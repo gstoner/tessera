@@ -142,12 +142,14 @@ Lets the language express modern model architectures directly, not as awkward te
  Ensures longevity, avoids CUDA-like lock-in.
 
 
-✅ The refined programming model in one line:
+## The refined programming model in one line:
 
-### A deep-learning-first language that treats numerics, data movement, parallelism, schedules, state, and reproducibility as first-class semantic objects — not bolted-on libraries.
+#### A deep-learning-first language that treats numerics, data movement, parallelism, schedules, state, and reproducibility as first-class semantic objects — not bolted-on libraries.
+
+
 
   
-#### Sketch what a small Transformer forward pass would look like in this refined language (showing numerics policy, KV cache, and distribution annotations)
+### Sketch what a small Transformer forward pass would look like in this refined language (showing numerics policy, KV cache, and distribution annotations)
 
 
 	•	numerics policy in the types (bf16 inputs, fp32 accum, fp8-friendly matmuls),
@@ -261,9 +263,11 @@ Lets the language express modern model architectures directly, not as awkward te
                                 heads=H, p_dropout=0.0, causal=True)
               return y_t, cache.prune(window=4096)  # keep last 4k tokens efficiently
 
-## why this matters: numerics (bf16/fp8/f32-accum), movement (prefetch/overlap), parallelism (mesh/pmap), schedules (autotune), and state (KV) are all first-class—so you write the math, and the compiler/runtime handle the fast, portable execution plans.
+#### why this matters: numerics (bf16/fp8/f32-accum), movement (prefetch/overlap), parallelism (mesh/pmap), schedules (autotune), and state (KV) are all first-class—so you write the math, and the compiler/runtime handle the fast, portable execution plans.
 
-### “toy” with a 2-block encoder (including dropout & residual fusions) or show how quantized INT8 weights fit into the same types
+
+
+# “toy” with a 2-block encoder (including dropout & residual fusions) or show how quantized INT8 weights fit into the same types
 
   compact, runnable-feeling two-block encoder in the refined model we’ve been sketching. it shows:
   

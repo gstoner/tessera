@@ -1,7 +1,7 @@
 # Tessera Unified Specification (Base Spec)
 
 This document defines the **Tessera programming model** and the **ABI runtime specification**. 
-It is the normative base spec, without worked examples.
+It is the normative base spec, without worked operator examples (those are in the separate Examples document).
 
 ---
 
@@ -189,11 +189,20 @@ Tile entry functions follow a fixed ABI:
 
 Mapping a HuggingFace GPT model into Tessera runtime:
 
-1. Create context with `tessera_context_create`.
-2. Allocate memory with `tessera_memory_alloc`.
-3. Upload operator graph into `.tessera.ops`.
-4. Launch tiles using descriptors tuned for `(arch, shape, dtype)`.
-5. Synchronize streams with events.
+```c
+tessera_context_handle ctx;
+tessera_context_create(&ctx);
+
+tessera_memory_handle mem;
+tessera_memory_alloc(ctx, 1024*1024*1024, &mem);
+
+tessera_operator_handle gpt_op = tessera_load_operator(ctx, "gpt_oss_120b.tessera.ops");
+
+tessera_launch_desc desc = {64, 64, 64, 4, 2, 0};
+tessera_launch_tile(gpt_op, &desc);
+
+tessera_context_destroy(ctx);
+```
 
 ---
 

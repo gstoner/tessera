@@ -2,12 +2,12 @@
 
 This Programing Model emerged after  spend time talking with ChatGPT 5 about  current progrmaing models SyCL, CUDA, Mojo, NUMBA, Chapel,  and you asked "if you could start over what would be the ideal programming model/language for programming deep learning model and solutions"  
 
-I asked it name it own programing model, which it came back with Tessera.  I will say you need to guide the coversation for a number of input, to get to what is bellow, but that will need to be another post. 
+I will say you it is very interactive coversation to get to limited early draft spec, but that will need to be another post to go deeper. 
 
 
-What i can saw are the models have come along way in the abilty to look at situation,  core material is interesting it give you bones of build out a real spec,   
-Now it ability to make techical presentations and spec pdf out of the materials bellow was not it strong suite, here we are still master of this domain. 
+What i can saw is this model has come along way in the abilty to look at situation and reason about what might be needed in the market, with a bit more work will give you the bones for solid spec.   The area i was not satified with is how it tired to turn this into a techical presentations and convert the spec into a pdf as well build a datasheet, here we humans are still master of this domain. 
 
+Let look at the what it came up with.  
 
 Tessera as a programming model is that it tries to bridge the gap between mathematical expressiveness and hardware efficiency, something existing models (CUDA, Triton, SYCL, etc.) only partially solve.
  

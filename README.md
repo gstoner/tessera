@@ -52,7 +52,7 @@ Tessera exists because we need a **math-native, operator-first programming model
 
 ---
 
-## Table of Contents
+### Table of Contents
 
 - **Part I**: Introduction and Scope
 - **Part II**: Execution Model
@@ -71,7 +71,7 @@ Tessera exists because we need a **math-native, operator-first programming model
 
 ---
 
-# Part I: Introduction and Scope *(Informative)*
+## Part I: Introduction and Scope *(Informative)*
 
 Tessera is a programming model and runtime designed for deep learning and operator-based AI workloads. It generalizes existing models (CUDA, Triton, SYCL) by:
 
@@ -82,7 +82,7 @@ Tessera is a programming model and runtime designed for deep learning and operat
 This document consolidates all normative rules and informative commentary into a single reference
 ---
 
-# Part II: Execution Model *(Normative)*
+## Part II: Execution Model *(Normative)*
 
 - **Tiles**: minimal scheduling units, mapped to warp/wave equivalents.
 - **Graphs**: DAGs of operators/kernels with explicit dependencies.
@@ -91,7 +91,7 @@ This document consolidates all normative rules and informative commentary into a
 
 ---
 
-# Part III: Numerics and Precision Policy *(Normative)*
+## Part III: Numerics and Precision Policy *(Normative)*
 
 - Types: FP32, FP16, BF16, FP8, INT8, etc.
 - Each type has an **accumulation policy** (e.g., FP8\@accum(FP32)).
@@ -99,7 +99,7 @@ This document consolidates all normative rules and informative commentary into a
 
 ---
 
-# Part IV: Memory and Streams *(Normative)*
+## Part IV: Memory and Streams *(Normative)*
 
 - **Address spaces**: global, shared (tile-local), private.
 - **Streams**: allow concurrency.
@@ -108,7 +108,7 @@ This document consolidates all normative rules and informative commentary into a
 
 ---
 
-# Part V: Tiling and Scheduling *(Normative)*
+## Part V: Tiling and Scheduling *(Normative)*
 
 - **Tile primitives**: GEMM, FFT, CONV, REDUCE.
 - **Schedules**: parameters (BM, BN, BK, warps, stages, vector width, swizzle).
@@ -117,7 +117,7 @@ This document consolidates all normative rules and informative commentary into a
 
 ---
 
-# Part VI: ABI Specification *(Normative)*
+## Part VI: ABI Specification *(Normative)*
 
 ### 6.1 Kernel Descriptor
 
@@ -147,18 +147,18 @@ typedef struct {
 } TessOperatorDesc;
 ```
 
----
 
-# Part VII: Automatic Differentiation *(Normative)*
 
-- **JVP rule**: `dy = (dA)@x + A@(dx)`
-- **VJP rule**: `dL/dx = A* @(dL/dy)`
-- Algebra obeys linearity: `d(A+B)=dA+dB`, `d(αA)=α dA + dα A`.
-- Factorization gradients follow standard SVD/eig differentials.
+## Part VII: Automatic Differentiation *(Normative)*
 
----
+ - **JVP rule**: `dy = (dA)@x + A@(dx)`
+ - **VJP rule**: `dL/dx = A* @(dL/dy)`
+ - Algebra obeys linearity: `d(A+B)=dA+dB`, `d(αA)=α dA + dα A`.
+ - Factorization gradients follow standard SVD/eig differentials.
 
-# Part VIII: Graph, Modules, and Compilation *(Normative)*
+
+
+## Part VIII: Graph, Modules, and Compilation *(Normative)*
 
 - **Graphs**: DAGs of operators and kernels.
 - **Modules**: compilable units with exports/imports.
@@ -167,9 +167,9 @@ typedef struct {
 
 ---
 
-# Part IX: Operator Dialect (TOD)
+## Part IX: Operator Dialect (TOD)
 
-## Chapter 20. Overview *(Informative)*
+### Chapter 20. Overview *(Informative)*
 
 TOD introduces linear operators as algebraic values.
 
@@ -248,28 +248,28 @@ See Part VI for `TessOperatorDesc`.
 
 ---
 
-# Appendix A: Glossary
+## Appendix A: Glossary
 
 - **Tile**: minimal execution unit.
 - **Operator**: linear map on Hilbert space.
 - **Spectral operator**: decomposition (U,S,V).
 
-# Appendix B: Normative vs Informative
+## Appendix B: Normative vs Informative
 
 - *Normative*: must implement.
 - *Informative*: guidance.
 
-# Appendix C: Worked Examples
+## Appendix C: Worked Examples
 
 (included inline).
 
-# Appendix D: Grammar *(Informative)*
+## Appendix D: Grammar *(Informative)*
 
 ```
 OperatorExpr ::= "op." Constructor | compose(...) | adjoint(...) | A @ x
 ```
 
-# Appendix E: Planning Diagrams *(Informative)*
+## Appendix E: Planning Diagrams *(Informative)*
 
 **Execution flow**:
 

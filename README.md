@@ -1,7 +1,8 @@
 ## When we give CHATGPT a Cupcake, it gives you a New Programing Model and then...... 
 
 This Programing Model emerged after  spend time talking with ChatGPT 5 about  current progrmaing models SyCL, CUDA, Mojo, NUMBA, Chapel,  and you asked "if you could start over what would be the ideal programming model/language for programming deep learning model and solutions"  
-Yes it I even  asked it to name the product. Which it came back with Tessera.  I will say you need to guide the coversation for a number of input, to get to what is bellow, but that will need to be another post. 
+
+I asked it name it own programing model, which it came back with Tessera.  I will say you need to guide the coversation for a number of input, to get to what is bellow, but that will need to be another post. 
 
 
 What i can saw are the models have come along way in the abilty to look at situation,  core material is interesting it give you bones of build out a real spec,   

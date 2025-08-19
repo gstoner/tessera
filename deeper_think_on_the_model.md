@@ -1,4 +1,4 @@
-## Ok think deeper on the programing model for deep learning  what are the refinement beyond what you defined?
+## Ok think deeper on the programing model for deep learning  what are the refinement beyond what is in the current spec?
 
 Excellent — let’s go one level deeper. Earlier I gave you the broad strokes (two-layer model: high-level modeling language + low-level tile/schedule DSL). But if we refine it further for deep learning end-to-end, the model needs to cover not just kernels, but also numerics, data movement, scale-out, lifecycle, and safety.
 

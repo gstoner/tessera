@@ -74,7 +74,7 @@
 
 ```python
 from tessera import numerics
-
+```
 numerics.policy("fast")          # Maximum speed
 numerics.policy("deterministic") # Reproducible reductions
 numerics.policy("kahan_sum")     # Compensated summation

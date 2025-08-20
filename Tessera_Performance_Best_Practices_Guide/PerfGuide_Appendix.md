@@ -75,9 +75,11 @@
 ```python
 from tessera import numerics
 ```
-numerics.policy("fast")          # Maximum speed
-numerics.policy("deterministic") # Reproducible reductions
-numerics.policy("kahan_sum")     # Compensated summation
+
+|numerics.policy("fast")         |# Maximum speed          |
+|--------------------------------|-------------------------|
+|numerics.policy("deterministic")|# Reproducible reductions| 
+|numerics.policy("kahan_sum")    |# Compensated summation  |
 
 |Policy       | Use Case                         |
 |-------------|----------------------------------|
@@ -86,6 +88,7 @@ numerics.policy("kahan_sum")     # Compensated summation
 |kahan_sum    | Sensitive PDEs, physics training |
 
 A.8 Checklist for Performance Tuning
+
 	•	Check occupancy (≥ 50%).
 	•	Avoid register spills.
 	•	Ensure memory coalescing.
@@ -99,6 +102,7 @@ A.8 Checklist for Performance Tuning
 ⸻
 
 A.9 Further Reading
+
 	•	Tessera Programming Guide (core language and IR concepts)
 	•	Runtime & ABI Spec (execution model and low-level ABI)
 	•	Tessera IR Docs (Graph IR, Schedule IR, Tile IR, Target IR)

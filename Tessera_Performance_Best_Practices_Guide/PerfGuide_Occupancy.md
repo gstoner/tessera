@@ -1,0 +1,3 @@
+# Tessera Performance Best Practices Guide
+## Chapter 2: Occupancy and Parallelism
+...

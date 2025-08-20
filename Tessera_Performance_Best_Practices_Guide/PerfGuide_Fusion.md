@@ -1,0 +1,3 @@
+# Tessera Performance Best Practices Guide
+## Chapter 5: Operator Fusion and Pipelines
+...

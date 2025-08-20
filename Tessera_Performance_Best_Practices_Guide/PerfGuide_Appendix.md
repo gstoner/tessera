@@ -1,0 +1,3 @@
+# Tessera Performance Best Practices Guide
+## Appendix: Reference Tables & Defaults
+...

@@ -1,0 +1,3 @@
+# Tessera Performance Best Practices Guide
+## Chapter 6: Mixed Precision and Numerics
+...

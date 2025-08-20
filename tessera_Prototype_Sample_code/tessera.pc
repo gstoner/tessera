@@ -1,0 +1,10 @@
+prefix=${pcfiledir}
+exec_prefix=${prefix}
+libdir=${prefix}
+includedir=${prefix}
+
+Name: tessera
+Description: Tessera Runtime mock library and headers
+Version: 1.0.0
+Libs: -L${libdir} -ltessera
+Cflags: -I${includedir}

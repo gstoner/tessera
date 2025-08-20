@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tessera-runtime"
+version = "0.1.0"
+description = "Tessera Runtime ctypes binding (with mock fallback)"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+authors = [{name="Tessera Authors"}]
+requires-python = ">=3.8"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://example.com/tessera"
+Repository = "https://example.com/tessera/runtime"
+
+[tool.setuptools]
+packages = ["tessera_runtime"]

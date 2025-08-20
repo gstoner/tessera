@@ -18,16 +18,12 @@ This guide describes how Tessera abstractions map onto GPU hardware:
 ### 1.2 Abstraction Stack
 
 Tessera organizes its abstractions into four IR layers:
-
-+———————+      ML Ops, Autodiff, Algebraic Rewrites
-|  Graph IR           |
-+———————+
-|  Schedule IR        |      Tiling, Fusion, Pipeline, Autotuning
-+———————+
-|  Tile IR            |      Warps, Tensor Cores, Memory Layouts
-+———————+
-|  Target IR (PTX)    |      PTX/SASS, ROCm LLVM, Hardware ABI
-+———————+
+      
+|  Graph IR           | ML Ops, Autodiff, Algebraic Rewrites       |
+|---------------------|--------------------------------------------|
+|  Schedule IR        | Tiling, Fusion, Pipeline, Autotuning       |
+|  Tile IR            |  Warps, Tensor Cores, Memory Layouts       |
+|  Target IR (PTX)    | PTX/SASS, ROCm LLVM, Hardware ABI          |
 
 - **Graph IR** is hardware-agnostic and declarative.  
 - **Schedule IR** decides *how* computation is partitioned.  

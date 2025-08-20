@@ -1,9 +1,6 @@
 # Tessera Performance Best Practices Guide
 ## Appendix: Reference Tables & Defaults
 
-# Tessera Performance Best Practices Guide
-## Appendix: Reference Tables & Defaults
-
 ---
 
 ### A.1 Recommended Tile Sizes

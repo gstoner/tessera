@@ -80,6 +80,7 @@ numerics.policy("deterministic") # Reproducible reductions
 numerics.policy("kahan_sum")     # Compensated summation
 
 |Policy       | Use Case                         |
+|-------------|----------------------------------|
 |fast         | Benchmarking, inference          |
 |deterministic| Debugging, reproducible training |
 |kahan_sum    | Sensitive PDEs, physics training |

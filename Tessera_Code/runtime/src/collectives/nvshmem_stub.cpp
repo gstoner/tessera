@@ -1,0 +1,1 @@
+// NVSHMEM adapter stub

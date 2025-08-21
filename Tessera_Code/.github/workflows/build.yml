@@ -1,0 +1,14 @@
+
+name: Build (stub)
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DTESSERA_ENABLE_CUDA=OFF -DTESSERA_ENABLE_ROCM=OFF
+      - name: Build
+        run: cmake --build build -j
+      - name: Python install
+        run: pip install -e python

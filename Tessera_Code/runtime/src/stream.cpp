@@ -1,0 +1,1 @@
+// stream abstraction stubs

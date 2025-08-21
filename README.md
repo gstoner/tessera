@@ -118,6 +118,29 @@ docs/models_examples/
  │    └── Tessera_Spectral_MoE.md  
  └── README.md   ← index listing all example models
  ```
+
+Tessera Standard Operator Library (TSOL)
+```
+docs/TSOL/
+├── TSOL_Guide.md
+├── tessera/
+│   └── ops.pyi
+├── include/
+│   └── tessera/
+│       └── ops.hpp
+├── tests/
+│   └── test_stubs.py
+└── mypy.ini
+```
+Tessera Collectives & Distributed Systems Guide
+```
+docs/Tessera_Collectives_Distributed/
+├── Tessera_Collectives_Distributed.md
+├── README.md
+└── images/
+    ├── mesh_collectives.png
+    └── zero_flow.png
+```
 ---
 
 ## 🔮 Roadmap

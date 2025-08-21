@@ -44,6 +44,28 @@ The full documentation set is organized by topic:
 - **[IR Specifications](docs/IR_Documentation/)** – Graph IR, Schedule IR, Tile IR, Target IR 
 - **[Quality Assurance & Testing](docs/Quality_Assurance_Testing/)** Q&A Testing Guide 
 
+# Tessera Model Examples
+
+This section provides **end-to-end examples** of mapping real-world models and reasoning frameworks onto the Tessera programming model.  
+Each example illustrates how Tessera’s multi-level IR (Graph IR → Schedule IR → Tile IR → Target IR) and runtime abstractions support scalable, efficient, and interpretable model design.  
+
+---
+
+## Available Examples
+
+- **[Hierarchical Reasoning Model (HRM)](HRM/Tessera_HRM_Mapping.md)**  
+  Mapping HRM’s Planner–Decomposer–Executor architecture into Tessera’s Graph IR and Schedule IR layers. Includes diagram of HRM ↔ Tessera IR mapping.
+
+- **[GPT-OSS-120B](GPT-OSS-120B/Tessera_GPTOSS_Example.md)**  
+  Illustrates how Tessera handles large-scale transformer models with distributed tensors, checkpointing, and efficient sharding strategies.
+
+- **[Physics-Informed Neural Networks (PINN)](PINN/Tessera_PINN_NavierStokes.md)**  
+  A 2D Navier–Stokes example with incompressibility constraints. Demonstrates Tessera’s operator adjoints for coupled PDE systems.
+
+- **[Spectral Mixture-of-Experts (Spectral-MoE)](MoE/Tessera_Spectral_MoE.md)**  
+  Combines FFT-based spectral decomposition, recursive operators, and MoE routing. Highlights Tessera’s strength in operator factorization and distributed expert parallelism.
+
+
 ---
 
 ## 🚀 Quick Example
@@ -83,7 +105,17 @@ tessera/
 │   └── reference/                # Operator reference
 └── README.md                     # This file
 ```
-
+docs/models_examples/
+ ├── HRM/  
+ │    ├── Tessera_HRM_Mapping.md  
+ │    └── Tessera_HRM_Mapping_Diagram.png  
+ ├── GPT-OSS-120B/  
+ │    └── Tessera_GPTOSS_Example.md  
+ ├── PINN/  
+ │    └── Tessera_PINN_NavierStokes.md  
+ ├── MoE/  
+ │    └── Tessera_Spectral_MoE.md  
+ └── README.md   ← index listing all example models
 ---
 
 ## 🔮 Roadmap

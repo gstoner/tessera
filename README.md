@@ -41,7 +41,7 @@ The full documentation set is organized by topic:
 - **[Tutorials Volume](docs/tutorials/)** – Hands-on walkthroughs  
 - **[Operator Reference](docs/reference/Tessera_Operator_Reference.md)** – Operator catalog  
 - **[Runtime & ABI Spec](docs/runtime_abi/)** – Normative runtime and ABI specification  
-- **[IR Specifications](docs/ir/)** – Graph IR, Schedule IR, Tile IR, Target IR  
+- **[IR Specifications](docs/ir_documentation/)** – Graph IR, Schedule IR, Tile IR, Target IR  
 
 ---
 

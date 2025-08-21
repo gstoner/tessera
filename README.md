@@ -33,15 +33,16 @@ It introduces a multi-level IR (Graph → Schedule → Tile → Target) and a DS
 
 The full documentation set is organized by topic:
 
-- **[Programming Guide](docs/programming_guide/)** – Core language features and usage  
-- **[Performance Best Practices](docs/performance/)** – Occupancy, memory tuning, autotuning  
-- **[Numerical Behavior Guide](docs/numerical/)** – Determinism, stability, mixed precision  
-- **[Interop & Tooling Guide](docs/interop/)** – Python, C++, MLIR, debuggers, profilers  
-- **[Hardware Mapping Guide](docs/hardware_mapping/)** – Mapping Tessera onto GPUs  
-- **[Tutorials Volume](docs/tutorials/)** – Hands-on walkthroughs  
-- **[Operator Reference](docs/reference/Tessera_Operator_Reference.md)** – Operator catalog  
-- **[Runtime & ABI Spec](docs/runtime_abi/)** – Normative runtime and ABI specification  
-- **[IR Specifications](docs/ir/)** – Graph IR, Schedule IR, Tile IR, Target IR  
+- **[Programming Guide](docs/Programming_Guide/)** – Core language features and usage  
+- **[Performance Best Practices](docs/Performance/)** – Occupancy, memory tuning, autotuning  
+- **[Numerical Behavior Guide](docs/Numerical_Behavior/)** – Determinism, stability, mixed precision  
+- **[Interop & Tooling Guide](docs/Tools_Interop/)** – Python, C++, MLIR, debuggers, profilers  
+- **[Hardware Mapping Guide](docs/Hardware_Mapping_Guide/)** – Mapping Tessera onto GPUs  
+- **[Tutorials Volume](docs/Tutorials/)** – Hands-on walkthroughs  
+- **[Operator Reference](docs/Reference/Tessera_Operator_Reference.md)** – Operator catalog  
+- **[Runtime & ABI Spec](docs/Runtime_ABI/)** – Normative runtime and ABI specification  
+- **[IR Specifications](docs/IR_Documentation/)** – Graph IR, Schedule IR, Tile IR, Target IR 
+- **[Quality Assurance & Testing](doc/Quality_Assurance_Testing/)** Q&A Testing Guide 
 
 ---
 

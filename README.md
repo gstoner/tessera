@@ -42,7 +42,7 @@ The full documentation set is organized by topic:
 - **[Operator Reference](docs/Reference/Tessera_Operator_Reference.md)** – Operator catalog  
 - **[Runtime & ABI Spec](docs/Runtime_ABI/)** – Normative runtime and ABI specification  
 - **[IR Specifications](docs/IR_Documentation/)** – Graph IR, Schedule IR, Tile IR, Target IR 
-- **[Quality Assurance & Testing](doc/Quality_Assurance_Testing/)** Q&A Testing Guide 
+- **[Quality Assurance & Testing](docs/Quality_Assurance_Testing/)** Q&A Testing Guide 
 
 ---
 

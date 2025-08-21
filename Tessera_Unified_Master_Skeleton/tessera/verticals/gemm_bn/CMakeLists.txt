@@ -1,0 +1,34 @@
+project(VerticalGEMM_BN LANGUAGES C CXX)
+
+# Tests
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+# CPU
+add_test(NAME VS_GEMM_BN_CPU
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_runtime_vs.py --device cpu
+)
+set_tests_properties(VS_GEMM_BN_CPU PROPERTIES
+  ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR};PYTHONPATH=${CMAKE_SOURCE_DIR}"
+)
+
+# CUDA
+if(TESSERA_ENABLE_CUDA)
+  add_test(NAME VS_GEMM_BN_CUDA
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_runtime_vs.py --device cuda
+  )
+  set_tests_properties(VS_GEMM_BN_CUDA PROPERTIES
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR};PYTHONPATH=${CMAKE_SOURCE_DIR}"
+  )
+  add_test(NAME VS_GEMM_BN_WMMA
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_runtime_vs.py --device cuda --mma
+  )
+  set_tests_properties(VS_GEMM_BN_WMMA PROPERTIES
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR};PYTHONPATH=${CMAKE_SOURCE_DIR};TESSERA_MMA=1"
+  )
+  add_test(NAME VS_GEMM_BN_WGMMA
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_runtime_vs.py --device cuda --wgmma
+  )
+  set_tests_properties(VS_GEMM_BN_WGMMA PROPERTIES
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR};PYTHONPATH=${CMAKE_SOURCE_DIR};TESSERA_WGMMA=1"
+  )
+endif()

@@ -6,6 +6,7 @@ This document catalogs core Tessera operators and includes **Python type stubs**
 1. Introduction
 
 TSOL is Tessera’s curated set of high-performance, portable primitives with stable semantics and back-end–aware implementations. It covers:
+
 	•	Linear algebra (BLAS-like + factorized ops)
 	•	NN primitives (convs, attention, normalization, MoE)
 	•	Spectral/FFT operators
@@ -34,6 +35,7 @@ C++/C API (example header below)
 ```
 ---
 3. Tensor, Dtype, Layout (Normative)
+
 	•	Tensor: rank-N array with dtype, layout, optional distribution (ShardSpec) and alignment.
 	•	Dtype: fp32, bf16, fp16, fp8_e4m3, fp8_e5m2, int8, int32.
 	•	Accumulator: unless specified, matmul/conv/attention accumulate in fp32, with epilogue cast to output dtype.
@@ -45,26 +47,18 @@ C++/C API (example header below)
 
 Determinism knobs
 	•	deterministic=True enforces fixed reduction tree + ordered send/recv and disables numerically-unstable fast paths.
-Op
-Signature (Python)
-Notes
-matmul
-op.matmul(A, B, *, epilogue=None)
-TC/MFMA/AMX; epilogue fusion: (+bias, act, add)
-batched_gemm
-op.batched_gemm(A, B)
-Strided or pointer arrays
-einsum
-op.einsum(spec, *tensors)
-Lowers to contractions + permutes
-factorized_matmul
-op.factorized_matmul(A, B, rank=k)
-Low-rank paths
-tri_solve
-op.tri_solve(A, b, lower=True)
-cholesky/qr/svd
-op.cholesky(A) etc.
-CPU fallback if needed
+
+4.0 Operators 
+
+4.1 Linear Algebra
+| Operator | Python Signature | Notes |
+|---|---|---|
+| GEMM | `op.matmul(A, B, *, epilogue=None)` | Fused epilogues: `bias`, `activation`, `residual` |
+| Batched GEMM | `op.batched_gemm(A, B)` | Strided or pointer arrays |
+| Einsum | `op.einsum(spec, *tensors)` | Lowers to contractions + permutes |
+| Factorized Matmul | `op.factorized_matmul(A, B, rank=k)` | Low-rank trade-offs |
+| Triangular Solve | `op.tri_solve(A, b, lower=True)` |  |
+| Decompositions | `op.cholesky/qr/svd` | CPU fallback when needed |
 
 Best practices
 	•	Prefer epilogue= fusion ("bias_relu", "bias_silu_residual") to save bandwidth.
@@ -73,77 +67,40 @@ Best practices
 ⸻
 
 4.2 NN Primitives
-Op
-Signature
-Notes
-conv2d/3d
-op.conv2d(x, w, stride, padding, layout="nhwc")
-Fused +bias, act
-layernorm/rmsnorm
-op.layernorm(x, eps) / op.rmsnorm(x, eps)
-Deterministic reductions
-dropout
-op.dropout(x, p, rng=...)
-Philox counter-based
-Attention
-qkv_projection
-op.qkv_projection(x, W_qkv)
-TP-friendly
-flash_attention
-op.flash_attention(q,k,v,*, causal=False, block_q, block_k, block_d)
-Double-buffering + softmax-stability
-rope
-op.rope(x, theta, axes="qk")
-MoE
-moe
-op.moe(x, experts, router="topk", k=2, transport=..., deterministic=...)
-DeepEP/NVSHMEM fast path
-moe_dispatch/combine
-exposed for manual routing
-Pack/route/combine procs
+| Op  |Signature| Notes |
+|------------------|----------------------------------------------|------------------------|
+|conv2d/3d| op.conv2d(x, w, stride, padding, layout="nhwc") | Fused +bias, act|
+|layernorm/rmsnorm| op.layernorm(x, eps) / op.rmsnorm(x, eps)| Deterministic reductions|
+|dropout| op.dropout(x, p, rng=...) |Philox counter-based |
+|Attention |       |
+| qkv_projection| op.qkv_projection(x, W_qkv) |TP-friendly|
+|flash_attention| op.flash_attention(q,k,v,*, causal=False, block_q, block_k, block_d)| Double-buffering + softmax-stability|
+|rope| op.rope(x, theta, axes="qk")| |
+|MoE | |
+|moe |op.moe(x, experts, router="topk", k=2, transport=..., deterministic=...) |DeepEP/NVSHMEM fast path|
+|moe_dispatch/combine | exposed for manual routing | Pack/route/combine procs |
 
 4.3 Spectral / FFT
 
-4. Operator Catalog
 
-4.1 Linear Algebra
-Op
-Signature
-Notes
-fft/ifft
-op.fft(x, axes=...) / op.ifft(...)
-Multi-GPU split-radix w/ collectives
-rfft/irfft
-real transforms
-stft/istft
-short-time Fourier
-windowing built-in
-dct/dst
-cosine/sine transforms
-spectral_filter
-op.spectral_filter(Xf, Hf)
-Complex dtype aware
+| Operator | Python Signature | Notes |
+|---|---|---|
+| FFT/IFFT | `op.fft(x, axes=...)` / `op.ifft(xf, axes=...)` | Batched, multi-dim |
+| RFFT/IRFFT | `op.rfft(x)` / `op.irfft(xf)` | Real transforms |
+| STFT/ISTFT | `op.stft(x, win, hop)` | Windowing built-in |
+| Spectral Filter | `op.spectral_filter(Xf, Hf)` | Complex dtype aware |
 
 Best practices
 	•	Prefer batched FFT with contiguous per-batch memory; let tuner choose pencil decomposition for multi-GPU.
 
 4.4 Sparse & Segment/Graph
 
-Op
-Signature
-Notes
-spmm_coo/csr
-op.spmm_coo(A_coo, B)
-Coalesced loads; block-sparse path
-sddmm
-sample dense-dense to sparse
-for attention sparsity pruning
-segment_reduce
-`op.segment_reduce(x, seg_ids, op=“sum
-max
-block_sparse_matmul
-op.bsmm(x, w_bsr)
-Tile IR masks
+| Operator | Python Signature | Notes |
+|---|---|---|
+| SPMM (COO/CSR) | `op.spmm_coo(A_coo, B)` | Coalesced loads |
+| SDDMM | `op.sddmm(A, B, mask)` | For attention sparsity |
+| Block-Sparse GEMM | `op.bsmm(X, W_bsr)` | BSR: (block_m, block_n, mask) |
+| Segment Reduce | `op.segment_reduce(x, seg_ids, op="sum|max|mean")` | |
 
 Best practices
 	•	For block-sparse, align block size to TC tile to keep MMA utilization.
@@ -152,15 +109,11 @@ Best practices
 
 4.5 Randomness & Init
 
-Op
-Signature
-Notes
-rng_uniform/normal
-rng.uniform(shape, dtype, seed, counter)
-Stateless Philox
-dropout
-above
-stream-ordered, reproducible
+| Operator | Python Signature | Notes |
+|---|---|---|
+| RNG Uniform | `rng.uniform(shape, dtype="fp32", seed=..., counter=...)` | Stateless Philox |
+| RNG Normal | `rng.normal(shape, dtype="fp32", seed=..., counter=...)` | |
+| Dropout | `op.dropout(x, p, rng=...)` | Deterministic with fixed seed |
 
 Best practices
 	•	Use counter-based RNG with (seed, subsequence) per stream to avoid overlap.
@@ -168,65 +121,65 @@ Best practices
 ⸻
 
 4.6 Collectives (hooks)
-Op
-Signature
-Default backend
-all_reduce
-dist.all_reduce(x, axis, deterministic=True)
-NCCL
-reduce_scatter/all_gather
-dist.reduce_scatter(...) / dist.all_gather(...)
-NCCL
-moe_dispatch/combine
-as above
-NVSHMEM + DeepEP
+| Operator | Python Signature | Default Backend |
+|---|---|---|
+| All-Reduce | `dist.all_reduce(x, axis="dp", deterministic=True)` | NCCL |
+| Reduce-Scatter | `dist.reduce_scatter(x, axis="dp", deterministic=True)` | NCCL |
+| All-Gather | `dist.all_gather(x, axis="dp", deterministic=True)` | NCCL |
+| MoE Dispatch/Combine | `op.moe_dispatch / op.moe_combine` | NVSHMEM + DeepEP |
+
+**See also**: `Tessera_Collectives_Distributed.md` for determinism, transports (NCCL/NVSHMEM/DeepEP), and tuning.
+
 
 4.7 Layout & Packing
 
-Signature
-Notes
-rearrange/transpose
-op.transpose(x, perm)
-pack/unpack
-op.pack(x, layout)
-cutlass/cute-like shapes
-tile_view
-op.tile_view(x, BM, BN, BK)
-feeds Tile IR autotuner
+| Operator | Python Signature | Notes |
+|---|---|---|
+| Transpose | `op.transpose(x, perm)` | |
+| Rearrange | `op.rearrange(x, layout)` | Dense or tiled |
+| Pack/Unpack | `op.pack(x, layout)` / `op.unpack(x)` | For tile/block views |
+| Tile View | `op.tile_view(x, BM, BN, BK)` | Feeds Tile IR autotuner |
 
-5. Backend Mapping (Informative)
-ategory
-NVIDIA (PTX)
-AMD (ROCm)
-Intel (Level-Zero/oneDNN)
-CPU
-GEMM
-Tensor Cores (mma.sync, wgmma), CUTLASS epilogues
-MFMA
-AMX / XMX
-MKL/BLIS
-Conv
-cuDNN kernels + fused epilogues
-MIOpen
-oneDNN
-oneDNN
-FFT
-cuFFT tiling
-rocFFT
-oneMKL DFT
-FFTW
-Sparse
-cuSPARSE / block-sparse kernels
-rocSPARSE
-oneDNN sparse (when avail)
-MKL sparse
-MoE A2A
-NVSHMEM + DeepEP
-RCCL + SHMEM (when avail)
-oneCCL / Level-Zero
-CPU fallback
+# 5. Operator Catalog (Concise Reference)
+
+## Linear Algebra
+- `op.matmul(A, B, *, epilogue=None)` → `(M×K)·(K×N)`
+- `op.batched_gemm(A, B)`
+- `op.einsum(spec, *tensors)`
+- `op.factorized_matmul(A, B, rank)`
+- `op.tri_solve(A, b)`
+- `op.cholesky/qr/svd(A)`
+
+## NN Primitives
+- `op.conv2d/3d(x, w, stride, padding, layout)`
+- `op.layernorm/rmsnorm(x, eps)`
+- `op.dropout(x, p)`
+- `op.qkv_projection(x, W_qkv)`
+- `op.flash_attention(q, k, v, causal=False, block_q, block_k, block_d)`
+- `op.moe(x, experts, router, k, transport, deterministic)`
+
+## Spectral
+- `op.fft/ifft/rfft/irfft(x, axes)`
+- `op.spectral_filter(Xf, Hf)`
+- `op.stft/istft(x, win, hop)`
+
+## Sparse/Graph
+- `op.spmm_coo(A_coo, B)`
+- `op.sddmm(A, B, mask)`
+- `op.bsmm(X, W_bsr)`
+- `op.segment_reduce(x, seg_ids, op)`
+
+## RNG
+- `rng.uniform(shape, dtype, seed, counter)`
+- `rng.normal(shape, dtype, seed, counter)`
+
+## Collectives
+- `dist.all_reduce(x, axis, deterministic=True)`
+- `dist.reduce_scatter(x, axis, deterministic=True)`
+- `dist.all_gather(x, axis, deterministic=True)`
 
 6. Error Handling (Normative)
+
 	•	All ops can raise tessera.error with code and what():
 	•	TS_ERR_INVALID_ARG, TS_ERR_SHAPE_MISMATCH, TS_ERR_UNSUPPORTED_DTYPE,
 	•	TS_ERR_BACKEND_FAILURE (wraps NCCL/NVSHMEM/etc.), TS_ERR_OOM.
@@ -235,6 +188,7 @@ CPU fallback
 ⸻
 
 7. Performance Notes (Informative)
+
 	•	Let the autotuner warm up; caches per (arch, dtype, shape, layout).
 	•	Prefer fused epilogues and intra-op layout matches to avoid transposes.
 	•	Use streams to overlap H2D/D2H with compute; pin host buffers.

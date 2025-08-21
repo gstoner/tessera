@@ -37,17 +37,17 @@ C++/C API (example header below)
 ---
 3. Tensor, Dtype, Layout (Normative)
 
-	•	Tensor: rank-N array with dtype, layout, optional distribution (ShardSpec) and alignment.
-	•	Dtype: fp32, bf16, fp16, fp8_e4m3, fp8_e5m2, int8, int32.
-	•	Accumulator: unless specified, matmul/conv/attention accumulate in fp32, with epilogue cast to output dtype.
-	•	Layouts:
-	•	Dense: row_major, col_major
-	•	Packed/tiled: tile(BM, BN, BK), channels_last (NHWC)
-	•	Block-sparse: bsr(block_m, block_n, mask)
-	•	Sequence: NLD or BLH (batch, length, hidden)
+- Tensor: rank-N array with dtype, layout, optional distribution (ShardSpec) and alignment.
+- Dtype: fp32, bf16, fp16, fp8_e4m3, fp8_e5m2, int8, int32.
+- Accumulator: unless specified, matmul/conv/attention accumulate in fp32, with epilogue cast to output dtype.
+- Layouts:
+- Dense: row_major, col_major
+- Packed/tiled: tile(BM, BN, BK), channels_last (NHWC)
+- Block-sparse: bsr(block_m, block_n, mask)
+- Sequence: NLD or BLH (batch, length, hidden)
 
 Determinism knobs
-	•	deterministic=True enforces fixed reduction tree + ordered send/recv and disables numerically-unstable fast paths.
+- deterministic=True enforces fixed reduction tree + ordered send/recv and disables numerically-unstable fast paths.
 
 4.0 Operators 
 
@@ -62,8 +62,8 @@ Determinism knobs
 | Decompositions | `op.cholesky/qr/svd` | CPU fallback when needed |
 
 Best practices
-	•	Prefer epilogue= fusion ("bias_relu", "bias_silu_residual") to save bandwidth.
-	•	For tall/skinny GEMM, tune Tile IR BM/BN/BK and warp count; let autotuner cache.
+- Prefer epilogue= fusion ("bias_relu", "bias_silu_residual") to save bandwidth.
+- For tall/skinny GEMM, tune Tile IR BM/BN/BK and warp count; let autotuner cache.
 
 ⸻
 
@@ -92,7 +92,7 @@ Best practices
 | Spectral Filter | `op.spectral_filter(Xf, Hf)` | Complex dtype aware |
 
 Best practices
-	•	Prefer batched FFT with contiguous per-batch memory; let tuner choose pencil decomposition for multi-GPU.
+- Prefer batched FFT with contiguous per-batch memory; let tuner choose pencil decomposition for multi-GPU.
 
 4.4 Sparse & Segment/Graph
 
@@ -104,7 +104,7 @@ Best practices
 | Segment Reduce | `op.segment_reduce(x, seg_ids, op="sum|max|mean")` | |
 
 Best practices
-	•	For block-sparse, align block size to TC tile to keep MMA utilization.
+- For block-sparse, align block size to TC tile to keep MMA utilization.
 
 ⸻
 
@@ -117,7 +117,7 @@ Best practices
 | Dropout | `op.dropout(x, p, rng=...)` | Deterministic with fixed seed |
 
 Best practices
-	•	Use counter-based RNG with (seed, subsequence) per stream to avoid overlap.
+- Use counter-based RNG with (seed, subsequence) per stream to avoid overlap.
 
 ⸻
 

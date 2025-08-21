@@ -105,6 +105,7 @@ tessera/
 │   └── reference/                # Operator reference
 └── README.md                     # This file
 ```
+```
 docs/models_examples/
  ├── HRM/  
  │    ├── Tessera_HRM_Mapping.md  
@@ -116,6 +117,7 @@ docs/models_examples/
  ├── MoE/  
  │    └── Tessera_Spectral_MoE.md  
  └── README.md   ← index listing all example models
+ ```
 ---
 
 ## 🔮 Roadmap

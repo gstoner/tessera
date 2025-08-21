@@ -7,19 +7,20 @@ This document catalogs core Tessera operators and includes **Python type stubs**
 
 TSOL is Tessera’s curated set of high-performance, portable primitives with stable semantics and back-end–aware implementations. It covers:
 
-	•	Linear algebra (BLAS-like + factorized ops)
-	•	NN primitives (convs, attention, normalization, MoE)
-	•	Spectral/FFT operators
-	•	Sparse & segment/graph ops
-	•	Randomness & dropout
-	•	Collectives hooks (NCCL/NVSHMEM/DeepEP aware)
-	•	Layout transforms & packing
+- Linear algebra (BLAS-like + factorized ops)
+- NN primitives (convs, attention, normalization, MoE)
+- Spectral/FFT operators
+- Sparse & segment/graph ops
+- Randomness & dropout
+- Collectives hooks (NCCL/NVSHMEM/DeepEP aware)
+- Layout transforms & packing
 
 Design goals
-	•	Portable & deterministic: well-defined accuracy and reduction order (when requested).
-	•	Fusion-friendly: canonical epilogues (+bias, activation, residual).
-	•	Autotuned: persistent cache per (arch, dtype, shape, layout) with on-device measurements.
-	•	IR-native lowering: Graph→Schedule→Tile→Target mapping with clear shape/layout contracts.
+
+- Portable & deterministic: well-defined accuracy and reduction order (when requested).
+- Fusion-friendly: canonical epilogues (+bias, activation, residual).
+- Autotuned: persistent cache per (arch, dtype, shape, layout) with on-device measurements.
+- IR-native lowering: Graph→Schedule→Tile→Target mapping with clear shape/layout contracts.
 
 ⸻
 
@@ -180,18 +181,18 @@ Best practices
 
 6. Error Handling (Normative)
 
-	•	All ops can raise tessera.error with code and what():
-	•	TS_ERR_INVALID_ARG, TS_ERR_SHAPE_MISMATCH, TS_ERR_UNSUPPORTED_DTYPE,
-	•	TS_ERR_BACKEND_FAILURE (wraps NCCL/NVSHMEM/etc.), TS_ERR_OOM.
-	•	Deterministic-mode violations raise TS_ERR_NONDETERMINISM.
+- All ops can raise tessera.error with code and what():
+- TS_ERR_INVALID_ARG, TS_ERR_SHAPE_MISMATCH, TS_ERR_UNSUPPORTED_DTYPE,
+- TS_ERR_BACKEND_FAILURE (wraps NCCL/NVSHMEM/etc.), TS_ERR_OOM.
+- Deterministic-mode violations raise TS_ERR_NONDETERMINISM.
 
 ⸻
 
 7. Performance Notes (Informative)
 
-	•	Let the autotuner warm up; caches per (arch, dtype, shape, layout).
-	•	Prefer fused epilogues and intra-op layout matches to avoid transposes.
-	•	Use streams to overlap H2D/D2H with compute; pin host buffers.
+- Let the autotuner warm up; caches per (arch, dtype, shape, layout).
+- Prefer fused epilogues and intra-op layout matches to avoid transposes.
+- Use streams to overlap H2D/D2H with compute; pin host buffers.
 
 ⸻
 

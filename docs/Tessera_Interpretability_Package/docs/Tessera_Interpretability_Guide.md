@@ -25,7 +25,7 @@ print("Δx (counterfactual):", exp.counterfactual.dx.norm().item())
 print("Causal edges:", (exp.causal_graph.A.abs()>0).sum().item())
 ```
 
-**Explanation bundle**
+**Artifact (Explanation) bundle**
 
 - `feature_importance`: IG/Grad-CAM-like heatmap(s)
 - `tcav_scores`: dict `{concept → score}` (+ optional confidence / p-values)
@@ -39,7 +39,8 @@ print("Causal edges:", (exp.causal_graph.A.abs()>0).sum().item())
 
 ### 2.1 Feature Importance
 - **Integrated Gradients (IG)** with Riemann/Legendre path and optional SmoothGrad.
-- **Grad-CAM/Grad-CAM++** for CNN/ViT-like blocks, using activation maps + gradients.
+- **Grad-CAM/Grad-CAM++** for CNN/ViT-like blocks, using activation maps + gradients. (uses conv/attention maps + dL/dA).
+- Token/feature attribution: rollups across channels, timesteps, or heads.
 
 ### 2.2 Concept Activation Vectors (TCAV)
 - Build **CAVs** at an interior layer from concept vs. random (counter-) examples.
@@ -48,10 +49,14 @@ print("Causal edges:", (exp.causal_graph.A.abs()>0).sum().item())
 ### 2.3 Counterfactual Explanations
 - Gradient-based search for minimum Δx achieving a desired target (classification) with proximity
 (ℓ1/ℓ2), sparsity, and feasibility constraints (box/monotone/causal). Latent-space versions are possible.
+- For images/text, optionally operate in latent space (VAE/encoder) and decode.
+- Includes statistical testing over random counter-concepts.
 
 ### 2.4 Causal Attribution Graphs
 - Lightweight structure learning over features/activations (sparse regression + stability selection),
 plus local interventional effect estimates. Produces an adjacency matrix `A` and effect weights on output.
+- Interventional effect reports: Δy|do(x_i↑) via local SCM linearization or ablations; aggregates to a causal graph with confidences.
+
 
 ---
 
@@ -86,9 +91,9 @@ plus local interventional effect estimates. Produces an adjacency matrix `A` and
 
 ## 5. Determinism & Performance
 
-- Fix seeds and use ordered reductions across DP ranks for IG/TCAV aggregations.
-- Overlap sampling/steps with auxiliary streams; capture activations once (avoid double forward).
-- Use activation checkpointing for long paths; keep Grad-CAM intermediates in fp16 if memory-bound.
+- Determinism: fix seeds; capture activation order; use ordered reductions when aggregating IG/TCAV/ensembles across DP ranks.
+- Performance: IG/MC sampling parallelized via Schedule IR streams; Grad-CAM uses saved conv/attention maps (no extra forward). Overlap sampling/steps with auxiliary streams; capture activations once (avoid double forward).
+- Memory: activation checkpointing for long paths; optional half precision for intermediates (not gradients) with bound on error; keep Grad-CAM intermediates in fp16 if memory-bound.
 
 ---
 

@@ -48,7 +48,10 @@ The full documentation set is organized by topic:
 - **[Differentiable Architecture Search](docs/Tessera_DNAS_Package/docs/)** - Differentiable Neural Architecture Search (DNAS)
 - **[Quality Assurance & Testing](docs/Quality_Assurance_Testing/)** - Q&A Testing Guide
 - **[PyTorch Bridge](docs/Tessera_PyTorch_Bridge/docs/)** - Tessera Pytorch Language Bridge
-- **[Learning Specification Language (LSL)](docs/Tessera_LSL_Package/docs/)** - Declaritive Language which allows you describe Higher level Learning Abstractions 
+- **[Learning Specification Language (LSL)](docs/Tessera_LSL_Package/docs/)** - Declaritive Language which allows you describe Higher 
+level Learning Abstractions 
+- **[Probabilistic Programming](docs/Tessera_ProbProg_Package/docs/)** - Uncertainty and probabilistic reasoning support 
+- **[Shape Debugging System](docs/Tessera_Shape_System_Package/)** -  Shape System with Compile-Time Verification 
 
 # Tessera Model Examples
 

@@ -42,6 +42,10 @@ The full documentation set is organized by topic:
 - **[Operator Reference](docs/Reference/Tessera_Operator_Reference.md)** – Operator catalog  
 - **[Runtime & ABI Spec](docs/Runtime_ABI/)** – Normative runtime and ABI specification  
 - **[IR Specifications](docs/IR_Documentation/)** – Graph IR, Schedule IR, Tile IR, Target IR 
+- **[Uncertenty & Robustness Guide](docs/Tessera_Uncertainty_Robustness/docs/)** - Predictive uncertainty capabilites
+- **[Lifelong Learning](docs/Tessera_Lifelong_Learning_Package/docs/)** - Lifelong Learning Solutions 
+- **[Interpretability Artifacts](docs/Tessera_Interpretability_Package/docs/)** - prediction can return feature attributions, concept relevance, counterfactuals, and causal structure
+- **[Differentiable Architecture Search](docs/Tessera_DNAS_Package/docs/)** - Differentiable Neural Architecture Search (DNAS)
 - **[Quality Assurance & Testing](docs/Quality_Assurance_Testing/)** Q&A Testing Guide 
 
 # Tessera Model Examples

@@ -31,6 +31,7 @@ Tessera Graph IR needs:
 	-	arch.weighted_sum / arch.switch operators that are autodiff-aware.
 
 What’s searchable?
+
 	-	Op choice: attention variant (Flash, Performer/Kerna, SDPA), MLP vs. gated MLP.
 	-	Dimensions: hidden size, FFN expansion ratio, #heads, groups, kernel sizes.
 	-	Topology: skip vs. residual mix, depth expansion (layer replication with gates).
@@ -60,13 +61,15 @@ for step, (train_batch, val_batch) in tg.zipcycle(train_loader, val_loader):
 ```
 
 Options:
-	•	Unrolled K-step inner optimization (memory-heavy but exact).
-	•	Implicit gradient (Hessian-vector via CG/Neumann) for lower memory.
-	•	Temperature annealing on Gumbel-Softmax to move from soft → near-discrete.
+
+	-	Unrolled K-step inner optimization (memory-heavy but exact).
+	-	Implicit gradient (Hessian-vector via CG/Neumann) for lower memory.
+	-	Temperature annealing on Gumbel-Softmax to move from soft → near-discrete.
 
 Stability helpers:
-	•	Clip ∥∇α∥, constrain skip-connect logits, L0/HG (Hard-Concrete) sparsity on edges to avoid collapse.
-	•	Keep arch params in fp32 regardless of AMP; weights can be mixed precision.
+
+	-	Clip ∥∇α∥, constrain skip-connect logits, L0/HG (Hard-Concrete) sparsity on edges to avoid collapse.
+	-	Keep arch params in fp32 regardless of AMP; weights can be mixed precision.
 
 ⸻
 
@@ -75,14 +78,17 @@ Stability helpers:
 You need a smooth proxy for latency/energy/memory that can participate in gradients:
 
 Two-tier cost model
+
 	1.	Analytical/IR-aware estimator (fast, differentiable):
 From Schedule IR decisions + Graph IR features (tensor sizes, flops/bytes) → predict {lat, energy, mem} via parametric formulas.
 	2.	Learned surrogate (smooth):
+
 Small MLP f_φ(features(α, shape, arch)) → {lat, energy, mem} trained online from on-device measurements.
 ```python
 lat_pred, energy_pred, mem_pred = arch.cost_model.predict(model)
 loss_val = task_loss + λ1*lat_pred + λ2*energy_pred + λ3*mem_pred
 ```
+
 Closing the loop: measure → fit → use
 ```python
 meas = arch.measure(model, reps=5, metric=("latency","energy"))
@@ -107,14 +113,16 @@ with arch.relax(sched):    # internally uses softmax/gumbel over discrete option
     loss = task(y, y_) + λ*cost
 ```
 Practical recipe:
-	•	Alternate: a few steps on W/α (ops), then a few on schedule α_s (tiling/layout).
-	•	Or nest: architecture is outer loop, schedule tuned by Tessera’s autotuner with a differentiable surrogate and occasional real measurements (non-diff).
+
+	-	Alternate: a few steps on W/α (ops), then a few on schedule α_s (tiling/layout).
+	-	Or nest: architecture is outer loop, schedule tuned by Tessera’s autotuner with a differentiable surrogate and occasional real measurements (non-diff).
 
 ⸻
 
 5) From soft choices → discrete specialization
 
 When validation stabilizes:
+
 	1.	Select per-edge argmax (or sample with temperature→0).
 	2.	Prune unused ops/branches.
 	3.	Specialize & lower: freeze to Graph IR, re-run Schedule IR autotuning, generate Tile IR/Target IR.
@@ -127,6 +135,7 @@ plan    = tg.compile(frozen).autotune().lower()    # emits CUDA/ROCm/CPU
 ```
 
 6) Distributed & deterministic
+
 	•	Gradients on α: allreduce across DP mesh; use Kahan or ordered reductions for determinism.
 	•	Population NAS (optional): split submeshes each exploring different α; periodically average logits (elastic DNAS).
 	•	Checkpointing: store {W, α, cost_model_φ}; resume exactly (cost model seeds, RNG states).
@@ -188,10 +197,12 @@ Schedule IR
 	-	Ties to autotuner (measurements → dataset for surrogate)
 
 Runtime
+
 	-	Deterministic allreduce for α
 	-	Efficient small-tensor updates (α are tiny)
 
 Tooling
+
 	-	Dashboards for α histograms & HW cost curves
 	-	Checkpointing of {W, α, φ}
 
@@ -228,6 +239,7 @@ frozen  = tg.specialize(model, choices)
 compiled = tg.compile(frozen).autotune().lower()
 ```
 Variants you may want
+
 	•	ProxylessNAS / Path Binarization (binary gates + STE) for even lower overhead.
 	•	Once-For-All supernet export: train once, derive many subnets for different devices by adjusting constraints/λ.
 	•	Population NAS (multiple α replicas per submesh) + periodic logit averaging (elastic).

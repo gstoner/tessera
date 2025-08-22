@@ -32,7 +32,21 @@ If K != D, compile-time error:
 error[shape-mismatch]: matmul(Q[B,N,D], K^T[B,D,M]) requires inner dims equal.
   found: D and K
 ```
+---
+## Head-splitting with derived dims
+```python 
 
+dim B, T, H, Dh
+let D = H * Dh
+
+fn mha(q: Tensor[B,T,D], k: Tensor[B,T,D], v: Tensor[B,T,D]) -> Tensor[B,T,D]
+where D = H * Dh {
+  let qh = reshape(q, [B, T, H, Dh])
+  let kh = reshape(k, [B, T, H, Dh])
+  let vh = reshape(v, [B, T, H, Dh])
+  let out_h = attention(qh, kh, vh)    // checks Dh alignment automatically
+  return reshape(out_h, [B, T, D])
+}
 ---
 
 ## Broadcasting
@@ -100,3 +114,28 @@ def attention(q: ts.Tensor[B, N, D], k: ts.Tensor[B, M, D]) -> ts.Tensor[B, N, M
 - Compile-time verification avoids subtle runtime bugs.
 - Errors are human-friendly with suggested fixes.
 - Works across tiles, layouts, and distributed shards.
+
+How to implement (compiler side)
+
+	1.	Type checker pass (Graph IR)
+
+	-Collect symbolic dims, build constraint graph, unify across ops.
+	-Solve using an integer/affine solver (Presburger subset: equalities, divisibility, bounds).
+	-Emit actionable diagnostics with source spans and suggested fixes.
+
+	2.	Schedule feasibility pass
+
+	-Combine shape constraints with schedule candidates; prune infeasible points before autotuning.
+	-Optionally suggest padding rewrites and quantify overhead.
+
+	3.	Tile verifier
+
+	-Check fragment sizes, shared memory banking, vector alignment; produce concrete PTX/ROCDL contracts.
+
+	4.	Runtime witnesses (optional)
+
+	-When Dim? appears, insert a single runtime assert; record refinement in module metadata so later kernels see the narrowed shape.
+
+	5.	IDE support
+
+	-*.pyi stubs and a mypy/Pyright plugin to validate annotations and show operator result shapes in tooltips.

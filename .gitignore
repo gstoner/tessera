@@ -1,0 +1,57 @@
+# Build artifacts
+build/
+build-*/
+cmake-build-*/
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Logs and databases
+*.log
+*.db
+*.sqlite
+
+# Temporary files
+*.tmp
+tmp/
+temp/
+
+# Generated files
+*.inc
+*.h.inc
+*.cpp.inc
+
+# CUDA
+*.fatbin
+*.cubin
+*.ptx
+
+# Tessera specific
+.tessera_cache/
+compiled_models/
+performance_logs/

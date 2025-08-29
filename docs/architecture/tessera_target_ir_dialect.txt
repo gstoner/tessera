@@ -1,0 +1,609 @@
+//===- TesseraTargetOps.td - Tessera Target IR Dialect -*- tablegen -*-===//
+//
+// This file defines the operations for Tessera's Target IR dialect in MLIR.
+// The Target IR handles final code generation for GPU architectures,
+// lowering to PTX, SASS, HIP, and LLVM GPU IR with hardware-specific
+// instruction selection and optimization.
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef TESSERA_TARGET_OPS
+#define TESSERA_TARGET_OPS
+
+include "mlir/Interfaces/CallInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/OpBase.td"
+include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/BuiltinAttributeInterfaces.td"
+include "mlir/IR/RegionKindInterface.td"
+
+//===----------------------------------------------------------------------===//
+// Tessera Target IR Dialect Definition
+//===----------------------------------------------------------------------===//
+
+def TesseraTarget_Dialect : Dialect {
+  let name = "tessera_target";
+  let summary = "Tessera Target IR Dialect";
+  let description = [{
+    The Tessera Target IR dialect represents platform-specific GPU operations
+    ready for final code generation. This dialect bridges high-level Tile IR
+    operations to low-level GPU instructions (PTX, SASS, HIP, SPIRV).
+
+    Key features:
+    - Platform-specific instruction selection (NVIDIA, AMD, Intel)
+    - Register allocation and spilling management
+    - Instruction scheduling and latency optimization
+    - Hardware-specific optimization (Tensor Cores, RDNA3, Xe-HPG)
+    - Multi-target code generation (PTX, SASS, HIP, SPIRV, Metal)
+    - Runtime integration and kernel launch configuration
+    - Performance instrumentation and profiling support
+  }];
+
+  let cppNamespace = "::mlir::tessera::target";
+  let dependentDialects = ["LLVM::LLVMDialect", "gpu::GPUDialect", 
+                          "NVVM::NVVMDialect", "spirv::SPIRVDialect",
+                          "tessera::tile::TesseraTileDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// Target Platform Types
+//===----------------------------------------------------------------------===//
+
+class TesseraTarget_Type<string name, string typeMnemonic> : 
+    TypeDef<TesseraTarget_Dialect, name> {
+  let mnemonic = typeMnemonic;
+}
+
+// Target Platform Type
+def TesseraTarget_PlatformType : TesseraTarget_Type<"Platform", "platform"> {
+  let summary = "Target platform specification";
+  
+  let parameters = (ins 
+    "StringAttr":$vendor,           // "nvidia", "amd", "intel"
+    "StringAttr":$architecture,     // "sm_90", "gfx1100", "xe_hpg"
+    "IntegerAttr":$compute_units,   // Number of SMs/CUs
+    OptionalParameter<"DictionaryAttr">:$features
+  );
+  
+  let assemblyFormat = "`<` $vendor `,` $architecture `,` $compute_units "
+                       "(`,` `features` `:` $features^)? `>`";
+}
+
+// Kernel Configuration Type
+def TesseraTarget_KernelConfigType : TesseraTarget_Type<"KernelConfig", "kernel_config"> {
+  let summary = "Kernel launch configuration";
+  
+  let parameters = (ins 
+    ArrayRefParameter<"int64_t">:$grid_size,      // Grid dimensions
+    ArrayRefParameter<"int64_t">:$block_size,     // Block dimensions
+    "IntegerAttr":$shared_memory_bytes,           // Shared memory allocation
+    "IntegerAttr":$register_count,                // Registers per thread
+    OptionalParameter<"IntegerAttr">:$stream_id   // CUDA stream
+  );
+  
+  let assemblyFormat = "`<` `grid` `=` $grid_size `,` `block` `=` $block_size `,` "
+                       "`shared` `=` $shared_memory_bytes `,` `regs` `=` $register_count "
+                       "(`,` `stream` `=` $stream_id^)? `>`";
+}
+
+// Instruction Format Type
+def TesseraTarget_InstrFormatType : TesseraTarget_Type<"InstrFormat", "instr_format"> {
+  let summary = "Target instruction format specification";
+  
+  let parameters = (ins 
+    "StringAttr":$opcode,                         // Instruction opcode
+    ArrayRefParameter<"Type">:$operand_types,     // Operand types
+    OptionalParameter<"StringAttr">:$encoding,    // Instruction encoding
+    OptionalParameter<"DictionaryAttr">:$constraints
+  );
+  
+  let assemblyFormat = "`<` $opcode `,` $operand_types "
+                       "(`,` `encoding` `:` $encoding^)? "
+                       "(`,` `constraints` `:` $constraints^)? `>`";
+}
+
+//===----------------------------------------------------------------------===//
+// Base Classes
+//===----------------------------------------------------------------------===//
+
+class TesseraTarget_Op<string mnemonic, list<Trait> traits = []> :
+    Op<TesseraTarget_Dialect, mnemonic, traits>;
+
+//===----------------------------------------------------------------------===//
+// Kernel and Function Operations
+//===----------------------------------------------------------------------===//
+
+def TesseraTarget_KernelOp : TesseraTarget_Op<"kernel", [
+    FunctionOpInterface,
+    IsolatedFromAbove,
+    SingleBlockImplicitTerminator<"tessera_target::ReturnOp">
+]> {
+  let summary = "GPU kernel definition with target-specific configuration";
+  let description = [{
+    Defines a GPU kernel with platform-specific launch configuration,
+    resource requirements, and optimization hints.
+    
+    Example:
+    ```mlir
+    tessera_target.kernel @flash_attention_kernel(
+      %q: memref<?x?x?x?xf16>,
+      %k: memref<?x?x?x?xf16>, 
+      %v: memref<?x?x?x?xf16>,
+      %o: memref<?x?x?x?xf16>
+    ) config = #tessera_target.kernel_config<
+      grid = [128, 64], block = [256, 1],
+      shared = 49152, regs = 128
+    > {
+      // Kernel body
+      tessera_target.return
+    }
+    ```
+  }];
+  
+  let arguments = (ins 
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<FunctionType>:$function_type,
+    TesseraTarget_KernelConfigType:$config,
+    OptionalAttr<TesseraTarget_PlatformType>:$platform,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
+    OptionalAttr<DictArrayAttr>:$res_attrs,
+    OptionalAttr<StrAttr>:$optimization_level
+  );
+  
+  let regions = (region AnyRegion:$body);
+  
+  let assemblyFormat = "$sym_name `(` $function_type `)` "
+                       "`config` `=` $config "
+                       "(`platform` `=` $platform^)? "
+                       "($arg_attrs^)? (`->` $res_attrs^)? "
+                       "(`opt_level` `=` $optimization_level^)? "
+                       "attr-dict-with-keyword $body";
+  
+  let hasVerifier = 1;
+  let hasRegionVerifier = 1;
+  
+  // Function interface methods
+  let extraClassDeclaration = [{
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+    /// Returns the kernel configuration.
+    TesseraTarget::KernelConfigType getKernelConfig() { return getConfig(); }
+  }];
+}
+
+def TesseraTarget_LaunchOp : TesseraTarget_Op<"launch", [
+    CallOpInterface
+]> {
+  let summary = "Launch GPU kernel with runtime parameters";
+  let description = [{
+    Launches a GPU kernel with dynamic grid/block dimensions and
+    runtime parameter binding.
+  }];
+  
+  let arguments = (ins 
+    FlatSymbolRefAttr:$kernel,
+    Variadic<Index>:$grid_size,
+    Variadic<Index>:$block_size,
+    Variadic<AnyType>:$args,
+    OptionalAttr<I64Attr>:$shared_memory_bytes,
+    OptionalAttr<I64Attr>:$stream_id
+  );
+  
+  let assemblyFormat = "$kernel `<` $grid_size `>` `<` $block_size `>` "
+                       "`(` $args `)` "
+                       "(`shared` `=` $shared_memory_bytes^)? "
+                       "(`stream` `=` $stream_id^)? "
+                       "attr-dict `:` functional-type($args, results)";
+}
+
+def TesseraTarget_ReturnOp : TesseraTarget_Op<"return", [
+    Pure, HasParent<"TesseraTarget_KernelOp">, Terminator
+]> {
+  let summary = "Kernel return operation";
+  let arguments = (ins Variadic<AnyType>:$operands);
+  let assemblyFormat = "($operands^ `:` type($operands))? attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Platform-Specific Instruction Operations
+//===----------------------------------------------------------------------===//
+
+def TesseraTarget_PTXInstrOp : TesseraTarget_Op<"ptx_instr", [Pure]> {
+  let summary = "Raw PTX instruction with operands";
+  let description = [{
+    Emits a raw PTX instruction with typed operands and results.
+    Used for hardware-specific instructions not covered by standard operations.
+    
+    Example:
+    ```mlir
+    %result = tessera_target.ptx_instr "wgmma.mma_async.sync.m64n256k32.f32.f16.f16.f32"
+      (%a_desc, %b_desc, %c_init) {
+        constraints = {operand0 = "r", operand1 = "r", operand2 = "+f"},
+        latency = 20
+      } : (i64, i64, f32) -> f32
+    ```
+  }];
+  
+  let arguments = (ins 
+    StrAttr:$instruction,
+    Variadic<AnyType>:$operands,
+    OptionalAttr<DictionaryAttr>:$constraints,
+    OptionalAttr<I64Attr>:$latency,
+    OptionalAttr<StrAttr>:$predicate
+  );
+  
+  let results = (outs Variadic<AnyType>:$results);
+  
+  let assemblyFormat = "$instruction `(` $operands `)` "
+                       "(`constraints` `=` $constraints^)? "
+                       "(`latency` `=` $latency^)? "
+                       "(`predicate` `=` $predicate^)? "
+                       "attr-dict `:` functional-type($operands, $results)";
+}
+
+def TesseraTarget_HIPInstrOp : TesseraTarget_Op<"hip_instr", [Pure]> {
+  let summary = "Raw HIP/ROCm instruction with operands";
+  let description = [{
+    Emits a raw HIP instruction for AMD GPU targets.
+  }];
+  
+  let arguments = (ins 
+    StrAttr:$instruction,
+    Variadic<AnyType>:$operands,
+    OptionalAttr<DictionaryAttr>:$constraints,
+    OptionalAttr<StrAttr>:$architecture  // "gfx906", "gfx1100"
+  );
+  
+  let results = (outs Variadic<AnyType>:$results);
+  
+  let assemblyFormat = "$instruction `(` $operands `)` "
+                       "(`constraints` `=` $constraints^)? "
+                       "(`arch` `=` $architecture^)? "
+                       "attr-dict `:` functional-type($operands, $results)";
+}
+
+//===----------------------------------------------------------------------===//
+// Memory Management Operations
+//===----------------------------------------------------------------------===//
+
+def TesseraTarget_AllocateOp : TesseraTarget_Op<"allocate", [
+    MemoryEffects<[MemAlloc]>
+]> {
+  let summary = "Allocate device memory with platform-specific hints";
+  let description = [{
+    Allocates device memory with platform-specific allocation hints
+    and memory pool management.
+  }];
+  
+  let arguments = (ins 
+    Index:$size,
+    OptionalAttr<StrAttr>:$memory_pool,  // "device", "managed", "pinned"
+    OptionalAttr<I64Attr>:$alignment,
+    OptionalAttr<BoolAttr>:$zero_initialize
+  );
+  
+  let results = (outs LLVM_AnyPointer:$ptr);
+  
+  let assemblyFormat = "$size "
+                       "(`pool` `=` $memory_pool^)? "
+                       "(`align` `=` $alignment^)? "
+                       "(`zero` $zero_initialize^)? "
+                       "attr-dict `:` type($ptr)";
+}
+
+def TesseraTarget_DeallocateOp : TesseraTarget_Op<"deallocate", [
+    MemoryEffects<[MemFree<0>]>
+]> {
+  let summary = "Deallocate device memory";
+  let arguments = (ins LLVM_AnyPointer:$ptr);
+  let assemblyFormat = "$ptr attr-dict `:` type($ptr)";
+}
+
+def TesseraTarget_MemcpyOp : TesseraTarget_Op<"memcpy", [
+    MemoryEffects<[MemRead<1>, MemWrite<0>]>
+]> {
+  let summary = "Platform-optimized memory copy";
+  let description = [{
+    Performs optimized memory copy with platform-specific acceleration
+    (DMA engines, copy engines, etc.).
+  }];
+  
+  let arguments = (ins 
+    LLVM_AnyPointer:$dest,
+    LLVM_AnyPointer:$src,
+    Index:$size,
+    OptionalAttr<StrAttr>:$kind,  // "host_to_device", "device_to_host", "device_to_device"
+    OptionalAttr<BoolAttr>:$async,
+    OptionalAttr<I64Attr>:$stream_id
+  );
+  
+  let assemblyFormat = "$dest `,` $src `,` $size "
+                       "(`kind` `=` $kind^)? "
+                       "(`async` $async^)? "
+                       "(`stream` `=` $stream_id^)? "
+                       "attr-dict `:` type($dest) `,` type($src)";
+}
+
+//===----------------------------------------------------------------------===//
+// Synchronization Operations
+//===----------------------------------------------------------------------===//
+
+def TesseraTarget_SyncOp : TesseraTarget_Op<"sync"> {
+  let summary = "Device synchronization";
+  let description = [{
+    Synchronizes device execution with host or between streams.
+  }];
+  
+  let arguments = (ins 
+    OptionalAttr<StrAttr>:$scope,  // "device", "stream", "event"
+    OptionalAttr<I64Attr>:$stream_id,
+    OptionalAttr<AnyAttr>:$event
+  );
+  
+  let assemblyFormat = "(`scope` `=` $scope^)? "
+                       "(`stream` `=` $stream_id^)? "
+                       "(`event` `=` $event^)? "
+                       "attr-dict";
+}
+
+def TesseraTarget_EventOp : TesseraTarget_Op<"event", [Pure]> {
+  let summary = "Create or manipulate GPU events";
+  let description = [{
+    Creates GPU events for fine-grained synchronization and timing.
+  }];
+  
+  let arguments = (ins 
+    StrAttr:$action,  // "create", "record", "wait", "destroy"
+    OptionalAttr<AnyAttr>:$event,
+    OptionalAttr<I64Attr>:$stream_id
+  );
+  
+  let results = (outs Optional<AnyType>:$result);
+  
+  let assemblyFormat = "$action "
+                       "(`event` `=` $event^)? "
+                       "(`stream` `=` $stream_id^)? "
+                       "attr-dict (`:` type($result)^)?";
+}
+
+//===----------------------------------------------------------------------===//
+// Profiling and Instrumentation Operations
+//===----------------------------------------------------------------------===//
+
+def TesseraTarget_ProfileBeginOp : TesseraTarget_Op<"profile_begin"> {
+  let summary = "Begin profiling region";
+  let description = [{
+    Marks the beginning of a profiling region with instrumentation.
+  }];
+  
+  let arguments = (ins 
+    StrAttr:$name,
+    OptionalAttr<StrAttr>:$category,
+    OptionalAttr<DictionaryAttr>:$metadata
+  );
+  
+  let assemblyFormat = "$name "
+                       "(`category` `=` $category^)? "
+                       "(`metadata` `=` $metadata^)? "
+                       "attr-dict";
+}
+
+def TesseraTarget_ProfileEndOp : TesseraTarget_Op<"profile_end"> {
+  let summary = "End profiling region";
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "$name attr-dict";
+}
+
+def TesseraTarget_CounterOp : TesseraTarget_Op<"counter", [Pure]> {
+  let summary = "Hardware performance counter access";
+  let description = [{
+    Reads hardware performance counters for detailed profiling.
+  }];
+  
+  let arguments = (ins 
+    StrAttr:$counter_name,  // "sm_efficiency", "memory_throughput", etc.
+    OptionalAttr<StrAttr>:$scope  // "kernel", "warp", "thread"
+  );
+  
+  let results = (outs I64:$value);
+  
+  let assemblyFormat = "$counter_name "
+                       "(`scope` `=` $scope^)? "
+                       "attr-dict `:` type($value)";
+}
+
+//===----------------------------------------------------------------------===//
+// Optimization Hint Operations
+//===----------------------------------------------------------------------===//
+
+def TesseraTarget_OptimizeOp : TesseraTarget_Op<"optimize", [
+    SingleBlockImplicitTerminator<"tessera_target::YieldOp">
+]> {
+  let summary = "Optimization hint region";
+  let description = [{
+    Provides optimization hints for the enclosed region,
+    such as loop unrolling, vectorization, or instruction scheduling.
+    
+    Example:
+    ```mlir
+    tessera_target.optimize {
+      unroll_factor = 4,
+      vectorize = true,
+      schedule = "latency_optimized"
+    } {
+      // Optimized code region
+    }
+    ```
+  }];
+  
+  let arguments = (ins DictionaryAttr:$hints);
+  let regions = (region SizedRegion<1>:$body);
+  
+  let assemblyFormat = "$hints $body attr-dict";
+}
+
+def TesseraTarget_UnrollOp : TesseraTarget_Op<"unroll", [
+    SingleBlockImplicitTerminator<"tessera_target::YieldOp">
+]> {
+  let summary = "Loop unrolling directive";
+  let description = [{
+    Directive to unroll the enclosed loop with specified factor.
+  }];
+  
+  let arguments = (ins 
+    I64Attr:$factor,
+    OptionalAttr<BoolAttr>:$full_unroll
+  );
+  
+  let regions = (region SizedRegion<1>:$body);
+  
+  let assemblyFormat = "`factor` `=` $factor "
+                       "(`full` $full_unroll^)? "
+                       "$body attr-dict";
+}
+
+def TesseraTarget_VectorizeOp : TesseraTarget_Op<"vectorize", [
+    SingleBlockImplicitTerminator<"tessera_target::YieldOp">
+]> {
+  let summary = "Vectorization directive";
+  let description = [{
+    Directive to vectorize operations in the enclosed region.
+  }];
+  
+  let arguments = (ins 
+    I64Attr:$width,
+    OptionalAttr<StrAttr>:$strategy  // "simd", "vector", "packed"
+  );
+  
+  let regions = (region SizedRegion<1>:$body);
+  
+  let assemblyFormat = "`width` `=` $width "
+                       "(`strategy` `=` $strategy^)? "
+                       "$body attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Hardware Feature Operations
+//===----------------------------------------------------------------------===//
+
+def TesseraTarget_TensorCoreOp : TesseraTarget_Op<"tensor_core", [Pure]> {
+  let summary = "Tensor Core matrix operation";
+  let description = [{
+    Direct tensor core operation with hardware-specific configuration.
+    Maps to WMMA, MMA, or equivalent hardware acceleration.
+  }];
+  
+  let arguments = (ins 
+    AnyType:$a_matrix,
+    AnyType:$b_matrix, 
+    AnyType:$c_matrix,
+    StrAttr:$operation,  // "mma", "wmma", "wgmma"
+    ArrayAttr:$shape,    // [M, N, K] 
+    OptionalAttr<StrAttr>:$layout,
+    OptionalAttr<StrAttr>:$precision
+  );
+  
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = "$operation `(` $a_matrix `,` $b_matrix `,` $c_matrix `)` "
+                       "`shape` `=` $shape "
+                       "(`layout` `=` $layout^)? "
+                       "(`precision` `=` $precision^)? "
+                       "attr-dict `:` functional-type(operands, results)";
+}
+
+def TesseraTarget_AtomicOp : TesseraTarget_Op<"atomic", [
+    MemoryEffects<[MemRead, MemWrite]>
+]> {
+  let summary = "Atomic memory operation";
+  let description = [{
+    Atomic memory operations with platform-specific optimization.
+  }];
+  
+  let arguments = (ins 
+    StrAttr:$operation,  // "add", "cas", "exch", "min", "max"
+    LLVM_AnyPointer:$ptr,
+    AnyType:$value,
+    OptionalAttr<AnyType>:$compare,
+    OptionalAttr<StrAttr>:$memory_order,  // "relaxed", "acquire", "release"
+    OptionalAttr<StrAttr>:$scope  // "thread", "warp", "block", "device"
+  );
+  
+  let results = (outs AnyType:$old_value);
+  
+  let assemblyFormat = "$operation $ptr `,` $value "
+                       "(`compare` `=` $compare^)? "
+                       "(`order` `=` $memory_order^)? "
+                       "(`scope` `=` $scope^)? "
+                       "attr-dict `:` functional-type(operands, results)";
+}
+
+//===----------------------------------------------------------------------===//
+// Control Flow Operations
+//===----------------------------------------------------------------------===//
+
+def TesseraTarget_YieldOp : TesseraTarget_Op<"yield", [
+    Pure, ReturnLike, Terminator
+]> {
+  let summary = "Yield operation for target regions";
+  let arguments = (ins Variadic<AnyType>:$operands);
+  let assemblyFormat = "($operands^ `:` type($operands))? attr-dict";
+}
+
+def TesseraTarget_PredicatedOp : TesseraTarget_Op<"predicated", [
+    SingleBlockImplicitTerminator<"tessera_target::YieldOp">
+]> {
+  let summary = "Predicated execution region";
+  let description = [{
+    Executes the enclosed region based on a predicate condition.
+    Maps to predicated execution on GPUs with divergent threads.
+  }];
+  
+  let arguments = (ins 
+    I1:$predicate,
+    OptionalAttr<BoolAttr>:$invert
+  );
+  
+  let regions = (region SizedRegion<1>:$body);
+  
+  let assemblyFormat = "$predicate "
+                       "(`invert` $invert^)? "
+                       "$body attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Debug and Verification Operations
+//===----------------------------------------------------------------------===//
+
+def TesseraTarget_AssertOp : TesseraTarget_Op<"assert"> {
+  let summary = "Runtime assertion for debugging";
+  let description = [{
+    Runtime assertion that can be compiled out in release builds.
+  }];
+  
+  let arguments = (ins 
+    I1:$condition,
+    OptionalAttr<StrAttr>:$message
+  );
+  
+  let assemblyFormat = "$condition "
+                       "(`message` `=` $message^)? "
+                       "attr-dict";
+}
+
+def TesseraTarget_BreakpointOp : TesseraTarget_Op<"breakpoint"> {
+  let summary = "Debugging breakpoint";
+  let description = [{
+    Inserts a debugging breakpoint for GPU debuggers.
+  }];
+  
+  let arguments = (ins OptionalAttr<StrAttr>:$label);
+  let assemblyFormat = "(`label` `=` $label^)? attr-dict";
+}
+
+#endif // TESSERA_TARGET_OPS

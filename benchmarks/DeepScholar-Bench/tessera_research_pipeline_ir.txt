@@ -1,0 +1,201 @@
+// Tessera Graph IR for DeepScholar-bench Research Synthesis Pipeline
+// Optimizes the entire research workflow from retrieval to synthesis
+
+#dialect-spec-begin
+tessera.graph.research_synthesis_pipeline
+#dialect-spec-end
+
+// Main research synthesis function optimized for DeepScholar-bench
+func.func @deepscholar_research_synthesis(
+    %query: !tessera.tensor<[?, 512], bf16>,           // Research query
+    %corpus: !tessera.tensor<[?, ?, 1024], bf16>,      // Document corpus
+    %target_section: !tessera.tensor<[?, 2048], bf16>  // Target section template
+) -> (!tessera.tensor<[?, 2048], bf16>, !tessera.research_metrics) {
+    
+    // Stage 1: Semantic Query Expansion and Planning
+    %expanded_query = tessera.graph.query_expansion %query {
+        method = "hierarchical_planning",
+        expansion_factor = 3,
+        semantic_depth = 2
+    } : !tessera.tensor<[?, 512], bf16> -> !tessera.tensor<[?, 1536], bf16>
+    
+    // Stage 2: Multi-Scale Document Retrieval
+    %retrieval_scores = tessera.graph.semantic_retrieval %expanded_query, %corpus {
+        similarity_function = "cosine_with_learned_weights",
+        top_k = 50,
+        diversity_penalty = 0.1,
+        temporal_weighting = true
+    } : (!tessera.tensor<[?, 1536], bf16>, !tessera.tensor<[?, ?, 1024], bf16>) 
+      -> !tessera.tensor<[?, 50], f32>
+    
+    %relevant_docs = tessera.graph.top_k_select %corpus, %retrieval_scores {
+        k = 20,
+        threshold = 0.6
+    } : (!tessera.tensor<[?, ?, 1024], bf16>, !tessera.tensor<[?, 50], f32>) 
+      -> !tessera.tensor<[?, 20, 1024], bf16>
+    
+    // Stage 3: Hierarchical Information Extraction
+    %nuggets = tessera.graph.nugget_extraction %relevant_docs {
+        extraction_method = "hierarchical_reasoning",
+        granularity_levels = [sentence, paragraph, section],
+        importance_threshold = 0.3,
+        max_nuggets_per_doc = 10
+    } : !tessera.tensor<[?, 20, 1024], bf16> -> !tessera.tensor<[?, ?, 256], bf16>
+    
+    // Stage 4: Citation-Aware Cross-Reference Analysis
+    %citation_graph = tessera.graph.citation_analysis %relevant_docs, %nuggets {
+        citation_extraction = true,
+        cross_reference_mapping = true,
+        authority_scoring = true,
+        recency_weighting = 0.2
+    } : (!tessera.tensor<[?, 20, 1024], bf16>, !tessera.tensor<[?, ?, 256], bf16>) 
+      -> !tessera.citation_graph
+    
+    // Stage 5: Multi-Level Attention for Synthesis Planning
+    %synthesis_plan = tessera.graph.hierarchical_attention %expanded_query, %nuggets {
+        attention_type = "hierarchical_reasoning_model",
+        levels = 3,
+        level_names = ["planning", "decomposition", "execution"],
+        cross_level_integration = true,
+        memory_efficient = true,
+        context_length = 32768
+    } : (!tessera.tensor<[?, 1536], bf16>, !tessera.tensor<[?, ?, 256], bf16>) 
+      -> !tessera.synthesis_plan
+    
+    // Stage 6: FlashMLA-Enhanced Content Synthesis
+    %synthesized_content = tessera.graph.content_synthesis %synthesis_plan, %nuggets, %citation_graph {
+        synthesis_method = "flash_mla",
+        memory_reduction = 0.93,
+        attention_heads = 32,
+        synthesis_strategy = "academic_writing",
+        citation_integration = "inline_and_bibliography",
+        coherence_optimization = true
+    } : (!tessera.synthesis_plan, !tessera.tensor<[?, ?, 256], bf16>, !tessera.citation_graph) 
+      -> !tessera.tensor<[?, 2048], bf16>
+    
+    // Stage 7: Multi-Objective Evaluation for DeepScholar-bench Metrics
+    %eval_metrics = tessera.graph.deepscholar_evaluation %synthesized_content, %nuggets, %citation_graph, %relevant_docs {
+        metrics = ["nugget_coverage", "document_importance", "reference_coverage", "citation_accuracy"],
+        evaluation_model = "specialized_evaluator",
+        human_alignment_optimization = true
+    } : (!tessera.tensor<[?, 2048], bf16>, !tessera.tensor<[?, ?, 256], bf16>, 
+        !tessera.citation_graph, !tessera.tensor<[?, 20, 1024], bf16>) 
+      -> !tessera.research_metrics
+    
+    // Stage 8: Iterative Refinement Based on Metrics
+    %refined_content = tessera.graph.iterative_refinement %synthesized_content, %eval_metrics {
+        refinement_iterations = 2,
+        improvement_targets = ["nugget_coverage", "citation_accuracy"],
+        convergence_threshold = 0.95
+    } : (!tessera.tensor<[?, 2048], bf16>, !tessera.research_metrics) 
+      -> !tessera.tensor<[?, 2048], bf16>
+    
+    return %refined_content, %eval_metrics : !tessera.tensor<[?, 2048], bf16>, !tessera.research_metrics
+}
+
+// Optimization passes for research synthesis pipeline
+tessera.graph.optimization_pass @optimize_research_pipeline {
+    // Memory optimization for long documents
+    tessera.pass.memory_layout_optimization {
+        strategy = "research_synthesis_optimized",
+        chunk_size = 2048,
+        overlap = 128,
+        prefetch_factor = 2
+    }
+    
+    // Attention fusion for hierarchical reasoning
+    tessera.pass.attention_fusion {
+        fusion_patterns = ["hierarchical_levels", "cross_attention", "flash_mla"],
+        memory_bound_optimization = true,
+        compute_intensity_optimization = true
+    }
+    
+    // Citation tracking optimization
+    tessera.pass.citation_tracking_optimization {
+        graph_compression = true,
+        reference_deduplication = true,
+        authority_caching = true
+    }
+    
+    // Pipeline parallelization
+    tessera.pass.pipeline_parallelization {
+        stages = ["retrieval", "extraction", "synthesis", "evaluation"],
+        overlap_computation = true,
+        load_balancing = "dynamic"
+    }
+}
+
+// Specialized types for research synthesis
+!tessera.synthesis_plan = !tessera.struct<{
+    planning_context: !tessera.tensor<[?, 1024], bf16>,
+    decomposition_strategy: !tessera.tensor<[?, 512], bf16>,
+    execution_outline: !tessera.tensor<[?, 256], bf16>,
+    cross_level_weights: !tessera.tensor<[3, 3], f32>
+}>
+
+!tessera.citation_graph = !tessera.struct<{
+    citation_matrix: !tessera.tensor<[?, ?], f32>,
+    authority_scores: !tessera.tensor<[?], f32>,
+    temporal_weights: !tessera.tensor<[?], f32>,
+    cross_references: !tessera.tensor<[?, 10], i32>
+}>
+
+!tessera.research_metrics = !tessera.struct<{
+    nugget_coverage: f32,
+    document_importance: f32,
+    reference_coverage: f32,
+    citation_accuracy: f32,
+    overall_score: f32,
+    detailed_breakdown: !tessera.tensor<[10], f32>
+}>
+
+// Schedule IR lowering for distributed execution
+func.func @schedule_research_synthesis_distributed(
+    %query: !tessera.tensor<[?, 512], bf16>,
+    %corpus: !tessera.tensor<[?, ?, 1024], bf16>
+) -> !tessera.tensor<[?, 2048], bf16> {
+    
+    // Distribute corpus across devices for parallel processing
+    %corpus_sharded = tessera.schedule.shard %corpus {
+        axis = 1,  // Shard along document dimension
+        devices = [0, 1, 2, 3],
+        strategy = "balanced_load"
+    } : !tessera.tensor<[?, ?, 1024], bf16> -> !tessera.distributed_tensor<[?, ?, 1024], bf16>
+    
+    // Parallel retrieval across shards
+    %retrieval_results = tessera.schedule.parallel_map @retrieval_kernel, %corpus_sharded {
+        parallelism = "data_parallel",
+        synchronization = "async_with_barrier",
+        load_balancing = true
+    } : (!tessera.distributed_tensor<[?, ?, 1024], bf16>) -> !tessera.distributed_tensor<[?, 20, 1024], bf16>
+    
+    // Gather results for synthesis
+    %gathered_docs = tessera.schedule.all_gather %retrieval_results {
+        gather_axis = 1,
+        result_placement = "replicated"
+    } : !tessera.distributed_tensor<[?, 20, 1024], bf16> -> !tessera.tensor<[?, ?, 1024], bf16>
+    
+    // Hierarchical synthesis with model parallelism
+    %synthesis_result = tessera.schedule.model_parallel @synthesis_kernel, %gathered_docs {
+        axis = 2,  // Model parallel along feature dimension
+        devices = [0, 1],
+        activation_checkpointing = true,
+        gradient_accumulation = 4
+    } : !tessera.tensor<[?, ?, 1024], bf16> -> !tessera.tensor<[?, 2048], bf16>
+    
+    return %synthesis_result : !tessera.tensor<[?, 2048], bf16>
+}
+
+// Performance annotations for autotuning
+tessera.performance.annotation @deepscholar_performance_targets {
+    latency_target = 2.5,      // 2.5 seconds for synthesis
+    throughput_target = 100,   // 100 papers per minute
+    memory_limit = 40,         // 40GB GPU memory
+    accuracy_target = 0.85,    // 85% on DeepScholar-bench metrics
+    
+    hardware_configs = [
+        {device = "A100", memory = "80GB", target_batch_size = 16},
+        {device = "H100", memory = "80GB", target_batch_size = 32},
+        {device = "V100", memory = "32GB", target_batch_size = 8}
+    ]
+}

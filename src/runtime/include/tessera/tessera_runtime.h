@@ -1,57 +1,55 @@
-#ifndef TESSERA_RUNTIME_H
-#define TESSERA_RUNTIME_H
+#pragma once
+#include <stddef.h>
+#include <stdint.h>
+#include "tsr_status.h"
+#include "tsr_types.h"
+#include "tsr_version.h"
+#include "tsr_kernel.h"
+#include "tsr_shape.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include <stddef.h>
-#include <stdint.h>
+TsrStatus tsrInit(void);
+TsrStatus tsrShutdown(void);
 
-#define TSR_API
+TsrStatus tsrGetDeviceCount(int* count);
+TsrStatus tsrGetDevice(int index, tsrDevice* out);
+TsrStatus tsrGetDeviceProps(tsrDevice dev, tsrDeviceProps* props);
 
-typedef struct tsrContext__* tsrContext;
-typedef struct tsrModule__*  tsrModule;
-typedef struct tsrMem__*     tsrMem;
-typedef struct tsrGraph__*   tsrGraph;
-typedef struct tsrEvent__*   tsrEvent;
+TsrStatus tsrCreateStream(tsrDevice dev, tsrStream* out);
+TsrStatus tsrDestroyStream(tsrStream s);
+TsrStatus tsrStreamSynchronize(tsrStream s);
 
-typedef enum {
-  TSR_SUCCESS = 0,
-  TSR_ERROR_GENERIC = 1,
-  TSR_ERROR_INVALID_ARGUMENT = 2,
-  TSR_ERROR_OUT_OF_MEMORY = 3,
-  TSR_ERROR_UNSUPPORTED = 4
-} tsrStatus;
+TsrStatus tsrCreateEvent(tsrDevice dev, tsrEvent* out);
+TsrStatus tsrRecordEvent(tsrEvent e, tsrStream s);
+TsrStatus tsrWaitEvent(tsrEvent e, tsrStream s);
+TsrStatus tsrEventSynchronize(tsrEvent e);
+TsrStatus tsrDestroyEvent(tsrEvent e);
 
-// version
-TSR_API int tsrGetVersion(int* major, int* minor, int* patch);
+// Profiling: timestamp in nanoseconds since process start (steady clock).
+TsrStatus tsrEventGetTimestamp(tsrEvent e, uint64_t* ns_out);
 
-// context
-TSR_API tsrStatus tsrContextCreate(tsrContext* out);
-TSR_API void      tsrContextDestroy(tsrContext ctx);
+TsrStatus tsrMalloc(tsrDevice dev, size_t bytes, tsrBuffer* out);
+TsrStatus tsrFree(tsrBuffer b);
+TsrStatus tsrMemset(tsrBuffer b, int value, size_t bytes);
+TsrStatus tsrMemcpy(tsrBuffer dst, const tsrBuffer src, size_t bytes, TsrMemcpyKind kind);
+TsrStatus tsrMap(tsrBuffer b, void** host_ptr, size_t* bytes);
+TsrStatus tsrUnmap(tsrBuffer b);
 
-// modules
-TSR_API tsrStatus tsrModuleLoad(tsrContext ctx, const void* data, size_t len, tsrModule* out);
-TSR_API void      tsrModuleUnload(tsrModule mod);
+// Host portable tile kernel launch with shared memory/barrier support.
+// The user_ctx passed to kernel is a (tsrKernelCtx*).
+TsrStatus tsrLaunchHostTileKernel(tsrStream s,
+                                  const tsrLaunchParams* params,
+                                  tsrHostKernelFn kernel,
+                                  void* user_payload);
 
-// memory
-TSR_API tsrStatus tsrMemAlloc(tsrContext ctx, size_t bytes, tsrMem* out);
-TSR_API tsrStatus tsrMemFree(tsrMem mem);
-TSR_API tsrStatus tsrMemcpy(tsrMem dst, const void* src, size_t bytes);
-
-// execution
-TSR_API tsrStatus tsrTileGraphCreate(tsrContext ctx, const void* tile_descs, size_t n, tsrGraph* out);
-TSR_API tsrStatus tsrLaunch(tsrGraph graph, const void* launch_params);
-TSR_API tsrStatus tsrSynchronize(tsrGraph graph);
-
-// events
-TSR_API tsrStatus tsrEventCreate(tsrContext ctx, tsrEvent* out);
-TSR_API tsrStatus tsrEventRecord(tsrEvent ev);
-TSR_API tsrStatus tsrEventWait(tsrEvent ev);
-TSR_API tsrStatus tsrEventDestroy(tsrEvent ev);
+TsrStatus tsrLaunchHostTileKernelSync(tsrDevice dev,
+                                      const tsrLaunchParams* params,
+                                      tsrHostKernelFn kernel,
+                                      void* user_payload);
 
 #ifdef __cplusplus
-}
+} // extern "C"
 #endif
-#endif // TESSERA_RUNTIME_H

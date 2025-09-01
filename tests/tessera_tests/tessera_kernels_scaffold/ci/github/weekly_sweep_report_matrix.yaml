@@ -1,0 +1,68 @@
+name: weekly-sweep-report-matrix
+on:
+  schedule:
+    - cron: '30 8 * * 1'  # Mondays 08:30 UTC
+  workflow_dispatch:
+jobs:
+  sweep-report:
+    strategy:
+      fail-fast: false
+      matrix:
+        gpu_label: [gpu-sm80, gpu-sm90]
+    runs-on: [self-hosted, ${{ matrix.gpu_label }}]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Install deps
+        run: |
+          pip install torch pytest pandas matplotlib pynvml
+      - name: Build extension (BF16 on where available)
+        run: |
+          if [[ "${{ matrix.gpu_label }}" == "gpu-sm80" ]]; then export TESSERA_TARGET_SM=80; export TESSERA_ENABLE_BF16=1; fi
+          if [[ "${{ matrix.gpu_label }}" == "gpu-sm90" ]]; then export TESSERA_TARGET_SM=90; export TESSERA_ENABLE_BF16=1; fi
+          python ext/setup.py build_ext --inplace
+      - name: Run sweep (S x D x dropout x causal)
+        run: |
+          python tests/perf/model/bench_flashattn_sweep.py --seqs 128,256,512,1024,2048 --dims 64,128,256 --dropouts 0.0,0.1 --causals 0,1 --seed 1234 --iters 20 --warmup 5
+      - name: Run memory I/O bench
+        run: |
+          python tests/perf/io/bench_mem_io.py --sizes_mb 64,128,256,512,1024
+      - name: Run PCIe I/O bench
+        run: |
+          python tests/perf/io/bench_pcie_io.py --sizes_mb 64,128,256,512,1024
+      - name: Run NCCL collectives bench (single-node; 2 GPUs expected)
+        env:
+          WORLD_SIZE: 2
+          INIT_METHOD: env://
+        run: |
+          if [[ -z "$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)" ]]; then exit 0; fi
+          torchrun --nproc_per_node=2 tests/perf/collectives/bench_nccl.py --sizes_mb 1,2,4,8,16,32,64,128,256 --iters 50 --warmup 10 --dtype float16 --out_dir runs
+      - name: Generate report (MD + HTML + PNGs)
+        run: |
+          python scripts/make_roofline_report.py --csv runs/flashattn_sweep.csv --outdir runs
+      - name: Upload artifacts per label
+        uses: actions/upload-artifact@v4
+        with:
+          name: runs-${{ matrix.gpu_label }}
+          path: runs/
+
+  aggregate-reports:
+    needs: sweep-report
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloads
+      - name: Aggregate into a single tabbed HTML
+        run: |
+          python scripts/aggregate_reports.py --root downloads --out downloads/combined_weekly_report.html
+      - name: Upload combined report
+        uses: actions/upload-artifact@v4
+        with:
+          name: combined-weekly-report
+          path: downloads/combined_weekly_report.html

@@ -1,0 +1,36 @@
+name: weekly-sweep-report
+on:
+  schedule:
+    - cron: '0 8 * * 1'  # Mondays 08:00 UTC
+  workflow_dispatch:
+jobs:
+  sweep-report:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Install deps
+        run: |
+          pip install torch pytest pandas matplotlib pynvml
+      - name: Build extension (sm90; BF16 on)
+        run: |
+          export TESSERA_TARGET_SM=90
+          export TESSERA_ENABLE_BF16=1
+          python ext/setup.py build_ext --inplace
+      - name: Run sweep (S x D x dropout x causal)
+        run: |
+          python tests/perf/model/bench_flashattn_sweep.py --seqs 128,256,512,1024,2048 --dims 64,128,256 --dropouts 0.0,0.1 --causals 0,1 --seed 1234 --iters 20 --warmup 5
+      - name: Generate report (MD + HTML + PNGs)
+        run: |
+          python scripts/make_roofline_report.py --csv runs/flashattn_sweep.csv --outdir runs
+      - name: Upload sweep artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tessera-weekly-sweep
+          path: |
+            runs/flashattn_sweep.csv
+            runs/flashattn_sweep.jsonl
+            runs/*.png
+            runs/flashattn_sweep_report.md
+            runs/flashattn_sweep_report.html

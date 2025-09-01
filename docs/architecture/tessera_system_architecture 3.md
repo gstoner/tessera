@@ -26,22 +26,22 @@ Tessera is a tile‑centric programming model and toolchain for high‑performan
 
 ## 2. Architecture at a Glance
 ```mermaid
-graph LR
+flowchart LR
   subgraph Authoring
-    A[Language & DSL\n(Tessera Source)] --> B[Frontend\nParser + Type/Shape]
+    A["Language & DSL<br/>(Tessera Source)"] --> B["Frontend<br/>Parser + Type/Shape"]
   end
   subgraph Compilation
-    B --> C[Tessera IR\nCore + Dialects]
-    C --> D[Pass Pipeline\nLegalize/Tile/Fuse/Vectorize]
-    D --> E[Backends\nNVIDIA PTX | AMD GCN | CPU SIMD]
-    E --> F[Binary Artifacts\n(PTX, HSACO, Obj, Metadata)]
+    B --> C["Tessera IR<br/>Core + Dialects"]
+    C --> D["Pass Pipeline<br/>Legalize / Tile / Fuse / Vectorize"]
+    D --> E["Backends<br/>NVIDIA PTX | AMD GCN | CPU SIMD"]
+    E --> F["Binary Artifacts<br/>(PTX, HSACO, Obj, Metadata)"]
   end
   subgraph Runtime
-    F --> G[Module Loader]
-    G --> H[Tile Scheduler & Streams]
-    H --> I[Memory Manager\nHBM/L2/SMEM]
-    H --> J[Distributed Engine\nCollectives + Overlap]
-    H --> K[Profiler & Tracer]
+    F --> G["Module Loader"]
+    G --> H["Tile Scheduler & Streams"]
+    H --> I["Memory Manager<br/>HBM / L2 / SMEM"]
+    H --> J["Distributed Engine<br/>Collectives + Overlap"]
+    H --> K["Profiler & Tracer"]
   end
 ```
 **Data Products:** IR snapshots, kernel binaries, per‑kernel metadata (tile shape, regs, smem, launch), and runtime traces.

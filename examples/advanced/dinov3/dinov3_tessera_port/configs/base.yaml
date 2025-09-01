@@ -1,0 +1,26 @@
+# Minimal config for the scaffold
+backbone:
+  img_size: 224
+  patch_size: 16
+  embed_dim: 512
+  depth: 8
+  num_heads: 8
+  mlp_ratio: 4.0
+
+head:
+  out_dim: 8192
+  hidden_dim: 1024
+  bottleneck_dim: 256
+  nlayers: 3
+
+ssl:
+  student_temp: 0.1
+  teacher_temp: 0.04
+  ema_momentum: 0.996
+  center_momentum: 0.9
+  gram_weight: 0.0
+
+data:
+  global_size: 224
+  local_size: 96
+  n_local: 6

@@ -1,0 +1,15 @@
+seed: 42
+vocab_size: 256
+max_len: 256
+group_size: 8
+oversample_factor: 2
+select_size: 8
+eps_clip_low: 0.2
+eps_clip_high: 0.28
+lr: 0.001
+entropy_coef: 0.0
+use_kl_penalty: false
+batch_prompts: 2
+max_turns: 3
+tool_timeout_s: 1.0
+device: cpu

@@ -1,0 +1,5 @@
+{"question": "Compute 12 + 34. Reply with <think>...</think> and the final result in <answer>...</answer>.", "answer": "46"}
+{"question": "What is 7 * 8?", "answer": "56"}
+{"question": "If x=5 and y=3, what is x^2 + y?", "answer": "28"}
+{"question": "What is 100 / 4?", "answer": "25"}
+{"question": "Solve: 15 - 9", "answer": "6"}

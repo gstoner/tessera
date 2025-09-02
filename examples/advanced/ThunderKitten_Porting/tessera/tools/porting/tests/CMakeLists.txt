@@ -1,0 +1,1 @@
+add_executable(tessera_wgmma_map_check wgmma_map_check.cu)

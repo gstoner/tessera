@@ -23,16 +23,15 @@
 
 ## 1. Performance Model: Where Time Goes
 Let total step time be:
-\[
-T \approx \max\big(T_{\text{compute}},\ T_{\text{mem}},\ T_{\text{sync}},\ T_{\text{comm}}\big) + T_{\text{launch}} + T_{\text{host}}
-\]
+\[ T \approx \max\big(T_{\text{compute}},\ T_{\text{mem}},\ T_{\text{sync}},\ T_{\text{comm}}\big) + T_{\text{launch}} + T_{\text{host}} \]
 - \(T_{\text{compute}}\): tensor‑core MMAs, ALU.
 - \(T_{\text{mem}}\): HBM/L2/L1/SMEM traffic; coalescing & reuse decide this term.
 - \(T_{\text{sync}}\): barriers, reductions, atomics, warp divergence.
 - \(T_{\text{comm}}\): NVLink/NVL/PCIe/NIC collectives, host‑device copies.
 - \(T_{\text{launch}}, T_{\text{host}}\): kernel launch, CPU orchestration.
 
-**Arithmetic intensity:** \(I = \frac{\text{FLOPs}}{\text{Bytes from HBM}}\).  
+**Arithmetic intensity:**
+\(I = \frac{\text{FLOPs}}{\text{Bytes from HBM}}\).  
 If \(I < \frac{P_{\text{peak}}}{B_{\text{HBM}}}\) → memory‑bound; increase reuse, fuse ops, shrink bytes.  
 If \(I \ge \frac{P_{\text{peak}}}{B_{\text{HBM}}}\) → compute‑bound; raise **tensor‑core occupancy** and pipeline depth.
 

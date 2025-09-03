@@ -91,5 +91,6 @@ def test_gpu_fryer_like_stress(tmp_path):
         assert stats["step_time_p95"] < 3.0 * stats["step_time_p50"], "High latency variance: possible throttling/instability"
 
     Path(tmp_path/"gpu_fryer_like.json").write_text(json.dumps(stats, indent=2))
-    # Ensure we ran at least a few iterations
+    # Ensure no numerical issues and we ran at least a few iterations
+    assert stats["nan_inf"] == 0
     assert stats["iters"] >= 5

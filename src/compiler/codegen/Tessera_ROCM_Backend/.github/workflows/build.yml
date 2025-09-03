@@ -1,0 +1,20 @@
+name: build-and-test
+on: [push, pull_request]
+jobs:
+  host-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DTESSERA_ROCM_BUILD_TOOLS=ON -DTESSERA_ROCM_BUILD_RUNTIME=OFF
+      - name: Build
+        run: cmake --build build -j
+  hip-runtime:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (runtime only)
+        run: cmake -S . -B build -DTESSERA_ROCM_BUILD_RUNTIME=ON -DTESSERA_ROCM_BUILD_TOOLS=OFF
+      - name: Build
+        run: cmake --build build -j

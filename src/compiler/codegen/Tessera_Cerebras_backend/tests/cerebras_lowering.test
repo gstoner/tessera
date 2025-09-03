@@ -1,0 +1,5 @@
+// RUN: %tessera_cerebras_opt | FileCheck %s
+// CHECK: tessera-cerebras-opt (stub)
+module {
+  // This would normally contain Tessera IR or Cerebras IR ops.
+}

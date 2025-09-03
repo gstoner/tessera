@@ -1,0 +1,2 @@
+// This file is an example output from csl_codegen.emit_gemm_kernel().
+// Replace with the emitted version or your hand-tuned CSL.

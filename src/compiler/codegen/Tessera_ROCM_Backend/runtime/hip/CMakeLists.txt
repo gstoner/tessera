@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.20)
+find_package(hip QUIET)
+add_library(tessera_rocm_runtime STATIC loader.cpp launcher.cpp)
+target_include_directories(tessera_rocm_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+if (hip_FOUND) target_link_libraries(tessera_rocm_runtime PUBLIC hip::host) endif()
+add_executable(launch_demo examples/launch_vec_add.cpp)
+target_link_libraries(launch_demo PRIVATE tessera_rocm_runtime)

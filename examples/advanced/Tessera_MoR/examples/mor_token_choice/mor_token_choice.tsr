@@ -1,0 +1,68 @@
+// examples/mor_token_choice/mor_token_choice.tsr
+package examples.mor_token_choice
+
+config MorConfig {
+  d_model    : i32 = 256
+  n_heads    : i32 = 4
+  max_depth  : i32 = 3
+  seq_len    : i32 = 64
+  batch      : i32 = 2
+  causal     : bool = true
+  kv_policy  : #tessera.kv<"recursion"> // or #tessera.kv<"share_first">
+  router     : #tessera.router<"token_choice">
+}
+
+params RecursionWeights(d_model: i32, n_heads: i32) {
+  attn_qkv : tensor<d_model, d_model*3>
+  attn_o   : tensor<d_model, d_model>
+  mlp_w1   : tensor<4*d_model, d_model>
+  mlp_w2   : tensor<d_model, 4*d_model>
+}
+
+fn router_token_choice(h: tensor<batch, seq_len, d_model>,
+                       cfg: MorConfig) -> tensor<batch, seq_len, i32> {
+  let hidden = max(64, cfg.d_model / 2)
+  let l1 = linear(h, in_dim=cfg.d_model, out_dim=hidden, act="gelu")
+  let logits = linear(l1, in_dim=hidden, out_dim=cfg.max_depth)
+  let depth = argmax(logits, axis=-1) + 1 : tensor<batch, seq_len, i32>
+  return depth
+}
+
+fn recursion_block(h_active: tensor<*, *, d_model>,
+                   kv      : !t.kvcache,
+                   w       : RecursionWeights,
+                   cfg     : MorConfig) -> tensor<*, *, d_model> {
+  let a = attention(h_active, kv, w.attn_qkv, w.attn_o,
+                    heads=cfg.n_heads, causal=cfg.causal, tile=[64,64,64])
+  let y = gelu(linear(a, in_dim=cfg.d_model, out_dim=4*cfg.d_model))
+  let z = linear(y, in_dim=4*cfg.d_model, out_dim=cfg.d_model)
+  return z + h_active
+}
+
+export fn main() -> i32 {
+  let cfg = MorConfig{}
+  srand(123)
+  var h0 : tensor<cfg.batch, cfg.seq_len, cfg.d_model> = randn()
+  let depth = router_token_choice(h0, cfg)
+
+  var kv_all : !t.kvcache.all = kv.alloc(policy=cfg.kv_policy,
+                                         max_depth=cfg.max_depth,
+                                         heads=cfg.n_heads,
+                                         d_model=cfg.d_model,
+                                         seq_len=cfg.seq_len)
+
+  let w = load_params RecursionWeights(cfg.d_model, cfg.n_heads)
+
+  var h = h0
+  for s in 1..=cfg.max_depth {
+    let active = mor.partition(h, depth, s)
+    let kv_s   = kv.view(kv_all, s)
+    let y = recursion_block(active, kv_s, w, cfg)
+    h = mor.scatter(h, y, depth, s)
+  }
+
+  let counts = bincount(depth, bins=cfg.max_depth)
+  print("MoR done. Depth counts = ", counts)
+  debug.emit_tag("MOR_DEPTH_COUNTS", counts)
+  return 0
+}

@@ -1,0 +1,17 @@
+package morl
+
+@kernel sum_lastdim(x: tensor<NxMxf32>, out: tensor<Nxf32>) {
+  parallel_for i in 0..N {
+    s = 0.0
+    for m in 0..M { s += x[i,m] }
+    out[i] = s
+  }
+}
+
+@kernel max_lastdim(x: tensor<NxMxf32>, out: tensor<Nxf32>) {
+  parallel_for i in 0..N {
+    mx = -INF
+    for m in 0..M { mx = max(mx, x[i,m]) }
+    out[i] = mx
+  }
+}

@@ -1,0 +1,18 @@
+package morl
+
+@kernel pcgrad_pairwise(grads: tensor<MxDxf32>, out: tensor<Dxf32>) {
+  g = zeros<D>()
+  for m in 0..M {
+    g_m = grads[m,:]
+    for n in 0..M {
+      if (n == m) continue
+      dotmn = dot(grads[m,:], grads[n,:])
+      if (dotmn < 0) {
+        proj = dotmn / (norm2(grads[n,:]) + 1e-8)
+        g_m = g_m - proj * grads[n,:]
+      }
+    }
+    g += g_m
+  }
+  out[:] = g / M
+}

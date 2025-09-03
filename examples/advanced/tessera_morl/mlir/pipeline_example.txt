@@ -1,0 +1,5 @@
+# Example pipeline sketch (align names to your repo's registered passes)
+# mlir-opt input.mlir \
+#   -tessera-migrate-ir -tessera-canonicalize -tessera-verify \
+#   -tessera-vectorize -tessera-lower-to-target -convert-vector-to-llvm \
+#   -lower-affine -convert-scf-to-cf -convert-memref-to-llvm -convert-func-to-llvm

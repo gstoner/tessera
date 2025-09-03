@@ -1,0 +1,23 @@
+package morl
+
+@kernel scalarize_linear(x: tensor<NxMxf32>, w: tensor<Mxf32>, out: tensor<Nxf32>) {
+  parallel_for i in 0..N {
+    s = 0.0
+    for m in 0..M { s += x[i,m] * w[m] }
+    out[i] = s
+  }
+}
+
+@kernel scalarize_tchebycheff(x: tensor<NxMxf32>, w: tensor<Mxf32>, z: tensor<Mxf32>,
+                              eps: f32, out: tensor<Nxf32>) {
+  parallel_for i in 0..N {
+    maxv = -INF; sumv = 0.0
+    for m in 0..M {
+      d = abs(x[i,m] - z[m])
+      term = w[m] * d
+      maxv = max(maxv, term)
+      sumv += term
+    }
+    out[i] = -(maxv + eps * sumv)
+  }
+}

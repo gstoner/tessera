@@ -1,0 +1,10 @@
+# examples/mor_token_choice/tests/mor_token_choice.mlir.test
+# RUN: tessera-opt %s -tessera-mor-route-assign -tessera-mor-kv-plan -tessera-mor-depth-batching | FileCheck %s
+
+# CHECK: t.func @recursion_block
+# CHECK: t.attention
+# CHECK: t.mlp
+# CHECK: t.mor.partition
+# CHECK: t.kv.view
+# CHECK: t.mor.scatter
+# CHECK: t.debug.emit_tag "MOR_DEPTH_COUNTS"

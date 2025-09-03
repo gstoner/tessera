@@ -1,0 +1,26 @@
+# .github/workflows/mor.yml
+name: MoR Sample (Tessera)
+on:
+  push:
+    paths:
+      - 'examples/mor_token_choice/**'
+  pull_request:
+    paths:
+      - 'examples/mor_token_choice/**'
+jobs:
+  mor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps (placeholder)
+        run: |
+          echo "Install tessera-opt / FileCheck / runner as needed"
+      - name: Lit test
+        run: |
+          if command -v tessera-opt >/dev/null 2>&1 && command -v FileCheck >/dev/null 2>&1; then
+            tessera-opt examples/mor_token_choice/mlir/mor_token_choice.mlir \
+              -tessera-mor-route-assign -tessera-mor-kv-plan -tessera-mor-depth-batching \
+              | FileCheck examples/mor_token_choice/tests/mor_token_choice.mlir.test
+          else
+            echo "tessera-opt or FileCheck missing; skipping CI check."
+          fi

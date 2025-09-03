@@ -1,0 +1,4 @@
+func mm(A,B)[M,N,K] {
+  C = matmul(A,B);
+  return C;
+}

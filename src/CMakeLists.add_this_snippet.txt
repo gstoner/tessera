@@ -1,0 +1,9 @@
+
+# Add to your top-level CMakeLists.txt
+find_package(MLIR REQUIRED CONFIG)
+list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
+include(AddMLIR)
+include(TableGen)
+
+add_subdirectory(src/tessera/transforms)
+add_subdirectory(tools/tessera-opt)  # optional

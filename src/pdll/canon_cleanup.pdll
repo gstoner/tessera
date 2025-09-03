@@ -1,0 +1,55 @@
+
+// PDLL canonicalizations for Tessera
+
+// 1) matmul + add(bias) + gelu -> fused_epilogue(epilogue=gelu, has_bias=true)
+Pattern FuseMatmulBiasGELU {
+  let gelu: Op<"tessera.gelu">;
+  let add  = gelu.input                        : Op<"tessera.add">;
+  let mm   = add.lhs                           : Op<"tessera.matmul">;
+  let bias = add.rhs                           : Value;
+
+  rewrite to {
+    %f = "tessera.fused_epilogue"(%arg0: mm.lhs, %arg1: mm.rhs, %arg2: bias)
+         {epilogue = 2 : i32, has_bias = true} :
+         (type(mm.lhs), type(mm.rhs), type(bias)) -> type(gelu.result)
+    replace gelu with %f
+  }
+}
+
+// 2) conv2d_nhwc + relu -> conv2d_nhwc(epilogue=relu)
+Pattern FuseConvRelu {
+  let relu: Op<"tessera.relu">;
+  let conv = relu.input                        : Op<"tessera.conv2d_nhwc">;
+
+  rewrite to {
+    %c = "tessera.conv2d_nhwc"(conv.input, conv.filter)
+         {strides = conv.strides, dilations = conv.dilations, epilogue = 1 : i32} :
+         (type(conv.input), type(conv.filter)) -> type(relu.result)
+    replace relu with %c
+  }
+}
+
+// 3) transpose feeding matmul -> fold flags
+Pattern FoldTransposeIntoMatmulA {
+  let mm : Op<"tessera.matmul">;
+  let ta = mm.lhs : Op<"tessera.transpose">;
+
+  rewrite to {
+    %m2 = "tessera.matmul"(ta.x, mm.rhs)
+          {transposeA = true, transposeB = mm.transposeB} :
+          (type(ta.x), type(mm.rhs)) -> type(mm.result)
+    replace mm with %m2
+  }
+}
+
+Pattern FoldTransposeIntoMatmulB {
+  let mm : Op<"tessera.matmul">;
+  let tb = mm.rhs : Op<"tessera.transpose">;
+
+  rewrite to {
+    %m2 = "tessera.matmul"(mm.lhs, tb.x)
+          {transposeA = mm.transposeA, transposeB = true} :
+          (type(mm.lhs), type(tb.x)) -> type(mm.result)
+    replace mm with %m2
+  }
+}

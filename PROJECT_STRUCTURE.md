@@ -35,8 +35,6 @@ tessera/
 ### Python Package (`python/tessera/`)
 - **Core**: Tensor, Module, and fundamental abstractions
 - **NN**: Neural network layers and operations
-- **Compiler**: Python to MLIR compilation
-- **Runtime**: Python interface to C++ runtime
 
 ### Documentation (`docs/`)
 - **Architecture**: System design and implementation

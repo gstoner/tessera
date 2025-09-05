@@ -1,0 +1,23 @@
+# Mirrors HF config.json for NVIDIA-Nemotron-Nano-12B-v2-Base
+vocab_size: 131072
+hidden_size: 5120
+intermediate_size: 20480
+num_hidden_layers: 62
+num_attention_heads: 40
+num_key_value_heads: 8
+head_dim: 128
+hybrid_override_pattern: "M-M-M-M*-M-M-M-M*-M-M-M-M*-M-M-M-M*-M-M-M-M*-M-M-M-M*-M-M-M-M-"
+# Mamba‑specific
+mamba_num_heads: 128
+mamba_head_dim: 80
+ssm_state_size: 128
+conv_kernel: 4
+chunk_size: 128
+# Misc
+attention_bias: false
+mlp_bias: false
+hidden_dropout: 0.0
+attention_dropout: 0.0
+rms_norm_eps: 1.0e-5
+max_position_embeddings: 131072
+torch_dtype: bfloat16

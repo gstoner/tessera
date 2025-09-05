@@ -1,0 +1,3 @@
+#pragma once
+#include "harness/op_registry.h"
+void register_flash_attention();

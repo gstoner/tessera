@@ -1,0 +1,25 @@
+name: opbench
+on:
+  workflow_dispatch:
+  push:
+    paths: ["ops/**","harness/**","common/**",".github/workflows/opbench.yml"]
+  schedule:
+    - cron: "0 6 * * 1"  # weekly
+jobs:
+  build-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ python3 python3-pip
+      - name: Build
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
+      - name: Run quick sweep
+        run: python3 scripts/opbench.py --config scripts/configs/quick_sweep.yaml --bin ./build/opbench --out opbench_out
+      - name: Report
+        run: python3 scripts/report_html.py opbench_out/results.csv opbench_out/report.html
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: opbench_report
+          path: opbench_out/*

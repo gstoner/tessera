@@ -1,0 +1,14 @@
+seed: 123
+runs:
+  - op: matmul
+    iters: 50
+    sweep:
+      M: [1024, 2048]
+      N: [1024, 2048]
+      K: [1024, 2048]
+  - op: reduce
+    iters: 100
+    sweep:
+      M: [1048576]
+      N: [1]
+      K: [1]

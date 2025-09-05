@@ -1,0 +1,29 @@
+seed: 2025
+runs:
+  - op: matmul
+    iters: 100
+    sweep:
+      M: [512, 1024, 2048, 4096]
+      N: [512, 1024, 2048, 4096]
+      K: [512, 1024, 2048, 4096]
+  - op: conv2d
+    iters: 50
+    sweep:
+      Nn: [1, 8]
+      H: [128, 256]
+      W: [128, 256]
+      C: [64, 128]
+      Kc: [64, 128]
+      R: [3]
+      S: [3]
+      stride_h: [1, 2]
+      stride_w: [1, 2]
+      pad_h: [1]
+      pad_w: [1]
+  - op: flash_attention
+    iters: 50
+    sweep:
+      B: [1, 4]
+      heads: [8, 16]
+      seq: [512, 1024, 2048]
+      dim: [64, 128]

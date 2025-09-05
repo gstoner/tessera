@@ -1,0 +1,9 @@
+# Default sweep config for spectral benchmarks
+ops: [fft1d, fft2d, dct2, conv1d_fft, conv2d_fft, spectrum]
+sizes_1d: [1024, 2048, 4096, 8192, 16384]
+sizes_2d: ["256x256", "512x512", "1024x1024"]
+batch: 1
+dtype: float32
+device: auto
+repeats: 50
+warmup: 10

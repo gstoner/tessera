@@ -1,0 +1,13 @@
+name: "SM90 Example"
+hbm_bw_GBps: 1000.0
+compute_peaks_GFLOPs:
+  fp32: 82000.0
+  bf16_tensor: 220000.0
+  fp16_tensor: 240000.0
+links:
+  - name: "NVLink4 per-link"
+    bw_GBps: 50.0
+  - name: "PCIe Gen5 x16"
+    bw_GBps: 64.0
+  - name: "400G NIC (1 dir)"
+    bw_GBps: 50.0

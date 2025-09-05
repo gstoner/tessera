@@ -1,0 +1,49 @@
+{
+  "events": [
+    {
+      "type": "compute",
+      "name": "gemm_tile",
+      "flops": 1100000000000.0,
+      "dram_bytes": 18000000000.0,
+      "dur_us": 3600.0,
+      "dtype_key": "bf16_tensor"
+    },
+    {
+      "type": "compute",
+      "name": "attn_block",
+      "flops": 400000000000.0,
+      "dram_bytes": 10000000000.0,
+      "dur_us": 2100.0,
+      "dtype_key": "bf16_tensor"
+    },
+    {
+      "type": "compute",
+      "name": "norm",
+      "flops": 80000000000.0,
+      "dram_bytes": 8500000000.0,
+      "dur_us": 1800.0,
+      "dtype_key": "fp32"
+    },
+    {
+      "type": "comm",
+      "name": "a2a_bucket0",
+      "bytes": 1600000000.0,
+      "dur_us": 16000.0,
+      "link": "NVLink4"
+    },
+    {
+      "type": "comm",
+      "name": "p2p_stage",
+      "bytes": 800000000.0,
+      "dur_us": 24000.0,
+      "link": "PCIe"
+    },
+    {
+      "type": "comm",
+      "name": "reduce_scatter",
+      "bytes": 4000000000.0,
+      "dur_us": 80000.0,
+      "link": "NIC"
+    }
+  ]
+}

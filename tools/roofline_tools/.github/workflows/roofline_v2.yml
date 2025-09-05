@@ -1,0 +1,26 @@
+name: Roofline v2 Demo
+on:
+  push:
+    paths:
+      - 'tools/roofline/**'
+      - '.github/workflows/roofline_v2.yml'
+jobs:
+  roofline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install matplotlib pyyaml
+      - name: Generate single report (Perfetto)
+        run: |
+          python tools/roofline/cli_v2.py one --peaks tools/roofline/peaks/sm90_with_links.yaml             --input tools/roofline/examples/trace_perfetto_mixed.json --fmt perfetto --dtype bf16_tensor --outdir roofline_v2_out             --export-csv roofline_v2_out/classify.csv --export-json roofline_v2_out/classify.json
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: roofline_v2_out
+          path: roofline_v2_out/

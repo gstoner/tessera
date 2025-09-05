@@ -1,0 +1,56 @@
+
+suite:
+  name: "default"
+  description: "Portable smoke + kernel stubs + probes"
+  repeat: 3
+  warmup: 1
+
+# Provide peaks for efficiency metrics (optional; can also pass via report_html --peaks)
+peaks_file: "peaks/example_peaks.yaml"
+
+tasks:
+  - id: "micro.mem_bandwidth"
+    runner: "cpp_binary"
+    path: "build/micro_mem_bandwidth"
+    args: ["--size=268435456", "--repeat=3"]
+    metrics: ["bytes_per_s", "latency_ms"]
+
+  - id: "micro.cache_latency"
+    runner: "cpp_binary"
+    path: "build/micro_cache_latency"
+    args: ["--repeat=5"]
+    metrics: ["latency_ns"]
+
+  - id: "micro.gemm_f32"
+    runner: "cpp_binary"
+    path: "build/micro_gemm_f32"
+    args: ["--m=1024","--n=1024","--k=1024","--repeat=3"]
+    metrics: ["throughput_flops","latency_ms"]
+
+  - id: "kernel.gemm_tessera_stub"
+    runner: "python_module"
+    path: "benches/kernel/gemm_tessera_stub.py"
+    args: ["--m=1024","--n=1024","--k=1024","--repeat=2"]
+    metrics: ["throughput_flops","latency_ms","max_abs_err"]
+
+  - id: "kernel.conv2d_nhwc_tessera_stub"
+    runner: "python_module"
+    path: "benches/kernel/conv2d_nhwc_tessera_stub.py"
+    args: ["--n=1","--h=64","--w=64","--c=32","--oc=64","--repeat=1"]
+    metrics: ["throughput_flops","latency_ms","max_abs_err"]
+
+  - id: "kernel.flashattn_tessera_stub"
+    runner: "python_module"
+    path: "benches/kernel/flashattn_tessera_stub.py"
+    args: ["--batch=1","--heads=8","--seq=512","--d=64","--repeat=1"]
+    metrics: ["throughput_tokens_per_s","latency_ms","max_abs_err"]
+
+  - id: "distributed.all_reduce"
+    runner: "python_module"
+    path: "benches/distributed/collectives_torch.py"
+    args: ["--world_size=2","--backend=nccl","--iters=50","--bytes=134217728"]
+    metrics: ["bandwidth_Bps","latency_ms"]
+
+report:
+  html: true
+  json: true

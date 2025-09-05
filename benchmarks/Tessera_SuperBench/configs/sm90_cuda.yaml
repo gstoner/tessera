@@ -1,0 +1,6 @@
+
+extends: "default.yaml"
+overrides:
+  tasks:
+    - id: "kernel.attention_stub"
+      args: ["--seq=4096","--d=128","--heads=32"]

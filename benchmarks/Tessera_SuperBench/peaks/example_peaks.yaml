@@ -1,0 +1,6 @@
+
+# Example device peaks for roofline (choose the closest or edit)
+device: "example-sm90"
+compute_peak_flops: 9.0e13      # 90 TFLOP/s (example FP16/FP8 tensor core)
+memory_peak_bytes_per_s: 3.0e12 # 3 TB/s HBM (example)
+notes: "Edit per your device. You can add multiple devices later."

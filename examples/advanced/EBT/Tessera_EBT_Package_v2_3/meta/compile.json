@@ -1,0 +1,20 @@
+{
+  "name": "Tessera-EBT v2.3",
+  "pipelines": [
+    "tessera-ebt-canonicalize",
+    "tessera-ebt-lower"
+  ],
+  "options": {
+    "K": 4,
+    "T": 4,
+    "use_jvp": false,
+    "backend": "auto"
+  },
+  "report": {
+    "roofline_csv": "reports/roofline.csv"
+  },
+  "provenance": {
+    "author": "EBT integration scaffold",
+    "license": "Apache-2.0-compatible"
+  }
+}

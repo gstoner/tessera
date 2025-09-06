@@ -1,0 +1,24 @@
+{
+  "traceEvents": [
+    {
+      "ph": "M",
+      "name": "process_name",
+      "pid": 1,
+      "args": {
+        "name": "tessera-ebt"
+      }
+    },
+    {
+      "ph": "X",
+      "name": "EBT inner loop",
+      "ts": 0,
+      "dur": 1000,
+      "pid": 1,
+      "tid": 0,
+      "args": {
+        "K": 4,
+        "T": 4
+      }
+    }
+  ]
+}

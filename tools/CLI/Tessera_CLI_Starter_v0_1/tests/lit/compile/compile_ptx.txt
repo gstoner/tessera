@@ -1,0 +1,4 @@
+\
+# RUN: tessera-compile %s --platform=cuda --arch=sm_90 --out-dir %t \
+# RUN: && test -f %t/kernels/demo.ptx \
+# RUN: && test -f %t/meta/compile.json

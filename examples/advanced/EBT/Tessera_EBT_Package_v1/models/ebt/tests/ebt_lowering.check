@@ -1,0 +1,6 @@
+// CHECK-LABEL: ebt_lowering
+// CHECK: scf.for
+// CHECK: ebt.grad_y
+// CHECK: ebt.inner_step
+// CHECK: ebt.energy
+// CHECK: ebt.self_verify

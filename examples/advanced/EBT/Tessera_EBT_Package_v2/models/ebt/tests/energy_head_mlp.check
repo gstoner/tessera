@@ -1,0 +1,5 @@
+// CHECK-LABEL: func @ebt_energy_mlp
+// CHECK: tessera.tile.concat
+// CHECK: tessera.tile.linear
+// CHECK: tessera.tile.gelu
+// CHECK: tessera.tile.reduce_sum

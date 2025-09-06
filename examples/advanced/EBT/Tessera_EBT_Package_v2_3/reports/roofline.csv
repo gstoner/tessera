@@ -1,0 +1,4 @@
+kernel,flops,bytes,intensity,time_ms,device
+energy_head_bilinear,1.2e12,3.0e11,4.0,1.6,SM90
+grad_y_autodiff,9.0e11,2.2e11,4.1,1.9,SM90
+inner_step,5.0e11,1.5e11,3.3,1.1,SM90

@@ -1,0 +1,14 @@
+{
+  "name": "Tessera-EBT v2.4",
+  "passes": [
+    "tessera-ebt-materialize-loops",
+    "tessera-ebt-select-grad-path"
+  ],
+  "numerics": {
+    "check": "ebt_check_cpu asserts energy decreases"
+  },
+  "provenance": {
+    "author": "EBT integration scaffold",
+    "license": "Apache-2.0-compatible"
+  }
+}

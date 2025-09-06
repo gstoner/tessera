@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.20)
+project(tessera_ebt_v24 LANGUAGES CXX)
+add_executable(tessera-ebt-opt tools/tessera-ebt-opt/main.cpp)
+add_executable(ebt_check_cpu models/ebt/runtime/ebt_check_cpu.cpp)
+target_include_directories(ebt_check_cpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+set_property(TARGET tessera-ebt-opt ebt_check_cpu PROPERTY CXX_STANDARD 17)

@@ -1,0 +1,10 @@
+{
+  "name": "Tessera-EBT v2.7",
+  "dialect": "models/ebt/dialect/EBTDialect.td",
+  "autodiff_example": "models/ebt/ir/autodiff/mlp_autodiff_example.mlir",
+  "jvp_check": "models/ebt/tests/jvp_equals_directional_cpu.cpp",
+  "provenance": {
+    "author": "EBT integration scaffold",
+    "license": "Apache-2.0-compatible"
+  }
+}

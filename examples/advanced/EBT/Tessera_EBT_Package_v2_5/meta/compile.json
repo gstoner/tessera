@@ -1,0 +1,21 @@
+{
+  "name": "Tessera-EBT v2.5",
+  "passes": [
+    "tessera-ebt-materialize-loops",
+    "tessera-ebt-select-grad-path"
+  ],
+  "smoke": {
+    "exe": "run_ebt_smoke",
+    "env": [
+      "EBT_K",
+      "EBT_T",
+      "EBT_D",
+      "EBT_DEVICE"
+    ],
+    "output": "reports/roofline.csv"
+  },
+  "provenance": {
+    "author": "EBT integration scaffold",
+    "license": "Apache-2.0-compatible"
+  }
+}

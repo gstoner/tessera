@@ -1,0 +1,17 @@
+{
+  "name": "Tessera-EBT v2.2",
+  "pipelines": [
+    "tessera-ebt-canonicalize",
+    "tessera-ebt-lower"
+  ],
+  "options": {
+    "K": 4,
+    "T": 4,
+    "use_jvp": false,
+    "report": "reports"
+  },
+  "provenance": {
+    "author": "EBT integration scaffold",
+    "license": "Apache-2.0-compatible"
+  }
+}

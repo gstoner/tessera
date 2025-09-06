@@ -1,0 +1,2 @@
+// CHECK-LABEL: func @grad_y
+// CHECK: tessera.autodiff.grad_y

@@ -1,0 +1,19 @@
+{
+  "name": "Tessera-EBT v2.6",
+  "passes": [
+    "tessera-ebt-canonicalize",
+    "tessera-ebt-materialize-loops",
+    "tessera-ebt-select-grad-path"
+  ],
+  "smoke": {
+    "exe": "run_smoke",
+    "opts": [
+      "SMOKE_WITH_CUDA",
+      "SMOKE_WITH_HIP"
+    ]
+  },
+  "provenance": {
+    "author": "EBT integration scaffold",
+    "license": "Apache-2.0-compatible"
+  }
+}

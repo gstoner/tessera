@@ -1,0 +1,4 @@
+// CHECK-LABEL: func @ebt_energy_bilinear
+// CHECK: tessera.tile.matmul
+// CHECK: tessera.tile.batched_dot
+// CHECK: tessera.tile.reduce_sum

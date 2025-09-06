@@ -1,0 +1,28 @@
+
+Tessera EBT Pipelines (intended mlir-opt style)
+
+[tessera-ebt-canonicalize]
+  -cse
+  -canonicalize
+  -tessera-ebt-normalize-self-verify
+  -tessera-hoist-invariants
+  -tessera-inline-decode-init
+  -tessera-shape-simplify
+  -canonicalize
+  -cse
+
+[tessera-ebt-lower]
+  # Graph→Schedule
+  -tessera-ebt-materialize-loops   # emits scf.for over K and T (reads --ebt-K, --ebt-T)
+  -tessera-loop-fusion --aggressive
+  # Schedule→Tile
+  -tessera-tiling-pipeline --targets=attention,mlp,ebt.energy
+  -tessera-autodiff=mode=vjp,targets=ebt.energy  # enables grad_y unless --ebt-use-jvp
+  -tessera-ebt-select-grad-path --prefer-jvp=%useJVP
+  # Tile→Target
+  -tessera-vectorize
+  -convert-vector-to-llvm
+  -tessera-target-select --nvidia|--rocm|--cpu
+  -tessera-target-lower   # NV: WGMMA/TMA; ROCm: MFMA; CPU: AVX2
+  -canonicalize
+  -cse

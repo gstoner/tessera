@@ -1,0 +1,2 @@
+// CHECK-LABEL: func @ebt_rocm_energy_tile_lowered
+// CHECK: tessera.target.rocm.mfma

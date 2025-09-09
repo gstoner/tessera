@@ -1,0 +1,7 @@
+# Example pass pipeline wiring for tessera-opt (conceptual)
+pipeline:
+  - name: tessera-migrate-ir
+  - name: canonicalize
+  - name: cse
+  - name: tessera-empirical-search  # hooks into the agent via RPC or embedded API
+  - name: tessera-verify --require-ir-version

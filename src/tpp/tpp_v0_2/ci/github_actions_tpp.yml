@@ -1,0 +1,21 @@
+name: tpp-ci
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  lit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DLLVM_ENABLE_PROJECTS=mlir
+      - name: Build
+        run: ninja -C build tessera-opt
+      - name: Run TPP pipeline tests
+        run: |
+          build/bin/tessera-opt src/tpp/test/TPP/pipeline_alias.mlir -tpp-space-time
+          build/bin/tessera-opt src/tpp/test/TPP/halo_infer.mlir -tpp-halo-infer
+          build/bin/tessera-opt src/tpp/test/TPP/bc_lowering.mlir -lower-tpp-to-target-ir
+          build/bin/tessera-opt src/tpp/test/TPP/shallow_water_smoke.mlir -tpp-space-time -lower-tpp-to-target-ir

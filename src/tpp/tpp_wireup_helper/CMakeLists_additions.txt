@@ -1,0 +1,12 @@
+
+# === Add this near other src/ subdirs ===
+add_subdirectory(src/tpp)
+
+# === Ensure tessera-opt (or your main tools) link the new libs ===
+# Example for a target named tessera-opt:
+target_link_libraries(tessera-opt
+  PRIVATE
+    TesseraTPPDialect
+    TesseraTPPPasses
+    TesseraTPPInit
+)

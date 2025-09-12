@@ -1,0 +1,23 @@
+//===- ParamBatchPlan.cpp -------------------------------------------------------*- C++ -*-===//
+#include "SolversPasses.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Support/LogicalResult.h"
+
+using namespace mlir;
+
+namespace {
+struct ParamBatchPlanPass : PassWrapper<ParamBatchPlanPass, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ParamBatchPlanPass)
+  StringRef getArgument() const final { return "parambatchplan"; }
+  StringRef getDescription() const final { return "parambatchplan pass (stub)"; }
+  void runOnOperation() override {
+    // TODO: Real implementation
+    // For now, do nothing.
+  }
+};
+} // namespace
+
+namespace tessera { namespace passes {
+std::unique_ptr<Pass> createParamBatchPlanPass() { return std::make_unique<ParamBatchPlanPass>(); }
+}} // namespace tessera::passes

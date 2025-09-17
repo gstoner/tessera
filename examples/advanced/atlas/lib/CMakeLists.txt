@@ -1,0 +1,4 @@
+add_library(tesseraAtlasDialect dialect/tessera_atlas.cpp)
+add_library(tesseraAtlasPasses passes/atlas_window_planner.cpp passes/atlas_featuremap_lowering.cpp passes/atlas_memory_kernel_lowering.cpp)
+add_executable(tessera-atlas-opt tools/atlas_opt_main.cpp)
+target_link_libraries(tessera-atlas-opt PRIVATE tesseraAtlasDialect tesseraAtlasPasses)

@@ -1,0 +1,5 @@
+# Prove‑As‑You‑Go Template
+[Insert DOMAIN text]
+[Insert PROBLEM text]
+
+Follow the JSON schema from docs/PDDL_CoT_Prompting_Guide.md and emit one line per step.

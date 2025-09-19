@@ -1,0 +1,33 @@
+{
+  "memory-bound": {
+    "hints": [
+      "prefer_async_copy",
+      "shared_mem_tiling",
+      "double_buffer"
+    ],
+    "targets": {
+      "throughput_tflops_min": 800.0,
+      "memory_usage_bytes_max": 200000
+    }
+  },
+  "compute-bound": {
+    "hints": [
+      "prefer_tensor_cores",
+      "increase_tile",
+      "unroll_guard_255regs"
+    ],
+    "targets": {
+      "throughput_tflops_min": 900.0
+    }
+  },
+  "mixed-precision": {
+    "hints": [
+      "fp8_storage_fp32_accum",
+      "quant_dequant_points",
+      "loss_scaling_hook"
+    ],
+    "targets": {
+      "numerical_error_max": 1e-06
+    }
+  }
+}

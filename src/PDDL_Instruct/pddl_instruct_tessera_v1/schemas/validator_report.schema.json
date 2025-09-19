@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Plan Validator Report",
+  "type": "object",
+  "required": [
+    "valid",
+    "failures",
+    "goal_satisfaction",
+    "summary"
+  ],
+  "properties": {
+    "valid": {
+      "type": "boolean"
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "goal_satisfaction": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "boolean"
+      }
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "steps": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "violations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "throughput_tflops_estimate": {
+          "type": "number"
+        },
+        "memory_efficiency": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

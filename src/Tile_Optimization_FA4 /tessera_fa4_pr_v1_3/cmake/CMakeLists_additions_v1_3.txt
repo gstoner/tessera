@@ -1,0 +1,4 @@
+# v1.3 additions
+add_library(TesseraQueueDialect      dialects/tessera_queue/Queue.td)
+add_library(TesseraQueueVerifiers    lib/Dialect/Queue/QueueVerifiers.cpp)
+# Ensure tessera-opt registers Queue + Attn + Schedule + Tile + Numerics dialects and related passes.

@@ -1,5 +1,0 @@
-func fused(A,B,bias)[M,N,K] {
-  T = matmul(A,B);
-  C = add(T,bias);
-  return C;
-}

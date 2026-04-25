@@ -1,1 +1,0 @@
-file(GLOB docs *.md)

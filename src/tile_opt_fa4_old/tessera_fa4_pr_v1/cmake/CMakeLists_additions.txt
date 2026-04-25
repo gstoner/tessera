@@ -1,9 +1,0 @@
-# Add these to your top-level CMake after MLIR is configured
-add_library(TesseraScheduleToTarget
-  ${CMAKE_CURRENT_SOURCE_DIR}/lib/Conversion/TesseraScheduleToTarget/LowerScheduleToTarget.cpp)
-add_library(TesseraTileToPTX
-  ${CMAKE_CURRENT_SOURCE_DIR}/lib/Conversion/TesseraTileToPTX/LowerTileToPTX.cpp)
-add_library(TesseraNumericsTransforms
-  ${CMAKE_CURRENT_SOURCE_DIR}/lib/Transforms/NumericsSoftmaxPolicy.cpp)
-
-# TODO: link against MLIR libraries and Tessera dialect libs

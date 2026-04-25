@@ -1,1 +1,0 @@
-def version(): return 'tessera_power 0.1.0'

@@ -946,7 +946,7 @@ The Tessera Target IR provides a complete solution for generating highly optimiz
 - **Automatic optimization** eliminating manual GPU programming
 - **Multi-platform support** with unified development experience
 
-### **🏗️ Production Ready**
+### **🏗️ Production Ready (Phase 6 Planned)**
 - **Complete toolchain** with debugging, profiling, and deployment tools
 - **Error handling** and runtime validation
 - **Performance monitoring** and regression detection

@@ -121,7 +121,7 @@ def flash_forward(Q, K, V):
     return tessera.ops.flash_attn(Q, K, V, causal=True)
 ```
 
-**Important:** legacy staged IR inspection helpers, `@autodiff`, `@vmap`, `@pmap`, `@scan`, `@checkpoint` are **not part of the current API**. The working inspection mechanism is `fn.graph_ir.to_mlir()`. See `docs/CANONICAL_API.md` for the complete authoritative API.
+**Important:** legacy staged inspection and transform helpers are **not part of the current API**. The working inspection mechanism is `fn.graph_ir.to_mlir()`. See `docs/CANONICAL_API.md` for the complete authoritative API.
 
 ### 2.4 Region privileges
 

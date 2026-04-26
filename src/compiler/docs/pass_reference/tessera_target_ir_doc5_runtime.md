@@ -30,7 +30,7 @@ The Tessera runtime system consists of several interconnected components:
 2. **Asynchronous Execution**: Overlap computation with communication and memory transfers
 3. **Resource Pooling**: Efficient reuse of GPU memory and compute resources
 4. **Error Resilience**: Graceful handling of hardware failures and resource constraints
-5. **Production Ready**: Enterprise-grade logging, monitoring, and debugging support
+5. **Production Ready (Phase 6 Planned)**: Enterprise-grade logging, monitoring, and debugging support
 
 ## Kernel Launch System
 

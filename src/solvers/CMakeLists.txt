@@ -13,5 +13,7 @@ project(TesseraSolvers LANGUAGES C CXX)
 
 add_subdirectory(dialects)
 add_subdirectory(passes)
+# linalg/ is grouped here by function but remains opt-in until its scaffold
+# APIs are aligned with the canonical solver pass build.
 
 add_custom_target(tessera_solvers DEPENDS tessera_solvers_dialects tessera_solvers_passes)

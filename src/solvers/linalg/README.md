@@ -6,4 +6,4 @@ This package provides:
 - Pass stubs for mixed precision and iterative refinement
 - A test sketch and minimal CMake
 
-Integrate by copying into `tessera/` tree and wiring registration in your main build.
+This package now lives under `src/solvers/linalg` so linear algebra solver work stays with the rest of the solver stack. Wire registration in the parent solver build when the scaffold graduates.

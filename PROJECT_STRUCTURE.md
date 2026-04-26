@@ -21,10 +21,9 @@ tessera/
 ├── PROJECT_STRUCTURE.md             # This file
 │
 ├── src/                             # Production C++/MLIR source
-│   ├── compiler/                    # Compiler infrastructure & passes
-│   ├── dialects/                    # Shared dialect utilities
+│   ├── compiler/                    # Compiler infrastructure, codegen, autotuning, pass docs
 │   ├── runtime/                     # C++ execution engine
-│   ├── solvers/                     # Constraint / schedule solvers
+│   ├── solvers/                     # Constraint, schedule, sparse/RNG, and linalg solvers
 │   ├── tessera_neighbors/           # Neighbor-discovery / topology
 │   │
 │   ├── scaling_resilience/          # SR dialect (SRDialect, SROps, manifest schema)
@@ -92,6 +91,10 @@ the git index.
 | `src/archive/tpp_old`        | `src/tpp_old`                                    | Superseded by canonical `src/tpp` |
 | `src/archive/tile_opt_fa4_old` | `src/tile_opt_fa4_old`                         | Superseded by canonical `src/tile_opt_fa4` |
 | `src/compiler/codegen/Tessera_TPU_Backend` | `src/compiler/codegen/Tessera_TPU_Backend_Starter_Advanced` | Advanced TPU backend promoted to single canonical TPU backend folder |
+| `src/compiler/docs/pass_reference` | `src/compiler/passes`                     | Pass reference markdown grouped with compiler documentation |
+| `src/solvers/linalg`         | `src/tessera_linalg_solvers`                    | Linear algebra solver scaffold grouped under the solver stack |
+| `docs/archive/pre_canonical/api` | `docs/api/Tessera_API_Vol*.md`               | Pre-canonical API volumes archived behind canonical API docs |
+| `docs/archive/pre_canonical/model` | `docs/Tessera_Deep_Learning_Programming_Model.md` | Pre-canonical model guide archived due old API examples |
 | `docs/architecture/`         | `src/compiler/tessera_target_ir_doc3b.md`        | Architecture doc migrated out of src/ |
 | `docs/build/`                | `src/README_SRC_INTEGRATION.md` + `CMakeLists.add_this_snippet.txt` | Build notes migrated out of src/ |
 | `docs/tutorials/Flash_Attention_in_Tessera.md` | `docs/tutorials/Flash Attention_in_Tessera.md` | Space in filename removed |
@@ -100,8 +103,8 @@ the git index.
 
 ## Archive Policy
 
-Files under `src/archive/` are **not included in the production build** (no
-`add_subdirectory` in any CMakeLists.txt). They exist for reference, future
+Files under `src/archive/` and `docs/archive/` are **not included in the
+production build or active documentation lint**. They exist for reference, future
 graduation to an active component, or deletion after review. New production work
 should land in the canonical component folder, not beside an archived copy.
 
@@ -118,3 +121,5 @@ Outstanding work:
 - Add per-component `CMakeLists.txt` where missing.
 - Validate MLIR dialect registration and tablegen targets for each component.
 - Gate the build on a single `TESSERA_VERSION` variable defined in one place.
+- Graduate `src/solvers/linalg` from opt-in scaffold to the parent solver build
+  once its MLIR APIs are aligned with the canonical solver pass stack.

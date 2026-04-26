@@ -37,7 +37,7 @@ Target IR embodies several key design principles:
 1. **Performance First**: Every decision prioritizes execution speed and hardware utilization
 2. **Architecture Awareness**: Deep integration with specific GPU capabilities
 3. **Portability with Specialization**: Common abstractions with target-specific optimizations
-4. **Production Ready**: Generate deployment-ready artifacts, not just prototypes
+4. **Production Ready (Phase 6 Planned)**: Generate deployment-ready artifacts, not just prototypes
 
 ## Target Backend Architecture
 

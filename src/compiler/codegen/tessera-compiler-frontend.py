@@ -921,4 +921,11 @@ def example_tessera_program():
         x: tensor[batch, seq_len, dim, f32],
         W_q: tensor[dim, dim, f32],
         W_k: tensor[dim, dim, f32],
-        W_v: tensor[dim, dim,
+        W_v: tensor[dim, dim, f32]
+    ):
+        q = matmul(x, W_q)
+        k = matmul(x, W_k)
+        v = matmul(x, W_v)
+        return attention(q, k, v)
+    '''
+    return source

@@ -15,7 +15,6 @@ Generated inventory for the April 2026 canonical `/src` layout. Active source co
 - `scaling_resilience`
 - `solvers`
 - `spectral`
-- `tessera_linalg_solvers`
 - `tessera_neighbors`
 - `Tessera_RubinCPX_Compiler`
 - `tessera.egg-info`
@@ -25,7 +24,7 @@ Generated inventory for the April 2026 canonical `/src` layout. Active source co
 
 ## Summary
 
-- Active folders: 289
+- Active folders: 290
 - Active files: 456
 - Archived folders: 147
 - Archived files: 152
@@ -152,7 +151,8 @@ Generated inventory for the April 2026 canonical `/src` layout. Active source co
 - `compiler/codegen/tessera_x86_backend/src/kernels`
 - `compiler/codegen/tessera_x86_backend/src/runtime`
 - `compiler/codegen/tessera_x86_backend/tests`
-- `compiler/passes`
+- `compiler/docs`
+- `compiler/docs/pass_reference`
 - `ir`
 - `mlir`
 - `mlir/include`
@@ -201,6 +201,21 @@ Generated inventory for the April 2026 canonical `/src` layout. Active source co
 - `scaling_resilience/tests/sr`
 - `solvers`
 - `solvers/dialects`
+- `solvers/linalg`
+- `solvers/linalg/cmake`
+- `solvers/linalg/docs`
+- `solvers/linalg/include`
+- `solvers/linalg/include/tessera`
+- `solvers/linalg/include/tessera/Dialect`
+- `solvers/linalg/include/tessera/Dialect/Solver`
+- `solvers/linalg/lib`
+- `solvers/linalg/lib/Dialect`
+- `solvers/linalg/lib/Dialect/Solver`
+- `solvers/linalg/lib/Passes`
+- `solvers/linalg/test`
+- `solvers/linalg/test/solver`
+- `solvers/linalg/tools`
+- `solvers/linalg/tools/tessera-opt`
 - `solvers/passes`
 - `spectral`
 - `spectral/benchmarks`
@@ -222,21 +237,6 @@ Generated inventory for the April 2026 canonical `/src` layout. Active source co
 - `spectral/test`
 - `spectral/test/ir`
 - `spectral/tools`
-- `tessera_linalg_solvers`
-- `tessera_linalg_solvers/cmake`
-- `tessera_linalg_solvers/docs`
-- `tessera_linalg_solvers/include`
-- `tessera_linalg_solvers/include/tessera`
-- `tessera_linalg_solvers/include/tessera/Dialect`
-- `tessera_linalg_solvers/include/tessera/Dialect/Solver`
-- `tessera_linalg_solvers/lib`
-- `tessera_linalg_solvers/lib/Dialect`
-- `tessera_linalg_solvers/lib/Dialect/Solver`
-- `tessera_linalg_solvers/lib/Passes`
-- `tessera_linalg_solvers/test`
-- `tessera_linalg_solvers/test/solver`
-- `tessera_linalg_solvers/tools`
-- `tessera_linalg_solvers/tools/tessera-opt`
 - `tessera_neighbors`
 - `tessera_neighbors/docs`
 - `tessera_neighbors/include`
@@ -530,15 +530,15 @@ Generated inventory for the April 2026 canonical `/src` layout. Active source co
 - `compiler/codegen/tessera-compiler-frontend.py`
 - `compiler/codegen/tessera-dsl-advanced.py`
 - `compiler/codegen/tessera-ir-lowering.cpp`
-- `compiler/passes/tessera_compiler_passes_overview.md`
-- `compiler/passes/tessera_graph_ir_passes.md`
-- `compiler/passes/tessera_schedule_ir_passes.md`
-- `compiler/passes/tessera_target_ir_doc1.md`
-- `compiler/passes/tessera_target_ir_doc2.md`
-- `compiler/passes/tessera_target_ir_doc4_complete.md`
-- `compiler/passes/tessera_target_ir_doc5_runtime.md`
-- `compiler/passes/tessera_target_ir_doc8_summary.md`
-- `compiler/passes/tessera_tile_ir_passes.md`
+- `compiler/docs/pass_reference/tessera_compiler_passes_overview.md`
+- `compiler/docs/pass_reference/tessera_graph_ir_passes.md`
+- `compiler/docs/pass_reference/tessera_schedule_ir_passes.md`
+- `compiler/docs/pass_reference/tessera_target_ir_doc1.md`
+- `compiler/docs/pass_reference/tessera_target_ir_doc2.md`
+- `compiler/docs/pass_reference/tessera_target_ir_doc4_complete.md`
+- `compiler/docs/pass_reference/tessera_target_ir_doc5_runtime.md`
+- `compiler/docs/pass_reference/tessera_target_ir_doc8_summary.md`
+- `compiler/docs/pass_reference/tessera_tile_ir_passes.md`
 - `ir/CMakeLists.txt`
 - `ir/TesseraOps.td`
 - `ir/TesseraTiling.cpp`
@@ -602,6 +602,14 @@ Generated inventory for the April 2026 canonical `/src` layout. Active source co
 - `solvers/dialects/tessera_rng.td`
 - `solvers/dialects/tessera_solver.td`
 - `solvers/dialects/tessera_sparse.td`
+- `solvers/linalg/CMakeLists.txt`
+- `solvers/linalg/docs/Tessera_Linalg_Solvers_Spec.md`
+- `solvers/linalg/include/tessera/Dialect/Solver/Solver.td`
+- `solvers/linalg/lib/Passes/IterativeRefinement.cpp`
+- `solvers/linalg/lib/Passes/MixedPrecision.cpp`
+- `solvers/linalg/README.md`
+- `solvers/linalg/test/solver/spd_solve.mlir`
+- `solvers/linalg/tools/tessera-opt/main.cpp`
 - `solvers/passes/CMakeLists.txt`
 - `solvers/passes/ContinuationGuard.cpp`
 - `solvers/passes/ImplicitLower.cpp`
@@ -647,14 +655,6 @@ Generated inventory for the April 2026 canonical `/src` layout. Active source co
 - `spectral/test/ir/transpose.mlir`
 - `spectral/test/lit.cfg.py`
 - `spectral/tools/ts-spectral-opt.cpp`
-- `tessera_linalg_solvers/CMakeLists.txt`
-- `tessera_linalg_solvers/docs/Tessera_Linalg_Solvers_Spec.md`
-- `tessera_linalg_solvers/include/tessera/Dialect/Solver/Solver.td`
-- `tessera_linalg_solvers/lib/Passes/IterativeRefinement.cpp`
-- `tessera_linalg_solvers/lib/Passes/MixedPrecision.cpp`
-- `tessera_linalg_solvers/README.md`
-- `tessera_linalg_solvers/test/solver/spd_solve.mlir`
-- `tessera_linalg_solvers/tools/tessera-opt/main.cpp`
 - `tessera_neighbors/CMakeLists.txt`
 - `tessera_neighbors/docs/Neighbors_and_Halo.md`
 - `tessera_neighbors/include/tessera/Dialect/Neighbors/IR/tessera_neighbors.td`

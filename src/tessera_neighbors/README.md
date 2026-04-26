@@ -14,7 +14,7 @@ It includes:
 
 ```cmake
 # In your top-level CMakeLists.txt, add_subdirectory to this folder.
-add_subdirectory(tessera-neighbors-dropin-v0_1)
+add_subdirectory(tessera_neighbors)
 ```
 
 Then build as usual with your LLVM/MLIR build.

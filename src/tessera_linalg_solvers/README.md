@@ -1,4 +1,4 @@
-# Tessera Linear Algebra Solvers (Mixed Precision) — Starter v0.1
+# Tessera Linear Algebra Solvers (Mixed Precision)
 
 This package provides:
 - A spec (`docs/Tessera_Linalg_Solvers_Spec.md`)

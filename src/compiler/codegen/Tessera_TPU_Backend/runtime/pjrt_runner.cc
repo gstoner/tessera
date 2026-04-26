@@ -16,7 +16,7 @@ static std::string slurp(const std::string& path) {
 
 int main(int argc, char** argv) {
 #ifndef TESSERA_HAVE_PJRT_C_API
-  std::cout << "PJRT TPU Runner (starter)\n";
+  std::cout << "PJRT TPU Runner\n";
   const char* dev = std::getenv("PJRT_DEVICE");
   std::cout << "PJRT_DEVICE=" << (dev ? dev : "(unset)") << "\n";
   std::cout << "Rebuild with -DTESSERA_HAVE_PJRT_C_API=ON and provide pjrt_c_api.h to enable compile+execute.\n";
@@ -76,7 +76,7 @@ int main(int argc, char** argv) {
 
   // 4) Prepare dummy buffers (zeros) and execute once.
   // NOTE: For a real run, you should query exec->parameter shapes and allocate PJRT buffers.
-  std::cout << "Compiled. (Buffer creation/execution elided in starter.)\n";
+  std::cout << "Compiled. (Buffer creation/execution elided in current PJRT hook.)\n";
   std::cout << "TODO: Create PJRT_Buffer for each parameter and call PJRT_Executable_Execute.\n";
 
   PJRT_Client_Destroy(client);

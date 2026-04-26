@@ -23,7 +23,7 @@ static int _ = register_tessera_sr();
 2. Link the SR objects in your `tessera-opt` CMake:
 ```
 # add_subdirectory to this package or add sources directly
-add_subdirectory(external/tessera_scaling_resilience_v1_1)
+add_subdirectory(scaling_resilience)
 
 target_link_libraries(tessera-opt PRIVATE TesseraSR DialectSR)
 ```

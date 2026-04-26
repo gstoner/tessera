@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(TesseraCerebrasStarter LANGUAGES C CXX)
+project(TesseraCerebrasBackend LANGUAGES C CXX)
 
 option(TESSERA_ENABLE_MLIR "Build with MLIR integration (dialect & passes)" ON)
 

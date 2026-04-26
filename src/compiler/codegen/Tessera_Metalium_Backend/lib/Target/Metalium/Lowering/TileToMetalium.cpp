@@ -198,7 +198,7 @@ struct TileGemmToMetaliumMatmul : public OpConversionPattern<mlir::tessera::tile
     }
 
     auto tileAttr = rewriter.getI64ArrayAttr({M, N, K});
-    // TODO: plumb real operands/types; we erase the op in this starter.
+    // TODO: plumb real operands/types; the current scaffold erases the op.
     // rewriter.replaceOpWithNewOp<mlir::tessera::metalium::Metalium_MatmulOp>(
     //   op, /*result type*/ op.getResult().getType(),
     //   A, B, Cinit, tileAttr, /*layout*/ nullptr, /*accum*/ nullptr);

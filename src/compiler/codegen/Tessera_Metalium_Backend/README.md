@@ -1,7 +1,6 @@
-\
-# Tessera Metalium Backend (Starter)
+# Tessera Metalium Backend
 
-This is a *minimal starter* for a Tessera→TT-Metalium backend that includes:
+This is a minimal Tessera→TT-Metalium backend scaffold that includes:
 
 - **Dialect draft** (`TesseraMetaliumOps.td`) for `dma`, `load2d`, `store2d`, `matmul`
 - **Dialect C++ stubs** (`TesseraMetaliumDialect.h/.cpp`) for registration

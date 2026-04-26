@@ -60,12 +60,12 @@ Tessera Frontend  →  Tessera Target‑IR  →  (this repo) Lower to StableHLO
 - For incompatible shardings, insert explicit reshard ops (pass provided).
 
 ## 6. Runtime & PJRT
-- Use **PJRT** to enumerate TPU devices and hand compiled executable blobs to **libtpu**. In this starter we:
+- Use **PJRT** to enumerate TPU devices and hand compiled executable blobs to **libtpu**. In this backend we:
   - Build a **device lister** (`runtime/pjrt_runner.cc`) to confirm TPU visibility.
   - Provide a **placeholder** compile‑and‑run hook for StableHLO once you point CMake to OpenXLA headers/libs.
 - Environment hints: `PJRT_DEVICE=TPU`, `LIBTPU_INIT_ARGS=--xla_tpu_enable_micro_machine_learning=true` (as needed), `XLA_FLAGS=--xla_gpu_enable_triton_gemm=false` (not relevant to TPU).
 
-## 7. What’s in the starter
+## 7. Backend Contents
 - **Pass:** `TesseraToStableHLO` – lowers a minimal subset (`matmul`, `add`) and leaves TODOs for attention/conv.
 - **Pass:** `TesseraShardingAnnotator` – attaches prototype shardings to HLO ops.
 - **Tool:** `tessera-tpu-opt` – mlir‑opt‑style driver to run the passes.

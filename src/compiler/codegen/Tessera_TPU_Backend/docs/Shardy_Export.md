@@ -5,7 +5,7 @@ This pass attaches `sdy.mesh` and `sdy.tensor_sharding` attributes so downstream
 Shardy/GSPMD passes can consume Tessera’s partitioning intent.
 
 - Module attr: `sdy.mesh = "mesh = {axes=[\"data\",\"model\"], shape=[D,M]}"` (example)
-- Per-op attr: `sdy.tensor_sharding = "{sharding = replicated}"` (starter)
+- Per-op attr: `sdy.tensor_sharding = "{sharding = replicated}"` (initial backend surface)
 
 Replace these with real mesh/axes inferred from Tessera’s `tile.distribute` and IR attrs.
 

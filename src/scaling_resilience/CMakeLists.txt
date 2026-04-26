@@ -1,5 +1,5 @@
 # Scaling / Resilience dialect
-# Canonical component: promoted from tessera_scaling_resilience_v1_1
+# Canonical scaling/resilience component.
 # (v1_1 adds SRDialect.cpp, SROps.cpp, SROps.td, manifest.schema.json over v1)
 #
 # Can be built standalone or as part of the Tessera monorepo.

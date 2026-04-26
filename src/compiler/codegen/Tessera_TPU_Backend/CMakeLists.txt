@@ -3,7 +3,7 @@ project(TesseraTPUBackend LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-option(TESSERA_ENABLE_TPU "Build TPU backend starter" ON)
+option(TESSERA_ENABLE_TPU "Build TPU backend" ON)
 
 # Find LLVM/MLIR (user supplies MLIR_DIR)
 find_package(MLIR REQUIRED CONFIG)
@@ -36,7 +36,7 @@ add_executable(tessera-tpu-opt tools/tessera-tpu-opt.cpp)
 target_link_libraries(tessera-tpu-opt PRIVATE tessera_tpu_passes MLIRIR MLIRPass)
 
 add_executable(pjrt_runner runtime/pjrt_runner.cc)
-# PJRT headers are not included in this starter; you can point to them later.
+# PJRT headers are optional; point CMake to them when enabling PJRT C API support.
 
 
 # PJRT C API support (optional)

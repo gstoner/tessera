@@ -1,4 +1,4 @@
-# Tessera_ROCM_Backend_Starter_v3
+# Tessera ROCm Backend
 
 ## Build
 ```bash

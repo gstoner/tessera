@@ -9,7 +9,7 @@ cmake --build build -j
 PJRT_DEVICE=TPU ./build/pjrt_runner --program examples/matmul_128.mlir --format=stablehlo
 ```
 
-**Note:** The starter compiles the program. For full execution, add device buffers using
+**Note:** The current backend compiles the program. For full execution, add device buffers using
 the PJRT buffer APIs and call `PJRT_Executable_Execute`.
 
 <<<MERGE_END: Tessera_TPU_PJRT_Execution>>>

@@ -1,5 +1,5 @@
 # Tile Optimization + Flash Attention v4
-# Canonical component: promoted from Tile_Optimization_FA4/v1_3
+# Canonical tile optimization + FA4 component.
 # Adds Queue dialect (v1.3) and backward-attention support over v1/v1_1/v1_2.
 #
 # Exported targets:

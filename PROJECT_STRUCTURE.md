@@ -1,8 +1,9 @@
 # Tessera Project Structure
 
 This document reflects the canonical layout after the April 2026 reorganization.
-All directory names use underscores (no spaces). Each component has a single
-authoritative version; superseded/experimental copies live under `research/`.
+All active directory names use underscores (no spaces). Each component has a
+single authoritative version; superseded/experimental copies live under
+`src/archive/` when retained for local reference.
 
 ---
 
@@ -61,10 +62,11 @@ tessera/
 ├── scripts/                         # Build & CI utility scripts
 ├── cmake/                           # CMake find-modules and helpers
 │
-└── research/                        # Experimental / pre-production work (not built)
-    ├── pddl_instruct/               # PDDL-based instruction synthesis experiments
-    └── sandbox_compilers/           # Frontend-to-backend sample compilers
-                                     #   (NVIDIA / ROCm / Tessera backends)
+└── src/archive/                     # Superseded / pre-production work (not built)
+    ├── PDDL_Instruct/               # PDDL-based instruction synthesis experiments
+    ├── Sandbox_Toy_compilers/       # Frontend-to-backend sample compilers
+    ├── tpp_old/                     # Superseded TPP snapshot
+    └── tile_opt_fa4_old/            # Superseded FA4 snapshots
 ```
 
 ---
@@ -85,20 +87,23 @@ the git index.
 | `src/solvers`                | `src/src/solvers`                                | Un-nested erroneous double `src/src/` path |
 | `tests/kernel_tests`         | `tests/tessera_kernels_scaffold`                 | Original retained: has system tests, roofline script, profile_ncu.sh |
 | `examples/advanced/power_retention` | `examples/advanced/Power Retention/…/v0_9` | v0_9: HIP kernel, WGMMA, autotune, nlohmann_json integration |
-| `research/pddl_instruct`     | `src/PDDL_Instruct/pddl_instruct_tessera_v1`     | Experimental — moved out of src/ |
-| `research/sandbox_compilers` | `src/Sandbox_Toy_compilers/…/v1 3`               | Experimental — v3 chosen (NVIDIA/ROCm/Tessera backends); moved out of src/ |
+| `src/archive/PDDL_Instruct`  | `src/PDDL_Instruct/pddl_instruct_tessera_v1`     | Experimental — archived out of the active `src/` surface |
+| `src/archive/Sandbox_Toy_compilers` | `src/Sandbox_Toy_compilers/…`            | Experimental sample compilers — archived out of the active `src/` surface |
+| `src/archive/tpp_old`        | `src/tpp_old`                                    | Superseded by canonical `src/tpp` |
+| `src/archive/tile_opt_fa4_old` | `src/tile_opt_fa4_old`                         | Superseded by canonical `src/tile_opt_fa4` |
+| `src/compiler/codegen/Tessera_TPU_Backend` | `src/compiler/codegen/Tessera_TPU_Backend_Starter_Advanced` | Advanced TPU backend promoted to single canonical TPU backend folder |
 | `docs/architecture/`         | `src/compiler/tessera_target_ir_doc3b.md`        | Architecture doc migrated out of src/ |
 | `docs/build/`                | `src/README_SRC_INTEGRATION.md` + `CMakeLists.add_this_snippet.txt` | Build notes migrated out of src/ |
 | `docs/tutorials/Flash_Attention_in_Tessera.md` | `docs/tutorials/Flash Attention_in_Tessera.md` | Space in filename removed |
 
 ---
 
-## `research/` Policy
+## Archive Policy
 
-Files under `research/` are **not included in the production build** (no
+Files under `src/archive/` are **not included in the production build** (no
 `add_subdirectory` in any CMakeLists.txt). They exist for reference, future
-graduation to `src/`, or archival. New experimental work should land here first,
-not in `src/`.
+graduation to an active component, or deletion after review. New production work
+should land in the canonical component folder, not beside an archived copy.
 
 ---
 

@@ -202,7 +202,7 @@ These passes are designed in CLAUDE.md §Phase 4 but not yet built:
 |------|---------------|---------|
 | `GPUCollectiveInsertionPass` | `src/transforms/lib/GPUCollectiveInsertionPass.cpp` | Insert `collective.reduce_scatter` at DP boundaries post-backward |
 | `PipelineStageInsertionPass` | `src/transforms/lib/PipelineStageInsertionPass.cpp` | 1F1B micro-batch schedule across PP stages |
-| `TPUAttentionLoweringPass` | `src/compiler/codegen/Tessera_TPU_Backend_Starter_Advanced/` | `tessera.flash_attn` → `stablehlo.composite` |
+| `TPUAttentionLoweringPass` | `src/compiler/codegen/Tessera_TPU_Backend/` | `tessera.flash_attn` → `stablehlo.composite` |
 | `TPUShardyExportPass` | same | Shardy mesh + sharding rules export |
 
 ---

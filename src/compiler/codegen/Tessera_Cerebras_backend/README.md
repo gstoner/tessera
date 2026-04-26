@@ -1,4 +1,4 @@
-# Tessera → Cerebras WSE-3 Starter (v1)
+# Tessera → Cerebras WSE-3 Backend
 
 This is a **scaffold** that shows how to target the Cerebras SDK from the Tessera Programming Model.
 It includes:

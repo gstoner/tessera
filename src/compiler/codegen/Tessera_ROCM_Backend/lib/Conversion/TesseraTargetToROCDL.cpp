@@ -30,7 +30,7 @@ struct MFMAOpLowering : OpConversionPattern<tessera_rocm::ROCM_MFMAOp> {
                                 ConversionPatternRewriter &rewriter) const override {
     auto module = op->getParentOfType<ModuleOp>();
     auto ctx = rewriter.getContext();
-    // For the starter, assume scalar f32 returns and f16/bf16/f32 inputs
+    // For the current backend scaffold, assume scalar f32 returns and f16/bf16/f32 inputs.
     auto name = mlir::tessera_rocm::chooseMFMAIntrinsic(op.getA().getType(), op.getB().getType(), op.getAcc().getType(), "gfx90a");
     auto f32 = LLVM::LLVMFloatType::get(ctx);
     auto fn = declareIntrinsic(module, name, f32, {f32,f32,f32});

@@ -3,7 +3,7 @@
 
 We lower `tessera.flash_attn(Q,K,V, [mask], scale, dropout_p, causal)` to a TPU-friendly form.
 
-## v1 (this starter)
+## Current lowering surface
 - Emit `stablehlo.custom_call` named `tessera.flash_attention` with attrs:
   - `tessera.scale: f32`
   - `tessera.dropout_p: f32`

@@ -1,5 +1,5 @@
 # Tessera Programming Model v1.1
-# Canonical component: promoted from src/tessera_pm_v1_1_memory_parallel
+# Canonical programming-model component.
 # Provides: tile/cache/schedule/moe ODS-generated headers + PassPipelines driver.
 #
 # Exported targets:

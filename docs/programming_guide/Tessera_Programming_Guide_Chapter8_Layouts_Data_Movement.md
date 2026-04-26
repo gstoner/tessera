@@ -79,8 +79,8 @@ W = dist.tensor(shape=(8192,8192),
 Privileges ensure correct use of shared buffers:
 
 ```python
-@jit
-def block_mm(A: Region[read], B: Region[read], C: Region[reduce_sum]):
+@tessera.jit
+def block_mm(A: tessera.Region["read"], B: tessera.Region["read"], C: tessera.Region["reduce_sum"]):
     sA = tshared.alloc[f16](BM,BK)
     sB = tshared.alloc[f16](BK,BN)
     cp_async.shared.global(sA, A)

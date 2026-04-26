@@ -2,6 +2,13 @@
 *Scope:* Graph IR → Schedule IR → Tile IR  
 *Status:* Draft v0.2 (with programmer context)
 
+> **API note:** Examples in this document using `gir.gemm` and `gir.rmsnorm_safe` reflect
+> internal MLIR op names (`tessera.matmul`, `tessera.layer_norm` in the tessera dialect).
+> `Region[write]` and `Region[reduce]` should be `Region["write"]` and `Region["reduce_sum"]`
+> in Python source. `inspect_ir("sched")` does not exist — use `fn.graph_ir.to_mlir()` for
+> Graph IR inspection; Schedule IR and below inspection is planned for Phase 4+.
+> See `docs/CANONICAL_API.md` for authoritative names.
+
 ---
 
 ## 0. Goals

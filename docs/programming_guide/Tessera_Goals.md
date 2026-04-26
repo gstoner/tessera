@@ -123,8 +123,8 @@ Error Diagnostics - Clear error messages when shape mismatches occur
 # Example Snippets
 
 ## Modeling:
-@jit @autodiff
-def transformer_block(x: Tensor["B","S","D", bf16 @accum(f32)],
+@tessera.jit   # Note: @autodiff planned Phase 5
+def transformer_block(x: tessera.Tensor["B","S","D", bf16 @accum(f32)],
                       cache: KVCache, *, heads: int, p: float):
     x = rmsnorm_safe(x)
     with device(gpu), prefetch(cache, into="smem", overlap="compute"):

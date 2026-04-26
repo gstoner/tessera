@@ -54,9 +54,9 @@ y = softmax_safe(x)      # guaranteed not to overflow
 Programmers can mix precisions declaratively:
 
 ```python
-@jit
-def proj(x: Tensor["B","D", fp8_e4m3 @accum(fp32)],
-         W: Tensor["D","K", bf16 @accum(fp32)]):
+@tessera.jit
+def proj(x: tessera.Tensor["B","D", fp8_e4m3 @accum(fp32)],
+         W: tessera.Tensor["D","K", bf16 @accum(fp32)]):
     return gemm(x, W)
 ```
 
@@ -89,8 +89,8 @@ All TP shards use the same accumulation rules. Tessera ensures reductions (`redu
 Numerical reductions are tracked via **region privileges**:
 
 ```python
-@jit
-def update_grad(A: Region[read], B: Region[read], G: Region[reduce_sum]):
+@tessera.jit
+def update_grad(A: tessera.Region["read"], B: tessera.Region["read"], G: tessera.Region["reduce_sum"]):
     G[:] += gemm(A, B)   # reductions in FP32 before casting
 ```
 

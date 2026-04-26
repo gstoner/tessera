@@ -1,5 +1,8 @@
 # Tessera for ML Engineers - Overview and Quick Start
 
+> **API names in this document are pre-canonical.** `@ts.kernel` should be `@tessera.kernel`; `@tessera.function` should be `@tessera.jit`; `ts.inspect_ir()` does not exist — use `fn.graph_ir.to_mlir()`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
+
+
 ## Why Tessera for Machine Learning?
 
 Tessera transforms the GPU programming experience for ML engineers by providing a **single programming model** that scales from research prototypes to production deployments. Instead of dealing with low-level CUDA kernels, complex memory management, and architecture-specific optimizations, you write high-level code that automatically optimizes for every GPU generation.

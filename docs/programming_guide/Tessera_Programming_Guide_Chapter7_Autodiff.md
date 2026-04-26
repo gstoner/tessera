@@ -10,12 +10,11 @@ Automatic differentiation (autodiff) is a first-class feature in Tessera. Unlike
 Tessera provides both forward-mode and reverse-mode AD:
 
 ```python
-@jit @autodiff
+# Note: @autodiff and tessera.vjp() are planned for Phase 5 — not yet implemented.
+# Use tessera.grad() (Phase 5) for reverse-mode gradients.
+@tessera.jit
 def f(x):
     return x * x + 2 * x
-
-y, grad_fn = tessera.vjp(f, 3.0)
-print(y, grad_fn(1.0))   # => (15.0, 8.0)
 ```
 
 - **Forward-mode (JVP)** for small-output functions.  
@@ -28,6 +27,7 @@ print(y, grad_fn(1.0))   # => (15.0, 8.0)
 Programmers can override differentiation rules for efficiency or stability.
 
 ```python
+# Note: tessera.custom_vjp is planned for Phase 5 — not yet implemented.
 @tessera.custom_vjp
 def gelu_safe(x): ...
 def gelu_fwd(x):
@@ -67,8 +67,8 @@ gW = tessera.grad(loss_fn)(W)    # inserts reduce_scatter in backward pass
 Region privileges extend naturally into autodiff:
 
 ```python
-@jit
-def step(X: Region[read], W: Region[read], G: Region[reduce_sum]):
+@tessera.jit
+def step(X: tessera.Region["read"], W: tessera.Region["read"], G: tessera.Region["reduce_sum"]):
     G[:] += gemm(X, W)   # backward also marked as reduce_sum
 ```
 
@@ -102,7 +102,8 @@ To trade off memory vs compute, Tessera supports:
 - **Rematerialization**: drop tensors and re-infer them.  
 
 ```python
-@checkpoint
+# Note: @tessera.jit(checkpoint=True) is planned for Phase 5 — not yet implemented.
+@tessera.jit(checkpoint=True)
 def transformer_block(x, W):
     ...
 ```
@@ -130,7 +131,7 @@ tessera.gradcheck(loss_fn, W)
 ```python
 mesh = dist.mesh(devices=[f"cuda:{i}" for i in range(72)], axes=("dp","tp","pp"), shape=(4,9,2))
 
-@jit @autodiff
+@tessera.jit   # Note: @autodiff is planned for Phase 5 — not yet implemented
 def block(x, Wqkv, Wo):
     h = rmsnorm_safe(x)
     qkv = gemm(h, Wqkv)                # TP-sharded GEMM

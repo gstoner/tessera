@@ -1,4 +1,7 @@
 # Tessera API Reference - Volume 3
+
+> **Pre-canonical reference.** API names and examples in this volume may be outdated. `@ts.function` → `@tessera.jit`; `@ts.kernel` → `@tessera.kernel`. Citation markers (【N†source】) are import artifacts — ignore them. The authoritative reference is `docs/spec/PYTHON_API_SPEC.md` and `docs/CANONICAL_API.md`.
+
 ## Intermediate Representation (IR) & Target IR
 
 ### 1. Graph IR

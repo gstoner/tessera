@@ -1,5 +1,8 @@
 # Tessera Target IR - Complete Usage Guide and Integration
 
+> **API names in this document are pre-canonical.** `@ts.kernel` should be `@tessera.kernel`; `@tessera.function` should be `@tessera.jit`; `ts.inspect_ir()` does not exist — use `fn.graph_ir.to_mlir()`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
+
+
 ## Overview
 
 The Tessera Target IR represents the final stage of the Tessera compilation pipeline, responsible for generating highly optimized GPU code from high-level mathematical operations. It provides a unified interface for targeting multiple GPU platforms while achieving peak performance through hardware-specific optimizations.

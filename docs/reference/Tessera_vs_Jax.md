@@ -1,5 +1,8 @@
 # Tessera vs JAX/Flax: Comprehensive Comparison
 
+> **API names in this document are pre-canonical.** `@ts.kernel` should be `@tessera.kernel`; `@tessera.function` should be `@tessera.jit`; `ts.inspect_ir()` does not exist — use `fn.graph_ir.to_mlir()`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
+
+
 ## Executive Summary
 
     While JAX/Flax represents the current state-of-the-art in functional ML frameworks, Tessera pushes beyond with a fundamentally different philosophy: correctness by construction, performance by default, and production-first design.

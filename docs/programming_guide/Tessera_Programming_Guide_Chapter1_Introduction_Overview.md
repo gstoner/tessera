@@ -24,11 +24,11 @@ Unlike thread- and block-centric models (e.g., CUDA), Tessera is **tile-first**:
 | Capability | Tessera Feature | Example |
 |------------|----------------|---------|
 | **Execution model** | Tile → Group → Mesh hierarchy | `tile.linear_id()` |
-| **IR stack** | Graph IR → Schedule IR → Tile IR → Target IR | `inspect_ir("tile")` |
+| **IR stack** | Graph IR → Schedule IR → Tile IR → Target IR | `fn.graph_ir.to_mlir()` |
 | **Numerics** | FP4/FP6/FP8/BF16/FP16/FP32 policies | `Tensor["B","D", fp8_e4m3 @accum(fp32)]` |
 | **Autodiff** | Forward, reverse, custom VJP/JVP, effect-aware | `grad(loss_fn)(W)` |
 | **Distributed tensors** | `ShardSpec`, domains, distributions | `ShardSpec(partition=("row",), mesh_axes=("tp",))` |
-| **Region privileges** | Read/Write/Reduce semantics for safe scheduling | `def step(W: Region[read], Y: Region[write])` |
+| **Region privileges** | Read/Write/Reduce semantics for safe scheduling | `def step(W: Region["read"], Y: Region["write"])` |
 | **Collectives** | Declarative DP/TP/PP/EP parallelism | `all_gather(y_local, axis="tp")` |
 | **Index launches** | Scale kernels across shards | `tessera.index_launch(axis="tp")(gemm_tile)` |
 | **Portability** | NVIDIA PTX + CUDA Tile IR | `tile.mma → wgmma` |
@@ -82,7 +82,7 @@ This shows how **mesh construction**, **ShardSpec distribution**, and **numerics
 - **Ch.2 Programming Model**: tiles, groups, meshes, and distributed concepts.  
 - **Ch.3 Memory Model**: registers, shared, HBM, NVLink/NVSwitch.  
 - **Ch.4 Execution Model**: pipelines, async copies, barriers.  
-- **Ch.5 Error Handling**: safety, diagnostics, debugging.  
+- **Ch.5 Kernel Programming**: `@tessera.kernel`, dtype annotations, `index_launch`, tile DSL, FA-4 attention ops.  
 - **Ch.6 Numerics Model**: FP4/6/8/BF16/FP16/FP32, safe ops, rounding.  
 - **Ch.7 Autodiff**: built-in, effect-aware, custom VJP/JVP.  
 - **Ch.8 Layouts & Data Movement**: explicit layouts, async pipelines.  

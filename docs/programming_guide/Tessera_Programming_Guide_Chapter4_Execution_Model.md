@@ -97,8 +97,8 @@ D = tessera.domain.Rect((B, S, Dm))
 dist = tessera.dist.Block(mesh_axes=("dp","tp"))
 X = tessera.array.from_domain(D, dtype="bf16", distribution=dist)
 
-@jit
-def norm_layer(X: Region[read], Y: Region[write]):
+@tessera.jit
+def norm_layer(X: tessera.Region["read"], Y: tessera.Region["write"]):
     Y[:] = rmsnorm_safe(X)
 ```
 
@@ -113,8 +113,8 @@ def norm_layer(X: Region[read], Y: Region[write]):
 Privileges prevent conflicting accesses during execution:
 
 ```python
-@jit
-def step(W: Region[read], X: Region[read], Y: Region[reduce_sum]):
+@tessera.jit
+def step(W: tessera.Region["read"], X: tessera.Region["read"], Y: tessera.Region["reduce_sum"]):
     # Compiler schedules reduce ops safely
     Y += gemm(X, W)
 ```
@@ -129,11 +129,11 @@ On NVL72 (72-GPU domain):
 - **Meshes** span all 72 GPUs (e.g., dp=4 × tp=9 × pp=2).  
 - Index launches distribute work across tensor-parallel and pipeline-parallel shards.  
 - Collectives map to NVLink/NVSwitch with SHARP-enabled NCCL.  
-- CUDA Graph capture (`@jit(capture_graph=True)`) minimizes per-launch overhead.  
+- CUDA Graph capture (planned Phase 4+: `@tessera.jit(capture_graph=True)`) minimizes per-launch overhead.  
 
 #### Example: Training step graph on NVL72
 ```python
-@jit(capture_graph=True)
+@tessera.jit  # Note: capture_graph=True is planned for Phase 4+
 def train_step(batch):
     out = model(batch)
     loss = loss_fn(out)

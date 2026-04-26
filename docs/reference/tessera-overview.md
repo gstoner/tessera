@@ -1,5 +1,8 @@
 # Tessera: Overview and Quick Start Guide
 
+> **API names in this document are pre-canonical.** `@ts.kernel` should be `@tessera.kernel`; `@tessera.function` should be `@tessera.jit`; `ts.inspect_ir()` does not exist — use `fn.graph_ir.to_mlir()`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
+
+
 ## What is Tessera?
 
 Tessera is a next-generation GPU programming framework that unifies modeling, training, kernels, and distributed execution in a single stack. It's designed to scale seamlessly from single-GPU research code to massive NVL72 rack-scale deployments (72 GPUs).

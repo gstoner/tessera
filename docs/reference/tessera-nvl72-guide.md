@@ -1,5 +1,8 @@
 # Tessera NVL72 Programming Guide
 
+> **API names in this document are pre-canonical.** `@ts.kernel` should be `@tessera.kernel`; `@tessera.function` should be `@tessera.jit`; `ts.inspect_ir()` does not exist — use `fn.graph_ir.to_mlir()`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
+
+
 ## Table of Contents
 1. [Overview](#overview)
 2. [NVL72 Architecture](#nvl72-architecture)

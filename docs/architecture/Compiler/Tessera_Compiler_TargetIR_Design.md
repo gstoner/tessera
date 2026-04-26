@@ -2,6 +2,10 @@
 *Scope:* Tile IR → Target IR → Binary (PTX, CUDA Tile IR, LLVM, ROCm, oneAPI)  
 *Status:* Draft v0.2 (with programmer context)
 
+> **API note:** `inspect_ir("target")` shown in examples in this document does not exist.
+> The canonical inspection method is `fn.graph_ir.to_mlir()` (Graph IR only).
+> Target IR inspection is planned for Phase 4+. See `docs/CANONICAL_API.md`.
+
 ---
 
 ## 0. Goals

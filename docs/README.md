@@ -3,6 +3,8 @@
 Welcome to the Tessera documentation. Start with **Architecture** to understand the system, then use **Spec** documents as authoritative references when implementing or extending the compiler.
 
 > **Phase status:** Phases 1 (Python frontend), 2 (x86 lowering), and 3 (NVIDIA GPU / FlashAttention) are complete. Phase 4 (Distributed Training — NCCL/TPU) is next. See [System Overview](architecture/system_overview.md) for the full status table.
+>
+> **Session 5–6 doc update complete.** All `[planned]` items in the Spec section are now written. Chapter 5 (Kernel Programming) is written. All programming guide chapters have been audited for wrong API names and corrected.
 
 ---
 
@@ -26,13 +28,13 @@ Authoritative documents for the compiler. Ground truth for Claude Code sessions 
 
 > **Note:** Entries marked `[planned]` are being written as part of the April 2026 doc update. Until complete, use `CLAUDE.md` at the repo root as the canonical reference.
 
-- `[planned]` [Canonical API Quick Reference](CANONICAL_API.md) — Single-page truth for all decorator names, module paths, and syntax
-- `[planned]` [Compiler Reference](spec/COMPILER_REFERENCE.md) — IR stack, pass pipeline registry, phase status, architecture decisions
-- `[planned]` [Python API Spec](spec/PYTHON_API_SPEC.md) — All public symbols, parameter signatures, error types
-- `[planned]` [Graph IR Spec](spec/GRAPH_IR_SPEC.md) — Op catalog, attributes, verifier rules, MLIR text examples
-- `[planned]` [Lowering Pipeline Spec](spec/LOWERING_PIPELINE_SPEC.md) — Every pass: input/output IR, options, invariants
-- `[planned]` [Target IR Spec](spec/TARGET_IR_SPEC.md) — FA-4 Attn dialect, TMA ops, WGMMA, Schedule Mesh dialect
-- `[planned]` [Runtime ABI Spec](spec/RUNTIME_ABI_SPEC.md) — C ABI function signatures, error codes, threading model
+- [Canonical API Quick Reference](CANONICAL_API.md) — **Single-page naming authority** for all decorator names, module paths, and syntax
+- [Compiler Reference](spec/COMPILER_REFERENCE.md) — IR stack, both named pass pipelines, phase status, 9 locked architecture decisions
+- [Python API Spec](spec/PYTHON_API_SPEC.md) — All public symbols, parameter signatures, error types, Phases 1–3
+- [Graph IR Spec](spec/GRAPH_IR_SPEC.md) — All 6 ops, 4 canonicalization patterns, verifier rules, MLIR text examples
+- [Lowering Pipeline Spec](spec/LOWERING_PIPELINE_SPEC.md) — Every pass: input/output IR contracts, options, invariants
+- [Target IR Spec](spec/TARGET_IR_SPEC.md) — FA-4 Attn dialect, TMA ops, WGMMA, Schedule Mesh, Queue dialects
+- [Runtime ABI Spec](spec/RUNTIME_ABI_SPEC.md) — C ABI functions, all types, error model, backend architecture (Phase 6)
 - [Conformance](spec/01_conformance.md) — Conformance profiles T0/T1/T2 (skeleton)
 - [Language Spec](spec/02_language_spec.md) — Language surface (skeleton)
 - [Runtime ABI](spec/03_runtime_abi.md) — Runtime ABI (skeleton)
@@ -47,7 +49,7 @@ Authoritative documents for the compiler. Ground truth for Claude Code sessions 
 - [Chapter 2: Programming Model](programming_guide/Tessera_Programming_Guide_Chapter2_Programming_Model.md)
 - [Chapter 3: Memory Model](programming_guide/Tessera_Programming_Guide_Chapter3_Memory_Model.md)
 - [Chapter 4: Execution Model](programming_guide/Tessera_Programming_Guide_Chapter4_Execution_Model.md)
-- `[missing]` Chapter 5: Kernel Programming — tile DSL, `@tessera.kernel`, memory ops, MMA — to be written
+- [Chapter 5: Kernel Programming](programming_guide/Tessera_Programming_Guide_Chapter5_Kernel_Programming.md) — `@tessera.kernel`, dtype annotations, `index_launch`, Tile IR, FA-4, `MockRankGroup`
 - [Chapter 6: Numerics Model](programming_guide/Tessera_Programming_Guide_Chapter6_Numerics_Model.md)
 - [Chapter 7: Autodiff](programming_guide/Tessera_Programming_Guide_Chapter7_Autodiff.md)
 - [Chapter 8: Layouts & Data Movement](programming_guide/Tessera_Programming_Guide_Chapter8_Layouts_Data_Movement.md)
@@ -61,11 +63,15 @@ Authoritative documents for the compiler. Ground truth for Claude Code sessions 
 
 ## API Reference
 
-- [API Reference Index](api/API_Reference_Index.md)
-- [Vol 1: Frontend & Type System](api/Tessera_API_Vol1_Frontend_and_TypeSystem.md)
-- [Vol 2: Operations](api/Tessera_API_Vol2_Operations.md)
-- [Vol 3: IR & Target](api/Tessera_API_Vol3_IR_and_Target.md)
-- [Vol 4: Runtime & Deployment](api/Tessera_API_Vol4_Runtime_and_Deployment.md)
+> **For all new work use `docs/spec/PYTHON_API_SPEC.md` and `docs/CANONICAL_API.md`.**
+> The volume files below are pre-canonical and contain outdated API names — each carries a
+> correction banner.
+
+- [API Reference Index](api/API_Reference_Index.md) — **Start here** — quick-lookup table by symbol → canonical spec section
+- [Vol 1: Frontend & Type System](api/Tessera_API_Vol1_Frontend_and_TypeSystem.md) *(pre-canonical)*
+- [Vol 2: Operations](api/Tessera_API_Vol2_Operations.md) *(pre-canonical)*
+- [Vol 3: IR & Target](api/Tessera_API_Vol3_IR_and_Target.md) *(pre-canonical)*
+- [Vol 4: Runtime & Deployment](api/Tessera_API_Vol4_Runtime_and_Deployment.md) *(pre-canonical — see [Runtime ABI Spec](spec/RUNTIME_ABI_SPEC.md))*
 - [Python API](api/python.md)
 
 ---

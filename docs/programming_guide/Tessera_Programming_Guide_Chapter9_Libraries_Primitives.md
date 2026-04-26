@@ -47,7 +47,7 @@ Y = gemm(X, W)   # lowers to TP-sharded GEMM with all_gather/reduce_scatter
 
 #### Example: Transformer Block
 ```python
-@jit @autodiff
+@tessera.jit   # Note: @autodiff is planned for Phase 5 — not yet implemented
 def block(x, Wqkv, Wo):
     h = rmsnorm_safe(x)
     qkv = gemm(h, Wqkv)                  # TP-sharded GEMM
@@ -123,8 +123,8 @@ grad = allreduce(grad, axis="dp")   # DP gradient sync
 Every primitive uses **region privileges**:
 
 ```python
-@jit
-def step(X: Region[read], W: Region[read], G: Region[reduce_sum]):
+@tessera.jit
+def step(X: tessera.Region["read"], W: tessera.Region["read"], G: tessera.Region["reduce_sum"]):
     G[:] += gemm(X, W)
 ```
 

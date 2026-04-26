@@ -1,4 +1,7 @@
 # Tessera API Reference - Volume 1
+
+> **Pre-canonical reference.** API names and examples in this volume may be outdated. `@ts.function` → `@tessera.jit`; `@ts.kernel` → `@tessera.kernel`. Citation markers (【N†source】) are import artifacts — ignore them. The authoritative reference is `docs/spec/PYTHON_API_SPEC.md` and `docs/CANONICAL_API.md`.
+
 ## Frontend API and Type System
 
 ### 1. Introduction

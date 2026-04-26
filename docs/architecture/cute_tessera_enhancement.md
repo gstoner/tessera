@@ -1,5 +1,8 @@
 # CuTe Flash Attention Enhancement for Tessera Programming Model
 
+> **API names in this document are pre-canonical.** `@ts.kernel` should be `@tessera.kernel`; `@tessera.function` should be `@tessera.jit`; `ts.inspect_ir()` does not exist — use `fn.graph_ir.to_mlir()`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
+
+
 ## Executive Summary
 
 The CuTe (CUTLASS Template) version of Flash Attention presents significant opportunities to enhance Tessera's programming model by introducing advanced tensor layout algebra, hardware-specific optimizations, and a more composable kernel development framework. This analysis evaluates how CuTe's design principles can be integrated into Tessera to create a more powerful and efficient programming paradigm.

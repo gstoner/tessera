@@ -1,5 +1,8 @@
 # Tessera Performance Tuning Guide - Advanced Optimization Techniques
 
+> **API names in this document are pre-canonical.** `@ts.kernel` should be `@tessera.kernel`; `@tessera.function` should be `@tessera.jit`; `ts.inspect_ir()` does not exist — use `fn.graph_ir.to_mlir()`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
+
+
 This comprehensive guide covers advanced performance optimization techniques for Tessera applications, from single-GPU kernels to NVL72-scale distributed systems. It provides both theoretical understanding and practical implementation strategies for achieving peak performance.
 
 ## Table of Contents

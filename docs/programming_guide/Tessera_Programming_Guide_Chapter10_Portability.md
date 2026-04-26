@@ -30,9 +30,10 @@ On NVIDIA accelerators (Ampere, Hopper, Blackwell):
 
 #### Example: Inspecting IR
 ```python
-kernel = gemm_tile.jit(M=4096,N=4096,K=4096)
-print(kernel.inspect_ir("tile"))     # Portable Tile IR
-print(kernel.inspect_ir("target"))   # NVIDIA PTX / CUDA Tile IR
+# Current API — emits Graph IR as MLIR text
+print(gemm_fn.graph_ir.to_mlir())
+
+# Note: tile/target IR inspection is planned for Phase 4+
 ```
 
 ---

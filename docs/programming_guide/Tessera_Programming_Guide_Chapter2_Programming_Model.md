@@ -166,7 +166,7 @@ Tessera provides optimized primitives (Ch.9):
 
 #### Example: Transformer block with TP mesh
 ```python
-@jit @autodiff
+@tessera.jit   # Note: @autodiff is planned for Phase 5 — not yet implemented
 def block(x, Wqkv, Wo):
     h = rmsnorm_safe(x)
     qkv = gemm(x, Wqkv)                 # TP-sharded GEMM
@@ -186,8 +186,8 @@ On NVIDIA GPUs (Ch.10):
 
 Inspect IR for debugging:  
 ```python
-print(kernel.inspect_ir("tile"))
-print(kernel.inspect_ir("target"))
+# Inspect Graph IR (current API — tile/target IR inspection planned for Phase 4+)
+print(my_fn.graph_ir.to_mlir())
 ```
 
 ---

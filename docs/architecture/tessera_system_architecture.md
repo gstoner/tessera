@@ -1,12 +1,24 @@
+---
+status: Pre-canonical
+classification: Pre-canonical
+authority: Historical architecture blueprint; use docs/architecture/system_overview.md and docs/spec/COMPILER_REFERENCE.md for current architecture
+last_updated: 2026-04-26
+---
+
+> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+
+
 # Tessera System Architecture
 **Version:** 1.0 • **Date:** 2025-09-01
-**Status:** Informative (normative interfaces are flagged accordingly)  
+**Status:** Pre-canonical historical blueprint. Current architecture authority is `docs/architecture/system_overview.md`; compiler and API authority is defined in `docs/README.md`.  
 **Audience:** Compiler/runtime engineers, kernel authors, systems & infra teams.
 
 ---
 
 ## 0. Abstract
-Tessera is a tile‑centric programming model and toolchain for high‑performance AI/HPC kernels. This document describes the end‑to‑end system architecture: language/front‑end, mid‑end IR and pass pipeline, backends, runtime/ABI, distributed services, memory and scheduling, tooling, and operational concerns. It complements and references: `Tessera_Programming_Model_V1.md`, `tessera_frontend_architecture.md`, `tessera_target_ir_complete_unified.md`, `tessera_target_ir_usage_guide.md`, `Tessera_Standard_Operations.md`, and `system_overview.md`.
+Tessera is a tile-centric programming model and toolchain for high-performance AI/HPC kernels. This document preserves an older system-level blueprint: language/front-end, mid-end IR and pass pipeline, backends, runtime/ABI, distributed services, memory and scheduling, tooling, and operational concerns.
+
+For current implementation status and canonical names, use `docs/architecture/system_overview.md`, `docs/spec/COMPILER_REFERENCE.md`, and `docs/CANONICAL_API.md`. Runtime/distributed claims in this document are design intent unless explicitly marked as Phase 1-3 implemented.
 
 ---
 
@@ -55,11 +67,11 @@ flowchart LR
 - **Type/Shape System:** Rank/dtype/layout, effect annotations, and compile‑time shape checks.
 - **Lowering Hooks:** Intrinsics for `async_copy`, `barrier`, `mma`, epilogues, and collectives.
 
-**Interfaces (Normative):**
+**Historical interface sketch:**
 - `tessera_frontend_compile(src, opts) -> ModuleIR`
 - `tessera_validate_shapes(ir, policy) -> Report`
 
-### 3.2 Tessera IR (Normative)
+### 3.2 Tessera IR (Historical)
 - **Core**: SSA IR with regions/blocks, explicit **Tile** and **Fragment** types.
 - **Dialects**: `tensor`, `sched` (tiling/scheduling), `mem` (alloc, alias, placement), `dist` (collectives), `math`, `quant`.
 - **Attributes**: `tile.shape=[M,N,K]`, `pipeline.stages`, `epilogue=[bias,gelu,scale]`.
@@ -71,7 +83,7 @@ flowchart LR
 - `t.mem.alloc(scope=smem|global, align=128)`
 - `t.dist.all_reduce(kind=ring|tree, bucket=16MB)`
 
-### 3.3 Pass Pipeline (Normative order of phases)
+### 3.3 Pass Pipeline (Historical order sketch)
 1. **Canonicalize & Simplify**
 2. **Tiling & Scheduling** (choose (M,N,K), stages, warp specialization)
 3. **Vectorize & Fragment Lowering** (map to MMA/WMMA/MFMA fragments)
@@ -80,14 +92,17 @@ flowchart LR
 6. **Quantization Legalization** (FP8/INT with scale metadata)
 7. **Lower to Backend IR** (PTX/LLVM‑IR/ROCm) + emit **Kernel Metadata**
 
-### 3.4 Backends (Normative)
-- **NVIDIA/PTX:** WMMA/HMMA, `cp.async`/TMA equivalents, cooperative groups, NVTX.
-- **AMD/GCN:** MFMA matrix ops, LDS async copies, wave ops.
-- **CPU/SIMD:** AVX‑512/SVE mapped fragments, threaded tiles.
+### 3.4 Backends (Phase Status)
+- **CPU/x86 AMX/AVX-512:** Phase 2 implemented.
+- **NVIDIA SM_90+ GPU:** Phase 3 implemented for the documented GPU lowering path.
+- **NCCL/RCCL distributed collectives and TPU StableHLO:** Phase 4 planned.
+- **ROCm full MFMA coverage and production runtime ABI wiring:** Phase 6 planned.
 
 Backends must accept: IR + **Kernel Metadata** → binary + **Launch Spec**.
 
-### 3.5 Runtime & ABI (Normative)
+### 3.5 Runtime & ABI (Phase Status)
+The runtime C ABI is specified in `docs/spec/RUNTIME_ABI_SPEC.md`. Header-level ABI definitions and CPU reference behavior are documented there; production GPU runtime wiring and the Python runtime wrapper are Phase 6 planned.
+
 - **Module Loader:** JIT or AOT module loading from PTX/HSACO/ELF.
 - **Execution:** Streams/queues, events, graph capture, and **Tile Scheduler**.
 - **Memory Manager:** Pooled HBM allocs, pinned host buffers, layout transforms.
@@ -264,12 +279,12 @@ epilogue: [bias, gelu]
 ---
 
 ## 12. Interaction with Existing Docs
-This document provides the system‑level blueprint. Detailed IR and operation semantics live in:
-- `tessera_target_ir_complete_unified.md` (dialects, ops, attributes).
-- `tessera_target_ir_usage_guide.md` (examples; FlashAttention, TileLinear).
-- `Tessera_Standard_Operations.md` (canonical ops & epilogues).
-- `tessera_frontend_architecture.md` (source language and typing).
-- `system_overview.md` (high‑level overview; this doc supersedes it for architecture).
+This document is pre-canonical background. Current detailed IR, API, and operation semantics live in:
+- `docs/architecture/system_overview.md` for the current high-level architecture and phase map.
+- `docs/spec/COMPILER_REFERENCE.md` for the canonical compiler architecture and pass registry.
+- `docs/CANONICAL_API.md` for public API names.
+- `docs/spec/RUNTIME_ABI_SPEC.md` for the runtime C ABI.
+- `docs/spec/TARGET_IR_SPEC.md` for Schedule, Tile, and Target IR dialect details.
 
 ---
 

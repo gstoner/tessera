@@ -1,3 +1,9 @@
+---
+status: Normative
+classification: Normative
+last_updated: 2026-04-26
+---
+
 # Tessera Target IR Specification
 **Status:** Normative — grounded in `src/tile_opt_fa4/`, `src/programming_model/ir/schedule/`, and `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` Phase 2–3 implementations  
 **Last updated:** April 26, 2026  

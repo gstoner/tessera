@@ -1,3 +1,12 @@
+---
+status: Informative
+classification: Informative
+last_updated: 2026-04-26
+---
+
+> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+
+
 # Tessera Compiler Architecture Overview
 **Version:** 2.0  
 **Date:** April 26, 2026  
@@ -112,7 +121,7 @@ def flash_forward(Q, K, V):
     return tessera.ops.flash_attn(Q, K, V, causal=True)
 ```
 
-**Important:** `inspect_ir()`, `@autodiff`, `@vmap`, `@pmap`, `@scan`, `@checkpoint` are **not part of the current API**. The working inspection mechanism is `fn.graph_ir.to_mlir()`. See `docs/CANONICAL_API.md` for the complete authoritative API.
+**Important:** legacy staged IR inspection helpers, `@autodiff`, `@vmap`, `@pmap`, `@scan`, `@checkpoint` are **not part of the current API**. The working inspection mechanism is `fn.graph_ir.to_mlir()`. See `docs/CANONICAL_API.md` for the complete authoritative API.
 
 ### 2.4 Region privileges
 

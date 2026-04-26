@@ -1,3 +1,12 @@
+---
+status: Informative
+classification: Informative
+last_updated: 2026-04-26
+---
+
+> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+
+
 # Tessera System Overview
 **Version:** 2.0  
 **Date:** April 26, 2026  
@@ -116,6 +125,22 @@ Each layer has its own spec document:
 | ROCm MFMA full coverage | 6 |
 | Runtime C ABI (`TesseraRuntime` Python wrapper) | 6 |
 | Benchmark suite | 6 |
+
+---
+
+## System Concepts Carried Forward
+
+The older `docs/architecture/tessera_system_architecture.md` blueprint included several useful system concepts that remain valid as design direction, but not as implemented Phase 1-3 behavior:
+
+| Concept | Current status |
+|---------|----------------|
+| Kernel metadata bundles containing tile shape, resource use, launch bounds, and backend artifacts | Phase 6 planned production packaging |
+| Runtime traces, profiler events, and per-kernel metrics | Phase 6 planned production diagnostics |
+| Repro packs containing IR snapshots, launch args, binaries, logs, and environment hashes | Phase 6 planned diagnostics |
+| Distributed topology service, bucketizer, and overlap engine | Phase 4 planned distributed runtime work |
+| Runtime C ABI as the stable host/runtime contract | Specified in `docs/spec/RUNTIME_ABI_SPEC.md`; Phase 6 planned production wiring |
+
+These concepts should be referenced as roadmap items unless a later spec marks them implemented.
 
 ---
 

@@ -1,3 +1,12 @@
+---
+status: Informative
+classification: Informative
+last_updated: 2026-04-26
+---
+
+> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+
+
 # Tessera ML Training Guide - Distributed Training at Scale
 
 This guide covers training ML models with Tessera, from single-GPU training to massive distributed setups with 72+ GPUs, including data parallelism, tensor parallelism, pipeline parallelism, and mixed strategies.

@@ -1,3 +1,9 @@
+---
+status: Normative
+classification: Normative
+last_updated: 2026-04-26
+---
+
 # Tessera Lowering Pipeline Specification
 **Status:** Normative — grounded in `src/transforms/lib/` and `src/tile_opt_fa4/lib/` Phase 1–3 implementations  
 **Last updated:** April 26, 2026  

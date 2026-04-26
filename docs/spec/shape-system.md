@@ -1,3 +1,9 @@
+---
+status: Normative
+classification: Normative
+last_updated: 2026-04-26
+---
+
 # shape-system.md
 # Shape System (Normative core + Informative appendix)
 

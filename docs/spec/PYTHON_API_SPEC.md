@@ -1,3 +1,9 @@
+---
+status: Normative
+classification: Normative
+last_updated: 2026-04-26
+---
+
 # Tessera Python API Specification
 **Status:** Normative — grounded in `python/tessera/` Phase 1–3 implementation  
 **Last updated:** April 26, 2026  

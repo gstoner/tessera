@@ -1,8 +1,17 @@
+---
+status: Informative
+classification: Informative
+last_updated: 2026-04-26
+---
+
+> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+
+
 # Tessera Compiler — Target IR Design
 *Scope:* Tile IR → Target IR → Binary (PTX, CUDA Tile IR, LLVM, ROCm, oneAPI)  
 *Status:* Draft v0.2 (with programmer context)
 
-> **API note:** `inspect_ir("target")` shown in examples in this document does not exist.
+> **API note:** Legacy Target IR inspection helpers shown in older examples do not exist.
 > The canonical inspection method is `fn.graph_ir.to_mlir()` (Graph IR only).
 > Target IR inspection is planned for Phase 4+. See `docs/CANONICAL_API.md`.
 
@@ -94,7 +103,7 @@ wgmma.mma_async.aligned.m64n128k32.f32.fp8.fp8.fp32 ...
 
 - Schedule IR attributes (`block`, `warp`, `vector`) flow into Target IR kernels.  
 - Autotune caches store **final target binaries per arch**.  
-- Fatbin packaging bundles GIR + SchedIR + TileIR + TargetIR + tuned binaries.
+- Fatbin packaging is Phase 6 planned. The intended package metadata bundles Graph IR, Schedule IR, Tile IR, Target IR, and tuned binaries.
 
 ---
 
@@ -114,7 +123,7 @@ wgmma.mma_async.aligned.m64n128k32.f32.fp8.fp8.fp32 ...
 Programmers can inspect target IR:
 
 ```python
-print(kernel.inspect_ir("target"))
+print(kernel.graph_ir.to_mlir())
 ```
 
 Outputs:
@@ -156,7 +165,7 @@ You don’t usually need to modify Target IR, but you can **inspect it** to:
 ## 11. Inspecting Target IR
 
 ```python
-gemm_kernel.inspect_ir("target")
+gemm_kernel.graph_ir.to_mlir()
 ```
 
 On NVIDIA (Blackwell) this might show:  
@@ -207,7 +216,7 @@ On Intel this might show DPAS intrinsics:
 
 2. Inspect Target IR:  
    ```python
-   step.inspect_ir("target")
+   step.graph_ir.to_mlir()
    ```
    → Shows `wgmma.mma_async` with `fp8.fp8.fp32` accumulate.  
 
@@ -226,7 +235,7 @@ This workflow ensures **numerics and backend mappings are correct** before deplo
 ## 14. Summary for Programmers
 
 - **Target IR** is the **final IR before GPU/accelerator execution**.  
-- Use **`inspect_ir("target")`** to see PTX, CTIR, LLVM, or SPIR-V output.  
+- Use **`fn.graph_ir.to_mlir()`** for current Graph IR inspection; Target IR inspection is Phase 4 planned.  
 - It’s useful for debugging:  
   - Intrinsics (WGMMA/WMMA, XDLops, DPAS).  
   - Numerics policies (fp8→fp32 accum).  

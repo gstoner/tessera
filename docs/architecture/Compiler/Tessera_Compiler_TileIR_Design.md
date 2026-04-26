@@ -1,8 +1,17 @@
+---
+status: Informative
+classification: Informative
+last_updated: 2026-04-26
+---
+
+> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+
+
 # Tessera Compiler — Tile IR Design
 *Scope:* Schedule IR → Tile IR → Target IR  
 *Status:* Draft v0.2 (with programmer context)
 
-> **API note:** `inspect_ir("tile")` shown in examples in this document does not exist.
+> **API note:** Legacy Tile IR inspection helpers shown in older examples do not exist.
 > The canonical inspection method is `fn.graph_ir.to_mlir()` (Graph IR only).
 > Tile IR inspection is planned for Phase 4+. See `docs/CANONICAL_API.md`.
 
@@ -158,7 +167,7 @@ Programmers use Tile IR to:
 ## 10. Inspecting Tile IR
 
 ```python
-gemm_kernel.inspect_ir("tile")
+gemm_kernel.graph_ir.to_mlir()
 ```
 
 Example output:  
@@ -208,7 +217,7 @@ This shows the **explicit tile-level kernel** the compiler will lower to PTX/CTI
 
 2. Inspect Tile IR:  
    ```python
-   gemm.inspect_ir("tile")
+   gemm.graph_ir.to_mlir()
    ```
    → Shows explicit shared memory allocation, cp.async prefetch, mma.  
 
@@ -229,6 +238,6 @@ This workflow shows how **Tile IR inspection helps tune performance-critical ker
 ## 13. Summary for Programmers
 
 - Tile IR is the **last IR you’ll inspect before actual PTX/CTIR**.  
-- Use **`inspect_ir("tile")`** to check memory movement, barriers, and mma lowering.  
+- Use **`fn.graph_ir.to_mlir()`** for current Graph IR inspection; Tile IR inspection is Phase 4 planned.  
 - Watch for **bank conflict, register pressure, barrier errors**.  
 - Tile IR connects directly to the CUDA Tile IR / PTX you’ll see at the Target IR stage.  

@@ -1,3 +1,9 @@
+---
+status: Informative
+classification: Informative
+last_updated: 2026-04-26
+---
+
 ## Vision Models
 
 ### Vision Transformer (ViT)

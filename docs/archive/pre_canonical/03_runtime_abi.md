@@ -1,5 +1,13 @@
+---
+status: Archive
+classification: Archive
+last_updated: 2026-04-26
+---
+
 # 03_runtime_abi.md
-# Tessera Runtime ABI (Normative)
+# Tessera Runtime ABI (Archived Stub)
+
+> Archived pre-canonical stub. Use `docs/spec/RUNTIME_ABI_SPEC.md` as the only normative runtime ABI reference.
 
 ## 1. Overview
 A thin C ABI enabling host toolchains to load TileIR modules, allocate device memory, launch tile graphs, and interop with vendor drivers.

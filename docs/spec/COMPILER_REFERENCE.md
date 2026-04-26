@@ -1,3 +1,9 @@
+---
+status: Normative
+classification: Normative
+last_updated: 2026-04-26
+---
+
 # Tessera Compiler Reference
 **Status:** Normative — grounded in `src/` and `python/tessera/` Phases 1–3 implementation  
 **Last updated:** April 26, 2026  
@@ -38,7 +44,7 @@ Target IR   (per-backend: LLVM+AMX/AVX512 | NVVM/PTX | StableHLO | ROCDL)
 | Layer 3 | **Tile IR** | `src/tile_opt_fa4/dialects/tessera_attn/Attn.td`, `tessera_queue/Queue.td` | `tile.*`, `tessera.attn.*`, `tessera.queue.*` |
 | Layer 4 | **Target IR** | `src/compiler/codegen/tessera_x86_backend/`, `tessera_gpu_backend_NVIDIA/` | LLVM, NVVM, StableHLO |
 
-**Never use:** "GIR", "GraphIR" (one word), "TIR-H", "TIR_H", "tirh". Always write the full two-word name.
+**Naming rule:** Always write the full two-word IR names: Graph IR, Schedule IR, Tile IR, and Target IR. Avoid older abbreviated or one-word aliases.
 
 ---
 

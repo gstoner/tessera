@@ -1,6 +1,15 @@
+---
+status: Informative
+classification: Informative
+last_updated: 2026-04-26
+---
+
+> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+
+
 # Tessera Migration Guide Part 1 - Assessment, Planning, and Basic Migration
 
-> **API names in this document are pre-canonical.** `@ts.kernel` should be `@tessera.kernel`; `@tessera.function` should be `@tessera.jit`; `ts.inspect_ir()` does not exist — use `fn.graph_ir.to_mlir()`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
+> **API names in this document are pre-canonical.** `@ts.kernel` should be `@tessera.kernel`; `@tessera.function` should be `@tessera.jit`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
 
 
 This comprehensive guide helps developers migrate existing CUDA and PyTorch applications to Tessera, providing step-by-step instructions, code transformation examples, and best practices for a smooth transition.

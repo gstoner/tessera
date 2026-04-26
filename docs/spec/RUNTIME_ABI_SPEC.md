@@ -1,8 +1,14 @@
+---
+status: Normative
+classification: Normative
+authority: Runtime C ABI
+last_updated: 2026-04-26
+---
+
 # Tessera Runtime ABI Specification
 
 > **Canonical reference.** This document is grounded in the actual header files under
-> `src/runtime/include/tessera/`. It supersedes `docs/spec/03_runtime_abi.md` (stub) and
-> the runtime section of `docs/spec/04_tile_ir.md`.
+> `src/runtime/include/tessera/`. It is the only normative runtime ABI reference.
 >
 > **Phase status:** The C ABI headers are complete and well-defined (Phase 6 target for full
 > GPU backend wiring). The CPU backend (`tessera_runtime_cpu.cpp`) is the reference

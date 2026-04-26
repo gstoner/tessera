@@ -1,3 +1,12 @@
+---
+status: Informative
+classification: Informative
+last_updated: 2026-04-26
+---
+
+> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+
+
 # Tessera Compiler — Schedule IR Design
 *Scope:* Graph IR → Schedule IR → Tile IR  
 *Status:* Draft v0.2 (with programmer context)
@@ -5,7 +14,7 @@
 > **API note:** Examples in this document using `gir.gemm` and `gir.rmsnorm_safe` reflect
 > internal MLIR op names (`tessera.matmul`, `tessera.layer_norm` in the tessera dialect).
 > `Region[write]` and `Region[reduce]` should be `Region["write"]` and `Region["reduce_sum"]`
-> in Python source. `inspect_ir("sched")` does not exist — use `fn.graph_ir.to_mlir()` for
+> in Python source. Legacy Schedule IR inspection helpers do not exist — use `fn.graph_ir.to_mlir()` for
 > Graph IR inspection; Schedule IR and below inspection is planned for Phase 4+.
 > See `docs/CANONICAL_API.md` for authoritative names.
 
@@ -23,10 +32,10 @@
 ## 1. Role in the Compiler Pipeline
 
 ```text
-Graph IR (GIR) — high-level ops, effects, privileges
+Graph IR — high-level ops, effects, privileges
     │
     ▼
-Schedule IR (SchedIR) — fusion, tiling, pipelining, collective overlap
+Schedule IR — fusion, tiling, pipelining, collective overlap
     │
     ▼
 Tile IR — explicit tiles, loads/stores, shared memory, cp.async, mma
@@ -112,7 +121,7 @@ sched.autotune %gemm {BM=[64,128], BN=[64,128], BK=[32,64], warps=[4,8], stages=
 
 - Autotuner explores legal configurations.  
 - Cost models + runtime measures guide search.  
-- Persistent cache keyed by `(GIR hash, arch)` ensures reproducibility.
+- Persistent cache keyed by `(Graph IR hash, arch)` ensures reproducibility.
 
 ---
 
@@ -185,7 +194,7 @@ You don’t write Schedule IR directly — but you can **inspect it** to underst
 @kernel.autotune(space=dict(BM=[128,256], BN=[128,256], BK=[64], stages=[2,3]))
 def gemm(A, B, C): return gemm_tile(A,B,C)
 
-gemm.inspect_ir("sched")
+gemm.graph_ir.to_mlir()
 ```
 
 Example output:  
@@ -223,7 +232,7 @@ sched.pipeline %y {stages=3}
 
 2. Inspect Schedule IR:  
    ```python
-   gemm_kernel.inspect_ir("sched")
+   gemm_kernel.graph_ir.to_mlir()
    ```
    → Shows autotune space and tiling strategy.
 
@@ -244,7 +253,7 @@ This lets you balance **autotune vs manual control**.
 ## 15. Summary for Programmers
 
 - **Schedule IR** explains how Graph IR ops are tiled, fused, pipelined.  
-- Use **`inspect_ir("sched")`** to debug autotune spaces and tiling choices.  
+- Use **`fn.graph_ir.to_mlir()`** for current Graph IR inspection; Schedule IR inspection is Phase 4 planned.  
 - Common issues: illegal tilings, privilege conflicts, register pressure.  
 - Programmers can let Tessera autotune, or manually override with `@kernel.schedule`.  
 - Understanding Schedule IR helps bridge **productivity → performance**.

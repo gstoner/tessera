@@ -1,8 +1,15 @@
+---
+status: Normative
+classification: Normative
+authority: Conformance profiles; defers API and compiler disputes to docs/README.md
+last_updated: 2026-04-26
+---
+
 # Tessera Conformance Specification (Normative)
 
 **Version:** 0.3.0  
 **Status:** Active — Phases 1–3 complete; Phases 4–6 planned  
-**Canonical reference:** This document. Disputes resolved here.
+**Authority:** This document defines conformance profiles. API, compiler, IR, and runtime disputes are resolved by the authority tree in `docs/README.md`.
 
 ---
 
@@ -32,9 +39,9 @@ conformance.
 | `docs/spec/LOWERING_PIPELINE_SPEC.md` | Pass input/output contracts |
 | `docs/spec/TARGET_IR_SPEC.md` | Target IR dialects |
 | `docs/spec/RUNTIME_ABI_SPEC.md` | C ABI functions and types |
-| `docs/spec/02_language_spec.md` | Python language surface (this spec family) |
-| `docs/spec/04_tile_ir.md` | Tile IR op set (this spec family) |
-| `docs/spec/shape-system.md` | Shape constraint system (this spec family) |
+| `docs/spec/02_language_spec.md` | Supporting language notes |
+| `docs/spec/04_tile_ir.md` | Supporting Tile IR notes |
+| `docs/spec/shape-system.md` | Supporting shape-system notes |
 
 ---
 

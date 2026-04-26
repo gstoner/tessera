@@ -1,3 +1,12 @@
+---
+status: Informative
+classification: Informative
+last_updated: 2026-04-26
+---
+
+> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+
+
 # Tessera Compiler Frontend Design — Python Surface to Graph IR
 **Version:** 2.0  
 **Date:** April 26, 2026  
@@ -373,7 +382,7 @@ module @step attributes {tessera.version = "1.0"} {
 }
 ```
 
-**Note:** The method `inspect_ir(stage)` shown in older documents does not exist. The `.graph_ir.to_mlir()` pattern is the canonical inspection mechanism.
+**Note:** Legacy staged IR inspection helpers shown in older documents do not exist. The `.graph_ir.to_mlir()` pattern is the canonical inspection mechanism.
 
 ---
 

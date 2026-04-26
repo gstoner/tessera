@@ -1,3 +1,9 @@
+---
+status: Normative
+classification: Normative
+last_updated: 2026-04-26
+---
+
 # 04_tile_ir.md
 # TileIR (Normative)
 

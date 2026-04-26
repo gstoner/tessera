@@ -1,3 +1,9 @@
+---
+status: Normative
+classification: Normative
+last_updated: 2026-04-26
+---
+
 # Tessera Graph IR Specification
 **Status:** Normative — grounded in `src/ir/TesseraOps.td` and `src/transforms/lib/CanonicalizeTesseraIR.cpp`  
 **Last updated:** April 26, 2026  

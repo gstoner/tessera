@@ -1,3 +1,9 @@
+---
+status: Informative
+classification: Informative
+last_updated: 2026-04-26
+---
+
 # Tessera Migration Guide Part 2 - Advanced Strategies, Testing, and Success Stories
 
 This document continues from Part 1, covering advanced migration strategies, comprehensive testing frameworks, real-world success stories, and best practices for large-scale Tessera adoption.

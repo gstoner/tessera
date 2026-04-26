@@ -32,3 +32,13 @@ def Schedule_StageOp : Op<ScheduleDialect, "stage"> {
   let regions = (region AnyRegion:$body);
   let hasVerifier = 1;
 }
+
+def Schedule_YieldOp : Op<ScheduleDialect, "yield",
+    [Pure, Terminator, ReturnLike]> {
+  let summary = "Terminator for schedule region bodies";
+  let arguments = (ins Variadic<AnyType>:$values);
+  let assemblyFormat = "($values^ `:` type($values))? attr-dict";
+  let builders = [OpBuilder<(ins), [{
+    $_state.addTypes({});
+  }]>];
+}

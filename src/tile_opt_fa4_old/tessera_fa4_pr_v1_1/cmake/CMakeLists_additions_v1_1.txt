@@ -1,0 +1,4 @@
+# v1.1 additions
+add_library(TesseraScheduleVerifiers lib/Dialect/Schedule/ScheduleVerifiers.cpp)
+add_library(TesseraTileVerifiers     lib/Dialect/Tile/TileVerifiers.cpp)
+add_library(TesseraNumericsVerifiers lib/Dialect/Numerics/NumericsVerifiers.cpp)

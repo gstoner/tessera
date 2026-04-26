@@ -1,0 +1,5 @@
+# v1.2 additions
+add_library(TesseraAttnDialect        dialects/tessera_attn/Attn.td)
+add_library(TesseraAttnVerifiers      lib/Dialect/Attn/AttnVerifiers.cpp)
+add_library(TesseraAttnToTarget       lib/Conversion/TesseraAttnToTarget/LowerAttnToTarget.cpp)
+# Update existing link lines to include Async dialect libs for schedule lowering.

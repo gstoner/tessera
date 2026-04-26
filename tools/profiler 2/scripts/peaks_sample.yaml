@@ -1,0 +1,5 @@
+# Example device peaks (placeholder values). Edit for your hardware.
+devices:
+  sm80: { peak_flops: 1.2e14, hbm_gbs: 2039 }
+  sm90: { peak_flops: 2.0e14, hbm_gbs: 3000 }
+  gb200: { peak_flops: 4.0e14, hbm_gbs: 6000 }

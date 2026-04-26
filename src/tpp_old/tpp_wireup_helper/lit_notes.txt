@@ -1,0 +1,8 @@
+
+# In your top-level lit config, ensure the 'tessera-opt' tool is on PATH and
+# add the TPP tests directory:
+config.suffixes = ['.mlir']
+config.test_source_root = os.path.dirname(__file__)
+# Example: add 'src/tpp/test' if not already walked by your tree:
+#   llvm/utils/lit will discover tests via add_subdirectory, or you can
+#   set config.test_exec_root accordingly.

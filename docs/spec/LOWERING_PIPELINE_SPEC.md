@@ -5,7 +5,7 @@ last_updated: 2026-04-26
 ---
 
 # Tessera Lowering Pipeline Specification
-**Status:** Normative — grounded in `src/transforms/lib/` and `src/tile_opt_fa4/lib/` Phase 1–3 implementations  
+**Status:** Normative — grounded in `src/transforms/lib/` and `src/compiler/tile_opt_fa4/lib/` Phase 1–3 implementations  
 **Last updated:** April 26, 2026  
 **Cross-references:** `docs/spec/COMPILER_REFERENCE.md` §Pass Pipeline Registry, `docs/spec/GRAPH_IR_SPEC.md`, `docs/spec/TARGET_IR_SPEC.md`
 
@@ -407,7 +407,7 @@ tile.wait_async
 
 ### 3.7 `WarpSpecializationPass`
 
-**File:** `src/tile_opt_fa4/lib/WarpSpecializationPass.cpp`  
+**File:** `src/compiler/tile_opt_fa4/lib/WarpSpecializationPass.cpp`  
 **CLI flag:** `--tessera-warp-specialization`  
 **Pipeline position:** 5 (GPU pipeline only)
 
@@ -457,7 +457,7 @@ tessera.schedule.warp {role = "consumer"} {
 
 ### 3.8 `AsyncCopyLoweringPass`
 
-**File:** `src/tile_opt_fa4/lib/AsyncCopyLoweringPass.cpp`  
+**File:** `src/compiler/tile_opt_fa4/lib/AsyncCopyLoweringPass.cpp`  
 **CLI flag:** `--tessera-async-copy-lowering`  
 **Pipeline position:** 6 (GPU pipeline only)
 

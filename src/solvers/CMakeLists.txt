@@ -11,9 +11,13 @@ project(TesseraSolvers LANGUAGES C CXX)
 # Add this directory from your main CMakeLists:
 # add_subdirectory(src/solvers)
 
-add_subdirectory(dialects)
-add_subdirectory(passes)
-# linalg/ is grouped here by function but remains opt-in until its scaffold
-# APIs are aligned with the canonical solver pass build.
+add_subdirectory(core/dialects)    # tessera_solvers_dialects target
+add_subdirectory(core/passes)      # tessera_solvers_passes target
+
+# Domain-specific solver components (each brings its own CMakeLists).
+add_subdirectory(scaling_resilience)
+add_subdirectory(tpp)
+add_subdirectory(spectral)
+# linalg/ remains opt-in until its scaffold APIs align with the canonical build.
 
 add_custom_target(tessera_solvers DEPENDS tessera_solvers_dialects tessera_solvers_passes)

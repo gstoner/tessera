@@ -4,17 +4,14 @@
 #
 # Layout (post April-2026 reorganization — see PROJECT_STRUCTURE.md):
 #
-#   ir/                 Core Tessera IR dialect (TesseraDialect, TesseraOps)
-#   transforms/         Canonicalize / verify / migrate passes over Tessera IR
-#   runtime/            C++ execution engine + CUDA/HIP backends
-#   scaling_resilience/ SR dialect: sharding, recompute, resilience passes
-#   tile_opt_fa4/       Attn + Queue dialects, FA4 conversion passes
-#   tpp/                TPP (Tile Processing Primitives) dialect
-#   programming_model/  PM v1.1: tile/cache/schedule/moe ODS + pipeline driver
-#   solvers/            Sparse, RNG, physics solver passes
-#   tessera_neighbors/  Neighbor topology + stencil lowering passes
-#   collectives/        Collective-communication dialect
-#   spectral/           Spectral / FFT dialect
+#   compiler/ir/               Core Tessera IR dialect (TesseraDialect, TesseraOps)
+#   transforms/                Canonicalize / verify / migrate / lowering passes
+#   runtime/                   C++ execution engine + CUDA/HIP backends
+#   compiler/tile_opt_fa4/     Attn + Queue dialects, FA4 conversion passes
+#   compiler/programming_model/PM v1.1: tile/cache/schedule/moe ODS + pipeline driver
+#   compiler/tessera_neighbors/Neighbor topology + stencil lowering passes
+#   solvers/                   Scaling-resilience / TPP / spectral / sparse solvers
+#   collectives/               Collective-communication dialect
 #
 # NOT in this file (intentionally excluded from production build):
 #   research/pddl_instruct        — experimental
@@ -23,8 +20,8 @@
 # ------------------------------------------------------------------
 # Core IR layer (must come first — other components link against it)
 # ------------------------------------------------------------------
-add_subdirectory(ir)
-add_subdirectory(transforms)
+add_subdirectory(compiler/ir)          # TesseraIR dialect + tablegen
+add_subdirectory(transforms)           # All lowering passes (Phases 1–3)
 
 # ------------------------------------------------------------------
 # Runtime
@@ -32,13 +29,14 @@ add_subdirectory(transforms)
 add_subdirectory(runtime)
 
 # ------------------------------------------------------------------
-# Canonical dialects and passes
+# Compiler components (dialects and passes under compiler/)
 # ------------------------------------------------------------------
-add_subdirectory(scaling_resilience)   # SR dialect: resilience/sharding passes
-add_subdirectory(tile_opt_fa4)         # Attn + Queue dialects, FA4 conversions
-add_subdirectory(tpp)                  # TPP dialect + CI workflow
-add_subdirectory(programming_model)    # PM v1.1: tile/cache/schedule/moe ODS
-add_subdirectory(solvers)              # Sparse/RNG/physics solvers
-add_subdirectory(tessera_neighbors)    # Neighbor topology + stencil passes
+add_subdirectory(compiler/tile_opt_fa4)         # Attn + Queue dialects, FA4 conversions
+add_subdirectory(compiler/programming_model)    # PM v1.1: Schedule IR ODS
+add_subdirectory(compiler/tessera_neighbors)    # Neighbor topology + stencil passes
+
+# ------------------------------------------------------------------
+# Solver suite and collectives
+# ------------------------------------------------------------------
+add_subdirectory(solvers)              # scaling_resilience, tpp, spectral, sparse
 add_subdirectory(collectives)          # Collective-communication dialect
-add_subdirectory(spectral)             # Spectral/FFT dialect

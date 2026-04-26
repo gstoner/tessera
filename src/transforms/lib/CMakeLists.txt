@@ -16,8 +16,8 @@ add_library(TesseraPasses
 
   # Phase 3 GPU / FA-4 Tile IR lowering
   TileIRLoweringPass.cpp
-  ${CMAKE_SOURCE_DIR}/src/tile_opt_fa4/lib/WarpSpecializationPass.cpp
-  ${CMAKE_SOURCE_DIR}/src/tile_opt_fa4/lib/AsyncCopyLoweringPass.cpp
+  ${CMAKE_SOURCE_DIR}/src/compiler/tile_opt_fa4/lib/WarpSpecializationPass.cpp
+  ${CMAKE_SOURCE_DIR}/src/compiler/tile_opt_fa4/lib/AsyncCopyLoweringPass.cpp
   ${CMAKE_SOURCE_DIR}/src/compiler/codegen/tessera_gpu_backend_NVIDIA/NVWGMMALoweringPass.cpp
   ${CMAKE_SOURCE_DIR}/src/compiler/codegen/tessera_gpu_backend_NVIDIA/NVTMADescriptorPass.cpp
   ${CMAKE_SOURCE_DIR}/src/compiler/codegen/tessera_gpu_backend_NVIDIA/NVFlashAttnKernelEmitter.cpp
@@ -26,7 +26,8 @@ add_library(TesseraPasses
 target_include_directories(TesseraPasses
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../ir
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../compiler/ir
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../compiler/tile_opt_fa4/include
 )
 
 target_link_libraries(TesseraPasses

@@ -152,7 +152,7 @@ Registration: `src/transforms/lib/Passes.cpp` (x86); `src/compiler/codegen/tesse
 - Named pipeline: `tessera-lower-to-gpu`
 
 **`WarpSpecializationPass`**
-- File: `src/tile_opt_fa4/lib/WarpSpecializationPass.cpp`
+- File: `src/compiler/tile_opt_fa4/lib/WarpSpecializationPass.cpp`
 - Input: Tile IR — ops in mesh.region bodies
 - Output: Tile IR — `tessera.schedule.warp {role="producer"}` and `{role="consumer"}` regions with `tessera.queue` barriers between them
 - Warp role separation is structural (hard boundary), not advisory
@@ -160,7 +160,7 @@ Registration: `src/transforms/lib/Passes.cpp` (x86); `src/compiler/codegen/tesse
 - Named pipeline: `tessera-lower-to-gpu`
 
 **`AsyncCopyLoweringPass`**
-- File: `src/tile_opt_fa4/lib/AsyncCopyLoweringPass.cpp`
+- File: `src/compiler/tile_opt_fa4/lib/AsyncCopyLoweringPass.cpp`
 - Input: Tile IR — `tile.async_copy` ops
 - Output: Tile IR — `tessera.tma.*` (SM_90+) or `tessera.cp_async.*` (SM < 90)
 - SM_90+ path uses TMA bulk-tensor copy; pre-SM_90 uses cp.async.cg

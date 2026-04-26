@@ -44,17 +44,20 @@ void registerTesseraPasses() {
       []() { return createTileToX86Pass(); });
 
   // Full Phase 2 lowering chain: Graph IR → x86 CPU calls.
-  // Equivalent to:
-  //   tessera-distribution-lowering
-  //   tessera-effect-annotation
-  //   tessera-tiling
-  //   tessera-tile-to-x86
+  //
+  // Pass order (normative — matches docs/spec/LOWERING_PIPELINE_SPEC.md §2.1):
+  //   1. tessera-effect-annotation     — annotate tessera.effect on func.func
+  //   2. tessera-canonicalize          — fuse/simplify Graph IR patterns
+  //   3. tessera-distribution-lowering — tessera.shard → schedule.mesh.*
+  //   4. tessera-tiling                — tessera.matmul → scf.for tile loops
+  //   5. tessera-tile-to-x86           — tiled matmul → func.call @tessera_x86_*
   ::mlir::PassPipelineRegistration<>
     lowerToX86("tessera-lower-to-x86",
                "Full Phase 2 lowering chain to x86 AMX/AVX-512 backend",
       [](OpPassManager &pm) {
-        pm.addPass(createDistributionLoweringPass());
         pm.addPass(createEffectAnnotationPass());
+        pm.addPass(createCanonicalizeTesseraIRPass());
+        pm.addPass(createDistributionLoweringPass());
         pm.addPass(createTilingPass());
         pm.addPass(createTileToX86Pass());
       });
@@ -86,19 +89,24 @@ void registerTesseraPasses() {
       []() { return createNVFlashAttnKernelEmitterPass(); });
 
   // Full Phase 3 GPU lowering chain: Graph IR → SM_90 PTX.
-  // Equivalent to running all Phase 3 passes in order:
-  //   tessera-tile-ir-lowering
-  //   tessera-warp-specialization
-  //   tessera-async-copy-lowering
-  //   tessera-nvwgmma-lowering
-  //   tessera-nvtma-descriptor
-  //   tessera-nvflash-attn-emitter
+  //
+  // Pass order (normative — matches docs/spec/LOWERING_PIPELINE_SPEC.md §2.2):
+  //   1. tessera-effect-annotation     — annotate tessera.effect on func.func
+  //   2. tessera-canonicalize          — fuse/simplify Graph IR patterns
+  //   3. tessera-distribution-lowering — tessera.shard → schedule.mesh.*
+  //   4. tessera-tile-ir-lowering      — schedule.mesh.region → tile.* + attn.*
+  //   5. tessera-warp-specialization   — warp role assignment + queue barriers
+  //   6. tessera-async-copy-lowering   — tile.async_copy → TMA / cp.async
+  //   7. tessera-nvwgmma-lowering      — tile.mma → wgmma.mma_async PTX
+  //   8. tessera-nvtma-descriptor      — TMA descriptor hoisting + mbarrier init
+  //   9. tessera-nvflash-attn-emitter  — FA-4 kernel finalisation
   ::mlir::PassPipelineRegistration<>
     lowerToGPU("tessera-lower-to-gpu",
                "Full Phase 3 lowering chain to NVIDIA SM_90 GPU backend",
       [](OpPassManager &pm) {
-        pm.addPass(createDistributionLoweringPass());
         pm.addPass(createEffectAnnotationPass());
+        pm.addPass(createCanonicalizeTesseraIRPass());
+        pm.addPass(createDistributionLoweringPass());
         pm.addPass(createTileIRLoweringPass());
         pm.addPass(createWarpSpecializationPass());
         pm.addPass(createAsyncCopyLoweringPass());

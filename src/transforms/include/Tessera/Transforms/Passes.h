@@ -11,11 +11,12 @@ std::unique_ptr<mlir::Pass> createMigrateTesseraIRPass();
 
 // Phase 2 lowering chain
 //
-// Pipeline order:
-//   tessera-distribution-lowering
-//   → tessera-effect-annotation
-//   → tessera-tiling
-//   → tessera-tile-to-x86
+// Pipeline order (normative — see docs/spec/LOWERING_PIPELINE_SPEC.md §2.1):
+//   1. tessera-effect-annotation     — annotate tessera.effect on func.func
+//   2. tessera-canonicalize          — fuse/simplify Graph IR patterns
+//   3. tessera-distribution-lowering — tessera.shard → schedule.mesh.*
+//   4. tessera-tiling                — tessera.matmul → scf.for tile loops
+//   5. tessera-tile-to-x86           — tiled matmul → func.call @tessera_x86_*
 //
 // Run the whole chain with: -tessera-lower-to-x86
 
@@ -47,15 +48,17 @@ std::unique_ptr<mlir::Pass> createTileToX86Pass();
 
 // ── Phase 3 passes — GPU backend + FA-4 Tile IR ───────────────────────────
 //
-// Full GPU lowering pipeline (SM_90 FlashAttention):
-//   tessera-distribution-lowering
-//   → tessera-effect-annotation
-//   → tessera-tile-ir-lowering        ← Graph IR → Tile IR (FA-4 ops)
-//   → tessera-warp-specialization     ← producer / consumer warp roles
-//   → tessera-async-copy-lowering     ← tile.async_copy → TMA / cp.async
-//   → tessera-nvwgmma-lowering        ← tile.mma → wgmma.mma_async PTX
-//   → tessera-nvtma-descriptor        ← hoist TMA descriptors to preamble
-//   → tessera-nvflash-attn-emitter    ← finalise scale, mbarrier, launch bounds
+// Full GPU lowering pipeline (SM_90 FlashAttention)
+// (normative — see docs/spec/LOWERING_PIPELINE_SPEC.md §2.2):
+//   1. tessera-effect-annotation     — annotate tessera.effect on func.func
+//   2. tessera-canonicalize          — fuse/simplify Graph IR patterns
+//   3. tessera-distribution-lowering — tessera.shard → schedule.mesh.*
+//   4. tessera-tile-ir-lowering      — schedule.mesh.region → tile.* + attn.*
+//   5. tessera-warp-specialization   — warp role assignment + queue barriers
+//   6. tessera-async-copy-lowering   — tile.async_copy → TMA / cp.async
+//   7. tessera-nvwgmma-lowering      — tile.mma → wgmma.mma_async PTX
+//   8. tessera-nvtma-descriptor      — TMA descriptor hoisting + mbarrier init
+//   9. tessera-nvflash-attn-emitter  — FA-4 kernel finalisation
 //
 // Run the whole chain with: -tessera-lower-to-gpu
 

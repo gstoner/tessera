@@ -130,7 +130,7 @@ Each layer has its own spec document:
 
 ## System Concepts Carried Forward
 
-The older `docs/architecture/tessera_system_architecture.md` blueprint included several useful system concepts that remain valid as design direction, but not as implemented Phase 1-3 behavior:
+The older `docs/old_concepts/tessera_system_architecture.md` blueprint included several useful system concepts that remain valid as design direction, but not as implemented Phase 1-3 behavior:
 
 | Concept | Current status |
 |---------|----------------|
@@ -235,5 +235,5 @@ src/
 | Graph IR op catalog + canonicalization | `docs/spec/GRAPH_IR_SPEC.md` |
 | Every pass: input/output/invariants | `docs/spec/LOWERING_PIPELINE_SPEC.md` |
 | FA-4 Attn dialect, TMA ops, WGMMA, Schedule Mesh | `docs/spec/TARGET_IR_SPEC.md` |
-| Full architecture deep dive | `docs/architecture/tessera_system_architecture.md` |
+| Historical architecture blueprint | `docs/old_concepts/tessera_system_architecture.md` |
 | Programming guide | `docs/programming_guide/` |

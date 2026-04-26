@@ -6,6 +6,8 @@ This document explores TesseraBench's deep integration with the Tessera programm
 
 TesseraBench is designed as the official benchmarking and performance analysis framework for the Tessera ecosystem. It provides comprehensive performance measurement capabilities that span from high-level Python kernels down to generated PTX assembly, enabling developers to understand performance characteristics at every level of the compilation pipeline.
 
+This document uses the current Tessera API from `docs/CANONICAL_API.md`: `import tessera`, `@tessera.jit`, `@tessera.kernel`, `tessera.ops`, `tessera.domain.Rect`, `tessera.dist.Block` / `Replicated`, and `tessera.array.from_domain`. Schedule IR, Tile IR, and Target IR inspection beyond `graph_ir.to_mlir()` is treated as TesseraBench compiler-instrumentation data, not a public Python API.
+
 ### Integration Architecture
 
 ```
@@ -33,8 +35,9 @@ TesseraBench is designed as the official benchmarking and performance analysis f
 
 ```python
 import tesserabench as tb
-import tessera as ts
-from tessera import Tensor, kernel, autotune
+import tessera
+from tessera.compiler.gpu_target import GPUTargetProfile, ISA
+from tessera.compiler.attn_lower import FlashAttnLoweringConfig
 
 class TesseraKernelBenchmark:
     """Specialized benchmarking for Tessera kernels with IR-level analysis."""
@@ -98,8 +101,12 @@ class TesseraKernelBenchmark:
             # Time Target IR code generation
             target_ir_time = self.compilation_profiler.time_phase("target_ir")
             
-            # Compile kernel for analysis
-            compiled_kernel = kernel_func.compile(*[arg.shape for arg in args])
+            # Graph IR is public in Phases 1-3. Lower IR timing is collected
+            # by TesseraBench's compiler instrumentation around named pipelines.
+            graph_ir = kernel_func.graph_ir.to_mlir()
+            target_profile = getattr(kernel_func, "target", None)
+            pipeline = "tessera-lower-to-gpu" if target_profile and target_profile.isa >= ISA.SM_90 else "tessera-lower-to-x86"
+            compiled_kernel = self.compilation_profiler.run_named_pipeline(pipeline, graph_ir)
         
         compilation_metrics.update({
             'graph_ir_time_ms': graph_ir_time,
@@ -161,10 +168,10 @@ class TesseraKernelBenchmark:
         ir_analysis = {}
         
         # Get IR representations at each level
-        graph_ir = kernel_func.get_ir_representation('graph')
-        schedule_ir = kernel_func.get_ir_representation('schedule')
-        tile_ir = kernel_func.get_ir_representation('tile')
-        target_ir = kernel_func.get_ir_representation('target')
+        graph_ir = kernel_func.graph_ir.to_mlir()
+        schedule_ir = self.compilation_profiler.get_pipeline_artifact(kernel_func, "Schedule IR")
+        tile_ir = self.compilation_profiler.get_pipeline_artifact(kernel_func, "Tile IR")
+        target_ir = self.compilation_profiler.get_pipeline_artifact(kernel_func, "Target IR")
         
         # Analyze Graph IR
         ir_analysis['graph_ir'] = self.ir_analyzer.analyze_graph_ir(graph_ir)
@@ -175,32 +182,24 @@ class TesseraKernelBenchmark:
         # Analyze Tile IR
         ir_analysis['tile_ir'] = self.ir_analyzer.analyze_tile_ir(tile_ir)
         
-        # Analyze Target IR (PTX or CUDA Tile IR)
+        # Analyze Target IR (for example NVVM/PTX on NVIDIA or LLVM on x86)
         ir_analysis['target_ir'] = self.ir_analyzer.analyze_target_ir(target_ir)
         
         return ir_analysis
 
 # Example usage with Flash Attention
-@ts.kernel
-@ts.autotune(
-    space=dict(
-        BLOCK_M=[64, 128, 256],
-        BLOCK_N=[64, 128, 256], 
-        BLOCK_K=[32, 64],
-        num_warps=[4, 8, 16],
-        num_stages=[2, 3, 4]
-    )
-)
+target = GPUTargetProfile(isa=ISA.SM_90, warps_per_cta=4)
+attn_config = FlashAttnLoweringConfig(tile_q=64, tile_kv=64, causal=True)
+
+@tessera.jit(target=target, attn_config=attn_config)
 def flash_attention_tessera(
-    Q: Tensor["B", "H", "S", "D", ts.bf16],
-    K: Tensor["B", "H", "S", "D", ts.bf16],
-    V: Tensor["B", "H", "S", "D", ts.bf16],
-    O: Tensor["B", "H", "S", "D", ts.bf16],
-    scale: float = 1.0
+    Q: tessera.Tensor["B", "H", "S", "D"],
+    K: tessera.Tensor["B", "H", "S", "D"],
+    V: tessera.Tensor["B", "H", "S", "D"],
 ):
     """Flash Attention implementation in Tessera."""
-    # Implementation details...
-    pass
+    tessera.require(tessera.constraint.Divisible("D", 64))
+    return tessera.ops.flash_attn(Q, K, V, causal=True)
 
 def benchmark_flash_attention_tessera():
     """Complete benchmarking example for Tessera Flash Attention."""
@@ -213,14 +212,13 @@ def benchmark_flash_attention_tessera():
     
     # Create test tensors
     B, H, S, D = 32, 16, 2048, 128
-    Q = ts.randn((B, H, S, D), dtype=ts.bf16)
-    K = ts.randn((B, H, S, D), dtype=ts.bf16)
-    V = ts.randn((B, H, S, D), dtype=ts.bf16)
-    O = ts.zeros((B, H, S, D), dtype=ts.bf16)
+    Q = tb.testing.random_array((B, H, S, D), dtype="bf16")
+    K = tb.testing.random_array((B, H, S, D), dtype="bf16")
+    V = tb.testing.random_array((B, H, S, D), dtype="bf16")
     
     # Run comprehensive benchmark
     results = tessera_bench.benchmark_tessera_kernel(
-        flash_attention_tessera, Q, K, V, O, scale=1.0/math.sqrt(D)
+        flash_attention_tessera, Q, K, V
     )
     
     # Analysis and reporting
@@ -307,7 +305,7 @@ class IRPerformanceAnalyzer:
         return analysis
     
     def analyze_target_ir(self, target_ir):
-        """Analyze Target IR (PTX/CUDA Tile IR) for final optimization quality."""
+        """Analyze Target IR for final optimization quality."""
         analysis = {
             'instruction_count': self.target_analyzer.count_instructions(target_ir),
             'register_allocation_quality': self.target_analyzer.analyze_register_allocation(target_ir),
@@ -483,11 +481,12 @@ class NVL72DistributedBenchmark:
         for config in mesh_configs:
             print(f"Benchmarking with mesh configuration: {config['name']}")
             
-            # Create mesh for this configuration
-            mesh = ts.dist.mesh(
+            # Domains describe shape; distributions describe placement. The
+            # benchmark harness maps mesh metadata to the backend runtime.
+            mesh = tb.distributed.MeshSpec(
                 devices=[f"cuda:{i}" for i in range(self.device_count)],
-                axes=config['axes'],
-                shape=config['shape']
+                axes=tuple(config['axes']),
+                shape=tuple(config['shape']),
             )
             
             # Configure kernel for this mesh
@@ -531,7 +530,7 @@ class NVL72DistributedBenchmark:
             with tb.Timer() as total_timer:
                 with tb.CollectiveProfiler() as collective_profiler:
                     result = kernel(*args)
-                    ts.barrier()  # Ensure all devices complete
+                    tb.distributed.barrier()  # Ensure all devices complete
             
             execution_times.append(total_timer.elapsed_ms)
             collective_times.append(collective_profiler.total_time_ms)
@@ -578,10 +577,10 @@ class NVL72DistributedBenchmark:
             for size in data_sizes:
                 # Benchmark across different mesh configurations
                 for config in self.mesh_configurations:
-                    mesh = ts.dist.mesh(
+                    mesh = tb.distributed.MeshSpec(
                         devices=[f"cuda:{i}" for i in range(self.device_count)],
-                        axes=config['axes'],
-                        shape=config['shape']
+                        axes=tuple(config['axes']),
+                        shape=tuple(config['shape']),
                     )
                     
                     # Run collective benchmark
@@ -668,24 +667,23 @@ def run_nvl72_flash_attention_benchmark():
     
     nvl72_bench = NVL72DistributedBenchmark()
     
-    # Define Flash Attention kernel with tensor parallelism
-    @ts.kernel
-    @ts.distribute(mesh_axes=['dp', 'tp'])
+    # Define Flash Attention with Region privileges. Placement is expressed by
+    # the arrays' ShardSpec, not a decorator on the function.
+    @tessera.jit(target=target, attn_config=attn_config)
     def distributed_flash_attention(
-        Q: ts.Tensor["B", "H", "S", "D", ts.bf16] @ts.shard(axes=['dp', 'tp']),
-        K: ts.Tensor["B", "H", "S", "D", ts.bf16] @ts.shard(axes=['dp', 'tp']),
-        V: ts.Tensor["B", "H", "S", "D", ts.bf16] @ts.shard(axes=['dp', 'tp']),
-        O: ts.Tensor["B", "H", "S", "D", ts.bf16] @ts.shard(axes=['dp', 'tp'])
+        Q: tessera.Region["read"],
+        K: tessera.Region["read"],
+        V: tessera.Region["read"],
     ):
-        # Flash attention implementation with automatic TP collective insertion
-        pass
+        return tessera.ops.flash_attn(Q, K, V, causal=True)
     
     # Create large test tensors suitable for NVL72
     B, H, S, D = 64, 32, 8192, 128  # Large sequence length for NVL72
-    Q = ts.randn((B, H, S, D), dtype=ts.bf16)
-    K = ts.randn((B, H, S, D), dtype=ts.bf16)
-    V = ts.randn((B, H, S, D), dtype=ts.bf16)
-    O = ts.zeros((B, H, S, D), dtype=ts.bf16)
+    domain = tessera.domain.Rect((B, H, S, D))
+    dist = tessera.dist.Block(mesh_axes=("dp", "tp"))
+    Q = tessera.array.from_domain(domain, dtype="bf16", distribution=dist)
+    K = tessera.array.from_domain(domain, dtype="bf16", distribution=dist)
+    V = tessera.array.from_domain(domain, dtype="bf16", distribution=dist)
     
     print("=== NVL72 Flash Attention Distributed Benchmark ===")
     print(f"Problem size: B={B}, H={H}, S={S}, D={D}")
@@ -693,7 +691,7 @@ def run_nvl72_flash_attention_benchmark():
     
     # Run comprehensive distributed benchmark
     results = nvl72_bench.benchmark_distributed_kernel(
-        distributed_flash_attention, Q, K, V, O
+        distributed_flash_attention, Q, K, V
     )
     
     # Print results for each mesh configuration
@@ -841,10 +839,10 @@ class TesseraAutotuningBenchmark:
         """Compare different autotuning strategies."""
         
         strategies = [
-            {'name': 'exhaustive', 'strategy': ts.autotune.ExhaustiveSearch()},
-            {'name': 'random', 'strategy': ts.autotune.RandomSearch(budget=100)},
-            {'name': 'bayesian', 'strategy': ts.autotune.BayesianOptimization(budget=50)},
-            {'name': 'genetic', 'strategy': ts.autotune.GeneticAlgorithm(generations=10)}
+            {'name': 'exhaustive', 'strategy': tb.autotune.ExhaustiveSearch()},
+            {'name': 'random', 'strategy': tb.autotune.RandomSearch(budget=100)},
+            {'name': 'bayesian', 'strategy': tb.autotune.BayesianOptimization(budget=50)},
+            {'name': 'genetic', 'strategy': tb.autotune.GeneticAlgorithm(generations=10)}
         ]
         
         strategy_results = {}
@@ -947,7 +945,7 @@ class TargetIRBenchmark:
     
     def __init__(self):
         self.ptx_analyzer = PTXAnalyzer()
-        self.cuda_tile_ir_analyzer = CUDATileIRAnalyzer()
+        self.llvm_analyzer = LLVMTargetIRAnalyzer()
         self.runtime_correlator = RuntimeCorrelator()
     
     def benchmark_target_ir_generation(self, kernel_func, target_architectures, *args):
@@ -969,8 +967,8 @@ class TargetIRBenchmark:
             # Analyze generated code quality
             if target_ir.backend == 'ptx':
                 code_analysis = self.ptx_analyzer.analyze_ptx(target_ir.code)
-            elif target_ir.backend == 'cuda_tile_ir':
-                code_analysis = self.cuda_tile_ir_analyzer.analyze_cuda_tile_ir(target_ir.code)
+            elif target_ir.backend == 'llvm':
+                code_analysis = self.llvm_analyzer.analyze_llvm_ir(target_ir.code)
             else:
                 code_analysis = {'error': f'Unknown backend: {target_ir.backend}'}
             
@@ -1005,8 +1003,8 @@ class TargetIRBenchmark:
             try:
                 if target_ir.backend == 'ptx':
                     binary = self._compile_ptx_to_cubin(target_ir.code, architecture)
-                elif target_ir.backend == 'cuda_tile_ir':
-                    binary = self._compile_cuda_tile_ir(target_ir.code, architecture)
+                elif target_ir.backend == 'llvm':
+                    binary = self._compile_llvm_target_ir(target_ir.code, architecture)
                 
                 compilation_results['success'] = True
                 compilation_results['binary_size_bytes'] = len(binary)
@@ -1044,8 +1042,8 @@ class TargetIRBenchmark:
                 correlation['ir_performance_correlation'] = self._correlate_ptx_with_performance(
                     target_ir, runtime_results
                 )
-            elif target_ir.backend == 'cuda_tile_ir':
-                correlation['ir_performance_correlation'] = self._correlate_cuda_tile_ir_with_performance(
+            elif target_ir.backend == 'llvm':
+                correlation['ir_performance_correlation'] = self._correlate_llvm_target_ir_with_performance(
                     target_ir, runtime_results
                 )
             
@@ -1088,28 +1086,25 @@ def benchmark_target_ir_comprehensive():
     target_ir_bench = TargetIRBenchmark()
     
     # Define test kernel
-    @ts.kernel
-    @ts.autotune(space=dict(BLOCK_M=[64, 128], BLOCK_N=[64, 128]))
+    @tessera.jit(target=GPUTargetProfile(isa=ISA.SM_90, warps_per_cta=4))
     def test_gemm(
-        A: ts.Tensor["M", "K", ts.bf16],
-        B: ts.Tensor["K", "N", ts.bf16],
-        C: ts.Tensor["M", "N", ts.f32]
-    ):
-        # GEMM implementation
-        pass
+        A: tessera.Tensor["M", "K"],
+        B: tessera.Tensor["K", "N"],
+    ) -> tessera.Tensor["M", "N"]:
+        tessera.require(tessera.constraint.Divisible("K", 64))
+        return tessera.ops.gemm(A, B)
     
     # Test data
     M, N, K = 4096, 4096, 4096
-    A = ts.randn((M, K), dtype=ts.bf16)
-    B = ts.randn((K, N), dtype=ts.bf16)
-    C = ts.zeros((M, N), dtype=ts.f32)
+    A = tb.testing.random_array((M, K), dtype="bf16")
+    B = tb.testing.random_array((K, N), dtype="bf16")
     
     # Target architectures
     architectures = ['sm_80', 'sm_86', 'sm_90']
     
     # Run comprehensive benchmark
     results = target_ir_bench.benchmark_target_ir_generation(
-        test_gemm, architectures, A, B, C
+        test_gemm, architectures, A, B
     )
     
     # Print results
@@ -1150,6 +1145,6 @@ This completes Document 6 covering Tessera Integration and Advanced Features. Th
 2. **Multi-Level IR Analysis**: Performance analysis at Graph IR, Schedule IR, Tile IR, and Target IR levels  
 3. **NVL72 Distributed Benchmarking**: Specialized benchmarking for 72-GPU systems with mesh configurations
 4. **Autotuning Integration**: Comprehensive autotuning workflow benchmarking and strategy comparison
-5. **Target IR Performance Analysis**: Deep analysis of PTX and CUDA Tile IR generation with runtime correlation
+5. **Target IR Performance Analysis**: Deep analysis of backend Target IR generation with runtime correlation
 
 The document demonstrates how TesseraBench integrates seamlessly with Tessera's programming model to provide insights across the entire compilation and execution pipeline, from high-level Python kernels down to generated assembly code.

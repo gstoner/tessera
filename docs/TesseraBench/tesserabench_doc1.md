@@ -2,6 +2,8 @@
 
 TesseraBench is a comprehensive benchmarking framework specifically designed for the Tessera programming model. Drawing inspiration from tritonbench, it provides systematic performance evaluation capabilities for GPU kernels compiled through Tessera's multi-level IR stack, from Graph IR to Target IR.
 
+This document uses the current Tessera API and compiler vocabulary from `docs/CANONICAL_API.md` and `docs/spec/COMPILER_REFERENCE.md`. Public examples should use `import tessera`, `@tessera.jit`, `@tessera.kernel`, `tessera.ops`, separate `tessera.domain.Rect(...)` and `tessera.dist.*` objects, and the named pipelines `tessera-lower-to-x86` / `tessera-lower-to-gpu`.
+
 ## Overview and Motivation
 
 ### Why TesseraBench?
@@ -9,7 +11,7 @@ TesseraBench is a comprehensive benchmarking framework specifically designed for
 The Tessera programming model introduces unique challenges and opportunities for performance benchmarking:
 
 - **Multi-Level IR Stack**: Performance characteristics vary across Graph IR → Schedule IR → Tile IR → Target IR transformations
-- **Architecture-Specific Optimization**: Different backends (PTX, CUDA Tile IR) require specialized benchmarking
+- **Architecture-Specific Optimization**: Different Target IR backends (LLVM/AMX, NVVM/PTX, StableHLO, ROCDL) require specialized benchmarking
 - **Numerical Precision Policies**: FP4/FP6/FP8/BF16/FP16/FP32 combinations need systematic evaluation
 - **Distributed Execution**: Multi-GPU meshes with TP/DP/PP parallelism require distributed benchmarking
 - **Autotuning Integration**: Performance-guided optimization requires robust measurement infrastructure
@@ -717,57 +719,38 @@ class AnalysisEngine:
 
 ```python
 import tessera
-from tessera.runtime import TesseraRuntime
-from tessera.ir import GraphIR, ScheduleIR, TileIR, TargetIR
+from tessera.compiler.gpu_target import GPUTargetProfile, ISA
 
 class TesseraIntegration:
-    """Integration layer between TesseraBench and Tessera runtime"""
+    """Integration layer between TesseraBench and the current Tessera compiler."""
     
-    def __init__(self, tessera_runtime: TesseraRuntime):
-        self.runtime = tessera_runtime
+    def __init__(self, target: GPUTargetProfile | None = None):
+        self.target = target
         self.ir_inspector = IRInspector()
         self.compilation_profiler = CompilationProfiler()
         
     def compile_with_timing(self, 
-                          kernel_source: str,
+                          kernel_func,
                           compilation_config: Dict[str, Any]) -> Tuple['CompiledKernel', Dict[str, float]]:
-        """Compile kernel and measure compilation times at each IR level"""
+        """Compile a @tessera.jit function and measure the canonical pipeline stages."""
         
         timing_results = {}
         
-        # Graph IR generation
+        # Graph IR is the public inspection surface in Phases 1-3.
         start_time = time.perf_counter()
-        graph_ir = tessera.compile.to_graph_ir(kernel_source)
+        graph_ir = kernel_func.graph_ir.to_mlir()
         timing_results['graph_ir_ms'] = (time.perf_counter() - start_time) * 1000
         
-        # Schedule IR optimization
+        # TesseraBench profiles the named C++ pipeline selected by the target.
+        pipeline = "tessera-lower-to-gpu" if self.target and self.target.isa >= ISA.SM_90 else "tessera-lower-to-x86"
         start_time = time.perf_counter()
-        schedule_ir = tessera.compile.to_schedule_ir(graph_ir, compilation_config.get('schedule_opts', {}))
-        timing_results['schedule_ir_ms'] = (time.perf_counter() - start_time) * 1000
-        
-        # Tile IR lowering
-        start_time = time.perf_counter()
-        tile_ir = tessera.compile.to_tile_ir(schedule_ir, compilation_config.get('tile_opts', {}))
-        timing_results['tile_ir_ms'] = (time.perf_counter() - start_time) * 1000
-        
-        # Target IR generation (PTX or CUDA Tile IR)
-        start_time = time.perf_counter()
-        target_ir = tessera.compile.to_target_ir(tile_ir, compilation_config.get('target_opts', {}))
-        timing_results['target_ir_ms'] = (time.perf_counter() - start_time) * 1000
-        
-        # Autotuning if enabled
-        if compilation_config.get('autotuning_enabled', False):
-            start_time = time.perf_counter()
-            optimized_kernel = tessera.autotune.optimize(target_ir, compilation_config.get('autotune_config', {}))
-            timing_results['autotuning_ms'] = (time.perf_counter() - start_time) * 1000
-        else:
-            optimized_kernel = target_ir
-            timing_results['autotuning_ms'] = 0.0
-            
-        # Final compilation to executable
-        start_time = time.perf_counter()
-        compiled_kernel = tessera.compile.to_executable(optimized_kernel)
-        timing_results['final_compilation_ms'] = (time.perf_counter() - start_time) * 1000
+        compiled_kernel = self.compilation_profiler.run_named_pipeline(
+            pipeline,
+            graph_ir,
+            options=compilation_config.get('pipeline_options', {}),
+        )
+        timing_results[f'{pipeline}_ms'] = (time.perf_counter() - start_time) * 1000
+        timing_results['autotuning_ms'] = 0.0
         
         return compiled_kernel, timing_results
         
@@ -1060,11 +1043,9 @@ class FlashAttentionBenchmark:
         S = problem_size['seq_len']
         D = problem_size['head_dim']
         
-        import tessera
-        Q = tessera.randn((B, H, S, D), dtype=precision.split('@')[0])
-        K = tessera.randn((B, H, S, D), dtype=precision.split('@')[0])
-        V = tessera.randn((B, H, S, D), dtype=precision.split('@')[0])
-        O = tessera.zeros((B, H, S, D), dtype=precision.split('@')[0])
+        Q = tb.testing.random_array((B, H, S, D), dtype=precision.split('@')[0])
+        K = tb.testing.random_array((B, H, S, D), dtype=precision.split('@')[0])
+        V = tb.testing.random_array((B, H, S, D), dtype=precision.split('@')[0])
         
         scale = 1.0 / (D ** 0.5)
         
@@ -1075,8 +1056,7 @@ class FlashAttentionBenchmark:
         
         # Warmup runs
         for _ in range(self.config.warmup_iterations):
-            tessera.launch_kernel(kernel_info['kernel'], [Q, K, V, O, scale, True])
-            tessera.synchronize()
+            _ = kernel_info['kernel'](Q, K, V)
             
         # Timing runs
         measurements = []
@@ -1086,13 +1066,12 @@ class FlashAttentionBenchmark:
             # Launch kernel with profiling
             profiling_result = self.tessera_integration.launch_kernel_with_profiling(
                 kernel_info['kernel'],
-                [Q, K, V, O, scale, True],
+                [Q, K, V],
                 grid_dim=(B * H, (S + 127) // 128, 1),
                 block_dim=(128, 1, 1),
                 profiling_config={'measure_bandwidth': True, 'measure_occupancy': True}
             )
             
-            tessera.synchronize()
             end_time = time.perf_counter()
             
             latency_ms = (end_time - start_time) * 1000

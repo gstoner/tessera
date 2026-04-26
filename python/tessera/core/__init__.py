@@ -3,7 +3,13 @@
 
 class Tensor:
     """Phase 1 stub — will be replaced by DistributedArray in Phase 3."""
-    pass
+
+    def __class_getitem__(cls, shape):
+        """Allow Tensor["B", "D"] annotation syntax for type hints."""
+        dims = shape if isinstance(shape, tuple) else (shape,)
+        ann = type(f"Tensor[{', '.join(str(d) for d in dims)}]",
+                   (cls,), {"__dims__": dims})
+        return ann
 
 
 class Module:

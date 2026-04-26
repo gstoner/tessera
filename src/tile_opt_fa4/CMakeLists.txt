@@ -20,6 +20,7 @@ add_public_tablegen_target(TesseraAttnTableGen)
 
 add_mlir_library(TesseraAttnDialect
     lib/Dialect/Attn/AttnVerifiers.cpp
+    lib/Dialect/Attn/AttnOps.cpp          # Phase 3: verifiers + ODS includes
 
     DEPENDS
         TesseraAttnTableGen

@@ -321,17 +321,26 @@ class GraphIRBuilder:
     def __init__(self) -> None:
         self._module = GraphIRModule()
 
-    def lower(self, fn: Callable, effect_tag: Optional[str] = None) -> GraphIRFunction:
+    def lower(
+        self,
+        fn: Callable,
+        effect_tag: Optional[str] = None,
+        target_attr: Optional[str] = None,
+    ) -> "GraphIRFunction":
         """
         Lower fn to a GraphIRFunction and add it to the module.
 
         Args:
-            fn         : Python function to lower
-            effect_tag : optional effect annotation for the function (e.g., "pure")
+            fn          : Python function to lower
+            effect_tag  : optional effect annotation for the function (e.g., "pure")
+            target_attr : optional GPU target attribute dict string emitted as
+                          tessera.target on the module (Phase 3+)
 
         Returns:
             GraphIRFunction — the emitted function IR
         """
+        if target_attr is not None:
+            self._module.module_attrs["tessera.target"] = target_attr
         import typing
 
         sig = inspect.signature(fn)

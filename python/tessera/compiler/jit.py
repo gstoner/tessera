@@ -23,6 +23,8 @@ from typing import Any, Callable, Dict, List, Optional
 from .constraints import Constraint, ConstraintSolver, TesseraConstraintError
 from .effects import Effect, EffectLattice, TesseraEffectError
 from .graph_ir import GraphIRBuilder, GraphIRModule
+from .gpu_target import GPUTargetProfile, ISA  # noqa: F401 — re-exported for callers
+from .attn_lower import FlashAttnLoweringConfig, SM90_DEFAULT  # noqa: F401
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -173,7 +175,7 @@ class JitFn:
 
     Wraps the original Python function. In Phase 1 it executes eagerly
     (plain Python call). In Phase 3 it will invoke the compiled kernel
-    through the MLIR lowering chain.
+    through the MLIR lowering chain when target is set.
 
     Attributes:
         fn              : original Python function
@@ -182,6 +184,8 @@ class JitFn:
         constraints     : ConstraintSolver with registered predicates
         deterministic   : whether @jit(deterministic=True) was set
         seed            : RNG seed (if provided)
+        target          : GPUTargetProfile if GPU compilation was requested, else None
+        attn_config     : FlashAttnLoweringConfig if flash_attn in body, else None
     """
 
     def __init__(
@@ -192,6 +196,8 @@ class JitFn:
         constraints: ConstraintSolver,
         deterministic: bool = False,
         seed: Optional[int] = None,
+        target: Optional[GPUTargetProfile] = None,
+        attn_config: Optional[FlashAttnLoweringConfig] = None,
     ) -> None:
         self._fn = fn
         self.graph_ir = graph_ir
@@ -199,6 +205,8 @@ class JitFn:
         self.constraints = constraints
         self.deterministic = deterministic
         self.seed = seed
+        self.target = target
+        self.attn_config = attn_config
         functools.update_wrapper(self, fn)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
@@ -212,11 +220,17 @@ class JitFn:
         """Return the emitted Graph IR as MLIR text."""
         return self.graph_ir.to_mlir()
 
+    @property
+    def is_gpu(self) -> bool:
+        return self.target is not None
+
     def __repr__(self) -> str:
+        target_str = f" target={self.target!r}" if self.target else ""
         return (
             f"<TesseraJitFn {self._fn.__name__!r} "
             f"effect={self.inferred_effect.name} "
-            f"deterministic={self.deterministic}>"
+            f"deterministic={self.deterministic}"
+            f"{target_str}>"
         )
 
 
@@ -230,9 +244,11 @@ def jit(
     deterministic: bool = False,
     seed: Optional[int] = None,
     bindings: Optional[Dict[str, int]] = None,
+    target: Optional[GPUTargetProfile] = None,
+    attn_config: Optional[FlashAttnLoweringConfig] = None,
 ) -> Any:
     """
-    Tessera JIT decorator — drives the Phase 1 compiler pipeline.
+    Tessera JIT decorator — drives the compiler pipeline.
 
     Can be used with or without arguments:
 
@@ -244,14 +260,22 @@ def jit(
         def stable_forward(x: Tensor["B", "D"]):
             return tessera.ops.layer_norm(x)
 
+        # Phase 3: GPU compilation
+        @tessera.jit(target=GPUTargetProfile(isa=ISA.SM_90, warps_per_cta=4))
+        def flash_attn_fwd(Q, K, V):
+            return tessera.ops.flash_attn(Q, K, V, causal=True)
+
     Args:
         fn           : function to decorate (when used bare without parens)
         deterministic: if True, enforce that the function has no non-seeded
                        random effects (raises TesseraEffectError otherwise)
         seed         : RNG seed; allows random ops under deterministic=True
         bindings     : optional dict of dim_name → concrete size for
-                       constraint checking at decoration time. If omitted,
-                       only constraints with literal values are checked.
+                       constraint checking at decoration time
+        target       : GPUTargetProfile; when set, routes to GPU lowering
+                       pipeline (Phase 3). None = CPU/interpreted path.
+        attn_config  : FlashAttnLoweringConfig; when None and target is set with
+                       isa >= SM_90, SM90_DEFAULT is used automatically.
 
     Returns:
         JitFn wrapper around the decorated function.
@@ -286,18 +310,25 @@ def jit(
             except TesseraEffectError:
                 raise
 
-        # ── Step 5: emit Graph IR ────────────────────────────────────────────
+        # ── Step 5: resolve attn config for GPU path ────────────────────────
+        resolved_attn = attn_config
+        if target is not None and target.supports_wgmma and resolved_attn is None:
+            resolved_attn = SM90_DEFAULT
+
+        # ── Step 6: emit Graph IR ────────────────────────────────────────────
         try:
             builder = GraphIRBuilder()
             effect_tag = inferred_effect.name if inferred_effect != Effect.pure else None
-            builder.lower(fn, effect_tag=effect_tag)
+            # Attach GPU target attrs to the module when target is provided.
+            target_attr = target.to_mlir_attr() if target is not None else None
+            builder.lower(fn, effect_tag=effect_tag, target_attr=target_attr)
             module = builder.module()
         except Exception as exc:
             raise TesseraJitError(
                 f"Graph IR emission failed for {fn.__name__!r}: {exc}"
             ) from exc
 
-        # ── Step 6: wrap and return ──────────────────────────────────────────
+        # ── Step 7: wrap and return ──────────────────────────────────────────
         return JitFn(
             fn=fn,
             graph_ir=module,
@@ -305,12 +336,11 @@ def jit(
             constraints=solver,
             deterministic=deterministic,
             seed=seed,
+            target=target,
+            attn_config=resolved_attn,
         )
 
     # Support both @jit and @jit(...) usage
     if fn is not None:
-        # Used as @jit (no parens)
         return _decorate(fn)
-
-    # Used as @jit(...) (with parens) — return decorator
     return _decorate

@@ -10,7 +10,7 @@ last_updated: 2026-04-26
 # Tessera Programming Guide  
 ## Appendix A: NVL72 Programming Guide (Extended)
 
-NVIDIA’s NVL72 is a 72-GPU NVSwitch domain built from GB200 superchips. Tessera programs can map directly to this hardware by treating the rack as a single, giant mesh.
+NVIDIA’s NVL72 is a 72-GPU NVSwitch domain built from GB200 superchips. Tessera’s NVL72 support is Phase 4 planned. This appendix is a future-facing guide, not current Phase 1-3 API guidance.
 
 ---
 
@@ -18,24 +18,18 @@ NVIDIA’s NVL72 is a 72-GPU NVSwitch domain built from GB200 superchips. Tesser
 
 ---
 
-### A.10 Mapper Recipes for NVL72
+### A.10 Future Mapper Recipes for NVL72
 
-Tessera exposes a **Mapper API** to override placement, variant choice, and collective strategy.
+Mapper APIs are Phase 4 planned. Future mapper policy may override placement, variant choice, and collective strategy.
 
 ```python
-class NVL72Mapper(tessera.Mapper):
-    def place(self, region, mesh):
-        if region.axis == "tp":
-            return "local_switch"   # co-locate TP ranks on same NVSwitch group
-    def choose_collective(self, kind, size):
-        return "sharp_ring"        # prefer SHARP-enabled collectives
-    def choose_variant(self, op, arch):
-        return "tile_ir" if arch.is_blackwell else "ptx"
-
-tessera.runtime.set_mapper(NVL72Mapper())
+# Phase 4 planned sketch
+# mapper.place(region, mesh)
+# mapper.choose_collective(kind, size)
+# mapper.choose_variant(op, arch)
 ```
 
-This ensures optimal performance on NVL72: TP shards stay close, collectives exploit SHARP, and kernels use CUDA Tile IR.
+The intended behavior is to keep TP shards close, select SHARP-capable collectives where available, and choose backend variants suited to the GPU generation.
 
 ---
 
@@ -46,25 +40,31 @@ Index launches simplify launching kernels across many shards.
 #### Example: TP GEMM across 72 GPUs
 
 ```python
-@kernel
-def tp_gemm(A: f16[M,K/tp], B: f16[K/tp,N], C: mut f32[M,N/tp]): ...
+@tessera.kernel
+def tp_gemm(
+    A: tessera.f16[..., ...],
+    B: tessera.f16[..., ...],
+    C: tessera.mut_f32[..., ...],
+):
+    C[:] = tessera.ops.gemm(A, B)
 
 # Launch kernel across TP axis (9-way tensor parallelism)
 tessera.index_launch(axis="tp")(tp_gemm)(A.parts("tp"), B.parts("tp"), C.parts("tp"))
 ```
 
-The runtime:  
-- Launches `tp_gemm` on all 9 TP shards per stage.  
-- Inserts `reduce_scatter` and `all_gather` as needed.  
-- Uses NCCL over NVSwitch with SHARP reductions.  
-- Control replication ensures low-latency launch across all 72 ranks.
+Current Phase 1-3 behavior can test this shape with shard lists and mock execution. Phase 4 planned runtime work adds:
+
+- Launch across all TP shards per stage.
+- Inserted `reduce_scatter` and `all_gather` where required.
+- NCCL over NVSwitch with SHARP reductions where available.
+- Low-latency replicated launch control across ranks.
 
 ---
 
 ### A.12 Summary
 
-- NVL72 can be programmed as a single 72-GPU mesh.  
+- NVL72 as a single 72-GPU mesh is Phase 4 planned.  
 - Use `ShardSpec` + **domains/distributions** to express tensor layouts.  
-- Collectives automatically use NVSwitch + SHARP.  
-- Custom **mappers** give control over placement, collectives, and kernel variants.  
+- Collectives over NVSwitch + SHARP are Phase 4 planned.  
+- Custom mapper policies are Phase 4 planned.  
 - **Index launches** provide scalable kernel distribution across shards.

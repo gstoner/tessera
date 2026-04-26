@@ -49,7 +49,7 @@ Registers are private to each hardware thread (lane) and are managed entirely by
 compiler. Programmers never allocate registers explicitly — the compiler assigns them
 from tile-level scalar and accumulator values.
 
-```tessera
+```python
 # Register use is implicit: scalars and accumulators live in registers
 @tessera.kernel
 def scale(X: tessera.f32[..., ...], Y: tessera.mut_f32[..., ...], alpha: float):
@@ -75,7 +75,7 @@ the primary mechanism for:
 
 #### Allocation
 
-```tessera
+```python
 # Basic allocation
 smem = tshared.alloc[f16](BM, BK)
 
@@ -93,7 +93,7 @@ kernels, `swizzle="xor"` eliminates 2-way and 4-way bank conflicts with no code 
 
 #### Synchronization
 
-```tessera
+```python
 # Required after any shared memory write before a read by a different thread
 tbarrier()
 ```
@@ -103,7 +103,7 @@ common source of incorrect results that only manifest at certain tile sizes.
 
 #### Example: Cooperative reduction
 
-```tessera
+```python
 @tessera.kernel
 def tile_sum(x: tessera.f32[..., ...], out: tessera.mut_f32[...]):
     smem = tshared.alloc[f32](128)
@@ -163,7 +163,7 @@ compute loop if you can avoid it. Use async copies to overlap the movement with 
 Tessera's async copy system uses an explicit **stage index** to model double- and
 multi-buffering pipelines. Each stage is a small non-negative integer forming a DAG:
 
-```tessera
+```python
 # Double-buffered pipeline: stage 0 and stage 1 alternate
 s0 = tshared.alloc[f16](BM, BK, swizzle="xor")   # stage 0 buffer
 s1 = tshared.alloc[f16](BM, BK, swizzle="xor")   # stage 1 buffer

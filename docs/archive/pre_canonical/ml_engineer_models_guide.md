@@ -1,6 +1,7 @@
 ---
-status: Informative
-classification: Informative
+status: Pre-canonical
+classification: Pre-canonical
+authority: Archived old-API reference; not current implementation guidance
 last_updated: 2026-04-26
 ---
 

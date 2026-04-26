@@ -4,401 +4,151 @@ classification: Informative
 last_updated: 2026-04-26
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
-
-
 # Tessera API Reference
 
-## Table of Contents
-1. [Core Types](#core-types)
-2. [Tensor Operations](#tensor-operations)
-3. [Kernel Programming](#kernel-programming)
-4. [Distributed Computing](#distributed-computing)
-5. [Compilation and JIT](#compilation-and-jit)
-6. [Memory Management](#memory-management)
-7. [Numerical Types](#numerical-types)
-8. [Autodiff](#autodiff)
-9. [Optimization](#optimization)
-10. [Utilities](#utilities)
+This reference summarizes the current public API shape. The authoritative API specification is `docs/spec/PYTHON_API_SPEC.md`; if this guide disagrees with that spec, the spec wins.
 
-## Core Types
-
-### Tensor
+## Import Pattern
 
 ```python
-class Tensor:
-    """
-    Multi-dimensional array with automatic differentiation support.
-    
-    Parameters:
-        data: Array-like data or shape tuple
-        dtype: Data type (default: f32)
-        device: Device placement (default: "cuda:0")
-        requires_grad: Enable gradient computation (default: False)
-        layout: Memory layout (default: "row_major")
-    """
-    
-    def __init__(
-        self,
-        data: Union[ArrayLike, Shape],
-        dtype: DType = f32,
-        device: str = "cuda:0",
-        requires_grad: bool = False,
-        layout: str = "row_major"
-    )
-    
-    # Properties
-    @property
-    def shape(self) -> Tuple[int, ...]:
-        """Tensor shape"""
-    
-    @property
-    def dtype(self) -> DType:
-        """Data type"""
-    
-    @property
-    def device(self) -> str:
-        """Device placement"""
-    
-    @property
-    def grad(self) -> Optional['Tensor']:
-        """Gradient tensor"""
-    
-    @property
-    def requires_grad(self) -> bool:
-        """Whether gradient is computed"""
-    
-    # Methods
-    def to(self, device: str) -> 'Tensor':
-        """Move tensor to device"""
-    
-    def detach(self) -> 'Tensor':
-        """Detach from computation graph"""
-    
-    def backward(self, gradient: Optional['Tensor'] = None):
-        """Compute gradients"""
-    
-    def item(self) -> Number:
-        """Get scalar value"""
-    
-    def numpy(self) -> np.ndarray:
-        """Convert to NumPy array"""
-    
-    def cuda(self) -> 'Tensor':
-        """Move to CUDA device"""
-    
-    def cpu(self) -> 'Tensor':
-        """Move to CPU"""
+import tessera
 ```
 
-### DType
+Use the top-level `tessera` namespace for public examples unless a spec explicitly names a submodule import.
+
+## Decorators
+
+| API | Status | Purpose |
+|-----|--------|---------|
+| `@tessera.jit` | Phase 1-3 implemented | Compile a Python function to Graph IR. |
+| `@tessera.kernel` | Phase 1-3 implemented | Mark a tile-level function for `index_launch`. |
 
 ```python
-# Numerical data types
-f32 = DType("float32")      # 32-bit float
-f16 = DType("float16")      # 16-bit float
-bf16 = DType("bfloat16")    # Brain float 16
-f64 = DType("float64")      # 64-bit float
-
-# Extended precision types
-fp8_e4m3 = DType("fp8_e4m3")  # 8-bit float (4 exp, 3 mantissa)
-fp8_e5m2 = DType("fp8_e5m2")  # 8-bit float (5 exp, 2 mantissa)
-fp6 = DType("fp6")            # 6-bit float
-fp4 = DType("fp4")            # 4-bit float
-
-# Integer types
-int8 = DType("int8")         # 8-bit integer
-int16 = DType("int16")       # 16-bit integer
-int32 = DType("int32")       # 32-bit integer
-int64 = DType("int64")       # 64-bit integer
-uint8 = DType("uint8")       # Unsigned 8-bit
-
-# Boolean
-bool = DType("bool")         # Boolean type
+@tessera.jit
+def matmul_step(A: tessera.Tensor["M", "K"], B: tessera.Tensor["K", "N"]):
+    return tessera.ops.gemm(A, B)
 ```
 
-## Tensor Operations
+## Region Privileges
 
-### Creation Operations
+`Region[...]` is a type annotation only. It lowers to privilege/effect attributes in Graph IR.
 
 ```python
-def zeros(shape: Shape, dtype: DType = f32, device: str = "cuda:0") -> Tensor:
-    """Create tensor filled with zeros"""
-
-def ones(shape: Shape, dtype: DType = f32, device: str = "cuda:0") -> Tensor:
-    """Create tensor filled with ones"""
-
-def full(shape: Shape, fill_value: Number, dtype: DType = f32, device: str = "cuda:0") -> Tensor:
-    """Create tensor filled with value"""
-
-def arange(start: Number, end: Number, step: Number = 1, dtype: DType = f32, device: str = "cuda:0") -> Tensor:
-    """Create tensor with range of values"""
-
-def linspace(start: Number, end: Number, steps: int, dtype: DType = f32, device: str = "cuda:0") -> Tensor:
-    """Create tensor with linearly spaced values"""
-
-def randn(shape: Shape, dtype: DType = f32, device: str = "cuda:0", generator: Optional[Generator] = None) -> Tensor:
-    """Create tensor with normal distribution"""
-
-def rand(shape: Shape, dtype: DType = f32, device: str = "cuda:0", generator: Optional[Generator] = None) -> Tensor:
-    """Create tensor with uniform distribution"""
-
-def randint(low: int, high: int, shape: Shape, dtype: DType = int32, device: str = "cuda:0") -> Tensor:
-    """Create tensor with random integers"""
+@tessera.jit
+def update(
+    X: tessera.Region["read"],
+    W: tessera.Region["read"],
+    Y: tessera.Region["write"],
+):
+    Y[:] = tessera.ops.gemm(X, W)
 ```
 
-### Mathematical Operations
+Valid modes are:
+
+| Mode | Meaning |
+|------|---------|
+| `read` | Read-only access |
+| `write` | Exclusive write access |
+| `reduce_sum` | Parallel sum reduction |
+| `reduce_max` | Parallel max reduction |
+| `reduce_min` | Parallel min reduction |
+
+## Domains, Distributions, And Arrays
+
+Domains describe shape. Distributions describe placement. Keep them separate.
 
 ```python
-# Arithmetic
-def add(x: Tensor, y: Tensor) -> Tensor:
-    """Element-wise addition"""
-
-def sub(x: Tensor, y: Tensor) -> Tensor:
-    """Element-wise subtraction"""
-
-def mul(x: Tensor, y: Tensor) -> Tensor:
-    """Element-wise multiplication"""
-
-def div(x: Tensor, y: Tensor) -> Tensor:
-    """Element-wise division"""
-
-def pow(x: Tensor, exponent: Union[Tensor, Number]) -> Tensor:
-    """Element-wise power"""
-
-# Reduction operations
-def sum(x: Tensor, axis: Optional[Union[int, Tuple[int, ...]]] = None, keepdims: bool = False) -> Tensor:
-    """Sum reduction"""
-
-def mean(x: Tensor, axis: Optional[Union[int, Tuple[int, ...]]] = None, keepdims: bool = False) -> Tensor:
-    """Mean reduction"""
-
-def max(x: Tensor, axis: Optional[Union[int, Tuple[int, ...]]] = None, keepdims: bool = False) -> Tensor:
-    """Maximum reduction"""
-
-def min(x: Tensor, axis: Optional[Union[int, Tuple[int, ...]]] = None, keepdims: bool = False) -> Tensor:
-    """Minimum reduction"""
-
-def var(x: Tensor, axis: Optional[Union[int, Tuple[int, ...]]] = None, keepdims: bool = False) -> Tensor:
-    """Variance reduction"""
-
-def std(x: Tensor, axis: Optional[Union[int, Tuple[int, ...]]] = None, keepdims: bool = False) -> Tensor:
-    """Standard deviation"""
-
-# Trigonometric
-def sin(x: Tensor) -> Tensor:
-    """Sine"""
-
-def cos(x: Tensor) -> Tensor:
-    """Cosine"""
-
-def tan(x: Tensor) -> Tensor:
-    """Tangent"""
-
-def sinh(x: Tensor) -> Tensor:
-    """Hyperbolic sine"""
-
-def cosh(x: Tensor) -> Tensor:
-    """Hyperbolic cosine"""
-
-def tanh(x: Tensor) -> Tensor:
-    """Hyperbolic tangent"""
-
-# Exponential and logarithm
-def exp(x: Tensor) -> Tensor:
-    """Exponential"""
-
-def log(x: Tensor) -> Tensor:
-    """Natural logarithm"""
-
-def log2(x: Tensor) -> Tensor:
-    """Base-2 logarithm"""
-
-def log10(x: Tensor) -> Tensor:
-    """Base-10 logarithm"""
-
-def sqrt(x: Tensor) -> Tensor:
-    """Square root"""
-
-def rsqrt(x: Tensor) -> Tensor:
-    """Reciprocal square root"""
+D = tessera.domain.Rect((4, 128, 256))
+dist = tessera.dist.Block(mesh_axes=("dp", "tp"))
+X = tessera.array.from_domain(D, dtype="bf16", distribution=dist)
 ```
 
-### Linear Algebra Operations
+`tessera.dist.Cyclic` exists as a Phase 4 planned distribution; in Phases 1-3 it raises `NotImplementedError` when shard specs are materialized.
+
+## Index Launch
+
+`index_launch` dispatches a `@tessera.kernel` function over shard lists.
 
 ```python
-def matmul(a: Tensor, b: Tensor) -> Tensor:
-    """Matrix multiplication"""
+@tessera.kernel
+def tp_gemm(A: tessera.f16[..., ...], B: tessera.f16[..., ...], C: tessera.mut_f32[..., ...]):
+    C[:] = tessera.ops.gemm(A, B)
 
-def gemm(a: Tensor, b: Tensor, c: Optional[Tensor] = None, 
-         alpha: float = 1.0, beta: float = 0.0,
-         trans_a: bool = False, trans_b: bool = False) -> Tensor:
-    """General matrix multiplication: alpha * A @ B + beta * C"""
-
-def dot(a: Tensor, b: Tensor) -> Tensor:
-    """Dot product"""
-
-def einsum(equation: str, *tensors: Tensor) -> Tensor:
-    """Einstein summation"""
-
-def transpose(x: Tensor, dim0: int = -2, dim1: int = -1) -> Tensor:
-    """Transpose dimensions"""
-
-def permute(x: Tensor, dims: Tuple[int, ...]) -> Tensor:
-    """Permute dimensions"""
-
-def reshape(x: Tensor, shape: Shape) -> Tensor:
-    """Reshape tensor"""
-
-def flatten(x: Tensor, start_dim: int = 0, end_dim: int = -1) -> Tensor:
-    """Flatten tensor"""
-
-# Decompositions
-def cholesky(x: Tensor) -> Tensor:
-    """Cholesky decomposition"""
-
-def svd(x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
-    """Singular value decomposition"""
-
-def qr(x: Tensor) -> Tuple[Tensor, Tensor]:
-    """QR decomposition"""
-
-def eig(x: Tensor) -> Tuple[Tensor, Tensor]:
-    """Eigenvalue decomposition"""
-```
-
-### Neural Network Operations
-
-```python
-# Activation functions
-def relu(x: Tensor) -> Tensor:
-    """Rectified linear unit"""
-
-def gelu(x: Tensor) -> Tensor:
-    """Gaussian error linear unit"""
-
-def silu(x: Tensor) -> Tensor:
-    """Sigmoid linear unit (Swish)"""
-
-def sigmoid(x: Tensor) -> Tensor:
-    """Sigmoid activation"""
-
-def softmax(x: Tensor, dim: int = -1) -> Tensor:
-    """Softmax activation"""
-
-def log_softmax(x: Tensor, dim: int = -1) -> Tensor:
-    """Log softmax"""
-
-# Normalization
-def layer_norm(x: Tensor, normalized_shape: Shape, 
-               weight: Optional[Tensor] = None,
-               bias: Optional[Tensor] = None,
-               eps: float = 1e-5) -> Tensor:
-    """Layer normalization"""
-
-def batch_norm(x: Tensor, running_mean: Tensor, running_var: Tensor,
-               weight: Optional[Tensor] = None, bias: Optional[Tensor] = None,
-               training: bool = True, momentum: float = 0.1, eps: float = 1e-5) -> Tensor:
-    """Batch normalization"""
-
-def rms_norm(x: Tensor, weight: Tensor, eps: float = 1e-5) -> Tensor:
-    """Root mean square normalization"""
-
-# Convolution
-def conv2d(input: Tensor, weight: Tensor, bias: Optional[Tensor] = None,
-           stride: Tuple[int, int] = (1, 1),
-           padding: Tuple[int, int] = (0, 0),
-           dilation: Tuple[int, int] = (1, 1),
-           groups: int = 1) -> Tensor:
-    """2D convolution"""
-
-# Pooling
-def max_pool2d(input: Tensor, kernel_size: Tuple[int, int],
-               stride: Optional[Tuple[int, int]] = None,
-               padding: Tuple[int, int] = (0, 0)) -> Tensor:
-    """2D max pooling"""
-
-def avg_pool2d(input: Tensor, kernel_size: Tuple[int, int],
-               stride: Optional[Tuple[int, int]] = None,
-               padding: Tuple[int, int] = (0, 0)) -> Tensor:
-    """2D average pooling"""
-
-# Dropout
-def dropout(x: Tensor, p: float = 0.5, training: bool = True) -> Tensor:
-    """Dropout regularization"""
-
-# Loss functions
-def mse_loss(input: Tensor, target: Tensor, reduction: str = "mean") -> Tensor:
-    """Mean squared error loss"""
-
-def cross_entropy(input: Tensor, target: Tensor, weight: Optional[Tensor] = None,
-                  reduction: str = "mean") -> Tensor:
-    """Cross entropy loss"""
-```
-
-## Kernel Programming
-
-### Kernel Decorator
-
-```python
-@kernel(
-    tile_shape: Optional[Tuple[int, ...]] = None,
-    shared_memory: int = 0,
-    num_warps: int = 4,
-    autotune: bool = False,
-    autotune_configs: Optional[List[Dict]] = None,
-    target: str = "cuda"
+tessera.index_launch(axis="tp")(tp_gemm)(
+    A.parts("tp"),
+    B.parts("tp"),
+    C.parts("tp"),
 )
-def kernel_function(...):
-    """
-    Decorator for kernel functions.
-    
-    Parameters:
-        tile_shape: Tile dimensions
-        shared_memory: Shared memory size in bytes
-        num_warps: Number of warps per block
-        autotune: Enable autotuning
-        autotune_configs: Autotuning configurations
-        target: Target architecture
-    """
 ```
 
-### Tile Operations
+Phase 1 uses sequential/mock execution. Production NCCL/RCCL-backed distributed execution is Phase 4 planned.
+
+## Constraints
+
+Use `tessera.require(...)` inside `@tessera.jit` functions.
 
 ```python
-class tile:
-    """Tile-level operations for kernel programming"""
-    
-    @staticmethod
-    def linear_id() -> int:
-        """Get linear tile ID"""
-    
-    @staticmethod
-    def thread_id() -> Tuple[int, int, int]:
-        """Get 3D thread ID"""
-    
-    @staticmethod
-    def block_id() -> Tuple[int, int, int]:
-        """Get 3D block ID"""
-    
-    @staticmethod
-    def warp_id() -> int:
-        """Get warp ID"""
-    
-    @staticmethod
-    def lane_id() -> int:
-        """Get lane ID within warp"""
-    
-    @staticmethod
-    def group_id() -> int:
-        """Get tile group ID"""
-    
-    @staticmethod
-    def alloc_shared(shape: Shape, dtype: DType, 
-                    swizzle: Optional[str] = None,
-                    alignment: int = 16) -> Tensor:
-        """Allocate shared memory"""
-    
-    @staticmethod
-    def alloc_register(shape: Shape, dtype: DType) -> Tensor:
-        """
+@tessera.jit(bindings={"K": 128})
+def aligned_gemm(A: tessera.Tensor["M", "K"], B: tessera.Tensor["K", "N"]):
+    tessera.require(tessera.constraint.Divisible("K", 64))
+    return tessera.ops.gemm(A, B)
+```
+
+Implemented constraints:
+
+| API | Meaning |
+|-----|---------|
+| `tessera.constraint.Divisible(dim, divisor)` | `dim % divisor == 0` |
+| `tessera.constraint.Range(dim, lo, hi)` | `lo <= dim <= hi` |
+| `tessera.constraint.Equal(dim_a, dim_b)` | `dim_a == dim_b` |
+
+## Operations
+
+Use `tessera.ops`.
+
+| API | Status |
+|-----|--------|
+| `gemm`, `matmul` | Phase 1-3 implemented |
+| `layer_norm`, `softmax`, `gelu`, `relu`, `transpose`, `cast` | Phase 1-3 implemented |
+| `dropout` | Phase 1-3 implemented with random effect |
+| `conv2d` | Phase 1 stub / Graph IR op support |
+| `flash_attn` | Phase 1 naive path; Phase 3 SM_90+ FA-4 lowering path |
+| `all_reduce`, `reduce_scatter`, `all_gather` | Phase 1 stubs; Phase 4 planned distributed lowering |
+| `fused_epilogue` | Phase 1-3 implemented where supported by canonicalization/lowering |
+
+## GPU Targeting
+
+```python
+from tessera.compiler.gpu_target import GPUTargetProfile, ISA
+from tessera.compiler.attn_lower import FlashAttnLoweringConfig
+
+@tessera.jit(
+    target=GPUTargetProfile(isa=ISA.SM_90, warps_per_cta=4),
+    attn_config=FlashAttnLoweringConfig(tile_q=64, tile_kv=64, causal=True),
+)
+def flash_fwd(Q, K, V):
+    return tessera.ops.flash_attn(Q, K, V, causal=True)
+```
+
+## Inspection
+
+Current public inspection supports Graph IR:
+
+```python
+print(flash_fwd.graph_ir.to_mlir())
+```
+
+Schedule IR, Tile IR, and Target IR inspection helpers are Phase 4 planned.
+
+## Future APIs
+
+The following areas are roadmap items and should be labeled as future examples in docs:
+
+| Area | Phase |
+|------|-------|
+| NCCL/RCCL collectives and cluster execution | Phase 4 planned |
+| TPU StableHLO backend | Phase 4 planned |
+| Autodiff transforms and custom VJP/JVP | Phase 5 planned |
+| Activation checkpointing and ZeRO sharding | Phase 5 planned |
+| Bayesian autotuning | Phase 5 planned |
+| Runtime Python wrapper | Phase 6 planned |

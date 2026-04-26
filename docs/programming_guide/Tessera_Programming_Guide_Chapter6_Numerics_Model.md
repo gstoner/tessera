@@ -66,7 +66,7 @@ Programmers can mix precisions declaratively:
 @tessera.jit
 def proj(x: tessera.Tensor["B","D", fp8_e4m3 @accum(fp32)],
          W: tessera.Tensor["D","K", bf16 @accum(fp32)]):
-    return gemm(x, W)
+    return tessera.ops.gemm(x, W)
 ```
 
 Here:
@@ -81,15 +81,14 @@ Here:
 On NVL72, mixed precision must remain stable across 72 GPUs. Tessera enforces consistent policies across shards:
 
 ```python
-W = dist.tensor(
-    shape=(8192,8192),
-    layout=ShardSpec(partition=("col",), mesh_axes=("tp",)),
-    mesh=mesh,
-    dtype="fp6 @accum(fp32)"
+W = tessera.array.from_domain(
+    tessera.domain.Rect((8192, 8192)),
+    dtype="fp6 @accum(fp32)",
+    distribution=tessera.dist.Block(mesh_axes=("tp",)),
 )
 ```
 
-All TP shards use the same accumulation rules. Tessera ensures reductions (`reduce_scatter`, `all_gather`) are performed at accumulation precision before casting.
+All TP shards use the same accumulation rules. Phase 4 distributed lowering ensures reductions (`reduce_scatter`, `all_gather`) are performed at accumulation precision before casting.
 
 ---
 
@@ -100,7 +99,7 @@ Numerical reductions are tracked via **region privileges**:
 ```python
 @tessera.jit
 def update_grad(A: tessera.Region["read"], B: tessera.Region["read"], G: tessera.Region["reduce_sum"]):
-    G[:] += gemm(A, B)   # reductions in FP32 before casting
+    G[:] += tessera.ops.gemm(A, B)   # reductions in FP32 before casting
 ```
 
 Privileges guarantee safe accumulation even in distributed settings.
@@ -109,7 +108,7 @@ Privileges guarantee safe accumulation even in distributed settings.
 
 ### 6.7 Autodiff and Numerics
 
-Tessera’s autodiff respects numeric policies:
+Autodiff is Phase 5 planned. Its numeric contract is:
 
 - Gradients accumulate in FP32 by default.  
 - Loss scaling policies propagate through backward passes.  
@@ -117,20 +116,23 @@ Tessera’s autodiff respects numeric policies:
 
 ---
 
-### 6.8 Example: Distributed FP6 GEMM on NVL72
+### 6.8 Future Example: Distributed FP6 GEMM on NVL72
+
+NVL72 execution is Phase 4 planned.
 
 ```python
-mesh = dist.mesh(devices=[f"cuda:{i}" for i in range(72)], axes=("dp","tp"), shape=(8,9))
+X = tessera.array.from_domain(
+    tessera.domain.Rect((B, D)),
+    dtype="fp6 @accum(fp32)",
+    distribution=tessera.dist.Block(mesh_axes=("dp",)),
+)
+W = tessera.array.from_domain(
+    tessera.domain.Rect((D, K)),
+    dtype="fp6 @accum(fp32)",
+    distribution=tessera.dist.Block(mesh_axes=("tp",)),
+)
 
-X = dist.tensor(shape=(B, D),
-    layout=ShardSpec(partition=("row",), mesh_axes=("dp",)),
-    mesh=mesh, dtype="fp6 @accum(fp32)")
-
-W = dist.tensor(shape=(D, K),
-    layout=ShardSpec(partition=("col",), mesh_axes=("tp",)),
-    mesh=mesh, dtype="fp6 @accum(fp32)")
-
-Y = gemm(X, W)   # FP6 storage, FP32 accum, distributed across dp/tp
+Y = tessera.ops.gemm(X, W)   # FP6 storage, FP32 accumulation
 ```
 
 ---

@@ -352,6 +352,7 @@ Full pass-by-pass specification: `docs/spec/LOWERING_PIPELINE_SPEC.md`.
 
 | Topic | Document |
 |-------|----------|
+| Architecture entry point | `docs/architecture/README.md` |
 | Single-page API naming authority | `docs/CANONICAL_API.md` |
 | IR stack, pass registry, phase status | `docs/spec/COMPILER_REFERENCE.md` |
 | All Python public symbols with signatures | `docs/spec/PYTHON_API_SPEC.md` |

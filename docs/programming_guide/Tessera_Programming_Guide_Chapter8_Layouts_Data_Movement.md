@@ -24,7 +24,7 @@ Layouts define how tensors are organized in memory:
 - **Interleaved**  
 
 Example:
-```tessera
+```python
 sA = tshared.alloc[f16](BM, BK, swizzle="xor")
 sB = tshared.alloc[f16](BK, BN, swizzle="xor")
 ```
@@ -37,7 +37,7 @@ Layouts are explicit so programmers can reason about **bank conflicts, vectoriza
 
 Data is moved between memory tiers explicitly:
 
-```tessera
+```python
 Qb = tile.load(Q, rows=T.m, cols=T.d, vector=T.vector, prefetch=2)
 tile.store(C, index=(i,j), value=Qb)
 ```
@@ -52,7 +52,7 @@ tile.store(C, index=(i,j), value=Qb)
 
 Tessera overlaps memory movement with compute using async copies:
 
-```tessera
+```python
 cp_async.shared.global(sA, A_tile)
 cp_async.shared.global(sB, B_tile)
 tbarrier()
@@ -70,12 +70,12 @@ C += tile.mma(sA, sB, accum=f32)
 Layouts define access patterns **within a shard**, while distributions define how data is partitioned **across the mesh**.
 
 ```python
-mesh = dist.mesh(devices=[f"cuda:{i}" for i in range(72)], axes=("dp","tp"), shape=(8,9))
-
-W = dist.tensor(shape=(8192,8192),
-    layout=ShardSpec(partition=("col",), mesh_axes=("tp",)),
-    mesh=mesh,
-    dtype="bf16")
+D = tessera.domain.Rect((8192, 8192))
+W = tessera.array.from_domain(
+    D,
+    dtype="bf16",
+    distribution=tessera.dist.Block(mesh_axes=("tp",)),
+)
 ```
 
 - Inside each shard, programmers choose row/col/blocked layouts.  
@@ -104,9 +104,9 @@ Privileges guarantee safe reads/writes across shards and prevent races.
 
 ### 8.6 Example: Distributed + Swizzled GEMM
 
-```tessera
-@kernel.autotune(space=dict(BM=[128,256], BN=[128,256], BK=[64], stages=[3]))
-def dist_gemm(A: f16[M,K/tp], B: f16[K/tp,N], C: mut f32[M,N/tp]):
+```python
+@tessera.kernel(autotune={"BM": [128, 256], "BN": [128, 256], "BK": [64], "stages": [3]})
+def dist_gemm(A: tessera.f16["M", "K_per_tp"], B: tessera.f16["K_per_tp", "N"], C: tessera.mut_f32["M", "N_per_tp"]):
     sA = tshared.alloc[f16](BM,BK,swizzle="xor")
     sB = tshared.alloc[f16](BK,BN,swizzle="xor")
     for k0 in range(0, K, BK):
@@ -116,7 +116,7 @@ def dist_gemm(A: f16[M,K/tp], B: f16[K/tp,N], C: mut f32[M,N/tp]):
         C += tile.mma(sA, sB, accum=f32)
 ```
 
-- Sharding handled via `ShardSpec` (TP axis).  
+- Sharding handled by `tessera.dist.Block(mesh_axes=("tp",))` and the resulting `ShardSpec`.  
 - Layout handled via swizzled tiles.  
 - Autotuner picks best BM/BN/BK/stages.  
 
@@ -124,14 +124,15 @@ def dist_gemm(A: f16[M,K/tp], B: f16[K/tp,N], C: mut f32[M,N/tp]):
 
 ### 8.7 Data Movement on NVL72
 
-On NVL72, data movement extends across the **NVSwitch fabric**:
+NVL72 execution is Phase 4 planned. In that phase, data movement extends across the **NVSwitch fabric**:
 
 - Intra-shard movement: registers ↔ shared ↔ HBM.  
 - Inter-shard movement: collectives over NVLink/NVSwitch.  
-- Tessera fuses collective communication with local compute.  
+- Tessera will fuse collective communication with local compute where legal.  
 
-#### Example: Overlapped reduce_scatter
+#### Future Example: Overlapped reduce_scatter
 ```python
+# Phase 4 planned
 with tessera.overlap(comm="tp_reduce_scatter"):
     grad_W = gemm(X, Y)   # compute while reduce_scatter happens
 ```
@@ -156,7 +157,7 @@ Tools to catch inefficiencies:
 - Distributions and layouts compose: shard across mesh, tile within shard.  
 - Region privileges ensure safe buffer use.  
 - Tessera autotunes layouts & movement for peak performance.  
-- On NVL72, Tessera maps inter-shard movement to NCCL/SHARP collectives.  
+- NVL72 inter-shard movement and NCCL/SHARP mapping are Phase 4 planned.  
 - Debugging tools help detect bank conflicts, pressure, and imbalance.
 
 This unified approach to layouts and data movement ensures that Tessera kernels scale **from registers to NVL72 fabric** efficiently and safely.

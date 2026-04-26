@@ -6,7 +6,7 @@ last_updated: 2026-04-26
 
 # CuTe Flash Attention Enhancement for Tessera Programming Model
 
-> **API names in this document are pre-canonical.** `@ts.kernel` should be `@tessera.kernel`; `@tessera.function` should be `@tessera.jit`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
+> **API names in this document are pre-canonical.** older decorator aliases should be replaced with `.kernel` or `.jit`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
 
 
 ## Executive Summary
@@ -162,7 +162,7 @@ class Layout:
         """Partition layout across threads"""
         return tessera.partition_layout(self, thread_layout)
 
-@tessera.function
+@tessera.jit
 def make_tensor(data: tessera.Pointer, layout: Layout) -> tessera.Tensor:
     """Create tensor with explicit layout"""
     return tessera.Tensor(data=data, layout=layout)
@@ -245,7 +245,7 @@ class RegisterFile:
     spill_threshold: float = 0.8
 
 # Memory-aware tensor creation
-@tessera.function
+@tessera.jit
 def create_workspace(shape: tessera.Shape, dtype: tessera.DType, 
                     memory_space: tessera.MemorySpace):
     """Create tensor in specific memory space"""

@@ -18,9 +18,9 @@ The Tessera execution model defines **how kernels are launched, scheduled, and o
 
 Each Tessera kernel is written in **SPMD style**: every tile executes the same program, operating on its portion of the data.
 
-```tessera
-@kernel
-def scale(x: f32[n], y: mut f32[n], alpha: f32):
+```python
+@tessera.kernel
+def scale(x: tessera.f32["n"], y: tessera.mut_f32["n"], alpha: tessera.f32):
     i = tile.linear_id()
     if i < n:
         y[i] = alpha * x[i]
@@ -36,9 +36,9 @@ def scale(x: f32[n], y: mut f32[n], alpha: f32):
 
 Tiles are organized into **groups**, which cooperate via shared memory and synchronization.
 
-```tessera
-@kernel tile[(128,)] shared(8_KiB)
-def group_sum(x: f32[n], out: mut f32[grid_groups]):
+```python
+@tessera.kernel(tile=(128,), shared="8KiB")
+def group_sum(x: tessera.f32["n"], out: tessera.mut_f32["grid_groups"]):
     smem = tshared.alloc[f32](128)
     i = tile.linear_id()
     acc = 0.0
@@ -59,9 +59,9 @@ def group_sum(x: f32[n], out: mut f32[grid_groups]):
 
 Tessera supports **double-buffered pipelines** that overlap data movement with compute.
 
-```tessera
-@kernel.autotune(space=dict(BM=[128,256], stages=[2,3]))
-def axpy_tiled(X: f16[m], Y: mut f16[m], alpha: f16):
+```python
+@tessera.kernel(autotune={"BM": [128, 256], "stages": [2, 3]})
+def axpy_tiled(X: tessera.f16["m"], Y: tessera.mut_f16["m"], alpha: tessera.f16):
     s0 = tshared.alloc[f16](128)
     s1 = tshared.alloc[f16](128)
     for t in tile.range(m, step=128, prefetch=2):
@@ -81,19 +81,19 @@ The compiler lowers `cp_async` and barriers to **CUDA Tile IR** for Hopper/Black
 
 ### 4.4 Distributed Execution with Index Launches
 
-On multi-GPU meshes (e.g., NVL72), Tessera uses **index launches** to execute kernels across shards.
+On multi-GPU meshes (Phase 4 planned, including NVL72), Tessera uses **index launches** to execute kernels across shards.
 
 ```python
-@kernel
-def tp_gemm(A: f16[M,K/tp], B: f16[K/tp,N], C: mut f32[M,N/tp]): ...
+@tessera.kernel
+def tp_gemm(A: tessera.f16["M", "K_per_tp"], B: tessera.f16["K_per_tp", "N"], C: tessera.mut_f32["M", "N_per_tp"]): ...
 
-# Launch kernel across 9-way tensor-parallel axis
+# Phase 4 planned: launch kernel across a tensor-parallel axis
 tessera.index_launch(axis="tp")(tp_gemm)(A.parts("tp"), B.parts("tp"), C.parts("tp"))
 ```
 
 - **`index_launch`** fans out kernels across partitions of a distributed tensor.  
-- Collectives (`all_gather`, `reduce_scatter`) are inserted automatically.  
-- On NVL72, Tessera maps this to NCCL collectives over NVSwitch with SHARP reductions.
+- Collectives (`all_gather`, `reduce_scatter`) are Phase 4 planned for distributed lowering.  
+- NVL72 execution and NCCL/SHARP mapping are Phase 4 planned.
 
 ---
 
@@ -108,7 +108,7 @@ X = tessera.array.from_domain(D, dtype="bf16", distribution=dist)
 
 @tessera.jit
 def norm_layer(X: tessera.Region["read"], Y: tessera.Region["write"]):
-    Y[:] = rmsnorm_safe(X)
+    Y[:] = tessera.ops.rmsnorm_safe(X)
 ```
 
 - The runtime partitions `D` according to `dist`.  
@@ -125,7 +125,7 @@ Privileges prevent conflicting accesses during execution:
 @tessera.jit
 def step(W: tessera.Region["read"], X: tessera.Region["read"], Y: tessera.Region["reduce_sum"]):
     # Compiler schedules reduce ops safely
-    Y += gemm(X, W)
+    Y += tessera.ops.gemm(X, W)
 ```
 
 This ensures that **reductions** can be overlapped and fused without programmer-managed synchronization.
@@ -134,15 +134,15 @@ This ensures that **reductions** can be overlapped and fused without programmer-
 
 ### 4.7 Execution on NVL72
 
-On NVL72 (72-GPU domain):  
+NVL72 execution is Phase 4 planned. The intended behavior is:
 - **Meshes** span all 72 GPUs (e.g., dp=4 × tp=9 × pp=2).  
 - Index launches distribute work across tensor-parallel and pipeline-parallel shards.  
 - Collectives map to NVLink/NVSwitch with SHARP-enabled NCCL.  
-- CUDA Graph capture (planned Phase 4+: `@tessera.jit(capture_graph=True)`) minimizes per-launch overhead.  
+- CUDA Graph capture for repeated training steps is planned future runtime work.  
 
 #### Example: Training step graph on NVL72
 ```python
-@tessera.jit  # Note: capture_graph=True is planned for Phase 4+
+@tessera.jit
 def train_step(batch):
     out = model(batch)
     loss = loss_fn(out)
@@ -159,4 +159,4 @@ def train_step(batch):
 - **Index launches** scale execution across mesh partitions.  
 - **Domains & distributions** describe global iteration spaces.  
 - **Region privileges** ensure safe scheduling and fusion.  
-- On NVL72, Tessera maps directly to NCCL/SHARP collectives with CUDA Graphs for low-overhead execution.
+- Phase 4 planned NVL72 support maps distributed collectives to NCCL/SHARP where available; CUDA Graph capture is future runtime work.

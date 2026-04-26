@@ -9,7 +9,7 @@ last_updated: 2026-04-26
 
 # Tessera Target IR - Complete Usage Guide and Integration
 
-> **API names in this document are pre-canonical.** `@ts.kernel` should be `@tessera.kernel`; `@tessera.function` should be `@tessera.jit`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
+> **API names in this document are pre-canonical.** older decorator aliases should be replaced with `.kernel` or `.jit`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
 
 
 ## Overview
@@ -604,7 +604,7 @@ class TesseraFlashAttention(torch.nn.Module):
     
     def _compile_kernel(self, target_arch):
         # Define operation in Graph IR
-        @tessera.function
+        @tessera.jit
         def flash_attention_impl(q, k, v):
             scores = tessera.matmul(q, k.transpose(-2, -1)) * self.scale
             probs = tessera.softmax(scores, dim=-1)

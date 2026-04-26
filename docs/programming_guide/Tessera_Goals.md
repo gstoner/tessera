@@ -99,7 +99,7 @@ Error Diagnostics - Clear error messages when shape mismatches occur
 
 - First-class Schedule IR:
 .block(m=[64,128], n=[64,128], k=[64]) .warps([4,8]) .stages([2,3]) .vector([4,8])
-- @kernel.autotune(space=…, metric="latency_ms", budget_ms=200, cache="…")
+- Phase 4 planned: canonical schedule/autotune API for metric-driven tuning and schedule-cache artifacts.
 - Persistent schedule cache keyed by shapes, dtypes, arch; export/import artifacts.
 
 # IR Stack
@@ -132,39 +132,31 @@ Error Diagnostics - Clear error messages when shape mismatches occur
 # Example Snippets
 
 ## Modeling:
-@tessera.jit   # Note: @autodiff planned Phase 5
-def transformer_block(x: tessera.Tensor["B","S","D", bf16 @accum(f32)],
-                      cache: KVCache, *, heads: int, p: float):
-    x = rmsnorm_safe(x)
-    with device(gpu), prefetch(cache, into="smem", overlap="compute"):
-        qkv = matmul(x, Wqkv)                 # fp8 -> fp32 accum
-        q,k,v = split_qkv(qkv, heads=heads)
-        cache = cache.append(k,v)
-        y = flash_attention(q, cache, dropout=p, causal=True)
-    y = residual(x, matmul(y, Wo), dropout=p)
-    y = residual(y, gelu(matmul(rmsnorm_safe(y), Wmlp_in)) @ Wmlp_out, dropout=p)
-    return cast_like(y, x), cache
+```python
+@tessera.jit
+def transformer_block(x, Wqkv, Wo, Wmlp_in, Wmlp_out, *, heads: int):
+    h = tessera.ops.rmsnorm_safe(x)
+    qkv = tessera.ops.gemm(h, Wqkv)
+    q, k, v = tessera.ops.split_qkv(qkv, heads=heads)
+    y = tessera.ops.flash_attn(q, k, v, causal=True)
+    y = x + tessera.ops.gemm(y, Wo)
+    z = tessera.ops.gelu(tessera.ops.gemm(tessera.ops.rmsnorm_safe(y), Wmlp_in))
+    return y + tessera.ops.gemm(z, Wmlp_out)
+```
+
+Autodiff transforms, managed KV-cache APIs, dropout lowering, and checkpointing for this block are Phase 5 planned.
 
 ## Kernel + schedule:
 
-@kernel.autotune(space=dict(BM=[64,128], BN=[64,96,128], BD=[64,128],
-                            warps=[4,8], stages=[2,3], vector=[4,8]),
-                 metric="latency_ms", budget_ms=180, cache="~/.sched")
-def flash_attention(q: KTile["B*H","S","D_h", bf16 @accum(f32)], cache: KVCache, *, dropout: float, causal: bool):
-    T  = tile.context()
-    Qb = tile.load(q, rows=T.m, cols=T.d, vector=T.vector, prefetch=2)
-    acc = tile.zeros((T.m,T.d), f32); m = tile.full((T.m,), -INF); l = tile.zeros((T.m,), f32)
-    for nblk in tile.range_n(cache.K.shape, T.n, prefetch=2):
-        Kb = tile.load(cache.K, nblk, cols=T.d, vector=T.vector)
-        Vb = tile.load(cache.V, nblk, cols=T.d, vector=T.vector)
-        S  = tile.dot(Qb, tile.transpose(Kb)) * tile.rsqrt(float(T.d))
-        if causal: tile.mask_causal(S, tile.row_index(), tile.col_index(nblk))
-        P, m_c, l_c = tile.softmax_online(S)
-        if dropout: P = dropout_in_kernel(P, p=dropout)
-        acc, m, l = tile.softmax_accumulate(acc, m, l, P, Vb, m_c, l_c)
-    return tile.cast(acc / l[:,None], bf16)
+```python
+@tessera.jit
+def attention(q, k, v):
+    return tessera.ops.flash_attn(q, k, v, causal=True)
 
+graph_ir_text = attention.graph_ir.to_mlir()
+```
 
+Custom kernel schedules and Bayesian autotuning are Phase 4 planned; current examples should prefer canonical `tessera.ops` calls unless a Tile IR lowering example is explicitly required.
 
 # Cost-model APIs (hybrid analytic + learned) for autotune warm-starts.
 Static guarantees for effect ordering across collectives (type/effect system).
@@ -173,43 +165,23 @@ Formal semantics for numerics policies (rounding, overflow, determinism).
 
 # Add Verification Hooks:
 
-Given the emphasis on numerics, add lightweight verification:
-python@verify.numerics(stable=True, bounded=[-100, 100])
-@kernel.auto
-def attention_score(q: Tile, k: Tile) -> Tile:
-    scores = tile.dot(q, k.T) / sqrt(d)
-    # Verification ensures no overflow/underflow
-    return scores
+Numerics verification decorators are Phase 5 planned:
+
+```python
+# Phase 5 planned
+# @tessera.verify.numerics(stable=True, bounded=[-100, 100])
+# def attention_score(q, k):
+#     return tessera.ops.gemm(q, tessera.ops.transpose(k))
+```
 
 Explicit Schedule Inheritance:
 
-Make schedule reuse more explicit:
-python# Define base schedule
-base_schedule = Schedule(
-    block=(128, 128),
-    warps=8,
-    stages=3
-)
+Schedule inheritance is Phase 4 planned. Keep examples marked as future until the API is canonical.
 
-# Variations inherit and override
-@kernel.schedule(base_schedule.with_block(64, 64))
-def small_attention(...): ...
-
-@kernel.schedule(base_schedule.with_warps(4))
-def memory_limited_attention(...): ...
-
- Add l Standard Library
+Add Standard Library
 Ship with pre-tuned implementations of common operations:
-pythonfrom tessera.stdlib import (
-    # Pre-tuned, verified kernels
-    flash_attention_2,
-    efficient_layernorm,
-    stable_softmax,
-    fused_adam,
-    rotary_embedding
-)
 
-# Users can either use as-is or customize
-my_attention = flash_attention_2.with_schedule(
-    my_custom_schedule
-)
+```python
+y = tessera.ops.flash_attn(q, k, v, causal=True)
+z = tessera.ops.rmsnorm_safe(y)
+```

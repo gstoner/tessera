@@ -38,6 +38,8 @@ These documents remain normative only where they do not conflict with the normat
 
 Architecture, programming guide, operations, reference, and tutorial documents are explanatory. They should link back to the normative root for API names, phase status, and implementation claims.
 
+Architecture readers should start with `docs/architecture/README.md`.
+
 ## Archive
 
 Pre-canonical or superseded material lives under `docs/archive/pre_canonical/`. Archived documents are retained for design history only and must not be treated as current API or implementation guidance.

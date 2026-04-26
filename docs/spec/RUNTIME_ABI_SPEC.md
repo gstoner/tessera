@@ -10,10 +10,10 @@ last_updated: 2026-04-26
 > **Canonical reference.** This document is grounded in the actual header files under
 > `src/runtime/include/tessera/`. It is the only normative runtime ABI reference.
 >
-> **Phase status:** The C ABI headers are complete and well-defined (Phase 6 target for full
-> GPU backend wiring). The CPU backend (`tessera_runtime_cpu.cpp`) is the reference
-> implementation used in all current tests. The Python `TesseraRuntime` wrapper is Phase 6
-> planned — not yet implemented.
+> **Phase status:** The C ABI headers are complete and well-defined. Production runtime
+> wiring for CPU/CUDA/HIP backends and the Python `TesseraRuntime` wrapper are Phase 6
+> planned. Current Phase 1-3 tests use Python-level stubs and mock collectives, not the
+> runtime C ABI as the primary execution path.
 
 ---
 
@@ -434,22 +434,23 @@ releases.
 
 ## 9. Backend Architecture
 
-The public C ABI is implemented over a `Backend` abstract class
-(`src/runtime/src/backend/base_backend.h`). Each backend is an independent shared library:
+The public C ABI is designed around a `Backend` abstract class
+(`src/runtime/src/backend/base_backend.h`). Each production backend is expected to be an
+independent shared library:
 
 | Backend | File | Status |
 |---------|------|--------|
-| CPU (thread pool) | `tessera_runtime_cpu.cpp` | **Phase 6 planned** (header complete) |
-| CUDA | `tessera_runtime_cuda.cpp` | **Phase 6 planned** |
-| HIP (AMD) | `tessera_runtime_hip.cpp` | **Phase 6 planned** |
+| CPU (thread pool) | `tessera_runtime_cpu.cpp` | Header/API specified; Phase 6 production wiring planned |
+| CUDA | `tessera_runtime_cuda.cpp` | Phase 6 planned |
+| HIP (AMD) | `tessera_runtime_hip.cpp` | Phase 6 planned |
 
 The `Backend` interface mirrors the C ABI 1:1 (every `tsr*` function calls the corresponding
 `Backend` virtual method). Selecting a backend at runtime:
 
 1. `tsrInit` scans for available backends in priority order: CUDA > HIP > CPU.
 2. `tsrGetDevice(0, ...)` always returns the CPU backend; higher indices are accelerators.
-3. Phase 1–3 tests use a mock thread-pool implementation that satisfies the `Backend`
-   interface without the runtime C ABI wiring.
+3. Phase 1–3 tests use Python stubs and `MockRankGroup` for execution and distributed
+   behavior. They do not demonstrate full C ABI runtime conformance.
 
 ---
 
@@ -485,16 +486,16 @@ reverse creation order.
 
 | Feature | ABI headers | CPU impl | CUDA impl | Python wrapper |
 |---------|------------|----------|-----------|----------------|
-| `tsrInit` / `tsrShutdown` | ✅ | Phase 6 | Phase 6 | Phase 6 |
-| Device enumeration | ✅ | Phase 6 | Phase 6 | Phase 6 |
-| Streams | ✅ | Phase 6 | Phase 6 | Phase 6 |
-| Events + timestamps | ✅ | Phase 6 | Phase 6 | Phase 6 |
-| `tsrMalloc` / `tsrFree` | ✅ | Phase 6 | Phase 6 | Phase 6 |
-| `tsrMemcpy` | ✅ | Phase 6 | Phase 6 | Phase 6 |
-| `tsrMap` / `tsrUnmap` | ✅ | Phase 6 | Phase 6 | Phase 6 |
-| `tsrLaunchHostTileKernel` | ✅ | Phase 6 | Phase 6 | Phase 6 |
-| Launch validation helpers | ✅ | Phase 6 | n/a | Phase 6 |
-| Profiling timestamps | ✅ | Phase 6 | Phase 6 | Phase 6 |
+| `tsrInit` / `tsrShutdown` | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
+| Device enumeration | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
+| Streams | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
+| Events + timestamps | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
+| `tsrMalloc` / `tsrFree` | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
+| `tsrMemcpy` | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
+| `tsrMap` / `tsrUnmap` | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
+| `tsrLaunchHostTileKernel` | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
+| Launch validation helpers | ✅ Specified | Phase 6 planned | n/a | Phase 6 planned |
+| Profiling timestamps | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
 
 **Note:** Phases 1–5 use `python/tessera/testing/mock_collective.py` (`MockRankGroup`) for
 multi-rank tests. That mock does not go through the C ABI — it uses Python threads and

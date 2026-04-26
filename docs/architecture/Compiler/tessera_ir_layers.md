@@ -6,7 +6,7 @@ last_updated: 2026-04-26
 
 # Tessera IR Layer Documentation
 
-> **API names in this document are pre-canonical.** `@ts.kernel` should be `@tessera.kernel`; `@tessera.function` should be `@tessera.jit`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
+> **API names in this document are pre-canonical.** older decorator aliases should be replaced with `.kernel` or `.jit`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
 
 
 ## Overview
@@ -39,7 +39,7 @@ Executable Binary
 
 **Example**:
 ```python
-@tessera.function
+@tessera.jit
 def flash_attention(
     q: Tensor["B", "H", "S", "D"],
     k: Tensor["B", "H", "S", "D"], 
@@ -578,7 +578,7 @@ def debug_attention(q, k, v):
 ```python
 # Profile compilation time per layer
 with tessera.profiler.compilation_time():
-    compiled_fn = tessera.compile(flash_attention)
+    compiled_fn = tessera.jit(flash_attention)
 
 # Results:
 """

@@ -115,6 +115,10 @@ IR emission. No multi-rank support.
 **Purpose:** Full single-machine GPU execution. Adds device memory management,
 streams, events, and GPU kernel launch. Includes FlashAttention on SM_90.
 
+**Phase status:** The Phase 3 compiler subset of T1 exists today: GPU target
+configuration, FA-4 Tile IR, and the `tessera-lower-to-gpu` pipeline. Full T1
+runtime conformance requires the Phase 6 runtime C ABI execution path.
+
 **Requires:** All of T0, plus:
 
 | Capability | Spec reference |
@@ -133,10 +137,10 @@ streams, events, and GPU kernel launch. Includes FlashAttention on SM_90.
 | `tile.async_copy` / `tile.wait_async` with `stage=` attribute | `04_tile_ir.md §3.2` |
 | `tessera.tma.*` + `tessera.nvgpu.wgmma.*` ops (SM_90 path) | `TARGET_IR_SPEC §4–5` |
 | `WarpSpecializationPass` producer/consumer role assignment | `LOWERING_PIPELINE_SPEC §2.2` |
-| Runtime C ABI lifecycle: `tsrInit` through `tsrShutdown` | `RUNTIME_ABI_SPEC §5.1` |
-| `tsrMalloc`, `tsrFree`, `tsrMemcpy`, `tsrMemset` | `RUNTIME_ABI_SPEC §5.5` |
-| `tsrCreateStream`, `tsrStreamSynchronize` | `RUNTIME_ABI_SPEC §5.3` |
-| `tsrLaunchHostTileKernel` / `tsrLaunchHostTileKernelSync` | `RUNTIME_ABI_SPEC §5.6` |
+| Runtime C ABI lifecycle: `tsrInit` through `tsrShutdown` | `RUNTIME_ABI_SPEC §5.1` (Phase 6 runtime requirement) |
+| `tsrMalloc`, `tsrFree`, `tsrMemcpy`, `tsrMemset` | `RUNTIME_ABI_SPEC §5.5` (Phase 6 runtime requirement) |
+| `tsrCreateStream`, `tsrStreamSynchronize` | `RUNTIME_ABI_SPEC §5.3` (Phase 6 runtime requirement) |
+| `tsrLaunchHostTileKernel` / `tsrLaunchHostTileKernelSync` | `RUNTIME_ABI_SPEC §5.6` (Phase 6 runtime requirement) |
 | `MockRankGroup` for multi-rank testing without NCCL | `PYTHON_API_SPEC §18` |
 
 **Required error behavior under T1 (in addition to T0):**
@@ -178,13 +182,14 @@ backend, pipeline parallelism, and Cyclic MoE distribution.
 |-------|---------------------|--------|
 | Phase 1 | T0 Python frontend (decorators, Region, domain, dist, constraints, effects, Graph IR) | ✅ Complete |
 | Phase 2 | T0 x86 lowering chain (all 4 passes, `tessera-lower-to-x86`) | ✅ Complete |
-| Phase 3 | T1 GPU backend (GPUTargetProfile, FA-4 Tile IR, 9-pass GPU pipeline) | ✅ Complete |
+| Phase 3 | T1 compiler subset (GPUTargetProfile, FA-4 Tile IR, 9-pass GPU pipeline) | ✅ Complete |
 | Phase 4 | T2 distributed (NCCL, TPU, Cyclic, pipeline parallelism) | 🔲 Next |
 | Phase 5 | T1 hardening (checkpointing, ZeRO sharding, Bayesian autotuner) | 🔲 Future |
 | Phase 6 | T1/T2 ROCm full MFMA, runtime C ABI wired, benchmarks | 🔲 Future |
 
 A **T0-conformant** implementation exists today (Phases 1–2).  
-A **T1-conformant** implementation exists today (Phases 1–3), pending Phase 6 runtime ABI wiring.  
+A **T1 compiler-subset implementation** exists today (Phase 3). Full T1
+conformance is pending Phase 6 runtime ABI wiring.  
 A **T2-conformant** implementation requires Phase 4 completion.
 
 ---

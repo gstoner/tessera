@@ -229,50 +229,19 @@ Repro: <cmd + seed>
 
 ---
 
-## 12. Appendix: Example Kernel Skeleton (Pseudo‑Tessera)
-```tessera
-kernel tile_linear(A, B, C, bias, M, N, K) {
-  // Tile params (tune these)
-  let TM = 128, TN = 128, TK = 64;
-  let stages = 3;
+## 12. Appendix: Current Example Skeleton
 
-  // Shared memory panels (padded to avoid bank conflicts)
-  smem A_panel[TM][TK + 1];
-  smem B_panel[TK][TN + 1];
+Prefer the canonical operation surface in tutorials. Use Tile IR sketches only in compiler
+reference material.
 
-  // Acc registers
-  reg acc[TM_frag][TN_frag] = 0;
+```python
+@tessera.jit
+def linear_bias_gelu(x, w, bias):
+    y = tessera.ops.gemm(x, w)
+    y = tessera.ops.add(y, bias)
+    return tessera.ops.gelu(y)
 
-  // Prologue: prefetch first stages
-  for s in 0..stages-1 {
-    async_copy(A_panel[s], A[... offset(s) ...]);
-    async_copy(B_panel[s], B[... offset(s) ...]);
-    async_commit();
-  }
-
-  barrier();
-
-  for k in 0..K step TK {
-    // Issue next stage prefetch while computing current
-    async_copy(A_panel[next], A[... offset(k + stages*TK) ...]);
-    async_copy(B_panel[next], B[... offset(k + stages*TK) ...]);
-    async_commit();
-
-    // Compute: ldmatrix + mma.sync
-    #pragma unroll
-    for kk in 0..TK step frag_k {
-      frag a = ldmatrix(A_panel[cur], kk);
-      frag b = ldmatrix(B_panel[cur], kk);
-      acc = mma(acc, a, b);
-    }
-
-    async_wait_group(1);
-    swap(cur, next);
-  }
-
-  // Fused epilogue: bias + activation
-  store_streaming(C, fuse(acc, bias));
-}
+print(linear_bias_gelu.graph_ir.to_mlir())
 ```
 
 ---

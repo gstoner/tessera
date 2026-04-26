@@ -222,7 +222,7 @@ def {kernel_name}(Q: Tensor[{B}, {H}, {S}, {D}, bf16],
                   K: Tensor[{B}, {H}, {S}, {D}, bf16], 
                   V: Tensor[{B}, {H}, {S}, {D}, bf16],
                   O: Tensor[{B}, {H}, {S}, {D}, bf16]):
-    O[:] = tessera.ops.flash_attention(Q, K, V, causal=True)
+    O[:] = tessera.ops.flash_attn(Q, K, V, causal=True)
 ''',
                 complexity_reduction=0.9,
                 confidence_boost=0.95
@@ -1231,7 +1231,7 @@ def flash_attention_tessera(Q: Tensor["B", "H", "S", "D", bf16],
                            K: Tensor["B", "H", "S", "D", bf16], 
                            V: Tensor["B", "H", "S", "D", bf16],
                            O: Tensor["B", "H", "S", "D", bf16]):
-    O[:] = tessera.ops.flash_attention(Q, K, V, causal=True, scale=0.125)
+    O[:] = tessera.ops.flash_attn(Q, K, V, causal=True, scale=0.125)
 ```
 
 ### 2. Gradient Synchronization

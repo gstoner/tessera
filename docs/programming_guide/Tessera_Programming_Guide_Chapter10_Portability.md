@@ -10,7 +10,7 @@ last_updated: 2026-04-26
 # Tessera Programming Guide  
 ## Chapter 10: Portability (Updated)
 
-Tessera is designed for **performance portability**. The same program can run on NVIDIA GPUs today, and future extensions will target AMD, Intel, and other accelerators. Portability is achieved through a **multi-level IR stack**, a **Mapper API**, and integration with vendor libraries.
+Tessera is designed for **performance portability**. The current implemented path covers x86 lowering and supported NVIDIA SM_90+ GPU lowering. Future extensions target distributed NVIDIA systems, AMD, Intel, and other accelerators. Portability is achieved through a **multi-level IR stack**, target profiles, domains/distributions, and planned mapper/runtime policy APIs.
 
 ---
 
@@ -63,25 +63,20 @@ print(gemm_fn.graph_ir.to_mlir())
 
 ---
 
-### 10.5 Mapper API for Portability
+### 10.5 Future Mapper API for Portability
 
-Programmers can override placement and lowering decisions with a **Mapper**:
+Mapper APIs are Phase 4 planned. Future examples should be marked clearly:
 
 ```python
-class MyMapper(tessera.Mapper):
-    def place(self, region, mesh):
-        if region.axis == "tp":
-            return "local_switch"
-    def choose_collective(self, kind, size):
-        return "sharp_ring" if size <= 72 else "tree"
-    def choose_variant(self, op, arch):
-        return "tile_ir" if arch.is_blackwell else "ptx"
-
-tessera.runtime.set_mapper(MyMapper())
+# Phase 4 planned sketch
+# mapper.place(region, mesh)
+# mapper.choose_collective(kind, size)
+# mapper.choose_variant(op, arch)
 ```
 
-- Ensures optimal policies on NVL72.  
-- Can be extended for AMD/Intel targets in the future.  
+- Intended to guide placement on systems such as NVL72.
+- Intended to choose collectives and backend variants.
+- Not current Phase 1-3 public API.
 
 ---
 
@@ -95,9 +90,9 @@ dist = tessera.dist.Block(mesh_axes=("dp","tp"))
 X = tessera.array.from_domain(D, dtype="bf16", distribution=dist)
 ```
 
-- On NVIDIA: lowers to NCCL collectives.  
-- On AMD: lowers to rccl.  
-- On Intel: lowers to oneCCL.  
+- On current Phase 1-3 paths: represented as shard metadata and mock/test behavior.
+- Phase 4 planned: NVIDIA collectives lower to NCCL/RCCL-backed runtime paths.
+- Future vendor paths: AMD and Intel collective backends are planned, not current.
 
 The same Tessera program runs across vendors.
 
@@ -111,9 +106,8 @@ The same Tessera program runs across vendors.
 tessera.index_launch(axis="tp")(gemm_tile)(A.parts("tp"), B.parts("tp"), C.parts("tp"))
 ```
 
-- On NVIDIA: maps to NVLink/NVSwitch with NCCL.  
-- On AMD: maps to xGMI/Infinity Fabric with rccl.  
-- On Intel: maps to oneCCL collectives.  
+- Current tests use shard lists and mock/sequential dispatch.
+- Phase 4 planned distributed runtime maps collectives to vendor backends.
 
 ---
 
@@ -121,10 +115,10 @@ tessera.index_launch(axis="tp")(gemm_tile)(A.parts("tp"), B.parts("tp"), C.parts
 
 NVL72 demonstrates Tessera’s philosophy:
 
-- Treats **72 GPUs as one device**.  
-- Mapper co-locates tensor-parallel ranks on NVSwitch groups.  
-- Collectives map to **NCCL with SHARP reductions**.  
-- CUDA Graphs minimize per-launch overhead.  
+- Phase 4 planned distributed placement treats a 72-GPU NVSwitch domain as a single logical mesh.
+- Phase 4 planned mapper policy co-locates tensor-parallel ranks on NVSwitch groups.
+- Phase 4 planned collectives map to NCCL with SHARP reductions where available.
+- CUDA Graph capture for repeated training steps is planned future runtime work.
 
 The same code can run on **smaller NVIDIA clusters** or **future AMD/Intel systems** with no changes.
 
@@ -133,8 +127,9 @@ The same code can run on **smaller NVIDIA clusters** or **future AMD/Intel syste
 ### 10.9 Summary
 
 - Tessera achieves portability through **multi-level IR** and **Mapper API hooks**.  
-- NVIDIA support is mature (PTX + CUDA Tile IR, NCCL).  
-- AMD and Intel support planned (ROCm/XDLops/rccl, oneAPI/DPAS/oneCCL).  
+- NVIDIA single-node compiler support exists for the documented x86 and SM_90+ GPU paths.
+- NCCL-backed distributed execution is Phase 4 planned.
+- AMD and Intel support is planned (ROCm/XDLops/RCCL, oneAPI/DPAS/oneCCL).
 - Domains, distributions, and index launches are portable abstractions.  
 - NVL72 illustrates how Tessera adapts to extreme-scale NVIDIA systems.  
 

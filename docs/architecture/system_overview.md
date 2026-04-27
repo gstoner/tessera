@@ -102,14 +102,14 @@ Each layer has its own spec document:
 | `GPUTargetProfile` + `ISA` enum (SM_80–SM_100) | ✅ | `python/tessera/compiler/gpu_target.py` |
 | `FlashAttnLoweringConfig` (tile_q, tile_kv, pipeline_stages, causal, dropout) | ✅ | `python/tessera/compiler/attn_lower.py` |
 | `TileIRLoweringPass` — `schedule.mesh.region` → `tile.*` + `tessera.attn.*` | ✅ | `src/transforms/lib/TileIRLoweringPass.cpp` |
-| `WarpSpecializationPass` — producer/consumer warp roles + queue barriers | ✅ | `src/tile_opt_fa4/lib/WarpSpecializationPass.cpp` |
-| `AsyncCopyLoweringPass` — `tile.async_copy` → TMA (SM_90) / `cp.async` (SM_80) | ✅ | `src/tile_opt_fa4/lib/AsyncCopyLoweringPass.cpp` |
+| `WarpSpecializationPass` — producer/consumer warp roles + queue barriers | ✅ | `src/compiler/tile_opt_fa4/lib/WarpSpecializationPass.cpp` |
+| `AsyncCopyLoweringPass` — `tile.async_copy` → TMA (SM_90) / `cp.async` (SM_80) | ✅ | `src/compiler/tile_opt_fa4/lib/AsyncCopyLoweringPass.cpp` |
 | `NVWGMMALoweringPass` — `tile.mma` → `wgmma.mma_async` PTX (SM_90+) or WMMA | ✅ | `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` |
 | `NVTMADescriptorPass` — TMA descriptor hoisting + mbarrier init | ✅ | `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` |
 | `NVFlashAttnKernelEmitter` — scale resolution, full mbarrier seq, launch bounds | ✅ | `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` |
 | `tessera-lower-to-gpu` named pipeline | ✅ | registered in GPU backend |
-| FA-4 Attn dialect v2.0 — `ScaledDotProduct`, `OnlineSoftmax`, `LseAccumulate`, `DropoutMask`, `CausalMask` | ✅ | `src/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td` |
-| `tessera.queue` dialect — `create`, `push`, `pop` | ✅ | `src/tile_opt_fa4/dialects/tessera_queue/Queue.td` |
+| FA-4 Attn dialect v2.0 — `ScaledDotProduct`, `OnlineSoftmax`, `LseAccumulate`, `DropoutMask`, `CausalMask` | ✅ | `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td` |
+| `tessera.queue` dialect — `create`, `push`, `pop` | ✅ | `src/compiler/tile_opt_fa4/dialects/tessera_queue/Queue.td` |
 
 ### What Does NOT Yet Work
 

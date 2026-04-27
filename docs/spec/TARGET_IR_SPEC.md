@@ -5,8 +5,8 @@ last_updated: 2026-04-26
 ---
 
 # Tessera Target IR Specification
-**Status:** Normative — grounded in `src/tile_opt_fa4/`, `src/programming_model/ir/schedule/`, and `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` Phase 2–3 implementations  
-**Last updated:** April 26, 2026  
+**Status:** Normative — grounded in `src/compiler/tile_opt_fa4/`, `src/compiler/programming_model/ir/schedule/`, and `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` Phase 2–3 implementations
+**Last updated:** April 26, 2026
 **Cross-references:** `docs/spec/GRAPH_IR_SPEC.md`, `docs/spec/LOWERING_PIPELINE_SPEC.md`
 
 ---
@@ -41,8 +41,8 @@ The x86 Target IR (AMX/AVX-512 C function calls) is documented separately in `do
 
 ## 2. Schedule Dialect
 
-**TableGen:** `src/programming_model/ir/schedule/ScheduleMeshPipelineOps.td`  
-**Dialect name:** `schedule`  
+**TableGen:** `src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td`
+**Dialect name:** `schedule`
 **C++ namespace:** `::tessera::schedule`
 
 The Schedule dialect bridges Graph IR and Tile IR by expressing **where** computation runs (mesh placement) and **when** (pipeline staging) without committing to hardware-specific tile ops.
@@ -162,9 +162,9 @@ schedule.yield %result : tensor<128x256xf32>
 
 ## 3. `tessera.attn` Dialect — FA-4 FlashAttention Ops
 
-**TableGen:** `src/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td` (v2.0)  
-**Dialect name:** `tessera.attn`  
-**C++ namespace:** `::tessera::attn`  
+**TableGen:** `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td` (v2.0)
+**Dialect name:** `tessera.attn`
+**C++ namespace:** `::tessera::attn`
 **Phase:** 3
 
 These ops implement the FA-2 online softmax algorithm at the tile level. They are emitted by `TileIRLoweringPass` when lowering `tessera.flash_attn` (Graph IR) to Tile IR.
@@ -191,7 +191,7 @@ Outer loop over Q tiles:
 
 Saves the per-row log-sum-exp (LSE) values from the forward attention pass. LSE values are consumed by the backward pass.
 
-**Traits:** None (has side effect — writes to LSE buffer)  
+**Traits:** None (has side effect — writes to LSE buffer)
 **Has verifier:** Yes (shape-aware check in `AttnOps.cpp`)
 
 **Arguments:**
@@ -238,7 +238,7 @@ Computes `Q_tile · K_tile^T * scale` for one (Q-tile, K-tile) pair. This is the
 
 The `scale` attribute is constant-folded at lowering time from `head_dim` on the parent `tessera.flash_attn` op. The Phase 5 autotuner stores `tile_q` and `tile_kv` as op attributes so it can retile without re-emitting Graph IR.
 
-**Traits:** `Pure`  
+**Traits:** `Pure`
 **Has verifier:** Yes
 
 **Arguments:**
@@ -278,7 +278,7 @@ The two-pass online algorithm:
 3. `new_acc = alpha * acc_out + exp(scores - new_m) @ V_tile`
 4. `new_l = alpha * running_l + rowsum(exp(scores - new_m))`
 
-**Traits:** None (updates accumulator in-place conceptually — not `Pure`)  
+**Traits:** None (updates accumulator in-place conceptually — not `Pure`)
 **Has verifier:** Yes
 
 **Arguments:**
@@ -405,9 +405,9 @@ $scores q_off = $q_offset kv_off = $kv_offset attr-dict
 
 ## 4. `tessera.queue` Dialect — Tile Queue Synchronisation
 
-**TableGen:** `src/tile_opt_fa4/dialects/tessera_queue/Queue.td` (v1.3)  
-**Dialect name:** `tessera.queue`  
-**C++ namespace:** `::tessera::queue`  
+**TableGen:** `src/compiler/tile_opt_fa4/dialects/tessera_queue/Queue.td` (v1.3)
+**Dialect name:** `tessera.queue`
+**C++ namespace:** `::tessera::queue`
 **Phase:** 3
 
 The queue dialect provides the barrier primitives used by `WarpSpecializationPass` to synchronise producer warps (which prefetch tiles via TMA) and consumer warps (which run WGMMA compute). Queues are opaque handles; their physical implementation is SM-specific (mbarriers on SM_90).
@@ -523,7 +523,7 @@ Initiates an asynchronous copy of a tile from global memory into shared/L1 memor
 
 Drains all in-flight `tile.async_copy` operations. All async copies issued before this op are guaranteed complete after it.
 
-**Arguments:** None  
+**Arguments:** None
 **Results:** None
 
 **MLIR text:**

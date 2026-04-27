@@ -394,7 +394,7 @@ module @step attributes {tessera.version = "1.0"} {
 | Canonical API names | `docs/CANONICAL_API.md` |
 | Graph IR op catalog | `docs/spec/GRAPH_IR_SPEC.md` |
 | C++ pass pipeline | `docs/spec/LOWERING_PIPELINE_SPEC.md` |
-| Effect system design | `src/programming_model/docs/Tessera_Programming_Model_v1_1_Plan_20250917_212640.md §1.2` |
+| Effect system design | `src/compiler/programming_model/docs/Tessera_Programming_Model_v1_1_Plan_20250917_212640.md §1.2` |
 | Constraint design | Same doc §1.1 |
 | `@jit` source | `python/tessera/compiler/jit.py` |
 | `ConstraintSolver` source | `python/tessera/compiler/constraints.py` |

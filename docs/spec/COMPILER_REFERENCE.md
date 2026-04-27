@@ -39,9 +39,9 @@ Target IR   (per-backend: LLVM+AMX/AVX512 | NVVM/PTX | StableHLO | ROCDL)
 
 | Layer | Canonical name | Primary file(s) | Key dialect(s) |
 |-------|---------------|-----------------|----------------|
-| Layer 1 | **Graph IR** | `src/ir/TesseraOps.td`, `src/ir/TesseraTiling.cpp` | `tessera.*` |
-| Layer 2 | **Schedule IR** | `src/programming_model/ir/schedule/ScheduleMeshPipelineOps.td` | `schedule.mesh.*` |
-| Layer 3 | **Tile IR** | `src/tile_opt_fa4/dialects/tessera_attn/Attn.td`, `tessera_queue/Queue.td` | `tile.*`, `tessera.attn.*`, `tessera.queue.*` |
+| Layer 1 | **Graph IR** | `src/compiler/ir/TesseraOps.td`, `src/compiler/ir/TesseraTiling.cpp` | `tessera.*` |
+| Layer 2 | **Schedule IR** | `src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td` | `schedule.mesh.*` |
+| Layer 3 | **Tile IR** | `src/compiler/tile_opt_fa4/dialects/tessera_attn/Attn.td`, `tessera_queue/Queue.td` | `tile.*`, `tessera.attn.*`, `tessera.queue.*` |
 | Layer 4 | **Target IR** | `src/compiler/codegen/tessera_x86_backend/`, `tessera_gpu_backend_NVIDIA/` | LLVM, NVVM, StableHLO |
 
 **Naming rule:** Always write the full two-word IR names: Graph IR, Schedule IR, Tile IR, and Target IR. Avoid older abbreviated or one-word aliases.
@@ -325,17 +325,17 @@ make -j$(nproc)
 
 | What you need | Where to look |
 |---------------|--------------|
-| Graph IR op definitions | `src/ir/TesseraOps.td` |
+| Graph IR op definitions | `src/compiler/ir/TesseraOps.td` |
 | Graph IR canonicalization (4 patterns) | `src/transforms/lib/CanonicalizeTesseraIR.cpp` |
 | Graph IR verifier | `src/transforms/lib/VerifyTesseraIR.cpp` |
-| Schedule IR op definitions | `src/programming_model/ir/schedule/ScheduleMeshPipelineOps.td` |
+| Schedule IR op definitions | `src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td` |
 | x86 backend headers | `src/compiler/codegen/tessera_x86_backend/include/tessera/x86/target.h` |
-| FA-4 Attn dialect ODS | `src/tile_opt_fa4/dialects/tessera_attn/Attn.td` |
-| FA-4 Queue dialect ODS | `src/tile_opt_fa4/dialects/tessera_queue/Queue.td` |
+| FA-4 Attn dialect ODS | `src/compiler/tile_opt_fa4/dialects/tessera_attn/Attn.td` |
+| FA-4 Queue dialect ODS | `src/compiler/tile_opt_fa4/dialects/tessera_queue/Queue.td` |
 | Collective IR ODS | `src/collectives/include/tessera/Dialect/Collective/IR/CollectiveOps.td` |
 | Collective adapters (Phase 4) | `src/collectives/include/tessera/Dialect/Collective/Runtime/Adapters.h` |
-| Scaling/Resilience dialect ODS | `src/scaling_resilience/lib/sr/dialect/SROps.td` |
-| Solver pass declarations | `src/solvers/passes/SolversPasses.h` |
+| Scaling/Resilience dialect ODS | `src/solvers/scaling_resilience/lib/sr/dialect/SROps.td` |
+| Solver pass declarations | `src/solvers/core/passes/SolversPasses.h` |
 | Runtime C ABI header | `src/runtime/include/tessera/tessera_runtime.h` |
 | Python `@jit` implementation | `python/tessera/compiler/jit.py` |
 | Python Graph IR builder | `python/tessera/compiler/graph_ir.py` |

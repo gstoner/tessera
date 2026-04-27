@@ -16,6 +16,7 @@ Reflects post-reorganization structure: compiler consolidation, `solvers/core/` 
 | `compiler/` | All compiler components (IR, codegen, passes, tooling) |
 | `runtime/` | C ABI runtime — device, stream, buffer, kernel launch |
 | `solvers/` | Scientific computing: linalg, spectral, scaling/resilience, tpp |
+| `tessera.egg-info/` | Python packaging metadata present under `/src`; not a build component |
 | `transforms/` | Graph IR canonicalization and lowering passes (Phases 1–3) |
 
 ---
@@ -24,10 +25,10 @@ Reflects post-reorganization structure: compiler consolidation, `solvers/core/` 
 
 | | Count |
 |-|-------|
-| Active folders | 306 |
-| Active files | 446 |
-| Archived folders | 165 |
-| Archived files | 218 |
+| Active folders | 291 |
+| Active files | 449 |
+| Archived folders | 159 |
+| Archived files | 173 |
 
 ---
 
@@ -268,4 +269,4 @@ Superseded material — retained for reference only. Do not add build targets he
 
 ---
 
-*Last updated: April 2026 — post-reorganization rebuild (RubinCPX rename, compiler consolidation, solvers/core, archive additions).*
+*Last updated: April 2026 — restart rebuild after RubinCPX rename, compiler consolidation, `Operators/`, `solvers/core`, and archive additions.*

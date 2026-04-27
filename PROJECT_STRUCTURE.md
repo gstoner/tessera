@@ -21,15 +21,12 @@ tessera/
 ├── PROJECT_STRUCTURE.md             # This file
 │
 ├── src/                             # Production C++/MLIR source
-│   ├── compiler/                    # Compiler infrastructure, codegen, autotuning, pass docs
+│   ├── Operators/                   # Operator library placeholder (Phase 4+)
+│   ├── compiler/                    # Compiler IR, MLIR, codegen, autotuning, pass docs
 │   ├── runtime/                     # C++ execution engine
-│   ├── solvers/                     # Constraint, schedule, sparse/RNG, and linalg solvers
-│   ├── tessera_neighbors/           # Neighbor-discovery / topology
-│   │
-│   ├── scaling_resilience/          # SR dialect (SRDialect, SROps, manifest schema)
-│   ├── tile_opt_fa4/                # Tile-opt + FA4 dialect (Queue, backward attn)
-│   ├── tpp/                         # TPP dialect (TPPAttrs, TPPTypes, CI workflow)
-│   └── programming_model/           # High-level programming model (memory, parallel)
+│   ├── solvers/                     # Core sparse/RNG, linalg, SR, spectral, TPP solvers
+│   ├── collectives/                 # Collective IR and runtime scaffolding
+│   └── transforms/                  # Canonicalization and lowering passes
 │
 ├── python/                          # Python frontend package
 │   └── tessera/
@@ -78,21 +75,26 @@ the git index.
 
 | Canonical path               | Promoted from                                    | Rationale |
 |------------------------------|--------------------------------------------------|-----------|
-| `src/scaling_resilience`     | `src/tessera_scaling_resilience_v1_1`            | v1_1 adds SRDialect.cpp, SROps.cpp, SROps.td, manifest.schema.json; v1 was pass-only |
-| `src/tile_opt_fa4`           | `src/Tile_Optimization_FA4 /…/v1_3`              | v1_3 is newest: adds Queue dialect, backward attention; docs from v1/v1_1/v1_2 merged in |
-| `src/tpp`                    | `src/tpp/tpp_v0_2`                               | v0_2 adds TPPAttrs.td, TPPTypes.td, CI workflow over v0_1 |
-| `src/programming_model`      | `src/tessera_pm_v1_1_memory_parallel`            | Only complete version with memory-parallel extensions |
-| `src/tessera_neighbors`      | `src/tessera-neighbors`                          | Renamed hyphen → underscore; single version |
-| `src/solvers`                | `src/src/solvers`                                | Un-nested erroneous double `src/src/` path |
+| `src/compiler/ir`            | `src/ir`                                         | Core Tessera IR grouped under compiler infrastructure |
+| `src/compiler/mlir`          | `src/mlir`                                       | MLIR dialect integration grouped under compiler infrastructure |
+| `src/compiler/programming_model` | `src/tessera_pm_v1_1_memory_parallel`        | Programming-model IR grouped under compiler infrastructure |
+| `src/compiler/tessera_neighbors` | `src/tessera-neighbors`                      | Neighbor topology/halo lowering grouped under compiler infrastructure |
+| `src/compiler/tile_opt_fa4`  | `src/Tile_Optimization_FA4 /…/v1_3`              | FA4 tile optimization grouped under compiler infrastructure |
+| `src/compiler/RubinCPX_Backend` | `src/Tessera_RubinCPX_Compiler`               | NV Rubin CPX target renamed and grouped under compiler infrastructure |
+| `src/solvers/core`           | `src/src/solvers`                                | Sparse/RNG/nonlinear solver core grouped below solvers |
+| `src/solvers/linalg`         | `src/tessera_linalg_solvers`                    | Linear algebra solver scaffold grouped under the solver stack |
+| `src/solvers/scaling_resilience` | `src/tessera_scaling_resilience_v1_1`        | SR dialect and passes grouped below solvers |
+| `src/solvers/spectral`       | `src/spectral`                                   | Spectral/FFT dialect grouped below solvers |
+| `src/solvers/tpp`            | `src/tpp/tpp_v0_2`                               | TPP dialect grouped below solvers |
+| `src/Operators`              | new                                              | Placeholder for operator library work (Phase 4+) |
 | `tests/kernel_tests`         | `tests/tessera_kernels_scaffold`                 | Original retained: has system tests, roofline script, profile_ncu.sh |
 | `examples/advanced/power_retention` | `examples/advanced/Power Retention/…/v0_9` | v0_9: HIP kernel, WGMMA, autotune, nlohmann_json integration |
 | `src/archive/PDDL_Instruct`  | `src/PDDL_Instruct/pddl_instruct_tessera_v1`     | Experimental — archived out of the active `src/` surface |
 | `src/archive/Sandbox_Toy_compilers` | `src/Sandbox_Toy_compilers/…`            | Experimental sample compilers — archived out of the active `src/` surface |
-| `src/archive/tpp_old`        | `src/tpp_old`                                    | Superseded by canonical `src/tpp` |
-| `src/archive/tile_opt_fa4_old` | `src/tile_opt_fa4_old`                         | Superseded by canonical `src/tile_opt_fa4` |
+| `src/archive/tpp_old`        | `src/tpp_old`                                    | Superseded by canonical `src/solvers/tpp` |
+| `src/archive/tile_opt_fa4_old` | `src/tile_opt_fa4_old`                         | Superseded by canonical `src/compiler/tile_opt_fa4` |
 | `src/compiler/codegen/Tessera_TPU_Backend` | `src/compiler/codegen/Tessera_TPU_Backend_Starter_Advanced` | Advanced TPU backend promoted to single canonical TPU backend folder |
 | `src/compiler/docs/pass_reference` | `src/compiler/passes`                     | Pass reference markdown grouped with compiler documentation |
-| `src/solvers/linalg`         | `src/tessera_linalg_solvers`                    | Linear algebra solver scaffold grouped under the solver stack |
 | `docs/archive/pre_canonical/api` | `docs/api/Tessera_API_Vol*.md`               | Pre-canonical API volumes archived behind canonical API docs |
 | `docs/archive/pre_canonical/model` | `docs/Tessera_Deep_Learning_Programming_Model.md` | Pre-canonical model guide archived due old API examples |
 | `docs/architecture/`         | `src/compiler/tessera_target_ir_doc3b.md`        | Architecture doc migrated out of src/ |
@@ -115,9 +117,8 @@ should land in the canonical component folder, not beside an archived copy.
 The build system cleanup is the immediate follow-on to this reorganization.
 Outstanding work:
 
-- Wire `src/scaling_resilience`, `src/tile_opt_fa4`, `src/tpp`,
-  `src/programming_model`, `src/solvers`, and `src/tessera_neighbors` into the
-  top-level `CMakeLists.txt` via `add_subdirectory`.
+- Keep `src/CMakeLists.txt` aligned as compiler and solver subtrees graduate
+  from scaffold to production build targets.
 - Add per-component `CMakeLists.txt` where missing.
 - Validate MLIR dialect registration and tablegen targets for each component.
 - Gate the build on a single `TESSERA_VERSION` variable defined in one place.

@@ -53,6 +53,9 @@ endif()
 if(TESSERA_BUILD_CEREBRAS_BACKEND)
   add_subdirectory(compiler/codegen/Tessera_Cerebras_backend)
 endif()
+if(TESSERA_BUILD_RUBINCPX_BACKEND)
+  add_subdirectory(compiler/codegen/Tessera_RubinCPX_Backend)
+endif()
 
 # ------------------------------------------------------------------
 # Solver suite and collectives

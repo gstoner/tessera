@@ -46,6 +46,7 @@ Key source locations:
 | Schedule IR ODS | `src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td` |
 | Tile IR (FA-4) | `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td`, `Queue.td` |
 | x86 backend | `src/compiler/codegen/tessera_x86_backend/` (AMX BF16 + AVX512 GEMM — **works**) |
+| RubinCPX backend | `src/compiler/codegen/Tessera_RubinCPX_Backend/` — `tessera.target.cpx` dialect; 4 passes; `tessera-cpx-opt` driver |
 | Collectives IR | `src/collectives/include/tessera/Dialect/Collective/IR/CollectiveOps.td` |
 | Scaling/Resilience | `src/solvers/scaling_resilience/lib/sr/passes/` (scaffold exists; bodies are stubs) |
 | Neighbors/Halo | `src/compiler/tessera_neighbors/lib/` (HaloInferPass is stub) |
@@ -71,6 +72,13 @@ Key source locations:
 | Roofline tooling | **Works standalone** |
 | Runtime C ABI (`tessera_runtime.cpp`) | **270 lines implemented; CPU backend has real thread pool** |
 | Runtime CUDA/HIP backends | **30-line stubs — dispatch not wired** |
+| RubinCPX dialect (`tessera.target.cpx`) | **ODS-generated via NVRubinCPX.td; NVFP4/NVFP6 types; 7 ops registered** |
+| RubinCPX `tessera-cpx-pipeline` | **4 passes wired: fuse-video-ingest → partition-longcontext → vectorize-nvfp4 → lower-kv-transport** |
+| `FuseVideoIngestPass` | **Implemented: BFS chain detection, video.decode→attn.prefill_fused fusion into region** |
+| `PartitionLongContextPass` | **Implemented: CPX/Rubin classification, kv.export after prefill, kv.import at Rubin boundary** |
+| `NVFP4VectorizePass` | **Implemented: bf16/f16 matmul detection, tessera.cast insertion, nvfp4_accel attribute** |
+| `LowerKVTransportPass` | **Implemented: kv.export/import/prefetch → runtime func.call to tessera_kv_{export_pcie,export_nvlink,import,prefetch}** |
+| `tessera-cpx-opt` driver | **Wired: NVRubinCPXDialect registered, all passes and both pipelines registered** |
 | Python runtime wrapper (`python/tessera/runtime.py`) | **Does not exist** |
 | FA-4 Attn+Queue ODS | **Defined with verifiers (Phase 3)** |
 | Phase 1–3 Python frontend | **Complete — 252 tests green** |
@@ -422,6 +430,7 @@ def test_region_annotation_reduce():
 | Phase 2 | ✅ **Complete** | C++ lowering chain — DistributionLoweringPass, EffectAnnotationPass, TilingPass, TileToX86Pass; `tessera-lower-to-x86` pipeline |
 | Phase 3 | ✅ **Complete** | NVIDIA GPU backend — GPUTargetProfile, TileIRLoweringPass, WarpSpecializationPass, AsyncCopyLoweringPass, NVWGMMALoweringPass, NVTMADescriptorPass, NVFlashAttnKernelEmitter; `tessera-lower-to-gpu` pipeline; FA-4 Attn dialect (ScaledDotProduct, OnlineSoftmax, LseAccumulate, DropoutMask, CausalMask) |
 | Cross-phase infra | ✅ **Added** | Core IR ODS with real verifiers (TesseraOps.td v2); Queue dialect QueueOps.cpp; `tessera-opt` fully wired; solver pipeline scaffold; SR pass scaffold; runtime C ABI implemented; tprof consolidated |
+| RubinCPX backend | ✅ **Built** | `tessera.target.cpx` dialect (NVRubinCPX ODS — NVFP4/NVFP6 types, 7 ops, 6 attrs); 4 compiler passes with real implementations; `tessera-cpx-pipeline` + `tessera-cpx-context-pipeline` named pipelines; `tessera-cpx-opt` driver; wired into main build via `TESSERA_BUILD_RUBINCPX_BACKEND` option |
 | Phase 4 | 🔲 **Next** | Distributed training: Cyclic distribution, NCCL/RCCL adapters, CollectiveInsertionPass, PipelineStageInsertionPass, TPU target + quantized dot, DistributedPlan, PipelinePlan, MoE helpers |
 | Phase 5 | 🔲 Future | Implement solver pass bodies (11 stubs), SR pass bodies (4 stubs), linalg solver bodies, Autotuner v2 (Bayesian/Optuna), checkpoint decorator |
 | Phase 6 | 🔲 Future | Runtime Python wrapper, CUDA/HIP backends, ROCm MFMA coverage, benchmark runners, diagnostics, shape inference pass |
@@ -1303,4 +1312,4 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 
 ---
 
-*Last updated: April 2026 — Phases 1–3 complete (252 tests green). Cross-phase infra added (Core IR ODS, tessera-opt, solver scaffold, runtime C ABI, profiler). Phase 4 is next: Cyclic distribution, NCCL/RCCL, CollectiveInsertionPass, PipelineStageInsertionPass, TPU quantized dot, DistributedPlan, PipelinePlan, MoE helpers. Phases 5–6 are solver body implementations, Autotuner v2, runtime wrappers, and benchmarks.*
+*Last updated: April 2026 — Phases 1–3 complete (252 tests green). Cross-phase infra added (Core IR ODS, tessera-opt, solver scaffold, runtime C ABI, profiler). RubinCPX backend built out: `tessera.target.cpx` dialect (ODS-generated, NVFP4/NVFP6, 7 ops), 4 passes (FuseVideoIngest, PartitionLongContext, NVFP4Vectorize, LowerKVTransport) all implemented, `tessera-cpx-opt` driver wired, `TESSERA_BUILD_RUBINCPX_BACKEND` CMake option added. Phase 4 is next: Cyclic distribution, NCCL/RCCL, CollectiveInsertionPass, PipelineStageInsertionPass, TPU quantized dot, DistributedPlan, PipelinePlan, MoE helpers. Phases 5–6 are solver body implementations, Autotuner v2, runtime wrappers, and benchmarks.*

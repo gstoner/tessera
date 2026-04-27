@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.20)
 project(Tessera
     VERSION 0.1.0
     DESCRIPTION "Next-Generation Deep Learning Programming Model"
-    LANGUAGES CXX CUDA
+    LANGUAGES CXX
 )
 
 # Single authoritative version variable — referenced by all sub-components
@@ -20,8 +20,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(TESSERA_BUILD_TESTS    "Build Tessera tests"     ON)
 option(TESSERA_BUILD_EXAMPLES "Build Tessera examples"  ON)
 option(TESSERA_BUILD_PYTHON   "Build Python bindings"   ON)
-option(TESSERA_ENABLE_CUDA    "Enable CUDA support"     ON)
+option(TESSERA_CPU_ONLY       "Disable GPU backends"     OFF)
+option(TESSERA_ENABLE_CUDA    "Enable CUDA support"     OFF)
 option(TESSERA_ENABLE_HIP     "Enable ROCm/HIP support" OFF)
+
+if(TESSERA_CPU_ONLY)
+    set(TESSERA_ENABLE_CUDA OFF CACHE BOOL "Enable CUDA support" FORCE)
+    set(TESSERA_ENABLE_HIP OFF CACHE BOOL "Enable ROCm/HIP support" FORCE)
+endif()
 
 # --------------------------------------------------------------------------
 # LLVM / MLIR
@@ -42,6 +48,9 @@ include(HandleLLVMOptions)
 # --------------------------------------------------------------------------
 if(TESSERA_ENABLE_CUDA)
     enable_language(CUDA)
+    if(DEFINED CUDA_TOOLKIT_ROOT_DIR AND NOT DEFINED CUDAToolkit_ROOT)
+        set(CUDAToolkit_ROOT "${CUDA_TOOLKIT_ROOT_DIR}" CACHE PATH "CUDA Toolkit root")
+    endif()
     find_package(CUDAToolkit REQUIRED)
     set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90")
 endif()
@@ -55,8 +64,8 @@ endif()
 # --------------------------------------------------------------------------
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/mlir/include)
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/src/mlir/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/compiler/mlir/include)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/src/compiler/mlir/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/include)
 
 add_definitions(${LLVM_DEFINITIONS})
@@ -95,6 +104,7 @@ message(STATUS "----------------------------------------------------")
 message(STATUS "Tessera ${TESSERA_VERSION} build configuration")
 message(STATUS "  LLVM/MLIR version : ${LLVM_PACKAGE_VERSION}")
 message(STATUS "  CUDA support      : ${TESSERA_ENABLE_CUDA}")
+message(STATUS "  CPU only          : ${TESSERA_CPU_ONLY}")
 message(STATUS "  HIP  support      : ${TESSERA_ENABLE_HIP}")
 message(STATUS "  Build tests       : ${TESSERA_BUILD_TESTS}")
 message(STATUS "  Build examples    : ${TESSERA_BUILD_EXAMPLES}")

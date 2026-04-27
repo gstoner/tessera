@@ -1,9 +1,9 @@
 # Tessera Project Structure
 
 This document reflects the canonical layout after the April 2026 reorganization.
-All active directory names use underscores (no spaces). Each component has a
-single authoritative version; superseded/experimental copies live under
-`src/archive/` when retained for local reference.
+Canonical production component names use underscores where practical. Some
+legacy example snapshots still keep their original names for reference; new
+active work should land in the canonical folders listed here.
 
 ---
 
@@ -16,7 +16,7 @@ tessera/
 ├── CONTRIBUTING.md                  # Contribution guidelines
 ├── CMakeLists.txt                   # Top-level build entry point
 ├── pyproject.toml                   # Python package metadata
-├── requirements.txt                 # Python runtime dependencies
+├── requirements.txt                 # Python runtime + development dependencies
 ├── .gitignore
 ├── PROJECT_STRUCTURE.md             # This file
 │
@@ -31,32 +31,46 @@ tessera/
 ├── python/                          # Python frontend package
 │   └── tessera/
 │       ├── core/                    # Tensor, Module, fundamental abstractions
+│       ├── compiler/                # JIT, constraints, effects, Graph IR, GPU target helpers
+│       ├── distributed/             # Mesh, shard, domain, launch, region APIs
 │       ├── nn/                      # Neural network layers and ops
+│       ├── testing/                 # Mock collectives and Python test helpers
 │       └── ...
 │
 ├── tests/                           # Test suite
+│   ├── phase1/                      # Python frontend, constraints, effects, Graph IR
+│   ├── phase2/                      # Lowering-chain Python tests
+│   ├── phase3/                      # GPU target and FlashAttention lowering tests
 │   ├── kernel_tests/                # System-level kernel + roofline tests
 │   └── ...
 │
 ├── docs/                            # All documentation
 │   ├── architecture/                # System design docs (incl. Target IR doc)
 │   ├── api/                         # API reference
-│   ├── build/                       # CMake integration snippets & notes
+│   ├── operations/                  # Canonical operation catalog
+│   ├── programming_guide/           # User-facing programming guide
+│   ├── spec/                        # IR, ABI, language, and compiler specs
 │   └── tutorials/                   # Step-by-step guides (Flash Attention, etc.)
 │
 ├── examples/                        # Runnable usage examples
-│   ├── basic/
+│   ├── getting_started/
+│   ├── integration/
+│   ├── optimization/
 │   └── advanced/
 │       └── power_retention/         # PowerAttention port (HIP, WGMMA, autotune)
 │
 ├── benchmarks/                      # Performance benchmarks
 │
 ├── tools/                           # Developer tooling
-│   ├── profiler/                    # Profiler scripts (tprof_view.py, peaks_sample.yaml)
-│   └── ...
+│   ├── profiler/                    # Canonical tprof profiler runtime, CLI, reports
+│   ├── roofline_tools/              # Roofline ingestion/report helpers
+│   ├── tessera-opt/                 # MLIR opt-style driver
+│   ├── tessera-translate/           # Translation tools placeholder
+│   └── CLI/                         # CLI starter snapshots
 │
 ├── scripts/                         # Build & CI utility scripts
 ├── cmake/                           # CMake find-modules and helpers
+├── research/                        # Experimental research prototypes outside production build
 │
 └── src/archive/                     # Superseded / pre-production work (not built)
     ├── PDDL_Instruct/               # PDDL-based instruction synthesis experiments
@@ -69,9 +83,9 @@ tessera/
 
 ## Component Versioning Table
 
-The table below records which version was promoted to canonical `src/` and why.
-Superseded versions remain on disk as untracked local files but are removed from
-the git index.
+The table below records notable promotions into canonical `src/` and why.
+Superseded versions may remain under `src/archive/`, `docs/archive/`, or legacy
+example snapshot folders when they are kept for reference.
 
 | Canonical path               | Promoted from                                    | Rationale |
 |------------------------------|--------------------------------------------------|-----------|
@@ -89,8 +103,8 @@ the git index.
 | `src/Operators`              | new                                              | Placeholder for operator library work (Phase 4+) |
 | `tests/kernel_tests`         | `tests/tessera_kernels_scaffold`                 | Original retained: has system tests, roofline script, profile_ncu.sh |
 | `examples/advanced/power_retention` | `examples/advanced/Power Retention/…/v0_9` | v0_9: HIP kernel, WGMMA, autotune, nlohmann_json integration |
-| `src/archive/PDDL_Instruct`  | `src/PDDL_Instruct/pddl_instruct_tessera_v1`     | Experimental — archived out of the active `src/` surface |
-| `src/archive/Sandbox_Toy_compilers` | `src/Sandbox_Toy_compilers/…`            | Experimental sample compilers — archived out of the active `src/` surface |
+| `research/pddl_instruct`     | `src/PDDL_Instruct/pddl_instruct_tessera_v1`     | Experimental research prototype moved out of the active `src/` surface |
+| `research/sandbox_compilers` | `src/Sandbox_Toy_compilers/…`                    | Experimental sample compilers moved out of the active `src/` surface |
 | `src/archive/tpp_old`        | `src/tpp_old`                                    | Superseded by canonical `src/solvers/tpp` |
 | `src/archive/tile_opt_fa4_old` | `src/tile_opt_fa4_old`                         | Superseded by canonical `src/compiler/tile_opt_fa4` |
 | `src/compiler/codegen/Tessera_TPU_Backend` | `src/compiler/codegen/Tessera_TPU_Backend_Starter_Advanced` | Advanced TPU backend promoted to single canonical TPU backend folder |
@@ -98,7 +112,6 @@ the git index.
 | `docs/archive/pre_canonical/api` | `docs/api/Tessera_API_Vol*.md`               | Pre-canonical API volumes archived behind canonical API docs |
 | `docs/archive/pre_canonical/model` | `docs/Tessera_Deep_Learning_Programming_Model.md` | Pre-canonical model guide archived due old API examples |
 | `docs/architecture/`         | `src/compiler/tessera_target_ir_doc3b.md`        | Architecture doc migrated out of src/ |
-| `docs/build/`                | `src/README_SRC_INTEGRATION.md` + `CMakeLists.add_this_snippet.txt` | Build notes migrated out of src/ |
 | `docs/tutorials/Flash_Attention_in_Tessera.md` | `docs/tutorials/Flash Attention_in_Tessera.md` | Space in filename removed |
 
 ---
@@ -106,9 +119,12 @@ the git index.
 ## Archive Policy
 
 Files under `src/archive/` and `docs/archive/` are **not included in the
-production build or active documentation lint**. They exist for reference, future
-graduation to an active component, or deletion after review. New production work
-should land in the canonical component folder, not beside an archived copy.
+production build or active documentation lint**. Research prototypes under
+`research/` and legacy example snapshots under `examples/advanced/` are likewise
+outside the production build unless explicitly wired by CMake. They exist for
+reference, future graduation to an active component, or deletion after review.
+New production work should land in the canonical component folder, not beside an
+archived copy.
 
 ---
 

@@ -3,10 +3,18 @@
 #include <mutex>
 #include <chrono>
 #include <thread>
+#include <utility>
 
 #if defined(_WIN32)
 #include <windows.h>
 static uint64_t get_tid() { return static_cast<uint64_t>(::GetCurrentThreadId()); }
+#elif defined(__APPLE__)
+#include <pthread.h>
+static uint64_t get_tid() {
+  uint64_t tid = 0;
+  pthread_threadid_np(nullptr, &tid);
+  return tid;
+}
 #else
 #include <unistd.h>
 #include <sys/syscall.h>
@@ -45,9 +53,9 @@ void disable() {
 
 void push(const char* name) {
   if (!g_enabled.load(std::memory_order_acquire)) return;
-  event_t e{event_t::RANGE_B, name, now_ns(), this_thread_id(), 0.0};
+  event_t e{event_t::RANGE_B, name ? name : "range", now_ns(), this_thread_id(), 0.0};
   std::lock_guard<std::mutex> lk(g_mu);
-  g_events.emplace_back(e);
+  g_events.emplace_back(std::move(e));
   nvtx_push(name);
 }
 
@@ -55,22 +63,22 @@ void pop() {
   if (!g_enabled.load(std::memory_order_acquire)) return;
   event_t e{event_t::RANGE_E, "", now_ns(), this_thread_id(), 0.0};
   std::lock_guard<std::mutex> lk(g_mu);
-  g_events.emplace_back(e);
+  g_events.emplace_back(std::move(e));
   nvtx_pop();
 }
 
 void marker(const char* name) {
   if (!g_enabled.load(std::memory_order_acquire)) return;
-  event_t e{event_t::MARKER, name, now_ns(), this_thread_id(), 0.0};
+  event_t e{event_t::MARKER, name ? name : "marker", now_ns(), this_thread_id(), 0.0};
   std::lock_guard<std::mutex> lk(g_mu);
-  g_events.emplace_back(e);
+  g_events.emplace_back(std::move(e));
 }
 
 void counter_add(const char* name, double v) {
   if (!g_enabled.load(std::memory_order_acquire)) return;
-  event_t e{event_t::COUNTER, name, now_ns(), this_thread_id(), v};
+  event_t e{event_t::COUNTER, name ? name : "counter", now_ns(), this_thread_id(), v};
   std::lock_guard<std::mutex> lk(g_mu);
-  g_events.emplace_back(e);
+  g_events.emplace_back(std::move(e));
 }
 
 // Forward decls

@@ -14,7 +14,7 @@ struct config_t {
 struct event_t {
   enum type_t { RANGE_B, RANGE_E, MARKER, COUNTER };
   type_t type;
-  const char* name;
+  std::string name;
   uint64_t ts_ns;
   uint64_t tid;
   double value;
@@ -28,7 +28,7 @@ void marker(const char* name);
 void counter_add(const char* name, double v);
 
 bool export_chrome(const std::string& path);
-bool export_perfetto(const std::string& path); // minimal JSON compatible with Perfetto UI
+bool export_perfetto(const std::string& path); // Trace Event JSON, Perfetto-compatible
 
 struct range_t {
   explicit range_t(const char* name): name_(name) { push(name_); }

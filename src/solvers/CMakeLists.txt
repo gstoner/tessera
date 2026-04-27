@@ -18,6 +18,10 @@ add_subdirectory(core/passes)      # tessera_solvers_passes target
 add_subdirectory(scaling_resilience)
 add_subdirectory(tpp)
 add_subdirectory(spectral)
-# linalg/ remains opt-in until its scaffold APIs align with the canonical build.
+add_subdirectory(linalg)               # parent linalg solver stack
 
-add_custom_target(tessera_solvers DEPENDS tessera_solvers_dialects tessera_solvers_passes)
+add_custom_target(tessera_solvers DEPENDS
+  tessera_solvers_dialects
+  tessera_solvers_passes
+  tessera_linalg_solver_passes
+)

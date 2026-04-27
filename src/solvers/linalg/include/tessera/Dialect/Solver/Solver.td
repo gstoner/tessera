@@ -2,6 +2,8 @@
 //===- Solver.td - Tessera Solver Dialect ----------------------*- tablegen -*-===//
 // Minimal ODS to define solver ops and precision policy attributes.
 include "mlir/IR/OpBase.td"
+include "mlir/IR/AttrTypeBase.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def Tessera_Solver_Dialect : Dialect {
   let name = "tessera.solver";

@@ -1,9 +1,12 @@
 //===- SolversPasses.h -----------------------------------------------*- C++ -*-===//
-// Minimal pass declarations & pipeline alias for Tessera solvers.
-// Integrate with tessera-opt by loading the plugin or linking the lib.
+// Pass declarations and pipeline aliases for Tessera solver components.
 //===-------------------------------------------------------------------------===//
 #pragma once
 #include "mlir/Pass/Pass.h"
+
+namespace mlir {
+class OpPassManager;
+} // namespace mlir
 
 namespace tessera {
 namespace passes {
@@ -24,6 +27,8 @@ std::unique_ptr<mlir::Pass> createParamBatchPlanPass();
 std::unique_ptr<mlir::Pass> createContinuationGuardPass();
 std::unique_ptr<mlir::Pass> createImplicitLowerPass();
 
+void buildTesseraSolverCorePipeline(mlir::OpPassManager &pm);
+void registerTesseraSolverPasses();
 void registerTesseraSolversPipeline();
 
 } // namespace passes

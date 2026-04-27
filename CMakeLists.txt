@@ -74,6 +74,21 @@ add_definitions(${LLVM_DEFINITIONS})
 # Source tree (dialects, runtime, compiler passes)
 # --------------------------------------------------------------------------
 add_subdirectory(src)
+add_subdirectory(tools/tessera-opt)
+
+add_custom_target(TesseraCompilerFoundation
+    DEPENDS
+        TesseraIRTableGen
+        TesseraAttnTableGen
+        TesseraQueueTableGen
+        TesseraSolversTableGen
+        TesseraLinalgSolverTableGen
+        TesseraIR
+        TesseraPasses
+        tessera_solvers_passes
+        tessera_linalg_solver_passes
+        tessera-opt
+)
 
 # --------------------------------------------------------------------------
 # Tests

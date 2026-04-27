@@ -1,19 +1,22 @@
 set(LLVM_LINK_COMPONENTS Support)
 
-# ODS tablegen for dialects
-set(TD_FILES
-  tessera_sparse.td
-  tessera_solver.td
-  tessera_rng.td
-)
+set(LLVM_TARGET_DEFINITIONS tessera_sparse.td)
+mlir_tablegen(TesseraSparseOps.h.inc -gen-op-decls)
+mlir_tablegen(TesseraSparseOps.cpp.inc -gen-op-defs)
+mlir_tablegen(TesseraSparseDialect.h.inc -gen-dialect-decls)
+mlir_tablegen(TesseraSparseDialect.cpp.inc -gen-dialect-defs)
 
-mlir_tablegen(TesseraSolversDialectInterfaces.h.inc -gen-op-interface-decls)
-mlir_tablegen(TesseraSolversDialectInterfaces.cpp.inc -gen-op-interface-defs)
+set(LLVM_TARGET_DEFINITIONS tessera_solver.td)
+mlir_tablegen(TesseraSolverOps.h.inc -gen-op-decls)
+mlir_tablegen(TesseraSolverOps.cpp.inc -gen-op-defs)
+mlir_tablegen(TesseraSolverDialect.h.inc -gen-dialect-decls)
+mlir_tablegen(TesseraSolverDialect.cpp.inc -gen-dialect-defs)
 
-foreach(td ${TD_FILES})
-  mlir_tablegen(${td}.inc -gen-op-decls -I ${CMAKE_CURRENT_SOURCE_DIR})
-  mlir_tablegen(${td}.cpp.inc -gen-op-defs  -I ${CMAKE_CURRENT_SOURCE_DIR})
-endforeach()
+set(LLVM_TARGET_DEFINITIONS tessera_rng.td)
+mlir_tablegen(TesseraRNGOps.h.inc -gen-op-decls)
+mlir_tablegen(TesseraRNGOps.cpp.inc -gen-op-defs)
+mlir_tablegen(TesseraRNGDialect.h.inc -gen-dialect-decls)
+mlir_tablegen(TesseraRNGDialect.cpp.inc -gen-dialect-defs)
 
 add_public_tablegen_target(TesseraSolversTableGen)
 

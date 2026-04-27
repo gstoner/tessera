@@ -26,7 +26,8 @@ add_library(TesseraPasses
 target_include_directories(TesseraPasses
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../compiler/ir
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../compiler/ir/include
+    ${CMAKE_CURRENT_BINARY_DIR}/../../compiler/ir
     ${CMAKE_CURRENT_SOURCE_DIR}/../../compiler/tile_opt_fa4/include
 )
 

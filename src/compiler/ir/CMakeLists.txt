@@ -1,12 +1,16 @@
 
 set(LLVM_LINK_COMPONENTS Support)
 
-set(LLVM_TABLEGEN_EXE ${LLVM_TABLEGEN_EXE} CACHE FILEPATH "llvm-tblgen")
-set(MLIR_TABLEGEN_EXE ${MLIR_TABLEGEN_EXE} CACHE FILEPATH "mlir-tblgen")
-set(MLIR_TABLEGEN_ENABLED 1)
+set(LLVM_TARGET_DEFINITIONS TesseraOps.td)
 
-add_mlir_dialect(TesseraIR tessera)
-add_mlir_doc(TesseraIR TesseraIR Dialects/ -gen-dialect-doc)
+mlir_tablegen(TesseraOps.h.inc -gen-op-decls)
+mlir_tablegen(TesseraOps.cpp.inc -gen-op-defs)
+mlir_tablegen(TesseraOpsDialect.h.inc -gen-dialect-decls)
+mlir_tablegen(TesseraOpsDialect.cpp.inc -gen-dialect-defs)
+mlir_tablegen(TesseraOpsEnums.h.inc -gen-enum-decls)
+mlir_tablegen(TesseraOpsEnums.cpp.inc -gen-enum-defs)
+add_public_tablegen_target(TesseraIRTableGen)
+add_mlir_doc(TesseraOps TesseraIR Dialects/ -gen-dialect-doc)
 
 add_mlir_dialect_library(TesseraIR
   TesseraDialect.cpp
@@ -14,13 +18,23 @@ add_mlir_dialect_library(TesseraIR
   TesseraTiling.cpp
 
   DEPENDS
-    MLIRTblGen
-    MLIRIR
+    TesseraIRTableGen
 
   LINK_LIBS PUBLIC
     MLIRIR
     MLIRTensorDialect
     MLIRArithDialect
-    MLIRIR
+    MLIRInferTypeOpInterface
+    MLIRSideEffectInterfaces
+    MLIRTilingInterface
 )
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../pdll ${CMAKE_CURRENT_BINARY_DIR}/pdll)
+
+target_include_directories(TesseraIR
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
+
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../pdll/CMakeLists.txt)
+  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../pdll ${CMAKE_CURRENT_BINARY_DIR}/pdll)
+endif()

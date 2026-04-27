@@ -42,9 +42,14 @@ set(QUEUE_TD ${CMAKE_CURRENT_SOURCE_DIR}/include/tessera/Dialect/Queue/Queue.td)
 
 mlir_tablegen(QueueOps.h.inc   -gen-op-decls -I ${CMAKE_CURRENT_SOURCE_DIR}/include DEPENDS ${QUEUE_TD})
 mlir_tablegen(QueueOps.cpp.inc -gen-op-defs  -I ${CMAKE_CURRENT_SOURCE_DIR}/include DEPENDS ${QUEUE_TD})
+mlir_tablegen(QueueTypes.h.inc   -gen-typedef-decls -typedefs-dialect=tessera.queue -I ${CMAKE_CURRENT_SOURCE_DIR}/include DEPENDS ${QUEUE_TD})
+mlir_tablegen(QueueTypes.cpp.inc -gen-typedef-defs  -typedefs-dialect=tessera.queue -I ${CMAKE_CURRENT_SOURCE_DIR}/include DEPENDS ${QUEUE_TD})
+mlir_tablegen(QueueDialect.h.inc   -gen-dialect-decls -I ${CMAKE_CURRENT_SOURCE_DIR}/include DEPENDS ${QUEUE_TD})
+mlir_tablegen(QueueDialect.cpp.inc -gen-dialect-defs  -I ${CMAKE_CURRENT_SOURCE_DIR}/include DEPENDS ${QUEUE_TD})
 add_public_tablegen_target(TesseraQueueTableGen)
 
 add_mlir_library(TesseraQueueDialect
+    lib/Dialect/Queue/QueueOps.cpp
     lib/Dialect/Queue/QueueVerifiers.cpp
 
     DEPENDS

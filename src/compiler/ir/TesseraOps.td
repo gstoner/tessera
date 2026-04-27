@@ -6,6 +6,17 @@ include "mlir/Interfaces/TilingInterface.td"
 include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/BuiltinAttributes.td"
 
+def Tessera_Dialect : Dialect {
+  let name = "tessera";
+  let cppNamespace = "::tessera";
+  let summary = "Tessera Graph IR dialect";
+  let description = [{
+    Tessera Graph IR is the top layer of the canonical Tessera compiler IR
+    stack. It models high-level tensor operations before Schedule IR, Tile IR,
+    and Target IR lowering.
+  }];
+}
+
 def Tessera_EpilogueKind : I32EnumAttr<
   "EpilogueKind",
   "Which post-op is fused",

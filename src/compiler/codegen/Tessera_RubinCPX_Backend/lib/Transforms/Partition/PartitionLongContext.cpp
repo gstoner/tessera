@@ -1,10 +1,12 @@
 
 #include "tessera/Transforms/Passes.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Pass/PassRegistry.h"
 
 using namespace mlir;
 
@@ -29,16 +31,17 @@ struct PartitionLongContextPass
         // For the skeleton we don't type-check strictly.
         auto policyAttr = b.getStringAttr("pcie+cx9");
         auto chunkBytes = b.getI64IntegerAttr(32*1024*1024);
-        auto exportOp = b.create<Operation>(loc, OperationName("tessera.target.cpx.kv.export", m.getContext()),
-                         ValueRange{anyOut}, NamedAttributeList{
-                           NamedAttribute(b.getStringAttr("policy"), policyAttr),
-                           NamedAttribute(b.getStringAttr("chunk_bytes"), chunkBytes)
-                         }, /*regions=*/0);
-        (void)exportOp;
+        OperationState state(loc, "tessera.target.cpx.kv.export");
+        state.addOperands(anyOut);
+        state.addAttribute("policy", policyAttr);
+        state.addAttribute("chunk_bytes", chunkBytes);
+        (void)b.create(state);
       }
     });
   }
 };
+
+PassRegistration<PartitionLongContextPass> partitionLongContextPass;
 } // namespace
 
 namespace tessera {

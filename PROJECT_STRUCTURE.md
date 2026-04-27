@@ -94,7 +94,7 @@ example snapshot folders when they are kept for reference.
 | `src/compiler/programming_model` | `src/tessera_pm_v1_1_memory_parallel`        | Programming-model IR grouped under compiler infrastructure |
 | `src/compiler/tessera_neighbors` | `src/tessera-neighbors`                      | Neighbor topology/halo lowering grouped under compiler infrastructure |
 | `src/compiler/tile_opt_fa4`  | `src/Tile_Optimization_FA4 /…/v1_3`              | FA4 tile optimization grouped under compiler infrastructure |
-| `src/compiler/RubinCPX_Backend` | `src/Tessera_RubinCPX_Compiler`               | NV Rubin CPX target renamed and grouped under compiler infrastructure |
+| `src/compiler/codegen/Tessera_RubinCPX_Backend` | `src/Tessera_RubinCPX_Compiler`     | NV Rubin CPX target grouped with compiler codegen backends |
 | `src/solvers/core`           | `src/src/solvers`                                | Sparse/RNG/nonlinear solver core grouped below solvers |
 | `src/solvers/linalg`         | `src/tessera_linalg_solvers`                    | Linear algebra solver scaffold grouped under the solver stack |
 | `src/solvers/scaling_resilience` | `src/tessera_scaling_resilience_v1_1`        | SR dialect and passes grouped below solvers |

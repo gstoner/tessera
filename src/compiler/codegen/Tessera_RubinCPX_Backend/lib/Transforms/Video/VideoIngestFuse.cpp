@@ -1,6 +1,8 @@
 
 #include "tessera/Transforms/Passes.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassRegistry.h"
 #include "mlir/IR/Builders.h"
 
 using namespace mlir;
@@ -16,6 +18,8 @@ struct FuseVideoIngestPass
     // TODO: Pattern: cluster matching video.decode -> ... -> attn.prefill_fused and outline a fused region.
   }
 };
+
+PassRegistration<FuseVideoIngestPass> fuseVideoIngestPass;
 }
 
 namespace tessera {

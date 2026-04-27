@@ -1,6 +1,8 @@
 
 #include "tessera/Transforms/Passes.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassRegistry.h"
 #include "mlir/IR/Builders.h"
 
 using namespace mlir;
@@ -16,6 +18,8 @@ struct NVFP4VectorizePass
     // TODO: Populate patterns against matmul/attn ops; map to packed NVFP4 types.
   }
 };
+
+PassRegistration<NVFP4VectorizePass> nvfp4VectorizePass;
 }
 
 namespace tessera {

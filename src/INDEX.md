@@ -61,27 +61,6 @@ All compiler subsystems consolidated here. Sub-tree:
 
 ```
 compiler/
-├── RubinCPX_Backend/          ← NV Rubin CPX target (renamed from Tessera_RubinCPX_Compiler)
-│   ├── cmake
-│   ├── docs
-│   ├── include/tessera/
-│   │   ├── Dialect/TargetIR
-│   │   ├── Target/NVRubinCPX
-│   │   └── Transforms
-│   ├── lib/
-│   │   ├── Target/NVRubinCPX
-│   │   └── Transforms/
-│   │       ├── KVTransport
-│   │       ├── Partition
-│   │       ├── Vectorize
-│   │       └── Video
-│   ├── test/
-│   │   ├── kv
-│   │   ├── partition
-│   │   ├── vec
-│   │   └── video
-│   └── tools/tessera-cpx-opt
-│
 ├── autotuning/tessera/tools/autotune/
 │   ├── configs
 │   ├── docs
@@ -114,6 +93,13 @@ compiler/
 │   │   ├── runtime/hip/examples
 │   │   ├── test/rocm
 │   │   └── tools
+│   ├── Tessera_RubinCPX_Backend/
+│   │   ├── cmake
+│   │   ├── docs
+│   │   ├── include/tessera/ (Dialect/TargetIR, Target/NVRubinCPX, Transforms)
+│   │   ├── lib/ (Target/NVRubinCPX, Transforms)
+│   │   ├── test/ (kv, partition, vec, video)
+│   │   └── tools/tessera-cpx-opt
 │   ├── Tessera_TPU_Backend/
 │   │   ├── docs
 │   │   ├── examples
@@ -260,7 +246,7 @@ Superseded material — retained for reference only. Do not add build targets he
 |--------|--------------|
 | `archive/PDDL_Instruct/` | n/a — research scratch |
 | `archive/Sandbox_Toy_compilers/` | Full compiler stack |
-| `archive/Tessera_RubinCPX_Compiler_v1_1/` | `compiler/RubinCPX_Backend/` |
+| `archive/Tessera_RubinCPX_Compiler_v1_1/` | `compiler/codegen/Tessera_RubinCPX_Backend/` |
 | `archive/Tessera_TPU_Backend_Starter/` | `compiler/codegen/Tessera_TPU_Backend/` |
 | `archive/codegen_prototypes/` | Promoted to proper modules or discarded |
 | `archive/tessera_scaling_resilience_v1/` | `solvers/scaling_resilience/` |

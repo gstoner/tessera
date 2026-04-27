@@ -1,6 +1,7 @@
 
 #pragma once
 #include "mlir/Pass/Pass.h"
+#include <memory>
 
 namespace tessera {
 std::unique_ptr<mlir::Pass> createPartitionLongContextPass();

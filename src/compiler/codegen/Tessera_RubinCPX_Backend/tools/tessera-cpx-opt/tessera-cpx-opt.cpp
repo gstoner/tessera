@@ -1,6 +1,7 @@
 
 #include "tessera/Transforms/Passes.h"
 #include "mlir/IR/DialectRegistry.h"
+#include "mlir/InitAllDialects.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 
@@ -8,6 +9,7 @@ using namespace mlir;
 
 int main(int argc, char **argv) {
   DialectRegistry registry;
+  registerAllDialects(registry);
   // TODO: registry.insert<tessera::target::NVRubinCPXDialect>();
   tessera::registerCPXPassPipelines();
 

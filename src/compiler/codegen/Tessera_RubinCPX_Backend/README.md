@@ -1,5 +1,5 @@
 
-# Tessera Rubin CPX Compiler Support (v0)
+# Tessera Rubin CPX Backend (v0)
 
 This drop includes:
 - ODS for CPX Target‑IR (types, attrs, ops).
@@ -16,6 +16,7 @@ cmake --build build
 ## Run tests
 ```bash
 cd build && ctest --output-on-failure
+cmake --build . --target check-tessera-rubincpx
 ```
 
 ## Pipelines (examples)

@@ -1,6 +1,8 @@
 
 #include "tessera/Transforms/Passes.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassRegistry.h"
 #include "mlir/IR/Builders.h"
 
 using namespace mlir;
@@ -18,6 +20,8 @@ struct LowerKVTransportPass
     // Leave as no-op markers for now.
   }
 };
+
+PassRegistration<LowerKVTransportPass> lowerKVTransportPass;
 }
 
 namespace tessera {

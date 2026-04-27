@@ -154,22 +154,50 @@ class Cyclic(Distribution):
     """
     Cyclic (round-robin) partition over a mesh axis.
 
-    Distributes elements cyclically rather than in contiguous blocks.
-    Useful for load-balanced workloads (e.g., MoE expert assignment).
+    Distributes elements cyclically: element i goes to rank (i % num_ranks).
+    This is the primary distribution strategy for MoE expert assignment because
+    it naturally load-balances heterogeneous token counts across experts.
 
-    Phase 1 scope: defined but make_shard_spec raises NotImplementedError.
-    Will be wired in Phase 2 when the MoE A2A backend is built.
+    Concretely: for a tensor of shape (N, D) partitioned cyclically over a
+    mesh axis of size R, rank k owns rows {k, k+R, k+2R, …}.
+
+    At runtime, DistributedArray.parts(axis) returns per-rank strided slices.
+
+    Args:
+        mesh_axes: tuple of mesh axis names. The i-th axis cyclically partitions
+                   dimension i. Length must be <= domain.rank.
+
+    Example:
+        dist = tessera.dist.Cyclic(mesh_axes=("dp",))
+        spec = dist.make_shard_spec(Rect((8, 256)))
+        # → ShardSpec(cyclic, dim0→dp)
+        # rank 0 gets rows 0, 4 (if dp=4)
+        # rank 1 gets rows 1, 5, etc.
     """
     mesh_axes: Tuple[str, ...]
 
     def __init__(self, mesh_axes: Tuple[str, ...]) -> None:
+        if not mesh_axes:
+            raise ValueError("Cyclic distribution requires at least one mesh axis")
+        if isinstance(mesh_axes, str):
+            raise TypeError(
+                "mesh_axes must be a tuple of strings, not a single string. "
+                f"Did you mean Cyclic(mesh_axes=({mesh_axes!r},)) ?"
+            )
         object.__setattr__(self, "mesh_axes", tuple(mesh_axes))
 
     def make_shard_spec(self, domain: Domain) -> ShardSpec:
-        raise NotImplementedError(
-            "Cyclic distribution sharding is a Phase 2 feature (MoE A2A). "
-            "Use Block for Phase 1."
-        )
+        if len(self.mesh_axes) > domain.rank:
+            raise ValueError(
+                f"Cyclic distribution has {len(self.mesh_axes)} axes but "
+                f"domain has only {domain.rank} dimensions"
+            )
+        partition = tuple(range(len(self.mesh_axes)))
+        return ShardSpec.cyclic_shard(partition=partition, mesh_axes=self.mesh_axes)
+
+    def to_ir_attr(self) -> str:
+        axes = ", ".join(f'"{a}"' for a in self.mesh_axes)
+        return f'{{tessera.dist = {{kind = "cyclic", axes = [{axes}]}}}}'
 
     def __repr__(self) -> str:
         return f"Cyclic(mesh_axes={self.mesh_axes})"

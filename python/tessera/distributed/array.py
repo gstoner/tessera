@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional, List, Tuple, Any
 import numpy as np
 
-from .domain import Domain, Rect, Distribution, Block, Replicated
+from .domain import Domain, Rect, Distribution, Block, Cyclic, Replicated
 from .shard import ShardSpec, MeshSpec
 
 if TYPE_CHECKING:
@@ -162,28 +162,47 @@ class DistributedArray:
         axis_idx_in_spec = self.shard_spec.mesh_axes.index(axis)
         dim_idx = self.shard_spec.partition[axis_idx_in_spec]
 
-        # Phase 1: split the numpy array along that dimension
         dim_size = self.shape[dim_idx]
-        # Infer number of parts from the annotation (default 1 per rank in mock)
-        # In Phase 1, we split evenly; Phase 3 will use mesh.axis_size(axis)
         num_parts = getattr(self, "_mesh_size_cache", {}).get(axis, 1)
 
-        if dim_size % num_parts != 0:
-            raise ValueError(
-                f"Cannot evenly split dimension {dim_idx} of size {dim_size} "
-                f"into {num_parts} parts for axis {axis!r}"
-            )
-
-        subs = np.array_split(self._data, num_parts, axis=dim_idx)
-        result = []
-        for sub in subs:
-            result.append(DistributedArray(
-                data=sub,
-                dtype=self.dtype,
-                shard_spec=self.shard_spec,
-                logical_shape=tuple(sub.shape),
-            ))
-        return result
+        if self.shard_spec.cyclic:
+            # ── Cyclic (round-robin) partition ───────────────────────────────
+            # Rank k receives rows: k, k + num_parts, k + 2*num_parts, …
+            # We pad the dimension to the next multiple of num_parts if needed.
+            result = []
+            for rank in range(num_parts):
+                indices = list(range(rank, dim_size, num_parts))
+                if not indices:
+                    # Edge case: more ranks than elements — empty shard
+                    sub_shape = list(self._data.shape)
+                    sub_shape[dim_idx] = 0
+                    sub = np.empty(sub_shape, dtype=self._data.dtype)
+                else:
+                    sub = np.take(self._data, indices, axis=dim_idx)
+                result.append(DistributedArray(
+                    data=sub,
+                    dtype=self.dtype,
+                    shard_spec=self.shard_spec,
+                    logical_shape=tuple(sub.shape),
+                ))
+            return result
+        else:
+            # ── Block (contiguous) partition ─────────────────────────────────
+            if dim_size % num_parts != 0:
+                raise ValueError(
+                    f"Cannot evenly split dimension {dim_idx} of size {dim_size} "
+                    f"into {num_parts} parts for axis {axis!r}"
+                )
+            subs = np.array_split(self._data, num_parts, axis=dim_idx)
+            return [
+                DistributedArray(
+                    data=sub,
+                    dtype=self.dtype,
+                    shard_spec=self.shard_spec,
+                    logical_shape=tuple(sub.shape),
+                )
+                for sub in subs
+            ]
 
     def _bind_mesh(self, mesh: MeshSpec) -> "DistributedArray":
         """

@@ -96,6 +96,7 @@ class ShardSpec:
     partition: Tuple[int, ...]
     mesh_axes: Tuple[str, ...]
     replicated: bool = False
+    cyclic: bool = False       # True → round-robin (Cyclic dist), False → contiguous (Block dist)
 
     def __post_init__(self) -> None:
         if self.replicated:
@@ -114,6 +115,11 @@ class ShardSpec:
     def replicate(cls) -> "ShardSpec":
         """Create a fully-replicated shard spec (no partition)."""
         return cls(partition=(), mesh_axes=(), replicated=True)
+
+    @classmethod
+    def cyclic_shard(cls, partition: Tuple[int, ...], mesh_axes: Tuple[str, ...]) -> "ShardSpec":
+        """Create a cyclic (round-robin) shard spec."""
+        return cls(partition=partition, mesh_axes=mesh_axes, cyclic=True)
 
     def shard_size(self, logical_dim: int, full_size: int, mesh: MeshSpec) -> int:
         """
@@ -138,10 +144,13 @@ class ShardSpec:
             return '{tessera.shard = "replicated"}'
         axes_str = ", ".join(f'"{a}"' for a in self.mesh_axes)
         dims_str = ", ".join(str(d) for d in self.partition)
-        return f"{{tessera.shard = {{axes = [{axes_str}], dims = [{dims_str}]}}}}"
+        kind = "cyclic" if self.cyclic else "block"
+        return (f'{{tessera.shard = {{kind = "{kind}", '
+                f'axes = [{axes_str}], dims = [{dims_str}]}}}}')
 
     def __repr__(self) -> str:
         if self.replicated:
             return "ShardSpec(replicated)"
+        kind = "cyclic" if self.cyclic else "block"
         pairs = ", ".join(f"dim{d}→{ax}" for d, ax in zip(self.partition, self.mesh_axes))
-        return f"ShardSpec({pairs})"
+        return f"ShardSpec({kind}, {pairs})"

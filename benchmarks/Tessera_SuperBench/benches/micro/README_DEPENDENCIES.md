@@ -1,13 +1,4 @@
 
-The C++ microbenchmarks expect the single-header **nlohmann/json** to be available in your include path.
+The C++ microbenchmarks are self-contained C++17 programs and do not require third-party headers.
 
-On Debian/Ubuntu:
-```bash
-sudo apt-get install nlohmann-json3-dev
-```
-
-Or vendored:
-```bash
-wget https://raw.githubusercontent.com/nlohmann/json/develop/single_include/nlohmann/json.hpp -O third_party/json.hpp
-# then add -Ithird_party when building, or place the header system-wide
-```
+NVTX ranges are enabled only when the optional CUDA/NVTX headers are found by CMake.

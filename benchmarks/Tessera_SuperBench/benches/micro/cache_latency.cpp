@@ -6,9 +6,9 @@
 #include <random>
 #include <string>
 #include <iostream>
-#include <nlohmann/json.hpp>\n#ifdef USE_NVTX\n#include <nvToolsExt.h>\n#endif
-
-using json = nlohmann::json;
+#ifdef USE_NVTX
+#include <nvToolsExt.h>
+#endif
 
 int main(int argc, char** argv){
     size_t N = 1<<24;
@@ -25,17 +25,21 @@ int main(int argc, char** argv){
     double best_ns = 1e9;
 
     for (int r=0;r<repeat;r++){
-        #ifdef USE_NVTX\nnvtxRangePushA("bench");\n#endif\n    auto t0 = std::chrono::high_resolution_clock::now();
+#ifdef USE_NVTX
+        nvtxRangePushA("bench");
+#endif
+        auto t0 = std::chrono::high_resolution_clock::now();
         size_t idx = 0;
         for (size_t i=0;i<N;i++) idx = next[idx];
-        auto t1 = std::chrono::high_resolution_clock::now();\n#ifdef USE_NVTX\nnvtxRangePop();\n#endif
+        auto t1 = std::chrono::high_resolution_clock::now();
+#ifdef USE_NVTX
+        nvtxRangePop();
+#endif
         double ns = std::chrono::duration<double, std::nano>(t1-t0).count() / N;
         if (ns < best_ns) best_ns = ns;
         sum += idx;
     }
 
-    json row;
-    row["latency_ns"] = best_ns;
-    std::cout << row.dump() << std::endl;
+    std::cout << "{\"latency_ns\":" << best_ns << "}\n";
     return 0;
 }

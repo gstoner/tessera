@@ -48,6 +48,12 @@ def main():
     except Exception as e:
         print(json.dumps({"ok": False, "skip_reason": f"torch not available: {e}"}))
         return
+    if args.backend == "nccl" and not torch.cuda.is_available():
+        print(json.dumps({"ok": False, "skip_reason": "CUDA not available for NCCL"}))
+        return
+
+    os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
+    os.environ.setdefault("MASTER_PORT", "29500")
 
     ctx = mp.get_context("spawn")
     procs = []
@@ -56,7 +62,12 @@ def main():
         p.start()
         procs.append(p)
     # Collect a single JSON line from rank 0 via stdout — for simplicity run with rank0 in same process:
-    for p in procs: p.join()
+    failed = False
+    for p in procs:
+        p.join()
+        failed = failed or (p.exitcode != 0)
+    if failed:
+        print(json.dumps({"ok": False, "skip_reason": "one or more distributed workers failed"}))
 
 if __name__ == "__main__":
     main()

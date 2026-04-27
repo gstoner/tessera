@@ -7,20 +7,16 @@ option(OPBENCH_WITH_NVTX "Enable NVTX ranges" OFF)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(opbench_common
-  common/timer.h
-  common/nvtx_helpers.h
-  common/device_utils.h
-)
-target_include_directories(opbench_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+add_library(opbench_common INTERFACE)
+target_include_directories(opbench_common INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 if(OPBENCH_WITH_NVTX)
   find_path(NVTX_INCLUDE_DIR nvToolsExt.h)
   find_library(NVTX_LIBRARY nvToolsExt)
   if(NVTX_INCLUDE_DIR AND NVTX_LIBRARY)
-    target_compile_definitions(opbench_common PUBLIC OPBENCH_WITH_NVTX=1)
-    target_include_directories(opbench_common PUBLIC ${NVTX_INCLUDE_DIR})
-    target_link_libraries(opbench_common PUBLIC ${NVTX_LIBRARY})
+    target_compile_definitions(opbench_common INTERFACE OPBENCH_WITH_NVTX=1)
+    target_include_directories(opbench_common INTERFACE ${NVTX_INCLUDE_DIR})
+    target_link_libraries(opbench_common INTERFACE ${NVTX_LIBRARY})
   endif()
 endif()
 

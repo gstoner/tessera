@@ -70,7 +70,9 @@ def main():
 
     backend = pick_backend(dev)
 
-    os.makedirs(os.path.dirname(args.outcsv), exist_ok=True)
+    outdir = os.path.dirname(args.outcsv)
+    if outdir:
+        os.makedirs(outdir, exist_ok=True)
     need_header = not os.path.exists(args.outcsv)
 
     sizes = parse_sizes(args.sizes)
@@ -112,17 +114,14 @@ def main():
                     n_elems = args.batch * N
 
                 # Allocate inputs
+                shape = (args.batch, H, W) if isinstance(size, tuple) else (args.batch, N)
                 if backend == "torch":
-                    if args.dtype.startswith("complex"):
-                        x = torch.randn((args.batch,)*(2 if isinstance(size, tuple) else 1) + ((H,W) if isinstance(size, tuple) else (N,)), dtype=dtype_t, device=device_t)
-                    else:
-                        x = torch.randn((args.batch,)*(2 if isinstance(size, tuple) else 1) + ((H,W) if isinstance(size, tuple) else (N,)), dtype=dtype_t, device=device_t)
+                    x = torch.randn(shape, dtype=dtype_t, device=device_t)
                 else:
                     if args.dtype.startswith("complex"):
-                        x = (np.random.randn(*( ((args.batch,)*(2 if isinstance(size, tuple) else 1)) + ((H,W) if isinstance(size, tuple) else (N,)) )) +
-                             1j*np.random.randn(*( ((args.batch,)*(2 if isinstance(size, tuple) else 1)) + ((H,W) if isinstance(size, tuple) else (N,)) ))).astype(dtype_np)
+                        x = (np.random.randn(*shape) + 1j*np.random.randn(*shape)).astype(dtype_np)
                     else:
-                        x = np.random.randn(*( ((args.batch,)*(2 if isinstance(size, tuple) else 1)) + ((H,W) if isinstance(size, tuple) else (N,)) )).astype(dtype_np)
+                        x = np.random.randn(*shape).astype(dtype_np)
 
                 err_rel = np.nan
                 gflops = 0.0
@@ -213,14 +212,16 @@ def main():
                     # Correctness vs direct conv for small N
                     if isinstance(x, np.ndarray):
                         y = fn()
-                        y_ref = np.convolve(x, w, mode="full")
+                        y_ref = np.stack([np.convolve(row, w, mode="full") for row in x])
                         m = min(y.shape[-1], y_ref.shape[-1])
                         num = np.linalg.norm(y[..., :m] - y_ref[..., :m])
                         den = np.linalg.norm(y_ref[..., :m]) + 1e-12
                         err_rel = float(num/den)
                     else:
                         y = fn().detach().cpu().numpy()
-                        y_ref = np.convolve(x.detach().cpu().numpy(), w.detach().cpu().numpy(), mode="full")
+                        x_np = x.detach().cpu().numpy()
+                        w_np = w.detach().cpu().numpy()
+                        y_ref = np.stack([np.convolve(row, w_np, mode="full") for row in x_np])
                         m = min(y.shape[-1], y_ref.shape[-1])
                         num = np.linalg.norm(y[..., :m] - y_ref[..., :m])
                         den = np.linalg.norm(y_ref[..., :m]) + 1e-12

@@ -77,7 +77,7 @@ async def enhanced_evaluation():
 # Tessera-optimized semantic operators
 enhanced_operators = {
     "sem_filter": TesseraSemanticFilter(hierarchical_reasoning=True),
-    "sem_rank": TesseraSemanticRank(importance_modeling=True), 
+    "sem_topk": TesseraSemanticTopK(importance_modeling=True),
     "sem_agg": TesseraSemanticAgg(nugget_extraction=True),
     "sem_join": TesseraSemanticJoin(citation_aware=True)
 }

@@ -5,9 +5,9 @@
 #include <vector>
 #include <string>
 #include <iostream>
-#include <nlohmann/json.hpp>\n#ifdef USE_NVTX\n#include <nvToolsExt.h>\n#endif
-
-using json = nlohmann::json;
+#ifdef USE_NVTX
+#include <nvToolsExt.h>
+#endif
 
 int main(int argc, char** argv){
     int M=512,N=512,K=512,repeat=3;
@@ -27,7 +27,10 @@ int main(int argc, char** argv){
     double last_ms = 0.0;
 
     for (int r=0;r<repeat;r++){
-        #ifdef USE_NVTX\nnvtxRangePushA("bench");\n#endif\n    auto t0 = std::chrono::high_resolution_clock::now();
+#ifdef USE_NVTX
+        nvtxRangePushA("bench");
+#endif
+        auto t0 = std::chrono::high_resolution_clock::now();
         for (int i=0;i<M;i++){
             for (int j=0;j<N;j++){
                 float acc = 0.0f;
@@ -35,16 +38,17 @@ int main(int argc, char** argv){
                 C[i*(size_t)N + j] = acc;
             }
         }
-        auto t1 = std::chrono::high_resolution_clock::now();\n#ifdef USE_NVTX\nnvtxRangePop();\n#endif
+        auto t1 = std::chrono::high_resolution_clock::now();
+#ifdef USE_NVTX
+        nvtxRangePop();
+#endif
         double ms = std::chrono::duration<double, std::milli>(t1-t0).count();
         last_ms = ms;
         double flops = 2.0 * (double)M * (double)N * (double)K / (ms/1000.0);
         if (flops > best_flops) best_flops = flops;
     }
 
-    json row;
-    row["throughput_flops"] = best_flops;
-    row["latency_ms"] = last_ms;
-    std::cout << row.dump() << std::endl;
+    std::cout << "{\"throughput_flops\":" << best_flops
+              << ",\"latency_ms\":" << last_ms << "}\n";
     return 0;
 }

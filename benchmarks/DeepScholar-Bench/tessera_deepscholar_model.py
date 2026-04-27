@@ -42,7 +42,7 @@ class TesseraDeepScholarModel:
             "sem_filter": ts.nn.SemanticFilter(config.dim),
             "sem_join": ts.nn.SemanticJoin(config.dim),
             "sem_agg": ts.nn.SemanticAggregation(config.dim),
-            "sem_rank": ts.nn.SemanticRanking(config.dim)
+            "sem_topk": ts.nn.SemanticTopK(config.dim)
         }
         
         # DeepScholar-bench specific evaluation heads

@@ -6,9 +6,9 @@
 #include <vector>
 #include <string>
 #include <iostream>
-#include <nlohmann/json.hpp>\n#ifdef USE_NVTX\n#include <nvToolsExt.h>\n#endif
-
-using json = nlohmann::json;
+#ifdef USE_NVTX
+#include <nvToolsExt.h>
+#endif
 
 int main(int argc, char** argv){
     size_t N = 1<<26; // elements
@@ -22,9 +22,15 @@ int main(int argc, char** argv){
     double last_ms = 0.0;
 
     for (int r=0;r<repeat;r++){
-        #ifdef USE_NVTX\nnvtxRangePushA("bench");\n#endif\n    auto t0 = std::chrono::high_resolution_clock::now();
+#ifdef USE_NVTX
+        nvtxRangePushA("bench");
+#endif
+        auto t0 = std::chrono::high_resolution_clock::now();
         for (size_t i=0;i<N;i++) C[i] = A[i] + 2.0f*B[i]; // triad-ish
-        auto t1 = std::chrono::high_resolution_clock::now();\n#ifdef USE_NVTX\nnvtxRangePop();\n#endif
+        auto t1 = std::chrono::high_resolution_clock::now();
+#ifdef USE_NVTX
+        nvtxRangePop();
+#endif
         double ms = std::chrono::duration<double, std::milli>(t1-t0).count();
         last_ms = ms;
         // bytes moved: read A,B and write C
@@ -33,9 +39,7 @@ int main(int argc, char** argv){
         if (bw > best_bw) best_bw = bw;
     }
 
-    json row;
-    row["bytes_per_s"] = best_bw;
-    row["latency_ms"] = last_ms;
-    std::cout << row.dump() << std::endl;
+    std::cout << "{\"bytes_per_s\":" << best_bw
+              << ",\"latency_ms\":" << last_ms << "}\n";
     return 0;
 }

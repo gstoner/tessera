@@ -1,13 +1,17 @@
 """
 Tessera-LOTUS Integration for DeepScholar-Bench
-Direct implementation following the repository structure and evaluation framework
+Integration template for the current LOTUS Pandas-style semantic operator API.
 """
 
-import tessera as ts
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
-from lotus import LOTUS, LM, sem_filter, sem_join, sem_agg, sem_rank
-from typing import Dict, List, Any, Optional
-import asyncio
+import tessera as ts
+
+try:
+    import lotus
+except ImportError:  # Keep this file importable in environments without LOTUS.
+    lotus = None
 
 class TesseraLotusDeepScholar:
     """
@@ -26,10 +30,11 @@ class TesseraLotusDeepScholar:
             model_name=config.get("base_model", "tessera-research-7b"),
             tessera_backend=self.tessera_model
         )
-        self.lotus = LOTUS(lm=self.lm)
+        if lotus is not None and hasattr(lotus, "settings"):
+            lotus.settings.configure(lm=self.lm)
         
         # DeepScholar-bench evaluation components
-        self.evaluator = DeepScholarEvaluator(self.lotus, self.lm)
+        self.evaluator = DeepScholarEvaluator(self.lm)
     
     def _init_tessera_model(self):
         """Initialize Tessera model optimized for research synthesis"""
@@ -76,9 +81,9 @@ class TesseraLotusDeepScholar:
         )
         
         # Stage 2: Semantic ranking by importance
-        ranked_papers = relevant_papers.sem_rank(
+        ranked_papers = relevant_papers.sem_topk(
             f"Papers most important for understanding {query}",
-            top_k=20,
+            K=20,
             lm=self.lm
         )
         
@@ -117,13 +122,14 @@ class TesseraLotusDeepScholar:
         
         # Use LOTUS semantic aggregation with Tessera's HRM
         for _, paper in papers.iterrows():
-            paper_nuggets = await self.lotus.sem_agg(
-                pd.DataFrame([paper]),
+            paper_nuggets = pd.DataFrame([paper]).sem_agg(
                 f"Extract key information nuggets relevant to {query} from this paper. "
                 f"Focus on: methodology, findings, contributions, and limitations.",
                 group_by="title",
                 lm=self.lm
             )
+            if hasattr(paper_nuggets, "tolist"):
+                paper_nuggets = paper_nuggets.tolist()
             
             # Tessera's nugget importance scoring
             for nugget_text in paper_nuggets:
@@ -187,7 +193,7 @@ class TesseraLotusDeepScholar:
         """Get information about the pipeline configuration"""
         return {
             "tessera_model": str(self.tessera_model),
-            "lotus_version": self.lotus.version,
+            "lotus_version": getattr(lotus, "__version__", "unavailable"),
             "optimization_features": [
                 "hierarchical_reasoning", 
                 "flash_mla", 
@@ -227,8 +233,7 @@ class DeepScholarEvaluator:
     Implements all seven evaluation metrics as defined in the benchmark
     """
     
-    def __init__(self, lotus: LOTUS, lm: TesseraLM):
-        self.lotus = lotus
+    def __init__(self, lm: TesseraLM):
         self.lm = lm
         
     async def evaluate_all_metrics(
@@ -461,3 +466,32 @@ class DeepScholarEvaluator:
             """
             
             importance = await self.lm.semantic_score(importance_prompt)
+            importance_scores.append(float(importance))
+
+        return sum(importance_scores) / len(importance_scores) if importance_scores else 0.0
+
+    async def _evaluate_reference_coverage(
+        self,
+        synthesis: str,
+        papers: pd.DataFrame
+    ) -> float:
+        """Reference Coverage: fraction of retrieved papers cited by the synthesis."""
+        citations = self._extract_citations(synthesis)
+        if papers.empty:
+            return 0.0
+        matched = 0
+        for _, paper in papers.iterrows():
+            title = str(paper.get("title", "")).lower()
+            if not title:
+                continue
+            if any(self._find_source_paper(citation, pd.DataFrame([paper])) is not None for citation in citations):
+                matched += 1
+        return matched / len(papers)
+
+    async def _evaluate_citation_coverage(self, synthesis: str) -> float:
+        """Citation Coverage: heuristic claim coverage based on citation density."""
+        sentences = [part.strip() for part in synthesis.replace("\n", " ").split(".") if part.strip()]
+        if not sentences:
+            return 0.0
+        cited_sentences = sum(1 for sentence in sentences if self._extract_citations(sentence))
+        return cited_sentences / len(sentences)

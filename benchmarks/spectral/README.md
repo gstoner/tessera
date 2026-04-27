@@ -1,6 +1,6 @@
 # Tessera Spectral Operators — Performance Tests (v1)
 
-**Path:** `tessera/tools/perf/spectral/`
+**Path:** `benchmarks/spectral/`
 
 This package provides a reproducible, extensible harness to benchmark key spectral operators commonly used in ML and scientific computing:
 
@@ -23,7 +23,7 @@ The harness **auto-detects** CPU/GPU availability and can run on:
 ## Quick Start
 
 ```bash
-cd tessera/tools/perf/spectral
+cd benchmarks/spectral
 
 # (Optional) Create & activate a venv, then:
 pip install numpy matplotlib torch  # torch optional for GPU runs

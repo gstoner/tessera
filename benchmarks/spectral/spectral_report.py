@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: MIT
-import argparse, os, csv, math
-from collections import defaultdict, OrderedDict
-import matplotlib.pyplot as plt
+import argparse, csv, os
+from collections import defaultdict
+try:
+    import matplotlib.pyplot as plt
+except ImportError as exc:
+    raise SystemExit("matplotlib is required to generate spectral reports. Install project dependencies with `python3 -m pip install -r requirements.txt`.") from exc
 
 def read_rows(csv_path):
     rows = []

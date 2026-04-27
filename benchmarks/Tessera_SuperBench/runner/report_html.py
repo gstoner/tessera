@@ -1,12 +1,16 @@
-
 #!/usr/bin/env python3
 import argparse, json, html, datetime, os, math
-import yaml
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 def make_roofline_svg(results, peaks):
     # Simple log-log axes roofline with compute peak and memory roof.
     W, H = 800, 500
     pad = 60
+    compute_peak = float(peaks["compute_peak_flops"])
+    memory_peak = float(peaks["memory_peak_bytes_per_s"])
     # Gather points with AI (I) and perf (P)
     pts = []
     for r in results.get("rows", []):
@@ -24,27 +28,27 @@ def make_roofline_svg(results, peaks):
         return "<p>No points for roofline.</p>"
 
     # Axes ranges
-    xs = [p[0] for p in pts] + [peaks["compute_peak_flops"]/peaks["memory_peak_bytes_per_s"]]
-    ys = [p[1] for p in pts] + [peaks["compute_peak_flops"], peaks["memory_peak_bytes_per_s"]*max(xs)]
+    xs = [p[0] for p in pts] + [compute_peak / memory_peak]
+    ys = [p[1] for p in pts] + [compute_peak, memory_peak * max(xs)]
     xmin, xmax = max(min(xs)/10, 1e-3), max(xs)*10
     ymin, ymax = max(min(ys)/10, 1e6), max(ys)*10
     def X(v): return pad + (math.log10(v) - math.log10(xmin)) / (math.log10(xmax)-math.log10(xmin)) * (W-2*pad)
     def Y(v): return H-pad - (math.log10(v) - math.log10(ymin)) / (math.log10(ymax)-math.log10(ymin)) * (H-2*pad)
 
-    ridge = peaks["compute_peak_flops"] / peaks["memory_peak_bytes_per_s"]
+    ridge = compute_peak / memory_peak
     # Build SVG
     lines = [f"<svg width='{W}' height='{H}' xmlns='http://www.w3.org/2000/svg'>"]
     # axes
     lines.append(f"<line x1='{pad}' y1='{H-pad}' x2='{W-pad}' y2='{H-pad}' stroke='black'/>")
     lines.append(f"<line x1='{pad}' y1='{H-pad}' x2='{pad}' y2='{pad}' stroke='black'/>")
     # memory roof: y = B * x up to ridge
-    x1, y1 = xmin, peaks['memory_peak_bytes_per_s']*xmin
-    x2, y2 = ridge, peaks['memory_peak_bytes_per_s']*ridge
+    x1, y1 = xmin, memory_peak * xmin
+    x2, y2 = ridge, memory_peak * ridge
     lines.append(f"""<polyline fill='none' stroke='gray' stroke-width='2'
         points='{X(x1)},{Y(y1)} {X(x2)},{Y(y2)}'/>""")
     # compute roof: y = P_peak for x >= ridge
     lines.append(f"""<polyline fill='none' stroke='gray' stroke-width='2'
-        points='{X(ridge)},{Y(peaks['compute_peak_flops'])} {X(xmax)},{Y(peaks['compute_peak_flops'])}'/>""")
+        points='{X(ridge)},{Y(compute_peak)} {X(xmax)},{Y(compute_peak)}'/>""")
     # ridge marker
     lines.append(f"""<line x1='{X(ridge)}' y1='{Y(ymin)}' x2='{X(ridge)}' y2='{Y(ymax)}' stroke='#ddd' stroke-dasharray='4,4'/>""")
     # labels
@@ -55,8 +59,8 @@ def make_roofline_svg(results, peaks):
         lines.append(f"""<circle cx='{X(I)}' cy='{Y(P)}' r='4' fill='black'/>
             <title>{html.escape(name or 'bench')}\nI={I:.3g}, P={P:.3g}</title>""")
     # legend
-    lines.append(f"""<text x='{pad+10}' y='{pad+15}' font-size='12'>Peak Compute: {peaks['compute_peak_flops']:.3g} FLOP/s</text>""")
-    lines.append(f"""<text x='{pad+10}' y='{pad+30}' font-size='12'>Peak Memory BW: {peaks['memory_peak_bytes_per_s']:.3g} B/s</text>""")
+    lines.append(f"""<text x='{pad+10}' y='{pad+15}' font-size='12'>Peak Compute: {compute_peak:.3g} FLOP/s</text>""")
+    lines.append(f"""<text x='{pad+10}' y='{pad+30}' font-size='12'>Peak Memory BW: {memory_peak:.3g} B/s</text>""")
     lines.append("</svg>")
     return "\n".join(lines)
 
@@ -71,6 +75,8 @@ def main():
         R = json.load(f)
     peaks = None
     if args.peaks and os.path.exists(args.peaks):
+        if yaml is None:
+            raise SystemExit("PyYAML is required to read --peaks. Install project dependencies with `python3 -m pip install -r requirements.txt`.")
         with open(args.peaks,"r") as pf:
             peaks = yaml.safe_load(pf)
 

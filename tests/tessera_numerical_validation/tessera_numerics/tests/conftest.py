@@ -1,6 +1,8 @@
-import os, json, yaml, pathlib, time
+import os, json, pathlib, time
 import numpy as np
 import pytest
+
+yaml = pytest.importorskip("yaml")
 
 from tessera_numerics import tessera_adapter as A
 

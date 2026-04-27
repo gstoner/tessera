@@ -1,4 +1,8 @@
-import pytest, torch, torch.nn.functional as F
+import pytest
+
+torch = pytest.importorskip("torch")
+import torch.nn.functional as F
+
 from tessera_kernels.tiled import flashattn_fwd_tiled, flashattn_bwd_tiled
 from tessera_kernels import HAS_EXT
 

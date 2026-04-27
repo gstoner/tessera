@@ -210,14 +210,13 @@ class TestEndToEndIRStructure:
                     C: tessera.mut_f32[..., ...]):
             C[:] = tessera.ops.gemm(A, B)
 
-        from tessera.distributed.domain import Rect
+        from tessera.distributed.domain import Block, Rect
         from tessera.distributed.shard import MeshSpec, ShardSpec
         from tessera.distributed.array import DistributedArray
-        from tessera.distributed.shard import Block
 
         D    = Rect((4, 128, 256))
         dist = Block(mesh_axes=("tp",))
-        X    = DistributedArray.from_domain(D, dtype="f16", distribution=dist)
+        X    = DistributedArray.from_domain(D, dtype="fp16", distribution=dist)
 
         # index_launch should not raise at this stage.
         from tessera.distributed.launch import index_launch
@@ -229,11 +228,7 @@ class TestEndToEndIRStructure:
     def test_constraint_error_raised_before_ir_emission(self):
         """Phase 2 depends on Phase 1 constraint errors firing early."""
         with pytest.raises(Exception):
-            @tessera.jit
+            @tessera.jit(bindings={"K": 7})
             def bad(A: tessera.Tensor["M", "K"]):
                 tessera.require(tessera.constraint.Divisible("K", 64))
                 return tessera.ops.gemm(A, A)
-
-            # Trigger the constraint solver with a violation.
-            bad_shaped = tessera.Tensor["M", "7"]  # K=7, not divisible by 64
-            # The constraint should fire at jit time, not call time.

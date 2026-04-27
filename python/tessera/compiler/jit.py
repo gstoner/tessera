@@ -318,7 +318,7 @@ def jit(
         # ── Step 6: emit Graph IR ────────────────────────────────────────────
         try:
             builder = GraphIRBuilder()
-            effect_tag = inferred_effect.name if inferred_effect != Effect.pure else None
+            effect_tag = inferred_effect.name if deterministic or inferred_effect != Effect.pure else None
             # Attach GPU target attrs to the module when target is provided.
             target_attr = target.to_mlir_attr() if target is not None else None
             builder.lower(fn, effect_tag=effect_tag, target_attr=target_attr)

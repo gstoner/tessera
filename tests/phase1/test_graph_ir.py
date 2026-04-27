@@ -240,31 +240,31 @@ class TestGraphIRBuilder:
         m = builder.module()
         assert len(m.functions) == 0
 
-    def test_ir_text_via_jit(self):
-        """@jit decorated functions expose .ir_text() for inspection."""
+    def test_graph_ir_mlir_via_jit(self):
+        """@jit decorated functions expose Graph IR MLIR for inspection."""
         @tessera.jit
         def simple(A, B):
             return tessera.ops.gemm(A, B)
 
-        ir = simple.ir_text()
+        ir = simple.graph_ir.to_mlir()
         assert "func.func @simple" in ir
         assert "module" in ir
 
-    def test_ir_text_contains_region_effects(self):
+    def test_graph_ir_mlir_contains_region_effects(self):
         @tessera.jit
         def step(W: Region["read"], X: Region["read"], Y: Region["write"]):
             Y[:] = tessera.ops.gemm(X, W)
 
-        ir = simple_ir = step.ir_text()
+        simple_ir = step.graph_ir.to_mlir()
         assert "read" in simple_ir
         assert "write" in simple_ir
 
-    def test_ir_text_contains_gemm(self):
+    def test_graph_ir_mlir_contains_gemm(self):
         @tessera.jit
         def gemm_step(A, B, C):
             C[:] = tessera.ops.gemm(A, B)
 
-        ir = gemm_step.ir_text()
+        ir = gemm_step.graph_ir.to_mlir()
         assert "gemm" in ir
 
     def test_effect_tag_in_function_attrs(self):
@@ -272,6 +272,6 @@ class TestGraphIRBuilder:
         def with_dropout(x):
             return tessera.ops.dropout(x)
 
-        ir = with_dropout.ir_text()
+        ir = with_dropout.graph_ir.to_mlir()
         # The function should be tagged with its inferred effect
         assert "random" in ir or "func.func @with_dropout" in ir

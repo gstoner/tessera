@@ -1,4 +1,8 @@
-import pytest, torch, torch.nn.functional as F
+import pytest
+
+torch = pytest.importorskip("torch")
+import torch.nn.functional as F
+
 from tessera_kernels import flashattn, flashattn_forward, HAS_EXT
 
 requires_cuda = pytest.mark.skipif(not (torch.cuda.is_available() and HAS_EXT), reason="CUDA/Ext required")

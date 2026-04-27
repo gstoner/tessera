@@ -1,6 +1,8 @@
-
-import os, time, math, json, pytest, torch, torch.nn.functional as F
+import os, time, math, json, pytest
 from pathlib import Path
+
+torch = pytest.importorskip("torch")
+import torch.nn.functional as F
 
 try:
     import pynvml

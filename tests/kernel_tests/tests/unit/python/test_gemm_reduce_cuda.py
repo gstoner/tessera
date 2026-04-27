@@ -1,4 +1,7 @@
-import pytest, torch
+import pytest
+
+torch = pytest.importorskip("torch")
+
 from tessera_kernels import gemm_fp16, reduce_sum, HAS_EXT
 
 requires_cuda = pytest.mark.skipif(not (torch.cuda.is_available() and HAS_EXT), reason="CUDA/Ext required")

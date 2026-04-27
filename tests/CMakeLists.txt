@@ -25,7 +25,9 @@ set(TESSERA_TEST_DEPENDS
     TesseraPasses
     TesseraSR
     TesseraFA4
-    TesseraTPP
+    TesseraTPPDialect
+    TesseraTPPPasses
+    TesseraTPPInit
     TesseraPM
 )
 

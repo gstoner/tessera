@@ -19,7 +19,8 @@ bool X86Backend::avx512BF16Available() const noexcept {
 
 void X86Backend::gemm_bf16(const uint16_t* A, const uint16_t* B, float* C,
                            int M, int N, int K, float beta) const {
-    if (cfg_.preferAMX && amxAvailable()) {
+    bool perfectAMXTile = (M % 16 == 0) && (N % 16 == 0) && (K % 64 == 0) && beta == 0.0f;
+    if (cfg_.preferAMX && perfectAMXTile && amxAvailable()) {
         tessera_x86_amx_gemm_bf16(A,B,C,M,N,K,beta);
     } else {
         tessera_x86_avx512_gemm_bf16(A,B,C,M,N,K,beta);
@@ -39,6 +40,9 @@ bool tessera_x86_avx512bf16_available() {
     return false;
 #endif
 }
+
+void registerTesseraX86BackendPasses() {}
+void registerTesseraX86BackendDialects() {}
 
 } // extern "C"
 

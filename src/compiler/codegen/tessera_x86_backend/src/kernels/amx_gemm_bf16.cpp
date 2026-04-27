@@ -9,8 +9,12 @@ extern "C" void tessera_x86_amx_gemm_bf16(const uint16_t* A, const uint16_t* B, 
                                           int M, int N, int K, float beta)
 {
     using namespace tessera::x86;
+    if ((M % 16) != 0 || (N % 16) != 0 || (K % 64) != 0 || beta != 0.0f) {
+        tessera_x86_reference_gemm_bf16(A, B, C, M, N, K, beta);
+        return;
+    }
     if (!tessera_x86_amx_supported() || !tessera_x86_amx_enable_linux()) {
-        // Fallback: zero or assert. In practice, the caller should check beforehand.
+        tessera_x86_reference_gemm_bf16(A, B, C, M, N, K, beta);
         return;
     }
 

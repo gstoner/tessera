@@ -6,8 +6,9 @@
 int main(int argc, char **argv) {
   mlir::DialectRegistry registry;
   mlir::registerAllDialects(registry);
+  tessera::registerTesseraTPUBackendDialects(registry);
   mlir::registerAllPasses();
-  tessera::registerTesseraTPUPasses();
+  tessera::registerTesseraTPUBackendPasses();
   return mlir::asMainReturnCode(
       mlir::MlirOptMain(argc, argv, "tessera-tpu-opt\n", registry));
 }

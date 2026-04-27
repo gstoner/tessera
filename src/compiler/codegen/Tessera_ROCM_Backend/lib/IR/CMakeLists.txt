@@ -1,4 +1,4 @@
-set(LLVM_TARGET_DEFINITIONS ${CMAKE_CURRENT_SOURCE_DIR}/../include/TesseraROCM/IR/TesseraROCMOps.td)
+set(LLVM_TARGET_DEFINITIONS ${CMAKE_CURRENT_SOURCE_DIR}/../../include/TesseraROCM/IR/TesseraROCMOps.td)
 mlir_tablegen(TesseraROCMOps.h.inc -gen-op-decls)
 mlir_tablegen(TesseraROCMOps.cpp.inc -gen-op-defs)
 mlir_tablegen(TesseraROCMDialect.h.inc -gen-dialect-decls)
@@ -13,4 +13,6 @@ add_mlir_library(TesseraROCMIR
   LINK_LIBS PUBLIC
     MLIRIR MLIRFuncDialect MLIRLLVMDialect
   DEPENDS TesseraROCMTableGen)
-target_include_directories(TesseraROCMIR PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+target_include_directories(TesseraROCMIR PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+  ${CMAKE_CURRENT_BINARY_DIR})

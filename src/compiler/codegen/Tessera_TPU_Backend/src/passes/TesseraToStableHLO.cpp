@@ -22,19 +22,28 @@ struct LowerMatmulPattern : OpRewritePattern<Operation> {
     auto rhsTy = llvm::dyn_cast<RankedTensorType>(rhs.getType());
     if (!lhsTy || !rhsTy) return failure();
 
-    // Assume [M,K] x [K,N] -> [M,N]. Build standard dot_general dims.
-    SmallVector<int64_t> lhsBatch, rhsBatch, lhsContract{(int64_t)lhsTy.getRank()-1}, rhsContract{(int64_t)rhsTy.getRank()-2};
+    if (lhsTy.getRank() < 2 || rhsTy.getRank() < 2)
+      return rewriter.notifyMatchFailure(op, "matmul operands must have rank >= 2");
+
+    // Build dot_general dims for [..., M, K] x [..., K, N] -> [..., M, N].
+    SmallVector<int64_t> lhsBatch, rhsBatch;
+    int64_t lhsBatchRank = lhsTy.getRank() - 2;
+    int64_t rhsBatchRank = rhsTy.getRank() - 2;
+    if (lhsBatchRank != rhsBatchRank)
+      return rewriter.notifyMatchFailure(op, "batched matmul ranks must match");
+    for (int64_t i = 0; i < lhsBatchRank; ++i) {
+      lhsBatch.push_back(i);
+      rhsBatch.push_back(i);
+    }
+    SmallVector<int64_t> lhsContract{(int64_t)lhsTy.getRank()-1};
+    SmallVector<int64_t> rhsContract{(int64_t)rhsTy.getRank()-2};
     auto dimNums = stablehlo::DotDimensionNumbersAttr::get(
         op->getContext(), lhsBatch, rhsBatch, lhsContract, rhsContract);
 
     // Precision config: BF16 inputs, F32 accums are XLA defaults; we leave it empty here.
     SmallVector<Attribute> precision;
 
-    // Result type: infer [M,N] element type from lhs.
-    auto elemTy = lhsTy.getElementType();
-    int64_t M = lhsTy.getShape()[lhsTy.getRank()-2];
-    int64_t N = rhsTy.getShape()[rhsTy.getRank()-1];
-    auto resultTy = RankedTensorType::get({M, N}, elemTy);
+    Type resultTy = op->getResult(0).getType();
 
     auto dot = rewriter.create<stablehlo::DotGeneralOp>(
         op->getLoc(), resultTy, lhs, rhs, dimNums,

@@ -28,4 +28,4 @@ if(HAVE_MLIR)
   target_compile_definitions(tesseraCerebrasPasses PUBLIC HAVE_MLIR=1)
 else()
   target_compile_definitions(tesseraCerebrasPasses PUBLIC HAVE_MLIR=0)
-#endif
+endif()

@@ -17,6 +17,8 @@ std::unique_ptr<mlir::Pass> createLowerTileToMetaliumPass();
 
 /// Optionally registers all Metalium passes in a registry.
 void registerMetaliumPasses(mlir::DialectRegistry &registry);
+void registerTesseraMetaliumBackendDialects(mlir::DialectRegistry &registry);
+void registerTesseraMetaliumBackendPasses(mlir::DialectRegistry &registry);
 
 } // namespace metalium
 } // namespace tessera

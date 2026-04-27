@@ -35,6 +35,25 @@ add_subdirectory(compiler/tile_opt_fa4)         # Attn + Queue dialects, FA4 con
 add_subdirectory(compiler/programming_model)    # PM v1.1: Schedule IR ODS
 add_subdirectory(compiler/tessera_neighbors)    # Neighbor topology + stencil passes
 
+if(TESSERA_BUILD_X86_BACKEND)
+  add_subdirectory(compiler/codegen/tessera_x86_backend)
+endif()
+if(TESSERA_BUILD_NVIDIA_BACKEND)
+  add_subdirectory(compiler/codegen/tessera_gpu_backend_NVIDIA)
+endif()
+if(TESSERA_BUILD_ROCM_BACKEND)
+  add_subdirectory(compiler/codegen/Tessera_ROCM_Backend)
+endif()
+if(TESSERA_BUILD_TPU_BACKEND)
+  add_subdirectory(compiler/codegen/Tessera_TPU_Backend)
+endif()
+if(TESSERA_BUILD_METALIUM_BACKEND)
+  add_subdirectory(compiler/codegen/Tessera_Metalium_Backend)
+endif()
+if(TESSERA_BUILD_CEREBRAS_BACKEND)
+  add_subdirectory(compiler/codegen/Tessera_Cerebras_backend)
+endif()
+
 # ------------------------------------------------------------------
 # Solver suite and collectives
 # ------------------------------------------------------------------

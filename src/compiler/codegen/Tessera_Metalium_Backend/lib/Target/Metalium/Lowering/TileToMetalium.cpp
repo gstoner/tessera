@@ -118,10 +118,8 @@ struct TileCopyToMetaliumDMA : public OpConversionPattern<mlir::tessera::tile::C
 
     auto srcTy = dyn_cast<MemRefType>(getElementTypeOrSelf(src.getType()));
     auto dstTy = dyn_cast<MemRefType>(getElementTypeOrSelf(dst.getType()));
-    if (!srcTy || !dstTy) {
-      rewriter.eraseOp(op);
-      return success();
-    }
+    if (!srcTy || !dstTy)
+      return rewriter.notifyMatchFailure(op, "tile copy requires memref source and destination");
 
     SmallVector<int64_t, 2> srcShape2D, dstShape2D, srcStrides2D, dstStrides2D;
     (void)extract2DShapeAndStrides(srcTy, srcShape2D, srcStrides2D);
@@ -166,7 +164,9 @@ struct TileCopyToMetaliumDMA : public OpConversionPattern<mlir::tessera::tile::C
       /*direction*/ dirAttr,
       /*element_size_bytes*/ elemAttr,
       /*burst*/ burstAttr,
-      /*async*/ nullptr);
+	      /*async*/ nullptr);
+#else
+    return rewriter.notifyMatchFailure(op, "Metalium generated ops are not enabled");
 #endif
 
     rewriter.eraseOp(op);
@@ -202,9 +202,10 @@ struct TileGemmToMetaliumMatmul : public OpConversionPattern<mlir::tessera::tile
     // rewriter.replaceOpWithNewOp<mlir::tessera::metalium::Metalium_MatmulOp>(
     //   op, /*result type*/ op.getResult().getType(),
     //   A, B, Cinit, tileAttr, /*layout*/ nullptr, /*accum*/ nullptr);
+#else
+    return rewriter.notifyMatchFailure(op, "Metalium generated ops are not enabled");
 #endif
-    rewriter.eraseOp(op);
-    return success();
+    return rewriter.notifyMatchFailure(op, "Metalium matmul lowering is not implemented");
   }
 };
 
@@ -217,6 +218,10 @@ void populateTileToMetaliumPatterns(RewritePatternSet &patterns, TypeConverter &
 
 struct LowerTileToMetaliumPass : public PassWrapper<LowerTileToMetaliumPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerTileToMetaliumPass)
+  StringRef getArgument() const final { return "tile-to-metalium"; }
+  StringRef getDescription() const final {
+    return "Lower Tessera Tile IR to TT-Metalium target ops";
+  }
 
   void runOnOperation() override {
     MLIRContext *ctx = &getContext();

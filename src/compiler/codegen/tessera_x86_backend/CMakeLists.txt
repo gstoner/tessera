@@ -50,3 +50,6 @@ target_include_directories(tessera_x86_backend PUBLIC
 # Link libraries: none required for intrinsics; pthread for tests if needed
 add_executable(test_gemm tests/test_gemm.cpp)
 target_link_libraries(test_gemm PRIVATE tessera_x86_backend)
+
+add_executable(test_gemm_reference_tails tests/test_gemm_reference_tails.cpp)
+target_link_libraries(test_gemm_reference_tails PRIVATE tessera_x86_backend)

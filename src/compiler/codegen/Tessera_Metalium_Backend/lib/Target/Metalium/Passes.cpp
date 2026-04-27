@@ -1,4 +1,5 @@
 #include "Tessera/Target/Metalium/Passes.h"
+#include "Tessera/Target/Metalium/TesseraMetaliumDialect.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/LogicalResult.h"
@@ -11,7 +12,15 @@ namespace mlir { namespace tessera { namespace metalium {
 std::unique_ptr<mlir::Pass> createLowerTileToMetaliumPass();
 
 void registerMetaliumPasses(mlir::DialectRegistry &registry) {
-  // If you have dialects to load here, add them; for now this is a stub.
+  registerTesseraMetaliumBackendDialects(registry);
+}
+
+void registerTesseraMetaliumBackendDialects(mlir::DialectRegistry &registry) {
+  registerMetaliumDialect(registry);
+}
+
+void registerTesseraMetaliumBackendPasses(mlir::DialectRegistry &registry) {
+  registerTesseraMetaliumBackendDialects(registry);
 }
 
 // Provide a pipeline like: -pass-pipeline="tessera-metalium(tile-to-metalium)"

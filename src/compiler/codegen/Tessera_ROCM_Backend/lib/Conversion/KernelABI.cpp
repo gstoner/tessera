@@ -4,6 +4,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/STLExtras.h"
 
 using namespace mlir;
 
@@ -15,6 +16,10 @@ namespace {
 
 struct KernelABIPass : PassWrapper<KernelABIPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(KernelABIPass)
+  StringRef getArgument() const final { return "lower-tessera-kernel-abi"; }
+  StringRef getDescription() const final {
+    return "Lower Tessera ROCm kernel signatures to the AMDGPU ABI";
+  }
   void runOnOperation() override {
     ModuleOp m = getOperation();
     auto ctx = m.getContext();
@@ -37,12 +42,17 @@ struct KernelABIPass : PassWrapper<KernelABIPass, OperationPass<ModuleOp>> {
       auto resTys = fn.getFunctionType().getResults();
       if (changed) {
         auto newTy = FunctionType::get(ctx, newArgTys, resTys);
+        OpBuilder b(fn.getContext());
+        b.setInsertionPoint(fn);
         auto newFn = func::FuncOp::create(fn.getLoc(), fn.getName(), newTy);
         newFn->setAttrs(fn->getAttrDictionary());
         newFn.getBody().takeBody(fn.getBody());
-        fn.replaceAllUsesWith(newFn.getNameAttr());
+        for (auto [arg, newType] :
+             llvm::zip(newFn.getBody().getArguments(), newArgTys))
+          arg.setType(newType);
+        b.insert(newFn);
         fn.erase();
-        m.push_back(newFn);
+        fn = newFn;
       }
 
       // Annotate basic ABI

@@ -9,6 +9,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/ROCDL/IR/ROCDLDialect.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
@@ -62,7 +63,6 @@ struct AsyncCopyLowering : OpConversionPattern<tessera_rocm::ROCM_AsyncCopyOp> {
     auto module = op->getParentOfType<ModuleOp>();
     auto ctx = rewriter.getContext();
     auto i32 = IntegerType::get(ctx, 32);
-    auto i64 = IntegerType::get(ctx, 64);
     auto i8Ptr = LLVM::LLVMPointerType::get(IntegerType::get(ctx,8));
     auto f32 = LLVM::LLVMFloatType::get(ctx);
 
@@ -76,9 +76,14 @@ struct AsyncCopyLowering : OpConversionPattern<tessera_rocm::ROCM_AsyncCopyOp> {
     auto dsFn = declareIntrinsic(module, dsWriteName, LLVM::LLVMVoidType::get(ctx), {v4f32, i32, i32, i32});
     auto barFn = declareIntrinsic(module, barrierName, LLVM::LLVMVoidType::get(ctx), {});
 
+    auto dstPtrTy = dyn_cast<LLVM::LLVMPointerType>(a.getDst().getType());
+    auto srcPtrTy = dyn_cast<LLVM::LLVMPointerType>(a.getSrc().getType());
+    if (!dstPtrTy || !srcPtrTy)
+      return rewriter.notifyMatchFailure(op, "async copy expects lowered LLVM pointer operands");
+
     // Pointers (treat as i8* for raw ops)
     Value srcPtr = rewriter.create<LLVM::BitcastOp>(op.getLoc(), i8Ptr, a.getSrc());
-    Value dstIndex = rewriter.create<LLVM::UndefOp>(op.getLoc(), i32); // LDS offset placeholder
+    Value dstIndex = rewriter.create<LLVM::PtrToIntOp>(op.getLoc(), i32, a.getDst());
 
     // Offsets zero for demo; real path would compute from memref + indices
     Value zero32 = rewriter.create<LLVM::ConstantOp>(op.getLoc(), i32, rewriter.getI32IntegerAttr(0));
@@ -110,6 +115,10 @@ struct WaitLowering : OpConversionPattern<tessera_rocm::ROCM_WaitTokenOp> {
 
 struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LoweringPass)
+  StringRef getArgument() const final { return "lower-tessera-target-to-rocdl"; }
+  StringRef getDescription() const final {
+    return "Lower Tessera ROCm target ops to LLVM/ROCDL";
+  }
   void runOnOperation() override {
     MLIRContext *ctx = &getContext();
     LLVMTypeConverter tc(ctx);

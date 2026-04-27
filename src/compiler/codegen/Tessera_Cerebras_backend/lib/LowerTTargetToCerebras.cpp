@@ -156,7 +156,6 @@ namespace tessera { namespace cerebras {
 std::unique_ptr<mlir::Pass> createLowerTTargetToCerebrasPass() {
   return std::make_unique<LowerTTargetToCerebras>();
 }
-void registerCerebrasLoweringPasses() {}
 }} // namespace
 
 #else

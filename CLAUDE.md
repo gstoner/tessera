@@ -41,15 +41,19 @@ Key source locations:
 
 | Layer | Primary files |
 |-------|--------------|
-| Graph IR ops | `src/ir/TesseraOps.td`, `src/ir/TesseraTiling.cpp` |
+| Graph IR ops | `src/compiler/ir/TesseraOps.td`, `src/compiler/ir/TesseraTiling.cpp` |
 | Graph IR passes | `src/transforms/lib/CanonicalizeTesseraIR.cpp` (4 patterns), `VerifyTesseraIR.cpp` |
-| Schedule IR ODS | `src/programming_model/ir/schedule/ScheduleMeshPipelineOps.td` |
-| Tile IR (FA-4) | `src/tile_opt_fa4/dialects/tessera_attn/Attn.td`, `tessera_queue/Queue.td` |
+| Schedule IR ODS | `src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td` |
+| Tile IR (FA-4) | `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td`, `Queue.td` |
 | x86 backend | `src/compiler/codegen/tessera_x86_backend/` (AMX BF16 + AVX512 GEMM — **works**) |
 | Collectives IR | `src/collectives/include/tessera/Dialect/Collective/IR/CollectiveOps.td` |
-| Scaling/Resilience | `tessera_scaling_resilience_v1/` (passes are TODO stubs) |
-| Neighbors/Halo | `src/tessera_neighbors/` (HaloInferPass is stub) |
-| Python package | `python/tessera/` (exports only Tensor, Module, NumericalPolicy — **thin**) |
+| Scaling/Resilience | `src/solvers/scaling_resilience/lib/sr/passes/` (scaffold exists; bodies are stubs) |
+| Neighbors/Halo | `src/compiler/tessera_neighbors/lib/` (HaloInferPass is stub) |
+| Solver suite | `src/solvers/core/passes/` (pipeline wired; all 11 passes are TODO stubs) |
+| Linalg solver | `src/solvers/linalg/lib/` (MixedPrecision + IterativeRefinement — TODO stubs) |
+| Runtime C ABI | `src/runtime/src/tessera_runtime.cpp` (270 lines); CPU backend (139 lines, real thread pool) |
+| Main tool | `tools/tessera-opt/tessera-opt.cpp` (wires all dialects + passes) |
+| Python package | `python/tessera/` (Phases 1–3 complete; Phases 4–6 missing) |
 
 ---
 
@@ -57,22 +61,29 @@ Key source locations:
 
 | Component | Status |
 |-----------|--------|
-| `src/ir/TesseraOps.td` — matmul, conv2d, flash_attn, fused_epilogue, cast, transpose | **Defined** |
+| `src/compiler/ir/TesseraOps.td` — MatmulOp, Conv2DNHWCOp, FlashAttnOp + TilingInterface | **Real ODS + verifiers** |
 | `CanonicalizeTesseraIR.cpp` — 4 fusion patterns | **Implemented** |
-| `VerifyTesseraIR.cpp` | **Checks module version attr only** |
-| `tessera_runtime.h` — C ABI for device/stream/buffer/kernel | **Header only, not wired** |
+| `VerifyTesseraIR.cpp` | **Checks module version attr** |
+| `tessera-opt` tool | **Fully wired — all dialects + passes registered** |
 | x86 AMX BF16/AVX512 GEMM kernels | **Work** |
-| Autotuner (Python, SQLite cache, Hyperband) | **Works standalone** |
+| Autotuner v1 (Python, SQLite cache, Hyperband) | **Works standalone** |
 | tprof profiler + Perfetto export | **Works standalone** |
 | Roofline tooling | **Works standalone** |
-| FA-4 warp specialization ODS | **Defined; lowering NOT implemented** |
-| Collectives IR + ExecRuntime + TokenLimiter | **Designed; NCCL adapter incomplete** |
-| All scaling/resilience passes | **Empty TODO stubs** |
-| Python distributed API (Region, domain, index_launch) | **Does not exist** |
-| Effect type propagation pass | **Does not exist** |
-| ConstraintSolver | **Does not exist** |
-| Autodiff (Graph IR VJP/JVP) | **Does not exist** |
-| Numerics policy ODS + cast/round pass | **Does not exist** |
+| Runtime C ABI (`tessera_runtime.cpp`) | **270 lines implemented; CPU backend has real thread pool** |
+| Runtime CUDA/HIP backends | **30-line stubs — dispatch not wired** |
+| Python runtime wrapper (`python/tessera/runtime.py`) | **Does not exist** |
+| FA-4 Attn+Queue ODS | **Defined with verifiers (Phase 3)** |
+| Phase 1–3 Python frontend | **Complete — 252 tests green** |
+| Collectives IR (AllToAll, Await, QoS) | **ODS defined; AllReduce/ReduceScatter/AllGather ops missing** |
+| NCCL/RCCL adapters | **Disabled stubs in `Adapters.h` only** |
+| Scaling/Resilience dialect + 4 passes | **Scaffold exists; pass bodies are minimal/empty** |
+| Solver core pipeline (11 passes) | **Pipeline wired; every pass body is `// TODO` stub** |
+| Linalg solver (MixedPrecision, IterativeRefinement) | **Structure wired; bodies are `// TODO`** |
+| `Cyclic` distribution | **Raises `NotImplementedError` — Phase 4 work** |
+| Phase 4 Python modules | **All missing** (`distributed_planner`, `pipeline_planner`, `tpu_target`, `moe`) |
+| Phase 4–6 test suites | **tests/phase4/, tests/phase5/, tests/phase6/ — not created** |
+| `python/tessera/diagnostics.py` | **Does not exist** |
+| Benchmark runners (`benchmark_gemm.py`, etc.) | **Not created** |
 
 ---
 
@@ -410,9 +421,127 @@ def test_region_annotation_reduce():
 | Phase 1 | ✅ **Complete** | Python frontend — Region, Domain, ShardSpec, DistributedArray, @jit, ConstraintSolver, EffectLattice, GraphIRBuilder |
 | Phase 2 | ✅ **Complete** | C++ lowering chain — DistributionLoweringPass, EffectAnnotationPass, TilingPass, TileToX86Pass; `tessera-lower-to-x86` pipeline |
 | Phase 3 | ✅ **Complete** | NVIDIA GPU backend — GPUTargetProfile, TileIRLoweringPass, WarpSpecializationPass, AsyncCopyLoweringPass, NVWGMMALoweringPass, NVTMADescriptorPass, NVFlashAttnKernelEmitter; `tessera-lower-to-gpu` pipeline; FA-4 Attn dialect (ScaledDotProduct, OnlineSoftmax, LseAccumulate, DropoutMask, CausalMask) |
-| Phase 4 | 🔲 Next session | Distributed training — NCCL/RCCL collectives + TPU backend + Cyclic MoE |
-| Phase 5 | 🔲 Future | Scaling/Resilience passes + Autotuner v2 (Bayesian) + Solver suite |
-| Phase 6 | 🔲 Future | ROCm full MFMA + Runtime C ABI + Production diagnostics + Benchmarks |
+| Cross-phase infra | ✅ **Added** | Core IR ODS with real verifiers (TesseraOps.td v2); Queue dialect QueueOps.cpp; `tessera-opt` fully wired; solver pipeline scaffold; SR pass scaffold; runtime C ABI implemented; tprof consolidated |
+| Phase 4 | 🔲 **Next** | Distributed training: Cyclic distribution, NCCL/RCCL adapters, CollectiveInsertionPass, PipelineStageInsertionPass, TPU target + quantized dot, DistributedPlan, PipelinePlan, MoE helpers |
+| Phase 5 | 🔲 Future | Implement solver pass bodies (11 stubs), SR pass bodies (4 stubs), linalg solver bodies, Autotuner v2 (Bayesian/Optuna), checkpoint decorator |
+| Phase 6 | 🔲 Future | Runtime Python wrapper, CUDA/HIP backends, ROCm MFMA coverage, benchmark runners, diagnostics, shape inference pass |
+
+---
+
+## Remaining Tasks — Ordered by Phase
+
+### Phase 4 — Distributed Training (START HERE)
+
+#### Python — create these files
+
+| File | What to implement |
+|------|-------------------|
+| `python/tessera/distributed/domain.py` | Implement `Cyclic.make_shard_spec()` — currently raises `NotImplementedError` |
+| `python/tessera/distributed/array.py` | Add cyclic branch in `parts()` — strided round-robin slicing |
+| `python/tessera/distributed/shard.py` | Add `cyclic: bool = False` field to `ShardSpec` |
+| `python/tessera/distributed/moe.py` | `MoEConfig`, `route_tokens()`, `plan_all_to_all()` |
+| `python/tessera/compiler/tpu_target.py` | `TPUTargetProfile` (mxu_tile=128, mesh_axes, `validate_matmul_dims`) |
+| `python/tessera/compiler/distributed_planner.py` | `DistributedPlan`, `LayerSpec`, dp/tp/pp assignment, `to_mlir_attrs()` |
+| `python/tessera/compiler/pipeline_planner.py` | `PipelinePlan`, 1F1B schedule builder, `schedule_steps()` |
+
+#### C++ — create these files
+
+| File | What to implement |
+|------|-------------------|
+| `src/collectives/include/tessera/Dialect/Collective/IR/CollectiveOps.td` | Add `AllReduceOp`, `ReduceScatterOp`, `AllGatherOp` (currently only `AllToAllOp` exists) |
+| `src/collectives/include/tessera/Dialect/Collective/Runtime/Adapters.h` | Expand `NCCLAdapter`/`RCCLAdapter` with `all_reduce`, `reduce_scatter`, `all_gather`, `all_to_all` methods |
+| `src/collectives/lib/NCCLAdapter.cpp` | Full mock NCCL adapter (real NCCL call sites + in-memory mock path) |
+| `src/collectives/lib/RCCLAdapter.cpp` | RCCL equivalent — same interface as NCCL |
+| `src/collectives/lib/ChunkPlanner.cpp` | `ChunkPlanner::chunk_bytes(Topology)` — NVLink=512KiB, PCIe=128KiB, RDMA=256KiB |
+| `src/collectives/lib/CollectiveScheduler.cpp` | Credit-based link scheduler; `CollectiveScheduler::submit()` |
+| `src/transforms/lib/GPUCollectiveInsertionPass.cpp` | Inserts `collective.reduce_scatter` at DP mesh boundaries; reads `tessera.effect = "memory"` |
+| `src/transforms/lib/PipelineStageInsertionPass.cpp` | 1F1B micro-batch schedule; partitions `schedule.pipeline.region` stages across ranks |
+| `src/compiler/codegen/Tessera_TPU_Backend/src/passes/TPUQuantizedDotPass.cpp` | `tessera.matmul` → `stablehlo.dot_general` with bf16/int8 precision attrs |
+| `src/compiler/codegen/Tessera_TPU_Backend/src/passes/TesseraShardyExport.cpp` | Complete Shardy export — translate `tessera.shard` attrs to `sdy.tensor_sharding` per func arg |
+
+#### Tests — create these directories and files
+
+| Path | Tests |
+|------|-------|
+| `tests/phase4/__init__.py` | Empty |
+| `tests/phase4/conftest.py` | 8-rank `MockRankGroup`, `NCCLMock` fixture |
+| `tests/phase4/test_nccl_adapter.py` | all_reduce, reduce_scatter, all_gather mock correctness |
+| `tests/phase4/test_chunk_planner.py` | 512KiB NVLink, 128KiB PCIe |
+| `tests/phase4/test_cyclic_distribution.py` | `Cyclic.make_shard_spec`, `parts()` round-robin slicing |
+| `tests/phase4/test_tpu_lowering.py` | TPUTargetProfile validation; flash_attn→stablehlo; shardy round-trip |
+| `tests/phase4/test_distributed_plan.py` | `DistributedPlan` 4-layer MLP over dp=4, tp=2; anchoring IR test |
+| `tests/phase4/test_gpu_collective_insertion.py` | `collective.reduce_scatter` at dp boundary in IR |
+| `tests/phase4/test_pipeline_stage_insertion.py` | 1F1B 4 stages, 8 micro-batches |
+| `tests/tessera-ir/phase4/gpu_collective_insertion.mlir` | Lit test |
+| `tests/tessera-ir/phase4/pipeline_stage_insertion.mlir` | Lit test |
+| `tests/tessera-ir/phase4/tpu_attention.mlir` | Lit test |
+| `tests/tessera-ir/phase4/tpu_shardy_export.mlir` | Lit test |
+
+---
+
+### Phase 5 — Solver Implementations + Autotuner v2
+
+#### C++ — implement these stub bodies
+
+| File | Current state | What to implement |
+|------|--------------|-------------------|
+| `src/solvers/core/passes/SparseInspector.cpp` | `// TODO` stub | Walk tensor ops; tag fill-fraction < 5% as `tessera_solver.sparse_hint` |
+| `src/solvers/core/passes/SparsePrecond.cpp` | `// TODO` stub | Select Jacobi/ILU/AMG preconditioner; attach `tessera_solver.precond` attr |
+| `src/solvers/core/passes/SparseSolverSpecialize.cpp` | `// TODO` stub | Specialize sparse solver variant based on precond + sparsity |
+| `src/solvers/core/passes/RNGLegalize.cpp` | `// TODO` stub | Legalize `tessera_rng.*` ops; assign stream IDs |
+| `src/solvers/core/passes/RNGStreamAssign.cpp` | `// TODO` stub | Assign Philox/Threefry streams; `stream_id = global_seed * ranks + rank` |
+| `src/solvers/core/passes/NewtonAutodiff.cpp` | `// TODO` stub | Generate VJP/JVP for `tessera_solver.implicit` ops |
+| `src/solvers/core/passes/TrigInit.cpp` | `// TODO` stub | Initialize trig tables for spectral solver ops |
+| `src/solvers/core/passes/PeriodicHalo.cpp` | `// TODO` stub | Infer periodic halo exchange patterns |
+| `src/solvers/core/passes/ParamBatchPlan.cpp` | `// TODO` stub | Batch parameter sweeps; plan multi-config execution |
+| `src/solvers/core/passes/ContinuationGuard.cpp` | `// TODO` stub | Insert guard ops at continuation/checkpoint boundaries |
+| `src/solvers/core/passes/ImplicitLower.cpp` | `// TODO` stub | Lower `tessera_solver.implicit` to explicit residual + Newton loop |
+| `src/solvers/linalg/lib/Passes/MixedPrecision.cpp` | `// TODO` body | Insert `tessera.quantize/dequantize` stubs around factor/solve boundaries |
+| `src/solvers/linalg/lib/Passes/IterativeRefinement.cpp` | `// TODO` body | Wrap solve region with residual compute + convergence loop |
+| `src/solvers/scaling_resilience/lib/sr/passes/InsertRecomputePass.cpp` | Tags only | Greedy memory-budget scan; insert `tessera_sr.checkpoint` + `recompute_hint` |
+| `src/solvers/scaling_resilience/lib/sr/passes/OptimizerShardPass.cpp` | Stub | ZeRO-2: partition momentum/variance across dp mesh |
+| `src/solvers/scaling_resilience/lib/sr/passes/ResilienceRestartPass.cpp` | Stub | Wrap body in `tessera_sr.resilience_region`; insert save/restore hooks |
+| `src/solvers/scaling_resilience/lib/sr/passes/ExportDeploymentManifestPass.cpp` | Stub | Emit `deployment_manifest.json` with mesh + shard + collective + checkpoint keys |
+
+#### Python — create these files
+
+| File | What to implement |
+|------|-------------------|
+| `python/tessera/compiler/autotune_v2.py` | `BayesianAutotuner` (Optuna TPE + Hyperband pruning); warm-start from SQLite cache |
+| `python/tessera/compiler/checkpoint.py` | `CollectiveCheckpointConfig`; `@jit(checkpoint=True)` extension |
+
+#### Tests — create `tests/phase5/`
+
+`test_insert_recompute.py`, `test_optimizer_shard.py`, `test_resilience_restart.py`, `test_deployment_manifest.py`, `test_sparse_inspector.py`, `test_rng_legalize.py`, `test_bayesian_autotuner.py`, `test_checkpoint_decorator.py` + lit tests in `tests/tessera-ir/phase5/`
+
+---
+
+### Phase 6 — Runtime + ROCm + Benchmarks + Diagnostics
+
+#### Python — create these files
+
+| File | What to implement |
+|------|-------------------|
+| `python/tessera/runtime.py` | `TesseraRuntime` ctypes wrapper around `tessera_runtime.cpp` C ABI |
+| `python/tessera/diagnostics.py` | `TesseraShapeError` with Python source location; `TesseraTargetError` |
+| `benchmarks/benchmark_gemm.py` | `GEMMBenchmark` — sweeps M/N/K; reports latency_ms, tflops, memory_bw |
+| `benchmarks/benchmark_attention.py` | `FlashAttnBenchmark` — B/H/S/D sweep; tokens/sec, MFU |
+| `benchmarks/benchmark_collective.py` | `CollectiveBenchmark` — 2–128 ranks; bus bandwidth |
+| `benchmarks/run_all.py` | Orchestrates all benchmarks; emits `tessera_benchmarks_*.json` |
+
+#### C++ — create/complete these files
+
+| File | What to implement |
+|------|-------------------|
+| `src/runtime/src/backend/cuda_backend.cpp` | Wire `cudaMalloc/cudaMemcpy/cudaStream` — currently 30-line stub |
+| `src/runtime/src/backend/hip_backend.cpp` | Wire `hipMalloc/hipMemcpy/hipStream` — currently 30-line stub |
+| `src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp` | Verify MFMA shape table covers gfx90a/gfx94/gfx1200 (check `MFMTables.cpp`) |
+| `src/compiler/diagnostics/ErrorReporter.cpp` | Walk MLIR op `loc` chain; attach Python file + line to shape errors |
+| `src/compiler/diagnostics/ShapeInferencePass.cpp` | Forward-propagate static shapes; catch mismatches early |
+
+#### Tests — create `tests/phase6/`
+
+`test_runtime_abi.py`, `test_runtime_cpu_backend.py`, `test_mfma_full_coverage.py`, `test_shape_inference.py`, `test_error_reporter.py`, `test_benchmark_gemm.py` + lit tests in `tests/tessera-ir/phase6/`
 
 ---
 
@@ -432,8 +561,8 @@ def test_region_annotation_reduce():
 | Pass | File | Purpose |
 |------|------|---------|
 | `TileIRLoweringPass` | `src/transforms/lib/TileIRLoweringPass.cpp` | `tessera.flash_attn` → `tessera.attn.*` + `tile.async_copy` + `tile.mma` |
-| `WarpSpecializationPass` | `src/tile_opt_fa4/lib/WarpSpecializationPass.cpp` | Assigns producer/consumer roles; inserts `tessera.queue` barriers |
-| `AsyncCopyLoweringPass` | `src/tile_opt_fa4/lib/AsyncCopyLoweringPass.cpp` | `tile.async_copy` → `tessera.tma.*` (SM_90) or `tessera.cp_async.*` |
+| `WarpSpecializationPass` | `src/compiler/tile_opt_fa4/lib/WarpSpecializationPass.cpp` | Assigns producer/consumer roles; inserts `tessera.queue` barriers |
+| `AsyncCopyLoweringPass` | `src/compiler/tile_opt_fa4/lib/AsyncCopyLoweringPass.cpp` | `tile.async_copy` → `tessera.tma.*` (SM_90) or `tessera.cp_async.*` |
 | `NVWGMMALoweringPass` | `src/.../NVWGMMALoweringPass.cpp` | `tile.mma` → `tessera.nvgpu.wgmma.mma_async` PTX (SM_90+) or WMMA |
 | `NVTMADescriptorPass` | `src/.../NVTMADescriptorPass.cpp` | Hoists TMA descriptors to kernel preamble; assigns mbarrier slots |
 | `NVFlashAttnKernelEmitter` | `src/.../NVFlashAttnKernelEmitter.cpp` | Resolves scale sentinel, emits mbarrier arrive/wait, attaches launch bounds |
@@ -515,7 +644,7 @@ src/transforms/lib/
   TileIRLoweringPass.cpp        ← schedule.mesh.region → Tile IR ops
                                    (tessera.attn.*, tile.async_copy, tile.wait_async)
 
-src/tile_opt_fa4/
+src/compiler/tile_opt_fa4/
   dialects/tessera_attn/
     AttnOps.cpp                 ← FA-4 attention op implementations:
                                    scaled_dot_product, online_softmax,
@@ -606,7 +735,7 @@ tests/tessera-ir/phase3/
 
 | What you need | Where to look |
 |---------------|--------------|
-| FA-4 Tile IR ODS (attn + queue) | `src/tile_opt_fa4/dialects/tessera_attn/Attn.td`, `tessera_queue/Queue.td` |
+| FA-4 Tile IR ODS (attn + queue) | `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td`, `Queue.td` |
 | Memory model (tile.async_copy spec) | `src/programming_model/docs/Memory_Execution_Model_v1_1.md` |
 | Warp specialization design | `src/programming_model/docs/Parallelism_Constructs_v1_1.md` |
 | NVIDIA WGMMA backend skeleton | `src/compiler/codegen/tessera_gpu_backend_NVIDIA/lowering_nvvm_mlir.cpp` |
@@ -1174,4 +1303,4 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 
 ---
 
-*Last updated: April 2026 — Phase 1 + Phase 2 complete; Phase 3–6 planned.*
+*Last updated: April 2026 — Phases 1–3 complete (252 tests green). Cross-phase infra added (Core IR ODS, tessera-opt, solver scaffold, runtime C ABI, profiler). Phase 4 is next: Cyclic distribution, NCCL/RCCL, CollectiveInsertionPass, PipelineStageInsertionPass, TPU quantized dot, DistributedPlan, PipelinePlan, MoE helpers. Phases 5–6 are solver body implementations, Autotuner v2, runtime wrappers, and benchmarks.*

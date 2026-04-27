@@ -1,23 +1,44 @@
 #include "TesseraROCM/Passes.h"
+#include "TesseraROCM/IR/TesseraROCMDialect.h.inc"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/IR/BuiltinOps.h"
 using namespace mlir;
-namespace {
-struct LowerT2ROCDL : public PassWrapper<LowerT2ROCDL, OperationPass<ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerT2ROCDL)
-  void runOnOperation() override;
-  StringRef getArgument() const final { return "lower-tessera-target-to-rocdl"; }
-};
-struct LowerKernelABI : public PassWrapper<LowerKernelABI, OperationPass<ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerKernelABI)
-  void runOnOperation() override;
-  StringRef getArgument() const final { return "lower-tessera-kernel-abi"; }
-};
-}
-void LowerT2ROCDL::runOnOperation() {}
-void LowerKernelABI::runOnOperation() {}
+
 namespace mlir::tessera_rocm {
-std::unique_ptr<Pass> createLowerTesseraTargetToROCDLPass(){ return std::make_unique<LowerT2ROCDL>(); }
-std::unique_ptr<Pass> createLowerKernelABIPass(){ return std::make_unique<LowerKernelABI>(); }
-void registerTesseraROCMPasses(){ PassRegistration<LowerT2ROCDL>(); PassRegistration<LowerKernelABI>(); }
+std::unique_ptr<Pass> createLowerTesseraToROCDLImpl();
+
+std::unique_ptr<Pass> createLowerTesseraTargetToROCDLPass() {
+  return createLowerTesseraToROCDLImpl();
+}
+
+void buildTesseraROCMBackendPipeline(OpPassManager &pm) {
+  pm.addPass(createLowerKernelABIPass());
+  pm.addPass(createLowerTesseraTargetToROCDLPass());
+}
+
+void registerTesseraROCMPasses() {
+  PassRegistration<Pass>(
+      "lower-tessera-kernel-abi",
+      "Lower Tessera ROCm kernel signatures to the AMDGPU ABI",
+      []() { return createLowerKernelABIPass(); });
+  PassRegistration<Pass>(
+      "lower-tessera-target-to-rocdl",
+      "Lower Tessera ROCm target ops to LLVM/ROCDL",
+      []() { return createLowerTesseraTargetToROCDLPass(); });
+  PassPipelineRegistration<> pipeline(
+      "tessera-rocm-backend",
+      "Lower Tessera ROCm target IR through ABI conversion and ROCDL",
+      [](OpPassManager &pm) { buildTesseraROCMBackendPipeline(pm); });
+}
+
+void registerTesseraROCMDialects(DialectRegistry &registry) {
+  registry.insert<TesseraROCMDialect>();
+}
+
+void registerTesseraROCMBackendPasses() { registerTesseraROCMPasses(); }
+
+void registerTesseraROCMBackendDialects(DialectRegistry &registry) {
+  registerTesseraROCMDialects(registry);
+}
 }

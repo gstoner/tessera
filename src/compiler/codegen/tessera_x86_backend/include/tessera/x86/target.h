@@ -35,6 +35,10 @@ void tessera_x86_amx_gemm_bf16(const uint16_t* A, const uint16_t* B, float* C,
                                int M, int N, int K, float beta);
 void tessera_x86_avx512_gemm_bf16(const uint16_t* A, const uint16_t* B, float* C,
                                   int M, int N, int K, float beta);
+void tessera_x86_reference_gemm_bf16(const uint16_t* A, const uint16_t* B, float* C,
+                                     int M, int N, int K, float beta);
+void registerTesseraX86BackendPasses();
+void registerTesseraX86BackendDialects();
 }
 
 } // namespace x86

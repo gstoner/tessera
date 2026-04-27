@@ -5,4 +5,6 @@ add_mlir_library(TesseraROCMConversion
   LINK_LIBS PUBLIC
     MLIRIR MLIRLLVMDialect MLIRROCDLDialect MLIRFuncDialect MLIRTransformUtils
     TesseraROCMIR)
-target_include_directories(TesseraROCMConversion PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+target_include_directories(TesseraROCMConversion PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+  ${CMAKE_CURRENT_BINARY_DIR}/../IR)

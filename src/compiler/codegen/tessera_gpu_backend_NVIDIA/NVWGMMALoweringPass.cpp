@@ -30,6 +30,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -39,22 +40,23 @@ namespace tessera {
 
 namespace {
 
-// ─────────────────────────────────────────────────────────────────────────────
-// WGMMA shape constants for SM_90 BF16
-// ─────────────────────────────────────────────────────────────────────────────
+static func::FuncOp getOrDeclareBackendCall(ModuleOp module, StringRef name,
+                                            Type resultType, ValueRange operands,
+                                            PatternRewriter &rewriter) {
+  if (auto fn = module.lookupSymbol<func::FuncOp>(name))
+    return fn;
 
-// Canonical wgmma.mma_async PTX for BF16 64×64×16 accumulate into f32.
-// Emitted verbatim into the tessera.nvgpu.wgmma op's ptx attribute.
-// The actual register binding is resolved by NVFlashAttnKernelEmitter.
-static constexpr llvm::StringLiteral kWGMMAPTX_BF16_m64n64k16 =
-    "wgmma.mma_async.sync.aligned.m64n64k16.f32.bf16.bf16 "
-    "{%0,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14,%15},"
-    " [%16], [%17], 1, 1, 1, 0, 0;";
+  SmallVector<Type> operandTypes;
+  for (Value operand : operands)
+    operandTypes.push_back(operand.getType());
 
-static constexpr llvm::StringLiteral kWGMMAPTX_F16_m64n64k16 =
-    "wgmma.mma_async.sync.aligned.m64n64k16.f32.f16.f16 "
-    "{%0,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14,%15},"
-    " [%16], [%17], 1, 1, 1, 0, 0;";
+  OpBuilder::InsertionGuard guard(rewriter);
+  rewriter.setInsertionPointToStart(module.getBody());
+  auto fnType = rewriter.getFunctionType(operandTypes, TypeRange{resultType});
+  auto fn = rewriter.create<func::FuncOp>(module.getLoc(), name, fnType);
+  fn.setPrivate();
+  return fn;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pattern: tile.mma → WGMMA (SM≥90) or WMMA (SM<90)
@@ -85,45 +87,35 @@ struct LowerTileMMA : public RewritePattern {
 
     if (sm >= 90) {
       // ── WGMMA path ────────────────────────────────────────────────────────
-      // Detect dtype from operand type to select the right PTX template.
-      llvm::StringRef ptx = kWGMMAPTX_BF16_m64n64k16;
+      // Keep this as a legal func.call boundary until a real NVVM/NVGPU WGMMA
+      // op model is registered. This prevents unregistered pseudo target ops
+      // from escaping the backend pipeline.
+      StringRef callee = "tessera_nvidia_wgmma_mma_async_bf16_m64n64k16";
       StringRef dtypeAB = "bf16";
       if (auto tType = mlir::dyn_cast<ShapedType>(A.getType())) {
         if (tType.getElementType().isF16()) {
-          ptx = kWGMMAPTX_F16_m64n64k16;
+          callee = "tessera_nvidia_wgmma_mma_async_f16_m64n64k16";
           dtypeAB = "f16";
         }
       }
 
-      OperationState wgmmaSt(loc, "tessera.nvgpu.wgmma.mma_async");
-      wgmmaSt.addOperands({A, B});
-      wgmmaSt.addTypes(resType);
-      wgmmaSt.addAttribute("shape",   rewriter.getStringAttr("m64n64k16"));
-      wgmmaSt.addAttribute("dtype_ab", rewriter.getStringAttr(dtypeAB));
-      wgmmaSt.addAttribute("dtype_c",  rewriter.getStringAttr("f32"));
-      wgmmaSt.addAttribute("ptx",      rewriter.getStringAttr(ptx));
-      Operation *wgmma = rewriter.create(wgmmaSt);
-
-      // Commit the wgmma group.
-      OperationState commitSt(loc, "tessera.nvgpu.wgmma.commit_group");
-      rewriter.create(commitSt);
-
-      // Wait for all pending wgmma to complete before consuming results.
-      OperationState waitSt(loc, "tessera.nvgpu.wgmma.wait_group");
-      waitSt.addAttribute("pending", rewriter.getI32IntegerAttr(0));
-      rewriter.create(waitSt);
-
-      rewriter.replaceOp(op, wgmma->getResults());
+      auto module = op->getParentOfType<ModuleOp>();
+      auto fn = getOrDeclareBackendCall(module, callee, resType, ValueRange{A, B},
+                                        rewriter);
+      auto call = rewriter.create<func::CallOp>(loc, fn, ValueRange{A, B});
+      call->setAttr("tessera.nvidia.shape", rewriter.getStringAttr("m64n64k16"));
+      call->setAttr("tessera.nvidia.dtype_ab", rewriter.getStringAttr(dtypeAB));
+      call->setAttr("tessera.nvidia.dtype_c", rewriter.getStringAttr("f32"));
+      rewriter.replaceOp(op, call.getResults());
     } else {
       // ── WMMA fallback (SM 70–89) ─────────────────────────────────────────
-      // nvgpu.mma.sync handles the details; we just emit the op with shape.
-      OperationState wmmaSt(loc, "tessera.nvgpu.mma.sync");
-      wmmaSt.addOperands({A, B});
-      wmmaSt.addTypes(resType);
-      wmmaSt.addAttribute("shape", rewriter.getStringAttr("m16n16k16"));
-      wmmaSt.addAttribute("dtype", rewriter.getStringAttr("bf16"));
-      Operation *wmma = rewriter.create(wmmaSt);
-      rewriter.replaceOp(op, wmma->getResults());
+      auto module = op->getParentOfType<ModuleOp>();
+      auto fn = getOrDeclareBackendCall(module, "tessera_nvidia_wmma_mma_sync_bf16_m16n16k16",
+                                        resType, ValueRange{A, B}, rewriter);
+      auto call = rewriter.create<func::CallOp>(loc, fn, ValueRange{A, B});
+      call->setAttr("tessera.nvidia.shape", rewriter.getStringAttr("m16n16k16"));
+      call->setAttr("tessera.nvidia.dtype_ab", rewriter.getStringAttr("bf16"));
+      rewriter.replaceOp(op, call.getResults());
     }
 
     return success();
@@ -167,6 +159,26 @@ struct NVWGMMALoweringPass
 
 std::unique_ptr<mlir::Pass> createNVWGMMALoweringPass() {
   return std::make_unique<NVWGMMALoweringPass>();
+}
+
+std::unique_ptr<mlir::Pass> createNVTMADescriptorPass();
+std::unique_ptr<mlir::Pass> createNVFlashAttnKernelEmitterPass();
+
+void buildTesseraNVIDIABackendPipeline(OpPassManager &pm) {
+  pm.addPass(createNVWGMMALoweringPass());
+  pm.addPass(createNVTMADescriptorPass());
+  pm.addPass(createNVFlashAttnKernelEmitterPass());
+}
+
+void registerTesseraNVIDIABackendPasses() {
+  PassPipelineRegistration<> pipeline(
+      "tessera-nvidia-backend",
+      "Lower Tessera Tile IR to NVIDIA backend calls and kernel metadata",
+      [](OpPassManager &pm) { buildTesseraNVIDIABackendPipeline(pm); });
+}
+
+void registerTesseraNVIDIABackendDialects(DialectRegistry &registry) {
+  registry.insert<func::FuncDialect, arith::ArithDialect>();
 }
 
 } // namespace tessera

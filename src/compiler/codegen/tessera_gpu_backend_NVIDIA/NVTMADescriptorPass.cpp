@@ -45,14 +45,14 @@ namespace tessera {
 
 namespace {
 
-// Key for descriptor deduplication: (operand-def-op, tile_rows, tile_cols).
+// Key for descriptor deduplication: (source SSA value, tile_rows, tile_cols).
 struct DescriptorKey {
-  Operation *srcDefOp;
+  Value src;
   int64_t tileRows;
   int64_t tileCols;
 
   bool operator==(const DescriptorKey &o) const {
-    return srcDefOp == o.srcDefOp &&
+    return src == o.src &&
            tileRows == o.tileRows &&
            tileCols == o.tileCols;
   }
@@ -60,14 +60,14 @@ struct DescriptorKey {
 
 struct DescriptorKeyInfo : public llvm::DenseMapInfo<DescriptorKey> {
   static DescriptorKey getEmptyKey() {
-    return {nullptr, -1, -1};
+    return {Value(), -1, -1};
   }
   static DescriptorKey getTombstoneKey() {
-    return {nullptr, -2, -2};
+    return {Value(), -2, -2};
   }
   static unsigned getHashValue(const DescriptorKey &k) {
     return llvm::hash_combine(
-        llvm::hash_value(k.srcDefOp),
+        llvm::hash_value(k.src.getAsOpaquePointer()),
         llvm::hash_value(k.tileRows),
         llvm::hash_value(k.tileCols));
   }
@@ -107,6 +107,7 @@ struct NVTMADescriptorPass
     // Deduplicate by key → canonical descriptor value.
     llvm::DenseMap<DescriptorKey, Value, DescriptorKeyInfo> canonMap;
     llvm::DenseMap<DescriptorKey, int64_t, DescriptorKeyInfo> slotMap;
+    llvm::DenseMap<Value, int64_t> descriptorSlotMap;
     int64_t nextSlot = 0;
 
     // Find insertion point: just before the first non-argument instruction.
@@ -134,7 +135,7 @@ struct NVTMADescriptorPass
       if (auto a = desc->getAttrOfType<IntegerAttr>("tile_cols"))
         tileCols = a.getInt();
 
-      DescriptorKey key{src.getDefiningOp(), tileRows, tileCols};
+      DescriptorKey key{src, tileRows, tileCols};
       auto it = canonMap.find(key);
       if (it == canonMap.end()) {
         // Hoist a new descriptor setup to preamble.
@@ -151,10 +152,12 @@ struct NVTMADescriptorPass
         Operation *setup = b.create(st);
         canonMap[key] = setup->getResult(0);
         slotMap[key] = nextSlot++;
+        descriptorSlotMap[setup->getResult(0)] = slotMap[key];
         desc->replaceAllUsesWith(setup->getResults());
         desc->erase();
       } else {
         // Replace duplicate with the canonical value.
+        descriptorSlotMap[it->second] = slotMap[key];
         desc->replaceAllUsesWith(ValueRange{it->second});
         desc->erase();
       }
@@ -168,14 +171,19 @@ struct NVTMADescriptorPass
 
     // Update all tessera.tma.copy_async ops with their correct mbarrier slot.
     // (Slot 0 is the default; the setup ops assigned sequential slots above.)
-    int64_t copyIdx = 0;
     funcOp.walk([&](Operation *op) {
       if (op->getName().getStringRef() == "tessera.tma.copy_async") {
-        // Assign sequential slots wrapping around nextSlot.
-        op->setAttr("mbarrier_slot",
-                    b.getI64IntegerAttr(copyIdx % std::max<int64_t>(nextSlot, 1)));
-        // expect_tx computed from tile shape attrs on the referencing descriptor.
-        ++copyIdx;
+        if (op->getNumOperands() == 0)
+          return;
+        Value descriptor = op->getOperand(0);
+        auto slotIt = descriptorSlotMap.find(descriptor);
+        if (slotIt == descriptorSlotMap.end())
+          return;
+        op->setAttr("mbarrier_slot", b.getI64IntegerAttr(slotIt->second));
+        if (auto setup = descriptor.getDefiningOp()) {
+          if (auto expectTx = setup->getAttrOfType<IntegerAttr>("expect_tx"))
+            op->setAttr("expect_tx", expectTx);
+        }
       }
     });
   }

@@ -5,6 +5,7 @@
 int main(int argc, char **argv){
   mlir::DialectRegistry registry;
   mlir::registerAllDialects(registry);
+  mlir::tessera_rocm::registerTesseraROCMDialects(registry);
   mlir::registerAllPasses();
   mlir::tessera_rocm::registerTesseraROCMPasses();
   return failed(mlir::MlirOptMain(argc, argv, "tessera-rocm-opt\n", registry));

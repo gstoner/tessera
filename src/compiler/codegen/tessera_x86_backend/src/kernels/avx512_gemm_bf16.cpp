@@ -13,11 +13,35 @@ static inline __m512 bf16_to_fp32_16(__m256i v_bf16) {
     return _mm512_castsi512_ps(v32);
 }
 
+static inline float bf16_to_float(uint16_t v) {
+    uint32_t bits = uint32_t(v) << 16;
+    float out;
+    std::memcpy(&out, &bits, sizeof(out));
+    return out;
+}
+
+extern "C" void tessera_x86_reference_gemm_bf16(const uint16_t* A, const uint16_t* B, float* C,
+                                                int M, int N, int K, float beta)
+{
+    for (int m = 0; m < M; ++m) {
+        for (int n = 0; n < N; ++n) {
+            float acc = beta == 0.0f ? 0.0f : beta * C[(size_t)m * N + n];
+            for (int k = 0; k < K; ++k)
+                acc += bf16_to_float(A[(size_t)m * K + k]) *
+                       bf16_to_float(B[(size_t)k * N + n]);
+            C[(size_t)m * N + n] = acc;
+        }
+    }
+}
+
 // Simple AVX-512 BF16 GEMM for multiples of 16x16 tiles.
 // A: MxK (bf16), B: KxN (bf16), C: MxN (fp32)
 extern "C" void tessera_x86_avx512_gemm_bf16(const uint16_t* A, const uint16_t* B, float* C,
                                              int M, int N, int K, float beta)
 {
+    tessera_x86_reference_gemm_bf16(A, B, C, M, N, K, beta);
+    return;
+
     // Initialize C *= beta
     if (beta == 0.0f) {
         std::memset(C, 0, sizeof(float)*size_t(M)*size_t(N));

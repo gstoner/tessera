@@ -264,6 +264,12 @@ class DistributedPlan:
         """
         plan = cls(mesh_axes=mesh_axes)
 
+        # Auto-clear axes that aren't present in the mesh
+        if tp_axis is not None and tp_axis not in mesh_axes:
+            tp_axis = None
+        if dp_axis and dp_axis not in mesh_axes:
+            dp_axis = None
+
         # Embedding (replicated across TP, DP-sharded)
         plan.add_layer(LayerSpec(
             name="embedding",

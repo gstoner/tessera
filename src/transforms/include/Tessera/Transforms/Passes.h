@@ -101,6 +101,30 @@ std::unique_ptr<mlir::Pass> createNVTMADescriptorPass();
 //   --warps    warps per CTA (default 4)
 std::unique_ptr<mlir::Pass> createNVFlashAttnKernelEmitterPass();
 
+// ── Phase 4 passes — Distributed training collectives + pipeline ──────────
+//
+// Pipeline order (after Phase 2/3 distribution + effect annotation):
+//   1. tessera-gpu-collective-insertion — insert reduce_scatter/all_gather
+//      at DP/TP mesh boundaries (reads tessera.weight_sharding + tessera.effect)
+//   2. tessera-pipeline-stage-insertion — 1F1B stage split; insert send/recv
+//      at PP stage boundaries (reads tessera.pipeline_plan on module)
+
+// GPUCollectiveInsertionPass — inserts collective.reduce_scatter at
+// data-parallel gradient boundaries and collective.all_gather at tensor-
+// parallel output boundaries.  Must run after EffectAnnotationPass.
+// Options:
+//   --dp-axis  mesh axis for data parallelism (default "dp")
+//   --tp-axis  mesh axis for tensor parallelism (default "tp")
+std::unique_ptr<mlir::Pass> createGPUCollectiveInsertionPass();
+
+// PipelineStageInsertionPass — partitions the IR into 1F1B pipeline stages
+// and inserts tessera.pipeline.send / tessera.pipeline.recv ops at boundaries.
+// Options:
+//   --num-stages         pipeline stage count (overrides module attr)
+//   --num-micro-batches  micro-batch count    (overrides module attr)
+//   --interleaved        use interleaved 1F1B (default false)
+std::unique_ptr<mlir::Pass> createPipelineStageInsertionPass();
+
 void registerTesseraPasses();
 
 } // namespace tessera

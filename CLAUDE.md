@@ -87,9 +87,11 @@ Key source locations:
 | Scaling/Resilience dialect + 4 passes | **Scaffold exists; pass bodies are minimal/empty** |
 | Solver core pipeline (11 passes) | **Pipeline wired; every pass body is `// TODO` stub** |
 | Linalg solver (MixedPrecision, IterativeRefinement) | **Structure wired; bodies are `// TODO`** |
-| `Cyclic` distribution | **Raises `NotImplementedError` — Phase 4 work** |
-| Phase 4 Python modules | **All missing** (`distributed_planner`, `pipeline_planner`, `tpu_target`, `moe`) |
-| Phase 4–6 test suites | **tests/phase4/, tests/phase5/, tests/phase6/ — not created** |
+| `Cyclic` distribution | **Implemented — round-robin `np.take` strided sharding** |
+| Phase 4 Python modules | **Complete** — `distributed_planner`, `pipeline_planner`, `tpu_target`, `moe` all implemented |
+| Phase 4 test suite | **127 tests green** — `tests/phase4/` (cyclic, NCCL adapters, TPU target, DistributedPlan, PipelinePlan, MoE, GPU collective insertion) |
+| Phase 4 lit tests | **4 lit tests** — `tests/tessera-ir/phase4/` (gpu_collective_insertion, pipeline_stage_insertion, tpu_attention, tpu_shardy_export) |
+| Phase 5–6 test suites | **tests/phase5/, tests/phase6/ — not created** |
 | `python/tessera/diagnostics.py` | **Does not exist** |
 | Benchmark runners (`benchmark_gemm.py`, etc.) | **Not created** |
 
@@ -431,8 +433,8 @@ def test_region_annotation_reduce():
 | Phase 3 | ✅ **Complete** | NVIDIA GPU backend — GPUTargetProfile, TileIRLoweringPass, WarpSpecializationPass, AsyncCopyLoweringPass, NVWGMMALoweringPass, NVTMADescriptorPass, NVFlashAttnKernelEmitter; `tessera-lower-to-gpu` pipeline; FA-4 Attn dialect (ScaledDotProduct, OnlineSoftmax, LseAccumulate, DropoutMask, CausalMask) |
 | Cross-phase infra | ✅ **Added** | Core IR ODS with real verifiers (TesseraOps.td v2); Queue dialect QueueOps.cpp; `tessera-opt` fully wired; solver pipeline scaffold; SR pass scaffold; runtime C ABI implemented; tprof consolidated |
 | RubinCPX backend | ✅ **Built** | `tessera.target.cpx` dialect (NVRubinCPX ODS — NVFP4/NVFP6 types, 7 ops, 6 attrs); 4 compiler passes with real implementations; `tessera-cpx-pipeline` + `tessera-cpx-context-pipeline` named pipelines; `tessera-cpx-opt` driver; wired into main build via `TESSERA_BUILD_RUBINCPX_BACKEND` option |
-| Phase 4 | 🔲 **Next** | Distributed training: Cyclic distribution, NCCL/RCCL adapters, CollectiveInsertionPass, PipelineStageInsertionPass, TPU target + quantized dot, DistributedPlan, PipelinePlan, MoE helpers |
-| Phase 5 | 🔲 Future | Implement solver pass bodies (11 stubs), SR pass bodies (4 stubs), linalg solver bodies, Autotuner v2 (Bayesian/Optuna), checkpoint decorator |
+| Phase 4 | ✅ **Complete** | Distributed training: Cyclic distribution, NCCL/RCCL adapters, CollectiveInsertionPass, PipelineStageInsertionPass, TPU target + quantized dot, DistributedPlan, PipelinePlan, MoE helpers — 127 tests green |
+| Phase 5 | 🔲 **Next** | Implement solver pass bodies (11 stubs), SR pass bodies (4 stubs), linalg solver bodies, Autotuner v2 (Bayesian/Optuna), checkpoint decorator |
 | Phase 6 | 🔲 Future | Runtime Python wrapper, CUDA/HIP backends, ROCm MFMA coverage, benchmark runners, diagnostics, shape inference pass |
 
 ---

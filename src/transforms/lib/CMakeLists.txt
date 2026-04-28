@@ -16,6 +16,10 @@ add_library(TesseraPasses
 
   # Phase 3 GPU / FA-4 Tile IR lowering
   TileIRLoweringPass.cpp
+
+  # Phase 4 distributed training
+  GPUCollectiveInsertionPass.cpp
+  PipelineStageInsertionPass.cpp
   ${CMAKE_SOURCE_DIR}/src/compiler/tile_opt_fa4/lib/WarpSpecializationPass.cpp
   ${CMAKE_SOURCE_DIR}/src/compiler/tile_opt_fa4/lib/AsyncCopyLoweringPass.cpp
   ${CMAKE_SOURCE_DIR}/src/compiler/codegen/tessera_gpu_backend_NVIDIA/NVWGMMALoweringPass.cpp

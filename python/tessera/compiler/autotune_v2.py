@@ -485,6 +485,32 @@ class BayesianAutotuner:
             f"numeric_policy = \"{shape['dtype']}@accum(f32)\"}}"
         )
 
+    def cost_measurements(self) -> List[Dict[str, float]]:
+        """Return autotuner measurements for learned surrogate training."""
+        rows: List[Dict[str, float]] = []
+        bytes_moved = 2.0 * (
+            self.workload.M * self.workload.K
+            + self.workload.K * self.workload.N
+            + self.workload.M * self.workload.N
+        )
+        flops = float(self.workload.flops())
+        for r in self._results:
+            rows.append({
+                "M": float(self.workload.M),
+                "N": float(self.workload.N),
+                "K": float(self.workload.K),
+                "flops": flops,
+                "bytes_moved": bytes_moved,
+                "tile_m": float(r.config.tile_m),
+                "tile_n": float(r.config.tile_n),
+                "tile_k": float(r.config.tile_k),
+                "num_warps": float(r.config.num_warps),
+                "num_stages": float(r.config.num_stages),
+                "latency_ms": float(r.latency_ms),
+                "tflops": float(r.tflops),
+            })
+        return rows
+
     @staticmethod
     def _hash_payload(payload: Dict[str, object]) -> str:
         stable = dict(payload)

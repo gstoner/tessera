@@ -27,6 +27,7 @@ import types
 # ─────────────────────────────────────────────────────────────────────────────
 from . import core
 from . import nn
+from . import arch
 from .core import Tensor, Module
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -57,6 +57,10 @@ For tensor layouts, packed dtype storage, KV-cache paging, explicit prefetch,
 async copies, and Hopper+ mbarrier movement patterns, use
 `docs/guides/Tessera_Tensor_Layout_And_Data_Movement_Guide.md`.
 
+For differentiable architecture search, searchable Graph IR choices, relaxed
+Schedule IR knobs, hardware-cost surrogates, and freeze/specialize workflow, use
+`docs/guides/Tessera_Differentiable_NAS_Guide.md`.
+
 Production operators should also read
 `docs/guides/Tessera_Production_Reliability_And_Chaos_Guide.md`, which covers
 monitoring, regression detection, replay debugging, observability, production

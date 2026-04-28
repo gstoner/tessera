@@ -68,6 +68,19 @@ def Tessera_RingType : TypeDef<Tessera_Dialect, "Ring"> {
   let summary = "Stateful ring-buffer handle";
 }
 
+def Tessera_ArchParamType : TypeDef<Tessera_Dialect, "ArchParam"> {
+  let mnemonic = "arch_param";
+  let summary = "FP32 architecture-search parameter vector";
+}
+
+def Tessera_ArchGateType : TypeDef<Tessera_Dialect, "ArchGate"> {
+  let mnemonic = "arch_gate";
+  let summary = "Differentiable architecture gate vector";
+}
+
+def Tessera_ArchRelaxAttr : StrEnumAttr<"ArchRelax", "architecture relaxation",
+  ["softmax", "gumbel", "hard_concrete", "ste"]>;
+
 def Tessera_MatmulOp : Op<
   Tessera_Dialect, "matmul",
   [Pure, NoSideEffect, DeclareOpInterfaceMethods<TilingInterface>]
@@ -205,5 +218,72 @@ def Tessera_RingCreateOp : Op<Tessera_Dialect, "ring.create", []> {
   let arguments = (ins I64Attr:$capacity);
   let results = (outs Tessera_RingType:$ring);
   let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
+
+def Tessera_ArchParameterOp : Op<Tessera_Dialect, "arch.parameter", []> {
+  let summary = "Declare FP32 architecture logits separate from model weights";
+  let arguments = (ins I64Attr:$size,
+                       OptionalAttr<StrAttr>:$name,
+                       DefaultValuedAttr<F64Attr, "0.0">:$init);
+  let results = (outs Tessera_ArchParamType:$alpha);
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
+
+def Tessera_ArchGumbelSoftmaxOp : Op<Tessera_Dialect, "arch.gumbel_softmax", []> {
+  let summary = "Differentiable Gumbel-Softmax relaxation over architecture logits";
+  let arguments = (ins Tessera_ArchParamType:$alpha,
+                       F64Attr:$temperature,
+                       OptionalAttr<I64Attr>:$seed);
+  let results = (outs Tessera_ArchGateType:$gate);
+  let assemblyFormat = "$alpha attr-dict";
+  let hasVerifier = 1;
+}
+
+def Tessera_ArchHardConcreteOp : Op<Tessera_Dialect, "arch.hard_concrete", []> {
+  let summary = "Hard-concrete sparse relaxation over architecture logits";
+  let arguments = (ins Tessera_ArchParamType:$alpha,
+                       F64Attr:$temperature);
+  let results = (outs Tessera_ArchGateType:$gate);
+  let assemblyFormat = "$alpha attr-dict";
+  let hasVerifier = 1;
+}
+
+def Tessera_ArchSTEOneHotOp : Op<Tessera_Dialect, "arch.ste_one_hot", []> {
+  let summary = "Straight-through one-hot architecture gate";
+  let arguments = (ins Tessera_ArchParamType:$alpha);
+  let results = (outs Tessera_ArchGateType:$gate);
+  let assemblyFormat = "$alpha attr-dict";
+  let hasVerifier = 1;
+}
+
+def Tessera_ArchWeightedSumOp : Op<Tessera_Dialect, "arch.weighted_sum", []> {
+  let summary = "Weighted merge of candidate tensor outputs by architecture gate";
+  let arguments = (ins Variadic<TensorType>:$candidates,
+                       Tessera_ArchGateType:$gate);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "$candidates `by` $gate attr-dict `:` functional-type($candidates, $result)";
+  let hasVerifier = 1;
+}
+
+def Tessera_ArchSwitchOp : Op<Tessera_Dialect, "arch.switch", []> {
+  let summary = "Soft or hard architecture candidate switch";
+  let arguments = (ins Variadic<TensorType>:$candidates,
+                       Tessera_ArchGateType:$gate,
+                       DefaultValuedAttr<BoolAttr, "false">:$hard);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "$candidates `by` $gate attr-dict `:` functional-type($candidates, $result)";
+  let hasVerifier = 1;
+}
+
+def Tessera_ArchMixedOp : Op<Tessera_Dialect, "arch.mixed", []> {
+  let summary = "Search-space mixed operator carrying candidate names and relaxation";
+  let arguments = (ins AnyType:$input,
+                       Tessera_ArchGateType:$gate,
+                       ArrayAttr:$candidates,
+                       Tessera_ArchRelaxAttr:$relax);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$input `by` $gate attr-dict `:` type($input) `->` type($result)";
   let hasVerifier = 1;
 }

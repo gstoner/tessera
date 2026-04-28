@@ -181,6 +181,9 @@ Selected operations:
 %c = tessera.graph.kv_cache.create {eviction = "rolling_window"}
 %o = tessera.graph.flash_attn %q, %k, %v, %c
 %r = tessera.graph.all_reduce %x {axis = "dp", op = "sum"}
+%a = tessera.graph.arch.parameter {size = 4, dtype = "fp32"}
+%g = tessera.graph.arch.gumbel_softmax %a {temperature = 4.0}
+%m = tessera.graph.arch.mixed %x, %g {candidates = ["flash", "performer", "gmlp"]}
 ```
 
 Verification:
@@ -190,6 +193,8 @@ Verification:
 - cache append must match cache head dimension and dtype policy
 - all-reduce requires sharding compatibility with the axis communicator
 - operators must carry legal numeric policies for requested dtype/target pairs
+- architecture parameters must remain FP32 and candidate gates must match
+  candidate counts
 
 ## 8. Schedule IR
 
@@ -205,6 +210,7 @@ Selected operations:
 %m = tessera.schedule.prefetch %t {scope = "shared", align = 32}
 %l = tessera.schedule.layout_cast %t {to = "row_major"}
 %a = tessera.schedule.artifact %p {hash = "..."}
+%k = tessera.schedule.knob %p {name = "tile_m", choices = [64, 128]}
 ```
 
 Constraints:

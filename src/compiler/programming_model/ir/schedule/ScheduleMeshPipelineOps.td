@@ -91,3 +91,15 @@ def Schedule_ArtifactOp : Op<ScheduleDialect, "artifact"> {
   let assemblyFormat = "attr-dict";
   let hasVerifier = 1;
 }
+
+def Schedule_KnobOp : Op<ScheduleDialect, "knob"> {
+  let summary = "Relaxed or discrete schedule-search knob for DNAS/autotuning";
+  let arguments = (ins AnyType:$subject,
+                       StrAttr:$name,
+                       ArrayAttr:$choices,
+                       OptionalAttr<ArrayAttr>:$logits,
+                       DefaultValuedAttr<BoolAttr, "false">:$frozen);
+  let results = (outs AnyType:$selected);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($selected)";
+  let hasVerifier = 1;
+}

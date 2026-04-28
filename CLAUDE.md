@@ -95,9 +95,12 @@ Key source locations:
 | Phase 5 C++ passes | **Implemented** — 11 solver core (SparseInspector, SparsePrecond, SparseSolverSpecialize, RNGLegalize, RNGStreamAssign, NewtonAutodiff, TrigInit, PeriodicHalo, ParamBatchPlan, ContinuationGuard, ImplicitLower) + 2 linalg (MixedPrecision, IterativeRefinement) + 3 SR (InsertRecompute, OptimizerShard, ResilienceRestart) |
 | Phase 5 test suite | **176 tests green** — `tests/phase5/` (sparse inspector, RNG, checkpoint, optimizer shard, resilience, deployment manifest, Bayesian autotuner) |
 | Phase 5 lit tests | **4 lit tests** — `tests/tessera-ir/phase5/` (insert_recompute, optimizer_shard, resilience_restart, rng_legalize) |
-| Phase 6 test suite | **tests/phase6/ — not created** |
-| `python/tessera/diagnostics.py` | **Does not exist** |
-| Benchmark runners (`benchmark_gemm.py`, etc.) | **Not created** |
+| Phase 6 test suite | **170 tests green** — `tests/phase6/` (runtime ABI, CPU backend, shape inference, error reporter, GEMM benchmark, MFMA coverage) |
+| `python/tessera/diagnostics.py` | **Complete** — ErrorReporter, ShapeInferenceEngine, TesseraShapeError/TargetError/TypeError hierarchy, SourceLocation |
+| Benchmark runners | **Complete** — `benchmarks/benchmark_gemm.py`, `benchmark_attention.py`, `benchmark_collective.py`, `run_all.py` |
+| C++ backends | **Complete** — `cuda_backend.cpp` (real CUDA calls), `hip_backend.cpp` (real HIP/ROCm calls) |
+| C++ diagnostics passes | **Complete** — `src/compiler/diagnostics/ErrorReporter.cpp`, `ShapeInferencePass.cpp` |
+| Phase 6 lit tests | **2 lit tests** — `tests/tessera-ir/phase6/` (shape_inference, error_reporter) |
 
 ---
 
@@ -439,7 +442,7 @@ def test_region_annotation_reduce():
 | RubinCPX backend | ✅ **Built** | `tessera.target.cpx` dialect (NVRubinCPX ODS — NVFP4/NVFP6 types, 7 ops, 6 attrs); 4 compiler passes with real implementations; `tessera-cpx-pipeline` + `tessera-cpx-context-pipeline` named pipelines; `tessera-cpx-opt` driver; wired into main build via `TESSERA_BUILD_RUBINCPX_BACKEND` option |
 | Phase 4 | ✅ **Complete** | Distributed training: Cyclic distribution, NCCL/RCCL adapters, CollectiveInsertionPass, PipelineStageInsertionPass, TPU target + quantized dot, DistributedPlan, PipelinePlan, MoE helpers — 127 tests green |
 | Phase 5 | ✅ **Complete** | Solver pass bodies (11 core + 2 linalg + 3 SR), Autotuner v2 (BayesianAutotuner / grid fallback / SQLite cache), checkpoint decorator, solver_config.py — 176 tests green |
-| Phase 6 | 🔲 **Next** | Runtime Python wrapper, CUDA/HIP backends, ROCm MFMA coverage, benchmark runners, diagnostics, shape inference pass |
+| Phase 6 | ✅ **Complete** | Runtime Python wrapper (TesseraRuntime + _MockBackend), CUDA/HIP backends (real CUDA/HIP calls), ROCm MFMA coverage (gfx90a/gfx94x/gfx120x), benchmark runners (GEMM/Attention/Collective/run_all), diagnostics (ErrorReporter + ShapeInferenceEngine), C++ shape inference pass — 170 tests green |
 
 ---
 

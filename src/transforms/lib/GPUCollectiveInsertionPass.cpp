@@ -1,6 +1,7 @@
 //===- GPUCollectiveInsertionPass.cpp — Phase 4 ───────────────────────────===//
 //
-// Inserts collective.reduce_scatter and collective.all_gather ops at
+// Inserts tessera.collective.reduce_scatter and tessera.collective.all_gather
+// ops at
 // data-parallel and tensor-parallel mesh boundaries.
 //
 // The pass reads two sources of truth:
@@ -76,21 +77,26 @@ static StringRef getMeshAxis(Operation *op, StringRef kind) {
   return "";
 }
 
-/// Emit a `collective.reduce_scatter` generic op after \p insertAfter.
+/// Emit a `tessera.collective.reduce_scatter` generic op after \p insertAfter.
 static void insertReduceScatter(OpBuilder &b, Operation *insertAfter,
                                  Value input, StringRef meshAxis,
                                  int64_t scatterDim) {
   b.setInsertionPointAfter(insertAfter);
   Location loc = insertAfter->getLoc();
 
-  OperationState state(loc, "collective.reduce_scatter");
+  OperationState state(loc, "tessera.collective.reduce_scatter");
   state.addOperands(input);
   state.addAttribute("reduce_op", b.getStringAttr("sum"));
   state.addAttribute("mesh_axis", b.getStringAttr(meshAxis));
   state.addAttribute("scatter_dim", b.getI64IntegerAttr(scatterDim));
   state.addAttribute("tessera.collective", UnitAttr::get(b.getContext()));
-  // Result: future type represented as i64 token
-  state.addTypes(b.getI64Type());
+  state.addAttribute("tessera.future_payload",
+                     TypeAttr::get(input.getType()));
+  // The registered collective dialect defines result type !tessera.collective.future<T>.
+  // This generic transform library avoids a hard dependency on generated
+  // collective headers, so it preserves the payload type and marks it as a
+  // future for later dialect-aware legalization.
+  state.addTypes(input.getType());
 
   b.create(state);
   LLVM_DEBUG(llvm::dbgs()
@@ -98,19 +104,21 @@ static void insertReduceScatter(OpBuilder &b, Operation *insertAfter,
              << " after " << insertAfter->getName() << "\n");
 }
 
-/// Emit a `collective.all_gather` generic op after \p insertAfter.
+/// Emit a `tessera.collective.all_gather` generic op after \p insertAfter.
 static void insertAllGather(OpBuilder &b, Operation *insertAfter,
                              Value input, StringRef meshAxis,
                              int64_t gatherDim) {
   b.setInsertionPointAfter(insertAfter);
   Location loc = insertAfter->getLoc();
 
-  OperationState state(loc, "collective.all_gather");
+  OperationState state(loc, "tessera.collective.all_gather");
   state.addOperands(input);
   state.addAttribute("mesh_axis", b.getStringAttr(meshAxis));
   state.addAttribute("gather_dim", b.getI64IntegerAttr(gatherDim));
   state.addAttribute("tessera.collective", UnitAttr::get(b.getContext()));
-  state.addTypes(b.getI64Type());
+  state.addAttribute("tessera.future_payload",
+                     TypeAttr::get(input.getType()));
+  state.addTypes(input.getType());
 
   b.create(state);
   LLVM_DEBUG(llvm::dbgs()

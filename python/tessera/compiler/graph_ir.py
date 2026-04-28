@@ -43,11 +43,51 @@ class IRType:
         return self.mlir_str
 
 
+@dataclass(frozen=True)
+class NumericPolicy:
+    """Canonical numerics contract carried through Graph/Schedule/Tile IR."""
+
+    storage: str = "bf16"
+    accum: str = "f32"
+    rounding: str = "nearest_even"
+    scale: float = 1.0
+    quant_axis: str = "none"
+    deterministic: bool = False
+
+    def to_mlir_attr(self) -> str:
+        det = "true" if self.deterministic else "false"
+        return (
+            "#tessera.numeric_policy<"
+            f"storage = \"{self.storage}\", accum = \"{self.accum}\", "
+            f"rounding = \"{self.rounding}\", scale = {self.scale}, "
+            f"quant_axis = \"{self.quant_axis}\", deterministic = {det}>"
+        )
+
+
+@dataclass(frozen=True)
+class KVCacheSpec:
+    """Graph-level KV cache state object."""
+
+    max_seq: int
+    head_dim: int
+    dtype_policy: NumericPolicy = field(default_factory=NumericPolicy)
+    eviction: str = "rolling_window"
+    page_size: int = 256
+
+    def create_attrs(self) -> str:
+        return (
+            f"max_seq = {self.max_seq}, head_dim = {self.head_dim}, "
+            f"eviction = \"{self.eviction}\", page_size = {self.page_size}, "
+            f"numeric_policy = {self.dtype_policy.to_mlir_attr()}"
+        )
+
+
 # Common types used in Phase 1
 TENSOR_BF16   = IRType("tensor<*xbf16>")
 TENSOR_FP16   = IRType("tensor<*xf16>")
 TENSOR_FP32   = IRType("tensor<*xf32>")
 TENSOR_OPAQUE = IRType("tensor<*x?>")   # unknown dtype
+KV_CACHE      = IRType("!tessera.kv_cache")
 INDEX         = IRType("index")
 BOOL          = IRType("i1")
 
@@ -59,6 +99,8 @@ def _dtype_to_ir_type(dtype: str) -> IRType:
         "fp16": TENSOR_FP16,
         "fp32": TENSOR_FP32,
         "fp64": IRType("tensor<*xf64>"),
+        "fp8_e4m3": IRType("tensor<*xf8E4M3FN>"),
+        "fp8_e5m2": IRType("tensor<*xf8E5M2>"),
         "int8": IRType("tensor<*xi8>"),
         "int32": IRType("tensor<*xi32>"),
         "int64": IRType("tensor<*xi64>"),
@@ -206,6 +248,10 @@ class _OpExtractor(ast.NodeVisitor):
         "cast":       "tessera.cast",
         "flash_attn": "tessera.flash_attn",
         "dropout":    "tessera.dropout",
+        "rmsnorm_safe": "tessera.rmsnorm_safe",
+        "softmax_safe": "tessera.softmax_safe",
+        "kv_cache_append": "tessera.kv_cache.append",
+        "kv_cache_prune": "tessera.kv_cache.prune",
     }
 
     def __init__(self, arg_names: List[str]) -> None:

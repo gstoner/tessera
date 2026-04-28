@@ -27,9 +27,10 @@ std::unique_ptr<mlir::Pass> createMigrateTesseraIRPass();
 //   --mesh-sizes comma-separated axis sizes (e.g. "4,4")
 std::unique_ptr<mlir::Pass> createDistributionLoweringPass();
 
-// EffectAnnotationPass — infers side-effect class from the function body and
-// attaches tessera.effect = "pure"|"random"|"memory"|"io" to each func.func.
-// Signals failure if a func annotated "pure" contains random or memory ops.
+// EffectAnnotationPass — infers semantic effects from the function body and
+// attaches tessera.effect = "pure"|"random"|"movement"|"state"|"collective"|
+// "memory"|"io" to each func.func. Signals failure if a func annotated "pure"
+// contains any higher effect.
 std::unique_ptr<mlir::Pass> createEffectAnnotationPass();
 
 // TilingPass — tiles tessera.matmul ops (inside schedule.mesh.region bodies)

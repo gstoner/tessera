@@ -23,19 +23,21 @@ module attributes {
     %out = memref.alloc() : memref<128x512xbf16>
 
     // Column-parallel matmul: each TP rank computes a partial column block.
-    // The pass should insert collective.reduce_scatter after this op.
-    // CHECK: collective.reduce_scatter
+    // The pass should insert tessera.collective.reduce_scatter after this op.
+    // CHECK: tessera.collective.reduce_scatter
     // CHECK-SAME: reduce_op = "sum"
     // CHECK-SAME: mesh_axis
+    // CHECK-SAME: tessera.future_payload
     %partial = memref.alloc() : memref<128x512xbf16>
     "tessera.matmul"(%x, %partial) {
       tessera.weight_sharding = "col_parallel",
       tessera.tp_axis = "tp"
     } : (memref<128x256xbf16>, memref<128x512xbf16>) -> ()
 
-    // Row-parallel matmul: the pass should insert collective.all_gather.
-    // CHECK: collective.all_gather
+    // Row-parallel matmul: the pass should insert tessera.collective.all_gather.
+    // CHECK: tessera.collective.all_gather
     // CHECK-SAME: mesh_axis
+    // CHECK-SAME: tessera.future_payload
     %partial2 = memref.alloc() : memref<128x256xbf16>
     "tessera.matmul"(%partial, %partial2) {
       tessera.weight_sharding = "row_parallel",

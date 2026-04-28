@@ -18,6 +18,7 @@ Build order for Phase 1:
 
 from .constraints import ConstraintSolver, Divisible, Range, Equal, TesseraConstraintError
 from .effects import EffectLattice, Effect, TesseraEffectError
+from .graph_ir import NumericPolicy, KVCacheSpec
 from .jit import jit, TesseraJitError
 
 __all__ = [
@@ -29,6 +30,8 @@ __all__ = [
     "EffectLattice",
     "Effect",
     "TesseraEffectError",
+    "NumericPolicy",
+    "KVCacheSpec",
     "jit",
     "TesseraJitError",
 ]

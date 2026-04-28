@@ -4,6 +4,7 @@
 // FA-4 Tile IR ops:
 //
 //   tessera.flash_attn(Q, K, V) {causal, tile_q, tile_kv}
+//   tessera.flash_attn(Q, KVCache) {causal, tile_q, tile_kv}
 //   →
 //   tile.async_copy(Q_tile) + tessera.attn.scaled_dot_product
 //   + tessera.attn.causal_mask? + tessera.attn.online_softmax
@@ -91,13 +92,13 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
 
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
-    // flash_attn takes Q, K, V operands.
-    if (op->getNumOperands() < 3)
+    // flash_attn takes either Q,K,V or Q,KVCache.
+    if (op->getNumOperands() < 2)
       return failure();
 
     Value Q = op->getOperand(0);
     Value K = op->getOperand(1);
-    Value V = op->getOperand(2);
+    Value V = (op->getNumOperands() >= 3) ? op->getOperand(2) : op->getOperand(1);
     Location loc = op->getLoc();
 
     bool causal = false;
@@ -112,7 +113,7 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
     if (auto a = op->getAttrOfType<IntegerAttr>("tessera.tile_kv"))
       tkv = a.getInt();
 
-    // ── Emit tile.async_copy for Q, K, V tiles ──────────────────────────────
+    // ── Emit tile.async_copy for Q and either K/V tensors or a staged cache ──
     Operation *cpQ = emitAsyncCopy(rewriter, loc, Q, tq, /*d_k inferred*/ -1);
     Operation *cpK = emitAsyncCopy(rewriter, loc, K, tkv, -1);
     Operation *cpV = emitAsyncCopy(rewriter, loc, V, tkv, -1);
@@ -227,6 +228,22 @@ struct LowerMatmulToTileMMA : public RewritePattern {
   }
 };
 
+struct LowerSchedulePrefetchToTileCopy : public RewritePattern {
+  LowerSchedulePrefetchToTileCopy(MLIRContext *ctx)
+      : RewritePattern("schedule.prefetch", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return failure();
+
+    Operation *copy = emitAsyncCopy(rewriter, op->getLoc(), op->getOperand(0),
+                                    /*tileRows=*/-1, /*tileCols=*/-1);
+    rewriter.replaceOp(op, copy->getResult(0));
+    return success();
+  }
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass definition
 // ─────────────────────────────────────────────────────────────────────────────
@@ -263,6 +280,7 @@ struct TileIRLoweringPass
     RewritePatternSet patterns(ctx);
     patterns.add<LowerFlashAttnToTileIR>(ctx, tileQ, tileKV, smVersion);
     patterns.add<LowerMatmulToTileMMA>(ctx, tileQ, tileKV, smVersion);
+    patterns.add<LowerSchedulePrefetchToTileCopy>(ctx);
 
     if (failed(applyPatternsAndFoldGreedily(getOperation(),
                                             std::move(patterns)))) {

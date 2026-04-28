@@ -7,7 +7,7 @@ A @jit(deterministic=True) block FORBIDS `random` unless the function is
 also decorated with seed=N.
 
 Lattice order (least → most permissive):
-    pure < random < memory < io < top
+    pure < random < movement < state < collective < memory < io < top
 
 The EffectLattice walks a function's call graph (in Phase 1: inspects the
 function body's AST for known Tessera op calls) and infers the effect level.
@@ -79,20 +79,26 @@ class Effect(enum.IntEnum):
     most permissive (pure=0 is the strictest).
 
     Lattice:
-        pure (0) < random (1) < memory (2) < io (3) < top (4)
+        pure < random < movement < state < collective < memory < io < top
 
     Semantics:
         pure   — no side effects; output depends only on inputs; recompute safe
         random — may call RNG; result varies across identical inputs
-        memory — reads or writes mutable state (e.g., KV cache)
-        io     — performs collective communication or host I/O
+        movement — explicit prefetch/copy/wait movement effects
+        state  — reads or writes compiler-visible state (e.g., KV cache)
+        collective — performs async device/rank communication
+        memory — writes mutable tensors or aliases host-visible memory
+        io     — performs host I/O or unknown external calls
         top    — unknown / unconstrained (conservative fallback)
     """
-    pure   = 0
-    random = 1
-    memory = 2
-    io     = 3
-    top    = 4
+    pure       = 0
+    random     = 1
+    movement   = 2
+    state      = 3
+    collective = 4
+    memory     = 5
+    io         = 6
+    top        = 7
 
     def join(self, other: "Effect") -> "Effect":
         """
@@ -132,6 +138,8 @@ _OP_EFFECTS: Dict[str, Effect] = {
     "transpose":   Effect.pure,
     "cast":        Effect.pure,
     "fused_epilogue": Effect.pure,
+    "rmsnorm_safe": Effect.pure,
+    "softmax_safe": Effect.pure,
 
     # Random ops
     "dropout":     Effect.random,
@@ -140,18 +148,28 @@ _OP_EFFECTS: Dict[str, Effect] = {
     "bernoulli":   Effect.random,
     "normal":      Effect.random,
 
-    # Memory (stateful) ops — KV cache, mutable buffers
-    "kv_cache_read":  Effect.memory,
-    "kv_cache_write": Effect.memory,
-    "flash_attn":     Effect.memory,  # conservative: may read/write KV cache
+    # Movement effects
+    "prefetch": Effect.movement,
+    "async_copy": Effect.movement,
+    "await_movement": Effect.movement,
 
-    # Collective / IO ops
-    "all_reduce":      Effect.io,
-    "reduce_scatter":  Effect.io,
-    "all_gather":      Effect.io,
-    "send":            Effect.io,
-    "recv":            Effect.io,
-    "barrier":         Effect.io,
+    # Stateful ops — KV cache, rings, mutable compiler-visible state
+    "kv_cache_create": Effect.state,
+    "kv_cache_append": Effect.state,
+    "kv_cache_prune": Effect.state,
+    "kv_cache_read":  Effect.state,
+    "kv_cache_write": Effect.state,
+    "flash_attn":     Effect.state,  # conservative: may read/write KV cache
+
+    # Async collectives
+    "all_reduce":      Effect.collective,
+    "reduce_scatter":  Effect.collective,
+    "all_gather":      Effect.collective,
+    "all_to_all":      Effect.collective,
+    "await":           Effect.collective,
+    "send":            Effect.collective,
+    "recv":            Effect.collective,
+    "barrier":         Effect.collective,
 }
 
 # Attribute / module paths that signal random (numpy, torch, etc.)
@@ -245,7 +263,7 @@ class EffectLattice:
         Infer the effect level of fn by walking its AST.
 
         Returns:
-            Effect — the inferred effect level (pure, random, memory, io, top)
+            Effect — the inferred effect level
 
         Note: Functions whose source cannot be retrieved (built-ins, C
         extensions) are conservatively assigned Effect.top.
@@ -295,19 +313,20 @@ class EffectLattice:
         """
         Validate that fn satisfies the @jit(deterministic=True) contract.
 
-        A deterministic function must not have `random` effect UNLESS a
-        seed is provided (which makes the randomness reproducible).
+        A deterministic function may contain movement, state, and collective
+        effects only when they are represented in Tessera IR, where the runtime
+        can impose stream/order contracts. RNG requires a seed. Host I/O and
+        unknown calls remain forbidden.
 
         Args:
             fn   : the function to validate
             seed : if provided, random ops are allowed (seeded RNG is deterministic)
 
         Raises:
-            TesseraEffectError: if fn has random/io/top effect and no seed is given
+            TesseraEffectError: if fn has unseeded RNG or host I/O/unknown effect
         """
         inferred, offending_ops = self.infer_with_ops(fn)
 
-        # io effect is always forbidden under deterministic=True
         if inferred >= Effect.io:
             raise TesseraEffectError(
                 fn_name=fn.__name__,
@@ -315,23 +334,27 @@ class EffectLattice:
                 inferred=inferred,
                 offending_ops=offending_ops,
                 message=(
-                    f"@jit(deterministic=True) function {fn.__name__!r} performs I/O "
-                    f"or collective communication ({inferred.name}), which cannot be "
-                    f"made deterministic. Remove the deterministic=True flag or "
+                    f"@jit(deterministic=True) function {fn.__name__!r} performs "
+                    f"host I/O or unknown external work ({inferred.name}), which "
+                    f"cannot be made deterministic. Remove deterministic=True or "
                     f"eliminate the offending ops: {offending_ops}"
                 ),
             )
 
-        # random effect is allowed only if seed is provided
-        if inferred >= Effect.random and seed is None:
+        random_ops = [
+            op for op in offending_ops
+            if op.split(".")[-1] in {"dropout", "randn", "rand", "bernoulli", "normal"}
+            or any(op.startswith(pat) for pat in _RANDOM_ATTR_PATTERNS)
+        ]
+        if random_ops and seed is None:
             raise TesseraEffectError(
                 fn_name=fn.__name__,
                 declared=Effect.pure,
                 inferred=inferred,
-                offending_ops=offending_ops,
+                offending_ops=random_ops,
                 message=(
                     f"@jit(deterministic=True) function {fn.__name__!r} calls RNG ops "
-                    f"({offending_ops}) without a seed. Either add seed=<int> to "
+                    f"({random_ops}) without a seed. Either add seed=<int> to "
                     f"@jit(deterministic=True, seed=42) or remove the RNG calls."
                 ),
             )

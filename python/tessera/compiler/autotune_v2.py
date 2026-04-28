@@ -18,6 +18,8 @@ Usage::
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import sqlite3
 import time
@@ -42,7 +44,7 @@ class GEMMWorkload:
         for name, val in [("M", self.M), ("N", self.N), ("K", self.K)]:
             if val <= 0:
                 raise ValueError(f"{name}={val} must be > 0")
-        if self.dtype not in ("bf16", "fp16", "fp32", "fp8"):
+        if self.dtype not in ("bf16", "fp16", "fp32", "fp8", "int8", "nvfp4"):
             raise ValueError(f"dtype={self.dtype!r} not supported")
 
     def flops(self) -> int:
@@ -93,6 +95,15 @@ class TuningConfig:
             f"tile_n = {self.tile_n}, tile_k = {self.tile_k}, "
             f"num_warps = {self.num_warps}, num_stages = {self.num_stages}}}}}"
         )
+
+    def to_dict(self) -> Dict[str, int]:
+        return {
+            "tile_m": self.tile_m,
+            "tile_n": self.tile_n,
+            "tile_k": self.tile_k,
+            "num_warps": self.num_warps,
+            "num_stages": self.num_stages,
+        }
 
     def __repr__(self) -> str:
         return (f"TuningConfig(tile_m={self.tile_m}, tile_n={self.tile_n}, "
@@ -397,12 +408,77 @@ class BayesianAutotuner:
         if self._best is None:
             return "{tessera.autotune = {}}"
         c = self._best.config
+        schedule_hash = self.schedule_hash()
         return (
             f"{{tessera.autotune = {{tile_m = {c.tile_m}, tile_n = {c.tile_n}, "
             f"tile_k = {c.tile_k}, num_warps = {c.num_warps}, "
             f"num_stages = {c.num_stages}, "
+            f"schedule_hash = \"{schedule_hash}\", "
             f"tflops = {self._best.tflops:.2f}}}}}"
         )
+
+    def schedule_artifact(self, arch: str = "generic") -> Dict[str, object]:
+        """Return a reproducible schedule artifact for deployment bundles."""
+        tile = self._best.config.to_dict() if self._best is not None else {}
+        artifact = {
+            "version": 1,
+            "kind": "tessera.schedule_artifact",
+            "arch": arch,
+            "shape": {
+                "M": self.workload.M,
+                "N": self.workload.N,
+                "K": self.workload.K,
+                "dtype": self.workload.dtype,
+            },
+            "numeric_policy": {
+                "storage": self.workload.dtype,
+                "accum": "f32" if self.workload.dtype != "int8" else "s32",
+                "rounding": "nearest_even",
+                "deterministic": True,
+            },
+            "movement": {
+                "prefetch": "auto",
+                "overlap": "compute",
+                "stages": tile.get("num_stages", 0),
+            },
+            "tile": tile,
+        }
+        artifact["hash"] = self._hash_payload(artifact)
+        return artifact
+
+    def schedule_hash(self, arch: str = "generic") -> str:
+        """Stable hash for the current best schedule artifact."""
+        return str(self.schedule_artifact(arch=arch)["hash"])
+
+    def to_schedule_artifact_mlir(self, arch: str = "generic") -> str:
+        """Serialise the schedule artifact as a Schedule IR op."""
+        artifact = self.schedule_artifact(arch=arch)
+        shape = artifact["shape"]
+        tile = artifact["tile"]
+        shape_key = (
+            f"M={shape['M']};N={shape['N']};K={shape['K']};dtype={shape['dtype']}"
+        )
+        tile_attr = (
+            "{"
+            + ", ".join(f"{k} = {v}" for k, v in tile.items())
+            + "}"
+            if tile
+            else "{}"
+        )
+        return (
+            "schedule.artifact "
+            f"{{hash = \"{artifact['hash']}\", arch = \"{arch}\", "
+            f"shape_key = \"{shape_key}\", tile = {tile_attr}, "
+            "movement = {prefetch = \"auto\", overlap = \"compute\"}, "
+            f"numeric_policy = \"{shape['dtype']}@accum(f32)\"}}"
+        )
+
+    @staticmethod
+    def _hash_payload(payload: Dict[str, object]) -> str:
+        stable = dict(payload)
+        stable.pop("hash", None)
+        raw = json.dumps(stable, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
     def __repr__(self) -> str:
         return (f"BayesianAutotuner(workload={self.workload!r}, "

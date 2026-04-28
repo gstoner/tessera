@@ -30,9 +30,9 @@ class TestGEMMWorkload:
         with pytest.raises(ValueError):
             GEMMWorkload(M=0, N=1024, K=1024)
 
-    def test_invalid_dtype(self):
-        with pytest.raises(ValueError):
-            GEMMWorkload(M=1024, N=1024, K=1024, dtype="int8")
+    def test_int8_dtype_supported_for_quantized_weights(self):
+        w = GEMMWorkload(M=1024, N=1024, K=1024, dtype="int8")
+        assert w.dtype == "int8"
 
     def test_tflops_at_zero_latency(self):
         w = GEMMWorkload(M=1024, N=1024, K=1024)
@@ -147,6 +147,7 @@ class TestBayesianAutotuner:
         attr = tuner.to_mlir_attrs()
         assert "tessera.autotune" in attr
         assert "tile_m" in attr
+        assert "schedule_hash" in attr
 
     def test_to_mlir_attrs_before_tune(self):
         tuner = self._tuner()
@@ -156,6 +157,22 @@ class TestBayesianAutotuner:
     def test_repr_contains_workload(self):
         tuner = self._tuner()
         assert "GEMMWorkload" in repr(tuner)
+
+    def test_schedule_artifact_has_stable_hash_and_policy(self):
+        tuner = self._tuner()
+        tuner.tune(max_trials=5)
+        artifact = tuner.schedule_artifact(arch="sm90")
+        assert artifact["hash"] == tuner.schedule_hash(arch="sm90")
+        assert artifact["numeric_policy"]["accum"] == "f32"
+        assert artifact["movement"]["overlap"] == "compute"
+
+    def test_schedule_artifact_mlir_op(self):
+        tuner = self._tuner()
+        tuner.tune(max_trials=5)
+        mlir = tuner.to_schedule_artifact_mlir(arch="sm90")
+        assert "schedule.artifact" in mlir
+        assert "hash" in mlir
+        assert "shape_key" in mlir
 
 
 class TestBayesianAutotunerCache:

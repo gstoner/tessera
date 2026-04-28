@@ -2,15 +2,18 @@
 // EffectAnnotationPass.cpp
 //
 // Infers the side-effect class of each func.func in the module by walking its
-// body ops, then attaches  tessera.effect = "pure"|"random"|"memory"|"io"  as
-// a function attribute.
+// body ops, then attaches a semantic effect summary as a function attribute.
 //
 // Effect lattice (least → most permissive):
-//   pure (0) < random (1) < memory (2) < io (3)
+//   pure (0) < random (1) < movement (2) < state (3)
+//            < collective (4) < memory (5) < io (6)
 //
 // Inference rules:
 //   tessera.flash_attn  with dropout_p != 0.0   → random
 //   tessera.copy                                 → memory
+//   schedule.prefetch / schedule.async_copy      → movement
+//   tessera.kv_cache.* / tessera.ring.*          → state
+//   tessera.collective.* / collective.*          → collective
 //   any arg  tessera.effect = "write"|"reduce_*" → memory
 //   func.call to an external non-tessera func    → io
 //   everything else                              → pure
@@ -30,7 +33,15 @@ using namespace mlir;
 
 namespace {
 
-enum class EffectLevel : int { Pure = 0, Random = 1, Memory = 2, IO = 3 };
+enum class EffectLevel : int {
+  Pure = 0,
+  Random = 1,
+  Movement = 2,
+  State = 3,
+  Collective = 4,
+  Memory = 5,
+  IO = 6
+};
 
 static EffectLevel maxEffect(EffectLevel a, EffectLevel b) {
   return (static_cast<int>(a) >= static_cast<int>(b)) ? a : b;
@@ -40,6 +51,9 @@ static StringRef effectStr(EffectLevel e) {
   switch (e) {
   case EffectLevel::Pure:   return "pure";
   case EffectLevel::Random: return "random";
+  case EffectLevel::Movement: return "movement";
+  case EffectLevel::State: return "state";
+  case EffectLevel::Collective: return "collective";
   case EffectLevel::Memory: return "memory";
   case EffectLevel::IO:     return "io";
   }
@@ -48,6 +62,9 @@ static StringRef effectStr(EffectLevel e) {
 
 static EffectLevel parseEffectStr(StringRef s) {
   if (s == "random") return EffectLevel::Random;
+  if (s == "movement") return EffectLevel::Movement;
+  if (s == "state") return EffectLevel::State;
+  if (s == "collective") return EffectLevel::Collective;
   if (s == "memory") return EffectLevel::Memory;
   if (s == "io")     return EffectLevel::IO;
   return EffectLevel::Pure;
@@ -76,6 +93,23 @@ struct EffectAnnotation
 
     // Explicit copy/store has memory side-effects.
     if (name == "tessera.copy") return EffectLevel::Memory;
+
+    if (name == "schedule.prefetch" || name == "schedule.async_copy" ||
+        name == "schedule.await_movement" || name == "tile.async_copy" ||
+        name == "tile.wait_async")
+      return EffectLevel::Movement;
+
+    if (name.starts_with("tessera.kv_cache.") ||
+        name.starts_with("tessera.ring.") ||
+        name.starts_with("cache.") || name.starts_with("ring."))
+      return EffectLevel::State;
+
+    if (name.starts_with("tessera.collective.") ||
+        name.starts_with("collective."))
+      return EffectLevel::Collective;
+
+    if (name == "rng.uniform" || name.starts_with("tessera.rng."))
+      return EffectLevel::Random;
 
     // External function calls (not tessera.*) raise the level to IO.
     if (name == "func.call") {

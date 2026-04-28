@@ -21,9 +21,15 @@ Python/Tessera DSL
 Each level serves specific purposes:
 
 - **Graph IR**: High-level operations, autodiff, effects, and algebraic simplification
-- **Schedule IR**: Loop tiling, fusion, memory placement, and parallelization
+- **Schedule IR**: Loop tiling, fusion, memory placement, movement effects,
+  schedule artifacts, and parallelization
 - **Tile IR**: Explicit tile operations, shared memory management, and hardware intrinsics
 - **Target IR**: Backend-specific code generation (PTX, CUDA Tile IR, LLVM)
+
+The canonical deep-learning semantic objects are defined in
+`src/compiler/docs/deep_learning_semantic_core.md`: numeric policies, stateful
+cache objects, Schedule IR movement effects, typed async collectives, durable
+schedule artifacts, and the determinism/reproducibility contract.
 
 ## Pass Organization
 
@@ -32,7 +38,10 @@ The compiler is organized into several major pass families:
 ### 1. Frontend Passes (Python → Graph IR)
 - **AST Lowering**: Converts Tessera Python to Graph IR
 - **Type Inference**: Infers tensor shapes and dtypes
-- **Effect Analysis**: Tracks side effects (RNG, state, collectives)
+- **Numerics Policy Resolution**: Attaches canonical `tessera.numeric_policy`
+  to matmul, attention, norm, softmax, casts, and quantized weights
+- **Effect Analysis**: Tracks RNG, movement, state/cache, collectives, memory,
+  and host I/O effects
 - **Symbol Resolution**: Resolves symbolic dimensions and mesh layouts
 
 ### 2. Graph IR Passes
@@ -40,18 +49,24 @@ The compiler is organized into several major pass families:
 - **Algebraic Simplification**: Mathematical optimizations
 - **Fusion Analysis**: Identifies fusable operations
 - **Distribution Passes**: Handles mesh parallelism and sharding
+- **State/Cache Legalization**: Keeps KV cache/page/ring semantics visible until
+  Schedule IR chooses placement and movement
 
 ### 3. Schedule IR Passes
 - **Tiling Passes**: Loop tiling and blocking strategies
 - **Memory Placement**: Assigns tensors to memory hierarchy
+- **Movement Planning**: Emits `schedule.prefetch`, `schedule.async_copy`, and
+  `schedule.await_movement` before Tile IR lowering
 - **Pipeline Generation**: Creates async execution pipelines
-- **Autotuning Integration**: Explores scheduling search spaces
+- **Autotuning Integration**: Explores scheduling search spaces and emits
+  durable `schedule.artifact` hashes
 
 ### 4. Tile IR Passes
 - **Memory Management**: Shared memory allocation and barriers
 - **Intrinsic Lowering**: Maps to hardware-specific operations
 - **Register Allocation**: Manages register pressure
-- **Collective Insertion**: Adds distributed communication ops
+- **Collective Insertion**: Adds typed async `tessera.collective.*` ops with
+  future/await dependencies
 
 ### 5. Target IR Passes
 - **Code Generation**: Emits PTX, CUDA Tile IR, or LLVM

@@ -5,6 +5,8 @@
 - Integrate **mesh axes** into IR semantics.
 - Expose **pipeline schedules** (1F1B, interleaved) at Schedule IR.
 - Extend **MoE** with dynamic load-balancing hooks (token limiter, A2A planner).
+- Use typed async `tessera.collective.future<T>` / `await` dependencies rather
+  than token-ish collective placeholders.
 
 ## 1. Mesh Semantics
 Introduce `schedule.mesh.region` with explicit `axes` and legality checks for collectives.
@@ -15,7 +17,8 @@ schedule.mesh.define @M dims = [2,4,2] axis_names = ["data","model","pipe"]
 
 schedule.mesh.region @M { axis = "data" } {
   // Data-parallel work; all-reduce over "data" is legal
-  schedule.collective "all_reduce" { axis = "data", op = "mean" }
+  %f = tessera.collective.all_reduce %grad, "sum" on "data" { dtype = "bf16" }
+  %reduced = tessera.collective.await %f
 }
 schedule.mesh.region @M { axis = "model" } {
   // Model-parallel sharded matmul legality checked

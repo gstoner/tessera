@@ -22,6 +22,10 @@ from tessera.compiler.effects import Effect, EffectLattice, TesseraEffectError
 class TestEffectEnum:
     def test_order(self):
         assert Effect.pure < Effect.random
+        assert Effect.random < Effect.movement
+        assert Effect.movement < Effect.state
+        assert Effect.state < Effect.collective
+        assert Effect.collective < Effect.memory
         assert Effect.random < Effect.memory
         assert Effect.memory < Effect.io
         assert Effect.io < Effect.top
@@ -52,12 +56,24 @@ class TestEffectEnum:
     def test_names(self):
         assert Effect.pure.name == "pure"
         assert Effect.random.name == "random"
+        assert Effect.movement.name == "movement"
+        assert Effect.state.name == "state"
+        assert Effect.collective.name == "collective"
         assert Effect.memory.name == "memory"
         assert Effect.io.name == "io"
         assert Effect.top.name == "top"
 
     def test_values_ordered(self):
-        effects = [Effect.pure, Effect.random, Effect.memory, Effect.io, Effect.top]
+        effects = [
+            Effect.pure,
+            Effect.random,
+            Effect.movement,
+            Effect.state,
+            Effect.collective,
+            Effect.memory,
+            Effect.io,
+            Effect.top,
+        ]
         values = [e.value for e in effects]
         assert values == sorted(values)
 
@@ -84,12 +100,12 @@ class TestEffectLatticeInfer:
         effect = self.lattice.infer(dropout_fn)
         assert effect == Effect.random
 
-    def test_io_function(self):
+    def test_collective_function(self):
         def collective_fn(x):
             return tessera.ops.all_reduce(x)
 
         effect = self.lattice.infer(collective_fn)
-        assert effect == Effect.io
+        assert effect == Effect.collective
 
     def test_no_ops_is_pure(self):
         def plain_python(x):
@@ -172,14 +188,11 @@ class TestCheckDeterministic:
 
         self.lattice.check_deterministic(f, seed=42)  # seeded RNG is deterministic
 
-    def test_io_always_fails(self):
+    def test_collective_deterministic_is_governed_by_ir(self):
         def f(x):
             return tessera.ops.all_reduce(x)
 
-        with pytest.raises(TesseraEffectError) as exc_info:
-            self.lattice.check_deterministic(f, seed=42)
-        # io cannot be deterministic even with a seed
-        assert "io" in str(exc_info.value).lower() or "collective" in str(exc_info.value).lower()
+        self.lattice.check_deterministic(f, seed=42)
 
     def test_error_has_fn_name(self):
         def my_nondeterministic_fn(x):

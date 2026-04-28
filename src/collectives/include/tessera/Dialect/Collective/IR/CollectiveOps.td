@@ -116,6 +116,22 @@ def AwaitOp : Op<Tessera_Collective_Dialect, "await", []> {
   let assemblyFormat = [{ $future attr-dict }];
 }
 
+def ShardViewOp : Op<Tessera_Collective_Dialect, "shard_view", []> {
+  let summary = "Create a typed logical shard view of a tensor/memref value";
+  let arguments = (ins AnyType:$input, StrAttr:$mesh_axis, I64Attr:$dim);
+  let results = (outs Tessera_ShardType:$shard);
+  let assemblyFormat = "$input `on` $mesh_axis `dim` $dim attr-dict `:` type($input)";
+  let hasVerifier = 1;
+}
+
+def MaterializeShardOp : Op<Tessera_Collective_Dialect, "materialize_shard", []> {
+  let summary = "Materialize a typed shard back into its payload value";
+  let arguments = (ins Tessera_ShardType:$shard);
+  let results = (outs AnyType:$value);
+  let assemblyFormat = "$shard attr-dict";
+  let hasVerifier = 1;
+}
+
 def QoSLimitOp : Op<Tessera_Collective_Dialect, "qos.limit", []> {
   let summary = "Set maximum in-flight collective chunks for QoS";
   let arguments = (ins I64Attr:$max_inflight);

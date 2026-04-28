@@ -88,8 +88,12 @@ class TestElementwise:
         assert result is None
         assert engine.reporter.has_errors()
 
-    def test_rank_mismatch_records_error(self, engine):
-        result = engine.infer_elementwise((4,), (4, 4))
+    def test_broadcast_passes(self, engine):
+        shape = engine.infer_elementwise((8, 1, 128), (8, 1024, 128))
+        assert shape == (8, 1024, 128)
+
+    def test_broadcast_mismatch_records_error(self, engine):
+        result = engine.infer_elementwise((3,), (4, 4))
         assert result is None
         assert engine.reporter.has_errors()
 

@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Sequence
 
+from .shape import ShapeSystemError, broadcast_shape
+
 
 # ---------------------------------------------------------------------------
 # Diagnostic level
@@ -607,7 +609,8 @@ class ShapeInferenceEngine:
     ) -> Optional[tuple]:
         """
         Infer output shape of a 2-D matmul: (M, K) × (K, N) → (M, N).
-        Supports batched: (B, M, K) × (B, K, N) → (B, M, N).
+        Supports batched matmul with NumPy-style batch broadcasting:
+        (B, M, K) × (1, K, N) → (B, M, N).
         """
         L, R = tuple(lhs_shape), tuple(rhs_shape)
         if len(L) < 2 or len(R) < 2:
@@ -623,7 +626,16 @@ class ShapeInferenceEngine:
                 actual_shape=None,
             )
             return None
-        batch = L[:-2]
+        try:
+            batch = broadcast_shape(L[:-2], R[:-2])
+        except ShapeSystemError as exc:
+            self._reporter.error(
+                f"matmul batch dimensions are not broadcastable: {exc}",
+                op_name=op_name,
+                code=TesseraErrorCode.SHAPE_MISMATCH,
+                hints=["align batch dimensions or insert an explicit broadcast"],
+            )
+            return None
         return batch + (L[-2], R[-1])
 
     def infer_elementwise(
@@ -631,18 +643,37 @@ class ShapeInferenceEngine:
         *shapes: Sequence[int],
         op_name: str = "tessera.elementwise",
     ) -> Optional[tuple]:
-        """All shapes must be identical for element-wise ops."""
+        """Infer NumPy-style broadcast shape for element-wise ops."""
         if not shapes:
             return None
-        ref = tuple(shapes[0])
-        for s in shapes[1:]:
-            if tuple(s) != ref:
-                self._reporter.error(
-                    f"element-wise shape mismatch: {ref} vs {tuple(s)}",
-                    op_name=op_name,
-                )
-                return None
-        return ref
+        try:
+            return broadcast_shape(*(tuple(s) for s in shapes))
+        except ShapeSystemError as exc:
+            self._reporter.error(
+                f"element-wise shapes are not broadcastable: {exc}",
+                op_name=op_name,
+                code=TesseraErrorCode.SHAPE_MISMATCH,
+                hints=["insert an explicit broadcast or correct the operand shapes"],
+            )
+            return None
+
+    def infer_transpose(
+        self,
+        shape: Sequence[int],
+        axes: Optional[Sequence[int]] = None,
+        op_name: str = "tessera.transpose",
+    ) -> Optional[tuple]:
+        """Infer output shape for a transpose/permutation."""
+        S = tuple(shape)
+        axes_tuple = tuple(reversed(range(len(S)))) if axes is None else tuple(axes)
+        if sorted(axes_tuple) != list(range(len(S))):
+            self._reporter.error(
+                f"transpose axes {axes_tuple} are not a permutation for rank {len(S)}",
+                op_name=op_name,
+                code=TesseraErrorCode.SHAPE_MISMATCH,
+            )
+            return None
+        return tuple(S[i] for i in axes_tuple)
 
     def infer_flash_attn(
         self,
@@ -708,6 +739,10 @@ class ShapeInferenceEngine:
             elif kind == "flash_attn" and len(inputs) >= 3:
                 shape = self.infer_flash_attn(
                     inputs[0], inputs[1], inputs[2], op_name
+                )
+            elif kind == "transpose" and len(inputs) >= 1:
+                shape = self.infer_transpose(
+                    inputs[0], axes=op.get("axes"), op_name=op_name
                 )
 
             if shape is not None:

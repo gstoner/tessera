@@ -1,12 +1,12 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-04-26
+last_updated: 2026-04-28
 ---
 
 # Tessera Python API Specification
 **Status:** Normative — grounded in `python/tessera/` Phase 1–3 implementation  
-**Last updated:** April 26, 2026  
+**Last updated:** April 28, 2026  
 **Authority:** This document specifies every public Python symbol in Tessera Phases 1–3. For naming disputes, `docs/CANONICAL_API.md` is the final arbiter. For compiler internals (pass pipeline, IR layers), see `docs/spec/COMPILER_REFERENCE.md`.
 
 ---
@@ -56,6 +56,7 @@ tessera/
 │   ├── graph_ir.py               # GraphIRBuilder
 │   ├── gpu_target.py             # GPUTargetProfile, ISA
 │   └── attn_lower.py             # FlashAttnLoweringConfig
+├── shape.py                      # Dim, Shape, layout/shard checks, runtime witnesses
 ├── ops/
 │   └── __init__.py               # tessera.ops.* namespace
 └── testing/
@@ -87,6 +88,11 @@ tessera.index_launch # tessera.index_launch(axis=...)
 # Constraints namespace
 tessera.constraint   # tessera.constraint.Divisible / Range / Equal
 tessera.require      # tessera.require(constraint) inside @jit body
+
+# Shape system
+tessera.sym          # symbolic dimensions: B, N, D = tessera.sym("B N D")
+tessera.check_shapes # marks functions for shape-system validation
+tessera.shape        # tessera.shape.ShapeConstraintGraph / RuntimeShapeWitness / helpers
 
 # Ops namespace
 tessera.ops          # tessera.ops.gemm / layer_norm / dropout / etc.
@@ -674,6 +680,44 @@ def aligned_gemm(
     return tessera.ops.gemm(A, B)
 # Raises TesseraConstraintError immediately if K % 64 != 0 (given bindings)
 ```
+
+---
+
+### 9.7 Shape-system helpers
+
+**Module:** `tessera.shape`  
+**Imports:** `tessera.sym`, `tessera.dim`, `tessera.check_shapes`, `tessera.shape.*`
+
+The shape-system helpers are the Python mirror of `docs/spec/shape-system.md`.
+They support symbolic dimensions, derived dimension products, broadcasting,
+reshape element-count checks, logical-dimension sharding checks, schedule tile
+feasibility, and runtime shape witnesses.
+
+```python
+B, N, M, D = tessera.sym("B N M D")
+
+@tessera.check_shapes
+def attention(q: tessera.Tensor[B, N, D],
+              k: tessera.Tensor[B, M, D]) -> tessera.Tensor[B, N, M]:
+    ...
+```
+
+Public helpers:
+
+| Symbol | Purpose |
+|--------|---------|
+| `Dim`, `dim`, `sym` | Symbolic/concrete dimensions |
+| `Shape`, `Layout`, `ShapeShard` | Tensor shape metadata |
+| `ShapeConstraintGraph` | Equality, derived, divisibility, and range checks |
+| `broadcast_shape` | NumPy-style symbolic broadcast rule |
+| `matmul_shape` | Matmul result-shape rule with batch broadcasting |
+| `reshape_shape` | Reshape element-count validation |
+| `check_shard` | Logical dimension divisibility against mesh axes |
+| `check_schedule_tile` | Schedule divisibility check with padding suggestion |
+| `RuntimeShapeWitness` | Runtime refinement for dynamic dimensions |
+
+These helpers do not replace the MLIR verifier; they make the same contracts
+available to the frontend, tests, and IDE-facing tooling.
 
 ---
 

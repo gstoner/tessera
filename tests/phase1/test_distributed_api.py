@@ -110,10 +110,18 @@ class TestBlock:
 
 
 class TestCyclic:
-    def test_make_shard_spec_not_implemented(self):
+    def test_make_shard_spec(self):
         dist = Cyclic(mesh_axes=("tp",))
-        with pytest.raises(NotImplementedError, match="Phase 2"):
-            dist.make_shard_spec(Rect((8, 256)))
+        spec = dist.make_shard_spec(Rect((8, 256)))
+        assert spec.partition == (0,)
+        assert spec.mesh_axes == ("tp",)
+        assert spec.cyclic is True
+
+    def test_ir_attr(self):
+        dist = Cyclic(mesh_axes=("tp",))
+        attr = dist.to_ir_attr()
+        assert "cyclic" in attr
+        assert "tp" in attr
 
 
 class TestReplicated:

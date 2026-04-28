@@ -28,7 +28,25 @@ import types
 from . import core
 from . import nn
 from . import arch
+from . import shape
 from .core import Tensor, Module
+from .shape import (
+    Dim,
+    Layout,
+    RuntimeShapeWitness,
+    Shape,
+    ShapeConstraintGraph,
+    ShapeShard,
+    ShapeSystemError,
+    broadcast_shape,
+    check_schedule_tile,
+    check_shapes,
+    check_shard,
+    dim,
+    matmul_shape,
+    reshape_shape,
+    sym,
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Phase 1: distributed API

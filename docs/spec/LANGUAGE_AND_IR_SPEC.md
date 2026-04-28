@@ -134,8 +134,15 @@ assert_stmt    ::= "assert" "(" expr [ "," string ] ")"
 ## 5. Static Semantics
 
 Every expression must have a statically known type. Tensor ranks must be known.
-Unknown dimensions are allowed at Graph IR and Schedule IR, but must be resolved
-or explicitly padded before lowering to Tile IR.
+Unknown dimensions are allowed at Graph IR and Schedule IR, but must be resolved,
+guarded by a runtime shape witness, or explicitly padded before lowering to
+Tile IR.
+
+Shape semantics are defined by `docs/spec/shape-system.md`. Tensor types carry
+logical shape separately from physical layout and shard map. Reusing a symbolic
+dimension name asserts equality within the current specialization. Derived
+dimensions such as `D = H * Dh` are legal in Graph IR, but products must be
+resolved before Tile IR lowering.
 
 Implicit casts shall not occur except for precision promotions declared by the
 operator numeric policy, such as BF16 or FP8 storage with FP32 accumulation.
@@ -189,6 +196,11 @@ Selected operations:
 Verification:
 
 - matmul requires `lhs.shape[-1] == rhs.shape[-2]`
+- batch matmul and elementwise ops use broadcasting only when the operator
+  declares broadcast semantics
+- reshape preserves element count, including derived-dimension products
+- shard maps require logical dimensions to be divisible by their mesh axes when
+  concrete, or guarded by runtime witnesses when dynamic
 - softmax axis must be in range and stable by construction
 - cache append must match cache head dimension and dtype policy
 - all-reduce requires sharding compatibility with the axis communicator
@@ -219,6 +231,8 @@ Constraints:
 - prefetch scopes are `shared`, `global`, `distributed`, or `host`
 - pipeline stages must be acyclic and have depth at least one
 - movement plans must be explicit before Tile IR
+- schedule feasibility shall prune tile/layout candidates that violate shape
+  divisibility or shard constraints before autotuning
 - schedule artifacts must include shape, layout, target, numeric policy,
   movement plan, tile knobs, and hash
 

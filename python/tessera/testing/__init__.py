@@ -7,9 +7,27 @@ Exports:
 """
 
 from .mock_collective import MockRankGroup, MockRank, MockCollectiveError
+from .qa import (
+    ChaosEvent,
+    HealthSnapshot,
+    PerformanceExpectation,
+    RegressionBaseline,
+    ReplayManifest,
+    assert_close_to_reference,
+    assert_deterministic,
+    assert_finite,
+)
 
 __all__ = [
     "MockRankGroup",
     "MockRank",
     "MockCollectiveError",
+    "ChaosEvent",
+    "HealthSnapshot",
+    "PerformanceExpectation",
+    "RegressionBaseline",
+    "ReplayManifest",
+    "assert_close_to_reference",
+    "assert_deterministic",
+    "assert_finite",
 ]

@@ -101,9 +101,15 @@ def _dtype_to_ir_type(dtype: str) -> IRType:
         "fp64": IRType("tensor<*xf64>"),
         "fp8_e4m3": IRType("tensor<*xf8E4M3FN>"),
         "fp8_e5m2": IRType("tensor<*xf8E5M2>"),
+        "fp6_e2m3": IRType("tensor<*x!tessera.fp6_e2m3>"),
+        "fp6_e3m2": IRType("tensor<*x!tessera.fp6_e3m2>"),
+        "fp4_e2m1": IRType("tensor<*x!tessera.fp4_e2m1>"),
+        "nvfp4": IRType("tensor<*x!tessera.nvfp4>"),
         "int8": IRType("tensor<*xi8>"),
+        "int16": IRType("tensor<*xi16>"),
         "int32": IRType("tensor<*xi32>"),
         "int64": IRType("tensor<*xi64>"),
+        "bool": IRType("tensor<*xi1>"),
     }
     return _map.get(dtype, TENSOR_OPAQUE)
 

@@ -2,6 +2,9 @@
 
 > Drop-in test package to *verify numerical correctness* across Tessera backends, dtypes, and schedules.
 
+This suite implements the numerical portion of the broader QA behavior guide:
+`docs/guides/Tessera_QA_Reliability_Guide.md`.
+
 ## Goals
 - Catch silent accuracy regressions early.
 - Make tolerance choices explicit per op/dtype/backend.

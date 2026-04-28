@@ -129,12 +129,13 @@ runtime conformance requires the Phase 6 runtime C ABI execution path.
 | `DistributedArray.parts(axis)` | `PYTHON_API_SPEC §8` |
 | `ShardSpec` with integer `partition` tuples | `PYTHON_API_SPEC §9`, `shape-system.md §4` |
 | `tessera.index_launch` | `PYTHON_API_SPEC §10` |
-| `GPUTargetProfile`, `ISA` enum (SM_80–SM_100) | `PYTHON_API_SPEC §13` |
+| `GPUTargetProfile`, `ISA` enum (SM_80–SM_120 placeholder) | `PYTHON_API_SPEC §13` |
 | `FlashAttnLoweringConfig` | `PYTHON_API_SPEC §14` |
 | `@tessera.jit(target=GPUTargetProfile(...))` routing | `COMPILER_REFERENCE §3.2` |
 | `tessera-lower-to-gpu` pipeline (all 9 passes) | `COMPILER_REFERENCE §3.2` |
 | FA-4 Attn dialect: `ScaledDotProduct`, `OnlineSoftmax`, `LseAccumulate`, `DropoutMask`, `CausalMask` | `TARGET_IR_SPEC §3`, `04_tile_ir.md §4` |
 | `tile.async_copy` / `tile.wait_async` with `stage=` attribute | `04_tile_ir.md §3.2` |
+| Hopper+ `tile.mbarrier.*` transaction barriers | `LANGUAGE_AND_IR_SPEC §9`, `MEMORY_MODEL_SPEC §4` |
 | `tessera.tma.*` + `tessera.nvgpu.wgmma.*` ops (SM_90 path) | `TARGET_IR_SPEC §4–5` |
 | `WarpSpecializationPass` producer/consumer role assignment | `LOWERING_PIPELINE_SPEC §2.2` |
 | Runtime C ABI lifecycle: `tsrInit` through `tsrShutdown` | `RUNTIME_ABI_SPEC §5.1` (Phase 6 runtime requirement) |

@@ -30,9 +30,23 @@ class TestISACapabilities:
         p = GPUTargetProfile(isa=ISA.SM_100)
         assert p.supports_wgmma is True
 
+    def test_sm90_supports_mbarrier(self):
+        p = GPUTargetProfile(isa=ISA.SM_90)
+        assert p.supports_mbarrier is True
+
+    def test_sm80_no_mbarrier(self):
+        p = GPUTargetProfile(isa=ISA.SM_80)
+        assert p.supports_mbarrier is False
+
+    def test_rubin_placeholder_supports_low_precision_tensor_core_dtypes(self):
+        p = GPUTargetProfile(isa=ISA.SM_120)
+        for dtype in ("nvfp4", "fp4_e2m1", "fp6_e2m3", "fp6_e3m2", "fp8_e4m3", "fp8_e5m2"):
+            assert p.supports_tensor_core_dtype(dtype)
+
     def test_isa_ordering(self):
         assert ISA.SM_90 > ISA.SM_80
         assert ISA.SM_100 > ISA.SM_90
+        assert ISA.SM_120 > ISA.SM_100
         assert ISA.SM_86 < ISA.SM_90
 
 

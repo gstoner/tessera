@@ -25,6 +25,7 @@ class ISA(IntEnum):
     SM_89  = 89   # RTX 40xx — Ada Lovelace
     SM_90  = 90   # H100 / GH200 — Hopper; WGMMA + TMA available
     SM_100 = 100  # B100 / GB200 — Blackwell
+    SM_120 = 120  # Rubin placeholder until NVIDIA publishes final CC numbering
 
 
 # Shared memory capacities in bytes per SM for each generation.
@@ -34,6 +35,7 @@ _SMEM_BYTES: dict[ISA, int] = {
     ISA.SM_89:  100352,   # RTX 4090: 98 KB
     ISA.SM_90:  233472,   # H100: 228 KB
     ISA.SM_100: 262144,   # B100: 256 KB
+    ISA.SM_120: 262144,   # Rubin: preliminary placeholder
 }
 
 # Maximum warps per CTA for each generation.
@@ -43,6 +45,39 @@ _MAX_WARPS: dict[ISA, int] = {
     ISA.SM_89:  32,
     ISA.SM_90:  32,   # 128 threads / warpgroup = 4 warps; max 8 warpgroups
     ISA.SM_100: 32,
+    ISA.SM_120: 32,
+}
+
+
+_BASE_CUDA_CORE_DTYPES = frozenset({
+    "fp64",
+    "fp32",
+    "int32",
+    "fp16",
+    "bf16",
+})
+
+_TENSOR_CORE_DTYPES: dict[ISA, frozenset[str]] = {
+    ISA.SM_80: frozenset({
+        "fp64", "tf32", "bf16", "fp16", "int8",
+    }),
+    ISA.SM_86: frozenset({
+        "tf32", "bf16", "fp16", "int8",
+    }),
+    ISA.SM_89: frozenset({
+        "tf32", "bf16", "fp16", "int8",
+    }),
+    ISA.SM_90: frozenset({
+        "fp64", "tf32", "bf16", "fp16", "fp8_e4m3", "fp8_e5m2", "int8",
+    }),
+    ISA.SM_100: frozenset({
+        "fp64", "tf32", "bf16", "fp16", "fp8_e4m3", "fp8_e5m2",
+        "fp6_e2m3", "fp6_e3m2", "fp4_e2m1", "nvfp4", "int8",
+    }),
+    ISA.SM_120: frozenset({
+        "nvfp4", "fp4_e2m1", "fp64", "tf32", "bf16", "fp16",
+        "fp8_e4m3", "fp8_e5m2", "fp6_e2m3", "fp6_e3m2", "int8",
+    }),
 }
 
 
@@ -112,6 +147,30 @@ class GPUTargetProfile:
         return self.isa >= ISA.SM_90
 
     @property
+    def supports_mbarrier(self) -> bool:
+        """True for SM_90+ (Hopper). Enables async transaction barriers."""
+        return self.isa >= ISA.SM_90
+
+    @property
+    def supports_async_transaction_barrier(self) -> bool:
+        """Alias for Hopper+ mbarrier transaction-count support."""
+        return self.supports_mbarrier
+
+    @property
+    def tensor_core_dtypes(self) -> frozenset[str]:
+        """Tensor Core dtype names accepted by the target profile."""
+        return _TENSOR_CORE_DTYPES[self.isa]
+
+    @property
+    def cuda_core_dtypes(self) -> frozenset[str]:
+        """CUDA-core scalar dtype names for the target profile."""
+        return _BASE_CUDA_CORE_DTYPES
+
+    def supports_tensor_core_dtype(self, dtype: str) -> bool:
+        """Return True when dtype is listed for Tensor Core lowering."""
+        return dtype in self.tensor_core_dtypes
+
+    @property
     def max_smem_bytes(self) -> int:
         """Effective shared memory limit for this target."""
         if self.shared_mem_bytes is not None:
@@ -142,5 +201,6 @@ class GPUTargetProfile:
             f"GPUTargetProfile(isa={self.isa.name}, "
             f"warps_per_cta={self.warps_per_cta}, "
             f"smem={self.max_smem_bytes // 1024}KB, "
-            f"wgmma={self.supports_wgmma}, tma={self.supports_tma})"
+            f"wgmma={self.supports_wgmma}, tma={self.supports_tma}, "
+            f"mbarrier={self.supports_mbarrier})"
         )

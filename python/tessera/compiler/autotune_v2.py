@@ -44,7 +44,19 @@ class GEMMWorkload:
         for name, val in [("M", self.M), ("N", self.N), ("K", self.K)]:
             if val <= 0:
                 raise ValueError(f"{name}={val} must be > 0")
-        if self.dtype not in ("bf16", "fp16", "fp32", "fp8", "int8", "nvfp4"):
+        if self.dtype not in (
+            "bf16",
+            "fp16",
+            "fp32",
+            "fp8",
+            "fp8_e4m3",
+            "fp8_e5m2",
+            "fp6_e2m3",
+            "fp6_e3m2",
+            "fp4_e2m1",
+            "nvfp4",
+            "int8",
+        ):
             raise ValueError(f"dtype={self.dtype!r} not supported")
 
     def flops(self) -> int:

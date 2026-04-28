@@ -17,10 +17,14 @@ These documents are the source of truth for current Tessera Phases 1-3 behavior 
 |-------|----------|
 | Public API names and current syntax | `docs/CANONICAL_API.md` |
 | Compiler architecture, IR stack, pass registry, phase status | `docs/spec/COMPILER_REFERENCE.md` |
+| Language and multi-level IR semantics | `docs/spec/LANGUAGE_AND_IR_SPEC.md` |
 | Python API surface | `docs/spec/PYTHON_API_SPEC.md` |
 | Graph IR semantics | `docs/spec/GRAPH_IR_SPEC.md` |
 | Lowering pipeline contracts | `docs/spec/LOWERING_PIPELINE_SPEC.md` |
 | Schedule, Tile, and Target IR dialect details | `docs/spec/TARGET_IR_SPEC.md` |
+| Memory model | `docs/spec/MEMORY_MODEL_SPEC.md` |
+| Standard operator library | `docs/operations/Tessera_Standard_Operations.md` |
+| Error handling and diagnostics | `docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md` |
 | Runtime C ABI | `docs/spec/RUNTIME_ABI_SPEC.md` |
 
 ## Supporting Specs
@@ -36,9 +40,28 @@ These documents remain normative only where they do not conflict with the normat
 
 ## Informative Guides
 
-Architecture, programming guide, operations, reference, and tutorial documents are explanatory. They should link back to the normative root for API names, phase status, and implementation claims.
+Architecture, programming guide, reference, and tutorial documents are explanatory. They should link back to the normative root for API names, phase status, and implementation claims.
 
 Architecture readers should start with `docs/architecture/README.md`.
+
+Reliability and validation readers should start with
+`docs/guides/Tessera_QA_Reliability_Guide.md`. It is the hands-on guide for
+correctness, numerical stability, determinism, expected failures, performance
+consistency, and distributed QA behavior.
+
+When a test or production run fails, use
+`docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md` for stable error
+codes, diagnostic fields, environment switches, and debugging workflows.
+
+For tensor layouts, packed dtype storage, KV-cache paging, explicit prefetch,
+async copies, and Hopper+ mbarrier movement patterns, use
+`docs/guides/Tessera_Tensor_Layout_And_Data_Movement_Guide.md`.
+
+Production operators should also read
+`docs/guides/Tessera_Production_Reliability_And_Chaos_Guide.md`, which covers
+monitoring, regression detection, replay debugging, observability, production
+fault tolerance, stress testing, chaos testing, node-scale QA, and rack-scale
+NVL72 validation.
 
 ## Archive
 

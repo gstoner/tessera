@@ -33,9 +33,67 @@ from typing import List, Optional, Sequence
 # ---------------------------------------------------------------------------
 
 class DiagnosticLevel(Enum):
+    INFO    = "info"
     NOTE    = "note"
     WARNING = "warning"
     ERROR   = "error"
+    FATAL   = "fatal"
+
+
+class TesseraErrorCode(Enum):
+    """Stable machine-readable Tessera diagnostic codes."""
+
+    OK = "TESSERA_OK"
+    GRAPH_INVALID = "E_GRAPH_INVALID"
+    SHAPE_MISMATCH = "E_SHAPE_MISMATCH"
+    SCHEDULE_FUSE_FAIL = "E_SCHEDULE_FUSE_FAIL"
+    TILE_LOWERING = "E_TILE_LOWERING"
+    TARGET_CODEGEN = "E_TARGET_CODEGEN"
+    LAUNCH_INVALID_SHAPE = "E_LAUNCH_INVALID_SHAPE"
+    LAUNCH_BAD_LAYOUT = "E_LAUNCH_BAD_LAYOUT"
+    LAUNCH_STREAM_BUSY = "E_LAUNCH_STREAM_BUSY"
+    LAUNCH_DEVICE_MISMATCH = "E_LAUNCH_DEVICE_MISMATCH"
+    OOM = "E_OOM"
+    ILLEGAL_ADDRESS = "E_ILLEGAL_ADDRESS"
+    MISALIGNED_ACCESS = "E_MISALIGNED_ACCESS"
+    TIMEOUT = "E_TIMEOUT"
+    DRIVER = "E_DRIVER"
+    COMM_INIT = "E_COMM_INIT"
+    TOPOLOGY = "E_TOPOLOGY"
+    DESYNC = "E_DESYNC"
+    TIMEOUT_COMM = "E_TIMEOUT_COMM"
+    NAN_INF = "E_NAN_INF"
+    LOSS_SCALING = "E_LOSS_SCALING"
+    NONDETERMINISTIC = "E_NONDETERMINISTIC"
+    TUNE_SPACE_EMPTY = "E_TUNE_SPACE_EMPTY"
+    TUNE_MEASURE_FAIL = "E_TUNE_MEASURE_FAIL"
+    CACHE_IO = "E_CACHE_IO"
+    UNKNOWN = "E_UNKNOWN"
+
+
+@dataclass(frozen=True)
+class DiagnosticWhere:
+    """Compiler/runtime location for a diagnostic."""
+
+    ir_level: str = ""
+    pass_name: str = ""
+    device: str = ""
+    stream: str = ""
+    op_name: str = ""
+
+    def __str__(self) -> str:
+        parts = []
+        if self.ir_level:
+            parts.append(self.ir_level)
+        if self.pass_name:
+            parts.append(f"pass={self.pass_name}")
+        if self.op_name:
+            parts.append(f"op={self.op_name}")
+        if self.device:
+            parts.append(f"device={self.device}")
+        if self.stream:
+            parts.append(f"stream={self.stream}")
+        return ", ".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -78,16 +136,26 @@ class TesseraDiagnostic:
     message: str
     location: Optional[SourceLocation] = None
     op_name: str = ""
+    code: TesseraErrorCode = TesseraErrorCode.UNKNOWN
+    where: Optional[DiagnosticWhere] = None
+    hints: List[str] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
 
     def __str__(self) -> str:
         parts = [f"{self.level.value.upper()}"]
+        if self.code != TesseraErrorCode.UNKNOWN:
+            parts.append(f"[{self.code.value}]")
         if self.location:
             parts.append(f"[{self.location}]")
         if self.op_name:
             parts.append(f"({self.op_name})")
         parts.append(self.message)
-        return " ".join(parts)
+        text = " ".join(parts)
+        if self.where:
+            text += f"\n  where: {self.where}"
+        if self.hints:
+            text += "\n  hints: " + "; ".join(self.hints)
+        return text
 
     def __repr__(self) -> str:
         return (f"TesseraDiagnostic(level={self.level.value!r}, "
@@ -117,18 +185,30 @@ class TesseraError(Exception):
         message: str,
         location: Optional[SourceLocation] = None,
         op_name: str = "",
+        code: TesseraErrorCode = TesseraErrorCode.UNKNOWN,
+        where: Optional[DiagnosticWhere] = None,
+        hints: Optional[Sequence[str]] = None,
     ) -> None:
         super().__init__(message)
         self.location = location
         self.op_name = op_name
+        self.code = code
+        self.where = where
+        self.hints = list(hints or [])
 
     def __str__(self) -> str:
         base = super().__str__()
         parts = [base]
+        if self.code != TesseraErrorCode.UNKNOWN:
+            parts.append(f"  code: {self.code.value}")
         if self.op_name:
             parts.append(f"  op: {self.op_name}")
         if self.location:
             parts.append(f"  at: {self.location}")
+        if self.where:
+            parts.append(f"  where: {self.where}")
+        if self.hints:
+            parts.append("  hints: " + "; ".join(self.hints))
         return "\n".join(parts)
 
 
@@ -246,6 +326,9 @@ class ErrorReporter:
         op_name: str = "",
         location: Optional[SourceLocation] = None,
         notes: Optional[List[str]] = None,
+        code: TesseraErrorCode = TesseraErrorCode.UNKNOWN,
+        where: Optional[DiagnosticWhere] = None,
+        hints: Optional[Sequence[str]] = None,
     ) -> TesseraDiagnostic:
         """Record a diagnostic.  Returns the created TesseraDiagnostic."""
         if location is None:
@@ -256,14 +339,17 @@ class ErrorReporter:
             message=message,
             location=location,
             op_name=op_name,
+            code=code,
+            where=where,
+            hints=list(hints or []),
             notes=notes or [],
         )
 
         error_count = sum(
             1 for d in self._diagnostics
-            if d.level == DiagnosticLevel.ERROR
+            if d.level in (DiagnosticLevel.ERROR, DiagnosticLevel.FATAL)
         )
-        if level != DiagnosticLevel.ERROR or error_count < self._error_limit:
+        if level not in (DiagnosticLevel.ERROR, DiagnosticLevel.FATAL) or error_count < self._error_limit:
             self._diagnostics.append(diag)
 
         return diag
@@ -275,9 +361,40 @@ class ErrorReporter:
         location: Optional[SourceLocation] = None,
         expected_shape: Optional[Sequence[int]] = None,
         actual_shape: Optional[Sequence[int]] = None,
+        code: TesseraErrorCode = TesseraErrorCode.UNKNOWN,
+        where: Optional[DiagnosticWhere] = None,
+        hints: Optional[Sequence[str]] = None,
     ) -> TesseraDiagnostic:
         """Record an error-level diagnostic."""
-        return self.report(DiagnosticLevel.ERROR, message, op_name, location)
+        return self.report(
+            DiagnosticLevel.ERROR,
+            message,
+            op_name,
+            location,
+            code=code,
+            where=where,
+            hints=hints,
+        )
+
+    def fatal(
+        self,
+        message: str,
+        op_name: str = "",
+        location: Optional[SourceLocation] = None,
+        code: TesseraErrorCode = TesseraErrorCode.UNKNOWN,
+        where: Optional[DiagnosticWhere] = None,
+        hints: Optional[Sequence[str]] = None,
+    ) -> TesseraDiagnostic:
+        """Record a fatal diagnostic."""
+        return self.report(
+            DiagnosticLevel.FATAL,
+            message,
+            op_name,
+            location,
+            code=code,
+            where=where,
+            hints=hints,
+        )
 
     def warning(
         self,
@@ -294,6 +411,14 @@ class ErrorReporter:
         location: Optional[SourceLocation] = None,
     ) -> TesseraDiagnostic:
         return self.report(DiagnosticLevel.NOTE, message, op_name, location)
+
+    def info(
+        self,
+        message: str,
+        op_name: str = "",
+        location: Optional[SourceLocation] = None,
+    ) -> TesseraDiagnostic:
+        return self.report(DiagnosticLevel.INFO, message, op_name, location)
 
     # ------------------------------------------------------------------
     # Shape-check helpers
@@ -316,6 +441,7 @@ class ErrorReporter:
                 DiagnosticLevel.ERROR,
                 f"shape mismatch: expected {tuple(expected)}, got {tuple(actual)}",
                 op_name=op_name,
+                code=TesseraErrorCode.SHAPE_MISMATCH,
             )
             return False
         return True
@@ -357,7 +483,7 @@ class ErrorReporter:
     # ------------------------------------------------------------------
 
     def has_errors(self) -> bool:
-        return any(d.level == DiagnosticLevel.ERROR
+        return any(d.level in (DiagnosticLevel.ERROR, DiagnosticLevel.FATAL)
                    for d in self._diagnostics)
 
     def has_warnings(self) -> bool:
@@ -366,7 +492,7 @@ class ErrorReporter:
 
     def error_count(self) -> int:
         return sum(1 for d in self._diagnostics
-                   if d.level == DiagnosticLevel.ERROR)
+                   if d.level in (DiagnosticLevel.ERROR, DiagnosticLevel.FATAL))
 
     def warning_count(self) -> int:
         return sum(1 for d in self._diagnostics
@@ -379,19 +505,22 @@ class ErrorReporter:
     def raise_if_errors(self) -> None:
         """Raise ``TesseraShapeError`` with the first error if any."""
         errs = [d for d in self._diagnostics
-                if d.level == DiagnosticLevel.ERROR]
+                if d.level in (DiagnosticLevel.ERROR, DiagnosticLevel.FATAL)]
         if errs:
             first = errs[0]
             raise TesseraShapeError(
                 first.message,
                 location=first.location,
                 op_name=first.op_name,
+                code=first.code,
+                where=first.where,
+                hints=first.hints,
             )
 
     def raise_target_error_if_any(self, target: str = "") -> None:
         """Raise ``TesseraTargetError`` with the first error if any."""
         errs = [d for d in self._diagnostics
-                if d.level == DiagnosticLevel.ERROR]
+                if d.level in (DiagnosticLevel.ERROR, DiagnosticLevel.FATAL)]
         if errs:
             first = errs[0]
             raise TesseraTargetError(
@@ -399,6 +528,9 @@ class ErrorReporter:
                 target=target,
                 location=first.location,
                 op_name=first.op_name,
+                code=first.code,
+                where=first.where,
+                hints=first.hints,
             )
 
     # ------------------------------------------------------------------
@@ -412,7 +544,7 @@ class ErrorReporter:
     @property
     def errors(self) -> List[TesseraDiagnostic]:
         return [d for d in self._diagnostics
-                if d.level == DiagnosticLevel.ERROR]
+                if d.level in (DiagnosticLevel.ERROR, DiagnosticLevel.FATAL)]
 
     @property
     def warnings(self) -> List[TesseraDiagnostic]:

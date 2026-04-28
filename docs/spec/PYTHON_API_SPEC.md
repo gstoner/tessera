@@ -698,7 +698,8 @@ Effect.top     # value 4 — unknown / unconstrained
 **Lattice order (least → most permissive):**
 
 ```
-pure(0) < random(1) < memory(2) < io(3) < top(4)
+pure(0) < random(1) < movement(2) < state(3)
+  < collective(4) < memory(5) < io(6) < top(7)
 ```
 
 **Lattice join:**
@@ -713,10 +714,12 @@ The join of two effects is the more permissive one. A function that calls a `ran
 | Op | Effect |
 |----|--------|
 | `gemm`, `matmul`, `layer_norm`, `softmax`, `gelu`, `relu` | `pure` |
-| `transpose`, `cast`, `flash_attn` | `pure` |
+| `transpose`, `cast` | `pure` |
 | `dropout` (when `training=True`) | `random` |
+| `prefetch`, `async_copy`, `await_movement` | `movement` |
+| `kv_cache_create`, `kv_cache_append`, `kv_cache_prune`, `kv_cache_read`, `kv_cache_write`, `flash_attn` | `state` |
 | `conv2d` | `pure` |
-| `all_reduce`, `reduce_scatter`, `all_gather` | `io` |
+| `all_reduce`, `reduce_scatter`, `all_gather`, `all_to_all` | `collective` |
 | `fused_epilogue` | `pure` |
 
 ### 10.3 `deterministic=True` contract
@@ -758,9 +761,12 @@ class ISA(enum.IntEnum):
     SM_89  = 89    # NVIDIA RTX 40xx
     SM_90  = 90    # NVIDIA H100 / GH200
     SM_100 = 100   # NVIDIA B100 / GB200
+    SM_120 = 120   # Rubin-family placeholder until final CC numbering is published
 ```
 
-WGMMA and TMA are available on `SM_90` and above only.
+WGMMA, TMA, and mbarrier transaction-barrier support are available on `SM_90`
+and above. `SM_120` is a Tessera planning placeholder for Rubin-family targets,
+not a claim about final NVIDIA compute capability numbering.
 
 ### 11.2 `GPUTargetProfile`
 
@@ -793,6 +799,9 @@ GPUTargetProfile(
 |----------|------|-------------|
 | `.supports_wgmma` | `bool` | `True` when `isa >= ISA.SM_90`. |
 | `.supports_tma` | `bool` | `True` when `isa >= ISA.SM_90`. |
+| `.supports_mbarrier` | `bool` | `True` when `isa >= ISA.SM_90`. |
+| `.tensor_core_dtypes` | `frozenset[str]` | Tensor Core dtype names for the target. |
+| `.cuda_core_dtypes` | `frozenset[str]` | CUDA-core scalar dtype names for the target. |
 
 **Exceptions:**
 
@@ -888,9 +897,13 @@ from tessera.compiler.attn_lower import SM90_DEFAULT
 ## 13. Operations Namespace
 
 **Module:** `tessera.ops`  
-**Import:** `tessera.ops.<name>`
+**Import:** `tessera.ops.<name>`  
+**Library contract:** `docs/operations/Tessera_Standard_Operations.md`
 
 Phase 1 implementations are numpy-backed stubs. Phase 3 dispatches to compiled MLIR kernels via the GPU lowering pipeline.
+The Tessera Standard Operator Library reserves additional operator names for
+planned compiler/runtime paths; this table lists only the current Phase 1-3
+runtime surface.
 
 | Operation | Signature | Effect | Phase 1 behavior |
 |-----------|-----------|--------|-----------------|

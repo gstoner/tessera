@@ -29,6 +29,7 @@ from . import core
 from . import nn
 from . import arch
 from . import shape
+from . import debug
 from .core import Tensor, Module
 from .shape import (
     Dim,
@@ -72,6 +73,12 @@ dist = types.SimpleNamespace(
 
 array = types.SimpleNamespace(
     from_domain=DistributedArray.from_domain,
+)
+
+graph = types.SimpleNamespace(
+    trace=debug.trace_graph,
+    debug_trace=debug.debug_trace,
+    export_graphviz=debug.export_graphviz,
 )
 
 # ─────────────────────────────────────────────────────────────────────────────

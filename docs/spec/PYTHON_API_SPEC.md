@@ -57,6 +57,7 @@ tessera/
 │   ├── gpu_target.py             # GPUTargetProfile, ISA
 │   └── attn_lower.py             # FlashAttnLoweringConfig
 ├── shape.py                      # Dim, Shape, layout/shard checks, runtime witnesses
+├── debug.py                      # graph tracing, tensor summaries, grad/determinism checks
 ├── ops/
 │   └── __init__.py               # tessera.ops.* namespace
 └── testing/
@@ -93,6 +94,10 @@ tessera.require      # tessera.require(constraint) inside @jit body
 tessera.sym          # symbolic dimensions: B, N, D = tessera.sym("B N D")
 tessera.check_shapes # marks functions for shape-system validation
 tessera.shape        # tessera.shape.ShapeConstraintGraph / RuntimeShapeWitness / helpers
+
+# Debugging
+tessera.debug        # tessera.debug.trace_graph / check_grad / check_determinism
+tessera.graph        # tessera.graph.trace / debug_trace / export_graphviz
 
 # Ops namespace
 tessera.ops          # tessera.ops.gemm / layer_norm / dropout / etc.
@@ -718,6 +723,31 @@ Public helpers:
 
 These helpers do not replace the MLIR verifier; they make the same contracts
 available to the frontend, tests, and IDE-facing tooling.
+
+---
+
+### 9.8 Debugging helpers
+
+**Module:** `tessera.debug`  
+**Convenience namespace:** `tessera.graph`
+
+Debugging helpers provide Graph IR inspection, numerical tracing, gradient
+checking, and determinism checks. The behavior is described in
+`docs/guides/Tessera_Debugging_Tools_Guide.md`.
+
+| Symbol | Purpose |
+|--------|---------|
+| `trace_graph(value, ir_level="graph")` | Return a printable/exportable graph trace |
+| `export_graphviz(value)` | Return GraphViz DOT for a trace |
+| `debug_trace(samples=0, stream=None)` | Context manager for numerical summaries |
+| `trace_value(name, value)` | Record a tensor-like value in the active trace |
+| `summarize_tensor(value)` | Compute shape/dtype/mean/std/min/max/finite summary |
+| `check_grad(fn, inputs, analytic_grads=...)` | Finite-difference gradient check |
+| `check_determinism(fn, runs=5)` | Repeated-run reproducibility check |
+
+`tessera.graph.trace`, `tessera.graph.debug_trace`, and
+`tessera.graph.export_graphviz` are aliases for the graph-oriented debug
+helpers.
 
 ---
 

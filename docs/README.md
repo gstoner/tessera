@@ -53,6 +53,10 @@ When a test or production run fails, use
 `docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md` for stable error
 codes, diagnostic fields, environment switches, and debugging workflows.
 
+For graph inspection, numerical tracing, gradient checking, determinism checks,
+and external debugger integration, use
+`docs/guides/Tessera_Debugging_Tools_Guide.md`.
+
 For tensor layouts, packed dtype storage, KV-cache paging, explicit prefetch,
 async copies, and Hopper+ mbarrier movement patterns, use
 `docs/guides/Tessera_Tensor_Layout_And_Data_Movement_Guide.md`.

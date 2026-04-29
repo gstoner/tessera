@@ -109,6 +109,10 @@ tessera.graph        # tessera.graph.trace / debug_trace / export_graphviz
 tessera.profiler     # tessera.profiler.session / record / timeline
 tessera.autotune     # callable autotune facade; also .load / .cache_key
 
+# Developer commands
+tessera-mlir         # static/debug IR dumps: --emit=graph-ir|schedule-ir|tile-ir|target-ir
+tessera-prof         # profiling report and Chrome trace export
+
 # Fault tolerance and elasticity
 tessera.fault        # on_failure / on_preempt / inject
 tessera.elastic      # configure / elastic / reshard
@@ -796,6 +800,14 @@ Autotuning helpers:
 
 The public autotune facade currently supports GEMM/matmul shapes and delegates
 search and SQLite persistence to `tessera.compiler.autotune_v2`.
+
+Developer commands:
+
+| Command | Purpose |
+|---------|---------|
+| `tessera-mlir my_model.py --emit=graph-ir --debug` | Dump static/debug IR with source locations |
+| `tessera-prof my_model.py --metrics=flops,bandwidth,occupancy` | Print a profiling report |
+| `tessera-prof my_model.py --trace=trace.json` | Write Chrome Trace Event JSON |
 
 ---
 

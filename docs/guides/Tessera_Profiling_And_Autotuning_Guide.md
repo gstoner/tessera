@@ -58,6 +58,18 @@ with profiler.session() as p:
     y = p.measure("step", lambda: model(batch), flops=1.2e12, bytes_moved=80e9)
 ```
 
+The CLI surface mirrors the runtime profiler:
+
+```bash
+tessera-prof my_model.py --metrics=flops,bandwidth,occupancy
+tessera-prof my_model.py --trace=trace.json
+```
+
+The current `tessera-prof` implementation records a lightweight inspection
+event and can emit a Chrome Trace Event JSON file. As device execution is wired
+through the runtime, this command should become the stable front door for kernel
+latency, FLOPs, bandwidth, occupancy, memory, collective, and launch metrics.
+
 Profiler events carry:
 
 - Latency in milliseconds.
@@ -256,6 +268,10 @@ Schedule artifacts should contain:
 - Tile knobs.
 - Measured or estimated metrics.
 - Stable hash.
+
+The command foundation is in `python/tessera/cli/prof.py` and is installed as:
+
+- `tessera-prof`
 
 ---
 

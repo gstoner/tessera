@@ -58,6 +58,8 @@ tessera/
 │   └── attn_lower.py             # FlashAttnLoweringConfig
 ├── shape.py                      # Dim, Shape, layout/shard checks, runtime witnesses
 ├── debug.py                      # graph tracing, tensor summaries, grad/determinism checks
+├── profiler.py                   # profiling sessions, reports, Chrome trace export
+├── autotune.py                   # public autotune facade and roofline cost model
 ├── ops/
 │   └── __init__.py               # tessera.ops.* namespace
 └── testing/
@@ -98,6 +100,10 @@ tessera.shape        # tessera.shape.ShapeConstraintGraph / RuntimeShapeWitness 
 # Debugging
 tessera.debug        # tessera.debug.trace_graph / check_grad / check_determinism
 tessera.graph        # tessera.graph.trace / debug_trace / export_graphviz
+
+# Profiling and autotuning
+tessera.profiler     # tessera.profiler.session / record / timeline
+tessera.autotune     # callable autotune facade; also .load / .cache_key
 
 # Ops namespace
 tessera.ops          # tessera.ops.gemm / layer_norm / dropout / etc.
@@ -748,6 +754,36 @@ checking, and determinism checks. The behavior is described in
 `tessera.graph.trace`, `tessera.graph.debug_trace`, and
 `tessera.graph.export_graphviz` are aliases for the graph-oriented debug
 helpers.
+
+---
+
+### 9.9 Profiling and autotuning helpers
+
+**Modules:** `tessera.profiler`, `tessera.autotune`  
+**Guide:** `docs/guides/Tessera_Profiling_And_Autotuning_Guide.md`
+
+Profiling helpers:
+
+| Symbol | Purpose |
+|--------|---------|
+| `profiler.session()` | Context manager that collects profile events |
+| `ProfileSession.record(...)` | Record latency, FLOPs, bytes, counters |
+| `ProfileSession.measure(...)` | Measure a callable region |
+| `ProfileSession.report()` | Render a tabular text report |
+| `ProfileSession.timeline(path)` | Write Chrome Trace Event JSON |
+
+Autotuning helpers:
+
+| Symbol | Purpose |
+|--------|---------|
+| `autotune(op, shapes=(M,N,K), ...)` | Tune a GEMM-like op and persist results |
+| `autotune.load(op, shapes, ...)` | Load the best cached result |
+| `autotune.cache_key(...)` | Return public cache key tuple |
+| `autotune.schedule_artifact(...)` | Build a schedule artifact from a result |
+| `autotune.RooflineCostModel` | Analytical FLOPs/bytes cost model |
+
+The public autotune facade currently supports GEMM/matmul shapes and delegates
+search and SQLite persistence to `tessera.compiler.autotune_v2`.
 
 ---
 

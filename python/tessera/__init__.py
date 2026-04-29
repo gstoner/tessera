@@ -30,6 +30,8 @@ from . import nn
 from . import arch
 from . import shape
 from . import debug
+from . import profiler
+from . import autotune as _autotune_module
 from .core import Tensor, Module
 from .shape import (
     Dim,
@@ -80,6 +82,12 @@ graph = types.SimpleNamespace(
     debug_trace=debug.debug_trace,
     export_graphviz=debug.export_graphviz,
 )
+
+autotune = _autotune_module.autotune
+autotune.load = _autotune_module.load
+autotune.cache_key = _autotune_module.cache_key
+autotune.schedule_artifact = _autotune_module.schedule_artifact
+autotune.RooflineCostModel = _autotune_module.RooflineCostModel
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Phase 1: compiler API

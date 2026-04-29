@@ -130,8 +130,19 @@ sm_arch, bandwidth, clock, movement_plan, schedule_hash
 ```
 
 The current Python foundation exposes `arch.CostFeatures`,
-`arch.HardwareCost`, and `arch.AnalyticalCostModel`. Future compiler passes
-should emit the same features from Graph and Schedule IR.
+`arch.HardwareCost`, `arch.AnalyticalCostModel`, `arch.hw_cost(...)`, and
+`arch.measure(...)`. Future compiler passes should emit the same features from
+Graph and Schedule IR.
+
+Example:
+
+```python
+lat, energy, mem = arch.hw_cost({
+    "flops": 2.0e12,
+    "bytes_moved": 1.0e9,
+    "params": 10.0e6,
+})
+```
 
 ## 5. Joint Architecture And Schedule Search
 
@@ -168,6 +179,14 @@ Search-time graphs are not deployment graphs. Deployment must freeze:
 The specialization artifact must include choices, architecture logits, schedule
 logits, cost-model hash, graph hash, schedule hash, RNG seeds, and target.
 
+Python foundation:
+
+```python
+choices_op = arch.argmax({"attn": attn})
+frozen_ops = arch.specialize({"attn": attn}, choices_op)
+choices_sched = arch.schedule_argmax(sched)
+```
+
 ## 7. Distributed And Deterministic Search
 
 Architecture logits are tiny but semantically important. Distributed DNAS must:
@@ -189,7 +208,47 @@ Architecture logits are tiny but semantically important. Distributed DNAS must:
 | Runtime | Deterministic alpha all-reduce helper and replay docs | Distributed runtime binding for alpha gradients. |
 | Tooling | QA/reliability docs | Alpha histograms, cost curves, predicted-vs-measured drift reports. |
 
-## 9. Autodiff And Runtime Plumbing
+## 9. Graph IR And Schedule IR Expansion
+
+DNAS has concrete compiler anchors today, but only the foundation is wired.
+
+Graph IR dialect anchors live in `src/compiler/ir/TesseraOps.td`:
+
+```mlir
+%tau   = tessera.graph.constant 4.0 : f32
+%alpha = tessera.graph.arch.parameter {size = 4, name = "block0.attn"}
+%gate  = tessera.graph.arch.gumbel_softmax %alpha {temperature = 4.0, seed = 17}
+
+%y0 = tessera.graph.op.flash_attention(%x)
+%y1 = tessera.graph.op.performer_attention(%x)
+%y2 = tessera.graph.op.multi_query_attention(%x)
+%y3 = tessera.graph.op.gmlp(%x)
+%y  = tessera.graph.arch.weighted_sum %y0, %y1, %y2, %y3 by %gate
+```
+
+Schedule IR anchors live in
+`src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td`:
+
+```mlir
+%tm = tessera.schedule.knob %matmul {name = "tile_m", choices = [64, 128]}
+%tn = tessera.schedule.knob %matmul {name = "tile_n", choices = [128, 256]}
+%st = tessera.schedule.knob %matmul {name = "stages", choices = [2, 3, 4]}
+```
+
+Compiler work still needed:
+
+- Python lowering from `arch.MixedOp` into `arch.*` Graph IR ops.
+- Verifiers for candidate shape/dtype/numeric-policy compatibility.
+- Autodiff registration so `backward(wrt="arch")` reaches architecture logits.
+- Schedule feature extraction from `schedule.knob` and movement plans.
+- On-device measurements feeding the learned surrogate through the autotuner.
+
+Examples:
+
+- `examples/dnas_graphir_sketch.mlir`
+- `examples/dnas_schedule_autotune.py`
+
+## 10. Autodiff And Runtime Plumbing
 
 DNAS uses explicit autodiff partitions:
 
@@ -215,7 +274,7 @@ The reduction is ordered and uses compensated summation in the Python reference
 helper. Production collectives should preserve the same rank order under
 deterministic mode.
 
-## 10. Phase Guidance
+## 11. Phase Guidance
 
 DNAS should be staged:
 

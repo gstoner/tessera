@@ -257,6 +257,11 @@ class HardwareCost:
     energy: float
     memory_bytes: float
 
+    def __iter__(self):
+        yield self.latency_ms
+        yield self.energy
+        yield self.memory_bytes
+
 
 class AnalyticalCostModel:
     """Fast differentiable-style proxy for latency, energy, and memory."""
@@ -354,6 +359,98 @@ class LearnedSurrogateCostModel:
         return count
 
 
+def extract_cost_features(
+    target: Any,
+    *,
+    schedule: Optional[Mapping[str, Any]] = None,
+) -> CostFeatures:
+    """Extract DNAS hardware-cost features from a model, mapping, or feature object."""
+
+    if isinstance(target, CostFeatures):
+        return target
+    if hasattr(target, "cost_features") and callable(target.cost_features):
+        features = target.cost_features()
+        if isinstance(features, CostFeatures):
+            return features
+        target = features
+    elif hasattr(target, "features") and callable(target.features):
+        features = target.features()
+        if isinstance(features, CostFeatures):
+            return features
+        target = features
+
+    data: Mapping[str, Any]
+    if isinstance(target, Mapping):
+        data = target
+    else:
+        data = {
+            "flops": getattr(target, "flops", 0.0),
+            "bytes_moved": getattr(target, "bytes_moved", 0.0),
+            "params": getattr(target, "params", 0.0),
+            "tiles": getattr(target, "tiles", 1.0),
+            "seq_len": getattr(target, "seq_len", 1.0),
+            "sm_arch": getattr(target, "sm_arch", "auto"),
+            "bandwidth_gbps": getattr(target, "bandwidth_gbps", 2000.0),
+            "peak_tflops": getattr(target, "peak_tflops", 312.0),
+        }
+
+    tiles = float(data.get("tiles", 1.0))
+    if schedule:
+        numeric_knobs = [
+            float(v) for v in schedule.values() if isinstance(v, (int, float))
+        ]
+        if numeric_knobs:
+            tiles = max(1.0, sum(numeric_knobs) / len(numeric_knobs))
+
+    return CostFeatures(
+        flops=float(data.get("flops", 0.0)),
+        bytes_moved=float(data.get("bytes_moved", 0.0)),
+        params=float(data.get("params", 0.0)),
+        tiles=tiles,
+        seq_len=float(data.get("seq_len", 1.0)),
+        sm_arch=str(data.get("sm_arch", "auto")),
+        bandwidth_gbps=float(data.get("bandwidth_gbps", 2000.0)),
+        peak_tflops=float(data.get("peak_tflops", 312.0)),
+    )
+
+
+def hw_cost(
+    target: Any,
+    *,
+    schedule: Optional[Mapping[str, Any]] = None,
+    cost_model: Optional[Any] = None,
+) -> HardwareCost:
+    """Predict latency, energy, and memory for DNAS objectives."""
+
+    model = cost_model or AnalyticalCostModel()
+    return model.predict(extract_cost_features(target, schedule=schedule))
+
+
+def measure(
+    target: Any,
+    *,
+    reps: int = 5,
+    metric: Sequence[str] = ("latency", "energy", "memory"),
+    schedule: Optional[Mapping[str, Any]] = None,
+) -> HardwareCost:
+    """Deterministic measurement placeholder for DNAS/autotuner integration.
+
+    The production runtime should replace this with on-device measurements.
+    Keeping the same return type lets cost surrogates and tests depend on a
+    stable API while compiler/runtime plumbing matures.
+    """
+
+    if reps <= 0:
+        raise ArchitectureSearchError("measure reps must be > 0")
+    cost = hw_cost(target, schedule=schedule)
+    requested = set(metric)
+    return HardwareCost(
+        latency_ms=cost.latency_ms if "latency" in requested else 0.0,
+        energy=cost.energy if "energy" in requested else 0.0,
+        memory_bytes=cost.memory_bytes if "memory" in requested or "mem" in requested else 0.0,
+    )
+
+
 @dataclass
 class ScheduleSpace:
     """Discrete Schedule IR knob space with architecture logits per knob."""
@@ -391,6 +488,28 @@ def argmax(mixed_ops: Mapping[str, MixedOp]) -> Dict[str, int]:
     """Freeze mixed ops to discrete candidate indexes."""
 
     return {name: op.choice() for name, op in mixed_ops.items()}
+
+
+def schedule_argmax(space: ScheduleSpace) -> Dict[str, Any]:
+    """Freeze a schedule search space to hard knob choices."""
+
+    return space.current(hard=True)
+
+
+def specialize(mixed_ops: Mapping[str, MixedOp], choices: Mapping[str, int]) -> Dict[str, Any]:
+    """Return selected candidates for a frozen architecture choice map."""
+
+    selected: Dict[str, Any] = {}
+    for name, choice in choices.items():
+        if name not in mixed_ops:
+            raise ArchitectureSearchError(f"unknown MixedOp {name!r}")
+        op = mixed_ops[name]
+        if choice < 0 or choice >= len(op.candidates):
+            raise ArchitectureSearchError(
+                f"choice {choice} out of range for MixedOp {name!r}"
+            )
+        selected[name] = op.candidates[choice]
+    return selected
 
 
 def deterministic_alpha_all_reduce(

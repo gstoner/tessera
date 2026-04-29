@@ -101,6 +101,34 @@ def test_analytical_cost_model_predicts_positive_costs():
     assert cost.memory_bytes > 1.0e9
 
 
+def test_hw_cost_measure_and_specialization_helpers():
+    attn = arch.MixedOp(["flash", "performer", "gmlp"], relax="softmax")
+    attn.alpha.set([0.0, 3.0, -1.0])
+    sched = arch.ScheduleSpace({"tile_m": [64, 128], "stages": [2, 3]})
+    sched.alpha["tile_m"].set([0.0, 1.0])
+    sched.alpha["stages"].set([2.0, 0.0])
+
+    latency, energy, mem = arch.hw_cost(
+        {"flops": 1.0e12, "bytes_moved": 512.0e6},
+        schedule=sched.current(),
+    )
+    assert latency > 0.0
+    assert energy > 0.0
+    assert mem >= 512.0e6
+
+    measured = arch.measure(
+        {"flops": 1.0e12, "bytes_moved": 512.0e6},
+        reps=2,
+        metric=("latency",),
+    )
+    assert measured.latency_ms > 0.0
+    assert measured.energy == 0.0
+
+    choices = arch.argmax({"attn": attn})
+    assert arch.specialize({"attn": attn}, choices) == {"attn": "performer"}
+    assert arch.schedule_argmax(sched) == {"tile_m": 128, "stages": 2}
+
+
 def test_autodiff_partition_helpers_and_deterministic_alpha_reduce():
     assert arch.validate_backward_wrt("arch") == "arch"
     with pytest.raises(arch.ArchitectureSearchError, match="backward"):
@@ -163,3 +191,14 @@ def test_dnas_ods_and_schedule_knob_ops_are_declared():
     ).read_text(encoding="utf-8")
     assert "schedule-search knob" in schedule_td
     assert "knob" in schedule_td
+
+
+def test_dnas_examples_exist_and_match_guide():
+    guide = GUIDE.read_text(encoding="utf-8")
+    graph_example = ROOT / "examples" / "dnas_graphir_sketch.mlir"
+    schedule_example = ROOT / "examples" / "dnas_schedule_autotune.py"
+
+    assert "examples/dnas_graphir_sketch.mlir" in guide
+    assert "examples/dnas_schedule_autotune.py" in guide
+    assert "tessera.graph.arch.parameter" in graph_example.read_text(encoding="utf-8")
+    assert "arch.hw_cost" in schedule_example.read_text(encoding="utf-8")

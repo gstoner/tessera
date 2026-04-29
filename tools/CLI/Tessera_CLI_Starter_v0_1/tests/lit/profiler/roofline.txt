@@ -1,0 +1,9 @@
+# RUN: tessera-compile %tessera_src/data/sample.mlir \
+# RUN:   --platform=cuda --arch=sm_90 --to=ptx --out-dir %t
+# RUN: tessera-profiler %t --peak-tflops=989 --peak-bw=3350 \
+# RUN: && test -f %t/reports/roofline.csv \
+# RUN: && test -f %t/reports/roofline.html \
+# RUN: && test -f %t/reports/perfetto.json \
+# RUN: && test -f %t/reports/summary.json \
+# RUN: && grep -q 'kernel'      %t/reports/roofline.csv \
+# RUN: && grep -q 'achieved_tflops' %t/reports/roofline.csv

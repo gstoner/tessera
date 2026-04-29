@@ -1,0 +1,1 @@
+/Library/Developer/CommandLineTools/usr/bin/c++ -g -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.4.sdk -Wl,-search_paths_first -Wl,-headerpad_max_install_names "CMakeFiles/tessera-opt.dir/tools/tessera-opt/main.cpp.o" -o bin/tessera-opt  libtessera_common.a

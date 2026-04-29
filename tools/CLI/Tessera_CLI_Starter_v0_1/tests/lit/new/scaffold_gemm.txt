@@ -1,0 +1,7 @@
+# RUN: tessera-new test_gemm_proj --template=gemm --platform=cuda --arch=sm_90 \
+# RUN:   && test -f test_gemm_proj/test_gemm_proj.mlir \
+# RUN:   && test -f test_gemm_proj/test_gemm_proj.py \
+# RUN:   && test -f test_gemm_proj/Makefile \
+# RUN:   && test -f test_gemm_proj/CMakeLists.txt \
+# RUN:   && grep -q 'tessera.matmul' test_gemm_proj/test_gemm_proj.mlir \
+# RUN:   && rm -rf test_gemm_proj

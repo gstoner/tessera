@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libtessera_common.a CMakeFiles/tessera_common.dir/tools/common/manifest.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libtessera_common.a

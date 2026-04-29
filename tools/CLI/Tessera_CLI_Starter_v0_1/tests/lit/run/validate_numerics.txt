@@ -1,0 +1,5 @@
+# RUN: tessera-compile %tessera_src/data/sample.mlir \
+# RUN:   --platform=cpu --arch=avx2 --to=cpu-obj --out-dir %t
+# RUN: tessera-run %t --shapes=256x256x256 --rtol=1e-3 --atol=1e-5 \
+# RUN:   && test -f %t/reports/validate.json \
+# RUN:   && grep -q '"status"' %t/reports/validate.json

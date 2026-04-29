@@ -1,0 +1,7 @@
+# RUN: tessera-autotune %tessera_src/data/sample.mlir \
+# RUN:   --searcher=random --trials=16 --seed=99 \
+# RUN:   --shapes=1024x1024x1024 \
+# RUN:   --out-dir %t \
+# RUN: && test -f %t/tune/summary.json \
+# RUN: && grep -q '"evaluations"' %t/tune/summary.json \
+# RUN: && grep -q '"best"'        %t/tune/summary.json

@@ -1,0 +1,9 @@
+# RUN: tessera-compile %tessera_src/data/sample.mlir \
+# RUN:   --platform=cuda --arch=sm_90 --to=ptx --out-dir %t
+# RUN: tessera-inspect %t --format=json -o - \
+# RUN: | FileCheck %s
+
+# CHECK: "kernels"
+# CHECK: "name"
+# CHECK: "regs"
+# CHECK: "occupancy"

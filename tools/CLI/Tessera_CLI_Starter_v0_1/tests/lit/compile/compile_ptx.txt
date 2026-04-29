@@ -1,4 +1,8 @@
-\
-# RUN: tessera-compile %s --platform=cuda --arch=sm_90 --out-dir %t \
+# RUN: tessera-compile %tessera_src/data/sample.mlir \
+# RUN:   --platform=cuda --arch=sm_90 --to=ptx \
+# RUN:   --enable-tensor-cores --emit-host \
+# RUN:   --out-dir %t \
 # RUN: && test -f %t/kernels/demo.ptx \
-# RUN: && test -f %t/meta/compile.json
+# RUN: && test -f %t/meta/compile.json \
+# RUN: && grep -q '"platform"' %t/meta/compile.json \
+# RUN: && grep -q '"sm_90"'    %t/meta/compile.json

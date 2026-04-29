@@ -1,0 +1,11 @@
+tessera_cli_smoke 2 0.0020934
+tessera_opt_version 2 0.140753
+tessera_compile_version 2 0.0917806
+tessera_compile_dry_run 2 0.00357758
+tessera_opt_print_pipeline 2 0.00276948
+tessera_opt_verify_only 1 0.00503725
+tessera_inspect_dry_run 2 0.0945337
+tessera_new_dry_run 2 0.0948879
+tessera_autotune_grid_dry_run 1 0.190779
+tessera_run_dry_run 2 0.101287
+---

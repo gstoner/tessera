@@ -107,7 +107,7 @@ IR emission. No multi-rank support.
 - `TesseraEffectError` raised at decoration time when `deterministic=True` and the function body contains unseeded random ops
 - Graph IR verifier raises `TesseraCompileError` (or equivalent) for missing `tessera.version` attribute
 
-**Test suite:** `tests/phase1/` (all tests) + `tests/phase2/test_lowering_chain.py`
+**Test suite:** `tests/unit/` (all tests) + `tests/unit/test_lowering_chain.py`
 
 ---
 
@@ -151,7 +151,7 @@ runtime conformance requires the Phase 6 runtime C ABI execution path.
 - `TsrStatus::TSR_ERROR_INVALID_STREAM` returned (not a crash) when stream arg is null
 - `TsrStatus::TSR_ERROR_OUT_OF_MEMORY` returned when device memory is exhausted
 
-**Test suite:** T0 suite + `tests/phase3/` (all tests) + `tests/tessera-ir/phase3/`
+**Test suite:** T0 suite + `tests/unit/` (all tests) + `tests/tessera-ir/phase3/`
 
 ---
 
@@ -206,9 +206,9 @@ hardware).
 
 | Profile | Required test suites | How to run |
 |---------|---------------------|------------|
-| T0 | `tests/phase1/`, `tests/phase2/` | `pytest tests/phase1/ tests/phase2/ -v` |
-| T1 | T0 + `tests/phase3/`, `tests/tessera-ir/phase3/` | `pytest tests/ -v && python -m lit tests/tessera-ir/phase3/ -v` |
-| T2 | T1 + `tests/phase4/`, `tests/tessera-ir/phase4/` | `pytest tests/ -v && python -m lit tests/tessera-ir/ -v` |
+| T0 | `tests/unit/`, `tests/unit/` | `pytest tests/unit/ tests/unit/ -v` |
+| T1 | T0 + `tests/unit/`, `tests/tessera-ir/phase3/` | `pytest tests/unit -v && python -m lit tests/tessera-ir/phase3/ -v` |
+| T2 | T1 + `tests/unit/`, `tests/tessera-ir/phase4/` | `pytest tests/unit -v && python -m lit tests/tessera-ir/ -v` |
 
 GPU tests that require SM_90+ hardware may be skipped with `@pytest.mark.skipif`
 when no GPU is present. Skipping these does **not** disqualify T1 conformance
@@ -305,8 +305,8 @@ version. The verifier rejects modules with a version mismatch.
 
 For implementers, a quick checklist to verify T0 conformance:
 
-- [ ] `pytest tests/phase1/ -v` — all green
-- [ ] `pytest tests/phase2/ -v` — all green
+- [ ] `pytest tests/unit/ -v` — all green
+- [ ] `pytest tests/unit/ -v` — all green
 - [ ] `mypy python/tessera/ --strict` — no errors
 - [ ] `@tessera.jit` with no args decorates successfully
 - [ ] `@tessera.jit(deterministic=True)` rejects an unseeded dropout function
@@ -319,7 +319,7 @@ For implementers, a quick checklist to verify T0 conformance:
 For T1, additionally:
 
 - [ ] `GPUTargetProfile(isa=ISA.SM_90)` accepted without error
-- [ ] `pytest tests/phase3/ -v` — all green
+- [ ] `pytest tests/unit/ -v` — all green
 - [ ] `python -m lit tests/tessera-ir/phase3/ -v` — all pass
 - [ ] `tessera.flash_attn` in Graph IR lowers to `tessera.attn.scaled_dot_product`
 - [ ] `WarpSpecializationPass` assigns producer/consumer roles

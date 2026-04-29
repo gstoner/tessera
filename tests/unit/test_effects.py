@@ -1,5 +1,5 @@
 """
-tests/phase1/test_effects.py
+tests/unit/test_effects.py
 
 Tests for:
   - Effect enum and lattice ordering

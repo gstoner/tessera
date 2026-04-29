@@ -198,9 +198,9 @@ Use these as implementation anchors:
 
 - `tests/tessera_numerical_validation/`: numerical correctness suite.
 - `python/tessera/testing/`: shared testing helpers.
-- `tests/phase4/test_nccl_adapter.py`: collective behavior tests.
-- `tests/phase5/test_bayesian_autotuner.py`: schedule artifact tests.
-- `tests/phase6/`: runtime, diagnostics, shape, and semantic-core tests.
+- `tests/unit/test_nccl_adapter.py`: collective behavior tests.
+- `tests/unit/test_bayesian_autotuner.py`: schedule artifact tests.
+- `tests/unit/`: runtime, diagnostics, shape, and semantic-core tests.
 - `docs/TesseraBench/`: benchmark and performance validation material.
 
 ## 10. Related Guides

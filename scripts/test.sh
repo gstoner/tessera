@@ -7,7 +7,7 @@ echo "🧪 Running Tessera tests..."
 
 # Python tests
 echo "Running Python tests..."
-python -m pytest tests/ -v
+"${PYTHON:-python3}" -m pytest tests/unit -v
 
 # C++ tests (if build directory exists)
 if [ -d "build" ]; then

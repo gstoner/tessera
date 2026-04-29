@@ -4,10 +4,11 @@
 # Test categories:
 #   tessera-ir/      — lit-based MLIR dialect regression tests
 #   kernel_tests/    — system-level kernel + roofline tests (C++/shell)
-#   unit/            — C++ unit tests (gtest / catch2)
+#   unit/            — flat Python unit tests
 #   integration/     — end-to-end pipeline tests
 #
 # Run all tests:   cmake --build . --target check-tessera
+# Run Python unit: cmake --build . --target check-tessera-unit
 # Run lit only:    cmake --build . --target check-tessera-ir
 
 # ------------------------------------------------------------------
@@ -53,10 +54,15 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/kernel_tests/CMakeLists.txt)
 endif()
 
 # ------------------------------------------------------------------
-# C++ unit tests
+# Python unit tests
 # ------------------------------------------------------------------
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/unit/CMakeLists.txt)
-    add_subdirectory(unit)
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/unit)
+    add_custom_target(check-tessera-unit
+        COMMAND ${Python3_EXECUTABLE} -m pytest -q ${CMAKE_CURRENT_SOURCE_DIR}/unit
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Running Tessera Python unit tests"
+        USES_TERMINAL
+    )
 endif()
 
 # ------------------------------------------------------------------
@@ -72,6 +78,9 @@ endif()
 set(_check_deps "")
 if(TARGET check-tessera-ir)
     list(APPEND _check_deps check-tessera-ir)
+endif()
+if(TARGET check-tessera-unit)
+    list(APPEND _check_deps check-tessera-unit)
 endif()
 
 add_custom_target(check-tessera

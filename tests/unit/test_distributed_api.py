@@ -1,5 +1,5 @@
 """
-tests/phase1/test_distributed_api.py
+tests/unit/test_distributed_api.py
 
 Tests for:
   - tessera.domain.Rect

@@ -75,6 +75,9 @@ profile = "black"
 line_length = 88
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests/unit"]
 python_files = "test_*.py"
-pythonpath = ["python"]
+pythonpath = [".", "python"]
+markers = [
+    "slow: long-running tests excluded from quick local sweeps",
+]

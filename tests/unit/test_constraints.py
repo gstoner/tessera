@@ -1,5 +1,5 @@
 """
-tests/phase1/test_constraints.py
+tests/unit/test_constraints.py
 
 Tests for ConstraintSolver and predicates:
   - Divisible

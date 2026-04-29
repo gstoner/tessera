@@ -327,10 +327,10 @@ Full pass-by-pass specification: `docs/spec/LOWERING_PIPELINE_SPEC.md`.
 
 | Suite | Location | Covers |
 |-------|----------|--------|
-| Phase 1 Python tests | `tests/phase1/` | Distributed API, constraints, effects, Graph IR |
-| Phase 2 Python tests | `tests/phase2/test_lowering_chain.py` | x86 lowering pipeline |
+| Phase 1 Python tests | `tests/unit/` | Distributed API, constraints, effects, Graph IR |
+| Phase 2 Python tests | `tests/unit/test_lowering_chain.py` | x86 lowering pipeline |
 | Phase 2 lit tests | `tests/tessera-ir/phase2/` | MLIR lowering correctness |
-| Phase 3 Python tests | `tests/phase3/` | GPU target, flash attn, warp specialization (56 tests) |
+| Phase 3 Python tests | `tests/unit/` | GPU target, flash attn, warp specialization (56 tests) |
 | Phase 3 lit tests | `tests/tessera-ir/phase3/` | Tile IR lowering, WGMMA, FA-4 |
 
 ---

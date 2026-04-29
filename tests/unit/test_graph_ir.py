@@ -1,5 +1,5 @@
 """
-tests/phase1/test_graph_ir.py
+tests/unit/test_graph_ir.py
 
 Tests for the Python → Graph IR lowering (tessera.compiler.graph_ir):
   - GraphIRBuilder.lower() extracts function signature and ops

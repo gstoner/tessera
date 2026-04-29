@@ -176,7 +176,7 @@ def test_adam_compiles_as_functional_cpu_optimizer_step():
     assert "functional_optimizer_step" in adam_step.tile_ir
 
 
-def test_unsupported_jit_reports_eager_fallback():
+def test_composite_supported_ops_compile_through_cpu_dataflow():
     @ts.jit
     def composite(x):
         y = ts.ops.relu(x)
@@ -185,10 +185,28 @@ def test_unsupported_jit_reports_eager_fallback():
     x = np.array([-1.0, 2.0], dtype=np.float32)
     out = composite(x)
 
-    assert not composite.uses_compiled_path
-    assert composite.lowering_artifacts() == ()
-    assert "JIT_EAGER_FALLBACK" in composite.explain_lowering()
+    assert composite.uses_compiled_path
+    assert "JIT_COMPILED_CPU" in composite.explain_lowering()
+    assert "tessera.cpu.relu" in composite.target_ir
+    assert "tessera.cpu.softmax" in composite.target_ir
     np.testing.assert_allclose(out, ts.ops.softmax(ts.ops.relu(x)))
+
+
+def test_nested_ops_and_keyword_literals_compile_through_cpu_dataflow():
+    @ts.jit
+    def nested(A, B):
+        return ts.ops.softmax(ts.ops.matmul(A, B), axis=0)
+
+    A = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+    B = np.array([[0.5, -1.0], [1.5, 0.25]], dtype=np.float32)
+    scores = A @ B
+    e = np.exp(scores - np.max(scores, axis=0, keepdims=True))
+
+    np.testing.assert_allclose(nested(A, B), e / np.sum(e, axis=0, keepdims=True))
+    assert nested.uses_compiled_path
+    assert "axis = 0" in nested.ir_text()
+    assert "tessera.cpu.matmul" in nested.target_ir
+    assert "tessera.cpu.softmax" in nested.target_ir
 
 
 def test_developer_frontend_docs_link_first_end_to_end_path():
@@ -200,7 +218,7 @@ def test_developer_frontend_docs_link_first_end_to_end_path():
     api = (root / "docs" / "spec" / "PYTHON_API_SPEC.md").read_text(encoding="utf-8")
 
     text = doc.read_text(encoding="utf-8")
-    assert "@jit single-op function -> Graph IR -> Schedule IR -> Tile IR -> Target IR -> CPU execution" in text
+    assert "@jit supported op graph -> Graph IR -> Schedule IR -> Tile IR -> Target IR -> CPU execution" in text
     assert "mm.lowering_artifacts()" in text
     assert "eager Python fallback" in text
     assert "docs/guides/Tessera_Developer_Frontend_End_To_End.md" in readme

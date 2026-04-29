@@ -10,13 +10,13 @@ last_updated: 2026-04-28
 This guide documents the first narrow executable compiler spine:
 
 ```text
-@jit single-op function -> Graph IR -> Schedule IR -> Tile IR -> Target IR -> CPU execution
+@jit supported op graph -> Graph IR -> Schedule IR -> Tile IR -> Target IR -> CPU execution
 ```
 
-It is intentionally small. The supported program shape is a `@tessera.jit`
-function that returns exactly one supported `tessera.ops.*` call. Unsupported
-functions keep the existing eager Python fallback and now expose an explicit
-diagnostic explaining why.
+It is intentionally small. The supported program shape is straight-line
+dataflow through supported `tessera.ops.*` calls. Unsupported functions keep
+the existing eager Python fallback and expose an explicit diagnostic explaining
+why.
 
 ## 1. Minimal Example
 
@@ -53,7 +53,7 @@ compiler schedule artifact that will become the input to native CPU lowering.
 
 ## 2. Inspecting Compiler Layers
 
-Every supported matmul function exposes four artifacts:
+Every supported function exposes four artifacts:
 
 ```python
 for artifact in mm.lowering_artifacts():
@@ -73,8 +73,8 @@ print(mm.target_ir)
 The artifacts are textual today:
 
 - **Graph IR:** emitted by `GraphIRBuilder`.
-- **Schedule IR:** fixed tile/layout plan for CPU matmul.
-- **Tile IR:** CPU loop-nest style tile matmul.
+- **Schedule IR:** fixed tile/layout plan for CPU execution.
+- **Tile IR:** CPU loop-nest, reduction, elementwise, or layout operations.
 - **Target IR:** CPU target artifact using the NumPy ABI for execution.
 
 To see whether a function used the compiler path:

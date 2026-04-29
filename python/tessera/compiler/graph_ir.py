@@ -149,6 +149,7 @@ class IROp:
     operand_types: List[str]  # e.g. ["tensor<*xbf16>", "tensor<*xbf16>"]
     result_type: Optional[str] = None
     attrs: Optional[str] = None   # additional op attributes
+    kwargs: Dict[str, Any] = field(default_factory=dict)
 
     def to_mlir(self, indent: str = "  ") -> str:
         ops_str = ", ".join(self.operands)
@@ -162,8 +163,24 @@ class IROp:
         else:
             lhs = ""
             type_str = f" : {types_in}" if types_in else ""
-        attr_str = f" {{{self.attrs}}}" if self.attrs else ""
+        attr_parts = []
+        if self.attrs:
+            attr_parts.append(self.attrs)
+        attr_parts.extend(f"{k} = {_format_attr_value(v)}" for k, v in self.kwargs.items())
+        attr_str = f" {{{', '.join(attr_parts)}}}" if attr_parts else ""
         return f"{indent}{lhs}{self.op_name}({ops_str}){attr_str}{type_str}"
+
+
+def _format_attr_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return f'"{value}"'
+    if value is None:
+        return "none"
+    if isinstance(value, (tuple, list)):
+        return "[" + ", ".join(_format_attr_value(v) for v in value) + "]"
+    return repr(value)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -237,8 +254,9 @@ class _OpExtractor(ast.NodeVisitor):
     """
     Walks a function AST and extracts tessera.ops calls as IROp instances.
 
-    Phase 1 scope: recognises `ops.gemm(A, B)`, `tessera.ops.gemm(A, B)`,
-    `Y[:] = ops.gemm(A, B)` patterns. Everything else becomes a comment op.
+    Phase 1 scope: recognises simple dataflow built from `ops.gemm(A, B)`,
+    `tessera.ops.gemm(A, B)`, nested calls, keyword literals, and
+    `Y[:] = ops.gemm(A, B)` stores.
     """
 
     # Map from op bare name to Graph IR op name
@@ -282,48 +300,55 @@ class _OpExtractor(ast.NodeVisitor):
         return None
 
     def visit_Assign(self, node: ast.Assign) -> None:
-        """Handle `Y[:] = ops.gemm(A, B)` or `result = ops.gemm(A, B)`."""
-        if isinstance(node.value, ast.Call):
-            call = node.value
-            op_mlir = self._try_map_call(call)
-            if op_mlir:
-                # Determine result name
-                tgt = node.targets[0]
-                if isinstance(tgt, ast.Name):
-                    result_name = tgt.id
-                elif isinstance(tgt, ast.Subscript):
-                    # Y[:] = ... → void copy into Y
-                    result_name = None
-                    outer_name = self._resolve_name(tgt.value)
-                    op_mlir.result = None
-                    op_mlir.op_name = op_mlir.op_name  # keep as-is; copy is implicit
-                    # Add a copy op
-                    fresh = self._fresh()
-                    # First emit the compute op with a temp result
-                    op_mlir.result = fresh
-                    self.ops.append(op_mlir)
-                    # Then emit copy/store
-                    dest = outer_name or "?"
-                    self.ops.append(IROp(
-                        result=None,
-                        op_name="tessera.copy",
-                        operands=[f"%{fresh}", f"%{dest}"],
-                        operand_types=["tensor<*x?>", "tensor<*x?>"],
-                    ))
-                    return
-                else:
-                    result_name = self._fresh()
-                op_mlir.result = result_name
-                self.ops.append(op_mlir)
+        """Handle `Y[:] = expr` or `result = expr`."""
+        if not node.targets:
+            return
+        tgt = node.targets[0]
+        if isinstance(tgt, ast.Name):
+            if self._emit_expr(node.value, result_name=tgt.id) is not None:
+                return
+        elif isinstance(tgt, ast.Subscript):
+            value = self._emit_expr(node.value)
+            if value is not None:
+                dest = self._resolve_name(tgt.value) or "?"
+                self.ops.append(IROp(
+                    result=None,
+                    op_name="tessera.copy",
+                    operands=[value, f"%{dest}"],
+                    operand_types=["tensor<*x?>", "tensor<*x?>"],
+                ))
+                return
         self.generic_visit(node)
 
     def visit_Return(self, node: ast.Return) -> None:
-        if node.value and isinstance(node.value, ast.Call):
-            op = self._try_map_call(node.value)
-            if op:
-                fresh = self._fresh()
-                op.result = fresh
-                self.ops.append(op)
+        if node.value and self._emit_expr(node.value) is not None:
+            return
+        self.generic_visit(node)
+
+    def _emit_expr(self, node: ast.expr, result_name: Optional[str] = None) -> Optional[str]:
+        if isinstance(node, ast.Call):
+            op = self._try_map_call(node)
+            if op is None:
+                return None
+            op.result = result_name or self._fresh()
+            self.ops.append(op)
+            return f"%{op.result}"
+        if isinstance(node, ast.Name):
+            return f"%{node.id}"
+        if isinstance(node, ast.Attribute) and node.attr == "T":
+            value = self._emit_expr(node.value)
+            if value is None:
+                return None
+            result = result_name or self._fresh()
+            self.ops.append(IROp(
+                result=result,
+                op_name="tessera.transpose",
+                operands=[value],
+                operand_types=["tensor<*x?>"],
+                result_type="tensor<*x?>",
+            ))
+            return f"%{result}"
+        return None
 
     def _try_map_call(self, call: ast.Call) -> Optional[IROp]:
         name = self._resolve_name(call.func)
@@ -336,8 +361,18 @@ class _OpExtractor(ast.NodeVisitor):
 
         operands = []
         for arg in call.args:
-            n = self._resolve_name(arg)
-            operands.append(f"%{n}" if n else "%?")
+            operand = self._emit_expr(arg)
+            operands.append(operand if operand else "%?")
+
+        kwargs = {}
+        for kw in call.keywords:
+            if kw.arg is None:
+                continue
+            try:
+                kwargs[kw.arg] = ast.literal_eval(kw.value)
+            except (ValueError, TypeError):
+                value_name = self._emit_expr(kw.value)
+                kwargs[kw.arg] = value_name or "?"
 
         return IROp(
             result=None,  # filled in by caller
@@ -345,6 +380,7 @@ class _OpExtractor(ast.NodeVisitor):
             operands=operands,
             operand_types=["tensor<*x?>"] * len(operands),
             result_type="tensor<*x?>",
+            kwargs=kwargs,
         )
 
 

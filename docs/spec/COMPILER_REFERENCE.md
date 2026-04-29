@@ -283,24 +283,24 @@ For SM < 90: fall back to WMMA via `NVWGMMALoweringPass` WMMA path. For SM < 90 
 
 | Phase | Python tests | MLIR lit tests |
 |-------|-------------|----------------|
-| Phase 1 | `tests/phase1/` (179+ tests) | `tests/tessera-ir/` (basic) |
-| Phase 2 | `tests/phase2/test_lowering_chain.py` | `tests/tessera-ir/phase2/` |
-| Phase 3 | `tests/phase3/` (56 tests) | `tests/tessera-ir/phase3/` |
-| Phase 4 | `tests/phase4/` (planned) | `tests/tessera-ir/phase4/` (planned) |
-| Phase 5 | `tests/phase5/` (planned) | `tests/tessera-ir/phase5/` (planned) |
-| Phase 6 | `tests/phase6/` (planned) | `tests/tessera-ir/phase6/` (planned) |
+| Phase 1 | `tests/unit/` (179+ tests) | `tests/tessera-ir/` (basic) |
+| Phase 2 | `tests/unit/test_lowering_chain.py` | `tests/tessera-ir/phase2/` |
+| Phase 3 | `tests/unit/` (56 tests) | `tests/tessera-ir/phase3/` |
+| Phase 4 | `tests/unit/` (planned) | `tests/tessera-ir/phase4/` (planned) |
+| Phase 5 | `tests/unit/` (planned) | `tests/tessera-ir/phase5/` (planned) |
+| Phase 6 | `tests/unit/` (planned) | `tests/tessera-ir/phase6/` (planned) |
 
 ### Running tests
 
 ```bash
 # All implemented phases
-pytest tests/phase1/ tests/phase2/ tests/phase3/ -v
+pytest tests/unit/ tests/unit/ tests/unit/ -v
 
 # MLIR lit tests (requires tessera-opt built)
 python -m lit tests/tessera-ir/ -v
 
 # Coverage
-pytest tests/phase1/ --cov=tessera.distributed --cov=tessera.compiler -v
+pytest tests/unit/ --cov=tessera.distributed --cov=tessera.compiler -v
 
 # Type check
 mypy python/tessera/distributed/ python/tessera/compiler/

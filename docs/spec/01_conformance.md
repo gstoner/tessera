@@ -38,6 +38,7 @@ conformance.
 | `docs/spec/GRAPH_IR_SPEC.md` | Graph IR op semantics and verifier rules |
 | `docs/spec/LOWERING_PIPELINE_SPEC.md` | Pass input/output contracts |
 | `docs/spec/TARGET_IR_SPEC.md` | Target IR dialects |
+| `docs/spec/MEMORY_MODEL_SPEC.md` | Memory ordering, visibility, synchronization, atomics, and mbarriers |
 | `docs/spec/RUNTIME_ABI_SPEC.md` | C ABI functions and types |
 | `docs/spec/02_language_spec.md` | Supporting language notes |
 | `docs/spec/04_tile_ir.md` | Supporting Tile IR notes |

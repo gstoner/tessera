@@ -44,6 +44,9 @@ def test_memory_model_spec_covers_scopes_happens_before_and_mbarriers():
         "mbarrier.arrive_expect_tx",
         "Happens-Before",
         "Data race",
+        "Shared Memory Visibility",
+        "Mbarrier-Gated TMA Consumption",
+        "Compiler Enforcement",
         "Backend Mapping",
     ]
     for term in required:

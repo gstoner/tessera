@@ -169,7 +169,92 @@ behavior.
 - mbarrier initialization dominates arrival and wait
 - deterministic profiles do not use nondeterministic reductions
 
-## 10. Backend Mapping
+## 10. Examples
+
+### 10.1 Shared Memory Visibility
+
+```python
+s = op.alloc_shared((32,), dtype="fp32")
+
+if threadIdx == 0:
+    s[0] = 42.0
+
+barrier.block()
+x = s[0]  # all block participants observe 42.0
+```
+
+The `barrier.block()` call is both a rendezvous and a shared-memory visibility
+edge. A compiler verifier shall reject or warn on paths where not all block
+participants can reach the barrier.
+
+### 10.2 Device-Wide Publication
+
+```python
+g = op.tensor((1,), dtype="int32", memory="global")
+g[0] = 7
+fence.device()
+```
+
+The fence orders the calling thread's prior global writes. Consumers still need
+a synchronization edge, such as a kernel boundary, event dependency, acquire
+atomic, or explicit runtime protocol.
+
+### 10.3 Mbarrier-Gated TMA Consumption
+
+```mlir
+%bar = tile.mbarrier.alloc {count = 1, scope = "block"}
+%tok = tile.mbarrier.arrive_expect_tx %bar
+  {bytes = 16384, semantics = "release", scope = "block"}
+tile.async_copy %global, %shared {bytes = 16384, completion = %tok}
+%ready = tile.mbarrier.try_wait %bar, %tok
+```
+
+The consumer may read `%shared` only after `%ready` establishes completion for
+the same mbarrier phase. The byte count must match the copied region.
+
+### 10.4 Deterministic Mesh Reduction
+
+```python
+y = dist.all_reduce(x, op="sum", deterministic=True)
+dist.barrier(mesh)
+```
+
+Under deterministic or strict numeric profiles, the collective implementation
+must use a stable reduction tree/order and must not substitute unordered
+floating-point atomics.
+
+### 10.5 Scoped Atomics
+
+```python
+counter = op.tensor((1,), dtype="int32")
+atomic.add(counter, 1, order="acq_rel", scope="block")
+barrier.block()
+```
+
+The atomic provides atomicity and acquire/release ordering for the counter at
+block scope. The barrier gives same-block participants a rendezvous before they
+consume the aggregate state.
+
+## 11. Compiler Enforcement
+
+| Compiler layer | Responsibility |
+|----------------|----------------|
+| Graph IR | Preserve memory effects, state/cache effects, collective ordering, and deterministic profile requirements. |
+| Schedule IR | Represent movement effects before lowering: prefetch, async copy, staging, overlap, memory space, and completion edges. |
+| Tile IR | Verify barriers, fences, mbarriers, shared-memory visibility, async-copy completion, alignment, and resource bounds. |
+| Target IR | Lower scopes/orders to backend primitives and reject unsupported target features such as mbarriers before SM_90. |
+| Runtime | Establish stream/event/kernel/collective ordering and record replay metadata for deterministic profiles. |
+
+Required diagnostic payloads:
+
+- synchronization primitive and scope
+- memory space and address/layout when available
+- producer and consumer op locations
+- target capability that made the operation legal or illegal
+- suggested repair, such as inserting `barrier.block()`, using an acquire
+  atomic, padding/alignment, or disabling mbarrier on unsupported targets
+
+## 12. Backend Mapping
 
 | Tessera primitive | NVIDIA mapping | AMD mapping |
 |-------------------|----------------|-------------|

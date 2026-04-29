@@ -80,4 +80,5 @@ python_files = "test_*.py"
 pythonpath = [".", "python"]
 markers = [
     "slow: long-running tests excluded from quick local sweeps",
+    "performance: deterministic compiler performance and benchmark proxy tests",
 ]

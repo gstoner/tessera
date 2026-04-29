@@ -5,10 +5,12 @@
 #   tessera-ir/      — lit-based MLIR dialect regression tests
 #   kernel_tests/    — system-level kernel + roofline tests (C++/shell)
 #   unit/            — flat Python unit tests
+#   performance/     — deterministic compiler performance proxy tests
 #   integration/     — end-to-end pipeline tests
 #
 # Run all tests:   cmake --build . --target check-tessera
 # Run Python unit: cmake --build . --target check-tessera-unit
+# Run perf proxy:  cmake --build . --target check-tessera-performance
 # Run lit only:    cmake --build . --target check-tessera-ir
 
 # ------------------------------------------------------------------
@@ -61,6 +63,18 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/unit)
         COMMAND ${Python3_EXECUTABLE} -m pytest -q ${CMAKE_CURRENT_SOURCE_DIR}/unit
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         COMMENT "Running Tessera Python unit tests"
+        USES_TERMINAL
+    )
+endif()
+
+# ------------------------------------------------------------------
+# Python performance tests
+# ------------------------------------------------------------------
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/performance)
+    add_custom_target(check-tessera-performance
+        COMMAND ${Python3_EXECUTABLE} -m pytest -q ${CMAKE_CURRENT_SOURCE_DIR}/performance
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Running Tessera Python performance tests"
         USES_TERMINAL
     )
 endif()

@@ -89,7 +89,7 @@ Key source locations:
 | Linalg solver (MixedPrecision, IterativeRefinement) | **Structure wired; bodies are `// TODO`** |
 | `Cyclic` distribution | **Implemented — round-robin `np.take` strided sharding** |
 | Phase 4 Python modules | **Complete** — `distributed_planner`, `pipeline_planner`, `tpu_target`, `moe` all implemented |
-| Phase 4 test suite | **127 tests green** — `tests/phase4/` (cyclic, NCCL adapters, TPU target, DistributedPlan, PipelinePlan, MoE, GPU collective insertion) |
+| Phase 4 test suite | **127 tests green** — `tests/unit/` (cyclic, NCCL adapters, TPU target, DistributedPlan, PipelinePlan, MoE, GPU collective insertion) |
 | Phase 4 lit tests | **4 lit tests** — `tests/tessera-ir/phase4/` (gpu_collective_insertion, pipeline_stage_insertion, tpu_attention, tpu_shardy_export) |
 | Phase 5 Python modules | **Complete** — `autotune_v2.py` (BayesianAutotuner + grid fallback + SQLite cache), `checkpoint.py` (@checkpoint_jit + CheckpointIRAnnotator), `solver_config.py` (SolverConfig, ZeROConfig, ResilienceConfig, DeploymentManifest, RNGStreamPlan) |
 | Phase 5 C++ passes | **Implemented** — 11 solver core (SparseInspector, SparsePrecond, SparseSolverSpecialize, RNGLegalize, RNGStreamAssign, NewtonAutodiff, TrigInit, PeriodicHalo, ParamBatchPlan, ContinuationGuard, ImplicitLower) + 2 linalg (MixedPrecision, IterativeRefinement) + 3 SR (InsertRecompute, OptimizerShard, ResilienceRestart) |
@@ -175,7 +175,7 @@ python/tessera/
 **New test files:**
 
 ```
-tests/phase1/
+tests/unit/
 ├── __init__.py
 ├── test_distributed_api.py  ← Domain, ShardSpec, Region, index_launch
 ├── test_constraints.py      ← ConstraintSolver predicates
@@ -304,13 +304,13 @@ This lives in `python/tessera/testing/mock_collective.py` (create in Phase 1).
 pip install -e ".[dev]"
 
 # Run all Phase 1 tests
-pytest tests/phase1/ -v
+pytest tests/unit/ -v
 
 # Run with coverage
-pytest tests/phase1/ --cov=tessera.distributed --cov=tessera.compiler -v
+pytest tests/unit/ --cov=tessera.distributed --cov=tessera.compiler -v
 
 # Run a single test file
-pytest tests/phase1/test_distributed_api.py -v
+pytest tests/unit/test_distributed_api.py -v
 
 # Run MLIR lit tests (requires tessera-opt built)
 python -m lit tests/tessera-ir/ -v
@@ -418,7 +418,7 @@ def test_region_annotation_reduce():
 
 ## Phase 1 Completion Criteria
 
-- [ ] `pytest tests/phase1/ -v` — all tests green
+- [ ] `pytest tests/unit/ -v` — all tests green
 - [ ] `mypy python/tessera/distributed/ python/tessera/compiler/` — no errors
 - [ ] `tessera.domain.Rect`, `tessera.dist.Block`, `tessera.array.from_domain` importable
 - [ ] `Region["read"]`, `Region["write"]`, `Region["reduce_sum"]` work as type annotations
@@ -592,7 +592,7 @@ Verifiers: `AttnOps.cpp` (FA-2 shape invariants)
 
 ### Tests
 
-Python: `tests/phase3/` — 56 tests, all green.
+Python: `tests/unit/` — 56 tests, all green.
 Lit: `tests/tessera-ir/phase3/` — 4 MLIR lit files (tile_ir_lowering, warp_specialization, nvwgmma_lowering, flash_attn_full).
 
 ---
@@ -696,7 +696,7 @@ python/tessera/compiler/jit.py  ← extend @jit to accept target= keyword;
 **New test files:**
 
 ```
-tests/phase3/
+tests/unit/
   __init__.py
   conftest.py                   ← GPUTargetProfile fixtures, mock WGMMA verifier
   test_tile_ir_lowering.py      ← TileIRLoweringPass: schedule.mesh.region → Tile IR
@@ -738,7 +738,7 @@ tests/tessera-ir/phase3/
 
 ### Phase 3 completion criteria
 
-- [ ] `pytest tests/phase3/ -v` — all tests green
+- [ ] `pytest tests/unit/ -v` — all tests green
 - [ ] `python -m lit tests/tessera-ir/phase3/ -v` — all lit tests pass
 - [ ] `TileIRLoweringPass` lowers `schedule.mesh.region { tessera.flash_attn }` to Tile IR ops
 - [ ] `WarpSpecializationPass` assigns producer/consumer roles with queue barriers
@@ -850,7 +850,7 @@ python/tessera/compiler/
 **New test files:**
 
 ```
-tests/phase4/
+tests/unit/
   __init__.py
   conftest.py                      ← 8-rank MockRankGroup, NCCLMock adapter
   test_nccl_adapter.py             ← NCCLAdapter interface + NCCLMock correctness
@@ -1015,7 +1015,7 @@ python/tessera/compiler/
 **New test files:**
 
 ```
-tests/phase5/
+tests/unit/
   __init__.py
   conftest.py                          ← fixtures: small transformer, sparse matrix
   test_insert_recompute.py             ← InsertRecomputePass: checkpoint placement
@@ -1194,7 +1194,7 @@ python/tessera/
 **New test files:**
 
 ```
-tests/phase6/
+tests/unit/
   __init__.py
   conftest.py                        ← TesseraRuntime fixture (CPU backend only)
   test_runtime_abi.py                ← full C ABI: context, stream, malloc, memcpy, launch
@@ -1244,7 +1244,7 @@ tests/tessera-ir/phase6/
 
 ### Phase 6 completion criteria
 
-- [ ] `pytest tests/phase6/ -v` — all tests green
+- [ ] `pytest tests/unit/ -v` — all tests green
 - [ ] `python -m lit tests/tessera-ir/phase6/ -v` — all lit tests pass
 - [ ] `TesseraRuntime` Python wrapper: context/stream/malloc/memcpy/launch work on CPU backend
 - [ ] `tessera_runtime_cpu.cpp` executes a `tsrLaunchHostTileKernel` with correct tile coord callbacks
@@ -1280,18 +1280,18 @@ tests/tessera-ir/phase6/
 pip install -e ".[dev]"
 
 # Run a specific phase's tests
-pytest tests/phase1/ -v
-pytest tests/phase2/ -v
-pytest tests/phase3/ -v   # requires GPU or mock
-pytest tests/phase4/ -v
-pytest tests/phase5/ -v
-pytest tests/phase6/ -v
+pytest tests/unit/ -v
+pytest tests/unit/ -v
+pytest tests/unit/ -v   # requires GPU or mock
+pytest tests/unit/ -v
+pytest tests/unit/ -v
+pytest tests/unit/ -v
 
 # Run all phases
 pytest tests/ -v
 
 # Coverage for a phase
-pytest tests/phase3/ --cov=tessera.compiler.gpu_target -v
+pytest tests/unit/ --cov=tessera.compiler.gpu_target -v
 
 # MLIR lit tests (all phases)
 python -m lit tests/tessera-ir/ -v

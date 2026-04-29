@@ -60,6 +60,9 @@ tessera/
 ├── debug.py                      # graph tracing, tensor summaries, grad/determinism checks
 ├── profiler.py                   # profiling sessions, reports, Chrome trace export
 ├── autotune.py                   # public autotune facade and roofline cost model
+├── fault.py                      # fault policies, preemption hooks, failure injection
+├── elastic.py                    # elastic rendezvous and reshard planning
+├── checkpoint.py                 # runtime checkpoint manifests and load/save helpers
 ├── ops/
 │   └── __init__.py               # tessera.ops.* namespace
 └── testing/
@@ -104,6 +107,11 @@ tessera.graph        # tessera.graph.trace / debug_trace / export_graphviz
 # Profiling and autotuning
 tessera.profiler     # tessera.profiler.session / record / timeline
 tessera.autotune     # callable autotune facade; also .load / .cache_key
+
+# Fault tolerance and elasticity
+tessera.fault        # on_failure / on_preempt / inject
+tessera.elastic      # configure / elastic / reshard
+tessera.checkpoint   # runtime checkpoint save/load/manifest helpers
 
 # Ops namespace
 tessera.ops          # tessera.ops.gemm / layer_norm / dropout / etc.
@@ -784,6 +792,42 @@ Autotuning helpers:
 
 The public autotune facade currently supports GEMM/matmul shapes and delegates
 search and SQLite persistence to `tessera.compiler.autotune_v2`.
+
+---
+
+### 9.10 Fault tolerance and elasticity helpers
+
+**Modules:** `tessera.fault`, `tessera.elastic`, `tessera.checkpoint`  
+**Guide:** `docs/guides/Tessera_Fault_Tolerance_And_Elasticity_Guide.md`
+
+Fault helpers:
+
+| Symbol | Purpose |
+|--------|---------|
+| `fault.on_failure(policy=...)` | Attach drain/resume, fail-fast, or manual policy |
+| `fault.on_preempt(grace_s=..., action=...)` | Attach scheduler preemption policy |
+| `fault.inject(...)` | Controlled failure injection context |
+
+Elastic helpers:
+
+| Symbol | Purpose |
+|--------|---------|
+| `elastic.configure(...)` | Configure rendezvous backend and rank bounds |
+| `elastic.elastic(...)` | Context manager for elastic membership |
+| `elastic.reshard(...)` | Build a mesh resharding plan |
+| `elastic.on_topology_change(...)` | Kernel/autotune invalidation policy |
+
+Runtime checkpoint helpers:
+
+| Symbol | Purpose |
+|--------|---------|
+| `checkpoint.save(tag=..., atomic=True)` | Write sharded checkpoint manifest |
+| `checkpoint.load(tag, remap_to=...)` | Load committed manifest and remap mesh |
+| `checkpoint.enable_async(...)` | Configure async checkpointing policy |
+| `checkpoint.last_committed(...)` | Find latest committed checkpoint tag |
+
+`tessera.checkpoint` is for runtime checkpoint/restart. Activation
+checkpointing/rematerialization remains under `tessera.compiler.checkpoint`.
 
 ---
 

@@ -75,6 +75,10 @@ monitoring, regression detection, replay debugging, observability, production
 fault tolerance, stress testing, chaos testing, node-scale QA, and rack-scale
 NVL72 validation.
 
+For fault policies, elastic membership, mesh resharding, atomic runtime
+checkpoints, rendezvous integration, and preemption handling, use
+`docs/guides/Tessera_Fault_Tolerance_And_Elasticity_Guide.md`.
+
 ## Archive
 
 Pre-canonical or superseded material lives under `docs/archive/pre_canonical/`. Archived documents are retained for design history only and must not be treated as current API or implementation guidance.

@@ -32,6 +32,9 @@ from . import shape
 from . import debug
 from . import profiler
 from . import autotune as _autotune_module
+from . import fault
+from . import elastic
+from . import checkpoint
 from .core import Tensor, Module
 from .shape import (
     Dim,
@@ -71,6 +74,11 @@ dist = types.SimpleNamespace(
     Block=Block,
     Cyclic=Cyclic,
     Replicated=Replicated,
+    config=lambda **kwargs: kwargs,
+    elastic=elastic.elastic,
+    reshard=elastic.reshard,
+    current_mesh=elastic.current_mesh,
+    world_size=elastic.world_size,
 )
 
 array = types.SimpleNamespace(

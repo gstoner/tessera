@@ -57,6 +57,10 @@ For graph inspection, numerical tracing, gradient checking, determinism checks,
 and external debugger integration, use
 `docs/guides/Tessera_Debugging_Tools_Guide.md`.
 
+For the first executable developer frontend path, `@jit` matmul lowering,
+Graph/Schedule/Tile/Target inspection, and current frontend boundaries, use
+`docs/guides/Tessera_Developer_Frontend_End_To_End.md`.
+
 For runtime metrics, Chrome trace export, cost models, autotuning workflows,
 persistent tuning caches, and on-device measurement contracts, use
 `docs/guides/Tessera_Profiling_And_Autotuning_Guide.md`.

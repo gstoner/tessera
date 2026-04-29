@@ -25,6 +25,7 @@ from .effects import Effect, EffectLattice, TesseraEffectError
 from .graph_ir import GraphIRBuilder, GraphIRModule
 from .gpu_target import GPUTargetProfile, ISA  # noqa: F401 — re-exported for callers
 from .attn_lower import FlashAttnLoweringConfig, SM90_DEFAULT  # noqa: F401
+from .matmul_pipeline import MatmulCPUPlan, build_matmul_cpu_plan
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -186,6 +187,7 @@ class JitFn:
         seed            : RNG seed (if provided)
         target          : GPUTargetProfile if GPU compilation was requested, else None
         attn_config     : FlashAttnLoweringConfig if flash_attn in body, else None
+        cpu_plan        : executable CPU lowering plan for supported programs
     """
 
     def __init__(
@@ -198,6 +200,7 @@ class JitFn:
         seed: Optional[int] = None,
         target: Optional[GPUTargetProfile] = None,
         attn_config: Optional[FlashAttnLoweringConfig] = None,
+        cpu_plan: Optional[MatmulCPUPlan] = None,
     ) -> None:
         self._fn = fn
         self.graph_ir = graph_ir
@@ -207,13 +210,16 @@ class JitFn:
         self.seed = seed
         self.target = target
         self.attn_config = attn_config
+        self.cpu_plan = cpu_plan
         functools.update_wrapper(self, fn)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """
-        Phase 1: execute the Python function eagerly.
-        Phase 3: dispatch through the compiled kernel.
+        Execute through the narrow CPU lowering path when available; otherwise
+        fall back to the original Python function.
         """
+        if self.cpu_plan is not None and self.target is None:
+            return self.cpu_plan.execute(args, kwargs, self.arg_names)
         return self._fn(*args, **kwargs)
 
     def ir_text(self) -> str:
@@ -223,6 +229,31 @@ class JitFn:
     @property
     def is_gpu(self) -> bool:
         return self.target is not None
+
+    @property
+    def arg_names(self) -> List[str]:
+        if not self.graph_ir.functions:
+            return []
+        return [arg.name for arg in self.graph_ir.functions[0].args]
+
+    @property
+    def schedule_ir(self) -> Optional[str]:
+        return self.cpu_plan.schedule_ir if self.cpu_plan is not None else None
+
+    @property
+    def tile_ir(self) -> Optional[str]:
+        return self.cpu_plan.tile_ir if self.cpu_plan is not None else None
+
+    @property
+    def target_ir(self) -> Optional[str]:
+        return self.cpu_plan.target_ir if self.cpu_plan is not None else None
+
+    def lowering_artifacts(self):
+        """Return Graph/Schedule/Tile/Target artifacts for the compiled path."""
+
+        if self.cpu_plan is None:
+            return ()
+        return self.cpu_plan.artifacts()
 
     def __repr__(self) -> str:
         target_str = f" target={self.target!r}" if self.target else ""
@@ -323,6 +354,7 @@ def jit(
             target_attr = target.to_mlir_attr() if target is not None else None
             builder.lower(fn, effect_tag=effect_tag, target_attr=target_attr)
             module = builder.module()
+            cpu_plan = build_matmul_cpu_plan(module) if target is None else None
         except Exception as exc:
             raise TesseraJitError(
                 f"Graph IR emission failed for {fn.__name__!r}: {exc}"
@@ -338,6 +370,7 @@ def jit(
             seed=seed,
             target=target,
             attn_config=resolved_attn,
+            cpu_plan=cpu_plan,
         )
 
     # Support both @jit and @jit(...) usage

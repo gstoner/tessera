@@ -184,6 +184,11 @@ def fn(...): ...
 | `.effect` | `Effect` | Inferred effect of the compiled function. |
 | `.constraints` | `list[Constraint]` | All constraints extracted from the function body. |
 | `.target` | `GPUTargetProfile \| None` | The target profile passed at decoration time. |
+| `.cpu_plan` | `MatmulCPUPlan \| None` | Narrow executable CPU plan for returned `ops.matmul`/`ops.gemm`. |
+| `.schedule_ir` | `str \| None` | Schedule IR text for the CPU matmul path. |
+| `.tile_ir` | `str \| None` | Tile IR text for the CPU matmul path. |
+| `.target_ir` | `str \| None` | Target IR text for the CPU matmul path. |
+| `.lowering_artifacts()` | `tuple[LoweringArtifact, ...]` | Graph/Schedule/Tile/Target artifacts for supported lowered functions. |
 
 **Exceptions raised at decoration time:**
 
@@ -207,6 +212,26 @@ def stable_gemm(
     tessera.require(tessera.constraint.Divisible("K", 64))
     return tessera.ops.gemm(A, B)
 ```
+
+**Current CPU end-to-end path:**
+
+```python
+import numpy as np
+import tessera as ts
+
+@ts.jit
+def mm(A, B):
+    return ts.ops.matmul(A, B)
+
+Y = mm(np.ones((2, 3), dtype=np.float32), np.ones((3, 4), dtype=np.float32))
+print(mm.schedule_ir)
+print(mm.tile_ir)
+print(mm.target_ir)
+```
+
+This path supports a single returned `ops.matmul` or `ops.gemm` and exposes
+Graph IR, Schedule IR, Tile IR, and Target IR artifacts before executing the
+matmul on CPU. Other functions continue to use the eager Python fallback.
 
 ---
 

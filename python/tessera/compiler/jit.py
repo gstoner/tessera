@@ -18,14 +18,15 @@ Reference: CLAUDE.md §Key Design Contracts
 from __future__ import annotations
 import functools
 import inspect
-from typing import Any, Callable, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .constraints import Constraint, ConstraintSolver, TesseraConstraintError
 from .effects import Effect, EffectLattice, TesseraEffectError
 from .graph_ir import GraphIRBuilder, GraphIRModule
 from .gpu_target import GPUTargetProfile, ISA  # noqa: F401 — re-exported for callers
 from .attn_lower import FlashAttnLoweringConfig, SM90_DEFAULT  # noqa: F401
-from .matmul_pipeline import MatmulCPUPlan, build_matmul_cpu_plan
+from .matmul_pipeline import JitDiagnostic, CPUPlan, build_cpu_plan, explain_cpu_plan
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -147,10 +148,10 @@ _ConstraintExtractor._PREDICATE_CTORS = {
 }
 
 
-def _extract_constraints(fn: Callable) -> List[Constraint]:
+def _extract_constraints(fn: Callable, source_text: Optional[str] = None) -> List[Constraint]:
     """Parse fn's source and return the list of tessera.require() constraints."""
     try:
-        source = inspect.getsource(fn)
+        source = source_text if source_text is not None else inspect.getsource(fn)
         source = textwrap.dedent(source)
         tree = ast.parse(source)
     except (OSError, TypeError, SyntaxError):
@@ -164,6 +165,29 @@ def _extract_constraints(fn: Callable) -> List[Constraint]:
                     extractor.visit(stmt)
                 break
     return extractor.constraints
+
+
+def _resolve_source_text(
+    fn: Callable,
+    *,
+    source: Optional[str] = None,
+    source_path: Optional[str] = None,
+) -> Tuple[Optional[str], str]:
+    """Return dedented function source and an origin label for diagnostics."""
+
+    if source is not None and source_path is not None:
+        raise TesseraJitError("Pass either source=... or source_path=..., not both")
+    if source is not None:
+        return textwrap.dedent(source), "explicit"
+    if source_path is not None:
+        try:
+            return textwrap.dedent(Path(source_path).read_text(encoding="utf-8")), f"file:{source_path}"
+        except OSError as exc:
+            raise TesseraJitError(f"Could not read @jit source_path {source_path!r}: {exc}") from exc
+    try:
+        return textwrap.dedent(inspect.getsource(fn)), "inspect"
+    except (OSError, TypeError):
+        return None, "unavailable"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -188,6 +212,9 @@ class JitFn:
         target          : GPUTargetProfile if GPU compilation was requested, else None
         attn_config     : FlashAttnLoweringConfig if flash_attn in body, else None
         cpu_plan        : executable CPU lowering plan for supported programs
+        cpu_tile        : CPU matmul/GEMM tile shape
+        source_origin   : where AST source came from: inspect, explicit, file, unavailable
+        lowering_diagnostics: developer-facing lowering decision diagnostics
     """
 
     def __init__(
@@ -200,7 +227,10 @@ class JitFn:
         seed: Optional[int] = None,
         target: Optional[GPUTargetProfile] = None,
         attn_config: Optional[FlashAttnLoweringConfig] = None,
-        cpu_plan: Optional[MatmulCPUPlan] = None,
+        cpu_plan: Optional[CPUPlan] = None,
+        cpu_tile: Tuple[int, int, int] = (128, 128, 64),
+        source_origin: str = "inspect",
+        lowering_diagnostics: Optional[List[JitDiagnostic]] = None,
     ) -> None:
         self._fn = fn
         self.graph_ir = graph_ir
@@ -211,6 +241,9 @@ class JitFn:
         self.target = target
         self.attn_config = attn_config
         self.cpu_plan = cpu_plan
+        self.cpu_tile = tuple(int(v) for v in cpu_tile)
+        self.source_origin = source_origin
+        self.lowering_diagnostics = tuple(lowering_diagnostics or [])
         functools.update_wrapper(self, fn)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
@@ -248,12 +281,21 @@ class JitFn:
     def target_ir(self) -> Optional[str]:
         return self.cpu_plan.target_ir if self.cpu_plan is not None else None
 
+    @property
+    def uses_compiled_path(self) -> bool:
+        return self.cpu_plan is not None and self.target is None
+
     def lowering_artifacts(self):
         """Return Graph/Schedule/Tile/Target artifacts for the compiled path."""
 
         if self.cpu_plan is None:
             return ()
         return self.cpu_plan.artifacts()
+
+    def explain_lowering(self) -> str:
+        """Return a human-readable explanation of compile vs fallback status."""
+
+        return "\n".join(d.format() for d in self.lowering_diagnostics)
 
     def __repr__(self) -> str:
         target_str = f" target={self.target!r}" if self.target else ""
@@ -277,6 +319,9 @@ def jit(
     bindings: Optional[Dict[str, int]] = None,
     target: Optional[GPUTargetProfile] = None,
     attn_config: Optional[FlashAttnLoweringConfig] = None,
+    cpu_tile: Tuple[int, int, int] = (128, 128, 64),
+    source: Optional[str] = None,
+    source_path: Optional[str] = None,
 ) -> Any:
     """
     Tessera JIT decorator — drives the compiler pipeline.
@@ -307,6 +352,12 @@ def jit(
                        pipeline (Phase 3). None = CPU/interpreted path.
         attn_config  : FlashAttnLoweringConfig; when None and target is set with
                        isa >= SM_90, SM90_DEFAULT is used automatically.
+        cpu_tile     : CPU matmul/GEMM schedule tile `(M, N, K)` for the narrow
+                       end-to-end CPU compiler path.
+        source       : optional function source text for functions created from
+                       stdin/exec where inspect.getsource() cannot recover the
+                       function body.
+        source_path  : optional path to Python source text for AST lowering.
 
     Returns:
         JitFn wrapper around the decorated function.
@@ -318,9 +369,15 @@ def jit(
     """
 
     def _decorate(fn: Callable) -> JitFn:
+        source_text, source_origin = _resolve_source_text(
+            fn,
+            source=source,
+            source_path=source_path,
+        )
+
         # ── Step 1: collect constraints from the function body ──────────────
         solver = ConstraintSolver()
-        extracted = _extract_constraints(fn)
+        extracted = _extract_constraints(fn, source_text=source_text)
         for c in extracted:
             solver.add(c)
 
@@ -332,12 +389,12 @@ def jit(
 
         # ── Step 3: infer effects ────────────────────────────────────────────
         lattice = EffectLattice()
-        inferred_effect = lattice.infer(fn)
+        inferred_effect = lattice.infer(fn, source_text=source_text)
 
         # ── Step 4: validate deterministic contract ──────────────────────────
         if deterministic:
             try:
-                lattice.check_deterministic(fn, seed=seed)
+                lattice.check_deterministic(fn, seed=seed, source_text=source_text)
             except TesseraEffectError:
                 raise
 
@@ -352,9 +409,27 @@ def jit(
             effect_tag = inferred_effect.name if deterministic or inferred_effect != Effect.pure else None
             # Attach GPU target attrs to the module when target is provided.
             target_attr = target.to_mlir_attr() if target is not None else None
-            builder.lower(fn, effect_tag=effect_tag, target_attr=target_attr)
+            builder.lower(fn, effect_tag=effect_tag, target_attr=target_attr, source_text=source_text)
             module = builder.module()
-            cpu_plan = build_matmul_cpu_plan(module) if target is None else None
+            cpu_plan = build_cpu_plan(module, tile=tuple(int(v) for v in cpu_tile)) if target is None else None
+            target_kind = "gpu" if target is not None else "cpu"
+            diagnostics = []
+            if source_text is None:
+                diagnostics.append(JitDiagnostic(
+                    "warning",
+                    "JIT_SOURCE_UNAVAILABLE",
+                    (
+                        "Python source could not be inspected; define the function in a file "
+                        "or pass @jit(source=...) / @jit(source_path=...) to enable AST lowering"
+                    ),
+                ))
+            elif source_origin != "inspect":
+                diagnostics.append(JitDiagnostic(
+                    "info",
+                    "JIT_SOURCE_PROVIDED",
+                    f"using {source_origin} source for AST lowering",
+                ))
+            diagnostics.append(explain_cpu_plan(module, target=target_kind))
         except Exception as exc:
             raise TesseraJitError(
                 f"Graph IR emission failed for {fn.__name__!r}: {exc}"
@@ -371,6 +446,9 @@ def jit(
             target=target,
             attn_config=resolved_attn,
             cpu_plan=cpu_plan,
+            cpu_tile=tuple(int(v) for v in cpu_tile),
+            source_origin=source_origin,
+            lowering_diagnostics=diagnostics,
         )
 
     # Support both @jit and @jit(...) usage

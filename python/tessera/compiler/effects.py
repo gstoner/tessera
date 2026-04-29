@@ -133,8 +133,11 @@ _OP_EFFECTS: Dict[str, Effect] = {
     "conv2d":      Effect.pure,
     "layer_norm":  Effect.pure,
     "softmax":     Effect.pure,
+    "sigmoid":     Effect.pure,
     "gelu":        Effect.pure,
     "relu":        Effect.pure,
+    "sin":         Effect.pure,
+    "adam":        Effect.pure,
     "transpose":   Effect.pure,
     "cast":        Effect.pure,
     "fused_epilogue": Effect.pure,
@@ -258,7 +261,7 @@ class EffectLattice:
         # Cache: fn_id → inferred Effect
         self._cache: Dict[int, Effect] = {}
 
-    def infer(self, fn: Callable) -> Effect:
+    def infer(self, fn: Callable, source_text: Optional[str] = None) -> Effect:
         """
         Infer the effect level of fn by walking its AST.
 
@@ -269,25 +272,28 @@ class EffectLattice:
         extensions) are conservatively assigned Effect.top.
         """
         fn_id = id(fn)
-        if fn_id in self._cache:
+        use_cache = source_text is None
+        if use_cache and fn_id in self._cache:
             return self._cache[fn_id]
 
         try:
-            source = inspect.getsource(fn)
+            source = source_text if source_text is not None else inspect.getsource(fn)
             source = textwrap.dedent(source)
             tree = ast.parse(source)
         except (OSError, TypeError, SyntaxError):
             # Cannot inspect — conservative fallback
-            self._cache[fn_id] = Effect.top
+            if use_cache:
+                self._cache[fn_id] = Effect.top
             return Effect.top
 
         visitor = _EffectVisitor()
         visitor.visit(tree)
         result = visitor.inferred
-        self._cache[fn_id] = result
+        if use_cache:
+            self._cache[fn_id] = result
         return result
 
-    def infer_with_ops(self, fn: Callable):
+    def infer_with_ops(self, fn: Callable, source_text: Optional[str] = None):
         """
         Like infer(), but also returns the list of offending op names.
 
@@ -295,7 +301,7 @@ class EffectLattice:
             (Effect, List[str]) — effect level and offending ops
         """
         try:
-            source = inspect.getsource(fn)
+            source = source_text if source_text is not None else inspect.getsource(fn)
             source = textwrap.dedent(source)
             tree = ast.parse(source)
         except (OSError, TypeError, SyntaxError):
@@ -309,6 +315,7 @@ class EffectLattice:
         self,
         fn: Callable,
         seed: Optional[int] = None,
+        source_text: Optional[str] = None,
     ) -> None:
         """
         Validate that fn satisfies the @jit(deterministic=True) contract.
@@ -325,7 +332,7 @@ class EffectLattice:
         Raises:
             TesseraEffectError: if fn has unseeded RNG or host I/O/unknown effect
         """
-        inferred, offending_ops = self.infer_with_ops(fn)
+        inferred, offending_ops = self.infer_with_ops(fn, source_text=source_text)
 
         if inferred >= Effect.io:
             raise TesseraEffectError(

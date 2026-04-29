@@ -159,6 +159,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         e = np.exp(x - x.max(axis=axis, keepdims=True))
         return e / e.sum(axis=axis, keepdims=True)
 
+    def sigmoid(x):
+        if hasattr(x, "_data"):
+            x = x._data
+        return 1.0 / (1.0 + np.exp(-x))
+
     def gelu(x):
         if hasattr(x, "_data"):
             x = x._data
@@ -168,6 +173,28 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         if hasattr(x, "_data"):
             x = x._data
         return np.maximum(0, x)
+
+    def sin(x):
+        if hasattr(x, "_data"):
+            x = x._data
+        return np.sin(x)
+
+    def adam(param, grad, moment1, moment2, lr: float = 1e-3, beta1: float = 0.9, beta2: float = 0.999, eps: float = 1e-8, step: int = 1):
+        """Functional Adam optimizer step.
+
+        Returns ``(new_param, new_moment1, new_moment2)`` and keeps optimizer
+        state explicit so it can lower as a pure CPU compiler op.
+        """
+        values = []
+        for value in (param, grad, moment1, moment2):
+            values.append(value._data if hasattr(value, "_data") else value)
+        param, grad, moment1, moment2 = values
+        new_m = beta1 * moment1 + (1.0 - beta1) * grad
+        new_v = beta2 * moment2 + (1.0 - beta2) * (grad * grad)
+        m_hat = new_m / (1.0 - beta1**step)
+        v_hat = new_v / (1.0 - beta2**step)
+        new_param = param - lr * m_hat / (np.sqrt(v_hat) + eps)
+        return new_param, new_m, new_v
 
     def transpose(x, axes=None):
         if hasattr(x, "_data"):
@@ -249,8 +276,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         matmul=matmul,
         layer_norm=layer_norm,
         softmax=softmax,
+        sigmoid=sigmoid,
         gelu=gelu,
         relu=relu,
+        sin=sin,
+        adam=adam,
         transpose=transpose,
         cast=cast,
         dropout=dropout,

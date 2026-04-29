@@ -162,6 +162,9 @@ def fn(...): ...
     bindings: dict[str, int] | None = None,
     target: GPUTargetProfile | None = None,
     attn_config: FlashAttnLoweringConfig | None = None,
+    cpu_tile: tuple[int, int, int] = (128, 128, 64),
+    source: str | None = None,
+    source_path: str | None = None,
 )
 def fn(...): ...
 ```
@@ -175,6 +178,9 @@ def fn(...): ...
 | `bindings` | `dict[str, int] \| None` | `None` | Concrete dimension bindings for early constraint checking at decoration time. Example: `{"K": 128, "M": 512}`. If `None`, constraint checking is deferred to the first call where sizes are known. |
 | `target` | `GPUTargetProfile \| None` | `None` | GPU lowering target. `None` routes to the CPU/interpreted path. When set to a profile with `isa >= ISA.SM_90`, the GPU lowering pipeline (`tessera-lower-to-gpu`) is selected. |
 | `attn_config` | `FlashAttnLoweringConfig \| None` | `None` | Flash attention tile sizes and pipeline configuration. If `None` and `target.isa >= ISA.SM_90`, `SM90_DEFAULT` is used automatically. |
+| `cpu_tile` | `tuple[int, int, int]` | `(128, 128, 64)` | CPU matmul/GEMM Schedule IR tile `(tile_m, tile_n, tile_k)` for the narrow end-to-end CPU compiler path. |
+| `source` | `str \| None` | `None` | Optional Python source text for functions created from `stdin`, notebooks, or `exec(...)` where `inspect.getsource()` cannot recover the body. |
+| `source_path` | `str \| None` | `None` | Optional file path containing Python source text for AST lowering. Mutually exclusive with `source`. |
 
 **Returns:** `JitFn` — a callable wrapper with the following additional attributes:
 
@@ -185,10 +191,14 @@ def fn(...): ...
 | `.constraints` | `list[Constraint]` | All constraints extracted from the function body. |
 | `.target` | `GPUTargetProfile \| None` | The target profile passed at decoration time. |
 | `.cpu_plan` | `MatmulCPUPlan \| None` | Narrow executable CPU plan for returned `ops.matmul`/`ops.gemm`. |
+| `.source_origin` | `str` | Source origin used by AST lowering: `inspect`, `explicit`, `file:<path>`, or `unavailable`. |
 | `.schedule_ir` | `str \| None` | Schedule IR text for the CPU matmul path. |
 | `.tile_ir` | `str \| None` | Tile IR text for the CPU matmul path. |
 | `.target_ir` | `str \| None` | Target IR text for the CPU matmul path. |
 | `.lowering_artifacts()` | `tuple[LoweringArtifact, ...]` | Graph/Schedule/Tile/Target artifacts for supported lowered functions. |
+| `.uses_compiled_path` | `bool` | `True` when execution uses the narrow CPU compiler path. |
+| `.lowering_diagnostics` | `tuple[JitDiagnostic, ...]` | Compile/fallback decision diagnostics. |
+| `.explain_lowering()` | `str` | Human-readable compile/fallback explanation. |
 
 **Exceptions raised at decoration time:**
 
@@ -229,9 +239,41 @@ print(mm.tile_ir)
 print(mm.target_ir)
 ```
 
-This path supports a single returned `ops.matmul` or `ops.gemm` and exposes
-Graph IR, Schedule IR, Tile IR, and Target IR artifacts before executing the
-matmul on CPU. Other functions continue to use the eager Python fallback.
+256x128 GEMM schedule:
+
+```python
+@ts.jit(cpu_tile=(256, 128, 64))
+def gemm_256x128(A, B):
+    return ts.ops.gemm(A, B)
+
+print(gemm_256x128.schedule_ir)
+```
+
+This path supports a single returned `ops.matmul`, `ops.gemm`, `ops.relu`,
+`ops.sigmoid`, `ops.softmax`, `ops.sin`, or functional `ops.adam` call. It
+exposes Graph IR, Schedule IR, Tile IR, and Target IR artifacts before executing
+on CPU. Other functions continue to use the eager Python fallback and expose the
+reason through `.lowering_diagnostics` and `.explain_lowering()`.
+
+For functions created dynamically from `stdin` or `exec(...)`, pass explicit
+source so the AST frontend can compile them:
+
+```python
+src = """
+def mm(A, B):
+    return ts.ops.gemm(A, B)
+"""
+
+ns = {}
+exec(src, {"ts": ts}, ns)
+mm = ts.jit(ns["mm"], source=src, cpu_tile=(256, 128, 64))
+
+assert mm.uses_compiled_path
+assert mm.source_origin == "explicit"
+```
+
+If no source can be inspected or supplied, `.explain_lowering()` includes
+`JIT_SOURCE_UNAVAILABLE` and the wrapper uses the eager fallback.
 
 ---
 

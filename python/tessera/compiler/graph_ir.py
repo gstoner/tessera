@@ -250,6 +250,9 @@ class _OpExtractor(ast.NodeVisitor):
         "softmax":    "tessera.softmax",
         "gelu":       "tessera.gelu",
         "relu":       "tessera.relu",
+        "sigmoid":    "tessera.sigmoid",
+        "sin":        "tessera.sin",
+        "adam":       "tessera.adam",
         "transpose":  "tessera.transpose",
         "cast":       "tessera.cast",
         "flash_attn": "tessera.flash_attn",
@@ -378,6 +381,7 @@ class GraphIRBuilder:
         fn: Callable,
         effect_tag: Optional[str] = None,
         target_attr: Optional[str] = None,
+        source_text: Optional[str] = None,
     ) -> "GraphIRFunction":
         """
         Lower fn to a GraphIRFunction and add it to the module.
@@ -387,6 +391,8 @@ class GraphIRBuilder:
             effect_tag  : optional effect annotation for the function (e.g., "pure")
             target_attr : optional GPU target attribute dict string emitted as
                           tessera.target on the module (Phase 3+)
+            source_text : optional Python source text for functions whose
+                          source cannot be retrieved with inspect.getsource()
 
         Returns:
             GraphIRFunction — the emitted function IR
@@ -422,7 +428,7 @@ class GraphIRBuilder:
 
         # Extract ops from AST
         arg_names = [a.name for a in args]
-        ops = self._extract_ops(fn, arg_names)
+        ops = self._extract_ops(fn, arg_names, source_text=source_text)
 
         # Build function attrs
         fn_attrs = {}
@@ -438,10 +444,15 @@ class GraphIRBuilder:
         self._module.functions.append(fn_ir)
         return fn_ir
 
-    def _extract_ops(self, fn: Callable, arg_names: List[str]) -> List[IROp]:
+    def _extract_ops(
+        self,
+        fn: Callable,
+        arg_names: List[str],
+        source_text: Optional[str] = None,
+    ) -> List[IROp]:
         """Walk the function AST and extract recognized tessera op calls."""
         try:
-            source = inspect.getsource(fn)
+            source = source_text if source_text is not None else inspect.getsource(fn)
             source = textwrap.dedent(source)
             tree = ast.parse(source)
         except (OSError, TypeError, SyntaxError):

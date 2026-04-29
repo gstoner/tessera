@@ -63,6 +63,7 @@ tessera/
 ├── fault.py                      # fault policies, preemption hooks, failure injection
 ├── elastic.py                    # elastic rendezvous and reshard planning
 ├── checkpoint.py                 # runtime checkpoint manifests and load/save helpers
+├── server.py                     # inference package, scheduler, KV cache, app registry
 ├── ops/
 │   └── __init__.py               # tessera.ops.* namespace
 └── testing/
@@ -112,6 +113,9 @@ tessera.autotune     # callable autotune facade; also .load / .cache_key
 tessera.fault        # on_failure / on_preempt / inject
 tessera.elastic      # configure / elastic / reshard
 tessera.checkpoint   # runtime checkpoint save/load/manifest helpers
+
+# Inference serving
+tessera.server       # App / load_package / scheduler / KVCacheManager
 
 # Ops namespace
 tessera.ops          # tessera.ops.gemm / layer_norm / dropout / etc.
@@ -828,6 +832,28 @@ Runtime checkpoint helpers:
 
 `tessera.checkpoint` is for runtime checkpoint/restart. Activation
 checkpointing/rematerialization remains under `tessera.compiler.checkpoint`.
+
+---
+
+### 9.11 Inference server helpers
+
+**Module:** `tessera.server`  
+**Guide:** `docs/guides/Tessera_Inference_Server_Guide.md`
+
+Inference helpers define the Python foundation for production serving:
+
+| Symbol | Purpose |
+|--------|---------|
+| `server.load_package(path)` | Load and validate `.tspkg/manifest.yaml` |
+| `server.ModelManifest` | Normative package manifest representation |
+| `server.KVCacheConfig` | Paged KV cache settings |
+| `server.KVCacheManager` | KV page accounting and hit-rate helper |
+| `server.scheduler(...)` | Continuous/sequence/priority scheduler metadata |
+| `server.App` | In-process model/route registry for future HTTP/gRPC binding |
+| `server.capabilities(...)` | Runtime placement capability descriptor |
+
+The server module is not a network transport. It defines validated contracts for
+package loading, scheduling, KV cache accounting, health, and metrics.
 
 ---
 

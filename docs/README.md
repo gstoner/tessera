@@ -79,6 +79,10 @@ For fault policies, elastic membership, mesh resharding, atomic runtime
 checkpoints, rendezvous integration, and preemption handling, use
 `docs/guides/Tessera_Fault_Tolerance_And_Elasticity_Guide.md`.
 
+For production inference serving, `.tspkg` packaging, continuous batching,
+OpenAI-compatible APIs, paged KV cache, distributed serving meshes, and
+serving SRE guidance, use `docs/guides/Tessera_Inference_Server_Guide.md`.
+
 ## Archive
 
 Pre-canonical or superseded material lives under `docs/archive/pre_canonical/`. Archived documents are retained for design history only and must not be treated as current API or implementation guidance.

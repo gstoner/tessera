@@ -35,6 +35,7 @@ from . import autotune as _autotune_module
 from . import fault
 from . import elastic
 from . import checkpoint
+from . import server
 from .core import Tensor, Module
 from .shape import (
     Dim,

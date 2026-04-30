@@ -87,10 +87,16 @@ kept separate from the distribution strategy.
 
 ## Effect Lattice
 
-The ordering `pure < random < movement < state < collective < memory < io < top`
-used to classify side effects.
-The compiler infers effects; programmers only declare `deterministic=True`.
-See [`docs/CANONICAL_API.md §Effect System`](CANONICAL_API.md).
+The ordering used to classify side effects. The compiler infers effects;
+programmers only declare `deterministic=True`.
+
+**Implemented (Phases 1–3):** `pure < random < memory < io < top`
+
+**Aspirational (Phases 4–5 planned):** `pure < random < movement < state < collective < memory < io < top`
+— the three intermediate levels (`movement`, `state`, `collective`) are specified
+but not yet emitted or inferred by `EffectAnnotationPass`.
+
+See [`docs/CANONICAL_API.md §Effect System`](CANONICAL_API.md) for the current implemented table.
 
 ## FA-4
 

@@ -1,7 +1,34 @@
+---
+status: Informative
+classification: Tutorial
+authority: Performance tuning concepts; Tessera API names defer to docs/CANONICAL_API.md
+last_updated: 2026-04-30
+---
+
+> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+
 # Tessera Performance Tuning Guide
-**File:** `performance_tuning.md`  
-**Version:** 1.0 (2025‑09‑01)  
+**Version:** 1.1 (2026‑04‑30)  
 **Audience:** Kernel authors, model integrators, and systems engineers using the Tessera Programming Model.
+
+## How This Guide Relates to Tessera
+
+The concepts below — arithmetic intensity, tile sizing, warp specialization, pipeline stages, memory coalescing — map directly to Tessera's compiler abstractions:
+
+| Tuning concept | Tessera mechanism |
+|---------------|-------------------|
+| Tile shape selection | `FlashAttnLoweringConfig(tile_q, tile_kv)` and `TilingPass --tile-m / --tile-n` |
+| Pipeline stages / double buffering | `schedule.pipeline {double_buffer = true, depth = N}` |
+| Warp specialization (producer/consumer) | `WarpSpecializationPass` — assigns `tessera.schedule.warp {role = "producer/consumer"}` |
+| Async copies to shared memory | `tile.async_copy` → `tessera.tma.async_load` (SM_90+) or `cp.async` |
+| Transaction barriers | `tile.mbarrier.arrive_expect_tx` / `tile.mbarrier.try_wait` |
+| Autotuning tile/pipeline choices | `BayesianAutotuner` (Phase 5) / `schedule.knob` attrs |
+| Constraint-driven alignment | `tessera.require(tessera.constraint.Divisible("K", 64))` |
+
+Use `@tessera.jit(target=GPUTargetProfile(isa=ISA.SM_90, warps_per_cta=4))` to
+route through the `tessera-lower-to-gpu` pipeline, which applies warp
+specialization, TMA async copy lowering, and WGMMA emission automatically.
+For x86 AMX/AVX-512, omit the `target=` argument.
 
 ---
 
@@ -218,14 +245,14 @@ Repro: <cmd + seed>
 ---
 
 ## 11. Cross‑References (Tessera Docs)
-- `Tessera_Programming_Model_V1.md` — conceptual overview.
-- `tessera_frontend_architecture.md` — language & frontend.
-- `tessera_target_ir_complete_unified.md` — IR & lowering passes.
-- `tessera_target_ir_usage_guide.md` — IR usage examples.
-- `Tessera_Standard_Operations.md` — canonical ops and epilogues.
-- `system_overview.md` — runtime/system integration.
 
-> Informative: The above internal docs complement this guide; sections are aligned to the tile‑first, IR‑lowering approach in Tessera.
+- [`docs/CANONICAL_API.md`](../CANONICAL_API.md) — authoritative API names and phase status
+- [`docs/architecture/tessera_target_ir_usage_guide.md`](../architecture/tessera_target_ir_usage_guide.md) — Target IR and pipeline examples
+- [`docs/architecture/Compiler/tessera_ir_layers.md`](../architecture/Compiler/tessera_ir_layers.md) — the four IR layers and lowering passes
+- [`docs/operations/Tessera_Standard_Operations.md`](../operations/Tessera_Standard_Operations.md) — canonical ops and epilogues
+- [`docs/architecture/system_overview.md`](../architecture/system_overview.md) — system component map
+- [`docs/guides/Tessera_Profiling_And_Autotuning_Guide.md`](../guides/Tessera_Profiling_And_Autotuning_Guide.md) — roofline, autotuner, persistent cache
+- [`docs/guides/Tessera_Tensor_Layout_And_Data_Movement_Guide.md`](../guides/Tessera_Tensor_Layout_And_Data_Movement_Guide.md) — TMA, mbarrier, async copy patterns
 
 ---
 

@@ -245,8 +245,8 @@ Compiler work still needed:
 
 Examples:
 
-- `examples/dnas_graphir_sketch.mlir`
-- `examples/dnas_schedule_autotune.py`
+- `examples/compiler/dnas/dnas_graphir_sketch.mlir`
+- `examples/compiler/dnas/dnas_schedule_autotune.py`
 
 ## 10. Autodiff And Runtime Plumbing
 

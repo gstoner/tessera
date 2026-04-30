@@ -195,10 +195,10 @@ def test_dnas_ods_and_schedule_knob_ops_are_declared():
 
 def test_dnas_examples_exist_and_match_guide():
     guide = GUIDE.read_text(encoding="utf-8")
-    graph_example = ROOT / "examples" / "dnas_graphir_sketch.mlir"
-    schedule_example = ROOT / "examples" / "dnas_schedule_autotune.py"
+    graph_example = ROOT / "examples" / "compiler" / "dnas" / "dnas_graphir_sketch.mlir"
+    schedule_example = ROOT / "examples" / "compiler" / "dnas" / "dnas_schedule_autotune.py"
 
-    assert "examples/dnas_graphir_sketch.mlir" in guide
-    assert "examples/dnas_schedule_autotune.py" in guide
+    assert "examples/compiler/dnas/dnas_graphir_sketch.mlir" in guide
+    assert "examples/compiler/dnas/dnas_schedule_autotune.py" in guide
     assert "tessera.graph.arch.parameter" in graph_example.read_text(encoding="utf-8")
     assert "arch.hw_cost" in schedule_example.read_text(encoding="utf-8")

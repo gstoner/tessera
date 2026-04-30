@@ -8,6 +8,11 @@ This directory contains examples and tutorials for using Tessera.
 - [`flash_attention_demo.py`](getting_started/flash_attention_demo.py) - Flash Attention usage
 - [`first_model.py`](getting_started/first_model.py) - Your first Tessera model
 
+## Compiler Examples
+
+- [`compiler/dnas/`](compiler/dnas/) - differentiable NAS Graph IR and schedule-search examples
+- [`compiler/ir_pipeline_tutorial/`](compiler/ir_pipeline_tutorial/) - Python to Graph/Schedule/Tile/Target IR walkthrough
+
 ## Advanced Examples
 
 - [`advanced/Fast_dLLM_v2/`](advanced/Fast_dLLM_v2/) - diffusion LLM inference and parallel decoding
@@ -40,4 +45,8 @@ python3 flash_attention_demo.py
 # Advanced examples
 python3 examples/advanced/rlvr_reasoning_suite/run_demo.py --steps 4
 python3 examples/advanced/kv_cache_serving/demo.py --requests 8
+
+# Compiler examples
+PYTHONPATH=python python3 examples/compiler/dnas/dnas_schedule_autotune.py
+PYTHONPATH=python python3 examples/compiler/ir_pipeline_tutorial/tessera_ir_pipeline_demo.py
 ```

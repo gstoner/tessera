@@ -16,7 +16,7 @@ Use this guide with:
 
 - `docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md` for stable error
   codes and diagnostic fields.
-- `docs/spec/shape-system.md` for shape, layout, shard, and witness checks.
+- `docs/spec/SHAPE_SYSTEM.md` for shape, layout, shard, and witness checks.
 - `docs/spec/MEMORY_MODEL_SPEC.md` for barrier, fence, mbarrier, and ordering
   semantics.
 

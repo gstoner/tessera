@@ -40,9 +40,9 @@ conformance.
 | `docs/spec/TARGET_IR_SPEC.md` | Target IR dialects |
 | `docs/spec/MEMORY_MODEL_SPEC.md` | Memory ordering, visibility, synchronization, atomics, and mbarriers |
 | `docs/spec/RUNTIME_ABI_SPEC.md` | C ABI functions and types |
-| `docs/spec/02_language_spec.md` | Supporting language notes |
-| `docs/spec/04_tile_ir.md` | Supporting Tile IR notes |
-| `docs/spec/shape-system.md` | Supporting shape-system notes |
+| `docs/spec/LANGUAGE_SPEC.md` | Supporting language notes |
+| `docs/spec/TILE_IR.md` | Supporting Tile IR notes |
+| `docs/spec/SHAPE_SYSTEM.md` | Supporting shape-system notes |
 
 ---
 
@@ -90,8 +90,8 @@ IR emission. No multi-rank support.
 | `tessera.Region["read"/"write"/"reduce_sum"/"reduce_max"/"reduce_min"]` | `PYTHON_API_SPEC §4` |
 | `tessera.Tensor["dim", ...]` subscript annotation | `PYTHON_API_SPEC §16` |
 | `tessera.f16[..., ...]`, `tessera.mut_f32[..., ...]` dtype annotations | `PYTHON_API_SPEC §16` |
-| `tessera.require()` + `ConstraintSolver` predicates (`Divisible`, `Range`, `Equal`) | `PYTHON_API_SPEC §11`, `shape-system.md` |
-| `EffectLattice` inference (pure → random → memory → io → top) | `PYTHON_API_SPEC §12`, `02_language_spec.md §5` |
+| `tessera.require()` + `ConstraintSolver` predicates (`Divisible`, `Range`, `Equal`) | `PYTHON_API_SPEC §11`, `SHAPE_SYSTEM.md` |
+| `EffectLattice` inference (pure → random → memory → io → top) | `PYTHON_API_SPEC §12`, `LANGUAGE_SPEC.md §5` |
 | `@tessera.jit(deterministic=True, seed=N)` contract | `PYTHON_API_SPEC §2` |
 | All 6 Graph IR ops (`tessera.matmul`, `conv2d`, `flash_attn`, `fused_epilogue`, `cast`, `transpose`) | `GRAPH_IR_SPEC §3` |
 | 4 Graph IR canonicalization patterns | `GRAPH_IR_SPEC §5` |
@@ -128,14 +128,14 @@ runtime conformance requires the Phase 6 runtime C ABI execution path.
 | `tessera.dist.Block`, `.Cyclic`, `.Replicated` | `PYTHON_API_SPEC §6` |
 | `tessera.array.from_domain` | `PYTHON_API_SPEC §7` |
 | `DistributedArray.parts(axis)` | `PYTHON_API_SPEC §8` |
-| `ShardSpec` with integer `partition` tuples | `PYTHON_API_SPEC §9`, `shape-system.md §4` |
+| `ShardSpec` with integer `partition` tuples | `PYTHON_API_SPEC §9`, `SHAPE_SYSTEM.md §4` |
 | `tessera.index_launch` | `PYTHON_API_SPEC §10` |
 | `GPUTargetProfile`, `ISA` enum (SM_80–SM_120 placeholder) | `PYTHON_API_SPEC §13` |
 | `FlashAttnLoweringConfig` | `PYTHON_API_SPEC §14` |
 | `@tessera.jit(target=GPUTargetProfile(...))` routing | `COMPILER_REFERENCE §3.2` |
 | `tessera-lower-to-gpu` pipeline (all 9 passes) | `COMPILER_REFERENCE §3.2` |
-| FA-4 Attn dialect: `ScaledDotProduct`, `OnlineSoftmax`, `LseAccumulate`, `DropoutMask`, `CausalMask` | `TARGET_IR_SPEC §3`, `04_tile_ir.md §4` |
-| `tile.async_copy` / `tile.wait_async` with `stage=` attribute | `04_tile_ir.md §3.2` |
+| FA-4 Attn dialect: `ScaledDotProduct`, `OnlineSoftmax`, `LseAccumulate`, `DropoutMask`, `CausalMask` | `TARGET_IR_SPEC §3`, `TILE_IR.md §4` |
+| `tile.async_copy` / `tile.wait_async` with `stage=` attribute | `TILE_IR.md §3.2` |
 | Hopper+ `tile.mbarrier.*` transaction barriers | `LANGUAGE_AND_IR_SPEC §9`, `MEMORY_MODEL_SPEC §4` |
 | `tessera.tma.*` + `tessera.nvgpu.wgmma.*` ops (SM_90 path) | `TARGET_IR_SPEC §4–5` |
 | `WarpSpecializationPass` producer/consumer role assignment | `LOWERING_PIPELINE_SPEC §2.2` |

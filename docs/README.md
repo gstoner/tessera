@@ -23,7 +23,7 @@ These documents are the source of truth for current Tessera Phases 1-3 behavior 
 | Lowering pipeline contracts | `docs/spec/LOWERING_PIPELINE_SPEC.md` |
 | Schedule, Tile, and Target IR dialect details | `docs/spec/TARGET_IR_SPEC.md` |
 | Memory model | `docs/spec/MEMORY_MODEL_SPEC.md` |
-| Shape, layout, shard, and schedule feasibility system | `docs/spec/shape-system.md` |
+| Shape, layout, shard, and schedule feasibility system | `docs/spec/SHAPE_SYSTEM.md` |
 | Standard operator library | `docs/operations/Tessera_Standard_Operations.md` |
 | Error handling and diagnostics | `docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md` |
 | Runtime C ABI | `docs/spec/RUNTIME_ABI_SPEC.md` |
@@ -34,9 +34,9 @@ These documents remain normative only where they do not conflict with the normat
 
 | Topic | Document |
 |-------|----------|
-| Conformance profiles | `docs/spec/01_conformance.md` |
-| Language notes | `docs/spec/02_language_spec.md` |
-| Tile IR notes | `docs/spec/04_tile_ir.md` |
+| Conformance profiles | `docs/spec/CONFORMANCE.md` |
+| Language notes | `docs/spec/LANGUAGE_SPEC.md` |
+| Tile IR notes | `docs/spec/TILE_IR.md` |
 
 ## Informative Guides
 

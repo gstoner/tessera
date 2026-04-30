@@ -169,13 +169,17 @@ Violation → `TesseraConstraintError` (at decoration time if concrete bindings 
 
 Effects are **inferred, not declared** (except the `deterministic` flag).
 
-| Effect | Value | Meaning |
-|--------|-------|---------|
-| `Effect.pure` | 0 | No side effects; recompute-safe |
-| `Effect.random` | 1 | Calls RNG; result varies |
-| `Effect.memory` | 2 | Reads/writes mutable state (KV cache, etc.) |
-| `Effect.io` | 3 | Collective communication or host I/O |
-| `Effect.top` | 4 | Unknown / unconstrained |
+> **Implementation note:** The Python implementation (`python/tessera/compiler/effects.py`) defines **5 levels** listed below. `docs/spec/LANGUAGE_AND_IR_SPEC.md` and `docs/operations/Tessera_Standard_Operations.md` specify an aspirational **8-level** lattice that adds `movement`, `state`, and `collective` between `random` and `memory`. Those three intermediate levels are Phase 4–5 planned; the compiler does not yet emit or infer them.
+
+| Effect | Value | Meaning | Status |
+|--------|-------|---------|--------|
+| `Effect.pure` | 0 | No side effects; recompute-safe | Implemented |
+| `Effect.random` | 1 | Calls RNG; result varies | Implemented |
+| `Effect.memory` | 2 | Reads/writes mutable state (KV cache, etc.) | Implemented |
+| `Effect.io` | 3 | Collective communication or host I/O | Implemented |
+| `Effect.top` | 4 | Unknown / unconstrained | Implemented |
+
+Intermediate levels (`movement`, `state`, `collective`) are in the aspirational spec only. See `LANGUAGE_AND_IR_SPEC.md §6` for the full planned lattice.
 
 Lattice join: `effect_a.join(effect_b)` → `max(a, b)`.
 

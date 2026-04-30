@@ -201,7 +201,7 @@ Use these as implementation anchors:
 - `tests/unit/test_nccl_adapter.py`: collective behavior tests.
 - `tests/unit/test_bayesian_autotuner.py`: schedule artifact tests.
 - `tests/unit/`: runtime, diagnostics, shape, and semantic-core tests.
-- `docs/TesseraBench/`: benchmark and performance validation material.
+- `docs/benchmarks/`: benchmark and performance validation material.
 
 ## 10. Related Guides
 

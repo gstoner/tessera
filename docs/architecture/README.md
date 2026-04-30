@@ -33,7 +33,7 @@ flowchart TD
 | Phase 3 | NVIDIA GPU lowering: GPU target profile, FA-4 Tile IR, warp specialization, async copy lowering, WGMMA/TMA target lowering | Complete | `docs/spec/TARGET_IR_SPEC.md`, `docs/spec/LOWERING_PIPELINE_SPEC.md` |
 | Phase 4 | Distributed training: NCCL/RCCL collectives, TPU StableHLO, Cyclic distribution, pipeline parallelism | Planned | `docs/spec/COMPILER_REFERENCE.md`, `docs/spec/TARGET_IR_SPEC.md` |
 | Phase 5 | Scaling and resilience: autodiff expansion, activation checkpointing, ZeRO sharding, Bayesian autotuning | Planned | `docs/README.md`, `docs/spec/COMPILER_REFERENCE.md` |
-| Phase 6 | Production runtime: Runtime C ABI wiring, Python runtime wrapper, ROCm MFMA completion, benchmark suite | Planned | `docs/spec/RUNTIME_ABI_SPEC.md`, `docs/spec/01_conformance.md` |
+| Phase 6 | Production runtime: Runtime C ABI wiring, Python runtime wrapper, ROCm MFMA completion, benchmark suite | Planned | `docs/spec/RUNTIME_ABI_SPEC.md`, `docs/spec/CONFORMANCE.md` |
 
 ## Canonical Specs
 
@@ -46,7 +46,7 @@ flowchart TD
 | What does each lowering pass consume and produce? | `docs/spec/LOWERING_PIPELINE_SPEC.md` |
 | What are Schedule IR, Tile IR, and Target IR dialects? | `docs/spec/TARGET_IR_SPEC.md` |
 | What is the runtime ABI contract? | `docs/spec/RUNTIME_ABI_SPEC.md` |
-| What is conformant today vs planned? | `docs/spec/01_conformance.md` |
+| What is conformant today vs planned? | `docs/spec/CONFORMANCE.md` |
 
 ## Architecture Guides
 
@@ -59,7 +59,7 @@ flowchart TD
 | `docs/architecture/Compiler/Tessera_Compiler_TileIR_Design.md` | Tile IR design, memory movement, MMA, and barriers |
 | `docs/architecture/Compiler/Tessera_Compiler_TargetIR_Design.md` | Target IR design and backend mapping concepts |
 | `docs/architecture/tessera_target_ir_usage_guide.md` | Informative target-lowering examples; defer API claims to canonical specs |
-| `docs/architecture/cute_tessera_enhancement.md` | Proposal material for CuTe-inspired enhancements |
+| `docs/architecture/proposals/cute_tessera_enhancement.md` | Proposal material for CuTe-inspired enhancements |
 
 ## Historical Material
 

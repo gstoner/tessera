@@ -782,7 +782,7 @@ def aligned_gemm(
 **Module:** `tessera.shape`  
 **Imports:** `tessera.sym`, `tessera.dim`, `tessera.check_shapes`, `tessera.shape.*`
 
-The shape-system helpers are the Python mirror of `docs/spec/shape-system.md`.
+The shape-system helpers are the Python mirror of `docs/spec/SHAPE_SYSTEM.md`.
 They support symbolic dimensions, derived dimension products, broadcasting,
 reshape element-count checks, logical-dimension sharding checks, schedule tile
 feasibility, and runtime shape witnesses.

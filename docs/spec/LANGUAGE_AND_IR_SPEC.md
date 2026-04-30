@@ -138,7 +138,7 @@ Unknown dimensions are allowed at Graph IR and Schedule IR, but must be resolved
 guarded by a runtime shape witness, or explicitly padded before lowering to
 Tile IR.
 
-Shape semantics are defined by `docs/spec/shape-system.md`. Tensor types carry
+Shape semantics are defined by `docs/spec/SHAPE_SYSTEM.md`. Tensor types carry
 logical shape separately from physical layout and shard map. Reusing a symbolic
 dimension name asserts equality within the current specialization. Derived
 dimensions such as `D = H * Dh` are legal in Graph IR, but products must be
@@ -160,6 +160,8 @@ The DSL denotes a pure functional graph except for declared effects:
 ```text
 pure < random < movement < state < collective < memory < io < top
 ```
+
+> **Implementation gap (Phases 1–3):** The compiler currently implements a **5-level** subset: `pure < random < memory < io < top`. The intermediate levels `movement`, `state`, and `collective` are specified here as the full aspirational contract but are not yet emitted or inferred by `EffectAnnotationPass`. They will be activated in Phases 4–5. See `docs/CANONICAL_API.md §Effect System` for the currently implemented table.
 
 Execution order is defined by SSA data dependencies, explicit synchronization,
 state effects, movement effects, and collective dependencies. Determinism is

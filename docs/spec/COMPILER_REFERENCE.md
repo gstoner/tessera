@@ -56,8 +56,8 @@ All passes in pipeline order, with their source files, named pipelines, and intr
 
 | Pipeline name | Target | Passes (in order) |
 |--------------|--------|-------------------|
-| `tessera-lower-to-x86` | x86 AMX/AVX512 CPU | EffectAnnotation → Distribution → Canonicalize → Tiling → TileToX86 |
-| `tessera-lower-to-gpu` | NVIDIA SM_90+ | EffectAnnotation → Distribution → TileIRLowering → WarpSpecialization → AsyncCopyLowering → NVWGMMALowering → NVTMADescriptor → NVFlashAttnKernelEmitter |
+| `tessera-lower-to-x86` | x86 AMX/AVX512 CPU | EffectAnnotation → Canonicalize → Distribution → Tiling → TileToX86 |
+| `tessera-lower-to-gpu` | NVIDIA SM_90+ | EffectAnnotation → Canonicalize → Distribution → TileIRLowering → WarpSpecialization → AsyncCopyLowering → NVWGMMALowering → NVTMADescriptor → NVFlashAttnKernelEmitter |
 
 Registration: `src/transforms/lib/Passes.cpp` (x86); `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` (GPU)
 
@@ -68,8 +68,12 @@ Registration: `src/transforms/lib/Passes.cpp` (x86); `src/compiler/codegen/tesse
 **`CanonicalizeTesseraIR`**
 - File: `src/transforms/lib/CanonicalizeTesseraIR.cpp`
 - Input: Graph IR with raw tessera.* ops
-- Output: Graph IR with 4 fusion patterns applied
-- Patterns: (1) matmul+bias fusion, (2) matmul+gelu fusion, (3) matmul+bias+gelu fusion, (4) conv+bias fusion
+- Output: Graph IR with 4 fusion/simplification patterns applied
+- Patterns:
+  1. **FuseMatmulBiasGELU** — `gelu(add(matmul(A,B), bias))` → `fused_epilogue(A,B,bias, Gelu)`
+  2. **FuseConvRelu** — `relu(conv2d_nhwc(...))` → `conv2d_nhwc(..., epilogue=Relu)`
+  3. **DropoutZeroSimplify** — `flash_attn {dropout_p=0.0}` → `flash_attn` without `dropout_p` attr
+  4. **TransposeIntoMatmul** — `matmul(transpose(A), B)` → `matmul(A, B, transposeA=true)`
 - Named pipeline: both (runs first)
 
 **`VerifyTesseraIR`**
@@ -87,12 +91,13 @@ Registration: `src/transforms/lib/Passes.cpp` (x86); `src/compiler/codegen/tesse
 - File: `src/transforms/lib/EffectAnnotationPass.cpp`
 - Input: Graph IR — `func.func` ops with tessera.* body ops
 - Output: Same, with `tessera.effect = "pure"|"random"|"memory"|"io"` on each function
-- Effect inference rules:
+- Effect inference rules (Phases 1–3 — 5-level lattice):
   - `tessera.flash_attn` with `dropout_p != 0.0` → `random`
   - `tessera.copy` → `memory`
   - Any arg with `tessera.effect = "write"` or `"reduce_*"` → `memory`
   - `func.call` to non-tessera external function → `io`
   - All else → `pure`
+- **Implementation note:** `LANGUAGE_AND_IR_SPEC.md §6` and `Tessera_Standard_Operations.md` specify an 8-level aspirational lattice (`pure < random < movement < state < collective < memory < io < top`). The additional levels `movement`, `state`, and `collective` are Phase 4–5 planned and are not emitted or inferred by this pass today.
 - Validation: if a function already carries `tessera.effect = "pure"` but body infers higher, emits error
 - Named pipeline: both (runs before Distribution)
 

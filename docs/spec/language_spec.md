@@ -375,7 +375,7 @@ NCCL execution for T2 conformance.
 ### 7.1 Intra-kernel Synchronization
 
 Within a `@tessera.kernel`, synchronization is expressed through Tile IR ops (see
-`04_tile_ir.md`). These ops are not directly callable from Python — they are emitted by
+`TILE_IR.md`). These ops are not directly callable from Python — they are emitted by
 the lowering pipeline based on the structure of the kernel:
 
 - `tile.async_copy {stage=N}` / `tile.wait_async {stage=N}` — explicit double-buffering

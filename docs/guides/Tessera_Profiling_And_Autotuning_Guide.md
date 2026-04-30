@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Guide
-authority: Profiling and autotuning workflows; defers schedule artifact semantics to docs/spec/shape-system.md and compiler autotuner implementation
+authority: Profiling and autotuning workflows; defers schedule artifact semantics to docs/spec/SHAPE_SYSTEM.md and compiler autotuner implementation
 last_updated: 2026-04-28
 ---
 

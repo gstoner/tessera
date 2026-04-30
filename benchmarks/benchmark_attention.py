@@ -20,6 +20,11 @@ import time
 from dataclasses import dataclass, field
 from typing import List, Optional, Sequence, Tuple
 
+try:
+    from benchmarks.compiler_support import compiler_flash_attention_ir
+except ImportError:
+    from compiler_support import compiler_flash_attention_ir
+
 
 @dataclass
 class AttnConfig:
@@ -68,6 +73,8 @@ class AttnResult:
     tokens_per_sec: float
     tflops: float
     mfu: float
+    compiler_path: str = "roofline_model"
+    compiler_lowering: str = ""
     timestamp: float = field(default_factory=time.time)
 
     def __repr__(self) -> str:
@@ -119,25 +126,39 @@ class FlashAttnBenchmark:
         memory_ms = cfg.bytes_accessed() / (self.peak_membw_gbps * 1e9) * 1e3
         return max(compute_ms, memory_ms) * 1.05
 
-    def _benchmark_one(self, cfg: AttnConfig) -> AttnResult:
+    def _benchmark_one(self, cfg: AttnConfig, *, emit_compiler_ir: bool = False) -> AttnResult:
         latency_ms = self._roofline_latency_ms(cfg)
         tflops = cfg.flops() / (latency_ms * 1e-3) / 1e12
         tokens_per_sec = cfg.tokens() / (latency_ms * 1e-3)
         mfu = tflops / self.peak_tflops
+        compiler_path = "roofline_model"
+        compiler_lowering = ""
+        if emit_compiler_ir:
+            info = compiler_flash_attention_ir()
+            if info.get("available"):
+                compiler_path = "tessera_graph_ir"
+                if info.get("uses_compiled_path"):
+                    compiler_path = "tessera_jit_cpu"
+                compiler_lowering = str(info.get("lowering", ""))
+            else:
+                compiler_path = "compiler_unavailable"
         return AttnResult(config=cfg, latency_ms=latency_ms,
                           tokens_per_sec=tokens_per_sec,
-                          tflops=tflops, mfu=mfu)
+                          tflops=tflops, mfu=mfu,
+                          compiler_path=compiler_path,
+                          compiler_lowering=compiler_lowering)
 
     def run(
         self,
         configs: Optional[Sequence[Tuple[int, int, int, int]]] = None,
+        emit_compiler_ir: bool = False,
     ) -> List[AttnResult]:
         if configs is None:
             configs = self.DEFAULT_CONFIGS
         results = []
         for B, H, S, D in configs:
             cfg = AttnConfig(B, H, S, D, causal=self.causal, dtype=self.dtype)
-            results.append(self._benchmark_one(cfg))
+            results.append(self._benchmark_one(cfg, emit_compiler_ir=emit_compiler_ir))
         return results
 
     def run_single(self, batch: int, heads: int, seq_len: int,
@@ -171,6 +192,8 @@ class FlashAttnBenchmark:
             "latency_ms": r.latency_ms,
             "tokens_per_sec": r.tokens_per_sec,
             "tflops": r.tflops, "mfu": r.mfu,
+            "compiler_path": r.compiler_path,
+            "compiler_lowering": r.compiler_lowering,
             "timestamp": r.timestamp,
         } for r in results]
         with open(path, "w") as f:

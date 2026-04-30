@@ -23,6 +23,13 @@ import time
 from dataclasses import dataclass, field
 from typing import List, Optional, Sequence, Tuple
 
+import numpy as np
+
+try:
+    from benchmarks.compiler_support import compiler_matmul_relu
+except ImportError:  # Allows running this file directly from benchmarks/.
+    from compiler_support import compiler_matmul_relu
+
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -61,6 +68,8 @@ class GEMMResult:
     tflops: float
     memory_bw_gbps: float
     roofline_bound: str       # "compute" or "memory"
+    compiler_path: str = "roofline_model"
+    compiler_lowering: str = ""
     timestamp: float = field(default_factory=time.time)
 
     def __repr__(self) -> str:
@@ -124,9 +133,32 @@ class GEMMBenchmark:
         memory_ms = cfg.bytes_accessed() / (self.peak_membw_gbps * 1e9) * 1e3
         return max(compute_ms, memory_ms)
 
-    def _benchmark_one(self, cfg: GEMMConfig) -> GEMMResult:
+    def _benchmark_one(self, cfg: GEMMConfig, *, use_compiler: bool = False) -> GEMMResult:
         """Time a single configuration using the roofline model as proxy."""
-        # Simulate warmup delay
+        compiler_path = "roofline_model"
+        compiler_lowering = ""
+
+        if use_compiler:
+            # Keep compiler smoke sizes bounded; large sweeps remain analytic.
+            elems = cfg.M * cfg.K + cfg.K * cfg.N
+            if elems <= 2_000_000:
+                a = np.ones((cfg.M, cfg.K), dtype=np.float32)
+                b = np.ones((cfg.K, cfg.N), dtype=np.float32)
+                run = compiler_matmul_relu(a, b, (cfg.tile_m, cfg.tile_n, cfg.tile_k))
+                if run is not None:
+                    latency_ms = run.latency_ms
+                    flops_per_sec = cfg.flops() / max(latency_ms * 1e-3, 1e-12)
+                    return GEMMResult(
+                        config=cfg,
+                        latency_ms=latency_ms,
+                        tflops=flops_per_sec / 1e12,
+                        memory_bw_gbps=cfg.bytes_accessed() / max(latency_ms * 1e-3, 1e-12) / 1e9,
+                        roofline_bound="measured_cpu",
+                        compiler_path="tessera_jit_cpu" if run.uses_compiled_path else "tessera_jit_fallback",
+                        compiler_lowering=run.lowering,
+                    )
+                compiler_path = "compiler_unavailable"
+
         latency_ms = self._roofline_latency_ms(cfg)
         # Add 5% overhead for kernel launch + scheduling
         latency_ms *= 1.05
@@ -145,6 +177,8 @@ class GEMMBenchmark:
             tflops=tflops,
             memory_bw_gbps=bw_gbps,
             roofline_bound=bound,
+            compiler_path=compiler_path,
+            compiler_lowering=compiler_lowering,
         )
 
     def run(
@@ -153,6 +187,7 @@ class GEMMBenchmark:
         tile_m: int = 128,
         tile_n: int = 128,
         tile_k: int = 32,
+        use_compiler: bool = False,
     ) -> List[GEMMResult]:
         """
         Run the benchmark for each (M, N, K) in ``sizes``.
@@ -166,7 +201,7 @@ class GEMMBenchmark:
         for M, N, K in sizes:
             cfg = GEMMConfig(M=M, N=N, K=K, dtype=self.dtype,
                              tile_m=tile_m, tile_n=tile_n, tile_k=tile_k)
-            results.append(self._benchmark_one(cfg))
+            results.append(self._benchmark_one(cfg, use_compiler=use_compiler))
         return results
 
     def run_single(self, M: int, N: int, K: int, **kwargs) -> GEMMResult:
@@ -202,6 +237,8 @@ class GEMMBenchmark:
                 "tflops": r.tflops,
                 "memory_bw_gbps": r.memory_bw_gbps,
                 "roofline_bound": r.roofline_bound,
+                "compiler_path": r.compiler_path,
+                "compiler_lowering": r.compiler_lowering,
                 "timestamp": r.timestamp,
             })
         with open(path, "w") as f:

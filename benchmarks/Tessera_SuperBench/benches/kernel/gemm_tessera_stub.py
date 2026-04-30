@@ -1,6 +1,15 @@
 
 #!/usr/bin/env python3
-import argparse, json, time, numpy as np
+import argparse, json, pathlib, sys, time, numpy as np
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[4]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+PYTHON_ROOT = REPO_ROOT / "python"
+if str(PYTHON_ROOT) not in sys.path:
+    sys.path.insert(0, str(PYTHON_ROOT))
+
+from benchmarks.compiler_support import compiler_matmul_relu
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--m", type=int, default=512)
@@ -17,11 +26,19 @@ B = (np.arange(args.k*args.n, dtype=np.float32)%17/17).reshape(args.k,args.n).as
 best = 0.0
 last_ms = 0.0
 max_abs = 0.0
+compiler_path = "numpy"
+compiler_lowering = ""
 
 for r in range(args.repeat):
     t0 = time.time()
-    # Placeholder for Tessera-targeted path would go here
-    C = A @ B
+    compiler_run = compiler_matmul_relu(A.astype(np.float32), B.astype(np.float32), (128, 128, 32))
+    if compiler_run is not None:
+        C = np.asarray(compiler_run.output).astype(dtype)
+        compiler_path = "tessera_jit_cpu" if compiler_run.uses_compiled_path else "tessera_jit_fallback"
+        compiler_lowering = compiler_run.lowering
+    else:
+        C = A @ B
+        compiler_path = "numpy_fallback"
     t1 = time.time()
     ms = (t1-t0)*1000.0
     last_ms = ms
@@ -35,6 +52,8 @@ for r in range(args.repeat):
 row = {
   "throughput_flops": best,
   "latency_ms": last_ms,
-  "max_abs_err": max_abs
+  "max_abs_err": max_abs,
+  "compiler_path": compiler_path,
+  "compiler_lowering": compiler_lowering
 }
 print(json.dumps(row))

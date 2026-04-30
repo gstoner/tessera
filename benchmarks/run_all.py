@@ -204,6 +204,7 @@ def run_all_benchmarks(
     collective_sizes: Optional[List[int]] = None,
     gemm_sizes=None,
     attn_configs=None,
+    use_compiler: bool = False,
     verbose: bool = True,
 ) -> BenchmarkSuite:
     """
@@ -254,7 +255,7 @@ def run_all_benchmarks(
         peak_tflops=peak_tflops,
         peak_membw_gbps=peak_membw_gbps,
     )
-    suite.gemm_results = gemm_bench.run(sizes=gemm_sizes)
+    suite.gemm_results = gemm_bench.run(sizes=gemm_sizes, use_compiler=use_compiler)
     if verbose:
         print(gemm_bench.report(suite.gemm_results))
 
@@ -269,7 +270,7 @@ def run_all_benchmarks(
         peak_tflops=peak_tflops,
         peak_membw_gbps=peak_membw_gbps,
     )
-    suite.attn_results = attn_bench.run(configs=attn_configs)
+    suite.attn_results = attn_bench.run(configs=attn_configs, emit_compiler_ir=use_compiler)
     if verbose:
         print(attn_bench.report(suite.attn_results))
 
@@ -325,12 +326,21 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="Suppress per-suite tables; only print summary")
     p.add_argument("--no-save", action="store_true",
                    help="Do not write JSON output file")
+    p.add_argument("--use-compiler", action="store_true",
+                   help="Exercise current Tessera compiler artifacts where supported")
+    p.add_argument("--smoke", action="store_true",
+                   help="Use tiny benchmark shapes suitable for local compiler smoke checks")
     return p
 
 
 def main(argv=None) -> int:
     args = _build_parser().parse_args(argv)
     verbose = not args.json_only
+
+    gemm_sizes = [(64, 64, 64), (128, 128, 64)] if args.smoke else None
+    attn_configs = [(1, 2, 64, 32)] if args.smoke else None
+    collective_ranks = [2, 4] if args.smoke else None
+    collective_sizes = [1 * 1024 * 1024] if args.smoke else None
 
     suite = run_all_benchmarks(
         peak_tflops=args.peak_tflops,
@@ -339,6 +349,11 @@ def main(argv=None) -> int:
         latency_us=args.latency_us,
         dtype=args.dtype,
         causal=not args.no_causal,
+        gemm_sizes=gemm_sizes,
+        attn_configs=attn_configs,
+        collective_ranks=collective_ranks,
+        collective_sizes=collective_sizes,
+        use_compiler=args.use_compiler,
         verbose=verbose,
     )
 

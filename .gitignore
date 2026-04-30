@@ -58,3 +58,7 @@ performance_logs/
 
 # Example verification outputs
 examples/advanced/**/runs/
+
+# Repo-local generated metadata/builds
+python/tessera.egg-info/
+research/sandbox_compilers/build/

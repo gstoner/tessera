@@ -21,6 +21,8 @@ __version__ = "0.1.0"
 __author__ = "Tessera Team"
 
 import types
+from dataclasses import dataclass, field
+from typing import Any, Callable
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Legacy core (Tensor, Module, NumericalPolicy)
@@ -130,6 +132,72 @@ constraint = types.SimpleNamespace(
 #
 # In Phase 3 these will dispatch to compiled MLIR kernels.
 # ─────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class _OperatorEntry:
+    name: str
+    reference: Callable[..., Any] | None = None
+    lowering: Callable[..., Any] | None = None
+    runtime_kernel: Callable[..., Any] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+class _OperatorRegistry:
+    def __init__(self) -> None:
+        self._entries: dict[str, _OperatorEntry] = {}
+
+    def register_reference(self, name: str, fn: Callable[..., Any], **metadata: Any) -> _OperatorEntry:
+        entry = self._entries.setdefault(name, _OperatorEntry(name=name))
+        entry.reference = fn
+        entry.metadata.update(metadata)
+        return entry
+
+    def register_lowering(self, name: str, fn: Callable[..., Any], **metadata: Any) -> _OperatorEntry:
+        entry = self._entries.setdefault(name, _OperatorEntry(name=name))
+        entry.lowering = fn
+        entry.metadata.update(metadata)
+        return entry
+
+    def register_runtime_kernel(self, name: str, fn: Callable[..., Any], **metadata: Any) -> _OperatorEntry:
+        entry = self._entries.setdefault(name, _OperatorEntry(name=name))
+        entry.runtime_kernel = fn
+        entry.metadata.update(metadata)
+        return entry
+
+    def get(self, name: str) -> _OperatorEntry | None:
+        return self._entries.get(name)
+
+    def list(self) -> list[str]:
+        return sorted(self._entries)
+
+    def dispatch(self, name: str, *args: Any, prefer_runtime: bool = True, **kwargs: Any) -> Any:
+        entry = self._entries.get(name)
+        if entry is None:
+            raise KeyError(f"unknown tessera op: {name}")
+        if prefer_runtime and entry.runtime_kernel is not None:
+            return entry.runtime_kernel(*args, **kwargs)
+        if not prefer_runtime and entry.reference is not None:
+            return entry.reference(*args, **kwargs)
+        if entry.lowering is not None:
+            return entry.lowering(*args, **kwargs)
+        if entry.reference is not None:
+            return entry.reference(*args, **kwargs)
+        raise NotImplementedError(f"tessera op {name!r} has no registered implementation")
+
+
+_ops_registry = _OperatorRegistry()
+
+
+def _register_reference(name: str, fn: Callable[..., Any], **metadata: Any) -> _OperatorEntry:
+    return _ops_registry.register_reference(name, fn, **metadata)
+
+
+def _register_lowering(name: str, fn: Callable[..., Any], **metadata: Any) -> _OperatorEntry:
+    return _ops_registry.register_lowering(name, fn, **metadata)
+
+
+def _register_runtime_kernel(name: str, fn: Callable[..., Any], **metadata: Any) -> _OperatorEntry:
+    return _ops_registry.register_runtime_kernel(name, fn, **metadata)
 
 def _make_ops_namespace() -> types.SimpleNamespace:
     """Build the tessera.ops namespace with Phase 1 numpy-backed stubs."""
@@ -271,7 +339,63 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             return relu(x)
         return x
 
+    def fft(x, axis: int = -1):
+        if hasattr(x, "_data"):
+            x = x._data
+        return np.fft.fft(x, axis=axis)
+
+    def dct(x, type: int = 2, axis: int = -1):
+        if hasattr(x, "_data"):
+            x = x._data
+        n = x.shape[axis]
+        y = np.concatenate([x, np.flip(x, axis=axis)], axis=axis)
+        spec = np.fft.fft(y, axis=axis)
+        slicer = [slice(None)] * spec.ndim
+        slicer[axis] = slice(0, n)
+        return np.real(spec[tuple(slicer)])
+
+    def spectral_conv(x, w):
+        if hasattr(x, "_data"):
+            x = x._data
+        if hasattr(w, "_data"):
+            w = w._data
+        n = x.shape[-1] + w.shape[-1] - 1
+        nfft = 1 << int(np.ceil(np.log2(n)))
+        y = np.fft.irfft(np.fft.rfft(x, nfft) * np.fft.rfft(w, nfft), nfft)
+        return y[..., :n]
+
+    references = {
+        "gemm": gemm,
+        "matmul": matmul,
+        "conv2d": conv2d,
+        "layer_norm": layer_norm,
+        "softmax": softmax,
+        "gelu": gelu,
+        "relu": relu,
+        "sigmoid": sigmoid,
+        "sin": sin,
+        "adam": adam,
+        "transpose": transpose,
+        "cast": cast,
+        "dropout": dropout,
+        "flash_attn": flash_attn,
+        "all_reduce": all_reduce,
+        "reduce_scatter": reduce_scatter,
+        "all_gather": all_gather,
+        "fused_epilogue": fused_epilogue,
+        "fft": fft,
+        "dct": dct,
+        "spectral_conv": spectral_conv,
+    }
+    for op_name, fn in references.items():
+        _register_reference(op_name, fn, backend="numpy")
+        _register_lowering(op_name, lambda *args, _op=op_name, **kwargs: {"op": _op, "status": "artifact_only"}, backend="graph_ir")
+
     return types.SimpleNamespace(
+        registry=_ops_registry,
+        register_reference=_register_reference,
+        register_lowering=_register_lowering,
+        register_runtime_kernel=_register_runtime_kernel,
         gemm=gemm,
         matmul=matmul,
         layer_norm=layer_norm,
@@ -290,10 +414,25 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         reduce_scatter=reduce_scatter,
         all_gather=all_gather,
         fused_epilogue=fused_epilogue,
+        fft=fft,
+        dct=dct,
+        spectral_conv=spectral_conv,
     )
 
 
 ops = _make_ops_namespace()
+
+from .runtime import (  # noqa: E402
+    RuntimeArtifact,
+    RuntimeProfile,
+    available_backends,
+    backend_capabilities,
+    compile as compile_artifact,
+    get_last_profile,
+    launch,
+    load_artifact,
+    query_backend,
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Dtype annotation shorthands
@@ -369,7 +508,9 @@ __all__ = [
     # Error types
     "TesseraJitError", "TesseraConstraintError", "TesseraEffectError",
     # Ops namespace
-    "ops",
+    "ops", "RuntimeArtifact", "RuntimeProfile", "available_backends",
+    "backend_capabilities", "compile_artifact", "get_last_profile", "launch",
+    "load_artifact", "query_backend",
     # Dtype annotations
     "f16", "bf16", "f32", "mut_f32",
 ]

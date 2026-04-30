@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.util
+import hashlib
+import json
 import os
 import sys
 from dataclasses import dataclass
@@ -93,6 +95,82 @@ class DeviceProps:
             f"tile_threads={self.logical_tile_threads_max}, "
             f"concurrent={self.concurrent_tiles_hint})"
         )
+
+
+@dataclass(frozen=True)
+class RuntimeProfile:
+    cpu_wall_ms: float | None = None
+    kernel_elapsed_ms: float | None = None
+    memory_bytes: int | None = None
+    launch_overhead_ms: float | None = None
+
+
+@dataclass(frozen=True)
+class BackendCapability:
+    name: str
+    available: bool
+    executable: bool
+    reason: str = ""
+    dtypes: tuple[str, ...] = ()
+    features: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RuntimeArtifact:
+    graph_ir: str = ""
+    schedule_ir: str = ""
+    tile_ir: str = ""
+    target_ir: str = ""
+    metadata: dict[str, Any] | None = None
+    abi_signature: str = ""
+
+    @property
+    def artifact_hash(self) -> str:
+        payload = self.to_json(include_hash=False)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "graph_ir": self.graph_ir,
+            "schedule_ir": self.schedule_ir,
+            "tile_ir": self.tile_ir,
+            "target_ir": self.target_ir,
+            "metadata": self.metadata or {},
+            "abi_signature": self.abi_signature,
+            "artifact_hash": self.artifact_hash,
+        }
+
+    def to_json(self, *, include_hash: bool = True) -> str:
+        data = {
+            "graph_ir": self.graph_ir,
+            "schedule_ir": self.schedule_ir,
+            "tile_ir": self.tile_ir,
+            "target_ir": self.target_ir,
+            "metadata": self.metadata or {},
+            "abi_signature": self.abi_signature,
+        }
+        if include_hash:
+            data["artifact_hash"] = hashlib.sha256(
+                json.dumps(data, sort_keys=True).encode("utf-8")
+            ).hexdigest()
+        return json.dumps(data, sort_keys=True)
+
+    @classmethod
+    def from_json(cls, payload: str | bytes) -> "RuntimeArtifact":
+        if isinstance(payload, bytes):
+            payload = payload.decode("utf-8")
+        data = json.loads(payload)
+        return cls(
+            graph_ir=data.get("graph_ir", ""),
+            schedule_ir=data.get("schedule_ir", ""),
+            tile_ir=data.get("tile_ir", ""),
+            target_ir=data.get("target_ir", ""),
+            metadata=data.get("metadata") or {},
+            abi_signature=data.get("abi_signature", ""),
+        )
+
+
+_last_profile = RuntimeProfile()
 
 
 # ---------------------------------------------------------------------------
@@ -621,3 +699,128 @@ class TesseraRuntime:
     def __exit__(self, *_) -> None:
         if self._initialized:
             self.shutdown()
+
+
+def _runtime_snapshot() -> tuple[TesseraRuntime | None, list[DeviceProps]]:
+    rt = TesseraRuntime()
+    try:
+        rt.init()
+        devices = [rt.get_device_props(rt.get_device(i)) for i in range(rt.get_device_count())]
+        return rt, devices
+    except Exception:
+        return None, []
+    finally:
+        if rt.is_initialized:
+            rt.shutdown()
+
+
+def available_backends() -> list[str]:
+    """Return runtime backends discoverable through the current C ABI/mock."""
+    _, devices = _runtime_snapshot()
+    names = []
+    for props in devices:
+        if props.kind == DeviceKind.CPU:
+            names.append("cpu")
+        elif props.kind == DeviceKind.CUDA:
+            names.append("cuda")
+        elif props.kind == DeviceKind.HIP:
+            names.append("rocm")
+    return names or ["cpu"]
+
+
+def backend_capabilities(target: str = "cpu") -> BackendCapability:
+    """Describe current backend support without guessing executable kernels."""
+    target = target.lower()
+    backends = available_backends()
+    if target not in backends:
+        return BackendCapability(
+            name=target,
+            available=False,
+            executable=False,
+            reason=f"{target} backend is not available",
+        )
+    if target == "cpu":
+        return BackendCapability(
+            name="cpu",
+            available=True,
+            executable=True,
+            reason="CPU host-tile runtime is available; generated artifact launch remains limited",
+            dtypes=("fp32", "f32"),
+            features=("host_tile_launch", "memory", "events"),
+        )
+    return BackendCapability(
+        name=target,
+        available=True,
+        executable=False,
+        reason=f"{target} device discovered, but generated artifact execution is not wired yet",
+        dtypes=(),
+        features=("memory", "events"),
+    )
+
+
+def query_backend(target: str = "cpu") -> dict[str, Any]:
+    cap = backend_capabilities(target)
+    return {
+        "name": cap.name,
+        "available": cap.available,
+        "executable": cap.executable,
+        "reason": cap.reason,
+        "dtypes": list(cap.dtypes),
+        "features": list(cap.features),
+    }
+
+
+def compile(module_ir: str | RuntimeArtifact, target: str = "cpu", options: dict[str, Any] | None = None) -> RuntimeArtifact:
+    """Create a lightweight artifact container for the current compiler output.
+
+    This is intentionally a containerization API, not a claim that Target IR can
+    execute through the runtime yet.
+    """
+    if isinstance(module_ir, RuntimeArtifact):
+        metadata = dict(module_ir.metadata or {})
+        metadata.update({"target": target, "options": options or {}})
+        return RuntimeArtifact(
+            graph_ir=module_ir.graph_ir,
+            schedule_ir=module_ir.schedule_ir,
+            tile_ir=module_ir.tile_ir,
+            target_ir=module_ir.target_ir,
+            metadata=metadata,
+            abi_signature=module_ir.abi_signature,
+        )
+    return RuntimeArtifact(
+        graph_ir=str(module_ir),
+        metadata={"target": target, "options": options or {}, "runtime_status": "artifact_only"},
+        abi_signature=f"tessera.runtime.v1.{target}",
+    )
+
+
+def load_artifact(path_or_bytes: str | bytes | os.PathLike[str] | RuntimeArtifact) -> RuntimeArtifact:
+    if isinstance(path_or_bytes, RuntimeArtifact):
+        return path_or_bytes
+    if isinstance(path_or_bytes, (str, os.PathLike)) and Path(path_or_bytes).exists():
+        return RuntimeArtifact.from_json(Path(path_or_bytes).read_text(encoding="utf-8"))
+    if isinstance(path_or_bytes, bytes):
+        return RuntimeArtifact.from_json(path_or_bytes)
+    if isinstance(path_or_bytes, str):
+        return RuntimeArtifact.from_json(path_or_bytes)
+    raise TypeError(f"unsupported artifact input: {type(path_or_bytes)!r}")
+
+
+def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, Any]:
+    """Return an explicit skip for generated artifacts until ABI launch exists."""
+    global _last_profile
+    _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
+    artifact = load_artifact(kernel)
+    target = str((artifact.metadata or {}).get("target", "cpu"))
+    cap = backend_capabilities(target)
+    return {
+        "ok": False,
+        "runtime_status": "unsupported" if cap.available else "missing_backend",
+        "compiler_path": "artifact_only",
+        "artifact_hash": artifact.artifact_hash,
+        "reason": "Generated artifact execution is not wired to the runtime ABI yet",
+    }
+
+
+def get_last_profile() -> RuntimeProfile:
+    return _last_profile

@@ -38,6 +38,16 @@ TsrStatus tsrMemcpy(tsrBuffer dst, const tsrBuffer src, size_t bytes, TsrMemcpyK
 TsrStatus tsrMap(tsrBuffer b, void** host_ptr, size_t* bytes);
 TsrStatus tsrUnmap(tsrBuffer b);
 
+// Generated artifact ABI skeleton. These return UNIMPLEMENTED until generated
+// Tile/Target artifacts are wired into backend-specific runtime launchers.
+TsrStatus tsrCompileArtifact(const char* module_ir,
+                             const tsrCompileOptions* options,
+                             tsrArtifact* out);
+TsrStatus tsrLoadArtifact(const void* bytes, size_t bytes_len, tsrArtifact* out);
+TsrStatus tsrDestroyArtifact(tsrArtifact artifact);
+TsrStatus tsrGetKernel(tsrArtifact artifact, const char* name, tsrKernel* out);
+TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel, void** args, size_t nargs);
+
 // Host portable tile kernel launch with shared memory/barrier support.
 // The user_ctx passed to kernel is a (tsrKernelCtx*).
 TsrStatus tsrLaunchHostTileKernel(tsrStream s,

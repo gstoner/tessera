@@ -1,0 +1,24 @@
+suite:
+  name: "compiler_smoke"
+  description: "Portable compiler-backed smoke tasks with honest runtime/artifact status"
+  repeat: 1
+  warmup: 0
+
+tasks:
+  - id: "kernel.gemm_tessera"
+    runner: "python_module"
+    path: "benches/kernel/gemm_tessera.py"
+    args: ["--m=64", "--n=64", "--k=64", "--repeat=1"]
+    metrics: ["throughput_flops", "latency_ms", "max_abs_err", "compiler_path", "runtime_status"]
+
+  - id: "kernel.conv2d_nhwc_tessera"
+    runner: "python_module"
+    path: "benches/kernel/conv2d_nhwc_tessera.py"
+    args: ["--n=1", "--h=16", "--w=16", "--c=4", "--oc=8", "--repeat=1"]
+    metrics: ["throughput_flops", "latency_ms", "max_abs_err", "compiler_path", "runtime_status"]
+
+  - id: "kernel.flashattn_tessera"
+    runner: "python_module"
+    path: "benches/kernel/flashattn_tessera.py"
+    args: ["--batch=1", "--heads=2", "--seq=64", "--d=32", "--repeat=1"]
+    metrics: ["throughput_tokens_per_s", "latency_ms", "max_abs_err", "compiler_path", "runtime_status"]

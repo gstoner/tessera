@@ -12,8 +12,8 @@ typedef struct tsrKernelCtx tsrKernelCtx;
 // Host tile kernel signature (portable).
 // user_ctx should be a (tsrKernelCtx*).
 typedef void (*tsrHostKernelFn)(void* user_ctx,
-                                const struct tsrTileCoord* tile,
-                                const struct tsrThreadCoord* thread);
+                                const tsrTileCoord* tile,
+                                const tsrThreadCoord* thread);
 
 // Runtime-provided context passed to each logical thread.
 struct tsrKernelCtx {

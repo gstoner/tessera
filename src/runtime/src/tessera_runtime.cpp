@@ -16,6 +16,8 @@ struct tsrDevice_t { std::unique_ptr<Backend> be; };
 struct tsrStream_t { tsr::Stream* impl; tsrDevice_t* dev; };
 struct tsrEvent_t  { tsr::Event*  impl; tsrDevice_t* dev; };
 struct tsrBuffer_t { tsr::Buffer* impl; tsrDevice_t* dev; };
+struct tsrArtifact_t { std::string payload; };
+struct tsrKernel_t { std::string name; tsrArtifact_t* artifact; };
 
 static std::vector<tsrDevice_t*> g_devices;
 static std::once_flag g_init_once;
@@ -217,6 +219,47 @@ TsrStatus tsrUnmap(tsrBuffer b) {
   if (!b) { SetLastError("b==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
   b->dev->be->unmap(b->impl);
   return TSR_STATUS_SUCCESS;
+}
+
+// ---- Generated artifact ABI skeleton ----
+TsrStatus tsrCompileArtifact(const char* module_ir,
+                             const tsrCompileOptions* options,
+                             tsrArtifact* out) {
+  (void)module_ir;
+  (void)options;
+  (void)out;
+  SetLastError("generated artifact compilation is not wired to the runtime ABI yet");
+  return TSR_STATUS_UNIMPLEMENTED;
+}
+
+TsrStatus tsrLoadArtifact(const void* bytes, size_t bytes_len, tsrArtifact* out) {
+  (void)bytes;
+  (void)bytes_len;
+  (void)out;
+  SetLastError("generated artifact loading is not wired to the runtime ABI yet");
+  return TSR_STATUS_UNIMPLEMENTED;
+}
+
+TsrStatus tsrDestroyArtifact(tsrArtifact artifact) {
+  delete artifact;
+  return TSR_STATUS_SUCCESS;
+}
+
+TsrStatus tsrGetKernel(tsrArtifact artifact, const char* name, tsrKernel* out) {
+  (void)artifact;
+  (void)name;
+  (void)out;
+  SetLastError("generated artifact kernel lookup is not wired to the runtime ABI yet");
+  return TSR_STATUS_UNIMPLEMENTED;
+}
+
+TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel, void** args, size_t nargs) {
+  (void)s;
+  (void)kernel;
+  (void)args;
+  (void)nargs;
+  SetLastError("generated artifact kernel launch is not wired to the runtime ABI yet");
+  return TSR_STATUS_UNIMPLEMENTED;
 }
 
 // ---- Shape helpers ----

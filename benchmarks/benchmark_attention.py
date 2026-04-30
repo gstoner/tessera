@@ -136,7 +136,7 @@ class FlashAttnBenchmark:
         if emit_compiler_ir:
             info = compiler_flash_attention_ir()
             if info.get("available"):
-                compiler_path = "tessera_graph_ir"
+                compiler_path = "graph_ir_only"
                 if info.get("uses_compiled_path"):
                     compiler_path = "tessera_jit_cpu"
                 compiler_lowering = str(info.get("lowering", ""))

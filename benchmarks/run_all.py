@@ -145,6 +145,9 @@ class BenchmarkSuite:
                     "tflops": r.tflops,
                     "memory_bw_gbps": r.memory_bw_gbps,
                     "roofline_bound": r.roofline_bound,
+                    "compiler_path": r.compiler_path,
+                    "runtime_status": "executable" if r.compiler_path == "tessera_jit_cpu" else "skipped" if r.compiler_path.startswith("tessera") else "executable",
+                    "compiler_lowering": r.compiler_lowering,
                     "timestamp": r.timestamp,
                 }
                 for r in self.gemm_results
@@ -157,6 +160,9 @@ class BenchmarkSuite:
                     "latency_ms": r.latency_ms,
                     "tokens_per_sec": r.tokens_per_sec,
                     "tflops": r.tflops, "mfu": r.mfu,
+                    "compiler_path": r.compiler_path,
+                    "runtime_status": "skipped" if r.compiler_path == "graph_ir_only" else "executable",
+                    "compiler_lowering": r.compiler_lowering,
                     "timestamp": r.timestamp,
                 }
                 for r in self.attn_results

@@ -10,6 +10,8 @@ typedef struct tsrDevice_t* tsrDevice;
 typedef struct tsrStream_t* tsrStream;
 typedef struct tsrEvent_t* tsrEvent;
 typedef struct tsrBuffer_t* tsrBuffer;
+typedef struct tsrArtifact_t* tsrArtifact;
+typedef struct tsrKernel_t* tsrKernel;
 
 typedef enum {
   TSR_DEVICE_CPU  = 0,
@@ -48,6 +50,11 @@ typedef enum {
   TSR_MEMCPY_DEVICE_TO_DEVICE,
   TSR_MEMCPY_HOST_TO_HOST
 } TsrMemcpyKind;
+
+typedef struct {
+  const char* target;
+  const char* options_json;
+} tsrCompileOptions;
 
 #ifdef __cplusplus
 } // extern "C"

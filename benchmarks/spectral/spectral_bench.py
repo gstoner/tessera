@@ -1,7 +1,17 @@
 # SPDX-License-Identifier: MIT
 import argparse, time, math, os, csv, json, sys
 from datetime import datetime
+from pathlib import Path
 import numpy as np
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+PYTHON_ROOT = REPO_ROOT / "python"
+if str(PYTHON_ROOT) not in sys.path:
+    sys.path.insert(0, str(PYTHON_ROOT))
+
+from benchmarks.common import compiler_spectral_ir
 
 from spectral_math import (
     estimate_fft_flops, estimate_bytes, dct2_numpy, dct2_numpy_2d,
@@ -49,6 +59,38 @@ def pick_backend(device):
     return "numpy"
 
 
+def _artifact_row(op, size, args, dev):
+    info = compiler_spectral_ir(op)
+    if isinstance(size, tuple):
+        shape_str = f"{size[0]}x{size[1]}"
+        n_elems = args.batch * size[0] * size[1]
+    else:
+        shape_str = f"{size}"
+        n_elems = args.batch * size
+    bytes_mv = float(estimate_bytes(n_elems, dtype=np.float32 if args.dtype.startswith("float") else np.complex64))
+    return [
+        datetime.now().isoformat(timespec="seconds"),
+        op,
+        dev,
+        "tessera-artifact",
+        args.dtype,
+        shape_str,
+        args.batch,
+        args.repeats,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        int(bytes_mv),
+        0,
+        np.nan,
+        "artifact_only" if info.get("available") else "runtime_unavailable",
+        "skipped",
+        info.get("artifact_hash", ""),
+        "Graph IR emitted; spectral Tile/Target runtime path is not executable yet" if info.get("available") else info.get("reason", "tessera import failed"),
+    ]
+
+
 def main():
     ap = argparse.ArgumentParser(description="Spectral Operators Performance Bench")
     ap.add_argument("--ops", type=str, default="fft1d,fft2d,dct2,conv1d_fft,conv2d_fft,spectrum",
@@ -58,6 +100,7 @@ def main():
     ap.add_argument("--batch", type=int, default=1)
     ap.add_argument("--dtype", type=str, default="float32", choices=["float32","float64","complex64","complex128"])
     ap.add_argument("--device", type=str, default="auto", choices=["auto","cpu","cuda","rocm"])
+    ap.add_argument("--backend", type=str, default="auto", choices=["auto", "numpy", "torch", "tessera-artifact"])
     ap.add_argument("--repeats", type=int, default=50)
     ap.add_argument("--warmup", type=int, default=10)
     ap.add_argument("--outcsv", type=str, default="results/results.csv")
@@ -68,7 +111,9 @@ def main():
     else:
         dev = args.device
 
-    backend = pick_backend(dev)
+    backend = pick_backend(dev) if args.backend == "auto" else args.backend
+    if backend == "torch" and not _HAS_TORCH:
+        raise SystemExit("--backend torch requested but PyTorch is not available")
 
     outdir = os.path.dirname(args.outcsv)
     if outdir:
@@ -100,10 +145,14 @@ def main():
         wr = csv.writer(f)
         if need_header:
             wr.writerow(["timestamp","op","device","backend","dtype","shape","batch","repeats",
-                         "time_ms","gflops","gbs","ai","bytes","flops","err_rel"])
+                         "time_ms","gflops","gbs","ai","bytes","flops","err_rel",
+                         "compiler_path","runtime_status","artifact_hash","reason"])
 
         for op in ops:
             for size in sizes:
+                if backend == "tessera-artifact":
+                    wr.writerow(_artifact_row(op, size, args, dev))
+                    continue
                 if isinstance(size, tuple):
                     H, W = size
                     shape_str = f"{H}x{W}"
@@ -295,7 +344,8 @@ def main():
                 wr.writerow([datetime.now().isoformat(timespec="seconds"), op, dev, backend, args.dtype,
                              shape_str, args.batch, args.repeats, round(t*1e3,4),
                              round(gflops,3), round(gbs,3), round(ai,4),
-                             int(bytes_mv), int(flops), err_rel])
+                             int(bytes_mv), int(flops), err_rel,
+                             "reference", "executable", "", ""])
 
 
 if __name__ == "__main__":

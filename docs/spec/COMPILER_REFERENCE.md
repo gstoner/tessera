@@ -90,14 +90,17 @@ Registration: `src/transforms/lib/Passes.cpp` (x86); `src/compiler/codegen/tesse
 **`EffectAnnotationPass`**
 - File: `src/transforms/lib/EffectAnnotationPass.cpp`
 - Input: Graph IR — `func.func` ops with tessera.* body ops
-- Output: Same, with `tessera.effect = "pure"|"random"|"memory"|"io"` on each function
-- Effect inference rules (Phases 1–3 — 5-level lattice):
+- Output: Same, with `tessera.effect = "pure"|"random"|"movement"|"state"|"collective"|"memory"|"io"` on each function
+- Effect inference rules:
   - `tessera.flash_attn` with `dropout_p != 0.0` → `random`
   - `tessera.copy` → `memory`
+  - `schedule.prefetch`, `schedule.async_copy`, `schedule.await_movement`, `tile.async_copy`, or `tile.wait_async` → `movement`
+  - `tessera.kv_cache.*`, `tessera.ring.*`, `cache.*`, or `ring.*` → `state`
+  - `tessera.collective.*` or `collective.*` → `collective`
+  - `rng.uniform` or `tessera.rng.*` → `random`
   - Any arg with `tessera.effect = "write"` or `"reduce_*"` → `memory`
   - `func.call` to non-tessera external function → `io`
   - All else → `pure`
-- **Implementation note:** `LANGUAGE_AND_IR_SPEC.md §6` and `Tessera_Standard_Operations.md` specify an 8-level aspirational lattice (`pure < random < movement < state < collective < memory < io < top`). The additional levels `movement`, `state`, and `collective` are Phase 4–5 planned and are not emitted or inferred by this pass today.
 - Validation: if a function already carries `tessera.effect = "pure"` but body infers higher, emits error
 - Named pipeline: both (runs before Distribution)
 

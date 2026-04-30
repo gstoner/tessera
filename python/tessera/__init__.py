@@ -294,7 +294,15 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             x = x._data
         return np.zeros_like(x)
 
-    def flash_attn(Q, K, V, scale=None):
+    def flash_attn(
+        Q,
+        K,
+        V,
+        scale=None,
+        causal: bool = False,
+        dropout_p: float = 0.0,
+        seed: int | None = None,
+    ):
         # Phase 1: naive attention (Phase 3: tile-level FA-4)
         for arr in [Q, K, V]:
             if hasattr(arr, "_data"):
@@ -305,11 +313,24 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             K = K._data
         if hasattr(V, "_data"):
             V = V._data
+        if not 0.0 <= dropout_p < 1.0:
+            raise ValueError("dropout_p must be in [0.0, 1.0)")
         d = Q.shape[-1]
         if scale is None:
             scale = 1.0 / np.sqrt(d)
         scores = np.matmul(Q, K.swapaxes(-1, -2)) * scale
+        if causal:
+            q_len, k_len = scores.shape[-2], scores.shape[-1]
+            mask = np.triu(
+                np.ones((q_len, k_len), dtype=bool),
+                k=1 + max(k_len - q_len, 0),
+            )
+            scores = np.where(mask, -np.inf, scores)
         weights = softmax(scores)
+        if dropout_p > 0.0:
+            rng = np.random.default_rng(seed)
+            keep = rng.binomial(1, 1.0 - dropout_p, weights.shape)
+            weights = weights * keep / (1.0 - dropout_p)
         return np.matmul(weights, V)
 
     def all_reduce(x, op: str = "sum"):
@@ -343,6 +364,21 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         if hasattr(x, "_data"):
             x = x._data
         return np.fft.fft(x, axis=axis)
+
+    def ifft(xf, axis: int = -1):
+        if hasattr(xf, "_data"):
+            xf = xf._data
+        return np.fft.ifft(xf, axis=axis)
+
+    def rfft(x, axis: int = -1):
+        if hasattr(x, "_data"):
+            x = x._data
+        return np.fft.rfft(x, axis=axis)
+
+    def irfft(xf, axis: int = -1, n=None):
+        if hasattr(xf, "_data"):
+            xf = xf._data
+        return np.fft.irfft(xf, n=n, axis=axis)
 
     def dct(x, type: int = 2, axis: int = -1):
         if hasattr(x, "_data"):
@@ -384,6 +420,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "all_gather": all_gather,
         "fused_epilogue": fused_epilogue,
         "fft": fft,
+        "ifft": ifft,
+        "rfft": rfft,
+        "irfft": irfft,
         "dct": dct,
         "spectral_conv": spectral_conv,
     }
@@ -415,6 +454,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         all_gather=all_gather,
         fused_epilogue=fused_epilogue,
         fft=fft,
+        ifft=ifft,
+        rfft=rfft,
+        irfft=irfft,
         dct=dct,
         spectral_conv=spectral_conv,
     )

@@ -175,7 +175,7 @@ def fn(...): ...
 |-----------|------|---------|-------------|
 | `deterministic` | `bool` | `False` | If `True`, raises `TesseraEffectError` if the function body contains any unseeded `random` effect op (e.g. `dropout` without `seed`). |
 | `seed` | `int \| None` | `None` | RNG seed. Required when `deterministic=True` and the body calls a `random` effect op. |
-| `bindings` | `dict[str, int] \| None` | `None` | Concrete dimension bindings for early constraint checking at decoration time. Example: `{"K": 128, "M": 512}`. If `None`, constraint checking is deferred to the first call where sizes are known. |
+| `bindings` | `dict[str, int] \| None` | `None` | Concrete dimension bindings for constraint checking at decoration time. Example: `{"K": 128, "M": 512}`. Runtime first-call shape binding is planned but not currently implemented. |
 | `target` | `GPUTargetProfile \| None` | `None` | GPU lowering target. `None` routes to the CPU/interpreted path. When set to a profile with `isa >= ISA.SM_90`, the GPU lowering pipeline (`tessera-lower-to-gpu`) is selected. |
 | `attn_config` | `FlashAttnLoweringConfig \| None` | `None` | Flash attention tile sizes and pipeline configuration. If `None` and `target.isa >= ISA.SM_90`, `SM90_DEFAULT` is used automatically. |
 | `cpu_tile` | `tuple[int, int, int]` | `(128, 128, 64)` | CPU matmul/GEMM Schedule IR tile `(tile_m, tile_n, tile_k)` for the narrow end-to-end CPU compiler path. |
@@ -188,7 +188,7 @@ def fn(...): ...
 |-----------|------|-------------|
 | `.graph_ir` | `GraphIRBuilder` | The emitted Graph IR. Call `.to_mlir()` to get MLIR text. |
 | `.effect` | `Effect` | Inferred effect of the compiled function. |
-| `.constraints` | `list[Constraint]` | All constraints extracted from the function body. |
+| `.constraints` | `ConstraintSolver` | Solver containing all constraints extracted from the function body. |
 | `.target` | `GPUTargetProfile \| None` | The target profile passed at decoration time. |
 | `.cpu_plan` | `MatmulCPUPlan \| None` | Narrow executable CPU plan for returned `ops.matmul`/`ops.gemm`. |
 | `.source_origin` | `str` | Source origin used by AST lowering: `inspect`, `explicit`, `file:<path>`, or `unavailable`. |
@@ -949,9 +949,12 @@ from tessera.compiler.effects import Effect
 
 Effect.pure    # value 0 — no side effects; recompute-safe
 Effect.random  # value 1 — calls RNG; result varies between runs
-Effect.memory  # value 2 — reads or writes mutable state (KV cache, etc.)
-Effect.io      # value 3 — collective communication or host I/O
-Effect.top     # value 4 — unknown / unconstrained
+Effect.movement   # value 2 — explicit data movement / async copy-wait
+Effect.state      # value 3 — compiler-visible state, such as KV cache
+Effect.collective # value 4 — device/rank communication
+Effect.memory     # value 5 — writes mutable tensors or host-visible aliases
+Effect.io         # value 6 — host I/O or unknown external work
+Effect.top        # value 7 — unknown / unconstrained
 ```
 
 **Lattice order (least → most permissive):**
@@ -986,7 +989,8 @@ The join of two effects is the more permissive one. A function that calls a `ran
 When `@jit(deterministic=True)` is applied:
 - If the inferred effect is `Effect.random` and no `seed` is provided → `TesseraEffectError`.
 - If `seed` is provided, random ops are considered seeded and deterministic → allowed.
-- `Effect.memory` and `Effect.io` are not restricted by `deterministic` — only `random` is.
+- `Effect.movement`, `Effect.state`, and `Effect.collective` are allowed when represented in Tessera IR, where ordering contracts can be enforced.
+- `Effect.io` and `Effect.top` are rejected because host I/O and unknown external work cannot be made deterministic by Tessera.
 
 ```python
 # OK: pure effect, deterministic is fine
@@ -1162,7 +1166,9 @@ from tessera.compiler.attn_lower import SM90_DEFAULT
 Phase 1 implementations are numpy-backed stubs. Phase 3 dispatches to compiled MLIR kernels via the GPU lowering pipeline.
 The Tessera Standard Operator Library reserves additional operator names for
 planned compiler/runtime paths; this table lists only the current Phase 1-3
-runtime surface.
+runtime surface. Larger typed APIs in `python/tessera/ops.pyi` such as sparse,
+MoE, RNG seed objects, and expanded collectives are reserved/planned unless
+they also appear in this table.
 
 | Operation | Signature | Effect | Phase 1 behavior |
 |-----------|-----------|--------|-----------------|
@@ -1176,11 +1182,12 @@ runtime surface.
 | `cast(x, dtype)` | `(array, str) → array` | `pure` | `x.astype(dtype)` |
 | `dropout(x, p=0.1, training=True)` | `(array) → array` | `random` | Bernoulli mask, numpy rng |
 | `conv2d(x, weight, bias=None, stride=1, padding=0)` | stub | `pure` | Returns zeros |
-| `flash_attn(Q, K, V, scale=None, causal=False)` | `(array,array,array) → array` | `pure` | Naive O(S²) Phase 1; FA-4 Phase 3 |
+| `flash_attn(Q, K, V, scale=None, causal=False, dropout_p=0.0, seed=None)` | `(array,array,array) → array` | `pure` / `random` when dropout is active | Naive O(S²) Phase 1; FA-4 Phase 3 |
 | `all_reduce(x, op="sum")` | stub | `io` | No-op Phase 1 |
 | `reduce_scatter(x, op="sum", axis=0)` | stub | `io` | No-op Phase 1 |
 | `all_gather(x, axis=0)` | stub | `io` | No-op Phase 1 |
 | `fused_epilogue(x, bias=None, activation="linear")` | `(array) → array` | `pure` | Applies bias + activation |
+| `fft(x, axis=-1)`, `ifft(xf, axis=-1)`, `rfft(x, axis=-1)`, `irfft(xf, axis=-1, n=None)` | `(array) → array` | `pure` | NumPy FFT helpers |
 
 **`flash_attn` parameter details:**
 
@@ -1191,6 +1198,8 @@ runtime surface.
 | `V` | array | — | Value tensor, shape `[B, H, S, D]` |
 | `scale` | `float \| None` | `None` | Attention scale factor. `None` = `1 / sqrt(D)`. |
 | `causal` | `bool` | `False` | Apply causal (lower-triangular) mask. |
+| `dropout_p` | `float` | `0.0` | Dropout probability in `[0, 1)`. If `> 0`, applies inverted dropout to attention weights. |
+| `seed` | `int \| None` | `None` | Optional NumPy RNG seed for deterministic dropout masks. |
 
 **`fused_epilogue` activation values:** `"linear"` (identity), `"relu"`, `"gelu"`.
 
@@ -1238,8 +1247,8 @@ All Tessera exception types are importable from their respective modules. The ta
 
 | Exception | Module | Raised when |
 |-----------|--------|-------------|
-| `TesseraConstraintError` | `tessera.compiler.constraints` | A structural constraint (Divisible/Range/Equal) is violated. Raised at `@jit` decoration time when concrete `bindings` are provided, or at first call when sizes become known. |
-| `TesseraEffectError` | `tessera.compiler.effects` | `@jit(deterministic=True)` is applied to a function with an unseeded `random` effect (e.g. `dropout` without a `seed`). |
+| `TesseraConstraintError` | `tessera.compiler.constraints` | A structural constraint (Divisible/Range/Equal) is violated at `@jit` decoration time when concrete `bindings` are provided. |
+| `TesseraEffectError` | `tessera.compiler.effects` | `@jit(deterministic=True)` is applied to a function with unseeded RNG, host I/O, or unknown external work. |
 | `TesseraJitError` | `tessera.compiler.jit` | Graph IR emission pipeline failure — malformed IR, unsupported op, or internal compiler error. |
 | `TesseraTargetError` | `tessera.compiler.gpu_target` | Invalid `GPUTargetProfile` parameters (e.g. non-power-of-2 `warps_per_cta`, invalid ISA). |
 | `TesseraAttnConfigError` | `tessera.compiler.attn_lower` | Invalid `FlashAttnLoweringConfig` parameters (e.g. non-power-of-2 tile size, missing seed for dropout). |

@@ -92,7 +92,7 @@ Infers the side-effect class of each `func.func` in the module and attaches `tes
 #### Output IR contract
 
 - Every `func.func` in the module has a `tessera.effect` string attribute.
-- Attribute value is one of: `"pure"`, `"random"`, `"memory"`, `"io"`.
+- Attribute value is one of: `"pure"`, `"random"`, `"movement"`, `"state"`, `"collective"`, `"memory"`, `"io"`.
 - No ops are modified or reordered.
 
 #### Effect inference rules
@@ -103,6 +103,10 @@ Applied in order; the highest-level effect found wins (lattice join):
 |---------------------------|--------------|
 | `tessera.flash_attn` with `dropout_p` attr present and `!= 0.0` | `random` |
 | `tessera.copy` op | `memory` |
+| `schedule.prefetch`, `schedule.async_copy`, `schedule.await_movement`, `tile.async_copy`, or `tile.wait_async` | `movement` |
+| `tessera.kv_cache.*`, `tessera.ring.*`, `cache.*`, or `ring.*` | `state` |
+| `tessera.collective.*` or `collective.*` | `collective` |
+| `rng.uniform` or `tessera.rng.*` | `random` |
 | Any argument with `tessera.effect = "write"` or `"reduce_*"` attribute | `memory` |
 | `func.call` to external non-tessera function | `io` |
 | None of the above | `pure` |

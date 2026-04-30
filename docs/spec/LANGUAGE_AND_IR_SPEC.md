@@ -161,7 +161,9 @@ The DSL denotes a pure functional graph except for declared effects:
 pure < random < movement < state < collective < memory < io < top
 ```
 
-> **Implementation gap (Phases 1–3):** The compiler currently implements a **5-level** subset: `pure < random < memory < io < top`. The intermediate levels `movement`, `state`, and `collective` are specified here as the full aspirational contract but are not yet emitted or inferred by `EffectAnnotationPass`. They will be activated in Phases 4–5. See `docs/CANONICAL_API.md §Effect System` for the currently implemented table.
+The Python effect lattice and C++ `EffectAnnotationPass` both implement this
+8-level order. Current lowering paths may still support only a subset of
+effectful operations, but emitted `tessera.effect` attributes use these names.
 
 Execution order is defined by SSA data dependencies, explicit synchronization,
 state effects, movement effects, and collective dependencies. Determinism is

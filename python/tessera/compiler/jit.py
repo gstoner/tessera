@@ -260,6 +260,11 @@ class JitFn:
         return self.graph_ir.to_mlir()
 
     @property
+    def effect(self) -> Effect:
+        """Compatibility alias for the inferred effect."""
+        return self.inferred_effect
+
+    @property
     def is_gpu(self) -> bool:
         return self.target is not None
 

@@ -76,6 +76,7 @@ class TestEffectEnum:
         ]
         values = [e.value for e in effects]
         assert values == sorted(values)
+        assert values == list(range(8))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -253,6 +254,7 @@ class TestJitDeterministicIntegration:
             return tessera.ops.gemm(x, x)
 
         assert pure_fn.inferred_effect == Effect.pure
+        assert pure_fn.effect == pure_fn.inferred_effect
 
     def test_jit_fn_is_callable(self):
         @tessera.jit

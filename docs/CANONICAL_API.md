@@ -161,7 +161,7 @@ def aligned_gemm(A: tessera.Tensor["M", "K"], B: tessera.Tensor["K", "N"]):
 | `tessera.constraint.Range(dim, lo, hi)` | `str, int, int` | `lo <= dim <= hi` |
 | `tessera.constraint.Equal(dim_a, dim_b)` | `str, str` | `dim_a == dim_b` |
 
-Violation → `TesseraConstraintError` (at decoration time if concrete bindings exist; else deferred to first call where sizes are known via `bindings=` kwarg).
+Violation → `TesseraConstraintError` at decoration time when concrete `bindings` are provided. Runtime first-call shape binding is planned but not currently implemented.
 
 ---
 
@@ -169,17 +169,16 @@ Violation → `TesseraConstraintError` (at decoration time if concrete bindings 
 
 Effects are **inferred, not declared** (except the `deterministic` flag).
 
-> **Implementation note:** The Python implementation (`python/tessera/compiler/effects.py`) defines **5 levels** listed below. `docs/spec/LANGUAGE_AND_IR_SPEC.md` and `docs/operations/Tessera_Standard_Operations.md` specify an aspirational **8-level** lattice that adds `movement`, `state`, and `collective` between `random` and `memory`. Those three intermediate levels are Phase 4–5 planned; the compiler does not yet emit or infer them.
-
 | Effect | Value | Meaning | Status |
 |--------|-------|---------|--------|
 | `Effect.pure` | 0 | No side effects; recompute-safe | Implemented |
 | `Effect.random` | 1 | Calls RNG; result varies | Implemented |
-| `Effect.memory` | 2 | Reads/writes mutable state (KV cache, etc.) | Implemented |
-| `Effect.io` | 3 | Collective communication or host I/O | Implemented |
-| `Effect.top` | 4 | Unknown / unconstrained | Implemented |
-
-Intermediate levels (`movement`, `state`, `collective`) are in the aspirational spec only. See `LANGUAGE_AND_IR_SPEC.md §6` for the full planned lattice.
+| `Effect.movement` | 2 | Explicit data movement or async copy/wait | Implemented |
+| `Effect.state` | 3 | Compiler-visible state, such as KV cache or rings | Implemented |
+| `Effect.collective` | 4 | Device/rank communication | Implemented |
+| `Effect.memory` | 5 | Writes mutable tensors or aliases host-visible memory | Implemented |
+| `Effect.io` | 6 | Host I/O or unknown external work | Implemented |
+| `Effect.top` | 7 | Unknown / unconstrained | Implemented |
 
 Lattice join: `effect_a.join(effect_b)` → `max(a, b)`.
 
@@ -261,11 +260,12 @@ Phase 1 implementations are numpy-backed stubs. Phase 3 dispatches to compiled M
 | `tessera.ops.cast(x, dtype)` | `(array, str) → array` | Pure effect |
 | `tessera.ops.dropout(x, p=0.1, training=True)` | `(array) → array` | `random` effect |
 | `tessera.ops.conv2d(x, weight, bias=None, stride=1, padding=0)` | stub | Returns zeros Phase 1 |
-| `tessera.ops.flash_attn(Q, K, V, scale=None)` | `(array,array,array) → array` | Naive Phase 1; FA-4 Phase 3 |
+| `tessera.ops.flash_attn(Q, K, V, scale=None, causal=False, dropout_p=0.0, seed=None)` | `(array,array,array) → array` | Naive Phase 1; FA-4 Phase 3 |
 | `tessera.ops.all_reduce(x, op="sum")` | stub | No-op Phase 1 |
 | `tessera.ops.reduce_scatter(x, op="sum", axis=0)` | stub | No-op Phase 1 |
 | `tessera.ops.all_gather(x, axis=0)` | stub | No-op Phase 1 |
 | `tessera.ops.fused_epilogue(x, bias=None, activation="linear")` | `(array) → array` | |
+| `tessera.ops.fft/ifft/rfft/irfft(...)` | `(array) → array` | NumPy FFT helpers |
 
 ---
 

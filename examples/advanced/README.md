@@ -7,6 +7,8 @@ Tessera's compiler, runtime, and hardware-aware scheduling model.
 
 - `Fast_dLLM_v2/` - diffusion LLM inference, confidence-aware parallel decoding,
   and approximate KV-cache planning.
+- `Diffusion_LLM/` - restored diffusion language model package with MDLM,
+  continuous diffusion, flow matching, MLIR sketches, and tests.
 - `rlvr_reasoning_suite/` - consolidated GRPO/RLVR reasoning suite with rollout
   batching, verifiers, reward telemetry, and trainer accounting.
 - `Jet_nemotron/` - hybrid efficient LM scaffold with PostNAS, linear attention,

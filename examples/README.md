@@ -11,6 +11,7 @@ This directory contains examples and tutorials for using Tessera.
 ## Advanced Examples
 
 - [`advanced/Fast_dLLM_v2/`](advanced/Fast_dLLM_v2/) - diffusion LLM inference and parallel decoding
+- [`advanced/Diffusion_LLM/`](advanced/Diffusion_LLM/) - diffusion language model package
 - [`advanced/rlvr_reasoning_suite/`](advanced/rlvr_reasoning_suite/) - consolidated GRPO/RLVR reasoning suite
 - [`advanced/Jet_nemotron/`](advanced/Jet_nemotron/) - hybrid efficient language model and PostNAS scaffold
 - [`advanced/Nemotron_Nano_12B_v2/`](advanced/Nemotron_Nano_12B_v2/) - hybrid Mamba2/GQA/MLP model port

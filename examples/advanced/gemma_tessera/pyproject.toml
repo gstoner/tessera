@@ -1,11 +1,42 @@
 [project]
 name = "tessera_gemma"
-version = "0.1.0"
-description = "Starter port of Gemma to the Tessera programming model"
-requires-python = ">=3.9"
-dependencies = ["torch>=2.2", "numpy>=1.23", "einops>=0.7", "sentencepiece>=0.1.99"]
-authors = [{name="Tessera PM Port", email="devnull@example.com"}]
+version = "0.4.0"
+description = "Gemma 4 port for the Tessera compiler and programming model"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.3",
+    "einops>=0.7",
+    "sentencepiece>=0.1.99",
+]
+authors = [{name = "Tessera", email = "devnull@example.com"}]
+license = {text = "Apache-2.0"}
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-xdist>=3.3",   # parallel test execution
+]
+convert = [
+    "transformers>=4.40",
+    "huggingface_hub>=0.22",
+    "numpy>=1.23",
+    "tqdm>=4.66",
+]
+train = [
+    "transformers>=4.40",
+    "datasets>=2.18",
+    "accelerate>=0.28",
+    "tqdm>=4.66",
+]
 
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=65", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "cuda: marks tests that require a CUDA GPU",
+]

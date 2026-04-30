@@ -10,9 +10,18 @@ This directory contains examples and tutorials for using Tessera.
 
 ## Advanced Examples
 
-- [`transformer/`](advanced/transformer/) - Complete transformer implementation
-- [`mla/`](advanced/mla/) - Multi-Latent Attention examples  
-- [`hrm/`](advanced/hrm/) - Hierarchical Reasoning Models
+- [`advanced/Fast_dLLM_v2/`](advanced/Fast_dLLM_v2/) - diffusion LLM inference and parallel decoding
+- [`advanced/rlvr_reasoning_suite/`](advanced/rlvr_reasoning_suite/) - consolidated GRPO/RLVR reasoning suite
+- [`advanced/Jet_nemotron/`](advanced/Jet_nemotron/) - hybrid efficient language model and PostNAS scaffold
+- [`advanced/Nemotron_Nano_12B_v2/`](advanced/Nemotron_Nano_12B_v2/) - hybrid Mamba2/GQA/MLP model port
+- [`advanced/mla/`](advanced/mla/) - Multi-Latent Attention / FlashMLA examples
+- [`advanced/power_retention/`](advanced/power_retention/) - retention and PowerAttention kernels
+- [`advanced/long_context_attention/`](advanced/long_context_attention/) - retrieval-head vs streaming-head planning
+- [`advanced/kv_cache_serving/`](advanced/kv_cache_serving/) - compressed KV-cache and disaggregated serving planner
+- [`advanced/speculative_decoding/`](advanced/speculative_decoding/) - tree/speculative decoding scheduler
+- [`advanced/Tessera_Empirical_Software_Agent/`](advanced/Tessera_Empirical_Software_Agent/) - agentic kernel autotuning loop
+
+Archived advanced examples are preserved under [`archive/advanced/`](archive/advanced/).
 
 ## Optimization
 
@@ -25,9 +34,9 @@ This directory contains examples and tutorials for using Tessera.
 ```bash
 # Basic examples
 cd examples/getting_started
-python flash_attention_demo.py
+python3 flash_attention_demo.py
 
-# Advanced examples  
-cd examples/advanced/transformer
-python model.py
+# Advanced examples
+python3 examples/advanced/rlvr_reasoning_suite/run_demo.py --steps 4
+python3 examples/advanced/kv_cache_serving/demo.py --requests 8
 ```

@@ -12,6 +12,7 @@ reproducible runner, scorable task API, and integration points for **Tile IR/Tar
 - `src/agents/` — Python reference runner (tree search + scoring + sandbox)
 - `mlir/passes/` — C++ pass stubs to register an opt-style driver hook (`-tessera-empirical-search`)
 - `examples/` — task shells you can flesh out (Kaggle playground, scRNA-seq integration, COVID-19 forecasting, integrals)
+- `examples/kernel_autotuning/` — concrete agentic compiler/autotuning task that scores candidate tile configs with correctness and benchmark feedback
 - `tests/` — spot checks / harness notes
 - `src/pipelines/empirical_search_pipeline.yaml` — example pass pipeline wiring
 
@@ -19,9 +20,16 @@ reproducible runner, scorable task API, and integration points for **Tile IR/Tar
 
 ## Quick start
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt  # (generate your own with tessera deps + sandbox deps)
-python -m src.agents.tree_search_runner --task examples/integrals_solver --budget 512 --parallel 8
+python3 -m src.agents.tree_search_runner --task examples/integrals_solver --budget 512 --parallel 8
+```
+
+Kernel autotuning loop:
+
+```bash
+python3 -m examples.advanced.Tessera_Empirical_Software_Agent.src.agents.kernel_autotune_loop \
+  --task examples/advanced/Tessera_Empirical_Software_Agent/examples/kernel_autotuning
 ```
 
 ## What’s included vs stubbed

@@ -3,11 +3,6 @@
 
 foreach(_example
     power_retention
-    Tessera_DiffEntropy_Op
-    Tessera_KAN_Port
-    Tessera_P3D
-    ThunderKitten_Porting
-    atlas
 )
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${_example}/CMakeLists.txt)
         add_subdirectory(${_example})

@@ -1,0 +1,13 @@
+suite: rlvr_reasoning
+policy: toy
+tasks: math_exact
+rollout:
+  group_size: 8
+  max_prompt_tokens: 256
+trainer:
+  algorithm: grpo
+  clip_low: 0.20
+  clip_high: 0.28
+  resample_on_correct: true
+telemetry:
+  reward_log: runs/rewards.jsonl

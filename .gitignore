@@ -55,3 +55,6 @@ temp/
 .tessera_cache/
 compiled_models/
 performance_logs/
+
+# Example verification outputs
+examples/advanced/**/runs/

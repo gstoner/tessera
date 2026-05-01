@@ -28,10 +28,11 @@ import hashlib
 import json
 import os
 import sys
+import time
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Mapping, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -770,7 +771,7 @@ def query_backend(target: str = "cpu") -> dict[str, Any]:
     }
 
 
-def compile(module_ir: str | RuntimeArtifact, target: str = "cpu", options: dict[str, Any] | None = None) -> RuntimeArtifact:
+def compile(module_ir: str | RuntimeArtifact, target: str | None = None, options: dict[str, Any] | None = None) -> RuntimeArtifact:
     """Create a lightweight artifact container for the current compiler output.
 
     This is intentionally a containerization API, not a claim that Target IR can
@@ -778,7 +779,10 @@ def compile(module_ir: str | RuntimeArtifact, target: str = "cpu", options: dict
     """
     if isinstance(module_ir, RuntimeArtifact):
         metadata = dict(module_ir.metadata or {})
-        metadata.update({"target": target, "options": options or {}})
+        metadata.update({
+            "target": target or metadata.get("target", "cpu"),
+            "options": options or metadata.get("options", {}) or {},
+        })
         return RuntimeArtifact(
             graph_ir=module_ir.graph_ir,
             schedule_ir=module_ir.schedule_ir,
@@ -789,8 +793,8 @@ def compile(module_ir: str | RuntimeArtifact, target: str = "cpu", options: dict
         )
     return RuntimeArtifact(
         graph_ir=str(module_ir),
-        metadata={"target": target, "options": options or {}, "runtime_status": "artifact_only"},
-        abi_signature=f"tessera.runtime.v1.{target}",
+        metadata={"target": target or "cpu", "options": options or {}, "runtime_status": "artifact_only"},
+        abi_signature=f"tessera.runtime.v1.{target or 'cpu'}",
     )
 
 
@@ -807,20 +811,144 @@ def load_artifact(path_or_bytes: str | bytes | os.PathLike[str] | RuntimeArtifac
 
 
 def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, Any]:
-    """Return an explicit skip for generated artifacts until ABI launch exists."""
+    """Launch executable CPU artifacts or return a structured non-success result."""
     global _last_profile
-    _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
+    start_ns = time.perf_counter_ns()
     artifact = load_artifact(kernel)
-    target = str((artifact.metadata or {}).get("target", "cpu"))
+    metadata = artifact.metadata or {}
+    target = str(metadata.get("target", "cpu"))
     cap = backend_capabilities(target)
+    if target != "cpu":
+        _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
+        return {
+            "ok": False,
+            "runtime_status": "unimplemented" if cap.available else "missing_backend",
+            "compiler_path": str(metadata.get("compiler_path", "artifact_only")),
+            "artifact_hash": artifact.artifact_hash,
+            "reason": f"{target} generated artifact execution is not wired to the runtime ABI yet",
+        }
+    if metadata.get("executable") is True and metadata.get("compiler_path") == "jit_cpu_numpy":
+        try:
+            output = _execute_jit_cpu_artifact(artifact, args)
+        except Exception as exc:
+            _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
+            return {
+                "ok": False,
+                "runtime_status": "invalid_artifact",
+                "compiler_path": "jit_cpu_numpy",
+                "artifact_hash": artifact.artifact_hash,
+                "reason": str(exc),
+            }
+        elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000.0
+        _last_profile = RuntimeProfile(cpu_wall_ms=elapsed_ms, launch_overhead_ms=elapsed_ms)
+        return {
+            "ok": True,
+            "runtime_status": "success",
+            "compiler_path": "jit_cpu_numpy",
+            "artifact_hash": artifact.artifact_hash,
+            "output": output,
+            "profile": {
+                "cpu_wall_ms": elapsed_ms,
+                "launch_overhead_ms": elapsed_ms,
+            },
+        }
+
+    _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
     return {
         "ok": False,
         "runtime_status": "unsupported" if cap.available else "missing_backend",
-        "compiler_path": "artifact_only",
+        "compiler_path": str(metadata.get("compiler_path", "artifact_only")),
         "artifact_hash": artifact.artifact_hash,
-        "reason": "Generated artifact execution is not wired to the runtime ABI yet",
+        "reason": str(metadata.get("reason", "Generated artifact is not executable by the runtime")),
     }
 
 
 def get_last_profile() -> RuntimeProfile:
     return _last_profile
+
+
+def _execute_jit_cpu_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    output_name = metadata.get("output_name")
+    ops = list(metadata.get("ops") or [])
+    if not arg_names or not output_name or not ops:
+        raise ValueError("executable CPU artifact is missing arg_names, output_name, or ops")
+
+    values = _bind_launch_args(args, arg_names)
+    for op in ops:
+        op_name = str(op.get("op_name", ""))
+        result = op.get("result")
+        operand_names = [str(name) for name in op.get("operands", [])]
+        kwargs = dict(op.get("kwargs") or {})
+        missing = [name for name in operand_names if name not in values]
+        if missing:
+            raise ValueError(f"artifact requires operand(s): {', '.join(missing)}")
+        operands = [_as_numpy(values[name]) for name in operand_names]
+        if not result:
+            raise ValueError(f"artifact op {op_name!r} has no result")
+        values[str(result)] = _execute_runtime_cpu_op(op_name, operands, kwargs, np)
+
+    if output_name not in values:
+        raise ValueError(f"artifact did not produce output {output_name!r}")
+    return values[output_name]
+
+
+def _bind_launch_args(args: Any, arg_names: list[str]) -> dict[str, Any]:
+    if isinstance(args, Mapping):
+        return dict(args)
+    if args is None:
+        args = ()
+    if not isinstance(args, (list, tuple)):
+        args = (args,)
+    values = {name: value for name, value in zip(arg_names, args)}
+    if len(values) < len(arg_names):
+        missing = ", ".join(arg_names[len(values):])
+        raise ValueError(f"launch args missing value(s): {missing}")
+    return values
+
+
+def _as_numpy(value: Any) -> Any:
+    import numpy as np
+
+    if hasattr(value, "numpy") and callable(value.numpy):
+        return np.asarray(value.numpy())
+    if hasattr(value, "_data"):
+        return np.asarray(value._data)
+    return np.asarray(value)
+
+
+def _execute_runtime_cpu_op(op_name: str, operands: list[Any], kwargs: dict[str, Any], np: Any) -> Any:
+    if op_name in {"tessera.matmul", "tessera.gemm"}:
+        return np.matmul(operands[0], operands[1])
+    if op_name == "tessera.relu":
+        return np.maximum(0, operands[0])
+    if op_name == "tessera.sigmoid":
+        return 1.0 / (1.0 + np.exp(-operands[0]))
+    if op_name == "tessera.sin":
+        return np.sin(operands[0])
+    if op_name == "tessera.softmax":
+        x = operands[0]
+        axis = int(kwargs.get("axis", -1))
+        e = np.exp(x - np.max(x, axis=axis, keepdims=True))
+        return e / np.sum(e, axis=axis, keepdims=True)
+    if op_name == "tessera.transpose":
+        axes = kwargs.get("axes", None)
+        if isinstance(axes, list):
+            axes = tuple(axes)
+        return np.transpose(operands[0], axes)
+    if op_name == "tessera.adam":
+        param, grad, moment1, moment2 = operands
+        beta1 = float(kwargs.get("beta1", 0.9))
+        beta2 = float(kwargs.get("beta2", 0.999))
+        lr = float(kwargs.get("lr", 1e-3))
+        eps = float(kwargs.get("eps", 1e-8))
+        step = int(kwargs.get("step", 1))
+        new_m = beta1 * moment1 + (1.0 - beta1) * grad
+        new_v = beta2 * moment2 + (1.0 - beta2) * (grad * grad)
+        m_hat = new_m / (1.0 - beta1**step)
+        v_hat = new_v / (1.0 - beta2**step)
+        return param - lr * m_hat / (np.sqrt(v_hat) + eps), new_m, new_v
+    raise ValueError(f"unsupported runtime CPU op {op_name!r}")

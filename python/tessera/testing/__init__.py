@@ -17,6 +17,7 @@ from .qa import (
     assert_deterministic,
     assert_finite,
 )
+from .compiler import CompilerHarnessResult, compile_and_maybe_launch
 
 __all__ = [
     "MockRankGroup",
@@ -30,4 +31,6 @@ __all__ = [
     "assert_close_to_reference",
     "assert_deterministic",
     "assert_finite",
+    "CompilerHarnessResult",
+    "compile_and_maybe_launch",
 ]

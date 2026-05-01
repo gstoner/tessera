@@ -297,6 +297,58 @@ class JitFn:
             return ()
         return self.cpu_plan.artifacts()
 
+    def runtime_artifact(self):
+        """Return a RuntimeArtifact for this JIT function's compiler output."""
+
+        from tessera.runtime import RuntimeArtifact
+
+        diagnostics = [d.format() for d in self.lowering_diagnostics]
+        metadata: dict[str, Any] = {
+            "target": "gpu" if self.target is not None else "cpu",
+            "function_name": self._fn.__name__,
+            "source_origin": self.source_origin,
+            "effect": self.inferred_effect.name,
+            "deterministic": self.deterministic,
+            "diagnostics": diagnostics,
+            "executable": False,
+            "compiler_path": "eager_fallback",
+            "runtime_status": "unsupported",
+        }
+        if self.target is not None:
+            metadata["compiler_path"] = "target_fallback"
+            metadata["runtime_status"] = "unimplemented"
+            metadata["reason"] = "native target execution is not wired"
+
+        if self.cpu_plan is not None and self.target is None:
+            metadata.update({
+                "executable": True,
+                "compiler_path": "jit_cpu_numpy",
+                "runtime_status": "ready",
+                "arg_names": list(self.arg_names),
+                "output_name": self.cpu_plan.output_name,
+                "input_descriptors": [{"name": name} for name in self.arg_names],
+                "output_descriptor": {"name": self.cpu_plan.output_name},
+                "cpu_tile": list(self.cpu_plan.tile),
+                "ops": [
+                    {
+                        "op_name": op.op_name,
+                        "result": op.result,
+                        "operands": [operand[1:] if operand.startswith("%") else operand for operand in op.operands],
+                        "kwargs": dict(op.kwargs),
+                    }
+                    for op in self.cpu_plan.ops
+                ],
+            })
+
+        return RuntimeArtifact(
+            graph_ir=self.graph_ir.to_mlir(),
+            schedule_ir=self.schedule_ir or "",
+            tile_ir=self.tile_ir or "",
+            target_ir=self.target_ir or "",
+            metadata=metadata,
+            abi_signature=f"tessera.runtime.v1.{metadata['target']}",
+        )
+
     def explain_lowering(self) -> str:
         """Return a human-readable explanation of compile vs fallback status."""
 

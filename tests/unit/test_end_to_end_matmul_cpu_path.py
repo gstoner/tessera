@@ -39,6 +39,7 @@ def test_jit_gemm_lowering_artifacts_cover_all_compiler_layers():
     assert gemm.schedule_ir == artifacts["schedule"]
     assert gemm.tile_ir == artifacts["tile"]
     assert gemm.target_ir == artifacts["target"]
+    assert gemm.runtime_artifact().metadata["compiler_path"] == "jit_cpu_numpy"
 
 
 def test_jit_gemm_can_use_256x128_cpu_tile():

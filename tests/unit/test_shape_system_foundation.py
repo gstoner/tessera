@@ -112,7 +112,7 @@ def test_check_shapes_decorator_marks_functions_for_frontend():
 
 
 def test_shape_system_spec_documents_compiler_integration_points():
-    spec = (ROOT / "docs/spec/shape-system.md").read_text()
+    spec = (ROOT / "docs/spec/SHAPE_SYSTEM.md").read_text()
 
     for needle in [
         "Derived dimensions",

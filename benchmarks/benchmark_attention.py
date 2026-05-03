@@ -25,6 +25,12 @@ try:
 except ImportError:
     from compiler_support import compiler_flash_attention_ir
 
+try:
+    from tessera.telemetry import make_event, telemetry_report
+except ImportError:
+    make_event = None
+    telemetry_report = None
+
 
 @dataclass
 class AttnConfig:
@@ -185,16 +191,55 @@ class FlashAttnBenchmark:
 
     @staticmethod
     def to_json(results: List[AttnResult], path: str) -> None:
-        data = [{
-            "batch": r.config.batch, "heads": r.config.heads,
-            "seq_len": r.config.seq_len, "head_dim": r.config.head_dim,
-            "causal": r.config.causal, "dtype": r.config.dtype,
-            "latency_ms": r.latency_ms,
-            "tokens_per_sec": r.tokens_per_sec,
-            "tflops": r.tflops, "mfu": r.mfu,
-            "compiler_path": r.compiler_path,
-            "compiler_lowering": r.compiler_lowering,
-            "timestamp": r.timestamp,
-        } for r in results]
+        data = []
+        telemetry_events = []
+        for r in results:
+            telemetry = _attn_telemetry(r) if make_event is not None else {}
+            if telemetry:
+                telemetry_events.append(telemetry)
+            data.append({
+                "batch": r.config.batch, "heads": r.config.heads,
+                "seq_len": r.config.seq_len, "head_dim": r.config.head_dim,
+                "causal": r.config.causal, "dtype": r.config.dtype,
+                "latency_ms": r.latency_ms,
+                "tokens_per_sec": r.tokens_per_sec,
+                "tflops": r.tflops, "mfu": r.mfu,
+                "compiler_path": r.compiler_path,
+                "compiler_lowering": r.compiler_lowering,
+                "timestamp": r.timestamp,
+                "telemetry": telemetry,
+            })
+        payload = {"benchmark": "flash_attn", "results": data}
+        if telemetry_report is not None:
+            payload["telemetry_summary"] = telemetry_report(telemetry_events)
+            payload["telemetry_events"] = telemetry_events
         with open(path, "w") as f:
-            json.dump({"benchmark": "flash_attn", "results": data}, f, indent=2)
+            json.dump(payload, f, indent=2)
+
+
+def _attn_telemetry(result: AttnResult) -> dict:
+    return make_event(
+        "benchmark.flash_attention",
+        source="benchmark",
+        op="flash_attention",
+        shape={
+            "batch": result.config.batch,
+            "heads": result.config.heads,
+            "seq_len": result.config.seq_len,
+            "head_dim": result.config.head_dim,
+        },
+        dtype=result.config.dtype,
+        kernel_id="flash_attention",
+        latency_ms=result.latency_ms,
+        tflops=result.tflops,
+        memory_bytes=result.config.bytes_accessed(),
+        status="executable" if result.compiler_path != "compiler_unavailable" else "unmeasured",
+        metadata={
+            "causal": result.config.causal,
+            "tokens_per_sec": result.tokens_per_sec,
+            "mfu": result.mfu,
+            "compiler_path": result.compiler_path,
+            "compiler_lowering": result.compiler_lowering,
+        },
+        timestamp=result.timestamp,
+    )

@@ -9,6 +9,7 @@ import pytest
 import tessera as ts
 from tessera import profiler
 from tessera import autotune
+from tessera.telemetry import TELEMETRY_SCHEMA_VERSION, make_event
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -42,9 +43,55 @@ def test_profiler_measure_and_timeline_export(tmp_path):
     assert payload["traceEvents"][0]["name"] == "sum"
 
 
+def test_telemetry_event_serialization_and_bottleneck():
+    event = make_event(
+        "matmul",
+        source="unit",
+        op="matmul",
+        shape={"M": 128, "N": 128, "K": 64},
+        dtype="bf16",
+        latency_ms=1.5,
+        tflops=2.0,
+        bandwidth_gbps=300.0,
+        metadata={"roofline_bound": "compute"},
+    )
+
+    assert event["schema"] == TELEMETRY_SCHEMA_VERSION
+    assert event["shape"] == {"M": 128, "N": 128, "K": 64}
+    assert event["bottleneck"] == "compute_bound"
+
+
 def test_profiler_module_record_requires_active_session():
     with pytest.raises(RuntimeError, match="active profiler.session"):
         profiler.record("orphan", latency_ms=1.0)
+
+
+def test_profiler_record_accepts_optional_correlation_fields():
+    with profiler.session() as p:
+        event = p.record(
+            "gemm",
+            latency_ms=1.0,
+            flops=1e12,
+            bytes_moved=2e9,
+            op="matmul",
+            shape=(256, 256, 256),
+            dtype="bf16",
+            arch="sm90",
+            graph_hash="graph123",
+            schedule_hash="sched456",
+            kernel_id="gemm",
+            device=0,
+            stream=7,
+            rank=2,
+            metadata={"compiler_path": "roofline_model"},
+        )
+
+    telemetry = event.telemetry
+    assert telemetry["op"] == "matmul"
+    assert telemetry["shape"] == [256, 256, 256]
+    assert telemetry["arch"] == "sm90"
+    assert telemetry["schedule_hash"] == "sched456"
+    assert p.to_dict()["summary"]["event_count"] == 1
 
 
 def test_roofline_cost_model_identifies_memory_bound_case():
@@ -77,6 +124,8 @@ def test_autotune_cache_key_and_schedule_artifact(tmp_path):
     assert key == ("matmul", (128, 128, 128), "bf16", "sm90")
     assert artifact["arch"] == "sm90"
     assert artifact["hash"]
+    assert artifact["telemetry"]["schema"] == TELEMETRY_SCHEMA_VERSION
+    assert artifact["telemetry"]["schedule_hash"] == artifact["hash"]
 
 
 def test_autotune_rejects_non_gemm_ops():

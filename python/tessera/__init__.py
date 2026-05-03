@@ -32,6 +32,7 @@ from . import nn
 from . import arch
 from . import shape
 from . import debug
+from . import telemetry
 from . import profiler
 from . import autotune as _autotune_module
 from . import fault

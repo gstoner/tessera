@@ -30,6 +30,12 @@ try:
 except ImportError:  # Allows running this file directly from benchmarks/.
     from compiler_support import compiler_matmul_relu
 
+try:
+    from tessera.telemetry import make_event, telemetry_report
+except ImportError:
+    make_event = None
+    telemetry_report = None
+
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -229,7 +235,11 @@ class GEMMBenchmark:
     def to_json(results: List[GEMMResult], path: str) -> None:
         """Serialize results to a JSON file."""
         data = []
+        telemetry_events = []
         for r in results:
+            telemetry = _gemm_telemetry(r) if make_event is not None else {}
+            if telemetry:
+                telemetry_events.append(telemetry)
             data.append({
                 "M": r.config.M, "N": r.config.N, "K": r.config.K,
                 "dtype": r.config.dtype,
@@ -240,10 +250,42 @@ class GEMMBenchmark:
                 "compiler_path": r.compiler_path,
                 "compiler_lowering": r.compiler_lowering,
                 "timestamp": r.timestamp,
+                "telemetry": telemetry,
             })
+        payload = {"benchmark": "gemm", "results": data}
+        if telemetry_report is not None:
+            payload["telemetry_summary"] = telemetry_report(telemetry_events)
+            payload["telemetry_events"] = telemetry_events
         with open(path, "w") as f:
-            json.dump({"benchmark": "gemm", "results": data}, f, indent=2)
+            json.dump(payload, f, indent=2)
 
     def mfu(self, result: GEMMResult) -> float:
         """Model FLOP utilisation (0–1)."""
         return result.tflops / self.peak_tflops
+
+
+def _gemm_telemetry(result: GEMMResult) -> dict:
+    return make_event(
+        "benchmark.gemm",
+        source="benchmark",
+        op="matmul",
+        shape={"M": result.config.M, "N": result.config.N, "K": result.config.K},
+        dtype=result.config.dtype,
+        kernel_id="gemm",
+        latency_ms=result.latency_ms,
+        tflops=result.tflops,
+        bandwidth_gbps=result.memory_bw_gbps,
+        memory_bytes=result.config.bytes_accessed(),
+        status="executable" if result.compiler_path != "compiler_unavailable" else "unmeasured",
+        metadata={
+            "roofline_bound": result.roofline_bound,
+            "compiler_path": result.compiler_path,
+            "compiler_lowering": result.compiler_lowering,
+            "tile": {
+                "M": result.config.tile_m,
+                "N": result.config.tile_n,
+                "K": result.config.tile_k,
+            },
+        },
+        timestamp=result.timestamp,
+    )

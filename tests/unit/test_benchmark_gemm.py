@@ -179,3 +179,16 @@ class TestGEMMJson:
         r = data["results"][0]
         for key in ("M", "N", "K", "latency_ms", "tflops", "roofline_bound"):
             assert key in r
+
+    def test_to_json_includes_telemetry_shape(self, gemm_bench, tmp_path):
+        results = gemm_bench.run(sizes=[(256, 256, 256)])
+        path = str(tmp_path / "gemm.json")
+        gemm_bench.to_json(results, path)
+        with open(path) as f:
+            data = json.load(f)
+
+        event = data["telemetry_events"][0]
+        assert event["schema"] == "tessera.telemetry.v1"
+        assert event["op"] == "matmul"
+        assert event["shape"] == {"M": 256, "N": 256, "K": 256}
+        assert data["results"][0]["telemetry"]["kernel_id"] == "gemm"

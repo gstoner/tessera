@@ -26,6 +26,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence
 
+from ..telemetry import make_event
+
 
 # ---------------------------------------------------------------------------
 # Workload description
@@ -432,6 +434,8 @@ class BayesianAutotuner:
     def schedule_artifact(self, arch: str = "generic") -> Dict[str, object]:
         """Return a reproducible schedule artifact for deployment bundles."""
         tile = self._best.config.to_dict() if self._best is not None else {}
+        latency_ms = self._best.latency_ms if self._best is not None else None
+        tflops = self._best.tflops if self._best is not None else None
         artifact = {
             "version": 1,
             "kind": "tessera.schedule_artifact",
@@ -456,6 +460,20 @@ class BayesianAutotuner:
             "tile": tile,
         }
         artifact["hash"] = self._hash_payload(artifact)
+        artifact["telemetry"] = make_event(
+            "autotune.best",
+            source="autotune",
+            op="matmul",
+            shape={"M": self.workload.M, "N": self.workload.N, "K": self.workload.K},
+            dtype=self.workload.dtype,
+            arch=arch,
+            schedule_hash=str(artifact["hash"]),
+            kernel_id="gemm",
+            latency_ms=latency_ms,
+            tflops=tflops,
+            status="ok" if self._best is not None else "unmeasured",
+            metadata={"tile": tile},
+        )
         return artifact
 
     def schedule_hash(self, arch: str = "generic") -> str:

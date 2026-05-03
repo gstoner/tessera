@@ -36,10 +36,14 @@ from typing import Any, Dict, List, Optional
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+_PY_ROOT = _REPO_ROOT / "python"
+if str(_PY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PY_ROOT))
 
 from benchmarks.benchmark_gemm import GEMMBenchmark, GEMMResult
 from benchmarks.benchmark_attention import FlashAttnBenchmark, AttnResult
 from benchmarks.benchmark_collective import CollectiveBenchmark, CollectiveResult, CollectiveOp
+from tessera.telemetry import TELEMETRY_SCHEMA_VERSION, make_event, telemetry_report
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +99,13 @@ class BenchmarkSuite:
             return 0.0
         return max(r.mfu for r in self.attn_results)
 
+    def telemetry_events(self) -> List[Dict[str, Any]]:
+        return (
+            [self._gemm_event(r) for r in self.gemm_results]
+            + [self._attn_event(r) for r in self.attn_results]
+            + [self._collective_event(r) for r in self.collective_results]
+        )
+
     # ------------------------------------------------------------------
     # Summary / reporting
     # ------------------------------------------------------------------
@@ -125,6 +136,7 @@ class BenchmarkSuite:
         ts = datetime.fromtimestamp(self.start_time, tz=timezone.utc).isoformat()
         return {
             "tessera_benchmark_version": "6.0",
+            "schema": TELEMETRY_SCHEMA_VERSION,
             "timestamp_utc": ts,
             "wall_time_s": self.wall_time_s,
             "hw_caps": self.hw_caps,
@@ -137,6 +149,8 @@ class BenchmarkSuite:
                 "peak_attn_mfu": self.peak_attn_mfu(),
                 "peak_collective_bw_gbps": self.peak_collective_bw(),
             },
+            "telemetry_summary": telemetry_report(self.telemetry_events()),
+            "telemetry_events": self.telemetry_events(),
             "gemm": [
                 {
                     "M": r.config.M, "N": r.config.N, "K": r.config.K,
@@ -149,6 +163,7 @@ class BenchmarkSuite:
                     "runtime_status": "executable" if r.compiler_path == "tessera_jit_cpu" else "skipped" if r.compiler_path.startswith("tessera") else "executable",
                     "compiler_lowering": r.compiler_lowering,
                     "timestamp": r.timestamp,
+                    "telemetry": self._gemm_event(r),
                 }
                 for r in self.gemm_results
             ],
@@ -164,6 +179,7 @@ class BenchmarkSuite:
                     "runtime_status": "skipped" if r.compiler_path == "graph_ir_only" else "executable",
                     "compiler_lowering": r.compiler_lowering,
                     "timestamp": r.timestamp,
+                    "telemetry": self._attn_event(r),
                 }
                 for r in self.attn_results
             ],
@@ -177,6 +193,7 @@ class BenchmarkSuite:
                     "bus_bw_gbps": r.bus_bw_gbps,
                     "algbw_gbps": r.algbw_gbps,
                     "timestamp": r.timestamp,
+                    "telemetry": self._collective_event(r),
                 }
                 for r in self.collective_results
             ],
@@ -191,6 +208,73 @@ class BenchmarkSuite:
     def default_output_path(cls, output_dir: str = ".") -> str:
         ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         return os.path.join(output_dir, f"tessera_benchmarks_{ts}.json")
+
+    def _gemm_event(self, r: GEMMResult) -> Dict[str, Any]:
+        return make_event(
+            "benchmark.gemm",
+            source="benchmark",
+            op="matmul",
+            shape={"M": r.config.M, "N": r.config.N, "K": r.config.K},
+            dtype=r.config.dtype,
+            arch=str(self.hw_caps.get("arch", "generic")),
+            kernel_id="gemm",
+            latency_ms=r.latency_ms,
+            tflops=r.tflops,
+            bandwidth_gbps=r.memory_bw_gbps,
+            memory_bytes=r.config.bytes_accessed(),
+            status="executable" if r.compiler_path != "compiler_unavailable" else "unmeasured",
+            metadata={
+                "roofline_bound": r.roofline_bound,
+                "compiler_path": r.compiler_path,
+                "compiler_lowering": r.compiler_lowering,
+            },
+            timestamp=r.timestamp,
+        )
+
+    def _attn_event(self, r: AttnResult) -> Dict[str, Any]:
+        return make_event(
+            "benchmark.flash_attention",
+            source="benchmark",
+            op="flash_attention",
+            shape={
+                "batch": r.config.batch,
+                "heads": r.config.heads,
+                "seq_len": r.config.seq_len,
+                "head_dim": r.config.head_dim,
+            },
+            dtype=r.config.dtype,
+            arch=str(self.hw_caps.get("arch", "generic")),
+            kernel_id="flash_attention",
+            latency_ms=r.latency_ms,
+            tflops=r.tflops,
+            memory_bytes=r.config.bytes_accessed(),
+            status="executable" if r.compiler_path != "compiler_unavailable" else "unmeasured",
+            metadata={
+                "tokens_per_sec": r.tokens_per_sec,
+                "mfu": r.mfu,
+                "compiler_path": r.compiler_path,
+                "compiler_lowering": r.compiler_lowering,
+            },
+            timestamp=r.timestamp,
+        )
+
+    def _collective_event(self, r: CollectiveResult) -> Dict[str, Any]:
+        return make_event(
+            "benchmark.collective",
+            source="benchmark",
+            op=r.config.op.value,
+            shape={"num_ranks": r.config.num_ranks, "message_bytes": r.config.message_bytes},
+            dtype=r.config.dtype,
+            arch=str(self.hw_caps.get("arch", "generic")),
+            kernel_id="collective",
+            rank=r.config.num_ranks,
+            latency_ms=r.latency_ms,
+            bandwidth_gbps=r.bus_bw_gbps,
+            memory_bytes=r.config.bus_bytes(),
+            status="ok",
+            metadata={"algbw_gbps": r.algbw_gbps},
+            timestamp=r.timestamp,
+        )
 
 
 # ---------------------------------------------------------------------------

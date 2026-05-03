@@ -25,6 +25,13 @@ public:
     TraceEvent e; e.name=name; e.cat=cat; e.ph='B'; e.pid=pid; e.tid=tid; e.ts_us=now();
     events_.push_back(e);
   }
+  void begin(const std::string& name, const std::string& cat, int pid, int tid,
+             const std::map<std::string, std::string>& sargs,
+             const std::map<std::string, double>& nargs = {}) {
+    TraceEvent e; e.name=name; e.cat=cat; e.ph='B'; e.pid=pid; e.tid=tid; e.ts_us=now();
+    e.sargs=sargs; e.nargs=nargs;
+    events_.push_back(e);
+  }
   void end(const std::string& name, const std::string& cat, int pid, int tid) {
     TraceEvent e; e.name=name; e.cat=cat; e.ph='E'; e.pid=pid; e.tid=tid; e.ts_us=now();
     events_.push_back(e);
@@ -41,21 +48,21 @@ public:
     std::ofstream f(path);
     f << "{\n";
     if (!meta_.empty()) {
-      f << ""metadata": {";
+      f << "\"metadata\": {";
       bool first=true;
       for (auto &kv : meta_) {
         if (!first) f << ",";
-        f << "\"" << kv.first << "\": \"" << kv.second << "\"";
+        f << "\"" << escape(kv.first) << "\": \"" << escape(kv.second) << "\"";
         first=false;
       }
       f << "},\n";
     }
-    f << ""traceEvents": [\n";
+    f << "\"traceEvents\": [\n";
     for (size_t i=0;i<events_.size();++i) {
       const auto &e=events_[i];
       f << " {";
-      f << "\"name\":\"" << e.name << "\",";
-      f << "\"cat\":\"" << e.cat << "\",";
+      f << "\"name\":\"" << escape(e.name) << "\",";
+      f << "\"cat\":\"" << escape(e.cat) << "\",";
       f << "\"ph\":\"" << e.ph << "\",";
       f << "\"pid\":" << e.pid << ",";
       f << "\"tid\":" << e.tid << ",";
@@ -65,11 +72,11 @@ public:
         bool aFirst=true;
         for (auto &kv : e.sargs) {
           if (!aFirst) f << ","; aFirst=false;
-          f << "\"" << kv.first << "\":\"" << kv.second << "\"";
+          f << "\"" << escape(kv.first) << "\":\"" << escape(kv.second) << "\"";
         }
         for (auto &kv : e.nargs) {
           if (!aFirst) f << ","; aFirst=false;
-          f << "\"" << kv.first << "\":" << kv.second;
+          f << "\"" << escape(kv.first) << "\":" << kv.second;
         }
         f << "}";
       }
@@ -81,6 +88,16 @@ public:
   }
 
 private:
+  static std::string escape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (char c : s) {
+      if (c == '\\' || c == '"') out.push_back('\\');
+      out.push_back(c);
+    }
+    return out;
+  }
+
   static double now() {
     using namespace std::chrono;
     static auto t0 = steady_clock::now();

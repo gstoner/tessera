@@ -11,7 +11,9 @@ import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional, Sequence
+
+from .telemetry import TELEMETRY_SCHEMA_VERSION, make_event, telemetry_report
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,7 @@ class ProfileEvent:
     bandwidth_gbps: float = 0.0
     efficiency_pct: float = 0.0
     counters: Mapping[str, float] = field(default_factory=dict)
+    telemetry: Mapping[str, Any] = field(default_factory=dict)
     start_us: float = 0.0
     duration_us: float = 0.0
 
@@ -37,6 +40,7 @@ class ProfileEvent:
         )
 
     def to_trace_event(self, pid: int = 0, tid: int = 0) -> dict:
+        telemetry = dict(self.telemetry)
         return {
             "name": self.name,
             "cat": "tessera",
@@ -50,6 +54,7 @@ class ProfileEvent:
                 "flops_g": self.flops_g,
                 "bandwidth_gbps": self.bandwidth_gbps,
                 "efficiency_pct": self.efficiency_pct,
+                "telemetry": telemetry,
                 **dict(self.counters),
             },
         }
@@ -80,6 +85,18 @@ class ProfileSession:
         bytes_moved: float = 0.0,
         peak_tflops: Optional[float] = None,
         counters: Optional[Mapping[str, float]] = None,
+        op: str | None = None,
+        shape: Sequence[int] | Mapping[str, int] | None = None,
+        dtype: str | None = None,
+        arch: str | None = None,
+        graph_hash: str | None = None,
+        schedule_hash: str | None = None,
+        kernel_id: str | None = None,
+        device: str | int | None = None,
+        stream: str | int | None = None,
+        rank: int | None = None,
+        status: str = "ok",
+        metadata: Optional[Mapping[str, Any]] = None,
     ) -> ProfileEvent:
         if latency_ms < 0:
             raise ValueError("latency_ms must be >= 0")
@@ -93,6 +110,27 @@ class ProfileSession:
             else 0.0
         )
         now_us = (time.perf_counter() - self._t0) * 1e6 if self._t0 else 0.0
+        telemetry = make_event(
+            name=name,
+            source="profiler",
+            op=op or name,
+            shape=shape,
+            dtype=dtype,
+            arch=arch,
+            graph_hash=graph_hash,
+            schedule_hash=schedule_hash,
+            kernel_id=kernel_id,
+            device=device,
+            stream=stream,
+            rank=rank,
+            latency_ms=latency_ms,
+            tflops=achieved_tflops if flops and seconds > 0 else None,
+            bandwidth_gbps=bandwidth_gbps if bytes_moved else None,
+            memory_bytes=bytes_moved if bytes_moved else None,
+            status=status,
+            counters=counters,
+            metadata=metadata,
+        )
         event = ProfileEvent(
             name=name,
             latency_ms=latency_ms,
@@ -100,6 +138,7 @@ class ProfileSession:
             bandwidth_gbps=bandwidth_gbps,
             efficiency_pct=efficiency,
             counters=dict(counters or {}),
+            telemetry=telemetry,
             start_us=now_us,
             duration_us=latency_ms * 1000.0,
         )
@@ -115,6 +154,7 @@ class ProfileSession:
         bytes_moved: float = 0.0,
         peak_tflops: Optional[float] = None,
         counters: Optional[Mapping[str, float]] = None,
+        **telemetry_fields,
     ):
         start = time.perf_counter()
         value = fn()
@@ -126,6 +166,7 @@ class ProfileSession:
             bytes_moved=bytes_moved,
             peak_tflops=peak_tflops,
             counters=counters,
+            **telemetry_fields,
         )
         return value
 
@@ -151,10 +192,31 @@ class ProfileSession:
     def timeline_events(self) -> list[dict]:
         return [event.to_trace_event(tid=i) for i, event in enumerate(self.events)]
 
+    def telemetry_events(self) -> list[dict]:
+        return [dict(event.telemetry) for event in self.events]
+
+    def to_dict(self) -> dict:
+        events = self.telemetry_events()
+        return {
+            "schema": TELEMETRY_SCHEMA_VERSION,
+            "source": "profiler",
+            "summary": telemetry_report(events),
+            "events": events,
+        }
+
     def timeline(self, path: str | Path) -> Path:
         out = Path(path)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps({"traceEvents": self.timeline_events()}, indent=2))
+        out.write_text(
+            json.dumps(
+                {
+                    "schema": TELEMETRY_SCHEMA_VERSION,
+                    "summary": telemetry_report(self.telemetry_events()),
+                    "traceEvents": self.timeline_events(),
+                },
+                indent=2,
+            )
+        )
         return out
 
 

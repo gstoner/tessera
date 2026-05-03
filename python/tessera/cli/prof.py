@@ -35,6 +35,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             bytes_moved=512.0e6 if "bandwidth" in metrics else 0.0,
             peak_tflops=2.0 if "flops" in metrics else None,
             counters=_counters(metrics, symbol_count),
+            op="model.inspect",
+            kernel_id=source.stem,
+            status="ok",
+            metadata={
+                "source_path": str(source),
+                "requested_metrics": sorted(metrics),
+            },
         )
         if args.trace:
             sess.timeline(args.trace)

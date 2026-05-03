@@ -18,6 +18,7 @@ from benchmarks.common import (
     correctness_report,
 )
 from benchmarks.compiler_support import compiler_matmul_relu as compat_compiler_matmul_relu
+from benchmarks.run_all import run_all_benchmarks
 
 
 def test_benchmark_row_serializes_standard_statuses():
@@ -75,3 +76,20 @@ def test_superbench_gemm_module_emits_shared_row():
     assert row["operator"] == "gemm"
     assert row["compiler_path"] in {"tessera_jit_cpu", "reference"}
     assert row["runtime_status"] == "executable"
+
+
+def test_benchmark_suite_exports_unified_telemetry():
+    suite = run_all_benchmarks(
+        gemm_sizes=[(16, 16, 16)],
+        attn_configs=[(1, 1, 16, 8)],
+        collective_ranks=[2],
+        collective_sizes=[1024],
+        verbose=False,
+    )
+    payload = suite.to_dict()
+
+    assert payload["schema"] == "tessera.telemetry.v1"
+    assert payload["telemetry_summary"]["event_count"] == 6
+    assert payload["gemm"][0]["telemetry"]["op"] == "matmul"
+    assert payload["attention"][0]["telemetry"]["op"] == "flash_attention"
+    assert payload["collective"][0]["telemetry"]["kernel_id"] == "collective"

@@ -33,7 +33,22 @@ public:
     limiter_.acquire();
     int pid = pidBase_ + d.device;
     int tid = d.stream;
-    trace_.begin("CommChunk", "comm", pid, tid);
+    trace_.begin(
+      "CommChunk", "comm", pid, tid,
+      {
+        {"schema", "tessera.telemetry.v1"},
+        {"source", "collective_runtime"},
+        {"op", "collective"},
+        {"kernel_id", "collective_chunk"},
+        {"device", std::to_string(d.device)},
+        {"stream", std::to_string(d.stream)},
+        {"status", "ok"},
+        {"path", (path==Path::NVLINK?"NVLINK": path==Path::RDMA?"RDMA":"PCIE")},
+        {"algo", (algo==Algo::Ring?"ring": algo==Algo::Tree?"tree": algo==Algo::Hier?"hier":"auto")},
+      },
+      {
+        {"memory_bytes", static_cast<double>(d.bytes)},
+      });
     trace_.counter("chunk_bytes", static_cast<double>(d.bytes), pid, tid);
     trace_.annotate("path", (path==Path::NVLINK?"NVLINK": path==Path::RDMA?"RDMA":"PCIE"));
 

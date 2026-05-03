@@ -68,6 +68,10 @@ def test_tessera_prof_writes_chrome_trace(tmp_path, capsys):
     payload = json.loads(trace.read_text())
     assert "traceEvents" in payload
     assert payload["traceEvents"][0]["name"] == "model.inspect"
+    telemetry = payload["traceEvents"][0]["args"]["telemetry"]
+    assert telemetry["schema"] == "tessera.telemetry.v1"
+    assert telemetry["op"] == "model.inspect"
+    assert telemetry["kernel_id"] == model.stem
     assert str(trace) in capsys.readouterr().out
 
 

@@ -6,6 +6,11 @@ from .utils import Objective, gpu_fingerprint, now_iso, stable_hash
 from .cache import CacheDB
 
 try:
+    from tessera.telemetry import make_event
+except Exception:
+    make_event = None
+
+try:
     import torch
 except Exception:
     torch = None
@@ -43,6 +48,22 @@ class ResultLogger:
             "best_so_far": best_so_far,
             "notes": notes,
         }
+        if make_event is not None:
+            row["telemetry"] = make_event(
+                "autotune.trial",
+                source="autotune",
+                op="matmul",
+                latency_ms=metrics.get("latency_ms"),
+                tflops=metrics.get("tflops"),
+                status="cached" if notes == "cache" else "ok",
+                metadata={
+                    "trial": trial,
+                    "budget_iters": budget_iters,
+                    "config": config,
+                    "objective": objective_value,
+                    "best_so_far": best_so_far,
+                },
+            )
         with open(self.jsonl_path, "a") as jf:
             jf.write(json.dumps(row) + "\n")
         with open(self.csv_path, "a") as cf:

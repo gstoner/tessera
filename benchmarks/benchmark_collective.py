@@ -22,6 +22,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Sequence
 
+try:
+    from tessera.telemetry import make_event, telemetry_report
+except ImportError:
+    make_event = None
+    telemetry_report = None
+
 
 class CollectiveOp(Enum):
     ALL_REDUCE     = "all_reduce"
@@ -169,19 +175,51 @@ class CollectiveBenchmark:
 
     @staticmethod
     def to_json(results: List[CollectiveResult], path: str) -> None:
-        data = [{
-            "op": r.config.op.value,
-            "num_ranks": r.config.num_ranks,
-            "message_bytes": r.config.message_bytes,
-            "dtype": r.config.dtype,
-            "latency_ms": r.latency_ms,
-            "bus_bw_gbps": r.bus_bw_gbps,
-            "algbw_gbps": r.algbw_gbps,
-            "timestamp": r.timestamp,
-        } for r in results]
+        data = []
+        telemetry_events = []
+        for r in results:
+            telemetry = _collective_telemetry(r) if make_event is not None else {}
+            if telemetry:
+                telemetry_events.append(telemetry)
+            data.append({
+                "op": r.config.op.value,
+                "num_ranks": r.config.num_ranks,
+                "message_bytes": r.config.message_bytes,
+                "dtype": r.config.dtype,
+                "latency_ms": r.latency_ms,
+                "bus_bw_gbps": r.bus_bw_gbps,
+                "algbw_gbps": r.algbw_gbps,
+                "timestamp": r.timestamp,
+                "telemetry": telemetry,
+            })
+        payload = {"benchmark": "collective", "results": data}
+        if telemetry_report is not None:
+            payload["telemetry_summary"] = telemetry_report(telemetry_events)
+            payload["telemetry_events"] = telemetry_events
         with open(path, "w") as f:
-            json.dump({"benchmark": "collective", "results": data}, f, indent=2)
+            json.dump(payload, f, indent=2)
 
     def bus_utilization(self, result: CollectiveResult) -> float:
         """Bus utilization fraction (0–1)."""
         return min(result.bus_bw_gbps / self.peak_bw_gbps, 1.0)
+
+
+def _collective_telemetry(result: CollectiveResult) -> dict:
+    return make_event(
+        "benchmark.collective",
+        source="benchmark",
+        op=result.config.op.value,
+        shape={"num_ranks": result.config.num_ranks, "message_bytes": result.config.message_bytes},
+        dtype=result.config.dtype,
+        kernel_id="collective",
+        rank=result.config.num_ranks,
+        latency_ms=result.latency_ms,
+        bandwidth_gbps=result.bus_bw_gbps,
+        memory_bytes=result.config.bus_bytes(),
+        status="ok",
+        metadata={
+            "algbw_gbps": result.algbw_gbps,
+            "bus_bytes": result.config.bus_bytes(),
+        },
+        timestamp=result.timestamp,
+    )

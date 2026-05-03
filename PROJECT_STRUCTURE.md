@@ -19,11 +19,12 @@ tessera/
 ├── requirements.txt                 # Python runtime + development dependencies
 ├── .gitignore
 ├── PROJECT_STRUCTURE.md             # This file
+├── .github/workflows/               # CI workflows (lint + CPU validation spine)
 │
 ├── src/                             # Production C++/MLIR source
 │   ├── Operators/                   # Operator library placeholder (Phase 4+)
 │   ├── compiler/                    # Compiler IR, MLIR, codegen, autotuning, pass docs
-│   ├── runtime/                     # C++ execution engine
+│   ├── runtime/                     # C++ execution engine + CPU runtime backbone
 │   ├── solvers/                     # Core sparse/RNG, linalg, SR, spectral, TPP solvers
 │   ├── collectives/                 # Collective IR and runtime scaffolding
 │   └── transforms/                  # Canonicalization and lowering passes
@@ -35,13 +36,21 @@ tessera/
 │       ├── distributed/             # Mesh, shard, domain, launch, region APIs
 │       ├── nn/                      # Neural network layers and ops
 │       ├── testing/                 # Mock collectives and Python test helpers
+│       ├── cli/                     # tessera-mlir, tessera-prof, runtime smoke CLI
+│       ├── runtime.py               # Python wrapper/helper over runtime C ABI
+│       ├── profiler.py              # Runtime profiler facade
+│       ├── autotune.py              # Public autotuning facade
+│       ├── telemetry.py             # Shared telemetry event/report schema
 │       └── ...
 │
 ├── tests/                           # Test suite
-│   ├── phase1/                      # Python frontend, constraints, effects, Graph IR
-│   ├── phase2/                      # Lowering-chain Python tests
-│   ├── phase3/                      # GPU target and FlashAttention lowering tests
+│   ├── unit/                        # Python unit tests and CPU validation contracts
+│   ├── integration/                 # Integration tests
+│   ├── regression/                  # Regression tests
+│   ├── tessera-ir/                  # MLIR/lit-style pipeline tests by phase
 │   ├── kernel_tests/                # System-level kernel + roofline tests
+│   ├── performance/                 # Optional performance/weekly sweep scaffolds
+│   ├── tessera_numerical_validation/ # Numerical reference validation suite
 │   └── ...
 │
 ├── docs/                            # All documentation
@@ -59,7 +68,14 @@ tessera/
 │   └── advanced/
 │       └── power_retention/         # PowerAttention port (HIP, WGMMA, autotune)
 │
-├── benchmarks/                      # Performance benchmarks
+├── benchmarks/                      # Performance benchmarks, telemetry gates, baselines
+│   ├── baselines/                   # Deterministic CPU smoke perf-gate baselines
+│   ├── common/                      # Shared benchmark compiler/correctness contracts
+│   ├── Tessera_Operator_Benchmarks/ # Operator micro-benchmark suite
+│   ├── Tessera_SuperBench/          # SuperBench-style benchmark suite
+│   ├── benchmark_*.py               # GEMM/attention/collective benchmark models
+│   ├── run_all.py                   # Unified benchmark orchestrator
+│   └── perf_gate.py                 # Telemetry baseline gate
 │
 ├── tools/                           # Developer tooling
 │   ├── profiler/                    # Canonical tprof profiler runtime, CLI, reports
@@ -68,7 +84,12 @@ tessera/
 │   ├── tessera-translate/           # Translation tools placeholder
 │   └── CLI/                         # CLI starter snapshots
 │
-├── scripts/                         # Build & CI utility scripts
+├── scripts/                         # Build, validation, and CI utility scripts
+│   ├── validate.sh                  # CPU-only validation spine
+│   ├── check_versions.py            # CMake/Python/runtime version drift check
+│   ├── build.sh
+│   ├── test.sh
+│   └── lint_docs.sh
 ├── cmake/                           # CMake find-modules and helpers
 ├── research/                        # Experimental research prototypes outside production build
 │
@@ -78,6 +99,10 @@ tessera/
     ├── tpp_old/                     # Superseded TPP snapshot
     └── tile_opt_fa4_old/            # Superseded FA4 snapshots
 ```
+
+Local/generated directories such as `build/`, `.venv/`, `__pycache__/`, and
+`.pytest_cache/` may exist in a developer checkout but are not source layout
+components.
 
 ---
 
@@ -113,6 +138,13 @@ example snapshot folders when they are kept for reference.
 | `docs/archive/pre_canonical/model` | `docs/Tessera_Deep_Learning_Programming_Model.md` | Pre-canonical model guide archived due old API examples |
 | `docs/architecture/`         | `src/compiler/tessera_target_ir_doc3b.md`        | Architecture doc migrated out of src/ |
 | `docs/tutorials/Flash_Attention_in_Tessera.md` | `docs/tutorials/Flash Attention_in_Tessera.md` | Space in filename removed |
+| `python/tessera/telemetry.py` | new                                             | Shared telemetry schema for profiler, autotune, benchmarks, and runtime smoke |
+| `python/tessera/cli/runtime.py` | new                                           | `tessera-runtime-smoke` CLI for CPU runtime telemetry validation |
+| `benchmarks/perf_gate.py`    | new                                              | Telemetry baseline gate for deterministic CPU smoke reports |
+| `benchmarks/baselines/`      | new                                              | Baseline inputs for benchmark/runtime telemetry gates |
+| `scripts/validate.sh`        | new                                              | CPU-only local validation spine across Python, runtime, profiler, and collectives |
+| `scripts/check_versions.py`  | new                                              | Version consistency check across CMake, Python, and runtime headers |
+| `.github/workflows/cpu-validation.yml` | new                                     | CI workflow for the CPU validation spine |
 
 ---
 
@@ -128,15 +160,25 @@ archived copy.
 
 ---
 
-## Build System (next milestone)
+## Build System Status
 
-The build system cleanup is the immediate follow-on to this reorganization.
-Outstanding work:
+The April 2026 reorganization is now paired with a CPU-only validation spine.
+Current active validation entry points:
 
-- Keep `src/CMakeLists.txt` aligned as compiler and solver subtrees graduate
-  from scaffold to production build targets.
-- Add per-component `CMakeLists.txt` where missing.
-- Validate MLIR dialect registration and tablegen targets for each component.
-- Gate the build on a single `TESSERA_VERSION` variable defined in one place.
-- Graduate `src/solvers/linalg` from opt-in scaffold to the parent solver build
-  once its MLIR APIs are aligned with the canonical solver pass stack.
+- `scripts/validate.sh` runs version checks, Python unit tests, runtime smoke
+  telemetry, benchmark smoke telemetry, standalone CPU runtime CMake/CTest,
+  C++ profiler smoke build, and collectives runtime compile check.
+- `.github/workflows/cpu-validation.yml` runs the same CPU validation spine in CI.
+- `scripts/check_versions.py` gates CMake, Python package, and runtime header
+  versions on one project version value.
+- Standalone runtime tests are split into separate CTest executables so each
+  test file owns its own `main()`.
+
+Remaining build-system work:
+
+- Keep `src/CMakeLists.txt` aligned as compiler, solver, backend, and collective
+  subtrees graduate from scaffold to production build targets.
+- Continue validating MLIR dialect registration and TableGen targets for each
+  component in a full monorepo build when LLVM/MLIR are available.
+- Expand CI beyond the CPU spine once CUDA/HIP/NCCL execution paths are real and
+  deterministic enough for automated validation.

@@ -45,6 +45,20 @@ def test_unit_plan_covers_core_compiler_modules():
         assert row in text
 
 
+def test_compiler_test_plan_documents_project_level_evals():
+    text = PLAN.read_text(encoding="utf-8")
+
+    expected_eval_topics = [
+        "Project-Level Eval Matrix",
+        "Spec conformance",
+        "End-to-end compiler evals",
+        "Documentation evals",
+        "Sample/tutorial evals",
+    ]
+    for topic in expected_eval_topics:
+        assert topic in text
+
+
 def test_transformer_proxy_exercises_all_documented_python_ir_layers():
     @ts.jit
     def block(x, wq, wk, wv, wo):

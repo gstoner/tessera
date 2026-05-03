@@ -1,0 +1,353 @@
+schema_version: 1
+description: >
+  Curated Tessera knowledge map for agents developing documentation, examples,
+  and code. This map points to existing authorities and implementation surfaces;
+  it does not replace canonical specs.
+
+entities:
+  - id: doc.documentation_authority_tree
+    type: doc
+    name: Documentation Authority Tree
+    description: "Conflict-resolution order for Tessera documentation and phase/status claims."
+    authority: normative
+    references:
+      - path: docs/README.md
+
+  - id: doc.canonical_api
+    type: doc
+    name: Canonical API
+    description: "Single naming authority for public Tessera APIs and current syntax."
+    authority: normative
+    references:
+      - path: docs/CANONICAL_API.md
+
+  - id: doc.compiler_reference
+    type: doc
+    name: Compiler Reference
+    description: "Canonical compiler architecture, IR stack, pass registry, and phase status."
+    authority: normative
+    references:
+      - path: docs/spec/COMPILER_REFERENCE.md
+
+  - id: doc.python_api_spec
+    type: doc
+    name: Python API Spec
+    description: "Normative public Python API surface and import paths."
+    authority: normative
+    references:
+      - path: docs/spec/PYTHON_API_SPEC.md
+
+  - id: doc.lowering_pipeline_spec
+    type: doc
+    name: Lowering Pipeline Spec
+    description: "Named lowering pipelines, pass order, and input/output contracts."
+    authority: normative
+    references:
+      - path: docs/spec/LOWERING_PIPELINE_SPEC.md
+
+  - id: doc.glossary
+    type: doc
+    name: Glossary
+    description: "Plain-language terminology guide that defers normative definitions to canonical specs."
+    authority: informative
+    references:
+      - path: docs/GLOSSARY.md
+
+  - id: api.python_frontend
+    type: api
+    name: Python Frontend API
+    description: "@tessera.jit, @tessera.kernel, Region, domain, dist, array, ops, and index_launch."
+    authority: normative
+    references:
+      - path: docs/CANONICAL_API.md
+      - path: docs/spec/PYTHON_API_SPEC.md
+      - path: python/tessera/__init__.py
+      - path: python/tessera/compiler/jit.py
+
+  - id: ir.graph
+    type: ir_layer
+    name: Graph IR
+    description: "First compiler IR layer for algebraic ops, effects, shapes, and distributed intent."
+    authority: normative
+    references:
+      - path: docs/spec/GRAPH_IR_SPEC.md
+      - path: src/compiler/ir/TesseraOps.td
+      - path: python/tessera/compiler/graph_ir.py
+
+  - id: ir.schedule
+    type: ir_layer
+    name: Schedule IR
+    description: "Second compiler IR layer for tiled, fused, pipelined, and distributed scheduling."
+    authority: normative
+    references:
+      - path: docs/spec/TARGET_IR_SPEC.md
+      - path: docs/architecture/Compiler/Tessera_Compiler_ScheduleIR_Design.md
+      - path: src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td
+
+  - id: ir.tile
+    type: ir_layer
+    name: Tile IR
+    description: "Third compiler IR layer for blocks, warps, fragments, memory movement, and MMA primitives."
+    authority: normative
+    references:
+      - path: docs/spec/TILE_IR.md
+      - path: docs/spec/TARGET_IR_SPEC.md
+      - path: src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td
+
+  - id: ir.target
+    type: ir_layer
+    name: Target IR
+    description: "Final compiler IR layer for backend-specific intrinsics and target lowering."
+    authority: normative
+    references:
+      - path: docs/spec/TARGET_IR_SPEC.md
+      - path: docs/architecture/Compiler/Tessera_Compiler_TargetIR_Design.md
+      - path: src/compiler/mlir/lib/Target/TesseraTargetIR.cpp
+
+  - id: pass.lower_to_x86
+    type: pass
+    name: tessera-lower-to-x86
+    description: "Named CPU lowering pipeline for Graph/Schedule/Tile/Target IR to x86-oriented artifacts."
+    authority: normative
+    references:
+      - path: docs/spec/LOWERING_PIPELINE_SPEC.md
+      - path: docs/spec/COMPILER_REFERENCE.md
+      - path: tests/tessera-ir/phase2/full_pipeline.mlir
+
+  - id: pass.lower_to_gpu
+    type: pass
+    name: tessera-lower-to-gpu
+    description: "Named NVIDIA GPU lowering pipeline for SM90+ target paths."
+    authority: normative
+    references:
+      - path: docs/spec/LOWERING_PIPELINE_SPEC.md
+      - path: docs/spec/COMPILER_REFERENCE.md
+      - path: tests/tessera-ir/phase3/tile_ir_lowering.mlir
+
+  - id: backend.x86
+    type: backend
+    name: x86 AMX/AVX512 Backend
+    description: "CPU backend and proxy execution path used for default local validation."
+    authority: normative
+    references:
+      - path: docs/spec/COMPILER_REFERENCE.md
+      - path: src/compiler/codegen/tessera_x86_backend/CMakeLists.txt
+      - path: src/runtime/src/backend/cpu_backend.cpp
+
+  - id: backend.nvidia_gpu
+    type: backend
+    name: NVIDIA GPU Backend
+    description: "CUDA/SM90+ backend surface for GPU lowering, WGMMA, TMA, and hardware-marked tests."
+    authority: normative
+    references:
+      - path: docs/spec/TARGET_IR_SPEC.md
+      - path: python/tessera/compiler/gpu_target.py
+      - path: src/runtime/src/backend/cuda_backend.cpp
+
+  - id: backend.rocm
+    type: backend
+    name: ROCm Backend
+    description: "AMD ROCm backend surface for HIP runtime integration and MFMA coverage."
+    authority: normative
+    references:
+      - path: docs/spec/COMPILER_REFERENCE.md
+      - path: src/compiler/codegen/Tessera_ROCM_Backend/CMakeLists.txt
+      - path: src/runtime/src/backend/hip_backend.cpp
+
+  - id: backend.tpu
+    type: backend
+    name: TPU StableHLO Backend
+    description: "TPU target planning and StableHLO export surface."
+    authority: normative
+    references:
+      - path: docs/spec/COMPILER_REFERENCE.md
+      - path: python/tessera/compiler/tpu_target.py
+      - path: tests/tessera-ir/phase4/tpu_shardy_export.mlir
+
+  - id: runtime.c_abi
+    type: runtime_component
+    name: Runtime C ABI
+    description: "C ABI types, status codes, context lifecycle, memory, launch, and backend contracts."
+    authority: normative
+    references:
+      - path: docs/spec/RUNTIME_ABI_SPEC.md
+      - path: src/runtime/include/tessera/tessera_runtime.h
+      - path: src/runtime/src/tessera_runtime.cpp
+
+  - id: runtime.profiler
+    type: runtime_component
+    name: Tessera Profiler
+    description: "Runtime metrics, Chrome trace export, Perfetto export, and profiling CLI surface."
+    authority: informative
+    references:
+      - path: docs/guides/Tessera_Profiling_And_Autotuning_Guide.md
+      - path: tools/profiler/README.md
+      - path: python/tessera/profiler.py
+
+  - id: concept.shape_layout
+    type: concept
+    name: Shape And Layout System
+    description: "Shape inference, symbolic dimensions, layout legality, shard metadata, and schedule feasibility."
+    authority: normative
+    references:
+      - path: docs/spec/SHAPE_SYSTEM.md
+      - path: docs/guides/Tessera_Tensor_Layout_And_Data_Movement_Guide.md
+      - path: python/tessera/shape.py
+
+  - id: concept.diagnostics
+    type: concept
+    name: Diagnostics And Error Handling
+    description: "Stable compiler/runtime error categories, source context, and failure reporting."
+    authority: normative
+    references:
+      - path: docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md
+      - path: python/tessera/diagnostics.py
+      - path: tests/unit/test_error_reporter.py
+
+  - id: example.getting_started_basic_tensor_ops
+    type: example
+    name: Basic Tensor Ops Example
+    description: "Getting-started Python example for canonical Tessera tensor operations."
+    authority: informative
+    references:
+      - path: examples/getting_started/basic_tensor_ops.py
+
+  - id: example.ir_pipeline_tutorial
+    type: example
+    name: IR Pipeline Tutorial
+    description: "Compiler tutorial for inspecting the Tessera IR pipeline from Python."
+    authority: informative
+    references:
+      - path: examples/compiler/ir_pipeline_tutorial/README.md
+      - path: examples/compiler/ir_pipeline_tutorial/tessera_ir_pipeline_demo.py
+
+  - id: test.unit
+    type: test_suite
+    name: Unit Tests
+    description: "Fast correctness contracts for Python compiler APIs, IR emission, pass preconditions, and docs drift."
+    authority: normative
+    references:
+      - path: tests/unit
+      - path: tests/COMPILER_TEST_PLAN.md
+
+  - id: test.mlir_lit
+    type: test_suite
+    name: MLIR Lit Tests
+    description: "FileCheck-based C++/MLIR pass and pipeline contracts."
+    authority: normative
+    references:
+      - path: tests/tessera-ir
+      - path: tests/tessera-ir/lit.cfg.py
+
+  - id: test.numerical_validation
+    type: test_suite
+    name: Numerical Validation
+    description: "Reference-vs-runtime comparisons for supported operators and backend modes."
+    authority: normative
+    references:
+      - path: tests/tessera_numerical_validation
+      - path: tests/tessera_numerical_validation/README.md
+
+  - id: test.performance
+    type: test_suite
+    name: Performance Tests
+    description: "Deterministic roofline/proxy performance contracts and benchmark schema checks."
+    authority: normative
+    references:
+      - path: tests/performance
+      - path: benchmarks/run_all.py
+
+relations:
+  - source: api.python_frontend
+    relation: defined_by
+    target: doc.canonical_api
+  - source: api.python_frontend
+    relation: implemented_in
+    target: python/tessera/compiler/jit.py
+  - source: api.python_frontend
+    relation: tested_by
+    target: test.unit
+  - source: ir.graph
+    relation: lowers_to
+    target: ir.schedule
+  - source: ir.schedule
+    relation: lowers_to
+    target: ir.tile
+  - source: ir.tile
+    relation: lowers_to
+    target: ir.target
+  - source: ir.graph
+    relation: defined_by
+    target: docs/spec/GRAPH_IR_SPEC.md
+  - source: pass.lower_to_x86
+    relation: depends_on
+    target: ir.target
+  - source: pass.lower_to_gpu
+    relation: depends_on
+    target: backend.nvidia_gpu
+  - source: backend.x86
+    relation: tested_by
+    target: test.unit
+  - source: backend.nvidia_gpu
+    relation: tested_by
+    target: test.mlir_lit
+  - source: runtime.c_abi
+    relation: defined_by
+    target: docs/spec/RUNTIME_ABI_SPEC.md
+  - source: runtime.profiler
+    relation: explained_by
+    target: docs/guides/Tessera_Profiling_And_Autotuning_Guide.md
+  - source: concept.shape_layout
+    relation: defined_by
+    target: docs/spec/SHAPE_SYSTEM.md
+  - source: concept.diagnostics
+    relation: explained_by
+    target: docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md
+  - source: example.getting_started_basic_tensor_ops
+    relation: depends_on
+    target: api.python_frontend
+  - source: example.ir_pipeline_tutorial
+    relation: depends_on
+    target: ir.graph
+  - source: test.numerical_validation
+    relation: depends_on
+    target: api.python_frontend
+  - source: doc.canonical_api
+    relation: supersedes
+    target: docs/archive/pre_canonical/api
+    historical: true
+    authoritative: false
+  - source: doc.compiler_reference
+    relation: phase_status
+    target: doc.documentation_authority_tree
+
+agent_workflows:
+  write_or_update_docs:
+    goal: "Keep documentation aligned with canonical authorities."
+    steps:
+      - "Read docs/README.md to identify the normative authority for the topic."
+      - "Use this knowledge map to find related guides, tests, examples, and implementation surfaces."
+      - "Use canonical API names from docs/CANONICAL_API.md and docs/spec/PYTHON_API_SPEC.md."
+      - "Avoid archive docs as authority; cite them only as historical background."
+      - "Run docs lint and any targeted tests for changed claims."
+  create_examples_or_tutorials:
+    goal: "Create runnable examples that match current APIs and implementation status."
+    steps:
+      - "Start from examples/getting_started or examples/compiler for style and structure."
+      - "Check docs/CANONICAL_API.md before introducing public API calls."
+      - "Prefer CPU-promised paths unless the example is explicitly hardware-marked."
+      - "Add or update sample tests when the example becomes part of active documentation."
+  plan_code_changes:
+    goal: "Use the map to locate specs, source files, and tests before editing code."
+    steps:
+      - "Identify the entity for the target subsystem."
+      - "Read its normative references before implementation."
+      - "Inspect implemented_in and tested_by targets before editing."
+      - "Update docs or examples when public behavior changes."
+  check_api_or_status_claims:
+    goal: "Prevent stale public claims in generated content."
+    steps:
+      - "Resolve conflicts through docs/README.md."
+      - "Check docs/CANONICAL_API.md for names and syntax."
+      - "Check docs/spec/COMPILER_REFERENCE.md for compiler status and phase labels."
+      - "Check tests/COMPILER_TEST_PLAN.md for validation expectations."

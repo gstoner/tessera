@@ -1,0 +1,53 @@
+schema_version: 1
+description: >
+  Stable vocabulary for Tessera agent context maps. This file defines the
+  allowed entity types, relation types, and required entity fields. Normative
+  project claims remain governed by docs/README.md and the canonical specs.
+
+required_entity_fields:
+  - id
+  - type
+  - name
+  - description
+  - authority
+  - references
+
+entity_types:
+  concept:
+    description: "A project concept such as tiling, effects, conformance, or diagnostics."
+  api:
+    description: "A public Python, CLI, runtime, or ABI surface."
+  ir_layer:
+    description: "One layer in the Tessera compiler IR stack."
+  dialect:
+    description: "An MLIR dialect or operation family."
+  pass:
+    description: "A compiler pass or named lowering pipeline."
+  backend:
+    description: "A hardware or runtime target backend."
+  runtime_component:
+    description: "A runtime subsystem, ABI component, profiler, or execution adapter."
+  doc:
+    description: "A documentation authority, guide, tutorial, or reference page."
+  example:
+    description: "A runnable or instructional example."
+  test_suite:
+    description: "A test family, validation suite, or benchmark gate."
+
+relation_types:
+  defined_by:
+    description: "The entity's authoritative definition is in the target doc or entity."
+  implemented_in:
+    description: "The entity is implemented or scaffolded in the target source path or component."
+  tested_by:
+    description: "The entity is covered by the target test suite."
+  explained_by:
+    description: "The entity is explained by the target guide, tutorial, or README."
+  depends_on:
+    description: "The entity needs the target concept or component to be understood or changed safely."
+  lowers_to:
+    description: "The source IR layer or construct lowers into the target IR layer or construct."
+  supersedes:
+    description: "The source entity replaces or overrides the target historical entity."
+  phase_status:
+    description: "The entity's implementation/planning status is described by the target status entity or doc."

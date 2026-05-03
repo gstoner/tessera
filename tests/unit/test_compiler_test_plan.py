@@ -79,6 +79,6 @@ def test_transformer_proxy_exercises_all_documented_python_ir_layers():
     artifacts = {artifact.level: artifact.text for artifact in block.lowering_artifacts()}
     assert set(artifacts) == {"graph", "schedule", "tile", "target"}
     assert "tessera.matmul" in artifacts["graph"]
-    assert "tessera.schedule.tile" in artifacts["schedule"]
+    assert "schedule.tile" in artifacts["schedule"]
     assert "stable_reduction" in artifacts["tile"]
     assert "tessera.cpu.matmul" in artifacts["target"]

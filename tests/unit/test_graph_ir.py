@@ -206,7 +206,7 @@ class TestGraphIRBuilder:
         builder = GraphIRBuilder()
         fn_ir = builder.lower(gemm_fn)
         op_names = [op.op_name for op in fn_ir.body]
-        assert any("gemm" in name for name in op_names)
+        assert "tessera.matmul" in op_names
 
     def test_lower_multiple_functions(self):
         def f(x):

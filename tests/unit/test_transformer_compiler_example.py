@@ -78,7 +78,7 @@ def test_transformer_attention_block_compiles_and_executes_cpu_dataflow():
     assert transformer_attention_block.uses_compiled_path
     artifacts = {artifact.level: artifact.text for artifact in transformer_attention_block.lowering_artifacts()}
     assert set(artifacts) == {"graph", "schedule", "tile", "target"}
-    assert artifacts["schedule"].count("tessera.schedule.tile") == 6
+    assert artifacts["schedule"].count("schedule.tile") == 6
     assert "layout_transform" in artifacts["tile"]
     assert "stable_reduction" in artifacts["tile"]
     assert artifacts["target"].count("tessera.cpu.matmul") == 6

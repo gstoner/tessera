@@ -19,10 +19,11 @@ from typing import Any, Mapping, Optional, Sequence
 import numpy as np
 
 from .graph_ir import GraphIRFunction, GraphIRModule, IROp
-from .op_catalog import GRAPH_OP_TO_SPEC, SUPPORTED_CPU_OPS
+from .op_catalog import GRAPH_OP_TO_SPEC, LEGACY_GRAPH_OP_ALIASES, SUPPORTED_CPU_OPS, canonical_graph_op_name
 
 
 MATMUL_OPS = {"tessera.matmul", "tessera.gemm"}
+CONV2D_OPS = {"tessera.conv2d_nhwc", "tessera.conv2d"}
 UNARY_OPS = {
     "tessera.layer_norm",
     "tessera.relu",
@@ -153,7 +154,7 @@ def build_cpu_plan(
     if not fn.body:
         return None
     for op in fn.body:
-        if op.op_name not in SUPPORTED_CPU_OPS or not _valid_arity(op):
+        if _canonical_op_name(op.op_name) not in SUPPORTED_CPU_OPS or not _valid_arity(op):
             return None
         operand_names = tuple(_operand_name(operand) for operand in op.operands)
         if any(not name or name == "?" for name in operand_names):
@@ -195,7 +196,7 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
     fn = module.functions[0]
     if not fn.body:
         return JitDiagnostic("warning", "JIT_EAGER_FALLBACK_EMPTY", "no Graph IR function body was emitted")
-    unsupported = [op for op in fn.body if op.op_name not in SUPPORTED_CPU_OPS]
+    unsupported = [op for op in fn.body if _canonical_op_name(op.op_name) not in SUPPORTED_CPU_OPS]
     if unsupported:
         names = ", ".join(sorted(SUPPORTED_CPU_OPS))
         seen = unsupported[0].op_name
@@ -243,17 +244,48 @@ def _render_schedule_ir(
     for idx, op in enumerate(ops):
         operand_names = tuple(_operand_name(operand) for operand in op.operands)
         operand_attr = ", ".join(f'"{name}"' for name in operand_names)
-        if op.op_name in MATMUL_OPS:
+        op_name = _canonical_op_name(op.op_name)
+        if op_name in MATMUL_OPS:
             lines.append(
-                f'    "tessera.schedule.tile"() {{source = "{op.op_name}", result = "{op.result}", ordinal = {idx} : i64, tile_m = {tile_m} : i64, tile_n = {tile_n} : i64, tile_k = {tile_k} : i64}} : () -> ()'
+                f'    "schedule.tile"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, tile_m = {tile_m} : i64, tile_n = {tile_n} : i64, tile_k = {tile_k} : i64}} : () -> ()'
+            )
+        elif op_name in CONV2D_OPS:
+            lines.append(
+                f'    "schedule.tile"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, tile_h = 16 : i64, tile_w = 16 : i64, tile_c = 32 : i64}} : () -> ()'
+            )
+        elif op_name == "tessera.flash_attn":
+            lines.append(
+                f'    "schedule.pipeline.region"() ({{'
+            )
+            lines.append(
+                f'      "schedule.stage"() ({{'
+            )
+            lines.append(
+                f'        "schedule.prefetch"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, into = "shared", overlap = "compute", tile_q = 64 : i64, tile_kv = 64 : i64}} : () -> ()'
+            )
+            lines.append(
+                f'        "schedule.yield"() : () -> ()'
+            )
+            lines.append(
+                f'      }}) {{devices = [0]}} : () -> ()'
+            )
+            lines.append(
+                f'      "schedule.yield"() : () -> ()'
+            )
+            lines.append(
+                f'    }}) {{schedule = "fa4", micro_batches = 1 : i32, source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64}} : () -> ()'
             )
         else:
             lines.append(
-                f'    "tessera.schedule.elementwise"() {{source = "{op.op_name}", result = "{op.result}", ordinal = {idx} : i64, vectorize = true}} : () -> ()'
+                f'    "schedule.elementwise"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, vectorize = true}} : () -> ()'
             )
         lines.append(
-            f'    "tessera.schedule.layout"() {{operands = [{operand_attr}], layout = "row_major", ordinal = {idx} : i64}} : () -> ()'
+            f'    "schedule.layout"() {{operands = [{operand_attr}], layout = "row_major", ordinal = {idx} : i64}} : () -> ()'
         )
+        if op_name.startswith("tessera.kv_cache."):
+            lines.append(
+                f'    "schedule.prefetch"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, into = "shared", overlap = "compute"}} : () -> ()'
+            )
     lines.extend([
         f'  }}) {{sym_name = "{fn.name}", target = "cpu"}} : () -> ()',
         "}",
@@ -267,9 +299,24 @@ def _render_tile_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
         f'  "tessera.tile.func"() ({{',
     ]
     for idx, op in enumerate(ops):
+        op_name = _canonical_op_name(op.op_name)
         lines.append(
-            f'    "{_tile_op_name(op.op_name)}"() {{source = "{op.op_name}", result = "{op.result}", ordinal = {idx} : i64, lowering = "{_lowering_kind(op.op_name)}", vectorize = true}} : () -> ()'
+            f'    "{_tile_op_name(op_name)}"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, lowering = "{_lowering_kind(op_name)}", vectorize = true}} : () -> ()'
         )
+        if op_name == "tessera.flash_attn":
+            lines.append(
+                f'    "tile.async_copy"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, stage = 0 : i32, vector = 16 : i32}} : () -> ()'
+            )
+            lines.append(
+                f'    "tessera.attn.online_softmax"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, policy = "safe"}} : () -> ()'
+            )
+            lines.append(
+                f'    "tile.wait_async"() {{stage = 0 : i32}} : () -> ()'
+            )
+        if op_name.startswith("tessera.kv_cache."):
+            lines.append(
+                f'    "tile.kv_cache"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, storage = "paged"}} : () -> ()'
+            )
     lines.extend([
         f'  }}) {{sym_name = "{fn.name}", target = "cpu"}} : () -> ()',
         "}",
@@ -283,8 +330,9 @@ def _render_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
         f'  "tessera.cpu.func"() ({{',
     ]
     for idx, op in enumerate(ops):
+        op_name = _canonical_op_name(op.op_name)
         lines.append(
-            f'    "{_target_op_name(op.op_name)}"() {{source = "{op.op_name}", result = "{op.result}", ordinal = {idx} : i64, abi = "numpy"}} : () -> ()'
+            f'    "{_target_op_name(op_name)}"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, abi = "numpy"}} : () -> ()'
         )
     lines.extend([
         f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
@@ -303,14 +351,15 @@ def _validate_tile(tile: tuple[int, int, int]) -> None:
 
 
 def _valid_arity(op: IROp) -> bool:
-    spec = GRAPH_OP_TO_SPEC.get(op.op_name)
+    spec = GRAPH_OP_TO_SPEC.get(_canonical_op_name(op.op_name))
     return spec.valid_arity(len(op.operands)) if spec is not None else False
 
 
 def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[str, Any]) -> Any:
+    op_name = _canonical_op_name(op_name)
     if op_name in MATMUL_OPS:
         return np.matmul(operands[0], operands[1])
-    if op_name == "tessera.conv2d":
+    if op_name in CONV2D_OPS:
         bias = operands[2] if len(operands) > 2 else kwargs.get("bias", None)
         return _conv2d_nhwc(operands[0], operands[1], bias=bias, stride=kwargs.get("stride", 1), padding=kwargs.get("padding", 0))
     if op_name == "tessera.layer_norm":
@@ -414,22 +463,32 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
 
 
 def _tile_op_name(op_name: str) -> str:
+    op_name = _canonical_op_name(op_name)
     bare = op_name.split(".")[-1]
     if op_name in MATMUL_OPS:
-        bare = "matmul"
-    return f"tessera.tile.{bare}"
+        return "tile.mma"
+    if op_name in CONV2D_OPS:
+        return "tile.conv2d"
+    return f"tile.{bare}"
 
 
 def _target_op_name(op_name: str) -> str:
+    op_name = _canonical_op_name(op_name)
     bare = op_name.split(".")[-1]
     if op_name in MATMUL_OPS:
         bare = "matmul"
+    if op_name in CONV2D_OPS:
+        bare = "conv2d_nhwc"
     return f"tessera.cpu.{bare}"
 
 
 def _lowering_kind(op_name: str) -> str:
-    spec = GRAPH_OP_TO_SPEC.get(op_name)
+    spec = GRAPH_OP_TO_SPEC.get(_canonical_op_name(op_name))
     return spec.lowering if spec is not None else "elementwise"
+
+
+def _canonical_op_name(op_name: str) -> str:
+    return canonical_graph_op_name(LEGACY_GRAPH_OP_ALIASES.get(op_name, op_name))
 
 
 def _as_value(value: Any) -> Any:

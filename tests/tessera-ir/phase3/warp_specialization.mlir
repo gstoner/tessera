@@ -5,11 +5,11 @@
 // RUN: tessera-opt --tessera-warp-specialization %s | FileCheck %s
 
 // CHECK-LABEL: func.func @gemm_kernel
-// CHECK:       tessera.schedule.warp
+// CHECK:       schedule.warp
 // CHECK-SAME:  role = "producer"
 // CHECK:       tile.async_copy
 // CHECK:       tessera.queue.push
-// CHECK:       tessera.schedule.warp
+// CHECK:       schedule.warp
 // CHECK-SAME:  role = "consumer"
 // CHECK:       tessera.queue.pop
 // CHECK:       tile.mma

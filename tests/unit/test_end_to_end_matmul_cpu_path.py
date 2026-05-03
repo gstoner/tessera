@@ -31,10 +31,11 @@ def test_jit_gemm_lowering_artifacts_cover_all_compiler_layers():
     artifacts = {artifact.level: artifact.text for artifact in gemm.lowering_artifacts()}
 
     assert set(artifacts) == {"graph", "schedule", "tile", "target"}
-    assert "tessera.gemm" in artifacts["graph"]
-    assert "tessera.schedule.tile" in artifacts["schedule"]
+    assert "tessera.matmul" in artifacts["graph"]
+    assert "tessera.gemm" not in artifacts["graph"]
+    assert "schedule.tile" in artifacts["schedule"]
     assert "tile_m = 128" in artifacts["schedule"]
-    assert "tessera.tile.matmul" in artifacts["tile"]
+    assert "tile.mma" in artifacts["tile"]
     assert "tessera.cpu.matmul" in artifacts["target"]
     assert gemm.schedule_ir == artifacts["schedule"]
     assert gemm.tile_ir == artifacts["tile"]

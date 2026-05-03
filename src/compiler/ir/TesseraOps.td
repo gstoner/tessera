@@ -138,6 +138,33 @@ def Tessera_FusedEpilogueOp : Op<
   let hasVerifier = 1;
 }
 
+class Tessera_UnaryPureOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic,
+  [Pure, NoSideEffect]
+> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$x);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_LayerNormOp : Tessera_UnaryPureOp<"layer_norm", "LayerNorm over the innermost dimension"> {
+  let arguments = (ins TensorType:$x,
+                       OptionalAttr<F64Attr>:$eps,
+                       OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
+}
+
+def Tessera_SoftmaxOp : Tessera_UnaryPureOp<"softmax", "Softmax over an explicit or innermost axis"> {
+  let arguments = (ins TensorType:$x,
+                       OptionalAttr<I64Attr>:$axis,
+                       OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
+}
+
+def Tessera_GeluOp : Tessera_UnaryPureOp<"gelu", "Gaussian error linear unit">;
+def Tessera_ReluOp : Tessera_UnaryPureOp<"relu", "Rectified linear unit">;
+def Tessera_SigmoidOp : Tessera_UnaryPureOp<"sigmoid", "Sigmoid activation">;
+def Tessera_SinOp : Tessera_UnaryPureOp<"sin", "Sine elementwise op">;
+
 def Tessera_TransposeOp : Op<
   Tessera_Dialect, "transpose",
   [Pure, NoSideEffect]
@@ -154,6 +181,74 @@ def Tessera_CastOp : Op<
   let arguments = (ins TensorType:$x,
                         OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
   let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_DropoutOp : Op<Tessera_Dialect, "dropout", []> {
+  let summary = "Reference random dropout with optional deterministic seed";
+  let arguments = (ins TensorType:$x,
+                       OptionalAttr<F64Attr>:$p,
+                       OptionalAttr<I64Attr>:$seed,
+                       DefaultValuedAttr<BoolAttr, "true">:$training);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+class Tessera_CollectiveOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic,
+  []
+> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$x,
+                       OptionalAttr<StrAttr>:$axis,
+                       OptionalAttr<StrAttr>:$op);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_AllReduceOp : Tessera_CollectiveOp<"all_reduce", "Single-rank/reference all-reduce semantic op">;
+def Tessera_ReduceScatterOp : Tessera_CollectiveOp<"reduce_scatter", "Single-rank/reference reduce-scatter semantic op">;
+def Tessera_AllGatherOp : Tessera_CollectiveOp<"all_gather", "Single-rank/reference all-gather semantic op">;
+
+class Tessera_SpectralUnaryOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic,
+  [Pure, NoSideEffect]
+> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$x,
+                       OptionalAttr<I64Attr>:$axis);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_FFTOp : Tessera_SpectralUnaryOp<"fft", "FFT spectral transform">;
+def Tessera_IFFTOp : Tessera_SpectralUnaryOp<"ifft", "Inverse FFT spectral transform">;
+def Tessera_RFFTOp : Tessera_SpectralUnaryOp<"rfft", "Real FFT spectral transform">;
+def Tessera_IRFFTOp : Tessera_SpectralUnaryOp<"irfft", "Inverse real FFT spectral transform">;
+def Tessera_DCTOp : Tessera_SpectralUnaryOp<"dct", "Discrete cosine transform"> {
+  let arguments = (ins TensorType:$x,
+                       OptionalAttr<I64Attr>:$axis,
+                       OptionalAttr<I64Attr>:$type);
+}
+
+def Tessera_SpectralConvOp : Op<Tessera_Dialect, "spectral_conv", [Pure, NoSideEffect]> {
+  let summary = "Reference spectral convolution semantic op";
+  let arguments = (ins TensorType:$x, TensorType:$filter);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_AdamOp : Op<Tessera_Dialect, "adam", []> {
+  let summary = "Functional Adam optimizer step";
+  let arguments = (ins TensorType:$param, TensorType:$grad,
+                       TensorType:$moment1, TensorType:$moment2,
+                       OptionalAttr<F64Attr>:$lr,
+                       OptionalAttr<F64Attr>:$beta1,
+                       OptionalAttr<F64Attr>:$beta2,
+                       OptionalAttr<F64Attr>:$eps,
+                       OptionalAttr<I64Attr>:$step);
+  let results = (outs TensorType:$new_param, TensorType:$new_moment1, TensorType:$new_moment2);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 

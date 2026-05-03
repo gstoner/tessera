@@ -22,10 +22,10 @@
 // CHECK:          tessera.tma.setup_descriptor
 // CHECK:          tessera.mbarrier.arrive.expect_tx
 // CHECK:          tessera.mbarrier.try_wait.parity
-// CHECK:          tessera.schedule.warp
+// CHECK:          schedule.warp
 // CHECK-SAME:     role = "producer"
 // CHECK:          tessera.tma.copy_async
-// CHECK:          tessera.schedule.warp
+// CHECK:          schedule.warp
 // CHECK-SAME:     role = "consumer"
 // CHECK:          tessera.attn.scaled_dot_product
 // CHECK:          tessera.attn.causal_mask

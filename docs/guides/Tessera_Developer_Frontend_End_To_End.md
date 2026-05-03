@@ -49,9 +49,11 @@ def gemm_256x128(A, B):
 print(gemm_256x128.schedule_ir)
 ```
 
-The emitted Schedule IR records `tile_m = 256`, `tile_n = 128`, and
-`tile_k = 64`. Execution is still CPU/NumPy today; the tile is an inspectable
-compiler schedule artifact that will become the input to native CPU lowering.
+The public `gemm` alias lowers to the canonical Graph IR op
+`tessera.matmul`. The emitted Schedule IR records `tile_m = 256`,
+`tile_n = 128`, and `tile_k = 64`. Execution is still CPU/NumPy today; the tile
+is an inspectable compiler schedule artifact that will become the input to
+native CPU lowering.
 
 ## 2. Inspecting Compiler Layers
 
@@ -72,11 +74,14 @@ print(mm.tile_ir)
 print(mm.target_ir)
 ```
 
-The artifacts are textual today:
+The artifacts are textual today and use the same dialect names as the MLIR
+contracts where the contracts already exist:
 
-- **Graph IR:** emitted by `GraphIRBuilder`.
-- **Schedule IR:** fixed tile/layout plan for CPU execution.
-- **Tile IR:** CPU loop-nest, reduction, elementwise, or layout operations.
+- **Graph IR:** emitted by `GraphIRBuilder` with ODS-backed op spellings such
+  as `tessera.matmul` and `tessera.conv2d_nhwc`.
+- **Schedule IR:** fixed `schedule.*` tile/layout/pipeline plans for CPU
+  execution and artifact inspection.
+- **Tile IR:** `tile.*`, `tessera.attn.*`, and KV-cache contract operations.
 - **Target IR:** CPU target artifact using the NumPy ABI for execution.
 
 To see whether a function used the compiler path:
@@ -140,7 +145,7 @@ Supported:
 
 Not yet supported:
 
-- dynamic Schedule IR selection
+- cost-model driven Schedule IR selection
 - native C ABI CPU launch
 - GPU/ROCm/TPU dispatch from this frontend path
 - arbitrary Python control flow lowering
@@ -162,12 +167,13 @@ Fallback example:
 
 ```python
 @ts.jit
-def composite(x):
-    y = ts.ops.relu(x)
-    return ts.ops.softmax(y)
+def unsupported_control_flow(x):
+    if x.sum() > 0:
+        return ts.ops.relu(x)
+    return x
 
-assert not composite.uses_compiled_path
-print(composite.explain_lowering())
+assert not unsupported_control_flow.uses_compiled_path
+print(unsupported_control_flow.explain_lowering())
 ```
 
 ## 6. Next Frontend Improvements

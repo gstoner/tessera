@@ -10,10 +10,11 @@
 //
 // Inference rules:
 //   tessera.flash_attn  with dropout_p != 0.0   → random
+//   tessera.dropout                              → random
 //   tessera.copy                                 → memory
 //   schedule.prefetch / schedule.async_copy      → movement
 //   tessera.kv_cache.* / tessera.ring.*          → state
-//   tessera.collective.* / collective.*          → collective
+//   tessera.collective.* / tessera.all_reduce    → collective
 //   any arg  tessera.effect = "write"|"reduce_*" → memory
 //   func.call to an external non-tessera func    → io
 //   everything else                              → pure
@@ -91,6 +92,9 @@ struct EffectAnnotation
       return EffectLevel::Pure;
     }
 
+    if (name == "tessera.dropout")
+      return EffectLevel::Random;
+
     // Explicit copy/store has memory side-effects.
     if (name == "tessera.copy") return EffectLevel::Memory;
 
@@ -104,7 +108,10 @@ struct EffectAnnotation
         name.starts_with("cache.") || name.starts_with("ring."))
       return EffectLevel::State;
 
-    if (name.starts_with("tessera.collective.") ||
+    if (name == "tessera.all_reduce" ||
+        name == "tessera.reduce_scatter" ||
+        name == "tessera.all_gather" ||
+        name.starts_with("tessera.collective.") ||
         name.starts_with("collective."))
       return EffectLevel::Collective;
 

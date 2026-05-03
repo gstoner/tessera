@@ -1,5 +1,6 @@
 //===- ScheduleMeshPipelineOps.td - Mesh & pipeline ops ------------------*- tablegen -*-===//
 include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def ScheduleDialect : Dialect {
   let name = "schedule";
@@ -41,6 +42,58 @@ def Schedule_YieldOp : Op<ScheduleDialect, "yield",
   let builders = [OpBuilder<(ins), [{
     $_state.addTypes({});
   }]>];
+}
+
+def Schedule_TileOp : Op<ScheduleDialect, "tile"> {
+  let summary = "Materialized graph-op tile plan";
+  let arguments = (ins StrAttr:$source,
+                       StrAttr:$result,
+                       I64Attr:$ordinal,
+                       OptionalAttr<I64Attr>:$tile_m,
+                       OptionalAttr<I64Attr>:$tile_n,
+                       OptionalAttr<I64Attr>:$tile_k,
+                       OptionalAttr<I64Attr>:$tile_h,
+                       OptionalAttr<I64Attr>:$tile_w,
+                       OptionalAttr<I64Attr>:$tile_c);
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
+
+def Schedule_ElementwiseOp : Op<ScheduleDialect, "elementwise"> {
+  let summary = "Materialized elementwise or reduction schedule plan";
+  let arguments = (ins StrAttr:$source,
+                       StrAttr:$result,
+                       I64Attr:$ordinal,
+                       DefaultValuedAttr<BoolAttr, "true">:$vectorize);
+  let assemblyFormat = "attr-dict";
+}
+
+def Schedule_LayoutOp : Op<ScheduleDialect, "layout"> {
+  let summary = "Layout decision attached to scheduled operands";
+  let arguments = (ins ArrayAttr:$operands,
+                       StrAttr:$layout,
+                       I64Attr:$ordinal);
+  let assemblyFormat = "attr-dict";
+}
+
+def Schedule_WarpOp : Op<ScheduleDialect, "warp"> {
+  let summary = "Warp role region for producer/consumer specialization";
+  let arguments = (ins StrAttr:$role,
+                       OptionalAttr<I32Attr>:$count);
+  let regions = (region AnyRegion:$body);
+  let assemblyFormat = "attr-dict-with-keyword $body";
+  let hasVerifier = 1;
+}
+
+def Schedule_OptimizerShardOp : Op<ScheduleDialect, "optimizer_shard"> {
+  let summary = "Optimizer-state sharding plan metadata";
+  let arguments = (ins AnyType:$subject,
+                       StrAttr:$axis,
+                       OptionalAttr<StrAttr>:$policy,
+                       OptionalAttr<I64Attr>:$partitions);
+  let results = (outs AnyType:$sharded);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($sharded)";
+  let hasVerifier = 1;
 }
 
 def Schedule_MemorySpaceAttr : StrEnumAttr<"MemorySpace", "memory space",

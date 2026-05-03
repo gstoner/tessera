@@ -17,6 +17,8 @@ def test_ops_registry_contains_reference_ops():
 def test_op_catalog_is_consistent_across_frontend_and_cpu():
     assert set(_OpExtractor._OP_MAP) == set(OP_SPECS)
     assert set(_OpExtractor._OP_MAP.values()) == set(SUPPORTED_CPU_OPS)
+    assert GRAPH_OP_MAP["gemm"] == "tessera.matmul"
+    assert GRAPH_OP_MAP["conv2d"] == "tessera.conv2d_nhwc"
     assert GRAPH_OP_MAP["kv_cache_append"] == "tessera.kv_cache.append"
 
 
@@ -109,6 +111,8 @@ def test_jit_cpu_executes_conv2d_nhwc_reference():
     expected = np.array([[[[8.0], [12.0]], [[20.0], [24.0]]]], dtype=np.float32)
     np.testing.assert_allclose(conv(x, w), expected)
     assert conv.uses_compiled_path
+    assert "tessera.conv2d_nhwc" in conv.ir_text()
+    assert "tessera.conv2d(" not in conv.ir_text()
 
 
 def test_jit_cpu_executes_seeded_dropout_and_collective_stubs():

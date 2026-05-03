@@ -14,12 +14,12 @@
 //
 // Output IR structure:
 //
-//   tessera.schedule.warp {role = "producer"} {
+//   schedule.warp {role = "producer"} {
 //     tile.async_copy(...)
 //     %q = tessera.queue.create
 //     tessera.queue.push %q, %tile
 //   }
-//   tessera.schedule.warp {role = "consumer"} {
+//   schedule.warp {role = "consumer"} {
 //     %q  = tessera.queue.create
 //     %t  = tessera.queue.pop %q, %dep
 //     tile.mma(%t, ...)
@@ -29,6 +29,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/OpDefinition.h"
@@ -43,11 +44,11 @@ namespace tessera {
 namespace {
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helper: create a tessera.schedule.warp region op with a given role attr.
+// Helper: create a schedule.warp region op with a given role attr.
 // ─────────────────────────────────────────────────────────────────────────────
 static Operation *createWarpRegion(OpBuilder &b, Location loc,
                                     StringRef role) {
-  OperationState st(loc, "tessera.schedule.warp");
+  OperationState st(loc, "schedule.warp");
   st.addAttribute("role", b.getStringAttr(role));
   // Single-block region; caller fills it with ops.
   st.addRegion();

@@ -13,7 +13,7 @@ Output format (MLIR text):
     func.func @step(%W: tensor<*xbf16> {tessera.effect = "read"},
                     %X: tensor<*xbf16> {tessera.effect = "read"},
                     %Y: tensor<*xbf16> {tessera.effect = "write"}) {
-      %0 = tessera.gemm(%X, %W) : (tensor<*xbf16>, tensor<*xbf16>) -> tensor<*xbf16>
+      %0 = tessera.matmul(%X, %W) : (tensor<*xbf16>, tensor<*xbf16>) -> tensor<*xbf16>
       tessera.copy %0, %Y : tensor<*xbf16>
       return
     }
@@ -146,7 +146,7 @@ class IRArg:
 class IROp:
     """A single emitted op in the Graph IR function body."""
     result: Optional[str]     # None for void ops (e.g. copy/store)
-    op_name: str              # e.g. "tessera.gemm"
+    op_name: str              # e.g. "tessera.matmul"
     operands: List[str]       # e.g. ["%X", "%W"]
     operand_types: List[str]  # e.g. ["tensor<*xbf16>", "tensor<*xbf16>"]
     result_type: Optional[str] = None

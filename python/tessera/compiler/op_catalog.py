@@ -25,9 +25,9 @@ class OpSpec:
 
 
 _SPECS = [
-    OpSpec("gemm", "tessera.gemm", 2, 2, lowering="loop_nest"),
+    OpSpec("gemm", "tessera.matmul", 2, 2, lowering="loop_nest"),
     OpSpec("matmul", "tessera.matmul", 2, 2, lowering="loop_nest"),
-    OpSpec("conv2d", "tessera.conv2d", 2, 4, lowering="stencil"),
+    OpSpec("conv2d", "tessera.conv2d_nhwc", 2, 4, lowering="stencil"),
     OpSpec("layer_norm", "tessera.layer_norm", 1, 1, lowering="normalization"),
     OpSpec("softmax", "tessera.softmax", 1, 1, lowering="stable_reduction"),
     OpSpec("softmax_safe", "tessera.softmax_safe", 1, 1, lowering="stable_reduction"),
@@ -59,6 +59,10 @@ OP_SPECS: dict[str, OpSpec] = {spec.public_name: spec for spec in _SPECS}
 GRAPH_OP_TO_SPEC: dict[str, OpSpec] = {spec.graph_name: spec for spec in _SPECS}
 GRAPH_OP_MAP: dict[str, str] = {spec.public_name: spec.graph_name for spec in _SPECS}
 SUPPORTED_CPU_OPS: frozenset[str] = frozenset(GRAPH_OP_TO_SPEC)
+LEGACY_GRAPH_OP_ALIASES: dict[str, str] = {
+    "tessera.gemm": "tessera.matmul",
+    "tessera.conv2d": "tessera.conv2d_nhwc",
+}
 
 
 def normalize_op_name(name: str) -> str:
@@ -89,12 +93,20 @@ def graph_name_for(name: str) -> Optional[str]:
     return spec.graph_name if spec is not None else None
 
 
+def canonical_graph_op_name(name: str) -> str:
+    """Return the ODS-backed canonical Graph IR op name."""
+
+    return LEGACY_GRAPH_OP_ALIASES.get(name, name)
+
+
 __all__ = [
     "GRAPH_OP_MAP",
     "GRAPH_OP_TO_SPEC",
+    "LEGACY_GRAPH_OP_ALIASES",
     "OP_SPECS",
     "SUPPORTED_CPU_OPS",
     "OpSpec",
+    "canonical_graph_op_name",
     "get_op_spec",
     "graph_name_for",
     "normalize_op_name",

@@ -123,21 +123,20 @@ struct DeltaArrayAttr : public Attribute::AttrBase<DeltaArrayAttr, Attribute,
 // Dialect definition
 // ---------------------------------------------------------------------------
 
+// Forward declarations for the hand-written ops registered by the dialect.
+// Definitions follow below the dialect class.
+struct CreateTopologyOp;
+struct HaloRegionOp;
+struct HaloExchangeOp;
+struct NeighborReadOp;
+struct StencilDefineOp;
+struct StencilApplyOp;
+struct PipelineConfigOp;
+
 class NeighborsDialect : public Dialect {
 public:
-  explicit NeighborsDialect(MLIRContext *ctx)
-      : Dialect(getDialectNamespace(), ctx,
-                TypeID::get<NeighborsDialect>()) {
-    // Register types
-    addTypes<TopologyType, HaloType>();
-    // Register attributes
-    addAttributes<DeltaArrayAttr>();
-    // Register ops (bodies defined below as Op structs)
-    addOperations<
-#define GET_OP_LIST
-#include "NeighborsOps.cpp.inc"
-    >();
-  }
+  // Defined out-of-line below — needs the Op struct definitions in scope.
+  explicit NeighborsDialect(MLIRContext *ctx);
 
   static llvm::StringRef getDialectNamespace() {
     return "tessera.neighbors";
@@ -385,6 +384,20 @@ struct PipelineConfigOp
   }
   LogicalResult verify() { return success(); }
 };
+
+// ---------------------------------------------------------------------------
+// Out-of-line dialect constructor — Op structs above must be in scope.
+// ---------------------------------------------------------------------------
+
+NeighborsDialect::NeighborsDialect(MLIRContext *ctx)
+    : Dialect(getDialectNamespace(), ctx,
+              TypeID::get<NeighborsDialect>()) {
+  addTypes<TopologyType, HaloType>();
+  addAttributes<DeltaArrayAttr>();
+  addOperations<CreateTopologyOp, HaloRegionOp, HaloExchangeOp,
+                NeighborReadOp, StencilDefineOp, StencilApplyOp,
+                PipelineConfigOp>();
+}
 
 // ---------------------------------------------------------------------------
 // Factory — used by the global dialect registry

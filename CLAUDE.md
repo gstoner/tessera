@@ -46,7 +46,7 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 | Phase 4 | ✅ Complete | Distributed training — Cyclic distribution, NCCL/RCCL adapters, `CollectiveInsertionPass`, `PipelineStageInsertionPass`, TPU quantized dot, `DistributedPlan`, `PipelinePlan`, MoE helpers — 127 tests |
 | Phase 5 | ✅ Complete | Solver passes (11 core + 2 linalg + 3 SR), `BayesianAutotuner`, checkpoint decorator, `solver_config.py` — 176 tests |
 | Phase 6 | ✅ Complete | `TesseraRuntime` Python wrapper, CUDA/HIP backends (real calls), ROCm MFMA coverage, benchmark runners, `ErrorReporter`, `ShapeInferencePass` — 170 tests |
-| Phase 7 | 🔲 Next | Neighbors dialect (halo/stencil), Cerebras WSE-3 backend, Tenstorrent Metalium backend, production hardening |
+| Phase 7 | 🟡 In progress | Neighbors dialect (halo/stencil) — passes implemented & wired into `tessera-opt` (May 2026); Cerebras WSE-3 backend, Tenstorrent Metalium backend, production hardening still pending |
 | RubinCPX | ✅ Built | `tessera.target.cpx` dialect, 4 passes, `tessera-cpx-opt` driver, `TESSERA_BUILD_RUBINCPX_BACKEND` CMake option |
 
 **Total active tests: 55+ test files in `tests/unit/`; lit tests in `tests/tessera-ir/phase2–7/`.**
@@ -254,11 +254,19 @@ Default: `tile_q=64, tile_kv=64, pipeline_stages=2`. Stored as `tessera.tile_q`/
 
 ### Neighbors Dialect (Halo/Stencil)
 
-`src/compiler/tessera_neighbors/` — scaffold exists with stub `HaloInferPass`.
+`src/compiler/tessera_neighbors/` — dialect + 4 passes (HaloInfer, StencilLower, PipelineOverlap, DynamicTopology) implemented (~680 lines). Dialect and passes are registered in `tools/tessera-opt/tessera-opt.cpp` and linked via `TesseraNeighbors`.
 
-`HaloInferPass` implementation: walk `tessera.neighbors.stencil.apply` ops → read `taps` attribute → compute halo widths per axis → annotate with `halo.width = [w0, w1, ...]`.
+Each pass walks the relevant `tessera.neighbors.*` ops:
+- `HaloInferPass`: reads `taps` on `stencil.define`, computes per-axis max |Δ|, annotates `halo.width` on `stencil.apply` and any `halo.region`.
+- `StencilLowerPass`: lowers `stencil.apply` to pack/exchange/unpack calls.
+- `PipelineOverlapPass`: applies double-buffering / overlap policy.
+- `DynamicTopologyPass`: handles dynamic topology updates.
 
-Lit tests in `tests/tessera-ir/phase7/`: `halo_infer.mlir`, `stencil_lower.mlir`, `pipeline_overlap.mlir`, `dynamic_topology.mlir`, `shardy_export.mlir`.
+Lit tests in `tests/tessera-ir/phase7/`: `neighbors_halo_infer.mlir`, `neighbors_stencil_lower.mlir`, `neighbors_pipeline_overlap.mlir`, `neighbors_dynamic_topology.mlir`, `shardy_export.mlir`.
+
+Structural Python test: `tests/unit/test_neighbors_dialect.py` (7 passing, 1 behavioral test that runs `tessera-opt -tessera-halo-infer` once the binary is built).
+
+**Open work:** build `tessera-opt` against MLIR 18, run lit tests, fix any pass-body bugs the tests expose.
 
 ### Cerebras WSE-3 Backend
 

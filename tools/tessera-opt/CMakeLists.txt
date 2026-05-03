@@ -5,6 +5,7 @@ target_link_libraries(tessera-opt PRIVATE
   TesseraPasses
   tessera_solvers_passes
   tessera_linalg_solver_passes
+  TesseraNeighbors
   MLIRIR
   MLIRPass
   MLIRParser
@@ -19,4 +20,5 @@ target_include_directories(tessera-opt PRIVATE
   ${CMAKE_SOURCE_DIR}/src/solvers/core/passes
   ${CMAKE_SOURCE_DIR}/src/solvers/linalg/include
   ${CMAKE_BINARY_DIR}/src/solvers/linalg
+  ${CMAKE_SOURCE_DIR}/src/compiler/tessera_neighbors/include
 )

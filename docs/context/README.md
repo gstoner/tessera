@@ -17,10 +17,44 @@ source of truth.
 2. Use `ontology.yaml` for the allowed entity and relation vocabulary.
 3. Use `knowledge_map.yaml` to find the canonical docs, implementation files,
    tests, and examples related to a concept.
-4. When two documents conflict, prefer the normative root listed in
+4. Use generated outputs in `docs/context/generated/` for fast navigation.
+5. When two documents conflict, prefer the normative root listed in
    `docs/README.md`.
-5. Treat archived material as historical background only unless a canonical
+6. Treat archived material as historical background only unless a canonical
    spec explicitly restores the concept.
+
+## Source Files And Generated Outputs
+
+The source files are:
+
+- `ontology.yaml` — allowed entity and relation vocabulary.
+- `knowledge_map.yaml` — curated project entities, references, relations, and
+  agent workflows.
+- `tests/COMPILER_TEST_PLAN.md` — project-level eval matrix and eval tiering.
+
+Regenerate derived outputs with:
+
+```bash
+python3 scripts/generate_context_outputs.py
+```
+
+Check that committed generated outputs are current with:
+
+```bash
+python3 scripts/generate_context_outputs.py --check
+```
+
+Generated outputs live under `docs/context/generated/`:
+
+- `knowledge_graph.json` — agent-readable entity/relation graph.
+- `knowledge_index.md` — human-readable index grouped by entity type.
+- `agent_workflows.md` — rendered workflows for docs, examples, code planning,
+  and API/status checks.
+- `eval_matrix.md` — rendered project eval matrix from the compiler test plan.
+
+Generated files are derived navigation artifacts. They are not authoritative;
+agents should use them to find relevant context, then verify claims against
+canonical specs.
 
 ## Agent Workflows
 
@@ -44,3 +78,4 @@ source of truth.
   `authoritative: false`.
 - Add validation coverage before relying on new schema fields in agent
   workflows.
+- Keep generated outputs deterministic and free of wall-clock timestamps.

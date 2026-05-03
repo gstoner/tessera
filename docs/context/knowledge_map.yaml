@@ -10,6 +10,9 @@ entities:
     name: Documentation Authority Tree
     description: "Conflict-resolution order for Tessera documentation and phase/status claims."
     authority: normative
+    tags: ["docs", "authority", "source-of-truth"]
+    owner_area: docs
+    output_priority: 10
     references:
       - path: docs/README.md
 
@@ -18,6 +21,9 @@ entities:
     name: Canonical API
     description: "Single naming authority for public Tessera APIs and current syntax."
     authority: normative
+    tags: ["api", "authority", "canonical"]
+    owner_area: docs
+    output_priority: 20
     references:
       - path: docs/CANONICAL_API.md
 
@@ -26,6 +32,9 @@ entities:
     name: Compiler Reference
     description: "Canonical compiler architecture, IR stack, pass registry, and phase status."
     authority: normative
+    tags: ["compiler", "architecture", "phase-status"]
+    owner_area: compiler
+    output_priority: 30
     references:
       - path: docs/spec/COMPILER_REFERENCE.md
 
@@ -58,6 +67,9 @@ entities:
     name: Python Frontend API
     description: "@tessera.jit, @tessera.kernel, Region, domain, dist, array, ops, and index_launch."
     authority: normative
+    tags: ["api", "python", "frontend"]
+    owner_area: python
+    output_priority: 40
     references:
       - path: docs/CANONICAL_API.md
       - path: docs/spec/PYTHON_API_SPEC.md
@@ -69,6 +81,9 @@ entities:
     name: Graph IR
     description: "First compiler IR layer for algebraic ops, effects, shapes, and distributed intent."
     authority: normative
+    tags: ["ir", "compiler", "graph"]
+    owner_area: compiler
+    output_priority: 50
     references:
       - path: docs/spec/GRAPH_IR_SPEC.md
       - path: src/compiler/ir/TesseraOps.td
@@ -79,6 +94,9 @@ entities:
     name: Schedule IR
     description: "Second compiler IR layer for tiled, fused, pipelined, and distributed scheduling."
     authority: normative
+    tags: ["ir", "compiler", "schedule"]
+    owner_area: compiler
+    output_priority: 60
     references:
       - path: docs/spec/TARGET_IR_SPEC.md
       - path: docs/architecture/Compiler/Tessera_Compiler_ScheduleIR_Design.md
@@ -89,6 +107,9 @@ entities:
     name: Tile IR
     description: "Third compiler IR layer for blocks, warps, fragments, memory movement, and MMA primitives."
     authority: normative
+    tags: ["ir", "compiler", "tile"]
+    owner_area: compiler
+    output_priority: 70
     references:
       - path: docs/spec/TILE_IR.md
       - path: docs/spec/TARGET_IR_SPEC.md
@@ -99,6 +120,9 @@ entities:
     name: Target IR
     description: "Final compiler IR layer for backend-specific intrinsics and target lowering."
     authority: normative
+    tags: ["ir", "compiler", "target"]
+    owner_area: compiler
+    output_priority: 80
     references:
       - path: docs/spec/TARGET_IR_SPEC.md
       - path: docs/architecture/Compiler/Tessera_Compiler_TargetIR_Design.md

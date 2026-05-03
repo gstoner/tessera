@@ -12,6 +12,14 @@ required_entity_fields:
   - authority
   - references
 
+optional_entity_fields:
+  tags:
+    description: "Short retrieval labels for agent filtering and generated indexes."
+  owner_area:
+    description: "Broad project area responsible for keeping the entity current."
+  output_priority:
+    description: "Stable integer sort hint for generated human-facing outputs."
+
 entity_types:
   concept:
     description: "A project concept such as tiling, effects, conformance, or diagnostics."

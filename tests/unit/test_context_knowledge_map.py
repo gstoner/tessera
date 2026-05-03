@@ -37,14 +37,35 @@ def test_knowledge_map_entities_follow_declared_ontology():
 
     required_fields = set(ontology["required_entity_fields"])
     allowed_types = set(ontology["entity_types"])
+    optional_fields = set(ontology.get("optional_entity_fields", {}))
+    allowed_fields = required_fields | optional_fields
 
     seen_ids: set[str] = set()
     for entity in knowledge_map["entities"]:
         assert required_fields.issubset(entity), entity
+        assert set(entity).difference(allowed_fields) == set(), entity
         assert entity["type"] in allowed_types
         assert entity["id"] not in seen_ids
         seen_ids.add(entity["id"])
         assert entity["references"], entity["id"]
+
+
+def test_generated_outputs_are_marked_non_authoritative():
+    generated = CONTEXT / "generated"
+    expected_outputs = [
+        "knowledge_graph.json",
+        "knowledge_index.md",
+        "agent_workflows.md",
+        "eval_matrix.md",
+    ]
+
+    for name in expected_outputs:
+        path = generated / name
+        assert path.exists(), path
+
+    graph = _load_yaml(generated / "knowledge_graph.json")
+    assert graph["derived_artifact"] is True
+    assert graph["authoritative"] is False
 
 
 def test_knowledge_map_references_existing_repo_paths():

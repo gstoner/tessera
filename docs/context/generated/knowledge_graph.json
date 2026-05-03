@@ -1,0 +1,701 @@
+{
+  "agent_workflows": {
+    "check_api_or_status_claims": {
+      "goal": "Prevent stale public claims in generated content.",
+      "steps": [
+        "Resolve conflicts through docs/README.md.",
+        "Check docs/CANONICAL_API.md for names and syntax.",
+        "Check docs/spec/COMPILER_REFERENCE.md for compiler status and phase labels.",
+        "Check tests/COMPILER_TEST_PLAN.md for validation expectations."
+      ]
+    },
+    "create_examples_or_tutorials": {
+      "goal": "Create runnable examples that match current APIs and implementation status.",
+      "steps": [
+        "Start from examples/getting_started or examples/compiler for style and structure.",
+        "Check docs/CANONICAL_API.md before introducing public API calls.",
+        "Prefer CPU-promised paths unless the example is explicitly hardware-marked.",
+        "Add or update sample tests when the example becomes part of active documentation."
+      ]
+    },
+    "plan_code_changes": {
+      "goal": "Use the map to locate specs, source files, and tests before editing code.",
+      "steps": [
+        "Identify the entity for the target subsystem.",
+        "Read its normative references before implementation.",
+        "Inspect implemented_in and tested_by targets before editing.",
+        "Update docs or examples when public behavior changes."
+      ]
+    },
+    "write_or_update_docs": {
+      "goal": "Keep documentation aligned with canonical authorities.",
+      "steps": [
+        "Read docs/README.md to identify the normative authority for the topic.",
+        "Use this knowledge map to find related guides, tests, examples, and implementation surfaces.",
+        "Use canonical API names from docs/CANONICAL_API.md and docs/spec/PYTHON_API_SPEC.md.",
+        "Avoid archive docs as authority; cite them only as historical background.",
+        "Run docs lint and any targeted tests for changed claims."
+      ]
+    }
+  },
+  "authoritative": false,
+  "derived_artifact": true,
+  "entities": [
+    {
+      "authority": "normative",
+      "description": "@tessera.jit, @tessera.kernel, Region, domain, dist, array, ops, and index_launch.",
+      "id": "api.python_frontend",
+      "name": "Python Frontend API",
+      "output_priority": 40,
+      "owner_area": "python",
+      "references": [
+        {
+          "path": "docs/CANONICAL_API.md"
+        },
+        {
+          "path": "docs/spec/PYTHON_API_SPEC.md"
+        },
+        {
+          "path": "python/tessera/__init__.py"
+        },
+        {
+          "path": "python/tessera/compiler/jit.py"
+        }
+      ],
+      "tags": [
+        "api",
+        "python",
+        "frontend"
+      ],
+      "type": "api"
+    },
+    {
+      "authority": "normative",
+      "description": "CUDA/SM90+ backend surface for GPU lowering, WGMMA, TMA, and hardware-marked tests.",
+      "id": "backend.nvidia_gpu",
+      "name": "NVIDIA GPU Backend",
+      "references": [
+        {
+          "path": "docs/spec/TARGET_IR_SPEC.md"
+        },
+        {
+          "path": "python/tessera/compiler/gpu_target.py"
+        },
+        {
+          "path": "src/runtime/src/backend/cuda_backend.cpp"
+        }
+      ],
+      "type": "backend"
+    },
+    {
+      "authority": "normative",
+      "description": "AMD ROCm backend surface for HIP runtime integration and MFMA coverage.",
+      "id": "backend.rocm",
+      "name": "ROCm Backend",
+      "references": [
+        {
+          "path": "docs/spec/COMPILER_REFERENCE.md"
+        },
+        {
+          "path": "src/compiler/codegen/Tessera_ROCM_Backend/CMakeLists.txt"
+        },
+        {
+          "path": "src/runtime/src/backend/hip_backend.cpp"
+        }
+      ],
+      "type": "backend"
+    },
+    {
+      "authority": "normative",
+      "description": "TPU target planning and StableHLO export surface.",
+      "id": "backend.tpu",
+      "name": "TPU StableHLO Backend",
+      "references": [
+        {
+          "path": "docs/spec/COMPILER_REFERENCE.md"
+        },
+        {
+          "path": "python/tessera/compiler/tpu_target.py"
+        },
+        {
+          "path": "tests/tessera-ir/phase4/tpu_shardy_export.mlir"
+        }
+      ],
+      "type": "backend"
+    },
+    {
+      "authority": "normative",
+      "description": "CPU backend and proxy execution path used for default local validation.",
+      "id": "backend.x86",
+      "name": "x86 AMX/AVX512 Backend",
+      "references": [
+        {
+          "path": "docs/spec/COMPILER_REFERENCE.md"
+        },
+        {
+          "path": "src/compiler/codegen/tessera_x86_backend/CMakeLists.txt"
+        },
+        {
+          "path": "src/runtime/src/backend/cpu_backend.cpp"
+        }
+      ],
+      "type": "backend"
+    },
+    {
+      "authority": "normative",
+      "description": "Stable compiler/runtime error categories, source context, and failure reporting.",
+      "id": "concept.diagnostics",
+      "name": "Diagnostics And Error Handling",
+      "references": [
+        {
+          "path": "docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md"
+        },
+        {
+          "path": "python/tessera/diagnostics.py"
+        },
+        {
+          "path": "tests/unit/test_error_reporter.py"
+        }
+      ],
+      "type": "concept"
+    },
+    {
+      "authority": "normative",
+      "description": "Shape inference, symbolic dimensions, layout legality, shard metadata, and schedule feasibility.",
+      "id": "concept.shape_layout",
+      "name": "Shape And Layout System",
+      "references": [
+        {
+          "path": "docs/spec/SHAPE_SYSTEM.md"
+        },
+        {
+          "path": "docs/guides/Tessera_Tensor_Layout_And_Data_Movement_Guide.md"
+        },
+        {
+          "path": "python/tessera/shape.py"
+        }
+      ],
+      "type": "concept"
+    },
+    {
+      "authority": "normative",
+      "description": "Single naming authority for public Tessera APIs and current syntax.",
+      "id": "doc.canonical_api",
+      "name": "Canonical API",
+      "output_priority": 20,
+      "owner_area": "docs",
+      "references": [
+        {
+          "path": "docs/CANONICAL_API.md"
+        }
+      ],
+      "tags": [
+        "api",
+        "authority",
+        "canonical"
+      ],
+      "type": "doc"
+    },
+    {
+      "authority": "normative",
+      "description": "Canonical compiler architecture, IR stack, pass registry, and phase status.",
+      "id": "doc.compiler_reference",
+      "name": "Compiler Reference",
+      "output_priority": 30,
+      "owner_area": "compiler",
+      "references": [
+        {
+          "path": "docs/spec/COMPILER_REFERENCE.md"
+        }
+      ],
+      "tags": [
+        "compiler",
+        "architecture",
+        "phase-status"
+      ],
+      "type": "doc"
+    },
+    {
+      "authority": "normative",
+      "description": "Conflict-resolution order for Tessera documentation and phase/status claims.",
+      "id": "doc.documentation_authority_tree",
+      "name": "Documentation Authority Tree",
+      "output_priority": 10,
+      "owner_area": "docs",
+      "references": [
+        {
+          "path": "docs/README.md"
+        }
+      ],
+      "tags": [
+        "docs",
+        "authority",
+        "source-of-truth"
+      ],
+      "type": "doc"
+    },
+    {
+      "authority": "informative",
+      "description": "Plain-language terminology guide that defers normative definitions to canonical specs.",
+      "id": "doc.glossary",
+      "name": "Glossary",
+      "references": [
+        {
+          "path": "docs/GLOSSARY.md"
+        }
+      ],
+      "type": "doc"
+    },
+    {
+      "authority": "normative",
+      "description": "Named lowering pipelines, pass order, and input/output contracts.",
+      "id": "doc.lowering_pipeline_spec",
+      "name": "Lowering Pipeline Spec",
+      "references": [
+        {
+          "path": "docs/spec/LOWERING_PIPELINE_SPEC.md"
+        }
+      ],
+      "type": "doc"
+    },
+    {
+      "authority": "normative",
+      "description": "Normative public Python API surface and import paths.",
+      "id": "doc.python_api_spec",
+      "name": "Python API Spec",
+      "references": [
+        {
+          "path": "docs/spec/PYTHON_API_SPEC.md"
+        }
+      ],
+      "type": "doc"
+    },
+    {
+      "authority": "informative",
+      "description": "Getting-started Python example for canonical Tessera tensor operations.",
+      "id": "example.getting_started_basic_tensor_ops",
+      "name": "Basic Tensor Ops Example",
+      "references": [
+        {
+          "path": "examples/getting_started/basic_tensor_ops.py"
+        }
+      ],
+      "type": "example"
+    },
+    {
+      "authority": "informative",
+      "description": "Compiler tutorial for inspecting the Tessera IR pipeline from Python.",
+      "id": "example.ir_pipeline_tutorial",
+      "name": "IR Pipeline Tutorial",
+      "references": [
+        {
+          "path": "examples/compiler/ir_pipeline_tutorial/README.md"
+        },
+        {
+          "path": "examples/compiler/ir_pipeline_tutorial/tessera_ir_pipeline_demo.py"
+        }
+      ],
+      "type": "example"
+    },
+    {
+      "authority": "normative",
+      "description": "First compiler IR layer for algebraic ops, effects, shapes, and distributed intent.",
+      "id": "ir.graph",
+      "name": "Graph IR",
+      "output_priority": 50,
+      "owner_area": "compiler",
+      "references": [
+        {
+          "path": "docs/spec/GRAPH_IR_SPEC.md"
+        },
+        {
+          "path": "src/compiler/ir/TesseraOps.td"
+        },
+        {
+          "path": "python/tessera/compiler/graph_ir.py"
+        }
+      ],
+      "tags": [
+        "ir",
+        "compiler",
+        "graph"
+      ],
+      "type": "ir_layer"
+    },
+    {
+      "authority": "normative",
+      "description": "Second compiler IR layer for tiled, fused, pipelined, and distributed scheduling.",
+      "id": "ir.schedule",
+      "name": "Schedule IR",
+      "output_priority": 60,
+      "owner_area": "compiler",
+      "references": [
+        {
+          "path": "docs/spec/TARGET_IR_SPEC.md"
+        },
+        {
+          "path": "docs/architecture/Compiler/Tessera_Compiler_ScheduleIR_Design.md"
+        },
+        {
+          "path": "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td"
+        }
+      ],
+      "tags": [
+        "ir",
+        "compiler",
+        "schedule"
+      ],
+      "type": "ir_layer"
+    },
+    {
+      "authority": "normative",
+      "description": "Final compiler IR layer for backend-specific intrinsics and target lowering.",
+      "id": "ir.target",
+      "name": "Target IR",
+      "output_priority": 80,
+      "owner_area": "compiler",
+      "references": [
+        {
+          "path": "docs/spec/TARGET_IR_SPEC.md"
+        },
+        {
+          "path": "docs/architecture/Compiler/Tessera_Compiler_TargetIR_Design.md"
+        },
+        {
+          "path": "src/compiler/mlir/lib/Target/TesseraTargetIR.cpp"
+        }
+      ],
+      "tags": [
+        "ir",
+        "compiler",
+        "target"
+      ],
+      "type": "ir_layer"
+    },
+    {
+      "authority": "normative",
+      "description": "Third compiler IR layer for blocks, warps, fragments, memory movement, and MMA primitives.",
+      "id": "ir.tile",
+      "name": "Tile IR",
+      "output_priority": 70,
+      "owner_area": "compiler",
+      "references": [
+        {
+          "path": "docs/spec/TILE_IR.md"
+        },
+        {
+          "path": "docs/spec/TARGET_IR_SPEC.md"
+        },
+        {
+          "path": "src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td"
+        }
+      ],
+      "tags": [
+        "ir",
+        "compiler",
+        "tile"
+      ],
+      "type": "ir_layer"
+    },
+    {
+      "authority": "normative",
+      "description": "Named NVIDIA GPU lowering pipeline for SM90+ target paths.",
+      "id": "pass.lower_to_gpu",
+      "name": "tessera-lower-to-gpu",
+      "references": [
+        {
+          "path": "docs/spec/LOWERING_PIPELINE_SPEC.md"
+        },
+        {
+          "path": "docs/spec/COMPILER_REFERENCE.md"
+        },
+        {
+          "path": "tests/tessera-ir/phase3/tile_ir_lowering.mlir"
+        }
+      ],
+      "type": "pass"
+    },
+    {
+      "authority": "normative",
+      "description": "Named CPU lowering pipeline for Graph/Schedule/Tile/Target IR to x86-oriented artifacts.",
+      "id": "pass.lower_to_x86",
+      "name": "tessera-lower-to-x86",
+      "references": [
+        {
+          "path": "docs/spec/LOWERING_PIPELINE_SPEC.md"
+        },
+        {
+          "path": "docs/spec/COMPILER_REFERENCE.md"
+        },
+        {
+          "path": "tests/tessera-ir/phase2/full_pipeline.mlir"
+        }
+      ],
+      "type": "pass"
+    },
+    {
+      "authority": "normative",
+      "description": "C ABI types, status codes, context lifecycle, memory, launch, and backend contracts.",
+      "id": "runtime.c_abi",
+      "name": "Runtime C ABI",
+      "references": [
+        {
+          "path": "docs/spec/RUNTIME_ABI_SPEC.md"
+        },
+        {
+          "path": "src/runtime/include/tessera/tessera_runtime.h"
+        },
+        {
+          "path": "src/runtime/src/tessera_runtime.cpp"
+        }
+      ],
+      "type": "runtime_component"
+    },
+    {
+      "authority": "informative",
+      "description": "Runtime metrics, Chrome trace export, Perfetto export, and profiling CLI surface.",
+      "id": "runtime.profiler",
+      "name": "Tessera Profiler",
+      "references": [
+        {
+          "path": "docs/guides/Tessera_Profiling_And_Autotuning_Guide.md"
+        },
+        {
+          "path": "tools/profiler/README.md"
+        },
+        {
+          "path": "python/tessera/profiler.py"
+        }
+      ],
+      "type": "runtime_component"
+    },
+    {
+      "authority": "normative",
+      "description": "FileCheck-based C++/MLIR pass and pipeline contracts.",
+      "id": "test.mlir_lit",
+      "name": "MLIR Lit Tests",
+      "references": [
+        {
+          "path": "tests/tessera-ir"
+        },
+        {
+          "path": "tests/tessera-ir/lit.cfg.py"
+        }
+      ],
+      "type": "test_suite"
+    },
+    {
+      "authority": "normative",
+      "description": "Reference-vs-runtime comparisons for supported operators and backend modes.",
+      "id": "test.numerical_validation",
+      "name": "Numerical Validation",
+      "references": [
+        {
+          "path": "tests/tessera_numerical_validation"
+        },
+        {
+          "path": "tests/tessera_numerical_validation/README.md"
+        }
+      ],
+      "type": "test_suite"
+    },
+    {
+      "authority": "normative",
+      "description": "Deterministic roofline/proxy performance contracts and benchmark schema checks.",
+      "id": "test.performance",
+      "name": "Performance Tests",
+      "references": [
+        {
+          "path": "tests/performance"
+        },
+        {
+          "path": "benchmarks/run_all.py"
+        }
+      ],
+      "type": "test_suite"
+    },
+    {
+      "authority": "normative",
+      "description": "Fast correctness contracts for Python compiler APIs, IR emission, pass preconditions, and docs drift.",
+      "id": "test.unit",
+      "name": "Unit Tests",
+      "references": [
+        {
+          "path": "tests/unit"
+        },
+        {
+          "path": "tests/COMPILER_TEST_PLAN.md"
+        }
+      ],
+      "type": "test_suite"
+    }
+  ],
+  "entity_types": {
+    "api": {
+      "description": "A public Python, CLI, runtime, or ABI surface."
+    },
+    "backend": {
+      "description": "A hardware or runtime target backend."
+    },
+    "concept": {
+      "description": "A project concept such as tiling, effects, conformance, or diagnostics."
+    },
+    "dialect": {
+      "description": "An MLIR dialect or operation family."
+    },
+    "doc": {
+      "description": "A documentation authority, guide, tutorial, or reference page."
+    },
+    "example": {
+      "description": "A runnable or instructional example."
+    },
+    "ir_layer": {
+      "description": "One layer in the Tessera compiler IR stack."
+    },
+    "pass": {
+      "description": "A compiler pass or named lowering pipeline."
+    },
+    "runtime_component": {
+      "description": "A runtime subsystem, ABI component, profiler, or execution adapter."
+    },
+    "test_suite": {
+      "description": "A test family, validation suite, or benchmark gate."
+    }
+  },
+  "generated_from": [
+    "docs/context/ontology.yaml",
+    "docs/context/knowledge_map.yaml",
+    "tests/COMPILER_TEST_PLAN.md"
+  ],
+  "relation_types": {
+    "defined_by": {
+      "description": "The entity's authoritative definition is in the target doc or entity."
+    },
+    "depends_on": {
+      "description": "The entity needs the target concept or component to be understood or changed safely."
+    },
+    "explained_by": {
+      "description": "The entity is explained by the target guide, tutorial, or README."
+    },
+    "implemented_in": {
+      "description": "The entity is implemented or scaffolded in the target source path or component."
+    },
+    "lowers_to": {
+      "description": "The source IR layer or construct lowers into the target IR layer or construct."
+    },
+    "phase_status": {
+      "description": "The entity's implementation/planning status is described by the target status entity or doc."
+    },
+    "supersedes": {
+      "description": "The source entity replaces or overrides the target historical entity."
+    },
+    "tested_by": {
+      "description": "The entity is covered by the target test suite."
+    }
+  },
+  "relations": [
+    {
+      "relation": "defined_by",
+      "source": "api.python_frontend",
+      "target": "doc.canonical_api"
+    },
+    {
+      "relation": "implemented_in",
+      "source": "api.python_frontend",
+      "target": "python/tessera/compiler/jit.py"
+    },
+    {
+      "relation": "tested_by",
+      "source": "api.python_frontend",
+      "target": "test.unit"
+    },
+    {
+      "relation": "tested_by",
+      "source": "backend.nvidia_gpu",
+      "target": "test.mlir_lit"
+    },
+    {
+      "relation": "tested_by",
+      "source": "backend.x86",
+      "target": "test.unit"
+    },
+    {
+      "relation": "explained_by",
+      "source": "concept.diagnostics",
+      "target": "docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md"
+    },
+    {
+      "relation": "defined_by",
+      "source": "concept.shape_layout",
+      "target": "docs/spec/SHAPE_SYSTEM.md"
+    },
+    {
+      "authoritative": false,
+      "historical": true,
+      "relation": "supersedes",
+      "source": "doc.canonical_api",
+      "target": "docs/archive/pre_canonical/api"
+    },
+    {
+      "relation": "phase_status",
+      "source": "doc.compiler_reference",
+      "target": "doc.documentation_authority_tree"
+    },
+    {
+      "relation": "depends_on",
+      "source": "example.getting_started_basic_tensor_ops",
+      "target": "api.python_frontend"
+    },
+    {
+      "relation": "depends_on",
+      "source": "example.ir_pipeline_tutorial",
+      "target": "ir.graph"
+    },
+    {
+      "relation": "defined_by",
+      "source": "ir.graph",
+      "target": "docs/spec/GRAPH_IR_SPEC.md"
+    },
+    {
+      "relation": "lowers_to",
+      "source": "ir.graph",
+      "target": "ir.schedule"
+    },
+    {
+      "relation": "lowers_to",
+      "source": "ir.schedule",
+      "target": "ir.tile"
+    },
+    {
+      "relation": "lowers_to",
+      "source": "ir.tile",
+      "target": "ir.target"
+    },
+    {
+      "relation": "depends_on",
+      "source": "pass.lower_to_gpu",
+      "target": "backend.nvidia_gpu"
+    },
+    {
+      "relation": "depends_on",
+      "source": "pass.lower_to_x86",
+      "target": "ir.target"
+    },
+    {
+      "relation": "defined_by",
+      "source": "runtime.c_abi",
+      "target": "docs/spec/RUNTIME_ABI_SPEC.md"
+    },
+    {
+      "relation": "explained_by",
+      "source": "runtime.profiler",
+      "target": "docs/guides/Tessera_Profiling_And_Autotuning_Guide.md"
+    },
+    {
+      "relation": "depends_on",
+      "source": "test.numerical_validation",
+      "target": "api.python_frontend"
+    }
+  ],
+  "schema_version": 1
+}

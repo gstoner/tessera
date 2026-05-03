@@ -7,16 +7,18 @@ last_updated: 2026-04-28
 
 # Tessera Developer Frontend: First End-To-End Path
 
-This guide documents the first narrow executable compiler spine:
+This guide documents the first reference executable compiler spine:
 
 ```text
 @jit supported op graph -> Graph IR -> Schedule IR -> Tile IR -> Target IR -> CPU execution
 ```
 
-It is intentionally small. The supported program shape is straight-line
-dataflow through supported `tessera.ops.*` calls. Unsupported functions keep
-the existing eager Python fallback and expose an explicit diagnostic explaining
-why.
+It is intentionally a development/reference path. The supported program shape
+is straight-line dataflow through canonical `tessera.ops.*` calls. CPU execution
+uses NumPy and explicit single-rank/state stubs; it is not native GPU,
+distributed, or C ABI execution.
+Functions outside this supported shape keep the eager Python fallback and expose
+an explicit diagnostic explaining why.
 
 ## 1. Minimal Example
 
@@ -107,36 +109,46 @@ Without `source=` or `source_path=`, these functions fall back eagerly and emit
 `JIT_SOURCE_UNAVAILABLE` so developers can tell that source inspection, not the
 op itself, blocked the compiler path.
 
-## 3. Current Boundaries
+## 3. Current Frontends
+
+Tessera currently has two frontend surfaces that lower to the same Graph IR
+model:
+
+- **Python AST frontend:** `@tessera.jit` inspects Python source, extracts
+  `tessera.ops.*` calls, runs constraint/effect checks, and builds Graph IR.
+- **Textual Graph DSL frontend:** `tessera.compiler.frontend.parse_text` and
+  `lower_text_to_graph_ir` parse canonical straight-line `module` / `func`
+  source and emit `GraphIRModule`.
+
+The old `research/sandbox_compilers/tilec` parser remains a legacy research
+sample and is not the canonical Tessera frontend.
+
+## 4. Current Boundaries
 
 Supported:
 
-- `return ts.ops.matmul(A, B)`
-- `return ts.ops.gemm(A, B)`
-- `return ts.ops.relu(x)`
-- `return ts.ops.sigmoid(x)`
-- `return ts.ops.softmax(x)`
-- `return ts.ops.sin(x)`
-- `return ts.ops.adam(param, grad, moment1, moment2)`
+- straight-line `tessera.ops.*` dataflow using the canonical op catalog
+- `matmul`, `gemm`, `conv2d`, normalization, activation, cast/transpose,
+  dropout, flash attention, collectives, fused epilogue, FFT/DCT/spectral ops,
+  and KV-cache reference state ops
 - explicit matmul/GEMM CPU schedule tile through `@ts.jit(cpu_tile=(M, N, K))`
 - explicit AST source for stdin/dynamic functions through `source=` or
   `source_path=`
-- positional or keyword arguments
+- literal keyword attributes such as `softmax(axis=0)` and optimizer params
 - NumPy arrays, tensor-like values with `.numpy()`, and Tessera `Tensor` values
   with `._data`
 
 Not yet supported:
 
-- assignment-style output buffers such as `C[:] = ts.ops.matmul(A, B)`
-- fused epilogues, bias, activation, residual
-- multi-op graphs such as `softmax(relu(x))`
-- keyword capture for op attributes such as `softmax(axis=0)` or Adam `lr=...`
 - dynamic Schedule IR selection
 - native C ABI CPU launch
 - GPU/ROCm/TPU dispatch from this frontend path
 - arbitrary Python control flow lowering
+- full textual DSL BNF coverage: kernels, meshes, schedule/dist statements,
+  control flow, barriers, and asserts are future work
+- full Tensor shape/type inference and MLIR verifier-backed construction
 
-## 4. Developer Evaluation Criteria
+## 5. Developer Evaluation Criteria
 
 When evaluating frontend ergonomics, use this path as the baseline:
 
@@ -158,17 +170,13 @@ assert not composite.uses_compiled_path
 print(composite.explain_lowering())
 ```
 
-## 5. Next Frontend Improvements
+## 6. Next Frontend Improvements
 
 Priority order:
 
-1. Support output-buffer matmul: `C[:] = ts.ops.matmul(A, B)`.
-2. Preserve keyword attributes in Graph IR for `softmax(axis=...)` and
-   optimizer hyperparameters.
-3. Improve notebook/REPL source capture beyond explicit `source=` handoff.
-4. Compile short op chains and simple SSA values instead of only one returned
-   op.
-5. Preserve concrete shape/dtype/layout metadata in Graph IR.
-6. Replace textual artifacts with MLIR objects and verifier calls.
-7. Connect Target IR to the runtime C ABI CPU backend.
-8. Extend the same spine to a measured CUDA matmul.
+1. Preserve concrete shape/dtype/layout metadata in Graph IR.
+2. Improve notebook/REPL source capture beyond explicit `source=` handoff.
+3. Extend textual DSL coverage beyond straight-line Graph IR.
+4. Replace textual artifacts with MLIR objects and verifier calls.
+5. Connect Target IR to the runtime C ABI CPU backend.
+6. Extend the same spine to measured CUDA execution.

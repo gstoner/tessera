@@ -222,11 +222,19 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         var = x.var(axis=-1, keepdims=True)
         return (x - mean) / np.sqrt(var + eps)
 
+    def rmsnorm_safe(x, eps: float = 1e-6):
+        if hasattr(x, "_data"):
+            x = x._data
+        return x / np.sqrt(np.mean(x * x, axis=-1, keepdims=True) + eps)
+
     def softmax(x, axis: int = -1):
         if hasattr(x, "_data"):
             x = x._data
         e = np.exp(x - x.max(axis=axis, keepdims=True))
         return e / e.sum(axis=axis, keepdims=True)
+
+    def softmax_safe(x, axis: int = -1):
+        return softmax(x, axis=axis)
 
     def sigmoid(x):
         if hasattr(x, "_data"):
@@ -290,10 +298,30 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         return x * mask
 
     def conv2d(x, weight, bias=None, stride=1, padding=0):
-        # Phase 1 stub — returns zeros of expected shape
+        """Reference NHWC/HWIO conv2d used by the frontend CPU path."""
         if hasattr(x, "_data"):
             x = x._data
-        return np.zeros_like(x)
+        if hasattr(weight, "_data"):
+            weight = weight._data
+        def pair(v):
+            if isinstance(v, (tuple, list)):
+                return int(v[0]), int(v[1])
+            return int(v), int(v)
+        stride_h, stride_w = pair(stride)
+        pad_h, pad_w = pair(padding)
+        x_pad = np.pad(x, ((0, 0), (pad_h, pad_h), (pad_w, pad_w), (0, 0)))
+        batch, in_h, in_w, _ = x_pad.shape
+        k_h, k_w, _, out_c = weight.shape
+        out_h = (in_h - k_h) // stride_h + 1
+        out_w = (in_w - k_w) // stride_w + 1
+        out = np.zeros((batch, out_h, out_w, out_c), dtype=np.result_type(x, weight))
+        for i in range(out_h):
+            for j in range(out_w):
+                window = x_pad[:, i * stride_h:i * stride_h + k_h, j * stride_w:j * stride_w + k_w, :]
+                out[:, i, j, :] = np.tensordot(window, weight, axes=([1, 2, 3], [0, 1, 2]))
+        if bias is not None:
+            out = out + bias
+        return out
 
     def flash_attn(
         Q,
@@ -401,12 +429,40 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         y = np.fft.irfft(np.fft.rfft(x, nfft) * np.fft.rfft(w, nfft), nfft)
         return y[..., :n]
 
+    class ReferenceKVCache:
+        def __init__(self):
+            self.keys = []
+            self.values = []
+
+        def append(self, key, value):
+            self.keys.append(np.asarray(key._data if hasattr(key, "_data") else key))
+            self.values.append(np.asarray(value._data if hasattr(value, "_data") else value))
+            return self
+
+        def prune(self, max_entries=None):
+            if max_entries is not None:
+                self.keys = self.keys[-int(max_entries):]
+                self.values = self.values[-int(max_entries):]
+            return self
+
+    def kv_cache_append(cache, key, value):
+        if not isinstance(cache, ReferenceKVCache):
+            cache = ReferenceKVCache()
+        return cache.append(key, value)
+
+    def kv_cache_prune(cache, max_entries=None, max_seq=None):
+        if not isinstance(cache, ReferenceKVCache):
+            cache = ReferenceKVCache()
+        limit = max_entries if max_entries is not None else max_seq
+        return cache.prune(limit)
+
     references = {
         "gemm": gemm,
         "matmul": matmul,
         "conv2d": conv2d,
         "layer_norm": layer_norm,
         "softmax": softmax,
+        "softmax_safe": softmax_safe,
         "gelu": gelu,
         "relu": relu,
         "sigmoid": sigmoid,
@@ -426,6 +482,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "irfft": irfft,
         "dct": dct,
         "spectral_conv": spectral_conv,
+        "rmsnorm_safe": rmsnorm_safe,
+        "kv_cache_append": kv_cache_append,
+        "kv_cache_prune": kv_cache_prune,
     }
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
@@ -440,9 +499,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         matmul=matmul,
         layer_norm=layer_norm,
         softmax=softmax,
+        softmax_safe=softmax_safe,
         sigmoid=sigmoid,
         gelu=gelu,
         relu=relu,
+        rmsnorm_safe=rmsnorm_safe,
         sin=sin,
         adam=adam,
         transpose=transpose,
@@ -460,6 +521,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         irfft=irfft,
         dct=dct,
         spectral_conv=spectral_conv,
+        ReferenceKVCache=ReferenceKVCache,
+        kv_cache_append=kv_cache_append,
+        kv_cache_prune=kv_cache_prune,
     )
 
 

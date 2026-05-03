@@ -13,20 +13,44 @@ existing Graph IR text and executes the operation on CPU via NumPy.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence
 
 import numpy as np
 
 from .graph_ir import GraphIRFunction, GraphIRModule, IROp
+from .op_catalog import GRAPH_OP_TO_SPEC, SUPPORTED_CPU_OPS
 
 
 MATMUL_OPS = {"tessera.matmul", "tessera.gemm"}
-UNARY_OPS = {"tessera.relu", "tessera.sigmoid", "tessera.sin"}
-REDUCTION_OPS = {"tessera.softmax"}
-LAYOUT_OPS = {"tessera.transpose"}
+UNARY_OPS = {
+    "tessera.layer_norm",
+    "tessera.relu",
+    "tessera.sigmoid",
+    "tessera.sin",
+    "tessera.gelu",
+    "tessera.rmsnorm_safe",
+}
+REDUCTION_OPS = {"tessera.softmax", "tessera.softmax_safe"}
+LAYOUT_OPS = {"tessera.transpose", "tessera.cast"}
 STATEFUL_FUNCTIONAL_OPS = {"tessera.adam"}
-SUPPORTED_CPU_OPS = MATMUL_OPS | UNARY_OPS | REDUCTION_OPS | LAYOUT_OPS | STATEFUL_FUNCTIONAL_OPS
+
+
+@dataclass
+class ReferenceKVCache:
+    keys: list[Any] = field(default_factory=list)
+    values: list[Any] = field(default_factory=list)
+
+    def append(self, key: Any, value: Any) -> "ReferenceKVCache":
+        self.keys.append(np.asarray(key))
+        self.values.append(np.asarray(value))
+        return self
+
+    def prune(self, max_entries: Optional[int] = None) -> "ReferenceKVCache":
+        if max_entries is not None:
+            self.keys = self.keys[-max_entries:]
+            self.values = self.values[-max_entries:]
+        return self
 
 
 @dataclass(frozen=True)
@@ -85,7 +109,7 @@ class CPUPlan:
             missing = [name for name in operand_names if name not in values]
             if missing:
                 raise ValueError(f"CPU plan requires operand(s): {', '.join(missing)}")
-            operands = [_as_numpy(values[name]) for name in operand_names]
+            operands = [_as_value(values[name]) for name in operand_names]
             if op.result is None:
                 raise ValueError(f"CPU plan cannot execute void op {op.op_name!r}")
             values[op.result] = _execute_op(op.op_name, operands, op.kwargs)
@@ -279,34 +303,100 @@ def _validate_tile(tile: tuple[int, int, int]) -> None:
 
 
 def _valid_arity(op: IROp) -> bool:
-    if op.op_name in MATMUL_OPS:
-        return len(op.operands) == 2
-    if op.op_name in UNARY_OPS | REDUCTION_OPS | LAYOUT_OPS:
-        return len(op.operands) == 1
-    if op.op_name in STATEFUL_FUNCTIONAL_OPS:
-        return len(op.operands) == 4
-    return False
+    spec = GRAPH_OP_TO_SPEC.get(op.op_name)
+    return spec.valid_arity(len(op.operands)) if spec is not None else False
 
 
 def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[str, Any]) -> Any:
     if op_name in MATMUL_OPS:
         return np.matmul(operands[0], operands[1])
+    if op_name == "tessera.conv2d":
+        bias = operands[2] if len(operands) > 2 else kwargs.get("bias", None)
+        return _conv2d_nhwc(operands[0], operands[1], bias=bias, stride=kwargs.get("stride", 1), padding=kwargs.get("padding", 0))
+    if op_name == "tessera.layer_norm":
+        x = np.asarray(operands[0])
+        eps = float(kwargs.get("eps", 1e-5))
+        mean = x.mean(axis=-1, keepdims=True)
+        var = x.var(axis=-1, keepdims=True)
+        return (x - mean) / np.sqrt(var + eps)
     if op_name == "tessera.relu":
         return np.maximum(0, operands[0])
     if op_name == "tessera.sigmoid":
         return 1.0 / (1.0 + np.exp(-operands[0]))
     if op_name == "tessera.sin":
         return np.sin(operands[0])
-    if op_name == "tessera.softmax":
+    if op_name == "tessera.gelu":
+        x = np.asarray(operands[0])
+        return x * 0.5 * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x + 0.044715 * x**3)))
+    if op_name in {"tessera.softmax", "tessera.softmax_safe"}:
         x = operands[0]
         axis = int(kwargs.get("axis", -1))
         e = np.exp(x - np.max(x, axis=axis, keepdims=True))
         return e / np.sum(e, axis=axis, keepdims=True)
+    if op_name == "tessera.rmsnorm_safe":
+        x = np.asarray(operands[0])
+        eps = float(kwargs.get("eps", 1e-6))
+        return x / np.sqrt(np.mean(x * x, axis=-1, keepdims=True) + eps)
     if op_name == "tessera.transpose":
         axes = kwargs.get("axes", None)
         if isinstance(axes, list):
             axes = tuple(axes)
         return np.transpose(operands[0], axes)
+    if op_name == "tessera.cast":
+        dtype = str(kwargs.get("dtype", "fp32"))
+        dtype_map = {"bf16": np.float32, "fp16": np.float16, "fp32": np.float32, "fp64": np.float64}
+        return np.asarray(operands[0]).astype(dtype_map.get(dtype, np.float32))
+    if op_name == "tessera.dropout":
+        x = np.asarray(operands[0])
+        if not bool(kwargs.get("training", True)):
+            return x
+        p = float(kwargs.get("p", 0.1))
+        if not 0.0 <= p < 1.0:
+            raise ValueError("dropout p must be in [0.0, 1.0)")
+        seed = kwargs.get("seed", None)
+        rng = np.random.default_rng(None if seed is None else int(seed))
+        mask = rng.binomial(1, 1.0 - p, x.shape) / (1.0 - p)
+        return x * mask
+    if op_name == "tessera.flash_attn":
+        return _flash_attn_reference(operands[0], operands[1], operands[2], kwargs)
+    if op_name in {"tessera.all_reduce", "tessera.reduce_scatter", "tessera.all_gather"}:
+        return operands[0]
+    if op_name == "tessera.fused_epilogue":
+        x = np.asarray(operands[0])
+        bias = operands[1] if len(operands) > 1 else kwargs.get("bias", None)
+        if bias is not None:
+            x = x + bias
+        activation = kwargs.get("activation", "linear")
+        if activation == "gelu":
+            return _execute_op("tessera.gelu", [x], {})
+        if activation == "relu":
+            return np.maximum(0, x)
+        return x
+    if op_name == "tessera.fft":
+        return np.fft.fft(operands[0], axis=int(kwargs.get("axis", -1)))
+    if op_name == "tessera.ifft":
+        return np.fft.ifft(operands[0], axis=int(kwargs.get("axis", -1)))
+    if op_name == "tessera.rfft":
+        return np.fft.rfft(operands[0], axis=int(kwargs.get("axis", -1)))
+    if op_name == "tessera.irfft":
+        n = kwargs.get("n", None)
+        return np.fft.irfft(operands[0], n=None if n is None else int(n), axis=int(kwargs.get("axis", -1)))
+    if op_name == "tessera.dct":
+        return _dct_reference(operands[0], axis=int(kwargs.get("axis", -1)))
+    if op_name == "tessera.spectral_conv":
+        x = np.asarray(operands[0])
+        w = np.asarray(operands[1])
+        n = x.shape[-1] + w.shape[-1] - 1
+        nfft = 1 << int(np.ceil(np.log2(n)))
+        y = np.fft.irfft(np.fft.rfft(x, nfft) * np.fft.rfft(w, nfft), nfft)
+        return y[..., :n]
+    if op_name == "tessera.kv_cache.append":
+        cache = operands[0] if isinstance(operands[0], ReferenceKVCache) else ReferenceKVCache()
+        return cache.append(operands[1], operands[2])
+    if op_name == "tessera.kv_cache.prune":
+        cache = operands[0] if isinstance(operands[0], ReferenceKVCache) else ReferenceKVCache()
+        max_entries = kwargs.get("max_entries", kwargs.get("max_seq", None))
+        return cache.prune(None if max_entries is None else int(max_entries))
     if op_name == "tessera.adam":
         param, grad, moment1, moment2 = operands
         beta1 = float(kwargs.get("beta1", 0.9))
@@ -338,23 +428,79 @@ def _target_op_name(op_name: str) -> str:
 
 
 def _lowering_kind(op_name: str) -> str:
-    if op_name in MATMUL_OPS:
-        return "loop_nest"
-    if op_name == "tessera.softmax":
-        return "stable_reduction"
-    if op_name == "tessera.adam":
-        return "functional_optimizer_step"
-    if op_name == "tessera.transpose":
-        return "layout_transform"
-    return "elementwise"
+    spec = GRAPH_OP_TO_SPEC.get(op_name)
+    return spec.lowering if spec is not None else "elementwise"
 
 
-def _as_numpy(value: Any) -> np.ndarray:
+def _as_value(value: Any) -> Any:
+    if isinstance(value, ReferenceKVCache):
+        return value
     if hasattr(value, "numpy") and callable(value.numpy):
         return np.asarray(value.numpy())
     if hasattr(value, "_data"):
         return np.asarray(value._data)
     return np.asarray(value)
+
+
+def _pair(value: Any) -> tuple[int, int]:
+    if isinstance(value, (tuple, list)):
+        return int(value[0]), int(value[1])
+    return int(value), int(value)
+
+
+def _conv2d_nhwc(x: Any, weight: Any, *, bias: Any = None, stride: Any = 1, padding: Any = 0) -> np.ndarray:
+    x = np.asarray(x)
+    weight = np.asarray(weight)
+    stride_h, stride_w = _pair(stride)
+    pad_h, pad_w = _pair(padding)
+    if x.ndim != 4 or weight.ndim != 4:
+        raise ValueError("conv2d reference expects NHWC input and HWIO weights")
+    x_pad = np.pad(x, ((0, 0), (pad_h, pad_h), (pad_w, pad_w), (0, 0)))
+    batch, in_h, in_w, _ = x_pad.shape
+    k_h, k_w, _, out_c = weight.shape
+    out_h = (in_h - k_h) // stride_h + 1
+    out_w = (in_w - k_w) // stride_w + 1
+    out = np.zeros((batch, out_h, out_w, out_c), dtype=np.result_type(x, weight))
+    for i in range(out_h):
+        for j in range(out_w):
+            window = x_pad[:, i * stride_h:i * stride_h + k_h, j * stride_w:j * stride_w + k_w, :]
+            out[:, i, j, :] = np.tensordot(window, weight, axes=([1, 2, 3], [0, 1, 2]))
+    if bias is not None:
+        out = out + np.asarray(bias)
+    return out
+
+
+def _flash_attn_reference(q: Any, k: Any, v: Any, kwargs: Mapping[str, Any]) -> np.ndarray:
+    q = np.asarray(q)
+    k = np.asarray(k)
+    v = np.asarray(v)
+    dropout_p = float(kwargs.get("dropout_p", 0.0))
+    if not 0.0 <= dropout_p < 1.0:
+        raise ValueError("dropout_p must be in [0.0, 1.0)")
+    scale = kwargs.get("scale", None)
+    scale = 1.0 / np.sqrt(q.shape[-1]) if scale is None else float(scale)
+    scores = np.matmul(q, np.swapaxes(k, -1, -2)) * scale
+    if bool(kwargs.get("causal", False)):
+        q_len, k_len = scores.shape[-2], scores.shape[-1]
+        mask = np.triu(np.ones((q_len, k_len), dtype=bool), k=1 + max(k_len - q_len, 0))
+        scores = np.where(mask, -np.inf, scores)
+    weights = _execute_op("tessera.softmax", [scores], {})
+    if dropout_p > 0.0:
+        seed = kwargs.get("seed", None)
+        rng = np.random.default_rng(None if seed is None else int(seed))
+        keep = rng.binomial(1, 1.0 - dropout_p, weights.shape)
+        weights = weights * keep / (1.0 - dropout_p)
+    return np.matmul(weights, v)
+
+
+def _dct_reference(x: Any, axis: int = -1) -> np.ndarray:
+    x = np.asarray(x)
+    n = x.shape[axis]
+    y = np.concatenate([x, np.flip(x, axis=axis)], axis=axis)
+    spec = np.fft.fft(y, axis=axis)
+    slicer = [slice(None)] * spec.ndim
+    slicer[axis] = slice(0, n)
+    return np.real(spec[tuple(slicer)])
 
 
 __all__ = [
@@ -363,6 +509,7 @@ __all__ = [
     "MATMUL_OPS",
     "CPUPlan",
     "MatmulCPUPlan",
+    "ReferenceKVCache",
     "SUPPORTED_CPU_OPS",
     "build_cpu_plan",
     "build_matmul_cpu_plan",

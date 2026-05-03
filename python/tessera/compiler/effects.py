@@ -23,6 +23,8 @@ import inspect
 import textwrap
 from typing import Callable, Dict, FrozenSet, List, Optional, Set
 
+from .op_catalog import OP_SPECS
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Error type
@@ -127,53 +129,26 @@ class Effect(enum.IntEnum):
 # Maps known tessera op names to the effect they introduce.
 # Phase 1: conservative static table. Phase 2: derive from op ODS attributes.
 _OP_EFFECTS: Dict[str, Effect] = {
-    # Pure math ops
-    "gemm":        Effect.pure,
-    "matmul":      Effect.pure,
-    "conv2d":      Effect.pure,
-    "layer_norm":  Effect.pure,
-    "softmax":     Effect.pure,
-    "sigmoid":     Effect.pure,
-    "gelu":        Effect.pure,
-    "relu":        Effect.pure,
-    "sin":         Effect.pure,
-    "adam":        Effect.pure,
-    "transpose":   Effect.pure,
-    "cast":        Effect.pure,
-    "fused_epilogue": Effect.pure,
-    "rmsnorm_safe": Effect.pure,
-    "softmax_safe": Effect.pure,
-
-    # Random ops
-    "dropout":     Effect.random,
-    "randn":       Effect.random,
-    "rand":        Effect.random,
-    "bernoulli":   Effect.random,
-    "normal":      Effect.random,
-
-    # Movement effects
+    name: Effect[spec.effect]
+    for name, spec in OP_SPECS.items()
+}
+_OP_EFFECTS.update({
+    "randn": Effect.random,
+    "rand": Effect.random,
+    "bernoulli": Effect.random,
+    "normal": Effect.random,
     "prefetch": Effect.movement,
     "async_copy": Effect.movement,
     "await_movement": Effect.movement,
-
-    # Stateful ops — KV cache, rings, mutable compiler-visible state
     "kv_cache_create": Effect.state,
-    "kv_cache_append": Effect.state,
-    "kv_cache_prune": Effect.state,
-    "kv_cache_read":  Effect.state,
+    "kv_cache_read": Effect.state,
     "kv_cache_write": Effect.state,
-    "flash_attn":     Effect.state,  # conservative: may read/write KV cache
-
-    # Async collectives
-    "all_reduce":      Effect.collective,
-    "reduce_scatter":  Effect.collective,
-    "all_gather":      Effect.collective,
-    "all_to_all":      Effect.collective,
-    "await":           Effect.collective,
-    "send":            Effect.collective,
-    "recv":            Effect.collective,
-    "barrier":         Effect.collective,
-}
+    "all_to_all": Effect.collective,
+    "await": Effect.collective,
+    "send": Effect.collective,
+    "recv": Effect.collective,
+    "barrier": Effect.collective,
+})
 
 # Attribute / module paths that signal random (numpy, torch, etc.)
 _RANDOM_ATTR_PATTERNS: FrozenSet[str] = frozenset({

@@ -3,12 +3,21 @@ from __future__ import annotations
 import numpy as np
 
 import tessera
+from tessera.compiler.graph_ir import _OpExtractor
+from tessera.compiler.matmul_pipeline import SUPPORTED_CPU_OPS
+from tessera.compiler.op_catalog import GRAPH_OP_MAP, OP_SPECS
 
 
 def test_ops_registry_contains_reference_ops():
     names = tessera.ops.registry.list()
-    for name in ("gemm", "conv2d", "flash_attn", "fft", "ifft", "rfft", "irfft", "dct", "spectral_conv"):
+    for name in OP_SPECS:
         assert name in names
+
+
+def test_op_catalog_is_consistent_across_frontend_and_cpu():
+    assert set(_OpExtractor._OP_MAP) == set(OP_SPECS)
+    assert set(_OpExtractor._OP_MAP.values()) == set(SUPPORTED_CPU_OPS)
+    assert GRAPH_OP_MAP["kv_cache_append"] == "tessera.kv_cache.append"
 
 
 def test_ops_registry_reference_dispatch():
@@ -71,3 +80,55 @@ def test_graph_ir_recognizes_new_operator_names():
     assert "tessera.fft" in ir
     assert "tessera.dct" in ir
     assert "tessera.spectral_conv" in ir
+
+
+def test_jit_cpu_executes_reconciled_numpy_ops():
+    @tessera.jit
+    def op_chain(x, w):
+        y = tessera.ops.layer_norm(x)
+        z = tessera.ops.gelu(y)
+        c = tessera.ops.cast(z, dtype="fp32")
+        f = tessera.ops.fft(c)
+        d = tessera.ops.dct(f)
+        return tessera.ops.spectral_conv(d, w)
+
+    x = np.arange(6, dtype=np.float32).reshape(2, 3)
+    w = np.array([1.0, 0.5], dtype=np.float32)
+    out = op_chain(x, w)
+    assert op_chain.uses_compiled_path
+    assert out.shape[-1] == 4
+
+
+def test_jit_cpu_executes_conv2d_nhwc_reference():
+    @tessera.jit
+    def conv(x, w):
+        return tessera.ops.conv2d(x, w, stride=1, padding=0)
+
+    x = np.arange(9, dtype=np.float32).reshape(1, 3, 3, 1)
+    w = np.ones((2, 2, 1, 1), dtype=np.float32)
+    expected = np.array([[[[8.0], [12.0]], [[20.0], [24.0]]]], dtype=np.float32)
+    np.testing.assert_allclose(conv(x, w), expected)
+    assert conv.uses_compiled_path
+
+
+def test_jit_cpu_executes_seeded_dropout_and_collective_stubs():
+    @tessera.jit
+    def dropped(x):
+        y = tessera.ops.dropout(x, p=0.25, seed=7)
+        return tessera.ops.all_reduce(y)
+
+    x = np.ones((4,), dtype=np.float32)
+    np.testing.assert_allclose(dropped(x), dropped(x))
+    assert dropped.uses_compiled_path
+
+
+def test_jit_cpu_executes_flash_attention_reference():
+    @tessera.jit
+    def flash(q, k, v):
+        return tessera.ops.flash_attn(q, k, v, causal=True)
+
+    q = np.array([[[[1.0, 0.0], [0.0, 1.0]]]], dtype=np.float32)
+    v = np.array([[[[1.0, 10.0], [100.0, 1000.0]]]], dtype=np.float32)
+    out = flash(q, q, v)
+    assert out.shape == v.shape
+    np.testing.assert_allclose(out[..., 0, :], v[..., 0, :])

@@ -29,6 +29,8 @@ import textwrap
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .op_catalog import GRAPH_OP_MAP, graph_name_for
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IR value types
@@ -260,32 +262,7 @@ class _OpExtractor(ast.NodeVisitor):
     """
 
     # Map from op bare name to Graph IR op name
-    _OP_MAP = {
-        "gemm":       "tessera.gemm",
-        "matmul":     "tessera.matmul",
-        "conv2d":     "tessera.conv2d",
-        "layer_norm": "tessera.layer_norm",
-        "softmax":    "tessera.softmax",
-        "gelu":       "tessera.gelu",
-        "relu":       "tessera.relu",
-        "sigmoid":    "tessera.sigmoid",
-        "sin":        "tessera.sin",
-        "adam":       "tessera.adam",
-        "transpose":  "tessera.transpose",
-        "cast":       "tessera.cast",
-        "flash_attn": "tessera.flash_attn",
-        "all_reduce": "tessera.all_reduce",
-        "reduce_scatter": "tessera.reduce_scatter",
-        "all_gather": "tessera.all_gather",
-        "fft":        "tessera.fft",
-        "dct":        "tessera.dct",
-        "spectral_conv": "tessera.spectral_conv",
-        "dropout":    "tessera.dropout",
-        "rmsnorm_safe": "tessera.rmsnorm_safe",
-        "softmax_safe": "tessera.softmax_safe",
-        "kv_cache_append": "tessera.kv_cache.append",
-        "kv_cache_prune": "tessera.kv_cache.prune",
-    }
+    _OP_MAP = GRAPH_OP_MAP
 
     def __init__(self, arg_names: List[str]) -> None:
         self.ops: List[IROp] = []
@@ -360,8 +337,7 @@ class _OpExtractor(ast.NodeVisitor):
         name = self._resolve_name(call.func)
         if not name:
             return None
-        bare = name.split(".")[-1]
-        mlir_name = self._OP_MAP.get(bare)
+        mlir_name = graph_name_for(name)
         if not mlir_name:
             return None
 

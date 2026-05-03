@@ -20,6 +20,7 @@ from .constraints import ConstraintSolver, Divisible, Range, Equal, TesseraConst
 from .effects import EffectLattice, Effect, TesseraEffectError
 from .graph_ir import NumericPolicy, KVCacheSpec
 from .jit import jit, TesseraJitError
+from .frontend import FrontendSemanticError, FrontendSyntaxError, lower_text_to_graph_ir, parse_text
 
 __all__ = [
     "ConstraintSolver",
@@ -34,4 +35,8 @@ __all__ = [
     "KVCacheSpec",
     "jit",
     "TesseraJitError",
+    "FrontendSemanticError",
+    "FrontendSyntaxError",
+    "lower_text_to_graph_ir",
+    "parse_text",
 ]

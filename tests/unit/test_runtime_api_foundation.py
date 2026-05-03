@@ -98,7 +98,7 @@ def test_jit_cpu_runtime_artifact_launch_supports_dict_args_and_stable_hash():
 def test_non_executable_runtime_artifact_keeps_structured_status():
     @tessera.jit
     def unsupported(x):
-        return tessera.ops.dropout(x)
+        return x
 
     artifact = unsupported.runtime_artifact()
     result = launch(artifact, args=(np.ones(2, dtype=np.float32),))

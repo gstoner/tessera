@@ -372,6 +372,7 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | Autotuner v1 framework | `src/compiler/autotuning/tessera/tools/autotune/` |
 | IR specs | `docs/spec/` (GRAPH_IR_SPEC, RUNTIME_ABI_SPEC, MEMORY_MODEL_SPEC, etc.) |
 | Style guide | `tessera_style_guide.md` |
+| Claude Code skill map | `skills.md` |
 | Project structure | `PROJECT_STRUCTURE.md` |
 | Src component index | `src/INDEX.md` |
 

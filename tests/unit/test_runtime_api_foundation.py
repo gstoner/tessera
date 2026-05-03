@@ -14,6 +14,7 @@ from tessera.runtime import (
     launch,
     load_artifact,
     query_backend,
+    runtime_smoke_telemetry,
 )
 from tessera.testing import compile_and_maybe_launch
 
@@ -46,6 +47,8 @@ def test_launch_artifact_reports_unsupported_not_success():
     assert result["ok"] is False
     assert result["compiler_path"] == "artifact_only"
     assert result["runtime_status"] in {"unsupported", "missing_backend"}
+    assert result["telemetry"]["schema"] == "tessera.telemetry.v1"
+    assert result["telemetry"]["status"] in {"unsupported", "missing_backend"}
     assert get_last_profile().launch_overhead_ms == 0.0
 
 
@@ -71,6 +74,8 @@ def test_jit_cpu_runtime_artifact_launches_successfully():
     assert result["ok"] is True
     assert result["runtime_status"] == "success"
     assert result["compiler_path"] == "jit_cpu_numpy"
+    assert result["telemetry"]["source"] == "runtime"
+    assert result["telemetry"]["status"] == "ok"
     np.testing.assert_allclose(result["output"], a @ b)
     assert get_last_profile().cpu_wall_ms is not None
 
@@ -102,6 +107,19 @@ def test_non_executable_runtime_artifact_keeps_structured_status():
     assert result["ok"] is False
     assert result["runtime_status"] == "unsupported"
     assert result["compiler_path"] == "eager_fallback"
+    assert result["telemetry"]["bottleneck"] == "failed_or_unmeasured"
+
+
+def test_runtime_smoke_telemetry_exercises_cpu_spine():
+    payload = runtime_smoke_telemetry(mock=True, bytes_size=32)
+
+    assert payload["schema"] == "tessera.telemetry.v1"
+    assert payload["runtime_status"] == "success"
+    assert payload["device"]["kind"] == "CPU"
+    assert payload["mapped_bytes"] == 32
+    assert payload["event_timestamp_ns"] > 0
+    names = {event["name"] for event in payload["telemetry_events"]}
+    assert {"runtime.init", "runtime.malloc", "runtime.record_event", "runtime.shutdown"} <= names
 
 
 def test_compiler_harness_captures_artifact_launch_and_diagnostics():

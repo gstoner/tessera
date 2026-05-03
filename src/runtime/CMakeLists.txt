@@ -52,12 +52,15 @@ target_compile_definitions(tessera_runtime PRIVATE
 # ------------------------------------------------------------------
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND TESSERA_BUILD_TESTS)
     enable_testing()
-    add_executable(tessera_runtime_tests
-        tests/test_runtime.cpp
-        tests/test_tile_reduction.cpp
-    )
-    target_link_libraries(tessera_runtime_tests PRIVATE tessera_runtime)
-    add_test(NAME tessera_runtime_tests COMMAND tessera_runtime_tests)
+    add_executable(tessera_runtime_basic_test tests/test_runtime.cpp)
+    target_link_libraries(tessera_runtime_basic_test PRIVATE tessera_runtime)
+    target_compile_options(tessera_runtime_basic_test PRIVATE -UNDEBUG)
+    add_test(NAME tessera_runtime_basic_test COMMAND tessera_runtime_basic_test)
+
+    add_executable(tessera_runtime_tile_reduction_test tests/test_tile_reduction.cpp)
+    target_link_libraries(tessera_runtime_tile_reduction_test PRIVATE tessera_runtime)
+    target_compile_options(tessera_runtime_tile_reduction_test PRIVATE -UNDEBUG)
+    add_test(NAME tessera_runtime_tile_reduction_test COMMAND tessera_runtime_tile_reduction_test)
 endif()
 
 # ------------------------------------------------------------------

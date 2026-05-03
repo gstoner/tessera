@@ -34,6 +34,8 @@ from enum import IntEnum
 from pathlib import Path
 from typing import Any, List, Mapping, Optional
 
+from .telemetry import TELEMETRY_SCHEMA_VERSION, make_event, telemetry_report
+
 
 # ---------------------------------------------------------------------------
 # Status codes (mirror TsrStatus)
@@ -303,7 +305,7 @@ class _MockBackend:
         return event.data.get("timestamp_ns", 0)
 
     def get_version(self) -> tuple:
-        return (1, 0, 0)
+        return (0, 1, 0)
 
     def get_last_error(self) -> str:
         return self._last_error
@@ -340,6 +342,10 @@ def _find_library() -> Optional[str]:
     return found
 
 
+def _elapsed_ms(start_ns: int) -> float:
+    return (time.perf_counter_ns() - start_ns) / 1_000_000.0
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -370,6 +376,7 @@ class TesseraRuntime:
         self._lib: Any = None
         self._backend: Any = None
         self._initialized: bool = False
+        self._telemetry_events: list[dict[str, Any]] = []
 
         if not mock:
             path = lib_path or _find_library()
@@ -473,49 +480,117 @@ class TesseraRuntime:
                     detail = err.decode() if isinstance(err, bytes) else err
             raise TesseraRuntimeError(fn_name, s, detail)
 
+    def _record_event(
+        self,
+        name: str,
+        *,
+        op: str | None = None,
+        latency_ms: float | None = None,
+        memory_bytes: int | None = None,
+        status: str = "ok",
+        kernel_id: str | None = None,
+        device: str | int | None = None,
+        stream: str | int | None = None,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        event = make_event(
+            name,
+            source="runtime",
+            op=op or name,
+            arch="cpu" if self._mock_mode else "native",
+            kernel_id=kernel_id,
+            device=device,
+            stream=stream,
+            latency_ms=latency_ms,
+            memory_bytes=memory_bytes,
+            status=status,
+            metadata={
+                "mock": self._mock_mode,
+                **dict(metadata or {}),
+            },
+        )
+        self._telemetry_events.append(event)
+        return event
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
     def init(self) -> None:
         """Initialise the runtime and all available backends."""
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
             self._backend.init()
         else:
             self._check("tsrInit", self._lib.tsrInit())
         self._initialized = True
+        self._record_event("runtime.init", latency_ms=_elapsed_ms(start_ns))
 
     def shutdown(self) -> None:
         """Release all runtime resources."""
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
             self._backend.shutdown()
         else:
             self._check("tsrShutdown", self._lib.tsrShutdown())
         self._initialized = False
+        self._record_event("runtime.shutdown", latency_ms=_elapsed_ms(start_ns))
 
     # ------------------------------------------------------------------
     # Device enumeration
     # ------------------------------------------------------------------
 
     def get_device_count(self) -> int:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
-            return self._backend.get_device_count()
+            count = self._backend.get_device_count()
+            self._record_event(
+                "runtime.device_count",
+                latency_ms=_elapsed_ms(start_ns),
+                metadata={"count": count},
+            )
+            return count
         count = ctypes.c_int(0)
         self._check("tsrGetDeviceCount",
                     self._lib.tsrGetDeviceCount(ctypes.byref(count)))
+        self._record_event(
+            "runtime.device_count",
+            latency_ms=_elapsed_ms(start_ns),
+            metadata={"count": count.value},
+        )
         return count.value
 
     def get_device(self, index: int) -> Any:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
-            return self._backend.get_device(index)
+            dev = self._backend.get_device(index)
+            self._record_event(
+                "runtime.get_device",
+                latency_ms=_elapsed_ms(start_ns),
+                device=index,
+            )
+            return dev
         handle = ctypes.c_void_p(0)
         self._check("tsrGetDevice",
                     self._lib.tsrGetDevice(index, ctypes.byref(handle)))
+        self._record_event(
+            "runtime.get_device",
+            latency_ms=_elapsed_ms(start_ns),
+            device=index,
+        )
         return handle
 
     def get_device_props(self, dev: Any) -> DeviceProps:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
-            return self._backend.get_device_props(dev)
+            props = self._backend.get_device_props(dev)
+            self._record_event(
+                "runtime.device_props",
+                latency_ms=_elapsed_ms(start_ns),
+                device=getattr(dev, "_id", None),
+                metadata={"kind": props.kind.name, "name": props.name},
+            )
+            return props
         # C struct layout for tsrDeviceProps
         class _Props(ctypes.Structure):
             _fields_ = [
@@ -527,124 +602,224 @@ class TesseraRuntime:
         p = _Props()
         self._check("tsrGetDeviceProps",
                     self._lib.tsrGetDeviceProps(dev, ctypes.byref(p)))
-        return DeviceProps(
+        props = DeviceProps(
             kind=DeviceKind(p.kind),
             name=p.name.decode(),
             logical_tile_threads_max=p.logical_tile_threads_max,
             concurrent_tiles_hint=p.concurrent_tiles_hint,
         )
+        self._record_event(
+            "runtime.device_props",
+            latency_ms=_elapsed_ms(start_ns),
+            metadata={"kind": props.kind.name, "name": props.name},
+        )
+        return props
 
     # ------------------------------------------------------------------
     # Memory
     # ------------------------------------------------------------------
 
     def malloc(self, dev: Any, size: int) -> Any:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
-            return self._backend.malloc(dev, size)
+            buf = self._backend.malloc(dev, size)
+            self._record_event(
+                "runtime.malloc",
+                latency_ms=_elapsed_ms(start_ns),
+                memory_bytes=size,
+                device=getattr(dev, "_id", None),
+            )
+            return buf
         handle = ctypes.c_void_p(0)
         self._check("tsrMalloc",
                     self._lib.tsrMalloc(dev, size, ctypes.byref(handle)))
+        self._record_event("runtime.malloc", latency_ms=_elapsed_ms(start_ns), memory_bytes=size)
         return handle
 
     def free(self, buf: Any) -> None:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
             self._backend.free(buf)
         else:
             self._check("tsrFree", self._lib.tsrFree(buf))
+        self._record_event("runtime.free", latency_ms=_elapsed_ms(start_ns))
 
     def memset(self, buf: Any, value: int, size: int) -> None:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
             self._backend.memset(buf, value, size)
         else:
             self._check("tsrMemset", self._lib.tsrMemset(buf, value, size))
+        self._record_event(
+            "runtime.memset",
+            latency_ms=_elapsed_ms(start_ns),
+            memory_bytes=size,
+            metadata={"value": value},
+        )
 
     def memcpy(self, dst: Any, src: Any, size: int,
                kind: MemcpyKind = MemcpyKind.DEVICE_TO_DEVICE) -> None:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
             self._backend.memcpy(dst, src, size, kind)
         else:
             self._check("tsrMemcpy",
                         self._lib.tsrMemcpy(dst, src, size, int(kind)))
+        self._record_event(
+            "runtime.memcpy",
+            latency_ms=_elapsed_ms(start_ns),
+            memory_bytes=size,
+            metadata={"kind": kind.name},
+        )
 
     def map(self, buf: Any) -> bytes:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
-            return self._backend.map(buf)
+            data = self._backend.map(buf)
+            self._record_event(
+                "runtime.map",
+                latency_ms=_elapsed_ms(start_ns),
+                memory_bytes=len(data),
+            )
+            return data
         host_ptr = ctypes.c_void_p(0)
         size = ctypes.c_size_t(0)
         self._check("tsrMap",
                     self._lib.tsrMap(buf, ctypes.byref(host_ptr),
                                      ctypes.byref(size)))
+        self._record_event("runtime.map", latency_ms=_elapsed_ms(start_ns), memory_bytes=size.value)
         if not host_ptr.value or not size.value:
             return b""
         return (ctypes.c_char * size.value).from_address(host_ptr.value).raw
 
     def unmap(self, buf: Any) -> None:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
             self._backend.unmap(buf)
         else:
             self._check("tsrUnmap", self._lib.tsrUnmap(buf))
+        self._record_event("runtime.unmap", latency_ms=_elapsed_ms(start_ns))
 
     # ------------------------------------------------------------------
     # Streams & events
     # ------------------------------------------------------------------
 
     def create_stream(self, dev: Any) -> Any:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
-            return self._backend.create_stream(dev)
+            stream = self._backend.create_stream(dev)
+            self._record_event(
+                "runtime.create_stream",
+                latency_ms=_elapsed_ms(start_ns),
+                device=getattr(dev, "_id", None),
+                stream=getattr(stream, "_id", None),
+            )
+            return stream
         h = ctypes.c_void_p(0)
         self._check("tsrCreateStream",
                     self._lib.tsrCreateStream(dev, ctypes.byref(h)))
+        self._record_event("runtime.create_stream", latency_ms=_elapsed_ms(start_ns), stream=h.value)
         return h
 
     def destroy_stream(self, stream: Any) -> None:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
             self._backend.destroy_stream(stream)
         else:
             self._check("tsrDestroyStream",
                         self._lib.tsrDestroyStream(stream))
+        self._record_event(
+            "runtime.destroy_stream",
+            latency_ms=_elapsed_ms(start_ns),
+            stream=getattr(stream, "_id", None),
+        )
 
     def stream_sync(self, stream: Any) -> None:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
             self._backend.stream_sync(stream)
         else:
             self._check("tsrStreamSynchronize",
                         self._lib.tsrStreamSynchronize(stream))
+        self._record_event(
+            "runtime.stream_sync",
+            latency_ms=_elapsed_ms(start_ns),
+            stream=getattr(stream, "_id", None),
+        )
 
     def create_event(self, dev: Any) -> Any:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
-            return self._backend.create_event(dev)
+            event = self._backend.create_event(dev)
+            self._record_event(
+                "runtime.create_event",
+                latency_ms=_elapsed_ms(start_ns),
+                device=getattr(dev, "_id", None),
+                metadata={"event": getattr(event, "_id", None)},
+            )
+            return event
         h = ctypes.c_void_p(0)
         self._check("tsrCreateEvent",
                     self._lib.tsrCreateEvent(dev, ctypes.byref(h)))
+        self._record_event("runtime.create_event", latency_ms=_elapsed_ms(start_ns), metadata={"event": h.value})
         return h
 
     def record_event(self, event: Any, stream: Any) -> None:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
             self._backend.record_event(event, stream)
         else:
             self._check("tsrRecordEvent",
                         self._lib.tsrRecordEvent(event, stream))
+        self._record_event(
+            "runtime.record_event",
+            latency_ms=_elapsed_ms(start_ns),
+            stream=getattr(stream, "_id", None),
+            metadata={
+                "event": getattr(event, "_id", None),
+                "timestamp_ns": self.event_get_timestamp(event),
+            },
+        )
 
     def wait_event(self, event: Any, stream: Any) -> None:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
             self._backend.wait_event(event, stream)
         else:
             self._check("tsrWaitEvent",
                         self._lib.tsrWaitEvent(event, stream))
+        self._record_event(
+            "runtime.wait_event",
+            latency_ms=_elapsed_ms(start_ns),
+            stream=getattr(stream, "_id", None),
+            metadata={"event": getattr(event, "_id", None)},
+        )
 
     def event_sync(self, event: Any) -> None:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
             self._backend.event_sync(event)
         else:
             self._check("tsrEventSynchronize",
                         self._lib.tsrEventSynchronize(event))
+        self._record_event(
+            "runtime.event_sync",
+            latency_ms=_elapsed_ms(start_ns),
+            metadata={"event": getattr(event, "_id", None)},
+        )
 
     def destroy_event(self, event: Any) -> None:
+        start_ns = time.perf_counter_ns()
         if self._mock_mode:
             self._backend.destroy_event(event)
         else:
             self._check("tsrDestroyEvent",
                         self._lib.tsrDestroyEvent(event))
+        self._record_event(
+            "runtime.destroy_event",
+            latency_ms=_elapsed_ms(start_ns),
+            metadata={"event": getattr(event, "_id", None)},
+        )
 
     def event_get_timestamp(self, event: Any) -> int:
         """Return event timestamp in nanoseconds."""
@@ -675,6 +850,21 @@ class TesseraRuntime:
             return self._backend.get_last_error()
         err = self._lib.tsrGetLastError()
         return err.decode() if isinstance(err, bytes) else (err or "")
+
+    def telemetry_events(self) -> list[dict[str, Any]]:
+        return [dict(event) for event in self._telemetry_events]
+
+    def telemetry_report(self) -> dict[str, Any]:
+        events = self.telemetry_events()
+        return {
+            "schema": TELEMETRY_SCHEMA_VERSION,
+            "source": "runtime",
+            "summary": telemetry_report(events),
+            "events": events,
+        }
+
+    def clear_telemetry(self) -> None:
+        self._telemetry_events.clear()
 
     # ------------------------------------------------------------------
     # Properties
@@ -820,33 +1010,70 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
     cap = backend_capabilities(target)
     if target != "cpu":
         _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
+        telemetry = make_event(
+            "runtime.launch",
+            source="runtime",
+            op="artifact_launch",
+            arch=target,
+            kernel_id=str(metadata.get("kernel_id", "artifact")),
+            graph_hash=artifact.artifact_hash,
+            status="unimplemented" if cap.available else "missing_backend",
+            metadata={
+                "compiler_path": str(metadata.get("compiler_path", "artifact_only")),
+                "reason": f"{target} generated artifact execution is not wired to the runtime ABI yet",
+            },
+        )
         return {
             "ok": False,
             "runtime_status": "unimplemented" if cap.available else "missing_backend",
             "compiler_path": str(metadata.get("compiler_path", "artifact_only")),
             "artifact_hash": artifact.artifact_hash,
             "reason": f"{target} generated artifact execution is not wired to the runtime ABI yet",
+            "telemetry": telemetry,
         }
     if metadata.get("executable") is True and metadata.get("compiler_path") == "jit_cpu_numpy":
         try:
             output = _execute_jit_cpu_artifact(artifact, args)
         except Exception as exc:
             _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
+            telemetry = make_event(
+                "runtime.launch",
+                source="runtime",
+                op="artifact_launch",
+                arch="cpu",
+                kernel_id=str(metadata.get("kernel_id", "jit_cpu_numpy")),
+                graph_hash=artifact.artifact_hash,
+                status="invalid_artifact",
+                metadata={"compiler_path": "jit_cpu_numpy", "reason": str(exc)},
+            )
             return {
                 "ok": False,
                 "runtime_status": "invalid_artifact",
                 "compiler_path": "jit_cpu_numpy",
                 "artifact_hash": artifact.artifact_hash,
                 "reason": str(exc),
+                "telemetry": telemetry,
             }
         elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000.0
         _last_profile = RuntimeProfile(cpu_wall_ms=elapsed_ms, launch_overhead_ms=elapsed_ms)
+        telemetry = make_event(
+            "runtime.launch",
+            source="runtime",
+            op="artifact_launch",
+            arch="cpu",
+            kernel_id=str(metadata.get("kernel_id", "jit_cpu_numpy")),
+            graph_hash=artifact.artifact_hash,
+            latency_ms=elapsed_ms,
+            status="ok",
+            metadata={"compiler_path": "jit_cpu_numpy"},
+        )
         return {
             "ok": True,
             "runtime_status": "success",
             "compiler_path": "jit_cpu_numpy",
             "artifact_hash": artifact.artifact_hash,
             "output": output,
+            "telemetry": telemetry,
             "profile": {
                 "cpu_wall_ms": elapsed_ms,
                 "launch_overhead_ms": elapsed_ms,
@@ -854,17 +1081,74 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
         }
 
     _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
+    reason = str(metadata.get("reason", "Generated artifact is not executable by the runtime"))
+    telemetry = make_event(
+        "runtime.launch",
+        source="runtime",
+        op="artifact_launch",
+        arch="cpu",
+        kernel_id=str(metadata.get("kernel_id", "artifact")),
+        graph_hash=artifact.artifact_hash,
+        status="unsupported" if cap.available else "missing_backend",
+        metadata={
+            "compiler_path": str(metadata.get("compiler_path", "artifact_only")),
+            "reason": reason,
+        },
+    )
     return {
         "ok": False,
         "runtime_status": "unsupported" if cap.available else "missing_backend",
         "compiler_path": str(metadata.get("compiler_path", "artifact_only")),
         "artifact_hash": artifact.artifact_hash,
-        "reason": str(metadata.get("reason", "Generated artifact is not executable by the runtime")),
+        "reason": reason,
+        "telemetry": telemetry,
     }
 
 
 def get_last_profile() -> RuntimeProfile:
     return _last_profile
+
+
+def runtime_smoke_telemetry(*, mock: bool = True, bytes_size: int = 64) -> dict[str, Any]:
+    """Exercise the CPU runtime spine and return telemetry-compatible JSON."""
+
+    rt = TesseraRuntime(mock=mock)
+    rt.init()
+    count = rt.get_device_count()
+    dev = rt.get_device(0)
+    props = rt.get_device_props(dev)
+    buf = rt.malloc(dev, bytes_size)
+    rt.memset(buf, 0, bytes_size)
+    mapped = rt.map(buf)
+    rt.unmap(buf)
+    stream = rt.create_stream(dev)
+    event = rt.create_event(dev)
+    rt.record_event(event, stream)
+    timestamp_ns = rt.event_get_timestamp(event)
+    rt.wait_event(event, stream)
+    rt.event_sync(event)
+    rt.destroy_event(event)
+    rt.stream_sync(stream)
+    rt.destroy_stream(stream)
+    rt.free(buf)
+    rt.shutdown()
+    events = rt.telemetry_events()
+
+    return {
+        "schema": TELEMETRY_SCHEMA_VERSION,
+        "runtime_status": "success",
+        "device_count": count,
+        "device": {
+            "kind": props.kind.name,
+            "name": props.name,
+            "logical_tile_threads_max": props.logical_tile_threads_max,
+            "concurrent_tiles_hint": props.concurrent_tiles_hint,
+        },
+        "mapped_bytes": len(mapped),
+        "event_timestamp_ns": timestamp_ns,
+        "telemetry_summary": telemetry_report(events),
+        "telemetry_events": events,
+    }
 
 
 def _execute_jit_cpu_artifact(artifact: RuntimeArtifact, args: Any) -> Any:

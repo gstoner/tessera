@@ -59,6 +59,7 @@ Repository = "https://github.com/tessera-ai/tessera"
 [project.scripts]
 tessera-mlir = "tessera.cli.mlir:main"
 tessera-prof = "tessera.cli.prof:main"
+tessera-runtime-smoke = "tessera.cli.runtime:main"
 
 [tool.setuptools]
 package-dir = {"" = "python"}

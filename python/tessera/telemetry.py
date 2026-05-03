@@ -71,6 +71,10 @@ class TelemetryEvent:
         return payload
 
 
+TesseraMetricEvent = TelemetryEvent
+TesseraTraceEvent = TelemetryEvent
+
+
 def make_event(
     name: str,
     *,
@@ -165,6 +169,8 @@ def _normalize_shape(shape: Sequence[int] | Mapping[str, int] | None) -> list[in
 __all__ = [
     "TELEMETRY_SCHEMA_VERSION",
     "TelemetryEvent",
+    "TesseraMetricEvent",
+    "TesseraTraceEvent",
     "classify_bottleneck",
     "make_event",
     "telemetry_report",

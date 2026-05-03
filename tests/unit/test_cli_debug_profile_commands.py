@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from tessera.cli import mlir, prof
+from tessera.cli import mlir, prof, runtime
 
 
 def _write_model(tmp_path: Path) -> Path:
@@ -75,10 +75,22 @@ def test_tessera_prof_writes_chrome_trace(tmp_path, capsys):
     assert str(trace) in capsys.readouterr().out
 
 
+def test_tessera_runtime_smoke_writes_telemetry(tmp_path):
+    output = tmp_path / "runtime.json"
+
+    assert runtime.main(["--output", str(output), "--bytes", "16"]) == 0
+
+    payload = json.loads(output.read_text())
+    assert payload["schema"] == "tessera.telemetry.v1"
+    assert payload["runtime_status"] == "success"
+    assert payload["mapped_bytes"] == 16
+
+
 def test_pyproject_registers_console_scripts():
     text = Path("pyproject.toml").read_text()
     assert 'tessera-mlir = "tessera.cli.mlir:main"' in text
     assert 'tessera-prof = "tessera.cli.prof:main"' in text
+    assert 'tessera-runtime-smoke = "tessera.cli.runtime:main"' in text
 
 
 def test_guides_document_debugging_and_profiling_commands():

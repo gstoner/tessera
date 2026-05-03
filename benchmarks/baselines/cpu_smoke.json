@@ -1,0 +1,8 @@
+{
+  "schema": "tessera.telemetry.v1",
+  "min_event_count": 1,
+  "max_latency_ms": 1000.0,
+  "min_tflops": 0.0,
+  "min_bandwidth_gbps": 0.0,
+  "allowed_statuses": ["ok", "executable", "cached"]
+}

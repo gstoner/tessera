@@ -82,7 +82,9 @@ contracts where the contracts already exist:
 - **Schedule IR:** fixed `schedule.*` tile/layout/pipeline plans for CPU
   execution and artifact inspection.
 - **Tile IR:** `tile.*`, `tessera.attn.*`, and KV-cache contract operations.
-- **Target IR:** CPU target artifact using the NumPy ABI for execution.
+- **Target IR:** CPU target artifact using the NumPy ABI for execution, or
+  hardware-free ROCm/Metalium/Apple target artifacts when a non-CPU target is
+  selected.
 
 To see whether a function used the compiler path:
 
@@ -142,12 +144,14 @@ Supported:
 - literal keyword attributes such as `softmax(axis=0)` and optimizer params
 - NumPy arrays, tensor-like values with `.numpy()`, and Tessera `Tensor` values
   with `._data`
+- hardware-free Target IR artifact selection with `target="rocm"`,
+  `target="metalium"`, `target="apple_cpu"`, and `target="apple_gpu"`
 
 Not yet supported:
 
 - cost-model driven Schedule IR selection
 - native C ABI CPU launch
-- GPU/ROCm/TPU dispatch from this frontend path
+- GPU/ROCm/Apple/Metalium runtime dispatch from this frontend path
 - arbitrary Python control flow lowering
 - full textual DSL BNF coverage: kernels, meshes, schedule/dist statements,
   control flow, barriers, and asserts are future work
@@ -186,3 +190,26 @@ Priority order:
 4. Replace textual artifacts with MLIR objects and verifier calls.
 5. Connect Target IR to the runtime C ABI CPU backend.
 6. Extend the same spine to measured CUDA execution.
+
+## 7. Target IR Artifact Selection
+
+Non-CPU targets currently produce inspectable Target IR artifacts while
+execution falls back to the original Python function:
+
+```python
+@ts.jit(target="apple_gpu")
+def mm(A, B):
+    return ts.ops.matmul(A, B)
+
+print(mm.has_target_artifacts)
+print(mm.target_ir)
+print(mm.runtime_artifact().metadata["runtime_status"])
+```
+
+Current hardware-free target contracts:
+
+- `target="rocm"` emits `tessera_rocm.*` MFMA, async-copy, and wait artifacts.
+- `target="metalium"` emits `tessera_metalium.*` DMA and matmul artifacts.
+- `target="apple_cpu"` emits Accelerate/vecLib-style
+  `tessera_apple.cpu.*` artifacts.
+- `target="apple_gpu"` emits Metal/MPS-style `tessera_apple.gpu.*` artifacts.

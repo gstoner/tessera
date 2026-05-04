@@ -82,6 +82,7 @@ class CPUPlan:
     ops: tuple[IROp, ...]
     output_name: str
     tile: tuple[int, int, int]
+    target_kind: str
     graph_ir: str
     schedule_ir: str
     tile_ir: str
@@ -144,10 +145,12 @@ def build_cpu_plan(
     module: GraphIRModule,
     *,
     tile: tuple[int, int, int] = (128, 128, 64),
+    target_kind: str = "cpu",
 ) -> Optional[CPUPlan]:
-    """Build a CPU plan if the Graph IR module is supported straight-line dataflow."""
+    """Build a hardware-free lowering artifact plan for supported straight-line dataflow."""
 
     _validate_tile(tile)
+    target_kind = normalize_target_kind(target_kind)
     if len(module.functions) != 1:
         return None
     fn = module.functions[0]
@@ -167,14 +170,15 @@ def build_cpu_plan(
 
     graph_text = module.to_mlir()
     ops = tuple(fn.body)
-    schedule = _render_schedule_ir(fn, ops, tile=tile)
-    tile_ir = _render_tile_ir(fn, ops)
-    target = _render_target_ir(fn, ops)
+    schedule = _render_schedule_ir(fn, ops, tile=tile, target_kind=target_kind)
+    tile_ir = _render_tile_ir(fn, ops, target_kind=target_kind)
+    target = _render_target_ir(fn, ops, target_kind=target_kind)
     return CPUPlan(
         function_name=fn.name,
         ops=ops,
         output_name=output_name,
         tile=tile,
+        target_kind=target_kind,
         graph_ir=graph_text,
         schedule_ir=schedule,
         tile_ir=tile_ir,
@@ -185,12 +189,7 @@ def build_cpu_plan(
 def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagnostic:
     """Return a diagnostic explaining compile-path or fallback status."""
 
-    if target != "cpu":
-        return JitDiagnostic(
-            "warning",
-            "JIT_EAGER_FALLBACK_TARGET",
-            f"native target {target!r} execution is not wired; using eager Python fallback",
-        )
+    target = normalize_target_kind(target)
     if not module.functions:
         return JitDiagnostic("warning", "JIT_EAGER_FALLBACK_EMPTY", "no Graph IR function was emitted")
     fn = module.functions[0]
@@ -223,10 +222,19 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
             "JIT_EAGER_FALLBACK_UNSUPPORTED_BODY",
             "CPU compiler needs named values for every supported op; using eager Python fallback",
         )
+    if target == "cpu":
+        return JitDiagnostic(
+            "info",
+            "JIT_COMPILED_CPU",
+            f"compiled {fn.name} through Graph IR -> Schedule IR -> Tile IR -> Target IR -> CPU",
+        )
     return JitDiagnostic(
         "info",
-        "JIT_COMPILED_CPU",
-        f"compiled {fn.name} through Graph IR -> Schedule IR -> Tile IR -> Target IR -> CPU",
+        "JIT_TARGET_IR_ARTIFACT_ONLY",
+        (
+            f"compiled {fn.name} through Graph IR -> Schedule IR -> Tile IR -> "
+            f"{target} Target IR artifact; native execution is not wired"
+        ),
     )
 
 
@@ -235,10 +243,11 @@ def _render_schedule_ir(
     ops: Sequence[IROp],
     *,
     tile: tuple[int, int, int],
+    target_kind: str,
 ) -> str:
     tile_m, tile_n, tile_k = tile
     lines = [
-        'module attributes {tessera.ir.level = "schedule"} {',
+        f'module attributes {{tessera.ir.level = "schedule", target = "{target_kind}"}} {{',
         f'  "tessera.schedule.func"() ({{',
     ]
     for idx, op in enumerate(ops):
@@ -287,15 +296,15 @@ def _render_schedule_ir(
                 f'    "schedule.prefetch"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, into = "shared", overlap = "compute"}} : () -> ()'
             )
     lines.extend([
-        f'  }}) {{sym_name = "{fn.name}", target = "cpu"}} : () -> ()',
+        f'  }}) {{sym_name = "{fn.name}", target = "{target_kind}"}} : () -> ()',
         "}",
     ])
     return "\n".join(lines)
 
 
-def _render_tile_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
+def _render_tile_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target_kind: str) -> str:
     lines = [
-        'module attributes {tessera.ir.level = "tile"} {',
+        f'module attributes {{tessera.ir.level = "tile", target = "{target_kind}"}} {{',
         f'  "tessera.tile.func"() ({{',
     ]
     for idx, op in enumerate(ops):
@@ -318,13 +327,23 @@ def _render_tile_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
                 f'    "tile.kv_cache"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, storage = "paged"}} : () -> ()'
             )
     lines.extend([
-        f'  }}) {{sym_name = "{fn.name}", target = "cpu"}} : () -> ()',
+        f'  }}) {{sym_name = "{fn.name}", target = "{target_kind}"}} : () -> ()',
         "}",
     ])
     return "\n".join(lines)
 
 
-def _render_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
+def _render_target_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target_kind: str) -> str:
+    if target_kind == "rocm":
+        return _render_rocm_target_ir(fn, ops)
+    if target_kind == "metalium":
+        return _render_metalium_target_ir(fn, ops)
+    if target_kind == "apple_cpu":
+        return _render_apple_cpu_target_ir(fn, ops)
+    if target_kind == "apple_gpu":
+        return _render_apple_gpu_target_ir(fn, ops)
+    if target_kind == "gpu":
+        return _render_gpu_target_ir(fn, ops)
     lines = [
         'module attributes {tessera.ir.level = "target", target = "cpu"} {',
         f'  "tessera.cpu.func"() ({{',
@@ -334,6 +353,150 @@ def _render_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
         lines.append(
             f'    "{_target_op_name(op_name)}"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, abi = "numpy"}} : () -> ()'
         )
+    lines.extend([
+        f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
+        "}",
+    ])
+    return "\n".join(lines)
+
+
+def _render_rocm_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
+    lines = [
+        'module attributes {tessera.ir.level = "target", target = "rocm", arch = "gfx90a"} {',
+        f'  "tessera_rocm.func"() ({{',
+    ]
+    for idx, op in enumerate(ops):
+        op_name = _canonical_op_name(op.op_name)
+        if op_name in MATMUL_OPS:
+            lines.append(
+                f'    "tessera_rocm.mfma"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "gfx90a", shape = "m16n16k16", accum = "f32"}} : () -> ()'
+            )
+        elif op_name == "tessera.flash_attn":
+            lines.append(
+                f'    "tessera.target.diagnostic"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, target = "rocm", severity = "unsupported", reason = "flash_attn target kernel contract is not implemented for ROCm in this phase"}} : () -> ()'
+            )
+        elif op_name.startswith("tessera.kv_cache."):
+            lines.append(
+                f'    "tessera.target.diagnostic"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, target = "rocm", severity = "unsupported", reason = "KV-cache target lowering is not implemented for ROCm in this phase"}} : () -> ()'
+            )
+        else:
+            lines.append(
+                f'    "tessera_rocm.elementwise"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "gfx90a"}} : () -> ()'
+            )
+        lines.append(
+            f'    "tessera_rocm.async_copy"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, src_space = "global", dst_space = "lds", bytes = 16 : i64}} : () -> ()'
+        )
+        lines.append(f'    "tessera_rocm.wait"() {{ordinal = {idx} : i64}} : () -> ()')
+    lines.extend([
+        f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
+        "}",
+    ])
+    return "\n".join(lines)
+
+
+def _render_metalium_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
+    lines = [
+        'module attributes {tessera.ir.level = "target", target = "metalium", arch = "wormhole"} {',
+        f'  "tessera_metalium.program"() ({{',
+    ]
+    for idx, op in enumerate(ops):
+        op_name = _canonical_op_name(op.op_name)
+        if op_name in MATMUL_OPS:
+            lines.append(
+                f'    "tessera_metalium.dma"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, direction = "dram_to_sram", burst = 256 : i64}} : () -> ()'
+            )
+            lines.append(
+                f'    "tessera_metalium.matmul"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, tile = [64, 64, 32], layout = "row_col", accumulate = "f32"}} : () -> ()'
+            )
+        elif op_name.startswith("tessera.kv_cache."):
+            lines.append(
+                f'    "tessera.target.diagnostic"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, target = "metalium", severity = "unsupported", reason = "KV-cache paged-buffer target contract is not implemented for Metalium in this phase"}} : () -> ()'
+            )
+        else:
+            lines.append(
+                f'    "tessera_metalium.kernel"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, program = "mock_queue"}} : () -> ()'
+            )
+    lines.extend([
+        f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
+        "}",
+    ])
+    return "\n".join(lines)
+
+
+def _render_apple_cpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
+    lines = [
+        'module attributes {tessera.ir.level = "target", target = "apple_cpu", arch = "arm64-apple-silicon"} {',
+        f'  "tessera_apple.cpu.func"() ({{',
+    ]
+    for idx, op in enumerate(ops):
+        op_name = _canonical_op_name(op.op_name)
+        if op_name in MATMUL_OPS:
+            target_op = "tessera_apple.cpu.accelerate_gemm"
+            attrs = 'framework = "Accelerate", abi = "cblas_sgemm"'
+        elif op_name in REDUCTION_OPS:
+            target_op = "tessera_apple.cpu.vector_reduce"
+            attrs = 'framework = "Accelerate", abi = "vDSP"'
+        else:
+            target_op = "tessera_apple.cpu.vector_op"
+            attrs = 'framework = "Accelerate", abi = "vecLib"'
+        lines.append(
+            f'    "{target_op}"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, {attrs}}} : () -> ()'
+        )
+    lines.extend([
+        f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
+        "}",
+    ])
+    return "\n".join(lines)
+
+
+def _render_apple_gpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
+    lines = [
+        'module attributes {tessera.ir.level = "target", target = "apple_gpu", arch = "apple-metal"} {',
+        f'  "tessera_apple.gpu.func"() ({{',
+    ]
+    for idx, op in enumerate(ops):
+        op_name = _canonical_op_name(op.op_name)
+        if op_name == "tessera.flash_attn":
+            lines.append(
+                f'    "tessera_apple.gpu.metal_kernel"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, kernel = "flash_attn_contract", framework = "Metal", status = "artifact_only"}} : () -> ()'
+            )
+        elif op_name.startswith("tessera.kv_cache."):
+            lines.append(
+                f'    "tessera.target.diagnostic"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, target = "apple_gpu", severity = "unsupported", reason = "KV-cache target lowering is not implemented for Apple GPU in this phase"}} : () -> ()'
+            )
+        else:
+            lines.append(
+                f'    "tessera_apple.gpu.metal_kernel"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, framework = "Metal", threadgroup_memory = "auto"}} : () -> ()'
+            )
+        lines.append(
+            f'    "tessera_apple.gpu.dispatch"() {{ordinal = {idx} : i64, queue = "MTLCommandQueue", artifact = "metallib"}} : () -> ()'
+        )
+    lines.extend([
+        f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
+        "}",
+    ])
+    return "\n".join(lines)
+
+
+def _render_gpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
+    lines = [
+        'module attributes {tessera.ir.level = "target", target = "gpu"} {',
+        f'  "tessera.gpu.func"() ({{',
+    ]
+    for idx, op in enumerate(ops):
+        op_name = _canonical_op_name(op.op_name)
+        if op_name in MATMUL_OPS:
+            lines.append(
+                f'    "tessera.nvgpu.wgmma.mma_async"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, shape = "m64n64k16"}} : () -> ()'
+            )
+        elif op_name == "tessera.flash_attn":
+            lines.append(
+                f'    "tessera.nvgpu.flash_attn.kernel"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, status = "artifact_only"}} : () -> ()'
+            )
+        else:
+            lines.append(
+                f'    "tessera.gpu.elementwise"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64}} : () -> ()'
+            )
     lines.extend([
         f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
         "}",
@@ -491,6 +654,31 @@ def _canonical_op_name(op_name: str) -> str:
     return canonical_graph_op_name(LEGACY_GRAPH_OP_ALIASES.get(op_name, op_name))
 
 
+def normalize_target_kind(target: object = "cpu") -> str:
+    if target is None:
+        return "cpu"
+    if isinstance(target, str):
+        normalized = target.lower().replace("-", "_")
+        aliases = {
+            "amd": "rocm",
+            "hip": "rocm",
+            "tt_metalium": "metalium",
+            "tt": "metalium",
+            "apple": "apple_gpu",
+            "mac": "apple_gpu",
+            "macos_cpu": "apple_cpu",
+            "macos_gpu": "apple_gpu",
+            "m_series_cpu": "apple_cpu",
+            "m_series_gpu": "apple_gpu",
+        }
+        normalized = aliases.get(normalized, normalized)
+        allowed = {"cpu", "gpu", "rocm", "metalium", "apple_cpu", "apple_gpu"}
+        if normalized not in allowed:
+            raise ValueError(f"unsupported Tessera target {target!r}; expected one of {sorted(allowed)}")
+        return normalized
+    return "gpu"
+
+
 def _as_value(value: Any) -> Any:
     if isinstance(value, ReferenceKVCache):
         return value
@@ -573,4 +761,5 @@ __all__ = [
     "build_cpu_plan",
     "build_matmul_cpu_plan",
     "explain_cpu_plan",
+    "normalize_target_kind",
 ]

@@ -26,7 +26,7 @@ from .effects import Effect, EffectLattice, TesseraEffectError
 from .graph_ir import GraphIRBuilder, GraphIRModule
 from .gpu_target import GPUTargetProfile, ISA  # noqa: F401 — re-exported for callers
 from .attn_lower import FlashAttnLoweringConfig, SM90_DEFAULT  # noqa: F401
-from .matmul_pipeline import JitDiagnostic, CPUPlan, build_cpu_plan, explain_cpu_plan
+from .matmul_pipeline import JitDiagnostic, CPUPlan, build_cpu_plan, explain_cpu_plan, normalize_target_kind
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -209,7 +209,7 @@ class JitFn:
         constraints     : ConstraintSolver with registered predicates
         deterministic   : whether @jit(deterministic=True) was set
         seed            : RNG seed (if provided)
-        target          : GPUTargetProfile if GPU compilation was requested, else None
+        target          : GPUTargetProfile or target string if non-CPU compilation was requested, else None
         attn_config     : FlashAttnLoweringConfig if flash_attn in body, else None
         cpu_plan        : executable CPU lowering plan for supported programs
         cpu_tile        : CPU matmul/GEMM tile shape
@@ -225,7 +225,7 @@ class JitFn:
         constraints: ConstraintSolver,
         deterministic: bool = False,
         seed: Optional[int] = None,
-        target: Optional[GPUTargetProfile] = None,
+        target: Optional[Any] = None,
         attn_config: Optional[FlashAttnLoweringConfig] = None,
         cpu_plan: Optional[CPUPlan] = None,
         cpu_tile: Tuple[int, int, int] = (128, 128, 64),
@@ -251,7 +251,7 @@ class JitFn:
         Execute through the narrow CPU lowering path when available; otherwise
         fall back to the original Python function.
         """
-        if self.cpu_plan is not None and self.target is None:
+        if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
             return self.cpu_plan.execute(args, kwargs, self.arg_names)
         return self._fn(*args, **kwargs)
 
@@ -266,7 +266,7 @@ class JitFn:
 
     @property
     def is_gpu(self) -> bool:
-        return self.target is not None
+        return normalize_target_kind(self.target) in {"gpu", "rocm", "metalium", "apple_gpu"}
 
     @property
     def arg_names(self) -> List[str]:
@@ -288,7 +288,11 @@ class JitFn:
 
     @property
     def uses_compiled_path(self) -> bool:
-        return self.cpu_plan is not None and self.target is None
+        return self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu"
+
+    @property
+    def has_target_artifacts(self) -> bool:
+        return self.cpu_plan is not None
 
     def lowering_artifacts(self):
         """Return Graph/Schedule/Tile/Target artifacts for the compiled path."""
@@ -304,7 +308,7 @@ class JitFn:
 
         diagnostics = [d.format() for d in self.lowering_diagnostics]
         metadata: dict[str, Any] = {
-            "target": "gpu" if self.target is not None else "cpu",
+            "target": self.cpu_plan.target_kind if self.cpu_plan is not None else normalize_target_kind(self.target),
             "function_name": self._fn.__name__,
             "source_origin": self.source_origin,
             "effect": self.inferred_effect.name,
@@ -314,12 +318,7 @@ class JitFn:
             "compiler_path": "eager_fallback",
             "runtime_status": "unsupported",
         }
-        if self.target is not None:
-            metadata["compiler_path"] = "target_fallback"
-            metadata["runtime_status"] = "unimplemented"
-            metadata["reason"] = "native target execution is not wired"
-
-        if self.cpu_plan is not None and self.target is None:
+        if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
             metadata.update({
                 "executable": True,
                 "compiler_path": "jit_cpu_numpy",
@@ -338,6 +337,15 @@ class JitFn:
                     }
                     for op in self.cpu_plan.ops
                 ],
+            })
+        elif self.cpu_plan is not None:
+            metadata.update({
+                "compiler_path": "target_ir_artifact",
+                "runtime_status": "artifact_only",
+                "reason": "native target execution is not wired",
+                "arg_names": list(self.arg_names),
+                "output_name": self.cpu_plan.output_name,
+                "cpu_tile": list(self.cpu_plan.tile),
             })
 
         return RuntimeArtifact(
@@ -374,7 +382,7 @@ def jit(
     deterministic: bool = False,
     seed: Optional[int] = None,
     bindings: Optional[Dict[str, int]] = None,
-    target: Optional[GPUTargetProfile] = None,
+    target: Optional[Any] = None,
     attn_config: Optional[FlashAttnLoweringConfig] = None,
     cpu_tile: Tuple[int, int, int] = (128, 128, 64),
     source: Optional[str] = None,
@@ -405,8 +413,9 @@ def jit(
         seed         : RNG seed; allows random ops under deterministic=True
         bindings     : optional dict of dim_name → concrete size for
                        constraint checking at decoration time
-        target       : GPUTargetProfile; when set, routes to GPU lowering
-                       pipeline (Phase 3). None = CPU/interpreted path.
+        target       : GPUTargetProfile or target string. Supported strings are
+                       "rocm", "metalium", "apple_cpu", and "apple_gpu".
+                       None = executable CPU/NumPy path.
         attn_config  : FlashAttnLoweringConfig; when None and target is set with
                        isa >= SM_90, SM90_DEFAULT is used automatically.
         cpu_tile     : CPU matmul/GEMM schedule tile `(M, N, K)` for the narrow
@@ -457,7 +466,8 @@ def jit(
 
         # ── Step 5: resolve attn config for GPU path ────────────────────────
         resolved_attn = attn_config
-        if target is not None and target.supports_wgmma and resolved_attn is None:
+        target_kind = normalize_target_kind(target)
+        if isinstance(target, GPUTargetProfile) and target.supports_wgmma and resolved_attn is None:
             resolved_attn = SM90_DEFAULT
 
         # ── Step 6: emit Graph IR ────────────────────────────────────────────
@@ -465,11 +475,15 @@ def jit(
             builder = GraphIRBuilder()
             effect_tag = inferred_effect.name if deterministic or inferred_effect != Effect.pure else None
             # Attach GPU target attrs to the module when target is provided.
-            target_attr = target.to_mlir_attr() if target is not None else None
+            if isinstance(target, GPUTargetProfile):
+                target_attr = target.to_mlir_attr()
+            elif target is not None:
+                target_attr = f'{{name = "{target_kind}"}}'
+            else:
+                target_attr = None
             builder.lower(fn, effect_tag=effect_tag, target_attr=target_attr, source_text=source_text)
             module = builder.module()
-            cpu_plan = build_cpu_plan(module, tile=tuple(int(v) for v in cpu_tile)) if target is None else None
-            target_kind = "gpu" if target is not None else "cpu"
+            cpu_plan = build_cpu_plan(module, tile=tuple(int(v) for v in cpu_tile), target_kind=target_kind)
             diagnostics = []
             if source_text is None:
                 diagnostics.append(JitDiagnostic(

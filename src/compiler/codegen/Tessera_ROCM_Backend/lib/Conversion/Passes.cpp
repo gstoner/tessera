@@ -30,6 +30,10 @@ void registerTesseraROCMPasses() {
       "tessera-rocm-backend",
       "Lower Tessera ROCm target IR through ABI conversion and ROCDL",
       [](OpPassManager &pm) { buildTesseraROCMBackendPipeline(pm); });
+  PassPipelineRegistration<> canonicalPipeline(
+      "tessera-lower-to-rocm",
+      "Canonical Tessera Target IR pipeline for ROCm artifacts",
+      [](OpPassManager &pm) { buildTesseraROCMBackendPipeline(pm); });
 }
 
 void registerTesseraROCMDialects(DialectRegistry &registry) {

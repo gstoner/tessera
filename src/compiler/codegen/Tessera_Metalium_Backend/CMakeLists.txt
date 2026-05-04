@@ -12,11 +12,16 @@ if (TESSERA_METALIUM_WITH_MLIR)
   include(TableGen)
   include(AddMLIR)
 
-  # TableGen ops (uncomment to enable once .td ops are integrated)
-  # set(TESSERA_METALIUM_TD ${CMAKE_CURRENT_SOURCE_DIR}/include/Tessera/Target/Metalium/TesseraMetaliumOps.td)
-  # mlir_tablegen(TesseraMetaliumOps.h.inc -gen-op-decls ${TESSERA_METALIUM_TD})
-  # mlir_tablegen(TesseraMetaliumOps.cpp.inc -gen-op-defs  ${TESSERA_METALIUM_TD})
-  # add_public_tablegen_target(TesseraMetaliumOpsIncGen)
+  set(LLVM_TARGET_DEFINITIONS include/Tessera/Target/Metalium/TesseraMetaliumOps.td)
+  mlir_tablegen(TesseraMetaliumOps.h.inc -gen-op-decls)
+  mlir_tablegen(TesseraMetaliumOps.cpp.inc -gen-op-defs)
+  mlir_tablegen(TesseraMetaliumDialect.h.inc -gen-dialect-decls -dialect=tessera_metalium)
+  mlir_tablegen(TesseraMetaliumDialect.cpp.inc -gen-dialect-defs -dialect=tessera_metalium)
+  mlir_tablegen(TesseraMetaliumTypes.h.inc -gen-typedef-decls -typedefs-dialect=tessera_metalium)
+  mlir_tablegen(TesseraMetaliumTypes.cpp.inc -gen-typedef-defs -typedefs-dialect=tessera_metalium)
+  mlir_tablegen(TesseraMetaliumAttrs.h.inc -gen-attrdef-decls -attrdefs-dialect=tessera_metalium)
+  mlir_tablegen(TesseraMetaliumAttrs.cpp.inc -gen-attrdef-defs -attrdefs-dialect=tessera_metalium)
+  add_public_tablegen_target(TesseraMetaliumOpsIncGen)
 
   add_library(tessera_metalium_passes SHARED
     lib/Target/Metalium/Passes.cpp
@@ -27,7 +32,9 @@ if (TESSERA_METALIUM_WITH_MLIR)
   target_include_directories(tessera_metalium_passes PUBLIC
     ${MLIR_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_BINARY_DIR}
   )
+  add_dependencies(tessera_metalium_passes TesseraMetaliumOpsIncGen)
   target_link_libraries(tessera_metalium_passes PRIVATE
     MLIRTransforms
     MLIRPass

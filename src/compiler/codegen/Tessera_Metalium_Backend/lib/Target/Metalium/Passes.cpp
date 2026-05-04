@@ -31,4 +31,11 @@ static PassPipelineRegistration<> pipeline(
     pm.addPass(createLowerTileToMetaliumPass());
   });
 
+static PassPipelineRegistration<> canonicalPipeline(
+  "tessera-lower-to-metalium",
+  "Canonical Tessera Target IR pipeline for Metalium artifacts",
+  [](OpPassManager &pm) {
+    pm.addPass(createLowerTileToMetaliumPass());
+  });
+
 }}} // namespace mlir::tessera::metalium

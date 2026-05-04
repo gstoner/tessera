@@ -15,13 +15,14 @@ This is an agent-friendly rendering of the project eval strategy. `tests/COMPILE
 | Diagnostics quality | Invalid programs for effects, distributions, target support, memory spaces, and shapes produce stable useful errors. | Diagnostics include source context, compiler stage, violated invariant, and actionable category. |
 | Documentation evals | Documentation code blocks, links, referenced paths, public symbols, and pipeline diagrams stay current. | Executable examples run or are explicitly marked pseudo-code; all referenced project paths exist. |
 | Sample/tutorial evals | Getting-started samples and tutorials import, use canonical APIs, and produce expected outputs or artifacts. | CPU-promised samples run without accelerators and finish within a local smoke-test budget. |
+| Agent context graph evals | Ontology, knowledge map, generated JSON/Markdown outputs, and agent workflows stay parseable, path-valid, deterministic, and marked non-authoritative. | `scripts/generate_context_outputs.py --check` passes and generated outputs match source YAML plus this test plan. |
 | Compatibility/project health | CPU-only build path, optional hardware gates, CLI help, import-time budget, package metadata, and script/README command agreement. | Deterministic health checks pass without requiring hidden local state. |
 
 ## Eval Tiering
 
 | Tier | Eval Scope | Default |
 | --- | --- | --- |
-| Fast local | Spec conformance, documentation smoke checks, sample import checks, and CLI/package health. | Developer opt-in and cheap enough for pre-commit use. |
-| CI deterministic | Project evals that require no accelerator and do not depend on machine-specific timings. | Always on once the corresponding eval harness exists. |
+| Fast local | Spec conformance, documentation smoke checks, context graph generation checks, sample import checks, and CLI/package health. | Developer opt-in and cheap enough for pre-commit use. |
+| CI deterministic | Project evals that require no accelerator, including context graph output freshness, and do not depend on machine-specific timings. | Always on once the corresponding eval harness exists. |
 | Scheduled | Numerical sweeps, broader sample execution, documentation execution, and performance regression checks. | Nightly or weekly depending on runtime cost. |
 | Hardware-marked | SM80/SM90/SM100, ROCm, TPU, and distributed backend evals. | Opt-in with explicit hardware environment flags. |

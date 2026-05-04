@@ -222,10 +222,16 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         var = x.var(axis=-1, keepdims=True)
         return (x - mean) / np.sqrt(var + eps)
 
-    def rmsnorm_safe(x, eps: float = 1e-6):
+    def _rmsnorm(x, eps: float):
         if hasattr(x, "_data"):
             x = x._data
         return x / np.sqrt(np.mean(x * x, axis=-1, keepdims=True) + eps)
+
+    def rmsnorm(x, eps: float = 1e-5):
+        return _rmsnorm(x, eps=eps)
+
+    def rmsnorm_safe(x, eps: float = 1e-6):
+        return _rmsnorm(x, eps=eps)
 
     def softmax(x, axis: int = -1):
         if hasattr(x, "_data"):
@@ -250,6 +256,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         if hasattr(x, "_data"):
             x = x._data
         return np.maximum(0, x)
+
+    def silu(x):
+        if hasattr(x, "_data"):
+            x = x._data
+        return x / (1.0 + np.exp(-x))
 
     def sin(x):
         if hasattr(x, "_data"):
@@ -378,6 +389,33 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             x = x._data
         return x
 
+    def all_to_all(x, axis: int | str = 0):
+        if hasattr(x, "_data"):
+            x = x._data
+        return x
+
+    def _dtype_for(dtype):
+        dtype_map = {
+            "bf16": np.float32,
+            "fp16": np.float16,
+            "fp32": np.float32,
+            "fp64": np.float64,
+            "float16": np.float16,
+            "float32": np.float32,
+            "float64": np.float64,
+            "int32": np.int32,
+            "bool": np.bool_,
+        }
+        return dtype_map.get(str(dtype), np.float32)
+
+    def rng_uniform(shape, dtype="fp32", seed=None, lo: float = 0.0, hi: float = 1.0):
+        rng = np.random.default_rng(None if seed is None else int(seed))
+        return rng.uniform(float(lo), float(hi), tuple(shape)).astype(_dtype_for(dtype))
+
+    def rng_normal(shape, dtype="fp32", seed=None, mean: float = 0.0, std: float = 1.0):
+        rng = np.random.default_rng(None if seed is None else int(seed))
+        return rng.normal(float(mean), float(std), tuple(shape)).astype(_dtype_for(dtype))
+
     def fused_epilogue(x, bias=None, activation="linear"):
         if hasattr(x, "_data"):
             x = x._data
@@ -467,6 +505,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "relu": relu,
         "sigmoid": sigmoid,
         "sin": sin,
+        "silu": silu,
         "adam": adam,
         "transpose": transpose,
         "cast": cast,
@@ -475,6 +514,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "all_reduce": all_reduce,
         "reduce_scatter": reduce_scatter,
         "all_gather": all_gather,
+        "all_to_all": all_to_all,
+        "rng_uniform": rng_uniform,
+        "rng_normal": rng_normal,
         "fused_epilogue": fused_epilogue,
         "fft": fft,
         "ifft": ifft,
@@ -482,6 +524,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "irfft": irfft,
         "dct": dct,
         "spectral_conv": spectral_conv,
+        "rmsnorm": rmsnorm,
         "rmsnorm_safe": rmsnorm_safe,
         "kv_cache_append": kv_cache_append,
         "kv_cache_prune": kv_cache_prune,
@@ -503,6 +546,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         sigmoid=sigmoid,
         gelu=gelu,
         relu=relu,
+        silu=silu,
+        rmsnorm=rmsnorm,
         rmsnorm_safe=rmsnorm_safe,
         sin=sin,
         adam=adam,
@@ -514,6 +559,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         all_reduce=all_reduce,
         reduce_scatter=reduce_scatter,
         all_gather=all_gather,
+        all_to_all=all_to_all,
+        rng_uniform=rng_uniform,
+        rng_normal=rng_normal,
         fused_epilogue=fused_epilogue,
         fft=fft,
         ifft=ifft,

@@ -42,7 +42,7 @@ class LayerSpec:
         weight_sharding: how to shard weights — "col_parallel", "row_parallel",
                           "replicated", "expert_parallel"
         activation_sharding: how activations flow — "dp_scatter", "tp_allgather",
-                              "full"
+                              "full", "cyclic"
 
     Example:
         LayerSpec(
@@ -92,6 +92,15 @@ class LayerSpec:
         """True if this layer requires an all_gather before the next layer."""
         # Row-parallel linear: need to gather split activations across TP ranks
         return self.tp_axis is not None and self.weight_sharding == "row_parallel"
+
+    def needs_all_to_all(self) -> bool:
+        """True if this layer requires all_to_all token or activation exchange."""
+        has_collective_axis = self.tp_axis is not None or self.dp_axis is not None
+        return has_collective_axis and (
+            self.layer_type == "moe"
+            or self.weight_sharding == "expert_parallel"
+            or self.activation_sharding == "cyclic"
+        )
 
     def to_ir_attr(self) -> str:
         """Serialize as MLIR attribute for GPUCollectiveInsertionPass."""
@@ -203,6 +212,10 @@ class DistributedPlan:
         """Return names of layers that need an all_gather at their input."""
         return [s.name for s in self.layers if s.needs_all_gather()]
 
+    def all_to_all_boundaries(self) -> List[str]:
+        """Return names of layers that need all_to_all token/activation exchange."""
+        return [s.name for s in self.layers if s.needs_all_to_all()]
+
     def to_mlir_attrs(self) -> str:
         """
         Serialize the plan as a MLIR module-level attribute string.
@@ -218,13 +231,23 @@ class DistributedPlan:
             f'{{{", ".join(self._layer_dict(s))}}}'
             for s in self.layers
         )
+        reduce_scatter = self._string_list_attr(self.reduce_scatter_boundaries())
+        all_gather = self._string_list_attr(self.all_gather_boundaries())
+        all_to_all = self._string_list_attr(self.all_to_all_boundaries())
         return (
             f'{{tessera.distributed_plan = {{'
             f'mesh = {{{mesh_parts}}}, '
             f'total_ranks = {self.total_ranks}, '
             f'num_stages = {self.num_pipeline_stages}, '
+            f'reduce_scatter = [{reduce_scatter}], '
+            f'all_gather = [{all_gather}], '
+            f'all_to_all = [{all_to_all}], '
             f'layers = [{layer_attrs}]}}}}'
         )
+
+    @staticmethod
+    def _string_list_attr(values: List[str]) -> str:
+        return ", ".join(f'"{value}"' for value in values)
 
     @staticmethod
     def _layer_dict(spec: LayerSpec) -> List[str]:

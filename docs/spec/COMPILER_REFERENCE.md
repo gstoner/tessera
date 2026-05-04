@@ -36,7 +36,7 @@ Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, TPU, Apple, ...)
 
 | Layer | Primary active files | Status |
 |-------|----------------------|--------|
-| Graph IR | `python/tessera/compiler/graph_ir.py`, `src/compiler/ir/TesseraOps.td`, `src/compiler/ir/TesseraTiling.cpp` | implemented |
+| Graph IR | `python/tessera/compiler/graph_ir.py`, `src/compiler/ir/TesseraOps.td`, `src/compiler/ir/TesseraTiling.cpp` | implemented; TilingInterface methods scaffolded |
 | Schedule IR | `src/compiler/programming_model/ir/ScheduleOps.cpp`, `src/compiler/programming_model/` | implemented / scaffolded |
 | Tile IR | `src/compiler/tile_opt_fa4/`, `src/transforms/lib/TileIRLoweringPass.cpp` | implemented / lit-testable |
 | Target IR | `src/compiler/codegen/`, `python/tessera/compiler/matmul_pipeline.py` | implemented for CPU artifacts; lit-testable or scaffolded for non-CPU targets unless backend docs say otherwise |
@@ -82,6 +82,12 @@ hardware-runtime when the backend-specific docs and tests say so.
 | `PipelineStageInsertionPass` | `src/transforms/lib/PipelineStageInsertionPass.cpp` | Insert pipeline stage structure | implemented / scaffolded |
 | TPU target support | `python/tessera/compiler/tpu_target.py`, `src/compiler/codegen/Tessera_TPU_Backend/` | TPU target metadata and Shardy/StableHLO artifacts | implemented / lit-testable |
 | Runtime diagnostics | `src/compiler/diagnostics/ErrorReporter.cpp`, `src/compiler/diagnostics/ShapeInferencePass.cpp`, `python/tessera/diagnostics.py` | Error reporting and shape diagnostics | implemented |
+
+TilingInterface support is intentionally classified separately from the
+`TilingPass`: `TilingPass` is implemented/lit-testable for the supported static
+matmul lowering path, while `src/compiler/ir/TesseraTiling.cpp` still contains
+scaffolded interface methods and must not be treated as complete interface
+coverage.
 
 ---
 

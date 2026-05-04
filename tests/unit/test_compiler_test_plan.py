@@ -54,6 +54,8 @@ def test_compiler_test_plan_documents_project_level_evals():
         "End-to-end compiler evals",
         "Documentation evals",
         "Sample/tutorial evals",
+        "Agent context graph evals",
+        "context graph output freshness",
     ]
     for topic in expected_eval_topics:
         assert topic in text

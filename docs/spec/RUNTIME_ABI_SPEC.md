@@ -438,42 +438,45 @@ The public C ABI is designed around a `Backend` abstract class
 (`src/runtime/src/backend/base_backend.h`). Each production backend is expected to be an
 independent shared library:
 
-| Backend | File | Status |
-|---------|------|--------|
-| CPU (thread pool) | `tessera_runtime_cpu.cpp` | Header/API specified; Phase 6 production wiring planned |
-| CUDA | `tessera_runtime_cuda.cpp` | Phase 6 planned |
-| HIP (AMD) | `tessera_runtime_hip.cpp` | Phase 6 planned |
+| Backend | Active file | Status |
+|---------|-------------|--------|
+| CPU (thread pool) | `src/runtime/src/backend/cpu_backend.cpp` | implemented / mock-runtime |
+| CUDA | `src/runtime/src/backend/cuda_backend.cpp` | hardware-runtime when built with `TESSERA_ENABLE_CUDA` and a CUDA device is present; otherwise unavailable |
+| HIP (AMD) | `src/runtime/src/backend/hip_backend.cpp` | hardware-runtime when built with `TESSERA_ENABLE_HIP` and a HIP device is present; otherwise unavailable |
 
 The `Backend` interface mirrors the C ABI 1:1 (every `tsr*` function calls the corresponding
 `Backend` virtual method). Selecting a backend at runtime:
 
 1. `tsrInit` scans for available backends in priority order: CUDA > HIP > CPU.
 2. `tsrGetDevice(0, ...)` always returns the CPU backend; higher indices are accelerators.
-3. Phase 1–3 tests use Python stubs and `MockRankGroup` for execution and distributed
-   behavior. They do not demonstrate full C ABI runtime conformance.
+3. Python distributed tests use `MockRankGroup` for multi-rank behavior. That
+   mock does not demonstrate NCCL/RCCL/MPI runtime conformance.
 
 ---
 
-## 10. Python Wrapper (Planned — Phase 6)
+## 10. Python Wrapper
 
-The `TesseraRuntime` Python class (to be implemented in `python/tessera/runtime.py`) is a
-thin ctypes/cffi binding over the C ABI:
+The `TesseraRuntime` Python class in `python/tessera/runtime.py` is the current
+Python wrapper over the C ABI when a shared runtime library is available, and a
+deterministic mock-runtime fallback otherwise:
 
 ```python
-from tessera.runtime import TesseraRuntime   # Phase 6
+from tessera.runtime import TesseraRuntime
 
 rt = TesseraRuntime()
-assert rt.device_count() >= 1   # always >= 1 (CPU)
+rt.init()
+assert rt.get_device_count() >= 1   # always >= 1 (CPU/mock)
 
-ctx = rt.create_context(device_id=0)
-stream = rt.create_stream(ctx)
+dev = rt.get_device(0)
+stream = rt.create_stream(dev)
 
-buf = rt.malloc(ctx, 4096)
+buf = rt.malloc(dev, 4096)
 rt.memset(buf, 0, 4096)
-rt.synchronize(stream)
+rt.stream_sync(stream)
 
 rt.destroy_stream(stream)
-rt.destroy_context(ctx)
+rt.free(buf)
+rt.shutdown()
 ```
 
 The Python wrapper maps `TsrStatus` return codes to `TesseraRuntimeError` exceptions. It
@@ -484,22 +487,23 @@ reverse creation order.
 
 ## 11. Phase Coverage
 
-| Feature | ABI headers | CPU impl | CUDA impl | Python wrapper |
-|---------|------------|----------|-----------|----------------|
-| `tsrInit` / `tsrShutdown` | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
-| Device enumeration | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
-| Streams | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
-| Events + timestamps | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
-| `tsrMalloc` / `tsrFree` | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
-| `tsrMemcpy` | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
-| `tsrMap` / `tsrUnmap` | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
-| `tsrLaunchHostTileKernel` | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
-| Launch validation helpers | ✅ Specified | Phase 6 planned | n/a | Phase 6 planned |
-| Profiling timestamps | ✅ Specified | Phase 6 planned | Phase 6 planned | Phase 6 planned |
+| Feature | ABI headers | CPU impl | CUDA/HIP impl | Python wrapper |
+|---------|-------------|----------|---------------|----------------|
+| `tsrInit` / `tsrShutdown` | implemented | implemented / mock-runtime | hardware-runtime when built and device-present | implemented / mock-runtime |
+| Device enumeration | implemented | implemented / mock-runtime | hardware-runtime when built and device-present | implemented / mock-runtime |
+| Streams | implemented | implemented / mock-runtime | hardware-runtime when built and device-present | implemented / mock-runtime |
+| Events + timestamps | implemented | implemented / mock-runtime | hardware-runtime when built and device-present | implemented / mock-runtime |
+| `tsrMalloc` / `tsrFree` | implemented | implemented / mock-runtime | hardware-runtime when built and device-present | implemented / mock-runtime |
+| `tsrMemcpy` | implemented | implemented / mock-runtime | hardware-runtime when built and device-present | implemented / mock-runtime |
+| `tsrMap` / `tsrUnmap` | implemented | implemented / mock-runtime | hardware-runtime when built and device-present | implemented / mock-runtime |
+| `tsrLaunchHostTileKernel` | implemented | implemented / mock-runtime | hardware-runtime when built and device-present | implemented / mock-runtime |
+| Artifact compile/load/get-kernel/launch | implemented | scaffolded / implemented subset | scaffolded | scaffolded / implemented subset |
+| Launch validation helpers | implemented | implemented / mock-runtime | n/a | implemented / mock-runtime |
+| Profiling timestamps | implemented | implemented / mock-runtime | hardware-runtime when built and device-present | implemented / mock-runtime |
 
-**Note:** Phases 1–5 use `python/tessera/testing/mock_collective.py` (`MockRankGroup`) for
-multi-rank tests. That mock does not go through the C ABI — it uses Python threads and
-in-process numpy buffers. The C ABI becomes the execution path starting in Phase 6.
+**Note:** `python/tessera/testing/mock_collective.py` (`MockRankGroup`) remains
+the current multi-rank test mechanism. It does not go through the C ABI; it uses
+Python threads and in-process numpy buffers.
 
 ---
 

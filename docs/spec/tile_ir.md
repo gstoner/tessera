@@ -29,7 +29,7 @@ Target IR    (tessera.nvgpu.wgmma.*, tessera.tma.*, x86 intrinsics)
 ```
 
 Tile IR is the layer at which:
-- Explicit shared memory allocation appears (`tshared.alloc`)
+- Explicit shared memory allocation appears (`tile.alloc_shared`)
 - Warp roles are assigned (`tessera.schedule.warp {role="producer/consumer"}`)
 - Async copy stages are made explicit (`tile.async_copy {stage=N}`)
 - MMA operations are expressed (`tile.mma`)
@@ -80,13 +80,12 @@ Example: `memref<128x64xf16, 1>` = 128×64 f16 array in shared memory.
 
 ## 3. Core `tile.*` Operations
 
-### 3.1 `tshared.alloc`
+### 3.1 `tile.alloc_shared`
 
 Allocates a buffer in shared memory. Must appear in the kernel preamble.
 
 ```mlir
-%smem = tshared.alloc[f16](128, 64) {swizzle = "xor"}
-    : memref<128x64xf16, 1>
+%smem = tile.alloc_shared : memref<128x64xf16, 1> {swizzle = "xor"}
 ```
 
 **Attributes:**
@@ -397,7 +396,8 @@ tessera.schedule.warp {role = "consumer"} {
 **Verifier rules:**
 - `tessera.schedule.warp` regions must not be nested
 - A function may contain at most one producer region and one consumer region per queue
-- `tile.barrier` is not permitted inside a single-role warp region (use queue tokens instead)
+- generic `tile.barrier` is legacy spelling; active code uses `tile.mbarrier.*`
+  for transactional barriers and queue tokens for producer/consumer handoff
 - All `tessera.queue.*` ops must be inside a `tessera.schedule.warp` region
 
 ---
@@ -410,7 +410,7 @@ The Tile IR verifier enforces the following (normative):
 |------|-----------|
 | Every `tile.async_copy {stage=N}` has a matching `tile.wait_async {stage=N}` | Function level |
 | No `tile.wait_async` for a stage with no corresponding `tile.async_copy` | Function level |
-| All `tshared.alloc` results are memory space 1 | Op level |
+| All `tile.alloc_shared` results are memory space 1 | Op level |
 | All `tessera.tcgen05.*` ops only appear when module `tessera.isa >= SM_100` | Module level |
 | `tessera.queue.*` ops only appear inside `tessera.schedule.warp` regions | Op level |
 | `tile.mma` input dimensions match hardware alignment requirements | Op level |
@@ -423,16 +423,17 @@ The Tile IR verifier enforces the following (normative):
 
 | Tile IR feature | Phase introduced | Status |
 |----------------|-----------------|--------|
-| `tshared.alloc` | Phase 3 | ✅ Complete |
+| `tile.alloc_shared` | Phase 3 | implemented / lit-testable |
 | `tile.async_copy` / `tile.wait_async` | Phase 3 | ✅ Complete |
 | `tile.mma` | Phase 3 | ✅ Complete |
 | `tile.reduce` | Phase 3 | ✅ Complete |
-| `tile.barrier` | Phase 3 | ✅ Complete |
+| `tile.mbarrier.*` | Phase 3 | implemented / lit-testable |
+| `tile.barrier` | legacy note | planned alias only; prefer `tile.mbarrier.*` or queue tokens |
 | `tessera.attn.*` (FA-4 ops) | Phase 3 | ✅ Complete |
 | `tessera.queue.*` (warp specialization) | Phase 3 | ✅ Complete |
-| `tessera.tcgen05.*` (TMEM / SM_100) | Phase 3 (ODS defined) | 🔲 Lowering Phase 6 |
+| `tessera.tcgen05.*` (TMEM / SM_100) | Phase 3 (ODS defined) | stubbed / lit-testable until real Blackwell PTX operands land |
 | Collective ops (`tile.comm`) | Phase 4 planned | 🔲 Planned |
-| ROCm MFMA Tile IR path | Phase 6 planned | 🔲 Planned |
+| ROCm MFMA Tile IR path | backend extension | planned / scaffolded in ROCm Target IR |
 
 ---
 

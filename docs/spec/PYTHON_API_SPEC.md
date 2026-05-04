@@ -1168,31 +1168,52 @@ from tessera.compiler.attn_lower import SM90_DEFAULT
 **Import:** `tessera.ops.<name>`  
 **Library contract:** `docs/operations/Tessera_Standard_Operations.md`
 
-Phase 1 implementations are numpy-backed stubs. Phase 3 dispatches to compiled MLIR kernels via the GPU lowering pipeline.
+Phase 1 implementations are numpy-backed references or single-rank mock
+helpers. Phase 3 dispatches to compiled MLIR artifacts via the GPU lowering
+pipeline where that target path is implemented. Native hardware runtime support
+is a separate claim and is recorded in `RUNTIME_ABI_SPEC.md`.
 The Tessera Standard Operator Library reserves additional operator names for
 planned compiler/runtime paths; this table lists only the current Phase 1-3
 runtime surface. Larger typed APIs in `python/tessera/ops.pyi` such as sparse,
 MoE, RNG seed objects, and expanded collectives are reserved/planned unless
 they also appear in this table.
 
-| Operation | Signature | Effect | Phase 1 behavior |
-|-----------|-----------|--------|-----------------|
+| Operation | Signature | Effect | Current behavior |
+|-----------|-----------|--------|------------------|
 | `gemm(A, B)` | `(array, array) → array` | `pure` | `np.matmul(A, B)` |
 | `matmul(A, B)` | `(array, array) → array` | `pure` | Alias for `gemm` |
 | `layer_norm(x, eps=1e-5)` | `(array) → array` | `pure` | NumPy layer norm |
 | `softmax(x, axis=-1)` | `(array) → array` | `pure` | NumPy softmax |
+| `softmax_safe(x, axis=-1)` | `(array) → array` | `pure` | Stable NumPy softmax alias |
 | `gelu(x)` | `(array) → array` | `pure` | NumPy GELU |
 | `relu(x)` | `(array) → array` | `pure` | NumPy ReLU |
+| `silu(x)` | `(array) → array` | `pure` | NumPy SiLU |
+| `sigmoid(x)` | `(array) → array` | `pure` | NumPy sigmoid |
+| `sin(x)` | `(array) → array` | `pure` | NumPy sine |
+| `adam(param, grad, moment1, moment2, lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8, step=1)` | `(array,array,array,array) → tuple` | `pure` | Functional NumPy Adam step |
+| `rmsnorm(x, eps=1e-5)` | `(array) → array` | `pure` | NumPy RMSNorm reference |
+| `rmsnorm_safe(x, eps=1e-6)` | `(array) → array` | `pure` | NumPy RMSNorm reference with safer default epsilon |
 | `transpose(x, axes=None)` | `(array) → array` | `pure` | `np.transpose(x, axes)` |
 | `cast(x, dtype)` | `(array, str) → array` | `pure` | `x.astype(dtype)` |
 | `dropout(x, p=0.1, training=True)` | `(array) → array` | `random` | Bernoulli mask, numpy rng |
-| `conv2d(x, weight, bias=None, stride=1, padding=0)` | stub | `pure` | Returns zeros |
+| `conv2d(x, weight, bias=None, stride=1, padding=0)` | `(NHWC, HWIO) → NHWC` | `pure` | NumPy NHWC/HWIO reference |
 | `flash_attn(Q, K, V, scale=None, causal=False, dropout_p=0.0, seed=None)` | `(array,array,array) → array` | `pure` / `random` when dropout is active | Naive O(S²) Phase 1; FA-4 Phase 3 |
-| `all_reduce(x, op="sum")` | stub | `io` | No-op Phase 1 |
-| `reduce_scatter(x, op="sum", axis=0)` | stub | `io` | No-op Phase 1 |
-| `all_gather(x, axis=0)` | stub | `io` | No-op Phase 1 |
+| `all_reduce(x, op="sum")` | `(array) → array` | `collective` | Single-rank/mock no-op unless using explicit mock collective helpers |
+| `reduce_scatter(x, op="sum", axis=0)` | `(array) → array` | `collective` | Single-rank/mock no-op unless using explicit mock collective helpers |
+| `all_gather(x, axis=0)` | `(array) → array` | `collective` | Single-rank/mock no-op unless using explicit mock collective helpers |
+| `all_to_all(x, axis=0)` | `(array) → array` | `collective` | Single-rank/mock no-op; MoE planner tests cover planning behavior |
+| `rng_uniform(shape, dtype="fp32", seed=None, lo=0.0, hi=1.0)` | `(shape) → array` | `random` | NumPy generator helper |
+| `rng_normal(shape, dtype="fp32", seed=None, mean=0.0, std=1.0)` | `(shape) → array` | `random` | NumPy generator helper |
 | `fused_epilogue(x, bias=None, activation="linear")` | `(array) → array` | `pure` | Applies bias + activation |
 | `fft(x, axis=-1)`, `ifft(xf, axis=-1)`, `rfft(x, axis=-1)`, `irfft(xf, axis=-1, n=None)` | `(array) → array` | `pure` | NumPy FFT helpers |
+| `dct(x, type=2, axis=-1)` | `(array) → array` | `pure` | NumPy FFT-derived DCT helper |
+| `spectral_conv(x, w)` | `(array, array) → array` | `pure` | NumPy spectral convolution helper |
+| `kv_cache_append(cache, key, value)` | `(cache, array, array) → cache` | `state` | Reference in-process KV cache helper |
+| `kv_cache_prune(cache, max_entries=None, max_seq=None)` | `(cache) → cache` | `state` | Reference in-process KV cache helper |
+
+**Operator registry behavior:** `tessera.ops.registry` tracks reference,
+lowering, and runtime-kernel handlers. Current public runtime names are mirrored
+by `python/tessera/compiler/op_catalog.py`; tests guard this table against drift.
 
 **`flash_attn` parameter details:**
 

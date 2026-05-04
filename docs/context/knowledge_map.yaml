@@ -62,6 +62,39 @@ entities:
     references:
       - path: docs/GLOSSARY.md
 
+  - id: doc.agent_context_readme
+    type: doc
+    name: Agent Context README
+    description: "Guide for using Tessera context maps, generated outputs, and maintenance rules."
+    authority: informative
+    tags: ["agent-context", "generated-outputs", "workflow"]
+    owner_area: docs
+    output_priority: 35
+    references:
+      - path: docs/context/README.md
+
+  - id: doc.agent_context_ontology
+    type: doc
+    name: Agent Context Ontology
+    description: "Machine-readable entity and relation vocabulary for Tessera context maps."
+    authority: informative
+    tags: ["agent-context", "ontology", "schema"]
+    owner_area: docs
+    output_priority: 36
+    references:
+      - path: docs/context/ontology.yaml
+
+  - id: doc.agent_knowledge_map
+    type: doc
+    name: Agent Knowledge Map
+    description: "Curated machine-readable map of Tessera concepts, references, relations, and workflows."
+    authority: informative
+    tags: ["agent-context", "knowledge-graph", "workflow"]
+    owner_area: docs
+    output_priority: 37
+    references:
+      - path: docs/context/knowledge_map.yaml
+
   - id: api.python_frontend
     type: api
     name: Python Frontend API
@@ -281,6 +314,83 @@ entities:
       - path: tests/performance
       - path: benchmarks/run_all.py
 
+  - id: test.context_knowledge_map
+    type: test_suite
+    name: Context Knowledge Map Tests
+    description: "Validation tests for ontology fields, knowledge-map references, relations, archive flags, and workflows."
+    authority: normative
+    tags: ["agent-context", "ontology", "knowledge-graph"]
+    owner_area: docs
+    output_priority: 300
+    references:
+      - path: tests/unit/test_context_knowledge_map.py
+
+  - id: test.context_generated_outputs
+    type: test_suite
+    name: Context Generated Output Tests
+    description: "Validation tests for generated context outputs, committed-output freshness, and non-authoritative generated artifacts."
+    authority: normative
+    tags: ["agent-context", "generated-outputs", "evals"]
+    owner_area: docs
+    output_priority: 310
+    references:
+      - path: tests/unit/test_context_generated_outputs.py
+
+  - id: tool.context_output_generator
+    type: tool
+    name: Context Output Generator
+    description: "Deterministic generator for agent knowledge graph JSON, Markdown indexes, workflows, and eval matrix outputs."
+    authority: informative
+    tags: ["agent-context", "generator", "automation"]
+    owner_area: docs
+    output_priority: 320
+    references:
+      - path: scripts/generate_context_outputs.py
+
+  - id: generated.knowledge_graph_json
+    type: generated_output
+    name: Knowledge Graph JSON
+    description: "Agent-readable generated JSON graph containing entities, relations, workflows, and source provenance."
+    authority: derived
+    tags: ["agent-context", "generated-output", "json"]
+    owner_area: docs
+    output_priority: 330
+    references:
+      - path: docs/context/generated/knowledge_graph.json
+
+  - id: generated.knowledge_index_md
+    type: generated_output
+    name: Knowledge Index Markdown
+    description: "Human-readable generated index grouped by entity type with authorities, references, and relations."
+    authority: derived
+    tags: ["agent-context", "generated-output", "markdown"]
+    owner_area: docs
+    output_priority: 340
+    references:
+      - path: docs/context/generated/knowledge_index.md
+
+  - id: generated.agent_workflows_md
+    type: generated_output
+    name: Agent Workflows Markdown
+    description: "Human-readable generated workflow guide for documentation, examples, code planning, and status checks."
+    authority: derived
+    tags: ["agent-context", "generated-output", "markdown"]
+    owner_area: docs
+    output_priority: 350
+    references:
+      - path: docs/context/generated/agent_workflows.md
+
+  - id: generated.eval_matrix_md
+    type: generated_output
+    name: Eval Matrix Markdown
+    description: "Human-readable generated rendering of the project-level eval matrix and eval tiering."
+    authority: derived
+    tags: ["agent-context", "generated-output", "evals"]
+    owner_area: docs
+    output_priority: 360
+    references:
+      - path: docs/context/generated/eval_matrix.md
+
 relations:
   - source: api.python_frontend
     relation: defined_by
@@ -336,6 +446,42 @@ relations:
   - source: test.numerical_validation
     relation: depends_on
     target: api.python_frontend
+  - source: doc.agent_context_readme
+    relation: explained_by
+    target: docs/context/README.md
+  - source: doc.agent_knowledge_map
+    relation: defined_by
+    target: doc.agent_context_ontology
+  - source: tool.context_output_generator
+    relation: depends_on
+    target: doc.agent_context_ontology
+  - source: tool.context_output_generator
+    relation: depends_on
+    target: doc.agent_knowledge_map
+  - source: tool.context_output_generator
+    relation: depends_on
+    target: tests/COMPILER_TEST_PLAN.md
+  - source: generated.knowledge_graph_json
+    relation: generated_by
+    target: tool.context_output_generator
+  - source: generated.knowledge_index_md
+    relation: generated_by
+    target: tool.context_output_generator
+  - source: generated.agent_workflows_md
+    relation: generated_by
+    target: tool.context_output_generator
+  - source: generated.eval_matrix_md
+    relation: generated_by
+    target: tool.context_output_generator
+  - source: test.context_knowledge_map
+    relation: tested_by
+    target: test.unit
+  - source: test.context_generated_outputs
+    relation: tested_by
+    target: test.unit
+  - source: tool.context_output_generator
+    relation: tested_by
+    target: test.context_generated_outputs
   - source: doc.canonical_api
     relation: supersedes
     target: docs/archive/pre_canonical/api
@@ -350,10 +496,11 @@ agent_workflows:
     goal: "Keep documentation aligned with canonical authorities."
     steps:
       - "Read docs/README.md to identify the normative authority for the topic."
-      - "Use this knowledge map to find related guides, tests, examples, and implementation surfaces."
+      - "Use docs/context/generated/knowledge_index.md to find related guides, tests, examples, and implementation surfaces."
       - "Use canonical API names from docs/CANONICAL_API.md and docs/spec/PYTHON_API_SPEC.md."
       - "Avoid archive docs as authority; cite them only as historical background."
-      - "Run docs lint and any targeted tests for changed claims."
+      - "Regenerate context outputs when the ontology, knowledge map, or project eval plan changes."
+      - "Run docs lint, context generator checks, and any targeted tests for changed claims."
   create_examples_or_tutorials:
     goal: "Create runnable examples that match current APIs and implementation status."
     steps:
@@ -367,6 +514,7 @@ agent_workflows:
       - "Identify the entity for the target subsystem."
       - "Read its normative references before implementation."
       - "Inspect implemented_in and tested_by targets before editing."
+      - "Check docs/context/generated/knowledge_graph.json for adjacent entities and relations."
       - "Update docs or examples when public behavior changes."
   check_api_or_status_claims:
     goal: "Prevent stale public claims in generated content."

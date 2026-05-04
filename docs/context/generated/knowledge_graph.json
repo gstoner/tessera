@@ -24,6 +24,7 @@
         "Identify the entity for the target subsystem.",
         "Read its normative references before implementation.",
         "Inspect implemented_in and tested_by targets before editing.",
+        "Check docs/context/generated/knowledge_graph.json for adjacent entities and relations.",
         "Update docs or examples when public behavior changes."
       ]
     },
@@ -31,10 +32,11 @@
       "goal": "Keep documentation aligned with canonical authorities.",
       "steps": [
         "Read docs/README.md to identify the normative authority for the topic.",
-        "Use this knowledge map to find related guides, tests, examples, and implementation surfaces.",
+        "Use docs/context/generated/knowledge_index.md to find related guides, tests, examples, and implementation surfaces.",
         "Use canonical API names from docs/CANONICAL_API.md and docs/spec/PYTHON_API_SPEC.md.",
         "Avoid archive docs as authority; cite them only as historical background.",
-        "Run docs lint and any targeted tests for changed claims."
+        "Regenerate context outputs when the ontology, knowledge map, or project eval plan changes.",
+        "Run docs lint, context generator checks, and any targeted tests for changed claims."
       ]
     }
   },
@@ -178,6 +180,63 @@
       "type": "concept"
     },
     {
+      "authority": "informative",
+      "description": "Machine-readable entity and relation vocabulary for Tessera context maps.",
+      "id": "doc.agent_context_ontology",
+      "name": "Agent Context Ontology",
+      "output_priority": 36,
+      "owner_area": "docs",
+      "references": [
+        {
+          "path": "docs/context/ontology.yaml"
+        }
+      ],
+      "tags": [
+        "agent-context",
+        "ontology",
+        "schema"
+      ],
+      "type": "doc"
+    },
+    {
+      "authority": "informative",
+      "description": "Guide for using Tessera context maps, generated outputs, and maintenance rules.",
+      "id": "doc.agent_context_readme",
+      "name": "Agent Context README",
+      "output_priority": 35,
+      "owner_area": "docs",
+      "references": [
+        {
+          "path": "docs/context/README.md"
+        }
+      ],
+      "tags": [
+        "agent-context",
+        "generated-outputs",
+        "workflow"
+      ],
+      "type": "doc"
+    },
+    {
+      "authority": "informative",
+      "description": "Curated machine-readable map of Tessera concepts, references, relations, and workflows.",
+      "id": "doc.agent_knowledge_map",
+      "name": "Agent Knowledge Map",
+      "output_priority": 37,
+      "owner_area": "docs",
+      "references": [
+        {
+          "path": "docs/context/knowledge_map.yaml"
+        }
+      ],
+      "tags": [
+        "agent-context",
+        "knowledge-graph",
+        "workflow"
+      ],
+      "type": "doc"
+    },
+    {
       "authority": "normative",
       "description": "Single naming authority for public Tessera APIs and current syntax.",
       "id": "doc.canonical_api",
@@ -296,6 +355,82 @@
         }
       ],
       "type": "example"
+    },
+    {
+      "authority": "derived",
+      "description": "Human-readable generated workflow guide for documentation, examples, code planning, and status checks.",
+      "id": "generated.agent_workflows_md",
+      "name": "Agent Workflows Markdown",
+      "output_priority": 350,
+      "owner_area": "docs",
+      "references": [
+        {
+          "path": "docs/context/generated/agent_workflows.md"
+        }
+      ],
+      "tags": [
+        "agent-context",
+        "generated-output",
+        "markdown"
+      ],
+      "type": "generated_output"
+    },
+    {
+      "authority": "derived",
+      "description": "Human-readable generated rendering of the project-level eval matrix and eval tiering.",
+      "id": "generated.eval_matrix_md",
+      "name": "Eval Matrix Markdown",
+      "output_priority": 360,
+      "owner_area": "docs",
+      "references": [
+        {
+          "path": "docs/context/generated/eval_matrix.md"
+        }
+      ],
+      "tags": [
+        "agent-context",
+        "generated-output",
+        "evals"
+      ],
+      "type": "generated_output"
+    },
+    {
+      "authority": "derived",
+      "description": "Agent-readable generated JSON graph containing entities, relations, workflows, and source provenance.",
+      "id": "generated.knowledge_graph_json",
+      "name": "Knowledge Graph JSON",
+      "output_priority": 330,
+      "owner_area": "docs",
+      "references": [
+        {
+          "path": "docs/context/generated/knowledge_graph.json"
+        }
+      ],
+      "tags": [
+        "agent-context",
+        "generated-output",
+        "json"
+      ],
+      "type": "generated_output"
+    },
+    {
+      "authority": "derived",
+      "description": "Human-readable generated index grouped by entity type with authorities, references, and relations.",
+      "id": "generated.knowledge_index_md",
+      "name": "Knowledge Index Markdown",
+      "output_priority": 340,
+      "owner_area": "docs",
+      "references": [
+        {
+          "path": "docs/context/generated/knowledge_index.md"
+        }
+      ],
+      "tags": [
+        "agent-context",
+        "generated-output",
+        "markdown"
+      ],
+      "type": "generated_output"
     },
     {
       "authority": "normative",
@@ -471,6 +606,44 @@
     },
     {
       "authority": "normative",
+      "description": "Validation tests for generated context outputs, committed-output freshness, and non-authoritative generated artifacts.",
+      "id": "test.context_generated_outputs",
+      "name": "Context Generated Output Tests",
+      "output_priority": 310,
+      "owner_area": "docs",
+      "references": [
+        {
+          "path": "tests/unit/test_context_generated_outputs.py"
+        }
+      ],
+      "tags": [
+        "agent-context",
+        "generated-outputs",
+        "evals"
+      ],
+      "type": "test_suite"
+    },
+    {
+      "authority": "normative",
+      "description": "Validation tests for ontology fields, knowledge-map references, relations, archive flags, and workflows.",
+      "id": "test.context_knowledge_map",
+      "name": "Context Knowledge Map Tests",
+      "output_priority": 300,
+      "owner_area": "docs",
+      "references": [
+        {
+          "path": "tests/unit/test_context_knowledge_map.py"
+        }
+      ],
+      "tags": [
+        "agent-context",
+        "ontology",
+        "knowledge-graph"
+      ],
+      "type": "test_suite"
+    },
+    {
+      "authority": "normative",
       "description": "FileCheck-based C++/MLIR pass and pipeline contracts.",
       "id": "test.mlir_lit",
       "name": "MLIR Lit Tests",
@@ -528,6 +701,25 @@
         }
       ],
       "type": "test_suite"
+    },
+    {
+      "authority": "informative",
+      "description": "Deterministic generator for agent knowledge graph JSON, Markdown indexes, workflows, and eval matrix outputs.",
+      "id": "tool.context_output_generator",
+      "name": "Context Output Generator",
+      "output_priority": 320,
+      "owner_area": "docs",
+      "references": [
+        {
+          "path": "scripts/generate_context_outputs.py"
+        }
+      ],
+      "tags": [
+        "agent-context",
+        "generator",
+        "automation"
+      ],
+      "type": "tool"
     }
   ],
   "entity_types": {
@@ -549,6 +741,9 @@
     "example": {
       "description": "A runnable or instructional example."
     },
+    "generated_output": {
+      "description": "A deterministic generated artifact derived from authoritative project sources."
+    },
     "ir_layer": {
       "description": "One layer in the Tessera compiler IR stack."
     },
@@ -560,6 +755,9 @@
     },
     "test_suite": {
       "description": "A test family, validation suite, or benchmark gate."
+    },
+    "tool": {
+      "description": "A repo script, generator, or developer tool that produces or validates artifacts."
     }
   },
   "generated_from": [
@@ -576,6 +774,9 @@
     },
     "explained_by": {
       "description": "The entity is explained by the target guide, tutorial, or README."
+    },
+    "generated_by": {
+      "description": "The source generated artifact is produced by the target tool or generator."
     },
     "implemented_in": {
       "description": "The entity is implemented or scaffolded in the target source path or component."
@@ -630,6 +831,16 @@
       "target": "docs/spec/SHAPE_SYSTEM.md"
     },
     {
+      "relation": "explained_by",
+      "source": "doc.agent_context_readme",
+      "target": "docs/context/README.md"
+    },
+    {
+      "relation": "defined_by",
+      "source": "doc.agent_knowledge_map",
+      "target": "doc.agent_context_ontology"
+    },
+    {
       "authoritative": false,
       "historical": true,
       "relation": "supersedes",
@@ -650,6 +861,26 @@
       "relation": "depends_on",
       "source": "example.ir_pipeline_tutorial",
       "target": "ir.graph"
+    },
+    {
+      "relation": "generated_by",
+      "source": "generated.agent_workflows_md",
+      "target": "tool.context_output_generator"
+    },
+    {
+      "relation": "generated_by",
+      "source": "generated.eval_matrix_md",
+      "target": "tool.context_output_generator"
+    },
+    {
+      "relation": "generated_by",
+      "source": "generated.knowledge_graph_json",
+      "target": "tool.context_output_generator"
+    },
+    {
+      "relation": "generated_by",
+      "source": "generated.knowledge_index_md",
+      "target": "tool.context_output_generator"
     },
     {
       "relation": "defined_by",
@@ -692,9 +923,39 @@
       "target": "docs/guides/Tessera_Profiling_And_Autotuning_Guide.md"
     },
     {
+      "relation": "tested_by",
+      "source": "test.context_generated_outputs",
+      "target": "test.unit"
+    },
+    {
+      "relation": "tested_by",
+      "source": "test.context_knowledge_map",
+      "target": "test.unit"
+    },
+    {
       "relation": "depends_on",
       "source": "test.numerical_validation",
       "target": "api.python_frontend"
+    },
+    {
+      "relation": "depends_on",
+      "source": "tool.context_output_generator",
+      "target": "doc.agent_context_ontology"
+    },
+    {
+      "relation": "depends_on",
+      "source": "tool.context_output_generator",
+      "target": "doc.agent_knowledge_map"
+    },
+    {
+      "relation": "depends_on",
+      "source": "tool.context_output_generator",
+      "target": "tests/COMPILER_TEST_PLAN.md"
+    },
+    {
+      "relation": "tested_by",
+      "source": "tool.context_output_generator",
+      "target": "test.context_generated_outputs"
     }
   ],
   "schema_version": 1

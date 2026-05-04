@@ -28,6 +28,14 @@ class TestCollectiveBoundaries:
         plan.add_layer(LayerSpec("norm", "norm", weight_sharding="replicated"))
         assert "norm" not in plan.reduce_scatter_boundaries()
         assert "norm" not in plan.all_gather_boundaries()
+        assert "norm" not in plan.all_to_all_boundaries()
+
+    def test_moe_expert_parallel_is_all_to_all_boundary(self):
+        plan = DistributedPlan(mesh_axes={"dp": 4, "tp": 2})
+        plan.add_layer(LayerSpec("moe.experts", "moe",
+                                  tp_axis="tp",
+                                  weight_sharding="expert_parallel"))
+        assert plan.all_to_all_boundaries() == ["moe.experts"]
 
     def test_four_layer_mlp_collectives(self):
         """Standard Megatron-style MLP: fc1 col-parallel, fc2 row-parallel."""
@@ -68,6 +76,9 @@ class TestCollectiveMLIRAnnotation:
                                   tp_axis="tp", weight_sharding="col_parallel"))
         attr = plan.to_mlir_attrs()
         assert "fc1" in attr
+        assert 'reduce_scatter = ["fc1"]' in attr
+        assert "all_gather = []" in attr
+        assert "all_to_all = []" in attr
 
     def test_mlir_attrs_contains_mesh(self):
         plan = DistributedPlan(mesh_axes={"dp": 4, "tp": 2})

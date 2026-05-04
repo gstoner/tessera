@@ -237,6 +237,13 @@ consume the aggregate state.
 
 ## 11. Compiler Enforcement
 
+Current enforcement is intentionally narrower than the full memory model. The
+implemented/lit-testable subset covers async movement, mbarrier-shaped
+contracts, target capability gating, and runtime stream/event ordering. The
+following requirements remain `planned` until verifier or runtime tests prove
+them: scoped atomics, device-wide fence legality, complete happens-before race
+checking, and deterministic mesh-reduction enforcement for native collectives.
+
 | Compiler layer | Responsibility |
 |----------------|----------------|
 | Graph IR | Preserve memory effects, state/cache effects, collective ordering, and deterministic profile requirements. |
@@ -244,6 +251,16 @@ consume the aggregate state.
 | Tile IR | Verify barriers, fences, mbarriers, shared-memory visibility, async-copy completion, alignment, and resource bounds. |
 | Target IR | Lower scopes/orders to backend primitives and reject unsupported target features such as mbarriers before SM_90. |
 | Runtime | Establish stream/event/kernel/collective ordering and record replay metadata for deterministic profiles. |
+
+| Enforcement area | Current status | Evidence / next step |
+|------------------|----------------|----------------------|
+| `tile.async_copy` / wait-stage pairing | lit-testable | FA-4 and Tile IR lowering tests |
+| Hopper+ `tile.mbarrier.*` contracts | lit-testable | target-contract and Tile IR tests |
+| Stream/event ordering in CPU runtime | implemented / mock-runtime | runtime ABI and CPU backend tests |
+| Scoped atomics | planned | add Tile IR verifier and backend tests |
+| Device-wide fences | planned | add target capability checks and diagnostics |
+| Complete happens-before race checking | planned | add Graph/Schedule/Tile verifier tests |
+| Deterministic native mesh reductions | planned | add native collective runtime acceptance tests |
 
 Required diagnostic payloads:
 

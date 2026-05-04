@@ -327,17 +327,38 @@ tessera.cast %x : tensor<MxNxbf16> -> tensor<MxNxf32>
 
 ---
 
-### 4.7 Implicit ops referenced in canonicalization
+### 4.7 Additional ODS-backed semantic ops
 
-The following op names appear in canonicalization patterns but are not yet defined in `TesseraOps.td`. They are used as string-based `OperationState` names only:
+The active Graph IR ODS also defines the following source-backed semantic ops.
+They are part of the current compiler surface even when a later backend lowers
+them as target artifacts or reference CPU behavior:
+
+| Op family | ODS op names | Status |
+|-----------|--------------|--------|
+| Unary math and normalization | `tessera.layer_norm`, `tessera.softmax`, `tessera.softmax_safe`, `tessera.gelu`, `tessera.relu`, `tessera.sigmoid`, `tessera.sin`, `tessera.rmsnorm_safe` | implemented |
+| Random and collectives | `tessera.dropout`, `tessera.all_reduce`, `tessera.reduce_scatter`, `tessera.all_gather` | implemented / mock-runtime at Python level |
+| Spectral | `tessera.fft`, `tessera.ifft`, `tessera.rfft`, `tessera.irfft`, `tessera.dct`, `tessera.spectral_conv` | implemented / reference CPU |
+| Optimizer | `tessera.adam` | implemented / reference CPU |
+| Stateful cache/ring | `tessera.kv_cache.create`, `tessera.kv_cache.append`, `tessera.kv_cache.prune`, `tessera.cache.page_lookup`, `tessera.ring.create` | implemented / scaffolded lowering |
+| Architecture search | `tessera.arch.parameter`, `tessera.arch.gumbel_softmax`, `tessera.arch.hard_concrete`, `tessera.arch.ste_one_hot`, `tessera.arch.weighted_sum`, `tessera.arch.switch`, `tessera.arch.mixed` | implemented / scaffolded lowering |
+
+The public Python op catalog also contains `tessera.all_to_all`,
+`tessera.rng_uniform`, `tessera.rng_normal`, `tessera.rmsnorm`, and
+`tessera.kv_cache.*` aliases. Those names are current frontend/catalog entries;
+ODS-backed op definitions should be added when they need MLIR verifier or
+canonicalization behavior beyond generic operation emission.
+
+### 4.8 String-based ops referenced in canonicalization
+
+The following op names may appear in canonicalization patterns or migration
+tests as generic/string-based `OperationState` names:
 
 | Op name | Context |
 |---------|---------|
-| `tessera.gelu` | Source op for `FuseMatmulBiasGELU` (the `gelu` being matched) |
-| `tessera.relu` | Source op for `FuseConvRelu` (the `relu` being matched) |
 | `tessera.add` | Intermediate add op matched by `FuseMatmulBiasGELU` |
 
-These ops are created by `GraphIRBuilder` when lowering Python ops that call `tessera.ops.gelu`, `tessera.ops.relu`, and arithmetic addition. They carry the `Pure` trait by convention. The canonicalization patterns immediately fuse them away when they follow a `matmul` or `conv2d_nhwc`.
+`tessera.gelu` and `tessera.relu` are no longer string-only; they are defined in
+`TesseraOps.td` and carry the `Pure` trait.
 
 ---
 

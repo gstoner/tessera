@@ -2,7 +2,7 @@
 Phase 4 — test_nccl_adapter.py
 
 Tests for MockRankGroup collective semantics (all_reduce, reduce_scatter,
-all_gather) and the NCCLAdapter / RCCLAdapter mock paths.
+all_gather, all_to_all) and the NCCLAdapter / RCCLAdapter mock paths.
 """
 import pytest
 import numpy as np
@@ -116,6 +116,22 @@ class TestAllGather:
         ))
         for res in results:
             assert np.allclose(res, results[0])
+
+
+class TestAllToAll:
+    def test_all_to_all_exchanges_equal_sized_shards(self):
+        group = MockRankGroup(n=2, mesh_axes={"tp": 2})
+        results = group.run(lambda r: r.all_to_all(
+            np.array([r.rank * 10, r.rank * 10 + 1], dtype=np.float32)
+        ))
+
+        np.testing.assert_array_equal(results[0], np.array([0, 10], dtype=np.float32))
+        np.testing.assert_array_equal(results[1], np.array([1, 11], dtype=np.float32))
+
+    def test_all_to_all_not_divisible_raises(self):
+        group = MockRankGroup(n=2, mesh_axes={"tp": 2})
+        with pytest.raises(MockCollectiveError):
+            group.run(lambda r: r.all_to_all(np.array([r.rank], dtype=np.float32)))
 
 
 class TestMockRankGroupMeta:

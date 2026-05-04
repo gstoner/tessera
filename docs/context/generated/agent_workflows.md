@@ -27,14 +27,16 @@ Use the map to locate specs, source files, and tests before editing code.
 1. Identify the entity for the target subsystem.
 2. Read its normative references before implementation.
 3. Inspect implemented_in and tested_by targets before editing.
-4. Update docs or examples when public behavior changes.
+4. Check docs/context/generated/knowledge_graph.json for adjacent entities and relations.
+5. Update docs or examples when public behavior changes.
 
 ## write_or_update_docs
 
 Keep documentation aligned with canonical authorities.
 
 1. Read docs/README.md to identify the normative authority for the topic.
-2. Use this knowledge map to find related guides, tests, examples, and implementation surfaces.
+2. Use docs/context/generated/knowledge_index.md to find related guides, tests, examples, and implementation surfaces.
 3. Use canonical API names from docs/CANONICAL_API.md and docs/spec/PYTHON_API_SPEC.md.
 4. Avoid archive docs as authority; cite them only as historical background.
-5. Run docs lint and any targeted tests for changed claims.
+5. Regenerate context outputs when the ontology, knowledge map, or project eval plan changes.
+6. Run docs lint, context generator checks, and any targeted tests for changed claims.

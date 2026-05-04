@@ -7,7 +7,7 @@ index_launch and collective semantics without NCCL, MPI, or CUDA.
 Design:
   - Each "rank" is represented by a Python thread sharing an in-process
     barrier and shared memory dict.
-  - Collectives (all_reduce, reduce_scatter, all_gather) use a barrier +
+  - Collectives (all_reduce, reduce_scatter, all_gather, all_to_all) use a barrier +
     per-rank buffer approach.
   - Phase 1 scope: CPU tensors (numpy arrays) only.
 
@@ -103,6 +103,25 @@ class MockRank:
             Concatenated tensor of all shards.
         """
         return self._group._all_gather(self.rank, tensor, axis)
+
+    def all_to_all(
+        self,
+        tensor: np.ndarray,
+        scatter_axis: int = 0,
+        gather_axis: int = 0,
+    ) -> np.ndarray:
+        """
+        Split each rank's tensor and exchange shards with every other rank.
+
+        Args:
+            tensor       : local tensor to split into world_size shards
+            scatter_axis : dimension to split before exchange
+            gather_axis  : dimension to concatenate received shards
+
+        Returns:
+            Concatenation of the shard addressed to this rank from every rank.
+        """
+        return self._group._all_to_all(self.rank, tensor, scatter_axis, gather_axis)
 
     def barrier(self) -> None:
         """Wait until all ranks reach this barrier."""
@@ -273,6 +292,36 @@ class MockRankGroup:
 
         buffers = self._shared_buffers[key]
         result = np.concatenate(buffers, axis=axis)  # type: ignore[arg-type]
+        self._barrier_obj.wait()
+
+        self._withdraw(key)
+        return result
+
+    def _all_to_all(
+        self,
+        rank: int,
+        tensor: np.ndarray,
+        scatter_axis: int,
+        gather_axis: int,
+    ) -> np.ndarray:
+        """All-to-all: split each rank's tensor, exchange, then concatenate."""
+        tensor = np.asarray(tensor)
+        dim_size = tensor.shape[scatter_axis]
+        if dim_size % self.world_size != 0:
+            raise MockCollectiveError(
+                f"all_to_all: scatter_axis {scatter_axis} size {dim_size} not divisible "
+                f"by world_size {self.world_size}"
+            )
+        key = "all_to_all"
+        self._deposit(key, rank, tensor)
+        self._barrier_obj.wait()
+
+        chunks = [
+            np.array_split(buffer, self.world_size, axis=scatter_axis)[rank]
+            for buffer in self._shared_buffers[key]
+            if buffer is not None
+        ]
+        result = np.concatenate(chunks, axis=gather_axis)
         self._barrier_obj.wait()
 
         self._withdraw(key)

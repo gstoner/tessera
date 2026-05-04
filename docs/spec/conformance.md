@@ -97,7 +97,7 @@ IR emission. No multi-rank support.
 | 4 Graph IR canonicalization patterns | `GRAPH_IR_SPEC §5` |
 | Graph IR verifier: module version attr, effect attrs, shape consistency | `GRAPH_IR_SPEC §6` |
 | `fn.graph_ir.to_mlir()` — MLIR text emission | `PYTHON_API_SPEC §2` |
-| `tessera.ops.*` — 15 public ops (gemm through cross_entropy) | `PYTHON_API_SPEC §15` |
+| `tessera.ops.*` current runtime/catalog surface including matmul, conv2d, collectives, RNG helpers, spectral ops, RMSNorm, and KV cache helpers | `PYTHON_API_SPEC §13` |
 | 7 error types (`TesseraConstraintError` through `TesseraRuntimeError`) | `PYTHON_API_SPEC §17` |
 | x86 AMX/AVX512 GEMM execution path (`tessera-lower-to-x86` pipeline) | `COMPILER_REFERENCE §3.1` |
 
@@ -116,9 +116,12 @@ IR emission. No multi-rank support.
 **Purpose:** Full single-machine GPU execution. Adds device memory management,
 streams, events, and GPU kernel launch. Includes FlashAttention on SM_90.
 
-**Phase status:** The Phase 3 compiler subset of T1 exists today: GPU target
-configuration, FA-4 Tile IR, and the `tessera-lower-to-gpu` pipeline. Full T1
-runtime conformance requires the Phase 6 runtime C ABI execution path.
+**Current status:** The single-node compiler subset exists today:
+`implemented`/`lit-testable` GPU target configuration, FA-4 Tile IR, and the
+`tessera-lower-to-gpu` pipeline. The C ABI and CPU backend are
+`implemented`/`mock-runtime`. CUDA/HIP native runtime claims are
+`hardware-runtime` only when built with the relevant flags and devices are
+present.
 
 **Requires:** All of T0, plus:
 
@@ -160,6 +163,11 @@ runtime conformance requires the Phase 6 runtime C ABI execution path.
 **Purpose:** Multi-node distributed training. Adds NCCL/RCCL collectives, TPU
 backend, pipeline parallelism, and Cyclic MoE distribution.
 
+**Current status:** T2 is mixed. Cyclic distribution, mock collectives,
+collective insertion scaffolding, pipeline planning, and TPU artifacts are
+implemented/scaffolded/lit-testable. Native NCCL/RCCL/MPI cluster execution is
+planned, not conformant.
+
 **Requires:** All of T1, plus:
 
 | Capability | Spec reference |
@@ -172,22 +180,25 @@ backend, pipeline parallelism, and Cyclic MoE distribution.
 | `collective.reduce_scatter` / `collective.all_gather` IR ops | `TARGET_IR_SPEC §6` |
 | Shardy mesh export | `TARGET_IR_SPEC §7` |
 
-> **Phase status:** T2 capabilities are **Phase 4 planned**. No implementations
-> exist yet. A conformant T2 implementation is not achievable before Phase 4 is
-> complete.
+> **Graduation criteria:** T2 becomes conformant only after native collective
+> runtime tests cover all-reduce, reduce-scatter, all-gather, failure behavior,
+> deterministic ordering, and multi-rank launch/teardown on the supported
+> backend.
 
 ---
 
 ## 5. Phase-to-Profile Mapping
 
-| Phase | Profile contribution | Status |
-|-------|---------------------|--------|
-| Phase 1 | T0 Python frontend (decorators, Region, domain, dist, constraints, effects, Graph IR) | ✅ Complete |
-| Phase 2 | T0 x86 lowering chain (all 4 passes, `tessera-lower-to-x86`) | ✅ Complete |
-| Phase 3 | T1 compiler subset (GPUTargetProfile, FA-4 Tile IR, 9-pass GPU pipeline) | ✅ Complete |
-| Phase 4 | T2 distributed (NCCL, TPU, Cyclic, pipeline parallelism) | 🔲 Next |
-| Phase 5 | T1 hardening (checkpointing, ZeRO sharding, Bayesian autotuner) | 🔲 Future |
-| Phase 6 | T1/T2 ROCm full MFMA, runtime C ABI wired, benchmarks | 🔲 Future |
+| Phase | Profile contribution | Current status |
+|-------|---------------------|----------------|
+| Phase 1 | T0 Python frontend (decorators, Region, domain, dist, constraints, effects, Graph IR) | implemented |
+| Phase 2 | T0 x86 lowering chain and `tessera-lower-to-x86` | implemented / lit-testable |
+| Phase 3 | T1 compiler subset (GPUTargetProfile, FA-4 Tile IR, GPU target artifacts) | implemented / lit-testable |
+| Phase 4 | T2 distributed planner/collective/TPU artifacts | implemented / scaffolded / lit-testable |
+| Phase 5 | Checkpointing, optimizer sharding, autotuning, resilience foundations | implemented / lit-testable |
+| Phase 6 | Runtime C ABI, Python wrapper, diagnostics, benchmark smoke; ROCm artifacts | implemented / mock-runtime / scaffolded |
+| Phase 7 | Neighbors/halo/stencil passes | implemented / lit-testable |
+| Phase 8 | Additional target-artifact backends | scaffolded / lit-testable |
 
 A **T0-conformant** implementation exists today (Phases 1–2).  
 A **T1 compiler-subset implementation** exists today (Phase 3). Full T1

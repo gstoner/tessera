@@ -656,27 +656,41 @@ module @flash_attn_sm90 attributes {tessera.version = "1.0", tessera.target_sm =
 
 ## 8. Phase Coverage
 
-| Dialect / Op | Phase introduced | Status |
-|--------------|-----------------|--------|
-| `schedule.mesh.define` | 2 | ✅ Implemented |
-| `schedule.mesh.region` | 2 | ✅ Implemented |
-| `schedule.pipeline.region` | 4 (designed Phase 2) | 🔲 Lowering pass in Phase 4 |
-| `schedule.stage` | 4 (designed Phase 2) | 🔲 Lowering pass in Phase 4 |
-| `schedule.yield` | 2 | ✅ Implemented |
-| `tessera.attn.lse.save` | 1 (v1.3) | ✅ Implemented |
-| `tessera.attn.lse.load` | 1 (v1.3) | ✅ Implemented |
-| `tessera.attn.scaled_dot_product` | 3 (v2.0) | ✅ Implemented |
-| `tessera.attn.online_softmax` | 3 (v2.0) | ✅ Implemented |
-| `tessera.attn.lse_accumulate` | 3 (v2.0) | ✅ Implemented |
-| `tessera.attn.dropout_mask` | 3 (v2.0) | ✅ Implemented |
-| `tessera.attn.causal_mask` | 3 (v2.0) | ✅ Implemented |
-| `tessera.queue.create/push/pop` | 3 | ✅ Implemented |
-| `tile.async_copy` | 3 | ✅ Implemented (string-based) |
-| `tile.wait_async` | 3 | ✅ Implemented (string-based) |
-| `tile.mma` | 3 | ✅ Implemented (string-based) |
-| `tessera.tma.*` | 3 | ✅ Implemented |
-| `tessera.nvgpu.wgmma.*` | 3 | ✅ Implemented |
-| `tessera.nvgpu.wmma.*` | 3 | ✅ Implemented (SM < 90 fallback) |
-| NCCL collective ops | 4 | 🔲 Phase 4 |
-| TPU StableHLO ops | 4 | 🔲 Phase 4 |
-| ROCm MFMA full coverage | 6 | 🔲 Phase 6 |
+| Dialect / Op | Phase introduced | Current status |
+|--------------|-----------------|----------------|
+| `schedule.mesh.define` | 2 | implemented / lit-testable |
+| `schedule.mesh.region` | 2 | implemented / lit-testable |
+| `schedule.pipeline.region` | 4 (designed Phase 2) | scaffolded / lit-testable |
+| `schedule.stage` | 4 (designed Phase 2) | scaffolded / lit-testable |
+| `schedule.yield` | 2 | implemented / lit-testable |
+| `tessera.attn.lse.save` | 1 (v1.3) | implemented / lit-testable |
+| `tessera.attn.lse.load` | 1 (v1.3) | implemented / lit-testable |
+| `tessera.attn.scaled_dot_product` | 3 (v2.0) | implemented / lit-testable |
+| `tessera.attn.online_softmax` | 3 (v2.0) | implemented / lit-testable |
+| `tessera.attn.lse_accumulate` | 3 (v2.0) | implemented / lit-testable |
+| `tessera.attn.dropout_mask` | 3 (v2.0) | implemented / lit-testable |
+| `tessera.attn.causal_mask` | 3 (v2.0) | implemented / lit-testable |
+| `tessera.queue.create/push/pop` | 3 | implemented / lit-testable |
+| `tile.async_copy` | 3 | implemented / lit-testable |
+| `tile.wait_async` | 3 | implemented / lit-testable |
+| `tile.mma` | 3 | implemented / lit-testable |
+| `tessera.tma.*` | 3 | lit-testable target artifact |
+| `tessera.nvgpu.wgmma.*` | 3 | lit-testable target artifact; placeholder kernels are not native-runtime claims |
+| `tessera.nvgpu.wmma.*` | 3 | lit-testable target artifact |
+| NCCL/RCCL native collectives | 4 | planned / scaffolded mock support |
+| TPU StableHLO/Shardy artifacts | 4 | implemented / lit-testable; PJRT execute remains scaffolded |
+| ROCm MFMA artifact path | 6 | lit-testable / scaffolded runtime |
+
+## 9. Backend Status Appendix
+
+Target IR status is reported separately from native runtime status:
+
+| Backend | Semantic compiler behavior | Target artifact generation | Mock/runtime fallback | Native hardware runtime |
+|---------|----------------------------|----------------------------|-----------------------|-------------------------|
+| NVIDIA | FA-4, queue, WGMMA/TMA contracts | lit-testable | Python/JIT artifact inspection | planned unless backend-specific hardware tests are run |
+| ROCm | MFMA/async-copy contracts | lit-testable | artifact-only | scaffolded; HIP loader/runtime paths require build flags and devices |
+| TPU | TPU profile, StableHLO/Shardy export | implemented / lit-testable | artifact-only | PJRT execute is scaffolded |
+| Apple | CPU/GPU target contracts | lit-testable | artifact-only | planned unless backend-specific runtime tests are added |
+| Metalium | DMA/load/store/matmul dialect shape | scaffolded / lit-testable | artifact-only | planned; matmul lowering remains incomplete |
+| Cerebras | TTarget/Cerebras pass shape | stubbed / scaffolded | tool stubs | planned |
+| Rubin CPX | CPX-specific ODS and target-contract tests | scaffolded / lit-testable | artifact-only | planned |

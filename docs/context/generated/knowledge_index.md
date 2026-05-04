@@ -33,6 +33,9 @@ Use this generated index for navigation, then verify claims against the canonica
 | `doc.documentation_authority_tree` | Documentation Authority Tree | normative | docs/README.md | doc.compiler_reference -> phase_status |
 | `doc.canonical_api` | Canonical API | normative | docs/CANONICAL_API.md | api.python_frontend -> defined_by; supersedes -> docs/archive/pre_canonical/api |
 | `doc.compiler_reference` | Compiler Reference | normative | docs/spec/COMPILER_REFERENCE.md | phase_status -> doc.documentation_authority_tree |
+| `doc.agent_context_readme` | Agent Context README | informative | docs/context/README.md | explained_by -> docs/context/README.md |
+| `doc.agent_context_ontology` | Agent Context Ontology | informative | docs/context/ontology.yaml | doc.agent_knowledge_map -> defined_by; tool.context_output_generator -> depends_on |
+| `doc.agent_knowledge_map` | Agent Knowledge Map | informative | docs/context/knowledge_map.yaml | defined_by -> doc.agent_context_ontology; tool.context_output_generator -> depends_on |
 | `doc.glossary` | Glossary | informative | docs/GLOSSARY.md | none |
 | `doc.lowering_pipeline_spec` | Lowering Pipeline Spec | normative | docs/spec/LOWERING_PIPELINE_SPEC.md | none |
 | `doc.python_api_spec` | Python API Spec | normative | docs/spec/PYTHON_API_SPEC.md | none |
@@ -43,6 +46,15 @@ Use this generated index for navigation, then verify claims against the canonica
 | --- | --- | --- | --- | --- |
 | `example.getting_started_basic_tensor_ops` | Basic Tensor Ops Example | informative | examples/getting_started/basic_tensor_ops.py | depends_on -> api.python_frontend |
 | `example.ir_pipeline_tutorial` | IR Pipeline Tutorial | informative | examples/compiler/ir_pipeline_tutorial/README.md, examples/compiler/ir_pipeline_tutorial/tessera_ir_pipeline_demo.py | depends_on -> ir.graph |
+
+## generated_output
+
+| ID | Name | Authority | Primary References | Relations |
+| --- | --- | --- | --- | --- |
+| `generated.knowledge_graph_json` | Knowledge Graph JSON | derived | docs/context/generated/knowledge_graph.json | generated_by -> tool.context_output_generator |
+| `generated.knowledge_index_md` | Knowledge Index Markdown | derived | docs/context/generated/knowledge_index.md | generated_by -> tool.context_output_generator |
+| `generated.agent_workflows_md` | Agent Workflows Markdown | derived | docs/context/generated/agent_workflows.md | generated_by -> tool.context_output_generator |
+| `generated.eval_matrix_md` | Eval Matrix Markdown | derived | docs/context/generated/eval_matrix.md | generated_by -> tool.context_output_generator |
 
 ## ir_layer
 
@@ -71,7 +83,15 @@ Use this generated index for navigation, then verify claims against the canonica
 
 | ID | Name | Authority | Primary References | Relations |
 | --- | --- | --- | --- | --- |
+| `test.context_knowledge_map` | Context Knowledge Map Tests | normative | tests/unit/test_context_knowledge_map.py | tested_by -> test.unit |
+| `test.context_generated_outputs` | Context Generated Output Tests | normative | tests/unit/test_context_generated_outputs.py | tested_by -> test.unit; tool.context_output_generator -> tested_by |
 | `test.mlir_lit` | MLIR Lit Tests | normative | tests/tessera-ir, tests/tessera-ir/lit.cfg.py | backend.nvidia_gpu -> tested_by |
 | `test.numerical_validation` | Numerical Validation | normative | tests/tessera_numerical_validation, tests/tessera_numerical_validation/README.md | depends_on -> api.python_frontend |
 | `test.performance` | Performance Tests | normative | tests/performance, benchmarks/run_all.py | none |
-| `test.unit` | Unit Tests | normative | tests/unit, tests/COMPILER_TEST_PLAN.md | api.python_frontend -> tested_by; backend.x86 -> tested_by |
+| `test.unit` | Unit Tests | normative | tests/unit, tests/COMPILER_TEST_PLAN.md | api.python_frontend -> tested_by; backend.x86 -> tested_by; test.context_generated_outputs -> tested_by; test.context_knowledge_map -> tested_by |
+
+## tool
+
+| ID | Name | Authority | Primary References | Relations |
+| --- | --- | --- | --- | --- |
+| `tool.context_output_generator` | Context Output Generator | informative | scripts/generate_context_outputs.py | generated.agent_workflows_md -> generated_by; generated.eval_matrix_md -> generated_by; generated.knowledge_graph_json -> generated_by; generated.knowledge_index_md -> generated_by; depends_on -> doc.agent_context_ontology; depends_on -> doc.agent_knowledge_map; depends_on -> tests/COMPILER_TEST_PLAN.md; tested_by -> test.context_generated_outputs |

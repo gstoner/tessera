@@ -41,6 +41,10 @@ entity_types:
     description: "A runnable or instructional example."
   test_suite:
     description: "A test family, validation suite, or benchmark gate."
+  tool:
+    description: "A repo script, generator, or developer tool that produces or validates artifacts."
+  generated_output:
+    description: "A deterministic generated artifact derived from authoritative project sources."
 
 relation_types:
   defined_by:
@@ -59,3 +63,5 @@ relation_types:
     description: "The source entity replaces or overrides the target historical entity."
   phase_status:
     description: "The entity's implementation/planning status is described by the target status entity or doc."
+  generated_by:
+    description: "The source generated artifact is produced by the target tool or generator."

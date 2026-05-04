@@ -314,3 +314,17 @@ The shape system participates in the compiler as follows:
 
 This makes shape checking useful at every level without letting any one pass own
 too much of the model.
+
+## 9. Current Implementation Map
+
+| Layer | Current status | Active evidence | Notes |
+|-------|----------------|-----------------|-------|
+| Python shape objects and helpers | implemented | `python/tessera/shape.py`, `tests/unit/test_shape_system_foundation.py` | Strongest current implementation surface. |
+| Constraint predicates and solver | implemented | `python/tessera/compiler/constraints.py`, `tests/unit/test_constraints.py` | Decoration-time concrete bindings are checked; runtime first-call binding remains planned. |
+| Graph IR shape inference | implemented / scaffolded | `src/compiler/diagnostics/ShapeInferencePass.cpp`, `tests/unit/test_shape_inference.py` | Coverage is focused on core ops and diagnostics. |
+| Schedule feasibility | implemented / scaffolded | `check_schedule_tile`, shape-system tests | Python helper reports padding/feasibility; full MLIR verifier coverage is incremental. |
+| Tile verifier integration | scaffolded / lit-testable | Tile IR and backend lit tests where available | Alignment/resource checks exist for selected paths; full memory-model legality is planned. |
+| Runtime shape witnesses | implemented / mock-runtime | `RuntimeShapeWitness`, shape-system tests | Dynamic witnesses refine shapes in Python/runtime-facing tests. |
+
+Specs or guides that claim stronger MLIR verifier coverage should cite a test or
+downgrade that claim to `planned`.

@@ -29,7 +29,9 @@ UNARY_OPS = {
     "tessera.relu",
     "tessera.sigmoid",
     "tessera.sin",
+    "tessera.silu",
     "tessera.gelu",
+    "tessera.rmsnorm",
     "tessera.rmsnorm_safe",
 }
 REDUCTION_OPS = {"tessera.softmax", "tessera.softmax_safe"}
@@ -554,6 +556,9 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
         return (x - mean) / np.sqrt(var + eps)
     if op_name == "tessera.relu":
         return np.maximum(0, operands[0])
+    if op_name == "tessera.silu":
+        x = np.asarray(operands[0])
+        return x / (1.0 + np.exp(-x))
     if op_name == "tessera.sigmoid":
         return 1.0 / (1.0 + np.exp(-operands[0]))
     if op_name == "tessera.sin":
@@ -566,9 +571,9 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
         axis = int(kwargs.get("axis", -1))
         e = np.exp(x - np.max(x, axis=axis, keepdims=True))
         return e / np.sum(e, axis=axis, keepdims=True)
-    if op_name == "tessera.rmsnorm_safe":
+    if op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}:
         x = np.asarray(operands[0])
-        eps = float(kwargs.get("eps", 1e-6))
+        eps = float(kwargs.get("eps", 1e-5 if op_name == "tessera.rmsnorm" else 1e-6))
         return x / np.sqrt(np.mean(x * x, axis=-1, keepdims=True) + eps)
     if op_name == "tessera.transpose":
         axes = kwargs.get("axes", None)
@@ -592,8 +597,28 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
         return x * mask
     if op_name == "tessera.flash_attn":
         return _flash_attn_reference(operands[0], operands[1], operands[2], kwargs)
-    if op_name in {"tessera.all_reduce", "tessera.reduce_scatter", "tessera.all_gather"}:
+    if op_name in {"tessera.all_reduce", "tessera.reduce_scatter", "tessera.all_gather", "tessera.all_to_all"}:
         return operands[0]
+    if op_name in {"tessera.rng_uniform", "tessera.rng_normal"}:
+        shape = tuple(kwargs.get("shape", ()))
+        dtype = str(kwargs.get("dtype", "fp32"))
+        dtype_map = {
+            "bf16": np.float32,
+            "fp16": np.float16,
+            "fp32": np.float32,
+            "fp64": np.float64,
+            "float16": np.float16,
+            "float32": np.float32,
+            "float64": np.float64,
+            "int32": np.int32,
+            "bool": np.bool_,
+        }
+        rng = np.random.default_rng(None if kwargs.get("seed", None) is None else int(kwargs["seed"]))
+        if op_name == "tessera.rng_uniform":
+            out = rng.uniform(float(kwargs.get("lo", 0.0)), float(kwargs.get("hi", 1.0)), shape)
+        else:
+            out = rng.normal(float(kwargs.get("mean", 0.0)), float(kwargs.get("std", 1.0)), shape)
+        return out.astype(dtype_map.get(dtype, np.float32))
     if op_name == "tessera.fused_epilogue":
         x = np.asarray(operands[0])
         bias = operands[1] if len(operands) > 1 else kwargs.get("bias", None)

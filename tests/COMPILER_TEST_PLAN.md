@@ -21,7 +21,7 @@ Python @jit frontend
 | Performance | `tests/performance/` | `cmake --build . --target check-tessera-performance` or `TESSERA_RUN_PERFORMANCE_TESTS=1 ./scripts/test.sh` | Deterministic roofline/proxy performance contracts for compile latency, generated-artifact size, GEMM, attention, collectives, and benchmark report schema. |
 | MLIR lit | `tests/tessera-ir/` | `check-tessera-ir` | FileCheck-based C++/MLIR pass and pipeline contracts. |
 | Numerical validation | `tests/tessera_numerical_validation/` | opt-in pytest suite | Reference-vs-runtime comparisons for compiled CPU/mock and future hardware backends. |
-| Project Evals | future `tests/evals/` plus existing docs/sample/spec checks | opt-in locally, scheduled in CI | Whole-project coherence checks for specs, docs, samples, compiler pipelines, diagnostics, compatibility, and health signals. |
+| Project Evals | `tests/unit/`, `docs/context/`, generated context outputs, and future `tests/evals/` | opt-in locally, scheduled in CI | Whole-project coherence checks for specs, docs, samples, compiler pipelines, diagnostics, compatibility, context graph freshness, and health signals. |
 
 ## Layered CI Matrix
 
@@ -55,14 +55,15 @@ fastest existing test mechanism for each concern until a dedicated
 | Diagnostics quality | Invalid programs for effects, distributions, target support, memory spaces, and shapes produce stable useful errors. | Diagnostics include source context, compiler stage, violated invariant, and actionable category. |
 | Documentation evals | Documentation code blocks, links, referenced paths, public symbols, and pipeline diagrams stay current. | Executable examples run or are explicitly marked pseudo-code; all referenced project paths exist. |
 | Sample/tutorial evals | Getting-started samples and tutorials import, use canonical APIs, and produce expected outputs or artifacts. | CPU-promised samples run without accelerators and finish within a local smoke-test budget. |
+| Agent context graph evals | Ontology, knowledge map, generated JSON/Markdown outputs, and agent workflows stay parseable, path-valid, deterministic, and marked non-authoritative. | `scripts/generate_context_outputs.py --check` passes and generated outputs match source YAML plus this test plan. |
 | Compatibility/project health | CPU-only build path, optional hardware gates, CLI help, import-time budget, package metadata, and script/README command agreement. | Deterministic health checks pass without requiring hidden local state. |
 
 ### Eval Tiering
 
 | Tier | Eval Scope | Default |
 | --- | --- | --- |
-| Fast local | Spec conformance, documentation smoke checks, sample import checks, and CLI/package health. | Developer opt-in and cheap enough for pre-commit use. |
-| CI deterministic | Project evals that require no accelerator and do not depend on machine-specific timings. | Always on once the corresponding eval harness exists. |
+| Fast local | Spec conformance, documentation smoke checks, context graph generation checks, sample import checks, and CLI/package health. | Developer opt-in and cheap enough for pre-commit use. |
+| CI deterministic | Project evals that require no accelerator, including context graph output freshness, and do not depend on machine-specific timings. | Always on once the corresponding eval harness exists. |
 | Scheduled | Numerical sweeps, broader sample execution, documentation execution, and performance regression checks. | Nightly or weekly depending on runtime cost. |
 | Hardware-marked | SM80/SM90/SM100, ROCm, TPU, and distributed backend evals. | Opt-in with explicit hardware environment flags. |
 
@@ -102,4 +103,4 @@ Performance tests should avoid requiring accelerators by default. Hardware-backe
 3. Add compile-time regression thresholds for larger transformer blocks once multi-op native lowering exists.
 4. Add hardware-marked performance gates for SM80, SM90, ROCm MFMA, and TPU backends.
 5. Track benchmark baselines in JSON and compare against tolerances rather than absolute single-machine timings.
-6. Create `tests/evals/` for project-level eval manifests and runners once the documented eval matrix is accepted.
+6. Promote context graph, spec, docs, and sample checks from unit guard tests into `tests/evals/` manifests once the generated-output workflow stabilizes.

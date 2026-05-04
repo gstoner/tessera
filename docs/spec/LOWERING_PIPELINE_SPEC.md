@@ -41,6 +41,13 @@ Graph IR (tessera dialect)
 
 ## 2. Named Pipelines
 
+Pipeline status is split by behavior type:
+
+| Pipeline | Semantic compiler behavior | Target artifact generation | Mock/runtime fallback | Native hardware runtime |
+|----------|----------------------------|----------------------------|-----------------------|-------------------------|
+| `tessera-lower-to-x86` | implemented / lit-testable | x86/CPU call artifacts | CPU mock-runtime path | CPU runtime tests cover supported paths |
+| `tessera-lower-to-gpu` | implemented / lit-testable | NVIDIA target artifacts | artifact inspection | planned unless backend-specific hardware tests are run |
+
 ### 2.1 `tessera-lower-to-x86`
 
 Registered pass sequence (executed in this order):

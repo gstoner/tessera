@@ -2,16 +2,19 @@
 status: Normative
 classification: Normative
 authority: Documentation authority tree
-last_updated: 2026-04-26
+last_updated: 2026-05-04
 ---
 
 # Tessera Documentation Map
 
-This file defines the documentation authority tree for Tessera. If documents conflict, resolve the conflict in this order.
+This file defines the documentation authority tree for Tessera. If documents
+conflict, resolve the conflict in this order. Use status labels below for
+implementation claims; phase numbers alone are too coarse for the current tree.
 
 ## Normative Root
 
-These documents are the source of truth for current Tessera Phases 1-3 behavior and Phase 4-6 planning status:
+These documents are the source of truth for current Tessera API, compiler,
+runtime, and phase/status claims:
 
 | Topic | Document |
 |-------|----------|
@@ -91,13 +94,29 @@ serving SRE guidance, use `docs/guides/Tessera_Inference_Server_Guide.md`.
 
 Pre-canonical or superseded material lives under `docs/archive/pre_canonical/`. Archived documents are retained for design history only and must not be treated as current API or implementation guidance.
 
-## Phase Labels
+## Status Labels
 
-Use these labels consistently:
+Use these labels consistently in active docs:
 
 | Label | Meaning |
 |-------|---------|
-| Phase 1-3 implemented | Current implemented behavior covered by the normative root |
-| Phase 4 planned | Distributed training, NCCL/RCCL collectives, TPU StableHLO, Cyclic distribution, pipeline parallelism |
-| Phase 5 planned | Autodiff expansion, activation checkpointing, ZeRO sharding, Bayesian autotuning |
-| Phase 6 planned | Runtime ABI production wiring, runtime Python wrapper, full ROCm MFMA coverage, benchmark suite |
+| implemented | Source exists, is importable/buildable in the active tree, and has unit or lit coverage. |
+| lit-testable | MLIR/dialect/pipeline behavior has lit fixtures or target-contract tests, but native hardware execution is not the claimed surface. |
+| mock-runtime | Runtime API exists and has a deterministic Python or CPU/mock fallback for development and tests. |
+| hardware-runtime | Native runtime execution is wired for the named backend and has a concrete build/test path. |
+| scaffolded | Directory, API shape, or design skeleton exists, but behavior is incomplete or intentionally artifact-only. |
+| planned | Design direction only; do not describe it as current behavior. |
+| archived | Retained for history under archive paths; not active implementation guidance. |
+
+## Current Status Summary
+
+| Area | Status | Source of truth |
+|------|--------|-----------------|
+| Python frontend, constraints, effects, Graph IR | implemented | `docs/CANONICAL_API.md`, `docs/spec/PYTHON_API_SPEC.md`, `python/tessera/` |
+| x86/CPU lowering path and CPU execution artifacts | implemented / mock-runtime | `docs/spec/COMPILER_REFERENCE.md`, `python/tessera/compiler/matmul_pipeline.py`, `src/transforms/` |
+| NVIDIA SM90+ target artifacts and FA-4 lowering | implemented / lit-testable | `docs/spec/COMPILER_REFERENCE.md`, `src/compiler/tile_opt_fa4/`, `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` |
+| Distributed collectives and planner foundation | implemented / scaffolded | `src/collectives/`, `python/tessera/testing/mock_collective.py`, `tests/unit/test_nccl_adapter.py` |
+| TPU target profile and StableHLO/Shardy artifacts | implemented / lit-testable | `python/tessera/compiler/tpu_target.py`, `src/compiler/codegen/Tessera_TPU_Backend/`, `tests/tessera-ir/phase4/` |
+| Solver, RNG, sparse, linalg, and resilience passes | implemented / lit-testable | `src/solvers/`, `tests/unit/test_*solver*.py`, `tests/tessera-ir/phase5/` |
+| Runtime C ABI and Python wrapper | mock-runtime / hardware-runtime where C backend is built | `docs/spec/RUNTIME_ABI_SPEC.md`, `python/tessera/runtime.py`, `src/runtime/` |
+| ROCm, Metalium, Apple, Cerebras, Rubin CPX backends | scaffolded / lit-testable unless a backend doc says hardware-runtime | `src/compiler/codegen/`, `tests/tessera-ir/phase8/`, backend-specific tests |

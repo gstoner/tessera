@@ -5,8 +5,7 @@ This directory contains examples and tutorials for using Tessera.
 ## Getting Started
 
 - [`basic_tensor_ops.py`](getting_started/basic_tensor_ops.py) - Basic tensor operations
-- [`flash_attention_demo.py`](getting_started/flash_attention_demo.py) - Flash Attention usage
-- [`first_model.py`](getting_started/first_model.py) - Your first Tessera model
+- [`tessera_flash_attention_demo/`](getting_started/tessera_flash_attention_demo/) - Flash Attention usage
 
 ## Compiler Examples
 
@@ -31,16 +30,16 @@ Archived advanced examples are preserved under [`archive/advanced/`](archive/adv
 
 ## Optimization
 
-- [`autotuning_demo.py`](optimization/autotuning_demo.py) - Automatic parameter tuning
-- [`memory_optimization.py`](optimization/memory_optimization.py) - Memory efficiency
-- [`kernel_fusion.py`](optimization/kernel_fusion.py) - Operation fusion
+- [`src/01_loop_tiling_blocking.cpp`](optimization/src/01_loop_tiling_blocking.cpp) - Loop tiling and blocking
+- [`src/02_vectorization_intrinsics.cpp`](optimization/src/02_vectorization_intrinsics.cpp) - Vectorization intrinsics
+- [`src/05_async_copy_tma_wgmma.cu`](optimization/src/05_async_copy_tma_wgmma.cu) - Async copy, TMA, and WGMMA sketch
+- [`src/08_mlir_gemm_tiled.mlir`](optimization/src/08_mlir_gemm_tiled.mlir) - MLIR tiled GEMM example
 
 ## Running Examples
 
 ```bash
 # Basic examples
-cd examples/getting_started
-python3 flash_attention_demo.py
+PYTHONPATH=python python3 examples/getting_started/basic_tensor_ops.py
 
 # Advanced examples
 python3 examples/advanced/rlvr_reasoning_suite/run_demo.py --steps 4

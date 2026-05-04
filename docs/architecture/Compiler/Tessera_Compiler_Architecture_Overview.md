@@ -78,7 +78,7 @@ Target IR  (tessera.nvgpu.wgmma.*, tessera.tma.*, mbarrier ops)
 
 The Tessera frontend is **pure Python** — no separate parser, no Rust layer, no domain-specific language file format. The Python interpreter runs normally; `@tessera.jit` intercepts the decorated function at decoration time through Python's standard decorator protocol.
 
-This is a deliberate architectural decision. The Python surface is a clean API, not a separate language. See `docs/old_concepts/Rust_Frontend_Research/README.md` for the rejected alternative.
+This is a deliberate architectural decision. The Python surface is a clean API, not a separate language. See `docs/archive/old_concepts/Rust_Frontend_Research/tessera_frontend_architecture.md` for the rejected alternative.
 
 ### 2.2 `@tessera.jit` decoration sequence
 

@@ -63,12 +63,12 @@ flowchart TD
 
 ## Historical Material
 
-Pre-canonical architecture material lives in `docs/old_concepts/` or `docs/archive/pre_canonical/`. It is retained for design history only. Do not use archived documents as implementation guidance unless the canonical specs explicitly restore a concept.
+Pre-canonical architecture material lives in `docs/archive/old_concepts/` or `docs/archive/pre_canonical/`. It is retained for design history only. Do not use archived documents as implementation guidance unless the canonical specs explicitly restore a concept.
 
 ## Rules For New Architecture Docs
 
 - Link back to this index and to the relevant canonical spec.
 - Use the canonical IR names: Graph IR, Schedule IR, Tile IR, Target IR.
-- Mark future behavior with phase labels: Phase 4 planned, Phase 5 planned, or Phase 6 planned.
+- Mark implementation claims with the status labels in `docs/README.md`.
 - Use current public APIs from `docs/CANONICAL_API.md`.
 - Keep proposals marked as `classification: Proposal`.

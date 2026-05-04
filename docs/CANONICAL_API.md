@@ -1,12 +1,12 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-04-26
+last_updated: 2026-05-04
 ---
 
 # Tessera Canonical API Quick Reference
-**Status:** Normative — grounded in `python/tessera/` Phase 1–3 implementation  
-**Last updated:** April 26, 2026  
+**Status:** Normative - grounded in `python/tessera/` active implementation  
+**Last updated:** May 4, 2026  
 **Use this document** to resolve any naming disagreement in other docs. If something here conflicts with another doc, this file wins.
 
 ---
@@ -45,10 +45,14 @@ def tp_gemm(A: tessera.f16[..., ...], B: tessera.f16[..., ...],
     deterministic: bool = False,     # if True, forbid unseeded random effects
     seed: int | None = None,         # RNG seed; required when using dropout under deterministic=True
     bindings: dict[str,int] | None = None,  # concrete dim sizes for early constraint checking
-    target: GPUTargetProfile | None = None, # GPU target; None = CPU/interpreted path
+    target: GPUTargetProfile | str | None = None, # CPU, GPU, or artifact target
     attn_config: FlashAttnLoweringConfig | None = None,  # FA-4 tile sizes; auto-set on SM_90+
 )
 ```
+
+String target aliases are normalized by `python/tessera/compiler/matmul_pipeline.py`.
+Artifact targets emit inspectable Target IR; native execution is only implied for
+targets marked hardware-runtime by their backend docs.
 
 ---
 
@@ -103,9 +107,9 @@ assert X.dtype == "bf16"
 
 | Symbol | Phase | Description |
 |--------|-------|-------------|
-| `tessera.dist.Block(mesh_axes)` | 1–3 | Contiguous block partition. `mesh_axes` is a non-empty tuple of strings. |
-| `tessera.dist.Cyclic(mesh_axes)` | 4 | Round-robin partition. `make_shard_spec` raises `NotImplementedError` until Phase 4. |
-| `tessera.dist.Replicated()` | 1–3 | No partition — tensor replicated on all ranks. |
+| `tessera.dist.Block(mesh_axes)` | implemented | Contiguous block partition. `mesh_axes` is a non-empty tuple of strings. |
+| `tessera.dist.Cyclic(mesh_axes)` | implemented / scaffolded runtime | Round-robin partition. `make_shard_spec` returns a cyclic `ShardSpec`; runtime behavior is still backend-dependent. |
+| `tessera.dist.Replicated()` | implemented | No partition - tensor replicated on all ranks. |
 
 ### `tessera.array`
 
@@ -208,7 +212,7 @@ tessera.index_launch(axis="tp")(my_kernel)(
 
 ---
 
-## GPU Target API (Phase 3+)
+## Target API
 
 ```python
 from tessera.compiler.gpu_target import GPUTargetProfile, ISA
@@ -226,10 +230,22 @@ def flash_attn_fwd(Q, K, V):
 | `ISA.SM_89` | RTX 40xx | ❌ | ❌ |
 | `ISA.SM_90` | H100 / GH200 | ✅ | ✅ |
 | `ISA.SM_100` | B100 / GB200 | ✅ | ✅ |
+| `ISA.SM_120` | Rubin placeholder | ✅ | ✅ |
 
 `GPUTargetProfile` key parameters: `isa`, `warps_per_cta` (default 4, must be power of 2), `shared_mem_bytes` (None = SM default), `pipeline_stages` (default 2).
 
 Key properties: `.supports_wgmma` / `.supports_tma` / `.supports_mbarrier` → `isa >= SM_90`; `.supports_tcgen05` / `.supports_tmem` / `.supports_cta_pairs` / `.supports_block_scaled_mma` → `isa >= SM_100`; `.runtime_arch` emits CUDA architecture strings such as `sm_90a`, `sm_100a`, and `sm_120`.
+
+### String target aliases
+
+| Input | Normalized target | Notes |
+|-------|-------------------|-------|
+| `None`, `"cpu"` | `cpu` | CPU/mock-runtime path when supported by the op graph |
+| `"cuda"`, `"nvidia"`, `"gpu"`, `"sm90"`, `"sm_90"`, `"sm90a"`, `"sm_90a"`, `"hopper"` | `nvidia_sm90` | NVIDIA artifact target |
+| `"rocm"`, `"amd"`, `"hip"` | `rocm` | ROCm Target IR artifact |
+| `"metalium"`, `"tt_metalium"`, `"tt"` | `metalium` | Metalium Target IR artifact |
+| `"apple_cpu"`, `"macos_cpu"`, `"m_series_cpu"` | `apple_cpu` | Apple CPU Target IR artifact |
+| `"apple_gpu"` | `apple_gpu` | Apple GPU Target IR artifact |
 
 ---
 
@@ -246,7 +262,9 @@ Key properties: `.supports_wgmma` / `.supports_tma` / `.supports_mbarrier` → `
 
 ## `tessera.ops` Namespace
 
-Phase 1 implementations are numpy-backed stubs. Phase 3 dispatches to compiled MLIR kernels.
+The public namespace is a `SimpleNamespace` backed by a registry. Most
+development-time implementations are NumPy reference paths or artifact
+lowerings; runtime kernels can be registered separately.
 
 | Op | Signature | Notes |
 |----|-----------|-------|
@@ -259,13 +277,47 @@ Phase 1 implementations are numpy-backed stubs. Phase 3 dispatches to compiled M
 | `tessera.ops.transpose(x, axes=None)` | `(array) → array` | Pure effect |
 | `tessera.ops.cast(x, dtype)` | `(array, str) → array` | Pure effect |
 | `tessera.ops.dropout(x, p=0.1, training=True)` | `(array) → array` | `random` effect |
-| `tessera.ops.conv2d(x, weight, bias=None, stride=1, padding=0)` | stub | Returns zeros Phase 1 |
-| `tessera.ops.flash_attn(Q, K, V, scale=None, causal=False, dropout_p=0.0, seed=None)` | `(array,array,array) → array` | Naive Phase 1; FA-4 Phase 3 |
-| `tessera.ops.all_reduce(x, op="sum")` | stub | No-op Phase 1 |
-| `tessera.ops.reduce_scatter(x, op="sum", axis=0)` | stub | No-op Phase 1 |
-| `tessera.ops.all_gather(x, axis=0)` | stub | No-op Phase 1 |
+| `tessera.ops.conv2d(x, weight, bias=None, stride=1, padding=0)` | `(NHWC,HWIO) → NHWC` | NumPy reference convolution |
+| `tessera.ops.flash_attn(Q, K, V, scale=None, causal=False, dropout_p=0.0, seed=None)` | `(array,array,array) → array` | NumPy reference attention; SM90+ lowering artifacts where supported |
+| `tessera.ops.all_reduce(x, op="sum")` | `(array) → array` | Single-rank no-op reference path |
+| `tessera.ops.reduce_scatter(x, op="sum", axis=0)` | `(array) → array` | Single-rank no-op reference path |
+| `tessera.ops.all_gather(x, axis=0)` | `(array) → array` | Single-rank no-op reference path |
 | `tessera.ops.fused_epilogue(x, bias=None, activation="linear")` | `(array) → array` | |
 | `tessera.ops.fft/ifft/rfft/irfft(...)` | `(array) → array` | NumPy FFT helpers |
+| `tessera.ops.dct(x, type=2, axis=-1)` | `(array) → array` | NumPy FFT-derived DCT reference |
+| `tessera.ops.spectral_conv(x, w)` | `(array,array) → array` | NumPy FFT convolution reference |
+| `tessera.ops.rmsnorm_safe(x, eps=1e-6)` | `(array) → array` | NumPy RMSNorm reference |
+| `tessera.ops.kv_cache_append(cache, key, value)` | cache helper | Reference KV-cache helper |
+| `tessera.ops.kv_cache_prune(cache, max_entries=None, max_seq=None)` | cache helper | Reference KV-cache helper |
+
+Registry helpers:
+
+| Symbol | Purpose |
+|--------|---------|
+| `tessera.ops.registry` | List and dispatch registered op entries |
+| `tessera.ops.register_reference(name, fn, **metadata)` | Register a reference implementation |
+| `tessera.ops.register_lowering(name, fn, **metadata)` | Register an artifact/lowering hook |
+| `tessera.ops.register_runtime_kernel(name, fn, **metadata)` | Register a runtime kernel hook |
+
+---
+
+## Runtime API
+
+Top-level runtime helpers are re-exported from `python/tessera/runtime.py`.
+When a compiled runtime shared library is not available, the Python wrapper
+falls back to a mock CPU runtime for development and tests.
+
+| Symbol | Purpose |
+|--------|---------|
+| `tessera.RuntimeArtifact` | Serializable Graph/Schedule/Tile/Target IR artifact bundle |
+| `tessera.RuntimeProfile` | Runtime/profile timing and memory metadata |
+| `tessera.compile_artifact(...)` | Create a runtime artifact from IR text/metadata |
+| `tessera.load_artifact(...)` | Load a serialized runtime artifact |
+| `tessera.launch(...)` | Launch through the available runtime path |
+| `tessera.available_backends()` | List backend capabilities |
+| `tessera.backend_capabilities()` | Return backend capability records |
+| `tessera.query_backend(name)` | Query one backend |
+| `tessera.get_last_profile()` | Read the last runtime profile |
 
 ---
 
@@ -291,7 +343,7 @@ Phase 1 implementations are numpy-backed stubs. Phase 3 dispatches to compiled M
 | `tessera.domain.Rect` | ✅ | 1 |
 | `tessera.dist.Block` | ✅ | 1 |
 | `tessera.dist.Replicated` | ✅ | 1 |
-| `tessera.dist.Cyclic` | ✅ (stub) | 4 (full) |
+| `tessera.dist.Cyclic` | ✅ | implemented / scaffolded runtime |
 | `tessera.array.from_domain` | ✅ | 1 |
 | `DistributedArray.parts()` | ✅ | 1 |
 | `tessera.constraint.*` | ✅ | 1 |
@@ -299,6 +351,6 @@ Phase 1 implementations are numpy-backed stubs. Phase 3 dispatches to compiled M
 | `GPUTargetProfile` / `ISA` | ✅ | 3 |
 | `FlashAttnLoweringConfig` | ✅ | 3 |
 | `MockRankGroup` (testing) | ✅ | 1 |
-| NCCL/RCCL collectives | 🔲 | 4 |
-| TPU backend | 🔲 | 4 |
-| Runtime C ABI (Python wrapper) | 🔲 | 6 |
+| NCCL/RCCL collectives | partial | scaffolded / mock-runtime tests |
+| TPU target profile and artifacts | ✅ | implemented / lit-testable |
+| Runtime C ABI Python wrapper | ✅ | mock-runtime; hardware-runtime when C backend is built |

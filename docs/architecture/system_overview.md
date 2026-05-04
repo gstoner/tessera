@@ -65,7 +65,7 @@ Each layer has its own spec document:
 
 ---
 
-## What Works Today (Phases 1–3)
+## What Works Today
 
 ### Python Frontend (Phase 1)
 
@@ -79,9 +79,9 @@ Each layer has its own spec document:
 | `tessera.index_launch` — `IndexLauncher`, `_ShardDispatcher` | ✅ | `python/tessera/distributed/launch.py` |
 | `tessera.constraint.Divisible/Range/Equal` + `ConstraintSolver` | ✅ | `python/tessera/compiler/constraints.py` |
 | `Effect` enum + `EffectLattice` inference | ✅ | `python/tessera/compiler/effects.py` |
-| `tessera.ops.*` — 15 ops, numpy-backed Phase 1 stubs | ✅ | `python/tessera/ops/` |
+| `tessera.ops.*` — registry-backed NumPy reference ops and lowering hooks | ✅ | `python/tessera/__init__.py` |
 | `MockRankGroup` — thread-based multi-rank collective testing | ✅ | `python/tessera/testing/mock_collective.py` |
-| `tessera.dist.Cyclic` — stub, raises `NotImplementedError` | ⚠️ Phase 4 | `python/tessera/distributed/domain.py` |
+| `tessera.dist.Cyclic` — cyclic `ShardSpec` construction; backend runtime behavior is target-dependent | ✅ / scaffolded runtime | `python/tessera/distributed/domain.py` |
 
 ### C++ x86 Lowering (Phase 2)
 
@@ -111,34 +111,28 @@ Each layer has its own spec document:
 | FA-4 Attn dialect v2.0 — `ScaledDotProduct`, `OnlineSoftmax`, `LseAccumulate`, `DropoutMask`, `CausalMask` | ✅ | `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td` |
 | `tessera.queue` dialect — `create`, `push`, `pop` | ✅ | `src/compiler/tile_opt_fa4/dialects/tessera_queue/Queue.td` |
 
-### What Does NOT Yet Work
+### Work That Is Scaffolded Or Artifact-Only
 
 | Component | Phase |
 |-----------|-------|
-| `tessera.dist.Cyclic` full implementation | 4 |
-| NCCL/RCCL adapters — `all_reduce`, `reduce_scatter`, `all_gather` | 4 |
-| TPU StableHLO backend | 4 |
-| `GPUCollectiveInsertionPass`, `PipelineStageInsertionPass` | 4 |
-| Activation checkpointing (`InsertRecomputePass`) | 5 |
-| ZeRO optimizer sharding (`OptimizerShardPass`) | 5 |
-| Bayesian autotuner (`BayesianAutotuner`) | 5 |
-| ROCm MFMA full coverage | 6 |
-| Runtime C ABI (`TesseraRuntime` Python wrapper) | 6 |
-| Benchmark suite | 6 |
+| Native NCCL/RCCL hardware-runtime execution for all collectives | scaffolded / mock-runtime tests |
+| TPU hardware-runtime execution | lit-testable artifacts |
+| Non-CPU backend native execution from Python `@jit` | artifact-only unless backend docs say otherwise |
+| Production deployment guarantees | planned |
 
 ---
 
 ## System Concepts Carried Forward
 
-The older `docs/old_concepts/tessera_system_architecture.md` blueprint included several useful system concepts that remain valid as design direction, but not as implemented Phase 1-3 behavior:
+The older `docs/archive/old_concepts/tessera_system_architecture.md` blueprint included several useful system concepts that remain valid as design direction, but not as implemented behavior:
 
 | Concept | Current status |
 |---------|----------------|
-| Kernel metadata bundles containing tile shape, resource use, launch bounds, and backend artifacts | Phase 6 planned production packaging |
-| Runtime traces, profiler events, and per-kernel metrics | Phase 6 planned production diagnostics |
-| Repro packs containing IR snapshots, launch args, binaries, logs, and environment hashes | Phase 6 planned diagnostics |
-| Distributed topology service, bucketizer, and overlap engine | Phase 4 planned distributed runtime work |
-| Runtime C ABI as the stable host/runtime contract | Specified in `docs/spec/RUNTIME_ABI_SPEC.md`; Phase 6 planned production wiring |
+| Kernel metadata bundles containing tile shape, resource use, launch bounds, and backend artifacts | scaffolded / production packaging planned |
+| Runtime traces, profiler events, and per-kernel metrics | implemented foundations / production diagnostics planned |
+| Repro packs containing IR snapshots, launch args, binaries, logs, and environment hashes | planned |
+| Distributed topology service, bucketizer, and overlap engine | scaffolded / hardware-runtime work planned |
+| Runtime C ABI as the stable host/runtime contract | specified in `docs/spec/RUNTIME_ABI_SPEC.md`; Python wrapper is mock-runtime unless the C backend is built |
 
 These concepts should be referenced as roadmap items unless a later spec marks them implemented.
 
@@ -158,7 +152,7 @@ python/tessera/
 │
 ├── distributed/
 │   ├── region.py         Region["read"/"write"/"reduce_*"], RegionType
-│   ├── domain.py         Rect, Block, Cyclic (stub), Replicated
+│   ├── domain.py         Rect, Block, Cyclic, Replicated
 │   ├── shard.py          ShardSpec, MeshSpec
 │   ├── array.py          DistributedArray, from_domain()
 │   └── launch.py         index_launch, IndexLauncher, _ShardDispatcher
@@ -207,9 +201,9 @@ src/
 
 ## Key Design Decisions (Locked)
 
-1. **Python frontend is permanent.** No Rust frontend layer. The MLIR C++ pass pipeline handles performance-critical compilation. See `docs/old_concepts/Rust_Frontend_Research/` for the rejected proposal.
+1. **Python frontend is permanent.** No Rust frontend layer. The MLIR C++ pass pipeline handles performance-critical compilation. See `docs/archive/old_concepts/Rust_Frontend_Research/` for the rejected proposal.
 
-2. **Static AOT compilation only.** No tracing JIT tier. ConstraintSolver runs at decoration time; effects are inferred statically. See `docs/old_concepts/Tracing_JIT_Research/` for the rejected research.
+2. **Static AOT compilation only.** No tracing JIT tier. ConstraintSolver runs at decoration time; effects are inferred statically. See `docs/archive/old_concepts/Tracing_JIT_Research/` for the rejected research.
 
 3. **Region is a type annotation, not a runtime wrapper.** `Region["read"]` participates in Python's type annotation system and lowers to `tessera.effect` attrs on Graph IR func arguments. It does not wrap tensors at runtime.
 
@@ -235,5 +229,5 @@ src/
 | Graph IR op catalog + canonicalization | `docs/spec/GRAPH_IR_SPEC.md` |
 | Every pass: input/output/invariants | `docs/spec/LOWERING_PIPELINE_SPEC.md` |
 | FA-4 Attn dialect, TMA ops, WGMMA, Schedule Mesh | `docs/spec/TARGET_IR_SPEC.md` |
-| Historical architecture blueprint | `docs/old_concepts/tessera_system_architecture.md` |
+| Historical architecture blueprint | `docs/archive/old_concepts/tessera_system_architecture.md` |
 | Programming guide | `docs/programming_guide/` |

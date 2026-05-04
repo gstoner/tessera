@@ -554,9 +554,9 @@ rt.destroy_context(ctx)
 | Goal | Document |
 |------|----------|
 | Full normative function reference | [`docs/spec/RUNTIME_ABI_SPEC.md`](../spec/RUNTIME_ABI_SPEC.md) |
-| Kernel programming model | [Chapter 5: Kernel Programming](Tessera_Programming_Guide_Chapter5_Kernel_Programming.md) |
-| Memory model (tiers, sharding, async) | [Chapter 3: Memory Model](Tessera_Programming_Guide_Chapter3_Memory_Model.md) |
-| Execution model (tiles, pipelines) | [Chapter 4: Execution Model](Tessera_Programming_Guide_Chapter4_Execution_Model.md) |
+| Kernel programming model | [Chapter 5: Kernel Programming](../programming_guide/Tessera_Programming_Guide_Chapter5_Kernel_Programming.md) |
+| Memory model (tiers, sharding, async) | [Chapter 3: Memory Model](../programming_guide/Tessera_Programming_Guide_Chapter3_Memory_Model.md) |
+| Execution model (tiles, pipelines) | [Chapter 4: Execution Model](../programming_guide/Tessera_Programming_Guide_Chapter4_Execution_Model.md) |
 | All `tsr*` type definitions | `src/runtime/include/tessera/tsr_types.h` |
 | All `TsrStatus` codes | `src/runtime/include/tessera/tsr_status.h` |
 | Kernel callback interface | `src/runtime/include/tessera/tsr_kernel.h` |

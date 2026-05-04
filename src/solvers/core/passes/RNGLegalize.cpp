@@ -22,6 +22,9 @@ struct RNGLegalizePass
     : PassWrapper<RNGLegalizePass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(RNGLegalizePass)
 
+  RNGLegalizePass() = default;
+  RNGLegalizePass(const RNGLegalizePass &other) : PassWrapper(other) {}
+
   Option<std::string> rngBackend{
       *this, "rng-backend",
       llvm::cl::desc("RNG backend: philox | threefry | xoshiro"),
@@ -51,7 +54,7 @@ struct RNGLegalizePass
 
     mod.walk([&](Operation *op) {
       StringRef opName = op->getName().getStringRef();
-      if (!opName.startswith("tessera_rng."))
+      if (!opName.starts_with("tessera_rng."))
         return;
 
       // 1. Ensure seed attr exists.

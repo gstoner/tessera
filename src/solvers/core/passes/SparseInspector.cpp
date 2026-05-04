@@ -28,6 +28,9 @@ struct SparseInspectorPass
     : PassWrapper<SparseInspectorPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SparseInspectorPass)
 
+  SparseInspectorPass() = default;
+  SparseInspectorPass(const SparseInspectorPass &other) : PassWrapper(other) {}
+
   // Pass option: override the sparsity threshold.
   Option<double> sparseThreshold{
       *this, "sparse-threshold",

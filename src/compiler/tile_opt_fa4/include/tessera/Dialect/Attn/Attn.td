@@ -2,7 +2,7 @@
 // Phase 3 additions: ScaledDotProduct, OnlineSoftmax, LseAccumulate,
 //                    DropoutMask, CausalMask — plus original LseSave/LseLoad.
 include "mlir/IR/OpBase.td"
-include "mlir/IR/DialectSpecification.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def Tessera_Attn_Dialect : Dialect {
   let name = "tessera.attn";
@@ -15,14 +15,14 @@ def LseSaveOp : Op<Tessera_Attn_Dialect, "lse.save", []> {
   let summary = "Save per-row log-sum-exp (LSE) from forward attention";
   let arguments = (ins AnyType:$scores);
   let results = (outs AnyType:$lse);
-  let assemblyFormat = "$scores attr-dict";
+  let assemblyFormat = "$scores attr-dict `:` type($scores) `->` type($lse)";
   let hasVerifier = 1;
 }
 
 def LseLoadOp : Op<Tessera_Attn_Dialect, "lse.load", [Pure]> {
   let summary = "Load LSE tensor for backward";
   let results = (outs AnyType:$lse);
-  let assemblyFormat = "attr-dict";
+  let assemblyFormat = "attr-dict `:` type($lse)";
 }
 
 // ─── Phase 3 FA-4 ops ────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ def OnlineSoftmaxOp : Op<Tessera_Attn_Dialect, "online_softmax", []> {
     AnyType:$new_m,     // updated running max
     AnyType:$new_l      // updated running sum
   );
-  let assemblyFormat = "$scores `,` $running_m `,` $running_l `,` $acc_out attr-dict";
+  let assemblyFormat = "$scores `,` $running_m `,` $running_l `,` $acc_out attr-dict `:` type($scores) `,` type($running_m) `,` type($running_l) `,` type($acc_out) `->` type($new_acc) `,` type($new_m) `,` type($new_l)";
   let hasVerifier = 1;
 }
 
@@ -76,7 +76,7 @@ def LseAccumulateOp : Op<Tessera_Attn_Dialect, "lse_accumulate", [Pure]> {
     AnyType:$output,    // normalised output [tile_q × d_v]
     AnyType:$lse        // log-sum-exp values [tile_q] — saved for backward
   );
-  let assemblyFormat = "$acc `,` $running_m `,` $running_l attr-dict";
+  let assemblyFormat = "$acc `,` $running_m `,` $running_l attr-dict `:` type($acc) `,` type($running_m) `,` type($running_l) `->` type($output) `,` type($lse)";
 }
 
 // DropoutMaskOp — stochastic binary mask for attention score dropout.
@@ -91,7 +91,7 @@ def DropoutMaskOp : Op<Tessera_Attn_Dialect, "dropout_mask", []> {
     I64Attr:$seed       // RNG seed (required when present)
   );
   let results = (outs AnyType:$masked_scores);
-  let assemblyFormat = "$scores `p` `=` $dropout_p `seed` `=` $seed attr-dict";
+  let assemblyFormat = "$scores `p` `=` $dropout_p `seed` `=` $seed attr-dict `:` type($scores) `->` type($masked_scores)";
 }
 
 // CausalMaskOp — applies lower-triangular causal mask to score tile.
@@ -106,5 +106,5 @@ def CausalMaskOp : Op<Tessera_Attn_Dialect, "causal_mask", [Pure]> {
     I64Attr:$kv_offset   // col offset of this KV tile in the sequence
   );
   let results = (outs AnyType:$masked_scores);
-  let assemblyFormat = "$scores `q_off` `=` $q_offset `kv_off` `=` $kv_offset attr-dict";
+  let assemblyFormat = "$scores `q_off` `=` $q_offset `kv_off` `=` $kv_offset attr-dict `:` type($scores) `->` type($masked_scores)";
 }

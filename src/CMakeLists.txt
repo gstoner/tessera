@@ -33,7 +33,11 @@ add_subdirectory(runtime)
 # ------------------------------------------------------------------
 add_subdirectory(compiler/tile_opt_fa4)         # Attn + Queue dialects, FA4 conversions
 add_subdirectory(compiler/programming_model)    # PM v1.1: Schedule IR ODS
-add_subdirectory(compiler/tessera_neighbors)    # Neighbor topology + stencil passes
+if(NOT (TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA))
+  add_subdirectory(compiler/tessera_neighbors)  # Neighbor topology + stencil passes
+else()
+  message(STATUS "Skipping Neighbors dialect for hardware-free ROCm artifact build")
+endif()
 
 if(TESSERA_BUILD_X86_BACKEND)
   add_subdirectory(compiler/codegen/tessera_x86_backend)
@@ -63,5 +67,9 @@ endif()
 # ------------------------------------------------------------------
 # Solver suite and collectives
 # ------------------------------------------------------------------
-add_subdirectory(solvers)              # scaling_resilience, tpp, spectral, sparse
+if(NOT (TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA))
+  add_subdirectory(solvers)            # scaling_resilience, tpp, spectral, sparse
+else()
+  message(STATUS "Skipping solver suite for hardware-free ROCm artifact build")
+endif()
 add_subdirectory(collectives)          # Collective-communication dialect

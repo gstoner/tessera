@@ -92,18 +92,29 @@ add_definitions(${LLVM_DEFINITIONS})
 add_subdirectory(src)
 add_subdirectory(tools/tessera-opt)
 
+set(TESSERA_COMPILER_FOUNDATION_DEPS
+    TesseraIRTableGen
+    TesseraAttnTableGen
+    TesseraQueueTableGen
+    TesseraIR
+    TesseraPasses
+    tessera-opt
+)
+if(TARGET TesseraSolversTableGen)
+    list(APPEND TESSERA_COMPILER_FOUNDATION_DEPS TesseraSolversTableGen)
+endif()
+if(TARGET TesseraLinalgSolverTableGen)
+    list(APPEND TESSERA_COMPILER_FOUNDATION_DEPS TesseraLinalgSolverTableGen)
+endif()
+if(TARGET tessera_solvers_passes)
+    list(APPEND TESSERA_COMPILER_FOUNDATION_DEPS tessera_solvers_passes)
+endif()
+if(TARGET tessera_linalg_solver_passes)
+    list(APPEND TESSERA_COMPILER_FOUNDATION_DEPS tessera_linalg_solver_passes)
+endif()
+
 add_custom_target(TesseraCompilerFoundation
-    DEPENDS
-        TesseraIRTableGen
-        TesseraAttnTableGen
-        TesseraQueueTableGen
-        TesseraSolversTableGen
-        TesseraLinalgSolverTableGen
-        TesseraIR
-        TesseraPasses
-        tessera_solvers_passes
-        tessera_linalg_solver_passes
-        tessera-opt
+    DEPENDS ${TESSERA_COMPILER_FOUNDATION_DEPS}
 )
 
 # --------------------------------------------------------------------------
@@ -117,7 +128,9 @@ endif()
 # --------------------------------------------------------------------------
 # Examples
 # --------------------------------------------------------------------------
-if(TESSERA_BUILD_EXAMPLES)
+if(TESSERA_BUILD_EXAMPLES AND TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA)
+    message(STATUS "Skipping examples for hardware-free ROCm build because CUDA is disabled")
+elseif(TESSERA_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 

@@ -1,10 +1,16 @@
 
 include "mlir/IR/OpBase.td"
-include "mlir/IR/OpImplementation.h.td"
+include "mlir/IR/EnumAttr.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/TilingInterface.td"
 include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/BuiltinAttributes.td"
+include "mlir/IR/CommonAttrConstraints.td"
+
+class StrEnumAttr<string name, string summaryText, list<string> cases>
+    : StringBasedAttr<StrAttrPred, summaryText> {
+  let summary = summaryText;
+}
 
 def Tessera_Dialect : Dialect {
   let name = "tessera";
@@ -28,7 +34,6 @@ def Tessera_EpilogueKind : I32EnumAttr<
   ]
 > {
   let convertFromStorage = [{(tessera::EpilogueKind)$_self;}];
-  let stringify = [{tessera::stringifyEpilogueKind($_self);}];
   let cppNamespace = "::tessera";
 }
 def Tessera_EpilogueKindAttr : EnumAttr<Tessera_Dialect, Tessera_EpilogueKind, "epilogue">;
@@ -42,14 +47,9 @@ def Tessera_RoundingMode : StrEnumAttr<"RoundingMode", "rounding mode",
 def Tessera_QuantAxis : StrEnumAttr<"QuantAxis", "quantization scale axis",
   ["none", "per_tensor", "per_channel_0", "per_channel_1", "blockwise"]>;
 
-def Tessera_NumericPolicyAttr : StructAttr<"NumericPolicy", Tessera_Dialect, [
-  StructFieldAttr<"storage", Tessera_StorageDType>,
-  StructFieldAttr<"accum", Tessera_AccumDType>,
-  StructFieldAttr<"rounding", Tessera_RoundingMode>,
-  StructFieldAttr<"scale", F64Attr>,
-  StructFieldAttr<"quant_axis", Tessera_QuantAxis>,
-  StructFieldAttr<"deterministic", BoolAttr>
-]>;
+def Tessera_NumericPolicyAttr
+    : DictionaryAttrBase<CPred<"::llvm::isa<::mlir::DictionaryAttr>($_self)">,
+                         "Tessera numeric policy dictionary">;
 
 def TensorType : AnyTypeOf<[AnyRankedTensor, AnyUnrankedTensor]>;
 
@@ -83,7 +83,7 @@ def Tessera_ArchRelaxAttr : StrEnumAttr<"ArchRelax", "architecture relaxation",
 
 def Tessera_MatmulOp : Op<
   Tessera_Dialect, "matmul",
-  [Pure, NoSideEffect, DeclareOpInterfaceMethods<TilingInterface>]
+  [Pure, DeclareOpInterfaceMethods<TilingInterface>]
 > {
   let summary = "Matrix multiply (A @ B)";
   let arguments = (ins TensorType:$lhs, TensorType:$rhs,
@@ -99,7 +99,7 @@ def Tessera_MatmulOp : Op<
 
 def Tessera_Conv2DNHWCOp : Op<
   Tessera_Dialect, "conv2d_nhwc",
-  [Pure, NoSideEffect, DeclareOpInterfaceMethods<TilingInterface>]
+  [Pure, DeclareOpInterfaceMethods<TilingInterface>]
 > {
   let summary = "2D convolution NHWC x HWCF -> NHWC";
   let arguments = (ins TensorType:$input, TensorType:$filter,
@@ -112,7 +112,7 @@ def Tessera_Conv2DNHWCOp : Op<
 
 def Tessera_FlashAttnOp : Op<
   Tessera_Dialect, "flash_attn",
-  [Pure, NoSideEffect]
+  [Pure]
 > {
   let summary = "FlashAttention fused op";
   let arguments = (ins TensorType:$q, AnyType:$k_or_cache, Variadic<AnyType>:$v,
@@ -127,7 +127,7 @@ def Tessera_FlashAttnOp : Op<
 
 def Tessera_FusedEpilogueOp : Op<
   Tessera_Dialect, "fused_epilogue",
-  [Pure, NoSideEffect]
+  [Pure]
 > {
   let summary = "Fused epilogue for matmul/conv with optional bias";
   let arguments = (ins TensorType:$lhs, TensorType:$rhs, TensorType:$bias,
@@ -140,7 +140,7 @@ def Tessera_FusedEpilogueOp : Op<
 
 class Tessera_UnaryPureOp<string mnemonic, string summaryText> : Op<
   Tessera_Dialect, mnemonic,
-  [Pure, NoSideEffect]
+  [Pure]
 > {
   let summary = summaryText;
   let arguments = (ins TensorType:$x);
@@ -167,7 +167,7 @@ def Tessera_SinOp : Tessera_UnaryPureOp<"sin", "Sine elementwise op">;
 
 def Tessera_TransposeOp : Op<
   Tessera_Dialect, "transpose",
-  [Pure, NoSideEffect]
+  [Pure]
 > {
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
@@ -176,7 +176,7 @@ def Tessera_TransposeOp : Op<
 
 def Tessera_CastOp : Op<
   Tessera_Dialect, "cast",
-  [Pure, NoSideEffect]
+  [Pure]
 > {
   let arguments = (ins TensorType:$x,
                         OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
@@ -213,7 +213,7 @@ def Tessera_AllGatherOp : Tessera_CollectiveOp<"all_gather", "Single-rank/refere
 
 class Tessera_SpectralUnaryOp<string mnemonic, string summaryText> : Op<
   Tessera_Dialect, mnemonic,
-  [Pure, NoSideEffect]
+  [Pure]
 > {
   let summary = summaryText;
   let arguments = (ins TensorType:$x,
@@ -232,7 +232,7 @@ def Tessera_DCTOp : Tessera_SpectralUnaryOp<"dct", "Discrete cosine transform"> 
                        OptionalAttr<I64Attr>:$type);
 }
 
-def Tessera_SpectralConvOp : Op<Tessera_Dialect, "spectral_conv", [Pure, NoSideEffect]> {
+def Tessera_SpectralConvOp : Op<Tessera_Dialect, "spectral_conv", [Pure]> {
   let summary = "Reference spectral convolution semantic op";
   let arguments = (ins TensorType:$x, TensorType:$filter);
   let results = (outs TensorType:$y);
@@ -254,7 +254,7 @@ def Tessera_AdamOp : Op<Tessera_Dialect, "adam", []> {
 
 def Tessera_RMSNormSafeOp : Op<
   Tessera_Dialect, "rmsnorm_safe",
-  [Pure, NoSideEffect]
+  [Pure]
 > {
   let summary = "Numerically safe RMSNorm with policy-controlled stats/rounding";
   let arguments = (ins TensorType:$x,
@@ -266,7 +266,7 @@ def Tessera_RMSNormSafeOp : Op<
 
 def Tessera_SoftmaxSafeOp : Op<
   Tessera_Dialect, "softmax_safe",
-  [Pure, NoSideEffect]
+  [Pure]
 > {
   let summary = "Numerically safe softmax/logsumexp primitive";
   let arguments = (ins TensorType:$x,

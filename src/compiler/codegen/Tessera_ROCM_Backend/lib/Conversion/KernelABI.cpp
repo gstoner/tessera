@@ -4,12 +4,14 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/STLExtras.h"
 
 using namespace mlir;
 
 static LLVM::LLVMPointerType ptrInAS(MLIRContext *ctx, unsigned as, Type elemTy){
-  return LLVM::LLVMPointerType::get(elemTy, as);
+  (void)elemTy;
+  return LLVM::LLVMPointerType::get(ctx, as);
 }
 
 namespace {
@@ -23,14 +25,19 @@ struct KernelABIPass : PassWrapper<KernelABIPass, OperationPass<ModuleOp>> {
   void runOnOperation() override {
     ModuleOp m = getOperation();
     auto ctx = m.getContext();
-    for (auto fn : m.getOps<func::FuncOp>()) {
+    ctx->loadDialect<LLVM::LLVMDialect>();
+    SmallVector<func::FuncOp> kernels;
+    for (auto fn : m.getOps<func::FuncOp>())
+      kernels.push_back(fn);
+
+    for (auto fn : kernels) {
       if (!fn->hasAttr("tessera_rocm.kernel")) continue;
 
       // Convert memref<*xT> -> !llvm.ptr<T, addrspace(1)>
       SmallVector<Type> newArgTys;
       bool changed = false;
       for (auto t : fn.getFunctionType().getInputs()) {
-        if (auto mr = dyn_cast<MemRefType>(t)) {
+        if (auto mr = dyn_cast<BaseMemRefType>(t)) {
           auto elem = mr.getElementType();
           auto llvmPtr = ptrInAS(ctx, /*global*/1, elem);
           newArgTys.push_back(llvmPtr);
@@ -45,7 +52,13 @@ struct KernelABIPass : PassWrapper<KernelABIPass, OperationPass<ModuleOp>> {
         OpBuilder b(fn.getContext());
         b.setInsertionPoint(fn);
         auto newFn = func::FuncOp::create(fn.getLoc(), fn.getName(), newTy);
-        newFn->setAttrs(fn->getAttrDictionary());
+        for (auto attr : fn->getAttrs()) {
+          StringRef name = attr.getName().getValue();
+          if (name == func::FuncOp::getFunctionTypeAttrName(newFn->getName()) ||
+              name == SymbolTable::getSymbolAttrName())
+            continue;
+          newFn->setAttr(attr.getName(), attr.getValue());
+        }
         newFn.getBody().takeBody(fn.getBody());
         for (auto [arg, newType] :
              llvm::zip(newFn.getBody().getArguments(), newArgTys))

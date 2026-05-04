@@ -28,6 +28,9 @@ struct RNGStreamAssignPass
     : PassWrapper<RNGStreamAssignPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(RNGStreamAssignPass)
 
+  RNGStreamAssignPass() = default;
+  RNGStreamAssignPass(const RNGStreamAssignPass &other) : PassWrapper(other) {}
+
   Option<int> numRanks{
       *this, "num-ranks",
       llvm::cl::desc("Total number of parallel ranks"),
@@ -61,7 +64,7 @@ struct RNGStreamAssignPass
     int64_t maxStream = 0;
 
     mod.walk([&](Operation *op) {
-      if (!op->getName().getStringRef().startswith("tessera_rng."))
+      if (!op->getName().getStringRef().starts_with("tessera_rng."))
         return;
       // Must have been legalized first (stream_id carries the rank-local offset).
       auto sidAttr = op->getAttrOfType<IntegerAttr>("rng.stream_id");

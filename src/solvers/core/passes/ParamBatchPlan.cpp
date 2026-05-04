@@ -27,6 +27,9 @@ struct ParamBatchPlanPass
     : PassWrapper<ParamBatchPlanPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ParamBatchPlanPass)
 
+  ParamBatchPlanPass() = default;
+  ParamBatchPlanPass(const ParamBatchPlanPass &other) : PassWrapper(other) {}
+
   Option<int> batchSize{
       *this, "param-batch-size",
       llvm::cl::desc("Number of sweep configurations per execution batch"),

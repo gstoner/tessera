@@ -9,5 +9,7 @@
 
 #include "TesseraOpsEnums.h.inc"
 #include "TesseraOpsDialect.h.inc"
+#define GET_TYPEDEF_CLASSES
+#include "TesseraOpsTypes.h.inc"
 #define GET_OP_CLASSES
 #include "TesseraOps.h.inc"

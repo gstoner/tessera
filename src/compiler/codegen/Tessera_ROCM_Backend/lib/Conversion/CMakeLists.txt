@@ -1,4 +1,5 @@
 add_mlir_library(TesseraROCMConversion
+  TileToROCM.cpp
   TesseraTargetToROCDL.cpp
   KernelABI.cpp
   Passes.cpp

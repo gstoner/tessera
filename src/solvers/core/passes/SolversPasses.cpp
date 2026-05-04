@@ -32,57 +32,21 @@ void buildTesseraSolverCorePipeline(OpPassManager &pm) {
 }
 
 void registerTesseraSolverPasses() {
-  PassRegistration<::mlir::Pass> sparseInspector(
-      "tessera-solver-sparse-inspector",
-      "Inspect sparse solver structure and attach solver metadata",
-      []() { return createSparseInspectorPass(); });
-  PassRegistration<::mlir::Pass> sparsePrecond(
-      "tessera-solver-sparse-precond",
-      "Plan sparse preconditioners for solver regions",
-      []() { return createSparsePrecondPass(); });
-  PassRegistration<::mlir::Pass> sparseSpecialize(
-      "tessera-solver-sparse-specialize",
-      "Specialize sparse solver kernels after inspection",
-      []() { return createSparseSolverSpecializePass(); });
+  registerPass([]() { return createSparseInspectorPass(); });
+  registerPass([]() { return createSparsePrecondPass(); });
+  registerPass([]() { return createSparseSolverSpecializePass(); });
 
-  PassRegistration<::mlir::Pass> trigInit(
-      "tessera-solver-trig-init",
-      "Initialize trigonometric solver state",
-      []() { return createTrigInitPass(); });
-  PassRegistration<::mlir::Pass> newtonAutodiff(
-      "tessera-solver-newton-autodiff",
-      "Prepare autodiff structure for Newton-style nonlinear solves",
-      []() { return createNewtonAutodiffPass(); });
-  PassRegistration<::mlir::Pass> periodicHalo(
-      "tessera-solver-periodic-halo",
-      "Materialize periodic halo solver boundaries",
-      []() { return createPeriodicHaloPass(); });
+  registerPass([]() { return createTrigInitPass(); });
+  registerPass([]() { return createNewtonAutodiffPass(); });
+  registerPass([]() { return createPeriodicHaloPass(); });
 
-  PassRegistration<::mlir::Pass> paramBatch(
-      "tessera-solver-param-batch-plan",
-      "Plan parameter batches for solver sweeps",
-      []() { return createParamBatchPlanPass(); });
-  PassRegistration<::mlir::Pass> continuation(
-      "tessera-solver-continuation-guard",
-      "Insert continuation guards for solver convergence",
-      []() { return createContinuationGuardPass(); });
-  PassRegistration<::mlir::Pass> implicitLower(
-      "tessera-solver-implicit-lower",
-      "Lower implicit solver forms toward linalg-compatible IR",
-      []() { return createImplicitLowerPass(); });
+  registerPass([]() { return createParamBatchPlanPass(); });
+  registerPass([]() { return createContinuationGuardPass(); });
+  registerPass([]() { return createImplicitLowerPass(); });
 
-  PassRegistration<::mlir::Pass> rngLegalize(
-      "tessera-solver-rng-legalize",
-      "Legalize solver RNG operations",
-      []() { return createRNGLegalizePass(); });
-  PassRegistration<::mlir::Pass> rngStream(
-      "tessera-solver-rng-stream-assign",
-      "Assign deterministic RNG streams for solver regions",
-      []() { return createRNGStreamAssignPass(); });
-  PassRegistration<::mlir::Pass> rngQmc(
-      "tessera-solver-rng-qmc-plan",
-      "Plan quasi-Monte Carlo RNG usage for solvers",
-      []() { return createRNGQMCPlanPass(); });
+  registerPass([]() { return createRNGLegalizePass(); });
+  registerPass([]() { return createRNGStreamAssignPass(); });
+  registerPass([]() { return createRNGQMCPlanPass(); });
 }
 
 void registerTesseraSolversPipeline() {

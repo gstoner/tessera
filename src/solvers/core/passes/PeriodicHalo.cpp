@@ -24,6 +24,9 @@ struct PeriodicHaloPass
     : PassWrapper<PeriodicHaloPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PeriodicHaloPass)
 
+  PeriodicHaloPass() = default;
+  PeriodicHaloPass(const PeriodicHaloPass &other) : PassWrapper(other) {}
+
   Option<int> defaultHaloWidth{
       *this, "halo-width",
       llvm::cl::desc("Default halo (ghost cell) width per dimension"),
@@ -72,7 +75,7 @@ struct PeriodicHaloPass
         if (op->hasAttr("tessera.halo_annotated"))
           return;
         StringRef opName = op->getName().getStringRef();
-        if (!opName.startswith("tessera."))
+      if (!opName.starts_with("tessera."))
           return;
         // Conservative: tag every tessera op inside a periodic-boundary func.
         int64_t width = defaultHaloWidth;

@@ -1,6 +1,5 @@
 //===- Queue.td (v1.3) -----------------------------------------------------*- tablegen -*-===//
 include "mlir/IR/OpBase.td"
-include "mlir/IR/DialectSpecification.td"
 include "mlir/IR/AttrTypeBase.td"
 
 def Tessera_Queue_Dialect : Dialect {

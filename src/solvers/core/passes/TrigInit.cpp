@@ -32,6 +32,9 @@ struct TrigInitPass
     : PassWrapper<TrigInitPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TrigInitPass)
 
+  TrigInitPass() = default;
+  TrigInitPass(const TrigInitPass &other) : PassWrapper(other) {}
+
   Option<std::string> windowType{
       *this, "window-type",
       llvm::cl::desc("FFT window function: none | hann | hamming"),
@@ -56,7 +59,7 @@ struct TrigInitPass
       // Infer signal length from first result type (if shaped).
       int64_t sigLen = 1024; // conservative default
       if (op->getNumResults() > 0) {
-        if (auto shaped = op->getResult(0).getType().dyn_cast<ShapedType>()) {
+        if (auto shaped = dyn_cast<ShapedType>(op->getResult(0).getType())) {
           if (shaped.hasStaticShape()) {
             // Use the last (innermost) dimension as the signal length.
             auto shape = shaped.getShape();

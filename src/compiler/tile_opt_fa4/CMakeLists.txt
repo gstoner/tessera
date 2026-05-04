@@ -12,6 +12,7 @@
 # ------------------------------------------------------------------
 set(ATTN_TD ${CMAKE_CURRENT_SOURCE_DIR}/include/tessera/Dialect/Attn/Attn.td)
 
+set(LLVM_TARGET_DEFINITIONS ${ATTN_TD})
 mlir_tablegen(AttnOps.h.inc        -gen-op-decls     -I ${CMAKE_CURRENT_SOURCE_DIR}/include DEPENDS ${ATTN_TD})
 mlir_tablegen(AttnOps.cpp.inc      -gen-op-defs      -I ${CMAKE_CURRENT_SOURCE_DIR}/include DEPENDS ${ATTN_TD})
 mlir_tablegen(AttnDialect.h.inc    -gen-dialect-decls -I ${CMAKE_CURRENT_SOURCE_DIR}/include DEPENDS ${ATTN_TD})
@@ -40,6 +41,7 @@ target_include_directories(TesseraAttnDialect
 # ------------------------------------------------------------------
 set(QUEUE_TD ${CMAKE_CURRENT_SOURCE_DIR}/include/tessera/Dialect/Queue/Queue.td)
 
+set(LLVM_TARGET_DEFINITIONS ${QUEUE_TD})
 mlir_tablegen(QueueOps.h.inc   -gen-op-decls -I ${CMAKE_CURRENT_SOURCE_DIR}/include DEPENDS ${QUEUE_TD})
 mlir_tablegen(QueueOps.cpp.inc -gen-op-defs  -I ${CMAKE_CURRENT_SOURCE_DIR}/include DEPENDS ${QUEUE_TD})
 mlir_tablegen(QueueTypes.h.inc   -gen-typedef-decls -typedefs-dialect=tessera.queue -I ${CMAKE_CURRENT_SOURCE_DIR}/include DEPENDS ${QUEUE_TD})

@@ -29,6 +29,9 @@ struct NewtonAutodiffPass
     : PassWrapper<NewtonAutodiffPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(NewtonAutodiffPass)
 
+  NewtonAutodiffPass() = default;
+  NewtonAutodiffPass(const NewtonAutodiffPass &other) : PassWrapper(other) {}
+
   Option<bool> generateJVP{
       *this, "generate-jvp",
       llvm::cl::desc("Also generate forward-mode JVP annotations"),

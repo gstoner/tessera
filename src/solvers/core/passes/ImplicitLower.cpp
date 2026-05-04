@@ -30,6 +30,9 @@ struct ImplicitLowerPass
     : PassWrapper<ImplicitLowerPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ImplicitLowerPass)
 
+  ImplicitLowerPass() = default;
+  ImplicitLowerPass(const ImplicitLowerPass &other) : PassWrapper(other) {}
+
   Option<int> maxIter{
       *this, "newton-max-iter",
       llvm::cl::desc("Max Newton iterations"),

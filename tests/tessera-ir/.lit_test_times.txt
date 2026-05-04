@@ -1,0 +1,3 @@
+2.428102e-02 phase8/apple_cpu_lowering.mlir
+2.453899e-02 phase8/apple_dialect_roundtrip.mlir
+2.435493e-02 phase8/apple_gpu_lowering.mlir

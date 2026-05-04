@@ -1,8 +1,8 @@
 # Tessera — Claude Code Project Context
 
-> **Phases 1–6 complete. Phase 7 (neighbors, Cerebras/Metalium, production) is next.**
+> **Phases 1–6 complete. Phase 7 in progress. Phase 8 in progress — Apple M-Series Phase 8.1 lit-testable on MLIR 21.**
 > This file is the authoritative working reference. Read it before touching any code.
-> Last updated: May 2026.
+> Last updated: May 2026 (MLIR 21 / LLVM 21 build pin).
 
 ---
 
@@ -47,7 +47,7 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 | Phase 5 | ✅ Complete | Solver passes (11 core + 2 linalg + 3 SR), `BayesianAutotuner`, checkpoint decorator, `solver_config.py` — 176 tests |
 | Phase 6 | ✅ Complete | `TesseraRuntime` Python wrapper, CUDA/HIP backends (real calls), ROCm MFMA coverage, benchmark runners, `ErrorReporter`, `ShapeInferencePass` — 170 tests |
 | Phase 7 | 🟡 In progress | Neighbors dialect (halo/stencil) wired into `tessera-opt`; Cerebras WSE-3 (487 LOC, real) and Tenstorrent Metalium (550 LOC, real) backends landed with `tessera-lower-to-metalium` pipeline alias |
-| Phase 8 | 🟡 In progress | Hardware-free Target IR — `tessera_rocm.mfma`, `tessera_metalium.dma/matmul`, `tessera_apple.cpu/gpu.*` ODS dialects between Tile IR and hardware-specific lowering; `@jit(target="rocm"/"metalium"/"apple_cpu"/"apple_gpu")` string targets; Apple M-Series backend scaffold; canonical pipelines `tessera-lower-to-rocm` and `tessera-lower-to-metalium` |
+| Phase 8 | 🟡 In progress | Hardware-free Target IR — `tessera_rocm.mfma`, `tessera_metalium.dma/matmul`, `tessera_apple.cpu/gpu.*` ODS dialects between Tile IR and hardware-specific lowering; `@jit(target="rocm"/"metalium"/"apple_cpu"/"apple_gpu")` string targets; **Apple M-Series backend lit-testable** (Phase 8.1 — dialect + lowering passes + 3 phase8 lit fixtures, MLIR 21); canonical pipelines `tessera-lower-to-rocm`, `tessera-lower-to-metalium`, `tessera-lower-to-apple_cpu`, `tessera-lower-to-apple_gpu` |
 | RubinCPX | ✅ Built | `tessera.target.cpx` dialect, 4 passes, `tessera-cpx-opt` driver, `TESSERA_BUILD_RUBINCPX_BACKEND` CMake option |
 
 **Total active tests: 1,824 passing in `tests/unit/`; lit tests in `tests/tessera-ir/phase2–8/`.**
@@ -111,7 +111,7 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 | `codegen/Tessera_TPU_Backend/` | TPU StableHLO + Shardy export |
 | `codegen/Tessera_Cerebras_backend/` | Cerebras WSE-3 backend — Phase 7, ~487 LOC, real implementation |
 | `codegen/Tessera_Metalium_Backend/` | Tenstorrent Metalium backend — Phase 7, ~550 LOC, real; `tessera-lower-to-metalium` pipeline alias |
-| `codegen/Tessera_Apple_Backend/` | Apple M-Series backend — **Phase 8 scaffold** — `TesseraAppleOps.td` ODS only, no .cpp yet; `TESSERA_BUILD_APPLE_BACKEND` CMake option wired |
+| `codegen/Tessera_Apple_Backend/` | Apple M-Series backend — **Phase 8.1 lit-testable** — dialect + Tile→Apple lowering passes (CPU + GPU) + `tessera-lower-to-apple_cpu`/`-apple_gpu` pipelines; `TESSERA_BUILD_APPLE_BACKEND` CMake option wired into `tessera-opt` |
 | `diagnostics/ErrorReporter.cpp` | Source-attributed shape error reporting |
 | `diagnostics/ShapeInferencePass.cpp` | Forward shape propagation |
 | `tessera_neighbors/` | Halo/stencil neighbor exchange dialect — **Phase 7** |
@@ -275,7 +275,7 @@ Each pass walks the relevant `tessera.neighbors.*` ops:
 
 Lit tests in `tests/tessera-ir/phase7/`. Python wiring test: `tests/unit/test_neighbors_dialect.py`.
 
-**Open work:** build `tessera-opt` against MLIR 18, run lit tests, fix any pass-body bugs the tests expose.
+**Open work:** build `tessera-opt` against MLIR 21, run lit tests, fix any pass-body bugs the tests expose.
 
 ### Cerebras WSE-3 Backend
 
@@ -309,11 +309,23 @@ Contract test: `tests/unit/test_target_ir_contract.py` and `tests/tessera-ir/pha
 
 `@jit(target="rocm" | "metalium" | "apple_cpu" | "apple_gpu")` — `matmul_pipeline.py` dispatches to the corresponding `tessera-lower-to-{target}` pipeline. Coexists with the existing `GPUTargetProfile` parameter form.
 
-### Apple M-Series Backend (Scaffold)
+### Apple M-Series Backend (Phase 8.1 — Lit-testable)
 
-`src/compiler/codegen/Tessera_Apple_Backend/` — `TesseraAppleOps.td` (81 lines ODS) + CMakeLists. **No .cpp yet.** `TESSERA_BUILD_APPLE_BACKEND` CMake option wired.
+`src/compiler/codegen/Tessera_Apple_Backend/` — full dialect + Tile→Apple lowering passes. Builds the `TesseraApple` static library when `-DTESSERA_BUILD_APPLE_BACKEND=ON`. Three lit fixtures under `tests/tessera-ir/phase8/`:
 
-**Open work:** implement the `tessera_apple.cpu/gpu.*` op verifiers and lowering passes; bridge to Apple's Accelerate framework (CPU) and Metal Performance Shaders (GPU).
+- `apple_dialect_roundtrip.mlir` — dialect parse + print smoke test
+- `apple_cpu_lowering.mlir` — exercises `tessera-lower-to-apple_cpu`
+- `apple_gpu_lowering.mlir` — exercises `tessera-lower-to-apple_gpu`
+
+ODS sets `usePropertiesForAttributes = 0` to keep the dialect header-only against MLIR 21's properties machinery. `tessera-opt` links the backend behind a `TESSERA_HAVE_APPLE_BACKEND` guard so non-Apple builds are unaffected.
+
+**Phase 8.2 — Apple CPU native execution (Accelerate).** New pass `AppleCPUToFunc` lowering `tessera_apple.cpu.*` → `func.call @cblas_sgemm` / `vDSP_*` / `vvN`-family. Runtime shim under `src/runtime/src/backend/apple_cpu_backend.cpp` linking `-framework Accelerate`. `@jit(target="apple_cpu")` initially gated on `execute=True`; the test suite migrates so the flag becomes the default.
+
+**Phase 8.3 — Apple GPU baseline via MPS.** New ODS ops `tessera_apple.gpu.mps_matmul` / `mps_softmax` / `mps_dispatch`. Pass `AppleGPUToMPS`. Runtime: Objective-C++ (`.mm`) `MetalDeviceContext` wrapping `MTLDevice` + `MTLCommandQueue` + `MPSMatrixMultiplication`. No `metal-cpp` vendoring.
+
+**Phase 8.4 — Custom MSL kernels for ops MPS doesn't cover.** New op `tessera_apple.gpu.msl_kernel` carries MSL source as a `StringAttr` payload. Runtime compiles via `[device newLibraryWithSource:options:error:]`, caching by hash. Flash-attention is the first custom kernel.
+
+**Out of scope:** AIR bitcode codegen (Mojo's path). Tessera uses MPS for ops Apple ships kernels for and MSL emission for the gaps; AIR codegen revisited only if a perf wall demands it.
 
 ### Production Hardening (ongoing)
 
@@ -382,7 +394,7 @@ cmake .. -DTESSERA_ENABLE_HIP=ON -DHIP_ROOT_DIR=/opt/rocm
 # With RubinCPX backend
 cmake .. -DTESSERA_BUILD_RUBINCPX_BACKEND=ON
 
-# With Apple M-Series backend (Phase 8 scaffold)
+# With Apple M-Series backend (Phase 8.1 — lit-testable)
 cmake .. -DTESSERA_BUILD_APPLE_BACKEND=ON
 
 # Benchmarks
@@ -397,6 +409,8 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | `tessera-lower-to-gpu` | NVIDIA SM_90+ WGMMA/TMA — Phase 3 |
 | `tessera-lower-to-rocm` | AMD ROCm MFMA — Phase 8 |
 | `tessera-lower-to-metalium` | Tenstorrent Metalium — Phase 8 |
+| `tessera-lower-to-apple_cpu` | Apple Silicon CPU (Accelerate artifact) — Phase 8.1 |
+| `tessera-lower-to-apple_gpu` | Apple Silicon GPU (Metal artifact) — Phase 8.1 |
 | `tessera-cpx-pipeline` / `tessera-cpx-context-pipeline` | NV Rubin CPX (separate `tessera-cpx-opt` driver) |
 
 ---
@@ -425,7 +439,7 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | TPU backend | `src/compiler/codegen/Tessera_TPU_Backend/` |
 | Cerebras backend | `src/compiler/codegen/Tessera_Cerebras_backend/` |
 | Metalium backend | `src/compiler/codegen/Tessera_Metalium_Backend/` |
-| Apple M-Series backend (Phase 8) | `src/compiler/codegen/Tessera_Apple_Backend/` |
+| Apple M-Series backend (Phase 8.1) | `src/compiler/codegen/Tessera_Apple_Backend/` |
 | Target IR contract test | `tests/unit/test_target_ir_contract.py`, `tests/tessera-ir/phase8/target_ir_contracts.mlir` |
 | Autotuner v1 framework | `src/compiler/autotuning/tessera/tools/autotune/` |
 | IR specs | `docs/spec/` (GRAPH_IR_SPEC, RUNTIME_ABI_SPEC, MEMORY_MODEL_SPEC, etc.) |
@@ -442,4 +456,4 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 
 ---
 
-*Last updated: May 2026 — Phases 1–6 complete; Phase 7 in progress (Neighbors wired into `tessera-opt`, Cerebras + Metalium backends real); Phase 8 in progress (hardware-free Target IR, string `target=` aliases, Apple M-Series scaffold, `tessera-lower-to-rocm`/`-metalium` pipelines). Test count: **1,824 passing, 1 skipped**.*
+*Last updated: May 2026 — Phases 1–6 complete; Phase 7 in progress (Neighbors wired into `tessera-opt`, Cerebras + Metalium backends real); Phase 8 in progress (hardware-free Target IR, string `target=` aliases, Apple M-Series Phase 8.1 lit-testable against MLIR 21 with three `phase8/apple_*.mlir` fixtures, `tessera-lower-to-rocm`/`-metalium`/`-apple_cpu`/`-apple_gpu` pipelines). Build pin: **LLVM/MLIR 21**. Test count: **1,824 passing, 1 skipped**.*

@@ -14,8 +14,12 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     cmake_minimum_required(VERSION 3.20)
     project(TesseraNeighbors LANGUAGES CXX)
 
-    find_package(LLVM 18 REQUIRED CONFIG)
+    find_package(LLVM REQUIRED CONFIG)
     find_package(MLIR REQUIRED CONFIG)
+    if(LLVM_VERSION_MAJOR LESS 21)
+      message(FATAL_ERROR
+        "TesseraNeighbors requires LLVM/MLIR 21+; found ${LLVM_PACKAGE_VERSION}")
+    endif()
     list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}" "${LLVM_CMAKE_DIR}")
     include(TableGen)
     include(AddLLVM)

@@ -152,14 +152,14 @@ pytest tests/ -v
 # Type check
 mypy python/tessera/
 
-# C++ build — CPU only
-mkdir -p build && cd build
-cmake .. -DTESSERA_ENABLE_CUDA=OFF -DTESSERA_CPU_ONLY=ON
-make -j$(nproc)
+# Configure C++/MLIR build with Homebrew LLVM/MLIR 21 on macOS
+cmake -S . -B build \
+  -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/llvm@21 \
+  -DLLVM_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/llvm \
+  -DMLIR_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/mlir
 
-# C++ build — with CUDA (Phase 3+)
-cmake .. -DTESSERA_ENABLE_CUDA=ON -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda
-make -j$(nproc)
+# Build C++ targets
+cmake --build build
 
 # MLIR lit tests
 python -m lit tests/tessera-ir/ -v

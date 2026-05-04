@@ -51,14 +51,12 @@ namespace {
 // Helpers
 //===----------------------------------------------------------------------===//
 
-constexpr llvm::StringLiteral kCPUFunc = "tessera_apple.cpu.func";
 constexpr llvm::StringLiteral kCPUAccelerateGemm =
     "tessera_apple.cpu.accelerate_gemm";
 constexpr llvm::StringLiteral kCPUVectorReduce =
     "tessera_apple.cpu.vector_reduce";
 constexpr llvm::StringLiteral kCPUVectorOp = "tessera_apple.cpu.vector_op";
 
-constexpr llvm::StringLiteral kGPUFunc = "tessera_apple.gpu.func";
 constexpr llvm::StringLiteral kGPUMetalKernel =
     "tessera_apple.gpu.metal_kernel";
 constexpr llvm::StringLiteral kGPUDispatch = "tessera_apple.gpu.dispatch";
@@ -108,12 +106,6 @@ std::string resolveResult(Operation *op, int64_t ordinal) {
   if (auto r = op->getAttrOfType<StringAttr>("result"))
     return r.getValue().str();
   return ("v" + llvm::Twine(ordinal)).str();
-}
-
-int64_t resolveOrdinal(Operation *op, int64_t fallback) {
-  if (auto o = op->getAttrOfType<IntegerAttr>("ordinal"))
-    return o.getInt();
-  return fallback;
 }
 
 // Build an op of the given name with the standard
@@ -171,7 +163,7 @@ struct LowerTileToAppleCPUPass
            "(Accelerate / vecLib / BNNS artifacts)";
   }
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<TesseraApple_Dialect>();
+    registry.insert<TesseraAppleDialect>();
   }
 
   void runOnOperation() override {
@@ -234,7 +226,7 @@ struct LowerTileToAppleGPUPass
            "(Metal / MPS artifacts)";
   }
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<TesseraApple_Dialect>();
+    registry.insert<TesseraAppleDialect>();
   }
 
   void runOnOperation() override {

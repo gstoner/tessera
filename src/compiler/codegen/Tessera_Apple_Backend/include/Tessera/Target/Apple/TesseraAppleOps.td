@@ -15,6 +15,10 @@ def TesseraApple_Dialect : Dialect {
     to Accelerate/vecLib/BNNS-style calls. GPU ops map to Metal/MPS-style kernel
     and dispatch artifacts.
   }];
+
+  // Use plain attributes (not op-properties storage). Keeps the dialect
+  // header-only and round-trippable without the Op<> getProperties() machinery.
+  let usePropertiesForAttributes = 0;
 }
 
 class TesseraApple_Op<string mnemonic, list<Trait> traits = []> :

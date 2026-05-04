@@ -16,7 +16,7 @@
 namespace tessera {
 namespace apple {
 
-void TesseraApple_Dialect::initialize() {
+void TesseraAppleDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
 #include "Tessera/Target/Apple/TesseraAppleOps.cpp.inc"
@@ -24,7 +24,7 @@ void TesseraApple_Dialect::initialize() {
 }
 
 void registerAppleDialect(::mlir::DialectRegistry &registry) {
-  registry.insert<TesseraApple_Dialect>();
+  registry.insert<TesseraAppleDialect>();
 }
 
 } // namespace apple

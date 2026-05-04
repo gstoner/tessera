@@ -32,6 +32,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "tessera/Dialect/Neighbors/Transforms/Passes.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
@@ -41,6 +42,7 @@
 #include "llvm/ADT/StringRef.h"
 
 using namespace mlir;
+using mlir::func::FuncOp;
 
 namespace tessera {
 namespace neighbors {

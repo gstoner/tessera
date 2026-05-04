@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.20)
 project(Tessera
     VERSION 0.1.0
     DESCRIPTION "Next-Generation Deep Learning Programming Model"
-    LANGUAGES CXX
+    LANGUAGES C CXX
 )
 
 # Single authoritative version variable — referenced by all sub-components
@@ -40,8 +40,16 @@ endif()
 # --------------------------------------------------------------------------
 # LLVM / MLIR
 # --------------------------------------------------------------------------
-find_package(LLVM 18 REQUIRED CONFIG)
+# Tessera targets LLVM/MLIR 21+. We match without a version constraint so any
+# 21.x patch release works (LLVM's CMake config only accepts exact major.minor
+# matches via the find_package version arg), then assert the major below.
+find_package(LLVM REQUIRED CONFIG)
 find_package(MLIR REQUIRED CONFIG)
+
+if(LLVM_VERSION_MAJOR LESS 21)
+  message(FATAL_ERROR
+    "Tessera requires LLVM/MLIR 21 or newer; found ${LLVM_PACKAGE_VERSION}")
+endif()
 
 # Pull in MLIR cmake helpers (TableGen, AddMLIR, …) — required by sub-components
 list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")

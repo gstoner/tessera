@@ -46,10 +46,11 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 | Phase 4 | ✅ Complete | Distributed training — Cyclic distribution, NCCL/RCCL adapters, `CollectiveInsertionPass`, `PipelineStageInsertionPass`, TPU quantized dot, `DistributedPlan`, `PipelinePlan`, MoE helpers — 127 tests |
 | Phase 5 | ✅ Complete | Solver passes (11 core + 2 linalg + 3 SR), `BayesianAutotuner`, checkpoint decorator, `solver_config.py` — 176 tests |
 | Phase 6 | ✅ Complete | `TesseraRuntime` Python wrapper, CUDA/HIP backends (real calls), ROCm MFMA coverage, benchmark runners, `ErrorReporter`, `ShapeInferencePass` — 170 tests |
-| Phase 7 | 🟡 In progress | Neighbors dialect (halo/stencil) — passes implemented & wired into `tessera-opt` (May 2026); Cerebras WSE-3 backend, Tenstorrent Metalium backend, production hardening still pending |
+| Phase 7 | 🟡 In progress | Neighbors dialect (halo/stencil) wired into `tessera-opt`; Cerebras WSE-3 (487 LOC, real) and Tenstorrent Metalium (550 LOC, real) backends landed with `tessera-lower-to-metalium` pipeline alias |
+| Phase 8 | 🟡 In progress | Hardware-free Target IR — `tessera_rocm.mfma`, `tessera_metalium.dma/matmul`, `tessera_apple.cpu/gpu.*` ODS dialects between Tile IR and hardware-specific lowering; `@jit(target="rocm"/"metalium"/"apple_cpu"/"apple_gpu")` string targets; Apple M-Series backend scaffold; canonical pipelines `tessera-lower-to-rocm` and `tessera-lower-to-metalium` |
 | RubinCPX | ✅ Built | `tessera.target.cpx` dialect, 4 passes, `tessera-cpx-opt` driver, `TESSERA_BUILD_RUBINCPX_BACKEND` CMake option |
 
-**Total active tests: 55+ test files in `tests/unit/`; lit tests in `tests/tessera-ir/phase2–7/`.**
+**Total active tests: 1,824 passing in `tests/unit/`; lit tests in `tests/tessera-ir/phase2–8/`.**
 
 ---
 
@@ -60,7 +61,9 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 | Module | Purpose |
 |--------|---------|
 | `__init__.py` | Top-level exports: `jit`, `kernel`, `Region`, `domain`, `dist`, `array`, `index_launch`, `constraint`, `ops`, `Tensor`, `f16`, `mut_f32` |
-| `compiler/jit.py` | `@jit` and `@kernel` decorators; routes to x86 or GPU pipeline |
+| `compiler/jit.py` | `@jit` and `@kernel` decorators; routes to x86, GPU, or string-target pipeline (`"rocm"`/`"metalium"`/`"apple_cpu"`/`"apple_gpu"`) |
+| `compiler/op_catalog.py` | Canonical op catalog — single source of truth for op names across Graph IR / Schedule IR / Tile IR / Target IR |
+| `compiler/matmul_pipeline.py` | Multi-target matmul pipeline dispatch — selects backend lowering based on `target=` argument |
 | `compiler/constraints.py` | `ConstraintSolver`: `Divisible`, `Range`, `Equal` — checked at decoration time |
 | `compiler/effects.py` | `EffectLattice`: `pure < random < memory < io < top` |
 | `compiler/graph_ir.py` | Python → Graph IR lowering (emits MLIR text) |
@@ -106,8 +109,9 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 | `codegen/Tessera_ROCM_Backend/` | ROCm MFMA backend — gfx90a/gfx94x/gfx120x |
 | `codegen/Tessera_RubinCPX_Backend/` | NV Rubin CPX — `tessera.target.cpx` dialect, 4 passes |
 | `codegen/Tessera_TPU_Backend/` | TPU StableHLO + Shardy export |
-| `codegen/Tessera_Cerebras_backend/` | Cerebras WSE-3 backend — **Phase 7** |
-| `codegen/Tessera_Metalium_Backend/` | Tenstorrent Metalium backend — **Phase 7** |
+| `codegen/Tessera_Cerebras_backend/` | Cerebras WSE-3 backend — Phase 7, ~487 LOC, real implementation |
+| `codegen/Tessera_Metalium_Backend/` | Tenstorrent Metalium backend — Phase 7, ~550 LOC, real; `tessera-lower-to-metalium` pipeline alias |
+| `codegen/Tessera_Apple_Backend/` | Apple M-Series backend — **Phase 8 scaffold** — `TesseraAppleOps.td` ODS only, no .cpp yet; `TESSERA_BUILD_APPLE_BACKEND` CMake option wired |
 | `diagnostics/ErrorReporter.cpp` | Source-attributed shape error reporting |
 | `diagnostics/ShapeInferencePass.cpp` | Forward shape propagation |
 | `tessera_neighbors/` | Halo/stencil neighbor exchange dialect — **Phase 7** |
@@ -118,6 +122,7 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 |------|-------|---------|
 | `CanonicalizeTesseraIR.cpp` | 1 | 4 Graph IR fusion patterns |
 | `VerifyTesseraIR.cpp` | 1 | Module version attribute check |
+| `MigrateTesseraIR.cpp` | 1 | IR version migration / upgrade transforms |
 | `DistributionLoweringPass.cpp` | 2 | `tessera.shard` → `schedule.mesh.define` + `schedule.mesh.region` |
 | `EffectAnnotationPass.cpp` | 2 | Infers `pure/random/memory/io`; annotates `func.func` |
 | `TilingPass.cpp` | 2 | `tessera.matmul` → `scf.for` M×N tile loops |
@@ -214,6 +219,12 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 
 18. **RNG streams are deterministically assigned.** `stream_id = global_seed * num_ranks + rank`. Philox counter offsets are non-overlapping for 2^128 elements.
 
+19. **Backends expose hardware-free Target IR before hardware-specific lowering.** Each backend defines an ODS dialect of abstract target ops (`tessera_rocm.mfma`, `tessera_metalium.dma/matmul`, `tessera_apple.cpu.accelerate_gemm`, `tessera_apple.gpu.metal_kernel`) that sit between Tile IR and the final hardware emission. New backends MUST follow this pattern — do not lower Tile IR directly to PTX/HIP/Metal source. The hardware-free layer is what makes backends testable in lit and what `test_target_ir_contract.py` validates.
+
+20. **`@jit(target=...)` accepts both `GPUTargetProfile` and string aliases.** Valid string targets: `"rocm"`, `"metalium"`, `"apple_cpu"`, `"apple_gpu"`. Strings dispatch through `matmul_pipeline.py` to the matching `tessera-lower-to-{target}` pipeline. Do not invent new string aliases without adding the corresponding pipeline.
+
+21. **Unsupported lowering must emit a stable diagnostic.** When a backend cannot lower an op (e.g., KV-cache on a target without it), emit a diagnostic that names the op and the target — never silently no-op or fall through. See the KV-cache → target lowering for the canonical pattern.
+
 ---
 
 ## Key Design Contracts
@@ -250,42 +261,66 @@ Default: `tile_q=64, tile_kv=64, pipeline_stages=2`. Stored as `tessera.tile_q`/
 
 ---
 
-## Phase 7 — Next Work
+## Phase 7 — In Progress
 
 ### Neighbors Dialect (Halo/Stencil)
 
 `src/compiler/tessera_neighbors/` — dialect + 4 passes (HaloInfer, StencilLower, PipelineOverlap, DynamicTopology) implemented (~680 lines). Dialect and passes are registered in `tools/tessera-opt/tessera-opt.cpp` and linked via `TesseraNeighbors`.
 
 Each pass walks the relevant `tessera.neighbors.*` ops:
-- `HaloInferPass`: reads `taps` on `stencil.define`, computes per-axis max |Δ|, annotates `halo.width` on `stencil.apply` and any `halo.region`.
+- `HaloInferPass`: reads `taps` on `stencil.define`, computes per-axis max |Δ|, annotates `halo.width`.
 - `StencilLowerPass`: lowers `stencil.apply` to pack/exchange/unpack calls.
 - `PipelineOverlapPass`: applies double-buffering / overlap policy.
 - `DynamicTopologyPass`: handles dynamic topology updates.
 
-Lit tests in `tests/tessera-ir/phase7/`: `neighbors_halo_infer.mlir`, `neighbors_stencil_lower.mlir`, `neighbors_pipeline_overlap.mlir`, `neighbors_dynamic_topology.mlir`, `shardy_export.mlir`.
-
-Structural Python test: `tests/unit/test_neighbors_dialect.py` (7 passing, 1 behavioral test that runs `tessera-opt -tessera-halo-infer` once the binary is built).
+Lit tests in `tests/tessera-ir/phase7/`. Python wiring test: `tests/unit/test_neighbors_dialect.py`.
 
 **Open work:** build `tessera-opt` against MLIR 18, run lit tests, fix any pass-body bugs the tests expose.
 
 ### Cerebras WSE-3 Backend
 
-`src/compiler/codegen/Tessera_Cerebras_backend/` — scaffold present (includes, examples, docs, partial target dialect).
+`src/compiler/codegen/Tessera_Cerebras_backend/` — ~487 LOC, real implementation. Wiring into `tessera-opt` needs verification.
 
-Cerebras uses a fabric-routed streaming architecture with no shared memory. Tile IR must map to `cerebras.data_tile` and `cerebras.compute_tile` with explicit routing annotations.
+Cerebras uses a fabric-routed streaming architecture with no shared memory. Tile IR maps to `cerebras.data_tile` / `cerebras.compute_tile` with explicit routing annotations.
 
 ### Tenstorrent Metalium Backend
 
-`src/compiler/codegen/Tessera_Metalium_Backend/` — ODS in `TesseraTargetMetalium.td`, `Codegen/Lowering/Util` lib scaffold.
+`src/compiler/codegen/Tessera_Metalium_Backend/` — ~550 LOC, real implementation. Pipeline alias `tessera-lower-to-metalium` registered.
 
-Metalium uses a RISC-V core grid. Tile IR maps to Metalium's op dispatch model.
+Metalium uses a RISC-V core grid. Tile IR maps to Metalium's op dispatch model via `TesseraTargetMetalium.td` ODS.
+
+---
+
+## Phase 8 — In Progress
+
+### Hardware-Free Target IR
+
+A new abstraction layer between Tile IR and hardware-specific lowering. Each backend exposes ODS ops that are hardware-shaped but not hardware-bound:
+
+- `tessera_rocm.mfma`, `tessera_rocm.async_copy`, `tessera_rocm.wait`
+- `tessera_metalium.dma`, `tessera_metalium.matmul`
+- `tessera_apple.cpu.accelerate_gemm`, `tessera_apple.gpu.metal_kernel`, `tessera_apple.gpu.dispatch`
+
+**Why:** lit-testable backends, shared optimization passes, easier per-target pass authoring. New backends MUST follow this layering — see Architecture Decision #19.
+
+Contract test: `tests/unit/test_target_ir_contract.py` and `tests/tessera-ir/phase8/target_ir_contracts.mlir`.
+
+### String `target=` Aliases
+
+`@jit(target="rocm" | "metalium" | "apple_cpu" | "apple_gpu")` — `matmul_pipeline.py` dispatches to the corresponding `tessera-lower-to-{target}` pipeline. Coexists with the existing `GPUTargetProfile` parameter form.
+
+### Apple M-Series Backend (Scaffold)
+
+`src/compiler/codegen/Tessera_Apple_Backend/` — `TesseraAppleOps.td` (81 lines ODS) + CMakeLists. **No .cpp yet.** `TESSERA_BUILD_APPLE_BACKEND` CMake option wired.
+
+**Open work:** implement the `tessera_apple.cpu/gpu.*` op verifiers and lowering passes; bridge to Apple's Accelerate framework (CPU) and Metal Performance Shaders (GPU).
 
 ### Production Hardening (ongoing)
 
 - Spectral/FFT solver (`src/solvers/spectral/`) — dialect defined, pass bodies incomplete
 - TPP solver (`src/solvers/tpp/`) — dialect defined, needs wiring
 - CI expansion beyond CPU spine (once CUDA/HIP paths are deterministic)
-- `scripts/validate.sh` expansion to cover Phase 4–6 test suites
+- `scripts/validate.sh` expansion to cover Phase 4–8 test suites
 
 ---
 
@@ -347,9 +382,22 @@ cmake .. -DTESSERA_ENABLE_HIP=ON -DHIP_ROOT_DIR=/opt/rocm
 # With RubinCPX backend
 cmake .. -DTESSERA_BUILD_RUBINCPX_BACKEND=ON
 
+# With Apple M-Series backend (Phase 8 scaffold)
+cmake .. -DTESSERA_BUILD_APPLE_BACKEND=ON
+
 # Benchmarks
 python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 ```
+
+### Canonical lowering pipelines (named pass pipelines in `tessera-opt`)
+
+| Pipeline | Target |
+|----------|--------|
+| `tessera-lower-to-x86` | x86 AMX/AVX512 — Phase 2 |
+| `tessera-lower-to-gpu` | NVIDIA SM_90+ WGMMA/TMA — Phase 3 |
+| `tessera-lower-to-rocm` | AMD ROCm MFMA — Phase 8 |
+| `tessera-lower-to-metalium` | Tenstorrent Metalium — Phase 8 |
+| `tessera-cpx-pipeline` / `tessera-cpx-context-pipeline` | NV Rubin CPX (separate `tessera-cpx-opt` driver) |
 
 ---
 
@@ -377,6 +425,8 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | TPU backend | `src/compiler/codegen/Tessera_TPU_Backend/` |
 | Cerebras backend | `src/compiler/codegen/Tessera_Cerebras_backend/` |
 | Metalium backend | `src/compiler/codegen/Tessera_Metalium_Backend/` |
+| Apple M-Series backend (Phase 8) | `src/compiler/codegen/Tessera_Apple_Backend/` |
+| Target IR contract test | `tests/unit/test_target_ir_contract.py`, `tests/tessera-ir/phase8/target_ir_contracts.mlir` |
 | Autotuner v1 framework | `src/compiler/autotuning/tessera/tools/autotune/` |
 | IR specs | `docs/spec/` (GRAPH_IR_SPEC, RUNTIME_ABI_SPEC, MEMORY_MODEL_SPEC, etc.) |
 | Style guide | `tessera_style_guide.md` |
@@ -392,4 +442,4 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 
 ---
 
-*Last updated: May 2026 — Phases 1–6 complete (525+ tests). Phase 7 is next: Neighbors dialect (halo/stencil), Cerebras WSE-3 and Tenstorrent Metalium backends, spectral/FFT and TPP solver bodies, CI expansion.*
+*Last updated: May 2026 — Phases 1–6 complete; Phase 7 in progress (Neighbors wired into `tessera-opt`, Cerebras + Metalium backends real); Phase 8 in progress (hardware-free Target IR, string `target=` aliases, Apple M-Series scaffold, `tessera-lower-to-rocm`/`-metalium` pipelines). Test count: **1,824 passing, 1 skipped**.*

@@ -14,7 +14,8 @@ target_link_libraries(tessera-opt PRIVATE
   MLIROptLib
 )
 
-if(NOT (TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA))
+if(NOT ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA) OR
+        (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA)))
   target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_CORE_TESSERA_IR)
   target_link_libraries(tessera-opt PRIVATE
     TesseraIR
@@ -58,4 +59,18 @@ if(TARGET TesseraROCMConversion)
     ${CMAKE_BINARY_DIR}/src/compiler/codegen/Tessera_ROCM_Backend/lib/IR
   )
   target_link_libraries(tessera-opt PRIVATE TesseraROCMIR TesseraROCMConversion)
+endif()
+
+# NVIDIA backend: hardware-free Hopper/Blackwell Target IR / NVVM artifact pipeline.
+if(TARGET TesseraNVIDIAConversion)
+  target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_NVIDIA_BACKEND)
+  target_include_directories(tessera-opt PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/compiler/codegen/tessera_gpu_backend_NVIDIA/include
+    ${CMAKE_BINARY_DIR}/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/IR
+  )
+  target_link_libraries(tessera-opt PRIVATE
+    TesseraNVIDIAIR
+    TesseraNVIDIAConversion
+    MLIRNVVMDialect
+  )
 endif()

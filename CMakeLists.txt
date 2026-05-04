@@ -128,8 +128,10 @@ endif()
 # --------------------------------------------------------------------------
 # Examples
 # --------------------------------------------------------------------------
-if(TESSERA_BUILD_EXAMPLES AND TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA)
-    message(STATUS "Skipping examples for hardware-free ROCm build because CUDA is disabled")
+if(TESSERA_BUILD_EXAMPLES AND
+   ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA) OR
+    (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA)))
+    message(STATUS "Skipping examples for hardware-free target build because CUDA is disabled")
 elseif(TESSERA_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()

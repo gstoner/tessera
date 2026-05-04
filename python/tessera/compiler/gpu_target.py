@@ -157,6 +157,37 @@ class GPUTargetProfile:
         return self.supports_mbarrier
 
     @property
+    def supports_tcgen05(self) -> bool:
+        """True for Blackwell SM_100+ Tensor Core generation 5 contracts."""
+        return self.isa >= ISA.SM_100
+
+    @property
+    def supports_tmem(self) -> bool:
+        """True for Blackwell SM_100+ Tensor Memory accumulator contracts."""
+        return self.isa >= ISA.SM_100
+
+    @property
+    def supports_cta_pairs(self) -> bool:
+        """True when CTA-pair scheduling metadata is available."""
+        return self.isa >= ISA.SM_100
+
+    @property
+    def supports_block_scaled_mma(self) -> bool:
+        """True for Blackwell block-scaled MMA dtypes such as NVFP4/FP6."""
+        return self.isa >= ISA.SM_100
+
+    @property
+    def runtime_arch(self) -> str:
+        """CUDA runtime architecture string for artifact metadata/builds."""
+        if self.isa == ISA.SM_120:
+            return "sm_120"
+        if self.isa >= ISA.SM_100:
+            return "sm_100a"
+        if self.isa >= ISA.SM_90:
+            return "sm_90a"
+        return f"sm_{int(self.isa)}"
+
+    @property
     def tensor_core_dtypes(self) -> frozenset[str]:
         """Tensor Core dtype names accepted by the target profile."""
         return _TENSOR_CORE_DTYPES[self.isa]
@@ -202,5 +233,6 @@ class GPUTargetProfile:
             f"warps_per_cta={self.warps_per_cta}, "
             f"smem={self.max_smem_bytes // 1024}KB, "
             f"wgmma={self.supports_wgmma}, tma={self.supports_tma}, "
-            f"mbarrier={self.supports_mbarrier})"
+            f"mbarrier={self.supports_mbarrier}, "
+            f"tcgen05={self.supports_tcgen05}, tmem={self.supports_tmem})"
         )

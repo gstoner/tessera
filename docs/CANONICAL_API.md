@@ -229,7 +229,7 @@ def flash_attn_fwd(Q, K, V):
 
 `GPUTargetProfile` key parameters: `isa`, `warps_per_cta` (default 4, must be power of 2), `shared_mem_bytes` (None = SM default), `pipeline_stages` (default 2).
 
-Key properties: `.supports_wgmma` → `isa >= SM_90`, `.supports_tma` → `isa >= SM_90`.
+Key properties: `.supports_wgmma` / `.supports_tma` / `.supports_mbarrier` → `isa >= SM_90`; `.supports_tcgen05` / `.supports_tmem` / `.supports_cta_pairs` / `.supports_block_scaled_mma` → `isa >= SM_100`; `.runtime_arch` emits CUDA architecture strings such as `sm_90a`, `sm_100a`, and `sm_120`.
 
 ---
 

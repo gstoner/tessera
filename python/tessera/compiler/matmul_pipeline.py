@@ -342,8 +342,8 @@ def _render_target_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target_kind: 
         return _render_apple_cpu_target_ir(fn, ops)
     if target_kind == "apple_gpu":
         return _render_apple_gpu_target_ir(fn, ops)
-    if target_kind == "gpu":
-        return _render_gpu_target_ir(fn, ops)
+    if target_kind.startswith("nvidia"):
+        return _render_nvidia_target_ir(fn, ops, target_kind=target_kind)
     lines = [
         'module attributes {tessera.ir.level = "target", target = "cpu"} {',
         f'  "tessera.cpu.func"() ({{',
@@ -478,24 +478,45 @@ def _render_apple_gpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str
     return "\n".join(lines)
 
 
-def _render_gpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
+def _render_nvidia_target_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target_kind: str) -> str:
+    is_blackwell = target_kind in {"nvidia_sm100", "nvidia_sm120"}
+    arch = {
+        "nvidia_sm80": "sm_80",
+        "nvidia_sm90": "sm_90a",
+        "nvidia_sm100": "sm_100a",
+        "nvidia_sm120": "sm_120",
+    }.get(target_kind, "sm_90a")
     lines = [
-        'module attributes {tessera.ir.level = "target", target = "gpu"} {',
-        f'  "tessera.gpu.func"() ({{',
+        f'module attributes {{tessera.ir.level = "target", target = "{target_kind}", arch = "{arch}"}} {{',
+        f'  "tessera_nvidia.func"() ({{',
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
         if op_name in MATMUL_OPS:
-            lines.append(
-                f'    "tessera.nvgpu.wgmma.mma_async"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, shape = "m64n64k16"}} : () -> ()'
-            )
+            if is_blackwell:
+                lines.append(
+                    f'    "tessera_nvidia.tmem_alloc"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "{arch}", columns = 128 : i64}} : () -> ()'
+                )
+                lines.append(
+                    f'    "tessera_nvidia.tcgen05_mma"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "{arch}", shape = "m128n128k32", accum = "tmem_f32", cta_group = 2 : i64, block_scaled = true}} : () -> ()'
+                )
+            else:
+                lines.append(
+                    f'    "tessera_nvidia.wgmma"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "{arch}", shape = "m64n64k16", dtype_ab = "bf16", dtype_c = "f32", warpgroup = 4 : i64}} : () -> ()'
+                )
+                lines.append(
+                    f'    "tessera_nvidia.tma_async_copy"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "{arch}", src_space = "global", dst_space = "shared", bytes = 16 : i64}} : () -> ()'
+                )
+                lines.append(
+                    f'    "tessera_nvidia.mbarrier"() {{ordinal = {idx} : i64, arch = "{arch}", scope = "cta"}} : () -> ()'
+                )
         elif op_name == "tessera.flash_attn":
             lines.append(
-                f'    "tessera.nvgpu.flash_attn.kernel"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, status = "artifact_only"}} : () -> ()'
+                f'    "tessera_nvidia.cuda_kernel"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "{arch}", kernel = "flash_attn_contract", status = "artifact_only"}} : () -> ()'
             )
         else:
             lines.append(
-                f'    "tessera.gpu.elementwise"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64}} : () -> ()'
+                f'    "tessera_nvidia.cuda_kernel"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "{arch}", kernel = "elementwise_contract", status = "artifact_only"}} : () -> ()'
             )
     lines.extend([
         f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
@@ -660,6 +681,23 @@ def normalize_target_kind(target: object = "cpu") -> str:
     if isinstance(target, str):
         normalized = target.lower().replace("-", "_")
         aliases = {
+            "cuda": "nvidia_sm90",
+            "nvidia": "nvidia_sm90",
+            "gpu": "nvidia_sm90",
+            "sm80": "nvidia_sm80",
+            "sm_80": "nvidia_sm80",
+            "sm90": "nvidia_sm90",
+            "sm_90": "nvidia_sm90",
+            "sm90a": "nvidia_sm90",
+            "sm_90a": "nvidia_sm90",
+            "hopper": "nvidia_sm90",
+            "sm100": "nvidia_sm100",
+            "sm_100": "nvidia_sm100",
+            "sm100a": "nvidia_sm100",
+            "sm_100a": "nvidia_sm100",
+            "blackwell": "nvidia_sm100",
+            "sm120": "nvidia_sm120",
+            "sm_120": "nvidia_sm120",
             "amd": "rocm",
             "hip": "rocm",
             "tt_metalium": "metalium",
@@ -672,11 +710,20 @@ def normalize_target_kind(target: object = "cpu") -> str:
             "m_series_gpu": "apple_gpu",
         }
         normalized = aliases.get(normalized, normalized)
-        allowed = {"cpu", "gpu", "rocm", "metalium", "apple_cpu", "apple_gpu"}
+        allowed = {"cpu", "nvidia_sm80", "nvidia_sm90", "nvidia_sm100", "nvidia_sm120", "rocm", "metalium", "apple_cpu", "apple_gpu"}
         if normalized not in allowed:
             raise ValueError(f"unsupported Tessera target {target!r}; expected one of {sorted(allowed)}")
         return normalized
-    return "gpu"
+    from .gpu_target import GPUTargetProfile, ISA
+    if isinstance(target, GPUTargetProfile):
+        if target.isa >= ISA.SM_120:
+            return "nvidia_sm120"
+        if target.isa >= ISA.SM_100:
+            return "nvidia_sm100"
+        if target.isa >= ISA.SM_90:
+            return "nvidia_sm90"
+        return "nvidia_sm80"
+    return "nvidia_sm90"
 
 
 def _as_value(value: Any) -> Any:

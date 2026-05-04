@@ -266,7 +266,8 @@ class JitFn:
 
     @property
     def is_gpu(self) -> bool:
-        return normalize_target_kind(self.target) in {"gpu", "rocm", "metalium", "apple_gpu"}
+        target_kind = normalize_target_kind(self.target)
+        return target_kind.startswith("nvidia") or target_kind in {"rocm", "metalium", "apple_gpu"}
 
     @property
     def arg_names(self) -> List[str]:

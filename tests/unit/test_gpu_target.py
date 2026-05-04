@@ -30,6 +30,27 @@ class TestISACapabilities:
         p = GPUTargetProfile(isa=ISA.SM_100)
         assert p.supports_wgmma is True
 
+    def test_sm100_supports_blackwell_capabilities(self):
+        p = GPUTargetProfile(isa=ISA.SM_100)
+        assert p.supports_tcgen05 is True
+        assert p.supports_tmem is True
+        assert p.supports_cta_pairs is True
+        assert p.supports_block_scaled_mma is True
+        assert p.runtime_arch == "sm_100a"
+
+    def test_sm120_runtime_arch(self):
+        p = GPUTargetProfile(isa=ISA.SM_120)
+        assert p.supports_tcgen05 is True
+        assert p.runtime_arch == "sm_120"
+
+    def test_sm90_does_not_support_blackwell_capabilities(self):
+        p = GPUTargetProfile(isa=ISA.SM_90)
+        assert p.supports_tcgen05 is False
+        assert p.supports_tmem is False
+        assert p.supports_cta_pairs is False
+        assert p.supports_block_scaled_mma is False
+        assert p.runtime_arch == "sm_90a"
+
     def test_sm90_supports_mbarrier(self):
         p = GPUTargetProfile(isa=ISA.SM_90)
         assert p.supports_mbarrier is True

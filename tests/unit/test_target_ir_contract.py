@@ -7,10 +7,18 @@ from pathlib import Path
 import tessera as ts
 from tessera.compiler.matmul_pipeline import build_cpu_plan, normalize_target_kind
 from tessera.compiler.frontend import lower_text_to_graph_ir
+from tessera.compiler.gpu_target import GPUTargetProfile, ISA
 
 
 def test_target_kind_normalization_accepts_planned_backend_aliases():
     assert normalize_target_kind(None) == "cpu"
+    assert normalize_target_kind("cuda") == "nvidia_sm90"
+    assert normalize_target_kind("nvidia") == "nvidia_sm90"
+    assert normalize_target_kind("gpu") == "nvidia_sm90"
+    assert normalize_target_kind("sm90") == "nvidia_sm90"
+    assert normalize_target_kind("sm100") == "nvidia_sm100"
+    assert normalize_target_kind("sm120") == "nvidia_sm120"
+    assert normalize_target_kind(GPUTargetProfile(isa=ISA.SM_100)) == "nvidia_sm100"
     assert normalize_target_kind("hip") == "rocm"
     assert normalize_target_kind("tt_metalium") == "metalium"
     assert normalize_target_kind("macos_cpu") == "apple_cpu"
@@ -37,6 +45,36 @@ def test_jit_rocm_target_emits_mfma_and_async_copy_artifact():
     assert artifact.metadata["target"] == "rocm"
     assert artifact.metadata["compiler_path"] == "target_ir_artifact"
     assert artifact.metadata["runtime_status"] == "artifact_only"
+
+
+def test_jit_hopper_target_emits_wgmma_tma_and_mbarrier_artifact():
+    @ts.jit(target=GPUTargetProfile(isa=ISA.SM_90))
+    def mm(A, B):
+        return ts.ops.matmul(A, B)
+
+    assert not mm.uses_compiled_path
+    assert mm.has_target_artifacts
+    assert 'target = "nvidia_sm90"' in mm.target_ir
+    assert 'arch = "sm_90a"' in mm.target_ir
+    assert "tessera_nvidia.wgmma" in mm.target_ir
+    assert "tessera_nvidia.tma_async_copy" in mm.target_ir
+    assert "tessera_nvidia.mbarrier" in mm.target_ir
+
+    artifact = mm.runtime_artifact()
+    assert artifact.metadata["target"] == "nvidia_sm90"
+    assert artifact.metadata["runtime_status"] == "artifact_only"
+
+
+def test_jit_blackwell_target_emits_tcgen05_and_tmem_artifact():
+    @ts.jit(target=GPUTargetProfile(isa=ISA.SM_100))
+    def mm(A, B):
+        return ts.ops.gemm(A, B)
+
+    assert 'target = "nvidia_sm100"' in mm.target_ir
+    assert 'arch = "sm_100a"' in mm.target_ir
+    assert "tessera_nvidia.tmem_alloc" in mm.target_ir
+    assert "tessera_nvidia.tcgen05_mma" in mm.target_ir
+    assert 'block_scaled = true' in mm.target_ir
 
 
 def test_jit_metalium_target_emits_dma_and_matmul_artifact():

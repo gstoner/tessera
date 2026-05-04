@@ -22,7 +22,7 @@ Schedule IR  (schedule dialect — mesh regions, pipeline stages)
 Tile IR      (tile.* ops — async copy, MMA, barriers; tessera.attn.* FA-4 ops)
      │  [AsyncCopyLoweringPass, NVWGMMALoweringPass, NVTMADescriptorPass]
      ▼
-Target IR    (tessera.nvgpu.*, tessera.tma.*, tessera.cp_async.*, mbarrier ops)
+Target IR    (tessera_nvidia.*, tessera.nvgpu.*, tessera.tma.*, tessera.cp_async.*, mbarrier ops)
      │  [NVFlashAttnKernelEmitter → LLVM NVPTX backend]
      ▼
 PTX / binary
@@ -34,8 +34,29 @@ This document specifies four dialect layers that together constitute the Target 
 2. **`tessera.attn` dialect** — FA-4 FlashAttention ops (Tile IR layer, Phase 3)
 3. **`tessera.queue` dialect** — tile queue synchronisation (Tile IR layer, Phase 3)
 4. **`tile.*` ops** — generic tile async copy and MMA primitives (Tile IR layer)
+5. **`tessera_nvidia` dialect** — hardware-free Hopper/Blackwell Target IR contracts
 
 The x86 Target IR (AMX/AVX-512 C function calls) is documented separately in `docs/architecture/tessera_target_ir_usage_guide.md`.
+
+### 1.1 NVIDIA Hopper And Blackwell Contracts
+
+The NVIDIA backend accepts Tile IR and emits `tessera_nvidia.*` Target IR contracts before lowering to LLVM/NVVM artifact calls. These contracts are intentionally hardware-free and are valid without CUDA hardware.
+
+| Contract op | Target | Meaning |
+| --- | --- | --- |
+| `tessera_nvidia.wgmma` | Hopper SM90+ | WGMMA matmul contract with shape, dtype, accumulator dtype, and warpgroup metadata. |
+| `tessera_nvidia.tma_async_copy` | Hopper SM90+ | TMA global-to-shared async movement contract. |
+| `tessera_nvidia.mbarrier` | Hopper SM90+ | Async transaction barrier contract. |
+| `tessera_nvidia.wmma` | Ampere/Ada fallback | Legacy WMMA contract. |
+| `tessera_nvidia.tcgen05_mma` | Blackwell SM100/SM120 | TCGEN05 MMA contract with TMEM accumulation. |
+| `tessera_nvidia.tmem_alloc/load/store` | Blackwell SM100/SM120 | Tensor Memory allocation and movement contracts. |
+| `tessera_nvidia.cuda_kernel` | Optional runtime | CUDA/NVRTC runtime artifact marker. |
+| `tessera_nvidia.diagnostic` | Any NVIDIA target | Stable unsupported-feature diagnostic. |
+
+Named pipelines:
+- `tessera-lower-to-nvidia`
+- `tessera-lower-to-hopper`
+- `tessera-lower-to-blackwell`
 
 ---
 

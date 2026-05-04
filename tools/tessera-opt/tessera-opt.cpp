@@ -3,6 +3,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/NVVMDialect.h"
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
 #include "mlir/InitAllDialects.h"
 #include "mlir/InitAllPasses.h"
@@ -33,17 +34,32 @@
 #include "TesseraROCM/Passes.h"
 #endif
 
+#ifdef TESSERA_HAVE_NVIDIA_BACKEND
+#include "tessera/gpu/BackendRegistration.h"
+#endif
+
 int main(int argc, char **argv) {
-#if defined(TESSERA_HAVE_ROCM_BACKEND) && !defined(TESSERA_HAVE_CORE_TESSERA_IR)
-  // Hardware-free ROCm artifact builds intentionally keep tessera-opt lean:
-  // only the dialects and passes needed by the ROCm contract spine are
+#if (defined(TESSERA_HAVE_ROCM_BACKEND) || defined(TESSERA_HAVE_NVIDIA_BACKEND)) && !defined(TESSERA_HAVE_CORE_TESSERA_IR)
+  // Hardware-free target artifact builds intentionally keep tessera-opt lean:
+  // only the dialects and passes needed by the target contract spine are
   // registered, avoiding a dependency on every upstream MLIR component.
+#ifdef TESSERA_HAVE_NVIDIA_BACKEND
+  tessera::registerTesseraNVIDIABackendPasses();
+#endif
+#ifdef TESSERA_HAVE_ROCM_BACKEND
   mlir::tessera_rocm::registerTesseraROCMBackendPasses();
+#endif
 
   mlir::DialectRegistry registry;
   registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
-                  mlir::LLVM::LLVMDialect, mlir::ROCDL::ROCDLDialect>();
+                  mlir::LLVM::LLVMDialect, mlir::NVVM::NVVMDialect,
+                  mlir::ROCDL::ROCDLDialect>();
+#ifdef TESSERA_HAVE_NVIDIA_BACKEND
+  tessera::registerTesseraNVIDIABackendDialects(registry);
+#endif
+#ifdef TESSERA_HAVE_ROCM_BACKEND
   mlir::tessera_rocm::registerTesseraROCMBackendDialects(registry);
+#endif
 
   return failed(mlir::MlirOptMain(argc, argv, "tessera-opt\n", registry));
 #else
@@ -76,6 +92,9 @@ int main(int argc, char **argv) {
 #ifdef TESSERA_HAVE_ROCM_BACKEND
   mlir::tessera_rocm::registerTesseraROCMBackendPasses();
 #endif
+#ifdef TESSERA_HAVE_NVIDIA_BACKEND
+  tessera::registerTesseraNVIDIABackendPasses();
+#endif
 
   mlir::DialectRegistry registry;
   mlir::registerAllDialects(registry);
@@ -97,6 +116,9 @@ int main(int argc, char **argv) {
 
 #ifdef TESSERA_HAVE_ROCM_BACKEND
   mlir::tessera_rocm::registerTesseraROCMBackendDialects(registry);
+#endif
+#ifdef TESSERA_HAVE_NVIDIA_BACKEND
+  tessera::registerTesseraNVIDIABackendDialects(registry);
 #endif
 
   return failed(mlir::MlirOptMain(argc, argv, "tessera-opt\n", registry));

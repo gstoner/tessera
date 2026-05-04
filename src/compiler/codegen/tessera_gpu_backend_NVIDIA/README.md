@@ -1,34 +1,58 @@
-# Tessera GPU Backend (NVVM / Tile IR / PTX)
+# Tessera NVIDIA GPU Backend (Hopper / Blackwell / NVVM / PTX)
 
-This is a **reference GPU backend** for Tessera targeting NVIDIA GPUs via **NVVM** (LLVM NVPTX), the MLIR **NVVM/NVGPU** dialects, and **PTX**. It contains:
+This backend has two build modes:
 
-- A backend interface and CUDA Driver runtime
-- WMMA Tensor Core GEMM kernels (FP16→FP32, BF16→FP32)
-- A lowering skeleton showing how Tessera Tile IR ops map to NVGPU/NVVM/LLVM NVPTX
-- A test that runs the WMMA kernels
+- **Hardware-free compiler artifacts** with `TESSERA_BUILD_NVIDIA_BACKEND=ON` and `TESSERA_ENABLE_CUDA=OFF`. This builds `tessera-opt`, `tessera-nvidia-opt`, the `tessera_nvidia` Target IR contract dialect, and Hopper/Blackwell lowering pipelines.
+- **Optional CUDA runtime validation** with `TESSERA_ENABLE_CUDA=ON`. This additionally builds CUDA kernels, NVRTC helpers, runtime launch tests, and benchmarks when a CUDA Toolkit is available.
 
-> **Architectures:** default `-arch=sm_90`. Override with `-DTESSERA_CUDA_ARCH=sm_80|sm_86|sm_90a|sm_102`.
+Primary profiles:
+- Hopper: `SM_90` / `sm_90a` with WGMMA, TMA, and mbarrier contracts.
+- Blackwell: `SM_100` / `sm_100a` and `SM_120` with TCGEN05 and TMEM contracts.
 
-## Build
+## LLVM/MLIR 21 Artifact Build
 
 ```bash
-mkdir build && cd build
-cmake -DTESSERA_CUDA_ARCH=sm_90 -DTESSERA_BUILD_TESTS=ON ..
-cmake --build . -j
-./test_wmma
+cmake -S . -B build-nvidia \
+  -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/llvm@21 \
+  -DLLVM_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/llvm \
+  -DMLIR_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/mlir \
+  -DTESSERA_BUILD_NVIDIA_BACKEND=ON \
+  -DTESSERA_ENABLE_CUDA=OFF \
+  -DTESSERA_BUILD_EXAMPLES=OFF
+
+cmake --build build-nvidia --target tessera-opt tessera-nvidia-opt
 ```
+
+Available hardware-free pipelines:
+- `tessera-lower-to-nvidia`
+- `tessera-lower-to-hopper`
+- `tessera-lower-to-blackwell`
+- `lower-tile-to-nvidia`
+- `lower-tessera-nvidia-to-nvvm`
+
+## Optional CUDA Runtime Build
+
+```bash
+cmake -S . -B build-nvidia-cuda \
+  -DTESSERA_BUILD_NVIDIA_BACKEND=ON \
+  -DTESSERA_ENABLE_CUDA=ON \
+  -DTESSERA_CUDA_ARCH=sm_90a
+
+cmake --build build-nvidia-cuda
+```
+
+Runtime checks require a CUDA Toolkit and suitable NVIDIA hardware. They are not required for the compiler artifact gate.
 
 ## Components
 
 - `include/tessera/gpu/target.h`: Backend interface + C APIs
+- `include/tessera/gpu/IR/TesseraNVIDIADialect.td`: NVIDIA Target IR contract dialect
+- `lib/Conversion/NVIDIALowering.cpp`: Tile → NVIDIA Target IR → NVVM artifact lowering
 - `src/runtime/cuda_driver.{h,cpp}`: Thin CUDA Driver API wrapper
 - `src/runtime/nvrtc_jit.cpp`: Optional NVRTC PTX JIT helper (guarded by `TESSERA_USE_NVRTC`)
 - `src/kernels/wmma_gemm_fp16.cu`: FP16 WMMA kernel
 - `src/kernels/wmma_gemm_bf16.cu`: BF16 WMMA kernel (sm80+)
-- `src/lowering_nvvm_mlir.cpp`: lowering skeleton (no MLIR dep; comments and pseudo-code)
-- `docs/`: IR mapping tables and backend overview
-
-
+- `test/nvidia/`: FileCheck contracts for Hopper and Blackwell artifact lowering
 
 ## NVIDIA Tile IR (experimental)
 

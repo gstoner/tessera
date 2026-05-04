@@ -176,7 +176,7 @@ def fn(...): ...
 | `deterministic` | `bool` | `False` | If `True`, raises `TesseraEffectError` if the function body contains any unseeded `random` effect op (e.g. `dropout` without `seed`). |
 | `seed` | `int \| None` | `None` | RNG seed. Required when `deterministic=True` and the body calls a `random` effect op. |
 | `bindings` | `dict[str, int] \| None` | `None` | Concrete dimension bindings for constraint checking at decoration time. Example: `{"K": 128, "M": 512}`. Runtime first-call shape binding is planned but not currently implemented. |
-| `target` | `GPUTargetProfile \| None` | `None` | GPU lowering target. `None` routes to the CPU/interpreted path. When set to a profile with `isa >= ISA.SM_90`, the GPU lowering pipeline (`tessera-lower-to-gpu`) is selected. |
+| `target` | `GPUTargetProfile \| str \| None` | `None` | Target lowering profile. `None` routes to the CPU/interpreted path. `GPUTargetProfile(ISA.SM_90)` selects NVIDIA Hopper artifacts; `ISA.SM_100` and `ISA.SM_120` select Blackwell artifacts. String aliases include `cuda`, `nvidia`, `gpu`, `sm90`, `sm100`, and `sm120`. |
 | `attn_config` | `FlashAttnLoweringConfig \| None` | `None` | Flash attention tile sizes and pipeline configuration. If `None` and `target.isa >= ISA.SM_90`, `SM90_DEFAULT` is used automatically. |
 | `cpu_tile` | `tuple[int, int, int]` | `(128, 128, 64)` | CPU matmul/GEMM Schedule IR tile `(tile_m, tile_n, tile_k)` for the narrow end-to-end CPU compiler path. |
 | `source` | `str \| None` | `None` | Optional Python source text for functions created from `stdin`, notebooks, or `exec(...)` where `inspect.getsource()` cannot recover the body. |
@@ -1065,6 +1065,11 @@ GPUTargetProfile(
 | `.supports_mbarrier` | `bool` | `True` when `isa >= ISA.SM_90`. |
 | `.tensor_core_dtypes` | `frozenset[str]` | Tensor Core dtype names for the target. |
 | `.cuda_core_dtypes` | `frozenset[str]` | CUDA-core scalar dtype names for the target. |
+| `.runtime_arch` | `str` | CUDA architecture string such as `sm_90a`, `sm_100a`, or `sm_120`. |
+| `.supports_tcgen05` | `bool` | True for Blackwell SM100+ TCGEN05 contracts. |
+| `.supports_tmem` | `bool` | True for Blackwell SM100+ Tensor Memory contracts. |
+| `.supports_cta_pairs` | `bool` | True when CTA-pair metadata is available. |
+| `.supports_block_scaled_mma` | `bool` | True for Blackwell block-scaled MMA dtypes. |
 
 **Exceptions:**
 

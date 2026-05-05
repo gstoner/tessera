@@ -37,6 +37,7 @@ UNARY_OPS = {
 REDUCTION_OPS = {"tessera.softmax", "tessera.softmax_safe"}
 LAYOUT_OPS = {"tessera.transpose", "tessera.cast"}
 STATEFUL_FUNCTIONAL_OPS = {"tessera.adam"}
+ROPE_OPS = {"tessera.rope"}
 
 
 @dataclass
@@ -286,6 +287,10 @@ def _render_schedule_ir(
             lines.append(
                 f'    }}) {{schedule = "fa4", micro_batches = 1 : i32, source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64}} : () -> ()'
             )
+        elif op_name in ROPE_OPS:
+            lines.append(
+                f'    "schedule.elementwise"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, vectorize = true, pattern = "rotary_pairs"}} : () -> ()'
+            )
         else:
             lines.append(
                 f'    "schedule.elementwise"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, vectorize = true}} : () -> ()'
@@ -323,6 +328,10 @@ def _render_tile_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target_kind: st
             )
             lines.append(
                 f'    "tile.wait_async"() {{stage = 0 : i32}} : () -> ()'
+            )
+        if op_name in ROPE_OPS:
+            lines.append(
+                f'    "tile.rotary_pair"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, vector = 2 : i32}} : () -> ()'
             )
         if op_name.startswith("tessera.kv_cache."):
             lines.append(
@@ -427,20 +436,23 @@ def _render_metalium_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
 
 def _render_apple_cpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
     lines = [
-        'module attributes {tessera.ir.level = "target", target = "apple_cpu", arch = "arm64-apple-silicon"} {',
+        'module attributes {tessera.ir.level = "target", target = "apple_cpu", arch = "arm64-apple-silicon", execution_mode = "cpu_accelerate"} {',
         f'  "tessera_apple.cpu.func"() ({{',
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
         if op_name in MATMUL_OPS:
             target_op = "tessera_apple.cpu.accelerate_gemm"
-            attrs = 'framework = "Accelerate", abi = "cblas_sgemm"'
+            attrs = 'framework = "Accelerate", abi = "cblas_sgemm", dtype = "f32"'
         elif op_name in REDUCTION_OPS:
             target_op = "tessera_apple.cpu.vector_reduce"
-            attrs = 'framework = "Accelerate", abi = "vDSP"'
+            attrs = 'framework = "Accelerate", abi = "vDSP", dtype = "f32"'
+        elif op_name in ROPE_OPS:
+            target_op = "tessera_apple.cpu.vector_op"
+            attrs = 'framework = "Accelerate", abi = "vecLib", pattern = "rotary_pairs", dtype = "f32"'
         else:
             target_op = "tessera_apple.cpu.vector_op"
-            attrs = 'framework = "Accelerate", abi = "vecLib"'
+            attrs = 'framework = "Accelerate", abi = "vecLib", dtype = "f32"'
         lines.append(
             f'    "{target_op}"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, {attrs}}} : () -> ()'
         )
@@ -453,25 +465,41 @@ def _render_apple_cpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str
 
 def _render_apple_gpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
     lines = [
-        'module attributes {tessera.ir.level = "target", target = "apple_gpu", arch = "apple-metal"} {',
+        'module attributes {tessera.ir.level = "target", target = "apple_gpu", arch = "apple-metal", execution_mode = "metal_artifact"} {',
         f'  "tessera_apple.gpu.func"() ({{',
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
+        if op_name.startswith("tessera.kv_cache."):
+            lines.append(
+                f'    "tessera_apple.diagnostic"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, severity = "unsupported", reason = "KV-cache target lowering is not implemented for Apple GPU in this phase"}} : () -> ()'
+            )
+            continue
         if op_name == "tessera.flash_attn":
-            lines.append(
-                f'    "tessera_apple.gpu.metal_kernel"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, kernel = "flash_attn_contract", framework = "Metal", status = "artifact_only"}} : () -> ()'
-            )
-        elif op_name.startswith("tessera.kv_cache."):
-            lines.append(
-                f'    "tessera.target.diagnostic"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, target = "apple_gpu", severity = "unsupported", reason = "KV-cache target lowering is not implemented for Apple GPU in this phase"}} : () -> ()'
-            )
+            kernel = "flash_attn_contract"
+            framework = "Metal"
+            extra = 'status = "artifact_only", grid = "bhn", threadgroup = "64x1x1", temporary_memory = "scores_lse"'
+        elif op_name in MATMUL_OPS:
+            kernel = "matmul_contract"
+            framework = "MPSGraph"
+            extra = 'status = "artifact_only", grid = "mn_tiles", threadgroup = "16x16x1", temporary_memory = "none"'
+        elif op_name in REDUCTION_OPS:
+            kernel = "softmax_contract"
+            framework = "MPSGraph"
+            extra = 'status = "artifact_only", grid = "rows", threadgroup = "256x1x1", temporary_memory = "row_max_sum"'
+        elif op_name in ROPE_OPS:
+            kernel = "rope_contract"
+            framework = "Metal"
+            extra = 'status = "artifact_only", grid = "tokens_heads", threadgroup = "128x1x1", temporary_memory = "none"'
         else:
-            lines.append(
-                f'    "tessera_apple.gpu.metal_kernel"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, framework = "Metal", threadgroup_memory = "auto"}} : () -> ()'
-            )
+            kernel = "elementwise_contract"
+            framework = "Metal"
+            extra = 'status = "artifact_only", grid = "elements", threadgroup = "256x1x1", temporary_memory = "none"'
         lines.append(
-            f'    "tessera_apple.gpu.dispatch"() {{ordinal = {idx} : i64, queue = "MTLCommandQueue", artifact = "metallib"}} : () -> ()'
+            f'    "tessera_apple.gpu.metal_kernel"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, kernel = "{kernel}", framework = "{framework}", dtype = "f32", {extra}}} : () -> ()'
+        )
+        lines.append(
+            f'    "tessera_apple.gpu.dispatch"() {{ordinal = {idx} : i64, queue = "MTLCommandQueue", artifact = "metallib", execution_mode = "metal_artifact"}} : () -> ()'
         )
     lines.extend([
         f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
@@ -597,6 +625,8 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
         return x * mask
     if op_name == "tessera.flash_attn":
         return _flash_attn_reference(operands[0], operands[1], operands[2], kwargs)
+    if op_name in ROPE_OPS:
+        return _rope_reference(operands[0], operands[1])
     if op_name in {"tessera.all_reduce", "tessera.reduce_scatter", "tessera.all_gather", "tessera.all_to_all"}:
         return operands[0]
     if op_name in {"tessera.rng_uniform", "tessera.rng_normal"}:
@@ -678,6 +708,8 @@ def _tile_op_name(op_name: str) -> str:
         return "tile.mma"
     if op_name in CONV2D_OPS:
         return "tile.conv2d"
+    if op_name in ROPE_OPS:
+        return "tile.rope"
     return f"tile.{bare}"
 
 
@@ -822,6 +854,23 @@ def _dct_reference(x: Any, axis: int = -1) -> np.ndarray:
     slicer = [slice(None)] * spec.ndim
     slicer[axis] = slice(0, n)
     return np.real(spec[tuple(slicer)])
+
+
+def _rope_reference(x: Any, theta: Any) -> np.ndarray:
+    x = np.asarray(x)
+    theta = np.asarray(theta)
+    if x.shape[-1] % 2 != 0:
+        raise ValueError("rope requires an even innermost dimension")
+    even = x[..., 0::2]
+    odd = x[..., 1::2]
+    if theta.shape[-1] == x.shape[-1]:
+        theta = theta[..., 0::2]
+    cos = np.cos(theta)
+    sin = np.sin(theta)
+    out = np.empty_like(x)
+    out[..., 0::2] = even * cos - odd * sin
+    out[..., 1::2] = even * sin + odd * cos
+    return out
 
 
 __all__ = [

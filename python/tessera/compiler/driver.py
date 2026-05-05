@@ -141,6 +141,7 @@ class CompileArtifactBundle:
     backend: LoweringArtifact | None = None
     executable: bool = False
     runtime_status: str = "unsupported"
+    execution_mode: str = "artifact_only"
     diagnostics: tuple[JitDiagnostic, ...] = ()
     trace_events: tuple[CompileTraceEvent, ...] = ()
     tool_invocations: tuple[ToolInvocation, ...] = ()
@@ -186,6 +187,7 @@ class CompileArtifactBundle:
             "artifact_hashes": self.artifact_hashes,
             "executable": self.executable,
             "runtime_status": self.runtime_status,
+            "execution_mode": self.execution_mode,
             "diagnostics": list(self.diagnostics_text()),
             "trace": [event.to_dict() for event in self.trace_events],
             "tool_invocations": [invocation.to_dict() for invocation in self.tool_invocations],
@@ -225,6 +227,7 @@ def compile_graph_module(
 
     output_text = cpu_plan.target_ir if cpu_plan is not None else graph_text
     status = "ok" if cpu_plan is not None else "fallback"
+    execution_mode = _execution_mode_for(target_kind, cpu_plan is not None)
     trace_events.append(CompileTraceEvent(
         pass_name="python-frontend-artifact-builder",
         target=target_kind,
@@ -233,7 +236,7 @@ def compile_graph_module(
         elapsed_ms=elapsed_ms,
         status=status,
         diagnostic_count=len(diagnostics),
-        metadata={"pipeline_name": request.pipeline_name},
+        metadata={"pipeline_name": request.pipeline_name, "execution_mode": execution_mode},
     ))
 
     if enable_tool_validation:
@@ -245,6 +248,7 @@ def compile_graph_module(
     schedule = LoweringArtifact("schedule", cpu_plan.schedule_ir) if cpu_plan is not None else None
     tile = LoweringArtifact("tile", cpu_plan.tile_ir) if cpu_plan is not None else None
     target_artifact = LoweringArtifact("target", cpu_plan.target_ir) if cpu_plan is not None else None
+    backend_artifact = _backend_artifact_for(target_kind, cpu_plan)
 
     executable = cpu_plan is not None and target_kind == "cpu"
     if executable:
@@ -260,13 +264,42 @@ def compile_graph_module(
         schedule=schedule,
         tile=tile,
         target_ir=target_artifact,
+        backend=backend_artifact,
         executable=executable,
         runtime_status=runtime_status,
+        execution_mode=execution_mode,
         diagnostics=tuple(diagnostics),
         trace_events=tuple(trace_events),
         tool_invocations=tuple(tool_invocations),
         cpu_plan=cpu_plan,
     )
+
+
+def _execution_mode_for(target_kind: str, has_plan: bool) -> str:
+    if target_kind == "apple_cpu" and has_plan:
+        return "cpu_accelerate"
+    if target_kind == "apple_gpu" and has_plan:
+        return "metal_artifact"
+    if target_kind == "cpu" and has_plan:
+        return "jit_cpu_numpy"
+    return "artifact_only"
+
+
+def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> LoweringArtifact | None:
+    if cpu_plan is None or target_kind != "apple_cpu":
+        return None
+    text = "\n".join([
+        'module attributes {tessera.ir.level = "backend", target = "apple_cpu", execution_mode = "cpu_accelerate"} {',
+        '  "tessera_apple.cpu.runtime_pipeline"() {',
+        '    pipeline = "tessera-lower-to-apple_cpu-runtime",',
+        '    symbol = "tessera_apple_cpu_gemm_f32",',
+        '    framework = "Accelerate",',
+        '    abi = "cblas_sgemm",',
+        '    dtype = "f32"',
+        '  } : () -> ()',
+        "}",
+    ])
+    return LoweringArtifact("backend", text)
 
 
 def _try_validate_with_tessera_opt(request: CompileRequest) -> tuple[ToolInvocation, CompileTraceEvent]:

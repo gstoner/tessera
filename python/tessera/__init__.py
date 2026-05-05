@@ -467,6 +467,27 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         y = np.fft.irfft(np.fft.rfft(x, nfft) * np.fft.rfft(w, nfft), nfft)
         return y[..., :n]
 
+    def rope(x, theta, axes: str = "qk"):
+        """Reference rotary position embedding over the innermost dimension."""
+        if hasattr(x, "_data"):
+            x = x._data
+        if hasattr(theta, "_data"):
+            theta = theta._data
+        x = np.asarray(x)
+        theta = np.asarray(theta)
+        if x.shape[-1] % 2 != 0:
+            raise ValueError("rope requires an even innermost dimension")
+        even = x[..., 0::2]
+        odd = x[..., 1::2]
+        if theta.shape[-1] == x.shape[-1]:
+            theta = theta[..., 0::2]
+        cos = np.cos(theta)
+        sin = np.sin(theta)
+        rotated = np.empty_like(x)
+        rotated[..., 0::2] = even * cos - odd * sin
+        rotated[..., 1::2] = even * sin + odd * cos
+        return rotated
+
     class ReferenceKVCache:
         def __init__(self):
             self.keys = []
@@ -526,6 +547,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "spectral_conv": spectral_conv,
         "rmsnorm": rmsnorm,
         "rmsnorm_safe": rmsnorm_safe,
+        "rope": rope,
         "kv_cache_append": kv_cache_append,
         "kv_cache_prune": kv_cache_prune,
     }
@@ -569,6 +591,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         irfft=irfft,
         dct=dct,
         spectral_conv=spectral_conv,
+        rope=rope,
         ReferenceKVCache=ReferenceKVCache,
         kv_cache_append=kv_cache_append,
         kv_cache_prune=kv_cache_prune,

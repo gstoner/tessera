@@ -29,6 +29,7 @@ def AppleCPU_AccelerateGemmOp : TesseraApple_Op<"cpu.accelerate_gemm", [Pure]> {
   let arguments = (ins StrAttr:$source,
                        StrAttr:$result,
                        I64Attr:$ordinal,
+                       OptionalAttr<StrAttr>:$framework,
                        OptionalAttr<StrAttr>:$abi,
                        OptionalAttr<StrAttr>:$dtype);
   let assemblyFormat = "attr-dict";
@@ -39,7 +40,10 @@ def AppleCPU_VectorOp : TesseraApple_Op<"cpu.vector_op", [Pure]> {
   let arguments = (ins StrAttr:$source,
                        StrAttr:$result,
                        I64Attr:$ordinal,
-                       OptionalAttr<StrAttr>:$abi);
+                       OptionalAttr<StrAttr>:$framework,
+                       OptionalAttr<StrAttr>:$abi,
+                       OptionalAttr<StrAttr>:$pattern,
+                       OptionalAttr<StrAttr>:$dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -48,7 +52,9 @@ def AppleCPU_VectorReduceOp : TesseraApple_Op<"cpu.vector_reduce", [Pure]> {
   let arguments = (ins StrAttr:$source,
                        StrAttr:$result,
                        I64Attr:$ordinal,
-                       OptionalAttr<StrAttr>:$abi);
+                       OptionalAttr<StrAttr>:$framework,
+                       OptionalAttr<StrAttr>:$abi,
+                       OptionalAttr<StrAttr>:$dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -59,7 +65,11 @@ def AppleGPU_MetalKernelOp : TesseraApple_Op<"gpu.metal_kernel"> {
                        I64Attr:$ordinal,
                        OptionalAttr<StrAttr>:$kernel,
                        OptionalAttr<StrAttr>:$framework,
+                       OptionalAttr<StrAttr>:$dtype,
+                       OptionalAttr<StrAttr>:$grid,
+                       OptionalAttr<StrAttr>:$threadgroup,
                        OptionalAttr<StrAttr>:$threadgroup_memory,
+                       OptionalAttr<StrAttr>:$temporary_memory,
                        OptionalAttr<StrAttr>:$status);
   let assemblyFormat = "attr-dict";
 }
@@ -68,7 +78,8 @@ def AppleGPU_DispatchOp : TesseraApple_Op<"gpu.dispatch"> {
   let summary = "Metal command queue dispatch artifact";
   let arguments = (ins I64Attr:$ordinal,
                        OptionalAttr<StrAttr>:$queue,
-                       OptionalAttr<StrAttr>:$artifact);
+                       OptionalAttr<StrAttr>:$artifact,
+                       OptionalAttr<StrAttr>:$execution_mode);
   let assemblyFormat = "attr-dict";
 }
 

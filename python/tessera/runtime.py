@@ -1225,6 +1225,8 @@ def _execute_runtime_cpu_op(op_name: str, operands: list[Any], kwargs: dict[str,
         x = np.asarray(operands[0])
         eps = float(kwargs.get("eps", 1e-5 if op_name == "tessera.rmsnorm" else 1e-6))
         return x / np.sqrt(np.mean(x * x, axis=-1, keepdims=True) + eps)
+    if op_name == "tessera.rope":
+        return _runtime_rope(np, operands[0], operands[1])
     if op_name == "tessera.flash_attn":
         return _runtime_flash_attn(np, operands[0], operands[1], operands[2], kwargs)
     if op_name == "tessera.transpose":
@@ -1289,3 +1291,18 @@ def _runtime_flash_attn(np: Any, q: Any, k: Any, v: Any, kwargs: Mapping[str, An
     e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
     weights = e / np.sum(e, axis=-1, keepdims=True)
     return np.matmul(weights, v)
+
+
+def _runtime_rope(np: Any, x: Any, theta: Any) -> Any:
+    x = np.asarray(x)
+    theta = np.asarray(theta)
+    if x.shape[-1] % 2 != 0:
+        raise ValueError("rope requires an even innermost dimension")
+    even = x[..., 0::2]
+    odd = x[..., 1::2]
+    if theta.shape[-1] == x.shape[-1]:
+        theta = theta[..., 0::2]
+    out = np.empty_like(x)
+    out[..., 0::2] = even * np.cos(theta) - odd * np.sin(theta)
+    out[..., 1::2] = even * np.sin(theta) + odd * np.cos(theta)
+    return out

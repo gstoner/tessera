@@ -56,6 +56,7 @@ _SPECS = [
     OpSpec("spectral_conv", "tessera.spectral_conv", 2, 2, lowering="spectral"),
     OpSpec("rmsnorm", "tessera.rmsnorm", 1, 1, lowering="normalization"),
     OpSpec("rmsnorm_safe", "tessera.rmsnorm_safe", 1, 1, lowering="normalization"),
+    OpSpec("rope", "tessera.rope", 2, 2, lowering="rotary_embedding"),
     OpSpec("kv_cache_append", "tessera.kv_cache.append", 3, 3, effect="state", lowering="state_update"),
     OpSpec("kv_cache_prune", "tessera.kv_cache.prune", 1, 1, effect="state", lowering="state_update"),
 ]

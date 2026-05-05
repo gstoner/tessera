@@ -12,11 +12,11 @@ module {
   // CHECK-LABEL: module
   // CHECK-NOT: "tessera.matmul"
 
-  "tessera.matmul"() {source = "tessera.matmul",  result = "C",     ordinal = 0 : i64} : () -> ()
-  "tessera.gemm"()   {source = "tessera.gemm",    result = "C2",    ordinal = 1 : i64} : () -> ()
-  "tessera.softmax"() {source = "tessera.softmax", result = "P",    ordinal = 2 : i64} : () -> ()
-  "tessera.flash_attn"() {source = "tessera.flash_attn", result = "O", ordinal = 3 : i64} : () -> ()
-  "tessera.kv_cache.append"() {source = "tessera.kv_cache.append", result = "Cache", ordinal = 4 : i64} : () -> ()
+  "tile.mock"() {source = "tessera.matmul",  result = "C",     ordinal = 0 : i64} : () -> ()
+  "tile.mock"() {source = "tessera.gemm",    result = "C2",    ordinal = 1 : i64} : () -> ()
+  "tile.mock"() {source = "tessera.softmax", result = "P",     ordinal = 2 : i64} : () -> ()
+  "tile.mock"() {source = "tessera.flash_attn", result = "O",  ordinal = 3 : i64} : () -> ()
+  "tile.mock"() {source = "tessera.kv_cache.append", result = "Cache", ordinal = 4 : i64} : () -> ()
 }
 
 // CHECK:      tessera_apple.cpu.accelerate_gemm

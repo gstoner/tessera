@@ -539,6 +539,7 @@ def jit(
                     backend=compile_bundle.backend,
                     executable=compile_bundle.executable,
                     runtime_status=compile_bundle.runtime_status,
+                    execution_mode=compile_bundle.execution_mode,
                     diagnostics=tuple(diagnostics) + compile_bundle.diagnostics,
                     trace_events=compile_bundle.trace_events,
                     tool_invocations=compile_bundle.tool_invocations,

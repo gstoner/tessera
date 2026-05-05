@@ -74,6 +74,8 @@ bool isReduction(llvm::StringRef name) {
 
 bool isFlashAttn(llvm::StringRef name) { return name == "tessera.flash_attn"; }
 
+bool isRoPE(llvm::StringRef name) { return name == "tessera.rope"; }
+
 bool isKVCache(llvm::StringRef name) {
   return name.starts_with("tessera.kv_cache.");
 }
@@ -86,7 +88,7 @@ bool isLowerable(Operation *op) {
   llvm::StringRef name = op->getName().getStringRef();
   if (name.starts_with("tessera_apple."))
     return false; // already lowered
-  if (isMatmul(name) || isReduction(name) || isFlashAttn(name) ||
+  if (isMatmul(name) || isReduction(name) || isFlashAttn(name) || isRoPE(name) ||
       isKVCache(name))
     return true;
   if (name.starts_with("tessera.tile.") || name.starts_with("tile."))
@@ -196,6 +198,15 @@ struct LowerTileToAppleCPUPass
         extra.emplace_back(builder.getStringAttr("abi"),
                            builder.getStringAttr("vDSP"));
         buildAppleOp(builder, op, kCPUVectorReduce, ordinal, extra);
+      } else if (isRoPE(name) || isRoPE(src)) {
+        llvm::SmallVector<NamedAttribute, 3> extra;
+        extra.emplace_back(builder.getStringAttr("framework"),
+                           builder.getStringAttr("Accelerate"));
+        extra.emplace_back(builder.getStringAttr("abi"),
+                           builder.getStringAttr("vecLib"));
+        extra.emplace_back(builder.getStringAttr("pattern"),
+                           builder.getStringAttr("rotary_pairs"));
+        buildAppleOp(builder, op, kCPUVectorOp, ordinal, extra);
       } else {
         llvm::SmallVector<NamedAttribute, 2> extra;
         extra.emplace_back(builder.getStringAttr("framework"),
@@ -247,21 +258,83 @@ struct LowerTileToAppleGPUPass
                         "KV-cache target lowering is not implemented for "
                         "Apple GPU in this phase");
       } else if (isFlashAttn(name) || isFlashAttn(src)) {
-        llvm::SmallVector<NamedAttribute, 3> extra;
+        llvm::SmallVector<NamedAttribute, 6> extra;
         extra.emplace_back(builder.getStringAttr("kernel"),
                            builder.getStringAttr("flash_attn_contract"));
         extra.emplace_back(builder.getStringAttr("framework"),
                            builder.getStringAttr("Metal"));
         extra.emplace_back(builder.getStringAttr("status"),
                            builder.getStringAttr("artifact_only"));
+        extra.emplace_back(builder.getStringAttr("grid"),
+                           builder.getStringAttr("bhn"));
+        extra.emplace_back(builder.getStringAttr("threadgroup"),
+                           builder.getStringAttr("64x1x1"));
+        extra.emplace_back(builder.getStringAttr("temporary_memory"),
+                           builder.getStringAttr("scores_lse"));
+        buildAppleOp(builder, op, kGPUMetalKernel, ordinal, extra);
+        emittedKernel = true;
+      } else if (isMatmul(name) || isMatmul(src)) {
+        llvm::SmallVector<NamedAttribute, 6> extra;
+        extra.emplace_back(builder.getStringAttr("kernel"),
+                           builder.getStringAttr("matmul_contract"));
+        extra.emplace_back(builder.getStringAttr("framework"),
+                           builder.getStringAttr("MPSGraph"));
+        extra.emplace_back(builder.getStringAttr("status"),
+                           builder.getStringAttr("artifact_only"));
+        extra.emplace_back(builder.getStringAttr("grid"),
+                           builder.getStringAttr("mn_tiles"));
+        extra.emplace_back(builder.getStringAttr("threadgroup"),
+                           builder.getStringAttr("16x16x1"));
+        extra.emplace_back(builder.getStringAttr("temporary_memory"),
+                           builder.getStringAttr("none"));
+        buildAppleOp(builder, op, kGPUMetalKernel, ordinal, extra);
+        emittedKernel = true;
+      } else if (isReduction(name) || isReduction(src)) {
+        llvm::SmallVector<NamedAttribute, 6> extra;
+        extra.emplace_back(builder.getStringAttr("kernel"),
+                           builder.getStringAttr("softmax_contract"));
+        extra.emplace_back(builder.getStringAttr("framework"),
+                           builder.getStringAttr("MPSGraph"));
+        extra.emplace_back(builder.getStringAttr("status"),
+                           builder.getStringAttr("artifact_only"));
+        extra.emplace_back(builder.getStringAttr("grid"),
+                           builder.getStringAttr("rows"));
+        extra.emplace_back(builder.getStringAttr("threadgroup"),
+                           builder.getStringAttr("256x1x1"));
+        extra.emplace_back(builder.getStringAttr("temporary_memory"),
+                           builder.getStringAttr("row_max_sum"));
+        buildAppleOp(builder, op, kGPUMetalKernel, ordinal, extra);
+        emittedKernel = true;
+      } else if (isRoPE(name) || isRoPE(src)) {
+        llvm::SmallVector<NamedAttribute, 6> extra;
+        extra.emplace_back(builder.getStringAttr("kernel"),
+                           builder.getStringAttr("rope_contract"));
+        extra.emplace_back(builder.getStringAttr("framework"),
+                           builder.getStringAttr("Metal"));
+        extra.emplace_back(builder.getStringAttr("status"),
+                           builder.getStringAttr("artifact_only"));
+        extra.emplace_back(builder.getStringAttr("grid"),
+                           builder.getStringAttr("tokens_heads"));
+        extra.emplace_back(builder.getStringAttr("threadgroup"),
+                           builder.getStringAttr("128x1x1"));
+        extra.emplace_back(builder.getStringAttr("temporary_memory"),
+                           builder.getStringAttr("none"));
         buildAppleOp(builder, op, kGPUMetalKernel, ordinal, extra);
         emittedKernel = true;
       } else {
-        llvm::SmallVector<NamedAttribute, 2> extra;
+        llvm::SmallVector<NamedAttribute, 6> extra;
+        extra.emplace_back(builder.getStringAttr("kernel"),
+                           builder.getStringAttr("elementwise_contract"));
         extra.emplace_back(builder.getStringAttr("framework"),
                            builder.getStringAttr("Metal"));
         extra.emplace_back(builder.getStringAttr("threadgroup_memory"),
                            builder.getStringAttr("auto"));
+        extra.emplace_back(builder.getStringAttr("status"),
+                           builder.getStringAttr("artifact_only"));
+        extra.emplace_back(builder.getStringAttr("grid"),
+                           builder.getStringAttr("elements"));
+        extra.emplace_back(builder.getStringAttr("temporary_memory"),
+                           builder.getStringAttr("none"));
         buildAppleOp(builder, op, kGPUMetalKernel, ordinal, extra);
         emittedKernel = true;
       }
@@ -277,6 +350,8 @@ struct LowerTileToAppleGPUPass
                                    builder.getStringAttr("MTLCommandQueue"));
         dispatchState.addAttribute("artifact",
                                    builder.getStringAttr("metallib"));
+        dispatchState.addAttribute("execution_mode",
+                                   builder.getStringAttr("metal_artifact"));
         builder.setInsertionPoint(op);
         builder.create(dispatchState);
       }

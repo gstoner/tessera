@@ -707,6 +707,8 @@ def normalize_target_kind(target: object = "cpu") -> str:
         normalized = target.lower().replace("-", "_")
         aliases = {
             "cuda": "nvidia_sm90",
+            "x86": "cpu",
+            "x86_64": "cpu",
             "nvidia": "nvidia_sm90",
             "gpu": "nvidia_sm90",
             "sm80": "nvidia_sm80",

@@ -1207,6 +1207,9 @@ def _as_numpy(value: Any) -> Any:
 def _execute_runtime_cpu_op(op_name: str, operands: list[Any], kwargs: dict[str, Any], np: Any) -> Any:
     if op_name in {"tessera.matmul", "tessera.gemm"}:
         return np.matmul(operands[0], operands[1])
+    if op_name in {"tessera.conv2d_nhwc", "tessera.conv2d"}:
+        bias = operands[2] if len(operands) > 2 else kwargs.get("bias", None)
+        return _runtime_conv2d_nhwc(np, operands[0], operands[1], bias=bias, stride=kwargs.get("stride", 1), padding=kwargs.get("padding", 0))
     if op_name == "tessera.relu":
         return np.maximum(0, operands[0])
     if op_name == "tessera.sigmoid":
@@ -1218,6 +1221,12 @@ def _execute_runtime_cpu_op(op_name: str, operands: list[Any], kwargs: dict[str,
         axis = int(kwargs.get("axis", -1))
         e = np.exp(x - np.max(x, axis=axis, keepdims=True))
         return e / np.sum(e, axis=axis, keepdims=True)
+    if op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}:
+        x = np.asarray(operands[0])
+        eps = float(kwargs.get("eps", 1e-5 if op_name == "tessera.rmsnorm" else 1e-6))
+        return x / np.sqrt(np.mean(x * x, axis=-1, keepdims=True) + eps)
+    if op_name == "tessera.flash_attn":
+        return _runtime_flash_attn(np, operands[0], operands[1], operands[2], kwargs)
     if op_name == "tessera.transpose":
         axes = kwargs.get("axes", None)
         if isinstance(axes, list):
@@ -1236,3 +1245,47 @@ def _execute_runtime_cpu_op(op_name: str, operands: list[Any], kwargs: dict[str,
         v_hat = new_v / (1.0 - beta2**step)
         return param - lr * m_hat / (np.sqrt(v_hat) + eps), new_m, new_v
     raise ValueError(f"unsupported runtime CPU op {op_name!r}")
+
+
+def _runtime_pair(value: Any) -> tuple[int, int]:
+    if isinstance(value, (tuple, list)):
+        return int(value[0]), int(value[1])
+    return int(value), int(value)
+
+
+def _runtime_conv2d_nhwc(np: Any, x: Any, weight: Any, *, bias: Any = None, stride: Any = 1, padding: Any = 0) -> Any:
+    x = np.asarray(x)
+    weight = np.asarray(weight)
+    stride_h, stride_w = _runtime_pair(stride)
+    pad_h, pad_w = _runtime_pair(padding)
+    if x.ndim != 4 or weight.ndim != 4:
+        raise ValueError("conv2d runtime artifact expects NHWC input and HWIO weights")
+    x_pad = np.pad(x, ((0, 0), (pad_h, pad_h), (pad_w, pad_w), (0, 0)))
+    batch, in_h, in_w, _ = x_pad.shape
+    k_h, k_w, _, out_c = weight.shape
+    out_h = (in_h - k_h) // stride_h + 1
+    out_w = (in_w - k_w) // stride_w + 1
+    out = np.zeros((batch, out_h, out_w, out_c), dtype=np.result_type(x, weight))
+    for i in range(out_h):
+        for j in range(out_w):
+            window = x_pad[:, i * stride_h:i * stride_h + k_h, j * stride_w:j * stride_w + k_w, :]
+            out[:, i, j, :] = np.tensordot(window, weight, axes=([1, 2, 3], [0, 1, 2]))
+    if bias is not None:
+        out = out + np.asarray(bias)
+    return out
+
+
+def _runtime_flash_attn(np: Any, q: Any, k: Any, v: Any, kwargs: Mapping[str, Any]) -> Any:
+    q = np.asarray(q)
+    k = np.asarray(k)
+    v = np.asarray(v)
+    scale = kwargs.get("scale", None)
+    scale = 1.0 / np.sqrt(q.shape[-1]) if scale is None else float(scale)
+    scores = np.matmul(q, np.swapaxes(k, -1, -2)) * scale
+    if bool(kwargs.get("causal", False)):
+        q_len, k_len = scores.shape[-2], scores.shape[-1]
+        mask = np.triu(np.ones((q_len, k_len), dtype=bool), k=1 + max(k_len - q_len, 0))
+        scores = np.where(mask, -np.inf, scores)
+    e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+    weights = e / np.sum(e, axis=-1, keepdims=True)
+    return np.matmul(weights, v)

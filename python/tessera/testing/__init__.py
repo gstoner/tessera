@@ -18,6 +18,15 @@ from .qa import (
     assert_finite,
 )
 from .compiler import CompilerHarnessResult, compile_and_maybe_launch
+from .compiler_examples import (
+    COMPILER_EXAMPLE_MANIFEST,
+    COMPILER_STAGES,
+    FOUNDATION_TARGETS,
+    CompilerExample,
+    CompilerExampleResult,
+    qualify_compiler_example,
+    qualify_compiler_examples,
+)
 
 __all__ = [
     "MockRankGroup",
@@ -33,4 +42,11 @@ __all__ = [
     "assert_finite",
     "CompilerHarnessResult",
     "compile_and_maybe_launch",
+    "COMPILER_EXAMPLE_MANIFEST",
+    "COMPILER_STAGES",
+    "FOUNDATION_TARGETS",
+    "CompilerExample",
+    "CompilerExampleResult",
+    "qualify_compiler_example",
+    "qualify_compiler_examples",
 ]

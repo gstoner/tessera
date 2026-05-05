@@ -1,0 +1,103 @@
+from __future__ import annotations
+
+import json
+
+import numpy as np
+
+import tessera as ts
+from tessera.compiler import CompileRequest, CompileTraceEvent
+from tessera.compiler.driver import PIPELINE_BY_TARGET
+from tessera.compiler.matmul_pipeline import normalize_target_kind
+from tessera.testing.compiler_examples import COMPILER_EXAMPLE_MANIFEST, FOUNDATION_TARGETS, qualify_compiler_example
+
+
+def test_compile_request_normalizes_x86_and_selects_pipeline():
+    request = CompileRequest(
+        source_origin="unit",
+        function_name="mm",
+        graph_ir='module { "tessera.matmul"() : () -> () }',
+        target="x86",
+    )
+
+    assert request.target == "cpu"
+    assert request.pipeline_name == "tessera-lower-to-x86"
+    assert request.graph_hash
+    assert request.to_dict()["graph_ir_hash"] == request.graph_hash
+    assert normalize_target_kind("x86_64") == "cpu"
+
+
+def test_compile_trace_event_serializes_json_and_chrome_trace():
+    event = CompileTraceEvent(
+        pass_name="tessera-lower-to-x86",
+        target="cpu",
+        input_hash="a",
+        output_hash="b",
+        elapsed_ms=1.25,
+        status="ok",
+        diagnostic_count=0,
+    )
+
+    payload = event.to_dict()
+    chrome = event.to_chrome_trace_event()
+    assert payload["schema"] == "tessera.compiler.trace.v1"
+    assert payload["pass_name"] == "tessera-lower-to-x86"
+    assert chrome["cat"] == "tessera.compiler"
+    assert chrome["args"]["output_hash"] == "b"
+
+
+def test_jit_routes_artifacts_and_trace_through_compile_bundle():
+    @ts.jit
+    def mm(A, B):
+        return ts.ops.matmul(A, B)
+
+    A = np.eye(2, dtype=np.float32)
+    B = np.ones((2, 2), dtype=np.float32)
+    np.testing.assert_allclose(mm(A, B), A @ B)
+
+    artifact = mm.runtime_artifact()
+    metadata = artifact.metadata
+    assert mm.compile_bundle is not None
+    assert metadata["pipeline_name"] == PIPELINE_BY_TARGET["cpu"]
+    assert metadata["artifact_hashes"]["graph"]
+    assert metadata["artifact_hashes"]["target"]
+    assert metadata["runtime_status"] == "ready"
+    assert metadata["executable"] is True
+    assert metadata["compiler_path"] == "jit_cpu_numpy"
+    assert mm.lowering_trace()[0]["pass_name"] == "python-frontend-artifact-builder"
+    assert json.loads(mm.compile_bundle.trace_json())[0]["target"] == "cpu"
+    assert "traceEvents" in json.loads(mm.compile_bundle.chrome_trace_json())
+
+
+def test_non_cpu_target_artifacts_are_traceable_and_non_executable():
+    @ts.jit(target="cuda")
+    def mm(A, B):
+        return ts.ops.matmul(A, B)
+
+    artifact = mm.runtime_artifact()
+    metadata = artifact.metadata
+    assert metadata["target"] == "nvidia_sm90"
+    assert metadata["pipeline_name"] == "tessera-lower-to-gpu"
+    assert metadata["runtime_status"] == "artifact_only"
+    assert metadata["executable"] is False
+    assert metadata["compiler_path"] == "target_ir_artifact"
+    assert "tessera_nvidia.wgmma" in artifact.target_ir
+    assert any(event["status"] in {"tool-missing", "tool-ok", "tool-failed", "tool-error"} for event in mm.lowering_trace())
+
+
+def test_compiler_example_manifest_qualifies_each_foundation_target():
+    seen = set()
+    for example in COMPILER_EXAMPLE_MANIFEST:
+        assert set(example.stages_by_target) == set(FOUNDATION_TARGETS)
+        for target in FOUNDATION_TARGETS:
+            result = qualify_compiler_example(example, target, run=target == "x86")
+            seen.add((example.example_id, result.target))
+            assert result.artifact.metadata["artifact_hashes"]["graph"]
+            assert result.trace
+            if target == "x86":
+                assert result.launch_result is not None
+                assert result.launch_result["ok"] is True
+            else:
+                assert result.artifact.metadata["runtime_status"] == "artifact_only"
+
+    assert ("mlp_matmul_relu", "cpu") in seen
+    assert ("flash_attn_contract", "nvidia_sm90") in seen

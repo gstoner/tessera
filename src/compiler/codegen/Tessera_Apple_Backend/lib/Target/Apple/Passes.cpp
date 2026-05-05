@@ -54,12 +54,24 @@ PassPipelineRegistration<> gAppleGPUPipeline(
       pm.addPass(createLowerTileToAppleGPUPass());
     });
 
+// Phase 8.2: executable lowering to the Apple CPU runtime shim
+// (cblas_sgemm via Accelerate). Distinct from the artifact-only
+// `tessera-lower-to-apple_cpu` pipeline above.
+PassPipelineRegistration<> gAppleCPURuntimePipeline(
+    "tessera-lower-to-apple_cpu-runtime",
+    "Lower tessera.matmul (rank-2, f32) to Apple CPU runtime calls "
+    "(cblas_sgemm)",
+    [](OpPassManager &pm) {
+      pm.addPass(createLowerMatmulToAppleCPUPass());
+    });
+
 } // namespace
 
 void registerTesseraAppleBackendPipelines() {
   // Touch the static registration objects so the linker keeps them.
   (void)&gAppleCPUPipeline;
   (void)&gAppleGPUPipeline;
+  (void)&gAppleCPURuntimePipeline;
 }
 
 } // namespace apple

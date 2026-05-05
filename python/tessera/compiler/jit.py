@@ -26,7 +26,8 @@ from .effects import Effect, EffectLattice, TesseraEffectError
 from .graph_ir import GraphIRBuilder, GraphIRModule
 from .gpu_target import GPUTargetProfile, ISA  # noqa: F401 — re-exported for callers
 from .attn_lower import FlashAttnLoweringConfig, SM90_DEFAULT  # noqa: F401
-from .matmul_pipeline import JitDiagnostic, CPUPlan, build_cpu_plan, explain_cpu_plan, normalize_target_kind
+from .driver import CompileArtifactBundle, compile_graph_module
+from .matmul_pipeline import JitDiagnostic, CPUPlan, normalize_target_kind
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -212,6 +213,7 @@ class JitFn:
         target          : GPUTargetProfile or target string if non-CPU compilation was requested, else None
         attn_config     : FlashAttnLoweringConfig if flash_attn in body, else None
         cpu_plan        : executable CPU lowering plan for supported programs
+        compile_bundle  : compiler driver artifacts, diagnostics, and trace
         cpu_tile        : CPU matmul/GEMM tile shape
         source_origin   : where AST source came from: inspect, explicit, file, unavailable
         lowering_diagnostics: developer-facing lowering decision diagnostics
@@ -228,6 +230,7 @@ class JitFn:
         target: Optional[Any] = None,
         attn_config: Optional[FlashAttnLoweringConfig] = None,
         cpu_plan: Optional[CPUPlan] = None,
+        compile_bundle: Optional[CompileArtifactBundle] = None,
         cpu_tile: Tuple[int, int, int] = (128, 128, 64),
         source_origin: str = "inspect",
         lowering_diagnostics: Optional[List[JitDiagnostic]] = None,
@@ -241,6 +244,7 @@ class JitFn:
         self.target = target
         self.attn_config = attn_config
         self.cpu_plan = cpu_plan
+        self.compile_bundle = compile_bundle
         self.cpu_tile = tuple(int(v) for v in cpu_tile)
         self.source_origin = source_origin
         self.lowering_diagnostics = tuple(lowering_diagnostics or [])
@@ -277,15 +281,18 @@ class JitFn:
 
     @property
     def schedule_ir(self) -> Optional[str]:
-        return self.cpu_plan.schedule_ir if self.cpu_plan is not None else None
+        artifact = self.compile_bundle.artifact("schedule") if self.compile_bundle is not None else None
+        return artifact.text if artifact is not None else None
 
     @property
     def tile_ir(self) -> Optional[str]:
-        return self.cpu_plan.tile_ir if self.cpu_plan is not None else None
+        artifact = self.compile_bundle.artifact("tile") if self.compile_bundle is not None else None
+        return artifact.text if artifact is not None else None
 
     @property
     def target_ir(self) -> Optional[str]:
-        return self.cpu_plan.target_ir if self.cpu_plan is not None else None
+        artifact = self.compile_bundle.artifact("target") if self.compile_bundle is not None else None
+        return artifact.text if artifact is not None else None
 
     @property
     def uses_compiled_path(self) -> bool:
@@ -300,7 +307,16 @@ class JitFn:
 
         if self.cpu_plan is None:
             return ()
-        return self.cpu_plan.artifacts()
+        if self.compile_bundle is None:
+            return self.cpu_plan.artifacts()
+        return self.compile_bundle.lowering_artifacts()
+
+    def lowering_trace(self) -> tuple[dict[str, Any], ...]:
+        """Return machine-readable compiler trace events for this JIT function."""
+
+        if self.compile_bundle is None:
+            return ()
+        return tuple(event.to_dict() for event in self.compile_bundle.trace_events)
 
     def runtime_artifact(self):
         """Return a RuntimeArtifact for this JIT function's compiler output."""
@@ -308,6 +324,7 @@ class JitFn:
         from tessera.runtime import RuntimeArtifact
 
         diagnostics = [d.format() for d in self.lowering_diagnostics]
+        bundle_metadata = self.compile_bundle.to_metadata() if self.compile_bundle is not None else {}
         metadata: dict[str, Any] = {
             "target": self.cpu_plan.target_kind if self.cpu_plan is not None else normalize_target_kind(self.target),
             "function_name": self._fn.__name__,
@@ -318,6 +335,7 @@ class JitFn:
             "executable": False,
             "compiler_path": "eager_fallback",
             "runtime_status": "unsupported",
+            **bundle_metadata,
         }
         if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
             metadata.update({
@@ -484,7 +502,6 @@ def jit(
                 target_attr = None
             builder.lower(fn, effect_tag=effect_tag, target_attr=target_attr, source_text=source_text)
             module = builder.module()
-            cpu_plan = build_cpu_plan(module, tile=tuple(int(v) for v in cpu_tile), target_kind=target_kind)
             diagnostics = []
             if source_text is None:
                 diagnostics.append(JitDiagnostic(
@@ -501,7 +518,34 @@ def jit(
                     "JIT_SOURCE_PROVIDED",
                     f"using {source_origin} source for AST lowering",
                 ))
-            diagnostics.append(explain_cpu_plan(module, target=target_kind))
+            compile_bundle = compile_graph_module(
+                module,
+                source_origin=source_origin,
+                target=target_kind,
+                cpu_tile=tuple(int(v) for v in cpu_tile),
+                options={
+                    "cpu_tile": list(tuple(int(v) for v in cpu_tile)),
+                    "deterministic": deterministic,
+                    "seed": seed,
+                },
+            )
+            if diagnostics:
+                compile_bundle = CompileArtifactBundle(
+                    request=compile_bundle.request,
+                    graph=compile_bundle.graph,
+                    schedule=compile_bundle.schedule,
+                    tile=compile_bundle.tile,
+                    target_ir=compile_bundle.target_ir,
+                    backend=compile_bundle.backend,
+                    executable=compile_bundle.executable,
+                    runtime_status=compile_bundle.runtime_status,
+                    diagnostics=tuple(diagnostics) + compile_bundle.diagnostics,
+                    trace_events=compile_bundle.trace_events,
+                    tool_invocations=compile_bundle.tool_invocations,
+                    cpu_plan=compile_bundle.cpu_plan,
+                )
+            cpu_plan = compile_bundle.cpu_plan
+            diagnostics = list(compile_bundle.diagnostics)
         except Exception as exc:
             raise TesseraJitError(
                 f"Graph IR emission failed for {fn.__name__!r}: {exc}"
@@ -518,6 +562,7 @@ def jit(
             target=target,
             attn_config=resolved_attn,
             cpu_plan=cpu_plan,
+            compile_bundle=compile_bundle,
             cpu_tile=tuple(int(v) for v in cpu_tile),
             source_origin=source_origin,
             lowering_diagnostics=diagnostics,

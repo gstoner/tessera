@@ -34,6 +34,7 @@ add_library(TesseraApple STATIC
   lib/Target/Apple/TesseraAppleDialect.cpp
   lib/Target/Apple/Passes.cpp
   lib/Target/Apple/Lowering/TileToApple.cpp
+  lib/Target/Apple/Lowering/MatmulToAppleCPU.cpp
 )
 
 # mlir_tablegen emits .h.inc / .cpp.inc into CMAKE_CURRENT_BINARY_DIR/Tessera/Target/Apple/
@@ -56,7 +57,10 @@ target_link_libraries(TesseraApple
     MLIRPass
     MLIRSupport
   PRIVATE
+    MLIRArithDialect
+    MLIRBufferizationDialect
     MLIRFuncDialect
+    MLIRMemRefDialect
     MLIRTransforms
 )
 

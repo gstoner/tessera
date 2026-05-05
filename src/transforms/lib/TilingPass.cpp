@@ -40,6 +40,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/Casting.h"
 
 using namespace mlir;
 
@@ -68,8 +69,8 @@ struct TileMatmul : public RewritePattern {
     auto rhs = op->getOperand(1);
 
     // Require statically-shaped 2-D ranked tensors.
-    auto lhsTy = lhs.getType().dyn_cast<RankedTensorType>();
-    auto rhsTy = rhs.getType().dyn_cast<RankedTensorType>();
+    auto lhsTy = llvm::dyn_cast<RankedTensorType>(lhs.getType());
+    auto rhsTy = llvm::dyn_cast<RankedTensorType>(rhs.getType());
     if (!lhsTy || !rhsTy) return failure();
     if (lhsTy.getRank() != 2 || rhsTy.getRank() != 2) return failure();
     if (lhsTy.isDynamicDim(0) || lhsTy.isDynamicDim(1) ||
@@ -86,7 +87,7 @@ struct TileMatmul : public RewritePattern {
     // Check that K matches.
     if (rhsTy.getDimSize(0) != K) return failure();
 
-    auto resultTy = op->getResult(0).getType().dyn_cast<RankedTensorType>();
+    auto resultTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
     if (!resultTy) return failure();
 
     Location loc = op->getLoc();
@@ -192,6 +193,9 @@ private:
 struct TilingPassImpl
     : public PassWrapper<TilingPassImpl, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TilingPassImpl)
+
+  TilingPassImpl() = default;
+  TilingPassImpl(const TilingPassImpl &other) : PassWrapper(other) {}
 
   Option<int> tileMOpt{*this, "tile-m",
                        llvm::cl::desc("M-dimension tile size"), llvm::cl::init(16)};

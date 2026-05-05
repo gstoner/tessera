@@ -25,6 +25,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <cstdlib>    // std::abs
@@ -48,10 +49,10 @@ static llvm::SmallVector<int64_t> getDeltaValues(Attribute attr) {
   if (!attr) return {};
 
   // Case 1: I64ArrayAttr (simple encoding)
-  if (auto arr = attr.dyn_cast<ArrayAttr>()) {
+  if (auto arr = llvm::dyn_cast<ArrayAttr>(attr)) {
     llvm::SmallVector<int64_t> out;
     for (auto el : arr) {
-      if (auto ia = el.dyn_cast<IntegerAttr>())
+      if (auto ia = llvm::dyn_cast<IntegerAttr>(el))
         out.push_back(ia.getInt());
     }
     return out;

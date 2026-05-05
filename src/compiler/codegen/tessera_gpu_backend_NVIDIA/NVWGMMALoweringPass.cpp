@@ -130,6 +130,10 @@ struct NVWGMMALoweringPass
     : public PassWrapper<NVWGMMALoweringPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(NVWGMMALoweringPass)
 
+  NVWGMMALoweringPass() = default;
+  NVWGMMALoweringPass(const NVWGMMALoweringPass &other)
+      : PassWrapper(other) {}
+
   Option<int> smVersion{*this, "sm",
                         llvm::cl::desc("Target SM version (90 = Hopper WGMMA)"),
                         llvm::cl::init(90)};

@@ -61,7 +61,8 @@ static func::FuncOp ensureExternalDecl(ModuleOp mod, StringRef name,
 // pointer as an i64 (matches the C ABI used by the x86 backend).
 static Value extractPtr(OpBuilder &b, Location loc, Value tensor,
                         MemRefType memTy) {
-  auto buf = b.create<bufferization::ToMemrefOp>(loc, memTy, tensor);
+  // MLIR 21: bufferization.to_memref renamed to bufferization.to_buffer.
+  auto buf = b.create<bufferization::ToBufferOp>(loc, memTy, tensor);
   auto ptrIdx = b.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buf);
   return b.create<arith::IndexCastOp>(loc, b.getI64Type(), ptrIdx);
 }
@@ -170,8 +171,7 @@ struct LowerMatmulToAppleCPUPass
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     patterns.add<LowerMatmulToAppleCPU>(&getContext());
-    if (failed(applyPatternsAndFoldGreedily(getOperation(),
-                                            std::move(patterns))))
+    if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
       signalPassFailure();
   }
 };

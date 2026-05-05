@@ -125,6 +125,10 @@ struct NVFlashAttnKernelEmitterPass
     : public PassWrapper<NVFlashAttnKernelEmitterPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(NVFlashAttnKernelEmitterPass)
 
+  NVFlashAttnKernelEmitterPass() = default;
+  NVFlashAttnKernelEmitterPass(const NVFlashAttnKernelEmitterPass &other)
+      : PassWrapper(other) {}
+
   Option<int>     smVersion{*this, "sm",
                             llvm::cl::desc("Target SM version"),
                             llvm::cl::init(90)};

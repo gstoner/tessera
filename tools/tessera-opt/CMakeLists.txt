@@ -7,10 +7,14 @@ target_link_libraries(tessera-opt PRIVATE
   MLIRSupport
   MLIRTransforms
   MLIRArithDialect
+  MLIRBufferizationDialect
   MLIRFuncDialect
   MLIRLLVMDialect
   MLIRROCDLDialect
   MLIRLinalgDialect
+  MLIRMemRefDialect
+  MLIRSCFDialect
+  MLIRTensorDialect
   MLIROptLib
 )
 

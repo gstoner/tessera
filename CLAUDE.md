@@ -319,7 +319,12 @@ Contract test: `tests/unit/test_target_ir_contract.py` and `tests/tessera-ir/pha
 
 ODS sets `usePropertiesForAttributes = 0` to keep the dialect header-only against MLIR 21's properties machinery. `tessera-opt` links the backend behind a `TESSERA_HAVE_APPLE_BACKEND` guard so non-Apple builds are unaffected.
 
-**Phase 8.2 — Apple CPU native execution (Accelerate).** New pass `AppleCPUToFunc` lowering `tessera_apple.cpu.*` → `func.call @cblas_sgemm` / `vDSP_*` / `vvN`-family. Runtime shim under `src/runtime/src/backend/apple_cpu_backend.cpp` linking `-framework Accelerate`. `@jit(target="apple_cpu")` initially gated on `execute=True`; the test suite migrates so the flag becomes the default.
+**Phase 8.2 — Apple CPU native execution (Accelerate)** — *in progress, C++ side done.*
+- Pass `MatmulToAppleCPU` (`lib/Target/Apple/Lowering/MatmulToAppleCPU.cpp`) lowers static-shape rank-2 f32 `tessera.matmul` to `func.call @tessera_apple_cpu_gemm_f32` over a memref/bufferization spine. Pipeline alias `tessera-lower-to-apple_cpu-runtime` (parallel to the artifact-only `tessera-lower-to-apple_cpu`).
+- Runtime shim `runtime/apple_cpu_runtime.cpp` is built as `TesseraAppleRuntime` and links `-framework Accelerate` on Darwin. Falls back to a portable reference kernel on non-Apple hosts so cross-platform CI stays green. Capability probe: `tessera_apple_cpu_runtime_has_accelerate()`.
+- Lit fixture `tests/tessera-ir/phase8/apple_cpu_runtime.mlir` covers both the positive (static f32) and negative (dynamic shape) paths.
+- Verified end-to-end on Apple Silicon: `cblas_sgemm` returns numerically correct output for a hand-checked 2×3 × 3×2 matmul through the runtime symbol.
+- *Open work:* Python `@jit(target="apple_cpu", execute=True)` plumbing — JIT-compile the lowered IR via MLIR's `ExecutionEngine`, register the runtime symbols, and dispatch from the existing `runtime.py` wrapper. Test suite migrates from `execute=True` opt-in toward the flag becoming default once correctness coverage lands.
 
 **Phase 8.3 — Apple GPU baseline via MPS.** New ODS ops `tessera_apple.gpu.mps_matmul` / `mps_softmax` / `mps_dispatch`. Pass `AppleGPUToMPS`. Runtime: Objective-C++ (`.mm`) `MetalDeviceContext` wrapping `MTLDevice` + `MTLCommandQueue` + `MPSMatrixMultiplication`. No `metal-cpp` vendoring.
 
@@ -410,6 +415,7 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | `tessera-lower-to-rocm` | AMD ROCm MFMA — Phase 8 |
 | `tessera-lower-to-metalium` | Tenstorrent Metalium — Phase 8 |
 | `tessera-lower-to-apple_cpu` | Apple Silicon CPU (Accelerate artifact) — Phase 8.1 |
+| `tessera-lower-to-apple_cpu-runtime` | Apple Silicon CPU runtime (cblas_sgemm via Accelerate) — Phase 8.2 |
 | `tessera-lower-to-apple_gpu` | Apple Silicon GPU (Metal artifact) — Phase 8.1 |
 | `tessera-cpx-pipeline` / `tessera-cpx-context-pipeline` | NV Rubin CPX (separate `tessera-cpx-opt` driver) |
 

@@ -31,6 +31,11 @@ struct MixedPrecisionPass
                                mlir::OperationPass<mlir::ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MixedPrecisionPass)
 
+  MixedPrecisionPass() = default;
+  MixedPrecisionPass(const MixedPrecisionPass &other)
+      : mlir::PassWrapper<MixedPrecisionPass,
+                          mlir::OperationPass<mlir::ModuleOp>>(other) {}
+
   mlir::StringRef getArgument() const final {
     return "tessera-linalg-mixed-precision";
   }
@@ -87,14 +92,8 @@ void buildTesseraLinalgSolverPipeline(mlir::OpPassManager &pm) {
 }
 
 void registerTesseraLinalgSolverPasses() {
-  mlir::PassRegistration<mlir::Pass> mixedPrecision(
-      "tessera-linalg-mixed-precision",
-      "Attach mixed-precision policies for linalg-backed solver regions",
-      []() { return createMixedPrecisionPass(); });
-  mlir::PassRegistration<mlir::Pass> iterativeRefinement(
-      "tessera-linalg-iterative-refinement",
-      "Wrap linalg-backed solver regions with iterative refinement",
-      []() { return createIterativeRefinementPass(); });
+  mlir::registerPass([]() { return createMixedPrecisionPass(); });
+  mlir::registerPass([]() { return createIterativeRefinementPass(); });
 }
 
 void registerTesseraLinalgSolverPipeline() {

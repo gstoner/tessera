@@ -19,12 +19,13 @@ using namespace tessera;
 namespace {
 
 static SmallVector<Range> get2DItrDomainFromResult(RankedTensorType resTy, Location loc, OpBuilder &b) {
-  auto c0 = b.getIndexAttr(0);
-  auto s0 = b.getIndexAttr(resTy.getDimSize(0));
-  auto s1 = b.getIndexAttr(resTy.getDimSize(1));
+  auto c0 = b.create<arith::ConstantIndexOp>(loc, 0).getResult();
+  auto c1 = b.create<arith::ConstantIndexOp>(loc, 1).getResult();
+  auto s0 = b.create<arith::ConstantIndexOp>(loc, resTy.getDimSize(0)).getResult();
+  auto s1 = b.create<arith::ConstantIndexOp>(loc, resTy.getDimSize(1)).getResult();
   return {
-    Range{b.create<arith::ConstantIndexOp>(loc, 0), b.create<arith::ConstantIndexOp>(loc, resTy.getDimSize(0)), b.create<arith::ConstantIndexOp>(loc, 1)},
-    Range{b.create<arith::ConstantIndexOp>(loc, 0), b.create<arith::ConstantIndexOp>(loc, resTy.getDimSize(1)), b.create<arith::ConstantIndexOp>(loc, 1)},
+    Range{c0, s0, c1},
+    Range{c0, s1, c1},
   };
 }
 

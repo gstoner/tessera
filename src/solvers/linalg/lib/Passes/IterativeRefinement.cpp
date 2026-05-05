@@ -29,6 +29,11 @@ struct IterativeRefinementPass
                                mlir::OperationPass<mlir::func::FuncOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(IterativeRefinementPass)
 
+  IterativeRefinementPass() = default;
+  IterativeRefinementPass(const IterativeRefinementPass &other)
+      : mlir::PassWrapper<IterativeRefinementPass,
+                          mlir::OperationPass<mlir::func::FuncOp>>(other) {}
+
   mlir::StringRef getArgument() const final {
     return "tessera-linalg-iterative-refinement";
   }
@@ -37,13 +42,13 @@ struct IterativeRefinementPass
            "(residual + correction loop)";
   }
 
-  llvm::cl::opt<int> maxIter{
-      "ir-max-iter",
+  mlir::Pass::Option<int> maxIter{
+      *this, "ir-max-iter",
       llvm::cl::desc("Max iterative-refinement iterations"),
       llvm::cl::init(3)};
 
-  llvm::cl::opt<double> tolerance{
-      "ir-tol",
+  mlir::Pass::Option<double> tolerance{
+      *this, "ir-tol",
       llvm::cl::desc("Convergence tolerance for iterative refinement"),
       llvm::cl::init(1e-6)};
 

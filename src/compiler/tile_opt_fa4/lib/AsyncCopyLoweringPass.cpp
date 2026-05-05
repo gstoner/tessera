@@ -157,6 +157,10 @@ struct AsyncCopyLoweringPass
     : public PassWrapper<AsyncCopyLoweringPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AsyncCopyLoweringPass)
 
+  AsyncCopyLoweringPass() = default;
+  AsyncCopyLoweringPass(const AsyncCopyLoweringPass &other)
+      : PassWrapper(other) {}
+
   Option<int> smVersion{*this, "sm",
                         llvm::cl::desc("Target SM version (e.g. 90 for Hopper)"),
                         llvm::cl::init(90)};

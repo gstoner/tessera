@@ -28,6 +28,14 @@ def GetrfOp : Op<Tessera_Solver_Dialect, "getrf", [Pure]> {
   }];
   let arguments = (ins AnyType:$A);
   let results = (outs AnyType:$LU, AnyType:$Pivots);
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$LUType, "::mlir::Type":$pivotsType,
+                   "::mlir::Value":$A), [{
+      $_state.addTypes({LUType, pivotsType});
+      $_state.addOperands(A);
+    }]>
+  ];
   let hasVerifier = 1;
   let assemblyFormat = "$A attr-dict `:` type($A) `->` type($LU) `,` type($Pivots)";
 }
@@ -37,6 +45,14 @@ def TrsmOp : Op<Tessera_Solver_Dialect, "trsm", [Pure]> {
   let summary = "Triangular solve";
   let arguments = (ins AnyType:$Tri, AnyType:$B);
   let results = (outs AnyType:$X);
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$XType, "::mlir::Value":$Tri,
+                   "::mlir::Value":$B), [{
+      $_state.addTypes(XType);
+      $_state.addOperands({Tri, B});
+    }]>
+  ];
   let hasVerifier = 0;
   let assemblyFormat = "$Tri `,` $B attr-dict `:` type($Tri) `,` type($B) `->` type($X)";
 }
@@ -46,6 +62,13 @@ def PotrfOp : Op<Tessera_Solver_Dialect, "potrf", [Pure]> {
   let summary = "Cholesky factorization";
   let arguments = (ins AnyType:$A);
   let results = (outs AnyType:$L);
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$LType, "::mlir::Value":$A), [{
+      $_state.addTypes(LType);
+      $_state.addOperands(A);
+    }]>
+  ];
   let hasVerifier = 1;
   let assemblyFormat = "$A attr-dict `:` type($A) `->` type($L)";
 }
@@ -55,6 +78,14 @@ def PotrsOp : Op<Tessera_Solver_Dialect, "potrs", [Pure]> {
   let summary = "Solve using Cholesky factors";
   let arguments = (ins AnyType:$L, AnyType:$B);
   let results = (outs AnyType:$X);
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$XType, "::mlir::Value":$L,
+                   "::mlir::Value":$B), [{
+      $_state.addTypes(XType);
+      $_state.addOperands({L, B});
+    }]>
+  ];
   let hasVerifier = 0;
   let assemblyFormat = "$L `,` $B attr-dict `:` type($L) `,` type($B) `->` type($X)";
 }
@@ -64,6 +95,15 @@ def IRStepOp : Op<Tessera_Solver_Dialect, "ir_step", [Pure]> {
   let summary = "Single iterative refinement step (x_{k+1}, r)";
   let arguments = (ins AnyType:$A, AnyType:$xk, AnyType:$b);
   let results = (outs AnyType:$xkp1, AnyType:$r);
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$xkp1Type, "::mlir::Type":$rType,
+                   "::mlir::Value":$A, "::mlir::Value":$xk,
+                   "::mlir::Value":$b), [{
+      $_state.addTypes({xkp1Type, rType});
+      $_state.addOperands({A, xk, b});
+    }]>
+  ];
   let hasVerifier = 0;
   let assemblyFormat = "$A `,` $xk `,` $b attr-dict `:` type($A) `,` type($xk) `,` type($b) `->` type($xkp1) `,` type($r)";
 }

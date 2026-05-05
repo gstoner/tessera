@@ -65,7 +65,7 @@ static bool isProducerOp(Operation *op) {
 
 static bool isConsumerOp(Operation *op) {
   StringRef name = op->getName().getStringRef();
-  return name.startswith("tessera.attn.") || name == "tile.mma";
+  return name.starts_with("tessera.attn.") || name == "tile.mma";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

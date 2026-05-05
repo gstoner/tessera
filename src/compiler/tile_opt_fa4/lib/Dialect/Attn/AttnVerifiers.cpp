@@ -2,12 +2,13 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Operation.h"
+#include "llvm/Support/Casting.h"
 using namespace mlir;
 namespace tessera { namespace attn {
 
 // Ensure that when scores is memref<RxCxf32>, lse is memref<Rxf32> (R rows)
 static bool getMemRefShape(Type t, SmallVector<int64_t,2> &shape) {
-  if (auto mr = t.dyn_cast<MemRefType>()) {
+  if (auto mr = llvm::dyn_cast<MemRefType>(t)) {
     for (auto d : mr.getShape()) shape.push_back(d);
     return true;
   }

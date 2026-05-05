@@ -1,12 +1,15 @@
 
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
-#include "mlir/InitAllDialects.h"
-#include "mlir/InitAllPasses.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
@@ -63,8 +66,6 @@ int main(int argc, char **argv) {
 
   return failed(mlir::MlirOptMain(argc, argv, "tessera-opt\n", registry));
 #else
-  mlir::registerAllPasses();
-
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
   tessera::registerTesseraPasses();
 #endif
@@ -97,7 +98,16 @@ int main(int argc, char **argv) {
 #endif
 
   mlir::DialectRegistry registry;
-  mlir::registerAllDialects(registry);
+  registry.insert<mlir::arith::ArithDialect,
+                  mlir::bufferization::BufferizationDialect,
+                  mlir::func::FuncDialect,
+                  mlir::linalg::LinalgDialect,
+                  mlir::memref::MemRefDialect,
+                  mlir::scf::SCFDialect,
+                  mlir::tensor::TensorDialect,
+                  mlir::LLVM::LLVMDialect,
+                  mlir::NVVM::NVVMDialect,
+                  mlir::ROCDL::ROCDLDialect>();
 
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
   tessera::registerTesseraDialects(registry);

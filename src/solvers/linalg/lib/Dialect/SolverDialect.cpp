@@ -1,13 +1,15 @@
 #include "tessera/Dialect/Solver/SolverDialect.h"
 
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 
 namespace tessera {
 namespace solver {
 
-void Tessera_Solver_Dialect::initialize() {
+void TesseraSolverDialect::initialize() {
   addAttributes<PrecisionPolicyAttr>();
   addOperations<
 #define GET_OP_LIST
@@ -16,17 +18,17 @@ void Tessera_Solver_Dialect::initialize() {
 }
 
 void registerTesseraLinalgSolverDialect(DialectRegistry &registry) {
-  registry.insert<Tessera_Solver_Dialect>();
+  registry.insert<TesseraSolverDialect>();
 }
 
 LogicalResult GetrfOp::verify() { return success(); }
 LogicalResult PotrfOp::verify() { return success(); }
+
+} // namespace solver
+} // namespace tessera
 
 #define GET_ATTRDEF_CLASSES
 #include "TesseraLinalgSolverAttrs.cpp.inc"
 #define GET_OP_CLASSES
 #include "TesseraLinalgSolverOps.cpp.inc"
 #include "TesseraLinalgSolverDialect.cpp.inc"
-
-} // namespace solver
-} // namespace tessera

@@ -134,6 +134,10 @@ struct GPUCollectiveInsertionPass
     : public PassWrapper<GPUCollectiveInsertionPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GPUCollectiveInsertionPass)
 
+  GPUCollectiveInsertionPass() = default;
+  GPUCollectiveInsertionPass(const GPUCollectiveInsertionPass &other)
+      : PassWrapper(other) {}
+
   Option<std::string> dpAxisOpt{
       *this, "dp-axis",
       llvm::cl::desc("Mesh axis name for data parallelism"),

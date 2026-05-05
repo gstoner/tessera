@@ -125,10 +125,10 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
     // running_m init: -inf  (f32 per row)
     // running_l init:  0.0  (f32 per row)
     Value negInf = rewriter.create<arith::ConstantFloatOp>(
-        loc, llvm::APFloat::getInf(llvm::APFloat::IEEEsingle(), /*neg=*/true),
-        rewriter.getF32Type());
+        loc, rewriter.getF32Type(),
+        llvm::APFloat::getInf(llvm::APFloat::IEEEsingle(), /*neg=*/true));
     Value zero = rewriter.create<arith::ConstantFloatOp>(
-        loc, llvm::APFloat(0.0f), rewriter.getF32Type());
+        loc, rewriter.getF32Type(), llvm::APFloat(0.0f));
 
     // Accumulator output init: zero tensor same shape as Q result.
     Type outType = op->getResultTypes().empty()
@@ -251,6 +251,10 @@ struct LowerSchedulePrefetchToTileCopy : public RewritePattern {
 struct TileIRLoweringPass
     : public PassWrapper<TileIRLoweringPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TileIRLoweringPass)
+
+  TileIRLoweringPass() = default;
+  TileIRLoweringPass(const TileIRLoweringPass &other)
+      : PassWrapper(other) {}
 
   Option<int64_t> tileQ{*this, "tile-q",
                         llvm::cl::desc("Q tile rows for flash attention"),

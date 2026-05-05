@@ -43,6 +43,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Casting.h"
 
 using namespace mlir;
 
@@ -67,7 +68,7 @@ static func::FuncOp ensureExternalDecl(ModuleOp mod, StringRef name,
 // Returns the i64 value representing the aligned data pointer.
 static Value extractPtr(OpBuilder &b, Location loc, Value tensor,
                         MemRefType memTy) {
-  auto buf = b.create<bufferization::ToMemrefOp>(loc, memTy, tensor);
+  auto buf = b.create<bufferization::ToBufferOp>(loc, memTy, tensor);
   auto ptrIdx =
       b.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buf);
   return b.create<arith::IndexCastOp>(loc, b.getI64Type(), ptrIdx);
@@ -90,8 +91,8 @@ struct LowerMatmulToX86 : public RewritePattern {
     Value lhs = op->getOperand(0);
     Value rhs = op->getOperand(1);
 
-    auto lhsTy = lhs.getType().dyn_cast<RankedTensorType>();
-    auto rhsTy = rhs.getType().dyn_cast<RankedTensorType>();
+    auto lhsTy = llvm::dyn_cast<RankedTensorType>(lhs.getType());
+    auto rhsTy = llvm::dyn_cast<RankedTensorType>(rhs.getType());
     if (!lhsTy || !rhsTy || lhsTy.getRank() != 2 || rhsTy.getRank() != 2)
       return failure();
 
@@ -139,7 +140,7 @@ struct LowerMatmulToX86 : public RewritePattern {
     Value Nv = rewriter.create<arith::ConstantIntOp>(loc, N, 32);
     Value Kv = rewriter.create<arith::ConstantIntOp>(loc, K, 32);
     Value betaV = rewriter.create<arith::ConstantFloatOp>(
-        loc, APFloat(0.0f), f32Ty);
+        loc, llvm::cast<FloatType>(f32Ty), APFloat(0.0f));
 
     // ── Declare and call the x86 kernel ───────────────────────────────────
     StringRef kernelName = preferAMX_ ? "tessera_x86_amx_gemm_bf16"
@@ -184,8 +185,8 @@ struct LowerFusedEpilogueToX86 : public RewritePattern {
     Value rhs  = op->getOperand(1);
     Value bias = op->getOperand(2);
 
-    auto lhsTy = lhs.getType().dyn_cast<RankedTensorType>();
-    auto rhsTy = rhs.getType().dyn_cast<RankedTensorType>();
+    auto lhsTy = llvm::dyn_cast<RankedTensorType>(lhs.getType());
+    auto rhsTy = llvm::dyn_cast<RankedTensorType>(rhs.getType());
     if (!lhsTy || !rhsTy || lhsTy.getRank() != 2 || rhsTy.getRank() != 2)
       return failure();
     Type lhsElem = lhsTy.getElementType();
@@ -231,7 +232,7 @@ struct LowerFusedEpilogueToX86 : public RewritePattern {
     Value Nv = rewriter.create<arith::ConstantIntOp>(loc, N, 32);
     Value Kv = rewriter.create<arith::ConstantIntOp>(loc, K, 32);
     Value betaV = rewriter.create<arith::ConstantFloatOp>(
-        loc, APFloat(0.0f), f32Ty);
+        loc, llvm::cast<FloatType>(f32Ty), APFloat(0.0f));
 
     StringRef gemmName = preferAMX_ ? "tessera_x86_amx_gemm_bf16"
                                     : "tessera_x86_avx512_gemm_bf16";
@@ -247,7 +248,7 @@ struct LowerFusedEpilogueToX86 : public RewritePattern {
                    op->getAttrOfType<BoolAttr>("has_bias").getValue();
     if (hasBias) {
       // Extract bias pointer.
-      auto biasTy = bias.getType().dyn_cast<RankedTensorType>();
+      auto biasTy = llvm::dyn_cast<RankedTensorType>(bias.getType());
       if (biasTy && !biasTy.isDynamicDim(0)) {
         auto biasMemTy = MemRefType::get({N}, f32Ty);
         Value biasPtr = extractPtr(rewriter, loc, bias, biasMemTy);
@@ -286,6 +287,10 @@ private:
 struct TileToX86PassImpl
     : public PassWrapper<TileToX86PassImpl, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TileToX86PassImpl)
+
+  TileToX86PassImpl() = default;
+  TileToX86PassImpl(const TileToX86PassImpl &other)
+      : PassWrapper(other) {}
 
   Option<bool> preferAMXOpt{
       *this, "prefer-amx",

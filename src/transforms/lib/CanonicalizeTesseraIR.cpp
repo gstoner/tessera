@@ -91,6 +91,10 @@ struct TransposeIntoMatmul : public RewritePattern {
 };
 struct Canon : public PassWrapper<Canon, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(Canon)
+  StringRef getArgument() const override { return "tessera-canonicalize"; }
+  StringRef getDescription() const override {
+    return "Canonicalize high-level Tessera IR patterns";
+  }
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     patterns.add<FuseMatmulBiasGELU, FuseConvRelu, DropoutZeroSimplify, TransposeIntoMatmul>(&getContext());

@@ -137,7 +137,7 @@ struct EffectAnnotation
     mod.walk([&](func::FuncOp func) {
       // Read the pre-existing annotation (set by @jit decorator).
       StringRef priorStr;
-      if (auto ea = func.getAttrOfType<StringAttr>("tessera.effect"))
+      if (auto ea = func->getAttrOfType<StringAttr>("tessera.effect"))
         priorStr = ea.getValue();
 
       // Infer from argument region annotations.
@@ -171,8 +171,8 @@ struct EffectAnnotation
           priorStr.empty() ? EffectLevel::Pure : parseEffectStr(priorStr);
       EffectLevel final_ = maxEffect(prior, inferred);
 
-      func.setAttr("tessera.effect",
-                   StringAttr::get(func.getContext(), effectStr(final_)));
+      func->setAttr("tessera.effect",
+                    StringAttr::get(func.getContext(), effectStr(final_)));
     });
   }
 };

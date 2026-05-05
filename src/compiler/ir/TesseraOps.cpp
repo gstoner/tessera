@@ -3,12 +3,13 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/Support/LogicalResult.h"
+#include "llvm/ADT/StringSwitch.h"
 
 using namespace mlir;
 
-namespace tessera {
-
 #include "TesseraOpsEnums.cpp.inc"
+
+namespace tessera {
 
 LogicalResult MatmulOp::verify() {
   auto lhsType = dyn_cast<RankedTensorType>(getLhs().getType());
@@ -42,7 +43,7 @@ LogicalResult FlashAttnOp::verify() {
   if (getHeadDim() <= 0)
     return emitOpError("head_dim must be positive");
   if (auto dropout = getDropoutP()) {
-    double p = dropout->getValueAsDouble();
+    double p = dropout->convertToDouble();
     if (p < 0.0 || p >= 1.0)
       return emitOpError("dropout_p must satisfy 0 <= p < 1");
   }
@@ -58,7 +59,18 @@ LogicalResult FusedEpilogueOp::verify() {
   return success();
 }
 
-#define GET_OP_CLASSES
-#include "TesseraOps.cpp.inc"
+LogicalResult DropoutOp::verify() { return success(); }
+LogicalResult KVCacheCreateOp::verify() { return success(); }
+LogicalResult RingCreateOp::verify() { return success(); }
+LogicalResult ArchParameterOp::verify() { return success(); }
+LogicalResult ArchGumbelSoftmaxOp::verify() { return success(); }
+LogicalResult ArchHardConcreteOp::verify() { return success(); }
+LogicalResult ArchSTEOneHotOp::verify() { return success(); }
+LogicalResult ArchWeightedSumOp::verify() { return success(); }
+LogicalResult ArchSwitchOp::verify() { return success(); }
+LogicalResult ArchMixedOp::verify() { return success(); }
 
 } // namespace tessera
+
+#define GET_OP_CLASSES
+#include "TesseraOps.cpp.inc"

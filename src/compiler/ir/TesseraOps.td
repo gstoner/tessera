@@ -7,11 +7,6 @@ include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/BuiltinAttributes.td"
 include "mlir/IR/CommonAttrConstraints.td"
 
-class StrEnumAttr<string name, string summaryText, list<string> cases>
-    : StringBasedAttr<StrAttrPred, summaryText> {
-  let summary = summaryText;
-}
-
 def Tessera_Dialect : Dialect {
   let name = "tessera";
   let cppNamespace = "::tessera";
@@ -38,14 +33,64 @@ def Tessera_EpilogueKind : I32EnumAttr<
 }
 def Tessera_EpilogueKindAttr : EnumAttr<Tessera_Dialect, Tessera_EpilogueKind, "epilogue">;
 
-def Tessera_StorageDType : StrEnumAttr<"StorageDType", "storage dtype",
-  ["f32", "bf16", "f16", "fp8_e4m3", "fp8_e5m2", "int8", "nvfp4"]>;
-def Tessera_AccumDType : StrEnumAttr<"AccumDType", "accumulator dtype",
-  ["f32", "f16", "bf16", "s32"]>;
-def Tessera_RoundingMode : StrEnumAttr<"RoundingMode", "rounding mode",
-  ["nearest_even", "stochastic", "toward_zero"]>;
-def Tessera_QuantAxis : StrEnumAttr<"QuantAxis", "quantization scale axis",
-  ["none", "per_tensor", "per_channel_0", "per_channel_1", "blockwise"]>;
+def Tessera_StorageDType : I32EnumAttr<
+  "StorageDType",
+  "storage dtype",
+  [
+    I32EnumAttrCase<"F32", 0, "f32">,
+    I32EnumAttrCase<"BF16", 1, "bf16">,
+    I32EnumAttrCase<"F16", 2, "f16">,
+    I32EnumAttrCase<"FP8E4M3", 3, "fp8_e4m3">,
+    I32EnumAttrCase<"FP8E5M2", 4, "fp8_e5m2">,
+    I32EnumAttrCase<"INT8", 5, "int8">,
+    I32EnumAttrCase<"NVFP4", 6, "nvfp4">
+  ]
+> {
+  let cppNamespace = "::tessera";
+}
+def Tessera_StorageDTypeAttr : EnumAttr<Tessera_Dialect, Tessera_StorageDType, "storage_dtype">;
+
+def Tessera_AccumDType : I32EnumAttr<
+  "AccumDType",
+  "accumulator dtype",
+  [
+    I32EnumAttrCase<"F32", 0, "f32">,
+    I32EnumAttrCase<"F16", 1, "f16">,
+    I32EnumAttrCase<"BF16", 2, "bf16">,
+    I32EnumAttrCase<"S32", 3, "s32">
+  ]
+> {
+  let cppNamespace = "::tessera";
+}
+def Tessera_AccumDTypeAttr : EnumAttr<Tessera_Dialect, Tessera_AccumDType, "accum_dtype">;
+
+def Tessera_RoundingMode : I32EnumAttr<
+  "RoundingMode",
+  "rounding mode",
+  [
+    I32EnumAttrCase<"NearestEven", 0, "nearest_even">,
+    I32EnumAttrCase<"Stochastic", 1, "stochastic">,
+    I32EnumAttrCase<"TowardZero", 2, "toward_zero">
+  ]
+> {
+  let cppNamespace = "::tessera";
+}
+def Tessera_RoundingModeAttr : EnumAttr<Tessera_Dialect, Tessera_RoundingMode, "rounding_mode">;
+
+def Tessera_QuantAxis : I32EnumAttr<
+  "QuantAxis",
+  "quantization scale axis",
+  [
+    I32EnumAttrCase<"None", 0, "none">,
+    I32EnumAttrCase<"PerTensor", 1, "per_tensor">,
+    I32EnumAttrCase<"PerChannel0", 2, "per_channel_0">,
+    I32EnumAttrCase<"PerChannel1", 3, "per_channel_1">,
+    I32EnumAttrCase<"Blockwise", 4, "blockwise">
+  ]
+> {
+  let cppNamespace = "::tessera";
+}
+def Tessera_QuantAxisAttr : EnumAttr<Tessera_Dialect, Tessera_QuantAxis, "quant_axis">;
 
 def Tessera_NumericPolicyAttr
     : DictionaryAttrBase<CPred<"::llvm::isa<::mlir::DictionaryAttr>($_self)">,
@@ -78,8 +123,19 @@ def Tessera_ArchGateType : TypeDef<Tessera_Dialect, "ArchGate"> {
   let summary = "Differentiable architecture gate vector";
 }
 
-def Tessera_ArchRelaxAttr : StrEnumAttr<"ArchRelax", "architecture relaxation",
-  ["softmax", "gumbel", "hard_concrete", "ste"]>;
+def Tessera_ArchRelax : I32EnumAttr<
+  "ArchRelax",
+  "architecture relaxation",
+  [
+    I32EnumAttrCase<"Softmax", 0, "softmax">,
+    I32EnumAttrCase<"Gumbel", 1, "gumbel">,
+    I32EnumAttrCase<"HardConcrete", 2, "hard_concrete">,
+    I32EnumAttrCase<"Ste", 3, "ste">
+  ]
+> {
+  let cppNamespace = "::tessera";
+}
+def Tessera_ArchRelaxAttr : EnumAttr<Tessera_Dialect, Tessera_ArchRelax, "arch_relax">;
 
 def Tessera_MatmulOp : Op<
   Tessera_Dialect, "matmul",

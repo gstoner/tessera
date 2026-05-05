@@ -35,6 +35,7 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace mlir;
@@ -44,6 +45,10 @@ namespace {
 struct DistributionLowering
     : public PassWrapper<DistributionLowering, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(DistributionLowering)
+
+  DistributionLowering() = default;
+  DistributionLowering(const DistributionLowering &other)
+      : PassWrapper(other) {}
 
   Option<std::string> meshAxesOpt{
       *this, "mesh-axes",
@@ -95,12 +100,12 @@ struct DistributionLowering
         if (!shardAttr) continue;
         if (auto axAttr = shardAttr.getAs<ArrayAttr>("axes")) {
           for (auto a : axAttr)
-            if (auto sa = a.dyn_cast<StringAttr>())
+            if (auto sa = llvm::dyn_cast<StringAttr>(a))
               shardAxes.push_back(sa.getValue().str());
         }
         if (auto szAttr = shardAttr.getAs<ArrayAttr>("sizes")) {
           for (auto a : szAttr)
-            if (auto ia = a.dyn_cast<IntegerAttr>())
+            if (auto ia = llvm::dyn_cast<IntegerAttr>(a))
               shardSizes.push_back(ia.getInt());
         }
       }

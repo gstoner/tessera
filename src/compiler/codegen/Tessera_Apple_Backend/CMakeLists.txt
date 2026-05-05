@@ -83,3 +83,22 @@ foreach(_inc TesseraAppleOps.h.inc TesseraAppleOps.cpp.inc
 endforeach()
 add_custom_target(TesseraAppleStagedIncs DEPENDS ${_STAGED_INC})
 add_dependencies(TesseraApple TesseraAppleStagedIncs)
+
+# ------------------------------------------------------------------
+# TesseraAppleRuntime: Accelerate-backed runtime shim
+#
+# Phase 8.2 — provides the C-ABI symbols emitted by MatmulToAppleCPUPass.
+# Built unconditionally so cross-platform CI compiles the library; on Darwin
+# the symbols dispatch to Accelerate's CBLAS, elsewhere they fall through to a
+# portable reference kernel.
+# ------------------------------------------------------------------
+add_library(TesseraAppleRuntime STATIC
+  runtime/apple_cpu_runtime.cpp
+)
+target_include_directories(TesseraAppleRuntime PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/runtime
+)
+if(APPLE)
+  target_link_libraries(TesseraAppleRuntime PUBLIC "-framework Accelerate")
+endif()
+

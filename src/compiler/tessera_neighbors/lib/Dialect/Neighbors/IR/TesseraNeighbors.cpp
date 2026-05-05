@@ -41,6 +41,8 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <optional>
@@ -55,32 +57,23 @@ namespace tessera {
 namespace neighbors {
 
 // ---------------------------------------------------------------------------
-// Type storage helpers (singleton types — no parameters)
+// Type wrappers (singleton types — no parameters)
 // ---------------------------------------------------------------------------
 
-/// Storage class shared by TopologyType and HaloType (no parameters needed).
-struct SimpleTypeStorage : public TypeStorage {
-  using KeyTy = int;
-  static SimpleTypeStorage *construct(TypeStorageAllocator &alloc, KeyTy) {
-    return new (alloc.allocate<SimpleTypeStorage>()) SimpleTypeStorage{};
-  }
-  bool operator==(const KeyTy &) const { return true; }
-};
-
-struct TopologyType : public Type::TypeBase<TopologyType, Type, SimpleTypeStorage> {
+struct TopologyType : public Type::TypeBase<TopologyType, Type, TypeStorage> {
   using Base::Base;
   static TopologyType get(MLIRContext *ctx) {
-    return Base::get(ctx, 0);
+    return Base::get(ctx);
   }
-  static llvm::StringRef name() { return "topology"; }
+  static constexpr llvm::StringLiteral name = "tessera.neighbors.topology";
 };
 
-struct HaloType : public Type::TypeBase<HaloType, Type, SimpleTypeStorage> {
+struct HaloType : public Type::TypeBase<HaloType, Type, TypeStorage> {
   using Base::Base;
   static HaloType get(MLIRContext *ctx) {
-    return Base::get(ctx, 0);
+    return Base::get(ctx);
   }
-  static llvm::StringRef name() { return "halo"; }
+  static constexpr llvm::StringLiteral name = "tessera.neighbors.halo";
 };
 
 // ---------------------------------------------------------------------------
@@ -116,7 +109,8 @@ struct DeltaArrayAttr : public Attribute::AttrBase<DeltaArrayAttr, Attribute,
   llvm::ArrayRef<int64_t> getValues() const {
     return getImpl()->values;
   }
-  static llvm::StringRef name() { return "delta_array"; }
+  static constexpr llvm::StringLiteral name =
+      "tessera.neighbors.delta_array";
 };
 
 // ---------------------------------------------------------------------------
@@ -155,8 +149,8 @@ public:
 
   // Print a dialect type.
   void printType(Type type, DialectAsmPrinter &printer) const override {
-    if (type.isa<TopologyType>()) { printer << "topology"; return; }
-    if (type.isa<HaloType>())     { printer << "halo";     return; }
+    if (llvm::isa<TopologyType>(type)) { printer << "topology"; return; }
+    if (llvm::isa<HaloType>(type))     { printer << "halo";     return; }
     printer << "unknown";
   }
 
@@ -172,7 +166,7 @@ public:
         int64_t v;
         if (parser.parseInteger(v)) return {};
         vals.push_back(v);
-        parser.parseOptionalComma();
+        (void)parser.parseOptionalComma();
       }
       if (parser.parseGreater()) return {};
       return DeltaArrayAttr::get(getContext(), vals);
@@ -185,7 +179,7 @@ public:
   // Print a dialect attribute.
   void printAttribute(Attribute attr,
                       DialectAsmPrinter &printer) const override {
-    if (auto da = attr.dyn_cast<DeltaArrayAttr>()) {
+    if (auto da = llvm::dyn_cast<DeltaArrayAttr>(attr)) {
       printer << "delta_array<[";
       llvm::interleaveComma(da.getValues(), printer);
       printer << "]>";
@@ -207,6 +201,7 @@ struct CreateTopologyOp
   static llvm::StringRef getOperationName() {
     return "tessera.neighbors.topology.create";
   }
+  static llvm::ArrayRef<llvm::StringRef> getAttributeNames() { return {}; }
   static ParseResult parse(OpAsmParser &, OperationState &) {
     return success();
   }
@@ -230,12 +225,14 @@ struct HaloRegionOp
   static llvm::StringRef getOperationName() {
     return "tessera.neighbors.halo.region";
   }
+  static llvm::ArrayRef<llvm::StringRef> getAttributeNames() { return {}; }
   static ParseResult parse(OpAsmParser &p, OperationState &result) {
     OpAsmParser::UnresolvedOperand tile;
     Type tileType;
     if (p.parseOperand(tile) || p.parseColonType(tileType)) return failure();
     if (p.resolveOperand(tile, tileType, result.operands)) return failure();
-    p.parseOptionalAttrDict(result.attributes);
+    if (p.parseOptionalAttrDict(result.attributes))
+      return failure();
     result.addTypes(HaloType::get(result.getContext()));
     return success();
   }
@@ -254,12 +251,14 @@ struct HaloExchangeOp
   static llvm::StringRef getOperationName() {
     return "tessera.neighbors.halo.exchange";
   }
+  static llvm::ArrayRef<llvm::StringRef> getAttributeNames() { return {}; }
   static ParseResult parse(OpAsmParser &p, OperationState &result) {
     OpAsmParser::UnresolvedOperand halo;
     Type haloType;
     if (p.parseOperand(halo) || p.parseColonType(haloType)) return failure();
     if (p.resolveOperand(halo, haloType, result.operands)) return failure();
-    p.parseOptionalAttrDict(result.attributes);
+    if (p.parseOptionalAttrDict(result.attributes))
+      return failure();
     result.addTypes(IndexType::get(result.getContext())); // token as index
     return success();
   }
@@ -268,7 +267,7 @@ struct HaloExchangeOp
     p.printOptionalAttrDict((*this)->getAttrs());
   }
   LogicalResult verify() {
-    if (!getOperand(0).getType().isa<HaloType>())
+    if (!llvm::isa<HaloType>(getOperand(0).getType()))
       return emitOpError("operand must be !tessera.neighbors.halo");
     return success();
   }
@@ -282,27 +281,32 @@ struct NeighborReadOp
   static llvm::StringRef getOperationName() {
     return "tessera.neighbors.neighbor.read";
   }
+  static llvm::ArrayRef<llvm::StringRef> getAttributeNames() { return {}; }
   static ParseResult parse(OpAsmParser &p, OperationState &result) {
     OpAsmParser::UnresolvedOperand tile, topo;
-    Type tileType, topoType, outType;
+    Type tileType;
+    SmallVector<Type> resultTypes;
     if (p.parseOperand(tile) || p.parseComma() ||
         p.parseOperand(topo) || p.parseComma()) return failure();
     // parse the delta_array attribute inline
     Attribute delta;
     if (p.parseAttribute(delta)) return failure();
     result.addAttribute("delta", delta);
-    if (p.parseColonType(tileType) || p.parseArrowTypeList({outType}))
+    if (p.parseColonType(tileType) || p.parseArrowTypeList(resultTypes) ||
+        resultTypes.size() != 1)
       return failure();
     if (p.resolveOperand(tile, tileType, result.operands)) return failure();
-    if (p.resolveOperand(topo, topoType, result.operands)) return failure();
-    result.addTypes(outType);
+    if (p.resolveOperand(topo, TopologyType::get(result.getContext()),
+                         result.operands))
+      return failure();
+    result.addTypes(resultTypes[0]);
     return success();
   }
   void print(OpAsmPrinter &p) {
     p << " " << getOperand(0) << ", " << getOperand(1) << ", ";
     p.printAttribute((*this)->getAttr("delta"));
     p << " : " << getOperand(0).getType() << " -> "
-      << getResult(0).getType();
+      << (*this)->getResult(0).getType();
   }
   LogicalResult verify() {
     if (!(*this)->getAttr("delta"))
@@ -319,8 +323,10 @@ struct StencilDefineOp
   static llvm::StringRef getOperationName() {
     return "tessera.neighbors.stencil.define";
   }
+  static llvm::ArrayRef<llvm::StringRef> getAttributeNames() { return {}; }
   static ParseResult parse(OpAsmParser &p, OperationState &result) {
-    p.parseOptionalAttrDict(result.attributes);
+    if (p.parseOptionalAttrDict(result.attributes))
+      return failure();
     result.addTypes(IndexType::get(result.getContext())); // stencil as opaque index
     return success();
   }
@@ -343,6 +349,7 @@ struct StencilApplyOp
   static llvm::StringRef getOperationName() {
     return "tessera.neighbors.stencil.apply";
   }
+  static llvm::ArrayRef<llvm::StringRef> getAttributeNames() { return {}; }
   static ParseResult parse(OpAsmParser &p, OperationState &result) {
     SmallVector<OpAsmParser::UnresolvedOperand> operands(3);
     SmallVector<Type> types(3);
@@ -374,9 +381,9 @@ struct PipelineConfigOp
   static llvm::StringRef getOperationName() {
     return "tessera.neighbors.pipeline.config";
   }
+  static llvm::ArrayRef<llvm::StringRef> getAttributeNames() { return {}; }
   static ParseResult parse(OpAsmParser &p, OperationState &result) {
-    p.parseOptionalAttrDict(result.attributes);
-    return success();
+    return p.parseOptionalAttrDict(result.attributes);
   }
   void print(OpAsmPrinter &p) {
     p << " ";

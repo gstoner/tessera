@@ -1,3 +1,5 @@
-2.428102e-02 phase8/apple_cpu_lowering.mlir
-2.453899e-02 phase8/apple_dialect_roundtrip.mlir
-2.435493e-02 phase8/apple_gpu_lowering.mlir
+2.572513e-02 phase8/apple_cpu_lowering.mlir
+2.837396e-02 phase8/apple_dialect_roundtrip.mlir
+2.831101e-02 phase8/apple_gpu_lowering.mlir
+2.600408e-02 phase8/apple_cpu_runtime.mlir
+-5.121231e-04 phase8/target_ir_contracts.mlir

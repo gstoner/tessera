@@ -111,6 +111,10 @@ struct PipelineStageInsertionPass
     : public PassWrapper<PipelineStageInsertionPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PipelineStageInsertionPass)
 
+  PipelineStageInsertionPass() = default;
+  PipelineStageInsertionPass(const PipelineStageInsertionPass &other)
+      : PassWrapper(other) {}
+
   Option<int> numStagesOpt{
       *this, "num-stages",
       llvm::cl::desc("Pipeline stage count (overrides module attr)"),

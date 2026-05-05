@@ -2,6 +2,7 @@
 #include "Tessera/IR/TesseraOps.h"
 
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 
@@ -22,8 +23,8 @@ void registerTesseraDialects(DialectRegistry &registry) {
   registry.insert<TesseraDialect>();
 }
 
+} // namespace tessera
+
 #include "TesseraOpsDialect.cpp.inc"
 #define GET_TYPEDEF_CLASSES
 #include "TesseraOpsTypes.cpp.inc"
-
-} // namespace tessera

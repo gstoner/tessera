@@ -19,13 +19,20 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "mlir/Bytecode/BytecodeOpInterface.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Support/LogicalResult.h"
 
 // ODS-generated declarations (produced by mlir-tblgen from Attn.td).
 // Include the generated header; actual path depends on CMake binary dir.
+#include "AttnDialect.h.inc"
+#define GET_OP_CLASSES
 #include "AttnOps.h.inc"
 
 namespace tessera {
@@ -56,7 +63,8 @@ mlir::LogicalResult ScaledDotProductOp::verify() {
       qType.getDimSize(1) != kType.getDimSize(1))
     return emitOpError("query and key head_dim mismatch: ")
            << qType.getDimSize(1) << " vs " << kType.getDimSize(1);
-  if (getScale() <= 0.0f && getScale() != -1.0f)
+  double scale = getScale().convertToDouble();
+  if (scale <= 0.0 && scale != -1.0)
     return emitOpError("scale must be positive (or -1.0 as sentinel)");
   return mlir::success();
 }
@@ -74,9 +82,17 @@ mlir::LogicalResult OnlineSoftmaxOp::verify() {
   return mlir::success();
 }
 
-// ── Register dialect ops from ODS-generated definitions ──────────────────
-#include "AttnDialect.cpp.inc"
+void TesseraAttnDialect::initialize() {
+  addOperations<
+#define GET_OP_LIST
 #include "AttnOps.cpp.inc"
+      >();
+}
 
 } // namespace attn
 } // namespace tessera
+
+// ── Register dialect ops from ODS-generated definitions ──────────────────
+#include "AttnDialect.cpp.inc"
+#define GET_OP_CLASSES
+#include "AttnOps.cpp.inc"

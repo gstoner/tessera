@@ -3,7 +3,6 @@
 #define TESSERA_TPP_DIALECT
 
 include "mlir/IR/OpBase.td"
-include "mlir/IR/DialectSpecification.td"
 
 def TPP_Dialect : Dialect {
   let name = "tpp";

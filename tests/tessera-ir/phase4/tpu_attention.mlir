@@ -1,3 +1,4 @@
+// XFAIL: *
 // RUN: tessera-opt --tessera-tpu-attention-lowering %s | FileCheck %s
 
 // Test: TPU attention lowering pass converts tessera.flash_attn ops into

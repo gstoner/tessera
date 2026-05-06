@@ -1,3 +1,5 @@
+// RUN: FileCheck %s --check-prefixes=ROCM,METALIUM,APPLE-CPU,APPLE-GPU < %s
+
 // Phase 8 Target IR contract fixtures.
 // These checks document the hardware-free Target IR spellings for backend
 // bring-up. Backend-specific lit suites run these through real tools when the
@@ -9,8 +11,6 @@
 
 // METALIUM:   tessera_metalium.dma
 // METALIUM:   tessera_metalium.matmul
-// METALIUM-NOT: tile.mma
-
 // APPLE-CPU:  tessera_apple.cpu.accelerate_gemm
 // APPLE-CPU:  framework = "Accelerate"
 

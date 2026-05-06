@@ -19,6 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "tessera/sr/Passes.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
@@ -32,7 +33,7 @@ namespace {
 
 /// Estimate tensor memory in bytes from a shaped type (bf16 = 2 bytes).
 static int64_t estimateTensorBytes(Type ty) {
-  auto shaped = ty.dyn_cast<ShapedType>();
+  auto shaped = mlir::dyn_cast<ShapedType>(ty);
   if (!shaped || !shaped.hasStaticShape())
     return 4096; // conservative estimate for dynamic shapes
   int64_t elems = 1;
@@ -61,6 +62,10 @@ static bool isPureOp(Operation *op) {
 struct InsertRecomputePass
     : public PassWrapper<InsertRecomputePass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InsertRecomputePass)
+
+  InsertRecomputePass() = default;
+  InsertRecomputePass(const InsertRecomputePass& other)
+      : PassWrapper<InsertRecomputePass, OperationPass<ModuleOp>>(other) {}
 
   Option<int64_t> memoryBudgetMB{
       *this, "memory-budget-mb",

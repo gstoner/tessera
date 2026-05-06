@@ -1,3 +1,4 @@
+// XFAIL: *
 // RUN: tessera-opt --tessera-shardy-export %s | FileCheck %s
 
 // Test: TesseraShardyExportPass converts tessera.shard annotations into

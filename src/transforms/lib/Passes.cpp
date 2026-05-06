@@ -52,6 +52,10 @@ void registerTesseraPasses() {
   ::mlir::registerPass([]() { return createNVTMADescriptorPass(); });
   ::mlir::registerPass([]() { return createNVFlashAttnKernelEmitterPass(); });
 
+  // ── Phase 4 passes ────────────────────────────────────────────────────────
+  ::mlir::registerPass([]() { return createGPUCollectiveInsertionPass(); });
+  ::mlir::registerPass([]() { return createPipelineStageInsertionPass(); });
+
   // Full Phase 3 GPU lowering chain: Graph IR → SM_90 PTX.
   //
   // Pass order (normative — matches docs/spec/LOWERING_PIPELINE_SPEC.md §2.2):

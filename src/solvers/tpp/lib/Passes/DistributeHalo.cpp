@@ -1,5 +1,6 @@
 
 #include "mlir/Pass/Pass.h"
+#include "mlir/IR/BuiltinOps.h"
 using namespace mlir;
 namespace {
 struct DistributeHalo : public PassWrapper<DistributeHalo, OperationPass<ModuleOp>> {

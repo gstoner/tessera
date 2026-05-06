@@ -40,6 +40,14 @@ if(TARGET tessera_solvers_passes AND TARGET tessera_linalg_solver_passes)
   )
 endif()
 
+if(TARGET TesseraSR)
+  target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_SCALING_RESILIENCE)
+  target_include_directories(tessera-opt PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/solvers/scaling_resilience/include
+  )
+  target_link_libraries(tessera-opt PRIVATE TesseraSR)
+endif()
+
 if(TARGET TesseraNeighbors)
   target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_NEIGHBORS)
   target_include_directories(tessera-opt PRIVATE

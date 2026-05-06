@@ -9,7 +9,7 @@ struct LowerTPPToTargetIR : public PassWrapper<LowerTPPToTargetIR, OperationPass
   StringRef getDescription() const final { return "Lower TPP to Target-IR (sketch)"; }
   void runOnOperation() final {
     getOperation()->walk([&](Operation *op){
-      if (op->getName().getStringRef().endswith("tpp.bc.enforce")) {
+      if (op->getName().getStringRef().ends_with("tpp.bc.enforce")) {
         // Attach a synthetic attribute marking masked store lowering occurred.
         op->setAttr("lowered.bc.masked", UnitAttr::get(op->getContext()));
       }

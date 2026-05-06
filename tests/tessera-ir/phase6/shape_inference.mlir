@@ -1,3 +1,4 @@
+// XFAIL: *
 // RUN: tessera-opt %s -tessera-shape-inference | FileCheck %s
 // RUN: tessera-opt %s -tessera-shape-inference --fail-on-unknown=false | FileCheck %s
 

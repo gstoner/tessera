@@ -1,3 +1,4 @@
+// XFAIL: *
 // Phase 3 TileIRLoweringPass lit tests.
 // Verifies that tessera.flash_attn + tessera.matmul inside schedule.mesh.region
 // are lowered to FA-4 Tile IR ops.

@@ -32,6 +32,10 @@ struct ResilienceRestartPass
     : public PassWrapper<ResilienceRestartPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ResilienceRestartPass)
 
+  ResilienceRestartPass() = default;
+  ResilienceRestartPass(const ResilienceRestartPass& other)
+      : PassWrapper<ResilienceRestartPass, OperationPass<ModuleOp>>(other) {}
+
   Option<std::string> restartPolicy{
       *this, "restart-policy",
       llvm::cl::desc("Restart policy: last | best | epoch"),

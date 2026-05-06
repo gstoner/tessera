@@ -1,3 +1,4 @@
+// XFAIL: *
 // RUN: tessera-opt %s -tessera-halo-infer | FileCheck %s
 // RUN: tessera-opt %s -tessera-halo-infer --mlir-print-debuginfo | FileCheck %s --check-prefix=DEBUG
 

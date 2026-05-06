@@ -20,6 +20,11 @@ add_library(TesseraPasses
   # Phase 4 distributed training
   GPUCollectiveInsertionPass.cpp
   PipelineStageInsertionPass.cpp
+
+  # Phase 6 diagnostics
+  ${CMAKE_SOURCE_DIR}/src/compiler/diagnostics/ShapeInferencePass.cpp
+  ${CMAKE_SOURCE_DIR}/src/compiler/diagnostics/ErrorReporter.cpp
+
   ${CMAKE_SOURCE_DIR}/src/compiler/tile_opt_fa4/lib/WarpSpecializationPass.cpp
   ${CMAKE_SOURCE_DIR}/src/compiler/tile_opt_fa4/lib/AsyncCopyLoweringPass.cpp
   ${CMAKE_SOURCE_DIR}/src/compiler/codegen/tessera_gpu_backend_NVIDIA/NVWGMMALoweringPass.cpp

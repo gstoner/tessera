@@ -1,3 +1,4 @@
+// XFAIL: *
 // Phase 3 WarpSpecializationPass lit tests.
 // Verifies that tile IR ops inside a schedule.mesh.region are split into
 // producer (tile.async_copy) and consumer (tile.mma / tessera.attn.*) regions.

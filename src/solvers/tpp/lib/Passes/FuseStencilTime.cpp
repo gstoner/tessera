@@ -1,5 +1,6 @@
 
 #include "mlir/Pass/Pass.h"
+#include "mlir/IR/BuiltinOps.h"
 using namespace mlir;
 namespace {
 struct FuseStencilTime : public PassWrapper<FuseStencilTime, OperationPass<ModuleOp>> {

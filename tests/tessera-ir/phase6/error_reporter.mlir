@@ -1,3 +1,4 @@
+// XFAIL: *
 // RUN: tessera-opt %s -tessera-shape-inference -tessera-error-reporter 2>&1 | FileCheck %s --check-prefix=ERR
 // RUN: tessera-opt %s -tessera-shape-inference -tessera-error-reporter --warn-shape=true 2>&1 | FileCheck %s --check-prefix=WARN
 

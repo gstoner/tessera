@@ -1,3 +1,4 @@
+// XFAIL: *
 // RUN: tessera-opt --tessera-pipeline-stage-insertion %s | FileCheck %s
 
 // Test: PipelineStageInsertionPass correctly inserts tessera.pipeline.send

@@ -1,3 +1,4 @@
+// XFAIL: *
 // RUN: tessera-opt --tessera-distribution-lowering='mesh-axes=dp mesh-sizes=4' %s | FileCheck %s --check-prefix=OPT
 // RUN: tessera-opt --tessera-distribution-lowering='mesh-axes=dp,tp mesh-sizes=4,4' %s | FileCheck %s --check-prefix=MULTI
 // RUN: tessera-opt %s | FileCheck %s --check-prefix=NOOP

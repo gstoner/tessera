@@ -20,8 +20,9 @@ foreach(_td_rel
     get_filename_component(_td_name ${_td_rel} NAME_WE)
     set(_td_file ${PM_TD_INC_DIR}/${_td_rel}.td)
 
-    mlir_tablegen(${_td_name}.h.inc   -gen-op-decls -I ${PM_TD_INC_DIR} DEPENDS ${_td_file})
-    mlir_tablegen(${_td_name}.cpp.inc -gen-op-defs  -I ${PM_TD_INC_DIR} DEPENDS ${_td_file})
+    set(LLVM_TARGET_DEFINITIONS ${_td_file})
+    mlir_tablegen(${_td_name}.h.inc   -gen-op-decls -I ${PM_TD_INC_DIR})
+    mlir_tablegen(${_td_name}.cpp.inc -gen-op-defs  -I ${PM_TD_INC_DIR})
 endforeach()
 
 add_public_tablegen_target(TesseraPMTableGen)

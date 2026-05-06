@@ -30,6 +30,10 @@ struct OptimizerShardPass
     : public PassWrapper<OptimizerShardPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(OptimizerShardPass)
 
+  OptimizerShardPass() = default;
+  OptimizerShardPass(const OptimizerShardPass& other)
+      : PassWrapper<OptimizerShardPass, OperationPass<ModuleOp>>(other) {}
+
   Option<std::string> dpAxis{
       *this, "dp-axis",
       llvm::cl::desc("Data-parallel mesh axis name"),
@@ -73,7 +77,7 @@ struct OptimizerShardPass
       bool isOptimizerOp =
           opName.contains("optimizer") || opName.contains("momentum") ||
           opName.contains("variance") || opName.contains("adam") ||
-          opName.endswith("optimizer.shard") ||
+          opName.ends_with("optimizer.shard") ||
           op->hasAttr("tessera_sr.optimizer_state");
 
       if (!isOptimizerOp)

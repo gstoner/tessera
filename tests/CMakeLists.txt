@@ -18,7 +18,15 @@
 # ------------------------------------------------------------------
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
-set(LLVM_LIT       "${LLVM_TOOLS_BINARY_DIR}/llvm-lit")
+find_program(LLVM_LIT
+    NAMES llvm-lit lit.py lit
+    HINTS
+      "${LLVM_TOOLS_BINARY_DIR}"
+      "$ENV{HOME}/venv/bin"
+)
+if(NOT LLVM_LIT)
+    message(FATAL_ERROR "lit not found; install llvm-lit or Python lit")
+endif()
 set(TESSERA_LIT_CFGS ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Core test dependencies (add more as components mature)
@@ -41,7 +49,9 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tessera-ir)
     set(TESSERA_LIT_TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tessera-ir)
 
     add_custom_target(check-tessera-ir
-        COMMAND ${LLVM_LIT} -v ${TESSERA_LIT_TEST_DIR}
+        COMMAND ${CMAKE_COMMAND} -E env
+            "PATH=$<TARGET_FILE_DIR:tessera-opt>:${LLVM_TOOLS_BINARY_DIR}:$ENV{PATH}"
+            ${LLVM_LIT} -v ${TESSERA_LIT_TEST_DIR}
         DEPENDS ${TESSERA_TEST_DEPENDS}
         COMMENT "Running Tessera IR lit regression tests"
         USES_TERMINAL

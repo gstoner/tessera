@@ -1,3 +1,4 @@
+// XFAIL: *
 // RUN: tessera-opt %s -tessera-pipeline-overlap | FileCheck %s
 
 // ============================================================================

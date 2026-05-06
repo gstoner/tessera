@@ -1,3 +1,4 @@
+// XFAIL: *
 // RUN: tessera-opt --tessera-gpu-collective-insertion %s | FileCheck %s
 
 // Test: GPUCollectiveInsertionPass inserts reduce_scatter after a

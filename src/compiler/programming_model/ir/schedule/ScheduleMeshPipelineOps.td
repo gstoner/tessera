@@ -1,5 +1,6 @@
 //===- ScheduleMeshPipelineOps.td - Mesh & pipeline ops ------------------*- tablegen -*-===//
 include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def ScheduleDialect : Dialect {
@@ -96,17 +97,11 @@ def Schedule_OptimizerShardOp : Op<ScheduleDialect, "optimizer_shard"> {
   let hasVerifier = 1;
 }
 
-def Schedule_MemorySpaceAttr : StrEnumAttr<"MemorySpace", "memory space",
-  ["register", "shared", "lds", "global", "managed", "host", "tmem"]>;
-
-def Schedule_OverlapAttr : StrEnumAttr<"OverlapPolicy", "overlap policy",
-  ["none", "compute", "collective"]>;
-
 def Schedule_PrefetchOp : Op<ScheduleDialect, "prefetch"> {
   let summary = "Prefetch a value/cache into an explicit memory space";
   let arguments = (ins AnyType:$source,
-                       Schedule_MemorySpaceAttr:$into,
-                       Schedule_OverlapAttr:$overlap,
+                       StrAttr:$into,
+                       StrAttr:$overlap,
                        OptionalAttr<I32Attr>:$stage,
                        OptionalAttr<I32Attr>:$vector);
   let results = (outs AnyType:$staged);
@@ -117,10 +112,10 @@ def Schedule_PrefetchOp : Op<ScheduleDialect, "prefetch"> {
 def Schedule_AsyncCopyOp : Op<ScheduleDialect, "async_copy"> {
   let summary = "Schedule-level asynchronous movement before Tile IR lowering";
   let arguments = (ins AnyType:$src, AnyType:$dst,
-                       Schedule_MemorySpaceAttr:$src_space,
-                       Schedule_MemorySpaceAttr:$dst_space,
+                       StrAttr:$src_space,
+                       StrAttr:$dst_space,
                        I32Attr:$stage,
-                       Schedule_OverlapAttr:$overlap);
+                       StrAttr:$overlap);
   let results = (outs AnyType:$token);
   let assemblyFormat = "$src `,` $dst attr-dict `:` type($src) `,` type($dst) `->` type($token)";
   let hasVerifier = 1;

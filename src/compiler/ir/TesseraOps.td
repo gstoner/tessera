@@ -11,6 +11,8 @@ def Tessera_Dialect : Dialect {
   let name = "tessera";
   let cppNamespace = "::tessera";
   let summary = "Tessera Graph IR dialect";
+  let useDefaultTypePrinterParser = 1;
+  let isExtensible = 1;
   let description = [{
     Tessera Graph IR is the top layer of the canonical Tessera compiler IR
     stack. It models high-level tensor operations before Schedule IR, Tile IR,

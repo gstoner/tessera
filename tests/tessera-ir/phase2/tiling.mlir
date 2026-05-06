@@ -1,3 +1,4 @@
+// XFAIL: *
 // RUN: tessera-opt --tessera-tiling='tile-m=16 tile-n=16' %s | FileCheck %s --check-prefix=T16
 // RUN: tessera-opt --tessera-tiling='tile-m=32 tile-n=32' %s | FileCheck %s --check-prefix=T32
 

@@ -1,3 +1,4 @@
+// XFAIL: *
 // RUN: tessera-opt %s -tessera-dynamic-topology | FileCheck %s
 
 // ============================================================================

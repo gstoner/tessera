@@ -131,6 +131,10 @@ struct ErrorReporterPass
 
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ErrorReporterPass)
 
+  ErrorReporterPass() = default;
+  ErrorReporterPass(const ErrorReporterPass& other) : mlir::PassWrapper<
+      ErrorReporterPass, mlir::OperationPass<mlir::ModuleOp>>(other) {}
+
   // Pass options
   mlir::Pass::Option<unsigned> errorLimit{
       *this, "error-limit",

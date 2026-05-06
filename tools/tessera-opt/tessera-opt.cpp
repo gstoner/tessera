@@ -23,6 +23,10 @@
 #include "tessera/Solvers/LinalgPasses.h"
 #endif
 
+#ifdef TESSERA_HAVE_SCALING_RESILIENCE
+#include "tessera/sr/Passes.h"
+#endif
+
 #ifdef TESSERA_HAVE_NEIGHBORS
 #include "tessera/Dialect/Neighbors/IR/NeighborsDialect.h"
 #include "tessera/Dialect/Neighbors/Transforms/Passes.h"
@@ -40,6 +44,13 @@
 #ifdef TESSERA_HAVE_NVIDIA_BACKEND
 #include "tessera/gpu/BackendRegistration.h"
 #endif
+
+namespace tessera {
+namespace diagnostics {
+void registerShapeInferencePass();
+void registerErrorReporterPass();
+} // namespace diagnostics
+} // namespace tessera
 
 int main(int argc, char **argv) {
 #if (defined(TESSERA_HAVE_ROCM_BACKEND) || defined(TESSERA_HAVE_NVIDIA_BACKEND)) && !defined(TESSERA_HAVE_CORE_TESSERA_IR)
@@ -68,11 +79,17 @@ int main(int argc, char **argv) {
 #else
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
   tessera::registerTesseraPasses();
+  tessera::diagnostics::registerShapeInferencePass();
+  tessera::diagnostics::registerErrorReporterPass();
 #endif
 
 #ifdef TESSERA_HAVE_SOLVERS
   tessera::passes::registerTesseraSolversPipeline();
   tessera::solver::registerTesseraLinalgSolverPipeline();
+#endif
+
+#ifdef TESSERA_HAVE_SCALING_RESILIENCE
+  mlir::tessera::sr::registerPasses();
 #endif
 
 #ifdef TESSERA_HAVE_NEIGHBORS

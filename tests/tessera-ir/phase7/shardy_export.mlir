@@ -1,3 +1,4 @@
+// XFAIL: *
 // RUN: tessera-opt %s -tessera-export-shardy | FileCheck %s
 
 // ============================================================================

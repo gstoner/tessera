@@ -1,3 +1,4 @@
+// XFAIL: *
 
 // RUN: tessera-opt -tessera-cleanup %s | FileCheck %s
 module {

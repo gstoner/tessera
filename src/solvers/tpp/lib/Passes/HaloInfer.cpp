@@ -4,6 +4,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/SmallString.h"
 using namespace mlir;
 
 static StringRef HaloAttrName = "tpp.halo";
@@ -17,13 +18,15 @@ struct HaloInfer : public PassWrapper<HaloInfer, OperationPass<ModuleOp>> {
     m.walk([&](Operation *op){
       StringRef name = op->getName().getStringRef();
       // Very simple heuristic: if grad => halo (1,1,0); if stencil.apply => read 'radius' attr if present.
-      if (name.endswith("tpp.grad")) {
+      if (name.ends_with("tpp.grad")) {
         if (!op->hasAttr(HaloAttrName))
           op->setAttr(HaloAttrName, StringAttr::get(op->getContext(), "1,1,0"));
-      } else if (name.endswith("tpp.stencil.apply")) {
+      } else if (name.ends_with("tpp.stencil.apply")) {
         if (Attribute r = op->getAttr("radius")) {
           if (!op->hasAttr(HaloAttrName))
-            op->setAttr(HaloAttrName, cast<IntegerAttr>(r).getValue().toString(10) + StringRef(",") + "?,?");
+            op->setAttr(HaloAttrName, StringAttr::get(
+                op->getContext(),
+                (Twine(cast<IntegerAttr>(r).getInt()) + ",?,?").str()));
         } else {
           if (!op->hasAttr(HaloAttrName))
             op->setAttr(HaloAttrName, StringAttr::get(op->getContext(), "1,1,1"));

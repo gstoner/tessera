@@ -33,6 +33,7 @@
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Visitors.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -255,6 +256,10 @@ struct ShapeInferencePass
 
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ShapeInferencePass)
 
+  ShapeInferencePass() = default;
+  ShapeInferencePass(const ShapeInferencePass& other) : mlir::PassWrapper<
+      ShapeInferencePass, mlir::OperationPass<mlir::ModuleOp>>(other) {}
+
   mlir::Pass::Option<bool> failOnUnknown{
       *this, "fail-on-unknown",
       llvm::cl::desc("Fail the pass when no inference rule is found"),
@@ -279,7 +284,7 @@ struct ShapeInferencePass
 
       if (!inferred) {
         if (failOnUnknown) {
-          op->emitNote()
+          op->emitError()
               << "[tessera-shape-inference] no inference rule for '"
               << op->getName() << "'";
           signalPassFailure();

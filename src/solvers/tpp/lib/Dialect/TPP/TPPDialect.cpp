@@ -3,31 +3,44 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/TypeSwitch.h"
+
 #include "TPPDialect.h.inc"
+#define GET_TYPEDEF_CLASSES
+#include "TPPTypes.h.inc"
+#define GET_ATTRDEF_CLASSES
+#include "TPPAttrs.h.inc"
+#define GET_OP_CLASSES
+#include "TPPOps.h.inc"
 
-using namespace mlir;
-namespace tessera { namespace tpp {
+#define GET_TYPEDEF_CLASSES
+#include "TPPTypes.cpp.inc"
+#define GET_ATTRDEF_CLASSES
+#include "TPPAttrs.cpp.inc"
+#define GET_OP_CLASSES
+#include "TPPOps.cpp.inc"
 
-struct TPPDialectImpl {};
+namespace tessera {
+namespace tpp {
 
-class TPPDialect : public Dialect {
-public:
-  explicit TPPDialect(MLIRContext *ctx)
-      : Dialect("tpp", ctx, TypeID::get<TPPDialect>()) {
-    addTypes<
-      // declared via TPPTypes.cpp.inc registration
-    >();
-    addAttributes<
-      // declared via TPPAttrs.cpp.inc registration
-    >();
-    addOperations<
-      // declared via TPPOps.cpp.inc registration
-    >();
-  }
-};
+void TPPDialect::initialize() {
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "TPPTypes.cpp.inc"
+      >();
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "TPPAttrs.cpp.inc"
+      >();
+  addOperations<
+#define GET_OP_LIST
+#include "TPPOps.cpp.inc"
+      >();
+}
 
-}} // namespace
+} // namespace tpp
+} // namespace tessera
 
 #include "TPPDialect.cpp.inc"
-
-static DialectRegistration<tessera::tpp::TPPDialect> TPPReg;

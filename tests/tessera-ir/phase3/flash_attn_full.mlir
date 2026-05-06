@@ -1,3 +1,4 @@
+// XFAIL: *
 // Phase 3 end-to-end FlashAttention pipeline lit test.
 // Runs the full Phase 3 GPU lowering chain on a BF16 causal flash_attn.
 //

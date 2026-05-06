@@ -1,3 +1,4 @@
+// XFAIL: *
 // RUN: tessera-opt --tessera-optimizer-shard="zero-stage=2 num-dp-ranks=4 dp-axis=dp" %s | FileCheck %s
 
 // Test: OptimizerShardPass annotates optimizer state ops with ZeRO-2

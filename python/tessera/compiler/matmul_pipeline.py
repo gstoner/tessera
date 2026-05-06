@@ -21,6 +21,7 @@ import numpy as np
 from .graph_ir import GraphIRFunction, GraphIRModule, IROp
 from .op_catalog import GRAPH_OP_TO_SPEC, LEGACY_GRAPH_OP_ALIASES, SUPPORTED_CPU_OPS, canonical_graph_op_name
 from .schedule_ir import lower_graph_to_schedule_ir
+from .target_ir import lower_tile_to_target_ir
 from .tile_ir import lower_schedule_to_tile_ir
 
 
@@ -177,7 +178,7 @@ def build_cpu_plan(
     ops = tuple(fn.body)
     schedule = _render_schedule_ir(module, fn, ops, tile=tile, target_kind=target_kind)
     tile_ir = _render_tile_ir(module, fn, ops, tile=tile, target_kind=target_kind)
-    target = _render_target_ir(fn, ops, target_kind=target_kind)
+    target = _render_target_ir(module, fn, ops, tile=tile, target_kind=target_kind)
     return CPUPlan(
         function_name=fn.name,
         ops=ops,
@@ -266,15 +267,22 @@ def _render_tile_ir(
     return lower_schedule_to_tile_ir(schedule, target_kind=target_kind).to_mlir()
 
 
-def _render_target_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target_kind: str) -> str:
+def _render_target_ir(
+    module: GraphIRModule,
+    fn: GraphIRFunction,
+    ops: Sequence[IROp],
+    *,
+    tile: tuple[int, int, int],
+    target_kind: str,
+) -> str:
     if target_kind == "rocm":
-        return _render_rocm_target_ir(fn, ops)
+        return _render_object_target_ir(module, tile=tile, target_kind=target_kind)
     if target_kind == "metalium":
         return _render_metalium_target_ir(fn, ops)
     if target_kind == "apple_cpu":
-        return _render_apple_cpu_target_ir(fn, ops)
+        return _render_object_target_ir(module, tile=tile, target_kind=target_kind)
     if target_kind == "apple_gpu":
-        return _render_apple_gpu_target_ir(fn, ops)
+        return _render_object_target_ir(module, tile=tile, target_kind=target_kind)
     if target_kind.startswith("nvidia"):
         return _render_nvidia_target_ir(fn, ops, target_kind=target_kind)
     lines = [
@@ -291,6 +299,17 @@ def _render_target_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target_kind: 
         "}",
     ])
     return "\n".join(lines)
+
+
+def _render_object_target_ir(
+    module: GraphIRModule,
+    *,
+    tile: tuple[int, int, int],
+    target_kind: str,
+) -> str:
+    schedule = lower_graph_to_schedule_ir(module, tile=tile, target_kind=target_kind)
+    tile_module = lower_schedule_to_tile_ir(schedule, target_kind=target_kind)
+    return lower_tile_to_target_ir(tile_module, target_kind=target_kind).to_mlir()
 
 
 def _render_rocm_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:

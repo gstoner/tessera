@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-04-26
+last_updated: 2026-05-06
 ---
 
 > **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
@@ -11,9 +11,9 @@ last_updated: 2026-04-26
 *Scope:* Tile IR → Target IR → Binary (PTX, CUDA Tile IR, LLVM, ROCm, oneAPI)  
 *Status:* Draft v0.2 (with programmer context)
 
-> **API note:** Legacy Target IR inspection helpers shown in older examples do not exist.
-> The canonical inspection method is `fn.graph_ir.to_mlir()` (Graph IR only).
-> Target IR inspection is planned for Phase 4+. See `docs/CANONICAL_API.md`.
+> **API note:** Legacy Target IR inspection helpers shown in older examples are
+> superseded by `fn.target_ir` and `fn.lowering_artifacts()`. Apple and ROCm
+> artifacts are emitted from the verified Python `TargetIRModule` object model.
 
 ---
 
@@ -235,7 +235,7 @@ This workflow ensures **numerics and backend mappings are correct** before deplo
 ## 14. Summary for Programmers
 
 - **Target IR** is the **final IR before GPU/accelerator execution**.  
-- Use **`fn.graph_ir.to_mlir()`** for current Graph IR inspection; Target IR inspection is Phase 4 planned.  
+- Use **`fn.target_ir`** or `fn.lowering_artifacts()` for current Target IR inspection.  
 - It’s useful for debugging:  
   - Intrinsics (WGMMA/WMMA, XDLops, DPAS).  
   - Numerics policies (fp8→fp32 accum).  

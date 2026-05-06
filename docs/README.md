@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Documentation authority tree
-last_updated: 2026-05-04
+last_updated: 2026-05-06
 ---
 
 # Tessera Documentation Map
@@ -112,11 +112,13 @@ Use these labels consistently in active docs:
 
 | Area | Status | Source of truth |
 |------|--------|-----------------|
-| Python frontend, constraints, effects, Graph IR | implemented | `docs/CANONICAL_API.md`, `docs/spec/PYTHON_API_SPEC.md`, `python/tessera/` |
+| Python frontend, textual DSL frontend, constraints, effects, Graph IR | implemented | `docs/CANONICAL_API.md`, `docs/spec/PYTHON_API_SPEC.md`, `python/tessera/` |
+| Object-backed Schedule IR, Tile IR, and Apple/ROCm Target IR artifact lowering | implemented / lit-testable | `python/tessera/compiler/schedule_ir.py`, `tile_ir.py`, `target_ir.py`, `tests/unit/test_*_ir.py` |
 | x86/CPU lowering path and CPU execution artifacts | implemented / mock-runtime | `docs/spec/COMPILER_REFERENCE.md`, `python/tessera/compiler/matmul_pipeline.py`, `src/transforms/` |
 | NVIDIA SM90+ target artifacts and FA-4 lowering | implemented / lit-testable | `docs/spec/COMPILER_REFERENCE.md`, `src/compiler/tile_opt_fa4/`, `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` |
 | Distributed collectives and planner foundation | implemented / scaffolded | `src/collectives/`, `python/tessera/testing/mock_collective.py`, `tests/unit/test_nccl_adapter.py` |
 | TPU target profile and StableHLO/Shardy artifacts | implemented / lit-testable | `python/tessera/compiler/tpu_target.py`, `src/compiler/codegen/Tessera_TPU_Backend/`, `tests/tessera-ir/phase4/` |
 | Solver, RNG, sparse, linalg, and resilience passes | implemented / lit-testable | `src/solvers/`, `tests/unit/test_*solver*.py`, `tests/tessera-ir/phase5/` |
 | Runtime C ABI and Python wrapper | mock-runtime / hardware-runtime where C backend is built | `docs/spec/RUNTIME_ABI_SPEC.md`, `python/tessera/runtime.py`, `src/runtime/` |
-| ROCm, Metalium, Apple, Cerebras, Rubin CPX backends | scaffolded / lit-testable unless a backend doc says hardware-runtime | `src/compiler/codegen/`, `tests/tessera-ir/phase8/`, backend-specific tests |
+| ROCm and Apple artifact backends | implemented / lit-testable / artifact-only unless a backend doc says hardware-runtime | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_ROCM_Backend/`, `src/compiler/codegen/Tessera_Apple_Backend/`, target-contract tests |
+| Metalium, Cerebras, Rubin CPX backends | scaffolded / lit-testable unless a backend doc says hardware-runtime | `src/compiler/codegen/`, `tests/tessera-ir/phase8/`, backend-specific tests |

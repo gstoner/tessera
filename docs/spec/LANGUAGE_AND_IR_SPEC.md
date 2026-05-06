@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: High-level DSL and multi-level IR specification; defers public Python symbols to docs/spec/PYTHON_API_SPEC.md and backend ABI details to docs/spec/RUNTIME_ABI_SPEC.md
-last_updated: 2026-04-28
+last_updated: 2026-05-06
 ---
 
 # Tessera Language And IR Specification
@@ -27,9 +27,10 @@ provides:
 - scheduling and numerics annotations
 - structured control flow with SSA-like region semantics
 
-The DSL is normative as a language model. The current Python implementation may
-construct the same IR through decorators and API calls rather than this textual
-syntax.
+The DSL is normative as a language model. The current Python implementation can
+construct Graph IR through decorators/API calls or through the textual DSL
+parser. The active Python compiler carries verifier-backed object models for
+Graph IR, Schedule IR, Tile IR, and Apple/ROCm Target IR artifact lowering.
 
 ## 2. Lexical Structure
 
@@ -217,16 +218,23 @@ Verification:
 Schedule IR legally transforms Graph IR into tiled, fused, pipelined kernels
 with explicit movement and memory staging.
 
-Selected operations:
+Selected operations and Python object-model coverage:
 
 ```mlir
-%t = tessera.schedule.tile %x {m = 128, n = 128, k = 64}
-%f = tessera.schedule.fuse %a, %b
-%p = tessera.schedule.pipeline %t {double_buffer = true, depth = 3}
-%m = tessera.schedule.prefetch %t {scope = "shared", align = 32}
-%l = tessera.schedule.layout_cast %t {to = "row_major"}
-%a = tessera.schedule.artifact %p {hash = "..."}
-%k = tessera.schedule.knob %p {name = "tile_m", choices = [64, 128]}
+schedule.mesh.define {dims = [2, 4], axis_names = ["dp", "tp"]}
+schedule.mesh.region {mesh = @M, axis = "dp"} {
+  schedule.pipeline.region {schedule = "gpipe", micro_batches = 2} {
+    schedule.stage {devices = ["gpu:0"]} {
+      schedule.yield
+    }
+    schedule.yield
+  }
+  schedule.yield
+}
+%t = schedule.tile %x {m = 128, n = 128, k = 64}
+%m = schedule.prefetch %t {into = "shared", overlap = "compute"}
+%a = schedule.artifact {hash = "..."}
+%k = schedule.knob %p {name = "tile_m", choices = [64, 128]}
 ```
 
 Constraints:
@@ -245,15 +253,21 @@ Constraints:
 Tile IR binds scheduled computation to accelerator execution primitives:
 blocks, warps, fragments, shared memory, transaction barriers, and MMA.
 
-Selected operations:
+Selected operations and active artifact surface:
 
 ```mlir
 %sa = tile.alloc_shared %desc : memref<128x64xbf16, shared>
 tile.async_copy %global, %shared {stage = 0, vector = 16}
+tile.wait_async {stage = 0}
 %bar = tile.mbarrier.alloc {count = 1, scope = "block"}
 %tok = tile.mbarrier.arrive_expect_tx %bar {bytes = 16384, semantics = "release", scope = "block"}
 %ok = tile.mbarrier.try_wait %bar, %tok
 %mm = tile.mma %a, %b, %c {accum = "fp32"}
+tessera.attn.online_softmax %scores {policy = "safe"}
+tessera.queue.create {queue_id = 0, depth = 2}
+tessera.queue.push {queue_id = 0, stage = 0}
+tessera.queue.pop {queue_id = 0, stage = 0}
+tessera.queue.barrier {queue_id = 0, scope = "warpgroup"}
 tile.barrier
 ```
 
@@ -285,6 +299,21 @@ AMD lowering includes:
 
 ```text
 MFMA/WMMA intrinsics, LDS operations, DS swizzles, cache controls
+```
+
+Apple lowering includes hardware-free Target IR artifacts for CPU and GPU:
+
+```text
+tessera_apple.cpu.accelerate_gemm, tessera_apple.cpu.vector_reduce,
+tessera_apple.cpu.vector_op, tessera_apple.gpu.metal_kernel,
+tessera_apple.gpu.dispatch, tessera_apple.diagnostic
+```
+
+ROCm lowering includes hardware-free Target IR artifacts:
+
+```text
+tessera_rocm.mfma, tessera_rocm.async_copy, tessera_rocm.wait,
+tessera_rocm.elementwise, tessera.target.diagnostic
 ```
 
 Kernel entry ABI:
@@ -341,18 +370,22 @@ Graph IR:
 Schedule IR:
 
 ```mlir
-%Ct = tessera.schedule.tile %C {m = 128, n = 128, k = 64}
-%Cp = tessera.schedule.pipeline %Ct {double_buffer = true, depth = 3}
+schedule.mesh.define {dims = [1], axis_names = ["local"]}
+%Ct = schedule.tile %C {m = 128, n = 128, k = 64}
+schedule.pipeline.region {schedule = "gpipe", micro_batches = 1} {
+  schedule.stage {devices = ["cpu:0"]} {
+    schedule.yield
+  }
+  schedule.yield
+}
 ```
 
 Tile IR:
 
 ```mlir
-%bar = tile.mbarrier.alloc {count = 1, scope = "block"}
 tile.async_copy %A_global, %A_shared {stage = 0, vector = 16}
-%tok = tile.mbarrier.arrive_expect_tx %bar {bytes = 16384, semantics = "release", scope = "block"}
-%ready = tile.mbarrier.try_wait %bar, %tok
 %fragC = tile.mma %fragA, %fragB, %fragC {m = 16, n = 16, k = 16, accum = "fp32"}
+tile.wait_async {stage = 0}
 ```
 
 ## 14. References

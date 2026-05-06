@@ -1,24 +1,24 @@
 ---
 status: Informative
 classification: Guide
-authority: Developer frontend workflow for the first executable CPU compiler path
-last_updated: 2026-04-28
+authority: Developer frontend workflow for the object-backed compiler artifact spine
+last_updated: 2026-05-06
 ---
 
 # Tessera Developer Frontend: First End-To-End Path
 
-This guide documents the first reference executable compiler spine:
+This guide documents the reference executable/artifact compiler spine:
 
 ```text
 @jit supported op graph -> Graph IR -> Schedule IR -> Tile IR -> Target IR -> CPU execution
 ```
 
-It is intentionally a development/reference path. The supported program shape
-is straight-line dataflow through canonical `tessera.ops.*` calls. CPU execution
-uses NumPy and explicit single-rank/state stubs; it is not native GPU,
-distributed, or C ABI execution.
-Functions outside this supported shape keep the eager Python fallback and expose
-an explicit diagnostic explaining why.
+It is intentionally a development/reference path. CPU execution uses NumPy and
+explicit single-rank/state stubs; it is not native GPU, distributed, or C ABI
+execution. Functions outside the executable CPU subset keep the eager Python
+fallback and expose an explicit diagnostic explaining why. Artifact generation
+for Graph/Schedule/Tile and Apple/ROCm Target IR is object-backed and verified
+before textual inspection strings are emitted.
 
 ## 1. Minimal Example
 
@@ -74,17 +74,19 @@ print(mm.tile_ir)
 print(mm.target_ir)
 ```
 
-The artifacts are textual today and use the same dialect names as the MLIR
-contracts where the contracts already exist:
+The public artifact properties are textual inspection strings, but the active
+Python compiler constructs them from verified object models:
 
-- **Graph IR:** emitted by `GraphIRBuilder` with ODS-backed op spellings such
-  as `tessera.matmul` and `tessera.conv2d_nhwc`.
-- **Schedule IR:** fixed `schedule.*` tile/layout/pipeline plans for CPU
-  execution and artifact inspection.
-- **Tile IR:** `tile.*`, `tessera.attn.*`, and KV-cache contract operations.
-- **Target IR:** CPU target artifact using the NumPy ABI for execution, or
-  hardware-free ROCm/Metalium/Apple target artifacts when a non-CPU target is
-  selected.
+- **Graph IR:** `GraphIRModule`, `GraphIRFunction`, and verifier diagnostics
+  preserve shape/dtype/layout, source spans, meshes, constants, and returns.
+- **Schedule IR:** `ScheduleIRModule` lowers mesh declarations, schedule
+  directives, `schedule.mesh.region`, `schedule.pipeline.region`, stages, and
+  yields.
+- **Tile IR:** `TileIRModule` lowers scheduled work to `tile.*`,
+  `tessera.attn.*` FA-4 helpers, and `tessera.queue.*` barriers.
+- **Target IR:** `TargetIRModule` lowers Tile IR into verified Apple CPU/GPU
+  and ROCm hardware-free target artifacts. Metalium/NVIDIA keep their existing
+  artifact renderers in this path.
 
 To see whether a function used the compiler path:
 
@@ -123,9 +125,10 @@ model:
 
 - **Python AST frontend:** `@tessera.jit` inspects Python source, extracts
   `tessera.ops.*` calls, runs constraint/effect checks, and builds Graph IR.
-- **Textual Graph DSL frontend:** `tessera.compiler.frontend.parse_text` and
-  `lower_text_to_graph_ir` parse canonical straight-line `module` / `func`
-  source and emit `GraphIRModule`.
+- **Textual DSL frontend:** `tessera.compiler.frontend.parse_text` and
+  `lower_text_to_graph_ir` parse canonical `module` / `func` / `kernel` source,
+  mesh/type/constant declarations, schedule/dist statements, barriers/asserts,
+  and structured control-flow markers, then emit `GraphIRModule`.
 
 The old `research/sandbox_compilers/tilec` parser remains a legacy research
 sample and is not the canonical Tessera frontend.
@@ -146,16 +149,17 @@ Supported:
   with `._data`
 - hardware-free Target IR artifact selection with `target="rocm"`,
   `target="metalium"`, `target="apple_cpu"`, and `target="apple_gpu"`
+- direct textual DSL lowering through Graph IR into Schedule/Tile/Apple/ROCm
+  Target IR object models
 
 Not yet supported:
 
 - cost-model driven Schedule IR selection
 - native C ABI CPU launch
 - GPU/ROCm/Apple/Metalium runtime dispatch from this frontend path
-- arbitrary Python control flow lowering
-- full textual DSL BNF coverage: kernels, meshes, schedule/dist statements,
-  control flow, barriers, and asserts are future work
-- full Tensor shape/type inference and MLIR verifier-backed construction
+- arbitrary Python control flow lowering in the Python AST frontend
+- complete native MLIR Python binding construction for every layer
+- full Tensor shape/type inference beyond the current verifier checks
 
 ## 5. Developer Evaluation Criteria
 
@@ -184,12 +188,12 @@ print(unsupported_control_flow.explain_lowering())
 
 Priority order:
 
-1. Preserve concrete shape/dtype/layout metadata in Graph IR.
-2. Improve notebook/REPL source capture beyond explicit `source=` handoff.
-3. Extend textual DSL coverage beyond straight-line Graph IR.
-4. Replace textual artifacts with MLIR objects and verifier calls.
-5. Connect Target IR to the runtime C ABI CPU backend.
-6. Extend the same spine to measured CUDA execution.
+1. Improve notebook/REPL source capture beyond explicit `source=` handoff.
+2. Extend native MLIR Python binding construction beyond the current verified
+   Python object models.
+3. Add cost-model driven Schedule IR selection and autotune feedback.
+4. Connect Target IR to the runtime C ABI CPU backend.
+5. Extend the same spine to measured CUDA/ROCm/Apple execution.
 
 ## 7. Target IR Artifact Selection
 
@@ -208,8 +212,10 @@ print(mm.runtime_artifact().metadata["runtime_status"])
 
 Current hardware-free target contracts:
 
-- `target="rocm"` emits `tessera_rocm.*` MFMA, async-copy, and wait artifacts.
+- `target="rocm"` lowers Tile IR to `tessera_rocm.*` MFMA, async-copy, wait,
+  elementwise, and diagnostic artifacts.
 - `target="metalium"` emits `tessera_metalium.*` DMA and matmul artifacts.
-- `target="apple_cpu"` emits Accelerate/vecLib-style
+- `target="apple_cpu"` lowers Tile IR to Accelerate/vecLib-style
   `tessera_apple.cpu.*` artifacts.
-- `target="apple_gpu"` emits Metal/MPS-style `tessera_apple.gpu.*` artifacts.
+- `target="apple_gpu"` lowers Tile IR to Metal/MPS-style
+  `tessera_apple.gpu.*` kernel and dispatch artifacts.

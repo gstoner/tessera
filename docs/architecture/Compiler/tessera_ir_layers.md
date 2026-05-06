@@ -122,11 +122,15 @@ func.func @step(%W: tensor<256x256xbf16>, %X: tensor<128x256xbf16>)
 }
 ```
 
-For pipelined kernels (GPU path):
+For pipelined kernels and Python artifact inspection:
 
 ```mlir
-%Ct = tessera.schedule.tile %C {m = 128, n = 128, k = 64}
-%Cp = tessera.schedule.pipeline %Ct {double_buffer = true, depth = 3}
+schedule.pipeline.region {schedule = "gpipe", micro_batches = 1} {
+  schedule.stage {devices = ["gpu:0"]} {
+    schedule.yield
+  }
+  schedule.yield
+}
 ```
 
 **Passes that produce Schedule IR:**
@@ -302,10 +306,10 @@ All pointers are address-space-qualified global pointers. Scalar uniforms are
 
 | Crossing | Pre-condition | Post-condition |
 |----------|--------------|----------------|
-| Python → Graph IR | Decorated function with type annotations | `tessera.*` ops with effect and shard attrs |
-| Graph IR → Schedule IR | `tessera.shard` attrs present on all distributed args | `schedule.mesh.define` + `schedule.mesh.region` |
-| Schedule IR → Tile IR | All shapes resolved; movement plans explicit | `tile.*` + `tessera.attn.*` + mbarrier ops |
-| Tile IR → Target IR | Alignment/layout constraints satisfied | Vendor intrinsics; kernel ABI ready for launch |
+| Python/textual DSL → Graph IR | Decorated function or canonical DSL source | `tessera.*` ops with effect attrs, shape/dtype/layout metadata, diagnostics |
+| Graph IR → Schedule IR | Verified graph object; optional mesh and schedule directives | `schedule.mesh.define`, `schedule.mesh.region`, `schedule.pipeline.region`, `schedule.stage`, `schedule.yield` |
+| Schedule IR → Tile IR | Verified schedule object; movement plans explicit | `tile.*`, `tessera.attn.*`, `tessera.queue.*` |
+| Tile IR → Target IR | Verified tile object and target selection | Backend artifacts; Apple/ROCm are object-backed in Python, other targets vary by backend |
 
 ---
 
@@ -314,10 +318,11 @@ All pointers are address-space-qualified global pointers. Scalar uniforms are
 | Layer | Status |
 |-------|--------|
 | Graph IR emission + canonicalization + effect inference | ✅ Phase 1–2 complete |
-| Schedule IR (x86 path: Distribution → Tiling → TileToX86) | ✅ Phase 2 complete |
-| Tile IR + warp specialization (GPU path) | ✅ Phase 3 complete |
+| Schedule IR (Python object model + x86 path: Distribution → Tiling → TileToX86) | ✅ implemented / lit-testable |
+| Tile IR + warp specialization (Python object model + GPU path) | ✅ implemented / lit-testable |
 | Target IR — NVIDIA WGMMA / TMA / mbarrier (SM_90+) | ✅ Phase 3 complete |
-| Target IR — AMD MFMA full coverage | 🔲 Phase 6 planned |
+| Target IR — Apple and AMD/ROCm artifact lowering | ✅ implemented / lit-testable / artifact-only |
+| Target IR — AMD MFMA native runtime coverage | 🔲 planned beyond artifact path |
 | Target IR — Runtime C ABI wired for launch | 🔲 Phase 6 planned |
 | Distributed collectives in Schedule/Target IR | 🔲 Phase 4 planned |
 

@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-04-26
+last_updated: 2026-05-06
 ---
 
 > **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
@@ -14,8 +14,8 @@ last_updated: 2026-04-26
 > **API note:** Examples in this document using `gir.gemm` and `gir.rmsnorm_safe` reflect
 > internal MLIR op names (`tessera.matmul`, `tessera.layer_norm` in the tessera dialect).
 > `Region[write]` and `Region[reduce]` should be `Region["write"]` and `Region["reduce_sum"]`
-> in Python source. Legacy Schedule IR inspection helpers do not exist — use `fn.graph_ir.to_mlir()` for
-> Graph IR inspection; Schedule IR and below inspection is planned for Phase 4+.
+> in Python source. Current JIT functions expose `schedule_ir` as a textual
+> artifact emitted from the verified Python `ScheduleIRModule` object model.
 > See `docs/CANONICAL_API.md` for authoritative names.
 
 ---
@@ -253,7 +253,7 @@ This lets you balance **autotune vs manual control**.
 ## 15. Summary for Programmers
 
 - **Schedule IR** explains how Graph IR ops are tiled, fused, pipelined.  
-- Use **`fn.graph_ir.to_mlir()`** for current Graph IR inspection; Schedule IR inspection is Phase 4 planned.  
+- Use **`fn.schedule_ir`** or `fn.lowering_artifacts()` for current Schedule IR inspection.  
 - Common issues: illegal tilings, privilege conflicts, register pressure.  
 - Programmers can let Tessera autotune, or manually override with `@kernel.schedule`.  
 - Understanding Schedule IR helps bridge **productivity → performance**.

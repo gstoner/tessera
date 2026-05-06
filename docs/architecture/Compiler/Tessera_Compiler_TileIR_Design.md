@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-04-26
+last_updated: 2026-05-06
 ---
 
 > **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
@@ -11,9 +11,9 @@ last_updated: 2026-04-26
 *Scope:* Schedule IR → Tile IR → Target IR  
 *Status:* Draft v0.2 (with programmer context)
 
-> **API note:** Legacy Tile IR inspection helpers shown in older examples do not exist.
-> The canonical inspection method is `fn.graph_ir.to_mlir()` (Graph IR only).
-> Tile IR inspection is planned for Phase 4+. See `docs/CANONICAL_API.md`.
+> **API note:** Legacy Tile IR inspection helpers shown in older examples are
+> superseded by `fn.tile_ir` and `fn.lowering_artifacts()`, which emit textual
+> artifacts from the verified Python `TileIRModule` object model.
 
 ---
 
@@ -238,6 +238,6 @@ This workflow shows how **Tile IR inspection helps tune performance-critical ker
 ## 13. Summary for Programmers
 
 - Tile IR is the **last IR you’ll inspect before actual PTX/CTIR**.  
-- Use **`fn.graph_ir.to_mlir()`** for current Graph IR inspection; Tile IR inspection is Phase 4 planned.  
+- Use **`fn.tile_ir`** or `fn.lowering_artifacts()` for current Tile IR inspection.  
 - Watch for **bank conflict, register pressure, barrier errors**.  
 - Tile IR connects directly to the CUDA Tile IR / PTX you’ll see at the Target IR stage.  

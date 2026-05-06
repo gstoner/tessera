@@ -1,7 +1,7 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-05-04
+last_updated: 2026-05-06
 ---
 
 # Tessera Compiler Reference
@@ -19,27 +19,28 @@ records status using the labels in `docs/README.md`.
 Use the full names: Graph IR, Schedule IR, Tile IR, and Target IR.
 
 ```text
-Python API  (@tessera.jit, Region[...], tessera.domain, index_launch)
+Python API + textual DSL frontend
+(@tessera.jit, module/func/kernel syntax, Region[...], tessera.domain)
      |
-     v  [python/tessera/compiler/graph_ir.py]
-Graph IR    (tessera.* ops, effects, shard and privilege attrs)
+     v  [python/tessera/compiler/graph_ir.py, frontend/parser.py]
+Graph IR    (tessera.* ops, effects, shape/dtype/layout metadata, diagnostics)
      |
-     v  [src/transforms/lib/*.cpp]
-Schedule IR (schedule.mesh.*, pipeline regions, tiling structure)
+     v  [python/tessera/compiler/schedule_ir.py, src/transforms/lib/*.cpp]
+Schedule IR (schedule.mesh.*, pipeline regions, stages, tiling structure)
      |
-     v  [tile lowering, backend lowering, solver/target passes]
-Tile IR     (tile.*, tessera.attn.*, tessera.queue.*)
+     v  [python/tessera/compiler/tile_ir.py, tile lowering, backend lowering]
+Tile IR     (tile.*, tessera.attn.* FA-4 ops, tessera.queue.* barriers)
      |
-     v
+     v  [python/tessera/compiler/target_ir.py for Apple/ROCm artifact paths]
 Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, TPU, Apple, ...)
 ```
 
 | Layer | Primary active files | Status |
 |-------|----------------------|--------|
-| Graph IR | `python/tessera/compiler/graph_ir.py`, `src/compiler/ir/TesseraOps.td`, `src/compiler/ir/TesseraTiling.cpp` | implemented; TilingInterface methods scaffolded |
-| Schedule IR | `src/compiler/programming_model/ir/ScheduleOps.cpp`, `src/compiler/programming_model/` | implemented / scaffolded |
-| Tile IR | `src/compiler/tile_opt_fa4/`, `src/transforms/lib/TileIRLoweringPass.cpp` | implemented / lit-testable |
-| Target IR | `src/compiler/codegen/`, `python/tessera/compiler/matmul_pipeline.py` | implemented for CPU artifacts; lit-testable or scaffolded for non-CPU targets unless backend docs say otherwise |
+| Graph IR | `python/tessera/compiler/graph_ir.py`, `python/tessera/compiler/frontend/parser.py`, `src/compiler/ir/TesseraOps.td`, `src/compiler/ir/TesseraTiling.cpp` | implemented; TilingInterface methods scaffolded |
+| Schedule IR | `python/tessera/compiler/schedule_ir.py`, `src/compiler/programming_model/ir/ScheduleOps.cpp`, `src/compiler/programming_model/` | implemented / lit-testable |
+| Tile IR | `python/tessera/compiler/tile_ir.py`, `src/compiler/tile_opt_fa4/`, `src/transforms/lib/TileIRLoweringPass.cpp` | implemented / lit-testable |
+| Target IR | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/`, `python/tessera/compiler/matmul_pipeline.py` | Apple/ROCm artifact paths implemented / lit-testable; other non-CPU targets vary by backend |
 
 ---
 
@@ -49,17 +50,18 @@ Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, TPU, Apple, ...)
 |-------------------------|--------|----------|--------|
 | `tessera-lower-to-x86` | `src/transforms/lib/Passes.cpp`, `src/transforms/lib/TileToX86Pass.cpp` | `tests/tessera-ir/phase2/`, `tests/unit/test_lowering_chain.py` | implemented |
 | `tessera-lower-to-gpu` | `src/transforms/lib/TileIRLoweringPass.cpp`, `src/compiler/tile_opt_fa4/`, `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` | `tests/tessera-ir/phase3/`, GPU target unit tests | implemented / lit-testable |
-| `tessera-lower-to-rocm` | `src/compiler/codegen/Tessera_ROCM_Backend/`, `python/tessera/compiler/matmul_pipeline.py` | ROCm backend tests and target-contract tests | lit-testable / artifact-only |
-| `tessera-lower-to-apple_cpu` | `src/compiler/codegen/Tessera_Apple_Backend/` | `tests/tessera-ir/phase8/apple_cpu_lowering.mlir` | lit-testable / artifact-only |
-| `tessera-lower-to-apple_gpu` | `src/compiler/codegen/Tessera_Apple_Backend/` | `tests/tessera-ir/phase8/apple_gpu_lowering.mlir` | lit-testable / artifact-only |
+| `tessera-lower-to-rocm` | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_ROCM_Backend/`, `python/tessera/compiler/matmul_pipeline.py` | ROCm backend tests and target-contract tests | implemented / lit-testable / artifact-only |
+| `tessera-lower-to-apple_cpu` | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_Apple_Backend/` | `tests/unit/test_target_ir.py`, `tests/tessera-ir/phase8/apple_cpu_lowering.mlir` | implemented / lit-testable / artifact-only |
+| `tessera-lower-to-apple_gpu` | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_Apple_Backend/` | `tests/unit/test_target_ir.py`, `tests/tessera-ir/phase8/apple_gpu_lowering.mlir` | implemented / lit-testable / artifact-only |
 | Metalium target artifacts | `src/compiler/codegen/Tessera_Metalium_Backend/`, `python/tessera/compiler/matmul_pipeline.py` | Metalium backend tests and target-contract tests | scaffolded / lit-testable |
 | TPU StableHLO/Shardy target artifacts | `src/compiler/codegen/Tessera_TPU_Backend/`, `python/tessera/compiler/tpu_target.py` | `tests/unit/test_tpu_lowering.py`, `tests/tessera-ir/phase4/` | implemented / lit-testable |
 | Solver and resilience pipelines | `src/solvers/` | `tests/unit/test_*solver*.py`, `tests/tessera-ir/phase5/` | implemented / lit-testable |
 | Neighbor/halo/stencil passes | `src/compiler/tessera_neighbors/` | `tests/unit/test_neighbors_dialect.py`, `tests/tessera-ir/phase7/` | implemented / lit-testable |
 
 Native execution support is separate from target artifact generation. The
-Python lowering path emits inspectable Graph/Schedule/Tile/Target IR artifacts
-for several targets; non-CPU native execution should only be called
+Python lowering path uses object-backed Graph IR, Schedule IR, Tile IR, and
+Apple/ROCm Target IR layers with verifier checks before emitting inspectable
+MLIR-like artifacts. Non-CPU native execution should only be called
 hardware-runtime when the backend-specific docs and tests say so.
 
 ---
@@ -102,7 +104,7 @@ coverage.
 | Phase 5 | implemented / lit-testable | checkpointing, optimizer shard, Bayesian/autotune foundations, sparse/RNG/solver passes; `src/solvers/`, `tests/tessera-ir/phase5/` |
 | Phase 6 | mock-runtime / hardware-runtime where C runtime is built | runtime C ABI, Python runtime wrapper, diagnostics, benchmark smoke; `src/runtime/`, `python/tessera/runtime.py`, `tests/tessera-ir/phase6/` |
 | Phase 7 | implemented / lit-testable | neighbors dialect and halo/stencil passes; `src/compiler/tessera_neighbors/`, `tests/tessera-ir/phase7/` |
-| Phase 8 | scaffolded / lit-testable | hardware-free Target IR and Apple/ROCm/Metalium contracts; `tests/tessera-ir/phase8/`, `src/compiler/codegen/` |
+| Phase 8 | implemented / lit-testable for Apple and ROCm artifacts; scaffolded / lit-testable for other targets | hardware-free Target IR and Apple/ROCm/Metalium contracts; `python/tessera/compiler/target_ir.py`, `tests/unit/test_target_ir.py`, `tests/tessera-ir/phase8/`, `src/compiler/codegen/` |
 
 ---
 
@@ -118,10 +120,10 @@ aliases handled by `python/tessera/compiler/matmul_pipeline.py`.
 | `GPUTargetProfile(ISA.SM_80)` | `nvidia_sm80` | artifact target |
 | `GPUTargetProfile(ISA.SM_90)` | `nvidia_sm90` | implemented / lit-testable |
 | `GPUTargetProfile(ISA.SM_100)` | `nvidia_sm100` | artifact target |
-| `"rocm"`, `"amd"`, `"hip"` | `rocm` | lit-testable / artifact-only |
+| `"rocm"`, `"amd"`, `"hip"` | `rocm` | implemented / lit-testable / artifact-only |
 | `"metalium"`, `"tt_metalium"`, `"tt"` | `metalium` | scaffolded / artifact-only |
-| `"apple_cpu"`, `"macos_cpu"`, `"m_series_cpu"` | `apple_cpu` | lit-testable / artifact-only |
-| `"apple_gpu"` | `apple_gpu` | lit-testable / artifact-only |
+| `"apple_cpu"`, `"macos_cpu"`, `"m_series_cpu"` | `apple_cpu` | implemented / lit-testable / artifact-only |
+| `"apple_gpu"` | `apple_gpu` | implemented / lit-testable / artifact-only |
 
 ---
 
@@ -166,6 +168,10 @@ These decisions are closed unless a new normative spec supersedes them.
 |---------------|---------------|
 | Python `@jit` implementation | `python/tessera/compiler/jit.py` |
 | Python Graph IR builder | `python/tessera/compiler/graph_ir.py` |
+| Textual DSL parser/lowerer | `python/tessera/compiler/frontend/parser.py` |
+| Python Schedule IR object model | `python/tessera/compiler/schedule_ir.py` |
+| Python Tile IR object model | `python/tessera/compiler/tile_ir.py` |
+| Python Apple/ROCm Target IR object model | `python/tessera/compiler/target_ir.py` |
 | CPU and target artifact planner | `python/tessera/compiler/matmul_pipeline.py` |
 | Public op catalog | `python/tessera/compiler/op_catalog.py` |
 | GPU target profile | `python/tessera/compiler/gpu_target.py` |

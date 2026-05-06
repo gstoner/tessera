@@ -21,6 +21,7 @@ from .effects import EffectLattice, Effect, TesseraEffectError
 from .graph_ir import NumericPolicy, KVCacheSpec
 from .schedule_ir import ScheduleIRModule, ScheduleFunction, ScheduleOp, lower_graph_to_schedule_ir
 from .tile_ir import TileIRModule, TileFunction, TileOp, lower_schedule_to_tile_ir
+from .target_ir import TargetIRModule, TargetFunction, TargetOp, lower_tile_to_target_ir
 from .jit import jit, TesseraJitError
 from .driver import CompileArtifactBundle, CompileRequest, CompileTraceEvent, compile_graph_module
 from .frontend import FrontendSemanticError, FrontendSyntaxError, lower_text_to_graph_ir, parse_text
@@ -44,6 +45,10 @@ __all__ = [
     "TileFunction",
     "TileOp",
     "lower_schedule_to_tile_ir",
+    "TargetIRModule",
+    "TargetFunction",
+    "TargetOp",
+    "lower_tile_to_target_ir",
     "jit",
     "TesseraJitError",
     "CompileArtifactBundle",

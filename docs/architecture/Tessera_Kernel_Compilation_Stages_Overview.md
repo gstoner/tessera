@@ -2,7 +2,7 @@
 status: Informative
 classification: Informative
 authority: Companion overview; defers to docs/spec/COMPILER_REFERENCE.md
-last_updated: 2026-04-26
+last_updated: 2026-05-06
 ---
 
 > **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
@@ -38,7 +38,8 @@ This section provides a worked GEMM/FlashAttention example and shows artifacts a
 ## Stage 5: Backend Lowering
 - NVIDIA path: Graph IR → Schedule IR → Tile IR → Target IR → NVVM/PTX → cubin
 - x86/AMX: Graph IR → Schedule IR → Target IR calls into AMX/AVX-512 backend functions
-- AMD/ROCm: ROCm full MFMA coverage is Phase 6 planned
+- AMD/ROCm: verified hardware-free MFMA/async-copy/wait artifacts are
+  implemented; native runtime coverage remains backend-specific
 
 ## Stage 6: Codegen & Linking
 Produces binaries (cubin/ELF/shared lib) and reflection JSON (shapes, regs, smem, features).
@@ -47,11 +48,16 @@ Produces binaries (cubin/ELF/shared lib) and reflection JSON (shapes, regs, smem
 Runtime sets up descriptors, mbarriers, streams, launches grid/block. Collects metrics & profiles.
 
 ## Stage 8: Introspection & Debugging
-Current inspection supports Graph IR:
-```bash
+Current JIT inspection exposes all artifact layers:
+```python
 fn.graph_ir.to_mlir()
+fn.schedule_ir
+fn.tile_ir
+fn.target_ir
+fn.lowering_artifacts()
 ```
-Tile/Target IR inspection is Phase 4 planned.
+Graph, Schedule, Tile, and Apple/ROCm Target IR artifacts are emitted from
+verified Python object models before they are presented as textual IR.
 
 ---
 

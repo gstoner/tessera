@@ -65,14 +65,16 @@ Current high-level status:
 
 | Area | Status |
 |------|--------|
-| Python frontend, `@tessera.jit`, constraints, effects, Graph IR | implemented |
+| Python frontend, textual DSL frontend, constraints, effects, Graph IR | implemented |
+| Object-backed Graph/Schedule/Tile IR and Apple/ROCm Target IR artifacts | implemented / lit-testable |
 | CPU/x86 lowering artifacts and NumPy-backed execution path | implemented / mock-runtime |
 | NVIDIA SM90+ FA-4 and target artifacts | implemented / lit-testable |
 | Distributed APIs, cyclic sharding, collectives scaffolding | implemented / scaffolded |
 | TPU target profile and StableHLO/Shardy artifacts | implemented / lit-testable |
 | Solver, sparse/RNG, linalg, resilience, and autotuning foundations | implemented / lit-testable |
 | Runtime C ABI and Python wrapper | mock-runtime; hardware-runtime when C runtime is built |
-| ROCm, Metalium, Apple, Cerebras, Rubin CPX backend trees | scaffolded / lit-testable unless backend docs say otherwise |
+| ROCm and Apple Target IR artifact lowering | implemented / lit-testable / artifact-only |
+| Metalium, Cerebras, Rubin CPX backend trees | scaffolded / lit-testable unless backend docs say otherwise |
 
 ---
 
@@ -81,20 +83,26 @@ Current high-level status:
 Tessera compiles through a four-layer IR stack:
 
 ```text
-Python API  (@tessera.jit, Region[...], tessera.domain, index_launch)
+Python API + textual DSL frontend
+(@tessera.jit, module/func/kernel syntax, Region[...], tessera.domain)
      |
      v
-Graph IR    (tessera dialect: mathematical ops, effects, shard attrs)
+Graph IR    (tessera dialect: math ops, shape/dtype/layout metadata, diagnostics)
      |
      v
-Schedule IR (schedule.* dialect: mesh regions, pipeline stages)
+Schedule IR (schedule.* dialect: mesh.define/region, pipeline.region, stage, yield)
      |
      v
-Tile IR     (tile.*, tessera.attn.*, tessera.queue.*)
+Tile IR     (tile.* ops, tessera.attn.* FA-4 ops, tessera.queue.* barriers)
      |
      v
 Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, TPU, Apple, ...)
 ```
+
+The Python compiler now carries object models and verifier checks for Graph IR,
+Schedule IR, Tile IR, and Apple/ROCm Target IR. The JIT artifact spine emits
+textual MLIR-like inspection strings from those objects; native hardware
+execution remains target-specific and is claimed only where backend docs say so.
 
 Primary named pipelines and target paths are tracked in
 [`docs/spec/COMPILER_REFERENCE.md`](docs/spec/COMPILER_REFERENCE.md). The most
@@ -104,9 +112,9 @@ common paths are:
 |------|--------|
 | `tessera-lower-to-x86` | implemented |
 | `tessera-lower-to-gpu` | implemented / lit-testable |
-| `tessera-lower-to-rocm` | lit-testable / artifact-only |
-| `tessera-lower-to-apple_cpu` | lit-testable / artifact-only |
-| `tessera-lower-to-apple_gpu` | lit-testable / artifact-only |
+| `tessera-lower-to-rocm` | implemented / lit-testable / artifact-only |
+| `tessera-lower-to-apple_cpu` | implemented / lit-testable / artifact-only |
+| `tessera-lower-to-apple_gpu` | implemented / lit-testable / artifact-only |
 | `tessera-lower-to-metalium` | scaffolded / target-contract artifacts |
 
 ---
@@ -184,7 +192,7 @@ scripts/lint_docs.sh
 
 ```text
 python/tessera/
-  compiler/              @jit, constraints, effects, Graph IR, targets, pipelines
+  compiler/              @jit, textual frontend, Graph/Schedule/Tile/Target IR, pipelines
   distributed/           Region, domain, dist, array, shard, index_launch, MoE helpers
   testing/               Mock collectives, compiler and QA helpers
   cli/                   tessera-mlir, tessera-prof, tessera-runtime-smoke

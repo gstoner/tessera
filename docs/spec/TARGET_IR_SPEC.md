@@ -1,12 +1,12 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-04-26
+last_updated: 2026-05-06
 ---
 
 # Tessera Target IR Specification
 **Status:** Normative — grounded in `src/compiler/tile_opt_fa4/`, `src/compiler/programming_model/ir/schedule/`, and `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` Phase 2–3 implementations
-**Last updated:** April 26, 2026
+**Last updated:** May 6, 2026
 **Cross-references:** `docs/spec/GRAPH_IR_SPEC.md`, `docs/spec/LOWERING_PIPELINE_SPEC.md`
 
 ---
@@ -22,7 +22,7 @@ Schedule IR  (schedule dialect — mesh regions, pipeline stages)
 Tile IR      (tile.* ops — async copy, MMA, barriers; tessera.attn.* FA-4 ops)
      │  [AsyncCopyLoweringPass, NVWGMMALoweringPass, NVTMADescriptorPass]
      ▼
-Target IR    (tessera_nvidia.*, tessera.nvgpu.*, tessera.tma.*, tessera.cp_async.*, mbarrier ops)
+Target IR    (tessera_nvidia.*, tessera_rocm.*, tessera_apple.*, tessera.tma.*, mbarrier ops)
      │  [NVFlashAttnKernelEmitter → LLVM NVPTX backend]
      ▼
 PTX / binary
@@ -35,8 +35,12 @@ This document specifies four dialect layers that together constitute the Target 
 3. **`tessera.queue` dialect** — tile queue synchronisation (Tile IR layer, Phase 3)
 4. **`tile.*` ops** — generic tile async copy and MMA primitives (Tile IR layer)
 5. **`tessera_nvidia` dialect** — hardware-free Hopper/Blackwell Target IR contracts
+6. **`tessera_rocm` and `tessera_apple` contracts** — hardware-free AMD and Apple Target IR artifacts
 
-The x86 Target IR (AMX/AVX-512 C function calls) is documented separately in `docs/architecture/tessera_target_ir_usage_guide.md`.
+The x86 Target IR (AMX/AVX-512 C function calls) is documented separately in
+`docs/architecture/tessera_target_ir_usage_guide.md`. The active Python
+compiler has verifier-backed object models for Schedule IR, Tile IR, and
+Apple/ROCm Target IR in `python/tessera/compiler/`.
 
 ### 1.1 NVIDIA Hopper And Blackwell Contracts
 
@@ -660,8 +664,8 @@ module @flash_attn_sm90 attributes {tessera.version = "1.0", tessera.target_sm =
 |--------------|-----------------|----------------|
 | `schedule.mesh.define` | 2 | implemented / lit-testable |
 | `schedule.mesh.region` | 2 | implemented / lit-testable |
-| `schedule.pipeline.region` | 4 (designed Phase 2) | scaffolded / lit-testable |
-| `schedule.stage` | 4 (designed Phase 2) | scaffolded / lit-testable |
+| `schedule.pipeline.region` | 4 (designed Phase 2) | implemented / lit-testable |
+| `schedule.stage` | 4 (designed Phase 2) | implemented / lit-testable |
 | `schedule.yield` | 2 | implemented / lit-testable |
 | `tessera.attn.lse.save` | 1 (v1.3) | implemented / lit-testable |
 | `tessera.attn.lse.load` | 1 (v1.3) | implemented / lit-testable |
@@ -679,7 +683,8 @@ module @flash_attn_sm90 attributes {tessera.version = "1.0", tessera.target_sm =
 | `tessera.nvgpu.wmma.*` | 3 | lit-testable target artifact |
 | NCCL/RCCL native collectives | 4 | planned / scaffolded mock support |
 | TPU StableHLO/Shardy artifacts | 4 | implemented / lit-testable; PJRT execute remains scaffolded |
-| ROCm MFMA artifact path | 6 | lit-testable / scaffolded runtime |
+| ROCm MFMA artifact path | 6 | implemented / lit-testable / scaffolded runtime |
+| Apple CPU/GPU artifact path | 8 | implemented / lit-testable / artifact-only |
 
 ## 9. Backend Status Appendix
 
@@ -688,9 +693,9 @@ Target IR status is reported separately from native runtime status:
 | Backend | Semantic compiler behavior | Target artifact generation | Mock/runtime fallback | Native hardware runtime |
 |---------|----------------------------|----------------------------|-----------------------|-------------------------|
 | NVIDIA | FA-4, queue, WGMMA/TMA contracts | lit-testable | Python/JIT artifact inspection | planned unless backend-specific hardware tests are run |
-| ROCm | MFMA/async-copy contracts | lit-testable | artifact-only | scaffolded; HIP loader/runtime paths require build flags and devices |
+| ROCm | MFMA/async-copy contracts | implemented / lit-testable | artifact-only | scaffolded; HIP loader/runtime paths require build flags and devices |
 | TPU | TPU profile, StableHLO/Shardy export | implemented / lit-testable | artifact-only | PJRT execute is scaffolded |
-| Apple | CPU/GPU target contracts | lit-testable | artifact-only | planned unless backend-specific runtime tests are added |
+| Apple | CPU/GPU target contracts | implemented / lit-testable | artifact-only; Apple CPU may execute through supported CPU fallback paths | planned unless backend-specific runtime tests are added |
 | Metalium | DMA/load/store/matmul dialect shape | scaffolded / lit-testable | artifact-only | planned; matmul lowering remains incomplete |
 | Cerebras | TTarget/Cerebras pass shape | stubbed / scaffolded | tool stubs | planned |
 | Rubin CPX | CPX-specific ODS and target-contract tests | scaffolded / lit-testable | artifact-only | planned |

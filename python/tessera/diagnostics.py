@@ -145,8 +145,7 @@ class TesseraDiagnostic:
 
     def __str__(self) -> str:
         parts = [f"{self.level.value.upper()}"]
-        if self.code != TesseraErrorCode.UNKNOWN:
-            parts.append(f"[{self.code.value}]")
+        parts.append(f"[{self.code.value}]")
         if self.location:
             parts.append(f"[{self.location}]")
         if self.op_name:
@@ -158,6 +157,18 @@ class TesseraDiagnostic:
         if self.hints:
             text += "\n  hints: " + "; ".join(self.hints)
         return text
+
+    def to_dict(self) -> dict:
+        return {
+            "severity": self.level.value.upper(),
+            "code": self.code.value,
+            "message": self.message,
+            "where": "" if self.where is None else str(self.where),
+            "source_location": None if self.location is None else str(self.location),
+            "op_name": self.op_name,
+            "hints": list(self.hints),
+            "notes": list(self.notes),
+        }
 
     def __repr__(self) -> str:
         return (f"TesseraDiagnostic(level={self.level.value!r}, "
@@ -403,24 +414,33 @@ class ErrorReporter:
         message: str,
         op_name: str = "",
         location: Optional[SourceLocation] = None,
+        code: TesseraErrorCode = TesseraErrorCode.UNKNOWN,
+        where: Optional[DiagnosticWhere] = None,
+        hints: Optional[Sequence[str]] = None,
     ) -> TesseraDiagnostic:
-        return self.report(DiagnosticLevel.WARNING, message, op_name, location)
+        return self.report(DiagnosticLevel.WARNING, message, op_name, location, code=code, where=where, hints=hints)
 
     def note(
         self,
         message: str,
         op_name: str = "",
         location: Optional[SourceLocation] = None,
+        code: TesseraErrorCode = TesseraErrorCode.UNKNOWN,
+        where: Optional[DiagnosticWhere] = None,
+        hints: Optional[Sequence[str]] = None,
     ) -> TesseraDiagnostic:
-        return self.report(DiagnosticLevel.NOTE, message, op_name, location)
+        return self.report(DiagnosticLevel.NOTE, message, op_name, location, code=code, where=where, hints=hints)
 
     def info(
         self,
         message: str,
         op_name: str = "",
         location: Optional[SourceLocation] = None,
+        code: TesseraErrorCode = TesseraErrorCode.UNKNOWN,
+        where: Optional[DiagnosticWhere] = None,
+        hints: Optional[Sequence[str]] = None,
     ) -> TesseraDiagnostic:
-        return self.report(DiagnosticLevel.INFO, message, op_name, location)
+        return self.report(DiagnosticLevel.INFO, message, op_name, location, code=code, where=where, hints=hints)
 
     # ------------------------------------------------------------------
     # Shape-check helpers
@@ -460,6 +480,7 @@ class ErrorReporter:
                 f"rank mismatch: expected rank {expected_rank}, "
                 f"got rank {len(shape)} (shape={tuple(shape)})",
                 op_name=op_name,
+                code=TesseraErrorCode.SHAPE_MISMATCH,
             )
             return False
         return True
@@ -476,6 +497,7 @@ class ErrorReporter:
                 f"dtype {actual_dtype!r} not allowed; expected one of "
                 f"{list(allowed_dtypes)}",
                 op_name=op_name,
+                code=TesseraErrorCode.SHAPE_MISMATCH,
             )
             return False
         return True

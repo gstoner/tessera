@@ -70,6 +70,61 @@ def test_lower_tile_to_rocm_target_ir_maps_mma_to_mfma_dma_wait():
     assert "tessera_rocm.wait" in text
 
 
+def test_lower_tile_to_cpu_target_ir_maps_mma_and_elementwise_to_x86_numpy_contracts():
+    tile = TileIRModule(functions=[
+        TileFunction(
+            "main",
+            body=[
+                TileOp("tile.mma", {"source": "tessera.matmul", "result": "C", "ordinal": 0}),
+                TileOp("tile.relu", {"source": "tessera.relu", "result": "R", "ordinal": 1}),
+            ],
+        )
+    ])
+    target = lower_tile_to_target_ir(tile, target_kind="cpu")
+    assert target.verify().ok
+    text = target.to_mlir()
+    assert 'target = "cpu"' in text
+    assert 'arch = "x86_64"' in text
+    assert "tessera.cpu.matmul" in text
+    assert "tessera.cpu.relu" in text
+    assert 'abi = "numpy"' in text
+
+
+def test_lower_tile_to_nvidia_hopper_target_ir_maps_mma_to_wgmma_tma_mbarrier():
+    tile = TileIRModule(functions=[
+        TileFunction(
+            "main",
+            body=[TileOp("tile.mma", {"source": "tessera.matmul", "result": "C", "ordinal": 0})],
+            target="nvidia_sm90",
+        )
+    ])
+    target = lower_tile_to_target_ir(tile, target_kind="nvidia_sm90")
+    assert target.verify().ok
+    text = target.to_mlir()
+    assert 'target = "nvidia_sm90"' in text
+    assert 'arch = "sm_90a"' in text
+    assert "tessera_nvidia.wgmma" in text
+    assert "tessera_nvidia.tma_async_copy" in text
+    assert "tessera_nvidia.mbarrier" in text
+
+
+def test_lower_tile_to_nvidia_blackwell_target_ir_maps_mma_to_tcgen05_tmem():
+    tile = TileIRModule(functions=[
+        TileFunction(
+            "main",
+            body=[TileOp("tile.mma", {"source": "tessera.matmul", "result": "C", "ordinal": 0})],
+            target="nvidia_sm100",
+        )
+    ])
+    target = lower_tile_to_target_ir(tile, target_kind="nvidia_sm100")
+    assert target.verify().ok
+    text = target.to_mlir()
+    assert 'arch = "sm_100a"' in text
+    assert "tessera_nvidia.tmem_alloc" in text
+    assert "tessera_nvidia.tcgen05_mma" in text
+    assert "block_scaled = true" in text
+
+
 def test_lower_tile_to_apple_gpu_target_ir_maps_fa4_to_metal_contract():
     tile = TileIRModule(functions=[
         TileFunction(
@@ -128,3 +183,22 @@ def test_frontend_to_apple_cpu_target_ir_maps_matmul_and_softmax():
     text = target.to_mlir()
     assert "tessera_apple.cpu.accelerate_gemm" in text
     assert "tessera_apple.cpu.vector_reduce" in text
+
+
+def test_frontend_to_nvidia_target_ir_maps_flash_attention_contract_through_full_spine():
+    graph = lower_text_to_graph_ir("""
+    module demo {
+      func flash(Q: tensor<2x4xfp32>, K: tensor<2x4xfp32>, V: tensor<2x4xfp32>) -> tensor<2x4xfp32> {
+        O = op.flash_attn(Q, K, V);
+        return O;
+      }
+    }
+    """)
+    schedule = lower_graph_to_schedule_ir(graph, target_kind="nvidia_sm90")
+    tile = lower_schedule_to_tile_ir(schedule, target_kind="nvidia_sm90")
+    target = lower_tile_to_target_ir(tile, target_kind="nvidia_sm90")
+    assert target.verify().ok
+    text = target.to_mlir()
+    assert "tessera_nvidia.cuda_kernel" in text
+    assert 'kernel = "flash_attn_contract"' in text
+    assert 'status = "artifact_only"' in text

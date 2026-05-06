@@ -4,6 +4,9 @@ This is a **reference backend** for the Tessera programming model targeting Inte
 
 - A minimal backend registration stub (`src/backend_x86.cpp`)
 - A lowering skeleton (`src/lowering_x86_mlir.cpp` placeholder) showing how Tessera IR ops could map to x86 intrinsics
+- A verified Python `TargetIRModule` artifact path for `target="cpu"`,
+  `target="x86"`, and `target="x86_64"` that emits `tessera.cpu.*`
+  MLIR-like inspection contracts before NumPy-backed reference execution
 - High‑performance math kernels:
   - `amx_gemm_bf16` using AMX BF16 tiles (`_tile_dpbf16ps`)
   - `avx512_gemm_bf16` using AVX‑512 BF16 (`_mm512_dpbf16_ps`) or emulation fallback

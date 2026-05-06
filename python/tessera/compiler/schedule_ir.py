@@ -13,6 +13,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 
+from ..diagnostics import TesseraDiagnostic
 from .graph_ir import GraphIRDiagnostic, GraphIRModule, GraphIRVerificationError, IROp
 from .op_catalog import canonical_graph_op_name
 
@@ -34,6 +35,9 @@ class ScheduleIRVerificationResult:
 
     def format(self) -> str:
         return "\n".join(d.format() for d in self.diagnostics)
+
+    def structured_diagnostics(self) -> tuple[TesseraDiagnostic, ...]:
+        return tuple(d.to_tessera_diagnostic() for d in self.diagnostics)
 
 
 class ScheduleIRVerificationError(ValueError):

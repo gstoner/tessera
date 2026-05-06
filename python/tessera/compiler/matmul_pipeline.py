@@ -275,16 +275,10 @@ def _render_target_ir(
     tile: tuple[int, int, int],
     target_kind: str,
 ) -> str:
-    if target_kind == "rocm":
-        return _render_object_target_ir(module, tile=tile, target_kind=target_kind)
     if target_kind == "metalium":
         return _render_metalium_target_ir(fn, ops)
-    if target_kind == "apple_cpu":
+    if target_kind in {"cpu", "rocm", "apple_cpu", "apple_gpu"} or target_kind.startswith("nvidia"):
         return _render_object_target_ir(module, tile=tile, target_kind=target_kind)
-    if target_kind == "apple_gpu":
-        return _render_object_target_ir(module, tile=tile, target_kind=target_kind)
-    if target_kind.startswith("nvidia"):
-        return _render_nvidia_target_ir(fn, ops, target_kind=target_kind)
     lines = [
         'module attributes {tessera.ir.level = "target", target = "cpu"} {',
         f'  "tessera.cpu.func"() ({{',
@@ -639,6 +633,11 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
         v_hat = new_v / (1.0 - beta2**step)
         new_param = param - lr * m_hat / (np.sqrt(v_hat) + eps)
         return new_param, new_m, new_v
+    spec = GRAPH_OP_TO_SPEC.get(op_name)
+    if spec is not None:
+        import tessera
+
+        return tessera.ops.registry.dispatch(spec.public_name, *operands, prefer_runtime=False, **kwargs)
     raise ValueError(f"unsupported CPU op {op_name!r}")
 
 

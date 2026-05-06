@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import numpy as np
 
 import tessera
@@ -12,6 +15,29 @@ def test_ops_registry_contains_reference_ops():
     names = tessera.ops.registry.list()
     for name in OP_SPECS:
         assert name in names
+
+
+def test_tsol_standard_operations_doc_is_covered_by_registry_and_public_namespace():
+    root = Path(__file__).resolve().parents[2]
+    text = (root / "docs" / "operations" / "Tessera_Standard_Operations.md").read_text(encoding="utf-8")
+    documented = set(re.findall(r"tessera\.ops\.([a-zA-Z_][a-zA-Z0-9_]*)", text))
+    documented.update({
+        "cholesky",
+        "qr",
+        "svd",
+        "gelu",
+        "relu",
+        "silu",
+        "moe_dispatch",
+        "moe_combine",
+        "unpack",
+    })
+    missing_catalog = documented - set(OP_SPECS)
+    missing_registry = documented - set(tessera.ops.registry.list())
+    missing_namespace = {name for name in documented if not hasattr(tessera.ops, name)}
+    assert not missing_catalog
+    assert not missing_registry
+    assert not missing_namespace
 
 
 def test_op_catalog_is_consistent_across_frontend_and_cpu():
@@ -96,6 +122,34 @@ def test_small_tsol_runtime_references_match_numpy_contracts():
     assert uniform_a.dtype == normal_a.dtype == np.float32
     np.testing.assert_allclose(uniform_a, uniform_b)
     np.testing.assert_allclose(normal_a, normal_b)
+
+
+def test_expanded_tsol_reference_slice_matches_numpy_contracts():
+    a = np.arange(8, dtype=np.float32).reshape(2, 2, 2)
+    b = np.ones((2, 2, 2), dtype=np.float32)
+    np.testing.assert_allclose(tessera.ops.batched_gemm(a, b), np.matmul(a, b))
+    np.testing.assert_allclose(tessera.ops.einsum("ij,jk->ik", a[0], b[0]), np.einsum("ij,jk->ik", a[0], b[0]))
+
+    spd = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float32)
+    rhs = np.array([1.0, 2.0], dtype=np.float32)
+    np.testing.assert_allclose(tessera.ops.cholesky(spd), np.linalg.cholesky(spd))
+    np.testing.assert_allclose(tessera.ops.tri_solve(spd, rhs), np.linalg.solve(np.tril(spd), rhs))
+
+    q, k, v = tessera.ops.qkv_projection(np.ones((1, 2), dtype=np.float32), np.ones((2, 6), dtype=np.float32))
+    assert q.shape == k.shape == v.shape == (1, 2)
+
+    xf = np.fft.rfft(np.arange(4.0))
+    np.testing.assert_allclose(tessera.ops.spectral_filter(xf, 2.0), xf * 2.0)
+    seg = tessera.ops.segment_reduce(np.array([[1.0], [2.0], [4.0]]), np.array([0, 0, 1]), op="sum")
+    np.testing.assert_allclose(seg, np.array([[3.0], [4.0]]))
+
+
+def test_documented_tsol_keywords_are_accepted_by_reference_runtime():
+    x = np.ones((2, 2), dtype=np.float32)
+    np.testing.assert_allclose(tessera.ops.matmul(x, x, epilogue={"activation": "relu"}), x @ x)
+    np.testing.assert_allclose(tessera.ops.dropout(x, p=0.25, seed=123), tessera.ops.dropout(x, p=0.25, seed=123))
+    np.testing.assert_allclose(tessera.ops.all_reduce(x, axis="dp", deterministic={"deterministic": True}), x)
+    np.testing.assert_allclose(tessera.ops.fft(x, axes=(-1,)), np.fft.fft(x, axis=-1))
 
 
 def test_graph_ir_recognizes_new_operator_names():

@@ -113,9 +113,9 @@ Use these labels consistently in active docs:
 | Area | Status | Source of truth |
 |------|--------|-----------------|
 | Python frontend, textual DSL frontend, constraints, effects, Graph IR | implemented | `docs/CANONICAL_API.md`, `docs/spec/PYTHON_API_SPEC.md`, `python/tessera/` |
-| Object-backed Schedule IR, Tile IR, and Apple/ROCm Target IR artifact lowering | implemented / lit-testable | `python/tessera/compiler/schedule_ir.py`, `tile_ir.py`, `target_ir.py`, `tests/unit/test_*_ir.py` |
+| Object-backed Schedule IR, Tile IR, and CPU/NVIDIA/Apple/ROCm Target IR artifact lowering | implemented / lit-testable | `python/tessera/compiler/schedule_ir.py`, `tile_ir.py`, `target_ir.py`, `tests/unit/test_*_ir.py` |
 | x86/CPU lowering path and CPU execution artifacts | implemented / mock-runtime | `docs/spec/COMPILER_REFERENCE.md`, `python/tessera/compiler/matmul_pipeline.py`, `src/transforms/` |
-| NVIDIA SM90+ target artifacts and FA-4 lowering | implemented / lit-testable | `docs/spec/COMPILER_REFERENCE.md`, `src/compiler/tile_opt_fa4/`, `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` |
+| NVIDIA SM90+ WGMMA/TMA, Blackwell TCGEN05/TMEM, and FA-4 target artifacts | implemented / lit-testable | `docs/spec/COMPILER_REFERENCE.md`, `src/compiler/tile_opt_fa4/`, `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` |
 | Distributed collectives and planner foundation | implemented / scaffolded | `src/collectives/`, `python/tessera/testing/mock_collective.py`, `tests/unit/test_nccl_adapter.py` |
 | TPU target profile and StableHLO/Shardy artifacts | implemented / lit-testable | `python/tessera/compiler/tpu_target.py`, `src/compiler/codegen/Tessera_TPU_Backend/`, `tests/tessera-ir/phase4/` |
 | Solver, RNG, sparse, linalg, and resilience passes | implemented / lit-testable | `src/solvers/`, `tests/unit/test_*solver*.py`, `tests/tessera-ir/phase5/` |

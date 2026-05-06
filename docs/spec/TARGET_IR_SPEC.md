@@ -22,7 +22,7 @@ Schedule IR  (schedule dialect — mesh regions, pipeline stages)
 Tile IR      (tile.* ops — async copy, MMA, barriers; tessera.attn.* FA-4 ops)
      │  [AsyncCopyLoweringPass, NVWGMMALoweringPass, NVTMADescriptorPass]
      ▼
-Target IR    (tessera_nvidia.*, tessera_rocm.*, tessera_apple.*, tessera.tma.*, mbarrier ops)
+Target IR    (tessera.cpu.*, tessera_nvidia.*, tessera_rocm.*, tessera_apple.*, tessera.tma.*, mbarrier ops)
      │  [NVFlashAttnKernelEmitter → LLVM NVPTX backend]
      ▼
 PTX / binary
@@ -35,12 +35,12 @@ This document specifies four dialect layers that together constitute the Target 
 3. **`tessera.queue` dialect** — tile queue synchronisation (Tile IR layer, Phase 3)
 4. **`tile.*` ops** — generic tile async copy and MMA primitives (Tile IR layer)
 5. **`tessera_nvidia` dialect** — hardware-free Hopper/Blackwell Target IR contracts
-6. **`tessera_rocm` and `tessera_apple` contracts** — hardware-free AMD and Apple Target IR artifacts
+6. **`tessera.cpu`, `tessera_rocm`, and `tessera_apple` contracts** — hardware-free CPU/x86, AMD, and Apple Target IR artifacts
 
-The x86 Target IR (AMX/AVX-512 C function calls) is documented separately in
-`docs/architecture/tessera_target_ir_usage_guide.md`. The active Python
-compiler has verifier-backed object models for Schedule IR, Tile IR, and
-Apple/ROCm Target IR in `python/tessera/compiler/`.
+The active Python compiler has verifier-backed object models for Schedule IR,
+Tile IR, and CPU/NVIDIA/Apple/ROCm Target IR in `python/tessera/compiler/`.
+The x86 native AMX/AVX-512 C ABI path remains documented separately in
+`docs/architecture/tessera_target_ir_usage_guide.md`.
 
 ### 1.1 NVIDIA Hopper And Blackwell Contracts
 
@@ -692,6 +692,7 @@ Target IR status is reported separately from native runtime status:
 
 | Backend | Semantic compiler behavior | Target artifact generation | Mock/runtime fallback | Native hardware runtime |
 |---------|----------------------------|----------------------------|-----------------------|-------------------------|
+| CPU/x86 | `tessera.cpu.*` matmul, elementwise, attention, and state contracts | implemented / lit-testable | NumPy-backed CPU execution for supported ops | AMX/AVX-512 runtime path is reference/scaffolded |
 | NVIDIA | FA-4, queue, WGMMA/TMA contracts | lit-testable | Python/JIT artifact inspection | planned unless backend-specific hardware tests are run |
 | ROCm | MFMA/async-copy contracts | implemented / lit-testable | artifact-only | scaffolded; HIP loader/runtime paths require build flags and devices |
 | TPU | TPU profile, StableHLO/Shardy export | implemented / lit-testable | artifact-only | PJRT execute is scaffolded |

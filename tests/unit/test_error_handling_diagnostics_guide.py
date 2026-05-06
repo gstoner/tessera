@@ -10,9 +10,14 @@ from tessera.diagnostics import (
     DiagnosticLevel,
     DiagnosticWhere,
     ErrorReporter,
+    TesseraError,
     TesseraErrorCode,
     TesseraShapeError,
 )
+from tessera import debug
+from tessera.compiler.graph_ir import GraphIRDiagnostic, SourceSpan
+from tessera.compiler.target_ir import TargetIRDiagnostic
+from tessera.compiler.tile_ir import TileIRDiagnostic
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -73,6 +78,7 @@ def test_structured_diagnostic_fields_render_code_where_and_hints():
     assert "tile-ir" in text
     assert "GPU:0" in text
     assert "reduce batch" in text
+    assert diag.to_dict()["code"] == "E_OOM"
 
 
 def test_raise_if_errors_preserves_structured_context():
@@ -103,3 +109,42 @@ def test_fatal_diagnostics_count_as_errors_and_info_does_not():
     assert reporter.has_errors()
     assert reporter.error_count() == 1
     assert reporter.errors[0].level == DiagnosticLevel.FATAL
+
+
+def test_compiler_ir_diagnostics_bridge_to_stable_error_codes_and_where():
+    graph = GraphIRDiagnostic(
+        "error",
+        "matmul inner dimensions differ",
+        span=SourceSpan(3, 10, source_name="model.py"),
+        code="GRAPH_IR_MATMUL_SHAPE",
+    )
+    tile = TileIRDiagnostic("error", "wait_async stage must be >= 0", "TILE_IR_WAIT_STAGE")
+    target = TargetIRDiagnostic("error", "unsupported target 'quantum'", "TARGET_IR_TARGET")
+
+    graph_structured = graph.to_tessera_diagnostic()
+    assert graph_structured.code == TesseraErrorCode.SHAPE_MISMATCH
+    assert graph_structured.where is not None
+    assert graph_structured.where.ir_level == "graph-ir"
+    assert "model.py:3:10" in str(graph_structured)
+    assert "GRAPH_IR_MATMUL_SHAPE" in graph.format()
+
+    assert tile.to_tessera_diagnostic().code == TesseraErrorCode.TILE_LOWERING
+    assert tile.to_tessera_diagnostic().where.ir_level == "tile-ir"
+    assert target.to_tessera_diagnostic().code == TesseraErrorCode.TARGET_CODEGEN
+    assert target.to_tessera_diagnostic().where.ir_level == "target-ir"
+
+
+def test_debug_determinism_failures_surface_stable_nondeterminism_code():
+    state = {"value": 0}
+
+    def unstable():
+        state["value"] += 1
+        return state["value"]
+
+    with pytest.raises(TesseraError) as exc_info:
+        debug.check_determinism(unstable, runs=2)
+
+    err = exc_info.value
+    assert err.code == TesseraErrorCode.NONDETERMINISTIC
+    assert err.where is not None
+    assert err.where.pass_name == "check_determinism"

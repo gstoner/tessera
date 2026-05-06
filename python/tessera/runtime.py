@@ -1594,6 +1594,15 @@ def _execute_runtime_cpu_op(op_name: str, operands: list[Any], kwargs: dict[str,
         m_hat = new_m / (1.0 - beta1**step)
         v_hat = new_v / (1.0 - beta2**step)
         return param - lr * m_hat / (np.sqrt(v_hat) + eps), new_m, new_v
+    try:
+        from tessera.compiler.op_catalog import GRAPH_OP_TO_SPEC
+        import tessera
+    except Exception:
+        GRAPH_OP_TO_SPEC = {}
+        tessera = None
+    spec = GRAPH_OP_TO_SPEC.get(op_name) if GRAPH_OP_TO_SPEC else None
+    if spec is not None and tessera is not None:
+        return tessera.ops.registry.dispatch(spec.public_name, *operands, prefer_runtime=False, **kwargs)
     raise ValueError(f"unsupported runtime CPU op {op_name!r}")
 
 

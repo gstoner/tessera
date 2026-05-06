@@ -31,6 +31,7 @@ import textwrap
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from ..diagnostics import DiagnosticLevel, DiagnosticWhere, SourceLocation, TesseraDiagnostic, TesseraErrorCode
 from .op_catalog import GRAPH_OP_MAP, graph_name_for
 
 
@@ -236,8 +237,23 @@ class GraphIRDiagnostic:
     code: str = "GRAPH_IR"
 
     def format(self) -> str:
+        structured = self.to_tessera_diagnostic()
+        legacy_code = f" [{self.code}]" if self.code else ""
         loc = f" at {self.span.format()}" if self.span else ""
-        return f"{self.severity} {self.code}{loc}: {self.message}"
+        return f"{structured.level.value.upper()} [{structured.code.value}]{legacy_code}{loc}: {self.message}\n  where: {structured.where}"
+
+    def to_tessera_diagnostic(self) -> TesseraDiagnostic:
+        return TesseraDiagnostic(
+            level=_diagnostic_level(self.severity),
+            message=self.message,
+            location=_source_location(self.span),
+            code=_error_code_for_ir_diagnostic(self.code),
+            where=DiagnosticWhere(
+                ir_level=_ir_level_for_diagnostic(self.code),
+                pass_name="verifier",
+            ),
+            hints=_hints_for_ir_diagnostic(self.code),
+        )
 
 
 @dataclass(frozen=True)
@@ -251,6 +267,9 @@ class GraphIRVerificationResult:
     def format(self) -> str:
         return "\n".join(d.format() for d in self.diagnostics)
 
+    def structured_diagnostics(self) -> Tuple[TesseraDiagnostic, ...]:
+        return tuple(d.to_tessera_diagnostic() for d in self.diagnostics)
+
 
 class GraphIRVerificationError(ValueError):
     pass
@@ -258,6 +277,56 @@ class GraphIRVerificationError(ValueError):
 
 class MLIRObjectUnavailable(RuntimeError):
     pass
+
+
+def _diagnostic_level(severity: str) -> DiagnosticLevel:
+    return {
+        "fatal": DiagnosticLevel.FATAL,
+        "error": DiagnosticLevel.ERROR,
+        "warning": DiagnosticLevel.WARNING,
+        "info": DiagnosticLevel.INFO,
+        "note": DiagnosticLevel.NOTE,
+    }.get(severity.lower(), DiagnosticLevel.ERROR)
+
+
+def _source_location(span: Optional[SourceSpan]) -> Optional[SourceLocation]:
+    if span is None:
+        return None
+    return SourceLocation(file=span.source_name or "<tessera-ir>", line=span.line, column=span.col)
+
+
+def _ir_level_for_diagnostic(code: str) -> str:
+    if code.startswith("SCHEDULE_IR"):
+        return "schedule-ir"
+    if code.startswith("TILE_IR"):
+        return "tile-ir"
+    if code.startswith("TARGET_IR"):
+        return "target-ir"
+    return "graph-ir"
+
+
+def _error_code_for_ir_diagnostic(code: str) -> TesseraErrorCode:
+    if "SHAPE" in code or "RANK" in code or "TYPE" in code or "DTYPE" in code:
+        return TesseraErrorCode.SHAPE_MISMATCH
+    if code.startswith("SCHEDULE_IR"):
+        return TesseraErrorCode.SCHEDULE_FUSE_FAIL
+    if code.startswith("TILE_IR"):
+        return TesseraErrorCode.TILE_LOWERING
+    if code.startswith("TARGET_IR"):
+        return TesseraErrorCode.TARGET_CODEGEN
+    return TesseraErrorCode.GRAPH_INVALID
+
+
+def _hints_for_ir_diagnostic(code: str) -> List[str]:
+    if "SHAPE" in code or "RANK" in code:
+        return ["dump Graph IR and check tensor shape/layout metadata", "add explicit shape constraints or op.assert guards"]
+    if code.startswith("SCHEDULE_IR"):
+        return ["inspect Schedule IR artifact and movement/fusion attributes"]
+    if code.startswith("TILE_IR"):
+        return ["inspect Tile IR async copy, queue, and barrier ordering"]
+    if code.startswith("TARGET_IR"):
+        return ["inspect Target IR and selected target profile"]
+    return ["dump the failing IR level with TESSERA_DEBUG_IR=1"]
 
 
 def _dtype_to_ir_type(dtype: str) -> IRType:

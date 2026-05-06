@@ -66,9 +66,9 @@ Current high-level status:
 | Area | Status |
 |------|--------|
 | Python frontend, textual DSL frontend, constraints, effects, Graph IR | implemented |
-| Object-backed Graph/Schedule/Tile IR and Apple/ROCm Target IR artifacts | implemented / lit-testable |
+| Object-backed Graph/Schedule/Tile IR and CPU/NVIDIA/Apple/ROCm Target IR artifacts | implemented / lit-testable |
 | CPU/x86 lowering artifacts and NumPy-backed execution path | implemented / mock-runtime |
-| NVIDIA SM90+ FA-4 and target artifacts | implemented / lit-testable |
+| NVIDIA SM90+ FA-4, WGMMA/TMA, and Blackwell TCGEN05/TMEM target artifacts | implemented / lit-testable |
 | Distributed APIs, cyclic sharding, collectives scaffolding | implemented / scaffolded |
 | TPU target profile and StableHLO/Shardy artifacts | implemented / lit-testable |
 | Solver, sparse/RNG, linalg, resilience, and autotuning foundations | implemented / lit-testable |
@@ -100,7 +100,7 @@ Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, TPU, Apple, ...)
 ```
 
 The Python compiler now carries object models and verifier checks for Graph IR,
-Schedule IR, Tile IR, and Apple/ROCm Target IR. The JIT artifact spine emits
+Schedule IR, Tile IR, and CPU/x86, NVIDIA/CUDA, Apple, and ROCm Target IR. The JIT artifact spine emits
 textual MLIR-like inspection strings from those objects; native hardware
 execution remains target-specific and is claimed only where backend docs say so.
 

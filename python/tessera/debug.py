@@ -14,6 +14,7 @@ from typing import Callable, Mapping, Optional, Sequence
 
 import numpy as np
 
+from .diagnostics import DiagnosticWhere, TesseraError, TesseraErrorCode
 from .testing.qa import assert_deterministic
 
 
@@ -123,6 +124,10 @@ class GraphTrace:
 
     def format(self) -> str:
         return "\n".join(self.lines)
+
+    @property
+    def summary(self) -> str:
+        return f"IR trace level={self.ir_level}, lines={len(self.lines)}"
 
     def print(self, file=None) -> str:
         text = self.format()
@@ -268,7 +273,15 @@ def check_determinism(
 ) -> DeterminismCheckResult:
     """Verify repeated executions produce the same result."""
 
-    assert_deterministic(fn, runs=runs, rtol=rtol, atol=atol)
+    try:
+        assert_deterministic(fn, runs=runs, rtol=rtol, atol=atol)
+    except AssertionError as exc:
+        raise TesseraError(
+            str(exc),
+            code=TesseraErrorCode.NONDETERMINISTIC,
+            where=DiagnosticWhere(ir_level="runtime", pass_name="check_determinism"),
+            hints=["fix RNG seeds", "use deterministic schedules", "inspect collective ordering"],
+        ) from exc
     return DeterminismCheckResult(runs=runs, bitwise=(rtol == 0.0 and atol == 0.0))
 
 

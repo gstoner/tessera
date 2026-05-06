@@ -1172,16 +1172,23 @@ Phase 1 implementations are numpy-backed references or single-rank mock
 helpers. Phase 3 dispatches to compiled MLIR artifacts via the GPU lowering
 pipeline where that target path is implemented. Native hardware runtime support
 is a separate claim and is recorded in `RUNTIME_ABI_SPEC.md`.
-The Tessera Standard Operator Library reserves additional operator names for
-planned compiler/runtime paths; this table lists only the current Phase 1-3
-runtime surface. Larger typed APIs in `python/tessera/ops.pyi` such as sparse,
-MoE, RNG seed objects, and expanded collectives are reserved/planned unless
-they also appear in this table.
+The Tessera Standard Operator Library reserves a broad set of compiler-visible
+operator names. This table lists the current Python runtime and registry
+surface: implemented entries have NumPy/reference behavior, while artifact-only
+entries still have stable names, Graph IR spellings, effects, and lowering
+metadata for frontend and compiler tests.
 
 | Operation | Signature | Effect | Current behavior |
 |-----------|-----------|--------|------------------|
 | `gemm(A, B)` | `(array, array) → array` | `pure` | `np.matmul(A, B)` |
 | `matmul(A, B)` | `(array, array) → array` | `pure` | Alias for `gemm` |
+| `batched_gemm(A, B)` | `(array, array) → array` | `pure` | Batched `np.matmul` reference |
+| `einsum(spec, *tensors)` | `(str, arrays...) → array` | `pure` | `np.einsum` reference |
+| `factorized_matmul(A, B, rank)` | `(array, array) → array` | `pure` | Low-rank SVD reference over `A @ B` |
+| `tri_solve(A, b, lower=True)` | `(array, array) → array` | `pure` | Triangular `np.linalg.solve` reference |
+| `cholesky(A)` | `(array) → array` | `pure` | `np.linalg.cholesky` reference |
+| `qr(A)` | `(array) → tuple` | `pure` | `np.linalg.qr` reference |
+| `svd(A)` | `(array) → tuple` | `pure` | `np.linalg.svd(..., full_matrices=False)` reference |
 | `layer_norm(x, eps=1e-5)` | `(array) → array` | `pure` | NumPy layer norm |
 | `softmax(x, axis=-1)` | `(array) → array` | `pure` | NumPy softmax |
 | `softmax_safe(x, axis=-1)` | `(array) → array` | `pure` | Stable NumPy softmax alias |
@@ -1197,7 +1204,10 @@ they also appear in this table.
 | `cast(x, dtype)` | `(array, str) → array` | `pure` | `x.astype(dtype)` |
 | `dropout(x, p=0.1, training=True)` | `(array) → array` | `random` | Bernoulli mask, numpy rng |
 | `conv2d(x, weight, bias=None, stride=1, padding=0)` | `(NHWC, HWIO) → NHWC` | `pure` | NumPy NHWC/HWIO reference |
+| `conv3d(x, weight, bias=None, stride=1, padding=0)` | `(NDHWC, DHWIO) → NDHWC` | `pure` | NumPy NDHWC/DHWIO reference |
+| `qkv_projection(x, W_qkv)` | `(array, array) → tuple` | `pure` | Matmul and split into Q/K/V references |
 | `flash_attn(Q, K, V, scale=None, causal=False, dropout_p=0.0, seed=None)` | `(array,array,array) → array` | `pure` / `random` when dropout is active | Naive O(S²) Phase 1; FA-4 Phase 3 |
+| `moe(x, experts)`, `moe_dispatch(x, route)`, `moe_combine(partials, inverse_route)` | `(array, ...) → array` | `collective` | Reference/mock transport helpers; distributed execution planned |
 | `all_reduce(x, op="sum")` | `(array) → array` | `collective` | Single-rank/mock no-op unless using explicit mock collective helpers |
 | `reduce_scatter(x, op="sum", axis=0)` | `(array) → array` | `collective` | Single-rank/mock no-op unless using explicit mock collective helpers |
 | `all_gather(x, axis=0)` | `(array) → array` | `collective` | Single-rank/mock no-op unless using explicit mock collective helpers |
@@ -1206,8 +1216,16 @@ they also appear in this table.
 | `rng_normal(shape, dtype="fp32", seed=None, mean=0.0, std=1.0)` | `(shape) → array` | `random` | NumPy generator helper |
 | `fused_epilogue(x, bias=None, activation="linear")` | `(array) → array` | `pure` | Applies bias + activation |
 | `fft(x, axis=-1)`, `ifft(xf, axis=-1)`, `rfft(x, axis=-1)`, `irfft(xf, axis=-1, n=None)` | `(array) → array` | `pure` | NumPy FFT helpers |
+| `stft(x, win, hop)`, `istft(xf, win, hop)` | `(array, array) → array` | `pure` | NumPy FFT-derived windowed transform references |
+| `spectral_filter(Xf, Hf)` | `(array, array) → array` | `pure` | Frequency-domain multiply reference |
 | `dct(x, type=2, axis=-1)` | `(array) → array` | `pure` | NumPy FFT-derived DCT helper |
 | `spectral_conv(x, w)` | `(array, array) → array` | `pure` | NumPy spectral convolution helper |
+| `spmm_coo(A_coo, B)` | `(sparse/dense, array) → array` | `pure` | Dense fallback or simple COO tuple reference |
+| `spmm_csr(A_csr, B)` | `(sparse/dense, array) → array` | `pure` | Dense fallback or simple CSR tuple reference |
+| `sddmm(A, B, mask)` | `(array, array, array) → array` | `pure` | Dense sampled matmul reference |
+| `bsmm(X, W_bsr)` | `(array, array) → array` | `pure` | Dense fallback block-sparse matmul reference |
+| `segment_reduce(x, seg_ids, op="sum")` | `(array, array) → array` | `pure` | NumPy segment reduction reference |
+| `rearrange(x, layout)`, `pack(x, layout)`, `unpack(x)`, `tile_view(x, BM, BN, BK=None)` | `(array, ...) → array` | `pure` / `movement` for materialized pack/unpack | Reference layout helpers; compiler-visible layout metadata |
 | `kv_cache_append(cache, key, value)` | `(cache, array, array) → cache` | `state` | Reference in-process KV cache helper |
 | `kv_cache_prune(cache, max_entries=None, max_seq=None)` | `(cache) → cache` | `state` | Reference in-process KV cache helper |
 

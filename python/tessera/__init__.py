@@ -204,16 +204,55 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     """Build the tessera.ops namespace with Phase 1 numpy-backed stubs."""
     import numpy as np
 
-    def gemm(A, B):
+    def gemm(A, B, epilogue=None):
         """Matrix multiply A @ B."""
         if hasattr(A, "_data"):
             A = A._data
         if hasattr(B, "_data"):
             B = B._data
-        return np.matmul(A, B)
+        out = np.matmul(A, B)
+        if epilogue:
+            out = fused_epilogue(out, **epilogue)
+        return out
 
-    def matmul(A, B):
-        return gemm(A, B)
+    def matmul(A, B, epilogue=None):
+        return gemm(A, B, epilogue=epilogue)
+
+    def batched_gemm(A, B, epilogue=None):
+        return gemm(A, B, epilogue=epilogue)
+
+    def einsum(spec: str, *tensors):
+        tensors = tuple(t._data if hasattr(t, "_data") else t for t in tensors)
+        return np.einsum(spec, *tensors)
+
+    def factorized_matmul(A, B, rank: int):
+        out = gemm(A, B)
+        u, s, vh = np.linalg.svd(out, full_matrices=False)
+        r = max(1, min(int(rank), s.shape[-1]))
+        return (u[..., :r] * s[..., :r]) @ vh[..., :r, :]
+
+    def tri_solve(A, b, lower: bool = True):
+        if hasattr(A, "_data"):
+            A = A._data
+        if hasattr(b, "_data"):
+            b = b._data
+        tri = np.tril(A) if lower else np.triu(A)
+        return np.linalg.solve(tri, b)
+
+    def cholesky(A):
+        if hasattr(A, "_data"):
+            A = A._data
+        return np.linalg.cholesky(A)
+
+    def qr(A):
+        if hasattr(A, "_data"):
+            A = A._data
+        return np.linalg.qr(A)
+
+    def svd(A):
+        if hasattr(A, "_data"):
+            A = A._data
+        return np.linalg.svd(A, full_matrices=False)
 
     def layer_norm(x, eps: float = 1e-5):
         if hasattr(x, "_data"):
@@ -300,15 +339,18 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         }
         return x.astype(_map.get(dtype, np.float32))
 
-    def dropout(x, p: float = 0.1, training: bool = True):
+    def dropout(x, p: float = 0.1, rng=None, training: bool = True, seed: int | None = None):
         if not training:
             return x
         if hasattr(x, "_data"):
             x = x._data
-        mask = np.random.binomial(1, 1 - p, x.shape) / (1 - p)
+        if not 0.0 <= p < 1.0:
+            raise ValueError("dropout p must be in [0.0, 1.0)")
+        generator = rng if rng is not None else np.random.default_rng(None if seed is None else int(seed))
+        mask = generator.binomial(1, 1 - p, x.shape) / (1 - p)
         return x * mask
 
-    def conv2d(x, weight, bias=None, stride=1, padding=0):
+    def conv2d(x, weight, bias=None, stride=1, padding=0, layout: str = "nhwc", epilogue=None):
         """Reference NHWC/HWIO conv2d used by the frontend CPU path."""
         if hasattr(x, "_data"):
             x = x._data
@@ -332,6 +374,44 @@ def _make_ops_namespace() -> types.SimpleNamespace:
                 out[:, i, j, :] = np.tensordot(window, weight, axes=([1, 2, 3], [0, 1, 2]))
         if bias is not None:
             out = out + bias
+        if epilogue:
+            out = fused_epilogue(out, **epilogue)
+        return out
+
+    def conv3d(x, weight, bias=None, stride=1, padding=0, layout: str = "ndhwc", epilogue=None):
+        """Reference NDHWC/DHWIO conv3d used by the TSOL CPU path."""
+        if hasattr(x, "_data"):
+            x = x._data
+        if hasattr(weight, "_data"):
+            weight = weight._data
+        def triple(v):
+            if isinstance(v, (tuple, list)):
+                return int(v[0]), int(v[1]), int(v[2])
+            return int(v), int(v), int(v)
+        stride_d, stride_h, stride_w = triple(stride)
+        pad_d, pad_h, pad_w = triple(padding)
+        x_pad = np.pad(x, ((0, 0), (pad_d, pad_d), (pad_h, pad_h), (pad_w, pad_w), (0, 0)))
+        batch, in_d, in_h, in_w, _ = x_pad.shape
+        k_d, k_h, k_w, _, out_c = weight.shape
+        out_d = (in_d - k_d) // stride_d + 1
+        out_h = (in_h - k_h) // stride_h + 1
+        out_w = (in_w - k_w) // stride_w + 1
+        out = np.zeros((batch, out_d, out_h, out_w, out_c), dtype=np.result_type(x, weight))
+        for od in range(out_d):
+            for oh in range(out_h):
+                for ow in range(out_w):
+                    window = x_pad[
+                        :,
+                        od * stride_d:od * stride_d + k_d,
+                        oh * stride_h:oh * stride_h + k_h,
+                        ow * stride_w:ow * stride_w + k_w,
+                        :,
+                    ]
+                    out[:, od, oh, ow, :] = np.tensordot(window, weight, axes=([1, 2, 3, 4], [0, 1, 2, 3]))
+        if bias is not None:
+            out = out + bias
+        if epilogue:
+            out = fused_epilogue(out, **epilogue)
         return out
 
     def flash_attn(
@@ -340,7 +420,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         V,
         scale=None,
         causal: bool = False,
+        cache=None,
         dropout_p: float = 0.0,
+        params=None,
+        deterministic=None,
         seed: int | None = None,
     ):
         # Phase 1: naive attention (Phase 3: tile-level FA-4)
@@ -373,23 +456,79 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             weights = weights * keep / (1.0 - dropout_p)
         return np.matmul(weights, V)
 
-    def all_reduce(x, op: str = "sum"):
+    def qkv_projection(x, W_qkv):
+        if hasattr(x, "_data"):
+            x = x._data
+        if hasattr(W_qkv, "_data"):
+            W_qkv = W_qkv._data
+        y = np.matmul(x, W_qkv)
+        return tuple(np.split(y, 3, axis=-1))
+
+    def moe(x, experts, router: str = "topk", k: int = 1, transport=None, deterministic=None, scores=None, route=None):
+        if hasattr(x, "_data"):
+            x = x._data
+        if hasattr(experts, "_data"):
+            experts = experts._data
+        experts = list(experts)
+        if not experts:
+            return x
+        if callable(experts[0]):
+            expert = experts[0]
+            return expert(x)
+        x_arr = np.asarray(x)
+        experts_arr = np.asarray(experts)
+        if experts_arr.ndim == 2:
+            experts_arr = experts_arr[None, :, :]
+        if experts_arr.ndim != 3:
+            raise ValueError("moe experts must be stacked as (num_experts, in_dim, out_dim)")
+        if x_arr.shape[-1] != experts_arr.shape[1]:
+            raise ValueError(
+                f"moe input dim {x_arr.shape[-1]} does not match expert dim {experts_arr.shape[1]}"
+            )
+        tokens = x_arr.reshape(-1, x_arr.shape[-1])
+        num_experts = experts_arr.shape[0]
+        if route is not None:
+            route_arr = np.asarray(route, dtype=np.int64).reshape(-1)
+        elif scores is not None:
+            route_arr = np.argmax(np.asarray(scores).reshape(tokens.shape[0], num_experts), axis=-1)
+        else:
+            route_arr = np.arange(tokens.shape[0], dtype=np.int64) % num_experts
+        if route_arr.shape[0] != tokens.shape[0]:
+            raise ValueError("moe route length must match token count")
+        route_arr = np.mod(route_arr, num_experts)
+        out = np.empty((tokens.shape[0], experts_arr.shape[2]), dtype=np.result_type(tokens, experts_arr))
+        for token_idx, expert_idx in enumerate(route_arr):
+            out[token_idx] = tokens[token_idx] @ experts_arr[int(expert_idx)]
+        return out.reshape(x_arr.shape[:-1] + (experts_arr.shape[2],))
+
+    def moe_dispatch(x, route, transport=None):
+        if hasattr(x, "_data"):
+            x = x._data
+        return x
+
+    def moe_combine(partials, inverse_route, reduce: str = "sum"):
+        if hasattr(partials, "_data"):
+            partials = partials._data
+        arr = np.asarray(partials)
+        return arr.mean(axis=0) if reduce == "mean" and arr.ndim > 0 else arr.sum(axis=0) if reduce == "sum" and arr.ndim > 1 else arr
+
+    def all_reduce(x, axis: int | str = "dp", op: str = "sum", deterministic=None):
         # Phase 1 stub: single-rank, no-op
         if hasattr(x, "_data"):
             x = x._data
         return x
 
-    def reduce_scatter(x, op: str = "sum", axis: int = 0):
+    def reduce_scatter(x, axis: int | str = "dp", op: str = "sum", deterministic=None):
         if hasattr(x, "_data"):
             x = x._data
         return x
 
-    def all_gather(x, axis: int = 0):
+    def all_gather(x, axis: int | str = "dp", deterministic=None):
         if hasattr(x, "_data"):
             x = x._data
         return x
 
-    def all_to_all(x, axis: int | str = 0):
+    def all_to_all(x, axis: int | str = "dp", deterministic=None):
         if hasattr(x, "_data"):
             x = x._data
         return x
@@ -416,36 +555,47 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         rng = np.random.default_rng(None if seed is None else int(seed))
         return rng.normal(float(mean), float(std), tuple(shape)).astype(_dtype_for(dtype))
 
-    def fused_epilogue(x, bias=None, activation="linear"):
+    def fused_epilogue(x, bias=None, activation="linear", residual=None, dropout_p: float = 0.0, cast_dtype=None, **kwargs):
         if hasattr(x, "_data"):
             x = x._data
         if bias is not None:
             x = x + bias
+        if residual is not None:
+            x = x + (residual._data if hasattr(residual, "_data") else residual)
         if activation == "gelu":
-            return gelu(x)
+            x = gelu(x)
         elif activation == "relu":
-            return relu(x)
+            x = relu(x)
+        elif activation == "silu":
+            x = silu(x)
+        if dropout_p:
+            x = dropout(x, p=float(dropout_p))
+        if cast_dtype is not None:
+            x = cast(x, cast_dtype)
         return x
 
-    def fft(x, axis: int = -1):
+    def _axis_from_axes(axis: int = -1, axes=None) -> int:
+        return int(axis if axes is None else tuple(axes)[-1])
+
+    def fft(x, axis: int = -1, axes=None):
         if hasattr(x, "_data"):
             x = x._data
-        return np.fft.fft(x, axis=axis)
+        return np.fft.fft(x, axis=_axis_from_axes(axis, axes))
 
-    def ifft(xf, axis: int = -1):
+    def ifft(xf, axis: int = -1, axes=None):
         if hasattr(xf, "_data"):
             xf = xf._data
-        return np.fft.ifft(xf, axis=axis)
+        return np.fft.ifft(xf, axis=_axis_from_axes(axis, axes))
 
-    def rfft(x, axis: int = -1):
+    def rfft(x, axis: int = -1, axes=None):
         if hasattr(x, "_data"):
             x = x._data
-        return np.fft.rfft(x, axis=axis)
+        return np.fft.rfft(x, axis=_axis_from_axes(axis, axes))
 
-    def irfft(xf, axis: int = -1, n=None):
+    def irfft(xf, axis: int = -1, axes=None, n=None):
         if hasattr(xf, "_data"):
             xf = xf._data
-        return np.fft.irfft(xf, n=n, axis=axis)
+        return np.fft.irfft(xf, n=n, axis=_axis_from_axes(axis, axes))
 
     def dct(x, type: int = 2, axis: int = -1):
         if hasattr(x, "_data"):
@@ -466,6 +616,127 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         nfft = 1 << int(np.ceil(np.log2(n)))
         y = np.fft.irfft(np.fft.rfft(x, nfft) * np.fft.rfft(w, nfft), nfft)
         return y[..., :n]
+
+    def stft(x, win, hop: int):
+        if hasattr(x, "_data"):
+            x = x._data
+        if hasattr(win, "_data"):
+            win = win._data
+        x = np.asarray(x)
+        win = np.asarray(win)
+        frames = []
+        for start in range(0, max(1, x.shape[-1] - win.shape[-1] + 1), int(hop)):
+            frames.append(np.fft.rfft(x[..., start:start + win.shape[-1]] * win, axis=-1))
+        return np.stack(frames, axis=-2)
+
+    def istft(xf, win, hop: int):
+        if hasattr(xf, "_data"):
+            xf = xf._data
+        if hasattr(win, "_data"):
+            win = win._data
+        xf = np.asarray(xf)
+        win = np.asarray(win)
+        frame_count = xf.shape[-2]
+        frame_len = win.shape[-1]
+        out = np.zeros(xf.shape[:-2] + ((frame_count - 1) * int(hop) + frame_len,), dtype=np.float64)
+        weight = np.zeros_like(out)
+        for idx in range(frame_count):
+            frame = np.fft.irfft(xf[..., idx, :], n=frame_len, axis=-1) * win
+            start = idx * int(hop)
+            out[..., start:start + frame_len] += frame
+            weight[..., start:start + frame_len] += win * win
+        return out / np.maximum(weight, 1e-12)
+
+    def spectral_filter(Xf, Hf):
+        if hasattr(Xf, "_data"):
+            Xf = Xf._data
+        if hasattr(Hf, "_data"):
+            Hf = Hf._data
+        return np.asarray(Xf) * np.asarray(Hf)
+
+    def spmm_coo(A_coo, B):
+        if hasattr(A_coo, "_data"):
+            A_coo = A_coo._data
+        if hasattr(B, "_data"):
+            B = B._data
+        if isinstance(A_coo, tuple) and len(A_coo) == 3:
+            coords, values, shape = A_coo
+            dense = np.zeros(tuple(shape), dtype=np.asarray(values).dtype)
+            coords = np.asarray(coords)
+            dense[coords[:, 0], coords[:, 1]] = values
+            return dense @ B
+        return np.asarray(A_coo) @ B
+
+    def spmm_csr(A_csr, B):
+        if hasattr(A_csr, "_data"):
+            A_csr = A_csr._data
+        if hasattr(B, "_data"):
+            B = B._data
+        if isinstance(A_csr, tuple) and len(A_csr) == 4:
+            indptr, indices, values, shape = A_csr
+            dense = np.zeros(tuple(shape), dtype=np.asarray(values).dtype)
+            for row in range(len(indptr) - 1):
+                dense[row, np.asarray(indices)[indptr[row]:indptr[row + 1]]] = np.asarray(values)[indptr[row]:indptr[row + 1]]
+            return dense @ B
+        return np.asarray(A_csr) @ B
+
+    def sddmm(A, B, mask):
+        if hasattr(A, "_data"):
+            A = A._data
+        if hasattr(B, "_data"):
+            B = B._data
+        if hasattr(mask, "_data"):
+            mask = mask._data
+        return (np.asarray(A) @ np.asarray(B)) * np.asarray(mask)
+
+    def bsmm(X, W_bsr, meta=None):
+        if hasattr(X, "_data"):
+            X = X._data
+        if hasattr(W_bsr, "_data"):
+            W_bsr = W_bsr._data
+        return np.asarray(X) @ np.asarray(W_bsr)
+
+    def segment_reduce(x, seg_ids, op: str = "sum"):
+        if hasattr(x, "_data"):
+            x = x._data
+        if hasattr(seg_ids, "_data"):
+            seg_ids = seg_ids._data
+        x = np.asarray(x)
+        seg_ids = np.asarray(seg_ids)
+        out = []
+        for seg in np.unique(seg_ids):
+            values = x[seg_ids == seg]
+            if op == "max":
+                out.append(values.max(axis=0))
+            elif op == "min":
+                out.append(values.min(axis=0))
+            elif op == "mean":
+                out.append(values.mean(axis=0))
+            elif op == "prod":
+                out.append(values.prod(axis=0))
+            else:
+                out.append(values.sum(axis=0))
+        return np.stack(out, axis=0)
+
+    def rearrange(x, layout):
+        if hasattr(x, "_data"):
+            x = x._data
+        if isinstance(layout, (tuple, list)):
+            return np.transpose(x, tuple(layout))
+        return np.asarray(x)
+
+    def pack(x, layout):
+        return rearrange(x, layout if isinstance(layout, (tuple, list)) else None)
+
+    def unpack(x):
+        if hasattr(x, "_data"):
+            x = x._data
+        return np.asarray(x)
+
+    def tile_view(x, BM: int, BN: int, BK=None):
+        if hasattr(x, "_data"):
+            x = x._data
+        return np.asarray(x)
 
     def rope(x, theta, axes: str = "qk"):
         """Reference rotary position embedding over the innermost dimension."""
@@ -518,7 +789,15 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     references = {
         "gemm": gemm,
         "matmul": matmul,
+        "batched_gemm": batched_gemm,
+        "einsum": einsum,
+        "factorized_matmul": factorized_matmul,
+        "tri_solve": tri_solve,
+        "cholesky": cholesky,
+        "qr": qr,
+        "svd": svd,
         "conv2d": conv2d,
+        "conv3d": conv3d,
         "layer_norm": layer_norm,
         "softmax": softmax,
         "softmax_safe": softmax_safe,
@@ -531,7 +810,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "transpose": transpose,
         "cast": cast,
         "dropout": dropout,
+        "qkv_projection": qkv_projection,
         "flash_attn": flash_attn,
+        "moe": moe,
+        "moe_dispatch": moe_dispatch,
+        "moe_combine": moe_combine,
         "all_reduce": all_reduce,
         "reduce_scatter": reduce_scatter,
         "all_gather": all_gather,
@@ -543,8 +826,20 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "ifft": ifft,
         "rfft": rfft,
         "irfft": irfft,
+        "stft": stft,
+        "istft": istft,
+        "spectral_filter": spectral_filter,
         "dct": dct,
         "spectral_conv": spectral_conv,
+        "spmm_coo": spmm_coo,
+        "spmm_csr": spmm_csr,
+        "sddmm": sddmm,
+        "bsmm": bsmm,
+        "segment_reduce": segment_reduce,
+        "rearrange": rearrange,
+        "pack": pack,
+        "unpack": unpack,
+        "tile_view": tile_view,
         "rmsnorm": rmsnorm,
         "rmsnorm_safe": rmsnorm_safe,
         "rope": rope,
@@ -562,6 +857,13 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         register_runtime_kernel=_register_runtime_kernel,
         gemm=gemm,
         matmul=matmul,
+        batched_gemm=batched_gemm,
+        einsum=einsum,
+        factorized_matmul=factorized_matmul,
+        tri_solve=tri_solve,
+        cholesky=cholesky,
+        qr=qr,
+        svd=svd,
         layer_norm=layer_norm,
         softmax=softmax,
         softmax_safe=softmax_safe,
@@ -577,7 +879,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         cast=cast,
         dropout=dropout,
         conv2d=conv2d,
+        conv3d=conv3d,
+        qkv_projection=qkv_projection,
         flash_attn=flash_attn,
+        moe=moe,
+        moe_dispatch=moe_dispatch,
+        moe_combine=moe_combine,
         all_reduce=all_reduce,
         reduce_scatter=reduce_scatter,
         all_gather=all_gather,
@@ -589,8 +896,20 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         ifft=ifft,
         rfft=rfft,
         irfft=irfft,
+        stft=stft,
+        istft=istft,
+        spectral_filter=spectral_filter,
         dct=dct,
         spectral_conv=spectral_conv,
+        spmm_coo=spmm_coo,
+        spmm_csr=spmm_csr,
+        sddmm=sddmm,
+        bsmm=bsmm,
+        segment_reduce=segment_reduce,
+        rearrange=rearrange,
+        pack=pack,
+        unpack=unpack,
+        tile_view=tile_view,
         rope=rope,
         ReferenceKVCache=ReferenceKVCache,
         kv_cache_append=kv_cache_append,

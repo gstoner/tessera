@@ -15,10 +15,10 @@ This guide documents the reference executable/artifact compiler spine:
 
 It is intentionally a development/reference path. CPU execution uses NumPy and
 explicit single-rank/state stubs; it is not native GPU, distributed, or C ABI
-execution. Functions outside the executable CPU subset keep the eager Python
-fallback and expose an explicit diagnostic explaining why. Artifact generation
-for Graph/Schedule/Tile and Apple/ROCm Target IR is object-backed and verified
-before textual inspection strings are emitted.
+execution. Functions outside the executable CPU subset keep the eager Python fallback
+and expose an explicit diagnostic explaining why. Artifact generation for
+Graph/Schedule/Tile and CPU, NVIDIA/CUDA, Apple, and ROCm Target IR is
+object-backed and verified before textual inspection strings are emitted.
 
 ## 1. Minimal Example
 
@@ -84,9 +84,9 @@ Python compiler constructs them from verified object models:
   yields.
 - **Tile IR:** `TileIRModule` lowers scheduled work to `tile.*`,
   `tessera.attn.*` FA-4 helpers, and `tessera.queue.*` barriers.
-- **Target IR:** `TargetIRModule` lowers Tile IR into verified Apple CPU/GPU
-  and ROCm hardware-free target artifacts. Metalium/NVIDIA keep their existing
-  artifact renderers in this path.
+- **Target IR:** `TargetIRModule` lowers Tile IR into verified CPU/x86,
+  NVIDIA/CUDA, Apple CPU/GPU, and ROCm hardware-free target artifacts.
+  Metalium keeps its existing artifact renderer in this path.
 
 To see whether a function used the compiler path:
 
@@ -147,10 +147,11 @@ Supported:
 - literal keyword attributes such as `softmax(axis=0)` and optimizer params
 - NumPy arrays, tensor-like values with `.numpy()`, and Tessera `Tensor` values
   with `._data`
-- hardware-free Target IR artifact selection with `target="rocm"`,
+- hardware-free Target IR artifact selection with `target="cpu"`,
+  `target="nvidia_sm90"`, `target="nvidia_sm100"`, `target="rocm"`,
   `target="metalium"`, `target="apple_cpu"`, and `target="apple_gpu"`
-- direct textual DSL lowering through Graph IR into Schedule/Tile/Apple/ROCm
-  Target IR object models
+- direct textual DSL lowering through Graph IR into Schedule/Tile/Target IR
+  object models
 
 Not yet supported:
 

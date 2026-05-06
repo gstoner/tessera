@@ -31,7 +31,7 @@ Schedule IR (schedule.mesh.*, pipeline regions, stages, tiling structure)
      v  [python/tessera/compiler/tile_ir.py, tile lowering, backend lowering]
 Tile IR     (tile.*, tessera.attn.* FA-4 ops, tessera.queue.* barriers)
      |
-     v  [python/tessera/compiler/target_ir.py for Apple/ROCm artifact paths]
+     v  [python/tessera/compiler/target_ir.py for CPU/NVIDIA/Apple/ROCm artifact paths]
 Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, TPU, Apple, ...)
 ```
 
@@ -40,7 +40,7 @@ Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, TPU, Apple, ...)
 | Graph IR | `python/tessera/compiler/graph_ir.py`, `python/tessera/compiler/frontend/parser.py`, `src/compiler/ir/TesseraOps.td`, `src/compiler/ir/TesseraTiling.cpp` | implemented; TilingInterface methods scaffolded |
 | Schedule IR | `python/tessera/compiler/schedule_ir.py`, `src/compiler/programming_model/ir/ScheduleOps.cpp`, `src/compiler/programming_model/` | implemented / lit-testable |
 | Tile IR | `python/tessera/compiler/tile_ir.py`, `src/compiler/tile_opt_fa4/`, `src/transforms/lib/TileIRLoweringPass.cpp` | implemented / lit-testable |
-| Target IR | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/`, `python/tessera/compiler/matmul_pipeline.py` | Apple/ROCm artifact paths implemented / lit-testable; other non-CPU targets vary by backend |
+| Target IR | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/`, `python/tessera/compiler/matmul_pipeline.py` | CPU/NVIDIA/Apple/ROCm artifact paths implemented / lit-testable; other non-CPU targets vary by backend |
 
 ---
 
@@ -60,7 +60,7 @@ Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, TPU, Apple, ...)
 
 Native execution support is separate from target artifact generation. The
 Python lowering path uses object-backed Graph IR, Schedule IR, Tile IR, and
-Apple/ROCm Target IR layers with verifier checks before emitting inspectable
+CPU/NVIDIA/Apple/ROCm Target IR layers with verifier checks before emitting inspectable
 MLIR-like artifacts. Non-CPU native execution should only be called
 hardware-runtime when the backend-specific docs and tests say so.
 

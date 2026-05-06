@@ -16,6 +16,21 @@ from tessera.runtime import launch
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _simple_transformer_reference(x, wq, wk, wv, wo, w1, w2):
+    q = x @ wq
+    k = x @ wk
+    v = x @ wv
+    scores = q @ k.T
+    exp_scores = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+    probs = exp_scores / np.sum(exp_scores, axis=-1, keepdims=True)
+    attn = (probs @ v) @ wo
+    hidden_pre = attn @ w1
+    hidden = 0.5 * hidden_pre * (
+        1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (hidden_pre + 0.044715 * np.power(hidden_pre, 3)))
+    )
+    return hidden @ w2
+
+
 def test_apple_cpu_target_reports_accelerate_execution_mode_and_runtime_pipeline():
     @ts.jit(target="apple_cpu")
     def mm(A, B):
@@ -172,6 +187,151 @@ def test_rope_reference_path_executes_tiny_decode_proxy_on_cpu():
     assert "tessera.rope" in tiny_decode_cpu.ir_text()
     assert "tile.rotary_pair" in tiny_decode_cpu.tile_ir
     np.testing.assert_allclose(out, ts.ops.softmax(x @ x.T) @ x)
+
+
+def test_apple_cpu_simple_moe_solver_executes_reference_expert_routing():
+    """Simple MoE solver path: stacked expert matrices, deterministic top-1
+    round-robin routing, Apple CPU compiler artifact, and reference execution.
+    This is intentionally a single-host solver; distributed all-to-all routing
+    remains covered by the MoE planner tests."""
+
+    @ts.jit(target="apple_cpu")
+    def simple_moe(x, experts):
+        return ts.ops.moe(x, experts)
+
+    x = np.array(
+        [
+            [1.0, 2.0],
+            [3.0, 4.0],
+            [5.0, 6.0],
+            [7.0, 8.0],
+        ],
+        dtype=np.float32,
+    )
+    experts = np.stack(
+        [
+            np.eye(2, dtype=np.float32),
+            np.array([[2.0, 0.0], [0.0, 3.0]], dtype=np.float32),
+        ],
+        axis=0,
+    )
+    expected = np.stack([
+        x[0] @ experts[0],
+        x[1] @ experts[1],
+        x[2] @ experts[0],
+        x[3] @ experts[1],
+    ])
+
+    artifact = simple_moe.runtime_artifact()
+    assert simple_moe.uses_compiled_path
+    assert artifact.metadata["compiler_path"] == "apple_cpu_accelerate"
+    assert artifact.metadata["runtime_status"] == "ready"
+    assert "tessera.moe" in simple_moe.ir_text()
+    assert "tile.moe" in simple_moe.tile_ir
+    assert "tessera_apple.cpu.moe_solver" in simple_moe.target_ir
+    assert 'routing = "deterministic_top1"' in simple_moe.target_ir
+    np.testing.assert_allclose(simple_moe(x, experts), expected)
+
+
+def test_apple_gpu_simple_moe_solver_emits_metal_artifact_contract():
+    @ts.jit(target="apple_gpu")
+    def simple_moe(x, experts):
+        return ts.ops.moe(x, experts)
+
+    artifact = simple_moe.runtime_artifact()
+    assert artifact.metadata["execution_mode"] == "metal_artifact"
+    assert artifact.metadata["runtime_status"] == "artifact_only"
+    assert "tessera.moe" in simple_moe.ir_text()
+    assert 'kernel = "moe_contract"' in simple_moe.target_ir
+    assert 'grid = "tokens_experts"' in simple_moe.target_ir
+
+
+def test_apple_cpu_simple_transformer_block_executes_attention_and_mlp():
+    @ts.jit(target="apple_cpu")
+    def simple_transformer(x, wq, wk, wv, wo, w1, w2):
+        q = ts.ops.matmul(x, wq)
+        k = ts.ops.matmul(x, wk)
+        v = ts.ops.matmul(x, wv)
+        scores = ts.ops.matmul(q, ts.ops.transpose(k))
+        probs = ts.ops.softmax(scores)
+        attn = ts.ops.matmul(probs, v)
+        proj = ts.ops.matmul(attn, wo)
+        hidden = ts.ops.gelu(ts.ops.matmul(proj, w1))
+        return ts.ops.matmul(hidden, w2)
+
+    x = np.arange(12, dtype=np.float32).reshape(3, 4) / 11.0 - 0.5
+    wq = np.array(
+        [
+            [0.50, -0.25, 0.10, 0.00],
+            [0.15, 0.40, -0.35, 0.20],
+            [0.00, 0.30, 0.45, -0.15],
+            [-0.20, 0.05, 0.25, 0.55],
+        ],
+        dtype=np.float32,
+    )
+    wk = np.flipud(wq).copy()
+    wv = np.eye(4, dtype=np.float32) * 0.75 + 0.05
+    wo = np.array(
+        [
+            [0.60, 0.00, -0.20, 0.10],
+            [0.05, 0.70, 0.10, -0.25],
+            [-0.15, 0.20, 0.50, 0.35],
+            [0.30, -0.10, 0.15, 0.45],
+        ],
+        dtype=np.float32,
+    )
+    w1 = np.linspace(-0.35, 0.45, 32, dtype=np.float32).reshape(4, 8)
+    w2 = np.linspace(0.25, -0.30, 32, dtype=np.float32).reshape(8, 4)
+
+    artifact = simple_transformer.runtime_artifact()
+    out = simple_transformer(x, wq, wk, wv, wo, w1, w2)
+    expected = _simple_transformer_reference(x, wq, wk, wv, wo, w1, w2)
+
+    assert simple_transformer.uses_compiled_path
+    assert artifact.metadata["compiler_path"] == "apple_cpu_accelerate"
+    assert artifact.metadata["runtime_status"] == "ready"
+    assert artifact.metadata["execution_mode"] == "cpu_accelerate"
+    assert artifact.metadata["guards"]["op_count"] == len(artifact.metadata["ops"])
+    assert artifact.metadata["guards"]["accelerate_op_count"] == 8
+    assert artifact.metadata["guards"]["fallback_path"] == "jit_cpu_numpy"
+    assert simple_transformer.ir_text().count("tessera.matmul") == 8
+    assert "tessera.softmax" in simple_transformer.ir_text()
+    assert "tessera.gelu" in simple_transformer.ir_text()
+    assert "tile.softmax" in simple_transformer.tile_ir
+    assert "tile.gelu" in simple_transformer.tile_ir
+    assert simple_transformer.target_ir.count("tessera_apple.cpu.accelerate_gemm") == 8
+    assert "tessera_apple.cpu.vector_reduce" in simple_transformer.target_ir
+    assert "tessera_apple.cpu.vector_op" in simple_transformer.target_ir
+    np.testing.assert_allclose(out, expected, rtol=1e-5, atol=1e-6)
+
+
+def test_apple_gpu_simple_transformer_block_emits_metal_artifact_contracts():
+    @ts.jit(target="apple_gpu")
+    def simple_transformer(x, wq, wk, wv, wo, w1, w2):
+        q = ts.ops.matmul(x, wq)
+        k = ts.ops.matmul(x, wk)
+        v = ts.ops.matmul(x, wv)
+        scores = ts.ops.matmul(q, ts.ops.transpose(k))
+        probs = ts.ops.softmax(scores)
+        attn = ts.ops.matmul(probs, v)
+        proj = ts.ops.matmul(attn, wo)
+        hidden = ts.ops.gelu(ts.ops.matmul(proj, w1))
+        return ts.ops.matmul(hidden, w2)
+
+    artifact = simple_transformer.runtime_artifact()
+    target_ir = simple_transformer.target_ir
+
+    assert artifact.metadata["execution_mode"] == "metal_artifact"
+    assert artifact.metadata["runtime_status"] == "artifact_only"
+    assert not simple_transformer.uses_compiled_path
+    assert simple_transformer.ir_text().count("tessera.matmul") == 8
+    assert "tessera.softmax" in simple_transformer.ir_text()
+    assert "tessera.gelu" in simple_transformer.ir_text()
+    assert target_ir.count('kernel = "matmul_contract"') == 8
+    assert 'kernel = "softmax_contract"' in target_ir
+    assert 'kernel = "gelu_contract"' in target_ir
+    assert 'framework = "MPSGraph"' in target_ir
+    assert 'execution_mode = "metal_artifact"' in target_ir
 
 
 def test_apple_cpu_runtime_shim_gemm_f32_correctness(tmp_path):

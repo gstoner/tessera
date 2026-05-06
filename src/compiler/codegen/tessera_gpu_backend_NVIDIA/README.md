@@ -5,6 +5,11 @@ This backend has two build modes:
 - **Hardware-free compiler artifacts** with `TESSERA_BUILD_NVIDIA_BACKEND=ON` and `TESSERA_ENABLE_CUDA=OFF`. This builds `tessera-opt`, `tessera-nvidia-opt`, the `tessera_nvidia` Target IR contract dialect, and Hopper/Blackwell lowering pipelines.
 - **Optional CUDA runtime validation** with `TESSERA_ENABLE_CUDA=ON`. This additionally builds CUDA kernels, NVRTC helpers, runtime launch tests, and benchmarks when a CUDA Toolkit is available.
 
+The Python compiler frontend now routes `target="nvidia_sm90"`,
+`target="nvidia_sm100"`, and related CUDA aliases through the verified
+`TargetIRModule` object model before emitting inspectable `tessera_nvidia.*`
+MLIR-like artifacts.
+
 Primary profiles:
 - Hopper: `SM_90` / `sm_90a` with WGMMA, TMA, and mbarrier contracts.
 - Blackwell: `SM_100` / `sm_100a` and `SM_120` with TCGEN05 and TMEM contracts.

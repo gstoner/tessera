@@ -6,7 +6,10 @@ Components:
                        checked at @jit decoration time
     effects.py      — EffectLattice: infers random/io/memory/pure through
                        the call graph; enforces @deterministic contracts
-    graph_ir.py     — Python → Graph IR lowering (emits MLIR text)
+    graph_ir.py     — Python → Graph IR lowering (emits object-backed MLIR text)
+    schedule_ir.py  — Graph IR → Schedule IR lowering and verifier
+    tile_ir.py      — Schedule IR → Tile IR lowering and verifier
+    target_ir.py    — Tile IR → CPU/NVIDIA/Apple/ROCm Target IR lowering
     jit.py          — @jit and @kernel decorators that drive the pipeline
 
 Build order for Phase 1:

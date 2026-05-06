@@ -12,12 +12,23 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 
+from ..diagnostics import DiagnosticLevel, DiagnosticWhere, TesseraDiagnostic, TesseraErrorCode
 from .schedule_ir import ScheduleIRModule, ScheduleIRVerificationError, ScheduleOp
 
 
 TILE_MEMORY_OPS = {"tile.async_copy", "tile.wait_async"}
 QUEUE_OPS = {"tessera.queue.create", "tessera.queue.push", "tessera.queue.pop", "tessera.queue.barrier"}
 ATTN_OPS = {"tessera.attn.scaled_dot_product", "tessera.attn.online_softmax", "tessera.attn.lse_save", "tessera.attn.attend_v"}
+
+
+def _diagnostic_level(severity: str) -> DiagnosticLevel:
+    return {
+        "fatal": DiagnosticLevel.FATAL,
+        "error": DiagnosticLevel.ERROR,
+        "warning": DiagnosticLevel.WARNING,
+        "info": DiagnosticLevel.INFO,
+        "note": DiagnosticLevel.NOTE,
+    }.get(severity.lower(), DiagnosticLevel.ERROR)
 
 
 @dataclass(frozen=True)
@@ -27,7 +38,17 @@ class TileIRDiagnostic:
     code: str = "TILE_IR"
 
     def format(self) -> str:
-        return f"{self.severity} {self.code}: {self.message}"
+        structured = self.to_tessera_diagnostic()
+        return f"{structured.level.value.upper()} [{structured.code.value}] [{self.code}]: {self.message}\n  where: {structured.where}"
+
+    def to_tessera_diagnostic(self) -> TesseraDiagnostic:
+        return TesseraDiagnostic(
+            level=_diagnostic_level(self.severity),
+            message=self.message,
+            code=TesseraErrorCode.TILE_LOWERING,
+            where=DiagnosticWhere(ir_level="tile-ir", pass_name="verifier"),
+            hints=["inspect Tile IR async copies, queues, attention ops, and barriers"],
+        )
 
 
 @dataclass(frozen=True)
@@ -40,6 +61,9 @@ class TileIRVerificationResult:
 
     def format(self) -> str:
         return "\n".join(d.format() for d in self.diagnostics)
+
+    def structured_diagnostics(self) -> tuple[TesseraDiagnostic, ...]:
+        return tuple(d.to_tessera_diagnostic() for d in self.diagnostics)
 
 
 class TileIRVerificationError(ValueError):

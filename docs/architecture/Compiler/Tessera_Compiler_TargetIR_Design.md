@@ -12,8 +12,9 @@ last_updated: 2026-05-06
 *Status:* Draft v0.2 (with programmer context)
 
 > **API note:** Legacy Target IR inspection helpers shown in older examples are
-> superseded by `fn.target_ir` and `fn.lowering_artifacts()`. Apple and ROCm
-> artifacts are emitted from the verified Python `TargetIRModule` object model.
+> superseded by `fn.target_ir` and `fn.lowering_artifacts()`. CPU/x86,
+> NVIDIA/CUDA, Apple, and ROCm artifacts are emitted from the verified Python
+> `TargetIRModule` object model.
 
 ---
 

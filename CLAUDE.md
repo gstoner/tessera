@@ -50,7 +50,7 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 | Phase 8 | 🟡 In progress | Hardware-free Target IR — `tessera_rocm.mfma`, `tessera_metalium.dma/matmul`, `tessera_apple.cpu/gpu.*` ODS dialects between Tile IR and hardware-specific lowering; `@jit(target="rocm"/"metalium"/"apple_cpu"/"apple_gpu")` string targets; **Apple M-Series Phase 8.2 operational** — `@jit(target="apple_cpu")` executes natively through Accelerate (cblas_sgemm rank-2/rank-3 batched f32 + BNNS fp16) + numpy reference for non-matmul ops; canonical pipelines `tessera-lower-to-rocm`, `tessera-lower-to-metalium`, `tessera-lower-to-apple_cpu`, `tessera-lower-to-apple_cpu-runtime`, `tessera-lower-to-apple_gpu` |
 | RubinCPX | ✅ Built | `tessera.target.cpx` dialect, 4 passes, `tessera-cpx-opt` driver, `TESSERA_BUILD_RUBINCPX_BACKEND` CMake option |
 
-**Total active tests: 1,908 passing in `tests/unit/` (0 failing); Apple Phase 8 lit fixtures 4/4 passing in `tests/tessera-ir/phase8/` against the in-tree `tessera-opt`.**
+**Total active tests: 1,938 passing in `tests/unit/` (0 failing); Apple Phase 8 lit fixtures 4/4 passing in `tests/tessera-ir/phase8/` against the in-tree `tessera-opt`.**
 
 ---
 
@@ -111,7 +111,7 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 | `codegen/Tessera_TPU_Backend/` | TPU StableHLO + Shardy export |
 | `codegen/Tessera_Cerebras_backend/` | Cerebras WSE-3 backend — Phase 7, ~487 LOC, real implementation |
 | `codegen/Tessera_Metalium_Backend/` | Tenstorrent Metalium backend — Phase 7, ~550 LOC, real; `tessera-lower-to-metalium` pipeline alias |
-| `codegen/Tessera_Apple_Backend/` | Apple M-Series backend — **Phase 8.2 operational** — dialect + Tile→Apple artifact passes + `MatmulToAppleCPU` runtime-lowering pass + `TesseraAppleRuntime` Accelerate shim (`tessera_apple_cpu_gemm_f32` rank-2, `_batched` rank-3, `_f16` via BNNS); `TESSERA_BUILD_APPLE_BACKEND` CMake option wired into `tessera-opt` |
+| `codegen/Tessera_Apple_Backend/` | Apple M-Series backend — **Phase 8.2 operational** — dialect + Tile→Apple artifact passes + `MatmulToAppleCPU` runtime-lowering pass + `TesseraAppleRuntime` Accelerate shim with four GEMM symbols: `tessera_apple_cpu_gemm_f32` (rank-2), `_batched` (rank-3), `_f16` (BNNS f16), `_bf16` (BNNS bf16); `TESSERA_BUILD_APPLE_BACKEND` CMake option wired into `tessera-opt` |
 | `diagnostics/ErrorReporter.cpp` | Source-attributed shape error reporting |
 | `diagnostics/ShapeInferencePass.cpp` | Forward shape propagation |
 | `tessera_neighbors/` | Halo/stencil neighbor exchange dialect — **Phase 7** |
@@ -339,9 +339,11 @@ Tests (`tests/unit/test_apple_backend_roadmap.py` — 10 passing): single matmul
 
 End-to-end verified on this Mac (LLVM/MLIR 21, Accelerate active): single GEMM bitwise-matches numpy; multi-op tiny decode bitwise-matches the numpy reference; rank-3 batched GEMM bitwise-matches numpy; fp16 matmul matches an f32-converted reference at fp16 tolerance.
 
+**Phase 8.2 follow-up — landed:**
+- **bf16 GEMM** — `tessera_apple_cpu_gemm_bf16` C symbol via `BNNSDataTypeBFloat16` (macOS 12+) with a bit-shift fp32 conversion fallback. Python boundary uses `ml_dtypes.bfloat16` (registered as `[project.optional-dependencies] ml_dtypes`) — the dtype probe is a soft import, so the bf16 fast path is unavailable when `ml_dtypes` isn't installed but the rest of the runtime keeps working. Tests under `test_apple_cpu_accelerate_dispatches_bf16_matmul_via_bnns` + `test_apple_cpu_runtime_exposes_bf16_gemm_symbol` + the `_disabled_when_ml_dtypes_missing` soft-dep contract test.
+- **Launch-overhead reduction** — `JitFn.runtime_artifact()` is now lazily cached on first call, and `__call__` for `apple_cpu` bypasses `runtime.launch()` via `_apple_cpu_fast_call` → `_execute_apple_cpu_accelerate_metadata` (the metadata dispatcher split out of `_execute_apple_cpu_accelerate_artifact`). The public `launch(mm.runtime_artifact(), ...)` entry stays unchanged for callers who want telemetry. **Measured speedups on Apple Silicon (M-series, Accelerate active):** 8×8×8 GEMM 459 µs → 10 µs (**46×**); 32×32×32 456 µs → 12 µs (**38×**); 128×128×128 470 µs → 19 µs (**25×**); 512×512×512 780 µs → 193 µs (**4×**). Tessera launch overhead at 512×512 is now ~1.3× numpy (was ~5×).
+
 *Open work:*
-- bf16 GEMM. Blocked on numpy not having a native bf16 dtype — needs the `ml_dtypes` package or a custom uint16-bf16 representation at the Python boundary. C-side BNNS already supports `BNNSDataTypeBFloat16` so the symbol is straightforward; the Python plumbing is the gating decision.
-- Launch-overhead reduction. Each call rebuilds `RuntimeArtifact` metadata + JSON-hashes it; small GEMMs are bottlenecked on Python-side dispatch rather than the cblas kernel. Cache the artifact per `JitFn`.
 - Apple GPU (Phase 8.3) — MPS dispatch, separate phase.
 
 **Phase 8.3 — Apple GPU baseline via MPS.** New ODS ops `tessera_apple.gpu.mps_matmul` / `mps_softmax` / `mps_dispatch`. Pass `AppleGPUToMPS`. Runtime: Objective-C++ (`.mm`) `MetalDeviceContext` wrapping `MTLDevice` + `MTLCommandQueue` + `MPSMatrixMultiplication`. No `metal-cpp` vendoring.
@@ -480,4 +482,4 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 
 ---
 
-*Last updated: May 2026 — Phases 1–6 complete; Phase 7 lit-clean (Neighbors wired into `tessera-opt`, Cerebras + Metalium backends real); Phase 8 in progress — Apple M-Series **Phase 8.2 operational** (Items #1–#4: hard-fail on uninspectable `@jit(target=...)` source; multi-op `apple_cpu` programs chain Accelerate matmul + numpy reference; rank-3 batched matmul; rank-2 fp16 via BNNS with cblas+fp32 fallback). Pipelines: `tessera-lower-to-rocm`/`-metalium`/`-apple_cpu`/`-apple_cpu-runtime`/`-apple_gpu`. Build pin: **LLVM/MLIR 21**. Test count: **1,908 passing**, plus **4/4 Apple Phase 8 lit fixtures** against the in-tree `tessera-opt`.*
+*Last updated: May 2026 — Phases 1–6 complete; Phase 7 lit-clean (Neighbors wired into `tessera-opt`, Cerebras + Metalium backends real); Phase 8 in progress — Apple M-Series **Phase 8.2 operational** (Items #1–#4 + bf16 follow-up + launch-overhead caching). Pipelines: `tessera-lower-to-rocm`/`-metalium`/`-apple_cpu`/`-apple_cpu-runtime`/`-apple_gpu`. Apple CPU runtime exports four GEMM symbols (f32, batched f32, f16, bf16); `JitFn.__call__` for apple_cpu uses cached metadata + a fast-path dispatcher (4–46× speedup over uncached). Build pin: **LLVM/MLIR 21**. Optional dep: `ml_dtypes` (bf16 dtype). Test count: **1,938 passing**, plus **4/4 Apple Phase 8 lit fixtures** against the in-tree `tessera-opt`.*

@@ -543,8 +543,14 @@ def test_apple_cpu_accelerate_dispatches_bf16_matmul_via_bnns():
     assert out.dtype == bf16
     assert out.shape == (48, 16)
 
+    # bf16 has a 7-bit mantissa (~0.8% rel ULP). BNNS does fp32-internal
+    # accumulation but in tiled order which differs from numpy's f32-then-
+    # cast reference. Cumulative drift on K=80 fits within bf16 tolerance.
     ref = (A.astype(np.float32) @ B.astype(np.float32)).astype(bf16)
-    np.testing.assert_array_equal(out, ref)
+    np.testing.assert_allclose(
+        out.astype(np.float32), ref.astype(np.float32),
+        rtol=2e-2, atol=2e-2,
+    )
 
 
 def test_apple_cpu_runtime_exposes_bf16_gemm_symbol(tmp_path):

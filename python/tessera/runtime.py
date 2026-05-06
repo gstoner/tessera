@@ -1252,16 +1252,26 @@ _APPLE_CPU_ACCELERATE_OPS = frozenset({"tessera.matmul", "tessera.gemm"})
 
 
 def _execute_apple_cpu_accelerate_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
-    """Run an apple_cpu plan: matmul/gemm via Accelerate (cblas_sgemm), every
-    other supported op via the numpy reference path used by the default `cpu`
-    target. Multi-op programs are first-class — ops execute in the order
-    captured by `metadata["ops"]` and intermediate values stay in the same
-    `values` dict the cpu reference path uses.
+    """Public entry: dispatch an apple_cpu artifact. Delegates to the metadata
+    dispatcher so the JIT hot-path can skip the artifact wrapper + hash + JSON
+    serialization entirely (see `JitFn._apple_cpu_fast_call`)."""
+
+    return _execute_apple_cpu_accelerate_metadata(artifact.metadata or {}, args)
+
+
+def _execute_apple_cpu_accelerate_metadata(metadata: Mapping[str, Any], args: Any) -> Any:
+    """Run an apple_cpu plan from a metadata dict directly: matmul/gemm via
+    Accelerate (cblas_sgemm), every other supported op via the numpy reference
+    path used by the default `cpu` target. Multi-op programs are first-class —
+    ops execute in the order captured by `metadata["ops"]` and intermediate
+    values stay in the same `values` dict the cpu reference path uses.
+
+    Phase 8.2 launch-overhead reduction: `JitFn` calls this directly so per-call
+    artifact construction (~0.5 ms for small GEMMs) is bypassed.
     """
 
     import numpy as np
 
-    metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
     output_name = metadata.get("output_name")
     ops = list(metadata.get("ops") or [])

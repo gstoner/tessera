@@ -51,6 +51,14 @@ dev = [
 gpu = [
     "nvidia-ml-py3>=7.352.0"
 ]
+# bf16 dtype support for the apple_cpu BNNS path (Phase 8.2 follow-up).
+# Soft dependency: if missing, the bf16 fast path is unavailable but the
+# rest of the runtime keeps working. The same package backs JAX / TF
+# Probability / PyTorch's experimental numpy bridge so it's the de-facto
+# standard for bf16-as-numpy-dtype.
+ml_dtypes = [
+    "ml_dtypes>=0.4.0"
+]
 
 [project.urls]
 Homepage = "https://tessera.ai"

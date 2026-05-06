@@ -248,6 +248,12 @@ class JitFn:
         self.cpu_tile = tuple(int(v) for v in cpu_tile)
         self.source_origin = source_origin
         self.lowering_diagnostics = tuple(lowering_diagnostics or [])
+        # Phase 8.2 launch-overhead reduction: the artifact + its metadata
+        # depend only on immutable construction inputs, so we lazily build
+        # them once and reuse on every __call__. Without caching the small-
+        # GEMM hot-path is dominated by metadata dict construction + the
+        # SHA-256 over the artifact JSON inside `RuntimeArtifact.artifact_hash`.
+        self._cached_artifact: Optional["RuntimeArtifact"] = None
         functools.update_wrapper(self, fn)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
@@ -263,18 +269,31 @@ class JitFn:
             and self.compile_bundle is not None
             and self.compile_bundle.executable
         ):
-            from tessera.runtime import launch
-
-            if kwargs and args:
-                launch_args = {name: value for name, value in zip(self.arg_names, args)}
-                launch_args.update(kwargs)
-            else:
-                launch_args = kwargs if kwargs else args
-            result = launch(self.runtime_artifact(), args=launch_args)
-            if result.get("ok") is True:
-                return result["output"]
-            raise TesseraJitError(str(result.get("reason", "apple_cpu launch failed")))
+            return self._apple_cpu_fast_call(args, kwargs)
         return self._fn(*args, **kwargs)
+
+    def _apple_cpu_fast_call(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Any:
+        """Phase 8.2 launch-overhead fast path. Bypasses ``runtime.launch`` by
+        calling the metadata dispatcher directly with the cached artifact's
+        metadata dict — skipping per-call telemetry events, the artifact
+        SHA-256, and the JSON serialization that backs it. The public
+        ``launch(mm.runtime_artifact(), ...)`` entry stays unchanged for
+        callers who want full telemetry."""
+
+        from tessera.runtime import _execute_apple_cpu_accelerate_metadata
+
+        if kwargs and args:
+            launch_args = {name: value for name, value in zip(self.arg_names, args)}
+            launch_args.update(kwargs)
+        else:
+            launch_args = kwargs if kwargs else args
+
+        try:
+            return _execute_apple_cpu_accelerate_metadata(
+                self.runtime_artifact().metadata or {}, launch_args
+            )
+        except Exception as exc:
+            raise TesseraJitError(f"apple_cpu launch failed: {exc}") from exc
 
     def ir_text(self) -> str:
         """Return the emitted Graph IR as MLIR text."""
@@ -338,7 +357,22 @@ class JitFn:
         return tuple(event.to_dict() for event in self.compile_bundle.trace_events)
 
     def runtime_artifact(self):
-        """Return a RuntimeArtifact for this JIT function's compiler output."""
+        """Return a RuntimeArtifact for this JIT function's compiler output.
+
+        Cached lazily — the inputs (cpu_plan, compile_bundle,
+        lowering_diagnostics) are immutable after JitFn construction, so
+        rebuilding the artifact + recomputing its SHA-256 every call is pure
+        overhead. The cached artifact is shared between inspection callers and
+        the apple_cpu fast path so they observe consistent metadata.
+        """
+
+        if self._cached_artifact is not None:
+            return self._cached_artifact
+        self._cached_artifact = self._build_runtime_artifact()
+        return self._cached_artifact
+
+    def _build_runtime_artifact(self):
+        """Construct a fresh RuntimeArtifact. Called once per JitFn."""
 
         from tessera.runtime import RuntimeArtifact
 

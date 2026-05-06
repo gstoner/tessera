@@ -622,50 +622,53 @@ from .runtime import (  # noqa: E402
 class _DtypeAnnotation:
     """Type annotation sentinel for Tessera dtype-annotated tensors."""
 
-    def __init__(self, dtype: str) -> None:
+    def __init__(self, dtype: str, shape=None, layout: str | None = None) -> None:
         self.dtype = dtype
+        self.shape = shape if isinstance(shape, tuple) else (() if shape is None else (shape,))
+        self.layout = layout
 
     def __class_getitem__(cls, shape):
-        return cls(cls._dtype)  # type: ignore[attr-defined]
+        return cls(cls._dtype, shape)  # type: ignore[attr-defined]
 
     def __getitem__(self, shape):
-        return self
+        return type(self)(shape)
 
     def __repr__(self) -> str:
-        return f"tessera.{self.dtype}[...]"
+        shape = ", ".join("..." if dim is Ellipsis else str(dim) for dim in self.shape) or "..."
+        return f"tessera.{self.dtype}[{shape}]"
 
 
 class f16(_DtypeAnnotation):
     _dtype = "fp16"
-    def __init__(self):
-        super().__init__("fp16")
+    def __init__(self, shape=None):
+        super().__init__("fp16", shape)
     def __class_getitem__(cls, shape):
-        return cls()
+        return cls(shape)
 
 
 class bf16(_DtypeAnnotation):
     _dtype = "bf16"
-    def __init__(self):
-        super().__init__("bf16")
+    def __init__(self, shape=None):
+        super().__init__("bf16", shape)
     def __class_getitem__(cls, shape):
-        return cls()
+        return cls(shape)
 
 
 class f32(_DtypeAnnotation):
     _dtype = "fp32"
-    def __init__(self):
-        super().__init__("fp32")
+    def __init__(self, shape=None):
+        super().__init__("fp32", shape)
     def __class_getitem__(cls, shape):
-        return cls()
+        return cls(shape)
 
 
 class mut_f32(_DtypeAnnotation):
     """Mutable fp32 — write-privileged tensor annotation."""
     _dtype = "fp32"
-    def __init__(self):
-        super().__init__("fp32")
+    def __init__(self, shape=None):
+        super().__init__("fp32", shape)
     def __class_getitem__(cls, shape):
-        return cls()
+        return cls(shape)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

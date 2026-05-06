@@ -319,12 +319,30 @@ Contract test: `tests/unit/test_target_ir_contract.py` and `tests/tessera-ir/pha
 
 ODS sets `usePropertiesForAttributes = 0` to keep the dialect header-only against MLIR 21's properties machinery. `tessera-opt` links the backend behind a `TESSERA_HAVE_APPLE_BACKEND` guard so non-Apple builds are unaffected.
 
-**Phase 8.2 — Apple CPU native execution (Accelerate)** — *in progress, C++ side done.*
-- Pass `MatmulToAppleCPU` (`lib/Target/Apple/Lowering/MatmulToAppleCPU.cpp`) lowers static-shape rank-2 f32 `tessera.matmul` to `func.call @tessera_apple_cpu_gemm_f32` over a memref/bufferization spine. Pipeline alias `tessera-lower-to-apple_cpu-runtime` (parallel to the artifact-only `tessera-lower-to-apple_cpu`).
-- Runtime shim `runtime/apple_cpu_runtime.cpp` is built as `TesseraAppleRuntime` and links `-framework Accelerate` on Darwin. Falls back to a portable reference kernel on non-Apple hosts so cross-platform CI stays green. Capability probe: `tessera_apple_cpu_runtime_has_accelerate()`.
-- Lit fixture `tests/tessera-ir/phase8/apple_cpu_runtime.mlir` covers both the positive (static f32) and negative (dynamic shape) paths.
-- Verified end-to-end on Apple Silicon: `cblas_sgemm` returns numerically correct output for a hand-checked 2×3 × 3×2 matmul through the runtime symbol.
-- *Open work:* Python `@jit(target="apple_cpu", execute=True)` plumbing — JIT-compile the lowered IR via MLIR's `ExecutionEngine`, register the runtime symbols, and dispatch from the existing `runtime.py` wrapper. Test suite migrates from `execute=True` opt-in toward the flag becoming default once correctness coverage lands.
+**Phase 8.2 — Apple CPU native execution (Accelerate)** — *Items #1–#4 landed.*
+
+C++ pieces:
+- Pass `MatmulToAppleCPU` (`lib/Target/Apple/Lowering/MatmulToAppleCPU.cpp`) lowers static-shape rank-2 f32 `tessera.matmul` to `func.call @tessera_apple_cpu_gemm_f32`. Pipeline alias `tessera-lower-to-apple_cpu-runtime` (parallel to the artifact-only `tessera-lower-to-apple_cpu`).
+- Runtime shim `runtime/apple_cpu_runtime.cpp` (built as `TesseraAppleRuntime`, links `-framework Accelerate` on Darwin, portable reference fallback elsewhere). Exports three GEMM symbols:
+  - `tessera_apple_cpu_gemm_f32` — single rank-2 f32 GEMM via `cblas_sgemm`
+  - `tessera_apple_cpu_gemm_f32_batched` — rank-3 batched GEMM looping `cblas_sgemm` per batch
+  - `tessera_apple_cpu_gemm_f16` — rank-2 fp16 GEMM via `BNNSMatMul` (BNNSDataLayout2DFirstMajor, native fp16) with internal cblas+fp32-conversion fallback
+- Lit fixture `tests/tessera-ir/phase8/apple_cpu_runtime.mlir` covers positive (static f32) + negative (dynamic shape) paths.
+
+Python pieces:
+- `@jit(target=...)` raises `TesseraJitError` at decoration time if function source can't be inspected (REPL/heredoc) — no more silent eager-Python fallback while pretending to be a target run. `target=None` keeps the soft-warning behavior.
+- `_execute_apple_cpu_accelerate_artifact` in `runtime.py` chains arbitrary supported op sequences: matmul/gemm dispatches to Accelerate, every other supported op falls through to the numpy reference path. Multi-op programs are first-class.
+- `_apple_cpu_dispatch_matmul` selects between the rank-2 f32 fast-path, rank-3 batched f32 path, rank-2 fp16 (BNNS) path, or `np.matmul` fallback.
+- `runtime_artifact()` metadata reports `op_count`, `accelerate_op_count`, `accelerate_ops`, and `fallback_path` for multi-op programs while preserving the original strict guards for single-matmul programs.
+
+Tests (`tests/unit/test_apple_backend_roadmap.py` — 10 passing): single matmul, multi-op tiny decode, rank-3 batched, fp16 via BNNS, plus three runtime-shim ABI tests that compile the runtime from source and probe each exported symbol numerically.
+
+End-to-end verified on this Mac (LLVM/MLIR 21, Accelerate active): single GEMM bitwise-matches numpy; multi-op tiny decode bitwise-matches the numpy reference; rank-3 batched GEMM bitwise-matches numpy; fp16 matmul matches an f32-converted reference at fp16 tolerance.
+
+*Open work:*
+- bf16 GEMM. Blocked on numpy not having a native bf16 dtype — needs the `ml_dtypes` package or a custom uint16-bf16 representation at the Python boundary. C-side BNNS already supports `BNNSDataTypeBFloat16` so the symbol is straightforward; the Python plumbing is the gating decision.
+- Launch-overhead reduction. Each call rebuilds `RuntimeArtifact` metadata + JSON-hashes it; small GEMMs are bottlenecked on Python-side dispatch rather than the cblas kernel. Cache the artifact per `JitFn`.
+- Apple GPU (Phase 8.3) — MPS dispatch, separate phase.
 
 **Phase 8.3 — Apple GPU baseline via MPS.** New ODS ops `tessera_apple.gpu.mps_matmul` / `mps_softmax` / `mps_dispatch`. Pass `AppleGPUToMPS`. Runtime: Objective-C++ (`.mm`) `MetalDeviceContext` wrapping `MTLDevice` + `MTLCommandQueue` + `MPSMatrixMultiplication`. No `metal-cpp` vendoring.
 

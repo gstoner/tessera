@@ -1298,34 +1298,124 @@ def _apple_cpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
     a = np.asarray(operands[0])
     b = np.asarray(operands[1])
 
-    fast_path = (
+    rank2_fast_path = (
         a.dtype == np.float32
         and b.dtype == np.float32
         and a.ndim == 2
         and b.ndim == 2
     )
-    if not fast_path:
-        # Non-f32 / non-rank-2 matmul falls through to numpy. Phase 8.3 will
-        # handle bf16/fp16 via BNNS and rank-3 via cblas_sgemm_batch.
-        return np.matmul(a, b)
-    if a.shape[1] != b.shape[0]:
-        raise ValueError(f"matmul shape mismatch: {a.shape} x {b.shape}")
-    if not a.flags.c_contiguous:
-        a = np.ascontiguousarray(a, dtype=np.float32)
-    if not b.flags.c_contiguous:
-        b = np.ascontiguousarray(b, dtype=np.float32)
 
-    out = np.zeros((a.shape[0], b.shape[1]), dtype=np.float32)
-    gemm = _apple_cpu_gemm_f32()
-    gemm(
-        a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        ctypes.c_int32(a.shape[0]),
-        ctypes.c_int32(b.shape[1]),
-        ctypes.c_int32(a.shape[1]),
+    # Phase 8.2 Item #3: rank-3 batched matmul via Accelerate's cblas_sgemm
+    # looped over the batch dimension. Activates when both inputs are
+    # 3-D float32 with matching leading batch dimensions and the batched
+    # ctypes symbol is available.
+    rank3_batched_path = (
+        a.dtype == np.float32
+        and b.dtype == np.float32
+        and a.ndim == 3
+        and b.ndim == 3
+        and a.shape[0] == b.shape[0]
     )
-    return out
+
+    # Phase 8.2 Item #4: rank-2 fp16 matmul via BNNS (with cblas fallback
+    # internal to the runtime symbol). Apple Silicon runs fp16 natively;
+    # falls through to numpy for shapes/dtypes outside the supported envelope.
+    fp16_fast_path = (
+        a.dtype == np.float16
+        and b.dtype == np.float16
+        and a.ndim == 2
+        and b.ndim == 2
+    )
+
+    if rank2_fast_path:
+        if a.shape[1] != b.shape[0]:
+            raise ValueError(f"matmul shape mismatch: {a.shape} x {b.shape}")
+        if not a.flags.c_contiguous:
+            a = np.ascontiguousarray(a, dtype=np.float32)
+        if not b.flags.c_contiguous:
+            b = np.ascontiguousarray(b, dtype=np.float32)
+
+        out = np.zeros((a.shape[0], b.shape[1]), dtype=np.float32)
+        gemm = _apple_cpu_gemm_f32()
+        gemm(
+            a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            ctypes.c_int32(a.shape[0]),
+            ctypes.c_int32(b.shape[1]),
+            ctypes.c_int32(a.shape[1]),
+        )
+        return out
+
+    if fp16_fast_path:
+        if a.shape[1] != b.shape[0]:
+            raise ValueError(f"matmul shape mismatch: {a.shape} x {b.shape}")
+        if not a.flags.c_contiguous:
+            a = np.ascontiguousarray(a, dtype=np.float16)
+        if not b.flags.c_contiguous:
+            b = np.ascontiguousarray(b, dtype=np.float16)
+        gemm_f16 = _apple_cpu_gemm_f16()
+        if gemm_f16 is not None:
+            out = np.zeros((a.shape[0], b.shape[1]), dtype=np.float16)
+            gemm_f16(
+                a.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                b.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                ctypes.c_int32(a.shape[0]),
+                ctypes.c_int32(b.shape[1]),
+                ctypes.c_int32(a.shape[1]),
+            )
+            return out
+        # Older runtime build without the fp16 symbol — convert to f32, do
+        # the matmul, convert back. Same numerical contract as the C++ shim's
+        # internal fallback path.
+        out_f32 = np.matmul(a.astype(np.float32), b.astype(np.float32))
+        return out_f32.astype(np.float16)
+
+    if rank3_batched_path:
+        if a.shape[2] != b.shape[1]:
+            raise ValueError(f"batched matmul shape mismatch: {a.shape} x {b.shape}")
+        if not a.flags.c_contiguous:
+            a = np.ascontiguousarray(a, dtype=np.float32)
+        if not b.flags.c_contiguous:
+            b = np.ascontiguousarray(b, dtype=np.float32)
+
+        batch, M, K = a.shape
+        _, _, N = b.shape
+        out = np.zeros((batch, M, N), dtype=np.float32)
+        batched = _apple_cpu_gemm_f32_batched()
+        if batched is not None:
+            batched(
+                a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                ctypes.c_int32(batch),
+                ctypes.c_int32(M),
+                ctypes.c_int32(N),
+                ctypes.c_int32(K),
+                ctypes.c_int32(M * K),
+                ctypes.c_int32(K * N),
+                ctypes.c_int32(M * N),
+            )
+        else:
+            # Older runtime build without the batched symbol — loop in Python
+            # calling the per-batch gemm. Same numerical result, slightly more
+            # ctypes-call overhead.
+            gemm = _apple_cpu_gemm_f32()
+            for i in range(batch):
+                gemm(
+                    a[i].ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                    b[i].ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                    out[i].ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                    ctypes.c_int32(M),
+                    ctypes.c_int32(N),
+                    ctypes.c_int32(K),
+                )
+        return out
+
+    # Anything else: fall back to numpy. Phase 8.4 will route bf16/fp16 here
+    # through BNNS.
+    return np.matmul(a, b)
 
 
 def _apple_cpu_gemm_f32() -> Any:
@@ -1341,6 +1431,55 @@ def _apple_cpu_gemm_f32() -> Any:
     ]
     gemm.restype = None
     return gemm
+
+
+def _apple_cpu_gemm_f32_batched() -> Any:
+    """Phase 8.2 Item #3: batched cblas_sgemm wrapper for rank-3 matmul.
+
+    Falls back to single-GEMM dispatch via ctypes lookup. If the prebuilt
+    library predates Phase 8.2 Item #3 the symbol may be missing; in that
+    case the caller should use the per-batch loop in Python.
+    """
+
+    runtime = _load_apple_cpu_runtime()
+    sym = getattr(runtime, "tessera_apple_cpu_gemm_f32_batched", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,  # batch
+        ctypes.c_int32,  # M
+        ctypes.c_int32,  # N
+        ctypes.c_int32,  # K
+        ctypes.c_int32,  # strideA
+        ctypes.c_int32,  # strideB
+        ctypes.c_int32,  # strideC
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_cpu_gemm_f16() -> Any:
+    """Phase 8.2 Item #4: fp16 matmul via BNNS (Accelerate) with cblas_sgemm
+    fallback. Inputs/outputs use IEEE-754 half encoding (numpy.float16
+    layout). Symbol may be absent on older runtime builds."""
+
+    runtime = _load_apple_cpu_runtime()
+    sym = getattr(runtime, "tessera_apple_cpu_gemm_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32,
+        ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
 
 
 def _load_apple_cpu_runtime() -> ctypes.CDLL:

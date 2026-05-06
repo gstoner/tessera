@@ -614,6 +614,12 @@ def jit(
             builder.lower(fn, effect_tag=effect_tag, target_attr=target_attr, source_text=source_text)
             module = builder.module()
             diagnostics = []
+            for frontend_diag in builder.diagnostics:
+                diagnostics.append(JitDiagnostic(
+                    frontend_diag.severity,
+                    frontend_diag.code,
+                    frontend_diag.format(),
+                ))
             if source_text is None:
                 diagnostics.append(JitDiagnostic(
                     "warning",

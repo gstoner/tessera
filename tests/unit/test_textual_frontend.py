@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tessera.compiler.frontend import FrontendSemanticError, lower_text_to_graph_ir, parse_text
+from tessera.compiler.frontend import FrontendSemanticError, FrontendSyntaxError, lower_text_to_graph_ir, parse_text
 from tessera.compiler.matmul_pipeline import build_cpu_plan
 
 
@@ -113,3 +113,68 @@ def test_textual_frontend_lowers_attention_and_state_reference_ops():
     assert "tessera.all_gather" in text
     assert "tessera.kv_cache.append" in text
     assert "tessera.kv_cache.prune" in text
+
+
+def test_textual_frontend_preserves_shape_dtype_layout_and_mesh_metadata():
+    source = """
+    module demo {
+      mesh data = mesh<axes=["dp"], shape=[2]>;
+      func main(A: tensor<16x32xfp32;layout=row_major>, B: tensor<32x8xfp32>) -> tensor<16x8xfp32> {
+        C = op.matmul(A, B);
+        schedule.tile(C) @{m = 16, n = 8, k = 32};
+        dist.all_reduce(C) @{axis = "dp", op = "sum"};
+        barrier("after_reduce");
+        assert(C);
+        return C;
+      }
+    }
+    """
+    module = lower_text_to_graph_ir(source)
+    text = module.to_mlir()
+    assert "tensor<16x32xf32>" in text
+    assert 'tessera.layout = "row_major"' in text
+    assert "tensor<16x8xf32>" in text
+    assert "tessera.meshes" in text
+    assert "tessera.schedule.tile" in text
+    assert "tessera.dist.all_reduce" in text
+    assert "tessera.barrier" in text
+    assert "tessera.assert" in text
+
+
+def test_textual_frontend_parses_kernel_and_reports_control_flow_span():
+    program = parse_text("""
+    module demo {
+      kernel k(A: tensor<?xfp32>) {
+        return;
+      }
+    }
+    """)
+    assert program.modules[0].funcs[0].kind == "kernel"
+
+    with pytest.raises(FrontendSemanticError) as excinfo:
+        lower_text_to_graph_ir("""
+        module demo {
+          func bad(A: tensor<?xfp32>) -> tensor<?xfp32> {
+            if (A) {
+              B = op.relu(A);
+            }
+            return A;
+          }
+        }
+        """)
+    message = str(excinfo.value)
+    assert "control flow" in message
+    assert "at " in message
+
+
+def test_textual_frontend_reports_syntax_line_column():
+    with pytest.raises(FrontendSyntaxError) as excinfo:
+        parse_text("""
+        module demo {
+          func bad(A: tensor<?xfp32>) {
+            B = op.relu(@);
+            return B;
+          }
+        }
+        """)
+    assert "at " in str(excinfo.value)

@@ -15,10 +15,12 @@ from tessera.compiler.graph_ir import (
     GraphIRBuilder,
     GraphIRModule,
     GraphIRFunction,
+    GraphIRVerificationError,
     IRArg,
     IROp,
     IRType,
     TENSOR_OPAQUE,
+    construct_mlir_module,
 )
 from tessera.distributed.region import Region
 
@@ -258,6 +260,70 @@ class TestGraphIRBuilder:
         simple_ir = step.graph_ir.to_mlir()
         assert "read" in simple_ir
         assert "write" in simple_ir
+
+    def test_lower_preserves_tensor_and_dtype_annotation_metadata(self):
+        def typed(
+            A: tessera.Tensor["M", "K"],
+            B: tessera.bf16[16, 32],
+            C: tessera.mut_f32[16, 8],
+        ):
+            C[:] = tessera.ops.matmul(A, B)
+
+        builder = GraphIRBuilder()
+        fn_ir = builder.lower(typed)
+        args = {arg.name: arg for arg in fn_ir.args}
+        assert args["A"].dim_names == ("M", "K")
+        assert str(args["A"].ir_type) == "tensor<?x?x?>"
+        assert str(args["B"].ir_type) == "tensor<16x32xbf16>"
+        assert str(args["C"].ir_type) == "tensor<16x8xf32>"
+
+    def test_unsupported_python_construct_has_source_span_diagnostic(self):
+        @tessera.jit
+        def bad_control(x):
+            if x.sum() > 0:
+                return tessera.ops.relu(x)
+            return x
+
+        explanation = bad_control.explain_lowering()
+        assert "PY_FRONTEND_UNSUPPORTED" in explanation
+        assert "if/else control flow" in explanation
+        assert " at " in explanation
+
+    def test_graph_ir_verifier_and_object_construction_boundary(self):
+        module = GraphIRModule(functions=[
+            GraphIRFunction(
+                name="bad",
+                body=[
+                    IROp(
+                        result="x",
+                        op_name="tessera.relu",
+                        operands=["%missing"],
+                        operand_types=["tensor<*x?>"],
+                        result_type="tensor<*x?>",
+                    )
+                ],
+            )
+        ])
+        with pytest.raises(GraphIRVerificationError):
+            module.to_mlir()
+
+        valid = GraphIRModule(functions=[
+            GraphIRFunction(
+                name="ok",
+                args=[IRArg("x", TENSOR_OPAQUE)],
+                body=[
+                    IROp(
+                        result="y",
+                        op_name="tessera.relu",
+                        operands=["%x"],
+                        operand_types=["tensor<*x?>"],
+                        result_type="tensor<*x?>",
+                    )
+                ],
+            )
+        ])
+        obj = construct_mlir_module(valid)
+        assert "func.func @ok" in obj.to_mlir()
 
     def test_graph_ir_mlir_contains_gemm(self):
         @tessera.jit

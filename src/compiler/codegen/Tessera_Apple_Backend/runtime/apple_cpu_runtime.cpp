@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <vector>
 
 #if defined(__APPLE__)
    // Opt into the modern Accelerate CBLAS/LAPACK headers (macOS 13.3+).
@@ -75,9 +76,209 @@ extern "C" void tessera_apple_cpu_gemm_f32(const float* A, const float* B,
 #endif
 }
 
+// Batched f32 GEMM: A is (batch, M, K), B is (batch, K, N), C is (batch, M, N),
+// row-major, contiguous within each batch. Strides count elements (not bytes)
+// from one batch slice to the next; for tightly-packed inputs that is M*K /
+// K*N / M*N respectively.
+//
+// Phase 8.2 Item #3: loops over batches calling cblas_sgemm. The kernel itself
+// is multi-threaded inside Accelerate, so for typical attention-style workloads
+// with large per-batch GEMMs this is competitive with cblas_sgemm_batch_strided.
+// We can swap to the batch-level API later if profiling shows tail-latency
+// pressure on small batches.
+extern "C" void tessera_apple_cpu_gemm_f32_batched(
+    const float* A, const float* B, float* C,
+    int32_t batch, int32_t M, int32_t N, int32_t K,
+    int32_t strideA, int32_t strideB, int32_t strideC) {
+  for (int32_t b = 0; b < batch; ++b) {
+    const float* Ab = A + static_cast<std::size_t>(b) * strideA;
+    const float* Bb = B + static_cast<std::size_t>(b) * strideB;
+    float*       Cb = C + static_cast<std::size_t>(b) * strideC;
+#if TESSERA_APPLE_CPU_HAVE_ACCELERATE
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                /*M=*/M, /*N=*/N, /*K=*/K,
+                /*alpha=*/1.0f,
+                Ab, /*lda=*/K,
+                Bb, /*ldb=*/N,
+                /*beta=*/0.0f,
+                Cb, /*ldc=*/N);
+#else
+    reference_gemm_f32(Ab, Bb, Cb, M, N, K);
+#endif
+  }
+}
+
 // Capability probe: returns 1 when Accelerate is the active backend, 0 when
 // the reference fallback is in use. Useful for the Python `execute=True`
 // machinery to decide whether to skip-or-warn on non-Darwin hosts.
 extern "C" int32_t tessera_apple_cpu_runtime_has_accelerate(void) {
   return TESSERA_APPLE_CPU_HAVE_ACCELERATE;
 }
+
+//===---------------------------------------------------------------------===//
+// fp16 matmul (Phase 8.2 Item #4)
+//===---------------------------------------------------------------------===//
+//
+// Inputs/output use the IEEE-754 half encoding (numpy float16 layout). At the
+// ABI boundary they appear as uint16_t* — no implicit casts.
+//
+// On Apple, prefer BNNSMatMul with f16 descriptors so fp16 stays in fp16
+// throughout the computation. If BNNS rejects the call (e.g. older OS without
+// the f16 path) we fall through to a cblas_sgemm dispatch with fp32 conversion
+// at the boundaries. Either way the C ABI is the same.
+//
+// On non-Apple builds this collapses to the fp32-conversion path against the
+// portable reference kernel.
+
+#if TESSERA_APPLE_CPU_HAVE_ACCELERATE
+#  include <Accelerate/Accelerate.h>
+#endif
+
+#if defined(__clang__)
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
+namespace {
+
+// Convert a single IEEE-754 half-precision value to float, manually.
+// Avoids depending on _Float16 being available (older toolchains, MSVC).
+inline float half_to_float(uint16_t h) {
+  // Bit-twiddle conversion. Branches on subnormal/inf/nan are inlined and
+  // predictable; called at most M*K + K*N times per fp16 GEMM dispatch.
+  uint32_t sign = (uint32_t(h) & 0x8000u) << 16;
+  uint32_t exp  = (uint32_t(h) & 0x7C00u) >> 10;
+  uint32_t frac = uint32_t(h) & 0x03FFu;
+  uint32_t f;
+  if (exp == 0) {
+    if (frac == 0) {
+      f = sign;
+    } else {
+      // subnormal half -> normal float
+      while ((frac & 0x0400u) == 0) { frac <<= 1; exp -= 1; }
+      exp = exp + 1;
+      frac &= ~0x0400u;
+      f = sign | ((exp + 112) << 23) | (frac << 13);
+    }
+  } else if (exp == 0x1F) {
+    f = sign | 0x7F800000u | (frac << 13);
+  } else {
+    f = sign | ((exp + 112) << 23) | (frac << 13);
+  }
+  float out;
+  std::memcpy(&out, &f, sizeof(out));
+  return out;
+}
+
+inline uint16_t float_to_half(float v) {
+  uint32_t f;
+  std::memcpy(&f, &v, sizeof(f));
+  uint32_t sign = (f >> 16) & 0x8000u;
+  int32_t  exp  = int32_t((f >> 23) & 0xFFu) - 127 + 15;
+  uint32_t frac = f & 0x007FFFFFu;
+  if (exp <= 0) {
+    if (exp < -10) return uint16_t(sign);
+    frac = (frac | 0x00800000u) >> (1 - exp);
+    if (frac & 0x00001000u) frac += 0x00002000u;
+    return uint16_t(sign | (frac >> 13));
+  }
+  if (exp >= 0x1F) {
+    if (((f >> 23) & 0xFFu) == 0xFFu) {
+      // Inf or NaN
+      return uint16_t(sign | 0x7C00u | (frac ? (frac >> 13) | 0x200u : 0));
+    }
+    return uint16_t(sign | 0x7C00u);
+  }
+  if (frac & 0x00001000u) {
+    frac += 0x00002000u;
+    if (frac & 0x00800000u) {
+      frac = 0;
+      exp += 1;
+      if (exp >= 0x1F) return uint16_t(sign | 0x7C00u);
+    }
+  }
+  return uint16_t(sign | (uint32_t(exp) << 10) | (frac >> 13));
+}
+
+// fp32 reference path used when BNNS isn't available or rejects the input.
+// Converts both inputs to fp32, runs cblas_sgemm (or the portable reference
+// kernel), then converts back. Preserves correctness at the cost of one
+// f16->f32->f16 round-trip per matrix.
+inline void cblas_fp16_via_fp32(const uint16_t* A, const uint16_t* B,
+                                uint16_t* C, int32_t M, int32_t N, int32_t K) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Cf(static_cast<std::size_t>(M) * N, 0.0f);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = half_to_float(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = half_to_float(B[i]);
+#if TESSERA_APPLE_CPU_HAVE_ACCELERATE
+  cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+              M, N, K, 1.0f, Af.data(), K, Bf.data(), N, 0.0f, Cf.data(), N);
+#else
+  reference_gemm_f32(Af.data(), Bf.data(), Cf.data(), M, N, K);
+#endif
+  for (std::size_t i = 0; i < Cf.size(); ++i) C[i] = float_to_half(Cf[i]);
+}
+
+#if TESSERA_APPLE_CPU_HAVE_ACCELERATE
+// Try BNNSMatMul with f16 descriptors. Returns true on success. The BNNS
+// row-major BLAS-equivalent layout is BNNSDataLayout2DFirstMajor where size[]
+// is (rows, cols) in BLAS order.
+inline bool bnns_gemm_f16(const uint16_t* A, const uint16_t* B, uint16_t* C,
+                          int32_t M, int32_t N, int32_t K) {
+  // BNNSDataLayout2DFirstMajor: value (i, j) at j*stride[0] + i*stride[1].
+  // For C row-major storage where value(i,j) is at i*ld + j, we need
+  //   stride[0] = 1 (j step)
+  //   stride[1] = leading dim (i step)
+  // size[0] = first dim (i / row count), size[1] = second dim (j / col count).
+  BNNSNDArrayDescriptor a{}, b{}, c{};
+  a.layout = BNNSDataLayout2DFirstMajor;
+  a.data_type = BNNSDataTypeFloat16;
+  a.size[0] = static_cast<size_t>(M);
+  a.size[1] = static_cast<size_t>(K);
+  a.stride[0] = 1;
+  a.stride[1] = static_cast<size_t>(K);
+  a.data = const_cast<uint16_t*>(A);
+
+  b.layout = BNNSDataLayout2DFirstMajor;
+  b.data_type = BNNSDataTypeFloat16;
+  b.size[0] = static_cast<size_t>(K);
+  b.size[1] = static_cast<size_t>(N);
+  b.stride[0] = 1;
+  b.stride[1] = static_cast<size_t>(N);
+  b.data = const_cast<uint16_t*>(B);
+
+  c.layout = BNNSDataLayout2DFirstMajor;
+  c.data_type = BNNSDataTypeFloat16;
+  c.size[0] = static_cast<size_t>(M);
+  c.size[1] = static_cast<size_t>(N);
+  c.stride[0] = 1;
+  c.stride[1] = static_cast<size_t>(N);
+  c.data = C;
+
+  ssize_t ws_size = BNNSMatMulWorkspaceSize(/*transA=*/false, /*transB=*/false,
+                                            /*alpha=*/1.0f, &a, &b, &c, nullptr);
+  if (ws_size < 0) return false;
+  std::vector<uint8_t> workspace(ws_size > 0 ? static_cast<std::size_t>(ws_size) : 0);
+  int rc = BNNSMatMul(/*transA=*/false, /*transB=*/false,
+                      /*alpha=*/1.0f, &a, &b, &c,
+                      ws_size > 0 ? workspace.data() : nullptr, nullptr);
+  return rc == 0;
+}
+#endif
+
+} // namespace
+
+extern "C" void tessera_apple_cpu_gemm_f16(const uint16_t* A, const uint16_t* B,
+                                           uint16_t* C, int32_t M, int32_t N,
+                                           int32_t K) {
+#if TESSERA_APPLE_CPU_HAVE_ACCELERATE
+  if (bnns_gemm_f16(A, B, C, M, N, K)) return;
+  // BNNS path failed (older OS, unexpected layout, etc.) — fall through.
+#endif
+  cblas_fp16_via_fp32(A, B, C, M, N, K);
+}
+
+#if defined(__clang__)
+#  pragma clang diagnostic pop
+#endif

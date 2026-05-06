@@ -89,13 +89,22 @@ def test_compiler_example_manifest_qualifies_each_foundation_target():
     for example in COMPILER_EXAMPLE_MANIFEST:
         assert set(example.stages_by_target) == set(FOUNDATION_TARGETS)
         for target in FOUNDATION_TARGETS:
-            result = qualify_compiler_example(example, target, run=target == "x86")
+            # x86 has the AMX runtime; apple_cpu is the second executable
+            # path (Phase 8.2 Item #2 — Accelerate cblas + numpy reference
+            # for multi-op programs). Both should actually launch.
+            should_run = target in {"x86", "apple_cpu"}
+            result = qualify_compiler_example(example, target, run=should_run)
             seen.add((example.example_id, result.target))
             assert result.artifact.metadata["artifact_hashes"]["graph"]
             assert result.trace
             if target == "x86":
                 assert result.launch_result is not None
                 assert result.launch_result["ok"] is True
+            elif target == "apple_cpu":
+                # Manifest examples are matmul-driven and the new multi-op
+                # runtime path means they now report runtime_status="ready".
+                assert result.artifact.metadata["runtime_status"] == "ready"
+                assert result.artifact.metadata["compiler_path"] == "apple_cpu_accelerate"
             else:
                 assert result.artifact.metadata["runtime_status"] == "artifact_only"
 

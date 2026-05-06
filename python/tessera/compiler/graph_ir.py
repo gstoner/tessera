@@ -36,13 +36,73 @@ from .op_catalog import GRAPH_OP_MAP, graph_name_for
 # IR value types
 # ─────────────────────────────────────────────────────────────────────────────
 
-@dataclass
+@dataclass(frozen=True)
 class IRType:
     """A simplified type representation for Graph IR emission."""
     mlir_str: str   # e.g. "tensor<*xbf16>", "f32", "index"
+    shape: Tuple[str, ...] = ()
+    dtype: Optional[str] = None
+    layout: Optional[str] = None
 
     def __str__(self) -> str:
         return self.mlir_str
+
+    @property
+    def rank(self) -> Optional[int]:
+        return len(self.shape) if self.shape and "*" not in self.shape else None
+
+
+def _normalize_dtype(dtype: Optional[str]) -> Optional[str]:
+    if dtype is None:
+        return None
+    aliases = {
+        "f64": "fp64",
+        "f32": "fp32",
+        "f16": "fp16",
+        "float64": "fp64",
+        "float32": "fp32",
+        "float16": "fp16",
+    }
+    return aliases.get(str(dtype), str(dtype))
+
+
+def _mlir_dtype(dtype: Optional[str]) -> str:
+    dtype = _normalize_dtype(dtype)
+    mapping = {
+        "fp64": "f64",
+        "fp32": "f32",
+        "fp16": "f16",
+        "bf16": "bf16",
+        "fp8_e4m3": "xf8E4M3FN",
+        "fp8_e5m2": "xf8E5M2",
+        "fp6_e2m3": "!tessera.fp6_e2m3",
+        "fp6_e3m2": "!tessera.fp6_e3m2",
+        "fp4_e2m1": "!tessera.fp4_e2m1",
+        "nvfp4": "!tessera.nvfp4",
+        "int8": "i8",
+        "int16": "i16",
+        "int32": "i32",
+        "int64": "i64",
+        "bool": "i1",
+    }
+    return mapping.get(dtype, dtype or "?")
+
+
+def tensor_ir_type(
+    shape: Tuple[Any, ...] = ("*",),
+    dtype: Optional[str] = None,
+    *,
+    layout: Optional[str] = None,
+) -> IRType:
+    """Create a tensor IR type while preserving source shape/dtype/layout metadata."""
+
+    normalized_shape = tuple("?" if dim is None else str(dim) for dim in shape)
+    normalized_dtype = _normalize_dtype(dtype)
+    shape_text = "*"
+    if normalized_shape and normalized_shape != ("*",):
+        shape_text = "x".join(normalized_shape)
+    dtype_text = _mlir_dtype(normalized_dtype) if normalized_dtype else "?"
+    return IRType(f"tensor<{shape_text}x{dtype_text}>", normalized_shape, normalized_dtype, layout)
 
 
 @dataclass(frozen=True)
@@ -85,35 +145,68 @@ class KVCacheSpec:
 
 
 # Common types used in Phase 1
-TENSOR_BF16   = IRType("tensor<*xbf16>")
-TENSOR_FP16   = IRType("tensor<*xf16>")
-TENSOR_FP32   = IRType("tensor<*xf32>")
-TENSOR_OPAQUE = IRType("tensor<*x?>")   # unknown dtype
+TENSOR_BF16   = tensor_ir_type(("*",), "bf16")
+TENSOR_FP16   = tensor_ir_type(("*",), "fp16")
+TENSOR_FP32   = tensor_ir_type(("*",), "fp32")
+TENSOR_OPAQUE = tensor_ir_type(("*",), None)   # unknown dtype
 KV_CACHE      = IRType("!tessera.kv_cache")
 INDEX         = IRType("index")
 BOOL          = IRType("i1")
 
 
+@dataclass(frozen=True)
+class SourceSpan:
+    """Source location for frontend diagnostics."""
+
+    line: int
+    col: int
+    end_line: Optional[int] = None
+    end_col: Optional[int] = None
+    source_name: Optional[str] = None
+
+    def format(self) -> str:
+        origin = f"{self.source_name}:" if self.source_name else ""
+        end = ""
+        if self.end_line is not None and self.end_col is not None:
+            end = f"-{self.end_line}:{self.end_col}"
+        return f"{origin}{self.line}:{self.col}{end}"
+
+
+@dataclass(frozen=True)
+class GraphIRDiagnostic:
+    severity: str
+    message: str
+    span: Optional[SourceSpan] = None
+    code: str = "GRAPH_IR"
+
+    def format(self) -> str:
+        loc = f" at {self.span.format()}" if self.span else ""
+        return f"{self.severity} {self.code}{loc}: {self.message}"
+
+
+@dataclass(frozen=True)
+class GraphIRVerificationResult:
+    diagnostics: Tuple[GraphIRDiagnostic, ...] = ()
+
+    @property
+    def ok(self) -> bool:
+        return not any(d.severity == "error" for d in self.diagnostics)
+
+    def format(self) -> str:
+        return "\n".join(d.format() for d in self.diagnostics)
+
+
+class GraphIRVerificationError(ValueError):
+    pass
+
+
+class MLIRObjectUnavailable(RuntimeError):
+    pass
+
+
 def _dtype_to_ir_type(dtype: str) -> IRType:
     """Map a Tessera dtype string to an MLIR type."""
-    _map = {
-        "bf16": TENSOR_BF16,
-        "fp16": TENSOR_FP16,
-        "fp32": TENSOR_FP32,
-        "fp64": IRType("tensor<*xf64>"),
-        "fp8_e4m3": IRType("tensor<*xf8E4M3FN>"),
-        "fp8_e5m2": IRType("tensor<*xf8E5M2>"),
-        "fp6_e2m3": IRType("tensor<*x!tessera.fp6_e2m3>"),
-        "fp6_e3m2": IRType("tensor<*x!tessera.fp6_e3m2>"),
-        "fp4_e2m1": IRType("tensor<*x!tessera.fp4_e2m1>"),
-        "nvfp4": IRType("tensor<*x!tessera.nvfp4>"),
-        "int8": IRType("tensor<*xi8>"),
-        "int16": IRType("tensor<*xi16>"),
-        "int32": IRType("tensor<*xi32>"),
-        "int64": IRType("tensor<*xi64>"),
-        "bool": IRType("tensor<*xi1>"),
-    }
-    return _map.get(dtype, TENSOR_OPAQUE)
+    return tensor_ir_type(("*",), dtype)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -127,6 +220,8 @@ class IRArg:
     ir_type: IRType
     effect: Optional[str] = None        # "read", "write", "reduce_sum", etc.
     shard_spec: Optional[str] = None    # tessera.shard attribute (Phase 2+)
+    dim_names: Tuple[str, ...] = ()
+    layout: Optional[str] = None
 
     def to_mlir(self) -> str:
         attrs = []
@@ -134,6 +229,12 @@ class IRArg:
             attrs.append(f'tessera.effect = "{self.effect}"')
         if self.shard_spec:
             attrs.append(f"tessera.shard = {self.shard_spec}")
+        if self.dim_names:
+            dims = "[" + ", ".join(f'"{name}"' for name in self.dim_names) + "]"
+            attrs.append(f"tessera.dim_names = {dims}")
+        layout = self.layout or self.ir_type.layout
+        if layout:
+            attrs.append(f'tessera.layout = "{layout}"')
         attr_str = (" {" + ", ".join(attrs) + "}") if attrs else ""
         return f"%{self.name}: {self.ir_type}{attr_str}"
 
@@ -152,6 +253,8 @@ class IROp:
     result_type: Optional[str] = None
     attrs: Optional[str] = None   # additional op attributes
     kwargs: Dict[str, Any] = field(default_factory=dict)
+    source_span: Optional["SourceSpan"] = None
+    inferred_type: Optional[IRType] = None
 
     def to_mlir(self, indent: str = "  ") -> str:
         ops_str = ", ".join(self.operands)
@@ -204,7 +307,14 @@ class GraphIRModule:
         "tessera.ir.version": '"1.0"',
     })
 
-    def to_mlir(self) -> str:
+    def verify(self) -> "GraphIRVerificationResult":
+        return GraphIRVerifier().verify_module(self)
+
+    def to_mlir(self, *, verify: bool = True) -> str:
+        if verify:
+            result = self.verify()
+            if not result.ok:
+                raise GraphIRVerificationError(result.format())
         attr_lines = ", ".join(f"{k} = {v}" for k, v in self.module_attrs.items())
         lines = [f"module attributes {{{attr_lines}}} {{"]
         for fn in self.functions:
@@ -230,7 +340,11 @@ class GraphIRFunction:
     body: List[IROp] = field(default_factory=list)
     fn_attrs: Dict[str, str] = field(default_factory=dict)
 
-    def to_mlir(self) -> str:
+    def to_mlir(self, *, verify: bool = False) -> str:
+        if verify:
+            result = GraphIRVerifier().verify_function(self)
+            if not result.ok:
+                raise GraphIRVerificationError(result.format())
         args_str = ", ".join(a.to_mlir() for a in self.args)
         if self.result_types:
             ret_str = " -> (" + ", ".join(str(t) for t in self.result_types) + ")"
@@ -246,6 +360,100 @@ class GraphIRFunction:
         lines.append("  return")
         lines.append("}")
         return "\n".join(lines)
+
+
+class GraphIRVerifier:
+    """Lightweight verifier for the Python Graph IR object model.
+
+    This is intentionally conservative: it catches frontend construction errors
+    before MLIR text is emitted. If native MLIR bindings are present, callers can
+    use `construct_mlir_module` for a parse-backed object as well.
+    """
+
+    def verify_module(self, module: GraphIRModule) -> GraphIRVerificationResult:
+        diagnostics: List[GraphIRDiagnostic] = []
+        seen = set()
+        for fn in module.functions:
+            if fn.name in seen:
+                diagnostics.append(GraphIRDiagnostic("error", f"duplicate function {fn.name!r}", code="GRAPH_IR_DUP_FUNC"))
+            seen.add(fn.name)
+            diagnostics.extend(self.verify_function(fn).diagnostics)
+        return GraphIRVerificationResult(tuple(diagnostics))
+
+    def verify_function(self, fn: GraphIRFunction) -> GraphIRVerificationResult:
+        diagnostics: List[GraphIRDiagnostic] = []
+        defined = {f"%{arg.name}" for arg in fn.args}
+        results = set()
+        for op in fn.body:
+            if op.result is not None:
+                result_name = f"%{op.result}"
+                if result_name in defined or result_name in results:
+                    diagnostics.append(GraphIRDiagnostic(
+                        "error",
+                        f"duplicate SSA result {result_name}",
+                        span=op.source_span,
+                        code="GRAPH_IR_DUP_VALUE",
+                    ))
+                results.add(result_name)
+            if len(op.operands) != len(op.operand_types):
+                diagnostics.append(GraphIRDiagnostic(
+                    "error",
+                    f"op {op.op_name!r} has {len(op.operands)} operands but {len(op.operand_types)} operand types",
+                    span=op.source_span,
+                    code="GRAPH_IR_OPERAND_TYPE_MISMATCH",
+                ))
+            for operand in op.operands:
+                if operand == "%?":
+                    diagnostics.append(GraphIRDiagnostic(
+                        "error",
+                        f"op {op.op_name!r} has unresolved operand",
+                        span=op.source_span,
+                        code="GRAPH_IR_UNRESOLVED_OPERAND",
+                    ))
+                elif operand.startswith("%") and operand not in defined and operand not in results:
+                    diagnostics.append(GraphIRDiagnostic(
+                        "error",
+                        f"op {op.op_name!r} uses undefined operand {operand}",
+                        span=op.source_span,
+                        code="GRAPH_IR_UNDEFINED_OPERAND",
+                    ))
+        return GraphIRVerificationResult(tuple(diagnostics))
+
+
+class MLIRObjectModule:
+    """Parse-backed MLIR object wrapper when native bindings are unavailable."""
+
+    def __init__(self, graph_module: GraphIRModule, native_module: Any = None) -> None:
+        self.graph_module = graph_module
+        self.native_module = native_module
+
+    @property
+    def is_native(self) -> bool:
+        return self.native_module is not None
+
+    def to_mlir(self) -> str:
+        return str(self.native_module) if self.native_module is not None else self.graph_module.to_mlir()
+
+
+def construct_mlir_module(module: GraphIRModule) -> MLIRObjectModule:
+    """Construct a verified MLIR module object.
+
+    The Python package does not require MLIR bindings in its lightweight test
+    environment. When bindings are installed, this parses through `mlir.ir`;
+    otherwise it returns a verified object wrapper around the Graph IR model.
+    """
+
+    result = module.verify()
+    if not result.ok:
+        raise GraphIRVerificationError(result.format())
+    text = module.to_mlir(verify=False)
+    try:
+        from mlir import ir as mlir_ir  # type: ignore
+    except Exception:
+        return MLIRObjectModule(module)
+    with mlir_ir.Context() as context:
+        native_module = mlir_ir.Module.parse(text, context)
+    return MLIRObjectModule(module, native_module=native_module)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -264,10 +472,12 @@ class _OpExtractor(ast.NodeVisitor):
     # Map from op bare name to Graph IR op name
     _OP_MAP = GRAPH_OP_MAP
 
-    def __init__(self, arg_names: List[str]) -> None:
+    def __init__(self, arg_names: List[str], arg_types: Optional[Dict[str, IRType]] = None) -> None:
         self.ops: List[IROp] = []
+        self.diagnostics: List[GraphIRDiagnostic] = []
         self._counter = 0
         self._arg_names = set(arg_names)
+        self._value_types: Dict[str, IRType] = {f"%{name}": typ for name, typ in (arg_types or {}).items()}
 
     def _fresh(self) -> str:
         name = f"v{self._counter}"
@@ -298,7 +508,11 @@ class _OpExtractor(ast.NodeVisitor):
                     result=None,
                     op_name="tessera.copy",
                     operands=[value, f"%{dest}"],
-                    operand_types=["tensor<*x?>", "tensor<*x?>"],
+                    operand_types=[
+                        str(self._value_types.get(value, TENSOR_OPAQUE)),
+                        str(self._value_types.get(f"%{dest}", TENSOR_OPAQUE)),
+                    ],
+                    source_span=_span_from_ast(node),
                 ))
                 return
         self.generic_visit(node)
@@ -308,12 +522,33 @@ class _OpExtractor(ast.NodeVisitor):
             return
         self.generic_visit(node)
 
+    def visit_If(self, node: ast.If) -> None:
+        self._unsupported(node, "Python if/else control flow is not lowered by the Graph IR frontend")
+
+    def visit_For(self, node: ast.For) -> None:
+        self._unsupported(node, "Python for-loops are not lowered by the Graph IR frontend")
+
+    def visit_While(self, node: ast.While) -> None:
+        self._unsupported(node, "Python while-loops are not lowered by the Graph IR frontend")
+
+    def visit_AugAssign(self, node: ast.AugAssign) -> None:
+        self._unsupported(node, "augmented assignment is not lowered by the Graph IR frontend")
+
+    def _unsupported(self, node: ast.AST, message: str) -> None:
+        self.diagnostics.append(GraphIRDiagnostic(
+            "warning",
+            message,
+            span=_span_from_ast(node),
+            code="PY_FRONTEND_UNSUPPORTED",
+        ))
+
     def _emit_expr(self, node: ast.expr, result_name: Optional[str] = None) -> Optional[str]:
         if isinstance(node, ast.Call):
             op = self._try_map_call(node)
             if op is None:
                 return None
             op.result = result_name or self._fresh()
+            self._value_types[f"%{op.result}"] = op.inferred_type if hasattr(op, "inferred_type") else _parse_mlir_tensor_type(op.result_type or "tensor<*x?>")
             self.ops.append(op)
             return f"%{op.result}"
         if isinstance(node, ast.Name):
@@ -327,9 +562,11 @@ class _OpExtractor(ast.NodeVisitor):
                 result=result,
                 op_name="tessera.transpose",
                 operands=[value],
-                operand_types=["tensor<*x?>"],
-                result_type="tensor<*x?>",
+                operand_types=[str(self._value_types.get(value, TENSOR_OPAQUE))],
+                result_type=str(self._value_types.get(value, TENSOR_OPAQUE)),
+                source_span=_span_from_ast(node),
             ))
+            self._value_types[f"%{result}"] = self._value_types.get(value, TENSOR_OPAQUE)
             return f"%{result}"
         return None
 
@@ -342,9 +579,13 @@ class _OpExtractor(ast.NodeVisitor):
             return None
 
         operands = []
+        operand_types = []
         for arg in call.args:
             operand = self._emit_expr(arg)
             operands.append(operand if operand else "%?")
+            operand_types.append(str(self._value_types.get(operand or "%?", TENSOR_OPAQUE)))
+
+        result_type = _infer_result_type(mlir_name, [self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands])
 
         kwargs = {}
         for kw in call.keywords:
@@ -360,10 +601,57 @@ class _OpExtractor(ast.NodeVisitor):
             result=None,  # filled in by caller
             op_name=mlir_name,
             operands=operands,
-            operand_types=["tensor<*x?>"] * len(operands),
-            result_type="tensor<*x?>",
+            operand_types=operand_types,
+            result_type=str(result_type),
             kwargs=kwargs,
+            source_span=_span_from_ast(call),
+            inferred_type=result_type,
         )
+
+
+def _span_from_ast(node: ast.AST) -> SourceSpan:
+    return SourceSpan(
+        line=int(getattr(node, "lineno", 0) or 0),
+        col=int(getattr(node, "col_offset", 0) or 0) + 1,
+        end_line=getattr(node, "end_lineno", None),
+        end_col=(getattr(node, "end_col_offset", None) + 1) if getattr(node, "end_col_offset", None) is not None else None,
+    )
+
+
+def _infer_result_type(op_name: str, operand_types: List[IRType]) -> IRType:
+    if not operand_types:
+        return TENSOR_OPAQUE
+    if op_name == "tessera.matmul" and len(operand_types) >= 2:
+        lhs, rhs = operand_types[0], operand_types[1]
+        dtype = lhs.dtype or rhs.dtype
+        if lhs.rank == 2 and rhs.rank == 2:
+            return tensor_ir_type((lhs.shape[0], rhs.shape[1]), dtype, layout=lhs.layout)
+        return tensor_ir_type(("*",), dtype, layout=lhs.layout)
+    if op_name in {"tessera.transpose"} and operand_types[0].rank is not None:
+        first = operand_types[0]
+        return tensor_ir_type(tuple(reversed(first.shape)), first.dtype, layout=first.layout)
+    return operand_types[0]
+
+
+def _parse_mlir_tensor_type(text: str) -> IRType:
+    match = re.fullmatch(r"tensor<(.+)x([^x<>]+)>", text or "")
+    if not match:
+        return IRType(text or "tensor<*x?>")
+    shape_text, dtype_text = match.groups()
+    shape = ("*",) if shape_text == "*" else tuple(shape_text.split("x"))
+    reverse_dtype = {
+        "f64": "fp64",
+        "f32": "fp32",
+        "f16": "fp16",
+        "bf16": "bf16",
+        "i8": "int8",
+        "i16": "int16",
+        "i32": "int32",
+        "i64": "int64",
+        "i1": "bool",
+        "?": None,
+    }
+    return tensor_ir_type(shape, reverse_dtype.get(dtype_text, dtype_text))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -393,6 +681,7 @@ class GraphIRBuilder:
 
     def __init__(self) -> None:
         self._module = GraphIRModule()
+        self.diagnostics: List[GraphIRDiagnostic] = []
 
     def lower(
         self,
@@ -430,23 +719,23 @@ class GraphIRBuilder:
         for param_name, param in sig.parameters.items():
             ann = hints.get(param_name) or param.annotation
 
-            # Detect RegionType annotations
+            # Detect RegionType, Tensor[...] and dtype annotations.
             effect = None
-            ir_type = TENSOR_OPAQUE
+            ir_type = _annotation_to_ir_type(ann)
+            dim_names: Tuple[str, ...] = ()
+            layout = ir_type.layout
             if ann is not inspect.Parameter.empty:
-                ann_name = getattr(ann, "__name__", "") or repr(ann)
                 # RegionType from tessera.distributed.region
                 if hasattr(ann, "mode"):
                     effect = ann.mode
-                # Simple dtype annotations like f16[...], bf16 etc.
-                elif hasattr(ann, "__origin__"):
-                    pass  # generic alias — leave opaque for now
+                if hasattr(ann, "__dims__"):
+                    dim_names = tuple(str(dim) for dim in getattr(ann, "__dims__"))
 
-            args.append(IRArg(name=param_name, ir_type=ir_type, effect=effect))
+            args.append(IRArg(name=param_name, ir_type=ir_type, effect=effect, dim_names=dim_names, layout=layout))
 
         # Extract ops from AST
         arg_names = [a.name for a in args]
-        ops = self._extract_ops(fn, arg_names, source_text=source_text)
+        ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args}, source_text=source_text)
 
         # Build function attrs
         fn_attrs = {}
@@ -466,6 +755,7 @@ class GraphIRBuilder:
         self,
         fn: Callable,
         arg_names: List[str],
+        arg_types: Optional[Dict[str, IRType]] = None,
         source_text: Optional[str] = None,
     ) -> List[IROp]:
         """Walk the function AST and extract recognized tessera op calls."""
@@ -476,7 +766,7 @@ class GraphIRBuilder:
         except (OSError, TypeError, SyntaxError):
             return []
 
-        extractor = _OpExtractor(arg_names)
+        extractor = _OpExtractor(arg_names, arg_types)
         # Only visit the function body (skip decorator lines)
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -485,6 +775,7 @@ class GraphIRBuilder:
                         extractor.visit(stmt)
                     break
 
+        self.diagnostics.extend(extractor.diagnostics)
         return extractor.ops
 
     def module(self) -> GraphIRModule:
@@ -494,3 +785,29 @@ class GraphIRBuilder:
     def reset(self) -> None:
         """Clear all accumulated functions."""
         self._module = GraphIRModule()
+        self.diagnostics = []
+
+
+def _annotation_to_ir_type(ann: Any) -> IRType:
+    if ann is inspect.Parameter.empty:
+        return TENSOR_OPAQUE
+    dims = getattr(ann, "__dims__", None)
+    dtype = getattr(ann, "dtype", None)
+    shape = getattr(ann, "shape", None)
+    layout = getattr(ann, "layout", None)
+    if dims is not None:
+        return tensor_ir_type(tuple("?" for _ in dims), dtype, layout=layout)
+    if dtype is not None:
+        normalized_shape = _shape_from_annotation(shape)
+        return tensor_ir_type(normalized_shape, dtype, layout=layout)
+    return TENSOR_OPAQUE
+
+
+def _shape_from_annotation(shape: Any) -> Tuple[Any, ...]:
+    if shape is None:
+        return ("*",)
+    if not isinstance(shape, tuple):
+        shape = (shape,)
+    if any(item is Ellipsis for item in shape):
+        return ("*",)
+    return tuple("?" if item is None else item for item in shape)

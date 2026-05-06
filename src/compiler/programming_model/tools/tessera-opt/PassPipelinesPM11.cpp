@@ -108,6 +108,49 @@ private:
       auto count = op->getAttrOfType<IntegerAttr>("count");
       if (!count || count.getInt() <= 0)
         return op->emitOpError("'count' must be > 0");
+      auto scope = op->getAttrOfType<StringAttr>("scope");
+      if (!scope || !isValidScope(scope.getValue()))
+        return op->emitOpError("'scope' must be one of thread, warp, block, cluster, device, mesh");
+      if (!supportsMBarrier(op))
+        return op->emitOpError("mbarrier requires target/arch containing sm90, sm100, sm120, hopper, or blackwell");
+      return success();
+    }
+
+    if (name == "tile.mbarrier.arrive_expect_tx") {
+      auto bytes = op->getAttrOfType<IntegerAttr>("bytes");
+      if (!bytes || bytes.getInt() <= 0)
+        return op->emitOpError("'bytes' must be > 0");
+      auto scope = op->getAttrOfType<StringAttr>("scope");
+      if (!scope || !isValidScope(scope.getValue()))
+        return op->emitOpError("'scope' must be one of thread, warp, block, cluster, device, mesh");
+      auto semantics = op->getAttrOfType<StringAttr>("semantics");
+      if (!semantics || (semantics.getValue() != "release" &&
+                         semantics.getValue() != "acq_rel" &&
+                         semantics.getValue() != "seq_cst"))
+        return op->emitOpError("'semantics' must be release, acq_rel, or seq_cst");
+      return success();
+    }
+
+    if (name == "tile.mbarrier.try_wait") {
+      if (op->getNumOperands() != 2)
+        return op->emitOpError("expected exactly 2 operands (barrier, token)");
+      return success();
+    }
+
+    if (name == "tile.atomic") {
+      auto order = op->getAttrOfType<StringAttr>("order");
+      if (!order || !isValidOrder(order.getValue()))
+        return op->emitOpError("'order' must be relaxed, acquire, release, acq_rel, or seq_cst");
+      auto scope = op->getAttrOfType<StringAttr>("scope");
+      if (!scope || !isValidScope(scope.getValue()))
+        return op->emitOpError("'scope' must be one of thread, warp, block, cluster, device, mesh");
+      return success();
+    }
+
+    if (name == "tile.barrier") {
+      auto divergent = op->getAttrOfType<BoolAttr>("divergent");
+      if (divergent && divergent.getValue())
+        return op->emitOpError("barrier cannot be marked divergent");
       return success();
     }
 
@@ -123,6 +166,28 @@ private:
     }
 
     return success(); // other ops: no custom constraint
+  }
+
+  bool isValidScope(StringRef scope) const {
+    return scope == "thread" || scope == "warp" || scope == "block" ||
+           scope == "cluster" || scope == "device" || scope == "mesh";
+  }
+
+  bool isValidOrder(StringRef order) const {
+    return order == "relaxed" || order == "acquire" || order == "release" ||
+           order == "acq_rel" || order == "seq_cst";
+  }
+
+  bool supportsMBarrier(Operation *op) const {
+    ModuleOp module = op->getParentOfType<ModuleOp>();
+    if (!module) return false;
+    auto target = module->getAttrOfType<StringAttr>("target");
+    auto arch = module->getAttrOfType<StringAttr>("arch");
+    StringRef value = target ? target.getValue() : (arch ? arch.getValue() : "");
+    return value.contains("sm90") || value.contains("sm_90") ||
+           value.contains("sm100") || value.contains("sm_100") ||
+           value.contains("sm120") || value.contains("sm_120") ||
+           value.contains("hopper") || value.contains("blackwell");
   }
 };
 } // anonymous namespace

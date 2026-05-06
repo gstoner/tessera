@@ -286,6 +286,16 @@ LogicalResult verifyRingCreate(Operation *op) {
 
 namespace tile {
 
+static bool isValidScope(StringRef scope) {
+  return scope == "thread" || scope == "warp" || scope == "block" ||
+         scope == "cluster" || scope == "device" || scope == "mesh";
+}
+
+static bool isValidOrder(StringRef order) {
+  return order == "relaxed" || order == "acquire" || order == "release" ||
+         order == "acq_rel" || order == "seq_cst";
+}
+
 // tile.alloc_shared — result must be a MemRefType
 LogicalResult verifyAllocShared(Operation *op) {
   if (op->getNumOperands() != 1)
@@ -329,6 +339,8 @@ LogicalResult verifyMBarrierAlloc(Operation *op) {
   auto scope = op->getAttrOfType<StringAttr>("scope");
   if (!scope || scope.getValue().empty())
     return op->emitOpError("requires non-empty 'scope' string attribute");
+  if (!isValidScope(scope.getValue()))
+    return op->emitOpError("'scope' must be one of thread, warp, block, cluster, device, mesh");
   return success();
 }
 
@@ -340,6 +352,28 @@ LogicalResult verifyMBarrierArriveExpectTx(Operation *op) {
   auto semantics = op->getAttrOfType<StringAttr>("semantics");
   if (!semantics || semantics.getValue().empty())
     return op->emitOpError("requires non-empty 'semantics' string attribute");
+  if (!isValidOrder(semantics.getValue()))
+    return op->emitOpError("'semantics' must be relaxed, acquire, release, acq_rel, or seq_cst");
+  auto scope = op->getAttrOfType<StringAttr>("scope");
+  if (!scope || !isValidScope(scope.getValue()))
+    return op->emitOpError("'scope' must be one of thread, warp, block, cluster, device, mesh");
+  return success();
+}
+
+LogicalResult verifyAtomic(Operation *op) {
+  auto order = op->getAttrOfType<StringAttr>("order");
+  if (!order || !isValidOrder(order.getValue()))
+    return op->emitOpError("'order' must be relaxed, acquire, release, acq_rel, or seq_cst");
+  auto scope = op->getAttrOfType<StringAttr>("scope");
+  if (!scope || !isValidScope(scope.getValue()))
+    return op->emitOpError("'scope' must be one of thread, warp, block, cluster, device, mesh");
+  return success();
+}
+
+LogicalResult verifyBarrier(Operation *op) {
+  auto divergent = op->getAttrOfType<BoolAttr>("divergent");
+  if (divergent && divergent.getValue())
+    return op->emitOpError("barrier cannot be marked divergent");
   return success();
 }
 
@@ -403,6 +437,8 @@ LogicalResult verifyProgrammingModelOp(Operation *op) {
   if (name == "tile.mbarrier.arrive_expect_tx")
     return tile::verifyMBarrierArriveExpectTx(op);
   if (name == "tile.mbarrier.try_wait")  return tile::verifyMBarrierTryWait(op);
+  if (name == "tile.atomic")             return tile::verifyAtomic(op);
+  if (name == "tile.barrier")            return tile::verifyBarrier(op);
   if (name == "tile.reduce")             return tile::verifyReduce(op);
 
   return success(); // unknown op — not our concern

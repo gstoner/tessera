@@ -43,6 +43,20 @@ def test_profiler_measure_and_timeline_export(tmp_path):
     assert payload["traceEvents"][0]["name"] == "sum"
 
 
+def test_profiler_backend_wall_clock_measurement_records_cpu_and_apple_status():
+    with profiler.session() as p:
+        value = p.measure("cpu_region", lambda: 1 + 1, backend="cpu", op="matmul")
+        p.measure("apple_region", lambda: 2 + 2, backend="apple_cpu", op="matmul")
+
+    assert value == 2
+    events = p.telemetry_events()
+    assert events[0]["schema"] == TELEMETRY_SCHEMA_VERSION
+    assert events[0]["status"] == "ok"
+    assert events[0]["metadata"]["backend"] == "cpu"
+    assert events[0]["metadata"]["timer"] == "wall_clock"
+    assert events[1]["metadata"]["backend"] == "apple_cpu"
+
+
 def test_telemetry_event_serialization_and_bottleneck():
     event = make_event(
         "matmul",
@@ -148,6 +162,22 @@ def test_public_autotune_on_device_reports_unmeasured_backend(tmp_path):
     assert result.status == "unmeasured"
     assert "device timers" in result.reason
     assert artifact["measurements"]["status"] == "unmeasured"
+
+
+def test_public_autotune_on_device_cpu_uses_wall_clock_measurement(tmp_path):
+    result = autotune(
+        "matmul",
+        shapes=(128, 128, 128),
+        method="on_device",
+        backend="cpu",
+        max_trials=1,
+        cache_path=tmp_path / "cpu_measure.db",
+    )
+
+    assert result.status == "ok"
+    assert result.method == "on_device"
+    assert "wall-clock measurement" in result.reason
+    assert result.latency_ms >= 0.0
 
 
 def test_autotune_rejects_non_gemm_ops():

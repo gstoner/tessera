@@ -239,10 +239,11 @@ consume the aggregate state.
 
 Current enforcement is intentionally narrower than the full memory model. The
 implemented/lit-testable subset covers async movement, mbarrier-shaped
-contracts, target capability gating, and runtime stream/event ordering. The
-following requirements remain `planned` until verifier or runtime tests prove
-them: scoped atomics, device-wide fence legality, complete happens-before race
-checking, and deterministic mesh-reduction enforcement for native collectives.
+contracts, target capability gating, atomic order/scope attribute validation,
+barrier divergence markers, and runtime stream/event ordering. The following
+requirements remain `planned` until verifier or runtime tests prove them:
+device-wide fence legality, complete happens-before race checking, and
+deterministic mesh-reduction enforcement for native collectives.
 
 | Compiler layer | Responsibility |
 |----------------|----------------|
@@ -257,7 +258,7 @@ checking, and deterministic mesh-reduction enforcement for native collectives.
 | `tile.async_copy` / wait-stage pairing | lit-testable | FA-4 and Tile IR lowering tests |
 | Hopper+ `tile.mbarrier.*` contracts | lit-testable | target-contract and Tile IR tests |
 | Stream/event ordering in CPU runtime | implemented / mock-runtime | runtime ABI and CPU backend tests |
-| Scoped atomics | planned | add Tile IR verifier and backend tests |
+| Scoped atomics | structural verifier | validates order/scope attributes; backend lowering tests still planned |
 | Device-wide fences | planned | add target capability checks and diagnostics |
 | Complete happens-before race checking | planned | add Graph/Schedule/Tile verifier tests |
 | Deterministic native mesh reductions | planned | add native collective runtime acceptance tests |

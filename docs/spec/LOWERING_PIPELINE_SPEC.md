@@ -39,6 +39,37 @@ Graph IR (tessera dialect)
 
 ---
 
+## 1.1 Python Object-Model Lowering Path
+
+In addition to the C++ pass pipelines, the active Python compiler exposes a
+hardware-free object-model lowering path through `compile_graph_module`:
+
+```text
+GraphIRModule
+  -> ScheduleIRModule
+  -> TileIRModule
+  -> TargetIRModule / RuntimeArtifact
+```
+
+This path constructs IR objects directly, runs verifier checks before textual
+artifact emission, and records graph/schedule/tile/target hashes in compile
+bundle metadata. It currently supports CPU/x86, NVIDIA, Apple CPU/GPU, and ROCm
+artifact paths. Native execution is available only for the supported CPU and
+Apple CPU runtime paths; other targets are inspectable artifacts unless their
+backend-specific runtime declares hardware support.
+
+Debug switches:
+
+| Variable | Behavior |
+|----------|----------|
+| `TESSERA_DEBUG_IR=1` | Write Graph/Schedule/Tile/Target artifact text. |
+| `TESSERA_DUMP_STATE=1` | Write compile metadata and Chrome trace JSON. |
+| `TESSERA_DUMP_DIR=...` | Select artifact output root. |
+
+These switches are developer-tool contracts, not semantic lowering passes.
+
+---
+
 ## 2. Named Pipelines
 
 Pipeline status is split by behavior type:

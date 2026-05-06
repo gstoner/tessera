@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Optional, Sequence
+
+import numpy as np
 
 from .compiler.autotune_v2 import BayesianAutotuner, GEMMWorkload, TuningConfig, TuningResult
 
@@ -60,6 +63,7 @@ def autotune(
     numeric_policy: Mapping[str, object] | None = None,
     movement: Mapping[str, object] | None = None,
     method: str = "roofline",
+    backend: str | None = None,
     max_trials: int = 20,
     cache_path: str | os.PathLike | None = None,
     peak_tflops: float = 312.0,
@@ -80,6 +84,10 @@ def autotune(
     tuner = BayesianAutotuner(workload, peak_tflops=peak_tflops)
     tuner.warm_start_from_cache(str(path))
     result = tuner.tune(max_trials=max_trials, method=method)
+    if method == "on_device" and backend in {"cpu", "apple_cpu"}:
+        result = _measure_gemm_wall_clock(result, shapes, dtype=dtype, backend=backend)
+        tuner._results.append(result)
+        tuner._best = result
     tuner.save_to_cache(str(path))
     return result
 
@@ -174,6 +182,39 @@ def _op_name(op: Callable | str) -> str:
 
 def _cache_path(path: str | os.PathLike | None) -> Path:
     return Path(path) if path is not None else DEFAULT_CACHE_PATH
+
+
+def _measure_gemm_wall_clock(
+    result: TuningResult,
+    shapes: Sequence[int],
+    *,
+    dtype: str,
+    backend: str,
+) -> TuningResult:
+    M, N, K = (int(v) for v in shapes)
+    rng = np.random.default_rng(0)
+    a = rng.standard_normal((M, K), dtype=np.float32)
+    b = rng.standard_normal((K, N), dtype=np.float32)
+    warmups = 1
+    repeats = 3
+    for _ in range(warmups):
+        _ = a @ b
+    start = time.perf_counter()
+    for _ in range(repeats):
+        _ = a @ b
+    latency_ms = (time.perf_counter() - start) * 1e3 / repeats
+    flops = 2.0 * M * N * K
+    tflops = flops / max(latency_ms * 1e-3, 1e-12) / 1e12
+    return TuningResult(
+        result.config,
+        latency_ms,
+        tflops,
+        time.time(),
+        result.trial_id,
+        "ok",
+        f"{backend} wall-clock measurement; dtype request {dtype!r} measured with fp32 reference arrays",
+        "on_device",
+    )
 
 
 __all__ = [

@@ -150,6 +150,7 @@ class ProfileSession:
         name: str,
         fn: Callable[[], object],
         *,
+        backend: str = "cpu",
         flops: float = 0.0,
         bytes_moved: float = 0.0,
         peak_tflops: Optional[float] = None,
@@ -159,6 +160,7 @@ class ProfileSession:
         start = time.perf_counter()
         value = fn()
         elapsed_ms = (time.perf_counter() - start) * 1e3
+        status = telemetry_fields.pop("status", _backend_status(backend))
         self.record(
             name,
             latency_ms=elapsed_ms,
@@ -166,6 +168,12 @@ class ProfileSession:
             bytes_moved=bytes_moved,
             peak_tflops=peak_tflops,
             counters=counters,
+            status=status,
+            metadata={
+                **dict(telemetry_fields.pop("metadata", {}) or {}),
+                "backend": backend,
+                "timer": _timer_kind(backend),
+            },
             **telemetry_fields,
         )
         return value
@@ -246,6 +254,23 @@ def measure(name: str, fn: Callable[[], object], **kwargs):
     return active.measure(name, fn, **kwargs)
 
 
+def measure_backend(
+    name: str,
+    fn: Callable[[], object],
+    *,
+    backend: str = "cpu",
+    **kwargs,
+):
+    """Measure a callable with the hardware-free backend timing contract.
+
+    CPU and Apple CPU use wall-clock timers. CUDA/HIP/ROCm/NVIDIA backends
+    return regular profiler events only when callers provide their own measured
+    latency; autotuning paths otherwise report them as unavailable/unmeasured.
+    """
+
+    return measure(name, fn, backend=backend, **kwargs)
+
+
 def timeline(path: str | Path, sess: Optional[ProfileSession] = None) -> Path:
     target = sess or current_session()
     if target is None:
@@ -253,11 +278,20 @@ def timeline(path: str | Path, sess: Optional[ProfileSession] = None) -> Path:
     return target.timeline(path)
 
 
+def _backend_status(backend: str) -> str:
+    return "ok" if backend in {"cpu", "apple_cpu"} else "backend_unavailable"
+
+
+def _timer_kind(backend: str) -> str:
+    return "wall_clock" if backend in {"cpu", "apple_cpu"} else "unavailable"
+
+
 __all__ = [
     "ProfileEvent",
     "ProfileSession",
     "current_session",
     "measure",
+    "measure_backend",
     "record",
     "session",
     "timeline",

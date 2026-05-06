@@ -37,7 +37,7 @@ Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, TPU, Apple, ...)
 
 | Layer | Primary active files | Status |
 |-------|----------------------|--------|
-| Graph IR | `python/tessera/compiler/graph_ir.py`, `python/tessera/compiler/frontend/parser.py`, `src/compiler/ir/TesseraOps.td`, `src/compiler/ir/TesseraTiling.cpp` | implemented; TilingInterface methods scaffolded |
+| Graph IR | `python/tessera/compiler/graph_ir.py`, `python/tessera/compiler/frontend/parser.py`, `src/compiler/ir/TesseraOps.td`, `src/compiler/ir/TesseraTiling.cpp` | implemented; Matmul TilingInterface conservative path implemented, Conv2D interface scaffolded |
 | Schedule IR | `python/tessera/compiler/schedule_ir.py`, `src/compiler/programming_model/ir/ScheduleOps.cpp`, `src/compiler/programming_model/` | implemented / lit-testable |
 | Tile IR | `python/tessera/compiler/tile_ir.py`, `src/compiler/tile_opt_fa4/`, `src/transforms/lib/TileIRLoweringPass.cpp` | implemented / lit-testable |
 | Target IR | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/`, `python/tessera/compiler/matmul_pipeline.py` | CPU/NVIDIA/Apple/ROCm artifact paths implemented / lit-testable; other non-CPU targets vary by backend |
@@ -87,9 +87,10 @@ hardware-runtime when the backend-specific docs and tests say so.
 
 TilingInterface support is intentionally classified separately from the
 `TilingPass`: `TilingPass` is implemented/lit-testable for the supported static
-matmul lowering path, while `src/compiler/ir/TesseraTiling.cpp` still contains
-scaffolded interface methods and must not be treated as complete interface
-coverage.
+matmul lowering path. `src/compiler/ir/TesseraTiling.cpp` now provides a
+conservative ranked-tensor Matmul TilingInterface artifact path, while Conv2D
+interface tiling remains explicitly scaffolded and must not be treated as
+complete interface coverage.
 
 ---
 

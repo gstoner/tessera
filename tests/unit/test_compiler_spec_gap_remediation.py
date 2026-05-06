@@ -17,6 +17,11 @@ MEMORY_SPEC = ROOT / "docs" / "spec" / "MEMORY_MODEL_SPEC.md"
 SHAPE_SPEC = ROOT / "docs" / "spec" / "SHAPE_SYSTEM.md"
 CONFORMANCE = ROOT / "docs" / "spec" / "CONFORMANCE.md"
 COMPILER_REF = ROOT / "docs" / "spec" / "COMPILER_REFERENCE.md"
+LOWERING_SPEC = ROOT / "docs" / "spec" / "LOWERING_PIPELINE_SPEC.md"
+METALIUM_LOWERING = ROOT / "src/compiler/codegen/Tessera_Metalium_Backend/lib/Target/Metalium/Lowering/TileToMetalium.cpp"
+TMEM_PTX = ROOT / "src/compiler/tile_opt_fa4/lib/Conversion/TesseraTileToPTX/LowerTileToPTX.cpp"
+TILING_INTERFACE = ROOT / "src/compiler/ir/TesseraTiling.cpp"
+PM_VERIFY = ROOT / "src/compiler/programming_model/tools/tessera-opt/PassPipelinesPM11.cpp"
 
 
 def test_python_api_spec_lists_current_runtime_op_catalog():
@@ -33,6 +38,12 @@ def test_python_api_spec_lists_current_runtime_op_catalog():
         "Single-rank/mock no-op",
         "Operator registry behavior",
         "Native hardware runtime support",
+        "tessera.graph.debug_value",
+        "tessera.graph.replay_capture",
+        "tessera-mlir my_model.py --emit=all --artifacts-dir out",
+        "tessera-autotune",
+        "`method=\"on_device\"`",
+        "wall-clock measurement",
     ]
     for term in required_status_terms:
         assert term in text
@@ -83,10 +94,12 @@ def test_target_ir_spec_splits_artifact_runtime_and_backend_status():
         "Mock/runtime fallback",
         "Native hardware runtime",
         "placeholder kernels are not native-runtime claims",
-        "matmul lowering remains incomplete",
+        "matmul lowers to artifact op",
         "PJRT execute is scaffolded",
         "Cerebras",
         "Rubin CPX",
+        "debug markers",
+        "Target IR lowering elides them",
     ]
     for term in required:
         assert term in text
@@ -98,6 +111,8 @@ def test_tile_ir_spec_uses_canonical_alloc_shared_and_mbarrier_status():
         "`tile.alloc_shared`",
         "active code uses `tile.mbarrier.*`",
         "planned alias only",
+        "`tile.debug_artifact`",
+        "`tile.debug_barrier`",
         "stubbed / lit-testable until real Blackwell PTX operands land",
     ]
     for term in required:
@@ -111,7 +126,7 @@ def test_memory_shape_and_conformance_specs_record_deferred_work_truthfully():
     memory = MEMORY_SPEC.read_text(encoding="utf-8")
     for term in (
         "Current enforcement is intentionally narrower than the full memory model",
-        "Scoped atomics | planned",
+        "Scoped atomics | structural verifier",
         "Complete happens-before race checking | planned",
         "Deterministic native mesh reductions | planned",
     ):
@@ -132,16 +147,81 @@ def test_memory_shape_and_conformance_specs_record_deferred_work_truthfully():
         "Native NCCL/RCCL/MPI cluster execution is",
         "Graduation criteria",
         "Phase 8",
+        "Full T1 native hardware",
+        "hardware-backed CUDA/HIP/device runtime tests",
     ):
         assert term in conformance
+    assert "Phases 1–3 complete; Phases 4–6 planned" not in conformance
+    assert "pytest tests/unit/ tests/unit/" not in conformance
 
 
 def test_compiler_reference_keeps_tiling_interface_distinct_from_tiling_pass():
     text = COMPILER_REF.read_text(encoding="utf-8")
     required = [
-        "TilingInterface methods scaffolded",
+        "Matmul TilingInterface conservative path implemented",
+        "Conv2D interface scaffolded",
         "`TilingPass` is implemented/lit-testable",
-        "complete interface\ncoverage",
+        "complete interface",
+        "coverage",
     ]
     for term in required:
+        assert term in text
+
+
+def test_lowering_spec_documents_python_object_model_path_and_debug_dumps():
+    text = LOWERING_SPEC.read_text(encoding="utf-8")
+    for term in (
+        "Python Object-Model Lowering Path",
+        "compile_graph_module",
+        "GraphIRModule",
+        "ScheduleIRModule",
+        "TileIRModule",
+        "TargetIRModule",
+        "TESSERA_DEBUG_IR=1",
+        "TESSERA_DUMP_STATE=1",
+    ):
+        assert term in text
+
+
+def test_backend_mvp_source_contracts_are_not_placeholders():
+    tiling = TILING_INTERFACE.read_text(encoding="utf-8")
+    for term in (
+        "matmul_conservative_ranked_tensor",
+        "getMixedSizes",
+        "tessera.full_k",
+        "Explicitly scaffolded",
+    ):
+        assert term in tiling
+    assert "return failure(); // TODO: implement with tensor.extract_slice" not in tiling
+
+    ptx = TMEM_PTX.read_text(encoding="utf-8")
+    for term in (
+        "isBlackwellTarget",
+        "tcgen05.mma.cta_group::2",
+        "tessera_acc_tmem",
+        "requires target/arch containing sm100",
+    ):
+        assert term in ptx
+    assert "schematic placeholder" not in ptx
+
+    metalium = METALIUM_LOWERING.read_text(encoding="utf-8")
+    for term in (
+        'OperationState state(loc, "tessera_metalium.matmul")',
+        "tile_shape",
+        "artifact_only",
+        "rewriter.replaceOp",
+    ):
+        assert term in metalium
+    assert "Metalium matmul lowering is not implemented" not in metalium
+
+
+def test_memory_model_verifier_source_covers_structural_negative_cases():
+    text = PM_VERIFY.read_text(encoding="utf-8")
+    for term in (
+        "mbarrier requires target/arch",
+        "'bytes' must be > 0",
+        "'order' must be relaxed, acquire, release, acq_rel, or seq_cst",
+        "barrier cannot be marked divergent",
+        "expected exactly 2 operands (barrier, token)",
+    ):
         assert term in text

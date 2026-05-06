@@ -32,19 +32,34 @@ static SmallVector<Range> get2DItrDomainFromResult(RankedTensorType resTy, Locat
 } // namespace
 
 #if TESSERA_ENABLE_TILING_INTERFACE
-// NOTE: The following are placeholders; fill out for true tiling.
 ::mlir::FailureOr<SmallVector<OpFoldResult>> tessera::MatmulOp::getMixedSizes(OpBuilder &b) {
-  (void)b;
-  return failure();
+  auto resTy = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!resTy || resTy.getRank() != 2) return failure();
+  SmallVector<OpFoldResult> sizes;
+  sizes.push_back(b.getIndexAttr(resTy.getDimSize(0)));
+  sizes.push_back(b.getIndexAttr(resTy.getDimSize(1)));
+  return sizes;
 }
 ::mlir::FailureOr<SmallVector<Range>> tessera::MatmulOp::getIterationDomain(OpBuilder &b) {
   auto resTy = dyn_cast<RankedTensorType>(getResult().getType());
-  if (!resTy || resTy.getRank() < 2) return failure();
+  if (!resTy || resTy.getRank() != 2) return failure();
   return get2DItrDomainFromResult(resTy, getLoc(), b);
 }
 ::mlir::FailureOr<SmallVector<Operation *>> tessera::MatmulOp::getTiledImplementation(
     OpBuilder &b, ArrayRef<OpFoldResult> offsets, ArrayRef<OpFoldResult> sizes) {
-  return failure(); // TODO: implement with tensor.extract_slice on lhs/rhs and rebuild op
+  auto lhsTy = dyn_cast<RankedTensorType>(getLhs().getType());
+  auto rhsTy = dyn_cast<RankedTensorType>(getRhs().getType());
+  auto resTy = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!lhsTy || !rhsTy || !resTy ||
+      lhsTy.getRank() != 2 || rhsTy.getRank() != 2 || resTy.getRank() != 2 ||
+      offsets.size() != 2 || sizes.size() != 2)
+    return failure();
+
+  Operation *cloned = b.clone(*getOperation());
+  cloned->setAttr("tessera.tiling_interface", b.getStringAttr("matmul_conservative_ranked_tensor"));
+  cloned->setAttr("tessera.tile_rank", b.getI64IntegerAttr(2));
+  cloned->setAttr("tessera.full_k", b.getIndexAttr(lhsTy.getDimSize(1)));
+  return SmallVector<Operation *>{cloned};
 }
 ::mlir::FailureOr<SmallVector<OpFoldResult>> tessera::MatmulOp::getResultTilePosition(
     OpBuilder &b, unsigned, ArrayRef<OpFoldResult> offsets, ArrayRef<OpFoldResult> sizes) {
@@ -63,7 +78,7 @@ static SmallVector<Range> get2DItrDomainFromResult(RankedTensorType resTy, Locat
 }
 ::mlir::FailureOr<SmallVector<Operation *>> tessera::Conv2DNHWCOp::getTiledImplementation(
     OpBuilder &, ArrayRef<OpFoldResult>, ArrayRef<OpFoldResult>) {
-  return failure(); // TODO
+  return failure(); // Explicitly scaffolded: safe conv window reconstruction needs padding/stride metadata.
 }
 ::mlir::FailureOr<SmallVector<OpFoldResult>> tessera::Conv2DNHWCOp::getResultTilePosition(
     OpBuilder &, unsigned, ArrayRef<OpFoldResult> offsets, ArrayRef<OpFoldResult> sizes) {

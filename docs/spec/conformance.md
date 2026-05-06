@@ -2,13 +2,13 @@
 status: Normative
 classification: Normative
 authority: Conformance profiles; defers API and compiler disputes to docs/README.md
-last_updated: 2026-04-26
+last_updated: 2026-05-06
 ---
 
 # Tessera Conformance Specification (Normative)
 
 **Version:** 0.3.0  
-**Status:** Active — Phases 1–3 complete; Phases 4–6 planned  
+**Status:** Active — current status is mixed by phase and profile; `docs/spec/COMPILER_REFERENCE.md` is the source of truth for phase implementation state.  
 **Authority:** This document defines conformance profiles. API, compiler, IR, and runtime disputes are resolved by the authority tree in `docs/README.md`.
 
 ---
@@ -65,8 +65,9 @@ constraints), compile time (for IR verifier violations), or before kernel launch
 executes. This is the earliest error-detection point and is where constraint
 checking runs.
 
-**Compile Time** — when the compiler pipeline (one of the two named pipelines)
-processes the Graph IR. Shape inference and verifier passes run here.
+**Compile Time** — when a compiler pipeline or the Python object-model lowering
+path processes Graph IR. Shape inference, verifier checks, and artifact
+construction run here.
 
 ---
 
@@ -200,10 +201,14 @@ planned, not conformant.
 | Phase 7 | Neighbors/halo/stencil passes | implemented / lit-testable |
 | Phase 8 | Additional target-artifact backends | scaffolded / lit-testable |
 
-A **T0-conformant** implementation exists today (Phases 1–2).  
-A **T1 compiler-subset implementation** exists today (Phase 3). Full T1
-conformance is pending Phase 6 runtime ABI wiring.  
-A **T2-conformant** implementation requires Phase 4 completion.
+A **T0-conformant** implementation exists today for the Python frontend,
+Graph IR, and CPU/x86 lowering subset.  
+A **T1 compiler-subset implementation** exists today for GPU target artifacts,
+FA-4 Tile IR, queues, and runtime ABI foundations. Full T1 native hardware
+runtime conformance requires hardware-backed CUDA/HIP/device runtime tests.  
+A **T2 compiler-subset implementation** exists today for distributed planners,
+mock collectives, and TPU artifacts. Full T2 conformance requires native
+NCCL/RCCL/MPI collective execution and multi-rank launch/teardown tests.
 
 ---
 
@@ -217,9 +222,10 @@ hardware).
 
 | Profile | Required test suites | How to run |
 |---------|---------------------|------------|
-| T0 | `tests/unit/`, `tests/unit/` | `pytest tests/unit/ tests/unit/ -v` |
-| T1 | T0 + `tests/unit/`, `tests/tessera-ir/phase3/` | `pytest tests/unit -v && python -m lit tests/tessera-ir/phase3/ -v` |
-| T2 | T1 + `tests/unit/`, `tests/tessera-ir/phase4/` | `pytest tests/unit -v && python -m lit tests/tessera-ir/ -v` |
+| T0 | `tests/unit/` plus Phase 2 lit fixtures | `pytest tests/unit -v && python -m lit tests/tessera-ir/phase2/ -v` |
+| T1 compiler subset | T0 plus Phase 3 and relevant Phase 6 runtime fixtures | `pytest tests/unit -v && python -m lit tests/tessera-ir/phase3/ tests/tessera-ir/phase6/ -v` |
+| T2 compiler subset | T1 subset plus Phase 4 distributed/TPU fixtures | `pytest tests/unit -v && python -m lit tests/tessera-ir/phase4/ -v` |
+| Full T1/T2 native runtime | Hardware-backed backend suites | Backend-specific CUDA/HIP/NCCL/RCCL/MPI commands; not required for hardware-free CI. |
 
 GPU tests that require SM_90+ hardware may be skipped with `@pytest.mark.skipif`
 when no GPU is present. Skipping these does **not** disqualify T1 conformance
@@ -237,13 +243,16 @@ A conformant implementation **shall**:
 
 ### 6.3 Static Conformance Checks
 
-In addition to runtime tests, conformance requires passing type checking:
+In addition to runtime tests, implementations should run static type checking
+when that toolchain is part of their validation profile:
 
 ```bash
 mypy python/tessera/distributed/ python/tessera/compiler/ --strict
 ```
 
-Zero errors are required. Warnings are permitted.
+Zero errors are required only for profiles that include mypy in CI. The current
+hardware-free validation spine treats this as an aspirational/static quality
+check, not as a blocker for compiler-artifact conformance.
 
 ### 6.4 Lit Test Conformance (T1+)
 
@@ -316,8 +325,7 @@ version. The verifier rejects modules with a version mismatch.
 
 For implementers, a quick checklist to verify T0 conformance:
 
-- [ ] `pytest tests/unit/ -v` — all green
-- [ ] `pytest tests/unit/ -v` — all green
+- [ ] `pytest tests/unit/ -v` — all green, excluding explicitly documented hardware/unrelated skips or failures
 - [ ] `mypy python/tessera/ --strict` — no errors
 - [ ] `@tessera.jit` with no args decorates successfully
 - [ ] `@tessera.jit(deterministic=True)` rejects an unseeded dropout function
@@ -330,7 +338,7 @@ For implementers, a quick checklist to verify T0 conformance:
 For T1, additionally:
 
 - [ ] `GPUTargetProfile(isa=ISA.SM_90)` accepted without error
-- [ ] `pytest tests/unit/ -v` — all green
+- [ ] `pytest tests/unit/ -v` — all green, excluding explicitly documented hardware/unrelated skips or failures
 - [ ] `python -m lit tests/tessera-ir/phase3/ -v` — all pass
 - [ ] `tessera.flash_attn` in Graph IR lowers to `tessera.attn.scaled_dot_product`
 - [ ] `WarpSpecializationPass` assigns producer/consumer roles

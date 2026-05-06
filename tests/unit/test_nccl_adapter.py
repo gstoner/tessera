@@ -6,6 +6,7 @@ all_gather, all_to_all) and the NCCLAdapter / RCCLAdapter mock paths.
 """
 import pytest
 import numpy as np
+import tessera as ts
 from tessera.testing.mock_collective import MockRankGroup, MockCollectiveError
 
 
@@ -153,3 +154,30 @@ class TestMockRankGroupMeta:
         group = MockRankGroup(n=4, mesh_axes={"dp": 4})
         results = group.run(lambda r: r.rank * 10)
         assert results == [0, 10, 20, 30]
+
+
+class TestCollectiveAdapterFacade:
+    def test_mock_adapter_reports_status_and_matches_all_reduce(self):
+        adapter = ts.collectives.adapter(backend="mock", world_size=2, mesh_axes={"dp": 2})
+        status = adapter.status().to_dict()
+        assert status["status"] == "mock"
+        results = adapter.all_reduce([
+            np.array([1.0], dtype=np.float32),
+            np.array([2.0], dtype=np.float32),
+        ])
+        for result in results:
+            np.testing.assert_allclose(result, np.array([3.0], dtype=np.float32))
+
+    def test_single_process_adapter_is_explicit(self):
+        adapter = ts.collectives.adapter(backend="single_process", world_size=1)
+        assert adapter.status().status == "single_process"
+        result = adapter.all_gather(np.array([4.0], dtype=np.float32))
+        np.testing.assert_allclose(result[0], np.array([4.0], dtype=np.float32))
+
+    def test_nccl_adapter_reports_backend_unavailable_without_hardware_runtime(self):
+        adapter = ts.collectives.adapter(backend="nccl", world_size=2)
+        status = adapter.status()
+        assert status.status == "backend_unavailable"
+        assert "not wired" in status.reason
+        with pytest.raises(RuntimeError, match="not wired"):
+            adapter.all_reduce(np.array([1.0], dtype=np.float32))

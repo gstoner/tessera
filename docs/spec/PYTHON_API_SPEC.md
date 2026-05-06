@@ -103,15 +103,16 @@ tessera.shape        # tessera.shape.ShapeConstraintGraph / RuntimeShapeWitness 
 
 # Debugging
 tessera.debug        # tessera.debug.trace_graph / check_grad / check_determinism
-tessera.graph        # tessera.graph.trace / debug_trace / export_graphviz
+tessera.graph        # trace / debug_trace / debug_value / export_graphviz / replay_capture
 
 # Profiling and autotuning
 tessera.profiler     # tessera.profiler.session / record / timeline
 tessera.autotune     # callable autotune facade; also .load / .cache_key
 
 # Developer commands
-tessera-mlir         # static/debug IR dumps: --emit=graph-ir|schedule-ir|tile-ir|target-ir
-tessera-prof         # profiling report and Chrome trace export
+tessera-mlir         # static/debug IR dumps and opt-in compile-artifact inspection
+tessera-prof         # profiling report, telemetry JSON, Chrome trace, autotune submode
+tessera-autotune     # GEMM/matmul tuning and schedule artifact writer
 
 # Fault tolerance and elasticity
 tessera.fault        # on_failure / on_preempt / inject
@@ -828,15 +829,29 @@ checking, and determinism checks. The behavior is described in
 |--------|---------|
 | `trace_graph(value, ir_level="graph")` | Return a printable/exportable graph trace |
 | `export_graphviz(value)` | Return GraphViz DOT for a trace |
-| `debug_trace(samples=0, stream=None)` | Context manager for numerical summaries |
+| `debug_trace(samples=0, stream=None, metadata=None)` | Context manager for numerical summaries |
 | `trace_value(name, value)` | Record a tensor-like value in the active trace |
 | `summarize_tensor(value)` | Compute shape/dtype/mean/std/min/max/finite summary |
+| `TensorSummary.to_dict()` | JSON-native bounded tensor summary |
+| `DebugTrace.to_dict()` / `.to_json()` | Structured debug trace export |
+| `GraphTrace.to_dict()` / `.to_json()` | Structured graph trace export |
+| `debug_value(name, value, metadata=None)` | Named capture point; returns `value` unchanged |
+| `debug_artifact(name, artifact=None, metadata=None)` | Schedule-artifact debug descriptor |
+| `debug_barrier(name, queue_id=None, scope="block", metadata=None)` | Tile barrier debug descriptor |
+| `replay_manifest(value=None, **metadata)` | Bounded replay manifest for artifacts/JIT wrappers |
+| `save_replay_manifest(path, value=None, **metadata)` | Write replay manifest JSON |
+| `replay_capture(value=None, **metadata)` | Convenience alias for replay manifest capture |
 | `check_grad(fn, inputs, analytic_grads=...)` | Finite-difference gradient check |
 | `check_determinism(fn, runs=5)` | Repeated-run reproducibility check |
 
 `tessera.graph.trace`, `tessera.graph.debug_trace`, and
 `tessera.graph.export_graphviz` are aliases for the graph-oriented debug
-helpers.
+helpers. `tessera.graph.debug_value` maps to `tessera.debug.debug_value`, and
+`tessera.graph.replay_capture` maps to `tessera.debug.replay_capture`.
+
+Replay manifests and full tensor capture are separate contracts: manifests
+include artifact hashes, metadata, and selected environment switches, but do not
+include full tensor values unless callers attach bounded summaries explicitly.
 
 ---
 
@@ -852,6 +867,7 @@ Profiling helpers:
 | `profiler.session()` | Context manager that collects profile events |
 | `ProfileSession.record(...)` | Record latency, FLOPs, bytes, counters |
 | `ProfileSession.measure(...)` | Measure a callable region |
+| `profiler.measure_backend(..., backend="cpu" \| "apple_cpu")` | Wall-clock backend measurement with telemetry |
 | `ProfileSession.report()` | Render a tabular text report |
 | `ProfileSession.timeline(path)` | Write Chrome Trace Event JSON |
 
@@ -866,15 +882,27 @@ Autotuning helpers:
 | `autotune.RooflineCostModel` | Analytical FLOPs/bytes cost model |
 
 The public autotune facade currently supports GEMM/matmul shapes and delegates
-search and SQLite persistence to `tessera.compiler.autotune_v2`.
+search and SQLite persistence to `tessera.compiler.autotune_v2`. Synthetic
+roofline tuning and schedule artifact generation are implemented. CPU and Apple
+CPU `method="on_device"` runs use wall-clock measurement. CUDA/HIP/NVIDIA/ROCm
+device timers remain planned and report `unmeasured` or `backend_unavailable`
+instead of silently pretending to benchmark hardware.
 
 Developer commands:
 
 | Command | Purpose |
 |---------|---------|
 | `tessera-mlir my_model.py --emit=graph-ir --debug` | Dump static/debug IR with source locations |
+| `tessera-mlir my_model.py --emit=metadata` | Emit source-inspection metadata JSON |
+| `tessera-mlir my_model.py --emit=diagnostics` | Emit diagnostics JSON |
+| `tessera-mlir my_model.py --emit=trace` | Emit Chrome Trace Event JSON |
+| `tessera-mlir my_model.py --emit=graphviz` | Emit GraphViz DOT |
+| `tessera-mlir my_model.py --emit=all --artifacts-dir out` | Write all static debug artifacts |
+| `tessera-mlir my_model.py --mode=compile_artifact --symbol=step --emit=all` | Opt-in import of a selected JIT symbol and artifact inspection without launching tensors |
 | `tessera-prof my_model.py --metrics=flops,bandwidth,occupancy` | Print a profiling report |
 | `tessera-prof my_model.py --trace=trace.json` | Write Chrome Trace Event JSON |
+| `tessera-prof my_model.py --emit=json --autotune` | Emit profiling JSON and GEMM tuning artifact metadata |
+| `tessera-autotune --op=matmul --shapes=128,128,128` | Run public GEMM/matmul tuner and write cache/artifacts |
 
 ---
 

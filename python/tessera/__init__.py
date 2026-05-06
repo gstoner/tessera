@@ -34,6 +34,7 @@ from . import shape
 from . import debug
 from . import telemetry
 from . import profiler
+from . import collectives
 from . import autotune as _autotune_module
 from . import fault
 from . import elastic
@@ -1012,7 +1013,7 @@ __all__ = [
     # Ops namespace
     "ops", "RuntimeArtifact", "RuntimeProfile", "available_backends",
     "backend_capabilities", "compile_artifact", "get_last_profile", "launch",
-    "load_artifact", "query_backend",
+    "load_artifact", "query_backend", "collectives",
     # Dtype annotations
     "f16", "bf16", "f32", "mut_f32",
 ]

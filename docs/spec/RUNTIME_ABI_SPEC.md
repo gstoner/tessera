@@ -505,6 +505,11 @@ reverse creation order.
 the current multi-rank test mechanism. It does not go through the C ABI; it uses
 Python threads and in-process numpy buffers.
 
+Replay manifests, structured debug traces, and compiler artifact bundles are
+Python/developer-tool contracts described in
+`docs/guides/Tessera_Debugging_Tools_Guide.md`. They are intentionally not part
+of the stable C ABI unless a future runtime replay API promotes them.
+
 ---
 
 ## 12. Authoritative References

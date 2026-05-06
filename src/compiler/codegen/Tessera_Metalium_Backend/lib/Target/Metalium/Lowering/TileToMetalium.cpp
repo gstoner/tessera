@@ -197,15 +197,19 @@ struct TileGemmToMetaliumMatmul : public OpConversionPattern<mlir::tessera::tile
       getI64("tile_m", M); getI64("tile_n", N); getI64("tile_k", K);
     }
 
-    auto tileAttr = rewriter.getI64ArrayAttr({M, N, K});
-    // TODO: plumb real operands/types; the current scaffold erases the op.
-    // rewriter.replaceOpWithNewOp<mlir::tessera::metalium::Metalium_MatmulOp>(
-    //   op, /*result type*/ op.getResult().getType(),
-    //   A, B, Cinit, tileAttr, /*layout*/ nullptr, /*accum*/ nullptr);
+    OperationState state(loc, "tessera_metalium.matmul");
+    state.addOperands(adaptor.getOperands());
+    state.addTypes(op->getResultTypes());
+    state.addAttribute("tile_shape", rewriter.getI64ArrayAttr({M, N, K}));
+    state.addAttribute("layout", rewriter.getStringAttr("row_major"));
+    state.addAttribute("accum", rewriter.getStringAttr("fp32"));
+    state.addAttribute("artifact_only", rewriter.getBoolAttr(true));
+    Operation *lowered = rewriter.create(state);
+    rewriter.replaceOp(op, lowered->getResults());
+    return success();
 #else
     return rewriter.notifyMatchFailure(op, "Metalium generated ops are not enabled");
 #endif
-    return rewriter.notifyMatchFailure(op, "Metalium matmul lowering is not implemented");
   }
 };
 

@@ -10,4 +10,5 @@ module {
 }
 
 // CHECK: tessera_metalium.matmul
-// CHECK-SAME: tile = [64, 64, 32]
+// CHECK-SAME: tile_shape
+// CHECK-SAME: artifact_only

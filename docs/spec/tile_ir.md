@@ -419,6 +419,17 @@ The Tile IR verifier enforces the following (normative):
 
 ---
 
+## 8.1 Debug Metadata Markers
+
+The Python object-model lowering path may emit `tile.debug_artifact` and
+`tile.debug_barrier` as metadata-only markers. They are developer-tool aids used
+for replay manifests, barrier inspection, and schedule hash correlation. They
+must not be treated as target execution ops, and Target IR lowering elides them.
+Native ODS debug ops should only be promoted if diagnostics and artifact
+metadata cannot represent the same information.
+
+---
+
 ## 9. Phase Coverage
 
 | Tile IR feature | Phase introduced | Status |
@@ -429,6 +440,7 @@ The Tile IR verifier enforces the following (normative):
 | `tile.reduce` | Phase 3 | ✅ Complete |
 | `tile.mbarrier.*` | Phase 3 | implemented / lit-testable |
 | `tile.barrier` | legacy note | planned alias only; prefer `tile.mbarrier.*` or queue tokens |
+| `tile.debug_artifact` / `tile.debug_barrier` | developer tooling | metadata-only markers; elided before Target IR |
 | `tessera.attn.*` (FA-4 ops) | Phase 3 | ✅ Complete |
 | `tessera.queue.*` (warp specialization) | Phase 3 | ✅ Complete |
 | `tessera.tcgen05.*` (TMEM / SM_100) | Phase 3 (ODS defined) | stubbed / lit-testable until real Blackwell PTX operands land |

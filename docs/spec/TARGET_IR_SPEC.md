@@ -42,6 +42,11 @@ Tile IR, and CPU/NVIDIA/Apple/ROCm Target IR in `python/tessera/compiler/`.
 The x86 native AMX/AVX-512 C ABI path remains documented separately in
 `docs/architecture/tessera_target_ir_usage_guide.md`.
 
+Developer debug markers such as `tile.debug_artifact` and `tile.debug_barrier`
+are metadata-only Tile IR aids. Target IR lowering elides them; correlation is
+preserved through compile-bundle metadata, artifact hashes, Chrome trace events,
+and replay manifests rather than executable target ops.
+
 ### 1.1 NVIDIA Hopper And Blackwell Contracts
 
 The NVIDIA backend accepts Tile IR and emits `tessera_nvidia.*` Target IR contracts before lowering to LLVM/NVVM artifact calls. These contracts are intentionally hardware-free and are valid without CUDA hardware.
@@ -697,6 +702,6 @@ Target IR status is reported separately from native runtime status:
 | ROCm | MFMA/async-copy contracts | implemented / lit-testable | artifact-only | scaffolded; HIP loader/runtime paths require build flags and devices |
 | TPU | TPU profile, StableHLO/Shardy export | implemented / lit-testable | artifact-only | PJRT execute is scaffolded |
 | Apple | CPU/GPU target contracts | implemented / lit-testable | artifact-only; Apple CPU may execute through supported CPU fallback paths | planned unless backend-specific runtime tests are added |
-| Metalium | DMA/load/store/matmul dialect shape | scaffolded / lit-testable | artifact-only | planned; matmul lowering remains incomplete |
+| Metalium | DMA/load/store/matmul dialect shape | scaffolded / lit-testable | artifact-only | hardware execution planned; matmul lowers to artifact op when generated Metalium ops are enabled |
 | Cerebras | TTarget/Cerebras pass shape | stubbed / scaffolded | tool stubs | planned |
 | Rubin CPX | CPX-specific ODS and target-contract tests | scaffolded / lit-testable | artifact-only | planned |

@@ -13,8 +13,10 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .graph_ir import GraphIRModule
@@ -273,7 +275,7 @@ def compile_graph_module(
     else:
         runtime_status = "unsupported"
 
-    return CompileArtifactBundle(
+    bundle = CompileArtifactBundle(
         request=request,
         graph=graph,
         schedule=schedule,
@@ -288,6 +290,8 @@ def compile_graph_module(
         tool_invocations=tuple(tool_invocations),
         cpu_plan=cpu_plan,
     )
+    _maybe_dump_debug_artifacts(bundle)
+    return bundle
 
 
 def _execution_mode_for(target_kind: str, has_plan: bool) -> str:
@@ -427,6 +431,31 @@ def _find_tessera_opt() -> str | None:
     if found:
         return found
     return None
+
+
+def _maybe_dump_debug_artifacts(bundle: CompileArtifactBundle) -> None:
+    debug_ir = os.environ.get("TESSERA_DEBUG_IR") == "1"
+    dump_state = os.environ.get("TESSERA_DUMP_STATE") == "1"
+    if not debug_ir and not dump_state:
+        return
+    dump_root = Path(os.environ.get("TESSERA_DUMP_DIR", Path(tempfile.gettempdir()) / "tessera_debug"))
+    label = _safe_dump_label(bundle)
+    out_dir = dump_root / label
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if debug_ir:
+        for artifact in bundle.lowering_artifacts():
+            (out_dir / f"{artifact.level}.mlir").write_text(artifact.text + "\n", encoding="utf-8")
+    if dump_state:
+        (out_dir / "metadata.json").write_text(
+            json.dumps(bundle.to_metadata(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        (out_dir / "trace.json").write_text(bundle.chrome_trace_json() + "\n", encoding="utf-8")
+
+
+def _safe_dump_label(bundle: CompileArtifactBundle) -> str:
+    function = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in bundle.request.function_name)
+    return f"{function}-{bundle.request.target}-{bundle.request.graph_hash[:12]}"
 
 
 __all__ = [

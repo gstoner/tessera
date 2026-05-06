@@ -197,6 +197,9 @@ def _lower_schedule_ops(ops: list[ScheduleOp]) -> list[TileOp]:
     for op in ops:
         if op.op_name in {"schedule.mesh.define", "schedule.layout", "schedule.artifact"}:
             continue
+        if op.op_name == "schedule.debug_artifact":
+            lowered.append(TileOp("tile.debug_artifact", dict(op.attrs)))
+            continue
         if op.op_name == "schedule.mesh.region":
             lowered.extend(_lower_schedule_ops(op.body[:-1]))
             continue
@@ -221,6 +224,7 @@ def _lower_schedule_ops(ops: list[ScheduleOp]) -> list[TileOp]:
                 queue_id = int(op.attrs.get("ordinal", 0))
                 lowered.append(TileOp("tessera.queue.create", {"queue_id": queue_id, "depth": 1, "producer_warps": 1, "consumer_warps": 1}))
                 lowered.append(TileOp("tessera.queue.barrier", {"queue_id": queue_id, "scope": "block"}))
+                lowered.append(TileOp("tile.debug_barrier", {"queue_id": queue_id, "scope": "block", "source": marker, "ordinal": queue_id}))
             continue
     return lowered
 
@@ -246,6 +250,7 @@ def _lower_pipeline_region(op: ScheduleOp) -> list[TileOp]:
     lowered.extend([
         TileOp("tile.wait_async", {"stage": 0}),
         TileOp("tessera.queue.barrier", {"queue_id": queue_id, "scope": "warpgroup"}),
+        TileOp("tile.debug_barrier", {"queue_id": queue_id, "scope": "warpgroup", "source": source, "ordinal": attrs.get("ordinal", 0)}),
     ])
     return lowered
 

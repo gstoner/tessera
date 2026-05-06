@@ -79,6 +79,26 @@ def test_lower_schedule_to_tile_ir_materializes_matmul_and_prefetch():
     assert "register_estimate" in text
 
 
+def test_schedule_debug_artifact_and_barrier_marker_reach_tile_ir():
+    schedule = ScheduleIRModule(functions=[
+        ScheduleFunction(
+            "main",
+            body=[
+                ScheduleOp("schedule.debug_artifact", {"name": "%x", "capture": "value_summary", "ordinal": 0}),
+                ScheduleOp("schedule.marker", {"marker": "tessera.barrier", "ordinal": 1}),
+            ],
+        )
+    ])
+
+    tile = lower_schedule_to_tile_ir(schedule)
+
+    assert tile.verify().ok
+    text = tile.to_mlir()
+    assert "tile.debug_artifact" in text
+    assert "tile.debug_barrier" in text
+    assert "tessera.queue.barrier" in text
+
+
 def test_frontend_graph_schedule_tile_pipeline_for_flash_attention_has_fa4_and_queues():
     graph = lower_text_to_graph_ir("""
     module demo {
@@ -101,6 +121,7 @@ def test_frontend_graph_schedule_tile_pipeline_for_flash_attention_has_fa4_and_q
     assert "tessera.attn.lse_save" in text
     assert "tessera.attn.attend_v" in text
     assert "tile.wait_async" in text
+    assert "tile.debug_barrier" in text
 
 
 def test_tile_ir_to_mlir_blocks_invalid_module():

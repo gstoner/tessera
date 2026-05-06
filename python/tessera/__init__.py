@@ -92,7 +92,9 @@ array = types.SimpleNamespace(
 graph = types.SimpleNamespace(
     trace=debug.trace_graph,
     debug_trace=debug.debug_trace,
+    debug_value=debug.debug_value,
     export_graphviz=debug.export_graphviz,
+    replay_capture=debug.replay_capture,
 )
 
 autotune = _autotune_module.autotune

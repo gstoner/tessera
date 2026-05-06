@@ -24,13 +24,21 @@ def test_trace_graph_accepts_op_descriptors_and_exports_graphviz():
 
     text = trace.format()
     assert "%1 = matmul(%0, %0.T)" in text
-    assert "softmax" in trace.to_graphviz()
+    dot = trace.to_graphviz()
+    assert "softmax" in dot
+    assert "n0 -> n1" in dot
+    assert "n1 -> n2" in dot
+    payload = trace.to_dict()
+    assert payload["schema"] == "tessera.debug.graph_trace.v1"
+    assert payload["ops"][1]["op"] == "matmul"
 
 
 def test_graph_namespace_aliases_debug_trace_helpers():
     assert ts.graph.trace is debug.trace_graph
     assert ts.graph.debug_trace is debug.debug_trace
+    assert ts.graph.debug_value is debug.debug_value
     assert ts.graph.export_graphviz is debug.export_graphviz
+    assert ts.graph.replay_capture is debug.replay_capture
 
 
 def test_debug_trace_records_tensor_summaries_to_stream():
@@ -44,6 +52,44 @@ def test_debug_trace_records_tensor_summaries_to_stream():
     assert trace.records[0].mean == pytest.approx(2.0)
     assert "Tensor %x" in stream.getvalue()
     assert "samples=[1.0, 2.0]" in stream.getvalue()
+    payload = trace.to_dict()
+    assert payload["schema"] == "tessera.debug.trace.v1"
+    assert payload["records"][0]["shape"] == [3]
+    assert '"records"' in trace.to_json()
+
+
+def test_debug_value_records_active_trace_and_returns_value():
+    with debug.debug_trace(samples=1, metadata={"graph_hash": "abc"}) as trace:
+        value = debug.debug_value("%scores", np.array([4.0, 5.0]))
+
+    assert value.tolist() == [4.0, 5.0]
+    assert trace.to_dict()["metadata"]["graph_hash"] == "abc"
+    assert trace.records[0].name == "%scores"
+
+
+def test_replay_manifest_accepts_runtime_artifact():
+    artifact = ts.RuntimeArtifact(
+        graph_ir="module { func.func @main() }",
+        schedule_ir='"schedule.artifact"() : () -> ()',
+        metadata={"target": "cpu", "graph_hash": "g"},
+    )
+
+    manifest = debug.replay_manifest(artifact, seed=123)
+
+    assert manifest["schema"] == "tessera.debug.replay_manifest.v1"
+    assert manifest["metadata"]["seed"] == 123
+    assert manifest["artifact"]["metadata"]["target"] == "cpu"
+    assert "graph" in manifest["artifact"]["ir_hashes"]
+
+
+def test_debug_artifact_and_barrier_descriptors_are_structured():
+    artifact = debug.debug_artifact("sched", metadata={"schedule_hash": "s"})
+    barrier = debug.debug_barrier("q0", queue_id=0, scope="warpgroup")
+
+    assert artifact["schema"] == "tessera.schedule.debug_artifact.v1"
+    assert artifact["metadata"]["schedule_hash"] == "s"
+    assert barrier["schema"] == "tessera.tile.debug_barrier.v1"
+    assert barrier["queue_id"] == 0
 
 
 def test_summarize_tensor_detects_non_finite_values():

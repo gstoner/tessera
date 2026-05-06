@@ -71,6 +71,29 @@ def test_jit_routes_artifacts_and_trace_through_compile_bundle():
     assert "traceEvents" in json.loads(mm.compile_bundle.chrome_trace_json())
 
 
+def test_debug_env_vars_dump_compiler_artifacts(tmp_path, monkeypatch):
+    monkeypatch.setenv("TESSERA_DEBUG_IR", "1")
+    monkeypatch.setenv("TESSERA_DUMP_STATE", "1")
+    monkeypatch.setenv("TESSERA_DUMP_DIR", str(tmp_path))
+
+    @ts.jit
+    def mm(A, B):
+        return ts.ops.matmul(A, B)
+
+    mm.runtime_artifact()
+
+    dump_dirs = list(tmp_path.iterdir())
+    assert len(dump_dirs) == 1
+    dump_dir = dump_dirs[0]
+    assert (dump_dir / "graph.mlir").exists()
+    assert (dump_dir / "schedule.mlir").exists()
+    assert (dump_dir / "tile.mlir").exists()
+    assert (dump_dir / "target.mlir").exists()
+    metadata = json.loads((dump_dir / "metadata.json").read_text())
+    assert metadata["profiling"]["graph_hash"]
+    assert "traceEvents" in json.loads((dump_dir / "trace.json").read_text())
+
+
 def test_non_cpu_target_artifacts_are_traceable_and_non_executable():
     @ts.jit(target="cuda")
     def mm(A, B):

@@ -105,6 +105,27 @@ def test_lower_graph_to_schedule_ir_preserves_meshes_and_tiles_matmul():
     assert "movement" in text
 
 
+def test_graph_debug_value_lowers_to_schedule_debug_artifact():
+    graph = GraphIRModule(
+        functions=[
+            GraphIRFunction(
+                "main",
+                args=[IRArg("A", TENSOR_OPAQUE)],
+                body=[
+                    IROp("A_dbg", "tessera.graph.debug_value", ["%A"], ["tensor<*x?>"], "tensor<*x?>", kwargs={"name": "%A"})
+                ],
+            )
+        ],
+    )
+
+    schedule = lower_graph_to_schedule_ir(graph)
+
+    assert schedule.verify().ok
+    text = schedule.to_mlir()
+    assert "schedule.debug_artifact" in text
+    assert 'capture = "value_summary"' in text
+
+
 def test_textual_frontend_schedule_pipeline_lowers_to_region_stage_yield():
     graph = lower_text_to_graph_ir("""
     module demo {

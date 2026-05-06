@@ -279,6 +279,13 @@ def _lower_graph_ops(ops: list[IROp], *, tile: tuple[int, int, int]) -> list[Sch
     tile_m, tile_n, tile_k = tile
     for idx, op in enumerate(ops):
         op_name = canonical_graph_op_name(op.op_name)
+        if op_name == "tessera.graph.debug_value":
+            scheduled.append(ScheduleOp("schedule.debug_artifact", {
+                **_base_attrs(op, idx),
+                "name": op.kwargs.get("name", op.result or f"debug_{idx}"),
+                "capture": "value_summary",
+            }))
+            continue
         if op_name.startswith("tessera.schedule."):
             scheduled.extend(_lower_schedule_directive(op, idx))
             continue

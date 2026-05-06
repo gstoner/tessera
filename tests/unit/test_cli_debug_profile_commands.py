@@ -47,6 +47,71 @@ def test_tessera_mlir_writes_tile_ir(tmp_path):
     assert 'sym_name = "loss"' in text
 
 
+def test_tessera_mlir_emits_metadata_diagnostics_trace_and_graphviz(tmp_path, capsys):
+    model = _write_model(tmp_path)
+
+    assert mlir.main([str(model), "--emit=metadata", "--target=apple_cpu"]) == 0
+    metadata = json.loads(capsys.readouterr().out)
+    assert metadata["schema"] == "tessera.mlir.metadata.v1"
+    assert metadata["mode"] == "source_inspection"
+    assert metadata["target"] == "apple_cpu"
+    assert metadata["symbols"][0]["name"] == "loss"
+
+    assert mlir.main([str(model), "--emit=diagnostics", "--mode=compile_artifact"]) == 0
+    diagnostics = json.loads(capsys.readouterr().out)
+    assert diagnostics["diagnostics"][0]["code"] == "W_COMPILE_ARTIFACT_STATIC_ONLY"
+
+    assert mlir.main([str(model), "--emit=trace"]) == 0
+    trace = json.loads(capsys.readouterr().out)
+    assert trace["traceEvents"][0]["name"] == "source.inspect"
+
+    assert mlir.main([str(model), "--emit=graphviz"]) == 0
+    assert "digraph tessera_source" in capsys.readouterr().out
+
+
+def test_tessera_mlir_emit_all_writes_artifact_bundle(tmp_path, capsys):
+    model = _write_model(tmp_path)
+    artifacts_dir = tmp_path / "debug_artifacts"
+
+    assert mlir.main([str(model), "--emit=all", "--artifacts-dir", str(artifacts_dir), "--target=nvidia_sm90"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema"] == "tessera.mlir.debug_bundle.v1"
+    assert payload["target"] == "nvidia_sm90"
+    assert (artifacts_dir / "graph-ir.mlir").exists()
+    assert (artifacts_dir / "metadata.json").exists()
+    assert (artifacts_dir / "graphviz.dot").exists()
+
+
+def test_tessera_mlir_compile_artifact_mode_uses_jit_symbol(tmp_path, capsys):
+    model = _write_model(tmp_path)
+    artifacts_dir = tmp_path / "compiled_debug"
+
+    assert mlir.main([
+        str(model),
+        "--mode=compile_artifact",
+        "--symbol=loss",
+        "--emit=metadata",
+    ]) == 0
+    metadata = json.loads(capsys.readouterr().out)
+    assert metadata["mode"] == "compile_artifact"
+    assert metadata["symbol"] == "loss"
+    assert metadata["artifact_metadata"]["artifact_hashes"]["graph"]
+
+    assert mlir.main([
+        str(model),
+        "--mode=compile_artifact",
+        "--symbol=loss",
+        "--emit=all",
+        "--artifacts-dir",
+        str(artifacts_dir),
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["mode"] == "compile_artifact"
+    assert (artifacts_dir / "graph-ir.mlir").exists()
+    assert (artifacts_dir / "trace.json").exists()
+
+
 def test_tessera_prof_reports_requested_metrics(tmp_path, capsys):
     model = _write_model(tmp_path)
 

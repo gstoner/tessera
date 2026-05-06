@@ -9,8 +9,11 @@ their MLIR-native debug hooks.
 from __future__ import annotations
 
 import io
+import json
+import os
 from dataclasses import dataclass, field
-from typing import Callable, Mapping, Optional, Sequence
+from pathlib import Path
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 import numpy as np
 
@@ -49,6 +52,19 @@ class TensorSummary:
             f"max={self.max:.6g}, {finite}{sample_text}"
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "shape": list(self.shape),
+            "dtype": self.dtype,
+            "mean": self.mean,
+            "std": self.std,
+            "min": self.min,
+            "max": self.max,
+            "finite": self.finite,
+            "samples": list(self.samples),
+        }
+
 
 def summarize_tensor(value, *, name: str = "%tensor", samples: int = 0) -> TensorSummary:
     """Return mean/std/min/max and optional sample values for a tensor-like value."""
@@ -77,6 +93,7 @@ class DebugTrace:
 
     samples: int = 0
     stream: Optional[io.StringIO] = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
     records: list[TensorSummary] = field(default_factory=list)
 
     def __enter__(self) -> "DebugTrace":
@@ -97,14 +114,29 @@ class DebugTrace:
     def format(self) -> str:
         return "\n".join(record.format() for record in self.records)
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema": "tessera.debug.trace.v1",
+            "metadata": dict(self.metadata),
+            "records": [record.to_dict() for record in self.records],
+        }
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), sort_keys=True)
+
 
 _TRACE_STACK: list[DebugTrace] = []
 
 
-def debug_trace(*, samples: int = 0, stream: Optional[io.StringIO] = None) -> DebugTrace:
+def debug_trace(
+    *,
+    samples: int = 0,
+    stream: Optional[io.StringIO] = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> DebugTrace:
     """Create a numerical debug trace context."""
 
-    return DebugTrace(samples=samples, stream=stream)
+    return DebugTrace(samples=samples, stream=stream, metadata=metadata or {})
 
 
 def trace_value(name: str, value):
@@ -121,6 +153,7 @@ class GraphTrace:
 
     lines: tuple[str, ...]
     ir_level: str = "graph"
+    descriptors: tuple[Mapping[str, Any], ...] = ()
 
     def format(self) -> str:
         return "\n".join(self.lines)
@@ -138,6 +171,8 @@ class GraphTrace:
         return self.format()
 
     def to_graphviz(self) -> str:
+        if self.descriptors:
+            return _op_descriptors_to_graphviz(self.descriptors)
         body = ["digraph tessera_debug {"]
         previous = None
         for idx, line in enumerate(self.lines):
@@ -149,6 +184,18 @@ class GraphTrace:
             previous = node
         body.append("}")
         return "\n".join(body)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema": "tessera.debug.graph_trace.v1",
+            "ir_level": self.ir_level,
+            "summary": self.summary,
+            "lines": list(self.lines),
+            "ops": [dict(op) for op in self.descriptors],
+        }
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), sort_keys=True)
 
 
 def trace_graph(value, *, ir_level: str = "graph") -> GraphTrace:
@@ -169,7 +216,9 @@ def trace_graph(value, *, ir_level: str = "graph") -> GraphTrace:
     if isinstance(value, str):
         return GraphTrace(_nonempty_lines(value), ir_level=ir_level)
     if isinstance(value, Sequence):
-        return GraphTrace(tuple(_format_op_descriptor(op, i) for i, op in enumerate(value)), ir_level=ir_level)
+        descriptors = tuple(op for op in value if isinstance(op, Mapping))
+        lines = tuple(_format_op_descriptor(op, i) for i, op in enumerate(value))
+        return GraphTrace(lines, ir_level=ir_level, descriptors=descriptors)
     return GraphTrace((repr(value),), ir_level=ir_level)
 
 
@@ -177,6 +226,85 @@ def export_graphviz(value, *, ir_level: str = "graph") -> str:
     """Return GraphViz DOT for a graph-like value."""
 
     return trace_graph(value, ir_level=ir_level).to_graphviz()
+
+
+def debug_value(name: str, value, *, metadata: Mapping[str, Any] | None = None):
+    """Named graph-level capture point.
+
+    This is a Python-side marker today: it records in an active debug trace and
+    returns ``value`` unchanged. Compiler-native lowering can preserve the same
+    marker name as ``tessera.graph.debug_value``.
+    """
+
+    if _TRACE_STACK:
+        _TRACE_STACK[-1].record(name, value)
+    return value
+
+
+def debug_artifact(name: str, artifact=None, *, metadata: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Return a structured schedule-artifact debug descriptor."""
+
+    payload = {
+        "schema": "tessera.schedule.debug_artifact.v1",
+        "name": name,
+        "metadata": dict(metadata or {}),
+    }
+    if artifact is not None:
+        payload["artifact"] = _artifact_summary(artifact)
+    return payload
+
+
+def debug_barrier(name: str, *, queue_id: int | None = None, scope: str = "block", metadata: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Return a structured Tile IR barrier debug descriptor."""
+
+    return {
+        "schema": "tessera.tile.debug_barrier.v1",
+        "name": name,
+        "queue_id": queue_id,
+        "scope": scope,
+        "metadata": dict(metadata or {}),
+    }
+
+
+def replay_capture(value=None, **metadata: Any) -> dict[str, Any]:
+    """Capture a deterministic replay manifest for a compiler/runtime artifact."""
+
+    return replay_manifest(value, **metadata)
+
+
+def replay_manifest(value=None, **metadata: Any) -> dict[str, Any]:
+    """Return a bounded JSON-serializable replay manifest.
+
+    Accepted inputs include ``@tessera.jit`` wrappers, ``RuntimeArtifact``
+    instances, compile artifact bundles, dictionaries, or ``None``. Full tensor
+    payloads are intentionally excluded; callers should attach summaries from
+    ``DebugTrace.to_dict()`` when needed.
+    """
+
+    manifest: dict[str, Any] = {
+        "schema": "tessera.debug.replay_manifest.v1",
+        "metadata": dict(metadata),
+        "environment": _debug_environment(),
+    }
+    if value is None:
+        return manifest
+    manifest["artifact"] = _artifact_summary(value)
+    if hasattr(value, "runtime_artifact") and callable(value.runtime_artifact):
+        artifact = value.runtime_artifact()
+        manifest["artifact"] = _artifact_summary(artifact)
+        if hasattr(value, "lowering_trace") and callable(value.lowering_trace):
+            manifest["compiler_trace"] = list(value.lowering_trace())
+    elif hasattr(value, "to_metadata") and callable(value.to_metadata):
+        manifest["compiler_metadata"] = value.to_metadata()
+    return manifest
+
+
+def save_replay_manifest(path: str | os.PathLike[str], value=None, **metadata: Any) -> dict[str, Any]:
+    """Write a replay manifest JSON file and return the manifest."""
+
+    manifest = replay_manifest(value, **metadata)
+    Path(path).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return manifest
 
 
 @dataclass(frozen=True)
@@ -308,6 +436,74 @@ def _format_op_descriptor(op, index: int) -> str:
     return str(op)
 
 
+def _op_descriptors_to_graphviz(descriptors: Sequence[Mapping[str, Any]]) -> str:
+    body = ["digraph tessera_debug {"]
+    producer_by_value: dict[str, str] = {}
+    node_by_output: dict[str, str] = {}
+    for idx, op in enumerate(descriptors):
+        node = f"n{idx}"
+        output = str(op.get("output") or op.get("name") or f"%{idx}")
+        node_by_output[output] = node
+        producer_by_value[output] = node
+        label = _format_op_descriptor(op, idx).replace("\\", "\\\\").replace('"', '\\"')
+        body.append(f'  {node} [label="{label}"];')
+    for idx, op in enumerate(descriptors):
+        node = f"n{idx}"
+        for operand in op.get("inputs", ()) or ():
+            producer = producer_by_value.get(str(operand))
+            if producer is not None:
+                body.append(f"  {producer} -> {node};")
+    if not node_by_output:
+        body.append('  empty [label="empty graph"];')
+    body.append("}")
+    return "\n".join(body)
+
+
+def _debug_environment() -> dict[str, str]:
+    keys = (
+        "TESSERA_DEBUG_IR",
+        "TESSERA_DUMP_DIR",
+        "TESSERA_DUMP_STATE",
+        "TESSERA_KEEP_PTX",
+        "TESSERA_LOG_LEVEL",
+        "TESSERA_PROF_TRACE",
+    )
+    return {key: os.environ[key] for key in keys if key in os.environ}
+
+
+def _artifact_summary(value) -> dict[str, Any]:
+    if hasattr(value, "to_dict") and callable(value.to_dict):
+        data = value.to_dict()
+        metadata = data.get("metadata", {}) if isinstance(data, Mapping) else {}
+        return {
+            "kind": type(value).__name__,
+            "artifact_hash": data.get("artifact_hash"),
+            "metadata": metadata,
+            "ir_hashes": {
+                level: _stable_hash(str(data.get(f"{level}_ir", "")))
+                for level in ("graph", "schedule", "tile", "target")
+                if data.get(f"{level}_ir")
+            },
+        }
+    if hasattr(value, "artifact_hashes"):
+        return {
+            "kind": type(value).__name__,
+            "artifact_hashes": dict(value.artifact_hashes),
+            "metadata": value.to_metadata() if hasattr(value, "to_metadata") else {},
+        }
+    if hasattr(value, "level") and hasattr(value, "text"):
+        return {"kind": type(value).__name__, "level": value.level, "hash": _stable_hash(value.text)}
+    if isinstance(value, Mapping):
+        return {"kind": "mapping", "metadata": dict(value)}
+    return {"kind": type(value).__name__, "repr": repr(value)}
+
+
+def _stable_hash(text: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 __all__ = [
     "DebugTrace",
     "DeterminismCheckResult",
@@ -316,8 +512,14 @@ __all__ = [
     "TensorSummary",
     "check_determinism",
     "check_grad",
+    "debug_artifact",
+    "debug_barrier",
     "debug_trace",
+    "debug_value",
     "export_graphviz",
+    "replay_capture",
+    "replay_manifest",
+    "save_replay_manifest",
     "summarize_tensor",
     "trace_graph",
     "trace_value",

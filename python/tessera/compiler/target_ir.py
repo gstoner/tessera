@@ -268,6 +268,8 @@ def _flatten_tile_ops(ops: Iterable[TileOp]) -> Iterable[TileOp]:
 
 
 def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
+    if op.op_name in {"tile.debug_artifact", "tile.debug_barrier"}:
+        return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
     base = _base_attrs(op, target="rocm")
     if op.op_name == "tile.mma":
@@ -305,6 +307,8 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
 
 
 def _lower_cpu_op(op: TileOp) -> list[TargetOp]:
+    if op.op_name in {"tile.debug_artifact", "tile.debug_barrier"}:
+        return []
     if op.op_name.startswith("tessera.queue.") or op.op_name in {"tile.async_copy", "tile.wait_async"}:
         return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
@@ -313,6 +317,8 @@ def _lower_cpu_op(op: TileOp) -> list[TargetOp]:
 
 
 def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
+    if op.op_name in {"tile.debug_artifact", "tile.debug_barrier"}:
+        return []
     if op.op_name.startswith("tessera.queue.") or op.op_name in {"tile.async_copy", "tile.wait_async"}:
         return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
@@ -354,6 +360,8 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
 
 
 def _lower_apple_cpu_op(op: TileOp) -> list[TargetOp]:
+    if op.op_name in {"tile.debug_artifact", "tile.debug_barrier"}:
+        return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
     base = _base_attrs(op)
     if source.startswith("tessera.kv_cache.") or op.op_name == "tile.kv_cache":
@@ -382,6 +390,8 @@ def _lower_apple_cpu_op(op: TileOp) -> list[TargetOp]:
 
 
 def _lower_apple_gpu_op(op: TileOp) -> list[TargetOp]:
+    if op.op_name in {"tile.debug_artifact", "tile.debug_barrier"}:
+        return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
     base = _base_attrs(op)
     if source.startswith("tessera.kv_cache.") or op.op_name == "tile.kv_cache":

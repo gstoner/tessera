@@ -83,6 +83,50 @@ def AppleGPU_DispatchOp : TesseraApple_Op<"gpu.dispatch"> {
   let assemblyFormat = "attr-dict";
 }
 
+// Phase 8.3 — MPS-shaped Target IR ops. These describe the GPU-side analogue of
+// the Apple CPU Accelerate ops: hardware-shaped but not hardware-bound. The
+// AppleGPUToMPS lowering pass + tessera_apple_gpu_runtime.mm runtime turn the
+// matmul op into an executable MTLDevice + MPSMatrixMultiplication call. The
+// softmax and dispatch ops are artifact-only in 8.3 — Phase 8.4 broadens the
+// runtime envelope.
+
+def AppleGPU_MPSMatmulOp : TesseraApple_Op<"gpu.mps_matmul", [Pure]> {
+  let summary = "Metal Performance Shaders matrix multiplication artifact";
+  let arguments = (ins StrAttr:$source,
+                       StrAttr:$result,
+                       I64Attr:$ordinal,
+                       OptionalAttr<StrAttr>:$framework,
+                       OptionalAttr<StrAttr>:$abi,
+                       OptionalAttr<StrAttr>:$dtype,
+                       OptionalAttr<I64Attr>:$m,
+                       OptionalAttr<I64Attr>:$n,
+                       OptionalAttr<I64Attr>:$k);
+  let assemblyFormat = "attr-dict";
+}
+
+def AppleGPU_MPSSoftmaxOp : TesseraApple_Op<"gpu.mps_softmax", [Pure]> {
+  let summary = "Metal Performance Shaders softmax artifact";
+  let arguments = (ins StrAttr:$source,
+                       StrAttr:$result,
+                       I64Attr:$ordinal,
+                       OptionalAttr<StrAttr>:$framework,
+                       OptionalAttr<StrAttr>:$abi,
+                       OptionalAttr<StrAttr>:$dtype,
+                       OptionalAttr<I64Attr>:$rows,
+                       OptionalAttr<I64Attr>:$cols,
+                       OptionalAttr<I64Attr>:$axis);
+  let assemblyFormat = "attr-dict";
+}
+
+def AppleGPU_MPSDispatchOp : TesseraApple_Op<"gpu.mps_dispatch"> {
+  let summary = "Metal command queue dispatch for MPS-encoded artifacts";
+  let arguments = (ins I64Attr:$ordinal,
+                       OptionalAttr<StrAttr>:$queue,
+                       OptionalAttr<StrAttr>:$framework,
+                       OptionalAttr<StrAttr>:$execution_mode);
+  let assemblyFormat = "attr-dict";
+}
+
 def Apple_TargetDiagnosticOp : TesseraApple_Op<"diagnostic"> {
   let summary = "Stable Apple target diagnostic artifact";
   let arguments = (ins StrAttr:$source,

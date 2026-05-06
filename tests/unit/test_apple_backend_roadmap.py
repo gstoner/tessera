@@ -598,6 +598,126 @@ def test_apple_cpu_runtime_exposes_bf16_gemm_symbol(tmp_path):
     )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 8.3: Apple GPU baseline via Metal Performance Shaders.
+#
+# The runtime gating is: a single rank-2 f32 matmul/gemm program flips the
+# apple_gpu artifact's execution_mode to "metal_runtime" and dispatches through
+# tessera_apple_gpu_mps_matmul_f32. Multi-op programs (existing tiny_decode /
+# simple_transformer / MoE tests) keep the metal_artifact contract — Phase 8.4
+# will broaden the runtime envelope via custom MSL kernels.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_apple_gpu_target_reports_mps_execution_mode_for_single_matmul():
+    @ts.jit(target="apple_gpu")
+    def mm(A, B):
+        return ts.ops.matmul(A, B)
+
+    A = np.eye(4, dtype=np.float32)
+    B = np.arange(16, dtype=np.float32).reshape(4, 4)
+    artifact = mm.runtime_artifact()
+
+    assert artifact.metadata["compiler_path"] == "apple_gpu_mps"
+    assert artifact.metadata["runtime_status"] == "ready"
+    assert artifact.metadata["execution_mode"] == "metal_runtime"
+    assert artifact.metadata["executable"] is True
+    assert artifact.metadata["guards"] == {
+        "dtype": "float32",
+        "rank": 2,
+        "static_shape_at_launch": True,
+        "op_count": 1,
+    }
+    assert "tessera_apple.gpu.mps_matmul" in mm.target_ir
+    assert "tessera_apple.gpu.mps_dispatch" in mm.target_ir
+    assert 'execution_mode = "metal_runtime"' in mm.target_ir
+    assert "tessera-lower-to-apple_gpu-runtime" in mm.compile_bundle.artifact("backend").text
+
+    out = mm(A, B)
+    np.testing.assert_allclose(out, A @ B, rtol=1e-5)
+    assert out.dtype == np.float32
+
+
+def test_apple_gpu_runtime_shim_exposes_mps_matmul_symbol(tmp_path):
+    """Compile the apple_gpu runtime shim from source and verify the C ABI:
+    symbol is exported, signature matches the lowering pass, numerical output
+    matches numpy. On Darwin this exercises the Metal/MPS path; on Linux the
+    portable reference fallback."""
+
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        pytest.skip("C++ compiler is not available")
+
+    backend = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
+    if sys.platform == "darwin":
+        source = backend / "apple_gpu_runtime.mm"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.dylib"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", "-fobjc-arc",
+               "-x", "objective-c++", str(source), "-o", str(lib),
+               "-framework", "Foundation",
+               "-framework", "Metal",
+               "-framework", "MetalPerformanceShaders"]
+    else:
+        source = backend / "apple_gpu_runtime_stub.cpp"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.so"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(lib)]
+    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    runtime = ctypes.CDLL(str(lib))
+    gemm = runtime.tessera_apple_gpu_mps_matmul_f32
+    gemm.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,
+        ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    gemm.restype = None
+
+    for m, n, k in ((2, 2, 2), (2, 3, 4), (1, 5, 3), (8, 8, 8)):
+        a = np.arange(m * k, dtype=np.float32).reshape(m, k)
+        b = (np.arange(k * n, dtype=np.float32).reshape(k, n) / 7.0)
+        c = np.zeros((m, n), dtype=np.float32)
+        gemm(
+            a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            c.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            m,
+            n,
+            k,
+        )
+        np.testing.assert_allclose(c, a @ b, rtol=1e-4, atol=1e-4)
+
+    has_metal = runtime.tessera_apple_gpu_runtime_has_metal
+    has_metal.argtypes = []
+    has_metal.restype = ctypes.c_int32
+    capability = has_metal()
+    if sys.platform == "darwin":
+        # Capability is 1 when MTLCreateSystemDefaultDevice succeeded; CI hosts
+        # without a GPU still link Metal but may report 0. Either is fine — the
+        # numerical outputs above already validate correctness on both paths.
+        assert capability in (0, 1)
+    else:
+        assert capability == 0
+
+
+def test_apple_gpu_target_keeps_metal_artifact_for_multi_op_programs():
+    """Multi-op apple_gpu programs (matmul + softmax) must stay artifact-only
+    — the Phase 8.3 runtime envelope is single-matmul. This pins the Phase 8.4
+    contract: broadening must explicitly opt in by adding ops to the MPS path,
+    not by relaxing the gating."""
+
+    @ts.jit(target="apple_gpu")
+    def fused(x, w):
+        return ts.ops.softmax(ts.ops.matmul(x, w))
+
+    artifact = fused.runtime_artifact()
+    assert artifact.metadata["execution_mode"] == "metal_artifact"
+    assert artifact.metadata["runtime_status"] == "artifact_only"
+    assert not fused.uses_compiled_path
+
+
 def test_apple_cpu_bf16_disabled_when_ml_dtypes_missing(monkeypatch):
     """When ml_dtypes isn't installed the bf16 dtype probe returns None and
     the runtime falls through to numpy. Verified by stubbing the import to

@@ -270,6 +270,13 @@ class JitFn:
             and self.compile_bundle.executable
         ):
             return self._apple_cpu_fast_call(args, kwargs)
+        if (
+            self.cpu_plan is not None
+            and self.cpu_plan.target_kind == "apple_gpu"
+            and self.compile_bundle is not None
+            and self.compile_bundle.executable
+        ):
+            return self._apple_gpu_fast_call(args, kwargs)
         return self._fn(*args, **kwargs)
 
     def _apple_cpu_fast_call(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Any:
@@ -294,6 +301,27 @@ class JitFn:
             )
         except Exception as exc:
             raise TesseraJitError(f"apple_cpu launch failed: {exc}") from exc
+
+    def _apple_gpu_fast_call(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Any:
+        """Phase 8.3 launch-overhead fast path for apple_gpu MPS programs.
+        Mirrors `_apple_cpu_fast_call` — bypasses ``runtime.launch`` and calls
+        the metadata dispatcher directly with the cached artifact's metadata.
+        """
+
+        from tessera.runtime import _execute_apple_gpu_mps_metadata
+
+        if kwargs and args:
+            launch_args = {name: value for name, value in zip(self.arg_names, args)}
+            launch_args.update(kwargs)
+        else:
+            launch_args = kwargs if kwargs else args
+
+        try:
+            return _execute_apple_gpu_mps_metadata(
+                self.runtime_artifact().metadata or {}, launch_args
+            )
+        except Exception as exc:
+            raise TesseraJitError(f"apple_gpu launch failed: {exc}") from exc
 
     def ir_text(self) -> str:
         """Return the emitted Graph IR as MLIR text."""
@@ -479,6 +507,47 @@ class JitFn:
                 "ops": ops_payload,
                 "accelerate_ops": accelerate_ops,
                 "guards": guards,
+            })
+        elif (
+            self.cpu_plan is not None
+            and self.cpu_plan.target_kind == "apple_gpu"
+            and self.compile_bundle is not None
+            and self.compile_bundle.executable
+        ):
+            ops_payload = [
+                {
+                    "op_name": op.op_name,
+                    "result": op.result,
+                    "operands": [operand[1:] if operand.startswith("%") else operand for operand in op.operands],
+                    "kwargs": dict(op.kwargs),
+                }
+                for op in self.cpu_plan.ops
+            ]
+            metadata.update({
+                "executable": True,
+                "compiler_path": "apple_gpu_mps",
+                "runtime_status": "ready",
+                "execution_mode": "metal_runtime",
+                "arg_names": list(self.arg_names),
+                "output_name": self.cpu_plan.output_name,
+                "input_descriptors": [
+                    {"name": name, "dtype": "f32", "rank": 2}
+                    for name in self.arg_names
+                ],
+                "output_descriptor": {
+                    "name": self.cpu_plan.output_name,
+                    "dtype": "f32",
+                    "rank": 2,
+                },
+                "cpu_tile": list(self.cpu_plan.tile),
+                "ops": ops_payload,
+                "mps_ops": [op["op_name"] for op in ops_payload],
+                "guards": {
+                    "dtype": "float32",
+                    "rank": 2,
+                    "static_shape_at_launch": True,
+                    "op_count": 1,
+                },
             })
         elif self.cpu_plan is not None:
             metadata.update({

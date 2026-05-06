@@ -266,7 +266,9 @@ def compile_graph_module(
     backend_artifact = _backend_artifact_for(target_kind, cpu_plan)
 
     executable = cpu_plan is not None and (
-        target_kind == "cpu" or _is_apple_cpu_accelerate_executable(cpu_plan)
+        target_kind == "cpu"
+        or _is_apple_cpu_accelerate_executable(cpu_plan)
+        or _is_apple_gpu_mps_executable(cpu_plan)
     )
     if executable:
         runtime_status = "ready"
@@ -274,6 +276,8 @@ def compile_graph_module(
         runtime_status = "artifact_only"
     else:
         runtime_status = "unsupported"
+    if _is_apple_gpu_mps_executable(cpu_plan):
+        execution_mode = "metal_runtime"
 
     bundle = CompileArtifactBundle(
         request=request,
@@ -328,21 +332,62 @@ def _is_apple_cpu_accelerate_executable(cpu_plan: CPUPlan | None) -> bool:
     return len(cpu_plan.ops) > 0
 
 
+_APPLE_GPU_MPS_OPS: frozenset[str] = frozenset({
+    "tessera.matmul",
+    "tessera.gemm",
+})
+
+
+def is_apple_gpu_mps_op(op_name: str) -> bool:
+    """Return True when an op is dispatched via Metal Performance Shaders."""
+
+    return op_name in _APPLE_GPU_MPS_OPS
+
+
+def _is_apple_gpu_mps_executable(cpu_plan: CPUPlan | None) -> bool:
+    """Phase 8.3: only single-op rank-2 f32 matmul/gemm programs take the MPS
+    runtime path. Multi-op programs (rope, softmax, kv_cache) keep the existing
+    metal_artifact contract — Phase 8.4 broadens the executable envelope via
+    custom MSL kernels.
+    """
+
+    if cpu_plan is None or cpu_plan.target_kind != "apple_gpu":
+        return False
+    if len(cpu_plan.ops) != 1:
+        return False
+    return cpu_plan.ops[0].op_name in _APPLE_GPU_MPS_OPS
+
+
 def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> LoweringArtifact | None:
-    if cpu_plan is None or target_kind != "apple_cpu":
+    if cpu_plan is None:
         return None
-    text = "\n".join([
-        'module attributes {tessera.ir.level = "backend", target = "apple_cpu", execution_mode = "cpu_accelerate"} {',
-        '  "tessera_apple.cpu.runtime_pipeline"() {',
-        '    pipeline = "tessera-lower-to-apple_cpu-runtime",',
-        '    symbol = "tessera_apple_cpu_gemm_f32",',
-        '    framework = "Accelerate",',
-        '    abi = "cblas_sgemm",',
-        '    dtype = "f32"',
-        '  } : () -> ()',
-        "}",
-    ])
-    return LoweringArtifact("backend", text)
+    if target_kind == "apple_cpu":
+        text = "\n".join([
+            'module attributes {tessera.ir.level = "backend", target = "apple_cpu", execution_mode = "cpu_accelerate"} {',
+            '  "tessera_apple.cpu.runtime_pipeline"() {',
+            '    pipeline = "tessera-lower-to-apple_cpu-runtime",',
+            '    symbol = "tessera_apple_cpu_gemm_f32",',
+            '    framework = "Accelerate",',
+            '    abi = "cblas_sgemm",',
+            '    dtype = "f32"',
+            '  } : () -> ()',
+            "}",
+        ])
+        return LoweringArtifact("backend", text)
+    if target_kind == "apple_gpu" and _is_apple_gpu_mps_executable(cpu_plan):
+        text = "\n".join([
+            'module attributes {tessera.ir.level = "backend", target = "apple_gpu", execution_mode = "metal_runtime"} {',
+            '  "tessera_apple.gpu.runtime_pipeline"() {',
+            '    pipeline = "tessera-lower-to-apple_gpu-runtime",',
+            '    symbol = "tessera_apple_gpu_mps_matmul_f32",',
+            '    framework = "MetalPerformanceShaders",',
+            '    abi = "MPSMatrixMultiplication",',
+            '    dtype = "f32"',
+            '  } : () -> ()',
+            "}",
+        ])
+        return LoweringArtifact("backend", text)
+    return None
 
 
 def _try_validate_with_tessera_opt(request: CompileRequest) -> tuple[ToolInvocation, CompileTraceEvent]:

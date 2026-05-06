@@ -28,6 +28,11 @@ std::unique_ptr<::mlir::Pass> createLowerTileToAppleGPUPass();
 /// `tessera-lower-to-apple_cpu` pipeline.
 std::unique_ptr<::mlir::Pass> createLowerMatmulToAppleCPUPass();
 
+/// tessera.matmul (rank-2, f32) → func.call into the Apple GPU runtime
+/// shim (MTLDevice + MPSMatrixMultiplication). Phase 8.3 — the executable
+/// counterpart to the artifact-only `tessera-lower-to-apple_gpu` pipeline.
+std::unique_ptr<::mlir::Pass> createLowerMatmulToAppleGPUPass();
+
 /// Register the Apple Silicon dialect into a DialectRegistry. Convenience
 /// wrapper that forwards to registerAppleDialect from TesseraAppleDialect.h.
 void registerTesseraAppleBackendDialects(::mlir::DialectRegistry &registry);

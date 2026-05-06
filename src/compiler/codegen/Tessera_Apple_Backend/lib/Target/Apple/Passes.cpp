@@ -65,6 +65,17 @@ PassPipelineRegistration<> gAppleCPURuntimePipeline(
       pm.addPass(createLowerMatmulToAppleCPUPass());
     });
 
+// Phase 8.3: executable lowering to the Apple GPU runtime shim
+// (MPSMatrixMultiplication via MetalDeviceContext). Distinct from the
+// artifact-only `tessera-lower-to-apple_gpu` pipeline above.
+PassPipelineRegistration<> gAppleGPURuntimePipeline(
+    "tessera-lower-to-apple_gpu-runtime",
+    "Lower tessera.matmul (rank-2, f32) to Apple GPU runtime calls "
+    "(MPSMatrixMultiplication)",
+    [](OpPassManager &pm) {
+      pm.addPass(createLowerMatmulToAppleGPUPass());
+    });
+
 } // namespace
 
 void registerTesseraAppleBackendPipelines() {
@@ -72,6 +83,7 @@ void registerTesseraAppleBackendPipelines() {
   (void)&gAppleCPUPipeline;
   (void)&gAppleGPUPipeline;
   (void)&gAppleCPURuntimePipeline;
+  (void)&gAppleGPURuntimePipeline;
 }
 
 } // namespace apple

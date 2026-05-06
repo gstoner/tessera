@@ -100,15 +100,34 @@ def test_jit_apple_cpu_target_emits_accelerate_artifact():
     assert 'abi = "cblas_sgemm"' in mm.target_ir
 
 
-def test_jit_apple_gpu_target_emits_metal_artifact():
+def test_jit_apple_gpu_target_emits_mps_runtime_for_single_matmul():
+    """Phase 8.3 — a single rank-2 f32 matmul flips the apple_gpu target IR
+    from the artifact-only metal_kernel contract to the MPS runtime contract:
+    mps_matmul + mps_dispatch with execution_mode="metal_runtime"."""
+
     @ts.jit(target="apple_gpu")
     def mm(A, B):
         return ts.ops.matmul(A, B)
 
     assert 'target = "apple_gpu"' in mm.target_ir
-    assert "tessera_apple.gpu.metal_kernel" in mm.target_ir
-    assert "tessera_apple.gpu.dispatch" in mm.target_ir
-    assert 'artifact = "metallib"' in mm.target_ir
+    assert "tessera_apple.gpu.mps_matmul" in mm.target_ir
+    assert "tessera_apple.gpu.mps_dispatch" in mm.target_ir
+    assert 'execution_mode = "metal_runtime"' in mm.target_ir
+
+
+def test_jit_apple_gpu_multi_op_keeps_metal_artifact_contract():
+    """Phase 8.3 — multi-op programs stay on the artifact-only path. The
+    metal_kernel + metallib dispatch shape is the gate Phase 8.4 must explicitly
+    cross when adding custom MSL kernels."""
+
+    @ts.jit(target="apple_gpu")
+    def fused(x, w):
+        return ts.ops.softmax(ts.ops.matmul(x, w))
+
+    assert 'target = "apple_gpu"' in fused.target_ir
+    assert "tessera_apple.gpu.metal_kernel" in fused.target_ir
+    assert "tessera_apple.gpu.dispatch" in fused.target_ir
+    assert 'artifact = "metallib"' in fused.target_ir
 
 
 def test_flash_attention_apple_gpu_gets_metal_kernel_contract():

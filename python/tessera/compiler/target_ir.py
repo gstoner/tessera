@@ -173,6 +173,10 @@ class TargetIRVerifier:
             self._require(op, diagnostics, "kernel", "framework", "status", "dtype")
         elif op.op_name == "tessera_apple.gpu.dispatch":
             self._require(op, diagnostics, "queue", "artifact", "execution_mode")
+        elif op.op_name == "tessera_apple.gpu.mps_matmul":
+            self._require(op, diagnostics, "framework", "abi", "dtype")
+        elif op.op_name == "tessera_apple.gpu.mps_dispatch":
+            self._require(op, diagnostics, "queue", "framework", "execution_mode")
         else:
             diagnostics.append(TargetIRDiagnostic("error", f"invalid Apple GPU op {op.op_name!r}", "TARGET_IR_APPLE_GPU_OP"))
 
@@ -231,18 +235,65 @@ def lower_tile_to_target_ir(tile_module: TileIRModule, *, target_kind: str) -> T
     elif target_kind == APPLE_CPU_TARGET:
         attrs.update({"arch": "arm64-apple-silicon", "execution_mode": "cpu_accelerate", "target_features": {"family": "apple", "accelerate": True, "device_timers": False}})
     else:
-        attrs.update({"arch": "apple-metal", "execution_mode": "metal_artifact", "target_features": {"family": "apple", "metal": True, "device_timers": False}})
+        # Phase 8.3: when the entire program is a single rank-2 f32 matmul, the
+        # apple_gpu module is executable through MPSMatrixMultiplication. The
+        # module-level execution_mode flips to "metal_runtime" so downstream
+        # tooling (and Python tests) can distinguish artifact-only from
+        # runtime-bound modules without re-walking the body.
+        apple_gpu_runtime = _apple_gpu_module_is_mps_runtime(tile_module)
+        execution_mode = "metal_runtime" if apple_gpu_runtime else "metal_artifact"
+        attrs.update({"arch": "apple-metal", "execution_mode": execution_mode, "target_features": {"family": "apple", "metal": True, "device_timers": False}})
     target_module = TargetIRModule(attrs=attrs)
+    apple_gpu_runtime_flag = (
+        target_kind == APPLE_GPU_TARGET
+        and _apple_gpu_module_is_mps_runtime(tile_module)
+    )
     for tile_fn in tile_module.functions:
         target_module.functions.append(TargetFunction(
             name=tile_fn.name,
             target=target_kind,
-            body=_lower_tile_ops(tile_fn.body, target_kind=target_kind),
+            body=_lower_tile_ops(
+                tile_fn.body,
+                target_kind=target_kind,
+                apple_gpu_mps_runtime=apple_gpu_runtime_flag,
+            ),
         ))
     return target_module
 
 
-def _lower_tile_ops(ops: Iterable[TileOp], *, target_kind: str) -> list[TargetOp]:
+def _apple_gpu_module_is_mps_runtime(tile_module: TileIRModule) -> bool:
+    """Return True when an apple_gpu Tile IR module qualifies for the Phase 8.3
+    MPS runtime path. Conservative: a single function whose flat body is one
+    tile.mma sourced from tessera.matmul/gemm, no other compute. Multi-op
+    programs stay artifact-only — Phase 8.4 broadens the envelope.
+    """
+
+    if len(tile_module.functions) != 1:
+        return False
+    flat_ops = [op for op in _flatten_tile_ops(tile_module.functions[0].body)]
+    compute_ops = [
+        op for op in flat_ops
+        if op.op_name not in {"tile.debug_artifact", "tile.debug_barrier"}
+        and not (
+            op.op_name.startswith("tessera.queue.")
+            or op.op_name in {"tile.async_copy", "tile.wait_async"}
+        )
+    ]
+    if len(compute_ops) != 1:
+        return False
+    only = compute_ops[0]
+    if only.op_name != "tile.mma":
+        return False
+    source = str(only.attrs.get("source", ""))
+    return source in {"tessera.matmul", "tessera.gemm"}
+
+
+def _lower_tile_ops(
+    ops: Iterable[TileOp],
+    *,
+    target_kind: str,
+    apple_gpu_mps_runtime: bool = False,
+) -> list[TargetOp]:
     lowered: list[TargetOp] = []
     for tile_op in _flatten_tile_ops(ops):
         if target_kind == ROCM_TARGET:
@@ -250,7 +301,7 @@ def _lower_tile_ops(ops: Iterable[TileOp], *, target_kind: str) -> list[TargetOp
         elif target_kind == APPLE_CPU_TARGET:
             lowered.extend(_lower_apple_cpu_op(tile_op))
         elif target_kind == APPLE_GPU_TARGET:
-            lowered.extend(_lower_apple_gpu_op(tile_op))
+            lowered.extend(_lower_apple_gpu_op(tile_op, mps_runtime=apple_gpu_mps_runtime))
         elif target_kind == CPU_TARGET:
             lowered.extend(_lower_cpu_op(tile_op))
         elif target_kind in NVIDIA_TARGETS:
@@ -389,7 +440,7 @@ def _lower_apple_cpu_op(op: TileOp) -> list[TargetOp]:
     return [TargetOp("tessera_apple.cpu.vector_op", {**base, "framework": "Accelerate", "abi": "vecLib", "dtype": "f32"})]
 
 
-def _lower_apple_gpu_op(op: TileOp) -> list[TargetOp]:
+def _lower_apple_gpu_op(op: TileOp, *, mps_runtime: bool = False) -> list[TargetOp]:
     if op.op_name in {"tile.debug_artifact", "tile.debug_barrier"}:
         return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
@@ -402,6 +453,24 @@ def _lower_apple_gpu_op(op: TileOp) -> list[TargetOp]:
         })]
     if op.op_name.startswith("tessera.queue.") or op.op_name in {"tile.async_copy", "tile.wait_async"}:
         return []
+    # Phase 8.3 MPS runtime path: a single-matmul module is lowered to
+    # mps_matmul + mps_dispatch with execution_mode="metal_runtime". The
+    # AppleGPUToMPS pass and the apple_gpu_runtime.mm shim consume this op.
+    if mps_runtime and op.op_name == "tile.mma" and source in {"tessera.matmul", "tessera.gemm"}:
+        return [
+            TargetOp("tessera_apple.gpu.mps_matmul", {
+                **base,
+                "framework": "MetalPerformanceShaders",
+                "abi": "MPSMatrixMultiplication",
+                "dtype": "f32",
+            }),
+            TargetOp("tessera_apple.gpu.mps_dispatch", {
+                "ordinal": base["ordinal"],
+                "queue": "MTLCommandQueue",
+                "framework": "MetalPerformanceShaders",
+                "execution_mode": "metal_runtime",
+            }),
+        ]
     kernel, framework, extra = _apple_gpu_kernel_contract(source)
     return [
         TargetOp("tessera_apple.gpu.metal_kernel", {**base, "kernel": kernel, "framework": framework, "dtype": "f32", **extra}),

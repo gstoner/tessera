@@ -2,6 +2,16 @@
 
 ## Overview
 
+## Current compiler status
+
+This folder now includes a runnable current-compiler sample in `mla/`, a smoke
+script in `tests/smoke_random.py`, and parser-valid MLIR fixtures in `ir/`.
+The current compiler representation is a straight-line tensor skeleton for Q
+projection, compressed KV projection, latent RMSNorm, absorbed K/V projection,
+softmax, context projection, and output RMSNorm. Native paged latent cache ops,
+RoPE split/merge, online softmax, and Hopper/Blackwell FlashMLA target kernels
+remain the semantic roadmap documented below.
+
 Multi-Latent Attention (MLA) is DeepSeek's innovative attention mechanism that dramatically reduces KV cache memory usage (up to 93.3% reduction) while maintaining or improving model performance. FlashMLA is the optimized GPU implementation specifically designed for Hopper architecture, achieving up to 3000 GB/s memory bandwidth and 660 TFLOPS on H800 GPUs.
 
 ## Core MLA Algorithm

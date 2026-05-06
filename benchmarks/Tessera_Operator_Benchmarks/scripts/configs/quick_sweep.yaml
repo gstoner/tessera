@@ -1,14 +1,53 @@
 seed: 123
 runs:
   - op: matmul
-    iters: 50
+    iters: 3
     sweep:
-      M: [1024, 2048]
-      N: [1024, 2048]
-      K: [1024, 2048]
+      M: [32]
+      N: [32]
+      K: [32]
+  - op: conv2d
+    iters: 2
+    sweep:
+      Nn: [1]
+      H: [8]
+      W: [8]
+      C: [4]
+      Kc: [4]
+      R: [3]
+      S: [3]
+      stride_h: [1]
+      stride_w: [1]
+      pad_h: [1]
+      pad_w: [1]
+  - op: flash_attention
+    iters: 1
+    sweep:
+      B: [1]
+      heads: [1]
+      seq: [16]
+      dim: [8]
   - op: reduce
-    iters: 100
+    iters: 3
     sweep:
-      M: [1048576]
+      M: [4096]
       N: [1]
       K: [1]
+  - op: elementwise
+    iters: 3
+    sweep:
+      M: [4096]
+      N: [1]
+      K: [1]
+  - op: softmax_layernorm
+    iters: 2
+    sweep:
+      M: [2]
+      N: [16]
+      K: [8]
+  - op: transpose_gather
+    iters: 3
+    sweep:
+      M: [2]
+      N: [16]
+      K: [8]

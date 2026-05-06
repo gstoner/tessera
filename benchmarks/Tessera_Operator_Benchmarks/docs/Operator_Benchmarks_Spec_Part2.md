@@ -11,6 +11,18 @@
 - Pluggable chart renderer; comparison across runners (future: multi-run aggregations)
 
 ## Backend Hooks
-- Provide `#ifdef OPBENCH_WITH_TESSERA` sections for real kernels.
-- Optional vendor paths: cutlass/MIOpen/CK/Triton as cross-checks.
+- `reference`: CPU reference kernels, executable everywhere.
+- `artifact`: registered MLIR sample artifacts, reported as
+  `runtime_status="artifact_only"` and `telemetry.status="unmeasured"`.
+- `tessera-runtime`: explicit `backend_unavailable` status until generated
+  operator runtime launches are wired to the Tessera C ABI.
+- Optional vendor paths: CUTLASS/MIOpen/CK/Triton as future cross-checks.
+
+## Current Gaps
+- Runtime launch hooks are not implemented for generated Tessera kernels.
+- Artifact samples currently stop at Graph IR contracts; Schedule/Tile/Target
+  benchmark artifact validation should be added as those paths become stable for
+  each operator.
+- Operator tests lock registration, quick sweep coverage, artifact coverage, and
+  telemetry schema. They do not replace numerical conformance suites.
 --- END-MERGE: Operator_Benchmarks_Spec ---

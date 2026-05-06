@@ -27,3 +27,27 @@ runs:
       heads: [8, 16]
       seq: [512, 1024, 2048]
       dim: [64, 128]
+  - op: reduce
+    iters: 100
+    sweep:
+      M: [1048576, 16777216]
+      N: [1]
+      K: [1]
+  - op: elementwise
+    iters: 100
+    sweep:
+      M: [1048576, 16777216]
+      N: [1]
+      K: [1]
+  - op: softmax_layernorm
+    iters: 50
+    sweep:
+      M: [16, 64]
+      N: [128, 512]
+      K: [64, 128]
+  - op: transpose_gather
+    iters: 100
+    sweep:
+      M: [16, 64]
+      N: [128, 512]
+      K: [64, 128]

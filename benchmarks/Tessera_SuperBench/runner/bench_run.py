@@ -127,7 +127,9 @@ def main():
         "env": collect_env(),
         "probes": collect_probes(),
         "timestamp": time.time(),
-        "rows": []
+        "rows": [],
+        "telemetry": [],
+        "telemetry_summary": {"schema": "tessera.telemetry.v1", "event_count": 0, "bottlenecks": {}},
     }
 
     for task in cfg.get("tasks", []):
@@ -147,9 +149,15 @@ def main():
 
         row["bench_id"] = rid
         row["variant"] = task.get("variant","default")
+        telemetry = row.get("telemetry")
+        if isinstance(telemetry, dict):
+            results["telemetry"].append(telemetry)
         maybe_efficiency(row, peaks)
         results["rows"].append(row)
-        print(f"[{rid}] -> ok={row.get('ok')} reason={row.get('skip_reason')}")
+        reason = row.get("skip_reason") or row.get("reason")
+        print(f"[{rid}] -> ok={row.get('ok')} status={row.get('runtime_status')} reason={reason}")
+
+    results["telemetry_summary"] = _telemetry_summary(results["telemetry"])
 
     os.makedirs(args.out, exist_ok=True)
     with open(os.path.join(args.out, "results.json"), "w") as f:
@@ -158,6 +166,19 @@ def main():
     trace.end()
     trace.save(os.path.join(args.out, "trace.json"))
     print(f"Wrote {os.path.join(args.out,'results.json')} and trace.json")
+
+
+def _telemetry_summary(events):
+    counts = {}
+    for event in events:
+        label = str(event.get("bottleneck") or "unknown")
+        counts[label] = counts.get(label, 0) + 1
+    return {
+        "schema": "tessera.telemetry.v1",
+        "event_count": len(events),
+        "bottlenecks": counts,
+    }
+
 
 if __name__ == "__main__":
     main()

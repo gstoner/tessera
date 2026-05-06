@@ -25,4 +25,16 @@ This document outlines a SuperBench‑style benchmark suite tailored to the Tess
 ## Output Artifacts
 - `results.json` (machine‑readable, stable schema)
 - `report.html` (at‑a‑glance cards + tables)
+- `trace.json` (Chrome Trace Event JSON for suite/task timing)
+- row-level `tessera.telemetry.v1` events and a suite telemetry summary
 - Optional CSV/Parquet for historical aggregation.
+
+## Current Compiler Contract
+
+- GEMM is the executable compiler-backed kernel and records Graph, Schedule,
+  Tile, Target, runtime, telemetry, and optional autotune schedule artifact
+  metadata.
+- Conv2D and FlashAttention are artifact-only in this suite today: compiler IR
+  is captured, while the benchmarked numeric path remains NumPy reference.
+- Distributed smoke defaults to `tessera.collectives` mock status. Native NCCL
+  or RCCL runs are backend-specific hardware jobs, not portable CI defaults.

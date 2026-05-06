@@ -89,6 +89,16 @@ def main():
     body = []
     body.append(f"<h1>Tessera Benchmark Report</h1>")
     body.append(f"<p>Suite: {td(R.get('suite',{}).get('name',''))} — {td(ts)}</p>")
+    telemetry = R.get("telemetry_summary", {})
+    if telemetry:
+        body.append("<h2>Telemetry</h2>")
+        body.append(
+            "<p>"
+            f"Schema: <code>{td(telemetry.get('schema', ''))}</code>; "
+            f"events: {td(telemetry.get('event_count', 0))}; "
+            f"bottlenecks: {td(telemetry.get('bottlenecks', {}))}"
+            "</p>"
+        )
 
     # Roofline (optional)
     if peaks:
@@ -98,10 +108,10 @@ def main():
     # Table of results
     body.append("<h2>Results</h2>")
     body.append("<table border='1' cellpadding='6' cellspacing='0'>")
-    body.append("<tr style='background:#eee;font-weight:bold'><td>bench_id</td><td>ok</td><td>skip_reason</td><td>metrics</td></tr>")
+    body.append("<tr style='background:#eee;font-weight:bold'><td>bench_id</td><td>ok</td><td>status</td><td>reason</td><td>metrics</td></tr>")
     for r in rows:
-        metrics = {k:v for k,v in r.items() if k not in ['bench_id','variant','ok','skip_reason'] and not isinstance(v, dict)}
-        body.append(f"<tr><td>{td(r.get('bench_id'))}</td><td>{td(r.get('ok'))}</td><td>{td(r.get('skip_reason'))}</td><td>{td(metrics)}</td></tr>")
+        metrics = {k:v for k,v in r.items() if k not in ['bench_id','variant','ok','skip_reason','reason','runtime_status'] and not isinstance(v, dict)}
+        body.append(f"<tr><td>{td(r.get('bench_id'))}</td><td>{td(r.get('ok'))}</td><td>{td(r.get('runtime_status'))}</td><td>{td(r.get('skip_reason') or r.get('reason'))}</td><td>{td(metrics)}</td></tr>")
     body.append("</table>")
 
     # Trace link

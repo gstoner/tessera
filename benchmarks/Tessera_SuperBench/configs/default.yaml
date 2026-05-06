@@ -1,7 +1,7 @@
 
 suite:
   name: "default"
-  description: "Portable smoke + kernel stubs + probes"
+  description: "Portable compiler artifacts, CPU executable GEMM, mock collectives, and probes"
   repeat: 3
   warmup: 1
 
@@ -30,8 +30,8 @@ tasks:
   - id: "kernel.gemm_tessera"
     runner: "python_module"
     path: "benches/kernel/gemm_tessera.py"
-    args: ["--m=1024","--n=1024","--k=1024","--repeat=2"]
-    metrics: ["throughput_flops","latency_ms","max_abs_err"]
+    args: ["--m=512","--n=512","--k=512","--target=cpu","--autotune","--repeat=2"]
+    metrics: ["throughput_flops","latency_ms","max_abs_err","compiler_path","runtime_status","telemetry"]
 
   - id: "kernel.conv2d_nhwc_tessera"
     runner: "python_module"
@@ -45,11 +45,11 @@ tasks:
     args: ["--batch=1","--heads=8","--seq=512","--d=64","--repeat=1"]
     metrics: ["throughput_tokens_per_s","latency_ms","max_abs_err"]
 
-  - id: "distributed.all_reduce"
+  - id: "distributed.all_reduce_tessera"
     runner: "python_module"
     path: "benches/distributed/collectives_torch.py"
-    args: ["--world_size=2","--backend=nccl","--iters=50","--bytes=134217728"]
-    metrics: ["bandwidth_Bps","latency_ms"]
+    args: ["--world_size=2","--backend=tessera_mock","--iters=50","--bytes=1048576"]
+    metrics: ["bandwidth_Bps","latency_ms","runtime_status","telemetry"]
 
 report:
   html: true

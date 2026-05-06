@@ -8,17 +8,23 @@ tasks:
   - id: "kernel.gemm_tessera"
     runner: "python_module"
     path: "benches/kernel/gemm_tessera.py"
-    args: ["--m=64", "--n=64", "--k=64", "--repeat=1"]
-    metrics: ["throughput_flops", "latency_ms", "max_abs_err", "compiler_path", "runtime_status"]
+    args: ["--m=128", "--n=128", "--k=128", "--target=cpu", "--autotune", "--repeat=1"]
+    metrics: ["throughput_flops", "latency_ms", "max_abs_err", "compiler_path", "runtime_status", "telemetry"]
 
   - id: "kernel.conv2d_nhwc_tessera"
     runner: "python_module"
     path: "benches/kernel/conv2d_nhwc_tessera.py"
     args: ["--n=1", "--h=16", "--w=16", "--c=4", "--oc=8", "--repeat=1"]
-    metrics: ["throughput_flops", "latency_ms", "max_abs_err", "compiler_path", "runtime_status"]
+    metrics: ["throughput_flops", "latency_ms", "max_abs_err", "compiler_path", "runtime_status", "telemetry"]
 
   - id: "kernel.flashattn_tessera"
     runner: "python_module"
     path: "benches/kernel/flashattn_tessera.py"
     args: ["--batch=1", "--heads=2", "--seq=64", "--d=32", "--repeat=1"]
-    metrics: ["throughput_tokens_per_s", "latency_ms", "max_abs_err", "compiler_path", "runtime_status"]
+    metrics: ["throughput_tokens_per_s", "latency_ms", "max_abs_err", "compiler_path", "runtime_status", "telemetry"]
+
+  - id: "distributed.all_reduce_tessera"
+    runner: "python_module"
+    path: "benches/distributed/collectives_torch.py"
+    args: ["--world_size=2", "--backend=tessera_mock", "--iters=3", "--bytes=4096"]
+    metrics: ["bandwidth_Bps", "latency_ms", "runtime_status", "telemetry"]

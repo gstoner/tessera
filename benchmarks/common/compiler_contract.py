@@ -41,12 +41,27 @@ def _hash_text(text: str) -> str:
 
 def compiler_matmul_relu(a: np.ndarray, b: np.ndarray, tile: tuple[int, int, int]) -> CompilerRun | None:
     """Run the supported Graph IR -> Schedule IR -> Tile IR -> Target IR -> CPU path."""
+    return compiler_matmul_relu_target(a, b, tile=tile, target="cpu")
+
+
+def compiler_matmul_relu_target(
+    a: np.ndarray,
+    b: np.ndarray,
+    *,
+    tile: tuple[int, int, int],
+    target: str,
+) -> CompilerRun | None:
+    """Run the supported matmul+relu compiler path for a target profile."""
 
     tessera = _import_tessera()
     if tessera is None:
         return None
 
-    @tessera.jit(cpu_tile=tile)
+    jit_kwargs: dict[str, Any] = {"cpu_tile": tile}
+    if target != "cpu":
+        jit_kwargs["target"] = target
+
+    @tessera.jit(**jit_kwargs)
     def bench_kernel(x, w):
         y = tessera.ops.matmul(x, w)
         return tessera.ops.relu(y)

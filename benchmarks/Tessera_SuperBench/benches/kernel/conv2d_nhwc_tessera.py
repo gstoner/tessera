@@ -6,6 +6,7 @@ import json
 import pathlib
 import sys
 import time
+from dataclasses import replace
 
 import numpy as np
 
@@ -25,6 +26,7 @@ from benchmarks.common import (  # noqa: E402
     RuntimeStatus,
     compiler_conv2d_ir,
     correctness_report,
+    telemetry_for_row,
 )
 
 
@@ -77,10 +79,11 @@ def main(argv=None) -> int:
 
     ref = conv2d_nhwc(x.astype(np.float64), w.astype(np.float64), stride=args.stride, padding=args.pad).astype(np.float32)
     corr = correctness_report(y, ref, tolerance=1e-5)
+    runtime_status = RuntimeStatus.ARTIFACT_ONLY if info.get("available") else RuntimeStatus.EXECUTABLE
     row = BenchmarkRow(
         operator=BenchmarkOperator("conv2d_nhwc", "f32", f"{args.n}x{args.h}x{args.w}x{args.c}->{args.oc}", "cpu"),
         compiler_path=CompilerPath.GRAPH_IR_ONLY if info.get("available") else CompilerPath.REFERENCE,
-        runtime_status=RuntimeStatus.SKIPPED if info.get("available") else RuntimeStatus.EXECUTABLE,
+        runtime_status=runtime_status,
         artifact_levels=ArtifactLevels(graph=bool(info.get("graph_ir")), artifact_hash=info.get("artifact_hash")),
         correctness=corr,
         profile=Profile(cpu_wall_ms=last_ms),
@@ -90,8 +93,9 @@ def main(argv=None) -> int:
             "max_abs_err": corr.max_error,
             "compiler_lowering": str(info.get("lowering", "")),
         },
-        reason="Tile/Target runtime path for Conv2D is not executable yet" if info.get("available") else "tessera import failed",
+        reason="compiler artifact captured; benchmark timing uses NumPy reference" if info.get("available") else "tessera import failed",
     )
+    row = replace(row, telemetry=telemetry_for_row(row))
     print(json.dumps(row.flat_dict()))
     return 0
 

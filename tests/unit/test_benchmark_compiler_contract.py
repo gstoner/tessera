@@ -25,12 +25,12 @@ def test_benchmark_row_serializes_standard_statuses():
     row = BenchmarkRow(
         operator=BenchmarkOperator("gemm", "f32", "16x16x16"),
         compiler_path=CompilerPath.GRAPH_IR_ONLY,
-        runtime_status=RuntimeStatus.SKIPPED,
+        runtime_status=RuntimeStatus.ARTIFACT_ONLY,
         artifact_levels=ArtifactLevels(graph=True, artifact_hash="abc"),
     )
     data = row.to_dict()
     assert data["compiler_path"] == "graph_ir_only"
-    assert data["runtime_status"] == "skipped"
+    assert data["runtime_status"] == "artifact_only"
     assert row.flat_dict()["artifact_graph"] is True
 
 
@@ -76,6 +76,28 @@ def test_superbench_gemm_module_emits_shared_row():
     assert row["operator"] == "gemm"
     assert row["compiler_path"] in {"tessera_jit_cpu", "reference"}
     assert row["runtime_status"] == "executable"
+    assert row["telemetry"]["schema"] == "tessera.telemetry.v1"
+    assert row["telemetry"]["op"] == "matmul"
+
+
+def test_superbench_compiler_smoke_emits_telemetry_summary(tmp_path):
+    cmd = [
+        sys.executable,
+        "benchmarks/Tessera_SuperBench/runner/bench_run.py",
+        "--config",
+        "benchmarks/Tessera_SuperBench/configs/compiler_smoke.yaml",
+        "--out",
+        str(tmp_path),
+    ]
+    subprocess.check_call(cmd)
+    results = json.loads((tmp_path / "results.json").read_text())
+    statuses = {row["bench_id"]: row.get("runtime_status") for row in results["rows"]}
+    assert statuses["kernel.gemm_tessera"] == "executable"
+    assert statuses["kernel.conv2d_nhwc_tessera"] == "artifact_only"
+    assert statuses["kernel.flashattn_tessera"] == "artifact_only"
+    assert statuses["distributed.all_reduce_tessera"] == "mock"
+    assert results["telemetry_summary"]["schema"] == "tessera.telemetry.v1"
+    assert results["telemetry_summary"]["event_count"] == 4
 
 
 def test_benchmark_suite_exports_unified_telemetry():

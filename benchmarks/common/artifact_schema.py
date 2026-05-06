@@ -6,6 +6,8 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
 
+from tessera.telemetry import make_event
+
 
 class CompilerPath(str, Enum):
     TESSERA_JIT_CPU = "tessera_jit_cpu"
@@ -18,6 +20,7 @@ class CompilerPath(str, Enum):
 
 class RuntimeStatus(str, Enum):
     EXECUTABLE = "executable"
+    ARTIFACT_ONLY = "artifact_only"
     SKIPPED = "skipped"
     UNSUPPORTED = "unsupported"
     MISSING_BACKEND = "missing_backend"
@@ -65,6 +68,7 @@ class BenchmarkRow:
     correctness: Correctness = field(default_factory=Correctness)
     profile: Profile = field(default_factory=Profile)
     metrics: dict[str, Any] = field(default_factory=dict)
+    telemetry: dict[str, Any] = field(default_factory=dict)
     reason: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -87,4 +91,67 @@ class BenchmarkRow:
         data.update({f"correctness_{k}": v for k, v in asdict(self.correctness).items()})
         data.update({f"profile_{k}": v for k, v in asdict(self.profile).items()})
         data.update(self.metrics)
+        if self.telemetry:
+            data["telemetry"] = dict(self.telemetry)
         return data
+
+
+def telemetry_for_row(
+    row: BenchmarkRow,
+    *,
+    name: str | None = None,
+    source: str = "tessera_superbench",
+    graph_hash: str | None = None,
+    schedule_hash: str | None = None,
+    kernel_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the shared Tessera telemetry event for a benchmark row."""
+
+    latency_ms = row.metrics.get("latency_ms") or row.profile.cpu_wall_ms or row.profile.kernel_elapsed_ms
+    throughput = row.metrics.get("throughput_flops")
+    tflops = float(throughput) / 1.0e12 if throughput is not None else None
+    bytes_per_s = row.metrics.get("bytes_per_s") or row.metrics.get("bandwidth_Bps")
+    bandwidth_gbps = float(bytes_per_s) / 1.0e9 if bytes_per_s is not None else None
+    return make_event(
+        name or row.operator.name,
+        source=source,
+        op=_telemetry_op(row.operator.name),
+        shape=None,
+        dtype=row.operator.dtype,
+        arch=row.operator.target,
+        graph_hash=graph_hash or row.artifact_levels.artifact_hash,
+        schedule_hash=schedule_hash,
+        kernel_id=kernel_id or row.operator.name,
+        latency_ms=float(latency_ms) if latency_ms is not None else None,
+        tflops=tflops,
+        bandwidth_gbps=bandwidth_gbps,
+        memory_bytes=row.profile.memory_bytes,
+        status=_telemetry_status(row.runtime_status),
+        metadata={
+            "compiler_path": row.compiler_path.value,
+            "runtime_status": row.runtime_status.value,
+            "reason": row.reason,
+            "shape_signature": row.operator.shape,
+            **dict(metadata or {}),
+        },
+    )
+
+
+def _telemetry_op(name: str) -> str:
+    return {
+        "gemm": "matmul",
+        "conv2d_nhwc": "conv2d",
+        "flash_attn": "flash_attention",
+        "all_reduce": "all_reduce",
+    }.get(name, name)
+
+
+def _telemetry_status(status: RuntimeStatus) -> str:
+    if status == RuntimeStatus.EXECUTABLE:
+        return "ok"
+    if status == RuntimeStatus.ARTIFACT_ONLY:
+        return "unmeasured"
+    if status == RuntimeStatus.MISSING_BACKEND:
+        return "backend_unavailable"
+    return status.value

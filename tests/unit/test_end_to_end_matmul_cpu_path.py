@@ -225,3 +225,112 @@ def test_developer_frontend_docs_link_first_end_to_end_path():
     assert "eager Python fallback" in text
     assert "docs/guides/Tessera_Developer_Frontend_End_To_End.md" in readme
     assert ".lowering_artifacts()" in api
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Item #1 (P0): hard-fail when @jit(target=...) is requested but source is
+# uninspectable. Without source no Graph IR is emitted and __call__ would
+# silently fall back to eager Python — looking like the target is active while
+# actually returning numpy semantics.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_jit_target_apple_cpu_without_source_raises_jit_error():
+    ns = {}
+    exec(
+        "def dynamic_mm(A, B):\n"
+        "    return ts.ops.matmul(A, B)\n",
+        {"ts": ts},
+        ns,
+    )
+
+    with pytest.raises(ts.TesseraJitError) as excinfo:
+        ts.jit(ns["dynamic_mm"], target="apple_cpu")
+
+    msg = str(excinfo.value)
+    assert "apple_cpu" in msg
+    assert "dynamic_mm" in msg
+    # The error must point the developer at the escape hatch.
+    assert "source=" in msg or "source_path=" in msg
+    assert "silently fall back" in msg.lower() or "silently" in msg.lower()
+
+
+def test_jit_target_apple_gpu_without_source_raises_jit_error():
+    ns = {}
+    exec(
+        "def dynamic_attn(q, k, v):\n"
+        "    return ts.ops.flash_attn(q, k, v)\n",
+        {"ts": ts},
+        ns,
+    )
+
+    with pytest.raises(ts.TesseraJitError, match="apple_gpu"):
+        ts.jit(ns["dynamic_attn"], target="apple_gpu")
+
+
+def test_jit_target_rocm_without_source_raises_jit_error():
+    ns = {}
+    exec(
+        "def dynamic_mm(A, B):\n"
+        "    return ts.ops.matmul(A, B)\n",
+        {"ts": ts},
+        ns,
+    )
+
+    with pytest.raises(ts.TesseraJitError, match="rocm"):
+        ts.jit(ns["dynamic_mm"], target="rocm")
+
+
+def test_jit_target_apple_cpu_with_explicit_source_compiles():
+    # Counterpart to the failure above — providing source= unblocks the
+    # native target path.
+    source = (
+        "def dynamic_mm(A, B):\n"
+        "    return ts.ops.matmul(A, B)\n"
+    )
+    ns = {}
+    exec(source, {"ts": ts}, ns)
+
+    mm = ts.jit(ns["dynamic_mm"], target="apple_cpu", source=source)
+
+    assert mm.uses_compiled_path is True
+    assert mm.runtime_artifact().metadata["compiler_path"] == "apple_cpu_accelerate"
+
+    A = np.eye(3, dtype=np.float32)
+    B = np.ones((3, 4), dtype=np.float32)
+    np.testing.assert_allclose(mm(A, B), A @ B)
+
+
+def test_jit_target_apple_cpu_with_source_path_compiles(tmp_path):
+    src = tmp_path / "_dyn_mm.py"
+    src.write_text(
+        "def dynamic_mm(A, B):\n"
+        "    return ts.ops.matmul(A, B)\n",
+        encoding="utf-8",
+    )
+    ns = {}
+    exec(src.read_text(encoding="utf-8"), {"ts": ts}, ns)
+
+    mm = ts.jit(ns["dynamic_mm"], target="apple_cpu", source_path=str(src))
+
+    assert mm.uses_compiled_path is True
+    assert mm.runtime_artifact().metadata["compiler_path"] == "apple_cpu_accelerate"
+
+
+def test_jit_target_none_without_source_still_falls_back_softly():
+    # target=None retains the existing soft-warning + eager Python behavior so
+    # REPL/heredoc exploration of the default path stays ergonomic.
+    ns = {}
+    exec(
+        "def dynamic_mm(A, B):\n"
+        "    return ts.ops.matmul(A, B)\n",
+        {"ts": ts},
+        ns,
+    )
+    mm = ts.jit(ns["dynamic_mm"])  # no target
+
+    assert not mm.uses_compiled_path
+    assert "JIT_SOURCE_UNAVAILABLE" in mm.explain_lowering()
+    A = np.eye(2, dtype=np.float32)
+    B = np.ones((2, 2), dtype=np.float32)
+    np.testing.assert_allclose(mm(A, B), A @ B)  # eager numpy

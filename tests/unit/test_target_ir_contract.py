@@ -142,7 +142,7 @@ def test_kv_cache_target_lowering_uses_stable_unsupported_diagnostics():
     assert "KV-cache target lowering is not implemented" in plan.target_ir
 
 
-def test_target_artifact_does_not_execute_native_backend():
+def test_apple_cpu_matmul_target_executes_accelerate_backend():
     @ts.jit(target="apple_cpu")
     def mm(A, B):
         return ts.ops.matmul(A, B)
@@ -151,7 +151,10 @@ def test_target_artifact_does_not_execute_native_backend():
     B = np.ones((2, 2), dtype=np.float32)
 
     np.testing.assert_allclose(mm(A, B), A @ B)
-    assert not mm.uses_compiled_path
+    assert mm.uses_compiled_path
+    artifact = mm.runtime_artifact()
+    assert artifact.metadata["compiler_path"] == "apple_cpu_accelerate"
+    assert artifact.metadata["runtime_status"] == "ready"
 
 
 def test_static_target_contract_files_define_backend_spine():

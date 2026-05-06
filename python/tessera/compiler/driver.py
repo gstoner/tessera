@@ -250,7 +250,9 @@ def compile_graph_module(
     target_artifact = LoweringArtifact("target", cpu_plan.target_ir) if cpu_plan is not None else None
     backend_artifact = _backend_artifact_for(target_kind, cpu_plan)
 
-    executable = cpu_plan is not None and target_kind == "cpu"
+    executable = cpu_plan is not None and (
+        target_kind == "cpu" or _is_apple_cpu_accelerate_executable(cpu_plan)
+    )
     if executable:
         runtime_status = "ready"
     elif cpu_plan is not None:
@@ -283,6 +285,30 @@ def _execution_mode_for(target_kind: str, has_plan: bool) -> str:
     if target_kind == "cpu" and has_plan:
         return "jit_cpu_numpy"
     return "artifact_only"
+
+
+_APPLE_CPU_ACCELERATE_OPS: frozenset[str] = frozenset({
+    "tessera.matmul",
+    "tessera.gemm",
+})
+
+
+def is_apple_cpu_accelerate_op(op_name: str) -> bool:
+    """Return True when an op is dispatched via Accelerate's CBLAS path."""
+
+    return op_name in _APPLE_CPU_ACCELERATE_OPS
+
+
+def _is_apple_cpu_accelerate_executable(cpu_plan: CPUPlan | None) -> bool:
+    """An apple_cpu plan is executable as long as at least one op exists; the
+    runtime dispatches matmul/gemm via Accelerate (cblas_sgemm) and falls
+    through to the numpy reference path for every other supported op. Multi-op
+    programs are now first-class — chain order is preserved by `cpu_plan.ops`.
+    """
+
+    if cpu_plan is None or cpu_plan.target_kind != "apple_cpu":
+        return False
+    return len(cpu_plan.ops) > 0
 
 
 def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> LoweringArtifact | None:

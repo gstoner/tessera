@@ -257,6 +257,23 @@ class JitFn:
         """
         if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
             return self.cpu_plan.execute(args, kwargs, self.arg_names)
+        if (
+            self.cpu_plan is not None
+            and self.cpu_plan.target_kind == "apple_cpu"
+            and self.compile_bundle is not None
+            and self.compile_bundle.executable
+        ):
+            from tessera.runtime import launch
+
+            if kwargs and args:
+                launch_args = {name: value for name, value in zip(self.arg_names, args)}
+                launch_args.update(kwargs)
+            else:
+                launch_args = kwargs if kwargs else args
+            result = launch(self.runtime_artifact(), args=launch_args)
+            if result.get("ok") is True:
+                return result["output"]
+            raise TesseraJitError(str(result.get("reason", "apple_cpu launch failed")))
         return self._fn(*args, **kwargs)
 
     def ir_text(self) -> str:
@@ -296,7 +313,9 @@ class JitFn:
 
     @property
     def uses_compiled_path(self) -> bool:
-        return self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu"
+        return self.compile_bundle.executable if self.compile_bundle is not None else (
+            self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu"
+        )
 
     @property
     def has_target_artifacts(self) -> bool:
@@ -356,6 +375,76 @@ class JitFn:
                     }
                     for op in self.cpu_plan.ops
                 ],
+            })
+        elif (
+            self.cpu_plan is not None
+            and self.cpu_plan.target_kind == "apple_cpu"
+            and self.compile_bundle is not None
+            and self.compile_bundle.executable
+        ):
+            ops_payload = [
+                {
+                    "op_name": op.op_name,
+                    "result": op.result,
+                    "operands": [operand[1:] if operand.startswith("%") else operand for operand in op.operands],
+                    "kwargs": dict(op.kwargs),
+                }
+                for op in self.cpu_plan.ops
+            ]
+            accelerate_ops = [
+                op["op_name"] for op in ops_payload
+                if op["op_name"] in {"tessera.matmul", "tessera.gemm"}
+            ]
+            single_matmul = (
+                len(self.cpu_plan.ops) == 1
+                and self.cpu_plan.ops[0].op_name in {"tessera.matmul", "tessera.gemm"}
+            )
+            # Single matmul keeps the strict f32/rank-2 descriptors and the
+            # original guard shape (preserves the Phase 8.2 metadata contract
+            # that downstream tooling and tests rely on).
+            # Multi-op programs report a relaxed schema: descriptors only
+            # carry names because intermediate values can be any dtype/rank
+            # (e.g. theta vectors, softmax results), and `accelerate_ops`
+            # surfaces which ops will dispatch through Accelerate at launch.
+            if single_matmul:
+                input_descriptors = [
+                    {"name": name, "dtype": "f32", "rank": 2}
+                    for name in self.arg_names
+                ]
+                output_descriptor = {
+                    "name": self.cpu_plan.output_name,
+                    "dtype": "f32",
+                    "rank": 2,
+                }
+                guards = {
+                    "dtype": "float32",
+                    "rank": 2,
+                    "static_shape_at_launch": True,
+                    "op_count": 1,
+                }
+            else:
+                input_descriptors = [{"name": name} for name in self.arg_names]
+                output_descriptor = {"name": self.cpu_plan.output_name}
+                guards = {
+                    "op_count": len(self.cpu_plan.ops),
+                    "accelerate_op_count": len(accelerate_ops),
+                    "accelerate_dtype": "float32",
+                    "accelerate_rank": 2,
+                    "fallback_path": "jit_cpu_numpy",
+                    "static_shape_at_launch": True,
+                }
+            metadata.update({
+                "executable": True,
+                "compiler_path": "apple_cpu_accelerate",
+                "runtime_status": "ready",
+                "arg_names": list(self.arg_names),
+                "output_name": self.cpu_plan.output_name,
+                "input_descriptors": input_descriptors,
+                "output_descriptor": output_descriptor,
+                "cpu_tile": list(self.cpu_plan.tile),
+                "ops": ops_payload,
+                "accelerate_ops": accelerate_ops,
+                "guards": guards,
             })
         elif self.cpu_plan is not None:
             metadata.update({
@@ -459,6 +548,28 @@ def jit(
             source=source,
             source_path=source_path,
         )
+
+        # ── Step 0: refuse to silently fall back when a target was requested ─
+        # When @jit(target=...) is set explicitly, the developer expects the
+        # named backend to drive execution. Without function source we cannot
+        # emit Graph IR, the `compile_bundle` would be empty, and __call__
+        # would silently route to plain Python. That looks like the target
+        # path is running but produces eager numpy semantics — the worst kind
+        # of bug to chase. Fail at decoration time instead.
+        #
+        # target=None keeps the existing soft-warning behavior so REPL/heredoc
+        # exploration of the default eager path is still ergonomic.
+        if target is not None and source_text is None:
+            raise TesseraJitError(
+                f"@jit(target={target!r}) was requested for {fn.__name__!r} "
+                f"but its source could not be inspected (source_origin="
+                f"{source_origin!r}). Without source, no Graph IR is emitted "
+                f"and the call would silently fall back to eager Python — "
+                f"giving the appearance of a compiled run while actually "
+                f"executing pure Python. Define the function in a file, or "
+                f"pass @jit(target=..., source=<source string>) or "
+                f"@jit(target=..., source_path=<path>) to enable AST lowering."
+            )
 
         # ── Step 1: collect constraints from the function body ──────────────
         solver = ConstraintSolver()

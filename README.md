@@ -164,6 +164,12 @@ cmake --build build --parallel
 
 # MLIR lit tests require a built tessera-opt on PATH
 python -m lit tests/tessera-ir/ -v
+
+# If the Python lit package is not installed, run a focused Apple contract
+# directly with the LLVM FileCheck installed alongside Homebrew LLVM:
+build/tools/tessera-opt/tessera-opt tests/tessera-ir/phase8/apple_gpu_lowering.mlir \
+  -tessera-lower-to-apple_gpu --allow-unregistered-dialect \
+  | /opt/homebrew/opt/llvm@21/bin/FileCheck tests/tessera-ir/phase8/apple_gpu_lowering.mlir
 ```
 
 Documentation checks:

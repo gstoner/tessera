@@ -21,19 +21,66 @@ def test_apple_cpu_target_reports_accelerate_execution_mode_and_runtime_pipeline
     def mm(A, B):
         return ts.ops.matmul(A, B)
 
+    A = np.eye(2, dtype=np.float32)
+    B = np.ones((2, 2), dtype=np.float32)
     artifact = mm.runtime_artifact()
 
     assert artifact.metadata["execution_mode"] == "cpu_accelerate"
-    assert artifact.metadata["runtime_status"] == "artifact_only"
-    assert artifact.metadata["compiler_path"] == "target_ir_artifact"
+    assert artifact.metadata["runtime_status"] == "ready"
+    assert artifact.metadata["compiler_path"] == "apple_cpu_accelerate"
+    assert artifact.metadata["executable"] is True
+    assert artifact.metadata["guards"] == {
+        "dtype": "float32",
+        "rank": 2,
+        "static_shape_at_launch": True,
+        "op_count": 1,
+    }
     assert artifact.metadata["artifact_hashes"]["backend"]
     assert 'execution_mode = "cpu_accelerate"' in mm.target_ir
     assert "tessera-lower-to-apple_cpu-runtime" in mm.compile_bundle.artifact("backend").text
 
-    result = launch(artifact, args=(np.eye(2, dtype=np.float32), np.ones((2, 2), dtype=np.float32)))
-    assert result["ok"] is False
-    assert result["runtime_status"] in {"missing_backend", "unimplemented"}
-    assert result["compiler_path"] == "target_ir_artifact"
+    result = launch(artifact, args=(A, B))
+    assert result["ok"] is True
+    assert result["runtime_status"] == "success"
+    assert result["compiler_path"] == "apple_cpu_accelerate"
+    np.testing.assert_allclose(result["output"], A @ B)
+    np.testing.assert_allclose(mm(A, B), A @ B)
+
+
+def test_apple_cpu_accelerate_guards_reject_non_f32_or_non_rank2_inputs():
+    @ts.jit(target="apple_cpu")
+    def mm(A, B):
+        return ts.ops.matmul(A, B)
+
+    bad_dtype = launch(mm.runtime_artifact(), args=(np.eye(2, dtype=np.float64), np.eye(2, dtype=np.float64)))
+    assert bad_dtype["ok"] is False
+    assert bad_dtype["runtime_status"] == "invalid_artifact"
+    assert "float32" in bad_dtype["reason"]
+
+    bad_rank = launch(mm.runtime_artifact(), args=(np.ones((1, 2, 2), dtype=np.float32), np.eye(2, dtype=np.float32)))
+    assert bad_rank["ok"] is False
+    assert bad_rank["runtime_status"] == "invalid_artifact"
+    assert "rank-2" in bad_rank["reason"]
+
+
+def test_apple_cpu_tiny_decode_stays_artifact_only_until_more_ops_are_native():
+    @ts.jit(target="apple_cpu")
+    def tiny_decode_cpu_artifact(x, wq, wk, wv, wo, theta):
+        q = ts.ops.rope(ts.ops.matmul(x, wq), theta)
+        k = ts.ops.rope(ts.ops.matmul(x, wk), theta)
+        v = ts.ops.matmul(x, wv)
+        scores = ts.ops.matmul(q, ts.ops.transpose(k))
+        probs = ts.ops.softmax(scores)
+        ctx = ts.ops.matmul(probs, v)
+        return ts.ops.matmul(ctx, wo)
+
+    artifact = tiny_decode_cpu_artifact.runtime_artifact()
+
+    assert artifact.metadata["execution_mode"] == "cpu_accelerate"
+    assert artifact.metadata["runtime_status"] == "artifact_only"
+    assert artifact.metadata["compiler_path"] == "target_ir_artifact"
+    assert artifact.metadata["executable"] is False
+    assert not tiny_decode_cpu_artifact.uses_compiled_path
 
 
 def test_apple_gpu_tiny_decode_artifact_covers_rope_softmax_matmul_and_kv_cache():
@@ -63,6 +110,11 @@ def test_apple_gpu_tiny_decode_artifact_covers_rope_softmax_matmul_and_kv_cache(
     assert 'framework = "MPSGraph"' in target_ir
     assert 'execution_mode = "metal_artifact"' in target_ir
     assert not tiny_decode.uses_compiled_path
+
+    result = launch(artifact, args={})
+    assert result["ok"] is False
+    assert result["runtime_status"] in {"missing_backend", "unimplemented"}
+    assert result["compiler_path"] == "target_ir_artifact"
 
 
 def test_rope_reference_path_executes_tiny_decode_proxy_on_cpu():

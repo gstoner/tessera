@@ -27,7 +27,10 @@ import ctypes.util
 import hashlib
 import json
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from enum import IntEnum
@@ -174,6 +177,7 @@ class RuntimeArtifact:
 
 
 _last_profile = RuntimeProfile()
+_apple_cpu_runtime: ctypes.CDLL | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -1008,6 +1012,58 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
     metadata = artifact.metadata or {}
     target = str(metadata.get("target", "cpu"))
     cap = backend_capabilities(target)
+    if (
+        target == "apple_cpu"
+        and metadata.get("executable") is True
+        and metadata.get("compiler_path") == "apple_cpu_accelerate"
+    ):
+        try:
+            output = _execute_apple_cpu_accelerate_artifact(artifact, args)
+        except Exception as exc:
+            _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
+            telemetry = make_event(
+                "runtime.launch",
+                source="runtime",
+                op="artifact_launch",
+                arch="apple_cpu",
+                kernel_id=str(metadata.get("kernel_id", "apple_cpu_accelerate")),
+                graph_hash=artifact.artifact_hash,
+                status="invalid_artifact",
+                metadata={"compiler_path": "apple_cpu_accelerate", "reason": str(exc)},
+            )
+            return {
+                "ok": False,
+                "runtime_status": "invalid_artifact",
+                "compiler_path": "apple_cpu_accelerate",
+                "artifact_hash": artifact.artifact_hash,
+                "reason": str(exc),
+                "telemetry": telemetry,
+            }
+        elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000.0
+        _last_profile = RuntimeProfile(cpu_wall_ms=elapsed_ms, launch_overhead_ms=elapsed_ms)
+        telemetry = make_event(
+            "runtime.launch",
+            source="runtime",
+            op="artifact_launch",
+            arch="apple_cpu",
+            kernel_id=str(metadata.get("kernel_id", "apple_cpu_accelerate")),
+            graph_hash=artifact.artifact_hash,
+            latency_ms=elapsed_ms,
+            status="ok",
+            metadata={"compiler_path": "apple_cpu_accelerate", "execution_mode": "cpu_accelerate"},
+        )
+        return {
+            "ok": True,
+            "runtime_status": "success",
+            "compiler_path": "apple_cpu_accelerate",
+            "artifact_hash": artifact.artifact_hash,
+            "output": output,
+            "telemetry": telemetry,
+            "profile": {
+                "cpu_wall_ms": elapsed_ms,
+                "launch_overhead_ms": elapsed_ms,
+            },
+        }
     if target != "cpu":
         _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
         telemetry = make_event(
@@ -1178,6 +1234,159 @@ def _execute_jit_cpu_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
     if output_name not in values:
         raise ValueError(f"artifact did not produce output {output_name!r}")
     return values[output_name]
+
+
+_APPLE_CPU_ACCELERATE_OPS = frozenset({"tessera.matmul", "tessera.gemm"})
+
+
+def _execute_apple_cpu_accelerate_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Run an apple_cpu plan: matmul/gemm via Accelerate (cblas_sgemm), every
+    other supported op via the numpy reference path used by the default `cpu`
+    target. Multi-op programs are first-class — ops execute in the order
+    captured by `metadata["ops"]` and intermediate values stay in the same
+    `values` dict the cpu reference path uses.
+    """
+
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    output_name = metadata.get("output_name")
+    ops = list(metadata.get("ops") or [])
+    if not ops:
+        raise ValueError("apple_cpu_accelerate artifact has no ops")
+
+    values = _bind_launch_args(args, arg_names)
+    for op in ops:
+        op_name = str(op.get("op_name", ""))
+        result = op.get("result")
+        operand_names = [str(name) for name in op.get("operands", [])]
+        kwargs = dict(op.get("kwargs") or {})
+        missing = [name for name in operand_names if name not in values]
+        if missing:
+            raise ValueError(f"artifact requires operand(s): {', '.join(missing)}")
+        if not result:
+            raise ValueError(f"artifact op {op_name!r} has no result")
+
+        if op_name in _APPLE_CPU_ACCELERATE_OPS:
+            values[str(result)] = _apple_cpu_dispatch_matmul(
+                op_name, [_as_numpy(values[name]) for name in operand_names], np
+            )
+        else:
+            # Fall through to the numpy CPU reference path. This keeps the
+            # apple_cpu target strictly more capable than the default `cpu`
+            # target: same op coverage, plus Accelerate dispatch for matmul.
+            operands = [_as_numpy(values[name]) for name in operand_names]
+            values[str(result)] = _execute_runtime_cpu_op(op_name, operands, kwargs, np)
+
+    if output_name not in values:
+        raise ValueError(f"artifact did not produce output {output_name!r}")
+    return values[output_name]
+
+
+def _apple_cpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> Any:
+    """Dispatch a single matmul/gemm op through Accelerate's cblas_sgemm.
+
+    Falls back to numpy.matmul if the input shape/dtype combination is outside
+    the Phase 8.2 fast-path (f32, rank-2). The fallback keeps multi-op programs
+    that mix shapes/dtypes runnable end-to-end while only the eligible matmuls
+    pay the Accelerate dispatch cost.
+    """
+
+    if len(operands) != 2:
+        raise ValueError(f"{op_name!r} requires exactly two operands")
+    a = np.asarray(operands[0])
+    b = np.asarray(operands[1])
+
+    fast_path = (
+        a.dtype == np.float32
+        and b.dtype == np.float32
+        and a.ndim == 2
+        and b.ndim == 2
+    )
+    if not fast_path:
+        # Non-f32 / non-rank-2 matmul falls through to numpy. Phase 8.3 will
+        # handle bf16/fp16 via BNNS and rank-3 via cblas_sgemm_batch.
+        return np.matmul(a, b)
+    if a.shape[1] != b.shape[0]:
+        raise ValueError(f"matmul shape mismatch: {a.shape} x {b.shape}")
+    if not a.flags.c_contiguous:
+        a = np.ascontiguousarray(a, dtype=np.float32)
+    if not b.flags.c_contiguous:
+        b = np.ascontiguousarray(b, dtype=np.float32)
+
+    out = np.zeros((a.shape[0], b.shape[1]), dtype=np.float32)
+    gemm = _apple_cpu_gemm_f32()
+    gemm(
+        a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        ctypes.c_int32(a.shape[0]),
+        ctypes.c_int32(b.shape[1]),
+        ctypes.c_int32(a.shape[1]),
+    )
+    return out
+
+
+def _apple_cpu_gemm_f32() -> Any:
+    runtime = _load_apple_cpu_runtime()
+    gemm = runtime.tessera_apple_cpu_gemm_f32
+    gemm.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,
+        ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    gemm.restype = None
+    return gemm
+
+
+def _load_apple_cpu_runtime() -> ctypes.CDLL:
+    global _apple_cpu_runtime
+    if _apple_cpu_runtime is not None:
+        return _apple_cpu_runtime
+    candidates = []
+    env = os.environ.get("TESSERA_APPLE_CPU_RUNTIME_LIB")
+    if env:
+        candidates.append(Path(env))
+    root = Path(__file__).resolve().parents[2]
+    candidates.extend([
+        root / "build/src/compiler/codegen/Tessera_Apple_Backend/libTesseraAppleRuntime.dylib",
+        root / "build/src/compiler/codegen/Tessera_Apple_Backend/libTesseraAppleRuntime.so",
+    ])
+    for candidate in candidates:
+        if candidate.exists():
+            _apple_cpu_runtime = ctypes.CDLL(str(candidate))
+            return _apple_cpu_runtime
+
+    built = _build_apple_cpu_runtime_shared(root)
+    _apple_cpu_runtime = ctypes.CDLL(str(built))
+    return _apple_cpu_runtime
+
+
+def _build_apple_cpu_runtime_shared(root: Path) -> Path:
+    source = root / "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_cpu_runtime.cpp"
+    if not source.exists():
+        raise FileNotFoundError(f"Apple CPU runtime source not found: {source}")
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        raise RuntimeError(
+            "Apple CPU runtime library is not available; set "
+            "TESSERA_APPLE_CPU_RUNTIME_LIB or install a C++ compiler"
+        )
+    out_dir = Path(tempfile.gettempdir()) / "tessera_apple_cpu_runtime"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    suffix = ".dylib" if sys.platform == "darwin" else ".so"
+    out = out_dir / f"libtessera_apple_cpu_runtime{suffix}"
+    if out.exists() and out.stat().st_mtime >= source.stat().st_mtime:
+        return out
+    cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(out)]
+    if sys.platform == "darwin":
+        cmd.extend(["-framework", "Accelerate"])
+    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    return out
 
 
 def _bind_launch_args(args: Any, arg_names: list[str]) -> dict[str, Any]:

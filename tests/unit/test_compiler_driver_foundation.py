@@ -60,6 +60,9 @@ def test_jit_routes_artifacts_and_trace_through_compile_bundle():
     assert metadata["pipeline_name"] == PIPELINE_BY_TARGET["cpu"]
     assert metadata["artifact_hashes"]["graph"]
     assert metadata["artifact_hashes"]["target"]
+    assert metadata["profiling"]["graph_hash"] == mm.compile_bundle.request.graph_hash
+    assert metadata["profiling"]["schedule_hash"] == metadata["artifact_hashes"]["schedule"]
+    assert metadata["profiling"]["target_hash"] == metadata["artifact_hashes"]["target"]
     assert metadata["runtime_status"] == "ready"
     assert metadata["executable"] is True
     assert metadata["compiler_path"] == "jit_cpu_numpy"

@@ -63,12 +63,15 @@ The CLI surface mirrors the runtime profiler:
 ```bash
 tessera-prof my_model.py --metrics=flops,bandwidth,occupancy
 tessera-prof my_model.py --trace=trace.json
+tessera-prof my_model.py --emit=json --compile-target=sm90
 ```
 
 The current `tessera-prof` implementation records a lightweight inspection
-event and can emit a Chrome Trace Event JSON file. As device execution is wired
-through the runtime, this command should become the stable front door for kernel
-latency, FLOPs, bandwidth, occupancy, memory, collective, and launch metrics.
+event labeled `source_inspection`, can emit report, JSON, or Chrome Trace Event
+JSON, and can correlate autotune schedule artifacts with profiler telemetry. As
+device execution is wired through the runtime, this command should become the
+stable front door for kernel latency, FLOPs, bandwidth, occupancy, memory,
+collective, and launch metrics.
 
 Profiler events carry:
 
@@ -208,6 +211,12 @@ cfg = autotune(
 )
 ```
 
+The foundation implementation accepts `method="on_device"` but marks the result
+as `status="unmeasured"` with a reason explaining that runtime device timers are
+not wired yet. It still emits the same schedule artifact and telemetry schema as
+synthetic tuning so downstream tooling can be implemented once and upgraded to
+real timing later.
+
 Required behavior for the production implementation:
 
 - Compile candidates with fixed graph/schedule hashes.
@@ -258,6 +267,14 @@ Recommended counter groups:
 | Tile IR | Verify target legality and expose resource estimates |
 | Runtime Profiler | Measure latency, counters, bytes, and trace events |
 | Autotuner | Search legal candidates, persist measurements, emit schedule artifacts |
+
+Current compiler hooks include:
+
+- `schedule.knob` metadata for GEMM tile sizes, warps, and stages.
+- `schedule.artifact` metadata with movement, numeric policy, and roofline cost model.
+- Tile IR resource estimates for MMA, async copy, queue/barrier, and softmax-style reductions.
+- Target IR launch metadata and target feature metadata for CPU/x86, Apple, NVIDIA, and ROCm artifacts.
+- Compile-bundle profiling correlation fields for graph, schedule, tile, and target hashes.
 | Learned Surrogate | Train on autotuner measurements and predict latency/energy/memory |
 
 Schedule artifacts should contain:

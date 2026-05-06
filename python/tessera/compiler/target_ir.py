@@ -223,15 +223,15 @@ def lower_tile_to_target_ir(tile_module: TileIRModule, *, target_kind: str) -> T
         raise ValueError(f"target_ir does not support target {target_kind!r}")
     attrs = {"tessera.ir.level": "target", "target": target_kind}
     if target_kind == CPU_TARGET:
-        attrs.update({"arch": "x86_64", "execution_mode": "numpy"})
+        attrs.update({"arch": "x86_64", "execution_mode": "numpy", "target_features": {"family": "cpu", "wall_clock": True, "device_timers": False}})
     elif target_kind in NVIDIA_TARGETS:
-        attrs["arch"] = _nvidia_arch(target_kind)
+        attrs.update({"arch": _nvidia_arch(target_kind), "target_features": {"family": "nvidia", "tensor_cores": True, "device_timers": False}})
     elif target_kind == ROCM_TARGET:
-        attrs["arch"] = "gfx90a"
+        attrs.update({"arch": "gfx90a", "target_features": {"family": "rocm", "mfma": True, "device_timers": False}})
     elif target_kind == APPLE_CPU_TARGET:
-        attrs.update({"arch": "arm64-apple-silicon", "execution_mode": "cpu_accelerate"})
+        attrs.update({"arch": "arm64-apple-silicon", "execution_mode": "cpu_accelerate", "target_features": {"family": "apple", "accelerate": True, "device_timers": False}})
     else:
-        attrs.update({"arch": "apple-metal", "execution_mode": "metal_artifact"})
+        attrs.update({"arch": "apple-metal", "execution_mode": "metal_artifact", "target_features": {"family": "apple", "metal": True, "device_timers": False}})
     target_module = TargetIRModule(attrs=attrs)
     for tile_fn in tile_module.functions:
         target_module.functions.append(TargetFunction(
@@ -425,10 +425,27 @@ def _base_attrs(op: TileOp, *, target: Optional[str] = None) -> dict[str, Any]:
         "source": op.attrs.get("source", _source_from_tile_op(op)),
         "result": op.attrs.get("result", "value"),
         "ordinal": int(op.attrs.get("ordinal", 0)),
+        "launch": _launch_metadata(op),
     }
+    if "resource" in op.attrs:
+        attrs["resource"] = op.attrs["resource"]
     if target is not None:
         attrs["target"] = target
     return attrs
+
+
+def _launch_metadata(op: TileOp) -> dict[str, Any]:
+    source = str(op.attrs.get("source", _source_from_tile_op(op)))
+    if op.op_name == "tile.mma" or source in {"tessera.matmul", "tessera.gemm"}:
+        return {
+            "kernel_id": "matmul",
+            "grid": "mn_tiles",
+            "block": "warpgroup",
+            "measurement": "wall_clock_pending",
+        }
+    if source in {"tessera.softmax", "tessera.softmax_safe"}:
+        return {"kernel_id": "softmax", "grid": "rows", "block": "256", "measurement": "wall_clock_pending"}
+    return {"kernel_id": source.removeprefix("tessera.").replace(".", "_"), "grid": "elements", "measurement": "wall_clock_pending"}
 
 
 def _source_from_tile_op(op: TileOp) -> str:

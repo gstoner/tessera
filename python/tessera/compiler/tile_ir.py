@@ -258,14 +258,22 @@ def _tile_compute_op(op: ScheduleOp) -> TileOp:
         tile_name = "tile.conv2d"
     else:
         tile_name = "tile.generic"
-    return TileOp(tile_name, {**dict(op.attrs), "lowering": _lowering_kind(source), "vectorize": True})
+    attrs = {**dict(op.attrs), "lowering": _lowering_kind(source), "vectorize": True}
+    if tile_name == "tile.mma":
+        attrs.update(_mma_resource_estimate(attrs))
+    return TileOp(tile_name, attrs)
 
 
 def _elementwise_op(op: ScheduleOp) -> TileOp:
     source = str(op.attrs.get("source", ""))
     bare = source.removeprefix("tessera.")
     tile_name = "tile.rope" if source == "tessera.rope" else f"tile.{bare or 'elementwise'}"
-    attrs = {**dict(op.attrs), "lowering": _lowering_kind(source), "vectorize": op.attrs.get("vectorize", True)}
+    attrs = {
+        **dict(op.attrs),
+        "lowering": _lowering_kind(source),
+        "vectorize": op.attrs.get("vectorize", True),
+        "resource": _elementwise_resource_estimate(source),
+    }
     ops = [TileOp(tile_name, attrs)]
     if source == "tessera.rope":
         ops.append(TileOp("tile.rotary_pair", {**dict(op.attrs), "vector": 2}))
@@ -277,13 +285,40 @@ def _elementwise_op(op: ScheduleOp) -> TileOp:
 
 
 def _copy_attrs(op: ScheduleOp) -> dict[str, Any]:
+    vector = int(op.attrs.get("vector", 16))
     return {
         "source": op.attrs.get("source", "schedule.prefetch"),
         "result": op.attrs.get("result", "prefetch"),
         "ordinal": op.attrs.get("ordinal", 0),
         "stage": int(op.attrs.get("stage", 0)),
-        "vector": int(op.attrs.get("vector", 16)),
+        "vector": vector,
+        "bytes": int(op.attrs.get("bytes", vector * 4)),
+        "resource": {"async_copy_bytes": int(op.attrs.get("bytes", vector * 4)), "barrier_count": 1},
     }
+
+
+def _mma_resource_estimate(attrs: dict[str, Any]) -> dict[str, Any]:
+    tile_m = int(attrs.get("tile_m", 128))
+    tile_n = int(attrs.get("tile_n", 128))
+    tile_k = int(attrs.get("tile_k", 64))
+    num_stages = int(attrs.get("num_stages", 2))
+    smem = 2 * (tile_m * tile_k + tile_k * tile_n) * num_stages
+    registers = max(32, (tile_m * tile_n) // 256)
+    return {
+        "resource": {
+            "shared_memory_bytes": smem,
+            "register_estimate": registers,
+            "async_copy_bytes": int(attrs.get("bytes_moved", 0)),
+            "queue_depth": num_stages,
+            "barrier_count": num_stages,
+        }
+    }
+
+
+def _elementwise_resource_estimate(source: str) -> dict[str, Any]:
+    if source in {"tessera.softmax", "tessera.softmax_safe"}:
+        return {"shared_memory_bytes": 1024, "register_estimate": 24, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 1}
+    return {"shared_memory_bytes": 0, "register_estimate": 16, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
 
 
 def _lowering_kind(op_name: str) -> str:

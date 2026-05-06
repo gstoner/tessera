@@ -75,6 +75,33 @@ def test_tessera_prof_writes_chrome_trace(tmp_path, capsys):
     assert str(trace) in capsys.readouterr().out
 
 
+def test_tessera_prof_emits_json_and_autotune_artifact(tmp_path, capsys):
+    model = _write_model(tmp_path)
+    artifact = tmp_path / "schedule.json"
+    cache = tmp_path / "tuning.db"
+
+    assert prof.main([
+        str(model),
+        "--emit=json",
+        "--autotune",
+        "--autotune-method=on_device",
+        "--compile-target=sm90",
+        "--shapes=128,128,128",
+        "--max-trials=1",
+        "--cache",
+        str(cache),
+        "--artifact",
+        str(artifact),
+    ]) == 0
+
+    payload = json.loads(capsys.readouterr().out.split("\nartifact:")[0])
+    schedule = json.loads(artifact.read_text())
+    assert payload["mode"] == "source_inspection"
+    assert payload["schedule_artifact"]["measurements"]["status"] == "unmeasured"
+    assert schedule["target_features"]["family"] == "nvidia"
+    assert cache.exists()
+
+
 def test_tessera_runtime_smoke_writes_telemetry(tmp_path):
     output = tmp_path / "runtime.json"
 
@@ -90,6 +117,7 @@ def test_pyproject_registers_console_scripts():
     text = Path("pyproject.toml").read_text()
     assert 'tessera-mlir = "tessera.cli.mlir:main"' in text
     assert 'tessera-prof = "tessera.cli.prof:main"' in text
+    assert 'tessera-autotune = "tessera.cli.autotune:main"' in text
     assert 'tessera-runtime-smoke = "tessera.cli.runtime:main"' in text
 
 

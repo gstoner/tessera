@@ -8,7 +8,7 @@ import os
 import tempfile
 import pytest
 from tessera.compiler.autotune_v2 import (
-    BayesianAutotuner, GEMMWorkload, TuningConfig, TuningResult,
+    BayesianAutotuner, GEMMWorkload, LegalGEMMCandidateGenerator, TuningConfig, TuningResult,
 )
 
 
@@ -141,6 +141,22 @@ class TestBayesianAutotuner:
         for r in tuner.results:
             assert r.config.smem_bytes() <= 4096
 
+    def test_legal_candidate_generator_prunes_shape_and_smem(self):
+        gen = LegalGEMMCandidateGenerator(
+            GEMMWorkload(M=96, N=128, K=64),
+            tile_choices=(32, 64, 128),
+            warp_choices=(4,),
+            stage_choices=(1, 4),
+            smem_budget_bytes=8192,
+        )
+
+        candidates = gen.candidates()
+
+        assert candidates
+        assert all(96 % c.tile_m == 0 and 128 % c.tile_n == 0 and 64 % c.tile_k == 0 for c in candidates)
+        assert any(r.reason == "shape_not_divisible_by_tile" for r in gen.rejections)
+        assert any(r.reason == "shared_memory_budget_exceeded" for r in gen.rejections)
+
     def test_to_mlir_attrs_after_tune(self):
         tuner = self._tuner()
         tuner.tune(max_trials=5)
@@ -165,6 +181,16 @@ class TestBayesianAutotuner:
         assert artifact["hash"] == tuner.schedule_hash(arch="sm90")
         assert artifact["numeric_policy"]["accum"] == "f32"
         assert artifact["movement"]["overlap"] == "compute"
+        assert artifact["layout"] == "row_major"
+        assert artifact["measurements"]["status"] == "ok"
+        assert artifact["target_features"]["family"] == "nvidia"
+
+    def test_on_device_method_is_structured_unmeasured(self):
+        tuner = self._tuner()
+        result = tuner.tune(max_trials=1, method="on_device")
+
+        assert result.status == "unmeasured"
+        assert "device timers" in result.reason
 
     def test_schedule_artifact_mlir_op(self):
         tuner = self._tuner()

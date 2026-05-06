@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -55,6 +56,9 @@ def autotune(
     shapes: Sequence[int],
     dtype: str = "bf16",
     arch: str = "generic",
+    layout: str = "row_major",
+    numeric_policy: Mapping[str, object] | None = None,
+    movement: Mapping[str, object] | None = None,
     method: str = "roofline",
     max_trials: int = 20,
     cache_path: str | os.PathLike | None = None,
@@ -70,12 +74,12 @@ def autotune(
 
     if method not in ("roofline", "on_device", "grid", "bayesian"):
         raise ValueError("method must be roofline, on_device, grid, or bayesian")
-    workload = _workload_from(op, shapes, dtype)
+    workload = _workload_from(op, shapes, dtype, arch=arch, layout=layout, movement=movement)
     path = _cache_path(cache_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tuner = BayesianAutotuner(workload, peak_tflops=peak_tflops)
     tuner.warm_start_from_cache(str(path))
-    result = tuner.tune(max_trials=max_trials)
+    result = tuner.tune(max_trials=max_trials, method=method)
     tuner.save_to_cache(str(path))
     return result
 
@@ -85,11 +89,14 @@ def load(
     shapes: Sequence[int],
     *,
     dtype: str = "bf16",
+    arch: str = "generic",
+    layout: str = "row_major",
+    movement: Mapping[str, object] | None = None,
     cache_path: str | os.PathLike | None = None,
 ) -> Optional[TuningResult]:
     """Load the best cached tuning result for an operation/shape."""
 
-    workload = _workload_from(op, shapes, dtype)
+    workload = _workload_from(op, shapes, dtype, arch=arch, layout=layout, movement=movement)
     tuner = BayesianAutotuner(workload)
     loaded = tuner.warm_start_from_cache(str(_cache_path(cache_path)))
     if loaded == 0:
@@ -97,10 +104,29 @@ def load(
     return tuner.best
 
 
-def cache_key(op: Callable | str, shapes: Sequence[int], *, dtype: str = "bf16", arch: str = "generic") -> tuple:
-    """Stable public cache key tuple."""
+def cache_key(
+    op: Callable | str,
+    shapes: Sequence[int],
+    *,
+    dtype: str = "bf16",
+    arch: str = "generic",
+    layout: str = "row_major",
+    numeric_policy: Mapping[str, object] | None = None,
+    movement: Mapping[str, object] | None = None,
+) -> tuple:
+    """Stable public cache key tuple including compiler-relevant tuning inputs."""
 
-    return (_op_name(op), tuple(int(s) for s in shapes), dtype, arch)
+    policy = dict(numeric_policy or {"storage": dtype, "accum": "f32" if dtype != "int8" else "s32"})
+    move = dict(movement or {"prefetch": "auto", "overlap": "compute"})
+    return (
+        _op_name(op),
+        tuple(int(s) for s in shapes),
+        dtype,
+        arch,
+        layout,
+        json.dumps(policy, sort_keys=True),
+        json.dumps(move, sort_keys=True),
+    )
 
 
 def schedule_artifact(
@@ -110,24 +136,34 @@ def schedule_artifact(
     shapes: Sequence[int],
     dtype: str = "bf16",
     arch: str = "generic",
+    layout: str = "row_major",
+    movement: Mapping[str, object] | None = None,
 ) -> Mapping[str, object]:
     """Create a lightweight public schedule artifact from a tuning result."""
 
-    workload = _workload_from(op, shapes, dtype)
+    workload = _workload_from(op, shapes, dtype, arch=arch, layout=layout, movement=movement)
     tuner = BayesianAutotuner(workload)
     tuner._results.append(result)
     tuner._best = result
     return tuner.schedule_artifact(arch=arch)
 
 
-def _workload_from(op: Callable | str, shapes: Sequence[int], dtype: str) -> GEMMWorkload:
+def _workload_from(
+    op: Callable | str,
+    shapes: Sequence[int],
+    dtype: str,
+    *,
+    arch: str = "generic",
+    layout: str = "row_major",
+    movement: Mapping[str, object] | None = None,
+) -> GEMMWorkload:
     name = _op_name(op)
     if name not in ("matmul", "gemm", "op.matmul", "tessera.matmul", "tessera.ops.matmul"):
         raise ValueError(f"public autotune currently supports GEMM/matmul, got {name!r}")
     if len(shapes) != 3:
         raise ValueError("GEMM autotune expects shapes=(M, N, K)")
     M, N, K = (int(v) for v in shapes)
-    return GEMMWorkload(M=M, N=N, K=K, dtype=dtype)
+    return GEMMWorkload(M=M, N=N, K=K, dtype=dtype, arch=arch, layout=layout, movement=dict(movement or {"prefetch": "auto", "overlap": "compute"}))
 
 
 def _op_name(op: Callable | str) -> str:

@@ -177,6 +177,18 @@ class CompileArtifactBundle:
         return json.dumps({"traceEvents": [event.to_chrome_trace_event(tid=i) for i, event in enumerate(self.trace_events)]}, sort_keys=True)
 
     def to_metadata(self) -> dict[str, Any]:
+        artifact_hashes = self.artifact_hashes
+        profiling = {
+            "schema": COMPILER_TRACE_SCHEMA_VERSION,
+            "op": self.request.function_name,
+            "target": self.request.target,
+            "graph_hash": self.request.graph_hash,
+            "schedule_hash": artifact_hashes.get("schedule"),
+            "tile_hash": artifact_hashes.get("tile"),
+            "target_hash": artifact_hashes.get("target"),
+            "runtime_status": self.runtime_status,
+            "execution_mode": self.execution_mode,
+        }
         return {
             "target": self.request.target,
             "function_name": self.request.function_name,
@@ -184,7 +196,8 @@ class CompileArtifactBundle:
             "pipeline_name": self.request.pipeline_name,
             "example_id": self.request.example_id,
             "options": dict(self.request.options),
-            "artifact_hashes": self.artifact_hashes,
+            "artifact_hashes": artifact_hashes,
+            "profiling": profiling,
             "executable": self.executable,
             "runtime_status": self.runtime_status,
             "execution_mode": self.execution_mode,

@@ -10,6 +10,7 @@ MLIR bindings.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 
@@ -265,6 +266,9 @@ def lower_graph_to_schedule_ir(
             "arch": target_kind,
             "shape_key": _shape_key(graph_fn.body),
             "tile": {"m": tile[0], "n": tile[1], "k": tile[2]},
+            "movement": {"prefetch": "auto", "overlap": "compute", "stages": 2},
+            "numeric_policy": "f32@accum(f32)",
+            "cost_model": "roofline",
         }))
         schedule_module.functions.append(ScheduleFunction(graph_fn.name, body=body, target=target_kind))
     return schedule_module
@@ -282,9 +286,26 @@ def _lower_graph_ops(ops: list[IROp], *, tile: tuple[int, int, int]) -> list[Sch
             scheduled.append(ScheduleOp("schedule.collective", _base_attrs(op, idx)))
             continue
         if op_name in MATMUL_OPS:
+            scheduled.extend([
+                ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "tile_m", "choices": [32, 64, 128, 256], "frozen": False}),
+                ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "tile_n", "choices": [32, 64, 128, 256], "frozen": False}),
+                ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "tile_k", "choices": [32, 64, 128, 256], "frozen": False}),
+                ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "num_warps", "choices": [1, 2, 4, 8], "frozen": False}),
+                ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "num_stages", "choices": [1, 2, 3, 4], "frozen": False}),
+            ])
             scheduled.append(ScheduleOp(
                 "schedule.tile",
-                {**_base_attrs(op, idx), "tile_m": tile_m, "tile_n": tile_n, "tile_k": tile_k},
+                {
+                    **_base_attrs(op, idx),
+                    "tile_m": tile_m,
+                    "tile_n": tile_n,
+                    "tile_k": tile_k,
+                    "num_warps": 4,
+                    "num_stages": 2,
+                    "cost_model": "roofline",
+                    "flops": _matmul_flops(op),
+                    "bytes_moved": _matmul_bytes(op),
+                },
             ))
         elif op_name in CONV2D_OPS:
             scheduled.append(ScheduleOp(
@@ -365,6 +386,37 @@ def _shape_key(ops: list[IROp]) -> str:
         if op.result_type:
             parts.append(op.result_type)
     return "|".join(parts) or "unknown"
+
+
+def _tensor_shape(type_text: str | None) -> tuple[int, ...]:
+    if not type_text or not type_text.startswith("tensor<") or "x" not in type_text:
+        return ()
+    body = type_text.removeprefix("tensor<").removesuffix(">")
+    parts = body.split("x")[:-1]
+    dims: list[int] = []
+    for part in parts:
+        try:
+            dims.append(int(part))
+        except ValueError:
+            return ()
+    return tuple(dims)
+
+
+def _matmul_flops(op: IROp) -> int:
+    if len(op.operand_types) < 2:
+        return 0
+    lhs = _tensor_shape(str(op.operand_types[0]))
+    rhs = _tensor_shape(str(op.operand_types[1]))
+    if len(lhs) != 2 or len(rhs) != 2:
+        return 0
+    return 2 * lhs[0] * rhs[1] * lhs[1]
+
+
+def _matmul_bytes(op: IROp) -> int:
+    shapes = [_tensor_shape(str(t)) for t in [*op.operand_types[:2], op.result_type]]
+    if any(not shape for shape in shapes):
+        return 0
+    return 4 * sum(math.prod(shape) for shape in shapes)
 
 
 def _format_attr_dict(attrs: dict[str, Any]) -> str:

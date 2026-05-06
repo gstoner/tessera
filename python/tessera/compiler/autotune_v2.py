@@ -24,7 +24,7 @@ import math
 import sqlite3
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Mapping, Optional, Sequence
 
 from ..telemetry import make_event
 
@@ -41,6 +41,9 @@ class GEMMWorkload:
     N: int
     K: int
     dtype: str = "bf16"
+    layout: str = "row_major"
+    arch: str = "generic"
+    movement: Mapping[str, object] = field(default_factory=lambda: {"prefetch": "auto", "overlap": "compute"})
 
     def __post_init__(self) -> None:
         for name, val in [("M", self.M), ("N", self.N), ("K", self.K)]:
@@ -138,10 +141,68 @@ class TuningResult:
     tflops: float
     sampled_at: float = field(default_factory=time.time)
     trial_id: int = 0
+    status: str = "ok"
+    reason: str = ""
+    method: str = "roofline"
 
     def __repr__(self) -> str:
+        suffix = f", status={self.status!r}" if self.status != "ok" else ""
         return (f"TuningResult(tflops={self.tflops:.2f}, "
-                f"latency_ms={self.latency_ms:.4f}, config={self.config!r})")
+                f"latency_ms={self.latency_ms:.4f}, config={self.config!r}{suffix})")
+
+
+@dataclass(frozen=True)
+class CandidateRejection:
+    """Why a tuning candidate was excluded before evaluation."""
+
+    config: TuningConfig
+    reason: str
+
+
+class LegalGEMMCandidateGenerator:
+    """Generate target-legal GEMM tuning candidates."""
+
+    def __init__(
+        self,
+        workload: GEMMWorkload,
+        *,
+        tile_choices: Sequence[int],
+        warp_choices: Sequence[int],
+        stage_choices: Sequence[int],
+        smem_budget_bytes: int,
+    ) -> None:
+        self.workload = workload
+        self.tile_choices = tuple(tile_choices)
+        self.warp_choices = tuple(warp_choices)
+        self.stage_choices = tuple(stage_choices)
+        self.smem_budget_bytes = smem_budget_bytes
+        self.rejections: list[CandidateRejection] = []
+
+    def candidates(self) -> list[TuningConfig]:
+        self.rejections.clear()
+        legal: list[TuningConfig] = []
+        for tm in self.tile_choices:
+            for tn in self.tile_choices:
+                for tk in self.tile_choices:
+                    for nw in self.warp_choices:
+                        for ns in self.stage_choices:
+                            cfg = TuningConfig(tm, tn, tk, nw, ns)
+                            reason = self.rejection_reason(cfg)
+                            if reason:
+                                self.rejections.append(CandidateRejection(cfg, reason))
+                            else:
+                                legal.append(cfg)
+        legal.sort(key=lambda c: (-(c.tile_m * c.tile_n), c.tile_k, c.num_warps, c.num_stages))
+        return legal
+
+    def rejection_reason(self, cfg: TuningConfig) -> str:
+        if cfg.tile_m > self.workload.M or cfg.tile_n > self.workload.N or cfg.tile_k > self.workload.K:
+            return "tile_exceeds_problem_shape"
+        if self.workload.M % cfg.tile_m or self.workload.N % cfg.tile_n or self.workload.K % cfg.tile_k:
+            return "shape_not_divisible_by_tile"
+        if cfg.smem_bytes() > self.smem_budget_bytes:
+            return "shared_memory_budget_exceeded"
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +248,7 @@ class BayesianAutotuner:
         self.smem_budget_bytes = smem_budget_bytes
         self._results: List[TuningResult] = []
         self._best: Optional[TuningResult] = None
+        self._rejections: List[CandidateRejection] = []
 
     # ------------------------------------------------------------------
     # Cache I/O
@@ -202,13 +264,31 @@ class BayesianAutotuner:
         """
         try:
             conn = sqlite3.connect(db_path)
+            columns = _table_columns(conn, "tuning_results")
+            if not columns:
+                conn.close()
+                return 0
+            optional = {
+                "status": "'ok'",
+                "reason": "''",
+                "method": "'roofline'",
+            }
+            select_cols = [
+                "tile_m", "tile_n", "tile_k", "num_warps", "num_stages",
+                "latency_ms", "tflops", "sampled_at", "trial_id",
+                *[name if name in columns else fallback for name, fallback in optional.items()],
+            ]
+            filters = ["M=?", "N=?", "K=?", "dtype=?"]
+            params: list[object] = [self.workload.M, self.workload.N, self.workload.K, self.workload.dtype]
+            if "arch" in columns:
+                filters.append("arch=?")
+                params.append(self.workload.arch)
+            if "layout" in columns:
+                filters.append("layout=?")
+                params.append(self.workload.layout)
             cur = conn.execute(
-                "SELECT tile_m, tile_n, tile_k, num_warps, num_stages, "
-                "latency_ms, tflops, sampled_at, trial_id "
-                "FROM tuning_results "
-                "WHERE M=? AND N=? AND K=? AND dtype=?",
-                (self.workload.M, self.workload.N, self.workload.K,
-                 self.workload.dtype),
+                f"SELECT {', '.join(select_cols)} FROM tuning_results WHERE {' AND '.join(filters)}",
+                tuple(params),
             )
             count = 0
             for row in cur.fetchall():
@@ -224,6 +304,9 @@ class BayesianAutotuner:
                         tflops=float(row[6]),
                         sampled_at=float(row[7]),
                         trial_id=int(row[8]),
+                        status=str(row[9]),
+                        reason=str(row[10]),
+                        method=str(row[11]),
                     )
                     self._results.append(res)
                     if self._best is None or res.tflops > self._best.tflops:
@@ -239,27 +322,25 @@ class BayesianAutotuner:
     def save_to_cache(self, db_path: str) -> None:
         """Persist all evaluated results to SQLite cache (upsert-style)."""
         conn = sqlite3.connect(db_path)
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tuning_results (
-                M INT, N INT, K INT, dtype TEXT,
-                tile_m INT, tile_n INT, tile_k INT,
-                num_warps INT, num_stages INT,
-                latency_ms REAL, tflops REAL,
-                sampled_at REAL, trial_id INT
-            )
-            """
-        )
+        _ensure_cache_schema(conn)
         for r in self._results:
             conn.execute(
-                "INSERT INTO tuning_results VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                """
+                INSERT INTO tuning_results (
+                    M, N, K, dtype, arch, layout, movement_json,
+                    tile_m, tile_n, tile_k, num_warps, num_stages,
+                    latency_ms, tflops, sampled_at, trial_id, status, reason, method
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
                 (
                     self.workload.M, self.workload.N,
                     self.workload.K, self.workload.dtype,
+                    self.workload.arch, self.workload.layout,
+                    json.dumps(dict(self.workload.movement), sort_keys=True),
                     r.config.tile_m, r.config.tile_n, r.config.tile_k,
                     r.config.num_warps, r.config.num_stages,
                     r.latency_ms, r.tflops,
-                    r.sampled_at, r.trial_id,
+                    r.sampled_at, r.trial_id, r.status, r.reason, r.method,
                 ),
             )
         conn.commit()
@@ -293,19 +374,40 @@ class BayesianAutotuner:
 
         return roofline_ms / max(tile_eff, 1e-6) * stage_pen * warp_pen * k_pen
 
-    def _evaluate(self, cfg: TuningConfig, trial_id: int) -> TuningResult:
+    def _evaluate(self, cfg: TuningConfig, trial_id: int, *, method: str = "roofline") -> TuningResult:
         latency_ms = self._mock_latency(cfg)
         tflops = self.workload.tflops_at(latency_ms)
-        return TuningResult(cfg, latency_ms, tflops, time.time(), trial_id)
+        status = "unmeasured" if method == "on_device" else "ok"
+        reason = "runtime device timers are not wired; using deterministic roofline estimate" if method == "on_device" else ""
+        return TuningResult(cfg, latency_ms, tflops, time.time(), trial_id, status, reason, method)
 
     def _is_feasible(self, cfg: TuningConfig) -> bool:
-        return cfg.smem_bytes() <= self.smem_budget_bytes
+        return self._candidate_generator().rejection_reason(cfg) == ""
+
+    def legal_candidates(self) -> list[TuningConfig]:
+        generator = self._candidate_generator()
+        candidates = generator.candidates()
+        self._rejections = list(generator.rejections)
+        return candidates
+
+    @property
+    def rejected_candidates(self) -> List[CandidateRejection]:
+        return list(self._rejections)
+
+    def _candidate_generator(self) -> LegalGEMMCandidateGenerator:
+        return LegalGEMMCandidateGenerator(
+            self.workload,
+            tile_choices=self._TILE_CHOICES,
+            warp_choices=self._WARP_CHOICES,
+            stage_choices=self._STAGE_CHOICES,
+            smem_budget_bytes=self.smem_budget_bytes,
+        )
 
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
-    def tune(self, max_trials: int = 50) -> TuningResult:
+    def tune(self, max_trials: int = 50, *, method: str = "roofline") -> TuningResult:
         """
         Search for the best TuningConfig.
 
@@ -322,13 +424,15 @@ class BayesianAutotuner:
         TuningResult
             The best configuration found.
         """
+        if method in {"on_device", "grid", "roofline"}:
+            return self._tune_grid(max_trials, method=method)
         try:
             import optuna  # noqa: F401
-            return self._tune_optuna(max_trials)
+            return self._tune_optuna(max_trials, method=method)
         except ImportError:
-            return self._tune_grid(max_trials)
+            return self._tune_grid(max_trials, method=method)
 
-    def _tune_optuna(self, max_trials: int) -> TuningResult:
+    def _tune_optuna(self, max_trials: int, *, method: str = "roofline") -> TuningResult:
         import optuna
 
         optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -346,9 +450,11 @@ class BayesianAutotuner:
                 num_stages=trial.suggest_categorical("num_stages",
                                                      list(self._STAGE_CHOICES)),
             )
-            if not self._is_feasible(cfg):
+            reason = self._candidate_generator().rejection_reason(cfg)
+            if reason:
+                self._rejections.append(CandidateRejection(cfg, reason))
                 raise optuna.TrialPruned()
-            res = self._evaluate(cfg, trial.number)
+            res = self._evaluate(cfg, trial.number, method=method)
             self._results.append(res)
             if self._best is None or res.tflops > self._best.tflops:
                 self._best = res
@@ -372,25 +478,19 @@ class BayesianAutotuner:
             })
 
         study.optimize(objective, n_trials=max_trials, show_progress_bar=False)
+        if self._best is None:
+            raise ValueError("no legal GEMM tuning candidates were available")
         return self._best
 
-    def _tune_grid(self, max_trials: int) -> TuningResult:
+    def _tune_grid(self, max_trials: int, *, method: str = "roofline") -> TuningResult:
         """Deterministic grid search fallback."""
         trial_id = len(self._results)
-        candidates = [
-            TuningConfig(tm, tn, tk, nw, ns)
-            for tm in self._TILE_CHOICES
-            for tn in self._TILE_CHOICES
-            for tk in [32, 64, 128]
-            for nw in self._WARP_CHOICES
-            for ns in self._STAGE_CHOICES
-            if TuningConfig(tm, tn, tk, nw, ns).smem_bytes() <= self.smem_budget_bytes
-        ]
-        # Prefer larger tiles (better for large GEMMs)
-        candidates.sort(key=lambda c: -(c.tile_m * c.tile_n))
+        candidates = self.legal_candidates()
+        if not candidates:
+            raise ValueError("no legal GEMM tuning candidates were available")
 
         for cfg in candidates[:max_trials]:
-            res = self._evaluate(cfg, trial_id)
+            res = self._evaluate(cfg, trial_id, method=method)
             self._results.append(res)
             if self._best is None or res.tflops > self._best.tflops:
                 self._best = res
@@ -436,26 +536,37 @@ class BayesianAutotuner:
         tile = self._best.config.to_dict() if self._best is not None else {}
         latency_ms = self._best.latency_ms if self._best is not None else None
         tflops = self._best.tflops if self._best is not None else None
+        status = self._best.status if self._best is not None else "unmeasured"
+        reason = self._best.reason if self._best is not None else "no tuning result has been selected"
+        movement = dict(self.workload.movement)
+        movement.setdefault("stages", tile.get("num_stages", 0))
         artifact = {
             "version": 1,
             "kind": "tessera.schedule_artifact",
             "arch": arch,
+            "cache_key": self.cache_key(arch=arch),
             "shape": {
                 "M": self.workload.M,
                 "N": self.workload.N,
                 "K": self.workload.K,
                 "dtype": self.workload.dtype,
             },
+            "layout": self.workload.layout,
             "numeric_policy": {
                 "storage": self.workload.dtype,
                 "accum": "f32" if self.workload.dtype != "int8" else "s32",
                 "rounding": "nearest_even",
                 "deterministic": True,
             },
-            "movement": {
-                "prefetch": "auto",
-                "overlap": "compute",
-                "stages": tile.get("num_stages", 0),
+            "movement": movement,
+            "target_features": self.target_features(arch),
+            "measurements": {
+                "status": status,
+                "reason": reason,
+                "latency_ms": latency_ms,
+                "tflops": tflops,
+                "trial_count": len(self._results),
+                "rejected_count": len(self._rejections),
             },
             "tile": tile,
         }
@@ -471,10 +582,36 @@ class BayesianAutotuner:
             kernel_id="gemm",
             latency_ms=latency_ms,
             tflops=tflops,
-            status="ok" if self._best is not None else "unmeasured",
-            metadata={"tile": tile},
+            status=status,
+            metadata={"tile": tile, "reason": reason, "target_features": artifact["target_features"]},
         )
         return artifact
+
+    def cache_key(self, arch: str = "generic") -> Dict[str, object]:
+        return {
+            "op": "matmul",
+            "shape": {"M": self.workload.M, "N": self.workload.N, "K": self.workload.K},
+            "dtype": self.workload.dtype,
+            "arch": arch,
+            "layout": self.workload.layout,
+            "numeric_policy": {
+                "storage": self.workload.dtype,
+                "accum": "f32" if self.workload.dtype != "int8" else "s32",
+            },
+            "movement": dict(self.workload.movement),
+        }
+
+    @staticmethod
+    def target_features(arch: str = "generic") -> Dict[str, object]:
+        if arch.startswith("sm") or arch.startswith("nvidia"):
+            return {"family": "nvidia", "tensor_cores": True, "device_timers": False}
+        if arch.startswith("gfx") or arch == "rocm":
+            return {"family": "rocm", "mfma": True, "device_timers": False}
+        if arch.startswith("apple") or arch == "apple_cpu":
+            return {"family": "apple", "accelerate": True, "device_timers": False}
+        if arch in {"cpu", "x86_64"}:
+            return {"family": "cpu", "wall_clock": True, "device_timers": False}
+        return {"family": "generic", "device_timers": False}
 
     def schedule_hash(self, arch: str = "generic") -> str:
         """Stable hash for the current best schedule artifact."""
@@ -526,6 +663,7 @@ class BayesianAutotuner:
                 "num_stages": float(r.config.num_stages),
                 "latency_ms": float(r.latency_ms),
                 "tflops": float(r.tflops),
+                "status": r.status,
             })
         return rows
 
@@ -539,3 +677,45 @@ class BayesianAutotuner:
     def __repr__(self) -> str:
         return (f"BayesianAutotuner(workload={self.workload!r}, "
                 f"trials={self.num_trials}, best={self._best!r})")
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    try:
+        return {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})")}
+    except sqlite3.DatabaseError:
+        return set()
+
+
+def _ensure_cache_schema(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tuning_results (
+            M INT, N INT, K INT, dtype TEXT,
+            arch TEXT DEFAULT 'generic',
+            layout TEXT DEFAULT 'row_major',
+            movement_json TEXT DEFAULT '{}',
+            tile_m INT, tile_n INT, tile_k INT,
+            num_warps INT, num_stages INT,
+            latency_ms REAL, tflops REAL,
+            sampled_at REAL, trial_id INT,
+            status TEXT DEFAULT 'ok',
+            reason TEXT DEFAULT '',
+            method TEXT DEFAULT 'roofline'
+        )
+        """
+    )
+    columns = _table_columns(conn, "tuning_results")
+    additions = {
+        "arch": "TEXT DEFAULT 'generic'",
+        "layout": "TEXT DEFAULT 'row_major'",
+        "movement_json": "TEXT DEFAULT '{}'",
+        "status": "TEXT DEFAULT 'ok'",
+        "reason": "TEXT DEFAULT ''",
+        "method": "TEXT DEFAULT 'roofline'",
+    }
+    for name, ddl in additions.items():
+        if name not in columns:
+            conn.execute(f"ALTER TABLE tuning_results ADD COLUMN {name} {ddl}")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tuning_lookup ON tuning_results(M, N, K, dtype, arch, layout)"
+    )

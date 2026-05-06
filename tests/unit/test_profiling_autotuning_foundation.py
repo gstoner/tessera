@@ -121,11 +121,33 @@ def test_autotune_cache_key_and_schedule_artifact(tmp_path):
     key = autotune.cache_key("matmul", (128, 128, 128), dtype="bf16", arch="sm90")
     artifact = autotune.schedule_artifact(result, op="matmul", shapes=(128, 128, 128), arch="sm90")
 
-    assert key == ("matmul", (128, 128, 128), "bf16", "sm90")
+    assert key[:4] == ("matmul", (128, 128, 128), "bf16", "sm90")
+    assert "row_major" in key
     assert artifact["arch"] == "sm90"
     assert artifact["hash"]
+    assert artifact["cache_key"]["layout"] == "row_major"
+    assert artifact["movement"]["overlap"] == "compute"
+    assert artifact["target_features"]["family"] == "nvidia"
     assert artifact["telemetry"]["schema"] == TELEMETRY_SCHEMA_VERSION
     assert artifact["telemetry"]["schedule_hash"] == artifact["hash"]
+
+
+def test_public_autotune_on_device_reports_unmeasured_backend(tmp_path):
+    cache = tmp_path / "tuning.db"
+
+    result = autotune(
+        "matmul",
+        shapes=(128, 128, 128),
+        method="on_device",
+        max_trials=1,
+        cache_path=cache,
+        arch="sm90",
+    )
+    artifact = autotune.schedule_artifact(result, op="matmul", shapes=(128, 128, 128), arch="sm90")
+
+    assert result.status == "unmeasured"
+    assert "device timers" in result.reason
+    assert artifact["measurements"]["status"] == "unmeasured"
 
 
 def test_autotune_rejects_non_gemm_ops():

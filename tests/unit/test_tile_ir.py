@@ -75,6 +75,8 @@ def test_lower_schedule_to_tile_ir_materializes_matmul_and_prefetch():
     assert "tile.mma" in text
     assert "tile.async_copy" in text
     assert "tensor_core_mma" in text
+    assert "shared_memory_bytes" in text
+    assert "register_estimate" in text
 
 
 def test_frontend_graph_schedule_tile_pipeline_for_flash_attention_has_fa4_and_queues():

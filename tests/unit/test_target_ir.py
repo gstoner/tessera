@@ -103,6 +103,8 @@ def test_lower_tile_to_nvidia_hopper_target_ir_maps_mma_to_wgmma_tma_mbarrier():
     text = target.to_mlir()
     assert 'target = "nvidia_sm90"' in text
     assert 'arch = "sm_90a"' in text
+    assert "target_features" in text
+    assert "launch" in text
     assert "tessera_nvidia.wgmma" in text
     assert "tessera_nvidia.tma_async_copy" in text
     assert "tessera_nvidia.mbarrier" in text
@@ -183,6 +185,8 @@ def test_frontend_to_apple_cpu_target_ir_maps_matmul_and_softmax():
     text = target.to_mlir()
     assert "tessera_apple.cpu.accelerate_gemm" in text
     assert "tessera_apple.cpu.vector_reduce" in text
+    assert "target_features" in text
+    assert "launch" in text
 
 
 def test_frontend_to_nvidia_target_ir_maps_flash_attention_contract_through_full_spine():

@@ -97,9 +97,12 @@ def test_lower_graph_to_schedule_ir_preserves_meshes_and_tiles_matmul():
     assert "schedule.mesh.define" in text
     assert "schedule.mesh.region" in text
     assert "schedule.tile" in text
+    assert "schedule.knob" in text
     assert "tile_m = 64" in text
     assert "tile_n = 32" in text
     assert "tile_k = 16" in text
+    assert 'cost_model = "roofline"' in text
+    assert "movement" in text
 
 
 def test_textual_frontend_schedule_pipeline_lowers_to_region_stage_yield():

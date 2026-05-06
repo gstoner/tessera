@@ -20,6 +20,8 @@ import numpy as np
 
 from .graph_ir import GraphIRFunction, GraphIRModule, IROp
 from .op_catalog import GRAPH_OP_TO_SPEC, LEGACY_GRAPH_OP_ALIASES, SUPPORTED_CPU_OPS, canonical_graph_op_name
+from .schedule_ir import lower_graph_to_schedule_ir
+from .tile_ir import lower_schedule_to_tile_ir
 
 
 MATMUL_OPS = {"tessera.matmul", "tessera.gemm"}
@@ -173,8 +175,8 @@ def build_cpu_plan(
 
     graph_text = module.to_mlir()
     ops = tuple(fn.body)
-    schedule = _render_schedule_ir(fn, ops, tile=tile, target_kind=target_kind)
-    tile_ir = _render_tile_ir(fn, ops, target_kind=target_kind)
+    schedule = _render_schedule_ir(module, fn, ops, tile=tile, target_kind=target_kind)
+    tile_ir = _render_tile_ir(module, fn, ops, tile=tile, target_kind=target_kind)
     target = _render_target_ir(fn, ops, target_kind=target_kind)
     return CPUPlan(
         function_name=fn.name,
@@ -242,106 +244,26 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
 
 
 def _render_schedule_ir(
+    module: GraphIRModule,
     fn: GraphIRFunction,
     ops: Sequence[IROp],
     *,
     tile: tuple[int, int, int],
     target_kind: str,
 ) -> str:
-    tile_m, tile_n, tile_k = tile
-    lines = [
-        f'module attributes {{tessera.ir.level = "schedule", target = "{target_kind}"}} {{',
-        f'  "tessera.schedule.func"() ({{',
-    ]
-    for idx, op in enumerate(ops):
-        operand_names = tuple(_operand_name(operand) for operand in op.operands)
-        operand_attr = ", ".join(f'"{name}"' for name in operand_names)
-        op_name = _canonical_op_name(op.op_name)
-        if op_name in MATMUL_OPS:
-            lines.append(
-                f'    "schedule.tile"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, tile_m = {tile_m} : i64, tile_n = {tile_n} : i64, tile_k = {tile_k} : i64}} : () -> ()'
-            )
-        elif op_name in CONV2D_OPS:
-            lines.append(
-                f'    "schedule.tile"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, tile_h = 16 : i64, tile_w = 16 : i64, tile_c = 32 : i64}} : () -> ()'
-            )
-        elif op_name == "tessera.flash_attn":
-            lines.append(
-                f'    "schedule.pipeline.region"() ({{'
-            )
-            lines.append(
-                f'      "schedule.stage"() ({{'
-            )
-            lines.append(
-                f'        "schedule.prefetch"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, into = "shared", overlap = "compute", tile_q = 64 : i64, tile_kv = 64 : i64}} : () -> ()'
-            )
-            lines.append(
-                f'        "schedule.yield"() : () -> ()'
-            )
-            lines.append(
-                f'      }}) {{devices = [0]}} : () -> ()'
-            )
-            lines.append(
-                f'      "schedule.yield"() : () -> ()'
-            )
-            lines.append(
-                f'    }}) {{schedule = "fa4", micro_batches = 1 : i32, source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64}} : () -> ()'
-            )
-        elif op_name in ROPE_OPS:
-            lines.append(
-                f'    "schedule.elementwise"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, vectorize = true, pattern = "rotary_pairs"}} : () -> ()'
-            )
-        else:
-            lines.append(
-                f'    "schedule.elementwise"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, vectorize = true}} : () -> ()'
-            )
-        lines.append(
-            f'    "schedule.layout"() {{operands = [{operand_attr}], layout = "row_major", ordinal = {idx} : i64}} : () -> ()'
-        )
-        if op_name.startswith("tessera.kv_cache."):
-            lines.append(
-                f'    "schedule.prefetch"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, into = "shared", overlap = "compute"}} : () -> ()'
-            )
-    lines.extend([
-        f'  }}) {{sym_name = "{fn.name}", target = "{target_kind}"}} : () -> ()',
-        "}",
-    ])
-    return "\n".join(lines)
+    return lower_graph_to_schedule_ir(module, tile=tile, target_kind=target_kind).to_mlir()
 
 
-def _render_tile_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target_kind: str) -> str:
-    lines = [
-        f'module attributes {{tessera.ir.level = "tile", target = "{target_kind}"}} {{',
-        f'  "tessera.tile.func"() ({{',
-    ]
-    for idx, op in enumerate(ops):
-        op_name = _canonical_op_name(op.op_name)
-        lines.append(
-            f'    "{_tile_op_name(op_name)}"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, lowering = "{_lowering_kind(op_name)}", vectorize = true}} : () -> ()'
-        )
-        if op_name == "tessera.flash_attn":
-            lines.append(
-                f'    "tile.async_copy"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, stage = 0 : i32, vector = 16 : i32}} : () -> ()'
-            )
-            lines.append(
-                f'    "tessera.attn.online_softmax"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, policy = "safe"}} : () -> ()'
-            )
-            lines.append(
-                f'    "tile.wait_async"() {{stage = 0 : i32}} : () -> ()'
-            )
-        if op_name in ROPE_OPS:
-            lines.append(
-                f'    "tile.rotary_pair"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, vector = 2 : i32}} : () -> ()'
-            )
-        if op_name.startswith("tessera.kv_cache."):
-            lines.append(
-                f'    "tile.kv_cache"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, storage = "paged"}} : () -> ()'
-            )
-    lines.extend([
-        f'  }}) {{sym_name = "{fn.name}", target = "{target_kind}"}} : () -> ()',
-        "}",
-    ])
-    return "\n".join(lines)
+def _render_tile_ir(
+    module: GraphIRModule,
+    fn: GraphIRFunction,
+    ops: Sequence[IROp],
+    *,
+    tile: tuple[int, int, int],
+    target_kind: str,
+) -> str:
+    schedule = lower_graph_to_schedule_ir(module, tile=tile, target_kind=target_kind)
+    return lower_schedule_to_tile_ir(schedule, target_kind=target_kind).to_mlir()
 
 
 def _render_target_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target_kind: str) -> str:

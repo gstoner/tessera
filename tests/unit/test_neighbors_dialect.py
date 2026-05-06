@@ -138,19 +138,15 @@ _HALO_INFER_INPUT = """\
 func.func @test_stencil_halo_infer(%arg0: tensor<?x?xf32>) -> tensor<?x?xf32> {
   %topo = "tessera.neighbors.topology.create"() {
       kind = "2d_mesh", defaults = "von_neumann"
-  } : () -> !tessera.neighbors.topology
+  } : () -> index
 
   %st = "tessera.neighbors.stencil.define"() {
-      taps = [dense<[0, 0]> : tensor<2xi64>,
-              dense<[1, 0]> : tensor<2xi64>,
-              dense<[-1, 0]> : tensor<2xi64>,
-              dense<[0, 1]> : tensor<2xi64>,
-              dense<[0, -1]> : tensor<2xi64>],
+      taps = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]],
       bc = "periodic"
   } : () -> index
 
   %out = "tessera.neighbors.stencil.apply"(%st, %arg0, %topo) :
-      (index, tensor<?x?xf32>, !tessera.neighbors.topology) -> tensor<?x?xf32>
+      (index, tensor<?x?xf32>, index) -> tensor<?x?xf32>
 
   return %out : tensor<?x?xf32>
 }

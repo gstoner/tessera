@@ -25,6 +25,8 @@ Reference: CLAUDE.md §Four-Layer IR Stack — Graph IR
 from __future__ import annotations
 import ast
 import inspect
+import json
+import re
 import textwrap
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -142,6 +144,60 @@ class KVCacheSpec:
             f"eviction = \"{self.eviction}\", page_size = {self.page_size}, "
             f"numeric_policy = {self.dtype_policy.to_mlir_attr()}"
         )
+
+
+@dataclass(frozen=True)
+class GraphIRMesh:
+    """Structured module-level mesh declaration from the Tessera DSL."""
+
+    name: str
+    axes: Tuple[str, ...] = ()
+    shape: Tuple[int, ...] = ()
+    attrs: Dict[str, Any] = field(default_factory=dict)
+    source_span: Optional["SourceSpan"] = None
+
+    @classmethod
+    def from_attrs(
+        cls,
+        name: str,
+        attrs: Dict[str, Any],
+        *,
+        source_span: Optional["SourceSpan"] = None,
+    ) -> "GraphIRMesh":
+        axes = tuple(str(axis) for axis in attrs.get("axes", ()))
+        shape = tuple(int(dim) for dim in attrs.get("shape", ()))
+        extra = {key: value for key, value in attrs.items() if key not in {"axes", "shape"}}
+        return cls(name=name, axes=axes, shape=shape, attrs=extra, source_span=source_span)
+
+    def to_metadata(self) -> Dict[str, Any]:
+        metadata: Dict[str, Any] = dict(self.attrs)
+        if self.axes:
+            metadata["axes"] = list(self.axes)
+        if self.shape:
+            metadata["shape"] = list(self.shape)
+        return metadata
+
+
+@dataclass(frozen=True)
+class GraphIRTypeAlias:
+    """Structured module-level type alias preserved by the frontend."""
+
+    name: str
+    type_expr: str
+    source_span: Optional["SourceSpan"] = None
+
+
+@dataclass(frozen=True)
+class GraphIRConstant:
+    """Structured module-level constant declaration preserved by the frontend."""
+
+    name: str
+    type_expr: str
+    value: Any
+    source_span: Optional["SourceSpan"] = None
+
+    def to_metadata(self) -> Dict[str, Any]:
+        return {"type": self.type_expr, "value": self.value}
 
 
 # Common types used in Phase 1
@@ -280,11 +336,13 @@ def _format_attr_value(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, str):
-        return f'"{value}"'
+        return json.dumps(value)
     if value is None:
         return "none"
     if isinstance(value, (tuple, list)):
         return "[" + ", ".join(_format_attr_value(v) for v in value) + "]"
+    if isinstance(value, dict):
+        return json.dumps(json.dumps(value, sort_keys=True))
     return repr(value)
 
 
@@ -306,6 +364,9 @@ class GraphIRModule:
     module_attrs: Dict[str, str] = field(default_factory=lambda: {
         "tessera.ir.version": '"1.0"',
     })
+    meshes: List[GraphIRMesh] = field(default_factory=list)
+    type_aliases: List[GraphIRTypeAlias] = field(default_factory=list)
+    constants: List[GraphIRConstant] = field(default_factory=list)
 
     def verify(self) -> "GraphIRVerificationResult":
         return GraphIRVerifier().verify_module(self)
@@ -315,7 +376,8 @@ class GraphIRModule:
             result = self.verify()
             if not result.ok:
                 raise GraphIRVerificationError(result.format())
-        attr_lines = ", ".join(f"{k} = {v}" for k, v in self.module_attrs.items())
+        attrs = self._emitted_module_attrs()
+        attr_lines = ", ".join(f"{k} = {v}" for k, v in attrs.items())
         lines = [f"module attributes {{{attr_lines}}} {{"]
         for fn in self.functions:
             for line in fn.to_mlir().splitlines():
@@ -325,6 +387,22 @@ class GraphIRModule:
 
     def __repr__(self) -> str:
         return f"GraphIRModule({len(self.functions)} functions)"
+
+    def _emitted_module_attrs(self) -> Dict[str, str]:
+        attrs = dict(self.module_attrs)
+        if self.meshes:
+            attrs["tessera.meshes"] = _format_attr_value({
+                mesh.name: mesh.to_metadata() for mesh in self.meshes
+            })
+        if self.type_aliases:
+            attrs["tessera.type_aliases"] = _format_attr_value({
+                alias.name: alias.type_expr for alias in self.type_aliases
+            })
+        if self.constants:
+            attrs["tessera.constants"] = _format_attr_value({
+                const.name: const.to_metadata() for const in self.constants
+            })
+        return attrs
 
 
 @dataclass
@@ -339,6 +417,7 @@ class GraphIRFunction:
     result_types: List[IRType] = field(default_factory=list)
     body: List[IROp] = field(default_factory=list)
     fn_attrs: Dict[str, str] = field(default_factory=dict)
+    return_values: List[str] = field(default_factory=list)
 
     def to_mlir(self, *, verify: bool = False) -> str:
         if verify:
@@ -372,6 +451,29 @@ class GraphIRVerifier:
 
     def verify_module(self, module: GraphIRModule) -> GraphIRVerificationResult:
         diagnostics: List[GraphIRDiagnostic] = []
+        diagnostics.extend(self._verify_named_declarations(
+            "mesh",
+            [(mesh.name, mesh.source_span) for mesh in module.meshes],
+            "GRAPH_IR_DUP_MESH",
+        ))
+        diagnostics.extend(self._verify_named_declarations(
+            "type alias",
+            [(alias.name, alias.source_span) for alias in module.type_aliases],
+            "GRAPH_IR_DUP_TYPE_ALIAS",
+        ))
+        diagnostics.extend(self._verify_named_declarations(
+            "constant",
+            [(const.name, const.source_span) for const in module.constants],
+            "GRAPH_IR_DUP_CONSTANT",
+        ))
+        for mesh in module.meshes:
+            if mesh.axes and mesh.shape and len(mesh.axes) != len(mesh.shape):
+                diagnostics.append(GraphIRDiagnostic(
+                    "error",
+                    f"mesh {mesh.name!r} has {len(mesh.axes)} axes but {len(mesh.shape)} shape dimensions",
+                    span=mesh.source_span,
+                    code="GRAPH_IR_MESH_RANK",
+                ))
         seen = set()
         for fn in module.functions:
             if fn.name in seen:
@@ -382,9 +484,22 @@ class GraphIRVerifier:
 
     def verify_function(self, fn: GraphIRFunction) -> GraphIRVerificationResult:
         diagnostics: List[GraphIRDiagnostic] = []
+        arg_names = set()
+        for arg in fn.args:
+            if arg.name in arg_names:
+                diagnostics.append(GraphIRDiagnostic(
+                    "error",
+                    f"duplicate argument %{arg.name}",
+                    code="GRAPH_IR_DUP_ARG",
+                ))
+            arg_names.add(arg.name)
         defined = {f"%{arg.name}" for arg in fn.args}
         results = set()
+        value_types: Dict[str, IRType] = {f"%{arg.name}": arg.ir_type for arg in fn.args}
+        control_stack: List[str] = []
         for op in fn.body:
+            if op.op_name.startswith("tessera.scf."):
+                self._verify_control_marker(op, control_stack, diagnostics)
             if op.result is not None:
                 result_name = f"%{op.result}"
                 if result_name in defined or result_name in results:
@@ -395,6 +510,8 @@ class GraphIRVerifier:
                         code="GRAPH_IR_DUP_VALUE",
                     ))
                 results.add(result_name)
+                parsed_type = op.inferred_type or _parse_mlir_tensor_type(op.result_type or "")
+                value_types[result_name] = parsed_type
             if len(op.operands) != len(op.operand_types):
                 diagnostics.append(GraphIRDiagnostic(
                     "error",
@@ -417,7 +534,101 @@ class GraphIRVerifier:
                         span=op.source_span,
                         code="GRAPH_IR_UNDEFINED_OPERAND",
                     ))
+            self._verify_op_types(op, value_types, diagnostics)
+        if control_stack:
+            diagnostics.append(GraphIRDiagnostic(
+                "error",
+                f"unterminated control region {control_stack[-1]!r}",
+                code="GRAPH_IR_CONTROL_UNBALANCED",
+            ))
+        if fn.result_types:
+            if not fn.return_values:
+                diagnostics.append(GraphIRDiagnostic(
+                    "error",
+                    f"function {fn.name!r} declares results but has no return values",
+                    code="GRAPH_IR_RETURN_MISSING",
+                ))
+            elif len(fn.return_values) != len(fn.result_types):
+                diagnostics.append(GraphIRDiagnostic(
+                    "error",
+                    f"function {fn.name!r} returns {len(fn.return_values)} values but declares {len(fn.result_types)} results",
+                    code="GRAPH_IR_RETURN_ARITY",
+                ))
+            for value in fn.return_values:
+                if value.startswith("%") and value not in defined and value not in results:
+                    diagnostics.append(GraphIRDiagnostic(
+                        "error",
+                        f"function {fn.name!r} returns undefined value {value}",
+                        code="GRAPH_IR_RETURN_UNDEFINED",
+                    ))
         return GraphIRVerificationResult(tuple(diagnostics))
+
+    def _verify_named_declarations(
+        self,
+        noun: str,
+        declarations: List[Tuple[str, Optional[SourceSpan]]],
+        code: str,
+    ) -> List[GraphIRDiagnostic]:
+        diagnostics: List[GraphIRDiagnostic] = []
+        seen = set()
+        for name, span in declarations:
+            if name in seen:
+                diagnostics.append(GraphIRDiagnostic("error", f"duplicate {noun} {name!r}", span=span, code=code))
+            seen.add(name)
+        return diagnostics
+
+    def _verify_control_marker(
+        self,
+        op: IROp,
+        stack: List[str],
+        diagnostics: List[GraphIRDiagnostic],
+    ) -> None:
+        suffix = op.op_name.removeprefix("tessera.scf.")
+        if suffix.endswith(".begin"):
+            stack.append(suffix.removesuffix(".begin"))
+            return
+        if suffix == "else":
+            if not stack or stack[-1] != "if":
+                diagnostics.append(GraphIRDiagnostic(
+                    "error",
+                    "else marker without an open if region",
+                    span=op.source_span,
+                    code="GRAPH_IR_CONTROL_ELSE",
+                ))
+            return
+        if suffix.endswith(".end"):
+            kind = suffix.removesuffix(".end")
+            if not stack or stack[-1] != kind:
+                diagnostics.append(GraphIRDiagnostic(
+                    "error",
+                    f"control end for {kind!r} does not match open region",
+                    span=op.source_span,
+                    code="GRAPH_IR_CONTROL_UNBALANCED",
+                ))
+                return
+            stack.pop()
+
+    def _verify_op_types(
+        self,
+        op: IROp,
+        value_types: Dict[str, IRType],
+        diagnostics: List[GraphIRDiagnostic],
+    ) -> None:
+        if op.op_name not in {"tessera.matmul", "tessera.gemm"} or len(op.operands) < 2:
+            return
+        lhs = value_types.get(op.operands[0])
+        rhs = value_types.get(op.operands[1])
+        if not lhs or not rhs or lhs.rank != 2 or rhs.rank != 2:
+            return
+        lhs_k = lhs.shape[1]
+        rhs_k = rhs.shape[0]
+        if lhs_k.isdigit() and rhs_k.isdigit() and lhs_k != rhs_k:
+            diagnostics.append(GraphIRDiagnostic(
+                "error",
+                f"matmul K dimension mismatch: lhs has {lhs_k}, rhs has {rhs_k}",
+                span=op.source_span,
+                code="GRAPH_IR_MATMUL_SHAPE",
+            ))
 
 
 class MLIRObjectModule:

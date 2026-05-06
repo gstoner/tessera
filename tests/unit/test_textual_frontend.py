@@ -131,6 +131,10 @@ def test_textual_frontend_preserves_shape_dtype_layout_and_mesh_metadata():
     """
     module = lower_text_to_graph_ir(source)
     text = module.to_mlir()
+    assert module.meshes[0].name == "data"
+    assert module.meshes[0].axes == ("dp",)
+    assert module.meshes[0].shape == (2,)
+    assert module.functions[0].return_values == ["%C"]
     assert "tensor<16x32xf32>" in text
     assert 'tessera.layout = "row_major"' in text
     assert "tensor<16x8xf32>" in text
@@ -141,7 +145,7 @@ def test_textual_frontend_preserves_shape_dtype_layout_and_mesh_metadata():
     assert "tessera.assert" in text
 
 
-def test_textual_frontend_parses_kernel_and_reports_control_flow_span():
+def test_textual_frontend_parses_kernel_and_lowers_control_flow_markers():
     program = parse_text("""
     module demo {
       kernel k(A: tensor<?xfp32>) {
@@ -151,20 +155,123 @@ def test_textual_frontend_parses_kernel_and_reports_control_flow_span():
     """)
     assert program.modules[0].funcs[0].kind == "kernel"
 
-    with pytest.raises(FrontendSemanticError) as excinfo:
-        lower_text_to_graph_ir("""
-        module demo {
-          func bad(A: tensor<?xfp32>) -> tensor<?xfp32> {
-            if (A) {
-              B = op.relu(A);
-            }
-            return A;
-          }
+    module = lower_text_to_graph_ir("""
+    module demo {
+      func control(A: tensor<?xfp32>) -> tensor<?xfp32> {
+        if (A) {
+          B = op.relu(A);
+        } else {
+          B = op.sigmoid(A);
         }
-        """)
-    message = str(excinfo.value)
-    assert "control flow" in message
-    assert "at " in message
+        for (i in 0:4:1) {
+          schedule.pipeline(B) @{depth = 2};
+        }
+        while (B) {
+          barrier("loop");
+          return B;
+        }
+        return B;
+      }
+    }
+    """)
+    text = module.to_mlir()
+    assert "tessera.scf.if.begin" in text
+    assert "tessera.scf.else" in text
+    assert "tessera.scf.for.begin" in text
+    assert "tessera.scf.while.begin" in text
+    assert "tessera.scf.yield" in text
+
+
+def test_textual_frontend_accepts_full_normative_declaration_and_type_shapes():
+    source = """
+    module full {
+      type Tile = fragment<16, 16, 32, bf16; layout=mma>;
+      type Callback = fn(tensor<?xfp32>) -> tensor<?xfp32>;
+      let alpha: fp32 = 1.0;
+      mesh mesh0 = mesh<axes=[dp, tp], shape=[2, 4]>;
+
+      kernel k(
+        A: memref<16x32xbf16>[addrspace=shared],
+        B: tensor<?x?xfp32; layout=row_major> = tensor<?x?xfp32; layout=row_major>
+      ) -> (tensor<?x?xfp32>, tensor<?x?xfp32>) @{precision = strict} {
+        let tmp: tensor<?x?xfp32>;
+        tmp = op.arch.parameter() @{size = 4, dtype = "fp32"};
+        tmp[0:1, :] = op.cast(B) @{dtype = "fp32"};
+        dist.all_reduce(tmp) @{axis = "dp", op = "sum"};
+        assert(tmp, "tmp exists");
+        return tmp, B;
+      }
+    }
+    """
+    module = lower_text_to_graph_ir(source)
+    text = module.to_mlir()
+    assert module.type_aliases[0].name == "Tile"
+    assert module.constants[0].name == "alpha"
+    assert module.functions[0].fn_attrs["tessera.frontend.kind"] == '"kernel"'
+    assert "tessera.type_aliases" in text
+    assert "tessera.constants" in text
+    assert "tessera.meshes" in text
+    assert "tessera.frontend.kind" in text
+    assert "tessera.graph.arch.parameter" in text
+    assert "tessera.cast" in text
+    assert "tessera.return_pack" in text
+
+
+def test_textual_frontend_constructs_verified_graph_ir_object():
+    module = lower_text_to_graph_ir("""
+    module full_graph {
+      mesh m = mesh<axes=[dp, tp], shape=[2, 4]>;
+      type Pair = fn(tensor<?xfp32>) -> tensor<?xfp32>;
+      let alpha: fp32 = 1.0;
+
+      func main(A: tensor<4x8xfp32>, B: tensor<8x2xfp32>) -> tensor<4x2xfp32> {
+        C = op.matmul(A, B);
+        schedule.tile(C) @{m = 4, n = 2, k = 8};
+        dist.all_reduce(C) @{axis = "dp", op = "sum"};
+        if (C) {
+          assert(C, "ok");
+        }
+        return C;
+      }
+    }
+    """)
+    assert module.verify().ok
+    obj = module.to_mlir()
+    assert "tessera.meshes" in obj
+    assert "tessera.schedule.tile" in obj
+    assert "tessera.scf.if.begin" in obj
+
+
+def test_textual_frontend_rejects_static_matmul_shape_mismatch_at_graph_boundary():
+    module = lower_text_to_graph_ir("""
+    module bad {
+      func main(A: tensor<4x8xfp32>, B: tensor<7x2xfp32>) -> tensor<4x2xfp32> {
+        C = op.matmul(A, B);
+        return C;
+      }
+    }
+    """)
+    result = module.verify()
+    assert not result.ok
+    assert "GRAPH_IR_MATMUL_SHAPE" in result.format()
+    with pytest.raises(Exception, match="GRAPH_IR_MATMUL_SHAPE"):
+        module.to_mlir()
+
+
+def test_textual_frontend_lowers_tensor_and_binary_expressions():
+    module = lower_text_to_graph_ir("""
+    module demo {
+      func exprs(A: tensor<?xfp32>) -> tensor<?xfp32> {
+        X = tensor<?xfp32; layout=row_major>;
+        Y = 1 + 2;
+        Z = op.relu(A);
+        return Z;
+      }
+    }
+    """)
+    text = module.to_mlir()
+    assert "tessera.tensor.literal" in text
+    assert "tessera.expr.add" in text
 
 
 def test_textual_frontend_reports_syntax_line_column():

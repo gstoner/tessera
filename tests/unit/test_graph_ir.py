@@ -13,8 +13,11 @@ import pytest
 import tessera
 from tessera.compiler.graph_ir import (
     GraphIRBuilder,
+    GraphIRConstant,
+    GraphIRMesh,
     GraphIRModule,
     GraphIRFunction,
+    GraphIRTypeAlias,
     GraphIRVerificationError,
     IRArg,
     IROp,
@@ -164,6 +167,34 @@ class TestGraphIRModule:
     def test_repr(self):
         m = GraphIRModule()
         assert "GraphIRModule" in repr(m)
+
+    def test_structured_module_declarations_emit_attrs(self):
+        m = GraphIRModule(
+            meshes=[GraphIRMesh("mesh0", axes=("dp", "tp"), shape=(2, 4))],
+            type_aliases=[GraphIRTypeAlias("Tile", "fragment<16,16,32,bf16>")],
+            constants=[GraphIRConstant("alpha", "fp32", 1.0)],
+        )
+        mlir = m.to_mlir()
+        assert "tessera.meshes" in mlir
+        assert "mesh0" in mlir
+        assert "tessera.type_aliases" in mlir
+        assert "Tile" in mlir
+        assert "tessera.constants" in mlir
+        assert "alpha" in mlir
+
+    def test_structured_module_declaration_verifier(self):
+        dup = GraphIRModule(meshes=[
+            GraphIRMesh("mesh0", axes=("dp",), shape=(2,)),
+            GraphIRMesh("mesh0", axes=("tp",), shape=(4,)),
+        ])
+        result = dup.verify()
+        assert not result.ok
+        assert "GRAPH_IR_DUP_MESH" in result.format()
+
+        bad_rank = GraphIRModule(meshes=[GraphIRMesh("bad", axes=("dp", "tp"), shape=(2,))])
+        result = bad_rank.verify()
+        assert not result.ok
+        assert "GRAPH_IR_MESH_RANK" in result.format()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -324,6 +355,58 @@ class TestGraphIRBuilder:
         ])
         obj = construct_mlir_module(valid)
         assert "func.func @ok" in obj.to_mlir()
+
+    def test_verifier_understands_returns_control_and_shapes(self):
+        balanced = GraphIRModule(functions=[
+            GraphIRFunction(
+                name="control",
+                args=[IRArg("x", TENSOR_OPAQUE)],
+                body=[
+                    IROp(None, "tessera.scf.if.begin", [], [], kwargs={"region": "if"}),
+                    IROp("y", "tessera.relu", ["%x"], ["tensor<*x?>"], "tensor<*x?>"),
+                    IROp(None, "tessera.scf.else", [], [], kwargs={"region": "if"}),
+                    IROp("z", "tessera.sigmoid", ["%x"], ["tensor<*x?>"], "tensor<*x?>"),
+                    IROp(None, "tessera.scf.if.end", [], [], kwargs={"region": "if"}),
+                ],
+            )
+        ])
+        assert balanced.verify().ok
+
+        unbalanced = GraphIRModule(functions=[
+            GraphIRFunction(name="bad", body=[IROp(None, "tessera.scf.if.begin", [], [])])
+        ])
+        result = unbalanced.verify()
+        assert not result.ok
+        assert "GRAPH_IR_CONTROL_UNBALANCED" in result.format()
+
+        bad_shape = GraphIRModule(functions=[
+            GraphIRFunction(
+                name="bad_matmul",
+                args=[
+                    IRArg("a", IRType("tensor<16x32xf32>", shape=("16", "32"), dtype="fp32")),
+                    IRArg("b", IRType("tensor<16x8xf32>", shape=("16", "8"), dtype="fp32")),
+                ],
+                body=[
+                    IROp("c", "tessera.matmul", ["%a", "%b"], ["tensor<16x32xf32>", "tensor<16x8xf32>"], "tensor<16x8xf32>")
+                ],
+            )
+        ])
+        result = bad_shape.verify()
+        assert not result.ok
+        assert "GRAPH_IR_MATMUL_SHAPE" in result.format()
+
+    def test_verifier_checks_function_return_contract(self):
+        module = GraphIRModule(functions=[
+            GraphIRFunction(
+                name="bad_return",
+                result_types=[TENSOR_OPAQUE],
+                body=[],
+                return_values=[],
+            )
+        ])
+        result = module.verify()
+        assert not result.ok
+        assert "GRAPH_IR_RETURN_MISSING" in result.format()
 
     def test_graph_ir_mlir_contains_gemm(self):
         @tessera.jit

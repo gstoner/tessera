@@ -123,6 +123,16 @@ def Tessera_ArchGateType : TypeDef<Tessera_Dialect, "ArchGate"> {
   let summary = "Differentiable architecture gate vector";
 }
 
+def Tessera_NeighborsTopologyType : TypeDef<Tessera_Dialect, "NeighborsTopology"> {
+  let mnemonic = "neighbors.topology";
+  let summary = "Opaque handle for tessera.neighbors topology extension ops";
+}
+
+def Tessera_NeighborsHaloType : TypeDef<Tessera_Dialect, "NeighborsHalo"> {
+  let mnemonic = "neighbors.halo";
+  let summary = "Opaque handle for tessera.neighbors halo extension ops";
+}
+
 def Tessera_ArchRelax : I32EnumAttr<
   "ArchRelax",
   "architecture relaxation",
@@ -438,3 +448,29 @@ def Tessera_ArchMixedOp : Op<Tessera_Dialect, "arch.mixed", []> {
   let assemblyFormat = "$input `by` $gate attr-dict `:` type($input) `->` type($result)";
   let hasVerifier = 1;
 }
+
+// Neighbors extension marker ops. The standalone TesseraNeighbors component
+// owns semantic passes for these names; defining generic shells in the core
+// tessera dialect lets MLIR parse quoted generic IR such as
+// "tessera.neighbors.stencil.apply" while those passes remain string-name
+// driven and lightweight.
+class Tessera_NeighborsGenericOp<string mnemonic>
+    : Op<Tessera_Dialect, mnemonic, []> {
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+}
+
+def Tessera_NeighborsTopologyCreateOp
+    : Tessera_NeighborsGenericOp<"neighbors.topology.create">;
+def Tessera_NeighborsHaloRegionOp
+    : Tessera_NeighborsGenericOp<"neighbors.halo.region">;
+def Tessera_NeighborsHaloExchangeOp
+    : Tessera_NeighborsGenericOp<"neighbors.halo.exchange">;
+def Tessera_NeighborsNeighborReadOp
+    : Tessera_NeighborsGenericOp<"neighbors.neighbor.read">;
+def Tessera_NeighborsStencilDefineOp
+    : Tessera_NeighborsGenericOp<"neighbors.stencil.define">;
+def Tessera_NeighborsStencilApplyOp
+    : Tessera_NeighborsGenericOp<"neighbors.stencil.apply">;
+def Tessera_NeighborsPipelineConfigOp
+    : Tessera_NeighborsGenericOp<"neighbors.pipeline.config">;

@@ -3,6 +3,21 @@
 
 **Scope.** Map NVLabs **Fast‑dLLM** (block‑wise **approximate KV Cache** + **confidence‑aware parallel decoding**) into Tessera IR stack and runtime.
 
+## 0) Current compiler status
+
+The runnable example has been refactored for the current Tessera compiler in:
+
+- `fast_dllm_v2/`: tiny NumPy reference plus a Graph IR object-model builder.
+- `tests/smoke_random.py`: validates confidence-aware decode shapes and the
+  Graph -> Schedule -> Tile -> Apple Target IR artifact path.
+- `ir/fast_dllm_ops.mlir`: parser-valid registered `tessera.*` textual fixture.
+
+Today this is represented as a straight-line tensor skeleton:
+denoise matmul, RMSNorm, confidence softmax, MLP update, RMSNorm. The full
+native DSL/IR target below remains the semantic roadmap for future compiler
+ops once branch regions, KV-cache handles, and validated-prefix merge are
+implemented as registered operations.
+
 ## 1) Concepts → Tessera IR
 
 ### Graph IR (model & control)

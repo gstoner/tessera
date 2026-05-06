@@ -1,22 +1,53 @@
 #!/usr/bin/env python3
-import torch, numpy as np
-from tessera.model.nemotron_h.hybrid_pattern import NemotronHConfig
-from tessera.model.nemotron_h.model import NemotronH
+"""Run the Nemotron Nano sample against the current Tessera compiler.
 
-def tiny_cfg():
-    return NemotronHConfig(
-        hidden_size=5120, intermediate_size=20480,
-        num_attention_heads=40, num_key_value_heads=8, head_dim=128,
-        num_hidden_layers=3, hybrid_override_pattern="M*-",
-        mamba_num_heads=128, mamba_head_dim=80, ssm_state_size=128,
-        conv_kernel=4, chunk_size=128, rms_norm_eps=1e-5,
-        attention_bias=False, mlp_bias=False
-    )
+This smoke intentionally avoids PyTorch so it can run in the repository venv.
+It validates:
+
+* tiny NumPy reference forward path for the M/*/- hybrid stack
+* Graph IR object construction and verification
+* Graph -> Schedule -> Tile -> Apple Target IR artifact plumbing
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import numpy as np
+
+ROOT = Path(__file__).resolve().parents[1]
+REPO = ROOT.parents[2]
+for path in (ROOT, REPO / "python"):
+    text = str(path)
+    if text not in sys.path:
+        sys.path.insert(0, text)
+
+from nemotron_nano import NemotronNanoNumpy, build_toy_graph_ir, compile_toy_graph, tiny_config
+
+
+def main() -> int:
+    cfg = tiny_config()
+    model = NemotronNanoNumpy(cfg, seed=0)
+    input_ids = (np.arange(32, dtype=np.int64).reshape(2, 16) * 7) % cfg.vocab_size
+    logits = model.forward(input_ids)
+    assert logits.shape == (2, 16, cfg.vocab_size), logits.shape
+    assert np.isfinite(logits).all()
+
+    graph = build_toy_graph_ir(cfg)
+    graph_text = graph.to_mlir()
+    assert "tessera.matmul" in graph_text
+    assert "tessera.rmsnorm_safe" in graph_text
+
+    bundle = compile_toy_graph(target="apple_cpu")
+    assert bundle.target_ir is not None
+    assert bundle.runtime_status == "ready"
+    assert bundle.execution_mode == "cpu_accelerate"
+    assert "tessera_apple.cpu.accelerate_gemm" in bundle.target_ir.text
+
+    print("OK nemotron tiny:", tuple(logits.shape), bundle.request.target, bundle.execution_mode)
+    return 0
+
 
 if __name__ == "__main__":
-    torch.manual_seed(0)
-    cfg = tiny_cfg()
-    m = NemotronH(cfg)
-    x = torch.randint(0, 32000, (2, 16))  # small seq for smoke
-    y = m(x)
-    print("OK shapes:", tuple(y.shape))
+    raise SystemExit(main())

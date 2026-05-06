@@ -1,12 +1,45 @@
-# Fast‑dLLM v2 → Tessera Mapping (Starter Package)
+# Fast-dLLM v2 -> Tessera Mapping
 
-This starter contains a concrete mapping plan for **Fast‑dLLM v2** into the Tessera Programming Model, plus example IR snippets, a confidence‑aware parallel decoding policy stub, and suggested `tessera-opt` pipelines.
+This example contains a current-compiler Fast dLLM v2 smoke path plus the
+original mapping notes for a full block-wise approximate KV cache and
+confidence-aware parallel decoding implementation.
 
 Contents
 - `docs/Fast_dLLM_to_Tessera.md` — full write‑up and design notes.
-- `ir/fast_dllm_ops.mlir` — end‑to‑end example (Graph IR → Schedule IR → Tile IR stubs).
-- `ir/tests/*.mlir` — FileCheck‑style examples for block‑wise approximate KV Cache and parallel decoding forks/joins.
+- `fast_dllm_v2/` — dependency-light NumPy reference and current Graph IR compiler smoke.
+- `ir/fast_dllm_ops.mlir` — parser-valid current-dialect Graph IR tensor skeleton.
+- `ir/tests/*.mlir` — parser-valid fixtures for current compiler contracts.
 - `runtime/policy_confidence.*` — C++-style pseudocode for the confidence policy + approximate KV block manager.
 - `pipelines/pipelines.md` — recommended `tessera-opt` / `tessera-compile` invocations and pass order.
 
-> This is a *starter* drop: it is intentionally minimal and aligned to your house style so we can iterate quickly.
+## Quick Start
+
+From the repository root:
+
+```bash
+PYTHONPATH=python /Users/gregorystoner/venv/bin/python \
+  examples/advanced/Fast_dLLM_v2/tests/smoke_random.py
+
+PATH="$PWD/build/tools/tessera-opt:/opt/homebrew/Cellar/llvm@21/21.1.8/bin:$PATH" \
+  tessera-opt examples/advanced/Fast_dLLM_v2/ir/fast_dllm_ops.mlir >/tmp/fast_dllm_graph.mlir
+```
+
+Expected smoke output:
+
+```text
+OK fast_dllm tiny: (4, 14) accepted 0 apple_cpu cpu_accelerate
+```
+
+## Current Compiler Contract
+
+The current smoke intentionally separates two concerns:
+
+- `fast_dllm_v2.compiler_smoke` builds Graph IR with the Python object model and
+  lowers it through Graph IR -> Schedule IR -> Tile IR -> Apple Target IR artifacts.
+- `ir/fast_dllm_ops.mlir` uses quoted registered `tessera.*` ops so `tessera-opt`
+  can parse and verify the checked-in textual fixture.
+
+The full Fast dLLM semantics still live in the docs and runtime policy sketch:
+branch fork/join, confidence stats, approximate KV pack/read, COW cache pages,
+and validated-prefix merge. Those should become native Graph/Schedule/Tile ops
+as the compiler grows beyond the current straight-line tensor core.

@@ -507,3 +507,105 @@ def test_apple_cpu_runtime_exposes_fp16_gemm_symbol(tmp_path):
     np.testing.assert_array_equal(
         C, (A.astype(np.float32) @ B.astype(np.float32)).astype(np.float16)
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# bf16 follow-up: Apple CPU bf16 matmul via BNNSDataTypeBFloat16. ml_dtypes is
+# a soft dependency — tests skip when it's not installed so the rest of the
+# suite stays runnable on stripped-down environments.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _ml_dtypes_or_skip():
+    pytest.importorskip("ml_dtypes")
+    import ml_dtypes
+    return ml_dtypes
+
+
+def test_apple_cpu_accelerate_dispatches_bf16_matmul_via_bnns():
+    """Rank-2 bf16 matmul takes the BNNSDataTypeBFloat16 path. ml_dtypes'
+    bfloat16 dtype is byte-compatible with the C ABI, so the Python boundary
+    just .view(np.uint16) into ctypes. Numerical result matches a fp32-cast
+    reference at bf16 tolerance."""
+
+    ml_dtypes = _ml_dtypes_or_skip()
+    bf16 = ml_dtypes.bfloat16
+
+    @ts.jit(target="apple_cpu")
+    def mm(A, B):
+        return ts.ops.matmul(A, B)
+
+    rng = np.random.RandomState(13)
+    A = rng.randn(48, 80).astype(bf16)
+    B = rng.randn(80, 16).astype(bf16)
+
+    out = mm(A, B)
+    assert out.dtype == bf16
+    assert out.shape == (48, 16)
+
+    ref = (A.astype(np.float32) @ B.astype(np.float32)).astype(bf16)
+    np.testing.assert_array_equal(out, ref)
+
+
+def test_apple_cpu_runtime_exposes_bf16_gemm_symbol(tmp_path):
+    """Compile the runtime shim and confirm tessera_apple_cpu_gemm_bf16 is
+    exported with the expected ABI plus correct numerical output via BNNS."""
+
+    ml_dtypes = _ml_dtypes_or_skip()
+    bf16 = ml_dtypes.bfloat16
+
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        pytest.skip("C++ compiler is not available")
+    if sys.platform != "darwin":
+        pytest.skip("bf16 BNNS path is Apple-only")
+
+    source = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_cpu_runtime.cpp"
+    lib = tmp_path / "libtessera_apple_cpu_runtime.dylib"
+    subprocess.run(
+        ["c++", "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(lib),
+         "-framework", "Accelerate"],
+        check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+
+    runtime = ctypes.CDLL(str(lib))
+    sym = runtime.tessera_apple_cpu_gemm_bf16
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    sym.restype = None
+
+    A = np.array([[1, 2, 3], [4, 5, 6]], dtype=bf16)
+    B = np.array([[7, 8], [9, 10], [11, 12]], dtype=bf16)
+    C = np.zeros((2, 2), dtype=bf16)
+    sym(
+        A.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        B.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        C.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        2, 2, 3,
+    )
+    np.testing.assert_array_equal(
+        C, (A.astype(np.float32) @ B.astype(np.float32)).astype(bf16)
+    )
+
+
+def test_apple_cpu_bf16_disabled_when_ml_dtypes_missing(monkeypatch):
+    """When ml_dtypes isn't installed the bf16 dtype probe returns None and
+    the runtime falls through to numpy. Verified by stubbing the import to
+    fail — exercises the soft-dep contract."""
+
+    from tessera import runtime as tessera_runtime
+
+    monkeypatch.setattr(tessera_runtime, "_bfloat16_dtype", lambda: None)
+
+    @ts.jit(target="apple_cpu")
+    def mm(A, B):
+        return ts.ops.matmul(A, B)
+
+    # Without bf16 detection, an f32 matmul still runs (rank-2 fast path).
+    A = np.eye(3, dtype=np.float32)
+    B = np.ones((3, 3), dtype=np.float32)
+    np.testing.assert_array_equal(mm(A, B), A @ B)

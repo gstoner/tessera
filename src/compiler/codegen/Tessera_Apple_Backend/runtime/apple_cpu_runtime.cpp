@@ -200,6 +200,29 @@ inline uint16_t float_to_half(float v) {
   return uint16_t(sign | (uint32_t(exp) << 10) | (frac >> 13));
 }
 
+// bf16 ↔ float conversion (Phase 8.2 Item: bf16 GEMM).
+// bf16 is IEEE binary32 with the bottom 16 mantissa bits truncated, so the
+// conversion is a simple shift. Round-to-nearest-even on the truncated bits.
+inline float bfloat16_to_float(uint16_t b) {
+  uint32_t f = static_cast<uint32_t>(b) << 16;
+  float out;
+  std::memcpy(&out, &f, sizeof(out));
+  return out;
+}
+
+inline uint16_t float_to_bfloat16(float v) {
+  uint32_t f;
+  std::memcpy(&f, &v, sizeof(f));
+  // Handle NaN: keep at least one mantissa bit set, otherwise NaN -> Inf.
+  if ((f & 0x7FC00000u) == 0x7F800000u && (f & 0x007FFFFFu) != 0) {
+    return static_cast<uint16_t>((f >> 16) | 0x40u);
+  }
+  // Round-to-nearest-even on bottom 16 bits.
+  uint32_t lsb = (f >> 16) & 1u;
+  uint32_t rounded = f + 0x7FFFu + lsb;
+  return static_cast<uint16_t>(rounded >> 16);
+}
+
 // fp32 reference path used when BNNS isn't available or rejects the input.
 // Converts both inputs to fp32, runs cblas_sgemm (or the portable reference
 // kernel), then converts back. Preserves correctness at the cost of one
@@ -277,6 +300,90 @@ extern "C" void tessera_apple_cpu_gemm_f16(const uint16_t* A, const uint16_t* B,
   // BNNS path failed (older OS, unexpected layout, etc.) — fall through.
 #endif
   cblas_fp16_via_fp32(A, B, C, M, N, K);
+}
+
+//===---------------------------------------------------------------------===//
+// bf16 matmul (Phase 8.2 follow-up)
+//===---------------------------------------------------------------------===//
+// Inputs/output use the IEEE-style brain-float (bf16) encoding. At the ABI
+// boundary they appear as uint16_t* — same convention as fp16. ml_dtypes'
+// numpy bfloat16 dtype is byte-compatible with this layout.
+//
+// Apple path: BNNSMatMul with BNNSDataTypeBFloat16 (macOS 12+). Same descriptor
+// shape as the fp16 path, just a different data_type field. Internally BNNS
+// does fp32 accumulation, matching the typical mixed-precision contract.
+//
+// Fallback path: convert to fp32 with a bit-shift, run cblas_sgemm (or the
+// portable reference kernel), convert back with round-to-nearest-even.
+
+namespace {
+
+inline void cblas_bf16_via_fp32(const uint16_t* A, const uint16_t* B,
+                                uint16_t* C, int32_t M, int32_t N, int32_t K) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Cf(static_cast<std::size_t>(M) * N, 0.0f);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = bfloat16_to_float(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = bfloat16_to_float(B[i]);
+#if TESSERA_APPLE_CPU_HAVE_ACCELERATE
+  cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+              M, N, K, 1.0f, Af.data(), K, Bf.data(), N, 0.0f, Cf.data(), N);
+#else
+  reference_gemm_f32(Af.data(), Bf.data(), Cf.data(), M, N, K);
+#endif
+  for (std::size_t i = 0; i < Cf.size(); ++i) C[i] = float_to_bfloat16(Cf[i]);
+}
+
+#if TESSERA_APPLE_CPU_HAVE_ACCELERATE
+inline bool bnns_gemm_bf16(const uint16_t* A, const uint16_t* B, uint16_t* C,
+                           int32_t M, int32_t N, int32_t K) {
+  // Same descriptor convention as bnns_gemm_f16: row-major storage maps
+  // to BNNSDataLayout2DFirstMajor with stride[0]=1, stride[1]=leading-dim.
+  BNNSNDArrayDescriptor a{}, b{}, c{};
+  a.layout = BNNSDataLayout2DFirstMajor;
+  a.data_type = BNNSDataTypeBFloat16;
+  a.size[0] = static_cast<size_t>(M);
+  a.size[1] = static_cast<size_t>(K);
+  a.stride[0] = 1;
+  a.stride[1] = static_cast<size_t>(K);
+  a.data = const_cast<uint16_t*>(A);
+
+  b.layout = BNNSDataLayout2DFirstMajor;
+  b.data_type = BNNSDataTypeBFloat16;
+  b.size[0] = static_cast<size_t>(K);
+  b.size[1] = static_cast<size_t>(N);
+  b.stride[0] = 1;
+  b.stride[1] = static_cast<size_t>(N);
+  b.data = const_cast<uint16_t*>(B);
+
+  c.layout = BNNSDataLayout2DFirstMajor;
+  c.data_type = BNNSDataTypeBFloat16;
+  c.size[0] = static_cast<size_t>(M);
+  c.size[1] = static_cast<size_t>(N);
+  c.stride[0] = 1;
+  c.stride[1] = static_cast<size_t>(N);
+  c.data = C;
+
+  ssize_t ws_size = BNNSMatMulWorkspaceSize(/*transA=*/false, /*transB=*/false,
+                                            /*alpha=*/1.0f, &a, &b, &c, nullptr);
+  if (ws_size < 0) return false;
+  std::vector<uint8_t> workspace(ws_size > 0 ? static_cast<std::size_t>(ws_size) : 0);
+  int rc = BNNSMatMul(/*transA=*/false, /*transB=*/false,
+                      /*alpha=*/1.0f, &a, &b, &c,
+                      ws_size > 0 ? workspace.data() : nullptr, nullptr);
+  return rc == 0;
+}
+#endif
+
+} // namespace
+
+extern "C" void tessera_apple_cpu_gemm_bf16(const uint16_t* A, const uint16_t* B,
+                                            uint16_t* C, int32_t M, int32_t N,
+                                            int32_t K) {
+#if TESSERA_APPLE_CPU_HAVE_ACCELERATE
+  if (bnns_gemm_bf16(A, B, C, M, N, K)) return;
+#endif
+  cblas_bf16_via_fp32(A, B, C, M, N, K);
 }
 
 #if defined(__clang__)

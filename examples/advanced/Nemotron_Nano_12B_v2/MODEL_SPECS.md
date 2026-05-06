@@ -24,7 +24,12 @@
 
 ## Tessera mapping (Graph‑IR → Schedule‑IR → Tile‑IR)
 
-- **Graph‑IR nodes**
+- **Current compiler smoke Graph IR**
+  - The checked-in `tessera/graph_examples/nemotron_2L_graph.mlir` uses registered `tessera.*`
+    ops only: `tessera.matmul`, `tessera.relu`, `tessera.softmax`, and `tessera.rmsnorm_safe`.
+  - This keeps the sample parseable by current `tessera-opt` and lowerable through the Python
+    Graph -> Schedule -> Tile -> Apple Target IR artifact path.
+- **Full model semantic Graph IR target**
   - `nemotron.mamba2_mixer(hidden_size, m_heads, m_head_dim, ssm_state, chunk=128)`
   - `nemotron.attn_gqa(num_heads=40, kv_heads=8, head_dim=128, attn_bias=false)`
   - `nemotron.mlp_relu2(hidden=5120, ff=20480, bias=false)`

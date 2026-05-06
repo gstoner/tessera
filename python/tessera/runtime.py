@@ -180,6 +180,18 @@ _last_profile = RuntimeProfile()
 _apple_cpu_runtime: ctypes.CDLL | None = None
 
 
+# bfloat16 dtype is exposed by the optional ml_dtypes package. We import lazily
+# and tolerate it missing so the rest of the runtime works for users who do
+# not need the bf16 fast path. ml_dtypes is the de-facto standard now (JAX,
+# TensorFlow Probability, PyTorch's experimental numpy bridge all use it).
+def _bfloat16_dtype() -> Any:
+    try:
+        import ml_dtypes
+        return ml_dtypes.bfloat16
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Mock implementation (no shared library required)
 # ---------------------------------------------------------------------------
@@ -1327,6 +1339,20 @@ def _apple_cpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
         and b.ndim == 2
     )
 
+    # Phase 8.2 follow-up: rank-2 bf16 matmul via BNNSDataTypeBFloat16. The
+    # ml_dtypes.bfloat16 numpy dtype is a 2-byte type byte-compatible with
+    # the C ABI's uint16_t bf16 layout, so we can pass through .view(np.uint16)
+    # to ctypes. Activates only when ml_dtypes is installed (soft dep) and
+    # both inputs use that dtype.
+    bf16_dtype = _bfloat16_dtype()
+    bf16_fast_path = (
+        bf16_dtype is not None
+        and a.dtype == bf16_dtype
+        and b.dtype == bf16_dtype
+        and a.ndim == 2
+        and b.ndim == 2
+    )
+
     if rank2_fast_path:
         if a.shape[1] != b.shape[0]:
             raise ValueError(f"matmul shape mismatch: {a.shape} x {b.shape}")
@@ -1371,6 +1397,31 @@ def _apple_cpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
         # internal fallback path.
         out_f32 = np.matmul(a.astype(np.float32), b.astype(np.float32))
         return out_f32.astype(np.float16)
+
+    if bf16_fast_path:
+        if a.shape[1] != b.shape[0]:
+            raise ValueError(f"matmul shape mismatch: {a.shape} x {b.shape}")
+        if not a.flags.c_contiguous:
+            a = np.ascontiguousarray(a, dtype=bf16_dtype)
+        if not b.flags.c_contiguous:
+            b = np.ascontiguousarray(b, dtype=bf16_dtype)
+        gemm_bf16 = _apple_cpu_gemm_bf16()
+        if gemm_bf16 is not None:
+            out = np.zeros((a.shape[0], b.shape[1]), dtype=bf16_dtype)
+            gemm_bf16(
+                a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                ctypes.c_int32(a.shape[0]),
+                ctypes.c_int32(b.shape[1]),
+                ctypes.c_int32(a.shape[1]),
+            )
+            return out
+        # Older runtime build without the bf16 symbol — same conversion-based
+        # fallback as fp16 above. ml_dtypes' bfloat16 is convertible to/from
+        # float32 directly via numpy astype.
+        out_f32 = np.matmul(a.astype(np.float32), b.astype(np.float32))
+        return out_f32.astype(bf16_dtype)
 
     if rank3_batched_path:
         if a.shape[2] != b.shape[1]:
@@ -1468,6 +1519,30 @@ def _apple_cpu_gemm_f16() -> Any:
 
     runtime = _load_apple_cpu_runtime()
     sym = getattr(runtime, "tessera_apple_cpu_gemm_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32,
+        ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_cpu_gemm_bf16() -> Any:
+    """Phase 8.2 follow-up: bf16 matmul via BNNS (BNNSDataTypeBFloat16) with
+    a bit-shift fp32 conversion fallback inside the runtime symbol. The
+    Python boundary uses ml_dtypes.bfloat16 (a 2-byte numpy dtype) which is
+    byte-compatible with the C ABI's uint16_t bf16 layout. Symbol may be
+    absent on older runtime builds; in that case bf16 inputs fall through to
+    the fp32 numpy path."""
+
+    runtime = _load_apple_cpu_runtime()
+    sym = getattr(runtime, "tessera_apple_cpu_gemm_bf16", None)
     if sym is None:
         return None
     sym.argtypes = [

@@ -505,7 +505,12 @@ class GraphIRFunction:
         lines = [f"func.func @{self.name}({args_str}){ret_str}{attr_str} {{"]
         for op in self.body:
             lines.append(op.to_mlir())
-        lines.append("  return")
+        if self.return_values:
+            values = ", ".join(self.return_values)
+            types = ", ".join(str(t) for t in self.result_types)
+            lines.append(f"  return {values} : {types}")
+        else:
+            lines.append("  return")
         lines.append("}")
         return "\n".join(lines)
 

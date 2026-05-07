@@ -4,6 +4,8 @@
 #include <vector>
 #include <cmath>
 #include <cstdlib>
+#include <cstdio>
+#include <array>
 #include "common/timer.h"
 #include "common/nvtx_helpers.h"
 #include "common/device_utils.h"
@@ -22,6 +24,7 @@ static void usage(){
   std::cout << "opbench --op <name> [args]\n"
                "  --list-ops                 List available operators\n"
                "  --backend reference|artifact|tessera-runtime\n"
+               "  --runtime bridge|native    tessera-runtime mode (default bridge)\n"
                "  --artifact-root PATH       Root containing mlir/tessera_ir_samples\n"
                "  --json                     Emit shared benchmark JSON row\n"
                "  --iters N                  Iterations (default 50)\n"
@@ -42,25 +45,6 @@ static std::string json_escape(const std::string& s){
     }
   }
   return out.str();
-}
-
-static std::string artifact_path_for(const std::string& root, const std::string& op){
-  std::string prefix = root.empty() ? "." : root;
-  if(!prefix.empty() && prefix.back()!='/') prefix += "/";
-  if(op=="matmul") return prefix + "mlir/tessera_ir_samples/MatmulOp.mlir";
-  if(op=="conv2d") return prefix + "mlir/tessera_ir_samples/Conv2dNHWC.mlir";
-  if(op=="flash_attention") return prefix + "mlir/tessera_ir_samples/FlashAttention.mlir";
-  if(op=="reduce") return prefix + "mlir/tessera_ir_samples/Reduce.mlir";
-  if(op=="elementwise") return prefix + "mlir/tessera_ir_samples/Elementwise.mlir";
-  if(op=="softmax_layernorm") return prefix + "mlir/tessera_ir_samples/SoftmaxLayerNorm.mlir";
-  if(op=="transpose_gather") return prefix + "mlir/tessera_ir_samples/TransposeGather.mlir";
-  return "";
-}
-
-static bool readable_file(const std::string& path){
-  if(path.empty()) return false;
-  std::ifstream f(path);
-  return f.good();
 }
 
 static void emit_json(const std::string& op,
@@ -111,6 +95,72 @@ static void emit_json(const std::string& op,
             << "}\n";
 }
 
+static std::string shell_quote(const std::string& s){
+  std::string out = "'";
+  for(char c: s){
+    if(c=='\'') out += "'\\''";
+    else out += c;
+  }
+  out += "'";
+  return out;
+}
+
+static std::string benchmark_bridge_script(const std::string& artifact_root){
+  std::string prefix = artifact_root.empty() ? "." : artifact_root;
+  if(!prefix.empty() && prefix.back()!='/') prefix += "/";
+  return prefix + "scripts/opbench_bridge.py";
+}
+
+static int run_python_bridge(const std::string& op,
+                             const std::string& backend,
+                             const std::string& mode,
+                             const std::string& runtime_mode,
+                             const std::string& artifact_root,
+                             const OpArgs& args){
+  const char* python_env = std::getenv("OPBENCH_PYTHON");
+  std::string python = python_env && *python_env ? python_env : "python3";
+  std::ostringstream cmd;
+  cmd << shell_quote(python)
+      << " " << shell_quote(benchmark_bridge_script(artifact_root))
+      << " --mode " << shell_quote(mode)
+      << " --backend " << shell_quote(backend)
+      << " --runtime " << shell_quote(runtime_mode)
+      << " --op " << shell_quote(op)
+      << " --iters " << args.iters
+      << " --seed " << args.seed
+      << " --m " << args.M
+      << " --n " << args.N
+      << " --k " << args.K
+      << " --Nn " << args.Nn
+      << " --H " << args.H
+      << " --W " << args.W
+      << " --C " << args.C
+      << " --Kc " << args.Kc
+      << " --R " << args.R
+      << " --S " << args.S
+      << " --stride_h " << args.stride_h
+      << " --stride_w " << args.stride_w
+      << " --pad_h " << args.pad_h
+      << " --pad_w " << args.pad_w
+      << " --B " << args.B
+      << " --heads " << args.heads
+      << " --seq " << args.seq
+      << " --dim " << args.dim;
+
+  std::array<char, 4096> buffer{};
+  FILE* pipe = popen(cmd.str().c_str(), "r");
+  if(!pipe){
+    OpResult res{};
+    emit_json(op, backend, "runtime_unavailable", "backend_unavailable", res, args, "failed to start Python Tessera runtime bridge");
+    return 2;
+  }
+  while(fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr){
+    std::cout << buffer.data();
+  }
+  int rc = pclose(pipe);
+  return rc == 0 ? 0 : 2;
+}
+
 int main(int argc, char** argv){
   register_matmul();
   register_conv2d();
@@ -124,6 +174,7 @@ int main(int argc, char** argv){
 
   std::string op;
   std::string backend = "reference";
+  std::string runtime_mode = "bridge";
   std::string artifact_root = ".";
   bool json = false;
   OpArgs args;
@@ -138,6 +189,7 @@ int main(int argc, char** argv){
       return 0;
     } else if(a=="--op" && i+1<argc){ op = argv[++i]; }
     else if(a=="--backend" && i+1<argc){ backend = argv[++i]; }
+    else if(a=="--runtime" && i+1<argc){ runtime_mode = argv[++i]; }
     else if(a=="--artifact-root" && i+1<argc){ artifact_root = argv[++i]; }
     else if(a=="--json"){ json = true; }
     else if(a=="--iters"){ want_int(args.iters); }
@@ -170,19 +222,25 @@ int main(int argc, char** argv){
   if(!fn){ std::cerr<<"Unknown op: "<<op<<"\n"; return 1; }
 
   if(backend=="artifact"){
-    std::string path = artifact_path_for(artifact_root, op);
-    bool ok = readable_file(path);
-    OpResult res{};
-    std::string reason = ok ? "MLIR sample artifact is present; runtime execution skipped"
-                            : "No MLIR sample artifact is registered for this operator";
-    if(json) emit_json(op, backend, ok ? "artifact_only" : "unsupported", ok ? "artifact_only" : "unsupported", res, args, reason, path);
-    else std::cout << (ok ? "artifact_ok=1 " : "artifact_ok=0 ") << "path=" << path << " reason=" << reason << "\n";
-    return ok ? 0 : 2;
+    if(json) return run_python_bridge(op, backend, "artifact", runtime_mode, artifact_root, args);
+    std::cout << "artifact_mode=generated_bundle bridge=" << benchmark_bridge_script(artifact_root) << "\n";
+    return 0;
   }
 
   if(backend=="tessera-runtime"){
+    if(runtime_mode=="native"){
+      OpResult res{};
+      std::string reason = "Native C ABI operator launch is pending; use --runtime bridge";
+      if(json) emit_json(op, backend, "runtime_unavailable", "backend_unavailable", res, args, reason);
+      else std::cout << "runtime_status=backend_unavailable reason=" << reason << "\n";
+      return 0;
+    }
+    if(runtime_mode!="bridge"){
+      std::cerr<<"Unknown runtime: "<<runtime_mode<<"\n"; usage(); return 1;
+    }
+    if(json) return run_python_bridge(op, backend, "runtime", runtime_mode, artifact_root, args);
     OpResult res{};
-    std::string reason = "Generated operator runtime launch is not wired to the Tessera C ABI yet";
+    std::string reason = "Python Tessera runtime bridge requires --json output in this harness";
     if(json) emit_json(op, backend, "runtime_unavailable", "backend_unavailable", res, args, reason);
     else std::cout << "runtime_status=backend_unavailable reason=" << reason << "\n";
     return 0;

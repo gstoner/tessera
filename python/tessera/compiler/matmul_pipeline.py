@@ -34,10 +34,11 @@ UNARY_OPS = {
     "tessera.sin",
     "tessera.silu",
     "tessera.gelu",
+    "tessera.tanh",
     "tessera.rmsnorm",
     "tessera.rmsnorm_safe",
 }
-REDUCTION_OPS = {"tessera.softmax", "tessera.softmax_safe"}
+REDUCTION_OPS = {"tessera.softmax", "tessera.softmax_safe", "tessera.reduce"}
 LAYOUT_OPS = {"tessera.transpose", "tessera.cast"}
 STATEFUL_FUNCTIONAL_OPS = {"tessera.adam"}
 ROPE_OPS = {"tessera.rope"}
@@ -529,11 +530,26 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
     if op_name == "tessera.gelu":
         x = np.asarray(operands[0])
         return x * 0.5 * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x + 0.044715 * x**3)))
+    if op_name == "tessera.tanh":
+        return np.tanh(operands[0])
+    if op_name == "tessera.add":
+        rhs = operands[1] if len(operands) > 1 else kwargs.get("scalar", 0.0)
+        return np.asarray(operands[0]) + rhs
+    if op_name == "tessera.mul":
+        rhs = operands[1] if len(operands) > 1 else kwargs.get("scalar", 1.0)
+        return np.asarray(operands[0]) * rhs
     if op_name in {"tessera.softmax", "tessera.softmax_safe"}:
         x = operands[0]
         axis = int(kwargs.get("axis", -1))
         e = np.exp(x - np.max(x, axis=axis, keepdims=True))
         return e / np.sum(e, axis=axis, keepdims=True)
+    if op_name == "tessera.reduce":
+        if str(kwargs.get("op", "sum")) != "sum":
+            raise ValueError("CPU compiler path only supports tessera.reduce op='sum'")
+        axis = kwargs.get("axis", None)
+        if axis is not None:
+            axis = int(axis)
+        return np.sum(operands[0], axis=axis, keepdims=bool(kwargs.get("keepdims", False)))
     if op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}:
         x = np.asarray(operands[0])
         eps = float(kwargs.get("eps", 1e-5 if op_name == "tessera.rmsnorm" else 1e-6))

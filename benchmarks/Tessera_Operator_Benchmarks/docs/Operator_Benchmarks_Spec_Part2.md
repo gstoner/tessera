@@ -12,17 +12,23 @@
 
 ## Backend Hooks
 - `reference`: CPU reference kernels, executable everywhere.
-- `artifact`: registered MLIR sample artifacts, reported as
-  `runtime_status="artifact_only"` and `telemetry.status="unmeasured"`.
-- `tessera-runtime`: explicit `backend_unavailable` status until generated
-  operator runtime launches are wired to the Tessera C ABI.
+- `artifact`: generated Tessera JIT bundles with Graph, Schedule, Tile, and
+  Target artifacts present for every registered operator. Static MLIR samples
+  remain readable examples, but validation uses generated bundles.
+- `tessera-runtime --runtime bridge`: portable Python bridge that generates
+  seeded NumPy inputs, compiles the operator with `@tessera.jit`, launches the
+  generated `RuntimeArtifact`, and emits the shared JSON row schema.
+- `tessera-runtime --runtime native`: future generated C ABI dispatch path;
+  reports `backend_unavailable` until native hooks are built and detected.
 - Optional vendor paths: CUTLASS/MIOpen/CK/Triton as future cross-checks.
 
 ## Current Gaps
-- Runtime launch hooks are not implemented for generated Tessera kernels.
-- Artifact samples currently stop at Graph IR contracts; Schedule/Tile/Target
-  benchmark artifact validation should be added as those paths become stable for
-  each operator.
-- Operator tests lock registration, quick sweep coverage, artifact coverage, and
-  telemetry schema. They do not replace numerical conformance suites.
+- Native C ABI runtime launch hooks are still pending; the Python runtime bridge
+  is the portable generated-artifact execution path for all registered ops.
+- Artifact validation covers generated Graph/Schedule/Tile/Target bundles.
+  Hardware validation of non-CPU target kernels remains out of scope for this
+  hardware-free profile.
+- Operator tests now lock bridge mappings, generated artifact coverage,
+  telemetry schema, and independent NumPy conformance for the bridge. They do
+  not replace future hardware runtime conformance suites.
 --- END-MERGE: Operator_Benchmarks_Spec ---

@@ -279,6 +279,9 @@ def _elementwise_op(op: ScheduleOp) -> TileOp:
         "vectorize": op.attrs.get("vectorize", True),
         "resource": _elementwise_resource_estimate(source),
     }
+    if source == "tessera.reduce":
+        attrs.setdefault("op", "sum")
+        attrs.setdefault("order", "deterministic_tree")
     ops = [TileOp(tile_name, attrs)]
     if source == "tessera.rope":
         ops.append(TileOp("tile.rotary_pair", {**dict(op.attrs), "vector": 2}))
@@ -321,7 +324,7 @@ def _mma_resource_estimate(attrs: dict[str, Any]) -> dict[str, Any]:
 
 
 def _elementwise_resource_estimate(source: str) -> dict[str, Any]:
-    if source in {"tessera.softmax", "tessera.softmax_safe"}:
+    if source in {"tessera.softmax", "tessera.softmax_safe", "tessera.reduce"}:
         return {"shared_memory_bytes": 1024, "register_estimate": 24, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 1}
     return {"shared_memory_bytes": 0, "register_estimate": 16, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
 
@@ -335,7 +338,7 @@ def _lowering_kind(op_name: str) -> str:
         return "paged_state"
     if op_name in {"tessera.transpose", "tessera.cast"}:
         return "layout_transform"
-    if op_name in {"tessera.softmax", "tessera.softmax_safe"}:
+    if op_name in {"tessera.softmax", "tessera.softmax_safe", "tessera.reduce"}:
         return "stable_reduction"
     if op_name == "tessera.adam":
         return "functional_optimizer_step"

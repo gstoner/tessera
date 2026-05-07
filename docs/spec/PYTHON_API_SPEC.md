@@ -250,8 +250,9 @@ def gemm_256x128(A, B):
 print(gemm_256x128.schedule_ir)
 ```
 
-This path supports a single returned `ops.matmul`, `ops.gemm`, `ops.relu`,
-`ops.sigmoid`, `ops.softmax`, `ops.sin`, or functional `ops.adam` call. It
+This path supports returned straight-line dataflow made from CPU-backed ops
+including `ops.matmul`, `ops.gemm`, `ops.relu`, `ops.sigmoid`, `ops.softmax`,
+`ops.reduce`, `ops.sum`, `ops.tanh`, `ops.sin`, and functional `ops.adam`. It
 exposes Graph IR, Schedule IR, Tile IR, and Target IR artifacts before executing
 on CPU. Other functions continue to use the eager Python fallback and expose the
 reason through `.lowering_diagnostics` and `.explain_lowering()`.
@@ -1003,7 +1004,7 @@ The join of two effects is the more permissive one. A function that calls a `ran
 
 | Op | Effect |
 |----|--------|
-| `gemm`, `matmul`, `layer_norm`, `softmax`, `gelu`, `relu` | `pure` |
+| `gemm`, `matmul`, `layer_norm`, `softmax`, `reduce`, `sum`, `gelu`, `tanh`, `relu`, `add`, `mul` | `pure` |
 | `transpose`, `cast` | `pure` |
 | `dropout` (when `training=True`) | `random` |
 | `prefetch`, `async_copy`, `await_movement` | `movement` |
@@ -1220,7 +1221,12 @@ metadata for frontend and compiler tests.
 | `layer_norm(x, eps=1e-5)` | `(array) → array` | `pure` | NumPy layer norm |
 | `softmax(x, axis=-1)` | `(array) → array` | `pure` | NumPy softmax |
 | `softmax_safe(x, axis=-1)` | `(array) → array` | `pure` | Stable NumPy softmax alias |
+| `reduce(x, op="sum", axis=None, keepdims=False)` | `(array) → array` | `pure` | NumPy sum reduction; non-sum reductions planned |
+| `sum(x, axis=None, keepdims=False)` | `(array) → array` | `pure` | Alias for `reduce(..., op="sum")` |
 | `gelu(x)` | `(array) → array` | `pure` | NumPy GELU |
+| `tanh(x)` | `(array) → array` | `pure` | NumPy tanh |
+| `add(x, y=None, scalar=None)` | `(array, array/scalar) → array` | `pure` | NumPy addition; also used by Python frontend binary `+` lowering |
+| `mul(x, y=None, scalar=None)` | `(array, array/scalar) → array` | `pure` | NumPy multiplication; also used by Python frontend binary `*` lowering |
 | `relu(x)` | `(array) → array` | `pure` | NumPy ReLU |
 | `silu(x)` | `(array) → array` | `pure` | NumPy SiLU |
 | `sigmoid(x)` | `(array) → array` | `pure` | NumPy sigmoid |

@@ -1951,11 +1951,26 @@ def _execute_runtime_cpu_op(op_name: str, operands: list[Any], kwargs: dict[str,
         return 1.0 / (1.0 + np.exp(-operands[0]))
     if op_name == "tessera.sin":
         return np.sin(operands[0])
+    if op_name == "tessera.tanh":
+        return np.tanh(operands[0])
+    if op_name == "tessera.add":
+        rhs = operands[1] if len(operands) > 1 else kwargs.get("scalar", 0.0)
+        return np.asarray(operands[0]) + rhs
+    if op_name == "tessera.mul":
+        rhs = operands[1] if len(operands) > 1 else kwargs.get("scalar", 1.0)
+        return np.asarray(operands[0]) * rhs
     if op_name == "tessera.softmax":
         x = operands[0]
         axis = int(kwargs.get("axis", -1))
         e = np.exp(x - np.max(x, axis=axis, keepdims=True))
         return e / np.sum(e, axis=axis, keepdims=True)
+    if op_name == "tessera.reduce":
+        if str(kwargs.get("op", "sum")) != "sum":
+            raise ValueError("runtime CPU reduce only supports op='sum'")
+        axis = kwargs.get("axis", None)
+        if axis is not None:
+            axis = int(axis)
+        return np.sum(operands[0], axis=axis, keepdims=bool(kwargs.get("keepdims", False)))
     if op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}:
         x = np.asarray(operands[0])
         eps = float(kwargs.get("eps", 1e-5 if op_name == "tessera.rmsnorm" else 1e-6))

@@ -19,7 +19,7 @@ common/          # timers, NVTX helpers, device init hooks
 harness/         # CLI runner, op registry, config parser
 ops/             # individual operators (matmul, conv2d, attention, …)
 mlir/            # Tessera IR samples for each op
-scripts/         # python sweeps + CSV/HTML report tools
+scripts/         # python sweeps, Tessera bridge, CSV/HTML report tools
 docs/            # spec split into two parts (merge markers included)
 .github/workflows# CI example
 ```
@@ -32,32 +32,39 @@ cmake --build build -j
 ./build/opbench --op matmul --m 64 --n 64 --k 64 --iters 3 --seed 123 --json
 ~/venv/bin/python scripts/opbench.py --config scripts/configs/quick_sweep.yaml --bin ./build/opbench --out /tmp/opbench_out
 ~/venv/bin/python scripts/opbench.py --config scripts/configs/quick_sweep.yaml --bin ./build/opbench --backend artifact --out /tmp/opbench_artifacts
+~/venv/bin/python scripts/opbench.py --config scripts/configs/quick_sweep.yaml --bin ./build/opbench --backend tessera-runtime --runtime bridge --out /tmp/opbench_runtime
 ~/venv/bin/python scripts/report_html.py /tmp/opbench_out/results.csv /tmp/opbench_out/report.html
 ```
 
 Backends:
 - `reference`: executable CPU reference kernels with correctness checks.
-- `artifact`: verifies the registered MLIR sample artifact exists for each op;
-  reports `runtime_status="artifact_only"` and `telemetry.status="unmeasured"`.
-- `tessera-runtime`: explicitly reports `backend_unavailable` until generated
-  operator runtime launches are wired to the Tessera C ABI.
+- `artifact`: generates a Tessera JIT bundle for each operator and validates
+  Graph, Schedule, Tile, and Target artifacts; reports
+  `runtime_status="artifact_only"` and `telemetry.status="unmeasured"`.
+- `tessera-runtime --runtime bridge`: launches generated CPU `RuntimeArtifact`
+  bundles through the Python `@tessera.jit` + `ts.launch()` path for all
+  registered operators.
+- `tessera-runtime --runtime native`: reserved for the future generated C ABI
+  dispatch layer and reports `backend_unavailable` until that path is built.
 - If ROCm/CUDA are available, define `-DOPBENCH_WITH_NVTX=ON` to get NVTX ranges.
 
 Current operator coverage:
 
-| Operator | CPU reference | Compiler artifact sample | Runtime status |
-|---|---:|---:|---|
-| `matmul` | yes | yes | reference executable; Tessera runtime pending |
-| `conv2d` | yes | yes | reference executable; Tessera runtime pending |
-| `flash_attention` | yes | yes | reference executable; Tessera runtime pending |
-| `reduce` | yes | yes | reference executable; Tessera runtime pending |
-| `elementwise` | yes | yes | reference executable; Tessera runtime pending |
-| `softmax_layernorm` | yes | yes | reference executable; Tessera runtime pending |
-| `transpose_gather` | yes | yes | reference executable; Tessera runtime pending |
+| Operator | CPU reference | Generated artifact bundle | Tessera runtime bridge | Native C ABI |
+|---|---:|---:|---:|---:|
+| `matmul` | yes | Graph/Schedule/Tile/Target | executable | pending |
+| `conv2d` | yes | Graph/Schedule/Tile/Target | executable | pending |
+| `flash_attention` | yes | Graph/Schedule/Tile/Target | executable | pending |
+| `reduce` | yes | Graph/Schedule/Tile/Target | executable | pending |
+| `elementwise` | yes | Graph/Schedule/Tile/Target | executable | pending |
+| `softmax_layernorm` | yes | Graph/Schedule/Tile/Target | executable | pending |
+| `transpose_gather` | yes | Graph/Schedule/Tile/Target | executable | pending |
 
 Known gaps:
-- No operator benchmark currently launches a generated Tessera runtime kernel.
-- Artifact samples are Graph IR contracts, not hardware-validated Target IR.
+- Native generated C ABI launch hooks remain pending; use `--runtime bridge`
+  for the portable generated-artifact execution path.
+- Static MLIR samples remain readable examples, but benchmark artifact
+  validation now uses generated bundles.
 - CSV output keeps nested telemetry as JSON-like strings for spreadsheet
   compatibility; use `results.json` for structured telemetry analysis.
 

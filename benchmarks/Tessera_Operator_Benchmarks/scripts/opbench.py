@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, csv, itertools, json, os, pathlib, subprocess, time
+import argparse, csv, itertools, json, os, pathlib, subprocess, sys, time
 try:
   import yaml
 except ImportError as exc:
@@ -25,6 +25,7 @@ def main():
   ap.add_argument("--bin", required=True)
   ap.add_argument("--out", required=True)
   ap.add_argument("--backend", default=None, choices=["reference", "artifact", "tessera-runtime"])
+  ap.add_argument("--runtime", default="bridge", choices=["bridge", "native"])
   ap.add_argument("--artifact-root", default=str(SCRIPT_ROOT))
   args = ap.parse_args()
   os.makedirs(args.out, exist_ok=True)
@@ -41,6 +42,7 @@ def main():
         args.bin,
         "--op", op,
         "--backend", backend,
+        "--runtime", args.runtime,
         "--artifact-root", args.artifact_root,
         "--json",
         "--iters", str(iters),
@@ -49,7 +51,11 @@ def main():
       for k,v in params.items():
         cmd += [f"--{ARG_ALIASES.get(k, k)}", str(v)]
       t0 = time.time()
-      out = subprocess.check_output(cmd, text=True, stderr=subprocess.STDOUT).strip()
+      env = os.environ.copy()
+      env["OPBENCH_PYTHON"] = sys.executable
+      python_path = str(SCRIPT_ROOT.parents[1] / "python")
+      env["PYTHONPATH"] = python_path + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+      out = subprocess.check_output(cmd, text=True, stderr=subprocess.STDOUT, env=env).strip()
       dur = time.time()-t0
       stats = _parse_output(out)
       if not stats:
@@ -113,6 +119,11 @@ def _flatten_row(op, backend, iters, params, stats, dur):
     "artifact_schedule": artifact.get("schedule"),
     "artifact_tile": artifact.get("tile"),
     "artifact_target": artifact.get("target"),
+    "artifact_hash": artifact.get("artifact_hash"),
+    "artifact_graph_hash": artifact.get("graph_hash"),
+    "artifact_schedule_hash": artifact.get("schedule_hash"),
+    "artifact_tile_hash": artifact.get("tile_hash"),
+    "artifact_target_hash": artifact.get("target_hash"),
     "telemetry": stats.get("telemetry"),
     "wall_s": f"{dur:.3f}",
   }

@@ -836,6 +836,14 @@ class _OpExtractor(ast.NodeVisitor):
             self._value_types[f"%{op.result}"] = op.inferred_type if hasattr(op, "inferred_type") else _parse_mlir_tensor_type(op.result_type or "tensor<*x?>")
             self.ops.append(op)
             return f"%{op.result}"
+        if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Mult)):
+            op = self._try_map_binop(node)
+            if op is None:
+                return None
+            op.result = result_name or self._fresh()
+            self._value_types[f"%{op.result}"] = op.inferred_type if hasattr(op, "inferred_type") else _parse_mlir_tensor_type(op.result_type or "tensor<*x?>")
+            self.ops.append(op)
+            return f"%{op.result}"
         if isinstance(node, ast.Name):
             return f"%{node.id}"
         if isinstance(node, ast.Attribute) and node.attr == "T":
@@ -854,6 +862,41 @@ class _OpExtractor(ast.NodeVisitor):
             self._value_types[f"%{result}"] = self._value_types.get(value, TENSOR_OPAQUE)
             return f"%{result}"
         return None
+
+    def _try_map_binop(self, node: ast.BinOp) -> Optional[IROp]:
+        op_name = "tessera.add" if isinstance(node.op, ast.Add) else "tessera.mul"
+        operands: list[str] = []
+        operand_types: list[str] = []
+        kwargs: dict[str, Any] = {}
+
+        for side, expr in (("left", node.left), ("right", node.right)):
+            try:
+                literal = ast.literal_eval(expr)
+            except (ValueError, TypeError):
+                literal = None
+            if isinstance(literal, (int, float)):
+                kwargs["scalar"] = float(literal)
+                kwargs["scalar_side"] = side
+                continue
+            operand = self._emit_expr(expr)
+            if operand is None:
+                return None
+            operands.append(operand)
+            operand_types.append(str(self._value_types.get(operand, TENSOR_OPAQUE)))
+
+        if not operands:
+            return None
+        result_type = _infer_result_type(op_name, [self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands])
+        return IROp(
+            result=None,
+            op_name=op_name,
+            operands=operands,
+            operand_types=operand_types,
+            result_type=str(result_type),
+            kwargs=kwargs,
+            source_span=_span_from_ast(node),
+            inferred_type=result_type,
+        )
 
     def _try_map_call(self, call: ast.Call) -> Optional[IROp]:
         name = self._resolve_name(call.func)

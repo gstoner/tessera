@@ -284,6 +284,16 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     def softmax_safe(x, axis: int = -1):
         return softmax(x, axis=axis)
 
+    def reduce(x, op: str = "sum", axis=None, keepdims: bool = False):
+        if hasattr(x, "_data"):
+            x = x._data
+        if op != "sum":
+            raise ValueError("only reduce op='sum' is implemented in the CPU reference path")
+        return np.sum(x, axis=axis, keepdims=keepdims)
+
+    def sum(x, axis=None, keepdims: bool = False):
+        return reduce(x, op="sum", axis=axis, keepdims=keepdims)
+
     def sigmoid(x):
         if hasattr(x, "_data"):
             x = x._data
@@ -293,6 +303,27 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         if hasattr(x, "_data"):
             x = x._data
         return x * 0.5 * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x + 0.044715 * x**3)))
+
+    def tanh(x):
+        if hasattr(x, "_data"):
+            x = x._data
+        return np.tanh(x)
+
+    def add(x, y=None, *, scalar=None):
+        if hasattr(x, "_data"):
+            x = x._data
+        if y is not None and hasattr(y, "_data"):
+            y = y._data
+        rhs = scalar if y is None else y
+        return np.asarray(x) + rhs
+
+    def mul(x, y=None, *, scalar=None):
+        if hasattr(x, "_data"):
+            x = x._data
+        if y is not None and hasattr(y, "_data"):
+            y = y._data
+        rhs = scalar if y is None else y
+        return np.asarray(x) * rhs
 
     def relu(x):
         if hasattr(x, "_data"):
@@ -804,7 +835,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "layer_norm": layer_norm,
         "softmax": softmax,
         "softmax_safe": softmax_safe,
+        "reduce": reduce,
+        "sum": sum,
         "gelu": gelu,
+        "tanh": tanh,
+        "add": add,
+        "mul": mul,
         "relu": relu,
         "sigmoid": sigmoid,
         "sin": sin,
@@ -870,8 +906,13 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         layer_norm=layer_norm,
         softmax=softmax,
         softmax_safe=softmax_safe,
+        reduce=reduce,
+        sum=sum,
         sigmoid=sigmoid,
         gelu=gelu,
+        tanh=tanh,
+        add=add,
+        mul=mul,
         relu=relu,
         silu=silu,
         rmsnorm=rmsnorm,

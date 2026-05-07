@@ -61,6 +61,11 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND TESSERA_BUILD_TESTS)
     target_link_libraries(tessera_runtime_tile_reduction_test PRIVATE tessera_runtime)
     target_compile_options(tessera_runtime_tile_reduction_test PRIVATE -UNDEBUG)
     add_test(NAME tessera_runtime_tile_reduction_test COMMAND tessera_runtime_tile_reduction_test)
+
+    add_executable(tessera_runtime_cpu_native_test tests/test_cpu_native.cpp)
+    target_link_libraries(tessera_runtime_cpu_native_test PRIVATE tessera_runtime)
+    target_compile_options(tessera_runtime_cpu_native_test PRIVATE -UNDEBUG)
+    add_test(NAME tessera_runtime_cpu_native_test COMMAND tessera_runtime_cpu_native_test)
 endif()
 
 # ------------------------------------------------------------------

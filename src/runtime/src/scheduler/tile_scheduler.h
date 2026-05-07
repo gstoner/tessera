@@ -16,8 +16,11 @@ class ThreadPool {
 
   void Enqueue(std::function<void()> fn);
   void WaitIdle();
+  void EnsureSize(unsigned nthreads);
+  unsigned Size() const;
 
  private:
+  void AddWorker();
   void WorkerLoop();
   std::vector<std::thread> workers_;
   std::queue<std::function<void()>> q_;

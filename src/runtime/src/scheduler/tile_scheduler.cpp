@@ -5,7 +5,7 @@ ThreadPool::ThreadPool(unsigned nthreads) {
   if (nthreads == 0) nthreads = 1;
   workers_.reserve(nthreads);
   for (unsigned i = 0; i < nthreads; ++i) {
-    workers_.emplace_back([this]{ WorkerLoop(); });
+    AddWorker();
   }
 }
 
@@ -24,6 +24,22 @@ void ThreadPool::Enqueue(std::function<void()> fn) {
     q_.push(std::move(fn));
   }
   cv_.notify_one();
+}
+
+void ThreadPool::EnsureSize(unsigned nthreads) {
+  if (nthreads == 0) nthreads = 1;
+  std::unique_lock<std::mutex> lk(mu_);
+  while (workers_.size() < nthreads) {
+    AddWorker();
+  }
+}
+
+unsigned ThreadPool::Size() const {
+  return static_cast<unsigned>(workers_.size());
+}
+
+void ThreadPool::AddWorker() {
+  workers_.emplace_back([this]{ WorkerLoop(); });
 }
 
 void ThreadPool::WaitIdle() {

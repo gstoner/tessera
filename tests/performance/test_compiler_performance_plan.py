@@ -37,7 +37,7 @@ def test_jit_transformer_proxy_compile_latency_and_artifact_size_budget():
     median_s = statistics.median(timings)
     assert median_s < 0.25
     assert compiled is not None
-    assert compiled.uses_compiled_path
+    assert compiled.is_executable
 
     artifact_bytes = sum(len(artifact.text.encode("utf-8")) for artifact in compiled.lowering_artifacts())
     assert artifact_bytes < 20 * 1024

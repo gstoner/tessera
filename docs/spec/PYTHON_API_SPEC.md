@@ -191,13 +191,16 @@ def fn(...): ...
 | `.effect` | `Effect` | Inferred effect of the compiled function. |
 | `.constraints` | `ConstraintSolver` | Solver containing all constraints extracted from the function body. |
 | `.target` | `GPUTargetProfile \| None` | The target profile passed at decoration time. |
-| `.cpu_plan` | `MatmulCPUPlan \| None` | Narrow executable CPU plan for returned `ops.matmul`/`ops.gemm`. |
+| `.cpu_plan` | `MatmulCPUPlan \| None` | Lowered CPU/reference plan for supported straight-line ops. |
 | `.source_origin` | `str` | Source origin used by AST lowering: `inspect`, `explicit`, `file:<path>`, or `unavailable`. |
-| `.schedule_ir` | `str \| None` | Schedule IR text for the CPU matmul path. |
-| `.tile_ir` | `str \| None` | Tile IR text for the CPU matmul path. |
-| `.target_ir` | `str \| None` | Target IR text for the CPU matmul path. |
+| `.schedule_ir` | `str \| None` | Schedule IR text for supported lowered functions. |
+| `.tile_ir` | `str \| None` | Tile IR text for supported lowered functions. |
+| `.target_ir` | `str \| None` | Target IR text for supported lowered functions. |
 | `.lowering_artifacts()` | `tuple[LoweringArtifact, ...]` | Graph/Schedule/Tile/Target artifacts for supported lowered functions. |
-| `.uses_compiled_path` | `bool` | `True` when execution uses the narrow CPU compiler path. |
+| `.execution_kind` | `str` | One of `reference_cpu`, `native_cpu`, `native_gpu`, `artifact_only`, or `fallback_eager`. |
+| `.is_executable` | `bool` | `True` for launchable reference or native execution. |
+| `.is_reference_execution` | `bool` | `True` for NumPy/reference CPU execution. |
+| `.is_native_execution` | `bool` | `True` for native CPU/GPU runtime execution. |
 | `.lowering_diagnostics` | `tuple[JitDiagnostic, ...]` | Compile/fallback decision diagnostics. |
 | `.explain_lowering()` | `str` | Human-readable compile/fallback explanation. |
 
@@ -270,7 +273,7 @@ ns = {}
 exec(src, {"ts": ts}, ns)
 mm = ts.jit(ns["mm"], source=src, cpu_tile=(256, 128, 64))
 
-assert mm.uses_compiled_path
+assert mm.is_executable
 assert mm.source_origin == "explicit"
 ```
 

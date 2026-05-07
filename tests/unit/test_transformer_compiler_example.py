@@ -75,7 +75,7 @@ def test_transformer_attention_block_compiles_and_executes_cpu_dataflow():
     assert "tessera.transpose" in ir
     assert "tessera.softmax" in ir
 
-    assert transformer_attention_block.uses_compiled_path
+    assert transformer_attention_block.is_executable
     artifacts = {artifact.level: artifact.text for artifact in transformer_attention_block.lowering_artifacts()}
     assert set(artifacts) == {"graph", "schedule", "tile", "target"}
     assert artifacts["schedule"].count("schedule.tile") == 6

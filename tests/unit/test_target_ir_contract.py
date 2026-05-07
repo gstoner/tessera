@@ -33,7 +33,7 @@ def test_jit_rocm_target_emits_mfma_and_async_copy_artifact():
     def mm(A, B):
         return ts.ops.matmul(A, B)
 
-    assert not mm.uses_compiled_path
+    assert not mm.is_executable
     assert mm.has_target_artifacts
     assert "JIT_TARGET_IR_ARTIFACT_ONLY" in mm.explain_lowering()
     assert 'target = "rocm"' in mm.target_ir
@@ -52,7 +52,7 @@ def test_jit_hopper_target_emits_wgmma_tma_and_mbarrier_artifact():
     def mm(A, B):
         return ts.ops.matmul(A, B)
 
-    assert not mm.uses_compiled_path
+    assert not mm.is_executable
     assert mm.has_target_artifacts
     assert 'target = "nvidia_sm90"' in mm.target_ir
     assert 'arch = "sm_90a"' in mm.target_ir
@@ -178,7 +178,7 @@ def test_apple_cpu_matmul_target_executes_accelerate_backend():
     B = np.ones((2, 2), dtype=np.float32)
 
     np.testing.assert_allclose(mm(A, B), A @ B)
-    assert mm.uses_compiled_path
+    assert mm.is_executable
     artifact = mm.runtime_artifact()
     assert artifact.metadata["compiler_path"] == "apple_cpu_accelerate"
     assert artifact.metadata["runtime_status"] == "ready"

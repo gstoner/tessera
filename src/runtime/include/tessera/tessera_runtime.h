@@ -60,6 +60,18 @@ TsrStatus tsrLaunchHostTileKernelSync(tsrDevice dev,
                                       tsrHostKernelFn kernel,
                                       void* user_payload);
 
+// Native CPU execution probes used by the Python JIT fast path and runtime
+// micro-tests. Matrices are row-major: A[M,K], B[K,N], C[M,N].
+TsrStatus tsrNativeGemmF32(tsrDevice dev,
+                           const float* a,
+                           const float* b,
+                           float* c,
+                           int32_t m,
+                           int32_t n,
+                           int32_t k);
+
+TsrStatus tsrGetWorkerThreadCount(tsrDevice dev, uint32_t* out);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

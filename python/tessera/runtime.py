@@ -487,6 +487,22 @@ class TesseraRuntime:
                                        ctypes.POINTER(i32)]
         lib.tsrGetVersion.restype = None
 
+        if hasattr(lib, "tsrNativeGemmF32"):
+            lib.tsrNativeGemmF32.argtypes = [
+                vp,
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                i32,
+                i32,
+                i32,
+            ]
+            lib.tsrNativeGemmF32.restype = i32
+
+        if hasattr(lib, "tsrGetWorkerThreadCount"):
+            lib.tsrGetWorkerThreadCount.argtypes = [vp, ctypes.POINTER(u32)]
+            lib.tsrGetWorkerThreadCount.restype = i32
+
     def _check(self, fn_name: str, status: int, extra: str = "") -> None:
         """Raise TesseraRuntimeError if status != SUCCESS."""
         s = TsrStatus(status)
@@ -863,6 +879,33 @@ class TesseraRuntime:
                                 ctypes.byref(patch))
         return (major.value, minor.value, patch.value)
 
+    def native_gemm_f32(self, dev: Any, a: Any, b: Any, c: Any, m: int, n: int, k: int) -> None:
+        if self._mock_mode:
+            raise TesseraRuntimeError("tsrNativeGemmF32", TsrStatus.UNIMPLEMENTED, "native GEMM requires the C runtime")
+        if not hasattr(self._lib, "tsrNativeGemmF32"):
+            raise TesseraRuntimeError("tsrNativeGemmF32", TsrStatus.UNIMPLEMENTED, "runtime ABI lacks tsrNativeGemmF32")
+        self._check(
+            "tsrNativeGemmF32",
+            self._lib.tsrNativeGemmF32(
+                dev,
+                a,
+                b,
+                c,
+                ctypes.c_int(m),
+                ctypes.c_int(n),
+                ctypes.c_int(k),
+            ),
+        )
+
+    def get_worker_thread_count(self, dev: Any) -> int:
+        if self._mock_mode:
+            return 0
+        if not hasattr(self._lib, "tsrGetWorkerThreadCount"):
+            raise TesseraRuntimeError("tsrGetWorkerThreadCount", TsrStatus.UNIMPLEMENTED, "runtime ABI lacks tsrGetWorkerThreadCount")
+        count = ctypes.c_uint32(0)
+        self._check("tsrGetWorkerThreadCount", self._lib.tsrGetWorkerThreadCount(dev, ctypes.byref(count)))
+        return int(count.value)
+
     def get_last_error(self) -> str:
         if self._mock_mode:
             return self._backend.get_last_error()
@@ -1047,12 +1090,13 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
                 kernel_id=str(metadata.get("kernel_id", "apple_cpu_accelerate")),
                 graph_hash=artifact.artifact_hash,
                 status="invalid_artifact",
-                metadata={"compiler_path": "apple_cpu_accelerate", "reason": str(exc)},
+                metadata={"compiler_path": "apple_cpu_accelerate", "execution_kind": "native_cpu", "reason": str(exc)},
             )
             return {
                 "ok": False,
                 "runtime_status": "invalid_artifact",
                 "compiler_path": "apple_cpu_accelerate",
+                "execution_kind": "native_cpu",
                 "artifact_hash": artifact.artifact_hash,
                 "reason": str(exc),
                 "telemetry": telemetry,
@@ -1068,12 +1112,13 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
             graph_hash=artifact.artifact_hash,
             latency_ms=elapsed_ms,
             status="ok",
-            metadata={"compiler_path": "apple_cpu_accelerate", "execution_mode": "cpu_accelerate"},
+            metadata={"compiler_path": "apple_cpu_accelerate", "execution_mode": "cpu_accelerate", "execution_kind": "native_cpu"},
         )
         return {
             "ok": True,
             "runtime_status": "success",
             "compiler_path": "apple_cpu_accelerate",
+            "execution_kind": "native_cpu",
             "artifact_hash": artifact.artifact_hash,
             "output": output,
             "telemetry": telemetry,
@@ -1099,12 +1144,13 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
                 kernel_id=str(metadata.get("kernel_id", "apple_gpu_mps")),
                 graph_hash=artifact.artifact_hash,
                 status="invalid_artifact",
-                metadata={"compiler_path": "apple_gpu_mps", "reason": str(exc)},
+                metadata={"compiler_path": "apple_gpu_mps", "execution_kind": "native_gpu", "reason": str(exc)},
             )
             return {
                 "ok": False,
                 "runtime_status": "invalid_artifact",
                 "compiler_path": "apple_gpu_mps",
+                "execution_kind": "native_gpu",
                 "artifact_hash": artifact.artifact_hash,
                 "reason": str(exc),
                 "telemetry": telemetry,
@@ -1120,12 +1166,13 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
             graph_hash=artifact.artifact_hash,
             latency_ms=elapsed_ms,
             status="ok",
-            metadata={"compiler_path": "apple_gpu_mps", "execution_mode": "metal_runtime"},
+            metadata={"compiler_path": "apple_gpu_mps", "execution_mode": "metal_runtime", "execution_kind": "native_gpu"},
         )
         return {
             "ok": True,
             "runtime_status": "success",
             "compiler_path": "apple_gpu_mps",
+            "execution_kind": "native_gpu",
             "artifact_hash": artifact.artifact_hash,
             "output": output,
             "telemetry": telemetry,
@@ -1146,6 +1193,7 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
             status="unimplemented" if cap.available else "missing_backend",
             metadata={
                 "compiler_path": str(metadata.get("compiler_path", "artifact_only")),
+                "execution_kind": str(metadata.get("execution_kind", "artifact_only")),
                 "reason": f"{target} generated artifact execution is not wired to the runtime ABI yet",
             },
         )
@@ -1153,10 +1201,97 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
             "ok": False,
             "runtime_status": "unimplemented" if cap.available else "missing_backend",
             "compiler_path": str(metadata.get("compiler_path", "artifact_only")),
+            "execution_kind": str(metadata.get("execution_kind", "artifact_only")),
             "artifact_hash": artifact.artifact_hash,
             "reason": f"{target} generated artifact execution is not wired to the runtime ABI yet",
             "telemetry": telemetry,
         }
+    if metadata.get("executable") is True and metadata.get("execution_kind") == "native_cpu":
+        try:
+            output = _execute_native_cpu_artifact(artifact, args)
+        except Exception as exc:
+            try:
+                output = _execute_jit_cpu_artifact(artifact, args)
+            except Exception:
+                output = None
+            if output is not None:
+                elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000.0
+                _last_profile = RuntimeProfile(cpu_wall_ms=elapsed_ms, launch_overhead_ms=elapsed_ms)
+                telemetry = make_event(
+                    "runtime.launch",
+                    source="runtime",
+                    op="artifact_launch",
+                    arch="cpu",
+                    kernel_id=str(metadata.get("kernel_id", "jit_cpu_numpy")),
+                    graph_hash=artifact.artifact_hash,
+                    latency_ms=elapsed_ms,
+                    status="ok",
+                    metadata={
+                        "compiler_path": str(metadata.get("compiler_path", "jit_cpu_numpy")),
+                        "execution_kind": "reference_cpu",
+                        "native_fallback_reason": str(exc),
+                    },
+                )
+                return {
+                    "ok": True,
+                    "runtime_status": "success",
+                    "compiler_path": str(metadata.get("compiler_path", "jit_cpu_numpy")),
+                    "execution_kind": "reference_cpu",
+                    "artifact_hash": artifact.artifact_hash,
+                    "output": output,
+                    "telemetry": telemetry,
+                    "profile": {
+                        "cpu_wall_ms": elapsed_ms,
+                        "launch_overhead_ms": elapsed_ms,
+                    },
+                }
+            _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
+            telemetry = make_event(
+                "runtime.launch",
+                source="runtime",
+                op="artifact_launch",
+                arch="cpu",
+                kernel_id=str(metadata.get("kernel_id", "native_cpu_gemm")),
+                graph_hash=artifact.artifact_hash,
+                status="invalid_artifact",
+                metadata={"compiler_path": str(metadata.get("compiler_path", "jit_cpu_numpy")), "execution_kind": "native_cpu", "reason": str(exc)},
+            )
+            return {
+                "ok": False,
+                "runtime_status": "invalid_artifact",
+                "compiler_path": str(metadata.get("compiler_path", "jit_cpu_numpy")),
+                "execution_kind": "native_cpu",
+                "artifact_hash": artifact.artifact_hash,
+                "reason": str(exc),
+                "telemetry": telemetry,
+            }
+        elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000.0
+        _last_profile = RuntimeProfile(cpu_wall_ms=elapsed_ms, launch_overhead_ms=elapsed_ms)
+        telemetry = make_event(
+            "runtime.launch",
+            source="runtime",
+            op="artifact_launch",
+            arch="cpu",
+            kernel_id=str(metadata.get("kernel_id", "native_cpu_gemm")),
+            graph_hash=artifact.artifact_hash,
+            latency_ms=elapsed_ms,
+            status="ok",
+            metadata={"compiler_path": str(metadata.get("compiler_path", "jit_cpu_numpy")), "execution_kind": "native_cpu"},
+        )
+        return {
+            "ok": True,
+            "runtime_status": "success",
+            "compiler_path": str(metadata.get("compiler_path", "jit_cpu_numpy")),
+            "execution_kind": "native_cpu",
+            "artifact_hash": artifact.artifact_hash,
+            "output": output,
+            "telemetry": telemetry,
+            "profile": {
+                "cpu_wall_ms": elapsed_ms,
+                "launch_overhead_ms": elapsed_ms,
+            },
+        }
+
     if metadata.get("executable") is True and metadata.get("compiler_path") == "jit_cpu_numpy":
         try:
             output = _execute_jit_cpu_artifact(artifact, args)
@@ -1170,12 +1305,13 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
                 kernel_id=str(metadata.get("kernel_id", "jit_cpu_numpy")),
                 graph_hash=artifact.artifact_hash,
                 status="invalid_artifact",
-                metadata={"compiler_path": "jit_cpu_numpy", "reason": str(exc)},
+                metadata={"compiler_path": "jit_cpu_numpy", "execution_kind": "reference_cpu", "reason": str(exc)},
             )
             return {
                 "ok": False,
                 "runtime_status": "invalid_artifact",
                 "compiler_path": "jit_cpu_numpy",
+                "execution_kind": "reference_cpu",
                 "artifact_hash": artifact.artifact_hash,
                 "reason": str(exc),
                 "telemetry": telemetry,
@@ -1191,12 +1327,13 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
             graph_hash=artifact.artifact_hash,
             latency_ms=elapsed_ms,
             status="ok",
-            metadata={"compiler_path": "jit_cpu_numpy"},
+            metadata={"compiler_path": "jit_cpu_numpy", "execution_kind": "reference_cpu"},
         )
         return {
             "ok": True,
             "runtime_status": "success",
             "compiler_path": "jit_cpu_numpy",
+            "execution_kind": "reference_cpu",
             "artifact_hash": artifact.artifact_hash,
             "output": output,
             "telemetry": telemetry,
@@ -1218,6 +1355,7 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
         status="unsupported" if cap.available else "missing_backend",
         metadata={
             "compiler_path": str(metadata.get("compiler_path", "artifact_only")),
+            "execution_kind": str(metadata.get("execution_kind", "artifact_only")),
             "reason": reason,
         },
     )
@@ -1225,6 +1363,7 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
         "ok": False,
         "runtime_status": "unsupported" if cap.available else "missing_backend",
         "compiler_path": str(metadata.get("compiler_path", "artifact_only")),
+        "execution_kind": str(metadata.get("execution_kind", "artifact_only")),
         "artifact_hash": artifact.artifact_hash,
         "reason": reason,
         "telemetry": telemetry,
@@ -1275,6 +1414,52 @@ def runtime_smoke_telemetry(*, mock: bool = True, bytes_size: int = 64) -> dict[
         "telemetry_summary": telemetry_report(events),
         "telemetry_events": events,
     }
+
+
+def _execute_native_cpu_metadata(metadata: Mapping[str, Any], args: Any) -> Any:
+    """Run an eligible CPU f32 rank-2 GEMM through libtessera_runtime."""
+
+    import numpy as np
+
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    output_name = metadata.get("output_name")
+    if len(ops) != 1 or str(ops[0].get("op_name")) not in {"tessera.matmul", "tessera.gemm"}:
+        raise ValueError("native_cpu currently supports a single matmul/gemm op")
+    values = _bind_launch_args(args, arg_names)
+    operand_names = [str(name) for name in ops[0].get("operands", [])]
+    if len(operand_names) != 2:
+        raise ValueError("native_cpu GEMM requires two operands")
+    a = np.ascontiguousarray(_as_numpy(values[operand_names[0]]), dtype=np.float32)
+    b = np.ascontiguousarray(_as_numpy(values[operand_names[1]]), dtype=np.float32)
+    if a.ndim != 2 or b.ndim != 2:
+        raise ValueError("native_cpu GEMM requires rank-2 operands")
+    if a.shape[1] != b.shape[0]:
+        raise ValueError(f"native_cpu GEMM K mismatch: {a.shape[1]} != {b.shape[0]}")
+    out = np.empty((a.shape[0], b.shape[1]), dtype=np.float32)
+
+    rt = TesseraRuntime(mock=False)
+    rt.init()
+    try:
+        dev = rt.get_device(0)
+        rt.native_gemm_f32(
+            dev,
+            a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            int(a.shape[0]),
+            int(b.shape[1]),
+            int(a.shape[1]),
+        )
+    finally:
+        rt.shutdown()
+    if output_name:
+        values[str(output_name)] = out
+    return out
+
+
+def _execute_native_cpu_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_native_cpu_metadata(artifact.metadata or {}, args)
 
 
 def _execute_jit_cpu_artifact(artifact: RuntimeArtifact, args: Any) -> Any:

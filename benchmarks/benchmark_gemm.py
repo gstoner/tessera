@@ -160,7 +160,7 @@ class GEMMBenchmark:
                         tflops=flops_per_sec / 1e12,
                         memory_bw_gbps=cfg.bytes_accessed() / max(latency_ms * 1e-3, 1e-12) / 1e9,
                         roofline_bound="measured_cpu",
-                        compiler_path="tessera_jit_cpu" if run.uses_compiled_path else "tessera_jit_fallback",
+                        compiler_path="tessera_jit_cpu" if run.is_executable else "tessera_jit_fallback",
                         compiler_lowering=run.lowering,
                     )
                 compiler_path = "compiler_unavailable"

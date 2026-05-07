@@ -69,7 +69,7 @@ def main(argv=None) -> int:
         if compiler_run is not None:
             last_out = np.asarray(compiler_run.output).astype(dtype)
             last_ms = compiler_run.latency_ms
-            compiler_path = CompilerPath.TESSERA_JIT_CPU if compiler_run.uses_compiled_path else CompilerPath.REFERENCE
+            compiler_path = CompilerPath.TESSERA_JIT_CPU if compiler_run.is_executable else CompilerPath.REFERENCE
             artifact = ArtifactLevels(
                 graph=compiler_run.graph_ir is not None,
                 schedule=compiler_run.schedule_ir is not None,

@@ -91,7 +91,7 @@ Python compiler constructs them from verified object models:
 To see whether a function used the compiler path:
 
 ```python
-print(mm.uses_compiled_path)
+print(mm.is_executable)
 print(mm.explain_lowering())
 ```
 
@@ -110,7 +110,7 @@ ns = {}
 exec(src, {"ts": ts}, ns)
 mm = ts.jit(ns["mm"], source=src, cpu_tile=(256, 128, 64))
 
-assert mm.uses_compiled_path
+assert mm.is_executable
 print(mm.explain_lowering())
 ```
 
@@ -181,7 +181,7 @@ def unsupported_control_flow(x):
         return ts.ops.relu(x)
     return x
 
-assert not unsupported_control_flow.uses_compiled_path
+assert not unsupported_control_flow.is_executable
 print(unsupported_control_flow.explain_lowering())
 ```
 

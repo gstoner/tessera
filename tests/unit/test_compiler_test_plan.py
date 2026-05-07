@@ -77,7 +77,7 @@ def test_transformer_proxy_exercises_all_documented_python_ir_layers():
     out = block(x, w, w, w, np.eye(3, dtype=np.float32))
 
     assert out.shape == (2, 3)
-    assert block.uses_compiled_path
+    assert block.is_executable
     artifacts = {artifact.level: artifact.text for artifact in block.lowering_artifacts()}
     assert set(artifacts) == {"graph", "schedule", "tile", "target"}
     assert "tessera.matmul" in artifacts["graph"]

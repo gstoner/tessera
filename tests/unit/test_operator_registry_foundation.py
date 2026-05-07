@@ -185,7 +185,7 @@ def test_jit_cpu_executes_seeded_rng_source():
 
     out_a = random_source()
     out_b = random_source()
-    assert random_source.uses_compiled_path
+    assert random_source.is_executable
     assert out_a.shape == (2, 2)
     assert out_a.dtype == np.float32
     np.testing.assert_allclose(out_a, out_b)
@@ -204,7 +204,7 @@ def test_jit_cpu_executes_reconciled_numpy_ops():
     x = np.arange(6, dtype=np.float32).reshape(2, 3)
     w = np.array([1.0, 0.5], dtype=np.float32)
     out = op_chain(x, w)
-    assert op_chain.uses_compiled_path
+    assert op_chain.is_executable
     assert out.shape[-1] == 4
 
 
@@ -217,7 +217,7 @@ def test_jit_cpu_executes_conv2d_nhwc_reference():
     w = np.ones((2, 2, 1, 1), dtype=np.float32)
     expected = np.array([[[[8.0], [12.0]], [[20.0], [24.0]]]], dtype=np.float32)
     np.testing.assert_allclose(conv(x, w), expected)
-    assert conv.uses_compiled_path
+    assert conv.is_executable
     assert "tessera.conv2d_nhwc" in conv.ir_text()
     assert "tessera.conv2d(" not in conv.ir_text()
 
@@ -230,7 +230,7 @@ def test_jit_cpu_executes_seeded_dropout_and_collective_stubs():
 
     x = np.ones((4,), dtype=np.float32)
     np.testing.assert_allclose(dropped(x), dropped(x))
-    assert dropped.uses_compiled_path
+    assert dropped.is_executable
 
 
 def test_jit_cpu_executes_flash_attention_reference():

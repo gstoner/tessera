@@ -14,7 +14,8 @@ import numpy as np
 class CompilerRun:
     output: Any
     latency_ms: float
-    uses_compiled_path: bool
+    execution_kind: str
+    is_executable: bool
     graph_ir: str | None
     schedule_ir: str | None
     tile_ir: str | None
@@ -72,7 +73,8 @@ def compiler_matmul_relu_target(
     return CompilerRun(
         output=out,
         latency_ms=latency_ms,
-        uses_compiled_path=bench_kernel.uses_compiled_path,
+        execution_kind=bench_kernel.execution_kind,
+        is_executable=bench_kernel.is_executable,
         graph_ir=bench_kernel.ir_text(),
         schedule_ir=bench_kernel.schedule_ir,
         tile_ir=bench_kernel.tile_ir,
@@ -93,7 +95,8 @@ def _artifact_info(fn, op_name: str) -> dict[str, Any]:
     return {
         "available": True,
         "op": op_name,
-        "uses_compiled_path": bool(getattr(fn, "uses_compiled_path", False)),
+        "execution_kind": str(getattr(fn, "execution_kind", "artifact_only")),
+        "is_executable": bool(getattr(fn, "is_executable", False)),
         "graph_ir": graph_ir,
         "schedule_ir": schedule_ir,
         "tile_ir": tile_ir,

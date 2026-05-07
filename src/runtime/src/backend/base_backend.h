@@ -55,6 +55,18 @@ class Backend {
                                 const tsrLaunchParams* params,
                                 tsrHostKernelFn kernel,
                                 void* user_payload) = 0;
+
+  virtual bool gemmF32(const float* a,
+                       const float* b,
+                       float* c,
+                       int32_t m,
+                       int32_t n,
+                       int32_t k) {
+    (void)a; (void)b; (void)c; (void)m; (void)n; (void)k;
+    return false;
+  }
+
+  virtual uint32_t workerThreadCount() const { return 0; }
 };
 
 // Factories

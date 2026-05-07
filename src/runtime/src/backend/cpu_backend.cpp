@@ -1,11 +1,11 @@
 #include "base_backend.h"
 #include <cstring>
 #include <cstdlib>
-#include <thread>
 #include <algorithm>
 #include <vector>
 #include <chrono>
 #include <condition_variable>
+#include <thread>
 
 namespace tsr {
 
@@ -117,8 +117,9 @@ class CpuBackend final : public Backend {
                         tsrHostKernelFn kernel,
                         void* user_payload) override {
     (void)s;
-    // Execute one tile at a time. Inside each tile, spawn per-thread workers to
-    // preserve logical thread and barrier semantics for the CPU validation spine.
+    // Execute one tile at a time. Inside each tile, reuse the backend's
+    // persistent worker pool for logical tile threads. The pool is grown when
+    // needed so all participants in a tile barrier can run concurrently.
     for (uint32_t bz = 0; bz < params->grid.z; ++bz)
     for (uint32_t by = 0; by < params->grid.y; ++by)
     for (uint32_t bx = 0; bx < params->grid.x; ++bx) {
@@ -132,14 +133,13 @@ class CpuBackend final : public Backend {
       TileInternals ti{&bar};
       tsrTileCoord tile{bx, by, bz};
 
-      std::vector<std::thread> workers;
-      workers.reserve(nthreads);
+      pool_.EnsureSize(nthreads);
       uint32_t linear = 0;
       for (uint32_t tz = 0; tz < tzN; ++tz)
       for (uint32_t ty = 0; ty < tyN; ++ty)
       for (uint32_t tx = 0; tx < txN; ++tx) {
         const uint32_t ltid = linear++;
-        workers.emplace_back([&, tx, ty, tz, ltid](){
+        pool_.Enqueue([&, tx, ty, tz, ltid](){
           tsrThreadCoord thr{tx, ty, tz, ltid};
           tsrKernelCtx kctx;
           kctx.user = user_payload;
@@ -150,8 +150,31 @@ class CpuBackend final : public Backend {
           kernel(&kctx, &tile, &thr);
         });
       }
-      for (auto& t : workers) t.join();
+      pool_.WaitIdle();
     }
+  }
+
+  bool gemmF32(const float* a,
+               const float* b,
+               float* c,
+               int32_t m,
+               int32_t n,
+               int32_t k) override {
+    if (!a || !b || !c || m < 0 || n < 0 || k < 0) return false;
+    for (int32_t i = 0; i < m; ++i) {
+      for (int32_t j = 0; j < n; ++j) {
+        float acc = 0.0f;
+        for (int32_t p = 0; p < k; ++p) {
+          acc += a[i * k + p] * b[p * n + j];
+        }
+        c[i * n + j] = acc;
+      }
+    }
+    return true;
+  }
+
+  uint32_t workerThreadCount() const override {
+    return pool_.Size();
   }
 
  private:

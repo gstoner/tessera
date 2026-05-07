@@ -1,15 +1,13 @@
 """
-tessera.compiler.graph_ir — Python → Graph IR lowering.
+tessera.compiler.graph_ir — Python → structured Graph IR lowering.
 
-Emits MLIR text for the Tessera Graph IR dialect (tessera.*) from a
-Python function's structure. In Phase 1 this is a simplified textual
-emitter — it captures function signatures, region annotations, and op
-calls and produces valid-looking MLIR that can be round-tripped.
+The canonical compiler product is a verified :class:`GraphIRModule` object.
+MLIR text is an inspection and interop serialization produced from that object,
+not the source of truth. Lightweight environments do not need MLIR Python
+bindings; when bindings are installed, ``construct_mlir_module`` can parse the
+serialized text as an optional native validation step.
 
-Phase 2 will replace this with a proper MLIR Python bindings emitter that
-constructs in-memory IR objects rather than text.
-
-Output format (MLIR text):
+Inspection format (MLIR text):
     func.func @step(%W: tensor<*xbf16> {tessera.effect = "read"},
                     %X: tensor<*xbf16> {tessera.effect = "read"},
                     %Y: tensor<*xbf16> {tessera.effect = "write"}) {
@@ -32,6 +30,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ..diagnostics import DiagnosticLevel, DiagnosticWhere, SourceLocation, TesseraDiagnostic, TesseraErrorCode
+from .legality import TensorContract, check_op_legality
 from .op_catalog import GRAPH_OP_MAP, graph_name_for
 
 
@@ -688,21 +687,36 @@ class GraphIRVerifier:
         value_types: Dict[str, IRType],
         diagnostics: List[GraphIRDiagnostic],
     ) -> None:
-        if op.op_name not in {"tessera.matmul", "tessera.gemm"} or len(op.operands) < 2:
-            return
-        lhs = value_types.get(op.operands[0])
-        rhs = value_types.get(op.operands[1])
-        if not lhs or not rhs or lhs.rank != 2 or rhs.rank != 2:
-            return
-        lhs_k = lhs.shape[1]
-        rhs_k = rhs.shape[0]
-        if lhs_k.isdigit() and rhs_k.isdigit() and lhs_k != rhs_k:
+        operand_contracts = [
+            _tensor_contract_for(value_types.get(operand))
+            for operand in op.operands
+            if value_types.get(operand) is not None
+        ]
+        legality = check_op_legality(op.op_name, operand_contracts)
+        for diag in legality.diagnostics:
+            if diag.code in {
+                "LEGALITY_COLLECTIVE_EFFECT",
+                "LEGALITY_FLASH_ATTN_RANK",
+            }:
+                continue
+            code = "GRAPH_IR_MATMUL_SHAPE" if diag.code == "LEGALITY_MATMUL_K_MISMATCH" else diag.code
             diagnostics.append(GraphIRDiagnostic(
-                "error",
-                f"matmul K dimension mismatch: lhs has {lhs_k}, rhs has {rhs_k}",
+                diag.severity,
+                diag.message,
                 span=op.source_span,
-                code="GRAPH_IR_MATMUL_SHAPE",
+                code=code,
             ))
+
+
+def _tensor_contract_for(ir_type: Optional[IRType]) -> TensorContract:
+    if ir_type is None:
+        return TensorContract()
+    return TensorContract(
+        shape=tuple(ir_type.shape),
+        dtype=ir_type.dtype,
+        layout=ir_type.layout,
+        memory_space="global",
+    )
 
 
 class MLIRObjectModule:
@@ -720,6 +734,58 @@ class MLIRObjectModule:
         return str(self.native_module) if self.native_module is not None else self.graph_module.to_mlir()
 
 
+@dataclass
+class GraphIRConstructionContext:
+    """Own the structured Graph IR construction and serialization boundary.
+
+    Builders mutate the object model through this context. Verification always
+    runs before text serialization or optional native MLIR parsing so callers do
+    not accidentally treat a string renderer as the compiler source of truth.
+    """
+
+    module: GraphIRModule = field(default_factory=GraphIRModule)
+    validate_native_mlir: bool = True
+    _verified: Optional[GraphIRVerificationResult] = field(default=None, init=False, repr=False)
+    serialization_count: int = field(default=0, init=False)
+
+    def add_function(self, fn: GraphIRFunction) -> GraphIRFunction:
+        self.module.functions.append(fn)
+        self._verified = None
+        return fn
+
+    def verify(self) -> GraphIRVerificationResult:
+        self._verified = self.module.verify()
+        return self._verified
+
+    def require_verified(self) -> GraphIRVerificationResult:
+        result = self.verify()
+        if not result.ok:
+            raise GraphIRVerificationError(result.format())
+        return result
+
+    def to_mlir(self) -> str:
+        self.require_verified()
+        self.serialization_count += 1
+        return self.module.to_mlir(verify=False)
+
+    def construct_mlir_module(self) -> MLIRObjectModule:
+        self.require_verified()
+        text = self.to_mlir()
+        if not self.validate_native_mlir:
+            return MLIRObjectModule(self.module)
+        return _parse_optional_native_mlir(self.module, text)
+
+
+def _parse_optional_native_mlir(module: GraphIRModule, text: str) -> MLIRObjectModule:
+    try:
+        from mlir import ir as mlir_ir  # type: ignore
+    except Exception:
+        return MLIRObjectModule(module)
+    with mlir_ir.Context() as context:
+        native_module = mlir_ir.Module.parse(text, context)
+    return MLIRObjectModule(module, native_module=native_module)
+
+
 def construct_mlir_module(module: GraphIRModule) -> MLIRObjectModule:
     """Construct a verified MLIR module object.
 
@@ -728,17 +794,7 @@ def construct_mlir_module(module: GraphIRModule) -> MLIRObjectModule:
     otherwise it returns a verified object wrapper around the Graph IR model.
     """
 
-    result = module.verify()
-    if not result.ok:
-        raise GraphIRVerificationError(result.format())
-    text = module.to_mlir(verify=False)
-    try:
-        from mlir import ir as mlir_ir  # type: ignore
-    except Exception:
-        return MLIRObjectModule(module)
-    with mlir_ir.Context() as context:
-        native_module = mlir_ir.Module.parse(text, context)
-    return MLIRObjectModule(module, native_module=native_module)
+    return GraphIRConstructionContext(module=module).construct_mlir_module()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1069,15 +1125,10 @@ class GraphIRBuilder:
     """
     Lowers a Python function (decorated with @jit) into a GraphIRFunction.
 
-    Phase 1 pipeline:
+    Structured construction pipeline:
       1. Extract parameter annotations → IRArg list (with effect attrs)
       2. Walk function AST → IROp list (tessera ops only)
-      3. Assemble GraphIRFunction
-
-    Phase 2:
-      - Replace textual emission with MLIR Python bindings IR construction
-      - Add ShardSpec → tessera.shard attribute lowering
-      - Add EffectLattice results as tessera.effect function attrs
+      3. Assemble GraphIRFunction inside GraphIRConstructionContext
 
     Usage:
         builder = GraphIRBuilder()
@@ -1087,7 +1138,7 @@ class GraphIRBuilder:
     """
 
     def __init__(self) -> None:
-        self._module = GraphIRModule()
+        self.context = GraphIRConstructionContext()
         self.diagnostics: List[GraphIRDiagnostic] = []
 
     def lower(
@@ -1112,7 +1163,7 @@ class GraphIRBuilder:
             GraphIRFunction — the emitted function IR
         """
         if target_attr is not None:
-            self._module.module_attrs["tessera.target"] = target_attr
+            self.context.module.module_attrs["tessera.target"] = target_attr
         import typing
 
         sig = inspect.signature(fn)
@@ -1155,7 +1206,7 @@ class GraphIRBuilder:
             body=ops,
             fn_attrs=fn_attrs,
         )
-        self._module.functions.append(fn_ir)
+        self.context.add_function(fn_ir)
         return fn_ir
 
     def _extract_ops(
@@ -1187,11 +1238,11 @@ class GraphIRBuilder:
 
     def module(self) -> GraphIRModule:
         """Return the assembled GraphIRModule."""
-        return self._module
+        return self.context.module
 
     def reset(self) -> None:
         """Clear all accumulated functions."""
-        self._module = GraphIRModule()
+        self.context = GraphIRConstructionContext()
         self.diagnostics = []
 
 

@@ -112,7 +112,7 @@ def test_apple_cpu_multi_op_tiny_decode_executes_through_accelerate():
     assert artifact.metadata["runtime_status"] == "ready"
     assert artifact.metadata["compiler_path"] == "apple_cpu_accelerate"
     assert artifact.metadata["executable"] is True
-    assert tiny_decode.uses_compiled_path
+    assert tiny_decode.is_executable
 
     # Multi-op metadata reports actual op count + how many are matmul-fast-path.
     guards = artifact.metadata["guards"]
@@ -158,7 +158,7 @@ def test_apple_gpu_tiny_decode_artifact_covers_rope_softmax_matmul_and_kv_cache(
     assert "KV-cache target lowering is not implemented for Apple GPU" in target_ir
     assert 'framework = "MPSGraph"' in target_ir
     assert 'execution_mode = "metal_artifact"' in target_ir
-    assert not tiny_decode.uses_compiled_path
+    assert not tiny_decode.is_executable
 
     result = launch(artifact, args={})
     assert result["ok"] is False
@@ -183,7 +183,7 @@ def test_rope_reference_path_executes_tiny_decode_proxy_on_cpu():
 
     out = tiny_decode_cpu(x, w, w, w, w, theta)
 
-    assert tiny_decode_cpu.uses_compiled_path
+    assert tiny_decode_cpu.is_executable
     assert "tessera.rope" in tiny_decode_cpu.ir_text()
     assert "tile.rotary_pair" in tiny_decode_cpu.tile_ir
     np.testing.assert_allclose(out, ts.ops.softmax(x @ x.T) @ x)
@@ -223,7 +223,7 @@ def test_apple_cpu_simple_moe_solver_executes_reference_expert_routing():
     ])
 
     artifact = simple_moe.runtime_artifact()
-    assert simple_moe.uses_compiled_path
+    assert simple_moe.is_executable
     assert artifact.metadata["compiler_path"] == "apple_cpu_accelerate"
     assert artifact.metadata["runtime_status"] == "ready"
     assert "tessera.moe" in simple_moe.ir_text()
@@ -287,7 +287,7 @@ def test_apple_cpu_simple_transformer_block_executes_attention_and_mlp():
     out = simple_transformer(x, wq, wk, wv, wo, w1, w2)
     expected = _simple_transformer_reference(x, wq, wk, wv, wo, w1, w2)
 
-    assert simple_transformer.uses_compiled_path
+    assert simple_transformer.is_executable
     assert artifact.metadata["compiler_path"] == "apple_cpu_accelerate"
     assert artifact.metadata["runtime_status"] == "ready"
     assert artifact.metadata["execution_mode"] == "cpu_accelerate"
@@ -323,7 +323,7 @@ def test_apple_gpu_simple_transformer_block_emits_metal_artifact_contracts():
 
     assert artifact.metadata["execution_mode"] == "metal_artifact"
     assert artifact.metadata["runtime_status"] == "artifact_only"
-    assert not simple_transformer.uses_compiled_path
+    assert not simple_transformer.is_executable
     assert simple_transformer.ir_text().count("tessera.matmul") == 8
     assert "tessera.softmax" in simple_transformer.ir_text()
     assert "tessera.gelu" in simple_transformer.ir_text()
@@ -715,7 +715,7 @@ def test_apple_gpu_target_keeps_metal_artifact_for_multi_op_programs():
     artifact = fused.runtime_artifact()
     assert artifact.metadata["execution_mode"] == "metal_artifact"
     assert artifact.metadata["runtime_status"] == "artifact_only"
-    assert not fused.uses_compiled_path
+    assert not fused.is_executable
 
 
 # ─────────────────────────────────────────────────────────────────────────────

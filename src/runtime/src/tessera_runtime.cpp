@@ -310,4 +310,35 @@ TsrStatus tsrLaunchHostTileKernelSync(tsrDevice dev,
   return TSR_STATUS_SUCCESS;
 }
 
+TsrStatus tsrNativeGemmF32(tsrDevice dev,
+                           const float* a,
+                           const float* b,
+                           float* c,
+                           int32_t m,
+                           int32_t n,
+                           int32_t k) {
+  if (!dev || !a || !b || !c) {
+    SetLastError("dev/a/b/c==NULL");
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
+  if (m < 0 || n < 0 || k < 0) {
+    SetLastError("gemm dimensions must be non-negative");
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
+  if (!dev->be->gemmF32(a, b, c, m, n, k)) {
+    SetLastError("native f32 GEMM is not available on this backend");
+    return TSR_STATUS_UNIMPLEMENTED;
+  }
+  return TSR_STATUS_SUCCESS;
+}
+
+TsrStatus tsrGetWorkerThreadCount(tsrDevice dev, uint32_t* out) {
+  if (!dev || !out) {
+    SetLastError("dev/out==NULL");
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
+  *out = dev->be->workerThreadCount();
+  return TSR_STATUS_SUCCESS;
+}
+
 } // extern "C"

@@ -23,7 +23,7 @@ Build order for Phase 1:
 
 from .constraints import ConstraintSolver, Divisible, Range, Equal, TesseraConstraintError
 from .effects import EffectLattice, Effect, TesseraEffectError
-from .graph_ir import NumericPolicy, KVCacheSpec
+from .graph_ir import GraphIRConstructionContext, KVCacheSpec, NumericPolicy, construct_mlir_module
 from .schedule_ir import ScheduleIRModule, ScheduleFunction, ScheduleOp, lower_graph_to_schedule_ir
 from .tile_ir import TileIRModule, TileFunction, TileOp, lower_schedule_to_tile_ir
 from .target_ir import TargetIRModule, TargetFunction, TargetOp, lower_tile_to_target_ir
@@ -36,6 +36,7 @@ from .capabilities import (
     runtime_status,
     supports_op,
 )
+from .legality import LegalityDiagnostic, LegalityResult, TensorContract, check_op_legality
 from .schedule_planner import ScheduleCandidate, SchedulePlanner, SelectedSchedule, schedule_cache_key
 from .gpu_smoke import SmokeResult, run_matmul_smoke
 from .jit import jit, TesseraJitError
@@ -52,6 +53,8 @@ __all__ = [
     "Effect",
     "TesseraEffectError",
     "NumericPolicy",
+    "GraphIRConstructionContext",
+    "construct_mlir_module",
     "KVCacheSpec",
     "ScheduleIRModule",
     "ScheduleFunction",
@@ -72,6 +75,10 @@ __all__ = [
     "normalize_target",
     "runtime_status",
     "supports_op",
+    "LegalityDiagnostic",
+    "LegalityResult",
+    "TensorContract",
+    "check_op_legality",
     "ScheduleCandidate",
     "SchedulePlanner",
     "SelectedSchedule",

@@ -145,6 +145,7 @@ class CompileArtifactBundle:
     executable: bool = False
     runtime_status: str = "unsupported"
     execution_mode: str = "artifact_only"
+    execution_kind: str = "artifact_only"
     diagnostics: tuple[JitDiagnostic, ...] = ()
     trace_events: tuple[CompileTraceEvent, ...] = ()
     tool_invocations: tuple[ToolInvocation, ...] = ()
@@ -191,6 +192,7 @@ class CompileArtifactBundle:
             "target_hash": artifact_hashes.get("target"),
             "runtime_status": self.runtime_status,
             "execution_mode": self.execution_mode,
+            "execution_kind": self.execution_kind,
             "capability_version": CAPABILITY_REGISTRY_VERSION,
         }
         if self.cpu_plan is not None:
@@ -207,6 +209,7 @@ class CompileArtifactBundle:
             "executable": self.executable,
             "runtime_status": self.runtime_status,
             "execution_mode": self.execution_mode,
+            "execution_kind": self.execution_kind,
             "capability_version": CAPABILITY_REGISTRY_VERSION,
             "capability_reason": _capability_reason(self),
             "selected_schedule": self.cpu_plan.selected_schedule if self.cpu_plan is not None else None,
@@ -250,6 +253,7 @@ def compile_graph_module(
     output_text = cpu_plan.target_ir if cpu_plan is not None else graph_text
     status = "ok" if cpu_plan is not None else "fallback"
     execution_mode = _execution_mode_for(target_kind, cpu_plan is not None)
+    execution_kind = _execution_kind_for(target_kind, cpu_plan)
     trace_events.append(CompileTraceEvent(
         pass_name="python-frontend-artifact-builder",
         target=target_kind,
@@ -285,6 +289,7 @@ def compile_graph_module(
         runtime_status = "unsupported"
     if _is_apple_gpu_mps_executable(cpu_plan):
         execution_mode = "metal_runtime"
+    execution_kind = _execution_kind_for(target_kind, cpu_plan, executable=executable)
 
     bundle = CompileArtifactBundle(
         request=request,
@@ -296,6 +301,7 @@ def compile_graph_module(
         executable=executable,
         runtime_status=runtime_status,
         execution_mode=execution_mode,
+        execution_kind=execution_kind,
         diagnostics=tuple(diagnostics),
         trace_events=tuple(trace_events),
         tool_invocations=tuple(tool_invocations),
@@ -319,6 +325,24 @@ def _execution_mode_for(target_kind: str, has_plan: bool) -> str:
     if target_kind == "cpu" and has_plan:
         return "jit_cpu_numpy"
     return "artifact_only"
+
+
+def _execution_kind_for(target_kind: str, cpu_plan: CPUPlan | None, *, executable: bool | None = None) -> str:
+    if cpu_plan is None:
+        return "fallback_eager"
+    if target_kind == "cpu":
+        return "native_cpu" if _is_native_cpu_gemm_plan(cpu_plan) else "reference_cpu"
+    if target_kind == "apple_cpu":
+        return "native_cpu" if executable is not False else "artifact_only"
+    if target_kind == "apple_gpu":
+        return "native_gpu" if executable else "artifact_only"
+    return "artifact_only"
+
+
+def _is_native_cpu_gemm_plan(cpu_plan: CPUPlan | None) -> bool:
+    if cpu_plan is None or cpu_plan.target_kind != "cpu" or len(cpu_plan.ops) != 1:
+        return False
+    return cpu_plan.ops[0].op_name in {"tessera.matmul", "tessera.gemm"}
 
 
 _APPLE_CPU_ACCELERATE_OPS: frozenset[str] = frozenset({

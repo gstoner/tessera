@@ -262,6 +262,8 @@ class JitFn:
         fall back to the original Python function.
         """
         if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
+            if self.execution_kind == "native_cpu":
+                return self._native_cpu_fast_call(args, kwargs)
             return self.cpu_plan.execute(args, kwargs, self.arg_names)
         if (
             self.cpu_plan is not None
@@ -278,6 +280,28 @@ class JitFn:
         ):
             return self._apple_gpu_fast_call(args, kwargs)
         return self._fn(*args, **kwargs)
+
+    def _native_cpu_fast_call(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Any:
+        """Dispatch eligible CPU rank-2 f32 GEMM through the native runtime ABI.
+
+        Guard failures fall back to the explicit NumPy reference plan, so
+        ``execution_kind`` remains a compile-time capability statement while
+        launch-time dtype/rank mismatches keep existing eager ergonomics.
+        """
+
+        from tessera.runtime import _execute_native_cpu_metadata
+
+        if kwargs and args:
+            launch_args = {name: value for name, value in zip(self.arg_names, args)}
+            launch_args.update(kwargs)
+        else:
+            launch_args = kwargs if kwargs else args
+        try:
+            return _execute_native_cpu_metadata(
+                self.runtime_artifact().metadata or {}, launch_args
+            )
+        except Exception:
+            return self.cpu_plan.execute(args, kwargs, self.arg_names)
 
     def _apple_cpu_fast_call(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Any:
         """Phase 8.2 launch-overhead fast path. Bypasses ``runtime.launch`` by
@@ -359,10 +383,24 @@ class JitFn:
         return artifact.text if artifact is not None else None
 
     @property
-    def uses_compiled_path(self) -> bool:
-        return self.compile_bundle.executable if self.compile_bundle is not None else (
-            self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu"
-        )
+    def execution_kind(self) -> str:
+        if self.compile_bundle is not None:
+            return self.compile_bundle.execution_kind
+        if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
+            return "reference_cpu"
+        return "fallback_eager"
+
+    @property
+    def is_executable(self) -> bool:
+        return self.execution_kind in {"reference_cpu", "native_cpu", "native_gpu"}
+
+    @property
+    def is_reference_execution(self) -> bool:
+        return self.execution_kind == "reference_cpu"
+
+    @property
+    def is_native_execution(self) -> bool:
+        return self.execution_kind in {"native_cpu", "native_gpu"}
 
     @property
     def has_target_artifacts(self) -> bool:
@@ -415,13 +453,16 @@ class JitFn:
             "diagnostics": diagnostics,
             "executable": False,
             "compiler_path": "eager_fallback",
+            "execution_kind": "fallback_eager",
             "runtime_status": "unsupported",
             **bundle_metadata,
         }
         if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
+            native_cpu = self.execution_kind == "native_cpu"
             metadata.update({
                 "executable": True,
                 "compiler_path": "jit_cpu_numpy",
+                "execution_kind": "native_cpu" if native_cpu else "reference_cpu",
                 "runtime_status": "ready",
                 "arg_names": list(self.arg_names),
                 "output_name": self.cpu_plan.output_name,
@@ -437,6 +478,13 @@ class JitFn:
                     }
                     for op in self.cpu_plan.ops
                 ],
+                "guards": {
+                    "dtype": "float32",
+                    "rank": 2,
+                    "op_count": 1,
+                } if native_cpu else {
+                    "reference_backend": "numpy",
+                },
             })
         elif (
             self.cpu_plan is not None
@@ -498,6 +546,7 @@ class JitFn:
             metadata.update({
                 "executable": True,
                 "compiler_path": "apple_cpu_accelerate",
+                "execution_kind": "native_cpu",
                 "runtime_status": "ready",
                 "arg_names": list(self.arg_names),
                 "output_name": self.cpu_plan.output_name,
@@ -526,6 +575,7 @@ class JitFn:
             metadata.update({
                 "executable": True,
                 "compiler_path": "apple_gpu_mps",
+                "execution_kind": "native_gpu",
                 "runtime_status": "ready",
                 "execution_mode": "metal_runtime",
                 "arg_names": list(self.arg_names),
@@ -552,6 +602,7 @@ class JitFn:
         elif self.cpu_plan is not None:
             metadata.update({
                 "compiler_path": "target_ir_artifact",
+                "execution_kind": "artifact_only",
                 "runtime_status": "artifact_only",
                 "reason": "native target execution is not wired",
                 "arg_names": list(self.arg_names),
@@ -760,6 +811,7 @@ def jit(
                     executable=compile_bundle.executable,
                     runtime_status=compile_bundle.runtime_status,
                     execution_mode=compile_bundle.execution_mode,
+                    execution_kind=compile_bundle.execution_kind,
                     diagnostics=tuple(diagnostics) + compile_bundle.diagnostics,
                     trace_events=compile_bundle.trace_events,
                     tool_invocations=compile_bundle.tool_invocations,

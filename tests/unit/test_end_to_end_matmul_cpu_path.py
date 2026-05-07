@@ -19,7 +19,7 @@ def test_jit_matmul_executes_through_cpu_lowering_path():
     np.testing.assert_allclose(out, A @ B)
     assert mm.cpu_plan is not None
     assert mm.cpu_plan.op_name == "tessera.matmul"
-    assert mm.uses_compiled_path
+    assert mm.is_executable
     assert "JIT_COMPILED_CPU" in mm.explain_lowering()
 
 
@@ -52,7 +52,7 @@ def test_jit_gemm_can_use_256x128_cpu_tile():
     B = np.arange(64 * 128, dtype=np.float32).reshape(64, 128)
 
     np.testing.assert_allclose(gemm_256x128(A, B), A @ B, rtol=1e-4)
-    assert gemm_256x128.uses_compiled_path
+    assert gemm_256x128.is_executable
     assert gemm_256x128.cpu_plan.tile == (256, 128, 64)
     assert "tile_m = 256" in gemm_256x128.schedule_ir
     assert "tile_n = 128" in gemm_256x128.schedule_ir
@@ -70,7 +70,7 @@ def test_jit_dynamic_function_without_source_reports_uninspectable_fallback():
 
     dynamic_mm = ts.jit(ns["dynamic_mm"])
 
-    assert not dynamic_mm.uses_compiled_path
+    assert not dynamic_mm.is_executable
     explanation = dynamic_mm.explain_lowering()
     assert "JIT_SOURCE_UNAVAILABLE" in explanation
     assert "JIT_EAGER_FALLBACK" in explanation
@@ -89,7 +89,7 @@ def test_jit_dynamic_function_can_compile_with_explicit_source():
     B = np.arange(64 * 128, dtype=np.float32).reshape(64, 128)
 
     np.testing.assert_allclose(dynamic_mm(A, B), A @ B, rtol=1e-4)
-    assert dynamic_mm.uses_compiled_path
+    assert dynamic_mm.is_executable
     assert dynamic_mm.source_origin == "explicit"
     assert "JIT_SOURCE_PROVIDED" in dynamic_mm.explain_lowering()
     assert "JIT_COMPILED_CPU" in dynamic_mm.explain_lowering()
@@ -137,9 +137,9 @@ def test_unary_ops_compile_through_cpu_path():
     np.testing.assert_allclose(relu(x), np.array([0.0, 2.0], dtype=np.float32))
     np.testing.assert_allclose(sigmoid(x), 1.0 / (1.0 + np.exp(-x)))
     np.testing.assert_allclose(sin(x), np.sin(x))
-    assert relu.uses_compiled_path
-    assert sigmoid.uses_compiled_path
-    assert sin.uses_compiled_path
+    assert relu.is_executable
+    assert sigmoid.is_executable
+    assert sin.is_executable
     assert "tessera.cpu.relu" in relu.target_ir
 
 
@@ -152,7 +152,7 @@ def test_softmax_compiles_as_stable_cpu_reduction():
     e = np.exp(x - np.max(x, axis=-1, keepdims=True))
 
     np.testing.assert_allclose(probs(x), e / np.sum(e, axis=-1, keepdims=True))
-    assert probs.uses_compiled_path
+    assert probs.is_executable
     assert "stable_reduction" in probs.tile_ir
 
 
@@ -174,7 +174,7 @@ def test_adam_compiles_as_functional_cpu_optimizer_step():
     np.testing.assert_allclose(new_m, expected_m, rtol=1e-6)
     np.testing.assert_allclose(new_v, expected_v, rtol=1e-6)
     np.testing.assert_allclose(new_param, expected_param, rtol=1e-6)
-    assert adam_step.uses_compiled_path
+    assert adam_step.is_executable
     assert "functional_optimizer_step" in adam_step.tile_ir
 
 
@@ -187,7 +187,7 @@ def test_composite_supported_ops_compile_through_cpu_dataflow():
     x = np.array([-1.0, 2.0], dtype=np.float32)
     out = composite(x)
 
-    assert composite.uses_compiled_path
+    assert composite.is_executable
     assert "JIT_COMPILED_CPU" in composite.explain_lowering()
     assert "tessera.cpu.relu" in composite.target_ir
     assert "tessera.cpu.softmax" in composite.target_ir
@@ -205,7 +205,7 @@ def test_nested_ops_and_keyword_literals_compile_through_cpu_dataflow():
     e = np.exp(scores - np.max(scores, axis=0, keepdims=True))
 
     np.testing.assert_allclose(nested(A, B), e / np.sum(e, axis=0, keepdims=True))
-    assert nested.uses_compiled_path
+    assert nested.is_executable
     assert "axis = 0" in nested.ir_text()
     assert "tessera.cpu.matmul" in nested.target_ir
     assert "tessera.cpu.softmax" in nested.target_ir
@@ -293,7 +293,7 @@ def test_jit_target_apple_cpu_with_explicit_source_compiles():
 
     mm = ts.jit(ns["dynamic_mm"], target="apple_cpu", source=source)
 
-    assert mm.uses_compiled_path is True
+    assert mm.is_executable is True
     assert mm.runtime_artifact().metadata["compiler_path"] == "apple_cpu_accelerate"
 
     A = np.eye(3, dtype=np.float32)
@@ -313,7 +313,7 @@ def test_jit_target_apple_cpu_with_source_path_compiles(tmp_path):
 
     mm = ts.jit(ns["dynamic_mm"], target="apple_cpu", source_path=str(src))
 
-    assert mm.uses_compiled_path is True
+    assert mm.is_executable is True
     assert mm.runtime_artifact().metadata["compiler_path"] == "apple_cpu_accelerate"
 
 
@@ -329,7 +329,7 @@ def test_jit_target_none_without_source_still_falls_back_softly():
     )
     mm = ts.jit(ns["dynamic_mm"])  # no target
 
-    assert not mm.uses_compiled_path
+    assert not mm.is_executable
     assert "JIT_SOURCE_UNAVAILABLE" in mm.explain_lowering()
     A = np.eye(2, dtype=np.float32)
     B = np.ones((2, 2), dtype=np.float32)

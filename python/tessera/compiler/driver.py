@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .graph_ir import GraphIRModule
+from .capabilities import CAPABILITY_REGISTRY_VERSION, supports_op
 from .matmul_pipeline import CPUPlan, JitDiagnostic, LoweringArtifact, build_cpu_plan, explain_cpu_plan, normalize_target_kind
 
 
@@ -190,7 +191,10 @@ class CompileArtifactBundle:
             "target_hash": artifact_hashes.get("target"),
             "runtime_status": self.runtime_status,
             "execution_mode": self.execution_mode,
+            "capability_version": CAPABILITY_REGISTRY_VERSION,
         }
+        if self.cpu_plan is not None:
+            profiling["selected_schedule"] = self.cpu_plan.selected_schedule
         return {
             "target": self.request.target,
             "function_name": self.request.function_name,
@@ -203,6 +207,9 @@ class CompileArtifactBundle:
             "executable": self.executable,
             "runtime_status": self.runtime_status,
             "execution_mode": self.execution_mode,
+            "capability_version": CAPABILITY_REGISTRY_VERSION,
+            "capability_reason": _capability_reason(self),
+            "selected_schedule": self.cpu_plan.selected_schedule if self.cpu_plan is not None else None,
             "diagnostics": list(self.diagnostics_text()),
             "trace": [event.to_dict() for event in self.trace_events],
             "tool_invocations": [invocation.to_dict() for invocation in self.tool_invocations],
@@ -296,6 +303,12 @@ def compile_graph_module(
     )
     _maybe_dump_debug_artifacts(bundle)
     return bundle
+
+
+def _capability_reason(bundle: CompileArtifactBundle) -> str:
+    if bundle.cpu_plan is None:
+        return "no supported compiler plan was emitted"
+    return supports_op(bundle.request.target, bundle.cpu_plan.op_name).reason
 
 
 def _execution_mode_for(target_kind: str, has_plan: bool) -> str:

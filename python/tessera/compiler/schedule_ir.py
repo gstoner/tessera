@@ -324,7 +324,7 @@ def _lower_graph_ops(ops: list[IROp], *, tile: tuple[int, int, int]) -> list[Sch
         elif op_name in ROPE_OPS:
             scheduled.append(ScheduleOp("schedule.elementwise", {**_base_attrs(op, idx), "vectorize": True, "pattern": "rotary_pairs"}))
         elif op_name.startswith("tessera.scf.") or op_name in {"tessera.barrier", "tessera.assert"}:
-            scheduled.append(ScheduleOp("schedule.marker", {**_base_attrs(op, idx), "marker": op_name}))
+            scheduled.append(ScheduleOp("schedule.marker", {**_base_attrs(op, idx), **op.kwargs, "marker": op_name}))
         elif op.result is not None:
             scheduled.append(ScheduleOp("schedule.elementwise", {**_base_attrs(op, idx), "vectorize": True}))
         operand_names = [operand.removeprefix("%") for operand in op.operands]

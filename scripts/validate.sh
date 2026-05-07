@@ -4,9 +4,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON="${PYTHON:-$ROOT/.venv/bin/python}"
-if [ ! -x "$PYTHON" ]; then
-  PYTHON="${PYTHON_FALLBACK:-python3}"
+if [ -z "${PYTHON:-}" ]; then
+  if [ -x "$HOME/venv/bin/python" ]; then
+    PYTHON="$HOME/venv/bin/python"
+  elif [ -x "$ROOT/.venv/bin/python" ]; then
+    PYTHON="$ROOT/.venv/bin/python"
+  else
+    PYTHON="${PYTHON_FALLBACK:-python3}"
+  fi
 fi
 
 TMP_ROOT="${TMPDIR:-/tmp}"
@@ -16,6 +21,9 @@ BENCH_REPORT="$TMP_ROOT/tessera_benchmark_smoke.json"
 RUNTIME_REPORT="$TMP_ROOT/tessera_runtime_smoke.json"
 
 cd "$ROOT"
+
+echo "==> Environment bootstrap"
+"$PYTHON" scripts/validation_env.py
 
 echo "==> Version consistency"
 "$PYTHON" scripts/check_versions.py

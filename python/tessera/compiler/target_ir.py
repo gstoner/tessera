@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 
 from ..diagnostics import DiagnosticLevel, DiagnosticWhere, TesseraDiagnostic, TesseraErrorCode
+from .capabilities import get_target_capability, normalize_target
 from .tile_ir import TileIRModule, TileIRVerificationError, TileOp
 
 
@@ -376,6 +377,7 @@ def lower_tile_to_target_ir(tile_module: TileIRModule, *, target_kind: str) -> T
     tile_result = tile_module.verify()
     if not tile_result.ok:
         raise TileIRVerificationError(tile_result.format())
+    target_kind = normalize_target(target_kind)
     if target_kind not in SUPPORTED_TARGETS:
         raise ValueError(f"target_ir does not support target {target_kind!r}")
     attrs = {"tessera.ir.level": "target", "target": target_kind}

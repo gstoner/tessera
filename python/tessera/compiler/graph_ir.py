@@ -808,10 +808,29 @@ class _OpExtractor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_If(self, node: ast.If) -> None:
-        self._unsupported(node, "Python if/else control flow is not lowered by the Graph IR frontend")
+        condition = self._static_condition(node.test)
+        if condition is None:
+            self._unsupported(node, "Python if/else control flow is not lowered by the Graph IR frontend")
+            return
+        self.ops.append(self._marker("tessera.scf.if.begin", node, condition=condition))
+        for stmt in node.body:
+            self.visit(stmt)
+        if node.orelse:
+            self.ops.append(self._marker("tessera.scf.else", node, condition=condition))
+            for stmt in node.orelse:
+                self.visit(stmt)
+        self.ops.append(self._marker("tessera.scf.if.end", node, condition=condition))
 
     def visit_For(self, node: ast.For) -> None:
-        self._unsupported(node, "Python for-loops are not lowered by the Graph IR frontend")
+        range_trip_count = self._static_range_trip_count(node.iter)
+        if range_trip_count is None:
+            self._unsupported(node, "Python for-loops are not lowered by the Graph IR frontend")
+            return
+        induction = node.target.id if isinstance(node.target, ast.Name) else "_"
+        self.ops.append(self._marker("tessera.scf.for.begin", node, induction=induction, trip_count=range_trip_count))
+        for stmt in node.body:
+            self.visit(stmt)
+        self.ops.append(self._marker("tessera.scf.for.end", node, induction=induction, trip_count=range_trip_count))
 
     def visit_While(self, node: ast.While) -> None:
         self._unsupported(node, "Python while-loops are not lowered by the Graph IR frontend")
@@ -826,6 +845,66 @@ class _OpExtractor(ast.NodeVisitor):
             span=_span_from_ast(node),
             code="PY_FRONTEND_UNSUPPORTED",
         ))
+
+    def _marker(self, op_name: str, node: ast.AST, **kwargs: Any) -> IROp:
+        return IROp(
+            result=None,
+            op_name=op_name,
+            operands=[],
+            operand_types=[],
+            kwargs=kwargs,
+            source_span=_span_from_ast(node),
+        )
+
+    def _static_range_trip_count(self, node: ast.expr) -> Optional[int]:
+        if not isinstance(node, ast.Call):
+            return None
+        name = self._resolve_name(node.func)
+        if name != "range":
+            return None
+        try:
+            args = [int(ast.literal_eval(arg)) for arg in node.args]
+        except Exception:
+            return None
+        if len(args) == 1:
+            start, stop, step = 0, args[0], 1
+        elif len(args) == 2:
+            start, stop, step = args[0], args[1], 1
+        elif len(args) == 3:
+            start, stop, step = args
+        else:
+            return None
+        if step == 0:
+            return None
+        return max(0, len(range(start, stop, step)))
+
+    def _static_condition(self, node: ast.expr) -> Optional[bool]:
+        try:
+            value = ast.literal_eval(node)
+        except Exception:
+            value = None
+        if isinstance(value, bool):
+            return value
+        if isinstance(node, ast.Compare) and len(node.ops) == 1 and len(node.comparators) == 1:
+            try:
+                lhs = ast.literal_eval(node.left)
+                rhs = ast.literal_eval(node.comparators[0])
+            except Exception:
+                return None
+            op = node.ops[0]
+            if isinstance(op, ast.Eq):
+                return lhs == rhs
+            if isinstance(op, ast.NotEq):
+                return lhs != rhs
+            if isinstance(op, ast.Lt):
+                return lhs < rhs
+            if isinstance(op, ast.LtE):
+                return lhs <= rhs
+            if isinstance(op, ast.Gt):
+                return lhs > rhs
+            if isinstance(op, ast.GtE):
+                return lhs >= rhs
+        return None
 
     def _emit_expr(self, node: ast.expr, result_name: Optional[str] = None) -> Optional[str]:
         if isinstance(node, ast.Call):

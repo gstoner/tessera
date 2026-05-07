@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any, List, Mapping, Optional
 
 from .telemetry import TELEMETRY_SCHEMA_VERSION, make_event, telemetry_report
+from .compiler.capabilities import get_target_capability, normalize_target, runtime_status as compiler_runtime_status
 
 
 # ---------------------------------------------------------------------------
@@ -938,9 +939,12 @@ def available_backends() -> list[str]:
 
 def backend_capabilities(target: str = "cpu") -> BackendCapability:
     """Describe current backend support without guessing executable kernels."""
-    target = target.lower()
+    target = normalize_target(target)
+    compiler_cap = get_target_capability(target)
     backends = available_backends()
-    if target not in backends:
+    runtime_backend = compiler_cap.runtime_backend
+    backend_name = "cuda" if runtime_backend == "cuda" else "rocm" if runtime_backend == "hip" else target
+    if backend_name not in backends and target not in {"apple_cpu", "apple_gpu"}:
         return BackendCapability(
             name=target,
             available=False,
@@ -956,13 +960,14 @@ def backend_capabilities(target: str = "cpu") -> BackendCapability:
             dtypes=("fp32", "f32"),
             features=("host_tile_launch", "memory", "events"),
         )
+    status = compiler_runtime_status(target)
     return BackendCapability(
         name=target,
         available=True,
-        executable=False,
-        reason=f"{target} device discovered, but generated artifact execution is not wired yet",
-        dtypes=(),
-        features=("memory", "events"),
+        executable=status == "ready",
+        reason=compiler_cap.reason or f"{target} runtime status is {status}",
+        dtypes=compiler_cap.supported_dtypes,
+        features=compiler_cap.features,
     )
 
 

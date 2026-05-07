@@ -19,7 +19,9 @@ from typing import Any, Mapping, Optional, Sequence
 import numpy as np
 
 from .graph_ir import GraphIRFunction, GraphIRModule, IROp
+from .capabilities import normalize_target as _normalize_target, supports_op
 from .op_catalog import GRAPH_OP_TO_SPEC, LEGACY_GRAPH_OP_ALIASES, SUPPORTED_CPU_OPS, canonical_graph_op_name
+from .schedule_planner import SchedulePlanner
 from .schedule_ir import lower_graph_to_schedule_ir
 from .target_ir import lower_tile_to_target_ir
 from .tile_ir import lower_schedule_to_tile_ir
@@ -94,6 +96,7 @@ class CPUPlan:
     schedule_ir: str
     tile_ir: str
     target_ir: str
+    selected_schedule: dict[str, Any] | None = None
 
     @property
     def op_name(self) -> str:
@@ -177,6 +180,7 @@ def build_cpu_plan(
 
     graph_text = module.to_mlir()
     ops = tuple(fn.body)
+    selected_schedule = _select_schedule(fn, ops, tile=tile, target_kind=target_kind)
     schedule = _render_schedule_ir(module, fn, ops, tile=tile, target_kind=target_kind)
     tile_ir = _render_tile_ir(module, fn, ops, tile=tile, target_kind=target_kind)
     target = _render_target_ir(module, fn, ops, tile=tile, target_kind=target_kind)
@@ -190,6 +194,7 @@ def build_cpu_plan(
         schedule_ir=schedule,
         tile_ir=tile_ir,
         target_ir=target,
+        selected_schedule=selected_schedule,
     )
 
 
@@ -689,55 +694,48 @@ def _canonical_op_name(op_name: str) -> str:
 
 
 def normalize_target_kind(target: object = "cpu") -> str:
-    if target is None:
-        return "cpu"
-    if isinstance(target, str):
-        normalized = target.lower().replace("-", "_")
-        aliases = {
-            "cuda": "nvidia_sm90",
-            "x86": "cpu",
-            "x86_64": "cpu",
-            "nvidia": "nvidia_sm90",
-            "gpu": "nvidia_sm90",
-            "sm80": "nvidia_sm80",
-            "sm_80": "nvidia_sm80",
-            "sm90": "nvidia_sm90",
-            "sm_90": "nvidia_sm90",
-            "sm90a": "nvidia_sm90",
-            "sm_90a": "nvidia_sm90",
-            "hopper": "nvidia_sm90",
-            "sm100": "nvidia_sm100",
-            "sm_100": "nvidia_sm100",
-            "sm100a": "nvidia_sm100",
-            "sm_100a": "nvidia_sm100",
-            "blackwell": "nvidia_sm100",
-            "sm120": "nvidia_sm120",
-            "sm_120": "nvidia_sm120",
-            "amd": "rocm",
-            "hip": "rocm",
-            "tt_metalium": "metalium",
-            "tt": "metalium",
-            "apple": "apple_gpu",
-            "mac": "apple_gpu",
-            "macos_cpu": "apple_cpu",
-            "macos_gpu": "apple_gpu",
-            "m_series_cpu": "apple_cpu",
-            "m_series_gpu": "apple_gpu",
-        }
-        normalized = aliases.get(normalized, normalized)
-        allowed = {"cpu", "nvidia_sm80", "nvidia_sm90", "nvidia_sm100", "nvidia_sm120", "rocm", "metalium", "apple_cpu", "apple_gpu"}
-        if normalized not in allowed:
-            raise ValueError(f"unsupported Tessera target {target!r}; expected one of {sorted(allowed)}")
-        return normalized
-    from .gpu_target import GPUTargetProfile, ISA
-    if isinstance(target, GPUTargetProfile):
-        if target.isa >= ISA.SM_120:
-            return "nvidia_sm120"
-        if target.isa >= ISA.SM_100:
-            return "nvidia_sm100"
-        if target.isa >= ISA.SM_90:
-            return "nvidia_sm90"
-        return "nvidia_sm80"
+    return _normalize_target(target)
+
+
+def _select_schedule(
+    fn: GraphIRFunction,
+    ops: Sequence[IROp],
+    *,
+    tile: tuple[int, int, int],
+    target_kind: str,
+) -> dict[str, Any] | None:
+    for op in ops:
+        if _canonical_op_name(op.op_name) not in MATMUL_OPS:
+            continue
+        shapes = [_tensor_shape(str(t)) for t in [*op.operand_types[:2], op.result_type]]
+        if len(shapes) < 3 or any(len(shape) != 2 for shape in shapes):
+            return {
+                "op_name": "tessera.matmul",
+                "target": target_kind,
+                "config": {"tile_m": tile[0], "tile_n": tile[1], "tile_k": tile[2], "num_warps": 4, "num_stages": 2},
+                "method": "manual",
+                "reason": "dynamic_or_unknown_shape",
+            }
+        m, k = shapes[0]
+        _, n = shapes[1]
+        if not all(isinstance(v, int) and v > 0 for v in (m, n, k)):
+            return None
+        return SchedulePlanner().plan_gemm(m=m, n=n, k=k, target=target_kind).to_dict()
+    return None
+
+
+def _tensor_shape(type_text: str | None) -> tuple[int, ...]:
+    if not type_text or not type_text.startswith("tensor<") or "x" not in type_text:
+        return ()
+    body = type_text.removeprefix("tensor<").removesuffix(">")
+    parts = body.split("x")[:-1]
+    dims: list[int] = []
+    for part in parts:
+        try:
+            dims.append(int(part))
+        except ValueError:
+            return ()
+    return tuple(dims)
     return "nvidia_sm90"
 
 

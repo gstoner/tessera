@@ -225,6 +225,8 @@ def _lower_schedule_ops(ops: list[ScheduleOp]) -> list[TileOp]:
                 lowered.append(TileOp("tessera.queue.create", {"queue_id": queue_id, "depth": 1, "producer_warps": 1, "consumer_warps": 1}))
                 lowered.append(TileOp("tessera.queue.barrier", {"queue_id": queue_id, "scope": "block"}))
                 lowered.append(TileOp("tile.debug_barrier", {"queue_id": queue_id, "scope": "block", "source": marker, "ordinal": queue_id}))
+            elif isinstance(marker, str) and marker.startswith("tessera.scf."):
+                lowered.append(TileOp("tile.control_marker", dict(op.attrs)))
             continue
     return lowered
 

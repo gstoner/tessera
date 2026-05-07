@@ -8,6 +8,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 
@@ -30,6 +31,22 @@ inline void reference_gemm_f32(const float* A, const float* B, float* C,
   }
 }
 
+inline void reference_rope_f32(const float* X, const float* Theta, float* Out,
+                               int32_t M, int32_t K) {
+  for (int32_t row = 0; row < M; ++row) {
+    for (int32_t pair = 0; pair < K / 2; ++pair) {
+      std::size_t even = static_cast<std::size_t>(row) * K + pair * 2;
+      std::size_t odd = even + 1;
+      float xe = X[even];
+      float xo = X[odd];
+      float c = std::cos(Theta[even]);
+      float s = std::sin(Theta[even]);
+      Out[even] = xe * c - xo * s;
+      Out[odd]  = xe * s + xo * c;
+    }
+  }
+}
+
 } // namespace
 
 extern "C" int32_t tessera_apple_gpu_runtime_has_metal(void) { return 0; }
@@ -39,6 +56,16 @@ extern "C" void tessera_apple_gpu_mps_matmul_f32(const float* A,
                                                  int32_t M, int32_t N,
                                                  int32_t K) {
   reference_gemm_f32(A, B, C, M, N, K);
+}
+
+extern "C" void tessera_apple_gpu_rope_f32(const float* X, const float* Theta,
+                                           float* Out, int32_t M, int32_t K) {
+  reference_rope_f32(X, Theta, Out, M, K);
+}
+
+extern "C" int32_t tessera_apple_gpu_runtime_msl_cache_size(void) {
+  // No Metal -> no MSL cache. Tests gate this on platform.
+  return -1;
 }
 
 #endif // !__APPLE__

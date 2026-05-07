@@ -34,9 +34,13 @@
 #import <Metal/Metal.h>
 #import <MetalPerformanceShaders/MetalPerformanceShaders.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <mutex>
+#include <string>
+#include <unordered_map>
 
 namespace {
 
@@ -44,6 +48,13 @@ struct MetalDeviceContext {
   id<MTLDevice>       device;
   id<MTLCommandQueue> queue;
   bool                ok;
+
+  // Phase 8.4 — MSL kernel cache. Keyed by (msl_source + entry_point) so
+  // multiple kernels in the same source unit (uncommon but legal) cache
+  // independently. Compiled lazily; the cache outlives any single command
+  // buffer so amortizes the ~1ms compile cost across kernel invocations.
+  std::unordered_map<std::string, id<MTLComputePipelineState>> kernel_cache;
+  std::mutex                                                   kernel_cache_mu;
 };
 
 MetalDeviceContext &deviceContext() {
@@ -170,4 +181,166 @@ extern "C" void tessera_apple_gpu_mps_matmul_f32(const float* A,
   MetalDeviceContext &ctx = deviceContext();
   if (ctx.ok && dispatch_mps_gemm_f32(ctx, A, B, C, M, N, K)) return;
   reference_gemm_f32(A, B, C, M, N, K);
+}
+
+//===---------------------------------------------------------------------===//
+// Phase 8.4 — Custom MSL kernel infrastructure
+//
+// `compile_msl_kernel` compiles an MSL source string into an
+// MTLComputePipelineState and caches it in the device context. The cache key
+// is the concatenation of the MSL source and entry point name — same source
+// + same entry point hits the cache; either changing forces a recompile.
+//
+// `dispatch_msl_kernel` is a thin wrapper that encodes a compute pass with
+// a 2-D grid. Kernel-specific symbols (rope_f32, etc.) build the buffers
+// and pick grid dimensions, then call this helper.
+//
+// Capability probe `tessera_apple_gpu_runtime_msl_cache_size` exposes the
+// number of cached pipelines so tests can assert the second invocation of a
+// kernel reuses a cached pipeline state.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+id<MTLComputePipelineState> compile_msl_kernel(MetalDeviceContext &ctx,
+                                               NSString *source,
+                                               NSString *entry_point) {
+  std::string key;
+  key.reserve(static_cast<std::size_t>([source length]) +
+              static_cast<std::size_t>([entry_point length]) + 1);
+  key.append([source UTF8String]);
+  key.push_back('\x1f'); // unit separator — entry-point disambiguator
+  key.append([entry_point UTF8String]);
+
+  {
+    std::lock_guard<std::mutex> lock(ctx.kernel_cache_mu);
+    auto it = ctx.kernel_cache.find(key);
+    if (it != ctx.kernel_cache.end()) return it->second;
+  }
+
+  NSError *error = nil;
+  MTLCompileOptions *opts = [[MTLCompileOptions alloc] init];
+  opts.languageVersion = MTLLanguageVersion3_0;
+  id<MTLLibrary> library = [ctx.device newLibraryWithSource:source
+                                                    options:opts
+                                                      error:&error];
+  if (!library) return nil;
+  id<MTLFunction> fn = [library newFunctionWithName:entry_point];
+  if (!fn) return nil;
+
+  id<MTLComputePipelineState> pso =
+      [ctx.device newComputePipelineStateWithFunction:fn error:&error];
+  if (!pso) return nil;
+
+  std::lock_guard<std::mutex> lock(ctx.kernel_cache_mu);
+  // Re-check under the lock in case another thread compiled the same kernel
+  // concurrently — keep whichever object won the race.
+  auto it = ctx.kernel_cache.find(key);
+  if (it != ctx.kernel_cache.end()) return it->second;
+  ctx.kernel_cache.emplace(std::move(key), pso);
+  return pso;
+}
+
+bool dispatch_rope_msl(MetalDeviceContext &ctx, const float* X,
+                       const float* Theta, float* Out, int32_t M, int32_t K) {
+  static NSString *const kRopeSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void rope_f32(
+    device const float* x      [[buffer(0)]],
+    device const float* theta  [[buffer(1)]],
+    device float*       out    [[buffer(2)]],
+    constant int&       M      [[buffer(3)]],
+    constant int&       K      [[buffer(4)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    if (gid.x >= (uint)(K / 2) || gid.y >= (uint)M) return;
+    int row = (int)gid.y;
+    int pair = (int)gid.x;
+    int idx_even = row * K + pair * 2;
+    int idx_odd  = idx_even + 1;
+    float xe = x[idx_even];
+    float xo = x[idx_odd];
+    float c = cos(theta[idx_even]);
+    float s = sin(theta[idx_even]);
+    out[idx_even] = xe * c - xo * s;
+    out[idx_odd]  = xe * s + xo * c;
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kRopeSource, @"rope_f32");
+    if (!pso) return false;
+
+    NSUInteger byteCount = sizeof(float) * static_cast<NSUInteger>(M) *
+                           static_cast<NSUInteger>(K);
+    id<MTLBuffer> bufX = [ctx.device newBufferWithBytes:X
+                                                  length:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufT = [ctx.device newBufferWithBytes:Theta
+                                                  length:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufX || !bufT || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufT offset:0 atIndex:1];
+    [enc setBuffer:bufO offset:0 atIndex:2];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:4];
+
+    NSUInteger half_k = static_cast<NSUInteger>(K / 2);
+    MTLSize grid = MTLSizeMake(half_k, static_cast<NSUInteger>(M), 1);
+    NSUInteger tg_x = std::min<NSUInteger>(half_k, 32);
+    NSUInteger tg_y = std::min<NSUInteger>(static_cast<NSUInteger>(M),
+                                           pso.maxTotalThreadsPerThreadgroup / std::max<NSUInteger>(tg_x, 1));
+    if (tg_y == 0) tg_y = 1;
+    MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(Out, [bufO contents], byteCount);
+    return true;
+  }
+}
+
+inline void reference_rope_f32(const float* X, const float* Theta, float* Out,
+                               int32_t M, int32_t K) {
+  for (int32_t row = 0; row < M; ++row) {
+    for (int32_t pair = 0; pair < K / 2; ++pair) {
+      std::size_t even = static_cast<std::size_t>(row) * K + pair * 2;
+      std::size_t odd = even + 1;
+      float xe = X[even];
+      float xo = X[odd];
+      float c = std::cos(Theta[even]);
+      float s = std::sin(Theta[even]);
+      Out[even] = xe * c - xo * s;
+      Out[odd]  = xe * s + xo * c;
+    }
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_rope_f32(const float* X, const float* Theta,
+                                           float* Out, int32_t M, int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_rope_msl(ctx, X, Theta, Out, M, K)) return;
+  reference_rope_f32(X, Theta, Out, M, K);
+}
+
+extern "C" int32_t tessera_apple_gpu_runtime_msl_cache_size(void) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return -1;
+  std::lock_guard<std::mutex> lock(ctx.kernel_cache_mu);
+  return static_cast<int32_t>(ctx.kernel_cache.size());
 }

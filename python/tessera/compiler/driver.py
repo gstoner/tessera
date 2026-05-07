@@ -337,6 +337,12 @@ _APPLE_GPU_MPS_OPS: frozenset[str] = frozenset({
     "tessera.gemm",
 })
 
+_APPLE_GPU_MSL_OPS: frozenset[str] = frozenset({
+    "tessera.rope",
+})
+
+_APPLE_GPU_RUNTIME_OPS: frozenset[str] = _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS
+
 
 def is_apple_gpu_mps_op(op_name: str) -> bool:
     """Return True when an op is dispatched via Metal Performance Shaders."""
@@ -344,18 +350,26 @@ def is_apple_gpu_mps_op(op_name: str) -> bool:
     return op_name in _APPLE_GPU_MPS_OPS
 
 
+def is_apple_gpu_msl_op(op_name: str) -> bool:
+    """Phase 8.4: return True when an op is dispatched via a custom MSL kernel."""
+
+    return op_name in _APPLE_GPU_MSL_OPS
+
+
 def _is_apple_gpu_mps_executable(cpu_plan: CPUPlan | None) -> bool:
-    """Phase 8.3: only single-op rank-2 f32 matmul/gemm programs take the MPS
-    runtime path. Multi-op programs (rope, softmax, kv_cache) keep the existing
-    metal_artifact contract — Phase 8.4 broadens the executable envelope via
-    custom MSL kernels.
+    """Phase 8.3 + 8.4: a single-op apple_gpu plan is executable when the op is
+    in the runtime envelope — currently matmul/gemm via MPS (Phase 8.3) or rope
+    via custom MSL (Phase 8.4). Multi-op programs keep the metal_artifact
+    contract until the runtime grows fused-kernel coverage.
+
+    Name kept for backward compatibility — it now spans MPS + MSL paths.
     """
 
     if cpu_plan is None or cpu_plan.target_kind != "apple_gpu":
         return False
     if len(cpu_plan.ops) != 1:
         return False
-    return cpu_plan.ops[0].op_name in _APPLE_GPU_MPS_OPS
+    return cpu_plan.ops[0].op_name in _APPLE_GPU_RUNTIME_OPS
 
 
 def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> LoweringArtifact | None:
@@ -375,13 +389,29 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
         ])
         return LoweringArtifact("backend", text)
     if target_kind == "apple_gpu" and _is_apple_gpu_mps_executable(cpu_plan):
+        # Pick the runtime symbol/framework pair based on which op is in the
+        # plan. matmul/gemm route to MPS (Phase 8.3); rope routes to the
+        # custom MSL kernel emitted by the runtime shim (Phase 8.4).
+        only_op = cpu_plan.ops[0].op_name
+        if only_op in _APPLE_GPU_MPS_OPS:
+            symbol = "tessera_apple_gpu_mps_matmul_f32"
+            framework = "MetalPerformanceShaders"
+            abi = "MPSMatrixMultiplication"
+        elif only_op in _APPLE_GPU_MSL_OPS:
+            symbol = "tessera_apple_gpu_rope_f32"
+            framework = "Metal"
+            abi = "MSLComputePipelineState"
+        else:
+            symbol = "tessera_apple_gpu_unknown"
+            framework = "Metal"
+            abi = "unknown"
         text = "\n".join([
             'module attributes {tessera.ir.level = "backend", target = "apple_gpu", execution_mode = "metal_runtime"} {',
             '  "tessera_apple.gpu.runtime_pipeline"() {',
             '    pipeline = "tessera-lower-to-apple_gpu-runtime",',
-            '    symbol = "tessera_apple_gpu_mps_matmul_f32",',
-            '    framework = "MetalPerformanceShaders",',
-            '    abi = "MPSMatrixMultiplication",',
+            f'    symbol = "{symbol}",',
+            f'    framework = "{framework}",',
+            f'    abi = "{abi}",',
             '    dtype = "f32"',
             '  } : () -> ()',
             "}",

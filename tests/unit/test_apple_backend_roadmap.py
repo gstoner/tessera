@@ -718,6 +718,143 @@ def test_apple_gpu_target_keeps_metal_artifact_for_multi_op_programs():
     assert not fused.uses_compiled_path
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 8.4: Custom MSL kernels for ops MPS doesn't cover.
+#
+# First concrete kernel is rope. The runtime envelope is now: single-op
+# matmul (Phase 8.3 via MPS) OR single-op rope (Phase 8.4 via custom MSL).
+# Multi-op programs still keep the metal_artifact contract; future Phase
+# 8.4.x kernels (flash-attention next) will add ops to that envelope.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_apple_gpu_target_emits_msl_kernel_artifact_with_inline_source():
+    """The Target IR for a single-rope apple_gpu program must carry the MSL
+    source as a StringAttr on tessera_apple.gpu.msl_kernel — the IR is the
+    self-contained, replayable record of the kernel."""
+
+    @ts.jit(target="apple_gpu")
+    def rope(X, Theta):
+        return ts.ops.rope(X, Theta)
+
+    target_ir = rope.target_ir
+    assert "tessera_apple.gpu.msl_kernel" in target_ir
+    assert 'entry_point = "rope_f32"' in target_ir
+    # The MSL source itself should appear inline — at minimum the kernel
+    # signature line. We don't pin the entire source so future kernel
+    # rewrites don't churn the test.
+    assert "kernel void rope_f32" in target_ir
+    assert 'cache_key' in target_ir
+    assert 'execution_mode = "metal_runtime"' in target_ir
+
+    artifact = rope.runtime_artifact()
+    assert artifact.metadata["compiler_path"] == "apple_gpu_mps"
+    assert artifact.metadata["runtime_status"] == "ready"
+    assert artifact.metadata["execution_mode"] == "metal_runtime"
+    assert artifact.metadata["executable"] is True
+    assert "tessera-lower-to-apple_gpu-runtime" in rope.compile_bundle.artifact("backend").text
+    assert "tessera_apple_gpu_rope_f32" in rope.compile_bundle.artifact("backend").text
+
+
+def test_apple_gpu_rope_executes_through_msl_kernel():
+    """End-to-end: @jit(target='apple_gpu') rope dispatches through the
+    custom MSL kernel and returns numerically-correct values vs the numpy
+    reference. On Darwin this hits Metal; on Linux/CI the portable reference
+    fallback in apple_gpu_runtime_stub.cpp produces the same result."""
+
+    @ts.jit(target="apple_gpu")
+    def rope(X, Theta):
+        return ts.ops.rope(X, Theta)
+
+    rng = np.random.RandomState(17)
+    M, K = 8, 16
+    X = rng.randn(M, K).astype(np.float32)
+    Theta = rng.uniform(-np.pi, np.pi, size=(M, K)).astype(np.float32)
+
+    out = rope(X, Theta)
+    assert out.shape == (M, K)
+    assert out.dtype == np.float32
+
+    # Reference via numpy. The runtime computes cos/sin in fp32 on either
+    # device, so a tight rtol is appropriate — fp32 cos/sin are bit-stable
+    # across Metal and the host BLAS for these magnitudes.
+    even = X[:, 0::2]
+    odd = X[:, 1::2]
+    theta_even = Theta[:, 0::2]
+    expected = np.empty_like(X)
+    expected[:, 0::2] = even * np.cos(theta_even) - odd * np.sin(theta_even)
+    expected[:, 1::2] = even * np.sin(theta_even) + odd * np.cos(theta_even)
+    np.testing.assert_allclose(out, expected, rtol=1e-5, atol=1e-5)
+
+
+def test_apple_gpu_msl_runtime_caches_kernel_pipeline_state(tmp_path):
+    """Compile the apple_gpu runtime shim from source and verify the MSL
+    cache size grows from 0 -> 1 after first dispatch and stays at 1 across
+    a second dispatch (cache hit). On non-Darwin the symbol returns -1; the
+    test gates on platform."""
+
+    if sys.platform != "darwin":
+        pytest.skip("MSL kernel cache is Apple-only")
+
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        pytest.skip("C++ compiler is not available")
+
+    backend = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
+    source = backend / "apple_gpu_runtime.mm"
+    lib = tmp_path / "libtessera_apple_gpu_runtime.dylib"
+    cmd = [cxx, "-std=c++17", "-shared", "-fPIC", "-fobjc-arc",
+           "-x", "objective-c++", str(source), "-o", str(lib),
+           "-framework", "Foundation",
+           "-framework", "Metal",
+           "-framework", "MetalPerformanceShaders"]
+    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    runtime = ctypes.CDLL(str(lib))
+    cache_size = runtime.tessera_apple_gpu_runtime_msl_cache_size
+    cache_size.argtypes = []
+    cache_size.restype = ctypes.c_int32
+
+    has_metal = runtime.tessera_apple_gpu_runtime_has_metal
+    has_metal.argtypes = []
+    has_metal.restype = ctypes.c_int32
+    if has_metal() == 0:
+        pytest.skip("Metal device not available on this host")
+
+    rope = runtime.tessera_apple_gpu_rope_f32
+    rope.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    rope.restype = None
+
+    # First dispatch — cold cache -> compile -> cache size becomes 1.
+    M, K = 4, 8
+    X = np.zeros((M, K), dtype=np.float32)
+    Theta = np.zeros((M, K), dtype=np.float32)
+    Out = np.zeros((M, K), dtype=np.float32)
+    assert cache_size() == 0
+    rope(
+        X.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        Theta.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        Out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        M, K,
+    )
+    assert cache_size() == 1
+
+    # Second dispatch — same source -> cache hit, size stays 1.
+    rope(
+        X.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        Theta.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        Out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        M, K,
+    )
+    assert cache_size() == 1
+
+
 def test_apple_cpu_bf16_disabled_when_ml_dtypes_missing(monkeypatch):
     """When ml_dtypes isn't installed the bf16 dtype probe returns None and
     the runtime falls through to numpy. Verified by stubbing the import to

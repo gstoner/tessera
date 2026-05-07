@@ -1,8 +1,8 @@
-3.052616e-02 phase8/apple_cpu_lowering.mlir
-3.566623e-02 phase8/apple_dialect_roundtrip.mlir
-3.233504e-02 phase8/apple_gpu_lowering.mlir
-3.303289e-02 phase8/apple_cpu_runtime.mlir
-1.469588e-02 phase8/target_ir_contracts.mlir
+3.644109e-02 phase8/apple_cpu_lowering.mlir
+3.553224e-02 phase8/apple_dialect_roundtrip.mlir
+3.757215e-02 phase8/apple_gpu_lowering.mlir
+3.885961e-02 phase8/apple_cpu_runtime.mlir
+1.801491e-02 phase8/target_ir_contracts.mlir
 4.739904e-02 phase2/distribution_lowering.mlir
 4.920816e-02 phase2/effect_annotation.mlir
 4.286575e-02 phase2/full_pipeline.mlir
@@ -29,5 +29,6 @@
 4.314494e-02 phase7/neighbors_stencil_lower.mlir
 4.376101e-02 phase7/shardy_export.mlir
 3.875470e-02 pipelines/cleanup_pipeline.mlir
-3.326321e-02 phase8/apple_gpu_runtime.mlir
-1.377988e-02 phase8/tmem_tcgen05_contract.mlir
+4.121494e-02 phase8/apple_gpu_runtime.mlir
+1.280689e-02 phase8/tmem_tcgen05_contract.mlir
+3.536510e-02 phase8/apple_gpu_msl.mlir

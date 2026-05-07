@@ -33,6 +33,11 @@ std::unique_ptr<::mlir::Pass> createLowerMatmulToAppleCPUPass();
 /// counterpart to the artifact-only `tessera-lower-to-apple_gpu` pipeline.
 std::unique_ptr<::mlir::Pass> createLowerMatmulToAppleGPUPass();
 
+/// tessera.rope (rank-2, f32, x.shape == theta.shape) → func.call into the
+/// Apple GPU runtime shim's custom-MSL rope kernel. Phase 8.4 — the first
+/// concrete custom kernel emitted via the gpu.msl_kernel op contract.
+std::unique_ptr<::mlir::Pass> createLowerRopeToAppleGPUPass();
+
 /// Register the Apple Silicon dialect into a DialectRegistry. Convenience
 /// wrapper that forwards to registerAppleDialect from TesseraAppleDialect.h.
 void registerTesseraAppleBackendDialects(::mlir::DialectRegistry &registry);

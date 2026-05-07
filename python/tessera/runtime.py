@@ -1644,6 +1644,8 @@ def _load_apple_cpu_runtime() -> ctypes.CDLL:
 
 
 _APPLE_GPU_MPS_OPS = frozenset({"tessera.matmul", "tessera.gemm"})
+_APPLE_GPU_MSL_OPS = frozenset({"tessera.rope"})
+_APPLE_GPU_RUNTIME_OPS = _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS
 
 
 def _execute_apple_gpu_mps_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -1687,12 +1689,17 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             values[str(result)] = _apple_gpu_dispatch_matmul(
                 op_name, [_as_numpy(values[name]) for name in operand_names], np
             )
+        elif op_name in _APPLE_GPU_MSL_OPS:
+            values[str(result)] = _apple_gpu_dispatch_rope(
+                op_name, [_as_numpy(values[name]) for name in operand_names], np
+            )
         else:
-            # Phase 8.4 will broaden the runtime envelope. Today multi-op
-            # programs do not flip to the MPS runtime path, so a non-matmul
-            # here means the gating in driver.py is out of sync.
+            # Phase 8.4.x will broaden further; today single-op gating in
+            # driver.py is the authoritative envelope. A non-MPS, non-MSL op
+            # here means the gating + dispatcher are out of sync.
             raise ValueError(
-                f"apple_gpu MPS path does not support op {op_name!r} in Phase 8.3"
+                f"apple_gpu runtime path does not support op {op_name!r} "
+                f"(envelope: {sorted(_APPLE_GPU_RUNTIME_OPS)})"
             )
 
     if output_name not in values:
@@ -1755,6 +1762,58 @@ def _apple_gpu_mps_matmul_f32() -> Any:
     return sym
 
 
+def _apple_gpu_dispatch_rope(op_name: str, operands: list[Any], np: Any) -> Any:
+    """Phase 8.4: dispatch a single rank-2 f32 rope through the apple_gpu
+    runtime shim's custom MSL kernel. Inputs outside the supported envelope
+    fall back to the numpy reference path used by the default `cpu` target.
+    """
+
+    if len(operands) != 2:
+        raise ValueError(f"{op_name!r} requires exactly two operands")
+    x = np.asarray(operands[0])
+    theta = np.asarray(operands[1])
+
+    rank2_fast_path = (
+        x.dtype == np.float32
+        and theta.dtype == np.float32
+        and x.ndim == 2
+        and theta.ndim == 2
+        and x.shape == theta.shape
+        and x.shape[1] % 2 == 0
+    )
+    if not rank2_fast_path:
+        return _runtime_rope(np, x, theta)
+    if not x.flags.c_contiguous:
+        x = np.ascontiguousarray(x, dtype=np.float32)
+    if not theta.flags.c_contiguous:
+        theta = np.ascontiguousarray(theta, dtype=np.float32)
+
+    out = np.zeros(x.shape, dtype=np.float32)
+    rope = _apple_gpu_rope_f32()
+    rope(
+        x.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        theta.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        ctypes.c_int32(x.shape[0]),
+        ctypes.c_int32(x.shape[1]),
+    )
+    return out
+
+
+def _apple_gpu_rope_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = runtime.tessera_apple_gpu_rope_f32
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
 def _load_apple_gpu_runtime() -> ctypes.CDLL:
     """Phase 8.3: locate or compile the apple_gpu runtime shared library.
 
@@ -1780,9 +1839,11 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
         if candidate.exists():
             try:
                 lib = ctypes.CDLL(str(candidate))
-                # Only accept the prebuilt library when it actually exports
-                # the apple_gpu symbol (older builds may predate Phase 8.3).
+                # Only accept the prebuilt library when it exports the full
+                # Phase 8.4 envelope. Older builds (Phase 8.3) lack the rope
+                # symbol; falling through forces a rebuild.
                 getattr(lib, "tessera_apple_gpu_mps_matmul_f32")
+                getattr(lib, "tessera_apple_gpu_rope_f32")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

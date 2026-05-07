@@ -339,6 +339,7 @@ _APPLE_GPU_MPS_OPS: frozenset[str] = frozenset({
 
 _APPLE_GPU_MSL_OPS: frozenset[str] = frozenset({
     "tessera.rope",
+    "tessera.flash_attn",
 })
 
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS
@@ -397,8 +398,12 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
             symbol = "tessera_apple_gpu_mps_matmul_f32"
             framework = "MetalPerformanceShaders"
             abi = "MPSMatrixMultiplication"
-        elif only_op in _APPLE_GPU_MSL_OPS:
+        elif only_op == "tessera.rope":
             symbol = "tessera_apple_gpu_rope_f32"
+            framework = "Metal"
+            abi = "MSLComputePipelineState"
+        elif only_op == "tessera.flash_attn":
+            symbol = "tessera_apple_gpu_flash_attn_f32"
             framework = "Metal"
             abi = "MSLComputePipelineState"
         else:

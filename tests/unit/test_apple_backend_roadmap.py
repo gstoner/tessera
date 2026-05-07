@@ -855,6 +855,155 @@ def test_apple_gpu_msl_runtime_caches_kernel_pipeline_state(tmp_path):
     assert cache_size() == 1
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 8.4.1: Custom MSL flash-attention forward.
+#
+# Single rank-3 f32 flash_attn programs flip from metal_artifact to
+# metal_runtime; the runtime shim compiles the embedded MSL kernel via
+# [device newLibraryWithSource:options:error:], caches it, and dispatches via
+# MTLComputeCommandEncoder. Online softmax in a single kernel — avoids
+# materializing the (B, Sq, Sk) score matrix entirely.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _np_flash_attn_reference(np, q, k, v, scale=None, causal=False):
+    """Faithful reference matching the runtime symbol's algorithm. Used as
+    the ground truth in the apple_gpu flash_attn unit tests."""
+
+    if scale is None:
+        scale = 1.0 / np.sqrt(q.shape[-1])
+    scores = np.matmul(q, np.swapaxes(k, -1, -2)) * scale
+    if causal:
+        Sq = scores.shape[-2]
+        Sk = scores.shape[-1]
+        mask = np.triu(np.ones((Sq, Sk), dtype=bool), k=1 + max(Sk - Sq, 0))
+        scores = np.where(mask, -np.inf, scores)
+    e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+    weights = e / np.sum(e, axis=-1, keepdims=True)
+    return np.matmul(weights, v)
+
+
+def test_apple_gpu_flash_attn_target_emits_msl_kernel_artifact_with_inline_source():
+    """The Target IR for a single-flash_attn apple_gpu program must carry the
+    MSL source inline on tessera_apple.gpu.msl_kernel — the IR is the
+    self-contained, replayable record of the kernel."""
+
+    @ts.jit(target="apple_gpu")
+    def flash(q, k, v):
+        return ts.ops.flash_attn(q, k, v, causal=True)
+
+    target_ir = flash.target_ir
+    assert "tessera_apple.gpu.msl_kernel" in target_ir
+    assert 'entry_point = "flash_attn_f32"' in target_ir
+    # Pin a stable line of the kernel so the IR clearly carries the source,
+    # without locking the test to whitespace details of the kernel body.
+    assert "kernel void flash_attn_f32" in target_ir
+    assert 'cache_key' in target_ir
+    assert 'execution_mode = "metal_runtime"' in target_ir
+
+    artifact = flash.runtime_artifact()
+    assert artifact.metadata["compiler_path"] == "apple_gpu_mps"
+    assert artifact.metadata["runtime_status"] == "ready"
+    assert artifact.metadata["execution_mode"] == "metal_runtime"
+    assert artifact.metadata["executable"] is True
+    assert "tessera-lower-to-apple_gpu-runtime" in flash.compile_bundle.artifact("backend").text
+    assert "tessera_apple_gpu_flash_attn_f32" in flash.compile_bundle.artifact("backend").text
+
+
+def test_apple_gpu_flash_attn_executes_through_msl_kernel():
+    """End-to-end: @jit(target='apple_gpu') flash_attn dispatches through
+    the custom MSL kernel and matches the numpy reference. Tested with both
+    causal and non-causal masks across multiple shapes that exercise the
+    online-softmax accumulator."""
+
+    @ts.jit(target="apple_gpu")
+    def flash(q, k, v):
+        return ts.ops.flash_attn(q, k, v)
+
+    @ts.jit(target="apple_gpu")
+    def flash_causal(q, k, v):
+        return ts.ops.flash_attn(q, k, v, causal=True)
+
+    rng = np.random.RandomState(23)
+    for B, Sq, Sk, D in ((1, 4, 4, 8), (2, 8, 8, 16), (1, 16, 32, 64)):
+        Q = rng.randn(B, Sq, D).astype(np.float32) * 0.5
+        K = rng.randn(B, Sk, D).astype(np.float32) * 0.5
+        V = rng.randn(B, Sk, D).astype(np.float32) * 0.5
+
+        # Non-causal
+        out = flash(Q, K, V)
+        assert out.shape == (B, Sq, D)
+        assert out.dtype == np.float32
+        ref = _np_flash_attn_reference(np, Q, K, V, causal=False)
+        np.testing.assert_allclose(out, ref, rtol=1e-4, atol=1e-5)
+
+        # Causal (only sensible when Sq == Sk)
+        if Sq == Sk:
+            out_c = flash_causal(Q, K, V)
+            ref_c = _np_flash_attn_reference(np, Q, K, V, causal=True)
+            np.testing.assert_allclose(out_c, ref_c, rtol=1e-4, atol=1e-5)
+
+
+def test_apple_gpu_flash_attn_runtime_shim_correctness(tmp_path):
+    """Compile the apple_gpu runtime shim from source and verify the C ABI
+    of tessera_apple_gpu_flash_attn_f32: signature matches the lowering pass,
+    numerical output matches the numpy reference. On Darwin this exercises
+    the Metal/MSL path; on Linux the portable reference fallback."""
+
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        pytest.skip("C++ compiler is not available")
+
+    backend = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
+    if sys.platform == "darwin":
+        source = backend / "apple_gpu_runtime.mm"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.dylib"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", "-fobjc-arc",
+               "-x", "objective-c++", str(source), "-o", str(lib),
+               "-framework", "Foundation",
+               "-framework", "Metal",
+               "-framework", "MetalPerformanceShaders"]
+    else:
+        source = backend / "apple_gpu_runtime_stub.cpp"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.so"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(lib)]
+    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    runtime = ctypes.CDLL(str(lib))
+    flash = runtime.tessera_apple_gpu_flash_attn_f32
+    flash.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_float,
+        ctypes.c_int32,
+    ]
+    flash.restype = None
+
+    rng = np.random.RandomState(29)
+    for B, Sq, Sk, D, causal in (
+        (1, 3, 3, 4, 0),
+        (2, 4, 6, 8, 0),
+        (1, 5, 5, 16, 1),
+    ):
+        Q = rng.randn(B, Sq, D).astype(np.float32) * 0.5
+        K = rng.randn(B, Sk, D).astype(np.float32) * 0.5
+        V = rng.randn(B, Sk, D).astype(np.float32) * 0.5
+        O = np.zeros((B, Sq, D), dtype=np.float32)
+        scale = 1.0 / float(np.sqrt(D))
+        flash(
+            Q.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            K.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            V.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            O.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            B, Sq, Sk, D, scale, causal,
+        )
+        ref = _np_flash_attn_reference(np, Q, K, V, scale=scale, causal=bool(causal))
+        np.testing.assert_allclose(O, ref, rtol=1e-4, atol=1e-5)
+
+
 def test_apple_cpu_bf16_disabled_when_ml_dtypes_missing(monkeypatch):
     """When ml_dtypes isn't installed the bf16 dtype probe returns None and
     the runtime falls through to numpy. Verified by stubbing the import to

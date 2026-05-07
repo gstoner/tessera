@@ -130,7 +130,13 @@ def test_jit_apple_gpu_multi_op_keeps_metal_artifact_contract():
     assert 'artifact = "metallib"' in fused.target_ir
 
 
-def test_flash_attention_apple_gpu_gets_metal_kernel_contract():
+def test_flash_attention_apple_gpu_gets_msl_runtime_contract():
+    """Phase 8.4.1 — single flash_attn programs flip from the artifact-only
+    metal_kernel contract to the metal_runtime MSL kernel contract: the
+    Target IR carries the MSL source as a StringAttr on
+    tessera_apple.gpu.msl_kernel and the runtime executes via a custom
+    MTLComputePipelineState."""
+
     @ts.jit(target="apple_gpu")
     def flash(q, k, v):
         return ts.ops.flash_attn(q, k, v, causal=True)
@@ -138,8 +144,10 @@ def test_flash_attention_apple_gpu_gets_metal_kernel_contract():
     assert "tessera.flash_attn" in flash.ir_text()
     assert "schedule.pipeline.region" in flash.schedule_ir
     assert "tessera.attn.online_softmax" in flash.tile_ir
-    assert 'kernel = "flash_attn_contract"' in flash.target_ir
-    assert 'status = "artifact_only"' in flash.target_ir
+    assert "tessera_apple.gpu.msl_kernel" in flash.target_ir
+    assert 'entry_point = "flash_attn_f32"' in flash.target_ir
+    assert "kernel void flash_attn_f32" in flash.target_ir
+    assert 'execution_mode = "metal_runtime"' in flash.target_ir
 
 
 def test_kv_cache_target_lowering_uses_stable_unsupported_diagnostics():

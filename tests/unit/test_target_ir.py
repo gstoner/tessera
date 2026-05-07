@@ -127,7 +127,11 @@ def test_lower_tile_to_nvidia_blackwell_target_ir_maps_mma_to_tcgen05_tmem():
     assert "block_scaled = true" in text
 
 
-def test_lower_tile_to_apple_gpu_target_ir_maps_fa4_to_metal_contract():
+def test_lower_tile_to_apple_gpu_target_ir_maps_fa4_to_msl_runtime_contract():
+    """Phase 8.4.1 — a single-source flash_attn tile module qualifies for the
+    runtime path; the lowering emits the MSL kernel + mps_dispatch contract
+    with execution_mode='metal_runtime'."""
+
     tile = TileIRModule(functions=[
         TileFunction(
             "flash",
@@ -144,10 +148,10 @@ def test_lower_tile_to_apple_gpu_target_ir_maps_fa4_to_metal_contract():
     target = lower_tile_to_target_ir(tile, target_kind="apple_gpu")
     assert target.verify().ok
     text = target.to_mlir()
-    assert "tessera_apple.gpu.metal_kernel" in text
-    assert 'kernel = "flash_attn_contract"' in text
-    assert "tessera_apple.gpu.dispatch" in text
-    assert 'artifact = "metallib"' in text
+    assert "tessera_apple.gpu.msl_kernel" in text
+    assert 'entry_point = "flash_attn_f32"' in text
+    assert "tessera_apple.gpu.mps_dispatch" in text
+    assert 'execution_mode = "metal_runtime"' in text
 
 
 def test_frontend_to_rocm_target_ir_reports_kv_cache_diagnostic_through_full_spine():

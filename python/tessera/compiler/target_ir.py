@@ -24,6 +24,46 @@ NVIDIA_TARGETS = {"nvidia_sm80", "nvidia_sm90", "nvidia_sm100", "nvidia_sm120"}
 SUPPORTED_TARGETS = {APPLE_CPU_TARGET, APPLE_GPU_TARGET, CPU_TARGET, ROCM_TARGET, *NVIDIA_TARGETS}
 
 
+# Phase 8.4 — embedded MSL source for the rope custom kernel. Carried as a
+# StringAttr on `tessera_apple.gpu.msl_kernel` so the Target IR module is a
+# self-contained, replayable artifact. The runtime compiles via
+# `[device newLibraryWithSource:options:error:]` and caches by the
+# concatenation of (msl_source, entry_point) — this string is therefore the
+# canonical cache identity at the IR layer, mirrored by `cache_key` below.
+_APPLE_GPU_ROPE_MSL_SOURCE = (
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "kernel void rope_f32(\n"
+    "    device const float* x      [[buffer(0)]],\n"
+    "    device const float* theta  [[buffer(1)]],\n"
+    "    device float*       out    [[buffer(2)]],\n"
+    "    constant int&       M      [[buffer(3)]],\n"
+    "    constant int&       K      [[buffer(4)]],\n"
+    "    uint2 gid [[thread_position_in_grid]])\n"
+    "{\n"
+    "    if (gid.x >= (uint)(K / 2) || gid.y >= (uint)M) return;\n"
+    "    int row = (int)gid.y;\n"
+    "    int pair = (int)gid.x;\n"
+    "    int idx_even = row * K + pair * 2;\n"
+    "    int idx_odd  = idx_even + 1;\n"
+    "    float xe = x[idx_even];\n"
+    "    float xo = x[idx_odd];\n"
+    "    float c = cos(theta[idx_even]);\n"
+    "    float s = sin(theta[idx_even]);\n"
+    "    out[idx_even] = xe * c - xo * s;\n"
+    "    out[idx_odd]  = xe * s + xo * c;\n"
+    "}\n"
+)
+
+
+def _sha256_short(text: str) -> str:
+    import hashlib
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+_APPLE_GPU_ROPE_MSL_CACHE_KEY = _sha256_short(_APPLE_GPU_ROPE_MSL_SOURCE)
+
+
 def _diagnostic_level(severity: str) -> DiagnosticLevel:
     return {
         "fatal": DiagnosticLevel.FATAL,
@@ -173,6 +213,14 @@ class TargetIRVerifier:
             self._require(op, diagnostics, "kernel", "framework", "status", "dtype")
         elif op.op_name == "tessera_apple.gpu.dispatch":
             self._require(op, diagnostics, "queue", "artifact", "execution_mode")
+        elif op.op_name == "tessera_apple.gpu.mps_matmul":
+            self._require(op, diagnostics, "framework", "abi", "dtype")
+        elif op.op_name == "tessera_apple.gpu.mps_dispatch":
+            self._require(op, diagnostics, "queue", "framework", "execution_mode")
+        elif op.op_name == "tessera_apple.gpu.msl_kernel":
+            # Phase 8.4 — custom MSL kernel artifact. Must carry the entry point
+            # name and the MSL source itself so the IR is self-contained.
+            self._require(op, diagnostics, "entry_point", "msl_source", "framework", "dtype")
         else:
             diagnostics.append(TargetIRDiagnostic("error", f"invalid Apple GPU op {op.op_name!r}", "TARGET_IR_APPLE_GPU_OP"))
 
@@ -231,26 +279,92 @@ def lower_tile_to_target_ir(tile_module: TileIRModule, *, target_kind: str) -> T
     elif target_kind == APPLE_CPU_TARGET:
         attrs.update({"arch": "arm64-apple-silicon", "execution_mode": "cpu_accelerate", "target_features": {"family": "apple", "accelerate": True, "device_timers": False}})
     else:
-        attrs.update({"arch": "apple-metal", "execution_mode": "metal_artifact", "target_features": {"family": "apple", "metal": True, "device_timers": False}})
+        # Phase 8.3: when the entire program is a single rank-2 f32 matmul, the
+        # apple_gpu module is executable through MPSMatrixMultiplication. The
+        # module-level execution_mode flips to "metal_runtime" so downstream
+        # tooling (and Python tests) can distinguish artifact-only from
+        # runtime-bound modules without re-walking the body.
+        apple_gpu_runtime = _apple_gpu_module_is_mps_runtime(tile_module)
+        execution_mode = "metal_runtime" if apple_gpu_runtime else "metal_artifact"
+        attrs.update({"arch": "apple-metal", "execution_mode": execution_mode, "target_features": {"family": "apple", "metal": True, "device_timers": False}})
     target_module = TargetIRModule(attrs=attrs)
+    apple_gpu_runtime_flag = (
+        target_kind == APPLE_GPU_TARGET
+        and _apple_gpu_module_is_mps_runtime(tile_module)
+    )
     for tile_fn in tile_module.functions:
         target_module.functions.append(TargetFunction(
             name=tile_fn.name,
             target=target_kind,
-            body=_lower_tile_ops(tile_fn.body, target_kind=target_kind),
+            body=_lower_tile_ops(
+                tile_fn.body,
+                target_kind=target_kind,
+                apple_gpu_mps_runtime=apple_gpu_runtime_flag,
+            ),
         ))
     return target_module
 
 
-def _lower_tile_ops(ops: Iterable[TileOp], *, target_kind: str) -> list[TargetOp]:
+def _apple_gpu_module_is_mps_runtime(tile_module: TileIRModule) -> bool:
+    """Return True when an apple_gpu Tile IR module qualifies for the runtime
+    path (MPS for matmul, MSL for rope as of Phase 8.4).
+
+    Conservative: a single function whose flat compute-op stream all carries
+    the same `source` attribute, and that source is in the runtime envelope.
+    Some Graph IR ops decompose into multiple Tile IR ops (rope -> tile.rope +
+    tile.rotary_pair); they all share the source so this still matches.
+
+    Name kept for backward compatibility — it now covers MPS + MSL paths.
+    """
+
+    if len(tile_module.functions) != 1:
+        return False
+    flat_ops = list(_flatten_tile_ops(tile_module.functions[0].body))
+    compute_ops = [
+        op for op in flat_ops
+        if op.op_name not in {"tile.debug_artifact", "tile.debug_barrier"}
+        and not (
+            op.op_name.startswith("tessera.queue.")
+            or op.op_name in {"tile.async_copy", "tile.wait_async"}
+        )
+    ]
+    if not compute_ops:
+        return False
+
+    sources = {str(op.attrs.get("source", "")) for op in compute_ops}
+    if len(sources) != 1:
+        return False
+    (source,) = sources
+    return source in {"tessera.matmul", "tessera.gemm", "tessera.rope"}
+
+
+def _lower_tile_ops(
+    ops: Iterable[TileOp],
+    *,
+    target_kind: str,
+    apple_gpu_mps_runtime: bool = False,
+) -> list[TargetOp]:
     lowered: list[TargetOp] = []
+    # Phase 8.4 — when in runtime mode some Graph IR ops (e.g. rope) decompose
+    # into multiple Tile IR ops sharing the same (source, ordinal). The
+    # artifact-only path emits both for inspection/diagnostics; the runtime
+    # path must emit exactly one func.call site, so we suppress duplicates.
+    seen_runtime_keys: set[tuple[str, object]] = set()
     for tile_op in _flatten_tile_ops(ops):
         if target_kind == ROCM_TARGET:
             lowered.extend(_lower_rocm_op(tile_op))
         elif target_kind == APPLE_CPU_TARGET:
             lowered.extend(_lower_apple_cpu_op(tile_op))
         elif target_kind == APPLE_GPU_TARGET:
-            lowered.extend(_lower_apple_gpu_op(tile_op))
+            if apple_gpu_mps_runtime:
+                key = (
+                    str(tile_op.attrs.get("source", _source_from_tile_op(tile_op))),
+                    tile_op.attrs.get("ordinal"),
+                )
+                if key in seen_runtime_keys:
+                    continue
+                seen_runtime_keys.add(key)
+            lowered.extend(_lower_apple_gpu_op(tile_op, mps_runtime=apple_gpu_mps_runtime))
         elif target_kind == CPU_TARGET:
             lowered.extend(_lower_cpu_op(tile_op))
         elif target_kind in NVIDIA_TARGETS:
@@ -389,7 +503,7 @@ def _lower_apple_cpu_op(op: TileOp) -> list[TargetOp]:
     return [TargetOp("tessera_apple.cpu.vector_op", {**base, "framework": "Accelerate", "abi": "vecLib", "dtype": "f32"})]
 
 
-def _lower_apple_gpu_op(op: TileOp) -> list[TargetOp]:
+def _lower_apple_gpu_op(op: TileOp, *, mps_runtime: bool = False) -> list[TargetOp]:
     if op.op_name in {"tile.debug_artifact", "tile.debug_barrier"}:
         return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
@@ -402,6 +516,49 @@ def _lower_apple_gpu_op(op: TileOp) -> list[TargetOp]:
         })]
     if op.op_name.startswith("tessera.queue.") or op.op_name in {"tile.async_copy", "tile.wait_async"}:
         return []
+    # Phase 8.3 MPS runtime path: a single-matmul module is lowered to
+    # mps_matmul + mps_dispatch with execution_mode="metal_runtime". The
+    # AppleGPUToMPS pass and the apple_gpu_runtime.mm shim consume this op.
+    if mps_runtime and op.op_name == "tile.mma" and source in {"tessera.matmul", "tessera.gemm"}:
+        return [
+            TargetOp("tessera_apple.gpu.mps_matmul", {
+                **base,
+                "framework": "MetalPerformanceShaders",
+                "abi": "MPSMatrixMultiplication",
+                "dtype": "f32",
+            }),
+            TargetOp("tessera_apple.gpu.mps_dispatch", {
+                "ordinal": base["ordinal"],
+                "queue": "MTLCommandQueue",
+                "framework": "MetalPerformanceShaders",
+                "execution_mode": "metal_runtime",
+            }),
+        ]
+    # Phase 8.4 custom MSL path: a single-rope module is lowered to
+    # msl_kernel + mps_dispatch carrying the MSL source as a StringAttr. The
+    # RopeToAppleGPU pass and the apple_gpu_runtime.mm shim consume this op.
+    if mps_runtime and (
+        op.op_name in {"tile.rotary_pair", "tile.rope"}
+        or source == "tessera.rope"
+    ):
+        return [
+            TargetOp("tessera_apple.gpu.msl_kernel", {
+                **base,
+                "framework": "Metal",
+                "dtype": "f32",
+                "entry_point": "rope_f32",
+                "msl_source": _APPLE_GPU_ROPE_MSL_SOURCE,
+                "cache_key": _APPLE_GPU_ROPE_MSL_CACHE_KEY,
+                "grid": "tokens_pairs",
+                "threadgroup": "32x?",
+            }),
+            TargetOp("tessera_apple.gpu.mps_dispatch", {
+                "ordinal": base["ordinal"],
+                "queue": "MTLCommandQueue",
+                "framework": "Metal",
+                "execution_mode": "metal_runtime",
+            }),
+        ]
     kernel, framework, extra = _apple_gpu_kernel_contract(source)
     return [
         TargetOp("tessera_apple.gpu.metal_kernel", {**base, "kernel": kernel, "framework": framework, "dtype": "f32", **extra}),

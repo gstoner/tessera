@@ -35,6 +35,8 @@ add_library(TesseraApple STATIC
   lib/Target/Apple/Passes.cpp
   lib/Target/Apple/Lowering/TileToApple.cpp
   lib/Target/Apple/Lowering/MatmulToAppleCPU.cpp
+  lib/Target/Apple/Lowering/MatmulToAppleGPU.cpp
+  lib/Target/Apple/Lowering/RopeToAppleGPU.cpp
 )
 
 # mlir_tablegen emits .h.inc / .cpp.inc into CMAKE_CURRENT_BINARY_DIR/Tessera/Target/Apple/
@@ -92,13 +94,30 @@ add_dependencies(TesseraApple TesseraAppleStagedIncs)
 # the symbols dispatch to Accelerate's CBLAS, elsewhere they fall through to a
 # portable reference kernel.
 # ------------------------------------------------------------------
-add_library(TesseraAppleRuntime STATIC
-  runtime/apple_cpu_runtime.cpp
-)
+if(APPLE)
+  # On Darwin compile the Objective-C++ MPS shim. CMake recognizes .mm by
+  # extension and uses the C++ compiler with -ObjC++ semantics.
+  add_library(TesseraAppleRuntime STATIC
+    runtime/apple_cpu_runtime.cpp
+    runtime/apple_gpu_runtime.mm
+  )
+  set_source_files_properties(runtime/apple_gpu_runtime.mm
+    PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+  target_link_libraries(TesseraAppleRuntime PUBLIC
+    "-framework Accelerate"
+    "-framework Foundation"
+    "-framework Metal"
+    "-framework MetalPerformanceShaders"
+  )
+else()
+  # On non-Darwin compile a portable C++ stub that exposes the same C ABI but
+  # routes the GPU symbol to a reference kernel.
+  add_library(TesseraAppleRuntime STATIC
+    runtime/apple_cpu_runtime.cpp
+    runtime/apple_gpu_runtime_stub.cpp
+  )
+endif()
 target_include_directories(TesseraAppleRuntime PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/runtime
 )
-if(APPLE)
-  target_link_libraries(TesseraAppleRuntime PUBLIC "-framework Accelerate")
-endif()
 

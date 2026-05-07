@@ -65,6 +65,21 @@ PassPipelineRegistration<> gAppleCPURuntimePipeline(
       pm.addPass(createLowerMatmulToAppleCPUPass());
     });
 
+// Phase 8.3 + 8.4: executable lowering to the Apple GPU runtime shim. The
+// pipeline composes one or more lowering patterns:
+//   - matmul (rank-2, f32) -> MPSMatrixMultiplication        [Phase 8.3]
+//   - rope   (rank-2, f32) -> custom MSL kernel              [Phase 8.4]
+// Distinct from the artifact-only `tessera-lower-to-apple_gpu` pipeline
+// above.
+PassPipelineRegistration<> gAppleGPURuntimePipeline(
+    "tessera-lower-to-apple_gpu-runtime",
+    "Lower supported tessera ops (matmul, rope) to Apple GPU runtime calls "
+    "(MPS + custom MSL kernels)",
+    [](OpPassManager &pm) {
+      pm.addPass(createLowerMatmulToAppleGPUPass());
+      pm.addPass(createLowerRopeToAppleGPUPass());
+    });
+
 } // namespace
 
 void registerTesseraAppleBackendPipelines() {
@@ -72,6 +87,7 @@ void registerTesseraAppleBackendPipelines() {
   (void)&gAppleCPUPipeline;
   (void)&gAppleGPUPipeline;
   (void)&gAppleCPURuntimePipeline;
+  (void)&gAppleGPURuntimePipeline;
 }
 
 } // namespace apple

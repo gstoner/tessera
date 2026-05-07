@@ -178,6 +178,7 @@ class RuntimeArtifact:
 
 _last_profile = RuntimeProfile()
 _apple_cpu_runtime: ctypes.CDLL | None = None
+_apple_gpu_runtime: ctypes.CDLL | None = None
 
 
 # bfloat16 dtype is exposed by the optional ml_dtypes package. We import lazily
@@ -1076,6 +1077,58 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
                 "launch_overhead_ms": elapsed_ms,
             },
         }
+    if (
+        target == "apple_gpu"
+        and metadata.get("executable") is True
+        and metadata.get("compiler_path") == "apple_gpu_mps"
+    ):
+        try:
+            output = _execute_apple_gpu_mps_artifact(artifact, args)
+        except Exception as exc:
+            _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
+            telemetry = make_event(
+                "runtime.launch",
+                source="runtime",
+                op="artifact_launch",
+                arch="apple_gpu",
+                kernel_id=str(metadata.get("kernel_id", "apple_gpu_mps")),
+                graph_hash=artifact.artifact_hash,
+                status="invalid_artifact",
+                metadata={"compiler_path": "apple_gpu_mps", "reason": str(exc)},
+            )
+            return {
+                "ok": False,
+                "runtime_status": "invalid_artifact",
+                "compiler_path": "apple_gpu_mps",
+                "artifact_hash": artifact.artifact_hash,
+                "reason": str(exc),
+                "telemetry": telemetry,
+            }
+        elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000.0
+        _last_profile = RuntimeProfile(cpu_wall_ms=elapsed_ms, launch_overhead_ms=elapsed_ms)
+        telemetry = make_event(
+            "runtime.launch",
+            source="runtime",
+            op="artifact_launch",
+            arch="apple_gpu",
+            kernel_id=str(metadata.get("kernel_id", "apple_gpu_mps")),
+            graph_hash=artifact.artifact_hash,
+            latency_ms=elapsed_ms,
+            status="ok",
+            metadata={"compiler_path": "apple_gpu_mps", "execution_mode": "metal_runtime"},
+        )
+        return {
+            "ok": True,
+            "runtime_status": "success",
+            "compiler_path": "apple_gpu_mps",
+            "artifact_hash": artifact.artifact_hash,
+            "output": output,
+            "telemetry": telemetry,
+            "profile": {
+                "cpu_wall_ms": elapsed_ms,
+                "launch_overhead_ms": elapsed_ms,
+            },
+        }
     if target != "cpu":
         _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
         telemetry = make_event(
@@ -1588,6 +1641,255 @@ def _load_apple_cpu_runtime() -> ctypes.CDLL:
     built = _build_apple_cpu_runtime_shared(root)
     _apple_cpu_runtime = ctypes.CDLL(str(built))
     return _apple_cpu_runtime
+
+
+_APPLE_GPU_MPS_OPS = frozenset({"tessera.matmul", "tessera.gemm"})
+_APPLE_GPU_MSL_OPS = frozenset({"tessera.rope"})
+_APPLE_GPU_RUNTIME_OPS = _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS
+
+
+def _execute_apple_gpu_mps_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Public entry: dispatch an apple_gpu MPS artifact. Delegates to the
+    metadata dispatcher so the JIT hot-path can skip the artifact wrapper +
+    hash + JSON serialization (see `JitFn._apple_gpu_fast_call`)."""
+
+    return _execute_apple_gpu_mps_metadata(artifact.metadata or {}, args)
+
+
+def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> Any:
+    """Phase 8.3: run an apple_gpu plan from a metadata dict directly.
+
+    The Phase 8.3 envelope is single-op rank-2 f32 matmul/gemm — anything
+    outside that envelope is not eligible for the MPS runtime path
+    (`_is_apple_gpu_mps_executable` in driver.py rejects it at compile time,
+    so this dispatcher does not need to handle multi-op programs yet).
+    """
+
+    import numpy as np
+
+    arg_names = list(metadata.get("arg_names") or [])
+    output_name = metadata.get("output_name")
+    ops = list(metadata.get("ops") or [])
+    if not ops:
+        raise ValueError("apple_gpu_mps artifact has no ops")
+
+    values = _bind_launch_args(args, arg_names)
+    for op in ops:
+        op_name = str(op.get("op_name", ""))
+        result = op.get("result")
+        operand_names = [str(name) for name in op.get("operands", [])]
+        kwargs = dict(op.get("kwargs") or {})
+        missing = [name for name in operand_names if name not in values]
+        if missing:
+            raise ValueError(f"artifact requires operand(s): {', '.join(missing)}")
+        if not result:
+            raise ValueError(f"artifact op {op_name!r} has no result")
+
+        if op_name in _APPLE_GPU_MPS_OPS:
+            values[str(result)] = _apple_gpu_dispatch_matmul(
+                op_name, [_as_numpy(values[name]) for name in operand_names], np
+            )
+        elif op_name in _APPLE_GPU_MSL_OPS:
+            values[str(result)] = _apple_gpu_dispatch_rope(
+                op_name, [_as_numpy(values[name]) for name in operand_names], np
+            )
+        else:
+            # Phase 8.4.x will broaden further; today single-op gating in
+            # driver.py is the authoritative envelope. A non-MPS, non-MSL op
+            # here means the gating + dispatcher are out of sync.
+            raise ValueError(
+                f"apple_gpu runtime path does not support op {op_name!r} "
+                f"(envelope: {sorted(_APPLE_GPU_RUNTIME_OPS)})"
+            )
+
+    if output_name not in values:
+        raise ValueError(f"artifact did not produce output {output_name!r}")
+    return values[output_name]
+
+
+def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> Any:
+    """Phase 8.3: dispatch a single rank-2 f32 matmul through the apple_gpu
+    runtime shim (MPSMatrixMultiplication when Metal is available, portable
+    reference fallback otherwise). Inputs outside the supported envelope fall
+    back to numpy.matmul — same shape as the apple_cpu dispatcher.
+    """
+
+    if len(operands) != 2:
+        raise ValueError(f"{op_name!r} requires exactly two operands")
+    a = np.asarray(operands[0])
+    b = np.asarray(operands[1])
+
+    rank2_fast_path = (
+        a.dtype == np.float32
+        and b.dtype == np.float32
+        and a.ndim == 2
+        and b.ndim == 2
+    )
+    if not rank2_fast_path:
+        return np.matmul(a, b)
+    if a.shape[1] != b.shape[0]:
+        raise ValueError(f"matmul shape mismatch: {a.shape} x {b.shape}")
+    if not a.flags.c_contiguous:
+        a = np.ascontiguousarray(a, dtype=np.float32)
+    if not b.flags.c_contiguous:
+        b = np.ascontiguousarray(b, dtype=np.float32)
+
+    out = np.zeros((a.shape[0], b.shape[1]), dtype=np.float32)
+    gemm = _apple_gpu_mps_matmul_f32()
+    gemm(
+        a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        ctypes.c_int32(a.shape[0]),
+        ctypes.c_int32(b.shape[1]),
+        ctypes.c_int32(a.shape[1]),
+    )
+    return out
+
+
+def _apple_gpu_mps_matmul_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = runtime.tessera_apple_gpu_mps_matmul_f32
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,
+        ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_dispatch_rope(op_name: str, operands: list[Any], np: Any) -> Any:
+    """Phase 8.4: dispatch a single rank-2 f32 rope through the apple_gpu
+    runtime shim's custom MSL kernel. Inputs outside the supported envelope
+    fall back to the numpy reference path used by the default `cpu` target.
+    """
+
+    if len(operands) != 2:
+        raise ValueError(f"{op_name!r} requires exactly two operands")
+    x = np.asarray(operands[0])
+    theta = np.asarray(operands[1])
+
+    rank2_fast_path = (
+        x.dtype == np.float32
+        and theta.dtype == np.float32
+        and x.ndim == 2
+        and theta.ndim == 2
+        and x.shape == theta.shape
+        and x.shape[1] % 2 == 0
+    )
+    if not rank2_fast_path:
+        return _runtime_rope(np, x, theta)
+    if not x.flags.c_contiguous:
+        x = np.ascontiguousarray(x, dtype=np.float32)
+    if not theta.flags.c_contiguous:
+        theta = np.ascontiguousarray(theta, dtype=np.float32)
+
+    out = np.zeros(x.shape, dtype=np.float32)
+    rope = _apple_gpu_rope_f32()
+    rope(
+        x.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        theta.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        ctypes.c_int32(x.shape[0]),
+        ctypes.c_int32(x.shape[1]),
+    )
+    return out
+
+
+def _apple_gpu_rope_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = runtime.tessera_apple_gpu_rope_f32
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _load_apple_gpu_runtime() -> ctypes.CDLL:
+    """Phase 8.3: locate or compile the apple_gpu runtime shared library.
+
+    Prefers a CMake-built `libTesseraAppleRuntime` (which already links the
+    GPU shim alongside the CPU shim on Darwin), then falls back to compiling
+    the .mm + .cpp pair on the fly. On non-Darwin only the .cpp stub is
+    compiled so the symbol still exists with a portable reference path.
+    """
+
+    global _apple_gpu_runtime
+    if _apple_gpu_runtime is not None:
+        return _apple_gpu_runtime
+    candidates = []
+    env = os.environ.get("TESSERA_APPLE_GPU_RUNTIME_LIB")
+    if env:
+        candidates.append(Path(env))
+    root = Path(__file__).resolve().parents[2]
+    candidates.extend([
+        root / "build/src/compiler/codegen/Tessera_Apple_Backend/libTesseraAppleRuntime.dylib",
+        root / "build/src/compiler/codegen/Tessera_Apple_Backend/libTesseraAppleRuntime.so",
+    ])
+    for candidate in candidates:
+        if candidate.exists():
+            try:
+                lib = ctypes.CDLL(str(candidate))
+                # Only accept the prebuilt library when it exports the full
+                # Phase 8.4 envelope. Older builds (Phase 8.3) lack the rope
+                # symbol; falling through forces a rebuild.
+                getattr(lib, "tessera_apple_gpu_mps_matmul_f32")
+                getattr(lib, "tessera_apple_gpu_rope_f32")
+                _apple_gpu_runtime = lib
+                return _apple_gpu_runtime
+            except (OSError, AttributeError):
+                continue
+
+    built = _build_apple_gpu_runtime_shared(root)
+    _apple_gpu_runtime = ctypes.CDLL(str(built))
+    return _apple_gpu_runtime
+
+
+def _build_apple_gpu_runtime_shared(root: Path) -> Path:
+    backend_dir = root / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
+    if sys.platform == "darwin":
+        sources = [backend_dir / "apple_gpu_runtime.mm"]
+    else:
+        sources = [backend_dir / "apple_gpu_runtime_stub.cpp"]
+    for source in sources:
+        if not source.exists():
+            raise FileNotFoundError(f"Apple GPU runtime source not found: {source}")
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        raise RuntimeError(
+            "Apple GPU runtime library is not available; set "
+            "TESSERA_APPLE_GPU_RUNTIME_LIB or install a C++ compiler"
+        )
+    out_dir = Path(tempfile.gettempdir()) / "tessera_apple_gpu_runtime"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    suffix = ".dylib" if sys.platform == "darwin" else ".so"
+    out = out_dir / f"libtessera_apple_gpu_runtime{suffix}"
+    if out.exists() and all(
+        out.stat().st_mtime >= source.stat().st_mtime for source in sources
+    ):
+        return out
+    cmd = [cxx, "-std=c++17", "-shared", "-fPIC"]
+    if sys.platform == "darwin":
+        cmd.extend(["-fobjc-arc", "-x", "objective-c++"])
+    cmd.extend([str(source) for source in sources])
+    cmd.extend(["-o", str(out)])
+    if sys.platform == "darwin":
+        cmd.extend([
+            "-framework", "Foundation",
+            "-framework", "Metal",
+            "-framework", "MetalPerformanceShaders",
+        ])
+    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    return out
 
 
 def _build_apple_cpu_runtime_shared(root: Path) -> Path:

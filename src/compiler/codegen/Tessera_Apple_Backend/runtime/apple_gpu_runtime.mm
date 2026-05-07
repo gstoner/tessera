@@ -574,3 +574,203 @@ extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
   }
   reference_flash_attn_f32(Q, K, V, O, B, Sq, Sk, D, scale, causal);
 }
+
+//===---------------------------------------------------------------------===//
+// Phase 8.4.2 — Softmax (rank-2, axis=-1, f32)
+//
+// Standard 3-pass softmax: row max -> subtract + exp + sum -> divide. One
+// thread per row; the per-thread loop streams over K once for max, once for
+// the exp/sum, and once for normalization. For typical post-attention shapes
+// this is GPU-bound on the elementwise loops, not the row reduction.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+bool dispatch_softmax_msl(MetalDeviceContext &ctx, const float* X, float* Out,
+                          int32_t M, int32_t K) {
+  static NSString *const kSoftmaxSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void softmax_f32(
+    device const float* x   [[buffer(0)]],
+    device float*       out [[buffer(1)]],
+    constant int&       M   [[buffer(2)]],
+    constant int&       K   [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)M) return;
+    int row = (int)gid;
+    int row_off = row * K;
+
+    // Pass 1: row max for numerical stability.
+    float row_max = -INFINITY;
+    for (int j = 0; j < K; ++j) {
+        row_max = max(row_max, x[row_off + j]);
+    }
+    // Pass 2: exp(x - max) accumulated into denom; write intermediate to out.
+    float denom = 0.0f;
+    for (int j = 0; j < K; ++j) {
+        float e = exp(x[row_off + j] - row_max);
+        out[row_off + j] = e;
+        denom += e;
+    }
+    // Pass 3: divide.
+    float inv = 1.0f / denom;
+    for (int j = 0; j < K; ++j) {
+        out[row_off + j] *= inv;
+    }
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kSoftmaxSource, @"softmax_f32");
+    if (!pso) return false;
+
+    NSUInteger byteCount = sizeof(float) * static_cast<NSUInteger>(M) *
+                           static_cast<NSUInteger>(K);
+    id<MTLBuffer> bufX = [ctx.device newBufferWithBytes:X
+                                                  length:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufX || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufO offset:0 atIndex:1];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:2];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:3];
+
+    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(M), 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(M),
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(Out, [bufO contents], byteCount);
+    return true;
+  }
+}
+
+inline void reference_softmax_f32(const float* X, float* Out, int32_t M,
+                                  int32_t K) {
+  for (int32_t r = 0; r < M; ++r) {
+    const float* row = X + static_cast<std::size_t>(r) * K;
+    float* out_row = Out + static_cast<std::size_t>(r) * K;
+    float row_max = -std::numeric_limits<float>::infinity();
+    for (int32_t j = 0; j < K; ++j) row_max = std::max(row_max, row[j]);
+    float denom = 0.0f;
+    for (int32_t j = 0; j < K; ++j) {
+      float e = std::exp(row[j] - row_max);
+      out_row[j] = e;
+      denom += e;
+    }
+    float inv = 1.0f / denom;
+    for (int32_t j = 0; j < K; ++j) out_row[j] *= inv;
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_softmax_f32(const float* X, float* Out,
+                                              int32_t M, int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_softmax_msl(ctx, X, Out, M, K)) return;
+  reference_softmax_f32(X, Out, M, K);
+}
+
+//===---------------------------------------------------------------------===//
+// Phase 8.4.2 — GeLU (elementwise, f32)
+//
+// Tanh-approximation GeLU, matching the numpy reference in
+// tessera.ops.gelu and the Tile IR `tile.gelu` lowering="elementwise":
+//
+//   gelu(x) = 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+//
+// One thread per element; rank-agnostic at the shim layer (caller flattens).
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+bool dispatch_gelu_msl(MetalDeviceContext &ctx, const float* X, float* Out,
+                       int32_t N) {
+  static NSString *const kGeluSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void gelu_f32(
+    device const float* x   [[buffer(0)]],
+    device float*       out [[buffer(1)]],
+    constant int&       N   [[buffer(2)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)N) return;
+    float v = x[gid];
+    // sqrt(2/pi) = 0.7978845608028654
+    float t = 0.7978845608028654f * (v + 0.044715f * v * v * v);
+    out[gid] = 0.5f * v * (1.0f + tanh(t));
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kGeluSource, @"gelu_f32");
+    if (!pso) return false;
+
+    NSUInteger byteCount = sizeof(float) * static_cast<NSUInteger>(N);
+    id<MTLBuffer> bufX = [ctx.device newBufferWithBytes:X
+                                                  length:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufX || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufO offset:0 atIndex:1];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:2];
+
+    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(N), 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(N),
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(Out, [bufO contents], byteCount);
+    return true;
+  }
+}
+
+inline void reference_gelu_f32(const float* X, float* Out, int32_t N) {
+  static constexpr float kSqrt2OverPi = 0.7978845608028654f;
+  for (int32_t i = 0; i < N; ++i) {
+    float v = X[i];
+    float t = kSqrt2OverPi * (v + 0.044715f * v * v * v);
+    Out[i] = 0.5f * v * (1.0f + std::tanh(t));
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_gelu_f32(const float* X, float* Out,
+                                           int32_t N) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_gelu_msl(ctx, X, Out, N)) return;
+  reference_gelu_f32(X, Out, N);
+}

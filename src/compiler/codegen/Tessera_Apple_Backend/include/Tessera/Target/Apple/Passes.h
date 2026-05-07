@@ -42,6 +42,14 @@ std::unique_ptr<::mlir::Pass> createLowerRopeToAppleGPUPass();
 /// Apple GPU runtime shim's custom-MSL flash-attention kernel. Phase 8.4.1.
 std::unique_ptr<::mlir::Pass> createLowerFlashAttnToAppleGPUPass();
 
+/// tessera.softmax (rank-2, f32, axis=-1) → func.call into the Apple GPU
+/// runtime shim's custom-MSL softmax kernel. Phase 8.4.2.
+std::unique_ptr<::mlir::Pass> createLowerSoftmaxToAppleGPUPass();
+
+/// tessera.gelu (rank-2, f32) → func.call into the Apple GPU runtime shim's
+/// custom-MSL gelu kernel. Phase 8.4.2.
+std::unique_ptr<::mlir::Pass> createLowerGeluToAppleGPUPass();
+
 /// Register the Apple Silicon dialect into a DialectRegistry. Convenience
 /// wrapper that forwards to registerAppleDialect from TesseraAppleDialect.h.
 void registerTesseraAppleBackendDialects(::mlir::DialectRegistry &registry);

@@ -70,16 +70,20 @@ PassPipelineRegistration<> gAppleCPURuntimePipeline(
 //   - matmul     (rank-2, f32) -> MPSMatrixMultiplication        [Phase 8.3]
 //   - rope       (rank-2, f32) -> custom MSL kernel              [Phase 8.4]
 //   - flash_attn (rank-3, f32) -> custom MSL kernel              [Phase 8.4.1]
+//   - softmax    (rank-2, f32) -> custom MSL kernel              [Phase 8.4.2]
+//   - gelu       (rank-2, f32) -> custom MSL kernel              [Phase 8.4.2]
 // Distinct from the artifact-only `tessera-lower-to-apple_gpu` pipeline
 // above.
 PassPipelineRegistration<> gAppleGPURuntimePipeline(
     "tessera-lower-to-apple_gpu-runtime",
-    "Lower supported tessera ops (matmul, rope, flash_attn) to Apple GPU "
-    "runtime calls (MPS + custom MSL kernels)",
+    "Lower supported tessera ops (matmul, rope, flash_attn, softmax, gelu) "
+    "to Apple GPU runtime calls (MPS + custom MSL kernels)",
     [](OpPassManager &pm) {
       pm.addPass(createLowerMatmulToAppleGPUPass());
       pm.addPass(createLowerRopeToAppleGPUPass());
       pm.addPass(createLowerFlashAttnToAppleGPUPass());
+      pm.addPass(createLowerSoftmaxToAppleGPUPass());
+      pm.addPass(createLowerGeluToAppleGPUPass());
     });
 
 } // namespace

@@ -340,6 +340,9 @@ _APPLE_GPU_MPS_OPS: frozenset[str] = frozenset({
 _APPLE_GPU_MSL_OPS: frozenset[str] = frozenset({
     "tessera.rope",
     "tessera.flash_attn",
+    "tessera.softmax",
+    "tessera.softmax_safe",
+    "tessera.gelu",
 })
 
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS
@@ -404,6 +407,14 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
             abi = "MSLComputePipelineState"
         elif only_op == "tessera.flash_attn":
             symbol = "tessera_apple_gpu_flash_attn_f32"
+            framework = "Metal"
+            abi = "MSLComputePipelineState"
+        elif only_op in {"tessera.softmax", "tessera.softmax_safe"}:
+            symbol = "tessera_apple_gpu_softmax_f32"
+            framework = "Metal"
+            abi = "MSLComputePipelineState"
+        elif only_op == "tessera.gelu":
+            symbol = "tessera_apple_gpu_gelu_f32"
             framework = "Metal"
             abi = "MSLComputePipelineState"
         else:

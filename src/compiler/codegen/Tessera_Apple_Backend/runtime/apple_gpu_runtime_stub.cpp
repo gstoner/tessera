@@ -118,6 +118,47 @@ extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
   reference_flash_attn_f32(Q, K, V, O, B, Sq, Sk, D, scale, causal);
 }
 
+namespace {
+
+inline void reference_softmax_f32(const float* X, float* Out, int32_t M,
+                                  int32_t K) {
+  for (int32_t r = 0; r < M; ++r) {
+    const float* row = X + static_cast<std::size_t>(r) * K;
+    float* out_row = Out + static_cast<std::size_t>(r) * K;
+    float row_max = -std::numeric_limits<float>::infinity();
+    for (int32_t j = 0; j < K; ++j) row_max = std::max(row_max, row[j]);
+    float denom = 0.0f;
+    for (int32_t j = 0; j < K; ++j) {
+      float e = std::exp(row[j] - row_max);
+      out_row[j] = e;
+      denom += e;
+    }
+    float inv = 1.0f / denom;
+    for (int32_t j = 0; j < K; ++j) out_row[j] *= inv;
+  }
+}
+
+inline void reference_gelu_f32(const float* X, float* Out, int32_t N) {
+  static constexpr float kSqrt2OverPi = 0.7978845608028654f;
+  for (int32_t i = 0; i < N; ++i) {
+    float v = X[i];
+    float t = kSqrt2OverPi * (v + 0.044715f * v * v * v);
+    Out[i] = 0.5f * v * (1.0f + std::tanh(t));
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_softmax_f32(const float* X, float* Out,
+                                              int32_t M, int32_t K) {
+  reference_softmax_f32(X, Out, M, K);
+}
+
+extern "C" void tessera_apple_gpu_gelu_f32(const float* X, float* Out,
+                                           int32_t N) {
+  reference_gelu_f32(X, Out, N);
+}
+
 extern "C" int32_t tessera_apple_gpu_runtime_msl_cache_size(void) {
   // No Metal -> no MSL cache. Tests gate this on platform.
   return -1;

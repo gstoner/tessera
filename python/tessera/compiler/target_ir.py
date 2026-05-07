@@ -121,6 +121,58 @@ _APPLE_GPU_FLASH_ATTN_MSL_SOURCE = (
 _APPLE_GPU_FLASH_ATTN_MSL_CACHE_KEY = _sha256_short(_APPLE_GPU_FLASH_ATTN_MSL_SOURCE)
 
 
+# Phase 8.4.2 — embedded MSL source for the softmax kernel. Standard 3-pass
+# axis=-1 softmax: row max -> subtract+exp+sum -> divide. One thread per row.
+_APPLE_GPU_SOFTMAX_MSL_SOURCE = (
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "kernel void softmax_f32(\n"
+    "    device const float* x   [[buffer(0)]],\n"
+    "    device float*       out [[buffer(1)]],\n"
+    "    constant int&       M   [[buffer(2)]],\n"
+    "    constant int&       K   [[buffer(3)]],\n"
+    "    uint gid [[thread_position_in_grid]])\n"
+    "{\n"
+    "    if (gid >= (uint)M) return;\n"
+    "    int row = (int)gid;\n"
+    "    int row_off = row * K;\n"
+    "    float row_max = -INFINITY;\n"
+    "    for (int j = 0; j < K; ++j) row_max = max(row_max, x[row_off + j]);\n"
+    "    float denom = 0.0f;\n"
+    "    for (int j = 0; j < K; ++j) {\n"
+    "        float e = exp(x[row_off + j] - row_max);\n"
+    "        out[row_off + j] = e;\n"
+    "        denom += e;\n"
+    "    }\n"
+    "    float inv = 1.0f / denom;\n"
+    "    for (int j = 0; j < K; ++j) out[row_off + j] *= inv;\n"
+    "}\n"
+)
+
+_APPLE_GPU_SOFTMAX_MSL_CACHE_KEY = _sha256_short(_APPLE_GPU_SOFTMAX_MSL_SOURCE)
+
+
+# Phase 8.4.2 — embedded MSL source for the gelu kernel. Tanh-approximation,
+# matching the numpy reference. Elementwise; one thread per element.
+_APPLE_GPU_GELU_MSL_SOURCE = (
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "kernel void gelu_f32(\n"
+    "    device const float* x   [[buffer(0)]],\n"
+    "    device float*       out [[buffer(1)]],\n"
+    "    constant int&       N   [[buffer(2)]],\n"
+    "    uint gid [[thread_position_in_grid]])\n"
+    "{\n"
+    "    if (gid >= (uint)N) return;\n"
+    "    float v = x[gid];\n"
+    "    float t = 0.7978845608028654f * (v + 0.044715f * v * v * v);\n"
+    "    out[gid] = 0.5f * v * (1.0f + tanh(t));\n"
+    "}\n"
+)
+
+_APPLE_GPU_GELU_MSL_CACHE_KEY = _sha256_short(_APPLE_GPU_GELU_MSL_SOURCE)
+
+
 def _diagnostic_level(severity: str) -> DiagnosticLevel:
     return {
         "fatal": DiagnosticLevel.FATAL,
@@ -397,6 +449,9 @@ def _apple_gpu_module_is_mps_runtime(tile_module: TileIRModule) -> bool:
         "tessera.gemm",
         "tessera.rope",
         "tessera.flash_attn",
+        "tessera.softmax",
+        "tessera.softmax_safe",
+        "tessera.gelu",
     }
 
 
@@ -645,6 +700,46 @@ def _lower_apple_gpu_op(op: TileOp, *, mps_runtime: bool = False) -> list[Target
                 "cache_key": _APPLE_GPU_FLASH_ATTN_MSL_CACHE_KEY,
                 "grid": "batch_query_rows",
                 "threadgroup": "32x?",
+            }),
+            TargetOp("tessera_apple.gpu.mps_dispatch", {
+                "ordinal": base["ordinal"],
+                "queue": "MTLCommandQueue",
+                "framework": "Metal",
+                "execution_mode": "metal_runtime",
+            }),
+        ]
+    # Phase 8.4.2 custom MSL path: single-softmax (axis=-1) module.
+    if mps_runtime and source in {"tessera.softmax", "tessera.softmax_safe"}:
+        return [
+            TargetOp("tessera_apple.gpu.msl_kernel", {
+                **base,
+                "framework": "Metal",
+                "dtype": "f32",
+                "entry_point": "softmax_f32",
+                "msl_source": _APPLE_GPU_SOFTMAX_MSL_SOURCE,
+                "cache_key": _APPLE_GPU_SOFTMAX_MSL_CACHE_KEY,
+                "grid": "rows",
+                "threadgroup": "?x1x1",
+            }),
+            TargetOp("tessera_apple.gpu.mps_dispatch", {
+                "ordinal": base["ordinal"],
+                "queue": "MTLCommandQueue",
+                "framework": "Metal",
+                "execution_mode": "metal_runtime",
+            }),
+        ]
+    # Phase 8.4.2 custom MSL path: single-gelu (elementwise) module.
+    if mps_runtime and source == "tessera.gelu":
+        return [
+            TargetOp("tessera_apple.gpu.msl_kernel", {
+                **base,
+                "framework": "Metal",
+                "dtype": "f32",
+                "entry_point": "gelu_f32",
+                "msl_source": _APPLE_GPU_GELU_MSL_SOURCE,
+                "cache_key": _APPLE_GPU_GELU_MSL_CACHE_KEY,
+                "grid": "elements",
+                "threadgroup": "?x1x1",
             }),
             TargetOp("tessera_apple.gpu.mps_dispatch", {
                 "ordinal": base["ordinal"],

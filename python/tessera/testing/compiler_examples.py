@@ -112,7 +112,10 @@ COMPILER_EXAMPLE_MANIFEST: tuple[CompilerExample, ...] = (
     CompilerExample(
         "flash_attn_contract",
         flash_attn_path,
-        {target: _common_artifact_stages(runtime=target == "x86") for target in FOUNDATION_TARGETS},
+        # Phase 8.4.1: apple_gpu single-flash_attn programs are now executable
+        # via the custom MSL kernel. x86 has the AMX runtime path; the
+        # remaining targets stay artifact-only.
+        {target: _common_artifact_stages(runtime=target in {"x86", "apple_gpu"}) for target in FOUNDATION_TARGETS},
         runtime_args=(
             np.ones((1, 2, 4), dtype=np.float32),
             np.ones((1, 2, 4), dtype=np.float32),

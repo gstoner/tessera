@@ -1644,7 +1644,13 @@ def _load_apple_cpu_runtime() -> ctypes.CDLL:
 
 
 _APPLE_GPU_MPS_OPS = frozenset({"tessera.matmul", "tessera.gemm"})
-_APPLE_GPU_MSL_OPS = frozenset({"tessera.rope"})
+_APPLE_GPU_MSL_OPS = frozenset({
+    "tessera.rope",
+    "tessera.flash_attn",
+    "tessera.softmax",
+    "tessera.softmax_safe",
+    "tessera.gelu",
+})
 _APPLE_GPU_RUNTIME_OPS = _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS
 
 
@@ -1689,9 +1695,29 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             values[str(result)] = _apple_gpu_dispatch_matmul(
                 op_name, [_as_numpy(values[name]) for name in operand_names], np
             )
-        elif op_name in _APPLE_GPU_MSL_OPS:
+        elif op_name == "tessera.rope":
             values[str(result)] = _apple_gpu_dispatch_rope(
                 op_name, [_as_numpy(values[name]) for name in operand_names], np
+            )
+        elif op_name == "tessera.flash_attn":
+            values[str(result)] = _apple_gpu_dispatch_flash_attn(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name in {"tessera.softmax", "tessera.softmax_safe"}:
+            values[str(result)] = _apple_gpu_dispatch_softmax(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name == "tessera.gelu":
+            values[str(result)] = _apple_gpu_dispatch_gelu(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                np,
             )
         else:
             # Phase 8.4.x will broaden further; today single-op gating in
@@ -1814,6 +1840,162 @@ def _apple_gpu_rope_f32() -> Any:
     return sym
 
 
+def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any],
+                                   kwargs: Mapping[str, Any], np: Any) -> Any:
+    """Phase 8.4.1: dispatch a single rank-3 f32 flash-attention forward
+    through the apple_gpu runtime shim's custom MSL kernel. Inputs outside
+    the supported envelope (rank, dtype, head_dim > 256) fall back to the
+    numpy reference path used by the default `cpu` target.
+    """
+
+    if len(operands) < 3:
+        raise ValueError(f"{op_name!r} requires Q, K, V operands")
+    q = np.asarray(operands[0])
+    k = np.asarray(operands[1])
+    v = np.asarray(operands[2])
+
+    rank3_fast_path = (
+        q.dtype == np.float32 and k.dtype == np.float32 and v.dtype == np.float32
+        and q.ndim == 3 and k.ndim == 3 and v.ndim == 3
+        and q.shape[0] == k.shape[0] == v.shape[0]   # B
+        and k.shape[1] == v.shape[1]                  # Sk
+        and q.shape[2] == k.shape[2] == v.shape[2]   # D
+        and q.shape[2] <= 256
+    )
+    if not rank3_fast_path:
+        return _runtime_flash_attn(np, q, k, v, kwargs)
+
+    if not q.flags.c_contiguous:
+        q = np.ascontiguousarray(q, dtype=np.float32)
+    if not k.flags.c_contiguous:
+        k = np.ascontiguousarray(k, dtype=np.float32)
+    if not v.flags.c_contiguous:
+        v = np.ascontiguousarray(v, dtype=np.float32)
+
+    B, Sq, D = q.shape
+    Sk = k.shape[1]
+    scale = kwargs.get("scale", None)
+    scale = (1.0 / float(np.sqrt(D))) if scale is None else float(scale)
+    causal = 1 if bool(kwargs.get("causal", False)) else 0
+
+    out = np.zeros((B, Sq, D), dtype=np.float32)
+    flash_attn = _apple_gpu_flash_attn_f32()
+    flash_attn(
+        q.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        k.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        v.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        ctypes.c_int32(B),
+        ctypes.c_int32(Sq),
+        ctypes.c_int32(Sk),
+        ctypes.c_int32(D),
+        ctypes.c_float(scale),
+        ctypes.c_int32(causal),
+    )
+    return out
+
+
+def _apple_gpu_flash_attn_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = runtime.tessera_apple_gpu_flash_attn_f32
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),  # Q
+        ctypes.POINTER(ctypes.c_float),  # K
+        ctypes.POINTER(ctypes.c_float),  # V
+        ctypes.POINTER(ctypes.c_float),  # O
+        ctypes.c_int32,                  # B
+        ctypes.c_int32,                  # Sq
+        ctypes.c_int32,                  # Sk
+        ctypes.c_int32,                  # D
+        ctypes.c_float,                  # scale
+        ctypes.c_int32,                  # causal
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_dispatch_softmax(op_name: str, operands: list[Any],
+                                kwargs: Mapping[str, Any], np: Any) -> Any:
+    """Phase 8.4.2: dispatch a single rank-2 f32 softmax (axis=-1) through
+    the apple_gpu runtime shim's custom MSL kernel. Inputs outside the
+    supported envelope (rank, dtype, axis) fall back to the numpy reference.
+    """
+
+    if len(operands) < 1:
+        raise ValueError(f"{op_name!r} requires one operand")
+    x = np.asarray(operands[0])
+    axis = int(kwargs.get("axis", -1))
+    rank2_fast_path = (
+        x.dtype == np.float32 and x.ndim == 2 and (axis == -1 or axis == 1)
+    )
+    if not rank2_fast_path:
+        # Numpy reference — same op as the default `cpu` target.
+        e = np.exp(x - np.max(x, axis=axis, keepdims=True))
+        return e / np.sum(e, axis=axis, keepdims=True)
+    if not x.flags.c_contiguous:
+        x = np.ascontiguousarray(x, dtype=np.float32)
+    M, K = x.shape
+    out = np.zeros((M, K), dtype=np.float32)
+    softmax = _apple_gpu_softmax_f32()
+    softmax(
+        x.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        ctypes.c_int32(M),
+        ctypes.c_int32(K),
+    )
+    return out
+
+
+def _apple_gpu_softmax_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = runtime.tessera_apple_gpu_softmax_f32
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_dispatch_gelu(op_name: str, operands: list[Any], np: Any) -> Any:
+    """Phase 8.4.2: dispatch a single rank-2 f32 gelu through the apple_gpu
+    runtime shim's custom MSL kernel. Tanh-approximation matching the numpy
+    reference. Inputs outside the supported envelope fall back to numpy.
+    """
+
+    if len(operands) < 1:
+        raise ValueError(f"{op_name!r} requires one operand")
+    x = np.asarray(operands[0])
+    rank2_fast_path = x.dtype == np.float32 and x.ndim == 2
+    if not rank2_fast_path:
+        return 0.5 * x * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x + 0.044715 * x**3)))
+    if not x.flags.c_contiguous:
+        x = np.ascontiguousarray(x, dtype=np.float32)
+    M, K = x.shape
+    out = np.zeros((M, K), dtype=np.float32)
+    gelu = _apple_gpu_gelu_f32()
+    gelu(
+        x.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        ctypes.c_int32(M * K),
+    )
+    return out
+
+
+def _apple_gpu_gelu_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = runtime.tessera_apple_gpu_gelu_f32
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
 def _load_apple_gpu_runtime() -> ctypes.CDLL:
     """Phase 8.3: locate or compile the apple_gpu runtime shared library.
 
@@ -1840,10 +2022,13 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
             try:
                 lib = ctypes.CDLL(str(candidate))
                 # Only accept the prebuilt library when it exports the full
-                # Phase 8.4 envelope. Older builds (Phase 8.3) lack the rope
-                # symbol; falling through forces a rebuild.
+                # Phase 8.4.2 envelope. Older builds lack the softmax/gelu
+                # (or earlier) symbols; falling through forces a rebuild.
                 getattr(lib, "tessera_apple_gpu_mps_matmul_f32")
                 getattr(lib, "tessera_apple_gpu_rope_f32")
+                getattr(lib, "tessera_apple_gpu_flash_attn_f32")
+                getattr(lib, "tessera_apple_gpu_softmax_f32")
+                getattr(lib, "tessera_apple_gpu_gelu_f32")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

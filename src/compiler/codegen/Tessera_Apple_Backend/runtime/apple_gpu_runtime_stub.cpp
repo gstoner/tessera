@@ -8,9 +8,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 
 #if !defined(__APPLE__)
 
@@ -61,6 +63,100 @@ extern "C" void tessera_apple_gpu_mps_matmul_f32(const float* A,
 extern "C" void tessera_apple_gpu_rope_f32(const float* X, const float* Theta,
                                            float* Out, int32_t M, int32_t K) {
   reference_rope_f32(X, Theta, Out, M, K);
+}
+
+namespace {
+
+inline void reference_flash_attn_f32(const float* Q, const float* K,
+                                     const float* V, float* O,
+                                     int32_t B, int32_t Sq, int32_t Sk,
+                                     int32_t D, float scale, int32_t causal) {
+  for (int32_t b = 0; b < B; ++b) {
+    for (int32_t q = 0; q < Sq; ++q) {
+      const float* Qrow = Q + (static_cast<std::size_t>(b) * Sq + q) * D;
+      const float* Kbase = K + static_cast<std::size_t>(b) * Sk * D;
+      const float* Vbase = V + static_cast<std::size_t>(b) * Sk * D;
+      float* Orow = O + (static_cast<std::size_t>(b) * Sq + q) * D;
+      float m = -std::numeric_limits<float>::infinity();
+      float l = 0.0f;
+      float o[256];
+      for (int32_t d = 0; d < D; ++d) o[d] = 0.0f;
+      for (int32_t k = 0; k < Sk; ++k) {
+        if (causal != 0 && k > q) break;
+        const float* Krow = Kbase + static_cast<std::size_t>(k) * D;
+        float score = 0.0f;
+        for (int32_t d = 0; d < D; ++d) score += Qrow[d] * Krow[d];
+        score *= scale;
+        float new_m = std::max(m, score);
+        float exp_old = std::exp(m - new_m);
+        float exp_score = std::exp(score - new_m);
+        float new_l = l * exp_old + exp_score;
+        const float* Vrow = Vbase + static_cast<std::size_t>(k) * D;
+        for (int32_t d = 0; d < D; ++d) {
+          o[d] = o[d] * exp_old + Vrow[d] * exp_score;
+        }
+        m = new_m;
+        l = new_l;
+      }
+      if (l == 0.0f) {
+        for (int32_t d = 0; d < D; ++d) Orow[d] = 0.0f;
+      } else {
+        float inv_l = 1.0f / l;
+        for (int32_t d = 0; d < D; ++d) Orow[d] = o[d] * inv_l;
+      }
+    }
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
+                                                 const float* V, float* O,
+                                                 int32_t B, int32_t Sq,
+                                                 int32_t Sk, int32_t D,
+                                                 float scale, int32_t causal) {
+  reference_flash_attn_f32(Q, K, V, O, B, Sq, Sk, D, scale, causal);
+}
+
+namespace {
+
+inline void reference_softmax_f32(const float* X, float* Out, int32_t M,
+                                  int32_t K) {
+  for (int32_t r = 0; r < M; ++r) {
+    const float* row = X + static_cast<std::size_t>(r) * K;
+    float* out_row = Out + static_cast<std::size_t>(r) * K;
+    float row_max = -std::numeric_limits<float>::infinity();
+    for (int32_t j = 0; j < K; ++j) row_max = std::max(row_max, row[j]);
+    float denom = 0.0f;
+    for (int32_t j = 0; j < K; ++j) {
+      float e = std::exp(row[j] - row_max);
+      out_row[j] = e;
+      denom += e;
+    }
+    float inv = 1.0f / denom;
+    for (int32_t j = 0; j < K; ++j) out_row[j] *= inv;
+  }
+}
+
+inline void reference_gelu_f32(const float* X, float* Out, int32_t N) {
+  static constexpr float kSqrt2OverPi = 0.7978845608028654f;
+  for (int32_t i = 0; i < N; ++i) {
+    float v = X[i];
+    float t = kSqrt2OverPi * (v + 0.044715f * v * v * v);
+    Out[i] = 0.5f * v * (1.0f + std::tanh(t));
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_softmax_f32(const float* X, float* Out,
+                                              int32_t M, int32_t K) {
+  reference_softmax_f32(X, Out, M, K);
+}
+
+extern "C" void tessera_apple_gpu_gelu_f32(const float* X, float* Out,
+                                           int32_t N) {
+  reference_gelu_f32(X, Out, N);
 }
 
 extern "C" int32_t tessera_apple_gpu_runtime_msl_cache_size(void) {

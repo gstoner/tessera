@@ -116,9 +116,13 @@ def test_compiler_example_manifest_qualifies_each_foundation_target():
         assert set(example.stages_by_target) == set(FOUNDATION_TARGETS)
         for target in FOUNDATION_TARGETS:
             # x86 has the AMX runtime; apple_cpu is the second executable
-            # path (Phase 8.2 Item #2 — Accelerate cblas + numpy reference
-            # for multi-op programs). Both should actually launch.
-            should_run = target in {"x86", "apple_cpu"}
+            # path (Phase 8.2 — Accelerate cblas + numpy reference for multi-op
+            # programs). apple_gpu joined the runtime path in Phase 8.3 (MPS
+            # matmul) and Phase 8.4 (custom MSL kernels: rope, flash_attn).
+            # Whether a given example actually runs is driven by the manifest
+            # entry's per-target stages, so the test reads it from there.
+            claimed = set(example.stages_by_target[target])
+            should_run = "runtime-executable" in claimed
             result = qualify_compiler_example(example, target, run=should_run)
             seen.add((example.example_id, result.target))
             assert result.artifact.metadata["artifact_hashes"]["graph"]
@@ -127,10 +131,15 @@ def test_compiler_example_manifest_qualifies_each_foundation_target():
                 assert result.launch_result is not None
                 assert result.launch_result["ok"] is True
             elif target == "apple_cpu":
-                # Manifest examples are matmul-driven and the new multi-op
+                # Manifest examples are matmul-driven and the multi-op
                 # runtime path means they now report runtime_status="ready".
                 assert result.artifact.metadata["runtime_status"] == "ready"
                 assert result.artifact.metadata["compiler_path"] == "apple_cpu_accelerate"
+            elif "runtime-executable" in claimed:
+                # apple_gpu flash_attn_contract — Phase 8.4.1 runtime path.
+                assert result.artifact.metadata["runtime_status"] == "ready"
+                assert result.launch_result is not None
+                assert result.launch_result["ok"] is True
             else:
                 assert result.artifact.metadata["runtime_status"] == "artifact_only"
 

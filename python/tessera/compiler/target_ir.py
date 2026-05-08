@@ -798,15 +798,23 @@ def _lower_apple_gpu_op(op: TileOp, *, mps_runtime: bool = False) -> list[Target
     if op.op_name.startswith("tessera.queue.") or op.op_name in {"tile.async_copy", "tile.wait_async"}:
         return []
     # Phase 8.3 MPS runtime path: a single-matmul module is lowered to
-    # mps_matmul + mps_dispatch with execution_mode="metal_runtime". The
-    # AppleGPUToMPS pass and the apple_gpu_runtime.mm shim consume this op.
+    # mps_matmul + mps_dispatch with execution_mode="metal_runtime". Phase
+    # 8.4.4 — the dtype attr now reflects the element type the runtime will
+    # dispatch to (f32, f16, or bf16). The MatmulToAppleGPU lowering pass
+    # picks the matching runtime symbol; the IR-level dtype attr is the
+    # introspection mirror.
     if mps_runtime and op.op_name == "tile.mma" and source in {"tessera.matmul", "tessera.gemm"}:
+        # Resolve dtype from the tile op's attrs if present (Phase 8.4.4),
+        # else default to f32 (preserves Phase 8.3 contract).
+        tile_dtype = str(op.attrs.get("dtype", "f32"))
+        if tile_dtype not in {"f32", "f16", "bf16"}:
+            tile_dtype = "f32"
         return [
             TargetOp("tessera_apple.gpu.mps_matmul", {
                 **base,
                 "framework": "MetalPerformanceShaders",
                 "abi": "MPSMatrixMultiplication",
-                "dtype": "f32",
+                "dtype": tile_dtype,
             }),
             TargetOp("tessera_apple.gpu.mps_dispatch", {
                 "ordinal": base["ordinal"],

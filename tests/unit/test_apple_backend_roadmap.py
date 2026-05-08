@@ -1269,6 +1269,179 @@ def test_apple_gpu_matmul_softmax_fusion_runtime_shim_correctness(tmp_path):
         np.testing.assert_allclose(O, ref, rtol=1e-4, atol=1e-5)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 8.4.4: fp16 / bf16 matmul on apple_gpu (mirrors BNNS bf16 from CPU).
+#
+# Single rank-2 matmul programs now flip to metal_runtime regardless of dtype:
+#   f32  -> native MPSDataTypeFloat32
+#   f16  -> native MPSDataTypeFloat16
+#   bf16 -> fp32-conversion path (MPS doesn't support bf16 matrix
+#           descriptors as of macOS 14)
+# Mixed-dtype operands fall back to the artifact-only path.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _bfloat16_or_skip():
+    pytest.importorskip("ml_dtypes")
+    import ml_dtypes
+    return ml_dtypes.bfloat16
+
+
+def test_apple_gpu_matmul_f32_artifact_reports_metal_runtime():
+    """Phase 8.4.4 — the compile-time artifact stays type-polymorphic
+    (defaults to f32 in the static Graph IR) because call-site dtypes are
+    only known when @jit functions are invoked. The runtime dispatcher
+    selects the matching MPS symbol by inspecting input array dtypes.
+    This test pins the compile-time contract; the runtime dtype dispatch
+    is exercised by the executes_through_mps tests below.
+    """
+
+    @ts.jit(target="apple_gpu")
+    def mm(A, B):
+        return ts.ops.matmul(A, B)
+
+    artifact = mm.runtime_artifact()
+    assert artifact.metadata["execution_mode"] == "metal_runtime"
+    assert artifact.metadata["compiler_path"] == "apple_gpu_mps"
+    backend_text = mm.compile_bundle.artifact("backend").text
+    # The default f32 symbol is named in the artifact since the Graph IR
+    # operand types are f32 absent explicit type hints. Runtime dtype
+    # dispatch overrides this at launch time when inputs are f16/bf16.
+    assert "tessera_apple_gpu_mps_matmul_f32" in backend_text
+
+
+def test_apple_gpu_matmul_f16_executes_through_mps():
+    """End-to-end: @jit(target='apple_gpu') fp16 matmul. The runtime
+    dispatcher detects fp16 inputs and routes to MPSDataTypeFloat16. MPS
+    does fp16 internal accumulation, which can drift slightly from the
+    fp32-converted reference; assert at fp16 tolerance."""
+
+    @ts.jit(target="apple_gpu")
+    def mm(A, B):
+        return ts.ops.matmul(A, B)
+
+    rng = np.random.RandomState(53)
+    for M, K, N in ((4, 8, 8), (8, 16, 32)):
+        A = rng.randn(M, K).astype(np.float16)
+        B = rng.randn(K, N).astype(np.float16)
+        out = mm(A, B)
+        assert out.dtype == np.float16
+        assert out.shape == (M, N)
+        # Reference: convert to fp32, matmul, convert back. MPS does fp16
+        # internal accumulation; modest rel tolerance covers the drift.
+        ref = (A.astype(np.float32) @ B.astype(np.float32)).astype(np.float16)
+        np.testing.assert_allclose(
+            out.astype(np.float32), ref.astype(np.float32),
+            rtol=5e-2, atol=5e-2,
+        )
+
+
+def test_apple_gpu_matmul_bf16_executes_through_fp32_conversion_path():
+    """End-to-end: @jit(target='apple_gpu') bf16 matmul matches an
+    fp32-converted reference at bf16 tolerance. The runtime shim does the
+    fp32 conversion internally so the host sees a bf16 in/out ABI."""
+
+    bf16 = _bfloat16_or_skip()
+
+    @ts.jit(target="apple_gpu")
+    def mm(A, B):
+        return ts.ops.matmul(A, B)
+
+    rng = np.random.RandomState(59)
+    for M, K, N in ((4, 8, 8), (8, 16, 32)):
+        A = rng.randn(M, K).astype(bf16)
+        B = rng.randn(K, N).astype(bf16)
+        out = mm(A, B)
+        assert out.dtype == bf16
+        assert out.shape == (M, N)
+        ref = (A.astype(np.float32) @ B.astype(np.float32)).astype(bf16)
+        # bf16 has ~7-bit mantissa; tile-order rounding can drift by ~2% on
+        # K=16. Same tolerance pattern as the apple_cpu BNNS bf16 test.
+        np.testing.assert_allclose(
+            out.astype(np.float32), ref.astype(np.float32),
+            rtol=2e-2, atol=2e-2,
+        )
+
+
+def test_apple_gpu_matmul_runtime_shim_exposes_f16_and_bf16_symbols(tmp_path):
+    """Compile the apple_gpu runtime shim from source and verify the C ABI
+    of the new fp16 + bf16 matmul symbols. On Darwin this exercises the
+    Metal/MPS path; on Linux/CI the portable reference fallback."""
+
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        pytest.skip("C++ compiler is not available")
+
+    backend = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
+    if sys.platform == "darwin":
+        source = backend / "apple_gpu_runtime.mm"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.dylib"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", "-fobjc-arc",
+               "-x", "objective-c++", str(source), "-o", str(lib),
+               "-framework", "Foundation",
+               "-framework", "Metal",
+               "-framework", "MetalPerformanceShaders"]
+    else:
+        source = backend / "apple_gpu_runtime_stub.cpp"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.so"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(lib)]
+    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    runtime = ctypes.CDLL(str(lib))
+
+    # fp16 ABI test
+    gemm_f16 = runtime.tessera_apple_gpu_mps_matmul_f16
+    gemm_f16.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    gemm_f16.restype = None
+
+    A = np.array([[1, 2, 3], [4, 5, 6]], dtype=np.float16)
+    B = np.array([[7, 8], [9, 10], [11, 12]], dtype=np.float16)
+    C = np.zeros((2, 2), dtype=np.float16)
+    gemm_f16(
+        A.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        B.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        C.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        2, 2, 3,
+    )
+    np.testing.assert_array_equal(
+        C, (A.astype(np.float32) @ B.astype(np.float32)).astype(np.float16)
+    )
+
+    # bf16 ABI test (only when ml_dtypes is available)
+    try:
+        import ml_dtypes
+        bf16 = ml_dtypes.bfloat16
+    except Exception:
+        return
+
+    gemm_bf16 = runtime.tessera_apple_gpu_mps_matmul_bf16
+    gemm_bf16.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    gemm_bf16.restype = None
+
+    A_bf = np.array([[1, 2, 3], [4, 5, 6]], dtype=bf16)
+    B_bf = np.array([[7, 8], [9, 10], [11, 12]], dtype=bf16)
+    C_bf = np.zeros((2, 2), dtype=bf16)
+    gemm_bf16(
+        A_bf.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        B_bf.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        C_bf.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        2, 2, 3,
+    )
+    np.testing.assert_array_equal(
+        C_bf, (A_bf.astype(np.float32) @ B_bf.astype(np.float32)).astype(bf16)
+    )
+
+
 def test_apple_cpu_bf16_disabled_when_ml_dtypes_missing(monkeypatch):
     """When ml_dtypes isn't installed the bf16 dtype probe returns None and
     the runtime falls through to numpy. Verified by stubbing the import to

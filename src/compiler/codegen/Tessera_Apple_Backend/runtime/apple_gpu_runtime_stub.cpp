@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <vector>
 
 #if !defined(__APPLE__)
 
@@ -58,6 +59,115 @@ extern "C" void tessera_apple_gpu_mps_matmul_f32(const float* A,
                                                  int32_t M, int32_t N,
                                                  int32_t K) {
   reference_gemm_f32(A, B, C, M, N, K);
+}
+
+namespace {
+
+// Phase 8.4.4 — fp16/bf16 bit-pattern conversion helpers for the non-Darwin
+// stub. Same shape as the conversion helpers in apple_gpu_runtime.mm; kept
+// inline here so the stub TU is self-contained.
+
+inline float half_to_float_stub(uint16_t h) {
+  uint32_t sign = (uint32_t(h) & 0x8000u) << 16;
+  uint32_t exp  = (uint32_t(h) & 0x7C00u) >> 10;
+  uint32_t frac = uint32_t(h) & 0x03FFu;
+  uint32_t f;
+  if (exp == 0) {
+    if (frac == 0) {
+      f = sign;
+    } else {
+      while ((frac & 0x0400u) == 0) { frac <<= 1; exp -= 1; }
+      exp += 1;
+      frac &= ~0x0400u;
+      f = sign | ((exp + 112) << 23) | (frac << 13);
+    }
+  } else if (exp == 0x1F) {
+    f = sign | 0x7F800000u | (frac << 13);
+  } else {
+    f = sign | ((exp + 112) << 23) | (frac << 13);
+  }
+  float out;
+  std::memcpy(&out, &f, sizeof(out));
+  return out;
+}
+
+inline uint16_t float_to_half_stub(float v) {
+  uint32_t f;
+  std::memcpy(&f, &v, sizeof(f));
+  uint32_t sign = (f >> 16) & 0x8000u;
+  int32_t  exp  = int32_t((f >> 23) & 0xFFu) - 127 + 15;
+  uint32_t frac = f & 0x007FFFFFu;
+  if (exp <= 0) {
+    if (exp < -10) return uint16_t(sign);
+    frac = (frac | 0x00800000u) >> (1 - exp);
+    if (frac & 0x00001000u) frac += 0x00002000u;
+    return uint16_t(sign | (frac >> 13));
+  }
+  if (exp >= 0x1F) {
+    if (((f >> 23) & 0xFFu) == 0xFFu) {
+      return uint16_t(sign | 0x7C00u | (frac ? (frac >> 13) | 0x200u : 0));
+    }
+    return uint16_t(sign | 0x7C00u);
+  }
+  if (frac & 0x00001000u) {
+    frac += 0x00002000u;
+    if (frac & 0x00800000u) {
+      frac = 0;
+      exp += 1;
+      if (exp >= 0x1F) return uint16_t(sign | 0x7C00u);
+    }
+  }
+  return uint16_t(sign | (uint32_t(exp) << 10) | (frac >> 13));
+}
+
+inline float bfloat16_to_float_stub(uint16_t b) {
+  uint32_t f = static_cast<uint32_t>(b) << 16;
+  float out;
+  std::memcpy(&out, &f, sizeof(out));
+  return out;
+}
+
+inline uint16_t float_to_bfloat16_stub(float v) {
+  uint32_t f;
+  std::memcpy(&f, &v, sizeof(f));
+  if ((f & 0x7FC00000u) == 0x7F800000u && (f & 0x007FFFFFu) != 0) {
+    return static_cast<uint16_t>((f >> 16) | 0x40u);
+  }
+  uint32_t lsb = (f >> 16) & 1u;
+  uint32_t rounded = f + 0x7FFFu + lsb;
+  return static_cast<uint16_t>(rounded >> 16);
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_mps_matmul_f16(const uint16_t* A,
+                                                 const uint16_t* B,
+                                                 uint16_t* C,
+                                                 int32_t M, int32_t N,
+                                                 int32_t K) {
+  // Convert each operand to fp32, run the reference fp32 GEMM, convert back.
+  // Same numerical contract as the BNNS-fallback path on CPU.
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Cf(static_cast<std::size_t>(M) * N, 0.0f);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = half_to_float_stub(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = half_to_float_stub(B[i]);
+  reference_gemm_f32(Af.data(), Bf.data(), Cf.data(), M, N, K);
+  for (std::size_t i = 0; i < Cf.size(); ++i) C[i] = float_to_half_stub(Cf[i]);
+}
+
+extern "C" void tessera_apple_gpu_mps_matmul_bf16(const uint16_t* A,
+                                                  const uint16_t* B,
+                                                  uint16_t* C,
+                                                  int32_t M, int32_t N,
+                                                  int32_t K) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Cf(static_cast<std::size_t>(M) * N, 0.0f);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = bfloat16_to_float_stub(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = bfloat16_to_float_stub(B[i]);
+  reference_gemm_f32(Af.data(), Bf.data(), Cf.data(), M, N, K);
+  for (std::size_t i = 0; i < Cf.size(); ++i) C[i] = float_to_bfloat16_stub(Cf[i]);
 }
 
 extern "C" void tessera_apple_gpu_rope_f32(const float* X, const float* Theta,

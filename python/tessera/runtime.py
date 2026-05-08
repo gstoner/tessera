@@ -1965,10 +1965,12 @@ def _apple_gpu_metadata_is_matmul_softmax_chain(ops: list[dict]) -> bool:
 
 
 def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> Any:
-    """Phase 8.3: dispatch a single rank-2 f32 matmul through the apple_gpu
-    runtime shim (MPSMatrixMultiplication when Metal is available, portable
-    reference fallback otherwise). Inputs outside the supported envelope fall
-    back to numpy.matmul — same shape as the apple_cpu dispatcher.
+    """Phase 8.3 + 8.4.4: dispatch a single rank-2 matmul through the
+    apple_gpu runtime shim. Picks the runtime symbol by element type:
+      - f32: native MPSDataTypeFloat32 (Phase 8.3)
+      - f16: native MPSDataTypeFloat16 (Phase 8.4.4)
+      - bf16: fp32-conversion path inside the shim (Phase 8.4.4)
+    Other dtypes fall back to numpy.matmul.
     """
 
     if len(operands) != 2:
@@ -1976,32 +1978,69 @@ def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
     a = np.asarray(operands[0])
     b = np.asarray(operands[1])
 
-    rank2_fast_path = (
-        a.dtype == np.float32
-        and b.dtype == np.float32
-        and a.ndim == 2
-        and b.ndim == 2
-    )
-    if not rank2_fast_path:
+    if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
         return np.matmul(a, b)
-    if a.shape[1] != b.shape[0]:
-        raise ValueError(f"matmul shape mismatch: {a.shape} x {b.shape}")
-    if not a.flags.c_contiguous:
-        a = np.ascontiguousarray(a, dtype=np.float32)
-    if not b.flags.c_contiguous:
-        b = np.ascontiguousarray(b, dtype=np.float32)
+    if a.dtype != b.dtype:
+        return np.matmul(a, b)
 
-    out = np.zeros((a.shape[0], b.shape[1]), dtype=np.float32)
-    gemm = _apple_gpu_mps_matmul_f32()
-    gemm(
-        a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        ctypes.c_int32(a.shape[0]),
-        ctypes.c_int32(b.shape[1]),
-        ctypes.c_int32(a.shape[1]),
-    )
-    return out
+    if a.dtype == np.float32:
+        if not a.flags.c_contiguous:
+            a = np.ascontiguousarray(a, dtype=np.float32)
+        if not b.flags.c_contiguous:
+            b = np.ascontiguousarray(b, dtype=np.float32)
+        out = np.zeros((a.shape[0], b.shape[1]), dtype=np.float32)
+        gemm = _apple_gpu_mps_matmul_f32()
+        gemm(
+            a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            ctypes.c_int32(a.shape[0]),
+            ctypes.c_int32(b.shape[1]),
+            ctypes.c_int32(a.shape[1]),
+        )
+        return out
+
+    if a.dtype == np.float16:
+        if not a.flags.c_contiguous:
+            a = np.ascontiguousarray(a, dtype=np.float16)
+        if not b.flags.c_contiguous:
+            b = np.ascontiguousarray(b, dtype=np.float16)
+        out = np.zeros((a.shape[0], b.shape[1]), dtype=np.float16)
+        gemm_f16 = _apple_gpu_mps_matmul_f16()
+        if gemm_f16 is not None:
+            gemm_f16(
+                a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                ctypes.c_int32(a.shape[0]),
+                ctypes.c_int32(b.shape[1]),
+                ctypes.c_int32(a.shape[1]),
+            )
+            return out
+        # Older runtime build without the f16 symbol — convert to f32 and back.
+        return (a.astype(np.float32) @ b.astype(np.float32)).astype(np.float16)
+
+    bf16_dtype = _bfloat16_dtype()
+    if bf16_dtype is not None and a.dtype == bf16_dtype:
+        if not a.flags.c_contiguous:
+            a = np.ascontiguousarray(a, dtype=bf16_dtype)
+        if not b.flags.c_contiguous:
+            b = np.ascontiguousarray(b, dtype=bf16_dtype)
+        out = np.zeros((a.shape[0], b.shape[1]), dtype=bf16_dtype)
+        gemm_bf16 = _apple_gpu_mps_matmul_bf16()
+        if gemm_bf16 is not None:
+            gemm_bf16(
+                a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                ctypes.c_int32(a.shape[0]),
+                ctypes.c_int32(b.shape[1]),
+                ctypes.c_int32(a.shape[1]),
+            )
+            return out
+        return (a.astype(np.float32) @ b.astype(np.float32)).astype(bf16_dtype)
+
+    return np.matmul(a, b)
 
 
 def _apple_gpu_mps_matmul_f32() -> Any:
@@ -2011,6 +2050,48 @@ def _apple_gpu_mps_matmul_f32() -> Any:
         ctypes.POINTER(ctypes.c_float),
         ctypes.POINTER(ctypes.c_float),
         ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,
+        ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_mps_matmul_f16() -> Any:
+    """Phase 8.4.4 — fp16 matmul via MPSDataTypeFloat16. Inputs/outputs are
+    bit-pattern uint16_t* (numpy float16 layout). Symbol may be absent on
+    older runtime builds; the dispatcher falls through to fp32 conversion."""
+
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mps_matmul_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32,
+        ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_mps_matmul_bf16() -> Any:
+    """Phase 8.4.4 — bf16 matmul. The runtime shim does fp32 conversion
+    inside since MPS doesn't natively support bf16 matrix descriptors as of
+    macOS 14. ml_dtypes.bfloat16 dtype is byte-compatible with the C ABI."""
+
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mps_matmul_bf16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
         ctypes.c_int32,
         ctypes.c_int32,
         ctypes.c_int32,
@@ -2318,6 +2399,10 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_softmax_f32")
                 getattr(lib, "tessera_apple_gpu_gelu_f32")
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_f32")
+                # Phase 8.4.4 — require fp16/bf16 matmul symbols too. Older
+                # builds lack them; falling through forces a rebuild.
+                getattr(lib, "tessera_apple_gpu_mps_matmul_f16")
+                getattr(lib, "tessera_apple_gpu_mps_matmul_bf16")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

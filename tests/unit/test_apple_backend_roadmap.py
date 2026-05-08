@@ -702,20 +702,24 @@ def test_apple_gpu_runtime_shim_exposes_mps_matmul_symbol(tmp_path):
         assert capability == 0
 
 
-def test_apple_gpu_target_keeps_metal_artifact_for_multi_op_programs():
-    """Multi-op apple_gpu programs (matmul + softmax) must stay artifact-only
-    — the Phase 8.3 runtime envelope is single-matmul. This pins the Phase 8.4
-    contract: broadening must explicitly opt in by adding ops to the MPS path,
-    not by relaxing the gating."""
+def test_apple_gpu_target_keeps_metal_artifact_for_unrecognized_multi_op_programs():
+    """Phase 8.4.3 added the first multi-op fusion (matmul -> softmax). To
+    keep the gate honest, programs that compose ops outside any recognized
+    fusion pattern must still stay on the metal_artifact contract.
+
+    matmul -> gelu is a 2-op chain that is NOT yet a recognized fusion, so
+    it stays artifact-only. (Phase 8.4.x will broaden by adding fusion
+    patterns one-by-one — that broadening is the gate to test against.)
+    """
 
     @ts.jit(target="apple_gpu")
-    def fused(x, w):
-        return ts.ops.softmax(ts.ops.matmul(x, w))
+    def chain(x, w):
+        return ts.ops.gelu(ts.ops.matmul(x, w))
 
-    artifact = fused.runtime_artifact()
+    artifact = chain.runtime_artifact()
     assert artifact.metadata["execution_mode"] == "metal_artifact"
     assert artifact.metadata["runtime_status"] == "artifact_only"
-    assert not fused.is_executable
+    assert not chain.is_executable
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1152,6 +1156,117 @@ def test_apple_gpu_softmax_runtime_shim_correctness(tmp_path):
             M * K,
         )
         np.testing.assert_allclose(Z, _np_gelu_reference(np, X), rtol=1e-5, atol=1e-5)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 8.4.3: First multi-op MSL fusion — matmul -> softmax.
+#
+# A 2-op SSA chain (matmul whose result is consumed only by a softmax)
+# now flips from metal_artifact to metal_runtime, dispatching through a
+# fused MSL kernel that avoids materializing the (M, N) intermediate
+# score matrix on the host. The runtime gate is exact: any deviation
+# (3+ ops, intermediate consumed by another op, N > 256) keeps the
+# program on the artifact path.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _np_matmul_softmax_reference(np, A, B):
+    scores = np.matmul(A, B)
+    e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+    return e / np.sum(e, axis=-1, keepdims=True)
+
+
+def test_apple_gpu_matmul_softmax_chain_emits_fused_msl_kernel_artifact():
+    @ts.jit(target="apple_gpu")
+    def fused(A, B):
+        return ts.ops.softmax(ts.ops.matmul(A, B))
+
+    target_ir = fused.target_ir
+    assert "tessera_apple.gpu.msl_kernel" in target_ir
+    assert 'entry_point = "matmul_softmax_f32"' in target_ir
+    assert "kernel void matmul_softmax_f32" in target_ir
+    assert 'fusion = "matmul_softmax"' in target_ir
+    assert 'execution_mode = "metal_runtime"' in target_ir
+    # Exactly one msl_kernel — the fused chain collapses two ops to one
+    # emission. Two would mean the fusion didn't fire.
+    assert target_ir.count('"tessera_apple.gpu.msl_kernel"') == 1
+
+    artifact = fused.runtime_artifact()
+    assert artifact.metadata["compiler_path"] == "apple_gpu_mps"
+    assert artifact.metadata["runtime_status"] == "ready"
+    assert artifact.metadata["execution_mode"] == "metal_runtime"
+    assert "tessera_apple_gpu_matmul_softmax_f32" in fused.compile_bundle.artifact("backend").text
+
+
+def test_apple_gpu_matmul_softmax_chain_executes_through_fused_msl_kernel():
+    """End-to-end: the fused chain matches the per-op numpy reference at
+    rtol=1e-4 across a few representative shapes including a wide-N case
+    that exercises the kernel's stack accumulator."""
+
+    @ts.jit(target="apple_gpu")
+    def fused(A, B):
+        return ts.ops.softmax(ts.ops.matmul(A, B))
+
+    rng = np.random.RandomState(43)
+    for M, K, N in ((4, 8, 8), (8, 16, 32), (16, 16, 64)):
+        A = rng.randn(M, K).astype(np.float32) * 0.5
+        B = rng.randn(K, N).astype(np.float32) * 0.5
+        out = fused(A, B)
+        assert out.shape == (M, N)
+        assert out.dtype == np.float32
+        ref = _np_matmul_softmax_reference(np, A, B)
+        np.testing.assert_allclose(out, ref, rtol=1e-4, atol=1e-5)
+        # Each row sums to ~1 modulo rounding.
+        np.testing.assert_allclose(out.sum(axis=-1), np.ones(M, dtype=np.float32), rtol=1e-4)
+
+
+def test_apple_gpu_matmul_softmax_fusion_runtime_shim_correctness(tmp_path):
+    """Compile the apple_gpu runtime shim from source and verify the C ABI
+    of tessera_apple_gpu_matmul_softmax_f32: signature matches the lowering
+    pass, numerical output matches numpy."""
+
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        pytest.skip("C++ compiler is not available")
+
+    backend = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
+    if sys.platform == "darwin":
+        source = backend / "apple_gpu_runtime.mm"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.dylib"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", "-fobjc-arc",
+               "-x", "objective-c++", str(source), "-o", str(lib),
+               "-framework", "Foundation",
+               "-framework", "Metal",
+               "-framework", "MetalPerformanceShaders"]
+    else:
+        source = backend / "apple_gpu_runtime_stub.cpp"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.so"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(lib)]
+    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    runtime = ctypes.CDLL(str(lib))
+    fused = runtime.tessera_apple_gpu_matmul_softmax_f32
+    fused.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    fused.restype = None
+
+    rng = np.random.RandomState(47)
+    for M, K, N in ((2, 4, 4), (8, 16, 32)):
+        A = rng.randn(M, K).astype(np.float32) * 0.5
+        B = rng.randn(K, N).astype(np.float32) * 0.5
+        O = np.zeros((M, N), dtype=np.float32)
+        fused(
+            A.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            B.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            O.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            M, N, K,
+        )
+        ref = _np_matmul_softmax_reference(np, A, B)
+        np.testing.assert_allclose(O, ref, rtol=1e-4, atol=1e-5)
 
 
 def test_apple_cpu_bf16_disabled_when_ml_dtypes_missing(monkeypatch):

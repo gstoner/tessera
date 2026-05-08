@@ -159,6 +159,49 @@ extern "C" void tessera_apple_gpu_gelu_f32(const float* X, float* Out,
   reference_gelu_f32(X, Out, N);
 }
 
+namespace {
+
+inline void reference_matmul_softmax_f32(const float* A, const float* B,
+                                         float* O, int32_t M, int32_t N,
+                                         int32_t K) {
+  // Phase 8.4.3 — fused matmul -> softmax(axis=-1) reference. Same algorithm
+  // as the MSL kernel: per-row, compute row of A@B, then numerically-stable
+  // softmax over that row. The GPU kernel caps N <= 256 with a stack array;
+  // the stub uses a heap allocation per row so it stays correct for any N.
+  for (int32_t row = 0; row < M; ++row) {
+    float* scores = new float[static_cast<std::size_t>(N)]();
+    for (int32_t k = 0; k < K; ++k) {
+      float a = A[static_cast<std::size_t>(row) * K + k];
+      const float* b_row = B + static_cast<std::size_t>(k) * N;
+      for (int32_t n = 0; n < N; ++n) scores[n] += a * b_row[n];
+    }
+    float row_max = -std::numeric_limits<float>::infinity();
+    for (int32_t n = 0; n < N; ++n) row_max = std::max(row_max, scores[n]);
+    float denom = 0.0f;
+    for (int32_t n = 0; n < N; ++n) {
+      scores[n] = std::exp(scores[n] - row_max);
+      denom += scores[n];
+    }
+    float* out_row = O + static_cast<std::size_t>(row) * N;
+    if (denom == 0.0f) {
+      for (int32_t n = 0; n < N; ++n) out_row[n] = 0.0f;
+    } else {
+      float inv = 1.0f / denom;
+      for (int32_t n = 0; n < N; ++n) out_row[n] = scores[n] * inv;
+    }
+    delete[] scores;
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_matmul_softmax_f32(const float* A,
+                                                     const float* B, float* O,
+                                                     int32_t M, int32_t N,
+                                                     int32_t K) {
+  reference_matmul_softmax_f32(A, B, O, M, N, K);
+}
+
 extern "C" int32_t tessera_apple_gpu_runtime_msl_cache_size(void) {
   // No Metal -> no MSL cache. Tests gate this on platform.
   return -1;

@@ -88,7 +88,10 @@ COMPILER_EXAMPLE_MANIFEST: tuple[CompilerExample, ...] = (
     CompilerExample(
         "attention_matmul_softmax",
         attention_like_path,
-        {target: _common_artifact_stages(runtime=target == "x86") for target in FOUNDATION_TARGETS},
+        # Phase 8.4.3: apple_gpu matmul -> softmax chains fuse into a single
+        # MSL kernel and become runtime-executable. x86 has the AMX runtime
+        # path; the remaining targets stay artifact-only.
+        {target: _common_artifact_stages(runtime=target in {"x86", "apple_gpu"}) for target in FOUNDATION_TARGETS},
         runtime_args=(
             np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32),
             np.array([[0.5, -1.0], [1.5, 0.25]], dtype=np.float32),

@@ -42,6 +42,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace {
 
@@ -773,4 +774,181 @@ extern "C" void tessera_apple_gpu_gelu_f32(const float* X, float* Out,
   MetalDeviceContext &ctx = deviceContext();
   if (ctx.ok && dispatch_gelu_msl(ctx, X, Out, N)) return;
   reference_gelu_f32(X, Out, N);
+}
+
+//===---------------------------------------------------------------------===//
+// Phase 8.4.3 — Fused matmul → softmax (rank-2, f32, axis=-1)
+//
+// O = softmax(A @ B, axis=-1)
+//
+// Shapes:
+//   A: (M, K)
+//   B: (K, N)
+//   O: (M, N)   — softmax taken over axis=1 (innermost), per row.
+//
+// One thread per output row. Each thread:
+//   1. Computes the full (1, N) row of A @ B into a stack array.
+//   2. Computes the row max (numerically-stable softmax).
+//   3. Computes exp(scores - max) and the row sum, in place.
+//   4. Divides by the sum to produce the row of O.
+//
+// Avoids materializing the (M, N) intermediate score matrix on host. Cap
+// N <= 256 so the per-thread stack array fits — typical attention shapes
+// have head_dim or seq_len in this range. Larger N falls back to the
+// reference path (which still produces correct results, just on CPU).
+//
+// The fused emission win comes from:
+//   - One kernel launch instead of two (matmul + softmax)
+//   - No host-side roundtrip for the (M, N) intermediate
+//   - Shared MTLCommandBuffer + MTLBuffer infrastructure
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+bool dispatch_matmul_softmax_msl(MetalDeviceContext &ctx, const float* A,
+                                 const float* B, float* O,
+                                 int32_t M, int32_t N, int32_t K) {
+  static NSString *const kMatmulSoftmaxSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_FUSED_MATMUL_SOFTMAX_MAX_N 256
+
+kernel void matmul_softmax_f32(
+    device const float* A   [[buffer(0)]],
+    device const float* B   [[buffer(1)]],
+    device float*       O   [[buffer(2)]],
+    constant int&       M   [[buffer(3)]],
+    constant int&       N   [[buffer(4)]],
+    constant int&       K   [[buffer(5)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)M) return;
+    if (N > TESSERA_APPLE_GPU_FUSED_MATMUL_SOFTMAX_MAX_N) return;
+    int row = (int)gid;
+
+    // Pass 1: compute the (1, N) row of A @ B into the stack array.
+    float scores[TESSERA_APPLE_GPU_FUSED_MATMUL_SOFTMAX_MAX_N];
+    int a_off = row * K;
+    for (int n = 0; n < N; ++n) scores[n] = 0.0f;
+    for (int k = 0; k < K; ++k) {
+        float a = A[a_off + k];
+        int b_off = k * N;
+        for (int n = 0; n < N; ++n) {
+            scores[n] += a * B[b_off + n];
+        }
+    }
+
+    // Pass 2: row max for numerical stability.
+    float row_max = -INFINITY;
+    for (int n = 0; n < N; ++n) row_max = max(row_max, scores[n]);
+
+    // Pass 3: exp + sum.
+    float denom = 0.0f;
+    for (int n = 0; n < N; ++n) {
+        scores[n] = exp(scores[n] - row_max);
+        denom += scores[n];
+    }
+
+    // Pass 4: divide and write out.
+    int o_off = row * N;
+    if (denom == 0.0f) {
+        for (int n = 0; n < N; ++n) O[o_off + n] = 0.0f;
+    } else {
+        float inv = 1.0f / denom;
+        for (int n = 0; n < N; ++n) O[o_off + n] = scores[n] * inv;
+    }
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kMatmulSoftmaxSource, @"matmul_softmax_f32");
+    if (!pso) return false;
+
+    NSUInteger aBytes = sizeof(float) * static_cast<NSUInteger>(M) *
+                        static_cast<NSUInteger>(K);
+    NSUInteger bBytes = sizeof(float) * static_cast<NSUInteger>(K) *
+                        static_cast<NSUInteger>(N);
+    NSUInteger oBytes = sizeof(float) * static_cast<NSUInteger>(M) *
+                        static_cast<NSUInteger>(N);
+
+    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A
+                                                  length:aBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B
+                                                  length:bBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufA || !bufB || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBuffer:bufO offset:0 atIndex:2];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
+
+    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(M), 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(M),
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+inline void reference_matmul_softmax_f32(const float* A, const float* B,
+                                         float* O, int32_t M, int32_t N,
+                                         int32_t K) {
+  for (int32_t row = 0; row < M; ++row) {
+    // Row of A @ B.
+    std::vector<float> scores(static_cast<std::size_t>(N), 0.0f);
+    for (int32_t k = 0; k < K; ++k) {
+      float a = A[static_cast<std::size_t>(row) * K + k];
+      const float* b_row = B + static_cast<std::size_t>(k) * N;
+      for (int32_t n = 0; n < N; ++n) scores[n] += a * b_row[n];
+    }
+    // Row-wise softmax.
+    float row_max = -std::numeric_limits<float>::infinity();
+    for (int32_t n = 0; n < N; ++n) row_max = std::max(row_max, scores[n]);
+    float denom = 0.0f;
+    for (int32_t n = 0; n < N; ++n) {
+      scores[n] = std::exp(scores[n] - row_max);
+      denom += scores[n];
+    }
+    float* out_row = O + static_cast<std::size_t>(row) * N;
+    if (denom == 0.0f) {
+      for (int32_t n = 0; n < N; ++n) out_row[n] = 0.0f;
+    } else {
+      float inv = 1.0f / denom;
+      for (int32_t n = 0; n < N; ++n) out_row[n] = scores[n] * inv;
+    }
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_matmul_softmax_f32(const float* A,
+                                                     const float* B, float* O,
+                                                     int32_t M, int32_t N,
+                                                     int32_t K) {
+  if (N > 256) {
+    reference_matmul_softmax_f32(A, B, O, M, N, K);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_matmul_softmax_msl(ctx, A, B, O, M, N, K)) return;
+  reference_matmul_softmax_f32(A, B, O, M, N, K);
 }

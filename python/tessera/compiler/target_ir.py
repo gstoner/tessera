@@ -174,6 +174,54 @@ _APPLE_GPU_GELU_MSL_SOURCE = (
 _APPLE_GPU_GELU_MSL_CACHE_KEY = _sha256_short(_APPLE_GPU_GELU_MSL_SOURCE)
 
 
+# Phase 8.4.3 — embedded MSL source for the fused matmul -> softmax(axis=-1)
+# kernel. One thread per output row: computes the row of A@B into a stack
+# array, then row-wise softmax in place. Cap N <= 256 to keep the stack
+# array bounded. Carrying the source inline here keeps the Target IR a
+# self-contained record of what the runtime actually compiles.
+_APPLE_GPU_MATMUL_SOFTMAX_MSL_SOURCE = (
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "kernel void matmul_softmax_f32(\n"
+    "    device const float* A   [[buffer(0)]],\n"
+    "    device const float* B   [[buffer(1)]],\n"
+    "    device float*       O   [[buffer(2)]],\n"
+    "    constant int&       M   [[buffer(3)]],\n"
+    "    constant int&       N   [[buffer(4)]],\n"
+    "    constant int&       K   [[buffer(5)]],\n"
+    "    uint gid [[thread_position_in_grid]])\n"
+    "{\n"
+    "    if (gid >= (uint)M) return;\n"
+    "    if (N > 256) return;\n"
+    "    int row = (int)gid;\n"
+    "    float scores[256];\n"
+    "    int a_off = row * K;\n"
+    "    for (int n = 0; n < N; ++n) scores[n] = 0.0f;\n"
+    "    for (int k = 0; k < K; ++k) {\n"
+    "        float a = A[a_off + k];\n"
+    "        int b_off = k * N;\n"
+    "        for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];\n"
+    "    }\n"
+    "    float row_max = -INFINITY;\n"
+    "    for (int n = 0; n < N; ++n) row_max = max(row_max, scores[n]);\n"
+    "    float denom = 0.0f;\n"
+    "    for (int n = 0; n < N; ++n) {\n"
+    "        scores[n] = exp(scores[n] - row_max);\n"
+    "        denom += scores[n];\n"
+    "    }\n"
+    "    int o_off = row * N;\n"
+    "    if (denom == 0.0f) {\n"
+    "        for (int n = 0; n < N; ++n) O[o_off + n] = 0.0f;\n"
+    "    } else {\n"
+    "        float inv = 1.0f / denom;\n"
+    "        for (int n = 0; n < N; ++n) O[o_off + n] = scores[n] * inv;\n"
+    "    }\n"
+    "}\n"
+)
+
+_APPLE_GPU_MATMUL_SOFTMAX_MSL_CACHE_KEY = _sha256_short(_APPLE_GPU_MATMUL_SOFTMAX_MSL_SOURCE)
+
+
 def _diagnostic_level(severity: str) -> DiagnosticLevel:
     return {
         "fatal": DiagnosticLevel.FATAL,
@@ -403,29 +451,121 @@ def lower_tile_to_target_ir(tile_module: TileIRModule, *, target_kind: str) -> T
         target_kind == APPLE_GPU_TARGET
         and _apple_gpu_module_is_mps_runtime(tile_module)
     )
+    apple_gpu_fusion_kind = (
+        _apple_gpu_module_fusion_kind(tile_module)
+        if apple_gpu_runtime_flag else None
+    )
     for tile_fn in tile_module.functions:
-        target_module.functions.append(TargetFunction(
-            name=tile_fn.name,
-            target=target_kind,
-            body=_lower_tile_ops(
+        if apple_gpu_fusion_kind is not None:
+            # Phase 8.4.3: a recognized fusion chain emits a single fused
+            # msl_kernel + mps_dispatch pair, regardless of how many tile
+            # ops the chain decomposed into. The per-op walk is bypassed
+            # entirely for fusion modules so we don't double-emit.
+            body = _lower_apple_gpu_fusion(tile_fn, apple_gpu_fusion_kind)
+        else:
+            body = _lower_tile_ops(
                 tile_fn.body,
                 target_kind=target_kind,
                 apple_gpu_mps_runtime=apple_gpu_runtime_flag,
-            ),
+            )
+        target_module.functions.append(TargetFunction(
+            name=tile_fn.name,
+            target=target_kind,
+            body=body,
         ))
     return target_module
 
 
+def _apple_gpu_module_fusion_kind(tile_module: TileIRModule) -> str | None:
+    """Phase 8.4.3 — when a Tile IR module's compute ops resolve to a
+    recognized fusion chain, return its kind. None otherwise. The runtime
+    pipeline pass collapses the chain at the IR layer; this hook is the
+    parallel decision at the Python/object Target IR layer so the emitted
+    metadata + lit-text views stay consistent.
+    """
+
+    if len(tile_module.functions) != 1:
+        return None
+    flat_ops = list(_flatten_tile_ops(tile_module.functions[0].body))
+    compute_ops = [
+        op for op in flat_ops
+        if op.op_name not in {"tile.debug_artifact", "tile.debug_barrier"}
+        and not (
+            op.op_name.startswith("tessera.queue.")
+            or op.op_name in {"tile.async_copy", "tile.wait_async"}
+        )
+    ]
+    if not compute_ops:
+        return None
+    sources = {str(op.attrs.get("source", "")) for op in compute_ops}
+    matmul_sources = {"tessera.matmul", "tessera.gemm"}
+    softmax_sources = {"tessera.softmax", "tessera.softmax_safe"}
+    if (sources & matmul_sources) and (sources & softmax_sources) and (
+        sources <= (matmul_sources | softmax_sources)
+    ):
+        return "matmul_softmax"
+    return None
+
+
+def _lower_apple_gpu_fusion(tile_fn, fusion_kind: str) -> list[TargetOp]:
+    """Phase 8.4.3 — emit the fused msl_kernel + mps_dispatch pair for a
+    recognized fusion chain. The IR carries the embedded MSL source as a
+    StringAttr so the runtime can compile-and-cache it via the same path
+    as single-op MSL kernels."""
+
+    if fusion_kind != "matmul_softmax":
+        raise ValueError(f"unknown apple_gpu fusion kind: {fusion_kind!r}")
+
+    # Identify a representative ordinal/result for the fused emission so the
+    # downstream tooling sees a stable contract. We pick the matmul as the
+    # "head" of the chain — its ordinal/result names the fused operation.
+    flat_ops = list(_flatten_tile_ops(tile_fn.body))
+    head = next(
+        (op for op in flat_ops
+         if op.op_name not in {"tile.debug_artifact", "tile.debug_barrier"}
+         and str(op.attrs.get("source", "")) in {"tessera.matmul", "tessera.gemm"}),
+        None,
+    )
+    if head is None:
+        return []
+    base = _base_attrs(head)
+    return [
+        TargetOp("tessera_apple.gpu.msl_kernel", {
+            **base,
+            "framework": "Metal",
+            "dtype": "f32",
+            "entry_point": "matmul_softmax_f32",
+            "msl_source": _APPLE_GPU_MATMUL_SOFTMAX_MSL_SOURCE,
+            "cache_key": _APPLE_GPU_MATMUL_SOFTMAX_MSL_CACHE_KEY,
+            "fusion": "matmul_softmax",
+            "grid": "rows",
+            "threadgroup": "?x1x1",
+        }),
+        TargetOp("tessera_apple.gpu.mps_dispatch", {
+            "ordinal": base["ordinal"],
+            "queue": "MTLCommandQueue",
+            "framework": "Metal",
+            "execution_mode": "metal_runtime",
+        }),
+    ]
+
+
 def _apple_gpu_module_is_mps_runtime(tile_module: TileIRModule) -> bool:
     """Return True when an apple_gpu Tile IR module qualifies for the runtime
-    path (MPS for matmul, MSL for rope as of Phase 8.4).
+    path (MPS for matmul, MSL for rope/flash_attn/softmax/gelu, or a fused
+    chain like matmul -> softmax as of Phase 8.4.3).
 
-    Conservative: a single function whose flat compute-op stream all carries
-    the same `source` attribute, and that source is in the runtime envelope.
-    Some Graph IR ops decompose into multiple Tile IR ops (rope -> tile.rope +
-    tile.rotary_pair); they all share the source so this still matches.
+    Two cases are accepted:
+      1. Single-source: every compute op carries the same `source`, and that
+         source is in the per-op envelope. Covers Graph IR ops that decompose
+         into multiple Tile IR ops (rope -> tile.rope + tile.rotary_pair).
+      2. Recognized fusion chain (Phase 8.4.3): the compute ops resolve to a
+         pair like {matmul, softmax} when grouped by source, with both in the
+         runtime envelope. The lowering will collapse them to a single
+         msl_kernel emission.
 
-    Name kept for backward compatibility — it now covers MPS + MSL paths.
+    Name kept for backward compatibility — it now covers MPS + MSL +
+    fusion paths.
     """
 
     if len(tile_module.functions) != 1:
@@ -442,11 +582,7 @@ def _apple_gpu_module_is_mps_runtime(tile_module: TileIRModule) -> bool:
     if not compute_ops:
         return False
 
-    sources = {str(op.attrs.get("source", "")) for op in compute_ops}
-    if len(sources) != 1:
-        return False
-    (source,) = sources
-    return source in {
+    single_op_envelope = {
         "tessera.matmul",
         "tessera.gemm",
         "tessera.rope",
@@ -455,6 +591,23 @@ def _apple_gpu_module_is_mps_runtime(tile_module: TileIRModule) -> bool:
         "tessera.softmax_safe",
         "tessera.gelu",
     }
+
+    sources = {str(op.attrs.get("source", "")) for op in compute_ops}
+    if len(sources) == 1:
+        (source,) = sources
+        return source in single_op_envelope
+
+    # Fusion check: matmul -> softmax. Both sources must be in the envelope
+    # and the set itself must match a recognized chain shape.
+    if sources == {"tessera.matmul", "tessera.softmax"} or sources == {
+        "tessera.matmul",
+        "tessera.softmax_safe",
+    } or sources == {"tessera.gemm", "tessera.softmax"} or sources == {
+        "tessera.gemm",
+        "tessera.softmax_safe",
+    }:
+        return True
+    return False
 
 
 def _lower_tile_ops(

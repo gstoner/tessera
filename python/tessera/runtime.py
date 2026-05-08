@@ -1853,12 +1853,16 @@ def _execute_apple_gpu_mps_artifact(artifact: RuntimeArtifact, args: Any) -> Any
 
 
 def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> Any:
-    """Phase 8.3: run an apple_gpu plan from a metadata dict directly.
+    """Phase 8.3 + 8.4: run an apple_gpu plan from a metadata dict directly.
 
-    The Phase 8.3 envelope is single-op rank-2 f32 matmul/gemm — anything
-    outside that envelope is not eligible for the MPS runtime path
-    (`_is_apple_gpu_mps_executable` in driver.py rejects it at compile time,
-    so this dispatcher does not need to handle multi-op programs yet).
+    Single-op programs dispatch through the per-op envelope (matmul/gemm via
+    MPS, rope/flash_attn/softmax/gelu via custom MSL). Phase 8.4.3: a
+    recognized 2-op fusion chain (matmul -> softmax) collapses to a single
+    fused MSL kernel call, skipping the host-side intermediate.
+
+    `_is_apple_gpu_mps_executable` in driver.py rejects anything outside
+    these patterns at compile time, so the per-op fallthrough below is just
+    a defensive guard against gating drift.
     """
 
     import numpy as np
@@ -1870,6 +1874,22 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
         raise ValueError("apple_gpu_mps artifact has no ops")
 
     values = _bind_launch_args(args, arg_names)
+
+    # Phase 8.4.3 — fused chain dispatch. Detect the matmul -> softmax
+    # pattern at the metadata layer and route to the fused kernel.
+    if _apple_gpu_metadata_is_matmul_softmax_chain(ops):
+        first, second = ops[0], ops[1]
+        operands = [_as_numpy(values[name]) for name in first.get("operands", [])]
+        result_name = second.get("result")
+        if not result_name:
+            raise ValueError("matmul_softmax fusion: missing softmax result name")
+        values[str(result_name)] = _apple_gpu_dispatch_matmul_softmax(
+            operands, np
+        )
+        if output_name not in values:
+            raise ValueError(f"artifact did not produce output {output_name!r}")
+        return values[output_name]
+
     for op in ops:
         op_name = str(op.get("op_name", ""))
         result = op.get("result")
@@ -1921,6 +1941,27 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
     if output_name not in values:
         raise ValueError(f"artifact did not produce output {output_name!r}")
     return values[output_name]
+
+
+def _apple_gpu_metadata_is_matmul_softmax_chain(ops: list[dict]) -> bool:
+    """Phase 8.4.3 — check whether the metadata ops form a 2-op
+    matmul -> softmax fusion chain. Mirrors driver.py's compile-time check
+    so the runtime can detect the pattern from artifact metadata alone."""
+
+    if len(ops) != 2:
+        return False
+    first, second = ops[0], ops[1]
+    if str(first.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
+        return False
+    if str(second.get("op_name", "")) not in {"tessera.softmax", "tessera.softmax_safe"}:
+        return False
+    sm_operands = [str(n) for n in second.get("operands") or []]
+    if len(sm_operands) != 1:
+        return False
+    op0 = sm_operands[0]
+    if op0.startswith("%"):
+        op0 = op0[1:]
+    return op0 == str(first.get("result", ""))
 
 
 def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> Any:
@@ -2186,6 +2227,63 @@ def _apple_gpu_gelu_f32() -> Any:
     return sym
 
 
+def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
+    """Phase 8.4.3 — dispatch a fused matmul -> softmax(axis=-1) chain
+    through the apple_gpu runtime shim's purpose-built MSL kernel. Inputs
+    outside the supported envelope (rank, dtype, N>256) fall back to a
+    numpy-equivalent host computation for correctness."""
+
+    if len(operands) != 2:
+        raise ValueError("matmul_softmax fusion requires two operands (A, B)")
+    a = np.asarray(operands[0])
+    b = np.asarray(operands[1])
+    rank2_fast_path = (
+        a.dtype == np.float32 and b.dtype == np.float32
+        and a.ndim == 2 and b.ndim == 2
+        and a.shape[1] == b.shape[0]
+        and b.shape[1] <= 256
+    )
+    if not rank2_fast_path:
+        # Numpy reference — same algorithm; the runtime's stub also takes
+        # this path on non-Darwin builds.
+        scores = np.matmul(a, b)
+        e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+        return e / np.sum(e, axis=-1, keepdims=True)
+
+    if not a.flags.c_contiguous:
+        a = np.ascontiguousarray(a, dtype=np.float32)
+    if not b.flags.c_contiguous:
+        b = np.ascontiguousarray(b, dtype=np.float32)
+    M, K = a.shape
+    N = b.shape[1]
+    out = np.zeros((M, N), dtype=np.float32)
+    fused = _apple_gpu_matmul_softmax_f32()
+    fused(
+        a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        ctypes.c_int32(M),
+        ctypes.c_int32(N),
+        ctypes.c_int32(K),
+    )
+    return out
+
+
+def _apple_gpu_matmul_softmax_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = runtime.tessera_apple_gpu_matmul_softmax_f32
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,  # M
+        ctypes.c_int32,  # N
+        ctypes.c_int32,  # K
+    ]
+    sym.restype = None
+    return sym
+
+
 def _load_apple_gpu_runtime() -> ctypes.CDLL:
     """Phase 8.3: locate or compile the apple_gpu runtime shared library.
 
@@ -2219,6 +2317,7 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_flash_attn_f32")
                 getattr(lib, "tessera_apple_gpu_softmax_f32")
                 getattr(lib, "tessera_apple_gpu_gelu_f32")
+                getattr(lib, "tessera_apple_gpu_matmul_softmax_f32")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

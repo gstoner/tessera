@@ -398,19 +398,70 @@ def is_apple_gpu_msl_op(op_name: str) -> bool:
 
 
 def _is_apple_gpu_mps_executable(cpu_plan: CPUPlan | None) -> bool:
-    """Phase 8.3 + 8.4: a single-op apple_gpu plan is executable when the op is
-    in the runtime envelope — currently matmul/gemm via MPS (Phase 8.3) or rope
-    via custom MSL (Phase 8.4). Multi-op programs keep the metal_artifact
-    contract until the runtime grows fused-kernel coverage.
+    """Phase 8.3 + 8.4: an apple_gpu plan is executable when:
+      - it is a single op in the runtime envelope (matmul/gemm via MPS,
+        rope/flash_attn/softmax/gelu via custom MSL), OR
+      - it is a recognized op chain (Phase 8.4.3: matmul -> softmax fused
+        into a single MSL kernel).
 
-    Name kept for backward compatibility — it now spans MPS + MSL paths.
+    Multi-op programs that don't match a recognized fusion pattern stay on
+    the metal_artifact contract.
+
+    Name kept for backward compatibility — it now spans MPS + MSL +
+    fusion paths.
     """
 
     if cpu_plan is None or cpu_plan.target_kind != "apple_gpu":
         return False
-    if len(cpu_plan.ops) != 1:
-        return False
-    return cpu_plan.ops[0].op_name in _APPLE_GPU_RUNTIME_OPS
+    if len(cpu_plan.ops) == 1:
+        return cpu_plan.ops[0].op_name in _APPLE_GPU_RUNTIME_OPS
+    return _apple_gpu_chain_kind(cpu_plan) is not None
+
+
+def _apple_gpu_chain_kind(cpu_plan: CPUPlan | None) -> str | None:
+    """Phase 8.4.3: classify multi-op apple_gpu plans against the recognized
+    fusion patterns. Returns the chain kind ("matmul_softmax" today) or None
+    when the plan does not match a fusion pattern.
+
+    A matmul -> softmax chain qualifies when:
+      - the plan has exactly 2 ops in this order
+      - the matmul's result is the softmax's only operand (single-use
+        consumed by the next op)
+      - softmax kwargs imply axis=-1 (default; missing axis is acceptable)
+    """
+
+    if cpu_plan is None or cpu_plan.target_kind != "apple_gpu":
+        return None
+    if len(cpu_plan.ops) != 2:
+        return None
+    first, second = cpu_plan.ops[0], cpu_plan.ops[1]
+    if first.op_name not in {"tessera.matmul", "tessera.gemm"}:
+        return None
+    if second.op_name not in {"tessera.softmax", "tessera.softmax_safe"}:
+        return None
+    # The softmax must consume the matmul's named result. cpu_plan.ops carry
+    # SSA-like operand names; the second op's first operand should match the
+    # first op's result name (with optional leading '%').
+    if not first.result:
+        return None
+    if not second.operands:
+        return None
+    sm_op0 = second.operands[0]
+    if sm_op0.startswith("%"):
+        sm_op0 = sm_op0[1:]
+    if sm_op0 != first.result:
+        return None
+    # axis=-1 only — the GPU kernel softmaxes the innermost dim.
+    axis = second.kwargs.get("axis", -1) if hasattr(second, "kwargs") else -1
+    if axis not in {-1, None}:
+        # numpy-style axis=1 on a rank-2 tensor is also "innermost"; we
+        # accept it. Anything else falls back.
+        try:
+            if int(axis) != -1 and int(axis) != 1:
+                return None
+        except (TypeError, ValueError):
+            return None
+    return "matmul_softmax"
 
 
 def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> LoweringArtifact | None:
@@ -430,34 +481,40 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
         ])
         return LoweringArtifact("backend", text)
     if target_kind == "apple_gpu" and _is_apple_gpu_mps_executable(cpu_plan):
-        # Pick the runtime symbol/framework pair based on which op is in the
-        # plan. matmul/gemm route to MPS (Phase 8.3); rope routes to the
-        # custom MSL kernel emitted by the runtime shim (Phase 8.4).
-        only_op = cpu_plan.ops[0].op_name
-        if only_op in _APPLE_GPU_MPS_OPS:
-            symbol = "tessera_apple_gpu_mps_matmul_f32"
-            framework = "MetalPerformanceShaders"
-            abi = "MPSMatrixMultiplication"
-        elif only_op == "tessera.rope":
-            symbol = "tessera_apple_gpu_rope_f32"
-            framework = "Metal"
-            abi = "MSLComputePipelineState"
-        elif only_op == "tessera.flash_attn":
-            symbol = "tessera_apple_gpu_flash_attn_f32"
-            framework = "Metal"
-            abi = "MSLComputePipelineState"
-        elif only_op in {"tessera.softmax", "tessera.softmax_safe"}:
-            symbol = "tessera_apple_gpu_softmax_f32"
-            framework = "Metal"
-            abi = "MSLComputePipelineState"
-        elif only_op == "tessera.gelu":
-            symbol = "tessera_apple_gpu_gelu_f32"
+        # Pick the runtime symbol/framework pair based on which op (or chain)
+        # is in the plan. Single-op cases route to one of the per-op kernels;
+        # recognized fusion chains route to a fused kernel (Phase 8.4.3).
+        chain = _apple_gpu_chain_kind(cpu_plan)
+        if chain == "matmul_softmax":
+            symbol = "tessera_apple_gpu_matmul_softmax_f32"
             framework = "Metal"
             abi = "MSLComputePipelineState"
         else:
-            symbol = "tessera_apple_gpu_unknown"
-            framework = "Metal"
-            abi = "unknown"
+            only_op = cpu_plan.ops[0].op_name
+            if only_op in _APPLE_GPU_MPS_OPS:
+                symbol = "tessera_apple_gpu_mps_matmul_f32"
+                framework = "MetalPerformanceShaders"
+                abi = "MPSMatrixMultiplication"
+            elif only_op == "tessera.rope":
+                symbol = "tessera_apple_gpu_rope_f32"
+                framework = "Metal"
+                abi = "MSLComputePipelineState"
+            elif only_op == "tessera.flash_attn":
+                symbol = "tessera_apple_gpu_flash_attn_f32"
+                framework = "Metal"
+                abi = "MSLComputePipelineState"
+            elif only_op in {"tessera.softmax", "tessera.softmax_safe"}:
+                symbol = "tessera_apple_gpu_softmax_f32"
+                framework = "Metal"
+                abi = "MSLComputePipelineState"
+            elif only_op == "tessera.gelu":
+                symbol = "tessera_apple_gpu_gelu_f32"
+                framework = "Metal"
+                abi = "MSLComputePipelineState"
+            else:
+                symbol = "tessera_apple_gpu_unknown"
+                framework = "Metal"
+                abi = "unknown"
         text = "\n".join([
             'module attributes {tessera.ir.level = "backend", target = "apple_gpu", execution_mode = "metal_runtime"} {',
             '  "tessera_apple.gpu.runtime_pipeline"() {',

@@ -115,19 +115,36 @@ def test_jit_apple_gpu_target_emits_mps_runtime_for_single_matmul():
     assert 'execution_mode = "metal_runtime"' in mm.target_ir
 
 
-def test_jit_apple_gpu_multi_op_keeps_metal_artifact_contract():
-    """Phase 8.3 — multi-op programs stay on the artifact-only path. The
-    metal_kernel + metallib dispatch shape is the gate Phase 8.4 must explicitly
-    cross when adding custom MSL kernels."""
+def test_jit_apple_gpu_matmul_softmax_chain_emits_fused_msl_runtime_contract():
+    """Phase 8.4.3 — the matmul -> softmax chain is the first recognized
+    fusion. Both ops collapse into a single fused MSL kernel, flipping the
+    program from metal_artifact to metal_runtime."""
 
     @ts.jit(target="apple_gpu")
-    def fused(x, w):
-        return ts.ops.softmax(ts.ops.matmul(x, w))
+    def fused(A, B):
+        return ts.ops.softmax(ts.ops.matmul(A, B))
 
     assert 'target = "apple_gpu"' in fused.target_ir
-    assert "tessera_apple.gpu.metal_kernel" in fused.target_ir
-    assert "tessera_apple.gpu.dispatch" in fused.target_ir
-    assert 'artifact = "metallib"' in fused.target_ir
+    assert "tessera_apple.gpu.msl_kernel" in fused.target_ir
+    assert 'entry_point = "matmul_softmax_f32"' in fused.target_ir
+    assert 'fusion = "matmul_softmax"' in fused.target_ir
+    assert 'execution_mode = "metal_runtime"' in fused.target_ir
+
+
+def test_jit_apple_gpu_unrecognized_multi_op_keeps_metal_artifact_contract():
+    """Multi-op programs that don't match a known fusion pattern stay on
+    the artifact path. matmul -> gelu is a clean negative case — both ops
+    are individually in the runtime envelope but the chain itself isn't a
+    recognized fusion (yet)."""
+
+    @ts.jit(target="apple_gpu")
+    def chain(x, w):
+        return ts.ops.gelu(ts.ops.matmul(x, w))
+
+    assert 'target = "apple_gpu"' in chain.target_ir
+    assert "tessera_apple.gpu.metal_kernel" in chain.target_ir
+    assert "tessera_apple.gpu.dispatch" in chain.target_ir
+    assert 'artifact = "metallib"' in chain.target_ir
 
 
 def test_flash_attention_apple_gpu_gets_msl_runtime_contract():

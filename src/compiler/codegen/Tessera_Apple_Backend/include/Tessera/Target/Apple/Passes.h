@@ -50,6 +50,12 @@ std::unique_ptr<::mlir::Pass> createLowerSoftmaxToAppleGPUPass();
 /// custom-MSL gelu kernel. Phase 8.4.2.
 std::unique_ptr<::mlir::Pass> createLowerGeluToAppleGPUPass();
 
+/// Fused tessera.matmul → tessera.softmax (rank-2, f32, axis=-1, N <= 256)
+/// → func.call into the Apple GPU runtime shim's fused custom-MSL kernel.
+/// Phase 8.4.3 — first multi-op fusion. Must run before the single-op
+/// matmul/softmax passes so the chain rewrite wins.
+std::unique_ptr<::mlir::Pass> createLowerMatmulSoftmaxFusionToAppleGPUPass();
+
 /// Register the Apple Silicon dialect into a DialectRegistry. Convenience
 /// wrapper that forwards to registerAppleDialect from TesseraAppleDialect.h.
 void registerTesseraAppleBackendDialects(::mlir::DialectRegistry &registry);

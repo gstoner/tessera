@@ -174,6 +174,135 @@ _APPLE_GPU_GELU_MSL_SOURCE = (
 _APPLE_GPU_GELU_MSL_CACHE_KEY = _sha256_short(_APPLE_GPU_GELU_MSL_SOURCE)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 8.4.4.1 — fp16 / bf16 MSL source constants for the simple kernels.
+# fp16: native MSL `half` kernels with `float` internal compute for accuracy.
+# bf16: emit a `bf16` cache_key marker; the runtime shim dispatches the
+#       fp32-conversion path internally (no native MSL bf16 source).
+# ─────────────────────────────────────────────────────────────────────────────
+
+_APPLE_GPU_ROPE_MSL_SOURCE_F16 = (
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "kernel void rope_f16(\n"
+    "    device const half*  x      [[buffer(0)]],\n"
+    "    device const half*  theta  [[buffer(1)]],\n"
+    "    device half*        out    [[buffer(2)]],\n"
+    "    constant int&       M      [[buffer(3)]],\n"
+    "    constant int&       K      [[buffer(4)]],\n"
+    "    uint2 gid [[thread_position_in_grid]])\n"
+    "{\n"
+    "    if (gid.x >= (uint)(K / 2) || gid.y >= (uint)M) return;\n"
+    "    int row = (int)gid.y;\n"
+    "    int pair = (int)gid.x;\n"
+    "    int idx_even = row * K + pair * 2;\n"
+    "    int idx_odd  = idx_even + 1;\n"
+    "    float xe = float(x[idx_even]);\n"
+    "    float xo = float(x[idx_odd]);\n"
+    "    float c = cos(float(theta[idx_even]));\n"
+    "    float s = sin(float(theta[idx_even]));\n"
+    "    out[idx_even] = half(xe * c - xo * s);\n"
+    "    out[idx_odd]  = half(xe * s + xo * c);\n"
+    "}\n"
+)
+_APPLE_GPU_ROPE_MSL_CACHE_KEY_F16 = _sha256_short(_APPLE_GPU_ROPE_MSL_SOURCE_F16)
+
+_APPLE_GPU_SOFTMAX_MSL_SOURCE_F16 = (
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "kernel void softmax_f16(\n"
+    "    device const half*  x   [[buffer(0)]],\n"
+    "    device half*        out [[buffer(1)]],\n"
+    "    constant int&       M   [[buffer(2)]],\n"
+    "    constant int&       K   [[buffer(3)]],\n"
+    "    uint gid [[thread_position_in_grid]])\n"
+    "{\n"
+    "    if (gid >= (uint)M) return;\n"
+    "    int row = (int)gid;\n"
+    "    int row_off = row * K;\n"
+    "    float row_max = -INFINITY;\n"
+    "    for (int j = 0; j < K; ++j) row_max = max(row_max, float(x[row_off + j]));\n"
+    "    float denom = 0.0f;\n"
+    "    for (int j = 0; j < K; ++j) {\n"
+    "        float e = exp(float(x[row_off + j]) - row_max);\n"
+    "        out[row_off + j] = half(e);\n"
+    "        denom += e;\n"
+    "    }\n"
+    "    float inv = 1.0f / denom;\n"
+    "    for (int j = 0; j < K; ++j) out[row_off + j] = half(float(out[row_off + j]) * inv);\n"
+    "}\n"
+)
+_APPLE_GPU_SOFTMAX_MSL_CACHE_KEY_F16 = _sha256_short(_APPLE_GPU_SOFTMAX_MSL_SOURCE_F16)
+
+_APPLE_GPU_GELU_MSL_SOURCE_F16 = (
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "kernel void gelu_f16(\n"
+    "    device const half*  x   [[buffer(0)]],\n"
+    "    device half*        out [[buffer(1)]],\n"
+    "    constant int&       N   [[buffer(2)]],\n"
+    "    uint gid [[thread_position_in_grid]])\n"
+    "{\n"
+    "    if (gid >= (uint)N) return;\n"
+    "    float v = float(x[gid]);\n"
+    "    float t = 0.7978845608028654f * (v + 0.044715f * v * v * v);\n"
+    "    out[gid] = half(0.5f * v * (1.0f + tanh(t)));\n"
+    "}\n"
+)
+_APPLE_GPU_GELU_MSL_CACHE_KEY_F16 = _sha256_short(_APPLE_GPU_GELU_MSL_SOURCE_F16)
+
+
+# bf16 doesn't get native MSL kernels in Phase 8.4.4.1 — the runtime shim
+# does fp32 conversion at the boundary then dispatches the existing f32
+# kernel. The IR-level marker reuses the f32 source text but flips the
+# entry_point + cache_key + dtype attr so downstream tooling can tell the
+# difference. Same shape as Phase 8.4.4 bf16 matmul (no native MPS bf16).
+def _apple_gpu_kernel_msl_for_dtype(
+    kernel: str, dtype: str
+) -> tuple[str, str, str, str]:
+    """Return (msl_source, entry_point, cache_key, dtype) for the given
+    (kernel, dtype) pair. dtype is one of {"f32", "f16", "bf16"}."""
+
+    if kernel == "rope":
+        if dtype == "f16":
+            return (_APPLE_GPU_ROPE_MSL_SOURCE_F16, "rope_f16",
+                    _APPLE_GPU_ROPE_MSL_CACHE_KEY_F16, "f16")
+        if dtype == "bf16":
+            return (_APPLE_GPU_ROPE_MSL_SOURCE, "rope_bf16",
+                    _APPLE_GPU_ROPE_MSL_CACHE_KEY, "bf16")
+        return (_APPLE_GPU_ROPE_MSL_SOURCE, "rope_f32",
+                _APPLE_GPU_ROPE_MSL_CACHE_KEY, "f32")
+    if kernel == "softmax":
+        if dtype == "f16":
+            return (_APPLE_GPU_SOFTMAX_MSL_SOURCE_F16, "softmax_f16",
+                    _APPLE_GPU_SOFTMAX_MSL_CACHE_KEY_F16, "f16")
+        if dtype == "bf16":
+            return (_APPLE_GPU_SOFTMAX_MSL_SOURCE, "softmax_bf16",
+                    _APPLE_GPU_SOFTMAX_MSL_CACHE_KEY, "bf16")
+        return (_APPLE_GPU_SOFTMAX_MSL_SOURCE, "softmax_f32",
+                _APPLE_GPU_SOFTMAX_MSL_CACHE_KEY, "f32")
+    if kernel == "gelu":
+        if dtype == "f16":
+            return (_APPLE_GPU_GELU_MSL_SOURCE_F16, "gelu_f16",
+                    _APPLE_GPU_GELU_MSL_CACHE_KEY_F16, "f16")
+        if dtype == "bf16":
+            return (_APPLE_GPU_GELU_MSL_SOURCE, "gelu_bf16",
+                    _APPLE_GPU_GELU_MSL_CACHE_KEY, "bf16")
+        return (_APPLE_GPU_GELU_MSL_SOURCE, "gelu_f32",
+                _APPLE_GPU_GELU_MSL_CACHE_KEY, "f32")
+    raise ValueError(f"unknown apple_gpu kernel: {kernel!r}")
+
+
+def _apple_gpu_dtype_from_op(op) -> str:
+    """Pick a runtime-supported dtype from a tile op's attrs. Defaults to f32
+    when the attr is absent or not in the supported envelope."""
+
+    raw = str(op.attrs.get("dtype", "f32"))
+    if raw in {"f32", "f16", "bf16"}:
+        return raw
+    return "f32"
+
+
 # Phase 8.4.3 — embedded MSL source for the fused matmul -> softmax(axis=-1)
 # kernel. One thread per output row: computes the row of A@B into a stack
 # array, then row-wise softmax in place. Cap N <= 256 to keep the stack
@@ -823,21 +952,27 @@ def _lower_apple_gpu_op(op: TileOp, *, mps_runtime: bool = False) -> list[Target
                 "execution_mode": "metal_runtime",
             }),
         ]
-    # Phase 8.4 custom MSL path: a single-rope module is lowered to
+    # Phase 8.4 + 8.4.4.1 custom MSL path: a single-rope module is lowered to
     # msl_kernel + mps_dispatch carrying the MSL source as a StringAttr. The
     # RopeToAppleGPU pass and the apple_gpu_runtime.mm shim consume this op.
+    # dtype attr (Phase 8.4.4.1) picks between f32 / f16 / bf16 source +
+    # entry point.
     if mps_runtime and (
         op.op_name in {"tile.rotary_pair", "tile.rope"}
         or source == "tessera.rope"
     ):
+        dtype = _apple_gpu_dtype_from_op(op)
+        msl_source, entry_point, cache_key, dtype_attr = (
+            _apple_gpu_kernel_msl_for_dtype("rope", dtype)
+        )
         return [
             TargetOp("tessera_apple.gpu.msl_kernel", {
                 **base,
                 "framework": "Metal",
-                "dtype": "f32",
-                "entry_point": "rope_f32",
-                "msl_source": _APPLE_GPU_ROPE_MSL_SOURCE,
-                "cache_key": _APPLE_GPU_ROPE_MSL_CACHE_KEY,
+                "dtype": dtype_attr,
+                "entry_point": entry_point,
+                "msl_source": msl_source,
+                "cache_key": cache_key,
                 "grid": "tokens_pairs",
                 "threadgroup": "32x?",
             }),
@@ -871,16 +1006,21 @@ def _lower_apple_gpu_op(op: TileOp, *, mps_runtime: bool = False) -> list[Target
                 "execution_mode": "metal_runtime",
             }),
         ]
-    # Phase 8.4.2 custom MSL path: single-softmax (axis=-1) module.
+    # Phase 8.4.2 + 8.4.4.1 custom MSL path: single-softmax (axis=-1) module
+    # with dtype-aware MSL source selection.
     if mps_runtime and source in {"tessera.softmax", "tessera.softmax_safe"}:
+        dtype = _apple_gpu_dtype_from_op(op)
+        msl_source, entry_point, cache_key, dtype_attr = (
+            _apple_gpu_kernel_msl_for_dtype("softmax", dtype)
+        )
         return [
             TargetOp("tessera_apple.gpu.msl_kernel", {
                 **base,
                 "framework": "Metal",
-                "dtype": "f32",
-                "entry_point": "softmax_f32",
-                "msl_source": _APPLE_GPU_SOFTMAX_MSL_SOURCE,
-                "cache_key": _APPLE_GPU_SOFTMAX_MSL_CACHE_KEY,
+                "dtype": dtype_attr,
+                "entry_point": entry_point,
+                "msl_source": msl_source,
+                "cache_key": cache_key,
                 "grid": "rows",
                 "threadgroup": "?x1x1",
             }),
@@ -891,16 +1031,21 @@ def _lower_apple_gpu_op(op: TileOp, *, mps_runtime: bool = False) -> list[Target
                 "execution_mode": "metal_runtime",
             }),
         ]
-    # Phase 8.4.2 custom MSL path: single-gelu (elementwise) module.
+    # Phase 8.4.2 + 8.4.4.1 custom MSL path: single-gelu (elementwise) module
+    # with dtype-aware MSL source selection.
     if mps_runtime and source == "tessera.gelu":
+        dtype = _apple_gpu_dtype_from_op(op)
+        msl_source, entry_point, cache_key, dtype_attr = (
+            _apple_gpu_kernel_msl_for_dtype("gelu", dtype)
+        )
         return [
             TargetOp("tessera_apple.gpu.msl_kernel", {
                 **base,
                 "framework": "Metal",
-                "dtype": "f32",
-                "entry_point": "gelu_f32",
-                "msl_source": _APPLE_GPU_GELU_MSL_SOURCE,
-                "cache_key": _APPLE_GPU_GELU_MSL_CACHE_KEY,
+                "dtype": dtype_attr,
+                "entry_point": entry_point,
+                "msl_source": msl_source,
+                "cache_key": cache_key,
                 "grid": "elements",
                 "threadgroup": "?x1x1",
             }),

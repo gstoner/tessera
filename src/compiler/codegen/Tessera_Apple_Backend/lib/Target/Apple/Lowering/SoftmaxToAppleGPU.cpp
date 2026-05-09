@@ -37,6 +37,10 @@ namespace {
 
 constexpr llvm::StringLiteral kSoftmaxF32Symbol =
     "tessera_apple_gpu_softmax_f32";
+constexpr llvm::StringLiteral kSoftmaxF16Symbol =
+    "tessera_apple_gpu_softmax_f16";
+constexpr llvm::StringLiteral kSoftmaxBF16Symbol =
+    "tessera_apple_gpu_softmax_bf16";
 
 static func::FuncOp ensureExternalDecl(ModuleOp mod, StringRef name,
                                        FunctionType fnTy) {
@@ -69,9 +73,18 @@ struct LowerSoftmaxToAppleGPU : public RewritePattern {
     if (!xTy || xTy.getRank() != 2)
       return rewriter.notifyMatchFailure(
           op, "AppleGPU softmax MSL path is rank-2 only in Phase 8.4.2");
-    if (!xTy.getElementType().isF32())
+    Type xElem = xTy.getElementType();
+    StringRef symbol;
+    if (xElem.isF32()) {
+      symbol = kSoftmaxF32Symbol;
+    } else if (xElem.isF16()) {
+      symbol = kSoftmaxF16Symbol;
+    } else if (xElem.isBF16()) {
+      symbol = kSoftmaxBF16Symbol;
+    } else {
       return rewriter.notifyMatchFailure(
-          op, "AppleGPU softmax MSL path is f32-only in Phase 8.4.2");
+          op, "AppleGPU softmax MSL path supports f32, f16, and bf16 in Phase 8.4.4.1");
+    }
     if (xTy.isDynamicDim(0) || xTy.isDynamicDim(1))
       return rewriter.notifyMatchFailure(
           op, "AppleGPU softmax MSL path requires static shapes");
@@ -94,9 +107,8 @@ struct LowerSoftmaxToAppleGPU : public RewritePattern {
 
     Type i64Ty = rewriter.getI64Type();
     Type i32Ty = rewriter.getI32Type();
-    Type f32Ty = rewriter.getF32Type();
 
-    auto memTy = MemRefType::get({M, K}, f32Ty);
+    auto memTy = MemRefType::get({M, K}, xElem);
     Value xPtr = extractPtr(rewriter, loc, x, memTy);
     auto outAlloc = rewriter.create<memref::AllocOp>(loc, memTy);
     Value outPtr;
@@ -111,13 +123,13 @@ struct LowerSoftmaxToAppleGPU : public RewritePattern {
 
     FunctionType fnTy =
         FunctionType::get(ctx, {i64Ty, i64Ty, i32Ty, i32Ty}, {});
-    ensureExternalDecl(mod, kSoftmaxF32Symbol, fnTy);
+    ensureExternalDecl(mod, symbol, fnTy);
 
     rewriter.create<func::CallOp>(
-        loc, kSoftmaxF32Symbol, TypeRange{},
+        loc, symbol, TypeRange{},
         ValueRange{xPtr, outPtr, Mv, Kv});
 
-    auto outTensorTy = RankedTensorType::get({M, K}, f32Ty);
+    auto outTensorTy = RankedTensorType::get({M, K}, xElem);
     Value result =
         rewriter.create<bufferization::ToTensorOp>(loc, outTensorTy, outAlloc);
     rewriter.replaceOp(op, result);
@@ -134,8 +146,8 @@ struct LowerSoftmaxToAppleGPUPass
     return "tessera-softmax-to-apple_gpu";
   }
   StringRef getDescription() const override {
-    return "Lower tessera.softmax (rank-2, f32, axis=-1) to Apple GPU "
-           "runtime calls (custom MSL kernel)";
+    return "Lower tessera.softmax (rank-2, f32/f16/bf16, axis=-1) to Apple "
+           "GPU runtime calls (custom MSL kernel)";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {

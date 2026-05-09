@@ -334,24 +334,38 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             x = x._data
         return x / (1.0 + np.exp(-x))
 
-    def swiglu(x, W_gate, W_up, W_down):
-        """Reference SwiGLU MLP block: gemm(silu(x @ W_gate) * (x @ W_up), W_down).
+    def silu_mul(a, b):
+        """Fused SiLU-and-multiply primitive: silu(a) * b.
 
-        Numpy reference path; Phase 3+ will lower to a fused MLP-block kernel
-        (see Apple GPU's matmul→{gelu,rmsnorm} fusions in `apple_gpu_overview.md`
-        for the lowering pattern this op is meant to compose into).
+        Single op (rather than `mul(silu(a), b)`) so the Schedule IR fusion
+        recognizer can match the SwiGLU 3-op chain `matmul → silu_mul → matmul`
+        and emit a fused `tessera.swiglu_fused` op for backends that ship a
+        fused MLP-block kernel (Apple GPU MSL, NVIDIA WGMMA epilogue, etc.).
         """
-        if hasattr(x, "_data"):
-            x = x._data
-        if hasattr(W_gate, "_data"):
-            W_gate = W_gate._data
-        if hasattr(W_up, "_data"):
-            W_up = W_up._data
-        if hasattr(W_down, "_data"):
-            W_down = W_down._data
-        gate = np.matmul(x, W_gate)
-        up = np.matmul(x, W_up)
-        return np.matmul(silu(gate) * up, W_down)
+        if hasattr(a, "_data"):
+            a = a._data
+        if hasattr(b, "_data"):
+            b = b._data
+        a = np.asarray(a)
+        b = np.asarray(b)
+        s = a / (1.0 + np.exp(-a))
+        return s * b
+
+    def swiglu(x, W_gate, W_up, W_down):
+        """SwiGLU MLP block decomposed as `gemm → gemm → silu_mul → gemm`.
+
+        Calls into the wrapped ops (`ops.gemm`, `ops.silu_mul`) so an active
+        autodiff tape records the four primitives. The Schedule IR fusion
+        recognizer matches this chain and emits `tessera.swiglu_fused` for
+        backends with a fused MLP-block kernel (Apple GPU MSL, NVIDIA WGMMA
+        epilogue, etc.).
+        """
+        # Resolve via the namespace at call time so the wrapped versions
+        # (installed by autodiff.install_op_wrappers) are picked up.
+        gate = ops.gemm(x, W_gate)
+        up = ops.gemm(x, W_up)
+        hidden = ops.silu_mul(gate, up)
+        return ops.gemm(hidden, W_down)
 
     def sin(x):
         if hasattr(x, "_data"):
@@ -1320,7 +1334,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "sigmoid": sigmoid,
         "sin": sin,
         "silu": silu,
-        "swiglu": swiglu,
+        "silu_mul": silu_mul,
         "adam": adam,
         "transpose": transpose,
         "cast": cast,
@@ -1403,6 +1417,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         mul=mul,
         relu=relu,
         silu=silu,
+        silu_mul=silu_mul,
         swiglu=swiglu,
         rmsnorm=rmsnorm,
         rmsnorm_safe=rmsnorm_safe,

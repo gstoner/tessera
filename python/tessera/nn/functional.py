@@ -45,14 +45,14 @@ def rms_norm(x, weight=None, eps: float = 1e-5):
 def swiglu(x, W_gate, W_up, W_down):
     """SwiGLU MLP block: (silu(x @ W_gate) * (x @ W_up)) @ W_down.
 
-    Composed through primitive ops (`gemm` / `silu` / `mul`) so the autodiff
-    tape sees every step. Drop into `ops.swiglu` directly for a single-op
-    shortcut when not differentiating.
+    Composed through primitive ops (`gemm` / `silu_mul` / `gemm`) so the
+    autodiff tape sees every step AND the Schedule IR fusion recognizer
+    matches the `matmul → silu_mul → matmul` chain. Functionally equivalent
+    to `ops.swiglu(...)`; either spelling works.
     """
     gate = ops.gemm(x, W_gate)
     up = ops.gemm(x, W_up)
-    activated = ops.silu(gate)
-    hidden = ops.mul(activated, up)
+    hidden = ops.silu_mul(gate, up)
     return ops.gemm(hidden, W_down)
 
 

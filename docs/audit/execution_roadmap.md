@@ -41,18 +41,22 @@ H (Conv2d + remaining nn cleanup, after G picks the layout)
 I (DDP/FSDP — depends on F4+F5 + G)
 ```
 
-**Critical paths:**
-- **G is the highest-leverage phase.** Without NVIDIA execution, the
-  autotuner, FA-4 verification, GPU-only tier, and GPU CI are all dark.
-- **B1 (buffer protocol)** unblocks `BatchNorm1d` (C1) + streaming kernels
-  with state (D).
-- **B2 (`KVCacheHandle` value type)** unblocks Theme 4 entirely (E1–E3) +
-  the `KVCache` Module wrapper (C2).
-- **F4 (Graph IR adjoints) → F5 (effect-aware adjoint collectives) → I
-  (DDP/FSDP).** This chain is the long pole for distributed training.
+**Critical paths (all three chains are now closed as of 2026-05-09 — G is the only remaining frontier):**
+- ✅ **B1 (buffer protocol)** unblocked `BatchNorm1d` (C1) + streaming kernels
+  with state (D). Closed.
+- ✅ **B2 (`KVCacheHandle` value type)** unblocked Theme 4 entirely (E1–E3) +
+  the `KVCache` Module wrapper (C2). Closed.
+- ✅ **F4 (Graph IR adjoints) → F5 (effect-aware adjoint collectives) → I
+  (DDP/FSDP).** This chain — the long pole for distributed training — is
+  closed at v1. F4+F5 verified end-to-end on MLIR 21; I1/I2 ship against
+  mock_collective.
+- 🚧 **G is the highest-leverage remaining phase.** Without NVIDIA execution, the
+  autotuner, FA-4 verification, GPU-only tier, and GPU CI are all dark. G1
+  audit is done; G2–G7 sequenced in `docs/audit/nvidia_execution_audit.md`.
 
-Estimated runway end-to-end: **12–20 weeks** of focused work, parallelizable
-across F + G.
+Estimated remaining runway: **4–8 weeks of focused work on Phase G** (4–6 days
+to first H100 BF16 GEMM per the G1 audit; remainder is sweep + verification +
+CI). All other phases complete.
 
 ---
 
@@ -495,7 +499,6 @@ ship.
 
 | Item | Reason |
 |------|--------|
-| `LSTM` Module (H2) | RNN cell state-propagation needs its own primitive design. No active demand. |
 | Higher-order derivatives (F7) | Niche; high implementation cost. |
 | JAX-style `vmap`/`jacrev`/`jacfwd` (F6) | High cost, unclear payoff for ML training workloads. Tracked. |
 | Module device migration (`to("cuda")`) | Requires a real device handle; tied to Phase G. |
@@ -518,16 +521,41 @@ ship.
 
 ## Phase summary (for at-a-glance scope)
 
-| Phase | LOC est | Wks | Independent? | Unblocks |
-|-------|---------|-----|--------------|----------|
-| A — quick wins | ~1,000 + 600 docs | 1–2 | ✅ all 5 tasks | Theme 1 90% closed; debugging story; autograd-via-flash_attn |
-| B — protocols | ~700 | 1 | sequential within | C, D, E |
-| C — Theme 1 cleanup | ~250 | 0.5 | ✅ within phase | BatchNorm1d, KVCache module |
-| D — streaming | ~1,000 | 2–3 | partly sequential | Jet_nemotron, Nemotron_Nano forward |
-| E — KV-cache | ~700 | 1–2 | sequential within | kv_cache_serving, Fast_dLLM_v2, paged-MLA |
-| F — autodiff follow-ups | ~1,500 | 2–4 | F1+F2+F3 ‖, F4→F5 | distributed training, mixed precision, checkpointing |
-| G — NVIDIA execution | ~2,000 | 4–8 | sequential within | autotuner, FA-4 verification, GPU CI |
-| H — Conv2d Module | ~150 | 0.5 | indep | torch-port examples |
-| I — DDP/FSDP | ~600 | 2 | post-F+G | distributed training at scale |
+| Phase | Status | LOC est | Wks | Independent? | Unblocks |
+|-------|--------|---------|-----|--------------|----------|
+| A — quick wins | ✅ complete | ~1,000 + 600 docs | 1–2 | ✅ all 5 tasks | Theme 1 90% closed; debugging story; autograd-via-flash_attn |
+| B — protocols | ✅ complete | ~700 | 1 | sequential within | C, D, E |
+| C — Theme 1 cleanup | ✅ complete | ~250 | 0.5 | ✅ within phase | BatchNorm1d, KVCache module |
+| D — streaming | ✅ (D3 VJP open) | ~1,000 | 2–3 | partly sequential | Jet_nemotron, Nemotron_Nano forward |
+| E — KV-cache | ✅ complete | ~700 | 1–2 | sequential within | kv_cache_serving, Fast_dLLM_v2, paged-MLA |
+| F — autodiff follow-ups | ✅ in scope (F3-moe, F6, F7 deferred) | ~1,500 | 2–4 | F1+F2+F3 ‖, F4→F5 | distributed training, mixed precision, checkpointing |
+| G — NVIDIA execution | 🚧 G1 audit only; G2–G7 open | ~2,000 | 4–8 | sequential within | autotuner, FA-4 verification, GPU CI |
+| H — Conv2d Module + LSTM | ✅ complete | ~150 | 0.5 | indep | torch-port examples |
+| I — DDP/FSDP | ✅ v1 complete | ~600 | 2 | post-F+G | distributed training at scale |
 
 **Total ~7,900 LOC code + ~3,000 LOC tests + ~1,000 LOC docs over 12–20 weeks.**
+
+---
+
+## Status snapshot — 2026-05-09
+
+**Done:** A, B, C, D (forward), E, F (in scope), H, I.
+
+**Remaining frontier:** **Phase G (NVIDIA execution)** — the only long pole. G1 audit is complete (`docs/audit/nvidia_execution_audit.md`); G2–G7 are open. Per the audit: 4–6 days of focused work to first H100 BF16 GEMM, of which only G1-5/G1-6/G1-8 need real H100 hardware.
+
+**Sequenced next steps for G:**
+1. **G2** — finish wiring `cuda_backend.cpp` per the audit (CUDA-only-no-H100 dev box is sufficient).
+2. **G3** — first WGMMA SM_90 BF16 GEMM end-to-end (Graph IR → Schedule IR → Tile IR → NVIDIA Target IR → PTX → cuBin → launch). This is the unlock; everything downstream is sweep-on-top.
+3. **G4** — TMA descriptors reach runtime launch (depends on G3).
+4. **G5** — FA-4 forward verification on real H100 (needs hardware).
+5. **G6** — autotuner sweep vs cuBLAS baseline (needs hardware).
+6. **G7** — `validate.sh --gpu` CI spine.
+
+**Small cleanup items:**
+- **D3 VJP** — `selective_ssm` chunked-scan adjoint is the only piece D is missing.
+- **F3-moe** — MoE router `custom_rule` VJP (F3 ships `flash_attn` ✅ and `fft`-family ✅; `moe` 🔲).
+
+**Three critical chains called out in the rationale at the top of this doc — all closed:**
+- B1 → C1 + D: ✅ complete (D3 VJP follow-up open)
+- B2 → E1–E3 + C2: ✅ complete
+- F4 → F5 → I (DDP/FSDP): ✅ v1 complete

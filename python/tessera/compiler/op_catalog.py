@@ -47,6 +47,7 @@ _SPECS = [
     OpSpec("mul", "tessera.mul", 1, 2),
     OpSpec("relu", "tessera.relu", 1, 1),
     OpSpec("silu", "tessera.silu", 1, 1),
+    OpSpec("silu_mul", "tessera.silu_mul", 2, 2),
     OpSpec("sigmoid", "tessera.sigmoid", 1, 1),
     OpSpec("sin", "tessera.sin", 1, 1),
     OpSpec("adam", "tessera.adam", 4, 4, lowering="functional_optimizer_step"),

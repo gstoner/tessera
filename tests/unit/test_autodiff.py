@@ -132,6 +132,91 @@ class TestVJPActivations:
         _jacobian_close(analytic, numerical)
 
 
+class TestSiluMul:
+    """Stage 2a — fused silu-and-multiply primitive that backs the SwiGLU
+    decomposition. Forward correctness + per-input numerical-Jacobian VJP
+    check + ops.swiglu chain decomposition on the tape."""
+
+    def test_forward_matches_reference(self):
+        np.random.seed(0)
+        a = np.random.randn(3, 5).astype(np.float64)
+        b = np.random.randn(3, 5).astype(np.float64)
+        out = ts.ops.silu_mul(a, b)
+        expected = (a / (1.0 + np.exp(-a))) * b
+        np.testing.assert_allclose(out, expected)
+
+    def test_vjp_matches_numerical_jacobian(self):
+        np.random.seed(0)
+        a = np.random.randn(3, 5).astype(np.float64)
+        b = np.random.randn(3, 5).astype(np.float64)
+        a_p = ts.nn.Parameter(a.copy())
+        b_p = ts.nn.Parameter(b.copy())
+
+        with ts.autodiff.tape() as t:
+            y = ts.ops.silu_mul(a_p, b_p)
+            loss = ts.ops.reduce(y, op="sum")
+            t.backward(loss)
+
+        def loss_a(arr):
+            return float(((arr / (1.0 + np.exp(-arr))) * b).sum())
+
+        def loss_b(arr):
+            return float(((a / (1.0 + np.exp(-a))) * arr).sum())
+
+        _jacobian_close(a_p.grad.numpy(), _numerical_grad(loss_a, a.copy()))
+        _jacobian_close(b_p.grad.numpy(), _numerical_grad(loss_b, b.copy()))
+
+    def test_swiglu_decomposes_on_tape(self):
+        """ops.swiglu must record matmul → matmul → silu_mul → matmul on the
+        tape, not a single 'swiglu' entry — that's what lets the Schedule IR
+        fusion recognizer match the chain."""
+        np.random.seed(0)
+        x = np.random.randn(2, 4).astype(np.float64)
+        Wg = np.random.randn(4, 8).astype(np.float64)
+        Wu = np.random.randn(4, 8).astype(np.float64)
+        Wd = np.random.randn(8, 4).astype(np.float64)
+
+        with ts.autodiff.tape() as t:
+            ts.ops.swiglu(x, Wg, Wu, Wd)
+
+        op_names = [e.op for e in t.entries]
+        assert "swiglu" not in op_names, (
+            f"ops.swiglu must decompose, not be a single tape entry: {op_names}"
+        )
+        # Three matmuls (gate, up, down) and one silu_mul, in that order.
+        assert op_names == ["gemm", "gemm", "silu_mul", "gemm"], op_names
+
+    def test_swiglu_end_to_end_bptt(self):
+        """All three weight matrices receive correct gradients through the
+        decomposed chain."""
+        np.random.seed(0)
+        x = np.random.randn(2, 4).astype(np.float64)
+        Wg = np.random.randn(4, 8).astype(np.float64)
+        Wu = np.random.randn(4, 8).astype(np.float64)
+        Wd = np.random.randn(8, 4).astype(np.float64)
+
+        Wg_p = ts.nn.Parameter(Wg.copy())
+        Wu_p = ts.nn.Parameter(Wu.copy())
+        Wd_p = ts.nn.Parameter(Wd.copy())
+
+        with ts.autodiff.tape() as t:
+            y = ts.ops.swiglu(x, Wg_p, Wu_p, Wd_p)
+            loss = ts.ops.reduce(y, op="sum")
+            t.backward(loss)
+
+        def loss_at(W, idx):
+            Ws = [Wg.copy(), Wu.copy(), Wd.copy()]
+            Ws[idx] = W
+            gate = x @ Ws[0]
+            up = x @ Ws[1]
+            h = (gate / (1.0 + np.exp(-gate))) * up
+            return float((h @ Ws[2]).sum())
+
+        for W_p, idx in [(Wg_p, 0), (Wu_p, 1), (Wd_p, 2)]:
+            ng = _numerical_grad(lambda W: loss_at(W, idx), W_p._data._data.copy())
+            _jacobian_close(W_p.grad.numpy(), ng)
+
+
 class TestVJPNormsSoftmax:
     def test_softmax(self):
         np.random.seed(0)

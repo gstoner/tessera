@@ -152,6 +152,22 @@ def vjp_silu(dout, x, **_):
     return (dout * (s + x * s * (1.0 - s)),)
 
 
+@_vjp("silu_mul")
+def vjp_silu_mul(dout, a, b, **_):
+    """y = silu(a) * b.
+
+    da = dout * b * d(silu)/da = dout * b * (sig(a) + a * sig(a) * (1 - sig(a)))
+    db = dout * silu(a)
+    """
+    s = 1.0 / (1.0 + np.exp(-a))
+    silu_a = a * s
+    da = dout * b * (s + a * s * (1.0 - s))
+    db = dout * silu_a
+    da = _sum_to_shape(da, a.shape)
+    db = _sum_to_shape(db, b.shape)
+    return (da, db)
+
+
 @_vjp("gelu")
 def vjp_gelu(dout, x, **_):
     """tanh-approx GELU: 0.5 x (1 + tanh(sqrt(2/pi)(x + 0.044715 x^3)))."""

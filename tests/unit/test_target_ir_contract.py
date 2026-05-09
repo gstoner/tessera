@@ -133,13 +133,13 @@ def test_jit_apple_gpu_matmul_softmax_chain_emits_fused_msl_runtime_contract():
 
 def test_jit_apple_gpu_unrecognized_multi_op_keeps_metal_artifact_contract():
     """Multi-op programs that don't match a known fusion pattern stay on
-    the artifact path. matmul -> gelu is a clean negative case — both ops
-    are individually in the runtime envelope but the chain itself isn't a
-    recognized fusion (yet)."""
+    the artifact path. The recognized fusion set has grown over phases —
+    softmax -> matmul (suffix-only, no matmul head) is currently NOT a
+    recognized pattern, so it makes a stable negative case."""
 
     @ts.jit(target="apple_gpu")
     def chain(x, w):
-        return ts.ops.gelu(ts.ops.matmul(x, w))
+        return ts.ops.matmul(ts.ops.softmax(x), w)
 
     assert 'target = "apple_gpu"' in chain.target_ir
     assert "tessera_apple.gpu.metal_kernel" in chain.target_ir

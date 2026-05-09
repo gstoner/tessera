@@ -63,6 +63,16 @@ std::unique_ptr<::mlir::Pass> createLowerMatmulSoftmaxFusionToAppleGPUPass();
 /// the 2-op fusion so the longer chain wins.
 std::unique_ptr<::mlir::Pass> createLowerMatmulSoftmaxMatmulFusionToAppleGPUPass();
 
+/// Fused tessera.matmul → tessera.gelu (rank-2, f32, N <= 256) → func.call
+/// into the Apple GPU runtime shim's matmul_gelu MSL kernel. Phase 8.4.7
+/// — MLP block activation pattern.
+std::unique_ptr<::mlir::Pass> createLowerMatmulGeluFusionToAppleGPUPass();
+
+/// Fused tessera.matmul → tessera.rmsnorm (rank-2, f32, N <= 256) →
+/// func.call into the Apple GPU runtime shim's matmul_rmsnorm MSL kernel.
+/// Phase 8.4.7 — transformer normalization pattern.
+std::unique_ptr<::mlir::Pass> createLowerMatmulRMSNormFusionToAppleGPUPass();
+
 /// Register the Apple Silicon dialect into a DialectRegistry. Convenience
 /// wrapper that forwards to registerAppleDialect from TesseraAppleDialect.h.
 void registerTesseraAppleBackendDialects(::mlir::DialectRegistry &registry);

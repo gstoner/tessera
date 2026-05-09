@@ -493,17 +493,21 @@ def _apple_gpu_chain_kind(cpu_plan: CPUPlan | None) -> str | None:
         ):
             return "matmul_softmax_matmul"
 
-    # Phase 8.4.3: 2-op fusion. matmul -> softmax.
+    # Phase 8.4.3 + 8.4.7: 2-op fusions. matmul -> {softmax | gelu | rmsnorm}.
     if len(ops) == 2:
         first, second = ops[0], ops[1]
         if (
             first.op_name in {"tessera.matmul", "tessera.gemm"}
-            and second.op_name in {"tessera.softmax", "tessera.softmax_safe"}
             and first.result
             and _operand_matches(second, first.result)
-            and _softmax_axis_ok(second)
         ):
-            return "matmul_softmax"
+            if second.op_name in {"tessera.softmax", "tessera.softmax_safe"} \
+                    and _softmax_axis_ok(second):
+                return "matmul_softmax"
+            if second.op_name == "tessera.gelu":
+                return "matmul_gelu"
+            if second.op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}:
+                return "matmul_rmsnorm"
     return None
 
 
@@ -534,6 +538,14 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
             abi = "MSLComputePipelineState"
         elif chain == "matmul_softmax":
             symbol = "tessera_apple_gpu_matmul_softmax_f32"
+            framework = "Metal"
+            abi = "MSLComputePipelineState"
+        elif chain == "matmul_gelu":
+            symbol = "tessera_apple_gpu_matmul_gelu_f32"
+            framework = "Metal"
+            abi = "MSLComputePipelineState"
+        elif chain == "matmul_rmsnorm":
+            symbol = "tessera_apple_gpu_matmul_rmsnorm_f32"
             framework = "Metal"
             abi = "MSLComputePipelineState"
         else:

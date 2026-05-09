@@ -703,18 +703,20 @@ def test_apple_gpu_runtime_shim_exposes_mps_matmul_symbol(tmp_path):
 
 
 def test_apple_gpu_target_keeps_metal_artifact_for_unrecognized_multi_op_programs():
-    """Phase 8.4.3 added the first multi-op fusion (matmul -> softmax). To
-    keep the gate honest, programs that compose ops outside any recognized
-    fusion pattern must still stay on the metal_artifact contract.
-
-    matmul -> gelu is a 2-op chain that is NOT yet a recognized fusion, so
-    it stays artifact-only. (Phase 8.4.x will broaden by adding fusion
-    patterns one-by-one — that broadening is the gate to test against.)
+    """Phase 8.4.3 added the first multi-op fusion. To keep the gate honest,
+    programs that compose ops outside any recognized fusion pattern must
+    still stay on the metal_artifact contract. Each Phase 8.4.x adds a
+    pattern, so the negative case has to be updated to a still-unrecognized
+    chain — currently softmax -> matmul (suffix-only chain, no matmul head)
+    which doesn't match any of our fusion shapes.
     """
 
     @ts.jit(target="apple_gpu")
     def chain(x, w):
-        return ts.ops.gelu(ts.ops.matmul(x, w))
+        # softmax(x) doesn't have a matmul head, so neither matmul_softmax
+        # nor matmul_softmax_matmul fires. The trailing matmul also can't
+        # fuse (its left operand isn't a recognized post-matmul producer).
+        return ts.ops.matmul(ts.ops.softmax(x), w)
 
     artifact = chain.runtime_artifact()
     assert artifact.metadata["execution_mode"] == "metal_artifact"
@@ -2029,6 +2031,108 @@ def test_apple_gpu_matmul_softmax_small_n_still_uses_per_thread_path():
     e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
     ref = e / np.sum(e, axis=-1, keepdims=True)
     np.testing.assert_allclose(out, ref, rtol=1e-4, atol=1e-5)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 8.4.7: MLP-block fusions — matmul -> gelu and matmul -> rmsnorm.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_apple_gpu_matmul_gelu_chain_emits_fused_msl_kernel():
+    @ts.jit(target="apple_gpu")
+    def mlp(A, B):
+        return ts.ops.gelu(ts.ops.matmul(A, B))
+
+    target_ir = mlp.target_ir
+    assert "tessera_apple.gpu.msl_kernel" in target_ir
+    assert 'entry_point = "matmul_gelu_f32"' in target_ir
+    assert 'fusion = "matmul_gelu"' in target_ir
+    # Exactly one fused emission.
+    assert target_ir.count('"tessera_apple.gpu.msl_kernel"') == 1
+    assert "tessera_apple_gpu_matmul_gelu_f32" in mlp.compile_bundle.artifact("backend").text
+
+
+def test_apple_gpu_matmul_gelu_executes_through_fused_msl_kernel():
+    @ts.jit(target="apple_gpu")
+    def mlp(A, B):
+        return ts.ops.gelu(ts.ops.matmul(A, B))
+
+    rng = np.random.RandomState(211)
+    for M, K, N in ((4, 8, 8), (8, 16, 32), (16, 32, 64)):
+        A = rng.randn(M, K).astype(np.float32) * 0.5
+        B = rng.randn(K, N).astype(np.float32) * 0.5
+        out = mlp(A, B)
+        assert out.shape == (M, N)
+        assert out.dtype == np.float32
+        scores = A @ B
+        ref = 0.5 * scores * (1.0 + np.tanh(
+            np.sqrt(2.0 / np.pi) * (scores + 0.044715 * scores ** 3)
+        ))
+        np.testing.assert_allclose(out, ref, rtol=1e-4, atol=1e-5)
+
+
+def test_apple_gpu_matmul_rmsnorm_chain_emits_fused_msl_kernel():
+    @ts.jit(target="apple_gpu")
+    def norm(A, B):
+        return ts.ops.rmsnorm(ts.ops.matmul(A, B))
+
+    target_ir = norm.target_ir
+    assert "tessera_apple.gpu.msl_kernel" in target_ir
+    assert 'entry_point = "matmul_rmsnorm_f32"' in target_ir
+    assert 'fusion = "matmul_rmsnorm"' in target_ir
+    assert target_ir.count('"tessera_apple.gpu.msl_kernel"') == 1
+    assert "tessera_apple_gpu_matmul_rmsnorm_f32" in norm.compile_bundle.artifact("backend").text
+
+
+def test_apple_gpu_matmul_rmsnorm_executes_through_fused_msl_kernel():
+    @ts.jit(target="apple_gpu")
+    def norm(A, B):
+        return ts.ops.rmsnorm(ts.ops.matmul(A, B))
+
+    rng = np.random.RandomState(223)
+    for M, K, N in ((4, 8, 8), (8, 16, 32)):
+        A = rng.randn(M, K).astype(np.float32) * 0.5
+        B = rng.randn(K, N).astype(np.float32) * 0.5
+        out = norm(A, B)
+        assert out.shape == (M, N)
+        assert out.dtype == np.float32
+        scores = A @ B
+        eps = 1e-5
+        rms = np.sqrt(np.mean(scores * scores, axis=-1, keepdims=True) + eps)
+        ref = scores / rms
+        np.testing.assert_allclose(out, ref, rtol=1e-4, atol=1e-5)
+
+
+def test_apple_gpu_mlp_fusion_runtime_shim_exposes_symbols(tmp_path):
+    """Compile the apple_gpu runtime shim and verify both new MLP-block
+    fusion symbols are exported."""
+
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        pytest.skip("C++ compiler is not available")
+
+    backend = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
+    if sys.platform == "darwin":
+        source = backend / "apple_gpu_runtime.mm"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.dylib"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", "-fobjc-arc",
+               "-x", "objective-c++", str(source), "-o", str(lib),
+               "-framework", "Foundation",
+               "-framework", "Metal",
+               "-framework", "MetalPerformanceShaders"]
+    else:
+        source = backend / "apple_gpu_runtime_stub.cpp"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.so"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(lib)]
+    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    runtime = ctypes.CDLL(str(lib))
+    for name in (
+        "tessera_apple_gpu_matmul_gelu_f32",
+        "tessera_apple_gpu_matmul_rmsnorm_f32",
+    ):
+        sym = getattr(runtime, name, None)
+        assert sym is not None, f"missing C ABI symbol: {name}"
 
 
 def test_apple_cpu_bf16_disabled_when_ml_dtypes_missing(monkeypatch):

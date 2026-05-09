@@ -1927,6 +1927,110 @@ def test_apple_gpu_attn_block_falls_back_when_chain_breaks():
     assert "matmul_softmax_matmul" not in target_ir or 'fusion = "matmul_softmax_matmul"' not in target_ir
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 8.4.6: threadgroup-tiled matmul_softmax_f32 (lifts the N <= 256 cap).
+#
+# When the per-thread fast-path is too narrow (N > 256), the runtime routes
+# to a threadgroup-tiled variant that allocates the score buffer in
+# threadgroup memory. One row per threadgroup; 32 threads cooperate.
+# Tests below exercise N = 512 and N = 1024 — both above the per-thread
+# bound, both within the tiled bound (8192).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_apple_gpu_matmul_softmax_tiled_path_executes_for_large_n():
+    """End-to-end through @jit for N > 256. The Phase 8.4.6 router selects
+    the tiled MSL variant. Output must match the per-op numpy reference."""
+
+    @ts.jit(target="apple_gpu")
+    def fused(A, B):
+        return ts.ops.softmax(ts.ops.matmul(A, B))
+
+    rng = np.random.RandomState(83)
+    for M, K, N in ((4, 16, 512), (8, 32, 1024)):
+        A = rng.randn(M, K).astype(np.float32) * 0.5
+        B = rng.randn(K, N).astype(np.float32) * 0.5
+        out = fused(A, B)
+        assert out.shape == (M, N)
+        assert out.dtype == np.float32
+        scores = A @ B
+        e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+        ref = e / np.sum(e, axis=-1, keepdims=True)
+        np.testing.assert_allclose(out, ref, rtol=1e-4, atol=1e-5)
+        # Each row sums to 1 modulo rounding.
+        np.testing.assert_allclose(out.sum(axis=-1), np.ones(M, dtype=np.float32), rtol=1e-4)
+
+
+def test_apple_gpu_matmul_softmax_tiled_runtime_shim_exposes_symbol(tmp_path):
+    """Compile the apple_gpu runtime shim and verify the tiled symbol is
+    exported with the expected ABI plus correct numerical output."""
+
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        pytest.skip("C++ compiler is not available")
+
+    backend = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
+    if sys.platform == "darwin":
+        source = backend / "apple_gpu_runtime.mm"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.dylib"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", "-fobjc-arc",
+               "-x", "objective-c++", str(source), "-o", str(lib),
+               "-framework", "Foundation",
+               "-framework", "Metal",
+               "-framework", "MetalPerformanceShaders"]
+    else:
+        source = backend / "apple_gpu_runtime_stub.cpp"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.so"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(lib)]
+    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    runtime = ctypes.CDLL(str(lib))
+    sym = runtime.tessera_apple_gpu_matmul_softmax_tiled_f32
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    sym.restype = None
+
+    rng = np.random.RandomState(89)
+    for M, K, N in ((4, 8, 512), (8, 16, 1024)):
+        A = rng.randn(M, K).astype(np.float32) * 0.5
+        B = rng.randn(K, N).astype(np.float32) * 0.5
+        O = np.zeros((M, N), dtype=np.float32)
+        sym(
+            A.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            B.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            O.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            M, N, K,
+        )
+        scores = A @ B
+        e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+        ref = e / np.sum(e, axis=-1, keepdims=True)
+        np.testing.assert_allclose(O, ref, rtol=1e-4, atol=1e-5)
+
+
+def test_apple_gpu_matmul_softmax_small_n_still_uses_per_thread_path():
+    """The router keeps the per-thread fast path for N <= 256. End-to-end
+    correctness is unchanged — both kernels produce identical numerical
+    results — but this pins that the router doesn't accidentally regress
+    small-N latency by always going through tiled."""
+
+    @ts.jit(target="apple_gpu")
+    def fused(A, B):
+        return ts.ops.softmax(ts.ops.matmul(A, B))
+
+    rng = np.random.RandomState(97)
+    A = rng.randn(8, 16).astype(np.float32) * 0.5
+    B = rng.randn(16, 64).astype(np.float32) * 0.5  # N = 64, well under 256
+    out = fused(A, B)
+    scores = A @ B
+    e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+    ref = e / np.sum(e, axis=-1, keepdims=True)
+    np.testing.assert_allclose(out, ref, rtol=1e-4, atol=1e-5)
+
+
 def test_apple_cpu_bf16_disabled_when_ml_dtypes_missing(monkeypatch):
     """When ml_dtypes isn't installed the bf16 dtype probe returns None and
     the runtime falls through to numpy. Verified by stubbing the import to

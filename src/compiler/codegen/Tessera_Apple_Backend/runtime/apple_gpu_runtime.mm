@@ -1776,17 +1776,196 @@ inline void reference_matmul_softmax_f32(const float* A, const float* B,
 
 } // namespace
 
-extern "C" void tessera_apple_gpu_matmul_softmax_f32(const float* A,
-                                                     const float* B, float* O,
-                                                     int32_t M, int32_t N,
-                                                     int32_t K) {
-  if (N > 256) {
+//===---------------------------------------------------------------------===//
+// Phase 8.4.6 — threadgroup-tiled matmul_softmax_f32 kernel.
+//
+// Lifts the N <= 256 constraint of the per-thread kernel by allocating the
+// score buffer in threadgroup memory. One row per threadgroup; THREADS
+// threads cooperate on the K reduction, threadgroup max, threadgroup sum,
+// and final write. Threadgroup memory is sized at runtime via
+// setThreadgroupMemoryLength so we can scale to whatever fits.
+//
+// Algorithm (per threadgroup, row = gid.y, lid = thread_position_in_threadgroup):
+//   1. Cooperative compute scores[n] for n in [lid, N) step THREADS
+//   2. Per-thread partial max -> threadgroup max reduction
+//   3. Per-thread exp + partial sum -> threadgroup sum reduction
+//   4. Cooperative divide and write to O[row, n]
+//
+// Uses dynamic threadgroup memory for the score buffer plus two small
+// shared scratch slots (max + sum). Threadgroup size fixed at 32 to keep
+// the reduction simple; can be tuned later.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+constexpr int kFusedTiledThreads = 32;
+
+bool dispatch_matmul_softmax_tiled_msl(MetalDeviceContext &ctx, const float* A,
+                                       const float* B, float* O,
+                                       int32_t M, int32_t N, int32_t K) {
+  static NSString *const kFusedTiledSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_FUSED_TILED_THREADS 32
+
+kernel void matmul_softmax_tiled_f32(
+    device const float* A   [[buffer(0)]],
+    device const float* B   [[buffer(1)]],
+    device float*       O   [[buffer(2)]],
+    constant int&       M   [[buffer(3)]],
+    constant int&       N   [[buffer(4)]],
+    constant int&       K   [[buffer(5)]],
+    threadgroup float*  tg_scores [[threadgroup(0)]],
+    uint2 tg_pos [[threadgroup_position_in_grid]],
+    uint  lid     [[thread_position_in_threadgroup]],
+    uint2 tg_size [[threads_per_threadgroup]])
+{
+    int row = (int)tg_pos.x;
+    if (row >= M) return;
+    const int T = TESSERA_APPLE_GPU_FUSED_TILED_THREADS;
+    const int lid_i = (int)lid;
+
+    threadgroup float tg_max[TESSERA_APPLE_GPU_FUSED_TILED_THREADS];
+    threadgroup float tg_sum[TESSERA_APPLE_GPU_FUSED_TILED_THREADS];
+
+    // Step 1: cooperative compute scores[n] = sum_k A[row,k] * B[k,n].
+    int a_off = row * K;
+    for (int n = lid_i; n < N; n += T) {
+        float s = 0.0f;
+        for (int k = 0; k < K; ++k) {
+            s += A[a_off + k] * B[k * N + n];
+        }
+        tg_scores[n] = s;
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    // Step 2: per-thread partial row max -> threadgroup max reduction.
+    float local_max = -INFINITY;
+    for (int n = lid_i; n < N; n += T) local_max = max(local_max, tg_scores[n]);
+    tg_max[lid_i] = local_max;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (int stride = T / 2; stride > 0; stride >>= 1) {
+        if (lid_i < stride) {
+            tg_max[lid_i] = max(tg_max[lid_i], tg_max[lid_i + stride]);
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    float row_max = tg_max[0];
+
+    // Step 3: per-thread exp + partial sum -> threadgroup sum reduction.
+    float local_sum = 0.0f;
+    for (int n = lid_i; n < N; n += T) {
+        float e = exp(tg_scores[n] - row_max);
+        tg_scores[n] = e;
+        local_sum += e;
+    }
+    tg_sum[lid_i] = local_sum;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (int stride = T / 2; stride > 0; stride >>= 1) {
+        if (lid_i < stride) {
+            tg_sum[lid_i] += tg_sum[lid_i + stride];
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    float denom = tg_sum[0];
+
+    // Step 4: cooperative divide and write back.
+    int o_off = row * N;
+    if (denom == 0.0f) {
+        for (int n = lid_i; n < N; n += T) O[o_off + n] = 0.0f;
+    } else {
+        float inv = 1.0f / denom;
+        for (int n = lid_i; n < N; n += T) O[o_off + n] = tg_scores[n] * inv;
+    }
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kFusedTiledSource, @"matmul_softmax_tiled_f32");
+    if (!pso) return false;
+
+    NSUInteger aBytes = sizeof(float) * static_cast<NSUInteger>(M) *
+                        static_cast<NSUInteger>(K);
+    NSUInteger bBytes = sizeof(float) * static_cast<NSUInteger>(K) *
+                        static_cast<NSUInteger>(N);
+    NSUInteger oBytes = sizeof(float) * static_cast<NSUInteger>(M) *
+                        static_cast<NSUInteger>(N);
+
+    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:aBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B length:bBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufA || !bufB || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBuffer:bufO offset:0 atIndex:2];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
+
+    // Dynamic threadgroup memory: scores[N] live floats per threadgroup.
+    NSUInteger tg_score_bytes = sizeof(float) * static_cast<NSUInteger>(N);
+    [enc setThreadgroupMemoryLength:tg_score_bytes atIndex:0];
+
+    // One threadgroup per row, kFusedTiledThreads threads cooperating.
+    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(M), 1, 1);
+    MTLSize tg = MTLSizeMake(static_cast<NSUInteger>(kFusedTiledThreads), 1, 1);
+    [enc dispatchThreadgroups:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_matmul_softmax_tiled_f32(const float* A,
+                                                           const float* B,
+                                                           float* O,
+                                                           int32_t M,
+                                                           int32_t N,
+                                                           int32_t K) {
+  // Tiled variant — works for any N (bounded only by threadgroup memory).
+  // Phase 8.4.6 caps N at 8192 to stay within typical device threadgroup
+  // memory limits (~32KB / sizeof(float)). Larger N falls back to the
+  // reference implementation.
+  if (N > 8192) {
     reference_matmul_softmax_f32(A, B, O, M, N, K);
     return;
   }
   MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_matmul_softmax_msl(ctx, A, B, O, M, N, K)) return;
+  if (ctx.ok && dispatch_matmul_softmax_tiled_msl(ctx, A, B, O, M, N, K))
+    return;
   reference_matmul_softmax_f32(A, B, O, M, N, K);
+}
+
+extern "C" void tessera_apple_gpu_matmul_softmax_f32(const float* A,
+                                                     const float* B, float* O,
+                                                     int32_t M, int32_t N,
+                                                     int32_t K) {
+  // Phase 8.4.6 — route by N. Per-thread kernel for N <= 256 (it's faster
+  // because no threadgroup synchronization), threadgroup-tiled for larger N
+  // (lifts the per-thread stack-array limit). Reference fallback for N
+  // beyond the tiled variant's bound.
+  if (N <= 256) {
+    MetalDeviceContext &ctx = deviceContext();
+    if (ctx.ok && dispatch_matmul_softmax_msl(ctx, A, B, O, M, N, K)) return;
+    reference_matmul_softmax_f32(A, B, O, M, N, K);
+    return;
+  }
+  tessera_apple_gpu_matmul_softmax_tiled_f32(A, B, O, M, N, K);
 }
 
 //===---------------------------------------------------------------------===//

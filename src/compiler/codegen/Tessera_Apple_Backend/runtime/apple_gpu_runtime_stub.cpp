@@ -269,6 +269,72 @@ extern "C" void tessera_apple_gpu_gelu_f32(const float* X, float* Out,
   reference_gelu_f32(X, Out, N);
 }
 
+// Phase 8.4.4.1 — fp16 / bf16 stubs for rope / softmax / gelu. All routes
+// fp32-convert at the boundary, run the existing f32 reference, convert
+// back. Same shape as the matmul fp16/bf16 stub from Phase 8.4.4.
+
+extern "C" void tessera_apple_gpu_rope_f16(const uint16_t* X,
+                                           const uint16_t* Theta,
+                                           uint16_t* Out,
+                                           int32_t M, int32_t K) {
+  std::vector<float> Xf(static_cast<std::size_t>(M) * K);
+  std::vector<float> Tf(static_cast<std::size_t>(M) * K);
+  std::vector<float> Of(static_cast<std::size_t>(M) * K);
+  for (std::size_t i = 0; i < Xf.size(); ++i) Xf[i] = half_to_float_stub(X[i]);
+  for (std::size_t i = 0; i < Tf.size(); ++i) Tf[i] = half_to_float_stub(Theta[i]);
+  reference_rope_f32(Xf.data(), Tf.data(), Of.data(), M, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_half_stub(Of[i]);
+}
+
+extern "C" void tessera_apple_gpu_rope_bf16(const uint16_t* X,
+                                            const uint16_t* Theta,
+                                            uint16_t* Out,
+                                            int32_t M, int32_t K) {
+  std::vector<float> Xf(static_cast<std::size_t>(M) * K);
+  std::vector<float> Tf(static_cast<std::size_t>(M) * K);
+  std::vector<float> Of(static_cast<std::size_t>(M) * K);
+  for (std::size_t i = 0; i < Xf.size(); ++i) Xf[i] = bfloat16_to_float_stub(X[i]);
+  for (std::size_t i = 0; i < Tf.size(); ++i) Tf[i] = bfloat16_to_float_stub(Theta[i]);
+  reference_rope_f32(Xf.data(), Tf.data(), Of.data(), M, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_bfloat16_stub(Of[i]);
+}
+
+extern "C" void tessera_apple_gpu_softmax_f16(const uint16_t* X, uint16_t* Out,
+                                              int32_t M, int32_t K) {
+  std::vector<float> Xf(static_cast<std::size_t>(M) * K);
+  std::vector<float> Of(static_cast<std::size_t>(M) * K);
+  for (std::size_t i = 0; i < Xf.size(); ++i) Xf[i] = half_to_float_stub(X[i]);
+  reference_softmax_f32(Xf.data(), Of.data(), M, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_half_stub(Of[i]);
+}
+
+extern "C" void tessera_apple_gpu_softmax_bf16(const uint16_t* X, uint16_t* Out,
+                                               int32_t M, int32_t K) {
+  std::vector<float> Xf(static_cast<std::size_t>(M) * K);
+  std::vector<float> Of(static_cast<std::size_t>(M) * K);
+  for (std::size_t i = 0; i < Xf.size(); ++i) Xf[i] = bfloat16_to_float_stub(X[i]);
+  reference_softmax_f32(Xf.data(), Of.data(), M, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_bfloat16_stub(Of[i]);
+}
+
+extern "C" void tessera_apple_gpu_gelu_f16(const uint16_t* X, uint16_t* Out,
+                                           int32_t N) {
+  std::vector<float> Xf(static_cast<std::size_t>(N));
+  std::vector<float> Of(static_cast<std::size_t>(N));
+  for (int32_t i = 0; i < N; ++i) Xf[i] = half_to_float_stub(X[i]);
+  reference_gelu_f32(Xf.data(), Of.data(), N);
+  for (int32_t i = 0; i < N; ++i) Out[i] = float_to_half_stub(Of[i]);
+}
+
+extern "C" void tessera_apple_gpu_gelu_bf16(const uint16_t* X, uint16_t* Out,
+                                            int32_t N) {
+  std::vector<float> Xf(static_cast<std::size_t>(N));
+  std::vector<float> Of(static_cast<std::size_t>(N));
+  for (int32_t i = 0; i < N; ++i) Xf[i] = bfloat16_to_float_stub(X[i]);
+  reference_gelu_f32(Xf.data(), Of.data(), N);
+  for (int32_t i = 0; i < N; ++i) Out[i] = float_to_bfloat16_stub(Of[i]);
+}
+
 namespace {
 
 inline void reference_matmul_softmax_f32(const float* A, const float* B,

@@ -1442,6 +1442,184 @@ def test_apple_gpu_matmul_runtime_shim_exposes_f16_and_bf16_symbols(tmp_path):
     )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 8.4.4.1: fp16 / bf16 for the simple MSL kernels (rope, softmax, gelu).
+#
+# fp16 path uses native MSL `half` kernels with `float` internal compute.
+# bf16 path uses fp32-conversion at the runtime boundary (no native MSL bf16).
+# Same pattern as Phase 8.4.4 matmul. The Python dispatcher detects input
+# array dtype at runtime and routes to the matching ctypes wrapper.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_apple_gpu_rope_f16_executes_through_native_msl():
+    @ts.jit(target="apple_gpu")
+    def rope(X, Theta):
+        return ts.ops.rope(X, Theta)
+
+    rng = np.random.RandomState(67)
+    M, K = 8, 16
+    X = rng.randn(M, K).astype(np.float16) * 0.5
+    Theta = rng.uniform(-np.pi, np.pi, size=(M, K)).astype(np.float16)
+    out = rope(X, Theta)
+    assert out.dtype == np.float16
+    assert out.shape == (M, K)
+    Xf = X.astype(np.float32)
+    Tf = Theta.astype(np.float32)
+    even = Xf[:, 0::2]
+    odd = Xf[:, 1::2]
+    theta_even = Tf[:, 0::2]
+    expected = np.empty_like(Xf)
+    expected[:, 0::2] = even * np.cos(theta_even) - odd * np.sin(theta_even)
+    expected[:, 1::2] = even * np.sin(theta_even) + odd * np.cos(theta_even)
+    np.testing.assert_allclose(
+        out.astype(np.float32), expected, rtol=5e-3, atol=5e-3,
+    )
+
+
+def test_apple_gpu_rope_bf16_executes_through_fp32_conversion_path():
+    pytest.importorskip("ml_dtypes")
+    import ml_dtypes
+    bf16 = ml_dtypes.bfloat16
+
+    @ts.jit(target="apple_gpu")
+    def rope(X, Theta):
+        return ts.ops.rope(X, Theta)
+
+    rng = np.random.RandomState(71)
+    M, K = 8, 16
+    # Multiplication BEFORE astype — `bf16_arr * python_float` would promote
+    # back to float32 because numpy treats Python scalars as float64 and
+    # downcast goes through fp32. Apply scaling in fp32, then cast.
+    X = (rng.randn(M, K) * 0.5).astype(bf16)
+    Theta = rng.uniform(-np.pi, np.pi, size=(M, K)).astype(bf16)
+    out = rope(X, Theta)
+    assert out.dtype == bf16
+    assert out.shape == (M, K)
+    Xf = X.astype(np.float32)
+    Tf = Theta.astype(np.float32)
+    even = Xf[:, 0::2]
+    odd = Xf[:, 1::2]
+    theta_even = Tf[:, 0::2]
+    expected = np.empty_like(Xf)
+    expected[:, 0::2] = even * np.cos(theta_even) - odd * np.sin(theta_even)
+    expected[:, 1::2] = even * np.sin(theta_even) + odd * np.cos(theta_even)
+    np.testing.assert_allclose(
+        out.astype(np.float32), expected, rtol=2e-2, atol=2e-2,
+    )
+
+
+def test_apple_gpu_softmax_f16_executes_through_native_msl():
+    @ts.jit(target="apple_gpu")
+    def sm(X):
+        return ts.ops.softmax(X)
+
+    rng = np.random.RandomState(73)
+    for shape in ((4, 8), (8, 32)):
+        X = rng.randn(*shape).astype(np.float16)
+        out = sm(X)
+        assert out.dtype == np.float16
+        assert out.shape == shape
+        ref_e = np.exp(X.astype(np.float32) - np.max(X.astype(np.float32), axis=-1, keepdims=True))
+        ref = ref_e / np.sum(ref_e, axis=-1, keepdims=True)
+        np.testing.assert_allclose(
+            out.astype(np.float32), ref, rtol=5e-3, atol=5e-3,
+        )
+
+
+def test_apple_gpu_softmax_bf16_executes_through_fp32_conversion_path():
+    pytest.importorskip("ml_dtypes")
+    import ml_dtypes
+    bf16 = ml_dtypes.bfloat16
+
+    @ts.jit(target="apple_gpu")
+    def sm(X):
+        return ts.ops.softmax(X)
+
+    rng = np.random.RandomState(79)
+    X = rng.randn(8, 16).astype(bf16)
+    out = sm(X)
+    assert out.dtype == bf16
+    ref_e = np.exp(X.astype(np.float32) - np.max(X.astype(np.float32), axis=-1, keepdims=True))
+    ref = ref_e / np.sum(ref_e, axis=-1, keepdims=True)
+    np.testing.assert_allclose(
+        out.astype(np.float32), ref, rtol=2e-2, atol=2e-2,
+    )
+
+
+def test_apple_gpu_gelu_f16_executes_through_native_msl():
+    @ts.jit(target="apple_gpu")
+    def gelu(X):
+        return ts.ops.gelu(X)
+
+    rng = np.random.RandomState(83)
+    X = rng.randn(8, 16).astype(np.float16) * 1.5
+    out = gelu(X)
+    assert out.dtype == np.float16
+    Xf = X.astype(np.float32)
+    ref = 0.5 * Xf * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (Xf + 0.044715 * Xf**3)))
+    np.testing.assert_allclose(
+        out.astype(np.float32), ref, rtol=5e-3, atol=5e-3,
+    )
+
+
+def test_apple_gpu_gelu_bf16_executes_through_fp32_conversion_path():
+    pytest.importorskip("ml_dtypes")
+    import ml_dtypes
+    bf16 = ml_dtypes.bfloat16
+
+    @ts.jit(target="apple_gpu")
+    def gelu(X):
+        return ts.ops.gelu(X)
+
+    rng = np.random.RandomState(89)
+    X = (rng.randn(8, 16) * 1.5).astype(bf16)
+    out = gelu(X)
+    assert out.dtype == bf16
+    Xf = X.astype(np.float32)
+    ref = 0.5 * Xf * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (Xf + 0.044715 * Xf**3)))
+    np.testing.assert_allclose(
+        out.astype(np.float32), ref, rtol=2e-2, atol=2e-2,
+    )
+
+
+def test_apple_gpu_msl_dtype_runtime_shim_exposes_all_symbols(tmp_path):
+    """Compile the apple_gpu runtime shim from source and verify all 6 new
+    fp16/bf16 symbols (rope_{f16,bf16}, softmax_{f16,bf16}, gelu_{f16,bf16})
+    are exported."""
+
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        pytest.skip("C++ compiler is not available")
+
+    backend = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
+    if sys.platform == "darwin":
+        source = backend / "apple_gpu_runtime.mm"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.dylib"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", "-fobjc-arc",
+               "-x", "objective-c++", str(source), "-o", str(lib),
+               "-framework", "Foundation",
+               "-framework", "Metal",
+               "-framework", "MetalPerformanceShaders"]
+    else:
+        source = backend / "apple_gpu_runtime_stub.cpp"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.so"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(lib)]
+    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    runtime = ctypes.CDLL(str(lib))
+    for name in (
+        "tessera_apple_gpu_rope_f16",
+        "tessera_apple_gpu_rope_bf16",
+        "tessera_apple_gpu_softmax_f16",
+        "tessera_apple_gpu_softmax_bf16",
+        "tessera_apple_gpu_gelu_f16",
+        "tessera_apple_gpu_gelu_bf16",
+    ):
+        sym = getattr(runtime, name, None)
+        assert sym is not None, f"missing C ABI symbol: {name}"
+
+
 def test_apple_cpu_bf16_disabled_when_ml_dtypes_missing(monkeypatch):
     """When ml_dtypes isn't installed the bf16 dtype probe returns None and
     the runtime falls through to numpy. Verified by stubbing the import to

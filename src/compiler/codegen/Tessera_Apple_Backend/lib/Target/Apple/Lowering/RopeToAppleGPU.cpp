@@ -39,6 +39,8 @@ namespace apple {
 namespace {
 
 constexpr llvm::StringLiteral kRopeF32Symbol = "tessera_apple_gpu_rope_f32";
+constexpr llvm::StringLiteral kRopeF16Symbol = "tessera_apple_gpu_rope_f16";
+constexpr llvm::StringLiteral kRopeBF16Symbol = "tessera_apple_gpu_rope_bf16";
 
 static func::FuncOp ensureExternalDecl(ModuleOp mod, StringRef name,
                                        FunctionType fnTy) {
@@ -74,9 +76,26 @@ struct LowerRopeToAppleGPU : public RewritePattern {
     if (!xTy || !thetaTy || xTy.getRank() != 2 || thetaTy.getRank() != 2)
       return failure();
 
-    if (!xTy.getElementType().isF32() || !thetaTy.getElementType().isF32())
+    Type xElem = xTy.getElementType();
+    Type thetaElem = thetaTy.getElementType();
+    if (xElem != thetaElem)
       return rewriter.notifyMatchFailure(
-          op, "AppleGPU rope MSL path is f32-only in Phase 8.4");
+          op, "AppleGPU rope MSL path requires matching x/theta dtypes");
+
+    // Phase 8.4.4.1 — pick the runtime symbol by dtype. Same i64×3 + i32×2
+    // ABI shape across all three; the element type is encoded in the
+    // symbol name, not the signature.
+    StringRef symbol;
+    if (xElem.isF32()) {
+      symbol = kRopeF32Symbol;
+    } else if (xElem.isF16()) {
+      symbol = kRopeF16Symbol;
+    } else if (xElem.isBF16()) {
+      symbol = kRopeBF16Symbol;
+    } else {
+      return rewriter.notifyMatchFailure(
+          op, "AppleGPU rope MSL path supports f32, f16, and bf16 in Phase 8.4.4.1");
+    }
 
     if (xTy.isDynamicDim(0) || xTy.isDynamicDim(1) ||
         thetaTy.isDynamicDim(0) || thetaTy.isDynamicDim(1))
@@ -99,9 +118,8 @@ struct LowerRopeToAppleGPU : public RewritePattern {
 
     Type i64Ty = rewriter.getI64Type();
     Type i32Ty = rewriter.getI32Type();
-    Type f32Ty = rewriter.getF32Type();
 
-    auto memTy = MemRefType::get({M, K}, f32Ty);
+    auto memTy = MemRefType::get({M, K}, xElem);
     Value xPtr = extractPtr(rewriter, loc, x, memTy);
     Value thetaPtr = extractPtr(rewriter, loc, theta, memTy);
     auto outAlloc = rewriter.create<memref::AllocOp>(loc, memTy);
@@ -117,13 +135,13 @@ struct LowerRopeToAppleGPU : public RewritePattern {
 
     FunctionType ropeFnTy =
         FunctionType::get(ctx, {i64Ty, i64Ty, i64Ty, i32Ty, i32Ty}, {});
-    ensureExternalDecl(mod, kRopeF32Symbol, ropeFnTy);
+    ensureExternalDecl(mod, symbol, ropeFnTy);
 
     rewriter.create<func::CallOp>(
-        loc, kRopeF32Symbol, TypeRange{},
+        loc, symbol, TypeRange{},
         ValueRange{xPtr, thetaPtr, outPtr, Mv, Kv});
 
-    auto outTensorTy = RankedTensorType::get({M, K}, f32Ty);
+    auto outTensorTy = RankedTensorType::get({M, K}, xElem);
     Value result =
         rewriter.create<bufferization::ToTensorOp>(loc, outTensorTy, outAlloc);
     rewriter.replaceOp(op, result);
@@ -140,8 +158,8 @@ struct LowerRopeToAppleGPUPass
     return "tessera-rope-to-apple_gpu";
   }
   StringRef getDescription() const override {
-    return "Lower tessera.rope (rank-2, f32) to Apple GPU runtime calls "
-           "(custom MSL kernel)";
+    return "Lower tessera.rope (rank-2, f32/f16/bf16) to Apple GPU runtime "
+           "calls (custom MSL kernel)";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {

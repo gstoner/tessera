@@ -1763,6 +1763,170 @@ def test_apple_gpu_fused_dtype_runtime_shim_exposes_all_symbols(tmp_path):
         assert sym is not None, f"missing C ABI symbol: {name}"
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 8.4.5: 3-op fusion — matmul → softmax → matmul (full attention block).
+#
+# The longest fusion pattern wins: when a program forms a matmul -> softmax
+# -> matmul SSA chain (single-use intermediates), the runtime collapses it
+# into a single MSL kernel that materializes the (M, N) softmax result only
+# in registers. fp32 accumulators throughout regardless of I/O dtype.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _np_attn_block_reference(np, A, B, C):
+    """Faithful reference for matmul -> softmax(axis=-1) -> matmul."""
+    scores = np.asarray(A) @ np.asarray(B)
+    e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+    probs = e / np.sum(e, axis=-1, keepdims=True)
+    return probs @ np.asarray(C)
+
+
+def test_apple_gpu_attn_block_chain_emits_fused_msl_kernel():
+    """The Target IR for a 3-op matmul -> softmax -> matmul chain must
+    emit a single fused msl_kernel with the matmul_softmax_matmul entry
+    point — collapsing all three Graph IR ops into one runtime call."""
+
+    @ts.jit(target="apple_gpu")
+    def attn(A, B, C):
+        return ts.ops.matmul(ts.ops.softmax(ts.ops.matmul(A, B)), C)
+
+    target_ir = attn.target_ir
+    assert "tessera_apple.gpu.msl_kernel" in target_ir
+    assert 'entry_point = "matmul_softmax_matmul_f32"' in target_ir
+    assert "kernel void matmul_softmax_matmul_f32" in target_ir
+    assert 'fusion = "matmul_softmax_matmul"' in target_ir
+    assert 'execution_mode = "metal_runtime"' in target_ir
+    # Exactly one msl_kernel — three ops collapsed to one emission.
+    assert target_ir.count('"tessera_apple.gpu.msl_kernel"') == 1
+
+    artifact = attn.runtime_artifact()
+    assert artifact.metadata["compiler_path"] == "apple_gpu_mps"
+    assert artifact.metadata["runtime_status"] == "ready"
+    assert artifact.metadata["execution_mode"] == "metal_runtime"
+    assert "tessera_apple_gpu_matmul_softmax_matmul_f32" in attn.compile_bundle.artifact("backend").text
+
+
+def test_apple_gpu_attn_block_f32_executes_through_fused_msl_kernel():
+    """End-to-end f32: matmul -> softmax -> matmul matches the per-op
+    numpy reference at rtol=1e-4 across attention-shaped inputs."""
+
+    @ts.jit(target="apple_gpu")
+    def attn(A, B, C):
+        return ts.ops.matmul(ts.ops.softmax(ts.ops.matmul(A, B)), C)
+
+    rng = np.random.RandomState(151)
+    for M, K, N, P in ((4, 8, 8, 4), (8, 16, 32, 16), (16, 16, 64, 32)):
+        A = rng.randn(M, K).astype(np.float32) * 0.5
+        B = rng.randn(K, N).astype(np.float32) * 0.5
+        C = rng.randn(N, P).astype(np.float32) * 0.5
+        out = attn(A, B, C)
+        assert out.shape == (M, P)
+        assert out.dtype == np.float32
+        ref = _np_attn_block_reference(np, A, B, C)
+        np.testing.assert_allclose(out, ref, rtol=1e-4, atol=1e-5)
+
+
+def test_apple_gpu_attn_block_f16_executes_through_fused_msl_kernel():
+    """End-to-end f16: same chain, mixed-precision (half I/O, fp32
+    accumulators). rtol matches the other f16 fused kernels."""
+
+    @ts.jit(target="apple_gpu")
+    def attn(A, B, C):
+        return ts.ops.matmul(ts.ops.softmax(ts.ops.matmul(A, B)), C)
+
+    rng = np.random.RandomState(157)
+    for M, K, N, P in ((4, 8, 8, 4), (8, 16, 32, 16)):
+        A = rng.randn(M, K).astype(np.float16)
+        B = rng.randn(K, N).astype(np.float16)
+        C = rng.randn(N, P).astype(np.float16)
+        out = attn(A, B, C)
+        assert out.shape == (M, P)
+        assert out.dtype == np.float16
+        ref = _np_attn_block_reference(
+            np, A.astype(np.float32), B.astype(np.float32), C.astype(np.float32)
+        ).astype(np.float16)
+        np.testing.assert_allclose(
+            out.astype(np.float32), ref.astype(np.float32),
+            rtol=5e-3, atol=5e-3,
+        )
+
+
+def test_apple_gpu_attn_block_bf16_executes_through_fp32_conversion():
+    pytest.importorskip("ml_dtypes")
+    import ml_dtypes
+    bf16 = ml_dtypes.bfloat16
+
+    @ts.jit(target="apple_gpu")
+    def attn(A, B, C):
+        return ts.ops.matmul(ts.ops.softmax(ts.ops.matmul(A, B)), C)
+
+    rng = np.random.RandomState(163)
+    M, K, N, P = 8, 16, 32, 16
+    A = rng.randn(M, K).astype(bf16)
+    B = rng.randn(K, N).astype(bf16)
+    C = rng.randn(N, P).astype(bf16)
+    out = attn(A, B, C)
+    assert out.dtype == bf16
+    ref = _np_attn_block_reference(
+        np, A.astype(np.float32), B.astype(np.float32), C.astype(np.float32)
+    ).astype(bf16)
+    np.testing.assert_allclose(
+        out.astype(np.float32), ref.astype(np.float32),
+        rtol=2e-2, atol=2e-2,
+    )
+
+
+def test_apple_gpu_attn_block_runtime_shim_exposes_3op_fusion_symbols(tmp_path):
+    """Compile the apple_gpu runtime shim from source and verify all 3 new
+    fp32/fp16/bf16 3-op fusion symbols are exported."""
+
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        pytest.skip("C++ compiler is not available")
+
+    backend = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
+    if sys.platform == "darwin":
+        source = backend / "apple_gpu_runtime.mm"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.dylib"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", "-fobjc-arc",
+               "-x", "objective-c++", str(source), "-o", str(lib),
+               "-framework", "Foundation",
+               "-framework", "Metal",
+               "-framework", "MetalPerformanceShaders"]
+    else:
+        source = backend / "apple_gpu_runtime_stub.cpp"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.so"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(lib)]
+    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    runtime = ctypes.CDLL(str(lib))
+    for name in (
+        "tessera_apple_gpu_matmul_softmax_matmul_f32",
+        "tessera_apple_gpu_matmul_softmax_matmul_f16",
+        "tessera_apple_gpu_matmul_softmax_matmul_bf16",
+    ):
+        sym = getattr(runtime, name, None)
+        assert sym is not None, f"missing C ABI symbol: {name}"
+
+
+def test_apple_gpu_attn_block_falls_back_when_chain_breaks():
+    """When the chain doesn't form an exact matmul -> softmax -> matmul
+    pattern, the 3-op fusion must NOT fire. gelu in place of softmax is a
+    clean negative — both ops are individually in the runtime envelope but
+    gelu doesn't fit the attention block shape."""
+
+    @ts.jit(target="apple_gpu")
+    def gelu_chain(A, B, C):
+        return ts.ops.matmul(ts.ops.gelu(ts.ops.matmul(A, B)), C)
+
+    target_ir = gelu_chain.target_ir
+    # The 3-op fusion entry point name (the actual call site) must NOT
+    # appear in any call. We check by looking for the call site shape rather
+    # than the entry_point string (which would also live in any embedded
+    # MSL source as the kernel name).
+    assert "matmul_softmax_matmul" not in target_ir or 'fusion = "matmul_softmax_matmul"' not in target_ir
+
+
 def test_apple_cpu_bf16_disabled_when_ml_dtypes_missing(monkeypatch):
     """When ml_dtypes isn't installed the bf16 dtype probe returns None and
     the runtime falls through to numpy. Verified by stubbing the import to

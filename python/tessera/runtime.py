@@ -1875,8 +1875,28 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
 
     values = _bind_launch_args(args, arg_names)
 
-    # Phase 8.4.3 — fused chain dispatch. Detect the matmul -> softmax
-    # pattern at the metadata layer and route to the fused kernel.
+    # Phase 8.4.3 + 8.4.5 — fused chain dispatch. Longest match wins, so
+    # check the 3-op pattern (matmul -> softmax -> matmul) before the 2-op
+    # pattern (matmul -> softmax).
+    if _apple_gpu_metadata_is_matmul_softmax_matmul_chain(ops):
+        first, _sm, third = ops[0], ops[1], ops[2]
+        a_b = [_as_numpy(values[name]) for name in first.get("operands", [])]
+        # The third op's second operand is C (the V tensor).
+        third_operands = [str(n) for n in third.get("operands", [])]
+        if len(third_operands) < 2:
+            raise ValueError("matmul_softmax_matmul fusion: tail matmul missing C operand")
+        c_name = third_operands[1]
+        c = _as_numpy(values[c_name])
+        result_name = third.get("result")
+        if not result_name:
+            raise ValueError("matmul_softmax_matmul fusion: missing tail matmul result name")
+        values[str(result_name)] = _apple_gpu_dispatch_matmul_softmax_matmul(
+            a_b + [c], np
+        )
+        if output_name not in values:
+            raise ValueError(f"artifact did not produce output {output_name!r}")
+        return values[output_name]
+
     if _apple_gpu_metadata_is_matmul_softmax_chain(ops):
         first, second = ops[0], ops[1]
         operands = [_as_numpy(values[name]) for name in first.get("operands", [])]
@@ -1941,6 +1961,34 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
     if output_name not in values:
         raise ValueError(f"artifact did not produce output {output_name!r}")
     return values[output_name]
+
+
+def _apple_gpu_metadata_is_matmul_softmax_matmul_chain(ops: list[dict]) -> bool:
+    """Phase 8.4.5 — check whether the metadata ops form a 3-op
+    matmul -> softmax -> matmul fusion chain (full attention block).
+    Mirrors driver.py's compile-time check so the runtime can detect
+    the pattern from artifact metadata alone."""
+
+    if len(ops) != 3:
+        return False
+    first, second, third = ops[0], ops[1], ops[2]
+    if str(first.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
+        return False
+    if str(second.get("op_name", "")) not in {"tessera.softmax", "tessera.softmax_safe"}:
+        return False
+    if str(third.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
+        return False
+
+    def _strip(name: str) -> str:
+        return name[1:] if name.startswith("%") else name
+
+    sm_operands = [_strip(str(n)) for n in second.get("operands") or []]
+    if len(sm_operands) != 1 or sm_operands[0] != str(first.get("result", "")):
+        return False
+    third_operands = [_strip(str(n)) for n in third.get("operands") or []]
+    if len(third_operands) < 1 or third_operands[0] != str(second.get("result", "")):
+        return False
+    return True
 
 
 def _apple_gpu_metadata_is_matmul_softmax_chain(ops: list[dict]) -> bool:
@@ -2718,6 +2766,155 @@ def _apple_gpu_matmul_softmax_bf16() -> Any:
     return sym
 
 
+def _apple_gpu_dispatch_matmul_softmax_matmul(operands: list[Any], np: Any) -> Any:
+    """Phase 8.4.5 — dispatch a fused matmul -> softmax -> matmul chain
+    (full attention block) through the apple_gpu runtime shim. Picks symbol
+    by element type (f32/f16/bf16). Inputs outside the supported envelope
+    fall back to a numpy-equivalent host computation."""
+
+    if len(operands) != 3:
+        raise ValueError("matmul_softmax_matmul fusion requires three operands (A, B, C)")
+    a = np.asarray(operands[0])
+    b = np.asarray(operands[1])
+    c = np.asarray(operands[2])
+
+    if not (
+        a.ndim == 2 and b.ndim == 2 and c.ndim == 2
+        and a.shape[1] == b.shape[0]
+        and b.shape[1] == c.shape[0]
+        and b.shape[1] <= 256
+        and c.shape[1] <= 256
+        and a.dtype == b.dtype == c.dtype
+    ):
+        scores = a @ b
+        e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+        probs = e / np.sum(e, axis=-1, keepdims=True)
+        return probs @ c
+
+    M, K = a.shape
+    N = b.shape[1]
+    P = c.shape[1]
+
+    if a.dtype == np.float32:
+        if not a.flags.c_contiguous:
+            a = np.ascontiguousarray(a, dtype=np.float32)
+        if not b.flags.c_contiguous:
+            b = np.ascontiguousarray(b, dtype=np.float32)
+        if not c.flags.c_contiguous:
+            c = np.ascontiguousarray(c, dtype=np.float32)
+        out = np.zeros((M, P), dtype=np.float32)
+        fused = _apple_gpu_matmul_softmax_matmul_f32()
+        fused(
+            a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            c.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            ctypes.c_int32(M), ctypes.c_int32(K),
+            ctypes.c_int32(N), ctypes.c_int32(P),
+        )
+        return out
+
+    if a.dtype == np.float16:
+        if not a.flags.c_contiguous:
+            a = np.ascontiguousarray(a, dtype=np.float16)
+        if not b.flags.c_contiguous:
+            b = np.ascontiguousarray(b, dtype=np.float16)
+        if not c.flags.c_contiguous:
+            c = np.ascontiguousarray(c, dtype=np.float16)
+        out = np.zeros((M, P), dtype=np.float16)
+        fused_f16 = _apple_gpu_matmul_softmax_matmul_f16()
+        if fused_f16 is not None:
+            fused_f16(
+                a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                c.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                ctypes.c_int32(M), ctypes.c_int32(K),
+                ctypes.c_int32(N), ctypes.c_int32(P),
+            )
+            return out
+        scores = a.astype(np.float32) @ b.astype(np.float32)
+        e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+        probs = e / np.sum(e, axis=-1, keepdims=True)
+        return (probs @ c.astype(np.float32)).astype(np.float16)
+
+    bf16_dtype = _bfloat16_dtype()
+    if bf16_dtype is not None and a.dtype == bf16_dtype:
+        if not a.flags.c_contiguous:
+            a = np.ascontiguousarray(a, dtype=bf16_dtype)
+        if not b.flags.c_contiguous:
+            b = np.ascontiguousarray(b, dtype=bf16_dtype)
+        if not c.flags.c_contiguous:
+            c = np.ascontiguousarray(c, dtype=bf16_dtype)
+        out = np.zeros((M, P), dtype=bf16_dtype)
+        fused_bf16 = _apple_gpu_matmul_softmax_matmul_bf16()
+        if fused_bf16 is not None:
+            fused_bf16(
+                a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                c.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                ctypes.c_int32(M), ctypes.c_int32(K),
+                ctypes.c_int32(N), ctypes.c_int32(P),
+            )
+            return out
+        scores = a.astype(np.float32) @ b.astype(np.float32)
+        e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+        probs = e / np.sum(e, axis=-1, keepdims=True)
+        return (probs @ c.astype(np.float32)).astype(bf16_dtype)
+
+    scores = a @ b
+    e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+    probs = e / np.sum(e, axis=-1, keepdims=True)
+    return probs @ c
+
+
+def _apple_gpu_matmul_softmax_matmul_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = runtime.tessera_apple_gpu_matmul_softmax_matmul_f32
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_matmul_softmax_matmul_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_matmul_softmax_matmul_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_matmul_softmax_matmul_bf16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_matmul_softmax_matmul_bf16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
 def _load_apple_gpu_runtime() -> ctypes.CDLL:
     """Phase 8.3: locate or compile the apple_gpu runtime shared library.
 
@@ -2768,6 +2965,10 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_bf16")
                 getattr(lib, "tessera_apple_gpu_flash_attn_f16")
                 getattr(lib, "tessera_apple_gpu_flash_attn_bf16")
+                # Phase 8.4.5 — 3-op fusion (full attention block).
+                getattr(lib, "tessera_apple_gpu_matmul_softmax_matmul_f32")
+                getattr(lib, "tessera_apple_gpu_matmul_softmax_matmul_f16")
+                getattr(lib, "tessera_apple_gpu_matmul_softmax_matmul_bf16")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

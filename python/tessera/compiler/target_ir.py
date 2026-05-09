@@ -362,6 +362,18 @@ def _apple_gpu_kernel_msl_for_dtype(
                     _APPLE_GPU_MATMUL_SOFTMAX_MSL_CACHE_KEY, "bf16")
         return (_APPLE_GPU_MATMUL_SOFTMAX_MSL_SOURCE, "matmul_softmax_f32",
                 _APPLE_GPU_MATMUL_SOFTMAX_MSL_CACHE_KEY, "f32")
+    if kernel == "matmul_softmax_matmul":
+        if dtype == "f16":
+            return (_APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_SOURCE_F16,
+                    "matmul_softmax_matmul_f16",
+                    _APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_CACHE_KEY_F16, "f16")
+        if dtype == "bf16":
+            return (_APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_SOURCE,
+                    "matmul_softmax_matmul_bf16",
+                    _APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_CACHE_KEY, "bf16")
+        return (_APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_SOURCE,
+                "matmul_softmax_matmul_f32",
+                _APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_CACHE_KEY, "f32")
     raise ValueError(f"unknown apple_gpu kernel: {kernel!r}")
 
 
@@ -466,6 +478,116 @@ _APPLE_GPU_MATMUL_SOFTMAX_MSL_SOURCE_F16 = (
     "}\n"
 )
 _APPLE_GPU_MATMUL_SOFTMAX_MSL_CACHE_KEY_F16 = _sha256_short(_APPLE_GPU_MATMUL_SOFTMAX_MSL_SOURCE_F16)
+
+
+# Phase 8.4.5 — embedded MSL source for the 3-op fusion (matmul -> softmax
+# -> matmul). One thread per output row; two stack arrays per thread
+# (`scores[256]` for the softmax intermediate, `out[256]` for the second
+# matmul accumulator). float accumulators throughout regardless of I/O dtype.
+_APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_SOURCE = (
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "kernel void matmul_softmax_matmul_f32(\n"
+    "    device const float* A   [[buffer(0)]],\n"
+    "    device const float* B   [[buffer(1)]],\n"
+    "    device const float* C   [[buffer(2)]],\n"
+    "    device float*       O   [[buffer(3)]],\n"
+    "    constant int&       M   [[buffer(4)]],\n"
+    "    constant int&       K   [[buffer(5)]],\n"
+    "    constant int&       N   [[buffer(6)]],\n"
+    "    constant int&       P   [[buffer(7)]],\n"
+    "    uint gid [[thread_position_in_grid]])\n"
+    "{\n"
+    "    if (gid >= (uint)M) return;\n"
+    "    if (N > 256) return;\n"
+    "    if (P > 256) return;\n"
+    "    int row = (int)gid;\n"
+    "    float scores[256];\n"
+    "    int a_off = row * K;\n"
+    "    for (int n = 0; n < N; ++n) scores[n] = 0.0f;\n"
+    "    for (int k = 0; k < K; ++k) {\n"
+    "        float a = A[a_off + k];\n"
+    "        int b_off = k * N;\n"
+    "        for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];\n"
+    "    }\n"
+    "    float row_max = -INFINITY;\n"
+    "    for (int n = 0; n < N; ++n) row_max = max(row_max, scores[n]);\n"
+    "    float denom = 0.0f;\n"
+    "    for (int n = 0; n < N; ++n) {\n"
+    "        scores[n] = exp(scores[n] - row_max);\n"
+    "        denom += scores[n];\n"
+    "    }\n"
+    "    if (denom == 0.0f) {\n"
+    "        for (int n = 0; n < N; ++n) scores[n] = 0.0f;\n"
+    "    } else {\n"
+    "        float inv = 1.0f / denom;\n"
+    "        for (int n = 0; n < N; ++n) scores[n] *= inv;\n"
+    "    }\n"
+    "    float out[256];\n"
+    "    for (int p = 0; p < P; ++p) out[p] = 0.0f;\n"
+    "    for (int n = 0; n < N; ++n) {\n"
+    "        float sn = scores[n];\n"
+    "        int c_off = n * P;\n"
+    "        for (int p = 0; p < P; ++p) out[p] += sn * C[c_off + p];\n"
+    "    }\n"
+    "    int o_off = row * P;\n"
+    "    for (int p = 0; p < P; ++p) O[o_off + p] = out[p];\n"
+    "}\n"
+)
+_APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_CACHE_KEY = _sha256_short(_APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_SOURCE)
+
+
+_APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_SOURCE_F16 = (
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "kernel void matmul_softmax_matmul_f16(\n"
+    "    device const half*  A   [[buffer(0)]],\n"
+    "    device const half*  B   [[buffer(1)]],\n"
+    "    device const half*  C   [[buffer(2)]],\n"
+    "    device half*        O   [[buffer(3)]],\n"
+    "    constant int&       M   [[buffer(4)]],\n"
+    "    constant int&       K   [[buffer(5)]],\n"
+    "    constant int&       N   [[buffer(6)]],\n"
+    "    constant int&       P   [[buffer(7)]],\n"
+    "    uint gid [[thread_position_in_grid]])\n"
+    "{\n"
+    "    if (gid >= (uint)M) return;\n"
+    "    if (N > 256) return;\n"
+    "    if (P > 256) return;\n"
+    "    int row = (int)gid;\n"
+    "    float scores[256];\n"
+    "    int a_off = row * K;\n"
+    "    for (int n = 0; n < N; ++n) scores[n] = 0.0f;\n"
+    "    for (int k = 0; k < K; ++k) {\n"
+    "        float a = float(A[a_off + k]);\n"
+    "        int b_off = k * N;\n"
+    "        for (int n = 0; n < N; ++n) scores[n] += a * float(B[b_off + n]);\n"
+    "    }\n"
+    "    float row_max = -INFINITY;\n"
+    "    for (int n = 0; n < N; ++n) row_max = max(row_max, scores[n]);\n"
+    "    float denom = 0.0f;\n"
+    "    for (int n = 0; n < N; ++n) {\n"
+    "        scores[n] = exp(scores[n] - row_max);\n"
+    "        denom += scores[n];\n"
+    "    }\n"
+    "    if (denom == 0.0f) {\n"
+    "        for (int n = 0; n < N; ++n) scores[n] = 0.0f;\n"
+    "    } else {\n"
+    "        float inv = 1.0f / denom;\n"
+    "        for (int n = 0; n < N; ++n) scores[n] *= inv;\n"
+    "    }\n"
+    "    float out[256];\n"
+    "    for (int p = 0; p < P; ++p) out[p] = 0.0f;\n"
+    "    for (int n = 0; n < N; ++n) {\n"
+    "        float sn = scores[n];\n"
+    "        int c_off = n * P;\n"
+    "        for (int p = 0; p < P; ++p) out[p] += sn * float(C[c_off + p]);\n"
+    "    }\n"
+    "    int o_off = row * P;\n"
+    "    for (int p = 0; p < P; ++p) O[o_off + p] = half(out[p]);\n"
+    "}\n"
+)
+_APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_CACHE_KEY_F16 = _sha256_short(_APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_SOURCE_F16)
 
 
 def _diagnostic_level(severity: str) -> DiagnosticLevel:
@@ -723,11 +845,16 @@ def lower_tile_to_target_ir(tile_module: TileIRModule, *, target_kind: str) -> T
 
 
 def _apple_gpu_module_fusion_kind(tile_module: TileIRModule) -> str | None:
-    """Phase 8.4.3 — when a Tile IR module's compute ops resolve to a
-    recognized fusion chain, return its kind. None otherwise. The runtime
-    pipeline pass collapses the chain at the IR layer; this hook is the
-    parallel decision at the Python/object Target IR layer so the emitted
-    metadata + lit-text views stay consistent.
+    """Phase 8.4.3 + 8.4.5 — classify the Tile IR module as one of the
+    recognized fusion chains:
+      - "matmul_softmax_matmul" (3 ops, full attention block)
+      - "matmul_softmax"        (2 ops)
+      - None                    (no fusion)
+
+    Distinct Graph IR ops carry distinct `ordinal` attrs through the
+    Schedule -> Tile lowering, so counting unique ordinals tells us how
+    many original ops are in the chain. The set of `source` strings tells
+    us the chain shape.
     """
 
     if len(tile_module.functions) != 1:
@@ -743,23 +870,37 @@ def _apple_gpu_module_fusion_kind(tile_module: TileIRModule) -> str | None:
     ]
     if not compute_ops:
         return None
+
     sources = {str(op.attrs.get("source", "")) for op in compute_ops}
     matmul_sources = {"tessera.matmul", "tessera.gemm"}
     softmax_sources = {"tessera.softmax", "tessera.softmax_safe"}
-    if (sources & matmul_sources) and (sources & softmax_sources) and (
-        sources <= (matmul_sources | softmax_sources)
-    ):
-        return "matmul_softmax"
-    return None
+
+    if not ((sources & matmul_sources) and (sources & softmax_sources)):
+        return None
+    if not (sources <= (matmul_sources | softmax_sources)):
+        return None
+
+    # Count distinct Graph IR op ordinals among matmul-source compute ops.
+    # 2 distinct matmul ordinals = 3-op chain (matmul -> softmax -> matmul).
+    matmul_ordinals = {
+        op.attrs.get("ordinal")
+        for op in compute_ops
+        if str(op.attrs.get("source", "")) in matmul_sources
+    }
+    if len(matmul_ordinals) >= 2:
+        return "matmul_softmax_matmul"
+    return "matmul_softmax"
 
 
 def _lower_apple_gpu_fusion(tile_fn, fusion_kind: str) -> list[TargetOp]:
-    """Phase 8.4.3 + 8.4.4.2 — emit the fused msl_kernel + mps_dispatch pair
-    for a recognized fusion chain. Picks the dtype-specific MSL source +
-    entry_point + cache_key from the matmul "head" op's dtype attr.
+    """Phase 8.4.3 + 8.4.4.2 + 8.4.5 — emit the fused msl_kernel +
+    mps_dispatch pair for a recognized fusion chain. Picks the dtype-
+    specific MSL source + entry_point + cache_key from the matmul "head"
+    op's dtype attr. The kernel_key in the helper call corresponds to
+    the chain shape: "matmul_softmax" or "matmul_softmax_matmul".
     """
 
-    if fusion_kind != "matmul_softmax":
+    if fusion_kind not in {"matmul_softmax", "matmul_softmax_matmul"}:
         raise ValueError(f"unknown apple_gpu fusion kind: {fusion_kind!r}")
 
     flat_ops = list(_flatten_tile_ops(tile_fn.body))
@@ -774,7 +915,7 @@ def _lower_apple_gpu_fusion(tile_fn, fusion_kind: str) -> list[TargetOp]:
     base = _base_attrs(head)
     dtype = _apple_gpu_dtype_from_op(head)
     msl_source, entry_point, cache_key, dtype_attr = (
-        _apple_gpu_kernel_msl_for_dtype("matmul_softmax", dtype)
+        _apple_gpu_kernel_msl_for_dtype(fusion_kind, dtype)
     )
     return [
         TargetOp("tessera_apple.gpu.msl_kernel", {
@@ -784,7 +925,7 @@ def _lower_apple_gpu_fusion(tile_fn, fusion_kind: str) -> list[TargetOp]:
             "entry_point": entry_point,
             "msl_source": msl_source,
             "cache_key": cache_key,
-            "fusion": "matmul_softmax",
+            "fusion": fusion_kind,
             "grid": "rows",
             "threadgroup": "?x1x1",
         }),

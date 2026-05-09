@@ -520,7 +520,7 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | **Advanced examples capability gap** (per-example status + 10-theme tracking plan) | `docs/audit/advanced_examples_capability_gap.md` |
 | **Development execution roadmap** (Phases A–I, per-task acceptance criteria, dependencies) | `docs/audit/execution_roadmap.md` |
 | **NVIDIA execution audit** (Phase G1 — per-component status + 8-task punch list to first H100 BF16 GEMM) | `docs/audit/nvidia_execution_audit.md` |
-| Examples (most are README/stub scaffolds) | `examples/` — `getting_started/basic_tensor_ops.py`, `compiler/`, `advanced/` (10+ subdirs: speculative_decoding, long_context_attention, kv_cache_serving, MoE, MLA, Nemotron, Jet_Nemotron, Fast_dLLM, RLVR), `optimization/`, `integration/`. **⚠️ `basic_tensor_ops.py` uses `@tsr.function` — drift from CANONICAL_API #15 (`@tessera.jit`); fix before pointing new users at it.** |
+| Examples (most are README/stub scaffolds) | `examples/` — `getting_started/basic_tensor_ops.py` (canonical `@tessera.jit`), `compiler/`, `advanced/` (10+ subdirs: speculative_decoding, long_context_attention, kv_cache_serving, MoE, MLA, Nemotron, Jet_Nemotron, Fast_dLLM, RLVR), `optimization/`, `integration/`. |
 | Style guide | `tessera_style_guide.md` |
 | Claude Code skill map | `skills.md` |
 | Project structure | `PROJECT_STRUCTURE.md` |

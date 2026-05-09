@@ -27,15 +27,15 @@ last_updated: 2026-05-09
 
 | Item | Tracking |
 |------|----------|
-| Graph/Tile IR adjoint ops | Phase 5 follow-up — adds adjoint Graph IR ops + lowering |
-| Effect-aware adjoint collective insertion (`reduce_scatter`/`all_gather` for distributed gradients) | Extends `GPUCollectiveInsertionPass` |
-| Activation checkpointing / rematerialization pass | Phase 5 follow-up |
-| Mixed-precision gradient master copy + loss scaling (fp32 master, fp8 forward) | Phase 5; depends on autocast (Theme 10) |
+| Graph/Tile IR adjoint ops | Phase F4 scaffold landed; full Python `@jit` integration remains follow-up |
+| Effect-aware adjoint collective insertion (`reduce_scatter`/`all_gather` for distributed gradients) | Phase F5 rewrite landed; full distributed training validation remains follow-up |
+| Activation checkpointing / rematerialization pass | Python reference rematerialization landed; lower-level pass integration remains follow-up |
+| Mixed-precision gradient master copy + loss scaling (fp32 master, fp8 forward) | Autocast + `GradScaler` landed for the reference path; fp8/backend lowering remains follow-up |
 | Higher-order derivatives (HVP, jacrev, jacfwd) | Out of scope for v1 |
 | `jax.vmap`-style batched transforms | Out of scope for v1 |
 | Custom CUDA/Metal adjoint kernels | Each backend's later phase |
-| Backward through `flash_attn` (fused) | Wired as a `custom_rule` once a kernel exists; v1 errors |
-| Backward through `ops.moe`, `ops.fft/ifft`, `ops.spmm_*`, `ops.cholesky` | Same — error in v1 unless `custom_rule` registered |
+| Backward through `flash_attn` (fused) | Reference-path VJP registered via `custom_rule`; backend-specific fused adjoint kernels remain follow-up |
+| Backward through `ops.moe`, `ops.spmm_*`, `ops.cholesky` | Error in v1 unless `custom_rule` registered; FFT-family VJPs are registered |
 
 ## Surface
 

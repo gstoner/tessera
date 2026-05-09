@@ -16,24 +16,21 @@ last_updated: 2026-05-09
 >
 > **Tier 2 v1 first slice landed (2026-05-09):** `tessera.autodiff` —
 > tape-based reverse-mode at the numpy-reference op layer.
-> `tessera.autodiff.{tape, reverse, custom_rule}` + 17 built-in VJPs (gemm,
+> `tessera.autodiff.{tape, reverse, custom_rule}` + 22 built-in VJPs (gemm,
 > add, mul, transpose, cast, relu, sigmoid, tanh, silu, gelu, softmax,
-> layer_norm, rmsnorm, rmsnorm_safe, reduce, sum, dropout). 25 unit tests
+> layer_norm, rmsnorm, rmsnorm_safe, reduce, sum, dropout, flash_attn,
+> fft/ifft/rfft/irfft). Unit tests
 > covering numerical-Jacobian per op + end-to-end MLP one-step SGD loss
 > decrease. See `docs/spec/AUTODIFF_SPEC.md`,
 > `python/tessera/autodiff/{tape,vjp,__init__}.py`,
-> `tests/unit/test_autodiff.py`. **Tier 2 explicitly defers:** Graph/Tile IR
-> adjoints, effect-aware adjoint collective insertion, rematerialization,
-> mixed-precision master-copy, higher-order derivatives, JAX-style
-> `vmap`/`jacrev`. Backward through `flash_attn`/`moe`/`fft` requires
-> `custom_rule` registration.
+> `tests/unit/test_autodiff.py` and `tests/unit/test_phase_e_f.py`. **Tier 2
+> still defers:** higher-order derivatives and JAX-style `vmap`/`jacrev`;
+> `moe` still needs custom VJP registration.
 >
-> **Theme 1 + Theme 2 below are partially closed** — the tables mark
-> unblocked phantoms with ✅. Remaining Theme 1 work: `BatchNorm1d` (needs
-> buffer protocol), `Conv2d` Module wrapper (layout decision), `LSTM`,
-> `RotaryEmbedding`, `KVCache`, `DynamicDepthwiseConv1d`,
-> `CastedLinear/Embedding`, `MultiHeadCrossAttention`, activation modules,
-> `CrossEntropyLoss` (now buildable from autodiff but not shipped).
+> **Theme 1 + Theme 2 below are mostly closed** — the tables mark unblocked
+> phantoms with ✅. Remaining notable gaps are GPU execution, optimizer/distribution
+> utilities, FP8-family lowering, and a few example-specific ops such as
+> `gather`, `einsum`, and `masked_fill`.
 
 ## Summary
 

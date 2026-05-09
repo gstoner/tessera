@@ -148,7 +148,9 @@ ShardSpec.replicate()   # fully replicated
 
 ## Constraint API
 
-Constraints are checked at `@jit` decoration time, not at call time.
+Constraints are checked at `@jit` decoration time when concrete `bindings`
+are provided, and again at call time when symbolic tensor annotations can be
+resolved from actual argument shapes.
 
 ```python
 @tessera.jit
@@ -165,7 +167,9 @@ def aligned_gemm(A: tessera.Tensor["M", "K"], B: tessera.Tensor["K", "N"]):
 | `tessera.constraint.Range(dim, lo, hi)` | `str, int, int` | `lo <= dim <= hi` |
 | `tessera.constraint.Equal(dim_a, dim_b)` | `str, str` | `dim_a == dim_b` |
 
-Violation → `TesseraConstraintError` at decoration time when concrete `bindings` are provided. Runtime first-call shape binding is planned but not currently implemented.
+Violation → `TesseraConstraintError`. Decoration-time checks fire when
+concrete `bindings` are provided; call-time checks fire for symbolic shapes
+resolved from actual tensor arguments.
 
 ---
 

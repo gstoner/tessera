@@ -58,7 +58,7 @@ across F + G.
 
 ## Phase A — Quick wins (independent, parallelizable, ~1–2 weeks)
 
-### [A1] Debugging story — env-var IR dumps + per-pass diff + how-to doc 📋
+### [A1] Debugging story — env-var IR dumps + per-pass diff + how-to doc ✅
 
 **Scope:** S (~250 LOC code + ~300 LOC docs).
 
@@ -77,7 +77,7 @@ across F + G.
 - Test: env var off → no files written; env var on → files exist + are non-empty MLIR.
 - Doc: a recipe titled "kernel ran, results wrong, what now?" walks through `TESSERA_DEBUG_IR`, the diff tool, and `tessera.debug.replay_manifest`.
 
-### [A2] Dynamic shapes — audit + doc + test 📋
+### [A2] Dynamic shapes — audit + doc + test ✅
 
 **Scope:** S (mostly investigation + ~150 LOC test + doc).
 
@@ -92,12 +92,10 @@ across F + G.
 - Update `CANONICAL_API.md` with a one-paragraph dynamic-shape semantics block.
 
 **Audit result (2026-05-09):** dynamic shapes work on CPU reference, Apple
-CPU, and Apple GPU — symbolic dims flow through to actual execution. The
-real gap is **call-time constraint enforcement**: `@jit(bindings={K:7})` +
-`require(Divisible(K, 8))` raises at decoration time, but the same function
-called *without* `bindings=` lets a violating shape through silently. See
-`tests/unit/test_dynamic_shapes.py::TestConstraintEnforcement::test_call_time_check_xfail`
-(currently `xfail`, becomes `xpass` when fixed) and `docs/spec/SHAPE_SYSTEM.md` §10.
+CPU, and Apple GPU — symbolic dims flow through to actual execution.
+Call-time constraint enforcement also landed: `JitFn.__call__` resolves
+symbolic dims from concrete argument shapes and raises `TesseraConstraintError`
+for `Divisible`, `Range`, and `Equal` violations.
 
 ### [A2-followup] Call-time constraint enforcement ✅
 
@@ -107,7 +105,7 @@ raise `TesseraConstraintError` even when no `bindings=` was supplied.
 Acceptance: the `xfail` test in `test_dynamic_shapes.py` flips to `xpass` and
 the `xfail` mark is removed.
 
-### [A3] KV-cache lowering coverage matrix 📋
+### [A3] KV-cache lowering coverage matrix ✅
 
 **Scope:** XS (doc-only, ~80 LOC).
 
@@ -122,7 +120,7 @@ the `xfail` mark is removed.
 - Audit method: grep each backend's lowering passes for `kv_cache_*`, verify behavior, document.
 - For any 🔲 cells found that turn out to be ❌, file a follow-up task in this roadmap.
 
-### [A4] Theme 1 cleanup — small phantoms that don't need new infrastructure 📋
+### [A4] Theme 1 cleanup — small phantoms that don't need new infrastructure ✅
 
 **Scope:** S (~300 LOC code + ~200 LOC tests).
 
@@ -147,11 +145,12 @@ the `xfail` mark is removed.
 - `clip_grad_norm_` tested: above-threshold case scales correctly; below-threshold leaves grads untouched.
 - Update `advanced_examples_capability_gap.md` to mark these ✅.
 
-### [A5] `flash_attn` VJP via `custom_rule` 📋
+### [A5] `flash_attn` VJP via `custom_rule` ✅
 
 **Scope:** XS (~50 LOC code + ~60 LOC test).
 
-Today, calling `flash_attn` inside a tape raises `TesseraAutodiffError`. This is correct (no kernel-level adjoint exists), but the standard reference VJP is well-known and worth shipping for the numpy reference path so `MultiHeadAttention` modules can train end-to-end.
+The numpy-reference VJP is shipped via the built-in `custom_rule` registry so
+`MultiHeadAttention`-style code can train end-to-end on the reference path.
 
 **Files (new):**
 - `python/tessera/autodiff/_flash_attn_vjp.py` — registered via `custom_rule("flash_attn")`

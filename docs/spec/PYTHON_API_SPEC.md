@@ -176,7 +176,7 @@ def fn(...): ...
 |-----------|------|---------|-------------|
 | `deterministic` | `bool` | `False` | If `True`, raises `TesseraEffectError` if the function body contains any unseeded `random` effect op (e.g. `dropout` without `seed`). |
 | `seed` | `int \| None` | `None` | RNG seed. Required when `deterministic=True` and the body calls a `random` effect op. |
-| `bindings` | `dict[str, int] \| None` | `None` | Concrete dimension bindings for constraint checking at decoration time. Example: `{"K": 128, "M": 512}`. Runtime first-call shape binding is planned but not currently implemented. |
+| `bindings` | `dict[str, int] \| None` | `None` | Optional concrete dimension bindings for early constraint checking at decoration time. Example: `{"K": 128, "M": 512}`. When omitted, symbolic tensor annotations are resolved from call-time argument shapes and constraints are checked before execution. |
 | `target` | `GPUTargetProfile \| str \| None` | `None` | Target lowering profile. `None` routes to the CPU/interpreted path. `GPUTargetProfile(ISA.SM_90)` selects NVIDIA Hopper artifacts; `ISA.SM_100` and `ISA.SM_120` select Blackwell artifacts. String aliases include `cuda`, `nvidia`, `gpu`, `sm90`, `sm100`, and `sm120`. |
 | `attn_config` | `FlashAttnLoweringConfig \| None` | `None` | Flash attention tile sizes and pipeline configuration. If `None` and `target.isa >= ISA.SM_90`, `SM90_DEFAULT` is used automatically. |
 | `cpu_tile` | `tuple[int, int, int]` | `(128, 128, 64)` | CPU matmul/GEMM Schedule IR tile `(tile_m, tile_n, tile_k)` for the narrow end-to-end CPU compiler path. |

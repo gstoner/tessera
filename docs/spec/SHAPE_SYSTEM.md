@@ -320,7 +320,7 @@ too much of the model.
 | Layer | Current status | Active evidence | Notes |
 |-------|----------------|-----------------|-------|
 | Python shape objects and helpers | implemented | `python/tessera/shape.py`, `tests/unit/test_shape_system_foundation.py` | Strongest current implementation surface. |
-| Constraint predicates and solver | implemented | `python/tessera/compiler/constraints.py`, `tests/unit/test_constraints.py` | Decoration-time concrete bindings are checked; runtime first-call binding remains planned. |
+| Constraint predicates and solver | implemented | `python/tessera/compiler/constraints.py`, `tests/unit/test_constraints.py`, `tests/unit/test_dynamic_shapes.py` | Decoration-time concrete bindings and call-time symbolic shape bindings are checked. |
 | Graph IR shape inference | implemented / scaffolded | `src/compiler/diagnostics/ShapeInferencePass.cpp`, `tests/unit/test_shape_inference.py` | Coverage is focused on core ops and diagnostics. |
 | Schedule feasibility | implemented / scaffolded | `check_schedule_tile`, shape-system tests | Python helper reports padding/feasibility; full MLIR verifier coverage is incremental. |
 | Tile verifier integration | scaffolded / lit-testable | Tile IR and backend lit tests where available | Alignment/resource checks exist for selected paths; full memory-model legality is planned. |
@@ -336,16 +336,16 @@ through to each backend?
 
 | Backend | Symbolic dims at call time | Decoration-time constraint check (`bindings=`) | Call-time constraint enforcement | Notes |
 |---------|----------------------------|------------------------------------------------|----------------------------------|-------|
-| CPU reference (no `target=`) | ✅ accepted; numpy reference handles whatever concrete shape arrives | ✅ | ❌ **gap — silent** | Numpy `__add__` etc. catch incompatible shapes by themselves; constraint predicates aren't re-checked on calls |
-| `target="apple_cpu"` (Accelerate) | ✅ accepted; rank-2 / rank-3 GEMM dispatch reads runtime shape | ✅ | ❌ same gap | Tested 4×8 ⊗ 8×16 and 4×16 ⊗ 16×16 with one decorator |
-| `target="apple_gpu"` (MPS + MSL) | ✅ accepted; MPS matrix descriptors built from concrete shape | ✅ | ❌ same gap | Verified in `tests/unit/test_dynamic_shapes.py` |
+| CPU reference (no `target=`) | ✅ accepted; numpy reference handles concrete call shapes | ✅ | ✅ | `JitFn.__call__` resolves symbolic dims from actual arguments and raises `TesseraConstraintError` for violations |
+| `target="apple_cpu"` (Accelerate) | ✅ accepted; rank-2 / rank-3 GEMM dispatch reads runtime shape | ✅ | ✅ | Tested 4×8 ⊗ 8×16 and 4×16 ⊗ 16×16 with one decorator |
+| `target="apple_gpu"` (MPS + MSL) | ✅ accepted; MPS matrix descriptors built from concrete shape | ✅ | ✅ | Verified in `tests/unit/test_dynamic_shapes.py` |
 | `target="rocm"` / `"metalium"` / `"nvidia"` / `"cerebras"` / TPU | n/a — artifact-only, no execution to test | ✅ | n/a | Symbolic dims appear in emitted IR text; runtime semantics undefined until backend executes |
 
-### The call-time constraint gap
+### Call-time constraint enforcement
 
 `@tessera.jit(bindings={"K": 7})` on a body with `tessera.require(Divisible("K", 8))`
-correctly raises `TesseraConstraintError` at decoration time. But the same
-function called *without* eager bindings:
+raises `TesseraConstraintError` at decoration time. The same function called
+without eager bindings is checked at call time:
 
 ```python
 @tessera.jit
@@ -353,17 +353,18 @@ def aligned_gemm(A: ts.Tensor["M", "K"], B: ts.Tensor["K", "N"]):
     ts.require(ts.constraint.Divisible("K", 8))
     return ts.ops.gemm(A, B)
 
-aligned_gemm(np.random.randn(4, 7), np.random.randn(7, 16))  # K=7 → returns silently
+aligned_gemm(np.random.randn(4, 7), np.random.randn(7, 16))  # K=7 → TesseraConstraintError
 ```
 
-This is a known gap (referenced in `CANONICAL_API.md` §Constraint API: "Runtime
-first-call shape binding is planned but not currently implemented"). Tracked
-as a Phase A2 follow-up in `docs/audit/execution_roadmap.md`.
+`JitFn.__call__` binds symbolic dimensions from tensor annotations, verifies
+that repeated symbols resolve consistently across arguments, then re-runs the
+constraint solver. Passing shapes are cached so repeated calls with the same
+shape tuple avoid redundant solver work.
 
 ### Recommended user pattern today
 
-For symbolic models that need constraint checking, declare bindings at
-decoration time once per shape specialization:
+For early errors on a known specialization, declare bindings at decoration
+time:
 
 ```python
 @tessera.jit(bindings={"K": K_VALUE})
@@ -372,6 +373,5 @@ def gemm(A: ts.Tensor["M", "K"], B: ts.Tensor["K", "N"]):
     return ts.ops.gemm(A, B)
 ```
 
-Or call directly without `bindings=` and accept that constraint violations
-will manifest as low-level numpy / Accelerate errors rather than typed
-`TesseraConstraintError`s.
+For polymorphic call sites, omit `bindings=` and let call-time enforcement
+validate each new concrete shape.

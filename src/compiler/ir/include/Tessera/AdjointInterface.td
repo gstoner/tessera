@@ -1,15 +1,15 @@
 //===- AdjointInterface.td - Tessera autodiff interface --------*- tablegen -*-===//
 //
-// Phase F4 of docs/audit/execution_roadmap.md. ODS scaffold for the
-// AdjointInterface op trait. Each differentiable Graph IR op declares an
-// `adjoint` method that materializes its backward computation as Graph IR
-// ops; the AutodiffPass walks the IR and inserts adjoint ops via interface
-// dispatch.
+// Phase F4 of docs/audit/execution_roadmap.md. ODS for the AdjointInterface
+// op trait. Each differentiable Graph IR op declares an `adjoint` method
+// that materializes its backward computation as Graph IR ops; the
+// AutodiffPass walks the IR and inserts adjoint ops via interface dispatch.
 //
-// This is the ODS surface only — the C++ pass that consumes it lives at
-// `lib/Transforms/AutodiffPass.cpp`. Custom Python-registered VJPs flow
-// through the same surface via a registry indirection (see
-// docs/spec/AUTODIFF_SPEC.md §4 once F4's Python bridge lands).
+// Cross-references:
+//   * lib/Transforms/AutodiffPass.cpp — the pass that consumes this interface
+//   * docs/spec/AUTODIFF_SPEC.md §Phase F4 — design + non-goals
+//   * python/tessera/autodiff/__init__.py — runtime VJP registry that the
+//     pass consults for ops carrying `customAdjointName()`
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,11 +22,9 @@ def Tessera_AdjointInterface : OpInterface<"AdjointInterface"> {
   let description = [{
     Marks an op as differentiable in reverse-mode autodiff.
 
-    Implementations declare how to construct the backward computation given:
-
-    * `outputCotangents` — the cotangents flowing in to the op's outputs
-      (indexed by result number).
-    * The op's own forward inputs and attributes.
+    Implementations declare how to construct the backward computation given
+    the cotangents flowing in to the op's outputs and the op's own forward
+    operands / attributes.
 
     The `buildAdjoint` method emits Graph IR ops that produce the
     `inputCotangents` — one per operand in the same order. Operands that
@@ -38,7 +36,7 @@ def Tessera_AdjointInterface : OpInterface<"AdjointInterface"> {
     `DenseMap<Value, Value>` keyed by forward SSA value.
   }];
 
-  let cppNamespace = "::mlir::tessera";
+  let cppNamespace = "::tessera";
 
   let methods = [
     InterfaceMethod<

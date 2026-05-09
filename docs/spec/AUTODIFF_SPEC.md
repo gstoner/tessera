@@ -246,19 +246,41 @@ custom_rule(name)` unchanged at the Python boundary.
 Key pieces (landed 2026-05-09):
 
 * **ODS interface** — `src/compiler/ir/include/Tessera/AdjointInterface.td`
-  defines `Tessera_AdjointInterface` with three methods:
-  `buildAdjoint(builder, outputCotangents) -> SmallVector<Value>`,
+  defines `Tessera_AdjointInterface` (`cppNamespace = ::tessera`) with three
+  methods: `buildAdjoint(builder, outputCotangents) -> SmallVector<Value>`,
   `isDifferentiable() -> bool`, and `customAdjointName() -> StringRef`.
 
-* **Pass scaffold** — `src/transforms/lib/AutodiffPass.cpp` documents the
-  four-step pass shape (collect, reverse-walk, dispatch, return cotangents)
-  and registers a no-op stub. The body lands when MLIR 21 tablegen is
-  wired against the ODS file.
+* **Pass body** — `src/transforms/lib/AutodiffPass.cpp` documents and codes
+  the full four-step reverse walk (collect forward ops, identify scalar
+  return as the loss seed, build cotangent map keyed by forward `Value`,
+  reverse-walk dispatching `buildAdjoint` per op, accumulate via
+  `arith.addf`). The interface-dispatch section is gated behind tablegen
+  on the ODS file landing in the build — until then the pass registers as
+  a no-op so opting into `--tessera-autodiff` doesn't break pipelines.
+
+* **Build wiring** — `AutodiffPass.cpp` is in
+  `src/transforms/lib/CMakeLists.txt`'s `TesseraPasses` library, registered
+  via `createAutodiffPass()` declared in
+  `src/transforms/include/Tessera/Transforms/Passes.h` and exposed to
+  `tessera-opt` via `Passes.cpp`'s `registerTesseraPasses()`.
+
+* **Lit smoke test** — `tests/tessera-ir/phase_f4/autodiff_pass_smoke.mlir`
+  is currently `XFAIL` and flips to passing when the tablegen step
+  produces `AdjointInterface.h.inc` and the per-op interface impls land.
 
 * **Custom-rule bridge** — `tessera.autodiff.custom_rule(name)` continues to
   register Python VJPs at runtime. Ops that opt into a custom rule report the
   registry key via `customAdjointName()`; the AutodiffPass consults the
-  bridge during its reverse walk.
+  bridge during its reverse walk via a `tessera.custom_adjoint_call`
+  placeholder op (to be added once tablegen runs).
+
+* **Remaining work to flip XFAIL** — (a) add the AdjointInterface ODS file
+  to a tablegen target so `AdjointInterface.h.inc` is generated; (b) declare
+  `Tessera_AdjointInterface` on each differentiable op in
+  `src/compiler/ir/TesseraOps.td`; (c) implement `buildAdjoint` for
+  `MatmulOp`, `AddOp`, `MulOp`, etc. (mirror the Python VJPs in
+  `python/tessera/autodiff/vjp.py`); (d) flesh out the custom-rule
+  placeholder op for ops carrying `customAdjointName()`.
 
 Out of scope for the F4 first cut:
 

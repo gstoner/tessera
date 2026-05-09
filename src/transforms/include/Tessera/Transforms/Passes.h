@@ -126,6 +126,39 @@ std::unique_ptr<mlir::Pass> createGPUCollectiveInsertionPass();
 //   --interleaved        use interleaved 1F1B (default false)
 std::unique_ptr<mlir::Pass> createPipelineStageInsertionPass();
 
+// ── Phase F4 — Reverse-mode autodiff via AdjointInterface ─────────────────
+//
+// Walks `func.func`s annotated with `tessera.autodiff = "reverse"` in
+// reverse program order and emits adjoint ops via the
+// `Tessera_AdjointInterface` op trait.
+//
+// ODS:  src/compiler/ir/include/Tessera/AdjointInterface.td
+// Body: src/transforms/lib/AutodiffPass.cpp
+// Spec: docs/spec/AUTODIFF_SPEC.md §Phase F4
+//
+// Until tablegen on the .td runs and produces `AdjointInterface.h.inc`,
+// the pass is registered as a no-op so opting into `--tessera-autodiff` in
+// a pipeline doesn't break the build. The Python numpy-tape autodiff
+// (`python/tessera/autodiff/`) remains the production path until then.
+std::unique_ptr<mlir::Pass> createAutodiffPass();
+
+// AdjointCollectiveInsertionPass — Phase F5. Runs **after** AutodiffPass.
+// For each function argument with both a recorded cotangent (set by
+// AutodiffPass via `tessera.autodiff.arg_cotangents`) and a sharding
+// declaration in `tessera.weight_sharding`, plans the appropriate
+// distributed-gradient collective:
+//   * "dp"-sharded         → reduce_scatter on dpAxis
+//   * "tp"-sharded         → all_gather on tpAxis (when the consumer needs full grad)
+//   * "replicated"         → all_reduce
+// The chosen plan is recorded as a per-arg `tessera.adjoint_collective_plan`
+// attribute. Real op insertion follows once AutodiffPass's multi-output
+// rewrite step lands.
+//
+// Options:
+//   --dp-axis  (default "dp")
+//   --tp-axis  (default "tp")
+std::unique_ptr<mlir::Pass> createAdjointCollectiveInsertionPass();
+
 void registerTesseraPasses();
 
 } // namespace tessera

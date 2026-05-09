@@ -1000,6 +1000,141 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             out += x_full[..., k:k + L_out] * w[None, :, k:k + 1]
         return out
 
+    def lstm_cell(x_t, h_prev, c_prev, W_ih, W_hh, b_ih=None, b_hh=None):
+        """One-step LSTM cell. Returns packed ``(B, 2*hidden_size)`` of ``concat([h_t, c_t])``.
+
+        Packing the two outputs in the last dim is the v1 workaround for the
+        single-output autodiff tape. Use ``lstm_state_h`` / ``lstm_state_c`` to
+        extract the parts under tape (slicing into the packed value isn't
+        traced because numpy slicing returns a fresh ``ndarray`` object).
+
+        Phase H2 of the execution roadmap — the state-propagation primitive
+        for RNN cells.
+        """
+        if hasattr(x_t, "_data"):
+            x_t = x_t._data
+        if hasattr(h_prev, "_data"):
+            h_prev = h_prev._data
+        if hasattr(c_prev, "_data"):
+            c_prev = c_prev._data
+        if hasattr(W_ih, "_data"):
+            W_ih = W_ih._data
+        if hasattr(W_hh, "_data"):
+            W_hh = W_hh._data
+        x_t = np.asarray(x_t)
+        h_prev = np.asarray(h_prev)
+        c_prev = np.asarray(c_prev)
+        W_ih = np.asarray(W_ih)
+        W_hh = np.asarray(W_hh)
+        H = h_prev.shape[-1]
+        gates = x_t @ W_ih.T + h_prev @ W_hh.T
+        if b_ih is not None:
+            if hasattr(b_ih, "_data"):
+                b_ih = b_ih._data
+            gates = gates + np.asarray(b_ih)
+        if b_hh is not None:
+            if hasattr(b_hh, "_data"):
+                b_hh = b_hh._data
+            gates = gates + np.asarray(b_hh)
+        i_g, f_g, g_g, o_g = (
+            gates[..., :H], gates[..., H:2*H], gates[..., 2*H:3*H], gates[..., 3*H:4*H]
+        )
+        i = 1.0 / (1.0 + np.exp(-i_g))
+        f = 1.0 / (1.0 + np.exp(-f_g))
+        g = np.tanh(g_g)
+        o = 1.0 / (1.0 + np.exp(-o_g))
+        c_t = f * c_prev + i * g
+        h_t = o * np.tanh(c_t)
+        return np.concatenate([h_t, c_t], axis=-1)
+
+    def lstm_state_h(packed):
+        """Extract ``h_t`` from a packed lstm_cell output. Traced for autodiff."""
+        if hasattr(packed, "_data"):
+            packed = packed._data
+        packed = np.asarray(packed)
+        H = packed.shape[-1] // 2
+        # Return a contiguous copy so id() is distinct from any view; the
+        # autodiff wrapper records this op's output as the tape entry.
+        return packed[..., :H].copy()
+
+    def lstm_state_c(packed):
+        """Extract ``c_t`` from a packed lstm_cell output. Traced for autodiff."""
+        if hasattr(packed, "_data"):
+            packed = packed._data
+        packed = np.asarray(packed)
+        H = packed.shape[-1] // 2
+        return packed[..., H:].copy()
+
+    def depthwise_conv2d(
+        x, w, *, kernel_size, stride=(1, 1), padding=(0, 0), causal=False
+    ):
+        """Depthwise 2-D convolution (NHWC; one filter per channel).
+
+        Inputs:
+          * ``x`` shape ``(N, H, W, C)``
+          * ``w`` shape ``(kH, kW, C)`` — one filter per channel
+          * ``kernel_size`` int or ``(kH, kW)`` tuple
+          * ``stride`` int or ``(sH, sW)`` tuple
+          * ``padding`` int or ``(pH, pW)`` tuple — symmetric pad on H/W
+          * ``causal`` — if True, pad only the top + left (kernel_size-1) edges
+            so output[n, h, w, c] depends only on inputs at ``h' <= h`` and
+            ``w' <= w``.
+
+        Output: ``(N, H_out, W_out, C)``.
+
+        D3 follow-up of the execution roadmap. Streaming-state variant
+        (matching the D1 ``state=`` kwarg) is left for a follow-on; this v1
+        is single-shot.
+        """
+        def _pair(v):
+            if isinstance(v, (tuple, list)):
+                return (int(v[0]), int(v[1]))
+            return (int(v), int(v))
+
+        kH, kW = _pair(kernel_size)
+        sH, sW = _pair(stride)
+        pH, pW = _pair(padding)
+
+        if hasattr(x, "_data"):
+            x = x._data
+        if hasattr(w, "_data"):
+            w = w._data
+        x = np.asarray(x)
+        w = np.asarray(w)
+        if x.ndim != 4:
+            raise ValueError(f"depthwise_conv2d expects (N, H, W, C); got {x.shape}")
+        N, H, W, C = x.shape
+        if w.shape != (kH, kW, C):
+            raise ValueError(
+                f"depthwise_conv2d weight shape {w.shape} must be (kH={kH}, kW={kW}, C={C})"
+            )
+
+        if causal:
+            x_pad = np.pad(x, ((0, 0), (kH - 1, 0), (kW - 1, 0), (0, 0)))
+        else:
+            x_pad = np.pad(x, ((0, 0), (pH, pH), (pW, pW), (0, 0)))
+
+        H_full = x_pad.shape[1]
+        W_full = x_pad.shape[2]
+        H_out = (H_full - kH) // sH + 1
+        W_out = (W_full - kW) // sW + 1
+        if H_out <= 0 or W_out <= 0:
+            raise ValueError(
+                f"depthwise_conv2d: non-positive output (H_out={H_out}, W_out={W_out})"
+            )
+
+        out = np.zeros((N, H_out, W_out, C), dtype=x.dtype)
+        for kh in range(kH):
+            for kw in range(kW):
+                # x_pad[:, kh:kh+H_out*sH:sH, kw:kw+W_out*sW:sW, :] would do strides;
+                # for clarity keep the simple case (stride=1) explicit.
+                if sH == 1 and sW == 1:
+                    patch = x_pad[:, kh:kh + H_out, kw:kw + W_out, :]
+                else:
+                    patch = x_pad[:, kh:kh + H_out * sH:sH, kw:kw + W_out * sW:sW, :]
+                out += patch * w[None, kh:kh + 1, kw:kw + 1, :]
+        return out
+
     def online_softmax(x, *, axis: int = -1, state=None):
         """Numerically stable softmax with optional streaming state.
 
@@ -1032,6 +1167,106 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         new_m = np.maximum(prev_m, chunk_m)
         new_s = prev_s * np.exp(prev_m - new_m) + np.exp(x - new_m).sum(axis=axis, keepdims=True)
         return np.exp(x - new_m) / new_s
+
+    def selective_ssm(x, A, B, C, delta, *, gate=None, state=None, chunk_size: int = 128):
+        """Mamba2-style selective state-space model (numpy reference path).
+
+        Inputs:
+          * ``x`` shape ``(B, S, D)`` — input sequence
+          * ``A`` shape ``(D, N)`` or ``(D,)`` — state-matrix diagonal. If
+            1-d, broadcast over ``N`` (taken from B/C). Typically negative.
+          * ``B`` shape ``(B, S, N)`` — input projection
+          * ``C`` shape ``(B, S, N)`` — output projection
+          * ``delta`` shape ``(B, S, D)`` — selective time-step (controls
+            per-token dynamics)
+          * ``gate`` shape ``(B, S, D)`` or None — optional output gate
+          * ``state`` shape ``(B, D, N)`` or None — optional initial state
+            (for chunked / streaming inference)
+          * ``chunk_size`` — internal chunked-scan size; affects numerical
+            layout, not correctness
+
+        Returns ``y`` shape ``(B, S, D)``.
+
+        Algorithm (per token t, channel d, state dim n):
+            A_bar = exp(delta[b,t,d] * A[d,n])
+            B_bar = delta[b,t,d] * B[b,t,n]
+            h[t,d,n] = A_bar * h[t-1,d,n] + B_bar * x[b,t,d]
+            y[t,d] = sum_n C[b,t,n] * h[t,d,n]
+
+        Phase D3 of the execution roadmap. **Forward-only in v1** — calling
+        inside a tape and backpropping through it raises the standard
+        ``TesseraAutodiffError`` pointing to
+        ``tessera.autodiff.custom_rule("selective_ssm")``. The Mamba2 adjoint
+        is on the Phase D3 follow-up list.
+        """
+        for arr_name, arr in (("x", x), ("A", A), ("B", B), ("C", C), ("delta", delta)):
+            if hasattr(arr, "_data"):
+                pass  # `np.asarray` below handles the unwrap via __array__
+        x = np.asarray(x)
+        A = np.asarray(A)
+        B_arr = np.asarray(B)
+        C_arr = np.asarray(C)
+        delta = np.asarray(delta)
+
+        if x.ndim != 3:
+            raise ValueError(f"selective_ssm: x must be (B, S, D); got {x.shape}")
+        Bsz, S, D = x.shape
+        if delta.shape != (Bsz, S, D):
+            raise ValueError(f"selective_ssm: delta {delta.shape} != x {x.shape}")
+        if B_arr.ndim != 3 or B_arr.shape[:2] != (Bsz, S):
+            raise ValueError(f"selective_ssm: B must be (B, S, N); got {B_arr.shape}")
+        if C_arr.shape != B_arr.shape:
+            raise ValueError(
+                f"selective_ssm: C shape {C_arr.shape} must match B shape {B_arr.shape}"
+            )
+        N = B_arr.shape[2]
+
+        if A.ndim == 1:
+            if A.shape[0] != D:
+                raise ValueError(f"selective_ssm: A 1-d shape {A.shape} != (D={D},)")
+            A2d = np.broadcast_to(A[:, None], (D, N))
+        elif A.ndim == 2:
+            if A.shape != (D, N):
+                raise ValueError(f"selective_ssm: A 2-d shape {A.shape} != (D={D}, N={N})")
+            A2d = A
+        else:
+            raise ValueError(f"selective_ssm: A must be (D,) or (D, N); got {A.shape}")
+
+        # Initial state h: (B, D, N)
+        if state is not None:
+            state = np.asarray(state)
+            if state.shape != (Bsz, D, N):
+                raise ValueError(
+                    f"selective_ssm: state shape {state.shape} must be (B, D, N)=({Bsz}, {D}, {N})"
+                )
+            h = state.astype(x.dtype, copy=True)
+        else:
+            h = np.zeros((Bsz, D, N), dtype=x.dtype)
+
+        y = np.zeros((Bsz, S, D), dtype=x.dtype)
+
+        # Chunked scan — purely a layout choice, doesn't change semantics.
+        for chunk_start in range(0, S, max(1, int(chunk_size))):
+            chunk_end = min(S, chunk_start + max(1, int(chunk_size)))
+            for t in range(chunk_start, chunk_end):
+                # delta_t: (B, D) ; A2d: (D, N) → A_bar: (B, D, N)
+                A_bar = np.exp(delta[:, t, :, None] * A2d[None, :, :])
+                # B_bar: (B, D, N) — delta * B
+                B_bar = delta[:, t, :, None] * B_arr[:, t, None, :]
+                # x_t: (B, D) → broadcast to (B, D, N)
+                h = A_bar * h + B_bar * x[:, t, :, None]
+                # y_t = sum over n of C[b,t,n] * h[b,d,n]
+                y[:, t, :] = np.einsum("bdn,bn->bd", h, C_arr[:, t, :])
+
+        if gate is not None:
+            gate = np.asarray(gate)
+            if gate.shape != y.shape:
+                raise ValueError(
+                    f"selective_ssm: gate shape {gate.shape} must match output {y.shape}"
+                )
+            y = y * gate
+
+        return y
 
     def online_softmax_state(x, *, axis: int = -1, state=None):
         """Compute the new ``(running_max, running_sum)`` state for streaming softmax.
@@ -1128,10 +1363,15 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "kv_cache_prune": kv_cache_prune,
         "kv_cache_read": kv_cache_read,
         "depthwise_conv1d": depthwise_conv1d,
+        "depthwise_conv2d": depthwise_conv2d,
+        "lstm_cell": lstm_cell,
+        "lstm_state_h": lstm_state_h,
+        "lstm_state_c": lstm_state_c,
         "online_softmax": online_softmax,
         "online_softmax_state": online_softmax_state,
         "quantize_kv": quantize_kv,
         "dequantize_kv": dequantize_kv,
+        "selective_ssm": selective_ssm,
     }
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
@@ -1210,10 +1450,15 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         kv_cache_prune=kv_cache_prune,
         kv_cache_read=kv_cache_read,
         depthwise_conv1d=depthwise_conv1d,
+        depthwise_conv2d=depthwise_conv2d,
+        lstm_cell=lstm_cell,
+        lstm_state_h=lstm_state_h,
+        lstm_state_c=lstm_state_c,
         online_softmax=online_softmax,
         online_softmax_state=online_softmax_state,
         quantize_kv=quantize_kv,
         dequantize_kv=dequantize_kv,
+        selective_ssm=selective_ssm,
     )
 
 

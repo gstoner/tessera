@@ -12,5 +12,11 @@
 #include "TesseraOpsDialect.h.inc"
 #define GET_TYPEDEF_CLASSES
 #include "TesseraOpsTypes.h.inc"
+
+// Phase F4 — AdjointInterface op trait. Must come before TesseraOps.h.inc
+// because the generated op class declarations reference
+// `::tessera::AdjointInterface`.
+#include "Tessera/AdjointInterface.h.inc"
+
 #define GET_OP_CLASSES
 #include "TesseraOps.h.inc"

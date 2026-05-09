@@ -1,7 +1,23 @@
 
 set(LLVM_LINK_COMPONENTS Support)
 
+# Phase F4 — AdjointInterface (autodiff op trait). Generated headers feed the
+# AutodiffPass C++ body in src/transforms/lib/AutodiffPass.cpp and the
+# DeclareOpInterfaceMethods<...> mixins on differentiable ops in TesseraOps.td.
+# Generated paths land at ${BINARY}/Tessera/AdjointInterface.{h,cpp}.inc so
+# that consumers can `#include "Tessera/AdjointInterface.h.inc"` against the
+# existing TesseraIR include-dir set.
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Tessera)
+set(LLVM_TARGET_DEFINITIONS include/Tessera/AdjointInterface.td)
+mlir_tablegen(Tessera/AdjointInterface.h.inc -gen-op-interface-decls)
+mlir_tablegen(Tessera/AdjointInterface.cpp.inc -gen-op-interface-defs)
+add_public_tablegen_target(TesseraAdjointInterfaceTableGen)
+
 set(LLVM_TARGET_DEFINITIONS TesseraOps.td)
+
+# TesseraOps.td now includes "Tessera/AdjointInterface.td" — surface that path
+# to the tablegen invocation so it can resolve the include.
+include_directories(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 mlir_tablegen(TesseraOps.h.inc -gen-op-decls)
 mlir_tablegen(TesseraOps.cpp.inc -gen-op-defs)
@@ -18,9 +34,11 @@ add_mlir_dialect_library(TesseraIR
   TesseraDialect.cpp
   TesseraOps.cpp
   TesseraTiling.cpp
+  AdjointInterface.cpp
 
   DEPENDS
     TesseraIRTableGen
+    TesseraAdjointInterfaceTableGen
 
   LINK_LIBS PUBLIC
     MLIRIR

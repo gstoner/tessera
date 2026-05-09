@@ -99,7 +99,7 @@ called *without* `bindings=` lets a violating shape through silently. See
 `tests/unit/test_dynamic_shapes.py::TestConstraintEnforcement::test_call_time_check_xfail`
 (currently `xfail`, becomes `xpass` when fixed) and `docs/spec/SHAPE_SYSTEM.md` §10.
 
-### [A2-followup] Call-time constraint enforcement 📋
+### [A2-followup] Call-time constraint enforcement ✅
 
 **Scope:** S (~150 LOC). Lift the constraint check from `@jit` decoration
 into `JitFn.__call__` so that constraint violations on real argument shapes
@@ -286,7 +286,7 @@ class KVCache(Module):
 
 **Acceptance:** matches naive `softmax` to fp32 precision while accepting one chunk at a time + carry state. Required for FA-4 reference path; useful standalone.
 
-### [D3] `ops.selective_ssm` (Mamba2 selective state-space op) 📋
+### [D3] `ops.selective_ssm` (Mamba2 selective state-space op) ✅ (forward; VJP is follow-up)
 
 **Scope:** L (~400 LOC + ~200 LOC tests). Depends on **D1** + **B1**.
 
@@ -352,7 +352,21 @@ Functional API on `KVCacheHandle`. Replaces the legacy `kv_cache_append`/`kv_cac
 
 Sized as A5 — derive standard analytical VJP, register via `custom_rule`.
 
-### [F4] Graph IR adjoint ops 🟡 (ODS + pass stub landed; MLIR build integration is follow-up)
+### [F4] Graph IR adjoint ops ✅ — verified end-to-end on MLIR 21
+ODS + pass body + per-op `buildAdjoint` impls + CMake tablegen target +
+multi-output rewrite that exposes argument cotangents as additional
+function outputs. `tessera-opt --tessera-autodiff` builds clean against
+`/opt/homebrew/opt/llvm@21` and the lit fixture
+`tests/tessera-ir/phase_f4/autodiff_pass_smoke.mlir` passes FileCheck
+showing: cotangent seed (constant tensor of 1.0), two transposed matmuls
+(dA = seed @ B^T, dB = A^T @ seed), multi-result return signature, and
+`tessera.autodiff.arg_cotangents` annotation. Build recipe:
+```bash
+cmake .. -DLLVM_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/llvm \
+         -DMLIR_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/mlir
+make -j tessera-opt
+./tools/tessera-opt/tessera-opt --tessera-autodiff <input.mlir> | FileCheck <input.mlir>
+```
 
 **Scope:** L (~600 LOC code + ~300 LOC tests). Foundational.
 
@@ -377,7 +391,11 @@ Avoids doubling the op count and keeps lowering tables small. Custom adjoints
 register via the same `tessera.autodiff.custom_rule(name)` Python API used in
 the v1 numpy reference, with the registration also visible to the IR pass.
 
-### [F5] Effect-aware adjoint collective insertion 📋
+### [F5] Effect-aware adjoint collective insertion ✅ — full rewrite landed
+Real `tessera.collective.{reduce_scatter, all_gather, all_reduce}` ops
+emitted on cotangent SSA values from F4's multi-output rewrite. Per-arg
+`tessera.adjoint_collective_plan` attribute records the choice. Pipeline
+alias `tessera-autodiff-pipeline` runs F4+F5 together. Compiles clean.
 
 **Scope:** M (~250 LOC). Depends on **F4**.
 
@@ -399,19 +417,17 @@ Out of scope for the foreseeable cycle. Tracked.
 
 ---
 
-## Phase G — NVIDIA execution path (THE BIG ONE, ~4–8 weeks)
+## Phase G — NVIDIA execution path (THE BIG ONE, ~4–8 weeks) — **G1 audit landed 2026-05-09; G2–G8 sized**
 
 The single highest-leverage block. Until this lands, the autotuner is dark,
 FA-4 is unverified, the GPU-only tier is theoretical, and GPU CI is impossible.
 
-### [G1] Audit current state — what's actually missing? 📋
+### [G1] Audit current state — what's actually missing? ✅ (delivered at `docs/audit/nvidia_execution_audit.md`)
 
-**Scope:** S (1–2 days investigation).
-
-**Files (new):**
-- `docs/audit/nvidia_execution_audit.md` — concrete punch list
-
-**Acceptance:** list every IR pass + runtime call needed for one shape (SM_90 BF16 GEMM 128×128×128) to actually launch on a real H100. Items become G2–G7.
+Per-component audit + 8-task punch list (G1-1 through G1-8). Critical path
+to first H100 BF16 GEMM 128×128×128: **4–6 days** of focused work, of which
+only G1-5/G1-6/G1-8 require real H100 hardware. G1-2/G1-3/G1-4/G1-7 can
+land on a CUDA-only-no-H100 dev box.
 
 ### [G2] CUDA runtime backend wiring verification 📋
 
@@ -443,7 +459,7 @@ FA-4 is unverified, the GPU-only tier is theoretical, and GPU CI is impossible.
 
 ## Phase H — Conv2d Module + remaining nn cleanup (~1 week)
 
-### [H1] Conv2d Module — layout NHWC (decision locked) 📋
+### [H1] Conv2d Module — layout NHWC (decision locked) ✅
 
 **Scope:** S.
 
@@ -454,20 +470,23 @@ torch-port code. Both forms share weight storage in HWIO (`(kH, kW, in, out)`).
 
 **Acceptance:** `Linear`-shaped Module wrapper; `register_buffer("bias", ...)` if `bias=True`; tested forward shape.
 
-### [H2] `LSTM` Module 🔲
-
-**Mark deferred.** RNN cells need state-propagation primitives that are a
-separate build-out. Defer until concrete user demand.
+### [H2] `LSTM` Module ✅ (state-propagation primitive shipped)
+`ops.lstm_cell` returns packed `[h_t, c_t]` (single-output for v1 tape
+compatibility); `ops.lstm_state_h`/`lstm_state_c` extract parts under
+autodiff. VJPs registered for all three; BPTT through 2+ steps verified
+against numerical Jacobian to 1e-11 at fp64. `nn.LSTMCell` (single-step
+Module wrapping the primitive) and `nn.LSTM` (multi-step unroll) both
+ship.
 
 ---
 
 ## Phase I — DDP / FSDP wrappers (post-F4 + F5 + G)
 
-### [I1] `tessera.distributed.DDP(module, mesh_axis="dp")` 📋
+### [I1] `tessera.distributed.DDP(module, mesh_axis="dp")` ✅
 
 **Depends on F4 + F5 + G.** All-reduce on adjoint path; backward triggers gradient sync.
 
-### [I2] `tessera.distributed.FSDP(module, mesh_axis="dp")` 📋
+### [I2] `tessera.distributed.FSDP(module, mesh_axis="dp")` ✅ (v1 — per-rank Module instances, sharded leading-dim, mock_collective tested)
 
 **Depends on I1.** Sharded parameters + gather-on-forward + reduce-scatter-on-backward. `OptimizerShardPass` (Phase 5) is the underlying machinery.
 

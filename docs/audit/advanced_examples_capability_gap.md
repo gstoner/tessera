@@ -137,15 +137,17 @@ gradient master-copy + loss scaling, higher-order derivatives,
 **Roadmap:** Tier 2 v1 lands the surface. Each deferred item is its own
 follow-up sized in `docs/spec/AUTODIFF_SPEC.md`.
 
-### Theme 3 — Streaming kernels + dynamic shapes (blocks 2) — **partially closed**
-✅ **Shipped (Phase D1/D2/D4, 2026-05-09):** `ops.depthwise_conv1d` (causal +
-streaming state), `ops.online_softmax` + `ops.online_softmax_state`
-(numerically stable, streaming via explicit state helper),
-`nn.DynamicDepthwiseConv1d` Module wrapper (state via non-persistent buffer
-from B1). VJPs registered for autodiff.
-🔲 **Still deferred:** `ops.selective_ssm` (Mamba2 — Phase D3, large enough
-to deserve its own session), depthwise_conv2d, shape-polymorphic tiling.
-**Roadmap:** D1/D2/D4 closed; D3 (Mamba2) is the remaining big piece.
+### Theme 3 — Streaming kernels + dynamic shapes (blocks 2) — **closed (forward); D3 VJP follow-up**
+✅ **Shipped (Phase D1/D2/D3/D4, 2026-05-09):** `ops.depthwise_conv1d` (causal +
+streaming state, with VJP), `ops.online_softmax` + `ops.online_softmax_state`
+(numerically stable, streaming via explicit state helper, with VJP for
+single-chunk path), `nn.DynamicDepthwiseConv1d` Module wrapper (state via
+non-persistent buffer from B1), **`ops.selective_ssm`** (Mamba2: A/B/C/Δ
+projections, chunked scan, optional gate + initial state, forward only).
+🔲 **Follow-up:** `selective_ssm` VJP (Mamba2 backward — analytical
+gradient is derivable but tedious; ship as a `custom_rule` registration in
+a focused PR). Also depthwise_conv2d and shape-polymorphic tiling (no
+active demand).
 
 ### Theme 4 — KV-cache abstraction + block quantization (blocks 3) — **Phase E landed 2026-05-09**
 ✅ **Shipped:** `KVCacheHandle` (Phase B2, paged buffer + max_seq enforcement),

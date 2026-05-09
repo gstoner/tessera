@@ -6,6 +6,9 @@ include "mlir/Interfaces/TilingInterface.td"
 include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/BuiltinAttributes.td"
 include "mlir/IR/CommonAttrConstraints.td"
+// Phase F4 — AdjointInterface op trait for reverse-mode autodiff.
+// Each differentiable op below opts in via DeclareOpInterfaceMethods.
+include "Tessera/AdjointInterface.td"
 
 def Tessera_Dialect : Dialect {
   let name = "tessera";
@@ -151,7 +154,9 @@ def Tessera_ArchRelaxAttr : EnumAttr<Tessera_Dialect, Tessera_ArchRelax, "arch_r
 
 def Tessera_MatmulOp : Op<
   Tessera_Dialect, "matmul",
-  [Pure, DeclareOpInterfaceMethods<TilingInterface>]
+  [Pure,
+   DeclareOpInterfaceMethods<TilingInterface>,
+   DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
 > {
   let summary = "Matrix multiply (A @ B)";
   let arguments = (ins TensorType:$lhs, TensorType:$rhs,
@@ -208,7 +213,7 @@ def Tessera_FusedEpilogueOp : Op<
 
 class Tessera_UnaryPureOp<string mnemonic, string summaryText> : Op<
   Tessera_Dialect, mnemonic,
-  [Pure]
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
 > {
   let summary = summaryText;
   let arguments = (ins TensorType:$x);
@@ -476,3 +481,30 @@ def Tessera_NeighborsStencilApplyOp
     : Tessera_NeighborsGenericOp<"neighbors.stencil.apply">;
 def Tessera_NeighborsPipelineConfigOp
     : Tessera_NeighborsGenericOp<"neighbors.pipeline.config">;
+
+// ── Phase F4 — Custom adjoint placeholder ─────────────────────────────────
+//
+// Emitted by the AutodiffPass when an op carries a `customAdjointName()`
+// (i.e., its VJP is registered from Python via
+// `tessera.autodiff.custom_rule`). The runtime resolves this op against the
+// Python registry; the C++ pass treats it as opaque.
+//
+// Operands: forward inputs + forward output cotangents (interleaved by
+// position; the `name` attr disambiguates).
+// Results: one cotangent per forward input (Variadic).
+def Tessera_CustomAdjointCallOp : Op<
+  Tessera_Dialect, "custom_adjoint_call",
+  [Pure]
+> {
+  let summary = "Placeholder for a Python-registered VJP — resolved at runtime";
+  let description = [{
+    Emitted by the AutodiffPass when a forward op opts into a
+    Python-registered VJP via `AdjointInterface::customAdjointName()`. The
+    `name` attribute is the registry key; the runtime lowers this op by
+    calling the registered Python callable with `(dout, *forward_inputs)`
+    and unpacking the returned tuple of input cotangents.
+  }];
+  let arguments = (ins StrAttr:$name, Variadic<AnyType>:$operands);
+  let results = (outs Variadic<AnyType>:$cotangents);
+  let assemblyFormat = "$name `(` operands `)` attr-dict `:` functional-type(operands, results)";
+}

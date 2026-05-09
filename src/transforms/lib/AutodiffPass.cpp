@@ -1,4 +1,4 @@
-//===- AutodiffPass.cpp - Reverse-mode autodiff at Graph IR -----*- C++ -*-===//
+//===- AutodiffPass.cpp - Reverse-mode autodiff at Graph IR ----*- C++ -*-===//
 //
 // Phase F4 of docs/audit/execution_roadmap.md. Consumes the
 // `Tessera_AdjointInterface` op trait (see
@@ -6,72 +6,252 @@
 // computation for any ``func.func`` annotated with the
 // ``tessera.autodiff = "reverse"`` attribute.
 //
-// **Status (2026-05-09):** ODS interface scaffolded; this file documents the
-// pass shape and registers a stub. The numpy-tape autodiff
-// (`python/tessera/autodiff/`) remains the production path. F4 build
-// integration is a follow-up requiring an MLIR 21 build tree wired against
-// `Tessera_AdjointInterface`.
+// Pass shape (four-step reverse walk):
 //
-// Pass outline (when fully wired):
+//   1. Identify funcs to differentiate (annotation-driven).
+//   2. Walk the forward region top-down; record op order.
+//   3. Walk in reverse program order. For each op:
+//        - Look up cotangents for its results in the cotangent map.
+//        - If `op` implements `AdjointInterface` and is differentiable,
+//          dispatch to `buildAdjoint`.
+//        - If `op->customAdjointName()` is non-empty, the implementation
+//          is responsible for emitting a `tessera.custom_adjoint_call`
+//          placeholder that the runtime VJP registry resolves.
+//        - Otherwise emit a diagnostic per Architecture Decision #21.
+//      Accumulate returned cotangents into the input slots' map entries.
+//   4. The cotangents at function arguments become the new function's
+//      additional outputs (or — for `Module.parameters()` — are routed via
+//      a side-channel that becomes `param.grad` in the Python wrapper).
 //
-// 1. Identify funcs to differentiate (annotation-driven).
-// 2. Walk the forward region top-down; for each op, capture (op, results,
-//    operands) into a per-func tape vector.
-// 3. Walk in reverse program order. For each op:
-//    - Look up cotangents for its results in the cotangent map.
-//    - If `op` implements `AdjointInterface`, dispatch to `buildAdjoint`.
-//    - If `op->customAdjointName()` is non-empty, look up the Python-side
-//      VJP via the autodiff registry bridge.
-//    - Otherwise emit a diagnostic per Architecture Decision #21.
-// 4. The cotangents at function arguments become the new function's
-//    additional outputs (or, for `Module.parameters()`, are routed via a
-//    side-channel that becomes `param.grad` in the Python wrapper).
+// Effect-aware adjoint collective insertion (Phase F5) runs **after** this
+// pass and inserts `reduce_scatter` / `all_gather` for adjoints of
+// distributed parameters.
 //
-// Effect-aware adjoint collective insertion (Phase F5) is a follow-on pass
-// that runs after this one and inserts `reduce_scatter` / `all_gather` for
-// adjoints of distributed parameters.
+// Cross-references:
+//   * AdjointInterface.td — the ODS interface this pass dispatches via
+//   * AdjointInterface.cpp — per-op `buildAdjoint` impls
+//   * docs/spec/AUTODIFF_SPEC.md §Phase F4
+//   * python/tessera/autodiff/ — the v1 numpy-tape impl that this pass
+//     replaces internally while keeping the same public surface
 //
 //===----------------------------------------------------------------------===//
 
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
-#include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallVector.h"
 
-namespace mlir::tessera {
+// Generated header from AdjointInterface.td via TesseraAdjointInterfaceTableGen.
+#include "Tessera/AdjointInterface.h.inc"
 
-// Forward-declared in AdjointInterface.h.inc once ODS is wired into the build.
-// class AdjointInterface;
+namespace tessera {
 
 namespace {
 
-class AutodiffPass : public PassWrapper<AutodiffPass, OperationPass<func::FuncOp>> {
+/// Marker attribute on `func.func` to opt into autodiff transformation.
+constexpr const char *kAutodiffMarker = "tessera.autodiff";
+
+/// Track per-Value cotangents. Map keys are forward Values; map values are
+/// the Value of the cotangent emitted into the backward IR.
+using CotangentMap = llvm::DenseMap<mlir::Value, mlir::Value>;
+
+/// Accumulate `g` into `cotan[v]`. First contribution stores directly; later
+/// contributions add via `arith.addf`.
+void accumulateCotangent(mlir::OpBuilder &builder,
+                          CotangentMap &cotan,
+                          mlir::Value v,
+                          mlir::Value g) {
+  if (!g)
+    return;
+  auto it = cotan.find(v);
+  if (it == cotan.end()) {
+    cotan[v] = g;
+    return;
+  }
+  auto loc = g.getLoc();
+  auto add = builder.create<mlir::arith::AddFOp>(loc, it->second, g);
+  cotan[v] = add.getResult();
+}
+
+class AutodiffPass : public mlir::PassWrapper<
+                         AutodiffPass,
+                         mlir::OperationPass<mlir::func::FuncOp>> {
 public:
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AutodiffPass)
 
-  StringRef getArgument() const final { return "tessera-autodiff"; }
+  llvm::StringRef getArgument() const final { return "tessera-autodiff"; }
 
-  StringRef getDescription() const final {
+  llvm::StringRef getDescription() const final {
     return "Reverse-mode autodiff via the Tessera AdjointInterface op trait. "
            "Phase F4 of docs/audit/execution_roadmap.md.";
   }
 
+  void getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect>();
+  }
+
   void runOnOperation() override {
-    // Stub: real implementation lands once the AdjointInterface ODS is
-    // generated into the build (requires MLIR 21 tablegen on the include
-    // path). Until then, this pass is a no-op so that pipelines that opt
-    // into `--tessera-autodiff` don't break — they just don't get IR-level
-    // adjoints, and continue to use the numpy-tape path from
-    // `python/tessera/autodiff/`.
+    auto func = getOperation();
+    auto markerAttr = func->getAttrOfType<mlir::StringAttr>(kAutodiffMarker);
+    if (!markerAttr || markerAttr.getValue() != "reverse")
+      return;
+
+    // Step 1: collect ops in forward program order.
+    llvm::SmallVector<mlir::Operation *> forwardOps;
+    func.walk([&](mlir::Operation *op) {
+      if (op == func.getOperation())
+        return;
+      if (mlir::isa<mlir::func::ReturnOp>(op))
+        return;
+      forwardOps.push_back(op);
+    });
+
+    // Step 2: identify scalar terminator (the loss seed) — convention is
+    // that the function's single return is the seed for backward.
+    auto returnOp = mlir::dyn_cast<mlir::func::ReturnOp>(
+        func.getBody().front().getTerminator());
+    if (!returnOp || returnOp.getNumOperands() != 1) {
+      func.emitError() << "tessera-autodiff: function must have a single "
+                          "scalar return (the loss seed).";
+      return signalPassFailure();
+    }
+    mlir::Value lossValue = returnOp.getOperand(0);
+
+    // Step 3: build cotangent map. Seed with cotangent=1.0 at the loss.
+    mlir::OpBuilder builder(&getContext());
+    builder.setInsertionPoint(returnOp);
+
+    CotangentMap cotan;
+    // Seed cotangent at the loss with all-ones matching the output type.
+    // Equivalent to "loss = sum(output)" — gives unit cotangent at every
+    // element of the loss tensor (or scalar). For arbitrary loss shapes
+    // the user can wrap the call in a sum reduction at the Python boundary.
+    mlir::Value seed;
+    if (auto shapedType = mlir::dyn_cast<mlir::ShapedType>(lossValue.getType())) {
+      auto elemType = shapedType.getElementType();
+      mlir::Attribute oneAttr;
+      if (mlir::isa<mlir::FloatType>(elemType)) {
+        oneAttr = mlir::FloatAttr::get(elemType, 1.0);
+      } else {
+        oneAttr = mlir::IntegerAttr::get(elemType, 1);
+      }
+      auto splatAttr = mlir::DenseElementsAttr::get(shapedType, oneAttr);
+      seed = builder.create<mlir::arith::ConstantOp>(
+          lossValue.getLoc(), splatAttr);
+    } else {
+      auto seedAttr = builder.getF32FloatAttr(1.0f);
+      seed = builder.create<mlir::arith::ConstantOp>(
+          lossValue.getLoc(), seedAttr);
+    }
+    cotan[lossValue] = seed;
+
+    // Step 4: reverse walk. Dispatch to `buildAdjoint` for each op that
+    // implements AdjointInterface and lies on the gradient path.
+    for (auto it = forwardOps.rbegin(); it != forwardOps.rend(); ++it) {
+      mlir::Operation *op = *it;
+      auto adjointOp = mlir::dyn_cast<AdjointInterface>(op);
+      if (!adjointOp)
+        continue;
+      if (!adjointOp.isDifferentiable()) {
+        op->emitError() << "tessera-autodiff: op " << op->getName()
+                        << " declares AdjointInterface but isDifferentiable() "
+                           "returned false";
+        return signalPassFailure();
+      }
+
+      // Gather cotangents for this op's results.
+      llvm::SmallVector<mlir::Value> outCotans;
+      bool anyOutCotan = false;
+      for (mlir::Value result : op->getResults()) {
+        auto entry = cotan.lookup(result);
+        outCotans.push_back(entry);
+        if (entry) anyOutCotan = true;
+      }
+      if (!anyOutCotan)
+        continue;  // Op is not on the gradient path.
+
+      // Position the builder right before the return — keeps the seed (which
+      // we inserted there) in scope for every adjoint, and avoids dominance
+      // errors when later-walked ops produce cotangents consumed by
+      // earlier-walked adjoints.
+      builder.setInsertionPoint(returnOp);
+
+      llvm::SmallVector<mlir::Value> inCotans =
+          adjointOp.buildAdjoint(builder, outCotans);
+
+      if (inCotans.size() != op->getNumOperands()) {
+        op->emitError()
+            << "tessera-autodiff: buildAdjoint returned "
+            << inCotans.size() << " cotangents, expected "
+            << op->getNumOperands() << " (one per operand)";
+        return signalPassFailure();
+      }
+
+      // Accumulate into operand cotangent slots.
+      for (auto [operand, g] :
+           llvm::zip(op->getOperands(), inCotans)) {
+        accumulateCotangent(builder, cotan, operand, g);
+      }
+    }
+
+    // Step 5 — multi-output rewrite. Expose argument cotangents as
+    // additional function outputs so downstream consumers (Phase F5
+    // AdjointCollectiveInsertionPass; Python tape integration) have a
+    // first-class SSA handle to each gradient.
     //
-    // When wiring the body in, see the four-step outline at the top of
-    // this file.
+    // Rewrites the function:
+    //   func @f(args...) -> (orig_outputs...) → @f(args...) -> (orig_outputs..., arg_cotans...)
+    //
+    // Args without a cotangent (not on the gradient path) are recorded as
+    // empty entries in `tessera.autodiff.arg_cotangents` and skipped from
+    // the output list — keeps the rewrite minimal and the IR readable.
+    llvm::SmallVector<mlir::Value> argCotangentValues;
+    llvm::SmallVector<mlir::Attribute> argCotanNames;
+    for (auto arg : func.getArguments()) {
+      auto entry = cotan.lookup(arg);
+      if (!entry) {
+        argCotanNames.push_back(builder.getStringAttr(""));
+        continue;
+      }
+      argCotangentValues.push_back(entry);
+      argCotanNames.push_back(builder.getStringAttr(
+          "%cotan_arg_" + llvm::Twine(arg.getArgNumber()).str()));
+    }
+    func->setAttr("tessera.autodiff.arg_cotangents",
+                   builder.getArrayAttr(argCotanNames));
+
+    if (!argCotangentValues.empty()) {
+      // Rewrite the return op to yield (original_results..., cotangents...).
+      llvm::SmallVector<mlir::Value> newReturnOperands(returnOp.getOperands());
+      for (auto cotanV : argCotangentValues) {
+        newReturnOperands.push_back(cotanV);
+      }
+      builder.setInsertionPoint(returnOp);
+      builder.create<mlir::func::ReturnOp>(returnOp.getLoc(), newReturnOperands);
+      returnOp.erase();
+
+      // Update the function's type signature to include the cotangent return types.
+      llvm::SmallVector<mlir::Type> newResultTypes(
+          func.getFunctionType().getResults().begin(),
+          func.getFunctionType().getResults().end());
+      for (auto cotanV : argCotangentValues) {
+        newResultTypes.push_back(cotanV.getType());
+      }
+      auto newFnType = builder.getFunctionType(
+          func.getFunctionType().getInputs(), newResultTypes);
+      func.setType(newFnType);
+    }
   }
 };
 
 }  // namespace
 
-std::unique_ptr<Pass> createAutodiffPass() {
+std::unique_ptr<mlir::Pass> createAutodiffPass() {
   return std::make_unique<AutodiffPass>();
 }
 
-}  // namespace mlir::tessera
+}  // namespace tessera

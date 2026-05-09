@@ -21,6 +21,13 @@ add_library(TesseraPasses
   GPUCollectiveInsertionPass.cpp
   PipelineStageInsertionPass.cpp
 
+  # Phase F4 autodiff (reverse-mode via AdjointInterface).
+  # ODS scaffold lives at src/compiler/ir/include/Tessera/AdjointInterface.td.
+  AutodiffPass.cpp
+
+  # Phase F5 — adjoint collective insertion (runs after AutodiffPass).
+  AdjointCollectiveInsertionPass.cpp
+
   # Phase 6 diagnostics
   ${CMAKE_SOURCE_DIR}/src/compiler/diagnostics/ShapeInferencePass.cpp
   ${CMAKE_SOURCE_DIR}/src/compiler/diagnostics/ErrorReporter.cpp
@@ -39,6 +46,9 @@ target_include_directories(TesseraPasses
     ${CMAKE_CURRENT_BINARY_DIR}/../../compiler/ir
     ${CMAKE_CURRENT_SOURCE_DIR}/../../compiler/tile_opt_fa4/include
 )
+
+# Phase F4 — pass body needs the AdjointInterface generated header.
+add_dependencies(TesseraPasses TesseraAdjointInterfaceTableGen)
 
 target_link_libraries(TesseraPasses
   PUBLIC

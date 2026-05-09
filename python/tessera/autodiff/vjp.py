@@ -356,6 +356,96 @@ def vjp_irfft(dout, x, *, axis=-1, axes=None, n=None, **_):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+@_vjp("selective_ssm")
+def vjp_selective_ssm(
+    dout, x, A, B, C, delta, *, gate=None, state=None, chunk_size=128, **_
+):
+    """Reverse-mode adjoint of Mamba2 selective_ssm (Phase D3 follow-up).
+
+    Forward (dropping batch ``b`` for brevity):
+        ``z[t,d,n] = delta[t,d] * A[d,n]``
+        ``A_bar[t,d,n] = exp(z[t,d,n])``
+        ``B_bar[t,d,n] = delta[t,d] * B[t,n]``
+        ``h[t,d,n] = A_bar[t,d,n] * h[t-1,d,n] + B_bar[t,d,n] * x[t,d]``
+        ``y[t,d] = sum_n C[t,n] * h[t,d,n]``
+        ``y_final = y * gate`` (if gated)
+
+    The VJP recomputes the forward trajectory (``h`` at every ``t``,
+    ``A_bar``, ``B_bar``) under the autodiff seed and walks ``t = S-1 → 0``
+    accumulating gradients via the chain rule. ``gate`` and ``state`` are
+    keyword-only — they have no cotangent slot in v1; users wanting their
+    gradients should pass them as positional inputs in a future revision.
+    """
+    Bsz, S, D = x.shape
+    N = B.shape[2]
+
+    if A.ndim == 1:
+        A2d = np.broadcast_to(A[:, None], (D, N)).copy()
+        A_was_1d = True
+    else:
+        A2d = A
+        A_was_1d = False
+
+    # Recompute the forward trajectory we need on backward.
+    # h_traj[t] holds h[t-1] (so h_traj[0] = initial state, h_traj[S] = final).
+    h_traj = np.zeros((S + 1, Bsz, D, N), dtype=x.dtype)
+    if state is not None:
+        h_traj[0] = np.asarray(state)
+    A_bar_traj = np.empty((S, Bsz, D, N), dtype=x.dtype)
+    B_bar_traj = np.empty((S, Bsz, D, N), dtype=x.dtype)
+
+    for t in range(S):
+        A_bar = np.exp(delta[:, t, :, None] * A2d[None, :, :])
+        B_bar_t = delta[:, t, :, None] * B[:, t, None, :]
+        h_t = A_bar * h_traj[t] + B_bar_t * x[:, t, :, None]
+        h_traj[t + 1] = h_t
+        A_bar_traj[t] = A_bar
+        B_bar_traj[t] = B_bar_t
+
+    # Cotangent at the un-gated y values
+    if gate is not None:
+        dy = dout * np.asarray(gate)
+    else:
+        dy = dout
+
+    dx = np.zeros_like(x)
+    dA2d = np.zeros((D, N), dtype=np.float64)  # accumulate in fp64 for stability
+    dB = np.zeros_like(B)
+    dC = np.zeros_like(C)
+    ddelta = np.zeros_like(delta)
+
+    dh_curr = np.zeros((Bsz, D, N), dtype=x.dtype)
+
+    for t in reversed(range(S)):
+        # y[t,d] = sum_n C[t,n] * h[t,d,n]
+        dh_curr = dh_curr + C[:, t, None, :] * dy[:, t, :, None]
+        dC[:, t, :] += np.einsum("bdn,bd->bn", h_traj[t + 1], dy[:, t, :])
+
+        # h[t] = A_bar * h[t-1] + B_bar * x[t]
+        dA_bar = dh_curr * h_traj[t]                              # (B, D, N)
+        dh_prev = dh_curr * A_bar_traj[t]
+        dB_bar = dh_curr * x[:, t, :, None]                       # (B, D, N)
+        dx[:, t, :] += np.einsum("bdn,bdn->bd", dh_curr, B_bar_traj[t])
+
+        # B_bar[t,d,n] = delta[t,d] * B[t,n]
+        dB[:, t, :] += np.einsum("bdn,bd->bn", dB_bar, delta[:, t, :])
+        ddelta[:, t, :] += np.einsum("bdn,bn->bd", dB_bar, B[:, t, :])
+
+        # A_bar[t,d,n] = exp(z),  z = delta[t,d] * A[d,n]
+        dz = dA_bar * A_bar_traj[t]                                # (B, D, N)
+        dA2d += np.einsum("bd,bdn->dn", delta[:, t, :], dz).astype(np.float64)
+        ddelta[:, t, :] += np.einsum("bdn,dn->bd", dz, A2d)
+
+        dh_curr = dh_prev
+
+    if A_was_1d:
+        dA = dA2d.sum(axis=1).astype(x.dtype)
+    else:
+        dA = dA2d.astype(x.dtype)
+
+    return (dx, dA, dB, dC, ddelta)
+
+
 @_vjp("depthwise_conv1d")
 def vjp_depthwise_conv1d(dout, x, w=None, *, kernel_size, padding=0, causal=False, state=None, **_):
     """Adjoint of depthwise 1-D conv.
@@ -407,6 +497,147 @@ def vjp_depthwise_conv1d(dout, x, w=None, *, kernel_size, padding=0, causal=Fals
         # Symmetric padding — drop both ends of dx_full.
         dx = dx_full[..., prefix_len:prefix_len + L]
         return (dx, dw)
+
+
+@_vjp("depthwise_conv2d")
+def vjp_depthwise_conv2d(
+    dout, x, w=None, *, kernel_size, stride=(1, 1), padding=(0, 0), causal=False, **_
+):
+    """Adjoint of depthwise 2-D conv (NHWC).
+
+    Forward: ``out[n, i, j, c] = sum_{kh, kw} x_pad[n, i*sH+kh, j*sW+kw, c] * w[kh, kw, c]``.
+    Adjoints mirror the 1-D case but accumulate over both spatial axes.
+    """
+    def _pair(v):
+        return (int(v[0]), int(v[1])) if isinstance(v, (tuple, list)) else (int(v), int(v))
+
+    kH, kW = _pair(kernel_size)
+    sH, sW = _pair(stride)
+    pH, pW = _pair(padding)
+
+    N, H, W, C = x.shape
+    H_out, W_out = dout.shape[1], dout.shape[2]
+
+    if causal:
+        prefix_h = kH - 1
+        prefix_w = kW - 1
+        x_pad = np.pad(x, ((0, 0), (kH - 1, 0), (kW - 1, 0), (0, 0)))
+    else:
+        prefix_h = pH
+        prefix_w = pW
+        x_pad = np.pad(x, ((0, 0), (pH, pH), (pW, pW), (0, 0)))
+
+    # dw[kh, kw, c] = sum over n, i, j of dout[n,i,j,c] * x_pad[n, i*sH+kh, j*sW+kw, c]
+    dw = np.zeros_like(w)
+    for kh in range(kH):
+        for kw in range(kW):
+            if sH == 1 and sW == 1:
+                patch = x_pad[:, kh:kh + H_out, kw:kw + W_out, :]
+            else:
+                patch = x_pad[:, kh:kh + H_out * sH:sH, kw:kw + W_out * sW:sW, :]
+            dw[kh, kw, :] = (dout * patch).sum(axis=(0, 1, 2))
+
+    # dx_full via accumulation
+    dx_full = np.zeros_like(x_pad)
+    for kh in range(kH):
+        for kw in range(kW):
+            if sH == 1 and sW == 1:
+                dx_full[:, kh:kh + H_out, kw:kw + W_out, :] += (
+                    dout * w[None, kh:kh + 1, kw:kw + 1, :]
+                )
+            else:
+                dx_full[:, kh:kh + H_out * sH:sH, kw:kw + W_out * sW:sW, :] += (
+                    dout * w[None, kh:kh + 1, kw:kw + 1, :]
+                )
+
+    # Trim padding off dx_full to recover dx at original input shape.
+    dx = dx_full[:, prefix_h:prefix_h + H, prefix_w:prefix_w + W, :]
+    return (dx, dw)
+
+
+@_vjp("lstm_cell")
+def vjp_lstm_cell(
+    dout, x_t, h_prev, c_prev, W_ih, W_hh, b_ih=None, b_hh=None, **_
+):
+    """Adjoint of one LSTM step (Phase H2).
+
+    Forward (recomputed for backward):
+        gates = x_t @ W_ih^T + h_prev @ W_hh^T + b_ih + b_hh
+        i,f,g,o = sigmoid/sigmoid/tanh/sigmoid of the four gate slices
+        c_t = f*c_prev + i*g
+        h_t = o*tanh(c_t)
+        out = concat([h_t, c_t], axis=-1)
+
+    `dout` is split into `(dh_t, dc_t)` along the last axis. Returns
+    cotangents in input order: `(dx_t, dh_prev, dc_prev, dW_ih, dW_hh,
+    db_ih, db_hh)`.
+    """
+    H = h_prev.shape[-1]
+    # Recompute forward intermediates we need.
+    gates = x_t @ W_ih.T + h_prev @ W_hh.T
+    if b_ih is not None:
+        gates = gates + b_ih
+    if b_hh is not None:
+        gates = gates + b_hh
+    i_g, f_g, g_g, o_g = gates[..., :H], gates[..., H:2*H], gates[..., 2*H:3*H], gates[..., 3*H:4*H]
+    i = 1.0 / (1.0 + np.exp(-i_g))
+    f = 1.0 / (1.0 + np.exp(-f_g))
+    g_act = np.tanh(g_g)
+    o = 1.0 / (1.0 + np.exp(-o_g))
+    c_t = f * c_prev + i * g_act
+    tanh_c_t = np.tanh(c_t)
+
+    # Split incoming cotangent.
+    dh_t = dout[..., :H]
+    dc_t_direct = dout[..., H:]
+
+    # Through h_t = o * tanh(c_t):
+    do = dh_t * tanh_c_t                               # (B, H)
+    dc_through_h = dh_t * o * (1.0 - tanh_c_t * tanh_c_t)
+    dc_total = dc_t_direct + dc_through_h
+
+    # Through c_t = f*c_prev + i*g:
+    df = dc_total * c_prev
+    dc_prev = dc_total * f
+    di = dc_total * g_act
+    dg = dc_total * i
+
+    # Through pre-sigmoid / pre-tanh of the four gates:
+    di_g = di * i * (1.0 - i)
+    df_g = df * f * (1.0 - f)
+    dg_g = dg * (1.0 - g_act * g_act)
+    do_g = do * o * (1.0 - o)
+    d_gates = np.concatenate([di_g, df_g, dg_g, do_g], axis=-1)  # (B, 4H)
+
+    # Through gates = x_t @ W_ih.T + h_prev @ W_hh.T (+ biases):
+    dx_t = d_gates @ W_ih
+    dh_prev = d_gates @ W_hh
+    # dW_ih[k, j] = sum_b d_gates[b, k] * x_t[b, j]
+    dW_ih = d_gates.T @ x_t
+    dW_hh = d_gates.T @ h_prev
+    # Biases (one for each); reduce over batch.
+    db_ih = d_gates.sum(axis=0) if b_ih is not None else None
+    db_hh = d_gates.sum(axis=0) if b_hh is not None else None
+
+    return (dx_t, dh_prev, dc_prev, dW_ih, dW_hh, db_ih, db_hh)
+
+
+@_vjp("lstm_state_h")
+def vjp_lstm_state_h(dout, packed, **_):
+    """`h_t = packed[..., :H]` — adjoint puts dout in the first half, zeros in the second."""
+    H = dout.shape[-1]
+    dpacked = np.zeros_like(packed)
+    dpacked[..., :H] = dout
+    return (dpacked,)
+
+
+@_vjp("lstm_state_c")
+def vjp_lstm_state_c(dout, packed, **_):
+    """`c_t = packed[..., H:]` — adjoint puts dout in the second half."""
+    H = dout.shape[-1]
+    dpacked = np.zeros_like(packed)
+    dpacked[..., H:] = dout
+    return (dpacked,)
 
 
 @_vjp("online_softmax")

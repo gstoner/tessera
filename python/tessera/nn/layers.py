@@ -710,6 +710,120 @@ class DynamicDepthwiseConv1d(Module):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# LSTM cell + sequence (Phase H2 — RNN with state-propagation primitive)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class LSTMCell(Module):
+    """Single-step LSTM cell.
+
+    Owns ``W_ih`` (4*hidden, in_features), ``W_hh`` (4*hidden, hidden), and
+    optional biases. ``forward(x_t, state)`` consumes a previous
+    ``(h_prev, c_prev)`` tuple and returns ``(h_t, c_t)``. The cell op
+    internally packs h+c into a single tensor; state extraction goes through
+    autodiff-traced ``ops.lstm_state_h`` / ``ops.lstm_state_c``.
+    """
+
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        bias: bool = True,
+        dtype: str = "fp32",
+    ) -> None:
+        super().__init__()
+        self.input_size = int(input_size)
+        self.hidden_size = int(hidden_size)
+        gate_size = 4 * self.hidden_size
+
+        self.W_ih = Parameter(shape=(gate_size, self.input_size), dtype=dtype)
+        _kaiming_uniform_(self.W_ih._data._data, fan_in=self.input_size)
+        self.W_hh = Parameter(shape=(gate_size, self.hidden_size), dtype=dtype)
+        _kaiming_uniform_(self.W_hh._data._data, fan_in=self.hidden_size)
+        if bias:
+            self.b_ih = Parameter(shape=(gate_size,), dtype=dtype)
+            self.b_ih._data._data[...] = 0.0
+            self.b_hh = Parameter(shape=(gate_size,), dtype=dtype)
+            self.b_hh._data._data[...] = 0.0
+        else:
+            object.__setattr__(self, "b_ih", None)
+            object.__setattr__(self, "b_hh", None)
+
+    def forward(self, x_t: Any, state: tuple) -> tuple:
+        """``state`` is ``(h_prev, c_prev)`` — both shape ``(B, hidden_size)``.
+        Returns ``(h_t, c_t)``.
+        """
+        h_prev, c_prev = state
+        packed = ops.lstm_cell(
+            _as_array(x_t),
+            _as_array(h_prev),
+            _as_array(c_prev),
+            _as_array(self.W_ih),
+            _as_array(self.W_hh),
+            _as_array(self.b_ih) if self.b_ih is not None else None,
+            _as_array(self.b_hh) if self.b_hh is not None else None,
+        )
+        h_t = ops.lstm_state_h(packed)
+        c_t = ops.lstm_state_c(packed)
+        return h_t, c_t
+
+
+class LSTM(Module):
+    """Multi-step LSTM. Wraps :class:`LSTMCell` and unrolls over time.
+
+    ``forward(x_seq, init_state=None)`` accepts ``x_seq`` of shape
+    ``(B, T, input_size)`` and returns ``(output, (h_n, c_n))`` where
+    ``output`` is ``(B, T, hidden_size)`` — the stacked ``h_t`` at each step.
+
+    For short sequences (T ≤ a few dozen), unrolling explicitly is fine and
+    BPTT works via the v1 numpy tape. For longer sequences, wrap with
+    ``tessera.autodiff.rematerialize`` (Phase F2) to drop intermediate
+    activations during forward and recompute on backward.
+
+    State-propagation primitive — RNN cells need explicit per-timestep state
+    plumbing. ``LSTM`` keeps the loop in Python (visible to the autodiff
+    tape) rather than fusing it into a single op, so gradients flow
+    correctly through the recurrence.
+    """
+
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        bias: bool = True,
+        dtype: str = "fp32",
+    ) -> None:
+        super().__init__()
+        self.input_size = int(input_size)
+        self.hidden_size = int(hidden_size)
+        self.cell = LSTMCell(input_size, hidden_size, bias=bias, dtype=dtype)
+
+    def forward(self, x_seq: Any, init_state: tuple | None = None) -> tuple:
+        x_arr = _as_array(x_seq)
+        if x_arr.ndim != 3:
+            raise ValueError(
+                f"LSTM expects (B, T, input_size); got shape {x_arr.shape}"
+            )
+        B, T, _ = x_arr.shape
+        if init_state is None:
+            h = np.zeros((B, self.hidden_size), dtype=x_arr.dtype)
+            c = np.zeros((B, self.hidden_size), dtype=x_arr.dtype)
+        else:
+            h, c = init_state
+            h = _as_array(h)
+            c = _as_array(c)
+        outputs = []
+        for t in range(T):
+            h, c = self.cell(x_arr[:, t, :], (h, c))
+            outputs.append(h)
+        # Stack along time. np.stack creates a new ndarray — not on the tape,
+        # but the user typically takes the *final* h or selects a single t,
+        # and those individual h's ARE on the tape via lstm_state_h.
+        output_seq = np.stack(outputs, axis=1)
+        return output_seq, (h, c)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # KV cache (Module wrapper around KVCacheHandle — Phase C2)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -784,10 +898,132 @@ class KVCache(Module):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Conv2dNCHW shim — torch-port helper around ops.conv2d (NHWC)
+# Conv2d (Phase H1 — NHWC default; Conv2dNCHW shim transposes in/out)
 # ─────────────────────────────────────────────────────────────────────────────
-# Conv2d (NHWC) Module proper lands in Phase H1; this shim is sized to that
-# decision (NHWC default, NCHW shim transposes in/out). Defer until H1.
+
+
+class Conv2d(Module):
+    """2-D convolution. Default layout is **NHWC** (matches `tessera.ops.conv2d`).
+
+    Weight layout is HWIO: ``(kernel_h, kernel_w, in_channels, out_channels)``.
+
+    Args:
+        in_channels: input channel count
+        out_channels: output channel count
+        kernel_size: int (square) or (kH, kW) tuple
+        stride: int (square) or (sH, sW) tuple, default 1
+        padding: int (square) or (pH, pW) tuple, default 0
+        bias: include a learnable bias, default True
+        dtype: weight + bias dtype
+
+    For torch-port code, see :class:`Conv2dNCHW` which transposes inputs/outputs
+    around this Module.
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size,
+        stride=1,
+        padding=0,
+        bias: bool = True,
+        dtype: str = "fp32",
+    ) -> None:
+        super().__init__()
+        self.in_channels = int(in_channels)
+        self.out_channels = int(out_channels)
+        self.kernel_size = self._pair(kernel_size)
+        self.stride = self._pair(stride)
+        self.padding = self._pair(padding)
+
+        kH, kW = self.kernel_size
+        # HWIO weight layout — matches the existing reference op
+        self.weight = Parameter(
+            shape=(kH, kW, self.in_channels, self.out_channels), dtype=dtype
+        )
+        # Kaiming-uniform with fan_in = kH * kW * in_channels
+        _kaiming_uniform_(
+            self.weight._data._data, fan_in=kH * kW * self.in_channels
+        )
+        if bias:
+            self.bias = Parameter(shape=(self.out_channels,), dtype=dtype)
+            self.bias._data._data[...] = 0.0
+        else:
+            object.__setattr__(self, "bias", None)
+
+    @staticmethod
+    def _pair(v):
+        if isinstance(v, (tuple, list)):
+            if len(v) != 2:
+                raise ValueError(f"expected 2-tuple, got length {len(v)}")
+            return (int(v[0]), int(v[1]))
+        return (int(v), int(v))
+
+    def forward(self, x: Any) -> np.ndarray:
+        """``x`` has shape ``(N, H, W, C_in)`` (NHWC). Returns ``(N, H_out, W_out, C_out)``."""
+        x_arr = _as_array(x)
+        if x_arr.ndim != 4:
+            raise ValueError(
+                f"Conv2d (NHWC) expects (N, H, W, C) input; got shape {x_arr.shape}"
+            )
+        if x_arr.shape[3] != self.in_channels:
+            raise ValueError(
+                f"input channel dim {x_arr.shape[3]} != in_channels {self.in_channels}"
+            )
+        return ops.conv2d(
+            x_arr,
+            _as_array(self.weight),
+            bias=_as_array(self.bias) if self.bias is not None else None,
+            stride=self.stride,
+            padding=self.padding,
+            layout="nhwc",
+        )
+
+
+class Conv2dNCHW(Module):
+    """Torch-style ``(N, C_in, H, W)`` → ``(N, C_out, H_out, W_out)`` shim.
+
+    Wraps :class:`Conv2d` (NHWC) with explicit transposes on the input and
+    output. The underlying weight storage is HWIO — the layout choice is
+    locked at the kernel boundary, not the Module boundary.
+
+    Use this when porting torch code; for new Tessera code, prefer
+    :class:`Conv2d` directly with NHWC inputs.
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size,
+        stride=1,
+        padding=0,
+        bias: bool = True,
+        dtype: str = "fp32",
+    ) -> None:
+        super().__init__()
+        self.conv = Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            bias=bias,
+            dtype=dtype,
+        )
+
+    def forward(self, x: Any) -> np.ndarray:
+        x_arr = _as_array(x)
+        if x_arr.ndim != 4:
+            raise ValueError(
+                f"Conv2dNCHW expects (N, C, H, W) input; got shape {x_arr.shape}"
+            )
+        # NCHW → NHWC
+        x_nhwc = np.transpose(x_arr, (0, 2, 3, 1))
+        y_nhwc = self.conv(x_nhwc)
+        # NHWC → NCHW
+        return np.transpose(y_nhwc, (0, 3, 1, 2))
 
 
 __all__ = [
@@ -807,4 +1043,8 @@ __all__ = [
     "CrossEntropyLoss",
     "KVCache",
     "DynamicDepthwiseConv1d",
+    "Conv2d",
+    "Conv2dNCHW",
+    "LSTMCell",
+    "LSTM",
 ]

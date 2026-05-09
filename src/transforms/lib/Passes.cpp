@@ -56,6 +56,30 @@ void registerTesseraPasses() {
   ::mlir::registerPass([]() { return createGPUCollectiveInsertionPass(); });
   ::mlir::registerPass([]() { return createPipelineStageInsertionPass(); });
 
+  // ── Phase F4 autodiff (reverse-mode via AdjointInterface) ──────────────────
+  // ODS scaffold: src/compiler/ir/include/Tessera/AdjointInterface.td
+  // Pass body: src/transforms/lib/AutodiffPass.cpp
+  // Registers as `--tessera-autodiff` for `tessera-opt`. Until tablegen on
+  // the .td runs, the pass body is a registered no-op (Python-tape autodiff
+  // remains the production path). See docs/spec/AUTODIFF_SPEC.md §Phase F4.
+  ::mlir::registerPass([]() { return createAutodiffPass(); });
+
+  // ── Phase F5 adjoint collective insertion ──────────────────────────────────
+  // Runs after AutodiffPass on functions carrying both
+  // tessera.autodiff="reverse" and tessera.weight_sharding. Plans
+  // reduce_scatter/all_gather/all_reduce per arg and records the choice as
+  // `tessera.adjoint_collective_plan`.
+  ::mlir::registerPass([]() { return createAdjointCollectiveInsertionPass(); });
+
+  // Full reverse-mode autodiff pipeline: forward → autodiff → collective insertion.
+  ::mlir::PassPipelineRegistration<>
+    autodiffPipeline("tessera-autodiff-pipeline",
+                     "Phase F4+F5 — reverse-mode autodiff with adjoint collective insertion",
+      [](OpPassManager &pm) {
+        pm.addPass(createAutodiffPass());
+        pm.addPass(createAdjointCollectiveInsertionPass());
+      });
+
   // Full Phase 3 GPU lowering chain: Graph IR → SM_90 PTX.
   //
   // Pass order (normative — matches docs/spec/LOWERING_PIPELINE_SPEC.md §2.2):

@@ -436,16 +436,23 @@ class TestComposition:
 
 
 class TestRemainingPhantoms:
-    """Phantoms that are STILL deferred after Phase A4 (Phase B1+/D/H1 work)."""
+    """No phantoms remain after Phase H2 — all `tessera.nn.*` names ship as
+    real classes. This test asserts that empty state. If a new phantom is
+    introduced later, add it to a parametrized check here.
+    """
 
-    @pytest.mark.parametrize(
-        "name",
-        ["Conv2d", "LSTM"],
-    )
-    def test_phantom_raises_with_roadmap_pointer(self, name):
-        cls = getattr(ts.nn, name)
-        with pytest.raises(NotImplementedError, match=r"(roadmap|backlog|deferred|H\d)"):
-            cls()
+    def test_no_phantoms_remain(self):
+        # Iterate the public surface; every callable should be a real class.
+        public = [n for n in dir(ts.nn) if not n.startswith("_")]
+        for name in public:
+            obj = getattr(ts.nn, name)
+            if isinstance(obj, type):
+                # Real Modules instantiate without raising NotImplementedError
+                # (with appropriate args). We don't try to construct here —
+                # just verify the class doesn't carry our phantom marker text.
+                assert "Tier 1+ backlog" not in (obj.__init__.__doc__ or ""), (
+                    f"phantom still in tessera.nn: {name}"
+                )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

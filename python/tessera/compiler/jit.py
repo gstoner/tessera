@@ -260,7 +260,13 @@ class JitFn:
         """
         Execute through the narrow CPU lowering path when available; otherwise
         fall back to the original Python function.
+
+        Phase A2-followup: before any execution, resolve symbolic dim names
+        against the actual argument shapes and re-run the constraint solver
+        so violations raise a clear ``TesseraConstraintError`` at first call,
+        not a downstream numpy / Accelerate error.
         """
+        self._enforce_call_time_constraints(args, kwargs)
         if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
             if self.execution_kind == "native_cpu":
                 return self._native_cpu_fast_call(args, kwargs)
@@ -280,6 +286,76 @@ class JitFn:
         ):
             return self._apple_gpu_fast_call(args, kwargs)
         return self._fn(*args, **kwargs)
+
+    def _enforce_call_time_constraints(
+        self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
+    ) -> None:
+        """Resolve symbolic dim names against actual call shapes + re-run the solver.
+
+        Skipped when the function has no dim-annotated args, or when the solver
+        was already satisfied at decoration time with concrete ``bindings=``.
+        Cached per-shape to avoid re-checking on every call.
+        """
+        if not self.graph_ir.functions:
+            return
+        ir_args = self.graph_ir.functions[0].args
+        # Resolve dim_name → concrete int by walking positional + keyword args
+        resolved: Dict[str, int] = {}
+        # Build a name → value map first
+        name_to_value: Dict[str, Any] = {}
+        for ir_arg, value in zip(ir_args, args):
+            name_to_value[ir_arg.name] = value
+        for k, v in kwargs.items():
+            name_to_value[k] = v
+
+        for ir_arg in ir_args:
+            if not ir_arg.dim_names:
+                continue
+            value = name_to_value.get(ir_arg.name)
+            if value is None:
+                continue
+            shape = getattr(value, "shape", None)
+            if shape is None:
+                continue
+            shape = tuple(shape)
+            if len(shape) != len(ir_arg.dim_names):
+                continue  # rank mismatch — let downstream surface a clearer error
+            for dim_name, concrete in zip(ir_arg.dim_names, shape):
+                if not isinstance(dim_name, str):
+                    continue
+                # Symbolic dim names are typically uppercase (e.g., "M", "K").
+                if not dim_name.isidentifier() or dim_name.isnumeric():
+                    continue
+                prev = resolved.get(dim_name)
+                if prev is not None and prev != int(concrete):
+                    # Inconsistent binding across args (e.g., K from arg 0 vs. arg 1).
+                    # Build a synthetic Equal constraint to get a uniform error type.
+                    from .constraints import Equal as _Equal
+                    raise TesseraConstraintError(
+                        _Equal(dim_name, dim_name),
+                        dim_name,
+                        actual=int(concrete),
+                        message=(
+                            f"Inconsistent binding for dim {dim_name!r}: "
+                            f"saw {prev} earlier, now {int(concrete)} (arg {ir_arg.name!r})"
+                        ),
+                    )
+                resolved[dim_name] = int(concrete)
+
+        if not resolved:
+            return
+
+        # Cache per-shape so repeated calls with the same shape skip the check.
+        cache_key = tuple(sorted(resolved.items()))
+        cache = getattr(self, "_constraint_cache", None)
+        if cache is None:
+            cache = set()
+            object.__setattr__(self, "_constraint_cache", cache)
+        if cache_key in cache:
+            return
+        # ConstraintSolver.check raises TesseraConstraintError on violation.
+        self.constraints.check(resolved)
+        cache.add(cache_key)
 
     def _native_cpu_fast_call(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Any:
         """Dispatch eligible CPU rank-2 f32 GEMM through the native runtime ABI.

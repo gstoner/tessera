@@ -407,10 +407,15 @@ block2.load_state_dict(sd)                 # restore
 | `BatchNorm1d` (C1) | Running-stat buffers (`running_mean`/`running_var`/`num_batches_tracked`); train/eval modes |
 | `KVCache` (C2) | Module wrapper around `tessera.cache.KVCacheHandle`; `forward(k, v)` returns full `(K, V)` so far |
 | `DynamicDepthwiseConv1d` (D4) | Owns kernel `Parameter` + non-persistent `_state` `Buffer` (when `streaming=True`); both single-shot and chunked inference |
+| `Conv2d` (H1) | NHWC default; HWIO weight layout; `(N, H, W, C)` → `(N, H_out, W_out, C_out)` |
+| `Conv2dNCHW` (H1) | Torch-port shim — wraps `Conv2d` with explicit `(N, C, H, W)` ↔ NHWC transposes |
+| `LSTMCell` (H2) | Single-step LSTM. `forward(x_t, (h_prev, c_prev))` → `(h_t, c_t)`; uses `ops.lstm_cell` + state extractors so BPTT works through the v1 tape |
+| `LSTM` (H2) | Multi-step LSTM. `forward(x_seq, init_state=None)` → `(output_seq, (h_n, c_n))`. Unrolls in Python so the autodiff tape sees every timestep |
 
-**Phantom (still raises `NotImplementedError` with roadmap pointer):**
-`Conv2d` (Phase H1), `LSTM` (Phase H2 — deferred). Each links to its phase
-in [`docs/audit/execution_roadmap.md`](audit/execution_roadmap.md).
+**No remaining phantoms.** Every `tessera.nn.*` name ships as a real
+class. The `tests/unit/test_nn_module.py::TestRemainingPhantoms`
+regression test asserts this state — adding a new phantom requires
+explicit registration there.
 
 ---
 
@@ -450,8 +455,12 @@ lowerings; runtime kernels can be registered separately.
 | `tessera.ops.quantize_kv(k, v, *, bits=4, symmetric=True)` | quantization | Phase E1 — block-quantize K/V to int8; returns `(k_q, v_q, scale, zero_point)` |
 | `tessera.ops.dequantize_kv(k_q, v_q, scale, zero_point=None, *, symmetric=True)` | quantization | Inverse of `quantize_kv` — returns `(k, v)` |
 | `tessera.ops.depthwise_conv1d(x, w, *, kernel_size, padding=0, causal=False, state=None)` | streaming conv | Phase D1 — depthwise 1-D conv with optional streaming state |
+| `tessera.ops.depthwise_conv2d(x, w, *, kernel_size, stride=(1,1), padding=(0,0), causal=False)` | streaming conv 2D | Phase D3 follow-up — depthwise 2-D NHWC conv; VJP shipped |
+| `tessera.ops.lstm_cell(x_t, h_prev, c_prev, W_ih, W_hh, b_ih=None, b_hh=None)` | RNN state primitive | Phase H2 — single-step LSTM. Returns packed ``concat([h_t, c_t], axis=-1)`` |
+| `tessera.ops.lstm_state_h(packed)` / `lstm_state_c(packed)` | RNN state extractors | Phase H2 — autodiff-traced extractors for the packed lstm_cell output |
 | `tessera.ops.online_softmax(x, *, axis=-1, state=None)` | streaming softmax | Phase D2 — single-chunk equiv. to `softmax`; pass `state` for streaming chunks |
 | `tessera.ops.online_softmax_state(x, *, axis=-1, state=None)` | helper | Returns `(running_max, running_sum)` for the next streaming `online_softmax` call (non-differentiable) |
+| `tessera.ops.selective_ssm(x, A, B, C, delta, *, gate=None, state=None, chunk_size=128)` | Mamba2 SSM | Phase D3 — selective state-space; chunked scan; optional output gate + initial state. **Forward + reverse-mode VJP shipped** (numerical-Jacobian verified at fp64). |
 
 Registry helpers:
 
@@ -553,6 +562,28 @@ existing Apple GPU MLP-block fusions (`matmul→gelu`, `matmul→rmsnorm`):
 Tracking: file under Phase 8.4.x follow-up (Apple GPU) and Phase 3 GPU
 backend execution work (NVIDIA / ROCm) — both gated on Architecture Decision
 #19 hardware-free Target IR layering.
+
+---
+
+## `tessera.distributed.DDP` / `FSDP` — Phase I
+
+Python wrappers that apply distributed-gradient collectives on each backward
+pass. Forward is unchanged; the wrapper exposes `sync_grads(rank)` (DDP) or
+`shard / gather_for_forward / reshard_after_forward / sync_grads` (FSDP)
+for per-rank state management. Today's implementation runs against the
+`tessera.testing.mock_collective.MockRankGroup` in-process simulator; real
+NCCL/RCCL bindings land alongside Phase G's NVIDIA execution path.
+
+| Class | Constructor | Per-rank methods |
+|-------|-------------|------------------|
+| `tessera.distributed.DDP` | `DDP(module, mesh_axis="dp")` | `forward(*args)` (passthrough), `sync_grads(rank)` (mean all-reduce) |
+| `tessera.distributed.FSDP` | `FSDP(module, mesh_axis="dp")` | `shard(rank)`, `gather_for_forward(rank)`, `reshard_after_forward(rank)`, `sync_grads(rank)` (reduce-scatter to local shard) |
+
+Both wrappers require the wrapped value to be a `tessera.nn.Module`. FSDP
+shards along the leading dim; non-leading-dim sharding requires an explicit
+transpose before wrapping. **Each rank in a real distributed run holds its
+own Module instance** (matches torch FSDP's per-process model); the mock
+collective tests construct one wrapper per worker.
 
 ---
 
@@ -658,9 +689,15 @@ with tessera.autodiff.tape() as t:
     t.backward(y, cotangent=dy)
 ```
 
-### Phase F4 — Graph IR autodiff (ODS landed; build integration follow-up)
+### Phase F4 — Graph IR autodiff (ODS + pass body + per-op `buildAdjoint` impls landed; lit XFAIL flips on first MLIR 21 build)
 
-`Tessera_AdjointInterface` ODS at `src/compiler/ir/include/Tessera/AdjointInterface.td`. `AutodiffPass.cpp` scaffold at `src/transforms/lib/AutodiffPass.cpp`. The Python tape (above) remains the production path until the MLIR pass body lands; both surfaces will share the `tessera.autodiff.custom_rule` registry. See `docs/spec/AUTODIFF_SPEC.md` §Phase F4.
+`Tessera_AdjointInterface` ODS at `src/compiler/ir/include/Tessera/AdjointInterface.td` with tablegen target `TesseraAdjointInterfaceTableGen`. Per-op `buildAdjoint` C++ impls in `src/compiler/ir/AdjointInterface.cpp` for `MatmulOp`, `LayerNormOp`, `SoftmaxOp`, and pointwise activations (GELU/ReLU/Sigmoid/Sin) — pointwise ops route via the Python registry through the new `tessera.custom_adjoint_call` placeholder op. The full reverse-walk body is in `src/transforms/lib/AutodiffPass.cpp` and registered as `--tessera-autodiff` (also packaged as the `tessera-autodiff-pipeline` together with F5).
+
+### Phase F5 — Effect-aware adjoint collective insertion
+
+`AdjointCollectiveInsertionPass` (`--tessera-adjoint-collective-insertion`) runs after AutodiffPass. For each function arg with a recorded cotangent + sharding declaration, plans the appropriate distributed-gradient collective (`reduce_scatter` / `all_gather` / `all_reduce`) and records the choice as a per-arg `tessera.adjoint_collective_plan` attribute. Real op insertion follows once F4's multi-output rewrite step is in. Options: `--dp-axis=` (default `dp`) and `--tp-axis=` (default `tp`).
+
+The Python tape (above) remains the production path until the MLIR build runs `cmake -DTESSERA_BUILD_TESTS=ON`; both surfaces will share the `tessera.autodiff.custom_rule` registry. See `docs/spec/AUTODIFF_SPEC.md` §Phase F4.
 
 **`Tape.backward` semantics:** the `target` must be a tape-recorded numpy output. Pass `cotangent=` when your loss math sits outside `ops.*` (raw numpy `(y - t)**2`-style); omit it when the target is itself a scalar from `ops.reduce` / `ops.sum`.
 

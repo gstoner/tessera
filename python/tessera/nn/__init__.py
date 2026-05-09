@@ -56,6 +56,12 @@ from .layers import (
     KVCache,
     # Phase D4 (depends on D1 + B1)
     DynamicDepthwiseConv1d,
+    # Phase H1 (NHWC default + NCHW shim)
+    Conv2d,
+    Conv2dNCHW,
+    # Phase H2 — RNN cells with state-propagation primitive (ops.lstm_cell + extractors)
+    LSTMCell,
+    LSTM,
 )
 from . import utils
 
@@ -87,8 +93,6 @@ def _phantom(name: str, hint: str) -> type:
 
 
 # Stateful structured modules awaiting follow-on backlog items
-Conv2d = _phantom("Conv2d", "Conv2d Module is Phase H1; call tessera.ops.conv2d(x, w, ...) directly until then")
-LSTM = _phantom("LSTM", "RNN cells are deferred (Phase H2 — out of scope this cycle)")
 
 
 __all__ = [
@@ -109,6 +113,8 @@ __all__ = [
     "BatchNorm1d", "KVCache",
     # Phase D4 (real, depends on D1 streaming kernels + B1 buffers)
     "DynamicDepthwiseConv1d",
-    # Remaining phantoms (deferred to later phases)
-    "Conv2d", "LSTM",
+    # Phase H1 (NHWC default; NCHW shim transposes in/out)
+    "Conv2d", "Conv2dNCHW",
+    # Phase H2 (RNN cells)
+    "LSTMCell", "LSTM",
 ]

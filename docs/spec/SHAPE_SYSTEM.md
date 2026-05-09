@@ -328,3 +328,50 @@ too much of the model.
 
 Specs or guides that claim stronger MLIR verifier coverage should cite a test or
 downgrade that claim to `planned`.
+
+## 10. Dynamic Shape Support Matrix (audited 2026-05-09)
+
+How well do symbolic dims (`Dim("S")`, `tessera.Tensor["B", "S", "D"]`) flow
+through to each backend?
+
+| Backend | Symbolic dims at call time | Decoration-time constraint check (`bindings=`) | Call-time constraint enforcement | Notes |
+|---------|----------------------------|------------------------------------------------|----------------------------------|-------|
+| CPU reference (no `target=`) | ✅ accepted; numpy reference handles whatever concrete shape arrives | ✅ | ❌ **gap — silent** | Numpy `__add__` etc. catch incompatible shapes by themselves; constraint predicates aren't re-checked on calls |
+| `target="apple_cpu"` (Accelerate) | ✅ accepted; rank-2 / rank-3 GEMM dispatch reads runtime shape | ✅ | ❌ same gap | Tested 4×8 ⊗ 8×16 and 4×16 ⊗ 16×16 with one decorator |
+| `target="apple_gpu"` (MPS + MSL) | ✅ accepted; MPS matrix descriptors built from concrete shape | ✅ | ❌ same gap | Verified in `tests/unit/test_dynamic_shapes.py` |
+| `target="rocm"` / `"metalium"` / `"nvidia"` / `"cerebras"` / TPU | n/a — artifact-only, no execution to test | ✅ | n/a | Symbolic dims appear in emitted IR text; runtime semantics undefined until backend executes |
+
+### The call-time constraint gap
+
+`@tessera.jit(bindings={"K": 7})` on a body with `tessera.require(Divisible("K", 8))`
+correctly raises `TesseraConstraintError` at decoration time. But the same
+function called *without* eager bindings:
+
+```python
+@tessera.jit
+def aligned_gemm(A: ts.Tensor["M", "K"], B: ts.Tensor["K", "N"]):
+    ts.require(ts.constraint.Divisible("K", 8))
+    return ts.ops.gemm(A, B)
+
+aligned_gemm(np.random.randn(4, 7), np.random.randn(7, 16))  # K=7 → returns silently
+```
+
+This is a known gap (referenced in `CANONICAL_API.md` §Constraint API: "Runtime
+first-call shape binding is planned but not currently implemented"). Tracked
+as a Phase A2 follow-up in `docs/audit/execution_roadmap.md`.
+
+### Recommended user pattern today
+
+For symbolic models that need constraint checking, declare bindings at
+decoration time once per shape specialization:
+
+```python
+@tessera.jit(bindings={"K": K_VALUE})
+def gemm(A: ts.Tensor["M", "K"], B: ts.Tensor["K", "N"]):
+    tessera.require(ts.constraint.Divisible("K", 8))
+    return ts.ops.gemm(A, B)
+```
+
+Or call directly without `bindings=` and accept that constraint violations
+will manifest as low-level numpy / Accelerate errors rather than typed
+`TesseraConstraintError`s.

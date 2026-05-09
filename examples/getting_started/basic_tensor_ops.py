@@ -1,41 +1,53 @@
 #!/usr/bin/env python3
-"""Basic Tessera tensor operations example."""
+"""Basic Tessera tensor operations example.
 
-import tessera as tsr
-from tessera import Tensor
+Walks through the canonical Tessera surface:
+  * `@tessera.jit` to compile a function
+  * `tessera.Tensor[...]` shape-annotation syntax
+  * Replicated tensor factories (`tessera.randn`, `tessera.ones`)
+  * `tessera.nn` functional wrappers (RMSNorm, SwiGLU)
 
-@tsr.function
+Runs on the CPU reference path — no accelerator required.
+"""
+
+import tessera
+
+
+@tessera.jit
 def add_tensors(
-    x: Tensor["B", "S", "D"],
-    y: Tensor["B", "S", "D"]
-) -> Tensor["B", "S", "D"]:
-    """
-    Add two tensors with shape polymorphism.
-    Shapes B, S, D can be symbolic or dynamic.
-    """
-    return x + y
+    x: tessera.Tensor["B", "S", "D"],
+    y: tessera.Tensor["B", "S", "D"],
+) -> tessera.Tensor["B", "S", "D"]:
+    """Elementwise add. Shapes B/S/D are symbolic and bound at call time."""
+    return tessera.ops.add(x, y)
+
 
 def main():
-    print("🌟 Tessera Basic Tensor Operations")
+    print("Tessera Basic Tensor Operations")
     print("=" * 40)
 
-    # Create tensors with symbolic shapes
-    x = tsr.randn([4, "S", 512])   # Batch=4, seq=S, hidden=512
-    y = tsr.randn([4, "S", 512])
+    B, S, D, FF = 4, 16, 512, 2048
 
-    # Perform basic addition
-    z = add_tensors(x, y)
-    print(f"Addition result shape: {z.shape}")
+    # Replicated DistributedArray factories — single-rank ergonomic shortcuts
+    x = tessera.randn((B, S, D), dtype="fp32")
+    y = tessera.randn((B, S, D), dtype="fp32")
 
-    # Try a few other standard ops
-    normed = tsr.nn.rms_norm(z, weight=tsr.ones([512]))
-    print(f"RMSNorm output shape: {normed.shape}")
+    # 1. Compiled elementwise add
+    z = add_tensors(x.numpy(), y.numpy())
+    print(f"add result shape: {z.shape}")
 
-    activated = tsr.nn.swiglu(z, 
-                              W_gate=tsr.randn([512, 2048]),
-                              W_up=tsr.randn([512, 2048]),
-                              W_down=tsr.randn([2048, 512]))
-    print(f"SwiGLU output shape: {activated.shape}")
+    # 2. RMSNorm with a learnable scale
+    weight = tessera.ones((D,), dtype="fp32")
+    normed = tessera.nn.rms_norm(z, weight=weight.numpy())
+    print(f"rms_norm output shape: {normed.shape}")
+
+    # 3. SwiGLU MLP block (D -> FF -> D)
+    W_gate = tessera.randn((D, FF), dtype="fp32").numpy()
+    W_up = tessera.randn((D, FF), dtype="fp32").numpy()
+    W_down = tessera.randn((FF, D), dtype="fp32").numpy()
+    activated = tessera.nn.swiglu(normed, W_gate, W_up, W_down)
+    print(f"swiglu output shape: {activated.shape}")
+
 
 if __name__ == "__main__":
     main()

@@ -82,12 +82,15 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 | `distributed/launch.py` | `index_launch()`, `@kernel` decorator |
 | `distributed/moe.py` | `MoEConfig`, `route_tokens()`, `plan_all_to_all()` |
 | `runtime.py` | `TesseraRuntime` — ctypes wrapper over runtime C ABI |
-| `diagnostics.py` | `ErrorReporter`, `ShapeInferenceEngine`, `TesseraShapeError`/`TargetError` |
+| `diagnostics.py` | 778 LOC — `ErrorReporter`, `ShapeInferenceEngine`, `TesseraShapeError`/`TargetError`, stable diagnostic codes (`SHAPE_MISMATCH`, `TILE_LOWERING`, `TARGET_CODEGEN`, ...), source-loc tracking |
 | `telemetry.py` | Shared telemetry event/report schema (profiler, autotune, benchmarks) |
 | `profiler.py` | Runtime profiler facade (wraps `tools/profiler/`) |
 | `autotune.py` | Public autotuning facade (wraps `compiler/autotune_v2.py`) |
 | `arch.py` | Architecture helpers |
-| `debug.py` | Debug utilities |
+| `debug.py` | 526 LOC — full debug surface: `DebugTrace`, `GraphTrace`, `summarize_tensor`, `debug_trace`, `trace_graph`, `export_graphviz`, `debug_value`, `debug_artifact`, `debug_barrier`, `replay_capture`/`replay_manifest`/`save_replay_manifest`, **`check_grad`**, **`check_determinism`**. Documented in `docs/guides/Tessera_Debugging_Tools_Guide.md`. |
+| `cli/mlir.py` | 425 LOC — `tessera-mlir` static IR inspection CLI (installed as console script). Supports `--mode=compile_artifact --symbol=name` to read a JIT artifact without launching tensors. |
+| `nn/{module,layers,functional}.py` | **Tier 1 stateful `nn.*` surface** — `Module`, `Parameter`, `Sequential`, `ModuleList`, `ModuleDict`, `Linear`, `RMSNorm`, `LayerNorm`, `Embedding`, `Dropout`, `MLP`, `MultiHeadAttention`. Functional API in `functional.py` decomposes through primitive `ops.*` so the autodiff tape sees every step. |
+| `autodiff/{tape,vjp,__init__}.py` | **Tier 2 v1 reverse-mode autodiff** — tape-based, numpy-reference. `tape()` context manager + `reverse(fn)` decorator + `custom_rule(name)` for VJP registration. 17 built-in VJPs. Hooks into `Parameter` via a `id(numpy_buffer) → Parameter` weak-ref registry. See `docs/spec/AUTODIFF_SPEC.md`. |
 | `fault.py` | Fault tolerance primitives |
 | `elastic.py` | Elastic training support |
 | `server.py` | Inference server scaffolding |
@@ -161,13 +164,21 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 
 ### Benchmarks (`benchmarks/`)
 
-| File | Purpose |
-|------|---------|
-| `benchmark_gemm.py` | M/N/K sweep — latency_ms, tflops, memory_bw |
-| `benchmark_attention.py` | B/H/S/D sweep — tokens/sec, MFU |
-| `benchmark_collective.py` | 2–128 ranks — bus bandwidth |
-| `run_all.py` | Orchestrates all; emits `tessera_benchmarks_*.json` |
-| `perf_gate.py` | Telemetry baseline gate for deterministic CPU smoke |
+| File / Path | Purpose |
+|-------------|---------|
+| `benchmark_gemm.py` (291 LOC) | M/N/K sweep — latency_ms, tflops, memory_bw |
+| `benchmark_attention.py` (245 LOC) | B/H/S/D sweep — tokens/sec, MFU; causal mask option |
+| `benchmark_collective.py` (225 LOC) | 2–128 ranks — bus bandwidth |
+| `run_all.py` (462 LOC) | Orchestrates all; emits `tessera_benchmarks_*.json`; backend selection |
+| `perf_gate.py` (73 LOC) | Telemetry baseline gate for deterministic CPU smoke |
+| `compiler_support.py` | IR dispatch helper |
+| `apple_gpu/benchmark_fusion.py` (186 LOC) | Phase 8.4.6 — fused vs. sequential matmul→softmax/gelu/rmsnorm; tiled large-N matmul_softmax variant. Same JSON schema as `benchmark_gemm.py`. |
+| `common/` | Shared harness — `correctness.py`, `compiler_contract.py`, `artifact_schema.py` |
+| `spectral/` | Spectral/FFT solver benchmarks (Phase 7 scaffold) |
+| `Tessera_Operator_Benchmarks/` | Operator-level benchmark suite |
+| `Tessera_SuperBench/` | Whole-model benchmark suite |
+| `DeepScholar-Bench/` | DeepScholar model port |
+| `baselines/cpu_smoke.json` | Recorded CPU smoke baseline for `perf_gate.py` |
 
 ### Tools
 
@@ -175,7 +186,10 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 |------|---------|
 | `tools/tessera-opt/tessera-opt.cpp` | MLIR opt-style driver — all dialects + passes registered |
 | `tools/profiler/` | tprof runtime, CLI, Perfetto export |
-| `tools/roofline_tools/` | Roofline ingestion and HTML reports |
+| `tools/roofline_tools/` | Roofline ingestion + HTML reports; CLI `cli_v2.py` with `one`/`multi` modes; Nsight CSV + Perfetto JSON ingestion; comm rooflines + overlap analysis |
+| `tools/CLI/Tessera_CLI_Starter_v0_1/` | CLI starter scaffold (CMakeLists + cmake + data + docs + tests + tools) |
+| `tools/tessera-translate/` | Placeholder — empty as of May 2026 |
+| `python/tessera/cli/mlir.py` | `tessera-mlir` console-script entry — static IR inspection; `--mode=compile_artifact` reads JIT artifacts without launching |
 | `scripts/validate.sh` | CPU-only validation spine (version check + unit + runtime + benchmark smoke) |
 | `scripts/check_versions.py` | CMake/Python/runtime header version drift check |
 
@@ -223,7 +237,9 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 
 20. **`@jit(target=...)` accepts both `GPUTargetProfile` and string aliases.** Valid string targets: `"rocm"`, `"metalium"`, `"apple_cpu"`, `"apple_gpu"`. Strings dispatch through `matmul_pipeline.py` to the matching `tessera-lower-to-{target}` pipeline. Do not invent new string aliases without adding the corresponding pipeline.
 
-21. **Unsupported lowering must emit a stable diagnostic.** When a backend cannot lower an op (e.g., KV-cache on a target without it), emit a diagnostic that names the op and the target — never silently no-op or fall through. See the KV-cache → target lowering for the canonical pattern.
+21. **Unsupported lowering must emit a stable diagnostic.** When a backend cannot lower an op (e.g., KV-cache on a target without it), emit a diagnostic that names the op and the target — never silently no-op or fall through. See the KV-cache → target lowering for the canonical pattern. **Per-target coverage matrix:** `docs/audit/kv_cache_coverage_matrix.md` (audited 2026-05-09 — Apple CPU/GPU and ROCm honor #21 with named diagnostics; NVIDIA/x86/TPU/Cerebras simply don't encounter KV-cache ops in tested paths today and need explicit handling when they light up).
+
+22. **Doc surface is broader than IR/runtime surface — check `docs/guides/` and `docs/programming_guide/` before claiming a feature is missing.** The 11 user guides + 11-chapter programming guide describe APIs (e.g., `tessera.debug.check_grad`, `tessera.debug.check_determinism`, replay manifests, `tessera-mlir` compile-artifact mode, autodiff via Ch.7) that are fully documented and largely implemented in `python/tessera/{debug,diagnostics,cli/mlir}.py` (526 + 778 + 425 LOC) but are easy to overlook because the source-tour above doesn't make them obvious. When evaluating "do we have X", read the relevant guide first.
 
 ---
 
@@ -492,7 +508,17 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | Apple GPU benchmark harness | `benchmarks/apple_gpu/benchmark_fusion.py` |
 | Target IR contract test | `tests/unit/test_target_ir_contract.py`, `tests/tessera-ir/phase8/target_ir_contracts.mlir` |
 | Autotuner v1 framework | `src/compiler/autotuning/tessera/tools/autotune/` |
-| IR specs | `docs/spec/` (GRAPH_IR_SPEC, RUNTIME_ABI_SPEC, MEMORY_MODEL_SPEC, etc.) |
+| IR specs | `docs/spec/` (14 files: GRAPH_IR_SPEC, TILE_IR, TARGET_IR_SPEC, MEMORY_MODEL_SPEC, SHAPE_SYSTEM, LANGUAGE_SPEC, PYTHON_API_SPEC, RUNTIME_ABI_SPEC, COMPILER_REFERENCE, LOWERING_PIPELINE_SPEC, CONFORMANCE, CITL_ROCM_TRACE_PROFILER_SPEC, LANGUAGE_AND_IR_SPEC, **AUTODIFF_SPEC** — Tier 2 v1 design) |
+| **User-facing guides** (the canonical "how to use Tessera") | `docs/guides/` — 11 guides totaling ~3,400 LOC: **Tessera_Debugging_Tools_Guide.md** (327, 6-layer debugging model + tooling per layer), **Tessera_Error_Handling_And_Diagnostics_Guide.md** (305, stable diagnostic codes), Tessera_Profiling_And_Autotuning_Guide.md (303), Tessera_Runtime_ABI_Guide.md (562), Tessera_Tensor_Layout_And_Data_Movement_Guide.md (158), Tessera_Inference_Server_Guide.md (444), Tessera_Fault_Tolerance_And_Elasticity_Guide.md (352), Tessera_Production_Reliability_And_Chaos_Guide.md (238), Tessera_QA_Reliability_Guide.md (210), Tessera_Differentiable_NAS_Guide.md (287), Tessera_Developer_Frontend_End_To_End.md (222) |
+| **Programming guide** (11-chapter user manual) | `docs/programming_guide/` — Ch.1 Intro, Ch.2 Programming Model, Ch.3 Memory Model (526), Ch.4 Execution Model, Ch.5 Kernel Programming (331), Ch.6 Numerics, **Ch.7 Autodiff** (101), Ch.8 Layouts & Data Movement, Ch.9 Libraries & Primitives, Ch.10 Portability, Ch.11 Conclusion, Appendix NVL72, Tessera_Goals.md |
+| Tutorials | `docs/tutorials/` — `Flash_Attention_in_Tessera.md`, `performance_tuning.md` |
+| API reference | `docs/api/API_Reference_Index.md`, `docs/reference/tessera-api-reference.md`, `docs/reference/tessera_migration_guide_part{1,2}.md` |
+| Getting started + glossary | `docs/GETTING_STARTED.md`, `docs/GLOSSARY.md` |
+| Architecture overviews | `docs/architecture/` (system_overview.md, tessera_target_ir_usage_guide.md, Tessera_Kernel_Compilation_Stages_Overview.md), `docs/operations/Tessera_Standard_Operations.md` |
+| Spec gap audits | `docs/audit/compiler_spec_gap_audit.md`, `compiler_spec_gap_matrix.md` |
+| **Advanced examples capability gap** (per-example status + 10-theme tracking plan) | `docs/audit/advanced_examples_capability_gap.md` |
+| **Development execution roadmap** (Phases A–I, per-task acceptance criteria, dependencies) | `docs/audit/execution_roadmap.md` |
+| Examples (most are README/stub scaffolds) | `examples/` — `getting_started/basic_tensor_ops.py`, `compiler/`, `advanced/` (10+ subdirs: speculative_decoding, long_context_attention, kv_cache_serving, MoE, MLA, Nemotron, Jet_Nemotron, Fast_dLLM, RLVR), `optimization/`, `integration/`. **⚠️ `basic_tensor_ops.py` uses `@tsr.function` — drift from CANONICAL_API #15 (`@tessera.jit`); fix before pointing new users at it.** |
 | Style guide | `tessera_style_guide.md` |
 | Claude Code skill map | `skills.md` |
 | Project structure | `PROJECT_STRUCTURE.md` |

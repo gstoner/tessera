@@ -28,7 +28,6 @@ from typing import Any, Callable
 # Legacy core (Tensor, Module, NumericalPolicy)
 # ─────────────────────────────────────────────────────────────────────────────
 from . import core
-from . import nn
 from . import arch
 from . import shape
 from . import debug
@@ -334,6 +333,25 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         if hasattr(x, "_data"):
             x = x._data
         return x / (1.0 + np.exp(-x))
+
+    def swiglu(x, W_gate, W_up, W_down):
+        """Reference SwiGLU MLP block: gemm(silu(x @ W_gate) * (x @ W_up), W_down).
+
+        Numpy reference path; Phase 3+ will lower to a fused MLP-block kernel
+        (see Apple GPU's matmul→{gelu,rmsnorm} fusions in `apple_gpu_overview.md`
+        for the lowering pattern this op is meant to compose into).
+        """
+        if hasattr(x, "_data"):
+            x = x._data
+        if hasattr(W_gate, "_data"):
+            W_gate = W_gate._data
+        if hasattr(W_up, "_data"):
+            W_up = W_up._data
+        if hasattr(W_down, "_data"):
+            W_down = W_down._data
+        gate = np.matmul(x, W_gate)
+        up = np.matmul(x, W_up)
+        return np.matmul(silu(gate) * up, W_down)
 
     def sin(x):
         if hasattr(x, "_data"):
@@ -845,6 +863,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "sigmoid": sigmoid,
         "sin": sin,
         "silu": silu,
+        "swiglu": swiglu,
         "adam": adam,
         "transpose": transpose,
         "cast": cast,
@@ -915,6 +934,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         mul=mul,
         relu=relu,
         silu=silu,
+        swiglu=swiglu,
         rmsnorm=rmsnorm,
         rmsnorm_safe=rmsnorm_safe,
         sin=sin,
@@ -962,6 +982,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
 
 
 ops = _make_ops_namespace()
+
+# nn module depends on `ops`, so import after the ops namespace is built.
+from . import nn  # noqa: E402
+
+# autodiff installs tape-aware wrappers on `ops.<name>`; load after `ops` and `nn`.
+from . import autodiff  # noqa: E402
 
 from .runtime import (  # noqa: E402
     RuntimeArtifact,
@@ -1035,11 +1061,61 @@ class mut_f32(_DtypeAnnotation):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Top-level tensor factories
+#
+# Thin ergonomic wrappers over `tessera.array.from_domain(...)` with
+# `Replicated()` distribution. For sharded construction, use
+# `tessera.array.from_domain` directly with an explicit `dist.*`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _normalize_shape(shape):
+    if isinstance(shape, (tuple, list)):
+        return tuple(int(d) for d in shape)
+    return (int(shape),)
+
+
+def _make_replicated(shape, dtype, fill):
+    return DistributedArray.from_domain(
+        Rect(_normalize_shape(shape)),
+        dtype=dtype,
+        distribution=Replicated(),
+        fill=fill,
+    )
+
+
+def zeros(shape, dtype: str = "fp32"):
+    """Create a Replicated DistributedArray filled with zeros."""
+    return _make_replicated(shape, dtype, "zeros")
+
+
+def ones(shape, dtype: str = "fp32"):
+    """Create a Replicated DistributedArray filled with ones."""
+    return _make_replicated(shape, dtype, "ones")
+
+
+def randn(shape, dtype: str = "fp32"):
+    """Create a Replicated DistributedArray filled with N(0,1) samples."""
+    return _make_replicated(shape, dtype, "randn")
+
+
+def empty(shape, dtype: str = "fp32"):
+    """Create a Replicated DistributedArray with uninitialized storage."""
+    return _make_replicated(shape, dtype, "empty")
+
+
+def full(shape, fill_value, dtype: str = "fp32"):
+    """Create a Replicated DistributedArray filled with `fill_value`."""
+    arr = _make_replicated(shape, dtype, "zeros")
+    arr._data[...] = fill_value
+    return arr
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # __all__
 # ─────────────────────────────────────────────────────────────────────────────
 
 __all__ = [
-    # Legacy
+    # Core types
     "core", "nn", "Tensor", "Module",
     # Distributed API
     "distributed", "Region", "index_launch", "kernel",
@@ -1051,10 +1127,17 @@ __all__ = [
     "Effect", "EffectLattice",
     # Error types
     "TesseraJitError", "TesseraConstraintError", "TesseraEffectError",
-    # Ops namespace
+    # Ops namespace + runtime
     "ops", "RuntimeArtifact", "RuntimeProfile", "available_backends",
     "backend_capabilities", "compile_artifact", "get_last_profile", "launch",
-    "load_artifact", "query_backend", "collectives",
+    "load_artifact", "query_backend",
     # Dtype annotations
     "f16", "bf16", "f32", "mut_f32",
+    # Tensor factories (Replicated)
+    "zeros", "ones", "randn", "empty", "full",
+    # Auxiliary submodules (debug / profile / autotune / fault-tolerance / observability)
+    "shape", "debug", "graph", "telemetry", "profiler", "autotune",
+    "collectives", "fault", "elastic", "checkpoint", "server", "arch",
+    # Autodiff (Tier 2 v1)
+    "autodiff",
 ]

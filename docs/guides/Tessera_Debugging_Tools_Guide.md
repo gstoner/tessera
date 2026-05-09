@@ -47,6 +47,38 @@ Current support status:
 
 ---
 
+## 1.5. "Kernel ran, results wrong, what now?" — env-var IR dumps
+
+Set two environment variables before re-running the failing program. Tessera
+will write IR snapshots for every JIT artifact the run produces, with no
+source changes:
+
+```bash
+export TESSERA_DEBUG_IR=graph,schedule,tile,target  # or "all"
+export TESSERA_DEBUG_DUMP_DIR=/tmp/tessera-ir
+python my_repro.py
+```
+
+After the run, `/tmp/tessera-ir/` contains files like `my_jit_fn.graph.mlir`,
+`my_jit_fn.schedule.mlir`, etc. — one per JIT artifact × stage. Compare two
+runs (e.g., before/after a fix) with the bundled diff tool:
+
+```bash
+tessera-mlir diff /tmp/tessera-ir-baseline/my_jit_fn.graph.mlir \
+                  /tmp/tessera-ir-now/my_jit_fn.graph.mlir
+```
+
+Exit 0 means identical, 1 means differing — same convention as `git diff`.
+The diff is purely textual (no MLIR parsing); it pairs well with
+`replay_manifest()` (Section 7) for full forensic capture.
+
+Recognized stages: `graph`, `schedule`, `tile`, `target`. Aliases that match
+`tessera-mlir --emit=` spelling (`graph-ir`, `schedule_ir`, etc.) and `all`
+are accepted. Unknown values are silently dropped — never crashes user code.
+
+The implementation lives at `python/tessera/debug_env.py` and is wired into
+`compiler/jit.py.runtime_artifact()`.
+
 ## 2. Graph Inspection
 
 Graph inspection should be the first step when behavior looks wrong. It answers:

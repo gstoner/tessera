@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import difflib
 import importlib.util
 import json
 import sys
@@ -37,9 +38,60 @@ class SourceSymbol:
         }
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = _build_parser()
+def _diff_command(argv: Sequence[str]) -> int:
+    """Subcommand: ``tessera-mlir diff <a.mlir> <b.mlir>``.
+
+    Pure textual unified diff (no MLIR parsing). Useful for "what did this
+    pass change?" workflows when paired with ``TESSERA_DEBUG_IR`` dumps.
+    """
+    parser = argparse.ArgumentParser(
+        prog="tessera-mlir diff",
+        description="Unified textual diff between two MLIR snapshots",
+    )
+    parser.add_argument("a", help="Old / baseline MLIR file")
+    parser.add_argument("b", help="New MLIR file to compare against the baseline")
+    parser.add_argument(
+        "-n", "--context", type=int, default=3,
+        help="Number of context lines (default: 3)",
+    )
+    parser.add_argument(
+        "-o", "--output",
+        help="Write diff to a file instead of stdout",
+    )
     args = parser.parse_args(argv)
+
+    a_path = Path(args.a)
+    b_path = Path(args.b)
+    try:
+        a_text = a_path.read_text()
+        b_text = b_path.read_text()
+    except OSError as exc:
+        parser.error(str(exc))
+
+    diff = difflib.unified_diff(
+        a_text.splitlines(keepends=True),
+        b_text.splitlines(keepends=True),
+        fromfile=str(a_path),
+        tofile=str(b_path),
+        n=args.context,
+    )
+    rendered = "".join(diff)
+    if args.output:
+        Path(args.output).write_text(rendered)
+    else:
+        sys.stdout.write(rendered)
+    # Exit 0 when files are identical, 1 when they differ. (Matches GNU diff.)
+    return 0 if a_text == b_text else 1
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    # Subcommand dispatch — `tessera-mlir diff <a> <b>`
+    if raw_argv and raw_argv[0] == "diff":
+        return _diff_command(raw_argv[1:])
+
+    parser = _build_parser()
+    args = parser.parse_args(raw_argv)
     source = Path(args.model)
     try:
         text = source.read_text()

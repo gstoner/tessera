@@ -610,11 +610,29 @@ class JitFn:
                 "cpu_tile": list(self.cpu_plan.tile),
             })
 
+        graph_ir_text = self.graph_ir.to_mlir()
+        schedule_ir_text = self.schedule_ir or ""
+        tile_ir_text = self.tile_ir or ""
+        target_ir_text = self.target_ir or ""
+
+        # Honor TESSERA_DEBUG_IR / TESSERA_DEBUG_DUMP_DIR — write IR snapshots
+        # for the configured stages so users can diff before/after a code
+        # change without re-instrumenting their source. See debug_env.py.
+        from .. import debug_env as _debug_env
+        if _debug_env.should_dump():
+            _debug_env.dump_artifact(
+                symbol=self._fn.__name__,
+                graph_ir=graph_ir_text,
+                schedule_ir=schedule_ir_text,
+                tile_ir=tile_ir_text,
+                target_ir=target_ir_text,
+            )
+
         return RuntimeArtifact(
-            graph_ir=self.graph_ir.to_mlir(),
-            schedule_ir=self.schedule_ir or "",
-            tile_ir=self.tile_ir or "",
-            target_ir=self.target_ir or "",
+            graph_ir=graph_ir_text,
+            schedule_ir=schedule_ir_text,
+            tile_ir=tile_ir_text,
+            target_ir=target_ir_text,
             metadata=metadata,
             abi_signature=f"tessera.runtime.v1.{metadata['target']}",
         )

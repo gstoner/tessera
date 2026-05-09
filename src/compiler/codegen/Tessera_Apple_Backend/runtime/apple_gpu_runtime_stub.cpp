@@ -418,6 +418,18 @@ extern "C" void tessera_apple_gpu_matmul_softmax_f32(const float* A,
   reference_matmul_softmax_f32(A, B, O, M, N, K);
 }
 
+// Phase 8.4.6 — threadgroup-tiled variant. On non-Darwin we just route
+// to the same reference implementation; the tiling is a Metal-specific
+// perf optimization that doesn't apply to the portable fallback.
+extern "C" void tessera_apple_gpu_matmul_softmax_tiled_f32(const float* A,
+                                                           const float* B,
+                                                           float* O,
+                                                           int32_t M,
+                                                           int32_t N,
+                                                           int32_t K) {
+  reference_matmul_softmax_f32(A, B, O, M, N, K);
+}
+
 // Phase 8.4.4.2 — fp16 / bf16 stubs for fused matmul -> softmax.
 
 extern "C" void tessera_apple_gpu_matmul_softmax_f16(const uint16_t* A,

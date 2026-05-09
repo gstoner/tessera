@@ -2649,10 +2649,20 @@ def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
     a = np.asarray(operands[0])
     b = np.asarray(operands[1])
 
+    # Phase 8.4.6 — N upper bound depends on dtype. f32 has the
+    # threadgroup-tiled variant (capped at 8192); f16/bf16 are still
+    # limited to 256 (per-thread stack-array bound until tiled variants
+    # land in a future phase).
+    bf16_dtype = _bfloat16_dtype()
+    if a.dtype == np.float32:
+        n_max = 8192
+    else:
+        n_max = 256
+
     if not (
         a.ndim == 2 and b.ndim == 2
         and a.shape[1] == b.shape[0]
-        and b.shape[1] <= 256
+        and b.shape[1] <= n_max
         and a.dtype == b.dtype
     ):
         scores = np.matmul(a, b)
@@ -2969,6 +2979,8 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_matmul_f32")
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_matmul_f16")
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_matmul_bf16")
+                # Phase 8.4.6 — threadgroup-tiled matmul_softmax_f32 (lifts N constraint).
+                getattr(lib, "tessera_apple_gpu_matmul_softmax_tiled_f32")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

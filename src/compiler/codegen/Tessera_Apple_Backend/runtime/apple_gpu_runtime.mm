@@ -2541,3 +2541,259 @@ extern "C" void tessera_apple_gpu_matmul_softmax_matmul_bf16(
     return;
   reference_matmul_softmax_matmul_bf16_via_fp32(A, B, C, O, M, K, N, P);
 }
+
+//===---------------------------------------------------------------------===//
+// Phase 8.4.7 — MLP-block fusions: matmul -> gelu, matmul -> rmsnorm.
+//
+// Both are 2-op chains that mirror the Phase 8.4.3 matmul -> softmax shape:
+// one thread per output row, scores[N] stack accumulator (cap N <= 256).
+//
+// matmul -> gelu: compute row of A @ B into stack, apply tanh-approximation
+//   gelu pointwise, write back. No row reduction.
+//
+// matmul -> rmsnorm: compute row of A @ B into stack, compute RMS = sqrt(
+//   mean(x^2) + eps), divide each element by RMS, write back. Mirrors the
+//   numpy reference in tessera.runtime._runtime_cpu_op for "tessera.rmsnorm".
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+bool dispatch_matmul_gelu_msl(MetalDeviceContext &ctx, const float* A,
+                              const float* B, float* O,
+                              int32_t M, int32_t N, int32_t K) {
+  static NSString *const kFusedSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_FUSED_MATMUL_GELU_MAX_N 256
+
+kernel void matmul_gelu_f32(
+    device const float* A   [[buffer(0)]],
+    device const float* B   [[buffer(1)]],
+    device float*       O   [[buffer(2)]],
+    constant int&       M   [[buffer(3)]],
+    constant int&       N   [[buffer(4)]],
+    constant int&       K   [[buffer(5)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)M) return;
+    if (N > TESSERA_APPLE_GPU_FUSED_MATMUL_GELU_MAX_N) return;
+    int row = (int)gid;
+
+    float scores[TESSERA_APPLE_GPU_FUSED_MATMUL_GELU_MAX_N];
+    int a_off = row * K;
+    for (int n = 0; n < N; ++n) scores[n] = 0.0f;
+    for (int k = 0; k < K; ++k) {
+        float a = A[a_off + k];
+        int b_off = k * N;
+        for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];
+    }
+    int o_off = row * N;
+    // Tanh-approximation gelu, matching the numpy reference:
+    //   0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+    for (int n = 0; n < N; ++n) {
+        float v = scores[n];
+        float t = 0.7978845608028654f * (v + 0.044715f * v * v * v);
+        O[o_off + n] = 0.5f * v * (1.0f + tanh(t));
+    }
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kFusedSource, @"matmul_gelu_f32");
+    if (!pso) return false;
+
+    NSUInteger aBytes = sizeof(float) * static_cast<NSUInteger>(M) *
+                        static_cast<NSUInteger>(K);
+    NSUInteger bBytes = sizeof(float) * static_cast<NSUInteger>(K) *
+                        static_cast<NSUInteger>(N);
+    NSUInteger oBytes = sizeof(float) * static_cast<NSUInteger>(M) *
+                        static_cast<NSUInteger>(N);
+
+    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:aBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B length:bBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufA || !bufB || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBuffer:bufO offset:0 atIndex:2];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
+
+    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(M), 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(M),
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+bool dispatch_matmul_rmsnorm_msl(MetalDeviceContext &ctx, const float* A,
+                                 const float* B, float* O,
+                                 int32_t M, int32_t N, int32_t K, float eps) {
+  static NSString *const kFusedSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_FUSED_MATMUL_RMSNORM_MAX_N 256
+
+kernel void matmul_rmsnorm_f32(
+    device const float* A   [[buffer(0)]],
+    device const float* B   [[buffer(1)]],
+    device float*       O   [[buffer(2)]],
+    constant int&       M   [[buffer(3)]],
+    constant int&       N   [[buffer(4)]],
+    constant int&       K   [[buffer(5)]],
+    constant float&     eps [[buffer(6)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)M) return;
+    if (N > TESSERA_APPLE_GPU_FUSED_MATMUL_RMSNORM_MAX_N) return;
+    int row = (int)gid;
+
+    float scores[TESSERA_APPLE_GPU_FUSED_MATMUL_RMSNORM_MAX_N];
+    int a_off = row * K;
+    for (int n = 0; n < N; ++n) scores[n] = 0.0f;
+    for (int k = 0; k < K; ++k) {
+        float a = A[a_off + k];
+        int b_off = k * N;
+        for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];
+    }
+    // RMSNorm: y = x / sqrt(mean(x^2) + eps).
+    float sumsq = 0.0f;
+    for (int n = 0; n < N; ++n) sumsq += scores[n] * scores[n];
+    float inv_rms = 1.0f / sqrt(sumsq / float(N) + eps);
+    int o_off = row * N;
+    for (int n = 0; n < N; ++n) O[o_off + n] = scores[n] * inv_rms;
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kFusedSource, @"matmul_rmsnorm_f32");
+    if (!pso) return false;
+
+    NSUInteger aBytes = sizeof(float) * static_cast<NSUInteger>(M) *
+                        static_cast<NSUInteger>(K);
+    NSUInteger bBytes = sizeof(float) * static_cast<NSUInteger>(K) *
+                        static_cast<NSUInteger>(N);
+    NSUInteger oBytes = sizeof(float) * static_cast<NSUInteger>(M) *
+                        static_cast<NSUInteger>(N);
+
+    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:aBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B length:bBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufA || !bufB || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBuffer:bufO offset:0 atIndex:2];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&eps length:sizeof(float) atIndex:6];
+
+    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(M), 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(M),
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+inline void reference_matmul_gelu_f32(const float* A, const float* B, float* O,
+                                      int32_t M, int32_t N, int32_t K) {
+  static constexpr float kSqrt2OverPi = 0.7978845608028654f;
+  std::vector<float> scores(static_cast<std::size_t>(N), 0.0f);
+  for (int32_t row = 0; row < M; ++row) {
+    for (int32_t n = 0; n < N; ++n) scores[n] = 0.0f;
+    for (int32_t k = 0; k < K; ++k) {
+      float a = A[static_cast<std::size_t>(row) * K + k];
+      const float* b_row = B + static_cast<std::size_t>(k) * N;
+      for (int32_t n = 0; n < N; ++n) scores[n] += a * b_row[n];
+    }
+    float* o_row = O + static_cast<std::size_t>(row) * N;
+    for (int32_t n = 0; n < N; ++n) {
+      float v = scores[n];
+      float t = kSqrt2OverPi * (v + 0.044715f * v * v * v);
+      o_row[n] = 0.5f * v * (1.0f + std::tanh(t));
+    }
+  }
+}
+
+inline void reference_matmul_rmsnorm_f32(const float* A, const float* B,
+                                         float* O, int32_t M, int32_t N,
+                                         int32_t K, float eps) {
+  std::vector<float> scores(static_cast<std::size_t>(N), 0.0f);
+  for (int32_t row = 0; row < M; ++row) {
+    for (int32_t n = 0; n < N; ++n) scores[n] = 0.0f;
+    for (int32_t k = 0; k < K; ++k) {
+      float a = A[static_cast<std::size_t>(row) * K + k];
+      const float* b_row = B + static_cast<std::size_t>(k) * N;
+      for (int32_t n = 0; n < N; ++n) scores[n] += a * b_row[n];
+    }
+    float sumsq = 0.0f;
+    for (int32_t n = 0; n < N; ++n) sumsq += scores[n] * scores[n];
+    float inv_rms = 1.0f / std::sqrt(sumsq / static_cast<float>(N) + eps);
+    float* o_row = O + static_cast<std::size_t>(row) * N;
+    for (int32_t n = 0; n < N; ++n) o_row[n] = scores[n] * inv_rms;
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_matmul_gelu_f32(const float* A, const float* B,
+                                                  float* O, int32_t M,
+                                                  int32_t N, int32_t K) {
+  if (N > 256) {
+    reference_matmul_gelu_f32(A, B, O, M, N, K);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_matmul_gelu_msl(ctx, A, B, O, M, N, K)) return;
+  reference_matmul_gelu_f32(A, B, O, M, N, K);
+}
+
+extern "C" void tessera_apple_gpu_matmul_rmsnorm_f32(const float* A,
+                                                     const float* B, float* O,
+                                                     int32_t M, int32_t N,
+                                                     int32_t K, float eps) {
+  if (N > 256) {
+    reference_matmul_rmsnorm_f32(A, B, O, M, N, K, eps);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_matmul_rmsnorm_msl(ctx, A, B, O, M, N, K, eps)) return;
+  reference_matmul_rmsnorm_f32(A, B, O, M, N, K, eps);
+}

@@ -228,6 +228,46 @@ extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
   reference_flash_attn_f32(Q, K, V, O, B, Sq, Sk, D, scale, causal);
 }
 
+// Phase 8.4.4.2 — fp16 / bf16 stubs for flash_attn (fp32 conversion path).
+
+extern "C" void tessera_apple_gpu_flash_attn_f16(const uint16_t* Q,
+                                                 const uint16_t* K_buf,
+                                                 const uint16_t* V,
+                                                 uint16_t* O,
+                                                 int32_t B, int32_t Sq,
+                                                 int32_t Sk, int32_t D,
+                                                 float scale, int32_t causal) {
+  std::vector<float> Qf(static_cast<std::size_t>(B) * Sq * D);
+  std::vector<float> Kf(static_cast<std::size_t>(B) * Sk * D);
+  std::vector<float> Vf(static_cast<std::size_t>(B) * Sk * D);
+  std::vector<float> Of(static_cast<std::size_t>(B) * Sq * D);
+  for (std::size_t i = 0; i < Qf.size(); ++i) Qf[i] = half_to_float_stub(Q[i]);
+  for (std::size_t i = 0; i < Kf.size(); ++i) Kf[i] = half_to_float_stub(K_buf[i]);
+  for (std::size_t i = 0; i < Vf.size(); ++i) Vf[i] = half_to_float_stub(V[i]);
+  reference_flash_attn_f32(Qf.data(), Kf.data(), Vf.data(), Of.data(),
+                           B, Sq, Sk, D, scale, causal);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_half_stub(Of[i]);
+}
+
+extern "C" void tessera_apple_gpu_flash_attn_bf16(const uint16_t* Q,
+                                                  const uint16_t* K_buf,
+                                                  const uint16_t* V,
+                                                  uint16_t* O,
+                                                  int32_t B, int32_t Sq,
+                                                  int32_t Sk, int32_t D,
+                                                  float scale, int32_t causal) {
+  std::vector<float> Qf(static_cast<std::size_t>(B) * Sq * D);
+  std::vector<float> Kf(static_cast<std::size_t>(B) * Sk * D);
+  std::vector<float> Vf(static_cast<std::size_t>(B) * Sk * D);
+  std::vector<float> Of(static_cast<std::size_t>(B) * Sq * D);
+  for (std::size_t i = 0; i < Qf.size(); ++i) Qf[i] = bfloat16_to_float_stub(Q[i]);
+  for (std::size_t i = 0; i < Kf.size(); ++i) Kf[i] = bfloat16_to_float_stub(K_buf[i]);
+  for (std::size_t i = 0; i < Vf.size(); ++i) Vf[i] = bfloat16_to_float_stub(V[i]);
+  reference_flash_attn_f32(Qf.data(), Kf.data(), Vf.data(), Of.data(),
+                           B, Sq, Sk, D, scale, causal);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_stub(Of[i]);
+}
+
 namespace {
 
 inline void reference_softmax_f32(const float* X, float* Out, int32_t M,
@@ -376,6 +416,36 @@ extern "C" void tessera_apple_gpu_matmul_softmax_f32(const float* A,
                                                      int32_t M, int32_t N,
                                                      int32_t K) {
   reference_matmul_softmax_f32(A, B, O, M, N, K);
+}
+
+// Phase 8.4.4.2 — fp16 / bf16 stubs for fused matmul -> softmax.
+
+extern "C" void tessera_apple_gpu_matmul_softmax_f16(const uint16_t* A,
+                                                     const uint16_t* B,
+                                                     uint16_t* O,
+                                                     int32_t M, int32_t N,
+                                                     int32_t K) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Of(static_cast<std::size_t>(M) * N);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = half_to_float_stub(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = half_to_float_stub(B[i]);
+  reference_matmul_softmax_f32(Af.data(), Bf.data(), Of.data(), M, N, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_half_stub(Of[i]);
+}
+
+extern "C" void tessera_apple_gpu_matmul_softmax_bf16(const uint16_t* A,
+                                                      const uint16_t* B,
+                                                      uint16_t* O,
+                                                      int32_t M, int32_t N,
+                                                      int32_t K) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Of(static_cast<std::size_t>(M) * N);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = bfloat16_to_float_stub(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = bfloat16_to_float_stub(B[i]);
+  reference_matmul_softmax_f32(Af.data(), Bf.data(), Of.data(), M, N, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_stub(Of[i]);
 }
 
 extern "C" int32_t tessera_apple_gpu_runtime_msl_cache_size(void) {

@@ -2227,10 +2227,10 @@ def _apple_gpu_rope_bf16() -> Any:
 
 def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any],
                                    kwargs: Mapping[str, Any], np: Any) -> Any:
-    """Phase 8.4.1: dispatch a single rank-3 f32 flash-attention forward
-    through the apple_gpu runtime shim's custom MSL kernel. Inputs outside
-    the supported envelope (rank, dtype, head_dim > 256) fall back to the
-    numpy reference path used by the default `cpu` target.
+    """Phase 8.4.1 + 8.4.4.2: dispatch a single rank-3 flash-attention
+    forward through the apple_gpu runtime shim's custom MSL kernel. Picks
+    symbol by element type (f32, f16, bf16). Inputs outside the supported
+    envelope (rank, dtype, head_dim > 256) fall back to the numpy reference.
     """
 
     if len(operands) < 3:
@@ -2239,23 +2239,15 @@ def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any],
     k = np.asarray(operands[1])
     v = np.asarray(operands[2])
 
-    rank3_fast_path = (
-        q.dtype == np.float32 and k.dtype == np.float32 and v.dtype == np.float32
-        and q.ndim == 3 and k.ndim == 3 and v.ndim == 3
-        and q.shape[0] == k.shape[0] == v.shape[0]   # B
-        and k.shape[1] == v.shape[1]                  # Sk
-        and q.shape[2] == k.shape[2] == v.shape[2]   # D
+    if not (
+        q.ndim == 3 and k.ndim == 3 and v.ndim == 3
+        and q.shape[0] == k.shape[0] == v.shape[0]
+        and k.shape[1] == v.shape[1]
+        and q.shape[2] == k.shape[2] == v.shape[2]
         and q.shape[2] <= 256
-    )
-    if not rank3_fast_path:
+        and q.dtype == k.dtype == v.dtype
+    ):
         return _runtime_flash_attn(np, q, k, v, kwargs)
-
-    if not q.flags.c_contiguous:
-        q = np.ascontiguousarray(q, dtype=np.float32)
-    if not k.flags.c_contiguous:
-        k = np.ascontiguousarray(k, dtype=np.float32)
-    if not v.flags.c_contiguous:
-        v = np.ascontiguousarray(v, dtype=np.float32)
 
     B, Sq, D = q.shape
     Sk = k.shape[1]
@@ -2263,21 +2255,73 @@ def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any],
     scale = (1.0 / float(np.sqrt(D))) if scale is None else float(scale)
     causal = 1 if bool(kwargs.get("causal", False)) else 0
 
-    out = np.zeros((B, Sq, D), dtype=np.float32)
-    flash_attn = _apple_gpu_flash_attn_f32()
-    flash_attn(
-        q.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        k.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        v.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        ctypes.c_int32(B),
-        ctypes.c_int32(Sq),
-        ctypes.c_int32(Sk),
-        ctypes.c_int32(D),
-        ctypes.c_float(scale),
-        ctypes.c_int32(causal),
-    )
-    return out
+    if q.dtype == np.float32:
+        if not q.flags.c_contiguous:
+            q = np.ascontiguousarray(q, dtype=np.float32)
+        if not k.flags.c_contiguous:
+            k = np.ascontiguousarray(k, dtype=np.float32)
+        if not v.flags.c_contiguous:
+            v = np.ascontiguousarray(v, dtype=np.float32)
+        out = np.zeros((B, Sq, D), dtype=np.float32)
+        flash_attn = _apple_gpu_flash_attn_f32()
+        flash_attn(
+            q.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            k.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            v.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            ctypes.c_int32(B), ctypes.c_int32(Sq), ctypes.c_int32(Sk),
+            ctypes.c_int32(D), ctypes.c_float(scale), ctypes.c_int32(causal),
+        )
+        return out
+
+    if q.dtype == np.float16:
+        if not q.flags.c_contiguous:
+            q = np.ascontiguousarray(q, dtype=np.float16)
+        if not k.flags.c_contiguous:
+            k = np.ascontiguousarray(k, dtype=np.float16)
+        if not v.flags.c_contiguous:
+            v = np.ascontiguousarray(v, dtype=np.float16)
+        out = np.zeros((B, Sq, D), dtype=np.float16)
+        flash_attn_f16 = _apple_gpu_flash_attn_f16()
+        if flash_attn_f16 is not None:
+            flash_attn_f16(
+                q.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                k.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                v.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                ctypes.c_int32(B), ctypes.c_int32(Sq), ctypes.c_int32(Sk),
+                ctypes.c_int32(D), ctypes.c_float(scale), ctypes.c_int32(causal),
+            )
+            return out
+        return _runtime_flash_attn(
+            np, q.astype(np.float32), k.astype(np.float32), v.astype(np.float32), kwargs
+        ).astype(np.float16)
+
+    bf16_dtype = _bfloat16_dtype()
+    if bf16_dtype is not None and q.dtype == bf16_dtype:
+        if not q.flags.c_contiguous:
+            q = np.ascontiguousarray(q, dtype=bf16_dtype)
+        if not k.flags.c_contiguous:
+            k = np.ascontiguousarray(k, dtype=bf16_dtype)
+        if not v.flags.c_contiguous:
+            v = np.ascontiguousarray(v, dtype=bf16_dtype)
+        out = np.zeros((B, Sq, D), dtype=bf16_dtype)
+        flash_attn_bf16 = _apple_gpu_flash_attn_bf16()
+        if flash_attn_bf16 is not None:
+            flash_attn_bf16(
+                q.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                k.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                v.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                ctypes.c_int32(B), ctypes.c_int32(Sq), ctypes.c_int32(Sk),
+                ctypes.c_int32(D), ctypes.c_float(scale), ctypes.c_int32(causal),
+            )
+            return out
+        return _runtime_flash_attn(
+            np, q.astype(np.float32), k.astype(np.float32), v.astype(np.float32), kwargs
+        ).astype(bf16_dtype)
+
+    return _runtime_flash_attn(np, q, k, v, kwargs)
 
 
 def _apple_gpu_flash_attn_f32() -> Any:
@@ -2294,6 +2338,40 @@ def _apple_gpu_flash_attn_f32() -> Any:
         ctypes.c_int32,                  # D
         ctypes.c_float,                  # scale
         ctypes.c_int32,                  # causal
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_flash_attn_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_flash_attn_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_float, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_flash_attn_bf16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_flash_attn_bf16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_float, ctypes.c_int32,
     ]
     sym.restype = None
     return sym
@@ -2512,45 +2590,87 @@ def _apple_gpu_gelu_bf16() -> Any:
 
 
 def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
-    """Phase 8.4.3 — dispatch a fused matmul -> softmax(axis=-1) chain
-    through the apple_gpu runtime shim's purpose-built MSL kernel. Inputs
-    outside the supported envelope (rank, dtype, N>256) fall back to a
+    """Phase 8.4.3 + 8.4.4.2 — dispatch a fused matmul -> softmax(axis=-1)
+    chain through the apple_gpu runtime shim's purpose-built MSL kernel.
+    Picks symbol by element type (f32, f16, bf16). Inputs outside the
+    supported envelope (rank, mixed dtypes, N>256) fall back to a
     numpy-equivalent host computation for correctness."""
 
     if len(operands) != 2:
         raise ValueError("matmul_softmax fusion requires two operands (A, B)")
     a = np.asarray(operands[0])
     b = np.asarray(operands[1])
-    rank2_fast_path = (
-        a.dtype == np.float32 and b.dtype == np.float32
-        and a.ndim == 2 and b.ndim == 2
+
+    if not (
+        a.ndim == 2 and b.ndim == 2
         and a.shape[1] == b.shape[0]
         and b.shape[1] <= 256
-    )
-    if not rank2_fast_path:
-        # Numpy reference — same algorithm; the runtime's stub also takes
-        # this path on non-Darwin builds.
+        and a.dtype == b.dtype
+    ):
         scores = np.matmul(a, b)
         e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
         return e / np.sum(e, axis=-1, keepdims=True)
 
-    if not a.flags.c_contiguous:
-        a = np.ascontiguousarray(a, dtype=np.float32)
-    if not b.flags.c_contiguous:
-        b = np.ascontiguousarray(b, dtype=np.float32)
     M, K = a.shape
     N = b.shape[1]
-    out = np.zeros((M, N), dtype=np.float32)
-    fused = _apple_gpu_matmul_softmax_f32()
-    fused(
-        a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        ctypes.c_int32(M),
-        ctypes.c_int32(N),
-        ctypes.c_int32(K),
-    )
-    return out
+
+    if a.dtype == np.float32:
+        if not a.flags.c_contiguous:
+            a = np.ascontiguousarray(a, dtype=np.float32)
+        if not b.flags.c_contiguous:
+            b = np.ascontiguousarray(b, dtype=np.float32)
+        out = np.zeros((M, N), dtype=np.float32)
+        fused = _apple_gpu_matmul_softmax_f32()
+        fused(
+            a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
+        )
+        return out
+
+    if a.dtype == np.float16:
+        if not a.flags.c_contiguous:
+            a = np.ascontiguousarray(a, dtype=np.float16)
+        if not b.flags.c_contiguous:
+            b = np.ascontiguousarray(b, dtype=np.float16)
+        out = np.zeros((M, N), dtype=np.float16)
+        fused_f16 = _apple_gpu_matmul_softmax_f16()
+        if fused_f16 is not None:
+            fused_f16(
+                a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
+            )
+            return out
+        scores = (a.astype(np.float32) @ b.astype(np.float32))
+        e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+        return (e / np.sum(e, axis=-1, keepdims=True)).astype(np.float16)
+
+    bf16_dtype = _bfloat16_dtype()
+    if bf16_dtype is not None and a.dtype == bf16_dtype:
+        if not a.flags.c_contiguous:
+            a = np.ascontiguousarray(a, dtype=bf16_dtype)
+        if not b.flags.c_contiguous:
+            b = np.ascontiguousarray(b, dtype=bf16_dtype)
+        out = np.zeros((M, N), dtype=bf16_dtype)
+        fused_bf16 = _apple_gpu_matmul_softmax_bf16()
+        if fused_bf16 is not None:
+            fused_bf16(
+                a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
+            )
+            return out
+        scores = (a.astype(np.float32) @ b.astype(np.float32))
+        e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+        return (e / np.sum(e, axis=-1, keepdims=True)).astype(bf16_dtype)
+
+    scores = np.matmul(a, b)
+    e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+    return e / np.sum(e, axis=-1, keepdims=True)
 
 
 def _apple_gpu_matmul_softmax_f32() -> Any:
@@ -2563,6 +2683,36 @@ def _apple_gpu_matmul_softmax_f32() -> Any:
         ctypes.c_int32,  # M
         ctypes.c_int32,  # N
         ctypes.c_int32,  # K
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_matmul_softmax_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_matmul_softmax_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_matmul_softmax_bf16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_matmul_softmax_bf16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
     ]
     sym.restype = None
     return sym
@@ -2613,6 +2763,11 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_softmax_bf16")
                 getattr(lib, "tessera_apple_gpu_gelu_f16")
                 getattr(lib, "tessera_apple_gpu_gelu_bf16")
+                # Phase 8.4.4.2 — fp16/bf16 for fused matmul_softmax + flash_attn.
+                getattr(lib, "tessera_apple_gpu_matmul_softmax_f16")
+                getattr(lib, "tessera_apple_gpu_matmul_softmax_bf16")
+                getattr(lib, "tessera_apple_gpu_flash_attn_f16")
+                getattr(lib, "tessera_apple_gpu_flash_attn_bf16")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

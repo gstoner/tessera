@@ -1620,6 +1620,149 @@ def test_apple_gpu_msl_dtype_runtime_shim_exposes_all_symbols(tmp_path):
         assert sym is not None, f"missing C ABI symbol: {name}"
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 8.4.4.2: fp16 / bf16 for the fused matmul -> softmax kernel and for
+# flash_attn. Mixed-precision design: half/bfloat I/O at the boundary, fp32
+# per-thread accumulators internally — matches what production flash-attn
+# implementations do.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_apple_gpu_matmul_softmax_f16_executes_through_native_msl():
+    @ts.jit(target="apple_gpu")
+    def fused(A, B):
+        return ts.ops.softmax(ts.ops.matmul(A, B))
+
+    rng = np.random.RandomState(101)
+    for M, K, N in ((4, 8, 8), (8, 16, 32)):
+        A = rng.randn(M, K).astype(np.float16)
+        B = rng.randn(K, N).astype(np.float16)
+        out = fused(A, B)
+        assert out.dtype == np.float16
+        assert out.shape == (M, N)
+        scores = A.astype(np.float32) @ B.astype(np.float32)
+        e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+        ref = (e / np.sum(e, axis=-1, keepdims=True)).astype(np.float16)
+        np.testing.assert_allclose(
+            out.astype(np.float32), ref.astype(np.float32),
+            rtol=5e-3, atol=5e-3,
+        )
+
+
+def test_apple_gpu_matmul_softmax_bf16_executes_through_fp32_conversion():
+    pytest.importorskip("ml_dtypes")
+    import ml_dtypes
+    bf16 = ml_dtypes.bfloat16
+
+    @ts.jit(target="apple_gpu")
+    def fused(A, B):
+        return ts.ops.softmax(ts.ops.matmul(A, B))
+
+    rng = np.random.RandomState(103)
+    M, K, N = 8, 16, 32
+    A = rng.randn(M, K).astype(bf16)
+    B = rng.randn(K, N).astype(bf16)
+    out = fused(A, B)
+    assert out.dtype == bf16
+    scores = A.astype(np.float32) @ B.astype(np.float32)
+    e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+    ref = (e / np.sum(e, axis=-1, keepdims=True)).astype(bf16)
+    np.testing.assert_allclose(
+        out.astype(np.float32), ref.astype(np.float32),
+        rtol=2e-2, atol=2e-2,
+    )
+
+
+def test_apple_gpu_flash_attn_f16_executes_through_native_msl():
+    @ts.jit(target="apple_gpu")
+    def flash(q, k, v):
+        return ts.ops.flash_attn(q, k, v)
+
+    rng = np.random.RandomState(107)
+    for B, Sq, Sk, D in ((1, 4, 4, 8), (2, 8, 8, 16)):
+        Q = rng.randn(B, Sq, D).astype(np.float16)
+        K = rng.randn(B, Sk, D).astype(np.float16)
+        V = rng.randn(B, Sk, D).astype(np.float16)
+        out = flash(Q, K, V)
+        assert out.dtype == np.float16
+        assert out.shape == (B, Sq, D)
+        Qf = Q.astype(np.float32)
+        Kf = K.astype(np.float32)
+        Vf = V.astype(np.float32)
+        scale = 1.0 / float(np.sqrt(D))
+        scores = Qf @ np.swapaxes(Kf, -1, -2) * scale
+        e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+        weights = e / np.sum(e, axis=-1, keepdims=True)
+        ref = weights @ Vf
+        np.testing.assert_allclose(
+            out.astype(np.float32), ref, rtol=5e-3, atol=5e-3,
+        )
+
+
+def test_apple_gpu_flash_attn_bf16_executes_through_fp32_conversion():
+    pytest.importorskip("ml_dtypes")
+    import ml_dtypes
+    bf16 = ml_dtypes.bfloat16
+
+    @ts.jit(target="apple_gpu")
+    def flash(q, k, v):
+        return ts.ops.flash_attn(q, k, v)
+
+    rng = np.random.RandomState(109)
+    B, Sq, Sk, D = 1, 8, 8, 16
+    Q = rng.randn(B, Sq, D).astype(bf16)
+    K = rng.randn(B, Sk, D).astype(bf16)
+    V = rng.randn(B, Sk, D).astype(bf16)
+    out = flash(Q, K, V)
+    assert out.dtype == bf16
+    Qf = Q.astype(np.float32)
+    Kf = K.astype(np.float32)
+    Vf = V.astype(np.float32)
+    scale = 1.0 / float(np.sqrt(D))
+    scores = Qf @ np.swapaxes(Kf, -1, -2) * scale
+    e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+    weights = e / np.sum(e, axis=-1, keepdims=True)
+    ref = weights @ Vf
+    np.testing.assert_allclose(
+        out.astype(np.float32), ref, rtol=2e-2, atol=2e-2,
+    )
+
+
+def test_apple_gpu_fused_dtype_runtime_shim_exposes_all_symbols(tmp_path):
+    """Compile the apple_gpu runtime shim from source and verify all 4 new
+    fp16/bf16 symbols (matmul_softmax_{f16,bf16}, flash_attn_{f16,bf16}) are
+    exported."""
+
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        pytest.skip("C++ compiler is not available")
+
+    backend = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
+    if sys.platform == "darwin":
+        source = backend / "apple_gpu_runtime.mm"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.dylib"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", "-fobjc-arc",
+               "-x", "objective-c++", str(source), "-o", str(lib),
+               "-framework", "Foundation",
+               "-framework", "Metal",
+               "-framework", "MetalPerformanceShaders"]
+    else:
+        source = backend / "apple_gpu_runtime_stub.cpp"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.so"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(lib)]
+    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    runtime = ctypes.CDLL(str(lib))
+    for name in (
+        "tessera_apple_gpu_matmul_softmax_f16",
+        "tessera_apple_gpu_matmul_softmax_bf16",
+        "tessera_apple_gpu_flash_attn_f16",
+        "tessera_apple_gpu_flash_attn_bf16",
+    ):
+        sym = getattr(runtime, name, None)
+        assert sym is not None, f"missing C ABI symbol: {name}"
+
+
 def test_apple_cpu_bf16_disabled_when_ml_dtypes_missing(monkeypatch):
     """When ml_dtypes isn't installed the bf16 dtype probe returns None and
     the runtime falls through to numpy. Verified by stubbing the import to

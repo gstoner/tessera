@@ -948,6 +948,237 @@ extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
 }
 
 //===---------------------------------------------------------------------===//
+// Phase 8.4.4.2 — fp16 / bf16 flash-attention forward.
+//
+// Mixed-precision design — the K/V/Q tensors are fp16 / bf16 at the I/O
+// boundary, but the per-thread accumulators (m, l, o[]) stay in fp32 just
+// like production flash-attn implementations (Tri Dao, etc). This is the
+// standard pattern: low-precision tensors save memory bandwidth, fp32
+// accumulation preserves softmax / online-update precision.
+//
+// fp16: native MSL `half` I/O kernel.
+// bf16: fp32-conversion path at the runtime boundary (no MSL bf16 type).
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+bool dispatch_flash_attn_msl_f16(MetalDeviceContext &ctx, const uint16_t* Q,
+                                 const uint16_t* K, const uint16_t* V,
+                                 uint16_t* O, int32_t B, int32_t Sq,
+                                 int32_t Sk, int32_t D, float scale,
+                                 int32_t causal) {
+  static NSString *const kFlashAttnSourceF16 = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_FLASH_ATTN_MAX_D 256
+
+kernel void flash_attn_f16(
+    device const half*  Q       [[buffer(0)]],
+    device const half*  K       [[buffer(1)]],
+    device const half*  V       [[buffer(2)]],
+    device half*        O       [[buffer(3)]],
+    constant int&       B       [[buffer(4)]],
+    constant int&       Sq      [[buffer(5)]],
+    constant int&       Sk      [[buffer(6)]],
+    constant int&       D       [[buffer(7)]],
+    constant float&     scale   [[buffer(8)]],
+    constant int&       causal  [[buffer(9)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    if (gid.y >= (uint)B || gid.x >= (uint)Sq) return;
+    int batch = (int)gid.y;
+    int q_row = (int)gid.x;
+    if (D > TESSERA_APPLE_GPU_FLASH_ATTN_MAX_D) return;
+
+    int q_off = batch * Sq * D + q_row * D;
+    int kv_base = batch * Sk * D;
+
+    // float accumulators — preserve softmax precision on the online update.
+    float m = -INFINITY;
+    float l = 0.0f;
+    float o[TESSERA_APPLE_GPU_FLASH_ATTN_MAX_D];
+    for (int d = 0; d < D; ++d) o[d] = 0.0f;
+
+    for (int k_row = 0; k_row < Sk; ++k_row) {
+        if (causal != 0 && k_row > q_row) break;
+        int k_off = kv_base + k_row * D;
+        float score = 0.0f;
+        for (int d = 0; d < D; ++d) {
+            score += float(Q[q_off + d]) * float(K[k_off + d]);
+        }
+        score *= scale;
+
+        float new_m = max(m, score);
+        float exp_old = exp(m - new_m);
+        float exp_score = exp(score - new_m);
+        float new_l = l * exp_old + exp_score;
+
+        for (int d = 0; d < D; ++d) {
+            o[d] = o[d] * exp_old + float(V[k_off + d]) * exp_score;
+        }
+        m = new_m;
+        l = new_l;
+    }
+
+    if (l == 0.0f) {
+        for (int d = 0; d < D; ++d) O[q_off + d] = half(0.0f);
+    } else {
+        float inv_l = 1.0f / l;
+        for (int d = 0; d < D; ++d) O[q_off + d] = half(o[d] * inv_l);
+    }
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kFlashAttnSourceF16, @"flash_attn_f16");
+    if (!pso) return false;
+
+    NSUInteger qBytes = sizeof(uint16_t) * static_cast<NSUInteger>(B) *
+                        static_cast<NSUInteger>(Sq) * static_cast<NSUInteger>(D);
+    NSUInteger kvBytes = sizeof(uint16_t) * static_cast<NSUInteger>(B) *
+                         static_cast<NSUInteger>(Sk) * static_cast<NSUInteger>(D);
+    NSUInteger oBytes = qBytes;
+
+    id<MTLBuffer> bufQ = [ctx.device newBufferWithBytes:Q
+                                                  length:qBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufK = [ctx.device newBufferWithBytes:K
+                                                  length:kvBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufV = [ctx.device newBufferWithBytes:V
+                                                  length:kvBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufQ || !bufK || !bufV || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufO offset:0 atIndex:3];
+    [enc setBytes:&B  length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&Sq length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&Sk length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&D  length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&scale  length:sizeof(float)   atIndex:8];
+    [enc setBytes:&causal length:sizeof(int32_t) atIndex:9];
+
+    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(Sq),
+                               static_cast<NSUInteger>(B), 1);
+    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(Sq), 32);
+    NSUInteger tg_y = std::min<NSUInteger>(static_cast<NSUInteger>(B),
+                                           pso.maxTotalThreadsPerThreadgroup /
+                                               std::max<NSUInteger>(tg_x, 1));
+    if (tg_y == 0) tg_y = 1;
+    MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+inline void reference_flash_attn_f16_via_fp32(const uint16_t* Q,
+                                              const uint16_t* K,
+                                              const uint16_t* V, uint16_t* O,
+                                              int32_t B, int32_t Sq,
+                                              int32_t Sk, int32_t D,
+                                              float scale, int32_t causal) {
+  std::vector<float> Qf(static_cast<std::size_t>(B) * Sq * D);
+  std::vector<float> Kf(static_cast<std::size_t>(B) * Sk * D);
+  std::vector<float> Vf(static_cast<std::size_t>(B) * Sk * D);
+  std::vector<float> Of(static_cast<std::size_t>(B) * Sq * D);
+  for (std::size_t i = 0; i < Qf.size(); ++i) Qf[i] = half_to_float_gpu(Q[i]);
+  for (std::size_t i = 0; i < Kf.size(); ++i) Kf[i] = half_to_float_gpu(K[i]);
+  for (std::size_t i = 0; i < Vf.size(); ++i) Vf[i] = half_to_float_gpu(V[i]);
+  reference_flash_attn_f32(Qf.data(), Kf.data(), Vf.data(), Of.data(),
+                           B, Sq, Sk, D, scale, causal);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_half_gpu(Of[i]);
+}
+
+inline void reference_flash_attn_bf16_via_fp32(const uint16_t* Q,
+                                               const uint16_t* K,
+                                               const uint16_t* V, uint16_t* O,
+                                               int32_t B, int32_t Sq,
+                                               int32_t Sk, int32_t D,
+                                               float scale, int32_t causal) {
+  std::vector<float> Qf(static_cast<std::size_t>(B) * Sq * D);
+  std::vector<float> Kf(static_cast<std::size_t>(B) * Sk * D);
+  std::vector<float> Vf(static_cast<std::size_t>(B) * Sk * D);
+  std::vector<float> Of(static_cast<std::size_t>(B) * Sq * D);
+  for (std::size_t i = 0; i < Qf.size(); ++i) Qf[i] = bfloat16_to_float_gpu(Q[i]);
+  for (std::size_t i = 0; i < Kf.size(); ++i) Kf[i] = bfloat16_to_float_gpu(K[i]);
+  for (std::size_t i = 0; i < Vf.size(); ++i) Vf[i] = bfloat16_to_float_gpu(V[i]);
+  reference_flash_attn_f32(Qf.data(), Kf.data(), Vf.data(), Of.data(),
+                           B, Sq, Sk, D, scale, causal);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_gpu(Of[i]);
+}
+
+bool dispatch_flash_attn_bf16_via_fp32(MetalDeviceContext &ctx,
+                                       const uint16_t* Q, const uint16_t* K,
+                                       const uint16_t* V, uint16_t* O,
+                                       int32_t B, int32_t Sq, int32_t Sk,
+                                       int32_t D, float scale, int32_t causal) {
+  std::vector<float> Qf(static_cast<std::size_t>(B) * Sq * D);
+  std::vector<float> Kf(static_cast<std::size_t>(B) * Sk * D);
+  std::vector<float> Vf(static_cast<std::size_t>(B) * Sk * D);
+  std::vector<float> Of(static_cast<std::size_t>(B) * Sq * D);
+  for (std::size_t i = 0; i < Qf.size(); ++i) Qf[i] = bfloat16_to_float_gpu(Q[i]);
+  for (std::size_t i = 0; i < Kf.size(); ++i) Kf[i] = bfloat16_to_float_gpu(K[i]);
+  for (std::size_t i = 0; i < Vf.size(); ++i) Vf[i] = bfloat16_to_float_gpu(V[i]);
+  if (!dispatch_flash_attn_msl(ctx, Qf.data(), Kf.data(), Vf.data(), Of.data(),
+                               B, Sq, Sk, D, scale, causal))
+    return false;
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_gpu(Of[i]);
+  return true;
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_flash_attn_f16(const uint16_t* Q,
+                                                 const uint16_t* K,
+                                                 const uint16_t* V,
+                                                 uint16_t* O,
+                                                 int32_t B, int32_t Sq,
+                                                 int32_t Sk, int32_t D,
+                                                 float scale, int32_t causal) {
+  if (D > 256) {
+    reference_flash_attn_f16_via_fp32(Q, K, V, O, B, Sq, Sk, D, scale, causal);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_flash_attn_msl_f16(ctx, Q, K, V, O, B, Sq, Sk, D, scale, causal))
+    return;
+  reference_flash_attn_f16_via_fp32(Q, K, V, O, B, Sq, Sk, D, scale, causal);
+}
+
+extern "C" void tessera_apple_gpu_flash_attn_bf16(const uint16_t* Q,
+                                                  const uint16_t* K,
+                                                  const uint16_t* V,
+                                                  uint16_t* O,
+                                                  int32_t B, int32_t Sq,
+                                                  int32_t Sk, int32_t D,
+                                                  float scale, int32_t causal) {
+  if (D > 256) {
+    reference_flash_attn_bf16_via_fp32(Q, K, V, O, B, Sq, Sk, D, scale, causal);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_flash_attn_bf16_via_fp32(ctx, Q, K, V, O, B, Sq, Sk, D, scale, causal))
+    return;
+  reference_flash_attn_bf16_via_fp32(Q, K, V, O, B, Sq, Sk, D, scale, causal);
+}
+
+//===---------------------------------------------------------------------===//
 // Phase 8.4.2 — Softmax (rank-2, axis=-1, f32)
 //
 // Standard 3-pass softmax: row max -> subtract + exp + sum -> divide. One
@@ -1556,4 +1787,189 @@ extern "C" void tessera_apple_gpu_matmul_softmax_f32(const float* A,
   MetalDeviceContext &ctx = deviceContext();
   if (ctx.ok && dispatch_matmul_softmax_msl(ctx, A, B, O, M, N, K)) return;
   reference_matmul_softmax_f32(A, B, O, M, N, K);
+}
+
+//===---------------------------------------------------------------------===//
+// Phase 8.4.4.2 — fp16 / bf16 fused matmul -> softmax variants.
+//
+// Mixed-precision design: I/O in `half`/`bfloat`-pattern, but the per-thread
+// `scores[256]` accumulator stays in `float`. This matches what production
+// flash-attn-style implementations do — fp32 accumulation regardless of
+// I/O dtype — and avoids precision loss on the inner reduction loops.
+//
+// fp16: native MSL `half` I/O kernel; load to float, accumulate, store back.
+// bf16: fp32-conversion path (matmul_softmax_f32 dispatch + boundary cast).
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+bool dispatch_matmul_softmax_msl_f16(MetalDeviceContext &ctx, const uint16_t* A,
+                                     const uint16_t* B, uint16_t* O,
+                                     int32_t M, int32_t N, int32_t K) {
+  static NSString *const kFusedSourceF16 = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_FUSED_MATMUL_SOFTMAX_MAX_N 256
+
+kernel void matmul_softmax_f16(
+    device const half*  A   [[buffer(0)]],
+    device const half*  B   [[buffer(1)]],
+    device half*        O   [[buffer(2)]],
+    constant int&       M   [[buffer(3)]],
+    constant int&       N   [[buffer(4)]],
+    constant int&       K   [[buffer(5)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)M) return;
+    if (N > TESSERA_APPLE_GPU_FUSED_MATMUL_SOFTMAX_MAX_N) return;
+    int row = (int)gid;
+
+    // float accumulator — preserve precision across the K-reduction.
+    float scores[TESSERA_APPLE_GPU_FUSED_MATMUL_SOFTMAX_MAX_N];
+    int a_off = row * K;
+    for (int n = 0; n < N; ++n) scores[n] = 0.0f;
+    for (int k = 0; k < K; ++k) {
+        float a = float(A[a_off + k]);
+        int b_off = k * N;
+        for (int n = 0; n < N; ++n) scores[n] += a * float(B[b_off + n]);
+    }
+
+    float row_max = -INFINITY;
+    for (int n = 0; n < N; ++n) row_max = max(row_max, scores[n]);
+    float denom = 0.0f;
+    for (int n = 0; n < N; ++n) {
+        scores[n] = exp(scores[n] - row_max);
+        denom += scores[n];
+    }
+    int o_off = row * N;
+    if (denom == 0.0f) {
+        for (int n = 0; n < N; ++n) O[o_off + n] = half(0.0f);
+    } else {
+        float inv = 1.0f / denom;
+        for (int n = 0; n < N; ++n) O[o_off + n] = half(scores[n] * inv);
+    }
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kFusedSourceF16, @"matmul_softmax_f16");
+    if (!pso) return false;
+
+    NSUInteger aBytes = sizeof(uint16_t) * static_cast<NSUInteger>(M) *
+                        static_cast<NSUInteger>(K);
+    NSUInteger bBytes = sizeof(uint16_t) * static_cast<NSUInteger>(K) *
+                        static_cast<NSUInteger>(N);
+    NSUInteger oBytes = sizeof(uint16_t) * static_cast<NSUInteger>(M) *
+                        static_cast<NSUInteger>(N);
+
+    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A
+                                                  length:aBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B
+                                                  length:bBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufA || !bufB || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBuffer:bufO offset:0 atIndex:2];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
+
+    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(M), 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(M),
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+inline void reference_matmul_softmax_f16_via_fp32(const uint16_t* A,
+                                                  const uint16_t* B,
+                                                  uint16_t* O,
+                                                  int32_t M, int32_t N,
+                                                  int32_t K) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Of(static_cast<std::size_t>(M) * N);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = half_to_float_gpu(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = half_to_float_gpu(B[i]);
+  reference_matmul_softmax_f32(Af.data(), Bf.data(), Of.data(), M, N, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_half_gpu(Of[i]);
+}
+
+inline void reference_matmul_softmax_bf16_via_fp32(const uint16_t* A,
+                                                   const uint16_t* B,
+                                                   uint16_t* O,
+                                                   int32_t M, int32_t N,
+                                                   int32_t K) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Of(static_cast<std::size_t>(M) * N);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = bfloat16_to_float_gpu(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = bfloat16_to_float_gpu(B[i]);
+  reference_matmul_softmax_f32(Af.data(), Bf.data(), Of.data(), M, N, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_gpu(Of[i]);
+}
+
+bool dispatch_matmul_softmax_bf16_via_fp32(MetalDeviceContext &ctx,
+                                           const uint16_t* A, const uint16_t* B,
+                                           uint16_t* O, int32_t M, int32_t N,
+                                           int32_t K) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Of(static_cast<std::size_t>(M) * N);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = bfloat16_to_float_gpu(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = bfloat16_to_float_gpu(B[i]);
+  if (!dispatch_matmul_softmax_msl(ctx, Af.data(), Bf.data(), Of.data(), M, N, K))
+    return false;
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_gpu(Of[i]);
+  return true;
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_matmul_softmax_f16(const uint16_t* A,
+                                                     const uint16_t* B,
+                                                     uint16_t* O,
+                                                     int32_t M, int32_t N,
+                                                     int32_t K) {
+  if (N > 256) {
+    reference_matmul_softmax_f16_via_fp32(A, B, O, M, N, K);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_matmul_softmax_msl_f16(ctx, A, B, O, M, N, K)) return;
+  reference_matmul_softmax_f16_via_fp32(A, B, O, M, N, K);
+}
+
+extern "C" void tessera_apple_gpu_matmul_softmax_bf16(const uint16_t* A,
+                                                      const uint16_t* B,
+                                                      uint16_t* O,
+                                                      int32_t M, int32_t N,
+                                                      int32_t K) {
+  if (N > 256) {
+    reference_matmul_softmax_bf16_via_fp32(A, B, O, M, N, K);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_matmul_softmax_bf16_via_fp32(ctx, A, B, O, M, N, K))
+    return;
+  reference_matmul_softmax_bf16_via_fp32(A, B, O, M, N, K);
 }

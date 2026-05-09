@@ -56,6 +56,10 @@ class TapeEntry:
 class Tape:
     entries: list[TapeEntry] = field(default_factory=list)
     _consumed: bool = False
+    # Final cotangent dict from `backward()` — exposed so that
+    # `tessera.autodiff.rematerialize` can extract input cotangents from a
+    # nested tape's backward pass without re-walking it.
+    cotangent: dict[int, np.ndarray] = field(default_factory=dict)
 
     def record(
         self,
@@ -157,6 +161,8 @@ class Tape:
                 if desc.param is not None:
                     _accumulate_param_grad(desc.param, g)
 
+        # Store final cotangent map for downstream consumers (rematerialize).
+        self.cotangent = cotan
         self._consumed = True
 
 
@@ -269,12 +275,18 @@ _WRAPPED: set[str] = set()
 
 def _make_wrapper(name: str, original: Callable) -> Callable:
     def wrapped(*args, **kwargs):
+        # Late import — avoids a load-time cycle through autodiff.__init__.
+        from .mixed_precision import autocast_dtype, autocast_keep_fp32
+
         active = _ACTIVE_TAPE.get()
         if active is None:
-            # Fast path — no tape; just forward the call. We still pre-convert
-            # Parameter inputs to numpy so non-tape callers don't trip on
-            # `Parameter._data == DistributedArray` unwrap mismatches.
             forward_args = tuple(_to_forward_arg(a) for a in args)
+            cast_dtype = autocast_dtype()
+            if cast_dtype is not None:
+                if autocast_keep_fp32(name):
+                    forward_args = _autocast_args(forward_args, "fp32")
+                else:
+                    forward_args = _autocast_args(forward_args, cast_dtype)
             return original(*forward_args, **kwargs)
 
         # Tape active — describe each positional arg, pre-convert to numpy
@@ -289,6 +301,13 @@ def _make_wrapper(name: str, original: Callable) -> Callable:
                 forward_args.append(d.array)
                 array_descs.append(d)
 
+        cast_dtype = autocast_dtype()
+        if cast_dtype is not None:
+            if autocast_keep_fp32(name):
+                forward_args = list(_autocast_args(forward_args, "fp32"))
+            else:
+                forward_args = list(_autocast_args(forward_args, cast_dtype))
+
         out = original(*forward_args, **kwargs)
         # Look up the VJP at call time so that `custom_rule` can register/override
         # after the wrapper was installed. `vjp_fn=None` is allowed; backward
@@ -302,6 +321,26 @@ def _make_wrapper(name: str, original: Callable) -> Callable:
     # still see e.g. "matmul" rather than "_traced_matmul".
     wrapped.__name__ = getattr(original, "__name__", name)
     return wrapped
+
+
+_AUTOCAST_NUMPY_DTYPE = {
+    "fp16": np.float16,
+    "bf16": np.float32,  # bf16 stored as fp32 in the numpy reference
+    "fp32": np.float32,
+    "fp64": np.float64,
+}
+
+
+def _autocast_args(args, dtype: str):
+    """Cast each ndarray in ``args`` to ``dtype``; pass non-arrays through."""
+    np_dtype = _AUTOCAST_NUMPY_DTYPE.get(dtype, np.float32)
+    out = []
+    for a in args:
+        if isinstance(a, np.ndarray) and a.dtype.kind in "fc":
+            out.append(a.astype(np_dtype, copy=False))
+        else:
+            out.append(a)
+    return out
 
 
 def _to_forward_arg(arg):

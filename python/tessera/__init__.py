@@ -848,6 +848,15 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             cache = ReferenceKVCache()
         return cache.prune(limit)
 
+    def kv_cache_update(cache, key, value):
+        """Functional KV-cache update — preferred over the legacy
+        :func:`tessera.ops.kv_cache_append` name.
+
+        Same dispatch semantics as ``kv_cache_append``: works on both the
+        Phase B2 ``KVCacheHandle`` and the legacy ``ReferenceKVCache``.
+        """
+        return kv_cache_append(cache, key, value)
+
     def kv_cache_read(cache, start, end=None):
         """Read a slice of the cache as (K, V).
 
@@ -867,6 +876,80 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             vs = np.stack(cache.values[start:stop], axis=0) if cache.values else np.zeros(0)
             return ks, vs
         raise TypeError(f"kv_cache_read: unsupported cache type {type(cache).__name__}")
+
+    def quantize_kv(k, v, *, bits: int = 4, symmetric: bool = True):
+        """Block-quantize K/V tensors to ``bits``-bit integers per token.
+
+        Per-token symmetric quantization (default): each ``(num_heads, head_dim)``
+        slice has its own ``scale`` such that the largest absolute value maps to
+        ``2^(bits-1) - 1``. For asymmetric, an additional ``zero_point`` per
+        token is returned.
+
+        Returns ``(k_q, v_q, scale, zero_point)`` where:
+          * ``k_q`` / ``v_q`` are int8/int16 arrays with the same shape as input
+          * ``scale`` is the per-token scale factor, shape ``(seq, 1, 1)``
+          * ``zero_point`` is per-token offset (zeros in symmetric mode)
+
+        Phase E1 of the execution roadmap.
+        """
+        if not 2 <= bits <= 8:
+            raise ValueError(f"bits must be in [2, 8]; got {bits}")
+        if hasattr(k, "_data"):
+            k = k._data
+        if hasattr(v, "_data"):
+            v = v._data
+        k = np.asarray(k)
+        v = np.asarray(v)
+        if k.shape != v.shape:
+            raise ValueError(f"k/v shapes must match; got {k.shape} vs {v.shape}")
+        if k.ndim != 3:
+            raise ValueError(f"quantize_kv expects (seq, num_heads, head_dim); got {k.shape}")
+
+        q_max = (1 << (bits - 1)) - 1
+        q_min = -q_max  # symmetric range
+        store_dtype = np.int8 if bits <= 8 else np.int16
+
+        # Per-token K and V scales (one each)
+        k_amax = np.max(np.abs(k), axis=(1, 2), keepdims=True)
+        v_amax = np.max(np.abs(v), axis=(1, 2), keepdims=True)
+        k_scale = np.maximum(k_amax / q_max, 1e-12)
+        v_scale = np.maximum(v_amax / q_max, 1e-12)
+
+        if symmetric:
+            k_q = np.clip(np.round(k / k_scale), q_min, q_max).astype(store_dtype)
+            v_q = np.clip(np.round(v / v_scale), q_min, q_max).astype(store_dtype)
+            zero_point = np.zeros_like(k_scale)
+        else:
+            k_min = np.min(k, axis=(1, 2), keepdims=True)
+            v_min = np.min(v, axis=(1, 2), keepdims=True)
+            k_scale = np.maximum((np.max(k, axis=(1, 2), keepdims=True) - k_min) / (2 * q_max), 1e-12)
+            v_scale = np.maximum((np.max(v, axis=(1, 2), keepdims=True) - v_min) / (2 * q_max), 1e-12)
+            k_q = np.clip(np.round((k - k_min) / k_scale + q_min), q_min, q_max).astype(store_dtype)
+            v_q = np.clip(np.round((v - v_min) / v_scale + q_min), q_min, q_max).astype(store_dtype)
+            zero_point = np.stack([k_min, v_min], axis=0)
+
+        # Stack scales: shape (2, seq, 1, 1) where [0] is K, [1] is V
+        scale = np.stack([k_scale, v_scale], axis=0)
+        return k_q, v_q, scale, zero_point
+
+    def dequantize_kv(k_q, v_q, scale, zero_point=None, *, symmetric: bool = True):
+        """Inverse of :func:`quantize_kv`. Returns ``(k, v)`` as fp32 arrays."""
+        k_q = np.asarray(k_q)
+        v_q = np.asarray(v_q)
+        scale = np.asarray(scale)
+        if scale.shape[0] != 2:
+            raise ValueError(f"scale must stack K and V scales; got shape {scale.shape}")
+        k_scale, v_scale = scale[0], scale[1]
+        if symmetric or zero_point is None:
+            k = k_q.astype(np.float32) * k_scale.astype(np.float32)
+            v = v_q.astype(np.float32) * v_scale.astype(np.float32)
+            return k, v
+        # asymmetric: zero_point[0] = k_min, zero_point[1] = v_min
+        k_min, v_min = zero_point[0], zero_point[1]
+        bits_q_min = -((1 << (k_q.dtype.itemsize * 8 - 1)) - 1)
+        k = (k_q.astype(np.float32) - bits_q_min) * k_scale.astype(np.float32) + k_min
+        v = (v_q.astype(np.float32) - bits_q_min) * v_scale.astype(np.float32) + v_min
+        return k, v
 
     def depthwise_conv1d(x, w, *, kernel_size: int, padding: int = 0, causal: bool = False, state=None):
         """Depthwise 1-D convolution (one filter per channel).
@@ -1041,11 +1124,14 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "rmsnorm_safe": rmsnorm_safe,
         "rope": rope,
         "kv_cache_append": kv_cache_append,
+        "kv_cache_update": kv_cache_update,
         "kv_cache_prune": kv_cache_prune,
         "kv_cache_read": kv_cache_read,
         "depthwise_conv1d": depthwise_conv1d,
         "online_softmax": online_softmax,
         "online_softmax_state": online_softmax_state,
+        "quantize_kv": quantize_kv,
+        "dequantize_kv": dequantize_kv,
     }
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
@@ -1120,11 +1206,14 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         rope=rope,
         ReferenceKVCache=ReferenceKVCache,
         kv_cache_append=kv_cache_append,
+        kv_cache_update=kv_cache_update,
         kv_cache_prune=kv_cache_prune,
         kv_cache_read=kv_cache_read,
         depthwise_conv1d=depthwise_conv1d,
         online_softmax=online_softmax,
         online_softmax_state=online_softmax_state,
+        quantize_kv=quantize_kv,
+        dequantize_kv=dequantize_kv,
     )
 
 

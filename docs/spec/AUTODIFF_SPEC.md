@@ -236,10 +236,49 @@ python/tessera/autodiff/
 Estimated v1 LOC: ~600 (code) + ~350 (tests) = **~950 LOC**. Well under the
 audit's 1,200–1,800 estimate because we explicitly defer Graph/Tile IR work.
 
+## Phase F4 — Graph IR adjoint via `AdjointInterface` (design landed, build follow-up)
+
+The numpy-tape implementation in this spec is the v1 surface that user code
+binds to. The Phase F4 follow-up replaces the *internals* of that surface
+with Graph-IR-level adjoints, while keeping `tape() / reverse(fn) /
+custom_rule(name)` unchanged at the Python boundary.
+
+Key pieces (landed 2026-05-09):
+
+* **ODS interface** — `src/compiler/ir/include/Tessera/AdjointInterface.td`
+  defines `Tessera_AdjointInterface` with three methods:
+  `buildAdjoint(builder, outputCotangents) -> SmallVector<Value>`,
+  `isDifferentiable() -> bool`, and `customAdjointName() -> StringRef`.
+
+* **Pass scaffold** — `src/transforms/lib/AutodiffPass.cpp` documents the
+  four-step pass shape (collect, reverse-walk, dispatch, return cotangents)
+  and registers a no-op stub. The body lands when MLIR 21 tablegen is
+  wired against the ODS file.
+
+* **Custom-rule bridge** — `tessera.autodiff.custom_rule(name)` continues to
+  register Python VJPs at runtime. Ops that opt into a custom rule report the
+  registry key via `customAdjointName()`; the AutodiffPass consults the
+  bridge during its reverse walk.
+
+Out of scope for the F4 first cut:
+
+* Higher-order derivatives (run AutodiffPass twice + canonicalize). Tracked
+  separately as F7 — currently 🔲 deferred.
+* Effect-aware adjoint collective insertion. That's Phase F5 — runs after
+  AutodiffPass and reads `Effect` attributes on adjoint values to insert
+  `reduce_scatter` / `all_gather`.
+* Activation rematerialization. The `tessera.autodiff.rematerialize` Python
+  surface (Phase F2) is shipping today; the IR-pass form will arrive
+  alongside F4.
+
 ## Cross-references
 
 - Programming Guide Ch.7 (Autodiff) — describes the *full* Phase 5 epic.
-  This spec implements the v1 first slice.
+  This spec implements the v1 first slice + F4 ODS scaffolding.
 - `docs/audit/advanced_examples_capability_gap.md` — Theme 2.
 - `python/tessera/nn/module.py` — `Module.zero_grad()` and `Parameter.grad`
-  are already in place from Tier 1.
+  are in place from Tier 1.
+- `python/tessera/autodiff/mixed_precision.py` — Phase F1 autocast + GradScaler.
+- `python/tessera/autodiff/rematerialize.py` — Phase F2 activation checkpointing.
+- `src/compiler/ir/include/Tessera/AdjointInterface.td` — Phase F4 ODS.
+- `src/transforms/lib/AutodiffPass.cpp` — Phase F4 pass scaffold.

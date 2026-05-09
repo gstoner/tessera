@@ -280,15 +280,15 @@ class TestTape:
                 t.backward(bogus)
 
     def test_unsupported_op_raises(self):
-        # `flash_attn` is intentionally NOT in the v1 VJP set. Calls inside a
-        # tape are recorded with vjp=None; the error fires during backward
-        # if and only if the gradient path actually reaches the entry.
-        Q = np.random.randn(1, 1, 4, 4).astype(np.float32)
-        Q_p = ts.nn.Parameter(Q.copy())
+        # An op without a registered VJP (here: `moe`, which still has no
+        # adjoint as of v1 — `flash_attn` got one in Phase F3). The error
+        # fires during backward iff the gradient path reaches that entry.
+        x_p = ts.nn.Parameter(np.random.randn(2, 4).astype(np.float32))
+        experts = np.random.randn(2, 4, 4).astype(np.float32)
         with ts.autodiff.tape() as t:
-            out = ts.ops.flash_attn(Q_p, Q_p, Q_p)
+            out = ts.ops.moe(x_p, experts)
             loss = ts.ops.reduce(out, op="sum")
-            with pytest.raises(TesseraAutodiffError, match=r"flash_attn.+not differentiable"):
+            with pytest.raises(TesseraAutodiffError, match=r"moe.+not differentiable"):
                 t.backward(loss)
 
     def test_non_scalar_target_without_cotangent_raises(self):

@@ -262,6 +262,96 @@ def vjp_dropout(dout, x, *, p=0.1, training=True, seed=None, **_):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Fused-op adjoints (Phase F3)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@_vjp("flash_attn")
+def vjp_flash_attn(dout, Q, K, V, *, scale=None, causal=False, dropout_p=0.0, **_):
+    """Adjoint of standard scaled-dot-product attention (numpy reference path).
+
+    Forward: ``S = scale * QK^T;  P = softmax(S);  O = PV``.
+    Memory-efficient streaming adjoint is left to fused-kernel custom rules
+    on each backend; this v1 recomputes ``S``, ``P`` so it works for any shape
+    that the forward already accepts.
+
+    ``dropout_p`` is ignored on backward — the v1 reference dropout uses a
+    fresh rng each call, so the backward path can't reproduce the mask
+    deterministically without a stored seed. Callers running training with
+    attention dropout should set ``deterministic=True, seed=...`` so the mask
+    is reproducible.
+    """
+    if dropout_p > 0.0:
+        # No deterministic mask available → conservative: assume mask is all-ones.
+        # Users training with dropout should provide a seed.
+        pass
+
+    d = Q.shape[-1]
+    if scale is None:
+        scale = 1.0 / math.sqrt(d)
+
+    # Recompute forward intermediates
+    S = np.matmul(Q, np.swapaxes(K, -1, -2)) * scale
+    if causal:
+        q_len, k_len = S.shape[-2], S.shape[-1]
+        mask = np.triu(np.ones((q_len, k_len), dtype=bool), k=1 + max(k_len - q_len, 0))
+        S = np.where(mask, -np.inf, S)
+    e = np.exp(S - S.max(axis=-1, keepdims=True))
+    P = e / e.sum(axis=-1, keepdims=True)
+
+    # dV = P^T @ dO
+    dV = np.matmul(np.swapaxes(P, -1, -2), dout)
+    # dP = dO @ V^T
+    dP = np.matmul(dout, np.swapaxes(V, -1, -2))
+    # dS through softmax: dS = (dP - sum(dP * P, -1, keepdims)) * P
+    dS = (dP - (dP * P).sum(axis=-1, keepdims=True)) * P
+    if causal:
+        dS = np.where(mask, 0.0, dS)
+    # dQ = dS @ K * scale;  dK = dS^T @ Q * scale
+    dQ = np.matmul(dS, K) * scale
+    dK = np.matmul(np.swapaxes(dS, -1, -2), Q) * scale
+    return (dQ, dK, dV)
+
+
+@_vjp("fft")
+def vjp_fft(dout, x, *, axis=-1, axes=None, **_):
+    """Adjoint of full FFT — adjoint is `n * ifft(dout, axis)` for non-orthonormal FFT.
+
+    NumPy's ``np.fft.fft`` is non-orthonormal: ``ifft(fft(x)) == x`` exactly,
+    but the gradient flow is ``df/dx = n * ifft(df/dy, axis)`` where ``n`` is
+    the FFT length. Returns a complex grad — for real inputs, the user is
+    responsible for taking the real part.
+    """
+    n = x.shape[axes[-1] if axes is not None else axis]
+    return (n * np.fft.ifft(dout, axis=axes[-1] if axes is not None else axis),)
+
+
+@_vjp("ifft")
+def vjp_ifft(dout, x, *, axis=-1, axes=None, **_):
+    """Adjoint of inverse FFT — adjoint is `(1/n) * fft(dout, axis)`."""
+    n = x.shape[axes[-1] if axes is not None else axis]
+    return ((1.0 / n) * np.fft.fft(dout, axis=axes[-1] if axes is not None else axis),)
+
+
+@_vjp("rfft")
+def vjp_rfft(dout, x, *, axis=-1, axes=None, **_):
+    """Adjoint of real FFT — pads ``dout`` back to full length then `n*ifft`."""
+    target_axis = axes[-1] if axes is not None else axis
+    n = x.shape[target_axis]
+    # Adjoint of rfft is irfft(dout * n) followed by taking the real part —
+    # but np.fft.irfft already does the (1/n) so multiply by n.
+    return (np.fft.irfft(dout, n=n, axis=target_axis) * n,)
+
+
+@_vjp("irfft")
+def vjp_irfft(dout, x, *, axis=-1, axes=None, n=None, **_):
+    """Adjoint of inverse real FFT — `rfft(dout) / n`."""
+    target_axis = axes[-1] if axes is not None else axis
+    n_out = n if n is not None else 2 * (x.shape[target_axis] - 1)
+    return ((1.0 / n_out) * np.fft.rfft(dout, axis=target_axis),)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Streaming kernels (Phase D)
 # ─────────────────────────────────────────────────────────────────────────────
 

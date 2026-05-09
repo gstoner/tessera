@@ -122,7 +122,7 @@ buffers), `train`/`eval`, `Module.to(dtype)`, `parameters()` /
 locked), `LSTM` (Phase H2 deferred — RNN cells need their own design).
 **Roadmap:** Theme 1 effectively closed except Conv2d + LSTM.
 
-### Theme 2 — Reverse-mode autodiff (blocks 2) — **v1 first slice landed**
+### Theme 2 — Reverse-mode autodiff (blocks 2) — **v1 + F1/F2/F3 landed; F4 ODS landed**
 ✅ **Shipped (Tier 2 v1):** `tessera.autodiff.tape()`, `tessera.autodiff.reverse(fn)`,
 `tessera.autodiff.custom_rule(name)`, `Parameter.grad` accumulation, 17
 built-in VJPs covering linear algebra / activations / norms / reductions /
@@ -147,11 +147,16 @@ from B1). VJPs registered for autodiff.
 to deserve its own session), depthwise_conv2d, shape-polymorphic tiling.
 **Roadmap:** D1/D2/D4 closed; D3 (Mamba2) is the remaining big piece.
 
-### Theme 4 — KV-cache abstraction + block quantization (blocks 3)
-KVCacheHandle (paged), `quantize_kv` / `dequantize_kv`, rolling-window state
-machine, confidence-aware retention.
-**Scope:** medium (~300–500 LOC).
-**Roadmap:** Partial in Ch.8; full state machine not specified.
+### Theme 4 — KV-cache abstraction + block quantization (blocks 3) — **Phase E landed 2026-05-09**
+✅ **Shipped:** `KVCacheHandle` (Phase B2, paged buffer + max_seq enforcement),
+`quantize_kv` / `dequantize_kv` (Phase E1, 2/4/8-bit per-token symmetric
+quantization), `KVCacheHandle(quantize_bits=...)` mode (Phase E2 — int8
+storage + transparent dequant on read), `auto_evict=True` rolling-window
+sliding window (Phase E3), explicit `evict_oldest(n)` method.
+🔲 **Still deferred:** confidence-aware retention (paper-grade
+implementations like H2O / DuoAttention require a confidence scorer that
+isn't in scope this cycle).
+**Roadmap:** Phase E closed for the v1 surface.
 
 ### Theme 5 — Multi-Latent Attention primitives (blocks 1)
 Latent Q/KV projections, confidence softmax, paged latent KV cache, RoPE

@@ -27,6 +27,8 @@ from .tape import (
     install_op_wrappers,
 )
 from .vjp import register_vjp, get_vjp, _VJPS
+from .mixed_precision import autocast, autocast_dtype, GradScaler
+from .rematerialize import rematerialize, checkpoint
 
 
 # Wrap every op in `_VJPS` so it's tape-aware.
@@ -89,4 +91,11 @@ __all__ = [
     "Tape",
     "TapeEntry",
     "InputDesc",
+    # Phase F1 — mixed-precision
+    "autocast",
+    "autocast_dtype",
+    "GradScaler",
+    # Phase F2 — activation checkpointing
+    "rematerialize",
+    "checkpoint",
 ]

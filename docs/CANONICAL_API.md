@@ -444,8 +444,11 @@ lowerings; runtime kernels can be registered separately.
 | `tessera.ops.spectral_conv(x, w)` | `(array,array) → array` | NumPy FFT convolution reference |
 | `tessera.ops.rmsnorm_safe(x, eps=1e-6)` | `(array) → array` | NumPy RMSNorm reference |
 | `tessera.ops.kv_cache_append(cache, key, value)` | cache helper | Reference KV-cache helper; dispatches handle vs. legacy |
+| `tessera.ops.kv_cache_update(cache, key, value)` | cache helper | Modern alias for `kv_cache_append` (Phase E2) |
 | `tessera.ops.kv_cache_prune(cache, max_entries=None, max_seq=None)` | cache helper | Reference KV-cache helper |
-| `tessera.ops.kv_cache_read(cache, start, end=None)` | cache helper | Read slice as `(K, V)` (Phase B2) |
+| `tessera.ops.kv_cache_read(cache, start, end=None)` | cache helper | Read slice as `(K, V)` (Phase B2); dequantizes for quantized handles |
+| `tessera.ops.quantize_kv(k, v, *, bits=4, symmetric=True)` | quantization | Phase E1 — block-quantize K/V to int8; returns `(k_q, v_q, scale, zero_point)` |
+| `tessera.ops.dequantize_kv(k_q, v_q, scale, zero_point=None, *, symmetric=True)` | quantization | Inverse of `quantize_kv` — returns `(k, v)` |
 | `tessera.ops.depthwise_conv1d(x, w, *, kernel_size, padding=0, causal=False, state=None)` | streaming conv | Phase D1 — depthwise 1-D conv with optional streaming state |
 | `tessera.ops.online_softmax(x, *, axis=-1, state=None)` | streaming softmax | Phase D2 — single-chunk equiv. to `softmax`; pass `state` for streaming chunks |
 | `tessera.ops.online_softmax_state(x, *, axis=-1, state=None)` | helper | Returns `(running_max, running_sum)` for the next streaming `online_softmax` call (non-differentiable) |
@@ -624,7 +627,40 @@ for p in mlp.parameters():
 mlp.zero_grad()
 ```
 
-**Built-in VJPs (v1):** `gemm`/`matmul`, `add`, `mul`, `transpose`, `cast`, `relu`, `sigmoid`, `tanh`, `silu`, `gelu`, `softmax`, `layer_norm`, `rmsnorm`/`rmsnorm_safe`, `reduce`/`sum`, `dropout`. Calling any other `ops.<name>` inside a tape is allowed; if its result actually feeds the gradient, `Tape.backward` raises `TesseraAutodiffError` with a pointer to `custom_rule`.
+**Built-in VJPs (v1 + Phase D + F3):** `gemm`/`matmul`, `add`, `mul`, `transpose`, `cast`, `relu`, `sigmoid`, `tanh`, `silu`, `gelu`, `softmax`, `layer_norm`, `rmsnorm`/`rmsnorm_safe`, `reduce`/`sum`, `dropout`, `depthwise_conv1d` (Phase D1), `online_softmax` (D2), **`flash_attn`** (F3), **`fft`** / **`ifft`** / **`rfft`** / **`irfft`** (F3). Calling any other `ops.<name>` inside a tape is allowed; if its result actually feeds the gradient, `Tape.backward` raises `TesseraAutodiffError` with a pointer to `custom_rule`. Notable still-unsupported: `moe` (depends on routing — register your own).
+
+### Phase F1 — `tessera.autodiff.autocast` + `GradScaler`
+
+Mixed-precision training. `with autocast("fp16"):` casts op-input arrays to
+fp16 before the underlying op runs; reductions and norms (`softmax`,
+`layer_norm`, `rmsnorm`, `reduce`, `sum`, `online_softmax`) are *up-cast* to
+fp32 for numerical stability — matches torch's default policy.
+
+| Symbol | Purpose |
+|--------|---------|
+| `tessera.autodiff.autocast(dtype="fp16")` | Context manager — casts/promotes op inputs |
+| `tessera.autodiff.autocast_dtype()` | Inspect the active autocast dtype (or `None`) |
+| `tessera.autodiff.GradScaler(init_scale=2**16, growth_factor=2.0, backoff_factor=0.5, growth_interval=2000)` | Loss-scaling helper |
+| `scaler.scale_loss(loss)` / `scaler.scale_grad(dy)` | Multiply loss / cotangent by scale |
+| `scaler.step(optimizer_fn, *, params)` | Unscale, check inf/nan, run optimizer (returns `True` if step taken, `False` on overflow) |
+
+### Phase F2 — `tessera.autodiff.rematerialize` / `checkpoint`
+
+Activation checkpointing. `@rematerialize` on a function (or `with` block) drops its intermediate ops from the outer tape; on backward, the function is re-run inside a nested tape and gradients are extracted from there. Trade compute for memory.
+
+```python
+@tessera.autodiff.rematerialize
+def expensive_block(x):
+    return mlp(x)
+
+with tessera.autodiff.tape() as t:
+    y = expensive_block(input)
+    t.backward(y, cotangent=dy)
+```
+
+### Phase F4 — Graph IR autodiff (ODS landed; build integration follow-up)
+
+`Tessera_AdjointInterface` ODS at `src/compiler/ir/include/Tessera/AdjointInterface.td`. `AutodiffPass.cpp` scaffold at `src/transforms/lib/AutodiffPass.cpp`. The Python tape (above) remains the production path until the MLIR pass body lands; both surfaces will share the `tessera.autodiff.custom_rule` registry. See `docs/spec/AUTODIFF_SPEC.md` §Phase F4.
 
 **`Tape.backward` semantics:** the `target` must be a tape-recorded numpy output. Pass `cotangent=` when your loss math sits outside `ops.*` (raw numpy `(y - t)**2`-style); omit it when the target is itself a scalar from `ops.reduce` / `ops.sum`.
 

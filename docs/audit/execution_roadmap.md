@@ -303,9 +303,9 @@ Replaces the phantom; wraps `ops.depthwise_conv1d` with state buffer.
 
 ---
 
-## Phase E — Theme 4 KV-cache + block quantization (~1–2 weeks)
+## Phase E — Theme 4 KV-cache + block quantization (~1–2 weeks) — **landed 2026-05-09**
 
-### [E1] `ops.quantize_kv` / `ops.dequantize_kv` 📋
+### [E1] `ops.quantize_kv` / `ops.dequantize_kv` ✅
 
 **Scope:** S (~150 LOC + ~80 LOC tests).
 
@@ -314,13 +314,13 @@ Replaces the phantom; wraps `ops.depthwise_conv1d` with state buffer.
 - `dequantize_kv(...)` round-trips with bounded error.
 - Numerical: max relative error ≤ `2^(-bits)` on N(0, 1) inputs.
 
-### [E2] `ops.kv_cache_update` / `ops.kv_cache_read` (with `KVCacheHandle`) 📋
+### [E2] `ops.kv_cache_update` / `ops.kv_cache_read` (with `KVCacheHandle`) ✅
 
 **Scope:** M (~200 LOC + ~150 LOC tests). Depends on **B2** + **E1**.
 
 Functional API on `KVCacheHandle`. Replaces the legacy `kv_cache_append`/`kv_cache_prune` (which become thin shims).
 
-### [E3] Rolling-window KV-cache state machine 📋
+### [E3] Rolling-window KV-cache state machine ✅
 
 **Scope:** S (~150 LOC + ~100 LOC tests). Depends on **E2**.
 
@@ -328,9 +328,9 @@ Functional API on `KVCacheHandle`. Replaces the legacy `kv_cache_append`/`kv_cac
 
 ---
 
-## Phase F — Tier 2 autodiff follow-ups (parallelizable, ~2–4 weeks)
+## Phase F — Tier 2 autodiff follow-ups (parallelizable, ~2–4 weeks) — **F1/F2/F3 landed 2026-05-09; F4 ODS scaffolded; F5/F6/F7 deferred**
 
-### [F1] Mixed-precision: autocast context + GradScaler 📋
+### [F1] Mixed-precision: autocast context + GradScaler ✅
 
 **Scope:** M (~300 LOC + ~150 LOC tests). Independent.
 
@@ -338,7 +338,7 @@ Functional API on `KVCacheHandle`. Replaces the legacy `kv_cache_append`/`kv_cac
 - `with ts.autodiff.autocast("fp16"): y = model(x)` casts forward inputs to fp16, accumulates in fp32 for matmul, casts back.
 - `GradScaler.scale(loss); scaler.step(optimizer)` follows the standard fp32 master-copy pattern.
 
-### [F2] Activation checkpointing (`rematerialize`) 📋
+### [F2] Activation checkpointing (`rematerialize`) ✅
 
 **Scope:** M (~250 LOC + ~150 LOC tests). Independent.
 
@@ -346,13 +346,13 @@ Functional API on `KVCacheHandle`. Replaces the legacy `kv_cache_append`/`kv_cac
 - `with ts.autodiff.rematerialize(): y = expensive_block(x)` — forward stores only the recipe, recomputes during backward.
 - Memory test: peak resident activations during backward < forward-only peak by a measurable margin on a 4-layer MLP.
 
-### [F3] Custom kernel adjoints — `flash_attn` (already in A5), `moe`, `fft` 📋
+### [F3] Custom kernel adjoints — `flash_attn` ✅, `fft`/`ifft`/`rfft`/`irfft` ✅, `moe` 🔲
 
 **Scope:** S each (~80 LOC + ~80 LOC tests per op). Independent.
 
 Sized as A5 — derive standard analytical VJP, register via `custom_rule`.
 
-### [F4] Graph IR adjoint ops 📋
+### [F4] Graph IR adjoint ops 🟡 (ODS + pass stub landed; MLIR build integration is follow-up)
 
 **Scope:** L (~600 LOC code + ~300 LOC tests). Foundational.
 

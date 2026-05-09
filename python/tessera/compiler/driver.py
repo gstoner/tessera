@@ -445,49 +445,66 @@ def _apple_gpu_matmul_dtype_suffix(cpu_plan: CPUPlan | None) -> str:
 
 
 def _apple_gpu_chain_kind(cpu_plan: CPUPlan | None) -> str | None:
-    """Phase 8.4.3: classify multi-op apple_gpu plans against the recognized
-    fusion patterns. Returns the chain kind ("matmul_softmax" today) or None
-    when the plan does not match a fusion pattern.
+    """Phase 8.4.3 + 8.4.5: classify multi-op apple_gpu plans against the
+    recognized fusion patterns. Returns one of:
+      - "matmul_softmax_matmul": 3-op chain matmul -> softmax -> matmul
+        (full attention block, Phase 8.4.5)
+      - "matmul_softmax": 2-op chain matmul -> softmax (Phase 8.4.3)
+      - None: plan doesn't match any recognized fusion pattern.
 
-    A matmul -> softmax chain qualifies when:
-      - the plan has exactly 2 ops in this order
-      - the matmul's result is the softmax's only operand (single-use
-        consumed by the next op)
-      - softmax kwargs imply axis=-1 (default; missing axis is acceptable)
+    Longer chains are checked first so the most-specific fusion wins.
+    Each chain link enforces single-use consumer (the intermediate is
+    materialized only inside the fused kernel, never observed elsewhere)
+    and matching dtypes/axes.
     """
 
     if cpu_plan is None or cpu_plan.target_kind != "apple_gpu":
         return None
-    if len(cpu_plan.ops) != 2:
-        return None
-    first, second = cpu_plan.ops[0], cpu_plan.ops[1]
-    if first.op_name not in {"tessera.matmul", "tessera.gemm"}:
-        return None
-    if second.op_name not in {"tessera.softmax", "tessera.softmax_safe"}:
-        return None
-    # The softmax must consume the matmul's named result. cpu_plan.ops carry
-    # SSA-like operand names; the second op's first operand should match the
-    # first op's result name (with optional leading '%').
-    if not first.result:
-        return None
-    if not second.operands:
-        return None
-    sm_op0 = second.operands[0]
-    if sm_op0.startswith("%"):
-        sm_op0 = sm_op0[1:]
-    if sm_op0 != first.result:
-        return None
-    # axis=-1 only — the GPU kernel softmaxes the innermost dim.
-    axis = second.kwargs.get("axis", -1) if hasattr(second, "kwargs") else -1
-    if axis not in {-1, None}:
-        # numpy-style axis=1 on a rank-2 tensor is also "innermost"; we
-        # accept it. Anything else falls back.
+    ops = cpu_plan.ops
+
+    def _operand_matches(consumer, expected_name: str) -> bool:
+        if not consumer.operands:
+            return False
+        op0 = consumer.operands[0]
+        if op0.startswith("%"):
+            op0 = op0[1:]
+        return op0 == expected_name
+
+    def _softmax_axis_ok(softmax_op) -> bool:
+        axis = softmax_op.kwargs.get("axis", -1) if hasattr(softmax_op, "kwargs") else -1
+        if axis in {-1, None}:
+            return True
         try:
-            if int(axis) != -1 and int(axis) != 1:
-                return None
+            return int(axis) in {-1, 1}
         except (TypeError, ValueError):
-            return None
-    return "matmul_softmax"
+            return False
+
+    # Phase 8.4.5: 3-op fusion. matmul -> softmax -> matmul.
+    if len(ops) == 3:
+        m1, sm, m2 = ops[0], ops[1], ops[2]
+        if (
+            m1.op_name in {"tessera.matmul", "tessera.gemm"}
+            and sm.op_name in {"tessera.softmax", "tessera.softmax_safe"}
+            and m2.op_name in {"tessera.matmul", "tessera.gemm"}
+            and m1.result and sm.result
+            and _operand_matches(sm, m1.result)
+            and _operand_matches(m2, sm.result)
+            and _softmax_axis_ok(sm)
+        ):
+            return "matmul_softmax_matmul"
+
+    # Phase 8.4.3: 2-op fusion. matmul -> softmax.
+    if len(ops) == 2:
+        first, second = ops[0], ops[1]
+        if (
+            first.op_name in {"tessera.matmul", "tessera.gemm"}
+            and second.op_name in {"tessera.softmax", "tessera.softmax_safe"}
+            and first.result
+            and _operand_matches(second, first.result)
+            and _softmax_axis_ok(second)
+        ):
+            return "matmul_softmax"
+    return None
 
 
 def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> LoweringArtifact | None:
@@ -511,7 +528,11 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
         # is in the plan. Single-op cases route to one of the per-op kernels;
         # recognized fusion chains route to a fused kernel (Phase 8.4.3).
         chain = _apple_gpu_chain_kind(cpu_plan)
-        if chain == "matmul_softmax":
+        if chain == "matmul_softmax_matmul":
+            symbol = "tessera_apple_gpu_matmul_softmax_matmul_f32"
+            framework = "Metal"
+            abi = "MSLComputePipelineState"
+        elif chain == "matmul_softmax":
             symbol = "tessera_apple_gpu_matmul_softmax_f32"
             framework = "Metal"
             abi = "MSLComputePipelineState"

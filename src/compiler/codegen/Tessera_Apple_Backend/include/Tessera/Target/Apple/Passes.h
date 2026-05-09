@@ -56,6 +56,13 @@ std::unique_ptr<::mlir::Pass> createLowerGeluToAppleGPUPass();
 /// matmul/softmax passes so the chain rewrite wins.
 std::unique_ptr<::mlir::Pass> createLowerMatmulSoftmaxFusionToAppleGPUPass();
 
+/// Fused tessera.matmul → tessera.softmax → tessera.matmul (rank-2,
+/// f32/f16/bf16, axis=-1, N <= 256, P <= 256) → func.call into the
+/// Apple GPU runtime shim's fused 3-op custom-MSL kernel — the full
+/// attention block: O = softmax(A @ B) @ C. Phase 8.4.5. Must run before
+/// the 2-op fusion so the longer chain wins.
+std::unique_ptr<::mlir::Pass> createLowerMatmulSoftmaxMatmulFusionToAppleGPUPass();
+
 /// Register the Apple Silicon dialect into a DialectRegistry. Convenience
 /// wrapper that forwards to registerAppleDialect from TesseraAppleDialect.h.
 void registerTesseraAppleBackendDialects(::mlir::DialectRegistry &registry);

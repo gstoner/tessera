@@ -67,27 +67,28 @@ PassPipelineRegistration<> gAppleCPURuntimePipeline(
 
 // Phase 8.3 + 8.4: executable lowering to the Apple GPU runtime shim. The
 // pipeline composes one or more lowering patterns:
-//   - matmul -> softmax fusion (rank-2, f32, N <= 256)            [Phase 8.4.3]
-//   - matmul     (rank-2, f32) -> MPSMatrixMultiplication        [Phase 8.3]
-//   - rope       (rank-2, f32) -> custom MSL kernel              [Phase 8.4]
-//   - flash_attn (rank-3, f32) -> custom MSL kernel              [Phase 8.4.1]
-//   - softmax    (rank-2, f32) -> custom MSL kernel              [Phase 8.4.2]
-//   - gelu       (rank-2, f32) -> custom MSL kernel              [Phase 8.4.2]
+//   - matmul -> softmax -> matmul fusion (rank-2, N/P <= 256)     [Phase 8.4.5]
+//   - matmul -> softmax fusion           (rank-2, N <= 256)        [Phase 8.4.3]
+//   - matmul     (rank-2) -> MPSMatrixMultiplication              [Phase 8.3]
+//   - rope       (rank-2) -> custom MSL kernel                    [Phase 8.4]
+//   - flash_attn (rank-3) -> custom MSL kernel                    [Phase 8.4.1]
+//   - softmax    (rank-2) -> custom MSL kernel                    [Phase 8.4.2]
+//   - gelu       (rank-2) -> custom MSL kernel                    [Phase 8.4.2]
 //
-// The fusion pass MUST run before the per-op passes so the chain rewrite
-// wins; otherwise the matmul would be lowered to its standalone runtime
-// call before the fusion pattern gets a chance to fire.
+// Pass ordering matters: longer chain patterns run BEFORE shorter ones so
+// that the longest applicable fusion wins. Per-op passes are last so they
+// only fire on what's left over.
 //
 // Distinct from the artifact-only `tessera-lower-to-apple_gpu` pipeline
 // above.
 PassPipelineRegistration<> gAppleGPURuntimePipeline(
     "tessera-lower-to-apple_gpu-runtime",
-    "Lower supported tessera ops (matmul->softmax fusion, matmul, rope, "
-    "flash_attn, softmax, gelu) to Apple GPU runtime calls "
-    "(MPS + custom MSL kernels)",
+    "Lower supported tessera ops (matmul->softmax->matmul + matmul->softmax "
+    "fusions, matmul, rope, flash_attn, softmax, gelu) to Apple GPU runtime "
+    "calls (MPS + custom MSL kernels)",
     [](OpPassManager &pm) {
-      // Fusion patterns first so they can collapse multi-op chains before
-      // the per-op passes touch them.
+      // Longest fusion first so it has first crack at the chain.
+      pm.addPass(createLowerMatmulSoftmaxMatmulFusionToAppleGPUPass());
       pm.addPass(createLowerMatmulSoftmaxFusionToAppleGPUPass());
       pm.addPass(createLowerMatmulToAppleGPUPass());
       pm.addPass(createLowerRopeToAppleGPUPass());

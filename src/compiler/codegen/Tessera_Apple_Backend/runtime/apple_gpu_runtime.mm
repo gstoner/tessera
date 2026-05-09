@@ -1973,3 +1973,392 @@ extern "C" void tessera_apple_gpu_matmul_softmax_bf16(const uint16_t* A,
     return;
   reference_matmul_softmax_bf16_via_fp32(A, B, O, M, N, K);
 }
+
+//===---------------------------------------------------------------------===//
+// Phase 8.4.5 — Fused matmul -> softmax -> matmul (full attention block)
+//
+// O = (softmax(A @ B, axis=-1)) @ C
+//
+// Shapes:
+//   A: (M, K)
+//   B: (K, N)
+//   C: (N, P)
+//   O: (M, P)
+//
+// One thread per output row. Each thread maintains two stack arrays:
+//   - scores[N] for the (1, N) softmax intermediate (capped N <= 256)
+//   - out[P]    for the (1, P) final accumulator     (capped P <= 256)
+//
+// Algorithm:
+//   1. Compute scores[n] = sum_k A[row, k] * B[k, n]   (matmul 1)
+//   2. Row max + exp + denom + divide                  (softmax)
+//   3. Compute out[p] = sum_n probs[n] * C[n, p]       (matmul 2)
+//   4. Write out[:] into O[row, :]
+//
+// fp32 accumulators throughout (mixed-precision for f16/bf16). Single
+// kernel launch — no host roundtrip on the (M, N) score matrix or the
+// (M, N) probs intermediate; both stay in registers.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+bool dispatch_matmul_softmax_matmul_msl(MetalDeviceContext &ctx,
+                                        const float* A, const float* B,
+                                        const float* C, float* O,
+                                        int32_t M, int32_t K, int32_t N,
+                                        int32_t P) {
+  static NSString *const kFused3Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_FUSED3_MAX_N 256
+#define TESSERA_APPLE_GPU_FUSED3_MAX_P 256
+
+kernel void matmul_softmax_matmul_f32(
+    device const float* A   [[buffer(0)]],
+    device const float* B   [[buffer(1)]],
+    device const float* C   [[buffer(2)]],
+    device float*       O   [[buffer(3)]],
+    constant int&       M   [[buffer(4)]],
+    constant int&       K   [[buffer(5)]],
+    constant int&       N   [[buffer(6)]],
+    constant int&       P   [[buffer(7)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)M) return;
+    if (N > TESSERA_APPLE_GPU_FUSED3_MAX_N) return;
+    if (P > TESSERA_APPLE_GPU_FUSED3_MAX_P) return;
+    int row = (int)gid;
+
+    // Step 1: scores = A[row, :] @ B
+    float scores[TESSERA_APPLE_GPU_FUSED3_MAX_N];
+    int a_off = row * K;
+    for (int n = 0; n < N; ++n) scores[n] = 0.0f;
+    for (int k = 0; k < K; ++k) {
+        float a = A[a_off + k];
+        int b_off = k * N;
+        for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];
+    }
+
+    // Step 2: row-wise softmax in place.
+    float row_max = -INFINITY;
+    for (int n = 0; n < N; ++n) row_max = max(row_max, scores[n]);
+    float denom = 0.0f;
+    for (int n = 0; n < N; ++n) {
+        scores[n] = exp(scores[n] - row_max);
+        denom += scores[n];
+    }
+    if (denom == 0.0f) {
+        for (int n = 0; n < N; ++n) scores[n] = 0.0f;
+    } else {
+        float inv = 1.0f / denom;
+        for (int n = 0; n < N; ++n) scores[n] *= inv;
+    }
+
+    // Step 3: out = scores @ C
+    float out[TESSERA_APPLE_GPU_FUSED3_MAX_P];
+    for (int p = 0; p < P; ++p) out[p] = 0.0f;
+    for (int n = 0; n < N; ++n) {
+        float sn = scores[n];
+        int c_off = n * P;
+        for (int p = 0; p < P; ++p) out[p] += sn * C[c_off + p];
+    }
+
+    // Step 4: write back.
+    int o_off = row * P;
+    for (int p = 0; p < P; ++p) O[o_off + p] = out[p];
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kFused3Source, @"matmul_softmax_matmul_f32");
+    if (!pso) return false;
+
+    NSUInteger aBytes = sizeof(float) * static_cast<NSUInteger>(M) *
+                        static_cast<NSUInteger>(K);
+    NSUInteger bBytes = sizeof(float) * static_cast<NSUInteger>(K) *
+                        static_cast<NSUInteger>(N);
+    NSUInteger cBytes = sizeof(float) * static_cast<NSUInteger>(N) *
+                        static_cast<NSUInteger>(P);
+    NSUInteger oBytes = sizeof(float) * static_cast<NSUInteger>(M) *
+                        static_cast<NSUInteger>(P);
+
+    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:aBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B length:bBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufC = [ctx.device newBufferWithBytes:C length:cBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufA || !bufB || !bufC || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBuffer:bufC offset:0 atIndex:2];
+    [enc setBuffer:bufO offset:0 atIndex:3];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&P length:sizeof(int32_t) atIndex:7];
+
+    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(M), 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(M),
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+bool dispatch_matmul_softmax_matmul_msl_f16(MetalDeviceContext &ctx,
+                                            const uint16_t* A, const uint16_t* B,
+                                            const uint16_t* C, uint16_t* O,
+                                            int32_t M, int32_t K, int32_t N,
+                                            int32_t P) {
+  static NSString *const kFused3SourceF16 = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_FUSED3_MAX_N 256
+#define TESSERA_APPLE_GPU_FUSED3_MAX_P 256
+
+kernel void matmul_softmax_matmul_f16(
+    device const half*  A   [[buffer(0)]],
+    device const half*  B   [[buffer(1)]],
+    device const half*  C   [[buffer(2)]],
+    device half*        O   [[buffer(3)]],
+    constant int&       M   [[buffer(4)]],
+    constant int&       K   [[buffer(5)]],
+    constant int&       N   [[buffer(6)]],
+    constant int&       P   [[buffer(7)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)M) return;
+    if (N > TESSERA_APPLE_GPU_FUSED3_MAX_N) return;
+    if (P > TESSERA_APPLE_GPU_FUSED3_MAX_P) return;
+    int row = (int)gid;
+
+    float scores[TESSERA_APPLE_GPU_FUSED3_MAX_N];
+    int a_off = row * K;
+    for (int n = 0; n < N; ++n) scores[n] = 0.0f;
+    for (int k = 0; k < K; ++k) {
+        float a = float(A[a_off + k]);
+        int b_off = k * N;
+        for (int n = 0; n < N; ++n) scores[n] += a * float(B[b_off + n]);
+    }
+
+    float row_max = -INFINITY;
+    for (int n = 0; n < N; ++n) row_max = max(row_max, scores[n]);
+    float denom = 0.0f;
+    for (int n = 0; n < N; ++n) {
+        scores[n] = exp(scores[n] - row_max);
+        denom += scores[n];
+    }
+    if (denom == 0.0f) {
+        for (int n = 0; n < N; ++n) scores[n] = 0.0f;
+    } else {
+        float inv = 1.0f / denom;
+        for (int n = 0; n < N; ++n) scores[n] *= inv;
+    }
+
+    float out[TESSERA_APPLE_GPU_FUSED3_MAX_P];
+    for (int p = 0; p < P; ++p) out[p] = 0.0f;
+    for (int n = 0; n < N; ++n) {
+        float sn = scores[n];
+        int c_off = n * P;
+        for (int p = 0; p < P; ++p) out[p] += sn * float(C[c_off + p]);
+    }
+
+    int o_off = row * P;
+    for (int p = 0; p < P; ++p) O[o_off + p] = half(out[p]);
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kFused3SourceF16, @"matmul_softmax_matmul_f16");
+    if (!pso) return false;
+
+    NSUInteger aBytes = sizeof(uint16_t) * static_cast<NSUInteger>(M) *
+                        static_cast<NSUInteger>(K);
+    NSUInteger bBytes = sizeof(uint16_t) * static_cast<NSUInteger>(K) *
+                        static_cast<NSUInteger>(N);
+    NSUInteger cBytes = sizeof(uint16_t) * static_cast<NSUInteger>(N) *
+                        static_cast<NSUInteger>(P);
+    NSUInteger oBytes = sizeof(uint16_t) * static_cast<NSUInteger>(M) *
+                        static_cast<NSUInteger>(P);
+
+    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:aBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B length:bBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufC = [ctx.device newBufferWithBytes:C length:cBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufA || !bufB || !bufC || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBuffer:bufC offset:0 atIndex:2];
+    [enc setBuffer:bufO offset:0 atIndex:3];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&P length:sizeof(int32_t) atIndex:7];
+
+    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(M), 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(M),
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+inline void reference_matmul_softmax_matmul_f32(const float* A, const float* B,
+                                                const float* C, float* O,
+                                                int32_t M, int32_t K, int32_t N,
+                                                int32_t P) {
+  std::vector<float> scores(static_cast<std::size_t>(N), 0.0f);
+  std::vector<float> out(static_cast<std::size_t>(P), 0.0f);
+  for (int32_t row = 0; row < M; ++row) {
+    for (int32_t n = 0; n < N; ++n) scores[n] = 0.0f;
+    for (int32_t k = 0; k < K; ++k) {
+      float a = A[static_cast<std::size_t>(row) * K + k];
+      const float* b_row = B + static_cast<std::size_t>(k) * N;
+      for (int32_t n = 0; n < N; ++n) scores[n] += a * b_row[n];
+    }
+    float row_max = -std::numeric_limits<float>::infinity();
+    for (int32_t n = 0; n < N; ++n) row_max = std::max(row_max, scores[n]);
+    float denom = 0.0f;
+    for (int32_t n = 0; n < N; ++n) {
+      scores[n] = std::exp(scores[n] - row_max);
+      denom += scores[n];
+    }
+    if (denom > 0.0f) {
+      float inv = 1.0f / denom;
+      for (int32_t n = 0; n < N; ++n) scores[n] *= inv;
+    } else {
+      for (int32_t n = 0; n < N; ++n) scores[n] = 0.0f;
+    }
+    for (int32_t p = 0; p < P; ++p) out[p] = 0.0f;
+    for (int32_t n = 0; n < N; ++n) {
+      const float* c_row = C + static_cast<std::size_t>(n) * P;
+      float sn = scores[n];
+      for (int32_t p = 0; p < P; ++p) out[p] += sn * c_row[p];
+    }
+    float* o_row = O + static_cast<std::size_t>(row) * P;
+    for (int32_t p = 0; p < P; ++p) o_row[p] = out[p];
+  }
+}
+
+inline void reference_matmul_softmax_matmul_f16_via_fp32(
+    const uint16_t* A, const uint16_t* B, const uint16_t* C, uint16_t* O,
+    int32_t M, int32_t K, int32_t N, int32_t P) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Cf(static_cast<std::size_t>(N) * P);
+  std::vector<float> Of(static_cast<std::size_t>(M) * P);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = half_to_float_gpu(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = half_to_float_gpu(B[i]);
+  for (std::size_t i = 0; i < Cf.size(); ++i) Cf[i] = half_to_float_gpu(C[i]);
+  reference_matmul_softmax_matmul_f32(Af.data(), Bf.data(), Cf.data(), Of.data(),
+                                      M, K, N, P);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_half_gpu(Of[i]);
+}
+
+inline void reference_matmul_softmax_matmul_bf16_via_fp32(
+    const uint16_t* A, const uint16_t* B, const uint16_t* C, uint16_t* O,
+    int32_t M, int32_t K, int32_t N, int32_t P) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Cf(static_cast<std::size_t>(N) * P);
+  std::vector<float> Of(static_cast<std::size_t>(M) * P);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = bfloat16_to_float_gpu(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = bfloat16_to_float_gpu(B[i]);
+  for (std::size_t i = 0; i < Cf.size(); ++i) Cf[i] = bfloat16_to_float_gpu(C[i]);
+  reference_matmul_softmax_matmul_f32(Af.data(), Bf.data(), Cf.data(), Of.data(),
+                                      M, K, N, P);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_gpu(Of[i]);
+}
+
+bool dispatch_matmul_softmax_matmul_bf16_via_fp32(
+    MetalDeviceContext &ctx, const uint16_t* A, const uint16_t* B,
+    const uint16_t* C, uint16_t* O, int32_t M, int32_t K, int32_t N, int32_t P) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Cf(static_cast<std::size_t>(N) * P);
+  std::vector<float> Of(static_cast<std::size_t>(M) * P);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = bfloat16_to_float_gpu(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = bfloat16_to_float_gpu(B[i]);
+  for (std::size_t i = 0; i < Cf.size(); ++i) Cf[i] = bfloat16_to_float_gpu(C[i]);
+  if (!dispatch_matmul_softmax_matmul_msl(ctx, Af.data(), Bf.data(), Cf.data(),
+                                          Of.data(), M, K, N, P))
+    return false;
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_gpu(Of[i]);
+  return true;
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_matmul_softmax_matmul_f32(
+    const float* A, const float* B, const float* C, float* O,
+    int32_t M, int32_t K, int32_t N, int32_t P) {
+  if (N > 256 || P > 256) {
+    reference_matmul_softmax_matmul_f32(A, B, C, O, M, K, N, P);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_matmul_softmax_matmul_msl(ctx, A, B, C, O, M, K, N, P))
+    return;
+  reference_matmul_softmax_matmul_f32(A, B, C, O, M, K, N, P);
+}
+
+extern "C" void tessera_apple_gpu_matmul_softmax_matmul_f16(
+    const uint16_t* A, const uint16_t* B, const uint16_t* C, uint16_t* O,
+    int32_t M, int32_t K, int32_t N, int32_t P) {
+  if (N > 256 || P > 256) {
+    reference_matmul_softmax_matmul_f16_via_fp32(A, B, C, O, M, K, N, P);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_matmul_softmax_matmul_msl_f16(ctx, A, B, C, O, M, K, N, P))
+    return;
+  reference_matmul_softmax_matmul_f16_via_fp32(A, B, C, O, M, K, N, P);
+}
+
+extern "C" void tessera_apple_gpu_matmul_softmax_matmul_bf16(
+    const uint16_t* A, const uint16_t* B, const uint16_t* C, uint16_t* O,
+    int32_t M, int32_t K, int32_t N, int32_t P) {
+  if (N > 256 || P > 256) {
+    reference_matmul_softmax_matmul_bf16_via_fp32(A, B, C, O, M, K, N, P);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_matmul_softmax_matmul_bf16_via_fp32(ctx, A, B, C, O, M, K, N, P))
+    return;
+  reference_matmul_softmax_matmul_bf16_via_fp32(A, B, C, O, M, K, N, P);
+}

@@ -448,6 +448,84 @@ extern "C" void tessera_apple_gpu_matmul_softmax_bf16(const uint16_t* A,
   for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_stub(Of[i]);
 }
 
+// Phase 8.4.5 — fp32/fp16/bf16 stubs for fused matmul -> softmax -> matmul.
+
+namespace {
+
+inline void reference_matmul_softmax_matmul_f32_stub(
+    const float* A, const float* B, const float* C, float* O,
+    int32_t M, int32_t K, int32_t N, int32_t P) {
+  std::vector<float> scores(static_cast<std::size_t>(N), 0.0f);
+  std::vector<float> out(static_cast<std::size_t>(P), 0.0f);
+  for (int32_t row = 0; row < M; ++row) {
+    for (int32_t n = 0; n < N; ++n) scores[n] = 0.0f;
+    for (int32_t k = 0; k < K; ++k) {
+      float a = A[static_cast<std::size_t>(row) * K + k];
+      const float* b_row = B + static_cast<std::size_t>(k) * N;
+      for (int32_t n = 0; n < N; ++n) scores[n] += a * b_row[n];
+    }
+    float row_max = -std::numeric_limits<float>::infinity();
+    for (int32_t n = 0; n < N; ++n) row_max = std::max(row_max, scores[n]);
+    float denom = 0.0f;
+    for (int32_t n = 0; n < N; ++n) {
+      scores[n] = std::exp(scores[n] - row_max);
+      denom += scores[n];
+    }
+    if (denom > 0.0f) {
+      float inv = 1.0f / denom;
+      for (int32_t n = 0; n < N; ++n) scores[n] *= inv;
+    } else {
+      for (int32_t n = 0; n < N; ++n) scores[n] = 0.0f;
+    }
+    for (int32_t p = 0; p < P; ++p) out[p] = 0.0f;
+    for (int32_t n = 0; n < N; ++n) {
+      const float* c_row = C + static_cast<std::size_t>(n) * P;
+      float sn = scores[n];
+      for (int32_t p = 0; p < P; ++p) out[p] += sn * c_row[p];
+    }
+    float* o_row = O + static_cast<std::size_t>(row) * P;
+    for (int32_t p = 0; p < P; ++p) o_row[p] = out[p];
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_matmul_softmax_matmul_f32(
+    const float* A, const float* B, const float* C, float* O,
+    int32_t M, int32_t K, int32_t N, int32_t P) {
+  reference_matmul_softmax_matmul_f32_stub(A, B, C, O, M, K, N, P);
+}
+
+extern "C" void tessera_apple_gpu_matmul_softmax_matmul_f16(
+    const uint16_t* A, const uint16_t* B, const uint16_t* C, uint16_t* O,
+    int32_t M, int32_t K, int32_t N, int32_t P) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Cf(static_cast<std::size_t>(N) * P);
+  std::vector<float> Of(static_cast<std::size_t>(M) * P);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = half_to_float_stub(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = half_to_float_stub(B[i]);
+  for (std::size_t i = 0; i < Cf.size(); ++i) Cf[i] = half_to_float_stub(C[i]);
+  reference_matmul_softmax_matmul_f32_stub(Af.data(), Bf.data(), Cf.data(),
+                                           Of.data(), M, K, N, P);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_half_stub(Of[i]);
+}
+
+extern "C" void tessera_apple_gpu_matmul_softmax_matmul_bf16(
+    const uint16_t* A, const uint16_t* B, const uint16_t* C, uint16_t* O,
+    int32_t M, int32_t K, int32_t N, int32_t P) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Cf(static_cast<std::size_t>(N) * P);
+  std::vector<float> Of(static_cast<std::size_t>(M) * P);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = bfloat16_to_float_stub(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = bfloat16_to_float_stub(B[i]);
+  for (std::size_t i = 0; i < Cf.size(); ++i) Cf[i] = bfloat16_to_float_stub(C[i]);
+  reference_matmul_softmax_matmul_f32_stub(Af.data(), Bf.data(), Cf.data(),
+                                           Of.data(), M, K, N, P);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_stub(Of[i]);
+}
+
 extern "C" int32_t tessera_apple_gpu_runtime_msl_cache_size(void) {
   // No Metal -> no MSL cache. Tests gate this on platform.
   return -1;

@@ -52,6 +52,10 @@ namespace {
 
 constexpr llvm::StringLiteral kMatmulSoftmaxF32Symbol =
     "tessera_apple_gpu_matmul_softmax_f32";
+constexpr llvm::StringLiteral kMatmulSoftmaxF16Symbol =
+    "tessera_apple_gpu_matmul_softmax_f16";
+constexpr llvm::StringLiteral kMatmulSoftmaxBF16Symbol =
+    "tessera_apple_gpu_matmul_softmax_bf16";
 
 static func::FuncOp ensureExternalDecl(ModuleOp mod, StringRef name,
                                        FunctionType fnTy) {
@@ -92,8 +96,18 @@ struct LowerMatmulSoftmaxFusionToAppleGPU : public RewritePattern {
     auto smTy = dyn_cast<RankedTensorType>(softmaxIn.getType());
     if (!smTy || smTy.getRank() != 2)
       return rewriter.notifyMatchFailure(softmaxOp, "fusion: rank-2 only");
-    if (!smTy.getElementType().isF32())
-      return rewriter.notifyMatchFailure(softmaxOp, "fusion: f32-only");
+    Type smElem = smTy.getElementType();
+    StringRef symbol;
+    if (smElem.isF32()) {
+      symbol = kMatmulSoftmaxF32Symbol;
+    } else if (smElem.isF16()) {
+      symbol = kMatmulSoftmaxF16Symbol;
+    } else if (smElem.isBF16()) {
+      symbol = kMatmulSoftmaxBF16Symbol;
+    } else {
+      return rewriter.notifyMatchFailure(
+          softmaxOp, "fusion: f32, f16, or bf16 only in Phase 8.4.4.2");
+    }
     if (axis != -1 && axis != smTy.getRank() - 1)
       return rewriter.notifyMatchFailure(softmaxOp, "fusion: axis must be -1");
 
@@ -116,8 +130,11 @@ struct LowerMatmulSoftmaxFusionToAppleGPU : public RewritePattern {
     auto rhsTy = dyn_cast<RankedTensorType>(rhs.getType());
     if (!lhsTy || !rhsTy || lhsTy.getRank() != 2 || rhsTy.getRank() != 2)
       return rewriter.notifyMatchFailure(softmaxOp, "fusion: matmul inputs not rank-2");
-    if (!lhsTy.getElementType().isF32() || !rhsTy.getElementType().isF32())
-      return rewriter.notifyMatchFailure(softmaxOp, "fusion: matmul not f32");
+    // The matmul element type must match the softmax (and softmax-result)
+    // element type. Mixed-dtype chains fall out of fusion.
+    if (lhsTy.getElementType() != smElem || rhsTy.getElementType() != smElem)
+      return rewriter.notifyMatchFailure(
+          softmaxOp, "fusion: matmul element types must match softmax dtype");
     if (lhsTy.isDynamicDim(0) || lhsTy.isDynamicDim(1) ||
         rhsTy.isDynamicDim(0) || rhsTy.isDynamicDim(1))
       return rewriter.notifyMatchFailure(softmaxOp, "fusion: requires static shapes");
@@ -137,11 +154,10 @@ struct LowerMatmulSoftmaxFusionToAppleGPU : public RewritePattern {
 
     Type i64Ty = rewriter.getI64Type();
     Type i32Ty = rewriter.getI32Type();
-    Type f32Ty = rewriter.getF32Type();
 
-    auto aMemTy = MemRefType::get({M, K}, f32Ty);
-    auto bMemTy = MemRefType::get({K, N}, f32Ty);
-    auto oMemTy = MemRefType::get({M, N}, f32Ty);
+    auto aMemTy = MemRefType::get({M, K}, smElem);
+    auto bMemTy = MemRefType::get({K, N}, smElem);
+    auto oMemTy = MemRefType::get({M, N}, smElem);
 
     rewriter.setInsertionPoint(matmulOp);
     Value aPtr = extractPtr(rewriter, loc, lhs, aMemTy);
@@ -160,13 +176,13 @@ struct LowerMatmulSoftmaxFusionToAppleGPU : public RewritePattern {
 
     FunctionType fnTy = FunctionType::get(
         ctx, {i64Ty, i64Ty, i64Ty, i32Ty, i32Ty, i32Ty}, {});
-    ensureExternalDecl(mod, kMatmulSoftmaxF32Symbol, fnTy);
+    ensureExternalDecl(mod, symbol, fnTy);
 
     rewriter.create<func::CallOp>(
-        loc, kMatmulSoftmaxF32Symbol, TypeRange{},
+        loc, symbol, TypeRange{},
         ValueRange{aPtr, bPtr, oPtr, Mv, Nv, Kv});
 
-    auto outTensorTy = RankedTensorType::get({M, N}, f32Ty);
+    auto outTensorTy = RankedTensorType::get({M, N}, smElem);
     Value result =
         rewriter.create<bufferization::ToTensorOp>(loc, outTensorTy, oAlloc);
 
@@ -187,8 +203,9 @@ struct LowerMatmulSoftmaxFusionToAppleGPUPass
     return "tessera-matmul-softmax-fusion-to-apple_gpu";
   }
   StringRef getDescription() const override {
-    return "Fuse tessera.matmul -> tessera.softmax (rank-2, f32, axis=-1, "
-           "N <= 256) into a single Apple GPU runtime call (custom MSL kernel)";
+    return "Fuse tessera.matmul -> tessera.softmax (rank-2, f32/f16/bf16, "
+           "axis=-1, N <= 256) into a single Apple GPU runtime call "
+           "(custom MSL kernel)";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {

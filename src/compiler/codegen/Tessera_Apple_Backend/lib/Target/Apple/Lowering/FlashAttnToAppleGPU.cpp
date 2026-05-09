@@ -53,6 +53,10 @@ namespace {
 
 constexpr llvm::StringLiteral kFlashAttnF32Symbol =
     "tessera_apple_gpu_flash_attn_f32";
+constexpr llvm::StringLiteral kFlashAttnF16Symbol =
+    "tessera_apple_gpu_flash_attn_f16";
+constexpr llvm::StringLiteral kFlashAttnBF16Symbol =
+    "tessera_apple_gpu_flash_attn_bf16";
 
 static func::FuncOp ensureExternalDecl(ModuleOp mod, StringRef name,
                                        FunctionType fnTy) {
@@ -92,10 +96,24 @@ struct LowerFlashAttnToAppleGPU : public RewritePattern {
     if (qTy.getRank() != 3 || kTy.getRank() != 3 || vTy.getRank() != 3)
       return rewriter.notifyMatchFailure(
           op, "AppleGPU flash-attn MSL path is rank-3 only in Phase 8.4.1");
-    if (!qTy.getElementType().isF32() || !kTy.getElementType().isF32() ||
-        !vTy.getElementType().isF32())
+    Type qElem = qTy.getElementType();
+    if (qElem != kTy.getElementType() || qElem != vTy.getElementType())
       return rewriter.notifyMatchFailure(
-          op, "AppleGPU flash-attn MSL path is f32-only in Phase 8.4.1");
+          op, "AppleGPU flash-attn MSL path requires matching Q/K/V dtypes");
+    // Phase 8.4.4.2 — pick symbol by element type. Q/K/V/O ABI changes
+    // pointer interpretation (uint16_t* for f16/bf16) but the func signature
+    // stays the same i64×4 + i32×4 + f32 + i32 since pointers are i64.
+    StringRef symbol;
+    if (qElem.isF32()) {
+      symbol = kFlashAttnF32Symbol;
+    } else if (qElem.isF16()) {
+      symbol = kFlashAttnF16Symbol;
+    } else if (qElem.isBF16()) {
+      symbol = kFlashAttnBF16Symbol;
+    } else {
+      return rewriter.notifyMatchFailure(
+          op, "AppleGPU flash-attn MSL path supports f32, f16, and bf16 in Phase 8.4.4.2");
+    }
     if (qTy.isDynamicDim(0) || qTy.isDynamicDim(1) || qTy.isDynamicDim(2) ||
         kTy.isDynamicDim(0) || kTy.isDynamicDim(1) || kTy.isDynamicDim(2) ||
         vTy.isDynamicDim(0) || vTy.isDynamicDim(1) || vTy.isDynamicDim(2))
@@ -137,10 +155,10 @@ struct LowerFlashAttnToAppleGPU : public RewritePattern {
     Type i32Ty = rewriter.getI32Type();
     Type f32Ty = rewriter.getF32Type();
 
-    auto qMemTy = MemRefType::get({B, Sq, Dq}, f32Ty);
-    auto kMemTy = MemRefType::get({B, Sk, Dq}, f32Ty);
-    auto vMemTy = MemRefType::get({B, Sk, Dq}, f32Ty);
-    auto oMemTy = MemRefType::get({B, Sq, Dq}, f32Ty);
+    auto qMemTy = MemRefType::get({B, Sq, Dq}, qElem);
+    auto kMemTy = MemRefType::get({B, Sk, Dq}, qElem);
+    auto vMemTy = MemRefType::get({B, Sk, Dq}, qElem);
+    auto oMemTy = MemRefType::get({B, Sq, Dq}, qElem);
 
     Value qPtr = extractPtr(rewriter, loc, q, qMemTy);
     Value kPtr = extractPtr(rewriter, loc, k, kMemTy);
@@ -170,15 +188,15 @@ struct LowerFlashAttnToAppleGPU : public RewritePattern {
          f32Ty,                             // scale
          i32Ty},                            // causal
         {});
-    ensureExternalDecl(mod, kFlashAttnF32Symbol, fnTy);
+    ensureExternalDecl(mod, symbol, fnTy);
 
     rewriter.create<func::CallOp>(
-        loc, kFlashAttnF32Symbol, TypeRange{},
+        loc, symbol, TypeRange{},
         ValueRange{qPtr, kPtr, vPtr, oPtr,
                    Bv32, Sqv32, Skv32, Dv32,
                    scaleV, causalV});
 
-    auto outTensorTy = RankedTensorType::get({B, Sq, Dq}, f32Ty);
+    auto outTensorTy = RankedTensorType::get({B, Sq, Dq}, qElem);
     Value result =
         rewriter.create<bufferization::ToTensorOp>(loc, outTensorTy, oAlloc);
     rewriter.replaceOp(op, result);
@@ -195,8 +213,8 @@ struct LowerFlashAttnToAppleGPUPass
     return "tessera-flash_attn-to-apple_gpu";
   }
   StringRef getDescription() const override {
-    return "Lower tessera.flash_attn (rank-3, f32, head_dim <= 256) to "
-           "Apple GPU runtime calls (custom MSL kernel)";
+    return "Lower tessera.flash_attn (rank-3, f32/f16/bf16, head_dim <= 256) "
+           "to Apple GPU runtime calls (custom MSL kernel)";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {

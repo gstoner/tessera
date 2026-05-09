@@ -42,6 +42,8 @@ add_library(TesseraApple STATIC
   lib/Target/Apple/Lowering/GeluToAppleGPU.cpp
   lib/Target/Apple/Lowering/MatmulSoftmaxFusionToAppleGPU.cpp
   lib/Target/Apple/Lowering/MatmulSoftmaxMatmulFusionToAppleGPU.cpp
+  lib/Target/Apple/Lowering/MatmulGeluFusionToAppleGPU.cpp
+  lib/Target/Apple/Lowering/MatmulRMSNormFusionToAppleGPU.cpp
 )
 
 # mlir_tablegen emits .h.inc / .cpp.inc into CMAKE_CURRENT_BINARY_DIR/Tessera/Target/Apple/

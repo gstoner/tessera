@@ -1910,6 +1910,38 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             raise ValueError(f"artifact did not produce output {output_name!r}")
         return values[output_name]
 
+    # Phase 8.4.7 — matmul -> gelu and matmul -> rmsnorm 2-op fusions.
+    if _apple_gpu_metadata_is_matmul_postlude_chain(ops, "tessera.gelu"):
+        first, second = ops[0], ops[1]
+        operands = [_as_numpy(values[name]) for name in first.get("operands", [])]
+        result_name = second.get("result")
+        if not result_name:
+            raise ValueError("matmul_gelu fusion: missing gelu result name")
+        values[str(result_name)] = _apple_gpu_dispatch_matmul_gelu(operands, np)
+        if output_name not in values:
+            raise ValueError(f"artifact did not produce output {output_name!r}")
+        return values[output_name]
+
+    if _apple_gpu_metadata_is_matmul_postlude_chain(
+        ops, "tessera.rmsnorm", "tessera.rmsnorm_safe"
+    ):
+        first, second = ops[0], ops[1]
+        operands = [_as_numpy(values[name]) for name in first.get("operands", [])]
+        result_name = second.get("result")
+        if not result_name:
+            raise ValueError("matmul_rmsnorm fusion: missing rmsnorm result name")
+        kwargs = dict(second.get("kwargs") or {})
+        # Default eps matches the python runtime: 1e-5 for rmsnorm,
+        # 1e-6 for rmsnorm_safe.
+        eps_default = 1e-6 if str(second.get("op_name")) == "tessera.rmsnorm_safe" else 1e-5
+        eps = float(kwargs.get("eps", eps_default))
+        values[str(result_name)] = _apple_gpu_dispatch_matmul_rmsnorm(
+            operands, eps, np
+        )
+        if output_name not in values:
+            raise ValueError(f"artifact did not produce output {output_name!r}")
+        return values[output_name]
+
     for op in ops:
         op_name = str(op.get("op_name", ""))
         result = op.get("result")
@@ -1989,6 +2021,30 @@ def _apple_gpu_metadata_is_matmul_softmax_matmul_chain(ops: list[dict]) -> bool:
     if len(third_operands) < 1 or third_operands[0] != str(second.get("result", "")):
         return False
     return True
+
+
+def _apple_gpu_metadata_is_matmul_postlude_chain(
+    ops: list[dict], *postlude_op_names: str
+) -> bool:
+    """Phase 8.4.7 — generic matmul -> postlude 2-op chain detector.
+    Used by the matmul_gelu and matmul_rmsnorm dispatchers; the second
+    op's name set is configurable so the same shape works for both.
+    """
+
+    if len(ops) != 2:
+        return False
+    first, second = ops[0], ops[1]
+    if str(first.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
+        return False
+    if str(second.get("op_name", "")) not in set(postlude_op_names):
+        return False
+    operands = [str(n) for n in second.get("operands") or []]
+    if len(operands) < 1:
+        return False
+    op0 = operands[0]
+    if op0.startswith("%"):
+        op0 = op0[1:]
+    return op0 == str(first.get("result", ""))
 
 
 def _apple_gpu_metadata_is_matmul_softmax_chain(ops: list[dict]) -> bool:
@@ -2776,6 +2832,105 @@ def _apple_gpu_matmul_softmax_bf16() -> Any:
     return sym
 
 
+def _apple_gpu_dispatch_matmul_gelu(operands: list[Any], np: Any) -> Any:
+    """Phase 8.4.7 — dispatch a fused matmul -> gelu chain through the
+    apple_gpu runtime shim. f32 only this phase; outside the envelope
+    (rank, dtype, N>256) falls back to numpy."""
+
+    if len(operands) != 2:
+        raise ValueError("matmul_gelu fusion requires two operands (A, B)")
+    a = np.asarray(operands[0])
+    b = np.asarray(operands[1])
+    if not (
+        a.ndim == 2 and b.ndim == 2
+        and a.shape[1] == b.shape[0]
+        and b.shape[1] <= 256
+        and a.dtype == np.float32 and b.dtype == np.float32
+    ):
+        scores = np.matmul(a, b)
+        return 0.5 * scores * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) *
+                                              (scores + 0.044715 * scores ** 3)))
+    if not a.flags.c_contiguous:
+        a = np.ascontiguousarray(a, dtype=np.float32)
+    if not b.flags.c_contiguous:
+        b = np.ascontiguousarray(b, dtype=np.float32)
+    M, K = a.shape
+    N = b.shape[1]
+    out = np.zeros((M, N), dtype=np.float32)
+    fused = _apple_gpu_matmul_gelu_f32()
+    fused(
+        a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
+    )
+    return out
+
+
+def _apple_gpu_matmul_gelu_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = runtime.tessera_apple_gpu_matmul_gelu_f32
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_dispatch_matmul_rmsnorm(operands: list[Any], eps: float, np: Any) -> Any:
+    """Phase 8.4.7 — dispatch a fused matmul -> rmsnorm chain through the
+    apple_gpu runtime shim. f32 only this phase. eps is passed in by the
+    metadata-layer dispatcher (it knows the rmsnorm vs rmsnorm_safe
+    default and any explicit override)."""
+
+    if len(operands) != 2:
+        raise ValueError("matmul_rmsnorm fusion requires two operands (A, B)")
+    a = np.asarray(operands[0])
+    b = np.asarray(operands[1])
+    if not (
+        a.ndim == 2 and b.ndim == 2
+        and a.shape[1] == b.shape[0]
+        and b.shape[1] <= 256
+        and a.dtype == np.float32 and b.dtype == np.float32
+    ):
+        scores = np.matmul(a, b)
+        rms = np.sqrt(np.mean(scores * scores, axis=-1, keepdims=True) + eps)
+        return scores / rms
+    if not a.flags.c_contiguous:
+        a = np.ascontiguousarray(a, dtype=np.float32)
+    if not b.flags.c_contiguous:
+        b = np.ascontiguousarray(b, dtype=np.float32)
+    M, K = a.shape
+    N = b.shape[1]
+    out = np.zeros((M, N), dtype=np.float32)
+    fused = _apple_gpu_matmul_rmsnorm_f32()
+    fused(
+        a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
+        ctypes.c_float(eps),
+    )
+    return out
+
+
+def _apple_gpu_matmul_rmsnorm_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = runtime.tessera_apple_gpu_matmul_rmsnorm_f32
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_float,
+    ]
+    sym.restype = None
+    return sym
+
+
 def _apple_gpu_dispatch_matmul_softmax_matmul(operands: list[Any], np: Any) -> Any:
     """Phase 8.4.5 — dispatch a fused matmul -> softmax -> matmul chain
     (full attention block) through the apple_gpu runtime shim. Picks symbol
@@ -2981,6 +3136,9 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_matmul_bf16")
                 # Phase 8.4.6 — threadgroup-tiled matmul_softmax_f32 (lifts N constraint).
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_tiled_f32")
+                # Phase 8.4.7 — MLP block fusions (matmul -> gelu, matmul -> rmsnorm).
+                getattr(lib, "tessera_apple_gpu_matmul_gelu_f32")
+                getattr(lib, "tessera_apple_gpu_matmul_rmsnorm_f32")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

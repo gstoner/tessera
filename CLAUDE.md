@@ -1,6 +1,6 @@
 # Tessera — Claude Code Project Context
 
-> **Phases 1–6 complete. Phase 7 lit-clean. Phase 8 in progress — Apple M-Series Phase 8.2 (CPU native execution via Accelerate) operational; bf16 GPU work ahead.**
+> **Phases 1–6 complete. Phase 7 lit-clean. Phase 8 — Apple M-Series CPU (Phase 8.2) and GPU (Phases 8.3 → 8.4.7) operational. apple_gpu ships 26 runtime symbols across 9 kernel concepts × {f32, f16, bf16}, including 4 fused chains (matmul→softmax, matmul→gelu, matmul→rmsnorm, matmul→softmax→matmul). See `docs/apple_gpu_overview.md`.**
 > This file is the authoritative working reference. Read it before touching any code.
 > Last updated: May 2026 (MLIR 21 / LLVM 21 build pin).
 
@@ -47,7 +47,7 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 | Phase 5 | ✅ Complete | Solver passes (11 core + 2 linalg + 3 SR), `BayesianAutotuner`, checkpoint decorator, `solver_config.py` — 176 tests |
 | Phase 6 | ✅ Complete | `TesseraRuntime` Python wrapper, CUDA/HIP backends (real calls), ROCm MFMA coverage, benchmark runners, `ErrorReporter`, `ShapeInferencePass` — 170 tests |
 | Phase 7 | 🟡 In progress | Neighbors dialect (halo/stencil) wired into `tessera-opt`; Cerebras WSE-3 (487 LOC, real) and Tenstorrent Metalium (550 LOC, real) backends landed with `tessera-lower-to-metalium` pipeline alias |
-| Phase 8 | 🟡 In progress | Hardware-free Target IR — `tessera_rocm.mfma`, `tessera_metalium.dma/matmul`, `tessera_apple.cpu/gpu.*` ODS dialects between Tile IR and hardware-specific lowering; `@jit(target="rocm"/"metalium"/"apple_cpu"/"apple_gpu")` string targets; **Apple M-Series Phase 8.2 operational** — `@jit(target="apple_cpu")` executes natively through Accelerate (cblas_sgemm rank-2/rank-3 batched f32 + BNNS fp16) + numpy reference for non-matmul ops; canonical pipelines `tessera-lower-to-rocm`, `tessera-lower-to-metalium`, `tessera-lower-to-apple_cpu`, `tessera-lower-to-apple_cpu-runtime`, `tessera-lower-to-apple_gpu` |
+| Phase 8 | 🟢 Apple operational | Hardware-free Target IR — `tessera_rocm.mfma`, `tessera_metalium.dma/matmul`, `tessera_apple.cpu/gpu.*` ODS dialects between Tile IR and hardware-specific lowering; `@jit(target="rocm"/"metalium"/"apple_cpu"/"apple_gpu")` string targets. **Apple M-Series CPU (8.2)** — `@jit(target="apple_cpu")` via Accelerate (cblas_sgemm + BNNS f16/bf16). **Apple M-Series GPU (8.3 → 8.4.7)** — `@jit(target="apple_gpu")` via MPS + custom MSL kernels: 9 kernel concepts × {f32, f16, bf16} = 26 runtime symbols; 4 fused chains (matmul→softmax, matmul→gelu, matmul→rmsnorm, matmul→softmax→matmul); threadgroup-tiled f32 matmul_softmax for N up to 8192. See `docs/apple_gpu_overview.md`. |
 | RubinCPX | ✅ Built | `tessera.target.cpx` dialect, 4 passes, `tessera-cpx-opt` driver, `TESSERA_BUILD_RUBINCPX_BACKEND` CMake option |
 
 **Total active tests: 1,938 passing in `tests/unit/` (0 failing); Apple Phase 8 lit fixtures 4/4 passing in `tests/tessera-ir/phase8/` against the in-tree `tessera-opt`.**
@@ -111,7 +111,7 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 | `codegen/Tessera_TPU_Backend/` | TPU StableHLO + Shardy export |
 | `codegen/Tessera_Cerebras_backend/` | Cerebras WSE-3 backend — Phase 7, ~487 LOC, real implementation |
 | `codegen/Tessera_Metalium_Backend/` | Tenstorrent Metalium backend — Phase 7, ~550 LOC, real; `tessera-lower-to-metalium` pipeline alias |
-| `codegen/Tessera_Apple_Backend/` | Apple M-Series backend — **Phase 8.2 operational** — dialect + Tile→Apple artifact passes + `MatmulToAppleCPU` runtime-lowering pass + `TesseraAppleRuntime` Accelerate shim with four GEMM symbols: `tessera_apple_cpu_gemm_f32` (rank-2), `_batched` (rank-3), `_f16` (BNNS f16), `_bf16` (BNNS bf16); `TESSERA_BUILD_APPLE_BACKEND` CMake option wired into `tessera-opt` |
+| `codegen/Tessera_Apple_Backend/` | Apple M-Series backend — **CPU + GPU operational** (Phases 8.2–8.4.7). CPU: `MatmulToAppleCPU` pass + `TesseraAppleRuntime` Accelerate shim (cblas_sgemm rank-2/rank-3, BNNS f16/bf16). GPU: 9 lowering passes (Matmul/Rope/FlashAttn/Softmax/Gelu plus 4 fusion passes) + Objective-C++ runtime shim with `MetalDeviceContext` and MSL kernel cache. 26 runtime C ABI symbols. See `docs/apple_gpu_overview.md` and `docs/apple_gpu_kernel_inventory.md`. |
 | `diagnostics/ErrorReporter.cpp` | Source-attributed shape error reporting |
 | `diagnostics/ShapeInferencePass.cpp` | Forward shape propagation |
 | `tessera_neighbors/` | Halo/stencil neighbor exchange dialect — **Phase 7** |
@@ -346,9 +346,29 @@ End-to-end verified on this Mac (LLVM/MLIR 21, Accelerate active): single GEMM b
 *Open work:*
 - Apple GPU (Phase 8.3) — MPS dispatch, separate phase.
 
-**Phase 8.3 — Apple GPU baseline via MPS.** New ODS ops `tessera_apple.gpu.mps_matmul` / `mps_softmax` / `mps_dispatch`. Pass `AppleGPUToMPS`. Runtime: Objective-C++ (`.mm`) `MetalDeviceContext` wrapping `MTLDevice` + `MTLCommandQueue` + `MPSMatrixMultiplication`. No `metal-cpp` vendoring.
+**Phase 8.3 — Apple GPU baseline via MPS — landed.** ODS ops `tessera_apple.gpu.mps_matmul` / `mps_softmax` / `mps_dispatch`. Pass `MatmulToAppleGPU`. Runtime: Objective-C++ (`.mm`) `MetalDeviceContext` wrapping `MTLDevice` + `MTLCommandQueue` + `MPSMatrixMultiplication`. No `metal-cpp` vendoring. Single rank-2 f32 matmul executes natively via MPS.
 
-**Phase 8.4 — Custom MSL kernels for ops MPS doesn't cover.** New op `tessera_apple.gpu.msl_kernel` carries MSL source as a `StringAttr` payload. Runtime compiles via `[device newLibraryWithSource:options:error:]`, caching by hash. Flash-attention is the first custom kernel.
+**Phase 8.4.0 — Custom MSL kernel infrastructure + rope — landed.** ODS op `tessera_apple.gpu.msl_kernel` carries MSL source as a `StringAttr`. Runtime compiles via `[device newLibraryWithSource:options:error:]`, caching by `(msl_source, entry_point)` sha256. First custom kernel: rope.
+
+**Phase 8.4.1 — flash-attention forward — landed.** Online softmax in a single MSL kernel. fp32 accumulators throughout; head_dim ≤ 256.
+
+**Phase 8.4.2 — softmax + gelu standalone MSL kernels — landed.**
+
+**Phase 8.4.3 — first multi-op fusion: matmul → softmax — landed.** Fused MSL kernel materializes the (M, N) score matrix in per-thread stack array. Runtime gate becomes "recognized op-chain in envelope" rather than "single op."
+
+**Phase 8.4.4 — fp16/bf16 matmul — landed.** Native MPSDataTypeFloat16 for fp16. fp32-conversion path inside the runtime shim for bf16 (MPS doesn't natively accept bf16 matrix descriptors as of macOS 14).
+
+**Phase 8.4.4.1 — fp16/bf16 for simple MSL kernels (rope, softmax, gelu) — landed.** Native MSL `half` for fp16; fp32-conversion for bf16.
+
+**Phase 8.4.4.2 — fp16/bf16 for fused matmul→softmax + flash_attn — landed.** Mixed-precision: `half` I/O + fp32 per-thread accumulators (matches production flash-attn implementations).
+
+**Phase 8.4.5 — 3-op fusion: matmul → softmax → matmul (full attention block) — landed.** `O = softmax(A @ B) @ C` collapsed into a single MSL kernel with two stack arrays (`scores[256]` + `out[256]`). All three dtypes.
+
+**Phase 8.4.6 — threadgroup-tiled matmul_softmax_f32 + benchmark harness — landed.** Lifts the N ≤ 256 constraint via dynamic threadgroup memory (cap N ≤ 8192). One row per threadgroup; 32 threads cooperate. Benchmark harness at `benchmarks/apple_gpu/benchmark_fusion.py`.
+
+**Phase 8.4.7 — MLP-block fusions (matmul → gelu, matmul → rmsnorm) — landed.** Two more 2-op fusions completing the common transformer-block chains. f32 only this phase.
+
+**Pipeline ordering:** longest fusion first (3-op → 2-op → per-op) so the most specific match wins. Detailed in `docs/apple_gpu_overview.md`.
 
 **Out of scope:** AIR bitcode codegen (Mojo's path). Tessera uses MPS for ops Apple ships kernels for and MSL emission for the gaps; AIR codegen revisited only if a perf wall demands it.
 
@@ -437,6 +457,7 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | `tessera-lower-to-apple_cpu` | Apple Silicon CPU (Accelerate artifact) — Phase 8.1 |
 | `tessera-lower-to-apple_cpu-runtime` | Apple Silicon CPU runtime (cblas_sgemm via Accelerate) — Phase 8.2 |
 | `tessera-lower-to-apple_gpu` | Apple Silicon GPU (Metal artifact) — Phase 8.1 |
+| `tessera-lower-to-apple_gpu-runtime` | Apple Silicon GPU runtime (MPS + custom MSL kernels). Composes (in order): matmul→softmax→matmul fusion → matmul→softmax / gelu / rmsnorm fusions → per-op (matmul mps, rope, flash_attn, softmax, gelu). Phases 8.3 → 8.4.7. |
 | `tessera-cpx-pipeline` / `tessera-cpx-context-pipeline` | NV Rubin CPX (separate `tessera-cpx-opt` driver) |
 
 ---
@@ -466,6 +487,9 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | Cerebras backend | `src/compiler/codegen/Tessera_Cerebras_backend/` |
 | Metalium backend | `src/compiler/codegen/Tessera_Metalium_Backend/` |
 | Apple M-Series backend (Phase 8.1) | `src/compiler/codegen/Tessera_Apple_Backend/` |
+| **Apple GPU architecture story (Phase 8.3 → 8.4.7)** | `docs/apple_gpu_overview.md` |
+| **Apple GPU kernel inventory** (every C ABI symbol + dtype matrix) | `docs/apple_gpu_kernel_inventory.md` |
+| Apple GPU benchmark harness | `benchmarks/apple_gpu/benchmark_fusion.py` |
 | Target IR contract test | `tests/unit/test_target_ir_contract.py`, `tests/tessera-ir/phase8/target_ir_contracts.mlir` |
 | Autotuner v1 framework | `src/compiler/autotuning/tessera/tools/autotune/` |
 | IR specs | `docs/spec/` (GRAPH_IR_SPEC, RUNTIME_ABI_SPEC, MEMORY_MODEL_SPEC, etc.) |
@@ -482,4 +506,4 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 
 ---
 
-*Last updated: May 2026 — Phases 1–6 complete; Phase 7 lit-clean (Neighbors wired into `tessera-opt`, Cerebras + Metalium backends real); Phase 8 in progress — Apple M-Series **Phase 8.2 operational** (Items #1–#4 + bf16 follow-up + launch-overhead caching). Pipelines: `tessera-lower-to-rocm`/`-metalium`/`-apple_cpu`/`-apple_cpu-runtime`/`-apple_gpu`. Apple CPU runtime exports four GEMM symbols (f32, batched f32, f16, bf16); `JitFn.__call__` for apple_cpu uses cached metadata + a fast-path dispatcher (4–46× speedup over uncached). Build pin: **LLVM/MLIR 21**. Optional dep: `ml_dtypes` (bf16 dtype). Test count: **1,938 passing**, plus **4/4 Apple Phase 8 lit fixtures** against the in-tree `tessera-opt`.*
+*Last updated: May 2026 — Phases 1–6 complete; Phase 7 lit-clean; Phase 8 Apple operational (CPU 8.2 via Accelerate; GPU 8.3 → 8.4.7 via MPS + custom MSL). Apple GPU runtime exports **26 C ABI symbols** across 9 kernel concepts × {f32, f16, bf16}: matmul (MPS), rope/softmax/gelu/flash_attn (MSL), 3 fused 2-op chains (matmul→softmax incl. tiled large-N variant, matmul→gelu, matmul→rmsnorm), and 1 fused 3-op chain (matmul→softmax→matmul, full attention block). All sharing one `MetalDeviceContext` + MSL kernel cache keyed by `(msl_source, entry_point)`. Pipelines: `tessera-lower-to-{rocm,metalium,apple_cpu,apple_cpu-runtime,apple_gpu,apple_gpu-runtime}`. Build pin: **LLVM/MLIR 21**. Test count: **2,020 unit tests passing** + **16/16 Phase 8 lit fixtures** against the in-tree `tessera-opt`. See `docs/apple_gpu_overview.md` for the full architecture story.*

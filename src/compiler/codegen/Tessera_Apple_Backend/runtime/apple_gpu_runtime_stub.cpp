@@ -538,6 +538,65 @@ extern "C" void tessera_apple_gpu_matmul_softmax_matmul_bf16(
   for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_stub(Of[i]);
 }
 
+// Phase 8.4.7 — MLP-block fusion stubs (matmul -> gelu, matmul -> rmsnorm).
+
+namespace {
+
+inline void reference_matmul_gelu_f32_stub(const float* A, const float* B,
+                                           float* O, int32_t M, int32_t N,
+                                           int32_t K) {
+  static constexpr float kSqrt2OverPi = 0.7978845608028654f;
+  std::vector<float> scores(static_cast<std::size_t>(N), 0.0f);
+  for (int32_t row = 0; row < M; ++row) {
+    for (int32_t n = 0; n < N; ++n) scores[n] = 0.0f;
+    for (int32_t k = 0; k < K; ++k) {
+      float a = A[static_cast<std::size_t>(row) * K + k];
+      const float* b_row = B + static_cast<std::size_t>(k) * N;
+      for (int32_t n = 0; n < N; ++n) scores[n] += a * b_row[n];
+    }
+    float* o_row = O + static_cast<std::size_t>(row) * N;
+    for (int32_t n = 0; n < N; ++n) {
+      float v = scores[n];
+      float t = kSqrt2OverPi * (v + 0.044715f * v * v * v);
+      o_row[n] = 0.5f * v * (1.0f + std::tanh(t));
+    }
+  }
+}
+
+inline void reference_matmul_rmsnorm_f32_stub(const float* A, const float* B,
+                                              float* O, int32_t M, int32_t N,
+                                              int32_t K, float eps) {
+  std::vector<float> scores(static_cast<std::size_t>(N), 0.0f);
+  for (int32_t row = 0; row < M; ++row) {
+    for (int32_t n = 0; n < N; ++n) scores[n] = 0.0f;
+    for (int32_t k = 0; k < K; ++k) {
+      float a = A[static_cast<std::size_t>(row) * K + k];
+      const float* b_row = B + static_cast<std::size_t>(k) * N;
+      for (int32_t n = 0; n < N; ++n) scores[n] += a * b_row[n];
+    }
+    float sumsq = 0.0f;
+    for (int32_t n = 0; n < N; ++n) sumsq += scores[n] * scores[n];
+    float inv_rms = 1.0f / std::sqrt(sumsq / static_cast<float>(N) + eps);
+    float* o_row = O + static_cast<std::size_t>(row) * N;
+    for (int32_t n = 0; n < N; ++n) o_row[n] = scores[n] * inv_rms;
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_matmul_gelu_f32(const float* A, const float* B,
+                                                  float* O, int32_t M,
+                                                  int32_t N, int32_t K) {
+  reference_matmul_gelu_f32_stub(A, B, O, M, N, K);
+}
+
+extern "C" void tessera_apple_gpu_matmul_rmsnorm_f32(const float* A,
+                                                     const float* B, float* O,
+                                                     int32_t M, int32_t N,
+                                                     int32_t K, float eps) {
+  reference_matmul_rmsnorm_f32_stub(A, B, O, M, N, K, eps);
+}
+
 extern "C" int32_t tessera_apple_gpu_runtime_msl_cache_size(void) {
   // No Metal -> no MSL cache. Tests gate this on platform.
   return -1;

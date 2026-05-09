@@ -89,7 +89,11 @@ PassPipelineRegistration<> gAppleGPURuntimePipeline(
     [](OpPassManager &pm) {
       // Longest fusion first so it has first crack at the chain.
       pm.addPass(createLowerMatmulSoftmaxMatmulFusionToAppleGPUPass());
+      // 2-op fusions next. Order within this group doesn't matter — each
+      // matches a different post-matmul op so they don't compete.
       pm.addPass(createLowerMatmulSoftmaxFusionToAppleGPUPass());
+      pm.addPass(createLowerMatmulGeluFusionToAppleGPUPass());
+      pm.addPass(createLowerMatmulRMSNormFusionToAppleGPUPass());
       pm.addPass(createLowerMatmulToAppleGPUPass());
       pm.addPass(createLowerRopeToAppleGPUPass());
       pm.addPass(createLowerFlashAttnToAppleGPUPass());

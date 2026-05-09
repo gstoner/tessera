@@ -374,6 +374,14 @@ def _apple_gpu_kernel_msl_for_dtype(
         return (_APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_SOURCE,
                 "matmul_softmax_matmul_f32",
                 _APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_CACHE_KEY, "f32")
+    if kernel == "matmul_gelu":
+        # Phase 8.4.7 — f32 only this phase. f16/bf16 mirror the existing
+        # Phase 8.4.4.x pattern via fp32-conversion at the runtime boundary.
+        return (_APPLE_GPU_MATMUL_GELU_MSL_SOURCE, "matmul_gelu_f32",
+                _APPLE_GPU_MATMUL_GELU_MSL_CACHE_KEY, "f32")
+    if kernel == "matmul_rmsnorm":
+        return (_APPLE_GPU_MATMUL_RMSNORM_MSL_SOURCE, "matmul_rmsnorm_f32",
+                _APPLE_GPU_MATMUL_RMSNORM_MSL_CACHE_KEY, "f32")
     raise ValueError(f"unknown apple_gpu kernel: {kernel!r}")
 
 
@@ -588,6 +596,80 @@ _APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_SOURCE_F16 = (
     "}\n"
 )
 _APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_CACHE_KEY_F16 = _sha256_short(_APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_SOURCE_F16)
+
+
+# Phase 8.4.7 — fused matmul -> gelu kernel. tanh-approximation gelu
+# applied pointwise to the row of (A @ B); float accumulator throughout.
+_APPLE_GPU_MATMUL_GELU_MSL_SOURCE = (
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "kernel void matmul_gelu_f32(\n"
+    "    device const float* A   [[buffer(0)]],\n"
+    "    device const float* B   [[buffer(1)]],\n"
+    "    device float*       O   [[buffer(2)]],\n"
+    "    constant int&       M   [[buffer(3)]],\n"
+    "    constant int&       N   [[buffer(4)]],\n"
+    "    constant int&       K   [[buffer(5)]],\n"
+    "    uint gid [[thread_position_in_grid]])\n"
+    "{\n"
+    "    if (gid >= (uint)M) return;\n"
+    "    if (N > 256) return;\n"
+    "    int row = (int)gid;\n"
+    "    float scores[256];\n"
+    "    int a_off = row * K;\n"
+    "    for (int n = 0; n < N; ++n) scores[n] = 0.0f;\n"
+    "    for (int k = 0; k < K; ++k) {\n"
+    "        float a = A[a_off + k];\n"
+    "        int b_off = k * N;\n"
+    "        for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];\n"
+    "    }\n"
+    "    int o_off = row * N;\n"
+    "    for (int n = 0; n < N; ++n) {\n"
+    "        float v = scores[n];\n"
+    "        float t = 0.7978845608028654f * (v + 0.044715f * v * v * v);\n"
+    "        O[o_off + n] = 0.5f * v * (1.0f + tanh(t));\n"
+    "    }\n"
+    "}\n"
+)
+_APPLE_GPU_MATMUL_GELU_MSL_CACHE_KEY = _sha256_short(_APPLE_GPU_MATMUL_GELU_MSL_SOURCE)
+
+
+# Phase 8.4.7 — fused matmul -> rmsnorm kernel. RMSNorm: y = x / sqrt(
+# mean(x^2) + eps). The eps is passed as a separate runtime arg so the
+# IR-level constant doesn't have to bake in the rmsnorm vs rmsnorm_safe
+# default difference.
+_APPLE_GPU_MATMUL_RMSNORM_MSL_SOURCE = (
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "kernel void matmul_rmsnorm_f32(\n"
+    "    device const float* A   [[buffer(0)]],\n"
+    "    device const float* B   [[buffer(1)]],\n"
+    "    device float*       O   [[buffer(2)]],\n"
+    "    constant int&       M   [[buffer(3)]],\n"
+    "    constant int&       N   [[buffer(4)]],\n"
+    "    constant int&       K   [[buffer(5)]],\n"
+    "    constant float&     eps [[buffer(6)]],\n"
+    "    uint gid [[thread_position_in_grid]])\n"
+    "{\n"
+    "    if (gid >= (uint)M) return;\n"
+    "    if (N > 256) return;\n"
+    "    int row = (int)gid;\n"
+    "    float scores[256];\n"
+    "    int a_off = row * K;\n"
+    "    for (int n = 0; n < N; ++n) scores[n] = 0.0f;\n"
+    "    for (int k = 0; k < K; ++k) {\n"
+    "        float a = A[a_off + k];\n"
+    "        int b_off = k * N;\n"
+    "        for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];\n"
+    "    }\n"
+    "    float sumsq = 0.0f;\n"
+    "    for (int n = 0; n < N; ++n) sumsq += scores[n] * scores[n];\n"
+    "    float inv_rms = 1.0f / sqrt(sumsq / float(N) + eps);\n"
+    "    int o_off = row * N;\n"
+    "    for (int n = 0; n < N; ++n) O[o_off + n] = scores[n] * inv_rms;\n"
+    "}\n"
+)
+_APPLE_GPU_MATMUL_RMSNORM_MSL_CACHE_KEY = _sha256_short(_APPLE_GPU_MATMUL_RMSNORM_MSL_SOURCE)
 
 
 def _diagnostic_level(severity: str) -> DiagnosticLevel:
@@ -845,11 +927,13 @@ def lower_tile_to_target_ir(tile_module: TileIRModule, *, target_kind: str) -> T
 
 
 def _apple_gpu_module_fusion_kind(tile_module: TileIRModule) -> str | None:
-    """Phase 8.4.3 + 8.4.5 — classify the Tile IR module as one of the
-    recognized fusion chains:
-      - "matmul_softmax_matmul" (3 ops, full attention block)
-      - "matmul_softmax"        (2 ops)
-      - None                    (no fusion)
+    """Phase 8.4.3 + 8.4.5 + 8.4.7 — classify the Tile IR module as one of
+    the recognized fusion chains:
+      - "matmul_softmax_matmul"  (3 ops, full attention block)
+      - "matmul_softmax"         (2 ops)
+      - "matmul_gelu"            (2 ops, MLP block activation)
+      - "matmul_rmsnorm"         (2 ops, transformer normalization)
+      - None                     (no fusion)
 
     Distinct Graph IR ops carry distinct `ordinal` attrs through the
     Schedule -> Tile lowering, so counting unique ordinals tells us how
@@ -874,22 +958,32 @@ def _apple_gpu_module_fusion_kind(tile_module: TileIRModule) -> str | None:
     sources = {str(op.attrs.get("source", "")) for op in compute_ops}
     matmul_sources = {"tessera.matmul", "tessera.gemm"}
     softmax_sources = {"tessera.softmax", "tessera.softmax_safe"}
+    rmsnorm_sources = {"tessera.rmsnorm", "tessera.rmsnorm_safe"}
 
-    if not ((sources & matmul_sources) and (sources & softmax_sources)):
-        return None
-    if not (sources <= (matmul_sources | softmax_sources)):
+    has_matmul = bool(sources & matmul_sources)
+    if not has_matmul:
         return None
 
-    # Count distinct Graph IR op ordinals among matmul-source compute ops.
-    # 2 distinct matmul ordinals = 3-op chain (matmul -> softmax -> matmul).
-    matmul_ordinals = {
-        op.attrs.get("ordinal")
-        for op in compute_ops
-        if str(op.attrs.get("source", "")) in matmul_sources
-    }
-    if len(matmul_ordinals) >= 2:
-        return "matmul_softmax_matmul"
-    return "matmul_softmax"
+    # 3-op fusion: matmul -> softmax -> matmul
+    if (sources & softmax_sources) and (sources <= (matmul_sources | softmax_sources)):
+        matmul_ordinals = {
+            op.attrs.get("ordinal")
+            for op in compute_ops
+            if str(op.attrs.get("source", "")) in matmul_sources
+        }
+        if len(matmul_ordinals) >= 2:
+            return "matmul_softmax_matmul"
+        return "matmul_softmax"
+
+    # 2-op fusion: matmul -> gelu
+    if "tessera.gelu" in sources and (sources <= (matmul_sources | {"tessera.gelu"})):
+        return "matmul_gelu"
+
+    # 2-op fusion: matmul -> rmsnorm[_safe]
+    if (sources & rmsnorm_sources) and (sources <= (matmul_sources | rmsnorm_sources)):
+        return "matmul_rmsnorm"
+
+    return None
 
 
 def _lower_apple_gpu_fusion(tile_fn, fusion_kind: str) -> list[TargetOp]:
@@ -900,7 +994,12 @@ def _lower_apple_gpu_fusion(tile_fn, fusion_kind: str) -> list[TargetOp]:
     the chain shape: "matmul_softmax" or "matmul_softmax_matmul".
     """
 
-    if fusion_kind not in {"matmul_softmax", "matmul_softmax_matmul"}:
+    if fusion_kind not in {
+        "matmul_softmax",
+        "matmul_softmax_matmul",
+        "matmul_gelu",
+        "matmul_rmsnorm",
+    }:
         raise ValueError(f"unknown apple_gpu fusion kind: {fusion_kind!r}")
 
     flat_ops = list(_flatten_tile_ops(tile_fn.body))
@@ -985,15 +1084,35 @@ def _apple_gpu_module_is_mps_runtime(tile_module: TileIRModule) -> bool:
         (source,) = sources
         return source in single_op_envelope
 
-    # Fusion check: matmul -> softmax. Both sources must be in the envelope
-    # and the set itself must match a recognized chain shape.
-    if sources == {"tessera.matmul", "tessera.softmax"} or sources == {
-        "tessera.matmul",
-        "tessera.softmax_safe",
-    } or sources == {"tessera.gemm", "tessera.softmax"} or sources == {
-        "tessera.gemm",
-        "tessera.softmax_safe",
-    }:
+    # Fusion shape check (covers matmul -> softmax, Phase 8.4.5 3-op chain,
+    # and Phase 8.4.7 MLP patterns matmul -> gelu, matmul -> rmsnorm). Tile
+    # IR carries the original Graph IR `source` attr on each op; ordinals
+    # preserve Graph IR op order, so we can check both shape and order.
+    matmul_sources = {"tessera.matmul", "tessera.gemm"}
+    softmax_sources = {"tessera.softmax", "tessera.softmax_safe"}
+    rmsnorm_sources = {"tessera.rmsnorm", "tessera.rmsnorm_safe"}
+
+    if not (sources & matmul_sources):
+        return False
+
+    # The first compute op (lowest ordinal) must be a matmul — otherwise the
+    # chain is in the wrong order (e.g., softmax -> matmul) and no fusion
+    # applies.
+    sorted_ops = sorted(
+        compute_ops,
+        key=lambda op: int(op.attrs.get("ordinal", 0)),
+    )
+    if str(sorted_ops[0].attrs.get("source", "")) not in matmul_sources:
+        return False
+
+    # 2-op or 3-op softmax-bearing chain (Phase 8.4.3 / 8.4.5)
+    if (sources & softmax_sources) and (sources <= (matmul_sources | softmax_sources)):
+        return True
+    # 2-op matmul -> gelu (Phase 8.4.7)
+    if "tessera.gelu" in sources and (sources <= (matmul_sources | {"tessera.gelu"})):
+        return True
+    # 2-op matmul -> rmsnorm[_safe] (Phase 8.4.7)
+    if (sources & rmsnorm_sources) and (sources <= (matmul_sources | rmsnorm_sources)):
         return True
     return False
 

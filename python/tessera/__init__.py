@@ -828,15 +828,154 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             return self
 
     def kv_cache_append(cache, key, value):
+        # Phase B2: prefer the new opaque handle type when given; otherwise
+        # fall back to the legacy `ReferenceKVCache`. Both surfaces stay live.
+        from .cache import KVCacheHandle as _KVCacheHandle
+        if isinstance(cache, _KVCacheHandle):
+            return cache.append(key, value)
         if not isinstance(cache, ReferenceKVCache):
             cache = ReferenceKVCache()
         return cache.append(key, value)
 
     def kv_cache_prune(cache, max_entries=None, max_seq=None):
+        from .cache import KVCacheHandle as _KVCacheHandle
+        limit = max_entries if max_entries is not None else max_seq
+        if isinstance(cache, _KVCacheHandle):
+            if limit is None:
+                return cache
+            return cache.prune(int(limit))
         if not isinstance(cache, ReferenceKVCache):
             cache = ReferenceKVCache()
-        limit = max_entries if max_entries is not None else max_seq
         return cache.prune(limit)
+
+    def kv_cache_read(cache, start, end=None):
+        """Read a slice of the cache as (K, V).
+
+        For Phase B2 ``KVCacheHandle``, returns numpy views of the trailing
+        time axis. ``start`` is required; ``end`` defaults to ``start+1`` for
+        the common single-token decode path.
+
+        For the legacy ``ReferenceKVCache`` (a list-of-tensors), returns
+        stacked arrays across the requested entries.
+        """
+        from .cache import KVCacheHandle as _KVCacheHandle
+        if isinstance(cache, _KVCacheHandle):
+            return cache.read(int(start), None if end is None else int(end))
+        if isinstance(cache, ReferenceKVCache):
+            stop = end if end is not None else start + 1
+            ks = np.stack(cache.keys[start:stop], axis=0) if cache.keys else np.zeros(0)
+            vs = np.stack(cache.values[start:stop], axis=0) if cache.values else np.zeros(0)
+            return ks, vs
+        raise TypeError(f"kv_cache_read: unsupported cache type {type(cache).__name__}")
+
+    def depthwise_conv1d(x, w, *, kernel_size: int, padding: int = 0, causal: bool = False, state=None):
+        """Depthwise 1-D convolution (one filter per channel).
+
+        Inputs:
+          * `x` shape `(N, C, L)`
+          * `w` shape `(C, K)` — one filter per channel
+          * `state` shape `(N, C, K-1)` or None — prepended to `x` for the conv,
+            enabling chunked / streaming inference. Phase D1 of the
+            execution roadmap.
+
+        Output: `(N, C, L_out)` where `L_out = L_full - K + 1`,
+        `L_full = L + (state.shape[-1] if state else 0) + (K-1 if causal else 2*padding)`.
+
+        For streaming, the next-call state is
+        `np.concatenate([state, x], axis=-1)[..., -(K-1):]` if `K > 1`.
+        """
+        if hasattr(x, "_data"):
+            x = x._data
+        if hasattr(w, "_data"):
+            w = w._data
+        x = np.asarray(x)
+        w = np.asarray(w)
+        if x.ndim != 3:
+            raise ValueError(f"depthwise_conv1d expects (N, C, L) input; got shape {x.shape}")
+        N, C, L = x.shape
+        K = int(kernel_size)
+        if w.shape != (C, K):
+            raise ValueError(f"depthwise_conv1d weight shape {w.shape} does not match (C={C}, K={K})")
+
+        if state is not None:
+            if hasattr(state, "_data"):
+                state = state._data
+            state = np.asarray(state)
+            if state.shape != (N, C, K - 1):
+                raise ValueError(f"state shape {state.shape} does not match (N, C, K-1)=({N}, {C}, {K - 1})")
+            x_full = np.concatenate([state, x], axis=-1)
+        elif causal:
+            x_full = np.pad(x, ((0, 0), (0, 0), (K - 1, 0)))
+        else:
+            x_full = np.pad(x, ((0, 0), (0, 0), (int(padding), int(padding))))
+
+        L_out = x_full.shape[-1] - K + 1
+        if L_out <= 0:
+            raise ValueError(f"depthwise_conv1d: non-positive output length {L_out}")
+        out = np.zeros((N, C, L_out), dtype=x.dtype)
+        for k in range(K):
+            out += x_full[..., k:k + L_out] * w[None, :, k:k + 1]
+        return out
+
+    def online_softmax(x, *, axis: int = -1, state=None):
+        """Numerically stable softmax with optional streaming state.
+
+        Two call patterns:
+
+        1. **Single chunk (no state)** — equivalent to `tessera.ops.softmax`.
+        2. **Streaming** — pass `state=(running_max, running_sum)` carried over
+           from the previous chunk's :func:`tessera.ops.online_softmax_state`
+           call. Returns the per-chunk softmax of `x` against the cumulative
+           running stats.
+
+        State protocol is `(running_max, running_sum)` numpy tensors over
+        every dim except ``axis`` (which has size 1, kept dims). The narrow
+        protocol matches v1; a future revision may switch to an opaque handle.
+
+        Phase D2 of the execution roadmap.
+        """
+        if hasattr(x, "_data"):
+            x = x._data
+        x = np.asarray(x)
+        if state is None:
+            m = x.max(axis=axis, keepdims=True)
+            e = np.exp(x - m)
+            s = e.sum(axis=axis, keepdims=True)
+            return e / s
+        prev_m, prev_s = state
+        prev_m = np.asarray(prev_m)
+        prev_s = np.asarray(prev_s)
+        chunk_m = x.max(axis=axis, keepdims=True)
+        new_m = np.maximum(prev_m, chunk_m)
+        new_s = prev_s * np.exp(prev_m - new_m) + np.exp(x - new_m).sum(axis=axis, keepdims=True)
+        return np.exp(x - new_m) / new_s
+
+    def online_softmax_state(x, *, axis: int = -1, state=None):
+        """Compute the new ``(running_max, running_sum)`` state for streaming softmax.
+
+        Pure helper — non-differentiable on purpose. Pair with
+        :func:`tessera.ops.online_softmax` for chunked decoding:
+
+        ::
+
+            y_a = ops.online_softmax(x_a)
+            state = ops.online_softmax_state(x_a)
+            y_b = ops.online_softmax(x_b, state=state)
+            state = ops.online_softmax_state(x_b, state=state)
+            ...
+        """
+        if hasattr(x, "_data"):
+            x = x._data
+        x = np.asarray(x)
+        if state is None:
+            m = x.max(axis=axis, keepdims=True)
+            e = np.exp(x - m)
+            return (m, e.sum(axis=axis, keepdims=True))
+        prev_m, prev_s = np.asarray(state[0]), np.asarray(state[1])
+        chunk_m = x.max(axis=axis, keepdims=True)
+        new_m = np.maximum(prev_m, chunk_m)
+        new_s = prev_s * np.exp(prev_m - new_m) + np.exp(x - new_m).sum(axis=axis, keepdims=True)
+        return (new_m, new_s)
 
     references = {
         "gemm": gemm,
@@ -903,6 +1042,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "rope": rope,
         "kv_cache_append": kv_cache_append,
         "kv_cache_prune": kv_cache_prune,
+        "kv_cache_read": kv_cache_read,
+        "depthwise_conv1d": depthwise_conv1d,
+        "online_softmax": online_softmax,
+        "online_softmax_state": online_softmax_state,
     }
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
@@ -978,6 +1121,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         ReferenceKVCache=ReferenceKVCache,
         kv_cache_append=kv_cache_append,
         kv_cache_prune=kv_cache_prune,
+        kv_cache_read=kv_cache_read,
+        depthwise_conv1d=depthwise_conv1d,
+        online_softmax=online_softmax,
+        online_softmax_state=online_softmax_state,
     )
 
 
@@ -988,6 +1135,9 @@ from . import nn  # noqa: E402
 
 # autodiff installs tape-aware wrappers on `ops.<name>`; load after `ops` and `nn`.
 from . import autodiff  # noqa: E402
+
+# KV-cache handle abstraction (Phase B2 of execution_roadmap.md).
+from . import cache  # noqa: E402
 
 from .runtime import (  # noqa: E402
     RuntimeArtifact,
@@ -1140,4 +1290,6 @@ __all__ = [
     "collectives", "fault", "elastic", "checkpoint", "server", "arch",
     # Autodiff (Tier 2 v1)
     "autodiff",
+    # KV-cache handle (Phase B2)
+    "cache",
 ]

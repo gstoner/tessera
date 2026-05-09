@@ -46,6 +46,26 @@ def parameter_for_buffer_id(buffer_id: int):
     return _PARAM_REGISTRY.get(buffer_id)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Buffer
+#
+# Non-trainable named tensors that ride alongside Parameters in a Module.
+# Used for BatchNorm running stats, RoPE precomputed tables, attention
+# masks — anything that is part of the module's persistent state but does
+# not receive gradients.
+#
+# Differs from `Parameter` in three ways:
+#   * No `.grad` slot
+#   * No `requires_grad` flag
+#   * Has a `persistent: bool` flag that controls `state_dict` participation
+#
+# Not subclassed from `Parameter` deliberately — autodiff's
+# `_PARAM_REGISTRY` lookup yields `None` for buffers, so gradients flow
+# through them harmlessly.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+
 _NUMPY_DTYPE_TO_TESSERA = {
     "float16": "fp16",
     "float32": "fp32",
@@ -60,6 +80,19 @@ _NUMPY_DTYPE_TO_TESSERA = {
 
 def _normalize_dtype(dtype: str) -> str:
     return _NUMPY_DTYPE_TO_TESSERA.get(dtype, dtype)
+
+
+def _migrate_distributed_array(arr: DistributedArray, np_dtype: str, tessera_dtype: str) -> None:
+    """Cast a DistributedArray's underlying numpy buffer to ``np_dtype`` in place.
+
+    The DistributedArray handle is preserved, but the underlying numpy buffer
+    is replaced (numpy doesn't support in-place dtype changes). Caller is
+    responsible for re-registering the new buffer id in any external registry
+    (e.g., autodiff's `_PARAM_REGISTRY`).
+    """
+    new_buf = arr._data.astype(np_dtype, copy=True)
+    arr._data = new_buf
+    arr.dtype = tessera_dtype
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -187,6 +220,87 @@ class Parameter:
         )
 
 
+class Buffer:
+    """Non-trainable named tensor that participates in `state_dict`.
+
+    Wraps a `DistributedArray` (or a numpy array / shape spec). Distinct from
+    `Parameter` in that it has no gradient slot and is not yielded by
+    `Module.parameters()`. Useful for running statistics, precomputed tables,
+    masks, and any module state that should be persisted but never
+    differentiated.
+    """
+
+    __slots__ = ("_data", "persistent", "__weakref__")
+
+    def __init__(
+        self,
+        data: DistributedArray | np.ndarray | tuple[int, ...] | list[int] | None = None,
+        *,
+        shape: tuple[int, ...] | None = None,
+        dtype: str = "fp32",
+        persistent: bool = True,
+    ) -> None:
+        if isinstance(data, DistributedArray):
+            arr = data
+        elif isinstance(data, np.ndarray):
+            inferred = _normalize_dtype(str(data.dtype))
+            arr = DistributedArray.from_domain(
+                Rect(tuple(data.shape)),
+                dtype=inferred if dtype == "fp32" else dtype,
+                distribution=Replicated(),
+                fill="empty",
+            )
+            arr._data[...] = data
+        elif isinstance(data, (tuple, list)):
+            arr = DistributedArray.from_domain(
+                Rect(tuple(data)), dtype=dtype, distribution=Replicated(), fill="zeros"
+            )
+        elif data is None and shape is not None:
+            arr = DistributedArray.from_domain(
+                Rect(tuple(shape)), dtype=dtype, distribution=Replicated(), fill="zeros"
+            )
+        else:
+            raise TypeError(
+                "Buffer expects a DistributedArray, numpy array, shape tuple, "
+                "or shape= keyword"
+            )
+        object.__setattr__(self, "_data", arr)
+        object.__setattr__(self, "persistent", bool(persistent))
+
+    @property
+    def data(self) -> DistributedArray:
+        return self._data
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        return self._data.shape
+
+    @property
+    def dtype(self) -> str:
+        return self._data.dtype
+
+    @property
+    def ndim(self) -> int:
+        return self._data.ndim
+
+    @property
+    def numel(self) -> int:
+        return self._data.numel
+
+    def numpy(self) -> np.ndarray:
+        return self._data.numpy()
+
+    def __array__(self, dtype=None) -> np.ndarray:
+        arr = self._data._data
+        return arr.astype(dtype, copy=False) if dtype is not None else arr
+
+    def __repr__(self) -> str:
+        return (
+            f"Buffer(shape={self.shape}, dtype={self.dtype!r}, "
+            f"persistent={self.persistent})"
+        )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Module
 # ─────────────────────────────────────────────────────────────────────────────
@@ -213,6 +327,7 @@ class Module:
     def __init__(self) -> None:
         # Use object.__setattr__ to bypass our routing logic during init.
         object.__setattr__(self, "_parameters", OrderedDict())
+        object.__setattr__(self, "_buffers", OrderedDict())
         object.__setattr__(self, "_modules", OrderedDict())
         object.__setattr__(self, "training", True)
 
@@ -220,8 +335,9 @@ class Module:
 
     def __setattr__(self, name: str, value: Any) -> None:
         params = self.__dict__.get("_parameters")
+        buffers = self.__dict__.get("_buffers")
         modules = self.__dict__.get("_modules")
-        if params is None or modules is None:
+        if params is None or buffers is None or modules is None:
             raise RuntimeError(
                 f"Cannot assign attributes before {type(self).__name__}.__init__() "
                 "has been called. Did you forget super().__init__()?"
@@ -229,14 +345,22 @@ class Module:
 
         if isinstance(value, Parameter):
             self.__dict__.pop(name, None)
+            buffers.pop(name, None)
             modules.pop(name, None)
             params[name] = value
+        elif isinstance(value, Buffer):
+            self.__dict__.pop(name, None)
+            params.pop(name, None)
+            modules.pop(name, None)
+            buffers[name] = value
         elif isinstance(value, Module):
             self.__dict__.pop(name, None)
             params.pop(name, None)
+            buffers.pop(name, None)
             modules[name] = value
         else:
             params.pop(name, None)
+            buffers.pop(name, None)
             modules.pop(name, None)
             object.__setattr__(self, name, value)
 
@@ -245,6 +369,9 @@ class Module:
         params = self.__dict__.get("_parameters")
         if params is not None and name in params:
             return params[name]
+        buffers = self.__dict__.get("_buffers")
+        if buffers is not None and name in buffers:
+            return buffers[name]
         modules = self.__dict__.get("_modules")
         if modules is not None and name in modules:
             return modules[name]
@@ -255,10 +382,38 @@ class Module:
     def __delattr__(self, name: str) -> None:
         if name in self.__dict__.get("_parameters", {}):
             del self._parameters[name]
+        elif name in self.__dict__.get("_buffers", {}):
+            del self._buffers[name]
         elif name in self.__dict__.get("_modules", {}):
             del self._modules[name]
         else:
             object.__delattr__(self, name)
+
+    # Buffer registration (torch.nn parity)
+    def register_buffer(
+        self,
+        name: str,
+        value: "Buffer | DistributedArray | np.ndarray | tuple[int, ...] | None",
+        *,
+        persistent: bool = True,
+    ) -> None:
+        """Register `value` as a non-trainable named buffer.
+
+        Accepts a `Buffer` directly, or a tensor-like that will be wrapped.
+        `persistent=False` excludes the buffer from `state_dict()`.
+        """
+        if value is None:
+            raise TypeError("register_buffer requires a non-None value")
+        if isinstance(value, Buffer):
+            buf = value
+            # Honor explicit `persistent=` arg if it differs from the wrapper default
+            if buf.persistent != persistent:
+                object.__setattr__(buf, "persistent", bool(persistent))
+        else:
+            buf = Buffer(value, persistent=persistent)
+        # Route through __setattr__ so it lands in _buffers and is reachable
+        # via attribute access.
+        setattr(self, name, buf)
 
     # Parameter / module iteration ----------------------------------------------
 
@@ -279,6 +434,23 @@ class Module:
                 child_prefix = f"{prefix}.{mod_name}" if prefix else mod_name
                 yield from m.named_parameters(prefix=child_prefix, recurse=True)
 
+    def buffers(self, recurse: bool = True) -> Iterator["Buffer"]:
+        for b in self._buffers.values():
+            yield b
+        if recurse:
+            for m in self._modules.values():
+                yield from m.buffers(recurse=True)
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[tuple[str, "Buffer"]]:
+        for name, b in self._buffers.items():
+            yield (f"{prefix}.{name}" if prefix else name, b)
+        if recurse:
+            for mod_name, m in self._modules.items():
+                child_prefix = f"{prefix}.{mod_name}" if prefix else mod_name
+                yield from m.named_buffers(prefix=child_prefix, recurse=True)
+
     def children(self) -> Iterator["Module"]:
         yield from self._modules.values()
 
@@ -293,36 +465,59 @@ class Module:
     # State dict ----------------------------------------------------------------
 
     def state_dict(self) -> dict[str, np.ndarray]:
-        """Return a `{name: numpy-array}` dict capturing every parameter."""
-        return {name: p.numpy().copy() for name, p in self.named_parameters()}
+        """Return `{name: numpy-array}` for every parameter and persistent buffer.
 
-    def load_state_dict(self, sd: dict[str, np.ndarray | DistributedArray], strict: bool = True) -> None:
-        """Copy weights from a state dict into this module's parameters in-place.
+        Non-persistent buffers (registered with `persistent=False`) are
+        excluded — they are runtime-only state.
+        """
+        d: dict[str, np.ndarray] = {
+            name: p.numpy().copy() for name, p in self.named_parameters()
+        }
+        for name, b in self.named_buffers():
+            if b.persistent:
+                d[name] = b.numpy().copy()
+        return d
 
-        Parameter handles are preserved — the underlying numpy buffer is
-        overwritten, so any references to `param.data` remain valid.
+    def load_state_dict(
+        self, sd: dict[str, np.ndarray | DistributedArray], strict: bool = True
+    ) -> None:
+        """Copy weights from a state dict into parameters and persistent buffers in-place.
+
+        Parameter / Buffer handles are preserved — the underlying numpy buffer
+        is overwritten, so any references to `param.data` / `buffer.data`
+        remain valid.
         """
         param_dict = dict(self.named_parameters())
+        # Only persistent buffers are loadable from state_dict — non-persistent
+        # ones are excluded from `state_dict()` so they shouldn't appear in
+        # incoming `sd`.
+        buffer_dict = {
+            name: b for name, b in self.named_buffers() if b.persistent
+        }
+        loadable = {**param_dict, **buffer_dict}
+
         if strict:
-            extra_keys = set(sd) - set(param_dict)
-            missing_keys = set(param_dict) - set(sd)
+            extra_keys = set(sd) - set(loadable)
+            missing_keys = set(loadable) - set(sd)
             if extra_keys or missing_keys:
                 raise KeyError(
                     f"state_dict mismatch — missing: {sorted(missing_keys)}; "
                     f"unexpected: {sorted(extra_keys)}"
                 )
-        for name, p in param_dict.items():
+
+        for name, holder in loadable.items():
             if name not in sd:
                 continue
             value = sd[name]
             if isinstance(value, DistributedArray):
                 value = value.numpy()
             value = np.asarray(value)
-            if value.shape != p.shape:
+            if value.shape != holder.shape:
                 raise ValueError(
-                    f"shape mismatch loading {name}: expected {p.shape}, got {value.shape}"
+                    f"shape mismatch loading {name}: expected {holder.shape}, "
+                    f"got {value.shape}"
                 )
-            p._data._data[...] = value
+            holder._data._data[...] = value
 
     # Mode switching ------------------------------------------------------------
 
@@ -335,6 +530,53 @@ class Module:
 
     def eval(self) -> "Module":
         return self.train(False)
+
+    # Dtype migration -----------------------------------------------------------
+
+    def to(self, dtype: str) -> "Module":
+        """Migrate every Parameter and persistent Buffer to ``dtype`` in place.
+
+        Returns ``self`` for chaining (``model.to("fp16").eval()``).
+
+        Non-persistent buffers are left as-is (they're runtime scratch state
+        that callers manage explicitly).
+
+        Device migration (``to("cuda")``) is not yet supported — see Phase H of
+        ``docs/audit/execution_roadmap.md``. ``dtype`` must be a Tessera dtype
+        string (``"fp16"`` / ``"bf16"`` / ``"fp32"`` / ``"fp64"``); numpy
+        dtype strings like ``"float32"`` are accepted and normalized.
+        """
+        normalized = _normalize_dtype(dtype)
+        if normalized not in {"fp16", "bf16", "fp32", "fp64"}:
+            raise ValueError(
+                f"Unknown dtype {dtype!r}. Valid: fp16, bf16, fp32, fp64. "
+                f"Device migration (to('cuda')/to('mps')) is not implemented yet."
+            )
+
+        np_dtype = _NUMPY_DTYPE_TO_TESSERA  # use the inverse mapping
+        # Map Tessera dtype → numpy dtype string for in-place cast
+        tessera_to_np = {
+            "fp16": "float16",
+            "bf16": "float32",  # bf16 stored as fp32 in the numpy reference path
+            "fp32": "float32",
+            "fp64": "float64",
+        }
+        target_np = tessera_to_np[normalized]
+
+        for p in self.parameters():
+            _migrate_distributed_array(p._data, target_np, normalized)
+            # The numpy buffer identity changed — re-register so autodiff can
+            # still trace gradients back to this Parameter through the new buffer.
+            _register_parameter(p)
+            # Drop any stale grad — its dtype no longer matches the parameter's
+            if p.grad is not None:
+                p.zero_grad()
+
+        for b in self.buffers():
+            if b.persistent:
+                _migrate_distributed_array(b._data, target_np, normalized)
+
+        return self
 
     # Gradient lifecycle --------------------------------------------------------
 
@@ -356,11 +598,16 @@ class Module:
 
     def __repr__(self) -> str:
         cls = type(self).__name__
-        if not self._parameters and not self._modules:
+        if not self._parameters and not self._buffers and not self._modules:
             return f"{cls}()"
         body = []
         for name, p in self._parameters.items():
             body.append(f"  {name}: Parameter(shape={p.shape}, dtype={p.dtype!r})")
+        for name, b in self._buffers.items():
+            body.append(
+                f"  {name}: Buffer(shape={b.shape}, dtype={b.dtype!r}, "
+                f"persistent={b.persistent})"
+            )
         for name, m in self._modules.items():
             body.append(f"  {name}: {m!r}".replace("\n", "\n  "))
         return cls + "(\n" + "\n".join(body) + "\n)"
@@ -480,6 +727,7 @@ class ModuleDict(Module):
 
 __all__ = [
     "Parameter",
+    "Buffer",
     "Module",
     "Sequential",
     "ModuleList",

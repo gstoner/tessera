@@ -22,6 +22,7 @@ from typing import Any
 import numpy as np
 
 from .. import ops
+from ..cache import KVCacheHandle
 from . import functional as F
 from .module import Module, Parameter
 
@@ -102,6 +103,119 @@ class RMSNorm(Module):
 
     def forward(self, x: Any) -> np.ndarray:
         return F.rms_norm(_as_array(x), weight=_as_array(self.weight), eps=self.eps)
+
+
+class BatchNorm1d(Module):
+    """1-D batch normalization with running stats.
+
+    Accepts inputs of shape ``(N, C)`` or ``(N, C, L)``. Statistics are
+    computed over the batch (and spatial axis when present); the channel
+    axis ``C`` is preserved.
+
+    Buffers (Phase B1):
+      * ``running_mean`` — shape ``(C,)``, init zeros
+      * ``running_var`` — shape ``(C,)``, init ones
+      * ``num_batches_tracked`` — scalar int64, increments on every train step
+
+    Train mode uses batch stats and updates running stats via
+    ``new = (1 - momentum) * old + momentum * batch``. Eval mode uses
+    running stats and never updates them.
+    """
+
+    def __init__(
+        self,
+        num_features: int,
+        eps: float = 1e-5,
+        momentum: float = 0.1,
+        affine: bool = True,
+        track_running_stats: bool = True,
+        dtype: str = "fp32",
+    ) -> None:
+        super().__init__()
+        self.num_features = int(num_features)
+        self.eps = float(eps)
+        self.momentum = float(momentum)
+        self.affine = bool(affine)
+        self.track_running_stats = bool(track_running_stats)
+
+        if affine:
+            self.weight = Parameter(shape=(self.num_features,), dtype=dtype)
+            self.weight._data._data[...] = 1.0
+            self.bias = Parameter(shape=(self.num_features,), dtype=dtype)
+            self.bias._data._data[...] = 0.0
+        else:
+            object.__setattr__(self, "weight", None)
+            object.__setattr__(self, "bias", None)
+
+        if track_running_stats:
+            self.register_buffer("running_mean", np.zeros(self.num_features, dtype=np.float32))
+            self.register_buffer("running_var", np.ones(self.num_features, dtype=np.float32))
+            # Stored as a 1-element vector; the Rect domain rejects empty shapes.
+            self.register_buffer("num_batches_tracked", np.zeros(1, dtype=np.int64))
+        # else: buffers absent; both modes use batch stats
+
+    def forward(self, x: Any) -> np.ndarray:
+        x_arr = _as_array(x)
+        if x_arr.ndim not in (2, 3):
+            raise ValueError(
+                f"BatchNorm1d expects (N, C) or (N, C, L) input; got shape {x_arr.shape}"
+            )
+        if x_arr.shape[1] != self.num_features:
+            raise ValueError(
+                f"channel dim {x_arr.shape[1]} != num_features {self.num_features}"
+            )
+
+        # Reduce over batch (axis 0) and spatial (axis 2 if present)
+        reduce_axes: tuple[int, ...] = (0,) if x_arr.ndim == 2 else (0, 2)
+
+        if self.training:
+            batch_mean = x_arr.mean(axis=reduce_axes)
+            # Use the population variance (matches torch's default for BN forward;
+            # the unbiased estimator only feeds the running buffer).
+            batch_var = x_arr.var(axis=reduce_axes)
+            mean, var = batch_mean, batch_var
+
+            if self.track_running_stats:
+                # Update running stats — torch uses the unbiased variance for the
+                # buffer when N > 1.
+                n = x_arr.size // self.num_features
+                if n > 1:
+                    unbiased_var = batch_var * n / (n - 1)
+                else:
+                    unbiased_var = batch_var
+                rm_buf = self.running_mean._data._data
+                rv_buf = self.running_var._data._data
+                rm_buf[...] = (1.0 - self.momentum) * rm_buf + self.momentum * batch_mean
+                rv_buf[...] = (1.0 - self.momentum) * rv_buf + self.momentum * unbiased_var
+                nbt = self.num_batches_tracked._data._data
+                nbt[...] = nbt + 1
+        else:
+            if self.track_running_stats:
+                mean = self.running_mean._data._data
+                var = self.running_var._data._data
+            else:
+                mean = x_arr.mean(axis=reduce_axes)
+                var = x_arr.var(axis=reduce_axes)
+
+        # Broadcast mean/var across batch (and spatial) axes by reshaping to (1, C) or (1, C, 1)
+        if x_arr.ndim == 3:
+            mean_b = mean.reshape(1, self.num_features, 1)
+            var_b = var.reshape(1, self.num_features, 1)
+        else:
+            mean_b = mean.reshape(1, self.num_features)
+            var_b = var.reshape(1, self.num_features)
+
+        normalized = (x_arr - mean_b) / np.sqrt(var_b + self.eps)
+
+        if self.affine:
+            if x_arr.ndim == 3:
+                w_b = self.weight._data._data.reshape(1, self.num_features, 1)
+                b_b = self.bias._data._data.reshape(1, self.num_features, 1)
+            else:
+                w_b = self.weight._data._data.reshape(1, self.num_features)
+                b_b = self.bias._data._data.reshape(1, self.num_features)
+            return normalized * w_b + b_b
+        return normalized
 
 
 class LayerNorm(Module):
@@ -489,6 +603,187 @@ class CrossEntropyLoss(Module):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Dynamic depthwise 1-D conv (Phase D4 — depends on D1 + B1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class DynamicDepthwiseConv1d(Module):
+    """Streaming-state-aware depthwise 1-D convolution.
+
+    Wraps :func:`tessera.ops.depthwise_conv1d`. Owns the per-channel kernel
+    weights as a `Parameter` and (when constructed with ``streaming=True``)
+    a non-persistent `Buffer` that holds the trailing ``kernel_size-1``
+    samples between forward calls — enabling chunked decode.
+
+    Buffers are non-persistent so that ``state_dict`` round-trip keeps the
+    *weights* but not the runtime carry-state, which is the right default
+    for save-and-resume.
+
+    Args:
+        channels: number of input/output channels (depthwise → equal)
+        kernel_size: filter length
+        causal: pad on the left only (right padding = 0)
+        streaming: track + reuse the trailing samples buffer across calls
+        dtype: weight + state dtype
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        kernel_size: int,
+        *,
+        causal: bool = True,
+        streaming: bool = False,
+        dtype: str = "fp32",
+    ) -> None:
+        super().__init__()
+        if kernel_size <= 0:
+            raise ValueError("kernel_size must be positive")
+        self.channels = int(channels)
+        self.kernel_size = int(kernel_size)
+        self.causal = bool(causal)
+        self.streaming = bool(streaming)
+
+        self.weight = Parameter(shape=(self.channels, self.kernel_size), dtype=dtype)
+        _kaiming_uniform_(self.weight._data._data, fan_in=self.kernel_size)
+
+        if self.streaming and self.kernel_size > 1:
+            # State is per-batch — start with batch=1 zeros; resized lazily
+            # on first call when we know N. Persistent=False because state
+            # is runtime carry, not a learned weight.
+            self.register_buffer(
+                "_state",
+                np.zeros((1, self.channels, self.kernel_size - 1), dtype=np.float32),
+                persistent=False,
+            )
+        else:
+            object.__setattr__(self, "_state", None)
+
+    def reset_state(self) -> None:
+        """Drop the streaming state — start fresh on the next call."""
+        if self._state is not None:
+            self._state._data._data[...] = 0.0
+
+    def forward(self, x: Any) -> np.ndarray:
+        x_arr = _as_array(x)
+        if x_arr.ndim != 3:
+            raise ValueError(
+                f"DynamicDepthwiseConv1d expects (N, C, L) input; got shape {x_arr.shape}"
+            )
+
+        if self.streaming and self.kernel_size > 1:
+            N = x_arr.shape[0]
+            cur_state = self._state._data._data
+            # Resize state buffer if batch size changed (or first call from default N=1)
+            if cur_state.shape[0] != N:
+                new_state = np.zeros(
+                    (N, self.channels, self.kernel_size - 1), dtype=cur_state.dtype
+                )
+                # Re-register so the buffer-id registry stays consistent
+                self.register_buffer("_state", new_state, persistent=False)
+                cur_state = self._state._data._data
+
+            y = ops.depthwise_conv1d(
+                x_arr,
+                _as_array(self.weight),
+                kernel_size=self.kernel_size,
+                state=cur_state,
+            )
+            # Update state for the next call: last K-1 samples of concat(state, x)
+            if x_arr.shape[-1] >= self.kernel_size - 1:
+                new_state_data = x_arr[..., -(self.kernel_size - 1):]
+            else:
+                new_state_data = np.concatenate([cur_state, x_arr], axis=-1)[
+                    ..., -(self.kernel_size - 1):
+                ]
+            cur_state[...] = new_state_data
+            return y
+
+        # Non-streaming path — causal-pad or zero-pad and convolve directly.
+        return ops.depthwise_conv1d(
+            x_arr,
+            _as_array(self.weight),
+            kernel_size=self.kernel_size,
+            causal=self.causal,
+            padding=0 if self.causal else (self.kernel_size - 1) // 2,
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# KV cache (Module wrapper around KVCacheHandle — Phase C2)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class KVCache(Module):
+    """Stateful Module form of :class:`tessera.cache.KVCacheHandle`.
+
+    Useful inside transformer decoder blocks: each forward call appends the
+    current step's K/V to the cache and returns the full cumulative
+    ``(K, V)``. The handle is stored as a regular attribute (not a Parameter
+    or Buffer — its semantics are different and it isn't naturally
+    state-dictable).
+
+    To save/restore a KV cache across runs, capture
+    ``handle.keys[:current_seq]`` / ``handle.values[:current_seq]`` and
+    rehydrate by appending into a new handle.
+    """
+
+    def __init__(
+        self,
+        num_heads: int,
+        head_dim: int,
+        max_seq: int,
+        dtype: str = "fp32",
+        page_size: int = 128,
+    ) -> None:
+        super().__init__()
+        self.num_heads = int(num_heads)
+        self.head_dim = int(head_dim)
+        self.max_seq = int(max_seq)
+        self.dtype_str = str(dtype)
+        # Stash as plain attribute — not a Parameter (no gradient), not a
+        # Buffer (state_dict semantics don't fit a paged handle).
+        object.__setattr__(
+            self,
+            "handle",
+            KVCacheHandle(
+                num_heads=num_heads,
+                head_dim=head_dim,
+                max_seq=max_seq,
+                dtype=dtype,
+                page_size=page_size,
+            ),
+        )
+
+    def reset(self) -> None:
+        """Drop everything; equivalent to constructing a fresh handle."""
+        object.__setattr__(
+            self,
+            "handle",
+            KVCacheHandle(
+                num_heads=self.num_heads,
+                head_dim=self.head_dim,
+                max_seq=self.max_seq,
+                dtype=self.dtype_str,
+                page_size=self.handle.page_size,
+            ),
+        )
+
+    @property
+    def current_seq(self) -> int:
+        return self.handle.current_seq
+
+    def forward(self, k: Any, v: Any) -> tuple[np.ndarray, np.ndarray]:
+        """Append ``(k, v)`` to the cache and return the full ``(K, V)`` so far.
+
+        Inputs follow ``KVCacheHandle.append`` shape rules: either
+        ``(seq, num_heads, head_dim)`` or packed ``(seq, num_heads*head_dim)``.
+        """
+        self.handle.append(k, v)
+        return self.handle.read(0, self.handle.current_seq)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Conv2dNCHW shim — torch-port helper around ops.conv2d (NHWC)
 # ─────────────────────────────────────────────────────────────────────────────
 # Conv2d (NHWC) Module proper lands in Phase H1; this shim is sized to that
@@ -499,6 +794,7 @@ __all__ = [
     "Linear",
     "RMSNorm",
     "LayerNorm",
+    "BatchNorm1d",
     "Embedding",
     "Dropout",
     "MLP",
@@ -509,4 +805,6 @@ __all__ = [
     "CastedEmbedding",
     "SiLU", "Sigmoid", "GELU", "ReLU", "Tanh", "Identity",
     "CrossEntropyLoss",
+    "KVCache",
+    "DynamicDepthwiseConv1d",
 ]

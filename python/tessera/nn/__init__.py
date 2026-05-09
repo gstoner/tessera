@@ -34,7 +34,7 @@ from .functional import (
 )
 
 # Stateful API (Tier 1) -------------------------------------------------------
-from .module import Module, Parameter, Sequential, ModuleList, ModuleDict
+from .module import Module, Parameter, Buffer, Sequential, ModuleList, ModuleDict
 from .layers import (
     Linear,
     RMSNorm,
@@ -50,6 +50,12 @@ from .layers import (
     CastedEmbedding,
     SiLU, Sigmoid, GELU, ReLU, Tanh, Identity,
     CrossEntropyLoss,
+    # Phase C1 (depends on B1 buffer protocol)
+    BatchNorm1d,
+    # Phase C2 (depends on B2 KVCacheHandle)
+    KVCache,
+    # Phase D4 (depends on D1 + B1)
+    DynamicDepthwiseConv1d,
 )
 from . import utils
 
@@ -81,21 +87,8 @@ def _phantom(name: str, hint: str) -> type:
 
 
 # Stateful structured modules awaiting follow-on backlog items
-BatchNorm1d = _phantom(
-    "BatchNorm1d",
-    "BatchNorm running stats need a buffer protocol (Phase B1 of execution_roadmap.md)",
-)
 Conv2d = _phantom("Conv2d", "Conv2d Module is Phase H1; call tessera.ops.conv2d(x, w, ...) directly until then")
 LSTM = _phantom("LSTM", "RNN cells are deferred (Phase H2 — out of scope this cycle)")
-DynamicDepthwiseConv1d = _phantom(
-    "DynamicDepthwiseConv1d",
-    "depthwise_conv1d streaming kernels are Phase D of execution_roadmap.md",
-)
-KVCache = _phantom(
-    "KVCache",
-    "KVCacheHandle abstraction is Phase B2 + E of execution_roadmap.md; "
-    "use tessera.ops.kv_cache_append / kv_cache_prune for now",
-)
 
 
 __all__ = [
@@ -103,7 +96,7 @@ __all__ = [
     "linear", "rms_norm", "swiglu", "multi_head_attention",
     "flash_attention", "functional",
     # Stateful API (Tier 1)
-    "Module", "Parameter", "Sequential", "ModuleList", "ModuleDict",
+    "Module", "Parameter", "Buffer", "Sequential", "ModuleList", "ModuleDict",
     "Linear", "RMSNorm", "LayerNorm", "Embedding", "Dropout", "MLP",
     "MultiHeadAttention",
     # Phase A4 additions (real implementations, not phantoms)
@@ -112,6 +105,10 @@ __all__ = [
     "SiLU", "Sigmoid", "GELU", "ReLU", "Tanh", "Identity",
     "CrossEntropyLoss",
     "utils",
+    # Phase C (real implementations using B1/B2 protocols)
+    "BatchNorm1d", "KVCache",
+    # Phase D4 (real, depends on D1 streaming kernels + B1 buffers)
+    "DynamicDepthwiseConv1d",
     # Remaining phantoms (deferred to later phases)
-    "BatchNorm1d", "Conv2d", "LSTM", "DynamicDepthwiseConv1d", "KVCache",
+    "Conv2d", "LSTM",
 ]

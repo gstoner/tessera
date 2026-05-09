@@ -440,12 +440,257 @@ class TestRemainingPhantoms:
 
     @pytest.mark.parametrize(
         "name",
-        ["BatchNorm1d", "Conv2d", "LSTM", "DynamicDepthwiseConv1d", "KVCache"],
+        ["Conv2d", "LSTM"],
     )
     def test_phantom_raises_with_roadmap_pointer(self, name):
         cls = getattr(ts.nn, name)
-        with pytest.raises(NotImplementedError, match=r"(roadmap|backlog|deferred)"):
+        with pytest.raises(NotImplementedError, match=r"(roadmap|backlog|deferred|H\d)"):
             cls()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase B1 — Buffer protocol
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestBuffer:
+    def test_construct_from_numpy(self):
+        b = ts.nn.Buffer(np.arange(6, dtype=np.float32).reshape(2, 3))
+        assert b.shape == (2, 3)
+        assert b.persistent is True
+        assert np.allclose(b.numpy(), np.arange(6).reshape(2, 3))
+
+    def test_construct_non_persistent(self):
+        b = ts.nn.Buffer(shape=(4,), persistent=False)
+        assert b.persistent is False
+
+    def test_construct_from_shape(self):
+        b = ts.nn.Buffer(shape=(2, 3), dtype="fp32")
+        assert b.shape == (2, 3)
+        assert (b.numpy() == 0).all()
+
+    def test_construct_from_distributed_array(self):
+        d = ts.array.from_domain(
+            ts.domain.Rect((4,)), dtype="fp32", distribution=ts.dist.Replicated()
+        )
+        b = ts.nn.Buffer(d)
+        assert b.data is d
+
+    def test_no_grad_attribute(self):
+        b = ts.nn.Buffer(shape=(4,))
+        # Buffers must not expose the gradient surface
+        assert not hasattr(b, "grad")
+        assert not hasattr(b, "requires_grad")
+
+    def test_array_protocol(self):
+        b = ts.nn.Buffer(np.arange(4, dtype=np.float32))
+        assert np.allclose(np.asarray(b), b.numpy())
+
+    def test_invalid_construction_raises(self):
+        with pytest.raises(TypeError):
+            ts.nn.Buffer("not a tensor")
+        with pytest.raises(TypeError):
+            ts.nn.Buffer(None)
+
+
+class TestModuleBufferIntegration:
+    def test_register_buffer_routes_to_buffers_dict(self):
+        m = ts.nn.Module()
+        m.register_buffer("running_mean", np.zeros(4, dtype=np.float32))
+        assert "running_mean" in m._buffers
+        assert "running_mean" not in m._parameters
+        assert "running_mean" not in m._modules
+        assert isinstance(m.running_mean, ts.nn.Buffer)
+
+    def test_register_buffer_accepts_existing_buffer_instance(self):
+        m = ts.nn.Module()
+        b = ts.nn.Buffer(shape=(3,))
+        m.register_buffer("b", b)
+        assert m.b is b
+
+    def test_register_buffer_persistent_override(self):
+        m = ts.nn.Module()
+        b = ts.nn.Buffer(shape=(3,), persistent=True)
+        m.register_buffer("b", b, persistent=False)
+        assert m.b.persistent is False  # explicit kwarg wins
+
+    def test_register_buffer_rejects_none(self):
+        m = ts.nn.Module()
+        with pytest.raises(TypeError):
+            m.register_buffer("nope", None)
+
+    def test_setattr_buffer_routes_correctly(self):
+        m = ts.nn.Module()
+        m.b = ts.nn.Buffer(shape=(2,))
+        assert "b" in m._buffers
+        assert "b" not in m._parameters
+
+    def test_buffer_overwrite_with_parameter(self):
+        m = ts.nn.Module()
+        m.x = ts.nn.Buffer(shape=(2,))
+        m.x = ts.nn.Parameter(shape=(2,))
+        assert "x" not in m._buffers
+        assert "x" in m._parameters
+
+    def test_named_buffers_recurse(self):
+        m = ts.nn.Module()
+        m.register_buffer("running_mean", np.zeros(4, dtype=np.float32))
+
+        class Inner(ts.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.register_buffer("inner_buf", np.ones(2, dtype=np.float32))
+
+        m.inner = Inner()
+        names = sorted(n for n, _ in m.named_buffers())
+        assert names == ["inner.inner_buf", "running_mean"]
+
+    def test_parameters_does_not_yield_buffers(self):
+        m = ts.nn.Module()
+        m.w = ts.nn.Parameter(shape=(4,))
+        m.register_buffer("running_mean", np.zeros(4, dtype=np.float32))
+        params = list(m.parameters())
+        assert len(params) == 1
+        assert all(isinstance(p, ts.nn.Parameter) for p in params)
+
+    def test_state_dict_includes_persistent_buffers(self):
+        m = ts.nn.Module()
+        m.w = ts.nn.Parameter(shape=(4,))
+        m.register_buffer("running_mean", np.zeros(4, dtype=np.float32))
+        sd = m.state_dict()
+        assert set(sd.keys()) == {"w", "running_mean"}
+
+    def test_state_dict_excludes_non_persistent_buffers(self):
+        m = ts.nn.Module()
+        m.w = ts.nn.Parameter(shape=(4,))
+        m.register_buffer("transient", np.zeros(4, dtype=np.float32), persistent=False)
+        sd = m.state_dict()
+        assert "transient" not in sd
+
+    def test_load_state_dict_restores_buffers(self):
+        m1 = ts.nn.Module()
+        m1.register_buffer("rm", np.array([1.0, 2.0, 3.0], dtype=np.float32))
+        sd = m1.state_dict()
+
+        m2 = ts.nn.Module()
+        m2.register_buffer("rm", np.zeros(3, dtype=np.float32))
+        m2.load_state_dict(sd)
+        np.testing.assert_allclose(m2.rm.numpy(), [1.0, 2.0, 3.0])
+
+    def test_load_state_dict_strict_with_buffer_keys(self):
+        m = ts.nn.Module()
+        m.register_buffer("rm", np.zeros(3, dtype=np.float32))
+        # Strict mode rejects extra keys
+        with pytest.raises(KeyError, match="unexpected"):
+            m.load_state_dict({"rm": np.zeros(3), "extra": np.zeros(2)})
+
+    def test_zero_grad_does_not_touch_buffers(self):
+        m = ts.nn.Linear(4, 4)
+        m.register_buffer("rm", np.ones(4, dtype=np.float32))
+        for p in m.parameters():
+            p.grad = np.ones(p.shape, dtype=np.float32)
+        m.zero_grad()
+        # All grads cleared, buffer untouched
+        assert all(p.grad is None for p in m.parameters())
+        np.testing.assert_allclose(m.rm.numpy(), 1.0)
+
+    def test_repr_shows_buffers(self):
+        m = ts.nn.Module()
+        m.register_buffer("rm", np.zeros(4, dtype=np.float32))
+        s = repr(m)
+        assert "Buffer" in s
+        assert "persistent=True" in s
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase B3 — Module.to(dtype) dtype migration
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestModuleToDtype:
+    def test_migrate_parameters(self):
+        m = ts.nn.Linear(4, 8)
+        assert m.weight.dtype == "fp32"
+        m.to("fp16")
+        assert m.weight.dtype == "fp16"
+        assert m.weight.numpy().dtype == np.float16
+        assert m.bias.dtype == "fp16"
+
+    def test_migrate_persistent_buffers(self):
+        m = ts.nn.Module()
+        m.register_buffer("mask", np.ones((4, 4), dtype=np.float32))
+        m.to("fp16")
+        assert m.mask.dtype == "fp16"
+        assert m.mask.numpy().dtype == np.float16
+
+    def test_skips_non_persistent_buffers(self):
+        m = ts.nn.Module()
+        m.register_buffer("temp", np.ones(4, dtype=np.float32), persistent=False)
+        m.to("fp16")
+        # Non-persistent buffers are runtime scratch — leave them alone
+        assert m.temp.dtype == "fp32"
+        assert m.temp.numpy().dtype == np.float32
+
+    def test_round_trip(self):
+        m = ts.nn.Linear(4, 8)
+        original = m.weight.numpy().copy()
+        m.to("fp16").to("fp32")
+        assert m.weight.dtype == "fp32"
+        # Values within fp16 quantization noise of the original
+        np.testing.assert_allclose(m.weight.numpy(), original, atol=1e-3)
+
+    def test_returns_self_for_chaining(self):
+        m = ts.nn.Linear(4, 8)
+        result = m.to("fp16")
+        assert result is m
+        # Can chain further calls
+        result = m.to("fp32").eval()
+        assert result is m
+        assert m.training is False
+
+    def test_recurses_into_children(self):
+        m = ts.nn.Sequential(ts.nn.Linear(4, 8), ts.nn.RMSNorm(8))
+        m.to("fp16")
+        for p in m.parameters():
+            assert p.dtype == "fp16"
+
+    def test_numpy_dtype_alias_accepted(self):
+        m = ts.nn.Linear(4, 4)
+        m.to("float16")
+        assert m.weight.dtype == "fp16"
+        m.to("float32")
+        assert m.weight.dtype == "fp32"
+
+    def test_invalid_dtype_rejected(self):
+        m = ts.nn.Linear(4, 4)
+        with pytest.raises(ValueError, match="Unknown dtype"):
+            m.to("bogus")
+
+    def test_device_migration_not_supported(self):
+        m = ts.nn.Linear(4, 4)
+        with pytest.raises(ValueError, match="Device migration"):
+            m.to("cuda")
+
+    def test_drops_stale_grads(self):
+        m = ts.nn.Linear(4, 4)
+        for p in m.parameters():
+            p.grad = np.ones(p.shape, dtype=np.float32)
+        m.to("fp16")
+        # Stale fp32 grads should be cleared since they don't match the new dtype
+        assert all(p.grad is None for p in m.parameters())
+
+    def test_autodiff_still_works_after_migration(self):
+        # The autodiff buffer-id registry must be updated by to(dtype) so
+        # gradients still find their parameters after the buffer is replaced.
+        m = ts.nn.Linear(4, 4)
+        m.to("fp32")  # No-op migration but still re-registers buffers
+
+        x = np.random.randn(2, 4).astype(np.float32)
+        with ts.autodiff.tape() as t:
+            y = m(x)
+            loss = ts.ops.reduce(ts.ops.mul(y, y), op="sum")
+            t.backward(loss)
+        assert all(p.grad is not None for p in m.parameters())
 
 
 # ─────────────────────────────────────────────────────────────────────────────

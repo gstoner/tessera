@@ -334,12 +334,36 @@ attributes are auto-registered via `__setattr__` (torch.nn pattern).
 |--------|---------|
 | `.parameters(recurse=True)` | iterate over `Parameter`s |
 | `.named_parameters(prefix="", recurse=True)` | iterate `(name, Parameter)` pairs |
+| `.buffers(recurse=True)` | iterate over `Buffer`s (Phase B1) |
+| `.named_buffers(prefix="", recurse=True)` | iterate `(name, Buffer)` pairs |
+| `.register_buffer(name, value, persistent=True)` | register a non-trainable named tensor (Phase B1) |
 | `.children()` / `.named_children()` | direct sub-modules only |
 | `.modules()` | self + all descendants (DFS) |
-| `.state_dict()` | `{name: numpy.ndarray}` snapshot |
-| `.load_state_dict(sd, strict=True)` | in-place copy back into existing `Parameter` handles |
+| `.state_dict()` | `{name: numpy.ndarray}` snapshot — includes Parameters and persistent Buffers |
+| `.load_state_dict(sd, strict=True)` | in-place copy back into existing `Parameter` / `Buffer` handles |
 | `.train(mode=True)` / `.eval()` | toggle `self.training` recursively |
-| `.zero_grad()` | drop `Parameter.grad` for every parameter |
+| `.zero_grad()` | drop `Parameter.grad` for every parameter (does not touch buffers) |
+| `.to(dtype)` | migrate every `Parameter` and persistent `Buffer` to a new dtype in place; returns `self` (Phase B3) |
+
+### `Buffer` (Phase B1)
+
+Non-trainable named tensors that ride alongside `Parameter`s in a `Module`.
+Used for BatchNorm running stats, RoPE precomputed tables, attention masks
+— anything that's part of the module's persistent state but doesn't receive
+gradients.
+
+| Aspect | `Buffer` | `Parameter` |
+|--------|----------|-------------|
+| `.grad` slot | ❌ | ✅ |
+| `requires_grad` flag | ❌ | ✅ |
+| Yielded by `parameters()` | ❌ | ✅ |
+| Yielded by `buffers()` | ✅ | ❌ |
+| Persisted to `state_dict()` | ✅ if `persistent=True` (default) | always |
+
+```python
+m.register_buffer("running_mean", np.zeros(64, dtype=np.float32))
+m.register_buffer("scratch", np.empty(8), persistent=False)  # not in state_dict
+```
 
 ```python
 import tessera
@@ -376,9 +400,17 @@ block2.load_state_dict(sd)                 # restore
 | `CrossEntropyLoss(reduction='mean')` | `mean/sum/none` reductions; composes through `ops.softmax` + `ops.reduce` |
 | `nn.utils.clip_grad_norm_(params, max_norm, norm_type=2.0)` | In-place `.grad` scaling; supports L1/L2/inf norms |
 
+### Phase C + D additions (2026-05-09)
+
+| Class | Notes |
+|-------|-------|
+| `BatchNorm1d` (C1) | Running-stat buffers (`running_mean`/`running_var`/`num_batches_tracked`); train/eval modes |
+| `KVCache` (C2) | Module wrapper around `tessera.cache.KVCacheHandle`; `forward(k, v)` returns full `(K, V)` so far |
+| `DynamicDepthwiseConv1d` (D4) | Owns kernel `Parameter` + non-persistent `_state` `Buffer` (when `streaming=True`); both single-shot and chunked inference |
+
 **Phantom (still raises `NotImplementedError` with roadmap pointer):**
-`BatchNorm1d`, `Conv2d`, `LSTM`, `DynamicDepthwiseConv1d`, `KVCache`. Each
-links to its phase in [`docs/audit/execution_roadmap.md`](audit/execution_roadmap.md).
+`Conv2d` (Phase H1), `LSTM` (Phase H2 — deferred). Each links to its phase
+in [`docs/audit/execution_roadmap.md`](audit/execution_roadmap.md).
 
 ---
 
@@ -411,8 +443,12 @@ lowerings; runtime kernels can be registered separately.
 | `tessera.ops.dct(x, type=2, axis=-1)` | `(array) → array` | NumPy FFT-derived DCT reference |
 | `tessera.ops.spectral_conv(x, w)` | `(array,array) → array` | NumPy FFT convolution reference |
 | `tessera.ops.rmsnorm_safe(x, eps=1e-6)` | `(array) → array` | NumPy RMSNorm reference |
-| `tessera.ops.kv_cache_append(cache, key, value)` | cache helper | Reference KV-cache helper |
+| `tessera.ops.kv_cache_append(cache, key, value)` | cache helper | Reference KV-cache helper; dispatches handle vs. legacy |
 | `tessera.ops.kv_cache_prune(cache, max_entries=None, max_seq=None)` | cache helper | Reference KV-cache helper |
+| `tessera.ops.kv_cache_read(cache, start, end=None)` | cache helper | Read slice as `(K, V)` (Phase B2) |
+| `tessera.ops.depthwise_conv1d(x, w, *, kernel_size, padding=0, causal=False, state=None)` | streaming conv | Phase D1 — depthwise 1-D conv with optional streaming state |
+| `tessera.ops.online_softmax(x, *, axis=-1, state=None)` | streaming softmax | Phase D2 — single-chunk equiv. to `softmax`; pass `state` for streaming chunks |
+| `tessera.ops.online_softmax_state(x, *, axis=-1, state=None)` | helper | Returns `(running_max, running_sum)` for the next streaming `online_softmax` call (non-differentiable) |
 
 Registry helpers:
 
@@ -514,6 +550,39 @@ existing Apple GPU MLP-block fusions (`matmul→gelu`, `matmul→rmsnorm`):
 Tracking: file under Phase 8.4.x follow-up (Apple GPU) and Phase 3 GPU
 backend execution work (NVIDIA / ROCm) — both gated on Architecture Decision
 #19 hardware-free Target IR layering.
+
+---
+
+## `tessera.cache` — KV-cache handle (Phase B2)
+
+Opaque handle for paged KV-cache state. Replaces the legacy
+`ReferenceKVCache` (which stays live for backward compat) with a
+fixed-allocation, max-seq-bounded paged buffer that future backends will
+lower as a first-class state value.
+
+| Symbol | Purpose |
+|--------|---------|
+| `tessera.cache.KVCacheHandle(num_heads, head_dim, max_seq, dtype="fp32", page_size=128)` | Construct a fresh cache handle |
+| `cache.append(k, v)` / `tessera.ops.kv_cache_append(cache, k, v)` | Append a chunk of `(seq, num_heads, head_dim)` (or packed `(seq, num_heads*head_dim)`) tokens |
+| `cache.read(start, end=None)` / `tessera.ops.kv_cache_read(cache, start, end=None)` | Slice K/V views from the cache (single-token if `end` omitted) |
+| `cache.prune(max_entries)` / `tessera.ops.kv_cache_prune(cache, max_entries=N)` | Keep only the trailing `max_entries` tokens (sliding window) |
+| `.current_seq` / `.shape` / `.is_full` | Read-only metadata |
+
+```python
+import numpy as np
+import tessera as ts
+
+cache = ts.cache.KVCacheHandle(num_heads=8, head_dim=64, max_seq=2048)
+k = np.random.randn(1, 8, 64).astype(np.float32)
+v = np.random.randn(1, 8, 64).astype(np.float32)
+cache = ts.ops.kv_cache_append(cache, k, v)
+k_now, v_now = ts.ops.kv_cache_read(cache, 0, cache.current_seq)
+```
+
+`page_size` is recorded but not yet used to physically page — Phase E adds
+real paging + block quantization. User code written today doesn't need to
+change when that lands. See [`docs/audit/kv_cache_coverage_matrix.md`](audit/kv_cache_coverage_matrix.md)
+for per-backend lowering status.
 
 ---
 

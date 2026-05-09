@@ -108,19 +108,19 @@ Names used in advanced examples that **do not exist** in `python/tessera/`:
 
 Each theme groups missing capabilities; numbers indicate examples blocked.
 
-### Theme 1 — Stateful `nn.Module` surface (blocks 2) — **partially closed (Tier 1.1)**
-Storage + lifecycle for trainable parameters. ✅ **Shipped:** `Module`,
-`Parameter`, `Sequential`, `ModuleList`, `ModuleDict`, `Linear`, `RMSNorm`,
-`LayerNorm`, `Embedding`, `Dropout`, `MLP`, `MultiHeadAttention`,
-state_dict / load_state_dict, `train`/`eval`, `parameters()` /
-`named_parameters()`. 🔲 **Still deferred:** `BatchNorm1d` (needs buffer
-protocol), `Conv2d` Module wrapper, `LSTM`, `RotaryEmbedding` Module wrapper
-(use `ops.rope` directly), `KVCache` Module wrapper, `DynamicDepthwiseConv1d`
-(blocks on Theme 3), `CastedLinear`/`CastedEmbedding`,
-`MultiHeadCrossAttention` (use `MultiHeadAttention` with separate Q/K/V),
-activation modules (use `ops.<silu/relu/...>`).
-**Scope:** Tier 1.1 was ~770 LOC code + 350 LOC tests = **1,120 LOC**.
-**Roadmap:** Tier 1.1 landed; remaining Theme 1 deferred to follow-ups.
+### Theme 1 — Stateful `nn.Module` surface (blocks 2) — **almost fully closed**
+Storage + lifecycle for trainable parameters. ✅ **Shipped (Tier 1.1 + A4 + B1 + C1 + D4):**
+`Module`, `Parameter`, **`Buffer`**, `Sequential`, `ModuleList`, `ModuleDict`,
+`Linear`, `RMSNorm`, `LayerNorm`, **`BatchNorm1d`**, `Embedding`, `Dropout`,
+`MLP`, `MultiHeadAttention`, `MultiHeadCrossAttention`, `RotaryEmbedding`,
+`CastedLinear`, `CastedEmbedding`, all activation Modules,
+`CrossEntropyLoss`, `nn.utils.clip_grad_norm_`, **`KVCache`**,
+**`DynamicDepthwiseConv1d`**. State_dict round-trip (incl. persistent
+buffers), `train`/`eval`, `Module.to(dtype)`, `parameters()` /
+`named_parameters()` / `buffers()` / `named_buffers()`, `register_buffer`.
+🔲 **Still deferred:** `Conv2d` Module (Phase H1 — NHWC layout decision
+locked), `LSTM` (Phase H2 deferred — RNN cells need their own design).
+**Roadmap:** Theme 1 effectively closed except Conv2d + LSTM.
 
 ### Theme 2 — Reverse-mode autodiff (blocks 2) — **v1 first slice landed**
 ✅ **Shipped (Tier 2 v1):** `tessera.autodiff.tape()`, `tessera.autodiff.reverse(fn)`,
@@ -137,12 +137,15 @@ gradient master-copy + loss scaling, higher-order derivatives,
 **Roadmap:** Tier 2 v1 lands the surface. Each deferred item is its own
 follow-up sized in `docs/spec/AUTODIFF_SPEC.md`.
 
-### Theme 3 — Streaming kernels + dynamic shapes (blocks 2)
-Depthwise conv 1d/2d (causal, grouped, streaming state), selective SSM
-(A/B/C/Δ scaling, chunked scan), online streaming softmax, shape-polymorphic
-tiling.
-**Scope:** large (~600–900 LOC + 2K LOC per backend).
-**Roadmap:** Partially in Ch.5; depthwise conv not documented.
+### Theme 3 — Streaming kernels + dynamic shapes (blocks 2) — **partially closed**
+✅ **Shipped (Phase D1/D2/D4, 2026-05-09):** `ops.depthwise_conv1d` (causal +
+streaming state), `ops.online_softmax` + `ops.online_softmax_state`
+(numerically stable, streaming via explicit state helper),
+`nn.DynamicDepthwiseConv1d` Module wrapper (state via non-persistent buffer
+from B1). VJPs registered for autodiff.
+🔲 **Still deferred:** `ops.selective_ssm` (Mamba2 — Phase D3, large enough
+to deserve its own session), depthwise_conv2d, shape-polymorphic tiling.
+**Roadmap:** D1/D2/D4 closed; D3 (Mamba2) is the remaining big piece.
 
 ### Theme 4 — KV-cache abstraction + block quantization (blocks 3)
 KVCacheHandle (paged), `quantize_kv` / `dequantize_kv`, rolling-window state

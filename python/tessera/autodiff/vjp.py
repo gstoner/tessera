@@ -261,4 +261,84 @@ def vjp_dropout(dout, x, *, p=0.1, training=True, seed=None, **_):
     return (dout * mask,)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Streaming kernels (Phase D)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@_vjp("depthwise_conv1d")
+def vjp_depthwise_conv1d(dout, x, w=None, *, kernel_size, padding=0, causal=False, state=None, **_):
+    """Adjoint of depthwise 1-D conv.
+
+    Forward: ``out[..., t] = sum_k x_full[..., t+k] * w[..., k]``
+    where ``x_full = pad-or-prefix(state, x)``. Adjoints:
+
+    * ``dx_full[..., j] += sum_{k: 0<=j-k<L_out} dout[..., j-k] * w[..., k]``
+    * ``dw[c, k] = sum_{n, t} dout[n, c, t] * x_full[n, c, t+k]``
+
+    The cotangent is split back into ``dx`` and ``dstate`` based on the original
+    prefix length.
+    """
+    N, C, L = x.shape
+    K = int(kernel_size)
+    L_out = dout.shape[-1]
+
+    # Reconstruct x_full layout (same logic as forward)
+    if state is not None:
+        prefix_len = K - 1
+        x_full = np.concatenate([state, x], axis=-1)
+    elif causal:
+        prefix_len = K - 1
+        x_full = np.pad(x, ((0, 0), (0, 0), (K - 1, 0)))
+    else:
+        prefix_len = int(padding)
+        x_full = np.pad(x, ((0, 0), (0, 0), (int(padding), int(padding))))
+
+    # dw[c, k] = sum over n, t of dout[n, c, t] * x_full[n, c, t+k]
+    dw = np.zeros_like(w)
+    for k in range(K):
+        dw[:, k] = (dout * x_full[..., k:k + L_out]).sum(axis=(0, 2))
+
+    # dx_full via accumulation
+    dx_full = np.zeros_like(x_full)
+    for k in range(K):
+        dx_full[..., k:k + L_out] += dout * w[None, :, k:k + 1]
+
+    # Split dx_full back into dstate (if streaming) + dx (the actual input region) + tail (padding, dropped)
+    if state is not None:
+        dstate = dx_full[..., :prefix_len]
+        dx = dx_full[..., prefix_len:prefix_len + L]
+        return (dx, dw, dstate)
+    elif causal:
+        # Causal padding contributed only zeros to the forward; their cotangent is dropped.
+        dx = dx_full[..., prefix_len:prefix_len + L]
+        return (dx, dw)
+    else:
+        # Symmetric padding — drop both ends of dx_full.
+        dx = dx_full[..., prefix_len:prefix_len + L]
+        return (dx, dw)
+
+
+@_vjp("online_softmax")
+def vjp_online_softmax(dout, x, *, axis=-1, state=None, **_):
+    """Adjoint of `online_softmax` for the single-chunk path (state=None).
+
+    The streaming case (state given) shares the standard softmax adjoint
+    *for that chunk's portion of the output* — earlier-chunk gradients live
+    in earlier-chunk tape entries.
+    """
+    if state is None:
+        # Same as standard softmax
+        e = np.exp(x - x.max(axis=axis, keepdims=True))
+        s = e / e.sum(axis=axis, keepdims=True)
+        return ((dout - (dout * s).sum(axis=axis, keepdims=True)) * s,)
+    # Streaming chunk — recompute the chunk's softmax against running max/sum
+    prev_m, prev_s = state
+    chunk_m = x.max(axis=axis, keepdims=True)
+    new_m = np.maximum(prev_m, chunk_m)
+    new_s = prev_s * np.exp(prev_m - new_m) + np.exp(x - new_m).sum(axis=axis, keepdims=True)
+    s = np.exp(x - new_m) / new_s
+    return ((dout - (dout * s).sum(axis=axis, keepdims=True)) * s,)
+
+
 __all__ = ["register_vjp", "get_vjp", "_VJPS"]

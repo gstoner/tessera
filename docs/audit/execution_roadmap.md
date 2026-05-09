@@ -164,9 +164,9 @@ Today, calling `flash_attn` inside a tape raises `TesseraAutodiffError`. This is
 
 ---
 
-## Phase B — Foundational protocols (sequential, ~1 week)
+## Phase B — Foundational protocols (sequential, ~1 week) — **all three landed 2026-05-09**
 
-### [B1] Module buffer protocol — `register_buffer` + state_dict integration 📋
+### [B1] Module buffer protocol — `register_buffer` + state_dict integration ✅
 
 **Scope:** M (~250 LOC code + ~150 LOC tests).
 
@@ -191,7 +191,7 @@ parameters.
 `Parameter`, with `_data: DistributedArray`, no `.grad` slot, no `requires_grad`,
 and `persistent: bool` for state-dict participation.
 
-### [B2] `KVCacheHandle` opaque value type 📋
+### [B2] `KVCacheHandle` opaque value type ✅
 
 **Scope:** M (~200 LOC code + ~150 LOC tests).
 
@@ -215,7 +215,7 @@ ops works only by Python convention. Theme 4 needs a real handle.
 - Round-trip: append then read returns the appended values.
 - Test: appending past `max_seq` raises a clear `TesseraAutodiffError`-style error.
 
-### [B3] `Module.to(dtype)` — dtype migration 📋
+### [B3] `Module.to(dtype)` — dtype migration ✅
 
 **Scope:** S (~100 LOC + ~80 LOC tests).
 
@@ -234,9 +234,9 @@ dtype. `to(device)` deferred until a real device handle exists post-Phase G.
 
 ---
 
-## Phase C — Theme 1 cleanup that depends on Phase B (parallelizable, ~1 week)
+## Phase C — Theme 1 cleanup that depends on Phase B (parallelizable, ~1 week) — **landed 2026-05-09**
 
-### [C1] `BatchNorm1d` (real Module) 📋
+### [C1] `BatchNorm1d` (real Module) ✅
 
 **Scope:** S (~80 LOC + ~80 LOC tests). Depends on **B1**.
 
@@ -251,7 +251,7 @@ dtype. `to(device)` deferred until a real device handle exists post-Phase G.
 - `state_dict()` includes the buffers; `load_state_dict()` restores them.
 - Replace the phantom in `nn/__init__.py`.
 
-### [C2] `KVCache` Module wrapper 📋
+### [C2] `KVCache` Module wrapper ✅
 
 **Scope:** XS (~60 LOC + ~50 LOC tests). Depends on **B2**.
 
@@ -267,9 +267,9 @@ class KVCache(Module):
 
 ---
 
-## Phase D — Theme 3 streaming kernels (~2–3 weeks)
+## Phase D — Theme 3 streaming kernels (~2–3 weeks) — **D1/D2/D4 landed 2026-05-09; D3 deferred**
 
-### [D1] `ops.depthwise_conv1d` 📋
+### [D1] `ops.depthwise_conv1d` ✅
 
 **Scope:** M (~250 LOC + ~150 LOC tests). Depends on **B1** for streaming state.
 
@@ -280,7 +280,7 @@ class KVCache(Module):
 - VJP for autodiff (Tier 2 v1 op set extended).
 - Streaming variant: passing `state=` into a sequence of length-1 calls produces the same output as one length-N call.
 
-### [D2] `ops.online_softmax` (streaming, numerically stable) 📋
+### [D2] `ops.online_softmax` (streaming, numerically stable) ✅
 
 **Scope:** M (~150 LOC + ~100 LOC tests).
 
@@ -295,7 +295,7 @@ class KVCache(Module):
 - Replaces the placeholder reference inside `examples/advanced/Nemotron_Nano_12B_v2/`.
 - VJP shipped (chunked scan adjoint is the interesting part).
 
-### [D4] `nn.DynamicDepthwiseConv1d` Module 📋
+### [D4] `nn.DynamicDepthwiseConv1d` Module ✅
 
 **Scope:** XS (~50 LOC). Depends on **D1** + **B1**.
 

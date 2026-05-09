@@ -384,7 +384,33 @@ def _base_attrs(op: IROp, ordinal: int) -> dict[str, Any]:
     }
     if op.result is not None:
         attrs["result"] = op.result
+    # Phase 8.4.4 — surface the operand element type so downstream Tile and
+    # Target IR layers can pick dtype-specific runtime symbols (e.g. mps_matmul
+    # f32/f16/bf16). The Graph IR encodes types as strings like "tensor<*xf16>";
+    # we extract the trailing element-type token. Defaults to f32 when the
+    # operand types aren't parseable, preserving the pre-Phase 8.4.4 contract.
+    dtype = _resolve_element_dtype(op)
+    if dtype:
+        attrs["dtype"] = dtype
     return attrs
+
+
+def _resolve_element_dtype(op: IROp) -> str | None:
+    operand_types = list(getattr(op, "operand_types", ()) or ())
+    if not operand_types:
+        return None
+    # Pick the dtype from the first operand. The IROp invariant for compute
+    # ops is uniform element type across operands (e.g. matmul A and B match).
+    t = operand_types[0]
+    if "bf16" in t:
+        return "bf16"
+    if "f16" in t and "bf16" not in t:
+        return "f16"
+    if "f32" in t:
+        return "f32"
+    if "f64" in t:
+        return "f64"
+    return None
 
 
 def _shape_key(ops: list[IROp]) -> str:

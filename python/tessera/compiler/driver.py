@@ -418,6 +418,32 @@ def _is_apple_gpu_mps_executable(cpu_plan: CPUPlan | None) -> bool:
     return _apple_gpu_chain_kind(cpu_plan) is not None
 
 
+def _apple_gpu_matmul_dtype_suffix(cpu_plan: CPUPlan | None) -> str:
+    """Phase 8.4.4 — extract the matmul element type from a CPUPlan and
+    map it to the runtime symbol's dtype suffix.
+
+    The graph IR operand types are strings like "tensor<*xf32>", "tensor<*xf16>",
+    or "tensor<*xbf16>". The matching runtime symbol is one of:
+      - tessera_apple_gpu_mps_matmul_f32   (Phase 8.3, native MPSDataTypeFloat32)
+      - tessera_apple_gpu_mps_matmul_f16   (Phase 8.4.4, native MPSDataTypeFloat16)
+      - tessera_apple_gpu_mps_matmul_bf16  (Phase 8.4.4, fp32-conversion path)
+
+    Defaults to f32 when the operand type can't be parsed — matches the pre-
+    Phase 8.4.4 behavior so existing single-op f32 programs are unchanged.
+    """
+
+    if cpu_plan is None or not cpu_plan.ops:
+        return "f32"
+    op = cpu_plan.ops[0]
+    operand_types = list(getattr(op, "operand_types", ()) or ())
+    for t in operand_types:
+        if "bf16" in t:
+            return "bf16"
+        if "f16" in t and "bf16" not in t:
+            return "f16"
+    return "f32"
+
+
 def _apple_gpu_chain_kind(cpu_plan: CPUPlan | None) -> str | None:
     """Phase 8.4.3: classify multi-op apple_gpu plans against the recognized
     fusion patterns. Returns the chain kind ("matmul_softmax" today) or None
@@ -492,7 +518,11 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
         else:
             only_op = cpu_plan.ops[0].op_name
             if only_op in _APPLE_GPU_MPS_OPS:
-                symbol = "tessera_apple_gpu_mps_matmul_f32"
+                # Phase 8.4.4 — pick the matmul symbol by element type. The
+                # actual element type comes from the Graph IR operand types
+                # ("tensor<*xf16>" etc); fall back to f32 if the parse fails.
+                dtype_suffix = _apple_gpu_matmul_dtype_suffix(cpu_plan)
+                symbol = f"tessera_apple_gpu_mps_matmul_{dtype_suffix}"
                 framework = "MetalPerformanceShaders"
                 abi = "MPSMatrixMultiplication"
             elif only_op == "tessera.rope":

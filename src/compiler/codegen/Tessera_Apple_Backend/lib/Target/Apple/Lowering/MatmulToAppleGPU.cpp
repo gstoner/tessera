@@ -37,6 +37,10 @@ namespace {
 
 constexpr llvm::StringLiteral kGemmF32Symbol =
     "tessera_apple_gpu_mps_matmul_f32";
+constexpr llvm::StringLiteral kGemmF16Symbol =
+    "tessera_apple_gpu_mps_matmul_f16";
+constexpr llvm::StringLiteral kGemmBF16Symbol =
+    "tessera_apple_gpu_mps_matmul_bf16";
 
 static func::FuncOp ensureExternalDecl(ModuleOp mod, StringRef name,
                                        FunctionType fnTy) {
@@ -74,9 +78,26 @@ struct LowerMatmulToAppleGPU : public RewritePattern {
 
     Type lhsElem = lhsTy.getElementType();
     Type rhsElem = rhsTy.getElementType();
-    if (!lhsElem.isF32() || !rhsElem.isF32())
+    if (lhsElem != rhsElem)
       return rewriter.notifyMatchFailure(
-          op, "AppleGPU MPS path is f32-only in Phase 8.3");
+          op, "AppleGPU MPS path requires matching matmul element types");
+
+    // Phase 8.4.4 — pick the runtime symbol based on the input element type.
+    // f32 routes to MPSDataTypeFloat32 (Phase 8.3); f16 routes to native
+    // MPSDataTypeFloat16; bf16 routes to a fp32-conversion path inside the
+    // shim because MPS doesn't natively accept bf16 matrix descriptors as of
+    // macOS 14.
+    StringRef symbol;
+    if (lhsElem.isF32()) {
+      symbol = kGemmF32Symbol;
+    } else if (lhsElem.isF16()) {
+      symbol = kGemmF16Symbol;
+    } else if (lhsElem.isBF16()) {
+      symbol = kGemmBF16Symbol;
+    } else {
+      return rewriter.notifyMatchFailure(
+          op, "AppleGPU MPS path supports f32, f16, and bf16 in Phase 8.4.4");
+    }
 
     if (lhsTy.isDynamicDim(0) || lhsTy.isDynamicDim(1) ||
         rhsTy.isDynamicDim(0) || rhsTy.isDynamicDim(1))
@@ -95,11 +116,10 @@ struct LowerMatmulToAppleGPU : public RewritePattern {
 
     Type i64Ty = rewriter.getI64Type();
     Type i32Ty = rewriter.getI32Type();
-    Type f32Ty = rewriter.getF32Type();
 
-    auto lhsMemTy = MemRefType::get({M, K}, f32Ty);
-    auto rhsMemTy = MemRefType::get({K, N}, f32Ty);
-    auto outMemTy = MemRefType::get({M, N}, f32Ty);
+    auto lhsMemTy = MemRefType::get({M, K}, lhsElem);
+    auto rhsMemTy = MemRefType::get({K, N}, rhsElem);
+    auto outMemTy = MemRefType::get({M, N}, lhsElem);
 
     Value aPtr = extractPtr(rewriter, loc, lhs, lhsMemTy);
     Value bPtr = extractPtr(rewriter, loc, rhs, rhsMemTy);
@@ -115,15 +135,18 @@ struct LowerMatmulToAppleGPU : public RewritePattern {
     Value Nv = rewriter.create<arith::ConstantIntOp>(loc, N, 32);
     Value Kv = rewriter.create<arith::ConstantIntOp>(loc, K, 32);
 
+    // The runtime ABI is the same shape for all three dtypes — three i64
+    // pointers + three i32 dim sizes. The element type is encoded in the
+    // symbol name, not the signature.
     FunctionType gemmFnTy = FunctionType::get(
         ctx, {i64Ty, i64Ty, i64Ty, i32Ty, i32Ty, i32Ty}, {});
-    ensureExternalDecl(mod, kGemmF32Symbol, gemmFnTy);
+    ensureExternalDecl(mod, symbol, gemmFnTy);
 
     rewriter.create<func::CallOp>(
-        loc, kGemmF32Symbol, TypeRange{},
+        loc, symbol, TypeRange{},
         ValueRange{aPtr, bPtr, cPtr, Mv, Nv, Kv});
 
-    auto outTensorTy = RankedTensorType::get({M, N}, f32Ty);
+    auto outTensorTy = RankedTensorType::get({M, N}, lhsElem);
     Value result =
         rewriter.create<bufferization::ToTensorOp>(loc, outTensorTy, cAlloc);
     rewriter.replaceOp(op, result);
@@ -140,8 +163,8 @@ struct LowerMatmulToAppleGPUPass
     return "tessera-matmul-to-apple_gpu";
   }
   StringRef getDescription() const override {
-    return "Lower tessera.matmul (rank-2, f32) to Apple GPU runtime calls "
-           "(MPSMatrixMultiplication)";
+    return "Lower tessera.matmul (rank-2, f32/f16/bf16) to Apple GPU runtime "
+           "calls (MPSMatrixMultiplication)";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {

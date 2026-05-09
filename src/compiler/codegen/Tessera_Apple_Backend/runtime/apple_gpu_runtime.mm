@@ -186,6 +186,235 @@ extern "C" void tessera_apple_gpu_mps_matmul_f32(const float* A,
 }
 
 //===---------------------------------------------------------------------===//
+// Phase 8.4.4 — fp16 / bf16 matmul (mirrors Phase 8.2 BNNS bf16 pattern)
+//
+// fp16: native MPSDataTypeFloat16 path. Apple Silicon GPUs run fp16
+//       natively at 2x throughput vs fp32 on most ops.
+// bf16: MPS does NOT directly support bf16 matmul as of macOS 14, so this
+//       path uses fp32 conversion at the boundary — load with bit-shift
+//       (bf16 -> fp32), run MPSDataTypeFloat32, convert back. Same shape
+//       as the BNNS bf16 fallback in apple_cpu_runtime.cpp.
+//
+// At the C ABI boundary fp16/bf16 inputs are passed as uint16_t* (the bit
+// pattern). This keeps the ABI portable across compilers regardless of
+// _Float16 / __bf16 availability.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+// fp16 <-> float helpers (bit-pattern; no _Float16 dependency).
+inline float half_to_float_gpu(uint16_t h) {
+  uint32_t sign = (uint32_t(h) & 0x8000u) << 16;
+  uint32_t exp  = (uint32_t(h) & 0x7C00u) >> 10;
+  uint32_t frac = uint32_t(h) & 0x03FFu;
+  uint32_t f;
+  if (exp == 0) {
+    if (frac == 0) {
+      f = sign;
+    } else {
+      while ((frac & 0x0400u) == 0) { frac <<= 1; exp -= 1; }
+      exp += 1;
+      frac &= ~0x0400u;
+      f = sign | ((exp + 112) << 23) | (frac << 13);
+    }
+  } else if (exp == 0x1F) {
+    f = sign | 0x7F800000u | (frac << 13);
+  } else {
+    f = sign | ((exp + 112) << 23) | (frac << 13);
+  }
+  float out;
+  std::memcpy(&out, &f, sizeof(out));
+  return out;
+}
+
+inline uint16_t float_to_half_gpu(float v) {
+  uint32_t f;
+  std::memcpy(&f, &v, sizeof(f));
+  uint32_t sign = (f >> 16) & 0x8000u;
+  int32_t  exp  = int32_t((f >> 23) & 0xFFu) - 127 + 15;
+  uint32_t frac = f & 0x007FFFFFu;
+  if (exp <= 0) {
+    if (exp < -10) return uint16_t(sign);
+    frac = (frac | 0x00800000u) >> (1 - exp);
+    if (frac & 0x00001000u) frac += 0x00002000u;
+    return uint16_t(sign | (frac >> 13));
+  }
+  if (exp >= 0x1F) {
+    if (((f >> 23) & 0xFFu) == 0xFFu) {
+      return uint16_t(sign | 0x7C00u | (frac ? (frac >> 13) | 0x200u : 0));
+    }
+    return uint16_t(sign | 0x7C00u);
+  }
+  if (frac & 0x00001000u) {
+    frac += 0x00002000u;
+    if (frac & 0x00800000u) {
+      frac = 0;
+      exp += 1;
+      if (exp >= 0x1F) return uint16_t(sign | 0x7C00u);
+    }
+  }
+  return uint16_t(sign | (uint32_t(exp) << 10) | (frac >> 13));
+}
+
+// bf16 <-> float helpers (bit-shift; round-to-nearest-even on store).
+inline float bfloat16_to_float_gpu(uint16_t b) {
+  uint32_t f = static_cast<uint32_t>(b) << 16;
+  float out;
+  std::memcpy(&out, &f, sizeof(out));
+  return out;
+}
+
+inline uint16_t float_to_bfloat16_gpu(float v) {
+  uint32_t f;
+  std::memcpy(&f, &v, sizeof(f));
+  if ((f & 0x7FC00000u) == 0x7F800000u && (f & 0x007FFFFFu) != 0) {
+    return static_cast<uint16_t>((f >> 16) | 0x40u);
+  }
+  uint32_t lsb = (f >> 16) & 1u;
+  uint32_t rounded = f + 0x7FFFu + lsb;
+  return static_cast<uint16_t>(rounded >> 16);
+}
+
+bool dispatch_mps_gemm_f16(MetalDeviceContext &ctx, const uint16_t* A,
+                           const uint16_t* B, uint16_t* C,
+                           int32_t M, int32_t N, int32_t K) {
+  // Same shape as dispatch_mps_gemm_f32 — only the MPS data type and the
+  // per-element byte count change. Apple GPUs run fp16 natively at higher
+  // throughput than fp32 so this is a real perf win, not just convenience.
+  @autoreleasepool {
+    NSUInteger byteCountA = sizeof(uint16_t) * static_cast<NSUInteger>(M) *
+                            static_cast<NSUInteger>(K);
+    NSUInteger byteCountB = sizeof(uint16_t) * static_cast<NSUInteger>(K) *
+                            static_cast<NSUInteger>(N);
+    NSUInteger byteCountC = sizeof(uint16_t) * static_cast<NSUInteger>(M) *
+                            static_cast<NSUInteger>(N);
+
+    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A
+                                                  length:byteCountA
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B
+                                                  length:byteCountB
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufC = [ctx.device newBufferWithLength:byteCountC
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufA || !bufB || !bufC) return false;
+
+    NSUInteger rowBytesA = sizeof(uint16_t) * static_cast<NSUInteger>(K);
+    NSUInteger rowBytesB = sizeof(uint16_t) * static_cast<NSUInteger>(N);
+    NSUInteger rowBytesC = sizeof(uint16_t) * static_cast<NSUInteger>(N);
+
+    MPSMatrixDescriptor *descA =
+        [MPSMatrixDescriptor matrixDescriptorWithRows:static_cast<NSUInteger>(M)
+                                              columns:static_cast<NSUInteger>(K)
+                                             rowBytes:rowBytesA
+                                             dataType:MPSDataTypeFloat16];
+    MPSMatrixDescriptor *descB =
+        [MPSMatrixDescriptor matrixDescriptorWithRows:static_cast<NSUInteger>(K)
+                                              columns:static_cast<NSUInteger>(N)
+                                             rowBytes:rowBytesB
+                                             dataType:MPSDataTypeFloat16];
+    MPSMatrixDescriptor *descC =
+        [MPSMatrixDescriptor matrixDescriptorWithRows:static_cast<NSUInteger>(M)
+                                              columns:static_cast<NSUInteger>(N)
+                                             rowBytes:rowBytesC
+                                             dataType:MPSDataTypeFloat16];
+
+    MPSMatrix *matA = [[MPSMatrix alloc] initWithBuffer:bufA descriptor:descA];
+    MPSMatrix *matB = [[MPSMatrix alloc] initWithBuffer:bufB descriptor:descB];
+    MPSMatrix *matC = [[MPSMatrix alloc] initWithBuffer:bufC descriptor:descC];
+
+    MPSMatrixMultiplication *kernel = [[MPSMatrixMultiplication alloc]
+        initWithDevice:ctx.device
+         transposeLeft:NO
+        transposeRight:NO
+            resultRows:static_cast<NSUInteger>(M)
+         resultColumns:static_cast<NSUInteger>(N)
+       interiorColumns:static_cast<NSUInteger>(K)
+                 alpha:1.0
+                  beta:0.0];
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    [kernel encodeToCommandBuffer:cb
+                       leftMatrix:matA
+                      rightMatrix:matB
+                     resultMatrix:matC];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(C, [bufC contents], byteCountC);
+    return true;
+  }
+}
+
+inline void reference_gemm_f16_via_fp32(const uint16_t* A, const uint16_t* B,
+                                        uint16_t* C, int32_t M, int32_t N,
+                                        int32_t K) {
+  // Convert each operand to fp32, run the existing reference kernel, convert
+  // back. Same numerical contract as the BNNS-fallback path in
+  // apple_cpu_runtime.cpp.
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Cf(static_cast<std::size_t>(M) * N, 0.0f);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = half_to_float_gpu(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = half_to_float_gpu(B[i]);
+  reference_gemm_f32(Af.data(), Bf.data(), Cf.data(), M, N, K);
+  for (std::size_t i = 0; i < Cf.size(); ++i) C[i] = float_to_half_gpu(Cf[i]);
+}
+
+inline void reference_gemm_bf16_via_fp32(const uint16_t* A, const uint16_t* B,
+                                         uint16_t* C, int32_t M, int32_t N,
+                                         int32_t K) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Cf(static_cast<std::size_t>(M) * N, 0.0f);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = bfloat16_to_float_gpu(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = bfloat16_to_float_gpu(B[i]);
+  reference_gemm_f32(Af.data(), Bf.data(), Cf.data(), M, N, K);
+  for (std::size_t i = 0; i < Cf.size(); ++i) C[i] = float_to_bfloat16_gpu(Cf[i]);
+}
+
+bool dispatch_mps_gemm_bf16_via_fp32(MetalDeviceContext &ctx,
+                                     const uint16_t* A, const uint16_t* B,
+                                     uint16_t* C, int32_t M, int32_t N,
+                                     int32_t K) {
+  // bf16 -> fp32 -> MPSDataTypeFloat32 -> fp32 -> bf16. MPS does not
+  // natively accept bf16 as of macOS 14; this path keeps the bf16 ABI
+  // honest while still spending the heavy compute on the GPU.
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Cf(static_cast<std::size_t>(M) * N, 0.0f);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = bfloat16_to_float_gpu(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = bfloat16_to_float_gpu(B[i]);
+  if (!dispatch_mps_gemm_f32(ctx, Af.data(), Bf.data(), Cf.data(), M, N, K))
+    return false;
+  for (std::size_t i = 0; i < Cf.size(); ++i) C[i] = float_to_bfloat16_gpu(Cf[i]);
+  return true;
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_mps_matmul_f16(const uint16_t* A,
+                                                 const uint16_t* B,
+                                                 uint16_t* C,
+                                                 int32_t M, int32_t N,
+                                                 int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_mps_gemm_f16(ctx, A, B, C, M, N, K)) return;
+  reference_gemm_f16_via_fp32(A, B, C, M, N, K);
+}
+
+extern "C" void tessera_apple_gpu_mps_matmul_bf16(const uint16_t* A,
+                                                  const uint16_t* B,
+                                                  uint16_t* C,
+                                                  int32_t M, int32_t N,
+                                                  int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_mps_gemm_bf16_via_fp32(ctx, A, B, C, M, N, K)) return;
+  reference_gemm_bf16_via_fp32(A, B, C, M, N, K);
+}
+
+//===---------------------------------------------------------------------===//
 // Phase 8.4 — Custom MSL kernel infrastructure
 //
 // `compile_msl_kernel` compiles an MSL source string into an
@@ -338,6 +567,148 @@ extern "C" void tessera_apple_gpu_rope_f32(const float* X, const float* Theta,
   MetalDeviceContext &ctx = deviceContext();
   if (ctx.ok && dispatch_rope_msl(ctx, X, Theta, Out, M, K)) return;
   reference_rope_f32(X, Theta, Out, M, K);
+}
+
+//===---------------------------------------------------------------------===//
+// Phase 8.4.4.1 — fp16 + bf16 rope variants.
+//
+// fp16: native MSL `half` kernel. Compute is in `float` for accuracy
+//       (cos/sin); load/store as `half`. Apple Silicon GPUs run this
+//       at higher throughput than the fp32 variant.
+// bf16: same fp32-conversion pattern as Phase 8.4.4 bf16 matmul. Decode
+//       bf16 bit-pattern, run the fp32 reference, encode back.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+bool dispatch_rope_msl_f16(MetalDeviceContext &ctx, const uint16_t* X,
+                           const uint16_t* Theta, uint16_t* Out,
+                           int32_t M, int32_t K) {
+  static NSString *const kRopeSourceF16 = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void rope_f16(
+    device const half*  x      [[buffer(0)]],
+    device const half*  theta  [[buffer(1)]],
+    device half*        out    [[buffer(2)]],
+    constant int&       M      [[buffer(3)]],
+    constant int&       K      [[buffer(4)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    if (gid.x >= (uint)(K / 2) || gid.y >= (uint)M) return;
+    int row = (int)gid.y;
+    int pair = (int)gid.x;
+    int idx_even = row * K + pair * 2;
+    int idx_odd  = idx_even + 1;
+    float xe = float(x[idx_even]);
+    float xo = float(x[idx_odd]);
+    float c = cos(float(theta[idx_even]));
+    float s = sin(float(theta[idx_even]));
+    out[idx_even] = half(xe * c - xo * s);
+    out[idx_odd]  = half(xe * s + xo * c);
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kRopeSourceF16, @"rope_f16");
+    if (!pso) return false;
+
+    NSUInteger byteCount = sizeof(uint16_t) * static_cast<NSUInteger>(M) *
+                           static_cast<NSUInteger>(K);
+    id<MTLBuffer> bufX = [ctx.device newBufferWithBytes:X
+                                                  length:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufT = [ctx.device newBufferWithBytes:Theta
+                                                  length:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufX || !bufT || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufT offset:0 atIndex:1];
+    [enc setBuffer:bufO offset:0 atIndex:2];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:4];
+
+    NSUInteger half_k = static_cast<NSUInteger>(K / 2);
+    MTLSize grid = MTLSizeMake(half_k, static_cast<NSUInteger>(M), 1);
+    NSUInteger tg_x = std::min<NSUInteger>(half_k, 32);
+    NSUInteger tg_y = std::min<NSUInteger>(static_cast<NSUInteger>(M),
+                                           pso.maxTotalThreadsPerThreadgroup /
+                                               std::max<NSUInteger>(tg_x, 1));
+    if (tg_y == 0) tg_y = 1;
+    MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(Out, [bufO contents], byteCount);
+    return true;
+  }
+}
+
+inline void reference_rope_f16_via_fp32(const uint16_t* X, const uint16_t* Theta,
+                                        uint16_t* Out, int32_t M, int32_t K) {
+  std::vector<float> Xf(static_cast<std::size_t>(M) * K);
+  std::vector<float> Tf(static_cast<std::size_t>(M) * K);
+  std::vector<float> Of(static_cast<std::size_t>(M) * K);
+  for (std::size_t i = 0; i < Xf.size(); ++i) Xf[i] = half_to_float_gpu(X[i]);
+  for (std::size_t i = 0; i < Tf.size(); ++i) Tf[i] = half_to_float_gpu(Theta[i]);
+  reference_rope_f32(Xf.data(), Tf.data(), Of.data(), M, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_half_gpu(Of[i]);
+}
+
+inline void reference_rope_bf16_via_fp32(const uint16_t* X, const uint16_t* Theta,
+                                         uint16_t* Out, int32_t M, int32_t K) {
+  std::vector<float> Xf(static_cast<std::size_t>(M) * K);
+  std::vector<float> Tf(static_cast<std::size_t>(M) * K);
+  std::vector<float> Of(static_cast<std::size_t>(M) * K);
+  for (std::size_t i = 0; i < Xf.size(); ++i) Xf[i] = bfloat16_to_float_gpu(X[i]);
+  for (std::size_t i = 0; i < Tf.size(); ++i) Tf[i] = bfloat16_to_float_gpu(Theta[i]);
+  reference_rope_f32(Xf.data(), Tf.data(), Of.data(), M, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_bfloat16_gpu(Of[i]);
+}
+
+bool dispatch_rope_bf16_via_fp32(MetalDeviceContext &ctx, const uint16_t* X,
+                                 const uint16_t* Theta, uint16_t* Out,
+                                 int32_t M, int32_t K) {
+  std::vector<float> Xf(static_cast<std::size_t>(M) * K);
+  std::vector<float> Tf(static_cast<std::size_t>(M) * K);
+  std::vector<float> Of(static_cast<std::size_t>(M) * K);
+  for (std::size_t i = 0; i < Xf.size(); ++i) Xf[i] = bfloat16_to_float_gpu(X[i]);
+  for (std::size_t i = 0; i < Tf.size(); ++i) Tf[i] = bfloat16_to_float_gpu(Theta[i]);
+  if (!dispatch_rope_msl(ctx, Xf.data(), Tf.data(), Of.data(), M, K))
+    return false;
+  for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_bfloat16_gpu(Of[i]);
+  return true;
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_rope_f16(const uint16_t* X,
+                                           const uint16_t* Theta,
+                                           uint16_t* Out,
+                                           int32_t M, int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_rope_msl_f16(ctx, X, Theta, Out, M, K)) return;
+  reference_rope_f16_via_fp32(X, Theta, Out, M, K);
+}
+
+extern "C" void tessera_apple_gpu_rope_bf16(const uint16_t* X,
+                                            const uint16_t* Theta,
+                                            uint16_t* Out,
+                                            int32_t M, int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_rope_bf16_via_fp32(ctx, X, Theta, Out, M, K)) return;
+  reference_rope_bf16_via_fp32(X, Theta, Out, M, K);
 }
 
 extern "C" int32_t tessera_apple_gpu_runtime_msl_cache_size(void) {
@@ -690,6 +1061,133 @@ extern "C" void tessera_apple_gpu_softmax_f32(const float* X, float* Out,
 }
 
 //===---------------------------------------------------------------------===//
+// Phase 8.4.4.1 — fp16 + bf16 softmax variants.
+// fp16: native MSL `half` kernel; per-row reduction in `float` for numerical
+//       stability (small per-row range matters for softmax denom accuracy).
+// bf16: fp32-conversion path.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+bool dispatch_softmax_msl_f16(MetalDeviceContext &ctx, const uint16_t* X,
+                              uint16_t* Out, int32_t M, int32_t K) {
+  static NSString *const kSoftmaxSourceF16 = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void softmax_f16(
+    device const half*  x   [[buffer(0)]],
+    device half*        out [[buffer(1)]],
+    constant int&       M   [[buffer(2)]],
+    constant int&       K   [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)M) return;
+    int row = (int)gid;
+    int row_off = row * K;
+
+    float row_max = -INFINITY;
+    for (int j = 0; j < K; ++j) {
+        row_max = max(row_max, float(x[row_off + j]));
+    }
+    float denom = 0.0f;
+    // Pass 2: store exp values in `out` as fp16 — slight precision loss vs
+    // f32 reference but matches the MSL native fp16 throughput contract.
+    for (int j = 0; j < K; ++j) {
+        float e = exp(float(x[row_off + j]) - row_max);
+        out[row_off + j] = half(e);
+        denom += e;
+    }
+    float inv = 1.0f / denom;
+    for (int j = 0; j < K; ++j) {
+        out[row_off + j] = half(float(out[row_off + j]) * inv);
+    }
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kSoftmaxSourceF16, @"softmax_f16");
+    if (!pso) return false;
+
+    NSUInteger byteCount = sizeof(uint16_t) * static_cast<NSUInteger>(M) *
+                           static_cast<NSUInteger>(K);
+    id<MTLBuffer> bufX = [ctx.device newBufferWithBytes:X
+                                                  length:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufX || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufO offset:0 atIndex:1];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:2];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:3];
+
+    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(M), 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(M),
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(Out, [bufO contents], byteCount);
+    return true;
+  }
+}
+
+inline void reference_softmax_f16_via_fp32(const uint16_t* X, uint16_t* Out,
+                                           int32_t M, int32_t K) {
+  std::vector<float> Xf(static_cast<std::size_t>(M) * K);
+  std::vector<float> Of(static_cast<std::size_t>(M) * K);
+  for (std::size_t i = 0; i < Xf.size(); ++i) Xf[i] = half_to_float_gpu(X[i]);
+  reference_softmax_f32(Xf.data(), Of.data(), M, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_half_gpu(Of[i]);
+}
+
+inline void reference_softmax_bf16_via_fp32(const uint16_t* X, uint16_t* Out,
+                                            int32_t M, int32_t K) {
+  std::vector<float> Xf(static_cast<std::size_t>(M) * K);
+  std::vector<float> Of(static_cast<std::size_t>(M) * K);
+  for (std::size_t i = 0; i < Xf.size(); ++i) Xf[i] = bfloat16_to_float_gpu(X[i]);
+  reference_softmax_f32(Xf.data(), Of.data(), M, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_bfloat16_gpu(Of[i]);
+}
+
+bool dispatch_softmax_bf16_via_fp32(MetalDeviceContext &ctx, const uint16_t* X,
+                                    uint16_t* Out, int32_t M, int32_t K) {
+  std::vector<float> Xf(static_cast<std::size_t>(M) * K);
+  std::vector<float> Of(static_cast<std::size_t>(M) * K);
+  for (std::size_t i = 0; i < Xf.size(); ++i) Xf[i] = bfloat16_to_float_gpu(X[i]);
+  if (!dispatch_softmax_msl(ctx, Xf.data(), Of.data(), M, K)) return false;
+  for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_bfloat16_gpu(Of[i]);
+  return true;
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_softmax_f16(const uint16_t* X, uint16_t* Out,
+                                              int32_t M, int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_softmax_msl_f16(ctx, X, Out, M, K)) return;
+  reference_softmax_f16_via_fp32(X, Out, M, K);
+}
+
+extern "C" void tessera_apple_gpu_softmax_bf16(const uint16_t* X, uint16_t* Out,
+                                               int32_t M, int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_softmax_bf16_via_fp32(ctx, X, Out, M, K)) return;
+  reference_softmax_bf16_via_fp32(X, Out, M, K);
+}
+
+//===---------------------------------------------------------------------===//
 // Phase 8.4.2 — GeLU (elementwise, f32)
 //
 // Tanh-approximation GeLU, matching the numpy reference in
@@ -774,6 +1272,113 @@ extern "C" void tessera_apple_gpu_gelu_f32(const float* X, float* Out,
   MetalDeviceContext &ctx = deviceContext();
   if (ctx.ok && dispatch_gelu_msl(ctx, X, Out, N)) return;
   reference_gelu_f32(X, Out, N);
+}
+
+//===---------------------------------------------------------------------===//
+// Phase 8.4.4.1 — fp16 + bf16 gelu variants.
+// fp16: native MSL `half` kernel; tanh/cube in `float` for accuracy.
+// bf16: fp32-conversion path.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+bool dispatch_gelu_msl_f16(MetalDeviceContext &ctx, const uint16_t* X,
+                           uint16_t* Out, int32_t N) {
+  static NSString *const kGeluSourceF16 = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void gelu_f16(
+    device const half*  x   [[buffer(0)]],
+    device half*        out [[buffer(1)]],
+    constant int&       N   [[buffer(2)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)N) return;
+    float v = float(x[gid]);
+    float t = 0.7978845608028654f * (v + 0.044715f * v * v * v);
+    out[gid] = half(0.5f * v * (1.0f + tanh(t)));
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kGeluSourceF16, @"gelu_f16");
+    if (!pso) return false;
+
+    NSUInteger byteCount = sizeof(uint16_t) * static_cast<NSUInteger>(N);
+    id<MTLBuffer> bufX = [ctx.device newBufferWithBytes:X
+                                                  length:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufX || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufO offset:0 atIndex:1];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:2];
+
+    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(N), 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(N),
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(Out, [bufO contents], byteCount);
+    return true;
+  }
+}
+
+inline void reference_gelu_f16_via_fp32(const uint16_t* X, uint16_t* Out,
+                                        int32_t N) {
+  std::vector<float> Xf(static_cast<std::size_t>(N));
+  std::vector<float> Of(static_cast<std::size_t>(N));
+  for (int32_t i = 0; i < N; ++i) Xf[i] = half_to_float_gpu(X[i]);
+  reference_gelu_f32(Xf.data(), Of.data(), N);
+  for (int32_t i = 0; i < N; ++i) Out[i] = float_to_half_gpu(Of[i]);
+}
+
+inline void reference_gelu_bf16_via_fp32(const uint16_t* X, uint16_t* Out,
+                                         int32_t N) {
+  std::vector<float> Xf(static_cast<std::size_t>(N));
+  std::vector<float> Of(static_cast<std::size_t>(N));
+  for (int32_t i = 0; i < N; ++i) Xf[i] = bfloat16_to_float_gpu(X[i]);
+  reference_gelu_f32(Xf.data(), Of.data(), N);
+  for (int32_t i = 0; i < N; ++i) Out[i] = float_to_bfloat16_gpu(Of[i]);
+}
+
+bool dispatch_gelu_bf16_via_fp32(MetalDeviceContext &ctx, const uint16_t* X,
+                                 uint16_t* Out, int32_t N) {
+  std::vector<float> Xf(static_cast<std::size_t>(N));
+  std::vector<float> Of(static_cast<std::size_t>(N));
+  for (int32_t i = 0; i < N; ++i) Xf[i] = bfloat16_to_float_gpu(X[i]);
+  if (!dispatch_gelu_msl(ctx, Xf.data(), Of.data(), N)) return false;
+  for (int32_t i = 0; i < N; ++i) Out[i] = float_to_bfloat16_gpu(Of[i]);
+  return true;
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_gelu_f16(const uint16_t* X, uint16_t* Out,
+                                           int32_t N) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_gelu_msl_f16(ctx, X, Out, N)) return;
+  reference_gelu_f16_via_fp32(X, Out, N);
+}
+
+extern "C" void tessera_apple_gpu_gelu_bf16(const uint16_t* X, uint16_t* Out,
+                                            int32_t N) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_gelu_bf16_via_fp32(ctx, X, Out, N)) return;
+  reference_gelu_bf16_via_fp32(X, Out, N);
 }
 
 //===---------------------------------------------------------------------===//

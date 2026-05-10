@@ -20,7 +20,9 @@ Phase 1 exports (Python frontend + Graph IR):
 __version__ = "0.1.0"
 __author__ = "Tessera Team"
 
+import math
 import types
+import builtins
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -2391,6 +2393,101 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             np.exp(-np.abs(a)) / (1.0 + np.exp(-np.abs(a))),
         )
 
+    # Scalar math breadth -------------------------------------------------
+    def sub(x, y):
+        return np.subtract(_unwrap(x), _unwrap(y))
+
+    def div(x, y):
+        return np.divide(_unwrap(x), _unwrap(y))
+
+    def floor_div(x, y):
+        return np.floor_divide(_unwrap(x), _unwrap(y))
+
+    def mod(x, y):
+        return np.mod(_unwrap(x), _unwrap(y))
+
+    def exp(x):
+        return np.exp(_unwrap(x))
+
+    def log(x):
+        return np.log(_unwrap(x))
+
+    def sqrt(x):
+        return np.sqrt(_unwrap(x))
+
+    def rsqrt(x):
+        return np.reciprocal(np.sqrt(_unwrap(x)))
+
+    def pow(x, y):
+        return np.power(_unwrap(x), _unwrap(y))
+
+    def cos(x):
+        return np.cos(_unwrap(x))
+
+    def tan(x):
+        return np.tan(_unwrap(x))
+
+    def sinh(x):
+        return np.sinh(_unwrap(x))
+
+    def cosh(x):
+        return np.cosh(_unwrap(x))
+
+    def asin(x):
+        return np.arcsin(_unwrap(x))
+
+    def acos(x):
+        return np.arccos(_unwrap(x))
+
+    def atan(x):
+        return np.arctan(_unwrap(x))
+
+    def atan2(y, x):
+        return np.arctan2(_unwrap(y), _unwrap(x))
+
+    def erf(x):
+        # NumPy 2.0+ no longer guarantees np.erf; vectorize math.erf to keep
+        # the reference path dependency-light.
+        a = _unwrap(x)
+        return np.vectorize(math.erf, otypes=[np.float64])(a).astype(a.dtype, copy=False)
+
+    def erfc(x):
+        a = _unwrap(x)
+        return np.vectorize(math.erfc, otypes=[np.float64])(a).astype(a.dtype, copy=False)
+
+    def lgamma(x):
+        a = _unwrap(x)
+        return np.vectorize(math.lgamma, otypes=[np.float64])(a).astype(a.dtype, copy=False)
+
+    def _digamma_scalar(x):
+        # Reflection formula handles negative non-integers; poles return nan.
+        x = float(x)
+        if x <= 0.0:
+            if abs(x - round(x)) < 1e-12:
+                return float("nan")
+            return _digamma_scalar(1.0 - x) - math.pi / math.tan(math.pi * x)
+        result = 0.0
+        while x < 8.0:
+            result -= 1.0 / x
+            x += 1.0
+        inv = 1.0 / x
+        inv2 = inv * inv
+        # Asymptotic expansion: psi(x) = log(x) - 1/(2x) - 1/(12x^2)
+        # + 1/(120x^4) - 1/(252x^6) + 1/(240x^8) ...
+        return (
+            result
+            + math.log(x)
+            - 0.5 * inv
+            - inv2 / 12.0
+            + inv2 * inv2 / 120.0
+            - inv2 * inv2 * inv2 / 252.0
+            + inv2 * inv2 * inv2 * inv2 / 240.0
+        )
+
+    def digamma(x):
+        a = _unwrap(x)
+        return np.vectorize(_digamma_scalar, otypes=[np.float64])(a).astype(a.dtype, copy=False)
+
     # Numeric helpers + comparisons --------------------------------------
     def clamp(x, min=None, max=None):
         a = _unwrap(x)
@@ -2404,8 +2501,26 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     def absolute(x):
         return np.abs(_unwrap(x))
 
+    def abs(x):
+        return absolute(x)
+
     def sign(x):
         return np.sign(_unwrap(x))
+
+    def reciprocal(x):
+        return np.reciprocal(_unwrap(x))
+
+    def floor(x):
+        return np.floor(_unwrap(x))
+
+    def ceil(x):
+        return np.ceil(_unwrap(x))
+
+    def round(x):
+        return np.round(_unwrap(x))
+
+    def trunc(x):
+        return np.trunc(_unwrap(x))
 
     def minimum(x, y):
         return np.minimum(_unwrap(x), _unwrap(y))
@@ -2439,6 +2554,186 @@ def _make_ops_namespace() -> types.SimpleNamespace:
 
     def ge(x, y):
         return np.greater_equal(_unwrap(x), _unwrap(y))
+
+    def logical_and(x, y):
+        return np.logical_and(_unwrap(x), _unwrap(y))
+
+    def logical_or(x, y):
+        return np.logical_or(_unwrap(x), _unwrap(y))
+
+    def logical_not(x):
+        return np.logical_not(_unwrap(x))
+
+    def logical_xor(x, y):
+        return np.logical_xor(_unwrap(x), _unwrap(y))
+
+    def bitwise_and(x, y):
+        return np.bitwise_and(_unwrap(x), _unwrap(y))
+
+    def bitwise_or(x, y):
+        return np.bitwise_or(_unwrap(x), _unwrap(y))
+
+    def bitwise_xor(x, y):
+        return np.bitwise_xor(_unwrap(x), _unwrap(y))
+
+    def bitwise_not(x):
+        return np.bitwise_not(_unwrap(x))
+
+    # Tensor algebra + indexing -----------------------------------------
+    def reshape(x, shape):
+        return np.reshape(_unwrap(x), tuple(shape))
+
+    def view(x, shape):
+        return reshape(x, shape)
+
+    def flatten(x, start_axis: int = 0, end_axis: int = -1):
+        a = _unwrap(x)
+        ndim = a.ndim
+        start = start_axis if start_axis >= 0 else ndim + start_axis
+        end = end_axis if end_axis >= 0 else ndim + end_axis
+        if start < 0 or end >= ndim or start > end:
+            raise ValueError(f"invalid flatten axes {start_axis}, {end_axis} for rank {ndim}")
+        flat = int(np.prod(a.shape[start:end + 1]))
+        return np.reshape(a, a.shape[:start] + (flat,) + a.shape[end + 1:])
+
+    def squeeze(x, axis=None):
+        return np.squeeze(_unwrap(x), axis=axis)
+
+    def unsqueeze(x, axis: int):
+        return np.expand_dims(_unwrap(x), axis=axis)
+
+    def permute(x, axes):
+        return np.transpose(_unwrap(x), axes=tuple(axes))
+
+    def broadcast(x, shape):
+        return np.broadcast_to(_unwrap(x), tuple(shape))
+
+    def expand(x, shape):
+        return broadcast(x, shape)
+
+    def cat(xs, axis: int = 0):
+        return np.concatenate([_unwrap(x) for x in xs], axis=axis)
+
+    def stack(xs, axis: int = 0):
+        return np.stack([_unwrap(x) for x in xs], axis=axis)
+
+    def split(x, indices_or_sections, axis: int = 0):
+        return tuple(np.array_split(_unwrap(x), indices_or_sections, axis=axis)
+                     if isinstance(indices_or_sections, int)
+                     else np.split(_unwrap(x), indices_or_sections, axis=axis))
+
+    def chunk(x, chunks: int, axis: int = 0):
+        return tuple(np.array_split(_unwrap(x), chunks, axis=axis))
+
+    def pad(x, pad_width, mode: str = "constant", constant_values=0):
+        a = _unwrap(x)
+        if mode == "constant":
+            return np.pad(a, pad_width, mode=mode, constant_values=constant_values)
+        return np.pad(a, pad_width, mode=mode)
+
+    def tile(x, reps):
+        return np.tile(_unwrap(x), reps)
+
+    def repeat(x, repeats, axis=None):
+        return np.repeat(_unwrap(x), repeats, axis=axis)
+
+    def roll(x, shift, axis=None):
+        return np.roll(_unwrap(x), shift=shift, axis=axis)
+
+    def flip(x, axis=None):
+        return np.flip(_unwrap(x), axis=axis)
+
+    def dynamic_slice(x, start_indices, slice_sizes):
+        a = _unwrap(x)
+        if len(start_indices) != a.ndim or len(slice_sizes) != a.ndim:
+            raise ValueError("start_indices and slice_sizes must match input rank")
+        slices = tuple(
+            builtins.slice(int(start), int(start) + int(size))
+            for start, size in zip(start_indices, slice_sizes)
+        )
+        return a[slices]
+
+    def slice_op(x, start_indices, slice_sizes):
+        return dynamic_slice(x, start_indices, slice_sizes)
+
+    def select(x, index: int, axis: int = 0):
+        return np.take(_unwrap(x), int(index), axis=axis)
+
+    def dynamic_update_slice(x, update, start_indices):
+        a = np.array(_unwrap(x), copy=True)
+        u = _unwrap(update)
+        if len(start_indices) != a.ndim:
+            raise ValueError("start_indices must match input rank")
+        slices = tuple(
+            builtins.slice(int(start), int(start) + int(size))
+            for start, size in zip(start_indices, u.shape)
+        )
+        a[slices] = u
+        return a
+
+    def take(x, indices, axis: int | None = None):
+        return np.take(_unwrap(x), _unwrap(indices).astype(np.int64), axis=axis)
+
+    def index_select(x, indices, axis: int = 0):
+        return take(x, indices, axis=axis)
+
+    def _scatter_base(x, indices, updates, *, axis: int = 0, mode: str = "set", reduce: str = "sum"):
+        out = np.array(_unwrap(x), copy=True)
+        idx = _unwrap(indices).astype(np.int64)
+        upd = _unwrap(updates)
+        ax = axis if axis >= 0 else out.ndim + axis
+        out_m = np.moveaxis(out, ax, 0)
+        upd_m = np.moveaxis(upd, ax, 0) if upd.ndim == out.ndim else upd
+        if idx.ndim == 1:
+            if mode == "set":
+                out_m[idx] = upd_m
+            elif reduce == "sum":
+                np.add.at(out_m, idx, upd_m)
+            elif reduce == "min":
+                np.minimum.at(out_m, idx, upd_m)
+            elif reduce == "max":
+                np.maximum.at(out_m, idx, upd_m)
+            else:
+                raise ValueError(f"unsupported scatter_reduce reduce={reduce!r}")
+        else:
+            if mode == "set":
+                np.put_along_axis(out, idx, upd, axis=ax)
+                return out
+            if reduce != "sum":
+                raise ValueError("non-1D scatter_reduce only supports reduce='sum' today")
+            np.add.at(out_m, idx, upd_m)
+        return np.moveaxis(out_m, 0, ax)
+
+    def scatter(x, indices, updates, axis: int = 0):
+        return _scatter_base(x, indices, updates, axis=axis, mode="set")
+
+    def scatter_add(x, indices, updates, axis: int = 0):
+        return _scatter_base(x, indices, updates, axis=axis, mode="add", reduce="sum")
+
+    def scatter_reduce(x, indices, updates, axis: int = 0, reduce: str = "sum"):
+        return _scatter_base(x, indices, updates, axis=axis, mode="add", reduce=reduce)
+
+    def index_update(x, indices, updates, axis: int = 0):
+        return scatter(x, indices, updates, axis=axis)
+
+    def nonzero(x):
+        return np.nonzero(_unwrap(x))
+
+    def top_k(x, k: int, axis: int = -1):
+        a = _unwrap(x)
+        idx = np.argsort(a, axis=axis)
+        idx = np.take(idx, np.arange(a.shape[axis] - k, a.shape[axis]), axis=axis)
+        idx = np.flip(idx, axis=axis)
+        values = np.take_along_axis(a, idx, axis=axis)
+        return values, idx
+
+    def sort(x, axis: int = -1, descending: bool = False):
+        out = np.sort(_unwrap(x), axis=axis)
+        return np.flip(out, axis=axis) if descending else out
+
+    def argsort(x, axis: int = -1, descending: bool = False):
+        out = np.argsort(_unwrap(x), axis=axis)
+        return np.flip(out, axis=axis) if descending else out
 
     references = {
         "gemm": gemm,
@@ -2564,11 +2859,38 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "expm1": expm1,
         "softplus": softplus,
         "sigmoid_safe": sigmoid_safe,
+        "sub": sub,
+        "div": div,
+        "floor_div": floor_div,
+        "mod": mod,
+        "exp": exp,
+        "log": log,
+        "sqrt": sqrt,
+        "rsqrt": rsqrt,
+        "pow": pow,
+        "cos": cos,
+        "tan": tan,
+        "sinh": sinh,
+        "cosh": cosh,
+        "asin": asin,
+        "acos": acos,
+        "atan": atan,
+        "atan2": atan2,
+        "erf": erf,
+        "erfc": erfc,
+        "lgamma": lgamma,
+        "digamma": digamma,
         # S2 — numeric helpers
         "clamp": clamp,
         "where": where,
         "absolute": absolute,
+        "abs": abs,
         "sign": sign,
+        "reciprocal": reciprocal,
+        "floor": floor,
+        "ceil": ceil,
+        "round": round,
+        "trunc": trunc,
         "minimum": minimum,
         "maximum": maximum,
         "isnan": isnan,
@@ -2581,6 +2903,47 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "le": le,
         "gt": gt,
         "ge": ge,
+        # S2 — logical / bitwise
+        "logical_and": logical_and,
+        "logical_or": logical_or,
+        "logical_not": logical_not,
+        "logical_xor": logical_xor,
+        "bitwise_and": bitwise_and,
+        "bitwise_or": bitwise_or,
+        "bitwise_xor": bitwise_xor,
+        "bitwise_not": bitwise_not,
+        # S2 — tensor algebra + indexing
+        "reshape": reshape,
+        "view": view,
+        "flatten": flatten,
+        "squeeze": squeeze,
+        "unsqueeze": unsqueeze,
+        "permute": permute,
+        "broadcast": broadcast,
+        "expand": expand,
+        "cat": cat,
+        "stack": stack,
+        "split": split,
+        "chunk": chunk,
+        "pad": pad,
+        "tile": tile,
+        "repeat": repeat,
+        "roll": roll,
+        "flip": flip,
+        "slice": slice_op,
+        "select": select,
+        "dynamic_slice": dynamic_slice,
+        "dynamic_update_slice": dynamic_update_slice,
+        "take": take,
+        "index_select": index_select,
+        "scatter": scatter,
+        "scatter_add": scatter_add,
+        "scatter_reduce": scatter_reduce,
+        "index_update": index_update,
+        "nonzero": nonzero,
+        "top_k": top_k,
+        "sort": sort,
+        "argsort": argsort,
     }
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
@@ -2716,10 +3079,37 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         expm1=expm1,
         softplus=softplus,
         sigmoid_safe=sigmoid_safe,
+        sub=sub,
+        div=div,
+        floor_div=floor_div,
+        mod=mod,
+        exp=exp,
+        log=log,
+        sqrt=sqrt,
+        rsqrt=rsqrt,
+        pow=pow,
+        cos=cos,
+        tan=tan,
+        sinh=sinh,
+        cosh=cosh,
+        asin=asin,
+        acos=acos,
+        atan=atan,
+        atan2=atan2,
+        erf=erf,
+        erfc=erfc,
+        lgamma=lgamma,
+        digamma=digamma,
         clamp=clamp,
         where=where,
         absolute=absolute,
+        abs=abs,
         sign=sign,
+        reciprocal=reciprocal,
+        floor=floor,
+        ceil=ceil,
+        round=round,
+        trunc=trunc,
         minimum=minimum,
         maximum=maximum,
         isnan=isnan,
@@ -2731,6 +3121,45 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         le=le,
         gt=gt,
         ge=ge,
+        logical_and=logical_and,
+        logical_or=logical_or,
+        logical_not=logical_not,
+        logical_xor=logical_xor,
+        bitwise_and=bitwise_and,
+        bitwise_or=bitwise_or,
+        bitwise_xor=bitwise_xor,
+        bitwise_not=bitwise_not,
+        reshape=reshape,
+        view=view,
+        flatten=flatten,
+        squeeze=squeeze,
+        unsqueeze=unsqueeze,
+        permute=permute,
+        broadcast=broadcast,
+        expand=expand,
+        cat=cat,
+        stack=stack,
+        split=split,
+        chunk=chunk,
+        pad=pad,
+        tile=tile,
+        repeat=repeat,
+        roll=roll,
+        flip=flip,
+        slice=slice_op,
+        select=select,
+        dynamic_slice=dynamic_slice,
+        dynamic_update_slice=dynamic_update_slice,
+        take=take,
+        index_select=index_select,
+        scatter=scatter,
+        scatter_add=scatter_add,
+        scatter_reduce=scatter_reduce,
+        index_update=index_update,
+        nonzero=nonzero,
+        top_k=top_k,
+        sort=sort,
+        argsort=argsort,
     )
 
 

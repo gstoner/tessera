@@ -170,6 +170,30 @@ _EXISTING_MODEL_FAMILIES: dict[str, tuple[str, ...]] = {
     "istft": ("Hyena/FNet/spectral",),
 }
 
+_EXISTING_CATEGORIES: dict[str, str] = {
+    # S2 tensor-algebra names are layout-transform lowering targets in Graph IR,
+    # but the audit dashboard groups them by their compiler primitive family.
+    "reshape": "tensor_algebra",
+    "view": "tensor_algebra",
+    "flatten": "tensor_algebra",
+    "squeeze": "tensor_algebra",
+    "unsqueeze": "tensor_algebra",
+    "permute": "tensor_algebra",
+    "broadcast": "tensor_algebra",
+    "expand": "tensor_algebra",
+    "cat": "tensor_algebra",
+    "stack": "tensor_algebra",
+    "split": "tensor_algebra",
+    "chunk": "tensor_algebra",
+    "pad": "tensor_algebra",
+    "tile": "tensor_algebra",
+    "repeat": "tensor_algebra",
+    "roll": "tensor_algebra",
+    "flip": "tensor_algebra",
+    "slice": "tensor_algebra",
+    "select": "tensor_algebra",
+}
+
 
 def _existing_coverage() -> dict[str, PrimitiveCoverage]:
     registered_vjps = _vjp_registered_names()
@@ -180,7 +204,7 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         has_jvp = _existing_op_has_jvp(name, registered_jvps)
         entries[name] = PrimitiveCoverage(
             name=name,
-            category=spec.lowering,
+            category=_EXISTING_CATEGORIES.get(name, spec.lowering),
             status="partial",
             contract_status=_existing_contracts(
                 spec.effect, vjp_complete=has_vjp, jvp_complete=has_jvp

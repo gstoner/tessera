@@ -123,6 +123,230 @@ def vjp_cast(dout, x, *, dtype=None, **_):
     return (dout.astype(x.dtype, copy=False),)
 
 
+def _normalize_axis(axis: int, ndim: int) -> int:
+    return axis if axis >= 0 else ndim + axis
+
+
+def _slice_tuple(start_indices, sizes) -> tuple[slice, ...]:
+    return tuple(
+        slice(int(start), int(start) + int(size))
+        for start, size in zip(start_indices, sizes)
+    )
+
+
+@_vjp("reshape")
+def vjp_reshape(dout, x, *, shape=None, **_):
+    return (np.asarray(dout).reshape(np.asarray(x).shape),)
+
+
+@_vjp("view")
+def vjp_view(dout, x, *, shape=None, **_):
+    return vjp_reshape(dout, x, shape=shape)
+
+
+@_vjp("flatten")
+def vjp_flatten(dout, x, *, start_axis=0, end_axis=-1, **_):
+    return (np.asarray(dout).reshape(np.asarray(x).shape),)
+
+
+@_vjp("squeeze")
+def vjp_squeeze(dout, x, *, axis=None, **_):
+    return (np.asarray(dout).reshape(np.asarray(x).shape),)
+
+
+@_vjp("unsqueeze")
+def vjp_unsqueeze(dout, x, *, axis=None, **_):
+    return (np.asarray(dout).reshape(np.asarray(x).shape),)
+
+
+@_vjp("permute")
+def vjp_permute(dout, x, *, axes=None, **_):
+    inv = np.argsort(tuple(axes))
+    return (np.transpose(dout, axes=tuple(int(i) for i in inv)),)
+
+
+@_vjp("broadcast")
+def vjp_broadcast(dout, x, *, shape=None, **_):
+    return (_sum_to_shape(np.asarray(dout), np.asarray(x).shape),)
+
+
+@_vjp("expand")
+def vjp_expand(dout, x, *, shape=None, **_):
+    return vjp_broadcast(dout, x, shape=shape)
+
+
+@_vjp("cat")
+def vjp_cat(dout, xs, *, axis=0, **_):
+    sizes = [np.asarray(x).shape[axis] for x in xs]
+    offsets = np.cumsum(sizes)[:-1]
+    return (tuple(np.split(np.asarray(dout), offsets, axis=axis)),)
+
+
+@_vjp("stack")
+def vjp_stack(dout, xs, *, axis=0, **_):
+    axis = _normalize_axis(axis, np.asarray(dout).ndim)
+    return (tuple(np.squeeze(part, axis=axis) for part in np.split(dout, len(xs), axis=axis)),)
+
+
+@_vjp("split")
+def vjp_split(dout, x, *, indices_or_sections=None, axis=0, **_):
+    return (np.concatenate(tuple(dout), axis=axis),)
+
+
+@_vjp("chunk")
+def vjp_chunk(dout, x, *, chunks=None, axis=0, **_):
+    return (np.concatenate(tuple(dout), axis=axis),)
+
+
+@_vjp("pad")
+def vjp_pad(dout, x, *, pad_width=None, mode="constant", constant_values=0, **_):
+    if pad_width is None:
+        raise ValueError("vjp_pad requires pad_width")
+    normalized = []
+    for item in pad_width:
+        if isinstance(item, int):
+            normalized.append((item, item))
+        else:
+            normalized.append((int(item[0]), int(item[1])))
+    slices = tuple(
+        slice(before, np.asarray(dout).shape[axis] - after if after else None)
+        for axis, (before, after) in enumerate(normalized)
+    )
+    return (np.asarray(dout)[slices].reshape(np.asarray(x).shape),)
+
+
+@_vjp("tile")
+def vjp_tile(dout, x, *, reps=None, **_):
+    x_shape = tuple(np.asarray(x).shape)
+    reps_tuple = tuple(reps if isinstance(reps, (tuple, list)) else (reps,))
+    if len(reps_tuple) < len(x_shape):
+        reps_tuple = (1,) * (len(x_shape) - len(reps_tuple)) + reps_tuple
+    elif len(reps_tuple) > len(x_shape):
+        x_shape = (1,) * (len(reps_tuple) - len(x_shape)) + x_shape
+    interleaved = []
+    for rep, size in zip(reps_tuple, x_shape):
+        interleaved.extend([int(rep), int(size)])
+    grad = np.asarray(dout).reshape(interleaved)
+    for axis in reversed(range(0, len(interleaved), 2)):
+        grad = grad.sum(axis=axis)
+    return (grad.reshape(np.asarray(x).shape),)
+
+
+@_vjp("repeat")
+def vjp_repeat(dout, x, *, repeats=None, axis=None, **_):
+    if not isinstance(repeats, (int, np.integer)):
+        raise NotImplementedError("repeat VJP currently supports scalar repeats only")
+    repeats = int(repeats)
+    if axis is None:
+        return (np.asarray(dout).reshape(-1, repeats).sum(axis=1).reshape(np.asarray(x).shape),)
+    ax = _normalize_axis(axis, np.asarray(x).ndim)
+    moved = np.moveaxis(np.asarray(dout), ax, 0)
+    grad = moved.reshape(np.asarray(x).shape[ax], repeats, *moved.shape[1:]).sum(axis=1)
+    return (np.moveaxis(grad, 0, ax),)
+
+
+@_vjp("roll")
+def vjp_roll(dout, x, *, shift=None, axis=None, **_):
+    return (np.roll(dout, shift=-shift, axis=axis),)
+
+
+@_vjp("flip")
+def vjp_flip(dout, x, *, axis=None, **_):
+    return (np.flip(dout, axis=axis),)
+
+
+@_vjp("dynamic_slice")
+def vjp_dynamic_slice(dout, x, *, start_indices=None, slice_sizes=None, **_):
+    dx = np.zeros_like(x)
+    dx[_slice_tuple(start_indices, slice_sizes)] = dout
+    return (dx,)
+
+
+@_vjp("slice")
+def vjp_slice(dout, x, *, start_indices=None, slice_sizes=None, **_):
+    return vjp_dynamic_slice(dout, x, start_indices=start_indices, slice_sizes=slice_sizes)
+
+
+@_vjp("select")
+def vjp_select(dout, x, *, index=None, axis=0, **_):
+    dx = np.zeros_like(x)
+    ax = _normalize_axis(axis, np.asarray(x).ndim)
+    dx_m = np.moveaxis(dx, ax, 0)
+    dx_m[int(index)] = dout
+    return (np.moveaxis(dx_m, 0, ax),)
+
+
+@_vjp("dynamic_update_slice")
+def vjp_dynamic_update_slice(dout, x, update, *, start_indices=None, **_):
+    slices = _slice_tuple(start_indices, np.asarray(update).shape)
+    dx = np.array(dout, copy=True)
+    dx[slices] = 0
+    dupdate = np.asarray(dout)[slices].reshape(np.asarray(update).shape)
+    return (dx, dupdate)
+
+
+@_vjp("take")
+def vjp_take(dout, x, indices, *, axis=None, **_):
+    idx = np.asarray(indices, dtype=np.int64)
+    dx = np.zeros_like(x)
+    if axis is None:
+        np.add.at(dx.reshape(-1), idx.reshape(-1), np.asarray(dout).reshape(-1))
+        return (dx, None)
+    ax = _normalize_axis(axis, np.asarray(x).ndim)
+    dx_m = np.moveaxis(dx, ax, 0)
+    dout_m = np.moveaxis(np.asarray(dout), ax, 0)
+    np.add.at(dx_m, idx, dout_m)
+    return (np.moveaxis(dx_m, 0, ax), None)
+
+
+@_vjp("index_select")
+def vjp_index_select(dout, x, indices, *, axis=0, **_):
+    return vjp_take(dout, x, indices, axis=axis)
+
+
+def _zero_selected_axis(dout, indices, axis):
+    dx = np.array(dout, copy=True)
+    ax = _normalize_axis(axis, dx.ndim)
+    dx_m = np.moveaxis(dx, ax, 0)
+    dx_m[np.asarray(indices, dtype=np.int64)] = 0
+    return np.moveaxis(dx_m, 0, ax)
+
+
+def _take_selected_axis(dout, indices, axis, target_shape):
+    gathered = np.take(np.asarray(dout), np.asarray(indices, dtype=np.int64), axis=axis)
+    return gathered.reshape(target_shape)
+
+
+@_vjp("scatter")
+def vjp_scatter(dout, x, indices, updates, *, axis=0, **_):
+    return (
+        _zero_selected_axis(dout, indices, axis),
+        None,
+        _take_selected_axis(dout, indices, axis, np.asarray(updates).shape),
+    )
+
+
+@_vjp("index_update")
+def vjp_index_update(dout, x, indices, updates, *, axis=0, **_):
+    return vjp_scatter(dout, x, indices, updates, axis=axis)
+
+
+@_vjp("scatter_add")
+def vjp_scatter_add(dout, x, indices, updates, *, axis=0, **_):
+    return (
+        np.asarray(dout),
+        None,
+        _take_selected_axis(dout, indices, axis, np.asarray(updates).shape),
+    )
+
+
+@_vjp("scatter_reduce")
+def vjp_scatter_reduce(dout, x, indices, updates, *, axis=0, reduce="sum", **_):
+    if reduce != "sum":
+        raise NotImplementedError("scatter_reduce VJP is implemented only for reduce='sum'")
+    return vjp_scatter_add(dout, x, indices, updates, axis=axis)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Activations
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1207,6 +1431,177 @@ def vjp_sigmoid_safe(dout, x, **_):
         np.exp(a) / (1.0 + np.exp(a)),
     )
     return (sig * (1.0 - sig) * np.asarray(dout),)
+
+
+# ── S2 scalar math breadth ─────────────────────────────────────────────────
+
+
+@_vjp("sub")
+def vjp_sub(dout, x, y, **_):
+    do = np.asarray(dout)
+    return (_sum_to_shape(do, np.asarray(x).shape),
+            _sum_to_shape(-do, np.asarray(y).shape))
+
+
+@_vjp("div")
+def vjp_div(dout, x, y, **_):
+    a, b, do = np.asarray(x), np.asarray(y), np.asarray(dout)
+    return (_sum_to_shape(do / b, a.shape),
+            _sum_to_shape(-do * a / (b * b), b.shape))
+
+
+@_vjp("exp")
+def vjp_exp(dout, x, **_):
+    return (np.asarray(dout) * np.exp(np.asarray(x)),)
+
+
+@_vjp("log")
+def vjp_log(dout, x, **_):
+    return (np.asarray(dout) / np.asarray(x),)
+
+
+@_vjp("sqrt")
+def vjp_sqrt(dout, x, **_):
+    a = np.asarray(x)
+    return (np.asarray(dout) * 0.5 / np.sqrt(a),)
+
+
+@_vjp("rsqrt")
+def vjp_rsqrt(dout, x, **_):
+    a = np.asarray(x)
+    return (np.asarray(dout) * -0.5 * np.power(a, -1.5),)
+
+
+@_vjp("pow")
+def vjp_pow(dout, x, y, **_):
+    a, b, do = np.asarray(x), np.asarray(y), np.asarray(dout)
+    out = np.power(a, b)
+    da = do * b * np.power(a, b - 1.0)
+    # d/db a**b = a**b log(a). Undefined for a <= 0 in real-valued AD;
+    # return 0 there, matching the "skip singular branch" convention used
+    # by several framework reference paths.
+    db = do * out * np.where(a > 0, np.log(a), 0.0)
+    return (_sum_to_shape(da, a.shape), _sum_to_shape(db, b.shape))
+
+
+@_vjp("cos")
+def vjp_cos(dout, x, **_):
+    return (-np.asarray(dout) * np.sin(np.asarray(x)),)
+
+
+@_vjp("tan")
+def vjp_tan(dout, x, **_):
+    c = np.cos(np.asarray(x))
+    return (np.asarray(dout) / (c * c),)
+
+
+@_vjp("sinh")
+def vjp_sinh(dout, x, **_):
+    return (np.asarray(dout) * np.cosh(np.asarray(x)),)
+
+
+@_vjp("cosh")
+def vjp_cosh(dout, x, **_):
+    return (np.asarray(dout) * np.sinh(np.asarray(x)),)
+
+
+@_vjp("asin")
+def vjp_asin(dout, x, **_):
+    a = np.asarray(x)
+    return (np.asarray(dout) / np.sqrt(1.0 - a * a),)
+
+
+@_vjp("acos")
+def vjp_acos(dout, x, **_):
+    a = np.asarray(x)
+    return (-np.asarray(dout) / np.sqrt(1.0 - a * a),)
+
+
+@_vjp("atan")
+def vjp_atan(dout, x, **_):
+    a = np.asarray(x)
+    return (np.asarray(dout) / (1.0 + a * a),)
+
+
+@_vjp("atan2")
+def vjp_atan2(dout, y, x, **_):
+    a, b, do = np.asarray(y), np.asarray(x), np.asarray(dout)
+    denom = a * a + b * b
+    dy = do * b / denom
+    dx = -do * a / denom
+    return (_sum_to_shape(dy, a.shape), _sum_to_shape(dx, b.shape))
+
+
+@_vjp("erf")
+def vjp_erf(dout, x, **_):
+    a = np.asarray(x)
+    return (np.asarray(dout) * (2.0 / math.sqrt(math.pi)) * np.exp(-(a * a)),)
+
+
+@_vjp("erfc")
+def vjp_erfc(dout, x, **_):
+    a = np.asarray(x)
+    return (-np.asarray(dout) * (2.0 / math.sqrt(math.pi)) * np.exp(-(a * a)),)
+
+
+def _digamma_positive(a: np.ndarray) -> np.ndarray:
+    x = np.asarray(a, dtype=np.float64).copy()
+    result = np.zeros_like(x, dtype=np.float64)
+    while np.any(x < 8.0):
+        mask = x < 8.0
+        result[mask] -= 1.0 / x[mask]
+        x[mask] += 1.0
+    inv = 1.0 / x
+    inv2 = inv * inv
+    result = (
+        result
+        + np.log(x)
+        - 0.5 * inv
+        - inv2 / 12.0
+        + inv2 * inv2 / 120.0
+        - inv2 * inv2 * inv2 / 252.0
+        + inv2 * inv2 * inv2 * inv2 / 240.0
+    )
+    return result
+
+
+def _trigamma_positive(a: np.ndarray) -> np.ndarray:
+    x = np.asarray(a, dtype=np.float64).copy()
+    result = np.zeros_like(x, dtype=np.float64)
+    while np.any(x < 8.0):
+        mask = x < 8.0
+        result[mask] += 1.0 / (x[mask] * x[mask])
+        x[mask] += 1.0
+    inv = 1.0 / x
+    inv2 = inv * inv
+    # Derivative of the digamma asymptotic expansion above.
+    result = (
+        result
+        + inv
+        + 0.5 * inv2
+        + inv2 * inv / 6.0
+        - inv2 * inv2 * inv / 30.0
+        + inv2 * inv2 * inv2 * inv / 42.0
+        - inv2 * inv2 * inv2 * inv2 * inv / 30.0
+    )
+    return result.astype(np.asarray(a).dtype, copy=False)
+
+
+@_vjp("lgamma")
+def vjp_lgamma(dout, x, **_):
+    a = np.asarray(x)
+    return (np.asarray(dout) * _digamma_positive(a),)
+
+
+@_vjp("digamma")
+def vjp_digamma(dout, x, **_):
+    return (np.asarray(dout) * _trigamma_positive(np.asarray(x)),)
+
+
+@_vjp("reciprocal")
+def vjp_reciprocal(dout, x, **_):
+    a = np.asarray(x)
+    return (-np.asarray(dout) / (a * a),)
 
 
 # ── Numeric helpers (differentiable ones) ───────────────────────────────────

@@ -163,8 +163,13 @@ def test_primitive_coverage_family_queries_and_summary():
 
 
 def test_primitive_coverage_includes_s2_reductions_and_stability():
-    """S2 must register reductions, numerical-stability, and missing scalar math."""
+    """S2 must register reductions, tensor algebra, indexing, and scalar math."""
     entries = all_primitive_coverages()
+
+    # Tensor algebra
+    for name in ("reshape", "pad", "tile", "dynamic_slice", "dynamic_update_slice",
+                 "cat", "stack", "split", "slice", "select", "permute", "broadcast"):
+        assert name in entries, f"S2 tensor algebra missing: {name}"
 
     # Reductions
     for name in ("mean", "var", "argmax", "argmin", "cumsum", "cumprod"):
@@ -181,6 +186,11 @@ def test_primitive_coverage_includes_s2_reductions_and_stability():
     # Numeric helpers
     for name in ("clamp", "where", "isnan", "isfinite", "sign", "abs"):
         assert name in entries, f"S2 numeric helper missing: {name}"
+
+    # Indexing / functional updates
+    for name in ("gather", "scatter", "scatter_add", "scatter_reduce", "top_k",
+                 "sort", "argsort", "take", "index_select", "index_update"):
+        assert name in entries, f"S2 indexing/update missing: {name}"
 
 
 def test_primitive_coverage_includes_s5_transforms_and_axis_helpers():

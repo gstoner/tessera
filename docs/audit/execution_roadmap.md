@@ -163,9 +163,28 @@ prove before it is compiler-complete.
   diffusion, RNN/xLSTM, SSM/Mamba, Hyena/FNet/spectral, Linformer/cosFormer,
   Griffin/Megalodon, Titans/Atlas memory, and JEPA.
 
-### [S2] Tensor algebra, indexing, and scalar math 📋
+### [S2] Tensor algebra, indexing, and scalar math 🚧
 
 **Scope:** L (~900 LOC code + ~600 LOC tests). Depends on S1.
+
+**Status (2026-05-10):** S2 is now implemented as a CPU-reference compiler
+surface in `python/tessera/__init__.py`, `python/tessera/compiler/op_catalog.py`,
+`python/tessera/compiler/primitive_coverage.py`, and
+`python/tessera/autodiff/vjp.py`. Covered today: tensor algebra (`reshape`,
+`view`, `flatten`, `squeeze`, `unsqueeze`, `permute`, `broadcast`, `expand`,
+`cat`, `stack`, `split`, `chunk`, `pad`, `tile`, `repeat`, `roll`, `flip`,
+`slice`, `select`, `dynamic_slice`, `dynamic_update_slice`), indexing/update (`take`,
+`index_select`, `scatter`, `scatter_add`, `scatter_reduce`, `index_update`,
+`nonzero`, `top_k`, `sort`, `argsort`), reductions (`mean`/`prod`/`amax`/
+`amin`/`var`/`std`/`argmax`/`argmin`/`cumsum`/`cumprod`), stability primitives
+(`logsumexp`, `log_softmax`, `log1p`, `expm1`, `softplus`, `sigmoid_safe`),
+scalar math (`sub`, `div`, `floor_div`, `mod`, `exp`, `log`, `sqrt`, `rsqrt`,
+`pow`, `cos`, `tan`, `sinh`, `cosh`, `asin`, `acos`, `atan`, `atan2`, `erf`,
+`erfc`, `lgamma`, `digamma`), numeric helpers, comparisons, logical ops, and
+full bitwise ops. Differentiable entries have VJPs where the local math
+contract is unambiguous; discontinuous, boolean/integer-valued, and sort-like
+entries intentionally do not. Remaining S2 hardening is formal shape/dtype
+promotion rules, JVP/batching/transpose/sharding rules, and backend kernels.
 
 Complete Tessera-native tensor manipulation and functional indexing. These are
 compiler primitives, not PyTorch compatibility wrappers.

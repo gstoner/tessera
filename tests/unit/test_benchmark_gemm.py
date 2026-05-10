@@ -1,5 +1,9 @@
 """
-test_benchmark_gemm.py — GEMMBenchmark tests (Phase 6)
+test_benchmark_gemm.py — GEMMBenchmark tests (Phase 6).
+
+Marked `slow` at the module level: `TestGEMMRun` runs real GEMMs up to
+8192×8192×8192 (the roofline test). Run explicitly with `pytest -m slow`
+when the benchmark surface needs verification.
 """
 from __future__ import annotations
 
@@ -7,6 +11,9 @@ import json
 import os
 import tempfile
 import pytest
+
+pytestmark = pytest.mark.slow
+
 from benchmarks.benchmark_gemm import GEMMBenchmark, GEMMConfig, GEMMResult
 
 

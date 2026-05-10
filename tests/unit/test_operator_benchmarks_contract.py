@@ -1,3 +1,12 @@
+"""Operator-bench contract tests (Tessera_Operator_Benchmarks bridge).
+
+Marked `slow` at the module level: tests like
+`test_operator_runner_accepts_json_rows_and_writes_telemetry_summary` and
+the artifact-mode bundle validators spawn the operator bridge via
+subprocess and walk the full MLIR-artifact corpus, which is too heavy
+for the quick `-m "not slow"` sweep. Run explicitly with `pytest -m slow`.
+"""
+
 from __future__ import annotations
 
 import csv
@@ -8,7 +17,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 import yaml
+
+pytestmark = pytest.mark.slow
 
 
 ROOT = Path(__file__).resolve().parents[2]

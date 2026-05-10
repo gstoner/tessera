@@ -1,3 +1,12 @@
+"""Tessera SuperBench / benchmark-contract tests.
+
+Marked `slow` at the module level: the SuperBench smoke spawns subprocesses,
+`run_all_benchmarks` runs real GEMMs/attention/collectives, and these
+together dominated 30+ minute runs in the killed `-m "not slow"` sweep.
+Run explicitly with `pytest -m slow` when the benchmark contract surface
+needs verification.
+"""
+
 from __future__ import annotations
 
 import json
@@ -5,6 +14,9 @@ import subprocess
 import sys
 
 import numpy as np
+import pytest
+
+pytestmark = pytest.mark.slow
 
 from benchmarks.common import (
     ArtifactLevels,

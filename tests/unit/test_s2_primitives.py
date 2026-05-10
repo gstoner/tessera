@@ -67,12 +67,16 @@ def test_cumsum_and_cumprod_match_numpy():
     x = np.array([1.0, 2.0, 3.0, 4.0])
     np.testing.assert_array_equal(ts.ops.cumsum(x), np.cumsum(x))
     np.testing.assert_array_equal(ts.ops.cumprod(x), np.cumprod(x))
+    np.testing.assert_array_equal(ts.ops.cummax(x), np.maximum.accumulate(x))
+    np.testing.assert_array_equal(ts.ops.cummin(x[::-1]), np.minimum.accumulate(x[::-1]))
 
 
 def test_amax_amin_match_numpy():
     x = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
     np.testing.assert_array_equal(ts.ops.amax(x, axis=1), np.max(x, axis=1))
     np.testing.assert_array_equal(ts.ops.amin(x, axis=0), np.min(x, axis=0))
+    np.testing.assert_array_equal(ts.ops.max(x, axis=1), np.max(x, axis=1))
+    np.testing.assert_array_equal(ts.ops.min(x, axis=0), np.min(x, axis=0))
 
 
 def test_prod_matches_numpy():
@@ -340,7 +344,7 @@ def test_s2_scatter_family_is_functional_and_matches_reference():
 
 
 @pytest.mark.parametrize("name", [
-    "mean", "prod", "amax", "amin", "var", "std", "cumsum",
+    "mean", "prod", "amax", "amin", "max", "min", "var", "std", "cumsum",
     "logsumexp", "log_softmax", "log1p", "expm1", "softplus", "sigmoid_safe",
     "sub", "div", "exp", "log", "sqrt", "rsqrt", "pow", "cos", "tan",
     "sinh", "cosh", "asin", "acos", "atan", "atan2", "erf", "erfc",

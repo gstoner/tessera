@@ -27,8 +27,8 @@ Generated from `all_primitive_coverages()` on 2026-05-10:
 | Metric | Count |
 |---|---:|
 | Total tracked primitives | 362 |
-| Existing / shipped partial entries | 355 |
-| Planned entries | 7 |
+| Existing / shipped partial entries | 362 |
+| Planned entries | 0 |
 | Contract-complete entries | 0 |
 
 The registry intentionally reports shipped work as **partial** until the full
@@ -55,19 +55,19 @@ with "is fully lowered and transform-complete."
 | S14 | AOT/cache: reference AOT export/load, StableHLO text, GGUF metadata, safetensors-like export, persistent compilation cache. |
 | S15 | Data/tokenizers: eager Dataset combinators, sharded/iterable datasets, checkpoint/restore, deterministic shuffle, byte/vocab tokenizers. |
 
-## Still Planned
+## Newly Promoted
 
-Only seven tracked entries remain planned in the registry:
+The prior seven planned entries are now shipped as Python-reference primitives:
 
-| Category | Planned entries |
+| Category | Promoted entries |
 |---|---|
 | Memory | `memory_read`, `memory_write`, `memory_evict` |
 | Reductions | `max`, `min`, `cummax`, `cummin` |
 
-The memory entries are the main model-family gap for Titans/Atlas-style active
-memory. The reduction entries are API aliases/coverage gaps relative to the
-broader reduction surface that already includes `amax`, `amin`, `argmax`,
-`argmin`, `cumsum`, `cumprod`, `mean`, `var`, and related helpers.
+The memory entries unblock Titans/Atlas-style active-memory conformance at the
+reference level. The reduction entries close the small API alias/coverage gaps
+around the broader reduction surface that already includes `amax`, `amin`,
+`argmax`, `argmin`, `cumsum`, `cumprod`, `mean`, `var`, and related helpers.
 
 ## Largest Remaining Contract Gaps
 
@@ -76,18 +76,18 @@ missing Python API names:
 
 | Contract axis | Missing / partial count |
 |---|---:|
-| Mathematical semantics | 362 |
-| Shape rule | 362 |
-| Dtype/layout rule | 362 |
+| Mathematical semantics | 339 |
+| Shape rule | 339 |
+| Dtype/layout rule | 339 |
 | Batching rule | 362 |
-| Transpose rule | 362 |
+| Transpose rule | 312 |
 | Sharding rule | 362 |
 | Backend kernel | 362 |
-| JVP | 348 |
-| VJP | 261 |
-| Tests | 200 |
+| JVP | 298 |
+| VJP | 209 |
+| Tests | 193 |
 | Lowering rule | 169 |
-| Masking/effect rule | 34 |
+| Masking/effect rule | 27 |
 
 This means the next quality jump is not adding more names. It is hardening the
 contract axes for the primitives already present.
@@ -95,25 +95,28 @@ contract axes for the primitives already present.
 ## Recommended Next Work
 
 1. **Contract schema hardening**
-   - Promote selected primitives from "Python reference" to explicit contracts:
-     math semantics, shape rules, dtype/layout rules, batching, transpose, and
-     sharding.
+   - Continue promoting selected primitives from "Python reference" to explicit
+     contracts. This pass hardened S15 data/tokenizer non-differentiability
+     declarations, reduction aliases, and memory primitive math/shape/dtype
+     contracts.
 
 2. **Autodiff coverage**
    - Prioritize VJP/JVP rules for S7 layers, S10 optimizers where differentiable,
      S11 losses, and S15 data/tokenizer non-differentiability declarations.
 
 3. **Backend/lowering gates**
-   - Add Graph IR lowering stubs and backend-kernel status for S5-S15 Python
-     primitives so "reference only" versus "compiler lowered" is visible.
+   - The registry now exposes `graph_ir_lowering` and `backend_kernel`
+     metadata. Next work is turning `stub_required` entries into real Graph IR
+     lowering paths.
 
 4. **Memory architecture sprint**
-   - Implement `memory_read`, `memory_write`, and `memory_evict` to unblock
-     Titans/Atlas-style learned memory conformance.
+   - Extend `memory_read`, `memory_write`, and `memory_evict` with sharded
+     memory layout rules, differentiable read VJP/JVP, and persistent memory
+     state ABI integration.
 
-5. **Reduction aliases**
-   - Add `max`, `min`, `cummax`, and `cummin` as first-class aliases/primitives
-     so the registry no longer has small reduction gaps.
+5. **Reduction hardening**
+   - Add JVP/batching/transpose/sharding rules for `max`, `min`, `cummax`, and
+     `cummin`; cumulative extrema still need full autodiff decisions.
 
 6. **S8 model-family expansion**
    - Build dedicated tiny Mamba/SSM, Hyena/FNet, Linformer/cosFormer,

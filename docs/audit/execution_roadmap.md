@@ -158,7 +158,8 @@ prove before it is compiler-complete.
 - Existing `OP_SPECS` are imported as implemented-or-partial entries, without
   falsely marking missing rules as complete.
 - Missing standalone primitives are represented as planned entries, not as
-  supported ops.
+  supported ops; as of the current snapshot, the known planned reduction and
+  memory entries have been promoted to Python-reference primitives.
 - The generated markdown dashboard groups entries by model-family relevance:
   diffusion, RNN/xLSTM, SSM/Mamba, Hyena/FNet/spectral, Linformer/cosFormer,
   Griffin/Megalodon, Titans/Atlas memory, and JEPA.
@@ -176,15 +177,18 @@ surface in `python/tessera/__init__.py`, `python/tessera/compiler/op_catalog.py`
 `slice`, `select`, `dynamic_slice`, `dynamic_update_slice`), indexing/update (`take`,
 `index_select`, `scatter`, `scatter_add`, `scatter_reduce`, `index_update`,
 `nonzero`, `top_k`, `sort`, `argsort`), reductions (`mean`/`prod`/`amax`/
-`amin`/`var`/`std`/`argmax`/`argmin`/`cumsum`/`cumprod`), stability primitives
+`amin`/`max`/`min`/`var`/`std`/`argmax`/`argmin`/`cumsum`/`cumprod`/
+`cummax`/`cummin`), stability primitives
 (`logsumexp`, `log_softmax`, `log1p`, `expm1`, `softplus`, `sigmoid_safe`),
 scalar math (`sub`, `div`, `floor_div`, `mod`, `exp`, `log`, `sqrt`, `rsqrt`,
 `pow`, `cos`, `tan`, `sinh`, `cosh`, `asin`, `acos`, `atan`, `atan2`, `erf`,
 `erfc`, `lgamma`, `digamma`), numeric helpers, comparisons, logical ops, and
 full bitwise ops. Differentiable entries have VJPs where the local math
 contract is unambiguous; discontinuous, boolean/integer-valued, and sort-like
-entries intentionally do not. Remaining S2 hardening is formal shape/dtype
-promotion rules, JVP/batching/transpose/sharding rules, and backend kernels.
+entries intentionally do not. The small reduction alias gaps (`max`, `min`,
+`cummax`, `cummin`) are now first-class reference primitives. Remaining S2
+hardening is formal shape/dtype promotion rules, JVP/batching/transpose/
+sharding rules, and backend kernels.
 
 Complete Tessera-native tensor manipulation and functional indexing. These are
 compiler primitives, not PyTorch compatibility wrappers.
@@ -381,10 +385,12 @@ now exposes `LinearGeneral`, `Einsum`, `LoRALinear`, `Conv1d`,
 `ConvTranspose1d`/`ConvTranspose`, `GroupNorm`, `InstanceNorm`,
 `WeightNorm`, `SpectralNorm`, pooling helpers, `SimpleRNNCell`, `GRUCell`,
 `bidirectional_scan`, `alibi`, `ntk_rope`, `gqa_attention`, `mqa_attention`,
-and `mla_decode`, with coverage entries and unit tests. Remaining S7 work:
-Conv3d, sequence flip/masking, stochastic depth, Titans/Atlas memory layers,
-and Graph IR/backend/VJP/JVP/batching/sharding rules for the Python-reference
-layers.
+and `mla_decode`, with coverage entries and unit tests. A reference
+Titans/Atlas memory surface now ships as `memory_read`, `memory_write`, and
+`memory_evict`, with explicit math/shape/dtype contracts and lowering/backend
+gates in the dashboard. Remaining S7 work: Conv3d, sequence flip/masking,
+stochastic depth, memory state ABI integration, and Graph IR/backend/VJP/JVP/
+batching/sharding rules for the Python-reference layers.
 
 ### [S9] Numerics, mixed precision, and quantization 🚧
 
@@ -502,9 +508,11 @@ regression (`mse_loss`, `mae_loss`, `huber_loss`, `smooth_l1_loss`,
 (`nt_xent_loss`, `info_nce_loss`, `triplet_loss`, `contrastive_loss`,
 `cosine_embedding_loss`), diffusion (`ddpm_noise_pred_loss`, `vlb_loss`,
 `score_matching_loss`), and sequence (`ctc_loss`, `seq2seq_loss`).
-Remaining S11 work: VJP registration for every loss, Graph IR lowering
-contracts, reduction-policy registry metadata, and larger numerical stability
-goldens.
+Remaining S11 work: VJP registration for every differentiable loss, Graph IR
+lowering contracts, reduction-policy registry metadata, and larger numerical
+stability goldens. S15 data/tokenizer primitives are now explicitly declared
+non-differentiable in the coverage contract instead of appearing as missing
+autodiff work.
 
 ### [S12] State serialization and checkpointing 🚧
 

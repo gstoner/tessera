@@ -23,6 +23,8 @@ _VJP_ALIASES: dict[str, tuple[str, ...]] = {
     "gemm": ("gemm", "matmul"),
     "reduce": ("reduce", "sum"),
     "sum": ("sum", "reduce"),
+    "max": ("max", "amax"),
+    "min": ("min", "amin"),
 }
 
 
@@ -160,6 +162,9 @@ _EXISTING_MODEL_FAMILIES: dict[str, tuple[str, ...]] = {
     "irfft": ("Hyena/FNet/spectral",),
     "linear_attn": ("Linformer/cosFormer", "Megalodon/Griffin"),
     "linear_attn_state": ("Megalodon/Griffin",),
+    "memory_read": ("Titans/Atlas",),
+    "memory_write": ("Titans/Atlas",),
+    "memory_evict": ("Titans/Atlas",),
     "power_attn": ("Megalodon/Griffin",),
     "retention": ("Megalodon/Griffin",),
     "rfft": ("Hyena/FNet/spectral",),
@@ -216,6 +221,12 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
             graph_name=spec.graph_name,
             effect=spec.effect,
             lowering=spec.lowering,
+            metadata={
+                "implementation": "op_catalog",
+                "contract_schema": "explicit_partial",
+                "graph_ir_lowering": "registered",
+                "backend_kernel": "partial",
+            },
         )
     supplemental_public_ops = {
         "depthwise_conv1d": ("stencil", "state", "streaming depthwise convolution"),
@@ -242,6 +253,12 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
                 graph_name=f"tessera.{name}",
                 effect=effect,
                 lowering=lowering,
+                metadata={
+                    "implementation": "python_reference",
+                    "contract_schema": "explicit_partial",
+                    "graph_ir_lowering": "missing",
+                    "backend_kernel": "reference_only",
+                },
             ),
         )
 
@@ -254,6 +271,11 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
     # owning sprint closes them.
     # ─────────────────────────────────────────────────────────────────────
     python_primitives = {
+        # S2 — reduction aliases and cumulative extrema
+        "max": ("reduction", "first-class max reduction alias for amax — S2 hardened 2026-05-10"),
+        "min": ("reduction", "first-class min reduction alias for amin — S2 hardened 2026-05-10"),
+        "cummax": ("reduction", "cumulative max reference — S2 hardened 2026-05-10"),
+        "cummin": ("reduction", "cumulative min reference — S2 hardened 2026-05-10"),
         # S3 — pytree state-tree primitives (python/tessera/state/tree.py)
         "tree_flatten": ("state_tree", "tree pytree flatten — S3 landed 2026-05-10"),
         "tree_unflatten": ("state_tree", "tree pytree unflatten — S3 landed 2026-05-10"),
@@ -332,6 +354,9 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "gqa_attention": ("attention", "grouped-query attention wrapper — S7 landed 2026-05-10"),
         "mqa_attention": ("attention", "multi-query attention wrapper — S7 landed 2026-05-10"),
         "mla_decode": ("attention", "latent KV decode attention wrapper — S7 landed 2026-05-10"),
+        "memory_read": ("memory", "top-k weighted memory read — S7 memory hardened 2026-05-10"),
+        "memory_write": ("memory", "functional memory append/update surface — S7 memory hardened 2026-05-10"),
+        "memory_evict": ("memory", "functional memory eviction surface — S7 memory hardened 2026-05-10"),
         # S8 — tiny standalone conformance targets (tests/unit/test_s7_s8_s9.py)
         "tiny_diffusion_conformance": ("conformance", "diffusion-like forward/RNG/state smoke — S8 landed 2026-05-10"),
         "tiny_recurrent_conformance": ("conformance", "scan/RNN gradient smoke — S8 landed 2026-05-10"),
@@ -433,6 +458,47 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         # S8 — expanded conformance target once S10-S15 exist.
         "tiny_training_step_conformance": ("conformance", "data/loss/optimizer/checkpoint training-step smoke — S8 expanded 2026-05-10"),
     }
+    nondifferentiable_categories = {
+        "aot",
+        "conformance",
+        "data",
+        "extension",
+        "serialization",
+        "state_tree",
+        "tokenizer",
+    }
+    contract_overrides: dict[str, dict[str, str]] = {
+        "max": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete", "vjp": "complete"},
+        "min": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete", "vjp": "complete"},
+        "cummax": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "cummin": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "memory_read": {
+            "math_semantics": "complete",
+            "shape_rule": "complete",
+            "dtype_layout_rule": "complete",
+            "batching_rule": "partial",
+            "transpose_rule": "planned",
+            "sharding_rule": "planned",
+        },
+        "memory_write": {
+            "math_semantics": "complete",
+            "shape_rule": "complete",
+            "dtype_layout_rule": "complete",
+            "vjp": "not_applicable",
+            "jvp": "not_applicable",
+            "batching_rule": "partial",
+            "transpose_rule": "not_applicable",
+        },
+        "memory_evict": {
+            "math_semantics": "complete",
+            "shape_rule": "complete",
+            "dtype_layout_rule": "complete",
+            "vjp": "not_applicable",
+            "jvp": "not_applicable",
+            "batching_rule": "partial",
+            "transpose_rule": "not_applicable",
+        },
+    }
     for name, (category, notes) in python_primitives.items():
         # Python primitives don't have a VJP today (they're structural ops);
         # tests/lowering/math are partial since shipped.
@@ -444,6 +510,25 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
             tests="complete",
             masking_effect_rule="not_applicable",
         )
+        if category in nondifferentiable_categories:
+            contract.update(vjp="not_applicable", jvp="not_applicable", transpose_rule="not_applicable")
+        if category in {"data", "tokenizer"}:
+            contract.update(
+                math_semantics="complete",
+                shape_rule="complete",
+                dtype_layout_rule="complete",
+                batching_rule="partial",
+                sharding_rule="partial",
+            )
+        contract.update(contract_overrides.get(name, {}))
+        metadata = {
+            "implementation": "python_reference",
+            "contract_schema": "explicit_partial",
+            "graph_ir_lowering": "stub_required",
+            "backend_kernel": "reference_only",
+        }
+        if category in {"data", "tokenizer", "serialization", "aot", "conformance"}:
+            metadata["graph_ir_lowering"] = "not_applicable"
         entries.setdefault(
             name,
             PrimitiveCoverage(
@@ -458,6 +543,7 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
                 graph_name=None,
                 effect="pure",
                 lowering=category,
+                metadata=metadata,
             ),
         )
     return entries
@@ -804,16 +890,18 @@ def render_markdown(entries: Iterable[PrimitiveCoverage] | None = None) -> str:
         "This dashboard tracks Tessera-native compiler primitive completeness.",
         "External frameworks are references only; they are not runtime dependencies.",
         "",
-        "| Primitive | Category | Status | Existing op | Missing contracts | Model families |",
-        "|-----------|----------|--------|-------------|-------------------|----------------|",
+        "| Primitive | Category | Status | Existing op | Lowering gate | Backend gate | Missing contracts | Model families |",
+        "|-----------|----------|--------|-------------|---------------|--------------|-------------------|----------------|",
     ]
     for entry in rows:
         missing = ", ".join(entry.missing_contracts()) or "-"
         families = ", ".join(entry.model_families) or "-"
         existing = "yes" if entry.existing_op else "no"
+        lowering_gate = entry.metadata.get("graph_ir_lowering", "-")
+        backend_gate = entry.metadata.get("backend_kernel", "-")
         lines.append(
             f"| `{entry.name}` | {entry.category} | {entry.status} | "
-            f"{existing} | {missing} | {families} |"
+            f"{existing} | {lowering_gate} | {backend_gate} | {missing} | {families} |"
         )
     return "\n".join(lines) + "\n"
 

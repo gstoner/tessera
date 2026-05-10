@@ -41,7 +41,7 @@ The dashboard groups primitives by the S-series sprint that ships them.
 |----------------|---------|--------------------|
 | **S2** Tensor algebra | Baseline model graph expressivity | `reshape`, `pad`, `tile`, `dynamic_slice`, `dynamic_update_slice`, `cat`, `stack` |
 | **S2** Indexing | Functional updates and retrieval | `scatter_add`, `scatter_reduce`, `top_k`, `sort`, `index_update`, `take` |
-| **S2** Reductions | Loss/metric computation | `mean`, `var`, `argmax`, `cumsum`, `cumprod` |
+| **S2** Reductions | Loss/metric computation | `mean`, `var`, `max`, `min`, `argmax`, `cumsum`, `cumprod`, `cummax`, `cummin` |
 | **S2** Stability primitives | Numerically safe ops | `logsumexp`, `log_softmax`, `log1p`, `expm1`, `softplus` |
 | **S2** Scalar math | Activation, schedule, transcendental breadth | `exp`, `log`, `sqrt`, `rsqrt`, `pow`, `erf`, `lgamma` |
 | **S2** Comparisons / logical | Boolean masking + control predicates | `eq`, `lt`, `logical_and`, `bitwise_xor` |
@@ -94,7 +94,10 @@ implemented. The current result is intentionally a mixed dashboard:
 - Existing Tessera operators are imported from `OP_SPECS` as partial coverage
   entries; the registry now consults `tessera.autodiff.vjp._VJPS` so any op
   with a registered VJP correctly shows `vjp = complete`.
-- Missing standalone compiler primitives are planned entries.
+- All currently tracked standalone compiler primitives have at least a
+  Python-reference surface; none remain falsely listed as planned.
+- The snapshot includes lowering/backend gates so reference-only primitives are
+  visually distinct from Graph IR-lowered primitives.
 - Missing contract axes remain visible until each primitive has semantics,
   transform rules, lowering, backend coverage, and tests.
 
@@ -103,15 +106,15 @@ the high-risk S1 entries and milestone sentinels. Tests compare these rows to
 `render_markdown(...)` so the dashboard cannot drift silently.
 
 <!-- BEGIN GENERATED PRIMITIVE COVERAGE SNAPSHOT -->
-| Primitive | Category | Status | Existing op | Missing contracts | Model families |
-|-----------|----------|--------|-------------|-------------------|----------------|
-| `matmul` | loop_nest | partial | yes | math_semantics, shape_rule, dtype_layout_rule, batching_rule, transpose_rule, sharding_rule, backend_kernel, tests | - |
-| `permute` | tensor_algebra | partial | yes | math_semantics, shape_rule, dtype_layout_rule, jvp, batching_rule, transpose_rule, sharding_rule, backend_kernel, tests | - |
-| `collective_permute` | collective | partial | yes | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, lowering_rule, backend_kernel | all |
-| `scan` | control_flow | partial | yes | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, lowering_rule, backend_kernel | all |
-| `selective_ssm` | state_space | partial | yes | math_semantics, shape_rule, dtype_layout_rule, jvp, batching_rule, transpose_rule, sharding_rule, masking_effect_rule, backend_kernel, tests | Mamba/SSM |
-| `dataset_map` | data | partial | yes | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, lowering_rule, backend_kernel | all |
-| `tokenizer_bpe` | tokenizer | partial | yes | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, lowering_rule, backend_kernel | all |
+| Primitive | Category | Status | Existing op | Lowering gate | Backend gate | Missing contracts | Model families |
+|-----------|----------|--------|-------------|---------------|--------------|-------------------|----------------|
+| `matmul` | loop_nest | partial | yes | registered | partial | math_semantics, shape_rule, dtype_layout_rule, batching_rule, transpose_rule, sharding_rule, backend_kernel, tests | - |
+| `permute` | tensor_algebra | partial | yes | registered | partial | math_semantics, shape_rule, dtype_layout_rule, jvp, batching_rule, transpose_rule, sharding_rule, backend_kernel, tests | - |
+| `collective_permute` | collective | partial | yes | stub_required | reference_only | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, lowering_rule, backend_kernel | all |
+| `scan` | control_flow | partial | yes | stub_required | reference_only | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, lowering_rule, backend_kernel | all |
+| `selective_ssm` | state_space | partial | yes | missing | reference_only | math_semantics, shape_rule, dtype_layout_rule, jvp, batching_rule, transpose_rule, sharding_rule, masking_effect_rule, backend_kernel, tests | Mamba/SSM |
+| `dataset_map` | data | partial | yes | not_applicable | reference_only | batching_rule, sharding_rule, lowering_rule, backend_kernel | all |
+| `tokenizer_bpe` | tokenizer | partial | yes | not_applicable | reference_only | batching_rule, sharding_rule, lowering_rule, backend_kernel | all |
 <!-- END GENERATED PRIMITIVE COVERAGE SNAPSHOT -->
 
 Regenerate/check the full table programmatically with:

@@ -2339,6 +2339,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     def amin(x, axis=None, keepdims: bool = False):
         return np.min(_unwrap(x), axis=axis, keepdims=keepdims)
 
+    def max_reduce(x, axis=None, keepdims: bool = False):
+        return amax(x, axis=axis, keepdims=keepdims)
+
+    def min_reduce(x, axis=None, keepdims: bool = False):
+        return amin(x, axis=axis, keepdims=keepdims)
+
     def var(x, axis=None, keepdims: bool = False, ddof: int = 0):
         return np.var(_unwrap(x), axis=axis, keepdims=keepdims, ddof=ddof)
 
@@ -2356,6 +2362,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
 
     def cumprod(x, axis: int = -1):
         return np.cumprod(_unwrap(x), axis=axis)
+
+    def cummax(x, axis: int = -1):
+        return np.maximum.accumulate(_unwrap(x), axis=axis)
+
+    def cummin(x, axis: int = -1):
+        return np.minimum.accumulate(_unwrap(x), axis=axis)
 
     # Numerical-stability primitives -------------------------------------
     def logsumexp(x, axis=None, keepdims: bool = False):
@@ -2849,12 +2861,16 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "prod": prod,
         "amax": amax,
         "amin": amin,
+        "max": max_reduce,
+        "min": min_reduce,
         "var": var,
         "std": std,
         "argmax": argmax,
         "argmin": argmin,
         "cumsum": cumsum,
         "cumprod": cumprod,
+        "cummax": cummax,
+        "cummin": cummin,
         # S2 — numerical-stability primitives
         "logsumexp": logsumexp,
         "log_softmax": log_softmax,
@@ -3070,12 +3086,16 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         prod=prod,
         amax=amax,
         amin=amin,
+        max=max_reduce,
+        min=min_reduce,
         var=var,
         std=std,
         argmax=argmax,
         argmin=argmin,
         cumsum=cumsum,
         cumprod=cumprod,
+        cummax=cummax,
+        cummin=cummin,
         logsumexp=logsumexp,
         log_softmax=log_softmax,
         log1p=log1p,
@@ -3174,6 +3194,7 @@ from . import aot  # noqa: E402
 from . import custom  # noqa: E402
 from . import data  # noqa: E402
 from . import losses  # noqa: E402
+from . import memory  # noqa: E402
 from . import optim  # noqa: E402
 from . import rng  # noqa: E402
 from . import quantization  # noqa: E402
@@ -3194,6 +3215,13 @@ from .custom import (  # noqa: E402
     custom_jvp,
     custom_primitive,
     custom_vjp,
+)
+from .memory import (  # noqa: E402
+    MemoryReadResult,
+    MemoryTable,
+    memory_evict,
+    memory_read,
+    memory_write,
 )
 
 # autodiff installs tape-aware wrappers on `ops.<name>`; load after `ops` and `nn`.
@@ -3388,7 +3416,9 @@ __all__ = [
     "data",
     "aot", "custom", "CustomPrimitive", "custom_primitive", "custom_call",
     "custom_vjp", "custom_jvp", "custom_batching",
-    "losses", "optim", "rng",
+    "losses", "memory", "optim", "rng",
+    "MemoryReadResult", "MemoryTable", "memory_read", "memory_write",
+    "memory_evict",
     "quantization", "CalibrationObserver", "calibration_observer",
     "quantize_int8", "dequantize_int8", "quantize_int4", "dequantize_int4",
     "fake_quantize", "grad_scaler_step",

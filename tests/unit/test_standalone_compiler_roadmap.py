@@ -135,12 +135,14 @@ def test_existing_coverage_consults_autodiff_vjp_registry():
             )
 
 
-def test_primitive_coverage_tracks_planned_standalone_gaps_separately():
+def test_primitive_coverage_promotes_memory_primitives_from_planned():
     memory_write = coverage_for("memory_write")
 
-    assert not memory_write.existing_op
-    assert memory_write.status == "planned"
+    assert memory_write.existing_op
+    assert memory_write.status == "partial"
     assert "Titans/Atlas" in memory_write.model_families
+    assert memory_write.metadata["graph_ir_lowering"] == "stub_required"
+    assert memory_write.metadata["backend_kernel"] == "reference_only"
 
 
 def test_primitive_coverage_contract_fields_are_complete_for_every_entry():
@@ -155,7 +157,6 @@ def test_primitive_coverage_family_queries_and_summary():
 
     assert "scan" in names
     assert "selective_ssm" in names
-    assert summary["planned"] > 0
     assert summary["partial"] > 0
 
 
@@ -169,7 +170,8 @@ def test_primitive_coverage_includes_s2_reductions_and_stability():
         assert name in entries, f"S2 tensor algebra missing: {name}"
 
     # Reductions
-    for name in ("mean", "var", "argmax", "argmin", "cumsum", "cumprod"):
+    for name in ("mean", "var", "argmax", "argmin", "cumsum", "cumprod",
+                 "max", "min", "cummax", "cummin"):
         assert name in entries, f"S2 reduction missing: {name}"
 
     # Numerical-stability primitives
@@ -237,6 +239,14 @@ def test_primitive_coverage_includes_s7_attention_and_position_layers():
                  "group_norm", "lora_linear"):
         assert name in entries, f"S7 layer/attention missing: {name}"
         assert entries[name].existing_op
+
+
+def test_primitive_coverage_includes_s7_memory_primitives():
+    entries = all_primitive_coverages()
+    for name in ("memory_read", "memory_write", "memory_evict"):
+        assert name in entries, f"S7 memory primitive missing: {name}"
+        assert entries[name].existing_op
+        assert entries[name].category == "memory"
 
 
 def test_primitive_coverage_includes_s9_quantization_and_numerics():
@@ -316,6 +326,8 @@ def test_primitive_coverage_includes_s15_data_pipeline_and_tokenizers():
                  "tokenizer_unigram", "tokenizer_sentencepiece_compat"):
         assert name in entries, f"S15 tokenizer missing: {name}"
         assert entries[name].existing_op
+        assert entries[name].contract_status["vjp"] == "not_applicable"
+        assert entries[name].contract_status["jvp"] == "not_applicable"
 
 
 def test_remaining_data_pipeline_gaps_stay_planned():

@@ -1315,6 +1315,11 @@ def vjp_amax(dout, x, *, axis=None, keepdims=False, **_):
     return (mask * dout_b / counts,)
 
 
+@_vjp("max")
+def vjp_max(dout, x, *, axis=None, keepdims=False, **kwargs):
+    return vjp_amax(dout, x, axis=axis, keepdims=keepdims, **kwargs)
+
+
 @_vjp("amin")
 def vjp_amin(dout, x, *, axis=None, keepdims=False, **_):
     a = np.asarray(x)
@@ -1326,6 +1331,11 @@ def vjp_amin(dout, x, *, axis=None, keepdims=False, **_):
     else:
         dout_b = np.asarray(dout)
     return (mask * dout_b / counts,)
+
+
+@_vjp("min")
+def vjp_min(dout, x, *, axis=None, keepdims=False, **kwargs):
+    return vjp_amin(dout, x, axis=axis, keepdims=keepdims, **kwargs)
 
 
 @_vjp("var")

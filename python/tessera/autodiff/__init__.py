@@ -29,6 +29,9 @@ from .tape import (
 from .vjp import register_vjp, get_vjp, _VJPS
 from .mixed_precision import autocast, autocast_dtype, GradScaler
 from .rematerialize import rematerialize, checkpoint
+from .grad import grad, hvp, elementwise_grad
+from .jvp import register_jvp, get_jvp, jvp
+from .transforms import vmap, jacrev, jacfwd
 
 
 # Wrap every op in `_VJPS` so it's tape-aware.
@@ -98,4 +101,15 @@ __all__ = [
     # Phase F2 — activation checkpointing
     "rematerialize",
     "checkpoint",
+    # Deferred-items plan, Item 4 — higher-order derivative helpers
+    "grad",
+    "hvp",
+    "elementwise_grad",
+    # Deferred-items plan, Item 5 — JAX-style transforms + forward-mode JVP
+    "vmap",
+    "jacrev",
+    "jacfwd",
+    "jvp",
+    "register_jvp",
+    "get_jvp",
 ]

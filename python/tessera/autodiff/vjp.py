@@ -168,6 +168,128 @@ def vjp_silu_mul(dout, a, b, **_):
     return (da, db)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Theme 9 — Utility op VJPs.
+# `arange` is non-differentiable (output values are constants). The rest
+# treat their non-tensor kwargs (`indices`, `mask`, `value`, bounds) as
+# pass-through.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@_vjp("gather")
+def vjp_gather(dout, x, indices, *, axis=0, **_):
+    """y = take(x, indices, axis=axis).
+
+    dx[i, ...] = sum over j with indices[j] == i of dout[j, ...]
+    indices: non-differentiable (integer index tensor).
+    """
+    idx = np.asarray(indices, dtype=np.int64)
+    dx = np.zeros_like(x)
+    # `np.add.at` performs unbuffered in-place add — correct under
+    # repeated indices (which a gather can produce).
+    if axis == 0 or axis == -x.ndim:
+        np.add.at(dx, idx, dout)
+    else:
+        # General case: move `axis` to leading dim, scatter, move back.
+        ax = axis if axis >= 0 else x.ndim + axis
+        dx_t = np.moveaxis(dx, ax, 0)
+        dout_t = np.moveaxis(dout, ax, 0)
+        np.add.at(dx_t, idx, dout_t)
+        dx = np.moveaxis(dx_t, 0, ax)
+    return (dx, None)
+
+
+@_vjp("clip")
+def vjp_clip(dout, x, *, min_val=None, max_val=None, **_):
+    """y = clip(x, min_val, max_val).
+
+    Straight-through estimator: dx = dout where x is **strictly** inside
+    the range, 0 at or beyond the bounds. Matches PyTorch's `torch.clamp`
+    convention and the central-difference numerical Jacobian (which sees a
+    flat plateau at any point that's eps-clipped on either side).
+    """
+    mask = np.ones_like(x, dtype=x.dtype)
+    if min_val is not None:
+        mask = mask * (x > min_val).astype(x.dtype)
+    if max_val is not None:
+        mask = mask * (x < max_val).astype(x.dtype)
+    return (dout * mask,)
+
+
+@_vjp("moe")
+def vjp_moe(dout, x, experts, *, router="topk", k=1, transport=None,
+            deterministic=None, scores=None, route=None, **_):
+    """Mixture-of-Experts VJP.
+
+    For each token ``i`` routed to expert ``r[i]``:
+        out[i] = x[i] @ E[r[i]]
+
+    Gradient pieces:
+        dx[i]    = dout[i] @ E[r[i]].T
+        dE[r[i]] += x[i].T @ dout[i]   (accumulated across tokens)
+
+    The route (`scores` argmax, explicit `route`, or modulo fallback) is
+    integer-valued, non-differentiable; we return cotangents only for
+    `x` and `experts`. The forward-side scoring path (a softmax over a
+    learnable router) lives one op up the tape — the user composes it
+    explicitly when training the router.
+
+    Theme 2 follow-up (F3-moe in the execution roadmap).
+    """
+    x_arr = np.asarray(x)
+    experts_arr = np.asarray(experts)
+    if experts_arr.ndim == 2:
+        experts_arr = experts_arr[None, :, :]
+    if experts_arr.ndim != 3:
+        # Same shape contract the forward enforces; fall through to
+        # zero gradients rather than raise from inside backward.
+        return (np.zeros_like(x_arr), np.zeros_like(experts))
+
+    tokens = x_arr.reshape(-1, x_arr.shape[-1])
+    num_experts = experts_arr.shape[0]
+    if route is not None:
+        route_arr = np.asarray(route, dtype=np.int64).reshape(-1)
+    elif scores is not None:
+        route_arr = np.argmax(
+            np.asarray(scores).reshape(tokens.shape[0], num_experts), axis=-1,
+        )
+    else:
+        route_arr = np.arange(tokens.shape[0], dtype=np.int64) % num_experts
+    route_arr = np.mod(route_arr, num_experts)
+
+    dout_arr = np.asarray(dout).reshape(tokens.shape[0], experts_arr.shape[2])
+
+    dx_tokens = np.zeros_like(tokens)
+    dE = np.zeros_like(experts_arr)
+    for i in range(tokens.shape[0]):
+        e = int(route_arr[i])
+        # dx[i] = dout[i] @ E[e].T
+        dx_tokens[i] = dout_arr[i] @ experts_arr[e].T
+        # Accumulate per-expert weight gradient.
+        dE[e] += np.outer(tokens[i], dout_arr[i])
+
+    dx = dx_tokens.reshape(x_arr.shape)
+    # Restore experts gradient to the same shape as the input (drop the
+    # leading axis if the user passed a 2-D weight).
+    if np.asarray(experts).ndim == 2:
+        dE = dE[0]
+    return (dx, dE)
+
+
+@_vjp("masked_fill")
+def vjp_masked_fill(dout, x, mask, *, value=None, **_):
+    """y = where(mask, value, x).
+
+    dx propagates dout only on positions where mask is False; positions
+    that were filled with `value` carry no gradient back. `mask` is a
+    tensor input recorded on the tape (non-differentiable, receives
+    `None` cotangent). `value` is keyword-only and not on the tape.
+    """
+    m = np.broadcast_to(np.asarray(mask, dtype=bool), x.shape)
+    dx = dout * (~m).astype(x.dtype)
+    return (_sum_to_shape(dx, x.shape), None)
+
+
 @_vjp("gelu")
 def vjp_gelu(dout, x, **_):
     """tanh-approx GELU: 0.5 x (1 + tanh(sqrt(2/pi)(x + 0.044715 x^3)))."""

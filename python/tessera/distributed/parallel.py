@@ -113,6 +113,21 @@ class FSDP(Module):
     Sharding axis: 0 (the leading dim). For non-leading-dim sharding,
     transpose into the desired layout before wrapping.
 
+    ZeRO stage mapping (deferred-items plan, Item 3):
+
+    * ``stage=2`` — Phase I2 default; gradients + optimizer state are
+      sharded across DP ranks (parameters held full per-rank). Numerical
+      behaviour matches Phase I2's original FSDP v1.
+    * ``stage=3`` — also shards parameters; sets
+      ``self.zero_config.partition_parameters = True`` so the
+      ``OptimizerShardPass`` IR-side machinery knows to emit
+      ``tessera_sr.params_sharded`` annotations on the wrapped module's
+      ops. Today the Python wrapper holds full params per rank between
+      gather/reshard pairs (numerical behavior identical to stage 2);
+      the actual NCCL all-gather of parameters before forward lands in
+      Phase G. The ``stage=3`` flag is what production training expects
+      to set even before that NCCL upgrade ships.
+
     Limitations (v1):
 
     * Initial state is unsharded — call :meth:`shard(mock_rank)` once
@@ -122,12 +137,45 @@ class FSDP(Module):
       streaming version.
     """
 
-    def __init__(self, module: Module, mesh_axis: str = "dp") -> None:
+    def __init__(
+        self,
+        module: Module,
+        mesh_axis: str = "dp",
+        *,
+        stage: int = 2,
+    ) -> None:
         super().__init__()
         _check_module(module)
+        if stage not in (2, 3):
+            raise ValueError(
+                f"FSDP stage must be 2 or 3 (use DDP for stage 1); got {stage}"
+            )
         self.module = module
         self.mesh_axis = str(mesh_axis)
+        self.stage = int(stage)
         self._sharded = False
+        # Lazy-build the ZeROConfig so this Python module doesn't pull in
+        # solver_config at top-level import. Resolved on first attribute
+        # access.
+        self._zero_config_cache = None
+
+    @property
+    def zero_config(self):
+        """Lazy-built :class:`tessera.compiler.solver_config.ZeROConfig`
+        matching the wrapper's stage. Populates with
+        ``partition_parameters=True`` when ``stage == 3`` so the IR-side
+        ``OptimizerShardPass`` annotates the module accordingly."""
+        if self._zero_config_cache is None:
+            from ..compiler.solver_config import ZeROConfig
+            self._zero_config_cache = ZeROConfig(
+                stage=self.stage,
+                dp_axis=self.mesh_axis,
+                num_dp_ranks=1,  # filled in by `compile_bundle` at jit time
+                partition_optimizer_states=True,
+                partition_gradients=True,
+                partition_parameters=(self.stage == 3),
+            )
+        return self._zero_config_cache
 
     def shard(self, rank) -> None:
         """Initial shard — drop everything but rank-local 1/world_size of
@@ -214,4 +262,19 @@ class FSDP(Module):
             p.grad = local_grad
 
 
-__all__ = ["DDP", "FSDP"]
+class ZeRO3(FSDP):
+    """DeepSpeed-style explicit alias for ``FSDP(module, stage=3)``.
+
+    Functionally identical to ``FSDP(module, stage=3)``; provides the
+    ZeRO-3 naming production training code typically uses. The wrapper's
+    ``zero_config`` will report ``stage=3`` and
+    ``partition_parameters=True``, which the IR-side
+    ``OptimizerShardPass`` reads to emit ``tessera_sr.params_sharded``
+    annotations on the module's ops.
+    """
+
+    def __init__(self, module: Module, mesh_axis: str = "dp") -> None:
+        super().__init__(module, mesh_axis=mesh_axis, stage=3)
+
+
+__all__ = ["DDP", "FSDP", "ZeRO3"]

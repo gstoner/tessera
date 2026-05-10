@@ -59,6 +59,27 @@ def autocast_keep_fp32(op_name: str) -> bool:
     return op_name in _AUTOCAST_FP32_ALLOWLIST
 
 
+_VALID_AUTOCAST_DTYPES = (
+    "fp16", "bf16", "fp32", "fp64",
+    # Theme 10 — fp8 autocast. Inputs are routed through
+    # `ops.quantize_fp8(..., format=<fmt>)` on the boundary; the
+    # reference path stores them as fp32 (numerically equal to their
+    # fp8-rounded value). Per-backend lowering — Hopper tcgen05 fp8 mma,
+    # ROCm OCP fp8 — is deferred to Phase G; the autocast surface is the
+    # API unblock.
+    "fp8_e4m3",
+    "fp8_e5m2",
+    # Deferred-items plan, Item 2 — fp6 / fp4 autocast. Same boundary-
+    # quantization mechanic as fp8. fp6 has two formats; fp4 ships only
+    # the Blackwell-supported E2M1; nvfp4 uses block-scaled e2m1 (default
+    # 16 elements per block).
+    "fp6_e2m3",
+    "fp6_e3m2",
+    "fp4_e2m1",
+    "nvfp4",
+)
+
+
 @contextmanager
 def autocast(dtype: str = "fp16"):
     """Enter a mixed-precision region.
@@ -68,12 +89,20 @@ def autocast(dtype: str = "fp16"):
     ``_AUTOCAST_FP32_ALLOWLIST`` ops, which stay in fp32). Output dtype
     follows the input dtype as numpy normally would.
 
-    Use ``"fp16"`` or ``"bf16"``. ``"bf16"`` is stored as fp32 by the numpy
-    reference — it's a logical type today, but downstream lowering can
-    materialize true bf16.
+    Supported dtypes:
+      * ``"fp16"`` — native ``np.float16`` cast.
+      * ``"bf16"`` — stored as fp32 by the numpy reference; downstream
+        lowering materializes true bf16.
+      * ``"fp32"`` / ``"fp64"`` — pass-through / upcast.
+      * ``"fp8_e4m3"`` / ``"fp8_e5m2"`` — Theme 10. Inputs are quantized
+        to fp8 on the boundary via :func:`tessera.ops.quantize_fp8` (per-
+        tensor symmetric, scale derived from amax). The cast is lossy;
+        accumulators stay in fp32.
     """
-    if dtype not in ("fp16", "bf16", "fp32", "fp64"):
-        raise ValueError(f"autocast dtype must be one of fp16/bf16/fp32/fp64; got {dtype!r}")
+    if dtype not in _VALID_AUTOCAST_DTYPES:
+        raise ValueError(
+            f"autocast dtype must be one of {_VALID_AUTOCAST_DTYPES}; got {dtype!r}"
+        )
     token = _ACTIVE_AUTOCAST.set(dtype)
     try:
         yield

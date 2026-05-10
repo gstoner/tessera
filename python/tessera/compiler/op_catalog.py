@@ -50,6 +50,12 @@ _SPECS = [
     OpSpec("silu_mul", "tessera.silu_mul", 2, 2),
     OpSpec("sigmoid", "tessera.sigmoid", 1, 1),
     OpSpec("sin", "tessera.sin", 1, 1),
+    # Theme 9 — utility tensor ops. `arange` has no differentiable inputs;
+    # the rest follow the standard elementwise / shape pattern.
+    OpSpec("arange", "tessera.arange", 0, 3, lowering="layout_transform"),
+    OpSpec("gather", "tessera.gather", 2, 2, lowering="layout_transform"),
+    OpSpec("clip", "tessera.clip", 1, 1),
+    OpSpec("masked_fill", "tessera.masked_fill", 2, 2, lowering="layout_transform"),
     OpSpec("adam", "tessera.adam", 4, 4, lowering="functional_optimizer_step"),
     OpSpec("transpose", "tessera.transpose", 1, 1, lowering="layout_transform"),
     OpSpec("cast", "tessera.cast", 1, 1, lowering="layout_transform"),
@@ -89,6 +95,25 @@ _SPECS = [
     OpSpec("rope", "tessera.rope", 2, 2, lowering="rotary_embedding"),
     OpSpec("kv_cache_append", "tessera.kv_cache.append", 3, 3, effect="state", lowering="state_update"),
     OpSpec("kv_cache_prune", "tessera.kv_cache.prune", 1, 1, effect="state", lowering="state_update"),
+    # Theme 10 — fp8 quantize/dequantize ops. Per-tensor symmetric.
+    OpSpec("quantize_fp8", "tessera.quantize_fp8", 1, 1, lowering="quantize"),
+    OpSpec("dequantize_fp8", "tessera.dequantize_fp8", 2, 2, lowering="quantize"),
+    # Deferred-items plan, Item 2 — fp6 / fp4 / nvfp4. Same shape as fp8.
+    OpSpec("quantize_fp6", "tessera.quantize_fp6", 1, 1, lowering="quantize"),
+    OpSpec("dequantize_fp6", "tessera.dequantize_fp6", 2, 2, lowering="quantize"),
+    OpSpec("quantize_fp4", "tessera.quantize_fp4", 1, 1, lowering="quantize"),
+    OpSpec("dequantize_fp4", "tessera.dequantize_fp4", 2, 2, lowering="quantize"),
+    OpSpec("quantize_nvfp4", "tessera.quantize_nvfp4", 1, 1, lowering="quantize"),
+    OpSpec("dequantize_nvfp4", "tessera.dequantize_nvfp4", 2, 2, lowering="quantize"),
+    # Theme 5 — Multi-Latent Attention primitives. The three projection ops
+    # are matmul-shaped but distinct names so a future FlashMLA target pass
+    # can match the chain (compress → cache → expand) and emit a fused
+    # absorbed-K kernel on Hopper/Blackwell.
+    OpSpec("latent_kv_compress", "tessera.latent_kv_compress", 2, 2, lowering="loop_nest"),
+    OpSpec("latent_kv_expand_k", "tessera.latent_kv_expand_k", 2, 2, lowering="loop_nest"),
+    OpSpec("latent_kv_expand_v", "tessera.latent_kv_expand_v", 2, 2, lowering="loop_nest"),
+    OpSpec("rope_split", "tessera.rope_split", 1, 1, lowering="layout_transform"),
+    OpSpec("rope_merge", "tessera.rope_merge", 2, 2, lowering="layout_transform"),
 ]
 
 OP_SPECS: dict[str, OpSpec] = {spec.public_name: spec for spec in _SPECS}

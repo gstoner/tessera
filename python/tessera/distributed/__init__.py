@@ -60,18 +60,20 @@ __all__ = [
     "domain",
     "dist",
     "array",
-    # Phase I — DDP / FSDP (lazy import to avoid pulling nn at module load)
+    # Phase I — DDP / FSDP / ZeRO3 (lazy import to avoid pulling nn at module load)
     "DDP",
     "FSDP",
+    "ZeRO3",
 ]
 
 
-# Phase I — DDP / FSDP. Lazy-imported because they reach into `tessera.nn`,
-# which is imported AFTER `tessera.distributed` in `tessera/__init__.py`.
+# Phase I — DDP / FSDP / ZeRO3. Lazy-imported because they reach into
+# `tessera.nn`, which is imported AFTER `tessera.distributed` in
+# `tessera/__init__.py`.
 def __getattr__(name):
-    if name in ("DDP", "FSDP"):
-        from .parallel import DDP, FSDP
-        return {"DDP": DDP, "FSDP": FSDP}[name]
+    if name in ("DDP", "FSDP", "ZeRO3"):
+        from .parallel import DDP, FSDP, ZeRO3
+        return {"DDP": DDP, "FSDP": FSDP, "ZeRO3": ZeRO3}[name]
     raise AttributeError(
         f"module 'tessera.distributed' has no attribute {name!r}"
     )

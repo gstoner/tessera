@@ -217,6 +217,109 @@ class TestSiluMul:
             _jacobian_close(W_p.grad.numpy(), ng)
 
 
+class TestTheme9UtilityOps:
+    """Theme 9 — utility tensor ops (gather, clip, masked_fill, arange).
+    Forward correctness + numerical-Jacobian VJPs for the differentiable
+    ones. arange is non-differentiable (no tensor input)."""
+
+    def test_arange_single_arg(self):
+        np.testing.assert_array_equal(ts.ops.arange(5), np.arange(5, dtype=np.float32))
+
+    def test_arange_with_start_stop_step(self):
+        np.testing.assert_array_equal(
+            ts.ops.arange(2, 8, 2), np.arange(2, 8, 2, dtype=np.float32)
+        )
+
+    def test_arange_int_dtype(self):
+        out = ts.ops.arange(0, 5, dtype="i64")
+        assert out.dtype == np.int64
+        np.testing.assert_array_equal(out, np.arange(5, dtype=np.int64))
+
+    def test_gather_axis_0(self):
+        x = np.arange(12, dtype=np.float64).reshape(3, 4)
+        idx = np.array([0, 2, 1, 0])
+        np.testing.assert_array_equal(ts.ops.gather(x, idx, axis=0), x[idx])
+
+    def test_gather_axis_1(self):
+        x = np.arange(12, dtype=np.float64).reshape(3, 4)
+        idx = np.array([2, 0, 3])
+        np.testing.assert_array_equal(ts.ops.gather(x, idx, axis=1), x[:, idx])
+
+    def test_gather_vjp_repeated_indices(self):
+        """Repeated indices in `idx` accumulate gradients via np.add.at —
+        the canonical gather adjoint."""
+        np.random.seed(0)
+        xv = np.random.randn(5, 3).astype(np.float64)
+        xp = ts.nn.Parameter(xv.copy())
+        idx = np.array([2, 0, 2, 4])  # idx 2 appears twice → grad accumulates
+        with ts.autodiff.tape() as t:
+            g = ts.ops.gather(xp, idx, axis=0)
+            loss = ts.ops.reduce(ts.ops.mul(g, g), op="sum")
+            t.backward(loss)
+        ng = _numerical_grad(
+            lambda a: float(((np.take(a, idx, axis=0)) ** 2).sum()), xv.copy()
+        )
+        _jacobian_close(xp.grad.numpy(), ng)
+
+    def test_clip_forward_both_bounds(self):
+        y = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+        np.testing.assert_array_equal(
+            ts.ops.clip(y, min_val=-1.0, max_val=1.0), [-1, -1, 0, 1, 1]
+        )
+
+    def test_clip_forward_single_bound(self):
+        y = np.array([-2.0, 0.0, 2.0])
+        np.testing.assert_array_equal(
+            ts.ops.clip(y, max_val=0.5), [-2.0, 0.0, 0.5]
+        )
+        np.testing.assert_array_equal(
+            ts.ops.clip(y, min_val=-0.5), [-0.5, 0.0, 2.0]
+        )
+
+    def test_clip_vjp_strict_bounds(self):
+        """Gradient is 1 strictly inside (min, max), 0 elsewhere — matches
+        PyTorch's `torch.clamp` and the central-difference Jacobian."""
+        np.random.seed(0)
+        xv = np.random.randn(6).astype(np.float64) * 2
+        xp = ts.nn.Parameter(xv.copy())
+        with ts.autodiff.tape() as t:
+            c = ts.ops.clip(xp, min_val=-1.0, max_val=1.0)
+            loss = ts.ops.reduce(ts.ops.mul(c, c), op="sum")
+            t.backward(loss)
+        ng = _numerical_grad(
+            lambda a: float((np.clip(a, -1.0, 1.0) ** 2).sum()), xv.copy()
+        )
+        _jacobian_close(xp.grad.numpy(), ng)
+
+    def test_masked_fill_forward(self):
+        z = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+        m = np.array([[True, False, True], [False, True, False]])
+        np.testing.assert_array_equal(
+            ts.ops.masked_fill(z, m, value=0.0),
+            [[0.0, 2.0, 0.0], [4.0, 0.0, 6.0]],
+        )
+
+    def test_masked_fill_broadcast(self):
+        z = np.zeros((2, 3))
+        m = np.array([True, False, True])  # broadcast across rows
+        out = ts.ops.masked_fill(z, m, value=-1.0)
+        np.testing.assert_array_equal(out, [[-1.0, 0.0, -1.0], [-1.0, 0.0, -1.0]])
+
+    def test_masked_fill_vjp(self):
+        np.random.seed(0)
+        xv = np.random.randn(2, 4).astype(np.float64)
+        xp = ts.nn.Parameter(xv.copy())
+        mask = np.array([[True, False, True, False], [False, True, False, True]])
+        with ts.autodiff.tape() as t:
+            mf = ts.ops.masked_fill(xp, mask, value=0.0)
+            loss = ts.ops.reduce(ts.ops.mul(mf, mf), op="sum")
+            t.backward(loss)
+        ng = _numerical_grad(
+            lambda a: float((np.where(mask, 0.0, a) ** 2).sum()), xv.copy()
+        )
+        _jacobian_close(xp.grad.numpy(), ng)
+
+
 class TestVJPNormsSoftmax:
     def test_softmax(self):
         np.random.seed(0)
@@ -365,15 +468,23 @@ class TestTape:
                 t.backward(bogus)
 
     def test_unsupported_op_raises(self):
-        # An op without a registered VJP (here: `moe`, which still has no
-        # adjoint as of v1 — `flash_attn` got one in Phase F3). The error
-        # fires during backward iff the gradient path reaches that entry.
-        x_p = ts.nn.Parameter(np.random.randn(2, 4).astype(np.float32))
-        experts = np.random.randn(2, 4, 4).astype(np.float32)
+        # An op without a registered VJP (here: `cholesky`, which has no
+        # adjoint — Cholesky's gradient requires sub-matrix solves, hasn't
+        # been written yet). The error fires during backward iff the
+        # gradient path reaches that entry.
+        # Note: `moe` HAD no VJP in v1 but got one in the Theme 2 follow-up
+        # (F3-moe, 2026-05-09); this test moved off `moe` accordingly.
+        np.random.seed(0)
+        # Cholesky needs a positive-definite input — A @ A.T + I works.
+        seed = np.random.randn(3, 3).astype(np.float64)
+        spd = seed @ seed.T + np.eye(3)
+        x_p = ts.nn.Parameter(spd.copy())
         with ts.autodiff.tape() as t:
-            out = ts.ops.moe(x_p, experts)
+            out = ts.ops.cholesky(x_p)
             loss = ts.ops.reduce(out, op="sum")
-            with pytest.raises(TesseraAutodiffError, match=r"moe.+not differentiable"):
+            with pytest.raises(
+                TesseraAutodiffError, match=r"cholesky.+not differentiable",
+            ):
                 t.backward(loss)
 
     def test_non_scalar_target_without_cotangent_raises(self):

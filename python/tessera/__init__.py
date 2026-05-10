@@ -367,6 +367,74 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         hidden = ops.silu_mul(gate, up)
         return ops.gemm(hidden, W_down)
 
+    # ── Theme 9 utility tensor ops (Tier 3 #8) ──────────────────────────────
+    # Small numpy-reference primitives that several advanced examples want
+    # for shape munging / masking / range generation. Each ships with a VJP
+    # in `python/tessera/autodiff/vjp.py` so they compose with the tape.
+
+    def arange(start, stop=None, step=1, dtype="fp32"):
+        """`numpy.arange` over a ``[start, stop)`` range with the given step.
+
+        Single-arg form (``arange(stop)``) starts at 0, mirroring numpy. The
+        result is a 1-D array. Non-differentiable — produces no `.grad`.
+        """
+        if stop is None:
+            stop = start
+            start = 0
+        np_dtype = {"fp16": np.float16, "fp32": np.float32, "fp64": np.float64,
+                    "i32": np.int32, "i64": np.int64}.get(dtype, np.float32)
+        return np.arange(start, stop, step, dtype=np_dtype)
+
+    def gather(x, indices, *, axis=0):
+        """Gather slices of ``x`` along ``axis`` per integer ``indices``.
+
+        Mirrors ``numpy.take(x, indices, axis=axis)``. ``indices`` may be any
+        int dtype. Differentiable through ``x``; ``indices`` is treated as a
+        non-tensor argument by the tape.
+        """
+        if hasattr(x, "_data"):
+            x = x._data
+        if hasattr(indices, "_data"):
+            indices = indices._data
+        x = np.asarray(x)
+        idx = np.asarray(indices, dtype=np.int64)
+        return np.take(x, idx, axis=axis)
+
+    def clip(x, *, min_val=None, max_val=None):
+        """Element-wise clamp into ``[min_val, max_val]``.
+
+        Either bound may be ``None`` to leave that side open. Mirrors
+        ``numpy.clip``. The VJP routes upstream cotangents only through
+        elements that weren't clamped (a straight-through estimator).
+
+        ``min_val``/``max_val`` are keyword-only so the autodiff tape
+        captures them as ``entry.kwargs`` for the VJP — non-tensor
+        positional args would otherwise be dropped by ``_make_wrapper``.
+        """
+        if hasattr(x, "_data"):
+            x = x._data
+        x = np.asarray(x)
+        return np.clip(x, min_val, max_val)
+
+    def masked_fill(x, mask, *, value):
+        """Replace elements of ``x`` where ``mask`` is True with ``value``.
+
+        ``mask`` must broadcast against ``x``. Used heavily by attention masks
+        and constraint-projected softmax (``-inf`` fill before softmax).
+        Differentiable through ``x``; ``mask`` is recorded but
+        non-differentiable. ``value`` is keyword-only so the tape captures it
+        as ``entry.kwargs`` for the VJP.
+        """
+        if hasattr(x, "_data"):
+            x = x._data
+        if hasattr(mask, "_data"):
+            mask = mask._data
+        x = np.asarray(x)
+        mask = np.asarray(mask, dtype=bool)
+        out = x.copy()
+        out[np.broadcast_to(mask, out.shape)] = value
+        return out
+
     def sin(x):
         if hasattr(x, "_data"):
             x = x._data
@@ -965,6 +1033,323 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         v = (v_q.astype(np.float32) - bits_q_min) * v_scale.astype(np.float32) + v_min
         return k, v
 
+    # ── Theme 10 fp8 quantize/dequantize ops ────────────────────────────────
+    # Per-tensor symmetric fp8 quantization (the convention used by
+    # transformer-engine, Megatron-LM fp8, and the Jet_nemotron / Nemotron
+    # examples). E4M3 has 3 mantissa bits, exponent bias 7, no inf, max
+    # representable normal value 448.0. E5M2 has 2 mantissa bits, exp bias
+    # 15, supports inf, max 57344.0.
+    #
+    # API contract:
+    #   quantize_fp8(x, *, format="e4m3", scale=None) → (x_q_as_fp32, scale)
+    #   dequantize_fp8(x_q, scale, *, format="e4m3") → x_fp32
+    #
+    # `x_q` is returned as fp32 (numerically equal to its fp8-rounded
+    # value) so the rest of the pipeline can keep using float arithmetic.
+    # When `ml_dtypes` is installed the quantization uses native
+    # `float8_e4m3fn` / `float8_e5m2` cast for accurate rounding; otherwise
+    # a pure-numpy emulation rounds to the fp8 grid by snapping the mantissa.
+    #
+    # Per-backend GPU lowering (Hopper tcgen05 fp8 mma, ROCm OCP fp8) is
+    # deferred to Phase G — the Python op surface unblocks the example
+    # paths today.
+
+    _FP8_FORMATS = {
+        "e4m3": {"max_normal": 448.0, "mantissa_bits": 3, "exp_bias": 7},
+        "e5m2": {"max_normal": 57344.0, "mantissa_bits": 2, "exp_bias": 15},
+    }
+
+    def _ml_dtypes_fp8():
+        """Return ``(e4m3_dtype, e5m2_dtype)`` if ``ml_dtypes`` is installed,
+        otherwise ``(None, None)``. Soft import — we don't want a hard
+        dependency just for the fp8 fast path."""
+        try:
+            import ml_dtypes  # type: ignore
+            return ml_dtypes.float8_e4m3fn, ml_dtypes.float8_e5m2
+        except Exception:
+            return None, None
+
+    def _round_to_fp_grid_numpy(
+        x: "np.ndarray", *, max_normal: float, mantissa_bits: int,
+    ) -> "np.ndarray":
+        """Pure-numpy mantissa-snap rounding to a low-precision float grid.
+
+        Generalizes the fp8 fallback to fp6 / fp4 by parameterizing
+        ``mantissa_bits`` and ``max_normal``. For each value, compute the
+        ULP at its magnitude (``2**(e - mantissa_bits)`` where ``e`` is the
+        unbiased binary exponent), round to the nearest multiple, then
+        saturate at ``max_normal``.
+        """
+        x = np.asarray(x, dtype=np.float32)
+        sign = np.sign(x)
+        ax = np.abs(x)
+        ax = np.minimum(ax, max_normal)
+        with np.errstate(divide="ignore"):
+            e = np.where(ax > 0, np.floor(np.log2(ax + 1e-38)), 0)
+        ulp = 2.0 ** (e - mantissa_bits)
+        rounded = np.round(ax / ulp) * ulp
+        rounded = np.minimum(rounded, max_normal)
+        return (sign * rounded).astype(np.float32)
+
+    # Backwards-compat alias for the original fp8 helper name. Keeps any
+    # external callsite working while the codebase migrates to the
+    # generic helper.
+    def _round_to_fp8_grid_numpy(x: "np.ndarray", *, format: str) -> "np.ndarray":
+        spec = _FP8_FORMATS[format]
+        return _round_to_fp_grid_numpy(
+            x, max_normal=spec["max_normal"], mantissa_bits=spec["mantissa_bits"],
+        )
+
+    def quantize_fp8(x, *, format: str = "e4m3", scale=None):
+        """Per-tensor symmetric fp8 quantization.
+
+        ``format`` is ``"e4m3"`` (default) or ``"e5m2"``. When ``scale`` is
+        ``None`` it is computed from the input as
+        ``amax(|x|) / max_normal_for_format`` (with a small floor). The
+        return is ``(x_q_as_fp32, scale)`` where ``x_q_as_fp32`` is the
+        fp8-rounded value cast back to fp32 — downstream ops can keep
+        using float arithmetic without bridge code.
+        """
+        if format not in _FP8_FORMATS:
+            raise ValueError(
+                f"format must be 'e4m3' or 'e5m2'; got {format!r}"
+            )
+        if hasattr(x, "_data"):
+            x = x._data
+        x = np.asarray(x, dtype=np.float32)
+        spec = _FP8_FORMATS[format]
+        max_normal = spec["max_normal"]
+        if scale is None:
+            amax = np.max(np.abs(x))
+            scale = float(np.maximum(amax / max_normal, 1e-12))
+        scaled = x / scale
+        # Saturate before the cast — ml_dtypes' native float8 cast turns
+        # finite-but-out-of-range values into nan/inf (IEEE behaviour),
+        # but for fp8 quantization the canonical convention is to clip to
+        # the format's max_normal.
+        scaled = np.clip(scaled, -max_normal, max_normal)
+        e4m3, e5m2 = _ml_dtypes_fp8()
+        if e4m3 is not None:
+            target = e4m3 if format == "e4m3" else e5m2
+            rounded = scaled.astype(target).astype(np.float32)
+        else:
+            rounded = _round_to_fp8_grid_numpy(scaled, format=format)
+        return rounded * np.float32(scale), np.float32(scale)
+
+    def dequantize_fp8(x_q, scale, *, format: str = "e4m3"):
+        """Inverse of :func:`quantize_fp8`. Returns the fp32 array.
+
+        The forward is already lossy (fp8 rounding); ``dequantize_fp8`` is
+        provided for clean call-site symmetry with ``quantize_fp8`` and to
+        match the canonical-API spelling.
+        """
+        if format not in _FP8_FORMATS:
+            raise ValueError(
+                f"format must be 'e4m3' or 'e5m2'; got {format!r}"
+            )
+        x_q = np.asarray(x_q, dtype=np.float32)
+        # quantize_fp8 already rescales by the scale factor on the way out,
+        # so the dequant is a no-op. Keeping it as an op so the IR layer
+        # can intercept the pair (quantize → dequantize) for fusion or
+        # cancellation.
+        return x_q.astype(np.float32)
+
+    # ── Deferred-items plan, Item 2 — fp6 / fp4 / nvfp4 quantize ops ───────
+    # Mirror of the fp8 framework above with format-specific bit-grids.
+    # Per-tensor symmetric (fp6 / fp4) or block-scaled (nvfp4). Per-backend
+    # GPU lowering (Hopper/Blackwell `cvt.fp4`/`cvt.fp6` PTX, ROCm OCP fp6/fp4
+    # mfma) is deferred to Phase G — this is the Python op surface unblock.
+
+    _FP6_FORMATS = {
+        # IEEE-style binary float layouts. max_normal = (2 - 2^-mantissa) * 2^(emax)
+        # where emax = (2^exp_bits - 1) - exp_bias - 1 (no inf reservation).
+        "e2m3": {"max_normal": 7.5, "mantissa_bits": 3},   # exp_bits=2
+        "e3m2": {"max_normal": 28.0, "mantissa_bits": 2},  # exp_bits=3
+    }
+    _FP4_FORMATS = {
+        # E2M1: 1 sign + 2 exp + 1 mantissa. max_normal = 1.5 * 2^2 = 6.0.
+        "e2m1": {"max_normal": 6.0, "mantissa_bits": 1},
+    }
+
+    def quantize_fp6(x, *, format: str = "e3m2", scale=None):
+        """Per-tensor symmetric fp6 quantization.
+
+        ``format`` is ``"e2m3"`` (3 mantissa bits, max ±7.5 — favors
+        precision) or ``"e3m2"`` (2 mantissa bits, max ±28 — favors
+        range). Returns ``(x_q_as_fp32, scale)`` matching the fp8 API.
+        """
+        if format not in _FP6_FORMATS:
+            raise ValueError(
+                f"format must be 'e2m3' or 'e3m2'; got {format!r}"
+            )
+        if hasattr(x, "_data"):
+            x = x._data
+        x = np.asarray(x, dtype=np.float32)
+        spec = _FP6_FORMATS[format]
+        max_normal = spec["max_normal"]
+        if scale is None:
+            amax = np.max(np.abs(x))
+            scale = float(np.maximum(amax / max_normal, 1e-12))
+        scaled = np.clip(x / scale, -max_normal, max_normal)
+        rounded = _round_to_fp_grid_numpy(
+            scaled, max_normal=max_normal,
+            mantissa_bits=spec["mantissa_bits"],
+        )
+        return rounded * np.float32(scale), np.float32(scale)
+
+    def dequantize_fp6(x_q, scale, *, format: str = "e3m2"):
+        """Inverse of :func:`quantize_fp6`. Pair-wise op so the IR layer
+        can intercept (quantize → dequantize) for fusion."""
+        if format not in _FP6_FORMATS:
+            raise ValueError(
+                f"format must be 'e2m3' or 'e3m2'; got {format!r}"
+            )
+        return np.asarray(x_q, dtype=np.float32)
+
+    def quantize_fp4(x, *, format: str = "e2m1", scale=None):
+        """Per-tensor symmetric fp4 quantization. Only ``"e2m1"`` is
+        supported today (the format Blackwell hardware exposes)."""
+        if format not in _FP4_FORMATS:
+            raise ValueError(f"format must be 'e2m1'; got {format!r}")
+        if hasattr(x, "_data"):
+            x = x._data
+        x = np.asarray(x, dtype=np.float32)
+        spec = _FP4_FORMATS[format]
+        max_normal = spec["max_normal"]
+        if scale is None:
+            amax = np.max(np.abs(x))
+            scale = float(np.maximum(amax / max_normal, 1e-12))
+        scaled = np.clip(x / scale, -max_normal, max_normal)
+        rounded = _round_to_fp_grid_numpy(
+            scaled, max_normal=max_normal,
+            mantissa_bits=spec["mantissa_bits"],
+        )
+        return rounded * np.float32(scale), np.float32(scale)
+
+    def dequantize_fp4(x_q, scale, *, format: str = "e2m1"):
+        """Inverse of :func:`quantize_fp4`."""
+        if format not in _FP4_FORMATS:
+            raise ValueError(f"format must be 'e2m1'; got {format!r}")
+        return np.asarray(x_q, dtype=np.float32)
+
+    def quantize_nvfp4(x, *, block_size: int = 16):
+        """NVFP4 — block-scaled fp4 (Blackwell convention).
+
+        Per-block (default 16 elements along the last axis) symmetric
+        E2M1 quantization with one fp32 scale factor per block. Returns
+        ``(x_q_as_fp32, scales)`` where ``scales.shape == x.shape[:-1] +
+        (num_blocks,)``.
+        """
+        if block_size <= 0:
+            raise ValueError("block_size must be positive")
+        if hasattr(x, "_data"):
+            x = x._data
+        x = np.asarray(x, dtype=np.float32)
+        if x.shape[-1] % block_size != 0:
+            raise ValueError(
+                f"last dim {x.shape[-1]} must be divisible by block_size "
+                f"{block_size} for NVFP4"
+            )
+        max_normal = _FP4_FORMATS["e2m1"]["max_normal"]
+        # Reshape last axis into (num_blocks, block_size).
+        leading = x.shape[:-1]
+        num_blocks = x.shape[-1] // block_size
+        blocked = x.reshape(*leading, num_blocks, block_size)
+        # Per-block amax → per-block scale.
+        amax = np.max(np.abs(blocked), axis=-1, keepdims=False)
+        scales = np.maximum(amax / max_normal, 1e-12).astype(np.float32)
+        # Broadcast scales back across the block dim for the cast.
+        scales_bcast = scales[..., None]
+        scaled = np.clip(blocked / scales_bcast, -max_normal, max_normal)
+        rounded = _round_to_fp_grid_numpy(
+            scaled, max_normal=max_normal,
+            mantissa_bits=_FP4_FORMATS["e2m1"]["mantissa_bits"],
+        )
+        out = (rounded * scales_bcast).reshape(x.shape)
+        return out.astype(np.float32), scales
+
+    def dequantize_nvfp4(x_q, scales, *, block_size: int = 16):
+        """Inverse of :func:`quantize_nvfp4`."""
+        return np.asarray(x_q, dtype=np.float32)
+
+    # ── Theme 5 — Multi-Latent Attention (MLA) primitives ──────────────────
+    # Anchors the MLA shape in the IR: compress hidden → latent, cache only
+    # the latent, expand to K/V at read time. The three projection ops are
+    # numerically gemms, but distinct op_names so a future FlashMLA target
+    # pass can match the chain end-to-end (compress → cache → expand →
+    # absorbed-attention) and emit a single fused kernel on Hopper/Blackwell.
+    #
+    # See `examples/advanced/mla/flashmla_tessera.md` for the design story.
+
+    def latent_kv_compress(x, w_dkv):
+        """Compress a hidden state to the MLA latent dim:
+        ``c = x @ W_dkv`` where ``W_dkv: [hidden_dim, latent_dim]``.
+
+        Numerically a matmul; the distinct op_name is the IR anchor for
+        backend-specific fusion (FlashMLA on H100/H200, e.g.).
+        """
+        if hasattr(x, "_data"):
+            x = x._data
+        if hasattr(w_dkv, "_data"):
+            w_dkv = w_dkv._data
+        return np.matmul(x, w_dkv)
+
+    def latent_kv_expand_k(c, w_uk):
+        """Expand the cached latent back to K: ``K = c @ W_uk`` where
+        ``W_uk: [latent_dim, num_heads * head_dim]``. The result has shape
+        compatible with the attention kernels' K input.
+
+        In production (Phase G FlashMLA), W_uk gets *absorbed* into the
+        score-matrix path so the K matrix is never materialized — that's
+        the 93%+ KV-cache memory saving DeepSeek reports. The distinct
+        op_name anchors that fusion.
+        """
+        if hasattr(c, "_data"):
+            c = c._data
+        if hasattr(w_uk, "_data"):
+            w_uk = w_uk._data
+        return np.matmul(c, w_uk)
+
+    def latent_kv_expand_v(c, w_uv):
+        """Expand the cached latent back to V: ``V = c @ W_uv``. Mirror
+        of :func:`latent_kv_expand_k`."""
+        if hasattr(c, "_data"):
+            c = c._data
+        if hasattr(w_uv, "_data"):
+            w_uv = w_uv._data
+        return np.matmul(c, w_uv)
+
+    def rope_split(x, *, rope_dim: int):
+        """Split a tensor's last dim into ``(rope_part, no_rope_part)``.
+
+        The first ``rope_dim`` channels along the last axis are returned
+        as ``rope_part`` (these get RoPE applied); the rest are returned
+        unchanged. Used by MLA's decoupled-RoPE design — the positional
+        encoding only touches the rope_dim slice, so the compressed
+        latent doesn't have to carry positional information.
+
+        ``rope_dim`` must be ≤ ``x.shape[-1]``. Returns a 2-tuple.
+        """
+        if hasattr(x, "_data"):
+            x = x._data
+        x = np.asarray(x)
+        if rope_dim < 0 or rope_dim > x.shape[-1]:
+            raise ValueError(
+                f"rope_dim must be in [0, {x.shape[-1]}]; got {rope_dim}"
+            )
+        return x[..., :rope_dim], x[..., rope_dim:]
+
+    def rope_merge(rope_part, no_rope_part):
+        """Inverse of :func:`rope_split` — concatenate the two parts along
+        the last axis."""
+        if hasattr(rope_part, "_data"):
+            rope_part = rope_part._data
+        if hasattr(no_rope_part, "_data"):
+            no_rope_part = no_rope_part._data
+        return np.concatenate(
+            [np.asarray(rope_part), np.asarray(no_rope_part)], axis=-1
+        )
+
     def depthwise_conv1d(x, w, *, kernel_size: int, padding: int = 0, causal: bool = False, state=None):
         """Depthwise 1-D convolution (one filter per channel).
 
@@ -1335,6 +1720,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "sin": sin,
         "silu": silu,
         "silu_mul": silu_mul,
+        "arange": arange,
+        "gather": gather,
+        "clip": clip,
+        "masked_fill": masked_fill,
         "adam": adam,
         "transpose": transpose,
         "cast": cast,
@@ -1385,6 +1774,19 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "online_softmax_state": online_softmax_state,
         "quantize_kv": quantize_kv,
         "dequantize_kv": dequantize_kv,
+        "quantize_fp8": quantize_fp8,
+        "dequantize_fp8": dequantize_fp8,
+        "quantize_fp6": quantize_fp6,
+        "dequantize_fp6": dequantize_fp6,
+        "quantize_fp4": quantize_fp4,
+        "dequantize_fp4": dequantize_fp4,
+        "quantize_nvfp4": quantize_nvfp4,
+        "dequantize_nvfp4": dequantize_nvfp4,
+        "latent_kv_compress": latent_kv_compress,
+        "latent_kv_expand_k": latent_kv_expand_k,
+        "latent_kv_expand_v": latent_kv_expand_v,
+        "rope_split": rope_split,
+        "rope_merge": rope_merge,
         "selective_ssm": selective_ssm,
     }
     for op_name, fn in references.items():
@@ -1419,6 +1821,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         silu=silu,
         silu_mul=silu_mul,
         swiglu=swiglu,
+        arange=arange,
+        gather=gather,
+        clip=clip,
+        masked_fill=masked_fill,
         rmsnorm=rmsnorm,
         rmsnorm_safe=rmsnorm_safe,
         sin=sin,
@@ -1473,6 +1879,19 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         online_softmax_state=online_softmax_state,
         quantize_kv=quantize_kv,
         dequantize_kv=dequantize_kv,
+        quantize_fp8=quantize_fp8,
+        dequantize_fp8=dequantize_fp8,
+        quantize_fp6=quantize_fp6,
+        dequantize_fp6=dequantize_fp6,
+        quantize_fp4=quantize_fp4,
+        dequantize_fp4=dequantize_fp4,
+        quantize_nvfp4=quantize_nvfp4,
+        dequantize_nvfp4=dequantize_nvfp4,
+        latent_kv_compress=latent_kv_compress,
+        latent_kv_expand_k=latent_kv_expand_k,
+        latent_kv_expand_v=latent_kv_expand_v,
+        rope_split=rope_split,
+        rope_merge=rope_merge,
         selective_ssm=selective_ssm,
     )
 
@@ -1487,6 +1906,12 @@ from . import autodiff  # noqa: E402
 
 # KV-cache handle abstraction (Phase B2 of execution_roadmap.md).
 from . import cache  # noqa: E402
+
+# Speculative decoding scheduler primitives (Theme 6).
+from . import speculative  # noqa: E402
+
+# Probability distributions (deferred-items plan, Item 1).
+from . import distributions  # noqa: E402
 
 from .runtime import (  # noqa: E402
     RuntimeArtifact,

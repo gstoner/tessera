@@ -18,5 +18,6 @@ Ergonomic entry point — all the user normally needs:
 from __future__ import annotations
 
 from .handle import KVCacheHandle
+from .latent import LatentKVCacheHandle
 
-__all__ = ["KVCacheHandle"]
+__all__ = ["KVCacheHandle", "LatentKVCacheHandle"]

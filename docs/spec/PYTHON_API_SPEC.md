@@ -1240,6 +1240,22 @@ metadata for frontend and compiler tests.
 | `rmsnorm_safe(x, eps=1e-6)` | `(array) → array` | `pure` | NumPy RMSNorm reference with safer default epsilon |
 | `transpose(x, axes=None)` | `(array) → array` | `pure` | `np.transpose(x, axes)` |
 | `cast(x, dtype)` | `(array, str) → array` | `pure` | `x.astype(dtype)` |
+| `arange(start, stop=None, step=1, dtype="fp32")` | `(...) → 1-D array` | `pure` | Theme 9 — `numpy.arange` over `[start, stop)`. Single-arg form starts at 0 |
+| `gather(x, indices, axis=0)` | `(array, int-array) → array` | `pure` | Theme 9 — `numpy.take(x, indices, axis=axis)`. VJP scatters via `np.add.at` (correct under repeated indices) |
+| `clip(x, min_val=None, max_val=None)` | `(array, float?, float?) → array` | `pure` | Theme 9 — element-wise clamp; either bound may be `None`. Straight-through gradient |
+| `masked_fill(x, mask, value)` | `(array, bool-array, scalar) → array` | `pure` | Theme 9 — replace `x` where `mask` is True. Used by attention masks and softmax `-inf` fill |
+| `quantize_fp8(x, format="e4m3", scale=None)` | `(array) → (array, float)` | `pure` | Theme 10 — per-tensor symmetric fp8 quantization. `format` is `"e4m3"` (max 448) or `"e5m2"` (max 57344). Returns `(x_q_as_fp32, scale)`. Native cast via `ml_dtypes` when installed; pure-numpy mantissa-snap fallback otherwise |
+| `dequantize_fp8(x_q, scale, format="e4m3")` | `(array, float) → array` | `pure` | Theme 10 — inverse of `quantize_fp8`. Pair-wise op so the IR layer can intercept (quantize→dequantize) for fusion |
+| `quantize_fp6(x, format="e3m2", scale=None)` | `(array) → (array, float)` | `pure` | Item 2 — fp6 quantization. `format` is `"e2m3"` (max ±7.5; precision-favored) or `"e3m2"` (max ±28; range-favored) |
+| `dequantize_fp6(x_q, scale, format="e3m2")` | `(array, float) → array` | `pure` | Item 2 — inverse of `quantize_fp6` |
+| `quantize_fp4(x, format="e2m1", scale=None)` | `(array) → (array, float)` | `pure` | Item 2 — fp4 quantization. Only `"e2m1"` supported (Blackwell hardware format) |
+| `dequantize_fp4(x_q, scale, format="e2m1")` | `(array, float) → array` | `pure` | Item 2 — inverse of `quantize_fp4` |
+| `quantize_nvfp4(x, block_size=16)` | `(array) → (array, scales)` | `pure` | Item 2 — block-scaled fp4 (Blackwell convention). One fp32 scale per `block_size`-element block along the last axis |
+| `dequantize_nvfp4(x_q, scales, block_size=16)` | `(array, array) → array` | `pure` | Item 2 — inverse of `quantize_nvfp4` |
+| `latent_kv_compress(x, w_dkv)` | `(array, array) → array` | `pure` | Theme 5 — MLA latent compression `c = x @ W_dkv`. Distinct op_name anchors the FlashMLA target-pass match |
+| `latent_kv_expand_k(c, w_uk)` / `latent_kv_expand_v(c, w_uv)` | `(array, array) → array` | `pure` | Theme 5 — expand cached latent back to K / V at attention time. Will be absorbed into the score kernel by Phase G FlashMLA pass |
+| `rope_split(x, rope_dim)` | `(array) → (array, array)` | `pure` | Theme 5 — split last dim into `(rope_part, no_rope_part)`. Used by MLA's decoupled-RoPE design so positional encoding only touches the small rope_dim slice |
+| `rope_merge(rope_part, no_rope_part)` | `(array, array) → array` | `pure` | Theme 5 — inverse of `rope_split`; concatenate along last dim |
 | `dropout(x, p=0.1, training=True)` | `(array) → array` | `random` | Bernoulli mask, numpy rng |
 | `conv2d(x, weight, bias=None, stride=1, padding=0)` | `(NHWC, HWIO) → NHWC` | `pure` | NumPy NHWC/HWIO reference |
 | `conv3d(x, weight, bias=None, stride=1, padding=0)` | `(NDHWC, DHWIO) → NDHWC` | `pure` | NumPy NDHWC/DHWIO reference |

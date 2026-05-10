@@ -376,3 +376,311 @@ class TestFFTVJP:
         assert get_vjp("ifft") is not None
         assert get_vjp("rfft") is not None
         assert get_vjp("irfft") is not None
+
+
+class TestMoeVJP:
+    """Theme 2 follow-up (F3-moe). Per-token gradient through the routed
+    matmul ``out[i] = x[i] @ E[route[i]]``, accumulated into per-expert
+    weight gradient when multiple tokens share an expert."""
+
+    def test_moe_vjp_registered(self):
+        from tessera.autodiff.vjp import get_vjp
+        assert get_vjp("moe") is not None
+
+    def test_moe_vjp_matches_numerical_jacobian_with_explicit_route(self):
+        np.random.seed(0)
+        T, D_in, D_out, E = 6, 4, 5, 3
+        x = np.random.randn(T, D_in).astype(np.float64) * 0.5
+        experts = np.random.randn(E, D_in, D_out).astype(np.float64) * 0.3
+        route = np.array([0, 1, 2, 0, 1, 2], dtype=np.int64)
+        x_p = ts.nn.Parameter(x.copy())
+        e_p = ts.nn.Parameter(experts.copy())
+
+        with ts.autodiff.tape() as t:
+            out = ts.ops.moe(x_p, e_p, route=route)
+            loss = ts.ops.reduce(ts.ops.mul(out, out), op="sum")
+            t.backward(loss)
+
+        def loss_x(arr):
+            o = np.empty((T, D_out))
+            for i in range(T):
+                o[i] = arr[i] @ experts[int(route[i])]
+            return float((o ** 2).sum())
+
+        def loss_e(arr):
+            o = np.empty((T, D_out))
+            for i in range(T):
+                o[i] = x[i] @ arr[int(route[i])]
+            return float((o ** 2).sum())
+
+        def numgrad(fn, x0, eps=1e-6):
+            g = np.zeros_like(x0)
+            flat = x0.ravel()
+            flat_g = g.ravel()
+            for i in range(flat.size):
+                orig = flat[i]
+                flat[i] = orig + eps
+                plus = float(fn(x0))
+                flat[i] = orig - eps
+                minus = float(fn(x0))
+                flat[i] = orig
+                flat_g[i] = (plus - minus) / (2 * eps)
+            return g
+
+        ng_x = numgrad(loss_x, x.copy())
+        ng_e = numgrad(loss_e, experts.copy())
+        np.testing.assert_allclose(x_p.grad.numpy(), ng_x, rtol=1e-5, atol=1e-6)
+        np.testing.assert_allclose(e_p.grad.numpy(), ng_e, rtol=1e-5, atol=1e-6)
+
+    def test_moe_vjp_accumulates_grads_when_tokens_share_an_expert(self):
+        """If multiple tokens route to the same expert, that expert's
+        weight gradient must accumulate (not overwrite). Test by sending
+        all tokens to expert 0 and confirming the gradient matches the
+        sum over per-token contributions."""
+        np.random.seed(1)
+        T, D_in, D_out, E = 4, 3, 2, 2
+        x = np.random.randn(T, D_in).astype(np.float64) * 0.5
+        experts = np.random.randn(E, D_in, D_out).astype(np.float64) * 0.3
+        route = np.zeros(T, dtype=np.int64)  # all tokens to expert 0
+        x_p = ts.nn.Parameter(x.copy())
+        e_p = ts.nn.Parameter(experts.copy())
+
+        with ts.autodiff.tape() as t:
+            out = ts.ops.moe(x_p, e_p, route=route)
+            loss = ts.ops.reduce(ts.ops.mul(out, out), op="sum")
+            t.backward(loss)
+
+        # Expert 1 was never used → its gradient must be zero.
+        np.testing.assert_array_equal(
+            e_p.grad.numpy()[1], np.zeros((D_in, D_out))
+        )
+        # Expert 0's gradient is the accumulation x.T @ (2 * x @ E[0]).
+        analytical_e0 = x.T @ (2 * (x @ experts[0]))
+        np.testing.assert_allclose(
+            e_p.grad.numpy()[0], analytical_e0, rtol=1e-9, atol=1e-12,
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Theme 10 — fp8 quantize/dequantize ops + autocast extension.
+#
+# Per-tensor symmetric quantization at e4m3 (max 448) and e5m2 (max
+# 57344). The numpy reference path either calls into ml_dtypes' native
+# float8 cast (when installed) or a pure-numpy mantissa-snap fallback.
+# Per-backend GPU lowering is deferred to Phase G.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestQuantizeFp8:
+    @pytest.mark.parametrize("format,max_rel_err", [
+        ("e4m3", 0.15),  # 3 mantissa bits → ULP ≈ 1/8 of value magnitude
+        ("e5m2", 0.30),  # 2 mantissa bits → coarser
+    ])
+    def test_round_trip_error_bound(self, format, max_rel_err):
+        np.random.seed(0)
+        x = np.random.randn(64).astype(np.float32) * 50.0
+        x_q, scale = ts.ops.quantize_fp8(x, format=format)
+        # x_q is already the dequantized value (in fp32) since
+        # quantize_fp8 rolls the rescale into the return.
+        err = np.abs(x - x_q) / (np.abs(x) + 1e-6)
+        assert float(err.max()) <= max_rel_err
+
+    def test_dequantize_is_identity_on_x_q(self):
+        """`dequantize_fp8(x_q, scale)` returns the same fp32 array as
+        `quantize_fp8`'s first return value — the rescale is rolled in.
+        Pair-wise op exists so the IR layer can intercept (quant→dequant)
+        for fusion/cancellation."""
+        x = np.linspace(-2.0, 2.0, 9).astype(np.float32)
+        x_q, scale = ts.ops.quantize_fp8(x, format="e4m3")
+        x_d = ts.ops.dequantize_fp8(x_q, scale, format="e4m3")
+        np.testing.assert_array_equal(x_q, x_d)
+
+    def test_explicit_scale_saturates_past_max_normal(self):
+        """When the caller provides an explicit `scale`, values past the
+        format's max_normal saturate (clip) rather than overflowing to
+        nan/inf. This is the convention transformer-engine uses."""
+        huge = np.array([1e6, -1e6], dtype=np.float32)
+        x_q_e4m3, _ = ts.ops.quantize_fp8(huge, format="e4m3", scale=1.0)
+        np.testing.assert_array_equal(x_q_e4m3, [448.0, -448.0])
+        x_q_e5m2, _ = ts.ops.quantize_fp8(huge, format="e5m2", scale=1.0)
+        np.testing.assert_array_equal(x_q_e5m2, [57344.0, -57344.0])
+
+    def test_zero_input_yields_zero(self):
+        x = np.zeros(4, dtype=np.float32)
+        x_q, _ = ts.ops.quantize_fp8(x, format="e4m3")
+        np.testing.assert_array_equal(x_q, np.zeros(4))
+
+    def test_invalid_format_rejected(self):
+        x = np.array([1.0], dtype=np.float32)
+        with pytest.raises(ValueError, match="format"):
+            ts.ops.quantize_fp8(x, format="e3m4")
+        with pytest.raises(ValueError, match="format"):
+            ts.ops.dequantize_fp8(x, 1.0, format="e3m4")
+
+    def test_autocast_accepts_fp8_dtypes(self):
+        """`tessera.autodiff.autocast("fp8_e4m3")` must accept the dtype
+        and route boundary casts through `ops.quantize_fp8`. The forward
+        result of an op under fp8 autocast is numerically the matmul of
+        fp8-rounded operands. Tests the per-op tape wrapper directly —
+        `@ts.jit` has its own inner pipeline that doesn't currently honor
+        autocast (separate concern)."""
+        np.random.seed(0)
+        A = np.random.randn(4, 8).astype(np.float32) * 0.1
+        B = np.random.randn(8, 4).astype(np.float32) * 0.1
+        with ts.autodiff.autocast("fp8_e4m3"):
+            out = ts.ops.matmul(A, B)
+        # Compute the same thing with explicit quantize → matmul to
+        # confirm the autocast applied the boundary cast.
+        Aq, _ = ts.ops.quantize_fp8(A, format="e4m3")
+        Bq, _ = ts.ops.quantize_fp8(B, format="e4m3")
+        ref = Aq @ Bq
+        np.testing.assert_allclose(out, ref, rtol=1e-5, atol=1e-5)
+
+    def test_autocast_rejects_unknown_dtype(self):
+        with pytest.raises(ValueError, match="autocast dtype"):
+            with ts.autodiff.autocast("fp8_e3m4"):
+                pass
+
+    def test_autocast_e5m2_is_coarser_than_e4m3(self):
+        """e5m2 has more exponent range but only 2 mantissa bits, so
+        roundtrip error in the small-value regime should be at least as
+        large as e4m3."""
+        np.random.seed(0)
+        x = np.random.randn(64).astype(np.float32) * 0.5
+        x4, _ = ts.ops.quantize_fp8(x, format="e4m3")
+        x5, _ = ts.ops.quantize_fp8(x, format="e5m2")
+        err4 = float(np.abs(x - x4).max())
+        err5 = float(np.abs(x - x5).max())
+        assert err5 >= err4 * 0.9  # not strictly larger, but in the same ballpark
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Deferred-items plan, Item 2 — fp6 / fp4 / nvfp4 quantize ops + autocast.
+# Same per-tensor-symmetric framework as fp8, with format-specific
+# bit-grids. Per-backend Hopper/Blackwell PTX rules deferred to Phase G.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestQuantizeFp6:
+    @pytest.mark.parametrize("format,max_normal,max_rel_err", [
+        ("e2m3", 7.5, 0.20),   # 3 mantissa bits — like fp8 e4m3 in precision
+        ("e3m2", 28.0, 0.30),  # 2 mantissa bits — coarser
+    ])
+    def test_round_trip_error_bound(self, format, max_normal, max_rel_err):
+        np.random.seed(0)
+        x = np.random.randn(64).astype(np.float32) * 0.5
+        x_q, scale = ts.ops.quantize_fp6(x, format=format)
+        err = np.abs(x - x_q) / (np.abs(x) + 1e-6)
+        assert float(err.max()) <= max_rel_err
+
+    def test_explicit_scale_saturates(self):
+        huge = np.array([1e6, -1e6], dtype=np.float32)
+        for format, max_normal in (("e2m3", 7.5), ("e3m2", 28.0)):
+            x_q, _ = ts.ops.quantize_fp6(huge, format=format, scale=1.0)
+            np.testing.assert_array_equal(x_q, [max_normal, -max_normal])
+
+    def test_invalid_format_rejected(self):
+        x = np.array([1.0], dtype=np.float32)
+        with pytest.raises(ValueError, match="format"):
+            ts.ops.quantize_fp6(x, format="e1m4")
+
+    def test_dequantize_returns_input_as_fp32(self):
+        x = np.array([0.5, -1.0], dtype=np.float32)
+        x_q, scale = ts.ops.quantize_fp6(x, format="e2m3")
+        np.testing.assert_array_equal(
+            ts.ops.dequantize_fp6(x_q, scale, format="e2m3"), x_q
+        )
+
+
+class TestQuantizeFp4:
+    def test_round_trip_error_bound(self):
+        """fp4 e2m1 has 1 mantissa bit (very coarse) — error tolerance
+        must reflect that."""
+        np.random.seed(0)
+        x = np.random.randn(64).astype(np.float32) * 0.5
+        x_q, _ = ts.ops.quantize_fp4(x, format="e2m1")
+        err = np.abs(x - x_q) / (np.abs(x) + 1e-6)
+        assert float(err.max()) <= 0.50
+
+    def test_e2m1_grid_only_has_known_values(self):
+        """E2M1 representable positive normals are exactly {1.0, 1.5,
+        2.0, 3.0, 4.0, 6.0} — the rounding must hit one of those when
+        scale=1."""
+        positives = np.array([1.0, 1.5, 2.0, 3.0, 4.0, 6.0], dtype=np.float32)
+        x_q, _ = ts.ops.quantize_fp4(positives, format="e2m1", scale=1.0)
+        np.testing.assert_array_equal(x_q, positives)
+
+    def test_saturates_past_max_normal(self):
+        huge = np.array([10.0, -10.0], dtype=np.float32)
+        x_q, _ = ts.ops.quantize_fp4(huge, format="e2m1", scale=1.0)
+        np.testing.assert_array_equal(x_q, [6.0, -6.0])
+
+    def test_invalid_format_rejected(self):
+        x = np.array([1.0], dtype=np.float32)
+        with pytest.raises(ValueError, match="format"):
+            ts.ops.quantize_fp4(x, format="e3m0")
+
+
+class TestQuantizeNVFP4:
+    def test_block_independent_scales(self):
+        """Two blocks with very different magnitudes must each get their
+        own scale factor; the small-magnitude block's precision is not
+        ruined by the large-magnitude block."""
+        # Block 0: ~ 0.01 magnitudes; Block 1: ~ 100 magnitudes.
+        block0 = np.full(16, 0.01, dtype=np.float32)
+        block1 = np.full(16, 100.0, dtype=np.float32)
+        x = np.concatenate([block0, block1]).reshape(1, 32)
+        x_q, scales = ts.ops.quantize_nvfp4(x, block_size=16)
+        assert scales.shape == (1, 2)
+        # Block 0 small-magnitude error stays bounded by its own scale,
+        # not by the large block's scale.
+        np.testing.assert_allclose(x_q[0, :16], 0.01, rtol=0.5)
+        np.testing.assert_allclose(x_q[0, 16:], 100.0, rtol=0.5)
+
+    def test_block_size_must_divide_last_dim(self):
+        x = np.zeros((1, 17), dtype=np.float32)
+        with pytest.raises(ValueError, match="divisible"):
+            ts.ops.quantize_nvfp4(x, block_size=16)
+
+    def test_block_size_positive(self):
+        x = np.zeros((1, 16), dtype=np.float32)
+        with pytest.raises(ValueError, match="positive"):
+            ts.ops.quantize_nvfp4(x, block_size=0)
+
+
+class TestAutocastFp6Fp4:
+    def test_autocast_fp6_e2m3_routes_through_quantize(self):
+        np.random.seed(0)
+        A = np.random.randn(4, 8).astype(np.float32) * 0.1
+        B = np.random.randn(8, 4).astype(np.float32) * 0.1
+        with ts.autodiff.autocast("fp6_e2m3"):
+            out = ts.ops.matmul(A, B)
+        Aq, _ = ts.ops.quantize_fp6(A, format="e2m3")
+        Bq, _ = ts.ops.quantize_fp6(B, format="e2m3")
+        np.testing.assert_allclose(out, Aq @ Bq, rtol=1e-5, atol=1e-5)
+
+    def test_autocast_fp4_routes_through_quantize(self):
+        np.random.seed(0)
+        A = np.random.randn(4, 8).astype(np.float32) * 0.1
+        B = np.random.randn(8, 4).astype(np.float32) * 0.1
+        with ts.autodiff.autocast("fp4_e2m1"):
+            out = ts.ops.matmul(A, B)
+        Aq, _ = ts.ops.quantize_fp4(A, format="e2m1")
+        Bq, _ = ts.ops.quantize_fp4(B, format="e2m1")
+        np.testing.assert_allclose(out, Aq @ Bq, rtol=1e-5, atol=1e-5)
+
+    def test_autocast_nvfp4_passes_through_when_block_mismatched(self):
+        """nvfp4 needs last dim divisible by block_size; mismatched inputs
+        must pass through as fp32 rather than crash the autocast region."""
+        # 4×8 with default block_size=16 → not divisible. Should not raise.
+        A = np.ones((4, 8), dtype=np.float32)
+        B = np.ones((8, 4), dtype=np.float32)
+        with ts.autodiff.autocast("nvfp4"):
+            out = ts.ops.matmul(A, B)
+        # 4×8 @ 8×4 of ones = 8 in every cell.
+        np.testing.assert_allclose(out, np.full((4, 4), 8.0), rtol=1e-5)
+
+    def test_autocast_rejects_unknown_low_precision_dtype(self):
+        with pytest.raises(ValueError, match="autocast dtype"):
+            with ts.autodiff.autocast("fp3_e1m1"):
+                pass

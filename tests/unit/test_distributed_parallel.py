@@ -167,3 +167,94 @@ class TestFSDP:
         for grad, rank_idx in results:
             assert grad.shape == (2, 4)
             np.testing.assert_allclose(grad, 2.5)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Deferred-items plan, Item 3 — ZeRO stage 3 unification.
+#
+# `FSDP(stage=3)` and the `ZeRO3` alias both opt into parameter-sharding
+# semantics. The Python wrapper today still holds full params per rank
+# between gather/reshard pairs (matching FSDP v1); the ZeROConfig
+# annotation is what the IR-side `OptimizerShardPass` reads to emit
+# `tessera_sr.params_sharded`. Real NCCL all-gather of parameters
+# pre-forward lands in Phase G — this test pins the API contract today.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestZeRO3:
+    def _make_module(self):
+        m = ts.nn.Linear(4, 4, bias=False)
+        m.weight._data._data = np.arange(16, dtype=np.float32).reshape(4, 4) * 0.1
+        return m
+
+    def test_fsdp_default_stage_is_2(self):
+        m = self._make_module()
+        f = ts.distributed.FSDP(m)
+        assert f.stage == 2
+        cfg = f.zero_config
+        assert cfg.stage == 2
+        assert cfg.partition_parameters is False
+
+    def test_fsdp_stage3_sets_partition_parameters(self):
+        m = self._make_module()
+        f = ts.distributed.FSDP(m, stage=3)
+        cfg = f.zero_config
+        assert cfg.stage == 3
+        assert cfg.partition_parameters is True
+        assert cfg.partition_gradients is True
+        assert cfg.partition_optimizer_states is True
+
+    def test_zero3_alias_equivalent_to_fsdp_stage3(self):
+        m1 = self._make_module()
+        m2 = self._make_module()
+        z3 = ts.distributed.ZeRO3(m1, mesh_axis="dp")
+        f3 = ts.distributed.FSDP(m2, mesh_axis="dp", stage=3)
+        # Same stage + same flags + same dp_axis.
+        assert z3.stage == f3.stage == 3
+        assert z3.zero_config.partition_parameters == f3.zero_config.partition_parameters
+        assert z3.mesh_axis == f3.mesh_axis == "dp"
+
+    def test_invalid_stage_rejected(self):
+        m = self._make_module()
+        with pytest.raises(ValueError, match="stage"):
+            ts.distributed.FSDP(m, stage=1)
+        with pytest.raises(ValueError, match="stage"):
+            ts.distributed.FSDP(m, stage=4)
+
+    def test_zero3_is_a_subclass_of_fsdp(self):
+        """Type-check users can write `isinstance(wrapper, FSDP)` and
+        catch ZeRO3 too — it's the stricter variant, not a parallel
+        hierarchy."""
+        m = self._make_module()
+        z3 = ts.distributed.ZeRO3(m)
+        assert isinstance(z3, ts.distributed.FSDP)
+
+    def test_zero3_forward_passthrough(self):
+        """Forward is unchanged from FSDP — ZeRO3 is a stage-3-flagging
+        wrapper, not a different runtime path (yet — Phase G upgrades
+        the gather/reshard cadence)."""
+        m = self._make_module()
+        z3 = ts.distributed.ZeRO3(m)
+        x = np.random.randn(2, 4).astype(np.float32)
+        np.testing.assert_allclose(z3(x), m(x))
+
+    def test_zero3_sync_grads_reduces_correctly_across_ranks(self):
+        """End-to-end: ZeRO3 + a 4-rank MockRankGroup. Same correctness
+        contract as FSDP stage 2 since the v1 Python wrapper doesn't yet
+        actually drop full-param storage — but the gradient sync still
+        reduce-scatters into the local shard."""
+        def worker(rank):
+            m = ts.nn.Linear(4, 4, bias=False)
+            m.weight._data._data = np.arange(16, dtype=np.float32).reshape(4, 4) * 0.1
+            z3 = ts.distributed.ZeRO3(m)
+            z3.shard(rank)
+            m.weight.grad = np.full((4, 4), float(rank.rank + 1), dtype=np.float32)
+            z3.sync_grads(rank)
+            return m.weight.grad.numpy().copy()
+
+        group = MockRankGroup(n=4, mesh_axes={"dp": 4})
+        results = group.run(worker)
+        for grad in results:
+            # Each rank's local 1/4 slice has mean(1,2,3,4) = 2.5
+            assert grad.shape == (1, 4)
+            np.testing.assert_allclose(grad, 2.5)

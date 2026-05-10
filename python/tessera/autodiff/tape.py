@@ -80,7 +80,14 @@ class Tape:
             )
         )
 
-    def backward(self, target: Any, *, cotangent: Any = None) -> None:
+    def backward(
+        self,
+        target: Any,
+        *,
+        cotangent: Any = None,
+        retain_graph: bool = False,
+        accumulate_param_grad: bool = True,
+    ) -> None:
         """Seed the cotangent at `target` and propagate backward through the tape.
 
         Two patterns are supported:
@@ -93,10 +100,23 @@ class Tape:
            with a user-computed gradient. Use this when loss math sits outside
            the tape (raw numpy: `(y - t)**2`-style). `target` must still be a
            tape-recorded numpy array.
+
+        Re-runnability (deferred-items plan, Item 4):
+          * Default behavior raises if `backward()` is called twice on the
+            same tape — preserves the original v1 contract.
+          * Pass ``retain_graph=True`` to allow re-running backward with a
+            different cotangent (e.g. for ``jacrev``, which seeds one
+            basis vector per output dim). The tape state stays valid.
+          * Pass ``accumulate_param_grad=False`` to skip writing into
+            ``Parameter.grad`` slots — useful when ``grad()`` wants the
+            cotangent map without mutating user-visible state.
         """
-        if self._consumed:
+        if self._consumed and not retain_graph:
             raise TesseraAutodiffError(
-                "tape.backward() called twice on the same tape; open a new tape() block"
+                "tape.backward() called twice on the same tape; open a new "
+                "tape() block, or pass retain_graph=True if you intentionally "
+                "want to re-run with a different cotangent (jacrev / repeated "
+                "backward)."
             )
         target_id = id(target)
         target_on_tape = any(e.output_id == target_id for e in self.entries)
@@ -158,10 +178,15 @@ class Tape:
                 else:
                     cotan[desc.array_id] = g
                 # If this input came from a Parameter, accumulate into .grad
-                if desc.param is not None:
+                # (skippable for `grad()` callsites that want the cotangent
+                # map without mutating user-visible Parameter state).
+                if desc.param is not None and accumulate_param_grad:
                     _accumulate_param_grad(desc.param, g)
 
-        # Store final cotangent map for downstream consumers (rematerialize).
+        # Store final cotangent map for downstream consumers (rematerialize,
+        # grad, jacrev). `_consumed` is set to True regardless — but
+        # `retain_graph=True` lets a future backward bypass the consumed
+        # check at call time.
         self.cotangent = cotan
         self._consumed = True
 
@@ -328,11 +353,67 @@ _AUTOCAST_NUMPY_DTYPE = {
     "bf16": np.float32,  # bf16 stored as fp32 in the numpy reference
     "fp32": np.float32,
     "fp64": np.float64,
+    # fp8 / fp6 / fp4 / nvfp4 are handled by routing through their
+    # `ops.quantize_*` op rather than a plain numpy cast — see
+    # `_autocast_args` below. The dict entries below are placeholders so
+    # the lookup doesn't fall through to the plain-cast branch.
+    "fp8_e4m3": np.float32,
+    "fp8_e5m2": np.float32,
+    "fp6_e2m3": np.float32,
+    "fp6_e3m2": np.float32,
+    "fp4_e2m1": np.float32,
+    "nvfp4": np.float32,
 }
 
 
 def _autocast_args(args, dtype: str):
-    """Cast each ndarray in ``args`` to ``dtype``; pass non-arrays through."""
+    """Cast each ndarray in ``args`` to ``dtype``; pass non-arrays through.
+
+    For low-precision floats (fp8 / fp6 / fp4 / nvfp4), arrays are
+    quantized to the requested format via the matching ``ops.quantize_*``
+    op on the boundary. The result is fp32 storage that's numerically
+    equal to its low-precision-rounded value — downstream ops can keep
+    using float arithmetic without bridge code.
+    """
+    if dtype.startswith(("fp8_", "fp6_", "fp4_")) or dtype == "nvfp4":
+        from .. import ops as _ops  # noqa: WPS433
+        # Pick the matching quantize op + extract the bare format suffix.
+        if dtype.startswith("fp8_"):
+            quantize = getattr(_ops.quantize_fp8, "__wrapped__",
+                               _ops.quantize_fp8)
+            fmt = dtype[len("fp8_"):]
+            kwargs = {"format": fmt}
+        elif dtype.startswith("fp6_"):
+            quantize = getattr(_ops.quantize_fp6, "__wrapped__",
+                               _ops.quantize_fp6)
+            fmt = dtype[len("fp6_"):]
+            kwargs = {"format": fmt}
+        elif dtype.startswith("fp4_"):
+            quantize = getattr(_ops.quantize_fp4, "__wrapped__",
+                               _ops.quantize_fp4)
+            fmt = dtype[len("fp4_"):]
+            kwargs = {"format": fmt}
+        else:  # nvfp4
+            quantize = getattr(_ops.quantize_nvfp4, "__wrapped__",
+                               _ops.quantize_nvfp4)
+            kwargs = {}  # default block_size
+
+        out = []
+        for a in args:
+            if isinstance(a, np.ndarray) and a.dtype.kind in "fc":
+                try:
+                    q, _scale = quantize(a, **kwargs)
+                except ValueError:
+                    # NVFP4 requires last dim divisible by block_size; if
+                    # the input doesn't satisfy that, pass through as fp32
+                    # rather than crash the autocast region.
+                    out.append(a.astype(np.float32, copy=False))
+                    continue
+                out.append(q)
+            else:
+                out.append(a)
+        return out
+
     np_dtype = _AUTOCAST_NUMPY_DTYPE.get(dtype, np.float32)
     out = []
     for a in args:

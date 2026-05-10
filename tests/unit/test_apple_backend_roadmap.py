@@ -2152,3 +2152,124 @@ def test_apple_cpu_bf16_disabled_when_ml_dtypes_missing(monkeypatch):
     A = np.eye(3, dtype=np.float32)
     B = np.ones((3, 3), dtype=np.float32)
     np.testing.assert_array_equal(mm(A, B), A @ B)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 8.4.8 — SwiGLU MLP-block fusion (Stage 3 of the SwiGLU Performance
+# Plan in `docs/CANONICAL_API.md`).
+#
+# The Schedule IR fusion recognizer (Stage 2b at
+# src/transforms/lib/SwigluFusionPass.cpp) collapses the
+# `matmul → silu_mul → matmul` chain to `tessera.swiglu_fused`. The
+# Apple GPU lowering (this phase) emits a single
+# `tessera_apple_gpu_swiglu_f32` runtime call dispatched through a custom
+# MSL kernel with three per-thread stack arrays (gate/up/out_row).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _np_swiglu_reference(np_, x, wg, wu, wd):
+    gate = np_.asarray(x) @ np_.asarray(wg)
+    up = np_.asarray(x) @ np_.asarray(wu)
+    hidden = (gate / (1.0 + np_.exp(-gate))) * up
+    return hidden @ np_.asarray(wd)
+
+
+def test_apple_gpu_swiglu_chain_dispatches_to_fused_runtime_symbol():
+    """End-to-end f32: a 4-op `gemm/gemm/silu_mul/gemm` chain inside a
+    `@jit(target='apple_gpu')` function runs through the fused
+    `tessera_apple_gpu_swiglu_f32` runtime symbol and matches the per-op
+    numpy reference."""
+
+    @ts.jit(target="apple_gpu")
+    def block(x, wg, wu, wd):
+        gate = ts.ops.gemm(x, wg)
+        up = ts.ops.gemm(x, wu)
+        hidden = ts.ops.silu_mul(gate, up)
+        return ts.ops.gemm(hidden, wd)
+
+    rng = np.random.RandomState(211)
+    for M, K, H, Kout in ((4, 8, 16, 8), (8, 16, 64, 32), (16, 8, 128, 16)):
+        x = rng.randn(M, K).astype(np.float32) * 0.5
+        wg = rng.randn(K, H).astype(np.float32) * 0.3
+        wu = rng.randn(K, H).astype(np.float32) * 0.3
+        wd = rng.randn(H, Kout).astype(np.float32) * 0.3
+        out = block(x, wg, wu, wd)
+        assert out.shape == (M, Kout)
+        assert out.dtype == np.float32
+        ref = _np_swiglu_reference(np, x, wg, wu, wd)
+        np.testing.assert_allclose(out, ref, rtol=1e-4, atol=1e-5)
+
+    artifact = block.runtime_artifact()
+    assert artifact.metadata["runtime_status"] == "ready"
+    assert artifact.metadata["execution_mode"] == "metal_runtime"
+
+
+def test_apple_gpu_swiglu_chain_emits_fused_msl_symbol_in_backend_artifact():
+    """The driver-level chain detector classifies the 4-op SwiGLU pattern
+    as `chain == "swiglu"` and emits the fused runtime symbol in the
+    backend artifact text."""
+
+    @ts.jit(target="apple_gpu")
+    def block(x, wg, wu, wd):
+        gate = ts.ops.gemm(x, wg)
+        up = ts.ops.gemm(x, wu)
+        hidden = ts.ops.silu_mul(gate, up)
+        return ts.ops.gemm(hidden, wd)
+
+    backend_text = block.compile_bundle.artifact("backend").text
+    assert "tessera_apple_gpu_swiglu_f32" in backend_text
+    assert 'execution_mode = "metal_runtime"' in backend_text
+
+
+def test_apple_gpu_swiglu_chain_breaks_when_x_differs_per_matmul():
+    """A SwiGLU fusion requires the gate and up matmuls to consume the same
+    `x` SSA value. When they differ, the 4-op fusion must NOT fire — the
+    plan stays as four independent ops and the runtime falls through to
+    per-op handling (which doesn't include silu_mul, so the path lands on
+    the artifact-only contract). This pins the negative case so the
+    detector's `gate_operands[0] == up_operands[0]` invariant can't
+    silently regress."""
+
+    @ts.jit(target="apple_gpu")
+    def two_inputs(x1, x2, wg, wu, wd):
+        gate = ts.ops.gemm(x1, wg)
+        up = ts.ops.gemm(x2, wu)
+        hidden = ts.ops.silu_mul(gate, up)
+        return ts.ops.gemm(hidden, wd)
+
+    backend = two_inputs.compile_bundle.artifact("backend")
+    backend_text = backend.text if backend is not None else ""
+    assert "tessera_apple_gpu_swiglu_f32" not in backend_text
+
+
+def test_apple_gpu_swiglu_runtime_shim_exposes_swiglu_symbols(tmp_path):
+    """Compile the apple_gpu runtime shim from source and verify all 3 new
+    SwiGLU dtype symbols are exported."""
+
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        pytest.skip("C++ compiler is not available")
+
+    backend = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
+    if sys.platform == "darwin":
+        source = backend / "apple_gpu_runtime.mm"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.dylib"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", "-fobjc-arc",
+               "-x", "objective-c++", str(source), "-o", str(lib),
+               "-framework", "Foundation",
+               "-framework", "Metal",
+               "-framework", "MetalPerformanceShaders"]
+    else:
+        source = backend / "apple_gpu_runtime_stub.cpp"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.so"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(lib)]
+    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    runtime = ctypes.CDLL(str(lib))
+    for name in (
+        "tessera_apple_gpu_swiglu_f32",
+        "tessera_apple_gpu_swiglu_f16",
+        "tessera_apple_gpu_swiglu_bf16",
+    ):
+        sym = getattr(runtime, name, None)
+        assert sym is not None, f"missing C ABI symbol: {name}"

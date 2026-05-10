@@ -159,6 +159,20 @@ std::unique_ptr<mlir::Pass> createAutodiffPass();
 //   --tp-axis  (default "tp")
 std::unique_ptr<mlir::Pass> createAdjointCollectiveInsertionPass();
 
+// ── Phase 8.4.8 SwiGLU fusion (Stage 2b of SwiGLU Performance Plan) ───────
+//
+// Recognizes the 3-op SwiGLU chain
+//   %gate   = tessera.matmul(%x, %W_gate)
+//   %up     = tessera.matmul(%x, %W_up)
+//   %hidden = tessera.silu_mul(%gate, %up)
+//   %out    = tessera.matmul(%hidden, %W_down)
+// and rewrites it to a single
+//   %out    = tessera.swiglu_fused(%x, %W_gate, %W_up, %W_down)
+//
+// Backends with a fused MLP-block kernel (Apple GPU MSL — Stage 3, NVIDIA
+// WGMMA epilogue, ROCm MFMA epilogue) lower the fused op directly.
+std::unique_ptr<mlir::Pass> createSwigluFusionPass();
+
 void registerTesseraPasses();
 
 } // namespace tessera

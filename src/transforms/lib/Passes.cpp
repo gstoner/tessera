@@ -64,6 +64,13 @@ void registerTesseraPasses() {
   // remains the production path). See docs/spec/AUTODIFF_SPEC.md §Phase F4.
   ::mlir::registerPass([]() { return createAutodiffPass(); });
 
+  // ── Phase 8.4.8 SwiGLU fusion (Stage 2b of SwiGLU Performance Plan) ───────
+  // Matches the 3-op SwiGLU chain at the Graph IR layer and emits
+  // `tessera.swiglu_fused`. Runs ahead of backend-specific lowering so
+  // each backend gets the fused op as input (longest-fusion-first matches
+  // Apple GPU pipeline ordering — see `apple_gpu_overview.md`).
+  ::mlir::registerPass([]() { return createSwigluFusionPass(); });
+
   // ── Phase F5 adjoint collective insertion ──────────────────────────────────
   // Runs after AutodiffPass on functions carrying both
   // tessera.autodiff="reverse" and tessera.weight_sharding. Plans

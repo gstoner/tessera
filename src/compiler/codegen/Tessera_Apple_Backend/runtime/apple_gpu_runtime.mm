@@ -2797,3 +2797,303 @@ extern "C" void tessera_apple_gpu_matmul_rmsnorm_f32(const float* A,
   if (ctx.ok && dispatch_matmul_rmsnorm_msl(ctx, A, B, O, M, N, K, eps)) return;
   reference_matmul_rmsnorm_f32(A, B, O, M, N, K, eps);
 }
+
+//===---------------------------------------------------------------------===//
+// Phase 8.4.8 — SwiGLU MLP-block fusion (Stage 3 of the SwiGLU Performance
+// Plan in `docs/CANONICAL_API.md`).
+//
+// Forward:
+//   O[M, K_out] = (silu(X[M, K] @ Wg[K, H]) * (X[M, K] @ Wu[K, H])) @ Wd[H, K_out]
+//
+// One thread per output row. Three per-thread stack arrays:
+//   gate[H], up[H], out_row[K_out]
+// Capped at H ≤ 256 and K_out ≤ 256 (mirrors matmul→softmax / matmul→gelu /
+// matmul→rmsnorm in this file). For wider shapes the runtime falls back to
+// the host reference.
+//
+// Mixed-precision pattern follows the existing fused-MLP kernels:
+//   - f32: native float throughout, fp32 accumulators
+//   - f16: half I/O on the GPU (matmul + silu*mul + matmul stays in fp32
+//         accumulators inside the kernel) — Phase 8.4.4.2 follow-up
+//   - bf16: fp32-conversion path inside the runtime shim (MPS doesn't take
+//         bf16 matrix descriptors as of macOS 14)
+//
+// For Stage 3 we ship the f32 MSL kernel + reference fallback for all three
+// dtypes. f16/bf16 native MSL paths land as a follow-up matching how the
+// matmul→softmax→matmul kernel layered f16/bf16 atop its f32 baseline.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+bool dispatch_swiglu_msl(MetalDeviceContext &ctx,
+                         const float* X, const float* Wg, const float* Wu,
+                         const float* Wd, float* O,
+                         int32_t M, int32_t K, int32_t H, int32_t Kout) {
+  static NSString *const kFusedSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_SWIGLU_MAX_H    256
+#define TESSERA_APPLE_GPU_SWIGLU_MAX_KOUT 256
+
+kernel void swiglu_f32(
+    device const float* X    [[buffer(0)]],
+    device const float* Wg   [[buffer(1)]],
+    device const float* Wu   [[buffer(2)]],
+    device const float* Wd   [[buffer(3)]],
+    device float*       O    [[buffer(4)]],
+    constant int&       M    [[buffer(5)]],
+    constant int&       K    [[buffer(6)]],
+    constant int&       H    [[buffer(7)]],
+    constant int&       Kout [[buffer(8)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)M) return;
+    if (H > TESSERA_APPLE_GPU_SWIGLU_MAX_H) return;
+    if (Kout > TESSERA_APPLE_GPU_SWIGLU_MAX_KOUT) return;
+    int row = (int)gid;
+
+    float gate[TESSERA_APPLE_GPU_SWIGLU_MAX_H];
+    float up[TESSERA_APPLE_GPU_SWIGLU_MAX_H];
+    float out_row[TESSERA_APPLE_GPU_SWIGLU_MAX_KOUT];
+
+    for (int h = 0; h < H; ++h) { gate[h] = 0.0f; up[h] = 0.0f; }
+    int x_off = row * K;
+    for (int k = 0; k < K; ++k) {
+        float xv = X[x_off + k];
+        int wg_off = k * H;
+        for (int h = 0; h < H; ++h) {
+            gate[h] += xv * Wg[wg_off + h];
+            up[h]   += xv * Wu[wg_off + h];
+        }
+    }
+    // hidden[h] = silu(gate[h]) * up[h]; reuse `gate` as the hidden buffer.
+    for (int h = 0; h < H; ++h) {
+        float g = gate[h];
+        float s = g / (1.0f + exp(-g));
+        gate[h] = s * up[h];
+    }
+    for (int ko = 0; ko < Kout; ++ko) out_row[ko] = 0.0f;
+    for (int h = 0; h < H; ++h) {
+        float hv = gate[h];
+        int wd_off = h * Kout;
+        for (int ko = 0; ko < Kout; ++ko) {
+            out_row[ko] += hv * Wd[wd_off + ko];
+        }
+    }
+    int o_off = row * Kout;
+    for (int ko = 0; ko < Kout; ++ko) O[o_off + ko] = out_row[ko];
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kFusedSource, @"swiglu_f32");
+    if (!pso) return false;
+
+    NSUInteger xBytes  = sizeof(float) * (NSUInteger)M  * (NSUInteger)K;
+    NSUInteger wgBytes = sizeof(float) * (NSUInteger)K  * (NSUInteger)H;
+    NSUInteger wuBytes = sizeof(float) * (NSUInteger)K  * (NSUInteger)H;
+    NSUInteger wdBytes = sizeof(float) * (NSUInteger)H  * (NSUInteger)Kout;
+    NSUInteger oBytes  = sizeof(float) * (NSUInteger)M  * (NSUInteger)Kout;
+
+    id<MTLBuffer> bufX  = [ctx.device newBufferWithBytes:X  length:xBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufWg = [ctx.device newBufferWithBytes:Wg length:wgBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufWu = [ctx.device newBufferWithBytes:Wu length:wuBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufWd = [ctx.device newBufferWithBytes:Wd length:wdBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO  = [ctx.device newBufferWithLength:oBytes
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufX || !bufWg || !bufWu || !bufWd || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX  offset:0 atIndex:0];
+    [enc setBuffer:bufWg offset:0 atIndex:1];
+    [enc setBuffer:bufWu offset:0 atIndex:2];
+    [enc setBuffer:bufWd offset:0 atIndex:3];
+    [enc setBuffer:bufO  offset:0 atIndex:4];
+    [enc setBytes:&M    length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&K    length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&H    length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&Kout length:sizeof(int32_t) atIndex:8];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)M, 1, 1);
+    NSUInteger tg_x =
+        std::min<NSUInteger>((NSUInteger)M, pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+inline void reference_swiglu_f32(const float* X, const float* Wg,
+                                 const float* Wu, const float* Wd, float* O,
+                                 int32_t M, int32_t K, int32_t H,
+                                 int32_t Kout) {
+  std::vector<float> gate((std::size_t)H, 0.0f);
+  std::vector<float> up((std::size_t)H, 0.0f);
+  std::vector<float> hidden((std::size_t)H, 0.0f);
+  std::vector<float> out_row((std::size_t)Kout, 0.0f);
+  for (int32_t row = 0; row < M; ++row) {
+    for (int32_t h = 0; h < H; ++h) { gate[h] = 0.0f; up[h] = 0.0f; }
+    for (int32_t k = 0; k < K; ++k) {
+      float xv = X[(std::size_t)row * K + k];
+      const float* wg_row = Wg + (std::size_t)k * H;
+      const float* wu_row = Wu + (std::size_t)k * H;
+      for (int32_t h = 0; h < H; ++h) {
+        gate[h] += xv * wg_row[h];
+        up[h]   += xv * wu_row[h];
+      }
+    }
+    for (int32_t h = 0; h < H; ++h) {
+      float g = gate[h];
+      float s = g / (1.0f + std::exp(-g));
+      hidden[h] = s * up[h];
+    }
+    for (int32_t ko = 0; ko < Kout; ++ko) out_row[ko] = 0.0f;
+    for (int32_t h = 0; h < H; ++h) {
+      float hv = hidden[h];
+      const float* wd_row = Wd + (std::size_t)h * Kout;
+      for (int32_t ko = 0; ko < Kout; ++ko) out_row[ko] += hv * wd_row[ko];
+    }
+    float* o_row = O + (std::size_t)row * Kout;
+    for (int32_t ko = 0; ko < Kout; ++ko) o_row[ko] = out_row[ko];
+  }
+}
+
+// f16 → fp32 buffers → reference. Mirrors how the rmsnorm/gelu f16 paths
+// landed initially (Phase 8.4.4.1 baseline) — native half MSL is a small
+// follow-up that doesn't change the runtime ABI.
+inline void reference_swiglu_f16_via_fp32(const uint16_t* X,
+                                          const uint16_t* Wg,
+                                          const uint16_t* Wu,
+                                          const uint16_t* Wd,
+                                          uint16_t* O, int32_t M, int32_t K,
+                                          int32_t H, int32_t Kout) {
+  auto half_to_float = [](uint16_t h) -> float {
+    uint32_t sign = (h >> 15) & 0x1;
+    uint32_t exp = (h >> 10) & 0x1F;
+    uint32_t mant = h & 0x3FF;
+    uint32_t f;
+    if (exp == 0) {
+      if (mant == 0) f = sign << 31;
+      else { // subnormal
+        exp = 1;
+        while ((mant & 0x400) == 0) { mant <<= 1; exp -= 1; }
+        mant &= 0x3FF;
+        f = (sign << 31) | ((exp + 112) << 23) | (mant << 13);
+      }
+    } else if (exp == 0x1F) {
+      f = (sign << 31) | (0xFFu << 23) | (mant << 13);
+    } else {
+      f = (sign << 31) | ((exp + 112) << 23) | (mant << 13);
+    }
+    float out;
+    std::memcpy(&out, &f, sizeof(out));
+    return out;
+  };
+  auto float_to_half = [](float v) -> uint16_t {
+    uint32_t f;
+    std::memcpy(&f, &v, sizeof(f));
+    uint32_t sign = (f >> 31) & 0x1;
+    int32_t exp = (int32_t)((f >> 23) & 0xFF) - 127 + 15;
+    uint32_t mant = (f >> 13) & 0x3FF;
+    uint16_t h;
+    if (exp <= 0) {
+      h = (uint16_t)(sign << 15);
+    } else if (exp >= 31) {
+      h = (uint16_t)((sign << 15) | (0x1F << 10));
+    } else {
+      h = (uint16_t)((sign << 15) | (uint32_t)(exp << 10) | mant);
+    }
+    return h;
+  };
+  std::vector<float> Xf((std::size_t)M  * K), Wgf((std::size_t)K  * H),
+      Wuf((std::size_t)K  * H), Wdf((std::size_t)H  * Kout),
+      Of((std::size_t)M  * Kout, 0.0f);
+  for (std::size_t i = 0, n = Xf.size();  i < n; ++i) Xf[i]  = half_to_float(X[i]);
+  for (std::size_t i = 0, n = Wgf.size(); i < n; ++i) Wgf[i] = half_to_float(Wg[i]);
+  for (std::size_t i = 0, n = Wuf.size(); i < n; ++i) Wuf[i] = half_to_float(Wu[i]);
+  for (std::size_t i = 0, n = Wdf.size(); i < n; ++i) Wdf[i] = half_to_float(Wd[i]);
+  reference_swiglu_f32(Xf.data(), Wgf.data(), Wuf.data(), Wdf.data(),
+                       Of.data(), M, K, H, Kout);
+  for (std::size_t i = 0, n = Of.size(); i < n; ++i) O[i] = float_to_half(Of[i]);
+}
+
+// bf16 → fp32 buffers → reference. bf16 is upper 16 bits of a float bit
+// pattern (truncate-toward-zero on the way back).
+inline void reference_swiglu_bf16_via_fp32(const uint16_t* X,
+                                           const uint16_t* Wg,
+                                           const uint16_t* Wu,
+                                           const uint16_t* Wd,
+                                           uint16_t* O, int32_t M, int32_t K,
+                                           int32_t H, int32_t Kout) {
+  auto bf16_to_float = [](uint16_t h) -> float {
+    uint32_t f = (uint32_t)h << 16;
+    float out;
+    std::memcpy(&out, &f, sizeof(out));
+    return out;
+  };
+  auto float_to_bf16 = [](float v) -> uint16_t {
+    uint32_t f;
+    std::memcpy(&f, &v, sizeof(f));
+    return (uint16_t)(f >> 16);
+  };
+  std::vector<float> Xf((std::size_t)M  * K), Wgf((std::size_t)K  * H),
+      Wuf((std::size_t)K  * H), Wdf((std::size_t)H  * Kout),
+      Of((std::size_t)M  * Kout, 0.0f);
+  for (std::size_t i = 0, n = Xf.size();  i < n; ++i) Xf[i]  = bf16_to_float(X[i]);
+  for (std::size_t i = 0, n = Wgf.size(); i < n; ++i) Wgf[i] = bf16_to_float(Wg[i]);
+  for (std::size_t i = 0, n = Wuf.size(); i < n; ++i) Wuf[i] = bf16_to_float(Wu[i]);
+  for (std::size_t i = 0, n = Wdf.size(); i < n; ++i) Wdf[i] = bf16_to_float(Wd[i]);
+  reference_swiglu_f32(Xf.data(), Wgf.data(), Wuf.data(), Wdf.data(),
+                       Of.data(), M, K, H, Kout);
+  for (std::size_t i = 0, n = Of.size(); i < n; ++i) O[i] = float_to_bf16(Of[i]);
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_swiglu_f32(const float* X, const float* Wg,
+                                             const float* Wu, const float* Wd,
+                                             float* O, int32_t M, int32_t K,
+                                             int32_t H, int32_t Kout) {
+  if (H > 256 || Kout > 256) {
+    reference_swiglu_f32(X, Wg, Wu, Wd, O, M, K, H, Kout);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_swiglu_msl(ctx, X, Wg, Wu, Wd, O, M, K, H, Kout))
+    return;
+  reference_swiglu_f32(X, Wg, Wu, Wd, O, M, K, H, Kout);
+}
+
+extern "C" void tessera_apple_gpu_swiglu_f16(const uint16_t* X,
+                                             const uint16_t* Wg,
+                                             const uint16_t* Wu,
+                                             const uint16_t* Wd,
+                                             uint16_t* O, int32_t M, int32_t K,
+                                             int32_t H, int32_t Kout) {
+  reference_swiglu_f16_via_fp32(X, Wg, Wu, Wd, O, M, K, H, Kout);
+}
+
+extern "C" void tessera_apple_gpu_swiglu_bf16(const uint16_t* X,
+                                              const uint16_t* Wg,
+                                              const uint16_t* Wu,
+                                              const uint16_t* Wd,
+                                              uint16_t* O, int32_t M,
+                                              int32_t K, int32_t H,
+                                              int32_t Kout) {
+  reference_swiglu_bf16_via_fp32(X, Wg, Wu, Wd, O, M, K, H, Kout);
+}

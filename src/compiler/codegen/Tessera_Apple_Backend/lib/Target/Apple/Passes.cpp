@@ -87,7 +87,13 @@ PassPipelineRegistration<> gAppleGPURuntimePipeline(
     "fusions, matmul, rope, flash_attn, softmax, gelu) to Apple GPU runtime "
     "calls (MPS + custom MSL kernels)",
     [](OpPassManager &pm) {
-      // Longest fusion first so it has first crack at the chain.
+      // Phase 8.4.8 (Stage 3) — SwiGLU is an even longer chain (4-op) and
+      // already arrives as a single `tessera.swiglu_fused` op courtesy of
+      // the Stage 2b Schedule IR fusion recognizer. Run it first so we
+      // capture the whole MLP block before per-op patterns can claim
+      // pieces of it. No-match (e.g. H > 256) falls through cleanly.
+      pm.addPass(createLowerSwigluFusionToAppleGPUPass());
+      // Longest in-pipeline 3-op chain.
       pm.addPass(createLowerMatmulSoftmaxMatmulFusionToAppleGPUPass());
       // 2-op fusions next. Order within this group doesn't matter — each
       // matches a different post-matmul op so they don't compete.

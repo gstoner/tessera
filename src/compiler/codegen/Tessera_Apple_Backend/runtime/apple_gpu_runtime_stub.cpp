@@ -597,6 +597,78 @@ extern "C" void tessera_apple_gpu_matmul_rmsnorm_f32(const float* A,
   reference_matmul_rmsnorm_f32_stub(A, B, O, M, N, K, eps);
 }
 
+// Phase 8.4.8 — SwiGLU MLP-block fusion stubs (Stage 3).
+// On non-Apple hosts the runtime falls through to a portable reference
+// path so tests can exercise the lowered IR without Metal.
+
+namespace {
+
+inline void reference_swiglu_f32_stub(const float* X, const float* Wg,
+                                      const float* Wu, const float* Wd,
+                                      float* O, int32_t M, int32_t K,
+                                      int32_t H, int32_t Kout) {
+  std::vector<float> gate(static_cast<std::size_t>(H), 0.0f);
+  std::vector<float> up(static_cast<std::size_t>(H), 0.0f);
+  std::vector<float> hidden(static_cast<std::size_t>(H), 0.0f);
+  std::vector<float> out_row(static_cast<std::size_t>(Kout), 0.0f);
+  for (int32_t row = 0; row < M; ++row) {
+    for (int32_t h = 0; h < H; ++h) { gate[h] = 0.0f; up[h] = 0.0f; }
+    for (int32_t k = 0; k < K; ++k) {
+      float xv = X[static_cast<std::size_t>(row) * K + k];
+      const float* wg_row = Wg + static_cast<std::size_t>(k) * H;
+      const float* wu_row = Wu + static_cast<std::size_t>(k) * H;
+      for (int32_t h = 0; h < H; ++h) {
+        gate[h] += xv * wg_row[h];
+        up[h]   += xv * wu_row[h];
+      }
+    }
+    for (int32_t h = 0; h < H; ++h) {
+      float g = gate[h];
+      float s = g / (1.0f + std::exp(-g));
+      hidden[h] = s * up[h];
+    }
+    for (int32_t ko = 0; ko < Kout; ++ko) out_row[ko] = 0.0f;
+    for (int32_t h = 0; h < H; ++h) {
+      float hv = hidden[h];
+      const float* wd_row = Wd + static_cast<std::size_t>(h) * Kout;
+      for (int32_t ko = 0; ko < Kout; ++ko) out_row[ko] += hv * wd_row[ko];
+    }
+    float* o_row = O + static_cast<std::size_t>(row) * Kout;
+    for (int32_t ko = 0; ko < Kout; ++ko) o_row[ko] = out_row[ko];
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_swiglu_f32(const float* X, const float* Wg,
+                                             const float* Wu, const float* Wd,
+                                             float* O, int32_t M, int32_t K,
+                                             int32_t H, int32_t Kout) {
+  reference_swiglu_f32_stub(X, Wg, Wu, Wd, O, M, K, H, Kout);
+}
+
+extern "C" void tessera_apple_gpu_swiglu_f16(const uint16_t* /*X*/,
+                                             const uint16_t* /*Wg*/,
+                                             const uint16_t* /*Wu*/,
+                                             const uint16_t* /*Wd*/,
+                                             uint16_t* O, int32_t M,
+                                             int32_t /*K*/, int32_t /*H*/,
+                                             int32_t Kout) {
+  // Non-Apple stub: zero-fill rather than implement fp16<->fp32 conversion
+  // here. Real numerical paths run on Apple Silicon.
+  std::memset(O, 0, sizeof(uint16_t) * static_cast<std::size_t>(M) * Kout);
+}
+
+extern "C" void tessera_apple_gpu_swiglu_bf16(const uint16_t* /*X*/,
+                                              const uint16_t* /*Wg*/,
+                                              const uint16_t* /*Wu*/,
+                                              const uint16_t* /*Wd*/,
+                                              uint16_t* O, int32_t M,
+                                              int32_t /*K*/, int32_t /*H*/,
+                                              int32_t Kout) {
+  std::memset(O, 0, sizeof(uint16_t) * static_cast<std::size_t>(M) * Kout);
+}
+
 extern "C" int32_t tessera_apple_gpu_runtime_msl_cache_size(void) {
   // No Metal -> no MSL cache. Tests gate this on platform.
   return -1;

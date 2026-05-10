@@ -73,6 +73,13 @@ std::unique_ptr<::mlir::Pass> createLowerMatmulGeluFusionToAppleGPUPass();
 /// Phase 8.4.7 — transformer normalization pattern.
 std::unique_ptr<::mlir::Pass> createLowerMatmulRMSNormFusionToAppleGPUPass();
 
+/// Fused tessera.swiglu_fused (rank-2, f32/f16/bf16, H ≤ 256, Kout ≤ 256)
+/// → func.call into the Apple GPU runtime shim's swiglu MSL kernel —
+/// the SwiGLU MLP block as a single GPU dispatch. Phase 8.4.8 (Stage 3
+/// of the SwiGLU Performance Plan in `docs/CANONICAL_API.md`). Must run
+/// before per-op matmul lowering so the longest fusion wins.
+std::unique_ptr<::mlir::Pass> createLowerSwigluFusionToAppleGPUPass();
+
 /// Register the Apple Silicon dialect into a DialectRegistry. Convenience
 /// wrapper that forwards to registerAppleDialect from TesseraAppleDialect.h.
 void registerTesseraAppleBackendDialects(::mlir::DialectRegistry &registry);

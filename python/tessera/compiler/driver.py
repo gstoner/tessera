@@ -380,6 +380,10 @@ _APPLE_GPU_MSL_OPS: frozenset[str] = frozenset({
     "tessera.softmax",
     "tessera.softmax_safe",
     "tessera.gelu",
+    # `tessera.silu_mul` doesn't ship a standalone MSL kernel today (it's
+    # only meaningful as part of the SwiGLU fusion chain). Keeping it out
+    # of this set means a lone silu_mul falls back to the metal_artifact
+    # contract — exactly the behavior we want until per-op coverage lands.
 })
 
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS
@@ -479,6 +483,32 @@ def _apple_gpu_chain_kind(cpu_plan: CPUPlan | None) -> str | None:
         except (TypeError, ValueError):
             return False
 
+    # Phase 8.4.8 (Stage 3 of the SwiGLU Performance Plan): 4-op fusion.
+    # matmul(x, Wg) -> matmul(x, Wu) -> silu_mul(gate, up) -> matmul(_, Wd).
+    # Both gate and up matmuls must consume the same `x` SSA value.
+    if len(ops) == 4:
+        m_gate, m_up, sm_op, m_down = ops[0], ops[1], ops[2], ops[3]
+        # Single-use chain on intermediates: m_gate.result is consumed only
+        # by silu_mul; m_up.result only by silu_mul; silu_mul.result only by
+        # m_down. We can't ask the IR directly for use counts here, so
+        # (mirroring the existing 2-op / 3-op detectors) the operand-name
+        # equality check stands in as a structural single-use proxy.
+        if (
+            m_gate.op_name in {"tessera.matmul", "tessera.gemm"}
+            and m_up.op_name in {"tessera.matmul", "tessera.gemm"}
+            and sm_op.op_name == "tessera.silu_mul"
+            and m_down.op_name in {"tessera.matmul", "tessera.gemm"}
+            and m_gate.result and m_up.result and sm_op.result
+            and len(m_gate.operands) >= 1 and len(m_up.operands) >= 1
+            and m_gate.operands[0] == m_up.operands[0]  # shared %x
+            and len(sm_op.operands) == 2
+            and _operand_matches(sm_op, m_gate.result)  # silu_mul[0] == gate
+            # silu_mul[1] == up.result (operand 1, not 0).
+            and (sm_op.operands[1].lstrip("%") == m_up.result)
+            and _operand_matches(m_down, sm_op.result)
+        ):
+            return "swiglu"
+
     # Phase 8.4.5: 3-op fusion. matmul -> softmax -> matmul.
     if len(ops) == 3:
         m1, sm, m2 = ops[0], ops[1], ops[2]
@@ -532,7 +562,11 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
         # is in the plan. Single-op cases route to one of the per-op kernels;
         # recognized fusion chains route to a fused kernel (Phase 8.4.3).
         chain = _apple_gpu_chain_kind(cpu_plan)
-        if chain == "matmul_softmax_matmul":
+        if chain == "swiglu":
+            symbol = "tessera_apple_gpu_swiglu_f32"
+            framework = "Metal"
+            abi = "MSLComputePipelineState"
+        elif chain == "matmul_softmax_matmul":
             symbol = "tessera_apple_gpu_matmul_softmax_matmul_f32"
             framework = "Metal"
             abi = "MSLComputePipelineState"

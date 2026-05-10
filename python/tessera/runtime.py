@@ -1875,6 +1875,34 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
 
     values = _bind_launch_args(args, arg_names)
 
+    # Phase 8.4.8 (Stage 3 SwiGLU Performance Plan) — 4-op fusion dispatch.
+    # The longest known fusion. Check before any shorter chain so the most-
+    # specific match wins. Chain shape: gate matmul → up matmul → silu_mul
+    # → down matmul, with both gate/up consuming the same %x.
+    if _apple_gpu_metadata_is_swiglu_chain(ops):
+        m_gate, m_up, _silu, m_down = ops[0], ops[1], ops[2], ops[3]
+        x_name = m_gate.get("operands", [None])[0]
+        if x_name is None:
+            raise ValueError("swiglu fusion: gate matmul missing operand")
+        wg_name = m_gate.get("operands", [None, None])[1]
+        wu_name = m_up.get("operands", [None, None])[1]
+        wd_name = m_down.get("operands", [None, None])[1]
+        if wg_name is None or wu_name is None or wd_name is None:
+            raise ValueError("swiglu fusion: missing weight operand name")
+        result_name = m_down.get("result")
+        if not result_name:
+            raise ValueError("swiglu fusion: missing tail matmul result name")
+        x_arr = _as_numpy(values[str(x_name).lstrip("%")])
+        wg_arr = _as_numpy(values[str(wg_name).lstrip("%")])
+        wu_arr = _as_numpy(values[str(wu_name).lstrip("%")])
+        wd_arr = _as_numpy(values[str(wd_name).lstrip("%")])
+        values[str(result_name)] = _apple_gpu_dispatch_swiglu(
+            x_arr, wg_arr, wu_arr, wd_arr, np
+        )
+        if output_name not in values:
+            raise ValueError(f"artifact did not produce output {output_name!r}")
+        return values[output_name]
+
     # Phase 8.4.3 + 8.4.5 — fused chain dispatch. Longest match wins, so
     # check the 3-op pattern (matmul -> softmax -> matmul) before the 2-op
     # pattern (matmul -> softmax).
@@ -2019,6 +2047,55 @@ def _apple_gpu_metadata_is_matmul_softmax_matmul_chain(ops: list[dict]) -> bool:
         return False
     third_operands = [_strip(str(n)) for n in third.get("operands") or []]
     if len(third_operands) < 1 or third_operands[0] != str(second.get("result", "")):
+        return False
+    return True
+
+
+def _apple_gpu_metadata_is_swiglu_chain(ops: list[dict]) -> bool:
+    """Phase 8.4.8 (Stage 3 SwiGLU Performance Plan) — check whether the
+    metadata ops form a 4-op SwiGLU MLP-block fusion chain:
+
+        matmul(x, Wg) -> matmul(x, Wu) -> silu_mul(gate, up) -> matmul(_, Wd)
+
+    Mirrors driver.py's compile-time `_apple_gpu_chain_kind == "swiglu"`
+    check. Both gate and up matmuls must consume the same `%x` SSA value;
+    otherwise the chain isn't a SwiGLU block.
+    """
+
+    if len(ops) != 4:
+        return False
+    m_gate, m_up, sm_op, m_down = ops[0], ops[1], ops[2], ops[3]
+    if str(m_gate.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
+        return False
+    if str(m_up.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
+        return False
+    if str(sm_op.get("op_name", "")) != "tessera.silu_mul":
+        return False
+    if str(m_down.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
+        return False
+
+    def _strip(name: str) -> str:
+        return name[1:] if name.startswith("%") else name
+
+    gate_operands = [_strip(str(n)) for n in m_gate.get("operands") or []]
+    up_operands = [_strip(str(n)) for n in m_up.get("operands") or []]
+    if len(gate_operands) < 2 or len(up_operands) < 2:
+        return False
+    if gate_operands[0] != up_operands[0]:
+        return False  # gate and up must share %x.
+
+    sm_operands = [_strip(str(n)) for n in sm_op.get("operands") or []]
+    if len(sm_operands) != 2:
+        return False
+    if sm_operands[0] != str(m_gate.get("result", "")):
+        return False
+    if sm_operands[1] != str(m_up.get("result", "")):
+        return False
+
+    down_operands = [_strip(str(n)) for n in m_down.get("operands") or []]
+    if len(down_operands) < 1:
+        return False
+    if down_operands[0] != str(sm_op.get("result", "")):
         return False
     return True
 
@@ -2931,6 +3008,74 @@ def _apple_gpu_matmul_rmsnorm_f32() -> Any:
     return sym
 
 
+def _apple_gpu_dispatch_swiglu(x: Any, wg: Any, wu: Any, wd: Any, np: Any) -> Any:
+    """Phase 8.4.8 (Stage 3 SwiGLU Performance Plan) — dispatch a fused
+    SwiGLU MLP block (`silu(x @ Wg) * (x @ Wu) @ Wd`) through the apple_gpu
+    runtime shim's `tessera_apple_gpu_swiglu_f32` symbol. f32 only this
+    phase. Inputs outside the supported envelope (rank, dtype, H>256,
+    Kout>256) fall back to a numpy host computation."""
+
+    x = np.asarray(x)
+    wg = np.asarray(wg)
+    wu = np.asarray(wu)
+    wd = np.asarray(wd)
+    H = wg.shape[1] if wg.ndim == 2 else None
+    Kout = wd.shape[1] if wd.ndim == 2 else None
+    if not (
+        x.ndim == 2 and wg.ndim == 2 and wu.ndim == 2 and wd.ndim == 2
+        and wg.shape == wu.shape
+        and x.shape[1] == wg.shape[0]
+        and wd.shape[0] == wg.shape[1]
+        and H is not None and Kout is not None
+        and H <= 256 and Kout <= 256
+        and x.dtype == np.float32 and wg.dtype == np.float32
+        and wu.dtype == np.float32 and wd.dtype == np.float32
+    ):
+        gate = np.matmul(x, wg)
+        up = np.matmul(x, wu)
+        hidden = (gate / (1.0 + np.exp(-gate))) * up
+        return np.matmul(hidden, wd)
+    if not x.flags.c_contiguous:
+        x = np.ascontiguousarray(x, dtype=np.float32)
+    if not wg.flags.c_contiguous:
+        wg = np.ascontiguousarray(wg, dtype=np.float32)
+    if not wu.flags.c_contiguous:
+        wu = np.ascontiguousarray(wu, dtype=np.float32)
+    if not wd.flags.c_contiguous:
+        wd = np.ascontiguousarray(wd, dtype=np.float32)
+    M, K = x.shape
+    H = wg.shape[1]
+    Kout = wd.shape[1]
+    out = np.zeros((M, Kout), dtype=np.float32)
+    fused = _apple_gpu_swiglu_f32()
+    fused(
+        x.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        wg.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        wu.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        wd.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        ctypes.c_int32(M), ctypes.c_int32(K),
+        ctypes.c_int32(H), ctypes.c_int32(Kout),
+    )
+    return out
+
+
+def _apple_gpu_swiglu_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = runtime.tessera_apple_gpu_swiglu_f32
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),  # X
+        ctypes.POINTER(ctypes.c_float),  # Wg
+        ctypes.POINTER(ctypes.c_float),  # Wu
+        ctypes.POINTER(ctypes.c_float),  # Wd
+        ctypes.POINTER(ctypes.c_float),  # O
+        ctypes.c_int32, ctypes.c_int32,  # M, K
+        ctypes.c_int32, ctypes.c_int32,  # H, Kout
+    ]
+    sym.restype = None
+    return sym
+
+
 def _apple_gpu_dispatch_matmul_softmax_matmul(operands: list[Any], np: Any) -> Any:
     """Phase 8.4.5 — dispatch a fused matmul -> softmax -> matmul chain
     (full attention block) through the apple_gpu runtime shim. Picks symbol
@@ -3139,6 +3284,12 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 # Phase 8.4.7 — MLP block fusions (matmul -> gelu, matmul -> rmsnorm).
                 getattr(lib, "tessera_apple_gpu_matmul_gelu_f32")
                 getattr(lib, "tessera_apple_gpu_matmul_rmsnorm_f32")
+                # Phase 8.4.8 — SwiGLU MLP-block fusion (Stage 3 of the
+                # SwiGLU Performance Plan). f32 native MSL + f16/bf16
+                # reference fallback today; native half MSL is a follow-up.
+                getattr(lib, "tessera_apple_gpu_swiglu_f32")
+                getattr(lib, "tessera_apple_gpu_swiglu_f16")
+                getattr(lib, "tessera_apple_gpu_swiglu_bf16")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

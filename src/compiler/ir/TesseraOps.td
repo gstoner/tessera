@@ -238,6 +238,41 @@ def Tessera_ReluOp : Tessera_UnaryPureOp<"relu", "Rectified linear unit">;
 def Tessera_SigmoidOp : Tessera_UnaryPureOp<"sigmoid", "Sigmoid activation">;
 def Tessera_SinOp : Tessera_UnaryPureOp<"sin", "Sine elementwise op">;
 
+// Phase 8.4.8 Stage 2a — fused silu-and-multiply primitive.
+// Anchors the SwiGLU `matmul → silu_mul → matmul` chain that Stage 2b's
+// SwigluFusionPass collapses into Tessera_SwigluFusedOp. Adjoint is
+// handled today by the Python numpy-tape autodiff (see
+// python/tessera/autodiff/vjp.py); IR-level adjoint via AdjointInterface
+// is a follow-up tied to Phase F4.
+def Tessera_SiluMulOp : Op<
+  Tessera_Dialect, "silu_mul",
+  [Pure]
+> {
+  let summary = "Fused silu(a) * b primitive (SwiGLU activation step)";
+  let arguments = (ins TensorType:$a, TensorType:$b);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+// Phase 8.4.8 Stage 2b — SwiGLU 3-op fusion target. Result of
+// SwigluFusionPass collapsing matmul → matmul → silu_mul → matmul into a
+// single op carrying (x, W_gate, W_up, W_down). Backends with a fused
+// MLP-block kernel (Apple GPU MSL — Stage 3, NVIDIA WGMMA epilogue, ROCm
+// MFMA epilogue) lower this directly; backends without one can expand it
+// back to the chain in their own lowering pipelines.
+def Tessera_SwigluFusedOp : Op<
+  Tessera_Dialect, "swiglu_fused",
+  [Pure]
+> {
+  let summary = "Fused SwiGLU MLP block: gemm(silu(x@Wg) * (x@Wu), Wd)";
+  let arguments = (ins TensorType:$x,
+                       TensorType:$w_gate,
+                       TensorType:$w_up,
+                       TensorType:$w_down);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
 def Tessera_TransposeOp : Op<
   Tessera_Dialect, "transpose",
   [Pure]

@@ -1,9 +1,14 @@
-"""apple_gpu fusion benchmark — Phase 8.4.6.
+"""apple_gpu fusion benchmark — Phase 8.4.6 + 8.4.8.
 
-Times the Phase 8.4.3 / 8.4.5 fused MSL kernels against the equivalent
-sequential per-op pipeline on a sweep of representative shapes. Outputs
-a JSON summary suitable for ingestion by ``tools/roofline_tools/`` (same
-schema as ``benchmarks/benchmark_gemm.py``).
+Times the Phase 8.4.3 / 8.4.5 / 8.4.8 fused MSL kernels against the
+equivalent sequential per-op pipeline on a sweep of representative
+shapes. Outputs a JSON summary suitable for ingestion by
+``tools/roofline_tools/`` (same schema as ``benchmarks/benchmark_gemm.py``).
+
+Op coverage:
+  - matmul → softmax  (Phase 8.4.3)
+  - SwiGLU MLP block — matmul → matmul → silu_mul → matmul  (Phase 8.4.8,
+    Stage 3 of the SwiGLU Performance Plan)
 
 Usage:
     python benchmarks/apple_gpu/benchmark_fusion.py \\
@@ -103,6 +108,91 @@ def _bytes_matmul_softmax(M: int, K: int, N: int, elem_bytes: int) -> int:
     return elem_bytes * (M * K + K * N + M * N)
 
 
+# SwiGLU shape parser — `MxKxHxKout`. M=batch (or seq), K=model dim,
+# H=hidden dim (gate/up output), Kout=down dim (gate@Wg → silu_mul → @Wd).
+def _parse_swiglu_shape(spec: str) -> tuple[int, int, int, int]:
+    parts = spec.lower().split("x")
+    if len(parts) != 4:
+        raise ValueError(f"swiglu shape must be MxKxHxKout, got {spec!r}")
+    return tuple(int(p) for p in parts)  # type: ignore[return-value]
+
+
+def _flops_swiglu(M: int, K: int, H: int, Kout: int) -> int:
+    # 2 * M * K * H × 2 (gate + up matmuls) + ~3 * M * H (silu_mul: sigmoid +
+    # multiply) + 2 * M * H * Kout (down matmul).
+    return 4 * M * K * H + 3 * M * H + 2 * M * H * Kout
+
+
+def _bytes_swiglu(M: int, K: int, H: int, Kout: int, elem_bytes: int) -> int:
+    return elem_bytes * (M * K + K * H + K * H + H * Kout + M * Kout)
+
+
+def _bench_swiglu_fused(M: int, K: int, H: int, Kout: int,
+                        reps: int) -> tuple[float, float]:
+    """Phase 8.4.8 fused SwiGLU MLP-block — `gemm → gemm → silu_mul → gemm`
+    inside a `@jit(target='apple_gpu')` function. The driver-side chain
+    detector classifies this as `chain == "swiglu"` and emits a single
+    `tessera_apple_gpu_swiglu_f32` runtime call dispatched to a custom MSL
+    kernel."""
+
+    @ts.jit(target="apple_gpu")
+    def fused(x, wg, wu, wd):
+        gate = ts.ops.gemm(x, wg)
+        up = ts.ops.gemm(x, wu)
+        hidden = ts.ops.silu_mul(gate, up)
+        return ts.ops.gemm(hidden, wd)
+
+    rng = np.random.RandomState(0)
+    x = rng.randn(M, K).astype(np.float32) * 0.5
+    wg = rng.randn(K, H).astype(np.float32) * 0.3
+    wu = rng.randn(K, H).astype(np.float32) * 0.3
+    wd = rng.randn(H, Kout).astype(np.float32) * 0.3
+    fused(x, wg, wu, wd)  # warm up
+    samples_ms = []
+    for _ in range(reps):
+        t0 = time.perf_counter_ns()
+        fused(x, wg, wu, wd)
+        samples_ms.append((time.perf_counter_ns() - t0) / 1e6)
+    return statistics.median(samples_ms), (
+        statistics.stdev(samples_ms) if reps > 1 else 0.0
+    )
+
+
+def _bench_swiglu_sequential(M: int, K: int, H: int, Kout: int,
+                              reps: int) -> tuple[float, float]:
+    """Per-op SwiGLU pipeline through three Phase 8.3 matmuls + a host-side
+    silu_mul step. Used as the fusion-vs-baseline comparison."""
+
+    @ts.jit(target="apple_gpu")
+    def matmul_only(a, b):
+        return ts.ops.matmul(a, b)
+
+    rng = np.random.RandomState(1)
+    x = rng.randn(M, K).astype(np.float32) * 0.5
+    wg = rng.randn(K, H).astype(np.float32) * 0.3
+    wu = rng.randn(K, H).astype(np.float32) * 0.3
+    wd = rng.randn(H, Kout).astype(np.float32) * 0.3
+
+    def step():
+        gate = matmul_only(x, wg)
+        up = matmul_only(x, wu)
+        # silu_mul has no standalone Apple GPU MSL kernel today; do it on
+        # the host (numpy) for an honest baseline rather than smuggling it
+        # through @jit and getting a partial dispatch.
+        hidden = (gate / (1.0 + np.exp(-gate))) * up
+        return matmul_only(hidden, wd)
+
+    step()  # warm up
+    samples_ms = []
+    for _ in range(reps):
+        t0 = time.perf_counter_ns()
+        step()
+        samples_ms.append((time.perf_counter_ns() - t0) / 1e6)
+    return statistics.median(samples_ms), (
+        statistics.stdev(samples_ms) if reps > 1 else 0.0
+    )
+
+
 def _device_name() -> str:
     if sys.platform != "darwin":
         return "non-darwin-fallback"
@@ -127,6 +217,13 @@ def main(argv: list[str] | None = None) -> int:
         nargs="+",
         default=["8x16x32", "8x16x64", "16x32x128", "32x64x256"],
         help="MxKxN shapes for matmul -> softmax",
+    )
+    parser.add_argument(
+        "--swiglu-shapes",
+        nargs="+",
+        default=["4x8x16x8", "8x16x64x32", "16x32x128x64", "32x64x256x128"],
+        help="MxKxHxKout shapes for the SwiGLU MLP-block fusion (Phase 8.4.8). "
+             "Set to an empty list to skip the SwiGLU sweep.",
     )
     parser.add_argument("--reps", type=int, default=20)
     parser.add_argument(
@@ -161,6 +258,38 @@ def main(argv: list[str] | None = None) -> int:
             rows.append({
                 "backend": "apple_gpu",
                 "op": "matmul_softmax",
+                "shape": shape,
+                "dtype": "f32",
+                "mode": mode,
+                "reps": args.reps,
+                "latency_ms": ms,
+                "stdev_ms": stdev_ms,
+                "tflops": tflops,
+                "memory_bw_gb_s": mem_bw,
+                "device": device,
+                "tessera_version": version,
+            })
+
+    # Phase 8.4.8 — SwiGLU MLP-block fusion sweep. Same fused vs.
+    # sequential pairing as above; the sequential baseline does the
+    # silu_mul step on the host because there's no standalone MSL kernel
+    # for it (silu_mul only ships as part of the SwiGLU fusion).
+    for shape in args.swiglu_shapes:
+        M, K, H, Kout = _parse_swiglu_shape(shape)
+        flops = _flops_swiglu(M, K, H, Kout)
+        rw_bytes = _bytes_swiglu(M, K, H, Kout, elem_bytes=4)
+
+        for mode, fn in (
+            ("fused", _bench_swiglu_fused),
+            ("sequential", _bench_swiglu_sequential),
+        ):
+            ms, stdev_ms = fn(M, K, H, Kout, args.reps)
+            sec = ms / 1000.0
+            tflops = (flops / sec) / 1e12 if sec > 0 else 0.0
+            mem_bw = (rw_bytes / sec) / 1e9 if sec > 0 else 0.0
+            rows.append({
+                "backend": "apple_gpu",
+                "op": "swiglu",
                 "shape": shape,
                 "dtype": "f32",
                 "mode": mode,

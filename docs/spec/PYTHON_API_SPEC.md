@@ -1232,6 +1232,7 @@ metadata for frontend and compiler tests.
 | `mul(x, y=None, scalar=None)` | `(array, array/scalar) → array` | `pure` | NumPy multiplication; also used by Python frontend binary `*` lowering |
 | `relu(x)` | `(array) → array` | `pure` | NumPy ReLU |
 | `silu(x)` | `(array) → array` | `pure` | NumPy SiLU |
+| `silu_mul(a, b)` | `(array, array) → array` | `pure` | Fused `silu(a) * b` primitive — anchors the SwiGLU `matmul → silu_mul → matmul` 3-op chain that the Schedule IR fusion recognizer collapses into `tessera.swiglu_fused` for backends with a fused MLP-block kernel |
 | `sigmoid(x)` | `(array) → array` | `pure` | NumPy sigmoid |
 | `sin(x)` | `(array) → array` | `pure` | NumPy sine |
 | `adam(param, grad, moment1, moment2, lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8, step=1)` | `(array,array,array,array) → tuple` | `pure` | Functional NumPy Adam step |

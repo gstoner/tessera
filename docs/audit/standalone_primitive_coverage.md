@@ -104,7 +104,7 @@ the high-risk S1 entries and milestone sentinels. Tests compare these rows to
 <!-- BEGIN GENERATED PRIMITIVE COVERAGE SNAPSHOT -->
 | Primitive | Category | Status | Existing op | Missing contracts | Model families |
 |-----------|----------|--------|-------------|-------------------|----------------|
-| `matmul` | loop_nest | partial | yes | math_semantics, shape_rule, dtype_layout_rule, jvp, batching_rule, transpose_rule, sharding_rule, backend_kernel, tests | - |
+| `matmul` | loop_nest | partial | yes | math_semantics, shape_rule, dtype_layout_rule, batching_rule, transpose_rule, sharding_rule, backend_kernel, tests | - |
 | `permute` | tensor_algebra | planned | no | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, masking_effect_rule, lowering_rule, backend_kernel, tests | all |
 | `collective_permute` | collective | planned | no | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, masking_effect_rule, lowering_rule, backend_kernel, tests | all |
 | `scan` | control_flow | planned | no | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, masking_effect_rule, lowering_rule, backend_kernel, tests | RNN/xLSTM, Mamba/SSM, Megalodon/Griffin |

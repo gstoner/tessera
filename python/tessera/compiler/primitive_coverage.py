@@ -39,6 +39,28 @@ def _vjp_registered_names() -> frozenset[str]:
     return frozenset(_VJPS.keys())
 
 
+def _jvp_registered_names() -> frozenset[str]:
+    """Return the set of public op names with a registered forward-mode JVP.
+
+    Tessera's autodiff today is reverse-mode (VJP-based); JVPs are S5/Phase F
+    territory. The registry exposes the hook anyway so when a JVP module
+    lands the dashboard auto-promotes those entries.
+
+    Looks for any of:
+      - ``tessera.autodiff.jvp._JVPS``
+      - ``tessera.autodiff._JVPS``
+    """
+    for path in ("tessera.autodiff.jvp", "tessera.autodiff"):
+        try:
+            mod = __import__(path, fromlist=["_JVPS"])
+            jvps = getattr(mod, "_JVPS", None)
+            if jvps is not None:
+                return frozenset(jvps.keys())
+        except Exception:
+            continue
+    return frozenset()
+
+
 CONTRACT_FIELDS: tuple[str, ...] = (
     "math_semantics",
     "shape_rule",
@@ -94,13 +116,19 @@ def _contracts(**overrides: str) -> dict[str, str]:
     return statuses
 
 
-def _existing_contracts(effect: str, *, vjp_complete: bool = False) -> dict[str, str]:
+def _existing_contracts(
+    effect: str,
+    *,
+    vjp_complete: bool = False,
+    jvp_complete: bool = False,
+) -> dict[str, str]:
     effect_rule = "partial" if effect != "pure" else "not_applicable"
     return _contracts(
         math_semantics="partial",
         shape_rule="partial",
         dtype_layout_rule="partial",
         vjp="complete" if vjp_complete else "planned",
+        jvp="complete" if jvp_complete else "planned",
         masking_effect_rule=effect_rule,
         lowering_rule="complete",
         backend_kernel="partial",
@@ -110,6 +138,11 @@ def _existing_contracts(effect: str, *, vjp_complete: bool = False) -> dict[str,
 
 def _existing_op_has_vjp(public_name: str, registered: frozenset[str]) -> bool:
     """True iff `public_name` (or a known alias) has a registered VJP."""
+    candidates = _VJP_ALIASES.get(public_name, (public_name,))
+    return any(name in registered for name in candidates)
+
+
+def _existing_op_has_jvp(public_name: str, registered: frozenset[str]) -> bool:
     candidates = _VJP_ALIASES.get(public_name, (public_name,))
     return any(name in registered for name in candidates)
 
@@ -140,14 +173,18 @@ _EXISTING_MODEL_FAMILIES: dict[str, tuple[str, ...]] = {
 
 def _existing_coverage() -> dict[str, PrimitiveCoverage]:
     registered_vjps = _vjp_registered_names()
+    registered_jvps = _jvp_registered_names()
     entries: dict[str, PrimitiveCoverage] = {}
     for name, spec in sorted(OP_SPECS.items()):
         has_vjp = _existing_op_has_vjp(name, registered_vjps)
+        has_jvp = _existing_op_has_jvp(name, registered_jvps)
         entries[name] = PrimitiveCoverage(
             name=name,
             category=spec.lowering,
             status="partial",
-            contract_status=_existing_contracts(spec.effect, vjp_complete=has_vjp),
+            contract_status=_existing_contracts(
+                spec.effect, vjp_complete=has_vjp, jvp_complete=has_jvp
+            ),
             model_families=_EXISTING_MODEL_FAMILIES.get(name, ()),
             references=("tessera",),
             notes="Imported from the supported op catalog; S1 keeps missing semantic rules visible.",
@@ -164,13 +201,16 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
     }
     for name, (lowering, effect, notes) in supplemental_public_ops.items():
         has_vjp = _existing_op_has_vjp(name, registered_vjps)
+        has_jvp = _existing_op_has_jvp(name, registered_jvps)
         entries.setdefault(
             name,
             PrimitiveCoverage(
                 name=name,
                 category=lowering,
                 status="partial",
-                contract_status=_existing_contracts(effect, vjp_complete=has_vjp),
+                contract_status=_existing_contracts(
+                    effect, vjp_complete=has_vjp, jvp_complete=has_jvp
+                ),
                 model_families=_EXISTING_MODEL_FAMILIES.get(name, ()),
                 references=("tessera",),
                 notes=f"Public Python op outside OP_SPECS today; tracked for standalone coverage: {notes}.",
@@ -178,6 +218,67 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
                 graph_name=f"tessera.{name}",
                 effect=effect,
                 lowering=lowering,
+            ),
+        )
+
+    # ─────────────────────────────────────────────────────────────────────
+    # S-series — Python-frontend primitives that are *shipped* (have numpy
+    # reference implementations + tests) but live outside `op_catalog.py`
+    # because they're structural primitives, not Graph IR ops. Covered at
+    # the partial level: math/shape/dtype/lowering/tests = partial; VJP/JVP
+    # /batching/transpose/sharding rules remain visible as missing until the
+    # owning sprint closes them.
+    # ─────────────────────────────────────────────────────────────────────
+    python_primitives = {
+        # S3 — pytree state-tree primitives (python/tessera/state/tree.py)
+        "tree_flatten": ("state_tree", "tree pytree flatten — S3 landed 2026-05-10"),
+        "tree_unflatten": ("state_tree", "tree pytree unflatten — S3 landed 2026-05-10"),
+        "tree_map": ("state_tree", "tree pytree map — S3 landed 2026-05-10"),
+        "tree_reduce": ("state_tree", "tree pytree reduce — S3 landed 2026-05-10"),
+        "tree_transpose": ("state_tree", "tree pytree transpose — S3 landed 2026-05-10"),
+        "state_filter": ("state_tree", "state-collection filter — S3 landed 2026-05-10"),
+        "state_partition": ("state_tree", "disjoint state partition — S3 landed 2026-05-10"),
+        # S4 — RNG keys + samplers (python/tessera/rng.py)
+        "rng_key": ("rng", "RNGKey.from_seed — S4 landed 2026-05-10"),
+        "rng_split": ("rng", "RNGKey.split — S4 landed 2026-05-10"),
+        "rng_fold_in": ("rng", "RNGKey.fold_in — S4 landed 2026-05-10"),
+        "rng_clone": ("rng", "RNGKey.clone — S4 landed 2026-05-10"),
+        "rng_truncated_normal": ("rng", "truncated normal sampler — S4 landed 2026-05-10"),
+        "rng_bernoulli": ("rng", "bernoulli sampler — S4 landed 2026-05-10"),
+        "rng_categorical": ("rng", "categorical (Gumbel-max) sampler — S4 landed 2026-05-10"),
+        "rng_multinomial": ("rng", "multinomial sampler — S4 landed 2026-05-10"),
+        "rng_randint": ("rng", "randint sampler — S4 landed 2026-05-10"),
+        "rng_permutation": ("rng", "permutation sampler — S4 landed 2026-05-10"),
+        "rng_gamma": ("rng", "gamma sampler — S4 landed 2026-05-10"),
+        "rng_beta": ("rng", "beta sampler — S4 landed 2026-05-10"),
+        "rng_dirichlet": ("rng", "dirichlet sampler — S4 landed 2026-05-10"),
+        "rng_poisson": ("rng", "poisson sampler — S4 landed 2026-05-10"),
+    }
+    for name, (category, notes) in python_primitives.items():
+        # Python primitives don't have a VJP today (they're structural ops);
+        # tests/lowering/math are partial since shipped.
+        contract = _contracts(
+            math_semantics="partial",
+            shape_rule="partial",
+            dtype_layout_rule="partial",
+            lowering_rule="partial",  # Python-frontend only — no Graph IR yet.
+            tests="complete",
+            masking_effect_rule="not_applicable",
+        )
+        entries.setdefault(
+            name,
+            PrimitiveCoverage(
+                name=name,
+                category=category,
+                status="partial",
+                contract_status=contract,
+                model_families=_EXISTING_MODEL_FAMILIES.get(name, ("all",)),
+                references=("tessera",),
+                notes=notes,
+                existing_op=True,
+                graph_name=None,
+                effect="pure",
+                lowering=category,
             ),
         )
     return entries

@@ -260,6 +260,27 @@ exposes Graph IR, Schedule IR, Tile IR, and Target IR artifacts before executing
 on CPU. Other functions continue to use the eager Python fallback and expose the
 reason through `.lowering_diagnostics` and `.explain_lowering()`.
 
+**S-series sprint S2 — additional CPU-backed ops (landed 2026-05-10).** The
+following primitives now have numpy reference implementations and are
+addressable via `ops.<name>`:
+
+- *Reductions:* `mean`, `prod`, `amax`, `amin`, `var`, `std`, `argmax`,
+  `argmin`, `cumsum`, `cumprod`. All accept `axis=` and `keepdims=`.
+- *Numerical-stability primitives:* `logsumexp`, `log_softmax`, `log1p`,
+  `expm1`, `softplus`, `sigmoid_safe`. Each lowers to `tessera.<name>` and
+  registers a VJP for reverse-mode autodiff.
+- *Numeric helpers:* `clamp`, `where`, `absolute`, `sign`, `minimum`,
+  `maximum`, `isnan`, `isinf`, `isfinite`.
+- *Comparisons:* `eq`, `ne`, `lt`, `le`, `gt`, `ge` — return a boolean
+  tensor; not differentiable.
+
+Each appears in `python/tessera/compiler/op_catalog.py` (graph names
+`tessera.mean`, `tessera.logsumexp`, etc.) and `tessera.compiler.primitive_coverage`
+imports them automatically as partial coverage entries. VJPs are
+registered in `python/tessera/autodiff/vjp.py` for the differentiable
+ones; comparisons and `isnan`/`isinf`/`isfinite` deliberately skip VJP
+registration.
+
 For functions created dynamically from `stdin` or `exec(...)`, pass explicit
 source so the AST frontend can compile them:
 

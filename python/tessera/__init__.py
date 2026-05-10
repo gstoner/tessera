@@ -2312,6 +2312,134 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         new_s = prev_s * np.exp(prev_m - new_m) + np.exp(x - new_m).sum(axis=axis, keepdims=True)
         return (new_m, new_s)
 
+    # ─────────────────────────────────────────────────────────────────────
+    # S-series sprint S2 — reductions, stability primitives, numeric helpers,
+    # and comparisons. Each is a numpy-reference op exposed via tessera.ops.*
+    # so autodiff/jit can pick them up. VJPs land in autodiff/vjp.py.
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _unwrap(x):
+        return np.asarray(x._data if hasattr(x, "_data") else x)
+
+    # Reductions ----------------------------------------------------------
+    def mean(x, axis=None, keepdims: bool = False):
+        return np.mean(_unwrap(x), axis=axis, keepdims=keepdims)
+
+    def prod(x, axis=None, keepdims: bool = False):
+        return np.prod(_unwrap(x), axis=axis, keepdims=keepdims)
+
+    def amax(x, axis=None, keepdims: bool = False):
+        return np.max(_unwrap(x), axis=axis, keepdims=keepdims)
+
+    def amin(x, axis=None, keepdims: bool = False):
+        return np.min(_unwrap(x), axis=axis, keepdims=keepdims)
+
+    def var(x, axis=None, keepdims: bool = False, ddof: int = 0):
+        return np.var(_unwrap(x), axis=axis, keepdims=keepdims, ddof=ddof)
+
+    def std(x, axis=None, keepdims: bool = False, ddof: int = 0):
+        return np.std(_unwrap(x), axis=axis, keepdims=keepdims, ddof=ddof)
+
+    def argmax(x, axis: int | None = None, keepdims: bool = False):
+        return np.argmax(_unwrap(x), axis=axis, keepdims=keepdims)
+
+    def argmin(x, axis: int | None = None, keepdims: bool = False):
+        return np.argmin(_unwrap(x), axis=axis, keepdims=keepdims)
+
+    def cumsum(x, axis: int = -1):
+        return np.cumsum(_unwrap(x), axis=axis)
+
+    def cumprod(x, axis: int = -1):
+        return np.cumprod(_unwrap(x), axis=axis)
+
+    # Numerical-stability primitives -------------------------------------
+    def logsumexp(x, axis=None, keepdims: bool = False):
+        a = _unwrap(x)
+        m = np.max(a, axis=axis, keepdims=True)
+        # `m` may be -inf for an all-(-inf) row; clamp to avoid nan in exp(a-m).
+        m_safe = np.where(np.isfinite(m), m, np.zeros_like(m))
+        out = np.log(np.sum(np.exp(a - m_safe), axis=axis, keepdims=True)) + m_safe
+        if not keepdims:
+            out = np.squeeze(out, axis=axis) if axis is not None else out.reshape(())
+        return out
+
+    def log_softmax(x, axis: int = -1):
+        a = _unwrap(x)
+        m = np.max(a, axis=axis, keepdims=True)
+        shifted = a - m
+        return shifted - np.log(np.sum(np.exp(shifted), axis=axis, keepdims=True))
+
+    def log1p(x):
+        return np.log1p(_unwrap(x))
+
+    def expm1(x):
+        return np.expm1(_unwrap(x))
+
+    def softplus(x):
+        # log(1 + exp(x)) computed as max(x,0) + log1p(exp(-|x|)) for stability.
+        a = _unwrap(x)
+        return np.maximum(a, 0) + np.log1p(np.exp(-np.abs(a)))
+
+    def sigmoid_safe(x):
+        # 1/(1+exp(-x)) computed branch-wise so neither branch overflows.
+        # For x >= 0: 1 / (1 + exp(-x))     (uses exp of negative arg).
+        # For x <  0: exp(x) / (1 + exp(x)) (uses exp of negative arg).
+        a = _unwrap(x)
+        return np.where(
+            a >= 0,
+            1.0 / (1.0 + np.exp(-np.abs(a))),
+            np.exp(-np.abs(a)) / (1.0 + np.exp(-np.abs(a))),
+        )
+
+    # Numeric helpers + comparisons --------------------------------------
+    def clamp(x, min=None, max=None):
+        a = _unwrap(x)
+        if min is None and max is None:
+            return a
+        return np.clip(a, a_min=min, a_max=max)
+
+    def where(cond, x, y):
+        return np.where(_unwrap(cond), _unwrap(x), _unwrap(y))
+
+    def absolute(x):
+        return np.abs(_unwrap(x))
+
+    def sign(x):
+        return np.sign(_unwrap(x))
+
+    def minimum(x, y):
+        return np.minimum(_unwrap(x), _unwrap(y))
+
+    def maximum(x, y):
+        return np.maximum(_unwrap(x), _unwrap(y))
+
+    def isnan(x):
+        return np.isnan(_unwrap(x))
+
+    def isinf(x):
+        return np.isinf(_unwrap(x))
+
+    def isfinite(x):
+        return np.isfinite(_unwrap(x))
+
+    def eq(x, y):
+        return np.equal(_unwrap(x), _unwrap(y))
+
+    def ne(x, y):
+        return np.not_equal(_unwrap(x), _unwrap(y))
+
+    def lt(x, y):
+        return np.less(_unwrap(x), _unwrap(y))
+
+    def le(x, y):
+        return np.less_equal(_unwrap(x), _unwrap(y))
+
+    def gt(x, y):
+        return np.greater(_unwrap(x), _unwrap(y))
+
+    def ge(x, y):
+        return np.greater_equal(_unwrap(x), _unwrap(y))
+
     references = {
         "gemm": gemm,
         "matmul": matmul,
@@ -2418,6 +2546,41 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "rope_split": rope_split,
         "rope_merge": rope_merge,
         "selective_ssm": selective_ssm,
+        # S-series sprint S2 — reductions
+        "mean": mean,
+        "prod": prod,
+        "amax": amax,
+        "amin": amin,
+        "var": var,
+        "std": std,
+        "argmax": argmax,
+        "argmin": argmin,
+        "cumsum": cumsum,
+        "cumprod": cumprod,
+        # S2 — numerical-stability primitives
+        "logsumexp": logsumexp,
+        "log_softmax": log_softmax,
+        "log1p": log1p,
+        "expm1": expm1,
+        "softplus": softplus,
+        "sigmoid_safe": sigmoid_safe,
+        # S2 — numeric helpers
+        "clamp": clamp,
+        "where": where,
+        "absolute": absolute,
+        "sign": sign,
+        "minimum": minimum,
+        "maximum": maximum,
+        "isnan": isnan,
+        "isinf": isinf,
+        "isfinite": isfinite,
+        # S2 — comparisons
+        "eq": eq,
+        "ne": ne,
+        "lt": lt,
+        "le": le,
+        "gt": gt,
+        "ge": ge,
     }
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
@@ -2535,6 +2698,39 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         rope_split=rope_split,
         rope_merge=rope_merge,
         selective_ssm=selective_ssm,
+        # S-series sprint S2 — reductions, stability, numeric helpers,
+        # comparisons. See `_make_ops_namespace`'s S2 block for definitions.
+        mean=mean,
+        prod=prod,
+        amax=amax,
+        amin=amin,
+        var=var,
+        std=std,
+        argmax=argmax,
+        argmin=argmin,
+        cumsum=cumsum,
+        cumprod=cumprod,
+        logsumexp=logsumexp,
+        log_softmax=log_softmax,
+        log1p=log1p,
+        expm1=expm1,
+        softplus=softplus,
+        sigmoid_safe=sigmoid_safe,
+        clamp=clamp,
+        where=where,
+        absolute=absolute,
+        sign=sign,
+        minimum=minimum,
+        maximum=maximum,
+        isnan=isnan,
+        isinf=isinf,
+        isfinite=isfinite,
+        eq=eq,
+        ne=ne,
+        lt=lt,
+        le=le,
+        gt=gt,
+        ge=ge,
     )
 
 

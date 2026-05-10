@@ -107,14 +107,17 @@ def test_primitive_coverage_imports_existing_ops_as_partial_entries():
     assert matmul.status == "partial"
     assert matmul.graph_name == "tessera.matmul"
     assert matmul.contract_status["lowering_rule"] == "complete"
-    # matmul has a registered VJP in autodiff/vjp.py — the registry must
-    # reflect that, not falsely report it as missing.
+    # matmul has both a registered VJP (autodiff/vjp.py) and JVP
+    # (autodiff/jvp.py); the registry must reflect that, not falsely report
+    # them as missing.
     assert matmul.contract_status["vjp"] == "complete"
+    assert matmul.contract_status["jvp"] == "complete"
     assert "vjp" not in matmul.missing_contracts()
-    # Other axes (jvp, batching, transpose, sharding, masking on a pure op,
+    assert "jvp" not in matmul.missing_contracts()
+    # Other axes (batching, transpose, sharding, masking on a pure op,
     # math/shape/dtype, tests) remain incomplete and must stay visible.
-    assert "jvp" in matmul.missing_contracts()
     assert "batching_rule" in matmul.missing_contracts()
+    assert "transpose_rule" in matmul.missing_contracts()
 
 
 def test_existing_coverage_consults_autodiff_vjp_registry():

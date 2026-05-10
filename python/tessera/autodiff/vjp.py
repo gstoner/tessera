@@ -1028,4 +1028,229 @@ def vjp_online_softmax(dout, x, *, axis=-1, state=None, **_):
     return ((dout - (dout * s).sum(axis=axis, keepdims=True)) * s,)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# S-series sprint S2 — VJPs for reductions, stability primitives, numeric
+# helpers. The non-differentiable ops (argmax/argmin/cumprod-via-zeros/
+# isnan/isinf/isfinite/comparisons) deliberately don't get a VJP — they
+# emit a zero gradient or a pass-through gradient through `where` /
+# masked operations as appropriate.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _broadcast_grad(grad: np.ndarray, shape: tuple[int, ...]) -> np.ndarray:
+    """Broadcast a reduction-output grad back to the input shape."""
+    return np.broadcast_to(np.asarray(grad), shape).copy()
+
+
+@_vjp("mean")
+def vjp_mean(dout, x, *, axis=None, keepdims=False, **_):
+    a = np.asarray(x)
+    if axis is None:
+        n = a.size
+    elif isinstance(axis, int):
+        n = a.shape[axis]
+    else:
+        n = int(np.prod([a.shape[ax] for ax in axis]))
+    if not keepdims and axis is not None:
+        dout = np.expand_dims(np.asarray(dout), axis=axis)
+    elif not keepdims and axis is None:
+        dout = np.asarray(dout)  # scalar
+    return (_broadcast_grad(np.asarray(dout) / n, a.shape),)
+
+
+@_vjp("prod")
+def vjp_prod(dout, x, *, axis=None, keepdims=False, **_):
+    """d/dx_i prod(x) = prod(x) / x_i (vectorized via the running output)."""
+    a = np.asarray(x)
+    p = np.prod(a, axis=axis, keepdims=True)
+    if not keepdims and axis is not None:
+        dout_b = np.expand_dims(np.asarray(dout), axis=axis)
+    else:
+        dout_b = np.asarray(dout)
+    # Avoid divide-by-zero by special-casing x_i == 0:
+    #   if x has a unique zero at i, grad_i = prod(x \ {x_i}); other entries 0.
+    safe = np.where(a == 0, 1.0, a)
+    grad = (p / safe) * dout_b
+    grad = grad * (a != 0).astype(grad.dtype) + (a == 0).astype(grad.dtype) * (
+        np.prod(safe, axis=axis, keepdims=True) * dout_b
+    ) * (np.sum(a == 0, axis=axis, keepdims=True) == 1)
+    return (np.broadcast_to(grad, a.shape).copy(),)
+
+
+@_vjp("amax")
+def vjp_amax(dout, x, *, axis=None, keepdims=False, **_):
+    a = np.asarray(x)
+    m = np.max(a, axis=axis, keepdims=True)
+    mask = (a == m).astype(a.dtype)
+    # Distribute grad equally across all argmax ties.
+    counts = mask.sum(axis=axis, keepdims=True)
+    if not keepdims and axis is not None:
+        dout_b = np.expand_dims(np.asarray(dout), axis=axis)
+    else:
+        dout_b = np.asarray(dout)
+    return (mask * dout_b / counts,)
+
+
+@_vjp("amin")
+def vjp_amin(dout, x, *, axis=None, keepdims=False, **_):
+    a = np.asarray(x)
+    m = np.min(a, axis=axis, keepdims=True)
+    mask = (a == m).astype(a.dtype)
+    counts = mask.sum(axis=axis, keepdims=True)
+    if not keepdims and axis is not None:
+        dout_b = np.expand_dims(np.asarray(dout), axis=axis)
+    else:
+        dout_b = np.asarray(dout)
+    return (mask * dout_b / counts,)
+
+
+@_vjp("var")
+def vjp_var(dout, x, *, axis=None, keepdims=False, ddof=0, **_):
+    a = np.asarray(x)
+    if axis is None:
+        n = a.size
+    elif isinstance(axis, int):
+        n = a.shape[axis]
+    else:
+        n = int(np.prod([a.shape[ax] for ax in axis]))
+    mu = np.mean(a, axis=axis, keepdims=True)
+    if not keepdims and axis is not None:
+        dout_b = np.expand_dims(np.asarray(dout), axis=axis)
+    else:
+        dout_b = np.asarray(dout)
+    # d var / d x_i = 2 (x_i - mu) / (n - ddof)
+    return ((2.0 / (n - ddof)) * (a - mu) * dout_b,)
+
+
+@_vjp("std")
+def vjp_std(dout, x, *, axis=None, keepdims=False, ddof=0, **_):
+    a = np.asarray(x)
+    sigma = np.std(a, axis=axis, keepdims=True, ddof=ddof)
+    if not keepdims and axis is not None:
+        dout_b = np.expand_dims(np.asarray(dout), axis=axis)
+    else:
+        dout_b = np.asarray(dout)
+    if axis is None:
+        n = a.size
+    elif isinstance(axis, int):
+        n = a.shape[axis]
+    else:
+        n = int(np.prod([a.shape[ax] for ax in axis]))
+    mu = np.mean(a, axis=axis, keepdims=True)
+    sigma_safe = np.where(sigma == 0, 1.0, sigma)
+    return (((a - mu) / ((n - ddof) * sigma_safe)) * dout_b,)
+
+
+@_vjp("cumsum")
+def vjp_cumsum(dout, x, *, axis=-1, **_):
+    # d/dx_i sum_{j<=i} x_j = 1 for j <= i, so grad_x[j] = sum_{i>=j} dout[i]
+    # That's a reverse cumulative sum.
+    do = np.asarray(dout)
+    return (np.flip(np.cumsum(np.flip(do, axis=axis), axis=axis), axis=axis),)
+
+
+# ── Stability primitives ────────────────────────────────────────────────────
+
+
+@_vjp("logsumexp")
+def vjp_logsumexp(dout, x, *, axis=None, keepdims=False, **_):
+    a = np.asarray(x)
+    m = np.max(a, axis=axis, keepdims=True)
+    e = np.exp(a - m)
+    s = np.sum(e, axis=axis, keepdims=True)
+    softmax = e / s
+    if not keepdims and axis is not None:
+        dout_b = np.expand_dims(np.asarray(dout), axis=axis)
+    else:
+        dout_b = np.asarray(dout)
+    return (softmax * dout_b,)
+
+
+@_vjp("log_softmax")
+def vjp_log_softmax(dout, x, *, axis=-1, **_):
+    a = np.asarray(x)
+    m = np.max(a, axis=axis, keepdims=True)
+    e = np.exp(a - m)
+    s = e / np.sum(e, axis=axis, keepdims=True)
+    do = np.asarray(dout)
+    return (do - s * np.sum(do, axis=axis, keepdims=True),)
+
+
+@_vjp("log1p")
+def vjp_log1p(dout, x, **_):
+    return (np.asarray(dout) / (1.0 + np.asarray(x)),)
+
+
+@_vjp("expm1")
+def vjp_expm1(dout, x, **_):
+    return (np.asarray(dout) * np.exp(np.asarray(x)),)
+
+
+@_vjp("softplus")
+def vjp_softplus(dout, x, **_):
+    # d/dx log(1 + e^x) = sigmoid(x) — compute in branch-stable form.
+    a = np.asarray(x)
+    sig = np.where(
+        a >= 0,
+        1.0 / (1.0 + np.exp(-a)),
+        np.exp(a) / (1.0 + np.exp(a)),
+    )
+    return (sig * np.asarray(dout),)
+
+
+@_vjp("sigmoid_safe")
+def vjp_sigmoid_safe(dout, x, **_):
+    a = np.asarray(x)
+    sig = np.where(
+        a >= 0,
+        1.0 / (1.0 + np.exp(-a)),
+        np.exp(a) / (1.0 + np.exp(a)),
+    )
+    return (sig * (1.0 - sig) * np.asarray(dout),)
+
+
+# ── Numeric helpers (differentiable ones) ───────────────────────────────────
+
+
+@_vjp("clamp")
+def vjp_clamp(dout, x, *, min=None, max=None, **_):
+    a = np.asarray(x)
+    in_range = np.ones_like(a, dtype=a.dtype)
+    if min is not None:
+        in_range = in_range * (a >= min).astype(a.dtype)
+    if max is not None:
+        in_range = in_range * (a <= max).astype(a.dtype)
+    return (np.asarray(dout) * in_range,)
+
+
+@_vjp("where")
+def vjp_where(dout, cond, x, y, **_):
+    c = np.asarray(cond)
+    do = np.asarray(dout)
+    return (None, np.where(c, do, np.zeros_like(do)),
+            np.where(c, np.zeros_like(do), do))
+
+
+@_vjp("absolute")
+def vjp_absolute(dout, x, **_):
+    return (np.asarray(dout) * np.sign(np.asarray(x)),)
+
+
+@_vjp("minimum")
+def vjp_minimum(dout, x, y, **_):
+    a, b, do = np.asarray(x), np.asarray(y), np.asarray(dout)
+    # Equal-tie convention: split grad evenly.
+    lt = (a < b).astype(a.dtype)
+    eq = (a == b).astype(a.dtype) * 0.5
+    return (do * (lt + eq), do * ((1.0 - lt) - eq))
+
+
+@_vjp("maximum")
+def vjp_maximum(dout, x, y, **_):
+    a, b, do = np.asarray(x), np.asarray(y), np.asarray(dout)
+    gt = (a > b).astype(a.dtype)
+    eq = (a == b).astype(a.dtype) * 0.5
+    return (do * (gt + eq), do * ((1.0 - gt) - eq))
+
+
 __all__ = ["register_vjp", "get_vjp", "_VJPS"]

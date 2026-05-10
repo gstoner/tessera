@@ -260,9 +260,10 @@ def test_primitive_coverage_includes_s8_tiny_model_conformance_targets():
 
 def test_primitive_coverage_includes_s10_optimizers_and_schedules():
     entries = all_primitive_coverages()
-    for name in ("sgd", "adamw", "adafactor", "lion", "muon",
+    for name in ("sgd", "adam", "adamw", "adafactor", "lion", "muon",
                  "cosine_lr", "cosine_warmup_lr", "linear_warmup_lr",
-                 "clip_grad_norm", "clip_grad_value", "ema_update", "polyak_avg"):
+                 "cyclical_lr", "chained_schedule", "clip_grad_norm",
+                 "clip_grad_value", "ema_update", "polyak_avg"):
         assert name in entries, f"S10 optimizer/schedule missing: {name}"
         assert entries[name].existing_op
 
@@ -273,13 +274,15 @@ def test_primitive_coverage_includes_s11_loss_library():
                  "info_nce_loss", "ddpm_noise_pred_loss", "ctc_loss",
                  "binary_cross_entropy_loss", "focal_loss"):
         assert name in entries, f"S11 loss missing: {name}"
+        assert entries[name].existing_op
 
 
 def test_primitive_coverage_includes_s12_serialization():
     entries = all_primitive_coverages()
     for name in ("save_state", "load_state", "save_sharded", "load_sharded",
-                 "state_migration"):
+                 "state_migration", "partial_state_load"):
         assert name in entries, f"S12 serialization primitive missing: {name}"
+        assert entries[name].existing_op
 
 
 def test_primitive_coverage_includes_s13_custom_primitive_api():

@@ -150,6 +150,20 @@ def adamw(
     return tree_map3(update_param, params, m, v), {"m": m, "v": v, "step": step}
 
 
+def adam(
+    params: Tree,
+    grads: Tree,
+    state: dict[str, Any] | None = None,
+    *,
+    lr: float = 1e-3,
+    beta1: float = 0.9,
+    beta2: float = 0.999,
+    eps: float = 1e-8,
+) -> tuple[Tree, dict[str, Any]]:
+    """Adam without decoupled weight decay."""
+    return adamw(params, grads, state, lr=lr, beta1=beta1, beta2=beta2, eps=eps, weight_decay=0.0)
+
+
 def adafactor(
     params: Tree,
     grads: Tree,
@@ -337,6 +351,30 @@ def inverse_sqrt_lr(step: int, *, init_value: float, warmup_steps: int = 1) -> f
     return float(init_value * math.sqrt(max(1, warmup_steps)) / math.sqrt(step))
 
 
+def cyclical_lr(
+    step: int,
+    *,
+    base_value: float,
+    max_value: float,
+    step_size: int,
+    mode: str = "triangular",
+) -> float:
+    """Triangular cyclical learning-rate schedule."""
+    cycle = math.floor(1.0 + int(step) / (2.0 * max(1, step_size)))
+    x = abs(int(step) / max(1, step_size) - 2.0 * cycle + 1.0)
+    amplitude = max(0.0, 1.0 - x)
+    if mode == "triangular2":
+        amplitude /= 2.0 ** (cycle - 1)
+    elif mode != "triangular":
+        raise ValueError("cyclical_lr mode must be 'triangular' or 'triangular2'")
+    return float(base_value + (max_value - base_value) * amplitude)
+
+
+def chained_schedule(*schedules: Callable[[int], float]) -> Callable[[int], tuple[float, ...]]:
+    """Return a schedule that evaluates each child schedule at the same step."""
+    return lambda step: tuple(float(schedule(step)) for schedule in schedules)
+
+
 def clip_grad_norm(grads: Tree, max_norm: float, norm_type: float = 2.0) -> tuple[Tree, float]:
     if norm_type == float("inf"):
         max_abs = {"value": 0.0}
@@ -405,15 +443,18 @@ def chain(*transforms: Callable[[Tree, Tree], Tree]) -> OptaxStyleChain:
 __all__ = [
     "OptaxStyleChain",
     "adafactor",
+    "adam",
     "adamw",
     "add_decoupled_weight_decay",
     "centralize_grad",
     "chain",
+    "chained_schedule",
     "clip_grad_norm",
     "clip_grad_value",
     "constant_lr",
     "cosine_lr",
     "cosine_warmup_lr",
+    "cyclical_lr",
     "ema_update",
     "inverse_sqrt_lr",
     "lamb",

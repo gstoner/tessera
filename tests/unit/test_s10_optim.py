@@ -34,6 +34,9 @@ def test_adamw_lion_lamb_and_adafactor_state_shapes():
     assert adam_state["step"] == 1
     assert adam_params["w"].shape == params["w"].shape
     assert np.all(adam_params["w"] < params["w"])
+    adam_plain, plain_state = ts.optim.adam(params, grads, lr=0.01)
+    assert plain_state["step"] == 1
+    assert np.all(adam_plain["w"] > adam_params["w"])
 
     ada_params, ada_state = ts.optim.adafactor(params, grads, lr=0.01)
     assert ada_state["v"]["w"]["factored"] is True
@@ -67,6 +70,9 @@ def test_schedules_match_expected_values():
     assert ts.optim.linear_warmup_lr(5, peak_value=1.0, warmup_steps=10) == 0.5
     assert ts.optim.polynomial_lr(10, init_value=1.0, end_value=0.2, decay_steps=10) == 0.2
     np.testing.assert_allclose(ts.optim.inverse_sqrt_lr(4, init_value=2.0, warmup_steps=1), 1.0)
+    assert ts.optim.cyclical_lr(5, base_value=0.1, max_value=1.0, step_size=5) == 1.0
+    chained = ts.optim.chained_schedule(ts.optim.constant_lr(0.1), ts.optim.constant_lr(0.2))
+    assert chained(7) == (0.1, 0.2)
 
 
 def test_gradient_transforms_and_chain():

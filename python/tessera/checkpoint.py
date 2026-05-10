@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import json
 import os
+import pickle
+import hashlib
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
+
+import numpy as np
+
+from .state import tree_flatten, tree_unflatten
 
 
 class CheckpointError(RuntimeError):
@@ -114,6 +120,8 @@ class AsyncCheckpointConfig:
 
 
 _ASYNC_CONFIG = AsyncCheckpointConfig()
+_STATE_FORMAT_VERSION = 1
+_STATE_MIGRATIONS: dict[tuple[int, int], Callable[[Any], Any]] = {}
 
 
 def enable_async(*, max_bandwidth_gbps: float, flush_interval_s: float) -> AsyncCheckpointConfig:
@@ -213,6 +221,148 @@ def async_config() -> AsyncCheckpointConfig:
     return _ASYNC_CONFIG
 
 
+def save_state(
+    tree: Any,
+    path: str | os.PathLike,
+    *,
+    version: int = _STATE_FORMAT_VERSION,
+    atomic: bool = True,
+    metadata: Optional[Mapping[str, Any]] = None,
+) -> Path:
+    """Save a Tessera state tree to a typed, self-describing binary file."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(f".{target.name}.tmp") if atomic else target
+    leaves, treedef = tree_flatten(tree)
+    arrays = {f"leaf_{i}": _to_serializable_array(leaf) for i, leaf in enumerate(leaves)}
+    leaf_meta = [
+        {
+            "name": f"leaf_{i}",
+            "shape": list(arrays[f"leaf_{i}"].shape),
+            "dtype": str(arrays[f"leaf_{i}"].dtype),
+            "sha256": _sha256_array(arrays[f"leaf_{i}"]),
+        }
+        for i in range(len(leaves))
+    ]
+    manifest = {
+        "format": "tessera.state.v1",
+        "version": int(version),
+        "leaf_count": len(leaves),
+        "leaves": leaf_meta,
+        "metadata": dict(metadata or {}),
+    }
+    payload = {
+        "__manifest__": np.frombuffer(json.dumps(manifest, sort_keys=True).encode("utf-8"), dtype=np.uint8),
+        "__treedef__": np.frombuffer(pickle.dumps(treedef), dtype=np.uint8),
+        **arrays,
+    }
+    with tmp.open("wb") as f:
+        np.savez(f, **payload)
+    if atomic:
+        os.replace(tmp, target)
+    return target
+
+
+def load_state(
+    path: str | os.PathLike,
+    *,
+    target_version: int | None = None,
+    collections: tuple[str, ...] | list[str] | set[str] | None = None,
+) -> Any:
+    """Load a Tessera state tree saved by :func:`save_state`."""
+    source = Path(path)
+    if not source.exists():
+        raise CheckpointError(f"state file not found: {source}")
+    with np.load(source, allow_pickle=False) as data:
+        manifest = json.loads(bytes(data["__manifest__"].tolist()).decode("utf-8"))
+        treedef = pickle.loads(bytes(data["__treedef__"].tolist()))
+        leaves = []
+        for meta in manifest["leaves"]:
+            arr = np.array(data[meta["name"]])
+            if _sha256_array(arr) != meta["sha256"]:
+                raise CheckpointError(f"checksum mismatch for {meta['name']}")
+            leaves.append(arr)
+    tree = tree_unflatten(treedef, leaves)
+    if collections is not None:
+        wanted = set(collections)
+        if not isinstance(tree, dict):
+            raise CheckpointError("partial collection loading requires a top-level dict")
+        tree = {k: v for k, v in tree.items() if k in wanted}
+    version = int(manifest.get("version", _STATE_FORMAT_VERSION))
+    if target_version is not None:
+        tree = _apply_migrations(tree, version, int(target_version))
+    return tree
+
+
+def save_sharded(
+    tree: Any,
+    path: str | os.PathLike,
+    mesh: Any,
+    *,
+    version: int = _STATE_FORMAT_VERSION,
+) -> Path:
+    """Save a state tree in a directory with mesh metadata and one payload shard."""
+    root = Path(path)
+    tmp = root.with_name(f".{root.name}.tmp")
+    if tmp.exists():
+        _remove_tree(tmp)
+    tmp.mkdir(parents=True, exist_ok=True)
+    shard_path = tmp / "shard_00000.tessera_state.npz"
+    save_state(tree, shard_path, version=version, atomic=False)
+    manifest = {
+        "format": "tessera.sharded_state.v1",
+        "version": int(version),
+        "mesh": _mesh_metadata(mesh),
+        "shards": [{"rank": 0, "path": shard_path.name}],
+    }
+    (tmp / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))
+    (tmp / "COMMITTED").write_text(str(time.time()))
+    if root.exists():
+        _remove_tree(root)
+    os.replace(tmp, root)
+    return root
+
+
+def load_sharded(path: str | os.PathLike, mesh: Any | None = None) -> Any:
+    root = Path(path)
+    manifest_path = root / "manifest.json"
+    if not manifest_path.exists() or not (root / "COMMITTED").exists():
+        raise CheckpointError(f"sharded checkpoint is not committed: {root}")
+    manifest = json.loads(manifest_path.read_text())
+    if mesh is not None and manifest.get("mesh", {}).get("size") not in (None, _mesh_metadata(mesh).get("size")):
+        raise CheckpointError("mesh size mismatch while loading sharded checkpoint")
+    return load_state(root / manifest["shards"][0]["path"])
+
+
+def register_state_migration(from_version: int, to_version: int, fn: Callable[[Any], Any]) -> Callable[[Any], Any]:
+    if to_version != from_version + 1:
+        raise ValueError("state migrations must advance by exactly one version")
+    _STATE_MIGRATIONS[(int(from_version), int(to_version))] = fn
+    return fn
+
+
+def state_migration(from_version: int, to_version: int):
+    """Decorator form of :func:`register_state_migration`."""
+    def decorate(fn: Callable[[Any], Any]) -> Callable[[Any], Any]:
+        register_state_migration(from_version, to_version, fn)
+        return fn
+    return decorate
+
+
+def _apply_migrations(tree: Any, version: int, target_version: int) -> Any:
+    if target_version < version:
+        raise CheckpointError("downgrade migrations are not supported")
+    out = tree
+    cur = version
+    while cur < target_version:
+        key = (cur, cur + 1)
+        if key not in _STATE_MIGRATIONS:
+            raise CheckpointError(f"missing state migration {cur}->{cur + 1}")
+        out = _STATE_MIGRATIONS[key](out)
+        cur += 1
+    return out
+
+
 def _tensor_shard(name: str, value: object, directory: Path) -> TensorShard:
     shape = tuple(int(v) for v in getattr(value, "shape", ()))
     dtype = str(getattr(value, "dtype", type(value).__name__))
@@ -220,6 +370,40 @@ def _tensor_shard(name: str, value: object, directory: Path) -> TensorShard:
     shard_path = directory / f"{safe_name}.json"
     shard_path.write_text(json.dumps({"name": name, "shape": shape, "dtype": dtype}))
     return TensorShard(name=name, shape=shape, dtype=dtype, path=shard_path.name)
+
+
+def _to_serializable_array(value: Any) -> np.ndarray:
+    if hasattr(value, "_data"):
+        value = value._data
+    if hasattr(value, "_data"):
+        value = value._data
+    arr = np.asarray(value)
+    if arr.dtype == object:
+        raise CheckpointError("object dtype leaves are not supported by save_state")
+    return arr
+
+
+def _sha256_array(arr: np.ndarray) -> str:
+    h = hashlib.sha256()
+    h.update(str(arr.dtype).encode("utf-8"))
+    h.update(json.dumps(list(arr.shape)).encode("utf-8"))
+    h.update(np.ascontiguousarray(arr).tobytes())
+    return h.hexdigest()
+
+
+def _mesh_metadata(mesh: Any) -> dict[str, Any]:
+    if mesh is None:
+        return {}
+    if hasattr(mesh, "axis_names") and hasattr(mesh, "shape"):
+        shape = mesh.shape
+        return {
+            "axis_names": list(mesh.axis_names),
+            "shape": dict(shape) if isinstance(shape, Mapping) else list(shape),
+            "size": int(getattr(mesh, "size", 1)),
+        }
+    if isinstance(mesh, Mapping):
+        return {"shape": dict(mesh), "size": int(np.prod(list(mesh.values()))) if mesh else 1}
+    return {"repr": repr(mesh)}
 
 
 def _remove_tree(path: Path) -> None:
@@ -241,5 +425,11 @@ __all__ = [
     "enable_async",
     "last_committed",
     "load",
+    "load_sharded",
+    "load_state",
+    "register_state_migration",
     "save",
+    "save_sharded",
+    "save_state",
+    "state_migration",
 ]

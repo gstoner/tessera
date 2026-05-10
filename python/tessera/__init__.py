@@ -3170,6 +3170,7 @@ ops = _make_ops_namespace()
 
 # nn module depends on `ops`, so import after the ops namespace is built.
 from . import nn  # noqa: E402
+from . import losses  # noqa: E402
 from . import optim  # noqa: E402
 from . import rng  # noqa: E402
 from . import quantization  # noqa: E402
@@ -3371,8 +3372,8 @@ __all__ = [
     "ops", "RuntimeArtifact", "RuntimeProfile", "available_backends",
     "backend_capabilities", "compile_artifact", "get_last_profile", "launch",
     "load_artifact", "query_backend",
-    # S10 optimizers / schedules and S9 quantization / numerics
-    "optim", "rng",
+    # S11 losses, S10 optimizers / schedules, and S9 quantization / numerics
+    "losses", "optim", "rng",
     "quantization", "CalibrationObserver", "calibration_observer",
     "quantize_int8", "dequantize_int8", "quantize_int4", "dequantize_int4",
     "fake_quantize", "grad_scaler_step",

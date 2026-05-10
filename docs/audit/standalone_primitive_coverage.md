@@ -55,9 +55,9 @@ The dashboard groups primitives by the S-series sprint that ships them.
 | **S7** Memory | Titans/Atlas-style learned memory | `memory_read`, `memory_write`, `memory_evict` |
 | **S8** Tiny model conformance | Standalone family smoke tests | `tiny_diffusion_conformance`, `tiny_recurrent_conformance`, `tiny_attention_conformance` |
 | **S9** Numerics + quantization | Mixed precision + quant flows | `quantize_int8`, `dequantize_int8`, `quantize_int4`, `dequantize_int4`, `fake_quantize`, `calibration_observer`, `grad_scaler_step`, `autocast` |
-| **S10** Optimizers + schedules | Functional training step | `sgd`, `adamw`, `adafactor`, `lion`, `muon`, `lamb`, `cosine_lr`, `cosine_warmup_lr`, `clip_grad_norm`, `ema_update`, `polyak_avg` |
-| **S11** Losses | Training criteria | `mse_loss`, `mae_loss`, `huber_loss`, `kl_divergence`, `info_nce_loss`, `triplet_loss`, `focal_loss`, `ddpm_noise_pred_loss`, `score_matching_loss`, `ctc_loss` |
-| **S12** Serialization | Save / load / migrate / shard | `save_state`, `load_state`, `save_sharded`, `load_sharded`, `state_migration` |
+| **S10** Optimizers + schedules | Functional training step | `sgd`, `adam`, `adamw`, `adafactor`, `lion`, `muon`, `lamb`, `cosine_lr`, `cosine_warmup_lr`, `cyclical_lr`, `chained_schedule`, `clip_grad_norm`, `ema_update`, `polyak_avg` |
+| **S11** Losses | Training criteria | `mse_loss`, `mae_loss`, `huber_loss`, `cross_entropy_loss`, `kl_divergence`, `info_nce_loss`, `triplet_loss`, `focal_loss`, `ddpm_noise_pred_loss`, `score_matching_loss`, `ctc_loss`, `seq2seq_loss` |
+| **S12** Serialization | Save / load / migrate / shard | `save_state`, `load_state`, `save_sharded`, `load_sharded`, `state_migration`, `partial_state_load` |
 | **S13** Custom-primitive API | User-defined primitives + kernels | `custom_primitive`, `custom_call`, `custom_vjp`, `custom_jvp`, `custom_batching` |
 | **S14** AOT + cache | Persistent JIT cache + AOT export | `aot_export`, `aot_load`, `stablehlo_export`, `gguf_export`, `safetensors_export`, `compilation_cache` |
 | **S15** Data pipeline | Native dataset + tokenizer surface (in-scope per S0) | `dataset_map`, `dataset_filter`, `dataset_batch`, `dataset_shuffle`, `sharded_dataset`, `iterable_dataset`, `dataset_checkpoint`, `tokenizer_byte`, `tokenizer_bpe`, `tokenizer_unigram`, `tokenizer_sentencepiece_compat` |

@@ -465,7 +465,10 @@ Graph IR optimizer-step contracts, sharded optimizer state integration,
 Rosenbrock/convergence suites, and training-loop examples once S11 losses and
 S12 checkpointing are in place.
 
-### [S11] Loss / criterion library 📋
+**Refinement 2026-05-10:** added `adam`, `cyclical_lr`, and
+`chained_schedule` to close the remaining S10 reference-vocabulary gaps.
+
+### [S11] Loss / criterion library 🚧
 
 **Scope:** M (~400 LOC code + ~350 LOC tests). Depends on S2 (reductions +
 stability primitives) and S9 (numerics policy).
@@ -489,7 +492,21 @@ acceptance.
   numerical-stability path (uses `logsumexp` / `log_softmax` from S2 where
   applicable), and a VJP.
 
-### [S12] State serialization and checkpointing 📋
+**Status 2026-05-10:** partial functional loss library landed in
+`python/tessera/losses.py` and is exported as `tessera.losses`. Covered:
+regression (`mse_loss`, `mae_loss`, `huber_loss`, `smooth_l1_loss`,
+`log_cosh_loss`), classification (`cross_entropy_loss`,
+`binary_cross_entropy_loss`, `focal_loss`,
+`label_smoothed_cross_entropy`), distribution (`kl_divergence`,
+`js_divergence`, `wasserstein_distance`), contrastive/metric
+(`nt_xent_loss`, `info_nce_loss`, `triplet_loss`, `contrastive_loss`,
+`cosine_embedding_loss`), diffusion (`ddpm_noise_pred_loss`, `vlb_loss`,
+`score_matching_loss`), and sequence (`ctc_loss`, `seq2seq_loss`).
+Remaining S11 work: VJP registration for every loss, Graph IR lowering
+contracts, reduction-policy registry metadata, and larger numerical stability
+goldens.
+
+### [S12] State serialization and checkpointing 🚧
 
 **Scope:** M (~500 LOC code + ~350 LOC tests). Depends on S3 (state trees) and
 S6 (sharded state for sharded checkpoints).
@@ -513,6 +530,15 @@ and shardable without external framework dependencies.
 - Tests cover round-trip equality on every state class from S3, sharded
   save/load on the mock collective harness, and a forward-compat migration
   example.
+
+**Status 2026-05-10:** real state-tree payload serialization landed in
+`python/tessera/checkpoint.py` alongside the existing runtime checkpoint
+manifest API. Covered: `save_state`, `load_state`, checksummed leaves,
+atomic rename, top-level collection filtering for partial loads,
+`register_state_migration`/`state_migration`, and
+`save_sharded`/`load_sharded` with mock mesh metadata. Remaining S12 work:
+multi-rank shard partitioning, resumable multi-host writes, richer partial
+merge policies such as LoRA merge-in, and non-numpy tensor payload adapters.
 
 ### [S13] Custom-primitive / extension API 📋
 

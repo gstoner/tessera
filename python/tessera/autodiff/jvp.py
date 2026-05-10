@@ -293,6 +293,26 @@ def _numeric_jvp_rule(forward, primals, tangents, *, eps: float = 1e-6):
     return primal, (np.asarray(plus, dtype=np.float64) - np.asarray(minus, dtype=np.float64)) / (2.0 * eps)
 
 
+def _tree_add_scaled(tree, tangent, scale: float):
+    if tree is None:
+        return None
+    if tangent is None:
+        return tree
+    if isinstance(tree, dict):
+        out = {}
+        for key, value in tree.items():
+            if isinstance(value, (bool, str, int, np.integer)) and not isinstance(value, np.ndarray):
+                out[key] = value
+            else:
+                out[key] = _tree_add_scaled(value, tangent.get(key) if isinstance(tangent, dict) else None, scale)
+        return out
+    if isinstance(tree, tuple):
+        return tuple(_tree_add_scaled(v, tangent[i] if tangent is not None else None, scale) for i, v in enumerate(tree))
+    if isinstance(tree, list):
+        return [_tree_add_scaled(v, tangent[i] if tangent is not None else None, scale) for i, v in enumerate(tree)]
+    return np.asarray(tree) + scale * np.asarray(tangent)
+
+
 @_jvp("linear_general")
 def jvp_linear_general(primals, tangents, *, axis=-1, **_):
     x, W = primals[:2]
@@ -1225,6 +1245,38 @@ def jvp_nesterov(primals, tangents, *, lr, momentum=0.9, **_):
     return new_params, d_new_params
 
 
+@_jvp("adam")
+def jvp_adam(primals, tangents, *, lr=1e-3, beta1=0.9, beta2=0.999,
+             eps=1e-8, step=1, **_):
+    param, grad, moment1, moment2 = (np.asarray(x, dtype=np.float64) for x in primals)
+    dparam, dgrad, dmoment1, dmoment2 = (np.asarray(x, dtype=np.float64) for x in tangents)
+    b1, b2 = float(beta1), float(beta2)
+    m_new = b1 * moment1 + (1.0 - b1) * grad
+    v_new = b2 * moment2 + (1.0 - b2) * grad * grad
+    dm_new = b1 * dmoment1 + (1.0 - b1) * dgrad
+    dv_new = b2 * dmoment2 + 2.0 * (1.0 - b2) * grad * dgrad
+    bc1 = 1.0 - b1 ** int(step)
+    bc2 = 1.0 - b2 ** int(step)
+    m_hat = m_new / bc1
+    v_hat = v_new / bc2
+    dm_hat = dm_new / bc1
+    dv_hat = dv_new / bc2
+    sqrt_v = np.sqrt(v_hat)
+    denom = sqrt_v + float(eps)
+    update = m_hat / denom
+    dsqrt_v = dv_hat / (2.0 * np.maximum(sqrt_v, 1e-12))
+    dupdate = (dm_hat * denom - m_hat * dsqrt_v) / (denom * denom)
+    return (
+        param - float(lr) * update,
+        m_new,
+        v_new,
+    ), (
+        dparam - float(lr) * dupdate,
+        dm_new,
+        dv_new,
+    )
+
+
 @_jvp("adamw")
 def jvp_adamw(primals, tangents, *, lr=1e-3, beta1=0.9, beta2=0.999,
               eps=1e-8, weight_decay=0.0, **_):
@@ -1274,6 +1326,56 @@ def jvp_adamw(primals, tangents, *, lr=1e-3, beta1=0.9, beta2=0.999,
     new_params = p_decay - float(lr) * update
     d_new_params = dp_decay - float(lr) * dupdate
     return new_params, d_new_params
+
+
+@_jvp("lion")
+def jvp_lion(primals, tangents, *, lr=1e-4, beta1=0.9, beta2=0.99,
+             weight_decay=0.0, **_):
+    params, grads = primals[0], primals[1]
+    state = primals[2] if len(primals) > 2 else None
+    dparams, dgrads = tangents[0], tangents[1]
+    dstate = tangents[2] if len(tangents) > 2 else None
+
+    p = np.asarray(params, dtype=np.float64)
+    g = np.asarray(grads, dtype=np.float64)
+    dp = np.asarray(dparams, dtype=np.float64)
+    if state is None:
+        m_prev = np.zeros_like(p)
+    else:
+        m_prev = np.asarray(state["m"], dtype=np.float64)
+    dm_prev = np.zeros_like(p) if dstate is None else np.asarray(dstate.get("m", np.zeros_like(p)), dtype=np.float64)
+    update = float(beta1) * m_prev + (1.0 - float(beta1)) * g
+    new_m = float(beta2) * m_prev + (1.0 - float(beta2)) * g
+    _dnew_m = float(beta2) * dm_prev + (1.0 - float(beta2)) * np.asarray(dgrads, dtype=np.float64)
+    decay = 1.0 - float(lr) * float(weight_decay)
+    return p * decay - float(lr) * np.sign(update), dp * decay
+
+
+@_jvp("adafactor")
+def jvp_adafactor(primals, tangents, *, lr=1e-3, beta2=0.999, eps=1e-30, **kwargs):
+    from tessera import optim as ts_optim
+
+    params, grads = primals[0], primals[1]
+    state = primals[2] if len(primals) > 2 else None
+    dparams, dgrads = tangents[0], tangents[1]
+    dstate = tangents[2] if len(tangents) > 2 else None
+
+    def forward(p, g, s):
+        return ts_optim.adafactor(p, g, s, lr=lr, beta2=beta2, eps=eps, **kwargs)[0]
+
+    primal = forward(params, grads, state)
+    h = 1e-6
+    plus = forward(
+        np.asarray(params, dtype=np.float64) + h * np.asarray(dparams, dtype=np.float64),
+        np.asarray(grads, dtype=np.float64) + h * np.asarray(dgrads, dtype=np.float64),
+        _tree_add_scaled(state, dstate, h),
+    )
+    minus = forward(
+        np.asarray(params, dtype=np.float64) - h * np.asarray(dparams, dtype=np.float64),
+        np.asarray(grads, dtype=np.float64) - h * np.asarray(dgrads, dtype=np.float64),
+        _tree_add_scaled(state, dstate, -h),
+    )
+    return primal, (np.asarray(plus, dtype=np.float64) - np.asarray(minus, dtype=np.float64)) / (2.0 * h)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

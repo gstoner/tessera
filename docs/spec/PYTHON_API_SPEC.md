@@ -1241,6 +1241,12 @@ Additional S-series runtime catalog entries are part of the same public
 `reciprocal`, `rsqrt`, `scatter_add`, `scatter_reduce`, `sinh`, `sort`,
 `squeeze`, `stack`, `trunc`, and `unsqueeze`.
 
+Optimizer ops share the `tessera.optim` mixed-precision policy:
+`compute_dtype="fp32"` and `state_dtype="fp32"` by default, optional
+`master_dtype` for fp16/bf16/quantized-adjacent training, and returned
+parameter leaves cast back to their original storage dtype unless
+`cast_updates_to_param_dtype=False`.
+
 | Operation | Signature | Effect | Current behavior |
 |-----------|-----------|--------|------------------|
 | `gemm(A, B)` | `(array, array) → array` | `pure` | `np.matmul(A, B)` |
@@ -1266,7 +1272,11 @@ Additional S-series runtime catalog entries are part of the same public
 | `silu_mul(a, b)` | `(array, array) → array` | `pure` | Fused `silu(a) * b` primitive — anchors the SwiGLU `matmul → silu_mul → matmul` 3-op chain that the Schedule IR fusion recognizer collapses into `tessera.swiglu_fused` for backends with a fused MLP-block kernel |
 | `sigmoid(x)` | `(array) → array` | `pure` | NumPy sigmoid |
 | `sin(x)` | `(array) → array` | `pure` | NumPy sine |
-| `adam(param, grad, moment1, moment2, lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8, step=1)` | `(array,array,array,array) → tuple` | `pure` | Functional NumPy Adam step |
+| `adam(param, grad, moment1, moment2, lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8, step=1)` | `(array,array,array,array) → tuple` | `pure` | Functional NumPy Adam step; math/state default to fp32 and outputs cast back to param dtype |
+| `adamw(params, grads, state=None, ...)` | `(tree,tree,dict?) → tuple` | `pure` | Tree-structured AdamW optimizer step from `tessera.optim` |
+| `momentum(params, grads, state=None, lr, momentum=0.9, ...)` | `(tree,tree,dict?) → tuple` | `pure` | Tree-structured SGD with momentum |
+| `adafactor(params, grads, state=None, ...)` | `(tree,tree,dict?) → tuple` | `pure` | Memory-efficient Adafactor with factored fp32 accumulator slots for matrix leaves |
+| `lion(params, grads, state=None, ...)` | `(tree,tree,dict?) → tuple` | `pure` | Lion optimizer with stop-gradient sign update and fp32 momentum slots |
 | `linear_general(x, W, bias=None, axis=-1)` | `(array,array,array?) → array` | `pure` | S7 axis-flexible linear projection; Graph IR op `tessera.linear_general` |
 | `sgd(params, grads, lr)` | `(array,array) → array` | `pure` | S10 functional SGD reference; Graph IR op `tessera.sgd` |
 | `mse_loss(pred, target, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 MSE criterion; Graph IR op `tessera.loss.mse` |

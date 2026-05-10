@@ -18,12 +18,85 @@ import numpy as np
 Tree = Any
 
 
+_DTYPE_ALIASES = {
+    "f64": "fp64",
+    "float64": "fp64",
+    "f32": "fp32",
+    "float32": "fp32",
+    "f16": "fp16",
+    "float16": "fp16",
+    "bfloat16": "bf16",
+}
+
+_NUMPY_DTYPES = {
+    "fp64": np.float64,
+    "fp32": np.float32,
+    "tf32": np.float32,
+    "bf16": np.float32,  # numpy reference stores bf16 as fp32.
+    "fp16": np.float16,
+    "fp8_e4m3": np.float32,
+    "fp8_e5m2": np.float32,
+    "fp4_e2m1": np.float32,
+    "nvfp4": np.float32,
+}
+
+
 def _asarray(x: Any) -> np.ndarray:
     if hasattr(x, "_data"):
         x = x._data
     if hasattr(x, "_data"):
         x = x._data
     return np.asarray(x)
+
+
+def _normalize_dtype(dtype: str | None, *, default: str = "fp32") -> str:
+    if dtype is None:
+        return default
+    normalized = _DTYPE_ALIASES.get(str(dtype), str(dtype))
+    if normalized not in _NUMPY_DTYPES:
+        raise ValueError(f"Unsupported optimizer dtype {dtype!r}")
+    return normalized
+
+
+def _np_dtype(dtype: str | None, *, default: str = "fp32"):
+    return _NUMPY_DTYPES[_normalize_dtype(dtype, default=default)]
+
+
+def _compute_array(x: Any, compute_dtype: str | None) -> np.ndarray:
+    arr = _asarray(x)
+    # Treat the default as "at least fp32" for reference math: fp16/bf16-style
+    # storage promotes to fp32, while fp64 test/reference inputs keep fp64.
+    if _normalize_dtype(compute_dtype) == "fp32" and arr.dtype == np.float64:
+        return arr.astype(np.float64, copy=False)
+    return arr.astype(_np_dtype(compute_dtype), copy=False)
+
+
+def _state_array(x: Any, state_dtype: str | None) -> np.ndarray:
+    return _asarray(x).astype(_np_dtype(state_dtype), copy=False)
+
+
+def _cast_like_param(x: Any, param: Any, cast_updates_to_param_dtype: bool) -> np.ndarray:
+    arr = np.asarray(x)
+    if not cast_updates_to_param_dtype:
+        return arr
+    return arr.astype(_asarray(param).dtype, copy=False)
+
+
+def _master_tree(params: Tree, state: dict[str, Any] | None, master_dtype: str | None) -> Tree:
+    if master_dtype is None:
+        return params
+    if state is not None and "master_params" in state:
+        return state["master_params"]
+    return tree_map(lambda p: _asarray(p).astype(_np_dtype(master_dtype), copy=True), params)
+
+
+def _attach_master_state(state: dict[str, Any], master_params: Tree, master_dtype: str | None) -> dict[str, Any]:
+    if master_dtype is None:
+        return state
+    out = dict(state)
+    out["master_params"] = master_params
+    out["master_dtype"] = _normalize_dtype(master_dtype)
+    return out
 
 
 def tree_map(fn: Callable[[Any], Any], tree: Tree) -> Tree:
@@ -56,8 +129,8 @@ def tree_map3(fn: Callable[[Any, Any, Any], Any], a: Tree, b: Tree, c: Tree) -> 
     return fn(a, b, c)
 
 
-def zeros_like_tree(tree: Tree) -> Tree:
-    return tree_map(lambda x: np.zeros_like(_asarray(x), dtype=np.float32), tree)
+def zeros_like_tree(tree: Tree, dtype: str | None = "fp32") -> Tree:
+    return tree_map(lambda x: np.zeros_like(_asarray(x), dtype=_np_dtype(dtype)), tree)
 
 
 def tree_l2_norm(tree: Tree) -> float:
@@ -73,9 +146,28 @@ def tree_l2_norm(tree: Tree) -> float:
     return math.sqrt(total)
 
 
-def sgd(params: Tree, grads: Tree, lr: float) -> Tree:
+def sgd(
+    params: Tree,
+    grads: Tree,
+    lr: float,
+    *,
+    compute_dtype: str = "fp32",
+    state_dtype: str = "fp32",
+    master_dtype: str | None = None,
+    cast_updates_to_param_dtype: bool = True,
+) -> Tree | tuple[Tree, dict[str, Any]]:
     """Plain SGD update."""
-    return tree_map2(lambda p, g: _asarray(p) - float(lr) * _asarray(g), params, grads)
+    del state_dtype  # SGD has no optimizer slots but accepts the common dtype policy.
+    base_params = _master_tree(params, None, master_dtype)
+    new_master = tree_map2(
+        lambda p, g: _compute_array(p, compute_dtype) - float(lr) * _compute_array(g, compute_dtype),
+        base_params,
+        grads,
+    )
+    new_params = tree_map2(lambda p_new, p_orig: _cast_like_param(p_new, p_orig, cast_updates_to_param_dtype), new_master, params)
+    if master_dtype is None:
+        return new_params
+    return new_params, {"master_params": new_master, "master_dtype": _normalize_dtype(master_dtype)}
 
 
 def momentum(
@@ -85,16 +177,22 @@ def momentum(
     *,
     lr: float,
     momentum: float = 0.9,
+    compute_dtype: str = "fp32",
+    state_dtype: str = "fp32",
+    master_dtype: str | None = None,
+    cast_updates_to_param_dtype: bool = True,
 ) -> tuple[Tree, dict[str, Tree]]:
     """SGD with classical momentum."""
-    velocity = zeros_like_tree(params) if state is None else state["velocity"]
+    base_params = _master_tree(params, state, master_dtype)
+    velocity = zeros_like_tree(params, state_dtype) if state is None else state["velocity"]
     new_velocity = tree_map2(
-        lambda v, g: float(momentum) * _asarray(v) + _asarray(g),
+        lambda v, g: _state_array(float(momentum) * _compute_array(v, compute_dtype) + _compute_array(g, compute_dtype), state_dtype),
         velocity,
         grads,
     )
-    new_params = tree_map2(lambda p, v: _asarray(p) - float(lr) * _asarray(v), params, new_velocity)
-    return new_params, {"velocity": new_velocity}
+    new_master = tree_map2(lambda p, v: _compute_array(p, compute_dtype) - float(lr) * _compute_array(v, compute_dtype), base_params, new_velocity)
+    new_params = tree_map2(lambda p_new, p_orig: _cast_like_param(p_new, p_orig, cast_updates_to_param_dtype), new_master, params)
+    return new_params, _attach_master_state({"velocity": new_velocity}, new_master, master_dtype)
 
 
 def nesterov(
@@ -104,20 +202,27 @@ def nesterov(
     *,
     lr: float,
     momentum: float = 0.9,
+    compute_dtype: str = "fp32",
+    state_dtype: str = "fp32",
+    master_dtype: str | None = None,
+    cast_updates_to_param_dtype: bool = True,
 ) -> tuple[Tree, dict[str, Tree]]:
     """Nesterov momentum update."""
-    velocity = zeros_like_tree(params) if state is None else state["velocity"]
+    base_params = _master_tree(params, state, master_dtype)
+    velocity = zeros_like_tree(params, state_dtype) if state is None else state["velocity"]
     new_velocity = tree_map2(
-        lambda v, g: float(momentum) * _asarray(v) + _asarray(g),
+        lambda v, g: _state_array(float(momentum) * _compute_array(v, compute_dtype) + _compute_array(g, compute_dtype), state_dtype),
         velocity,
         grads,
     )
     update = tree_map2(
-        lambda g, v: _asarray(g) + float(momentum) * _asarray(v),
+        lambda g, v: _compute_array(g, compute_dtype) + float(momentum) * _compute_array(v, compute_dtype),
         grads,
         new_velocity,
     )
-    return sgd(params, update, lr), {"velocity": new_velocity}
+    new_master = tree_map2(lambda p, u: _compute_array(p, compute_dtype) - float(lr) * _compute_array(u, compute_dtype), base_params, update)
+    new_params = tree_map2(lambda p_new, p_orig: _cast_like_param(p_new, p_orig, cast_updates_to_param_dtype), new_master, params)
+    return new_params, _attach_master_state({"velocity": new_velocity}, new_master, master_dtype)
 
 
 def adamw(
@@ -130,24 +235,39 @@ def adamw(
     beta2: float = 0.999,
     eps: float = 1e-8,
     weight_decay: float = 0.0,
+    compute_dtype: str = "fp32",
+    state_dtype: str = "fp32",
+    master_dtype: str | None = None,
+    cast_updates_to_param_dtype: bool = True,
 ) -> tuple[Tree, dict[str, Any]]:
     """AdamW with decoupled weight decay."""
+    base_params = _master_tree(params, state, master_dtype)
     if state is None:
-        state = {"m": zeros_like_tree(params), "v": zeros_like_tree(params), "step": 0}
+        state = {"m": zeros_like_tree(params, state_dtype), "v": zeros_like_tree(params, state_dtype), "step": 0}
     step = int(state["step"]) + 1
-    m = tree_map2(lambda m_, g: beta1 * _asarray(m_) + (1.0 - beta1) * _asarray(g), state["m"], grads)
-    v = tree_map2(lambda v_, g: beta2 * _asarray(v_) + (1.0 - beta2) * (_asarray(g) ** 2), state["v"], grads)
+    m = tree_map2(
+        lambda m_, g: _state_array(beta1 * _compute_array(m_, compute_dtype) + (1.0 - beta1) * _compute_array(g, compute_dtype), state_dtype),
+        state["m"],
+        grads,
+    )
+    v = tree_map2(
+        lambda v_, g: _state_array(beta2 * _compute_array(v_, compute_dtype) + (1.0 - beta2) * (_compute_array(g, compute_dtype) ** 2), state_dtype),
+        state["v"],
+        grads,
+    )
     b1_corr = 1.0 - beta1 ** step
     b2_corr = 1.0 - beta2 ** step
 
     def update_param(p, m_, v_):
-        p_arr = _asarray(p)
-        update = (_asarray(m_) / b1_corr) / (np.sqrt(_asarray(v_) / b2_corr) + eps)
+        p_arr = _compute_array(p, compute_dtype)
+        update = (_compute_array(m_, compute_dtype) / b1_corr) / (np.sqrt(_compute_array(v_, compute_dtype) / b2_corr) + eps)
         if weight_decay:
             p_arr = p_arr * (1.0 - lr * weight_decay)
         return p_arr - lr * update
 
-    return tree_map3(update_param, params, m, v), {"m": m, "v": v, "step": step}
+    new_master = tree_map3(update_param, base_params, m, v)
+    new_params = tree_map2(lambda p_new, p_orig: _cast_like_param(p_new, p_orig, cast_updates_to_param_dtype), new_master, params)
+    return new_params, _attach_master_state({"m": m, "v": v, "step": step}, new_master, master_dtype)
 
 
 def adam(
@@ -159,9 +279,26 @@ def adam(
     beta1: float = 0.9,
     beta2: float = 0.999,
     eps: float = 1e-8,
+    compute_dtype: str = "fp32",
+    state_dtype: str = "fp32",
+    master_dtype: str | None = None,
+    cast_updates_to_param_dtype: bool = True,
 ) -> tuple[Tree, dict[str, Any]]:
     """Adam without decoupled weight decay."""
-    return adamw(params, grads, state, lr=lr, beta1=beta1, beta2=beta2, eps=eps, weight_decay=0.0)
+    return adamw(
+        params,
+        grads,
+        state,
+        lr=lr,
+        beta1=beta1,
+        beta2=beta2,
+        eps=eps,
+        weight_decay=0.0,
+        compute_dtype=compute_dtype,
+        state_dtype=state_dtype,
+        master_dtype=master_dtype,
+        cast_updates_to_param_dtype=cast_updates_to_param_dtype,
+    )
 
 
 def adafactor(
@@ -172,25 +309,32 @@ def adafactor(
     lr: float = 1e-3,
     beta2: float = 0.999,
     eps: float = 1e-30,
+    compute_dtype: str = "fp32",
+    state_dtype: str = "fp32",
+    master_dtype: str | None = None,
+    cast_updates_to_param_dtype: bool = True,
 ) -> tuple[Tree, dict[str, Any]]:
     """Adafactor reference update.
 
     Matrix leaves store factored row/column second moments; lower-rank leaves
     fall back to full second moments.
     """
+    base_params = _master_tree(params, state, master_dtype)
     if state is None:
-        state = {"v": tree_map(lambda p: _adafactor_zero_state(_asarray(p)), params), "step": 0}
+        state = {"v": tree_map(lambda p: _adafactor_zero_state(_asarray(p), state_dtype=state_dtype), params), "step": 0}
     new_v = _adafactor_tree_map(
-        lambda s, g: _adafactor_update_state(s, _asarray(g), beta2),
+        lambda s, g: _adafactor_update_state(s, _compute_array(g, compute_dtype), beta2, state_dtype=state_dtype),
         state["v"],
         grads,
     )
     updates = _adafactor_tree_map(
-        lambda s, g: _adafactor_update_from_state(s, _asarray(g), eps),
+        lambda s, g: _adafactor_update_from_state(s, _compute_array(g, compute_dtype), eps, compute_dtype=compute_dtype),
         new_v,
         grads,
     )
-    return sgd(params, updates, lr), {"v": new_v, "step": int(state["step"]) + 1}
+    new_master = tree_map2(lambda p, u: _compute_array(p, compute_dtype) - float(lr) * _compute_array(u, compute_dtype), base_params, updates)
+    new_params = tree_map2(lambda p_new, p_orig: _cast_like_param(p_new, p_orig, cast_updates_to_param_dtype), new_master, params)
+    return new_params, _attach_master_state({"v": new_v, "step": int(state["step"]) + 1}, new_master, master_dtype)
 
 
 def _is_adafactor_slot(x: Any) -> bool:
@@ -209,34 +353,35 @@ def _adafactor_tree_map(fn: Callable[[Any, Any], Any], slot_tree: Tree, grad_tre
     return fn(slot_tree, grad_tree)
 
 
-def _adafactor_zero_state(arr: np.ndarray):
+def _adafactor_zero_state(arr: np.ndarray, *, state_dtype: str = "fp32"):
     if arr.ndim >= 2:
         return {
-            "row": np.zeros(arr.shape[:-1], dtype=np.float32),
-            "col": np.zeros(arr.shape[-1], dtype=np.float32),
+            "row": np.zeros(arr.shape[:-1], dtype=_np_dtype(state_dtype)),
+            "col": np.zeros(arr.shape[-1], dtype=_np_dtype(state_dtype)),
             "factored": True,
         }
-    return {"v": np.zeros_like(arr, dtype=np.float32), "factored": False}
+    return {"v": np.zeros_like(arr, dtype=_np_dtype(state_dtype)), "factored": False}
 
 
-def _adafactor_update_state(state, grad: np.ndarray, beta2: float):
-    grad2 = grad.astype(np.float32, copy=False) ** 2
+def _adafactor_update_state(state, grad: np.ndarray, beta2: float, *, state_dtype: str = "fp32"):
+    grad2 = grad.astype(_np_dtype(state_dtype), copy=False) ** 2
     if state["factored"]:
         return {
-            "row": beta2 * state["row"] + (1.0 - beta2) * grad2.mean(axis=-1),
-            "col": beta2 * state["col"] + (1.0 - beta2) * grad2.mean(axis=tuple(range(grad.ndim - 1))),
+            "row": _state_array(beta2 * state["row"] + (1.0 - beta2) * grad2.mean(axis=-1), state_dtype),
+            "col": _state_array(beta2 * state["col"] + (1.0 - beta2) * grad2.mean(axis=tuple(range(grad.ndim - 1))), state_dtype),
             "factored": True,
         }
-    return {"v": beta2 * state["v"] + (1.0 - beta2) * grad2, "factored": False}
+    return {"v": _state_array(beta2 * state["v"] + (1.0 - beta2) * grad2, state_dtype), "factored": False}
 
 
-def _adafactor_update_from_state(state, grad: np.ndarray, eps: float):
+def _adafactor_update_from_state(state, grad: np.ndarray, eps: float, *, compute_dtype: str = "fp32"):
+    grad = _compute_array(grad, compute_dtype)
     if state["factored"]:
-        row = np.maximum(state["row"], eps)
-        col = np.maximum(state["col"], eps)
+        row = np.maximum(_compute_array(state["row"], compute_dtype), eps)
+        col = np.maximum(_compute_array(state["col"], compute_dtype), eps)
         scale = row[..., None] * col / max(float(np.mean(row)), eps)
         return grad / (np.sqrt(scale) + eps)
-    return grad / (np.sqrt(np.maximum(state["v"], eps)) + eps)
+    return grad / (np.sqrt(np.maximum(_compute_array(state["v"], compute_dtype), eps)) + eps)
 
 
 def lion(
@@ -248,19 +393,34 @@ def lion(
     beta1: float = 0.9,
     beta2: float = 0.99,
     weight_decay: float = 0.0,
+    compute_dtype: str = "fp32",
+    state_dtype: str = "fp32",
+    master_dtype: str | None = None,
+    cast_updates_to_param_dtype: bool = True,
 ) -> tuple[Tree, dict[str, Any]]:
+    base_params = _master_tree(params, state, master_dtype)
     if state is None:
-        state = {"m": zeros_like_tree(params), "step": 0}
-    update = tree_map2(lambda m, g: beta1 * _asarray(m) + (1.0 - beta1) * _asarray(g), state["m"], grads)
-    new_m = tree_map2(lambda m, g: beta2 * _asarray(m) + (1.0 - beta2) * _asarray(g), state["m"], grads)
+        state = {"m": zeros_like_tree(params, state_dtype), "step": 0}
+    update = tree_map2(
+        lambda m, g: beta1 * _compute_array(m, compute_dtype) + (1.0 - beta1) * _compute_array(g, compute_dtype),
+        state["m"],
+        grads,
+    )
+    new_m = tree_map2(
+        lambda m, g: _state_array(beta2 * _compute_array(m, compute_dtype) + (1.0 - beta2) * _compute_array(g, compute_dtype), state_dtype),
+        state["m"],
+        grads,
+    )
 
     def apply(p, u):
-        p_arr = _asarray(p)
+        p_arr = _compute_array(p, compute_dtype)
         if weight_decay:
             p_arr = p_arr * (1.0 - lr * weight_decay)
         return p_arr - lr * np.sign(_asarray(u))
 
-    return tree_map2(apply, params, update), {"m": new_m, "step": int(state["step"]) + 1}
+    new_master = tree_map2(apply, base_params, update)
+    new_params = tree_map2(lambda p_new, p_orig: _cast_like_param(p_new, p_orig, cast_updates_to_param_dtype), new_master, params)
+    return new_params, _attach_master_state({"m": new_m, "step": int(state["step"]) + 1}, new_master, master_dtype)
 
 
 def muon(

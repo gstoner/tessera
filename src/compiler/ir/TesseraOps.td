@@ -685,10 +685,38 @@ def Tessera_AdamOp : Op<Tessera_Dialect, "adam", []> {
                        OptionalAttr<F64Attr>:$beta1,
                        OptionalAttr<F64Attr>:$beta2,
                        OptionalAttr<F64Attr>:$eps,
-                       OptionalAttr<I64Attr>:$step);
+                       OptionalAttr<I64Attr>:$step,
+                       OptionalAttr<StrAttr>:$compute_dtype,
+                       OptionalAttr<StrAttr>:$state_dtype,
+                       OptionalAttr<StrAttr>:$master_dtype,
+                       OptionalAttr<BoolAttr>:$cast_updates_to_param_dtype);
   let results = (outs TensorType:$new_param, TensorType:$new_moment1, TensorType:$new_moment2);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
+
+class Tessera_OptimizerTreeOp<string mnemonic, string summaryText>
+  : Op<Tessera_Dialect, mnemonic, []> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$params, TensorType:$grads,
+                       Optional<TensorType>:$state,
+                       OptionalAttr<F64Attr>:$lr,
+                       OptionalAttr<F64Attr>:$beta1,
+                       OptionalAttr<F64Attr>:$beta2,
+                       OptionalAttr<F64Attr>:$eps,
+                       OptionalAttr<F64Attr>:$momentum,
+                       OptionalAttr<F64Attr>:$weight_decay,
+                       OptionalAttr<StrAttr>:$compute_dtype,
+                       OptionalAttr<StrAttr>:$state_dtype,
+                       OptionalAttr<StrAttr>:$master_dtype,
+                       OptionalAttr<BoolAttr>:$cast_updates_to_param_dtype);
+  let results = (outs TensorType:$new_params, TensorType:$new_state);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_AdamWOp : Tessera_OptimizerTreeOp<"adamw", "Functional AdamW optimizer tree step">;
+def Tessera_MomentumOp : Tessera_OptimizerTreeOp<"momentum", "Functional SGD-with-momentum optimizer tree step">;
+def Tessera_AdafactorOp : Tessera_OptimizerTreeOp<"adafactor", "Functional Adafactor optimizer tree step">;
+def Tessera_LionOp : Tessera_OptimizerTreeOp<"lion", "Functional Lion optimizer tree step">;
 
 def Tessera_RMSNormSafeOp : Op<
   Tessera_Dialect, "rmsnorm_safe",

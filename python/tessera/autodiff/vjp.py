@@ -10,6 +10,7 @@ Adding a new op = one VJP function + a `register_vjp(name, fn)` call.
 from __future__ import annotations
 
 import math
+import copy
 from typing import Callable
 
 import numpy as np
@@ -75,6 +76,50 @@ def _numeric_vjp_arg(fn, dout, arg, *, eps: float = 1e-5):
         grad[idx] = np.sum(((y_plus - y_minus) / (2.0 * eps)) * dout_arr)
         it.iternext()
     return grad.reshape(np.asarray(arg).shape)
+
+
+def _tree_numeric_vjp(fn, dout, tree, *, eps: float = 1e-5):
+    """Central-difference VJP over numeric leaves in a nested state tree."""
+    if tree is None:
+        return None
+    if isinstance(tree, dict):
+        out = {}
+        for key, value in tree.items():
+            if isinstance(value, (bool, str, int, np.integer)) and not isinstance(value, np.ndarray):
+                out[key] = None
+                continue
+
+            def replace_leaf(new_value, key=key):
+                copied = copy.deepcopy(tree)
+                copied[key] = new_value
+                return fn(copied)
+
+            out[key] = _tree_numeric_vjp(replace_leaf, dout, value, eps=eps)
+        return out
+    if isinstance(tree, tuple):
+        return tuple(
+            _tree_numeric_vjp(
+                lambda new_value, i=i: fn(tuple(new_value if j == i else copy.deepcopy(v) for j, v in enumerate(tree))),
+                dout,
+                value,
+                eps=eps,
+            )
+            for i, value in enumerate(tree)
+        )
+    if isinstance(tree, list):
+        return [
+            _tree_numeric_vjp(
+                lambda new_value, i=i: fn([new_value if j == i else copy.deepcopy(v) for j, v in enumerate(tree)]),
+                dout,
+                value,
+                eps=eps,
+            )
+            for i, value in enumerate(tree)
+        ]
+    arr = np.asarray(tree)
+    if not np.issubdtype(arr.dtype, np.number):
+        return None
+    return _numeric_vjp_arg(fn, dout, arr, eps=eps)
 
 
 def _attention_vjp(dout, Q, K, V, *, scale=None, mask=None):
@@ -3011,6 +3056,56 @@ def vjp_nesterov(dout, params, grads, state=None, *, lr, momentum=0.9, **_):
     return (d_params, d_grads, d_state)
 
 
+@_vjp("adam")
+def vjp_adam(dout, param, grad, moment1, moment2, *,
+             lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8, step=1,
+             _output_index=0, **_):
+    """Low-level tuple-output Adam VJP.
+
+    ``_output_index`` is injected by the tape for tuple components:
+    0 = new_param, 1 = new_moment1, 2 = new_moment2.
+    """
+    do = np.asarray(dout, dtype=np.float64)
+    p = np.asarray(param, dtype=np.float64)
+    g = np.asarray(grad, dtype=np.float64)
+    m_prev = np.asarray(moment1, dtype=np.float64)
+    v_prev = np.asarray(moment2, dtype=np.float64)
+    b1, b2 = float(beta1), float(beta2)
+    if int(_output_index) == 1:
+        return (
+            np.zeros_like(p),
+            (1.0 - b1) * do,
+            b1 * do,
+            np.zeros_like(v_prev),
+        )
+    if int(_output_index) == 2:
+        return (
+            np.zeros_like(p),
+            2.0 * (1.0 - b2) * g * do,
+            np.zeros_like(m_prev),
+            b2 * do,
+        )
+
+    step_i = int(step)
+    m_new = b1 * m_prev + (1.0 - b1) * g
+    v_new = b2 * v_prev + (1.0 - b2) * g * g
+    bc1 = 1.0 - b1 ** step_i
+    bc2 = 1.0 - b2 ** step_i
+    m_hat = m_new / bc1
+    v_hat = v_new / bc2
+    sqrt_v = np.sqrt(v_hat)
+    denom = sqrt_v + float(eps)
+    d_update = -float(lr) * do
+    d_m_new = d_update / (bc1 * denom)
+    d_v_new = d_update * (-m_hat / (2.0 * np.maximum(sqrt_v, 1e-12) * denom * denom * bc2))
+    return (
+        do,
+        (1.0 - b1) * d_m_new + 2.0 * (1.0 - b2) * g * d_v_new,
+        b1 * d_m_new,
+        b2 * d_v_new,
+    )
+
+
 @_vjp("adamw")
 def vjp_adamw(dout, params, grads, state=None, *,
               lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.0, **_):
@@ -3065,6 +3160,41 @@ def vjp_adamw(dout, params, grads, state=None, *,
     d_v_prev = b2 * d_v_new
     d_state = {"m": d_m_prev, "v": d_v_prev, "step": None}
     return (d_params, d_grads, d_state)
+
+
+@_vjp("lion")
+def vjp_lion(dout, params, grads, state=None, *,
+             lr=1e-4, beta1=0.9, beta2=0.99, weight_decay=0.0, **_):
+    del beta1, beta2
+    do = np.asarray(dout, dtype=np.float64)
+    d_params = do * (1.0 - float(lr) * float(weight_decay))
+    d_grads = np.zeros_like(np.asarray(grads, dtype=np.float64))
+    d_state = {"m": np.zeros_like(np.asarray(params, dtype=np.float64)), "step": None}
+    if state is not None and "m" in state:
+        d_state["m"] = np.zeros_like(np.asarray(state["m"], dtype=np.float64))
+    return d_params, d_grads, d_state
+
+
+@_vjp("adafactor")
+def vjp_adafactor(dout, params, grads, state=None, *,
+                  lr=1e-3, beta2=0.999, eps=1e-30, **kwargs):
+    from tessera import optim as ts_optim
+
+    def forward(p, g, s):
+        return ts_optim.adafactor(
+            p,
+            g,
+            s,
+            lr=lr,
+            beta2=beta2,
+            eps=eps,
+            **kwargs,
+        )[0]
+
+    d_params = _numeric_vjp_arg(lambda p: forward(p, grads, state), dout, params)
+    d_grads = _numeric_vjp_arg(lambda g: forward(params, g, state), dout, grads)
+    d_state = _tree_numeric_vjp(lambda s: forward(params, grads, s), dout, state) if state is not None else None
+    return d_params, d_grads, d_state
 
 
 # ─────────────────────────────────────────────────────────────────────────────

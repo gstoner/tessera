@@ -442,22 +442,78 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             x = x._data
         return np.sin(x)
 
-    def adam(param, grad, moment1, moment2, lr: float = 1e-3, beta1: float = 0.9, beta2: float = 0.999, eps: float = 1e-8, step: int = 1):
+    def adam(
+        param,
+        grad,
+        moment1,
+        moment2,
+        lr: float = 1e-3,
+        beta1: float = 0.9,
+        beta2: float = 0.999,
+        eps: float = 1e-8,
+        step: int = 1,
+        *,
+        compute_dtype: str = "fp32",
+        state_dtype: str = "fp32",
+        master_dtype: str | None = None,
+        cast_updates_to_param_dtype: bool = True,
+    ):
         """Functional Adam optimizer step.
 
         Returns ``(new_param, new_moment1, new_moment2)`` and keeps optimizer
         state explicit so it can lower as a pure CPU compiler op.
         """
+        del master_dtype  # Low-level Adam keeps state explicit; tree API owns master params.
         values = []
         for value in (param, grad, moment1, moment2):
             values.append(value._data if hasattr(value, "_data") else value)
         param, grad, moment1, moment2 = values
+        dtype_map = {
+            "fp16": np.float16,
+            "f16": np.float16,
+            "float16": np.float16,
+            "bf16": np.float32,
+            "bfloat16": np.float32,
+            "fp32": np.float32,
+            "f32": np.float32,
+            "float32": np.float32,
+            "fp64": np.float64,
+            "f64": np.float64,
+            "float64": np.float64,
+        }
+        compute_np = dtype_map.get(compute_dtype, np.float32)
+        state_np = dtype_map.get(state_dtype, np.float32)
+        param_dtype = np.asarray(param).dtype
+        param = np.asarray(param).astype(compute_np, copy=False)
+        grad = np.asarray(grad).astype(compute_np, copy=False)
+        moment1 = np.asarray(moment1).astype(compute_np, copy=False)
+        moment2 = np.asarray(moment2).astype(compute_np, copy=False)
         new_m = beta1 * moment1 + (1.0 - beta1) * grad
         new_v = beta2 * moment2 + (1.0 - beta2) * (grad * grad)
         m_hat = new_m / (1.0 - beta1**step)
         v_hat = new_v / (1.0 - beta2**step)
         new_param = param - lr * m_hat / (np.sqrt(v_hat) + eps)
+        if cast_updates_to_param_dtype:
+            new_param = new_param.astype(param_dtype, copy=False)
+        new_m = new_m.astype(state_np, copy=False)
+        new_v = new_v.astype(state_np, copy=False)
         return new_param, new_m, new_v
+
+    def adamw(params, grads, state=None, **kwargs):
+        from . import optim as _optim
+        return _optim.adamw(params, grads, state, **kwargs)
+
+    def momentum(params, grads, state=None, **kwargs):
+        from . import optim as _optim
+        return _optim.momentum(params, grads, state, **kwargs)
+
+    def adafactor(params, grads, state=None, **kwargs):
+        from . import optim as _optim
+        return _optim.adafactor(params, grads, state, **kwargs)
+
+    def lion(params, grads, state=None, **kwargs):
+        from . import optim as _optim
+        return _optim.lion(params, grads, state, **kwargs)
 
     def transpose(x, axes=None):
         if hasattr(x, "_data"):
@@ -3016,6 +3072,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "ppo_policy_loss": ppo_policy_loss_ref,
         "grpo_policy_loss": grpo_policy_loss_ref,
         "cispo_policy_loss": cispo_policy_loss_ref,
+        "adamw": adamw,
+        "momentum": momentum,
+        "adafactor": adafactor,
+        "lion": lion,
     }
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
@@ -3057,6 +3117,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         rmsnorm_safe=rmsnorm_safe,
         sin=sin,
         adam=adam,
+        adamw=adamw,
+        momentum=momentum,
+        adafactor=adafactor,
+        lion=lion,
         transpose=transpose,
         cast=cast,
         dropout=dropout,

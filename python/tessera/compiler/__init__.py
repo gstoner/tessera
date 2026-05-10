@@ -36,6 +36,15 @@ from .capabilities import (
     runtime_status,
     supports_op,
 )
+from .primitive_coverage import (
+    CONTRACT_FIELDS,
+    PrimitiveCoverage,
+    all_primitive_coverages,
+    coverage_for,
+    coverage_summary,
+    primitives_for_model_family,
+    render_markdown,
+)
 from .legality import LegalityDiagnostic, LegalityResult, TensorContract, check_op_legality
 from .schedule_planner import ScheduleCandidate, SchedulePlanner, SelectedSchedule, schedule_cache_key
 from .gpu_smoke import SmokeResult, run_matmul_smoke
@@ -75,6 +84,13 @@ __all__ = [
     "normalize_target",
     "runtime_status",
     "supports_op",
+    "CONTRACT_FIELDS",
+    "PrimitiveCoverage",
+    "all_primitive_coverages",
+    "coverage_for",
+    "coverage_summary",
+    "primitives_for_model_family",
+    "render_markdown",
     "LegalityDiagnostic",
     "LegalityResult",
     "TensorContract",

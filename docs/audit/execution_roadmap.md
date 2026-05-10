@@ -2,7 +2,7 @@
 status: Normative (development roadmap)
 classification: Audit / Plan
 authority: Sequences every open capability gap into executable phases
-last_updated: 2026-05-09
+last_updated: 2026-05-10
 ---
 
 # Tessera Development Roadmap
@@ -39,9 +39,17 @@ F (autodiff follow-ups, parallelizable)
 G (NVIDIA execution — biggest lift, parallelizable with F)
 H (Conv2d + remaining nn cleanup, after G picks the layout)
 I (DDP/FSDP — depends on F4+F5 + G)
+
+S0 (standalone gap lock) ─► S1 (primitive contracts) ─► S2 (tensor algebra)
+                                                       ├► S3 (state trees)
+                                                       ├► S4 (RNG/effects)
+                                                       ├► S5 (control flow)
+                                                       ├► S6 (sharding)
+                                                       ├► S7 (model primitives)
+                                                       └► S8 (tiny model conformance)
 ```
 
-**Critical paths (all three chains are now closed as of 2026-05-09 — G is the only remaining frontier):**
+**Legacy A-I critical paths (all three chains are now closed as of 2026-05-09):**
 - ✅ **B1 (buffer protocol)** unblocked `BatchNorm1d` (C1) + streaming kernels
   with state (D). Closed.
 - ✅ **B2 (`KVCacheHandle` value type)** unblocked Theme 4 entirely (E1–E3) +
@@ -54,9 +62,205 @@ I (DDP/FSDP — depends on F4+F5 + G)
   autotuner, FA-4 verification, GPU-only tier, and GPU CI are all dark. G1
   audit is done; G2–G7 sequenced in `docs/audit/nvidia_execution_audit.md`.
 
-Estimated remaining runway: **4–8 weeks of focused work on Phase G** (4–6 days
-to first H100 BF16 GEMM per the G1 audit; remainder is sweep + verification +
-CI). All other phases complete.
+Estimated remaining runway for the legacy A-I execution track: **4–8 weeks of
+focused work on Phase G** (4–6 days to first H100 BF16 GEMM per the G1 audit;
+remainder is sweep + verification + CI).
+
+**New standalone compiler track:** The S-series milestones below are the next
+roadmap for Tessera as a self-contained model compiler, independent of PyTorch,
+JAX, or Flax at runtime. PyTorch/Core ATen and JAX/Flax are used only as
+reference vocabularies for missing mathematical and compiler semantics.
+
+---
+
+## Standalone compiler milestone sprints (S-series)
+
+These sprints convert the May 2026 JAX/Flax/PyTorch gap analysis into an
+implementation path. They run in parallel with Phase G where possible: S1-S5
+are mostly frontend/compiler/runtime-semantics work; S6 and S8 benefit from
+real GPU execution but must still have CPU-reference acceptance.
+
+### [S0] Gap lock + sprint documentation ✅
+
+**Scope:** XS (doc/test only). This section is the canonical sprint breakdown
+for the standalone compiler goal.
+
+**Acceptance:**
+- `docs/audit/execution_roadmap.md` contains S0-S8 milestone sprints.
+- The S-series explicitly states that Tessera remains runtime-independent from
+  PyTorch, JAX, and Flax.
+- Unit coverage checks that the standalone roadmap names the required compiler
+  surfaces: primitive contracts, tensor algebra, state trees, explicit RNG,
+  control flow, sharding, model primitives, and tiny model conformance.
+
+### [S1] Native primitive contract registry ✅
+
+**Scope:** M (~350 LOC code + ~150 LOC tests + generated markdown).
+
+**Status (landed 2026-05-10):** `python/tessera/compiler/primitive_coverage.py`
+now provides the standalone primitive coverage registry, imports existing
+`OP_SPECS` as partial entries, keeps planned gaps separate from supported ops,
+and renders the markdown dashboard contract. Coverage is locked by
+`tests/unit/test_standalone_compiler_roadmap.py`.
+
+Build a standalone registry next to, not inside, the supported-op catalog. The
+current `op_catalog.py` says what exists; S1 documents what each primitive must
+prove before it is compiler-complete.
+
+**Files (new):**
+- `python/tessera/compiler/primitive_coverage.py`
+- `tests/unit/test_standalone_compiler_roadmap.py`
+- `docs/audit/standalone_primitive_coverage.md`
+
+**Acceptance:**
+- Each primitive/gap entry records: math semantics, shape rule, dtype/layout
+  rule, VJP, JVP, batching rule, transpose rule, sharding rule, masking/effect
+  behavior, lowering rule, backend kernel, and tests.
+- Existing `OP_SPECS` are imported as implemented-or-partial entries, without
+  falsely marking missing rules as complete.
+- Missing standalone primitives are represented as planned entries, not as
+  supported ops.
+- The generated markdown dashboard groups entries by model-family relevance:
+  diffusion, RNN/xLSTM, SSM/Mamba, Hyena/FNet/spectral, Linformer/cosFormer,
+  Griffin/Megalodon, Titans/Atlas memory, and JEPA.
+
+### [S2] Tensor algebra, indexing, and scalar math 📋
+
+**Scope:** L (~900 LOC code + ~600 LOC tests). Depends on S1.
+
+Complete Tessera-native tensor manipulation and functional indexing. These are
+compiler primitives, not PyTorch compatibility wrappers.
+
+**Primitive groups:**
+- Shape/view/data movement: `reshape`, `view`, `flatten`, `squeeze`,
+  `unsqueeze`, `permute`, `broadcast`, `expand`, `cat`, `stack`, `split`,
+  `chunk`, `slice`, `select`, `pad`, `dynamic_slice`,
+  `dynamic_update_slice`.
+- Functional updates: indexed set/add/min/max without mutation-dependent
+  behavior.
+- Indexing/sorting: `gather`, `scatter`, `scatter_add`, `scatter_reduce`,
+  `nonzero`, `top_k`, `sort`, `argsort`, `take`, `index_select`,
+  `index_update`.
+- Scalar math breadth: `sub`, `div`, `exp`, `log`, `sqrt`, `rsqrt`, `pow`,
+  trig, `erf`, comparisons, logical ops, `clamp`, `minimum`, `maximum`, `sign`,
+  `abs`, `reciprocal`.
+
+**Acceptance:**
+- Every S2 primitive has shape/dtype rules, CPU reference behavior, VJP/JVP
+  status, and Graph IR lowering status in the S1 dashboard.
+- Functional update tests prove no caller-visible mutation leaks through the
+  API.
+- Dynamic-shape tests cover symbolic batch, sequence, image height/width, and
+  memory-window dimensions.
+
+### [S3] Pytrees, module state, and model containers 📋
+
+**Scope:** M (~500 LOC code + ~350 LOC tests). Can run after S1.
+
+Add a Tessera-native tree/state abstraction inspired by JAX pytrees and Flax
+collections, but owned by Tessera semantics.
+
+**Acceptance:**
+- Native tree APIs support flatten/unflatten, tree-map, tree-reduce,
+  tree-transpose, state filters, and state partitioning.
+- State classes distinguish params, buffers, batch stats, optimizer slots,
+  RNG state, recurrent state, memory state, and metrics.
+- `nn.Module.state_dict()` can be projected into filtered state trees without
+  depending on external framework objects.
+- Tests cover nested modules, shared containers, mutable/non-mutable buffers,
+  optimizer state, recurrent state, memory state, and metrics.
+
+### [S4] Explicit RNG and stochastic effects 📋
+
+**Scope:** M (~450 LOC code + ~300 LOC tests). Depends on S1; integrates with
+S3 once state trees exist.
+
+Make randomness a typed, compiler-visible effect rather than an implicit
+process-global source.
+
+**Acceptance:**
+- Add typed RNG keys with `split`, `fold_in`, `clone`, named streams, and
+  deterministic replay metadata.
+- Add samplers: uniform, normal, bernoulli, categorical, randint,
+  permutation, gamma, and beta.
+- Dropout, stochastic depth, diffusion noise, random masking, and sampling use
+  explicit RNG streams.
+- Tests prove deterministic replay across single-device, sharded, checkpointed,
+  and resumed runs.
+
+### [S5] Control flow and transform composition 📋
+
+**Scope:** XL (~1,200 LOC code + ~800 LOC tests). Depends on S1; uses S2 for
+indexing-heavy cases.
+
+Promote JAX-like transforms to first-class Tessera compiler semantics rather
+than Python helpers.
+
+**Acceptance:**
+- First-class transforms: `jit`, `grad`, `value_and_grad`, `jvp`, `vjp`,
+  `vmap`, `map`, `scan`, `associative_scan`, `while_loop`, `fori_loop`,
+  `cond`, `switch`, `remat`, and `checkpoint`.
+- Transform rules compose through Graph IR, Schedule IR, Tile IR, and backend
+  lowering, with explicit fallback diagnostics where a stage is not ready.
+- Reverse-mode through scan, split transpose for scans, checkpointed BPTT, and
+  stateful streaming scan are covered.
+- Tests include `grad(vmap(f))`, `vmap(grad(f))`, `grad(scan(f))`,
+  `remat(scan(f))`, and `shard_map(grad(f))` once S6 lands.
+
+### [S6] Native sharding and distributed semantics 📋
+
+**Scope:** L (~800 LOC code + ~500 LOC tests). Depends on S3-S5; GPU runtime
+acceleration depends on Phase G.
+
+Add compiler-visible placement, sharding, and SPMD mapping semantics.
+
+**Acceptance:**
+- Named mesh, partition specs, named sharding, replicated/sharded state,
+  addressable-device metadata, and memory-kind placement exist as native
+  objects.
+- Add a `shard_map`-style API with explicit in/out specs and collective
+  behavior.
+- Data, tensor, sequence, expert, pipeline, and memory sharding are expressible
+  in the compiler and visible to autodiff/optimizer/RNG/checkpoint logic.
+- CPU/mock tests validate semantics; NVIDIA/NCCL tests become active when
+  Phase G provides hardware execution.
+
+### [S7] Flax-level model primitive library 📋
+
+**Scope:** L (~900 LOC code + ~600 LOC tests). Depends on S2-S4.
+
+Provide native model-building layers so Tessera users can author models without
+PyTorch/JAX/Flax modules.
+
+**Acceptance:**
+- Layers: `Linear`, `LinearGeneral`, `Einsum`, `Embed`, `Conv`,
+  `ConvTranspose`, `LoRA`, and `LoRALinear`.
+- Normalization: BatchNorm, LayerNorm, RMSNorm, GroupNorm, InstanceNorm,
+  WeightNorm, SpectralNorm.
+- Pooling: max, avg, min, adaptive variants.
+- Recurrent layers: SimpleRNN, GRU, LSTM, optimized LSTM, bidirectional RNN,
+  sequence flip/masking.
+- Dropout and stochastic-depth modules consume explicit Tessera RNG streams.
+
+### [S8] Tiny standalone model conformance suite 📋
+
+**Scope:** XL (~1,000 LOC tests/examples + dashboard integration). Depends on
+S2-S7; performance gates depend on Phase G.
+
+The acceptance target is small standalone Tessera models, not imported
+PyTorch/JAX/Flax modules.
+
+**Acceptance:**
+- Add tiny standalone models for diffusion/DiT or U-Net, xLSTM, Mamba/SSM,
+  Hyena/FNet/spectral, Linformer/cosFormer, Griffin/Megalodon, JEPA, and
+  Titans/Atlas memory.
+- Every tiny model validates forward correctness, backward correctness, state
+  behavior, RNG determinism, shape polymorphism, mixed precision, and one
+  training step on CPU reference.
+- Backend gates track CPU reference, Apple/GPU development backends, and
+  NVIDIA/H100 optimized execution after Phase G.
+- The S1 dashboard reports which model families are blocked by each missing
+  primitive contract.
 
 ---
 

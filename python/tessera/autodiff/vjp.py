@@ -2294,4 +2294,298 @@ def vjp_avg_pool(dout, x, kernel_size, stride=None, padding=0, **_):
     return (grad,)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Deferred-VJP follow-up (per `primitive_coverage_state.md` recommended next
+# work): CTC, JS divergence, Wasserstein, NT-Xent.
+#
+# These were skipped in the earlier autodiff hardening pass because each
+# required a non-trivial closed-form derivation. Now that the simpler S11
+# losses are settled, this block closes the four highest-leverage gaps.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ── S11 sequence: CTC loss ──────────────────────────────────────────────────
+
+
+def _ctc_extended_target(target: np.ndarray, blank: int) -> list[int]:
+    """Build the blank-interleaved extended target [blank, t_0, blank, t_1, ...]."""
+    ext = [blank]
+    for token in target:
+        ext.extend([int(token), blank])
+    return ext
+
+
+def _ctc_log_beta(log_y_b: np.ndarray, ext: list[int], inp_len: int,
+                   blank: int) -> np.ndarray:
+    """Backward DP table mirroring the forward `alpha` recurrence.
+
+    `log_y_b[t, v]` = log probability for time `t`, vocab `v`, this batch.
+    `log_beta[t, i]` includes the emission `log_y_b[t, ext[i]]` so it's
+    symmetric with `log_alpha` and the standard posterior identity holds:
+
+        P(state i at t | obs, target) ∝ α[t, i] · β[t, i] / y[t, ext[i]]
+    """
+    s = len(ext)
+    log_beta = np.full((inp_len, s), -np.inf, dtype=np.float64)
+    log_beta[inp_len - 1, s - 1] = log_y_b[inp_len - 1, ext[s - 1]]
+    if s > 1:
+        log_beta[inp_len - 1, s - 2] = log_y_b[inp_len - 1, ext[s - 2]]
+    for t in range(inp_len - 2, -1, -1):
+        for i in range(s):
+            nxt = [log_beta[t + 1, i]]
+            if i + 1 < s:
+                nxt.append(log_beta[t + 1, i + 1])
+            if (i + 2 < s and ext[i + 2] != blank
+                    and ext[i + 2] != ext[i]):
+                nxt.append(log_beta[t + 1, i + 2])
+            log_beta[t, i] = log_y_b[t, ext[i]] + np.logaddexp.reduce(nxt)
+    return log_beta
+
+
+def _ctc_log_alpha(log_y_b: np.ndarray, ext: list[int], inp_len: int,
+                    blank: int) -> np.ndarray:
+    """Forward DP table — re-implemented in vjp.py so `log_alpha` is
+    available without re-entering `tessera.losses.ctc_loss`. Bit-identical
+    to the recurrence in `python/tessera/losses.py:ctc_loss`."""
+    s = len(ext)
+    log_alpha = np.full((inp_len, s), -np.inf, dtype=np.float64)
+    log_alpha[0, 0] = log_y_b[0, blank]
+    if s > 1:
+        log_alpha[0, 1] = log_y_b[0, ext[1]]
+    for t in range(1, inp_len):
+        for i in range(s):
+            prev = [log_alpha[t - 1, i]]
+            if i - 1 >= 0:
+                prev.append(log_alpha[t - 1, i - 1])
+            if (i - 2 >= 0 and ext[i] != blank
+                    and ext[i] != ext[i - 2]):
+                prev.append(log_alpha[t - 1, i - 2])
+            log_alpha[t, i] = np.logaddexp.reduce(prev) + log_y_b[t, ext[i]]
+    return log_alpha
+
+
+@_vjp("ctc_loss")
+def vjp_ctc_loss(dout, log_probs, targets, input_lengths, target_lengths,
+                 *, blank=0, reduction="mean", **_):
+    """Reverse-mode for CTC.
+
+    The gradient flows only through `log_probs`. For each batch element b,
+
+        dL_b / dlog_y[t, k] = -(1/Z_b) · Σ_{i: ext[i]=k} α[t,i] · β[t,i] / y[t,k]
+
+    computed entirely in log-space to stay numerically stable. The
+    posterior is then summed over states sharing the same vocab index k.
+
+    `targets` / `input_lengths` / `target_lengths` / `blank` are
+    non-differentiable — `None` slot for each.
+    """
+    lp = np.asarray(log_probs).astype(np.float64, copy=False)
+    targets_arr = np.asarray(targets).astype(np.int64)
+    inp_lens = np.asarray(input_lengths).astype(np.int64)
+    tgt_lens = np.asarray(target_lengths).astype(np.int64)
+    T, B, V = lp.shape
+
+    grad = np.zeros_like(lp)
+    do = np.asarray(dout, dtype=np.float64)
+    if reduction == "mean":
+        per_batch_cot = np.full((B,), float(do) / max(B, 1))
+    elif reduction == "sum":
+        per_batch_cot = np.full((B,), float(do))
+    else:  # 'none'
+        per_batch_cot = np.broadcast_to(do.reshape(-1), (B,)).astype(np.float64).copy()
+
+    for b in range(B):
+        inp_len = int(inp_lens[b])
+        t_len = int(tgt_lens[b])
+        target = targets_arr[b, :t_len]
+        ext = _ctc_extended_target(target, blank)
+        s = len(ext)
+        log_y_b = lp[:inp_len, b, :]
+
+        log_alpha = _ctc_log_alpha(log_y_b, ext, inp_len, blank)
+        log_beta = _ctc_log_beta(log_y_b, ext, inp_len, blank)
+        log_Z = np.logaddexp(
+            log_alpha[inp_len - 1, s - 1],
+            log_alpha[inp_len - 1, s - 2] if s > 1 else -np.inf,
+        )
+
+        # Per-(t, k) gradient: `-exp(logsumexp_{i: ext[i]=k} (log_α + log_β - log_y) - log_Z)`.
+        # `log_alpha + log_beta - log_y_b[..., ext[i]]` strips one copy of the
+        # double-counted emission term so the result is the path posterior.
+        ab = log_alpha + log_beta - log_y_b[:, np.array(ext)]  # (inp_len, s)
+
+        # Group states by vocab index.
+        ext_arr = np.asarray(ext)
+        vocab_used = np.unique(ext_arr)
+        for k in vocab_used:
+            states_for_k = np.where(ext_arr == k)[0]
+            # logsumexp along the state axis for this vocab index.
+            block = ab[:, states_for_k]
+            log_post = np.logaddexp.reduce(block, axis=1) - log_Z
+            grad[:inp_len, b, k] = -np.exp(log_post) * per_batch_cot[b]
+
+    return (grad, None, None, None)
+
+
+# ── S11 distribution: Jensen-Shannon divergence ─────────────────────────────
+
+
+@_vjp("js_divergence")
+def vjp_js_divergence(dout, p_probs, q_probs, *, reduction="mean", **_):
+    """JS(p||q) = ½(KL(p||m) + KL(q||m)) with m = ½(p+q).
+
+    The cross-terms cancel cleanly because p_i + q_i = 2 m_i, leaving:
+
+        dJS/dp_i = ½ log(p_i / m_i),   dJS/dq_i = ½ log(q_i / m_i)
+    """
+    p = np.asarray(p_probs).astype(np.float64, copy=False)
+    q = np.asarray(q_probs).astype(np.float64, copy=False)
+    m = 0.5 * (p + q)
+    log_p_m = np.log(np.maximum(p, 1e-12)) - np.log(np.maximum(m, 1e-12))
+    log_q_m = np.log(np.maximum(q, 1e-12)) - np.log(np.maximum(m, 1e-12))
+
+    leading_shape = p.shape[:-1]
+    leading_size = max(int(np.prod(leading_shape)) if leading_shape else 1, 1)
+    do = np.asarray(dout)
+    if reduction == "mean":
+        do = do / leading_size
+    if reduction == "none":
+        do = do.reshape(leading_shape + (1,))
+    else:
+        do = np.broadcast_to(do, leading_shape).reshape(leading_shape + (1,))
+
+    grad_p = 0.5 * log_p_m * do
+    grad_q = 0.5 * log_q_m * do
+    return (grad_p, grad_q)
+
+
+# ── S11 distribution: Wasserstein-1 (1-D, sort-based) ──────────────────────
+
+
+@_vjp("wasserstein_distance")
+def vjp_wasserstein_distance(dout, x, y, *, reduction="mean", **_):
+    """1-D empirical Wasserstein-1 distance routed through sort permutations.
+
+    Forward computes `mean_i |x_sort[i] - y_sort[i]|` along axis -1 and
+    reduces. Backward:
+
+      dW/dx_sort[i] = (1/N) sign(x_sort[i] - y_sort[i])
+      dW/dx[k]      = dW/dx_sort[π_x_inv[k]]   (scatter through the sort)
+
+    Same for `y` with sign flipped. Sort ties are handled by the standard
+    sub-gradient convention `sign(0) = 0`.
+    """
+    x_arr = np.asarray(x).astype(np.float64, copy=False)
+    y_arr = np.asarray(y).astype(np.float64, copy=False)
+    N = x_arr.shape[-1]
+    pi_x = np.argsort(x_arr, axis=-1)
+    pi_y = np.argsort(y_arr, axis=-1)
+    x_sorted = np.take_along_axis(x_arr, pi_x, axis=-1)
+    y_sorted = np.take_along_axis(y_arr, pi_y, axis=-1)
+    sign_diff = np.sign(x_sorted - y_sorted)  # (..., N)
+
+    # Per-element cotangent in sort space, then scatter back.
+    leading_shape = x_arr.shape[:-1]
+    do = _reduction_cotangent(dout, leading_shape if leading_shape else (), reduction)
+    do_b = np.asarray(do).reshape(leading_shape + (1,))
+
+    grad_sort_x = sign_diff * do_b / N
+    grad_sort_y = -sign_diff * do_b / N
+
+    grad_x = np.empty_like(x_arr)
+    grad_y = np.empty_like(y_arr)
+    np.put_along_axis(grad_x, pi_x, grad_sort_x, axis=-1)
+    np.put_along_axis(grad_y, pi_y, grad_sort_y, axis=-1)
+    return (grad_x, grad_y)
+
+
+# ── S11 contrastive: NT-Xent ────────────────────────────────────────────────
+
+
+def _nt_xent_forward_state(z: np.ndarray, labels: np.ndarray,
+                            temperature: float) -> dict:
+    """Cache the forward intermediates that both VJP and JVP need.
+
+    Computes `n` (norms), `u` (normalized embeddings), `S` (Gram / temp),
+    `pos` (positive mask, diagonal-zeroed), `K` (positives per row),
+    and `sm` (softmax over the masked logits).
+    """
+    norms = np.linalg.norm(z, axis=-1, keepdims=True)
+    safe_n = norms + 1e-12
+    u = z / safe_n
+    S = (u @ u.T) / float(temperature)
+    masked = S.copy()
+    np.fill_diagonal(masked, -np.inf)
+    # Stable softmax along last axis.
+    m = np.max(masked, axis=-1, keepdims=True)
+    sm = np.exp(masked - m)
+    sm[~np.isfinite(masked)] = 0.0
+    sm = sm / np.maximum(np.sum(sm, axis=-1, keepdims=True), 1e-12)
+
+    labels_arr = np.asarray(labels)
+    pos = (labels_arr[:, None] == labels_arr[None, :])
+    np.fill_diagonal(pos, False)
+    K = np.maximum(pos.sum(axis=-1), 1)
+    return {"u": u, "n": safe_n, "S": S, "sm": sm, "pos": pos, "K": K}
+
+
+@_vjp("nt_xent_loss")
+def vjp_nt_xent_loss(dout, embeddings, labels, *, temperature=0.5,
+                     reduction="mean", **_):
+    """SimCLR-style NT-Xent contrastive loss.
+
+    The chain is:
+      z → u = z/||z||           (per-row L2 normalize)
+      u → S = u uᵀ / τ          (Gram matrix scaled by temperature)
+      S → masked: diagonal = -∞
+      masked → log_softmax row-wise → loss[i] = -mean over positives j of LP[i,j]
+      L = reduce(loss)
+
+    Gradient at the masked-logit level:
+      dL/dM[i,k] = (-pos[i,k]/K_i + softmax[i,k])    (i ≠ k; diagonal is 0)
+
+    Then `dL/du = (1/τ)(G + Gᵀ) u` (since S = (1/τ) u uᵀ is symmetric in
+    its dependence on u via two slots), and finally L2-normalize backprop:
+      dL/dz[i] = (dL/du[i] - u[i] * (dL/du[i] · u[i])) / ||z[i]||
+    """
+    z = np.asarray(embeddings).astype(np.float64, copy=False)
+    state = _nt_xent_forward_state(z, labels, temperature)
+    u, n, sm, pos, K = state["u"], state["n"], state["sm"], state["pos"], state["K"]
+    B = z.shape[0]
+
+    # Per-row dL/dM: where i==j it's 0 (those rows were -inf in logits, sm[i,i]=0).
+    dM = sm - pos.astype(np.float64) / K[:, None]
+    np.fill_diagonal(dM, 0.0)
+
+    # No-positives rows have loss[i] = 0 by the forward's `where(positives, ...)`.
+    no_pos = pos.sum(axis=-1) == 0
+    dM[no_pos, :] = 0.0
+
+    # Reduction cotangent: per-row scalar weight.
+    do = np.asarray(dout)
+    if reduction == "mean":
+        row_cot = float(do) / max(B, 1)
+    elif reduction == "sum":
+        row_cot = float(do)
+    else:  # 'none' — `do[b]` is the per-row cotangent.
+        do_arr = np.asarray(do).reshape(-1)
+        dM = dM * do_arr[:, None]
+        row_cot = 1.0
+    if reduction != "none":
+        dM = dM * row_cot
+
+    # G = dL/dS where S is the un-masked Gram matrix; off-diagonal == dM,
+    # diagonal == 0 (it was masked out).
+    G = dM.copy()
+    np.fill_diagonal(G, 0.0)
+
+    # du[a,d] = (1/τ) * (G + Gᵀ) @ u
+    du = ((G + G.T) @ u) / float(temperature)
+
+    # Unwind the L2 normalize: dz = (du - u (du · u)) / ||z||
+    proj = np.sum(du * u, axis=-1, keepdims=True)
+    dz = (du - u * proj) / n
+    return (dz, None)
+
+
 __all__ = ["register_vjp", "get_vjp", "_VJPS"]

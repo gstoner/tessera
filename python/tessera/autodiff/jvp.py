@@ -736,4 +736,146 @@ def jvp(fn: Callable, primals, tangents) -> Tuple[np.ndarray, np.ndarray]:
     return primal_out, tangent_out
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# JVPs paralleling the deferred-VJP follow-up. CTC's JVP routes through the
+# VJP via the scalar-loss "double backward" trick — same approach
+# `torch.autograd.functional.jvp` uses internally. The naive forward-mode
+# pass through forward-backward DP would be O(T²·V²) per batch; the
+# contraction approach is one VJP call per element instead.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@_jvp("ctc_loss")
+def jvp_ctc_loss(primals, tangents, *, blank=0, reduction="mean", **_):
+    """Forward-mode CTC via VJP contraction.
+
+    For a scalar loss L = L(x), the directional derivative in tangent v is
+
+        L'(x) · v = ∇L(x) · v
+
+    so once we have a VJP that returns ∇L, the JVP is a dot product. CTC
+    decouples per batch element (`L_b` only depends on `log_probs[:, b, :]`),
+    so per-batch raw gradients give per-batch tangents — even when
+    `reduction='none'` and the "loss" is a length-B vector.
+
+    We obtain raw per-batch gradients by calling the VJP with
+    `reduction='sum'` and `dout=1.0`: that path sets every batch's
+    cotangent to 1, so `grad_lp[t, b, v] = dL_b/dlog_probs[t, b, v]` exactly.
+    Then we contract with the tangent and apply the user's reduction.
+
+    Cost: one CTC VJP call (= one forward + one backward pass per batch
+    element) — independent of the tangent's sparsity. This is the same
+    cost as the corresponding VJP, so for scalar reductions you can swap
+    `vjp` ↔ `jvp` freely.
+    """
+    from tessera import losses as ts_losses
+    from tessera.autodiff.vjp import get_vjp
+
+    log_probs = primals[0]
+    targets = primals[1]
+    input_lengths = primals[2]
+    target_lengths = primals[3]
+    dlog_probs = np.asarray(tangents[0], dtype=np.float64)
+
+    primal = ts_losses.ctc_loss(
+        log_probs, targets, input_lengths, target_lengths,
+        blank=blank, reduction=reduction,
+    )
+
+    # Raw per-batch gradient: with reduction='sum' and dout=1.0 the per-batch
+    # cotangent is uniformly 1, so the VJP returns exactly dL_b/dlog_probs.
+    grad_lp_raw, *_ = get_vjp("ctc_loss")(
+        1.0, log_probs, targets, input_lengths, target_lengths,
+        blank=blank, reduction="sum",
+    )
+
+    # Per-batch dot product: contract over time (axis 0) and vocab (axis 2).
+    per_batch_tan = np.sum(grad_lp_raw * dlog_probs, axis=(0, 2))
+
+    if reduction == "mean":
+        return primal, per_batch_tan.mean()
+    if reduction == "sum":
+        return primal, per_batch_tan.sum()
+    # 'none' — per-element tangent matches the per-element primal shape.
+    return primal, per_batch_tan
+
+
+@_jvp("js_divergence")
+def jvp_js_divergence(primals, tangents, *, reduction="mean", **_):
+    """Forward-mode for Jensen-Shannon. Same closed form as the VJP."""
+    p_arr, q_arr = (np.asarray(t, dtype=np.float64) for t in primals)
+    dp, dq = (np.asarray(t, dtype=np.float64) for t in tangents)
+    m = 0.5 * (p_arr + q_arr)
+    log_p_m = np.log(np.maximum(p_arr, 1e-12)) - np.log(np.maximum(m, 1e-12))
+    log_q_m = np.log(np.maximum(q_arr, 1e-12)) - np.log(np.maximum(m, 1e-12))
+    kl_pm = np.sum(p_arr * log_p_m, axis=-1)
+    kl_qm = np.sum(q_arr * log_q_m, axis=-1)
+    loss = 0.5 * (kl_pm + kl_qm)
+
+    # Cross-terms cancel: dJS/dp_i = ½ log(p_i/m_i), dJS/dq_i = ½ log(q_i/m_i).
+    tangent = np.sum(0.5 * log_p_m * dp + 0.5 * log_q_m * dq, axis=-1)
+    return _reduce_loss(loss, tangent, reduction)
+
+
+@_jvp("wasserstein_distance")
+def jvp_wasserstein_distance(primals, tangents, *, reduction="mean", **_):
+    """Forward-mode Wasserstein-1: route the tangent through the same sort
+    permutations as the primal."""
+    x_arr, y_arr = (np.asarray(t, dtype=np.float64) for t in primals)
+    dx, dy = (np.asarray(t, dtype=np.float64) for t in tangents)
+    pi_x = np.argsort(x_arr, axis=-1)
+    pi_y = np.argsort(y_arr, axis=-1)
+    x_sorted = np.take_along_axis(x_arr, pi_x, axis=-1)
+    y_sorted = np.take_along_axis(y_arr, pi_y, axis=-1)
+    dx_sorted = np.take_along_axis(dx, pi_x, axis=-1)
+    dy_sorted = np.take_along_axis(dy, pi_y, axis=-1)
+    diff = x_sorted - y_sorted
+    sign_diff = np.sign(diff)
+    loss = np.mean(np.abs(diff), axis=-1)
+    tangent = np.mean(sign_diff * (dx_sorted - dy_sorted), axis=-1)
+    return _reduce_loss(loss, tangent, reduction)
+
+
+@_jvp("nt_xent_loss")
+def jvp_nt_xent_loss(primals, tangents, *, temperature=0.5,
+                     reduction="mean", **_):
+    """Forward-mode NT-Xent.
+
+    Pushes `dz` through L2-normalize → Gram → masked log_softmax → positive
+    mean. The math mirrors the VJP's chain: the only direction-dependent
+    intermediate is `du = (dz - u(u·dz)) / ||z||` (the Jacobian of L2
+    normalize applied to the tangent).
+    """
+    from tessera.autodiff.vjp import _nt_xent_forward_state
+
+    z = np.asarray(primals[0], dtype=np.float64)
+    labels = primals[1]
+    dz = np.asarray(tangents[0], dtype=np.float64)
+    state = _nt_xent_forward_state(z, labels, temperature)
+    u, n, sm, pos, K = state["u"], state["n"], state["sm"], state["pos"], state["K"]
+    B = z.shape[0]
+
+    # Tangent of the L2 normalize.
+    proj = np.sum(dz * u, axis=-1, keepdims=True)
+    du = (dz - u * proj) / n
+
+    # Tangent of S = u uᵀ / τ.
+    dS = ((du @ u.T) + (u @ du.T)) / float(temperature)
+    np.fill_diagonal(dS, 0.0)  # diagonal stays masked at -∞ (no flow).
+
+    # Tangent of log_softmax along last axis: dLP[i, j] = dS[i, j] - Σ_k sm[i,k] dS[i,k].
+    sum_sm_dS = np.sum(sm * dS, axis=-1, keepdims=True)
+    dLP = dS - sum_sm_dS
+
+    # Per-row primal loss + tangent.
+    log_sm = np.where(np.isfinite(sm) & (sm > 0), np.log(np.maximum(sm, 1e-12)), 0.0)
+    loss_per_row = -np.sum(np.where(pos, log_sm, 0.0), axis=-1) / K
+    no_pos = pos.sum(axis=-1) == 0
+    loss_per_row = np.where(no_pos, 0.0, loss_per_row)
+    tan_per_row = -np.sum(np.where(pos, dLP, 0.0), axis=-1) / K
+    tan_per_row = np.where(no_pos, 0.0, tan_per_row)
+
+    return _reduce_loss(loss_per_row, tan_per_row, reduction)
+
+
 __all__ = ["register_jvp", "get_jvp", "jvp"]

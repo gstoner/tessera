@@ -55,6 +55,10 @@ and tests for each primitive.
 Current lowering gates: `201` registered, `125` still `stub_required`, `32`
 not applicable, and `4` missing.
 
+Current contract schemas: `36` primitives are promoted to
+`explicit_semantic`; the rest remain `explicit_partial` until more contract
+axes are hardened.
+
 ## Milestone Groups
 
 The dashboard groups primitives by the S-series sprint that ships them.
@@ -152,7 +156,9 @@ print(render_markdown())
 The next work is contract hardening, not broad name collection:
 
 - **Contract hardening:** promote math semantics, shape rules, and dtype/layout
-  rules for high-use S2, S5, S7, S10, and S11 primitives.
+  rules for high-use S2, S5, S7, S10, and S11 primitives. The first focused
+  semantic pass now covers `conv1d`, `linear_general`, `sgd`, data/tokenizer
+  declarations, reduction aliases, memory primitives, and core S11 losses.
 - **Transform coverage:** close VJP/JVP, batching, transpose, and sharding gaps
   starting with reductions, model layers, losses, `memory_read`, scans, and
   collectives. The first focused pass now covers `linear_general`, `sgd`, and

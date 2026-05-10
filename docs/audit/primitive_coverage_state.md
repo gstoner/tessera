@@ -76,15 +76,15 @@ missing Python API names:
 
 | Contract axis | Missing / partial count |
 |---|---:|
-| Mathematical semantics | 339 |
-| Shape rule | 339 |
-| Dtype/layout rule | 339 |
+| Mathematical semantics | 326 |
+| Shape rule | 326 |
+| Dtype/layout rule | 326 |
 | Batching rule | 362 |
 | Transpose rule | 312 |
 | Sharding rule | 362 |
 | Backend kernel | 362 |
-| JVP | 287 |
-| VJP | 197 |
+| JVP | 273 |
+| VJP | 183 |
 | Tests | 191 |
 | Lowering rule | 157 |
 | Masking/effect rule | 27 |
@@ -98,7 +98,10 @@ contract axes for the primitives already present.
    - Continue promoting selected primitives from "Python reference" to explicit
      contracts. This pass hardened S15 data/tokenizer non-differentiability
      declarations, reduction aliases, and memory primitive math/shape/dtype
-     contracts.
+     contracts. A follow-up pass promoted `linear_general`, `sgd`, and core
+     S11 losses to `explicit_semantic` contracts with complete math, shape, and
+     dtype/layout axes. The S7 `conv1d` reference now also carries an
+     `explicit_semantic` contract plus VJP/JVP coverage.
 
 2. **Autodiff coverage**
    - A focused pass now registers VJP/JVP rules for `linear_general`, `sgd`,

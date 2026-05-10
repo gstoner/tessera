@@ -1036,6 +1036,98 @@ def vjp_selective_ssm(
     return (dx, dA, dB, dC, ddelta)
 
 
+def _conv1d_forward_fp64(
+    x,
+    weight,
+    *,
+    stride: int = 1,
+    padding: int = 0,
+    dilation: int = 1,
+    groups: int = 1,
+) -> np.ndarray:
+    """NCL grouped Conv1d reference that preserves fp64 for adjoint tests."""
+
+    x_arr = np.asarray(x, dtype=np.float64)
+    w_arr = np.asarray(weight, dtype=np.float64)
+    if x_arr.ndim != 3 or w_arr.ndim != 3:
+        raise ValueError("conv1d expects x [N,C,L] and weight [O,I,K]")
+    n, c_in, length = x_arr.shape
+    c_out, c_per_group, kernel = w_arr.shape
+    if groups <= 0 or c_in % groups != 0 or c_out % groups != 0:
+        raise ValueError("groups must divide input and output channels")
+    if c_per_group != c_in // groups:
+        raise ValueError("weight input channels must equal C_in/groups")
+    out_len = (length + 2 * padding - dilation * (kernel - 1) - 1) // stride + 1
+    if out_len <= 0:
+        raise ValueError("conv1d output length must be positive")
+
+    padded = np.pad(x_arr, ((0, 0), (0, 0), (padding, padding)))
+    out = np.zeros((n, c_out, out_len), dtype=np.float64)
+    out_per_group = c_out // groups
+    in_per_group = c_in // groups
+    for b in range(n):
+        for g in range(groups):
+            in_base = g * in_per_group
+            out_base = g * out_per_group
+            for oc in range(out_per_group):
+                oc_abs = out_base + oc
+                for pos in range(out_len):
+                    start = pos * stride
+                    acc = 0.0
+                    for ic in range(in_per_group):
+                        ic_abs = in_base + ic
+                        for k in range(kernel):
+                            acc += padded[b, ic_abs, start + k * dilation] * w_arr[oc_abs, ic, k]
+                    out[b, oc_abs, pos] = acc
+    return out
+
+
+@_vjp("conv1d")
+def vjp_conv1d(
+    dout,
+    x,
+    weight,
+    bias=None,
+    *,
+    stride: int = 1,
+    padding: int = 0,
+    dilation: int = 1,
+    groups: int = 1,
+    **_,
+):
+    x_arr = np.asarray(x, dtype=np.float64)
+    w_arr = np.asarray(weight, dtype=np.float64)
+    do = np.asarray(dout, dtype=np.float64)
+    n, c_in, length = x_arr.shape
+    c_out, _, kernel = w_arr.shape
+    out_len = do.shape[-1]
+    padded = np.pad(x_arr, ((0, 0), (0, 0), (padding, padding)))
+    dx_padded = np.zeros_like(padded, dtype=np.float64)
+    dw = np.zeros_like(w_arr, dtype=np.float64)
+    out_per_group = c_out // groups
+    in_per_group = c_in // groups
+
+    for b in range(n):
+        for g in range(groups):
+            in_base = g * in_per_group
+            out_base = g * out_per_group
+            for oc in range(out_per_group):
+                oc_abs = out_base + oc
+                for pos in range(out_len):
+                    start = pos * stride
+                    grad = do[b, oc_abs, pos]
+                    for ic in range(in_per_group):
+                        ic_abs = in_base + ic
+                        for k in range(kernel):
+                            x_pos = start + k * dilation
+                            dw[oc_abs, ic, k] += grad * padded[b, ic_abs, x_pos]
+                            dx_padded[b, ic_abs, x_pos] += grad * w_arr[oc_abs, ic, k]
+
+    dx = dx_padded[:, :, padding:padding + length] if padding else dx_padded
+    db = do.sum(axis=(0, 2)) if bias is not None else None
+    return (dx.astype(np.asarray(x).dtype, copy=False), dw.astype(np.asarray(weight).dtype, copy=False), db)
+
+
 @_vjp("depthwise_conv1d")
 def vjp_depthwise_conv1d(dout, x, w=None, *, kernel_size, padding=0, causal=False, state=None, **_):
     """Adjoint of depthwise 1-D conv.

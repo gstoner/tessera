@@ -388,8 +388,10 @@ now exposes `LinearGeneral`, `Einsum`, `LoRALinear`, `Conv1d`,
 and `mla_decode`, with coverage entries and unit tests. A reference
 Titans/Atlas memory surface now ships as `memory_read`, `memory_write`, and
 `memory_evict`, with explicit math/shape/dtype contracts and lowering/backend
-gates in the dashboard. `linear_general` now has focused VJP/JVP rules and a
-Graph IR catalog entry. Remaining S7 work: Conv3d, sequence flip/masking,
+gates in the dashboard. `conv1d` now has fp64 reference semantics, VJP/JVP
+coverage, and an `explicit_semantic` contract; `linear_general` also has an
+`explicit_semantic` contract, focused VJP/JVP rules, and a Graph IR catalog
+entry. Remaining S7 work: Conv3d, sequence flip/masking,
 stochastic depth, memory state ABI integration, and Graph IR/backend/VJP/JVP/
 batching/sharding rules for the remaining Python-reference layers.
 
@@ -511,11 +513,13 @@ regression (`mse_loss`, `mae_loss`, `huber_loss`, `smooth_l1_loss`,
 `score_matching_loss`), and sequence (`ctc_loss`, `seq2seq_loss`).
 Focused VJP/JVP and Graph IR catalog coverage now exists for MSE/MAE/Huber/
 SmoothL1, log-cosh, BCE, DDPM noise-prediction, score matching, and VLB
-reducers. Remaining S11 work: VJP/JVP registration for the remaining
-classification, distribution, contrastive, and sequence losses, reduction-policy
-registry metadata, backend kernels, and larger numerical stability goldens. S15
-data/tokenizer primitives are now explicitly declared non-differentiable in the
-coverage contract instead of appearing as missing autodiff work.
+reducers, and those losses now carry `explicit_semantic` math/shape/dtype
+contracts. Remaining S11 work: VJP/JVP registration for the remaining
+classification, distribution, contrastive, and sequence losses,
+reduction-policy registry metadata, backend kernels, and larger numerical
+stability goldens. S15 data/tokenizer primitives are now explicitly declared
+non-differentiable in the coverage contract instead of appearing as missing
+autodiff work.
 
 ### [S12] State serialization and checkpointing 🚧
 

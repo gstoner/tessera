@@ -47,12 +47,17 @@ def test_s10_sgd_and_s7_linear_general_have_transform_rules():
 
 
 def test_focused_python_reference_primitives_have_graph_ir_lowering_entries():
-    for name in ("linear_general", "sgd", "mse_loss", "binary_cross_entropy_loss"):
+    for name in ("conv1d", "linear_general", "sgd", "mse_loss", "binary_cross_entropy_loss"):
         entry = coverage_for(name)
-        assert entry.metadata["graph_ir_lowering"] == "registered"
-        assert entry.contract_status["lowering_rule"] == "complete"
+        assert entry.metadata["contract_schema"] == "explicit_semantic"
+        assert entry.contract_status["math_semantics"] == "complete"
+        assert entry.contract_status["shape_rule"] == "complete"
+        assert entry.contract_status["dtype_layout_rule"] == "complete"
         assert entry.contract_status["vjp"] == "complete"
         assert entry.contract_status["jvp"] == "complete"
+        if name != "conv1d":
+            assert entry.metadata["graph_ir_lowering"] == "registered"
+            assert entry.contract_status["lowering_rule"] == "complete"
 
 
 def test_graph_ir_builder_lowers_promoted_s7_s10_s11_calls():

@@ -220,6 +220,33 @@ def jvp_linear_general(primals, tangents, *, axis=-1, **_):
     return y, dy
 
 
+@_jvp("conv1d")
+def jvp_conv1d(
+    primals,
+    tangents,
+    *,
+    stride: int = 1,
+    padding: int = 0,
+    dilation: int = 1,
+    groups: int = 1,
+    **_,
+):
+    from .vjp import _conv1d_forward_fp64
+
+    x, weight = primals[:2]
+    dx, dweight = tangents[:2]
+    bias = primals[2] if len(primals) > 2 else None
+    dbias = tangents[2] if len(tangents) > 2 else None
+    kwargs = dict(stride=stride, padding=padding, dilation=dilation, groups=groups)
+    primal = _conv1d_forward_fp64(x, weight, **kwargs)
+    tangent = _conv1d_forward_fp64(dx, weight, **kwargs) + _conv1d_forward_fp64(x, dweight, **kwargs)
+    if bias is not None:
+        primal = primal + np.asarray(bias, dtype=np.float64).reshape(1, -1, 1)
+    if dbias is not None:
+        tangent = tangent + np.asarray(dbias, dtype=np.float64).reshape(1, -1, 1)
+    return primal, tangent
+
+
 @_jvp("sgd")
 def jvp_sgd(primals, tangents, *, lr, **_):
     params, grads = primals

@@ -149,6 +149,27 @@ def _existing_op_has_jvp(public_name: str, registered: frozenset[str]) -> bool:
     return any(name in registered for name in candidates)
 
 
+def _merge_contract_status(
+    base: Mapping[str, str],
+    promoted: Mapping[str, str],
+) -> dict[str, str]:
+    """Merge a catalog contract with a Python-reference contract.
+
+    `OP_SPECS` gives Graph IR identity/lowering truth while the Python
+    reference surface carries tests and, for selected hardened primitives,
+    explicit math/shape/dtype/autodiff declarations. Complete and
+    not-applicable declarations are stronger than partial/planned defaults.
+    """
+
+    merged = dict(base)
+    for field, value in promoted.items():
+        if value in {"complete", "not_applicable"}:
+            merged[field] = value
+        elif merged.get(field) == "planned":
+            merged[field] = value
+    return merged
+
+
 _EXISTING_MODEL_FAMILIES: dict[str, tuple[str, ...]] = {
     "attn_compressed_blocks": ("Linformer/cosFormer", "Megalodon/Griffin"),
     "attn_sliding_window": ("Megalodon/Griffin",),
@@ -472,6 +493,19 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "min": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete", "vjp": "complete"},
         "cummax": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "cummin": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "conv1d": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "linear_general": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "sgd": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "mse_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "mae_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "huber_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "smooth_l1_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "log_cosh_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "cross_entropy_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "binary_cross_entropy_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "ddpm_noise_pred_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "score_matching_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "vlb_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "memory_read": {
             "math_semantics": "complete",
             "shape_rule": "complete",
@@ -536,6 +570,11 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         }
         if category in {"data", "tokenizer", "serialization", "aot", "conformance"}:
             metadata["graph_ir_lowering"] = "not_applicable"
+        if all(
+            contract[field] == "complete"
+            for field in ("math_semantics", "shape_rule", "dtype_layout_rule")
+        ):
+            metadata["contract_schema"] = "explicit_semantic"
         python_entry = PrimitiveCoverage(
             name=name,
             category=category,
@@ -552,8 +591,7 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         )
         existing = entries.get(name)
         if existing is not None:
-            merged_contract = dict(existing.contract_status)
-            merged_contract["tests"] = "complete"
+            merged_contract = _merge_contract_status(existing.contract_status, python_entry.contract_status)
             entries[name] = PrimitiveCoverage(
                 name=existing.name,
                 category=existing.category,
@@ -566,7 +604,18 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
                 graph_name=existing.graph_name,
                 effect=existing.effect,
                 lowering=existing.lowering,
-                metadata={**existing.metadata, "implementation": "op_catalog+python_reference"},
+                metadata={
+                    **existing.metadata,
+                    "implementation": "op_catalog+python_reference",
+                    "contract_schema": (
+                        "explicit_semantic"
+                        if all(
+                            merged_contract[field] == "complete"
+                            for field in ("math_semantics", "shape_rule", "dtype_layout_rule")
+                        )
+                        else existing.metadata.get("contract_schema", "explicit_partial")
+                    ),
+                },
             )
         else:
             entries[name] = python_entry

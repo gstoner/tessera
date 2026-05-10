@@ -30,7 +30,7 @@ Design notes:
 
 from __future__ import annotations
 
-from dataclasses import is_dataclass, fields as dataclass_fields
+from dataclasses import dataclass, is_dataclass, fields as dataclass_fields
 from typing import (
     Any,
     Callable,
@@ -397,6 +397,16 @@ def tree_any(predicate: Callable[[Any], bool], tree: Any) -> bool:
 # ───────────────────────────────────────────────────────────────────────────
 
 
+@dataclass(frozen=True)
+class StateCollectionSpec:
+    """Semantic contract for one Tessera model-state collection."""
+
+    name: str
+    trainable: bool = False
+    mutable: bool = False
+    persistent: bool = True
+
+
 STATE_COLLECTIONS: tuple[str, ...] = (
     "params",            # trainable parameters
     "buffers",           # non-trainable named tensors persisted in state_dict
@@ -407,6 +417,74 @@ STATE_COLLECTIONS: tuple[str, ...] = (
     "memory_state",      # Titans/Atlas-style learned memory banks
     "metrics",           # running losses, accuracies, eval metrics
 )
+
+STATE_COLLECTION_SPECS: dict[str, StateCollectionSpec] = {
+    "params": StateCollectionSpec("params", trainable=True, persistent=True),
+    "buffers": StateCollectionSpec("buffers", persistent=True),
+    "batch_stats": StateCollectionSpec("batch_stats", mutable=True, persistent=True),
+    "optimizer_slots": StateCollectionSpec("optimizer_slots", mutable=True, persistent=True),
+    "rng_state": StateCollectionSpec("rng_state", mutable=True, persistent=True),
+    "recurrent_state": StateCollectionSpec("recurrent_state", mutable=True, persistent=False),
+    "memory_state": StateCollectionSpec("memory_state", mutable=True, persistent=True),
+    "metrics": StateCollectionSpec("metrics", mutable=True, persistent=False),
+}
+
+
+def empty_state_tree() -> dict[str, dict[str, Any]]:
+    """Return an empty state tree with every known collection present."""
+    return {name: {} for name in STATE_COLLECTIONS}
+
+
+_BATCH_STAT_BASENAMES = frozenset(
+    {"running_mean", "running_var", "num_batches_tracked"}
+)
+
+
+def _is_batch_stat_name(name: str) -> bool:
+    return name.rsplit(".", 1)[-1] in _BATCH_STAT_BASENAMES
+
+
+def module_state_tree(
+    module: Any,
+    *,
+    include_empty: bool = True,
+    extra: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Project a ``tessera.nn.Module`` into the S3 state taxonomy.
+
+    Parameters and persistent buffers are copied out as numpy arrays so callers
+    can filter, partition, serialize, or checkpoint the result without holding
+    framework object handles. BatchNorm-style running-stat buffers are routed to
+    ``batch_stats``; other persistent buffers go to ``buffers``.
+    """
+    state = empty_state_tree() if include_empty else {}
+
+    def ensure(collection: str) -> dict[str, Any]:
+        if collection not in STATE_COLLECTIONS:
+            raise ValueError(f"unknown state collection: {collection}")
+        return state.setdefault(collection, {})
+
+    if not hasattr(module, "named_parameters") or not hasattr(module, "named_buffers"):
+        raise TypeError("module_state_tree expects a tessera.nn.Module-like object")
+
+    for name, param in module.named_parameters():
+        ensure("params")[name] = param.numpy().copy()
+
+    for name, buffer in module.named_buffers():
+        if not getattr(buffer, "persistent", True):
+            continue
+        collection = "batch_stats" if _is_batch_stat_name(name) else "buffers"
+        ensure(collection)[name] = buffer.numpy().copy()
+
+    if extra is not None:
+        for collection, values in extra.items():
+            if collection not in STATE_COLLECTIONS:
+                raise ValueError(f"unknown state collection: {collection}")
+            ensure(collection).update(dict(values))
+
+    if not include_empty:
+        state = {k: v for k, v in state.items() if v}
+    return state
 
 
 def state_filter(state: Mapping[str, Any], keep: Iterable[str]) -> dict[str, Any]:
@@ -443,6 +521,7 @@ def state_partition(
 
 __all__ = [
     "TreeDef",
+    "StateCollectionSpec",
     "tree_flatten",
     "tree_unflatten",
     "tree_map",
@@ -454,6 +533,9 @@ __all__ = [
     "tree_any",
     "register_pytree_node",
     "STATE_COLLECTIONS",
+    "STATE_COLLECTION_SPECS",
+    "empty_state_tree",
+    "module_state_tree",
     "state_filter",
     "state_partition",
 ]

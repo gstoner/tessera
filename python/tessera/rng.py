@@ -26,8 +26,8 @@ Design notes:
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
-from typing import Sequence
+from dataclasses import dataclass
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 
@@ -66,6 +66,8 @@ class RNGKey:
     seed_high: int
     seed_low: int = 0
     name: str = ""  # Optional debugging label, doesn't affect samples.
+    algorithm: str = "philox"
+    version: int = 1
 
     @staticmethod
     def from_seed(seed: int, *, name: str = "") -> "RNGKey":
@@ -74,6 +76,33 @@ class RNGKey:
         # produce correlated streams.
         high = _hash_to_u64("seed", int(seed))
         return RNGKey(seed_high=high, seed_low=0, name=name)
+
+    @staticmethod
+    def from_state(state: Mapping[str, Any]) -> "RNGKey":
+        """Restore a key from ``to_state`` replay metadata."""
+        algorithm = str(state.get("algorithm", "philox"))
+        version = int(state.get("version", 1))
+        if algorithm != "philox" or version != 1:
+            raise ValueError(
+                f"unsupported RNGKey state: algorithm={algorithm!r} version={version}"
+            )
+        return RNGKey(
+            seed_high=int(state["seed_high"]),
+            seed_low=int(state.get("seed_low", 0)),
+            name=str(state.get("name", "")),
+            algorithm=algorithm,
+            version=version,
+        )
+
+    def to_state(self) -> dict[str, int | str]:
+        """Return deterministic replay metadata for checkpoint/state trees."""
+        return {
+            "algorithm": self.algorithm,
+            "version": self.version,
+            "seed_high": int(self.seed_high),
+            "seed_low": int(self.seed_low),
+            "name": self.name,
+        }
 
     def split(self, num: int = 2) -> tuple["RNGKey", ...]:
         """Deterministically derive `num` independent child keys."""
@@ -84,6 +113,8 @@ class RNGKey:
                 seed_high=_hash_to_u64("split", self.seed_high, self.seed_low, i),
                 seed_low=0,
                 name=f"{self.name}.split[{i}]" if self.name else "",
+                algorithm=self.algorithm,
+                version=self.version,
             )
             for i in range(num)
         )
@@ -100,6 +131,8 @@ class RNGKey:
             seed_high=self.seed_high,
             seed_low=_hash_to_u64("fold_in", self.seed_low, data),
             name=self.name,
+            algorithm=self.algorithm,
+            version=self.version,
         )
 
     def clone(self) -> "RNGKey":
@@ -112,6 +145,8 @@ class RNGKey:
             seed_high=self.seed_high,
             seed_low=self.seed_low,
             name=self.name,
+            algorithm=self.algorithm,
+            version=self.version,
         )
 
     def _generator(self) -> np.random.Generator:

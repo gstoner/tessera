@@ -106,8 +106,8 @@ the high-risk S1 entries and milestone sentinels. Tests compare these rows to
 |-----------|----------|--------|-------------|-------------------|----------------|
 | `matmul` | loop_nest | partial | yes | math_semantics, shape_rule, dtype_layout_rule, batching_rule, transpose_rule, sharding_rule, backend_kernel, tests | - |
 | `permute` | tensor_algebra | partial | yes | math_semantics, shape_rule, dtype_layout_rule, jvp, batching_rule, transpose_rule, sharding_rule, backend_kernel, tests | - |
-| `collective_permute` | collective | planned | no | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, masking_effect_rule, lowering_rule, backend_kernel, tests | all |
-| `scan` | control_flow | planned | no | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, masking_effect_rule, lowering_rule, backend_kernel, tests | RNN/xLSTM, Mamba/SSM, Megalodon/Griffin |
+| `collective_permute` | collective | partial | yes | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, lowering_rule, backend_kernel | all |
+| `scan` | control_flow | partial | yes | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, lowering_rule, backend_kernel | all |
 | `selective_ssm` | state_space | partial | yes | math_semantics, shape_rule, dtype_layout_rule, jvp, batching_rule, transpose_rule, sharding_rule, masking_effect_rule, backend_kernel, tests | Mamba/SSM |
 | `dataset_map` | data | planned | no | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, masking_effect_rule, lowering_rule, backend_kernel, tests | all |
 | `tokenizer_bpe` | tokenizer | planned | no | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, masking_effect_rule, lowering_rule, backend_kernel, tests | all |

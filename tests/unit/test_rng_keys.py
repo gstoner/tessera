@@ -13,6 +13,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+import tessera as ts
 from tessera.rng import (
     RNGKey,
     bernoulli,
@@ -55,6 +56,23 @@ def test_rng_key_supports_optional_name_for_debugging():
         uniform(k, (4,), dtype="fp32"),
         uniform(k_unnamed, (4,), dtype="fp32"),
     )
+
+
+def test_rng_key_round_trips_replay_metadata():
+    k = RNGKey.from_seed(7, name="dropout").fold_in("layer_0")
+    restored = RNGKey.from_state(k.to_state())
+    assert restored == k
+    np.testing.assert_array_equal(
+        normal(restored, (8,), dtype="fp32"),
+        normal(k, (8,), dtype="fp32"),
+    )
+
+
+def test_rng_key_rejects_unknown_replay_metadata_version():
+    state = RNGKey.from_seed(0).to_state()
+    state["version"] = 999
+    with pytest.raises(ValueError, match="unsupported RNGKey state"):
+        RNGKey.from_state(state)
 
 
 # ── split: independence + reproducibility ──────────────────────────────────
@@ -114,6 +132,15 @@ def test_clone_yields_equivalent_stream():
     a = RNGKey.from_seed(42)
     b = a.clone()
     np.testing.assert_array_equal(uniform(a, (16,)), uniform(b, (16,)))
+
+
+def test_ops_dropout_accepts_typed_rng_key():
+    x = np.ones((512,), dtype=np.float32)
+    key = RNGKey.from_seed(123, name="dropout")
+    a = ts.ops.dropout(x, p=0.25, rng=key)
+    b = ts.ops.dropout(x, p=0.25, rng=RNGKey.from_state(key.to_state()))
+    np.testing.assert_array_equal(a, b)
+    assert set(np.unique(a)).issubset({0.0, 1.0 / 0.75})
 
 
 # ── samplers: shape + dtype + determinism ──────────────────────────────────

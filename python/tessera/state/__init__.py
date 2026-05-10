@@ -7,7 +7,11 @@ and the state taxonomy (`STATE_COLLECTIONS`, `state_filter`,
 
 from .tree import (
     STATE_COLLECTIONS,
+    STATE_COLLECTION_SPECS,
+    StateCollectionSpec,
     TreeDef,
+    empty_state_tree,
+    module_state_tree,
     register_pytree_node,
     state_filter,
     state_partition,
@@ -24,7 +28,11 @@ from .tree import (
 
 __all__ = [
     "STATE_COLLECTIONS",
+    "STATE_COLLECTION_SPECS",
+    "StateCollectionSpec",
     "TreeDef",
+    "empty_state_tree",
+    "module_state_tree",
     "register_pytree_node",
     "state_filter",
     "state_partition",

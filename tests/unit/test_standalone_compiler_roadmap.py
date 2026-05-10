@@ -136,12 +136,11 @@ def test_existing_coverage_consults_autodiff_vjp_registry():
 
 
 def test_primitive_coverage_tracks_planned_standalone_gaps_separately():
-    scan = coverage_for("scan")
+    custom_primitive = coverage_for("custom_primitive")
     memory_write = coverage_for("memory_write")
 
-    assert not scan.existing_op
-    assert scan.status == "planned"
-    assert "Mamba/SSM" in scan.model_families
+    assert not custom_primitive.existing_op
+    assert custom_primitive.status == "planned"
     assert not memory_write.existing_op
     assert "Titans/Atlas" in memory_write.model_families
 
@@ -195,9 +194,31 @@ def test_primitive_coverage_includes_s2_reductions_and_stability():
 
 def test_primitive_coverage_includes_s5_transforms_and_axis_helpers():
     entries = all_primitive_coverages()
-    for name in ("vjp", "jvp", "vmap", "pmap", "fori_loop", "remat",
-                 "axis_index", "axis_size", "autocast"):
+    for name in ("scan", "associative_scan", "while_loop", "fori_loop",
+                 "cond", "switch", "map", "value_and_grad", "vjp", "jvp",
+                 "vmap", "pmap", "remat", "checkpoint", "axis_index",
+                 "axis_size", "axis_name", "autocast"):
         assert name in entries, f"S5 transform missing: {name}"
+        assert entries[name].existing_op
+
+
+def test_primitive_coverage_includes_s3_state_tree_surface():
+    entries = all_primitive_coverages()
+    for name in ("tree_flatten", "tree_unflatten", "tree_map", "tree_reduce",
+                 "tree_transpose", "empty_state_tree", "module_state_tree",
+                 "state_filter", "state_partition", "state_collection_spec"):
+        assert name in entries, f"S3 state-tree primitive missing: {name}"
+        assert entries[name].existing_op
+
+
+def test_primitive_coverage_includes_s4_rng_surface():
+    entries = all_primitive_coverages()
+    for name in ("rng_key", "rng_split", "rng_fold_in", "rng_clone",
+                 "rng_uniform", "rng_normal", "rng_truncated_normal",
+                 "rng_bernoulli", "rng_categorical", "rng_multinomial",
+                 "rng_randint", "rng_permutation", "rng_gamma", "rng_beta",
+                 "rng_dirichlet", "rng_poisson"):
+        assert name in entries, f"S4 RNG primitive missing: {name}"
 
 
 def test_primitive_coverage_includes_s6_collectives_library():
@@ -205,6 +226,7 @@ def test_primitive_coverage_includes_s6_collectives_library():
     for name in ("psum", "pmean", "pmax", "pmin", "collective_permute", "broadcast_to_axis",
                  "shard_map", "named_sharding", "partition_spec"):
         assert name in entries, f"S6 collective missing: {name}"
+        assert entries[name].existing_op
     assert entries["collective_permute"].category == "collective"
     assert entries["permute"].category == "tensor_algebra"
 

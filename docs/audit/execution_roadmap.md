@@ -223,9 +223,21 @@ compiler primitives, not PyTorch compatibility wrappers.
 - Dynamic-shape tests cover symbolic batch, sequence, image height/width, and
   memory-window dimensions.
 
-### [S3] Pytrees, module state, and model containers 📋
+### [S3] Pytrees, module state, and model containers 🚧
 
 **Scope:** M (~500 LOC code + ~350 LOC tests). Can run after S1.
+
+**Status (2026-05-10):** S3 is implemented as a Python/reference compiler
+surface in `python/tessera/state/tree.py` with tests in
+`tests/unit/test_state_tree.py`. Covered today: `tree_flatten`,
+`tree_unflatten`, `tree_map`, `tree_reduce`, `tree_transpose`,
+`tree_leaves`, `tree_structure`, `tree_all`, `tree_any`, custom pytree node
+registration, typed `STATE_COLLECTION_SPECS`, `empty_state_tree`,
+`module_state_tree`, `state_filter`, and `state_partition`. The module-state
+projection separates trainable params, persistent buffers, and BatchNorm-style
+batch stats without depending on PyTorch/JAX/Flax objects. Remaining S3
+hardening is Graph IR state typing, optimizer/recurrent/memory state producers,
+and sharded state-tree lowering.
 
 Add a Tessera-native tree/state abstraction inspired by JAX pytrees and Flax
 collections, but owned by Tessera semantics.
@@ -240,10 +252,21 @@ collections, but owned by Tessera semantics.
 - Tests cover nested modules, shared containers, mutable/non-mutable buffers,
   optimizer state, recurrent state, memory state, and metrics.
 
-### [S4] Explicit RNG and stochastic effects 📋
+### [S4] Explicit RNG and stochastic effects 🚧
 
 **Scope:** M (~450 LOC code + ~300 LOC tests). Depends on S1; integrates with
 S3 once state trees exist.
+
+**Status (2026-05-10):** S4 is implemented as a typed Python/reference RNG
+surface in `python/tessera/rng.py` with tests in `tests/unit/test_rng_keys.py`.
+Covered today: `RNGKey.from_seed`, `split`, `fold_in`, `clone`, named streams,
+serializable replay metadata (`to_state` / `from_state`), and samplers
+`uniform`, `normal`, `truncated_normal`, `bernoulli`, `categorical`,
+`multinomial`, `randint`, `permutation`, `gamma`, `beta`, `dirichlet`, and
+`poisson`. `ts.ops.dropout(..., rng=RNGKey)` now accepts explicit typed RNG
+streams. Remaining S4 hardening is Graph IR RNG-key typing, typed RNG lowering
+for all random ops, stochastic-depth/random-mask callsites, and checkpoint /
+distributed replay integration through S3/S6.
 
 Make randomness a typed, compiler-visible effect rather than an implicit
 process-global source.
@@ -260,10 +283,21 @@ process-global source.
 - Tests prove deterministic replay across single-device, sharded, checkpointed,
   and resumed runs.
 
-### [S5] Control flow and transform composition 📋
+### [S5] Control flow and transform composition 🚧
 
 **Scope:** XL (~1,200 LOC code + ~800 LOC tests). Depends on S1; uses S2 for
 indexing-heavy cases.
+
+**Status (2026-05-10):** S5 is implemented as a CPU/reference compiler
+surface in `python/tessera/control.py`, layered over the existing autodiff
+transforms in `python/tessera/autodiff/`. Covered today: `scan`,
+`associative_scan`, `while_loop`, `fori_loop`, `cond`, `switch`, `map`,
+`pmap`, `axis_index`, `axis_size`, `axis_name`, `value_and_grad`, `vjp`,
+`jvp`, `vmap`, `remat`, `checkpoint`, and `autocast`. Tests cover structured
+control flow, axis context, `grad(vmap(f))`, `vmap(grad(f))`, `grad(scan(f))`,
+and `remat(scan(f))`. Remaining S5 hardening is Graph IR / Schedule IR /
+Tile IR control-flow lowering, split-transpose scan rules, backend-native
+batched lowering, and full sharding-aware transform rules.
 
 Promote JAX-like transforms to first-class Tessera compiler semantics rather
 than Python helpers.
@@ -283,10 +317,20 @@ than Python helpers.
 - Tests include `grad(vmap(f))`, `vmap(grad(f))`, `grad(scan(f))`,
   `remat(scan(f))`, and `shard_map(grad(f))` once S6 lands.
 
-### [S6] Native sharding, collectives, and distributed semantics 📋
+### [S6] Native sharding, collectives, and distributed semantics 🚧
 
 **Scope:** L (~800 LOC code + ~500 LOC tests). Depends on S3-S5; GPU runtime
 acceleration depends on Phase G.
+
+**Status (2026-05-10):** S6 is implemented as a CPU/reference sharding surface
+in `python/tessera/sharding.py`. Covered today: `NamedMesh`, `PartitionSpec`,
+`NamedSharding`, `named_sharding`, `partition_spec`, `shard_map`, and
+collective primitives `psum`, `pmean`, `pmax`, `pmin`, `collective_permute`,
+and `broadcast_to_axis`. Tests validate mesh metadata, partition specs,
+reference `shard_map` split/reassemble behavior, axis context, and stacked
+rank-value collectives. Remaining S6 hardening is Graph IR placement typing,
+collective transpose/VJP/sharding rules, multi-axis `shard_map`, optimizer /
+RNG / checkpoint integration, and hardware runtime lowering.
 
 Add compiler-visible placement, sharding, and SPMD mapping semantics, plus the
 collectives primitive library that `shard_map` callees actually invoke.

@@ -8,8 +8,12 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
+import tessera as ts
 from tessera.state import (
     STATE_COLLECTIONS,
+    STATE_COLLECTION_SPECS,
+    empty_state_tree,
+    module_state_tree,
     register_pytree_node,
     state_filter,
     state_partition,
@@ -239,6 +243,54 @@ def test_state_collections_lock_the_taxonomy():
         "rng_state", "recurrent_state", "memory_state", "metrics",
     }
     assert set(STATE_COLLECTIONS) == expected
+
+
+def test_state_collection_specs_distinguish_mutability_and_trainability():
+    assert STATE_COLLECTION_SPECS["params"].trainable
+    assert not STATE_COLLECTION_SPECS["buffers"].trainable
+    assert STATE_COLLECTION_SPECS["batch_stats"].mutable
+    assert STATE_COLLECTION_SPECS["recurrent_state"].mutable
+    assert not STATE_COLLECTION_SPECS["recurrent_state"].persistent
+
+
+def test_empty_state_tree_contains_every_collection():
+    state = empty_state_tree()
+    assert set(state) == set(STATE_COLLECTIONS)
+    assert all(value == {} for value in state.values())
+
+
+def test_module_state_tree_projects_params_buffers_and_batch_stats():
+    class Block(ts.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.linear = ts.nn.Linear(3, 2)
+            self.bn = ts.nn.BatchNorm1d(2)
+            self.register_buffer("mask", np.ones(2, dtype=np.float32))
+            self.register_buffer("scratch", np.zeros(2, dtype=np.float32), persistent=False)
+
+    state = module_state_tree(Block())
+    assert "linear.weight" in state["params"]
+    assert "linear.bias" in state["params"]
+    assert "mask" in state["buffers"]
+    assert "scratch" not in state["buffers"]
+    assert "bn.running_mean" in state["batch_stats"]
+    assert "bn.running_var" in state["batch_stats"]
+    assert "bn.num_batches_tracked" in state["batch_stats"]
+
+
+def test_module_state_tree_supports_extra_collections_and_filtering():
+    m = ts.nn.Linear(2, 2)
+    state = module_state_tree(
+        m,
+        include_empty=False,
+        extra={
+            "optimizer_slots": {"weight.momentum": np.zeros((2, 2))},
+            "metrics": {"loss": 1.25},
+        },
+    )
+    assert set(state) == {"params", "optimizer_slots", "metrics"}
+    opt_and_metrics = state_filter(state, ["optimizer_slots", "metrics"])
+    assert set(opt_and_metrics) == {"optimizer_slots", "metrics"}
 
 
 def test_state_filter_keeps_only_requested_collections():

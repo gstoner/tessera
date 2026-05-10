@@ -482,7 +482,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             x = x._data
         if not 0.0 <= p < 1.0:
             raise ValueError("dropout p must be in [0.0, 1.0)")
-        generator = rng if rng is not None else np.random.default_rng(None if seed is None else int(seed))
+        if rng is not None and hasattr(rng, "_generator"):
+            generator = rng._generator()
+        else:
+            generator = rng if rng is not None else np.random.default_rng(None if seed is None else int(seed))
         mask = generator.binomial(1, 1 - p, x.shape) / (1 - p)
         return x * mask
 
@@ -3170,6 +3173,39 @@ from . import nn  # noqa: E402
 
 # autodiff installs tape-aware wrappers on `ops.<name>`; load after `ops` and `nn`.
 from . import autodiff  # noqa: E402
+
+# S5/S6 standalone compiler semantics.
+from . import control  # noqa: E402
+from . import sharding  # noqa: E402
+from .control import (  # noqa: E402
+    associative_scan,
+    axis_index,
+    axis_name,
+    axis_size,
+    cond,
+    fori_loop,
+    map,
+    pmap,
+    scan,
+    switch,
+    value_and_grad,
+    vjp,
+    while_loop,
+)
+from .sharding import (  # noqa: E402
+    NamedMesh,
+    NamedSharding,
+    PartitionSpec,
+    broadcast_to_axis,
+    collective_permute,
+    named_sharding,
+    partition_spec,
+    pmax,
+    pmean,
+    pmin,
+    psum,
+    shard_map,
+)
 
 # KV-cache handle abstraction (Phase B2 of execution_roadmap.md).
 from . import cache  # noqa: E402

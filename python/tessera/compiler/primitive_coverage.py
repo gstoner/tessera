@@ -500,8 +500,10 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         },
     }
     for name, (category, notes) in python_primitives.items():
-        # Python primitives don't have a VJP today (they're structural ops);
-        # tests/lowering/math are partial since shipped.
+        # Python primitives default to partial coverage. We then promote
+        # individual axes to `complete` based on what's actually registered:
+        #   - vjp/jvp: consult `_VJPS`/`_JVPS` — same hook as `OP_SPECS` ops.
+        #   - other axes via `contract_overrides[name]` below.
         contract = _contracts(
             math_semantics="partial",
             shape_rule="partial",
@@ -512,6 +514,11 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         )
         if category in nondifferentiable_categories:
             contract.update(vjp="not_applicable", jvp="not_applicable", transpose_rule="not_applicable")
+        else:
+            if _existing_op_has_vjp(name, registered_vjps):
+                contract["vjp"] = "complete"
+            if _existing_op_has_jvp(name, registered_jvps):
+                contract["jvp"] = "complete"
         if category in {"data", "tokenizer"}:
             contract.update(
                 math_semantics="complete",

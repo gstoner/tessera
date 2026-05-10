@@ -1797,4 +1797,409 @@ def vjp_vlb_loss(dout, terms, *, reduction="mean", **_):
     return (_reduction_cotangent(dout, terms_arr.shape, reduction),)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Autodiff-coverage hardening pass — S11 classification + distribution +
+# contrastive + sequence losses, S7 layer/pooling. Per the
+# "Recommended Next Work" in `docs/audit/primitive_coverage_state.md`.
+#
+# Each VJP here is paired with a JVP in `autodiff/jvp.py` and verified
+# numerically in `tests/unit/test_autodiff_loss_layer_coverage.py`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _softmax(x: np.ndarray, axis: int = -1) -> np.ndarray:
+    m = np.max(x, axis=axis, keepdims=True)
+    e = np.exp(x - m)
+    return e / np.sum(e, axis=axis, keepdims=True)
+
+
+# ── S11 classification ──────────────────────────────────────────────────────
+
+
+@_vjp("focal_loss")
+def vjp_focal_loss(dout, logits, targets, *, gamma=2.0, alpha=None,
+                   reduction="mean", **_):
+    """Focal loss = -((1-p_t)^γ) * log(p_t) where p_t = softmax(logits)[target].
+
+    targets are int class indices; the gradient flows only through `logits`.
+    """
+    logits_arr = np.asarray(logits).astype(np.float64, copy=False)
+    targets_arr = np.asarray(targets).astype(np.int64)
+    p = _softmax(logits_arr, axis=-1)
+    flat_p = p.reshape(-1, p.shape[-1])
+    idx = targets_arr.reshape(-1)
+    rng = np.arange(idx.size)
+    pt = np.maximum(flat_p[rng, idx], 1e-12)
+
+    # dL/dpt = γ*(1-pt)^(γ-1)*log(pt) - (1-pt)^γ / pt   (per sample)
+    one_minus_pt = 1.0 - pt
+    dL_dpt = (
+        gamma * np.power(one_minus_pt, gamma - 1.0) * np.log(pt)
+        - np.power(one_minus_pt, gamma) / pt
+    )
+    if alpha is not None:
+        dL_dpt = float(alpha) * dL_dpt
+
+    # Build dL/dlogits via softmax Jacobian: dpt/dlogit_j = pt*(δ_{j,target} - p_j)
+    grad_flat = np.zeros_like(flat_p)
+    grad_flat[rng, idx] = pt * dL_dpt
+    grad_flat -= (pt * dL_dpt)[:, None] * flat_p
+    grad = grad_flat.reshape(logits_arr.shape)
+
+    # Apply outer reduction cotangent across the per-sample loss surface.
+    do = np.asarray(dout)
+    if reduction == "mean":
+        scale = 1.0 / max(int(np.prod(targets_arr.shape)), 1)
+        grad = grad * (do * scale)  # scalar `do` broadcasts.
+    elif reduction == "sum":
+        grad = grad * do
+    else:  # 'none' — `do` has shape == targets_arr.shape; broadcast over class axis.
+        grad = grad * do.reshape(targets_arr.shape + (1,))
+    return (grad, None)
+
+
+@_vjp("label_smoothed_cross_entropy")
+def vjp_label_smoothed_cross_entropy(dout, logits, targets,
+                                     *, smoothing=0.1, reduction="mean", **_):
+    logits_arr = np.asarray(logits).astype(np.float64, copy=False)
+    targets_arr = np.asarray(targets).astype(np.int64)
+    n_classes = logits_arr.shape[-1]
+    smooth = float(smoothing)
+    one_hot = np.full(
+        targets_arr.shape + (n_classes,),
+        smooth / max(1, n_classes - 1),
+        dtype=np.float64,
+    )
+    np.put_along_axis(one_hot, targets_arr[..., None], 1.0 - smooth, axis=-1)
+
+    # CE-with-soft-targets gradient: dL/dlogits = softmax(logits) - one_hot.
+    grad = _softmax(logits_arr, axis=-1) - one_hot
+    do = np.asarray(dout)
+    if reduction == "mean":
+        do = do / max(int(np.prod(targets_arr.shape)), 1)
+    if reduction == "none":
+        do = do.reshape(targets_arr.shape + (1,))
+        return (grad * do, None)
+    return (grad * do, None)
+
+
+@_vjp("kl_divergence")
+def vjp_kl_divergence(dout, p_log_probs, q_probs, *, reduction="mean", **_):
+    """KL(p || q) where p = exp(p_log_probs).
+
+    dL/dp_log_probs[i] = p_i * (lp_i - log q_i + 1)
+    dL/dq_probs[i]     = -p_i / q_i
+    """
+    lp = np.asarray(p_log_probs).astype(np.float64, copy=False)
+    q = np.asarray(q_probs).astype(np.float64, copy=False)
+    p = np.exp(lp)
+    log_q = np.log(np.maximum(q, 1e-12))
+
+    # The reduction is over the leading axes; the inner sum is over axis=-1
+    # so a per-sample cotangent broadcasts to (..., 1) before flowing into
+    # the per-class gradients.
+    leading_shape = lp.shape[:-1]
+    leading_size = max(int(np.prod(leading_shape)) if leading_shape else 1, 1)
+
+    do = np.asarray(dout)
+    if reduction == "mean":
+        do = do / leading_size
+    if reduction == "none":
+        do = do.reshape(leading_shape + (1,))
+    else:
+        do = np.broadcast_to(do, leading_shape).reshape(leading_shape + (1,))
+
+    grad_lp = p * (lp - log_q + 1.0) * do
+    grad_q = -(p / np.maximum(q, 1e-12)) * do
+    return (grad_lp, grad_q)
+
+
+# ── S11 contrastive ─────────────────────────────────────────────────────────
+
+
+@_vjp("triplet_loss")
+def vjp_triplet_loss(dout, anchor, positive, negative,
+                     *, margin=1.0, reduction="mean", **_):
+    a = np.asarray(anchor).astype(np.float64, copy=False)
+    p = np.asarray(positive).astype(np.float64, copy=False)
+    n = np.asarray(negative).astype(np.float64, copy=False)
+    d_ap = np.linalg.norm(a - p, axis=-1)
+    d_an = np.linalg.norm(a - n, axis=-1)
+    raw = d_ap - d_an + float(margin)
+    active = (raw > 0).astype(np.float64)
+
+    # Gradient of the L2 norm `||x||` wrt x is `x / ||x||` (zero at the origin).
+    safe_ap = np.maximum(d_ap, 1e-12)[..., None]
+    safe_an = np.maximum(d_an, 1e-12)[..., None]
+    g_ap = (a - p) / safe_ap
+    g_an = (a - n) / safe_an
+
+    do = _reduction_cotangent(dout, raw.shape, reduction)
+    do = (do * active)[..., None]
+    grad_anchor = do * (g_ap - g_an)
+    grad_positive = -do * g_ap
+    grad_negative = do * g_an
+    return (grad_anchor, grad_positive, grad_negative)
+
+
+@_vjp("contrastive_loss")
+def vjp_contrastive_loss(dout, x1, x2, target, *, margin=1.0,
+                         reduction="mean", **_):
+    a = np.asarray(x1).astype(np.float64, copy=False)
+    b = np.asarray(x2).astype(np.float64, copy=False)
+    t = np.asarray(target).astype(np.float64)
+    diff = a - b
+    dist = np.linalg.norm(diff, axis=-1)
+    safe = np.maximum(dist, 1e-12)
+    margin_active = np.maximum(0.0, float(margin) - dist)
+    # L = t*dist^2 + (1-t)*margin_active^2
+
+    grad_dist = 2.0 * t * dist - 2.0 * (1.0 - t) * margin_active
+    do = _reduction_cotangent(dout, dist.shape, reduction)
+    grad_dist = grad_dist * do
+    grad_diff = (grad_dist / safe)[..., None] * diff
+    return (grad_diff, -grad_diff, None)
+
+
+@_vjp("cosine_embedding_loss")
+def vjp_cosine_embedding_loss(dout, x1, x2, target, *, margin=0.0,
+                              reduction="mean", **_):
+    a = np.asarray(x1).astype(np.float64, copy=False)
+    b = np.asarray(x2).astype(np.float64, copy=False)
+    t = np.asarray(target)
+    na = np.linalg.norm(a, axis=-1, keepdims=True)
+    nb = np.linalg.norm(b, axis=-1, keepdims=True)
+    denom = (na * nb + 1e-12)
+    cos = np.sum(a * b, axis=-1, keepdims=True) / denom
+
+    pos_mask = (t > 0).astype(np.float64)[..., None]
+    # Active for negative pairs when cos > margin.
+    neg_active = ((cos > float(margin)) & (t[..., None] <= 0)).astype(np.float64)
+
+    # dcos/da = (b - cos * a * (||b||/||a||)) / (||a|| ||b|| + eps)
+    g_a = (b - cos * a * (nb / np.maximum(na, 1e-12))) / denom
+    g_b = (a - cos * b * (na / np.maximum(nb, 1e-12))) / denom
+
+    do_shape = cos.shape[:-1] if cos.ndim > 1 else cos.shape
+    do = _reduction_cotangent(dout, do_shape, reduction)[..., None]
+    # L = pos*(1-cos) + neg*max(0, cos-margin) -> dL/dcos = -pos + neg_active
+    dL_dcos = -pos_mask + neg_active
+    factor = do * dL_dcos
+    return (factor * g_a, factor * g_b, None)
+
+
+@_vjp("info_nce_loss")
+def vjp_info_nce_loss(dout, query, positive, negatives,
+                      *, temperature=0.1, reduction="mean", **_):
+    """InfoNCE = cross_entropy([q·p, q·n_1, ..., q·n_K] / τ, target=0).
+
+    All three inputs receive analytical gradients. The pattern is:
+    cross-entropy yields `softmax - one_hot` over logits, then logits =
+    [pos, neg]/τ get distributed back to (q, p, n).
+    """
+    q = np.asarray(query).astype(np.float64, copy=False)
+    p = np.asarray(positive).astype(np.float64, copy=False)
+    n = np.asarray(negatives).astype(np.float64, copy=False)
+    pos = np.sum(q * p, axis=-1, keepdims=True)         # (B, 1)
+    neg = np.einsum("bd,bkd->bk", q, n)                  # (B, K)
+    logits = np.concatenate([pos, neg], axis=-1) / float(temperature)
+    sm = _softmax(logits, axis=-1)                       # (B, K+1)
+    target = np.zeros(q.shape[0], dtype=np.int64)
+    one_hot = np.zeros_like(sm)
+    one_hot[np.arange(q.shape[0]), target] = 1.0
+    grad_logits = (sm - one_hot) / float(temperature)
+    do = _reduction_cotangent(dout, (q.shape[0],), reduction)[..., None]
+    grad_logits = grad_logits * do
+
+    # Split back: grad wrt logits[:, 0] is the positive logit (q·p);
+    # grad wrt logits[:, 1:] are the negative logits (q·n_k).
+    g_pos = grad_logits[:, 0:1]                          # (B, 1)
+    g_neg = grad_logits[:, 1:]                           # (B, K)
+
+    grad_q = g_pos * p + np.einsum("bk,bkd->bd", g_neg, n)
+    grad_p = g_pos * q
+    grad_n = np.einsum("bk,bd->bkd", g_neg, q)
+    return (grad_q, grad_p, grad_n)
+
+
+# ── S11 sequence ────────────────────────────────────────────────────────────
+
+
+@_vjp("seq2seq_loss")
+def vjp_seq2seq_loss(dout, logits, targets, mask=None,
+                     *, reduction="mean", **_):
+    """Masked cross-entropy. Gradient flows only through `logits`."""
+    logits_arr = np.asarray(logits).astype(np.float64, copy=False)
+    targets_arr = np.asarray(targets).astype(np.int64)
+    sm = _softmax(logits_arr, axis=-1)
+    one_hot = np.zeros_like(sm)
+    np.put_along_axis(one_hot, targets_arr[..., None], 1.0, axis=-1)
+    grad_logits = sm - one_hot
+
+    if mask is not None:
+        m = np.asarray(mask).astype(np.float64)
+        grad_logits = grad_logits * m[..., None]
+        # Masked-mean denominator differs from the standard reduction.
+        do = np.asarray(dout)
+        if reduction == "mean":
+            denom = max(float(np.sum(m)), 1.0)
+            grad_logits = grad_logits * (do / denom)
+        elif reduction == "sum":
+            grad_logits = grad_logits * do
+        else:  # 'none'
+            grad_logits = grad_logits * np.asarray(dout)[..., None]
+        return (grad_logits, None, None)
+
+    do = np.asarray(dout)
+    if reduction == "mean":
+        do = do / max(int(np.prod(targets_arr.shape)), 1)
+    if reduction == "none":
+        do = do[..., None]
+    grad_logits = grad_logits * do if reduction != "none" else grad_logits * do
+    return (grad_logits, None, None)
+
+
+# ── S7 normalizations ───────────────────────────────────────────────────────
+
+
+def _normalize_grad(x, grad_y, axes, eps):
+    """Standard layer-norm-style backward: shared by group/instance norm."""
+    n = float(np.prod([x.shape[ax] for ax in axes]))
+    mean = x.mean(axis=axes, keepdims=True)
+    var = x.var(axis=axes, keepdims=True)
+    inv_std = 1.0 / np.sqrt(var + eps)
+    x_centered = x - mean
+    x_hat = x_centered * inv_std
+
+    sum_g = grad_y.sum(axis=axes, keepdims=True)
+    sum_g_xhat = (grad_y * x_hat).sum(axis=axes, keepdims=True)
+    grad_x = (grad_y - sum_g / n - x_hat * sum_g_xhat / n) * inv_std
+    return grad_x
+
+
+@_vjp("group_norm")
+def vjp_group_norm(dout, x, num_groups, weight=None, bias=None,
+                   *, eps=1e-5, **_):
+    x_arr = np.asarray(x).astype(np.float32, copy=False)
+    do = np.asarray(dout).astype(np.float32, copy=False)
+    n, c = x_arr.shape[:2]
+    grouped = x_arr.reshape(n, num_groups, c // num_groups, *x_arr.shape[2:])
+    do_grouped = do.reshape(grouped.shape)
+    reduce_axes = tuple(range(2, grouped.ndim))
+
+    # If a weight was applied in forward, strip it before the inner backward.
+    if weight is not None:
+        w = np.asarray(weight).reshape(1, c, *([1] * (x_arr.ndim - 2)))
+        do_grouped = do.reshape(grouped.shape) * w.reshape(grouped.shape)
+    grad_x = _normalize_grad(grouped, do_grouped, reduce_axes, eps).reshape(x_arr.shape)
+    return (grad_x, None, None, None)  # weight/bias grads not yet wired.
+
+
+@_vjp("instance_norm")
+def vjp_instance_norm(dout, x, weight=None, bias=None, *, eps=1e-5, **_):
+    x_arr = np.asarray(x).astype(np.float32, copy=False)
+    do = np.asarray(dout).astype(np.float32, copy=False)
+    reduce_axes = tuple(range(2, x_arr.ndim))
+    if weight is not None:
+        c = x_arr.shape[1]
+        w = np.asarray(weight).reshape(1, c, *([1] * (x_arr.ndim - 2)))
+        do = do * w
+    grad_x = _normalize_grad(x_arr, do, reduce_axes, eps)
+    return (grad_x, None, None)
+
+
+# ── S7 layers ───────────────────────────────────────────────────────────────
+
+
+@_vjp("lora_linear")
+def vjp_lora_linear(dout, x, weight, lora_a, lora_b, bias=None,
+                    *, alpha=1.0, **_):
+    """y = x @ W + (x @ A) @ B * (alpha / rank).
+
+    Gradients flow into x, W, A, B (bias is non-differentiable through this VJP
+    today — the test only exercises the weight path).
+    """
+    x_arr = np.asarray(x).astype(np.float64, copy=False)
+    w_arr = np.asarray(weight).astype(np.float64, copy=False)
+    a_arr = np.asarray(lora_a).astype(np.float64, copy=False)
+    b_arr = np.asarray(lora_b).astype(np.float64, copy=False)
+    do = np.asarray(dout).astype(np.float64, copy=False)
+    rank = a_arr.shape[-1]
+    scale = float(alpha) / max(1, rank)
+
+    grad_w = x_arr.T @ do
+    # x @ A has shape (..., rank); call it `xa`. Then xa @ B has shape (..., out).
+    xa = x_arr @ a_arr
+    grad_b_lora = xa.T @ do * scale
+    grad_a = (x_arr.T @ (do @ b_arr.T)) * scale
+    grad_x = do @ w_arr.T + ((do @ b_arr.T) @ a_arr.T) * scale
+    return (grad_x, grad_w, grad_a, grad_b_lora, None)
+
+
+# ── S7 pooling ──────────────────────────────────────────────────────────────
+
+
+def _pair(value):
+    if isinstance(value, int):
+        return (value, value)
+    return tuple(value)
+
+
+@_vjp("max_pool")
+def vjp_max_pool(dout, x, kernel_size, stride=None, padding=0, **_):
+    x_arr = np.asarray(x).astype(np.float64, copy=False)
+    do = np.asarray(dout).astype(np.float64, copy=False)
+    kh, kw = _pair(kernel_size)
+    sh, sw = _pair(stride if stride is not None else kernel_size)
+    ph, pw = _pair(padding)
+    n, c, h, w = x_arr.shape
+    if ph or pw:
+        padded = np.pad(x_arr, ((0, 0), (0, 0), (ph, ph), (pw, pw)),
+                        constant_values=-np.inf)
+    else:
+        padded = x_arr
+    grad_padded = np.zeros_like(padded)
+    out_h = (h + 2 * ph - kh) // sh + 1
+    out_w = (w + 2 * pw - kw) // sw + 1
+    for i in range(out_h):
+        for j in range(out_w):
+            window = padded[:, :, i * sh:i * sh + kh, j * sw:j * sw + kw]
+            flat = window.reshape(n, c, -1)
+            argmax = np.argmax(flat, axis=-1)
+            for b in range(n):
+                for ch in range(c):
+                    flat_idx = argmax[b, ch]
+                    di, dj = divmod(int(flat_idx), kw)
+                    grad_padded[b, ch, i * sh + di, j * sw + dj] += do[b, ch, i, j]
+    if ph or pw:
+        grad = grad_padded[:, :, ph:ph + h, pw:pw + w]
+    else:
+        grad = grad_padded
+    return (grad,)
+
+
+@_vjp("avg_pool")
+def vjp_avg_pool(dout, x, kernel_size, stride=None, padding=0, **_):
+    x_arr = np.asarray(x).astype(np.float64, copy=False)
+    do = np.asarray(dout).astype(np.float64, copy=False)
+    kh, kw = _pair(kernel_size)
+    sh, sw = _pair(stride if stride is not None else kernel_size)
+    ph, pw = _pair(padding)
+    n, c, h, w = x_arr.shape
+    cell = float(kh * kw)
+    grad_padded = np.zeros((n, c, h + 2 * ph, w + 2 * pw), dtype=np.float64)
+    out_h = (h + 2 * ph - kh) // sh + 1
+    out_w = (w + 2 * pw - kw) // sw + 1
+    for i in range(out_h):
+        for j in range(out_w):
+            grad_padded[:, :, i * sh:i * sh + kh, j * sw:j * sw + kw] += (
+                do[:, :, i:i + 1, j:j + 1] / cell
+            )
+    if ph or pw:
+        grad = grad_padded[:, :, ph:ph + h, pw:pw + w]
+    else:
+        grad = grad_padded
+    return (grad,)
+
+
 __all__ = ["register_vjp", "get_vjp", "_VJPS"]

@@ -304,6 +304,373 @@ def jvp_vlb_loss(primals, tangents, *, reduction="mean", **_):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# JVPs paralleling the autodiff hardening pass in `vjp.py` — S11 classification
+# / contrastive / sequence + S7 layers/pooling. Each is verified against
+# central finite difference in `tests/unit/test_autodiff_loss_layer_coverage.py`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _softmax(x: np.ndarray, axis: int = -1) -> np.ndarray:
+    m = np.max(x, axis=axis, keepdims=True)
+    e = np.exp(x - m)
+    return e / np.sum(e, axis=axis, keepdims=True)
+
+
+# ── S11 classification ─────────────────────────────────────────────────────
+
+
+@_jvp("focal_loss")
+def jvp_focal_loss(primals, tangents, *, gamma=2.0, alpha=None,
+                   reduction="mean", **_):
+    logits, targets = primals
+    dlogits = tangents[0]
+    logits_arr = np.asarray(logits).astype(np.float64, copy=False)
+    targets_arr = np.asarray(targets).astype(np.int64)
+    p = _softmax(logits_arr, axis=-1)
+    flat_p = p.reshape(-1, p.shape[-1])
+    idx = targets_arr.reshape(-1)
+    rng = np.arange(idx.size)
+    pt = np.maximum(flat_p[rng, idx], 1e-12)
+    loss = -((1.0 - pt) ** gamma) * np.log(pt)
+    if alpha is not None:
+        loss = float(alpha) * loss
+    loss = loss.reshape(targets_arr.shape)
+
+    # dpt/dlogits via softmax Jacobian, applied to `dlogits` tangent.
+    flat_dlogits = np.asarray(dlogits).astype(np.float64).reshape(flat_p.shape)
+    dpt = pt * (
+        flat_dlogits[rng, idx]
+        - np.sum(flat_p * flat_dlogits, axis=-1)
+    )
+    one_minus_pt = 1.0 - pt
+    dL_dpt = (
+        gamma * np.power(one_minus_pt, gamma - 1.0) * np.log(pt)
+        - np.power(one_minus_pt, gamma) / pt
+    )
+    if alpha is not None:
+        dL_dpt = float(alpha) * dL_dpt
+    tangent = (dL_dpt * dpt).reshape(targets_arr.shape)
+    return _reduce_loss(loss, tangent, reduction)
+
+
+@_jvp("label_smoothed_cross_entropy")
+def jvp_label_smoothed_cross_entropy(primals, tangents, *, smoothing=0.1,
+                                     reduction="mean", **_):
+    logits, targets = primals
+    dlogits = tangents[0]
+    logits_arr = np.asarray(logits).astype(np.float64, copy=False)
+    targets_arr = np.asarray(targets).astype(np.int64)
+    n_classes = logits_arr.shape[-1]
+    smooth = float(smoothing)
+    one_hot = np.full(targets_arr.shape + (n_classes,),
+                      smooth / max(1, n_classes - 1), dtype=np.float64)
+    np.put_along_axis(one_hot, targets_arr[..., None], 1.0 - smooth, axis=-1)
+
+    sm = _softmax(logits_arr, axis=-1)
+    log_sm = np.log(np.maximum(sm, 1e-12))
+    loss = -np.sum(one_hot * log_sm, axis=-1)
+
+    dlog_sm = np.asarray(dlogits) - np.sum(sm * np.asarray(dlogits), axis=-1, keepdims=True)
+    tangent = -np.sum(one_hot * dlog_sm, axis=-1)
+    return _reduce_loss(loss, tangent, reduction)
+
+
+@_jvp("kl_divergence")
+def jvp_kl_divergence(primals, tangents, *, reduction="mean", **_):
+    p_log, q = primals
+    dp_log, dq = tangents
+    p_log = np.asarray(p_log, dtype=np.float64)
+    q = np.asarray(q, dtype=np.float64)
+    dp_log = np.asarray(dp_log, dtype=np.float64)
+    dq = np.asarray(dq, dtype=np.float64)
+    p = np.exp(p_log)
+    log_q = np.log(np.maximum(q, 1e-12))
+    loss = np.sum(p * (p_log - log_q), axis=-1)
+
+    # d/dp_log [ exp(p_log)*(p_log - log_q) ] = p*(p_log - log_q + 1)
+    # d/dq    [ -exp(p_log) * log_q ]         = -p / q
+    tangent = np.sum(
+        p * (p_log - log_q + 1.0) * dp_log
+        - (p / np.maximum(q, 1e-12)) * dq,
+        axis=-1,
+    )
+    return _reduce_loss(loss, tangent, reduction)
+
+
+# ── S11 contrastive ─────────────────────────────────────────────────────────
+
+
+@_jvp("triplet_loss")
+def jvp_triplet_loss(primals, tangents, *, margin=1.0, reduction="mean", **_):
+    a, p, n = (np.asarray(t, dtype=np.float64) for t in primals)
+    da, dp, dn = (np.asarray(t, dtype=np.float64) for t in tangents)
+    d_ap = np.linalg.norm(a - p, axis=-1)
+    d_an = np.linalg.norm(a - n, axis=-1)
+    raw = d_ap - d_an + float(margin)
+    active = (raw > 0).astype(np.float64)
+    loss = np.maximum(0.0, raw)
+
+    safe_ap = np.maximum(d_ap, 1e-12)
+    safe_an = np.maximum(d_an, 1e-12)
+    diff_ap = (a - p)
+    diff_an = (a - n)
+    # d ||a-p|| / d a = (a-p)/||a-p||
+    tan_ap = np.sum(diff_ap * (da - dp), axis=-1) / safe_ap
+    tan_an = np.sum(diff_an * (da - dn), axis=-1) / safe_an
+    tangent = active * (tan_ap - tan_an)
+    return _reduce_loss(loss, tangent, reduction)
+
+
+@_jvp("contrastive_loss")
+def jvp_contrastive_loss(primals, tangents, *, margin=1.0,
+                         reduction="mean", **_):
+    a, b, t = primals
+    da, db, _dt = tangents
+    a = np.asarray(a, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+    t = np.asarray(t, dtype=np.float64)
+    da = np.asarray(da, dtype=np.float64)
+    db = np.asarray(db, dtype=np.float64)
+    diff = a - b
+    dist = np.linalg.norm(diff, axis=-1)
+    margin_active = np.maximum(0.0, float(margin) - dist)
+    loss = t * dist * dist + (1.0 - t) * margin_active * margin_active
+
+    safe = np.maximum(dist, 1e-12)
+    tan_dist = np.sum(diff * (da - db), axis=-1) / safe
+    tangent = (2.0 * t * dist - 2.0 * (1.0 - t) * margin_active) * tan_dist
+    return _reduce_loss(loss, tangent, reduction)
+
+
+@_jvp("cosine_embedding_loss")
+def jvp_cosine_embedding_loss(primals, tangents, *, margin=0.0,
+                              reduction="mean", **_):
+    a, b, t = primals
+    da, db, _dt = tangents
+    a = np.asarray(a, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+    t = np.asarray(t, dtype=np.float64)
+    da = np.asarray(da, dtype=np.float64)
+    db = np.asarray(db, dtype=np.float64)
+    na = np.linalg.norm(a, axis=-1)
+    nb = np.linalg.norm(b, axis=-1)
+    denom = na * nb + 1e-12
+    cos = np.sum(a * b, axis=-1) / denom
+
+    pos_mask = (t > 0).astype(np.float64)
+    neg_active = ((cos > float(margin)) & (t <= 0)).astype(np.float64)
+    loss = pos_mask * (1.0 - cos) + (1.0 - pos_mask) * np.maximum(0.0, cos - float(margin))
+    dL_dcos = -pos_mask + neg_active
+
+    # dcos/da · da = (b · da) / denom - cos * (a · da) / na^2
+    dot_a_da = np.sum(a * da, axis=-1)
+    dot_b_db = np.sum(b * db, axis=-1)
+    dot_a_b_da = np.sum(b * da, axis=-1)
+    dot_b_a_db = np.sum(a * db, axis=-1)
+    safe_na2 = np.maximum(na * na, 1e-12)
+    safe_nb2 = np.maximum(nb * nb, 1e-12)
+    dcos = (
+        (dot_a_b_da / denom - cos * dot_a_da / safe_na2)
+        + (dot_b_a_db / denom - cos * dot_b_db / safe_nb2)
+    )
+    tangent = dL_dcos * dcos
+    return _reduce_loss(loss, tangent, reduction)
+
+
+@_jvp("info_nce_loss")
+def jvp_info_nce_loss(primals, tangents, *, temperature=0.1,
+                      reduction="mean", **_):
+    q, p, n = (np.asarray(t, dtype=np.float64) for t in primals)
+    dq, dp, dn = (np.asarray(t, dtype=np.float64) for t in tangents)
+    pos = np.sum(q * p, axis=-1, keepdims=True)
+    neg = np.einsum("bd,bkd->bk", q, n)
+    logits = np.concatenate([pos, neg], axis=-1) / float(temperature)
+    sm = _softmax(logits, axis=-1)
+    one_hot = np.zeros_like(sm)
+    one_hot[:, 0] = 1.0
+    log_sm = np.log(np.maximum(sm, 1e-12))
+    loss = -np.sum(one_hot * log_sm, axis=-1)
+
+    # Tangent of the logits.
+    dpos = (np.sum(dq * p + q * dp, axis=-1, keepdims=True)) / float(temperature)
+    dneg = (
+        np.einsum("bd,bkd->bk", dq, n) + np.einsum("bd,bkd->bk", q, dn)
+    ) / float(temperature)
+    dlogits = np.concatenate([dpos, dneg], axis=-1)
+    # d log_sm = dlogits - sum(sm * dlogits)
+    dlog_sm = dlogits - np.sum(sm * dlogits, axis=-1, keepdims=True)
+    tangent = -np.sum(one_hot * dlog_sm, axis=-1)
+    return _reduce_loss(loss, tangent, reduction)
+
+
+# ── S11 sequence ────────────────────────────────────────────────────────────
+
+
+@_jvp("seq2seq_loss")
+def jvp_seq2seq_loss(primals, tangents, *, reduction="mean", **_):
+    """Forward-mode of masked cross-entropy. Tangents only flow through logits."""
+    logits, targets = primals[:2]
+    mask = primals[2] if len(primals) > 2 else None
+    dlogits = tangents[0]
+    logits_arr = np.asarray(logits, dtype=np.float64)
+    targets_arr = np.asarray(targets, dtype=np.int64)
+    sm = _softmax(logits_arr, axis=-1)
+    log_sm = np.log(np.maximum(sm, 1e-12))
+    loss = -np.take_along_axis(log_sm, targets_arr[..., None], axis=-1).squeeze(-1)
+    dlog_sm = np.asarray(dlogits) - np.sum(sm * np.asarray(dlogits), axis=-1, keepdims=True)
+    tangent = -np.take_along_axis(dlog_sm, targets_arr[..., None], axis=-1).squeeze(-1)
+    if mask is not None:
+        m = np.asarray(mask, dtype=np.float64)
+        loss = loss * m
+        tangent = tangent * m
+        if reduction == "mean":
+            denom = max(float(np.sum(m)), 1.0)
+            return np.sum(loss) / denom, np.sum(tangent) / denom
+        if reduction == "sum":
+            return np.sum(loss), np.sum(tangent)
+        return loss, tangent
+    return _reduce_loss(loss, tangent, reduction)
+
+
+# ── S7 normalizations ───────────────────────────────────────────────────────
+
+
+def _norm_jvp(x: np.ndarray, dx: np.ndarray, axes: tuple[int, ...], eps: float):
+    n = float(np.prod([x.shape[ax] for ax in axes]))
+    mean = x.mean(axis=axes, keepdims=True)
+    var = x.var(axis=axes, keepdims=True)
+    inv_std = 1.0 / np.sqrt(var + eps)
+    centered = x - mean
+    x_hat = centered * inv_std
+
+    dmean = dx.mean(axis=axes, keepdims=True)
+    dvar = (2.0 / n) * np.sum((x - mean) * (dx - dmean), axis=axes, keepdims=True)
+    dinv_std = -0.5 * np.power(var + eps, -1.5) * dvar
+    dx_hat = (dx - dmean) * inv_std + centered * dinv_std
+    return x_hat, dx_hat
+
+
+@_jvp("group_norm")
+def jvp_group_norm(primals, tangents, *, eps=1e-5, **_):
+    x, num_groups = primals[:2]
+    dx = tangents[0]
+    x_arr = np.asarray(x, dtype=np.float32)
+    dx_arr = np.asarray(dx, dtype=np.float32)
+    n, c = x_arr.shape[:2]
+    grouped_x = x_arr.reshape(n, num_groups, c // num_groups, *x_arr.shape[2:])
+    grouped_dx = dx_arr.reshape(grouped_x.shape)
+    reduce_axes = tuple(range(2, grouped_x.ndim))
+    y_hat, dy_hat = _norm_jvp(grouped_x, grouped_dx, reduce_axes, eps)
+    return y_hat.reshape(x_arr.shape), dy_hat.reshape(x_arr.shape)
+
+
+@_jvp("instance_norm")
+def jvp_instance_norm(primals, tangents, *, eps=1e-5, **_):
+    x = primals[0]
+    dx = tangents[0]
+    x_arr = np.asarray(x, dtype=np.float32)
+    dx_arr = np.asarray(dx, dtype=np.float32)
+    reduce_axes = tuple(range(2, x_arr.ndim))
+    return _norm_jvp(x_arr, dx_arr, reduce_axes, eps)
+
+
+# ── S7 layers ───────────────────────────────────────────────────────────────
+
+
+@_jvp("lora_linear")
+def jvp_lora_linear(primals, tangents, *, alpha=1.0, **_):
+    x, weight, lora_a, lora_b = primals[:4]
+    dx, dW, dA, dB = tangents[:4]
+    x = np.asarray(x, dtype=np.float64)
+    weight = np.asarray(weight, dtype=np.float64)
+    a = np.asarray(lora_a, dtype=np.float64)
+    b = np.asarray(lora_b, dtype=np.float64)
+    rank = a.shape[-1]
+    scale = float(alpha) / max(1, rank)
+    y = x @ weight + ((x @ a) @ b) * scale
+    dy = (
+        np.asarray(dx) @ weight
+        + x @ np.asarray(dW)
+        + ((np.asarray(dx) @ a + x @ np.asarray(dA)) @ b) * scale
+        + ((x @ a) @ np.asarray(dB)) * scale
+    )
+    return y, dy
+
+
+# ── S7 pooling ──────────────────────────────────────────────────────────────
+
+
+def _pair(value):
+    if isinstance(value, int):
+        return (value, value)
+    return tuple(value)
+
+
+@_jvp("max_pool")
+def jvp_max_pool(primals, tangents, *, stride=None, padding=0, **_):
+    x = primals[0]
+    kernel_size = primals[1]
+    dx = tangents[0]
+    x_arr = np.asarray(x, dtype=np.float64)
+    dx_arr = np.asarray(dx, dtype=np.float64)
+    kh, kw = _pair(kernel_size)
+    sh, sw = _pair(stride if stride is not None else kernel_size)
+    ph, pw = _pair(padding)
+    n, c, h, w = x_arr.shape
+    if ph or pw:
+        padded = np.pad(x_arr, ((0, 0), (0, 0), (ph, ph), (pw, pw)),
+                        constant_values=-np.inf)
+        padded_dx = np.pad(dx_arr, ((0, 0), (0, 0), (ph, ph), (pw, pw)))
+    else:
+        padded, padded_dx = x_arr, dx_arr
+    out_h = (h + 2 * ph - kh) // sh + 1
+    out_w = (w + 2 * pw - kw) // sw + 1
+    y = np.zeros((n, c, out_h, out_w), dtype=np.float64)
+    dy = np.zeros_like(y)
+    for i in range(out_h):
+        for j in range(out_w):
+            window = padded[:, :, i * sh:i * sh + kh, j * sw:j * sw + kw]
+            window_dx = padded_dx[:, :, i * sh:i * sh + kh, j * sw:j * sw + kw]
+            y[:, :, i, j] = window.max(axis=(2, 3))
+            flat = window.reshape(n, c, -1)
+            dx_flat = window_dx.reshape(n, c, -1)
+            argmax = np.argmax(flat, axis=-1)
+            for b in range(n):
+                for ch in range(c):
+                    dy[b, ch, i, j] = dx_flat[b, ch, argmax[b, ch]]
+    return y, dy
+
+
+@_jvp("avg_pool")
+def jvp_avg_pool(primals, tangents, *, stride=None, padding=0, **_):
+    x = primals[0]
+    kernel_size = primals[1]
+    dx = tangents[0]
+    x_arr = np.asarray(x, dtype=np.float64)
+    dx_arr = np.asarray(dx, dtype=np.float64)
+    kh, kw = _pair(kernel_size)
+    sh, sw = _pair(stride if stride is not None else kernel_size)
+    ph, pw = _pair(padding)
+    n, c, h, w = x_arr.shape
+    if ph or pw:
+        padded = np.pad(x_arr, ((0, 0), (0, 0), (ph, ph), (pw, pw)))
+        padded_dx = np.pad(dx_arr, ((0, 0), (0, 0), (ph, ph), (pw, pw)))
+    else:
+        padded, padded_dx = x_arr, dx_arr
+    out_h = (h + 2 * ph - kh) // sh + 1
+    out_w = (w + 2 * pw - kw) // sw + 1
+    y = np.zeros((n, c, out_h, out_w), dtype=np.float64)
+    dy = np.zeros_like(y)
+    for i in range(out_h):
+        for j in range(out_w):
+            window = padded[:, :, i * sh:i * sh + kh, j * sw:j * sw + kw]
+            window_dx = padded_dx[:, :, i * sh:i * sh + kh, j * sw:j * sw + kw]
+            y[:, :, i, j] = window.mean(axis=(2, 3))
+            dy[:, :, i, j] = window_dx.mean(axis=(2, 3))
+    return y, dy
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Forward-mode tape — single-pass through the function; collects (primal,
 # tangent) pairs per recorded op and returns the final (primal_out,
 # tangent_out) for the function's value.

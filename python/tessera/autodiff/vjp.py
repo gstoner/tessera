@@ -2588,4 +2588,359 @@ def vjp_nt_xent_loss(dout, embeddings, labels, *, temperature=0.5,
     return (dz, None)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint 1 — S6 collective VJPs.
+#
+# All collectives in `tessera.sharding` operate over a leading "rank" axis
+# (axis=0). The VJPs are the standard duals:
+#   psum               ↔ broadcast_to_axis (sum is self-adjoint)
+#   pmean              ↔ broadcast_to_axis / R
+#   pmax / pmin        → argmax-routed, ties split evenly
+#   collective_permute → inverse permutation
+#   broadcast_to_axis  ↔ psum
+# These are required for `shard_map(grad(f))` to route correctly.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@_vjp("psum")
+def vjp_psum(dout, values, axis_name=None, **_):
+    """Sum-across-ranks VJP. Each rank receives the full upstream gradient."""
+    arr = np.asarray(values)
+    R = arr.shape[0]
+    do = np.broadcast_to(np.asarray(dout), arr.shape[1:])
+    grad = np.broadcast_to(do, arr.shape).copy()
+    return (grad,)
+
+
+@_vjp("pmean")
+def vjp_pmean(dout, values, axis_name=None, **_):
+    arr = np.asarray(values)
+    R = arr.shape[0]
+    do = np.asarray(dout)
+    grad = np.broadcast_to(do, arr.shape) / R
+    return (np.array(grad),)
+
+
+@_vjp("pmax")
+def vjp_pmax(dout, values, axis_name=None, **_):
+    """Routes grad only to the rank(s) that achieved the max; ties split."""
+    arr = np.asarray(values).astype(np.float64, copy=False)
+    m = np.max(arr, axis=0, keepdims=True)
+    mask = (arr == m).astype(arr.dtype)
+    counts = mask.sum(axis=0, keepdims=True)
+    do = np.asarray(dout)
+    return (mask * do[None] / counts,)
+
+
+@_vjp("pmin")
+def vjp_pmin(dout, values, axis_name=None, **_):
+    arr = np.asarray(values).astype(np.float64, copy=False)
+    m = np.min(arr, axis=0, keepdims=True)
+    mask = (arr == m).astype(arr.dtype)
+    counts = mask.sum(axis=0, keepdims=True)
+    do = np.asarray(dout)
+    return (mask * do[None] / counts,)
+
+
+@_vjp("collective_permute")
+def vjp_collective_permute(dout, values, pairs, **_):
+    """Permute (src, dst) → invert by routing grad along (dst, src)."""
+    arr = np.asarray(values)
+    do = np.asarray(dout)
+    grad = np.zeros_like(arr)
+    for src, dst in pairs:
+        grad[int(src)] = do[int(dst)]
+    return (grad, None)
+
+
+@_vjp("broadcast_to_axis")
+def vjp_broadcast_to_axis(dout, value, *, axis_size, axis=0, **_):
+    """Broadcast→stack VJP is `psum` along the broadcast axis."""
+    do = np.asarray(dout)
+    return (np.sum(do, axis=axis),)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint 2 — stateful optimizer VJPs.
+#
+# Convention: `dout` is the cotangent for `new_params` only. The
+# `new_state` cotangent is treated as zero (single-step meta-learning). For
+# K-step meta-learning chains the user registers `custom_vjp` over the full
+# rollout. Returns `(d_params, d_grads, d_state)` where `d_state` is the
+# same dict-of-arrays shape as the input state.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _zero_state_dict(state: dict | None, default_keys=()) -> dict:
+    if state is None:
+        return {k: None for k in default_keys}
+    return state
+
+
+@_vjp("momentum")
+def vjp_momentum(dout, params, grads, state=None, *, lr, momentum=0.9, **_):
+    """new_velocity = momentum*velocity + grads
+       new_params   = params - lr*new_velocity
+
+    With `d_new_state = 0`:
+      d_params   = dout
+      d_grads    = -lr * dout
+      d_velocity = -lr * momentum * dout      (chain through new_velocity)
+    """
+    do = np.asarray(dout, dtype=np.float64)
+    d_params = do
+    d_grads = -float(lr) * do
+    d_velocity = -float(lr) * float(momentum) * do
+    d_state = {"velocity": d_velocity}
+    return (d_params, d_grads, d_state)
+
+
+@_vjp("nesterov")
+def vjp_nesterov(dout, params, grads, state=None, *, lr, momentum=0.9, **_):
+    """Nesterov uses the look-ahead update:
+       new_velocity = momentum*velocity + grads
+       look_ahead   = grads + momentum*new_velocity
+       new_params   = params - lr*look_ahead
+
+    Chain rule:
+      d_params  = dout
+      d_grads   = -lr * dout * (1 + momentum)            (grads enters look_ahead twice)
+      d_velocity= -lr * momentum * (1 + momentum) * dout
+                  ── new_velocity flows into look_ahead through momentum
+    """
+    do = np.asarray(dout, dtype=np.float64)
+    m = float(momentum)
+    d_params = do
+    d_grads = -float(lr) * do * (1.0 + m)
+    d_velocity = -float(lr) * m * (1.0 + m) * do
+    d_state = {"velocity": d_velocity}
+    return (d_params, d_grads, d_state)
+
+
+@_vjp("adamw")
+def vjp_adamw(dout, params, grads, state=None, *,
+              lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.0, **_):
+    """AdamW with decoupled weight decay.
+
+    Forward:
+      m_new   = β1 m + (1-β1) g
+      v_new   = β2 v + (1-β2) g²
+      m_hat   = m_new / (1 - β1^t)
+      v_hat   = v_new / (1 - β2^t)
+      update  = m_hat / (sqrt(v_hat) + eps)
+      params_after_decay = params * (1 - lr*wd)
+      new_params = params_after_decay - lr*update
+
+    With `d_new_state = 0`:
+      d_params = dout * (1 - lr*wd)
+      d_grads  = -lr * d_update/d_g
+      d_m      = -lr * d_update/d_m_new
+      d_v      = -lr * d_update/d_v_new
+
+    `d_update/d_m_new = 1 / ((1-β1^t)(sqrt(v_hat)+eps))`
+    `d_update/d_v_new = -m_hat / (2*sqrt(v_hat)*(sqrt(v_hat)+eps)²) / (1-β2^t)`
+    `d_update/d_g     = (1-β1)/(1-β1) * d_update/d_m_new + 2(1-β2)g * d_update/d_v_new`
+                     = (1-β1) * d_update/d_m_new + 2(1-β2)g * d_update/d_v_new
+    """
+    do = np.asarray(dout, dtype=np.float64)
+    g = np.asarray(grads, dtype=np.float64)
+    if state is None:
+        state = {"m": np.zeros_like(g), "v": np.zeros_like(g), "step": 0}
+    step = int(state["step"]) + 1
+    m_prev = np.asarray(state["m"], dtype=np.float64)
+    v_prev = np.asarray(state["v"], dtype=np.float64)
+    b1, b2 = float(beta1), float(beta2)
+    m_new = b1 * m_prev + (1.0 - b1) * g
+    v_new = b2 * v_prev + (1.0 - b2) * g * g
+    bc1 = 1.0 - b1 ** step
+    bc2 = 1.0 - b2 ** step
+    m_hat = m_new / bc1
+    v_hat = v_new / bc2
+    sqrt_v = np.sqrt(v_hat)
+    denom = sqrt_v + float(eps)
+
+    d_update_d_m_new = 1.0 / (bc1 * denom)
+    d_update_d_v_new = -m_hat / (2.0 * np.maximum(sqrt_v, 1e-12) * denom * denom * bc2)
+
+    d_params = do * (1.0 - float(lr) * float(weight_decay))
+    d_update = -float(lr) * do
+    d_m_new = d_update * d_update_d_m_new
+    d_v_new = d_update * d_update_d_v_new
+    d_grads = (1.0 - b1) * d_m_new + 2.0 * (1.0 - b2) * g * d_v_new
+    d_m_prev = b1 * d_m_new
+    d_v_prev = b2 * d_v_new
+    d_state = {"m": d_m_prev, "v": d_v_prev, "step": None}
+    return (d_params, d_grads, d_state)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint 3 — Memory architecture: differentiable `memory_read`.
+#
+# Forward (Titans/Atlas-style):
+#   scores  = query @ keys.T
+#   indices = top_k(scores)              (non-diff — argpartition)
+#   weights = softmax(top_scores)         (or 1/k uniform if normalize=False)
+#   read    = sum_j gathered_values[j] * weights[j]
+#
+# Backward treats `indices` as constants (the standard top-k convention,
+# matching JAX/PyTorch). The read VJP returns (d_table, d_query) where
+# d_table is `(d_keys, d_values)` and d_query has the input query's shape.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _memory_unwrap(query):
+    arr = np.asarray(query._data if hasattr(query, "_data") else query, dtype=np.float64)
+    return arr
+
+
+@_vjp("memory_read")
+def vjp_memory_read(dout, memory, query, *, top_k=1, normalize=True, **_):
+    """Reverse-mode through Titans/Atlas memory_read.
+
+    `dout` is the gradient w.r.t. `read_values` (the primary output of
+    `MemoryReadResult`). `memory` is a `MemoryTable` or `(keys, values)`
+    pair. Returns `(d_memory, d_query)` where `d_memory` is the tuple
+    `(d_keys, d_values)` matching the table layout.
+
+    Per-row math (one batch row b shown — code vectorizes over b):
+      gathered[j] = values[indices[j]]
+      read = Σ_j gathered[j] * weights[j]        (broadcasting over value dims)
+      ↓
+      d_gathered[j] = dout * weights[j]
+      d_weights[j]  = Σ_v gathered[j, v] * dout[v]
+      d_top_scores  = (d_weights - Σ_k weights[k] d_weights[k]) * weights      (softmax J)
+      d_scores[indices[j]] += d_top_scores[j]    (scatter)
+      d_query  = d_scores @ keys
+      d_keys   = d_scores.T @ query
+      d_values[indices[j]] += d_gathered[j]      (scatter)
+    """
+    from tessera.memory import MemoryTable
+
+    if isinstance(memory, MemoryTable):
+        keys = memory.keys
+        values = memory.values
+    else:
+        keys, values = memory
+    keys_arr = np.asarray(keys, dtype=np.float64)
+    values_arr = np.asarray(values, dtype=np.float64)
+    query_arr = _memory_unwrap(query)
+    do = np.asarray(dout, dtype=np.float64)
+
+    single_query = query_arr.ndim == 1
+    if single_query:
+        query_arr = query_arr[None, :]
+        do = do[None, ...]
+
+    B = query_arr.shape[0]
+    N = keys_arr.shape[0]
+    k = min(int(top_k), N)
+
+    scores = query_arr @ keys_arr.T              # (B, N)
+    partition = np.argpartition(-scores, kth=k - 1, axis=-1)[:, :k]
+    top_scores = np.take_along_axis(scores, partition, axis=-1)
+    order = np.argsort(-top_scores, axis=-1)
+    indices = np.take_along_axis(partition, order, axis=-1)  # (B, k)
+    top_scores = np.take_along_axis(top_scores, order, axis=-1)
+
+    if normalize:
+        # Stable softmax mirroring the forward.
+        m = np.max(top_scores, axis=-1, keepdims=True)
+        e = np.exp(top_scores - m)
+        weights = e / np.sum(e, axis=-1, keepdims=True)
+    else:
+        weights = np.ones_like(top_scores) / k
+
+    gathered = values_arr[indices]                # (B, k, *value_shape)
+
+    # value_shape may have multiple trailing dims.
+    value_dims = tuple(range(2, gathered.ndim))
+    # d_gathered[b, j, ...] = dout[b, ...] * weights[b, j]
+    weights_b = weights.reshape(B, k, *([1] * len(value_dims)))
+    d_gathered = do[:, None] * weights_b
+    # d_weights[b, j] = Σ_v gathered[b, j, v] * dout[b, v]
+    d_weights = np.sum(gathered * do[:, None], axis=value_dims)  # (B, k)
+
+    if normalize:
+        d_top_scores = (d_weights - np.sum(weights * d_weights, axis=-1, keepdims=True)) * weights
+    else:
+        d_top_scores = d_weights / k
+
+    # Scatter d_top_scores into the full d_scores at the gathered indices.
+    d_scores = np.zeros_like(scores)
+    np.add.at(d_scores, (np.arange(B)[:, None], indices), d_top_scores)
+
+    d_query = d_scores @ keys_arr            # (B, key_dim)
+    d_keys = d_scores.T @ query_arr          # (N, key_dim)
+
+    # Scatter d_gathered into d_values at the gathered indices.
+    d_values = np.zeros_like(values_arr)
+    flat_idx = indices.reshape(-1)
+    flat_grad = d_gathered.reshape(-1, *values_arr.shape[1:])
+    np.add.at(d_values, flat_idx, flat_grad)
+
+    if single_query:
+        d_query = d_query[0]
+
+    d_memory = (d_keys, d_values)
+    return (d_memory, d_query)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint 4 — `cummax` and `cummin` reverse-prefix VJPs.
+#
+# `cummax[i] = max(x[0], ..., x[i])`. The grad routes only to the index
+# that achieved the running max at each step. With ties, distribute evenly.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _cumextrema_grad(x, dout, axis, comparator):
+    """Shared backward for cummax/cummin.
+
+    `comparator(a, b) -> bool` decides which value wins (e.g. `np.greater`
+    for cummax, `np.less` for cummin). For each output position i, we
+    accumulate `dout[i]` into the input position k where x[k] is the
+    running extremum at step i.
+
+    Implementation: for each axis position i, find argmax/argmin of x[0..i]
+    along that axis, scatter `dout[i]` there. For ties at any prefix, split
+    `dout[i]` evenly across the tying positions (matches the existing
+    amax/amin/minimum/maximum convention).
+    """
+    x = np.asarray(x).astype(np.float64, copy=False)
+    do = np.asarray(dout).astype(np.float64, copy=False)
+    axis = axis if axis >= 0 else x.ndim + axis
+
+    # Move target axis to the end for vectorized prefix scans.
+    x_perm = np.moveaxis(x, axis, -1)
+    do_perm = np.moveaxis(do, axis, -1)
+    grad_perm = np.zeros_like(x_perm)
+
+    L = x_perm.shape[-1]
+    # Running extremum and tie mask via prefix scan.
+    if comparator is np.greater:
+        running = np.maximum.accumulate(x_perm, axis=-1)
+    else:
+        running = np.minimum.accumulate(x_perm, axis=-1)
+
+    for i in range(L):
+        prefix = x_perm[..., :i + 1]
+        winner = running[..., i:i + 1]                       # (..., 1)
+        mask = (prefix == winner).astype(np.float64)         # (..., i+1)
+        counts = mask.sum(axis=-1, keepdims=True)            # (..., 1)
+        share = do_perm[..., i:i + 1] * mask / counts        # (..., i+1)
+        grad_perm[..., :i + 1] += share
+
+    return np.moveaxis(grad_perm, -1, axis)
+
+
+@_vjp("cummax")
+def vjp_cummax(dout, x, *, axis=-1, **_):
+    return (_cumextrema_grad(x, dout, axis, np.greater),)
+
+
+@_vjp("cummin")
+def vjp_cummin(dout, x, *, axis=-1, **_):
+    return (_cumextrema_grad(x, dout, axis, np.less),)
+
+
 __all__ = ["register_vjp", "get_vjp", "_VJPS"]

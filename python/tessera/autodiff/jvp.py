@@ -878,4 +878,300 @@ def jvp_nt_xent_loss(primals, tangents, *, temperature=0.5,
     return _reduce_loss(loss_per_row, tan_per_row, reduction)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint 1 — S6 collective JVPs (paralleling the VJPs in `vjp.py`).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@_jvp("psum")
+def jvp_psum(primals, tangents, axis_name=None, **_):
+    arr = np.asarray(primals[0])
+    dval = np.asarray(tangents[0])
+    return np.sum(arr, axis=0), np.sum(dval, axis=0)
+
+
+@_jvp("pmean")
+def jvp_pmean(primals, tangents, axis_name=None, **_):
+    arr = np.asarray(primals[0])
+    dval = np.asarray(tangents[0])
+    return np.mean(arr, axis=0), np.mean(dval, axis=0)
+
+
+@_jvp("pmax")
+def jvp_pmax(primals, tangents, axis_name=None, **_):
+    arr = np.asarray(primals[0]).astype(np.float64, copy=False)
+    dval = np.asarray(tangents[0]).astype(np.float64, copy=False)
+    m = np.max(arr, axis=0)
+    mask = (arr == m[None]).astype(np.float64)
+    counts = mask.sum(axis=0)
+    tan = np.sum(mask * dval, axis=0) / np.maximum(counts, 1.0)
+    return m, tan
+
+
+@_jvp("pmin")
+def jvp_pmin(primals, tangents, axis_name=None, **_):
+    arr = np.asarray(primals[0]).astype(np.float64, copy=False)
+    dval = np.asarray(tangents[0]).astype(np.float64, copy=False)
+    m = np.min(arr, axis=0)
+    mask = (arr == m[None]).astype(np.float64)
+    counts = mask.sum(axis=0)
+    tan = np.sum(mask * dval, axis=0) / np.maximum(counts, 1.0)
+    return m, tan
+
+
+@_jvp("collective_permute")
+def jvp_collective_permute(primals, tangents, **kw):
+    arr = np.asarray(primals[0])
+    pairs = primals[1] if len(primals) > 1 else kw.get("pairs", [])
+    dval = np.asarray(tangents[0])
+    out = np.empty_like(arr)
+    dout = np.empty_like(dval)
+    for src, dst in pairs:
+        out[int(dst)] = arr[int(src)]
+        dout[int(dst)] = dval[int(src)]
+    return out, dout
+
+
+@_jvp("broadcast_to_axis")
+def jvp_broadcast_to_axis(primals, tangents, *, axis_size, axis=0, **_):
+    val = np.asarray(primals[0])
+    dval = np.asarray(tangents[0])
+    out = np.stack([val for _ in range(int(axis_size))], axis=axis)
+    dout = np.stack([dval for _ in range(int(axis_size))], axis=axis)
+    return out, dout
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint 2 — stateful optimizer JVPs.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@_jvp("momentum")
+def jvp_momentum(primals, tangents, *, lr, momentum=0.9, **_):
+    params, grads = primals[0], primals[1]
+    state = primals[2] if len(primals) > 2 else None
+    dparams, dgrads = tangents[0], tangents[1]
+    dstate = tangents[2] if len(tangents) > 2 else None
+
+    velocity = state["velocity"] if state is not None and "velocity" in state else np.zeros_like(np.asarray(params))
+    dvelocity = (dstate["velocity"] if (dstate is not None and "velocity" in dstate)
+                 else np.zeros_like(np.asarray(params)))
+    new_velocity = float(momentum) * np.asarray(velocity) + np.asarray(grads)
+    d_new_velocity = float(momentum) * np.asarray(dvelocity) + np.asarray(dgrads)
+    new_params = np.asarray(params) - float(lr) * new_velocity
+    d_new_params = np.asarray(dparams) - float(lr) * d_new_velocity
+    return new_params, d_new_params
+
+
+@_jvp("nesterov")
+def jvp_nesterov(primals, tangents, *, lr, momentum=0.9, **_):
+    params, grads = primals[0], primals[1]
+    state = primals[2] if len(primals) > 2 else None
+    dparams, dgrads = tangents[0], tangents[1]
+    dstate = tangents[2] if len(tangents) > 2 else None
+
+    velocity = state["velocity"] if state is not None and "velocity" in state else np.zeros_like(np.asarray(params))
+    dvelocity = (dstate["velocity"] if (dstate is not None and "velocity" in dstate)
+                 else np.zeros_like(np.asarray(params)))
+    m = float(momentum)
+    new_velocity = m * np.asarray(velocity) + np.asarray(grads)
+    look_ahead = np.asarray(grads) + m * new_velocity
+    d_new_velocity = m * np.asarray(dvelocity) + np.asarray(dgrads)
+    d_look_ahead = np.asarray(dgrads) + m * d_new_velocity
+    new_params = np.asarray(params) - float(lr) * look_ahead
+    d_new_params = np.asarray(dparams) - float(lr) * d_look_ahead
+    return new_params, d_new_params
+
+
+@_jvp("adamw")
+def jvp_adamw(primals, tangents, *, lr=1e-3, beta1=0.9, beta2=0.999,
+              eps=1e-8, weight_decay=0.0, **_):
+    params, grads = primals[0], primals[1]
+    state = primals[2] if len(primals) > 2 else None
+    dparams, dgrads = tangents[0], tangents[1]
+    dstate = tangents[2] if len(tangents) > 2 else None
+
+    p = np.asarray(params, dtype=np.float64)
+    g = np.asarray(grads, dtype=np.float64)
+    dp = np.asarray(dparams, dtype=np.float64)
+    dg = np.asarray(dgrads, dtype=np.float64)
+    if state is None:
+        m_prev = np.zeros_like(p)
+        v_prev = np.zeros_like(p)
+        step = 0
+    else:
+        m_prev = np.asarray(state["m"], dtype=np.float64)
+        v_prev = np.asarray(state["v"], dtype=np.float64)
+        step = int(state["step"])
+    if dstate is None:
+        dm_prev = np.zeros_like(p)
+        dv_prev = np.zeros_like(p)
+    else:
+        dm_prev = np.asarray(dstate.get("m", np.zeros_like(p)), dtype=np.float64)
+        dv_prev = np.asarray(dstate.get("v", np.zeros_like(p)), dtype=np.float64)
+
+    step += 1
+    b1, b2 = float(beta1), float(beta2)
+    m_new = b1 * m_prev + (1.0 - b1) * g
+    v_new = b2 * v_prev + (1.0 - b2) * g * g
+    dm_new = b1 * dm_prev + (1.0 - b1) * dg
+    dv_new = b2 * dv_prev + (1.0 - b2) * 2.0 * g * dg
+    bc1 = 1.0 - b1 ** step
+    bc2 = 1.0 - b2 ** step
+    m_hat = m_new / bc1
+    v_hat = v_new / bc2
+    dm_hat = dm_new / bc1
+    dv_hat = dv_new / bc2
+    sqrt_v = np.sqrt(v_hat)
+    denom = sqrt_v + float(eps)
+    update = m_hat / denom
+    dsqrt_v = dv_hat / (2.0 * np.maximum(sqrt_v, 1e-12))
+    dupdate = (dm_hat * denom - m_hat * dsqrt_v) / (denom * denom)
+    p_decay = p * (1.0 - float(lr) * float(weight_decay))
+    dp_decay = dp * (1.0 - float(lr) * float(weight_decay))
+    new_params = p_decay - float(lr) * update
+    d_new_params = dp_decay - float(lr) * dupdate
+    return new_params, d_new_params
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint 3 — Memory architecture: differentiable `memory_read` JVP.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@_jvp("memory_read")
+def jvp_memory_read(primals, tangents, *, top_k=1, normalize=True, **_):
+    """Forward-mode for `memory_read`.
+
+    Tangents flow through:
+      - `query` (changes scores → top_scores → weights → read)
+      - `keys`  (changes scores)
+      - `values` (changes gathered tensor directly)
+
+    Top-k indices are treated as constants (matches the VJP convention).
+    Returns the primal `MemoryReadResult` and a tuple-of-tangent matching
+    its layout: `(d_values, d_indices=None, d_weights, d_scores)`.
+    """
+    from tessera.memory import MemoryReadResult, MemoryTable
+
+    memory, query = primals[0], primals[1]
+    if isinstance(memory, MemoryTable):
+        keys = memory.keys
+        values = memory.values
+    else:
+        keys, values = memory
+    keys = np.asarray(keys, dtype=np.float64)
+    values = np.asarray(values, dtype=np.float64)
+    query = np.asarray(query._data if hasattr(query, "_data") else query, dtype=np.float64)
+
+    dmem, dquery = tangents[0], tangents[1]
+    if isinstance(dmem, tuple):
+        dkeys, dvalues = dmem
+    elif isinstance(dmem, MemoryTable):
+        dkeys, dvalues = dmem.keys, dmem.values
+    elif dmem is None:
+        dkeys = np.zeros_like(keys)
+        dvalues = np.zeros_like(values)
+    else:
+        dkeys, dvalues = dmem
+    dkeys = np.asarray(dkeys, dtype=np.float64)
+    dvalues = np.asarray(dvalues, dtype=np.float64)
+    dquery = np.asarray(dquery, dtype=np.float64)
+
+    single_query = query.ndim == 1
+    if single_query:
+        query = query[None, :]
+        dquery = dquery[None, :]
+    B = query.shape[0]
+    N = keys.shape[0]
+    k = min(int(top_k), N)
+
+    scores = query @ keys.T                                      # (B, N)
+    dscores = dquery @ keys.T + query @ dkeys.T
+
+    partition = np.argpartition(-scores, kth=k - 1, axis=-1)[:, :k]
+    top_scores = np.take_along_axis(scores, partition, axis=-1)
+    order = np.argsort(-top_scores, axis=-1)
+    indices = np.take_along_axis(partition, order, axis=-1)      # (B, k)
+    top_scores = np.take_along_axis(top_scores, order, axis=-1)
+    dtop_scores = np.take_along_axis(dscores, indices, axis=-1)
+
+    if normalize:
+        m = np.max(top_scores, axis=-1, keepdims=True)
+        e = np.exp(top_scores - m)
+        weights = e / np.sum(e, axis=-1, keepdims=True)
+        # JVP of softmax: dw = w * (dx - sum(w * dx))
+        sum_w_dx = np.sum(weights * dtop_scores, axis=-1, keepdims=True)
+        dweights = weights * (dtop_scores - sum_w_dx)
+    else:
+        weights = np.ones_like(top_scores) / k
+        dweights = np.zeros_like(top_scores)
+
+    gathered = values[indices]                                   # (B, k, *value_shape)
+    dgathered = dvalues[indices]
+    value_dims = tuple(range(2, gathered.ndim))
+    weights_b = weights.reshape(B, k, *([1] * len(value_dims)))
+    dweights_b = dweights.reshape(B, k, *([1] * len(value_dims)))
+    read = np.sum(gathered * weights_b, axis=1)
+    dread = np.sum(gathered * dweights_b + dgathered * weights_b, axis=1)
+
+    if single_query:
+        result = MemoryReadResult(values=read[0], indices=indices[0],
+                                  weights=weights[0], scores=top_scores[0])
+        tangent = MemoryReadResult(values=dread[0], indices=np.zeros_like(indices[0]),
+                                   weights=dweights[0], scores=dtop_scores[0])
+    else:
+        result = MemoryReadResult(values=read, indices=indices,
+                                  weights=weights, scores=top_scores)
+        tangent = MemoryReadResult(values=dread, indices=np.zeros_like(indices),
+                                   weights=dweights, scores=dtop_scores)
+    return result, tangent
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint 4 — `cummax` / `cummin` JVPs.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _cumextrema_jvp(x, dx, axis, comparator):
+    """Shared forward-mode for cummax/cummin.
+
+    For each output position i, the tangent is the tangent of whichever
+    input position currently holds the running extremum (with ties split
+    evenly, matching the VJP).
+    """
+    x = np.asarray(x, dtype=np.float64)
+    dx = np.asarray(dx, dtype=np.float64)
+    axis = axis if axis >= 0 else x.ndim + axis
+    x_perm = np.moveaxis(x, axis, -1)
+    dx_perm = np.moveaxis(dx, axis, -1)
+    if comparator is np.greater:
+        primal = np.maximum.accumulate(x_perm, axis=-1)
+    else:
+        primal = np.minimum.accumulate(x_perm, axis=-1)
+    tangent = np.zeros_like(primal)
+    L = x_perm.shape[-1]
+    for i in range(L):
+        prefix = x_perm[..., :i + 1]
+        running = primal[..., i:i + 1]
+        mask = (prefix == running).astype(np.float64)
+        counts = mask.sum(axis=-1, keepdims=True)
+        tangent[..., i] = np.sum(dx_perm[..., :i + 1] * mask, axis=-1) / counts.squeeze(-1)
+    return np.moveaxis(primal, -1, axis), np.moveaxis(tangent, -1, axis)
+
+
+@_jvp("cummax")
+def jvp_cummax(primals, tangents, *, axis=-1, **_):
+    x = primals[0]
+    dx = tangents[0]
+    return _cumextrema_jvp(x, dx, axis, np.greater)
+
+
+@_jvp("cummin")
+def jvp_cummin(primals, tangents, *, axis=-1, **_):
+    x = primals[0]
+    dx = tangents[0]
+    return _cumextrema_jvp(x, dx, axis, np.less)
+
+
 __all__ = ["register_jvp", "get_jvp", "jvp"]

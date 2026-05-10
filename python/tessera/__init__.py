@@ -3170,6 +3170,19 @@ ops = _make_ops_namespace()
 
 # nn module depends on `ops`, so import after the ops namespace is built.
 from . import nn  # noqa: E402
+from . import optim  # noqa: E402
+from . import rng  # noqa: E402
+from . import quantization  # noqa: E402
+from .quantization import (  # noqa: E402
+    CalibrationObserver,
+    calibration_observer,
+    dequantize_int4,
+    dequantize_int8,
+    fake_quantize,
+    grad_scaler_step,
+    quantize_int4,
+    quantize_int8,
+)
 
 # autodiff installs tape-aware wrappers on `ops.<name>`; load after `ops` and `nn`.
 from . import autodiff  # noqa: E402
@@ -3358,6 +3371,11 @@ __all__ = [
     "ops", "RuntimeArtifact", "RuntimeProfile", "available_backends",
     "backend_capabilities", "compile_artifact", "get_last_profile", "launch",
     "load_artifact", "query_backend",
+    # S10 optimizers / schedules and S9 quantization / numerics
+    "optim", "rng",
+    "quantization", "CalibrationObserver", "calibration_observer",
+    "quantize_int8", "dequantize_int8", "quantize_int4", "dequantize_int4",
+    "fake_quantize", "grad_scaler_step",
     # Dtype annotations
     "f16", "bf16", "f32", "mut_f32",
     # Tensor factories (Replicated)

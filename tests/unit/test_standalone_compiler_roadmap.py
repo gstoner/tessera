@@ -235,23 +235,36 @@ def test_primitive_coverage_includes_s7_attention_and_position_layers():
     entries = all_primitive_coverages()
     for name in ("multi_head_attention", "gqa_attention", "mqa_attention",
                  "mla_decode", "alibi", "ntk_rope", "conv1d", "max_pool",
-                 "avg_pool", "gru_cell", "simple_rnn_cell"):
+                 "avg_pool", "gru_cell", "simple_rnn_cell", "linear_general",
+                 "group_norm", "lora_linear"):
         assert name in entries, f"S7 layer/attention missing: {name}"
+        assert entries[name].existing_op
 
 
 def test_primitive_coverage_includes_s9_quantization_and_numerics():
     entries = all_primitive_coverages()
     for name in ("quantize_int8", "dequantize_int8", "quantize_int4",
-                 "fake_quantize", "calibration_observer", "grad_scaler_step"):
+                 "dequantize_int4", "fake_quantize", "calibration_observer",
+                 "grad_scaler_step"):
         assert name in entries, f"S9 quant/numerics primitive missing: {name}"
+        assert entries[name].existing_op
+
+
+def test_primitive_coverage_includes_s8_tiny_model_conformance_targets():
+    entries = all_primitive_coverages()
+    for name in ("tiny_diffusion_conformance", "tiny_recurrent_conformance",
+                 "tiny_attention_conformance"):
+        assert name in entries, f"S8 conformance target missing: {name}"
+        assert entries[name].existing_op
 
 
 def test_primitive_coverage_includes_s10_optimizers_and_schedules():
     entries = all_primitive_coverages()
     for name in ("sgd", "adamw", "adafactor", "lion", "muon",
                  "cosine_lr", "cosine_warmup_lr", "linear_warmup_lr",
-                 "clip_grad_norm", "ema_update"):
+                 "clip_grad_norm", "clip_grad_value", "ema_update", "polyak_avg"):
         assert name in entries, f"S10 optimizer/schedule missing: {name}"
+        assert entries[name].existing_op
 
 
 def test_primitive_coverage_includes_s11_loss_library():

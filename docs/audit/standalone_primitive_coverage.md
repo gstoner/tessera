@@ -53,7 +53,8 @@ The dashboard groups primitives by the S-series sprint that ships them.
 | **S7** Model layers | Standalone model authoring | `linear_general`, `conv1d`, `conv_transpose`, `group_norm`, `gru_cell`, `simple_rnn_cell`, `bidirectional_scan`, `max_pool`, `avg_pool`, `lora_linear` |
 | **S7** Position encodings + attention | Modern transformer building blocks | `rope`, `alibi`, `ntk_rope`, `multi_head_attention`, `gqa_attention`, `mqa_attention`, `mla_decode` |
 | **S7** Memory | Titans/Atlas-style learned memory | `memory_read`, `memory_write`, `memory_evict` |
-| **S9** Numerics + quantization | Mixed precision + quant flows | `quantize_int8`, `dequantize_int8`, `quantize_int4`, `fake_quantize`, `calibration_observer`, `grad_scaler_step`, `autocast` |
+| **S8** Tiny model conformance | Standalone family smoke tests | `tiny_diffusion_conformance`, `tiny_recurrent_conformance`, `tiny_attention_conformance` |
+| **S9** Numerics + quantization | Mixed precision + quant flows | `quantize_int8`, `dequantize_int8`, `quantize_int4`, `dequantize_int4`, `fake_quantize`, `calibration_observer`, `grad_scaler_step`, `autocast` |
 | **S10** Optimizers + schedules | Functional training step | `sgd`, `adamw`, `adafactor`, `lion`, `muon`, `lamb`, `cosine_lr`, `cosine_warmup_lr`, `clip_grad_norm`, `ema_update`, `polyak_avg` |
 | **S11** Losses | Training criteria | `mse_loss`, `mae_loss`, `huber_loss`, `kl_divergence`, `info_nce_loss`, `triplet_loss`, `focal_loss`, `ddpm_noise_pred_loss`, `score_matching_loss`, `ctc_loss` |
 | **S12** Serialization | Save / load / migrate / shard | `save_state`, `load_state`, `save_sharded`, `load_sharded`, `state_migration` |

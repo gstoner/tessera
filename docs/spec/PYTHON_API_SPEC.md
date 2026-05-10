@@ -1231,6 +1231,16 @@ surface: implemented entries have NumPy/reference behavior, while artifact-only
 entries still have stable names, Graph IR spellings, effects, and lowering
 metadata for frontend and compiler tests.
 
+Additional S-series runtime catalog entries are part of the same public
+`tessera.ops` namespace and are guarded against spec drift:
+`acos`, `argsort`, `asin`, `atan`, `atan2`, `bitwise_and`, `bitwise_not`,
+`bitwise_or`, `bitwise_xor`, `ceil`, `cosh`, `digamma`, `dynamic_slice`,
+`dynamic_update_slice`, `erf`, `erfc`, `flatten`, `flip`, `floor`,
+`floor_div`, `index_select`, `index_update`, `lgamma`, `logical_and`,
+`logical_not`, `logical_or`, `logical_xor`, `nonzero`, `permute`,
+`reciprocal`, `rsqrt`, `scatter_add`, `scatter_reduce`, `sinh`, `sort`,
+`squeeze`, `stack`, `trunc`, and `unsqueeze`.
+
 | Operation | Signature | Effect | Current behavior |
 |-----------|-----------|--------|------------------|
 | `gemm(A, B)` | `(array, array) → array` | `pure` | `np.matmul(A, B)` |

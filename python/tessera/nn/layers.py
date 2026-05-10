@@ -86,6 +86,192 @@ class Linear(Module):
         return F.linear(_as_array(x), _as_array(self.weight), bias=_as_array(self.bias) if self.bias is not None else None)
 
 
+class LinearGeneral(Module):
+    """Axis-flexible linear projection.
+
+    `in_shape` names the axes contracted from the input; `out_shape` names the
+    new trailing output axes. This is the stateful pair for
+    ``nn.functional.linear_general``.
+    """
+
+    def __init__(
+        self,
+        in_shape: int | tuple[int, ...],
+        out_shape: int | tuple[int, ...],
+        axis: int | tuple[int, ...] = -1,
+        bias: bool = True,
+        dtype: str = "fp32",
+    ) -> None:
+        super().__init__()
+        self.in_shape = (int(in_shape),) if isinstance(in_shape, int) else tuple(int(v) for v in in_shape)
+        self.out_shape = (int(out_shape),) if isinstance(out_shape, int) else tuple(int(v) for v in out_shape)
+        self.axis = axis
+        self.weight = Parameter(shape=self.in_shape + self.out_shape, dtype=dtype)
+        _kaiming_uniform_(self.weight._data._data, fan_in=int(np.prod(self.in_shape)))
+        if bias:
+            self.bias = Parameter(shape=self.out_shape, dtype=dtype)
+            self.bias._data._data[...] = 0.0
+        else:
+            object.__setattr__(self, "bias", None)
+
+    def forward(self, x: Any) -> np.ndarray:
+        return F.linear_general(
+            _as_array(x),
+            _as_array(self.weight),
+            bias=_as_array(self.bias) if self.bias is not None else None,
+            axis=self.axis,
+        )
+
+
+class Einsum(Module):
+    """Stateful Einsum layer with one owned weight tensor."""
+
+    def __init__(self, spec: str, weight_shape: tuple[int, ...], dtype: str = "fp32") -> None:
+        super().__init__()
+        self.spec = str(spec)
+        self.weight = Parameter(shape=tuple(int(v) for v in weight_shape), dtype=dtype)
+        _kaiming_uniform_(self.weight._data._data, fan_in=max(1, self.weight._data._data.shape[0]))
+
+    def forward(self, x: Any) -> np.ndarray:
+        return F.einsum(self.spec, _as_array(x), _as_array(self.weight))
+
+
+class LoRALinear(Module):
+    """Linear layer plus low-rank LoRA adapter."""
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        rank: int,
+        alpha: float = 1.0,
+        bias: bool = True,
+        dtype: str = "fp32",
+    ) -> None:
+        super().__init__()
+        self.in_features = int(in_features)
+        self.out_features = int(out_features)
+        self.rank = int(rank)
+        self.alpha = float(alpha)
+        self.weight = Parameter(shape=(self.in_features, self.out_features), dtype=dtype)
+        self.lora_a = Parameter(shape=(self.in_features, self.rank), dtype=dtype)
+        self.lora_b = Parameter(shape=(self.rank, self.out_features), dtype=dtype)
+        _kaiming_uniform_(self.weight._data._data, fan_in=self.in_features)
+        _kaiming_uniform_(self.lora_a._data._data, fan_in=self.in_features)
+        self.lora_b._data._data[...] = 0.0
+        if bias:
+            self.bias = Parameter(shape=(self.out_features,), dtype=dtype)
+            self.bias._data._data[...] = 0.0
+        else:
+            object.__setattr__(self, "bias", None)
+
+    def forward(self, x: Any) -> np.ndarray:
+        return F.lora_linear(
+            _as_array(x),
+            _as_array(self.weight),
+            _as_array(self.lora_a),
+            _as_array(self.lora_b),
+            bias=_as_array(self.bias) if self.bias is not None else None,
+            alpha=self.alpha,
+        )
+
+
+class Conv1d(Module):
+    """NCL grouped Conv1d reference layer."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int = 1,
+        padding: int = 0,
+        dilation: int = 1,
+        groups: int = 1,
+        bias: bool = True,
+        dtype: str = "fp32",
+    ) -> None:
+        super().__init__()
+        if in_channels % groups != 0 or out_channels % groups != 0:
+            raise ValueError("groups must divide in_channels and out_channels")
+        self.in_channels = int(in_channels)
+        self.out_channels = int(out_channels)
+        self.kernel_size = int(kernel_size)
+        self.stride = int(stride)
+        self.padding = int(padding)
+        self.dilation = int(dilation)
+        self.groups = int(groups)
+        self.weight = Parameter(shape=(out_channels, in_channels // groups, kernel_size), dtype=dtype)
+        _kaiming_uniform_(self.weight._data._data, fan_in=(in_channels // groups) * kernel_size)
+        if bias:
+            self.bias = Parameter(shape=(out_channels,), dtype=dtype)
+            self.bias._data._data[...] = 0.0
+        else:
+            object.__setattr__(self, "bias", None)
+
+    def forward(self, x: Any) -> np.ndarray:
+        return F.conv1d(
+            _as_array(x),
+            _as_array(self.weight),
+            bias=_as_array(self.bias) if self.bias is not None else None,
+            stride=self.stride,
+            padding=self.padding,
+            dilation=self.dilation,
+            groups=self.groups,
+        )
+
+
+class ConvTranspose1d(Module):
+    """NCL grouped ConvTranspose1d reference layer."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int = 1,
+        padding: int = 0,
+        output_padding: int = 0,
+        dilation: int = 1,
+        groups: int = 1,
+        bias: bool = True,
+        dtype: str = "fp32",
+    ) -> None:
+        super().__init__()
+        if in_channels % groups != 0 or out_channels % groups != 0:
+            raise ValueError("groups must divide in_channels and out_channels")
+        self.in_channels = int(in_channels)
+        self.out_channels = int(out_channels)
+        self.kernel_size = int(kernel_size)
+        self.stride = int(stride)
+        self.padding = int(padding)
+        self.output_padding = int(output_padding)
+        self.dilation = int(dilation)
+        self.groups = int(groups)
+        self.weight = Parameter(shape=(in_channels, out_channels // groups, kernel_size), dtype=dtype)
+        _kaiming_uniform_(self.weight._data._data, fan_in=(out_channels // groups) * kernel_size)
+        if bias:
+            self.bias = Parameter(shape=(out_channels,), dtype=dtype)
+            self.bias._data._data[...] = 0.0
+        else:
+            object.__setattr__(self, "bias", None)
+
+    def forward(self, x: Any) -> np.ndarray:
+        return F.conv_transpose(
+            _as_array(x),
+            _as_array(self.weight),
+            bias=_as_array(self.bias) if self.bias is not None else None,
+            stride=self.stride,
+            padding=self.padding,
+            output_padding=self.output_padding,
+            dilation=self.dilation,
+            groups=self.groups,
+        )
+
+
+ConvTranspose = ConvTranspose1d
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Norms
 # ─────────────────────────────────────────────────────────────────────────────
@@ -253,6 +439,83 @@ class LayerNorm(Module):
         if self.elementwise_affine and self.bias is not None:
             y = y + _as_array(self.bias)
         return y
+
+
+class GroupNorm(Module):
+    """GroupNorm over N,C,* tensors."""
+
+    def __init__(self, num_groups: int, num_channels: int, eps: float = 1e-5, affine: bool = True, dtype: str = "fp32") -> None:
+        super().__init__()
+        self.num_groups = int(num_groups)
+        self.num_channels = int(num_channels)
+        self.eps = float(eps)
+        self.affine = bool(affine)
+        if affine:
+            self.weight = Parameter(shape=(self.num_channels,), dtype=dtype)
+            self.weight._data._data[...] = 1.0
+            self.bias = Parameter(shape=(self.num_channels,), dtype=dtype)
+            self.bias._data._data[...] = 0.0
+        else:
+            object.__setattr__(self, "weight", None)
+            object.__setattr__(self, "bias", None)
+
+    def forward(self, x: Any) -> np.ndarray:
+        return F.group_norm(
+            _as_array(x),
+            self.num_groups,
+            weight=_as_array(self.weight) if self.weight is not None else None,
+            bias=_as_array(self.bias) if self.bias is not None else None,
+            eps=self.eps,
+        )
+
+
+class InstanceNorm(Module):
+    """InstanceNorm over N,C,* tensors."""
+
+    def __init__(self, num_features: int, eps: float = 1e-5, affine: bool = True, dtype: str = "fp32") -> None:
+        super().__init__()
+        self.num_features = int(num_features)
+        self.eps = float(eps)
+        self.affine = bool(affine)
+        if affine:
+            self.weight = Parameter(shape=(self.num_features,), dtype=dtype)
+            self.weight._data._data[...] = 1.0
+            self.bias = Parameter(shape=(self.num_features,), dtype=dtype)
+            self.bias._data._data[...] = 0.0
+        else:
+            object.__setattr__(self, "weight", None)
+            object.__setattr__(self, "bias", None)
+
+    def forward(self, x: Any) -> np.ndarray:
+        return F.instance_norm(
+            _as_array(x),
+            weight=_as_array(self.weight) if self.weight is not None else None,
+            bias=_as_array(self.bias) if self.bias is not None else None,
+            eps=self.eps,
+        )
+
+
+class WeightNorm(Module):
+    """Stateless module wrapper for weight normalization."""
+
+    def __init__(self, axis: int = 0, eps: float = 1e-12) -> None:
+        super().__init__()
+        self.axis = int(axis)
+        self.eps = float(eps)
+
+    def forward(self, weight: Any) -> np.ndarray:
+        return F.weight_norm(_as_array(weight), axis=self.axis, eps=self.eps)
+
+
+class SpectralNorm(Module):
+    """Stateless module wrapper for spectral normalization."""
+
+    def __init__(self, eps: float = 1e-12) -> None:
+        super().__init__()
+        self.eps = float(eps)
+
+    def forward(self, weight: Any) -> np.ndarray:
+        return F.spectral_norm(_as_array(weight), eps=self.eps)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -712,6 +975,66 @@ class DynamicDepthwiseConv1d(Module):
 # ─────────────────────────────────────────────────────────────────────────────
 # LSTM cell + sequence (Phase H2 — RNN with state-propagation primitive)
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+class SimpleRNNCell(Module):
+    """Simple tanh/relu RNN cell."""
+
+    def __init__(self, input_size: int, hidden_size: int, bias: bool = True, activation: str = "tanh", dtype: str = "fp32") -> None:
+        super().__init__()
+        self.input_size = int(input_size)
+        self.hidden_size = int(hidden_size)
+        self.activation = str(activation)
+        self.W_ih = Parameter(shape=(self.input_size, self.hidden_size), dtype=dtype)
+        self.W_hh = Parameter(shape=(self.hidden_size, self.hidden_size), dtype=dtype)
+        _kaiming_uniform_(self.W_ih._data._data, fan_in=self.input_size)
+        _kaiming_uniform_(self.W_hh._data._data, fan_in=self.hidden_size)
+        if bias:
+            self.bias = Parameter(shape=(self.hidden_size,), dtype=dtype)
+            self.bias._data._data[...] = 0.0
+        else:
+            object.__setattr__(self, "bias", None)
+
+    def forward(self, x: Any, h: Any) -> np.ndarray:
+        return F.simple_rnn_cell(
+            _as_array(x),
+            _as_array(h),
+            _as_array(self.W_ih),
+            _as_array(self.W_hh),
+            bias=_as_array(self.bias) if self.bias is not None else None,
+            activation=self.activation,
+        )
+
+
+class GRUCell(Module):
+    """GRU cell with gate order z, r, n."""
+
+    def __init__(self, input_size: int, hidden_size: int, bias: bool = True, dtype: str = "fp32") -> None:
+        super().__init__()
+        self.input_size = int(input_size)
+        self.hidden_size = int(hidden_size)
+        self.W_ih = Parameter(shape=(self.input_size, 3 * self.hidden_size), dtype=dtype)
+        self.W_hh = Parameter(shape=(self.hidden_size, 3 * self.hidden_size), dtype=dtype)
+        _kaiming_uniform_(self.W_ih._data._data, fan_in=self.input_size)
+        _kaiming_uniform_(self.W_hh._data._data, fan_in=self.hidden_size)
+        if bias:
+            self.b_ih = Parameter(shape=(3 * self.hidden_size,), dtype=dtype)
+            self.b_hh = Parameter(shape=(3 * self.hidden_size,), dtype=dtype)
+            self.b_ih._data._data[...] = 0.0
+            self.b_hh._data._data[...] = 0.0
+        else:
+            object.__setattr__(self, "b_ih", None)
+            object.__setattr__(self, "b_hh", None)
+
+    def forward(self, x: Any, h: Any) -> np.ndarray:
+        return F.gru_cell(
+            _as_array(x),
+            _as_array(h),
+            _as_array(self.W_ih),
+            _as_array(self.W_hh),
+            b_ih=_as_array(self.b_ih) if self.b_ih is not None else None,
+            b_hh=_as_array(self.b_hh) if self.b_hh is not None else None,
+        )
 
 
 class LSTMCell(Module):
@@ -1224,8 +1547,18 @@ class MixtureOfRecursions(Module):
 
 __all__ = [
     "Linear",
+    "LinearGeneral",
+    "Einsum",
+    "LoRALinear",
+    "Conv1d",
+    "ConvTranspose1d",
+    "ConvTranspose",
     "RMSNorm",
     "LayerNorm",
+    "GroupNorm",
+    "InstanceNorm",
+    "WeightNorm",
+    "SpectralNorm",
     "BatchNorm1d",
     "Embedding",
     "Dropout",
@@ -1241,6 +1574,8 @@ __all__ = [
     "DynamicDepthwiseConv1d",
     "Conv2d",
     "Conv2dNCHW",
+    "SimpleRNNCell",
+    "GRUCell",
     "LSTMCell",
     "LSTM",
     "NativeSparseAttention",

@@ -26,9 +26,30 @@ import sys as _sys
 # Functional API and submodule alias ------------------------------------------
 from . import functional
 from .functional import (
+    adaptive_pool,
+    alibi,
+    avg_pool,
+    bidirectional_scan,
+    conv1d,
+    conv_transpose,
+    einsum,
+    group_norm,
+    gqa_attention,
+    gru_cell,
+    instance_norm,
     linear,
+    linear_general,
+    lora_linear,
+    max_pool,
+    min_pool,
+    mla_decode,
+    mqa_attention,
+    ntk_rope,
     rms_norm,
+    simple_rnn_cell,
+    spectral_norm,
     swiglu,
+    weight_norm,
     multi_head_attention,
     flash_attention,
 )
@@ -37,8 +58,18 @@ from .functional import (
 from .module import Module, Parameter, Buffer, Sequential, ModuleList, ModuleDict
 from .layers import (
     Linear,
+    LinearGeneral,
+    Einsum,
+    LoRALinear,
+    Conv1d,
+    ConvTranspose1d,
+    ConvTranspose,
     RMSNorm,
     LayerNorm,
+    GroupNorm,
+    InstanceNorm,
+    WeightNorm,
+    SpectralNorm,
     Embedding,
     Dropout,
     MLP,
@@ -60,6 +91,8 @@ from .layers import (
     Conv2d,
     Conv2dNCHW,
     # Phase H2 — RNN cells with state-propagation primitive (ops.lstm_cell + extractors)
+    SimpleRNNCell,
+    GRUCell,
     LSTMCell,
     LSTM,
     # attention_variants_plan, NSA-3 — DeepSeek Native Sparse Attention.
@@ -101,11 +134,19 @@ def _phantom(name: str, hint: str) -> type:
 
 __all__ = [
     # Functional API
-    "linear", "rms_norm", "swiglu", "multi_head_attention",
+    "linear", "linear_general", "einsum", "conv1d", "conv_transpose",
+    "group_norm", "instance_norm", "weight_norm", "spectral_norm",
+    "max_pool", "avg_pool", "min_pool", "adaptive_pool",
+    "simple_rnn_cell", "gru_cell", "bidirectional_scan", "lora_linear",
+    "alibi", "ntk_rope", "gqa_attention", "mqa_attention", "mla_decode",
+    "rms_norm", "swiglu", "multi_head_attention",
     "flash_attention", "functional",
     # Stateful API (Tier 1)
     "Module", "Parameter", "Buffer", "Sequential", "ModuleList", "ModuleDict",
-    "Linear", "RMSNorm", "LayerNorm", "Embedding", "Dropout", "MLP",
+    "Linear", "LinearGeneral", "Einsum", "LoRALinear",
+    "Conv1d", "ConvTranspose1d", "ConvTranspose",
+    "RMSNorm", "LayerNorm", "GroupNorm", "InstanceNorm", "WeightNorm", "SpectralNorm",
+    "Embedding", "Dropout", "MLP",
     "MultiHeadAttention",
     # Phase A4 additions (real implementations, not phantoms)
     "MultiHeadCrossAttention", "RotaryEmbedding",
@@ -120,7 +161,7 @@ __all__ = [
     # Phase H1 (NHWC default; NCHW shim transposes in/out)
     "Conv2d", "Conv2dNCHW",
     # Phase H2 (RNN cells)
-    "LSTMCell", "LSTM",
+    "SimpleRNNCell", "GRUCell", "LSTMCell", "LSTM",
     # attention_variants_plan, NSA-3
     "NativeSparseAttention",
     # Phase F-MoR — Mixture of Recursions

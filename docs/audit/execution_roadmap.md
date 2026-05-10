@@ -352,7 +352,7 @@ collectives primitive library that `shard_map` callees actually invoke.
 - CPU/mock tests validate semantics; NVIDIA/NCCL tests become active when
   Phase G provides hardware execution.
 
-### [S7] Flax-level model primitive library 📋
+### [S7] Flax-level model primitive library 🚧
 
 **Scope:** L (~900 LOC code + ~600 LOC tests). Depends on S2-S5 (recurrent
 layers require `scan` from S5; attention layers require batching rules from
@@ -376,7 +376,17 @@ PyTorch/JAX/Flax modules.
   `multi_head_attention`, `gqa_attention`, `mqa_attention`, `mla_decode`.
 - Dropout and stochastic-depth modules consume explicit Tessera RNG streams.
 
-### [S9] Numerics, mixed precision, and quantization 📋
+**Status 2026-05-10:** partial reference surface landed. `tessera.nn`
+now exposes `LinearGeneral`, `Einsum`, `LoRALinear`, `Conv1d`,
+`ConvTranspose1d`/`ConvTranspose`, `GroupNorm`, `InstanceNorm`,
+`WeightNorm`, `SpectralNorm`, pooling helpers, `SimpleRNNCell`, `GRUCell`,
+`bidirectional_scan`, `alibi`, `ntk_rope`, `gqa_attention`, `mqa_attention`,
+and `mla_decode`, with coverage entries and unit tests. Remaining S7 work:
+Conv3d, sequence flip/masking, stochastic depth, Titans/Atlas memory layers,
+and Graph IR/backend/VJP/JVP/batching/sharding rules for the Python-reference
+layers.
+
+### [S9] Numerics, mixed precision, and quantization 🚧
 
 **Scope:** L (~700 LOC code + ~450 LOC tests). Depends on S1; integrates with
 S2 (dtype rules) and S5 (autocast as a transform).
@@ -407,7 +417,17 @@ infrastructure.
 - Tests cover dtype-promotion correctness, autocast under reverse-mode AD,
   per-channel quant round-trip error, and QAT gradient flow.
 
-### [S10] Optimizer library and training-step primitives 📋
+**Status 2026-05-10:** partial reference API landed in
+`python/tessera/quantization.py` and is exported from `tessera`. Covered:
+`quantize_int8`, `dequantize_int8`, `quantize_int4`, `dequantize_int4`,
+`fake_quantize`, `CalibrationObserver`/`calibration_observer`, and
+`grad_scaler_step`, with unit tests and primitive-coverage entries. Existing
+fp8/fp6/fp4/nvfp4 ops remain available through `tessera.ops`. Remaining S9
+work: per-channel/blockwise quantization, GPTQ/AWQ policy hooks, STE VJPs,
+dtype-lattice documentation, reduction precision policy, and full autocast
+rewrite integration through compiled IR.
+
+### [S10] Optimizer library and training-step primitives 🚧
 
 **Scope:** M (~600 LOC code + ~400 LOC tests). Depends on S3 (state trees
 hold optimizer slots) and S2 (scalar math + reductions).
@@ -430,6 +450,20 @@ optimizer surface to a real library.
 - Tests cover Rosenbrock convergence, AdamW vs Adam decoupling,
   Adafactor's factored second moments, EMA shadow consistency, and
   optimizer-state pytree round-trip through S3.
+
+**Status 2026-05-10:** partial functional optimizer library landed in
+`python/tessera/optim.py` and is exported as `tessera.optim`. Covered:
+`sgd`, `momentum`, `nesterov`, `adamw`, `adafactor`, `lion`, `muon`,
+`lamb`, `constant_lr`, `cosine_lr`, `cosine_warmup_lr`,
+`linear_warmup_lr`, `polynomial_lr`, `inverse_sqrt_lr`,
+`clip_grad_norm`, `clip_grad_value`, `centralize_grad`,
+`add_decoupled_weight_decay`, `ema_update`, `polyak_avg`, and
+`OptaxStyleChain`/`chain`. Unit tests cover nested parameter trees,
+factored Adafactor state, optimizer-state S3 tree round trip, schedules,
+EMA/Polyak updates, and gradient-transform composition. Remaining S10 work:
+Graph IR optimizer-step contracts, sharded optimizer state integration,
+Rosenbrock/convergence suites, and training-loop examples once S11 losses and
+S12 checkpointing are in place.
 
 ### [S11] Loss / criterion library 📋
 
@@ -565,7 +599,7 @@ batching, sharding-of-data, and tokenization surfaces. `tf.data`,
   mock collective harness, tokenizer round-trip equality, and resumed
   iteration after a checkpoint.
 
-### [S8] Tiny standalone model conformance suite 📋
+### [S8] Tiny standalone model conformance suite 🚧
 
 **Scope:** XL (~1,000 LOC tests/examples + dashboard integration). Depends on
 S2-S7 + S9-S15; performance gates depend on Phase G.
@@ -585,6 +619,16 @@ PyTorch/JAX/Flax modules.
   NVIDIA/H100 optimized execution after Phase G.
 - The S1 dashboard reports which model families are blocked by each missing
   primitive contract.
+
+**Status 2026-05-10:** initial conformance smoke tests landed in
+`tests/unit/test_s7_s8_s9.py` for recurrent/scan forward+backward, RNG
+state replay, diffusion-like Conv1d+GroupNorm, and attention-like
+LinearGeneral+MHA fragments. Coverage now tracks
+`tiny_diffusion_conformance`, `tiny_recurrent_conformance`, and
+`tiny_attention_conformance` as shipped partial targets. Remaining S8 work:
+dedicated tiny xLSTM, Mamba/SSM, Hyena/FNet, Linformer/cosFormer,
+Griffin/Megalodon, JEPA, and Titans/Atlas examples with optimizer/loss/data
+pipeline/checkpoint gates once S10-S15 mature.
 
 ---
 

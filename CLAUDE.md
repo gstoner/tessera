@@ -1,6 +1,9 @@
 # Tessera — Claude Code Project Context
 
 > **Phases 1–6 complete. Phase 7 lit-clean. Phase 8 — Apple M-Series CPU (Phase 8.2) and GPU (Phases 8.3 → 8.4.7) operational. apple_gpu ships 26 runtime symbols across 9 kernel concepts × {f32, f16, bf16}, including 4 fused chains (matmul→softmax, matmul→gelu, matmul→rmsnorm, matmul→softmax→matmul). See `docs/apple_gpu_overview.md`.**
+>
+> **NEW: Standalone compiler track (S-series) — S0/S1 landed (2026-05-10).** Tessera is being lifted into a standalone model compiler that is *runtime-independent of PyTorch, JAX, and Flax*. They are reference vocabularies only — never imported by the runtime. S0 locks the scope decisions (data pipeline, training step, custom-op API, AOT export are all in-scope). S1 ships the standalone primitive contract registry at `python/tessera/compiler/primitive_coverage.py` (342 entries across 53 categories) with a guarded dashboard at `docs/audit/standalone_primitive_coverage.md`. S2–S15 sequence the remaining work. See `docs/audit/execution_roadmap.md`.
+>
 > This file is the authoritative working reference. Read it before touching any code.
 > Last updated: May 2026 (MLIR 21 / LLVM 21 build pin).
 
@@ -48,9 +51,10 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 | Phase 6 | ✅ Complete | `TesseraRuntime` Python wrapper, CUDA/HIP backends (real calls), ROCm MFMA coverage, benchmark runners, `ErrorReporter`, `ShapeInferencePass` — 170 tests |
 | Phase 7 | 🟡 In progress | Neighbors dialect (halo/stencil) wired into `tessera-opt`; Cerebras WSE-3 (487 LOC, real) and Tenstorrent Metalium (550 LOC, real) backends landed with `tessera-lower-to-metalium` pipeline alias |
 | Phase 8 | 🟢 Apple operational | Hardware-free Target IR — `tessera_rocm.mfma`, `tessera_metalium.dma/matmul`, `tessera_apple.cpu/gpu.*` ODS dialects between Tile IR and hardware-specific lowering; `@jit(target="rocm"/"metalium"/"apple_cpu"/"apple_gpu")` string targets. **Apple M-Series CPU (8.2)** — `@jit(target="apple_cpu")` via Accelerate (cblas_sgemm + BNNS f16/bf16). **Apple M-Series GPU (8.3 → 8.4.7)** — `@jit(target="apple_gpu")` via MPS + custom MSL kernels: 9 kernel concepts × {f32, f16, bf16} = 26 runtime symbols; 4 fused chains (matmul→softmax, matmul→gelu, matmul→rmsnorm, matmul→softmax→matmul); threadgroup-tiled f32 matmul_softmax for N up to 8192. See `docs/apple_gpu_overview.md`. |
+| **S-series** (standalone compiler track) | 🟢 S0/S1 landed | **S0** locks scope: data pipeline (S15), training step (S10/S11/S12), custom-op API (S13), AOT export + cache (S14) are all in-scope; PyTorch/JAX/Flax are reference vocabularies only. **S1** ships `python/tessera/compiler/primitive_coverage.py` — standalone primitive contract registry (342 entries × 12 contract axes × 53 categories). Registry consults `tessera.autodiff.vjp._VJPS` so any op with a registered VJP correctly shows `vjp = complete`. Guard: `tests/unit/test_standalone_compiler_roadmap.py` (26 tests, including a snapshot-drift gate against the dashboard). **S2–S15** sequenced in `docs/audit/execution_roadmap.md`: S2 tensor algebra, S3 pytrees, S4 RNG, S5 control flow + transforms, S6 sharding + collectives, S7 Flax-level model layers, S8 tiny-model conformance, S9 numerics + quantization, S10 optimizers, S11 losses, S12 checkpointing, S13 custom-op API, S14 cache + AOT, S15 native data pipeline. |
 | RubinCPX | ✅ Built | `tessera.target.cpx` dialect, 4 passes, `tessera-cpx-opt` driver, `TESSERA_BUILD_RUBINCPX_BACKEND` CMake option |
 
-**Total active tests: 1,938 passing in `tests/unit/` (0 failing); Apple Phase 8 lit fixtures 4/4 passing in `tests/tessera-ir/phase8/` against the in-tree `tessera-opt`.**
+**Total active tests: 1,816 passing under `-m "not slow"` in `tests/unit/` (3 pre-existing `test_debug_env.py::TestDiffCommand` failures, unrelated to recent work); Apple Phase 8 lit fixtures 4/4 passing in `tests/tessera-ir/phase8/` against the in-tree `tessera-opt`; Phase 2 + Phase 7 KV-cache lit fixtures 2/2 passing; S-series roadmap guard 26/26 passing in `tests/unit/test_standalone_compiler_roadmap.py`.**
 
 ---
 
@@ -63,6 +67,7 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 | `__init__.py` | Top-level exports: `jit`, `kernel`, `Region`, `domain`, `dist`, `array`, `index_launch`, `constraint`, `ops`, `Tensor`, `f16`, `mut_f32` |
 | `compiler/jit.py` | `@jit` and `@kernel` decorators; routes to x86, GPU, or string-target pipeline (`"rocm"`/`"metalium"`/`"apple_cpu"`/`"apple_gpu"`). **Phase A2-followup**: `JitFn._enforce_call_time_constraints` resolves symbolic dim names against actual call shapes and re-runs `ConstraintSolver.check`; cached per-shape. |
 | `compiler/op_catalog.py` | Canonical op catalog — single source of truth for op names across Graph IR / Schedule IR / Tile IR / Target IR |
+| `compiler/primitive_coverage.py` | **S-series S1** — standalone primitive contract registry. Distinct from `op_catalog.py`: catalog says "what we accept today"; this says "what each primitive must prove (math/shape/dtype/VJP/JVP/batching/transpose/sharding/effect/lowering/kernel/tests) before it is compiler-complete". Imports `OP_SPECS` as partial entries; consults `autodiff.vjp._VJPS` so registered VJPs aren't reported as missing. 342 entries spanning S2–S15 surfaces (tensor algebra, control flow, collectives, optimizers, losses, quant, custom-op, AOT, data pipeline + tokenizers). Renders `docs/audit/standalone_primitive_coverage.md`. Guard: `tests/unit/test_standalone_compiler_roadmap.py`. |
 | `compiler/matmul_pipeline.py` | Multi-target matmul pipeline dispatch — selects backend lowering based on `target=` argument |
 | `compiler/constraints.py` | `ConstraintSolver`: `Divisible`, `Range`, `Equal` — checked at decoration time |
 | `compiler/effects.py` | `EffectLattice`: `pure < random < memory < io < top` |
@@ -242,6 +247,10 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 
 22. **Doc surface is broader than IR/runtime surface — check `docs/guides/` and `docs/programming_guide/` before claiming a feature is missing.** The 11 user guides + 11-chapter programming guide describe APIs (e.g., `tessera.debug.check_grad`, `tessera.debug.check_determinism`, replay manifests, `tessera-mlir` compile-artifact mode, autodiff via Ch.7) that are fully documented and largely implemented in `python/tessera/{debug,diagnostics,cli/mlir}.py` (526 + 778 + 425 LOC) but are easy to overlook because the source-tour above doesn't make them obvious. When evaluating "do we have X", read the relevant guide first.
 
+23. **Tessera is a standalone compiler — no PyTorch / JAX / Flax at runtime.** This is the S0 scope decision (locked 2026-05-10). PyTorch (torch / aten / optax-style helpers), JAX (jax.lax / jax.numpy / flax.nnx / orbax / grain), and any equivalent are **reference vocabularies only**. Nothing in `python/tessera/`, the C++ runtime, or any shipped artifact may import them. The same rule applies to data and tokenization (`tf.data`, `torch.utils.data`, `grain`, `tiktoken`, `tokenizers`, `sentencepiece`) — Tessera owns its own data pipeline and tokenizer surfaces (S15). The single permitted concession is *file-format compatibility* (e.g., reading SentencePiece protobufs in `tokenizer_sentencepiece_compat`); the runtime that consumes those bytes must be Tessera's own. When you see "the JAX way" or "torch.optim.AdamW" in an issue or doc, treat it as vocabulary borrowing — reimplement, don't wrap.
+
+24. **`primitive_coverage.py` is the standalone compiler's audit truth, not `op_catalog.py`.** They serve different purposes: `op_catalog.py` is the runtime/frontend op acceptor (what the parser will accept today); `primitive_coverage.py` is the audit dashboard (what each primitive must prove across 12 contract axes before it is compiler-complete). When you ship a new primitive, update *both*: catalog for runtime acceptance, coverage for contract status. The coverage registry consults `tessera.autodiff.vjp._VJPS` automatically, so registering a VJP flips `vjp` from `planned` to `complete` without manual dashboard edits. Adding a planned primitive is also automatic — but the registry rejects duplicate planned entries (`ValueError`) so a primitive can only have one canonical row. The dashboard at `docs/audit/standalone_primitive_coverage.md` is gated against drift by `test_standalone_primitive_dashboard_contains_checked_generated_snapshot`.
+
 ---
 
 ## Key Design Contracts
@@ -398,6 +407,70 @@ End-to-end verified on this Mac (LLVM/MLIR 21, Accelerate active): single GEMM b
 
 ---
 
+## Standalone Compiler Track (S-series) — In Progress
+
+Distinct from the Phase A–I "execution roadmap" (which sequenced the existing
+NVIDIA / FA-4 / Apple work), the S-series sequences Tessera into a fully
+standalone model compiler — independent of PyTorch, JAX, and Flax at runtime.
+See Architecture Decisions #23 and #24, and `docs/audit/execution_roadmap.md`.
+
+### S0 — Scope lock ✅ (2026-05-10)
+
+The S0 sprint is the canonical place where the contested boundaries are made
+explicit. **In scope:** native data pipeline + tokenizers (S15), training step
+(S10 optimizers + S11 losses + S12 checkpointing), custom-primitive authoring
+(S13), AOT export + persistent compilation cache (S14). **Reference
+vocabularies only:** PyTorch, JAX, Flax, Optax, Orbax, Grain, tf.data,
+tiktoken, tokenizers, sentencepiece. The runtime never imports them.
+
+### S1 — Native primitive contract registry ✅ (2026-05-10)
+
+`python/tessera/compiler/primitive_coverage.py` is the standalone compiler's
+audit dashboard. Each entry records 12 contract axes — math, shape,
+dtype/layout, VJP, JVP, batching, transpose, sharding, masking/effect,
+lowering, kernel, tests — across `complete`/`partial`/`planned`/`not_applicable`.
+
+**342 entries × 53 categories** today, covering S2–S15 surfaces:
+- S2: tensor algebra, indexing, reductions, stability primitives, scalar math, comparisons, numeric helpers
+- S3: state trees (`tree_flatten`/`tree_map`/`tree_reduce`/`state_filter`/`state_partition`)
+- S4: 14 RNG primitives (key + 12 samplers)
+- S5: control flow + transforms (`scan`, `associative_scan`, `cond`, `while_loop`, `fori_loop`, `vmap`, `pmap`, `vjp`, `jvp`, `remat`, `autocast`, `axis_index`/`axis_size`/`axis_name`)
+- S6: sharding (`shard_map`, `named_sharding`, `partition_spec`) + collectives library (`psum`/`pmean`/`pmax`/`pmin`/`collective_permute`/`broadcast_to_axis`)
+- S7: model layers + position encodings (`rope`/`alibi`/`ntk_rope`) + attention library (`multi_head_attention`/`gqa_attention`/`mqa_attention`/`mla_decode`)
+- S9: 8 quantization + numerics primitives (int8/int4 quant, fake-quant, observers, GradScaler)
+- S10: 8 optimizers, 5 LR schedules, 4 grad transforms
+- S11: 21 losses (regression / classification / distribution / contrastive / diffusion / sequence)
+- S12: serialization (`save_state`/`load_state`/`save_sharded`/`load_sharded`/`state_migration`)
+- S13: custom-primitive API (`custom_primitive`/`custom_call`/`custom_vjp`/`custom_jvp`/`custom_batching`)
+- S14: AOT + cache (`aot_export`/`aot_load`/`stablehlo_export`/`gguf_export`/`safetensors_export`/`compilation_cache`)
+- S15: data pipeline (`dataset_map`/`dataset_filter`/`dataset_batch`/`dataset_shuffle`/`dataset_interleave`/`dataset_prefetch`/`sharded_dataset`/`iterable_dataset`/`dataset_checkpoint`) + tokenizers (`tokenizer_byte`/`tokenizer_bpe`/`tokenizer_wordpiece`/`tokenizer_unigram`/`tokenizer_sentencepiece_compat`)
+
+**Imported `OP_SPECS` are partial entries**, not falsely complete: when an op
+has a registered VJP in `tessera.autodiff.vjp._VJPS` (36 ops today), the
+registry sets `vjp = complete` automatically; everything else stays visible
+as missing until each axis lands.
+
+**Naming gotchas locked into the registry:**
+- `permute` (tensor algebra — axis transposition) and `collective_permute`
+  (S6 collective — cross-device reshuffle) are distinct primitives; the
+  registry rejects duplicate planned entries.
+
+**Guards:** `tests/unit/test_standalone_compiler_roadmap.py` (26 tests)
+locks roadmap structure, scope decisions, registry axes, and a
+snapshot-drift gate that compares `render_markdown()` output to a
+checked-in section of `docs/audit/standalone_primitive_coverage.md`.
+
+### S2–S15 — Planned
+
+Sequenced and individually scoped in `docs/audit/execution_roadmap.md`.
+Dependencies: S1 gates everything; S7 depends on S2–S5 (recurrent layers
+need `scan`); S8 depends on every other S-sprint (it's the conformance
+gate). S15 (data pipeline) is in scope from S0 onwards. When picking up
+an S-sprint, the registry tells you exactly which contract axes the
+sprint must close.
+
+---
+
 ## GPU-Only Tier — Never Implement on CPU
 
 Gate all of these behind `target_profile.isa >= ISA.SM_90`:
@@ -518,7 +591,9 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | Architecture overviews | `docs/architecture/` (system_overview.md, tessera_target_ir_usage_guide.md, Tessera_Kernel_Compilation_Stages_Overview.md), `docs/operations/Tessera_Standard_Operations.md` |
 | Spec gap audits | `docs/audit/compiler_spec_gap_audit.md`, `compiler_spec_gap_matrix.md` |
 | **Advanced examples capability gap** (per-example status + 10-theme tracking plan) | `docs/audit/advanced_examples_capability_gap.md` |
-| **Development execution roadmap** (Phases A–I, per-task acceptance criteria, dependencies) | `docs/audit/execution_roadmap.md` |
+| **Development execution roadmap** (Phases A–I + S-series S0–S15 standalone compiler track, per-task acceptance criteria, dependencies) | `docs/audit/execution_roadmap.md` |
+| **Standalone primitive coverage dashboard** (S1 audit — 342 entries × 12 contract axes × 53 categories; sentinel snapshot + drift guard) | `docs/audit/standalone_primitive_coverage.md` |
+| **Standalone primitive coverage registry** (the source of truth that renders the dashboard) | `python/tessera/compiler/primitive_coverage.py` |
 | **NVIDIA execution audit** (Phase G1 — per-component status + 8-task punch list to first H100 BF16 GEMM) | `docs/audit/nvidia_execution_audit.md` |
 | Examples (most are README/stub scaffolds) | `examples/` — `getting_started/basic_tensor_ops.py` (canonical `@tessera.jit`), `compiler/`, `advanced/` (10+ subdirs: speculative_decoding, long_context_attention, kv_cache_serving, MoE, MLA, Nemotron, Jet_Nemotron, Fast_dLLM, RLVR), `optimization/`, `integration/`. |
 | Style guide | `tessera_style_guide.md` |
@@ -534,4 +609,4 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 
 ---
 
-*Last updated: May 2026 — Phases 1–6 complete; Phase 7 lit-clean; Phase 8 Apple operational (CPU 8.2 via Accelerate; GPU 8.3 → 8.4.7 via MPS + custom MSL). Apple GPU runtime exports **26 C ABI symbols** across 9 kernel concepts × {f32, f16, bf16}: matmul (MPS), rope/softmax/gelu/flash_attn (MSL), 3 fused 2-op chains (matmul→softmax incl. tiled large-N variant, matmul→gelu, matmul→rmsnorm), and 1 fused 3-op chain (matmul→softmax→matmul, full attention block). All sharing one `MetalDeviceContext` + MSL kernel cache keyed by `(msl_source, entry_point)`. Pipelines: `tessera-lower-to-{rocm,metalium,apple_cpu,apple_cpu-runtime,apple_gpu,apple_gpu-runtime}`. Build pin: **LLVM/MLIR 21**. Test count: **2,020 unit tests passing** + **16/16 Phase 8 lit fixtures** against the in-tree `tessera-opt`. See `docs/apple_gpu_overview.md` for the full architecture story.*
+*Last updated: 2026-05-10 — Phases 1–6 complete; Phase 7 lit-clean; Phase 8 Apple operational (CPU 8.2 via Accelerate; GPU 8.3 → 8.4.7 via MPS + custom MSL). KV-cache Decision-#21 lowering shipped on x86 + Apple CPU/GPU + Metalium with REQUIRES-gated lit fixtures. Apple GPU runtime exports **26 C ABI symbols** across 9 kernel concepts × {f32, f16, bf16}: matmul (MPS), rope/softmax/gelu/flash_attn (MSL), 3 fused 2-op chains (matmul→softmax incl. tiled large-N variant, matmul→gelu, matmul→rmsnorm), and 1 fused 3-op chain (matmul→softmax→matmul, full attention block). All sharing one `MetalDeviceContext` + MSL kernel cache keyed by `(msl_source, entry_point)`. Pipelines: `tessera-lower-to-{rocm,metalium,apple_cpu,apple_cpu-runtime,apple_gpu,apple_gpu-runtime}`. Build pin: **LLVM/MLIR 21**. **NEW:** Standalone compiler track (S-series) S0/S1 landed — primitive contract registry at `python/tessera/compiler/primitive_coverage.py` (342 entries × 12 axes × 53 categories), guarded by 26 tests. S2–S15 sequenced in `docs/audit/execution_roadmap.md`. See Architecture Decisions #23 and #24. See `docs/apple_gpu_overview.md` for the Apple GPU architecture story.*

@@ -7,15 +7,23 @@
 //   CPU side  (-tessera-lower-to-apple_cpu):
 //     tessera.matmul / tessera.gemm        -> tessera_apple.cpu.accelerate_gemm
 //     tessera.softmax / tessera.softmax_safe -> tessera_apple.cpu.vector_reduce
-//     tessera.kv_cache.*                   -> tessera_apple.diagnostic
+//     tessera.kv_cache.*                   -> tessera_apple.cpu.kv_cache_op
 //     anything else                        -> tessera_apple.cpu.vector_op
 //
 //   GPU side  (-tessera-lower-to-apple_gpu):
 //     tessera.flash_attn                   -> metal_kernel("flash_attn_contract")
 //                                             + tessera_apple.gpu.dispatch
-//     tessera.kv_cache.*                   -> tessera_apple.diagnostic
+//     tessera.kv_cache.*                   -> tessera_apple.gpu.kv_cache_op
 //     anything else                        -> tessera_apple.gpu.metal_kernel
 //                                             + tessera_apple.gpu.dispatch
+//
+// kv_cache_coverage_matrix.md (2026-05-10): the kv_cache.* lowerings
+// previously emitted `tessera_apple.diagnostic("unsupported")`. They
+// now emit real `tessera_apple.{cpu,gpu}.kv_cache_op` artifacts that
+// carry the original Graph IR op as a `kind` attribute; the Python
+// runtime dispatches on (target, kind) and routes to
+// `tessera.cache.KVCacheHandle.{append,read,prune,...}` — same
+// reference path that backs the numpy execution route.
 //
 // Lowering matches on op-name strings so it can consume both the registered
 // Tile IR dialect and the unregistered text-form artifacts the Python pipeline
@@ -62,6 +70,15 @@ constexpr llvm::StringLiteral kGPUMetalKernel =
 constexpr llvm::StringLiteral kGPUDispatch = "tessera_apple.gpu.dispatch";
 
 constexpr llvm::StringLiteral kDiagnostic = "tessera_apple.diagnostic";
+
+// kv_cache_coverage_matrix.md — Apple CPU + GPU KV-cache lowering targets.
+// `kv_cache.{create,append,prune,read}` map to a single tessera_apple.*
+// op carrying the original Graph IR op as a `kind` attribute. The Python
+// runtime path dispatches on (target, kind) and routes to
+// `tessera.cache.KVCacheHandle.{append,read,prune,...}` — the same
+// reference path that backs the numpy execution route.
+constexpr llvm::StringLiteral kCPUKVCacheOp = "tessera_apple.cpu.kv_cache_cpu";
+constexpr llvm::StringLiteral kGPUKVCacheOp = "tessera_apple.gpu.kv_cache_gpu";
 
 // Op-name predicates that mirror the Python pipeline.
 bool isMatmul(llvm::StringRef name) {
@@ -181,9 +198,20 @@ struct LowerTileToAppleCPUPass
               : name;
 
       if (isKVCache(name) || isKVCache(src)) {
-        buildDiagnostic(builder, op, ordinal, "unsupported",
-                        "KV-cache target lowering is not implemented for "
-                        "Apple CPU in this phase");
+        // kv_cache_coverage_matrix.md (2026-05-10) — replace the
+        // historical "unsupported" diagnostic with a real lowering to
+        // tessera_apple.cpu.kv_cache_op. The op carries the original
+        // Graph IR op spelling as `kind` so the Python runtime can
+        // dispatch correctly without re-parsing the source string.
+        llvm::StringRef kind = isKVCache(name) ? name : src;
+        llvm::SmallVector<NamedAttribute, 3> extra;
+        extra.emplace_back(builder.getStringAttr("framework"),
+                           builder.getStringAttr("Tessera"));
+        extra.emplace_back(builder.getStringAttr("abi"),
+                           builder.getStringAttr("kv_cache_handle"));
+        extra.emplace_back(builder.getStringAttr("kind"),
+                           builder.getStringAttr(kind));
+        buildAppleOp(builder, op, kCPUKVCacheOp, ordinal, extra);
       } else if (isMatmul(name) || isMatmul(src)) {
         llvm::SmallVector<NamedAttribute, 2> extra;
         extra.emplace_back(builder.getStringAttr("framework"),
@@ -254,9 +282,21 @@ struct LowerTileToAppleGPUPass
 
       bool emittedKernel = false;
       if (isKVCache(name) || isKVCache(src)) {
-        buildDiagnostic(builder, op, ordinal, "unsupported",
-                        "KV-cache target lowering is not implemented for "
-                        "Apple GPU in this phase");
+        // kv_cache_coverage_matrix.md (2026-05-10) — Apple GPU mirrors
+        // Apple CPU: emit a tessera_apple.gpu.kv_cache_op carrying the
+        // original Graph IR `kind`. The Python runtime dispatches to
+        // `tessera.cache.KVCacheHandle` for execution; a future native
+        // Metal kernel for the in-cache score-matrix path is gated on
+        // Phase G.
+        llvm::StringRef kind = isKVCache(name) ? name : src;
+        llvm::SmallVector<NamedAttribute, 3> extra;
+        extra.emplace_back(builder.getStringAttr("framework"),
+                           builder.getStringAttr("Metal"));
+        extra.emplace_back(builder.getStringAttr("abi"),
+                           builder.getStringAttr("kv_cache_handle"));
+        extra.emplace_back(builder.getStringAttr("kind"),
+                           builder.getStringAttr(kind));
+        buildAppleOp(builder, op, kGPUKVCacheOp, ordinal, extra);
       } else if (isFlashAttn(name) || isFlashAttn(src)) {
         llvm::SmallVector<NamedAttribute, 6> extra;
         extra.emplace_back(builder.getStringAttr("kernel"),

@@ -4,7 +4,9 @@
 //   - matmul / softmax / rope -> Metal/MPS-shaped kernel artifact + dispatch
 //   - flash_attn       -> tessera_apple.gpu.metal_kernel{kernel="flash_attn_contract"}
 //                         + dispatch
-//   - kv_cache.*       -> tessera_apple.diagnostic with stable wording
+//   - kv_cache.*       -> tessera_apple.gpu.kv_cache_gpu (real artifact;
+//                         previously a "unsupported" diagnostic — see
+//                         docs/audit/kv_cache_coverage_matrix.md, 2026-05-10)
 //   - every kernel is paired with a dispatch (queue + metallib artifact)
 
 module {
@@ -45,6 +47,8 @@ module {
 // CHECK-SAME: status = "artifact_only"
 // CHECK-NEXT: tessera_apple.gpu.dispatch
 
-// CHECK:      tessera_apple.diagnostic
-// CHECK-SAME: KV-cache target lowering is not implemented for Apple GPU
-// CHECK-SAME: severity = "unsupported"
+// CHECK:      tessera_apple.gpu.kv_cache_gpu
+// CHECK-SAME: abi = "kv_cache_handle"
+// CHECK-SAME: framework = "Metal"
+// CHECK-SAME: kind = "tessera.kv_cache.append"
+// CHECK-SAME: source = "tessera.kv_cache.append"

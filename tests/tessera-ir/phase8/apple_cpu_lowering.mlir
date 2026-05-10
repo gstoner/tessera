@@ -6,7 +6,9 @@
 //   - matmul / gemm     -> tessera_apple.cpu.accelerate_gemm
 //   - softmax           -> tessera_apple.cpu.vector_reduce
 //   - flash_attn        -> tessera_apple.cpu.vector_op (CPU has no Metal kernel)
-//   - kv_cache.*        -> tessera_apple.diagnostic with stable wording
+//   - kv_cache.*        -> tessera_apple.cpu.kv_cache_cpu (real artifact;
+//                          previously a "unsupported" diagnostic — see
+//                          docs/audit/kv_cache_coverage_matrix.md, 2026-05-10)
 
 module {
   // CHECK-LABEL: module
@@ -35,6 +37,7 @@ module {
 // CHECK-SAME: abi = "vecLib"
 // CHECK-SAME: source = "tessera.flash_attn"
 
-// CHECK:      tessera_apple.diagnostic
-// CHECK-SAME: KV-cache target lowering is not implemented for Apple CPU
-// CHECK-SAME: severity = "unsupported"
+// CHECK:      tessera_apple.cpu.kv_cache_cpu
+// CHECK-SAME: abi = "kv_cache_handle"
+// CHECK-SAME: kind = "tessera.kv_cache.append"
+// CHECK-SAME: source = "tessera.kv_cache.append"

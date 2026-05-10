@@ -1270,6 +1270,9 @@ metadata for frontend and compiler tests.
 | `attn_compressed_blocks(Q, K_c, V_c)` | `(array,array,array) → array` | `state` | NSA-1 branch — attention over per-block compressed K/V summaries |
 | `attn_top_k_blocks(Q, K, V, *, scores, top_k, block_size, causal=True)` | `(array,array,array) → array` | `state` | NSA-1 branch — top-k block-selected attention |
 | `compress_blocks(K, V, *, block_size, w_compress=None)` | `(array,array) → tuple` | `pure` | NSA-2 — chunk K/V into block_size groups; returns `(K_c, V_c)` per-block summaries (mean or learnable projection) |
+| `mor_router(x, w_router, *, max_depth)` | `(array, array) → int64-array` | `pure` | Phase F-MoR — token-choice depth router for Mixture of Recursions. Argmax of the router logits + 1; returns ints in [1, max_depth] |
+| `mor_partition(x, depth, *, step)` | `(array, int64-array) → bool-array` | `pure` | Phase F-MoR — bool mask of tokens whose target depth ≥ step (1-indexed) |
+| `mor_scatter(full, updated, mask)` | `(array, array, bool-array) → array` | `pure` | Phase F-MoR — write `updated` values into `full` at masked positions (frozen-token semantics for the unselected rows) |
 | `moe(x, experts)`, `moe_dispatch(x, route)`, `moe_combine(partials, inverse_route)` | `(array, ...) → array` | `collective` | Reference/mock transport helpers; distributed execution planned |
 | `all_reduce(x, op="sum")` | `(array) → array` | `collective` | Single-rank/mock no-op unless using explicit mock collective helpers |
 | `reduce_scatter(x, op="sum", axis=0)` | `(array) → array` | `collective` | Single-rank/mock no-op unless using explicit mock collective helpers |

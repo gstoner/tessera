@@ -1,8 +1,8 @@
 ---
 status: Audit
 classification: Coverage Matrix
-authority: Per-target KV-cache lowering status as of 2026-05-09
-last_updated: 2026-05-09
+authority: Per-target KV-cache lowering status as of 2026-05-10
+last_updated: 2026-05-10
 ---
 
 # KV-Cache Lowering Coverage Matrix
@@ -40,41 +40,53 @@ violation and gets a follow-up entry in `docs/audit/execution_roadmap.md`.
 
 | Target | `kv_cache.create` | `kv_cache.append` | `kv_cache.prune` | `kv_cache.read` | `tile.kv_cache` | FA-4 + cache | Notes |
 |--------|-------------------|-------------------|------------------|-----------------|------------------|--------------|-------|
-| **x86** (`tessera_x86_backend`) | ⛔ | ⛔ | ⛔ | ⛔ | ⛔ | ⛔ | No references in backend; ops never lowered to x86 IR |
-| **Apple CPU** (`Tessera_Apple_Backend`, CPU lowering) | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | `TileToApple.cpp:isKVCache()` emits "KV-cache target lowering is not implemented for Apple CPU in this phase" |
-| **Apple GPU** (`Tessera_Apple_Backend`, GPU lowering) | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | Same `isKVCache()` predicate; same diagnostic for GPU |
+| **x86** (`tessera_x86_backend`) | 🟡 | 🟡 | 🟡 | 🟡 | 🟡 | 🟡 | `TileToX86Pass.cpp:LowerKVCacheToX86` emits `func.call @tessera_x86_kv_cache_op(kind:i32)` artifacts (Decision #21 compliant). Runtime symbol delegates to the Python `KVCacheHandle` reference path. Lit fixture: `tests/tessera-ir/phase2/x86_kv_cache_lowering.mlir` (2026-05-10) |
+| **Apple CPU** (`Tessera_Apple_Backend`, CPU lowering) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Lowers to `tessera_apple.cpu.kv_cache_cpu` artifact carrying `kind=tessera.kv_cache.*`, `abi="kv_cache_handle"`, `framework="Tessera"`. Runtime path consumes via `KVCacheHandle`. Lit fixtures: `apple_kv_cache_lowering.mlir`, `apple_cpu_lowering.mlir` (2026-05-10) |
+| **Apple GPU** (`Tessera_Apple_Backend`, GPU lowering) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Lowers to `tessera_apple.gpu.kv_cache_gpu` artifact carrying `kind=...`, `abi="kv_cache_handle"`, `framework="Metal"`. Lit fixtures: `apple_kv_cache_lowering.mlir`, `apple_gpu_lowering.mlir` (2026-05-10) |
 | **NVIDIA** (`tessera_gpu_backend_NVIDIA`) | ⛔ | ⛔ | ⛔ | ⛔ | ⛔ | ⛔ | No references — IR is ready (Phase 3) but kv_cache isn't wired into the NVIDIA Target IR. **Not yet a Decision #21 violation** because no tested path lowers KV-cache ops here; will become one when NVIDIA execution lands (Phase G) |
 | **ROCm** (`Tessera_ROCM_Backend`) | ⛔ | ⛔ | ⛔ | ⛔ | 🔲 | ⛔ | `TileToROCM.cpp:94` matches `tile.kv_cache` and emits "ROCm lowering does not implement KV-cache artifacts in this phase" |
 | **TPU** (`Tessera_TPU_Backend`) | ⛔ | ⛔ | ⛔ | ⛔ | ⛔ | ⛔ | No references in backend |
 | **Cerebras** (`Tessera_Cerebras_backend`) | ⛔ | ⛔ | ⛔ | ⛔ | ⛔ | ⛔ | No references in backend |
-| **Metalium** (`Tessera_Metalium_Backend`) | 🟡 | 🟡 | ⛔ | ⛔ | ⛔ | 🟡 | `MetaliumBufferPlanner::planKVCache()` plans DRAM/SRAM staging layout (k/v/tileSeq) but no explicit Tile IR lowering of `tile.kv_cache`; output is buffer plan metadata, not a launchable artifact |
+| **Metalium** (`Tessera_Metalium_Backend`) | 🟡 | 🟡 | 🟡 | 🟡 | 🟡 | 🟡 | `TileToMetalium.cpp:LowerKVCacheToMetalium` emits `tessera_metalium.kv_cache_op` artifact carrying `kind=tessera.kv_cache.*`, `abi="kv_cache_handle"`, `plan={...}` populated by `MetaliumBufferPlanner::planKVCache()` (DRAM/SRAM staging, k/v tile bindings, kLoad/vLoad DMA descriptors, tileSeq). Decision #21 compliant. Lit fixture (REQUIRES tessera-metalium-backend): `tests/tessera-ir/phase7/metalium_kv_cache_lowering.mlir` (2026-05-10) |
 | **RubinCPX** (`Tessera_RubinCPX_Backend`) | 🟡 | 🟡 | 🟡 | 🟡 | ⛔ | 🟡 | Backend defines its own `cpx.kv.cache` op (`NVRubinCPX.td:86`) with verifier; runs through `tessera-cpx-opt` pipeline but no real device execution path |
 | **Python numpy reference** (cross-target fallback via `ops.kv_cache_*`) | n/a | ✅ | ✅ | n/a | n/a | n/a | `ReferenceKVCache` Python class; backs all numpy reference-path runs (today: x86 + Apple CPU fast path); no FA-4 integration |
 
 ## Findings
 
-1. **Decision #21 is being honored where the ops are reached.** Apple
-   (CPU+GPU) and ROCm both emit named diagnostics rather than dropping the op.
-   ✅ no violations of #21 in tested lowering paths.
+1. **Decision #21 is being honored on every backend that lowers KV-cache
+   ops.** Apple CPU+GPU now emit real `tessera_apple.{cpu,gpu}.kv_cache_*`
+   artifacts (was: diagnostic). x86 emits `func.call @tessera_x86_kv_cache_op`
+   artifacts. Metalium emits `tessera_metalium.kv_cache_op` artifacts that
+   embed the DRAM/SRAM staging plan from `MetaliumBufferPlanner::planKVCache()`.
+   ROCm continues to emit a named diagnostic. ✅ no violations of #21 in
+   tested lowering paths. (2026-05-10)
 
-2. **Most ⛔ cells are non-violations** — backends never *encounter* KV-cache
-   ops because the test surface today doesn't push them through. NVIDIA, TPU,
-   Cerebras, x86 all fall in this category. The risk: when those backends
-   start executing real KV-cache flows, the absence of explicit handling
-   becomes a silent drop. **Recommendation:** when each backend lights up
-   end-to-end execution, add a `tile.kv_cache` match arm that either lowers
-   or emits a Decision #21 diagnostic.
+2. **Remaining ⛔ cells are non-violations** — NVIDIA, TPU, and Cerebras never
+   *encounter* KV-cache ops because the test surface today doesn't push them
+   through. The risk: when those backends start executing real KV-cache flows,
+   the absence of explicit handling becomes a silent drop. **Recommendation:**
+   when each backend lights up end-to-end execution, add a `tile.kv_cache`
+   match arm that either lowers or emits a Decision #21 diagnostic.
 
 3. **The Python runtime path works on every backend that uses the numpy
    reference path** — calling `tessera.ops.kv_cache_append(cache, k, v)` from
    user code goes through `_make_ops_namespace`'s reference impl
    (`ReferenceKVCache`) and works regardless of compiled-backend status. This
    is what makes `examples/advanced/kv_cache_serving/` a runnable Python
-   utility today (no Tile IR involvement).
+   utility today (no Tile IR involvement). x86 and Metalium artifact lowerings
+   are designed to delegate to this same `KVCacheHandle` runtime path until
+   each backend grows a native in-cache score-matrix kernel.
 
-4. **Metalium and RubinCPX have partial scaffolding** (Metalium: buffer
-   planner; RubinCPX: target IR op + verifier) but no full lowering chain.
-   Both are 🟡 — not silent drops, but not real execution either.
+4. **RubinCPX still has partial scaffolding** (target IR op + verifier) but no
+   full lowering chain. RubinCPX remains 🟡 — not a silent drop, but not real
+   execution either.
+
+5. **Metalium lit fixture is REQUIRES-gated** on `tessera-metalium-backend`
+   feature. The Metalium backend isn't currently linked into the in-tree
+   `tessera-opt` build (gated by `TESSERA_BUILD_METALIUM_BACKEND` and
+   `TESSERA_METALIUM_WITH_MLIR`). When the backend is enabled and registered
+   in `tessera-opt`, lit will pick up the fixture automatically via the
+   feature probe in `tests/tessera-ir/lit.cfg.py`.
 
 ## Action items folded into roadmap
 

@@ -281,6 +281,76 @@ private:
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// kv_cache_coverage_matrix.md (2026-05-10) — KV-cache lowering on x86.
+//
+// The x86 backend has no native KV-cache kernel. We lower
+// `tessera.kv_cache.{create,append,prune,read}` to a single host-shaped
+// runtime call:
+//
+//   tessera_x86_kv_cache_op(kind: i32, args...)
+//
+// The runtime symbol delegates to the existing `KVCacheHandle`
+// reference path (the same one backing `tessera.ops.kv_cache_*` from
+// Python). Until x86 grows a real in-cache score-matrix kernel, this
+// keeps the IR-level lowering Decision-#21-compliant (a real op, not
+// a silent drop) while the Python runtime path continues to drive
+// execution.
+//
+// `kind` enum (matches the same handle-style discrimination the Apple
+// path uses):
+//   0 = create, 1 = append, 2 = prune, 3 = read
+//
+// We emit attribute-only artifact ops here (no buffer pointers); the
+// Python frontend separately drives execution via the `ReferenceKVCache`
+// path. This pattern matches how the Apple TileToApple lowering ships
+// kv_cache_op artifacts that the Python runtime consumes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+struct LowerKVCacheToX86 : public RewritePattern {
+  LowerKVCacheToX86(MLIRContext *ctx, StringRef opName)
+      : RewritePattern(opName, /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    Location loc = op->getLoc();
+    StringRef name = op->getName().getStringRef();
+    int32_t kindInt = 0;
+    if (name == "tessera.kv_cache.create")      kindInt = 0;
+    else if (name == "tessera.kv_cache.append") kindInt = 1;
+    else if (name == "tessera.kv_cache.prune")  kindInt = 2;
+    else if (name == "tessera.kv_cache.read")   kindInt = 3;
+    else
+      return rewriter.notifyMatchFailure(op, "unknown kv_cache op");
+
+    // For ops with consumed results we'd need handle-shaped runtime
+    // wiring; in v1 the x86 backend is artifact-only for kv_cache (the
+    // Python runtime drives the real `KVCacheHandle` execution path).
+    // Skip ops whose results are consumed downstream so we don't break
+    // the IR.
+    for (Value r : op->getResults()) {
+      if (!r.use_empty())
+        return rewriter.notifyMatchFailure(
+            op, "x86 kv_cache lowering is artifact-only; result is "
+                "consumed downstream — keep the op live and let the "
+                "Python runtime path drive it");
+    }
+
+    ModuleOp mod = op->getParentOfType<ModuleOp>();
+    MLIRContext *ctx = op->getContext();
+    Type i32Ty = rewriter.getI32Type();
+    FunctionType fnTy = FunctionType::get(ctx, {i32Ty}, {});
+    ensureExternalDecl(mod, "tessera_x86_kv_cache_op", fnTy);
+
+    rewriter.setInsertionPoint(op);
+    Value kindV = rewriter.create<arith::ConstantIntOp>(loc, kindInt, 32);
+    rewriter.create<func::CallOp>(loc, "tessera_x86_kv_cache_op",
+                                   TypeRange{}, ValueRange{kindV});
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Pass
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -312,6 +382,13 @@ struct TileToX86PassImpl
     bool amx = preferAMXOpt;
     patterns.add<LowerMatmulToX86>(&getContext(), amx);
     patterns.add<LowerFusedEpilogueToX86>(&getContext(), amx);
+    // kv_cache_coverage_matrix.md (2026-05-10) — KV-cache artifact
+    // lowering on x86. Each op gets its own pattern instance so the
+    // GreedyPatternRewriteDriver can match by string name.
+    patterns.add<LowerKVCacheToX86>(&getContext(), "tessera.kv_cache.create");
+    patterns.add<LowerKVCacheToX86>(&getContext(), "tessera.kv_cache.append");
+    patterns.add<LowerKVCacheToX86>(&getContext(), "tessera.kv_cache.prune");
+    patterns.add<LowerKVCacheToX86>(&getContext(), "tessera.kv_cache.read");
     if (failed(applyPatternsAndFoldGreedily(getOperation(),
                                            std::move(patterns))))
       signalPassFailure();

@@ -64,6 +64,8 @@ from .layers import (
     LSTM,
     # attention_variants_plan, NSA-3 — DeepSeek Native Sparse Attention.
     NativeSparseAttention,
+    # execution_roadmap.md, Phase F-MoR — Mixture of Recursions.
+    MixtureOfRecursions,
 )
 from . import utils
 
@@ -121,4 +123,6 @@ __all__ = [
     "LSTMCell", "LSTM",
     # attention_variants_plan, NSA-3
     "NativeSparseAttention",
+    # Phase F-MoR — Mixture of Recursions
+    "MixtureOfRecursions",
 ]

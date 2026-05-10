@@ -457,6 +457,39 @@ def Tessera_NativeSparseAttnFusedOp : Op<
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
+// Phase F-MoR — Mixture of Recursions primitives.
+def Tessera_MorRouterOp : Op<
+  Tessera_Dialect, "mor_router",
+  [Pure]
+> {
+  let summary = "MoR token-choice router: argmax of x @ w_router → per-token depth";
+  let arguments = (ins TensorType:$x, TensorType:$w_router,
+                        I64Attr:$max_depth);
+  let results = (outs TensorType:$depth);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_MorPartitionOp : Op<
+  Tessera_Dialect, "mor_partition",
+  [Pure]
+> {
+  let summary = "MoR active-token mask at recursion step";
+  let arguments = (ins TensorType:$x, TensorType:$depth,
+                        I64Attr:$step);
+  let results = (outs TensorType:$mask);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_MorScatterOp : Op<
+  Tessera_Dialect, "mor_scatter",
+  [Pure]
+> {
+  let summary = "MoR scatter — write updated values back into full at masked positions";
+  let arguments = (ins TensorType:$full, TensorType:$updated, TensorType:$mask);
+  let results = (outs TensorType:$out);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
 def Tessera_TransposeOp : Op<
   Tessera_Dialect, "transpose",
   [Pure]

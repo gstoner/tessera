@@ -331,7 +331,7 @@ Functional API on `KVCacheHandle`. Replaces the legacy `kv_cache_append`/`kv_cac
 
 ---
 
-## Phase F — Tier 2 autodiff follow-ups (parallelizable, ~2–4 weeks) — **F1/F2/F3 landed 2026-05-09; F4 ODS scaffolded; F5/F6/F7 deferred**
+## Phase F — Tier 2 autodiff follow-ups (parallelizable, ~2–4 weeks) — **F1–F7 landed; +Phase F-MoR shipped 2026-05-10**
 
 ### [F1] Mixed-precision: autocast context + GradScaler ✅
 
@@ -349,11 +349,29 @@ Functional API on `KVCacheHandle`. Replaces the legacy `kv_cache_append`/`kv_cac
 - `with ts.autodiff.rematerialize(): y = expensive_block(x)` — forward stores only the recipe, recomputes during backward.
 - Memory test: peak resident activations during backward < forward-only peak by a measurable margin on a 4-layer MLP.
 
-### [F3] Custom kernel adjoints — `flash_attn` ✅, `fft`/`ifft`/`rfft`/`irfft` ✅, `moe` 🔲
+### [F3] Custom kernel adjoints — `flash_attn` ✅, `fft`/`ifft`/`rfft`/`irfft` ✅, `moe` ✅, `selective_ssm` (D3 VJP) ✅, `linear_attn` ✅, `silu_mul` ✅
 
 **Scope:** S each (~80 LOC + ~80 LOC tests per op). Independent.
 
 Sized as A5 — derive standard analytical VJP, register via `custom_rule`.
+
+**Status (verified 2026-05-10):** all originally-listed F3 ops + the
+post-F3 follow-ups have analytical VJPs registered in
+`python/tessera/autodiff/vjp.py`:
+
+- `flash_attn` — line 590 (recompute-scores adjoint)
+- `fft` / `ifft` / `rfft` / `irfft` — lines 637–667 (spectral adjoints)
+- **`moe`** — line 219 (per-token routed-matmul adjoint, accumulating
+  per-expert weight gradient when multiple tokens share an expert)
+- **`selective_ssm`** — line 680 (Mamba2 chunked-scan adjoint that
+  recomputes the forward trajectory and walks ``t = S-1 → 0``)
+- `linear_attn` / `linear_attn_state` — lines 407 / 524
+- `silu_mul` / `gather` / `clip` / `masked_fill` — extras shipped
+  with Theme 9 / SwiGLU work
+
+The original `moe 🔲` and "D3 VJP" follow-ups are both ✅ closed —
+both predate this 2026-05-10 update; the doc is being refreshed to
+reflect that.
 
 ### [F4] Graph IR adjoint ops ✅ — verified end-to-end on MLIR 21
 ODS + pass body + per-op `buildAdjoint` impls + CMake tablegen target +
@@ -408,15 +426,115 @@ on adjoint paths for distributed parameters.
 **Acceptance:** A 2-rank mock-collective test of MLP training shows correct
 gradient aggregation across ranks.
 
-### [F6] JAX-style transforms — `jacrev`, `jacfwd`, `vmap` 📋
+### [F6] JAX-style transforms — `vmap`, `jacrev`, `jacfwd` ✅
 
-**Scope:** L. Independent. **Mark 🔲 deferred** unless explicit user demand —
-high cost, unclear immediate payoff for ML training. Tracked here so it isn't
-forgotten.
+**Scope:** L (~600 LOC code + ~400 LOC tests). Independent.
 
-### [F7] Higher-order derivatives 🔲
+**Status (landed 2026-05-09 via deferred-items plan Item 5):**
+- `tessera.autodiff.vmap(fn, in_axes=0, out_axes=0)` — naive scan-then-stack;
+  per-arg `in_axes` (int / sequence / None); `out_axes=None` returns the
+  per-element list as-is.
+- `tessera.autodiff.jacrev(fn, argnums=0)` — reverse-mode Jacobian; one
+  backward pass per output dim. Uses Item 4's `retain_graph=True`
+  re-runnable tape.
+- `tessera.autodiff.jacfwd(fn, argnums=0)` — forward-mode Jacobian via the
+  JVP engine in `python/tessera/autodiff/jvp.py`. v1 implementation uses
+  central FD (`eps=1e-6`) for the `jvp(fn, primals, tangents)` entry
+  point; the parallel JVP-rule registry is in place for 12 core ops.
+  A true tape-based dual-number propagation is a Phase G perf
+  follow-up that won't change the API contract.
+- 15 unit tests in `tests/unit/test_jax_transforms.py` (vmap × 6,
+  jacrev × 3, jacfwd × 3, JVP engine × 2, composability × 1).
 
-Out of scope for the foreseeable cycle. Tracked.
+The canonical `vmap(grad(fn))` per-sample-gradient pattern works as
+written.
+
+### [F7] Higher-order derivatives ✅
+
+**Scope:** M (~400 LOC code + ~250 LOC tests).
+
+**Status (landed 2026-05-09 via deferred-items plan Item 4):**
+- `tessera.autodiff.grad(fn, argnums=0)` — JAX-style gradient
+  transform. Returns ndarray for int argnums, tuple for sequence
+  argnums; uses `accumulate_param_grad=False` so it doesn't leak into
+  caller `Parameter.grad` slots.
+- `tessera.autodiff.hvp(fn, primals, tangents, eps=1e-4)` —
+  Hessian-vector product via central finite difference of `grad`.
+  ~1e-6 accuracy at fp64.
+- `tessera.autodiff.elementwise_grad(fn)` — per-element derivative
+  for vector → vector elementwise ops; convenient for inspecting
+  activation derivatives.
+- `tape.backward(target, *, retain_graph=False, accumulate_param_grad=True)`
+  — re-runnable tape with explicit opt-in via `retain_graph=True`.
+  Required for `jacrev` (F6).
+- 15 unit tests in `tests/unit/test_higher_order_autodiff.py`
+  (`grad` × 6, `hvp` × 3, `elementwise_grad` × 3, `retain_graph` × 3).
+
+True forward-over-reverse HVP (`jvp(grad(fn), x, v)`) lands when the
+F6 forward-mode tape's analytical-rule path matures; the FD path is
+correct for L-BFGS / natural-gradient / GAN-penalty workloads today.
+
+### [F-MoR] Mixture of Recursions ✅ — landed 2026-05-10
+
+**Scope:** M (~400 LOC code + ~280 LOC tests). Independent.
+
+Bae et al. 2025 "Mixture-of-Recursions" — adaptive computation by
+routing tokens through different numbers of recursive layer
+applications. A learned per-token router assigns each token to a
+target depth d ∈ [1, max_depth]; the layer is applied recursively to
+each token until it hits its target depth, then the token's hidden
+state freezes for the rest of the loop. Computational savings follow
+from "easy" tokens routing to lower depths.
+
+**Shipped 2026-05-10:**
+
+- **Three primitive ops** in `python/tessera/__init__.py`:
+  - `ops.mor_router(x, w_router, *, max_depth)` — argmax-based
+    token-choice depth router; returns ``(B, S)`` int64 in
+    ``[1, max_depth]``.
+  - `ops.mor_partition(x, depth, *, step)` — bool mask of tokens
+    whose target depth ≥ step (1-indexed).
+  - `ops.mor_scatter(full, updated, mask)` — write `updated` values
+    into `full` at masked positions (frozen-token semantics for the
+    unselected rows).
+- **VJPs** in `python/tessera/autodiff/vjp.py`:
+  - `mor_router` returns zero gradients (argmax is non-differentiable;
+    real router-training uses auxiliary load-balance / utilization
+    losses the user adds explicitly).
+  - `mor_partition` zero-grad on the int-valued depth and the
+    real-valued x.
+  - `mor_scatter` is linear in `updated`; gradients flow through
+    `full` on the False positions and through `updated` on the True
+    positions.
+- **`nn.MixtureOfRecursions(layer, *, embed_dim, max_depth)`** Module —
+  composes the router + recursion loop. The wrapped `layer`'s
+  parameters are shared across all recursion steps (the canonical
+  MoR contract).
+- **ODS ops** `tessera.mor_router` / `tessera.mor_partition` /
+  `tessera.mor_scatter` in `src/compiler/ir/TesseraOps.td`.
+- **Lit fixture** `tests/tessera-ir/phase8/mor_primitives.mlir` —
+  ODS verifier + assembly-format roundtrip.
+- **17 unit tests** in `tests/unit/test_mor.py` covering forward
+  correctness of all three ops + the Module + per-token recursion
+  depth verified end-to-end + VJP shape contracts.
+
+**Acceptance:**
+- Per-token recursion depth is honored: with a layer that adds a
+  constant, output for token i increases by exactly `depth_i * Δ`.
+- `mor_partition(depth=[1,2,3,2,1], step=2)` returns
+  `[F, T, T, T, F]`.
+- `mor_scatter(full, updated, mask)` writes `updated` only where
+  `mask` is True; the rest of `full` is preserved bit-equivalent.
+- `nn.MixtureOfRecursions` rejects rank-2 inputs and `max_depth=0`.
+
+**Phase G follow-ups** (not gating the v1 surface):
+- Token-active-only kernel: gather active tokens before the layer
+  call and scatter back after, instead of the v1 reference's
+  apply-to-full-then-mask approach. Saves compute proportional to
+  token-depth utilization.
+- KV-cache-share-first / KV-cache-recursion policies for attention
+  inside the inner layer (the example folder at
+  `examples/archive/advanced/Tessera_MoR/` sketches the design).
 
 ---
 
@@ -528,7 +646,7 @@ ship.
 | C — Theme 1 cleanup | ✅ complete | ~250 | 0.5 | ✅ within phase | BatchNorm1d, KVCache module |
 | D — streaming | ✅ (D3 VJP open) | ~1,000 | 2–3 | partly sequential | Jet_nemotron, Nemotron_Nano forward |
 | E — KV-cache | ✅ complete | ~700 | 1–2 | sequential within | kv_cache_serving, Fast_dLLM_v2, paged-MLA |
-| F — autodiff follow-ups | ✅ in scope (F3-moe, F6, F7 deferred) | ~1,500 | 2–4 | F1+F2+F3 ‖, F4→F5 | distributed training, mixed precision, checkpointing |
+| F — autodiff follow-ups | ✅ all closed (F1–F7 + F3-moe + D3-VJP + Phase F-MoR) | ~2,500 | 2–4 | F1+F2+F3 ‖, F4→F5 | distributed training, mixed precision, checkpointing, JAX-style transforms, Mixture of Recursions |
 | G — NVIDIA execution | 🚧 G1 audit only; G2–G7 open | ~2,000 | 4–8 | sequential within | autotuner, FA-4 verification, GPU CI |
 | H — Conv2d Module + LSTM | ✅ complete | ~150 | 0.5 | indep | torch-port examples |
 | I — DDP/FSDP | ✅ v1 complete | ~600 | 2 | post-F+G | distributed training at scale |
@@ -537,9 +655,9 @@ ship.
 
 ---
 
-## Status snapshot — 2026-05-09
+## Status snapshot — 2026-05-10
 
-**Done:** A, B, C, D (forward), E, F (in scope), H, I.
+**Done:** A, B, C, D (forward + D3 VJP), E, F (F1–F7 + F3-moe + Phase F-MoR), H, I.
 
 **Remaining frontier:** **Phase G (NVIDIA execution)** — the only long pole. G1 audit is complete (`docs/audit/nvidia_execution_audit.md`); G2–G7 are open. Per the audit: 4–6 days of focused work to first H100 BF16 GEMM, of which only G1-5/G1-6/G1-8 need real H100 hardware.
 
@@ -551,11 +669,14 @@ ship.
 5. **G6** — autotuner sweep vs cuBLAS baseline (needs hardware).
 6. **G7** — `validate.sh --gpu` CI spine.
 
-**Small cleanup items:**
-- **D3 VJP** — `selective_ssm` chunked-scan adjoint is the only piece D is missing.
-- **F3-moe** — MoE router `custom_rule` VJP (F3 ships `flash_attn` ✅ and `fft`-family ✅; `moe` 🔲).
+**Cleanup items closed 2026-05-10:**
+- ✅ **D3 VJP** — `selective_ssm` chunked-scan adjoint shipped; registered at `python/tessera/autodiff/vjp.py:680` (`vjp_selective_ssm` recomputes the forward trajectory and walks ``t = S-1 → 0`` accumulating gradients).
+- ✅ **F3-moe** — MoE router `custom_rule` VJP shipped at `python/tessera/autodiff/vjp.py:219` (per-token routed-matmul adjoint with per-expert gradient accumulation).
+- ✅ **F6** — `vmap` / `jacrev` / `jacfwd` shipped (deferred-items plan Item 5).
+- ✅ **F7** — `grad` / `hvp` / `elementwise_grad` + re-runnable tape shipped (deferred-items plan Item 4).
+- ✅ **Phase F-MoR** — Mixture of Recursions primitives + `nn.MixtureOfRecursions` Module + ODS ops + lit fixture + 17 unit tests (2026-05-10).
 
 **Three critical chains called out in the rationale at the top of this doc — all closed:**
-- B1 → C1 + D: ✅ complete (D3 VJP follow-up open)
+- B1 → C1 + D: ✅ complete (D3 VJP shipped)
 - B2 → E1–E3 + C2: ✅ complete
 - F4 → F5 → I (DDP/FSDP): ✅ v1 complete

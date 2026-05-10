@@ -162,4 +162,36 @@ def Apple_TargetDiagnosticOp : TesseraApple_Op<"diagnostic"> {
   let assemblyFormat = "attr-dict";
 }
 
+// kv_cache_coverage_matrix.md (2026-05-10) — KV-cache lowering target
+// for both CPU and GPU sides of the Apple backend. The TileToApple
+// pass emits these in place of the historical
+// `tessera_apple.diagnostic("unsupported")`. The Python runtime
+// dispatches on (target, kind) to the existing `KVCacheHandle`
+// reference path; a future native Metal kernel for the in-cache
+// score-matrix decode is gated on Phase G.
+// Distinct mnemonics (cpu.kv_cache_cpu / gpu.kv_cache_gpu) so the
+// auto-generated C++ class names don't collide on `KVCacheOp`. Op
+// names in the IR remain user-friendly via the dialect prefix.
+def AppleCPU_KVCacheCPUOp : TesseraApple_Op<"cpu.kv_cache_cpu", [Pure]> {
+  let summary = "Apple CPU KV-cache op artifact (handle-shaped)";
+  let arguments = (ins StrAttr:$source,
+                       StrAttr:$result,
+                       I64Attr:$ordinal,
+                       OptionalAttr<StrAttr>:$framework,
+                       OptionalAttr<StrAttr>:$abi,
+                       StrAttr:$kind);
+  let assemblyFormat = "attr-dict";
+}
+
+def AppleGPU_KVCacheGPUOp : TesseraApple_Op<"gpu.kv_cache_gpu"> {
+  let summary = "Apple GPU KV-cache op artifact (handle-shaped)";
+  let arguments = (ins StrAttr:$source,
+                       StrAttr:$result,
+                       I64Attr:$ordinal,
+                       OptionalAttr<StrAttr>:$framework,
+                       OptionalAttr<StrAttr>:$abi,
+                       StrAttr:$kind);
+  let assemblyFormat = "attr-dict";
+}
+
 #endif // TESSERA_TARGET_APPLE_OPS

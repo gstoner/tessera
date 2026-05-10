@@ -1076,6 +1076,116 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         V_c = np.einsum("bhnsd,sx->bhnxd", V_blk, w_compress)[..., 0, :]
         return K_c, V_c
 
+    # ── execution_roadmap.md, Phase F-MoR — Mixture of Recursions ───────────
+    # Bae et al. 2025 "Mixture-of-Recursions" — adaptive computation via
+    # per-token recursion depth. A learned router assigns each token to a
+    # depth d ∈ [1, max_depth]; the layer is applied recursively to a
+    # token until it hits its target depth, then the token's hidden state
+    # freezes for the rest of the recursion loop. Computational savings
+    # follow from "easy" tokens routing to lower depths.
+    #
+    # Three primitive ops mirror the staged-recursion pattern:
+    #   * mor_router(x, w_router, max_depth) → per-token depth (int).
+    #   * mor_partition(x, depth, s) → mask telling which tokens are still
+    #     "active" at recursion step s (i.e. depth[token] >= s).
+    #   * mor_scatter(full, active_updated, depth, s) → write back the
+    #     updated hidden states from the active tokens at step s.
+    #
+    # The corresponding `tessera.nn.MixtureOfRecursions` Module composes
+    # these with a user-provided per-step layer to implement the full
+    # recursion loop.
+
+    def mor_router(x, w_router, *, max_depth: int):
+        """Per-token depth router (token-choice variant).
+
+        Inputs:
+            x          shape ``(B, S, D)`` hidden states.
+            w_router   shape ``(D, max_depth)`` learnable projection.
+            max_depth  number of recursion steps (max depth = 1).
+
+        Returns int64 tensor of shape ``(B, S)`` with values in
+        ``[1, max_depth]`` selecting per-token target recursion depth.
+        Argmax over the router logits + 1 (so depth=0 is reserved for
+        the "no-op" case the caller can handle separately).
+        """
+        if hasattr(x, "_data"): x = x._data
+        if hasattr(w_router, "_data"): w_router = w_router._data
+        x = np.asarray(x)
+        w_router = np.asarray(w_router)
+        if x.ndim != 3:
+            raise ValueError(
+                f"mor_router expects rank-3 (B, S, D) input; got {x.shape}"
+            )
+        if w_router.shape != (x.shape[-1], max_depth):
+            raise ValueError(
+                f"w_router shape {w_router.shape} must equal "
+                f"(D, max_depth) = ({x.shape[-1]}, {max_depth})"
+            )
+        if max_depth <= 0:
+            raise ValueError(f"max_depth must be positive; got {max_depth}")
+        logits = np.matmul(x, w_router)  # (B, S, max_depth)
+        return (np.argmax(logits, axis=-1).astype(np.int64) + 1)
+
+    def mor_partition(x, depth, *, step: int):
+        """Boolean mask of tokens still active at recursion ``step``.
+
+        A token is active iff its router-assigned depth is at least
+        ``step``. Returns a bool ndarray of shape ``(B, S)``.
+
+        ``step`` is 1-indexed (matches the recursion-block layout in
+        ``examples/archive/advanced/Tessera_MoR/``).
+        """
+        if hasattr(x, "_data"): x = x._data
+        if hasattr(depth, "_data"): depth = depth._data
+        x = np.asarray(x); depth = np.asarray(depth)
+        if x.ndim != 3:
+            raise ValueError(f"mor_partition expects rank-3 x; got {x.shape}")
+        if depth.shape != x.shape[:2]:
+            raise ValueError(
+                f"depth shape {depth.shape} must equal x.shape[:2] "
+                f"({x.shape[:2]})"
+            )
+        if step <= 0:
+            raise ValueError(f"step must be positive; got {step}")
+        return depth >= step
+
+    def mor_scatter(full, updated, mask):
+        """Inverse of partition: write ``updated`` values back into
+        ``full`` at the positions where ``mask`` is True.
+
+        Inputs:
+            full     shape ``(B, S, D)`` the full hidden state buffer.
+            updated  shape ``(B, S, D)`` updated values (only the
+                     positions where mask is True are written).
+            mask     shape ``(B, S)`` bool — which positions to update.
+
+        Returns a new ``(B, S, D)`` array with the masked-in values
+        replaced. Tokens whose mask is False keep their original
+        ``full`` value (they "freeze" — the canonical MoR behaviour
+        once a token hits its target depth).
+        """
+        if hasattr(full, "_data"): full = full._data
+        if hasattr(updated, "_data"): updated = updated._data
+        if hasattr(mask, "_data"): mask = mask._data
+        full = np.asarray(full)
+        updated = np.asarray(updated)
+        mask = np.asarray(mask, dtype=bool)
+        if full.ndim != 3 or updated.ndim != 3:
+            raise ValueError("mor_scatter expects rank-3 full and updated")
+        if full.shape != updated.shape:
+            raise ValueError(
+                f"full shape {full.shape} must equal updated shape "
+                f"{updated.shape}"
+            )
+        if mask.shape != full.shape[:2]:
+            raise ValueError(
+                f"mask shape {mask.shape} must equal full.shape[:2] "
+                f"({full.shape[:2]})"
+            )
+        # Broadcast mask along the last (D) dim.
+        m = mask[..., None]
+        return np.where(m, updated, full)
+
     def qkv_projection(x, W_qkv):
         if hasattr(x, "_data"):
             x = x._data
@@ -2245,6 +2355,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "attn_sliding_window": attn_sliding_window,
         "attn_compressed_blocks": attn_compressed_blocks,
         "attn_top_k_blocks": attn_top_k_blocks,
+        # Phase F-MoR — Mixture of Recursions primitives.
+        "mor_router": mor_router,
+        "mor_partition": mor_partition,
+        "mor_scatter": mor_scatter,
         "moe": moe,
         "moe_dispatch": moe_dispatch,
         "moe_combine": moe_combine,
@@ -2360,6 +2474,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         attn_compressed_blocks=attn_compressed_blocks,
         attn_top_k_blocks=attn_top_k_blocks,
         compress_blocks=compress_blocks,
+        mor_router=mor_router,
+        mor_partition=mor_partition,
+        mor_scatter=mor_scatter,
         moe=moe,
         moe_dispatch=moe_dispatch,
         moe_combine=moe_combine,

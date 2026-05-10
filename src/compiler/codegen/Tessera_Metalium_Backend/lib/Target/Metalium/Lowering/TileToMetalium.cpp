@@ -3,8 +3,10 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinDialect.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Value.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/MemRef/IR/MemRefOps.h"
 #include "mlir/Dialect/MemRef/Utils/Utils.h"
@@ -12,6 +14,9 @@
 #include "mlir/IR/Location.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+
+#include "Tessera/Target/Metalium/MetaliumBufferPlanner.h"
 
 // Forward declarations for Tessera Tile IR ops (adjust include paths in real project)
 namespace mlir {
@@ -213,11 +218,155 @@ struct TileGemmToMetaliumMatmul : public OpConversionPattern<mlir::tessera::tile
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// kv_cache_coverage_matrix.md (2026-05-10) — KV-cache lowering on Metalium.
+//
+// Tile IR `tessera.kv_cache.{create,append,prune,read}` is lowered to a
+// hardware-free Metalium artifact op
+//
+//   "tessera_metalium.kv_cache_op"() {kind=..., abi="kv_cache_handle",
+//                                     plan = {...}}
+//
+// where the `plan` dictionary carries the DRAM/SRAM staging plan computed
+// by `tessera_metalium_planner::planKVCache`. The intent is identical to
+// the x86 / Apple paths: emit a real artifact (Decision #21 — never silently
+// drop the op) that downstream code generation or the Python runtime can
+// consume.
+//
+// The pattern is artifact-only: ops with consumed results are left alive
+// so the Python `KVCacheHandle` reference path can drive execution. This
+// matches the contract used by the Apple GPU/CPU lowerings.
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+struct LowerKVCacheToMetalium : public RewritePattern {
+  LowerKVCacheToMetalium(MLIRContext *ctx, StringRef opName)
+      : RewritePattern(opName, /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    Location loc = op->getLoc();
+    StringRef name = op->getName().getStringRef();
+
+    StringRef kindStr;
+    if (name == "tessera.kv_cache.create")      kindStr = "tessera.kv_cache.create";
+    else if (name == "tessera.kv_cache.append") kindStr = "tessera.kv_cache.append";
+    else if (name == "tessera.kv_cache.prune")  kindStr = "tessera.kv_cache.prune";
+    else if (name == "tessera.kv_cache.read")   kindStr = "tessera.kv_cache.read";
+    else
+      return rewriter.notifyMatchFailure(op, "unknown kv_cache op");
+
+    // Artifact-only: skip ops with consumed results (Python runtime drives
+    // the real `KVCacheHandle` path).
+    for (Value r : op->getResults()) {
+      if (!r.use_empty())
+        return rewriter.notifyMatchFailure(
+            op, "metalium kv_cache lowering is artifact-only; result is "
+                "consumed downstream — keep the op live for the Python "
+                "runtime path");
+    }
+
+    // Plan DRAM/SRAM staging. Defaults are reasonable for a Wormhole-class
+    // core with ~1 MiB of usable SRAM per Tensix; downstream codegen can
+    // refine when real shape attributes are wired through.
+    int64_t maxSeq        = 4096;
+    int64_t headDim       = 128;
+    int64_t elemBytes     = 2;       // bf16/fp16 — KV cache is typically 16-bit
+    int64_t sramBudget    = 256 * 1024;
+
+    if (auto dict = op->getAttrDictionary()) {
+      auto getI64 = [&](StringRef key, int64_t &dst) {
+        if (auto a = dict.get(key))
+          if (auto ia = dyn_cast<IntegerAttr>(a)) dst = ia.getInt();
+      };
+      getI64("max_seq", maxSeq);
+      getI64("head_dim", headDim);
+      getI64("element_bytes", elemBytes);
+      getI64("sram_budget", sramBudget);
+      getI64("window", maxSeq); // prune carries `window`
+    }
+
+    auto plan = tessera_metalium_planner::planKVCache(
+        maxSeq, headDim, elemBytes, sramBudget);
+
+    auto bindingDict = [&](const tessera_metalium_planner::BufferBinding &b) {
+      SmallVector<NamedAttribute> entries;
+      entries.push_back(rewriter.getNamedAttr(
+          "name", rewriter.getStringAttr(b.name)));
+      entries.push_back(rewriter.getNamedAttr(
+          "space", rewriter.getStringAttr(
+                       b.space == tessera_metalium_planner::Space::DRAM
+                           ? "dram"
+                           : "sram")));
+      entries.push_back(rewriter.getNamedAttr(
+          "offset_bytes", rewriter.getI64IntegerAttr(b.offsetBytes)));
+      entries.push_back(rewriter.getNamedAttr(
+          "size_bytes", rewriter.getI64IntegerAttr(b.sizeBytes)));
+      entries.push_back(rewriter.getNamedAttr(
+          "stride_bytes", rewriter.getI64IntegerAttr(b.strideBytes)));
+      return rewriter.getDictionaryAttr(entries);
+    };
+    auto dmaDict = [&](const tessera_metalium_planner::DMADescriptor &d) {
+      SmallVector<NamedAttribute> entries;
+      entries.push_back(rewriter.getNamedAttr(
+          "name", rewriter.getStringAttr(d.name)));
+      entries.push_back(rewriter.getNamedAttr(
+          "direction", rewriter.getStringAttr(d.direction)));
+      entries.push_back(rewriter.getNamedAttr(
+          "rows", rewriter.getI64IntegerAttr(d.rows)));
+      entries.push_back(rewriter.getNamedAttr(
+          "cols", rewriter.getI64IntegerAttr(d.cols)));
+      entries.push_back(rewriter.getNamedAttr(
+          "element_bytes", rewriter.getI64IntegerAttr(d.elementBytes)));
+      entries.push_back(rewriter.getNamedAttr(
+          "burst", rewriter.getI64IntegerAttr(d.burst)));
+      return rewriter.getDictionaryAttr(entries);
+    };
+
+    SmallVector<NamedAttribute> planEntries;
+    planEntries.push_back(rewriter.getNamedAttr(
+        "k_dram", bindingDict(plan.kDRAM)));
+    planEntries.push_back(rewriter.getNamedAttr(
+        "v_dram", bindingDict(plan.vDRAM)));
+    planEntries.push_back(rewriter.getNamedAttr(
+        "k_tile_sram", bindingDict(plan.kTileSRAM)));
+    planEntries.push_back(rewriter.getNamedAttr(
+        "v_tile_sram", bindingDict(plan.vTileSRAM)));
+    planEntries.push_back(rewriter.getNamedAttr(
+        "k_load", dmaDict(plan.kLoad)));
+    planEntries.push_back(rewriter.getNamedAttr(
+        "v_load", dmaDict(plan.vLoad)));
+    planEntries.push_back(rewriter.getNamedAttr(
+        "tile_seq", rewriter.getI64IntegerAttr(plan.tileSeq)));
+    auto planAttr = rewriter.getDictionaryAttr(planEntries);
+
+    OperationState state(loc, "tessera_metalium.kv_cache_op");
+    state.addAttribute("kind", rewriter.getStringAttr(kindStr));
+    state.addAttribute("abi", rewriter.getStringAttr("kv_cache_handle"));
+    state.addAttribute("plan", planAttr);
+    rewriter.create(state);
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 } // namespace
 
 void populateTileToMetaliumPatterns(RewritePatternSet &patterns, TypeConverter &converter) {
   auto *ctx = patterns.getContext();
   patterns.add<TileCopyToMetaliumDMA, TileGemmToMetaliumMatmul>(ctx);
+}
+
+/// Populate kv_cache → metalium artifact patterns. Used as a separate
+/// greedy pre-pass so the patterns can match by op-name string without
+/// fighting the partial-conversion target setup.
+static void populateMetaliumKVCachePatterns(RewritePatternSet &patterns) {
+  auto *ctx = patterns.getContext();
+  patterns.add<LowerKVCacheToMetalium>(ctx, "tessera.kv_cache.create");
+  patterns.add<LowerKVCacheToMetalium>(ctx, "tessera.kv_cache.append");
+  patterns.add<LowerKVCacheToMetalium>(ctx, "tessera.kv_cache.prune");
+  patterns.add<LowerKVCacheToMetalium>(ctx, "tessera.kv_cache.read");
 }
 
 struct LowerTileToMetaliumPass : public PassWrapper<LowerTileToMetaliumPass, OperationPass<ModuleOp>> {
@@ -230,6 +379,15 @@ struct LowerTileToMetaliumPass : public PassWrapper<LowerTileToMetaliumPass, Ope
   void runOnOperation() override {
     MLIRContext *ctx = &getContext();
     ModuleOp module = getOperation();
+
+    // KV-cache is lowered as a greedy pre-pass so the artifact patterns
+    // can match by op-name string. (Architecture Decision #21 — emit a
+    // real artifact, never silently drop the op.)
+    {
+      RewritePatternSet kvPatterns(ctx);
+      populateMetaliumKVCachePatterns(kvPatterns);
+      (void)applyPatternsGreedily(module, std::move(kvPatterns));
+    }
 
     RewritePatternSet patterns(ctx);
     TypeConverter converter;

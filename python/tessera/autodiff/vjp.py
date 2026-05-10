@@ -276,6 +276,51 @@ def vjp_moe(dout, x, experts, *, router="topk", k=1, transport=None,
     return (dx, dE)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase F-MoR — Mixture of Recursions VJPs.
+#
+# `mor_router` outputs an int64 depth tensor — the argmax is
+# non-differentiable. We treat it as a straight-through identity: the
+# gradient w.r.t. `x` and `w_router` is zero (the router's training
+# signal usually arrives through the recursion-loop's output via the
+# layer's own gradient path, plus an auxiliary load-balancing loss the
+# user adds explicitly).
+#
+# `mor_partition` produces a bool mask from an int depth tensor — also
+# non-differentiable, returns zero cotangents.
+#
+# `mor_scatter` is linear in `updated` and selects rows of `full` for
+# the unselected positions. Both `full` and `updated` get real
+# gradients. `mask` is non-differentiable.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@_vjp("mor_router")
+def vjp_mor_router(dout, x, w_router, *, max_depth=None, **_):
+    """Argmax-based router has no analytical gradient. Return zeros so
+    this op is benign on the gradient path. Real router-training comes
+    from auxiliary losses (load-balance / utilization) the user adds
+    explicitly downstream."""
+    return (np.zeros_like(x), np.zeros_like(w_router))
+
+
+@_vjp("mor_partition")
+def vjp_mor_partition(dout, x, depth, *, step=None, **_):
+    """Bool-mask output; zero gradient w.r.t. real-valued inputs."""
+    return (np.zeros_like(x), None)
+
+
+@_vjp("mor_scatter")
+def vjp_mor_scatter(dout, full, updated, mask, **_):
+    """y = where(mask, updated, full). dx for `full` flows on the False
+    positions; for `updated` on the True positions. `mask` is
+    non-differentiable."""
+    m = np.broadcast_to(np.asarray(mask, dtype=bool)[..., None], full.shape)
+    d_full = dout * (~m).astype(full.dtype)
+    d_updated = dout * m.astype(updated.dtype)
+    return (d_full, d_updated, None)
+
+
 @_vjp("masked_fill")
 def vjp_masked_fill(dout, x, mask, *, value=None, **_):
     """y = where(mask, value, x).

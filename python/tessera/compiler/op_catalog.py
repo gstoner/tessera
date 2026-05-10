@@ -79,6 +79,13 @@ _SPECS = [
     OpSpec("attn_sliding_window", "tessera.attn_sliding_window", 3, 3, effect="state", lowering="attention"),
     OpSpec("attn_compressed_blocks", "tessera.attn_compressed_blocks", 3, 3, effect="state", lowering="attention"),
     OpSpec("attn_top_k_blocks", "tessera.attn_top_k_blocks", 3, 3, effect="state", lowering="attention"),
+    # Phase F-MoR — Mixture of Recursions primitives. mor_router maps
+    # (x, w_router) → per-token depth assignment. mor_partition takes a
+    # depth tensor + step int and returns a bool mask. mor_scatter writes
+    # active-token updates back into the full hidden state buffer.
+    OpSpec("mor_router", "tessera.mor_router", 2, 2, lowering="layout_transform"),
+    OpSpec("mor_partition", "tessera.mor_partition", 2, 2, lowering="layout_transform"),
+    OpSpec("mor_scatter", "tessera.mor_scatter", 3, 3, lowering="layout_transform"),
     OpSpec("moe", "tessera.moe", 2, 2, effect="collective", lowering="moe"),
     OpSpec("moe_dispatch", "tessera.moe_dispatch", 2, 2, effect="collective", lowering="moe_transport"),
     OpSpec("moe_combine", "tessera.moe_combine", 2, 2, effect="collective", lowering="moe_transport"),

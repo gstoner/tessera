@@ -1140,6 +1140,88 @@ class NativeSparseAttention(Module):
         return ops.gemm(out, self.W_o._data._data)
 
 
+class MixtureOfRecursions(Module):
+    """execution_roadmap.md, Phase F-MoR — Mixture of Recursions.
+
+    Bae et al. 2025 "Mixture-of-Recursions": adaptive computation by
+    routing tokens through different numbers of recursive layer
+    applications. A learned per-token router assigns each token to a
+    target depth d ∈ [1, max_depth]; the recursion loop applies the
+    same inner layer to each token until it hits its target depth,
+    then the token's hidden state freezes for the rest of the loop.
+
+    Wiring:
+        layer  — a `tessera.nn.Module` whose forward(h_active) returns
+                 an updated hidden state of the same shape. Typically
+                 a transformer block (attention + MLP). The same layer
+                 is applied at every recursion step (parameter
+                 sharing — that's the whole point of the architecture).
+        router_dim — hidden width of the routing projection. Defaults
+                 to embed_dim.
+
+    Parameters owned by this Module:
+        W_router  : (embed_dim, max_depth) — depth logits.
+
+    The wrapped ``layer``'s parameters are shared across all recursion
+    steps (the canonical MoR contract). To use a depth-specific layer
+    family instead, wrap a `ModuleList` or write a custom Module.
+
+    See ``examples/archive/advanced/Tessera_MoR/`` for the design notes
+    that motivated the API.
+    """
+
+    def __init__(
+        self,
+        layer: Module,
+        *,
+        embed_dim: int,
+        max_depth: int = 3,
+        dtype: str = "fp32",
+    ):
+        super().__init__()
+        if max_depth <= 0:
+            raise ValueError(f"max_depth must be positive; got {max_depth}")
+        self.layer = layer
+        self.embed_dim = int(embed_dim)
+        self.max_depth = int(max_depth)
+        self.W_router = Parameter(
+            np.zeros((self.embed_dim, self.max_depth)), dtype=dtype,
+        )
+
+    def forward(self, x):
+        if hasattr(x, "_data"):
+            x = x._data
+        x = np.asarray(x)
+        if x.ndim != 3:
+            raise ValueError(
+                f"MixtureOfRecursions expects rank-3 (B, S, D) input; "
+                f"got {x.shape}"
+            )
+        # Depth assignment per token.
+        depth = ops.mor_router(
+            x, self.W_router._data._data, max_depth=self.max_depth,
+        )
+        # Recursion loop: at each step s, gather active tokens, run the
+        # shared layer, scatter the updated values back. Tokens whose
+        # depth < s freeze (their state in `h` doesn't change).
+        h = x
+        for s in range(1, self.max_depth + 1):
+            mask = ops.mor_partition(h, depth, step=s)
+            if not bool(np.any(mask)):
+                # No tokens active at this depth — short-circuit. The
+                # full `h` remains unchanged.
+                continue
+            # Run the wrapped layer on the full hidden state, then
+            # selectively keep its updates only where the mask is True.
+            # (Materializing per-token gathered tensors is a Phase G
+            # optimization — for the v1 reference, applying to the
+            # full tensor + scatter-mask is cheaper than the gather/
+            # scatter dance and produces identical results.)
+            updated = self.layer(h)
+            h = ops.mor_scatter(h, updated, mask)
+        return h
+
+
 __all__ = [
     "Linear",
     "RMSNorm",
@@ -1162,4 +1244,5 @@ __all__ = [
     "LSTMCell",
     "LSTM",
     "NativeSparseAttention",
+    "MixtureOfRecursions",
 ]

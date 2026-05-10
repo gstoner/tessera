@@ -426,19 +426,10 @@ def test_registry_reports_vjp_complete(name):
 
 
 @pytest.mark.parametrize("name", [
-    "js_divergence", "wasserstein_distance", "nt_xent_loss",
+    "ctc_loss", "js_divergence", "wasserstein_distance", "nt_xent_loss",
 ])
 def test_registry_reports_jvp_complete(name):
     from tessera.compiler.primitive_coverage import coverage_for
 
     entry = coverage_for(name)
     assert entry.contract_status["jvp"] == "complete"
-
-
-def test_registry_keeps_ctc_jvp_unregistered():
-    """CTC JVP is intentionally not implemented — the registry should
-    still surface that gap."""
-    from tessera.compiler.primitive_coverage import coverage_for
-
-    entry = coverage_for("ctc_loss")
-    assert entry.contract_status["jvp"] != "complete"

@@ -80,6 +80,28 @@ std::unique_ptr<::mlir::Pass> createLowerMatmulRMSNormFusionToAppleGPUPass();
 /// before per-op matmul lowering so the longest fusion wins.
 std::unique_ptr<::mlir::Pass> createLowerSwigluFusionToAppleGPUPass();
 
+/// tessera.linear_attn (rank-4, f32, D_qk*D_v ≤ 256, causal) → func.call
+/// into the Apple GPU runtime shim's linear-attn MSL kernel. attention
+/// _variants_plan, LA-2 — linear / kernel-feature attention as a single
+/// GPU dispatch. Out-of-envelope inputs fall through to the host
+/// reference path.
+std::unique_ptr<::mlir::Pass> createLowerLinearAttnToAppleGPUPass();
+
+/// tessera.mla_decode_fused (rank-3 Q + rank-2 weights, f32) →
+/// func.call into the Apple GPU runtime shim. attention_variants_plan,
+/// MLA-2 — DeepSeek MLA decode as a single GPU dispatch. Today the
+/// runtime materializes the latent + expanded K/V on the host (the
+/// memory-saving cache lives in the LatentKVCacheHandle); the
+/// absorb-K speed win lands as a follow-up MSL kernel.
+std::unique_ptr<::mlir::Pass> createLowerMLADecodeFusionToAppleGPUPass();
+
+/// tessera.native_sparse_attn_fused (rank-4, f32) → func.call into the
+/// Apple GPU runtime shim. attention_variants_plan, NSA-5 — DeepSeek
+/// NSA fused kernel. Host-reference path today; a fully fused MSL
+/// kernel that does all three branches in a single dispatch is a
+/// follow-up.
+std::unique_ptr<::mlir::Pass> createLowerNSAFusionToAppleGPUPass();
+
 /// Register the Apple Silicon dialect into a DialectRegistry. Convenience
 /// wrapper that forwards to registerAppleDialect from TesseraAppleDialect.h.
 void registerTesseraAppleBackendDialects(::mlir::DialectRegistry &registry);

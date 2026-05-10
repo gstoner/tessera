@@ -669,6 +669,168 @@ extern "C" void tessera_apple_gpu_swiglu_bf16(const uint16_t* /*X*/,
   std::memset(O, 0, sizeof(uint16_t) * static_cast<std::size_t>(M) * Kout);
 }
 
+// attention_variants_plan, LA-2 — linear-attn stub on non-Apple hosts.
+// Pure-numpy reference over the recurrence; tests compile this from
+// source via a CXX subprocess on Linux.
+
+namespace {
+
+inline float la_feature_map(float x, int32_t fm) {
+  if (fm == 0) return x > 0.0f ? (x + 1.0f) : std::exp(x);
+  if (fm == 1) return std::max(x, 0.0f);
+  if (fm == 2) return x;
+  return x * x;
+}
+
+inline void reference_linear_attn_f32_stub(const float* Q, const float* K,
+                                           const float* V, float* O,
+                                           int32_t B, int32_t H, int32_t S,
+                                           int32_t D_qk, int32_t D_v,
+                                           int32_t feature_map,
+                                           int32_t /*causal*/) {
+  std::vector<float> state(static_cast<std::size_t>(D_qk) * D_v, 0.0f);
+  for (int32_t b = 0; b < B; ++b) {
+    for (int32_t h = 0; h < H; ++h) {
+      std::fill(state.begin(), state.end(), 0.0f);
+      int q_base = (b * H + h) * S * D_qk;
+      int k_base = q_base;
+      int v_base = (b * H + h) * S * D_v;
+      int o_base = v_base;
+      for (int32_t t = 0; t < S; ++t) {
+        for (int32_t d_qk = 0; d_qk < D_qk; ++d_qk) {
+          float k_d = la_feature_map(K[k_base + t * D_qk + d_qk], feature_map);
+          for (int32_t d_v = 0; d_v < D_v; ++d_v) {
+            state[(std::size_t)d_qk * D_v + d_v] +=
+                k_d * V[v_base + t * D_v + d_v];
+          }
+        }
+        for (int32_t d_v = 0; d_v < D_v; ++d_v) {
+          float acc = 0.0f;
+          for (int32_t d_qk = 0; d_qk < D_qk; ++d_qk) {
+            float q_d = la_feature_map(Q[q_base + t * D_qk + d_qk], feature_map);
+            acc += q_d * state[(std::size_t)d_qk * D_v + d_v];
+          }
+          O[o_base + t * D_v + d_v] = acc;
+        }
+      }
+    }
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_linear_attn_f32(const float* Q, const float* K,
+                                                   const float* V, float* O,
+                                                   int32_t B, int32_t H,
+                                                   int32_t S, int32_t D_qk,
+                                                   int32_t D_v,
+                                                   int32_t feature_map,
+                                                   int32_t causal) {
+  reference_linear_attn_f32_stub(Q, K, V, O, B, H, S, D_qk, D_v, feature_map,
+                                 causal);
+}
+
+// attention_variants_plan, MLA-2 — non-Apple stub. Numpy-reference path
+// for the host-only fallback. The Apple .mm file's `reference_mla_decode_f32`
+// already implements the same math; this is its non-Apple twin.
+
+namespace {
+
+inline void reference_mla_decode_f32_stub(const float* X, const float* Wdkv,
+                                          const float* Wuk, const float* Wuv,
+                                          const float* Q, float* O,
+                                          int32_t B, int32_t S_kv,
+                                          int32_t D_x, int32_t D_lat,
+                                          int32_t S_q, int32_t D_h) {
+  std::vector<float> c(static_cast<std::size_t>(S_kv) * D_lat, 0.0f);
+  for (int32_t s = 0; s < S_kv; ++s) {
+    for (int32_t d = 0; d < D_x; ++d) {
+      float xv = X[static_cast<std::size_t>(s) * D_x + d];
+      const float* w_row = Wdkv + static_cast<std::size_t>(d) * D_lat;
+      for (int32_t l = 0; l < D_lat; ++l) {
+        c[static_cast<std::size_t>(s) * D_lat + l] += xv * w_row[l];
+      }
+    }
+  }
+  std::vector<float> K(static_cast<std::size_t>(S_kv) * D_h, 0.0f);
+  std::vector<float> V(static_cast<std::size_t>(S_kv) * D_h, 0.0f);
+  for (int32_t s = 0; s < S_kv; ++s) {
+    for (int32_t l = 0; l < D_lat; ++l) {
+      float cv = c[static_cast<std::size_t>(s) * D_lat + l];
+      const float* uk_row = Wuk + static_cast<std::size_t>(l) * D_h;
+      const float* uv_row = Wuv + static_cast<std::size_t>(l) * D_h;
+      for (int32_t h = 0; h < D_h; ++h) {
+        K[static_cast<std::size_t>(s) * D_h + h] += cv * uk_row[h];
+        V[static_cast<std::size_t>(s) * D_h + h] += cv * uv_row[h];
+      }
+    }
+  }
+  float scale = 1.0f / std::sqrt(static_cast<float>(D_h));
+  std::vector<float> scores(static_cast<std::size_t>(S_q) * S_kv);
+  for (int32_t b = 0; b < B; ++b) {
+    const float* Qb = Q + static_cast<std::size_t>(b) * S_q * D_h;
+    float* Ob = O + static_cast<std::size_t>(b) * S_q * D_h;
+    for (int32_t i = 0; i < S_q; ++i) {
+      for (int32_t j = 0; j < S_kv; ++j) {
+        float dot = 0.0f;
+        for (int32_t h = 0; h < D_h; ++h) {
+          dot += Qb[i * D_h + h] * K[static_cast<std::size_t>(j) * D_h + h];
+        }
+        scores[static_cast<std::size_t>(i) * S_kv + j] = dot * scale;
+      }
+    }
+    for (int32_t i = 0; i < S_q; ++i) {
+      float maxv = -std::numeric_limits<float>::infinity();
+      for (int32_t j = 0; j < S_kv; ++j) {
+        maxv = std::max(maxv, scores[static_cast<std::size_t>(i) * S_kv + j]);
+      }
+      float sum = 0.0f;
+      for (int32_t j = 0; j < S_kv; ++j) {
+        float e = std::exp(
+            scores[static_cast<std::size_t>(i) * S_kv + j] - maxv);
+        scores[static_cast<std::size_t>(i) * S_kv + j] = e;
+        sum += e;
+      }
+      for (int32_t j = 0; j < S_kv; ++j) {
+        scores[static_cast<std::size_t>(i) * S_kv + j] /= sum;
+      }
+      for (int32_t h = 0; h < D_h; ++h) {
+        float acc = 0.0f;
+        for (int32_t j = 0; j < S_kv; ++j) {
+          acc += scores[static_cast<std::size_t>(i) * S_kv + j]
+                 * V[static_cast<std::size_t>(j) * D_h + h];
+        }
+        Ob[i * D_h + h] = acc;
+      }
+    }
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_mla_decode_f32(const float* X,
+                                                  const float* Wdkv,
+                                                  const float* Wuk,
+                                                  const float* Wuv,
+                                                  const float* Q, float* O,
+                                                  int32_t B, int32_t S_kv,
+                                                  int32_t D_x, int32_t D_lat,
+                                                  int32_t S_q, int32_t D_h) {
+  reference_mla_decode_f32_stub(X, Wdkv, Wuk, Wuv, Q, O, B, S_kv, D_x, D_lat,
+                                S_q, D_h);
+}
+
+// attention_variants_plan, NSA-5 — non-Apple stub.
+// Zero-fills the output (the Apple-side reference has the full impl).
+extern "C" void tessera_apple_gpu_native_sparse_attn_f32(
+    const float* /*Q*/, const float* /*K*/, const float* /*V*/,
+    const float* /*gate*/, float* O,
+    int32_t B, int32_t H, int32_t S, int32_t D,
+    int32_t /*window*/, int32_t /*block*/, int32_t /*top_k*/,
+    int32_t /*causal*/) {
+  std::memset(O, 0, sizeof(float) * static_cast<std::size_t>(B) * H * S * D);
+}
+
 extern "C" int32_t tessera_apple_gpu_runtime_msl_cache_size(void) {
   // No Metal -> no MSL cache. Tests gate this on platform.
   return -1;

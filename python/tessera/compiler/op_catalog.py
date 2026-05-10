@@ -62,6 +62,23 @@ _SPECS = [
     OpSpec("dropout", "tessera.dropout", 1, 1, effect="random", lowering="random_mask"),
     OpSpec("qkv_projection", "tessera.qkv_projection", 2, 2, lowering="projection"),
     OpSpec("flash_attn", "tessera.flash_attn", 3, 3, effect="state", lowering="attention"),
+    # attention_variants_plan, LA-1 — linear / kernel-feature attention.
+    # Returns (O, state) tuple; the runtime dispatcher unpacks both.
+    OpSpec("linear_attn", "tessera.linear_attn", 3, 3, effect="state", lowering="attention"),
+    OpSpec("linear_attn_state", "tessera.linear_attn_state", 3, 3, effect="state", lowering="attention"),
+    # attention_variants_plan, LA-4 — Power attention + Retention promoted
+    # from `examples/advanced/power_retention/`. Same recurrence backbone
+    # as linear_attn with deg + window / log_g + chunk attrs.
+    OpSpec("power_attn", "tessera.power_attn", 3, 3, effect="state", lowering="attention"),
+    OpSpec("retention", "tessera.retention", 3, 3, effect="state", lowering="attention"),
+    # attention_variants_plan, NSA — Native Sparse Attention branches.
+    # Each is a single-output op (no tuple returns) so the tape can
+    # record + back-propagate cleanly. compress_blocks is a tuple-returning
+    # helper that's intentionally NOT in op_catalog (matches the
+    # qkv_projection pattern).
+    OpSpec("attn_sliding_window", "tessera.attn_sliding_window", 3, 3, effect="state", lowering="attention"),
+    OpSpec("attn_compressed_blocks", "tessera.attn_compressed_blocks", 3, 3, effect="state", lowering="attention"),
+    OpSpec("attn_top_k_blocks", "tessera.attn_top_k_blocks", 3, 3, effect="state", lowering="attention"),
     OpSpec("moe", "tessera.moe", 2, 2, effect="collective", lowering="moe"),
     OpSpec("moe_dispatch", "tessera.moe_dispatch", 2, 2, effect="collective", lowering="moe_transport"),
     OpSpec("moe_combine", "tessera.moe_combine", 2, 2, effect="collective", lowering="moe_transport"),
@@ -112,6 +129,8 @@ _SPECS = [
     OpSpec("latent_kv_compress", "tessera.latent_kv_compress", 2, 2, lowering="loop_nest"),
     OpSpec("latent_kv_expand_k", "tessera.latent_kv_expand_k", 2, 2, lowering="loop_nest"),
     OpSpec("latent_kv_expand_v", "tessera.latent_kv_expand_v", 2, 2, lowering="loop_nest"),
+    # MLA-1 fusion target — result of the MLAFusionPass collapse.
+    OpSpec("mla_decode_fused", "tessera.mla_decode_fused", 5, 5, effect="state", lowering="attention"),
     OpSpec("rope_split", "tessera.rope_split", 1, 1, lowering="layout_transform"),
     OpSpec("rope_merge", "tessera.rope_merge", 2, 2, lowering="layout_transform"),
 ]

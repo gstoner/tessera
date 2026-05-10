@@ -404,6 +404,189 @@ def vjp_dropout(dout, x, *, p=0.1, training=True, seed=None, **_):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+@_vjp("linear_attn")
+def vjp_linear_attn(
+    dout, Q, K, V, *, feature_map="elu", state=None, chunk_size=None,
+    decay=None, causal=True, **_,
+):
+    """Adjoint of linear / kernel-feature attention.
+
+    Forward (causal):
+        S_t = decay_t * S_{t-1} + φ(K_t)^T V_t
+        O_t = φ(Q_t) @ S_t
+
+    Backward strategy: recompute the forward states ``S_t`` (cheap —
+    it's the same recurrence), then walk the recurrence in reverse,
+    accumulating gradients into ``dQ`` / ``dK`` / ``dV``. This is the
+    canonical linear-attention adjoint (RWKV / RetNet / Mamba2-linear
+    use the same shape).
+
+    Returns ``(dQ, dK, dV)``. Decay and state inputs are non-tensor /
+    optional; their gradients are deferred until concrete demand
+    surfaces (most production training calls drop the chained state).
+    """
+    Q = np.asarray(Q, dtype=np.float64)
+    K = np.asarray(K, dtype=np.float64)
+    V = np.asarray(V, dtype=np.float64)
+    dout = np.asarray(dout, dtype=np.float64)
+    B, H, S, D_qk = Q.shape
+    D_v = V.shape[3]
+
+    # Feature map + its derivative w.r.t. its input.
+    def phi_and_dphi(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        if feature_map == "elu":
+            mask_pos = x > 0
+            phi = np.where(mask_pos, x + 1.0, np.exp(x))
+            dphi = np.where(mask_pos, np.ones_like(x), np.exp(x))
+            return phi, dphi
+        if feature_map == "relu":
+            phi = np.maximum(x, 0.0)
+            dphi = (x > 0).astype(x.dtype)
+            return phi, dphi
+        if feature_map == "identity":
+            return x, np.ones_like(x)
+        if feature_map == "polynomial_2":
+            return x * x, 2.0 * x
+        raise ValueError(
+            f"vjp_linear_attn: unknown feature_map {feature_map!r}"
+        )
+
+    phi_Q, dphi_Q = phi_and_dphi(Q)
+    phi_K, dphi_K = phi_and_dphi(K)
+
+    # Forward recurrence: store S_t for each t (memory: O(S * D_qk * D_v)).
+    if state is None:
+        S_state = np.zeros((B, H, D_qk, D_v), dtype=np.float64)
+    else:
+        S_state = np.asarray(state, dtype=np.float64).copy()
+    S_history = np.zeros((S + 1, B, H, D_qk, D_v), dtype=np.float64)
+    S_history[0] = S_state
+    if decay is not None:
+        decay = np.asarray(decay, dtype=np.float64)
+
+    # Causal forward replay (ignores chunk_size for backward — bit-equivalent
+    # at fp64 to the chunked-parallel forward).
+    if causal:
+        for t in range(S):
+            if decay is not None:
+                S_state = decay[:, :, t][:, :, None, None] * S_state
+            S_state = S_state + np.einsum(
+                "bhd,bhe->bhde", phi_K[:, :, t, :], V[:, :, t, :]
+            )
+            S_history[t + 1] = S_state
+    else:
+        # Non-causal: O = φ(Q) @ (Σ φ(K)^T V).
+        kv_sum = np.einsum("bhsd,bhse->bhde", phi_K, V)
+        if state is not None:
+            kv_sum = state + kv_sum
+        # dQ_phi = dout @ kv_sum^T   shape (B, H, S, D_qk)
+        dphi_Q_full = np.einsum("bhse,bhde->bhsd", dout, kv_sum)
+        dQ = dphi_Q_full * dphi_Q
+        # d(kv_sum) = sum over s of φ(Q_s)^T @ dout_s
+        d_kv_sum = np.einsum("bhsd,bhse->bhde", phi_Q, dout)
+        # d_kv_sum / d(φ(K)_t, V_t) = (V_t broadcast, φ(K)_t broadcast)
+        dphi_K_full = np.einsum("bhde,bhse->bhsd", d_kv_sum, V)
+        dK = dphi_K_full * dphi_K
+        dV = np.einsum("bhsd,bhde->bhse", phi_K, d_kv_sum)
+        return (dQ, dK, dV)
+
+    # Reverse pass: dS holds running cotangent on the current (post-step) S.
+    dQ = np.zeros_like(Q)
+    dK = np.zeros_like(K)
+    dV = np.zeros_like(V)
+    dS = np.zeros((B, H, D_qk, D_v), dtype=np.float64)
+
+    for t in range(S - 1, -1, -1):
+        # O_t = φ(Q_t) @ S_t  (where S_t is post-update, i.e. S_history[t+1])
+        S_post = S_history[t + 1]
+        dout_t = dout[:, :, t, :]
+        phi_Q_t = phi_Q[:, :, t, :]
+        # dφ(Q_t) = dout_t @ S_t^T
+        dphi_Q_t = np.einsum("bhe,bhde->bhd", dout_t, S_post)
+        dQ[:, :, t, :] = dphi_Q_t * dphi_Q[:, :, t, :]
+        # dS_post += φ(Q_t)^T outer dout_t
+        dS = dS + np.einsum("bhd,bhe->bhde", phi_Q_t, dout_t)
+        # S_post = decay_t * S_pre + φ(K_t)^T V_t
+        # → dS_pre = decay_t * dS_post (broadcast)
+        # → dφ(K_t) = dS_post @ V_t^T;  dV_t = φ(K_t)^T @ dS_post (per-head)
+        phi_K_t = phi_K[:, :, t, :]
+        V_t = V[:, :, t, :]
+        dphi_K_t = np.einsum("bhde,bhe->bhd", dS, V_t)
+        dK[:, :, t, :] = dphi_K_t * dphi_K[:, :, t, :]
+        dV[:, :, t, :] = np.einsum("bhd,bhde->bhe", phi_K_t, dS)
+        # Propagate dS through the decay multiplier (if present).
+        if decay is not None:
+            dS = decay[:, :, t][:, :, None, None] * dS
+
+    return (dQ, dK, dV)
+
+
+@_vjp("linear_attn_state")
+def vjp_linear_attn_state(
+    dstate_out, Q, K, V, *, feature_map="elu", state=None, chunk_size=None,
+    decay=None, causal=True, **_,
+):
+    """Adjoint of :func:`linear_attn_state`.
+
+    The state output has shape ``(B, H, D_qk, D_v)``; it depends on
+    ``φ(K)`` and ``V`` along the recurrence and on ``Q`` not at all
+    (Q only affects ``O``, not the state). For non-chained training
+    paths most callers drop the state grad entirely (treat it as
+    ``stop_gradient``). We provide a true VJP for completeness.
+    """
+    Q = np.asarray(Q, dtype=np.float64)
+    K = np.asarray(K, dtype=np.float64)
+    V = np.asarray(V, dtype=np.float64)
+    dstate_out = np.asarray(dstate_out, dtype=np.float64)
+    B, H, S, D_qk = Q.shape
+
+    def phi_and_dphi(x):
+        if feature_map == "elu":
+            mp = x > 0
+            return np.where(mp, x + 1.0, np.exp(x)), np.where(
+                mp, np.ones_like(x), np.exp(x)
+            )
+        if feature_map == "relu":
+            return np.maximum(x, 0.0), (x > 0).astype(x.dtype)
+        if feature_map == "identity":
+            return x, np.ones_like(x)
+        if feature_map == "polynomial_2":
+            return x * x, 2.0 * x
+        raise ValueError(f"unknown feature_map {feature_map!r}")
+
+    _, dphi_K = phi_and_dphi(K)
+    phi_K, _ = phi_and_dphi(K)
+
+    if not causal:
+        # state_out = (state_in or 0) + Σ φ(K)^T V
+        # d/dφ(K)_t = dstate_out @ V_t^T;  dV_t = φ(K)^T @ dstate_out
+        dphi_K_full = np.einsum("bhde,bhse->bhsd", dstate_out, V)
+        dK = dphi_K_full * dphi_K
+        dV = np.einsum("bhsd,bhde->bhe", phi_K, dstate_out)  # broadcast over S → (B, H, D_v)
+        # Need (B, H, S, D_v); broadcast dstate_out's contribution across S.
+        dV = np.einsum("bhsd,bhde->bhse", phi_K, dstate_out)
+        dQ = np.zeros_like(Q)
+        return (dQ, dK, dV)
+
+    # Causal: walk the recurrence backward seeded with dS = dstate_out.
+    if decay is not None:
+        decay = np.asarray(decay, dtype=np.float64)
+    dS = dstate_out.copy()
+    dQ = np.zeros_like(Q)  # state has no Q dependence
+    dK = np.zeros_like(K)
+    dV = np.zeros_like(V)
+    for t in range(S - 1, -1, -1):
+        # S_t = decay_t * S_{t-1} + φ(K_t)^T V_t
+        # dφ(K_t) = dS @ V_t^T ; dV_t = φ(K_t)^T @ dS
+        dphi_K_t = np.einsum("bhde,bhe->bhd", dS, V[:, :, t, :])
+        dK[:, :, t, :] = dphi_K_t * dphi_K[:, :, t, :]
+        dV[:, :, t, :] = np.einsum("bhd,bhde->bhe", phi_K[:, :, t, :], dS)
+        if decay is not None:
+            dS = decay[:, :, t][:, :, None, None] * dS
+
+    return (dQ, dK, dV)
+
+
 @_vjp("flash_attn")
 def vjp_flash_attn(dout, Q, K, V, *, scale=None, causal=False, dropout_p=0.0, **_):
     """Adjoint of standard scaled-dot-product attention (numpy reference path).

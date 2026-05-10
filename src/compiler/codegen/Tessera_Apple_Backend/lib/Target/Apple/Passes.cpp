@@ -87,6 +87,15 @@ PassPipelineRegistration<> gAppleGPURuntimePipeline(
     "fusions, matmul, rope, flash_attn, softmax, gelu) to Apple GPU runtime "
     "calls (MPS + custom MSL kernels)",
     [](OpPassManager &pm) {
+      // attention_variants_plan, NSA-5 — Native Sparse Attention fused
+      // op. The longest end-to-end fusion (3-branch + gating). Run first.
+      pm.addPass(createLowerNSAFusionToAppleGPUPass());
+      // attention_variants_plan, MLA-2 — DeepSeek MLA decode is the
+      // longest chain in the apple_gpu pipeline (4-op fusion). The
+      // Schedule IR pass produces `tessera.mla_decode_fused`; this
+      // pass lowers it to a runtime call. Run first so the longest
+      // fusion wins. Out-of-envelope inputs fall through.
+      pm.addPass(createLowerMLADecodeFusionToAppleGPUPass());
       // Phase 8.4.8 (Stage 3) — SwiGLU is an even longer chain (4-op) and
       // already arrives as a single `tessera.swiglu_fused` op courtesy of
       // the Stage 2b Schedule IR fusion recognizer. Run it first so we
@@ -103,6 +112,7 @@ PassPipelineRegistration<> gAppleGPURuntimePipeline(
       pm.addPass(createLowerMatmulToAppleGPUPass());
       pm.addPass(createLowerRopeToAppleGPUPass());
       pm.addPass(createLowerFlashAttnToAppleGPUPass());
+      pm.addPass(createLowerLinearAttnToAppleGPUPass());
       pm.addPass(createLowerSoftmaxToAppleGPUPass());
       pm.addPass(createLowerGeluToAppleGPUPass());
     });

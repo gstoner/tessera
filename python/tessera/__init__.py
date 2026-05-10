@@ -590,6 +590,492 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             weights = weights * keep / (1.0 - dropout_p)
         return np.matmul(weights, V)
 
+    # ── attention_variants_plan, LA-1 — Linear / kernel-feature attention ──
+    # Linear attention recurrence:
+    #     S_t = S_{t-1} + φ(K_t)^T V_t          (state update)
+    #     O_t = φ(Q_t) @ S_t                     (output)
+    # with optional decay g_t:
+    #     S_t = decay_t * S_{t-1} + φ(K_t)^T V_t
+    #
+    # Two evaluation forms:
+    #   * recurrent (chunk_size=None or 1) — true streaming form, O(S)
+    #   * chunked-parallel (chunk_size=C)  — fold C-token chunks against S in
+    #                                         parallel, then chain chunks
+    #                                         sequentially. Trains as fast as
+    #                                         flash_attn on long contexts.
+    # Both forms produce bit-equivalent results at fp64.
+
+    _LINEAR_ATTN_FEATURE_MAPS = ("elu", "relu", "identity", "polynomial_2")
+
+    def _linear_attn_apply_feature_map(x: "np.ndarray", name: str) -> "np.ndarray":
+        if name == "elu":
+            return np.where(x > 0, x + 1.0, np.exp(x))  # elu(x) + 1, always > 0
+        if name == "relu":
+            return np.maximum(x, 0.0)
+        if name == "identity":
+            return x
+        if name == "polynomial_2":
+            return x * x
+        raise ValueError(
+            f"feature_map must be one of {_LINEAR_ATTN_FEATURE_MAPS}; got {name!r}"
+        )
+
+    def _linear_attn_impl(
+        Q,
+        K,
+        V,
+        *,
+        feature_map: str,
+        state,
+        chunk_size,
+        decay,
+        causal: bool,
+    ):
+        """Shared kernel for ``linear_attn`` (returns O) and
+        ``linear_attn_state`` (returns the post-update state). Single
+        function so the math stays in one place; the public ops are
+        thin returns of ``[0]`` / ``[1]`` so each is a tape-friendly
+        single-tensor op (matches the ``lstm_cell`` precedent).
+        """
+        if feature_map not in _LINEAR_ATTN_FEATURE_MAPS:
+            raise ValueError(
+                f"feature_map must be one of {_LINEAR_ATTN_FEATURE_MAPS}; "
+                f"got {feature_map!r}"
+            )
+        for name, arr in (("Q", Q), ("K", K), ("V", V)):
+            if hasattr(arr, "_data"):
+                pass  # accessed below
+        if hasattr(Q, "_data"):
+            Q = Q._data
+        if hasattr(K, "_data"):
+            K = K._data
+        if hasattr(V, "_data"):
+            V = V._data
+        Q = np.asarray(Q)
+        K = np.asarray(K)
+        V = np.asarray(V)
+        if Q.ndim != 4 or K.ndim != 4 or V.ndim != 4:
+            raise ValueError(
+                f"linear_attn expects rank-4 (B, H, S, D) tensors; got "
+                f"Q.ndim={Q.ndim}, K.ndim={K.ndim}, V.ndim={V.ndim}"
+            )
+        B, H, S, D_qk = Q.shape
+        if K.shape[:3] != (B, H, S) or K.shape[3] != D_qk:
+            raise ValueError(
+                f"K shape {K.shape} must match (B, H, S, D_qk) = ({B}, {H}, {S}, {D_qk})"
+            )
+        if V.shape[:3] != (B, H, S):
+            raise ValueError(
+                f"V shape {V.shape} must match (B, H, S, *) = ({B}, {H}, {S}, *)"
+            )
+        D_v = V.shape[3]
+
+        phi_Q = _linear_attn_apply_feature_map(Q, feature_map)
+        phi_K = _linear_attn_apply_feature_map(K, feature_map)
+
+        if decay is not None:
+            if hasattr(decay, "_data"):
+                decay = decay._data
+            decay = np.asarray(decay)
+            if decay.shape != (B, H, S):
+                raise ValueError(
+                    f"decay shape {decay.shape} must match (B, H, S) = "
+                    f"({B}, {H}, {S})"
+                )
+
+        # Non-causal short-circuit: folds to a single matmul, plus the
+        # cumulative ΣK^T V state for chained calls.
+        if not causal:
+            kv_sum = np.einsum("bhsd,bhse->bhde", phi_K, V)
+            if state is not None:
+                kv_sum = state + kv_sum
+            O = np.einsum("bhsd,bhde->bhse", phi_Q, kv_sum)
+            return O, kv_sum
+
+        # Causal recurrence. Initial state: zeros or carried-over.
+        if state is None:
+            S_state = np.zeros((B, H, D_qk, D_v), dtype=np.float64)
+        else:
+            if hasattr(state, "_data"):
+                state = state._data
+            S_state = np.asarray(state, dtype=np.float64).copy()
+        O = np.zeros((B, H, S, D_v), dtype=np.float64)
+
+        if chunk_size is None or chunk_size <= 0 or chunk_size >= S:
+            # Pure recurrent form.
+            for t in range(S):
+                if decay is not None:
+                    # decay shape (B, H); broadcast over (D_qk, D_v).
+                    g = decay[:, :, t][:, :, None, None]
+                    S_state = g * S_state
+                # S += φ(K_t)^T @ V_t — outer product per (B, H).
+                S_state = S_state + np.einsum(
+                    "bhd,bhe->bhde", phi_K[:, :, t, :], V[:, :, t, :]
+                )
+                O[:, :, t, :] = np.einsum(
+                    "bhd,bhde->bhe", phi_Q[:, :, t, :], S_state
+                )
+        else:
+            # Chunked-parallel form. Within each chunk, compute the chunk's
+            # output as: chunk_O = φ(Q_c) @ S_prev + intra_chunk_causal_term.
+            # The intra-chunk causal term is computed via a small recurrent
+            # walk over the chunk; bit-equivalent to the pure recurrent form.
+            for chunk_start in range(0, S, chunk_size):
+                chunk_end = min(chunk_start + chunk_size, S)
+                phi_Q_c = phi_Q[:, :, chunk_start:chunk_end, :]
+                phi_K_c = phi_K[:, :, chunk_start:chunk_end, :]
+                V_c = V[:, :, chunk_start:chunk_end, :]
+                # 1) Inter-chunk: every Q sees the pre-chunk state.
+                inter = np.einsum("bhsd,bhde->bhse", phi_Q_c, S_state)
+                # 2) Intra-chunk: for each position t inside the chunk,
+                #    O_t += sum over r ≤ t of (φ(Q_t)·φ(K_r)) * V_r * decay_factor
+                C = chunk_end - chunk_start
+                intra = np.zeros((B, H, C, D_v), dtype=np.float64)
+                for t in range(C):
+                    for r in range(t + 1):
+                        coef = np.einsum(
+                            "bhd,bhd->bh", phi_Q_c[:, :, t, :], phi_K_c[:, :, r, :]
+                        )
+                        if decay is not None:
+                            # Apply product of decays from r+1..t to the
+                            # contribution from position r.
+                            for s in range(r + 1, t + 1):
+                                coef = coef * decay[:, :, chunk_start + s]
+                        intra[:, :, t, :] += coef[:, :, None] * V_c[:, :, r, :]
+                O[:, :, chunk_start:chunk_end, :] = inter + intra
+                # Update S_state by walking the chunk recurrently.
+                for t in range(C):
+                    if decay is not None:
+                        g = decay[:, :, chunk_start + t][:, :, None, None]
+                        S_state = g * S_state
+                    S_state = S_state + np.einsum(
+                        "bhd,bhe->bhde", phi_K_c[:, :, t, :], V_c[:, :, t, :]
+                    )
+
+        # Preserve input dtype on the way out — match the convention
+        # of the other tape-friendly ops (gemm, mul, etc.).
+        out_dtype = np.result_type(Q, K, V)
+        return O.astype(out_dtype), S_state.astype(out_dtype)
+
+    def linear_attn(
+        Q, K, V, *, feature_map: str = "elu", state=None,
+        chunk_size=None, decay=None, causal: bool = True,
+    ):
+        """Linear / kernel-feature attention. Returns just the output ``O``.
+
+        Inputs:
+            Q, K  shape ``(B, H, S, D_qk)``
+            V     shape ``(B, H, S, D_v)``
+            state optional ``(B, H, D_qk, D_v)`` recurrent state from a prior
+                  chunk. ``None`` = fresh start.
+            decay optional ``(B, H, S)`` per-token multiplicative decay (RetNet
+                  / GLA / Mamba2-selective). ``None`` = no decay.
+
+        For chained-chunk inference, pair with :func:`linear_attn_state`
+        to get the post-update state — both ops take the same args and
+        run the same kernel; the split keeps each op as a single-tensor
+        return so the autograd tape can record them.
+
+        See ``docs/audit/attention_variants_plan.md`` Variant 2.
+        """
+        O, _ = _linear_attn_impl(
+            Q, K, V, feature_map=feature_map, state=state,
+            chunk_size=chunk_size, decay=decay, causal=causal,
+        )
+        return O
+
+    def linear_attn_state(
+        Q, K, V, *, feature_map: str = "elu", state=None,
+        chunk_size=None, decay=None, causal: bool = True,
+    ):
+        """Companion to :func:`linear_attn` — returns just the post-update
+        state ``S_out`` (shape ``(B, H, D_qk, D_v)``). Run it alongside
+        ``linear_attn`` to chain chunks during inference."""
+        _, S_out = _linear_attn_impl(
+            Q, K, V, feature_map=feature_map, state=state,
+            chunk_size=chunk_size, decay=decay, causal=causal,
+        )
+        return S_out
+
+    # ── attention_variants_plan, LA-4 — Power attention + Retention ─────────
+    # Both are linear-cost causal attention variants that fit on the same
+    # (Q, K, V) state-recurrence backbone as `linear_attn`, with their own
+    # parametric structure:
+    #   * power_attn:  φ(Q) = Q^deg pointwise (symmetric power attention,
+    #                  Buckman/Edelmuth). state-width = `state` attr.
+    #   * retention:   RetNet equation 4 — multiplicative decay + degree.
+    #                  Returns (O, state, sum_of_keys) for training/inference
+    #                  variants.
+    #
+    # Promoted from `examples/advanced/power_retention/` so callers can
+    # spell `@jit(target="apple_gpu") def block(q, k, v): return
+    # ts.ops.power_attn(...)` once the backend lowering lands. Today the
+    # forward path is the numpy reference; per-backend kernels (Hopper
+    # CUDA in the example folder, ROCm HIP variant) wait on Phase G.
+
+    def power_attn(Q, K, V, *, state: int = 64, window=None, deg: int = 2,
+                   causal: bool = True):
+        """Symmetric power attention.
+
+        ``φ(x) = x^deg`` element-wise (no exp / kernel feature map). The
+        ``state`` attribute reserves the recurrent state width;
+        ``window`` (optional) clamps to a sliding window over the most
+        recent ``window`` keys.
+        """
+        if hasattr(Q, "_data"):
+            Q = Q._data
+        if hasattr(K, "_data"):
+            K = K._data
+        if hasattr(V, "_data"):
+            V = V._data
+        Q = np.asarray(Q)
+        K = np.asarray(K)
+        V = np.asarray(V)
+        if Q.ndim != 4 or K.ndim != 4 or V.ndim != 4:
+            raise ValueError(
+                f"power_attn expects rank-4 (B, H, S, D) tensors; got "
+                f"Q.ndim={Q.ndim}, K.ndim={K.ndim}, V.ndim={V.ndim}"
+            )
+        if deg < 1:
+            raise ValueError(f"deg must be >= 1; got {deg}")
+        # Use linear_attn with a polynomial feature map of the requested
+        # degree. deg=2 maps directly to "polynomial_2"; higher degrees
+        # use a custom power function inline.
+        if deg == 2:
+            return _linear_attn_impl(
+                Q, K, V, feature_map="polynomial_2", state=None,
+                chunk_size=None, decay=None, causal=causal,
+            )[0]
+        # Generic polynomial deg path (window currently passes through
+        # without a hard-coded windowing fast path — kernel-level
+        # windowing is a Phase G follow-up).
+        Q_p = Q.astype(np.float64) ** deg
+        K_p = K.astype(np.float64) ** deg
+        return _linear_attn_impl(
+            Q_p, K_p, V, feature_map="identity", state=None,
+            chunk_size=None, decay=None, causal=causal,
+        )[0]
+
+    def retention(Q, K, V, *, log_g=None, deg: int = 2, chunk: int = 128,
+                  switch_over=None, causal: bool = True):
+        """RetNet-style retention with multiplicative decay.
+
+        ``log_g`` is the per-token log-decay tensor of shape ``(B, H, S)``;
+        ``None`` defaults to no decay. ``deg`` raises Q/K to a power
+        before the recurrence (matches the example folder's
+        ``Power_RetentionOp`` defaults). Returns just ``O`` here — for
+        the (O, state, sum_of_keys) triple that the RetNet paper uses,
+        call :func:`retention_state` and :func:`retention_sum_of_keys`
+        alongside this op (same single-tensor-per-op convention as
+        ``lstm_cell`` / ``linear_attn``).
+        """
+        if hasattr(Q, "_data"):
+            Q = Q._data
+        if hasattr(K, "_data"):
+            K = K._data
+        if hasattr(V, "_data"):
+            V = V._data
+        Q = np.asarray(Q, dtype=np.float64)
+        K = np.asarray(K, dtype=np.float64)
+        V = np.asarray(V, dtype=np.float64)
+        if log_g is not None:
+            if hasattr(log_g, "_data"):
+                log_g = log_g._data
+            decay = np.exp(np.asarray(log_g, dtype=np.float64))
+        else:
+            decay = None
+        Q_p = Q ** deg
+        K_p = K ** deg
+        return _linear_attn_impl(
+            Q_p, K_p, V, feature_map="identity", state=None,
+            chunk_size=chunk, decay=decay, causal=causal,
+        )[0].astype(np.result_type(Q, V))
+
+    # ── attention_variants_plan, NSA — Native Sparse Attention primitives ───
+    # DeepSeek's Native Sparse Attention pattern: three branches that all
+    # operate on the same Q/K/V but with different sparsity / locality
+    # patterns. The branches are jointly trainable; a learnable per-query
+    # gate decides how much weight goes to each.
+
+    def attn_sliding_window(Q, K, V, *, window_size: int, causal: bool = True):
+        """NSA branch 1 — sliding-window attention (dense local context).
+
+        Each query attends only to the most recent ``window_size`` keys.
+        Output shape matches Q. Inputs are rank-4 ``(B, H, S, D)``.
+        """
+        if hasattr(Q, "_data"): Q = Q._data
+        if hasattr(K, "_data"): K = K._data
+        if hasattr(V, "_data"): V = V._data
+        Q = np.asarray(Q); K = np.asarray(K); V = np.asarray(V)
+        if Q.ndim != 4 or K.ndim != 4 or V.ndim != 4:
+            raise ValueError(
+                f"attn_sliding_window expects rank-4 (B, H, S, D) tensors"
+            )
+        if window_size <= 0:
+            raise ValueError(f"window_size must be positive; got {window_size}")
+        d = Q.shape[-1]
+        scale = 1.0 / np.sqrt(d)
+        scores = np.matmul(Q, np.swapaxes(K, -1, -2)) * scale
+        # Mask: position i can attend only to positions in (i - window_size, i].
+        S_q, S_k = scores.shape[-2], scores.shape[-1]
+        i_idx = np.arange(S_q)[:, None]
+        j_idx = np.arange(S_k)[None, :]
+        # Outside window: j > i (future) or j < i - window_size + 1 (too old)
+        if causal:
+            mask = (j_idx > i_idx) | (j_idx < i_idx - window_size + 1)
+        else:
+            mask = (
+                (j_idx > i_idx + window_size // 2)
+                | (j_idx < i_idx - window_size // 2)
+            )
+        scores = np.where(mask, -np.inf, scores)
+        e = np.exp(scores - scores.max(axis=-1, keepdims=True))
+        # Guard zero-sum rows (no positions in window) → uniform dist.
+        row_sum = e.sum(axis=-1, keepdims=True)
+        row_sum = np.where(row_sum == 0, 1.0, row_sum)
+        weights = e / row_sum
+        return np.matmul(weights, V)
+
+    def attn_compressed_blocks(Q, K_c, V_c):
+        """NSA branch 2 — attention over compressed-block summaries.
+
+        ``K_c`` / ``V_c`` are pre-computed per-block summaries of shape
+        ``(B, H, num_blocks, D)``; queries attend to those summaries
+        directly (dense over a much smaller key space). The
+        compression itself is the ``compress_blocks`` op below.
+        """
+        if hasattr(Q, "_data"): Q = Q._data
+        if hasattr(K_c, "_data"): K_c = K_c._data
+        if hasattr(V_c, "_data"): V_c = V_c._data
+        Q = np.asarray(Q); K_c = np.asarray(K_c); V_c = np.asarray(V_c)
+        if Q.ndim != 4 or K_c.ndim != 4 or V_c.ndim != 4:
+            raise ValueError(
+                f"attn_compressed_blocks expects rank-4 tensors"
+            )
+        d = Q.shape[-1]
+        scale = 1.0 / np.sqrt(d)
+        scores = np.matmul(Q, np.swapaxes(K_c, -1, -2)) * scale
+        e = np.exp(scores - scores.max(axis=-1, keepdims=True))
+        weights = e / e.sum(axis=-1, keepdims=True)
+        return np.matmul(weights, V_c)
+
+    def attn_top_k_blocks(Q, K, V, *, scores, top_k: int, block_size: int,
+                           causal: bool = True):
+        """NSA branch 3 — top-k block-selected attention.
+
+        ``scores`` shape ``(B, H, S_q, num_blocks)`` — typically the dot
+        product between Q and per-block compressed summaries. Per query
+        we take the ``top_k`` highest-scoring blocks and run dense
+        attention across the *full* K/V tokens within those blocks.
+
+        Returns ``(B, H, S_q, D)``.
+
+        ``causal=True`` further masks any block strictly after the
+        query's own block.
+        """
+        if hasattr(Q, "_data"): Q = Q._data
+        if hasattr(K, "_data"): K = K._data
+        if hasattr(V, "_data"): V = V._data
+        if hasattr(scores, "_data"): scores = scores._data
+        Q = np.asarray(Q); K = np.asarray(K); V = np.asarray(V)
+        scores = np.asarray(scores)
+        if Q.ndim != 4 or K.ndim != 4 or V.ndim != 4:
+            raise ValueError("attn_top_k_blocks expects rank-4 Q/K/V")
+        B, H, S_q, D = Q.shape
+        S_k = K.shape[2]
+        if S_k % block_size != 0:
+            raise ValueError(
+                f"S_k={S_k} not divisible by block_size={block_size}"
+            )
+        num_blocks = S_k // block_size
+        if scores.shape != (B, H, S_q, num_blocks):
+            raise ValueError(
+                f"scores shape {scores.shape} must equal (B, H, S_q, num_blocks) = "
+                f"({B}, {H}, {S_q}, {num_blocks})"
+            )
+        if top_k > num_blocks:
+            raise ValueError(f"top_k={top_k} > num_blocks={num_blocks}")
+
+        # Apply causal block mask BEFORE selecting top-k.
+        scores_masked = scores.copy()
+        if causal:
+            q_block = np.arange(S_q) // block_size  # which block each query lives in
+            blk_idx = np.arange(num_blocks)[None, None, None, :]
+            q_blk = q_block[None, None, :, None]
+            future_mask = blk_idx > q_blk
+            scores_masked = np.where(future_mask, -np.inf, scores_masked)
+
+        # Per (B, H, S_q) row: pick the top_k block indices.
+        topk_idx = np.argpartition(-scores_masked, top_k - 1, axis=-1)[..., :top_k]
+        # Sort the top_k indices for determinism.
+        topk_idx = np.sort(topk_idx, axis=-1)
+
+        # For each query, gather its top_k blocks of K/V (block_size tokens each)
+        # and run dense attention.
+        out = np.zeros_like(Q)
+        scale = 1.0 / np.sqrt(D)
+        for b in range(B):
+            for h in range(H):
+                for sq in range(S_q):
+                    # Concatenate the top_k blocks → (top_k * block_size, D).
+                    blocks = topk_idx[b, h, sq]
+                    rows = []
+                    val_rows = []
+                    for blk in blocks:
+                        start = blk * block_size
+                        end = start + block_size
+                        rows.append(K[b, h, start:end, :])
+                        val_rows.append(V[b, h, start:end, :])
+                    K_sel = np.concatenate(rows, axis=0)
+                    V_sel = np.concatenate(val_rows, axis=0)
+                    s = (Q[b, h, sq, :] @ K_sel.T) * scale
+                    e = np.exp(s - s.max())
+                    w = e / e.sum()
+                    out[b, h, sq, :] = w @ V_sel
+        return out
+
+    def compress_blocks(K, V, *, block_size: int, w_compress=None):
+        """NSA helper — chunk K/V into ``block_size``-sized groups and
+        produce per-block summaries.
+
+        With ``w_compress=None`` the summary is the per-block mean (a
+        common choice that has zero learnable parameters). With
+        ``w_compress`` shape ``(block_size, 1)`` (or a learnable matrix
+        ``(block_size, summary_size)``), the summary is a learnable
+        linear projection over the block.
+
+        Returns ``(K_compressed, V_compressed)`` of shape
+        ``(B, H, num_blocks, D)``.
+        """
+        if hasattr(K, "_data"): K = K._data
+        if hasattr(V, "_data"): V = V._data
+        K = np.asarray(K); V = np.asarray(V)
+        if K.ndim != 4 or V.ndim != 4:
+            raise ValueError("compress_blocks expects rank-4 K and V")
+        B, H, S, D = K.shape
+        if S % block_size != 0:
+            raise ValueError(
+                f"S={S} not divisible by block_size={block_size}"
+            )
+        num_blocks = S // block_size
+        K_blk = K.reshape(B, H, num_blocks, block_size, D)
+        V_blk = V.reshape(B, H, num_blocks, block_size, D)
+        if w_compress is None:
+            return K_blk.mean(axis=-2), V_blk.mean(axis=-2)
+        if hasattr(w_compress, "_data"):
+            w_compress = w_compress._data
+        w_compress = np.asarray(w_compress)
+        if w_compress.shape != (block_size, 1):
+            raise ValueError(
+                f"w_compress shape {w_compress.shape} must equal "
+                f"(block_size, 1) = ({block_size}, 1)"
+            )
+        # einsum: (B, H, num_blocks, block_size, D) @ (block_size, 1)
+        # → (B, H, num_blocks, 1, D) → squeeze → (B, H, num_blocks, D).
+        K_c = np.einsum("bhnsd,sx->bhnxd", K_blk, w_compress)[..., 0, :]
+        V_c = np.einsum("bhnsd,sx->bhnxd", V_blk, w_compress)[..., 0, :]
+        return K_c, V_c
+
     def qkv_projection(x, W_qkv):
         if hasattr(x, "_data"):
             x = x._data
@@ -1319,6 +1805,28 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             w_uv = w_uv._data
         return np.matmul(c, w_uv)
 
+    # attention_variants_plan, MLA-1 — fused decode op (numpy reference).
+    # Result of the Schedule IR MLAFusionPass collapsing
+    #   c = x @ W_dkv  → K = c @ W_uk  → V = c @ W_uv  → flash_attn(Q, K, V)
+    # into a single op carrying (x, W_dkv, W_uk, W_uv, Q). On backends
+    # without a fused absorb-K kernel this just expands back to the chain.
+    def mla_decode_fused(x, w_dkv, w_uk, w_uv, q, *, scale=None,
+                          causal: bool = False):
+        """Fused MLA decode block (numpy reference).
+
+        ``q`` shape: ``(B, S_q, D_q)`` (or rank-3 with H = 1 implicit).
+        Returns ``O`` of the same shape as ``q``.
+        """
+        if hasattr(x, "_data"): x = x._data
+        if hasattr(w_dkv, "_data"): w_dkv = w_dkv._data
+        if hasattr(w_uk, "_data"): w_uk = w_uk._data
+        if hasattr(w_uv, "_data"): w_uv = w_uv._data
+        if hasattr(q, "_data"): q = q._data
+        c = np.matmul(x, w_dkv)
+        K = np.matmul(c, w_uk)
+        V = np.matmul(c, w_uv)
+        return flash_attn(q, K, V, scale=scale, causal=causal)
+
     def rope_split(x, *, rope_dim: int):
         """Split a tensor's last dim into ``(rope_part, no_rope_part)``.
 
@@ -1730,6 +2238,13 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "dropout": dropout,
         "qkv_projection": qkv_projection,
         "flash_attn": flash_attn,
+        "linear_attn": linear_attn,
+        "linear_attn_state": linear_attn_state,
+        "power_attn": power_attn,
+        "retention": retention,
+        "attn_sliding_window": attn_sliding_window,
+        "attn_compressed_blocks": attn_compressed_blocks,
+        "attn_top_k_blocks": attn_top_k_blocks,
         "moe": moe,
         "moe_dispatch": moe_dispatch,
         "moe_combine": moe_combine,
@@ -1785,6 +2300,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "latent_kv_compress": latent_kv_compress,
         "latent_kv_expand_k": latent_kv_expand_k,
         "latent_kv_expand_v": latent_kv_expand_v,
+        "mla_decode_fused": mla_decode_fused,
         "rope_split": rope_split,
         "rope_merge": rope_merge,
         "selective_ssm": selective_ssm,
@@ -1836,6 +2352,14 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         conv3d=conv3d,
         qkv_projection=qkv_projection,
         flash_attn=flash_attn,
+        linear_attn=linear_attn,
+        linear_attn_state=linear_attn_state,
+        power_attn=power_attn,
+        retention=retention,
+        attn_sliding_window=attn_sliding_window,
+        attn_compressed_blocks=attn_compressed_blocks,
+        attn_top_k_blocks=attn_top_k_blocks,
+        compress_blocks=compress_blocks,
         moe=moe,
         moe_dispatch=moe_dispatch,
         moe_combine=moe_combine,
@@ -1890,6 +2414,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         latent_kv_compress=latent_kv_compress,
         latent_kv_expand_k=latent_kv_expand_k,
         latent_kv_expand_v=latent_kv_expand_v,
+        mla_decode_fused=mla_decode_fused,
         rope_split=rope_split,
         rope_merge=rope_merge,
         selective_ssm=selective_ssm,

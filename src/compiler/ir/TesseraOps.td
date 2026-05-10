@@ -198,6 +198,77 @@ def Tessera_FlashAttnOp : Op<
   let hasVerifier = 1;
 }
 
+// attention_variants_plan, LA-1 — Linear / kernel-feature attention.
+// Distinct ODS op so backend passes can match it independently of
+// flash_attn. The `feature_map` string attribute selects the φ function;
+// `causal` selects between recurrent and folded forms. Decay / state /
+// chunk_size live as additional optional attrs on the op for future
+// kernel variants.
+def Tessera_LinearAttnOp : Op<
+  Tessera_Dialect, "linear_attn",
+  [Pure]
+> {
+  let summary = "Linear / kernel-feature attention (causal recurrence or folded)";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        DefaultValuedAttr<StrAttr, "\"elu\"">:$feature_map,
+                        DefaultValuedAttr<BoolAttr, "true">:$causal,
+                        OptionalAttr<I64Attr>:$chunk_size);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_LinearAttnStateOp : Op<
+  Tessera_Dialect, "linear_attn_state",
+  [Pure]
+> {
+  let summary = "Linear-attention companion op returning the post-update state";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        DefaultValuedAttr<StrAttr, "\"elu\"">:$feature_map,
+                        DefaultValuedAttr<BoolAttr, "true">:$causal,
+                        OptionalAttr<I64Attr>:$chunk_size);
+  let results = (outs TensorType:$state);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+// attention_variants_plan, LA-4 — promotion of the example
+// `power_retention` dialect into the canonical Tessera dialect.
+// Power attention (Buckman/Edelmuth 2024) and Retention (Sun et al.,
+// RetNet 2023) are both linear-cost causal attention variants; share
+// the (Q, K, V, optional decay/log_g, optional state) input shape
+// with `linear_attn`. The distinct op_names anchor backend-specific
+// kernels (the example folder ships CUDA + HIP sketches under
+// `examples/advanced/power_retention/src/kernels/`).
+
+def Tessera_PowerAttnOp : Op<
+  Tessera_Dialect, "power_attn",
+  [Pure]
+> {
+  let summary = "Symmetric power attention (linear-cost; deg + state width)";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        I64Attr:$state,
+                        OptionalAttr<I64Attr>:$window,
+                        DefaultValuedAttr<I64Attr, "2">:$deg,
+                        DefaultValuedAttr<BoolAttr, "true">:$causal);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_RetentionOp : Op<
+  Tessera_Dialect, "retention",
+  [Pure]
+> {
+  let summary = "RetNet-style retention with multiplicative decay (linear-cost)";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        Optional<TensorType>:$log_g,
+                        DefaultValuedAttr<I64Attr, "2">:$deg,
+                        DefaultValuedAttr<I64Attr, "128">:$chunk,
+                        OptionalAttr<I64Attr>:$switch_over,
+                        DefaultValuedAttr<BoolAttr, "true">:$causal);
+  // (output, state, sum_of_keys) — matches RetNet's training/inference contract.
+  let results = (outs TensorType:$o, TensorType:$state, TensorType:$sum_of_keys);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
 def Tessera_FusedEpilogueOp : Op<
   Tessera_Dialect, "fused_epilogue",
   [Pure]
@@ -270,6 +341,119 @@ def Tessera_SwigluFusedOp : Op<
                        TensorType:$w_up,
                        TensorType:$w_down);
   let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+// Theme 5 — MLA primitives (Python ops landed; ODS for fusion-pass
+// match support). Each is matmul-shaped; the distinct op_names anchor
+// the FlashMLA target pass match in MLAFusionPass.
+def Tessera_LatentKVCompressOp : Op<
+  Tessera_Dialect, "latent_kv_compress",
+  [Pure]
+> {
+  let summary = "MLA latent compression: c = x @ W_dkv";
+  let arguments = (ins TensorType:$x, TensorType:$w_dkv);
+  let results = (outs TensorType:$c);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_LatentKVExpandKOp : Op<
+  Tessera_Dialect, "latent_kv_expand_k",
+  [Pure]
+> {
+  let summary = "MLA latent K expansion: K = c @ W_uk";
+  let arguments = (ins TensorType:$c, TensorType:$w_uk);
+  let results = (outs TensorType:$k);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_LatentKVExpandVOp : Op<
+  Tessera_Dialect, "latent_kv_expand_v",
+  [Pure]
+> {
+  let summary = "MLA latent V expansion: V = c @ W_uv";
+  let arguments = (ins TensorType:$c, TensorType:$w_uv);
+  let results = (outs TensorType:$v);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+// attention_variants_plan, MLA-1 — DeepSeek MLA decode fusion target.
+// Result of MLAFusionPass collapsing the 3-op chain
+//   c = latent_kv_compress(x, W_dkv)
+//   K = latent_kv_expand_k(c, W_uk)
+//   V = latent_kv_expand_v(c, W_uv)
+//   O = flash_attn(Q, K, V)
+// into a single op carrying (x, W_dkv, W_uk, W_uv, Q). Backends with a
+// FlashMLA-style absorb-K kernel (Hopper, future Blackwell) materialize
+// just `c` and reuse `W_uk` / `W_uv` inside the score kernel; backends
+// without one expand back to the 4-op chain.
+def Tessera_MLADecodeFusedOp : Op<
+  Tessera_Dialect, "mla_decode_fused",
+  [Pure]
+> {
+  let summary = "Fused MLA decode block: latent compress → expand → flash_attn";
+  let arguments = (ins TensorType:$x,
+                       TensorType:$w_dkv,
+                       TensorType:$w_uk,
+                       TensorType:$w_uv,
+                       TensorType:$q,
+                       OptionalAttr<F64Attr>:$scale,
+                       DefaultValuedAttr<BoolAttr, "false">:$causal);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+// attention_variants_plan, NSA — branch + fusion ODS ops.
+def Tessera_AttnSlidingWindowOp : Op<
+  Tessera_Dialect, "attn_sliding_window",
+  [Pure]
+> {
+  let summary = "NSA branch 1 — sliding-window dense attention";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        I64Attr:$window_size,
+                        DefaultValuedAttr<BoolAttr, "true">:$causal);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_AttnCompressedBlocksOp : Op<
+  Tessera_Dialect, "attn_compressed_blocks",
+  [Pure]
+> {
+  let summary = "NSA branch 2 — attention over compressed-block summaries";
+  let arguments = (ins TensorType:$q, TensorType:$k_c, TensorType:$v_c);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_AttnTopKBlocksOp : Op<
+  Tessera_Dialect, "attn_top_k_blocks",
+  [Pure]
+> {
+  let summary = "NSA branch 3 — top-k block-selected attention";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        TensorType:$scores,
+                        I64Attr:$top_k,
+                        I64Attr:$block_size,
+                        DefaultValuedAttr<BoolAttr, "true">:$causal);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+// NSA-4 fusion target — collapses the three NSA branches + gating into
+// a single op for backends with a fused NSA kernel.
+def Tessera_NativeSparseAttnFusedOp : Op<
+  Tessera_Dialect, "native_sparse_attn_fused",
+  [Pure]
+> {
+  let summary = "Fused NSA block (sliding + compressed + selected + gating)";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        TensorType:$gate_logits,
+                        I64Attr:$window_size,
+                        I64Attr:$block_size,
+                        I64Attr:$top_k,
+                        DefaultValuedAttr<BoolAttr, "true">:$causal);
+  let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 

@@ -1261,6 +1261,15 @@ metadata for frontend and compiler tests.
 | `conv3d(x, weight, bias=None, stride=1, padding=0)` | `(NDHWC, DHWIO) → NDHWC` | `pure` | NumPy NDHWC/DHWIO reference |
 | `qkv_projection(x, W_qkv)` | `(array, array) → tuple` | `pure` | Matmul and split into Q/K/V references |
 | `flash_attn(Q, K, V, scale=None, causal=False, dropout_p=0.0, seed=None)` | `(array,array,array) → array` | `pure` / `random` when dropout is active | Naive O(S²) Phase 1; FA-4 Phase 3 |
+| `linear_attn(Q, K, V, *, feature_map="elu", state=None, chunk_size=None, decay=None, causal=True)` | `(array,array,array) → array` | `state` | Linear / kernel-feature attention. Recurrent or chunk-parallel forms; optional decay (RetNet/GLA/Mamba2-selective). Returns just `O` — pair with `linear_attn_state` for chained-chunk inference (see attention_variants_plan LA-1) |
+| `linear_attn_state(Q, K, V, ...)` | `(array,array,array) → array` | `state` | Companion to `linear_attn` returning the post-update state `(B, H, D_qk, D_v)` |
+| `power_attn(Q, K, V, *, state, window=None, deg=2, causal=True)` | `(array,array,array) → array` | `state` | LA-4 — Symmetric power attention (linear-cost). Promoted from `examples/advanced/power_retention/` |
+| `retention(Q, K, V, *, log_g=None, deg=2, chunk=128, causal=True)` | `(array,array,array) → array` | `state` | LA-4 — RetNet-style retention with multiplicative decay |
+| `mla_decode_fused(x, w_dkv, w_uk, w_uv, q, *, scale=None, causal=False)` | `(array,array,array,array,array) → array` | `state` | MLA-1 — DeepSeek MLA decode block as a single op (result of the Schedule IR `tessera-mla-fusion` pass) |
+| `attn_sliding_window(Q, K, V, *, window_size, causal=True)` | `(array,array,array) → array` | `state` | NSA-1 branch — sliding-window dense local attention |
+| `attn_compressed_blocks(Q, K_c, V_c)` | `(array,array,array) → array` | `state` | NSA-1 branch — attention over per-block compressed K/V summaries |
+| `attn_top_k_blocks(Q, K, V, *, scores, top_k, block_size, causal=True)` | `(array,array,array) → array` | `state` | NSA-1 branch — top-k block-selected attention |
+| `compress_blocks(K, V, *, block_size, w_compress=None)` | `(array,array) → tuple` | `pure` | NSA-2 — chunk K/V into block_size groups; returns `(K_c, V_c)` per-block summaries (mean or learnable projection) |
 | `moe(x, experts)`, `moe_dispatch(x, route)`, `moe_combine(partials, inverse_route)` | `(array, ...) → array` | `collective` | Reference/mock transport helpers; distributed execution planned |
 | `all_reduce(x, op="sum")` | `(array) → array` | `collective` | Single-rank/mock no-op unless using explicit mock collective helpers |
 | `reduce_scatter(x, op="sum", axis=0)` | `(array) → array` | `collective` | Single-rank/mock no-op unless using explicit mock collective helpers |

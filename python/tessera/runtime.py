@@ -3290,6 +3290,17 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_swiglu_f32")
                 getattr(lib, "tessera_apple_gpu_swiglu_f16")
                 getattr(lib, "tessera_apple_gpu_swiglu_bf16")
+                # attention_variants_plan, LA-2 — linear / kernel-feature
+                # attention. f32 only in v1; D_qk*D_v ≤ 256 envelope.
+                getattr(lib, "tessera_apple_gpu_linear_attn_f32")
+                # attention_variants_plan, MLA-2 — DeepSeek MLA decode.
+                # Host-reference path today; absorb-K MSL kernel is a
+                # follow-up.
+                getattr(lib, "tessera_apple_gpu_mla_decode_f32")
+                # attention_variants_plan, NSA-5 — DeepSeek Native Sparse
+                # Attention. Host-reference path today; fully fused MSL
+                # kernel is a follow-up.
+                getattr(lib, "tessera_apple_gpu_native_sparse_attn_f32")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

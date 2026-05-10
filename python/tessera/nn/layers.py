@@ -1026,6 +1026,120 @@ class Conv2dNCHW(Module):
         return np.transpose(y_nhwc, (0, 3, 1, 2))
 
 
+class NativeSparseAttention(Module):
+    """attention_variants_plan, NSA-3 — DeepSeek-style Native Sparse Attention.
+
+    Three branches that all see the same Q/K/V from a single
+    qkv_projection, with a learnable per-query gate combining their
+    outputs:
+
+      * sliding_window: dense over the most recent ``window_size`` keys.
+      * compressed_blocks: per-block summaries (mean by default; pass
+        ``compress_weight=True`` to enable a learnable projection).
+      * top_k_blocks: pick the ``top_k`` highest-scoring blocks per
+        query and run dense attention over their full tokens.
+
+    Gating: a learnable linear projects each query token to a 3-dim
+    sigmoid gate ``(g_w, g_c, g_s)``; the output is
+    ``g_w * out_w + g_c * out_c + g_s * out_s``.
+    """
+
+    def __init__(
+        self,
+        *,
+        embed_dim: int,
+        num_heads: int,
+        window_size: int = 64,
+        block_size: int = 16,
+        top_k: int = 2,
+        compress_weight: bool = False,
+        causal: bool = True,
+        dtype: str = "fp32",
+    ):
+        super().__init__()
+        if embed_dim % num_heads != 0:
+            raise ValueError(
+                f"embed_dim {embed_dim} must be divisible by num_heads {num_heads}"
+            )
+        self.embed_dim = int(embed_dim)
+        self.num_heads = int(num_heads)
+        self.head_dim = self.embed_dim // self.num_heads
+        self.window_size = int(window_size)
+        self.block_size = int(block_size)
+        self.top_k = int(top_k)
+        self.causal = bool(causal)
+
+        # qkv projection (same as standard MHA)
+        self.W_qkv = Parameter(np.zeros((self.embed_dim, 3 * self.embed_dim)), dtype=dtype)
+        self.W_o = Parameter(np.zeros((self.embed_dim, self.embed_dim)), dtype=dtype)
+        # Per-query gate (3-way: window / compressed / selected)
+        self.W_gate = Parameter(np.zeros((self.embed_dim, 3 * self.num_heads)), dtype=dtype)
+        # Optional learnable block-compression projection.
+        self._compress_weight_enabled = bool(compress_weight)
+        if compress_weight:
+            self.W_compress = Parameter(
+                np.zeros((self.block_size, 1)), dtype=dtype,
+            )
+
+    def forward(self, x):
+        if hasattr(x, "_data"):
+            x = x._data
+        x = np.asarray(x)
+        if x.ndim == 2:
+            x = x[None]
+        B, S, _ = x.shape
+        H, D = self.num_heads, self.head_dim
+        if S % self.block_size != 0:
+            raise ValueError(
+                f"NativeSparseAttention: seq len {S} must be divisible by "
+                f"block_size {self.block_size}"
+            )
+        # qkv projection
+        qkv = ops.gemm(x, self.W_qkv._data._data)
+        Q_flat, K_flat, V_flat = np.split(qkv, 3, axis=-1)
+
+        def to_heads(t):
+            return t.reshape(B, S, H, D).transpose(0, 2, 1, 3)
+        Q = to_heads(Q_flat)
+        K = to_heads(K_flat)
+        V = to_heads(V_flat)
+
+        # Branch 1 — sliding window
+        out_w = ops.attn_sliding_window(
+            Q, K, V, window_size=self.window_size, causal=self.causal,
+        )
+
+        # Branch 2 — compressed blocks
+        w_compress = (
+            self.W_compress._data._data if self._compress_weight_enabled else None
+        )
+        K_c, V_c = ops.compress_blocks(
+            K, V, block_size=self.block_size, w_compress=w_compress,
+        )
+        out_c = ops.attn_compressed_blocks(Q, K_c, V_c)
+
+        # Branch 3 — top-k blocks (use Q @ K_c^T as the block score)
+        scale = 1.0 / np.sqrt(D)
+        block_scores = np.matmul(Q, np.swapaxes(K_c, -1, -2)) * scale
+        out_s = ops.attn_top_k_blocks(
+            Q, K, V, scores=block_scores, top_k=self.top_k,
+            block_size=self.block_size, causal=self.causal,
+        )
+
+        # Gate the three outputs per (B, H, S).
+        gate_logits = ops.gemm(x, self.W_gate._data._data)  # (B, S, 3*H)
+        gate_logits = gate_logits.reshape(B, S, 3, H).transpose(0, 3, 1, 2)  # (B, H, S, 3)
+        gates = 1.0 / (1.0 + np.exp(-gate_logits))
+
+        out = (
+            gates[..., 0:1] * out_w
+            + gates[..., 1:2] * out_c
+            + gates[..., 2:3] * out_s
+        )
+        out = out.transpose(0, 2, 1, 3).reshape(B, S, self.embed_dim)
+        return ops.gemm(out, self.W_o._data._data)
+
+
 __all__ = [
     "Linear",
     "RMSNorm",
@@ -1047,4 +1161,5 @@ __all__ = [
     "Conv2dNCHW",
     "LSTMCell",
     "LSTM",
+    "NativeSparseAttention",
 ]

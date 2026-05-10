@@ -71,6 +71,17 @@ void registerTesseraPasses() {
   // Apple GPU pipeline ordering — see `apple_gpu_overview.md`).
   ::mlir::registerPass([]() { return createSwigluFusionPass(); });
 
+  // ── attention_variants_plan, MLA-1 — DeepSeek MLA decode fusion ────────
+  // Matches the (compress → expand_k/v → flash_attn) chain and emits
+  // `tessera.mla_decode_fused`. Runs ahead of backend-specific lowering
+  // for the same reason as SwigluFusion.
+  ::mlir::registerPass([]() { return createMLAFusionPass(); });
+
+  // ── attention_variants_plan, NSA-4 — DeepSeek NSA fusion ────────────────
+  // Matches the three-branch NSA shape and emits
+  // `tessera.native_sparse_attn_fused`.
+  ::mlir::registerPass([]() { return createNativeSparseAttnFusionPass(); });
+
   // ── Phase F5 adjoint collective insertion ──────────────────────────────────
   // Runs after AutodiffPass on functions carrying both
   // tessera.autodiff="reverse" and tessera.weight_sharding. Plans

@@ -31,6 +31,12 @@ add_library(TesseraPasses
   # Phase 8.4.8 — SwiGLU fusion (Stage 2b of SwiGLU Performance Plan).
   SwigluFusionPass.cpp
 
+  # attention_variants_plan, MLA-1 — DeepSeek MLA decode fusion.
+  MLAFusionPass.cpp
+
+  # attention_variants_plan, NSA-4 — DeepSeek NSA fusion.
+  NativeSparseAttnFusionPass.cpp
+
   # Phase 6 diagnostics
   ${CMAKE_SOURCE_DIR}/src/compiler/diagnostics/ShapeInferencePass.cpp
   ${CMAKE_SOURCE_DIR}/src/compiler/diagnostics/ErrorReporter.cpp

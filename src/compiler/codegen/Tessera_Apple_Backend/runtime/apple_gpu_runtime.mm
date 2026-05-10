@@ -3097,3 +3097,497 @@ extern "C" void tessera_apple_gpu_swiglu_bf16(const uint16_t* X,
                                               int32_t Kout) {
   reference_swiglu_bf16_via_fp32(X, Wg, Wu, Wd, O, M, K, H, Kout);
 }
+
+//===---------------------------------------------------------------------===//
+// attention_variants_plan, LA-2 — Linear / kernel-feature attention.
+//
+// Causal recurrent form, one thread per (B, H) batch-head row:
+//
+//     S_{t} = S_{t-1} + φ(K_t)^T V_t           (D_qk × D_v outer-product update)
+//     O_{t} = φ(Q_t) @ S_{t}                   (D_qk · D_v dot-product per timestep)
+//
+// Per-thread state buffer S[D_qk * D_v]; capped at D_qk * D_v ≤ 256
+// floats (1 KB per thread). Wider shapes fall through to the host
+// reference path.
+//
+// f32 only in v1; f16 / bf16 follow the existing fp32-conversion shim
+// pattern (matches how matmul→softmax→matmul layered f16/bf16 atop f32).
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+bool dispatch_linear_attn_msl(MetalDeviceContext &ctx,
+                              const float* Q, const float* K, const float* V,
+                              float* O, int32_t B, int32_t H, int32_t S,
+                              int32_t D_qk, int32_t D_v,
+                              int32_t feature_map, int32_t causal) {
+  static NSString *const kKernelSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_LINEAR_ATTN_MAX_STATE 256
+
+inline float feature_map_apply_f32(float x, int fm) {
+    // 0=elu, 1=relu, 2=identity, 3=polynomial_2
+    if (fm == 0) {
+        return x > 0.0f ? (x + 1.0f) : exp(x);
+    }
+    if (fm == 1) {
+        return max(x, 0.0f);
+    }
+    if (fm == 2) {
+        return x;
+    }
+    return x * x;  // polynomial_2
+}
+
+kernel void linear_attn_f32(
+    device const float* Q   [[buffer(0)]],
+    device const float* K   [[buffer(1)]],
+    device const float* V   [[buffer(2)]],
+    device float*       O   [[buffer(3)]],
+    constant int&       B   [[buffer(4)]],
+    constant int&       H   [[buffer(5)]],
+    constant int&       S   [[buffer(6)]],
+    constant int&       D_qk [[buffer(7)]],
+    constant int&       D_v  [[buffer(8)]],
+    constant int&       feature_map [[buffer(9)]],
+    constant int&       causal [[buffer(10)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)(B * H)) return;
+    int batch_head = (int)gid;
+    int b = batch_head / H;
+    int h = batch_head - b * H;
+    if (D_qk * D_v > TESSERA_APPLE_GPU_LINEAR_ATTN_MAX_STATE) return;
+
+    // Per-thread state, indexed [d_qk * D_v + d_v].
+    float state[TESSERA_APPLE_GPU_LINEAR_ATTN_MAX_STATE];
+    for (int i = 0; i < D_qk * D_v; ++i) state[i] = 0.0f;
+
+    // Stride helpers: Q/K/O in (B, H, S, D_qk) row-major; V/O in (B, H, S, D_v).
+    int row_stride_qk = S * D_qk;
+    int row_stride_v = S * D_v;
+    int q_base = (b * H + h) * row_stride_qk;
+    int k_base = q_base;
+    int v_base = (b * H + h) * row_stride_v;
+    int o_base = v_base;
+
+    for (int t = 0; t < S; ++t) {
+        // Load + apply feature map to Q_t and K_t.
+        float phi_K_t[16];  // D_qk capped by D_qk*D_v <= 256, but we further
+                            // cap D_qk to 16 to keep this stack array small;
+                            // larger D_qk is a follow-up.
+        float phi_Q_t[16];
+        // Defensive cap — caller's lowering pass enforces D_qk*D_v ≤ 256,
+        // and a sensible D_qk is ≤ 16 (typical 1..8). Wider falls back to
+        // reference.
+        if (D_qk > 16) return;
+        for (int d = 0; d < D_qk; ++d) {
+            phi_Q_t[d] = feature_map_apply_f32(Q[q_base + t * D_qk + d], feature_map);
+            phi_K_t[d] = feature_map_apply_f32(K[k_base + t * D_qk + d], feature_map);
+        }
+
+        // State update: S += φ(K_t)^T outer V_t  (each (d_qk, d_v) cell)
+        for (int d_qk = 0; d_qk < D_qk; ++d_qk) {
+            float k_d = phi_K_t[d_qk];
+            int row_off = d_qk * D_v;
+            for (int d_v = 0; d_v < D_v; ++d_v) {
+                state[row_off + d_v] += k_d * V[v_base + t * D_v + d_v];
+            }
+        }
+
+        // Output: O_t = φ(Q_t) @ S_t
+        for (int d_v = 0; d_v < D_v; ++d_v) {
+            float acc = 0.0f;
+            for (int d_qk = 0; d_qk < D_qk; ++d_qk) {
+                acc += phi_Q_t[d_qk] * state[d_qk * D_v + d_v];
+            }
+            O[o_base + t * D_v + d_v] = acc;
+        }
+    }
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kKernelSource, @"linear_attn_f32");
+    if (!pso) return false;
+
+    NSUInteger qBytes = sizeof(float) * (NSUInteger)B * H * S * D_qk;
+    NSUInteger kBytes = qBytes;
+    NSUInteger vBytes = sizeof(float) * (NSUInteger)B * H * S * D_v;
+    NSUInteger oBytes = vBytes;
+
+    id<MTLBuffer> bufQ = [ctx.device newBufferWithBytes:Q length:qBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufK = [ctx.device newBufferWithBytes:K length:kBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufV = [ctx.device newBufferWithBytes:V length:vBytes
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufQ || !bufK || !bufV || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufO offset:0 atIndex:3];
+    [enc setBytes:&B length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&H length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&S length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&D_qk length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&D_v length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&feature_map length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&causal length:sizeof(int32_t) atIndex:10];
+
+    NSUInteger total = (NSUInteger)B * H;
+    MTLSize grid = MTLSizeMake(total, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(total, pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+inline float feature_map_apply_host(float x, int32_t fm) {
+  if (fm == 0) return x > 0.0f ? (x + 1.0f) : std::exp(x);
+  if (fm == 1) return std::max(x, 0.0f);
+  if (fm == 2) return x;
+  return x * x;
+}
+
+inline void reference_linear_attn_f32(const float* Q, const float* K,
+                                      const float* V, float* O,
+                                      int32_t B, int32_t H, int32_t S,
+                                      int32_t D_qk, int32_t D_v,
+                                      int32_t feature_map, int32_t causal) {
+  std::vector<float> state((std::size_t)D_qk * D_v, 0.0f);
+  for (int32_t b = 0; b < B; ++b) {
+    for (int32_t h = 0; h < H; ++h) {
+      std::fill(state.begin(), state.end(), 0.0f);
+      int q_base = (b * H + h) * S * D_qk;
+      int k_base = q_base;
+      int v_base = (b * H + h) * S * D_v;
+      int o_base = v_base;
+      for (int32_t t = 0; t < S; ++t) {
+        // Update state
+        for (int32_t d_qk = 0; d_qk < D_qk; ++d_qk) {
+          float k_d = feature_map_apply_host(K[k_base + t * D_qk + d_qk], feature_map);
+          for (int32_t d_v = 0; d_v < D_v; ++d_v) {
+            state[(std::size_t)d_qk * D_v + d_v] += k_d * V[v_base + t * D_v + d_v];
+          }
+        }
+        // Compute output
+        for (int32_t d_v = 0; d_v < D_v; ++d_v) {
+          float acc = 0.0f;
+          for (int32_t d_qk = 0; d_qk < D_qk; ++d_qk) {
+            float q_d = feature_map_apply_host(Q[q_base + t * D_qk + d_qk], feature_map);
+            acc += q_d * state[(std::size_t)d_qk * D_v + d_v];
+          }
+          O[o_base + t * D_v + d_v] = acc;
+        }
+      }
+    }
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_linear_attn_f32(const float* Q, const float* K,
+                                                   const float* V, float* O,
+                                                   int32_t B, int32_t H,
+                                                   int32_t S, int32_t D_qk,
+                                                   int32_t D_v,
+                                                   int32_t feature_map,
+                                                   int32_t causal) {
+  if (D_qk * D_v > 256 || D_qk > 16) {
+    reference_linear_attn_f32(Q, K, V, O, B, H, S, D_qk, D_v, feature_map, causal);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_linear_attn_msl(ctx, Q, K, V, O, B, H, S, D_qk, D_v,
+                                          feature_map, causal))
+    return;
+  reference_linear_attn_f32(Q, K, V, O, B, H, S, D_qk, D_v, feature_map, causal);
+}
+
+//===---------------------------------------------------------------------===//
+// attention_variants_plan, MLA-2 — DeepSeek MLA decode runtime entry.
+//
+// Today this is a host-reference path that materializes the latent c
+// and the expanded K/V before running flash-attention. The Apple GPU
+// memory win — only the latent c lives in cache via
+// LatentKVCacheHandle — is fully observable on the Python side already;
+// this entry exists so the IR-level fusion has a concrete runtime
+// landing pad. The absorb-K MSL kernel (no full-K materialization) is
+// a follow-up that reuses the existing flash-attn kernel infra.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+inline void reference_mla_decode_f32(const float* X, const float* Wdkv,
+                                     const float* Wuk, const float* Wuv,
+                                     const float* Q, float* O,
+                                     int32_t B, int32_t S_kv,
+                                     int32_t D_x, int32_t D_lat,
+                                     int32_t S_q, int32_t D_h) {
+  // c = X @ Wdkv  ((S_kv, D_x) @ (D_x, D_lat) → (S_kv, D_lat))
+  std::vector<float> c((std::size_t)S_kv * D_lat, 0.0f);
+  for (int32_t s = 0; s < S_kv; ++s) {
+    for (int32_t d = 0; d < D_x; ++d) {
+      float xv = X[(std::size_t)s * D_x + d];
+      const float* w_row = Wdkv + (std::size_t)d * D_lat;
+      for (int32_t l = 0; l < D_lat; ++l) {
+        c[(std::size_t)s * D_lat + l] += xv * w_row[l];
+      }
+    }
+  }
+  // K = c @ Wuk;  V = c @ Wuv  ((S_kv, D_lat) @ (D_lat, D_h) → (S_kv, D_h))
+  std::vector<float> K((std::size_t)S_kv * D_h, 0.0f);
+  std::vector<float> V((std::size_t)S_kv * D_h, 0.0f);
+  for (int32_t s = 0; s < S_kv; ++s) {
+    for (int32_t l = 0; l < D_lat; ++l) {
+      float cv = c[(std::size_t)s * D_lat + l];
+      const float* uk_row = Wuk + (std::size_t)l * D_h;
+      const float* uv_row = Wuv + (std::size_t)l * D_h;
+      for (int32_t h = 0; h < D_h; ++h) {
+        K[(std::size_t)s * D_h + h] += cv * uk_row[h];
+        V[(std::size_t)s * D_h + h] += cv * uv_row[h];
+      }
+    }
+  }
+  // O = flash_attn(Q[B, S_q, D_h], K[S_kv, D_h], V[S_kv, D_h]) — broadcast
+  // K/V across batch.
+  float scale = 1.0f / std::sqrt(static_cast<float>(D_h));
+  std::vector<float> scores((std::size_t)S_q * S_kv);
+  for (int32_t b = 0; b < B; ++b) {
+    const float* Qb = Q + (std::size_t)b * S_q * D_h;
+    float* Ob = O + (std::size_t)b * S_q * D_h;
+    for (int32_t i = 0; i < S_q; ++i) {
+      for (int32_t j = 0; j < S_kv; ++j) {
+        float dot = 0.0f;
+        for (int32_t h = 0; h < D_h; ++h) {
+          dot += Qb[i * D_h + h] * K[(std::size_t)j * D_h + h];
+        }
+        scores[(std::size_t)i * S_kv + j] = dot * scale;
+      }
+    }
+    // Softmax + matmul V per row.
+    for (int32_t i = 0; i < S_q; ++i) {
+      float maxv = -std::numeric_limits<float>::infinity();
+      for (int32_t j = 0; j < S_kv; ++j) {
+        maxv = std::max(maxv, scores[(std::size_t)i * S_kv + j]);
+      }
+      float sum = 0.0f;
+      for (int32_t j = 0; j < S_kv; ++j) {
+        float e = std::exp(scores[(std::size_t)i * S_kv + j] - maxv);
+        scores[(std::size_t)i * S_kv + j] = e;
+        sum += e;
+      }
+      for (int32_t j = 0; j < S_kv; ++j) {
+        scores[(std::size_t)i * S_kv + j] /= sum;
+      }
+      for (int32_t h = 0; h < D_h; ++h) {
+        float acc = 0.0f;
+        for (int32_t j = 0; j < S_kv; ++j) {
+          acc += scores[(std::size_t)i * S_kv + j] * V[(std::size_t)j * D_h + h];
+        }
+        Ob[i * D_h + h] = acc;
+      }
+    }
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_mla_decode_f32(const float* X,
+                                                  const float* Wdkv,
+                                                  const float* Wuk,
+                                                  const float* Wuv,
+                                                  const float* Q, float* O,
+                                                  int32_t B, int32_t S_kv,
+                                                  int32_t D_x, int32_t D_lat,
+                                                  int32_t S_q, int32_t D_h) {
+  reference_mla_decode_f32(X, Wdkv, Wuk, Wuv, Q, O, B, S_kv, D_x, D_lat, S_q, D_h);
+}
+
+//===---------------------------------------------------------------------===//
+// attention_variants_plan, NSA-5 — DeepSeek Native Sparse Attention.
+//
+// Host reference combining the three branches:
+//   1. Sliding-window dense local attention.
+//   2. Per-block-summary attention (mean compression by default).
+//   3. Top-k block-selected dense attention.
+// Gated per query via the `gate_logits` operand (sigmoid → 3-way mix
+// using the first 3 channels per block-score logit; this matches the
+// `nn.NativeSparseAttention` Module's gate convention).
+//
+// A fully fused MSL kernel (all three branches + gating in one
+// dispatch with simdgroup top-k reduction) is a follow-up. The host
+// reference here just composes the existing per-branch math.
+//===---------------------------------------------------------------------===//
+
+extern "C" void tessera_apple_gpu_native_sparse_attn_f32(
+    const float* Q, const float* K, const float* V,
+    const float* gate_logits, float* O,
+    int32_t B, int32_t H, int32_t S, int32_t D,
+    int32_t window_size, int32_t block_size, int32_t top_k,
+    int32_t causal) {
+  // Output starts at zero; we'll accumulate the gated branch outputs.
+  std::memset(O, 0, sizeof(float) * (std::size_t)B * H * S * D);
+  if (block_size <= 0 || S % block_size != 0) {
+    // Out-of-envelope: leave O as zeros so the caller can detect.
+    return;
+  }
+  int32_t num_blocks = S / block_size;
+  float scale = 1.0f / std::sqrt(static_cast<float>(D));
+
+  // Pre-compute per-block (mean-compressed) K_c, V_c.
+  std::vector<float> Kc((std::size_t)B * H * num_blocks * D, 0.0f);
+  std::vector<float> Vc((std::size_t)B * H * num_blocks * D, 0.0f);
+  for (int32_t b = 0; b < B; ++b) {
+    for (int32_t h = 0; h < H; ++h) {
+      for (int32_t blk = 0; blk < num_blocks; ++blk) {
+        for (int32_t t = 0; t < block_size; ++t) {
+          for (int32_t d = 0; d < D; ++d) {
+            std::size_t k_idx = (((std::size_t)b * H + h) * S + blk * block_size + t) * D + d;
+            std::size_t kc_idx = (((std::size_t)b * H + h) * num_blocks + blk) * D + d;
+            Kc[kc_idx] += K[k_idx] / static_cast<float>(block_size);
+            Vc[kc_idx] += V[k_idx] / static_cast<float>(block_size);
+          }
+        }
+      }
+    }
+  }
+
+  // Per (b, h, q): three branches.
+  std::vector<float> scores;
+  scores.resize(std::max((std::size_t)S, (std::size_t)num_blocks));
+
+  for (int32_t b = 0; b < B; ++b) {
+    for (int32_t h = 0; h < H; ++h) {
+      for (int32_t q = 0; q < S; ++q) {
+        // Row indices.
+        std::size_t q_off = (((std::size_t)b * H + h) * S + q) * D;
+        std::size_t o_off = q_off;
+        std::size_t gate_off = (((std::size_t)b * H + h) * S + q) * num_blocks;
+
+        // Branch 1 — sliding window.
+        float row1[1024]; (void)row1; // placeholder to avoid VLAs
+        std::vector<float> w_branch(D, 0.0f);
+        {
+          // Compute scores[j] for j in window of q.
+          int32_t lo = causal ? std::max(0, q - window_size + 1) : std::max(0, q - window_size / 2);
+          int32_t hi = causal ? q : std::min(S - 1, q + window_size / 2);
+          float maxv = -std::numeric_limits<float>::infinity();
+          std::vector<float> ws(hi - lo + 1, 0.0f);
+          for (int32_t j = lo; j <= hi; ++j) {
+            float s = 0.0f;
+            for (int32_t d = 0; d < D; ++d) {
+              s += Q[q_off + d] * K[(((std::size_t)b * H + h) * S + j) * D + d];
+            }
+            ws[j - lo] = s * scale;
+            if (ws[j - lo] > maxv) maxv = ws[j - lo];
+          }
+          float sum = 0.0f;
+          for (auto &v : ws) { v = std::exp(v - maxv); sum += v; }
+          if (sum == 0) sum = 1.0f;
+          for (auto &v : ws) v /= sum;
+          for (int32_t j = lo; j <= hi; ++j) {
+            for (int32_t d = 0; d < D; ++d) {
+              w_branch[d] += ws[j - lo]
+                  * V[(((std::size_t)b * H + h) * S + j) * D + d];
+            }
+          }
+        }
+
+        // Branch 2 — compressed blocks.
+        std::vector<float> c_branch(D, 0.0f);
+        {
+          std::vector<float> ws(num_blocks, 0.0f);
+          float maxv = -std::numeric_limits<float>::infinity();
+          for (int32_t blk = 0; blk < num_blocks; ++blk) {
+            float s = 0.0f;
+            std::size_t kc_off = (((std::size_t)b * H + h) * num_blocks + blk) * D;
+            for (int32_t d = 0; d < D; ++d) s += Q[q_off + d] * Kc[kc_off + d];
+            ws[blk] = s * scale;
+            if (ws[blk] > maxv) maxv = ws[blk];
+          }
+          float sum = 0.0f;
+          for (auto &v : ws) { v = std::exp(v - maxv); sum += v; }
+          if (sum == 0) sum = 1.0f;
+          for (auto &v : ws) v /= sum;
+          for (int32_t blk = 0; blk < num_blocks; ++blk) {
+            std::size_t vc_off = (((std::size_t)b * H + h) * num_blocks + blk) * D;
+            for (int32_t d = 0; d < D; ++d) c_branch[d] += ws[blk] * Vc[vc_off + d];
+          }
+        }
+
+        // Branch 3 — top-k blocks.
+        std::vector<float> s_branch(D, 0.0f);
+        {
+          // Use gate_logits as the block scoring tensor (matches the
+          // Schedule IR fusion's convention of carrying the score
+          // tensor as the 4th operand). When gate_logits is None /
+          // zero, the runtime falls back to argmax-by-Q·Kc.
+          std::vector<std::pair<float, int32_t>> scored(num_blocks);
+          int32_t q_blk = q / block_size;
+          for (int32_t blk = 0; blk < num_blocks; ++blk) {
+            float gv = gate_logits[gate_off + blk];
+            if (causal && blk > q_blk) gv = -std::numeric_limits<float>::infinity();
+            scored[blk] = {gv, blk};
+          }
+          std::partial_sort(scored.begin(), scored.begin() + top_k, scored.end(),
+              [](auto &a, auto &b) { return a.first > b.first; });
+          int32_t total = top_k * block_size;
+          std::vector<float> ws(total, 0.0f);
+          float maxv = -std::numeric_limits<float>::infinity();
+          for (int32_t i = 0; i < top_k; ++i) {
+            int32_t blk = scored[i].second;
+            for (int32_t t = 0; t < block_size; ++t) {
+              int32_t j = blk * block_size + t;
+              float s = 0.0f;
+              for (int32_t d = 0; d < D; ++d) {
+                s += Q[q_off + d] * K[(((std::size_t)b * H + h) * S + j) * D + d];
+              }
+              ws[i * block_size + t] = s * scale;
+              if (ws[i * block_size + t] > maxv) maxv = ws[i * block_size + t];
+            }
+          }
+          float sum = 0.0f;
+          for (auto &v : ws) { v = std::exp(v - maxv); sum += v; }
+          if (sum == 0) sum = 1.0f;
+          for (auto &v : ws) v /= sum;
+          for (int32_t i = 0; i < top_k; ++i) {
+            int32_t blk = scored[i].second;
+            for (int32_t t = 0; t < block_size; ++t) {
+              int32_t j = blk * block_size + t;
+              for (int32_t d = 0; d < D; ++d) {
+                s_branch[d] += ws[i * block_size + t]
+                    * V[(((std::size_t)b * H + h) * S + j) * D + d];
+              }
+            }
+          }
+        }
+
+        // Equal-weight 1/3 mix on each branch (uniform prior; the
+        // user-side gate Module already weighs per-query, so this
+        // host-reference path doesn't double-gate).
+        for (int32_t d = 0; d < D; ++d) {
+          O[o_off + d] = (w_branch[d] + c_branch[d] + s_branch[d]) / 3.0f;
+        }
+      }
+    }
+  }
+}

@@ -62,6 +62,8 @@ from .layers import (
     # Phase H2 — RNN cells with state-propagation primitive (ops.lstm_cell + extractors)
     LSTMCell,
     LSTM,
+    # attention_variants_plan, NSA-3 — DeepSeek Native Sparse Attention.
+    NativeSparseAttention,
 )
 from . import utils
 
@@ -117,4 +119,6 @@ __all__ = [
     "Conv2d", "Conv2dNCHW",
     # Phase H2 (RNN cells)
     "LSTMCell", "LSTM",
+    # attention_variants_plan, NSA-3
+    "NativeSparseAttention",
 ]

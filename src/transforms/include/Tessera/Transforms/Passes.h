@@ -173,6 +173,27 @@ std::unique_ptr<mlir::Pass> createAdjointCollectiveInsertionPass();
 // WGMMA epilogue, ROCm MFMA epilogue) lower the fused op directly.
 std::unique_ptr<mlir::Pass> createSwigluFusionPass();
 
+// ── attention_variants_plan, MLA-1 — DeepSeek MLA decode fusion ─────────
+//
+// Recognizes the chain
+//   %c = tessera.latent_kv_compress(%x, %W_dkv)
+//   %K = tessera.latent_kv_expand_k(%c, %W_uk)
+//   %V = tessera.latent_kv_expand_v(%c, %W_uv)
+//   %O = tessera.flash_attn(%Q, %K, %V)
+// and rewrites it to
+//   %O = tessera.mla_decode_fused(%x, %W_dkv, %W_uk, %W_uv, %Q)
+// so that backends with a FlashMLA-style absorb-K kernel never have to
+// materialize the full K / V matrices.
+std::unique_ptr<mlir::Pass> createMLAFusionPass();
+
+// ── attention_variants_plan, NSA-4 — DeepSeek NSA fusion ────────────────
+//
+// Recognizes the three-branch NSA shape (sliding_window + compressed
+// _blocks + top_k_blocks all sharing the same Q) and rewrites to
+//   %O = tessera.native_sparse_attn_fused(%Q, %K, %V, %gate_logits)
+// for backends with a fused NSA kernel.
+std::unique_ptr<mlir::Pass> createNativeSparseAttnFusionPass();
+
 void registerTesseraPasses();
 
 } // namespace tessera

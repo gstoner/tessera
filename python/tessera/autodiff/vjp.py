@@ -58,6 +58,47 @@ def _sum_to_shape(grad: np.ndarray, target_shape: tuple[int, ...]) -> np.ndarray
     return grad.reshape(target_shape)
 
 
+def _numeric_vjp_arg(fn, dout, arg, *, eps: float = 1e-5):
+    """Central-difference VJP for small reference-only primitives."""
+    arr = np.asarray(arg, dtype=np.float64)
+    grad = np.zeros_like(arr, dtype=np.float64)
+    dout_arr = np.asarray(dout, dtype=np.float64)
+    it = np.nditer(arr, flags=["multi_index"], op_flags=["readwrite"])
+    while not it.finished:
+        idx = it.multi_index
+        plus = arr.copy()
+        minus = arr.copy()
+        plus[idx] += eps
+        minus[idx] -= eps
+        y_plus = np.asarray(fn(plus), dtype=np.float64)
+        y_minus = np.asarray(fn(minus), dtype=np.float64)
+        grad[idx] = np.sum(((y_plus - y_minus) / (2.0 * eps)) * dout_arr)
+        it.iternext()
+    return grad.reshape(np.asarray(arg).shape)
+
+
+def _attention_vjp(dout, Q, K, V, *, scale=None, mask=None):
+    Q = np.asarray(Q, dtype=np.float64)
+    K = np.asarray(K, dtype=np.float64)
+    V = np.asarray(V, dtype=np.float64)
+    dout = np.asarray(dout, dtype=np.float64)
+    if scale is None:
+        scale = 1.0 / math.sqrt(Q.shape[-1])
+    S = np.matmul(Q, np.swapaxes(K, -1, -2)) * float(scale)
+    if mask is not None:
+        S = np.where(mask, -np.inf, S)
+    e = np.exp(S - np.max(S, axis=-1, keepdims=True))
+    P = e / np.sum(e, axis=-1, keepdims=True)
+    dV = np.matmul(np.swapaxes(P, -1, -2), dout)
+    dP = np.matmul(dout, np.swapaxes(V, -1, -2))
+    dS = (dP - np.sum(dP * P, axis=-1, keepdims=True)) * P
+    if mask is not None:
+        dS = np.where(mask, 0.0, dS)
+    dQ = np.matmul(dS, K) * float(scale)
+    dK = np.matmul(np.swapaxes(dS, -1, -2), Q) * float(scale)
+    return dQ, dK, dV
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Linear algebra
 # ─────────────────────────────────────────────────────────────────────────────
@@ -901,6 +942,259 @@ def vjp_flash_attn(dout, Q, K, V, *, scale=None, causal=False, dropout_p=0.0, **
     dQ = np.matmul(dS, K) * scale
     dK = np.matmul(np.swapaxes(dS, -1, -2), Q) * scale
     return (dQ, dK, dV)
+
+
+@_vjp("rope")
+def vjp_rope(dout, x, theta, *, axes="qk", **_):
+    x = np.asarray(x)
+    theta = np.asarray(theta)
+    theta_pair = theta[..., 0::2] if theta.shape[-1] == x.shape[-1] else theta
+    cos = np.cos(theta_pair)
+    sin = np.sin(theta_pair)
+    de = np.asarray(dout)[..., 0::2]
+    do = np.asarray(dout)[..., 1::2]
+    xe = x[..., 0::2]
+    xo = x[..., 1::2]
+    dx = np.empty_like(np.asarray(dout), dtype=np.result_type(dout, x))
+    dx[..., 0::2] = de * cos + do * sin
+    dx[..., 1::2] = -de * sin + do * cos
+    dtheta_pair = de * (-xe * sin - xo * cos) + do * (xe * cos - xo * sin)
+    if theta.shape[-1] == x.shape[-1]:
+        dtheta = np.zeros_like(theta)
+        dtheta[..., 0::2] = dtheta_pair
+    else:
+        dtheta = _sum_to_shape(dtheta_pair, theta.shape)
+    return (_sum_to_shape(dx, x.shape), dtheta)
+
+
+@_vjp("ntk_rope")
+def vjp_ntk_rope(dout, x, theta, *, scale=1.0, **kwargs):
+    dx, dtheta = vjp_rope(dout, x, np.asarray(theta) / float(scale), **kwargs)
+    return dx, dtheta / float(scale)
+
+
+@_vjp("rope_split")
+def vjp_rope_split(dout, x, *, rope_dim, _output_index=0, **_):
+    dx = np.zeros_like(x)
+    if int(_output_index) == 0:
+        dx[..., :int(rope_dim)] = dout
+    else:
+        dx[..., int(rope_dim):] = dout
+    return (dx,)
+
+
+@_vjp("rope_merge")
+def vjp_rope_merge(dout, rope_part, no_rope_part, **_):
+    rdim = np.asarray(rope_part).shape[-1]
+    return (np.asarray(dout)[..., :rdim], np.asarray(dout)[..., rdim:])
+
+
+@_vjp("latent_kv_compress")
+def vjp_latent_kv_compress(dout, x, w_dkv, **_):
+    return vjp_matmul(dout, x, w_dkv)
+
+
+@_vjp("latent_kv_expand_k")
+def vjp_latent_kv_expand_k(dout, c, w_uk, **_):
+    return vjp_matmul(dout, c, w_uk)
+
+
+@_vjp("latent_kv_expand_v")
+def vjp_latent_kv_expand_v(dout, c, w_uv, **_):
+    return vjp_matmul(dout, c, w_uv)
+
+
+@_vjp("mla_decode_fused")
+def vjp_mla_decode_fused(dout, x, w_dkv, w_uk, w_uv, q, *, scale=None, causal=False, **_):
+    def forward(args):
+        x_, wd_, wk_, wv_, q_ = args
+        c = np.matmul(x_, wd_)
+        K = np.matmul(c, wk_)
+        V = np.matmul(c, wv_)
+        return _flash_attn_reference(q_, K, V, scale=scale, causal=causal)
+
+    args = [x, w_dkv, w_uk, w_uv, q]
+    return tuple(
+        _numeric_vjp_arg(lambda a, i=i: forward(args[:i] + [a] + args[i + 1:]), dout, arg)
+        for i, arg in enumerate(args)
+    )
+
+
+def _flash_attn_reference(Q, K, V, *, scale=None, causal=False):
+    Q = np.asarray(Q, dtype=np.float64)
+    K = np.asarray(K, dtype=np.float64)
+    V = np.asarray(V, dtype=np.float64)
+    if Q.ndim == 3:
+        Q = Q[:, None, :, :]
+        K = K[:, None, :, :]
+        V = V[:, None, :, :]
+        squeeze = True
+    else:
+        squeeze = False
+    mask = None
+    if causal:
+        q_len, k_len = Q.shape[-2], K.shape[-2]
+        mask = np.triu(np.ones((q_len, k_len), dtype=bool), k=1 + max(k_len - q_len, 0))
+    s = np.matmul(Q, np.swapaxes(K, -1, -2)) * (1.0 / math.sqrt(Q.shape[-1]) if scale is None else float(scale))
+    if mask is not None:
+        s = np.where(mask, -np.inf, s)
+    e = np.exp(s - np.max(s, axis=-1, keepdims=True))
+    p = e / np.sum(e, axis=-1, keepdims=True)
+    y = np.matmul(p, V)
+    return y[:, 0, :, :] if squeeze else y
+
+
+@_vjp("quantize_fp8")
+@_vjp("quantize_fp4")
+@_vjp("fake_quantize")
+def vjp_quantize_ste(dout, x, *, _output_index=0, **_):
+    if int(_output_index) != 0:
+        return (np.zeros_like(np.asarray(x)),)
+    return (_sum_to_shape(np.asarray(dout), np.asarray(x).shape),)
+
+
+@_vjp("dequantize_fp8")
+@_vjp("dequantize_fp4")
+def vjp_dequantize_ste(dout, x_q, scale, **_):
+    return (_sum_to_shape(np.asarray(dout), np.asarray(x_q).shape), np.zeros_like(np.asarray(scale)))
+
+
+@_vjp("attn_sliding_window")
+def vjp_attn_sliding_window(dout, Q, K, V, *, window_size, causal=True, **_):
+    S_q, S_k = Q.shape[-2], K.shape[-2]
+    i_idx = np.arange(S_q)[:, None]
+    j_idx = np.arange(S_k)[None, :]
+    if causal:
+        mask = (j_idx > i_idx) | (j_idx < i_idx - int(window_size) + 1)
+    else:
+        mask = (j_idx > i_idx + int(window_size) // 2) | (j_idx < i_idx - int(window_size) // 2)
+    return _attention_vjp(dout, Q, K, V, mask=mask)
+
+
+@_vjp("attn_compressed_blocks")
+def vjp_attn_compressed_blocks(dout, Q, K_c, V_c, **_):
+    return _attention_vjp(dout, Q, K_c, V_c)
+
+
+@_vjp("attn_top_k_blocks")
+def vjp_attn_top_k_blocks(dout, Q, K, V, *, scores, top_k, block_size, causal=True, **_):
+    from tessera import ops as _ops
+    original = getattr(_ops.attn_top_k_blocks, "__wrapped__", _ops.attn_top_k_blocks)
+    args = [Q, K, V]
+    return tuple(
+        _numeric_vjp_arg(
+            lambda a, i=i: original(
+                *(args[:i] + [a] + args[i + 1:]),
+                scores=scores,
+                top_k=top_k,
+                block_size=block_size,
+                causal=causal,
+            ),
+            dout,
+            arg,
+        )
+        for i, arg in enumerate(args)
+    )
+
+
+@_vjp("moe_dispatch")
+def vjp_moe_dispatch(dout, x, route, *, transport=None, **_):
+    return (_sum_to_shape(np.asarray(dout), np.asarray(x).shape), None)
+
+
+@_vjp("moe_combine")
+def vjp_moe_combine(dout, partials, inverse_route, *, reduce="sum", **_):
+    partials = np.asarray(partials)
+    if reduce == "mean" and partials.ndim > 0:
+        dpartials = np.broadcast_to(dout, partials.shape) / partials.shape[0]
+    elif reduce == "sum" and partials.ndim > 1:
+        dpartials = np.broadcast_to(dout, partials.shape)
+    else:
+        dpartials = np.asarray(dout)
+    return (dpartials, None)
+
+
+@_vjp("alibi")
+def vjp_alibi(dout, *args, **_):
+    return tuple(None for _ in args)
+
+
+@_vjp("multi_head_attention")
+def vjp_multi_head_attention(dout, Q, K, V, **kwargs):
+    from tessera import ops as _ops
+    original = getattr(_ops.multi_head_attention, "__wrapped__", _ops.multi_head_attention)
+    args = [Q, K, V]
+    return tuple(
+        _numeric_vjp_arg(lambda a, i=i: original(*(args[:i] + [a] + args[i + 1:]), **kwargs), dout, arg)
+        for i, arg in enumerate(args)
+    )
+
+
+@_vjp("gqa_attention")
+def vjp_gqa_attention(dout, Q, K, V, **kwargs):
+    from tessera import ops as _ops
+    original = getattr(_ops.gqa_attention, "__wrapped__", _ops.gqa_attention)
+    args = [Q, K, V]
+    return tuple(
+        _numeric_vjp_arg(lambda a, i=i: original(*(args[:i] + [a] + args[i + 1:]), **kwargs), dout, arg)
+        for i, arg in enumerate(args)
+    )
+
+
+@_vjp("mqa_attention")
+def vjp_mqa_attention(dout, Q, K, V, **kwargs):
+    from tessera import ops as _ops
+    original = getattr(_ops.mqa_attention, "__wrapped__", _ops.mqa_attention)
+    args = [Q, K, V]
+    return tuple(
+        _numeric_vjp_arg(lambda a, i=i: original(*(args[:i] + [a] + args[i + 1:]), **kwargs), dout, arg)
+        for i, arg in enumerate(args)
+    )
+
+
+@_vjp("mla_decode")
+def vjp_mla_decode(dout, Q, K_latent, V_latent, *weights, **kwargs):
+    from tessera import ops as _ops
+    original = getattr(_ops.mla_decode, "__wrapped__", _ops.mla_decode)
+    args = [Q, K_latent, V_latent, *weights]
+    return tuple(
+        _numeric_vjp_arg(lambda a, i=i: original(*(args[:i] + [a] + args[i + 1:]), **kwargs), dout, arg)
+        for i, arg in enumerate(args)
+    )
+
+
+def _rl_numeric_vjp(dout, fn, args, kwargs):
+    return tuple(
+        _numeric_vjp_arg(lambda a, i=i: fn(*(args[:i] + [a] + args[i + 1:]), **kwargs), dout, arg)
+        for i, arg in enumerate(args)
+    )
+
+
+@_vjp("normalize_group_advantages")
+def vjp_normalize_group_advantages(dout, rewards, **kwargs):
+    from tessera import rl as ts_rl
+    return _rl_numeric_vjp(dout, ts_rl.normalize_group_advantages, [rewards], kwargs)
+
+
+@_vjp("ppo_policy_loss")
+def vjp_ppo_policy_loss(dout, logp_new, logp_old, advantages, **kwargs):
+    from tessera import rl as ts_rl
+    grads = _rl_numeric_vjp(dout, ts_rl.ppo_policy_loss, [logp_new, logp_old, advantages], kwargs)
+    return grads
+
+
+@_vjp("grpo_policy_loss")
+def vjp_grpo_policy_loss(dout, logp_new, logp_old, rewards=None, **kwargs):
+    from tessera import rl as ts_rl
+    args = [logp_new, logp_old] if rewards is None else [logp_new, logp_old, rewards]
+    return _rl_numeric_vjp(dout, ts_rl.grpo_policy_loss, args, kwargs)
+
+
+@_vjp("cispo_policy_loss")
+def vjp_cispo_policy_loss(dout, logp_new, logp_old, rewards=None, **kwargs):
+    from tessera import rl as ts_rl
+    args = [logp_new, logp_old] if rewards is None else [logp_new, logp_old, rewards]
+    return _rl_numeric_vjp(dout, ts_rl.cispo_policy_loss, args, kwargs)
 
 
 @_vjp("fft")

@@ -1279,6 +1279,10 @@ Additional S-series runtime catalog entries are part of the same public
 | `ddpm_noise_pred_loss(pred_noise, true_noise, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 diffusion noise-prediction criterion; Graph IR op `tessera.loss.ddpm_noise_pred` |
 | `score_matching_loss(score, target_score, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 score-matching criterion; Graph IR op `tessera.loss.score_matching` |
 | `vlb_loss(terms, reduction="mean")` | `(array) → scalar/array` | `pure` | S11 diffusion VLB reducer; Graph IR op `tessera.loss.vlb` |
+| `normalize_group_advantages(rewards, group_axis=1)` | `(array) → array` | `pure` | Reasoning RL helper; normalizes rewards within each prompt/group |
+| `ppo_policy_loss(logp_new, logp_old, advantages, ...)` | `(array,array,array) → scalar/array` | `pure` | PPO clipped surrogate loss with optional mask, entropy, and reference-policy KL |
+| `grpo_policy_loss(logp_new, logp_old, rewards=None, advantages=None, ...)` | `(array,array,optional array) → scalar/array` | `pure` | GRPO policy loss; derives group-normalized advantages from rewards when needed |
+| `cispo_policy_loss(logp_new, logp_old, rewards=None, advantages=None, ...)` | `(array,array,optional array) → scalar/array` | `pure` | CISPO loss; clips importance-sampling weights directly and detaches the clipped weight from the log-prob gradient |
 | `rmsnorm(x, eps=1e-5)` | `(array) → array` | `pure` | NumPy RMSNorm reference |
 | `rmsnorm_safe(x, eps=1e-6)` | `(array) → array` | `pure` | NumPy RMSNorm reference with safer default epsilon |
 | `transpose(x, axes=None)` | `(array) → array` | `pure` | `np.transpose(x, axes)` |
@@ -1299,6 +1303,8 @@ Additional S-series runtime catalog entries are part of the same public
 | `latent_kv_expand_k(c, w_uk)` / `latent_kv_expand_v(c, w_uv)` | `(array, array) → array` | `pure` | Theme 5 — expand cached latent back to K / V at attention time. Will be absorbed into the score kernel by Phase G FlashMLA pass |
 | `rope_split(x, rope_dim)` | `(array) → (array, array)` | `pure` | Theme 5 — split last dim into `(rope_part, no_rope_part)`. Used by MLA's decoupled-RoPE design so positional encoding only touches the small rope_dim slice |
 | `rope_merge(rope_part, no_rope_part)` | `(array, array) → array` | `pure` | Theme 5 — inverse of `rope_split`; concatenate along last dim |
+| `alibi(num_heads, seq_len, slopes=None)` | `(int,int) → array` | `pure` | S7 ALiBi positional-bias helper |
+| `ntk_rope(x, theta, scale=1.0)` | `(array,array) → array` | `pure` | S7 NTK-scaled RoPE wrapper |
 | `dropout(x, p=0.1, training=True)` | `(array) → array` | `random` | Bernoulli mask, numpy rng |
 | `conv2d(x, weight, bias=None, stride=1, padding=0)` | `(NHWC, HWIO) → NHWC` | `pure` | NumPy NHWC/HWIO reference |
 | `conv3d(x, weight, bias=None, stride=1, padding=0)` | `(NDHWC, DHWIO) → NDHWC` | `pure` | NumPy NDHWC/DHWIO reference |
@@ -1308,6 +1314,10 @@ Additional S-series runtime catalog entries are part of the same public
 | `linear_attn_state(Q, K, V, ...)` | `(array,array,array) → array` | `state` | Companion to `linear_attn` returning the post-update state `(B, H, D_qk, D_v)` |
 | `power_attn(Q, K, V, *, state, window=None, deg=2, causal=True)` | `(array,array,array) → array` | `state` | LA-4 — Symmetric power attention (linear-cost). Promoted from `examples/advanced/power_retention/` |
 | `retention(Q, K, V, *, log_g=None, deg=2, chunk=128, causal=True)` | `(array,array,array) → array` | `state` | LA-4 — RetNet-style retention with multiplicative decay |
+| `multi_head_attention(Q, K, V, num_heads, ...)` | `(array,array,array) → array` | `state` | S7 multi-head attention wrapper over `flash_attn` |
+| `gqa_attention(Q, K, V, num_query_heads, num_kv_heads, ...)` | `(array,array,array) → array` | `state` | S7 grouped-query attention wrapper |
+| `mqa_attention(Q, K, V, ...)` | `(array,array,array) → array` | `state` | S7 multi-query attention wrapper |
+| `mla_decode(Q, K_latent, V_latent, W_k=None, W_v=None, ...)` | `(array,array,array,optional array,optional array) → array` | `state` | S7 MLA decode wrapper over latent expansion and `flash_attn` |
 | `mla_decode_fused(x, w_dkv, w_uk, w_uv, q, *, scale=None, causal=False)` | `(array,array,array,array,array) → array` | `state` | MLA-1 — DeepSeek MLA decode block as a single op (result of the Schedule IR `tessera-mla-fusion` pass) |
 | `attn_sliding_window(Q, K, V, *, window_size, causal=True)` | `(array,array,array) → array` | `state` | NSA-1 branch — sliding-window dense local attention |
 | `attn_compressed_blocks(Q, K_c, V_c)` | `(array,array,array) → array` | `state` | NSA-1 branch — attention over per-block compressed K/V summaries |

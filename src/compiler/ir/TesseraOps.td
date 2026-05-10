@@ -198,6 +198,119 @@ def Tessera_FlashAttnOp : Op<
   let hasVerifier = 1;
 }
 
+def Tessera_RopeOp : Op<Tessera_Dialect, "rope", [Pure]> {
+  let summary = "Rotary position embedding over the innermost dimension";
+  let arguments = (ins TensorType:$x, TensorType:$theta);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_NTKRopeOp : Op<Tessera_Dialect, "ntk_rope", [Pure]> {
+  let summary = "NTK-scaled rotary position embedding";
+  let arguments = (ins TensorType:$x, TensorType:$theta,
+                        DefaultValuedAttr<F64Attr, "1.0">:$scale);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_ALiBiOp : Op<Tessera_Dialect, "alibi", [Pure]> {
+  let summary = "ALiBi positional bias helper";
+  let arguments = (ins I64Attr:$num_heads, I64Attr:$seq_len);
+  let results = (outs TensorType:$bias);
+  let assemblyFormat = "attr-dict `:` type($bias)";
+}
+
+def Tessera_RopeSplitOp : Op<Tessera_Dialect, "rope_split", [Pure]> {
+  let summary = "Split last dimension into RoPE and non-RoPE partitions";
+  let arguments = (ins TensorType:$x, I64Attr:$rope_dim);
+  let results = (outs TensorType:$rope_part, TensorType:$no_rope_part);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_RopeMergeOp : Op<Tessera_Dialect, "rope_merge", [Pure]> {
+  let summary = "Merge RoPE and non-RoPE partitions along the last dimension";
+  let arguments = (ins TensorType:$rope_part, TensorType:$no_rope_part);
+  let results = (outs TensorType:$x);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_MultiHeadAttentionOp : Op<Tessera_Dialect, "multi_head_attention", [Pure]> {
+  let summary = "Multi-head attention wrapper over flash attention";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        I64Attr:$num_heads,
+                        OptionalAttr<F64Attr>:$scale,
+                        DefaultValuedAttr<BoolAttr, "false">:$causal);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_GQAAttentionOp : Op<Tessera_Dialect, "gqa_attention", [Pure]> {
+  let summary = "Grouped-query attention wrapper";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        I64Attr:$num_query_heads,
+                        I64Attr:$num_kv_heads);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_MQAAttentionOp : Op<Tessera_Dialect, "mqa_attention", [Pure]> {
+  let summary = "Multi-query attention wrapper";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_MLADecodeOp : Op<Tessera_Dialect, "mla_decode", [Pure]> {
+  let summary = "MLA decode wrapper over latent K/V expansion and attention";
+  let arguments = (ins TensorType:$q, TensorType:$k_latent, TensorType:$v_latent,
+                        Variadic<TensorType>:$weights);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_QuantizeFP8Op : Op<Tessera_Dialect, "quantize_fp8", [Pure]> {
+  let summary = "Reference FP8 quantize with dequantized fp32 payload plus scale";
+  let arguments = (ins TensorType:$x, OptionalAttr<StrAttr>:$format);
+  let results = (outs TensorType:$x_q, AnyType:$scale);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_DequantizeFP8Op : Op<Tessera_Dialect, "dequantize_fp8", [Pure]> {
+  let summary = "Reference FP8 dequantize";
+  let arguments = (ins TensorType:$x_q, AnyType:$scale, OptionalAttr<StrAttr>:$format);
+  let results = (outs TensorType:$x);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_QuantizeFP4Op : Op<Tessera_Dialect, "quantize_fp4", [Pure]> {
+  let summary = "Reference FP4 quantize with dequantized fp32 payload plus scale";
+  let arguments = (ins TensorType:$x, OptionalAttr<StrAttr>:$format);
+  let results = (outs TensorType:$x_q, AnyType:$scale);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_DequantizeFP4Op : Op<Tessera_Dialect, "dequantize_fp4", [Pure]> {
+  let summary = "Reference FP4 dequantize";
+  let arguments = (ins TensorType:$x_q, AnyType:$scale, OptionalAttr<StrAttr>:$format);
+  let results = (outs TensorType:$x);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_MoeDispatchOp : Op<Tessera_Dialect, "moe_dispatch", []> {
+  let summary = "MoE token dispatch transport op";
+  let arguments = (ins TensorType:$x, TensorType:$route);
+  let results = (outs TensorType:$partials);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_MoeCombineOp : Op<Tessera_Dialect, "moe_combine", []> {
+  let summary = "MoE token combine transport op";
+  let arguments = (ins TensorType:$partials, TensorType:$inverse_route,
+                        DefaultValuedAttr<StrAttr, "\"sum\"">:$reduce);
+  let results = (outs TensorType:$x);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
 // attention_variants_plan, LA-1 — Linear / kernel-feature attention.
 // Distinct ODS op so backend passes can match it independently of
 // flash_attn. The `feature_map` string attribute selects the φ function;

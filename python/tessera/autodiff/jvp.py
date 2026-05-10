@@ -172,6 +172,89 @@ def jvp_sin(primals, tangents, **_):
     return np.sin(x), dx * np.cos(x)
 
 
+@_jvp("clamp")
+def jvp_clamp(primals, tangents, *, min_val=None, max_val=None, **_):
+    (x,) = primals
+    (dx,) = tangents
+    y = np.clip(x, -np.inf if min_val is None else min_val, np.inf if max_val is None else max_val)
+    mask = np.ones_like(x, dtype=np.float64)
+    if min_val is not None:
+        mask = mask * (x > min_val)
+    if max_val is not None:
+        mask = mask * (x < max_val)
+    return y, dx * mask
+
+
+@_jvp("rope")
+def jvp_rope(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.rope, "__wrapped__", _ops.rope)
+    return _numeric_jvp_rule(lambda x, theta: fn(x, theta, **kwargs), primals, tangents)
+
+
+@_jvp("ntk_rope")
+def jvp_ntk_rope(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.ntk_rope, "__wrapped__", _ops.ntk_rope)
+    return _numeric_jvp_rule(lambda x, theta: fn(x, theta, **kwargs), primals, tangents)
+
+
+@_jvp("rope_split")
+def jvp_rope_split(primals, tangents, *, rope_dim, **_):
+    (x,) = primals
+    (dx,) = tangents
+    return (x[..., :rope_dim], x[..., rope_dim:]), (dx[..., :rope_dim], dx[..., rope_dim:])
+
+
+@_jvp("rope_merge")
+def jvp_rope_merge(primals, tangents, **_):
+    rope_part, no_rope_part = primals
+    drope, dno = tangents
+    return np.concatenate([rope_part, no_rope_part], axis=-1), np.concatenate([drope, dno], axis=-1)
+
+
+@_jvp("latent_kv_compress")
+@_jvp("latent_kv_expand_k")
+@_jvp("latent_kv_expand_v")
+def jvp_latent_matmul(primals, tangents, **_):
+    return jvp_matmul(primals, tangents)
+
+
+def _jvp_quantize_with(fn_name, primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    x = primals[0]
+    dx = tangents[0]
+    fn = getattr(_ops, fn_name)
+    original = getattr(fn, "__wrapped__", fn)
+    primal = original(x, **kwargs)
+    if isinstance(primal, tuple):
+        return primal, (dx,) + tuple(np.zeros_like(np.asarray(p)) for p in primal[1:])
+    return primal, dx
+
+
+@_jvp("quantize_fp8")
+def jvp_quantize_fp8(primals, tangents, **kwargs):
+    return _jvp_quantize_with("quantize_fp8", primals, tangents, **kwargs)
+
+
+@_jvp("quantize_fp4")
+def jvp_quantize_fp4(primals, tangents, **kwargs):
+    return _jvp_quantize_with("quantize_fp4", primals, tangents, **kwargs)
+
+
+@_jvp("fake_quantize")
+def jvp_fake_quantize(primals, tangents, **kwargs):
+    return _jvp_quantize_with("fake_quantize", primals, tangents, **kwargs)
+
+
+@_jvp("dequantize_fp8")
+@_jvp("dequantize_fp4")
+def jvp_dequantize_ste(primals, tangents, **kwargs):
+    x_q, scale = primals
+    dx_q, _dscale = tangents
+    return np.asarray(x_q, dtype=np.float32), dx_q
+
+
 @_jvp("reduce")
 def jvp_reduce(primals, tangents, *, op="sum", axis=None, keepdims=False, **_):
     (x,) = primals
@@ -201,6 +284,15 @@ def _reduce_loss(x: np.ndarray, dx: np.ndarray, reduction: str):
     raise ValueError("reduction must be 'none', 'mean', or 'sum'")
 
 
+def _numeric_jvp_rule(forward, primals, tangents, *, eps: float = 1e-6):
+    primals = tuple(np.asarray(p) for p in primals)
+    tangents = tuple(np.asarray(t) for t in tangents)
+    primal = forward(*primals)
+    plus = forward(*(p + eps * t for p, t in zip(primals, tangents)))
+    minus = forward(*(p - eps * t for p, t in zip(primals, tangents)))
+    return primal, (np.asarray(plus, dtype=np.float64) - np.asarray(minus, dtype=np.float64)) / (2.0 * eps)
+
+
 @_jvp("linear_general")
 def jvp_linear_general(primals, tangents, *, axis=-1, **_):
     x, W = primals[:2]
@@ -218,6 +310,114 @@ def jvp_linear_general(primals, tangents, *, axis=-1, **_):
         y = y + bias
         dy = dy + dbias
     return y, dy
+
+
+@_jvp("flash_attn")
+def jvp_flash_attn(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.flash_attn, "__wrapped__", _ops.flash_attn)
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
+
+
+@_jvp("linear_attn")
+def jvp_linear_attn(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.linear_attn, "__wrapped__", _ops.linear_attn)
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
+
+
+@_jvp("linear_attn_state")
+def jvp_linear_attn_state(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.linear_attn_state, "__wrapped__", _ops.linear_attn_state)
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
+
+
+@_jvp("mla_decode_fused")
+def jvp_mla_decode_fused(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.mla_decode_fused, "__wrapped__", _ops.mla_decode_fused)
+    return _numeric_jvp_rule(lambda x, wd, wk, wv, q: fn(x, wd, wk, wv, q, **kwargs), primals, tangents)
+
+
+@_jvp("alibi")
+def jvp_alibi(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.alibi, "__wrapped__", _ops.alibi)
+    primal = fn(**kwargs) if not primals else fn(*primals, **kwargs)
+    return primal, np.zeros_like(np.asarray(primal))
+
+
+@_jvp("multi_head_attention")
+def jvp_multi_head_attention(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.multi_head_attention, "__wrapped__", _ops.multi_head_attention)
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
+
+
+@_jvp("gqa_attention")
+def jvp_gqa_attention(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.gqa_attention, "__wrapped__", _ops.gqa_attention)
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
+
+
+@_jvp("mqa_attention")
+def jvp_mqa_attention(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.mqa_attention, "__wrapped__", _ops.mqa_attention)
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
+
+
+@_jvp("mla_decode")
+def jvp_mla_decode(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.mla_decode, "__wrapped__", _ops.mla_decode)
+    return _numeric_jvp_rule(lambda *args: fn(*args, **kwargs), primals, tangents)
+
+
+@_jvp("attn_sliding_window")
+def jvp_attn_sliding_window(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.attn_sliding_window, "__wrapped__", _ops.attn_sliding_window)
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
+
+
+@_jvp("attn_compressed_blocks")
+def jvp_attn_compressed_blocks(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.attn_compressed_blocks, "__wrapped__", _ops.attn_compressed_blocks)
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
+
+
+@_jvp("attn_top_k_blocks")
+def jvp_attn_top_k_blocks(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.attn_top_k_blocks, "__wrapped__", _ops.attn_top_k_blocks)
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
+
+
+@_jvp("moe")
+def jvp_moe(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.moe, "__wrapped__", _ops.moe)
+    return _numeric_jvp_rule(lambda x, experts: fn(x, experts, **kwargs), primals, tangents)
+
+
+@_jvp("moe_dispatch")
+def jvp_moe_dispatch(primals, tangents, **_):
+    return primals[0], tangents[0]
+
+
+@_jvp("moe_combine")
+def jvp_moe_combine(primals, tangents, *, reduce="sum", **_):
+    partials = primals[0]
+    dpartials = tangents[0]
+    if reduce == "mean" and np.asarray(partials).ndim > 0:
+        return np.asarray(partials).mean(axis=0), np.asarray(dpartials).mean(axis=0)
+    if reduce == "sum" and np.asarray(partials).ndim > 1:
+        return np.asarray(partials).sum(axis=0), np.asarray(dpartials).sum(axis=0)
+    return partials, dpartials
 
 
 @_jvp("conv1d")
@@ -314,6 +514,20 @@ def jvp_binary_cross_entropy_loss(primals, tangents, *, reduction="mean", **_):
     return _reduce_loss(loss, tangent, reduction)
 
 
+@_jvp("cross_entropy_loss")
+def jvp_cross_entropy_loss(primals, tangents, *, reduction="mean", **_):
+    from tessera import losses as ts_losses
+    logits, targets = primals
+    dlogits = tangents[0]
+    primal = ts_losses.cross_entropy_loss(logits, targets, reduction=reduction)
+    eps = 1e-6
+    tangent = (
+        ts_losses.cross_entropy_loss(logits + eps * dlogits, targets, reduction=reduction)
+        - ts_losses.cross_entropy_loss(logits - eps * dlogits, targets, reduction=reduction)
+    ) / (2.0 * eps)
+    return primal, tangent
+
+
 @_jvp("ddpm_noise_pred_loss")
 def jvp_ddpm_noise_pred_loss(primals, tangents, *, reduction="mean", **kwargs):
     return jvp_mse_loss(primals, tangents, reduction=reduction, **kwargs)
@@ -328,6 +542,34 @@ def jvp_score_matching_loss(primals, tangents, *, reduction="mean", **_):
 @_jvp("vlb_loss")
 def jvp_vlb_loss(primals, tangents, *, reduction="mean", **_):
     return _reduce_loss(primals[0], tangents[0], reduction)
+
+
+@_jvp("normalize_group_advantages")
+def jvp_normalize_group_advantages(primals, tangents, **kwargs):
+    from tessera import rl as ts_rl
+    return _numeric_jvp_rule(lambda r: ts_rl.normalize_group_advantages(r, **kwargs), primals, tangents)
+
+
+@_jvp("ppo_policy_loss")
+def jvp_ppo_policy_loss(primals, tangents, **kwargs):
+    from tessera import rl as ts_rl
+    return _numeric_jvp_rule(lambda ln, lo, adv: ts_rl.ppo_policy_loss(ln, lo, adv, **kwargs), primals, tangents)
+
+
+@_jvp("grpo_policy_loss")
+def jvp_grpo_policy_loss(primals, tangents, **kwargs):
+    from tessera import rl as ts_rl
+    if len(primals) == 2:
+        return _numeric_jvp_rule(lambda ln, lo: ts_rl.grpo_policy_loss(ln, lo, **kwargs), primals, tangents)
+    return _numeric_jvp_rule(lambda ln, lo, rewards: ts_rl.grpo_policy_loss(ln, lo, rewards, **kwargs), primals, tangents)
+
+
+@_jvp("cispo_policy_loss")
+def jvp_cispo_policy_loss(primals, tangents, **kwargs):
+    from tessera import rl as ts_rl
+    if len(primals) == 2:
+        return _numeric_jvp_rule(lambda ln, lo: ts_rl.cispo_policy_loss(ln, lo, **kwargs), primals, tangents)
+    return _numeric_jvp_rule(lambda ln, lo, rewards: ts_rl.cispo_policy_loss(ln, lo, rewards, **kwargs), primals, tangents)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

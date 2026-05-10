@@ -338,7 +338,20 @@ def _make_wrapper(name: str, original: Callable) -> Callable:
         # after the wrapper was installed. `vjp_fn=None` is allowed; backward
         # raises only if this entry actually lies on the gradient path.
         vjp_fn = get_vjp(name)
-        active.record(name, tuple(array_descs), dict(kwargs), out, vjp_fn)
+        if isinstance(out, tuple):
+            for i, component in enumerate(out):
+                if isinstance(component, (np.ndarray, np.generic)):
+                    component_kwargs = dict(kwargs)
+                    component_kwargs["_output_index"] = i
+                    active.record(
+                        name,
+                        tuple(array_descs),
+                        component_kwargs,
+                        component,
+                        vjp_fn,
+                    )
+        else:
+            active.record(name, tuple(array_descs), dict(kwargs), out, vjp_fn)
         return out
 
     wrapped.__wrapped__ = original

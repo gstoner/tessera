@@ -140,6 +140,12 @@ _SPECS = [
     OpSpec("mla_decode_fused", "tessera.mla_decode_fused", 5, 5, effect="state", lowering="attention"),
     OpSpec("rope_split", "tessera.rope_split", 1, 1, lowering="layout_transform"),
     OpSpec("rope_merge", "tessera.rope_merge", 2, 2, lowering="layout_transform"),
+    OpSpec("alibi", "tessera.alibi", 0, 2, lowering="position_encoding"),
+    OpSpec("ntk_rope", "tessera.ntk_rope", 2, 2, lowering="position_encoding"),
+    OpSpec("multi_head_attention", "tessera.multi_head_attention", 3, 3, effect="state", lowering="attention"),
+    OpSpec("gqa_attention", "tessera.gqa_attention", 3, 3, effect="state", lowering="attention"),
+    OpSpec("mqa_attention", "tessera.mqa_attention", 3, 3, effect="state", lowering="attention"),
+    OpSpec("mla_decode", "tessera.mla_decode", 3, 5, effect="state", lowering="attention"),
     # S-series sprint S2 — reductions. All accept (x, axis=, keepdims=).
     OpSpec("mean", "tessera.mean", 1, 1, lowering="reduction"),
     OpSpec("prod", "tessera.prod", 1, 1, lowering="reduction"),
@@ -259,6 +265,10 @@ _SPECS = [
     OpSpec("ddpm_noise_pred_loss", "tessera.loss.ddpm_noise_pred", 2, 2, lowering="loss"),
     OpSpec("score_matching_loss", "tessera.loss.score_matching", 2, 2, lowering="loss"),
     OpSpec("vlb_loss", "tessera.loss.vlb", 1, 1, lowering="loss"),
+    OpSpec("ppo_policy_loss", "tessera.rl.ppo_policy_loss", 3, 3, lowering="rl_loss"),
+    OpSpec("grpo_policy_loss", "tessera.rl.grpo_policy_loss", 2, 3, lowering="rl_loss"),
+    OpSpec("cispo_policy_loss", "tessera.rl.cispo_policy_loss", 2, 3, lowering="rl_loss"),
+    OpSpec("normalize_group_advantages", "tessera.rl.normalize_group_advantages", 1, 1, lowering="rl_loss"),
 ]
 
 OP_SPECS: dict[str, OpSpec] = {spec.public_name: spec for spec in _SPECS}
@@ -289,6 +299,9 @@ def normalize_op_name(name: str) -> str:
         "tessera.optim.",
         "ts.optim.",
         "optim.",
+        "tessera.rl.",
+        "ts.rl.",
+        "rl.",
         "tessera.nn.",
         "ts.nn.",
         "nn.",

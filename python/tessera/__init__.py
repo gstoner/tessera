@@ -2757,6 +2757,13 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         return _wrapper
 
     linear_general_ref = _lazy_module_fn("nn.functional", "linear_general")
+    alibi_ref = _lazy_module_fn("nn.functional", "alibi")
+    ntk_rope_ref = _lazy_module_fn("nn.functional", "ntk_rope")
+    multi_head_attention_ref = _lazy_module_fn("nn.functional", "multi_head_attention")
+    gqa_attention_ref = _lazy_module_fn("nn.functional", "gqa_attention")
+    mqa_attention_ref = _lazy_module_fn("nn.functional", "mqa_attention")
+    mla_decode_ref = _lazy_module_fn("nn.functional", "mla_decode")
+    fake_quantize_ref = _lazy_module_fn("quantization", "fake_quantize")
     sgd_ref = _lazy_module_fn("optim", "sgd")
     mse_loss_ref = _lazy_module_fn("losses", "mse_loss")
     mae_loss_ref = _lazy_module_fn("losses", "mae_loss")
@@ -2768,6 +2775,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     ddpm_noise_pred_loss_ref = _lazy_module_fn("losses", "ddpm_noise_pred_loss")
     score_matching_loss_ref = _lazy_module_fn("losses", "score_matching_loss")
     vlb_loss_ref = _lazy_module_fn("losses", "vlb_loss")
+    normalize_group_advantages_ref = _lazy_module_fn("rl", "normalize_group_advantages")
+    ppo_policy_loss_ref = _lazy_module_fn("rl", "ppo_policy_loss")
+    grpo_policy_loss_ref = _lazy_module_fn("rl", "grpo_policy_loss")
+    cispo_policy_loss_ref = _lazy_module_fn("rl", "cispo_policy_loss")
 
     references = {
         "gemm": gemm,
@@ -2874,6 +2885,13 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "mla_decode_fused": mla_decode_fused,
         "rope_split": rope_split,
         "rope_merge": rope_merge,
+        "alibi": alibi_ref,
+        "ntk_rope": ntk_rope_ref,
+        "multi_head_attention": multi_head_attention_ref,
+        "gqa_attention": gqa_attention_ref,
+        "mqa_attention": mqa_attention_ref,
+        "mla_decode": mla_decode_ref,
+        "fake_quantize": fake_quantize_ref,
         "selective_ssm": selective_ssm,
         # S-series sprint S2 — reductions
         "mean": mean,
@@ -2994,6 +3012,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "ddpm_noise_pred_loss": ddpm_noise_pred_loss_ref,
         "score_matching_loss": score_matching_loss_ref,
         "vlb_loss": vlb_loss_ref,
+        "normalize_group_advantages": normalize_group_advantages_ref,
+        "ppo_policy_loss": ppo_policy_loss_ref,
+        "grpo_policy_loss": grpo_policy_loss_ref,
+        "cispo_policy_loss": cispo_policy_loss_ref,
     }
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
@@ -3110,6 +3132,13 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         mla_decode_fused=mla_decode_fused,
         rope_split=rope_split,
         rope_merge=rope_merge,
+        alibi=alibi_ref,
+        ntk_rope=ntk_rope_ref,
+        multi_head_attention=multi_head_attention_ref,
+        gqa_attention=gqa_attention_ref,
+        mqa_attention=mqa_attention_ref,
+        mla_decode=mla_decode_ref,
+        fake_quantize=fake_quantize_ref,
         selective_ssm=selective_ssm,
         # S-series sprint S2 — reductions, stability, numeric helpers,
         # comparisons. See `_make_ops_namespace`'s S2 block for definitions.
@@ -3226,6 +3255,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         ddpm_noise_pred_loss=ddpm_noise_pred_loss_ref,
         score_matching_loss=score_matching_loss_ref,
         vlb_loss=vlb_loss_ref,
+        normalize_group_advantages=normalize_group_advantages_ref,
+        ppo_policy_loss=ppo_policy_loss_ref,
+        grpo_policy_loss=grpo_policy_loss_ref,
+        cispo_policy_loss=cispo_policy_loss_ref,
     )
 
 
@@ -3241,6 +3274,7 @@ from . import memory  # noqa: E402
 from . import optim  # noqa: E402
 from . import rng  # noqa: E402
 from . import quantization  # noqa: E402
+from . import rl  # noqa: E402
 from .quantization import (  # noqa: E402
     CalibrationObserver,
     calibration_observer,
@@ -3459,7 +3493,7 @@ __all__ = [
     "data",
     "aot", "custom", "CustomPrimitive", "custom_primitive", "custom_call",
     "custom_vjp", "custom_jvp", "custom_batching",
-    "losses", "memory", "optim", "rng",
+    "losses", "memory", "optim", "rng", "rl",
     "MemoryReadResult", "MemoryTable", "memory_read", "memory_write",
     "memory_evict",
     "quantization", "CalibrationObserver", "calibration_observer",

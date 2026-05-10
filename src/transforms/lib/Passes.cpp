@@ -39,6 +39,9 @@ void registerTesseraPasses() {
       [](OpPassManager &pm) {
         pm.addPass(createEffectAnnotationPass());
         pm.addPass(createCanonicalizeTesseraIRPass());
+        pm.addPass(createSwigluFusionPass());
+        pm.addPass(createMLAFusionPass());
+        pm.addPass(createNativeSparseAttnFusionPass());
         pm.addPass(createDistributionLoweringPass());
         pm.addPass(createTilingPass());
         pm.addPass(createTileToX86Pass());
@@ -116,6 +119,9 @@ void registerTesseraPasses() {
       [](OpPassManager &pm) {
         pm.addPass(createEffectAnnotationPass());
         pm.addPass(createCanonicalizeTesseraIRPass());
+        pm.addPass(createSwigluFusionPass());
+        pm.addPass(createMLAFusionPass());
+        pm.addPass(createNativeSparseAttnFusionPass());
         pm.addPass(createDistributionLoweringPass());
         pm.addPass(createTileIRLoweringPass());
         pm.addPass(createWarpSpecializationPass());

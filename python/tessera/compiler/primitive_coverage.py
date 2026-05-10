@@ -220,6 +220,19 @@ _EXISTING_CATEGORIES: dict[str, str] = {
     "select": "tensor_algebra",
 }
 
+_EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
+    "kv_cache_append": {
+        "vjp": "not_applicable",
+        "jvp": "not_applicable",
+        "transpose_rule": "not_applicable",
+    },
+    "kv_cache_prune": {
+        "vjp": "not_applicable",
+        "jvp": "not_applicable",
+        "transpose_rule": "not_applicable",
+    },
+}
+
 
 def _existing_coverage() -> dict[str, PrimitiveCoverage]:
     registered_vjps = _vjp_registered_names()
@@ -228,13 +241,15 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
     for name, spec in sorted(OP_SPECS.items()):
         has_vjp = _existing_op_has_vjp(name, registered_vjps)
         has_jvp = _existing_op_has_jvp(name, registered_jvps)
+        contract_status = _existing_contracts(
+            spec.effect, vjp_complete=has_vjp, jvp_complete=has_jvp
+        )
+        contract_status.update(_EXISTING_CONTRACT_OVERRIDES.get(name, {}))
         entries[name] = PrimitiveCoverage(
             name=name,
             category=_EXISTING_CATEGORIES.get(name, spec.lowering),
             status="partial",
-            contract_status=_existing_contracts(
-                spec.effect, vjp_complete=has_vjp, jvp_complete=has_jvp
-            ),
+            contract_status=contract_status,
             model_families=_EXISTING_MODEL_FAMILIES.get(name, ()),
             references=("tessera",),
             notes="Imported from the supported op catalog; S1 keeps missing semantic rules visible.",

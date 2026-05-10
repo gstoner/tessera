@@ -21,17 +21,39 @@ def test_standalone_compiler_sprints_are_documented():
     text = ROADMAP.read_text(encoding="utf-8")
 
     assert "Standalone compiler milestone sprints (S-series)" in text
-    for sprint in ("S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"):
+    expected_sprints = [
+        "S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8",
+        "S9", "S10", "S11", "S12", "S13", "S14", "S15",
+    ]
+    for sprint in expected_sprints:
         assert f"[{sprint}]" in text
 
 
 def test_standalone_roadmap_keeps_external_frameworks_as_references_only():
     text = ROADMAP.read_text(encoding="utf-8")
 
-    assert "independent of PyTorch" in text
-    assert "JAX, or Flax at runtime" in text
+    assert "runtime-independent of PyTorch, JAX, and Flax" in text
     assert "reference vocabularies" in text
     assert "supported ops" in text
+
+
+def test_s0_locks_data_pipeline_optimizers_and_aot_in_scope():
+    """S0 must explicitly declare the contested boundaries as in-scope."""
+    text = ROADMAP.read_text(encoding="utf-8")
+
+    # Data pipeline is in scope per the user's S0 decision (2026-05-10).
+    assert "data pipeline is in scope" in text
+    assert "tf.data" in text and "torch.utils.data" in text and "grain" in text
+
+    # Training-step elements must be in scope, otherwise S8 cannot run a
+    # training step on CPU reference.
+    assert "training step is in scope" in text
+
+    # Custom-primitive authoring is the standalone differentiator.
+    assert "Custom-primitive authoring is in scope" in text
+
+    # AOT export and persistent compilation cache are deployment requirements.
+    assert "AOT export and persistent compilation cache are in scope" in text
 
 
 def test_standalone_roadmap_covers_required_compiler_surfaces():
@@ -43,12 +65,19 @@ def test_standalone_roadmap_covers_required_compiler_surfaces():
         "Pytrees, module state, and model containers",
         "Explicit RNG and stochastic effects",
         "Control flow and transform composition",
-        "Native sharding and distributed semantics",
+        "Native sharding, collectives, and distributed semantics",
         "Flax-level model primitive library",
         "Tiny standalone model conformance suite",
+        "Numerics, mixed precision, and quantization",
+        "Optimizer library and training-step primitives",
+        "Loss / criterion library",
+        "State serialization and checkpointing",
+        "Custom-primitive / extension API",
+        "Compilation cache and AOT export",
+        "Native data pipeline",
     ]
     for surface in expected_surfaces:
-        assert surface in text
+        assert surface in text, f"missing roadmap surface: {surface}"
 
 
 def test_standalone_roadmap_names_broad_model_families():
@@ -78,7 +107,29 @@ def test_primitive_coverage_imports_existing_ops_as_partial_entries():
     assert matmul.status == "partial"
     assert matmul.graph_name == "tessera.matmul"
     assert matmul.contract_status["lowering_rule"] == "complete"
-    assert "vjp" in matmul.missing_contracts()
+    # matmul has a registered VJP in autodiff/vjp.py — the registry must
+    # reflect that, not falsely report it as missing.
+    assert matmul.contract_status["vjp"] == "complete"
+    assert "vjp" not in matmul.missing_contracts()
+    # Other axes (jvp, batching, transpose, sharding, masking on a pure op,
+    # math/shape/dtype, tests) remain incomplete and must stay visible.
+    assert "jvp" in matmul.missing_contracts()
+    assert "batching_rule" in matmul.missing_contracts()
+
+
+def test_existing_coverage_consults_autodiff_vjp_registry():
+    """Every op with a registered VJP must show vjp=complete in the registry."""
+    from tessera.autodiff.vjp import _VJPS
+
+    entries = all_primitive_coverages()
+    # Sample a representative slice across the registered ops.
+    for name in ("matmul", "softmax", "rmsnorm", "flash_attn", "fft", "rfft",
+                 "gelu", "layer_norm", "dropout", "rope"):
+        if name in entries and name in _VJPS:
+            assert entries[name].contract_status["vjp"] == "complete", (
+                f"{name} has a registered VJP but the registry reports it as "
+                f"{entries[name].contract_status['vjp']}"
+            )
 
 
 def test_primitive_coverage_tracks_planned_standalone_gaps_separately():
@@ -108,6 +159,120 @@ def test_primitive_coverage_family_queries_and_summary():
     assert summary["partial"] > 0
 
 
+def test_primitive_coverage_includes_s2_reductions_and_stability():
+    """S2 must register reductions, numerical-stability, and missing scalar math."""
+    entries = all_primitive_coverages()
+
+    # Reductions
+    for name in ("mean", "var", "argmax", "argmin", "cumsum", "cumprod"):
+        assert name in entries, f"S2 reduction missing: {name}"
+
+    # Numerical-stability primitives
+    for name in ("logsumexp", "log_softmax", "log1p", "expm1", "softplus"):
+        assert name in entries, f"S2 stability primitive missing: {name}"
+
+    # Comparisons + logical
+    for name in ("eq", "lt", "gt", "logical_and", "logical_or", "logical_not"):
+        assert name in entries, f"S2 comparison/logical missing: {name}"
+
+    # Numeric helpers
+    for name in ("clamp", "where", "isnan", "isfinite", "sign", "abs"):
+        assert name in entries, f"S2 numeric helper missing: {name}"
+
+
+def test_primitive_coverage_includes_s5_transforms_and_axis_helpers():
+    entries = all_primitive_coverages()
+    for name in ("vjp", "jvp", "vmap", "pmap", "fori_loop", "remat",
+                 "axis_index", "axis_size", "autocast"):
+        assert name in entries, f"S5 transform missing: {name}"
+
+
+def test_primitive_coverage_includes_s6_collectives_library():
+    entries = all_primitive_coverages()
+    for name in ("psum", "pmean", "pmax", "pmin", "collective_permute", "broadcast_to_axis",
+                 "shard_map", "named_sharding", "partition_spec"):
+        assert name in entries, f"S6 collective missing: {name}"
+    assert entries["collective_permute"].category == "collective"
+    assert entries["permute"].category == "tensor_algebra"
+
+
+def test_primitive_coverage_includes_s7_attention_and_position_layers():
+    entries = all_primitive_coverages()
+    for name in ("multi_head_attention", "gqa_attention", "mqa_attention",
+                 "mla_decode", "alibi", "ntk_rope", "conv1d", "max_pool",
+                 "avg_pool", "gru_cell", "simple_rnn_cell"):
+        assert name in entries, f"S7 layer/attention missing: {name}"
+
+
+def test_primitive_coverage_includes_s9_quantization_and_numerics():
+    entries = all_primitive_coverages()
+    for name in ("quantize_int8", "dequantize_int8", "quantize_int4",
+                 "fake_quantize", "calibration_observer", "grad_scaler_step"):
+        assert name in entries, f"S9 quant/numerics primitive missing: {name}"
+
+
+def test_primitive_coverage_includes_s10_optimizers_and_schedules():
+    entries = all_primitive_coverages()
+    for name in ("sgd", "adamw", "adafactor", "lion", "muon",
+                 "cosine_lr", "cosine_warmup_lr", "linear_warmup_lr",
+                 "clip_grad_norm", "ema_update"):
+        assert name in entries, f"S10 optimizer/schedule missing: {name}"
+
+
+def test_primitive_coverage_includes_s11_loss_library():
+    entries = all_primitive_coverages()
+    for name in ("mse_loss", "mae_loss", "huber_loss", "kl_divergence",
+                 "info_nce_loss", "ddpm_noise_pred_loss", "ctc_loss",
+                 "binary_cross_entropy_loss", "focal_loss"):
+        assert name in entries, f"S11 loss missing: {name}"
+
+
+def test_primitive_coverage_includes_s12_serialization():
+    entries = all_primitive_coverages()
+    for name in ("save_state", "load_state", "save_sharded", "load_sharded",
+                 "state_migration"):
+        assert name in entries, f"S12 serialization primitive missing: {name}"
+
+
+def test_primitive_coverage_includes_s13_custom_primitive_api():
+    entries = all_primitive_coverages()
+    for name in ("custom_primitive", "custom_call", "custom_vjp", "custom_jvp",
+                 "custom_batching"):
+        assert name in entries, f"S13 custom-op primitive missing: {name}"
+
+
+def test_primitive_coverage_includes_s14_aot_and_cache():
+    entries = all_primitive_coverages()
+    for name in ("aot_export", "aot_load", "stablehlo_export",
+                 "safetensors_export", "compilation_cache"):
+        assert name in entries, f"S14 AOT/cache primitive missing: {name}"
+
+
+def test_primitive_coverage_includes_s15_data_pipeline_and_tokenizers():
+    """S0 puts the data pipeline in scope — registry must reflect S15 surface."""
+    entries = all_primitive_coverages()
+
+    # Dataset combinators
+    for name in ("dataset_map", "dataset_filter", "dataset_batch",
+                 "dataset_prefetch", "dataset_shuffle", "dataset_interleave",
+                 "sharded_dataset", "iterable_dataset", "dataset_checkpoint"):
+        assert name in entries, f"S15 dataset primitive missing: {name}"
+
+    # Tokenizers
+    for name in ("tokenizer_byte", "tokenizer_bpe", "tokenizer_wordpiece",
+                 "tokenizer_unigram", "tokenizer_sentencepiece_compat"):
+        assert name in entries, f"S15 tokenizer missing: {name}"
+
+
+def test_data_pipeline_categories_are_planned_not_supported():
+    """Data + tokenizer entries must not pretend to be implemented."""
+    entries = all_primitive_coverages()
+    for name in ("dataset_map", "tokenizer_bpe", "sharded_dataset"):
+        entry = entries[name]
+        assert entry.status == "planned"
+        assert not entry.existing_op
+
+
 def test_primitive_coverage_renders_markdown_dashboard():
     text = render_markdown([coverage_for("scan"), coverage_for("matmul")])
 
@@ -115,6 +280,20 @@ def test_primitive_coverage_renders_markdown_dashboard():
     assert "`scan`" in text
     assert "`matmul`" in text
     assert "Missing contracts" in text
+
+
+def test_primitive_coverage_rejects_duplicate_planned_entries(monkeypatch):
+    from tessera.compiler import primitive_coverage as pc
+
+    duplicate = pc._planned("scan", "control_flow", ("all",))
+    monkeypatch.setattr(pc, "_PLANNED_ENTRIES", pc._PLANNED_ENTRIES + (duplicate,))
+
+    try:
+        pc.all_primitive_coverages()
+    except ValueError as exc:
+        assert "duplicate planned primitive coverage entry: scan" in str(exc)
+    else:
+        raise AssertionError("duplicate planned primitive entries must fail loudly")
 
 
 def test_standalone_primitive_dashboard_documents_s1_contract():
@@ -126,3 +305,21 @@ def test_standalone_primitive_dashboard_documents_s1_contract():
     assert "Flax" in text
     assert "Contract Axes" in text
     assert "Model-Family Coverage Tags" in text
+
+
+def test_standalone_primitive_dashboard_contains_checked_generated_snapshot():
+    text = DASHBOARD.read_text(encoding="utf-8")
+    names = [
+        "matmul",
+        "permute",
+        "collective_permute",
+        "scan",
+        "selective_ssm",
+        "dataset_map",
+        "tokenizer_bpe",
+    ]
+    generated = render_markdown([coverage_for(name) for name in names])
+    generated_table = "\n".join(generated.splitlines()[5:])
+
+    assert "<!-- BEGIN GENERATED PRIMITIVE COVERAGE SNAPSHOT -->" in text
+    assert generated_table in text

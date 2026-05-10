@@ -44,9 +44,16 @@ S0 (standalone gap lock) ─► S1 (primitive contracts) ─► S2 (tensor algeb
                                                        ├► S3 (state trees)
                                                        ├► S4 (RNG/effects)
                                                        ├► S5 (control flow)
-                                                       ├► S6 (sharding)
-                                                       ├► S7 (model primitives)
-                                                       └► S8 (tiny model conformance)
+                                                       ├► S6 (sharding + collectives)
+                                                       ├► S7 (model primitives)  [depends on S2-S5]
+                                                       ├► S9 (numerics + quantization)
+                                                       ├► S10 (optimizers)        [depends on S3]
+                                                       ├► S11 (losses)            [depends on S2, S9]
+                                                       ├► S12 (checkpointing)     [depends on S3]
+                                                       ├► S13 (custom-op API)     [depends on S5]
+                                                       ├► S14 (cache + AOT)       [depends on S5]
+                                                       ├► S15 (data pipeline)     [in-scope per S0]
+                                                       └► S8 (tiny model conformance) [depends on S2-S7, S9-S15]
 ```
 
 **Legacy A-I critical paths (all three chains are now closed as of 2026-05-09):**
@@ -76,22 +83,54 @@ reference vocabularies for missing mathematical and compiler semantics.
 ## Standalone compiler milestone sprints (S-series)
 
 These sprints convert the May 2026 JAX/Flax/PyTorch gap analysis into an
-implementation path. They run in parallel with Phase G where possible: S1-S5
-are mostly frontend/compiler/runtime-semantics work; S6 and S8 benefit from
-real GPU execution but must still have CPU-reference acceptance.
+implementation path. They run in parallel with Phase G where possible: S1-S5,
+S9-S14 are mostly frontend/compiler/runtime-semantics work; S6 and S8 benefit
+from real GPU execution but must still have CPU-reference acceptance; S15 is
+runtime-only data plumbing.
+
+**Sprint sequencing:**
+- **S0** (lock + scope decisions) gates everything.
+- **S1** (registry) gates every other S-sprint because each sprint adds
+  contract-complete entries to it.
+- **S2-S6, S9-S15** are largely parallelizable behind S1 with the explicit
+  dependencies declared on each sprint.
+- **S7** depends on S2-S5 because layers compose tensor algebra (S2),
+  state (S3), RNG (S4), and transforms (S5).
+- **S8** is the conformance gate — it depends on every other S-sprint.
 
 ### [S0] Gap lock + sprint documentation ✅
 
 **Scope:** XS (doc/test only). This section is the canonical sprint breakdown
 for the standalone compiler goal.
 
+**In-scope decisions locked here:**
+- **Tessera remains runtime-independent of PyTorch, JAX, and Flax.** They are
+  reference vocabularies only; nothing in the runtime, compiler, or shipped
+  artifact may import them.
+- **The data pipeline is in scope** (S15). Tessera owns its own dataset,
+  batching, sharding-of-data, and tokenization surfaces. The standalone
+  compiler claim does not allow punting to `tf.data`, `torch.utils.data`, or
+  `grain` at runtime — those are reference vocabularies only.
+- **The training step is in scope.** Optimizers (S10), losses (S11), and
+  checkpointing (S12) are not optional add-ons; without them S8 cannot
+  execute its "one training step on CPU reference" criterion.
+- **Custom-primitive authoring is in scope** (S13). Tile-level kernel
+  authoring with VJP/JVP/batching/sharding rule registration is a
+  differentiator, not an external concern.
+- **AOT export and persistent compilation cache are in scope** (S14). A
+  JIT-only compiler does not ship.
+
 **Acceptance:**
-- `docs/audit/execution_roadmap.md` contains S0-S8 milestone sprints.
+- `docs/audit/execution_roadmap.md` contains S0-S15 milestone sprints
+  (S0-S8 plus S9 numerics/quant, S10 optimizers, S11 losses, S12
+  checkpointing, S13 custom-op API, S14 cache + AOT, S15 data pipeline).
 - The S-series explicitly states that Tessera remains runtime-independent from
   PyTorch, JAX, and Flax.
-- Unit coverage checks that the standalone roadmap names the required compiler
-  surfaces: primitive contracts, tensor algebra, state trees, explicit RNG,
-  control flow, sharding, model primitives, and tiny model conformance.
+- Unit coverage checks that the standalone roadmap names every required
+  compiler surface: primitive contracts, tensor algebra, state trees, explicit
+  RNG, control flow, sharding, model primitives, tiny model conformance,
+  numerics/quantization, optimizers, losses, checkpointing, custom-op API,
+  compilation cache + AOT, and data pipeline.
 
 ### [S1] Native primitive contract registry ✅
 
@@ -134,16 +173,28 @@ compiler primitives, not PyTorch compatibility wrappers.
 **Primitive groups:**
 - Shape/view/data movement: `reshape`, `view`, `flatten`, `squeeze`,
   `unsqueeze`, `permute`, `broadcast`, `expand`, `cat`, `stack`, `split`,
-  `chunk`, `slice`, `select`, `pad`, `dynamic_slice`,
-  `dynamic_update_slice`.
+  `chunk`, `slice`, `select`, `pad`, `tile`, `repeat`, `roll`, `flip`,
+  `dynamic_slice`, `dynamic_update_slice`.
 - Functional updates: indexed set/add/min/max without mutation-dependent
   behavior.
 - Indexing/sorting: `gather`, `scatter`, `scatter_add`, `scatter_reduce`,
   `nonzero`, `top_k`, `sort`, `argsort`, `take`, `index_select`,
   `index_update`.
-- Scalar math breadth: `sub`, `div`, `exp`, `log`, `sqrt`, `rsqrt`, `pow`,
-  trig, `erf`, comparisons, logical ops, `clamp`, `minimum`, `maximum`, `sign`,
-  `abs`, `reciprocal`.
+- Reductions: `sum`, `mean`, `prod`, `max`, `min`, `var`, `std`, `argmax`,
+  `argmin`, `cumsum`, `cumprod`, `cummax`, `cummin`. Each carries an explicit
+  `axis`/`keepdims` rule and an fp32-accumulate dtype-promotion policy.
+- Numerical-stability primitives: `logsumexp`, `log_softmax`, `log1p`,
+  `expm1`, `softplus`, `sigmoid_safe`, `softmax_safe`. These are first-class,
+  not derived ops, because they have their own VJPs and lowering rules.
+- Scalar math breadth: `sub`, `div`, `floor_div`, `mod`, `exp`, `log`,
+  `sqrt`, `rsqrt`, `pow`, `sin`, `cos`, `tan`, `sinh`, `cosh`, `tanh`,
+  `asin`, `acos`, `atan`, `atan2`, `erf`, `erfc`, `lgamma`, `digamma`.
+- Comparisons + logical: `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `logical_and`,
+  `logical_or`, `logical_not`, `logical_xor`, `bitwise_and`, `bitwise_or`,
+  `bitwise_xor`, `bitwise_not`.
+- Numeric helpers: `clamp`, `minimum`, `maximum`, `sign`, `abs`,
+  `reciprocal`, `floor`, `ceil`, `round`, `trunc`, `where`, `isnan`,
+  `isinf`, `isfinite`.
 
 **Acceptance:**
 - Every S2 primitive has shape/dtype rules, CPU reference behavior, VJP/JVP
@@ -181,8 +232,10 @@ process-global source.
 **Acceptance:**
 - Add typed RNG keys with `split`, `fold_in`, `clone`, named streams, and
   deterministic replay metadata.
-- Add samplers: uniform, normal, bernoulli, categorical, randint,
-  permutation, gamma, and beta.
+- Add samplers (each a separate registry primitive with its own contract):
+  `rng_uniform`, `rng_normal`, `rng_truncated_normal`, `rng_bernoulli`,
+  `rng_categorical`, `rng_multinomial`, `rng_randint`, `rng_permutation`,
+  `rng_gamma`, `rng_beta`, `rng_dirichlet`, `rng_poisson`.
 - Dropout, stochastic depth, diffusion noise, random masking, and sampling use
   explicit RNG streams.
 - Tests prove deterministic replay across single-device, sharded, checkpointed,
@@ -198,8 +251,12 @@ than Python helpers.
 
 **Acceptance:**
 - First-class transforms: `jit`, `grad`, `value_and_grad`, `jvp`, `vjp`,
-  `vmap`, `map`, `scan`, `associative_scan`, `while_loop`, `fori_loop`,
-  `cond`, `switch`, `remat`, and `checkpoint`.
+  `vmap`, `pmap`, `map`, `scan`, `associative_scan`, `while_loop`,
+  `fori_loop`, `cond`, `switch`, `remat`, and `checkpoint`.
+- Mesh-aware transform helpers: `axis_index`, `axis_size`, `axis_name` are
+  first-class so functions inside `vmap`/`pmap`/`shard_map` can introspect
+  their position. (Listed here, not in S6, because they are transform-time
+  semantics, not collective primitives.)
 - Transform rules compose through Graph IR, Schedule IR, Tile IR, and backend
   lowering, with explicit fallback diagnostics where a stage is not ready.
 - Reverse-mode through scan, split transpose for scans, checkpointed BPTT, and
@@ -207,12 +264,13 @@ than Python helpers.
 - Tests include `grad(vmap(f))`, `vmap(grad(f))`, `grad(scan(f))`,
   `remat(scan(f))`, and `shard_map(grad(f))` once S6 lands.
 
-### [S6] Native sharding and distributed semantics 📋
+### [S6] Native sharding, collectives, and distributed semantics 📋
 
 **Scope:** L (~800 LOC code + ~500 LOC tests). Depends on S3-S5; GPU runtime
 acceleration depends on Phase G.
 
-Add compiler-visible placement, sharding, and SPMD mapping semantics.
+Add compiler-visible placement, sharding, and SPMD mapping semantics, plus the
+collectives primitive library that `shard_map` callees actually invoke.
 
 **Acceptance:**
 - Named mesh, partition specs, named sharding, replicated/sharded state,
@@ -220,6 +278,12 @@ Add compiler-visible placement, sharding, and SPMD mapping semantics.
   objects.
 - Add a `shard_map`-style API with explicit in/out specs and collective
   behavior.
+- **Collectives primitive library** — each is a registry primitive with its
+  own VJP/transpose/sharding rule and Graph IR lowering: `psum`, `pmean`,
+  `pmax`, `pmin`, `all_gather`, `all_to_all`, `reduce_scatter`,
+  `collective_permute`, `broadcast_to_axis`. (`tessera.all_reduce`/`all_gather`/`all_to_all`/
+  `reduce_scatter` exist in `op_catalog.py` today; S6 turns them into
+  contract-complete entries with batching/transpose/sharding rules.)
 - Data, tensor, sequence, expert, pipeline, and memory sharding are expressible
   in the compiler and visible to autodiff/optimizer/RNG/checkpoint logic.
 - CPU/mock tests validate semantics; NVIDIA/NCCL tests become active when
@@ -227,25 +291,221 @@ Add compiler-visible placement, sharding, and SPMD mapping semantics.
 
 ### [S7] Flax-level model primitive library 📋
 
-**Scope:** L (~900 LOC code + ~600 LOC tests). Depends on S2-S4.
+**Scope:** L (~900 LOC code + ~600 LOC tests). Depends on S2-S5 (recurrent
+layers require `scan` from S5; attention layers require batching rules from
+S5; normalization layers require reductions from S2; sampling layers require
+S4 RNG).
 
 Provide native model-building layers so Tessera users can author models without
 PyTorch/JAX/Flax modules.
 
 **Acceptance:**
-- Layers: `Linear`, `LinearGeneral`, `Einsum`, `Embed`, `Conv`,
-  `ConvTranspose`, `LoRA`, and `LoRALinear`.
+- Layers: `Linear`, `LinearGeneral`, `Einsum`, `Embed`, `Conv1d`, `Conv2d`,
+  `Conv3d`, `ConvTranspose`, `LoRA`, and `LoRALinear`.
 - Normalization: BatchNorm, LayerNorm, RMSNorm, GroupNorm, InstanceNorm,
   WeightNorm, SpectralNorm.
-- Pooling: max, avg, min, adaptive variants.
-- Recurrent layers: SimpleRNN, GRU, LSTM, optimized LSTM, bidirectional RNN,
-  sequence flip/masking.
+- Pooling: `max_pool`, `avg_pool`, `min_pool`, adaptive variants.
+- Recurrent layers: `simple_rnn_cell`, `gru_cell`, `lstm_cell`, optimized
+  LSTM, bidirectional scan, sequence flip/masking.
+- Position encodings: `rope`, `alibi`, `ntk_rope` as registry primitives
+  with shape/dtype/VJP rules.
+- Attention library as registry primitives (in addition to existing `flash_attn`):
+  `multi_head_attention`, `gqa_attention`, `mqa_attention`, `mla_decode`.
 - Dropout and stochastic-depth modules consume explicit Tessera RNG streams.
+
+### [S9] Numerics, mixed precision, and quantization 📋
+
+**Scope:** L (~700 LOC code + ~450 LOC tests). Depends on S1; integrates with
+S2 (dtype rules) and S5 (autocast as a transform).
+
+Standalone-compiler numerics policy. Today's `op_catalog.py` ships `cast`,
+`quantize_fp{8,6,4}`, and `dequantize_fp{8,6,4,nvfp4}`; S9 turns those into a
+contract-complete numerics layer plus the missing mixed-precision and QAT
+infrastructure.
+
+**Acceptance:**
+- Compiler-visible dtype lattice: `f64`, `f32`, `bf16`, `f16`, `f8e4m3`,
+  `f8e5m2`, `f6`, `f4`, `nvfp4`, `i64`, `i32`, `i16`, `i8`, `u8`, `bool`.
+  Promotion rules and reduction-precision policy (fp32 accumulate by
+  default) documented in the registry.
+- `autocast(dtype)` transform composes through `grad`/`vmap`/`scan` and
+  rewrites supported ops to the chosen dtype while keeping reductions in
+  fp32. Replaces today's ad-hoc `python/tessera/autodiff/mixed_precision.py`
+  hooks with a first-class transform.
+- Quantization primitives: per-tensor symmetric, per-channel, blockwise,
+  GPTQ-style int4, and AWQ-style int4. `quantize_int8`, `dequantize_int8`,
+  `quantize_int4`, `dequantize_int4` join the existing fp8/fp6/fp4/nvfp4
+  ops with full contracts (VJP via straight-through estimator + transpose
+  rule).
+- QAT (quantization-aware training) hooks: fake-quantize ops with VJPs,
+  observer modules, calibration capture.
+- `GradScaler` migrated from `python/tessera/autodiff/mixed_precision.py`
+  to expose a contract-complete primitive.
+- Tests cover dtype-promotion correctness, autocast under reverse-mode AD,
+  per-channel quant round-trip error, and QAT gradient flow.
+
+### [S10] Optimizer library and training-step primitives 📋
+
+**Scope:** M (~600 LOC code + ~400 LOC tests). Depends on S3 (state trees
+hold optimizer slots) and S2 (scalar math + reductions).
+
+Today `op_catalog.py` exposes a single `tessera.adam` primitive and
+`python/tessera/nn/utils.py` ships `clip_grad_norm_`. S10 promotes the
+optimizer surface to a real library.
+
+**Acceptance:**
+- Optimizers as functional primitives over state trees: `sgd`, `momentum`,
+  `nesterov`, `adam`, `adamw`, `adafactor`, `lion`, `muon`, `lamb`. Each
+  registry entry has a state-tree shape contract and a step contract.
+- Learning-rate schedules: `constant_lr`, `cosine_lr`, `cosine_warmup`,
+  `linear_warmup`, `polynomial_lr`, `inverse_sqrt`, `cyclical`,
+  `chained_schedule`.
+- Gradient transforms: `clip_grad_norm`, `clip_grad_value`,
+  `centralize_grad`, `add_decoupled_weight_decay`, `ema_update`, `polyak`.
+- `OptaxStyleChain` — composition of gradient transforms (the reference
+  vocabulary is `optax`/`flax.optim`; Tessera owns the implementation).
+- Tests cover Rosenbrock convergence, AdamW vs Adam decoupling,
+  Adafactor's factored second moments, EMA shadow consistency, and
+  optimizer-state pytree round-trip through S3.
+
+### [S11] Loss / criterion library 📋
+
+**Scope:** M (~400 LOC code + ~350 LOC tests). Depends on S2 (reductions +
+stability primitives) and S9 (numerics policy).
+
+Today only `CrossEntropyLoss` exists in `python/tessera/nn/layers.py`. S11
+ships the full standalone-compiler loss surface needed for S8's training-step
+acceptance.
+
+**Acceptance:**
+- Regression: `mse_loss`, `mae_loss`, `huber_loss`, `smooth_l1_loss`,
+  `log_cosh_loss`.
+- Classification: `cross_entropy_loss` (existing — promoted to registry
+  primitive), `binary_cross_entropy_loss`, `focal_loss`,
+  `label_smoothed_cross_entropy`.
+- Distribution: `kl_divergence`, `js_divergence`, `wasserstein_distance`.
+- Contrastive / metric: `nt_xent_loss`, `info_nce_loss`, `triplet_loss`,
+  `contrastive_loss`, `cosine_embedding_loss`.
+- Diffusion: `ddpm_noise_pred_loss`, `vlb_loss`, `score_matching_loss`.
+- Sequence: `ctc_loss`, `seq2seq_loss`.
+- Each loss registers its `reduction` policy (`none`/`mean`/`sum`),
+  numerical-stability path (uses `logsumexp` / `log_softmax` from S2 where
+  applicable), and a VJP.
+
+### [S12] State serialization and checkpointing 📋
+
+**Scope:** M (~500 LOC code + ~350 LOC tests). Depends on S3 (state trees) and
+S6 (sharded state for sharded checkpoints).
+
+Standalone-compiler weights/state must be saveable, restorable, version-able,
+and shardable without external framework dependencies.
+
+**Acceptance:**
+- On-disk format: typed binary container holding state-tree topology,
+  per-leaf metadata (dtype, shape, sharding spec, version), and tensor
+  payloads. Self-describing — no external schema needed to read it back.
+- API: `save_state(tree, path)`, `load_state(path) -> tree`,
+  `save_sharded(tree, path, mesh)`, `load_sharded(path, mesh)`.
+- Migration: registered `state_migration` rules so a checkpoint produced
+  at version N can be loaded at version N+1 with explicit field renames /
+  shape splits / dtype upgrades.
+- Partial loading: load only `params` (drop optimizer slots), or merge a
+  LoRA adapter into a base checkpoint.
+- Resilience: torn-write detection (per-leaf checksums), atomic rename,
+  and resumable saves for multi-host training.
+- Tests cover round-trip equality on every state class from S3, sharded
+  save/load on the mock collective harness, and a forward-compat migration
+  example.
+
+### [S13] Custom-primitive / extension API 📋
+
+**Scope:** L (~700 LOC code + ~500 LOC tests). Depends on S5 (transforms must
+see custom primitives) and S1 (registry).
+
+Tessera's tile-level kernel authoring is the standalone differentiator. S13
+formalizes how a user-defined kernel registers with the compiler so that
+`grad`, `vmap`, `pmap`, `shard_map`, and `autocast` all compose with it.
+
+**Acceptance:**
+- `@tessera.custom_primitive(name)` decorator that lets a user define:
+  forward implementation (Python or `@tessera.kernel` tile program), shape
+  rule, dtype rule, VJP, JVP, batching rule, transpose rule, sharding
+  rule, masking/effect declaration, and a per-target lowering hook.
+- `@tessera.custom_call` escape hatch for opaque kernels that bypass
+  Graph IR optimization but still report shape/sharding/effects to the
+  compiler.
+- Per-target lowering registration: a custom primitive can supply
+  `lower_to_tile`, `lower_to_x86`, `lower_to_apple_cpu`, `lower_to_apple_gpu`,
+  `lower_to_rocm`, `lower_to_metalium`, etc.
+- Tests cover: a user `softplus_inplace` op with a hand-written VJP that
+  composes under `grad(vmap(f))`; a user kernel that registers a
+  Tile-IR-only lowering and falls back to a numpy reference on other
+  targets; an effect-declaring custom primitive that participates in
+  collective-insertion correctly under `shard_map`.
+
+### [S14] Compilation cache and AOT export 📋
+
+**Scope:** L (~700 LOC code + ~400 LOC tests). Depends on S5 (the transforms
+that compile) and S6 (sharding metadata travels with the artifact).
+
+A JIT-only compiler is not deployable. S14 ships persistent compilation
+caching and a real AOT export path.
+
+**Acceptance:**
+- Persistent JIT cache keyed on
+  `hash(graph_ir + target + dtype_policy + mesh_spec + tessera_version)`
+  with on-disk artifact storage (extends today's autotuner SQLite cache to
+  cover compiled programs, not just kernel configs).
+- Cache invalidation rules surface to the user when any keyed input
+  changes — never silent staleness.
+- AOT export targets:
+  - `tessera.aot.export(fn, *example_inputs) -> AOTArtifact` produces a
+    self-contained artifact with Graph IR, per-target Tile IR, and the
+    minimum runtime metadata to launch.
+  - StableHLO export for the JAX/TF interoperability story.
+  - GGUF / safetensors export for inference-only deployment.
+- Loadable artifacts: `tessera.aot.load(path).run(inputs)` works without
+  the original Python source.
+- Tests cover cache hit/miss correctness, AOT round-trip equality with JIT
+  on every reference op family, and a sharded-AOT artifact loaded onto a
+  smaller mesh.
+
+### [S15] Native data pipeline 📋
+
+**Scope:** L (~800 LOC code + ~500 LOC tests). Depends on S3 (datasets are
+state trees) and S4 (shuffle uses RNG).
+
+**S0 decision:** the data pipeline is in scope. Tessera owns its own dataset,
+batching, sharding-of-data, and tokenization surfaces. `tf.data`,
+`torch.utils.data`, and `grain` are reference vocabularies only.
+
+**Acceptance:**
+- `Dataset` interface: `map`, `filter`, `batch`, `prefetch`, `shuffle`,
+  `interleave`, `take`, `skip`, `repeat`, `concatenate`, `zip`, `unbatch`.
+- Source datasets: in-memory tensor source, sharded file source
+  (memory-mapped), generator source, deterministic synthetic source.
+- Sharding-of-data: a `ShardedDataset` partitions across mesh axes so
+  data parallelism is a first-class semantic, not a per-call argument.
+- Determinism: shuffle uses S4 RNG keys; `dataset.replay_from(epoch, step)`
+  is bit-exact under the same key.
+- Tokenization surface: `Tokenizer` interface with `byte`, `bpe`,
+  `wordpiece`, `unigram`, and `sentencepiece_compat` implementations
+  (the format compatibility layer reads SentencePiece protobufs but the
+  tokenizer is implemented in Tessera). Tokenizers expose
+  `encode`/`decode`/`vocab_size`/`special_tokens` as compiler-visible state.
+- Streaming / iteration: `IterableDataset` for sources too large to
+  enumerate; backpressure and prefetch buffer sizing are explicit.
+- Resumability: `dataset.checkpoint() / dataset.restore(state)` round-trips
+  through S12 so a training run pauses and resumes without re-shuffling
+  the same examples.
+- Tests cover deterministic replay, sharded data-parallel iteration on the
+  mock collective harness, tokenizer round-trip equality, and resumed
+  iteration after a checkpoint.
 
 ### [S8] Tiny standalone model conformance suite 📋
 
 **Scope:** XL (~1,000 LOC tests/examples + dashboard integration). Depends on
-S2-S7; performance gates depend on Phase G.
+S2-S7 + S9-S15; performance gates depend on Phase G.
 
 The acceptance target is small standalone Tessera models, not imported
 PyTorch/JAX/Flax modules.
@@ -255,8 +515,9 @@ PyTorch/JAX/Flax modules.
   Hyena/FNet/spectral, Linformer/cosFormer, Griffin/Megalodon, JEPA, and
   Titans/Atlas memory.
 - Every tiny model validates forward correctness, backward correctness, state
-  behavior, RNG determinism, shape polymorphism, mixed precision, and one
-  training step on CPU reference.
+  behavior, RNG determinism, shape polymorphism, mixed precision, one training
+  step on CPU reference (using S10 optimizers, S11 losses, S15 data pipeline),
+  and a checkpoint round-trip (S12).
 - Backend gates track CPU reference, Apple/GPU development backends, and
   NVIDIA/H100 optimized execution after Phase G.
 - The S1 dashboard reports which model families are blocked by each missing

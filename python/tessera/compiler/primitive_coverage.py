@@ -529,23 +529,40 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         }
         if category in {"data", "tokenizer", "serialization", "aot", "conformance"}:
             metadata["graph_ir_lowering"] = "not_applicable"
-        entries.setdefault(
-            name,
-            PrimitiveCoverage(
-                name=name,
-                category=category,
-                status="partial",
-                contract_status=contract,
-                model_families=_EXISTING_MODEL_FAMILIES.get(name, ("all",)),
-                references=("tessera",),
-                notes=notes,
-                existing_op=True,
-                graph_name=None,
-                effect="pure",
-                lowering=category,
-                metadata=metadata,
-            ),
+        python_entry = PrimitiveCoverage(
+            name=name,
+            category=category,
+            status="partial",
+            contract_status=contract,
+            model_families=_EXISTING_MODEL_FAMILIES.get(name, ("all",)),
+            references=("tessera",),
+            notes=notes,
+            existing_op=True,
+            graph_name=None,
+            effect="pure",
+            lowering=category,
+            metadata=metadata,
         )
+        existing = entries.get(name)
+        if existing is not None:
+            merged_contract = dict(existing.contract_status)
+            merged_contract["tests"] = "complete"
+            entries[name] = PrimitiveCoverage(
+                name=existing.name,
+                category=existing.category,
+                status=existing.status,
+                contract_status=merged_contract,
+                model_families=existing.model_families or python_entry.model_families,
+                references=tuple(dict.fromkeys(existing.references + python_entry.references)),
+                notes=f"{existing.notes} Python reference/tests shipped: {notes}",
+                existing_op=True,
+                graph_name=existing.graph_name,
+                effect=existing.effect,
+                lowering=existing.lowering,
+                metadata={**existing.metadata, "implementation": "op_catalog+python_reference"},
+            )
+        else:
+            entries[name] = python_entry
     return entries
 
 

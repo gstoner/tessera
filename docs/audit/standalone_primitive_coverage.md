@@ -52,6 +52,9 @@ primitive should be treated as contract-complete yet. Contract completion still
 requires fully specified semantics, transform rules, lowering, backend kernels,
 and tests for each primitive.
 
+Current lowering gates: `201` registered, `125` still `stub_required`, `32`
+not applicable, and `4` missing.
+
 ## Milestone Groups
 
 The dashboard groups primitives by the S-series sprint that ships them.
@@ -152,9 +155,11 @@ The next work is contract hardening, not broad name collection:
   rules for high-use S2, S5, S7, S10, and S11 primitives.
 - **Transform coverage:** close VJP/JVP, batching, transpose, and sharding gaps
   starting with reductions, model layers, losses, `memory_read`, scans, and
-  collectives.
+  collectives. The first focused pass now covers `linear_general`, `sgd`, and
+  core differentiable S11 losses.
 - **Lowering gates:** convert `stub_required` S5-S15 Python-reference
-  primitives into real Graph IR lowering paths.
+  primitives into real Graph IR lowering paths. The first focused pass now
+  registers Graph IR names for `linear_general`, `sgd`, and core S11 losses.
 - **Backend gates:** distinguish CPU-reference behavior, Graph IR-lowered
   behavior, and backend-kernel-ready behavior for each primitive group.
 - **Memory architecture:** extend `memory_read`, `memory_write`, and

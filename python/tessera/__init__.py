@@ -2750,6 +2750,25 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         out = np.argsort(_unwrap(x), axis=axis)
         return np.flip(out, axis=axis) if descending else out
 
+    def _lazy_module_fn(module_name: str, fn_name: str):
+        def _wrapper(*args, **kwargs):
+            module = __import__(f"tessera.{module_name}", fromlist=[fn_name])
+            return getattr(module, fn_name)(*args, **kwargs)
+        return _wrapper
+
+    linear_general_ref = _lazy_module_fn("nn.functional", "linear_general")
+    sgd_ref = _lazy_module_fn("optim", "sgd")
+    mse_loss_ref = _lazy_module_fn("losses", "mse_loss")
+    mae_loss_ref = _lazy_module_fn("losses", "mae_loss")
+    huber_loss_ref = _lazy_module_fn("losses", "huber_loss")
+    smooth_l1_loss_ref = _lazy_module_fn("losses", "smooth_l1_loss")
+    log_cosh_loss_ref = _lazy_module_fn("losses", "log_cosh_loss")
+    cross_entropy_loss_ref = _lazy_module_fn("losses", "cross_entropy_loss")
+    binary_cross_entropy_loss_ref = _lazy_module_fn("losses", "binary_cross_entropy_loss")
+    ddpm_noise_pred_loss_ref = _lazy_module_fn("losses", "ddpm_noise_pred_loss")
+    score_matching_loss_ref = _lazy_module_fn("losses", "score_matching_loss")
+    vlb_loss_ref = _lazy_module_fn("losses", "vlb_loss")
+
     references = {
         "gemm": gemm,
         "matmul": matmul,
@@ -2963,6 +2982,18 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "top_k": top_k,
         "sort": sort,
         "argsort": argsort,
+        "linear_general": linear_general_ref,
+        "sgd": sgd_ref,
+        "mse_loss": mse_loss_ref,
+        "mae_loss": mae_loss_ref,
+        "huber_loss": huber_loss_ref,
+        "smooth_l1_loss": smooth_l1_loss_ref,
+        "log_cosh_loss": log_cosh_loss_ref,
+        "cross_entropy_loss": cross_entropy_loss_ref,
+        "binary_cross_entropy_loss": binary_cross_entropy_loss_ref,
+        "ddpm_noise_pred_loss": ddpm_noise_pred_loss_ref,
+        "score_matching_loss": score_matching_loss_ref,
+        "vlb_loss": vlb_loss_ref,
     }
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
@@ -3183,6 +3214,18 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         top_k=top_k,
         sort=sort,
         argsort=argsort,
+        linear_general=linear_general_ref,
+        sgd=sgd_ref,
+        mse_loss=mse_loss_ref,
+        mae_loss=mae_loss_ref,
+        huber_loss=huber_loss_ref,
+        smooth_l1_loss=smooth_l1_loss_ref,
+        log_cosh_loss=log_cosh_loss_ref,
+        cross_entropy_loss=cross_entropy_loss_ref,
+        binary_cross_entropy_loss=binary_cross_entropy_loss_ref,
+        ddpm_noise_pred_loss=ddpm_noise_pred_loss_ref,
+        score_matching_loss=score_matching_loss_ref,
+        vlb_loss=vlb_loss_ref,
     )
 
 

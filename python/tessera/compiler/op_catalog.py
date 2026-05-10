@@ -244,6 +244,21 @@ _SPECS = [
     OpSpec("top_k", "tessera.top_k", 1, 1, lowering="sort"),
     OpSpec("sort", "tessera.sort", 1, 1, lowering="sort"),
     OpSpec("argsort", "tessera.argsort", 1, 1, lowering="sort"),
+    # S7/S10/S11 focused Graph IR entrypoints. These are Python-reference
+    # primitives promoted into the frontend catalog so the Graph IR builder can
+    # emit stable op names instead of treating them as opaque calls.
+    OpSpec("linear_general", "tessera.linear_general", 2, 3, lowering="model_layer"),
+    OpSpec("sgd", "tessera.sgd", 2, 2, lowering="functional_optimizer_step"),
+    OpSpec("mse_loss", "tessera.loss.mse", 2, 2, lowering="loss"),
+    OpSpec("mae_loss", "tessera.loss.mae", 2, 2, lowering="loss"),
+    OpSpec("huber_loss", "tessera.loss.huber", 2, 2, lowering="loss"),
+    OpSpec("smooth_l1_loss", "tessera.loss.smooth_l1", 2, 2, lowering="loss"),
+    OpSpec("log_cosh_loss", "tessera.loss.log_cosh", 2, 2, lowering="loss"),
+    OpSpec("cross_entropy_loss", "tessera.loss.cross_entropy", 2, 2, lowering="loss"),
+    OpSpec("binary_cross_entropy_loss", "tessera.loss.binary_cross_entropy", 2, 2, lowering="loss"),
+    OpSpec("ddpm_noise_pred_loss", "tessera.loss.ddpm_noise_pred", 2, 2, lowering="loss"),
+    OpSpec("score_matching_loss", "tessera.loss.score_matching", 2, 2, lowering="loss"),
+    OpSpec("vlb_loss", "tessera.loss.vlb", 1, 1, lowering="loss"),
 ]
 
 OP_SPECS: dict[str, OpSpec] = {spec.public_name: spec for spec in _SPECS}
@@ -267,6 +282,22 @@ def normalize_op_name(name: str) -> str:
         return name.removeprefix("ops.")
     if name.startswith("op."):
         return name.removeprefix("op.")
+    for prefix in (
+        "tessera.losses.",
+        "ts.losses.",
+        "losses.",
+        "tessera.optim.",
+        "ts.optim.",
+        "optim.",
+        "tessera.nn.",
+        "ts.nn.",
+        "nn.",
+        "tessera.memory.",
+        "ts.memory.",
+        "memory.",
+    ):
+        if name.startswith(prefix):
+            return name.removeprefix(prefix)
     if name.startswith("tessera."):
         tail = name.removeprefix("tessera.")
         if tail.startswith("kv_cache."):

@@ -1658,4 +1658,143 @@ def vjp_maximum(dout, x, y, **_):
     return (do * (gt + eq), do * ((1.0 - gt) - eq))
 
 
+def _reduction_cotangent(dout, shape: tuple[int, ...], reduction: str) -> np.ndarray:
+    do = np.asarray(dout)
+    if reduction == "none":
+        return np.broadcast_to(do, shape)
+    if reduction == "sum":
+        return np.ones(shape, dtype=do.dtype) * do
+    if reduction == "mean":
+        return np.ones(shape, dtype=do.dtype) * do / max(int(np.prod(shape)), 1)
+    raise ValueError("reduction must be 'none', 'mean', or 'sum'")
+
+
+@_vjp("linear_general")
+def vjp_linear_general(dout, x, W, bias=None, *, axis=-1, **_):
+    x_arr = np.asarray(x)
+    w_arr = np.asarray(W)
+    do = np.asarray(dout)
+    axes = (axis,) if isinstance(axis, int) else tuple(axis)
+    axes = tuple(ax if ax >= 0 else x_arr.ndim + ax for ax in axes)
+    w_contract_axes = tuple(range(len(axes)))
+    dx = np.tensordot(do, w_arr, axes=(tuple(range(do.ndim - (w_arr.ndim - len(axes)), do.ndim)), tuple(range(len(axes), w_arr.ndim))))
+    if axes != tuple(range(x_arr.ndim - len(axes), x_arr.ndim)):
+        remaining = [i for i in range(x_arr.ndim) if i not in axes]
+        current_order = remaining + list(axes)
+        inverse = np.argsort(current_order)
+        dx = np.transpose(dx, inverse)
+    dW = np.tensordot(x_arr, do, axes=(tuple(i for i in range(x_arr.ndim) if i not in axes), tuple(range(do.ndim - (w_arr.ndim - len(axes))))))
+    db = _sum_to_shape(do, np.asarray(bias).shape) if bias is not None else None
+    return (dx.reshape(x_arr.shape), dW.reshape(w_arr.shape), db)
+
+
+@_vjp("sgd")
+def vjp_sgd(dout, params, grads, *, lr, **_):
+    do = np.asarray(dout)
+    return (_sum_to_shape(do, np.asarray(params).shape), _sum_to_shape(-float(lr) * do, np.asarray(grads).shape))
+
+
+@_vjp("mse_loss")
+def vjp_mse_loss(dout, pred, target, *, reduction="mean", **_):
+    pred_arr = np.asarray(pred)
+    target_arr = np.asarray(target)
+    scale = _reduction_cotangent(dout, np.broadcast_shapes(pred_arr.shape, target_arr.shape), reduction)
+    err = pred_arr - target_arr
+    grad = 2.0 * err * scale
+    return (_sum_to_shape(grad, pred_arr.shape), _sum_to_shape(-grad, target_arr.shape))
+
+
+@_vjp("mae_loss")
+def vjp_mae_loss(dout, pred, target, *, reduction="mean", **_):
+    pred_arr = np.asarray(pred)
+    target_arr = np.asarray(target)
+    scale = _reduction_cotangent(dout, np.broadcast_shapes(pred_arr.shape, target_arr.shape), reduction)
+    grad = np.sign(pred_arr - target_arr) * scale
+    return (_sum_to_shape(grad, pred_arr.shape), _sum_to_shape(-grad, target_arr.shape))
+
+
+@_vjp("huber_loss")
+def vjp_huber_loss(dout, pred, target, *, delta=1.0, reduction="mean", **_):
+    pred_arr = np.asarray(pred)
+    target_arr = np.asarray(target)
+    err = pred_arr - target_arr
+    d = float(delta)
+    local = np.where(np.abs(err) <= d, err, d * np.sign(err))
+    grad = local * _reduction_cotangent(dout, np.broadcast_shapes(pred_arr.shape, target_arr.shape), reduction)
+    return (_sum_to_shape(grad, pred_arr.shape), _sum_to_shape(-grad, target_arr.shape))
+
+
+@_vjp("smooth_l1_loss")
+def vjp_smooth_l1_loss(dout, pred, target, *, beta=1.0, reduction="mean", **_):
+    pred_arr = np.asarray(pred)
+    target_arr = np.asarray(target)
+    err = pred_arr - target_arr
+    b = float(beta)
+    local = np.where(np.abs(err) < b, err / b, np.sign(err))
+    grad = local * _reduction_cotangent(dout, np.broadcast_shapes(pred_arr.shape, target_arr.shape), reduction)
+    return (_sum_to_shape(grad, pred_arr.shape), _sum_to_shape(-grad, target_arr.shape))
+
+
+@_vjp("log_cosh_loss")
+def vjp_log_cosh_loss(dout, pred, target, *, reduction="mean", **_):
+    pred_arr = np.asarray(pred)
+    target_arr = np.asarray(target)
+    grad = np.tanh(pred_arr - target_arr) * _reduction_cotangent(
+        dout, np.broadcast_shapes(pred_arr.shape, target_arr.shape), reduction
+    )
+    return (_sum_to_shape(grad, pred_arr.shape), _sum_to_shape(-grad, target_arr.shape))
+
+
+@_vjp("cross_entropy_loss")
+def vjp_cross_entropy_loss(dout, logits, targets, *, reduction="mean", **_):
+    logits_arr = np.asarray(logits, dtype=np.float64)
+    targets_arr = np.asarray(targets)
+    shifted = logits_arr - np.max(logits_arr, axis=-1, keepdims=True)
+    probs = np.exp(shifted) / np.sum(np.exp(shifted), axis=-1, keepdims=True)
+    if targets_arr.dtype.kind in "iu":
+        one_hot = np.zeros_like(probs)
+        np.put_along_axis(one_hot.reshape(-1, one_hot.shape[-1]), targets_arr.reshape(-1, 1).astype(np.int64), 1.0, axis=-1)
+        target_grad = None
+    else:
+        one_hot = targets_arr
+        target_grad = -(
+            logits_arr - (np.log(np.sum(np.exp(shifted), axis=-1, keepdims=True)) + np.max(logits_arr, axis=-1, keepdims=True))
+        )
+    scale_shape = probs.shape[:-1]
+    scale = _reduction_cotangent(dout, scale_shape, reduction)[..., None]
+    grad_logits = (probs - one_hot) * scale
+    return (_sum_to_shape(grad_logits, logits_arr.shape), target_grad)
+
+
+@_vjp("binary_cross_entropy_loss")
+def vjp_binary_cross_entropy_loss(dout, logits, targets, *, reduction="mean", **_):
+    logits_arr = np.asarray(logits, dtype=np.float64)
+    targets_arr = np.asarray(targets, dtype=np.float64)
+    sigmoid = 1.0 / (1.0 + np.exp(-logits_arr))
+    scale = _reduction_cotangent(dout, np.broadcast_shapes(logits_arr.shape, targets_arr.shape), reduction)
+    grad_logits = (sigmoid - targets_arr) * scale
+    grad_targets = -logits_arr * scale
+    return (_sum_to_shape(grad_logits, logits_arr.shape), _sum_to_shape(grad_targets, targets_arr.shape))
+
+
+@_vjp("ddpm_noise_pred_loss")
+def vjp_ddpm_noise_pred_loss(dout, pred_noise, true_noise, *, reduction="mean", **kwargs):
+    return vjp_mse_loss(dout, pred_noise, true_noise, reduction=reduction, **kwargs)
+
+
+@_vjp("score_matching_loss")
+def vjp_score_matching_loss(dout, score, target_score, *, reduction="mean", **_):
+    score_arr = np.asarray(score)
+    target_arr = np.asarray(target_score)
+    scale = _reduction_cotangent(dout, np.broadcast_shapes(score_arr.shape, target_arr.shape), reduction)
+    grad = (score_arr - target_arr) * scale
+    return (_sum_to_shape(grad, score_arr.shape), _sum_to_shape(-grad, target_arr.shape))
+
+
+@_vjp("vlb_loss")
+def vjp_vlb_loss(dout, terms, *, reduction="mean", **_):
+    terms_arr = np.asarray(terms)
+    return (_reduction_cotangent(dout, terms_arr.shape, reduction),)
+
+
 __all__ = ["register_vjp", "get_vjp", "_VJPS"]

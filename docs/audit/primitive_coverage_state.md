@@ -83,10 +83,10 @@ missing Python API names:
 | Transpose rule | 312 |
 | Sharding rule | 362 |
 | Backend kernel | 362 |
-| JVP | 298 |
-| VJP | 209 |
-| Tests | 193 |
-| Lowering rule | 169 |
+| JVP | 287 |
+| VJP | 197 |
+| Tests | 191 |
+| Lowering rule | 157 |
 | Masking/effect rule | 27 |
 
 This means the next quality jump is not adding more names. It is hardening the
@@ -101,13 +101,17 @@ contract axes for the primitives already present.
      contracts.
 
 2. **Autodiff coverage**
-   - Prioritize VJP/JVP rules for S7 layers, S10 optimizers where differentiable,
-     S11 losses, and S15 data/tokenizer non-differentiability declarations.
+   - A focused pass now registers VJP/JVP rules for `linear_general`, `sgd`,
+     and core differentiable S11 losses including MSE/MAE/Huber/SmoothL1,
+     log-cosh, BCE, DDPM noise-prediction, score matching, and VLB reducers.
+     Continue with the remaining S7 layers, S10 optimizers where
+     differentiable, and S11 classification/contrastive/sequence losses.
 
 3. **Backend/lowering gates**
    - The registry now exposes `graph_ir_lowering` and `backend_kernel`
-     metadata. Next work is turning `stub_required` entries into real Graph IR
-     lowering paths.
+     metadata. A focused pass moved `linear_general`, `sgd`, and core S11
+     losses into the Graph IR op catalog; next work is turning the remaining
+     `stub_required` entries into real Graph IR lowering paths.
 
 4. **Memory architecture sprint**
    - Extend `memory_read`, `memory_write`, and `memory_evict` with sharded

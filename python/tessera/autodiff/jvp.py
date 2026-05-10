@@ -191,6 +191,118 @@ def jvp_sum(primals, tangents, *, axis=None, keepdims=False, **_):
     return jvp_reduce(primals, tangents, op="sum", axis=axis, keepdims=keepdims)
 
 
+def _reduce_loss(x: np.ndarray, dx: np.ndarray, reduction: str):
+    if reduction == "none":
+        return x, dx
+    if reduction == "sum":
+        return np.sum(x), np.sum(dx)
+    if reduction == "mean":
+        return np.mean(x), np.mean(dx)
+    raise ValueError("reduction must be 'none', 'mean', or 'sum'")
+
+
+@_jvp("linear_general")
+def jvp_linear_general(primals, tangents, *, axis=-1, **_):
+    x, W = primals[:2]
+    dx, dW = tangents[:2]
+    bias = primals[2] if len(primals) > 2 else None
+    dbias = tangents[2] if len(tangents) > 2 else None
+    axes = (axis,) if isinstance(axis, int) else tuple(axis)
+    axes = tuple(ax if ax >= 0 else x.ndim + ax for ax in axes)
+    y = np.tensordot(x, W, axes=(axes, tuple(range(len(axes)))))
+    dy = (
+        np.tensordot(dx, W, axes=(axes, tuple(range(len(axes)))))
+        + np.tensordot(x, dW, axes=(axes, tuple(range(len(axes)))))
+    )
+    if bias is not None:
+        y = y + bias
+        dy = dy + dbias
+    return y, dy
+
+
+@_jvp("sgd")
+def jvp_sgd(primals, tangents, *, lr, **_):
+    params, grads = primals
+    dparams, dgrads = tangents
+    return params - float(lr) * grads, dparams - float(lr) * dgrads
+
+
+@_jvp("mse_loss")
+def jvp_mse_loss(primals, tangents, *, reduction="mean", **_):
+    pred, target = primals
+    dpred, dtarget = tangents
+    err = pred - target
+    derr = dpred - dtarget
+    return _reduce_loss(err * err, 2.0 * err * derr, reduction)
+
+
+@_jvp("mae_loss")
+def jvp_mae_loss(primals, tangents, *, reduction="mean", **_):
+    pred, target = primals
+    dpred, dtarget = tangents
+    err = pred - target
+    return _reduce_loss(np.abs(err), np.sign(err) * (dpred - dtarget), reduction)
+
+
+@_jvp("huber_loss")
+def jvp_huber_loss(primals, tangents, *, delta=1.0, reduction="mean", **_):
+    pred, target = primals
+    dpred, dtarget = tangents
+    err = pred - target
+    derr = dpred - dtarget
+    d = float(delta)
+    loss = np.where(np.abs(err) <= d, 0.5 * err * err, d * (np.abs(err) - 0.5 * d))
+    tangent = np.where(np.abs(err) <= d, err, d * np.sign(err)) * derr
+    return _reduce_loss(loss, tangent, reduction)
+
+
+@_jvp("smooth_l1_loss")
+def jvp_smooth_l1_loss(primals, tangents, *, beta=1.0, reduction="mean", **_):
+    pred, target = primals
+    dpred, dtarget = tangents
+    err = pred - target
+    derr = dpred - dtarget
+    b = float(beta)
+    loss = np.where(np.abs(err) < b, 0.5 * err * err / b, np.abs(err) - 0.5 * b)
+    tangent = np.where(np.abs(err) < b, err / b, np.sign(err)) * derr
+    return _reduce_loss(loss, tangent, reduction)
+
+
+@_jvp("log_cosh_loss")
+def jvp_log_cosh_loss(primals, tangents, *, reduction="mean", **_):
+    pred, target = primals
+    dpred, dtarget = tangents
+    err = pred - target
+    loss = err + np.log1p(np.exp(-2.0 * err)) - np.log(2.0)
+    return _reduce_loss(loss, np.tanh(err) * (dpred - dtarget), reduction)
+
+
+@_jvp("binary_cross_entropy_loss")
+def jvp_binary_cross_entropy_loss(primals, tangents, *, reduction="mean", **_):
+    logits, targets = primals
+    dlogits, dtargets = tangents
+    loss = np.maximum(logits, 0.0) - logits * targets + np.log1p(np.exp(-np.abs(logits)))
+    sigmoid = 1.0 / (1.0 + np.exp(-logits))
+    tangent = (sigmoid - targets) * dlogits - logits * dtargets
+    return _reduce_loss(loss, tangent, reduction)
+
+
+@_jvp("ddpm_noise_pred_loss")
+def jvp_ddpm_noise_pred_loss(primals, tangents, *, reduction="mean", **kwargs):
+    return jvp_mse_loss(primals, tangents, reduction=reduction, **kwargs)
+
+
+@_jvp("score_matching_loss")
+def jvp_score_matching_loss(primals, tangents, *, reduction="mean", **_):
+    primal, tangent = jvp_mse_loss(primals, tangents, reduction=reduction)
+    return 0.5 * primal, 0.5 * tangent
+
+
+@_jvp("vlb_loss")
+def jvp_vlb_loss(primals, tangents, *, reduction="mean", **_):
+    return _reduce_loss(primals[0], tangents[0], reduction)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Forward-mode tape — single-pass through the function; collects (primal,
 # tangent) pairs per recorded op and returns the final (primal_out,

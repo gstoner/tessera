@@ -1267,6 +1267,18 @@ Additional S-series runtime catalog entries are part of the same public
 | `sigmoid(x)` | `(array) → array` | `pure` | NumPy sigmoid |
 | `sin(x)` | `(array) → array` | `pure` | NumPy sine |
 | `adam(param, grad, moment1, moment2, lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8, step=1)` | `(array,array,array,array) → tuple` | `pure` | Functional NumPy Adam step |
+| `linear_general(x, W, bias=None, axis=-1)` | `(array,array,array?) → array` | `pure` | S7 axis-flexible linear projection; Graph IR op `tessera.linear_general` |
+| `sgd(params, grads, lr)` | `(array,array) → array` | `pure` | S10 functional SGD reference; Graph IR op `tessera.sgd` |
+| `mse_loss(pred, target, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 MSE criterion; Graph IR op `tessera.loss.mse` |
+| `mae_loss(pred, target, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 MAE criterion; Graph IR op `tessera.loss.mae` |
+| `huber_loss(pred, target, delta=1.0, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 Huber criterion; Graph IR op `tessera.loss.huber` |
+| `smooth_l1_loss(pred, target, beta=1.0, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 SmoothL1 criterion; Graph IR op `tessera.loss.smooth_l1` |
+| `log_cosh_loss(pred, target, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 log-cosh criterion; Graph IR op `tessera.loss.log_cosh` |
+| `cross_entropy_loss(logits, targets, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 cross-entropy criterion; Graph IR op `tessera.loss.cross_entropy` |
+| `binary_cross_entropy_loss(logits, targets, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 BCE-with-logits criterion; Graph IR op `tessera.loss.binary_cross_entropy` |
+| `ddpm_noise_pred_loss(pred_noise, true_noise, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 diffusion noise-prediction criterion; Graph IR op `tessera.loss.ddpm_noise_pred` |
+| `score_matching_loss(score, target_score, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 score-matching criterion; Graph IR op `tessera.loss.score_matching` |
+| `vlb_loss(terms, reduction="mean")` | `(array) → scalar/array` | `pure` | S11 diffusion VLB reducer; Graph IR op `tessera.loss.vlb` |
 | `rmsnorm(x, eps=1e-5)` | `(array) → array` | `pure` | NumPy RMSNorm reference |
 | `rmsnorm_safe(x, eps=1e-6)` | `(array) → array` | `pure` | NumPy RMSNorm reference with safer default epsilon |
 | `transpose(x, axes=None)` | `(array) → array` | `pure` | `np.transpose(x, axes)` |

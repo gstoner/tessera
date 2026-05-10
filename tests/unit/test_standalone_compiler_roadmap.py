@@ -136,12 +136,10 @@ def test_existing_coverage_consults_autodiff_vjp_registry():
 
 
 def test_primitive_coverage_tracks_planned_standalone_gaps_separately():
-    custom_primitive = coverage_for("custom_primitive")
     memory_write = coverage_for("memory_write")
 
-    assert not custom_primitive.existing_op
-    assert custom_primitive.status == "planned"
     assert not memory_write.existing_op
+    assert memory_write.status == "planned"
     assert "Titans/Atlas" in memory_write.model_families
 
 
@@ -253,7 +251,7 @@ def test_primitive_coverage_includes_s9_quantization_and_numerics():
 def test_primitive_coverage_includes_s8_tiny_model_conformance_targets():
     entries = all_primitive_coverages()
     for name in ("tiny_diffusion_conformance", "tiny_recurrent_conformance",
-                 "tiny_attention_conformance"):
+                 "tiny_attention_conformance", "tiny_training_step_conformance"):
         assert name in entries, f"S8 conformance target missing: {name}"
         assert entries[name].existing_op
 
@@ -288,15 +286,17 @@ def test_primitive_coverage_includes_s12_serialization():
 def test_primitive_coverage_includes_s13_custom_primitive_api():
     entries = all_primitive_coverages()
     for name in ("custom_primitive", "custom_call", "custom_vjp", "custom_jvp",
-                 "custom_batching"):
+                 "custom_batching", "custom_lowering"):
         assert name in entries, f"S13 custom-op primitive missing: {name}"
+        assert entries[name].existing_op
 
 
 def test_primitive_coverage_includes_s14_aot_and_cache():
     entries = all_primitive_coverages()
     for name in ("aot_export", "aot_load", "stablehlo_export",
-                 "safetensors_export", "compilation_cache"):
+                 "gguf_export", "safetensors_export", "compilation_cache"):
         assert name in entries, f"S14 AOT/cache primitive missing: {name}"
+        assert entries[name].existing_op
 
 
 def test_primitive_coverage_includes_s15_data_pipeline_and_tokenizers():
@@ -306,19 +306,24 @@ def test_primitive_coverage_includes_s15_data_pipeline_and_tokenizers():
     # Dataset combinators
     for name in ("dataset_map", "dataset_filter", "dataset_batch",
                  "dataset_prefetch", "dataset_shuffle", "dataset_interleave",
-                 "sharded_dataset", "iterable_dataset", "dataset_checkpoint"):
+                 "dataset_repeat", "dataset_zip", "sharded_dataset",
+                 "iterable_dataset", "dataset_checkpoint"):
         assert name in entries, f"S15 dataset primitive missing: {name}"
+        assert entries[name].existing_op
 
     # Tokenizers
     for name in ("tokenizer_byte", "tokenizer_bpe", "tokenizer_wordpiece",
                  "tokenizer_unigram", "tokenizer_sentencepiece_compat"):
         assert name in entries, f"S15 tokenizer missing: {name}"
+        assert entries[name].existing_op
 
 
-def test_data_pipeline_categories_are_planned_not_supported():
-    """Data + tokenizer entries must not pretend to be implemented."""
+def test_remaining_data_pipeline_gaps_stay_planned():
+    """Unimplemented data extensions still should not pretend to be supported."""
     entries = all_primitive_coverages()
-    for name in ("dataset_map", "tokenizer_bpe", "sharded_dataset"):
+    for name in ("dataset_take", "tokenizer_sentencepiece_training"):
+        if name not in entries:
+            continue
         entry = entries[name]
         assert entry.status == "planned"
         assert not entry.existing_op

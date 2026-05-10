@@ -53,12 +53,12 @@ The dashboard groups primitives by the S-series sprint that ships them.
 | **S7** Model layers | Standalone model authoring | `linear_general`, `conv1d`, `conv_transpose`, `group_norm`, `gru_cell`, `simple_rnn_cell`, `bidirectional_scan`, `max_pool`, `avg_pool`, `lora_linear` |
 | **S7** Position encodings + attention | Modern transformer building blocks | `rope`, `alibi`, `ntk_rope`, `multi_head_attention`, `gqa_attention`, `mqa_attention`, `mla_decode` |
 | **S7** Memory | Titans/Atlas-style learned memory | `memory_read`, `memory_write`, `memory_evict` |
-| **S8** Tiny model conformance | Standalone family smoke tests | `tiny_diffusion_conformance`, `tiny_recurrent_conformance`, `tiny_attention_conformance` |
+| **S8** Tiny model conformance | Standalone family smoke tests | `tiny_diffusion_conformance`, `tiny_recurrent_conformance`, `tiny_attention_conformance`, `tiny_training_step_conformance` |
 | **S9** Numerics + quantization | Mixed precision + quant flows | `quantize_int8`, `dequantize_int8`, `quantize_int4`, `dequantize_int4`, `fake_quantize`, `calibration_observer`, `grad_scaler_step`, `autocast` |
 | **S10** Optimizers + schedules | Functional training step | `sgd`, `adam`, `adamw`, `adafactor`, `lion`, `muon`, `lamb`, `cosine_lr`, `cosine_warmup_lr`, `cyclical_lr`, `chained_schedule`, `clip_grad_norm`, `ema_update`, `polyak_avg` |
 | **S11** Losses | Training criteria | `mse_loss`, `mae_loss`, `huber_loss`, `cross_entropy_loss`, `kl_divergence`, `info_nce_loss`, `triplet_loss`, `focal_loss`, `ddpm_noise_pred_loss`, `score_matching_loss`, `ctc_loss`, `seq2seq_loss` |
 | **S12** Serialization | Save / load / migrate / shard | `save_state`, `load_state`, `save_sharded`, `load_sharded`, `state_migration`, `partial_state_load` |
-| **S13** Custom-primitive API | User-defined primitives + kernels | `custom_primitive`, `custom_call`, `custom_vjp`, `custom_jvp`, `custom_batching` |
+| **S13** Custom-primitive API | User-defined primitives + kernels | `custom_primitive`, `custom_call`, `custom_vjp`, `custom_jvp`, `custom_batching`, `custom_lowering` |
 | **S14** AOT + cache | Persistent JIT cache + AOT export | `aot_export`, `aot_load`, `stablehlo_export`, `gguf_export`, `safetensors_export`, `compilation_cache` |
 | **S15** Data pipeline | Native dataset + tokenizer surface (in-scope per S0) | `dataset_map`, `dataset_filter`, `dataset_batch`, `dataset_shuffle`, `sharded_dataset`, `iterable_dataset`, `dataset_checkpoint`, `tokenizer_byte`, `tokenizer_bpe`, `tokenizer_unigram`, `tokenizer_sentencepiece_compat` |
 
@@ -110,8 +110,8 @@ the high-risk S1 entries and milestone sentinels. Tests compare these rows to
 | `collective_permute` | collective | partial | yes | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, lowering_rule, backend_kernel | all |
 | `scan` | control_flow | partial | yes | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, lowering_rule, backend_kernel | all |
 | `selective_ssm` | state_space | partial | yes | math_semantics, shape_rule, dtype_layout_rule, jvp, batching_rule, transpose_rule, sharding_rule, masking_effect_rule, backend_kernel, tests | Mamba/SSM |
-| `dataset_map` | data | planned | no | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, masking_effect_rule, lowering_rule, backend_kernel, tests | all |
-| `tokenizer_bpe` | tokenizer | planned | no | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, masking_effect_rule, lowering_rule, backend_kernel, tests | all |
+| `dataset_map` | data | partial | yes | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, lowering_rule, backend_kernel | all |
+| `tokenizer_bpe` | tokenizer | partial | yes | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, lowering_rule, backend_kernel | all |
 <!-- END GENERATED PRIMITIVE COVERAGE SNAPSHOT -->
 
 Regenerate/check the full table programmatically with:

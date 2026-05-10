@@ -3170,6 +3170,9 @@ ops = _make_ops_namespace()
 
 # nn module depends on `ops`, so import after the ops namespace is built.
 from . import nn  # noqa: E402
+from . import aot  # noqa: E402
+from . import custom  # noqa: E402
+from . import data  # noqa: E402
 from . import losses  # noqa: E402
 from . import optim  # noqa: E402
 from . import rng  # noqa: E402
@@ -3183,6 +3186,14 @@ from .quantization import (  # noqa: E402
     grad_scaler_step,
     quantize_int4,
     quantize_int8,
+)
+from .custom import (  # noqa: E402
+    CustomPrimitive,
+    custom_batching,
+    custom_call,
+    custom_jvp,
+    custom_primitive,
+    custom_vjp,
 )
 
 # autodiff installs tape-aware wrappers on `ops.<name>`; load after `ops` and `nn`.
@@ -3372,7 +3383,11 @@ __all__ = [
     "ops", "RuntimeArtifact", "RuntimeProfile", "available_backends",
     "backend_capabilities", "compile_artifact", "get_last_profile", "launch",
     "load_artifact", "query_backend",
-    # S11 losses, S10 optimizers / schedules, and S9 quantization / numerics
+    # S15 data, S14 AOT, S13 custom primitives, S11 losses, S10 optimizers /
+    # schedules, and S9 quantization / numerics
+    "data",
+    "aot", "custom", "CustomPrimitive", "custom_primitive", "custom_call",
+    "custom_vjp", "custom_jvp", "custom_batching",
     "losses", "optim", "rng",
     "quantization", "CalibrationObserver", "calibration_observer",
     "quantize_int8", "dequantize_int8", "quantize_int4", "dequantize_int4",

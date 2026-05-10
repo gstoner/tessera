@@ -399,6 +399,39 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "load_sharded": ("serialization", "mock sharded state load — S12 landed 2026-05-10"),
         "state_migration": ("serialization", "registered checkpoint migration rule — S12 landed 2026-05-10"),
         "partial_state_load": ("serialization", "top-level state collection filtering — S12 landed 2026-05-10"),
+        # S13 — custom primitive / extension API (python/tessera/custom.py)
+        "custom_primitive": ("extension", "custom primitive decorator — S13 landed 2026-05-10"),
+        "custom_call": ("extension", "opaque custom call decorator — S13 landed 2026-05-10"),
+        "custom_vjp": ("extension", "custom VJP registration — S13 landed 2026-05-10"),
+        "custom_jvp": ("extension", "custom JVP registration — S13 landed 2026-05-10"),
+        "custom_batching": ("extension", "custom batching registration — S13 landed 2026-05-10"),
+        "custom_lowering": ("extension", "per-target custom lowering registration — S13 landed 2026-05-10"),
+        # S14 — compilation cache + AOT export (python/tessera/aot.py)
+        "aot_export": ("aot", "reference AOT export — S14 landed 2026-05-10"),
+        "aot_load": ("aot", "reference AOT load — S14 landed 2026-05-10"),
+        "stablehlo_export": ("aot", "StableHLO reference text export — S14 landed 2026-05-10"),
+        "gguf_export": ("aot", "GGUF reference metadata export — S14 landed 2026-05-10"),
+        "safetensors_export": ("aot", "safetensors-like npz export — S14 landed 2026-05-10"),
+        "compilation_cache": ("aot", "persistent AOT artifact cache — S14 landed 2026-05-10"),
+        # S15 — data pipeline + tokenizers (python/tessera/data.py)
+        "dataset_map": ("data", "Dataset.map — S15 landed 2026-05-10"),
+        "dataset_filter": ("data", "Dataset.filter — S15 landed 2026-05-10"),
+        "dataset_batch": ("data", "Dataset.batch — S15 landed 2026-05-10"),
+        "dataset_prefetch": ("data", "Dataset.prefetch reference no-op — S15 landed 2026-05-10"),
+        "dataset_shuffle": ("data", "RNGKey-backed deterministic shuffle — S15 landed 2026-05-10"),
+        "dataset_interleave": ("data", "Dataset.interleave — S15 landed 2026-05-10"),
+        "dataset_repeat": ("data", "Dataset.repeat — S15 landed 2026-05-10"),
+        "dataset_zip": ("data", "Dataset.zip — S15 landed 2026-05-10"),
+        "sharded_dataset": ("data", "mesh-axis sharded dataset — S15 landed 2026-05-10"),
+        "iterable_dataset": ("data", "checkpointable iterable dataset — S15 landed 2026-05-10"),
+        "dataset_checkpoint": ("data", "dataset checkpoint/restore metadata — S15 landed 2026-05-10"),
+        "tokenizer_byte": ("tokenizer", "UTF-8 byte tokenizer — S15 landed 2026-05-10"),
+        "tokenizer_bpe": ("tokenizer", "vocab-backed BPE-compatible tokenizer — S15 landed 2026-05-10"),
+        "tokenizer_wordpiece": ("tokenizer", "vocab-backed WordPiece-compatible tokenizer — S15 landed 2026-05-10"),
+        "tokenizer_unigram": ("tokenizer", "vocab-backed unigram-compatible tokenizer — S15 landed 2026-05-10"),
+        "tokenizer_sentencepiece_compat": ("tokenizer", "SentencePiece-compatible vocab tokenizer — S15 landed 2026-05-10"),
+        # S8 — expanded conformance target once S10-S15 exist.
+        "tiny_training_step_conformance": ("conformance", "data/loss/optimizer/checkpoint training-step smoke — S8 expanded 2026-05-10"),
     }
     for name, (category, notes) in python_primitives.items():
         # Python primitives don't have a VJP today (they're structural ops);

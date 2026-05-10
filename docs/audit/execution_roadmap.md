@@ -540,7 +540,7 @@ atomic rename, top-level collection filtering for partial loads,
 multi-rank shard partitioning, resumable multi-host writes, richer partial
 merge policies such as LoRA merge-in, and non-numpy tensor payload adapters.
 
-### [S13] Custom-primitive / extension API 📋
+### [S13] Custom-primitive / extension API 🚧
 
 **Scope:** L (~700 LOC code + ~500 LOC tests). Depends on S5 (transforms must
 see custom primitives) and S1 (registry).
@@ -566,7 +566,19 @@ formalizes how a user-defined kernel registers with the compiler so that
   targets; an effect-declaring custom primitive that participates in
   collective-insertion correctly under `shard_map`.
 
-### [S14] Compilation cache and AOT export 📋
+**Status 2026-05-10:** partial custom primitive API landed in
+`python/tessera/custom.py` and is exported from `tessera`. Covered:
+`custom_primitive`, `custom_call`, `custom_vjp`, `custom_jvp`,
+`custom_batching`, metadata-bearing shape/dtype/transpose/sharding/masking
+rules, and per-target lowering registration. Custom primitives register as
+real `tessera.ops` entries so the existing autodiff tape can see them; tests
+cover a hand-written VJP under `grad(vmap(f))`, Tile-only lowering metadata,
+and an opaque state-effecting custom call. Remaining S13 work: Graph IR
+custom-op nodes, collective insertion/effect lowering beyond metadata,
+target-specific custom-call ABI plumbing, and transform-rule enforcement in
+compiled pipelines.
+
+### [S14] Compilation cache and AOT export 🚧
 
 **Scope:** L (~700 LOC code + ~400 LOC tests). Depends on S5 (the transforms
 that compile) and S6 (sharding metadata travels with the artifact).
@@ -593,7 +605,18 @@ caching and a real AOT export path.
   on every reference op family, and a sharded-AOT artifact loaded onto a
   smaller mesh.
 
-### [S15] Native data pipeline 📋
+**Status 2026-05-10:** partial AOT/cache surface landed in
+`python/tessera/aot.py` and is exported as `tessera.aot`. Covered:
+`export`, `load`, `stablehlo_export`, `gguf_export`,
+`safetensors_export`, `compilation_cache_key`, and `CompilationCache`.
+Reference artifacts carry `RuntimeArtifact` data plus launch metadata; when a
+Python callable is picklable, `aot.load(path).run(inputs)` works in the
+reference path. Remaining S14 work: native artifact bundles per backend,
+source-independent execution for non-picklable callables, cache invalidation
+diagnostics in the JIT path, sharded-AOT mesh remapping, and real GGUF /
+safetensors binary compatibility.
+
+### [S15] Native data pipeline 🚧
 
 **Scope:** L (~800 LOC code + ~500 LOC tests). Depends on S3 (datasets are
 state trees) and S4 (shuffle uses RNG).
@@ -625,6 +648,17 @@ batching, sharding-of-data, and tokenization surfaces. `tf.data`,
   mock collective harness, tokenizer round-trip equality, and resumed
   iteration after a checkpoint.
 
+**Status 2026-05-10:** partial CPU-reference data pipeline landed in
+`python/tessera/data.py` and is exported as `tessera.data`. Covered:
+`Dataset` with `map`, `filter`, `batch`, `prefetch`, `shuffle`,
+`interleave`, `take`, `skip`, `repeat`, `concatenate`, `zip`, `unbatch`,
+`checkpoint`, `restore`, and `replay_from`; tensor, synthetic, sharded-file,
+sharded, and iterable sources; RNGKey-backed deterministic shuffle; and
+byte/BPE/WordPiece/unigram/SentencePiece-compatible tokenizer surfaces.
+Remaining S15 work: lazy streaming execution, true memory-mapped shard
+readers, async prefetch workers, tokenizer training/model-file parsers, and
+compiler-visible dataset lowering.
+
 ### [S8] Tiny standalone model conformance suite 🚧
 
 **Scope:** XL (~1,000 LOC tests/examples + dashboard integration). Depends on
@@ -655,6 +689,13 @@ LinearGeneral+MHA fragments. Coverage now tracks
 dedicated tiny xLSTM, Mamba/SSM, Hyena/FNet, Linformer/cosFormer,
 Griffin/Megalodon, JEPA, and Titans/Atlas examples with optimizer/loss/data
 pipeline/checkpoint gates once S10-S15 mature.
+
+**Expansion 2026-05-10:** added
+`tiny_training_step_conformance` in `tests/unit/test_s8_training_conformance.py`.
+It exercises S15 data batches, S11 loss, S10 optimizer/gradient transforms,
+S4 RNG state, and S12 checkpoint round-trip in one CPU-reference training
+step. Remaining S8 work now centers on broader model-family coverage and
+backend gates rather than missing training-loop primitives.
 
 ---
 

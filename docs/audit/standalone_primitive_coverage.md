@@ -16,6 +16,9 @@ The source of truth for this dashboard is
 source of truth for currently accepted operators; this dashboard can include
 planned primitives without falsely marking them as supported.
 
+For a fuller audit narrative, see
+`docs/audit/primitive_coverage_state.md`.
+
 ## Contract Axes
 
 Every primitive is tracked across these contract fields:
@@ -32,6 +35,22 @@ Every primitive is tracked across these contract fields:
 - lowering rule
 - backend kernel
 - tests
+
+## Current Registry State
+
+Generated from `all_primitive_coverages()` on 2026-05-10:
+
+| Metric | Count |
+|---|---:|
+| Total tracked primitives | 362 |
+| Existing / shipped partial entries | 362 |
+| Planned entries | 0 |
+| Contract-complete entries | 0 |
+
+The current truth is that Tessera has a broad Python-reference surface, but no
+primitive should be treated as contract-complete yet. Contract completion still
+requires fully specified semantics, transform rules, lowering, backend kernels,
+and tests for each primitive.
 
 ## Milestone Groups
 
@@ -124,3 +143,20 @@ from tessera.compiler.primitive_coverage import render_markdown
 
 print(render_markdown())
 ```
+
+## Open Gap Plan
+
+The next work is contract hardening, not broad name collection:
+
+- **Contract hardening:** promote math semantics, shape rules, and dtype/layout
+  rules for high-use S2, S5, S7, S10, and S11 primitives.
+- **Transform coverage:** close VJP/JVP, batching, transpose, and sharding gaps
+  starting with reductions, model layers, losses, `memory_read`, scans, and
+  collectives.
+- **Lowering gates:** convert `stub_required` S5-S15 Python-reference
+  primitives into real Graph IR lowering paths.
+- **Backend gates:** distinguish CPU-reference behavior, Graph IR-lowered
+  behavior, and backend-kernel-ready behavior for each primitive group.
+- **Memory architecture:** extend `memory_read`, `memory_write`, and
+  `memory_evict` with sharded layout rules, differentiable read VJP/JVP, and a
+  persistent memory state ABI.

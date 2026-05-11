@@ -335,3 +335,40 @@ Plus +179 new unit tests passing.
      optimizers, and PPO/GRPO/CISPO losses. The next jump is fused lowering,
      sharding rules for expert/recurrent state, and long-context performance
      tests.
+
+## Spectral solver pass-body landing (2026-05-10)
+
+The Production Hardening item "Spectral/FFT solver pass bodies" is now
+closed. Each of the six passes under `src/solvers/spectral/lib/Passes/`
+moved from a 21-LOC `// TODO: implement` stub to a real implementation:
+
+| Pass | What it does | Attributes attached |
+|------|-------------|---------------------|
+| `LegalizeSpectral` | Resolves per-axis radix sequence (prefers 4 → 2 → 3 → 5 → 7); mirrors norm/real-input policy onto exec op | `tessera.spectral.stages`, `tessera.spectral.per_axis_len`, `tessera.spectral.direction`, `tessera.spectral.half_spectrum`, `tessera.spectral.norm`, `tessera.spectral.legalized` |
+| `SpectralMXP` | Block-FP scale block size from elem/acc/scaling policy (32 for fp8, 64 for fp16/bf16) | `tessera.mxp.block_size`, `tessera.mxp.acc_dtype`, `tessera.mxp.elem_dtype`, `tessera.mxp.guard_eps`, `tessera.mxp.scale_blocks`, `tessera.mxp.scaling` |
+| `TransposePlan` | Per-transpose tile shape + bank-conflict pad + vector width | `tessera.transpose.tile_shapes`, `tessera.transpose.pad`, `tessera.transpose.vector_w`, `tessera.transpose.required` |
+| `Autotune` | Deterministic FNV-1a cache key over (axes, len, dtype, target, stages, tile) | `tessera.autotune.cache_key`, `tessera.autotune.cached`, `tessera.autotune.knobs` |
+| `LowerToTargetIR` | Per-stage C ABI symbol selection (CPU StockhamRadix4 scalar / NV SM90 / AMD gfx94x) | `tessera.target_ir.backend`, `tessera.target_ir.call`, `tessera.target_ir.stage_calls`, `tessera.target_ir.composite`, `tessera.target_ir.lowered` |
+| `DistributedFFT` | Pencil decomposition: per-axis split + all-to-all transposes between consecutive FFT axes | `tessera.dist.axis_split`, `tessera.dist.transposes`, `tessera.dist.overlap_token`, `tessera.dist.local_only` |
+
+Additionally:
+
+- `ts-spectral-opt` registers every pass + a canonical
+  `tessera-spectral-pipeline` end-to-end alias.
+- 7 lit fixtures upgraded from placeholder `// TODO: expect ...` lines to
+  real CHECK directives matching the structured attributes each pass emits.
+- 6 new JVPs registered (`fft`, `ifft`, `rfft`, `irfft`, `stft`, `istft`).
+  Spectral family now reads vjp+jvp+lowering = complete across the full
+  9-primitive family (fft / ifft / rfft / irfft / stft / istft / dct /
+  spectral_filter / spectral_conv). Only `backend_kernel` and
+  `sharding_rule` remain `partial`, both universally gated on a real
+  distributed GPU runtime.
+- 26 Python guard tests at `tests/unit/test_spectral_solver_passes.py`
+  lock the C++ pass bodies are not stubs, the driver registers every
+  factory, the pipeline alias exists, the lit fixtures use real CHECK
+  prefixes, and the 9 differentiable spectral primitives all show
+  `vjp=complete + jvp=complete + lowering_rule=complete` in the registry.
+
+Autodiff totals after this pass: **213 VJPs + 169 JVPs**
+(was 213 + 163). Total unit tests: **2,428 passing**
+under `-m "not slow"`.

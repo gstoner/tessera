@@ -1990,6 +1990,77 @@ del _name
 
 # ── Spectral family — linear in primal input ───────────────────────────────
 
+@_jvp("fft")
+def jvp_fft(primals, tangents, *, axis=-1, axes=None, **_):
+    """FFT is linear — JVP is FFT applied to the tangent on the same axis."""
+    x = np.asarray(primals[0], dtype=np.complex128)
+    dx = np.asarray(tangents[0], dtype=np.complex128)
+    ax = axes[-1] if axes is not None else axis
+    return np.fft.fft(x, axis=ax), np.fft.fft(dx, axis=ax)
+
+
+@_jvp("ifft")
+def jvp_ifft(primals, tangents, *, axis=-1, axes=None, **_):
+    """Inverse FFT is linear — JVP is iFFT applied to the tangent."""
+    x = np.asarray(primals[0], dtype=np.complex128)
+    dx = np.asarray(tangents[0], dtype=np.complex128)
+    ax = axes[-1] if axes is not None else axis
+    return np.fft.ifft(x, axis=ax), np.fft.ifft(dx, axis=ax)
+
+
+@_jvp("rfft")
+def jvp_rfft(primals, tangents, *, axis=-1, axes=None, **_):
+    """Real FFT is linear — JVP is rfft applied to the tangent."""
+    x = np.asarray(primals[0], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    ax = axes[-1] if axes is not None else axis
+    return np.fft.rfft(x, axis=ax), np.fft.rfft(dx, axis=ax)
+
+
+@_jvp("irfft")
+def jvp_irfft(primals, tangents, *, axis=-1, axes=None, n=None, **_):
+    """Inverse real FFT is linear — JVP is irfft applied to the tangent."""
+    x = np.asarray(primals[0], dtype=np.complex128)
+    dx = np.asarray(tangents[0], dtype=np.complex128)
+    ax = axes[-1] if axes is not None else axis
+    return np.fft.irfft(x, n=n, axis=ax), np.fft.irfft(dx, n=n, axis=ax)
+
+
+@_jvp("stft")
+def jvp_stft(primals, tangents, *, n_fft=512, hop=128, window=None, **_):
+    """STFT is linear in the input signal — JVP = STFT(tangent)."""
+    from numpy.lib.stride_tricks import sliding_window_view
+
+    def _stft(sig):
+        sig = np.asarray(sig, dtype=np.float64)
+        win = (np.asarray(window, dtype=np.float64)
+               if window is not None else np.ones(n_fft, dtype=np.float64))
+        frames = sliding_window_view(sig, n_fft, axis=-1)[..., ::hop, :]
+        return np.fft.rfft(frames * win, axis=-1)
+
+    return _stft(primals[0]), _stft(tangents[0])
+
+
+@_jvp("istft")
+def jvp_istft(primals, tangents, *, n_fft=512, hop=128, window=None, **_):
+    """Inverse STFT is linear in the STFT frames — JVP = iSTFT(tangent)."""
+
+    def _istft(frames):
+        frames = np.asarray(frames, dtype=np.complex128)
+        win = (np.asarray(window, dtype=np.float64)
+               if window is not None else np.ones(n_fft, dtype=np.float64))
+        n_frames = frames.shape[-2]
+        out_len = (n_frames - 1) * hop + n_fft
+        out = np.zeros(frames.shape[:-2] + (out_len,), dtype=np.float64)
+        for t in range(n_frames):
+            out[..., t * hop:t * hop + n_fft] += (
+                np.fft.irfft(frames[..., t, :], n=n_fft) * win
+            )
+        return out
+
+    return _istft(primals[0]), _istft(tangents[0])
+
+
 @_jvp("dct")
 def jvp_dct(primals, tangents, *, axis=-1, **_):
     """DCT is orthonormal linear — JVP is DCT applied to the tangent."""

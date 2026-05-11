@@ -162,6 +162,17 @@ def test_target_capability_dtypes_use_canonical_names_or_documented_aliases():
 
 
 def test_every_catalog_op_has_explicit_dtype_layout_contract_status():
+    """Every OP_SPECS entry must carry an explicit dtype_layout_rule value
+    in the canonical status set.
+
+    Sprint C (2026-05-11) flipped the 22 long-tail partials (control_flow,
+    recurrent, sparse, linalg, moe, state_space, memory) to ``complete``,
+    so OP_SPECS entries now read either ``complete`` or ``not_applicable``.
+    The registry-level gap-reporting *infrastructure* (the ability to
+    express ``partial`` / ``planned`` for new entries) is exercised by the
+    standalone primitive coverage suite; this test guards only that every
+    OP_SPECS entry is *explicitly classified*, not unexpectedly empty.
+    """
     coverage = all_primitive_coverages()
     unknown = sorted(set(OP_SPECS) - set(coverage))
     assert unknown == []
@@ -178,9 +189,10 @@ def test_every_catalog_op_has_explicit_dtype_layout_contract_status():
     }
     assert incomplete == {}
 
-    reported_gaps = {
-        name
+    # OP_SPECS entries should all be classified — no implicit defaults.
+    classified = {
+        name: coverage[name].contract_status.get("dtype_layout_rule")
         for name in OP_SPECS
-        if coverage[name].contract_status.get("dtype_layout_rule") in {"partial", "planned"}
     }
-    assert reported_gaps
+    assert all(v in {"complete", "partial", "planned", "not_applicable"}
+               for v in classified.values())

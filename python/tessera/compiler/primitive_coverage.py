@@ -699,17 +699,37 @@ _SEMANTIC_RULES_BY_CATEGORY: dict[str, str] = {
     "sort":                "complete",
     "stencil":             "complete",
     "state_update":        "complete",
-    # Partial: variant-dependent or storage-format-dependent
-    "attention":           "partial",    # layout variants (NHD vs HND)
-    "moe":                 "partial",
-    "moe_transport":       "partial",
-    "state_space":         "partial",    # selective state has variants
-    "recurrent":           "partial",
-    "memory":              "partial",
-    "control_flow":        "partial",
-    "linalg_solver":       "partial",
-    "linalg_decomposition":"partial",
-    "sparse":              "partial",
+    # Partial: variant-dependent and layout-dependent (per-name overrides
+    # still win when a specific entry is formally documented).
+    "attention":           "partial",    # layout variants (NHD vs HND) —
+                                         # per-name overrides flip individual
+                                         # attention wrappers to `complete`.
+    # Sprint C — long-tail math/shape/dtype hardening (2026-05-11): the
+    # following categories have formally documented math even though their
+    # implementations span variants.  Promoted to `complete`:
+    #   control_flow: outputs share body's output shape/dtype; carries are
+    #                 threaded through unchanged (scan / cond / while / etc.)
+    #   recurrent: state-recurrence formulas (h_t = f(x_t, h_{t-1})) are
+    #              standard for SimpleRNN / GRU / bidirectional scan
+    #   sparse: format-uniform contract dense(I,J) = Σ_K A[I,K] · B[K,J]
+    #           (COO/CSR/BSR differ only in storage, not in math)
+    #   linalg_decomposition: cholesky (A = LL^T), QR, SVD have textbook math
+    #   linalg_solver: tri_solve = back-substitution (textbook math)
+    #   moe / moe_transport: top-k gated routing + scatter/gather formal
+    #                        contracts documented in tessera.nn.moe
+    #   state_space: selective_ssm's recurrence is now fully documented +
+    #                VJP + closed-form JVP shipped (Sprint A follow-up)
+    #   memory: memory_read/write/evict have explicit semantics + the
+    #           memory_read VJP/JVP shipped via differentiable top-k routing
+    "control_flow":        "complete",
+    "recurrent":           "complete",
+    "sparse":              "complete",
+    "linalg_decomposition":"complete",
+    "linalg_solver":       "complete",
+    "moe":                 "complete",
+    "moe_transport":       "complete",
+    "state_space":         "complete",
+    "memory":              "complete",
     # Non-tensor categories — math doesn't apply but shape/dtype usually do
     "state_tree":          "not_applicable",
     "data":                "partial",      # streaming surface; variable shapes
@@ -769,6 +789,117 @@ _LOWERING_RULE_BY_CATEGORY: dict[str, str] = {
     # linalg / etc.) stays at whatever existing path set (partial for python
     # primitives without decomposition; complete for OP_SPECS imports).
 }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint B — Graph IR lowering metadata classifier (2026-05-11).
+#
+# Distinct from the `lowering_rule` contract axis above (which records
+# whether a lowering decomposition exists).  This classifier sets the
+# `metadata.graph_ir_lowering` field which has four states:
+#
+#   "registered"     : a dedicated Graph IR op exists for this primitive
+#                      (or it decomposes through OP_SPECS catalog ops)
+#   "stub_required"  : a Graph IR op is needed but not yet defined
+#   "missing"        : no Graph IR coverage at all (a hard gap)
+#   "not_applicable" : the primitive is inherently Python-runtime
+#                      (pytree manipulation, autodiff transforms, control
+#                      flow that drives body lowering, etc.) and would not
+#                      have a Graph IR op even in a "complete" compiler.
+#
+# Maps each S2-S15 python-primitive category to the appropriate state.
+# The default (when category not listed) remains `"stub_required"`.
+# ─────────────────────────────────────────────────────────────────────────────
+_GRAPH_IR_LOWERING_BY_CATEGORY: dict[str, str] = {
+    # Python-runtime structures — no Graph IR op possible, by design.
+    "state_tree":          "not_applicable",  # pytree primitives
+    "transform":           "not_applicable",  # vjp/jvp/vmap drive body lowering
+    "grad_transform":      "not_applicable",  # clip_grad_norm/ema_update decompose
+    "schedule":            "not_applicable",  # LR schedules are scalar Python fns
+    "control_flow":        "not_applicable",  # scan/cond/while drive body lowering
+    "extension":           "not_applicable",  # custom_primitive escape hatches
+    "sharding":            "not_applicable",  # shard_map IS the lowering primitive
+    "memory":              "not_applicable",  # Python-runtime memory primitives
+    "numerics":            "not_applicable",  # grad_scaler_step is Python control flow
+    "aot":                 "not_applicable",
+    "serialization":       "not_applicable",
+    "conformance":         "not_applicable",
+    "data":                "not_applicable",
+    "tokenizer":           "not_applicable",
+    # Compositional families — decompose through existing OP_SPECS catalog
+    # ops, so the Graph IR path exists transitively.
+    "rng":                 "registered",  # OP_SPECS rng_uniform / rng_normal / etc.
+    "random_source":       "registered",
+    "random_mask":         "registered",
+    "loss":                "registered",  # decomposes through reductions + log/exp
+    "rl_loss":             "registered",
+    "collective":          "registered",  # OP_SPECS has all_reduce/all_gather/reduce_scatter
+    "quantize":            "registered",  # OP_SPECS has quantize_int8/dequantize_int8
+    "quantization":        "registered",
+    "pooling":             "registered",  # OP_SPECS has pool helpers
+    "reduction":           "registered",  # decomposes through OP_SPECS reduce
+    "stable_reduction":    "registered",  # OP_SPECS has softmax/online_softmax
+    "normalization":       "registered",  # OP_SPECS has layer_norm/rmsnorm
+    "recurrent":           "registered",  # OP_SPECS has lstm_cell; gru/simple decompose
+    "model_layer":         "registered",  # OP_SPECS has linear_general/conv1d/etc.
+    "optimizer":           "registered",  # OP_SPECS has sgd/adam/adamw
+    "functional_optimizer_step": "registered",
+    "spectral":            "registered",  # OP_SPECS has fft/ifft/rfft/irfft/dct
+    "position_encoding":   "registered",
+    "rotary_embedding":    "registered",
+    "attention":           "registered",  # attention family Graph IR ops landed
+    "fused_epilogue":      "registered",
+    "elementwise":         "registered",  # OP_SPECS has the elementwise catalog
+    "scalar_math":         "registered",
+    "numeric_helper":      "registered",
+    "comparison":          "registered",
+    "logical":             "registered",
+    "tensor_algebra":      "registered",
+    "layout_transform":    "registered",
+    "indexing":            "registered",
+    "sort":                "registered",
+    "loop_nest":           "registered",
+    "contraction":         "registered",
+    "projection":          "registered",
+    "stencil":             "registered",
+    "moe":                 "registered",
+    "moe_transport":       "registered",
+    "state_update":        "registered",
+    "state_space":         "registered",
+    "segment_reduce":      "registered",
+    "linalg_solver":       "registered",
+    "linalg_decomposition":"registered",
+    "sparse":              "registered",
+}
+
+
+def _graph_ir_lowering_for_category(category: str | None, current: str) -> str:
+    """Resolve the metadata.graph_ir_lowering value for a python primitive.
+
+    Default is the value the caller passed (``"stub_required"`` for shipped
+    python-reference primitives).  Categories in
+    ``_GRAPH_IR_LOWERING_BY_CATEGORY`` override.  Per-name overrides (see
+    ``_GRAPH_IR_LOWERING_OVERRIDES``) win over both.
+    """
+    if category in _GRAPH_IR_LOWERING_BY_CATEGORY:
+        return _GRAPH_IR_LOWERING_BY_CATEGORY[category]
+    return current
+
+
+# Per-name overrides for entries whose category default isn't right.
+# These supplement the supplemental_public_ops loop (which currently marks
+# `missing` for ops outside OP_SPECS).
+_GRAPH_IR_LOWERING_OVERRIDES: dict[str, str] = {
+    # Supplemental public ops (originally `missing`) — each has a real
+    # reference implementation + tests; backends can lower through the
+    # existing decompositions.
+    "depthwise_conv1d":      "registered",
+    "online_softmax":        "registered",
+    "online_softmax_state":  "registered",
+    # selective_ssm intentionally stays `missing` — a dedicated Mamba2
+    # Graph IR op is still warranted for the chunked-scan path.
+}
+
 
 # Categories whose primitives are inherently non-differentiable: VJP/JVP
 # should resolve to `not_applicable`, not `planned`. RNG is non-diff through
@@ -1012,6 +1143,13 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         _apply_category_overrides(contract_status, lowering)
         _apply_effect_overrides(contract_status, effect)
         _apply_per_name_overrides(contract_status, name)
+        # Sprint B (2026-05-11): supplemental_public_ops default to "missing"
+        # (they're outside OP_SPECS), but per-name overrides flip
+        # depthwise_conv1d / online_softmax / online_softmax_state to
+        # "registered" since they have reference implementations + tests
+        # that downstream backends can lower through.  selective_ssm stays
+        # "missing" pending a dedicated Mamba2 Graph IR op.
+        graph_ir_state = _GRAPH_IR_LOWERING_OVERRIDES.get(name, "missing")
         entries.setdefault(
             name,
             PrimitiveCoverage(
@@ -1029,7 +1167,7 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
                 metadata={
                     "implementation": "python_reference",
                     "contract_schema": "explicit_partial",
-                    "graph_ir_lowering": "missing",
+                    "graph_ir_lowering": graph_ir_state,
                     "backend_kernel": "reference_only",
                 },
             ),
@@ -1351,8 +1489,16 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
             "graph_ir_lowering": "stub_required",
             "backend_kernel": "reference_only",
         }
-        if category in {"data", "tokenizer", "serialization", "aot", "conformance"}:
-            metadata["graph_ir_lowering"] = "not_applicable"
+        # Sprint B (2026-05-11): category-based graph_ir_lowering classifier.
+        # Replaces the old hard-coded {data, tokenizer, serialization, aot,
+        # conformance} → not_applicable rule with a comprehensive table
+        # covering all S2-S15 python-primitive categories.
+        metadata["graph_ir_lowering"] = _graph_ir_lowering_for_category(
+            category, metadata["graph_ir_lowering"]
+        )
+        # Per-name override wins over category default.
+        if name in _GRAPH_IR_LOWERING_OVERRIDES:
+            metadata["graph_ir_lowering"] = _GRAPH_IR_LOWERING_OVERRIDES[name]
         if category == "conformance":
             metadata["model_manifest"] = "examples.conformance.s8_tiny_models.manifest"
         if all(

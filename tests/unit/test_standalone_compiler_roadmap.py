@@ -149,7 +149,11 @@ def test_primitive_coverage_promotes_memory_primitives_from_planned():
     assert memory_write.existing_op
     assert memory_write.status == "partial"
     assert "Titans/Atlas" in memory_write.model_families
-    assert memory_write.metadata["graph_ir_lowering"] == "stub_required"
+    # Sprint B (2026-05-11): memory primitives are Python-runtime by
+    # design (tessera.memory.memory_read/write/evict have explicit
+    # semantics but no dedicated Graph IR op).  graph_ir_lowering
+    # flipped stub_required → not_applicable.
+    assert memory_write.metadata["graph_ir_lowering"] == "not_applicable"
     assert memory_write.metadata["backend_kernel"] == "reference_only"
 
 

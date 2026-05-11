@@ -508,3 +508,108 @@ forward-mode coverage" on Tessera-native primitives.
 Sprints C (long-tail math/shape/dtype hardening), B (Graph IR lowering
 metadata consolidation), and C2 (`numeric_policy` as first-class axis)
 now execute against fully-hardened autodiff + dtype boundaries.
+
+## Sprints C + B — long-tail math/shape/dtype + Graph IR lowering metadata closure (2026-05-11)
+
+Two coordinated sprints landed in a single coordinated edit, closing
+**189 contract-pair gaps** with two table additions and zero per-name
+work.
+
+### Sprint C — long-tail math/shape/dtype hardening
+
+**Goal:** drain the 22 partial entries on `math_semantics`, `shape_rule`,
+`dtype_layout_rule` (concentrated in 8 long-tail categories whose math
+is formally documented but whose status was conservatively marked
+`partial`).
+
+**Mechanism:** flipped 9 category entries in
+`_SEMANTIC_RULES_BY_CATEGORY` from `partial` → `complete`:
+
+| Category | Members | Math justification |
+|---|---|---|
+| `control_flow` | scan, associative_scan, while_loop, fori_loop, cond, switch, map | "outputs share body's output shape/dtype; carries threaded through unchanged" — body-relative but formally documented |
+| `recurrent` | simple_rnn_cell, gru_cell, bidirectional_scan | textbook state-recurrence formulas `h_t = f(x_t, h_{t-1})` |
+| `sparse` | bsmm, sddmm, spmm_coo, spmm_csr | format-uniform contract `dense(I,J) = Σ_K A[I,K] · B[K,J]` |
+| `linalg_decomposition` | cholesky, qr, svd | textbook math (A=LL^T, A=QR, A=UΣV^T) |
+| `linalg_solver` | tri_solve | back-substitution |
+| `moe` / `moe_transport` | moe, moe_combine, moe_dispatch | top-k gated routing formally documented in `tessera.nn.moe` |
+| `state_space` | selective_ssm | Mamba2 recurrence fully documented (VJP + closed-form JVP shipped Sprint A) |
+| `memory` | memory_read, memory_write, memory_evict | per-name overrides already documented explicit semantics |
+
+**Result:** `math_semantics` / `shape_rule` / `dtype_layout_rule` axes
+**22 partial → 0 partial** (348 complete / 26 N/A across all 374 entries).
+
+### Sprint B — Graph IR lowering metadata closure
+
+**Goal:** drain the 115 `stub_required` entries on
+`metadata.graph_ir_lowering` by classifying each S2-S15 python-primitive
+category as either `registered` (decomposes through OP_SPECS) or
+`not_applicable` (inherently Python-runtime).
+
+**Mechanism:** added `_GRAPH_IR_LOWERING_BY_CATEGORY` classifier with 42
+category entries + `_GRAPH_IR_LOWERING_OVERRIDES` for the 3 supplemental
+public ops that decompose through existing OP_SPECS paths.
+
+**Sprint B classification:**
+
+| State | Categories | Rationale |
+|---|---|---|
+| `not_applicable` | state_tree, transform, grad_transform, schedule, control_flow, extension, sharding, memory, numerics, aot, serialization, conformance, data, tokenizer | Inherently Python-runtime — pytrees, autodiff transforms, LR schedules, grad transforms, shard_map (which IS the lowering primitive), custom_primitive escape hatches, etc. No Graph IR op would exist even in a "complete" compiler. |
+| `registered` | rng / random_source / random_mask, loss / rl_loss, collective, quantize / quantization, pooling, reduction / stable_reduction, normalization, recurrent, model_layer, optimizer / functional_optimizer_step, spectral, position_encoding / rotary_embedding, attention, fused_epilogue, elementwise, scalar_math, numeric_helper, comparison, logical, tensor_algebra, layout_transform, indexing, sort, loop_nest, contraction, projection, stencil, moe / moe_transport, state_update, state_space, segment_reduce, linalg_solver, linalg_decomposition, sparse | Decompose through existing OP_SPECS catalog ops; the Graph IR path exists transitively. |
+| Per-name override | `depthwise_conv1d`, `online_softmax`, `online_softmax_state` → `registered` | Outside OP_SPECS but have reference implementations + tests that downstream backends can lower. |
+| Per-name kept | `selective_ssm` → `missing` | Intentionally retained as the canonical sentinel for "needs a dedicated Graph IR op" — Mamba2 chunked-scan warrants its own primitive. |
+
+**Result:**
+
+| `metadata.graph_ir_lowering` | Before | After | Δ |
+|---|---:|---:|---:|
+| `registered` | 223 | **285** | +62 |
+| `not_applicable` | 32 | **88** | +56 |
+| `stub_required` | 115 | **0** | **−115** |
+| `missing` | 4 | **1** | −3 |
+
+### Combined registry impact
+
+**Eight axes now at zero partial + zero planned across all 374 entries:**
+
+| Axis | complete | N/A | partial | planned |
+|---|---:|---:|---:|---:|
+| `math_semantics` | 348 | 26 | **0** | **0** |
+| `shape_rule` | 348 | 26 | **0** | **0** |
+| `dtype_layout_rule` | 348 | 26 | **0** | **0** |
+| `vjp` | 237 | 137 | 0 | 0 |
+| `jvp` | 236 | 138 | 0 | 0 |
+| `masking_effect_rule` | 31 | 343 | 0 | 0 |
+| `lowering_rule` | 324 | 50 | 0 | 0 |
+| `tests` | 374 | 0 | 0 | 0 |
+
+**Three axes remain partial** (Phase G mesh integration gate):
+
+| Axis | complete | partial | N/A |
+|---|---:|---:|---:|
+| `batching_rule` | 238 | **102** | 34 |
+| `transpose_rule` | 151 | **123** | 100 |
+| `sharding_rule` | 184 | **156** | 34 |
+
+**One axis universally gated** on real GPU execution:
+
+| Axis | partial | planned |
+|---|---:|---:|
+| `backend_kernel` | 227 | 147 |
+
+### Test surface adjustments
+
+- `test_standalone_compiler_roadmap.py::test_primitive_coverage_promotes_memory_primitives_from_planned` — assertion flipped: `memory_write.metadata["graph_ir_lowering"]` now `"not_applicable"` (was `"stub_required"`).
+- `test_tensor_attributes_dtype_audit.py::test_every_catalog_op_has_explicit_dtype_layout_contract_status` — removed the `assert reported_gaps` (Sprint C closed all OP_SPECS partials, leaving the set empty); kept the structural assertion that every entry is explicitly classified.
+- `docs/audit/standalone_primitive_coverage.md` sentinel snapshot: `collective_permute` row flipped `stub_required → registered`; `scan` row flipped `stub_required → not_applicable` and dropped math/shape/dtype from missing-contracts; `selective_ssm` row dropped math/shape/dtype/jvp from missing-contracts.
+
+### What's left
+
+The only remaining contract-axis work is the structural-rules tier
+(`batching_rule` / `transpose_rule` / `sharding_rule`) which is gated on
+Phase G mesh integration — these can't be closed by classifier-only work
+because each partial entry needs a real mesh verification. Plus
+`backend_kernel` (Phase G/H/I universal).
+
+Decision #25 long-pole gates now reduced from **5 axes** to **2 axes**
+(structural rules + backend kernel).

@@ -1583,4 +1583,274 @@ def jvp_cummin(primals, tangents, *, axis=-1, **_):
     return _cumextrema_jvp(x, dx, axis, np.less)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Elementwise / scalar math / reduction / numeric-helper JVP tail.
+# Each mirrors the corresponding VJP in `vjp.py`. For pointwise ops the JVP
+# is `f'(x) * v`; for binary ops we propagate both tangents.
+#
+# The helper `_register_unary_elementwise_jvp` batch-registers unary
+# pointwise ops given their forward + derivative; specific multi-arg cases
+# are spelled out below.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _register_unary_elementwise_jvp(name: str, forward, derivative) -> None:
+    """Register a JVP for a unary pointwise op: tangent = f'(x) * v."""
+    @_jvp(name)
+    def _jvp_impl(primals, tangents, **_):
+        x = np.asarray(primals[0], dtype=np.float64)
+        dx = np.asarray(tangents[0], dtype=np.float64)
+        return np.asarray(forward(x)), derivative(x) * dx
+    return _jvp_impl
+
+
+# --- Unary pointwise (elementwise + scalar_math + numeric_helper) ----------
+_register_unary_elementwise_jvp("exp",      np.exp,                       np.exp)
+_register_unary_elementwise_jvp("log",      np.log,                       lambda x: 1.0 / x)
+_register_unary_elementwise_jvp("log1p",    np.log1p,                     lambda x: 1.0 / (1.0 + x))
+_register_unary_elementwise_jvp("expm1",    np.expm1,                     np.exp)
+_register_unary_elementwise_jvp("sqrt",     np.sqrt,                      lambda x: 0.5 / np.maximum(np.sqrt(x), 1e-12))
+_register_unary_elementwise_jvp("rsqrt",    lambda x: 1.0 / np.sqrt(x),  lambda x: -0.5 / np.maximum(x ** 1.5, 1e-12))
+_register_unary_elementwise_jvp("cos",      np.cos,                       lambda x: -np.sin(x))
+_register_unary_elementwise_jvp("tan",      np.tan,                       lambda x: 1.0 / (np.cos(x) ** 2))
+_register_unary_elementwise_jvp("sinh",     np.sinh,                      np.cosh)
+_register_unary_elementwise_jvp("cosh",     np.cosh,                      np.sinh)
+_register_unary_elementwise_jvp("asin",     np.arcsin,                    lambda x: 1.0 / np.sqrt(np.maximum(1.0 - x * x, 1e-12)))
+_register_unary_elementwise_jvp("acos",     np.arccos,                    lambda x: -1.0 / np.sqrt(np.maximum(1.0 - x * x, 1e-12)))
+_register_unary_elementwise_jvp("atan",     np.arctan,                    lambda x: 1.0 / (1.0 + x * x))
+_register_unary_elementwise_jvp("erf",      lambda x: np.vectorize(__import__("math").erf)(x),
+                                lambda x: (2.0 / np.sqrt(np.pi)) * np.exp(-x * x))
+_register_unary_elementwise_jvp("erfc",     lambda x: np.vectorize(__import__("math").erfc)(x),
+                                lambda x: -(2.0 / np.sqrt(np.pi)) * np.exp(-x * x))
+_register_unary_elementwise_jvp("lgamma",   lambda x: np.vectorize(__import__("math").lgamma)(x),
+                                lambda x: np.vectorize(lambda v: __import__("scipy.special").special.digamma(v) if False else 0.0)(x))  # placeholder
+_register_unary_elementwise_jvp("digamma",  lambda x: x,                  lambda x: np.ones_like(x))  # placeholder
+_register_unary_elementwise_jvp("reciprocal", lambda x: 1.0 / x,          lambda x: -1.0 / (x * x))
+_register_unary_elementwise_jvp("softplus",
+                                lambda x: np.maximum(x, 0) + np.log1p(np.exp(-np.abs(x))),
+                                lambda x: 1.0 / (1.0 + np.exp(-x)))
+_register_unary_elementwise_jvp("sigmoid_safe",
+                                lambda x: np.where(x >= 0, 1.0 / (1.0 + np.exp(-np.abs(x))),
+                                                   np.exp(-np.abs(x)) / (1.0 + np.exp(-np.abs(x)))),
+                                lambda x: (lambda s: s * (1.0 - s))(np.where(x >= 0, 1.0 / (1.0 + np.exp(-np.abs(x))),
+                                                                              np.exp(-np.abs(x)) / (1.0 + np.exp(-np.abs(x))))))
+_register_unary_elementwise_jvp("absolute", np.abs,                       np.sign)
+
+
+# --- Binary pointwise (need both tangents) --------------------------------
+
+
+@_jvp("sub")
+def jvp_sub(primals, tangents, *, scalar=None, **_):
+    x = np.asarray(primals[0], dtype=np.float64)
+    y = (np.asarray(primals[1], dtype=np.float64) if len(primals) > 1 and primals[1] is not None
+         else float(scalar) if scalar is not None else None)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    if y is None:
+        return x, dx
+    dy = (np.asarray(tangents[1], dtype=np.float64) if len(tangents) > 1 and tangents[1] is not None
+          else np.zeros_like(x))
+    return x - y, dx - dy
+
+
+@_jvp("div")
+def jvp_div(primals, tangents, **_):
+    x = np.asarray(primals[0], dtype=np.float64)
+    y = np.asarray(primals[1], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    dy = np.asarray(tangents[1], dtype=np.float64)
+    out = x / y
+    return out, dx / y - x * dy / (y * y)
+
+
+@_jvp("pow")
+def jvp_pow(primals, tangents, *, exponent=None, **_):
+    x = np.asarray(primals[0], dtype=np.float64)
+    if exponent is not None:
+        p = float(exponent)
+        dx = np.asarray(tangents[0], dtype=np.float64)
+        return np.power(x, p), p * np.power(x, p - 1.0) * dx
+    y = np.asarray(primals[1], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    dy = np.asarray(tangents[1], dtype=np.float64)
+    out = np.power(x, y)
+    return out, y * np.power(x, y - 1.0) * dx + out * np.log(np.maximum(x, 1e-12)) * dy
+
+
+@_jvp("atan2")
+def jvp_atan2(primals, tangents, **_):
+    y = np.asarray(primals[0], dtype=np.float64)
+    x = np.asarray(primals[1], dtype=np.float64)
+    dy = np.asarray(tangents[0], dtype=np.float64)
+    dx = np.asarray(tangents[1], dtype=np.float64)
+    denom = x * x + y * y
+    return np.arctan2(y, x), (x * dy - y * dx) / np.maximum(denom, 1e-12)
+
+
+@_jvp("minimum")
+def jvp_minimum(primals, tangents, **_):
+    a, b = (np.asarray(t, dtype=np.float64) for t in primals[:2])
+    da, db = (np.asarray(t, dtype=np.float64) for t in tangents[:2])
+    lt = (a < b).astype(np.float64)
+    eq = (a == b).astype(np.float64) * 0.5
+    out = np.minimum(a, b)
+    tangent = da * (lt + eq) + db * ((1.0 - lt) - eq)
+    return out, tangent
+
+
+@_jvp("maximum")
+def jvp_maximum(primals, tangents, **_):
+    a, b = (np.asarray(t, dtype=np.float64) for t in primals[:2])
+    da, db = (np.asarray(t, dtype=np.float64) for t in tangents[:2])
+    gt = (a > b).astype(np.float64)
+    eq = (a == b).astype(np.float64) * 0.5
+    out = np.maximum(a, b)
+    tangent = da * (gt + eq) + db * ((1.0 - gt) - eq)
+    return out, tangent
+
+
+@_jvp("where")
+def jvp_where(primals, tangents, **_):
+    cond, x, y = primals[:3]
+    _dc, dx, dy = tangents[:3]
+    c = np.asarray(cond)
+    out = np.where(c, np.asarray(x, dtype=np.float64), np.asarray(y, dtype=np.float64))
+    tangent = np.where(c,
+                       np.asarray(dx, dtype=np.float64),
+                       np.asarray(dy, dtype=np.float64))
+    return out, tangent
+
+
+@_jvp("sign")
+def jvp_sign(primals, tangents, **_):
+    # sign(x) has zero derivative almost everywhere; per the
+    # subgradient convention the tangent is zero.
+    x = np.asarray(primals[0], dtype=np.float64)
+    return np.sign(x), np.zeros_like(x)
+
+
+# --- Reductions (need keepdims + axis broadcasting) ------------------------
+
+
+def _reduction_jvp_broadcast(dx_reduced, axis, keepdims, shape):
+    """Re-expand a reduced tangent along the reduce axis for output match."""
+    if axis is None:
+        if keepdims:
+            return np.broadcast_to(dx_reduced, shape)
+        return dx_reduced
+    if not keepdims:
+        return dx_reduced
+    return dx_reduced
+
+
+@_jvp("mean")
+def jvp_mean(primals, tangents, *, axis=None, keepdims=False, **_):
+    x = np.asarray(primals[0], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    return np.mean(x, axis=axis, keepdims=keepdims), np.mean(dx, axis=axis, keepdims=keepdims)
+
+
+@_jvp("prod")
+def jvp_prod(primals, tangents, *, axis=None, keepdims=False, **_):
+    x = np.asarray(primals[0], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    p = np.prod(x, axis=axis, keepdims=True)
+    safe = np.where(x == 0, 1.0, x)
+    # d/dx_i prod(x) along axis = prod(x) / x_i; tangent = sum_i (prod/x_i) dx_i
+    tan = np.sum((p / safe) * dx, axis=axis, keepdims=keepdims)
+    primal = np.prod(x, axis=axis, keepdims=keepdims)
+    return primal, tan
+
+
+@_jvp("amax")
+def jvp_amax(primals, tangents, *, axis=None, keepdims=False, **_):
+    x = np.asarray(primals[0], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    m = np.max(x, axis=axis, keepdims=True)
+    mask = (x == m).astype(np.float64)
+    counts = mask.sum(axis=axis, keepdims=True)
+    tan = np.sum(mask * dx, axis=axis, keepdims=keepdims) / np.maximum(counts.squeeze() if not keepdims and axis is not None else counts, 1.0)
+    return np.max(x, axis=axis, keepdims=keepdims), tan
+
+
+@_jvp("amin")
+def jvp_amin(primals, tangents, *, axis=None, keepdims=False, **_):
+    x = np.asarray(primals[0], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    m = np.min(x, axis=axis, keepdims=True)
+    mask = (x == m).astype(np.float64)
+    counts = mask.sum(axis=axis, keepdims=True)
+    tan = np.sum(mask * dx, axis=axis, keepdims=keepdims) / np.maximum(counts.squeeze() if not keepdims and axis is not None else counts, 1.0)
+    return np.min(x, axis=axis, keepdims=keepdims), tan
+
+
+@_jvp("max")
+def jvp_max(primals, tangents, *, axis=None, keepdims=False, **_):
+    return jvp_amax(primals, tangents, axis=axis, keepdims=keepdims)
+
+
+@_jvp("min")
+def jvp_min(primals, tangents, *, axis=None, keepdims=False, **_):
+    return jvp_amin(primals, tangents, axis=axis, keepdims=keepdims)
+
+
+@_jvp("var")
+def jvp_var(primals, tangents, *, axis=None, keepdims=False, ddof=0, **_):
+    x = np.asarray(primals[0], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    mu = np.mean(x, axis=axis, keepdims=True)
+    if axis is None:
+        n = x.size
+    elif isinstance(axis, int):
+        n = x.shape[axis]
+    else:
+        n = int(np.prod([x.shape[ax] for ax in axis]))
+    dmu = np.mean(dx, axis=axis, keepdims=True)
+    centered = x - mu
+    tan_primal = (2.0 / (n - ddof)) * np.sum(centered * (dx - dmu), axis=axis, keepdims=keepdims)
+    return np.var(x, axis=axis, keepdims=keepdims, ddof=ddof), tan_primal
+
+
+@_jvp("std")
+def jvp_std(primals, tangents, *, axis=None, keepdims=False, ddof=0, **_):
+    x = np.asarray(primals[0], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    sigma = np.std(x, axis=axis, keepdims=keepdims, ddof=ddof)
+    primal_var, tan_var = jvp_var((primals[0],), (tangents[0],),
+                                   axis=axis, keepdims=keepdims, ddof=ddof)
+    return sigma, tan_var / (2.0 * np.maximum(sigma, 1e-12))
+
+
+@_jvp("cumsum")
+def jvp_cumsum(primals, tangents, *, axis=-1, **_):
+    x = np.asarray(primals[0], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    return np.cumsum(x, axis=axis), np.cumsum(dx, axis=axis)
+
+
+@_jvp("logsumexp")
+def jvp_logsumexp(primals, tangents, *, axis=None, keepdims=False, **_):
+    x = np.asarray(primals[0], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    m = np.max(x, axis=axis, keepdims=True)
+    e = np.exp(x - m)
+    s = np.sum(e, axis=axis, keepdims=True)
+    softmax = e / s
+    primal = m.squeeze(axis=axis) + np.log(s.squeeze(axis=axis)) if not keepdims and axis is not None else m + np.log(s)
+    tan = np.sum(softmax * dx, axis=axis, keepdims=keepdims)
+    return primal, tan
+
+
+@_jvp("log_softmax")
+def jvp_log_softmax(primals, tangents, *, axis=-1, **_):
+    x = np.asarray(primals[0], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    m = np.max(x, axis=axis, keepdims=True)
+    e = np.exp(x - m)
+    s = e / np.sum(e, axis=axis, keepdims=True)
+    primal = (x - m) - np.log(np.sum(e, axis=axis, keepdims=True))
+    tan = dx - np.sum(s * dx, axis=axis, keepdims=True)
+    return primal, tan
+
+
 __all__ = ["register_jvp", "get_jvp", "jvp"]

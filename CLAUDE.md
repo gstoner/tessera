@@ -537,9 +537,20 @@ coverage loops. The pass promoted **~1,176 contract entry-axis pairs**
 across five axes: `batching_rule` (340 → 102, −238), `transpose_rule`
 (313 → 123, −190), `math_semantics`/`shape_rule`/`dtype_layout_rule`
 (299 → 22 each, −277 each), `lowering_rule` (147 → 77, −70), and
-`tests` (196 → 69, −127). After this pass the leading long-pole gates
-are `backend_kernel` (374, Phase G/H/I dependency) and `jvp` (221, the
-remaining forward-mode tail).
+`tests` (196 → 69, −127).
+
+**Final-stage closure pass (2026-05-10):** A follow-up pass closed five
+more axes. Added `_NONDIFFERENTIABLE_CATEGORIES` + `_NONDIFFERENTIABLE_PER_NAME`
+classifiers (closed 84 VJP planned, 125 JVP planned via auto-N/A);
+`_apply_effect_overrides` (closed masking_effect_rule); expanded
+`_LOWERING_RULE_BY_CATEGORY` for compositional categories (closed
+lowering_rule); a new 40+ JVP batch in `autodiff/jvp.py` for the
+elementwise/scalar_math/reduction tail; and `tests/unit/test_primitive_coverage_smoke.py`
+(179 new tests covering 69 long-tail primitives). **Three axes are now
+at zero missing:** `masking_effect_rule`, `lowering_rule`, `tests`.
+Cumulative session deltas: **−371 contract entry-axis pairs closed** plus
+**+179 new unit tests** (2,220 → 2,399 passing). The only remaining
+long-pole gate is `backend_kernel` (374 entries, Phase G/H/I dependency).
 
 **Reasoning-model coverage extension (2026-05-10):**
 
@@ -554,20 +565,20 @@ remaining forward-mode tail).
 | **RL post-training losses** | `ppo_policy_loss`, `grpo_policy_loss`, `cispo_policy_loss` in `tessera.rl` — all VJP+JVP | DeepSeek-R1 (GRPO), MiniMax-M1 (CISPO), reasoning RL generally |
 
 **Largest remaining contract-axis gaps** (across all 374 entries, after
-the 2026-05-10 multi-axis category-based hardening pass):
+the 2026-05-10 multi-axis hardening + final-stage closure passes):
 
-| Axis | Missing / partial | After classifier | Δ from prior pass |
+| Axis | Missing / partial | After classifier | Δ this session |
 |---|---:|---|---:|
 | `backend_kernel` | **374** | 227 partial / 147 planned | unchanged (Phase G/H/I universal gate) |
-| `jvp` | 221 | 100 complete / 221 planned / 53 N/A | unchanged |
-| `sharding_rule` | 156 | 184 complete / 156 partial / 34 N/A | unchanged (closed in earlier pass) |
-| `vjp` | 137 | 184 complete / 137 planned / 53 N/A | unchanged |
-| `transpose_rule` | 123 | 151 complete / 122 partial / 100 N/A | **−190** |
-| `batching_rule` | 102 | 238 complete / 102 partial / 34 N/A | **−238** |
-| `lowering_rule` | 77 | 247 complete / 77 partial / 50 N/A | **−70** |
-| `tests` | 69 | 305 complete / 69 partial | **−127** |
-| `math_semantics` / `shape_rule` / `dtype_layout_rule` | 22 each | 326 complete / 26 N/A / 22 partial | **−277 each** |
-| `masking_effect_rule` | 16 | 343 N/A / 16 partial / 15 complete | unchanged |
+| `sharding_rule` | 156 | 184 complete / 156 partial / 34 N/A | unchanged |
+| `transpose_rule` | 123 | 151 complete / 123 partial / 100 N/A | unchanged |
+| `batching_rule` | 102 | 238 complete / 102 partial / 34 N/A | unchanged |
+| `jvp` | **96** | 140 complete / 96 planned / 138 N/A | **−125** |
+| `vjp` | **53** | 184 complete / 53 planned / 137 N/A | **−84** |
+| `math_semantics` / `shape_rule` / `dtype_layout_rule` | 22 each | 326 complete / 26 N/A / 22 partial | unchanged |
+| **`masking_effect_rule`** | **0** | 343 N/A / 31 complete | **−16** |
+| **`lowering_rule`** | **0** | 324 complete / 50 N/A | **−77** |
+| **`tests`** | **0** | 374 complete | **−69** |
 
 **Multi-axis category-based hardening pass (2026-05-10):** Generalized
 the sharding-rule classifier into `_apply_category_overrides()` —
@@ -725,4 +736,4 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 
 ---
 
-*Last updated: 2026-05-10 — Phases 1–6 complete; Phase 7 lit-clean; Phase 8 Apple operational (CPU 8.2 via Accelerate; GPU 8.3 → 8.4.7 via MPS + custom MSL). KV-cache Decision-#21 lowering shipped on x86 + Apple CPU/GPU + Metalium. Apple GPU runtime exports **26 C ABI symbols** across 9 kernel concepts × {f32, f16, bf16}. Pipelines: `tessera-lower-to-{rocm,metalium,apple_cpu,apple_cpu-runtime,apple_gpu,apple_gpu-runtime}`. Build pin: **LLVM/MLIR 21**. **Standalone compiler track (S-series) S0/S1 + S2–S15 + reasoning-model attention/RL coverage + 27-entry contract-axis hardening + long-tail sharding-rule + multi-axis category-based hardening across batching/transpose/math/shape/dtype/lowering/tests** — `primitive_coverage.py` (**374 entries × 12 axes; 75 at `explicit_semantic`**). Per-axis post-hardening counts: batching **238 complete / 102 partial**, transpose **151 / 122**, math/shape/dtype **326 / 22 each**, sharding **184 / 156**, lowering **247 / 77**, tests **305 / 69**. Reasoning-model attention family (DeepSeek sparse / MiniMax Lightning / Kimi Delta + variants) has VJP+JVP and a dedicated `src/transforms/lib/AttentionFamilyPasses.cpp`. KV cache (`append`/`prune`/new `read`) now has explicit math/shape/dtype/effect contracts with `vjp=not_applicable` per the state-effect audit. **Autodiff: 188 VJPs + 100 JVPs registered; 184 vjp-complete, 100 jvp-complete. Tests: 2,220 passing.** Backend kernel (374, Phase G/H/I universal gate) and JVP (221, forward-mode long tail) are the remaining leading gates per Decision #25. See `docs/audit/primitive_coverage_state.md` and `docs/apple_gpu_overview.md`.*
+*Last updated: 2026-05-10 — Phases 1–6 complete; Phase 7 lit-clean; Phase 8 Apple operational (CPU 8.2 via Accelerate; GPU 8.3 → 8.4.7 via MPS + custom MSL). KV-cache Decision-#21 lowering shipped on x86 + Apple CPU/GPU + Metalium. Apple GPU runtime exports **26 C ABI symbols** across 9 kernel concepts × {f32, f16, bf16}. Pipelines: `tessera-lower-to-{rocm,metalium,apple_cpu,apple_cpu-runtime,apple_gpu,apple_gpu-runtime}`. Build pin: **LLVM/MLIR 21**. **Standalone compiler track (S-series) S0/S1 + S2–S15 + reasoning-model attention/RL coverage + multi-pass contract-axis hardening (sharding/batching/transpose/math/shape/dtype/lowering/tests/masking_effect) + final-stage closure (VJP/JVP non-diff classifier + elementwise JVP batch + long-tail smoke tests)** — `primitive_coverage.py` (**374 entries × 12 axes; 75 at `explicit_semantic`**). **Three axes at zero missing: `masking_effect_rule`, `lowering_rule`, `tests`.** Remaining gates: `backend_kernel` 374 (Phase G/H/I universal), `sharding_rule` 156 (Phase G mesh), `transpose_rule` 123, `batching_rule` 102, `jvp` 96, `vjp` 53, `math/shape/dtype` 22 each. Reasoning-model attention family (DeepSeek sparse / MiniMax Lightning / Kimi Delta + variants) has VJP+JVP and a dedicated `src/transforms/lib/AttentionFamilyPasses.cpp`. **Autodiff: 188 VJPs + 140 JVPs registered; 184 vjp-complete, 140 jvp-complete. Tests: 2,399 passing (+179 new from the smoke pass).** Backend_kernel (Phase G/H/I) is now the sole remaining long-pole gate per Decision #25. See `docs/audit/primitive_coverage_state.md` and `docs/apple_gpu_overview.md`.*

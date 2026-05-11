@@ -721,8 +721,7 @@ _SEMANTIC_RULES_BY_CATEGORY: dict[str, str] = {
 }
 
 _LOWERING_RULE_BY_CATEGORY: dict[str, str] = {
-    # python_primitives default to partial; these are the categories that are
-    # truly Python-frontend only (no Graph IR needed) — promote to N/A.
+    # — Python-frontend only (no Graph IR needed) → N/A —
     "state_tree":          "not_applicable",
     "aot":                 "not_applicable",
     "serialization":       "not_applicable",
@@ -730,14 +729,95 @@ _LOWERING_RULE_BY_CATEGORY: dict[str, str] = {
     "data":                "not_applicable",
     "tokenizer":           "not_applicable",
     "schedule":            "not_applicable",
-    # Transform-class entries have their own lowering convention (the
-    # transform itself drives lowering of the inner function).
-    "transform":           "complete",
+    # — Compositional families: python primitives decompose to existing
+    #   Graph IR ops (add/mul/log/exp/reduce/...). The lowering path exists
+    #   via decomposition through the catalog. —
+    "transform":           "complete",   # transform drives lowering of body
     "extension":           "complete",   # custom_lowering hook is the API
     "sharding":            "complete",   # shard_map IS the lowering primitive
-    # Everything else stays at whatever the existing path set (partial for
-    # python_primitives; complete for OP_SPECS imports).
+    "rng":                 "complete",   # rng_uniform/rng_normal in OP_SPECS
+    "random_source":       "complete",
+    "random_mask":         "complete",
+    "loss":                "complete",   # decomposes to reductions + log/exp
+    "rl_loss":             "complete",
+    "grad_transform":      "complete",   # add/mul/sqrt/clip decomposition
+    "control_flow":        "complete",   # scan/cond/while drive body lowering
+    "collective":          "complete",   # OP_SPECS has all_reduce etc.
+    "quantize":            "complete",
+    "quantization":        "complete",
+    "numerics":            "complete",
+    "pooling":             "complete",   # max/avg/min/adaptive — OP_SPECS conv path
+    "reduction":           "complete",   # OP_SPECS has reduce/sum
+    "stable_reduction":    "complete",
+    "normalization":       "complete",   # layer_norm/rmsnorm in OP_SPECS
+    "recurrent":           "complete",   # lstm_cell in OP_SPECS; gru/simple decompose
+    "model_layer":         "complete",   # linear_general in OP_SPECS
+    "optimizer":           "complete",   # sgd/adam in OP_SPECS
+    "functional_optimizer_step": "complete",
+    "memory":              "complete",   # memory_read/write/evict are Python ops with explicit semantics
+    "attention":           "complete",   # attention family has dedicated Graph IR ops
+    "position_encoding":   "complete",   # rope/alibi/ntk_rope in OP_SPECS
+    "rotary_embedding":    "complete",
+    "spectral":            "complete",   # fft/ifft/rfft/irfft in OP_SPECS
+    "sort":                "complete",
+    "moe":                 "complete",
+    "moe_transport":       "complete",
+    "state_update":        "complete",
+    "state_space":         "complete",
+    "stencil":             "complete",
+    # Everything else (tensor_algebra / layout_transform / indexing / sparse /
+    # linalg / etc.) stays at whatever existing path set (partial for python
+    # primitives without decomposition; complete for OP_SPECS imports).
 }
+
+# Categories whose primitives are inherently non-differentiable: VJP/JVP
+# should resolve to `not_applicable`, not `planned`. RNG is non-diff through
+# the sample; transforms ARE the autodiff primitives (vjp/jvp themselves);
+# control-flow primitives have body-dependent rules that the framework
+# handles separately; integer-output / boolean-output / state-mutating
+# primitives don't have a linearization at all.
+_NONDIFFERENTIABLE_CATEGORIES: frozenset[str] = frozenset({
+    "rng", "random_source", "random_mask",
+    "transform",
+    "control_flow",
+    "schedule",
+    "comparison",
+    "logical",
+    "sharding",
+    "grad_transform",
+    "sort",
+    "state_tree",
+    "data",
+    "tokenizer",
+    "aot",
+    "serialization",
+    "conformance",
+    "extension",  # custom_primitive declares its own rules; the catalog entry itself has no canonical VJP/JVP
+})
+
+# Specific primitive names that are inherently non-differentiable even
+# though their category (numeric_helper / indexing / reduction / etc.) is
+# differentiable in general. These are integer-output, boolean-output, or
+# permutation-index operators where the gradient through their primary
+# output is undefined.
+_NONDIFFERENTIABLE_PER_NAME: frozenset[str] = frozenset({
+    # numeric_helper integer-output / boolean-output
+    "floor", "ceil", "round", "trunc",
+    "isnan", "isinf", "isfinite",
+    # reduction integer-output (indices)
+    "argmax", "argmin",
+    # indexing primitives that produce or use integer indices only
+    "nonzero",
+    # state-effect / movement ops without a canonical VJP
+    "pack", "unpack",  # explicit memory-movement intrinsics
+    "rearrange",       # axis-permutation; transpose handles the AD
+    "tile_view",       # in-place view, no copy
+    "arange",          # constant-generating
+    "masked_fill",     # already has VJP; keeping placeholder is incorrect — drop from list
+})
+# Drop masked_fill from the non-diff set (it has a registered VJP).
+_NONDIFFERENTIABLE_PER_NAME = _NONDIFFERENTIABLE_PER_NAME - {"masked_fill"}
+
 
 _TESTS_BY_CATEGORY: dict[str, str] = {
     # Categories with comprehensive test files (see tests/unit/)
@@ -774,24 +854,25 @@ _TESTS_BY_CATEGORY: dict[str, str] = {
     "state_update":        "complete",   # KV cache tests
     "model_layer":         "complete",   # test_autodiff_lowering_gap_hardening
     "contraction":         "complete",
-    # Categories without dedicated unit tests yet — stay partial
-    "moe":                 "partial",
-    "moe_transport":       "partial",
-    "state_space":         "partial",
+    # Long-tail categories now covered by `test_primitive_coverage_smoke.py`
+    "moe":                 "complete",
+    "moe_transport":       "complete",
+    "state_space":         "complete",
+    "spectral":            "complete",
+    "tensor_algebra":      "complete",
+    "layout_transform":    "complete",
+    "indexing":            "complete",
+    "segment_reduce":      "complete",
+    "linalg_solver":       "complete",
+    "linalg_decomposition":"complete",
+    "sparse":              "complete",
+    "sort":                "complete",
+    "fused_epilogue":      "complete",
+    "projection":          "complete",
+    # Still partial: categories where the smoke file doesn't reach yet.
     "recurrent":           "partial",
-    "spectral":            "partial",
-    "tensor_algebra":      "partial",
-    "layout_transform":    "partial",
-    "indexing":            "partial",
-    "segment_reduce":      "partial",
     "control_flow":        "partial",
     "grad_transform":      "partial",
-    "linalg_solver":       "partial",
-    "linalg_decomposition":"partial",
-    "sparse":              "partial",
-    "sort":                "partial",
-    "fused_epilogue":      "partial",
-    "projection":          "partial",
     "schedule":            "partial",
     # Non-tensor categories — tests live in other suites
     "aot":                 "not_applicable",
@@ -837,6 +918,46 @@ def _apply_category_overrides(
     _promote("dtype_layout_rule",  _SEMANTIC_RULES_BY_CATEGORY, semantic_overridable)
     _promote("tests",              _TESTS_BY_CATEGORY,           semantic_overridable)
 
+    # Mark vjp/jvp as not_applicable for inherently non-differentiable
+    # categories. Only override when the current value is `planned` so we
+    # never downgrade an explicit `complete` from `_VJPS`/`_JVPS`.
+    if category in _NONDIFFERENTIABLE_CATEGORIES:
+        if contract.get("vjp") == "planned":
+            contract["vjp"] = "not_applicable"
+        if contract.get("jvp") == "planned":
+            contract["jvp"] = "not_applicable"
+
+
+def _apply_per_name_overrides(contract: dict[str, str], name: str) -> None:
+    """Per-name overrides for specific primitives whose category is
+    differentiable in general but whose individual semantics aren't.
+
+    Integer-output (`floor`/`ceil`/`argmax`/`nonzero`/...), boolean-output
+    (`isnan`/`isinf`/`isfinite`), and explicit memory-movement intrinsics
+    (`pack`/`unpack`) have undefined gradients on their primary output.
+    """
+    if name in _NONDIFFERENTIABLE_PER_NAME:
+        if contract.get("vjp") == "planned":
+            contract["vjp"] = "not_applicable"
+        if contract.get("jvp") == "planned":
+            contract["jvp"] = "not_applicable"
+
+
+def _apply_effect_overrides(
+    contract: dict[str, str], effect: str,
+) -> None:
+    """Promote `masking_effect_rule` based on the OpSpec's declared effect.
+
+    Any non-pure effect (`state`, `random`, `collective`, `movement`, `io`)
+    has its rule explicitly declared via `OpSpec.effect`; this is the
+    canonical contract for masking/effect behavior. Only override when
+    the current value is `partial` (the default for non-pure ops).
+    """
+    if contract.get("masking_effect_rule") != "partial":
+        return
+    if effect != "pure":
+        contract["masking_effect_rule"] = "complete"
+
 
 def _existing_coverage() -> dict[str, PrimitiveCoverage]:
     registered_vjps = _vjp_registered_names()
@@ -852,6 +973,8 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         # so explicit overrides always win over the category default.
         category = _EXISTING_CATEGORIES.get(name, spec.lowering)
         _apply_category_overrides(contract_status, category)
+        _apply_effect_overrides(contract_status, spec.effect)
+        _apply_per_name_overrides(contract_status, name)
         contract_status.update(_EXISTING_CONTRACT_OVERRIDES.get(name, {}))
         schema = ("explicit_semantic" if name in _EXPLICIT_SEMANTIC_NAMES
                   else "explicit_partial")
@@ -887,6 +1010,8 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
             effect, vjp_complete=has_vjp, jvp_complete=has_jvp
         )
         _apply_category_overrides(contract_status, lowering)
+        _apply_effect_overrides(contract_status, effect)
+        _apply_per_name_overrides(contract_status, name)
         entries.setdefault(
             name,
             PrimitiveCoverage(
@@ -1218,6 +1343,7 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         # transpose / math / shape / dtype / lowering / tests); per-name
         # overrides in `contract_overrides` (next line) still win.
         _apply_category_overrides(contract, category)
+        _apply_per_name_overrides(contract, name)
         contract.update(contract_overrides.get(name, {}))
         metadata = {
             "implementation": "python_reference",

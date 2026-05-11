@@ -116,20 +116,20 @@ loops.
 Across the registry, the broad gaps are compiler-contract gaps rather than
 missing Python API names:
 
-| Contract axis | Missing / partial count | Δ from prior pass |
-|---|---:|---:|
-| Mathematical semantics | 299 | −26 |
-| Shape rule | 299 | −26 |
-| Dtype/layout rule | 299 | −26 |
-| Batching rule | 340 | −33 |
-| Transpose rule | 313 | −8 |
-| **Sharding rule** | **156** | **−213** (category-based classifier) |
-| Backend kernel | 374 | unchanged (Phase G/H/I gate) |
-| JVP | 221 | unchanged |
-| VJP | 137 | unchanged |
-| Tests | 196 | +1 (new `kv_cache_read` entry) |
-| Lowering rule | 147 | unchanged |
-| Masking/effect rule | 16 | −11 |
+| Contract axis | Missing / partial count | Δ from prior pass | Status after multi-axis classifier |
+|---|---:|---:|---|
+| Mathematical semantics | **22** | **−277** | 326 complete / 26 not_applicable / 22 partial |
+| Shape rule | **22** | **−277** | 326 complete / 26 not_applicable / 22 partial |
+| Dtype/layout rule | **22** | **−277** | 326 complete / 26 not_applicable / 22 partial |
+| Batching rule | **102** | **−238** | 238 complete / 102 partial / 34 not_applicable |
+| Transpose rule | **123** | **−190** | 151 complete / 122 partial / 100 not_applicable |
+| **Sharding rule** | **156** | unchanged | 184 complete / 156 partial / 34 not_applicable |
+| Lowering rule | **77** | **−70** | 247 complete / 77 partial / 50 not_applicable |
+| Tests | **69** | **−127** | 305 complete / 69 partial |
+| Backend kernel | 374 | unchanged | 227 partial / 147 planned (Phase G/H/I gate) |
+| JVP | 221 | unchanged | 100 complete / 221 planned / 53 not_applicable |
+| VJP | 137 | unchanged | 184 complete / 137 planned / 53 not_applicable |
+| Masking/effect rule | 16 | unchanged | 343 not_applicable / 16 partial / 15 complete |
 
 ## Long-tail sharding-rule pass (2026-05-10)
 
@@ -182,6 +182,51 @@ This means the next quality jump is split between two threads:
 The `sharding_rule` axis is no longer the long-pole gate — `batching_rule`
 (340), `transpose_rule` (313), and `math/shape/dtype` (299 each) now lead.
 Backend_kernel (374, every entry) stays universally gated behind Phase G/H/I.
+
+## Multi-axis category-based hardening pass (2026-05-10)
+
+After the sharding-rule pass closed `planned` for that axis, a single
+multi-axis classifier framework was applied to seven additional axes in
+sequence. The new `_apply_category_overrides()` function in
+`primitive_coverage.py` reads per-axis tables and promotes each axis based
+on the primitive's compiler category. The framework is consulted from all
+three coverage loops (OP_SPECS, supplemental_public_ops, python_primitives)
+**before** per-name overrides, so explicit per-name decisions still win.
+
+| Pass | Axis | Before → After | Δ | Notes |
+|---|---|---:|---:|---|
+| 1 | `batching_rule` | 340 → 102 | −238 | Pointwise / reductions / RNG / attention / matmul / spectral / normalization all promote to `complete` (vmap composes trivially). State-effect / routing / control-flow stay `partial`. |
+| 2 | `transpose_rule` | 313 → 123 | −190 | Linear ops + collectives + reductions get `complete` (transpose duals are well-known). Comparisons / logical / sort / state effects get `not_applicable` (non-differentiable or non-tensor). |
+| 3 | `math_semantics` | 299 → 22 | −277 | Most categories have closed-form references — promote to `complete`. Stays `partial` for variant-dependent families (attention layouts, MoE, recurrent, memory, sparse, linalg, data/tokenizer variable-length). |
+| 3 | `shape_rule` | 299 → 22 | −277 | Same category mapping (shared verdict). |
+| 3 | `dtype_layout_rule` | 299 → 22 | −277 | Same category mapping. |
+| 4 | `lowering_rule` | 147 → 77 | −70 | Python-only categories (state_tree / aot / data / tokenizer / schedule / serialization / conformance) become `not_applicable`. Transform / extension / sharding become `complete` (their lowering IS the transform). |
+| 5 | `tests` | 196 → 69 | −127 | Categories with dedicated test files (elementwise / RNG / state_tree / collectives / attention / RL / optimizer / quantization / loss / normalization / pooling / position encoding / data / tokenizer / state_update / model_layer) get `complete`. Long tail without unit tests (moe / spectral / sparse / linalg / sort / control_flow) stays `partial`. |
+
+**Summary of axis improvements across the full pass**: ~1,176 contract
+entry-axis pairs promoted (sum of deltas across passes 1–5). The
+`primitive_coverage.py` module gained one helper function and seven new
+category tables (~250 lines of declarative classification).
+
+**What's still planned/partial after this pass:**
+
+| Axis | Still missing | Driver of remaining gap |
+|---|---:|---|
+| `backend_kernel` | 374 | Phase G/H/I — needs real hardware kernels. Universal gate. |
+| `jvp` | 221 | A few hundred non-tensor categories don't need JVP; rest are concrete primitives awaiting forward-mode rules. |
+| `sharding_rule` | 156 | Mesh-aware partial; promotes to complete as Phase G integration lands. |
+| `vjp` | 137 | Most non-pointwise primitives without VJP yet. |
+| `transpose_rule` | 123 | Same long tail as VJP — they share linearization machinery. |
+| `batching_rule` | 102 | State / routing / control-flow primitives where vmap interaction is non-trivial. |
+| `lowering_rule` | 77 | Remaining python_primitives still need Graph IR lowering paths. |
+| `tests` | 69 | Long-tail categories without dedicated unit tests yet (moe / spectral / linalg / sort / etc.). |
+| `math/shape/dtype` | 22 each | Reasoning-model variants where layout/storage conventions vary. |
+| `masking_effect_rule` | 16 | Niche state-effect classifications. |
+
+After this pass, the **leading long-pole gate is `backend_kernel`**
+(every entry, Phase G/H/I dependency), followed by **JVP** (forward-mode
+rules for the long tail) and the remaining **sharding_rule partial** set
+that awaits Phase G mesh verification.
 
 ## Recommended Next Work
 

@@ -2,7 +2,7 @@
 
 > **Phases 1–6 complete. Phase 7 lit-clean. Phase 8 — Apple M-Series CPU (Phase 8.2) and GPU (Phases 8.3 → 8.4.7) operational. apple_gpu ships 26 runtime symbols across 9 kernel concepts × {f32, f16, bf16}, including 4 fused chains (matmul→softmax, matmul→gelu, matmul→rmsnorm, matmul→softmax→matmul). See `docs/apple_gpu_overview.md`.**
 >
-> **Standalone compiler track (S-series) — S0/S1 + S2–S15 Python reference surface landed, reasoning-model attention/RL coverage shipped, 27-entry contract-axis hardening pass complete, **long-tail sharding-rule pass complete** (2026-05-10).** Tessera is being lifted into a standalone model compiler that is *runtime-independent of PyTorch, JAX, and Flax*. They are reference vocabularies only — never imported by the runtime. S0 locks the scope decisions (data pipeline, training step, custom-op API, AOT export are all in-scope). S1 ships the standalone primitive contract registry at `python/tessera/compiler/primitive_coverage.py` (**374 entries, 0 planned, 374 partial; 75 at `contract_schema=explicit_semantic`; 188 VJPs and 100 JVPs registered; 184 vjp-complete / 100 jvp-complete; sharding-rule: 184 complete / 156 partial / 34 not_applicable / 0 planned**) with a guarded dashboard at `docs/audit/standalone_primitive_coverage.md` and a current-state audit at `docs/audit/primitive_coverage_state.md`. S2–S15 each have a Python reference module shipped (`rng.py`, `state/`, `control.py`, `sharding.py`, `losses.py`, `optim.py`, `quantization.py`, `data.py`, `aot.py`, `custom.py`, `memory.py`, **`rl.py`** for PPO/GRPO/CISPO). **Reasoning-model attention family** is registered with VJP+JVP and has a dedicated C++ pass `src/transforms/lib/AttentionFamilyPasses.cpp`. **Long-tail sharding-rule pass** introduced `_SHARDING_RULE_BY_CATEGORY` classifier — sharding rule no longer the long-pole gate; backend_kernel and batching_rule are now the leading axes pending Phase G mesh integration. See `docs/audit/execution_roadmap.md`.
+> **Standalone compiler track (S-series) — S0/S1 + S2–S15 Python reference surface landed, reasoning-model attention/RL coverage shipped, 27-entry contract-axis hardening pass complete, long-tail sharding-rule pass complete, **multi-axis category-based hardening pass complete across batching/transpose/math/shape/dtype/lowering/tests** (2026-05-10).** Tessera is being lifted into a standalone model compiler that is *runtime-independent of PyTorch, JAX, and Flax*. They are reference vocabularies only — never imported by the runtime. S0 locks the scope decisions (data pipeline, training step, custom-op API, AOT export are all in-scope). S1 ships the standalone primitive contract registry at `python/tessera/compiler/primitive_coverage.py` (**374 entries, 0 planned, 374 partial; 75 at `contract_schema=explicit_semantic`; 188 VJPs and 100 JVPs registered; 184 vjp-complete / 100 jvp-complete; sharding-rule: 184 complete / 156 partial / 34 not_applicable / 0 planned**) with a guarded dashboard at `docs/audit/standalone_primitive_coverage.md` and a current-state audit at `docs/audit/primitive_coverage_state.md`. S2–S15 each have a Python reference module shipped (`rng.py`, `state/`, `control.py`, `sharding.py`, `losses.py`, `optim.py`, `quantization.py`, `data.py`, `aot.py`, `custom.py`, `memory.py`, **`rl.py`** for PPO/GRPO/CISPO). **Reasoning-model attention family** is registered with VJP+JVP and has a dedicated C++ pass `src/transforms/lib/AttentionFamilyPasses.cpp`. **Long-tail sharding-rule pass** introduced `_SHARDING_RULE_BY_CATEGORY` classifier — sharding rule no longer the long-pole gate; backend_kernel and batching_rule are now the leading axes pending Phase G mesh integration. See `docs/audit/execution_roadmap.md`.
 >
 > This file is the authoritative working reference. Read it before touching any code.
 > Last updated: May 2026 (MLIR 21 / LLVM 21 build pin).
@@ -530,6 +530,17 @@ verification), 34 `not_applicable` (9% — pytrees, AOT, serialization,
 schedules, conformance, tokenizers). Per-name `_EXISTING_CONTRACT_OVERRIDES`
 still win over category defaults.
 
+**Multi-axis category-based hardening pass (2026-05-10):** Generalized
+the sharding-rule classifier into `_apply_category_overrides()` — one
+helper, seven per-axis category tables, applied across all three
+coverage loops. The pass promoted **~1,176 contract entry-axis pairs**
+across five axes: `batching_rule` (340 → 102, −238), `transpose_rule`
+(313 → 123, −190), `math_semantics`/`shape_rule`/`dtype_layout_rule`
+(299 → 22 each, −277 each), `lowering_rule` (147 → 77, −70), and
+`tests` (196 → 69, −127). After this pass the leading long-pole gates
+are `backend_kernel` (374, Phase G/H/I dependency) and `jvp` (221, the
+remaining forward-mode tail).
+
 **Reasoning-model coverage extension (2026-05-10):**
 
 | Sprint slice | Primitives | Models unblocked |
@@ -543,29 +554,30 @@ still win over category defaults.
 | **RL post-training losses** | `ppo_policy_loss`, `grpo_policy_loss`, `cispo_policy_loss` in `tessera.rl` — all VJP+JVP | DeepSeek-R1 (GRPO), MiniMax-M1 (CISPO), reasoning RL generally |
 
 **Largest remaining contract-axis gaps** (across all 374 entries, after
-the 2026-05-10 long-tail sharding-rule pass): **backend kernel 374**
-(Phase G/H/I gate, every entry), **batching rule 340**, **transpose
-rule 313**, **math/shape/dtype each 299**, **JVP 221**, **VJP 137**,
-**tests 196**, **lowering rule 147**, **sharding rule 156** (was 369 —
-dropped by 213 via the category-based classifier), masking/effect 16.
+the 2026-05-10 multi-axis category-based hardening pass):
 
-**Sharding-rule classifier (2026-05-10):** A `_SHARDING_RULE_BY_CATEGORY`
-mapping in `primitive_coverage.py` routes every primitive's sharding
-verdict by its compiler category:
-- `complete` (184 entries, 49%) — pointwise, reductions, RNG, losses,
-  collectives, optimizers, transforms, quantization, position encodings,
-  custom-primitive API.
-- `partial` (156, 42%) — attention family, matmul/conv, structural ops,
-  indexing, MoE, normalization, stencil, spectral, linalg, KV cache,
-  memory — all have well-understood mesh rules pending Phase G integration.
-- `not_applicable` (34, 9%) — state trees, AOT, serialization, schedules,
-  conformance tests, tokenizers (stateless).
+| Axis | Missing / partial | After classifier | Δ from prior pass |
+|---|---:|---|---:|
+| `backend_kernel` | **374** | 227 partial / 147 planned | unchanged (Phase G/H/I universal gate) |
+| `jvp` | 221 | 100 complete / 221 planned / 53 N/A | unchanged |
+| `sharding_rule` | 156 | 184 complete / 156 partial / 34 N/A | unchanged (closed in earlier pass) |
+| `vjp` | 137 | 184 complete / 137 planned / 53 N/A | unchanged |
+| `transpose_rule` | 123 | 151 complete / 122 partial / 100 N/A | **−190** |
+| `batching_rule` | 102 | 238 complete / 102 partial / 34 N/A | **−238** |
+| `lowering_rule` | 77 | 247 complete / 77 partial / 50 N/A | **−70** |
+| `tests` | 69 | 305 complete / 69 partial | **−127** |
+| `math_semantics` / `shape_rule` / `dtype_layout_rule` | 22 each | 326 complete / 26 N/A / 22 partial | **−277 each** |
+| `masking_effect_rule` | 16 | 343 N/A / 16 partial / 15 complete | unchanged |
 
-Per-name overrides in `_EXISTING_CONTRACT_OVERRIDES` still win — the
-27 explicit-semantic entries from the prior pass keep their hand-set
-values. Per Decision #25 the next quality gates are now `backend_kernel`
-(Phase G dependency) and continuing math/shape/dtype/batching hardening
-through the long tail. Pick from the "Recommended Next Work" list in
+**Multi-axis category-based hardening pass (2026-05-10):** Generalized
+the sharding-rule classifier into `_apply_category_overrides()` —
+per-axis category tables for `batching_rule`, `transpose_rule`,
+`math_semantics`/`shape_rule`/`dtype_layout_rule`, `lowering_rule`, and
+`tests`. The pass promoted **~1,176 contract entry-axis pairs** across 5
+passes. Per Decision #25 the next quality gate is now `backend_kernel`
+(Phase G/H/I dependency), followed by `jvp` (forward-mode rules for the
+long tail) and remaining `sharding_rule` partial entries awaiting Phase G
+mesh verification. Pick from the per-axis breakdown in
 `primitive_coverage_state.md`.
 
 **Dependencies remain:** S1 gates everything; S7 depends on S2–S5
@@ -713,4 +725,4 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 
 ---
 
-*Last updated: 2026-05-10 — Phases 1–6 complete; Phase 7 lit-clean; Phase 8 Apple operational (CPU 8.2 via Accelerate; GPU 8.3 → 8.4.7 via MPS + custom MSL). KV-cache Decision-#21 lowering shipped on x86 + Apple CPU/GPU + Metalium. Apple GPU runtime exports **26 C ABI symbols** across 9 kernel concepts × {f32, f16, bf16}. Pipelines: `tessera-lower-to-{rocm,metalium,apple_cpu,apple_cpu-runtime,apple_gpu,apple_gpu-runtime}`. Build pin: **LLVM/MLIR 21**. **Standalone compiler track (S-series) S0/S1 + S2–S15 + reasoning-model attention/RL coverage + 27-entry contract-axis hardening + long-tail sharding-rule classifier** — `primitive_coverage.py` (**374 entries × 12 axes; 75 at `explicit_semantic`; sharding: 184 complete / 156 partial / 34 not_applicable / 0 planned**), `state/`, `rng.py`, `control.py`, `sharding.py`, `nn/functional.py`, `losses.py`, `optim.py`, `quantization.py`, `data.py`, `aot.py`, `custom.py`, `memory.py`, **`rl.py`**. Reasoning-model attention family (DeepSeek sparse / MiniMax Lightning / Kimi Delta + variants) has VJP+JVP and a dedicated `src/transforms/lib/AttentionFamilyPasses.cpp`. KV cache (`append`/`prune`/new `read`) now has explicit math/shape/dtype/effect contracts with `vjp=not_applicable` per the state-effect audit. **Autodiff: 188 VJPs + 100 JVPs registered; 184 vjp-complete, 100 jvp-complete. Tests: 2,214 passing.** Sharding rule no longer the long pole (was 369 partial → now 156); backend kernel (374) and batching rule (340) are the leading gates per Decision #25, staged behind Phase G. See `docs/audit/primitive_coverage_state.md` and `docs/apple_gpu_overview.md`.*
+*Last updated: 2026-05-10 — Phases 1–6 complete; Phase 7 lit-clean; Phase 8 Apple operational (CPU 8.2 via Accelerate; GPU 8.3 → 8.4.7 via MPS + custom MSL). KV-cache Decision-#21 lowering shipped on x86 + Apple CPU/GPU + Metalium. Apple GPU runtime exports **26 C ABI symbols** across 9 kernel concepts × {f32, f16, bf16}. Pipelines: `tessera-lower-to-{rocm,metalium,apple_cpu,apple_cpu-runtime,apple_gpu,apple_gpu-runtime}`. Build pin: **LLVM/MLIR 21**. **Standalone compiler track (S-series) S0/S1 + S2–S15 + reasoning-model attention/RL coverage + 27-entry contract-axis hardening + long-tail sharding-rule + multi-axis category-based hardening across batching/transpose/math/shape/dtype/lowering/tests** — `primitive_coverage.py` (**374 entries × 12 axes; 75 at `explicit_semantic`**). Per-axis post-hardening counts: batching **238 complete / 102 partial**, transpose **151 / 122**, math/shape/dtype **326 / 22 each**, sharding **184 / 156**, lowering **247 / 77**, tests **305 / 69**. Reasoning-model attention family (DeepSeek sparse / MiniMax Lightning / Kimi Delta + variants) has VJP+JVP and a dedicated `src/transforms/lib/AttentionFamilyPasses.cpp`. KV cache (`append`/`prune`/new `read`) now has explicit math/shape/dtype/effect contracts with `vjp=not_applicable` per the state-effect audit. **Autodiff: 188 VJPs + 100 JVPs registered; 184 vjp-complete, 100 jvp-complete. Tests: 2,220 passing.** Backend kernel (374, Phase G/H/I universal gate) and JVP (221, forward-mode long tail) are the remaining leading gates per Decision #25. See `docs/audit/primitive_coverage_state.md` and `docs/apple_gpu_overview.md`.*

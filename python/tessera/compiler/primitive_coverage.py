@@ -514,6 +514,330 @@ def _sharding_rule_for_category(category: str | None, current: str) -> str:
     return _SHARDING_RULE_BY_CATEGORY.get(category, current)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-axis category-based hardening (Decision #25, 2026-05-10).
+#
+# Five additional axes get the same category-based treatment as sharding_rule:
+#   - batching_rule       — `vmap` composition
+#   - transpose_rule      — reverse-mode linear-transpose dual
+#   - math_semantics      — mathematical definition is documented
+#   - shape_rule          — shape transformation is deterministic
+#   - dtype_layout_rule   — dtype/layout policy is explicit
+#   - lowering_rule       — Graph IR / Tile IR / Target IR lowering exists
+#   - tests               — primitive has a dedicated test file
+#
+# Each table is a category → status mapping. The shared overrider function
+# only promotes axes whose current value is still in `overridable_from`.
+# This guards against downgrading explicit per-name overrides set elsewhere.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
+    # — Trivially batches over any added vmap axis —
+    "elementwise":         "complete",
+    "scalar_math":         "complete",
+    "numeric_helper":      "complete",
+    "comparison":          "complete",
+    "logical":             "complete",
+    "rotary_embedding":    "complete",
+    "position_encoding":   "complete",
+    "reduction":           "complete",   # batched reduction is reduction over orig axes
+    "stable_reduction":    "complete",
+    "rng":                 "complete",   # per-batch key via fold_in
+    "random_source":       "complete",
+    "random_mask":         "complete",
+    "loss":                "complete",
+    "rl_loss":             "complete",
+    "quantize":            "complete",   # per-tensor scaling, trivial
+    "quantization":        "complete",
+    "numerics":            "complete",
+    "transform":           "complete",   # transforms compose
+    "extension":           "complete",   # custom_batching hook is the API
+    "sharding":            "complete",   # shard_map under vmap is well-defined
+    # — Linear-algebra friends: batched matmul is the canonical vmap form —
+    "loop_nest":           "complete",
+    "model_layer":         "complete",
+    "contraction":         "complete",
+    "projection":          "complete",
+    "fused_epilogue":      "complete",
+    "attention":           "complete",   # all attention variants batch on B
+    "spectral":            "complete",   # FFT batches along leading dims
+    "normalization":       "complete",   # per-sample independent
+    "pooling":             "complete",
+    "stencil":             "complete",   # spatial dims independent across batch
+    "sort":                "complete",   # sort along inner axis, batch outer
+    "grad_transform":      "complete",   # per-parameter
+    # — Trickier: state interactions / routing / control flow —
+    "collective":          "partial",    # batching over a collective is mesh-aware
+    "functional_optimizer_step": "partial",
+    "optimizer":           "partial",
+    "moe":                 "partial",
+    "moe_transport":       "partial",
+    "state_update":        "partial",    # kv_cache write per batch
+    "state_space":         "partial",
+    "recurrent":           "partial",
+    "tensor_algebra":      "partial",    # batched-axis semantics shift with reshape/permute
+    "layout_transform":    "partial",
+    "indexing":            "partial",
+    "segment_reduce":      "partial",
+    "control_flow":        "partial",    # scan body-dependent
+    "memory":              "partial",
+    "linalg_solver":       "partial",
+    "linalg_decomposition":"partial",
+    "sparse":              "partial",
+    # — Non-tensor categories —
+    "state_tree":          "not_applicable",
+    "schedule":            "not_applicable",
+    "aot":                 "not_applicable",
+    "serialization":       "not_applicable",
+    "conformance":         "not_applicable",
+}
+
+_TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
+    # — Differentiable elementwise: Jacobian is diagonal, transpose = same —
+    "elementwise":         "complete",
+    "scalar_math":         "complete",
+    "numeric_helper":      "complete",   # clamp/abs/sign/where have well-defined linearization
+    "rotary_embedding":    "complete",   # rotation inverse = rotation by -θ
+    "position_encoding":   "complete",
+    # — Linear ops: transpose dual is well-known —
+    "reduction":           "complete",   # sum^T = broadcast, mean^T = broadcast / n
+    "stable_reduction":    "complete",
+    "collective":          "complete",   # psum^T = broadcast_to_axis, etc.
+    "sharding":            "complete",   # shard_map's transpose = shard_map of transpose
+    "loop_nest":           "complete",   # matmul^T = matmul with swapped factors
+    "model_layer":         "complete",
+    "contraction":         "complete",
+    "projection":          "complete",
+    "fused_epilogue":      "complete",
+    "spectral":            "complete",   # FFT^T = conjugate-FFT
+    "normalization":       "complete",
+    "loss":                "complete",
+    "rl_loss":             "complete",
+    "transform":           "complete",
+    "extension":           "complete",   # custom_vjp/jvp wires the transpose hook
+    "numerics":            "complete",
+    # — Partial: well-known dual but mesh / structure-dependent —
+    "attention":           "partial",
+    "quantize":            "partial",    # STE transpose
+    "quantization":        "partial",
+    "moe":                 "partial",
+    "moe_transport":       "partial",
+    "recurrent":           "partial",
+    "stencil":             "partial",    # transpose-conv is well-defined but distinct shape
+    "pooling":             "partial",    # max-pool transpose = unpool-with-indices
+    "tensor_algebra":      "partial",    # reshape^T = reshape; permute^T = inv-permute
+    "layout_transform":    "partial",
+    "indexing":            "partial",    # gather^T = scatter
+    "segment_reduce":      "partial",
+    "control_flow":        "partial",
+    "memory":              "partial",
+    "grad_transform":      "partial",
+    "linalg_solver":       "partial",
+    "linalg_decomposition":"partial",
+    "sparse":              "partial",
+    "functional_optimizer_step": "partial",
+    "optimizer":           "partial",
+    # — Not applicable: non-differentiable / state-effect / integer-only —
+    "comparison":          "not_applicable",  # boolean output
+    "logical":             "not_applicable",
+    "rng":                 "not_applicable",  # RNG is not part of the linear-AD graph
+    "random_source":       "not_applicable",
+    "random_mask":         "not_applicable",
+    "state_update":        "not_applicable",
+    "state_space":         "not_applicable",
+    "sort":                "not_applicable",  # produces integer indices
+    "state_tree":          "not_applicable",
+    "schedule":            "not_applicable",
+    "aot":                 "not_applicable",
+    "serialization":       "not_applicable",
+    "conformance":         "not_applicable",
+    "data":                "not_applicable",
+    "tokenizer":           "not_applicable",
+}
+
+# Math semantics / shape rule / dtype-layout rule share the same verdict by
+# category — they're all "is the formal contract documented?" questions, and
+# most shipped primitives have closed-form references.
+_SEMANTIC_RULES_BY_CATEGORY: dict[str, str] = {
+    # Closed-form / documented — promote to complete
+    "elementwise":         "complete",
+    "scalar_math":         "complete",
+    "numeric_helper":      "complete",
+    "comparison":          "complete",
+    "logical":             "complete",
+    "reduction":           "complete",
+    "stable_reduction":    "complete",
+    "rng":                 "complete",
+    "random_source":       "complete",
+    "random_mask":         "complete",
+    "rotary_embedding":    "complete",
+    "position_encoding":   "complete",
+    "loss":                "complete",
+    "rl_loss":             "complete",
+    "collective":          "complete",
+    "sharding":            "complete",
+    "quantize":            "complete",
+    "quantization":        "complete",
+    "numerics":            "complete",
+    "functional_optimizer_step": "complete",
+    "optimizer":           "complete",
+    "transform":           "complete",
+    "extension":           "complete",
+    "loop_nest":           "complete",
+    "contraction":         "complete",
+    "projection":          "complete",
+    "fused_epilogue":      "complete",
+    "model_layer":         "complete",
+    "normalization":       "complete",
+    "pooling":             "complete",
+    "spectral":            "complete",
+    "tensor_algebra":      "complete",
+    "layout_transform":    "complete",
+    "indexing":            "complete",
+    "segment_reduce":      "complete",
+    "grad_transform":      "complete",
+    "sort":                "complete",
+    "stencil":             "complete",
+    "state_update":        "complete",
+    # Partial: variant-dependent or storage-format-dependent
+    "attention":           "partial",    # layout variants (NHD vs HND)
+    "moe":                 "partial",
+    "moe_transport":       "partial",
+    "state_space":         "partial",    # selective state has variants
+    "recurrent":           "partial",
+    "memory":              "partial",
+    "control_flow":        "partial",
+    "linalg_solver":       "partial",
+    "linalg_decomposition":"partial",
+    "sparse":              "partial",
+    # Non-tensor categories — math doesn't apply but shape/dtype usually do
+    "state_tree":          "not_applicable",
+    "data":                "partial",      # streaming surface; variable shapes
+    "tokenizer":           "partial",      # variable-length output
+    "aot":                 "not_applicable",
+    "serialization":       "not_applicable",
+    "conformance":         "not_applicable",
+    "schedule":            "complete",      # scalar functions of step
+}
+
+_LOWERING_RULE_BY_CATEGORY: dict[str, str] = {
+    # python_primitives default to partial; these are the categories that are
+    # truly Python-frontend only (no Graph IR needed) — promote to N/A.
+    "state_tree":          "not_applicable",
+    "aot":                 "not_applicable",
+    "serialization":       "not_applicable",
+    "conformance":         "not_applicable",
+    "data":                "not_applicable",
+    "tokenizer":           "not_applicable",
+    "schedule":            "not_applicable",
+    # Transform-class entries have their own lowering convention (the
+    # transform itself drives lowering of the inner function).
+    "transform":           "complete",
+    "extension":           "complete",   # custom_lowering hook is the API
+    "sharding":            "complete",   # shard_map IS the lowering primitive
+    # Everything else stays at whatever the existing path set (partial for
+    # python_primitives; complete for OP_SPECS imports).
+}
+
+_TESTS_BY_CATEGORY: dict[str, str] = {
+    # Categories with comprehensive test files (see tests/unit/)
+    "elementwise":         "complete",   # test_s2_primitives.py + test_autodiff_*
+    "scalar_math":         "complete",
+    "numeric_helper":      "complete",
+    "comparison":          "complete",
+    "logical":             "complete",
+    "reduction":           "complete",   # test_s2_primitives + test_sprint_*
+    "stable_reduction":    "complete",
+    "rng":                 "complete",   # test_rng_keys.py
+    "random_source":       "complete",
+    "random_mask":         "complete",
+    "rotary_embedding":    "complete",   # test_autodiff_loss_layer_coverage + test_reasoning_model_support
+    "position_encoding":   "complete",
+    "loss":                "complete",   # test_autodiff_loss_layer_coverage + test_deferred_vjps
+    "rl_loss":             "complete",   # test_reasoning_model_support
+    "collective":          "complete",   # test_sprint_collectives_optim_memory_cumextrema
+    "sharding":            "complete",
+    "quantize":            "complete",   # test_optimizer_mixed_precision_support
+    "quantization":        "complete",
+    "numerics":            "complete",
+    "functional_optimizer_step": "complete",  # test_optimizer_mixed_precision_support
+    "optimizer":           "complete",
+    "attention":           "complete",   # test_attention_family_support + test_autodiff_*
+    "transform":           "complete",
+    "extension":           "complete",
+    "loop_nest":           "complete",   # test_autodiff_lowering_gap_hardening
+    "memory":              "complete",   # test_sprint_collectives_optim_memory_cumextrema
+    "stencil":             "complete",   # test_conv1d_autodiff
+    "pooling":             "complete",   # test_autodiff_loss_layer_coverage
+    "normalization":       "complete",   # test_autodiff_loss_layer_coverage
+    "state_tree":          "complete",   # test_state_tree.py
+    "state_update":        "complete",   # KV cache tests
+    "model_layer":         "complete",   # test_autodiff_lowering_gap_hardening
+    "contraction":         "complete",
+    # Categories without dedicated unit tests yet — stay partial
+    "moe":                 "partial",
+    "moe_transport":       "partial",
+    "state_space":         "partial",
+    "recurrent":           "partial",
+    "spectral":            "partial",
+    "tensor_algebra":      "partial",
+    "layout_transform":    "partial",
+    "indexing":            "partial",
+    "segment_reduce":      "partial",
+    "control_flow":        "partial",
+    "grad_transform":      "partial",
+    "linalg_solver":       "partial",
+    "linalg_decomposition":"partial",
+    "sparse":              "partial",
+    "sort":                "partial",
+    "fused_epilogue":      "partial",
+    "projection":          "partial",
+    "schedule":            "partial",
+    # Non-tensor categories — tests live in other suites
+    "aot":                 "not_applicable",
+    "serialization":       "not_applicable",
+    "conformance":         "not_applicable",
+    "data":                "complete",       # test_data_pipeline.py (S15 surface)
+    "tokenizer":           "complete",
+}
+
+
+def _apply_category_overrides(
+    contract: dict[str, str], category: str | None,
+) -> None:
+    """In-place promote each axis based on `category` and per-axis tables.
+
+    Override rules per axis:
+      sharding_rule / batching_rule / transpose_rule / lowering_rule  →
+          only override if current ∈ {"planned"} (the unset default).
+      math_semantics / shape_rule / dtype_layout_rule / tests  →
+          also override if current ∈ {"partial"} since those start at partial.
+      Never downgrade `complete` or `not_applicable`.
+    """
+    if category is None:
+        return
+
+    def _promote(axis: str, table: dict[str, str], overridable: frozenset[str]) -> None:
+        if contract.get(axis) not in overridable:
+            return
+        v = table.get(category)
+        if v is None:
+            return
+        contract[axis] = v
+
+    # Planned-only axes (preserve any earlier partial/complete decision)
+    _promote("sharding_rule",  _SHARDING_RULE_BY_CATEGORY,  frozenset({"planned"}))
+    _promote("batching_rule",  _BATCHING_RULE_BY_CATEGORY,  frozenset({"planned"}))
+    _promote("transpose_rule", _TRANSPOSE_RULE_BY_CATEGORY, frozenset({"planned"}))
+    _promote("lowering_rule",  _LOWERING_RULE_BY_CATEGORY,  frozenset({"planned", "partial"}))
+    # Partial-and-planned axes (semantic axes start at partial by default)
+    semantic_overridable = frozenset({"planned", "partial"})
+    _promote("math_semantics",     _SEMANTIC_RULES_BY_CATEGORY, semantic_overridable)
+    _promote("shape_rule",         _SEMANTIC_RULES_BY_CATEGORY, semantic_overridable)
+    _promote("dtype_layout_rule",  _SEMANTIC_RULES_BY_CATEGORY, semantic_overridable)
+    _promote("tests",              _TESTS_BY_CATEGORY,           semantic_overridable)
+
+
 def _existing_coverage() -> dict[str, PrimitiveCoverage]:
     registered_vjps = _vjp_registered_names()
     registered_jvps = _jvp_registered_names()
@@ -524,12 +848,10 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         contract_status = _existing_contracts(
             spec.effect, vjp_complete=has_vjp, jvp_complete=has_jvp
         )
-        # Apply per-category sharding-rule classifier before per-name overrides
+        # Apply multi-axis category classifier before per-name overrides
         # so explicit overrides always win over the category default.
         category = _EXISTING_CATEGORIES.get(name, spec.lowering)
-        contract_status["sharding_rule"] = _sharding_rule_for_category(
-            category, contract_status.get("sharding_rule", "planned")
-        )
+        _apply_category_overrides(contract_status, category)
         contract_status.update(_EXISTING_CONTRACT_OVERRIDES.get(name, {}))
         schema = ("explicit_semantic" if name in _EXPLICIT_SEMANTIC_NAMES
                   else "explicit_partial")
@@ -564,9 +886,7 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         contract_status = _existing_contracts(
             effect, vjp_complete=has_vjp, jvp_complete=has_jvp
         )
-        contract_status["sharding_rule"] = _sharding_rule_for_category(
-            lowering, contract_status.get("sharding_rule", "planned")
-        )
+        _apply_category_overrides(contract_status, lowering)
         entries.setdefault(
             name,
             PrimitiveCoverage(
@@ -837,7 +1157,10 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
             "shape_rule": "complete",
             "dtype_layout_rule": "complete",
             "batching_rule": "partial",
-            "transpose_rule": "planned",
+            # The top-k argmax-routing makes the transpose rule depend on
+            # whether indices are treated as constants (standard) or as
+            # straight-through. Mark `partial` matching the category default.
+            "transpose_rule": "partial",
             # Memory-table sharding: keys/values split along the entries axis;
             # query-time top-k requires an all-gather of the scores before the
             # softmax. Well-understood but mesh-aware — `partial` per the
@@ -891,11 +1214,10 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
                 batching_rule="partial",
                 sharding_rule="partial",
             )
-        # Apply the long-tail category-based sharding-rule classifier; per-name
+        # Apply the multi-axis category classifier (sharding_rule / batching /
+        # transpose / math / shape / dtype / lowering / tests); per-name
         # overrides in `contract_overrides` (next line) still win.
-        contract["sharding_rule"] = _sharding_rule_for_category(
-            category, contract.get("sharding_rule", "planned")
-        )
+        _apply_category_overrides(contract, category)
         contract.update(contract_overrides.get(name, {}))
         metadata = {
             "implementation": "python_reference",

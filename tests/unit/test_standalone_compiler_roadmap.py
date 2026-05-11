@@ -106,18 +106,26 @@ def test_primitive_coverage_imports_existing_ops_as_partial_entries():
     assert matmul.existing_op
     assert matmul.status == "partial"
     assert matmul.graph_name == "tessera.matmul"
+    # matmul has VJP+JVP registered and the contract-axis hardening passes
+    # promoted math / shape / dtype / batching / transpose / lowering / tests
+    # to `complete` via the category classifier. What's still incomplete is
+    # the mesh-dependent sharding rule and the hardware backend kernel —
+    # both gated behind Phase G integration.
     assert matmul.contract_status["lowering_rule"] == "complete"
-    # matmul has both a registered VJP (autodiff/vjp.py) and JVP
-    # (autodiff/jvp.py); the registry must reflect that, not falsely report
-    # them as missing.
     assert matmul.contract_status["vjp"] == "complete"
     assert matmul.contract_status["jvp"] == "complete"
+    assert matmul.contract_status["batching_rule"] == "complete"
+    assert matmul.contract_status["transpose_rule"] == "complete"
+    assert matmul.contract_status["math_semantics"] == "complete"
     assert "vjp" not in matmul.missing_contracts()
     assert "jvp" not in matmul.missing_contracts()
-    # Other axes (batching, transpose, sharding, masking on a pure op,
-    # math/shape/dtype, tests) remain incomplete and must stay visible.
-    assert "batching_rule" in matmul.missing_contracts()
-    assert "transpose_rule" in matmul.missing_contracts()
+    # The remaining gates for a fully contract-complete `matmul`.
+    assert "sharding_rule" in matmul.missing_contracts(), (
+        "sharding_rule should remain partial pending Phase G mesh integration"
+    )
+    assert "backend_kernel" in matmul.missing_contracts(), (
+        "backend_kernel should remain partial pending Phase G hardware execution"
+    )
 
 
 def test_existing_coverage_consults_autodiff_vjp_registry():

@@ -147,13 +147,13 @@ the high-risk S1 entries and milestone sentinels. Tests compare these rows to
 <!-- BEGIN GENERATED PRIMITIVE COVERAGE SNAPSHOT -->
 | Primitive | Category | Status | Existing op | Lowering gate | Backend gate | Missing contracts | Model families |
 |-----------|----------|--------|-------------|---------------|--------------|-------------------|----------------|
-| `matmul` | loop_nest | partial | yes | registered | partial | math_semantics, shape_rule, dtype_layout_rule, batching_rule, transpose_rule, sharding_rule, backend_kernel, tests | - |
-| `permute` | tensor_algebra | partial | yes | registered | partial | math_semantics, shape_rule, dtype_layout_rule, jvp, batching_rule, transpose_rule, sharding_rule, backend_kernel, tests | - |
-| `collective_permute` | collective | partial | yes | stub_required | reference_only | math_semantics, shape_rule, dtype_layout_rule, batching_rule, transpose_rule, lowering_rule, backend_kernel | all |
+| `matmul` | loop_nest | partial | yes | registered | partial | sharding_rule, backend_kernel | - |
+| `permute` | tensor_algebra | partial | yes | registered | partial | jvp, batching_rule, transpose_rule, sharding_rule, backend_kernel, tests | - |
+| `collective_permute` | collective | partial | yes | stub_required | reference_only | batching_rule, lowering_rule, backend_kernel | all |
 | `scan` | control_flow | partial | yes | stub_required | reference_only | math_semantics, shape_rule, dtype_layout_rule, vjp, jvp, batching_rule, transpose_rule, sharding_rule, lowering_rule, backend_kernel | all |
-| `selective_ssm` | state_space | partial | yes | missing | reference_only | math_semantics, shape_rule, dtype_layout_rule, jvp, batching_rule, transpose_rule, sharding_rule, masking_effect_rule, backend_kernel, tests | Mamba/SSM |
-| `dataset_map` | data | partial | yes | not_applicable | reference_only | batching_rule, sharding_rule, lowering_rule, backend_kernel | all |
-| `tokenizer_bpe` | tokenizer | partial | yes | not_applicable | reference_only | batching_rule, sharding_rule, lowering_rule, backend_kernel | all |
+| `selective_ssm` | state_space | partial | yes | missing | reference_only | math_semantics, shape_rule, dtype_layout_rule, jvp, batching_rule, sharding_rule, masking_effect_rule, backend_kernel, tests | Mamba/SSM |
+| `dataset_map` | data | partial | yes | not_applicable | reference_only | batching_rule, sharding_rule, backend_kernel | all |
+| `tokenizer_bpe` | tokenizer | partial | yes | not_applicable | reference_only | batching_rule, sharding_rule, backend_kernel | all |
 <!-- END GENERATED PRIMITIVE COVERAGE SNAPSHOT -->
 
 Regenerate/check the full table programmatically with:

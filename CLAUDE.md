@@ -246,6 +246,12 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 
 15. **Canonical API.** `docs/CANONICAL_API.md` wins all naming conflicts. Decorators are `@tessera.jit` and `@tessera.kernel` — not `@tessera.function`, `@ts.kernel`, etc.
 
+15a. **Canonical tensor attributes & dtypes.** `docs/reference/tessera_tensor_attributes.md` (normative, 2026-05-11) is the authoritative source for the **six tensor attributes** (`shape`, `dtype`, `layout`, `device`/`target`, `distribution`, `numeric_policy`), the canonical dtype name set (`fp64`/`fp32`/`fp16`/`bf16`/`fp8_e4m3`/`fp8_e5m2`/`fp6_e2m3`/`fp6_e3m2`/`fp4_e2m1`/`nvfp4`/`int8`/`int16`/`int32`/`int64`/`bool`) with accepted aliases (`f64`/`f32`/`f16`/`i8`/`i16`/`i32`/`i64`), the planned/gated dtype set (`uint*`, `complex*`, packed `int4`, AMD `mxfp*`, Tenstorrent `bfp*`/`blockfp*`), the 5-rule Promotion And Casting Policy, and the JAX-like canonicalization direction. Three concrete rules from this doc:
+  - **Storage dtype is on the tensor; accumulator goes in `numeric_policy`** — never compress them into a single dtype string. Ops where they differ (matmul/gemm/einsum/flash_attn use `storage=bf16, accum=fp32`; quant ops use `scale + quant_axis`) **must** declare a `numeric_policy` rather than a fused dtype.
+  - **TF32 is not a storage dtype.** Model as `math_mode="tf32"` on `fp32` tensors via `numeric_policy`, not as `dtype="tf32"`.
+  - **Planned/gated dtypes are not first-class** today. Registry entries that reference `uint*`/`complex*`/packed `int4`/`mxfp*`/`bfp*` must declare `metadata.dtype_status = "planned_gated"`; do not alias them to canonical names.
+  CANONICAL_API.md cross-links to this doc in its top-of-doc banner and in the Dtype Annotations section.
+
 16. **ZeRO stage 2 only.** `OptimizerShardPass` partitions momentum + variance across `dp` mesh. Stage 3 (parameter sharding) is out of scope.
 
 17. **Pipeline parallelism uses 1F1B by default.** `schedule="interleaved"` requires `micro_batches >= 2 * num_stages`.
@@ -683,6 +689,7 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | What you need | Where to look |
 |---------------|--------------|
 | **Authoritative API naming** | `docs/CANONICAL_API.md` |
+| **Canonical tensor attributes & dtypes** (six tensor attributes, canonical dtype names + aliases, planned/gated dtype set, promotion rules, JAX-like direction) | `docs/reference/tessera_tensor_attributes.md` |
 | Graph IR op definitions | `src/compiler/ir/TesseraOps.td` |
 | Graph IR canonicalizations | `src/transforms/lib/CanonicalizeTesseraIR.cpp` |
 | Schedule IR op definitions | `src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td` |
@@ -712,7 +719,7 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | **User-facing guides** (the canonical "how to use Tessera") | `docs/guides/` — 11 guides totaling ~3,400 LOC: **Tessera_Debugging_Tools_Guide.md** (327, 6-layer debugging model + tooling per layer), **Tessera_Error_Handling_And_Diagnostics_Guide.md** (305, stable diagnostic codes), Tessera_Profiling_And_Autotuning_Guide.md (303), Tessera_Runtime_ABI_Guide.md (562), Tessera_Tensor_Layout_And_Data_Movement_Guide.md (158), Tessera_Inference_Server_Guide.md (444), Tessera_Fault_Tolerance_And_Elasticity_Guide.md (352), Tessera_Production_Reliability_And_Chaos_Guide.md (238), Tessera_QA_Reliability_Guide.md (210), Tessera_Differentiable_NAS_Guide.md (287), Tessera_Developer_Frontend_End_To_End.md (222) |
 | **Programming guide** (11-chapter user manual) | `docs/programming_guide/` — Ch.1 Intro, Ch.2 Programming Model, Ch.3 Memory Model (526), Ch.4 Execution Model, Ch.5 Kernel Programming (331), Ch.6 Numerics, **Ch.7 Autodiff** (101), Ch.8 Layouts & Data Movement, Ch.9 Libraries & Primitives, Ch.10 Portability, Ch.11 Conclusion, Appendix NVL72, Tessera_Goals.md |
 | Tutorials | `docs/tutorials/` — `Flash_Attention_in_Tessera.md`, `performance_tuning.md` |
-| API reference | `docs/api/API_Reference_Index.md`, `docs/reference/tessera-api-reference.md`, `docs/reference/tessera_migration_guide_part{1,2}.md` |
+| API reference | `docs/api/API_Reference_Index.md`, `docs/reference/tessera-api-reference.md`, `docs/reference/tessera_tensor_attributes.md` (canonical tensor attributes + dtype names), `docs/reference/tessera_migration_guide_part{1,2}.md` |
 | Getting started + glossary | `docs/GETTING_STARTED.md`, `docs/GLOSSARY.md` |
 | Architecture overviews | `docs/architecture/` (system_overview.md, tessera_target_ir_usage_guide.md, Tessera_Kernel_Compilation_Stages_Overview.md), `docs/operations/Tessera_Standard_Operations.md` |
 | Spec gap audits | `docs/audit/compiler_spec_gap_audit.md`, `compiler_spec_gap_matrix.md` |

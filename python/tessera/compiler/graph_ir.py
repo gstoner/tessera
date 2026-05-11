@@ -1101,12 +1101,17 @@ def _parse_mlir_tensor_type(text: str) -> IRType:
     if not match:
         return IRType(text or "tensor<*x?>")
     shape_text, dtype_text = match.groups()
-    shape = ("*",) if shape_text == "*" else tuple(shape_text.split("x"))
     reverse_dtype = {
         "f64": "fp64",
         "f32": "fp32",
         "f16": "fp16",
         "bf16": "bf16",
+        "xf8E4M3FN": "fp8_e4m3",
+        "xf8E5M2": "fp8_e5m2",
+        "!tessera.fp6_e2m3": "fp6_e2m3",
+        "!tessera.fp6_e3m2": "fp6_e3m2",
+        "!tessera.fp4_e2m1": "fp4_e2m1",
+        "!tessera.nvfp4": "nvfp4",
         "i8": "int8",
         "i16": "int16",
         "i32": "int32",
@@ -1114,6 +1119,14 @@ def _parse_mlir_tensor_type(text: str) -> IRType:
         "i1": "bool",
         "?": None,
     }
+    # Extended MLIR float spellings such as `xf8E4M3FN` start with the same
+    # `x` separator used between shape dimensions, so the simple regex above
+    # sees `tensor<2x3xxf8E4M3FN>` as shape `2x3x` plus dtype `f8E4M3FN`.
+    # Reattach that leading marker before splitting the shape.
+    if shape_text.endswith("x") and f"x{dtype_text}" in reverse_dtype:
+        shape_text = shape_text[:-1]
+        dtype_text = f"x{dtype_text}"
+    shape = ("*",) if shape_text == "*" else tuple(shape_text.split("x"))
     return tensor_ir_type(shape, reverse_dtype.get(dtype_text, dtype_text))
 
 

@@ -1,13 +1,15 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-05-04
+last_updated: 2026-05-11
 ---
 
 # Tessera Canonical API Quick Reference
 **Status:** Normative - grounded in `python/tessera/` active implementation  
-**Last updated:** May 4, 2026  
+**Last updated:** May 11, 2026  
 **Use this document** to resolve any naming disagreement in other docs. If something here conflicts with another doc, this file wins.
+
+> **Tensor attribute vocabulary lives in [`docs/reference/tessera_tensor_attributes.md`](reference/tessera_tensor_attributes.md).** That document is the canonical reference for the six tensor attributes (`shape`, `dtype`, `layout`, `device`/`target`, `distribution`, `numeric_policy`), the canonical dtype names + accepted aliases, the planned/gated dtype set (`uint*`, `complex*`, packed `int4`, `mxfp*`, `bfp*`), and the JAX-like promotion direction. Every dtype string used in this file (`"fp32"`, `"bf16"`, `"fp16"`, `"fp8_e4m3"`, etc.) follows that vocabulary; aliases like `"f32"` are accepted at API boundaries but should normalize before storage.
 
 ---
 
@@ -255,12 +257,51 @@ Key properties: `.supports_wgmma` / `.supports_tma` / `.supports_mbarrier` → `
 
 ## Dtype Annotations
 
+> **The full tensor attribute vocabulary lives in [`docs/reference/tessera_tensor_attributes.md`](reference/tessera_tensor_attributes.md).** That document is the canonical source for: six tensor attributes (`shape`/`dtype`/`layout`/`device`/`distribution`/`numeric_policy`), the canonical dtype name table + accepted aliases, the planned/gated dtype set, the 5-rule Promotion And Casting Policy, and the JAX-like canonicalization direction. The summary tables below are derived from that source.
+
+### Canonical dtype strings
+
+| Family | Canonical | Accepted aliases (normalize at API boundary) |
+|---|---|---|
+| FP64 | `fp64` | `f64` |
+| FP32 | `fp32` | `f32` — **default user-facing floating dtype** |
+| FP16 | `fp16` | `f16` |
+| BF16 | `bf16` | — (preferred reduced-precision dtype where target supports) |
+| FP8 | `fp8_e4m3`, `fp8_e5m2` | — (target-gated) |
+| FP6 | `fp6_e2m3`, `fp6_e3m2` | — (target-gated) |
+| FP4 | `fp4_e2m1`, `nvfp4` | — (`nvfp4` is the NVIDIA block-scaled policy; **do not alias** to OCP FP4 / AMD MXFP4) |
+| Signed integers | `int8`, `int16`, `int32`, `int64` | `i8`/`i16`/`i32`/`i64` in MLIR spellings |
+| Boolean | `bool` | (lowers to `i1` in MLIR-like text) |
+
+### Planned / gated (not first-class today)
+
+`uint8`/`uint16`/`uint32`/`uint64`, `complex64`/`complex128`, packed `int4`,
+AMD `mxfp8`/`mxfp6`/`mxfp4`, Tenstorrent `bfp8`/`bfp4`/`blockfp8`/`blockfp4`,
+and TF32 (which is **not** a storage dtype — model it as `math_mode="tf32"`
+on `fp32` tensors via `numeric_policy`, not as `dtype="tf32"`).
+
+### Tensor-attribute Python annotation shortcuts
+
 | Annotation | Dtype | Notes |
 |------------|-------|-------|
-| `tessera.f16[..., ...]` | FP16 | Read-only tensor annotation |
-| `tessera.bf16[..., ...]` | BF16 | Read-only tensor annotation |
-| `tessera.f32[..., ...]` | FP32 | Read-only tensor annotation |
-| `tessera.mut_f32[..., ...]` | FP32 | Write-privileged tensor annotation |
+| `tessera.f16[..., ...]` | `fp16` | Read-only tensor annotation |
+| `tessera.bf16[..., ...]` | `bf16` | Read-only tensor annotation |
+| `tessera.f32[..., ...]` | `fp32` | Read-only tensor annotation |
+| `tessera.mut_f32[..., ...]` | `fp32` | Write-privileged tensor annotation |
+
+The single-letter `f16`/`bf16`/`f32` annotation names are the *Python-side
+shortcuts* and should be considered aliases — when emitted into IR
+metadata, the canonical `fp16`/`bf16`/`fp32` spellings are used.
+
+### `numeric_policy` (sixth tensor attribute)
+
+Storage dtype on a tensor is **explicit**; accumulator dtype, rounding,
+quantization scale/axis, and determinism flags belong on `numeric_policy`,
+not on `dtype`. For ops where storage and accumulator differ intrinsically
+(matmul/gemm/einsum/flash_attn use `storage=bf16, accum=fp32`; quant ops use
+`scale + quant_axis`), this distinction is required for correctness. See
+the Promotion And Casting Policy section of the source document for the
+five governing rules.
 
 ---
 

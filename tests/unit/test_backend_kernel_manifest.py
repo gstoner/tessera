@@ -224,11 +224,22 @@ class TestBackendDtypeAudit:
             f"alias dtype strings in manifest: {buckets['alias'][:5]}"
         )
 
-    def test_zero_planned_gated(self):
-        """No planned-gated dtypes (uint*, complex*, mxfp*, bfp*) leak
-        into the synthesized backend manifest today."""
+    def test_planned_gated_only_via_explicit_metalium_blockfp(self):
+        """Only the explicit Tenstorrent `metalium_blockfp` target may
+        carry planned/gated dtypes (`bfp8`/`bfp4`) — Sprint I-2 added
+        those deliberately to surface the block-FP family without
+        promoting them to the general dtype matrix.  All other targets
+        must stay 0 planned-gated."""
         buckets = audit_backend_dtypes()
-        assert buckets["planned_gated"] == []
+        for op_name, key, dt in buckets["planned_gated"]:
+            assert "metalium_blockfp" in key, (
+                f"planned-gated dtype {dt!r} on {key!r} should only appear "
+                f"via the metalium_blockfp target"
+            )
+        # Both bfp8 and bfp4 must be present (Sprint I-2 ships them).
+        gated_dtypes = {dt for _, _, dt in buckets["planned_gated"]}
+        assert "bfp8" in gated_dtypes
+        assert "bfp4" in gated_dtypes
 
     def test_canonical_bucket_substantial(self):
         buckets = audit_backend_dtypes()

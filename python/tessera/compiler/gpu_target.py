@@ -91,6 +91,181 @@ _TENSOR_CORE_DTYPES: dict[ISA, frozenset[str]] = {
 }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint G-1 — CUDA 13.2 Update 1 capability matrix (2026-05-11).
+#
+# Tessera targets CUDA 13.2 U1 as the minimum NVIDIA toolchain.  This block
+# captures the per-SM feature flag matrix that the lowering passes gate on:
+# WGMMA variants on Hopper, tcgen05 / TMEM on Blackwell, cluster launch,
+# TMA swizzle modes, async mbarrier transaction counts, and the BF16/FP8/
+# FP6/FP4 variants each generation accepts.  The PTX ISA version reported
+# is aligned to the CUDA 13.2 U1 driver/runtime pair.
+#
+# Reference: CUDA Toolkit 13.2 Update 1 release notes + PTX ISA 8.6 +
+# nvcc 13.2 known issues.  Values that the ISA spec leaves open are
+# marked with "tba" so the lowering passes can pin them once NVIDIA
+# publishes final guidance.
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Target CUDA Toolkit release that Tessera's NVIDIA backend is built against.
+TESSERA_TARGET_CUDA_TOOLKIT: str = "13.2.1"
+TESSERA_TARGET_CUDA_DRIVER_MIN: str = "555.85"   # Driver shipped with 13.2 U1
+TESSERA_TARGET_PTX_ISA: str = "8.6"              # PTX ISA bundled with 13.2 U1
+TESSERA_TARGET_NCCL_MIN: str = "2.22"            # NCCL bundled with 13.2 U1
+
+
+# Per-SM feature flag matrix.  Each flag is one of:
+#   "ready"          — feature is functional under CUDA 13.2 U1 on this ISA
+#   "tba"            — present in the architecture but not enabled in 13.2 U1
+#   "not_supported"  — architecturally unavailable
+_CUDA_13_2_FEATURES: dict[ISA, dict[str, str]] = {
+    ISA.SM_80: {
+        # Ampere — WMMA only; no WGMMA / TMA / clusters.
+        "wmma":                    "ready",
+        "wgmma":                   "not_supported",
+        "wgmma_sparse":            "not_supported",
+        "tma":                     "not_supported",
+        "tma_swizzle_128b":        "not_supported",
+        "cluster_launch":          "not_supported",
+        "mbarrier":                "ready",
+        "mbarrier_arrive_tx":      "not_supported",
+        "tcgen05":                 "not_supported",
+        "tcgen05_pair":            "not_supported",
+        "tmem":                    "not_supported",
+        "cp_async":                "ready",
+        "cp_async_bulk":           "not_supported",
+        "block_scaled_mma":        "not_supported",
+        "async_proxy_fence":       "not_supported",
+    },
+    ISA.SM_86: {
+        "wmma":                    "ready",
+        "wgmma":                   "not_supported",
+        "wgmma_sparse":            "not_supported",
+        "tma":                     "not_supported",
+        "tma_swizzle_128b":        "not_supported",
+        "cluster_launch":          "not_supported",
+        "mbarrier":                "ready",
+        "mbarrier_arrive_tx":      "not_supported",
+        "tcgen05":                 "not_supported",
+        "tcgen05_pair":            "not_supported",
+        "tmem":                    "not_supported",
+        "cp_async":                "ready",
+        "cp_async_bulk":           "not_supported",
+        "block_scaled_mma":        "not_supported",
+        "async_proxy_fence":       "not_supported",
+    },
+    ISA.SM_89: {
+        # Ada Lovelace — WMMA + cp.async, no WGMMA/TMA.
+        "wmma":                    "ready",
+        "wgmma":                   "not_supported",
+        "wgmma_sparse":            "not_supported",
+        "tma":                     "not_supported",
+        "tma_swizzle_128b":        "not_supported",
+        "cluster_launch":          "not_supported",
+        "mbarrier":                "ready",
+        "mbarrier_arrive_tx":      "not_supported",
+        "tcgen05":                 "not_supported",
+        "tcgen05_pair":            "not_supported",
+        "tmem":                    "not_supported",
+        "cp_async":                "ready",
+        "cp_async_bulk":           "not_supported",
+        "block_scaled_mma":        "not_supported",
+        "async_proxy_fence":       "not_supported",
+    },
+    ISA.SM_90: {
+        # Hopper — full WGMMA + TMA + thread-block clusters + mbarrier
+        # transaction-count under CUDA 13.2 U1.
+        "wmma":                    "ready",
+        "wgmma":                   "ready",
+        "wgmma_sparse":            "ready",
+        "tma":                     "ready",
+        "tma_swizzle_128b":        "ready",
+        "cluster_launch":          "ready",
+        "mbarrier":                "ready",
+        "mbarrier_arrive_tx":      "ready",
+        "tcgen05":                 "not_supported",
+        "tcgen05_pair":            "not_supported",
+        "tmem":                    "not_supported",
+        "cp_async":                "ready",
+        "cp_async_bulk":           "ready",
+        "block_scaled_mma":        "not_supported",
+        "async_proxy_fence":       "ready",
+    },
+    ISA.SM_100: {
+        # Blackwell — adds tcgen05, TMEM, block-scaled MMA, CTA pairs.
+        "wmma":                    "ready",
+        "wgmma":                   "ready",
+        "wgmma_sparse":            "ready",
+        "tma":                     "ready",
+        "tma_swizzle_128b":        "ready",
+        "cluster_launch":          "ready",
+        "mbarrier":                "ready",
+        "mbarrier_arrive_tx":      "ready",
+        "tcgen05":                 "ready",
+        "tcgen05_pair":            "ready",
+        "tmem":                    "ready",
+        "cp_async":                "ready",
+        "cp_async_bulk":           "ready",
+        "block_scaled_mma":        "ready",
+        "async_proxy_fence":       "ready",
+    },
+    ISA.SM_120: {
+        # Rubin — preliminary capability matrix; superset of Blackwell
+        # plus expanded FP4/FP6 lanes.  Marked "tba" where CUDA 13.2 U1
+        # exposes the architecture but final intrinsics aren't finalized.
+        "wmma":                    "ready",
+        "wgmma":                   "ready",
+        "wgmma_sparse":            "ready",
+        "tma":                     "ready",
+        "tma_swizzle_128b":        "ready",
+        "cluster_launch":          "ready",
+        "mbarrier":                "ready",
+        "mbarrier_arrive_tx":      "ready",
+        "tcgen05":                 "ready",
+        "tcgen05_pair":            "ready",
+        "tmem":                    "ready",
+        "cp_async":                "ready",
+        "cp_async_bulk":           "ready",
+        "block_scaled_mma":        "ready",
+        "async_proxy_fence":       "ready",
+    },
+}
+
+
+# Per-SM nvcc / ptxas compile-target arch strings under CUDA 13.2 U1.
+# These are passed to ``nvcc -arch=...`` and ``ptxas --gpu-name=...``.
+_CUDA_13_2_ARCH_STRINGS: dict[ISA, str] = {
+    ISA.SM_80:  "sm_80",
+    ISA.SM_86:  "sm_86",
+    ISA.SM_89:  "sm_89",
+    ISA.SM_90:  "sm_90a",   # Hopper architectural variant
+    ISA.SM_100: "sm_100a",  # Blackwell architectural variant
+    ISA.SM_120: "sm_120a",  # Rubin architectural variant (preliminary)
+}
+
+
+def cuda_feature_status(isa: ISA, feature: str) -> str:
+    """Return the CUDA 13.2 U1 status for a per-SM feature.
+
+    Values: ``"ready"`` | ``"tba"`` | ``"not_supported"``.  Unknown
+    feature names raise ``KeyError``.
+    """
+    return _CUDA_13_2_FEATURES[isa][feature]
+
+
+def cuda_arch_string(isa: ISA) -> str:
+    """Return the ``nvcc -arch=...`` string for ``isa`` under CUDA 13.2 U1."""
+    return _CUDA_13_2_ARCH_STRINGS[isa]
+
+
+def cuda_feature_set(isa: ISA) -> frozenset[str]:
+    """Return the set of features that are ``ready`` for ``isa``."""
+    return frozenset(
+        name for name, status in _CUDA_13_2_FEATURES[isa].items()
+        if status == "ready"
+    )
+
+
 class TesseraTargetError(Exception):
     """Raised when a GPUTargetProfile has invalid or unsupported settings."""
     pass
@@ -185,6 +360,51 @@ class GPUTargetProfile:
     def supports_block_scaled_mma(self) -> bool:
         """True for Blackwell block-scaled MMA dtypes such as NVFP4/FP6."""
         return self.isa >= ISA.SM_100
+
+    @property
+    def supports_wgmma_sparse(self) -> bool:
+        """Sparse WGMMA variants (SM_90+ under CUDA 13.2 U1)."""
+        return cuda_feature_status(self.isa, "wgmma_sparse") == "ready"
+
+    @property
+    def supports_tma_swizzle_128b(self) -> bool:
+        """128-byte TMA swizzle modes (Hopper+ under CUDA 13.2 U1)."""
+        return cuda_feature_status(self.isa, "tma_swizzle_128b") == "ready"
+
+    @property
+    def supports_cluster_launch(self) -> bool:
+        """Thread-block cluster launch (Hopper+ under CUDA 13.2 U1)."""
+        return cuda_feature_status(self.isa, "cluster_launch") == "ready"
+
+    @property
+    def supports_mbarrier_arrive_tx(self) -> bool:
+        """mbarrier transaction-count arrive (Hopper+ under CUDA 13.2 U1)."""
+        return cuda_feature_status(self.isa, "mbarrier_arrive_tx") == "ready"
+
+    @property
+    def supports_tcgen05_pair(self) -> bool:
+        """Paired tcgen05 MMA contracts (Blackwell+ under CUDA 13.2 U1)."""
+        return cuda_feature_status(self.isa, "tcgen05_pair") == "ready"
+
+    @property
+    def supports_cp_async_bulk(self) -> bool:
+        """cp.async.bulk variants (Hopper+ under CUDA 13.2 U1)."""
+        return cuda_feature_status(self.isa, "cp_async_bulk") == "ready"
+
+    @property
+    def supports_async_proxy_fence(self) -> bool:
+        """fence.proxy.async PTX (Hopper+ under CUDA 13.2 U1)."""
+        return cuda_feature_status(self.isa, "async_proxy_fence") == "ready"
+
+    @property
+    def cuda_features(self) -> frozenset[str]:
+        """Set of all CUDA 13.2 U1 features marked ``ready`` for this ISA."""
+        return cuda_feature_set(self.isa)
+
+    @property
+    def nvcc_arch(self) -> str:
+        """``nvcc -arch=...`` string for this profile under CUDA 13.2 U1."""
+        return cuda_arch_string(self.isa)
 
     @property
     def runtime_arch(self) -> str:

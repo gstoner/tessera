@@ -812,3 +812,115 @@ flip from `artifact_only` → `fused`, and the contract axis flips
 **Test totals after the full close-out:** **2,730 passing** under
 `-m "not slow"` (was 2,657; +40 Sprint D + +33 Sprint E = +73 new),
 **0 failures**.
+
+## Phase G/H/I hardware-free batch 1 — Toolchain pins + Metalium expansion (2026-05-11)
+
+After the 7-sprint registry close-out, the first **hardware-free**
+slice of the Phase G/H/I plan landed: per-target toolchain pinning
+(CUDA 13.2 Update 1 for NVIDIA, ROCm 7.2.3 for AMD) plus expanded
+Tenstorrent Metalium kernel coverage.
+
+### G-1 — NVIDIA CUDA 13.2 Update 1 capability matrix
+
+**Goal:** lock the NVIDIA toolchain version + capture the per-SM
+feature matrix every WGMMA/TMA/TCGEN05 lowering pass gates on, before
+any code lands that touches hardware.
+
+**Shipped (`python/tessera/compiler/gpu_target.py`):**
+
+| Component | Detail |
+|---|---|
+| Toolchain pins | `TESSERA_TARGET_CUDA_TOOLKIT="13.2.1"`, `TESSERA_TARGET_CUDA_DRIVER_MIN="555.85"`, `TESSERA_TARGET_PTX_ISA="8.6"`, `TESSERA_TARGET_NCCL_MIN="2.22"` |
+| `_CUDA_13_2_FEATURES` matrix | Per-SM dict of 12 feature flags with status ∈ `ready/tba/not_supported`: `wmma`, `wgmma`, `wgmma_sparse`, `tma`, `tma_swizzle_128b`, `cluster_launch`, `mbarrier_arrive_tx`, `tcgen05`, `tcgen05_pair`, `tmem`, `cp_async`, `cp_async_bulk`, `block_scaled_mma`, `async_proxy_fence` |
+| `_CUDA_13_2_ARCH_STRINGS` | `nvcc -arch=` strings: `sm_80`, `sm_86`, `sm_89`, `sm_90a`, `sm_100a`, `sm_120a` |
+| New `GPUTargetProfile` properties | `supports_wgmma_sparse`, `supports_tma_swizzle_128b`, `supports_cluster_launch`, `supports_mbarrier_arrive_tx`, `supports_tcgen05_pair`, `supports_cp_async_bulk`, `supports_async_proxy_fence`, `cuda_features`, `nvcc_arch` |
+| Helpers | `cuda_feature_status(isa, name)`, `cuda_arch_string(isa)`, `cuda_feature_set(isa)` |
+
+**`capabilities.py` updates:** NVIDIA entries (`nvidia_sm80/sm90/sm100/sm120`) expanded with full dtype matrices (Hopper FP8 family, Blackwell FP4/FP6/NVFP4) + feature tuples reflecting `cuda_feature_set()` output + `cuda_13_2_u1` marker flag.
+
+### H-1 — ROCm 7.2.3 capability matrix
+
+**Goal:** parallel coverage for AMD/ROCm, pinned to ROCm 7.2.3 / HIP 7.2.3.
+
+**Shipped (`python/tessera/compiler/rocm_target.py`, new file):**
+
+| Component | Detail |
+|---|---|
+| `AMDArch` enum | `GFX_90A` (MI250 — CDNA 2), `GFX_940` (MI300A — CDNA 3 unified), `GFX_942` (MI300X — CDNA 3 discrete), `GFX_950` (MI325X — CDNA 4), `GFX_1100` (RDNA 3) |
+| Toolchain pins | `TESSERA_TARGET_ROCM="7.2.3"`, `TESSERA_TARGET_HIP="7.2.3"`, `TESSERA_TARGET_RCCL_MIN="2.22"`, `TESSERA_TARGET_ROCBLAS_MIN="5.0.0"`, `TESSERA_TARGET_MIOPEN_MIN="3.5.0"` |
+| `_ROCM_7_2_FEATURES` matrix | Per-arch dict of 14 feature flags: `mfma`, `mfma_f8`, `mfma_xf32`, `mfma_f4`, `mfma_f6`, `wmma_f16`, `wmma_bf16`, `wmma_f8`, `lds_async_copy`, `buffer_load_lds`, `global_load_lds`, `cluster_mode`, `xnack`, `sram_ecc` |
+| `_MFMA_VARIANTS` shape table | Per-arch frozenset of `(M, N, K, K_blocks)` MFMA instruction shapes: CDNA 2 has 2 shapes, CDNA 3 adds F8/XF32 (6 shapes total), CDNA 4 adds F4/F6 lanes (8 shapes total), RDNA 3 has 0 (WMMA-only) |
+| `ROCmTargetProfile` class | Mirrors `GPUTargetProfile` — `arch`, `waves_per_cu`, `lds_bytes`, `pipeline_stages`, `prefer_inline_asm`; per-arch wavefront width (CDNA=64, RDNA=32); capability queries `supports_mfma`, `supports_mfma_f8`, `supports_mfma_xf32`, `supports_mfma_f4`, `supports_mfma_f6`, `supports_wmma`, `supports_lds_async_copy`, `supports_cluster_mode`; `hipcc_arch` returns `gfx94x`/`gfx950`/`gfx1100` |
+| Helpers | `rocm_feature_status`, `rocm_feature_set`, `rocm_arch_string`, `mfma_variants` |
+
+**`capabilities.py` updates:** Added 5 new per-arch ROCm entries (`rocm_gfx90a`/`rocm_gfx940`/`rocm_gfx942`/`rocm_gfx950`/`rocm_gfx1100`) plus the legacy `rocm` alias (routes to MI300X conventions). Each carries `rocm_7_2_3` marker + per-arch feature tuple + correct dtype set (CDNA 4 includes the FP4/FP6 family).
+
+### I-1 + I-2 + I-3 — Tenstorrent Metalium expansion
+
+**Goal:** expand the shipped Metalium kernel surface beyond matmul + DMA (Phase 7) to cover softmax / LayerNorm / RMSNorm, plus surface the planned/gated `bfp*` block-FP dtype family.
+
+**I-1 — 3 new lit fixtures** (`src/compiler/codegen/Tessera_Metalium_Backend/test/metalium/`):
+
+| Fixture | Decomposition |
+|---|---|
+| `softmax_to_metalium.mlir` | DMA → tile-local reduce (via matmul) → exp/scale → DMA |
+| `layer_norm_to_metalium.mlir` | 2× tile-local reductions (Σx, Σ(x−μ)²) + elementwise compose + DMA |
+| `rmsnorm_to_metalium.mlir` | 1× tile-local reduction (Σx²) + elementwise compose + DMA |
+
+All bf16; row-local reductions lower as `1×N · N×1` matmuls against a broadcast identity vector (Metalium's FMA engine is matrix-shaped, has no dedicated reduce intrinsic — same idiom DeepSeek uses for the softmax denominator pass on Hopper).
+
+**I-2 — `BackendKernelEntry` extensions (`compiler/backend_manifest.py`):**
+
+- Added new `"compileable"` status (5th — for kernels that pass `ptxas`/`hipcc -S` validation but haven't run on hardware yet; Sprint G/H follow-up state).
+- New `_METALIUM_KERNELS` dict surfaces matmul + softmax + layer_norm + rmsnorm artifacts (all bf16, `artifact_only`).
+- New `_METALIUM_PLANNED_GATED_KERNELS` dict surfaces the Tenstorrent **block-FP** family — `bfp8` / `bfp4` — under a separate `metalium_blockfp` target so the audit walker correctly classifies them as `planned_gated` (not `unknown`).
+- Walker confirms **2 planned-gated dtype slots** under `metalium_blockfp`, **0 elsewhere**.
+
+**I-3 — `docs/metalium_kernel_inventory.md` (new file):**
+
+Documents:
+- **RISC-V grid mapping** — Tensix cores, per-core roles (BRISC for DRAM→NoC, NCRISC for NoC→DRAM, TRISC0/TRISC1 for FMA compute, Packetizer for routing), `CoreRangeAttr` from the dialect ODS
+- **Memory hierarchy** — DRAM ↔ SRAM ↔ vector regs with the `tessera_metalium.dma`/`load`/`matmul` op chain
+- **Shipped kernel inventory** — Phase 7 base (matmul + DMA + no-silent-erase) + Sprint I-1 reductions
+- **Dtype matrix** — standard FP (`fp32`/`bf16`) + Tenstorrent block-FP (`bfp8`/`bfp4` planned/gated)
+- **Execution gates** — `artifact_only` → `compileable` → `executable` → `fused` ladder
+- **Source map** — pointers to all relevant `.td`/`.cpp`/`.mlir` files
+- **Roadmap** — hardware-free additions still possible (gelu / matmul_softmax fusion / flash_attn / BFP MFMA-style matmul); blocked-on-hardware items (execution + perf)
+
+### Test surface
+
+52 new tests in `tests/unit/test_target_toolchain_pins.py`:
+
+| Test class | Coverage |
+|---|---|
+| `TestCUDA13ToolchainPin` | Toolchain version constants + `nvcc_arch` strings for all 6 SMs |
+| `TestCUDA13FeatureMatrix` | Per-SM feature flags: SM_80 baseline, SM_90 Hopper, SM_100 Blackwell, SM_120 Rubin (inherits Blackwell) |
+| `TestNVIDIACapabilityRegistry` | 4 NVIDIA capability entries carry `cuda_13_2_u1` marker + correct feature/dtype tuples |
+| `TestROCmToolchainPin` | ROCm version constants + `hipcc_arch` for 5 arches |
+| `TestROCmFeatureMatrix` | Per-arch feature flags + dtype sets across CDNA 2/3/4 + RDNA 3 |
+| `TestROCmMFMAShapeTable` | MFMA instruction shapes per arch (CDNA 2: 2, CDNA 3: 6, CDNA 4: 8, RDNA 3: 0) |
+| `TestROCmCapabilityRegistry` | 6 ROCm capability entries (legacy + 5 per-arch) carry `rocm_7_2_3` marker + dtype validation |
+| `TestMetaliumLitFixtures` | All 3 Sprint I-1 fixtures exist, contain DMA + matmul, use bf16 |
+| `TestMetaliumManifest` | matmul has `metalium` artifact + `metalium_blockfp` planned (bfp8/bfp4); softmax/layer_norm/rmsnorm have metalium artifacts |
+| `TestMetaliumAuditWalker` | Planned-gated bfp entries appear ONLY under `metalium_blockfp`; 0 unknown dtypes |
+| `TestMetaliumKernelInventoryDoc` | I-3 doc exists with required sections (RISC-V grid mapping, kernel inventory, BFP, execution gates) + per-core role names |
+| `TestCompileableStatus` | `compileable` status accepted by `BackendKernelEntry`; invalid statuses rejected |
+
+### Test totals after this batch
+
+**2,782 passing** under `-m "not slow"` (was 2,730; +52 new), **0 failures**.
+
+### What's next on the hardware-free runway
+
+Per the original Phase G/H/I plan, the remaining hardware-free items:
+
+| Sprint | Description | Effort |
+|---|---|---|
+| G-2 + H-3 | Per-target kernel inventory docs (parallel to Apple GPU / Metalium); enumerate every fused kernel we plan to ship | 1 sess each |
+| G-3 | Extend `BackendKernelEntry` schema with `cuda_arch_min` / `wgmma_shape` / `nvcc_version_min` fields | 0.5 sess |
+| G-4 + H-4 | Lit fixture expansion: one per planned kernel with FileCheck on emitted PTX/MFMA patterns | 1-2 sess each |
+| G-5 | `NVIDIATargetPipeline` named pipeline alias in `tessera-opt` chaining `WarpSpec → AsyncCopy → WGMMA → TMA → NVPTXLowering` for CUDA 13.2 U1 | 1 sess |
+| H-2 | Refresh `mfma_table.inc` C++ table to match `_MFMA_VARIANTS` | 1 sess |
+| G-6/G-7/G-8 + H-6/H-7/H-8 | Lane 2: CMake `find_package(CUDAToolkit 13.2 EXACT)` / `find_package(hip 7.2.3 EXACT)`; compile NVIDIA/AMD backend C++ to verify ABI; `nvcc -ptx` / `hipcc -S` compile-only validation per kernel | Requires nvcc/hipcc on dev box (no GPU needed) |
+
+All blocked items (Lane 3) remain hardware-only: H100/B100 execution, MI300/MI325 execution, Wormhole/Blackhole execution, perf characterization, multi-rank collectives.

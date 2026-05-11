@@ -9,7 +9,7 @@ compiler.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, Mapping
+from typing import Callable, Iterable, Mapping
 
 from .op_catalog import OP_SPECS
 
@@ -79,6 +79,84 @@ CONTRACT_FIELDS: tuple[str, ...] = (
 )
 
 VALID_CONTRACT_STATUSES: frozenset[str] = frozenset({"complete", "partial", "planned", "not_applicable"})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint C2 — NumericPolicy as a first-class registry attribute (2026-05-11).
+#
+# Per `docs/reference/tessera_tensor_attributes.md`, numeric_policy is the
+# sixth tensor attribute, separate from `dtype`.  Today the registry
+# compresses storage + accumulator + scaling into a single
+# `dtype_layout_rule` axis (a status field), which hides important
+# correctness contracts.  This dataclass exposes the policy as a real
+# typed slot on `PrimitiveCoverage.metadata['numeric_policy']`.
+#
+# Fields mirror the doc's spec:
+#   storage      : canonical dtype name (the on-disk tensor element type)
+#   accum        : accumulator dtype, e.g., "fp32" for a bf16 matmul; None
+#                  when storage doubles as the accumulator.
+#   rounding     : "round_to_nearest_even" (default), "stochastic", "trunc",
+#                  etc.  Per IEEE-754 default.
+#   scale        : scaling policy for block-FP / quantized formats, e.g.,
+#                  "blockfp_per_stage", "per_tensor_symmetric", or None.
+#   quant_axis   : channel axis for per-channel quantization (None for
+#                  per-tensor).
+#   deterministic: whether the op must execute deterministically (e.g., for
+#                  reproducibility-critical paths).
+#   math_mode    : TF32 lives here, not on `storage` — per doc rule "TF32
+#                  is not a storage dtype".  Values: None | "tf32" |
+#                  "ieee" | "fast".
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class NumericPolicy:
+    """Canonical numeric-policy contract for a primitive.
+
+    Use the constructor for ops where the policy is explicitly required
+    (matmul / fft / quantize / etc.).  Leave the default-constructed
+    ``NumericPolicy("fp32")`` for ops whose storage doubles as the
+    accumulator (elementwise / reductions).
+    """
+
+    storage: str  # canonical dtype — validated at construction
+    accum: str | None = None
+    rounding: str = "round_to_nearest_even"
+    scale: str | None = None
+    quant_axis: int | None = None
+    deterministic: bool = False
+    math_mode: str | None = None  # None | "tf32" | "ieee" | "fast"
+
+    def __post_init__(self) -> None:
+        # Validate canonical-dtype membership at construction time so a
+        # malformed policy fails immediately rather than during dashboard
+        # rendering.  Allow planned-gated dtypes for entries whose
+        # `metadata.dtype_status` is explicitly set.
+        from tessera.dtype import canonicalize_dtype
+
+        canon = canonicalize_dtype(self.storage, allow_planned_gated=True)
+        if canon != self.storage:
+            object.__setattr__(self, "storage", canon)
+        if self.accum is not None:
+            canon_accum = canonicalize_dtype(self.accum, allow_planned_gated=True)
+            if canon_accum != self.accum:
+                object.__setattr__(self, "accum", canon_accum)
+
+    def as_metadata_dict(self) -> dict[str, str | int | bool | None]:
+        """Flatten the policy to plain JSON-style values for the dashboard.
+
+        The registry walker (`audit_canonical_dtypes`) scans these keys to
+        verify storage + accum + scale dtypes are canonical.
+        """
+        return {
+            "storage": self.storage,
+            "accum": self.accum,
+            "rounding": self.rounding,
+            "scale": self.scale,
+            "quant_axis": self.quant_axis,
+            "deterministic": self.deterministic,
+            "math_mode": self.math_mode,
+        }
 
 
 @dataclass(frozen=True)
@@ -901,6 +979,191 @@ _GRAPH_IR_LOWERING_OVERRIDES: dict[str, str] = {
 }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint C2 — Per-op NumericPolicy attachments (2026-05-11).
+#
+# These ops have intrinsic storage + accumulator coupling that the single-
+# axis `dtype_layout_rule` status field can't express.  Each entry below
+# gets a `metadata.numeric_policy` attached at construction time.
+#
+# Policy choices follow standard production conventions:
+#   - Matmul/contraction: storage bf16/fp16 (the "tile element"), accum fp32
+#   - Attention: storage bf16, accum fp32, deterministic=True for softmax
+#   - Spectral: storage fp32, accum fp32 (FFT numerics need fp32 internally)
+#   - Normalization: storage bf16/fp16, accum fp32 (variance/mean stats)
+#   - Stable reductions: storage fp32, accum fp32, deterministic=True
+#   - Quantization: storage = canonical low-precision dtype, scale =
+#     per_tensor_symmetric or per_channel_symmetric, quant_axis as needed
+#
+# Where `storage` is recorded as bf16 / fp16, that's the *typical* deploy
+# storage; the dashboard records the contract, not the only-supported value.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _matmul_policy() -> "NumericPolicy":
+    """bf16 storage with fp32 accumulator — covers matmul / einsum /
+    convolution / linear_general / projection ops."""
+    return NumericPolicy(storage="bf16", accum="fp32")
+
+
+def _attn_policy() -> "NumericPolicy":
+    """Attention: bf16 tile, fp32 accumulator, deterministic softmax."""
+    return NumericPolicy(storage="bf16", accum="fp32", deterministic=True)
+
+
+def _spectral_policy() -> "NumericPolicy":
+    """FFT family: fp32 throughout — FFT numerics need the full mantissa."""
+    return NumericPolicy(storage="fp32", accum="fp32")
+
+
+def _normalize_policy() -> "NumericPolicy":
+    """Layer/RMS norm: bf16 storage, fp32 stat accumulation."""
+    return NumericPolicy(storage="bf16", accum="fp32")
+
+
+def _stable_reduce_policy() -> "NumericPolicy":
+    """Softmax / logsumexp: fp32 throughout for numerical stability."""
+    return NumericPolicy(storage="fp32", accum="fp32", deterministic=True)
+
+
+def _quant_int8_policy(quant_axis: int | None = None) -> "NumericPolicy":
+    return NumericPolicy(
+        storage="int8",
+        accum="fp32",
+        scale="per_channel_symmetric" if quant_axis is not None else "per_tensor_symmetric",
+        quant_axis=quant_axis,
+    )
+
+
+def _quant_low_fp_policy(storage: str) -> "NumericPolicy":
+    """fp8 / fp6 / fp4 / nvfp4 quantizers — block-scaled storage,
+    fp32 accumulator for the rescale."""
+    return NumericPolicy(
+        storage=storage,
+        accum="fp32",
+        scale="blockfp_per_stage",
+    )
+
+
+# Map op name → NumericPolicy.  Populated lazily because NumericPolicy is
+# defined further up; we resolve at registry-build time via _policy_for_name.
+_NUMERIC_POLICY_BY_NAME_FACTORIES: dict[str, "Callable[[], NumericPolicy]"] = {
+    # ── Matmul / contraction / convolution family ──────────────────────
+    "matmul":            _matmul_policy,
+    "gemm":              _matmul_policy,
+    "batched_gemm":      _matmul_policy,
+    "einsum":            _matmul_policy,
+    "factorized_matmul": _matmul_policy,
+    "linear_general":    _matmul_policy,
+    "conv1d":            _matmul_policy,
+    "conv2d":            _matmul_policy,
+    "conv3d":            _matmul_policy,
+    "conv_transpose":    _matmul_policy,
+    "depthwise_conv1d":  _matmul_policy,
+    "depthwise_conv2d":  _matmul_policy,
+    "qkv_projection":    _matmul_policy,
+    "fused_epilogue":    _matmul_policy,
+    # ── Attention family ───────────────────────────────────────────────
+    "flash_attn":                 _attn_policy,
+    "multi_head_attention":       _attn_policy,
+    "gqa_attention":              _attn_policy,
+    "mqa_attention":              _attn_policy,
+    "mla_decode":                 _attn_policy,
+    "mla_decode_fused":           _attn_policy,
+    "linear_attn":                _attn_policy,
+    "lightning_attention":        _attn_policy,
+    "deepseek_sparse_attention":  _attn_policy,
+    "gated_attention":            _attn_policy,
+    "hybrid_attention":           _attn_policy,
+    "gated_deltanet":             _attn_policy,
+    "kimi_delta_attention":       _attn_policy,
+    "modified_delta_attention":   _attn_policy,
+    "attn_sliding_window":        _attn_policy,
+    "attn_compressed_blocks":     _attn_policy,
+    "attn_top_k_blocks":          _attn_policy,
+    # ── Spectral family ────────────────────────────────────────────────
+    "fft":              _spectral_policy,
+    "ifft":             _spectral_policy,
+    "rfft":             _spectral_policy,
+    "irfft":            _spectral_policy,
+    "stft":             _spectral_policy,
+    "istft":            _spectral_policy,
+    "dct":              _spectral_policy,
+    "spectral_conv":    _spectral_policy,
+    "spectral_filter":  _spectral_policy,
+    # ── Normalization family ───────────────────────────────────────────
+    "layer_norm":      _normalize_policy,
+    "rmsnorm":         _normalize_policy,
+    "rmsnorm_safe":    _normalize_policy,
+    "group_norm":      _normalize_policy,
+    "instance_norm":   _normalize_policy,
+    "weight_norm":     _normalize_policy,
+    "spectral_norm":   _normalize_policy,
+    # ── Stable reductions ──────────────────────────────────────────────
+    "softmax":               _stable_reduce_policy,
+    "softmax_safe":          _stable_reduce_policy,
+    "online_softmax":        _stable_reduce_policy,
+    "online_softmax_state":  _stable_reduce_policy,
+    "logsumexp":             _stable_reduce_policy,
+    "log_softmax":           _stable_reduce_policy,
+    # ── Quantization family ────────────────────────────────────────────
+    "quantize_int8":     lambda: _quant_int8_policy(),
+    "dequantize_int8":   lambda: _quant_int8_policy(),
+    "quantize_int4":     lambda: NumericPolicy(
+        storage="int8",  # int4 packed into int8 today (per Decision #23)
+        accum="fp32",
+        scale="per_tensor_symmetric",
+    ),
+    "dequantize_int4":   lambda: NumericPolicy(
+        storage="int8", accum="fp32", scale="per_tensor_symmetric",
+    ),
+    "quantize_fp8":      lambda: _quant_low_fp_policy("fp8_e4m3"),
+    "dequantize_fp8":    lambda: _quant_low_fp_policy("fp8_e4m3"),
+    "quantize_fp4":      lambda: _quant_low_fp_policy("fp4_e2m1"),
+    "dequantize_fp4":    lambda: _quant_low_fp_policy("fp4_e2m1"),
+    "quantize_fp6":      lambda: _quant_low_fp_policy("fp6_e2m3"),
+    "dequantize_fp6":    lambda: _quant_low_fp_policy("fp6_e2m3"),
+    "quantize_nvfp4":    lambda: _quant_low_fp_policy("nvfp4"),
+    "dequantize_nvfp4":  lambda: _quant_low_fp_policy("nvfp4"),
+    "fake_quantize":     lambda: _quant_int8_policy(),
+    "calibration_observer": lambda: NumericPolicy(
+        storage="fp32", accum="fp32",
+        scale="per_tensor_symmetric",
+        deterministic=True,
+    ),
+    # ── Mixed-precision optimizer/scaler ───────────────────────────────
+    "grad_scaler_step":  lambda: NumericPolicy(
+        storage="fp32", accum="fp32",
+        scale="loss_scale",
+        deterministic=True,
+    ),
+}
+
+
+def _policy_for_name(name: str) -> "NumericPolicy | None":
+    factory = _NUMERIC_POLICY_BY_NAME_FACTORIES.get(name)
+    return factory() if factory is not None else None
+
+
+def _supplemental_metadata(name: str, graph_ir_state: str) -> dict[str, object]:
+    """Build the metadata dict for a supplemental_public_ops entry.
+
+    Sprint C2: attach numeric_policy when this op is in
+    ``_NUMERIC_POLICY_BY_NAME_FACTORIES``.  Keeps the existing fields
+    intact otherwise.
+    """
+    md: dict[str, object] = {
+        "implementation": "python_reference",
+        "contract_schema": "explicit_partial",
+        "graph_ir_lowering": graph_ir_state,
+        "backend_kernel": "reference_only",
+    }
+    policy = _policy_for_name(name)
+    if policy is not None:
+        md["numeric_policy"] = policy.as_metadata_dict()
+    return md
+
+
 # Categories whose primitives are inherently non-differentiable: VJP/JVP
 # should resolve to `not_applicable`, not `planned`. RNG is non-diff through
 # the sample; transforms ARE the autodiff primitives (vjp/jvp themselves);
@@ -1109,6 +1372,17 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         contract_status.update(_EXISTING_CONTRACT_OVERRIDES.get(name, {}))
         schema = ("explicit_semantic" if name in _EXPLICIT_SEMANTIC_NAMES
                   else "explicit_partial")
+        # Sprint C2 (2026-05-11): attach numeric_policy when this op has an
+        # intrinsic storage/accumulator coupling.
+        metadata: dict[str, object] = {
+            "implementation": "op_catalog",
+            "contract_schema": schema,
+            "graph_ir_lowering": "registered",
+            "backend_kernel": "partial",
+        }
+        policy = _policy_for_name(name)
+        if policy is not None:
+            metadata["numeric_policy"] = policy.as_metadata_dict()
         entries[name] = PrimitiveCoverage(
             name=name,
             category=_EXISTING_CATEGORIES.get(name, spec.lowering),
@@ -1121,12 +1395,7 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
             graph_name=spec.graph_name,
             effect=spec.effect,
             lowering=spec.lowering,
-            metadata={
-                "implementation": "op_catalog",
-                "contract_schema": schema,
-                "graph_ir_lowering": "registered",
-                "backend_kernel": "partial",
-            },
+            metadata=metadata,
         )
     supplemental_public_ops = {
         "depthwise_conv1d": ("stencil", "state", "streaming depthwise convolution"),
@@ -1164,12 +1433,7 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
                 graph_name=f"tessera.{name}",
                 effect=effect,
                 lowering=lowering,
-                metadata={
-                    "implementation": "python_reference",
-                    "contract_schema": "explicit_partial",
-                    "graph_ir_lowering": graph_ir_state,
-                    "backend_kernel": "reference_only",
-                },
+                metadata=_supplemental_metadata(name, graph_ir_state),
             ),
         )
 
@@ -1506,6 +1770,12 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
             for field in ("math_semantics", "shape_rule", "dtype_layout_rule")
         ):
             metadata["contract_schema"] = "explicit_semantic"
+        # Sprint C2 (2026-05-11): attach numeric_policy for python_primitives
+        # that have intrinsic storage/accum coupling (e.g., logsumexp,
+        # log_softmax, the quantization helpers under tessera.quantization).
+        _python_policy = _policy_for_name(name)
+        if _python_policy is not None:
+            metadata["numeric_policy"] = _python_policy.as_metadata_dict()
         python_entry = PrimitiveCoverage(
             name=name,
             category=category,

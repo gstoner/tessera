@@ -304,3 +304,188 @@ class TestPublicReexport:
     def test_assert_canonical_dtype_attaches_context(self):
         with pytest.raises(TesseraDtypeError, match="my_op input"):
             assert_canonical_dtype("frobnicate", context="my_op input")
+
+
+# ──────────────────────────────────────────────────────────────────────────
+#         Sprint F — public Dtype object + result_type lattice
+# ──────────────────────────────────────────────────────────────────────────
+
+from tessera.dtype import Dtype, result_type, canonicalize, is_canonical
+
+
+class TestDtypeClass:
+    def test_dtype_canonicalizes_alias(self):
+        assert Dtype("f32") == "fp32"
+        assert Dtype("bfloat16") == "bf16"
+        assert Dtype("half") == "fp16"
+        assert Dtype("i8") == "int8"
+
+    def test_dtype_idempotent_on_dtype_input(self):
+        d = Dtype("fp32")
+        assert Dtype(d) is d
+        assert Dtype.from_(d) is d
+
+    def test_dtype_is_str_compatible(self):
+        d = Dtype("fp16")
+        assert isinstance(d, str)
+        # Existing code paths that compare against string literals still work.
+        assert d == "fp16"
+        assert {d, "fp32"} == {"fp16", "fp32"}
+
+    def test_dtype_repr_round_trip(self):
+        d = Dtype("bf16")
+        assert repr(d) == "Dtype('bf16')"
+
+    def test_dtype_rejects_unknown(self):
+        with pytest.raises(TesseraDtypeError):
+            Dtype("frobnicate")
+
+    def test_dtype_rejects_tf32(self):
+        with pytest.raises(TesseraDtypeError, match="math_mode"):
+            Dtype("tf32")
+
+    def test_dtype_planned_gated_requires_flag(self):
+        with pytest.raises(TesseraDtypeError, match="planned/gated"):
+            Dtype("uint8")
+        assert Dtype("uint8", allow_planned_gated=True) == "uint8"
+
+    @pytest.mark.parametrize("name,expected", [
+        ("fp64", 64), ("fp32", 32), ("fp16", 16), ("bf16", 16),
+        ("fp8_e4m3", 8), ("fp8_e5m2", 8),
+        ("fp6_e2m3", 6), ("fp6_e3m2", 6),
+        ("fp4_e2m1", 4), ("nvfp4", 4),
+        ("int8", 8), ("int16", 16), ("int32", 32), ("int64", 64),
+        ("bool", 1),
+    ])
+    def test_dtype_bits(self, name, expected):
+        assert Dtype(name).bits == expected
+
+    def test_dtype_predicates(self):
+        assert Dtype("fp32").is_float
+        assert Dtype("bf16").is_float
+        assert Dtype("nvfp4").is_low_precision
+        assert Dtype("nvfp4").is_float  # low-precision floats are still floats
+        assert Dtype("int32").is_integer
+        assert not Dtype("int32").is_float
+        assert not Dtype("fp32").is_integer
+
+    def test_dtype_canonical_classmethods(self):
+        assert Dtype.canonical("f32") == "fp32"
+        # Roundtrip via from_
+        d = Dtype("bf16")
+        assert Dtype.from_(d) is d
+        assert Dtype.from_("fp32") == "fp32"
+
+
+class TestResultType:
+    """Standard NumPy/JAX-style implicit promotion."""
+
+    @pytest.mark.parametrize("a,b,expected", [
+        ("fp16", "fp32", "fp32"),
+        ("fp32", "fp16", "fp32"),
+        ("fp64", "fp16", "fp64"),
+        ("fp32", "fp64", "fp64"),
+        # bf16/fp16 incomparable → fp32 safety net
+        ("bf16", "fp16", "fp32"),
+        ("fp16", "bf16", "fp32"),
+        # Identity
+        ("fp32", "fp32", "fp32"),
+        ("bf16", "bf16", "bf16"),
+        # Int + int
+        ("int32", "int64", "int64"),
+        ("int8", "int16", "int16"),
+        ("bool", "int8", "int8"),
+        # Float + int → float, with safety net for wide ints + narrow floats
+        ("int8", "fp16", "fp16"),
+        ("int8", "bf16", "bf16"),
+        ("int32", "fp16", "fp32"),
+        ("int64", "bf16", "fp32"),
+        ("int32", "fp32", "fp32"),
+        ("int64", "fp64", "fp64"),
+        # Low-precision routes through fp32 family
+        ("fp8_e4m3", "fp16", "fp32"),
+        ("fp8_e4m3", "fp32", "fp32"),
+        ("fp8_e4m3", "fp64", "fp64"),
+        ("nvfp4", "bf16", "fp32"),
+        ("fp4_e2m1", "fp8_e4m3", "fp32"),
+    ])
+    def test_pairwise_promotion(self, a, b, expected):
+        assert result_type(a, b) == expected
+        # Commutative
+        assert result_type(b, a) == expected
+
+    def test_returns_dtype_instance(self):
+        out = result_type("fp16", "fp32")
+        assert isinstance(out, Dtype)
+
+    def test_n_ary_promotion(self):
+        # left-fold over the list
+        assert result_type("int8", "fp16", "fp32") == "fp32"
+        assert result_type("bool", "int8", "int16", "int32") == "int32"
+
+    def test_aliases_canonicalize_before_promotion(self):
+        assert result_type("f16", "f32") == "fp32"
+        assert result_type("bfloat16", "half") == "fp32"
+
+    def test_single_arg_returns_canonical(self):
+        assert result_type("f32") == "fp32"
+        assert isinstance(result_type("f32"), Dtype)
+
+    def test_zero_args_rejected(self):
+        with pytest.raises(TesseraDtypeError, match="at least one"):
+            result_type()
+
+    def test_invalid_mode_rejected(self):
+        with pytest.raises(TesseraDtypeError, match="must be 'standard' or 'strict'"):
+            result_type("fp32", "fp32", mode="bogus")
+
+    def test_tf32_rejected_in_promotion(self):
+        with pytest.raises(TesseraDtypeError):
+            result_type("fp32", "tf32")
+
+
+class TestResultTypeStrict:
+    """Strict mode rejects mixed dtypes."""
+
+    def test_strict_same_dtype_passes(self):
+        assert result_type("fp32", "fp32", "fp32", mode="strict") == "fp32"
+        assert result_type("bf16", "bf16", mode="strict") == "bf16"
+
+    def test_strict_alias_normalization_still_works(self):
+        # f32 + fp32 are the same canonical dtype after normalization.
+        assert result_type("f32", "fp32", mode="strict") == "fp32"
+
+    @pytest.mark.parametrize("a,b", [
+        ("fp32", "fp16"),
+        ("bf16", "fp16"),
+        ("int32", "fp32"),
+        ("fp8_e4m3", "bf16"),
+    ])
+    def test_strict_mixed_dtypes_rejected(self, a, b):
+        with pytest.raises(TesseraDtypeError, match="strict-mode result_type rejects"):
+            result_type(a, b, mode="strict")
+
+
+class TestDtypeOperators:
+    def test_or_operator_is_promotion(self):
+        assert (Dtype("fp16") | Dtype("bf16")) == "fp32"
+        assert (Dtype("int8") | Dtype("fp16")) == "fp16"
+        assert (Dtype("int32") | Dtype("fp64")) == "fp64"
+
+    def test_or_with_string_works(self):
+        assert (Dtype("fp16") | "fp32") == "fp32"
+        assert ("fp16" | Dtype("fp32")) == "fp32"
+
+
+class TestShortAliases:
+    def test_canonicalize_short_alias_is_canonicalize_dtype(self):
+        from tessera.dtype import canonicalize_dtype
+        assert canonicalize is canonicalize_dtype
+
+    def test_is_canonical_short_alias(self):
+        from tessera.dtype import is_canonical_dtype
+        assert is_canonical is is_canonical_dtype
+
+    def test_is_planned_gated_short_alias(self):
+        from tessera.dtype import is_planned_gated, is_planned_gated_dtype
+        assert is_planned_gated is is_planned_gated_dtype

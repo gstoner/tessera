@@ -613,3 +613,89 @@ because each partial entry needs a real mesh verification. Plus
 
 Decision #25 long-pole gates now reduced from **5 axes** to **2 axes**
 (structural rules + backend kernel).
+
+## Sprints F + C2 — Public dtype object + numeric_policy first-class axis (2026-05-11)
+
+Two coordinated sprints land the final pieces from the tensor-attributes
+doc's "what's missing" list.
+
+### Sprint F — public `tessera.dtype.Dtype` object + promotion lattice
+
+**Goal:** match the doc's stated direction *"Tessera's equivalent direction
+is a tensor-attribute layer over shape, dtype, distribution, layout, and
+numeric_policy."*  Today's `canonicalize_dtype` was string-in / string-out;
+Sprint F adds the typed object and the promotion lattice the doc names.
+
+**Shipped:**
+
+| Component | Detail |
+|---|---|
+| `Dtype` class | Str-compatible (`Dtype("f32") == "fp32"` is True; existing string comparison paths keep working).  Constructor canonicalizes aliases.  Idempotent (`Dtype(Dtype("fp16")) is Dtype("fp16")`).  Predicates `.is_canonical`/`.is_planned_gated`/`.is_float`/`.is_integer`/`.is_low_precision`.  `.bits` reports storage width (fp32 → 32, nvfp4 → 4, bool → 1, etc.).  Class-method constructors `Dtype.canonical(s)` and `Dtype.from_(x)` for idempotent lifting. |
+| `result_type(*dtypes, mode="standard"|"strict") -> Dtype` | NumPy/JAX-style implicit promotion in `standard` mode: integer family promotes by bit width, float family by mantissa+exponent, mixed bf16/fp16 → fp32 (incomparable exponent ranges), low-precision (fp8/fp6/fp4/nvfp4) storage routes through fp32 for arithmetic.  `strict` mode rejects mixed dtypes (matches JAX's `jax_numpy_dtype_promotion='strict'`).  Multi-arg left-fold; aliases canonicalize before promotion. |
+| `Dtype.__or__` | Operator-style promotion: `Dtype('fp16') | Dtype('bf16') == 'fp32'`.  Same rule as `result_type(a, b, mode='standard')`. |
+| Short aliases | `tessera.dtype.canonicalize` (= `canonicalize_dtype`), `is_canonical` (= `is_canonical_dtype`), `is_planned_gated` (= `is_planned_gated_dtype`) — match the JAX-side vocabulary the doc references. |
+
+**Tests:** 64 new in `tests/unit/test_canonical_dtype.py` covering Dtype
+class behavior (10 tests), pairwise promotion (38 parametrized cases),
+strict-mode rejection (5 cases), operator overload (3 cases), short aliases
+(3 cases), and edge cases (zero-arg / invalid-mode / TF32-rejection).
+
+### Sprint C2 — NumericPolicy as a first-class tensor attribute
+
+**Goal:** the doc lists six tensor attributes — `shape`, `dtype`, `layout`,
+`device`, `distribution`, `numeric_policy`.  The previous registry
+compressed `numeric_policy` into the single-axis `dtype_layout_rule`
+status, which hid intrinsic storage/accumulator coupling (e.g., bf16
+matmul needs fp32 accumulator; quantization needs scale + quant_axis).
+
+**Shipped:**
+
+| Component | Detail |
+|---|---|
+| `NumericPolicy` dataclass | Frozen `@dataclass` with 7 fields: `storage` (canonical dtype), `accum` (None when storage doubles as accum), `rounding` (default `round_to_nearest_even`), `scale` (`blockfp_per_stage` / `per_tensor_symmetric` / `per_channel_symmetric` / `loss_scale` / None), `quant_axis` (channel axis for per-channel quant), `deterministic` (must-be-reproducible flag), `math_mode` (None / `"tf32"` / `"ieee"` / `"fast"`).  Validates `storage` + `accum` against `canonicalize_dtype(..., allow_planned_gated=True)` at `__post_init__` so a malformed policy fails immediately.  **TF32 routes through `math_mode='tf32'` on fp32 storage** — the storage field rejects TF32 with a precise pointer at numeric_policy. |
+| `_NUMERIC_POLICY_BY_NAME_FACTORIES` table | Maps **67 op names** to lazy `NumericPolicy()` factories across 6 families: matmul (14 ops — gemm/matmul/batched_gemm/einsum/factorized_matmul/linear_general/conv1d/conv2d/conv3d/conv_transpose/depthwise_conv1d/depthwise_conv2d/qkv_projection/fused_epilogue → `storage=bf16, accum=fp32`); attention (17 ops — flash_attn/MHA/GQA/MQA/MLA family/Lightning/DeepSeek-NSA/gated/hybrid/delta/kimi/sliding_window/compressed/top_k → `storage=bf16, accum=fp32, deterministic=True`); spectral (9 ops — fft/ifft/rfft/irfft/stft/istft/dct/spectral_conv/spectral_filter → `storage=fp32, accum=fp32`); normalization (7 ops — layer_norm/rmsnorm/rmsnorm_safe/group_norm/instance_norm/weight_norm/spectral_norm → `storage=bf16, accum=fp32`); stable reductions (6 ops — softmax/softmax_safe/online_softmax/online_softmax_state/logsumexp/log_softmax → `storage=fp32, accum=fp32, deterministic=True`); quantization (14 ops — int8/int4/fp8/fp6/fp4/nvfp4 quant+dequant, fake_quantize, calibration_observer, grad_scaler_step). |
+| Wiring | `_policy_for_name(name)` resolves the factory; metadata builders in the OP_SPECS loop, python_primitives loop, and supplemental_public_ops loop call it and attach `metadata["numeric_policy"] = policy.as_metadata_dict()`. |
+| Audit walker extension | `_iter_dtype_strings_in_entry` already scanned `metadata.numeric_policy.{storage,accum,scale_dtype}` (Sprint A0 forward-compat stub).  Today's registry: **134 canonical dtype slots reported, 0 unknown / 0 aliased / 0 un-annotated planned-gated**. |
+
+**Tests:** 79 new in `tests/unit/test_numeric_policy.py`:
+
+| Test class | Coverage |
+|---|---|
+| `TestNumericPolicy` | dataclass shape + alias normalization (`NumericPolicy(storage="f32")` → `"fp32"`), planned-gated acceptance, TF32 rejection, frozen-dataclass property, `as_metadata_dict` round-trip |
+| `TestPolicyTableCoverage` | parametrized over the 6 families × 67 op names — every member of MATMUL_FAMILY / ATTENTION_FAMILY / SPECTRAL_FAMILY / NORMALIZATION_FAMILY / STABLE_REDUCTION_FAMILY / QUANT_FAMILY has the expected policy shape |
+| `TestRegistryMetadata` | `coverage_for("matmul").metadata["numeric_policy"]` returns the expected dict; spectral ops all store=fp32; quant ops carry scale; calibration_observer is deterministic; promoted count ≥ 40 |
+| `TestRegistryDtypeAuditPicksUpNumericPolicy` | walker reports ≥80 canonical slots; 0 unknown; 0 alias; `assert_canonical_dtypes()` passes; namespaced keys `numeric_policy.storage` / `numeric_policy.accum` exposed |
+
+### Combined registry state
+
+**Eight axes remain at zero partial+planned** (same as post-Sprint-C+B);
+the new `numeric_policy` slot sits on top of `dtype_layout_rule` —
+the latter records *"is the dtype/layout contract documented?"* (348
+complete), the former records *"what is the storage+accumulator+scale
+contract specifically?"* (67 promoted entries with explicit policy).
+
+**Test totals:** **2,657 passing** under `-m "not slow"` (was 2,514;
++64 Sprint F + +79 Sprint C2 = +143 new tests), **0 failures**.
+
+### What this unblocks
+
+The tensor-attributes doc's stated direction is now fully realized:
+
+1. **Storage dtype** lives on the tensor — canonicalized by `Dtype` /
+   `canonicalize_dtype`.
+2. **Accumulator + scaling** lives on `numeric_policy` — registered as
+   metadata for 67 ops, audited by `audit_canonical_dtypes`.
+3. **Promotion lattice** is opt-in (`result_type(..., mode="strict")`)
+   per the doc's JAX comparison.
+4. **TF32 is not a storage dtype** — modelled as `math_mode='tf32'` on
+   fp32 storage; enforced by `canonicalize_dtype` rejection.
+5. **Planned/gated dtypes** require explicit annotation
+   (`metadata.dtype_status='planned_gated'`).
+6. **No external framework runtime** — `tessera.dtype` is the only
+   public dtype surface, matching Decision #23 (no PyTorch / JAX / Flax
+   at runtime).
+
+The original 7-sprint close-out plan (A0 → A → C → B → C2 → F → D → E)
+is **complete through F**.  Remaining: Sprint D (memory architecture —
+sharded layout rules + persistent state ABI) and Sprint E (Phase G/H/I
+backend kernel landing) — both require code outside the registry.

@@ -164,7 +164,7 @@ prove before it is compiler-complete.
   diffusion, RNN/xLSTM, SSM/Mamba, Hyena/FNet/spectral, Linformer/cosFormer,
   Griffin/Megalodon, Titans/Atlas memory, and JEPA.
 
-### [S2] Tensor algebra, indexing, and scalar math 🚧
+### [S2] Tensor algebra, indexing, and scalar math 🟢 (Python reference + hardening complete)
 
 **Scope:** L (~900 LOC code + ~600 LOC tests). Depends on S1.
 
@@ -227,7 +227,7 @@ compiler primitives, not PyTorch compatibility wrappers.
 - Dynamic-shape tests cover symbolic batch, sequence, image height/width, and
   memory-window dimensions.
 
-### [S3] Pytrees, module state, and model containers 🚧
+### [S3] Pytrees, module state, and model containers 🟢 (Python reference + hardening complete)
 
 **Scope:** M (~500 LOC code + ~350 LOC tests). Can run after S1.
 
@@ -256,7 +256,7 @@ collections, but owned by Tessera semantics.
 - Tests cover nested modules, shared containers, mutable/non-mutable buffers,
   optimizer state, recurrent state, memory state, and metrics.
 
-### [S4] Explicit RNG and stochastic effects 🚧
+### [S4] Explicit RNG and stochastic effects 🟢 (Python reference + hardening complete)
 
 **Scope:** M (~450 LOC code + ~300 LOC tests). Depends on S1; integrates with
 S3 once state trees exist.
@@ -287,7 +287,7 @@ process-global source.
 - Tests prove deterministic replay across single-device, sharded, checkpointed,
   and resumed runs.
 
-### [S5] Control flow and transform composition 🚧
+### [S5] Control flow and transform composition 🟢 (Python reference + hardening complete)
 
 **Scope:** XL (~1,200 LOC code + ~800 LOC tests). Depends on S1; uses S2 for
 indexing-heavy cases.
@@ -321,7 +321,7 @@ than Python helpers.
 - Tests include `grad(vmap(f))`, `vmap(grad(f))`, `grad(scan(f))`,
   `remat(scan(f))`, and `shard_map(grad(f))` once S6 lands.
 
-### [S6] Native sharding, collectives, and distributed semantics 🚧
+### [S6] Native sharding, collectives, and distributed semantics 🟢 (Python reference + hardening complete)
 
 **Scope:** L (~800 LOC code + ~500 LOC tests). Depends on S3-S5; GPU runtime
 acceleration depends on Phase G.
@@ -356,7 +356,7 @@ collectives primitive library that `shard_map` callees actually invoke.
 - CPU/mock tests validate semantics; NVIDIA/NCCL tests become active when
   Phase G provides hardware execution.
 
-### [S7] Flax-level model primitive library 🚧
+### [S7] Flax-level model primitive library 🟢 (Python reference + hardening complete)
 
 **Scope:** L (~900 LOC code + ~600 LOC tests). Depends on S2-S5 (recurrent
 layers require `scan` from S5; attention layers require batching rules from
@@ -408,7 +408,7 @@ Remaining S7 work: Conv3d, sequence flip/masking, stochastic depth, memory
 state ABI integration, batching/sharding/transpose rules for reference layers,
 and backend fused kernels for the reasoning-model attention families.
 
-### [S9] Numerics, mixed precision, and quantization 🚧
+### [S9] Numerics, mixed precision, and quantization 🟢 (Python reference + hardening complete)
 
 **Scope:** L (~700 LOC code + ~450 LOC tests). Depends on S1; integrates with
 S2 (dtype rules) and S5 (autocast as a transform).
@@ -451,7 +451,7 @@ Remaining S9 work: per-channel/blockwise quantization, GPTQ/AWQ policy hooks,
 full dtype-lattice documentation, reduction precision policy, and full
 autocast rewrite integration through compiled IR.
 
-### [S10] Optimizer library and training-step primitives 🚧
+### [S10] Optimizer library and training-step primitives 🟢 (Python reference + hardening complete)
 
 **Scope:** M (~600 LOC code + ~400 LOC tests). Depends on S3 (state trees
 hold optimizer slots) and S2 (scalar math + reductions).
@@ -500,7 +500,7 @@ mixed-precision optimizer kwargs, and autodiff coverage for `adam`,
 MoSA, MoE, DeepSeek-style fp8-adjacent training, MiniMax, and Kimi-style
 long-context finetuning.
 
-### [S11] Loss / criterion library 🚧
+### [S11] Loss / criterion library 🟢 (Python reference + hardening complete)
 
 **Scope:** M (~400 LOC code + ~350 LOC tests). Depends on S2 (reductions +
 stability primitives) and S9 (numerics policy).
@@ -550,7 +550,7 @@ metadata, backend kernels, and larger numerical stability goldens. S15
 data/tokenizer primitives are now explicitly declared non-differentiable in the
 coverage contract instead of appearing as missing autodiff work.
 
-### [S12] State serialization and checkpointing 🚧
+### [S12] State serialization and checkpointing 🟢 (Python reference + hardening complete)
 
 **Scope:** M (~500 LOC code + ~350 LOC tests). Depends on S3 (state trees) and
 S6 (sharded state for sharded checkpoints).
@@ -584,7 +584,7 @@ atomic rename, top-level collection filtering for partial loads,
 multi-rank shard partitioning, resumable multi-host writes, richer partial
 merge policies such as LoRA merge-in, and non-numpy tensor payload adapters.
 
-### [S13] Custom-primitive / extension API 🚧
+### [S13] Custom-primitive / extension API 🟢 (Python reference + hardening complete)
 
 **Scope:** L (~700 LOC code + ~500 LOC tests). Depends on S5 (transforms must
 see custom primitives) and S1 (registry).
@@ -622,7 +622,7 @@ custom-op nodes, collective insertion/effect lowering beyond metadata,
 target-specific custom-call ABI plumbing, and transform-rule enforcement in
 compiled pipelines.
 
-### [S14] Compilation cache and AOT export 🚧
+### [S14] Compilation cache and AOT export 🟢 (Python reference + hardening complete)
 
 **Scope:** L (~700 LOC code + ~400 LOC tests). Depends on S5 (the transforms
 that compile) and S6 (sharding metadata travels with the artifact).
@@ -660,7 +660,7 @@ source-independent execution for non-picklable callables, cache invalidation
 diagnostics in the JIT path, sharded-AOT mesh remapping, and real GGUF /
 safetensors binary compatibility.
 
-### [S15] Native data pipeline 🚧
+### [S15] Native data pipeline 🟢 (Python reference + hardening complete)
 
 **Scope:** L (~800 LOC code + ~500 LOC tests). Depends on S3 (datasets are
 state trees) and S4 (shuffle uses RNG).
@@ -703,7 +703,7 @@ Remaining S15 work: lazy streaming execution, true memory-mapped shard
 readers, async prefetch workers, tokenizer training/model-file parsers, and
 compiler-visible dataset lowering.
 
-### [S8] Tiny standalone model conformance suite 🚧
+### [S8] Tiny standalone model conformance suite 🚧 (next session)
 
 **Scope:** XL (~1,000 LOC tests/examples + dashboard integration). Depends on
 S2-S7 + S9-S15; performance gates depend on Phase G.

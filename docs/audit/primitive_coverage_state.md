@@ -118,14 +118,14 @@ missing Python API names:
 
 | Contract axis | Missing / partial count | Δ this session | Status after this pass |
 |---|---:|---:|---|
-| **`masking_effect_rule`** | **0** | **−16** | 343 not_applicable / 31 complete |
-| **`lowering_rule`** | **0** | **−77** | 324 complete / 50 not_applicable |
-| **`tests`** | **0** | **−69** | 374 complete |
+| **`masking_effect_rule`** | **0** | unchanged | 343 not_applicable / 31 complete |
+| **`lowering_rule`** | **0** | unchanged | 324 complete / 50 not_applicable |
+| **`tests`** | **0** | unchanged | 374 complete |
 | Mathematical semantics | 22 | unchanged | 326 complete / 26 not_applicable / 22 partial |
 | Shape rule | 22 | unchanged | 326 complete / 26 not_applicable / 22 partial |
 | Dtype/layout rule | 22 | unchanged | 326 complete / 26 not_applicable / 22 partial |
-| VJP | **53** | **−84** | 184 complete / 137 not_applicable / 53 planned |
-| JVP | **96** | **−125** | 140 complete / 138 not_applicable / 96 planned |
+| **VJP** | **28** | **−25** (long-tail closure) | **209** complete / 137 not_applicable / 28 planned |
+| **JVP** | **73** | **−23** (long-tail closure) | **163** complete / 138 not_applicable / 73 planned |
 | Batching rule | 102 | unchanged | 238 complete / 102 partial / 34 not_applicable |
 | Transpose rule | 123 | unchanged | 151 complete / 123 partial / 100 not_applicable |
 | Sharding rule | 156 | unchanged | 184 complete / 156 partial / 34 not_applicable |

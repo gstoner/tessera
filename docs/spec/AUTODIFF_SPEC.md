@@ -23,19 +23,20 @@ last_updated: 2026-05-09
    work lands, `tessera.autodiff.tape()` and `tessera.autodiff.reverse(fn)`
    keep the same shape; only the implementation underneath swaps.
 
-## Non-goals (deferred follow-ups)
+## Non-goals (deferred follow-ups, refreshed 2026-05-10)
 
-| Item | Tracking |
-|------|----------|
-| Graph/Tile IR adjoint ops | Phase F4 scaffold landed; full Python `@jit` integration remains follow-up |
-| Effect-aware adjoint collective insertion (`reduce_scatter`/`all_gather` for distributed gradients) | Phase F5 rewrite landed; full distributed training validation remains follow-up |
-| Activation checkpointing / rematerialization pass | Python reference rematerialization landed; lower-level pass integration remains follow-up |
-| Mixed-precision gradient master copy + loss scaling (fp32 master, fp8 forward) | Autocast + `GradScaler` landed for the reference path; fp8/backend lowering remains follow-up |
-| Higher-order derivatives (HVP, jacrev, jacfwd) | Reference `grad`, `hvp`, `elementwise_grad`, `jacrev`, and `jacfwd` shipped; true tape-based forward-over-reverse remains a perf/IR follow-up |
-| `jax.vmap`-style batched transforms | Reference `vmap` shipped as scan-then-stack; batched IR lowering remains a perf/IR follow-up |
-| Custom CUDA/Metal adjoint kernels | Each backend's later phase |
-| Backward through `flash_attn` (fused) | Reference-path VJP registered via `custom_rule`; backend-specific fused adjoint kernels remain follow-up |
-| Backward through `ops.moe`, `ops.spmm_*`, `ops.cholesky` | Error in v1 unless `custom_rule` registered; FFT-family VJPs are registered |
+| Item | Status |
+|------|--------|
+| Graph/Tile IR adjoint ops | **✅ Phase F4 landed** — `AdjointInterface` ODS + `AutodiffPass.cpp` verified end-to-end on MLIR 21. |
+| Effect-aware adjoint collective insertion | **✅ Phase F5 landed** — `tessera.distributed.DDP` / `FSDP` validate against `mock_collective`. |
+| Activation checkpointing / rematerialization | **✅ Phase F2 landed** — `tessera.autodiff.rematerialize` (alias `checkpoint`). |
+| Mixed-precision autocast + loss scaling | **✅ Phase F1 landed** — `tessera.autodiff.autocast(dtype)` + `GradScaler`. fp8 backend lowering still pending Phase G. |
+| Higher-order derivatives (HVP, jacrev, jacfwd) | **✅ Phase F7 landed** — `tessera.autodiff.{grad, hvp, jacrev, jacfwd, elementwise_grad}`. |
+| `jax.vmap`-style batched transforms | **✅ Phase F6 landed** — `tessera.autodiff.vmap` + `tessera.control.{vmap, pmap}`. |
+| Backward through `flash_attn`, attention family | **✅ Phase F3 landed** — `custom_rule`-registered VJP+JVP; reasoning-model variants (`deepseek_sparse_attention`, `lightning_attention`, `kimi_delta_attention`, etc.) also shipped. |
+| Backward through spectral, MoE, selective_ssm, sparse, linalg | **Mixed** — `fft`/`ifft`/`rfft`/`irfft`/`moe`/`selective_ssm` shipped (Phase F3); long-tail (`stft`/`istft`/`dct`/`spectral_*`, `spmm_*`/`sddmm`/`bsmm`, `cholesky`/`qr`/`svd`/`tri_solve`) tracked at `docs/audit/primitive_coverage_state.md`. |
+| Custom CUDA / Metal adjoint kernels | **Pending Phase G/H/I** — autodiff contract is numpy-reference complete; hardware kernels arrive with each backend. |
+| Custom-primitive registration API | **✅ Sprint S13 landed** — `tessera.custom.custom_vjp`/`custom_jvp`/`custom_batching`/`custom_lowering`. |
 
 ## Surface
 
@@ -99,32 +100,69 @@ wasn't already. Use this to opt op families *into* autodiff incrementally.
 - Multiple backward passes accumulate into `.grad` (matches PyTorch).
 - `Module.zero_grad()` (already shipped Tier 1) resets every parameter's `.grad` to `None`.
 
-## VJP coverage in v1
+## VJP / JVP coverage
 
-The first slice ships VJPs for these ops. Calling any other op inside an
-active tape **raises `TesseraAutodiffError`** with a clear message naming
-the op and pointing at `custom_rule`.
+The spec ships a registry-driven coverage model rather than a static table.
+Per-primitive contract status is the single source of truth at
+`python/tessera/compiler/primitive_coverage.py`, rendered as a dashboard
+at `docs/audit/standalone_primitive_coverage.md`, and audited at
+`docs/audit/primitive_coverage_state.md`.
 
-| Op | VJP |
-|----|-----|
-| `gemm` / `matmul` | `dA = dout @ B.T`, `dB = A.T @ dout` |
-| `add` (incl. broadcast) | `dx = sum_to_shape(dout, x.shape)`, `dy = sum_to_shape(dout, y.shape)` |
-| `mul` | `dx = sum_to_shape(dout * y, x.shape)`, `dy = sum_to_shape(dout * x, y.shape)` |
-| `transpose` | `dx = transpose(dout, inverse_axes)` |
-| `cast` | `dx = dout.astype(x.dtype)` |
-| `relu` | `dx = dout * (x > 0)` |
-| `silu` | `s = sigmoid(x); dx = dout * (s + x * s * (1 - s))` |
-| `gelu` (tanh approx) | derivative of the tanh approx |
-| `sigmoid` | `dx = dout * sig * (1 - sig)` |
-| `tanh` | `dx = dout * (1 - tanh^2)` |
-| `softmax(x, axis=-1)` | `dx = (dout - sum(dout * out, axis)) * out` |
-| `layer_norm(x, eps)` | standard LN gradient |
-| `rmsnorm(x, eps)` | standard RMSNorm gradient |
-| `sum` / `reduce(op="sum")` | `dx = broadcast(dout, x.shape)` |
-| `dropout` | `dx = dout * mask / (1-p)` (training); pass-through (eval) |
+**Current numbers (2026-05-10):**
 
-The VJPs are pure-numpy and live in `python/tessera/autodiff/vjp.py`. Adding
-a new op is one VJP function + one `register_vjp` call.
+| Registry axis | Status |
+|---|---|
+| VJPs registered (`tessera.autodiff.vjp._VJPS`) | **188** |
+| JVPs registered (`tessera.autodiff.jvp._JVPS`) | **140** |
+| Entries with `vjp = complete` | 184 |
+| Entries with `jvp = complete` | 140 |
+| Entries with `vjp = not_applicable` | 137 (RNG / transforms / schedules / boolean-output / state-effect — non-differentiable by design) |
+| Entries with `jvp = not_applicable` | 138 |
+| Entries with `vjp = planned` | 53 (niche tail: spectral `stft`/`istft`/`dct`/`spectral_*`, sparse `spmm_*`/`sddmm`/`bsmm`, linalg `cholesky`/`qr`/`svd`/`tri_solve`, quant `fp4`/`fp6` variants, recurrent `simple_rnn`/`gru`) |
+| Entries with `jvp = planned` | 96 (same tail plus tensor_algebra reshape/cat/stack JVPs) |
+
+**Coverage by family:**
+
+| Family | VJP+JVP coverage |
+|---|---|
+| Elementwise pointwise (`add`/`mul`/`exp`/`log`/`sqrt`/`pow`/`cos`/`tan`/`sinh`/`cosh`/`asin`/`acos`/`atan`/`atan2`/`erf`/`erfc`/`log1p`/`expm1`/`softplus`/`sigmoid_safe`/`reciprocal`/`absolute`/`sign`/...) | ✅ complete |
+| Activations (`gelu`/`silu`/`relu`/`sigmoid`/`tanh`/`softmax`/`log_softmax`) | ✅ complete |
+| Reductions (`sum`/`mean`/`prod`/`amax`/`amin`/`var`/`std`/`cumsum`/`logsumexp`) | ✅ complete |
+| Normalization (`layer_norm`/`rmsnorm`/`group_norm`/`instance_norm`) | ✅ complete |
+| Linear (`matmul`/`gemm`/`linear_general`/`einsum`/`conv1d`) | ✅ complete |
+| Attention family — `flash_attn`/`multi_head_attention`/`gqa_attention`/`mqa_attention`/`mla_decode`/`linear_attn`/`linear_attn_state`/`power_attn`/`retention`/`attn_sliding_window`/`attn_top_k_blocks`/`attn_compressed_blocks` | ✅ complete |
+| Reasoning-model attention — `deepseek_sparse_attention`/`lightning_attention`/`gated_attention`/`hybrid_attention`/`gated_deltanet`/`kimi_delta_attention`/`modified_delta_attention` | ✅ complete |
+| Position encodings (`rope`/`rope_split`/`rope_merge`/`alibi`/`ntk_rope`) | ✅ complete |
+| Losses (`mse_loss`/`mae_loss`/`huber_loss`/`smooth_l1_loss`/`log_cosh_loss`/`cross_entropy_loss`/`binary_cross_entropy_loss`/`focal_loss`/`label_smoothed_cross_entropy`/`kl_divergence`/`js_divergence`/`wasserstein_distance`/`triplet_loss`/`contrastive_loss`/`cosine_embedding_loss`/`info_nce_loss`/`nt_xent_loss`/`ddpm_noise_pred_loss`/`score_matching_loss`/`vlb_loss`/`ctc_loss`/`seq2seq_loss`) | ✅ complete |
+| RL policy losses (`ppo_policy_loss`/`grpo_policy_loss`/`cispo_policy_loss`) | ✅ complete |
+| MoE routing (`moe`/`moe_dispatch`/`moe_combine`/`mor_router`/`mor_partition`/`mor_scatter`) | ✅ complete |
+| MLA family (`latent_kv_compress`/`latent_kv_expand_k`/`latent_kv_expand_v`/`mla_decode`/`mla_decode_fused`) | ✅ complete |
+| Collectives — `psum`/`pmean`/`pmax`/`pmin`/`collective_permute`/`broadcast_to_axis` | ✅ complete |
+| Optimizers — `sgd`/`momentum`/`nesterov`/`adamw` (state-aware single-step) | ✅ complete |
+| Spectral — `fft`/`ifft`/`rfft`/`irfft` | ✅ complete |
+| Memory (`memory_read` differentiable; `memory_write`/`memory_evict` are state-effect) | ✅ complete |
+| Cumulative extrema (`cummax`/`cummin`) | ✅ complete |
+| Pooling (`max_pool`/`avg_pool`) | ✅ complete |
+
+The VJPs live in `python/tessera/autodiff/vjp.py`, JVPs in
+`python/tessera/autodiff/jvp.py`. Adding a new op is one rule function +
+one decorator (`@_vjp("name")` / `@_jvp("name")`). The primitive coverage
+registry consults both dicts automatically — registering a (V/J)VP for a
+catalog op auto-flips its dashboard status from `planned` to `complete`
+without manual intervention.
+
+**Categories that are intentionally non-differentiable** (covered by the
+`_NONDIFFERENTIABLE_CATEGORIES` set in `primitive_coverage.py`): RNG
+samplers, control-flow transforms (`scan`/`cond`/`while_loop`), LR
+schedules, comparisons (`eq`/`ne`/`lt`/`...`), logical ops, sharding
+primitives, gradient transforms, sort/argsort/top_k, state trees, data
+pipelines, AOT/serialization, conformance suites, and the
+`extension` (custom-primitive) declarations themselves. These resolve to
+`vjp = not_applicable` / `jvp = not_applicable` in the registry.
+
+Calling an unregistered op inside an active tape raises
+`TesseraAutodiffError` with a clear message naming the op and pointing at
+`custom_rule` for registration.
 
 ## Mechanism
 

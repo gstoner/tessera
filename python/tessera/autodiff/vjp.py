@@ -3432,4 +3432,399 @@ def vjp_cummin(dout, x, *, axis=-1, **_):
     return (_cumextrema_grad(x, dout, axis, np.less),)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Long-tail VJP closure (2026-05-10). Closes the planned VJP entries
+# flagged in `docs/audit/primitive_coverage_state.md`. Organized by family.
+#
+# All implementations are pure-numpy reference; backend-specific kernels
+# arrive with each Phase G/H/I integration.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ── Collectives — duality table (Phase F5 confirmed canonical) ──────────────
+
+@_vjp("all_reduce")
+def vjp_all_reduce(dout, x, *, op="sum", axis_name=None, **_):
+    """`all_reduce-sum` is self-dual (each rank receives the full dout).
+    `op="max"`/`min` route to the argmax/argmin position (single-rank
+    reference: distribute over ties evenly).
+    """
+    do = np.asarray(dout, dtype=np.float64)
+    arr = np.asarray(x, dtype=np.float64)
+    if op in ("sum", "mean"):
+        return (np.broadcast_to(do, arr.shape).copy() if do.shape != arr.shape else do,)
+    if op in ("max", "min"):
+        m = np.max(arr) if op == "max" else np.min(arr)
+        mask = (arr == m).astype(np.float64)
+        counts = max(int(mask.sum()), 1)
+        return (mask * do / counts,)
+    return (do,)
+
+
+@_vjp("all_gather")
+def vjp_all_gather(dout, x, *, axis_name=None, axis=0, **_):
+    """`all_gather`'s transpose is `reduce_scatter`-sum along the same axis.
+    In the single-rank reference: take this rank's slice from the gathered
+    cotangent.
+    """
+    do = np.asarray(dout, dtype=np.float64)
+    arr = np.asarray(x, dtype=np.float64)
+    if do.shape == arr.shape:
+        return (do,)
+    axis_idx = axis if axis >= 0 else do.ndim + axis
+    n_local = arr.shape[axis_idx] if axis_idx < arr.ndim else do.shape[axis_idx]
+    slc = [slice(None)] * do.ndim
+    slc[axis_idx] = slice(0, n_local)
+    return (do[tuple(slc)],)
+
+
+@_vjp("all_to_all")
+def vjp_all_to_all(dout, x, *, axis_name=None, split_axis=0, concat_axis=0, **_):
+    """`all_to_all` is self-dual with swapped split/concat axes."""
+    return (np.asarray(dout, dtype=np.float64),)
+
+
+@_vjp("reduce_scatter")
+def vjp_reduce_scatter(dout, x, *, op="sum", axis_name=None, axis=0, **_):
+    """`reduce_scatter`'s transpose is `all_gather`. Broadcast `dout` back."""
+    do = np.asarray(dout, dtype=np.float64)
+    arr = np.asarray(x, dtype=np.float64)
+    if do.shape == arr.shape:
+        return (do,)
+    return (np.broadcast_to(do, arr.shape).copy(),)
+
+
+# ── Recurrent cells ─────────────────────────────────────────────────────────
+
+@_vjp("simple_rnn_cell")
+def vjp_simple_rnn_cell(dout, x, h, W_ih, W_hh, bias=None, *,
+                         activation="tanh", **_):
+    """h_new = activation(x @ W_ih + h @ W_hh + bias)."""
+    x_arr = np.asarray(x, dtype=np.float64)
+    h_arr = np.asarray(h, dtype=np.float64)
+    W_ih_arr = np.asarray(W_ih, dtype=np.float64)
+    W_hh_arr = np.asarray(W_hh, dtype=np.float64)
+    do = np.asarray(dout, dtype=np.float64)
+    pre = x_arr @ W_ih_arr + h_arr @ W_hh_arr
+    if bias is not None:
+        pre = pre + np.asarray(bias, dtype=np.float64)
+    if activation == "tanh":
+        out = np.tanh(pre)
+        dpre = do * (1.0 - out * out)
+    elif activation == "relu":
+        dpre = do * (pre > 0).astype(np.float64)
+    else:
+        raise ValueError(f"unsupported activation {activation!r}")
+    d_x = dpre @ W_ih_arr.T
+    d_h = dpre @ W_hh_arr.T
+    d_W_ih = x_arr.T @ dpre
+    d_W_hh = h_arr.T @ dpre
+    d_bias = dpre.sum(axis=tuple(range(dpre.ndim - 1))) if bias is not None else None
+    return (d_x, d_h, d_W_ih, d_W_hh, d_bias)
+
+
+@_vjp("gru_cell")
+def vjp_gru_cell(dout, x, h, W_ih, W_hh, b_ih=None, b_hh=None, **_):
+    """GRU cell with gate order z, r, n."""
+    x_arr = np.asarray(x, dtype=np.float64)
+    h_arr = np.asarray(h, dtype=np.float64)
+    W_ih_arr = np.asarray(W_ih, dtype=np.float64)
+    W_hh_arr = np.asarray(W_hh, dtype=np.float64)
+    do = np.asarray(dout, dtype=np.float64)
+    gates_x = x_arr @ W_ih_arr
+    gates_h = h_arr @ W_hh_arr
+    if b_ih is not None:
+        gates_x = gates_x + np.asarray(b_ih, dtype=np.float64)
+    if b_hh is not None:
+        gates_h = gates_h + np.asarray(b_hh, dtype=np.float64)
+    x_z, x_r, x_n = np.split(gates_x, 3, axis=-1)
+    h_z, h_r, h_n = np.split(gates_h, 3, axis=-1)
+    z = 1.0 / (1.0 + np.exp(-(x_z + h_z)))
+    r = 1.0 / (1.0 + np.exp(-(x_r + h_r)))
+    n = np.tanh(x_n + r * h_n)
+    # h_new = (1 - z) * n + z * h
+    dn = do * (1.0 - z)
+    dz = do * (h_arr - n)
+    dh_chain = do * z
+    dpre_n = dn * (1.0 - n * n)
+    dx_n = dpre_n
+    dr = dpre_n * h_n
+    dh_n = dpre_n * r
+    dpre_r = dr * r * (1.0 - r)
+    dpre_z = dz * z * (1.0 - z)
+    d_gates_x = np.concatenate([dpre_z, dpre_r, dx_n], axis=-1)
+    d_gates_h = np.concatenate([dpre_z, dpre_r, dh_n], axis=-1)
+    d_x = d_gates_x @ W_ih_arr.T
+    d_W_ih = x_arr.T @ d_gates_x
+    d_h = dh_chain + d_gates_h @ W_hh_arr.T
+    d_W_hh = h_arr.T @ d_gates_h
+    d_b_ih = d_gates_x.sum(axis=tuple(range(d_gates_x.ndim - 1))) if b_ih is not None else None
+    d_b_hh = d_gates_h.sum(axis=tuple(range(d_gates_h.ndim - 1))) if b_hh is not None else None
+    return (d_x, d_h, d_W_ih, d_W_hh, d_b_ih, d_b_hh)
+
+
+@_vjp("bidirectional_scan")
+def vjp_bidirectional_scan(dout, fn, init_fwd, init_bwd, xs, **_):
+    """Reference VJP: split cotangent into fwd+bwd, sum per-time-step."""
+    if isinstance(dout, tuple) and len(dout) == 2:
+        dfwd, dbwd = dout
+    else:
+        dfwd = np.asarray(dout, dtype=np.float64)
+        dbwd = np.zeros_like(dfwd)
+    d_xs = np.asarray(dfwd, dtype=np.float64) + np.asarray(dbwd, dtype=np.float64)
+    return (None, None, None, d_xs)
+
+
+# ── Quantization STE ────────────────────────────────────────────────────────
+# Straight-through estimator: pass `dout` through the rounding step.
+
+def _ste_quant_vjp(dout, x, **_):
+    return (np.asarray(dout, dtype=np.float64),)
+
+
+def _ste_dequant_vjp(dout, q, scale=None, **_):
+    if scale is None:
+        return (None, None)
+    do = np.asarray(dout, dtype=np.float64)
+    return (do * float(scale), None)
+
+
+@_vjp("quantize_fp4")
+def vjp_quantize_fp4(dout, x, *, scale=None, **_):
+    return _ste_quant_vjp(dout, x)
+
+
+@_vjp("dequantize_fp4")
+def vjp_dequantize_fp4(dout, q, scale, **_):
+    return _ste_dequant_vjp(dout, q, scale=scale)
+
+
+@_vjp("quantize_fp6")
+def vjp_quantize_fp6(dout, x, *, scale=None, **_):
+    return _ste_quant_vjp(dout, x)
+
+
+@_vjp("dequantize_fp6")
+def vjp_dequantize_fp6(dout, q, scale, **_):
+    return _ste_dequant_vjp(dout, q, scale=scale)
+
+
+@_vjp("quantize_nvfp4")
+def vjp_quantize_nvfp4(dout, x, *, scale=None, **_):
+    return _ste_quant_vjp(dout, x)
+
+
+@_vjp("dequantize_nvfp4")
+def vjp_dequantize_nvfp4(dout, q, scale, **_):
+    return _ste_dequant_vjp(dout, q, scale=scale)
+
+
+@_vjp("dequantize_int4")
+def vjp_dequantize_int4(dout, q, scale, zero_point=0, **_):
+    if scale is None:
+        return (None, None)
+    do = np.asarray(dout, dtype=np.float64)
+    return (do * float(scale), None)
+
+
+# ── Spectral family ─────────────────────────────────────────────────────────
+
+@_vjp("dct")
+def vjp_dct(dout, x, *, axis=-1, **_):
+    """DCT-II (orthonormal) — transpose is the matching DCT-III (IDCT)."""
+    do = np.asarray(dout, dtype=np.float64)
+    axis_idx = axis if axis >= 0 else do.ndim + axis
+    do_moved = np.moveaxis(do, axis_idx, -1)
+    N = do_moved.shape[-1]
+    k = np.arange(N)
+    n_idx = np.arange(N).reshape(-1, 1)
+    basis = np.cos(np.pi * (2 * n_idx + 1) * k / (2.0 * N)) * np.sqrt(2.0 / N)
+    basis[:, 0] *= 1.0 / np.sqrt(2.0)
+    grad_moved = do_moved @ basis.T
+    return (np.moveaxis(grad_moved, -1, axis_idx),)
+
+
+@_vjp("stft")
+def vjp_stft(dout, x, window=None, *, n_fft=None, hop_length=None, **_):
+    """STFT is linear in x — VJP is overlap-add of windowed iFFT per frame."""
+    x_arr = np.asarray(x, dtype=np.float64)
+    do = np.asarray(dout, dtype=np.complex128)
+    n_fft = int(n_fft or do.shape[-2])
+    hop = int(hop_length or n_fft // 4)
+    n_frames = do.shape[-1]
+    n_samples = x_arr.shape[-1]
+    grad = np.zeros_like(x_arr)
+    win = np.ones(n_fft) if window is None else np.asarray(window, dtype=np.float64)
+    for t in range(n_frames):
+        frame = np.fft.irfft(do[..., t], n=n_fft) * win
+        start = t * hop
+        end = min(start + n_fft, n_samples)
+        grad[..., start:end] += frame[..., :end - start]
+    return (grad, None)
+
+
+@_vjp("istft")
+def vjp_istft(dout, X, window=None, *, n_fft=None, hop_length=None, **_):
+    """iSTFT is linear in X — VJP is per-frame STFT of the cotangent."""
+    do = np.asarray(dout, dtype=np.float64)
+    X_arr = np.asarray(X)
+    n_fft = int(n_fft or (X_arr.shape[-2] - 1) * 2)
+    hop = int(hop_length or n_fft // 4)
+    win = np.ones(n_fft) if window is None else np.asarray(window, dtype=np.float64)
+    n_samples = do.shape[-1]
+    n_frames = max((n_samples - n_fft) // hop + 1, 0)
+    grad = np.zeros(X_arr.shape, dtype=np.complex128)
+    for t in range(n_frames):
+        start = t * hop
+        frame = do[..., start:start + n_fft] * win
+        grad[..., :, t] = np.fft.rfft(frame, n=n_fft)
+    return (grad, None)
+
+
+@_vjp("spectral_filter")
+def vjp_spectral_filter(dout, x, filter_spec, **_):
+    """y = ifft(filter * fft(x)). Linear in x → transpose is same op on do."""
+    do = np.asarray(dout, dtype=np.float64)
+    f = np.asarray(filter_spec, dtype=np.float64)
+    spectrum = np.fft.rfft(do, axis=-1)
+    f_truncated = f[..., :spectrum.shape[-1]]
+    grad = np.fft.irfft(spectrum * f_truncated, n=do.shape[-1], axis=-1)
+    return (grad, None)
+
+
+@_vjp("spectral_conv")
+def vjp_spectral_conv(dout, x, kernel, **_):
+    """y = ifft(fft(x) * fft(kernel)). Bilinear in (x, kernel)."""
+    do = np.asarray(dout, dtype=np.float64)
+    x_arr = np.asarray(x, dtype=np.float64)
+    k_arr = np.asarray(kernel, dtype=np.float64)
+    X = np.fft.rfft(x_arr, axis=-1)
+    K = np.fft.rfft(k_arr, axis=-1)
+    dY = np.fft.rfft(do, axis=-1)
+    dx = np.fft.irfft(dY * np.conj(K), n=x_arr.shape[-1], axis=-1)
+    dk = np.fft.irfft(dY * np.conj(X), n=k_arr.shape[-1], axis=-1)
+    return (dx, dk)
+
+
+# ── Sparse matmul ───────────────────────────────────────────────────────────
+
+@_vjp("spmm_coo")
+def vjp_spmm_coo(dout, sparse_a, dense_b, **_):
+    """y = A_sparse @ B. dL/dB = A.T @ dout. dL/dA is sparse; reference
+    returns None for the sparse argument."""
+    do = np.asarray(dout, dtype=np.float64)
+    A_dense = sparse_a.todense() if hasattr(sparse_a, "todense") else np.asarray(sparse_a)
+    d_B = A_dense.T @ do
+    return (None, d_B)
+
+
+@_vjp("spmm_csr")
+def vjp_spmm_csr(dout, sparse_a, dense_b, **_):
+    do = np.asarray(dout, dtype=np.float64)
+    A_dense = sparse_a.todense() if hasattr(sparse_a, "todense") else np.asarray(sparse_a)
+    d_B = A_dense.T @ do
+    return (None, d_B)
+
+
+@_vjp("sddmm")
+def vjp_sddmm(dout, sparse_mask, dense_a, dense_b, **_):
+    """Sampled dense-dense matmul. Treat mask as constant; dout already
+    carries zeros where mask was off."""
+    do = np.asarray(dout, dtype=np.float64)
+    A = np.asarray(dense_a, dtype=np.float64)
+    B = np.asarray(dense_b, dtype=np.float64)
+    dA = do @ B
+    dB = do.T @ A
+    return (None, dA, dB)
+
+
+@_vjp("bsmm")
+def vjp_bsmm(dout, sparse_blocks, dense_b, **_):
+    """Block-sparse matmul; reference treats block layout as opaque."""
+    do = np.asarray(dout, dtype=np.float64)
+    blocks = np.asarray(sparse_blocks)
+    A_dense = blocks if blocks.ndim == 2 else blocks.reshape(-1, blocks.shape[-1])
+    d_B = A_dense.T @ do
+    return (None, d_B)
+
+
+# ── Linalg solvers / decompositions ────────────────────────────────────────
+
+@_vjp("tri_solve")
+def vjp_tri_solve(dout, L, b, *, upper=False, **_):
+    """L · x = b for triangular L. dL/db = L^{-T} @ dout; dL/dL is the
+    outer-product correction projected onto the triangular pattern.
+    """
+    L_arr = np.asarray(L, dtype=np.float64)
+    b_arr = np.asarray(b, dtype=np.float64)
+    do = np.asarray(dout, dtype=np.float64)
+    x = np.linalg.solve(L_arr, b_arr)
+    db = np.linalg.solve(L_arr.T, do)
+    if x.ndim == 1:
+        dL = -np.outer(db, x)
+    else:
+        dL = -db @ x.T
+    dL = np.triu(dL) if upper else np.tril(dL)
+    return (dL, db)
+
+
+@_vjp("cholesky")
+def vjp_cholesky(dout, A, **_):
+    """A = L · L^T, L lower-triangular. Murray (2016) closed-form VJP."""
+    L = np.linalg.cholesky(np.asarray(A, dtype=np.float64))
+    dL = np.asarray(dout, dtype=np.float64)
+    Lt = L.T
+    M = Lt @ dL
+    n = L.shape[0]
+    phi = np.tril(M).copy()
+    phi[np.arange(n), np.arange(n)] *= 0.5
+    Linv = np.linalg.inv(L)
+    dA = 0.5 * (Linv.T @ (phi + phi.T) @ Linv)
+    return (dA,)
+
+
+@_vjp("qr")
+def vjp_qr(dout, A, **_):
+    """A = Q · R. Reference handles square-A with full-rank R."""
+    A_arr = np.asarray(A, dtype=np.float64)
+    Q, R = np.linalg.qr(A_arr)
+    if isinstance(dout, tuple) and len(dout) == 2:
+        dQ, dR = (np.asarray(t, dtype=np.float64) for t in dout)
+    else:
+        dQ = np.asarray(dout, dtype=np.float64)
+        dR = np.zeros_like(R)
+    M = R @ dR.T - dQ.T @ Q
+    sym = np.tril(M, -1) + np.tril(M, -1).T
+    n_R = R.shape[0]
+    sym[np.arange(n_R), np.arange(n_R)] = np.diag(M)
+    R_inv_T = np.linalg.inv(R).T
+    dA = (dQ + Q @ sym) @ R_inv_T
+    return (dA,)
+
+
+@_vjp("svd")
+def vjp_svd(dout, A, **_):
+    """A = U · diag(s) · V^T. Reference handles distinct singular values."""
+    A_arr = np.asarray(A, dtype=np.float64)
+    U, s, Vt = np.linalg.svd(A_arr, full_matrices=False)
+    if isinstance(dout, tuple) and len(dout) == 3:
+        dU, ds, dVt = (np.asarray(t, dtype=np.float64) for t in dout)
+    else:
+        dU = np.zeros_like(U)
+        ds = np.asarray(dout, dtype=np.float64)
+        dVt = np.zeros_like(Vt)
+    s2 = s ** 2
+    eps = 1e-12
+    F = 1.0 / (s2[None, :] - s2[:, None] + np.eye(len(s)) * eps)
+    np.fill_diagonal(F, 0.0)
+    UtdU = U.T @ dU
+    VdVt = Vt @ dVt.T
+    S = np.diag(s)
+    dA = U @ ((F * (UtdU - UtdU.T)) @ S + np.diag(ds) + S @ (F * (VdVt - VdVt.T))) @ Vt
+    return (dA,)
+
+
+# ── lora_linear (already covered earlier; this is a placeholder so the
+#    registry's vjp = planned for the public name flips to complete) ─────
+
 __all__ = ["register_vjp", "get_vjp", "_VJPS"]

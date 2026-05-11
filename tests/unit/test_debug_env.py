@@ -167,7 +167,21 @@ class TestJitIntegration:
 class TestDiffCommand:
     def _run_cli(self, *args: str, capture_output: bool = True):
         cmd = [sys.executable, "-m", "tessera.cli.mlir", *args]
-        return subprocess.run(cmd, capture_output=capture_output, text=True)
+        # The repo is dev-installed via `pyproject.toml`'s `pythonpath = [".",
+        # "python"]`, which is honored by the pytest collector but NOT by a
+        # naked subprocess. Pass PYTHONPATH so `-m tessera.cli.mlir` resolves
+        # the same way it does inside the test process.
+        repo_root = Path(__file__).resolve().parents[2]
+        env = dict(os.environ)
+        existing_path = env.get("PYTHONPATH", "")
+        repo_python = str(repo_root / "python")
+        env["PYTHONPATH"] = (
+            f"{repo_python}{os.pathsep}{existing_path}"
+            if existing_path else repo_python
+        )
+        return subprocess.run(
+            cmd, capture_output=capture_output, text=True, env=env,
+        )
 
     def test_identical_files_exit_zero(self, tmp_path):
         a = tmp_path / "a.mlir"

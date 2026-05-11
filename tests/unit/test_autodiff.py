@@ -468,22 +468,21 @@ class TestTape:
                 t.backward(bogus)
 
     def test_unsupported_op_raises(self):
-        # An op without a registered VJP (here: `cholesky`, which has no
-        # adjoint — Cholesky's gradient requires sub-matrix solves, hasn't
-        # been written yet). The error fires during backward iff the
-        # gradient path reaches that entry.
-        # Note: `moe` HAD no VJP in v1 but got one in the Theme 2 follow-up
-        # (F3-moe, 2026-05-09); this test moved off `moe` accordingly.
-        np.random.seed(0)
-        # Cholesky needs a positive-definite input — A @ A.T + I works.
-        seed = np.random.randn(3, 3).astype(np.float64)
-        spd = seed @ seed.T + np.eye(3)
-        x_p = ts.nn.Parameter(spd.copy())
+        # An op without a registered VJP. The error fires during backward
+        # iff the gradient path reaches that entry.
+        # History of sentinels (each migrated as its VJP landed):
+        #   - `moe`        v1 → F3-moe shipped 2026-05-09
+        #   - `cholesky`   v1 → long-tail closure 2026-05-10 (Murray)
+        # Current sentinel: `cumprod` — gradient through `cumprod` requires
+        # a non-trivial reverse-cumprod construction still on the
+        # `vjp = planned` list.
+        x = np.array([1.0, 2.0, 3.0])
+        x_p = ts.nn.Parameter(x.copy())
         with ts.autodiff.tape() as t:
-            out = ts.ops.cholesky(x_p)
+            out = ts.ops.cumprod(x_p)
             loss = ts.ops.reduce(out, op="sum")
             with pytest.raises(
-                TesseraAutodiffError, match=r"cholesky.+not differentiable",
+                TesseraAutodiffError, match=r"cumprod.+not differentiable",
             ):
                 t.backward(loss)
 

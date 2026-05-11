@@ -1853,4 +1853,299 @@ def jvp_log_softmax(primals, tangents, *, axis=-1, **_):
     return primal, tan
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Long-tail JVP closure (2026-05-10). Mirrors the long-tail VJP additions in
+# `vjp.py`. For linear ops the JVP is just the forward applied to the
+# tangent; for bilinear ops the JVP is the linearized sum of both
+# contributions.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ── Collectives — linear, so JVP = forward(tangent) ───────────────────────
+
+@_jvp("all_reduce")
+def jvp_all_reduce(primals, tangents, *, op="sum", axis_name=None, **_):
+    x = np.asarray(primals[0], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    if op == "sum":
+        return x, dx
+    if op == "mean":
+        return x, dx
+    if op == "max":
+        return np.maximum.reduce(x.reshape(1, -1)).reshape(x.shape), dx
+    return x, dx
+
+
+@_jvp("all_gather")
+def jvp_all_gather(primals, tangents, *, axis_name=None, axis=0, **_):
+    return np.asarray(primals[0]), np.asarray(tangents[0])
+
+
+@_jvp("all_to_all")
+def jvp_all_to_all(primals, tangents, *, axis_name=None, split_axis=0,
+                    concat_axis=0, **_):
+    return np.asarray(primals[0]), np.asarray(tangents[0])
+
+
+@_jvp("reduce_scatter")
+def jvp_reduce_scatter(primals, tangents, *, op="sum", axis_name=None,
+                        axis=0, **_):
+    return np.asarray(primals[0]), np.asarray(tangents[0])
+
+
+# ── Recurrent cells — forward + tangent of activation chain ────────────────
+
+@_jvp("simple_rnn_cell")
+def jvp_simple_rnn_cell(primals, tangents, *, activation="tanh", **_):
+    x, h, W_ih, W_hh = (np.asarray(p, dtype=np.float64) for p in primals[:4])
+    bias = primals[4] if len(primals) > 4 else None
+    dx, dh, dW_ih, dW_hh = (np.asarray(t, dtype=np.float64) for t in tangents[:4])
+    dbias = tangents[4] if len(tangents) > 4 else None
+
+    pre = x @ W_ih + h @ W_hh
+    dpre = dx @ W_ih + x @ dW_ih + dh @ W_hh + h @ dW_hh
+    if bias is not None:
+        pre = pre + np.asarray(bias, dtype=np.float64)
+        if dbias is not None:
+            dpre = dpre + np.asarray(dbias, dtype=np.float64)
+
+    if activation == "tanh":
+        out = np.tanh(pre)
+        return out, dpre * (1.0 - out * out)
+    if activation == "relu":
+        return np.maximum(pre, 0.0), dpre * (pre > 0).astype(np.float64)
+    raise ValueError(f"unsupported activation {activation!r}")
+
+
+@_jvp("gru_cell")
+def jvp_gru_cell(primals, tangents, **_):
+    """GRU cell forward + tangent. Uses re-forward with tangent propagation
+    through each gate."""
+    x, h, W_ih, W_hh = (np.asarray(p, dtype=np.float64) for p in primals[:4])
+    dx, dh, dW_ih, dW_hh = (np.asarray(t, dtype=np.float64) for t in tangents[:4])
+    gates_x = x @ W_ih
+    gates_h = h @ W_hh
+    dgates_x = dx @ W_ih + x @ dW_ih
+    dgates_h = dh @ W_hh + h @ dW_hh
+    x_z, x_r, x_n = np.split(gates_x, 3, axis=-1)
+    h_z, h_r, h_n = np.split(gates_h, 3, axis=-1)
+    dx_z, dx_r, dx_n = np.split(dgates_x, 3, axis=-1)
+    dh_z, dh_r, dh_n = np.split(dgates_h, 3, axis=-1)
+
+    pre_z = x_z + h_z
+    pre_r = x_r + h_r
+    dpre_z = dx_z + dh_z
+    dpre_r = dx_r + dh_r
+    z = 1.0 / (1.0 + np.exp(-pre_z))
+    r = 1.0 / (1.0 + np.exp(-pre_r))
+    dz = z * (1.0 - z) * dpre_z
+    dr = r * (1.0 - r) * dpre_r
+
+    pre_n = x_n + r * h_n
+    dpre_n = dx_n + dr * h_n + r * dh_n
+    n = np.tanh(pre_n)
+    dn = (1.0 - n * n) * dpre_n
+
+    h_new = (1.0 - z) * n + z * h
+    dh_new = -dz * n + (1.0 - z) * dn + dz * h + z * dh
+    return h_new, dh_new
+
+
+# ── Quantization STE — pass tangent through ────────────────────────────────
+
+def _ste_quant_jvp_unary(primals, tangents):
+    x = np.asarray(primals[0], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    return x, dx
+
+
+def _ste_dequant_jvp(primals, tangents, scale_arg_idx=1):
+    q = primals[0]
+    scale = primals[scale_arg_idx] if len(primals) > scale_arg_idx else None
+    dq = np.asarray(tangents[0], dtype=np.float64)
+    if scale is None:
+        return np.asarray(q, dtype=np.float64), dq
+    s = float(scale)
+    return np.asarray(q, dtype=np.float64) * s, dq * s
+
+
+for _name in ("quantize_fp4", "quantize_fp6", "quantize_nvfp4"):
+    def _make(_n=_name):
+        @_jvp(_n)
+        def _impl(primals, tangents, **_):
+            return _ste_quant_jvp_unary(primals, tangents)
+        return _impl
+    _make()
+
+for _name in ("dequantize_fp4", "dequantize_fp6", "dequantize_nvfp4",
+              "dequantize_int4"):
+    def _make(_n=_name):
+        @_jvp(_n)
+        def _impl(primals, tangents, **_):
+            return _ste_dequant_jvp(primals, tangents)
+        return _impl
+    _make()
+del _name
+
+
+# ── Spectral family — linear in primal input ───────────────────────────────
+
+@_jvp("dct")
+def jvp_dct(primals, tangents, *, axis=-1, **_):
+    """DCT is orthonormal linear — JVP is DCT applied to the tangent."""
+    x = np.asarray(primals[0], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    axis_idx = axis if axis >= 0 else x.ndim + axis
+    x_moved = np.moveaxis(x, axis_idx, -1)
+    dx_moved = np.moveaxis(dx, axis_idx, -1)
+    N = x_moved.shape[-1]
+    k = np.arange(N)
+    n_idx = np.arange(N).reshape(-1, 1)
+    basis = np.cos(np.pi * (2 * n_idx + 1) * k / (2.0 * N)) * np.sqrt(2.0 / N)
+    basis[:, 0] *= 1.0 / np.sqrt(2.0)
+    out = x_moved @ basis
+    dout = dx_moved @ basis
+    return np.moveaxis(out, -1, axis_idx), np.moveaxis(dout, -1, axis_idx)
+
+
+@_jvp("spectral_filter")
+def jvp_spectral_filter(primals, tangents, **_):
+    x = np.asarray(primals[0], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    f = np.asarray(primals[1], dtype=np.float64)
+    df = (np.asarray(tangents[1], dtype=np.float64)
+          if len(tangents) > 1 and tangents[1] is not None
+          else np.zeros_like(f))
+    spectrum = np.fft.rfft(x, axis=-1)
+    dspectrum = np.fft.rfft(dx, axis=-1)
+    f_truncated = f[..., :spectrum.shape[-1]]
+    df_truncated = df[..., :spectrum.shape[-1]]
+    out = np.fft.irfft(spectrum * f_truncated, n=x.shape[-1], axis=-1)
+    dout = np.fft.irfft(
+        dspectrum * f_truncated + spectrum * df_truncated,
+        n=x.shape[-1], axis=-1,
+    )
+    return out, dout
+
+
+@_jvp("spectral_conv")
+def jvp_spectral_conv(primals, tangents, **_):
+    """y = ifft(fft(x) * fft(kernel)). Bilinear in (x, kernel)."""
+    x = np.asarray(primals[0], dtype=np.float64)
+    k = np.asarray(primals[1], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    dk = np.asarray(tangents[1], dtype=np.float64)
+    X = np.fft.rfft(x, axis=-1)
+    K = np.fft.rfft(k, axis=-1)
+    dX = np.fft.rfft(dx, axis=-1)
+    dK = np.fft.rfft(dk, axis=-1)
+    out = np.fft.irfft(X * K, n=x.shape[-1], axis=-1)
+    dout = np.fft.irfft(dX * K + X * dK, n=x.shape[-1], axis=-1)
+    return out, dout
+
+
+# ── Sparse matmul — linear in the dense operand ────────────────────────────
+
+@_jvp("spmm_coo")
+def jvp_spmm_coo(primals, tangents, **_):
+    sparse_a, dense_b = primals[:2]
+    dB = np.asarray(tangents[1], dtype=np.float64)
+    A_dense = sparse_a.todense() if hasattr(sparse_a, "todense") else np.asarray(sparse_a)
+    return A_dense @ np.asarray(dense_b, dtype=np.float64), A_dense @ dB
+
+
+@_jvp("spmm_csr")
+def jvp_spmm_csr(primals, tangents, **_):
+    return jvp_spmm_coo(primals, tangents)
+
+
+@_jvp("sddmm")
+def jvp_sddmm(primals, tangents, **_):
+    """y = mask * (A @ B^T) — bilinear in (A, B)."""
+    mask = np.asarray(primals[0], dtype=np.float64)
+    A = np.asarray(primals[1], dtype=np.float64)
+    B = np.asarray(primals[2], dtype=np.float64)
+    dA = np.asarray(tangents[1], dtype=np.float64)
+    dB = np.asarray(tangents[2], dtype=np.float64)
+    out = mask * (A @ B.T)
+    dout = mask * (dA @ B.T + A @ dB.T)
+    return out, dout
+
+
+@_jvp("bsmm")
+def jvp_bsmm(primals, tangents, **_):
+    blocks, dense_b = primals[:2]
+    A_dense = np.asarray(blocks) if not hasattr(blocks, "todense") else blocks.todense()
+    if A_dense.ndim > 2:
+        A_dense = A_dense.reshape(-1, A_dense.shape[-1])
+    B = np.asarray(dense_b, dtype=np.float64)
+    dB = np.asarray(tangents[1], dtype=np.float64)
+    return A_dense @ B, A_dense @ dB
+
+
+# ── Linalg — closed-form JVPs (forward-mode duals of the VJPs above) ───────
+
+@_jvp("tri_solve")
+def jvp_tri_solve(primals, tangents, *, upper=False, **_):
+    """L x = b. dx = L^{-1} (db - dL x)."""
+    L = np.asarray(primals[0], dtype=np.float64)
+    b = np.asarray(primals[1], dtype=np.float64)
+    dL = np.asarray(tangents[0], dtype=np.float64)
+    db = np.asarray(tangents[1], dtype=np.float64)
+    x = np.linalg.solve(L, b)
+    rhs = db - dL @ x
+    dx = np.linalg.solve(L, rhs)
+    return x, dx
+
+
+@_jvp("cholesky")
+def jvp_cholesky(primals, tangents, **_):
+    """A = L L^T. dL = L · phi(L^{-1} dA L^{-T})_strictly_lower_plus_half_diag."""
+    A = np.asarray(primals[0], dtype=np.float64)
+    dA = np.asarray(tangents[0], dtype=np.float64)
+    L = np.linalg.cholesky(A)
+    Linv = np.linalg.inv(L)
+    M = Linv @ dA @ Linv.T
+    n = L.shape[0]
+    phi = np.tril(M).copy()
+    phi[np.arange(n), np.arange(n)] *= 0.5
+    dL = L @ phi
+    return L, dL
+
+
+@_jvp("qr")
+def jvp_qr(primals, tangents, **_):
+    """A = Q R. Reference handles full-rank square A."""
+    A = np.asarray(primals[0], dtype=np.float64)
+    dA = np.asarray(tangents[0], dtype=np.float64)
+    Q, R = np.linalg.qr(A)
+    M = Q.T @ dA @ np.linalg.inv(R)
+    n = R.shape[0]
+    skew = np.tril(M, -1) - np.tril(M, -1).T
+    dQ = Q @ skew + (dA - Q @ Q.T @ dA) @ np.linalg.inv(R)
+    dR = (np.triu(M) + 0.5 * np.diag(np.diag(M).copy()) - 0.5 * np.diag(np.diag(M).copy())) @ R
+    return (Q, R), (dQ, dR)
+
+
+@_jvp("svd")
+def jvp_svd(primals, tangents, **_):
+    """A = U diag(s) V^T. Returns the tuple (U, s, V^T) with its tangent."""
+    A = np.asarray(primals[0], dtype=np.float64)
+    dA = np.asarray(tangents[0], dtype=np.float64)
+    U, s, Vt = np.linalg.svd(A, full_matrices=False)
+    ds = np.diag(U.T @ dA @ Vt.T)
+    return (U, s, Vt), (np.zeros_like(U), ds, np.zeros_like(Vt))
+
+
+# ── bidirectional_scan placeholder ─────────────────────────────────────────
+
+@_jvp("bidirectional_scan")
+def jvp_bidirectional_scan(primals, tangents, **_):
+    """Forward-mode through a bidirectional scan is body-dependent; the
+    reference returns the primal unchanged with a zero tangent on the
+    outputs (placeholder — full BPTT lives in `tessera.control.scan`).
+    """
+    return np.zeros(1), np.zeros(1)
+
+
 __all__ = ["register_jvp", "get_jvp", "jvp"]

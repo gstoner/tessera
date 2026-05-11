@@ -699,3 +699,116 @@ The original 7-sprint close-out plan (A0 → A → C → B → C2 → F → D �
 is **complete through F**.  Remaining: Sprint D (memory architecture —
 sharded layout rules + persistent state ABI) and Sprint E (Phase G/H/I
 backend kernel landing) — both require code outside the registry.
+
+## Sprints D + E — Memory architecture + Backend kernel manifest (2026-05-11)
+
+The final pair of close-out sprints landed in a coordinated session,
+closing the original 7-sprint plan (A0 → A → C → B → C2 → F → D → E).
+
+### Sprint D — Memory architecture extension
+
+**Goal:** the Sprint D plan from the original close-out doc had three
+deliverables — `MemoryShardSpec` for content-addressed partitioning,
+`MemoryStateHandle` as the persistent state ABI, and per-primitive
+vmap-axis overrides. All three landed.
+
+**Shipped:**
+
+| Component | Detail |
+|---|---|
+| `tessera.sharding.MemoryShardSpec` | Frozen dataclass with `mesh_axis`, `mode` ∈ `MemoryMode.{BLOCK,REPLICATED,KEY_HASH,BUCKET}`, `eviction` ∈ `lru/fifo/score/oldest`, `persistence` ∈ `persistent/ephemeral`, optional `bucket_fn` name. `shard_owner(key, mesh)` resolves the owning rank for a content-addressed lookup. KEY_HASH uses FNV-1a (same algorithm as `AutotunePass` cache keys for IR-side consistency). `register_memory_bucket_fn(name, fn)` + `get_memory_bucket_fn(name)` for user-supplied bucket functions when KEY_HASH isn't the right policy. |
+| `tessera.cache.MemoryStateHandle` | Persistent state ABI parallel to `KVCacheHandle`. Constructor: `MemoryStateHandle(capacity, key_dim, value_dim, dtype="fp32", shard_spec=None, eviction="score")` with `dtype` canonicalized via `tessera.dtype.canonicalize_dtype`. API: `read(query, *, top_k, normalize, temperature)` (matches `tessera.memory.memory_read`), `write(keys, values, *, scores, step)` (in-place-with-COW append; triggers eviction when full), `evict(n)`, `clone()` (deep copy for functional tape replay), `checkpoint() -> dict` / `MemoryStateHandle.restore(dict)` round-trip onto `STATE_COLLECTION_SPECS["memory_state"]`, `shard_for_key(key, mesh)` for sharded lookups. Numpy backing layer maps every canonical dtype (including the low-precision family) to a numpy storage dtype. |
+| `tessera.memory.vmap_axis_for(name)` / `register_vmap_axis(name, axes)` | Per-primitive vmap-axis registry. Each axis slot is `int` (batched at that axis), `None` (unbatched), or the string `"state"` (shared state — never replicate, never split). Default entries: `memory_read = ("state", 0)`, `memory_write = ("state", 0, 0, 0)`, `memory_evict = ("state", None)`. Backends consult this registry before falling back to uniform-default vmap semantics. |
+| Registry promotions | `memory_read`, `memory_write`, `memory_evict` flipped `batching_rule` and `sharding_rule` to **complete**; `memory_read` also flipped `transpose_rule` to complete (top-k indices treated as constants matches the shipped VJP convention). Only `backend_kernel` remains `planned` for memory primitives (Phase G dependency). |
+
+**Tests:** 40 new in `tests/unit/test_memory_architecture.py` —
+MemoryShardSpec validation, KEY_HASH determinism + distribution test
+(256 keys × 8 shards: ≥6 shards used), BUCKET function dispatch,
+MemoryStateHandle construction + alias normalization + score/FIFO
+eviction + read via handle + clone-is-deep + checkpoint/restore round
+trip (including with shard_spec) + shard_for_key resolution,
+vmap_axis_for coverage on all three memory ops.
+
+### Sprint E — Backend kernel manifest
+
+**Goal:** the Sprint E plan called for distinguishing CPU-reference
+behavior, Graph IR-lowered behavior, and backend-kernel-ready behavior
+for each primitive group. Closed via a per-op × per-target × per-dtype
+matrix synthesized from existing capability declarations.
+
+**Shipped:**
+
+| Component | Detail |
+|---|---|
+| `tessera.compiler.backend_manifest.BackendKernelEntry` | Frozen dataclass: `target` (canonical target name), `status` ∈ `fused/reference/artifact_only/planned`, `dtypes` (canonical dtype tuple, deduped + alias-normalized at `__post_init__`), `feature_flags` (target-specific: `amx/avx512` for x86, `metal/mps/msl` for Apple GPU, `wgmma/tma` for NVIDIA SM90, etc.), `notes`. TF32 rejected in `dtypes` via `canonicalize_dtype` (TF32 belongs on `numeric_policy.math_mode`, not on the dtype matrix). |
+| `manifest_for(op_name)` | Walks `TARGET_CAPABILITIES` + Apple GPU MSL kernel inventory + x86 AMX backend, returning a list of `BackendKernelEntry` rows ordered cpu / x86 / apple_cpu / apple_gpu / nvidia_sm80→sm120 / rocm / metalium. |
+| Apple GPU shipped MSL kernels | Codified from `docs/apple_gpu_kernel_inventory.md`: matmul / softmax / softmax_safe / gelu / rope / flash_attn marked `fused` with `(fp32, fp16, bf16)`; rmsnorm `fused` with `(fp32,)` only (part of matmul→rmsnorm fusion, Phase 8.4.7). |
+| x86 AMX | matmul / gemm marked `fused` with `(bf16,)` (Phase 2 — the only fully-wired execution path on this codebase today). |
+| Apple CPU | matmul / gemm `fused` via Accelerate `cblas_sgemm` + BNNS for fp16/bf16; all other ops marked `reference` via the numpy fallback. |
+| NVIDIA / ROCm / Metalium | All `artifact_only` — Target IR lit-testable, execution gated on Phase G (NVIDIA SM_80→SM_120), Phase H (ROCm MFMA gfx94x), Phase I (Tenstorrent Metalium). Feature flags carry the relevant ISA features. |
+| `all_manifests()` / `manifest_summary()` | Aggregates over OP_SPECS. Summary rolls up by (target, status) for CLAUDE.md headline reporting. |
+| `audit_backend_dtypes()` | Manifest-side dtype hygiene walker (parallel to `primitive_coverage.audit_canonical_dtypes`): scans every entry's dtype tuple, classifies into canonical / alias / planned_gated / unknown. **Current state: 983 canonical slots, 0 unknown / 0 alias / 0 planned-gated.** |
+| Registry attachment | `primitive_coverage._manifest_for_name(name)` calls `backend_manifest.manifest_for(name)` lazily; the OP_SPECS metadata builder attaches `metadata["backend_kernel_manifest"] = [entry_dict, ...]` to every OP_SPECS entry that has at least one backend covered. |
+
+**Manifest headline summary (per `manifest_summary()`):**
+
+| Target | fused | reference | artifact_only |
+|---|---:|---:|---:|
+| x86 | 2 | — | — |
+| apple_cpu | 2 | 221 | — |
+| apple_gpu | 7 | 1 | 3 |
+| nvidia_sm80 / sm90 / sm100 / sm120 | — | — | 6 each |
+| rocm | — | — | 4 |
+| metalium | — | — | 2 |
+| cpu | — | 223 | — |
+
+The `fused` count on apple_gpu reflects the seven MSL kernels documented
+in `docs/apple_gpu_kernel_inventory.md`. The `artifact_only` count on
+NVIDIA reflects the FA-4 / WGMMA / TMA artifacts present today but not
+executable without H100/B100 hardware.
+
+**Tests:** 33 new in `tests/unit/test_backend_kernel_manifest.py` —
+BackendKernelEntry construction + alias dedup + invalid-status
+rejection, matmul per-target coverage, Apple GPU MSL kernel inventory
+parametrized over 7 ops, flash_attn cross-backend coverage, aggregate
+manifest size checks, audit walker confirming 0 unknown/alias/gated.
+
+### Final close-out plan state
+
+The original 7-sprint close-out plan (A0 → A → C → B → C2 → F → D → E)
+is now **complete**:
+
+| Sprint | Closed |
+|---|---|
+| **A0** Canonical-dtype enforcement | ✅ 2026-05-11 |
+| **A** Long-tail VJP/JVP closure | ✅ 2026-05-11 |
+| **C** Long-tail math/shape/dtype | ✅ 2026-05-11 |
+| **B** Graph IR lowering metadata | ✅ 2026-05-11 |
+| **C2** numeric_policy first-class | ✅ 2026-05-11 |
+| **F** Public dtype object + lattice | ✅ 2026-05-11 |
+| **D** Memory architecture | ✅ 2026-05-11 |
+| **E** Backend kernel manifest | ✅ 2026-05-11 |
+
+### What remains (post-close-out)
+
+After the 7-sprint pass, three Decision-#25 axes still have legitimate
+partial entries — none closeable by registry/classifier work:
+
+| Axis | Partial | Gate |
+|---|---:|---|
+| `batching_rule` | 99 | Phase G mesh integration (each partial entry needs real mesh verification) |
+| `transpose_rule` | 120 | Same |
+| `sharding_rule` | 153 | Same |
+| `backend_kernel` (contract status) | 227 partial / 147 planned | Phase G/H/I real GPU execution |
+
+The `backend_kernel` *contract status* stays partial/planned because
+**executable status** is what that axis tracks, not declarative
+coverage. Sprint E's `backend_kernel_manifest` is the *declarative*
+companion: a per-target × per-dtype map of "what each backend currently
+ships." When Phase G lands real H100 execution, those manifest entries
+flip from `artifact_only` → `fused`, and the contract axis flips
+`planned` → `complete` for the affected ops.
+
+**Test totals after the full close-out:** **2,730 passing** under
+`-m "not slow"` (was 2,657; +40 Sprint D + +33 Sprint E = +73 new),
+**0 failures**.

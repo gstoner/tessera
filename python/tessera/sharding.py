@@ -183,6 +183,172 @@ def broadcast_to_axis(value: Any, *, axis_size: int, axis: int = 0) -> np.ndarra
     return np.stack([np.asarray(value) for _ in range(int(axis_size))], axis=axis)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint D — Memory-bank sharding (2026-05-11).
+#
+# Tensor data shards are described by `PartitionSpec` + `NamedSharding`
+# (above).  Memory-bank state (Titans/Atlas-style learned memory tables
+# under `tessera.memory.memory_read/write/evict`) needs a richer
+# partition vocabulary:
+#
+#   - The bank IS the state; it's not a tensor input/output.
+#   - Partitioning is content-addressed (by key-hash) rather than
+#     positional (by index), so a row's owning rank depends on its key,
+#     not its position in the table.
+#   - Eviction policies (`lru`/`fifo`/`score`) are sharded — each rank
+#     independently evicts its own bucket.
+#
+# `MemoryShardSpec` captures these.  `MemoryMode` enumerates the supported
+# partitioning strategies.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class MemoryMode:
+    """Partition strategies for memory banks.
+
+    Values are strings so they can travel through IR metadata unchanged.
+    """
+
+    BLOCK = "block"            # contiguous slices along the entries axis
+    REPLICATED = "replicated"  # every rank holds the full bank
+    KEY_HASH = "key_hash"      # row ownership = hash(key) mod num_shards
+    BUCKET = "bucket"          # explicit bucket function (caller-supplied)
+
+
+_MEMORY_MODES: frozenset[str] = frozenset({
+    MemoryMode.BLOCK,
+    MemoryMode.REPLICATED,
+    MemoryMode.KEY_HASH,
+    MemoryMode.BUCKET,
+})
+
+
+@dataclass(frozen=True)
+class MemoryShardSpec:
+    """How a memory bank is partitioned across a mesh axis.
+
+    Attributes
+    ----------
+    mesh_axis : str
+        Mesh axis to partition along.  Validated against the
+        ``NamedMesh.axis_names`` at attach time.
+    mode : str
+        One of ``MemoryMode.*``.  ``KEY_HASH`` is the recommended default
+        for content-addressed memory: a row's owning shard is
+        ``hash(key) mod num_shards``, so reads with the same key always
+        find the row on the same shard.
+    eviction : str
+        Eviction policy applied independently per shard.  One of
+        ``"lru"``, ``"fifo"``, ``"score"``, ``"oldest"``.  Default
+        ``"score"`` matches the `tessera.memory.memory_evict` reference.
+    persistence : str
+        ``"persistent"`` (saved to checkpoints; default), ``"ephemeral"``
+        (in-RAM only).  Matches the `STATE_COLLECTION_SPECS["memory_state"]`
+        ``persistent=True`` flag.
+    bucket_fn : str | None
+        For ``MemoryMode.BUCKET``: name of the user-supplied bucket
+        function registered via `register_memory_bucket_fn`.
+        Required when ``mode == BUCKET``.
+    """
+
+    mesh_axis: str
+    mode: str = MemoryMode.KEY_HASH
+    eviction: str = "score"
+    persistence: str = "persistent"
+    bucket_fn: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.mode not in _MEMORY_MODES:
+            raise ValueError(
+                f"MemoryShardSpec.mode must be one of {sorted(_MEMORY_MODES)}, "
+                f"got {self.mode!r}"
+            )
+        if self.persistence not in {"persistent", "ephemeral"}:
+            raise ValueError(
+                f"MemoryShardSpec.persistence must be 'persistent' or 'ephemeral', "
+                f"got {self.persistence!r}"
+            )
+        if self.eviction not in {"lru", "fifo", "score", "oldest"}:
+            raise ValueError(
+                f"MemoryShardSpec.eviction must be 'lru' | 'fifo' | 'score' | 'oldest', "
+                f"got {self.eviction!r}"
+            )
+        if self.mode == MemoryMode.BUCKET and self.bucket_fn is None:
+            raise ValueError(
+                "MemoryShardSpec(mode='bucket') requires a `bucket_fn=` name"
+            )
+        if self.mode != MemoryMode.BUCKET and self.bucket_fn is not None:
+            raise ValueError(
+                f"bucket_fn is only meaningful when mode='bucket' (got mode={self.mode!r})"
+            )
+
+    def validate_against(self, mesh: NamedMesh) -> None:
+        """Confirm `mesh_axis` exists on the given mesh."""
+        if self.mesh_axis not in mesh.axis_names:
+            raise ValueError(
+                f"MemoryShardSpec.mesh_axis={self.mesh_axis!r} not in mesh "
+                f"axes {mesh.axis_names}"
+            )
+
+    def shard_owner(self, key: np.ndarray, mesh: NamedMesh) -> int:
+        """Compute the owning shard index for a single key (or batch).
+
+        For ``KEY_HASH``: stable FNV-1a hash on the key bytes mod
+        ``mesh.axis_size(mesh_axis)``.  For ``BUCKET``: dispatches to
+        the registered bucket function.  For ``BLOCK`` / ``REPLICATED``:
+        returns 0 (caller is responsible for slicing along the entries
+        axis externally).
+        """
+        self.validate_against(mesh)
+        n_shards = mesh.axis_size(self.mesh_axis)
+        if self.mode == MemoryMode.REPLICATED:
+            return 0
+        if self.mode == MemoryMode.BLOCK:
+            return 0
+        if self.mode == MemoryMode.KEY_HASH:
+            arr = np.ascontiguousarray(key)
+            h = _fnv1a_64(arr.tobytes())
+            return int(h % n_shards)
+        if self.mode == MemoryMode.BUCKET:
+            fn = _MEMORY_BUCKET_FUNCTIONS.get(self.bucket_fn)
+            if fn is None:
+                raise ValueError(
+                    f"MemoryShardSpec.bucket_fn={self.bucket_fn!r} is not "
+                    f"registered.  Use register_memory_bucket_fn first."
+                )
+            return int(fn(key, n_shards) % n_shards)
+        raise ValueError(f"unexpected mode {self.mode!r}")
+
+
+def _fnv1a_64(data: bytes) -> int:
+    """Deterministic FNV-1a — same algorithm as
+    `primitive_coverage.AutotunePass` cache-key for IR-side consistency."""
+    h = 0xcbf29ce484222325
+    for byte in data:
+        h ^= byte
+        h = (h * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
+    return h
+
+
+_MEMORY_BUCKET_FUNCTIONS: dict[str, Callable[[np.ndarray, int], int]] = {}
+
+
+def register_memory_bucket_fn(
+    name: str,
+    fn: Callable[[np.ndarray, int], int],
+) -> None:
+    """Register a user-supplied bucket function for ``MemoryMode.BUCKET``.
+
+    The function takes ``(key_array, num_shards)`` and returns the owning
+    shard index (will be reduced mod ``num_shards`` automatically).
+    """
+    _MEMORY_BUCKET_FUNCTIONS[name] = fn
+
+
+def get_memory_bucket_fn(name: str) -> Callable[[np.ndarray, int], int] | None:
+    return _MEMORY_BUCKET_FUNCTIONS.get(name)
+
+
 __all__ = [
     "NamedMesh",
     "NamedSharding",
@@ -196,4 +362,9 @@ __all__ = [
     "pmin",
     "psum",
     "shard_map",
+    # Sprint D — memory-bank sharding
+    "MemoryMode",
+    "MemoryShardSpec",
+    "register_memory_bucket_fn",
+    "get_memory_bucket_fn",
 ]

@@ -183,10 +183,61 @@ def memory_evict(
     return MemoryTable(keys=table.keys[mask], values=table.values[mask], metadata=metadata)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint D — vmap-axis registry for stateful memory primitives.
+#
+# The memory bank arg is shared state — `vmap` should NOT add a batch axis
+# to it.  The query / keys / values / scores args ARE batchable.
+#
+# Per-primitive axis map: tuple-keyed by op name, value is a tuple of
+# `int | None | "state"` annotations matching the positional-arg slots.
+#   - int N    : this arg's batch dimension is axis N
+#   - None     : this arg is unbatched (broadcast through)
+#   - "state"  : this arg is shared state — never replicate, never split
+#
+# Backends consult `vmap_axis_for(name)` before falling back to uniform-axis
+# default semantics.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+_VMAP_AXIS_MAP: dict[str, tuple] = {
+    # (memory_or_handle, query)                 batched: query at axis 0
+    "memory_read":  ("state", 0),
+    # (memory_or_handle, keys, values, scores)  batched: all writes at axis 0
+    "memory_write": ("state", 0, 0, 0),
+    # (memory_or_handle, n_or_indices)          neither batched
+    "memory_evict": ("state", None),
+}
+
+
+def vmap_axis_for(op_name: str) -> tuple | None:
+    """Return the per-arg vmap-axis tuple for ``op_name``, or ``None`` if
+    no override is registered (in which case the caller falls back to the
+    uniform-default vmap semantics)."""
+    return _VMAP_AXIS_MAP.get(op_name)
+
+
+def register_vmap_axis(op_name: str, axes: tuple) -> None:
+    """Register the per-arg axis tuple for ``op_name``.
+
+    Each axis slot is one of:
+      - ``int`` — that arg is batched along the given axis
+      - ``None`` — that arg is unbatched (broadcast through)
+      - the string ``"state"`` — that arg is shared state; never replicate
+        or split during vmap
+
+    Overwrites any existing entry for ``op_name``.
+    """
+    _VMAP_AXIS_MAP[op_name] = tuple(axes)
+
+
 __all__ = [
     "MemoryReadResult",
     "MemoryTable",
     "memory_evict",
     "memory_read",
     "memory_write",
+    # Sprint D — vmap axis registry
+    "vmap_axis_for",
+    "register_vmap_axis",
 ]

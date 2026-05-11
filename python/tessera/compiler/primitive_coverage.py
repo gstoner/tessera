@@ -1145,6 +1145,25 @@ def _policy_for_name(name: str) -> "NumericPolicy | None":
     return factory() if factory is not None else None
 
 
+def _manifest_for_name(name: str) -> list[dict[str, object]] | None:
+    """Return the backend-kernel manifest entries for ``name`` as plain
+    dicts (Sprint E, 2026-05-11).
+
+    Looks up `backend_manifest.manifest_for(name)`; returns ``None`` when
+    the manifest is empty (i.e., when ``name`` is not in OP_SPECS or has
+    no per-target coverage worth recording).  Imported lazily to avoid
+    cycles.
+    """
+    try:
+        from . import backend_manifest as _bm
+    except Exception:
+        return None
+    entries = _bm.manifest_for(name)
+    if not entries:
+        return None
+    return [e.as_dict() for e in entries]
+
+
 def _supplemental_metadata(name: str, graph_ir_state: str) -> dict[str, object]:
     """Build the metadata dict for a supplemental_public_ops entry.
 
@@ -1383,6 +1402,12 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         policy = _policy_for_name(name)
         if policy is not None:
             metadata["numeric_policy"] = policy.as_metadata_dict()
+        # Sprint E (2026-05-11): attach the per-target backend-kernel
+        # manifest synthesized from the capability registry +
+        # Apple GPU kernel inventory + x86 AMX backend.
+        manifest = _manifest_for_name(name)
+        if manifest is not None:
+            metadata["backend_kernel_manifest"] = manifest
         entries[name] = PrimitiveCoverage(
             name=name,
             category=_EXISTING_CATEGORIES.get(name, spec.lowering),
@@ -1679,20 +1704,21 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "ddpm_noise_pred_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "score_matching_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "vlb_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        # Sprint D (2026-05-11): memory primitives now have:
+        #   - vmap_axis_map for shared-state batching semantics
+        #     (tessera.memory.vmap_axis_for) → batching_rule complete
+        #   - MemoryShardSpec for content-addressed sharding
+        #     (tessera.sharding.MemoryShardSpec, KEY_HASH/BUCKET modes) +
+        #     MemoryStateHandle persistent ABI → sharding_rule complete
+        #   - transpose_rule promoted to complete (top-k indices treated as
+        #     constants matches the shipped VJP convention)
         "memory_read": {
             "math_semantics": "complete",
             "shape_rule": "complete",
             "dtype_layout_rule": "complete",
-            "batching_rule": "partial",
-            # The top-k argmax-routing makes the transpose rule depend on
-            # whether indices are treated as constants (standard) or as
-            # straight-through. Mark `partial` matching the category default.
-            "transpose_rule": "partial",
-            # Memory-table sharding: keys/values split along the entries axis;
-            # query-time top-k requires an all-gather of the scores before the
-            # softmax. Well-understood but mesh-aware — `partial` per the
-            # category convention for memory primitives.
-            "sharding_rule": "partial",
+            "batching_rule": "complete",
+            "transpose_rule": "complete",
+            "sharding_rule": "complete",
         },
         "memory_write": {
             "math_semantics": "complete",
@@ -1700,8 +1726,9 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
             "dtype_layout_rule": "complete",
             "vjp": "not_applicable",
             "jvp": "not_applicable",
-            "batching_rule": "partial",
+            "batching_rule": "complete",
             "transpose_rule": "not_applicable",
+            "sharding_rule": "complete",
         },
         "memory_evict": {
             "math_semantics": "complete",
@@ -1709,8 +1736,9 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
             "dtype_layout_rule": "complete",
             "vjp": "not_applicable",
             "jvp": "not_applicable",
-            "batching_rule": "partial",
+            "batching_rule": "complete",
             "transpose_rule": "not_applicable",
+            "sharding_rule": "complete",
         },
     }
     for name, (category, notes) in python_primitives.items():

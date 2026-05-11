@@ -19,5 +19,6 @@ from __future__ import annotations
 
 from .handle import KVCacheHandle
 from .latent import LatentKVCacheHandle
+from .memory_state import MemoryStateHandle
 
-__all__ = ["KVCacheHandle", "LatentKVCacheHandle"]
+__all__ = ["KVCacheHandle", "LatentKVCacheHandle", "MemoryStateHandle"]

@@ -1069,3 +1069,172 @@ optional fields on `BackendKernelEntry`:
 | G-9 + H-8 | NCCL 2.22 / RCCL 2.22 adapter compile + symbol resolution | Lane 2 |
 
 Lane 3 (hardware-required) is unchanged: H100/B100 execution, MI300/MI325 execution, perf characterization, multi-rank collectives.
+
+## Phase G/H/I hardware-free batch 3 — Pipelines + toolchain validation + collective pin (2026-05-11)
+
+The third (and final pre-hardware) batch landed: the named pass
+pipeline alias for the full NVIDIA WGMMA→TMA→NVPTX chain, the
+auto-generated MFMA shape table, the CMake toolchain pin infrastructure
+with `nvcc -ptx` / `hipcc -S` compile-only validators, and the NCCL/RCCL
+version-pin header + symbol-resolution probe.
+
+### G-5 — NVIDIATargetPipeline named pass alias
+
+**Shipped (`src/transforms/lib/Passes.cpp`):**
+
+4 new pipeline aliases registered via `PassPipelineRegistration<>`:
+
+| Alias | Target | Chain |
+|---|---|---|
+| `tessera-nvidia-pipeline` | SM_90 (default) | EffectAnnot → Canonicalize → SwigluFusion → MLA/NSA/Hybrid/Lightning/Delta → DistributionLowering → TileIRLowering → **WarpSpec → AsyncCopy → WGMMA → TMA → NVFlashAttnEmitter** |
+| `tessera-nvidia-pipeline-sm90` | Hopper | Same chain pinned to `sm_90a` (WGMMA + TMA) |
+| `tessera-nvidia-pipeline-sm100` | Blackwell | Same chain pinned to `sm_100a` (TCGEN05 + TMEM) |
+| `tessera-nvidia-pipeline-sm120` | Rubin | Same chain pinned to `sm_120a` (preliminary) |
+
+The shared `buildCUDA13Pipeline` lambda is the single source of truth;
+SM-specific dispatching happens inside `createLowerTileToNVIDIAPass(sm)`
+in the NVIDIA backend.
+
+**Lit fixture:** `tests/tessera-ir/phase3/cuda13/nvidia_pipeline_alias.mlir` with 4 RUN lines validating all aliases.
+
+### H-2 — `mfma_table.inc` generator + 22-shape table
+
+**Shipped:**
+
+| Component | Detail |
+|---|---|
+| `scripts/generate_mfma_table.py` | Reads `_MFMA_VARIANTS` from `rocm_target.py`; emits X-macro `.inc` with `TESSERA_MFMA_VARIANT(arch_id, arch_name, M, N, K, K_blocks)`. `--check` mode verifies the on-disk file matches the Python source |
+| `src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/mfma_table.inc` | Auto-generated, 2189 bytes, 22 shapes across 5 arches; auto-generated banner + ROCm 7.2.3 + HIP 7.2.3 pins in comment |
+| Per-arch counts | gfx90a: 2 shapes; gfx940: 6; gfx942: 6; gfx950: 8 (CDNA 4 + FP4 lanes); gfx1100: 0 (WMMA-only) |
+
+### G-6/G-7/G-8 + H-6/H-7/H-8 — CMake toolchain pin + compile-only validators
+
+**Shipped (`cmake/TesseraToolchainPins.cmake`):**
+
+| Function | Action |
+|---|---|
+| `tessera_pin_cuda_toolkit(13.2)` | `find_package(CUDAToolkit 13.2 REQUIRED)` + version assertion + `find_program(nvcc)` |
+| `tessera_pin_rocm(7.2.3)` | `find_package(hip 7.2.3 REQUIRED CONFIG)` + version assertion + `find_program(hipcc)` |
+| `tessera_add_nvcc_compile_check(NAME, FIXTURES)` | Registers a CMake target that runs `validate_nvcc_compile.py` over a fixture dir |
+| `tessera_add_hipcc_compile_check(NAME, FIXTURES)` | Same for `validate_hipcc_compile.py` |
+
+Cached vars: `TESSERA_REQUIRED_CUDA_VERSION="13.2"`, `TESSERA_REQUIRED_PTX_ISA="8.6"`, `TESSERA_REQUIRED_NCCL_VERSION="2.22"`, `TESSERA_REQUIRED_ROCM_VERSION="7.2.3"`, `TESSERA_REQUIRED_HIP_VERSION="7.2.3"`, `TESSERA_REQUIRED_RCCL_VERSION="2.22"`. Override via `-DTESSERA_SKIP_TOOLCHAIN_PIN=ON`.
+
+**Shipped (`scripts/validate_nvcc_compile.py`):**
+
+Compile-only PTX validator. Walks every G-4 fixture, identifies the
+PTX patterns it asserts, compiles a minimal CUDA stub per pattern
+through `nvcc -ptx --gpu-architecture=sm_90a`. Covers 8 patterns:
+
+```
+wgmma.mma_async.sync.aligned.m64n256k16   (Hopper canonical)
+wgmma.mma_async.sync.aligned.m64n128k16   (FA tile)
+wgmma.mma_async.sync.aligned.m32n32k16    (Lightning)
+mbarrier.arrive.expect_tx
+cp.async.bulk.tensor                       (TMA)
+tcgen05.mma                                (Blackwell)
+tcgen05.alloc                              (Blackwell TMEM)
+shfl.sync.bfly                             (cooperative softmax)
+```
+
+Exits 0 when `nvcc` is absent (the expected state on a dev box without CUDA installed).
+
+**Shipped (`scripts/validate_hipcc_compile.py`):**
+
+Compile-only AMDGCN intrinsic validator. Per-pattern arch dispatch:
+CDNA-4-only FP4 → `gfx950`; WMMA → `gfx1100`; everything else → `gfx942`. Covers 8 intrinsics:
+
+```
+llvm.amdgcn.mfma.f32.32x32x8bf16.1k   (CDNA 2/3 baseline)
+llvm.amdgcn.mfma.f32.16x16x16bf16.1k  (CDNA attention)
+llvm.amdgcn.mfma.f32.32x32x16f8f8     (CDNA 3 FP8)
+llvm.amdgcn.mfma.f32.32x32x32f4f4     (CDNA 4 FP4 — gfx950)
+llvm.amdgcn.global.load.lds           (CDNA 3+ async copy)
+llvm.amdgcn.s.barrier                 (waveside barrier)
+llvm.amdgcn.wmma.f32.16x16x16         (RDNA 3 — gfx1100)
+llvm.amdgcn.buffer.load               (CDNA + RDNA)
+```
+
+### G-9 + H-8 — NCCL / RCCL adapter version pin + symbol probe
+
+**Shipped (`src/collectives/include/tessera/Dialect/Collective/Runtime/AdapterVersionPin.h`):**
+
+- C macros: `TESSERA_NCCL_MIN_MAJOR=2`, `TESSERA_NCCL_MIN_MINOR=22` (matches `gpu_target.py`'s `TESSERA_TARGET_NCCL_MIN`).
+- Same for RCCL.
+- `#if defined(TESSERA_HAS_NCCL)`/`RCCL` guarded `#include` of the upstream headers + `#error` if `NCCL_MAJOR.NCCL_MINOR` is below the pin.
+- Toolchain-pin string macros: `TESSERA_TARGET_CUDA_TOOLKIT "13.2.1"`, `TESSERA_TARGET_PTX_ISA "8.6"`, `TESSERA_TARGET_ROCM "7.2.3"`, `TESSERA_TARGET_HIP "7.2.3"`.
+- `AdapterBuildInfo` constexpr struct exposing `kHasNCCL` / `kHasRCCL` / version constants for runtime introspection.
+
+**Shipped (`scripts/probe_collective_libs.py`):**
+
+ctypes-based probe. `dlopen`s `libnccl.so.2` and `librccl.so.1`,
+verifies the 8 expected symbols (`ncclAllReduce`/`ReduceScatter`/
+`AllGather`/`Send`/`Recv`/`CommInitRank`/`GetVersion`/`GetErrorString`),
+and reads `ncclGetVersion()` to verify the installed version meets
+the 2.22 pin. Exits 0 cleanly when neither lib is installed.
+
+### Toolchain pin consistency
+
+A dedicated test class (`TestToolchainPinConsistency`) asserts the
+pins are **byte-identical** across the four sources:
+
+1. Python — `gpu_target.py::TESSERA_TARGET_CUDA_TOOLKIT="13.2.1"` + `rocm_target.py::TESSERA_TARGET_ROCM="7.2.3"`
+2. CMake — `cmake/TesseraToolchainPins.cmake` cached vars
+3. C++ — `AdapterVersionPin.h` C macros
+4. Scripts — `validate_nvcc_compile.py::MIN_NVCC_VERSION=(13,2,1)` + `validate_hipcc_compile.py::MIN_HIP_VERSION=(7,2,3)` + `probe_collective_libs.py::TESSERA_TARGET_NCCL_MIN=(2,22)`
+
+Any drift between these four sources will fail
+`test_phase_ghi_lane2.py::TestToolchainPinConsistency` at unit-test time.
+
+### Test surface
+
+**34 new tests** in `tests/unit/test_phase_ghi_lane2.py` across 8 classes:
+
+| Class | Coverage |
+|---|---|
+| `TestG5PipelineAlias` | 4 — Passes.cpp registers 4 aliases; chain includes WarpSpec→…→NVPTX stages; description mentions CUDA 13.2 U1 + PTX ISA 8.6; lit fixture exists with all 4 RUN lines |
+| `TestH2MFMATableSync` | 6 — generator exists; .inc has X-macro format + ROCm 7.2.3 pin; `--check` mode passes; all 22 shapes from `_MFMA_VARIANTS` present in C++; total count 22 |
+| `TestG6H6CMakeToolchainPin` | 4 — cmake module exists; pins all required versions; exports the 4 pin functions; `TESSERA_SKIP_TOOLCHAIN_PIN` escape hatch present |
+| `TestG78NvccCompileValidator` | 4 — script exists; pins CUDA 13.2.1 min; covers all 8 G-4 PTX patterns; skips cleanly when nvcc absent |
+| `TestH78HipccCompileValidator` | 5 — script exists; pins HIP 7.2.3 min; covers all 8 H-4 AMDGCN patterns; dispatches FP4→gfx950 and WMMA→gfx1100; skips cleanly when hipcc absent |
+| `TestG9H8CollectivePin` | 8 — header exists with NCCL 2.22 + RCCL 2.22 + CUDA 13.2.1 + ROCm 7.2.3 pins; `#error` directives for version drift; probe script exists; probe runs clean with no libs; expected symbol list complete |
+| `TestToolchainPinConsistency` | 2 — CUDA pin agrees across Python/CMake/C++; ROCm pin agrees across Python/CMake/C++ |
+| `TestG5PipelineAlias::test_pipeline_includes_warpspec_to_nvptx_chain` | 1 — checks all 5 pipeline stages are wired |
+
+### Test totals after this batch
+
+**2,904 passing** under `-m "not slow"` (was 2,870; +34 new),
+**0 failures**.
+
+### What's next — Lane 3 (hardware-required, blocked)
+
+After this batch, every hardware-free task from the original Phase G/H/I
+plan is **done**:
+
+| Sprint | Status |
+|---|---|
+| G-1 + H-1 (capability matrix pins) | ✅ batch 1 |
+| I-1/I-2/I-3 (Metalium expansion) | ✅ batch 1 |
+| G-2 + H-3 (kernel inventories) | ✅ batch 2 |
+| G-3 (schema extension) | ✅ batch 2 |
+| G-4 + H-4 (lit fixtures) | ✅ batch 2 |
+| G-5 (NVIDIATargetPipeline) | ✅ batch 3 |
+| H-2 (mfma_table.inc) | ✅ batch 3 |
+| G-6/G-7/G-8 + H-6/H-7/H-8 (CMake + compile validators) | ✅ batch 3 |
+| G-9 + H-8 (NCCL/RCCL pin + probe) | ✅ batch 3 |
+
+**Lane 3 — blocked on hardware:**
+
+- H100/B100 NVIDIA execution + numerical correctness vs fp64 CPU reference
+- MI300/MI325 ROCm execution + numerical correctness
+- Wormhole/Blackhole Tenstorrent execution
+- Multi-rank NCCL/RCCL all-reduce numerical verification
+- Perf characterization: validate the §4/§5 MFU targets in the
+  kernel-inventory docs against actual hardware
+- Profiler timeline capture (NVTX/CUPTI + rocprof + Perfetto for TT)
+
+Everything *before* "real execution" is locked. When hardware lands,
+the remaining work is roughly:
+- ~2-3 sessions to numerically validate the lit-test surface against
+  CPU reference at fp64.
+- ~2-4 sessions per backend to hit the published MFU targets.

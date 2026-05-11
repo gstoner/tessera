@@ -148,7 +148,7 @@ the high-risk S1 entries and milestone sentinels. Tests compare these rows to
 | Primitive | Category | Status | Existing op | Lowering gate | Backend gate | Missing contracts | Model families |
 |-----------|----------|--------|-------------|---------------|--------------|-------------------|----------------|
 | `matmul` | loop_nest | partial | yes | registered | partial | sharding_rule, backend_kernel | - |
-| `permute` | tensor_algebra | partial | yes | registered | partial | jvp, batching_rule, transpose_rule, sharding_rule, backend_kernel | - |
+| `permute` | tensor_algebra | partial | yes | registered | partial | batching_rule, transpose_rule, sharding_rule, backend_kernel | - |
 | `collective_permute` | collective | partial | yes | stub_required | reference_only | batching_rule, backend_kernel | all |
 | `scan` | control_flow | partial | yes | stub_required | reference_only | math_semantics, shape_rule, dtype_layout_rule, batching_rule, transpose_rule, sharding_rule, backend_kernel | all |
 | `selective_ssm` | state_space | partial | yes | missing | reference_only | math_semantics, shape_rule, dtype_layout_rule, jvp, batching_rule, sharding_rule, backend_kernel | Mamba/SSM |

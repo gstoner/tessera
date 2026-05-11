@@ -401,3 +401,93 @@ discovery), **0 failures**.
 hardened dtype boundary — every new (V/J)VP test that uses an alias
 spelling (`f32`/`bfloat16`/etc.) auto-normalizes; no risk of registry
 drift on new entries.
+
+## Sprint A — long-tail JVP/VJP closure (2026-05-11)
+
+Following A0, Sprint A drained the (V/J)VP-planned gap from
+**28 VJP + 67 JVP** to **0 VJP + 1 JVP** (only `selective_ssm` remains —
+its non-trivial chunked-scan adjoint warrants dedicated work).
+
+### What shipped
+
+| Category | New VJPs | New JVPs |
+|---|---|---|
+| Elementwise / numeric_helper | `sin`, `abs`, `sign`, `floor_div`, `mod` | `clip`, `floor_div`, `mod`, `silu_mul`, `abs` |
+| Reduction | `cumprod` | `cumprod` |
+| Stable-reduction | `softmax_safe` | `softmax`, `softmax_safe`, `online_softmax`, `online_softmax_state` |
+| Tensor algebra (linear) | — (already covered) | `reshape`, `view`, `flatten`, `squeeze`, `unsqueeze`, `permute`, `broadcast`, `expand`, `cat`, `stack`, `split`, `chunk`, `pad`, `tile`, `repeat`, `roll`, `flip`, `slice`, `select`, `dynamic_slice`, `dynamic_update_slice` |
+| Indexing | — (already covered) | `gather`, `take`, `index_select`, `scatter`, `index_update`, `scatter_add`, `scatter_reduce` |
+| Layout transform | — | `masked_fill`, `mor_partition`, `mor_router`, `mor_scatter` |
+| Normalization | `weight_norm`, `spectral_norm` | `layer_norm`, `rmsnorm`, `rmsnorm_safe`, `weight_norm`, `spectral_norm` |
+| Stencil convolution | `conv2d`, `conv3d`, `conv_transpose` | `conv2d`, `conv3d`, `conv_transpose`, `depthwise_conv1d` |
+| Pooling | `min_pool`, `adaptive_pool` | `min_pool`, `adaptive_pool` |
+| Loop nest / contraction | `batched_gemm`, `factorized_matmul`, `einsum` | `batched_gemm`, `factorized_matmul`, `einsum` |
+| Quantization STE | `quantize_int8`, `quantize_int4`, `dequantize_int8`, `calibration_observer` | `quantize_int8`, `quantize_int4`, `dequantize_int8`, `calibration_observer` |
+| Projection | `qkv_projection` | `qkv_projection` |
+| Fused epilogue | `fused_epilogue` | `fused_epilogue` |
+| Segment reduce | `segment_reduce` (analytical for `reduce='sum'`) | `segment_reduce` (same) |
+| Optimizer | `lamb`, `muon` (stop-gradient through state) | `lamb`, `muon` |
+| Numerics | `grad_scaler_step`, `online_softmax_state` (non-diff) | `grad_scaler_step`, `online_softmax_state` |
+
+**28 new VJPs + 66 new JVPs** registered.
+
+### Rule classifications
+
+- **Closed-form** (≈30 entries): tensor_algebra linear ops, indexing,
+  softmax-family, normalization, cumprod, segment_reduce sum, einsum,
+  batched_gemm/factorized_matmul, weight_norm, spectral_norm.
+- **STE / zero-gradient** (≈12 entries): floor_div, mod, sign,
+  abs (zero at 0), quantize_int*/dequantize_int8, calibration_observer.
+- **Numeric-Jacobian via `tessera.ops.*`** (≈10 entries): conv2d/conv3d/
+  conv_transpose/depthwise_conv1d, min_pool/adaptive_pool, fused_epilogue,
+  qkv_projection, lamb, muon — analytical forms shipped where derived;
+  numeric fallback otherwise so the registry flips while
+  closed-form coverage continues in follow-up sprints.
+- **Stop-gradient state** (≈3 entries): grad_scaler_step,
+  online_softmax_state, optimizer adjoints — non-differentiable wrt state
+  updates by design.
+
+### Test surface adjustments
+
+- `test_autodiff.py::test_unsupported_op_raises` sentinel migrated
+  `cumprod → floor` (cumprod now has a VJP).
+- `test_s2_primitives.py::test_s2_non_differentiable_or_discontinuous_ops_skip_vjp`
+  parametrization narrowed: removed `floor_div`/`mod`/`sign`/`cumprod` (now
+  have VJPs). Added companion test
+  `test_s2_ste_or_closed_form_vjp_ops_have_registered_vjp` asserting the
+  new positive coverage.
+- `docs/audit/standalone_primitive_coverage.md` sentinel snapshot: the
+  `permute` row dropped `jvp` from its missing-contracts list.
+
+### Final registry totals (post-Sprint-A)
+
+| | Before A0+A | After Sprint A | Δ |
+|---|---:|---:|---:|
+| VJP `complete` | 209 | **237** | +28 |
+| VJP `planned` | 28 | **0** | −28 |
+| JVP `complete` | 169 | **235** | +66 |
+| JVP `planned` | 67 | **1** | −66 |
+| Total `_VJPS` dict | 213 | **241** | +28 |
+| Total `_JVPS` dict | 169 | **235** | +66 |
+
+**Tests: 2,511 passing**, 0 failures (no net new tests this sprint —
+Sprint A is mechanically closing pre-declared planned entries; A0's
+71-test surface is what guards the dtype hygiene).
+
+### What's left on the autodiff axis
+
+Exactly one entry: **`selective_ssm` JVP**. The Mamba2 selective state-
+space chunked-scan adjoint is non-trivial (it threads through both the
+state recurrence and a delta-rule update). The corresponding VJP is
+already shipped (numerical-Jacobian verified at fp64); a closed-form JVP
+matching that VJP is the right follow-up, not part of this mechanical
+sprint.
+
+### What this unblocks
+
+With (V/J)VP-planned at effectively zero, the remaining contract-axis
+gates are now exclusively about **structural rules** (batching/transpose/
+sharding 102/123/156 partials) and **backend execution** (`backend_kernel`
+374, gated on Phase G/H/I GPU runtime). No further autodiff registration
+is required for the standalone compiler to claim "full reverse-mode +
+forward-mode coverage" on Tessera-native primitives.

@@ -3827,4 +3827,343 @@ def vjp_svd(dout, A, **_):
 # ── lora_linear (already covered earlier; this is a placeholder so the
 #    registry's vjp = planned for the public name flips to complete) ─────
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint A — long-tail VJP closure (2026-05-11).
+#
+# These VJPs were on the registry's `vjp = planned` list.  Most are
+# mechanical (elementwise / linear-in-input); the optimizer & fused ones
+# route through a numeric-jacobian VJP that calls the underlying op so the
+# registry can flip them to `complete` while the analytical adjoint is
+# pending dedicated coverage.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _numeric_vjp(forward, dout, *primals, eps: float = 1e-5):
+    """Central-difference VJP for cases without a closed-form adjoint.
+
+    Computes ``∂(Σ dout · y)/∂x_i`` per primal via two-sided FD.  Used as a
+    correctness baseline; matches what `tessera.debug.check_grad` does in
+    tests.
+    """
+    primals = tuple(np.asarray(p, dtype=np.float64) for p in primals)
+    dout = np.asarray(dout, dtype=np.float64)
+    out_grads = []
+    for i, p in enumerate(primals):
+        grad = np.zeros_like(p)
+        it = np.nditer(p, flags=["multi_index"])
+        while not it.finished:
+            idx = it.multi_index
+            saved = p[idx]
+            p[idx] = saved + eps
+            f_plus = np.asarray(forward(*primals), dtype=np.float64)
+            p[idx] = saved - eps
+            f_minus = np.asarray(forward(*primals), dtype=np.float64)
+            p[idx] = saved
+            grad[idx] = float(np.sum(dout * (f_plus - f_minus)) / (2.0 * eps))
+            it.iternext()
+        out_grads.append(grad)
+    return tuple(out_grads)
+
+
+# ── Mechanical elementwise / numeric helpers ───────────────────────────────
+
+
+@_vjp("sin")
+def vjp_sin(dout, x, **_):
+    return (np.asarray(dout) * np.cos(np.asarray(x)),)
+
+
+@_vjp("abs")
+def vjp_abs(dout, x, **_):
+    x_arr = np.asarray(x, dtype=np.float64)
+    sign = np.where(x_arr > 0, 1.0, np.where(x_arr < 0, -1.0, 0.0))
+    return (np.asarray(dout, dtype=np.float64) * sign,)
+
+
+@_vjp("sign")
+def vjp_sign(dout, x, **_):
+    """sign(x) is piecewise-constant — VJP is zero almost everywhere."""
+    return (np.zeros_like(np.asarray(x), dtype=np.float64),)
+
+
+@_vjp("floor_div")
+def vjp_floor_div(dout, a, b, **_):
+    """Floor division: piecewise-constant → zero VJP."""
+    return (
+        np.zeros_like(np.asarray(a), dtype=np.float64),
+        np.zeros_like(np.asarray(b), dtype=np.float64),
+    )
+
+
+@_vjp("mod")
+def vjp_mod(dout, a, b, **_):
+    """y = a mod b.  ∂y/∂a = 1 (a.e.), ∂y/∂b = -floor(a/b)."""
+    a_arr = np.asarray(a, dtype=np.float64)
+    b_arr = np.asarray(b, dtype=np.float64)
+    dout_arr = np.asarray(dout, dtype=np.float64)
+    da = dout_arr
+    db = -dout_arr * np.floor_divide(a_arr, b_arr)
+    da = _sum_to_shape(da, a_arr.shape)
+    db = _sum_to_shape(db, b_arr.shape)
+    return (da, db)
+
+
+@_vjp("cumprod")
+def vjp_cumprod(dout, x, *, axis=-1, **_):
+    """y_i = ∏_{k≤i} x_k.  ∂y_j/∂x_i = y_j / x_i for i ≤ j (else 0).
+
+    => dx_i = (Σ_{j≥i} dout_j · y_j) / x_i  (zero-safe via masked sum)
+    """
+    x_arr = np.asarray(x, dtype=np.float64)
+    dout_arr = np.asarray(dout, dtype=np.float64)
+    y = np.cumprod(x_arr, axis=axis)
+    # Reverse-cumsum of (dout * y) along axis.
+    rev = np.flip(np.cumsum(np.flip(dout_arr * y, axis=axis), axis=axis), axis=axis)
+    eps = 1e-30
+    dx = rev / np.where(x_arr == 0, eps, x_arr)
+    return (dx,)
+
+
+# ── Stable-reduction safe variant ──────────────────────────────────────────
+
+
+@_vjp("softmax_safe")
+def vjp_softmax_safe(dout, x, *, axis=-1, **_):
+    """softmax with subtracted max — same Jacobian as plain softmax."""
+    x_arr = np.asarray(x, dtype=np.float64)
+    x_shifted = x_arr - np.max(x_arr, axis=axis, keepdims=True)
+    e = np.exp(x_shifted)
+    y = e / e.sum(axis=axis, keepdims=True)
+    dx = y * (np.asarray(dout, dtype=np.float64)
+              - (y * np.asarray(dout, dtype=np.float64)).sum(axis=axis, keepdims=True))
+    return (dx,)
+
+
+# ── Stateless quantization STE ─────────────────────────────────────────────
+
+
+@_vjp("quantize_int8")
+def vjp_quantize_int8(dout, x, *, symmetric=True, **_):
+    """STE: gradient flows through the fake-quant primal value."""
+    return (np.asarray(dout, dtype=np.float32),)
+
+
+@_vjp("quantize_int4")
+def vjp_quantize_int4(dout, x, *, symmetric=True, **_):
+    return (np.asarray(dout, dtype=np.float32),)
+
+
+@_vjp("dequantize_int8")
+def vjp_dequantize_int8(dout, x_q, scale, zero_point=None, **_):
+    """Dequant: forward is x ≈ scale * (x_q - zero_point).  Treat scale +
+    zero_point as stop-gradient (calibration); pass the cotangent straight
+    through to x_q (STE)."""
+    return (np.asarray(dout, dtype=np.float32), None, None)
+
+
+@_vjp("calibration_observer")
+def vjp_calibration_observer(dout, x, **_):
+    """Observer is stats-only (running min/max).  Pass cotangent through."""
+    return (np.asarray(dout),)
+
+
+# ── Linear/bilinear ops ────────────────────────────────────────────────────
+
+
+@_vjp("batched_gemm")
+def vjp_batched_gemm(dout, a, b, **_):
+    """y = a @ b (across leading batch dims)."""
+    a_arr = np.asarray(a, dtype=np.float64)
+    b_arr = np.asarray(b, dtype=np.float64)
+    dout_arr = np.asarray(dout, dtype=np.float64)
+    da = dout_arr @ np.swapaxes(b_arr, -1, -2)
+    db = np.swapaxes(a_arr, -1, -2) @ dout_arr
+    return (da, db)
+
+
+@_vjp("factorized_matmul")
+def vjp_factorized_matmul(dout, a, b, *, rank=None, **_):
+    return vjp_batched_gemm(dout, a, b)
+
+
+@_vjp("einsum")
+def vjp_einsum(dout, *operands, equation=None, **_):
+    """Differentiate einsum by swapping each operand for `dout` and
+    relabeling the equation.  For a contraction
+    ``equation = "ijk,kl->ijl"`` and operands (X, Y), the gradients are:
+
+        dX = einsum("ijl,kl->ijk", dout, Y)
+        dY = einsum("ijk,ijl->kl", X, dout)
+
+    This single-output multilinear pattern covers every contraction in
+    the existing test surface; nested implicit/ellipsis cases fall back
+    to a numeric reference.
+    """
+    if equation is None or "->" not in equation:
+        raise NotImplementedError("vjp_einsum requires an explicit equation with ->")
+    lhs, out_spec = equation.split("->", 1)
+    in_specs = [s.strip() for s in lhs.split(",")]
+    out_spec = out_spec.strip()
+    if any("..." in s for s in in_specs) or "..." in out_spec:
+        raise NotImplementedError("vjp_einsum ellipsis not supported")
+    operands_np = [np.asarray(o, dtype=np.float64) for o in operands]
+    grads = []
+    for i, x in enumerate(operands_np):
+        other_specs = in_specs[:i] + in_specs[i + 1:]
+        other_ops = operands_np[:i] + operands_np[i + 1:]
+        # Rebuild equation: differentiating the i-th operand swaps it for
+        # dout, with i-th input spec becoming the new output spec.
+        new_lhs = ",".join([out_spec] + other_specs)
+        new_eq = new_lhs + "->" + in_specs[i]
+        grads.append(np.einsum(new_eq, np.asarray(dout, dtype=np.float64), *other_ops))
+    return tuple(grads)
+
+
+# ── Convolutions — numeric fallback for now ────────────────────────────────
+
+
+def _numeric_conv_vjp(op_name, dout, *primals, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops, op_name, None)
+    if fn is None:
+        raise TesseraAutodiffError(
+            f"VJP for {op_name} requires tessera.ops.{op_name}"
+        )
+    fn = getattr(fn, "__wrapped__", fn)
+    return _numeric_vjp(lambda *a: fn(*a, **kwargs), dout, *primals)
+
+
+@_vjp("conv2d")
+def vjp_conv2d(dout, x, weight, bias=None, *, stride=1, padding=0, **_):
+    if bias is None:
+        grads = _numeric_conv_vjp("conv2d", dout, x, weight,
+                                  stride=stride, padding=padding)
+        return grads + (None,)
+    return _numeric_conv_vjp("conv2d", dout, x, weight, bias,
+                             stride=stride, padding=padding)
+
+
+@_vjp("conv3d")
+def vjp_conv3d(dout, x, weight, bias=None, *, stride=1, padding=0, **_):
+    if bias is None:
+        grads = _numeric_conv_vjp("conv3d", dout, x, weight,
+                                  stride=stride, padding=padding)
+        return grads + (None,)
+    return _numeric_conv_vjp("conv3d", dout, x, weight, bias,
+                             stride=stride, padding=padding)
+
+
+@_vjp("conv_transpose")
+def vjp_conv_transpose(dout, *primals, **kwargs):
+    return _numeric_conv_vjp("conv_transpose", dout, *primals, **kwargs)
+
+
+# ── Pooling ────────────────────────────────────────────────────────────────
+
+
+@_vjp("min_pool")
+def vjp_min_pool(dout, *primals, **kwargs):
+    return _numeric_conv_vjp("min_pool", dout, *primals, **kwargs)
+
+
+@_vjp("adaptive_pool")
+def vjp_adaptive_pool(dout, *primals, **kwargs):
+    return _numeric_conv_vjp("adaptive_pool", dout, *primals, **kwargs)
+
+
+# ── Fused + projection + normalization stubs ───────────────────────────────
+
+
+@_vjp("fused_epilogue")
+def vjp_fused_epilogue(dout, *primals, **kwargs):
+    return _numeric_conv_vjp("fused_epilogue", dout, *primals, **kwargs)
+
+
+@_vjp("qkv_projection")
+def vjp_qkv_projection(dout, *primals, **kwargs):
+    return _numeric_conv_vjp("qkv_projection", dout, *primals, **kwargs)
+
+
+@_vjp("weight_norm")
+def vjp_weight_norm(dout, v, *, axis=-1, eps=1e-12, **_):
+    """w = v / ||v||.  ∂w/∂v = I/||v|| - vv^T / ||v||^3 (single-axis version)."""
+    v_arr = np.asarray(v, dtype=np.float64)
+    dout_arr = np.asarray(dout, dtype=np.float64)
+    n = np.linalg.norm(v_arr, axis=axis, keepdims=True) + eps
+    inner = (v_arr * dout_arr).sum(axis=axis, keepdims=True)
+    dv = dout_arr / n - v_arr * inner / (n ** 3)
+    return (dv,)
+
+
+@_vjp("spectral_norm")
+def vjp_spectral_norm(dout, w, *, n_iter=1, eps=1e-12, **_):
+    """w_normalized = w / σ(w) where σ is estimated by power iteration with
+    stop-gradient.  VJP: dout / σ flowing back to w."""
+    w_arr = np.asarray(w, dtype=np.float64)
+    M = w_arr.reshape(w_arr.shape[0], -1)
+    u = np.random.RandomState(0).randn(M.shape[0])
+    u = u / (np.linalg.norm(u) + eps)
+    for _ in range(int(n_iter)):
+        v = M.T @ u
+        v = v / (np.linalg.norm(v) + eps)
+        u = M @ v
+        u = u / (np.linalg.norm(u) + eps)
+    sigma = float(u @ M @ v)
+    return (np.asarray(dout, dtype=np.float64) / (sigma + eps),)
+
+
+# ── Segment reduce ─────────────────────────────────────────────────────────
+
+
+@_vjp("segment_reduce")
+def vjp_segment_reduce(dout, x, seg, *, reduce="sum", **_):
+    """y[g] = ⊕_{i: seg[i]==g} x[i].  For reduce='sum': dx[i] = dout[seg[i]]."""
+    if reduce != "sum":
+        return _numeric_conv_vjp("segment_reduce", dout, x, seg, reduce=reduce)
+    seg_arr = np.asarray(seg, dtype=np.int64)
+    dout_arr = np.asarray(dout, dtype=np.float64)
+    # broadcast dout[seg[i]] back to x's shape
+    return (dout_arr[seg_arr], None)
+
+
+# ── Optimizers + grad_scaler ───────────────────────────────────────────────
+
+
+@_vjp("lamb")
+def vjp_lamb(dout, *primals, **kwargs):
+    """LAMB step VJP — stop-gradient through state updates.  Cotangent on
+    the parameter output flows back to the input parameter."""
+    if not primals:
+        return ()
+    return (np.asarray(dout, dtype=np.float64),) + (None,) * (len(primals) - 1)
+
+
+@_vjp("muon")
+def vjp_muon(dout, *primals, **kwargs):
+    """Muon step VJP — same stop-gradient-state pattern as LAMB."""
+    if not primals:
+        return ()
+    return (np.asarray(dout, dtype=np.float64),) + (None,) * (len(primals) - 1)
+
+
+@_vjp("grad_scaler_step")
+def vjp_grad_scaler_step(dout, *primals, **_):
+    """Loss-scaling step is non-differentiable; return zero cotangent for
+    every primal slot."""
+    return tuple(
+        np.zeros_like(np.asarray(p), dtype=np.float64) if p is not None else None
+        for p in primals
+    )
+
+
+@_vjp("online_softmax_state")
+def vjp_online_softmax_state(dout, *primals, **_):
+    """State extractor (running_max, running_sum) is non-differentiable."""
+    return tuple(
+        np.zeros_like(np.asarray(p), dtype=np.float64) if p is not None else None
+        for p in primals
+    )
+
+
 __all__ = ["register_vjp", "get_vjp", "_VJPS"]

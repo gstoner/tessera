@@ -473,16 +473,17 @@ class TestTape:
         # History of sentinels (each migrated as its VJP landed):
         #   - `moe`        v1 → F3-moe shipped 2026-05-09
         #   - `cholesky`   v1 → long-tail closure 2026-05-10 (Murray)
-        # Current sentinel: `cumprod` — gradient through `cumprod` requires
-        # a non-trivial reverse-cumprod construction still on the
-        # `vjp = planned` list.
-        x = np.array([1.0, 2.0, 3.0])
+        #   - `cumprod`    → Sprint A VJP closure 2026-05-11
+        # Current sentinel: `floor` — piecewise-constant output, gradient is
+        # zero almost everywhere; no STE rule registered today so the tape
+        # raises when this op lies on the gradient path.
+        x = np.array([1.5, 2.5, 3.5])
         x_p = ts.nn.Parameter(x.copy())
         with ts.autodiff.tape() as t:
-            out = ts.ops.cumprod(x_p)
+            out = ts.ops.floor(x_p)
             loss = ts.ops.reduce(out, op="sum")
             with pytest.raises(
-                TesseraAutodiffError, match=r"cumprod.+not differentiable",
+                TesseraAutodiffError, match=r"floor.+not differentiable",
             ):
                 t.backward(loss)
 

@@ -361,14 +361,39 @@ def test_s2_primitive_has_registered_vjp(name):
 
 
 @pytest.mark.parametrize("name", [
-    "floor_div", "mod", "sign", "floor", "ceil", "round", "trunc",
-    "eq", "ne", "lt", "le", "gt", "ge", "logical_and", "logical_or",
-    "logical_not", "logical_xor", "bitwise_and", "bitwise_or", "bitwise_xor",
-    "bitwise_not", "isnan", "isinf", "isfinite", "argmax", "argmin", "cumprod",
-    "nonzero", "top_k", "sort", "argsort",
+    # Pure discontinuities — no closed-form or STE rule yet
+    "floor", "ceil", "round", "trunc",
+    # Comparisons (boolean output)
+    "eq", "ne", "lt", "le", "gt", "ge",
+    # Logical / bitwise (boolean / integer output)
+    "logical_and", "logical_or", "logical_not", "logical_xor",
+    "bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not",
+    # Predicates (boolean output)
+    "isnan", "isinf", "isfinite",
+    # Index-producing ops (integer output)
+    "argmax", "argmin", "nonzero", "top_k", "sort", "argsort",
 ])
 def test_s2_non_differentiable_or_discontinuous_ops_skip_vjp(name):
+    """Ops whose outputs are not in the differentiable manifold (integers,
+    booleans, indices) have no VJP — calling them on the gradient path
+    raises ``TesseraAutodiffError``.
+
+    Sprint A (2026-05-11): `floor_div` / `mod` / `sign` / `cumprod` were
+    moved OUT of this list — they're piecewise-constant or have non-trivial
+    Jacobians, but each got an STE-style or closed-form VJP that the
+    registry can flip to `complete`.  See `test_s2_ste_or_closed_form_vjp_ops`
+    for the positive coverage.
+    """
     assert get_vjp(name) is None
+
+
+@pytest.mark.parametrize("name", ["floor_div", "mod", "sign", "cumprod"])
+def test_s2_ste_or_closed_form_vjp_ops_have_registered_vjp(name):
+    """Sprint A (2026-05-11): piecewise-constant ops (`floor_div`/`mod`/
+    `sign`) get STE-style zero VJPs; `cumprod` gets a closed-form ratio-
+    cumsum VJP.  The registry flips these from `vjp = planned` to `complete`
+    once they're registered."""
+    assert get_vjp(name) is not None, f"VJP not registered for {name}"
 
 
 def test_mean_vjp_matches_numerical_gradient():

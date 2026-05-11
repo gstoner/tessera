@@ -122,6 +122,7 @@ tessera.fault        # on_failure / on_preempt / inject
 tessera.elastic      # configure / elastic / reshard
 tessera.checkpoint   # runtime checkpoint save/load/manifest helpers
 tessera.optim        # Adam/AdamW/Adafactor/Momentum/Lion and training utilities
+tessera.optimizers   # compatibility namespace: Adam / AdamW stateful wrappers
 tessera.losses       # regression/classification/contrastive/diffusion losses
 tessera.rl           # PPO/GRPO/CISPO post-training helpers
 
@@ -130,6 +131,11 @@ tessera.server       # App / load_package / scheduler / KVCacheManager
 
 # Ops namespace
 tessera.ops          # tessera.ops.gemm / layer_norm / dropout / etc.
+tessera.arange       # compatibility alias for tessera.ops.arange
+tessera.gather       # compatibility alias for tessera.ops.gather
+tessera.clip         # compatibility alias for tessera.ops.clip
+tessera.einsum       # compatibility alias for tessera.ops.einsum
+tessera.masked_fill  # compatibility alias for tessera.ops.masked_fill
 
 # Tensor type annotations
 tessera.Tensor       # tessera.Tensor["M", "K"]
@@ -137,6 +143,11 @@ tessera.f16          # tessera.f16[..., ...]
 tessera.bf16         # tessera.bf16[..., ...]
 tessera.f32          # tessera.f32[..., ...]
 tessera.mut_f32      # tessera.mut_f32[..., ...]
+tessera.fp8_e4m3     # low-precision annotation shorthand
+tessera.fp8_e5m2     # low-precision annotation shorthand
+tessera.fp6          # alias for fp6_e3m2 annotation shorthand
+tessera.fp4          # alias for fp4_e2m1 annotation shorthand
+tessera.nvfp4        # block-scaled fp4 annotation shorthand
 ```
 
 ---

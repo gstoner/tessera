@@ -3536,6 +3536,14 @@ def _make_ops_namespace() -> types.SimpleNamespace:
 
 ops = _make_ops_namespace()
 
+# Common op aliases kept at the top level for older advanced examples. The
+# canonical compiler-visible spelling remains ``tessera.ops.<name>``.
+arange = ops.arange
+gather = ops.gather
+clip = ops.clip
+einsum = ops.einsum
+masked_fill = ops.masked_fill
+
 # nn module depends on `ops`, so import after the ops namespace is built.
 from . import nn  # noqa: E402
 from . import aot  # noqa: E402
@@ -3544,6 +3552,10 @@ from . import data  # noqa: E402
 from . import losses  # noqa: E402
 from . import memory  # noqa: E402
 from . import optim  # noqa: E402
+optimizers = types.SimpleNamespace(
+    Adam=optim.Adam,
+    AdamW=optim.AdamW,
+)
 from . import rng  # noqa: E402
 from . import quantization  # noqa: E402
 from . import rl  # noqa: E402
@@ -3575,6 +3587,15 @@ from .memory import (  # noqa: E402
 
 # autodiff installs tape-aware wrappers on `ops.<name>`; load after `ops` and `nn`.
 from . import autodiff  # noqa: E402
+autocast = autodiff.autocast
+rematerialize = autodiff.rematerialize
+activation_checkpoint = autodiff.checkpoint
+# Refresh top-level op aliases after autodiff installs tape-aware wrappers.
+arange = ops.arange
+gather = ops.gather
+clip = ops.clip
+einsum = ops.einsum
+masked_fill = ops.masked_fill
 
 # S5/S6 standalone compiler semantics.
 from . import control  # noqa: E402
@@ -3689,6 +3710,62 @@ class mut_f32(_DtypeAnnotation):
         return cls(shape)
 
 
+class fp8_e4m3(_DtypeAnnotation):
+    _dtype = "fp8_e4m3"
+    def __init__(self, shape=None):
+        super().__init__("fp8_e4m3", shape)
+    def __class_getitem__(cls, shape):
+        return cls(shape)
+
+
+class fp8_e5m2(_DtypeAnnotation):
+    _dtype = "fp8_e5m2"
+    def __init__(self, shape=None):
+        super().__init__("fp8_e5m2", shape)
+    def __class_getitem__(cls, shape):
+        return cls(shape)
+
+
+class fp6_e2m3(_DtypeAnnotation):
+    _dtype = "fp6_e2m3"
+    def __init__(self, shape=None):
+        super().__init__("fp6_e2m3", shape)
+    def __class_getitem__(cls, shape):
+        return cls(shape)
+
+
+class fp6_e3m2(_DtypeAnnotation):
+    _dtype = "fp6_e3m2"
+    def __init__(self, shape=None):
+        super().__init__("fp6_e3m2", shape)
+    def __class_getitem__(cls, shape):
+        return cls(shape)
+
+
+class fp6(fp6_e3m2):
+    _dtype = "fp6_e3m2"
+
+
+class fp4_e2m1(_DtypeAnnotation):
+    _dtype = "fp4_e2m1"
+    def __init__(self, shape=None):
+        super().__init__("fp4_e2m1", shape)
+    def __class_getitem__(cls, shape):
+        return cls(shape)
+
+
+class fp4(fp4_e2m1):
+    _dtype = "fp4_e2m1"
+
+
+class nvfp4(_DtypeAnnotation):
+    _dtype = "nvfp4"
+    def __init__(self, shape=None):
+        super().__init__("nvfp4", shape)
+    def __class_getitem__(cls, shape):
+        return cls(shape)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Top-level tensor factories
 #
@@ -3765,21 +3842,25 @@ __all__ = [
     "data",
     "aot", "custom", "CustomPrimitive", "custom_primitive", "custom_call",
     "custom_vjp", "custom_jvp", "custom_batching",
-    "losses", "memory", "optim", "rng", "rl",
+    "losses", "memory", "optim", "optimizers", "rng", "rl",
     "MemoryReadResult", "MemoryTable", "memory_read", "memory_write",
     "memory_evict",
     "quantization", "CalibrationObserver", "calibration_observer",
     "quantize_int8", "dequantize_int8", "quantize_int4", "dequantize_int4",
     "fake_quantize", "grad_scaler_step",
+    # Top-level op compatibility aliases
+    "arange", "gather", "clip", "einsum", "masked_fill",
     # Dtype annotations
     "f16", "bf16", "f32", "mut_f32",
+    "fp8_e4m3", "fp8_e5m2", "fp6_e2m3", "fp6_e3m2", "fp6",
+    "fp4_e2m1", "fp4", "nvfp4",
     # Tensor factories (Replicated)
     "zeros", "ones", "randn", "empty", "full",
     # Auxiliary submodules (debug / profile / autotune / fault-tolerance / observability)
     "shape", "debug", "graph", "telemetry", "profiler", "autotune",
     "collectives", "fault", "elastic", "checkpoint", "server", "arch",
     # Autodiff (Tier 2 v1)
-    "autodiff",
+    "autodiff", "autocast", "rematerialize", "activation_checkpoint",
     # KV-cache handle (Phase B2)
-    "cache",
+    "cache", "distributions",
 ]

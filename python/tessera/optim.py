@@ -600,8 +600,122 @@ def chain(*transforms: Callable[[Tree, Tree], Tree]) -> OptaxStyleChain:
     return OptaxStyleChain(tuple(transforms))
 
 
+def _grad_tree_from_params(params: Tree) -> Tree:
+    def grad_leaf(p):
+        grad = getattr(p, "grad", None)
+        if grad is None:
+            return np.zeros_like(_asarray(p), dtype=np.float32)
+        return _asarray(grad)
+
+    return tree_map(grad_leaf, params)
+
+
+def _assign_tree(dst: Tree, src: Tree) -> None:
+    if isinstance(dst, dict):
+        for key in dst:
+            _assign_tree(dst[key], src[key])
+        return
+    if isinstance(dst, tuple):
+        for d, s in zip(dst, src, strict=True):
+            _assign_tree(d, s)
+        return
+    if isinstance(dst, list):
+        for d, s in zip(dst, src, strict=True):
+            _assign_tree(d, s)
+        return
+    if hasattr(dst, "_data") and hasattr(dst._data, "_data"):
+        dst._data._data[...] = np.asarray(src, dtype=dst._data._data.dtype)
+        return
+    if isinstance(dst, np.ndarray):
+        dst[...] = np.asarray(src, dtype=dst.dtype)
+        return
+    raise TypeError(f"Cannot assign optimizer update into {type(dst).__name__}")
+
+
+class Optimizer:
+    """Stateful wrapper around Tessera's functional optimizer updates.
+
+    The wrapper is intentionally small: parameters remain owned by modules or
+    callers, optimizer state is a Python tree, and ``step()`` mutates parameter
+    storage in place for ergonomic training-loop compatibility.
+    """
+
+    update_fn: Callable[..., tuple[Tree, dict[str, Any]]]
+
+    def __init__(self, params: Tree, **kwargs: Any) -> None:
+        self.params = list(params) if not isinstance(params, (dict, list, tuple)) else params
+        self.kwargs = dict(kwargs)
+        self.state: dict[str, Any] | None = None
+
+    def step(self, grads: Tree | None = None) -> Tree:
+        if grads is None:
+            grads = _grad_tree_from_params(self.params)
+        new_params, self.state = self.update_fn(self.params, grads, self.state, **self.kwargs)
+        _assign_tree(self.params, new_params)
+        return self.params
+
+    def zero_grad(self) -> None:
+        def clear(p):
+            if hasattr(p, "zero_grad"):
+                p.zero_grad()
+            return p
+
+        tree_map(clear, self.params)
+
+
+class AdamW(Optimizer):
+    """Stateful AdamW optimizer over module parameters or array trees."""
+
+    update_fn = staticmethod(adamw)
+
+    def __init__(
+        self,
+        params: Tree,
+        lr: float = 1e-3,
+        betas: tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-8,
+        weight_decay: float = 0.0,
+        **dtype_policy: Any,
+    ) -> None:
+        super().__init__(
+            params,
+            lr=lr,
+            beta1=betas[0],
+            beta2=betas[1],
+            eps=eps,
+            weight_decay=weight_decay,
+            **dtype_policy,
+        )
+
+
+class Adam(Optimizer):
+    """Stateful Adam optimizer over module parameters or array trees."""
+
+    update_fn = staticmethod(adam)
+
+    def __init__(
+        self,
+        params: Tree,
+        lr: float = 1e-3,
+        betas: tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-8,
+        **dtype_policy: Any,
+    ) -> None:
+        super().__init__(
+            params,
+            lr=lr,
+            beta1=betas[0],
+            beta2=betas[1],
+            eps=eps,
+            **dtype_policy,
+        )
+
+
 __all__ = [
+    "Adam",
+    "AdamW",
     "OptaxStyleChain",
+    "Optimizer",
     "adafactor",
     "adam",
     "adamw",

@@ -173,7 +173,7 @@ are deferred to Phase G — the Python op surface is the unblock today.
 | Manual `all_reduce(grads)` | `tessera.distributed.DDP(module, mesh_axis="dp")` (Phase I1) |
 | Manual sharded params | `tessera.distributed.FSDP(module, mesh_axis="dp", stage=2 or 3)` (Phase I2 v1 + deferred-items Item 3) |
 | ZeRO-3 explicit naming | `tessera.distributed.ZeRO3(module, mesh_axis="dp")` — alias for `FSDP(stage=3)` |
-| `tessera.optimizers.AdamW` | Compose `tessera.ops.adam` + a Module wrapper. AdamW is a Phase 5 follow-up. |
+| `tessera.optimizers.AdamW` | ✅ now real — stateful wrapper over `tessera.optim.adamw`; `tessera.optimizers.Adam` also available. |
 | `tessera.distributions.{Normal, Beta}` | ✅ now real — `tessera.distributions.{Normal, Beta, kl_divergence}`. |
 
 DDP/FSDP today run against `tessera.testing.mock_collective.MockRankGroup` (in-process simulator); real NCCL/RCCL bindings wait on Phase G's NVIDIA execution path.
@@ -356,7 +356,6 @@ JAX — it works as written.
 
 | Item | Status |
 |------|--------|
-| `tessera.optimizers.AdamW` Module | Functional `ops.adam` ships; Module wrapper is a Phase 5 follow-up. |
 | Hopper `tcgen05.fp8.mma` / `cvt.fp4` / `cvt.fp6` lowering | Phase G — needs real H100/Blackwell hardware. |
 | ROCm OCP fp6/fp4/fp8 mfma rules | Phase G. |
 | Native FlashMLA target kernel (Hopper / Blackwell absorb-K) | Phase G. |

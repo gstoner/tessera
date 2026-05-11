@@ -6,7 +6,9 @@ import json
 import os
 import pickle
 import hashlib
+import sys
 import time
+import types
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional
@@ -433,3 +435,23 @@ __all__ = [
     "save_state",
     "state_migration",
 ]
+
+
+class _CallableCheckpointModule(types.ModuleType):
+    """Let ``tessera.checkpoint`` double as an activation-checkpoint decorator.
+
+    The module still exposes runtime checkpoint helpers such as
+    ``save_state``/``load_state``. Calling the module delegates to
+    ``tessera.autodiff.checkpoint`` for compatibility with older examples that
+    used ``@tessera.checkpoint`` for rematerialization.
+    """
+
+    def __call__(self, fn=None):
+        from .autodiff import checkpoint as activation_checkpoint
+
+        if fn is None:
+            return activation_checkpoint
+        return activation_checkpoint(fn)
+
+
+sys.modules[__name__].__class__ = _CallableCheckpointModule

@@ -114,14 +114,14 @@ Names used in advanced examples that **do not exist** in `python/tessera/`:
 | `tessera.nn.utils.clip_grad_norm_` | training paths | ✅ landed Phase A4 |
 | `tessera.nn.functional` (submodule) | HF_transformer | ✅ shipped as self-alias of `tessera.nn` |
 | `tessera.nn.flash_attention` | flash_attention_demo | ✅ shipped as alias for `tessera.ops.flash_attn` |
-| `tessera.nn.DynamicDepthwiseConv1d` | Jet_nemotron | 🔲 still phantom — needs `ops.depthwise_conv1d` (Theme 3) |
+| `tessera.nn.DynamicDepthwiseConv1d` | Jet_nemotron | ✅ landed Phase D4 on top of `ops.depthwise_conv1d` |
 | `@tessera.function`, `@ts.compile(backend=...)` | Diffusion_LLM | Replaced — use `@tessera.jit(target=...)` |
-| `@tessera.autodiff`, `tessera.autodiff.*` | Jet_nemotron, Diffusion_LLM | Phase 5 — see Programming Guide Ch.7 |
-| `tessera.autocast`, `tessera.checkpoint` (context) | Diffusion_LLM, Jet_nemotron | Implement (Tier 3 / Phase 5) |
-| `tessera.optimizers.AdamW` | Diffusion_LLM | Composite of `ops.adam` + Module — Phase 5 |
-| `tessera.distributions.{Normal,Beta}` | Diffusion_LLM | Out of scope today |
-| `tessera.arange`, `tessera.gather`, `tessera.clip`, `tessera.einsum`, `tessera.masked_fill` | Diffusion_LLM | Add as `ops.*` (Tier 3) |
-| `fp8_e4m3` / `fp6` / `fp4` runtime dtypes | Jet_nemotron, Nemotron_Nano | Tier 3 — autocast + lowering rules |
+| `@tessera.autodiff`, `tessera.autodiff.*` | Jet_nemotron, Diffusion_LLM | `tessera.autodiff.*` ✅ shipped; bare `@tessera.autodiff` remains an intentional error because `autodiff` is a module namespace |
+| `tessera.autocast`, `tessera.checkpoint` (context) | Diffusion_LLM, Jet_nemotron | ✅ top-level `autocast`; callable `tessera.checkpoint` delegates to activation checkpointing while retaining save/load helpers |
+| `tessera.optimizers.AdamW` | Diffusion_LLM | ✅ stateful wrapper over `tessera.optim.adamw`; `tessera.optimizers.Adam` also available |
+| `tessera.distributions.{Normal,Beta}` | Diffusion_LLM | ✅ `Normal`, `Beta`, and `kl_divergence` shipped |
+| `tessera.arange`, `tessera.gather`, `tessera.clip`, `tessera.einsum`, `tessera.masked_fill` | Diffusion_LLM | ✅ top-level aliases for `ops.*` |
+| `fp8_e4m3` / `fp6` / `fp4` runtime dtypes | Jet_nemotron, Nemotron_Nano | ✅ annotation shorthands + autocast/quantization reference support; backend lowering remains Phase G |
 
 ---
 

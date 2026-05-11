@@ -42,6 +42,9 @@ void registerTesseraPasses() {
         pm.addPass(createSwigluFusionPass());
         pm.addPass(createMLAFusionPass());
         pm.addPass(createNativeSparseAttnFusionPass());
+        pm.addPass(createHybridAttnExpandPass());
+        pm.addPass(createLightningAttnFusionPass());
+        pm.addPass(createDeltaAttnChunkingPass());
         pm.addPass(createDistributionLoweringPass());
         pm.addPass(createTilingPass());
         pm.addPass(createTileToX86Pass());
@@ -85,6 +88,11 @@ void registerTesseraPasses() {
   // `tessera.native_sparse_attn_fused`.
   ::mlir::registerPass([]() { return createNativeSparseAttnFusionPass(); });
 
+  // ── attention-family plan — Ling/Kimi/Lightning/Delta pass slots ────────
+  ::mlir::registerPass([]() { return createHybridAttnExpandPass(); });
+  ::mlir::registerPass([]() { return createLightningAttnFusionPass(); });
+  ::mlir::registerPass([]() { return createDeltaAttnChunkingPass(); });
+
   // ── Phase F5 adjoint collective insertion ──────────────────────────────────
   // Runs after AutodiffPass on functions carrying both
   // tessera.autodiff="reverse" and tessera.weight_sharding. Plans
@@ -122,6 +130,9 @@ void registerTesseraPasses() {
         pm.addPass(createSwigluFusionPass());
         pm.addPass(createMLAFusionPass());
         pm.addPass(createNativeSparseAttnFusionPass());
+        pm.addPass(createHybridAttnExpandPass());
+        pm.addPass(createLightningAttnFusionPass());
+        pm.addPass(createDeltaAttnChunkingPass());
         pm.addPass(createDistributionLoweringPass());
         pm.addPass(createTileIRLoweringPass());
         pm.addPass(createWarpSpecializationPass());

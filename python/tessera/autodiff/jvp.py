@@ -417,6 +417,71 @@ def jvp_attn_top_k_blocks(primals, tangents, **kwargs):
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
 
 
+@_jvp("power_attn")
+def jvp_power_attn(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.power_attn, "__wrapped__", _ops.power_attn)
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
+
+
+@_jvp("retention")
+def jvp_retention(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.retention, "__wrapped__", _ops.retention)
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
+
+
+@_jvp("lightning_attention")
+def jvp_lightning_attention(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.lightning_attention, "__wrapped__", _ops.lightning_attention)
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals[:3], tangents[:3])
+
+
+@_jvp("gated_attention")
+def jvp_gated_attention(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.gated_attention, "__wrapped__", _ops.gated_attention)
+    return _numeric_jvp_rule(lambda q, k, v, gate: fn(q, k, v, gate, **kwargs), primals, tangents)
+
+
+@_jvp("deepseek_sparse_attention")
+def jvp_deepseek_sparse_attention(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.deepseek_sparse_attention, "__wrapped__", _ops.deepseek_sparse_attention)
+    if len(primals) == 3:
+        return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
+    return _numeric_jvp_rule(lambda q, k, v, gate: fn(q, k, v, gate, **kwargs), primals, tangents)
+
+
+@_jvp("gated_deltanet")
+def jvp_gated_deltanet(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.gated_deltanet, "__wrapped__", _ops.gated_deltanet)
+    return _numeric_jvp_rule(lambda *args: fn(*args, **kwargs), primals, tangents)
+
+
+@_jvp("kimi_delta_attention")
+def jvp_kimi_delta_attention(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.kimi_delta_attention, "__wrapped__", _ops.kimi_delta_attention)
+    return _numeric_jvp_rule(lambda *args: fn(*args, **kwargs), primals, tangents)
+
+
+@_jvp("modified_delta_attention")
+def jvp_modified_delta_attention(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.modified_delta_attention, "__wrapped__", _ops.modified_delta_attention)
+    return _numeric_jvp_rule(lambda *args: fn(*args, **kwargs), primals, tangents)
+
+
+@_jvp("hybrid_attention")
+def jvp_hybrid_attention(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.hybrid_attention, "__wrapped__", _ops.hybrid_attention)
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals[:3], tangents[:3])
+
+
 @_jvp("moe")
 def jvp_moe(primals, tangents, **kwargs):
     from tessera import ops as _ops

@@ -83,6 +83,13 @@ _SPECS = [
     OpSpec("attn_sliding_window", "tessera.attn_sliding_window", 3, 3, effect="state", lowering="attention"),
     OpSpec("attn_compressed_blocks", "tessera.attn_compressed_blocks", 3, 3, effect="state", lowering="attention"),
     OpSpec("attn_top_k_blocks", "tessera.attn_top_k_blocks", 3, 3, effect="state", lowering="attention"),
+    OpSpec("deepseek_sparse_attention", "tessera.deepseek_sparse_attention", 3, 4, effect="state", lowering="attention"),
+    OpSpec("gated_attention", "tessera.gated_attention", 4, 4, effect="state", lowering="attention"),
+    OpSpec("hybrid_attention", "tessera.hybrid_attention", 3, 3, effect="state", lowering="attention"),
+    OpSpec("lightning_attention", "tessera.lightning_attention", 3, 3, effect="state", lowering="attention"),
+    OpSpec("gated_deltanet", "tessera.gated_deltanet", 3, 6, effect="state", lowering="attention"),
+    OpSpec("kimi_delta_attention", "tessera.kimi_delta_attention", 3, 6, effect="state", lowering="attention"),
+    OpSpec("modified_delta_attention", "tessera.modified_delta_attention", 3, 6, effect="state", lowering="attention"),
     # Phase F-MoR — Mixture of Recursions primitives. mor_router maps
     # (x, w_router) → per-token depth assignment. mor_partition takes a
     # depth tensor + step int and returns a bool mask. mor_scatter writes

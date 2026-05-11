@@ -1142,6 +1142,71 @@ def vjp_attn_top_k_blocks(dout, Q, K, V, *, scores, top_k, block_size, causal=Tr
     )
 
 
+def _numeric_attention_family_vjp(op_name, dout, args, kwargs):
+    from tessera import ops as _ops
+    original = getattr(getattr(_ops, op_name), "__wrapped__", getattr(_ops, op_name))
+    args = list(args)
+    return tuple(
+        _numeric_vjp_arg(
+            lambda a, i=i: original(*(args[:i] + [a] + args[i + 1:]), **kwargs),
+            dout,
+            arg,
+        )
+        for i, arg in enumerate(args)
+    )
+
+
+@_vjp("power_attn")
+def vjp_power_attn(dout, Q, K, V, **kwargs):
+    return _numeric_attention_family_vjp("power_attn", dout, (Q, K, V), kwargs)
+
+
+@_vjp("retention")
+def vjp_retention(dout, Q, K, V, **kwargs):
+    return _numeric_attention_family_vjp("retention", dout, (Q, K, V), kwargs)
+
+
+@_vjp("lightning_attention")
+def vjp_lightning_attention(dout, Q, K, V, **kwargs):
+    kwargs = {k: v for k, v in kwargs.items() if k != "_output_index"}
+    return _numeric_attention_family_vjp("lightning_attention", dout, (Q, K, V), kwargs)
+
+
+@_vjp("gated_attention")
+def vjp_gated_attention(dout, Q, K, V, gate, **kwargs):
+    return _numeric_attention_family_vjp("gated_attention", dout, (Q, K, V, gate), kwargs)
+
+
+@_vjp("deepseek_sparse_attention")
+def vjp_deepseek_sparse_attention(dout, Q, K, V, gate_logits=None, **kwargs):
+    args = (Q, K, V) if gate_logits is None else (Q, K, V, gate_logits)
+    return _numeric_attention_family_vjp("deepseek_sparse_attention", dout, args, kwargs)
+
+
+@_vjp("gated_deltanet")
+def vjp_gated_deltanet(dout, *args, **kwargs):
+    kwargs = {k: v for k, v in kwargs.items() if k != "_output_index"}
+    return _numeric_attention_family_vjp("gated_deltanet", dout, args, kwargs)
+
+
+@_vjp("kimi_delta_attention")
+def vjp_kimi_delta_attention(dout, *args, **kwargs):
+    kwargs = {k: v for k, v in kwargs.items() if k != "_output_index"}
+    return _numeric_attention_family_vjp("kimi_delta_attention", dout, args, kwargs)
+
+
+@_vjp("modified_delta_attention")
+def vjp_modified_delta_attention(dout, *args, **kwargs):
+    kwargs = {k: v for k, v in kwargs.items() if k != "_output_index"}
+    return _numeric_attention_family_vjp("modified_delta_attention", dout, args, kwargs)
+
+
+@_vjp("hybrid_attention")
+def vjp_hybrid_attention(dout, Q, K, V, **kwargs):
+    kwargs = {k: v for k, v in kwargs.items() if k != "_output_index"}
+    return _numeric_attention_family_vjp("hybrid_attention", dout, (Q, K, V), kwargs)
+
+
 @_vjp("moe_dispatch")
 def vjp_moe_dispatch(dout, x, route, *, transport=None, **_):
     return (_sum_to_shape(np.asarray(dout), np.asarray(x).shape), None)

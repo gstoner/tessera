@@ -42,8 +42,8 @@ Generated from `all_primitive_coverages()` on 2026-05-10:
 
 | Metric | Count |
 |---|---:|
-| Total tracked primitives | 362 |
-| Existing / shipped partial entries | 362 |
+| Total tracked primitives | 373 |
+| Existing / shipped partial entries | 373 |
 | Planned entries | 0 |
 | Contract-complete entries | 0 |
 
@@ -52,10 +52,13 @@ primitive should be treated as contract-complete yet. Contract completion still
 requires fully specified semantics, transform rules, lowering, backend kernels,
 and tests for each primitive.
 
-Current lowering gates: `201` registered, `125` still `stub_required`, `32`
+Current lowering metadata: `222` registered, `115` still `stub_required`, `32`
 not applicable, and `4` missing.
 
-Current contract schemas: `36` primitives are promoted to
+Current backend metadata: `222` partial backend entries and `151`
+reference-only entries.
+
+Current contract schemas: `48` primitives are promoted to
 `explicit_semantic`; the rest remain `explicit_partial` until more contract
 axes are hardened.
 
@@ -77,12 +80,12 @@ The dashboard groups primitives by the S-series sprint that ships them.
 | **S5** Control flow + transforms | Recurrent + composable transforms | `scan`, `associative_scan`, `while_loop`, `fori_loop`, `cond`, `switch`, `vmap`, `pmap`, `vjp`, `jvp`, `remat`, `autocast`, `axis_index`, `axis_size` |
 | **S6** Sharding + collectives | Compiler-visible SPMD placement and primitive collectives | `shard_map`, `named_sharding`, `partition_spec`, `psum`, `pmean`, `pmax`, `pmin`, `collective_permute`, `broadcast_to_axis` |
 | **S7** Model layers | Standalone model authoring | `linear_general`, `conv1d`, `conv_transpose`, `group_norm`, `gru_cell`, `simple_rnn_cell`, `bidirectional_scan`, `max_pool`, `avg_pool`, `lora_linear` |
-| **S7** Position encodings + attention | Modern transformer building blocks | `rope`, `alibi`, `ntk_rope`, `multi_head_attention`, `gqa_attention`, `mqa_attention`, `mla_decode` |
+| **S7** Position encodings + attention | Modern transformer and reasoning-model building blocks | `rope`, `alibi`, `ntk_rope`, `multi_head_attention`, `gqa_attention`, `mqa_attention`, `mla_decode`, `mla_decode_fused`, `deepseek_sparse_attention`, `attn_sliding_window`, `attn_compressed_blocks`, `attn_top_k_blocks`, `lightning_attention`, `gated_attention`, `hybrid_attention`, `gated_deltanet`, `kimi_delta_attention`, `modified_delta_attention` |
 | **S7** Memory | Titans/Atlas-style learned memory | `memory_read`, `memory_write`, `memory_evict` |
 | **S8** Tiny model conformance | Standalone family smoke tests | `tiny_diffusion_conformance`, `tiny_recurrent_conformance`, `tiny_attention_conformance`, `tiny_training_step_conformance` |
-| **S9** Numerics + quantization | Mixed precision + quant flows | `quantize_int8`, `dequantize_int8`, `quantize_int4`, `dequantize_int4`, `fake_quantize`, `calibration_observer`, `grad_scaler_step`, `autocast` |
-| **S10** Optimizers + schedules | Functional training step | `sgd`, `adam`, `adamw`, `adafactor`, `lion`, `muon`, `lamb`, `cosine_lr`, `cosine_warmup_lr`, `cyclical_lr`, `chained_schedule`, `clip_grad_norm`, `ema_update`, `polyak_avg` |
-| **S11** Losses | Training criteria | `mse_loss`, `mae_loss`, `huber_loss`, `cross_entropy_loss`, `kl_divergence`, `info_nce_loss`, `triplet_loss`, `focal_loss`, `ddpm_noise_pred_loss`, `score_matching_loss`, `ctc_loss`, `seq2seq_loss` |
+| **S9** Numerics + quantization | Mixed precision + quant flows | `quantize_fp8`, `dequantize_fp8`, `quantize_fp4`, `dequantize_fp4`, `quantize_int8`, `dequantize_int8`, `quantize_int4`, `dequantize_int4`, `fake_quantize`, `calibration_observer`, `grad_scaler_step`, `autocast` |
+| **S10** Optimizers + schedules | Functional training step | `sgd`, `momentum`, `adam`, `adamw`, `adafactor`, `lion`, `muon`, `lamb`, `cosine_lr`, `cosine_warmup_lr`, `cyclical_lr`, `chained_schedule`, `clip_grad_norm`, `ema_update`, `polyak_avg` |
+| **S11** Losses | Training criteria | `mse_loss`, `mae_loss`, `huber_loss`, `cross_entropy_loss`, `kl_divergence`, `info_nce_loss`, `triplet_loss`, `focal_loss`, `ddpm_noise_pred_loss`, `score_matching_loss`, `ctc_loss`, `seq2seq_loss`, `ppo_policy_loss`, `grpo_policy_loss`, `cispo_policy_loss` |
 | **S12** Serialization | Save / load / migrate / shard | `save_state`, `load_state`, `save_sharded`, `load_sharded`, `state_migration`, `partial_state_load` |
 | **S13** Custom-primitive API | User-defined primitives + kernels | `custom_primitive`, `custom_call`, `custom_vjp`, `custom_jvp`, `custom_batching`, `custom_lowering` |
 | **S14** AOT + cache | Persistent JIT cache + AOT export | `aot_export`, `aot_load`, `stablehlo_export`, `gguf_export`, `safetensors_export`, `compilation_cache` |
@@ -100,6 +103,12 @@ The registry tags primitives by the model families they unblock:
 - Griffin / Megalodon
 - Titans / Atlas memory
 - JEPA
+- MoSA / MoE sparse attention
+- DeepSeek-style MLA / Native Sparse Attention
+- MiniMax Lightning / long-context hybrid attention
+- Kimi Delta / Modified Delta Attention
+- Ling-style MLA + Lightning hybrid attention
+- reasoning RL post-training loops
 
 ## S0 Scope Decision (2026-05-10)
 
@@ -118,12 +127,16 @@ S1 is complete when the registry and tests exist, not when every primitive is
 implemented. The current result is intentionally a mixed dashboard:
 
 - Existing Tessera operators are imported from `OP_SPECS` as partial coverage
-  entries; the registry now consults `tessera.autodiff.vjp._VJPS` so any op
-  with a registered VJP correctly shows `vjp = complete`.
+  entries; the registry now consults `tessera.autodiff.vjp._VJPS` and
+  `tessera.autodiff.jvp._JVPS` so any op with a registered VJP/JVP correctly
+  shows `complete`.
 - All currently tracked standalone compiler primitives have at least a
   Python-reference surface; none remain falsely listed as planned.
 - The snapshot includes lowering/backend gates so reference-only primitives are
   visually distinct from Graph IR-lowered primitives.
+- Reasoning-model support now appears as first-class registry coverage for
+  RoPE/MLA/NSA, MoE dispatch/combine, quantization STE, optimizers, and
+  PPO/GRPO/CISPO helpers.
 - Missing contract axes remain visible until each primitive has semantics,
   transform rules, lowering, backend coverage, and tests.
 
@@ -158,16 +171,23 @@ The next work is contract hardening, not broad name collection:
 - **Contract hardening:** promote math semantics, shape rules, and dtype/layout
   rules for high-use S2, S5, S7, S10, and S11 primitives. The first focused
   semantic pass now covers `conv1d`, `linear_general`, `sgd`, data/tokenizer
-  declarations, reduction aliases, memory primitives, and core S11 losses.
+  declarations, reduction aliases, memory primitives, core S11 losses,
+  minimum optimizers, and modern attention-family wrappers.
 - **Transform coverage:** close VJP/JVP, batching, transpose, and sharding gaps
   starting with reductions, model layers, losses, `memory_read`, scans, and
-  collectives. The first focused pass now covers `linear_general`, `sgd`, and
-  core differentiable S11 losses.
+  collectives. Focused passes now cover `linear_general`, `sgd`, core
+  differentiable S11 losses, `memory_read`, `cummax`/`cummin`, RoPE/MLA/NSA,
+  quantization STE, MoE dispatch/combine, optimizers, and reasoning RL losses.
 - **Lowering gates:** convert `stub_required` S5-S15 Python-reference
   primitives into real Graph IR lowering paths. The first focused pass now
-  registers Graph IR names for `linear_general`, `sgd`, and core S11 losses.
+  registers Graph IR names for `linear_general`, `sgd`, core S11 losses,
+  optimizer ops, attention-family wrappers, quantization, MoE transport, and
+  RL helpers.
 - **Backend gates:** distinguish CPU-reference behavior, Graph IR-lowered
-  behavior, and backend-kernel-ready behavior for each primitive group.
+  behavior, and backend-kernel-ready behavior for each primitive group. The
+  major remaining reasoning-model gap is fused backend kernels for MLA, Native
+  Sparse Attention, Lightning, Delta/Kimi recurrence, and optimizer steps.
 - **Memory architecture:** extend `memory_read`, `memory_write`, and
-  `memory_evict` with sharded layout rules, differentiable read VJP/JVP, and a
-  persistent memory state ABI.
+  `memory_evict` with sharded layout rules, batching-axis overrides, and a
+  persistent memory state ABI; differentiable `memory_read` VJP/JVP is now
+  present, while mutation-style writes/evictions remain state effects.

@@ -1,12 +1,12 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-04-28
+last_updated: 2026-05-10
 ---
 
 # Tessera Python API Specification
-**Status:** Normative — grounded in `python/tessera/` Phase 1–3 implementation  
-**Last updated:** April 28, 2026  
+**Status:** Normative — grounded in `python/tessera/` Phase 1–3 implementation plus S-series standalone compiler updates  
+**Last updated:** May 10, 2026  
 **Authority:** This document specifies every public Python symbol in Tessera Phases 1–3. For naming disputes, `docs/CANONICAL_API.md` is the final arbiter. For compiler internals (pass pipeline, IR layers), see `docs/spec/COMPILER_REFERENCE.md`.
 
 ---
@@ -63,6 +63,9 @@ tessera/
 ├── fault.py                      # fault policies, preemption hooks, failure injection
 ├── elastic.py                    # elastic rendezvous and reshard planning
 ├── checkpoint.py                 # runtime checkpoint manifests and load/save helpers
+├── optim.py                      # functional optimizers, schedules, grad transforms
+├── losses.py                     # standalone loss / criterion helpers
+├── rl.py                         # PPO/GRPO/CISPO reasoning post-training helpers
 ├── server.py                     # inference package, scheduler, KV cache, app registry
 ├── ops/
 │   └── __init__.py               # tessera.ops.* namespace
@@ -118,6 +121,9 @@ tessera-autotune     # GEMM/matmul tuning and schedule artifact writer
 tessera.fault        # on_failure / on_preempt / inject
 tessera.elastic      # configure / elastic / reshard
 tessera.checkpoint   # runtime checkpoint save/load/manifest helpers
+tessera.optim        # Adam/AdamW/Adafactor/Momentum/Lion and training utilities
+tessera.losses       # regression/classification/contrastive/diffusion losses
+tessera.rl           # PPO/GRPO/CISPO post-training helpers
 
 # Inference serving
 tessera.server       # App / load_package / scheduler / KVCacheManager
@@ -1245,7 +1251,25 @@ Optimizer ops share the `tessera.optim` mixed-precision policy:
 `compute_dtype="fp32"` and `state_dtype="fp32"` by default, optional
 `master_dtype` for fp16/bf16/quantized-adjacent training, and returned
 parameter leaves cast back to their original storage dtype unless
-`cast_updates_to_param_dtype=False`.
+`cast_updates_to_param_dtype=False`. The tree API accepts
+`compute_dtype`, `state_dtype`, `master_dtype`, and
+`cast_updates_to_param_dtype` across Adam, AdamW, Momentum, Adafactor, and
+Lion. Hyperparameters, integer steps, dtype policy fields, and casts are
+treated as nondifferentiable; parameter/state tensor outputs participate in
+VJP/JVP rules.
+
+Attention-family ops support fp32 accumulation for fp16/bf16 inputs. Linear
+and recurrent variants (`lightning_attention`, `gated_deltanet`,
+`kimi_delta_attention`, `modified_delta_attention`, and hybrid policies) accept
+optional recurrent `state`; when `return_state=True`, they return
+`(output, new_state)` and default recurrent state storage to fp32.
+
+Reasoning RL helpers are public as both `tessera.rl.<name>` and
+`tessera.ops.<name>`. `RolloutBatch` stores `logp_new`, `logp_old`, optional
+`ref_logp`, rewards, mask, and free-form metadata for post-training loops.
+PPO/GRPO/CISPO losses support masks, reference-policy KL, and
+`reduction={"none","sum","mean"}`; CISPO clips importance weights directly and
+uses the clipped weight as a detached multiplier on the log-prob objective.
 
 | Operation | Signature | Effect | Current behavior |
 |-----------|-----------|--------|------------------|
@@ -1324,6 +1348,12 @@ parameter leaves cast back to their original storage dtype unless
 | `linear_attn_state(Q, K, V, ...)` | `(array,array,array) → array` | `state` | Companion to `linear_attn` returning the post-update state `(B, H, D_qk, D_v)` |
 | `power_attn(Q, K, V, *, state, window=None, deg=2, causal=True)` | `(array,array,array) → array` | `state` | LA-4 — Symmetric power attention (linear-cost). Promoted from `examples/advanced/power_retention/` |
 | `retention(Q, K, V, *, log_g=None, deg=2, chunk=128, causal=True)` | `(array,array,array) → array` | `state` | LA-4 — RetNet-style retention with multiplicative decay |
+| `lightning_attention(Q, K, V, ...)` | `(array,array,array) → array/tuple` | `state` | Lightning-style identity-feature linear attention; optional fp32 recurrent state |
+| `gated_attention(Q, K, V, gate, ...)` | `(array,array,array,array) → array` | `state` | Softmax attention multiplied by a learned gate |
+| `gated_deltanet(Q, K, V, gate=None, beta=None, decay=None, ...)` | `(array,array,array,optional array...) → array/tuple` | `state` | Gated DeltaNet recurrent attention reference |
+| `kimi_delta_attention(Q, K, V, ...)` | `(array,array,array,optional array...) → array/tuple` | `state` | Kimi Delta Attention recurrence |
+| `modified_delta_attention(Q, K, V, ...)` | `(array,array,array,optional array...) → array/tuple` | `state` | Bounded modified delta-attention recurrence |
+| `hybrid_attention(Q, K, V, pattern="...", layer_index=0, ...)` | `(array,array,array) → array/tuple` | `state` | Named Ling/Kimi hybrid attention policy wrapper |
 | `multi_head_attention(Q, K, V, num_heads, ...)` | `(array,array,array) → array` | `state` | S7 multi-head attention wrapper over `flash_attn` |
 | `gqa_attention(Q, K, V, num_query_heads, num_kv_heads, ...)` | `(array,array,array) → array` | `state` | S7 grouped-query attention wrapper |
 | `mqa_attention(Q, K, V, ...)` | `(array,array,array) → array` | `state` | S7 multi-query attention wrapper |
@@ -1332,6 +1362,7 @@ parameter leaves cast back to their original storage dtype unless
 | `attn_sliding_window(Q, K, V, *, window_size, causal=True)` | `(array,array,array) → array` | `state` | NSA-1 branch — sliding-window dense local attention |
 | `attn_compressed_blocks(Q, K_c, V_c)` | `(array,array,array) → array` | `state` | NSA-1 branch — attention over per-block compressed K/V summaries |
 | `attn_top_k_blocks(Q, K, V, *, scores, top_k, block_size, causal=True)` | `(array,array,array) → array` | `state` | NSA-1 branch — top-k block-selected attention |
+| `deepseek_sparse_attention(Q, K, V, gate_logits=None, ...)` | `(array,array,array,optional array) → array` | `state` | DeepSeek/NSA wrapper composing sliding, compressed, and top-k branches |
 | `compress_blocks(K, V, *, block_size, w_compress=None)` | `(array,array) → tuple` | `pure` | NSA-2 — chunk K/V into block_size groups; returns `(K_c, V_c)` per-block summaries (mean or learnable projection) |
 | `mor_router(x, w_router, *, max_depth)` | `(array, array) → int64-array` | `pure` | Phase F-MoR — token-choice depth router for Mixture of Recursions. Argmax of the router logits + 1; returns ints in [1, max_depth] |
 | `mor_partition(x, depth, *, step)` | `(array, int64-array) → bool-array` | `pure` | Phase F-MoR — bool mask of tokens whose target depth ≥ step (1-indexed) |

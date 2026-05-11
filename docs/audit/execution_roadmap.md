@@ -377,23 +377,36 @@ PyTorch/JAX/Flax modules.
 - Position encodings: `rope`, `alibi`, `ntk_rope` as registry primitives
   with shape/dtype/VJP rules.
 - Attention library as registry primitives (in addition to existing `flash_attn`):
-  `multi_head_attention`, `gqa_attention`, `mqa_attention`, `mla_decode`.
+  `multi_head_attention`, `gqa_attention`, `mqa_attention`, `mla_decode`,
+  `mla_decode_fused`, `attn_sliding_window`, `attn_compressed_blocks`,
+  `attn_top_k_blocks`, `deepseek_sparse_attention`, `gated_attention`,
+  `hybrid_attention`, `lightning_attention`, `gated_deltanet`,
+  `kimi_delta_attention`, and `modified_delta_attention`.
 - Dropout and stochastic-depth modules consume explicit Tessera RNG streams.
 
 **Status 2026-05-10:** partial reference surface landed. `tessera.nn`
 now exposes `LinearGeneral`, `Einsum`, `LoRALinear`, `Conv1d`,
 `ConvTranspose1d`/`ConvTranspose`, `GroupNorm`, `InstanceNorm`,
 `WeightNorm`, `SpectralNorm`, pooling helpers, `SimpleRNNCell`, `GRUCell`,
-`bidirectional_scan`, `alibi`, `ntk_rope`, `gqa_attention`, `mqa_attention`,
-and `mla_decode`, with coverage entries and unit tests. A reference
-Titans/Atlas memory surface now ships as `memory_read`, `memory_write`, and
-`memory_evict`, with explicit math/shape/dtype contracts and lowering/backend
-gates in the dashboard. `conv1d` now has fp64 reference semantics, VJP/JVP
-coverage, and an `explicit_semantic` contract; `linear_general` also has an
+`bidirectional_scan`, `rope`, `rope_split`, `rope_merge`, `alibi`,
+`ntk_rope`, `multi_head_attention`, `gqa_attention`, `mqa_attention`,
+`mla_decode`, `mla_decode_fused`, `gated_attention`, `hybrid_attention`,
+`deepseek_sparse_attention`, `lightning_attention`, `gated_deltanet`,
+`kimi_delta_attention`, and `modified_delta_attention`, with coverage entries
+and unit tests. A reference Titans/Atlas memory surface now ships as
+`memory_read`, `memory_write`, and `memory_evict`, with explicit
+math/shape/dtype contracts and lowering/backend gates in the dashboard.
+`conv1d` now has fp64 reference semantics, VJP/JVP coverage, and an
+`explicit_semantic` contract; `linear_general` also has an
 `explicit_semantic` contract, focused VJP/JVP rules, and a Graph IR catalog
-entry. Remaining S7 work: Conv3d, sequence flip/masking,
-stochastic depth, memory state ABI integration, and Graph IR/backend/VJP/JVP/
-batching/sharding rules for the remaining Python-reference layers.
+entry. RoPE/MLA/NSA, sparse attention, MoE dispatch/combine, Lightning,
+Gated DeltaNet, Kimi Delta, Modified Delta, gated attention, and hybrid
+attention have VJP/JVP registry coverage. The normal x86/GPU lowering
+pipelines include slots for SwiGLU, MLA fusion, Native Sparse Attention,
+Lightning attention fusion, Delta chunking, and hybrid-attention expansion.
+Remaining S7 work: Conv3d, sequence flip/masking, stochastic depth, memory
+state ABI integration, batching/sharding/transpose rules for reference layers,
+and backend fused kernels for the reasoning-model attention families.
 
 ### [S9] Numerics, mixed precision, and quantization 🚧
 
@@ -431,10 +444,12 @@ infrastructure.
 `quantize_int8`, `dequantize_int8`, `quantize_int4`, `dequantize_int4`,
 `fake_quantize`, `CalibrationObserver`/`calibration_observer`, and
 `grad_scaler_step`, with unit tests and primitive-coverage entries. Existing
-fp8/fp6/fp4/nvfp4 ops remain available through `tessera.ops`. Remaining S9
-work: per-channel/blockwise quantization, GPTQ/AWQ policy hooks, STE VJPs,
-dtype-lattice documentation, reduction precision policy, and full autocast
-rewrite integration through compiled IR.
+fp8/fp6/fp4/nvfp4 ops remain available through `tessera.ops`; `quantize_fp8`,
+`dequantize_fp8`, `quantize_fp4`, `dequantize_fp4`, and `fake_quantize` now
+have STE-style VJP/JVP coverage for QAT and fp8/fp4-adjacent LLM training.
+Remaining S9 work: per-channel/blockwise quantization, GPTQ/AWQ policy hooks,
+full dtype-lattice documentation, reduction precision policy, and full
+autocast rewrite integration through compiled IR.
 
 ### [S10] Optimizer library and training-step primitives 🚧
 
@@ -462,20 +477,28 @@ optimizer surface to a real library.
 
 **Status 2026-05-10:** partial functional optimizer library landed in
 `python/tessera/optim.py` and is exported as `tessera.optim`. Covered:
-`sgd`, `momentum`, `nesterov`, `adamw`, `adafactor`, `lion`, `muon`,
+`sgd`, `momentum`, `nesterov`, `adam`, `adamw`, `adafactor`, `lion`, `muon`,
 `lamb`, `constant_lr`, `cosine_lr`, `cosine_warmup_lr`,
 `linear_warmup_lr`, `polynomial_lr`, `inverse_sqrt_lr`,
 `clip_grad_norm`, `clip_grad_value`, `centralize_grad`,
 `add_decoupled_weight_decay`, `ema_update`, `polyak_avg`, and
 `OptaxStyleChain`/`chain`. Unit tests cover nested parameter trees,
 factored Adafactor state, optimizer-state S3 tree round trip, schedules,
-EMA/Polyak updates, and gradient-transform composition. Remaining S10 work:
-Graph IR optimizer-step contracts, sharded optimizer state integration,
-Rosenbrock/convergence suites, and training-loop examples once S11 losses and
-S12 checkpointing are in place.
+EMA/Polyak updates, gradient-transform composition, and dtype policy behavior.
+The minimum LLM optimizer set (`adam`, `adamw`, `momentum`, `adafactor`,
+`lion`) is compiler-visible in `op_catalog`, ODS, stubs, primitive coverage,
+and VJP/JVP registries. Optimizer math and state default to fp32; fp16/bf16
+params cast updates back to storage dtype by default; optional `master_dtype`
+supports fp32 master weights for fp16 and quantized-adjacent QAT paths.
+Remaining S10 work: sharded optimizer state integration, Rosenbrock/
+convergence suites, fused backend optimizer kernels, and larger training-loop
+examples.
 
-**Refinement 2026-05-10:** added `adam`, `cyclical_lr`, and
-`chained_schedule` to close the remaining S10 reference-vocabulary gaps.
+**Refinement 2026-05-10:** added `adam`, `cyclical_lr`, `chained_schedule`,
+mixed-precision optimizer kwargs, and autodiff coverage for `adam`,
+`adafactor`, and `lion` to close the remaining minimum optimizer gaps for
+MoSA, MoE, DeepSeek-style fp8-adjacent training, MiniMax, and Kimi-style
+long-context finetuning.
 
 ### [S11] Loss / criterion library 🚧
 
@@ -497,6 +520,9 @@ acceptance.
   `contrastive_loss`, `cosine_embedding_loss`.
 - Diffusion: `ddpm_noise_pred_loss`, `vlb_loss`, `score_matching_loss`.
 - Sequence: `ctc_loss`, `seq2seq_loss`.
+- Reasoning RL: `normalize_group_advantages`, `ppo_policy_loss`,
+  `grpo_policy_loss`, `cispo_policy_loss`, and a `RolloutBatch` container for
+  log-probs, old/ref log-probs, rewards, masks, and metadata.
 - Each loss registers its `reduction` policy (`none`/`mean`/`sum`),
   numerical-stability path (uses `logsumexp` / `log_softmax` from S2 where
   applicable), and a VJP.
@@ -514,12 +540,15 @@ regression (`mse_loss`, `mae_loss`, `huber_loss`, `smooth_l1_loss`,
 Focused VJP/JVP and Graph IR catalog coverage now exists for MSE/MAE/Huber/
 SmoothL1, log-cosh, BCE, DDPM noise-prediction, score matching, and VLB
 reducers, and those losses now carry `explicit_semantic` math/shape/dtype
-contracts. Remaining S11 work: VJP/JVP registration for the remaining
-classification, distribution, contrastive, and sequence losses,
-reduction-policy registry metadata, backend kernels, and larger numerical
-stability goldens. S15 data/tokenizer primitives are now explicitly declared
-non-differentiable in the coverage contract instead of appearing as missing
-autodiff work.
+contracts. `python/tessera/rl.py` now exports PPO, GRPO, and CISPO helpers;
+CISPO clips importance weights directly and treats the clipped weight as a
+constant multiplier on the log-prob objective. The RL helpers are registered in
+`op_catalog`, `tessera.ops`, primitive coverage, and VJP/JVP registries.
+Remaining S11 work: VJP/JVP registration for the remaining classification,
+distribution, contrastive, and sequence losses, reduction-policy registry
+metadata, backend kernels, and larger numerical stability goldens. S15
+data/tokenizer primitives are now explicitly declared non-differentiable in the
+coverage contract instead of appearing as missing autodiff work.
 
 ### [S12] State serialization and checkpointing 🚧
 
@@ -1003,7 +1032,7 @@ Functional API on `KVCacheHandle`. Replaces the legacy `kv_cache_append`/`kv_cac
 - `with ts.autodiff.rematerialize(): y = expensive_block(x)` — forward stores only the recipe, recomputes during backward.
 - Memory test: peak resident activations during backward < forward-only peak by a measurable margin on a 4-layer MLP.
 
-### [F3] Custom kernel adjoints — `flash_attn` ✅, `fft`/`ifft`/`rfft`/`irfft` ✅, `moe` ✅, `selective_ssm` (D3 VJP) ✅, `linear_attn` ✅, `silu_mul` ✅
+### [F3] Custom kernel adjoints — `flash_attn` ✅, spectral ops ✅, `moe` ✅, `selective_ssm` ✅, linear / sparse / hybrid attention ✅, optimizers ✅
 
 **Scope:** S each (~80 LOC + ~80 LOC tests per op). Independent.
 
@@ -1022,6 +1051,19 @@ post-F3 follow-ups have analytical VJPs registered in
 - `linear_attn` / `linear_attn_state` — lines 407 / 524
 - `silu_mul` / `gather` / `clip` / `masked_fill` — extras shipped
   with Theme 9 / SwiGLU work
+- RoPE/MLA/NSA and attention-family follow-ups — `rope`, `rope_split`,
+  `rope_merge`, `ntk_rope`, `latent_kv_compress`, `latent_kv_expand_k`,
+  `latent_kv_expand_v`, `mla_decode`, `mla_decode_fused`,
+  `attn_sliding_window`, `attn_compressed_blocks`, `attn_top_k_blocks`,
+  `deepseek_sparse_attention`, `multi_head_attention`, `gqa_attention`,
+  `mqa_attention`, `gated_attention`, `hybrid_attention`,
+  `lightning_attention`, `gated_deltanet`, `kimi_delta_attention`,
+  `modified_delta_attention`, `power_attn`, and `retention`
+- MoE transport and optimizer/RL follow-ups — `moe_dispatch`, `moe_combine`,
+  `adam`, `adamw`, `momentum`, `adafactor`, `lion`,
+  `ppo_policy_loss`, `grpo_policy_loss`, and `cispo_policy_loss`
+- Quantization STE follow-ups — `quantize_fp8`, `dequantize_fp8`,
+  `quantize_fp4`, `dequantize_fp4`, and `fake_quantize`
 
 The original `moe 🔲` and "D3 VJP" follow-ups are both ✅ closed —
 both predate this 2026-05-10 update; the doc is being refreshed to

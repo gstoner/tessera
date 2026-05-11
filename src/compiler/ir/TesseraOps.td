@@ -382,6 +382,71 @@ def Tessera_RetentionOp : Op<
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
+def Tessera_LightningAttentionOp : Op<
+  Tessera_Dialect, "lightning_attention",
+  [Pure]
+> {
+  let summary = "Lightning linear attention with optional recurrent state";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        Optional<TensorType>:$state,
+                        Optional<TensorType>:$decay,
+                        DefaultValuedAttr<BoolAttr, "true">:$causal,
+                        DefaultValuedAttr<BoolAttr, "false">:$return_state,
+                        DefaultValuedAttr<StrAttr, "\"fp32\"">:$state_dtype);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_GatedAttentionOp : Op<
+  Tessera_Dialect, "gated_attention",
+  [Pure]
+> {
+  let summary = "Softmax attention multiplied by a learned gate";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v, TensorType:$gate,
+                        OptionalAttr<F64Attr>:$scale,
+                        DefaultValuedAttr<BoolAttr, "true">:$causal,
+                        DefaultValuedAttr<StrAttr, "\"sigmoid\"">:$gate_activation);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+class Tessera_DeltaAttentionOp<string mnemonic, string summaryText>
+  : Op<Tessera_Dialect, mnemonic, [Pure]> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        Optional<TensorType>:$gate,
+                        Optional<TensorType>:$beta,
+                        Optional<TensorType>:$decay,
+                        Optional<TensorType>:$state,
+                        DefaultValuedAttr<BoolAttr, "true">:$causal,
+                        DefaultValuedAttr<BoolAttr, "false">:$return_state,
+                        DefaultValuedAttr<StrAttr, "\"fp32\"">:$state_dtype);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_GatedDeltaNetOp
+  : Tessera_DeltaAttentionOp<"gated_deltanet", "Gated DeltaNet recurrent attention">;
+def Tessera_KimiDeltaAttentionOp
+  : Tessera_DeltaAttentionOp<"kimi_delta_attention", "Kimi Delta Attention recurrent op">;
+def Tessera_ModifiedDeltaAttentionOp
+  : Tessera_DeltaAttentionOp<"modified_delta_attention", "Modified bounded Delta Attention recurrent op">;
+
+def Tessera_HybridAttentionOp : Op<
+  Tessera_Dialect, "hybrid_attention",
+  [Pure]
+> {
+  let summary = "Named hybrid attention policy wrapper for Ling/Kimi schedules";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        DefaultValuedAttr<StrAttr, "\"auto\"">:$pattern,
+                        DefaultValuedAttr<I64Attr, "0">:$layer_index,
+                        DefaultValuedAttr<BoolAttr, "true">:$causal,
+                        DefaultValuedAttr<BoolAttr, "false">:$return_state,
+                        DefaultValuedAttr<StrAttr, "\"fp32\"">:$state_dtype);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
 def Tessera_FusedEpilogueOp : Op<
   Tessera_Dialect, "fused_epilogue",
   [Pure]
@@ -548,6 +613,21 @@ def Tessera_AttnTopKBlocksOp : Op<
                         TensorType:$scores,
                         I64Attr:$top_k,
                         I64Attr:$block_size,
+                        DefaultValuedAttr<BoolAttr, "true">:$causal);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_DeepSeekSparseAttentionOp : Op<
+  Tessera_Dialect, "deepseek_sparse_attention",
+  [Pure]
+> {
+  let summary = "DeepSeek/NSA sparse attention wrapper over sliding/compressed/top-k branches";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        Optional<TensorType>:$gate_logits,
+                        I64Attr:$window_size,
+                        I64Attr:$block_size,
+                        I64Attr:$top_k,
                         DefaultValuedAttr<BoolAttr, "true">:$causal);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";

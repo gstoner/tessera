@@ -194,6 +194,16 @@ std::unique_ptr<mlir::Pass> createMLAFusionPass();
 // for backends with a fused NSA kernel.
 std::unique_ptr<mlir::Pass> createNativeSparseAttnFusionPass();
 
+// ── attention-family plan — linear/delta/hybrid lowering slots ───────────
+//
+// These target-agnostic passes establish stable pipeline positions for
+// Lightning Attention fusion, chunked Delta/Kimi scan lowering, and named
+// hybrid-policy expansion. v1 implementations are conservative no-ops that
+// preserve IR while making the passes discoverable and pipeline-testable.
+std::unique_ptr<mlir::Pass> createLightningAttnFusionPass();
+std::unique_ptr<mlir::Pass> createDeltaAttnChunkingPass();
+std::unique_ptr<mlir::Pass> createHybridAttnExpandPass();
+
 void registerTesseraPasses();
 
 } // namespace tessera

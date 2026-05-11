@@ -37,6 +37,9 @@ add_library(TesseraPasses
   # attention_variants_plan, NSA-4 — DeepSeek NSA fusion.
   NativeSparseAttnFusionPass.cpp
 
+  # attention-family plan — Lightning / Delta / hybrid pass slots.
+  AttentionFamilyPasses.cpp
+
   # Phase 6 diagnostics
   ${CMAKE_SOURCE_DIR}/src/compiler/diagnostics/ShapeInferencePass.cpp
   ${CMAKE_SOURCE_DIR}/src/compiler/diagnostics/ErrorReporter.cpp

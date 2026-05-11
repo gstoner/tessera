@@ -952,6 +952,129 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             chunk_size=chunk, decay=decay, causal=causal,
         )[0].astype(np.result_type(Q, V))
 
+    def lightning_attention(Q, K, V, *, state=None, chunk_size=None,
+                            decay=None, causal: bool = True,
+                            return_state: bool = False,
+                            state_dtype: str = "fp32"):
+        """Lightning-style linear attention.
+
+        Reference form reuses Tessera's stable linear-attention recurrence
+        with the identity feature map. Recurrent state is accumulated in fp32
+        by default and returned only when ``return_state=True``.
+        """
+        O, S_out = _linear_attn_impl(
+            Q, K, V, feature_map="identity", state=state,
+            chunk_size=chunk_size, decay=decay, causal=causal,
+        )
+        S_out = S_out.astype(np.float32 if state_dtype in ("fp32", "bf16") else O.dtype, copy=False)
+        return (O, S_out) if return_state else O
+
+    def gated_attention(Q, K, V, gate, *, scale=None, causal: bool = True,
+                        gate_activation: str = "sigmoid"):
+        """Softmax attention multiplied by a learned gate."""
+        if hasattr(gate, "_data"):
+            gate = gate._data
+        attn = flash_attn(Q, K, V, scale=scale, causal=causal)
+        gate_arr = np.asarray(gate)
+        if gate_activation == "sigmoid":
+            gate_arr = 1.0 / (1.0 + np.exp(-gate_arr))
+        elif gate_activation not in ("identity", "none"):
+            raise ValueError("gate_activation must be 'sigmoid', 'identity', or 'none'")
+        return attn * np.broadcast_to(gate_arr, attn.shape)
+
+    def _delta_attention_impl(Q, K, V, *, gate=None, beta=None, decay=None,
+                              state=None, causal: bool = True,
+                              return_state: bool = False,
+                              state_dtype: str = "fp32",
+                              modified: bool = False):
+        if hasattr(Q, "_data"): Q = Q._data
+        if hasattr(K, "_data"): K = K._data
+        if hasattr(V, "_data"): V = V._data
+        out_dtype = np.result_type(Q, K, V)
+        Q = np.asarray(Q, dtype=np.float64)
+        K = np.asarray(K, dtype=np.float64)
+        V = np.asarray(V, dtype=np.float64)
+        if Q.ndim != 4 or K.ndim != 4 or V.ndim != 4:
+            raise ValueError("delta attention expects rank-4 (B, H, S, D) tensors")
+        B, H, S, D_qk = Q.shape
+        D_v = V.shape[-1]
+        if state is None:
+            S_state = np.zeros((B, H, D_qk, D_v), dtype=np.float64)
+        else:
+            if hasattr(state, "_data"): state = state._data
+            S_state = np.asarray(state, dtype=np.float64).copy()
+        if gate is not None:
+            if hasattr(gate, "_data"): gate = gate._data
+            gate_arr = 1.0 / (1.0 + np.exp(-np.asarray(gate, dtype=np.float64)))
+        else:
+            gate_arr = None
+        if beta is not None:
+            if hasattr(beta, "_data"): beta = beta._data
+            beta_arr = np.asarray(beta, dtype=np.float64)
+        else:
+            beta_arr = None
+        if decay is not None:
+            if hasattr(decay, "_data"): decay = decay._data
+            decay_arr = np.asarray(decay, dtype=np.float64)
+        else:
+            decay_arr = None
+
+        O = np.zeros((B, H, S, D_v), dtype=np.float64)
+        if not causal:
+            # Non-causal reference: build a single state over the full sequence.
+            weights = np.ones((B, H, S), dtype=np.float64) if beta_arr is None else beta_arr
+            S_state = np.einsum("bhs,bhsd,bhse->bhde", weights, K, V)
+            O = np.einsum("bhsd,bhde->bhse", Q, S_state)
+        else:
+            for t in range(S):
+                if decay_arr is not None:
+                    S_state = decay_arr[:, :, t][:, :, None, None] * S_state
+                weight = 1.0 if beta_arr is None else beta_arr[:, :, t][:, :, None, None]
+                delta = np.einsum("bhd,bhe->bhde", K[:, :, t, :], V[:, :, t, :])
+                if modified:
+                    # Kimi-style modified delta keeps the update bounded and
+                    # smooth for the numpy reference path.
+                    delta = delta / (1.0 + np.linalg.norm(delta, axis=(-2, -1), keepdims=True))
+                S_state = S_state + weight * delta
+                O[:, :, t, :] = np.einsum("bhd,bhde->bhe", Q[:, :, t, :], S_state)
+        if gate_arr is not None:
+            O = O * np.broadcast_to(gate_arr, O.shape)
+        O = O.astype(out_dtype, copy=False)
+        state_np_dtype = np.float32 if state_dtype in ("fp32", "bf16") else out_dtype
+        S_state = S_state.astype(state_np_dtype, copy=False)
+        return (O, S_state) if return_state else O
+
+    def gated_deltanet(Q, K, V, gate=None, beta=None, decay=None, *,
+                       state=None, causal: bool = True,
+                       return_state: bool = False,
+                       state_dtype: str = "fp32"):
+        """Gated DeltaNet reference recurrence."""
+        return _delta_attention_impl(
+            Q, K, V, gate=gate, beta=beta, decay=decay, state=state,
+            causal=causal, return_state=return_state, state_dtype=state_dtype,
+        )
+
+    def kimi_delta_attention(Q, K, V, gate=None, beta=None, decay=None, *,
+                             state=None, causal: bool = True,
+                             return_state: bool = False,
+                             state_dtype: str = "fp32"):
+        """Kimi Delta Attention reference op."""
+        return _delta_attention_impl(
+            Q, K, V, gate=gate, beta=beta, decay=decay, state=state,
+            causal=causal, return_state=return_state, state_dtype=state_dtype,
+        )
+
+    def modified_delta_attention(Q, K, V, gate=None, beta=None, decay=None, *,
+                                 state=None, causal: bool = True,
+                                 return_state: bool = False,
+                                 state_dtype: str = "fp32"):
+        """Modified Delta Attention with a bounded delta update."""
+        return _delta_attention_impl(
+            Q, K, V, gate=gate, beta=beta, decay=decay, state=state,
+            causal=causal, return_state=return_state, state_dtype=state_dtype,
+            modified=True,
+        )
+
     # ── attention_variants_plan, NSA — Native Sparse Attention primitives ───
     # DeepSeek's Native Sparse Attention pattern: three branches that all
     # operate on the same Q/K/V but with different sparsity / locality
@@ -1073,7 +1196,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
 
         # For each query, gather its top_k blocks of K/V (block_size tokens each)
         # and run dense attention.
-        out = np.zeros_like(Q)
+        out = np.zeros((B, H, S_q, V.shape[-1]), dtype=np.result_type(Q, K, V))
         scale = 1.0 / np.sqrt(D)
         for b in range(B):
             for h in range(H):
@@ -1114,13 +1237,14 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         if K.ndim != 4 or V.ndim != 4:
             raise ValueError("compress_blocks expects rank-4 K and V")
         B, H, S, D = K.shape
+        D_v = V.shape[-1]
         if S % block_size != 0:
             raise ValueError(
                 f"S={S} not divisible by block_size={block_size}"
             )
         num_blocks = S // block_size
         K_blk = K.reshape(B, H, num_blocks, block_size, D)
-        V_blk = V.reshape(B, H, num_blocks, block_size, D)
+        V_blk = V.reshape(B, H, num_blocks, block_size, D_v)
         if w_compress is None:
             return K_blk.mean(axis=-2), V_blk.mean(axis=-2)
         if hasattr(w_compress, "_data"):
@@ -1136,6 +1260,76 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         K_c = np.einsum("bhnsd,sx->bhnxd", K_blk, w_compress)[..., 0, :]
         V_c = np.einsum("bhnsd,sx->bhnxd", V_blk, w_compress)[..., 0, :]
         return K_c, V_c
+
+    def deepseek_sparse_attention(Q, K, V, gate_logits=None, *,
+                                  window_size: int, block_size: int,
+                                  top_k: int, causal: bool = True):
+        """DeepSeek/NSA wrapper over sliding, compressed, and top-k branches."""
+        K_c, V_c = compress_blocks(K, V, block_size=block_size)
+        branch_sliding = attn_sliding_window(Q, K, V, window_size=window_size, causal=causal)
+        branch_compressed = attn_compressed_blocks(Q, K_c, V_c)
+        scores = np.matmul(np.asarray(Q), np.swapaxes(np.asarray(K_c), -1, -2))
+        branch_topk = attn_top_k_blocks(
+            Q, K, V, scores=scores, top_k=top_k, block_size=block_size, causal=causal
+        )
+        if gate_logits is None:
+            weights = np.full(branch_sliding.shape[:-1] + (3,), 1.0 / 3.0, dtype=np.float64)
+        else:
+            if hasattr(gate_logits, "_data"):
+                gate_logits = gate_logits._data
+            logits = np.asarray(gate_logits, dtype=np.float64)
+            e = np.exp(logits - logits.max(axis=-1, keepdims=True))
+            weights = e / e.sum(axis=-1, keepdims=True)
+        return (
+            branch_sliding * weights[..., 0:1]
+            + branch_compressed * weights[..., 1:2]
+            + branch_topk * weights[..., 2:3]
+        ).astype(np.result_type(Q, K, V), copy=False)
+
+    def hybrid_attention(Q, K, V, *, pattern: str = "auto",
+                         layer_index: int = 0, gate=None, beta=None,
+                         decay=None, state=None, w_dkv=None, w_uk=None,
+                         w_uv=None, q_mla=None, causal: bool = True,
+                         return_state: bool = False,
+                         state_dtype: str = "fp32"):
+        """Named hybrid attention policy wrapper.
+
+        ``ling_1_7_mla_lightning`` uses Lightning Attention for seven layers
+        and MLA on the eighth. ``kimi_kda_mla`` alternates Kimi Delta and MLA.
+        If MLA weights are not supplied, the MLA slot falls back to softmax
+        attention so the reference op remains runnable in unit tests.
+        """
+        def mla_or_softmax():
+            if w_dkv is not None and w_uk is not None and w_uv is not None:
+                return mla_decode_fused(K, w_dkv, w_uk, w_uv, Q if q_mla is None else q_mla, causal=causal)
+            return flash_attn(Q, K, V, causal=causal)
+
+        normalized = pattern.lower()
+        if normalized in ("ling_1_7_mla_lightning", "ling2_5", "ling_2_5"):
+            if int(layer_index) % 8 == 7:
+                return mla_or_softmax()
+            return lightning_attention(
+                Q, K, V, state=state, decay=decay, causal=causal,
+                return_state=return_state, state_dtype=state_dtype,
+            )
+        if normalized in ("kimi_kda_mla", "kimi_linear", "kimi"):
+            if int(layer_index) % 2 == 1:
+                return mla_or_softmax()
+            return kimi_delta_attention(
+                Q, K, V, gate=gate, beta=beta, decay=decay, state=state,
+                causal=causal, return_state=return_state, state_dtype=state_dtype,
+            )
+        if normalized in ("gated_deltanet", "delta"):
+            return gated_deltanet(
+                Q, K, V, gate=gate, beta=beta, decay=decay, state=state,
+                causal=causal, return_state=return_state, state_dtype=state_dtype,
+            )
+        if normalized in ("lightning", "auto"):
+            return lightning_attention(
+                Q, K, V, state=state, decay=decay, causal=causal,
+                return_state=return_state, state_dtype=state_dtype,
+            )
+        raise ValueError(f"unknown hybrid attention pattern: {pattern!r}")
 
     # ── execution_roadmap.md, Phase F-MoR — Mixture of Recursions ───────────
     # Bae et al. 2025 "Mixture-of-Recursions" — adaptive computation via
@@ -3076,6 +3270,13 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "momentum": momentum,
         "adafactor": adafactor,
         "lion": lion,
+        "gated_attention": gated_attention,
+        "hybrid_attention": hybrid_attention,
+        "deepseek_sparse_attention": deepseek_sparse_attention,
+        "lightning_attention": lightning_attention,
+        "gated_deltanet": gated_deltanet,
+        "kimi_delta_attention": kimi_delta_attention,
+        "modified_delta_attention": modified_delta_attention,
     }
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
@@ -3132,6 +3333,13 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         linear_attn_state=linear_attn_state,
         power_attn=power_attn,
         retention=retention,
+        gated_attention=gated_attention,
+        hybrid_attention=hybrid_attention,
+        deepseek_sparse_attention=deepseek_sparse_attention,
+        lightning_attention=lightning_attention,
+        gated_deltanet=gated_deltanet,
+        kimi_delta_attention=kimi_delta_attention,
+        modified_delta_attention=modified_delta_attention,
         attn_sliding_window=attn_sliding_window,
         attn_compressed_blocks=attn_compressed_blocks,
         attn_top_k_blocks=attn_top_k_blocks,

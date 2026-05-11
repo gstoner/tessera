@@ -273,7 +273,9 @@ class TestDistributedArray:
 
     def test_from_domain_invalid_dtype_raises(self):
         D = Rect((4, 64))
-        with pytest.raises(ValueError, match="Unknown dtype"):
+        # Sprint A0 (2026-05-11): error wording updated to match the new
+        # canonical-dtype enforcement layer (`tessera.dtype.canonicalize_dtype`).
+        with pytest.raises(ValueError, match="unknown dtype"):
             DistributedArray.from_domain(D, dtype="float99", distribution=Replicated())
 
     def test_from_domain_replicated(self):

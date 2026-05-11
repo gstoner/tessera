@@ -372,3 +372,32 @@ Additionally:
 Autodiff totals after this pass: **213 VJPs + 169 JVPs**
 (was 213 + 163). Total unit tests: **2,428 passing**
 under `-m "not slow"`.
+
+## Sprint A0 — Canonical-dtype enforcement (2026-05-11)
+
+The first gate of the post-spectral close-out plan landed. Goal: lock the
+public dtype vocabulary against `docs/reference/tessera_tensor_attributes.md`
+before any contract-axis pass writes new `dtype_layout_rule` rows.
+
+**Shipped:**
+
+| Component | Notes |
+|---|---|
+| `python/tessera/dtype.py` | 15-name canonical set (`fp64`/`fp32`/`fp16`/`bf16` + 6 low-precision + 4 ints + bool) + 15-name planned/gated set (`uint*`/`complex*`/packed `int4`/AMD `mxfp*`/Tenstorrent `bfp*`+`blockfp*`) + alias map (`f32`/`i8`/`bfloat16`/`half`/`float`/etc.). Functions: `canonicalize_dtype(s, *, allow_planned_gated=False)`, `is_canonical_dtype`, `is_planned_gated_dtype`, `is_known_dtype`, `assert_canonical_dtype(s, *, context=None)`, `canonical_dtypes()`, `planned_gated_dtypes()`, `dtype_aliases()`. `TesseraDtypeError` subclasses `ValueError` for back-compat. |
+| TF32 rejection | `canonicalize_dtype("tf32")` raises with a precise error pointing at `numeric_policy.math_mode` (per the tensor-attributes doc, TF32 is **not** a storage dtype). |
+| Compound-spelling rejection | `"bf16/fp32"` / `"fp16,fp32"` / `"fp16+fp32"` rejected with a message pointing at `numeric_policy` for storage-plus-accumulator declarations. |
+| Public-API canonicalization | `DistributedArray.from_domain` / `tessera.zeros` / `ones` / `randn` / `empty` / `full` / `Parameter(dtype=...)` all flow through `canonicalize_dtype`. Existing code using canonical names is unchanged; alias spellings (`"f32"`, `"i32"`, `"bfloat16"`, `"half"`, `"float"`) now normalize to the canonical form before storage. |
+| `_DTYPE_MAP` in `distributed/array.py` | Expanded from 9 → 16 entries to cover the full canonical low-precision set (`fp8_e4m3`/`fp8_e5m2`/`fp6_e2m3`/`fp6_e3m2`/`fp4_e2m1`/`nvfp4`/`int16`) — each pinned to a numpy storage backing while no native numpy dtype exists. |
+| Registry walker | `compiler/primitive_coverage.py` exposes `audit_canonical_dtypes()` and `assert_canonical_dtypes()`. Scans entries' metadata + the forward-compat `numeric_policy` slot (Sprint C2 pre-wire). Classifies into `canonical`/`alias`/`planned_gated`/`unknown` buckets and rejects unknown spellings + un-tagged planned-gated references. |
+| `gpu_target.py` TF32 doc | `_TENSOR_CORE_DTYPES` now carries a comment clarifying that `tf32` in the per-ISA dict is a **math mode**, not a storage dtype. Storage-side `canonicalize_dtype("tf32")` still rejects. |
+| Test surface | 71 new tests in `tests/unit/test_canonical_dtype.py` covering: canonical set membership, planned/gated set membership, 16 alias normalizations, case-insensitive fold, TF32 rejection (3 angles), planned-gated rejection-without-flag + acceptance-with-flag (parametrized × 14 names), compound-spelling rejection, public API boundary (`zeros`/`ones`/`randn`/`Parameter`), registry walker (`audit_canonical_dtypes`/`assert_canonical_dtypes`), and `tessera.dtype` module re-export. |
+| Pre-existing test wording | `tests/unit/test_distributed_api.py::test_from_domain_invalid_dtype_raises` regex updated from `"Unknown dtype"` → `"unknown dtype"` to match the new error wording. |
+
+**Test totals after Sprint A0:** **2,511 passing** under `-m "not slow"`
+(was 2,428; +71 canonical-dtype + 12 picked up from prior session
+discovery), **0 failures**.
+
+**Next:** Sprint A (long-tail JVP/VJP closure) now executes against a
+hardened dtype boundary — every new (V/J)VP test that uses an alias
+spelling (`f32`/`bfloat16`/etc.) auto-normalizes; no risk of registry
+drift on new entries.

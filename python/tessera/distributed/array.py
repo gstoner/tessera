@@ -22,20 +22,57 @@ if TYPE_CHECKING:
     pass
 
 
-# Supported dtype strings → numpy dtypes
+# Supported dtype strings → numpy dtypes.
+#
+# Keys are **canonical Tessera dtype names**, normalized via
+# ``tessera.dtype.canonicalize_dtype`` at every API entry point (Sprint A0,
+# 2026-05-11).  Aliases like ``"f32"``/``"i8"`` are accepted as inputs but
+# never stored.  ``uint8`` is in the canonical-numpy-backing set even though
+# the tensor-attributes doc lists ``uint*`` as planned/gated — this is the
+# one numpy-backing storage slot kept live for the legacy quantization
+# helpers; new entries should go through ``canonicalize_dtype(...,
+# allow_planned_gated=True)`` and declare ``dtype_status="planned_gated"``.
 _DTYPE_MAP = {
-    "bf16":   np.float32,   # numpy has no bf16; store as f32 in Phase 1
-    "fp16":   np.float16,
-    "fp32":   np.float32,
-    "fp64":   np.float64,
-    "int8":   np.int8,
-    "uint8":  np.uint8,
-    "int32":  np.int32,
-    "int64":  np.int64,
-    "bool":   np.bool_,
+    "bf16":      np.float32,   # numpy has no bf16; store as f32 in Phase 1
+    "fp16":      np.float16,
+    "fp32":      np.float32,
+    "fp64":      np.float64,
+    "fp8_e4m3":  np.float32,   # no native numpy storage; pinned to f32
+    "fp8_e5m2":  np.float32,
+    "fp6_e2m3":  np.float32,
+    "fp6_e3m2":  np.float32,
+    "fp4_e2m1":  np.float32,
+    "nvfp4":     np.float32,
+    "int8":      np.int8,
+    "int16":     np.int16,
+    "int32":     np.int32,
+    "int64":     np.int64,
+    "uint8":     np.uint8,     # legacy quantization helpers
+    "bool":      np.bool_,
 }
 
 _VALID_DTYPES = set(_DTYPE_MAP)
+
+
+def _normalize_dtype(dtype: str) -> str:
+    """Canonicalize a user-supplied dtype string at the public API boundary.
+
+    Accepts canonical names and registered aliases (``"f32"``/``"i8"``/
+    ``"float32"``/etc.).  Returns the canonical spelling that downstream
+    storage and IR metadata expect.  Raises ``ValueError`` (via
+    ``TesseraDtypeError``) for unknown or compound spellings, and for TF32
+    (which is a math_mode, not a storage dtype).
+    """
+    from tessera.dtype import canonicalize_dtype  # local import → no cycle
+
+    canon = canonicalize_dtype(dtype, allow_planned_gated=True)
+    if canon not in _DTYPE_MAP:
+        raise ValueError(
+            f"Tessera dtype {canon!r} (from {dtype!r}) has no numpy "
+            f"storage backing in this DistributedArray runtime.  "
+            f"Backed dtypes: {sorted(_VALID_DTYPES)}."
+        )
+    return canon
 
 
 class DistributedArray:
@@ -61,10 +98,7 @@ class DistributedArray:
         shard_spec: ShardSpec,
         logical_shape: Optional[Tuple[int, ...]] = None,
     ) -> None:
-        if dtype not in _VALID_DTYPES:
-            raise ValueError(
-                f"Unknown dtype {dtype!r}. Valid dtypes: {sorted(_VALID_DTYPES)}"
-            )
+        dtype = _normalize_dtype(dtype)
         self._data = data
         self.dtype = dtype
         self.shard_spec = shard_spec
@@ -100,10 +134,7 @@ class DistributedArray:
             assert X.shape == (4, 128, 256)
             assert X.shard_spec.mesh_axes == ("dp", "tp")
         """
-        if dtype not in _VALID_DTYPES:
-            raise ValueError(
-                f"Unknown dtype {dtype!r}. Valid dtypes: {sorted(_VALID_DTYPES)}"
-            )
+        dtype = _normalize_dtype(dtype)
         shard_spec = distribution.make_shard_spec(domain)
         np_dtype = _DTYPE_MAP[dtype]
 

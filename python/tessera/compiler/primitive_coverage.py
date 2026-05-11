@@ -1747,6 +1747,142 @@ def coverage_summary() -> dict[str, int]:
     return summary
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Sprint A0 — Canonical-dtype enforcement (forward-looking)
+#
+# These helpers walk the registry looking for dtype identifiers stored on
+# entries' metadata.  The intent is:
+#
+#   1. Today the registry stores dtype completeness as a *status* (the
+#      `dtype_layout_rule` axis), not as identifiers.  This walker is a
+#      no-op against the current registry.
+#
+#   2. Sprint C2 adds `metadata.numeric_policy = NumericPolicy(
+#         storage=..., accum=..., scale=..., quant_axis=..., ...)` for
+#      promoted ops (matmul/fft/quant/etc.).  Each storage/accumulator
+#      slot is a dtype string that must be canonical.
+#
+#   3. Sprint A0+ planned-gated track: entries that reference
+#      uint*/complex*/int4/mxfp*/bfp* must carry
+#      ``metadata.dtype_status = "planned_gated"``.  This walker is the
+#      gate.
+#
+# The walker is invoked from `tests/unit/test_canonical_dtype.py` and is
+# also exposed publicly via `audit_canonical_dtypes()`.
+# ──────────────────────────────────────────────────────────────────────────
+
+# Metadata keys whose values, when strings, are interpreted as dtype
+# identifiers.  Add to this set as future schemas land.
+_DTYPE_METADATA_KEYS: frozenset[str] = frozenset({
+    "dtype",
+    "storage_dtype",
+    "accum_dtype",
+    "scale_dtype",
+    "quant_dtype",
+    "output_dtype",
+    "input_dtype",
+})
+
+
+def _iter_dtype_strings_in_entry(entry: "PrimitiveCoverage") -> Iterable[tuple[str, str]]:
+    """Yield (metadata_key, dtype_string) tuples found on a registry entry.
+
+    Scans:
+      - top-level metadata dict values whose key is in `_DTYPE_METADATA_KEYS`
+      - nested values under `numeric_policy` (planned for Sprint C2)
+    """
+    md = entry.metadata or {}
+    for key in _DTYPE_METADATA_KEYS:
+        val = md.get(key)
+        if isinstance(val, str):
+            yield key, val
+        elif isinstance(val, (list, tuple)):
+            for item in val:
+                if isinstance(item, str):
+                    yield key, item
+    # numeric_policy (forward-compat for Sprint C2)
+    np_meta = md.get("numeric_policy")
+    if isinstance(np_meta, Mapping):
+        for sub_key in ("storage", "accum", "scale_dtype"):
+            sub_val = np_meta.get(sub_key)
+            if isinstance(sub_val, str):
+                yield f"numeric_policy.{sub_key}", sub_val
+
+
+def audit_canonical_dtypes() -> dict[str, list[tuple[str, str, str]]]:
+    """Walk the live registry, classify every stored dtype string.
+
+    Returns a dict with four buckets, each a list of
+    ``(primitive_name, metadata_key, dtype_string)`` tuples:
+
+      - ``"canonical"``    : dtype is a canonical spelling
+      - ``"alias"``        : dtype is an accepted alias (e.g., ``"f32"``)
+      - ``"planned_gated"``: dtype is a planned/gated spelling
+      - ``"unknown"``      : dtype is not recognized
+
+    The intent is: ``unknown`` MUST be empty.  ``alias`` SHOULD be empty
+    (entries should store the canonical spelling), but is allowed during
+    migration.  ``planned_gated`` entries must also declare
+    ``metadata.dtype_status == "planned_gated"``.
+    """
+    from tessera.dtype import (
+        is_canonical_dtype,
+        is_planned_gated_dtype,
+        dtype_aliases,
+    )
+
+    aliases = dtype_aliases()
+    buckets: dict[str, list[tuple[str, str, str]]] = {
+        "canonical": [],
+        "alias": [],
+        "planned_gated": [],
+        "unknown": [],
+    }
+    for name, entry in all_primitive_coverages().items():
+        for key, dt in _iter_dtype_strings_in_entry(entry):
+            if is_canonical_dtype(dt):
+                buckets["canonical"].append((name, key, dt))
+            elif dt in aliases:
+                buckets["alias"].append((name, key, dt))
+            elif is_planned_gated_dtype(dt):
+                buckets["planned_gated"].append((name, key, dt))
+            else:
+                buckets["unknown"].append((name, key, dt))
+    return buckets
+
+
+def assert_canonical_dtypes() -> None:
+    """Assert the registry contains no unknown or unannounced gated dtypes.
+
+    Rules enforced:
+      - bucket ``unknown`` must be empty
+      - every entry in ``planned_gated`` must carry
+        ``metadata.dtype_status == "planned_gated"``
+
+    Raises ``AssertionError`` with a precise list on violation.  Wired
+    into the canonical-dtype guard test
+    (``tests/unit/test_canonical_dtype.py``).
+    """
+    buckets = audit_canonical_dtypes()
+    if buckets["unknown"]:
+        bad = "; ".join(f"{n}.{k}={d!r}" for n, k, d in buckets["unknown"])
+        raise AssertionError(
+            f"registry has unknown dtype strings: {bad}.  Use "
+            "tessera.dtype.canonicalize_dtype() or add to the canonical / "
+            "planned-gated tables in tessera.dtype."
+        )
+    reg = all_primitive_coverages()
+    for name, key, dt in buckets["planned_gated"]:
+        entry = reg.get(name)
+        status = (entry.metadata or {}).get("dtype_status")
+        if status != "planned_gated":
+            raise AssertionError(
+                f"{name}.{key} = {dt!r} is a planned/gated dtype but the "
+                f"entry's metadata.dtype_status is {status!r} "
+                f"(must be 'planned_gated')."
+            )
+
+
 def render_markdown(entries: Iterable[PrimitiveCoverage] | None = None) -> str:
     rows = list(entries if entries is not None else all_primitive_coverages().values())
     lines = [
@@ -1779,4 +1915,7 @@ __all__ = [
     "coverage_summary",
     "primitives_for_model_family",
     "render_markdown",
+    # Sprint A0 — canonical-dtype audit
+    "audit_canonical_dtypes",
+    "assert_canonical_dtypes",
 ]

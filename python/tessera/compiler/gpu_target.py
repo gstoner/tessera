@@ -57,6 +57,16 @@ _BASE_CUDA_CORE_DTYPES = frozenset({
     "bf16",
 })
 
+# Tensor-core operand types AND math modes per ISA.
+#
+# NOTE: ``tf32`` in this table is a **math mode**, not a storage dtype.
+# Per ``docs/reference/tessera_tensor_attributes.md`` (normative,
+# 2026-05-11), TF32 must be modelled as ``math_mode="tf32"`` on an
+# ``fp32`` tensor via ``numeric_policy``.  It appears in this dict
+# because the hardware tensor-core can consume fp32 operands under TF32
+# math; the dict mixes storage dtypes and math modes for capability
+# reporting only.  ``tessera.dtype.canonicalize_dtype("tf32")`` raises
+# ``TesseraDtypeError`` so the storage-dtype path stays clean.
 _TENSOR_CORE_DTYPES: dict[ISA, frozenset[str]] = {
     ISA.SM_80: frozenset({
         "fp64", "tf32", "bf16", "fp16", "int8",

@@ -33,6 +33,7 @@ from . import core
 from . import arch
 from . import shape
 from . import debug
+from . import dtype  # Canonical dtype + alias normalization — Sprint A0
 from . import telemetry
 from . import profiler
 from . import collectives

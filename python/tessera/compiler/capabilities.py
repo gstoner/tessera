@@ -144,7 +144,55 @@ def _ops(status: RuntimeStatus, names: tuple[str, ...], *, reason: str = "", dty
 
 _CPU_OPS = tuple(sorted(GRAPH_OP_TO_SPEC))
 _APPLE_GPU_READY = ("tessera.matmul", "tessera.flash_attn", "tessera.softmax", "tessera.softmax_safe", "tessera.gelu", "tessera.rope")
-_NVIDIA_ARTIFACT = ("tessera.matmul", "tessera.flash_attn", "tessera.gelu", "tessera.softmax", "tessera.softmax_safe")
+
+# Sprint G-2 (2026-05-11): expanded to match the planned NVIDIA kernel
+# inventory in `docs/nvidia_cuda13_kernel_inventory.md`.  Each entry
+# here ships a Target IR artifact under CUDA 13.2 U1.
+_NVIDIA_ARTIFACT = (
+    # Matmul / contraction family
+    "tessera.matmul", "tessera.batched_gemm", "tessera.einsum",
+    "tessera.linear_general", "tessera.qkv_projection",
+    "tessera.fused_epilogue", "tessera.factorized_matmul",
+    # Attention family
+    "tessera.flash_attn",
+    "tessera.multi_head_attention", "tessera.gqa_attention",
+    "tessera.mqa_attention",
+    "tessera.mla_decode", "tessera.mla_decode_fused",
+    "tessera.deepseek_sparse_attention",
+    "tessera.attn_top_k_blocks", "tessera.attn_compressed_blocks",
+    "tessera.attn_sliding_window",
+    "tessera.lightning_attention", "tessera.linear_attn",
+    "tessera.gated_deltanet", "tessera.kimi_delta_attention",
+    "tessera.modified_delta_attention", "tessera.gated_attention",
+    "tessera.hybrid_attention",
+    # Normalization / activation / position encoding
+    "tessera.layer_norm", "tessera.rmsnorm", "tessera.rmsnorm_safe",
+    "tessera.softmax", "tessera.softmax_safe", "tessera.online_softmax",
+    "tessera.gelu", "tessera.silu", "tessera.silu_mul",
+    "tessera.rope", "tessera.alibi",
+)
+
+# Sprint H-3 (2026-05-11): expanded to match the planned ROCm kernel
+# inventory in `docs/rocm_mfma_kernel_inventory.md`.
+_ROCM_ARTIFACT = (
+    "tessera.matmul", "tessera.batched_gemm", "tessera.einsum",
+    "tessera.linear_general", "tessera.qkv_projection",
+    "tessera.fused_epilogue", "tessera.factorized_matmul",
+    "tessera.flash_attn",
+    "tessera.multi_head_attention", "tessera.gqa_attention",
+    "tessera.mqa_attention",
+    "tessera.mla_decode", "tessera.mla_decode_fused",
+    "tessera.deepseek_sparse_attention",
+    "tessera.attn_sliding_window",
+    "tessera.lightning_attention", "tessera.linear_attn",
+    "tessera.gated_deltanet", "tessera.kimi_delta_attention",
+    "tessera.modified_delta_attention", "tessera.gated_attention",
+    "tessera.hybrid_attention",
+    "tessera.layer_norm", "tessera.rmsnorm", "tessera.rmsnorm_safe",
+    "tessera.softmax", "tessera.softmax_safe",
+    "tessera.gelu", "tessera.silu", "tessera.silu_mul",
+    "tessera.rope", "tessera.alibi",
+)
 
 
 TARGET_CAPABILITIES: dict[str, TargetCapability] = {
@@ -240,7 +288,9 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="rocm",
         runtime_backend="hip",
         default_runtime_status="artifact_only",
-        supported_ops=_ops("artifact_only", ("tessera.matmul", "tessera.gelu", "tessera.softmax"), reason="ROCm 7.2.3 MFMA artifact exists; HIP execution remains gated"),
+        # Sprint H-3 (2026-05-11): full planned kernel set from
+        # `docs/rocm_mfma_kernel_inventory.md`.
+        supported_ops=_ops("artifact_only", _ROCM_ARTIFACT, reason="ROCm 7.2.3 MFMA artifact exists; HIP execution remains gated"),
         supported_dtypes=("bf16", "fp16", "fp32", "fp64", "fp8_e4m3", "fp8_e5m2", "int8"),
         features=(
             "mfma", "mfma_f8", "mfma_xf32",

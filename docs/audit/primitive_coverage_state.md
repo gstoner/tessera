@@ -924,3 +924,148 @@ Per the original Phase G/H/I plan, the remaining hardware-free items:
 | G-6/G-7/G-8 + H-6/H-7/H-8 | Lane 2: CMake `find_package(CUDAToolkit 13.2 EXACT)` / `find_package(hip 7.2.3 EXACT)`; compile NVIDIA/AMD backend C++ to verify ABI; `nvcc -ptx` / `hipcc -S` compile-only validation per kernel | Requires nvcc/hipcc on dev box (no GPU needed) |
 
 All blocked items (Lane 3) remain hardware-only: H100/B100 execution, MI300/MI325 execution, Wormhole/Blackhole execution, perf characterization, multi-rank collectives.
+
+## Phase G/H/I hardware-free batch 2 — Kernel inventories + schema + lit fixtures (2026-05-11)
+
+The second batch of Phase G/H/I hardware-free work landed: per-target
+kernel inventory documents, the `BackendKernelEntry` schema extension
+covering toolchain pins + tile shapes + MFU/roofline targets, and 14
+lit fixtures that lock the codegen contract for the planned fused
+kernel surface.
+
+### G-3 — `BackendKernelEntry` schema extension
+
+**Goal:** capture the per-kernel toolchain pin, WGMMA/MFMA tile shape,
+cluster size, expected MFU, and roofline target so backend lowering
+passes and `perf_gate.py` have a single source of truth.
+
+**Shipped (`python/tessera/compiler/backend_manifest.py`):** 8 new
+optional fields on `BackendKernelEntry`:
+
+| Field | Type | Notes |
+|---|---|---|
+| `cuda_arch_min` | `str` | One of `{sm_70, sm_75, sm_80, sm_86, sm_89, sm_90, sm_90a, sm_100, sm_100a, sm_120, sm_120a}`; validated at construction |
+| `nvcc_version_min` | `str` | Pinned to `"13.2.1"` across NVIDIA entries today |
+| `wgmma_shape` | `tuple[int, int, int]` | M×N×K Hopper tile; **NVIDIA-only** (validation rejects ROCm targets) |
+| `cluster_size` | `tuple[int, int, int]` | Thread-block cluster shape for SM_90+ |
+| `mfma_shape` | `tuple[int, int, int, int]` | (M, N, K, K_blocks); **ROCm-only** |
+| `hipcc_version_min` | `str` | Pinned to `"7.2.3"` across ROCm entries today |
+| `expected_mfu` | `float` | Target MFU as fraction of peak (validated in `[0, 1]`) |
+| `roofline_target` | `str` | Free-form roofline characterization |
+
+`as_dict()` only emits non-None fields (keeps the JSON compact).
+
+**Per-kernel tables now populated:**
+
+| Table | Coverage |
+|---|---|
+| `_NVIDIA_KERNEL_TILE_SHAPES` | 35+ entries — bf16/fp16 GEMM at `(64, 256, 16)`; FA family at `(64, 128, 16)` cluster `(2, 1, 1)`; Lightning/linear-attn at `(32, 32, 16)`; factorized matmul at `(64, 128, 16)`; rmsnorm/softmax/etc. don't use WGMMA (None) |
+| `_NVIDIA_KERNEL_MFU` | Per-(op, arch) MFU targets: cuBLAS matmul 80%/82% (SM_90/SM_100), FA-4 75%/78%, MLA-decode 55%/60% (KV-bound), Lightning 40%/45% (recurrence-bound), NSA 50%/55% (gather-bound) |
+| `_NVIDIA_KERNEL_ROOFLINE` | Free-form characterizations for matmul, FA, MLA-decode, Lightning, NSA, fused chains |
+| `_ROCM_KERNEL_MFMA_SHAPES` | CDNA matmul `(32, 32, 8, 1)`; attention `(16, 16, 16, 1)` (narrow-N score matrix); factorized `(16, 16, 16, 1)` |
+| `_ROCM_KERNEL_MFU` | rocBLAS MFMA 75%/78% (gfx942/gfx950), FA rocm-FA2 65%/70%, MLA-decode 50%, Lightning 35% |
+
+### G-2 — NVIDIA CUDA 13.2 U1 kernel inventory
+
+**Shipped:** `docs/nvidia_cuda13_kernel_inventory.md` (15 KB, 9 sections):
+
+1. Toolchain pin (CUDA 13.2 U1 + driver 555.85 + PTX ISA 8.6 + NCCL 2.22)
+2. Per-SM feature matrix (12 flags × 6 ISAs)
+3. Per-SM dtype matrix (10 dtypes + TF32 math_mode)
+4. **50+ planned fused kernels across 9 family tables:**
+   - Matmul / contraction (7 ops)
+   - Attention (18 ops — FA-4 fwd/bwd, MLA decode + fused, NSA, top-k blocks, compressed blocks, sliding window, Lightning, linear, gated DeltaNet, Kimi-Delta, modified-Delta, gated attention, hybrid)
+   - Fused chains (matmul→softmax, full attention block, matmul→gelu, matmul→rmsnorm, matmul→silu·mul, SwiGLU MLP)
+   - Normalization / activation / position encoding (8 ops)
+   - Optimizer / training-step fused kernels (5 ops — adamw, lion, muon, lamb, grad_clip)
+   - KV-cache / paged-attention (5 ops)
+   - RNG + sampling (4 ops)
+   - Spectral family (6 ops — FFT/iFFT/rFFT/iRFFT/STFT/iSTFT/DCT)
+   - Recurrent / SSM (5 ops — LSTM/GRU/simpleRNN/selectiveSSM/depthwise_conv1d)
+5. PTX assembly patterns lit fixtures validate (WGMMA, TMA, mbarrier, cluster, tcgen05, TMEM, cp.async.bulk)
+6. Execution gates (`artifact_only` → `compileable` → `executable` → `fused`)
+7. Source map
+8. Roadmap (hardware-free vs blocked)
+
+**Capability registry impact:** `_NVIDIA_ARTIFACT` expanded from 5 →
+**32 op names** to match the planned inventory.
+
+### H-3 — ROCm 7.2.3 MFMA kernel inventory
+
+**Shipped:** `docs/rocm_mfma_kernel_inventory.md` (14 KB, 9 sections):
+
+1. Toolchain pin (ROCm 7.2.3 + HIP 7.2.3 + RCCL 2.22 + rocBLAS 5.0 + MIOpen 3.5)
+2. Per-arch feature matrix (14 flags × 5 arches)
+3. MFMA instruction shape table (CDNA 2: 2 shapes, CDNA 3: 6, CDNA 4: 8, RDNA 3: 0)
+4. Per-arch dtype matrix (CDNA 4 includes FP4/FP6/FP8 family)
+5. **Same 50+ planned fused kernels as NVIDIA**, mapped to MFMA shapes (`32×32×8×1` baseline, `16×16×16×1` for attention)
+6. AMDGCN intrinsic patterns lit fixtures validate (`llvm.amdgcn.mfma.*`, `llvm.amdgcn.wmma.*`, `llvm.amdgcn.global.load.lds`, XNACK/SRAM-ECC)
+7. Execution gates
+8. Source map
+9. Roadmap
+
+**Capability registry impact:** new `_ROCM_ARTIFACT` tuple matches
+`_NVIDIA_ARTIFACT` modulo `attn_top_k_blocks`/`attn_compressed_blocks`
+(ROCm has top_k_blocks artifact only at gfx950); `rocm` legacy entry's
+`supported_ops` now flows through this list.
+
+### G-4 — NVIDIA lit fixtures (8 fixtures)
+
+**Shipped:** `tests/tessera-ir/phase3/cuda13/`:
+
+| Fixture | Kernel | Asserts on |
+|---|---|---|
+| `wgmma_matmul_bf16.mlir` | Hopper bf16 matmul | `wgmma.mma_async.sync.aligned.m64n256k16.f32.bf16.bf16`, `mbarrier.arrive.expect_tx` |
+| `wgmma_matmul_fp8.mlir` | Hopper FP8 matmul | `wgmma.mma_async.sync.aligned.m64n256k32.f32.e4m3.e4m3` |
+| `flash_attn_fwd_fa4.mlir` | FA-4 forward | `wgmma.mma_async.sync.aligned.m64n128k16`, TMA descriptor, cluster, mbarrier |
+| `mla_decode_fused.mlir` | DeepSeek MLA decode | Latent expansion + FA pass via WGMMA |
+| `deepseek_nsa_sparse_attention.mlir` | DeepSeek NSA | Top-k gather + WGMMA on selected blocks |
+| `lightning_attention.mlir` | MiniMax Lightning | Small WGMMA `m32n32k16` for recurrence |
+| `matmul_softmax_fused.mlir` | Fused 2-op chain | WGMMA + `shfl.sync.bfly` cooperative reduce |
+| `swiglu_mlp_fused.mlir` | SwiGLU MLP | 2× WGMMA + cluster for producer/consumer |
+| `tcgen05_blackwell_matmul.mlir` | Blackwell NVFP4 | `tcgen05.alloc`, `tcgen05.mma.cta_group::2`, `tcgen05.commit`, `tcgen05.dealloc` |
+| `adamw_step_fused.mlir` | Fused optimizer | `CHECK-NOT: wgmma.mma_async` (elementwise); vectorized `ld.global.v4` |
+
+### H-4 — ROCm lit fixtures (6 fixtures)
+
+**Shipped:** `tests/tessera-ir/phase8/rocm_7_2/`:
+
+| Fixture | Kernel | Asserts on |
+|---|---|---|
+| `mfma_matmul_bf16.mlir` | CDNA 3 bf16 matmul | `llvm.amdgcn.mfma.f32.32x32x8bf16.1k` |
+| `mfma_matmul_fp8.mlir` | CDNA 3 FP8 matmul | `llvm.amdgcn.mfma.f32.32x32x16f8f8` |
+| `mfma_matmul_fp4_cdna4.mlir` | CDNA 4 FP4 matmul | `llvm.amdgcn.mfma.f32.32x32x32f4f4` |
+| `flash_attn_fwd.mlir` | rocm-FA2 forward | `llvm.amdgcn.mfma.f32.16x16x16bf16.1k`, LDS staging |
+| `mla_decode.mlir` | MLA decode on MI300X | Latent expansion + MFMA |
+| `adamw_step_fused.mlir` | Fused optimizer | `CHECK-NOT: llvm.amdgcn.mfma`; vectorized `buffer.load` |
+| `wmma_rdna3_matmul.mlir` | RDNA 3 WMMA | `llvm.amdgcn.wmma.f32.16x16x16` (no MFMA) |
+
+### Test surface
+
+88 new tests in `tests/unit/test_kernel_inventory_and_lit_fixtures.py`:
+
+| Test class | Coverage |
+|---|---|
+| `TestG3SchemaExtension` | 8 new fields on `BackendKernelEntry`; validation (cuda_arch_min ∈ valid set; WGMMA NVIDIA-only; MFMA ROCm-only; MFU in `[0,1]`); `as_dict()` omits None fields |
+| `TestG3ManifestWiring` | Matmul carries `(64, 256, 16)` WGMMA + `sm_90a`; FA carries `(64, 128, 16)` + cluster `(2, 1, 1)`; Lightning uses `(32, 32, 16)`; MFU per (op, arch); roofline strings populated; ROCm matmul `(32, 32, 8, 1)` MFMA + `7.2.3` hipcc |
+| `TestG2NvidiaInventoryDoc` | Doc exists; required sections + canonical kernel families + PTX patterns documented |
+| `TestH3RocmInventoryDoc` | Doc exists; required sections + arch families (gfx90a/940/942/950/1100, CDNA 2/3/4, RDNA 3, MI300X, MI325X) + AMDGCN patterns + CDNA 4 FP4 coverage |
+| `TestG4NvidiaLitFixtures` | All 10 NVIDIA fixtures exist with correct RUN/REQUIRES/CHECK structure; WGMMA pattern present in 8; tcgen05 + sm_100a + nvfp4 in Blackwell fixture; AdamW asserts `CHECK-NOT: wgmma.mma_async` |
+| `TestH4RocmLitFixtures` | All 7 ROCm fixtures exist; MFMA pattern in 5; CDNA 4 FP4 in gfx950 fixture; RDNA 3 uses WMMA not MFMA; AdamW asserts no MFMA |
+| `TestCrossTargetParity` | Every canonical kernel family (matmul/FA/MLA/Lightning/NSA/rmsnorm/softmax) has entries on **both** NVIDIA SM_90 and ROCm |
+
+### Test totals after this batch
+
+**2,870 passing** under `-m "not slow"` (was 2,782; +88 new),
+**0 failures**.
+
+### What's next on the hardware-free runway
+
+| Sprint | Description | Effort |
+|---|---|---|
+| G-5 | `NVIDIATargetPipeline` named pass alias in `tessera-opt` chaining `WarpSpec → AsyncCopy → WGMMA → TMA → NVPTXLowering` for CUDA 13.2 U1 | 1 sess |
+| H-2 | Refresh `mfma_table.inc` C++ table to match the per-arch `_MFMA_VARIANTS` Python source | 1 sess |
+| G-6/G-7/G-8 + H-6/H-7/H-8 | Lane 2 — CMake `find_package(CUDAToolkit 13.2 EXACT)` / `find_package(hip 7.2.3 EXACT)`; compile NVIDIA/AMD backend C++ to verify ABI; `nvcc -ptx` / `hipcc -S` compile-only validation per kernel (every G-4 + H-4 fixture becomes a compile-test) | Requires nvcc/hipcc on dev box (no GPU needed) |
+| G-9 + H-8 | NCCL 2.22 / RCCL 2.22 adapter compile + symbol resolution | Lane 2 |
+
+Lane 3 (hardware-required) is unchanged: H100/B100 execution, MI300/MI325 execution, perf characterization, multi-rank collectives.

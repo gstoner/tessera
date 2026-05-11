@@ -37,10 +37,18 @@ dashboard to surface.  The ``backend_kernel`` contract axis stays at
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Mapping
+from typing import Mapping, Optional, Tuple
 
 from .capabilities import TARGET_CAPABILITIES, canonical_op
 from .op_catalog import OP_SPECS
+
+# Sprint G-3 type aliases — keep imports minimal at the entry point and
+# expose them as module-level shorthands for the new BackendKernelEntry
+# optional fields.
+Optional_str = Optional[str]
+Optional_float = Optional[float]
+Optional_triple = Optional[Tuple[int, int, int]]
+Optional_quad = Optional[Tuple[int, int, int, int]]
 
 
 _FUSED_KERNEL_STATUS = "fused"
@@ -64,6 +72,55 @@ class BackendKernelEntry:
 
     All dtype strings are canonical (the dataclass normalizes at
     ``__post_init__``).
+
+    Sprint G-3 (2026-05-11) added the toolchain-pin + tile-shape fields:
+
+    Attributes
+    ----------
+    target : str
+        Normalized target name (``"nvidia_sm90"`` / ``"rocm_gfx942"`` /
+        ``"apple_gpu"`` / etc.).
+    status : str
+        One of ``fused`` / ``reference`` / ``compileable`` /
+        ``artifact_only`` / ``planned``.
+    dtypes : tuple[str, ...]
+        Canonical dtype set this kernel supports.  Aliases normalized at
+        construction.
+    feature_flags : tuple[str, ...]
+        Target-specific feature flags (``wgmma`` / ``tcgen05_pair`` /
+        ``mfma_f8`` / ``msl`` / etc.).
+    notes : str
+        Free-form context.
+
+    Sprint G-3 fields (all optional — meaningful only on tensor-core
+    targets):
+    cuda_arch_min : str | None
+        Minimum NVIDIA SM arch the kernel compiles for, e.g., ``"sm_90a"``
+        (Hopper WGMMA) or ``"sm_100a"`` (Blackwell tcgen05).  ``None``
+        for non-NVIDIA targets.
+    nvcc_version_min : str | None
+        Minimum nvcc release that emits this kernel correctly.  Today
+        all NVIDIA entries pin to ``"13.2.1"``.
+    wgmma_shape : tuple[int, int, int] | None
+        ``(M, N, K)`` for the WGMMA tile.  ``(64, 256, 16)`` is the
+        canonical bf16/fp16 Hopper shape; FP8 lowers to
+        ``(64, 256, 32)``; FP4/NVFP4 to ``(64, 256, 64)``.  ``None``
+        for non-NVIDIA targets or non-tensor-core kernels.
+    cluster_size : tuple[int, int, int] | None
+        Thread-block cluster shape for SM_90+ (``(1, 1, 1)`` when
+        clusters disabled).  ``None`` on pre-Hopper or non-NVIDIA.
+    mfma_shape : tuple[int, int, int, int] | None
+        ``(M, N, K, K_blocks)`` for AMD MFMA instructions.  Looked up
+        against ``rocm_target.mfma_variants(arch)``.  ``None`` for
+        non-AMD targets.
+    hipcc_version_min : str | None
+        Minimum hipcc release.  Today all ROCm entries pin to ``"7.2.3"``.
+    expected_mfu : float | None
+        Target MFU as a fraction of peak (e.g., ``0.65`` = 65%).  Used
+        by ``perf_gate.py`` once execution lights up.
+    roofline_target : str | None
+        Free-form roofline characterization (e.g., ``"compute-bound at
+        N >= 2048"``, ``"memory-bound at K < 256"``).
     """
 
     target: str
@@ -71,6 +128,15 @@ class BackendKernelEntry:
     dtypes: tuple[str, ...] = ()
     feature_flags: tuple[str, ...] = ()
     notes: str = ""
+    # Sprint G-3 — toolchain pins + tile-shape contracts
+    cuda_arch_min: Optional_str = None
+    nvcc_version_min: Optional_str = None
+    wgmma_shape: Optional_triple = None
+    cluster_size: Optional_triple = None
+    mfma_shape: Optional_quad = None
+    hipcc_version_min: Optional_str = None
+    expected_mfu: Optional_float = None
+    roofline_target: Optional_str = None
 
     def __post_init__(self) -> None:
         from ..dtype import canonicalize_dtype
@@ -89,14 +155,73 @@ class BackendKernelEntry:
         if normalized != tuple(self.dtypes):
             object.__setattr__(self, "dtypes", normalized)
 
+        # Sprint G-3 validation: WGMMA shape only on NVIDIA targets.
+        if self.wgmma_shape is not None:
+            if not self.target.startswith("nvidia"):
+                raise ValueError(
+                    f"wgmma_shape only applies to NVIDIA targets, got "
+                    f"target={self.target!r}"
+                )
+            if len(self.wgmma_shape) != 3:
+                raise ValueError(
+                    f"wgmma_shape must be (M, N, K), got {self.wgmma_shape!r}"
+                )
+        # cuda_arch_min validation — must be in the known set.
+        if self.cuda_arch_min is not None:
+            _valid_arches = {
+                "sm_70", "sm_75", "sm_80", "sm_86", "sm_89",
+                "sm_90", "sm_90a", "sm_100", "sm_100a", "sm_120", "sm_120a",
+            }
+            if self.cuda_arch_min not in _valid_arches:
+                raise ValueError(
+                    f"cuda_arch_min must be one of {sorted(_valid_arches)}, "
+                    f"got {self.cuda_arch_min!r}"
+                )
+        # MFMA shape only on AMD targets.
+        if self.mfma_shape is not None:
+            if not self.target.startswith("rocm"):
+                raise ValueError(
+                    f"mfma_shape only applies to ROCm targets, got "
+                    f"target={self.target!r}"
+                )
+            if len(self.mfma_shape) != 4:
+                raise ValueError(
+                    f"mfma_shape must be (M, N, K, K_blocks), got "
+                    f"{self.mfma_shape!r}"
+                )
+        # expected_mfu in [0, 1]
+        if self.expected_mfu is not None:
+            if not (0.0 <= self.expected_mfu <= 1.0):
+                raise ValueError(
+                    f"expected_mfu must be in [0, 1], got {self.expected_mfu}"
+                )
+
     def as_dict(self) -> dict[str, object]:
-        return {
+        out: dict[str, object] = {
             "target": self.target,
             "status": self.status,
             "dtypes": list(self.dtypes),
             "feature_flags": list(self.feature_flags),
             "notes": self.notes,
         }
+        # Only emit non-None Sprint G-3 fields to keep the JSON compact.
+        if self.cuda_arch_min is not None:
+            out["cuda_arch_min"] = self.cuda_arch_min
+        if self.nvcc_version_min is not None:
+            out["nvcc_version_min"] = self.nvcc_version_min
+        if self.wgmma_shape is not None:
+            out["wgmma_shape"] = list(self.wgmma_shape)
+        if self.cluster_size is not None:
+            out["cluster_size"] = list(self.cluster_size)
+        if self.mfma_shape is not None:
+            out["mfma_shape"] = list(self.mfma_shape)
+        if self.hipcc_version_min is not None:
+            out["hipcc_version_min"] = self.hipcc_version_min
+        if self.expected_mfu is not None:
+            out["expected_mfu"] = self.expected_mfu
+        if self.roofline_target is not None:
+            out["roofline_target"] = self.roofline_target
+        return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -143,6 +268,159 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, object]] = {
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "Online-softmax MSL kernel; head_dim ≤ 256 (Phase 8.4.1)",
     },
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint G-3 (2026-05-11) — Per-kernel WGMMA tile shape + cluster + MFU
+# targets for NVIDIA SM_90+ (CUDA 13.2 U1).
+#
+# The canonical bf16/fp16 Hopper tile is (M=64, N=256, K=16) — this is
+# what cuBLAS uses for its WGMMA-based GEMM kernels. FP8 lowers to
+# K=32; FP4/NVFP4 to K=64.  Tessera's WGMMA lowering pass uses these
+# shapes to drive `tile_q`/`tile_kv` selection in attention kernels.
+#
+# Per-kernel MFU targets come from published benchmarks where available
+# (FA-4 on H100 hits ~75% of FP16 peak; cuBLAS GEMM hits ~80% MFU on
+# large M/N) and conservative estimates otherwise.  These are tracked
+# by `perf_gate.py` once execution lights up under Phase G.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_NVIDIA_KERNEL_TILE_SHAPES: dict[str, dict[str, tuple]] = {
+    # ── Matmul / contraction family ──────────────────────────────────────
+    "matmul":           {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
+    "gemm":             {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
+    "batched_gemm":     {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
+    "einsum":           {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
+    "linear_general":   {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
+    "qkv_projection":   {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
+    "fused_epilogue":   {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
+    "factorized_matmul":{"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
+    # ── Attention family ─────────────────────────────────────────────────
+    # FA-4 uses two WGMMA passes per outer-step: tile_q=128, tile_kv=128,
+    # head_dim=128 maps to wgmma (M=128, N=128, K=16) on bf16 inputs with
+    # an fp32 accumulator.  Cluster (2, 1, 1) for producer-consumer
+    # warp specialization across paired CTAs.
+    "flash_attn":               {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
+    "multi_head_attention":     {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
+    "gqa_attention":            {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
+    "mqa_attention":            {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
+    "mla_decode":               {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
+    "mla_decode_fused":         {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
+    # DeepSeek NSA — top-k sparse selection then WGMMA over the chosen
+    # blocks.  Reuses the FA tile; cluster=1 since each block runs
+    # independently.
+    "deepseek_sparse_attention":{"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
+    "attn_top_k_blocks":        {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
+    "attn_compressed_blocks":   {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
+    "attn_sliding_window":      {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
+    # MiniMax Lightning — linear-attention with delta-rule recurrence.
+    # The recurrence runs as a sequence of small (32, 32, 16) WGMMAs.
+    "lightning_attention":      {"wgmma_shape": (32, 32, 16),  "cluster": (1, 1, 1)},
+    "linear_attn":              {"wgmma_shape": (32, 32, 16),  "cluster": (1, 1, 1)},
+    "gated_deltanet":           {"wgmma_shape": (32, 32, 16),  "cluster": (1, 1, 1)},
+    "kimi_delta_attention":     {"wgmma_shape": (32, 32, 16),  "cluster": (1, 1, 1)},
+    "modified_delta_attention": {"wgmma_shape": (32, 32, 16),  "cluster": (1, 1, 1)},
+    "gated_attention":          {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
+    "hybrid_attention":         {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
+    # ── Normalization (fused, no WGMMA — single-tile reductions) ─────────
+    # rmsnorm / layer_norm / softmax don't use WGMMA in the canonical
+    # fused kernel; they use cooperative warp-shuffle reductions.
+    # Recorded shape None.
+}
+
+
+# Per-(op, target) expected MFU targets.  Conservative for SM_120 since
+# Rubin numbers aren't fully published; use the SM_100 number until then.
+_NVIDIA_KERNEL_MFU: dict[tuple[str, str], float] = {
+    # cuBLAS WGMMA GEMM hits ~80% MFU on large M/N.
+    ("matmul",     "nvidia_sm90"):  0.80,
+    ("matmul",     "nvidia_sm100"): 0.82,
+    ("matmul",     "nvidia_sm120"): 0.80,
+    ("gemm",       "nvidia_sm90"):  0.80,
+    ("gemm",       "nvidia_sm100"): 0.82,
+    ("batched_gemm","nvidia_sm90"): 0.78,
+    ("batched_gemm","nvidia_sm100"):0.80,
+    # FA-4 on H100 hits ~75% of FP16 peak; B100 expected slightly higher.
+    ("flash_attn", "nvidia_sm90"):  0.75,
+    ("flash_attn", "nvidia_sm100"): 0.78,
+    ("flash_attn", "nvidia_sm120"): 0.75,
+    # MLA decode — KV-bound, lower MFU; perf target is decode tokens/sec.
+    ("mla_decode", "nvidia_sm90"):  0.55,
+    ("mla_decode", "nvidia_sm100"): 0.60,
+    # Lightning + delta variants — linear-attention, recurrence-bound.
+    ("lightning_attention", "nvidia_sm90"):  0.40,
+    ("kimi_delta_attention", "nvidia_sm90"): 0.40,
+    # Sparse attention is gather-bound until WGMMA kicks in.
+    ("deepseek_sparse_attention", "nvidia_sm90"): 0.50,
+}
+
+
+_NVIDIA_KERNEL_ROOFLINE: dict[str, str] = {
+    "matmul":    "compute-bound at M*N >= 8192*8192 on SM_90; memory-bound at K <= 256",
+    "gemm":      "compute-bound at M*N >= 8192*8192 on SM_90; memory-bound at K <= 256",
+    "flash_attn":"compute-bound at seq_len >= 1024 + head_dim >= 64; memory-bound otherwise",
+    "mla_decode":"KV-cache-memory-bound (compressed latent KV reduces bandwidth ~4x vs MHA)",
+    "lightning_attention": "recurrence-serial; memory-bound on the state update step",
+    "deepseek_sparse_attention": "gather-bound at top-k <= 32; compute-bound at top-k >= 64",
+    "matmul_softmax":     "fused — saves the score-matrix DRAM round-trip; compute-bound after fusion",
+    "matmul_softmax_matmul": "fused 3-op chain — saves both score + softmax round-trips",
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint H-3 (2026-05-11) — Per-kernel MFMA shape + LDS layout + MFU for
+# ROCm 7.2.3.  Mirrors the NVIDIA tables above.
+#
+# Canonical MFMA shapes for bf16 on CDNA 3 (gfx94x): (32, 32, 8, 1) and
+# (16, 16, 16, 1).  FP8 variants are (32, 32, 16, 1) / (16, 16, 32, 1).
+# CDNA 4 (gfx950) adds FP4 lanes at (32, 32, 32, 1) / (16, 16, 64, 1).
+# ─────────────────────────────────────────────────────────────────────────────
+
+_ROCM_KERNEL_MFMA_SHAPES: dict[str, tuple[int, int, int, int]] = {
+    # Matmul family — canonical CDNA bf16 shape
+    "matmul":           (32, 32, 8, 1),
+    "gemm":             (32, 32, 8, 1),
+    "batched_gemm":     (32, 32, 8, 1),
+    "einsum":           (32, 32, 8, 1),
+    "linear_general":   (32, 32, 8, 1),
+    "qkv_projection":   (32, 32, 8, 1),
+    "fused_epilogue":   (32, 32, 8, 1),
+    "factorized_matmul":(16, 16, 16, 1),
+    # Attention family — smaller MFMA tile (16x16) for the score matrix
+    # because the matrix is typically narrow in N (head_dim ≤ 128).
+    "flash_attn":               (16, 16, 16, 1),
+    "multi_head_attention":     (16, 16, 16, 1),
+    "gqa_attention":            (16, 16, 16, 1),
+    "mqa_attention":            (16, 16, 16, 1),
+    "mla_decode":               (16, 16, 16, 1),
+    "mla_decode_fused":         (16, 16, 16, 1),
+    "deepseek_sparse_attention":(16, 16, 16, 1),
+    "attn_top_k_blocks":        (16, 16, 16, 1),
+    "attn_compressed_blocks":   (16, 16, 16, 1),
+    "attn_sliding_window":      (16, 16, 16, 1),
+    "lightning_attention":      (16, 16, 16, 1),
+    "linear_attn":              (16, 16, 16, 1),
+    "gated_deltanet":           (16, 16, 16, 1),
+    "kimi_delta_attention":     (16, 16, 16, 1),
+    "modified_delta_attention": (16, 16, 16, 1),
+    "gated_attention":          (16, 16, 16, 1),
+    "hybrid_attention":         (16, 16, 16, 1),
+}
+
+
+_ROCM_KERNEL_MFU: dict[tuple[str, str], float] = {
+    # rocBLAS MFMA GEMM hits ~75% MFU on MI300X.
+    ("matmul", "rocm_gfx942"): 0.75,
+    ("matmul", "rocm_gfx950"): 0.78,
+    ("gemm",   "rocm_gfx942"): 0.75,
+    ("gemm",   "rocm_gfx950"): 0.78,
+    ("batched_gemm", "rocm_gfx942"): 0.72,
+    # FA on MI300X via rocm-FA2 hits ~65% of FP16 peak.
+    ("flash_attn", "rocm_gfx942"): 0.65,
+    ("flash_attn", "rocm_gfx950"): 0.70,
+    ("mla_decode", "rocm_gfx942"): 0.50,
+    ("lightning_attention", "rocm_gfx942"): 0.35,
 }
 
 
@@ -332,12 +610,16 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 notes="capability-registered Apple GPU coverage",
             ))
 
-    # NVIDIA SM_80 / SM_90 / SM_100 / SM_120 — artifact-only until Phase G
-    for target_name, flags in (
-        ("nvidia_sm80",  ("wmma",)),
-        ("nvidia_sm90",  ("wgmma", "tma")),
-        ("nvidia_sm100", ("tcgen05", "tmem")),
-        ("nvidia_sm120", ("tcgen05", "tmem")),
+    # NVIDIA SM_80 / SM_90 / SM_100 / SM_120 — artifact-only until Phase G.
+    # Sprint G-3 (2026-05-11): each entry carries cuda_arch_min /
+    # nvcc_version_min + WGMMA shape (Hopper+ only).  Per-kernel shape
+    # overrides come from `_NVIDIA_KERNEL_TILE_SHAPES` below.
+    _kernel_shapes = _NVIDIA_KERNEL_TILE_SHAPES.get(op_name, {})
+    for target_name, flags, arch_min in (
+        ("nvidia_sm80",  ("wmma",),                  "sm_80"),
+        ("nvidia_sm90",  ("wgmma", "tma"),           "sm_90a"),
+        ("nvidia_sm100", ("tcgen05", "tmem"),        "sm_100a"),
+        ("nvidia_sm120", ("tcgen05", "tmem"),        "sm_120a"),
     ):
         cap = _capability_status(target_name, op_name)
         if cap is not None:
@@ -347,19 +629,37 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 else _ARTIFACT_STATUS if status == "artifact_only"
                 else _PLANNED_STATUS
             )
+            # WGMMA only kicks in at SM_90+.  Use the per-kernel shape
+            # if registered, otherwise default to the canonical
+            # bf16/fp16 Hopper tile.
+            wgmma_shape = None
+            cluster = None
+            if target_name != "nvidia_sm80" and op_name in _NVIDIA_KERNEL_TILE_SHAPES:
+                wgmma_shape = _kernel_shapes.get("wgmma_shape")
+                cluster = _kernel_shapes.get("cluster")
+            mfu = _NVIDIA_KERNEL_MFU.get((op_name, target_name))
+            roofline = _NVIDIA_KERNEL_ROOFLINE.get(op_name)
             entries.append(BackendKernelEntry(
                 target=target_name,
                 status=mapped,
                 dtypes=dtypes,
                 feature_flags=flags,
                 notes=(
-                    "Target IR artifact ships; execution gated on Phase G"
+                    "Target IR artifact ships under CUDA 13.2 U1; "
+                    "execution gated on Phase G"
                     if mapped == _ARTIFACT_STATUS
                     else ""
                 ),
+                cuda_arch_min=arch_min,
+                nvcc_version_min="13.2.1",
+                wgmma_shape=wgmma_shape,
+                cluster_size=cluster,
+                expected_mfu=mfu,
+                roofline_target=roofline,
             ))
 
-    # ROCm MFMA
+    # ROCm MFMA — Sprint H-3 (2026-05-11): attach MFMA shape + hipcc
+    # version pin per kernel.
     cap = _capability_status("rocm", op_name)
     if cap is not None:
         status, dtypes = cap
@@ -368,15 +668,20 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             else _ARTIFACT_STATUS if status == "artifact_only"
             else _PLANNED_STATUS
         )
+        mfma = _ROCM_KERNEL_MFMA_SHAPES.get(op_name)
+        mfu = _ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942"))
         entries.append(BackendKernelEntry(
             target="rocm",
             status=mapped,
             dtypes=dtypes,
             feature_flags=("mfma",),
             notes=(
-                "ROCm MFMA artifact ships; HIP execution gated on Phase H"
+                "ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H"
                 if mapped == _ARTIFACT_STATUS else ""
             ),
+            mfma_shape=mfma,
+            hipcc_version_min="7.2.3",
+            expected_mfu=mfu,
         ))
 
     # Tenstorrent Metalium — Sprint I-1/I-2 (2026-05-11): shipped kernel

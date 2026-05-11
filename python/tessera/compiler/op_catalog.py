@@ -130,6 +130,7 @@ _SPECS = [
     OpSpec("rope", "tessera.rope", 2, 2, lowering="rotary_embedding"),
     OpSpec("kv_cache_append", "tessera.kv_cache.append", 3, 3, effect="state", lowering="state_update"),
     OpSpec("kv_cache_prune", "tessera.kv_cache.prune", 1, 1, effect="state", lowering="state_update"),
+    OpSpec("kv_cache_read", "tessera.kv_cache.read", 2, 2, effect="state", lowering="state_update"),
     # Theme 10 — fp8 quantize/dequantize ops. Per-tensor symmetric.
     OpSpec("quantize_fp8", "tessera.quantize_fp8", 1, 1, lowering="quantize"),
     OpSpec("dequantize_fp8", "tessera.dequantize_fp8", 2, 2, lowering="quantize"),

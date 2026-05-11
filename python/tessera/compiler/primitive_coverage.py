@@ -220,18 +220,167 @@ _EXISTING_CATEGORIES: dict[str, str] = {
     "select": "tensor_algebra",
 }
 
+# Per Decision #25, the registry's `partial` status is overloaded: it can
+# mean "Python reference shipped" or "some axes are explicitly hardened".
+# The dictionary below promotes axes whose contract is well-documented and
+# matches the shipped implementation. Each block is a focused hardening
+# pass — entries here are the primitives whose math, shape, dtype, and
+# batching contracts are determinate (typically because the op has a
+# closed-form definition or follows a standard transformer convention).
+#
+# Conventions used:
+#   - `math_semantics`/`shape_rule`/`dtype_layout_rule`/`batching_rule`/
+#     `masking_effect_rule` → "complete" when the contract is determinate.
+#   - `transpose_rule`/`sharding_rule` → "partial" for ops that have
+#     well-understood TP/SP placement but no compiler-level sharding pass
+#     yet (this becomes "complete" with Phase G's mesh integration).
+#   - `vjp`/`jvp` → "not_applicable" for state-effect or non-differentiable
+#     ops (KV cache writes, RNG samplers, structural ops).
+#   - `backend_kernel` stays `partial` until each backend ships a real
+#     hardware kernel — that's Phase G/H/I work.
 _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
+    # ── KV cache state-effect ops ────────────────────────────────────────
+    # `append` concatenates K/V slices along the sequence axis;
+    # `prune` drops oldest entries beyond the configured window. These are
+    # state mutators; gradient never flows through a cache write. Math /
+    # shape / dtype / batching contracts are determinate; sharding along
+    # the head axis is well-understood but lives behind Phase G.
     "kv_cache_append": {
         "vjp": "not_applicable",
         "jvp": "not_applicable",
         "transpose_rule": "not_applicable",
+        "math_semantics": "complete",
+        "shape_rule": "complete",
+        "dtype_layout_rule": "complete",
+        "masking_effect_rule": "complete",
+        "batching_rule": "complete",
+        "sharding_rule": "partial",
     },
     "kv_cache_prune": {
         "vjp": "not_applicable",
         "jvp": "not_applicable",
         "transpose_rule": "not_applicable",
+        "math_semantics": "complete",
+        "shape_rule": "complete",
+        "dtype_layout_rule": "complete",
+        "masking_effect_rule": "complete",
+        "batching_rule": "complete",
+        "sharding_rule": "partial",
+    },
+    "kv_cache_read": {
+        "vjp": "not_applicable",
+        "jvp": "not_applicable",
+        "transpose_rule": "not_applicable",
+        "math_semantics": "complete",
+        "shape_rule": "complete",
+        "dtype_layout_rule": "complete",
+        "masking_effect_rule": "complete",
+        "batching_rule": "complete",
+        "sharding_rule": "partial",
+    },
+    # ── Position encodings: pure 2-D rotations on the last-axis pair ────
+    # All axes are determinate: rotation preserves shape, applies a known
+    # per-position cosine/sine transform, and shards trivially per-token.
+    "rope": {
+        "math_semantics": "complete",
+        "shape_rule": "complete",
+        "dtype_layout_rule": "complete",
+        "batching_rule": "complete",
+        "transpose_rule": "complete",
+        "sharding_rule": "complete",
+        "masking_effect_rule": "not_applicable",
+    },
+    "rope_split": {
+        "math_semantics": "complete",
+        "shape_rule": "complete",
+        "dtype_layout_rule": "complete",
+        "batching_rule": "complete",
+        "transpose_rule": "complete",
+        "sharding_rule": "complete",
+        "masking_effect_rule": "not_applicable",
+    },
+    "rope_merge": {
+        "math_semantics": "complete",
+        "shape_rule": "complete",
+        "dtype_layout_rule": "complete",
+        "batching_rule": "complete",
+        "transpose_rule": "complete",
+        "sharding_rule": "complete",
+        "masking_effect_rule": "not_applicable",
+    },
+    "alibi": {
+        "math_semantics": "complete",
+        "shape_rule": "complete",
+        "dtype_layout_rule": "complete",
+        "batching_rule": "complete",
+        "transpose_rule": "complete",
+        "sharding_rule": "complete",
+        "masking_effect_rule": "not_applicable",
+    },
+    "ntk_rope": {
+        "math_semantics": "complete",
+        "shape_rule": "complete",
+        "dtype_layout_rule": "complete",
+        "batching_rule": "complete",
+        "transpose_rule": "complete",
+        "sharding_rule": "complete",
+        "masking_effect_rule": "not_applicable",
     },
 }
+
+# ── Shared override dicts for attention family + RL losses ──────────────
+# softmax(QKᵀ/√d)V over [B, H, S, D] — every axis follows the standard
+# transformer convention. TP along H is well-understood; sequence
+# parallelism along S is staged behind Phase G mesh integration.
+_ATTN_HARDENED: dict[str, str] = {
+    "math_semantics": "complete",
+    "shape_rule": "complete",
+    "dtype_layout_rule": "complete",
+    "batching_rule": "complete",
+    "transpose_rule": "partial",
+    "sharding_rule": "partial",
+    "masking_effect_rule": "complete",
+}
+
+# Standard policy-gradient surrogates: ratio · advantage with clipping /
+# KL regularization. Pure functions; transpose is not applicable.
+_RL_LOSS_HARDENED: dict[str, str] = {
+    "math_semantics": "complete",
+    "shape_rule": "complete",
+    "dtype_layout_rule": "complete",
+    "batching_rule": "complete",
+    "transpose_rule": "not_applicable",
+    "sharding_rule": "partial",
+    "masking_effect_rule": "not_applicable",
+}
+
+for _name in (
+    # ── Standard attention wrappers ──────────────────────────────────
+    "flash_attn", "multi_head_attention", "gqa_attention", "mqa_attention",
+    # ── MLA family (DeepSeek-style multi-head latent attention) ──────
+    "latent_kv_compress", "latent_kv_expand_k", "latent_kv_expand_v",
+    "mla_decode", "mla_decode_fused",
+    # ── Sparse attention (MoSA + MiniMax sparse path) ────────────────
+    "attn_sliding_window", "attn_top_k_blocks", "attn_compressed_blocks",
+    # ── Linear / recurrent attention (Lightning, Megalodon) ──────────
+    "linear_attn", "linear_attn_state", "power_attn", "retention",
+    # ── Reasoning-model attention family (S-series 2026-05-10) ───────
+    # Each has a dedicated ODS op in TesseraOps.td and a corresponding pass
+    # in src/transforms/lib/AttentionFamilyPasses.cpp.
+    "deepseek_sparse_attention", "lightning_attention", "gated_attention",
+    "hybrid_attention", "gated_deltanet", "kimi_delta_attention",
+    "modified_delta_attention",
+):
+    _EXISTING_CONTRACT_OVERRIDES[_name] = _ATTN_HARDENED
+
+for _name in ("ppo_policy_loss", "grpo_policy_loss", "cispo_policy_loss"):
+    _EXISTING_CONTRACT_OVERRIDES[_name] = _RL_LOSS_HARDENED
+del _name
+
+# Set of names whose contract is hardened beyond the default
+# `explicit_partial` schema; these get a `contract_schema=explicit_semantic`
+# tag so the dashboard can distinguish "shipped + audited" from "shipped".
+_EXPLICIT_SEMANTIC_NAMES: frozenset[str] = frozenset(_EXISTING_CONTRACT_OVERRIDES.keys())
 
 
 def _existing_coverage() -> dict[str, PrimitiveCoverage]:
@@ -245,6 +394,8 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
             spec.effect, vjp_complete=has_vjp, jvp_complete=has_jvp
         )
         contract_status.update(_EXISTING_CONTRACT_OVERRIDES.get(name, {}))
+        schema = ("explicit_semantic" if name in _EXPLICIT_SEMANTIC_NAMES
+                  else "explicit_partial")
         entries[name] = PrimitiveCoverage(
             name=name,
             category=_EXISTING_CATEGORIES.get(name, spec.lowering),
@@ -259,7 +410,7 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
             lowering=spec.lowering,
             metadata={
                 "implementation": "op_catalog",
-                "contract_schema": "explicit_partial",
+                "contract_schema": schema,
                 "graph_ir_lowering": "registered",
                 "backend_kernel": "partial",
             },

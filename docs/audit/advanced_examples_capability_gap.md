@@ -23,9 +23,10 @@ last_updated: 2026-05-09
 > covering numerical-Jacobian per op + end-to-end MLP one-step SGD loss
 > decrease. See `docs/spec/AUTODIFF_SPEC.md`,
 > `python/tessera/autodiff/{tape,vjp,__init__}.py`,
-> `tests/unit/test_autodiff.py` and `tests/unit/test_phase_e_f.py`. **Tier 2
-> still defers:** higher-order derivatives and JAX-style `vmap`/`jacrev`;
-> `moe` still needs custom VJP registration.
+> `tests/unit/test_autodiff.py` and `tests/unit/test_phase_e_f.py`. Tier 2
+> follow-ups now ship reference higher-order derivatives, JAX-style
+> `vmap`/`jacrev`/`jacfwd`, and `moe` VJP registration; backend fused/IR
+> lowering remains tracked separately.
 >
 > **Theme 1 + Theme 2 below are fully closed** (Conv2d / LSTM landed in
 > Phase H1/H2; F4+F5 verified end-to-end on MLIR 21). **Themes 3 / 4 / 5 /
@@ -157,9 +158,9 @@ persistent buffers), `train`/`eval`, `Module.to(dtype)`, `parameters()` /
 - **F4 Graph IR adjoints:** end-to-end verified on MLIR 21 — `--tessera-autodiff` builds clean against LLVM/MLIR 21, lit fixture passes (`tests/tessera-ir/phase_f4/autodiff_pass_smoke.mlir`).
 - **F5 effect-aware adjoint collective insertion:** real `tessera.collective.{reduce_scatter, all_gather, all_reduce}` emission on cotangent SSA values; pipeline alias `tessera-autodiff-pipeline` runs F4+F5 together.
 
-🔲 **Still deferred:** higher-order derivatives (out of scope this cycle);
-JAX-style `vmap` / `jacrev` / `jacfwd` (high cost, unclear payoff —
-tracked).
+✅ **No longer deferred:** higher-order derivatives (`grad`, `hvp`,
+`elementwise_grad`) and JAX-style `vmap` / `jacrev` / `jacfwd` shipped as
+reference transforms. Remaining work is performance/IR maturation.
 **Roadmap:** Theme 2 closed for the v1 + follow-ups surface.
 
 ### Theme 3 — Streaming kernels + dynamic shapes (blocks 2) — **closed**

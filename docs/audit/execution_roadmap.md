@@ -1313,10 +1313,12 @@ ship.
 
 | Item | Reason |
 |------|--------|
-| Higher-order derivatives (F7) | Niche; high implementation cost. |
-| JAX-style `vmap`/`jacrev`/`jacfwd` (F6) | High cost, unclear payoff for ML training workloads. Tracked. |
 | Module device migration (`to("cuda")`) | Requires a real device handle; tied to Phase G. |
 | AIR bitcode codegen on Apple GPU | MPS+MSL covers everything we need; revisit only if a perf wall demands it. |
+
+F6 and F7 are no longer out of scope: the reference implementations shipped
+2026-05-09. Remaining work for those areas is performance/IR maturation, not
+API support.
 
 ---
 

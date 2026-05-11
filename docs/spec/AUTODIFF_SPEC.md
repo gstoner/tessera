@@ -31,8 +31,8 @@ last_updated: 2026-05-09
 | Effect-aware adjoint collective insertion (`reduce_scatter`/`all_gather` for distributed gradients) | Phase F5 rewrite landed; full distributed training validation remains follow-up |
 | Activation checkpointing / rematerialization pass | Python reference rematerialization landed; lower-level pass integration remains follow-up |
 | Mixed-precision gradient master copy + loss scaling (fp32 master, fp8 forward) | Autocast + `GradScaler` landed for the reference path; fp8/backend lowering remains follow-up |
-| Higher-order derivatives (HVP, jacrev, jacfwd) | Out of scope for v1 |
-| `jax.vmap`-style batched transforms | Out of scope for v1 |
+| Higher-order derivatives (HVP, jacrev, jacfwd) | Reference `grad`, `hvp`, `elementwise_grad`, `jacrev`, and `jacfwd` shipped; true tape-based forward-over-reverse remains a perf/IR follow-up |
+| `jax.vmap`-style batched transforms | Reference `vmap` shipped as scan-then-stack; batched IR lowering remains a perf/IR follow-up |
 | Custom CUDA/Metal adjoint kernels | Each backend's later phase |
 | Backward through `flash_attn` (fused) | Reference-path VJP registered via `custom_rule`; backend-specific fused adjoint kernels remain follow-up |
 | Backward through `ops.moe`, `ops.spmm_*`, `ops.cholesky` | Error in v1 unless `custom_rule` registered; FFT-family VJPs are registered |
@@ -284,8 +284,9 @@ Key pieces (landed 2026-05-09):
 
 Out of scope for the F4 first cut:
 
-* Higher-order derivatives (run AutodiffPass twice + canonicalize). Tracked
-  separately as F7 — currently 🔲 deferred.
+* Higher-order derivatives in Graph IR (run AutodiffPass twice +
+  canonicalize). The Python reference F7 surface is shipped; this bullet only
+  tracks lower-level IR support.
 * Effect-aware adjoint collective insertion. That's Phase F5 — runs after
   AutodiffPass and reads `Effect` attributes on adjoint values to insert
   `reduce_scatter` / `all_gather`.

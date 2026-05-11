@@ -13,6 +13,10 @@ from typing import Any, Callable, Mapping
 import numpy as np
 
 import tessera as ts
+from examples.conformance.s8_tiny_models.models import (
+    compile_attention_slice as s8_compile_attention_slice,
+    compile_mlp_slice as s8_compile_mlp_slice,
+)
 from tessera.compiler.jit import JitFn, jit
 from tessera.compiler.matmul_pipeline import normalize_target_kind
 from tessera.runtime import RuntimeArtifact, launch
@@ -123,6 +127,24 @@ COMPILER_EXAMPLE_MANIFEST: tuple[CompilerExample, ...] = (
             np.ones((1, 2, 4), dtype=np.float32),
             np.ones((1, 2, 4), dtype=np.float32),
             np.ones((1, 2, 4), dtype=np.float32),
+        ),
+    ),
+    CompilerExample(
+        "s8_tiny_diffusion_compile_slice",
+        s8_compile_mlp_slice,
+        {target: _common_artifact_stages(runtime=target == "x86") for target in FOUNDATION_TARGETS},
+        runtime_args=(
+            np.arange(6, dtype=np.float32).reshape(2, 3) / 10.0,
+            np.ones((3, 4), dtype=np.float32) * 0.25,
+        ),
+    ),
+    CompilerExample(
+        "s8_tiny_attention_compile_slice",
+        s8_compile_attention_slice,
+        {target: _common_artifact_stages(runtime=target in {"x86", "apple_gpu"}) for target in FOUNDATION_TARGETS},
+        runtime_args=(
+            np.arange(6, dtype=np.float32).reshape(2, 3) / 10.0,
+            np.ones((3, 3), dtype=np.float32) * 0.25,
         ),
     ),
 )

@@ -703,7 +703,7 @@ Remaining S15 work: lazy streaming execution, true memory-mapped shard
 readers, async prefetch workers, tokenizer training/model-file parsers, and
 compiler-visible dataset lowering.
 
-### [S8] Tiny standalone model conformance suite 🚧 (next session)
+### [S8] Tiny standalone model conformance suite 🟢 (aggregate suite shipped)
 
 **Scope:** XL (~1,000 LOC tests/examples + dashboard integration). Depends on
 S2-S7 + S9-S15; performance gates depend on Phase G.
@@ -740,6 +740,18 @@ It exercises S15 data batches, S11 loss, S10 optimizer/gradient transforms,
 S4 RNG state, and S12 checkpoint round-trip in one CPU-reference training
 step. Remaining S8 work now centers on broader model-family coverage and
 backend gates rather than missing training-loop primitives.
+
+**Tiny-model suite 2026-05-10:** shipped importable examples under
+`examples/conformance/s8_tiny_models/` with a `TinyModelSpec` manifest for
+diffusion/DiT, xLSTM/recurrent, Mamba/SSM, Hyena/FNet/spectral,
+Linformer/cosFormer, Griffin/Megalodon, JEPA, and Titans/Atlas memory. The
+aggregate suite covers S2-S15, validates forward/backward behavior, S4 RNG
+replay, S3 state-tree round trip, S6 sharding/collective semantics, S9
+quantization, S10 optimizer steps, S11 losses, S12 checkpoints, S13 custom
+primitive metadata, S14 AOT/cache export, and S15 data/tokenizer inputs.
+Compiler slices are wired into `tessera.testing.compiler_examples` so
+foundation targets emit Graph/Schedule/Tile/Target IR today; CUDA/ROCm remain
+artifact-only until Phase G runtime execution lands.
 
 ---
 

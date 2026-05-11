@@ -1353,6 +1353,8 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         }
         if category in {"data", "tokenizer", "serialization", "aot", "conformance"}:
             metadata["graph_ir_lowering"] = "not_applicable"
+        if category == "conformance":
+            metadata["model_manifest"] = "examples.conformance.s8_tiny_models.manifest"
         if all(
             contract[field] == "complete"
             for field in ("math_semantics", "shape_rule", "dtype_layout_rule")

@@ -123,7 +123,7 @@ missing Python API names:
 | Dtype/layout rule | 299 | −26 |
 | Batching rule | 340 | −33 |
 | Transpose rule | 313 | −8 |
-| Sharding rule | 369 | −4 |
+| **Sharding rule** | **156** | **−213** (category-based classifier) |
 | Backend kernel | 374 | unchanged (Phase G/H/I gate) |
 | JVP | 221 | unchanged |
 | VJP | 137 | unchanged |
@@ -131,25 +131,57 @@ missing Python API names:
 | Lowering rule | 147 | unchanged |
 | Masking/effect rule | 16 | −11 |
 
-The math/shape/dtype/batching deltas reflect the **2026-05-10
-contract-axis hardening pass** that promoted 27 entries to
-`explicit_semantic`. The next-largest contract gaps are:
+## Long-tail sharding-rule pass (2026-05-10)
 
-- **`sharding_rule`** (369 still missing/partial) — the fundamental
-  blocker for `shard_map(grad(f))` on a real mesh. Most non-elementwise
-  primitives need explicit per-axis partition rules. This is staged
-  behind Phase G mesh integration.
-- **`backend_kernel`** (374, every entry) — the dashboard intentionally
-  keeps every entry at `partial` or `reference_only` until each backend
-  ships a real hardware kernel. This unlocks under Phase G (NVIDIA H100),
-  Phase 7 (Cerebras / Metalium), and Phase 8 (Apple GPU).
-- **`batching_rule`** (340) — `vmap`-composition rules for the long
-  tail. The shipped attention / position / RL groups now have these; the
-  scalar-math / reduction / data-pipeline tail remains.
+The previous `sharding_rule` audit showed 369 entries still
+`partial`/`planned` — Decision #25's flagship long pole. A
+**category-based classifier** (`_SHARDING_RULE_BY_CATEGORY` in
+`primitive_coverage.py`) routes each primitive to one of three
+verdicts based on its compiler category. Per-name overrides in
+`_EXISTING_CONTRACT_OVERRIDES` still win.
 
-This means the next quality jump is still not adding more names. It is
-extending the hardening pass through the long tail and then closing the
-sharding-rule axis once Phase G mesh integration lands.
+Final distribution across 374 entries:
+
+| Verdict | Count | Share | Examples |
+|---|---:|---:|---|
+| **`complete`** | **184** | 49% | All elementwise (`add`, `mul`, `silu`, `gelu`, ...), scalar math, comparisons / logical, reductions (`sum`, `mean`, `argmax`, `cumsum`), stability primitives (`logsumexp`, `log_softmax`), RNG samplers (per-shard via `fold_in`), losses (reduce to scalar/per-sample), collectives themselves (`psum`/`pmean`/`shard_map`), quantization (per-tensor symmetric), optimizers (ZeRO-style per-parameter), all transforms (`vjp`/`jvp`/`vmap`/`pmap`/`remat`), position encodings (`rope`/`alibi`/`ntk_rope`), `custom_*` extension API |
+| **`partial`** | **156** | 42% | All attention variants (TP-along-head / SP-along-sequence well-understood, mesh-dependent), `matmul`/`gemm`/`einsum` (contract-axis all-reduce), structural ops (`reshape`/`cat`/`split`/`permute` — depends on partition spec), indexing (`gather`/`scatter` — indices replicated), MoE (`moe`/`moe_dispatch`/`moe_combine`), normalization (feature-axis all-reduce when sharded), stencil (`depthwise_conv1d` — halo exchange), spectral / FFT (ring/butterfly), linalg solvers, `kv_cache_*` (handle layout matters), `memory_*` |
+| **`not_applicable`** | **34** | 9% | `state_tree` family (pytrees, not tensors), `aot_*` (artifact export), `serialization` (save/load), `conformance` tests, LR `schedule`s (scalar functions), tokenizers (stateless string→int)... data combinators keep `partial` because `ShardedDataset` IS sharding-aware |
+
+The classifier's design rationale lives in the module doc comment for
+`_SHARDING_RULE_BY_CATEGORY`. Per-category mappings:
+
+```
+complete       → elementwise, scalar_math, numeric_helper, comparison,
+                 logical, reduction, stable_reduction, rng, random_source,
+                 random_mask, collective, sharding, quantize, quantization,
+                 numerics, functional_optimizer_step, optimizer, rl_loss,
+                 loss, rotary_embedding, position_encoding, transform,
+                 extension
+
+partial        → attention, loop_nest, model_layer, contraction,
+                 projection, fused_epilogue, moe, moe_transport,
+                 state_update, state_space, recurrent, stencil, pooling,
+                 tensor_algebra, layout_transform, indexing,
+                 segment_reduce, spectral, linalg_solver,
+                 linalg_decomposition, sparse, normalization,
+                 grad_transform, control_flow, memory, sort
+
+not_applicable → state_tree, schedule, aot, serialization, conformance
+                 (also data + tokenizer get `partial` via the
+                 separate special-case, since `ShardedDataset` is
+                 sharding-aware)
+```
+
+This means the next quality jump is split between two threads:
+1. **Push the 156 `partial` entries to `complete`** as Phase G mesh
+   integration lands and per-axis rules become testable.
+2. **Continue the math/shape/dtype/batching hardening pass** through the
+   long tail (~300 entries on each axis), category-by-category.
+
+The `sharding_rule` axis is no longer the long-pole gate — `batching_rule`
+(340), `transpose_rule` (313), and `math/shape/dtype` (299 each) now lead.
+Backend_kernel (374, every entry) stays universally gated behind Phase G/H/I.
 
 ## Recommended Next Work
 

@@ -383,6 +383,137 @@ del _name
 _EXPLICIT_SEMANTIC_NAMES: frozenset[str] = frozenset(_EXISTING_CONTRACT_OVERRIDES.keys())
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Long-tail sharding-rule classifier (Decision #25 — quality gate, 2026-05-10).
+#
+# Almost every primitive has a well-understood sharding behavior; the gap was
+# that the dashboard defaulted every entry to `sharding_rule = planned`. This
+# classifier resolves the long tail by category:
+#
+#   complete       — sharding is trivial (pointwise) or self-defining
+#                    (collectives themselves), or follows the canonical
+#                    reduction / RNG-fold-in / per-parameter pattern.
+#   partial        — sharding is well-understood but depends on the partition
+#                    spec / mesh / IR-level pass (reshape interactions,
+#                    contraction-axis all-reduce, halo exchange, spectral
+#                    butterflies). Real verification needs Phase G mesh hooks.
+#   not_applicable — the primitive isn't tensor data (pytree, dataset,
+#                    tokenizer, AOT/cache, serialization, scalar schedule,
+#                    test conformance, custom-primitive registration). The
+#                    sharding question doesn't apply.
+#
+# Per-name overrides in `_EXISTING_CONTRACT_OVERRIDES` (above) still win, so
+# `kv_cache_*` keeps its explicit `partial` (handle layout matters) and the
+# already-hardened position encodings keep their `complete`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SHARDING_RULE_BY_CATEGORY: dict[str, str] = {
+    # — Pointwise / elementwise families: every axis trivially shardable —
+    "elementwise":         "complete",
+    "scalar_math":         "complete",
+    "numeric_helper":      "complete",
+    "comparison":          "complete",
+    "logical":             "complete",
+    "rotary_embedding":    "complete",  # rope — pure per-token rotation
+    "position_encoding":   "complete",  # alibi / ntk_rope — per-token
+
+    # — Standard reductions: insert all-reduce on the reduced axis —
+    "reduction":           "complete",
+    "stable_reduction":    "complete",
+    "normalization":       "partial",   # all-reduce on feature axis when sharded
+    "loss":                "complete",  # all reduce to scalar or per-sample
+
+    # — RNG: per-shard streams via `fold_in(axis_index)` —
+    "rng":                 "complete",
+    "random_source":       "complete",
+    "random_mask":         "complete",
+
+    # — Collectives themselves: they ARE the sharding rule —
+    "collective":          "complete",
+    "moe_transport":       "partial",   # dispatch/combine: known but mesh-aware
+    "sharding":            "complete",  # shard_map, partition_spec — self-defining
+
+    # — Quantization: per-tensor symmetric quant shards trivially —
+    "quantize":            "complete",
+    "quantization":        "complete",
+    "numerics":            "complete",
+    "grad_transform":      "partial",   # clip_grad_norm needs cross-param sum
+
+    # — Optimizers: per-parameter, ZeRO-style shardable —
+    "functional_optimizer_step": "complete",
+    "optimizer":           "complete",
+
+    # — Schedules: scalar functions of step; no sharding —
+    "schedule":            "not_applicable",
+
+    # — RL post-training losses: standard reductions —
+    "rl_loss":             "complete",
+
+    # — Attention & friends: known TP/SP patterns, mesh-dependent —
+    "attention":           "partial",
+    "loop_nest":           "partial",   # matmul/gemm/conv — TP along contract axis
+    "model_layer":         "partial",
+    "contraction":         "partial",   # einsum
+    "projection":          "partial",
+    "fused_epilogue":      "partial",
+    "moe":                 "partial",
+    "state_update":        "partial",   # kv_cache — handle layout matters
+    "state_space":         "partial",   # selective_ssm
+    "recurrent":           "partial",
+    "stencil":             "partial",   # depthwise_conv1d/2d — halo exchange
+    "pooling":             "partial",
+
+    # — Structural / layout / indexing: rule depends on partition spec —
+    "tensor_algebra":      "partial",
+    "layout_transform":    "partial",
+    "indexing":            "partial",
+    "segment_reduce":      "partial",
+
+    # — Spectral: ring/butterfly partition rules well-known —
+    "spectral":            "partial",
+
+    # — Sort / top-k: indices must be replicated; partial-axis sharding —
+    "sort":                "partial",
+
+    # — Linear algebra solvers: sophisticated partition rules —
+    "linalg_solver":       "partial",
+    "linalg_decomposition":"partial",
+    "sparse":              "partial",
+
+    # — Transforms: sharding-aware by nature —
+    "transform":           "complete",  # vjp/jvp/vmap/pmap/remat — self-defining
+    "control_flow":        "partial",   # scan/while depend on body
+
+    # — Memory primitives: sharded layout pending Phase G —
+    "memory":              "partial",
+
+    # — Extension API: delegates to user-supplied rule —
+    "extension":           "complete",  # custom_primitive declares its own
+
+    # — Non-tensor categories: sharding doesn't apply —
+    "state_tree":          "not_applicable",
+    "data":                "not_applicable",
+    "tokenizer":           "not_applicable",
+    "aot":                 "not_applicable",
+    "serialization":       "not_applicable",
+    "conformance":         "not_applicable",
+}
+
+
+def _sharding_rule_for_category(category: str | None, current: str) -> str:
+    """Return the sharding-rule value to use for the given category.
+
+    Per-category classification only overrides when the current value is
+    still `planned` (or unset). If a per-name override or the existing
+    contract has already promoted the axis, keep that.
+    """
+    if current not in ("planned", None):
+        return current
+    if category is None:
+        return current
+    return _SHARDING_RULE_BY_CATEGORY.get(category, current)
+
+
 def _existing_coverage() -> dict[str, PrimitiveCoverage]:
     registered_vjps = _vjp_registered_names()
     registered_jvps = _jvp_registered_names()
@@ -392,6 +523,12 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         has_jvp = _existing_op_has_jvp(name, registered_jvps)
         contract_status = _existing_contracts(
             spec.effect, vjp_complete=has_vjp, jvp_complete=has_jvp
+        )
+        # Apply per-category sharding-rule classifier before per-name overrides
+        # so explicit overrides always win over the category default.
+        category = _EXISTING_CATEGORIES.get(name, spec.lowering)
+        contract_status["sharding_rule"] = _sharding_rule_for_category(
+            category, contract_status.get("sharding_rule", "planned")
         )
         contract_status.update(_EXISTING_CONTRACT_OVERRIDES.get(name, {}))
         schema = ("explicit_semantic" if name in _EXPLICIT_SEMANTIC_NAMES
@@ -424,15 +561,19 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
     for name, (lowering, effect, notes) in supplemental_public_ops.items():
         has_vjp = _existing_op_has_vjp(name, registered_vjps)
         has_jvp = _existing_op_has_jvp(name, registered_jvps)
+        contract_status = _existing_contracts(
+            effect, vjp_complete=has_vjp, jvp_complete=has_jvp
+        )
+        contract_status["sharding_rule"] = _sharding_rule_for_category(
+            lowering, contract_status.get("sharding_rule", "planned")
+        )
         entries.setdefault(
             name,
             PrimitiveCoverage(
                 name=name,
                 category=lowering,
                 status="partial",
-                contract_status=_existing_contracts(
-                    effect, vjp_complete=has_vjp, jvp_complete=has_jvp
-                ),
+                contract_status=contract_status,
                 model_families=_EXISTING_MODEL_FAMILIES.get(name, ()),
                 references=("tessera",),
                 notes=f"Public Python op outside OP_SPECS today; tracked for standalone coverage: {notes}.",
@@ -697,7 +838,11 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
             "dtype_layout_rule": "complete",
             "batching_rule": "partial",
             "transpose_rule": "planned",
-            "sharding_rule": "planned",
+            # Memory-table sharding: keys/values split along the entries axis;
+            # query-time top-k requires an all-gather of the scores before the
+            # softmax. Well-understood but mesh-aware — `partial` per the
+            # category convention for memory primitives.
+            "sharding_rule": "partial",
         },
         "memory_write": {
             "math_semantics": "complete",
@@ -746,6 +891,11 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
                 batching_rule="partial",
                 sharding_rule="partial",
             )
+        # Apply the long-tail category-based sharding-rule classifier; per-name
+        # overrides in `contract_overrides` (next line) still win.
+        contract["sharding_rule"] = _sharding_rule_for_category(
+            category, contract.get("sharding_rule", "planned")
+        )
         contract.update(contract_overrides.get(name, {}))
         metadata = {
             "implementation": "python_reference",

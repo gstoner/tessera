@@ -2946,4 +2946,134 @@ def jvp_muon(primals, tangents, **kwargs):
     return _conv_via_op("muon", primals, tangents, **kwargs)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# selective_ssm (Mamba2) closed-form JVP — Sprint A follow-up (2026-05-11).
+#
+# Forward (per batch, dropping `b`):
+#     z[t,d,n]      = delta[t,d] * A[d,n]
+#     A_bar[t,d,n]  = exp(z[t,d,n])
+#     B_bar[t,d,n]  = delta[t,d] * B[t,n]
+#     h[t,d,n]      = A_bar[t,d,n] * h[t-1,d,n] + B_bar[t,d,n] * x[t,d]
+#     y[t,d]        = Σ_n C[t,n] * h[t,d,n]
+#     y_gated       = y * gate    (if gate is not None)
+#
+# Forward-mode JVP threads tangents through the same recurrence:
+#     dz       = ddelta * A + delta * dA
+#     dA_bar   = A_bar * dz                  (since A_bar = exp(z))
+#     dB_bar   = ddelta * B + delta * dB
+#     dh[t]    = dA_bar[t]*h[t-1] + A_bar[t]*dh[t-1]
+#              + dB_bar[t]*x[t]  + B_bar[t]*dx[t]
+#     dy[t,d]  = Σ_n (dC[t,n]*h[t,d,n] + C[t,n]*dh[t,d,n])
+#     dy_gated = dy * gate    (gate tangent treated as zero in v1, mirroring
+#                              the VJP which omits gate from the gradient
+#                              tuple; gate is keyword-only in both rules)
+#
+# This is the only JVP that was still `planned` after Sprint A; closing it
+# brings the autodiff registry to 0 VJP + 0 JVP planned across the entire
+# 374-primitive surface.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@_jvp("selective_ssm")
+def jvp_selective_ssm(primals, tangents, *, gate=None, state=None,
+                      chunk_size=128, **_):
+    x, A, B, C, delta = primals[:5]
+    dx, dA, dB, dC, ddelta = tangents[:5]
+
+    x_arr = np.asarray(x, dtype=np.float64)
+    A_arr = np.asarray(A, dtype=np.float64)
+    B_arr = np.asarray(B, dtype=np.float64)
+    C_arr = np.asarray(C, dtype=np.float64)
+    delta_arr = np.asarray(delta, dtype=np.float64)
+
+    dx_arr = (np.zeros_like(x_arr) if dx is None
+              else np.asarray(dx, dtype=np.float64))
+    dB_arr = (np.zeros_like(B_arr) if dB is None
+              else np.asarray(dB, dtype=np.float64))
+    dC_arr = (np.zeros_like(C_arr) if dC is None
+              else np.asarray(dC, dtype=np.float64))
+    ddelta_arr = (np.zeros_like(delta_arr) if ddelta is None
+                  else np.asarray(delta_arr, dtype=np.float64) * 0
+                  + np.asarray(ddelta, dtype=np.float64))
+
+    Bsz, S, D = x_arr.shape
+    N = B_arr.shape[2]
+
+    if A_arr.ndim == 1:
+        A2d = np.broadcast_to(A_arr[:, None], (D, N)).copy()
+        if dA is None:
+            dA2d = np.zeros_like(A2d)
+        else:
+            dA_arr = np.asarray(dA, dtype=np.float64)
+            # broadcast 1-D tangent across N to match A2d's shape
+            dA2d = np.broadcast_to(dA_arr[:, None], (D, N)).copy()
+    else:
+        A2d = A_arr
+        dA2d = (np.zeros_like(A2d) if dA is None
+                else np.asarray(dA, dtype=np.float64))
+
+    # Initial state + tangent.
+    if state is not None:
+        h_prev = np.asarray(state, dtype=np.float64)
+    else:
+        h_prev = np.zeros((Bsz, D, N), dtype=np.float64)
+    # state tangent omitted in v1 (state is keyword-only, matches VJP).
+    dh_prev = np.zeros_like(h_prev)
+
+    # Primal output + tangent output buffers.
+    y = np.zeros((Bsz, S, D), dtype=np.float64)
+    dy = np.zeros_like(y)
+
+    for t in range(S):
+        # Forward-mode through the recurrence at step t.
+        delta_t = delta_arr[:, t, :]                 # (B, D)
+        ddelta_t = ddelta_arr[:, t, :]               # (B, D)
+        Bt = B_arr[:, t, :]                          # (B, N)
+        dBt = dB_arr[:, t, :]                        # (B, N)
+        Ct = C_arr[:, t, :]                          # (B, N)
+        dCt = dC_arr[:, t, :]                        # (B, N)
+
+        # z = delta_t * A2d  (B, D, N) — broadcast
+        z = delta_t[:, :, None] * A2d[None, :, :]
+        dz = ddelta_t[:, :, None] * A2d[None, :, :] + delta_t[:, :, None] * dA2d[None, :, :]
+
+        A_bar = np.exp(z)                            # (B, D, N)
+        dA_bar = A_bar * dz                          # (B, D, N)
+
+        B_bar = delta_t[:, :, None] * Bt[:, None, :]     # (B, D, N)
+        dB_bar = ddelta_t[:, :, None] * Bt[:, None, :] + delta_t[:, :, None] * dBt[:, None, :]
+
+        # h_curr = A_bar * h_prev + B_bar * x_t   where x_t has shape (B, D)
+        x_t = x_arr[:, t, :]                         # (B, D)
+        dx_t = dx_arr[:, t, :]                       # (B, D)
+
+        h_curr = A_bar * h_prev + B_bar * x_t[:, :, None]
+        dh_curr = (
+            dA_bar * h_prev
+            + A_bar * dh_prev
+            + dB_bar * x_t[:, :, None]
+            + B_bar * dx_t[:, :, None]
+        )
+
+        # y[t,d] = sum_n C[t,n] * h_curr[d,n]
+        y[:, t, :] = np.einsum("bn,bdn->bd", Ct, h_curr)
+        dy[:, t, :] = (
+            np.einsum("bn,bdn->bd", dCt, h_curr)
+            + np.einsum("bn,bdn->bd", Ct, dh_curr)
+        )
+
+        h_prev = h_curr
+        dh_prev = dh_curr
+
+    # Gated path — gate tangent is treated as zero in v1 (gate is keyword-
+    # only on both VJP and JVP, matching the VJP contract).  When gate is
+    # provided, the output is y * gate and its tangent is dy * gate.
+    if gate is not None:
+        gate_arr = np.asarray(gate, dtype=np.float64)
+        y = y * gate_arr
+        dy = dy * gate_arr
+
+    return y, dy
+
+
 __all__ = ["register_jvp", "get_jvp", "jvp"]

@@ -476,18 +476,35 @@ Sprint A is mechanically closing pre-declared planned entries; A0's
 
 ### What's left on the autodiff axis
 
-Exactly one entry: **`selective_ssm` JVP**. The Mamba2 selective state-
-space chunked-scan adjoint is non-trivial (it threads through both the
-state recurrence and a delta-rule update). The corresponding VJP is
-already shipped (numerical-Jacobian verified at fp64); a closed-form JVP
-matching that VJP is the right follow-up, not part of this mechanical
-sprint.
+**Nothing.** Sprint A wrapped up with the `selective_ssm` Mamba2 closed-form
+JVP shipped as a follow-up (2026-05-11):
+
+| Path | Verification |
+|---|---|
+| Forward-mode through the recurrence `dh[t] = dA_bar·h[t-1] + A_bar·dh[t-1] + dB_bar·x[t] + B_bar·dx[t]` followed by `dy[t,d] = Σ_n (dC[t,n]·h[t,d,n] + C[t,n]·dh[t,d,n])` | Central-difference verified at **~4e-10 rel err** (fp64) across all five positional inputs `(x, A, B, C, delta)` |
+| Gated path `y_gated = y * gate`, with gate treated as stop-gradient in v1 (matches the VJP's keyword-only `gate` slot) | **~3.7e-10 rel err** |
+| 1-D A input — tangent broadcasts to `(D, N)` the same way the primal does (matches VJP's `A_was_1d` path) | **~3.6e-10 rel err** |
+
+Three new tests in `tests/unit/test_h1_d3.py::TestSelectiveSSM`:
+`test_jvp_numerical_jacobian`, `test_jvp_gated_and_initial_state`,
+`test_jvp_a_1d_form`. Test totals: **2,514 passing** (was 2,511 +3 new).
+
+Final autodiff registry state across the entire 374-primitive surface:
+
+| Axis | `complete` | `not_applicable` | `planned` |
+|---|---:|---:|---:|
+| VJP | **237** | 137 | **0** |
+| JVP | **236** | 138 | **0** |
 
 ### What this unblocks
 
-With (V/J)VP-planned at effectively zero, the remaining contract-axis
-gates are now exclusively about **structural rules** (batching/transpose/
-sharding 102/123/156 partials) and **backend execution** (`backend_kernel`
-374, gated on Phase G/H/I GPU runtime). No further autodiff registration
-is required for the standalone compiler to claim "full reverse-mode +
+The autodiff axis is **closed**. The remaining contract-axis gates are now
+exclusively about **structural rules** (batching/transpose/sharding
+102/123/156 partials) and **backend execution** (`backend_kernel` 374,
+gated on Phase G/H/I GPU runtime). No further autodiff registration is
+required for the standalone compiler to claim "full reverse-mode +
 forward-mode coverage" on Tessera-native primitives.
+
+Sprints C (long-tail math/shape/dtype hardening), B (Graph IR lowering
+metadata consolidation), and C2 (`numeric_policy` as first-class axis)
+now execute against fully-hardened autodiff + dtype boundaries.

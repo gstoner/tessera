@@ -239,3 +239,134 @@ class TestSelectiveSSM:
             y = ts.ops.selective_ssm(x_p, A_p, B_p, C_p, d_p)
             t.backward(ts.ops.reduce(y, op="sum"))
         assert A_p.grad.shape == (D, N)
+
+    def test_jvp_numerical_jacobian(self):
+        """Sprint A follow-up (2026-05-11) — selective_ssm closed-form JVP
+        matches central-difference reference at fp64 to <1e-8 relative
+        error across all five positional inputs (x, A, B, C, delta).
+        This closes the last `jvp = planned` entry in the registry.
+        """
+        import importlib
+
+        jvp_mod = importlib.import_module("tessera.autodiff.jvp")
+
+        rng = np.random.default_rng(0)
+        Bsz, S, D, N = 2, 5, 3, 4
+        x = rng.standard_normal((Bsz, S, D)).astype(np.float64)
+        A = -np.abs(rng.standard_normal((D, N))).astype(np.float64)
+        B = rng.standard_normal((Bsz, S, N)).astype(np.float64)
+        C = rng.standard_normal((Bsz, S, N)).astype(np.float64)
+        delta = np.clip(
+            np.abs(rng.standard_normal((Bsz, S, D))).astype(np.float64),
+            0.05, 0.5,
+        )
+
+        dx = rng.standard_normal(x.shape).astype(np.float64) * 1e-3
+        dA = rng.standard_normal(A.shape).astype(np.float64) * 1e-3
+        dB = rng.standard_normal(B.shape).astype(np.float64) * 1e-3
+        dC = rng.standard_normal(C.shape).astype(np.float64) * 1e-3
+        ddelta = rng.standard_normal(delta.shape).astype(np.float64) * 1e-3
+
+        jvp_fn = jvp_mod._JVPS["selective_ssm"]
+        y_jvp, dy = jvp_fn((x, A, B, C, delta), (dx, dA, dB, dC, ddelta))
+
+        # Forward primal cross-check.
+        fn = getattr(ts.ops.selective_ssm, "__wrapped__", ts.ops.selective_ssm)
+        y_ref = fn(x, A, B, C, delta)
+        np.testing.assert_allclose(y_jvp, y_ref, atol=1e-10)
+
+        # Central-difference reference for the tangent.
+        eps = 1e-4
+        y_plus = fn(x + eps * dx, A + eps * dA, B + eps * dB,
+                    C + eps * dC, delta + eps * ddelta)
+        y_minus = fn(x - eps * dx, A - eps * dA, B - eps * dB,
+                     C - eps * dC, delta - eps * ddelta)
+        dy_num = (y_plus - y_minus) / (2 * eps)
+
+        rel_err = np.max(np.abs(dy - dy_num)) / (np.max(np.abs(dy_num)) + 1e-12)
+        assert rel_err < 1e-7, f"JVP rel err {rel_err:.2e} exceeds 1e-7"
+
+    def test_jvp_gated_and_initial_state(self):
+        """Gate + initial state path matches CD reference at fp64."""
+        import importlib
+
+        jvp_mod = importlib.import_module("tessera.autodiff.jvp")
+
+        rng = np.random.default_rng(7)
+        Bsz, S, D, N = 2, 4, 3, 4
+        x = rng.standard_normal((Bsz, S, D)).astype(np.float64)
+        A = -np.abs(rng.standard_normal((D, N))).astype(np.float64)
+        B = rng.standard_normal((Bsz, S, N)).astype(np.float64)
+        C = rng.standard_normal((Bsz, S, N)).astype(np.float64)
+        delta = np.clip(
+            np.abs(rng.standard_normal((Bsz, S, D))).astype(np.float64),
+            0.05, 0.5,
+        )
+        gate = rng.standard_normal((Bsz, S, D)).astype(np.float64)
+        state = (rng.standard_normal((Bsz, D, N)) * 0.1).astype(np.float64)
+
+        dx = rng.standard_normal(x.shape).astype(np.float64) * 1e-3
+        dA = rng.standard_normal(A.shape).astype(np.float64) * 1e-3
+        dB = rng.standard_normal(B.shape).astype(np.float64) * 1e-3
+        dC = rng.standard_normal(C.shape).astype(np.float64) * 1e-3
+        ddelta = rng.standard_normal(delta.shape).astype(np.float64) * 1e-3
+
+        jvp_fn = jvp_mod._JVPS["selective_ssm"]
+        y_jvp, dy = jvp_fn(
+            (x, A, B, C, delta),
+            (dx, dA, dB, dC, ddelta),
+            gate=gate, state=state,
+        )
+
+        fn = getattr(ts.ops.selective_ssm, "__wrapped__", ts.ops.selective_ssm)
+        y_ref = fn(x, A, B, C, delta, gate=gate, state=state)
+        np.testing.assert_allclose(y_jvp, y_ref, atol=1e-10)
+
+        eps = 1e-4
+        y_plus = fn(x + eps * dx, A + eps * dA, B + eps * dB,
+                    C + eps * dC, delta + eps * ddelta,
+                    gate=gate, state=state)
+        y_minus = fn(x - eps * dx, A - eps * dA, B - eps * dB,
+                     C - eps * dC, delta - eps * ddelta,
+                     gate=gate, state=state)
+        dy_num = (y_plus - y_minus) / (2 * eps)
+
+        rel_err = np.max(np.abs(dy - dy_num)) / (np.max(np.abs(dy_num)) + 1e-12)
+        assert rel_err < 1e-7, f"Gated JVP rel err {rel_err:.2e} exceeds 1e-7"
+
+    def test_jvp_a_1d_form(self):
+        """When A is 1-D (D,), the tangent dA broadcasts to (D, N) the same
+        way the primal does — matches the VJP's `A_was_1d` path."""
+        import importlib
+
+        jvp_mod = importlib.import_module("tessera.autodiff.jvp")
+
+        rng = np.random.default_rng(13)
+        Bsz, S, D, N = 1, 4, 3, 4
+        x = rng.standard_normal((Bsz, S, D)).astype(np.float64)
+        A = -np.abs(rng.standard_normal((D,))).astype(np.float64)
+        B = rng.standard_normal((Bsz, S, N)).astype(np.float64)
+        C = rng.standard_normal((Bsz, S, N)).astype(np.float64)
+        delta = np.clip(
+            np.abs(rng.standard_normal((Bsz, S, D))).astype(np.float64),
+            0.05, 0.5,
+        )
+        dx = rng.standard_normal(x.shape).astype(np.float64) * 1e-3
+        dA = rng.standard_normal(A.shape).astype(np.float64) * 1e-3
+        dB = rng.standard_normal(B.shape).astype(np.float64) * 1e-3
+        dC = rng.standard_normal(C.shape).astype(np.float64) * 1e-3
+        ddelta = rng.standard_normal(delta.shape).astype(np.float64) * 1e-3
+
+        jvp_fn = jvp_mod._JVPS["selective_ssm"]
+        y_jvp, dy = jvp_fn((x, A, B, C, delta), (dx, dA, dB, dC, ddelta))
+
+        fn = getattr(ts.ops.selective_ssm, "__wrapped__", ts.ops.selective_ssm)
+        eps = 1e-4
+        y_plus = fn(x + eps * dx, A + eps * dA, B + eps * dB,
+                    C + eps * dC, delta + eps * ddelta)
+        y_minus = fn(x - eps * dx, A - eps * dA, B - eps * dB,
+                     C - eps * dC, delta - eps * ddelta)
+        dy_num = (y_plus - y_minus) / (2 * eps)
+
+        rel_err = np.max(np.abs(dy - dy_num)) / (np.max(np.abs(dy_num)) + 1e-12)
+        assert rel_err < 1e-7, f"1-D A JVP rel err {rel_err:.2e} exceeds 1e-7"

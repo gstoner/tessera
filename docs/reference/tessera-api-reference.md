@@ -1,12 +1,15 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-04-26
+last_updated: 2026-05-11
 ---
 
 # Tessera API Reference
 
-This reference summarizes the current public API shape. The authoritative API specification is `docs/spec/PYTHON_API_SPEC.md`; if this guide disagrees with that spec, the spec wins.
+This reference summarizes the current public API shape. The authoritative API
+specification is `docs/spec/PYTHON_API_SPEC.md`; if this guide disagrees with
+that spec, the spec wins. Tensor attribute and dtype vocabulary lives in
+`docs/reference/tessera_tensor_attributes.md`.
 
 ## Import Pattern
 
@@ -64,6 +67,12 @@ X = tessera.array.from_domain(D, dtype="bf16", distribution=dist)
 ```
 
 `tessera.dist.Cyclic` exists as a Phase 4 planned distribution; in Phases 1-3 it raises `NotImplementedError` when shard specs are materialized.
+
+Tensor attributes are split across logical shape (`shape`), storage dtype
+(`dtype`), layout (`layout`), execution target (`target`), distribution
+(`ShardSpec`), and numeric policy (`numeric_policy`). Dtype strings should use
+the canonical names in `docs/reference/tessera_tensor_attributes.md`; aliases
+such as `"f32"` normalize before storage.
 
 ## Index Launch
 

@@ -24,13 +24,14 @@ specs. This document defines the public vocabulary those specs should use.
 | `layout` | Logical or physical layout metadata, separate from shape. Layout may be unspecified until schedule or target lowering. | `IRType.layout`, `IRArg.layout`, `TensorContract.layout`, textual `; layout=...` |
 | `device` / `target` | Execution target profile. Tessera currently models this at JIT/module/legality level, not as a PyTorch-style per-tensor device attribute. | `@tessera.jit(target=...)`, `GPUTargetProfile`, capability registry target names |
 | `distribution` | Mesh and sharding placement for distributed arrays. This is separate from both shape and layout. | `ShardSpec`, `MeshSpec`, `DistributedArray.shard_spec` |
-| `numeric_policy` | Tessera-specific numerics contract: storage type, accumulator type, rounding, quantization scale/axis, and determinism. | `NumericPolicy(storage, accum, rounding, scale, quant_axis, deterministic)` |
+| `numeric_policy` | Tessera-specific numerics contract: storage type, accumulator type, rounding, quantization scale/axis, determinism, and optional math mode. | `NumericPolicy(storage, accum, rounding, scale, quant_axis, deterministic[, math_mode])` |
 
 ## Dtype Names
 
-Tessera keeps dtype names as strings today. The canonical spelling is the value
-that should be stored in IR metadata. Aliases are accepted at selected API
-boundaries and should normalize to the canonical spelling.
+Tessera stores dtype metadata as canonical strings. The canonical spelling is
+the value that should be stored in IR metadata. Aliases and `Dtype` helper
+objects are accepted at selected API boundaries and should normalize to the
+canonical spelling.
 
 ### Current Canonical Surface
 
@@ -58,28 +59,45 @@ boundaries and should normalize to the canonical spelling.
 | Tenstorrent BFP/block formats | `bfp8`, `bfp4`, `blockfp8`, `blockfp4` | Planned/gated; do not alias to OCP FP8/FP4, AMD MXFP, or NVIDIA NVFP4 |
 | TF32 | Not a storage dtype | Model as `math_mode="tf32"` on `fp32` tensors or numeric policy, not as `dtype="tf32"` |
 
-## Canonicalization Direction
+## Canonical Dtype API
 
-Tessera's current implementation is string-based. The intended public API layer
-is JAX-like rather than NumPy-like:
+Tessera keeps string compatibility for existing APIs, and also exposes
+`tessera.dtype` as the canonical dtype helper module:
 
-- Dtype inputs may be strings, aliases, or future dtype objects.
-- Public APIs should canonicalize aliases before storing dtype metadata.
-- Default floating-point examples should prefer `fp32`, not `fp64`, unless an
-  explicit accuracy-oriented mode is enabled.
-- Future weak scalar semantics should allow Python scalar literals to follow the
-  typed tensor they are combined with, rather than forcing 64-bit promotion.
-- Future strict promotion mode should reject implicit mixed-dtype tensor
-  arithmetic unless an operator or numeric policy declares the conversion.
+| API | Purpose |
+| --- | --- |
+| `tessera.dtype.Dtype(value)` | Str-compatible wrapper around a canonical dtype name. Aliases normalize at construction. |
+| `tessera.dtype.canonicalize_dtype(value, allow_planned_gated=False)` | Normalize aliases such as `f32` or `float32` to canonical storage spellings such as `fp32`. |
+| `tessera.dtype.assert_canonical_dtype(value, context=None)` | Canonicalize or raise a contextual `TesseraDtypeError`. |
+| `tessera.dtype.result_type(*dtypes, mode="standard")` | Compute the standard promotion result or reject mixed dtypes in `mode="strict"`. |
+| `tessera.dtype.canonical_dtypes()` | Return the canonical dtype set. |
+| `tessera.dtype.planned_gated_dtypes()` | Return the recognized-but-gated dtype set. |
+| `tessera.dtype.dtype_aliases()` | Return accepted alias spellings. |
 
-Tessera does not currently expose a public `tessera.dtype` class, a public
-promotion lattice, or a full equivalent of `jax.dtypes.result_type`.
+The helper module is the implementation source for canonical dtype membership.
+Graph IR, distributed arrays, backend manifests, and primitive coverage audits
+should use these helpers instead of open-coded dtype tables.
+
+The public API direction remains JAX-like rather than NumPy-like:
+
+- Dtype inputs may be strings, aliases, or `Dtype` objects.
+- Public APIs canonicalize aliases before storing dtype metadata.
+- Default floating-point examples prefer `fp32`, not `fp64`, unless an explicit
+  accuracy-oriented mode is enabled.
+- Weak scalar semantics are still a planned tensor-expression behavior:
+  Python scalar literals should eventually follow the typed tensor they combine
+  with rather than forcing 64-bit promotion.
+- Strict promotion is available at the dtype helper level through
+  `result_type(..., mode="strict")`; broader operator enforcement remains a
+  compiler policy direction.
 
 ## Promotion And Casting Policy
 
-Current Tessera lowering does not define one global PyTorch- or JAX-compatible
-promotion table. Operator implementations and backend shims may use local
-reference behavior. The canonical direction is:
+Tessera exposes a dtype-helper promotion lattice through
+`tessera.dtype.result_type`. Current operator lowering does not yet enforce one
+global PyTorch- or JAX-compatible promotion table; operator implementations and
+backend shims may still use local reference behavior. The canonical direction
+is:
 
 1. Storage dtype is explicit on tensors and annotations.
 2. Accumulator dtype belongs in `numeric_policy`, not in the storage dtype.
@@ -94,16 +112,18 @@ reference behavior. The canonical direction is:
 
 JAX's closest concept is `jax.ShapeDtypeStruct(shape, dtype, sharding,
 weak_type=...)`: a static container for array shape, dtype, sharding, and weak
-scalar behavior. Tessera's equivalent direction is a tensor-attribute layer
-over `shape`, `dtype`, `distribution`, `layout`, and `numeric_policy`.
+scalar behavior. Tessera's equivalent direction is the tensor-attribute layer
+over `shape`, `dtype`, `distribution`, `layout`, and `numeric_policy`, plus the
+`tessera.dtype` helper module for canonicalization and promotion inspection.
 
 JAX also provides two dtype behaviors Tessera should mirror over time:
 
 - `jax_enable_x64`: an explicit switch for allowing/defaulting wider 64-bit
   dtypes. Tessera should remain accelerator-friendly by default.
 - `jax_numpy_dtype_promotion`: standard vs. strict promotion. Tessera should
-  eventually support strict compiler dtype checking without changing the
-  existing string APIs.
+  support strict compiler dtype checking without changing the existing string
+  APIs. `tessera.dtype.result_type(..., mode="strict")` is the helper-level
+  surface for this direction.
 
 ## Source Of Truth
 
@@ -113,6 +133,7 @@ JAX also provides two dtype behaviors Tessera should mirror over time:
   `docs/CANONICAL_API.md`.
 - Graph IR dtype normalization and MLIR-like spelling:
   `python/tessera/compiler/graph_ir.py`.
+- Public dtype helpers: `python/tessera/dtype.py`.
 - Target capability gates: `python/tessera/compiler/capabilities.py`.
 - Primitive dtype/layout contract status:
   `python/tessera/compiler/primitive_coverage.py`.

@@ -11,6 +11,7 @@
 | What you need | Authoritative document |
 |---------------|----------------------|
 | **Single naming authority** — wins all disputes | [`docs/CANONICAL_API.md`](../CANONICAL_API.md) |
+| **Tensor attributes and dtypes** (`shape`, `dtype`, `layout`, `target`, `distribution`, `numeric_policy`) | [`docs/reference/tessera_tensor_attributes.md`](../reference/tessera_tensor_attributes.md) |
 | **Complete Python API** (all public symbols, Phases 1–3) | [`docs/spec/PYTHON_API_SPEC.md`](../spec/PYTHON_API_SPEC.md) |
 | **Compiler pass pipeline** (both named pipelines, all passes) | [`docs/spec/COMPILER_REFERENCE.md`](../spec/COMPILER_REFERENCE.md) |
 | **Graph IR ops** (all 6 ops, 4 canonicalization patterns) | [`docs/spec/GRAPH_IR_SPEC.md`](../spec/GRAPH_IR_SPEC.md) |
@@ -36,6 +37,7 @@
 | `tessera.Region["read"/"write"/"reduce_sum"]` | [PYTHON_API_SPEC §4](../spec/PYTHON_API_SPEC.md) |
 | `tessera.f16[..., ...]`, `tessera.mut_f32[..., ...]` | [PYTHON_API_SPEC §16](../spec/PYTHON_API_SPEC.md) |
 | `tessera.Tensor["B", "D"]` | [PYTHON_API_SPEC §16](../spec/PYTHON_API_SPEC.md) |
+| Canonical dtype names, aliases, planned/gated dtypes, and `tessera.dtype` helpers | [Tensor Attributes And Dtypes](../reference/tessera_tensor_attributes.md) |
 
 ### Distribution API
 

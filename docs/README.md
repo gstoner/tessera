@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Documentation authority tree
-last_updated: 2026-05-06
+last_updated: 2026-05-11
 ---
 
 # Tessera Documentation Map
@@ -19,6 +19,7 @@ runtime, and phase/status claims:
 | Topic | Document |
 |-------|----------|
 | Public API names and current syntax | `docs/CANONICAL_API.md` |
+| Tensor attribute vocabulary, dtype canonicalization, and numeric policy | `docs/reference/tessera_tensor_attributes.md` |
 | Compiler architecture, IR stack, pass registry, phase status | `docs/spec/COMPILER_REFERENCE.md` |
 | Language and multi-level IR semantics | `docs/spec/LANGUAGE_AND_IR_SPEC.md` |
 | Python API surface | `docs/spec/PYTHON_API_SPEC.md` |

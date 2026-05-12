@@ -1,12 +1,12 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-05-10
+last_updated: 2026-05-11
 ---
 
 # Tessera Python API Specification
 **Status:** Normative — grounded in `python/tessera/` Phase 1–3 implementation plus S-series standalone compiler updates  
-**Last updated:** May 10, 2026  
+**Last updated:** May 11, 2026  
 **Authority:** This document specifies every public Python symbol in Tessera Phases 1–3. For naming disputes, `docs/CANONICAL_API.md` is the final arbiter. For compiler internals (pass pipeline, IR layers), see `docs/spec/COMPILER_REFERENCE.md`.
 
 ---
@@ -67,6 +67,7 @@ tessera/
 ├── losses.py                     # standalone loss / criterion helpers
 ├── rl.py                         # PPO/GRPO/CISPO reasoning post-training helpers
 ├── server.py                     # inference package, scheduler, KV cache, app registry
+├── dtype.py                      # canonical dtype names, aliases, Dtype wrapper, promotion helpers
 ├── ops/
 │   └── __init__.py               # tessera.ops.* namespace
 └── testing/
@@ -128,6 +129,9 @@ tessera.rl           # PPO/GRPO/CISPO post-training helpers
 
 # Inference serving
 tessera.server       # App / load_package / scheduler / KVCacheManager
+
+# Canonical dtype helpers
+tessera.dtype        # Dtype, canonicalize_dtype, result_type, planned-gated checks
 
 # Ops namespace
 tessera.ops          # tessera.ops.gemm / layer_norm / dropout / etc.
@@ -1443,7 +1447,7 @@ The subscript creates a `TensorType` with `.dim_names` set to the provided strin
 
 **Module:** `tessera.core.tensor` (exported via `tessera.__init__`)
 
-Dtype annotations are used in `@tessera.kernel` parameter signatures to express both the storage type and the read/write privilege.
+Dtype annotations are used in `@tessera.kernel` parameter signatures to express both the storage type and the read/write privilege. The canonical tensor-attribute and dtype vocabulary is `docs/reference/tessera_tensor_attributes.md`.
 
 | Annotation | Storage dtype | Privilege | Use in |
 |------------|---------------|-----------|--------|
@@ -1453,6 +1457,29 @@ Dtype annotations are used in `@tessera.kernel` parameter signatures to express 
 | `tessera.mut_f32[..., ...]` | FP32 | Write-privileged | `@kernel` output params |
 
 The `[..., ...]` subscript specifies dimensionality via Ellipsis (arbitrary shape). These annotations participate in Python's `__class_getitem__` protocol and are validated at `@kernel` decoration time.
+
+### 15.1 Canonical Dtype Helper Module
+
+**Module:** `tessera.dtype`  
+**Import:** `import tessera; tessera.dtype` or `from tessera.dtype import ...`
+
+The dtype helper module is the implementation source for canonical dtype
+membership, accepted aliases, planned/gated dtype names, and helper-level
+promotion inspection.
+
+| API | Purpose |
+|-----|---------|
+| `Dtype(value)` | Str-compatible wrapper around a canonical dtype name. Aliases normalize at construction. |
+| `canonicalize_dtype(value, allow_planned_gated=False)` | Normalize aliases such as `"f32"` / `"float32"` to canonical spellings such as `"fp32"`. |
+| `assert_canonical_dtype(value, context=None)` | Canonicalize or raise `TesseraDtypeError` with caller context. |
+| `result_type(*dtypes, mode="standard")` | Compute standard helper-level promotion or reject mixed dtypes in `mode="strict"`. |
+| `canonical_dtypes()` | Return the canonical dtype set. |
+| `planned_gated_dtypes()` | Return recognized but gated dtype names. |
+| `dtype_aliases()` | Return accepted alias spellings. |
+| `is_canonical_dtype(value)` / `is_planned_gated_dtype(value)` / `is_known_dtype(value)` | Predicate helpers for validation and audits. |
+
+TF32 is not a storage dtype. Use `numeric_policy.math_mode = "tf32"` on
+`fp32` storage instead of `dtype="tf32"`.
 
 ---
 

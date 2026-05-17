@@ -197,6 +197,81 @@ def seq2seq_loss(logits, targets, mask=None, reduction: str = "mean"):
     return _reduce(loss, reduction)
 
 
+# ---------------------------------------------------------------------------
+# EBM4 — Energy-based-model training losses.
+#
+# All four are pre-computed-tensor APIs: the user supplies the necessary
+# quantities (energies, scores) and `reduction` controls the per-sample
+# reduction. See `docs/audit/ga_ebm_roadmap.md` § EBM4.
+# ---------------------------------------------------------------------------
+
+def contrastive_divergence_loss(energy_pos, energy_neg, reduction: str = "mean"):
+    """k-step Contrastive Divergence loss: ``L = E(x⁺) − E(x⁻)``.
+
+    The user is responsible for generating ``x⁻`` via k Langevin / MALA /
+    HMC / Gibbs steps from ``x⁺`` (using `tessera.rng.langevin_sample` or
+    similar), evaluating both energies, and passing them here. Treating
+    ``x⁻`` as detached during the gradient pass is the standard CD
+    practice (Hinton 2002).
+    """
+    diff = _asarray(energy_pos) - _asarray(energy_neg)
+    return _reduce(diff, reduction)
+
+
+def persistent_cd_loss(energy_pos, energy_persistent_neg, reduction: str = "mean"):
+    """Persistent Contrastive Divergence — same formula as CD but the
+    ``x⁻`` samples come from a chain that persists across batches
+    (Tieleman 2008). The user maintains the persistent chain state
+    externally; this loss is just the energy difference.
+    """
+    diff = _asarray(energy_pos) - _asarray(energy_persistent_neg)
+    return _reduce(diff, reduction)
+
+
+def implicit_score_matching_loss(score, divergence_score, reduction: str = "mean"):
+    """Implicit (Hyvärinen 2005) Score Matching: ``L = ½‖s(y)‖² + tr(∇·s(y))``.
+
+    Inputs:
+        score: model score evaluated at the data points; shape (B, D).
+        divergence_score: divergence ``Σ_i ∂s_i/∂y_i`` per sample; shape (B,).
+
+    The trace can be estimated cheaply with Hutchinson's estimator —
+    that estimation is left to the caller; this loss just sums the two
+    contributions. Per Hyvärinen, minimizing this drives the model
+    score toward the true data score even though Z_θ is intractable.
+    """
+    s = _asarray(score).astype(np.float64, copy=False)
+    div = _asarray(divergence_score).astype(np.float64, copy=False)
+    # Per-sample: 0.5 * ||s||² + div. Sum over the feature axis for ||s||².
+    sum_sq = 0.5 * (s ** 2).sum(axis=-1)
+    return _reduce(sum_sq + div, reduction)
+
+
+def denoising_score_matching_loss(score_noisy, y_clean, y_noisy, sigma: float,
+                                  reduction: str = "mean"):
+    """Vincent (2011) Denoising Score Matching:
+    ``L = ½ ‖s_θ(ỹ) + (ỹ − y) / σ²‖²`` where ``ỹ = y + σ ξ`` is the
+    noisy data and ``ξ ~ N(0, I)``.
+
+    Inputs:
+        score_noisy: model score at the noisy point, shape (B, D).
+        y_clean:     clean data, shape (B, D).
+        y_noisy:     noisy version, shape (B, D).
+        sigma:       noise std (positive scalar).
+
+    The target score has the closed-form ``-(ỹ − y)/σ²``; minimizing
+    matches the model to it without needing Z_θ.
+    """
+    if sigma <= 0.0:
+        raise ValueError(f"denoising_score_matching_loss requires sigma > 0; got {sigma}.")
+    s = _asarray(score_noisy).astype(np.float64, copy=False)
+    yc = _asarray(y_clean).astype(np.float64, copy=False)
+    yn = _asarray(y_noisy).astype(np.float64, copy=False)
+    target = -(yn - yc) / (sigma * sigma)
+    diff_sq = 0.5 * ((s - target) ** 2).sum(axis=-1)
+    return _reduce(diff_sq, reduction)
+
+
 def ctc_loss(log_probs, targets, input_lengths, target_lengths, blank: int = 0, reduction: str = "mean"):
     """Small CPU-reference CTC forward loss."""
     lp = _asarray(log_probs).astype(np.float64, copy=False)

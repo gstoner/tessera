@@ -629,6 +629,58 @@ def jvp_vlb_loss(primals, tangents, *, reduction="mean", **_):
     return _reduce_loss(primals[0], tangents[0], reduction)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# EBM4 — energy-based-model training loss JVPs.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@_jvp("contrastive_divergence_loss")
+def jvp_contrastive_divergence_loss(primals, tangents, *, reduction="mean", **_):
+    e_pos, e_neg = primals
+    de_pos, de_neg = tangents
+    primal_diff = np.asarray(e_pos) - np.asarray(e_neg)
+    tangent_diff = np.asarray(de_pos) - np.asarray(de_neg)
+    return _reduce_loss(primal_diff, tangent_diff, reduction)
+
+
+@_jvp("persistent_cd_loss")
+def jvp_persistent_cd_loss(primals, tangents, *, reduction="mean", **_):
+    return jvp_contrastive_divergence_loss(primals, tangents, reduction=reduction)
+
+
+@_jvp("implicit_score_matching_loss")
+def jvp_implicit_score_matching_loss(primals, tangents, *, reduction="mean", **_):
+    score, div = primals
+    dscore, ddiv = tangents
+    s = np.asarray(score, dtype=np.float64)
+    ds = np.asarray(dscore, dtype=np.float64)
+    d = np.asarray(div, dtype=np.float64)
+    dd = np.asarray(ddiv, dtype=np.float64)
+    per_sample = 0.5 * (s ** 2).sum(axis=-1) + d
+    per_sample_tan = (s * ds).sum(axis=-1) + dd
+    return _reduce_loss(per_sample, per_sample_tan, reduction)
+
+
+@_jvp("denoising_score_matching_loss")
+def jvp_denoising_score_matching_loss(primals, tangents, *, reduction="mean", **_):
+    score_noisy, y_clean, y_noisy, sigma = primals
+    dscore, dyc, dyn, _dsigma = tangents
+    s = np.asarray(score_noisy, dtype=np.float64)
+    yc = np.asarray(y_clean, dtype=np.float64)
+    yn = np.asarray(y_noisy, dtype=np.float64)
+    sig2 = float(sigma) ** 2
+    target = -(yn - yc) / sig2
+    diff = s - target
+    per_sample = 0.5 * (diff ** 2).sum(axis=-1)
+    ds_arr = np.asarray(dscore, dtype=np.float64)
+    dyc_arr = np.asarray(dyc, dtype=np.float64)
+    dyn_arr = np.asarray(dyn, dtype=np.float64)
+    # d(diff)/dt = ds - d(target)/dt = ds - (dyc - dyn) / sig2  (note sign on target).
+    dtarget = -(dyn_arr - dyc_arr) / sig2
+    ddiff = ds_arr - dtarget
+    per_sample_tan = (diff * ddiff).sum(axis=-1)
+    return _reduce_loss(per_sample, per_sample_tan, reduction)
+
+
 @_jvp("normalize_group_advantages")
 def jvp_normalize_group_advantages(primals, tangents, **kwargs):
     from tessera import rl as ts_rl

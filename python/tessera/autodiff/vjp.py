@@ -2294,6 +2294,67 @@ def vjp_vlb_loss(dout, terms, *, reduction="mean", **_):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# EBM4 — energy-based-model training losses.
+# Pre-computed tensor APIs; chain rule is mechanical.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@_vjp("contrastive_divergence_loss")
+def vjp_contrastive_divergence_loss(dout, energy_pos, energy_neg, *, reduction="mean", **_):
+    e_pos = np.asarray(energy_pos)
+    e_neg = np.asarray(energy_neg)
+    shape = np.broadcast_shapes(e_pos.shape, e_neg.shape)
+    scale = _reduction_cotangent(dout, shape, reduction)
+    return (
+        _sum_to_shape(scale, e_pos.shape),
+        _sum_to_shape(-scale, e_neg.shape),
+    )
+
+
+@_vjp("persistent_cd_loss")
+def vjp_persistent_cd_loss(dout, energy_pos, energy_persistent_neg, *, reduction="mean", **_):
+    return vjp_contrastive_divergence_loss(
+        dout, energy_pos, energy_persistent_neg, reduction=reduction
+    )
+
+
+@_vjp("implicit_score_matching_loss")
+def vjp_implicit_score_matching_loss(dout, score, divergence_score, *, reduction="mean", **_):
+    s = np.asarray(score).astype(np.float64, copy=False)
+    div = np.asarray(divergence_score).astype(np.float64, copy=False)
+    per_sample_shape = div.shape
+    scale = _reduction_cotangent(dout, per_sample_shape, reduction)
+    # ∂L/∂s = scale[..., None] * s; ∂L/∂div = scale.
+    grad_s = scale[..., None] * s
+    grad_div = scale
+    return _sum_to_shape(grad_s, s.shape), _sum_to_shape(grad_div, div.shape)
+
+
+@_vjp("denoising_score_matching_loss")
+def vjp_denoising_score_matching_loss(
+    dout, score_noisy, y_clean, y_noisy, sigma, *, reduction="mean", **_
+):
+    s = np.asarray(score_noisy).astype(np.float64, copy=False)
+    yc = np.asarray(y_clean).astype(np.float64, copy=False)
+    yn = np.asarray(y_noisy).astype(np.float64, copy=False)
+    sig2 = float(sigma) ** 2
+    target = -(yn - yc) / sig2
+    diff = s - target  # shape: (B, D)
+    per_sample_shape = diff.shape[:-1]
+    scale = _reduction_cotangent(dout, per_sample_shape, reduction)
+    # target = -(yn - yc)/sig2, so ∂target/∂yn = -1/sig2 and ∂target/∂yc = +1/sig2.
+    # diff = s - target ⇒ ∂diff/∂yn = +1/sig2 and ∂diff/∂yc = -1/sig2.
+    grad_s = scale[..., None] * diff
+    grad_yc = -scale[..., None] * diff / sig2
+    grad_yn = scale[..., None] * diff / sig2
+    return (
+        _sum_to_shape(grad_s, s.shape),
+        _sum_to_shape(grad_yc, yc.shape),
+        _sum_to_shape(grad_yn, yn.shape),
+        None,  # sigma scalar — non-differentiable for v1
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Autodiff-coverage hardening pass — S11 classification + distribution +
 # contrastive + sequence losses, S7 layer/pooling. Per the
 # "Recommended Next Work" in `docs/audit/primitive_coverage_state.md`.

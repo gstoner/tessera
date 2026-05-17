@@ -76,54 +76,10 @@ struct EBMCanonicalizePass
   }
 };
 
-// EBM6 stub passes — emit a remark per op, no IR rewriting.
-struct EBMStubPass
-    : public PassWrapper<EBMStubPass, OperationPass<ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EBMStubPass)
-  std::string argName;
-  std::string descName;
-  std::string remarkTag;
-  EBMStubPass(StringRef arg, StringRef desc, StringRef remark)
-      : argName(arg.str()), descName(desc.str()), remarkTag(remark.str()) {}
-  EBMStubPass(const EBMStubPass &other) = default;
-  StringRef getArgument() const final { return argName; }
-  StringRef getDescription() const final { return descName; }
-
-  void runOnOperation() override {
-    getOperation().walk([&](Operation *op) {
-      if (isEBMOp(op->getName().getStringRef())) {
-        op->emitRemark()
-            << remarkTag << " stub: lowering implementation pending EBM6";
-      }
-    });
-  }
-};
-
 }  // namespace
 
 std::unique_ptr<mlir::Pass> createEBMCanonicalizePass() {
   return std::make_unique<EBMCanonicalizePass>();
-}
-
-std::unique_ptr<mlir::Pass> createEBMFuseEnergyGradPass() {
-  return std::make_unique<EBMStubPass>(
-      "tessera-ebm-fuse-energy-grad",
-      "[EBM6 stub] Fuse energy + grad_y evaluations across the inner loop.",
-      "fuse-energy-grad");
-}
-
-std::unique_ptr<mlir::Pass> createEBMCheckpointInnerLoopPass() {
-  return std::make_unique<EBMStubPass>(
-      "tessera-ebm-checkpoint-inner-loop",
-      "[EBM6 stub] Rematerialize the T-step inner-loop trajectory.",
-      "checkpoint-inner-loop");
-}
-
-std::unique_ptr<mlir::Pass> createEBMPipelineCandidatesPass() {
-  return std::make_unique<EBMStubPass>(
-      "tessera-ebm-pipeline-candidates",
-      "[EBM6 stub] Map K candidates across streams / devices.",
-      "pipeline-candidates");
 }
 
 }  // namespace tessera

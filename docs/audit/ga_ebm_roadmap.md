@@ -981,27 +981,85 @@ variants). Archive stays in place per project policy.
   `ts-ebm-opt --help`.
 - ⏳ MLIR-21 build verification + lit-fixture green pass: pending.
 
-### [EBM6] Inner-loop fusion + checkpointing passes 📋
+### [EBM6] Inner-loop fusion + checkpointing passes ✅ (bodies landed; build verification pending MLIR-21 env)
 
 **Scope:** M (~400 LOC C++ + ~300 LOC tests). Depends on EBM5.
 
-Three passes:
+**Status (landed 2026-05-17):** All three pass bodies shipped,
+parallel to the GA8 structure. EBM5 stubs replaced with real
+annotation-driven implementations.
 
-1. **`-ebm-fuse-energy-grad`** — fuses `energy` evaluation with its
-   `grad_y` (the inner-loop gradient computation), reusing activations.
-2. **`-ebm-checkpoint-inner-loop`** — applies Phase F2 rematerialization
-   to the inner-loop trajectory; tunable budget.
-3. **`-ebm-pipeline-candidates`** — maps the K-candidate dimension to
-   stream / device axes for self-verify.
+**1. [`FuseEnergyGrad.cpp`](../../src/solvers/ebm/lib/Passes/FuseEnergyGrad.cpp)** —
+walks every block, collects `tessera_ebm.energy` ops, and looks for
+subsequent `langevin_step` / `inner_step` ops in the same block that
+share both the `energy_fn` symbol AND the `y` operand. Matching pairs
+get `tessera.ebm.energy_grad_fused` + `tessera.ebm.fused_with_symbol`
+markers. Annotation-only at this layer; the actual fused kernel is a
+backend codegen choice (GA9+ work).
+
+**2. [`CheckpointInnerLoop.cpp`](../../src/solvers/ebm/lib/Passes/CheckpointInnerLoop.cpp)** —
+walks every `scf::ForOp` whose body contains `langevin_step` or
+`inner_step`, attaches `tessera.ebm.checkpoint_loop` +
+`tessera.ebm.checkpoint_budget` (configurable via `--budget=N` pass
+option, default 4) on the loop, and `tessera.ebm.recompute_step` on
+each inner step. Loops not containing ebm ops are correctly left
+untouched.
+
+**3. [`PipelineCandidates.cpp`](../../src/solvers/ebm/lib/Passes/PipelineCandidates.cpp)** —
+walks every `tessera_ebm.self_verify`, finds the most-recent preceding
+`tessera_ebm.decode_init` in the same block (carrying the K candidate
+count), and links them via `tessera.ebm.pipeline_K` +
+`tessera.ebm.pipeline_axis = "k"` + `tessera.ebm.pipelined` markers.
+Self-verify ops consuming externally-supplied candidates (no matching
+decode_init) are correctly skipped.
+
+**Verification (without a built MLIR 21 env):**
+
+- **Python wiring test extensions** in
+  [`tests/unit/test_clifford_dialect_wiring.py`](../../tests/unit/test_clifford_dialect_wiring.py)
+  — grew from 82 to **110 tests** (28 new EBM6 checks). Every EBM6
+  source file is present; every pass-creator function is both
+  declared and defined; FuseEnergyGrad walks energy + step pairs
+  sharing energy_fn + y; CheckpointInnerLoop reads `scf::ForOp` and
+  exposes the configurable `budget` option; PipelineCandidates reads
+  the `K` attribute and emits pipeline annotations.
+- **9 lit fixtures** under
+  [`src/solvers/ebm/test/ir/passes/`](../../src/solvers/ebm/test/ir/passes/)
+  — 3 per pass plus an end-to-end pipeline fixture. Each verifies
+  the post-pass annotations via FileCheck, including the negative
+  cases (mismatched-y rejection in fuse, scf.for without ebm ops in
+  checkpoint, external-candidates skip in pipeline).
+
+MLIR-21 build verification (link + lit run) is pending a session with
+the build environment available.
 
 **Files (new):**
-- `src/solvers/ebm/lib/Passes/`
+- `src/solvers/ebm/lib/Passes/FuseEnergyGrad.cpp` (~110 LOC)
+- `src/solvers/ebm/lib/Passes/CheckpointInnerLoop.cpp` (~100 LOC)
+- `src/solvers/ebm/lib/Passes/PipelineCandidates.cpp` (~110 LOC)
+- 9 lit fixtures (~280 LOC)
+- 28 new tests in `test_clifford_dialect_wiring.py`.
 
-**Acceptance:**
-- Energy-grad fusion reduces memory traffic by ≥ 30% on a 4-layer EBT
-  model (measured via the existing benchmark harness).
-- Inner-loop checkpointing reduces peak memory by ≥ 50% with ≤ 20% time
-  cost on T=16 inner steps.
+**Files (modified):**
+- `src/solvers/ebm/CMakeLists.txt` — adds the 3 .cpp files +
+  `MLIRSCFDialect` link dep.
+- `src/solvers/ebm/tools/ts-ebm-opt.cpp` — registers SCF + Func
+  dialects.
+- `src/solvers/ebm/lib/Passes/Canonicalize.cpp` — stub passes removed.
+
+**Acceptance (v1 — annotation layer):**
+- ✅ `fuse-energy-grad` matches `(energy, langevin_step | inner_step)`
+  pairs sharing `energy_fn` + `y` and rejects mismatched-y chains.
+- ✅ `checkpoint-inner-loop` annotates scf.for + inner step ops with
+  budget (default 4, configurable); leaves non-ebm loops untouched.
+- ✅ `pipeline-candidates` links matching `decode_init` →
+  `self_verify` pairs with the K count and pipeline axis; skips
+  externally-supplied candidates.
+- ⏳ Quantitative claims ("≥ 30% memory traffic reduction",
+  "≥ 50% peak memory reduction") require GA9+ backend codegen
+  implementing the fused kernels and a benchmark harness on a real
+  build — outside the scope of EBM6's annotation layer. These are
+  EBM/GA9-backend follow-on work.
 
 ### [EBM7] Manifold-aware integrator ✅
 

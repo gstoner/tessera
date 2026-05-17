@@ -536,9 +536,23 @@ EBM_FILES = [
     "src/solvers/ebm/lib/Dialect/EBM/EBMOps.cpp",
     "src/solvers/ebm/lib/Dialect/EBM/EBMOps.td",
     "src/solvers/ebm/lib/Passes/Canonicalize.cpp",
+    # EBM6 fusion / checkpoint / pipeline passes.
+    "src/solvers/ebm/lib/Passes/FuseEnergyGrad.cpp",
+    "src/solvers/ebm/lib/Passes/CheckpointInnerLoop.cpp",
+    "src/solvers/ebm/lib/Passes/PipelineCandidates.cpp",
     "src/solvers/ebm/test/lit.cfg.py",
     "src/solvers/ebm/test/ir/parse_print.mlir",
     "src/solvers/ebm/test/ir/canonicalize.mlir",
+    # EBM6 lit fixtures.
+    "src/solvers/ebm/test/ir/passes/fuse_energy_grad_basic.mlir",
+    "src/solvers/ebm/test/ir/passes/fuse_energy_grad_rejects_mismatch.mlir",
+    "src/solvers/ebm/test/ir/passes/fuse_energy_grad_inner_step.mlir",
+    "src/solvers/ebm/test/ir/passes/checkpoint_inner_loop_basic.mlir",
+    "src/solvers/ebm/test/ir/passes/checkpoint_custom_budget.mlir",
+    "src/solvers/ebm/test/ir/passes/checkpoint_skips_loops_without_ebm_ops.mlir",
+    "src/solvers/ebm/test/ir/passes/pipeline_candidates_basic.mlir",
+    "src/solvers/ebm/test/ir/passes/pipeline_skips_external_candidates.mlir",
+    "src/solvers/ebm/test/ir/passes/full_pipeline_chain.mlir",
     "src/solvers/ebm/tools/ts-ebm-opt.cpp",
 ]
 
@@ -581,6 +595,9 @@ def test_ts_ebm_opt_registers_all_passes_and_pipeline() -> None:
     ):
         assert pass_fn in src
     assert "tessera-ebm-pipeline" in src
+    # EBM6's CheckpointInnerLoop walks scf.for — register the SCF dialect.
+    assert "scf::SCFDialect" in src
+    assert "func::FuncDialect" in src
 
 
 def test_ebm_lit_fixture_round_trips_sphere_manifold() -> None:
@@ -588,6 +605,159 @@ def test_ebm_lit_fixture_round_trips_sphere_manifold() -> None:
     assert 'manifold = "sphere"' in fixture
     assert "tessera.ebm.canonical" in fixture
     assert "tessera.ebm.manifold" in fixture
+
+
+# ---------------------------------------------------------------------------
+# EBM6 — fusion / checkpoint / pipeline structural checks
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "pass_fn,impl_rel_path",
+    [
+        ("createEBMFuseEnergyGradPass",
+         "src/solvers/ebm/lib/Passes/FuseEnergyGrad.cpp"),
+        ("createEBMCheckpointInnerLoopPass",
+         "src/solvers/ebm/lib/Passes/CheckpointInnerLoop.cpp"),
+        ("createEBMPipelineCandidatesPass",
+         "src/solvers/ebm/lib/Passes/PipelineCandidates.cpp"),
+    ],
+)
+def test_ebm_pass_creator_is_defined(pass_fn: str, impl_rel_path: str) -> None:
+    impl = (REPO_ROOT / impl_rel_path).read_text()
+    assert f"{pass_fn}()" in impl, (
+        f"{impl_rel_path} missing definition of {pass_fn}"
+    )
+
+
+def test_fuse_energy_grad_matches_energy_plus_step_pairs() -> None:
+    body = (REPO_ROOT / "src/solvers/ebm/lib/Passes/FuseEnergyGrad.cpp").read_text()
+    # The pass walks energy + step pairs sharing energy_fn + y.
+    assert "tessera_ebm.energy" in body
+    assert "tessera_ebm.langevin_step" in body
+    assert "tessera_ebm.inner_step" in body
+    # Cross-link attribute.
+    assert "tessera.ebm.energy_grad_fused" in body
+    assert "tessera.ebm.fused_with_symbol" in body
+    # The pass verifies both ops share the same energy_fn symbol and y operand.
+    assert "energy_fn" in body
+    assert "isBeforeInBlock" in body
+
+
+def test_checkpoint_inner_loop_walks_scf_for() -> None:
+    body = (REPO_ROOT / "src/solvers/ebm/lib/Passes/CheckpointInnerLoop.cpp").read_text()
+    # Walks scf.for ops looking for inner ebm steps.
+    assert "scf::ForOp" in body
+    assert "tessera_ebm.langevin_step" in body
+    assert "tessera_ebm.inner_step" in body
+    # Attaches checkpoint annotations.
+    assert "tessera.ebm.checkpoint_loop" in body
+    assert "tessera.ebm.checkpoint_budget" in body
+    assert "tessera.ebm.recompute_step" in body
+    # Has a configurable budget pass option.
+    assert "checkpointBudget" in body
+    assert "budget" in body
+
+
+def test_pipeline_candidates_links_decode_init_and_self_verify() -> None:
+    body = (REPO_ROOT / "src/solvers/ebm/lib/Passes/PipelineCandidates.cpp").read_text()
+    assert "tessera_ebm.decode_init" in body
+    assert "tessera_ebm.self_verify" in body
+    # Attaches pipeline annotations.
+    assert "tessera.ebm.pipeline_K" in body
+    assert "tessera.ebm.pipeline_axis" in body
+    assert "tessera.ebm.pipelined" in body
+    # Reads the K attribute from decode_init.
+    assert '"K"' in body
+
+
+def test_ebm_cmake_compiles_all_three_ebm6_sources() -> None:
+    cm = (REPO_ROOT / "src/solvers/ebm/CMakeLists.txt").read_text()
+    for src in (
+        "lib/Passes/FuseEnergyGrad.cpp",
+        "lib/Passes/CheckpointInnerLoop.cpp",
+        "lib/Passes/PipelineCandidates.cpp",
+    ):
+        assert src in cm
+    # CheckpointInnerLoop walks scf.for — needs the SCF dialect linked.
+    assert "MLIRSCFDialect" in cm
+
+
+# ---------------------------------------------------------------------------
+# EBM6 — lit fixture content checks
+# ---------------------------------------------------------------------------
+
+def test_fuse_energy_grad_basic_fixture_validates_marker() -> None:
+    fixture = (REPO_ROOT
+        / "src/solvers/ebm/test/ir/passes/fuse_energy_grad_basic.mlir").read_text()
+    assert "tessera.ebm.energy_grad_fused" in fixture
+    assert "tessera.ebm.fused_with_symbol = @user_E" in fixture
+
+
+def test_fuse_energy_grad_rejects_mismatch_fixture() -> None:
+    fixture = (REPO_ROOT
+        / "src/solvers/ebm/test/ir/passes/fuse_energy_grad_rejects_mismatch.mlir").read_text()
+    assert "CHECK-NOT: tessera.ebm.energy_grad_fused" in fixture
+
+
+def test_fuse_energy_grad_works_with_inner_step() -> None:
+    fixture = (REPO_ROOT
+        / "src/solvers/ebm/test/ir/passes/fuse_energy_grad_inner_step.mlir").read_text()
+    assert "tessera_ebm.inner_step" in fixture
+    assert "tessera.ebm.energy_grad_fused" in fixture
+
+
+def test_checkpoint_inner_loop_basic_fixture_validates_attrs() -> None:
+    fixture = (REPO_ROOT
+        / "src/solvers/ebm/test/ir/passes/checkpoint_inner_loop_basic.mlir").read_text()
+    assert "scf.for" in fixture
+    assert "tessera.ebm.checkpoint_loop" in fixture
+    assert "tessera.ebm.checkpoint_budget = 4" in fixture
+    assert "tessera.ebm.recompute_step" in fixture
+
+
+def test_checkpoint_custom_budget_fixture_uses_option() -> None:
+    fixture = (REPO_ROOT
+        / "src/solvers/ebm/test/ir/passes/checkpoint_custom_budget.mlir").read_text()
+    assert "budget=2" in fixture
+    assert "tessera.ebm.checkpoint_budget = 2" in fixture
+
+
+def test_checkpoint_skips_non_ebm_loops() -> None:
+    fixture = (REPO_ROOT
+        / "src/solvers/ebm/test/ir/passes/checkpoint_skips_loops_without_ebm_ops.mlir").read_text()
+    assert "CHECK-NOT: tessera.ebm.checkpoint_loop" in fixture
+
+
+def test_pipeline_candidates_basic_fixture_validates_K_link() -> None:
+    fixture = (REPO_ROOT
+        / "src/solvers/ebm/test/ir/passes/pipeline_candidates_basic.mlir").read_text()
+    assert "tessera.ebm.pipeline_K = 8" in fixture
+    assert 'tessera.ebm.pipeline_axis = "k"' in fixture
+    assert "tessera.ebm.pipelined" in fixture
+    # Both decode_init and self_verify get the marker.
+    assert fixture.count("tessera.ebm.pipelined") >= 2
+
+
+def test_pipeline_skips_external_candidates_fixture() -> None:
+    fixture = (REPO_ROOT
+        / "src/solvers/ebm/test/ir/passes/pipeline_skips_external_candidates.mlir").read_text()
+    assert "CHECK-NOT: tessera.ebm.pipeline_K" in fixture
+
+
+def test_full_ebm_pipeline_fixture_combines_all_four_passes() -> None:
+    fixture = (REPO_ROOT
+        / "src/solvers/ebm/test/ir/passes/full_pipeline_chain.mlir").read_text()
+    assert "--tessera-ebm-pipeline" in fixture
+    # Canonicalize.
+    assert "tessera.ebm.canonical" in fixture
+    # FuseEnergyGrad.
+    assert "tessera.ebm.energy_grad_fused" in fixture
+    # CheckpointInnerLoop.
+    assert "tessera.ebm.checkpoint_loop" in fixture
+    assert "tessera.ebm.checkpoint_budget" in fixture
+    # PipelineCandidates.
+    assert "tessera.ebm.pipeline_K = 4" in fixture
+    assert 'tessera.ebm.pipeline_axis = "k"' in fixture
 
 
 # ---------------------------------------------------------------------------

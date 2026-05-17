@@ -38,6 +38,9 @@ add_mlir_library(TesseraEBM
     lib/Dialect/EBM/EBMDialect.cpp
     lib/Dialect/EBM/EBMOps.cpp
     lib/Passes/Canonicalize.cpp
+    lib/Passes/FuseEnergyGrad.cpp
+    lib/Passes/CheckpointInnerLoop.cpp
+    lib/Passes/PipelineCandidates.cpp
 
     DEPENDS
         TesseraEBMTableGen
@@ -46,6 +49,7 @@ add_mlir_library(TesseraEBM
     LINK_LIBS PUBLIC
         MLIRIR
         MLIRFuncDialect
+        MLIRSCFDialect
         MLIRPass
         MLIRTransforms
 )

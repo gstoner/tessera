@@ -15,6 +15,8 @@
 
 #include "tessera/EBM/EBMDialect.h"
 #include "tessera/EBM/EBMPasses.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassRegistry.h"
@@ -25,6 +27,10 @@ using namespace mlir;
 int main(int argc, char **argv) {
   DialectRegistry registry;
   registry.insert<tessera::ebm::EBMDialect>();
+  // EBM6's CheckpointInnerLoop walks scf.for ops; register the SCF and
+  // Func dialects so the IR parses end-to-end.
+  registry.insert<scf::SCFDialect>();
+  registry.insert<func::FuncDialect>();
 
   PassRegistration<>(tessera::createEBMCanonicalizePass);
   PassRegistration<>(tessera::createEBMFuseEnergyGradPass);

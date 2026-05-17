@@ -69,8 +69,12 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 # Allow running as a standalone script from the repo root before
 # `pip install -e .` — the in-tree `python/tessera` package is the
-# source of truth for the Python API.
+# source of truth for the Python API.  Keep the repo root importable too:
+# importing `tessera` currently pulls a few test helpers that reference
+# `examples.*` as a namespace package.
 _PY_SRC = ROOT / "python"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 if str(_PY_SRC) not in sys.path:
     sys.path.insert(0, str(_PY_SRC))
 

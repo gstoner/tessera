@@ -138,57 +138,10 @@ struct CliffordAnnotateAlgebraPass
   }
 };
 
-// ---------------------------------------------------------------------------
-// GA8 stub passes — emit a remark, no IR rewriting.
-// ---------------------------------------------------------------------------
-
-struct CliffordStubPass
-    : public PassWrapper<CliffordStubPass, OperationPass<ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(CliffordStubPass)
-  std::string argName;
-  std::string descName;
-  std::string remarkTag;
-  CliffordStubPass(StringRef arg, StringRef desc, StringRef remark)
-      : argName(arg.str()), descName(desc.str()), remarkTag(remark.str()) {}
-  CliffordStubPass(const CliffordStubPass &other) = default;
-  StringRef getArgument() const final { return argName; }
-  StringRef getDescription() const final { return descName; }
-
-  void runOnOperation() override {
-    getOperation().walk([&](Operation *op) {
-      if (isCliffordOp(op->getName().getStringRef())) {
-        op->emitRemark()
-            << remarkTag << " stub: lowering implementation pending GA8";
-      }
-    });
-  }
-};
-
 }  // namespace
 
 std::unique_ptr<mlir::Pass> createCliffordAnnotateAlgebraPass() {
   return std::make_unique<CliffordAnnotateAlgebraPass>();
-}
-
-std::unique_ptr<mlir::Pass> createCliffordExpandProductTablePass() {
-  return std::make_unique<CliffordStubPass>(
-      "tessera-clifford-expand-product-table",
-      "[GA8 stub] Lower clifford.geo_product to a sparse Cayley contraction.",
-      "expand-product-table");
-}
-
-std::unique_ptr<mlir::Pass> createCliffordGradeFusionPass() {
-  return std::make_unique<CliffordStubPass>(
-      "tessera-clifford-grade-fusion",
-      "[GA8 stub] Fuse grade-projection chains into restricted contractions.",
-      "grade-fusion");
-}
-
-std::unique_ptr<mlir::Pass> createCliffordRotorSandwichFoldPass() {
-  return std::make_unique<CliffordStubPass>(
-      "tessera-clifford-rotor-sandwich-fold",
-      "[GA8 stub] Fold R x R† into a direct rotor-conjugation kernel.",
-      "rotor-sandwich-fold");
 }
 
 }  // namespace tessera

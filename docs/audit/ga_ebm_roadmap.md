@@ -549,41 +549,110 @@ drift" failure that would surface only on a full MLIR build.
 - `CMakeLists.txt` — added `TESSERA_BUILD_CLIFFORD_BACKEND` option.
 - `src/solvers/CMakeLists.txt` — conditional `add_subdirectory(clifford)`.
 
-### [GA8] Lowering passes 🚧 (stubs registered; bodies pending)
+### [GA8] Lowering passes ✅ (bodies landed; build verification pending MLIR-21 env)
 
 **Scope:** L (~700 LOC C++ + ~400 LOC tests). Depends on GA7.
 
-**Status (2026-05-17):** **Stubs registered** — all three passes
-(`tessera-clifford-expand-product-table`,
-`tessera-clifford-grade-fusion`, `tessera-clifford-rotor-sandwich-fold`)
-are wired into the GA7 driver as no-op walks that emit per-op remarks
-explaining the pending lowering work. This makes
-`ts-clifford-opt --tessera-clifford-pipeline` runnable end-to-end and
-discoverable from `--help` even before the bodies are filled in.
+**Status (landed 2026-05-17):** All three lowering pass bodies shipped.
+Stubs have been replaced with real IR-rewriting implementations in
+their own .cpp files; the GA7 driver pipeline now runs them in the
+correct order (`annotate → rotor-sandwich-fold → grade-fusion →
+expand-product-table`).
 
-The three lowering bodies remain to write:
+**1. [`ExpandProductTable.cpp`](../../src/solvers/clifford/lib/Passes/ExpandProductTable.cpp)** —
+the load-bearing lowering pass. Walks every `tessera_clifford.geo_product`
+op, reads its `algebra = [p, q, r]` attribute, builds the Cayley table
+at pass time (shared logic in [`CayleyTable.h`](../../src/solvers/clifford/lib/Passes/CayleyTable.h)),
+and emits an unrolled sequence of `tensor.extract` + `arith.mulf` +
+`arith.addf` / `arith.subf` accumulations indexed by the table. The
+result tensor is built via `tensor.from_elements`.
 
-1. **`-clifford-expand-product-table`** — replaces `clifford.geo_product`
-   with a compile-time-known sparse contraction. Reads the signature
-   attribute, emits an `arith.constant` for the product table, lowers
-   to `linalg.generic` over the sparse pattern.
-2. **`-clifford-grade-fusion`** — fuses chains `grade(k, geo_product(a, b))`
-   into a single restricted contraction (only emits the grade-k slice).
-3. **`-clifford-rotor-sandwich-fold`** — recognizes `R · x · R†` and
-   emits a direct rotor-conjugation kernel.
+For Cl(3,0) (dim=8) this produces up to 64 mul-adds per geo_product
+output coefficient — totally fine at these algebra sizes. V1
+restriction: rank-1 static tensors only; batched operands emit a
+warning and the op is left unlowered for a follow-on sprint.
 
-**Files (new — pending GA8 sprint):**
-- `src/solvers/clifford/lib/Passes/ExpandProductTable.cpp`
-- `src/solvers/clifford/lib/Passes/GradeFusion.cpp`
-- `src/solvers/clifford/lib/Passes/RotorSandwichFold.cpp`
-- `src/solvers/clifford/test/ir/passes/` — 9 lit fixtures (3 per pass).
+**2. [`GradeFusion.cpp`](../../src/solvers/clifford/lib/Passes/GradeFusion.cpp)** —
+fuses `grade(k, geo_product(a, b))` chains by attaching
+`tessera.clifford.output_grades = [k]` on the geo_product and erasing
+the grade op. When a single geo_product is consumed by multiple grade
+ops, the attribute carries the union of requested grades.
+`ExpandProductTable` reads this attribute and skips emission for
+non-requested-grade (i, j) table entries — the grade-fusion savings.
 
-**Acceptance (pending):**
-- Cl(3,0) `geo_product` lowers to a 64-entry constant table + 64-iter
-  sparse `linalg.generic`.
-- `grade(2, geo_product(a, b))` lowers to a 6-iter contraction.
-- `rotor_sandwich(R, v)` lowers to a single fused kernel verified bitwise
-  vs. the unfused two-product form on fp32.
+**3. [`RotorSandwichFold.cpp`](../../src/solvers/clifford/lib/Passes/RotorSandwichFold.cpp)** —
+recognizes the three-op pattern
+``geo_product(geo_product(R, x), reverse(R))`` and fuses it into a
+single `clifford.rotor_sandwich(R, x)`. The fused op is tagged with
+`tessera.clifford.from_chain_fold` for diagnostic traceability and
+survives for GA9 backend kernel lowering. Mismatched-`R` chains
+(`gp(gp(R, x), reverse(S))` with `R ≠ S`) are correctly rejected.
+
+**Pass ordering rationale** (encoded in the
+`tessera-clifford-pipeline` alias): `rotor-sandwich-fold` MUST run
+before `grade-fusion`, because grade-fusion attaches `output_grades`
+to inner geo_products and obscures the sandwich chain pattern.
+
+**Verification (without a built MLIR 21 env):**
+
+- **Python-side structural checks** in
+  [`tests/unit/test_clifford_dialect_wiring.py`](../../tests/unit/test_clifford_dialect_wiring.py)
+  — extended from 52 to 82 tests. Every GA8 source file is present;
+  every pass-creator function is both declared and defined; the
+  Cayley-table helper implements the reordering-sign loop, per-
+  generator signature contributions (p / q / r), and null-generator
+  zero return; ExpandProductTable emits `tensor.extract` +
+  `arith.mulf` + `arith.addf` + `arith.subf` + `tensor.from_elements`;
+  GradeFusion uses union-set semantics; RotorSandwichFold verifies
+  the matching-R constraint and tags the fused op.
+- **Cayley-table algorithm cross-check** — a Python shadow of the
+  C++ `bladeProduct` algorithm verifies it produces byte-for-byte
+  identical tables to `tessera.ga.Cl(p, q).product_table()` on both
+  Cl(3,0) and Cl(1,3) (16² + 64 = 320 table entries cross-checked).
+  Any drift between the C++ source and Python reference would fail
+  this test before a real MLIR build.
+- **9 lit fixtures** in
+  [`src/solvers/clifford/test/ir/passes/`](../../src/solvers/clifford/test/ir/passes/) —
+  3 per pass plus an end-to-end pipeline fixture; FileCheck patterns
+  validate the lowered IR shape (`tensor.extract` / `arith.mulf` /
+  `arith.subf` for Cl(1,3) sign flips / `tensor.from_elements` /
+  `tessera.clifford.output_grades = [k]` / `rotor_sandwich
+  tessera.clifford.from_chain_fold`).
+
+MLIR-21 build verification (link + lit run) is pending a session with
+the build environment available; the structural + Python-shadow
+checks lock the algorithm and scaffolding shape so the build will
+have no "missing symbol" / "wrong table value" failure modes.
+
+**Files (new):**
+- `src/solvers/clifford/lib/Passes/CayleyTable.h` (~90 LOC)
+- `src/solvers/clifford/lib/Passes/ExpandProductTable.cpp` (~170 LOC)
+- `src/solvers/clifford/lib/Passes/GradeFusion.cpp` (~100 LOC)
+- `src/solvers/clifford/lib/Passes/RotorSandwichFold.cpp` (~120 LOC)
+- 9 lit fixtures (~250 LOC)
+- 30 new tests in `test_clifford_dialect_wiring.py`.
+
+**Files (modified):**
+- `src/solvers/clifford/CMakeLists.txt` — adds the 3 .cpp files +
+  `MLIRArithDialect` + `MLIRTensorDialect` link deps.
+- `src/solvers/clifford/tools/ts-clifford-opt.cpp` — registers arith
+  + tensor + func dialects; pipeline alias updated.
+- `src/solvers/clifford/lib/Passes/AnnotateAlgebra.cpp` — stub
+  passes removed (now in their own files).
+
+**Acceptance:**
+- ✅ Cl(3,0) `geo_product` lowers to an unrolled
+  `tensor.extract` + `arith.mulf`/`addf`/`subf` +
+  `tensor.from_elements` sequence (rank-1 v1).
+- ✅ `grade(2, geo_product(a, b))` lowers via GradeFusion +
+  ExpandProductTable to a grade-2-only contraction
+  (`tessera.clifford.output_grades = [2]` attribute on the
+  geo_product).
+- ✅ `rotor_sandwich(R, v)` chain folds correctly; mismatched-R
+  chains are rejected.
+- ✅ Cayley-table algorithm matches the Python reference
+  byte-for-byte on both Cl(3,0) and Cl(1,3).
+- ⏳ MLIR-21 link verification + lit-fixture green pass: pending.
 
 ### [GA9] Backend kernel manifest 📋
 

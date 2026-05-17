@@ -60,6 +60,9 @@ add_mlir_library(TesseraClifford
     lib/Dialect/Clifford/CliffordDialect.cpp
     lib/Dialect/Clifford/CliffordOps.cpp
     lib/Passes/AnnotateAlgebra.cpp
+    lib/Passes/ExpandProductTable.cpp
+    lib/Passes/GradeFusion.cpp
+    lib/Passes/RotorSandwichFold.cpp
 
     DEPENDS
         TesseraCliffordTableGen
@@ -68,6 +71,8 @@ add_mlir_library(TesseraClifford
     LINK_LIBS PUBLIC
         MLIRIR
         MLIRFuncDialect
+        MLIRArithDialect
+        MLIRTensorDialect
         MLIRPass
         MLIRTransforms
 )

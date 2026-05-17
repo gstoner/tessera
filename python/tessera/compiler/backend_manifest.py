@@ -550,13 +550,63 @@ _CLIFFORD_APPLE_GPU_BASELINE_DTYPES = ("fp32",)
 _CLIFFORD_PLANNED_GPU_DTYPES = ("fp32", "fp16", "bf16")
 
 
-# Per-op headline overrides: geo_product and rotor_sandwich light up
-# Apple GPU first because they're the primitives the post-GA9 fused MSL
-# kernels will target.  All other ops fall through to baseline coverage.
+# GA10 conformance follow-on (2026-05-17): the two headline ops also
+# carry fp16 + bf16 MSL ports.  All other shipped-MSL ops are f32-only;
+# the dtype set below mirrors what `apple_gpu_runtime.mm` actually
+# exports.
 _CLIFFORD_HEADLINE_OPS = frozenset({
     "clifford_geometric_product",
     "clifford_rotor_sandwich",
 })
+
+# Ops that ship fused MSL kernels on Apple GPU (2026-05-17 follow-on).
+# Each maps to the exported runtime C ABI symbol name + dtype set.
+_CLIFFORD_APPLE_GPU_FUSED = {
+    "clifford_geometric_product": {
+        "symbol_prefix": "tessera_apple_gpu_clifford_geo_product_cl30_",
+        "dtypes": ("fp32", "fp16", "bf16"),
+    },
+    "clifford_rotor_sandwich": {
+        "symbol_prefix": "tessera_apple_gpu_clifford_rotor_sandwich_cl30_",
+        "dtypes": ("fp32", "fp16", "bf16"),
+    },
+    "clifford_reverse": {
+        "symbol_prefix": "tessera_apple_gpu_clifford_reverse_cl30_",
+        "dtypes": ("fp32",),
+    },
+    "clifford_grade_involution": {
+        "symbol_prefix": "tessera_apple_gpu_clifford_grade_involution_cl30_",
+        "dtypes": ("fp32",),
+    },
+    "clifford_conjugate": {
+        "symbol_prefix": "tessera_apple_gpu_clifford_conjugate_cl30_",
+        "dtypes": ("fp32",),
+    },
+    "clifford_hodge_star": {
+        "symbol_prefix": "tessera_apple_gpu_clifford_hodge_star_cl30_",
+        "dtypes": ("fp32",),
+    },
+    "clifford_norm": {
+        "symbol_prefix": "tessera_apple_gpu_clifford_norm_cl30_",
+        "dtypes": ("fp32",),
+    },
+    "clifford_wedge": {
+        "symbol_prefix": "tessera_apple_gpu_clifford_wedge_cl30_",
+        "dtypes": ("fp32",),
+    },
+    "clifford_left_contraction": {
+        "symbol_prefix": "tessera_apple_gpu_clifford_left_contraction_cl30_",
+        "dtypes": ("fp32",),
+    },
+    "clifford_inner": {
+        "symbol_prefix": "tessera_apple_gpu_clifford_inner_cl30_",
+        "dtypes": ("fp32",),
+    },
+    "clifford_grade_projection": {
+        "symbol_prefix": "tessera_apple_gpu_clifford_grade_projection_cl30_",
+        "dtypes": ("fp32",),
+    },
+}
 
 # All 17 GA primitives (12 GA3 core + 5 GA5 differential-form) registered
 # in `primitive_coverage.py` under `category="geometric_algebra"`.
@@ -619,29 +669,46 @@ def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
         notes="Python GA reference; Accelerate hand-off for batched products pending GA9-followup",
     ))
 
-    # Apple GPU — the two headline ops have shipped fused MSL kernels
-    # (Cl(3,0) f32, 2026-05-17); the rest remain planned.
-    if op_name in _CLIFFORD_HEADLINE_OPS:
+    # Apple GPU — 11 ops shipped fused MSL kernels as of 2026-05-17
+    # (the two headline ops additionally carry fp16 + bf16 ports).
+    # Remaining: exp_mv / log_mv (need trigonometric closed-form MSL —
+    # deferred) and the 4 GA5 field ops (ext_deriv / codiff / vec_deriv
+    # / integral — they take MultivectorField inputs with grid strides,
+    # different signature contract; pending GA10/GA11 design pass).
+    fused_spec = _CLIFFORD_APPLE_GPU_FUSED.get(op_name)
+    if fused_spec is not None:
         entries.append(BackendKernelEntry(
             target="apple_gpu",
             status=_FUSED_KERNEL_STATUS,
-            dtypes=("fp32",),
+            dtypes=tuple(fused_spec["dtypes"]),
             feature_flags=("clifford_dialect", "msl", "metal"),
             notes=(
-                "Fused MSL kernel: tessera_apple_gpu_"
-                + ("clifford_geo_product_cl30_f32"
-                   if op_name == "clifford_geometric_product"
-                   else "clifford_rotor_sandwich_cl30_f32")
-                + " (apple_gpu_runtime.mm); verified bitwise vs Python GA reference"
+                "Fused MSL kernel(s): "
+                + ", ".join(
+                    f"{fused_spec['symbol_prefix']}{dt}"
+                    for dt in fused_spec["dtypes"]
+                )
+                + " — apple_gpu_runtime.mm; verified bitwise vs Python GA reference."
             ),
         ))
     else:
+        # exp_mv / log_mv / field ops — still planned.
+        is_field_op = op_name in {
+            "clifford_ext_deriv", "clifford_codiff",
+            "clifford_vec_deriv", "clifford_integral",
+        }
+        note = (
+            "Field-op kernel (takes MultivectorField + grid strides); "
+            "signature contract pending GA10/GA11 design pass"
+            if is_field_op
+            else "Closed-form trigonometric MSL kernel pending GA11 follow-on"
+        )
         entries.append(BackendKernelEntry(
             target="apple_gpu",
             status=_PLANNED_STATUS,
             dtypes=_CLIFFORD_APPLE_GPU_BASELINE_DTYPES,
             feature_flags=("clifford_dialect", "msl"),
-            notes="MSL coverage scheduled for GA10 follow-on",
+            notes=note,
         ))
 
     # NVIDIA — planned, gated on Phase G.  No per-arch breakout yet;

@@ -87,25 +87,60 @@ def test_cpu_targets_carry_reference_status(op_name: str) -> None:
     assert by_target["apple_cpu"].status == "reference"
 
 
-@pytest.mark.parametrize("op_name", sorted(EXPECTED_CLIFFORD_OPS - HEADLINE_OPS))
-def test_non_headline_apple_gpu_status_is_planned(op_name: str) -> None:
-    """Non-headline ops remain planned on Apple GPU — MSL coverage is
-    scheduled for GA10 follow-on."""
+FUSED_APPLE_GPU_OPS = frozenset(bm._CLIFFORD_APPLE_GPU_FUSED.keys())
+PLANNED_APPLE_GPU_OPS = EXPECTED_CLIFFORD_OPS - FUSED_APPLE_GPU_OPS
+
+
+def test_eleven_apple_gpu_kernels_shipped_in_followup() -> None:
+    """GA10 follow-on (2026-05-17) — 11 of the 17 GA primitives now have
+    fused MSL kernels: 2 headline ops + 9 pointwise GA3/GA5 ops.
+    The remaining 6 (exp / log + 4 field ops) are explicitly deferred."""
+    assert FUSED_APPLE_GPU_OPS == {
+        "clifford_geometric_product",
+        "clifford_rotor_sandwich",
+        "clifford_reverse",
+        "clifford_grade_involution",
+        "clifford_conjugate",
+        "clifford_hodge_star",
+        "clifford_norm",
+        "clifford_wedge",
+        "clifford_left_contraction",
+        "clifford_inner",
+        "clifford_grade_projection",
+    }
+    assert PLANNED_APPLE_GPU_OPS == {
+        "clifford_exp",          # closed-form trigonometric MSL pending
+        "clifford_log",          # closed-form trigonometric MSL pending
+        "clifford_ext_deriv",    # field op — signature contract pending
+        "clifford_codiff",       # field op
+        "clifford_vec_deriv",    # field op
+        "clifford_integral",     # field op
+    }
+
+
+@pytest.mark.parametrize("op_name", sorted(PLANNED_APPLE_GPU_OPS))
+def test_deferred_op_apple_gpu_status_is_planned(op_name: str) -> None:
+    """exp/log + 4 field ops remain planned; document why per op."""
     manifest = bm.clifford_manifest_for(op_name)
     by_target = {e.target: e for e in manifest}
     assert by_target["apple_gpu"].status == "planned"
+    # Notes name the specific reason for deferral.
+    notes = by_target["apple_gpu"].notes
+    if op_name in {"clifford_exp", "clifford_log"}:
+        assert "trigonometric" in notes
+    else:
+        assert "Field-op" in notes
 
 
-@pytest.mark.parametrize("op_name", sorted(HEADLINE_OPS))
-def test_headline_apple_gpu_status_is_fused(op_name: str) -> None:
-    """As of 2026-05-17, the two headline GA ops ship native MSL kernels
-    (Cl(3,0) f32) in apple_gpu_runtime.mm — see test_apple_gpu_clifford_msl.py."""
+@pytest.mark.parametrize("op_name", sorted(FUSED_APPLE_GPU_OPS))
+def test_fused_apple_gpu_status_for_eleven_shipped_ops(op_name: str) -> None:
+    """All 11 ops with shipped MSL kernels carry status=fused on Apple GPU."""
     manifest = bm.clifford_manifest_for(op_name)
     by_target = {e.target: e for e in manifest}
     assert by_target["apple_gpu"].status == "fused"
-    # fp32 native kernel; fp16/bf16 ports pending.
-    assert by_target["apple_gpu"].dtypes == ("fp32",)
-    assert "MSL" in by_target["apple_gpu"].notes
+    # Notes reference the exported C ABI symbol.
+    assert "Fused MSL kernel" in by_target["apple_gpu"].notes
+    assert by_target["apple_gpu"].notes.count("tessera_apple_gpu_clifford_") >= 1
 
 
 @pytest.mark.parametrize("op_name", sorted(EXPECTED_CLIFFORD_OPS))
@@ -122,28 +157,31 @@ def test_nvidia_and_rocm_remain_planned(op_name: str) -> None:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("op_name", sorted(HEADLINE_OPS))
-def test_headline_ops_ship_fused_msl_kernel_on_apple_gpu(op_name: str) -> None:
-    """geo_product + rotor_sandwich shipped as fused MSL kernels
-    (Cl(3,0) f32) on 2026-05-17 — see test_apple_gpu_clifford_msl.py
-    for the bitwise GPU-vs-numpy verification."""
+def test_headline_ops_ship_fp32_fp16_bf16_msl_kernels(op_name: str) -> None:
+    """geo_product + rotor_sandwich carry all 3 dtypes (fp32 native +
+    fp16 native MSL `half` + bf16 fp32-conversion path) as of the
+    2026-05-17 follow-on. See test_apple_gpu_clifford_msl_full.py for
+    bitwise verification of each dtype port."""
     manifest = bm.clifford_manifest_for(op_name)
     apple_gpu = next(e for e in manifest if e.target == "apple_gpu")
     assert apple_gpu.status == "fused"
-    assert apple_gpu.dtypes == ("fp32",)
-    # Feature flags name the actual stack components.
+    assert set(apple_gpu.dtypes) == {"fp32", "fp16", "bf16"}
     assert "msl" in apple_gpu.feature_flags
     assert "metal" in apple_gpu.feature_flags
 
 
-def test_non_headline_ops_get_apple_gpu_fp32_only() -> None:
-    """Non-headline ops carry fp32 baseline on Apple GPU; MSL ports for
-    fp16/bf16 are GA10/GA11 conformance follow-on."""
-    for op_name in EXPECTED_CLIFFORD_OPS - HEADLINE_OPS:
-        manifest = bm.clifford_manifest_for(op_name)
-        apple_gpu = next(e for e in manifest if e.target == "apple_gpu")
-        assert apple_gpu.dtypes == ("fp32",), (
-            f"{op_name} should have fp32-only apple_gpu coverage; got {apple_gpu.dtypes}"
-        )
+@pytest.mark.parametrize(
+    "op_name",
+    sorted(bm._CLIFFORD_APPLE_GPU_FUSED.keys() - {"clifford_geometric_product",
+                                                  "clifford_rotor_sandwich"}),
+)
+def test_non_headline_fused_ops_fp32_only(op_name: str) -> None:
+    """The 9 pointwise GA3/GA5 ops added in the GA10 follow-on are
+    fp32-only on Apple GPU; fp16/bf16 ports are downstream."""
+    manifest = bm.clifford_manifest_for(op_name)
+    apple_gpu = next(e for e in manifest if e.target == "apple_gpu")
+    assert apple_gpu.dtypes == ("fp32",)
+    assert apple_gpu.status == "fused"
 
 
 @pytest.mark.parametrize("op_name", sorted(EXPECTED_CLIFFORD_OPS))
@@ -257,13 +295,15 @@ def test_clifford_entries_have_feature_flags() -> None:
             )
 
 
-def test_headline_apple_gpu_entry_documents_fused_msl_kernel() -> None:
-    """The notes now reference the actual exported C ABI symbol so
-    consumers can grep for it directly."""
+def test_headline_apple_gpu_entry_documents_all_three_dtype_kernels() -> None:
+    """The headline geo_product entry now names all 3 dtype variants
+    (fp32 + fp16 + bf16) so consumers can grep each kernel symbol."""
     manifest = bm.clifford_manifest_for("clifford_geometric_product")
     apple_gpu = next(e for e in manifest if e.target == "apple_gpu")
     assert "Fused MSL kernel" in apple_gpu.notes
-    assert "tessera_apple_gpu_clifford_geo_product_cl30_f32" in apple_gpu.notes
+    assert "tessera_apple_gpu_clifford_geo_product_cl30_fp32" in apple_gpu.notes
+    assert "tessera_apple_gpu_clifford_geo_product_cl30_fp16" in apple_gpu.notes
+    assert "tessera_apple_gpu_clifford_geo_product_cl30_bf16" in apple_gpu.notes
     assert "apple_gpu_runtime.mm" in apple_gpu.notes
 
 

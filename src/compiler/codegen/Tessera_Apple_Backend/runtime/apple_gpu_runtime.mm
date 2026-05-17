@@ -3861,3 +3861,909 @@ extern "C" void tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32(
   if (ctx.ok && dispatch_clifford_rotor_sandwich_cl30_f32_msl(ctx, R, V, Out, batch)) return;
   reference_clifford_rotor_sandwich_cl30_f32(R, V, Out, batch);
 }
+
+//===---------------------------------------------------------------------===//
+// GA10 conformance — pointwise GA3 / GA5 MSL kernels (2026-05-17).
+//
+// Each kernel below is the Cl(3,0) f32 native MSL implementation of one
+// `tessera.ga.*` op.  Expressions are generated from the Python Cayley
+// table in `tessera.ga.signature._product_table` so the GPU result is
+// bitwise-equivalent to the Python GA reference up to fp32 rounding.
+//
+// Blade order (last axis = 8):
+//   0:1   1:e1   2:e2   3:e12   4:e3   5:e13   6:e23   7:e123
+//
+// Pattern: each block is (numpy reference) + (MSL dispatch helper) +
+// (extern "C" entry).  fp16 + bf16 variants of geo_product +
+// rotor_sandwich land at the end via the Phase 8.4.4 pattern
+// (native MSL half for fp16; fp32-conversion path for bf16).
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+// ===========================================================================
+// Unary signed-per-grade ops: reverse, grade_involution, conjugate
+// ===========================================================================
+
+inline void reference_clifford_reverse_cl30_f32(const float* A, float* C, int32_t b) {
+  for (int32_t i = 0; i < b; ++i) {
+    const float* a = A + i * 8;
+    float* c = C + i * 8;
+    c[0] = a[0]; c[1] = a[1]; c[2] = a[2]; c[3] = -a[3];
+    c[4] = a[4]; c[5] = -a[5]; c[6] = -a[6]; c[7] = -a[7];
+  }
+}
+
+inline void reference_clifford_grade_involution_cl30_f32(const float* A, float* C, int32_t b) {
+  for (int32_t i = 0; i < b; ++i) {
+    const float* a = A + i * 8;
+    float* c = C + i * 8;
+    c[0] = a[0]; c[1] = -a[1]; c[2] = -a[2]; c[3] = a[3];
+    c[4] = -a[4]; c[5] = a[5]; c[6] = a[6]; c[7] = -a[7];
+  }
+}
+
+inline void reference_clifford_conjugate_cl30_f32(const float* A, float* C, int32_t b) {
+  for (int32_t i = 0; i < b; ++i) {
+    const float* a = A + i * 8;
+    float* c = C + i * 8;
+    c[0] = a[0]; c[1] = -a[1]; c[2] = -a[2]; c[3] = -a[3];
+    c[4] = -a[4]; c[5] = -a[5]; c[6] = -a[6]; c[7] = a[7];
+  }
+}
+
+inline void reference_clifford_hodge_star_cl30_f32(const float* A, float* C, int32_t b) {
+  for (int32_t i = 0; i < b; ++i) {
+    const float* a = A + i * 8;
+    float* c = C + i * 8;
+    // ⋆ω = reverse(ω) · I — generated from tessera.ga.signature.
+    c[0] = a[7];   c[1] = a[6];   c[2] = -a[5];  c[3] = a[4];
+    c[4] = a[3];   c[5] = -a[2];  c[6] = a[1];   c[7] = a[0];
+  }
+}
+
+inline void reference_clifford_norm_squared_cl30_f32(const float* A, float* C, int32_t b) {
+  for (int32_t i = 0; i < b; ++i) {
+    const float* a = A + i * 8;
+    float s = 0.0f;
+    for (int k = 0; k < 8; ++k) s += a[k] * a[k];
+    C[i] = s;
+  }
+}
+
+inline void reference_clifford_norm_cl30_f32(const float* A, float* C, int32_t b) {
+  for (int32_t i = 0; i < b; ++i) {
+    const float* a = A + i * 8;
+    float s = 0.0f;
+    for (int k = 0; k < 8; ++k) s += a[k] * a[k];
+    C[i] = std::sqrt(std::max(0.0f, s));
+  }
+}
+
+// ===========================================================================
+// Binary ops: wedge, left_contraction, inner
+// ===========================================================================
+
+inline void reference_clifford_wedge_cl30_f32(
+    const float* A, const float* B, float* C, int32_t batch) {
+  for (int32_t i = 0; i < batch; ++i) {
+    const float* a = A + i * 8;
+    const float* b = B + i * 8;
+    float* c = C + i * 8;
+    c[0] = a[0]*b[0];
+    c[1] = a[0]*b[1] + a[1]*b[0];
+    c[2] = a[0]*b[2] + a[2]*b[0];
+    c[3] = a[0]*b[3] + a[1]*b[2] - a[2]*b[1] + a[3]*b[0];
+    c[4] = a[0]*b[4] + a[4]*b[0];
+    c[5] = a[0]*b[5] + a[1]*b[4] - a[4]*b[1] + a[5]*b[0];
+    c[6] = a[0]*b[6] + a[2]*b[4] - a[4]*b[2] + a[6]*b[0];
+    c[7] = a[0]*b[7] + a[1]*b[6] - a[2]*b[5] + a[3]*b[4]
+         + a[4]*b[3] - a[5]*b[2] + a[6]*b[1] + a[7]*b[0];
+  }
+}
+
+inline void reference_clifford_left_contraction_cl30_f32(
+    const float* A, const float* B, float* C, int32_t batch) {
+  for (int32_t i = 0; i < batch; ++i) {
+    const float* a = A + i * 8;
+    const float* b = B + i * 8;
+    float* c = C + i * 8;
+    c[0] = a[0]*b[0] + a[1]*b[1] + a[2]*b[2] - a[3]*b[3]
+         + a[4]*b[4] - a[5]*b[5] - a[6]*b[6] - a[7]*b[7];
+    c[1] = a[0]*b[1] - a[2]*b[3] - a[4]*b[5] - a[6]*b[7];
+    c[2] = a[0]*b[2] + a[1]*b[3] - a[4]*b[6] + a[5]*b[7];
+    c[3] = a[0]*b[3] + a[4]*b[7];
+    c[4] = a[0]*b[4] + a[1]*b[5] + a[2]*b[6] - a[3]*b[7];
+    c[5] = a[0]*b[5] - a[2]*b[7];
+    c[6] = a[0]*b[6] + a[1]*b[7];
+    c[7] = a[0]*b[7];
+  }
+}
+
+inline void reference_clifford_inner_cl30_f32(
+    const float* A, const float* B, float* C, int32_t batch) {
+  for (int32_t i = 0; i < batch; ++i) {
+    const float* a = A + i * 8;
+    const float* b = B + i * 8;
+    float s = 0.0f;
+    for (int k = 0; k < 8; ++k) s += a[k] * b[k];
+    C[i] = s;
+  }
+}
+
+// ===========================================================================
+// grade_projection: keep coefficients whose blade grade is in the mask.
+// `grade_mask` is a bitmask over grades (bit k set => keep grade k).
+// For Cl(3,0): grade-of-blade[0..7] = (0,1,1,2,1,2,2,3).
+// ===========================================================================
+
+inline void reference_clifford_grade_projection_cl30_f32(
+    const float* A, float* C, int32_t grade_mask, int32_t batch) {
+  // Per-blade grade lookup.
+  static const int kBladeGrade[8] = {0, 1, 1, 2, 1, 2, 2, 3};
+  for (int32_t i = 0; i < batch; ++i) {
+    const float* a = A + i * 8;
+    float* c = C + i * 8;
+    for (int k = 0; k < 8; ++k) {
+      c[k] = ((grade_mask >> kBladeGrade[k]) & 1) ? a[k] : 0.0f;
+    }
+  }
+}
+
+// ===========================================================================
+// MSL dispatch helpers
+// ===========================================================================
+
+// Common MSL fragment for the f32 unary-pointwise GA ops.  Each kernel
+// is small (8 stores) so we bake the whole expression into the kernel
+// source string.
+
+static NSString *const kCliffordReverseCl30F32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void clifford_reverse_cl30_f32(
+    device const float* A   [[buffer(0)]],
+    device float*       C   [[buffer(1)]],
+    constant int&       batch [[buffer(2)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    C[off+0] = A[off+0];  C[off+1] = A[off+1];  C[off+2] = A[off+2];  C[off+3] = -A[off+3];
+    C[off+4] = A[off+4];  C[off+5] = -A[off+5]; C[off+6] = -A[off+6]; C[off+7] = -A[off+7];
+}
+)MSL";
+
+static NSString *const kCliffordGradeInvolutionCl30F32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void clifford_grade_involution_cl30_f32(
+    device const float* A   [[buffer(0)]],
+    device float*       C   [[buffer(1)]],
+    constant int&       batch [[buffer(2)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    C[off+0] = A[off+0];  C[off+1] = -A[off+1]; C[off+2] = -A[off+2]; C[off+3] = A[off+3];
+    C[off+4] = -A[off+4]; C[off+5] = A[off+5];  C[off+6] = A[off+6];  C[off+7] = -A[off+7];
+}
+)MSL";
+
+static NSString *const kCliffordConjugateCl30F32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void clifford_conjugate_cl30_f32(
+    device const float* A   [[buffer(0)]],
+    device float*       C   [[buffer(1)]],
+    constant int&       batch [[buffer(2)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    C[off+0] = A[off+0];  C[off+1] = -A[off+1]; C[off+2] = -A[off+2]; C[off+3] = -A[off+3];
+    C[off+4] = -A[off+4]; C[off+5] = -A[off+5]; C[off+6] = -A[off+6]; C[off+7] = A[off+7];
+}
+)MSL";
+
+static NSString *const kCliffordHodgeStarCl30F32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void clifford_hodge_star_cl30_f32(
+    device const float* A   [[buffer(0)]],
+    device float*       C   [[buffer(1)]],
+    constant int&       batch [[buffer(2)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    C[off+0] = A[off+7];  C[off+1] = A[off+6];  C[off+2] = -A[off+5]; C[off+3] = A[off+4];
+    C[off+4] = A[off+3];  C[off+5] = -A[off+2]; C[off+6] = A[off+1];  C[off+7] = A[off+0];
+}
+)MSL";
+
+static NSString *const kCliffordNormSquaredCl30F32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void clifford_norm_squared_cl30_f32(
+    device const float* A   [[buffer(0)]],
+    device float*       C   [[buffer(1)]],
+    constant int&       batch [[buffer(2)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    float s = 0.0f;
+    s += A[off+0]*A[off+0]; s += A[off+1]*A[off+1];
+    s += A[off+2]*A[off+2]; s += A[off+3]*A[off+3];
+    s += A[off+4]*A[off+4]; s += A[off+5]*A[off+5];
+    s += A[off+6]*A[off+6]; s += A[off+7]*A[off+7];
+    C[gid] = s;
+}
+)MSL";
+
+static NSString *const kCliffordNormCl30F32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void clifford_norm_cl30_f32(
+    device const float* A   [[buffer(0)]],
+    device float*       C   [[buffer(1)]],
+    constant int&       batch [[buffer(2)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    float s = 0.0f;
+    s += A[off+0]*A[off+0]; s += A[off+1]*A[off+1];
+    s += A[off+2]*A[off+2]; s += A[off+3]*A[off+3];
+    s += A[off+4]*A[off+4]; s += A[off+5]*A[off+5];
+    s += A[off+6]*A[off+6]; s += A[off+7]*A[off+7];
+    C[gid] = sqrt(max(0.0f, s));
+}
+)MSL";
+
+static NSString *const kCliffordWedgeCl30F32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void clifford_wedge_cl30_f32(
+    device const float* A   [[buffer(0)]],
+    device const float* B   [[buffer(1)]],
+    device float*       C   [[buffer(2)]],
+    constant int&       batch [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    float a0=A[off+0], a1=A[off+1], a2=A[off+2], a3=A[off+3];
+    float a4=A[off+4], a5=A[off+5], a6=A[off+6], a7=A[off+7];
+    float b0=B[off+0], b1=B[off+1], b2=B[off+2], b3=B[off+3];
+    float b4=B[off+4], b5=B[off+5], b6=B[off+6], b7=B[off+7];
+    C[off+0] = a0*b0;
+    C[off+1] = a0*b1 + a1*b0;
+    C[off+2] = a0*b2 + a2*b0;
+    C[off+3] = a0*b3 + a1*b2 - a2*b1 + a3*b0;
+    C[off+4] = a0*b4 + a4*b0;
+    C[off+5] = a0*b5 + a1*b4 - a4*b1 + a5*b0;
+    C[off+6] = a0*b6 + a2*b4 - a4*b2 + a6*b0;
+    C[off+7] = a0*b7 + a1*b6 - a2*b5 + a3*b4 + a4*b3 - a5*b2 + a6*b1 + a7*b0;
+}
+)MSL";
+
+static NSString *const kCliffordLeftContractionCl30F32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void clifford_left_contraction_cl30_f32(
+    device const float* A   [[buffer(0)]],
+    device const float* B   [[buffer(1)]],
+    device float*       C   [[buffer(2)]],
+    constant int&       batch [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    float a0=A[off+0], a1=A[off+1], a2=A[off+2], a3=A[off+3];
+    float a4=A[off+4], a5=A[off+5], a6=A[off+6], a7=A[off+7];
+    float b0=B[off+0], b1=B[off+1], b2=B[off+2], b3=B[off+3];
+    float b4=B[off+4], b5=B[off+5], b6=B[off+6], b7=B[off+7];
+    C[off+0] = a0*b0 + a1*b1 + a2*b2 - a3*b3 + a4*b4 - a5*b5 - a6*b6 - a7*b7;
+    C[off+1] = a0*b1 - a2*b3 - a4*b5 - a6*b7;
+    C[off+2] = a0*b2 + a1*b3 - a4*b6 + a5*b7;
+    C[off+3] = a0*b3 + a4*b7;
+    C[off+4] = a0*b4 + a1*b5 + a2*b6 - a3*b7;
+    C[off+5] = a0*b5 - a2*b7;
+    C[off+6] = a0*b6 + a1*b7;
+    C[off+7] = a0*b7;
+}
+)MSL";
+
+static NSString *const kCliffordInnerCl30F32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void clifford_inner_cl30_f32(
+    device const float* A   [[buffer(0)]],
+    device const float* B   [[buffer(1)]],
+    device float*       C   [[buffer(2)]],
+    constant int&       batch [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    float s = 0.0f;
+    s += A[off+0]*B[off+0]; s += A[off+1]*B[off+1];
+    s += A[off+2]*B[off+2]; s += A[off+3]*B[off+3];
+    s += A[off+4]*B[off+4]; s += A[off+5]*B[off+5];
+    s += A[off+6]*B[off+6]; s += A[off+7]*B[off+7];
+    C[gid] = s;
+}
+)MSL";
+
+static NSString *const kCliffordGradeProjectionCl30F32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void clifford_grade_projection_cl30_f32(
+    device const float* A           [[buffer(0)]],
+    device float*       C           [[buffer(1)]],
+    constant int&       batch       [[buffer(2)]],
+    constant int&       grade_mask  [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    // Blade grade lookup for Cl(3,0).
+    int blade_grade[8] = {0, 1, 1, 2, 1, 2, 2, 3};
+    for (uint k = 0; k < 8u; ++k) {
+        bool keep = ((grade_mask >> blade_grade[k]) & 1) != 0;
+        C[off+k] = keep ? A[off+k] : 0.0f;
+    }
+}
+)MSL";
+
+// ---- Generic unary dispatch (8 in, 8 out per sample) ----
+
+static bool dispatch_clifford_unary_8x8_f32_msl(
+    MetalDeviceContext &ctx,
+    NSString *source, NSString *entry,
+    const float* A, float* C, int32_t batch) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, source, entry);
+    if (!pso) return false;
+    NSUInteger byteCount = sizeof(float) * (NSUInteger)batch * 8u;
+    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:byteCount
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufC = [ctx.device newBufferWithLength:byteCount
+                                                  options:MTLResourceStorageModeShared];
+    if (!bufA || !bufC) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufC offset:0 atIndex:1];
+    [enc setBytes:&batch length:sizeof(int32_t) atIndex:2];
+    MTLSize grid = MTLSizeMake((NSUInteger)batch, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)batch,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(C, [bufC contents], byteCount);
+    return true;
+  }
+}
+
+// ---- Generic scalar-reducer dispatch (8 in -> 1 out per sample) ----
+
+static bool dispatch_clifford_unary_8x1_f32_msl(
+    MetalDeviceContext &ctx,
+    NSString *source, NSString *entry,
+    const float* A, float* C, int32_t batch) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, source, entry);
+    if (!pso) return false;
+    NSUInteger inBytes  = sizeof(float) * (NSUInteger)batch * 8u;
+    NSUInteger outBytes = sizeof(float) * (NSUInteger)batch;
+    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:inBytes
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufC = [ctx.device newBufferWithLength:outBytes
+                                                  options:MTLResourceStorageModeShared];
+    if (!bufA || !bufC) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufC offset:0 atIndex:1];
+    [enc setBytes:&batch length:sizeof(int32_t) atIndex:2];
+    MTLSize grid = MTLSizeMake((NSUInteger)batch, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)batch,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(C, [bufC contents], outBytes);
+    return true;
+  }
+}
+
+// ---- Generic binary dispatch (two 8 inputs -> 8 output per sample) ----
+
+static bool dispatch_clifford_binary_8x8_f32_msl(
+    MetalDeviceContext &ctx,
+    NSString *source, NSString *entry,
+    const float* A, const float* B, float* C, int32_t batch) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, source, entry);
+    if (!pso) return false;
+    NSUInteger byteCount = sizeof(float) * (NSUInteger)batch * 8u;
+    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:byteCount
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B length:byteCount
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufC = [ctx.device newBufferWithLength:byteCount
+                                                  options:MTLResourceStorageModeShared];
+    if (!bufA || !bufB || !bufC) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBuffer:bufC offset:0 atIndex:2];
+    [enc setBytes:&batch length:sizeof(int32_t) atIndex:3];
+    MTLSize grid = MTLSizeMake((NSUInteger)batch, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)batch,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(C, [bufC contents], byteCount);
+    return true;
+  }
+}
+
+// ---- Generic binary scalar-reducer (two 8 inputs -> 1 output per sample) ----
+
+static bool dispatch_clifford_binary_8x1_f32_msl(
+    MetalDeviceContext &ctx,
+    NSString *source, NSString *entry,
+    const float* A, const float* B, float* C, int32_t batch) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, source, entry);
+    if (!pso) return false;
+    NSUInteger inBytes  = sizeof(float) * (NSUInteger)batch * 8u;
+    NSUInteger outBytes = sizeof(float) * (NSUInteger)batch;
+    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:inBytes
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B length:inBytes
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufC = [ctx.device newBufferWithLength:outBytes
+                                                  options:MTLResourceStorageModeShared];
+    if (!bufA || !bufB || !bufC) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBuffer:bufC offset:0 atIndex:2];
+    [enc setBytes:&batch length:sizeof(int32_t) atIndex:3];
+    MTLSize grid = MTLSizeMake((NSUInteger)batch, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)batch,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(C, [bufC contents], outBytes);
+    return true;
+  }
+}
+
+// ---- Grade-projection dispatch (extra int32 grade_mask buffer) ----
+
+static bool dispatch_clifford_grade_projection_cl30_f32_msl(
+    MetalDeviceContext &ctx, const float* A, float* C,
+    int32_t grade_mask, int32_t batch) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kCliffordGradeProjectionCl30F32Source,
+        @"clifford_grade_projection_cl30_f32");
+    if (!pso) return false;
+    NSUInteger byteCount = sizeof(float) * (NSUInteger)batch * 8u;
+    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:byteCount
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufC = [ctx.device newBufferWithLength:byteCount
+                                                  options:MTLResourceStorageModeShared];
+    if (!bufA || !bufC) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufC offset:0 atIndex:1];
+    [enc setBytes:&batch length:sizeof(int32_t) atIndex:2];
+    [enc setBytes:&grade_mask length:sizeof(int32_t) atIndex:3];
+    MTLSize grid = MTLSizeMake((NSUInteger)batch, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)batch,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(C, [bufC contents], byteCount);
+    return true;
+  }
+}
+
+} // namespace
+
+// ===========================================================================
+// extern "C" entries — unary 8→8 f32
+// ===========================================================================
+
+#define CLIFFORD_UNARY_8x8_F32_ENTRY(NAME, SOURCE, ENTRY, REF)                \
+extern "C" void NAME(const float* A, float* C, int32_t batch) {               \
+  MetalDeviceContext &ctx = deviceContext();                                  \
+  if (ctx.ok && dispatch_clifford_unary_8x8_f32_msl(                          \
+          ctx, SOURCE, @ENTRY, A, C, batch)) return;                          \
+  REF(A, C, batch);                                                           \
+}
+
+CLIFFORD_UNARY_8x8_F32_ENTRY(tessera_apple_gpu_clifford_reverse_cl30_f32,
+                             kCliffordReverseCl30F32Source,
+                             "clifford_reverse_cl30_f32",
+                             reference_clifford_reverse_cl30_f32)
+CLIFFORD_UNARY_8x8_F32_ENTRY(tessera_apple_gpu_clifford_grade_involution_cl30_f32,
+                             kCliffordGradeInvolutionCl30F32Source,
+                             "clifford_grade_involution_cl30_f32",
+                             reference_clifford_grade_involution_cl30_f32)
+CLIFFORD_UNARY_8x8_F32_ENTRY(tessera_apple_gpu_clifford_conjugate_cl30_f32,
+                             kCliffordConjugateCl30F32Source,
+                             "clifford_conjugate_cl30_f32",
+                             reference_clifford_conjugate_cl30_f32)
+CLIFFORD_UNARY_8x8_F32_ENTRY(tessera_apple_gpu_clifford_hodge_star_cl30_f32,
+                             kCliffordHodgeStarCl30F32Source,
+                             "clifford_hodge_star_cl30_f32",
+                             reference_clifford_hodge_star_cl30_f32)
+
+#undef CLIFFORD_UNARY_8x8_F32_ENTRY
+
+// ===========================================================================
+// extern "C" entries — unary 8→1 f32 (norm, norm_squared)
+// ===========================================================================
+
+extern "C" void tessera_apple_gpu_clifford_norm_squared_cl30_f32(
+    const float* A, float* C, int32_t batch) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_unary_8x1_f32_msl(
+          ctx, kCliffordNormSquaredCl30F32Source,
+          @"clifford_norm_squared_cl30_f32", A, C, batch)) return;
+  reference_clifford_norm_squared_cl30_f32(A, C, batch);
+}
+
+extern "C" void tessera_apple_gpu_clifford_norm_cl30_f32(
+    const float* A, float* C, int32_t batch) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_unary_8x1_f32_msl(
+          ctx, kCliffordNormCl30F32Source,
+          @"clifford_norm_cl30_f32", A, C, batch)) return;
+  reference_clifford_norm_cl30_f32(A, C, batch);
+}
+
+// ===========================================================================
+// extern "C" entries — binary 8x8→8 / 8x8→1 f32
+// ===========================================================================
+
+extern "C" void tessera_apple_gpu_clifford_wedge_cl30_f32(
+    const float* A, const float* B, float* C, int32_t batch) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_binary_8x8_f32_msl(
+          ctx, kCliffordWedgeCl30F32Source, @"clifford_wedge_cl30_f32",
+          A, B, C, batch)) return;
+  reference_clifford_wedge_cl30_f32(A, B, C, batch);
+}
+
+extern "C" void tessera_apple_gpu_clifford_left_contraction_cl30_f32(
+    const float* A, const float* B, float* C, int32_t batch) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_binary_8x8_f32_msl(
+          ctx, kCliffordLeftContractionCl30F32Source,
+          @"clifford_left_contraction_cl30_f32",
+          A, B, C, batch)) return;
+  reference_clifford_left_contraction_cl30_f32(A, B, C, batch);
+}
+
+extern "C" void tessera_apple_gpu_clifford_inner_cl30_f32(
+    const float* A, const float* B, float* C, int32_t batch) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_binary_8x1_f32_msl(
+          ctx, kCliffordInnerCl30F32Source, @"clifford_inner_cl30_f32",
+          A, B, C, batch)) return;
+  reference_clifford_inner_cl30_f32(A, B, C, batch);
+}
+
+// ===========================================================================
+// extern "C" entries — grade_projection (extra grade_mask int32)
+// ===========================================================================
+
+extern "C" void tessera_apple_gpu_clifford_grade_projection_cl30_f32(
+    const float* A, float* C, int32_t grade_mask, int32_t batch) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_grade_projection_cl30_f32_msl(
+          ctx, A, C, grade_mask, batch)) return;
+  reference_clifford_grade_projection_cl30_f32(A, C, grade_mask, batch);
+}
+
+//===---------------------------------------------------------------------===//
+// Phase 8.4.4-style fp16 + bf16 ports of clifford_geo_product +
+// clifford_rotor_sandwich on Cl(3,0) (2026-05-17).
+//
+//   fp16 : native MSL `half` kernel.  Per-blade `half` storage with
+//          on-the-fly promotion to `float` for the 64-term contraction
+//          (matches softmax_f16 numerical-stability pattern).
+//   bf16 : fp32-conversion path on the host — convert to fp32 via the
+//          existing bfloat16_to_float_gpu / float_to_bfloat16_gpu
+//          helpers, dispatch the fp32 MSL kernel, convert back.  No
+//          native MSL bf16 yet (matches the matmul_bf16 / softmax_bf16
+//          precedent — MPS doesn't expose a bf16 matrix descriptor on
+//          macOS 14, and Apple GPU MSL bf16 is a separate roadmap).
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+static NSString *const kCliffordGeoProductCl30F16Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void clifford_geo_product_cl30_f16(
+    device const half*  A   [[buffer(0)]],
+    device const half*  B   [[buffer(1)]],
+    device half*        C   [[buffer(2)]],
+    constant int&       batch [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    // Promote to float for the 64-term accumulation so per-blade
+    // rounding stays close to the fp32 native kernel.
+    float a0=float(A[off+0]), a1=float(A[off+1]), a2=float(A[off+2]), a3=float(A[off+3]);
+    float a4=float(A[off+4]), a5=float(A[off+5]), a6=float(A[off+6]), a7=float(A[off+7]);
+    float b0=float(B[off+0]), b1=float(B[off+1]), b2=float(B[off+2]), b3=float(B[off+3]);
+    float b4=float(B[off+4]), b5=float(B[off+5]), b6=float(B[off+6]), b7=float(B[off+7]);
+
+    C[off+0] = half(a0*b0 + a1*b1 + a2*b2 - a3*b3 + a4*b4 - a5*b5 - a6*b6 - a7*b7);
+    C[off+1] = half(a0*b1 + a1*b0 - a2*b3 + a3*b2 - a4*b5 + a5*b4 - a6*b7 - a7*b6);
+    C[off+2] = half(a0*b2 + a1*b3 + a2*b0 - a3*b1 - a4*b6 + a5*b7 + a6*b4 + a7*b5);
+    C[off+3] = half(a0*b3 + a1*b2 - a2*b1 + a3*b0 + a4*b7 - a5*b6 + a6*b5 + a7*b4);
+    C[off+4] = half(a0*b4 + a1*b5 + a2*b6 - a3*b7 + a4*b0 - a5*b1 - a6*b2 - a7*b3);
+    C[off+5] = half(a0*b5 + a1*b4 - a2*b7 + a3*b6 - a4*b1 + a5*b0 - a6*b3 - a7*b2);
+    C[off+6] = half(a0*b6 + a1*b7 + a2*b4 - a3*b5 - a4*b2 + a5*b3 + a6*b0 + a7*b1);
+    C[off+7] = half(a0*b7 + a1*b6 - a2*b5 + a3*b4 + a4*b3 - a5*b2 + a6*b1 + a7*b0);
+}
+)MSL";
+
+static NSString *const kCliffordRotorSandwichCl30F16Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+inline void cl30_geo_product_fp16_via_fp32(
+    thread float a[8], thread float b[8], thread float c[8])
+{
+    c[0] = a[0]*b[0] + a[1]*b[1] + a[2]*b[2] - a[3]*b[3] + a[4]*b[4] - a[5]*b[5] - a[6]*b[6] - a[7]*b[7];
+    c[1] = a[0]*b[1] + a[1]*b[0] - a[2]*b[3] + a[3]*b[2] - a[4]*b[5] + a[5]*b[4] - a[6]*b[7] - a[7]*b[6];
+    c[2] = a[0]*b[2] + a[1]*b[3] + a[2]*b[0] - a[3]*b[1] - a[4]*b[6] + a[5]*b[7] + a[6]*b[4] + a[7]*b[5];
+    c[3] = a[0]*b[3] + a[1]*b[2] - a[2]*b[1] + a[3]*b[0] + a[4]*b[7] - a[5]*b[6] + a[6]*b[5] + a[7]*b[4];
+    c[4] = a[0]*b[4] + a[1]*b[5] + a[2]*b[6] - a[3]*b[7] + a[4]*b[0] - a[5]*b[1] - a[6]*b[2] - a[7]*b[3];
+    c[5] = a[0]*b[5] + a[1]*b[4] - a[2]*b[7] + a[3]*b[6] - a[4]*b[1] + a[5]*b[0] - a[6]*b[3] - a[7]*b[2];
+    c[6] = a[0]*b[6] + a[1]*b[7] + a[2]*b[4] - a[3]*b[5] - a[4]*b[2] + a[5]*b[3] + a[6]*b[0] + a[7]*b[1];
+    c[7] = a[0]*b[7] + a[1]*b[6] - a[2]*b[5] + a[3]*b[4] + a[4]*b[3] - a[5]*b[2] + a[6]*b[1] + a[7]*b[0];
+}
+
+kernel void clifford_rotor_sandwich_cl30_f16(
+    device const half*  R   [[buffer(0)]],
+    device const half*  V   [[buffer(1)]],
+    device half*        Out [[buffer(2)]],
+    constant int&       batch [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    float r[8], v[8], rd[8], t[8], o[8];
+    for (uint i = 0; i < 8; ++i) {
+        r[i] = float(R[off+i]);
+        v[i] = float(V[off+i]);
+    }
+    // R†: Cl(3,0) reverse-sign per blade — (+,+,+,-,+,-,-,-).
+    rd[0]=r[0]; rd[1]=r[1]; rd[2]=r[2]; rd[3]=-r[3];
+    rd[4]=r[4]; rd[5]=-r[5]; rd[6]=-r[6]; rd[7]=-r[7];
+    cl30_geo_product_fp16_via_fp32(r, v, t);
+    cl30_geo_product_fp16_via_fp32(t, rd, o);
+    for (uint i = 0; i < 8; ++i) Out[off+i] = half(o[i]);
+}
+)MSL";
+
+static bool dispatch_clifford_geo_product_cl30_f16_msl(
+    MetalDeviceContext &ctx, const uint16_t* A, const uint16_t* B,
+    uint16_t* C, int32_t batch) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kCliffordGeoProductCl30F16Source,
+        @"clifford_geo_product_cl30_f16");
+    if (!pso) return false;
+    NSUInteger byteCount = sizeof(uint16_t) * (NSUInteger)batch * 8u;
+    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:byteCount
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B length:byteCount
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufC = [ctx.device newBufferWithLength:byteCount
+                                                  options:MTLResourceStorageModeShared];
+    if (!bufA || !bufB || !bufC) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBuffer:bufC offset:0 atIndex:2];
+    [enc setBytes:&batch length:sizeof(int32_t) atIndex:3];
+    MTLSize grid = MTLSizeMake((NSUInteger)batch, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)batch,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(C, [bufC contents], byteCount);
+    return true;
+  }
+}
+
+static bool dispatch_clifford_rotor_sandwich_cl30_f16_msl(
+    MetalDeviceContext &ctx, const uint16_t* R, const uint16_t* V,
+    uint16_t* Out, int32_t batch) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kCliffordRotorSandwichCl30F16Source,
+        @"clifford_rotor_sandwich_cl30_f16");
+    if (!pso) return false;
+    NSUInteger byteCount = sizeof(uint16_t) * (NSUInteger)batch * 8u;
+    id<MTLBuffer> bufR = [ctx.device newBufferWithBytes:R length:byteCount
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufV = [ctx.device newBufferWithBytes:V length:byteCount
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
+                                                  options:MTLResourceStorageModeShared];
+    if (!bufR || !bufV || !bufO) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufR offset:0 atIndex:0];
+    [enc setBuffer:bufV offset:0 atIndex:1];
+    [enc setBuffer:bufO offset:0 atIndex:2];
+    [enc setBytes:&batch length:sizeof(int32_t) atIndex:3];
+    MTLSize grid = MTLSizeMake((NSUInteger)batch, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)batch,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(Out, [bufO contents], byteCount);
+    return true;
+  }
+}
+
+inline void reference_clifford_geo_product_cl30_f16_via_fp32(
+    const uint16_t* A, const uint16_t* B, uint16_t* C, int32_t batch) {
+  std::vector<float> Af((std::size_t)batch * 8);
+  std::vector<float> Bf((std::size_t)batch * 8);
+  std::vector<float> Cf((std::size_t)batch * 8);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = half_to_float_gpu(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = half_to_float_gpu(B[i]);
+  reference_clifford_geo_product_cl30_f32(Af.data(), Bf.data(), Cf.data(), batch);
+  for (std::size_t i = 0; i < Cf.size(); ++i) C[i] = float_to_half_gpu(Cf[i]);
+}
+
+inline void reference_clifford_geo_product_cl30_bf16_via_fp32(
+    const uint16_t* A, const uint16_t* B, uint16_t* C, int32_t batch) {
+  std::vector<float> Af((std::size_t)batch * 8);
+  std::vector<float> Bf((std::size_t)batch * 8);
+  std::vector<float> Cf((std::size_t)batch * 8);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = bfloat16_to_float_gpu(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = bfloat16_to_float_gpu(B[i]);
+  reference_clifford_geo_product_cl30_f32(Af.data(), Bf.data(), Cf.data(), batch);
+  for (std::size_t i = 0; i < Cf.size(); ++i) C[i] = float_to_bfloat16_gpu(Cf[i]);
+}
+
+bool dispatch_clifford_geo_product_cl30_bf16_via_fp32(
+    MetalDeviceContext &ctx, const uint16_t* A, const uint16_t* B,
+    uint16_t* C, int32_t batch) {
+  std::vector<float> Af((std::size_t)batch * 8);
+  std::vector<float> Bf((std::size_t)batch * 8);
+  std::vector<float> Cf((std::size_t)batch * 8);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = bfloat16_to_float_gpu(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = bfloat16_to_float_gpu(B[i]);
+  if (!dispatch_clifford_geo_product_cl30_f32_msl(ctx, Af.data(), Bf.data(),
+                                                  Cf.data(), batch))
+    return false;
+  for (std::size_t i = 0; i < Cf.size(); ++i) C[i] = float_to_bfloat16_gpu(Cf[i]);
+  return true;
+}
+
+inline void reference_clifford_rotor_sandwich_cl30_f16_via_fp32(
+    const uint16_t* R, const uint16_t* V, uint16_t* Out, int32_t batch) {
+  std::vector<float> Rf((std::size_t)batch * 8);
+  std::vector<float> Vf((std::size_t)batch * 8);
+  std::vector<float> Of((std::size_t)batch * 8);
+  for (std::size_t i = 0; i < Rf.size(); ++i) Rf[i] = half_to_float_gpu(R[i]);
+  for (std::size_t i = 0; i < Vf.size(); ++i) Vf[i] = half_to_float_gpu(V[i]);
+  reference_clifford_rotor_sandwich_cl30_f32(Rf.data(), Vf.data(), Of.data(), batch);
+  for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_half_gpu(Of[i]);
+}
+
+inline void reference_clifford_rotor_sandwich_cl30_bf16_via_fp32(
+    const uint16_t* R, const uint16_t* V, uint16_t* Out, int32_t batch) {
+  std::vector<float> Rf((std::size_t)batch * 8);
+  std::vector<float> Vf((std::size_t)batch * 8);
+  std::vector<float> Of((std::size_t)batch * 8);
+  for (std::size_t i = 0; i < Rf.size(); ++i) Rf[i] = bfloat16_to_float_gpu(R[i]);
+  for (std::size_t i = 0; i < Vf.size(); ++i) Vf[i] = bfloat16_to_float_gpu(V[i]);
+  reference_clifford_rotor_sandwich_cl30_f32(Rf.data(), Vf.data(), Of.data(), batch);
+  for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_bfloat16_gpu(Of[i]);
+}
+
+bool dispatch_clifford_rotor_sandwich_cl30_bf16_via_fp32(
+    MetalDeviceContext &ctx, const uint16_t* R, const uint16_t* V,
+    uint16_t* Out, int32_t batch) {
+  std::vector<float> Rf((std::size_t)batch * 8);
+  std::vector<float> Vf((std::size_t)batch * 8);
+  std::vector<float> Of((std::size_t)batch * 8);
+  for (std::size_t i = 0; i < Rf.size(); ++i) Rf[i] = bfloat16_to_float_gpu(R[i]);
+  for (std::size_t i = 0; i < Vf.size(); ++i) Vf[i] = bfloat16_to_float_gpu(V[i]);
+  if (!dispatch_clifford_rotor_sandwich_cl30_f32_msl(ctx, Rf.data(), Vf.data(),
+                                                     Of.data(), batch))
+    return false;
+  for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_bfloat16_gpu(Of[i]);
+  return true;
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_clifford_geo_product_cl30_f16(
+    const uint16_t* A, const uint16_t* B, uint16_t* C, int32_t batch) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_geo_product_cl30_f16_msl(ctx, A, B, C, batch)) return;
+  reference_clifford_geo_product_cl30_f16_via_fp32(A, B, C, batch);
+}
+
+extern "C" void tessera_apple_gpu_clifford_geo_product_cl30_bf16(
+    const uint16_t* A, const uint16_t* B, uint16_t* C, int32_t batch) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_geo_product_cl30_bf16_via_fp32(ctx, A, B, C, batch)) return;
+  reference_clifford_geo_product_cl30_bf16_via_fp32(A, B, C, batch);
+}
+
+extern "C" void tessera_apple_gpu_clifford_rotor_sandwich_cl30_f16(
+    const uint16_t* R, const uint16_t* V, uint16_t* Out, int32_t batch) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_rotor_sandwich_cl30_f16_msl(ctx, R, V, Out, batch)) return;
+  reference_clifford_rotor_sandwich_cl30_f16_via_fp32(R, V, Out, batch);
+}
+
+extern "C" void tessera_apple_gpu_clifford_rotor_sandwich_cl30_bf16(
+    const uint16_t* R, const uint16_t* V, uint16_t* Out, int32_t batch) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_rotor_sandwich_cl30_bf16_via_fp32(ctx, R, V, Out, batch)) return;
+  reference_clifford_rotor_sandwich_cl30_bf16_via_fp32(R, V, Out, batch);
+}

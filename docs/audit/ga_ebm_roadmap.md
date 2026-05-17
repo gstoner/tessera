@@ -1,5 +1,5 @@
 ---
-status: Active (development roadmap — all 6 scope-lock questions resolved; GA7/GA8/EBM5/EBM6 dialects build on MLIR 21; first 2 fused MSL kernels shipped on Apple GPU)
+status: Active (development roadmap — all 6 scope-lock questions resolved; GA7/GA8/EBM5/EBM6 dialects build on MLIR 21; **11 of 17** GA primitives ship fused MSL kernels on Apple GPU; headline ops carry fp32+fp16+bf16)
 classification: Audit / Plan
 authority: Sequences Geometric Algebra (Clifford) + Energy-Based Model primitive surfaces into Tessera
 last_updated: 2026-05-17
@@ -731,13 +731,34 @@ end-to-end rotor_sandwich smoke.
   `apple_gpu` status="fused": `tessera_apple_gpu_clifford_geo_product_cl30_f32`
   and `tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32` in
   [`apple_gpu_runtime.mm`](../../src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm).
-  Both compiled, dispatched on real Apple Silicon GPU, and verified
-  bitwise-equivalent to the Python numpy GA reference across 64 random
-  Cl(3,0) multivectors — see
-  [`tests/unit/test_apple_gpu_clifford_msl.py`](../../tests/unit/test_apple_gpu_clifford_msl.py)
-  (5 tests, all passing).
-- ⏳ Remaining 15 GA primitive MSL kernels at `apple_gpu`
-  status="fused": GA10 follow-on conformance work.
+- ✅ **GA10 conformance follow-on (2026-05-17) — 9 more fused MSL kernels +
+  4 fp16/bf16 ports.** The Apple GPU MSL surface now covers **11 of 17**
+  GA primitives:
+  - **9 new pointwise kernels:** `clifford_reverse_cl30_f32`,
+    `clifford_grade_involution_cl30_f32`, `clifford_conjugate_cl30_f32`,
+    `clifford_hodge_star_cl30_f32`, `clifford_norm_cl30_f32`,
+    `clifford_norm_squared_cl30_f32`, `clifford_wedge_cl30_f32`,
+    `clifford_left_contraction_cl30_f32`, `clifford_inner_cl30_f32`,
+    `clifford_grade_projection_cl30_f32` — each generated from the
+    Python Cayley-table source of truth so GPU output bitwise-matches
+    `tessera.ga` to fp32 tolerance.
+  - **4 dtype ports** of the existing headline ops following the
+    Phase 8.4.4 pattern: `clifford_geo_product_cl30_{f16,bf16}` +
+    `clifford_rotor_sandwich_cl30_{f16,bf16}`. fp16 uses native MSL
+    `half` storage with `float`-promoted accumulators; bf16 uses the
+    fp32-conversion path (matches softmax_bf16 / matmul_bf16
+    precedent).
+  - **34 new integration tests** at
+    [`tests/unit/test_apple_gpu_clifford_msl_full.py`](../../tests/unit/test_apple_gpu_clifford_msl_full.py)
+    — each kernel dispatched on real Apple GPU + bitwise/tolerance
+    cross-check against the Python `tessera.ga.*` reference.
+- ⏳ Remaining 6 GA primitives:
+  - `clifford_exp` / `clifford_log` — pending closed-form
+    trigonometric MSL kernels (formulas for Cl(3,0) bivectors / rotors
+    are known but require `sin`/`cos`/`atan2`).
+  - 4 GA5 field ops (`ext_deriv`, `codiff`, `vec_deriv`, `integral`)
+    — pending a `MultivectorField` signature contract (grid strides +
+    spatial shape arguments). Design pass scheduled for GA11.
 - ⏳ Native C++ kernels in `Tessera_Clifford_x86_Backend/`: would
   enable Accelerate hand-off for batched products (currently the
   Python reference path is the v1 execution route on x86 + Apple CPU).

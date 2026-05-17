@@ -91,50 +91,19 @@ FUSED_APPLE_GPU_OPS = frozenset(bm._CLIFFORD_APPLE_GPU_FUSED.keys())
 PLANNED_APPLE_GPU_OPS = EXPECTED_CLIFFORD_OPS - FUSED_APPLE_GPU_OPS
 
 
-def test_eleven_apple_gpu_kernels_shipped_in_followup() -> None:
-    """GA10 follow-on (2026-05-17) — 11 of the 17 GA primitives now have
-    fused MSL kernels: 2 headline ops + 9 pointwise GA3/GA5 ops.
-    The remaining 6 (exp / log + 4 field ops) are explicitly deferred."""
-    assert FUSED_APPLE_GPU_OPS == {
-        "clifford_geometric_product",
-        "clifford_rotor_sandwich",
-        "clifford_reverse",
-        "clifford_grade_involution",
-        "clifford_conjugate",
-        "clifford_hodge_star",
-        "clifford_norm",
-        "clifford_wedge",
-        "clifford_left_contraction",
-        "clifford_inner",
-        "clifford_grade_projection",
-    }
-    assert PLANNED_APPLE_GPU_OPS == {
-        "clifford_exp",          # closed-form trigonometric MSL pending
-        "clifford_log",          # closed-form trigonometric MSL pending
-        "clifford_ext_deriv",    # field op — signature contract pending
-        "clifford_codiff",       # field op
-        "clifford_vec_deriv",    # field op
-        "clifford_integral",     # field op
-    }
-
-
-@pytest.mark.parametrize("op_name", sorted(PLANNED_APPLE_GPU_OPS))
-def test_deferred_op_apple_gpu_status_is_planned(op_name: str) -> None:
-    """exp/log + 4 field ops remain planned; document why per op."""
-    manifest = bm.clifford_manifest_for(op_name)
-    by_target = {e.target: e for e in manifest}
-    assert by_target["apple_gpu"].status == "planned"
-    # Notes name the specific reason for deferral.
-    notes = by_target["apple_gpu"].notes
-    if op_name in {"clifford_exp", "clifford_log"}:
-        assert "trigonometric" in notes
-    else:
-        assert "Field-op" in notes
+def test_all_seventeen_apple_gpu_kernels_shipped_in_ga11() -> None:
+    """GA11 (2026-05-17) — all 17 GA primitives have fused MSL kernels:
+    2 headline ops (3 dtypes), 9 pointwise GA3/GA5 ops (fp32), 2 trig-MSL
+    ops (exp/log, fp32, closed-form for Cl(3,0) bivectors/rotors), and
+    4 field-signature ops (ext_deriv/vec_deriv/codiff/integral, fp32,
+    3D-grid ABI)."""
+    assert FUSED_APPLE_GPU_OPS == EXPECTED_CLIFFORD_OPS
+    assert PLANNED_APPLE_GPU_OPS == set()
 
 
 @pytest.mark.parametrize("op_name", sorted(FUSED_APPLE_GPU_OPS))
-def test_fused_apple_gpu_status_for_eleven_shipped_ops(op_name: str) -> None:
-    """All 11 ops with shipped MSL kernels carry status=fused on Apple GPU."""
+def test_fused_apple_gpu_status_for_all_seventeen_ops(op_name: str) -> None:
+    """All 17 GA ops with shipped MSL kernels carry status=fused on Apple GPU."""
     manifest = bm.clifford_manifest_for(op_name)
     by_target = {e.target: e for e in manifest}
     assert by_target["apple_gpu"].status == "fused"

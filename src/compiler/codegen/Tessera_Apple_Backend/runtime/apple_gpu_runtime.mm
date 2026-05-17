@@ -4767,3 +4767,656 @@ extern "C" void tessera_apple_gpu_clifford_rotor_sandwich_cl30_bf16(
   if (ctx.ok && dispatch_clifford_rotor_sandwich_cl30_bf16_via_fp32(ctx, R, V, Out, batch)) return;
   reference_clifford_rotor_sandwich_cl30_bf16_via_fp32(R, V, Out, batch);
 }
+
+//===---------------------------------------------------------------------===//
+// GA11 — final 6 GA primitives (2026-05-17 follow-on).
+//
+// Closes the apple_gpu coverage to all 17 GA primitives:
+//   - clifford_exp_cl30_f32       closed-form (pure bivector) + power series
+//   - clifford_log_cl30_f32       closed-form for Cl(3,0) rotors
+//   - clifford_ext_deriv_cl30_f32 finite-difference exterior derivative
+//   - clifford_vec_deriv_cl30_f32 finite-difference geometric gradient
+//   - clifford_codiff_cl30_f32    composed ⋆d⋆
+//   - clifford_integral_cl30_f32  weighted Riemann sum
+//
+// The field ops take (D0, D1, D2) grid dims + (h0, h1, h2) per-axis
+// spacing — same convention as the Python `MultivectorField` class.
+// Spatial dim = 3 matches Cl(3,0).n by Decision GA-L0.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+// ===========================================================================
+// exp_mv reference + dispatch
+// ===========================================================================
+
+inline void cl30_geo_product_inline(const float* a, const float* x, float* c) {
+  c[0] = a[0]*x[0] + a[1]*x[1] + a[2]*x[2] - a[3]*x[3]
+       + a[4]*x[4] - a[5]*x[5] - a[6]*x[6] - a[7]*x[7];
+  c[1] = a[0]*x[1] + a[1]*x[0] - a[2]*x[3] + a[3]*x[2]
+       - a[4]*x[5] + a[5]*x[4] - a[6]*x[7] - a[7]*x[6];
+  c[2] = a[0]*x[2] + a[1]*x[3] + a[2]*x[0] - a[3]*x[1]
+       - a[4]*x[6] + a[5]*x[7] + a[6]*x[4] + a[7]*x[5];
+  c[3] = a[0]*x[3] + a[1]*x[2] - a[2]*x[1] + a[3]*x[0]
+       + a[4]*x[7] - a[5]*x[6] + a[6]*x[5] + a[7]*x[4];
+  c[4] = a[0]*x[4] + a[1]*x[5] + a[2]*x[6] - a[3]*x[7]
+       + a[4]*x[0] - a[5]*x[1] - a[6]*x[2] - a[7]*x[3];
+  c[5] = a[0]*x[5] + a[1]*x[4] - a[2]*x[7] + a[3]*x[6]
+       - a[4]*x[1] + a[5]*x[0] - a[6]*x[3] - a[7]*x[2];
+  c[6] = a[0]*x[6] + a[1]*x[7] + a[2]*x[4] - a[3]*x[5]
+       - a[4]*x[2] + a[5]*x[3] + a[6]*x[0] + a[7]*x[1];
+  c[7] = a[0]*x[7] + a[1]*x[6] - a[2]*x[5] + a[3]*x[4]
+       + a[4]*x[3] - a[5]*x[2] + a[6]*x[1] + a[7]*x[0];
+}
+
+inline bool cl30_is_pure_bivector(const float* a, float eps = 1e-9f) {
+  return std::fabs(a[0]) + std::fabs(a[1]) + std::fabs(a[2])
+       + std::fabs(a[4]) + std::fabs(a[7]) < eps;
+}
+
+inline void reference_clifford_exp_cl30_f32(
+    const float* A, float* C, int32_t batch) {
+  for (int32_t b = 0; b < batch; ++b) {
+    const float* a = A + b * 8;
+    float* c = C + b * 8;
+    if (cl30_is_pure_bivector(a)) {
+      // Closed-form: exp(B) = cos(|B|) + sin(|B|)/|B| * B.
+      float b3 = a[3], b5 = a[5], b6 = a[6];
+      float bn = std::sqrt(b3*b3 + b5*b5 + b6*b6);
+      if (bn < 1e-12f) {
+        c[0] = 1.0f; c[1] = c[2] = c[3] = c[4] = c[5] = c[6] = c[7] = 0.0f;
+      } else {
+        float cs = std::cos(bn);
+        float sn = std::sin(bn) / bn;
+        c[0] = cs; c[1] = c[2] = 0.0f;
+        c[3] = sn * b3;
+        c[4] = 0.0f;
+        c[5] = sn * b5;
+        c[6] = sn * b6;
+        c[7] = 0.0f;
+      }
+    } else {
+      // Power series: 1 + a + a²/2 + a³/6 + ...  (K = 24 terms).
+      float power[8] = {1, 0, 0, 0, 0, 0, 0, 0};
+      float result[8] = {1, 0, 0, 0, 0, 0, 0, 0};
+      double fact = 1.0;
+      for (int k = 1; k <= 24; ++k) {
+        float next[8];
+        cl30_geo_product_inline(power, a, next);
+        fact *= k;
+        float inv_fact = float(1.0 / fact);
+        for (int r = 0; r < 8; ++r) {
+          power[r] = next[r];
+          result[r] += power[r] * inv_fact;
+        }
+      }
+      for (int r = 0; r < 8; ++r) c[r] = result[r];
+    }
+  }
+}
+
+static NSString *const kCliffordExpCl30F32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+inline void cl30_gp(thread float a[8], thread float x[8], thread float c[8]) {
+    c[0] = a[0]*x[0] + a[1]*x[1] + a[2]*x[2] - a[3]*x[3] + a[4]*x[4] - a[5]*x[5] - a[6]*x[6] - a[7]*x[7];
+    c[1] = a[0]*x[1] + a[1]*x[0] - a[2]*x[3] + a[3]*x[2] - a[4]*x[5] + a[5]*x[4] - a[6]*x[7] - a[7]*x[6];
+    c[2] = a[0]*x[2] + a[1]*x[3] + a[2]*x[0] - a[3]*x[1] - a[4]*x[6] + a[5]*x[7] + a[6]*x[4] + a[7]*x[5];
+    c[3] = a[0]*x[3] + a[1]*x[2] - a[2]*x[1] + a[3]*x[0] + a[4]*x[7] - a[5]*x[6] + a[6]*x[5] + a[7]*x[4];
+    c[4] = a[0]*x[4] + a[1]*x[5] + a[2]*x[6] - a[3]*x[7] + a[4]*x[0] - a[5]*x[1] - a[6]*x[2] - a[7]*x[3];
+    c[5] = a[0]*x[5] + a[1]*x[4] - a[2]*x[7] + a[3]*x[6] - a[4]*x[1] + a[5]*x[0] - a[6]*x[3] - a[7]*x[2];
+    c[6] = a[0]*x[6] + a[1]*x[7] + a[2]*x[4] - a[3]*x[5] - a[4]*x[2] + a[5]*x[3] + a[6]*x[0] + a[7]*x[1];
+    c[7] = a[0]*x[7] + a[1]*x[6] - a[2]*x[5] + a[3]*x[4] + a[4]*x[3] - a[5]*x[2] + a[6]*x[1] + a[7]*x[0];
+}
+
+kernel void clifford_exp_cl30_f32(
+    device const float* A   [[buffer(0)]],
+    device float*       C   [[buffer(1)]],
+    constant int&       batch [[buffer(2)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    float a[8];
+    for (uint i = 0; i < 8; ++i) a[i] = A[off + i];
+
+    // Pure-bivector closed form: exp(B) = cos(|B|) + sin(|B|)/|B| * B.
+    float other = abs(a[0]) + abs(a[1]) + abs(a[2]) + abs(a[4]) + abs(a[7]);
+    if (other < 1e-9f) {
+        float bn = sqrt(a[3]*a[3] + a[5]*a[5] + a[6]*a[6]);
+        if (bn < 1e-12f) {
+            C[off+0] = 1.0f;
+            for (uint i = 1; i < 8; ++i) C[off+i] = 0.0f;
+        } else {
+            float cs = cos(bn);
+            float sn = sin(bn) / bn;
+            C[off+0] = cs;
+            C[off+1] = 0.0f; C[off+2] = 0.0f;
+            C[off+3] = sn * a[3];
+            C[off+4] = 0.0f;
+            C[off+5] = sn * a[5];
+            C[off+6] = sn * a[6];
+            C[off+7] = 0.0f;
+        }
+        return;
+    }
+
+    // Power series fallback: 24 terms.
+    float power[8] = {1, 0, 0, 0, 0, 0, 0, 0};
+    float result[8] = {1, 0, 0, 0, 0, 0, 0, 0};
+    float fact = 1.0f;
+    for (int k = 1; k <= 24; ++k) {
+        float next[8];
+        cl30_gp(power, a, next);
+        fact *= float(k);
+        float inv_fact = 1.0f / fact;
+        for (uint r = 0; r < 8; ++r) {
+            power[r] = next[r];
+            result[r] += power[r] * inv_fact;
+        }
+    }
+    for (uint r = 0; r < 8; ++r) C[off + r] = result[r];
+}
+)MSL";
+
+// ===========================================================================
+// log_mv reference + dispatch  (closed-form for Cl(3,0) rotors)
+// ===========================================================================
+
+inline void reference_clifford_log_cl30_f32(
+    const float* A, float* C, int32_t batch) {
+  for (int32_t b = 0; b < batch; ++b) {
+    const float* a = A + b * 8;
+    float* c = C + b * 8;
+    float s = a[0];
+    float b3 = a[3], b5 = a[5], b6 = a[6];
+    float bn = std::sqrt(b3*b3 + b5*b5 + b6*b6);
+    float half_theta = std::atan2(bn, s);
+    float safe = bn > 1e-12f ? bn : 1.0f;
+    float scale = half_theta / safe;
+    c[0] = 0.0f; c[1] = 0.0f; c[2] = 0.0f;
+    c[3] = scale * b3;
+    c[4] = 0.0f;
+    c[5] = scale * b5;
+    c[6] = scale * b6;
+    c[7] = 0.0f;
+  }
+}
+
+static NSString *const kCliffordLogCl30F32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void clifford_log_cl30_f32(
+    device const float* A   [[buffer(0)]],
+    device float*       C   [[buffer(1)]],
+    constant int&       batch [[buffer(2)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    float s = A[off+0];
+    float b3 = A[off+3], b5 = A[off+5], b6 = A[off+6];
+    float bn = sqrt(b3*b3 + b5*b5 + b6*b6);
+    float half_theta = atan2(bn, s);
+    float safe = bn > 1e-12f ? bn : 1.0f;
+    float scale = half_theta / safe;
+    C[off+0] = 0.0f; C[off+1] = 0.0f; C[off+2] = 0.0f;
+    C[off+3] = scale * b3;
+    C[off+4] = 0.0f;
+    C[off+5] = scale * b5;
+    C[off+6] = scale * b6;
+    C[off+7] = 0.0f;
+}
+)MSL";
+
+// ===========================================================================
+// ext_deriv + vec_deriv on 3D Cl(3,0) grids
+//
+// Grid: (D0, D1, D2) with spacing (h0, h1, h2); each cell holds 8 floats.
+// Boundary cells (any index 0 or D-1 in any axis) get the partial = 0
+// contribution from that axis — matches the Python ext_deriv's central-
+// difference behavior at the grid edges (Python uses np.gradient which
+// uses one-sided diffs; ours skips for simplicity, matching the d²=0
+// "interior" claim of the GA5 acceptance test).
+// ===========================================================================
+
+inline void reference_clifford_ext_deriv_cl30_f32(
+    const float* F, float* Out,
+    int32_t D0, int32_t D1, int32_t D2,
+    float h0, float h1, float h2) {
+  int64_t stride2 = 8;
+  int64_t stride1 = (int64_t)D2 * stride2;
+  int64_t stride0 = (int64_t)D1 * stride1;
+  for (int32_t i = 0; i < D0; ++i) {
+    for (int32_t j = 0; j < D1; ++j) {
+      for (int32_t k = 0; k < D2; ++k) {
+        int64_t base = (int64_t)i * stride0 + (int64_t)j * stride1 + (int64_t)k * stride2;
+        float c[8] = {0,0,0,0,0,0,0,0};
+        // Axis 0 (e1 ∧ ∂/∂x): contrib only if interior.
+        if (i > 0 && i < D0 - 1) {
+          float inv = 1.0f / (2.0f * h0);
+          int64_t bp = base + stride0;
+          int64_t bm = base - stride0;
+          c[1] += (F[bp+0] - F[bm+0]) * inv;
+          c[3] += (F[bp+2] - F[bm+2]) * inv;
+          c[5] += (F[bp+4] - F[bm+4]) * inv;
+          c[7] += (F[bp+6] - F[bm+6]) * inv;
+        }
+        // Axis 1 (e2 ∧ ∂/∂y).
+        if (j > 0 && j < D1 - 1) {
+          float inv = 1.0f / (2.0f * h1);
+          int64_t bp = base + stride1;
+          int64_t bm = base - stride1;
+          c[2] += (F[bp+0] - F[bm+0]) * inv;
+          c[3] -= (F[bp+1] - F[bm+1]) * inv;
+          c[6] += (F[bp+4] - F[bm+4]) * inv;
+          c[7] -= (F[bp+5] - F[bm+5]) * inv;
+        }
+        // Axis 2 (e3 ∧ ∂/∂z).
+        if (k > 0 && k < D2 - 1) {
+          float inv = 1.0f / (2.0f * h2);
+          int64_t bp = base + stride2;
+          int64_t bm = base - stride2;
+          c[4] += (F[bp+0] - F[bm+0]) * inv;
+          c[5] -= (F[bp+1] - F[bm+1]) * inv;
+          c[6] -= (F[bp+2] - F[bm+2]) * inv;
+          c[7] += (F[bp+3] - F[bm+3]) * inv;
+        }
+        for (int r = 0; r < 8; ++r) Out[base + r] = c[r];
+      }
+    }
+  }
+}
+
+inline void reference_clifford_vec_deriv_cl30_f32(
+    const float* F, float* Out,
+    int32_t D0, int32_t D1, int32_t D2,
+    float h0, float h1, float h2) {
+  int64_t stride2 = 8;
+  int64_t stride1 = (int64_t)D2 * stride2;
+  int64_t stride0 = (int64_t)D1 * stride1;
+  for (int32_t i = 0; i < D0; ++i) {
+    for (int32_t j = 0; j < D1; ++j) {
+      for (int32_t k = 0; k < D2; ++k) {
+        int64_t base = (int64_t)i * stride0 + (int64_t)j * stride1 + (int64_t)k * stride2;
+        float c[8] = {0,0,0,0,0,0,0,0};
+        // Axis 0 (e1 · ∂/∂x) — full Cayley row (8 contributions).
+        if (i > 0 && i < D0 - 1) {
+          float inv = 1.0f / (2.0f * h0);
+          int64_t bp = base + stride0, bm = base - stride0;
+          c[1] += (F[bp+0] - F[bm+0]) * inv;  // e1 * 1
+          c[0] += (F[bp+1] - F[bm+1]) * inv;  // e1 * e1
+          c[3] += (F[bp+2] - F[bm+2]) * inv;  // e1 * e2
+          c[2] += (F[bp+3] - F[bm+3]) * inv;  // e1 * e12
+          c[5] += (F[bp+4] - F[bm+4]) * inv;  // e1 * e3
+          c[4] += (F[bp+5] - F[bm+5]) * inv;  // e1 * e13
+          c[7] += (F[bp+6] - F[bm+6]) * inv;  // e1 * e23
+          c[6] += (F[bp+7] - F[bm+7]) * inv;  // e1 * e123
+        }
+        // Axis 1 (e2 · ∂/∂y).
+        if (j > 0 && j < D1 - 1) {
+          float inv = 1.0f / (2.0f * h1);
+          int64_t bp = base + stride1, bm = base - stride1;
+          c[2] += (F[bp+0] - F[bm+0]) * inv;
+          c[3] -= (F[bp+1] - F[bm+1]) * inv;
+          c[0] += (F[bp+2] - F[bm+2]) * inv;
+          c[1] -= (F[bp+3] - F[bm+3]) * inv;
+          c[6] += (F[bp+4] - F[bm+4]) * inv;
+          c[7] -= (F[bp+5] - F[bm+5]) * inv;
+          c[4] += (F[bp+6] - F[bm+6]) * inv;
+          c[5] -= (F[bp+7] - F[bm+7]) * inv;
+        }
+        // Axis 2 (e3 · ∂/∂z).
+        if (k > 0 && k < D2 - 1) {
+          float inv = 1.0f / (2.0f * h2);
+          int64_t bp = base + stride2, bm = base - stride2;
+          c[4] += (F[bp+0] - F[bm+0]) * inv;
+          c[5] -= (F[bp+1] - F[bm+1]) * inv;
+          c[6] -= (F[bp+2] - F[bm+2]) * inv;
+          c[7] += (F[bp+3] - F[bm+3]) * inv;
+          c[0] += (F[bp+4] - F[bm+4]) * inv;
+          c[1] -= (F[bp+5] - F[bm+5]) * inv;
+          c[2] -= (F[bp+6] - F[bm+6]) * inv;
+          c[3] += (F[bp+7] - F[bm+7]) * inv;
+        }
+        for (int r = 0; r < 8; ++r) Out[base + r] = c[r];
+      }
+    }
+  }
+}
+
+static NSString *const kCliffordExtDerivCl30F32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+struct GridParams {
+    int D0; int D1; int D2;
+    float h0; float h1; float h2;
+};
+
+kernel void clifford_ext_deriv_cl30_f32(
+    device const float*     F    [[buffer(0)]],
+    device float*           Out  [[buffer(1)]],
+    constant GridParams&    P    [[buffer(2)]],
+    uint3 gid [[thread_position_in_grid]])
+{
+    int i = int(gid.x), j = int(gid.y), k = int(gid.z);
+    int D0 = P.D0, D1 = P.D1, D2 = P.D2;
+    if (i >= D0 || j >= D1 || k >= D2) return;
+    long stride2 = 8;
+    long stride1 = (long)D2 * stride2;
+    long stride0 = (long)D1 * stride1;
+    long base = (long)i * stride0 + (long)j * stride1 + (long)k * stride2;
+
+    float c[8] = {0,0,0,0,0,0,0,0};
+    if (i > 0 && i < D0 - 1) {
+        float inv = 1.0f / (2.0f * P.h0);
+        long bp = base + stride0, bm = base - stride0;
+        c[1] += (F[bp+0] - F[bm+0]) * inv;
+        c[3] += (F[bp+2] - F[bm+2]) * inv;
+        c[5] += (F[bp+4] - F[bm+4]) * inv;
+        c[7] += (F[bp+6] - F[bm+6]) * inv;
+    }
+    if (j > 0 && j < D1 - 1) {
+        float inv = 1.0f / (2.0f * P.h1);
+        long bp = base + stride1, bm = base - stride1;
+        c[2] += (F[bp+0] - F[bm+0]) * inv;
+        c[3] -= (F[bp+1] - F[bm+1]) * inv;
+        c[6] += (F[bp+4] - F[bm+4]) * inv;
+        c[7] -= (F[bp+5] - F[bm+5]) * inv;
+    }
+    if (k > 0 && k < D2 - 1) {
+        float inv = 1.0f / (2.0f * P.h2);
+        long bp = base + stride2, bm = base - stride2;
+        c[4] += (F[bp+0] - F[bm+0]) * inv;
+        c[5] -= (F[bp+1] - F[bm+1]) * inv;
+        c[6] -= (F[bp+2] - F[bm+2]) * inv;
+        c[7] += (F[bp+3] - F[bm+3]) * inv;
+    }
+    for (int r = 0; r < 8; ++r) Out[base + r] = c[r];
+}
+)MSL";
+
+static NSString *const kCliffordVecDerivCl30F32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+struct GridParams {
+    int D0; int D1; int D2;
+    float h0; float h1; float h2;
+};
+
+kernel void clifford_vec_deriv_cl30_f32(
+    device const float*     F    [[buffer(0)]],
+    device float*           Out  [[buffer(1)]],
+    constant GridParams&    P    [[buffer(2)]],
+    uint3 gid [[thread_position_in_grid]])
+{
+    int i = int(gid.x), j = int(gid.y), k = int(gid.z);
+    int D0 = P.D0, D1 = P.D1, D2 = P.D2;
+    if (i >= D0 || j >= D1 || k >= D2) return;
+    long stride2 = 8;
+    long stride1 = (long)D2 * stride2;
+    long stride0 = (long)D1 * stride1;
+    long base = (long)i * stride0 + (long)j * stride1 + (long)k * stride2;
+
+    float c[8] = {0,0,0,0,0,0,0,0};
+    if (i > 0 && i < D0 - 1) {
+        float inv = 1.0f / (2.0f * P.h0);
+        long bp = base + stride0, bm = base - stride0;
+        c[1] += (F[bp+0] - F[bm+0]) * inv;
+        c[0] += (F[bp+1] - F[bm+1]) * inv;
+        c[3] += (F[bp+2] - F[bm+2]) * inv;
+        c[2] += (F[bp+3] - F[bm+3]) * inv;
+        c[5] += (F[bp+4] - F[bm+4]) * inv;
+        c[4] += (F[bp+5] - F[bm+5]) * inv;
+        c[7] += (F[bp+6] - F[bm+6]) * inv;
+        c[6] += (F[bp+7] - F[bm+7]) * inv;
+    }
+    if (j > 0 && j < D1 - 1) {
+        float inv = 1.0f / (2.0f * P.h1);
+        long bp = base + stride1, bm = base - stride1;
+        c[2] += (F[bp+0] - F[bm+0]) * inv;
+        c[3] -= (F[bp+1] - F[bm+1]) * inv;
+        c[0] += (F[bp+2] - F[bm+2]) * inv;
+        c[1] -= (F[bp+3] - F[bm+3]) * inv;
+        c[6] += (F[bp+4] - F[bm+4]) * inv;
+        c[7] -= (F[bp+5] - F[bm+5]) * inv;
+        c[4] += (F[bp+6] - F[bm+6]) * inv;
+        c[5] -= (F[bp+7] - F[bm+7]) * inv;
+    }
+    if (k > 0 && k < D2 - 1) {
+        float inv = 1.0f / (2.0f * P.h2);
+        long bp = base + stride2, bm = base - stride2;
+        c[4] += (F[bp+0] - F[bm+0]) * inv;
+        c[5] -= (F[bp+1] - F[bm+1]) * inv;
+        c[6] -= (F[bp+2] - F[bm+2]) * inv;
+        c[7] += (F[bp+3] - F[bm+3]) * inv;
+        c[0] += (F[bp+4] - F[bm+4]) * inv;
+        c[1] -= (F[bp+5] - F[bm+5]) * inv;
+        c[2] -= (F[bp+6] - F[bm+6]) * inv;
+        c[3] += (F[bp+7] - F[bm+7]) * inv;
+    }
+    for (int r = 0; r < 8; ++r) Out[base + r] = c[r];
+}
+)MSL";
+
+struct CliffordGridParams { int32_t D0, D1, D2; float h0, h1, h2; };
+
+static bool dispatch_clifford_field_op_f32_msl(
+    MetalDeviceContext &ctx, NSString *source, NSString *entry,
+    const float* F, float* Out,
+    int32_t D0, int32_t D1, int32_t D2,
+    float h0, float h1, float h2) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, source, entry);
+    if (!pso) return false;
+    NSUInteger byteCount = sizeof(float) * (NSUInteger)D0 * (NSUInteger)D1
+                         * (NSUInteger)D2 * 8u;
+    id<MTLBuffer> bufF = [ctx.device newBufferWithBytes:F length:byteCount
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
+                                                  options:MTLResourceStorageModeShared];
+    if (!bufF || !bufO) return false;
+    CliffordGridParams P = {D0, D1, D2, h0, h1, h2};
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufF offset:0 atIndex:0];
+    [enc setBuffer:bufO offset:0 atIndex:1];
+    [enc setBytes:&P length:sizeof(P) atIndex:2];
+    MTLSize grid = MTLSizeMake((NSUInteger)D0, (NSUInteger)D1, (NSUInteger)D2);
+    NSUInteger tg_x = std::min<NSUInteger>(8, pso.maxTotalThreadsPerThreadgroup);
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(Out, [bufO contents], byteCount);
+    return true;
+  }
+}
+
+// ===========================================================================
+// codiff = ⋆ d ⋆ (composed)
+// ===========================================================================
+
+inline void reference_clifford_codiff_cl30_f32(
+    const float* F, float* Out,
+    int32_t D0, int32_t D1, int32_t D2,
+    float h0, float h1, float h2) {
+  std::size_t N = (std::size_t)D0 * D1 * D2 * 8;
+  std::vector<float> tmp1(N), tmp2(N);
+  // Pointwise hodge applied to every cell.
+  for (std::size_t p = 0; p < N / 8; ++p) {
+    reference_clifford_hodge_star_cl30_f32(F + p * 8, tmp1.data() + p * 8, 1);
+  }
+  reference_clifford_ext_deriv_cl30_f32(tmp1.data(), tmp2.data(),
+                                         D0, D1, D2, h0, h1, h2);
+  for (std::size_t p = 0; p < N / 8; ++p) {
+    reference_clifford_hodge_star_cl30_f32(tmp2.data() + p * 8, Out + p * 8, 1);
+  }
+}
+
+static bool dispatch_clifford_codiff_cl30_f32_msl(
+    MetalDeviceContext &ctx,
+    const float* F, float* Out,
+    int32_t D0, int32_t D1, int32_t D2,
+    float h0, float h1, float h2) {
+  // Stage 1: pointwise hodge applied to each grid cell.
+  std::size_t N = (std::size_t)D0 * D1 * D2;
+  std::size_t total = N * 8;
+  std::vector<float> tmp1(total), tmp2(total);
+  if (!dispatch_clifford_unary_8x8_f32_msl(
+          ctx, kCliffordHodgeStarCl30F32Source,
+          @"clifford_hodge_star_cl30_f32", F, tmp1.data(), (int32_t)N))
+    return false;
+  // Stage 2: ext_deriv on the grid.
+  if (!dispatch_clifford_field_op_f32_msl(
+          ctx, kCliffordExtDerivCl30F32Source,
+          @"clifford_ext_deriv_cl30_f32",
+          tmp1.data(), tmp2.data(), D0, D1, D2, h0, h1, h2))
+    return false;
+  // Stage 3: pointwise hodge again.
+  if (!dispatch_clifford_unary_8x8_f32_msl(
+          ctx, kCliffordHodgeStarCl30F32Source,
+          @"clifford_hodge_star_cl30_f32", tmp2.data(), Out, (int32_t)N))
+    return false;
+  return true;
+}
+
+// ===========================================================================
+// integral = sum_i weights[i] * field[i]  (per-coefficient weighted sum)
+// ===========================================================================
+
+inline void reference_clifford_integral_cl30_f32(
+    const float* field, const float* weights, float* out, int32_t n) {
+  for (int r = 0; r < 8; ++r) out[r] = 0.0f;
+  for (int32_t i = 0; i < n; ++i) {
+    float w = weights[i];
+    for (int r = 0; r < 8; ++r) out[r] += w * field[i * 8 + r];
+  }
+}
+
+static NSString *const kCliffordIntegralCl30F32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void clifford_integral_cl30_f32(
+    device const float* field    [[buffer(0)]],
+    device const float* weights  [[buffer(1)]],
+    device float*       out      [[buffer(2)]],
+    constant int&       n        [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    // One thread per output coefficient (8 threads total).
+    if (gid >= 8u) return;
+    float s = 0.0f;
+    for (int i = 0; i < n; ++i) {
+        s += weights[i] * field[i * 8 + int(gid)];
+    }
+    out[gid] = s;
+}
+)MSL";
+
+static bool dispatch_clifford_integral_cl30_f32_msl(
+    MetalDeviceContext &ctx, const float* field, const float* weights,
+    float* out, int32_t n) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kCliffordIntegralCl30F32Source, @"clifford_integral_cl30_f32");
+    if (!pso) return false;
+    NSUInteger fieldBytes = sizeof(float) * (NSUInteger)n * 8u;
+    NSUInteger wBytes = sizeof(float) * (NSUInteger)n;
+    id<MTLBuffer> bufF = [ctx.device newBufferWithBytes:field length:fieldBytes
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufW = [ctx.device newBufferWithBytes:weights length:wBytes
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:sizeof(float) * 8u
+                                                  options:MTLResourceStorageModeShared];
+    if (!bufF || !bufW || !bufO) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufF offset:0 atIndex:0];
+    [enc setBuffer:bufW offset:0 atIndex:1];
+    [enc setBuffer:bufO offset:0 atIndex:2];
+    [enc setBytes:&n length:sizeof(int32_t) atIndex:3];
+    [enc dispatchThreads:MTLSizeMake(8, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(8, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(out, [bufO contents], sizeof(float) * 8u);
+    return true;
+  }
+}
+
+} // namespace
+
+// ===========================================================================
+// extern "C" entries for the 6 new ops.
+// ===========================================================================
+
+extern "C" void tessera_apple_gpu_clifford_exp_cl30_f32(
+    const float* A, float* C, int32_t batch) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_unary_8x8_f32_msl(
+          ctx, kCliffordExpCl30F32Source, @"clifford_exp_cl30_f32",
+          A, C, batch)) return;
+  reference_clifford_exp_cl30_f32(A, C, batch);
+}
+
+extern "C" void tessera_apple_gpu_clifford_log_cl30_f32(
+    const float* A, float* C, int32_t batch) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_unary_8x8_f32_msl(
+          ctx, kCliffordLogCl30F32Source, @"clifford_log_cl30_f32",
+          A, C, batch)) return;
+  reference_clifford_log_cl30_f32(A, C, batch);
+}
+
+extern "C" void tessera_apple_gpu_clifford_ext_deriv_cl30_f32(
+    const float* F, float* Out,
+    int32_t D0, int32_t D1, int32_t D2,
+    float h0, float h1, float h2) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_field_op_f32_msl(
+          ctx, kCliffordExtDerivCl30F32Source,
+          @"clifford_ext_deriv_cl30_f32",
+          F, Out, D0, D1, D2, h0, h1, h2)) return;
+  reference_clifford_ext_deriv_cl30_f32(F, Out, D0, D1, D2, h0, h1, h2);
+}
+
+extern "C" void tessera_apple_gpu_clifford_vec_deriv_cl30_f32(
+    const float* F, float* Out,
+    int32_t D0, int32_t D1, int32_t D2,
+    float h0, float h1, float h2) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_field_op_f32_msl(
+          ctx, kCliffordVecDerivCl30F32Source,
+          @"clifford_vec_deriv_cl30_f32",
+          F, Out, D0, D1, D2, h0, h1, h2)) return;
+  reference_clifford_vec_deriv_cl30_f32(F, Out, D0, D1, D2, h0, h1, h2);
+}
+
+extern "C" void tessera_apple_gpu_clifford_codiff_cl30_f32(
+    const float* F, float* Out,
+    int32_t D0, int32_t D1, int32_t D2,
+    float h0, float h1, float h2) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_codiff_cl30_f32_msl(
+          ctx, F, Out, D0, D1, D2, h0, h1, h2)) return;
+  reference_clifford_codiff_cl30_f32(F, Out, D0, D1, D2, h0, h1, h2);
+}
+
+extern "C" void tessera_apple_gpu_clifford_integral_cl30_f32(
+    const float* field, const float* weights, float* out, int32_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_integral_cl30_f32_msl(
+          ctx, field, weights, out, n)) return;
+  reference_clifford_integral_cl30_f32(field, weights, out, n);
+}

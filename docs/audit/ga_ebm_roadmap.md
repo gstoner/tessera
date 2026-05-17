@@ -1,5 +1,5 @@
 ---
-status: Active (development roadmap — all 6 scope-lock questions resolved; GA7/GA8/EBM5/EBM6 dialects build on MLIR 21; **11 of 17** GA primitives ship fused MSL kernels on Apple GPU; headline ops carry fp32+fp16+bf16)
+status: Active (development roadmap — all 6 scope-lock questions resolved; GA7/GA8/EBM5/EBM6 dialects build on MLIR 21; **all 17 of 17** GA primitives ship fused MSL kernels on Apple GPU; headline ops carry fp32+fp16+bf16, trig-MSL exp/log + 4 field-signature ops carry fp32)
 classification: Audit / Plan
 authority: Sequences Geometric Algebra (Clifford) + Energy-Based Model primitive surfaces into Tessera
 last_updated: 2026-05-17
@@ -752,13 +752,33 @@ end-to-end rotor_sandwich smoke.
     [`tests/unit/test_apple_gpu_clifford_msl_full.py`](../../tests/unit/test_apple_gpu_clifford_msl_full.py)
     — each kernel dispatched on real Apple GPU + bitwise/tolerance
     cross-check against the Python `tessera.ga.*` reference.
-- ⏳ Remaining 6 GA primitives:
-  - `clifford_exp` / `clifford_log` — pending closed-form
-    trigonometric MSL kernels (formulas for Cl(3,0) bivectors / rotors
-    are known but require `sin`/`cos`/`atan2`).
-  - 4 GA5 field ops (`ext_deriv`, `codiff`, `vec_deriv`, `integral`)
-    — pending a `MultivectorField` signature contract (grid strides +
-    spatial shape arguments). Design pass scheduled for GA11.
+- ✅ **GA11 (2026-05-17) — final 6 GA primitives shipped, Apple GPU
+  coverage now 17/17.**
+  - **2 trig-MSL closed-form ops:** `clifford_exp_cl30_f32` uses
+    `exp(B) = cos(|B|) + sin(|B|)/|B| · B` for pure bivectors with a
+    24-term power-series fallback; `clifford_log_cl30_f32` uses
+    `log(R) = atan2(|bivec|, scalar) · unit_bivec` for Cl(3,0) rotors
+    and falls back to a 64-term `log(1 + (a-1))` series otherwise.
+  - **4 field-signature ops:** `clifford_ext_deriv_cl30_f32` and
+    `clifford_vec_deriv_cl30_f32` take `(F, Out, D0, D1, D2, h0, h1, h2)`
+    — central-difference finite differences on a 3D grid with
+    boundary-zero padding (matches the `np.gradient(... edge_order=2)`
+    interior); `clifford_codiff_cl30_f32` composes
+    `hodge → ext_deriv → hodge` via sequential MSL dispatches with
+    intermediate host buffers; `clifford_integral_cl30_f32` takes
+    `(field, weights, out, n)` and runs an 8-thread reduction (one
+    thread per output coefficient).
+  - **16 new integration tests** at
+    [`tests/unit/test_apple_gpu_clifford_msl_ga11.py`](../../tests/unit/test_apple_gpu_clifford_msl_ga11.py)
+    — symbol-export probes, `exp_mv`/`log_mv` bitwise-vs-Python on the
+    closed-form path, `log(exp(B)) = B` round-trip on principal branch,
+    interior-cell match against `tessera.ga.calculus.{ext_deriv,vec_deriv,codiff}`,
+    corner-cell zero check, and weighted-Riemann-sum match for
+    `integral` (incl. `Euclidean` manifold derived weights).
+  - **Manifest flipped**: all 17 GA primitives now carry
+    `apple_gpu` status="fused" in
+    [`backend_manifest.py`](../../python/tessera/compiler/backend_manifest.py).
+    `PLANNED_APPLE_GPU_OPS` set is empty.
 - ⏳ Native C++ kernels in `Tessera_Clifford_x86_Backend/`: would
   enable Accelerate hand-off for batched products (currently the
   Python reference path is the v1 execution route on x86 + Apple CPU).

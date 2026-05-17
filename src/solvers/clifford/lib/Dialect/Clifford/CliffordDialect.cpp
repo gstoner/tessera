@@ -3,9 +3,11 @@
 #include "mlir/IR/DialectImplementation.h"
 
 using namespace mlir;
+using namespace tessera::clifford;
 
-namespace tessera {
-namespace clifford {
+// Generated dialect-defs must be at file scope (MLIR 21): the generated
+// code references `mlir::detail::TypeIDResolver<...>` which requires the
+// `mlir::detail::` qualifier resolve from file scope.
 #include "CliffordDialect.cpp.inc"
 
 void CliffordDialect::initialize() {
@@ -15,6 +17,3 @@ void CliffordDialect::initialize() {
 #include "CliffordOps.cpp.inc"
       >();
 }
-
-}  // namespace clifford
-}  // namespace tessera

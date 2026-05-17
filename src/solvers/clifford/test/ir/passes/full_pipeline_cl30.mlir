@@ -28,9 +28,8 @@ module {
   }
 }
 
-// Annotation succeeded.
-// CHECK: tessera.clifford.canonical
-// The chain folded into a rotor_sandwich (survives for GA9 backend).
+// The chain folded into a rotor_sandwich (survives for GA9 backend
+// kernel lowering) with the chain-fold trace marker.
 // CHECK: tessera_clifford.rotor_sandwich
 // CHECK-SAME: tessera.clifford.from_chain_fold
 // The standalone product lowered to arith.

@@ -17,4 +17,4 @@ module {
 }
 
 // CHECK: tessera_clifford.inner
-// CHECK-SAME: algebra = [1, 3, 0]
+// CHECK-SAME: algebra [1, 3, 0]

@@ -21,7 +21,9 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/BuiltinTypes.td"
+include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def EBM_Dialect : Dialect {
@@ -39,12 +41,16 @@ def EBM_Dialect : Dialect {
 }
 
 //===----------------------------------------------------------------------===//
-// Common attributes
+// Common attribute conventions
+//
+// Several `StrAttr` operands carry enumerated string values:
+//   manifold      : "euclidean" | "sphere" | "bivector"
+//   method        : "exact" | "monte_carlo" | "annealed"
+//   init_strategy : "noise" | "base_model" | "copy"
+//
+// MLIR ODS doesn't support `def X : StrAttr` aliases (StrAttr is itself
+// a def, not a class), so we use `StrAttr` directly in op operands.
 //===----------------------------------------------------------------------===//
-
-def TS_EBM_Manifold : StrAttr;     // "euclidean" | "sphere" | "bivector"
-def TS_EBM_Method : StrAttr;       // "exact" | "monte_carlo" | "annealed"
-def TS_EBM_InitStrategy : StrAttr; // "noise" | "base_model" | "copy"
 
 //===----------------------------------------------------------------------===//
 // Core EBM ops
@@ -73,18 +79,22 @@ def EBM_EnergyOp : EBMOp<"energy", [Pure]> {
 }
 
 def EBM_InnerStepOp : EBMOp<"inner_step", [Pure]> {
-  let summary = "One inner-loop update y' = y − η · grad [+ noise].";
+  let summary = "One deterministic inner-loop update y' = y − η · grad.";
+  let description = [{
+    Pure gradient-descent step.  For stochastic / noise-augmented
+    Langevin dynamics use `tessera_ebm.langevin_step` which threads an
+    `RNGKey` operand.  This op intentionally drops the noise / RNG
+    surface so the downstream code-gen passes can specialize fused
+    energy-grad kernels without an RNG-state-handle parameter.
+  }];
   let arguments = (ins
     AnyType:$y,
     AnyType:$grad,
-    F64Attr:$eta,
-    OptionalAttr<F64Attr>:$noise_scale,
-    OptionalAttr<AnyType>:$rng_key
+    F64Attr:$eta
   );
   let results = (outs AnyType:$result);
   let assemblyFormat = [{
-    $y `,` $grad `eta` $eta (`noise_scale` $noise_scale^)?
-    (`rng_key` $rng_key^)?
+    $y `,` $grad `eta` $eta
     attr-dict `:` functional-type(operands, results)
   }];
 }
@@ -109,7 +119,7 @@ def EBM_LangevinStepOp : EBMOp<"langevin_step", []> {
     FlatSymbolRefAttr:$energy_fn,
     F64Attr:$eta,
     F64Attr:$temperature,
-    TS_EBM_Manifold:$manifold,
+    StrAttr:$manifold,
     OptionalAttr<I64Attr>:$grade
   );
   let results = (outs AnyType:$new_state, AnyType:$next_key);
@@ -140,7 +150,7 @@ def EBM_DecodeInitOp : EBMOp<"decode_init", []> {
     AnyType:$x,
     AnyType:$rng_key,
     I64Attr:$K,
-    TS_EBM_InitStrategy:$init_strategy,
+    StrAttr:$init_strategy,
     OptionalAttr<FlatSymbolRefAttr>:$base_model_fn,
     OptionalAttr<I64ArrayAttr>:$shape
   );
@@ -163,7 +173,7 @@ def EBM_PartitionZOp : EBMOp<"partition_z", []> {
   }];
   let arguments = (ins
     FlatSymbolRefAttr:$energy_fn,
-    TS_EBM_Method:$method,
+    StrAttr:$method,
     OptionalAttr<I64Attr>:$n_samples,
     OptionalAttr<I64Attr>:$n_chains,
     OptionalAttr<I64Attr>:$n_steps

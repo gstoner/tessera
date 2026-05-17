@@ -49,6 +49,12 @@ struct EBMCheckpointInnerLoopPass
                          OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EBMCheckpointInnerLoopPass)
 
+  EBMCheckpointInnerLoopPass() = default;
+  EBMCheckpointInnerLoopPass(const EBMCheckpointInnerLoopPass &other)
+      : PassWrapper(other) {
+    checkpointBudget = other.checkpointBudget;
+  }
+
   // Pass option: maximum number of live states to keep (rest are
   // rematerialized).  Default 4 — enough to fit a typical T=16 chain
   // with one checkpoint every 4 steps.

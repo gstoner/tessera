@@ -36,21 +36,29 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+# Tablegen emits .h.inc / .cpp.inc into the build dir; sources include
+# them by short name (e.g. `#include "CliffordDialect.h.inc"`), so the
+# build dir needs to be on the search path.
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 # ------------------------------------------------------------------
 # Dialect + Ops tablegen.
+# `mlir_tablegen()` reads `LLVM_TARGET_DEFINITIONS` to find its input
+# file; setting the variable in the directory scope is the standard
+# MLIR pattern.  We set it before each batch so the Ops and Passes
+# tablegens each see the right input.
 # ------------------------------------------------------------------
-set(CLIFFORD_TD ${CMAKE_CURRENT_SOURCE_DIR}/lib/Dialect/Clifford/CliffordOps.td)
+set(LLVM_TARGET_DEFINITIONS ${CMAKE_CURRENT_SOURCE_DIR}/lib/Dialect/Clifford/CliffordOps.td)
 
-mlir_tablegen(CliffordOps.h.inc       -gen-op-decls      -dialect=tessera_clifford DEPENDS ${CLIFFORD_TD})
-mlir_tablegen(CliffordOps.cpp.inc     -gen-op-defs       -dialect=tessera_clifford DEPENDS ${CLIFFORD_TD})
-mlir_tablegen(CliffordDialect.h.inc   -gen-dialect-decls                            DEPENDS ${CLIFFORD_TD})
-mlir_tablegen(CliffordDialect.cpp.inc -gen-dialect-defs                             DEPENDS ${CLIFFORD_TD})
+mlir_tablegen(CliffordOps.h.inc       -gen-op-decls      -dialect=tessera_clifford)
+mlir_tablegen(CliffordOps.cpp.inc     -gen-op-defs       -dialect=tessera_clifford)
+mlir_tablegen(CliffordDialect.h.inc   -gen-dialect-decls -dialect=tessera_clifford)
+mlir_tablegen(CliffordDialect.cpp.inc -gen-dialect-defs  -dialect=tessera_clifford)
 add_public_tablegen_target(TesseraCliffordTableGen)
 
 # Passes tablegen (registration headers).
-mlir_tablegen(CliffordPasses.h.inc -gen-pass-decls
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/include/tessera/Clifford/CliffordPasses.td)
+set(LLVM_TARGET_DEFINITIONS ${CMAKE_CURRENT_SOURCE_DIR}/include/tessera/Clifford/CliffordPasses.td)
+mlir_tablegen(CliffordPasses.h.inc -gen-pass-decls)
 add_public_tablegen_target(TesseraCliffordPassesIncGen)
 
 # ------------------------------------------------------------------
@@ -81,7 +89,16 @@ add_mlir_library(TesseraClifford
 # Tool: ts-clifford-opt.
 # ------------------------------------------------------------------
 add_executable(ts-clifford-opt tools/ts-clifford-opt.cpp)
-target_link_libraries(ts-clifford-opt PRIVATE TesseraClifford MLIRIR MLIRPass MLIRSupport)
+target_link_libraries(ts-clifford-opt PRIVATE
+    TesseraClifford
+    MLIRIR
+    MLIRPass
+    MLIRSupport
+    MLIROptLib
+    MLIRArithDialect
+    MLIRTensorDialect
+    MLIRFuncDialect
+)
 
 # ------------------------------------------------------------------
 # Lit tests.

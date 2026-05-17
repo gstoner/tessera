@@ -21,17 +21,18 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-set(EBM_TD ${CMAKE_CURRENT_SOURCE_DIR}/lib/Dialect/EBM/EBMOps.td)
+set(LLVM_TARGET_DEFINITIONS ${CMAKE_CURRENT_SOURCE_DIR}/lib/Dialect/EBM/EBMOps.td)
 
-mlir_tablegen(EBMOps.h.inc       -gen-op-decls      -dialect=tessera_ebm DEPENDS ${EBM_TD})
-mlir_tablegen(EBMOps.cpp.inc     -gen-op-defs       -dialect=tessera_ebm DEPENDS ${EBM_TD})
-mlir_tablegen(EBMDialect.h.inc   -gen-dialect-decls                      DEPENDS ${EBM_TD})
-mlir_tablegen(EBMDialect.cpp.inc -gen-dialect-defs                       DEPENDS ${EBM_TD})
+mlir_tablegen(EBMOps.h.inc       -gen-op-decls      -dialect=tessera_ebm)
+mlir_tablegen(EBMOps.cpp.inc     -gen-op-defs       -dialect=tessera_ebm)
+mlir_tablegen(EBMDialect.h.inc   -gen-dialect-decls -dialect=tessera_ebm)
+mlir_tablegen(EBMDialect.cpp.inc -gen-dialect-defs  -dialect=tessera_ebm)
 add_public_tablegen_target(TesseraEBMTableGen)
 
-mlir_tablegen(EBMPasses.h.inc -gen-pass-decls
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/include/tessera/EBM/EBMPasses.td)
+set(LLVM_TARGET_DEFINITIONS ${CMAKE_CURRENT_SOURCE_DIR}/include/tessera/EBM/EBMPasses.td)
+mlir_tablegen(EBMPasses.h.inc -gen-pass-decls)
 add_public_tablegen_target(TesseraEBMPassesIncGen)
 
 add_mlir_library(TesseraEBM
@@ -55,7 +56,15 @@ add_mlir_library(TesseraEBM
 )
 
 add_executable(ts-ebm-opt tools/ts-ebm-opt.cpp)
-target_link_libraries(ts-ebm-opt PRIVATE TesseraEBM MLIRIR MLIRPass MLIRSupport)
+target_link_libraries(ts-ebm-opt PRIVATE
+    TesseraEBM
+    MLIRIR
+    MLIRPass
+    MLIRSupport
+    MLIROptLib
+    MLIRSCFDialect
+    MLIRFuncDialect
+)
 
 set(LLVM_LIT ${LLVM_TOOLS_BINARY_DIR}/llvm-lit)
 add_custom_target(check-ebm

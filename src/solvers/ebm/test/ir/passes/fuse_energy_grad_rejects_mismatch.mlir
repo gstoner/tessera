@@ -9,7 +9,7 @@ module {
       %x : tensor<8x4xf32>,
       %y : tensor<8x4xf32>,
       %z : tensor<8x4xf32>,
-      %key : !ebm.rngkey) -> tensor<8x4xf32> {
+      %key : tensor<2xi64>) -> tensor<8x4xf32> {
     // Energy is evaluated on y but the step runs on z — no fusion.
     %e = "tessera_ebm.energy"(%x, %y) { energy_fn = @user_E }
         : (tensor<8x4xf32>, tensor<8x4xf32>) -> tensor<8xf32>
@@ -18,7 +18,7 @@ module {
           eta = 0.05 : f64,
           temperature = 1.0 : f64,
           manifold = "euclidean" }
-        : (tensor<8x4xf32>, !ebm.rngkey) -> (tensor<8x4xf32>, !ebm.rngkey)
+        : (tensor<8x4xf32>, tensor<2xi64>) -> (tensor<8x4xf32>, tensor<2xi64>)
     return %step#0 : tensor<8x4xf32>
   }
   func.func private @user_E(

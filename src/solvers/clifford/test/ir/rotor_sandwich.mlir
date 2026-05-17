@@ -16,11 +16,9 @@ module {
   }
 }
 
-// Annotation succeeds.
-// CHECK: tessera.clifford.canonical
-// CHECK: tessera.clifford.dim = 8
-
-// GA8 stub remarks fire (lowering bodies not implemented yet).
-// CHECK: expand-product-table stub
-// CHECK: grade-fusion stub
-// CHECK: rotor-sandwich-fold stub
+// Annotation succeeds; the rotor_sandwich op survives the pipeline
+// (GA8 RotorSandwichFold preserves the high-level op for GA9 backend
+// kernel lowering; only chains of geo_product+reverse get folded into it).
+// CHECK: tessera_clifford.rotor_sandwich
+// CHECK-SAME: tessera.clifford.canonical
+// CHECK-SAME: tessera.clifford.dim = 8

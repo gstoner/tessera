@@ -9,19 +9,19 @@
 module {
   func.func @T_step_chain(
       %y0 : tensor<8x4xf32>,
-      %key0 : !ebm.rngkey) -> tensor<8x4xf32> {
+      %key0 : tensor<2xi64>) -> tensor<8x4xf32> {
     %T = arith.constant 16 : index
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %final:2 = scf.for %t = %c0 to %T step %c1
-        iter_args(%y = %y0, %key = %key0) -> (tensor<8x4xf32>, !ebm.rngkey) {
+        iter_args(%y = %y0, %key = %key0) -> (tensor<8x4xf32>, tensor<2xi64>) {
       %step:2 = "tessera_ebm.langevin_step"(%y, %key)
           { energy_fn = @user_E,
             eta = 0.05 : f64,
             temperature = 1.0 : f64,
             manifold = "euclidean" }
-          : (tensor<8x4xf32>, !ebm.rngkey) -> (tensor<8x4xf32>, !ebm.rngkey)
-      scf.yield %step#0, %step#1 : tensor<8x4xf32>, !ebm.rngkey
+          : (tensor<8x4xf32>, tensor<2xi64>) -> (tensor<8x4xf32>, tensor<2xi64>)
+      scf.yield %step#0, %step#1 : tensor<8x4xf32>, tensor<2xi64>
     }
     return %final#0 : tensor<8x4xf32>
   }

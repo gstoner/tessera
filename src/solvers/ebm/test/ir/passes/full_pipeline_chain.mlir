@@ -10,11 +10,11 @@
 module {
   func.func @ebt_chain(
       %x : tensor<2x16xf32>,
-      %key0 : !ebm.rngkey) -> tensor<2x16xf32> {
+      %key0 : tensor<2xi64>) -> tensor<2x16xf32> {
     // Initialize K=4 candidates.
     %cands:2 = "tessera_ebm.decode_init"(%x, %key0)
         { K = 4 : i64, init_strategy = "noise", shape = [16] }
-        : (tensor<2x16xf32>, !ebm.rngkey) -> (tensor<2x4x16xf32>, !ebm.rngkey)
+        : (tensor<2x16xf32>, tensor<2xi64>) -> (tensor<2x4x16xf32>, tensor<2xi64>)
 
     // T-step inner loop on each candidate.
     %T = arith.constant 8 : index
@@ -22,7 +22,7 @@ module {
     %c1 = arith.constant 1 : index
     %final:2 = scf.for %t = %c0 to %T step %c1
         iter_args(%y = %cands#0, %k = %cands#1)
-        -> (tensor<2x4x16xf32>, !ebm.rngkey) {
+        -> (tensor<2x4x16xf32>, tensor<2xi64>) {
       %e = "tessera_ebm.energy"(%x, %y) { energy_fn = @user_E }
           : (tensor<2x16xf32>, tensor<2x4x16xf32>) -> tensor<2x4xf32>
       %step:2 = "tessera_ebm.langevin_step"(%y, %k)
@@ -30,8 +30,8 @@ module {
             eta = 0.05 : f64,
             temperature = 1.0 : f64,
             manifold = "euclidean" }
-          : (tensor<2x4x16xf32>, !ebm.rngkey) -> (tensor<2x4x16xf32>, !ebm.rngkey)
-      scf.yield %step#0, %step#1 : tensor<2x4x16xf32>, !ebm.rngkey
+          : (tensor<2x4x16xf32>, tensor<2xi64>) -> (tensor<2x4x16xf32>, tensor<2xi64>)
+      scf.yield %step#0, %step#1 : tensor<2x4x16xf32>, tensor<2xi64>
     }
 
     // Final energies + self_verify.

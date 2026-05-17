@@ -3591,3 +3591,273 @@ extern "C" void tessera_apple_gpu_native_sparse_attn_f32(
     }
   }
 }
+
+//===---------------------------------------------------------------------===//
+// GA9 — Clifford / Geometric-Algebra MSL kernels (2026-05-17).
+//
+// First fused kernels for the `tessera_clifford.*` dialect:
+//   - clifford_geo_product_cl30_f32 : 8-element multivector × multivector
+//     using the fully-unrolled Cl(3,0) Cayley table (64 fp32 mul-adds).
+//   - clifford_rotor_sandwich_cl30_f32 : R · v · R† fused (3 geo_products
+//     collapsed into a single dispatch).
+//
+// Cl(3,0) basis blade order (last axis = 8):
+//   0:1   1:e1   2:e2   3:e12   4:e3   5:e13   6:e23   7:e123
+//
+// All expressions below were generated from the Python Cayley table in
+// `tessera.ga.signature._product_table` so the GPU result is
+// bitwise-equivalent to the GA Python reference up to fp32 rounding.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+inline void reference_clifford_geo_product_cl30_f32(
+    const float* A, const float* B, float* C, int32_t batch) {
+  for (int32_t b = 0; b < batch; ++b) {
+    const float* a = A + b * 8;
+    const float* x = B + b * 8;
+    float* c = C + b * 8;
+    c[0] = a[0]*x[0] + a[1]*x[1] + a[2]*x[2] - a[3]*x[3]
+         + a[4]*x[4] - a[5]*x[5] - a[6]*x[6] - a[7]*x[7];
+    c[1] = a[0]*x[1] + a[1]*x[0] - a[2]*x[3] + a[3]*x[2]
+         - a[4]*x[5] + a[5]*x[4] - a[6]*x[7] - a[7]*x[6];
+    c[2] = a[0]*x[2] + a[1]*x[3] + a[2]*x[0] - a[3]*x[1]
+         - a[4]*x[6] + a[5]*x[7] + a[6]*x[4] + a[7]*x[5];
+    c[3] = a[0]*x[3] + a[1]*x[2] - a[2]*x[1] + a[3]*x[0]
+         + a[4]*x[7] - a[5]*x[6] + a[6]*x[5] + a[7]*x[4];
+    c[4] = a[0]*x[4] + a[1]*x[5] + a[2]*x[6] - a[3]*x[7]
+         + a[4]*x[0] - a[5]*x[1] - a[6]*x[2] - a[7]*x[3];
+    c[5] = a[0]*x[5] + a[1]*x[4] - a[2]*x[7] + a[3]*x[6]
+         - a[4]*x[1] + a[5]*x[0] - a[6]*x[3] - a[7]*x[2];
+    c[6] = a[0]*x[6] + a[1]*x[7] + a[2]*x[4] - a[3]*x[5]
+         - a[4]*x[2] + a[5]*x[3] + a[6]*x[0] + a[7]*x[1];
+    c[7] = a[0]*x[7] + a[1]*x[6] - a[2]*x[5] + a[3]*x[4]
+         + a[4]*x[3] - a[5]*x[2] + a[6]*x[1] + a[7]*x[0];
+  }
+}
+
+bool dispatch_clifford_geo_product_cl30_f32_msl(
+    MetalDeviceContext &ctx, const float* A, const float* B,
+    float* C, int32_t batch) {
+  static NSString *const kCliffordGeoProductCl30F32 = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void clifford_geo_product_cl30_f32(
+    device const float* A   [[buffer(0)]],
+    device const float* B   [[buffer(1)]],
+    device float*       C   [[buffer(2)]],
+    constant int&       batch [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    float a0=A[off+0], a1=A[off+1], a2=A[off+2], a3=A[off+3];
+    float a4=A[off+4], a5=A[off+5], a6=A[off+6], a7=A[off+7];
+    float b0=B[off+0], b1=B[off+1], b2=B[off+2], b3=B[off+3];
+    float b4=B[off+4], b5=B[off+5], b6=B[off+6], b7=B[off+7];
+
+    C[off+0] = a0*b0 + a1*b1 + a2*b2 - a3*b3 + a4*b4 - a5*b5 - a6*b6 - a7*b7;
+    C[off+1] = a0*b1 + a1*b0 - a2*b3 + a3*b2 - a4*b5 + a5*b4 - a6*b7 - a7*b6;
+    C[off+2] = a0*b2 + a1*b3 + a2*b0 - a3*b1 - a4*b6 + a5*b7 + a6*b4 + a7*b5;
+    C[off+3] = a0*b3 + a1*b2 - a2*b1 + a3*b0 + a4*b7 - a5*b6 + a6*b5 + a7*b4;
+    C[off+4] = a0*b4 + a1*b5 + a2*b6 - a3*b7 + a4*b0 - a5*b1 - a6*b2 - a7*b3;
+    C[off+5] = a0*b5 + a1*b4 - a2*b7 + a3*b6 - a4*b1 + a5*b0 - a6*b3 - a7*b2;
+    C[off+6] = a0*b6 + a1*b7 + a2*b4 - a3*b5 - a4*b2 + a5*b3 + a6*b0 + a7*b1;
+    C[off+7] = a0*b7 + a1*b6 - a2*b5 + a3*b4 + a4*b3 - a5*b2 + a6*b1 + a7*b0;
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kCliffordGeoProductCl30F32, @"clifford_geo_product_cl30_f32");
+    if (!pso) return false;
+
+    NSUInteger byteCount =
+        sizeof(float) * static_cast<NSUInteger>(batch) * 8u;
+    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B length:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufC = [ctx.device newBufferWithLength:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufA || !bufB || !bufC) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBuffer:bufC offset:0 atIndex:2];
+    [enc setBytes:&batch length:sizeof(int32_t) atIndex:3];
+
+    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(batch), 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(batch),
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(C, [bufC contents], byteCount);
+    return true;
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_clifford_geo_product_cl30_f32(
+    const float* A, const float* B, float* C, int32_t batch)
+{
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_geo_product_cl30_f32_msl(ctx, A, B, C, batch)) return;
+  reference_clifford_geo_product_cl30_f32(A, B, C, batch);
+}
+
+//===---------------------------------------------------------------------===//
+// clifford_rotor_sandwich_cl30_f32 — R · v · R† fused.
+//
+// For a Cl(3,0) rotor R (even-grade) acting on a vector v, the sandwich
+// produces another vector.  The fused kernel computes both intermediate
+// geo_products in one dispatch, sharing the R† computation (reverse of
+// a Cl(3,0) multivector applies signs (+,+,+,-,+,-,-,+) for grades
+// 0,1,1,2,1,2,2,3).
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+inline void reference_clifford_rotor_sandwich_cl30_f32(
+    const float* R, const float* V, float* Out, int32_t batch) {
+  for (int32_t b = 0; b < batch; ++b) {
+    // Compute R†: reverse signs by grade.
+    float r0=R[b*8+0], r1=R[b*8+1], r2=R[b*8+2], r3=R[b*8+3];
+    float r4=R[b*8+4], r5=R[b*8+5], r6=R[b*8+6], r7=R[b*8+7];
+    float Rd[8] = {
+      r0, r1, r2, -r3,         //  grade 0: +1, grade 1: +1, grade 2: -1
+      r4, -r5, -r6, -r7,       //  grade 3: -1
+    };
+    // T = R * v  (use the same Cayley layout).
+    float T[8];
+    {
+      const float* a = R + b*8;
+      const float* x = V + b*8;
+      float* c = T;
+      c[0] = a[0]*x[0] + a[1]*x[1] + a[2]*x[2] - a[3]*x[3] + a[4]*x[4] - a[5]*x[5] - a[6]*x[6] - a[7]*x[7];
+      c[1] = a[0]*x[1] + a[1]*x[0] - a[2]*x[3] + a[3]*x[2] - a[4]*x[5] + a[5]*x[4] - a[6]*x[7] - a[7]*x[6];
+      c[2] = a[0]*x[2] + a[1]*x[3] + a[2]*x[0] - a[3]*x[1] - a[4]*x[6] + a[5]*x[7] + a[6]*x[4] + a[7]*x[5];
+      c[3] = a[0]*x[3] + a[1]*x[2] - a[2]*x[1] + a[3]*x[0] + a[4]*x[7] - a[5]*x[6] + a[6]*x[5] + a[7]*x[4];
+      c[4] = a[0]*x[4] + a[1]*x[5] + a[2]*x[6] - a[3]*x[7] + a[4]*x[0] - a[5]*x[1] - a[6]*x[2] - a[7]*x[3];
+      c[5] = a[0]*x[5] + a[1]*x[4] - a[2]*x[7] + a[3]*x[6] - a[4]*x[1] + a[5]*x[0] - a[6]*x[3] - a[7]*x[2];
+      c[6] = a[0]*x[6] + a[1]*x[7] + a[2]*x[4] - a[3]*x[5] - a[4]*x[2] + a[5]*x[3] + a[6]*x[0] + a[7]*x[1];
+      c[7] = a[0]*x[7] + a[1]*x[6] - a[2]*x[5] + a[3]*x[4] + a[4]*x[3] - a[5]*x[2] + a[6]*x[1] + a[7]*x[0];
+    }
+    // Out = T * R†.
+    {
+      const float* a = T;
+      const float* x = Rd;
+      float* c = Out + b*8;
+      c[0] = a[0]*x[0] + a[1]*x[1] + a[2]*x[2] - a[3]*x[3] + a[4]*x[4] - a[5]*x[5] - a[6]*x[6] - a[7]*x[7];
+      c[1] = a[0]*x[1] + a[1]*x[0] - a[2]*x[3] + a[3]*x[2] - a[4]*x[5] + a[5]*x[4] - a[6]*x[7] - a[7]*x[6];
+      c[2] = a[0]*x[2] + a[1]*x[3] + a[2]*x[0] - a[3]*x[1] - a[4]*x[6] + a[5]*x[7] + a[6]*x[4] + a[7]*x[5];
+      c[3] = a[0]*x[3] + a[1]*x[2] - a[2]*x[1] + a[3]*x[0] + a[4]*x[7] - a[5]*x[6] + a[6]*x[5] + a[7]*x[4];
+      c[4] = a[0]*x[4] + a[1]*x[5] + a[2]*x[6] - a[3]*x[7] + a[4]*x[0] - a[5]*x[1] - a[6]*x[2] - a[7]*x[3];
+      c[5] = a[0]*x[5] + a[1]*x[4] - a[2]*x[7] + a[3]*x[6] - a[4]*x[1] + a[5]*x[0] - a[6]*x[3] - a[7]*x[2];
+      c[6] = a[0]*x[6] + a[1]*x[7] + a[2]*x[4] - a[3]*x[5] - a[4]*x[2] + a[5]*x[3] + a[6]*x[0] + a[7]*x[1];
+      c[7] = a[0]*x[7] + a[1]*x[6] - a[2]*x[5] + a[3]*x[4] + a[4]*x[3] - a[5]*x[2] + a[6]*x[1] + a[7]*x[0];
+    }
+  }
+}
+
+bool dispatch_clifford_rotor_sandwich_cl30_f32_msl(
+    MetalDeviceContext &ctx, const float* R, const float* V,
+    float* Out, int32_t batch) {
+  static NSString *const kCliffordRotorSandwichCl30F32 = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+inline void cl30_geo_product(
+    thread float a[8], thread float b[8], thread float c[8])
+{
+    c[0] = a[0]*b[0] + a[1]*b[1] + a[2]*b[2] - a[3]*b[3] + a[4]*b[4] - a[5]*b[5] - a[6]*b[6] - a[7]*b[7];
+    c[1] = a[0]*b[1] + a[1]*b[0] - a[2]*b[3] + a[3]*b[2] - a[4]*b[5] + a[5]*b[4] - a[6]*b[7] - a[7]*b[6];
+    c[2] = a[0]*b[2] + a[1]*b[3] + a[2]*b[0] - a[3]*b[1] - a[4]*b[6] + a[5]*b[7] + a[6]*b[4] + a[7]*b[5];
+    c[3] = a[0]*b[3] + a[1]*b[2] - a[2]*b[1] + a[3]*b[0] + a[4]*b[7] - a[5]*b[6] + a[6]*b[5] + a[7]*b[4];
+    c[4] = a[0]*b[4] + a[1]*b[5] + a[2]*b[6] - a[3]*b[7] + a[4]*b[0] - a[5]*b[1] - a[6]*b[2] - a[7]*b[3];
+    c[5] = a[0]*b[5] + a[1]*b[4] - a[2]*b[7] + a[3]*b[6] - a[4]*b[1] + a[5]*b[0] - a[6]*b[3] - a[7]*b[2];
+    c[6] = a[0]*b[6] + a[1]*b[7] + a[2]*b[4] - a[3]*b[5] - a[4]*b[2] + a[5]*b[3] + a[6]*b[0] + a[7]*b[1];
+    c[7] = a[0]*b[7] + a[1]*b[6] - a[2]*b[5] + a[3]*b[4] + a[4]*b[3] - a[5]*b[2] + a[6]*b[1] + a[7]*b[0];
+}
+
+kernel void clifford_rotor_sandwich_cl30_f32(
+    device const float* R   [[buffer(0)]],
+    device const float* V   [[buffer(1)]],
+    device float*       Out [[buffer(2)]],
+    constant int&       batch [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    float r[8], v[8], rd[8], t[8], o[8];
+    for (uint i = 0; i < 8; ++i) { r[i] = R[off+i]; v[i] = V[off+i]; }
+    // R†: grade-k reverse sign = (-1)^(k(k-1)/2).
+    // For Cl(3,0): grades = (0,1,1,2,1,2,2,3) for masks 0..7.
+    // Signs:        (+,+,+,-,+,-,-,+).
+    rd[0]=r[0]; rd[1]=r[1]; rd[2]=r[2]; rd[3]=-r[3];
+    rd[4]=r[4]; rd[5]=-r[5]; rd[6]=-r[6]; rd[7]=-r[7];
+    cl30_geo_product(r, v, t);
+    cl30_geo_product(t, rd, o);
+    for (uint i = 0; i < 8; ++i) Out[off+i] = o[i];
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kCliffordRotorSandwichCl30F32, @"clifford_rotor_sandwich_cl30_f32");
+    if (!pso) return false;
+
+    NSUInteger byteCount =
+        sizeof(float) * static_cast<NSUInteger>(batch) * 8u;
+    id<MTLBuffer> bufR = [ctx.device newBufferWithBytes:R length:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufV = [ctx.device newBufferWithBytes:V length:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
+                                                 options:MTLResourceStorageModeShared];
+    if (!bufR || !bufV || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufR offset:0 atIndex:0];
+    [enc setBuffer:bufV offset:0 atIndex:1];
+    [enc setBuffer:bufO offset:0 atIndex:2];
+    [enc setBytes:&batch length:sizeof(int32_t) atIndex:3];
+
+    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(batch), 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(batch),
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(Out, [bufO contents], byteCount);
+    return true;
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32(
+    const float* R, const float* V, float* Out, int32_t batch)
+{
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_rotor_sandwich_cl30_f32_msl(ctx, R, V, Out, batch)) return;
+  reference_clifford_rotor_sandwich_cl30_f32(R, V, Out, batch);
+}

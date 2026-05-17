@@ -3,9 +3,8 @@
 #include "mlir/IR/DialectImplementation.h"
 
 using namespace mlir;
+using namespace tessera::ebm;
 
-namespace tessera {
-namespace ebm {
 #include "EBMDialect.cpp.inc"
 
 void EBMDialect::initialize() {
@@ -14,6 +13,3 @@ void EBMDialect::initialize() {
 #include "EBMOps.cpp.inc"
       >();
 }
-
-}  // namespace ebm
-}  // namespace tessera

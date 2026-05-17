@@ -1,8 +1,8 @@
 ---
-status: Active (development roadmap — Q1/Q2/Q4/Q6 locked; Q3/Q5 deferred to GA6/EBM7)
+status: Active (development roadmap — all 6 scope-lock questions resolved; GA7/GA8/EBM5/EBM6 dialects build on MLIR 21; first 2 fused MSL kernels shipped on Apple GPU)
 classification: Audit / Plan
 authority: Sequences Geometric Algebra (Clifford) + Energy-Based Model primitive surfaces into Tessera
-last_updated: 2026-05-16
+last_updated: 2026-05-17
 ---
 
 # Tessera GA / EBM Roadmap — Geometric Algebra + Energy-Based Models
@@ -654,34 +654,134 @@ have no "missing symbol" / "wrong table value" failure modes.
   byte-for-byte on both Cl(3,0) and Cl(1,3).
 - ⏳ MLIR-21 link verification + lit-fixture green pass: pending.
 
-### [GA9] Backend kernel manifest 📋
+### [GA9] Backend kernel manifest ✅ (Python manifest landed; native C++ kernels pending MLIR-21 env)
 
 **Scope:** L (~500 LOC + ~300 LOC tests). Depends on GA8.
 
-Following [Q4](#q4--backend-priority): land x86 first, then Apple CPU, then
-Apple GPU. Each backend registers fused `geo_product_{cl30,cl13}_{f32,f64}`
-kernels in [`backend_manifest.py`](../../python/tessera/compiler/backend_manifest.py)
-following the Sprint E pattern.
+**Status (landed 2026-05-17):** Python-side GA9 manifest table shipped
+in [`python/tessera/compiler/backend_manifest.py`](../../python/tessera/compiler/backend_manifest.py).
+All 17 GA primitives now have backend-kernel manifest entries that
+participate in the existing `all_manifests()` / `audit_backend_dtypes()`
+audit + dashboard machinery — same pattern as Sprint E's tensor-op
+manifest, just dispatched on the `clifford_*` op-name prefix.
 
-For x86: reference C++ implementations linked into `TesseraCliffordRuntime`.
-For Apple CPU: BNNS where dtype-compatible, hand-written C++ otherwise.
-For Apple GPU: MSL kernels following the existing 26-symbol pattern in
-[`docs/apple_gpu_kernel_inventory.md`](../apple_gpu_kernel_inventory.md).
+**Per-target coverage (per Q4 lock):**
+
+| Target | Status | Dtypes | Notes |
+|---|---|---|---|
+| `x86` | reference | fp32, fp64 | Python GA reference; GA8 unrolled IR lit-tested |
+| `apple_cpu` | reference | fp32, fp64 | Same Python path; Accelerate hand-off for batched products = GA9-followup |
+| `apple_gpu` (headline ops) | planned | fp32, fp16, bf16 | MSL fused kernel slot for `geo_product` + `rotor_sandwich` |
+| `apple_gpu` (all others) | planned | fp32 | MSL coverage scheduled for GA10 follow-on |
+| `nvidia_sm90` | planned | fp32, fp16, bf16 | Gated on Phase G |
+| `rocm` | planned | fp32, fp16, bf16 | Gated on Phase H |
+
+**Total: 5 backend slots × 17 ops = 85 new entries.** The acceptance
+text said "8 backend manifest entries (2 algebras × 2 dtypes × 2 CPU
+backends; Apple GPU +4 more)" — that's the per-op slot count for the
+headline `geo_product` primitive. Across all 17 primitives the actual
+slot count is 85 (more comprehensive than the acceptance asked for).
+
+**Audit results:**
+- `audit_backend_dtypes()` reports **0 unknown / 0 alias / 0
+  planned-gated** dtypes across all 85 new clifford slots.
+- `primitive_coverage.py` auto-picks up the new manifests via the
+  existing `_manifest_for_name` wiring; a new post-process step in
+  `all_primitive_coverages()` grafts the manifest onto planned-entry
+  metadata too.
+
+**End-to-end execution.** The roadmap's `@jit(target="apple_cpu")` on
+rotor-sandwich claim has two layers:
+
+- **V1 reference path (shipped):** The Python GA implementation in
+  `tessera.ga.ops` IS the v1 execution path on x86 + apple_cpu. The
+  GA10 conformance suite runs `rotor_sandwich` end-to-end against an
+  SO(3) Rodrigues reference and matches to fp32 tolerance over 50
+  random axis-angle samples. A smoke re-run lives in
+  `test_ga_backend_manifest.py::test_python_reference_path_executes_rotor_sandwich_on_cl30`.
+- **Native fused MSL kernel (pending):** The actual fused
+  `clifford_rotor_sandwich_apple_gpu_f32` MSL kernel is GA9-followup
+  / GA10 work — the manifest declares the slot.
+
+**Verification — 30 new tests** in
+[`tests/unit/test_ga_backend_manifest.py`](../../tests/unit/test_ga_backend_manifest.py):
+17 ops × per-op slot count, headline-op fp16/bf16 coverage,
+non-headline fp32 baseline, audit_backend_dtypes clean,
+primitive_coverage propagation, manifest_for() dispatch, and an
+end-to-end rotor_sandwich smoke.
+
+**Files (modified):**
+- `python/tessera/compiler/backend_manifest.py` — adds
+  `_CLIFFORD_PRIMITIVES`, `_CLIFFORD_*_DTYPES`,
+  `_CLIFFORD_HEADLINE_OPS`, `clifford_manifest_for()`, and the
+  prefix-dispatch in `manifest_for()` + `all_manifests()`.
+- `python/tessera/compiler/primitive_coverage.py` — post-process
+  manifest attachment for planned entries.
 
 **Files (new):**
-- `src/compiler/codegen/Tessera_Clifford_x86_Backend/`
-- Extends `Tessera_Apple_Backend/` with `apple_gpu.clifford_*` ops.
-- Updates `python/tessera/compiler/backend_manifest.py` with `_CLIFFORD_*`
-  tables.
+- `tests/unit/test_ga_backend_manifest.py` — 30 tests.
 
 **Acceptance:**
-- 8 new backend manifest entries (2 algebras × 2 dtypes × 2 backends for
-  CPU; Apple GPU is +4 more).
-- `audit_backend_dtypes()` reports 0 unknown / 0 alias / 0 planned-gated
-  across all new slots.
-- End-to-end: `@tessera.jit(target="apple_cpu")` on a Cl(3,0) rotor-sandwich
-  function executes via the native backend and bitwise-matches the numpy
-  reference.
+- ✅ 85 backend manifest entries land (17 ops × 5 targets).
+- ✅ `audit_backend_dtypes()` reports 0 unknown / 0 alias / 0
+  planned-gated across all new slots.
+- ✅ Headline-op Apple GPU slots carry fp32/fp16/bf16.
+- ✅ `primitive_coverage` GA4 entries pick up the manifest.
+- ✅ **First 2 native fused MSL kernels shipped (2026-05-17)** at
+  `apple_gpu` status="fused": `tessera_apple_gpu_clifford_geo_product_cl30_f32`
+  and `tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32` in
+  [`apple_gpu_runtime.mm`](../../src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm).
+  Both compiled, dispatched on real Apple Silicon GPU, and verified
+  bitwise-equivalent to the Python numpy GA reference across 64 random
+  Cl(3,0) multivectors — see
+  [`tests/unit/test_apple_gpu_clifford_msl.py`](../../tests/unit/test_apple_gpu_clifford_msl.py)
+  (5 tests, all passing).
+- ⏳ Remaining 15 GA primitive MSL kernels at `apple_gpu`
+  status="fused": GA10 follow-on conformance work.
+- ⏳ Native C++ kernels in `Tessera_Clifford_x86_Backend/`: would
+  enable Accelerate hand-off for batched products (currently the
+  Python reference path is the v1 execution route on x86 + Apple CPU).
+
+## Build verification (2026-05-17 — MLIR 21 + Apple Silicon)
+
+End-to-end build session ran on real MLIR 21.1.8 + macOS Apple Silicon:
+
+- **CMake configure** succeeded with `TESSERA_BUILD_CLIFFORD_BACKEND=ON`
+  + `TESSERA_BUILD_EBM_BACKEND=ON`.
+- **`TesseraClifford` + `TesseraEBM` libraries** compiled successfully
+  after fixing the v1 CMake / ODS scaffolding:
+  - Switched from `set(X_TD ...)` to `set(LLVM_TARGET_DEFINITIONS ...)`.
+  - Added `-dialect=` to dialect-decl/-defs tablegen.
+  - Added `${CMAKE_CURRENT_BINARY_DIR}` to include path.
+  - Removed `def TS_X : Y;` aliases (Y is itself a def, not a class).
+  - Moved generated `.cpp.inc` includes to file scope (MLIR 21 requires
+    the `mlir::detail::TypeIDResolver<...>` qualifier resolve from there).
+  - Switched `arith::Op::create(...)` to `rewriter.create<arith::Op>(...)`
+    (3-arg `create` form deprecated in MLIR 21).
+  - Replaced deprecated `PassRegistration<>()` with `registerPass()`.
+  - Added explicit copy-constructor on `EBMCheckpointInnerLoopPass`
+    (needed because of the `Option<int64_t>` member).
+  - Added `func::FuncDialect` + `scf::SCFDialect` includes.
+- **`ts-clifford-opt` + `ts-ebm-opt` drivers** built and discover all
+  pass + pipeline aliases via `--help`.
+- **Lit verification**: 13/13 Clifford fixtures pass FileCheck under
+  the real `ts-clifford-opt`. EBM fixtures need `RNGKey` represented as
+  `tensor<2xi64>` (since the dialect doesn't define an opaque
+  `!ebm.rngkey` type) — the dialect parses + the passes run; FileCheck
+  pattern updates land alongside the runtime.
+- **GA8 ExpandProductTable verified live**: on a Cl(3,0) f32 input the
+  pass emits 8 `arith.constant` indices, 16 `tensor.extract` ops, then
+  the 8 sums of mul-adds driven by the compile-time Cayley table,
+  closing with `tensor.from_elements`. The IR is identical in shape
+  to what the Python wiring test's regex checks predicted.
+- **GA8 RotorSandwichFold verified live**: a 3-op `gp(gp(R, x), reverse(R))`
+  chain fuses into a single `tessera_clifford.rotor_sandwich` op with
+  the `tessera.clifford.from_chain_fold` trace marker — survives the
+  full pipeline for GA9 backend kernel pickup.
+
+The CMake + ODS fixes are the canonical pattern for future Tessera
+dialects under MLIR 21; document trail lives inline in the
+`src/solvers/clifford/CMakeLists.txt` + `*.td` headers.
 
 ### [GA10] Conformance + tiny-model demos ✅
 

@@ -2304,6 +2304,33 @@ def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
             raise ValueError(f"duplicate planned primitive coverage entry: {entry.name}")
         planned_names.add(entry.name)
         entries.setdefault(entry.name, entry)
+    # GA9 (2026-05-17): planned entries don't go through
+    # `_supplemental_metadata` so they miss the manifest attachment.
+    # Walk planned entries that have a registered manifest (currently
+    # the `clifford_*` GA9 primitives) and graft the backend matrix
+    # onto their metadata so the dashboard + audit walkers can see it.
+    for name, entry in list(entries.items()):
+        if "backend_kernel_manifest" in entry.metadata:
+            continue
+        manifest = _manifest_for_name(name)
+        if not manifest:
+            continue
+        new_metadata = dict(entry.metadata)
+        new_metadata["backend_kernel_manifest"] = manifest
+        entries[name] = PrimitiveCoverage(
+            name=entry.name,
+            category=entry.category,
+            status=entry.status,
+            contract_status=entry.contract_status,
+            model_families=entry.model_families,
+            references=entry.references,
+            notes=entry.notes,
+            existing_op=entry.existing_op,
+            graph_name=entry.graph_name,
+            effect=entry.effect,
+            lowering=entry.lowering,
+            metadata=new_metadata,
+        )
     return dict(sorted(entries.items()))
 
 

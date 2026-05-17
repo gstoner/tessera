@@ -5,12 +5,8 @@
 #include "mlir/IR/OpImplementation.h"
 
 using namespace mlir;
+using namespace tessera::clifford;
 
-namespace tessera {
-namespace clifford {
-
+// Generated op-defs must be at file scope (MLIR 21).
 #define GET_OP_CLASSES
 #include "CliffordOps.cpp.inc"
-
-}  // namespace clifford
-}  // namespace tessera

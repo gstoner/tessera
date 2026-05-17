@@ -8,10 +8,10 @@
 module {
   func.func @K8_self_verify(
       %x : tensor<3x16xf32>,
-      %key : !ebm.rngkey) -> tensor<3x16xf32> {
+      %key : tensor<2xi64>) -> tensor<3x16xf32> {
     %cands:2 = "tessera_ebm.decode_init"(%x, %key)
         { K = 8 : i64, init_strategy = "noise", shape = [16] }
-        : (tensor<3x16xf32>, !ebm.rngkey) -> (tensor<3x8x16xf32>, !ebm.rngkey)
+        : (tensor<3x16xf32>, tensor<2xi64>) -> (tensor<3x8x16xf32>, tensor<2xi64>)
     %energies = arith.constant dense<0.0> : tensor<3x8xf32>
     %best = "tessera_ebm.self_verify"(%energies, %cands#0)
         : (tensor<3x8xf32>, tensor<3x8x16xf32>) -> tensor<3x16xf32>

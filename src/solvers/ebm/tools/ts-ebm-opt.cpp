@@ -32,10 +32,10 @@ int main(int argc, char **argv) {
   registry.insert<scf::SCFDialect>();
   registry.insert<func::FuncDialect>();
 
-  PassRegistration<>(tessera::createEBMCanonicalizePass);
-  PassRegistration<>(tessera::createEBMFuseEnergyGradPass);
-  PassRegistration<>(tessera::createEBMCheckpointInnerLoopPass);
-  PassRegistration<>(tessera::createEBMPipelineCandidatesPass);
+  registerPass(tessera::createEBMCanonicalizePass);
+  registerPass(tessera::createEBMFuseEnergyGradPass);
+  registerPass(tessera::createEBMCheckpointInnerLoopPass);
+  registerPass(tessera::createEBMPipelineCandidatesPass);
 
   PassPipelineRegistration<> pipeline(
       "tessera-ebm-pipeline",

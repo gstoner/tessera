@@ -7,13 +7,13 @@
 module {
   func.func @sphere_chain(
       %x : tensor<3xf32>,
-      %key : !ebm.rngkey) -> tensor<3xf32> {
+      %key : tensor<2xi64>) -> tensor<3xf32> {
     %step:2 = "tessera_ebm.langevin_step"(%x, %key)
         { energy_fn = @user_energy_fn,
           eta = 0.005 : f64,
           temperature = 1.0 : f64,
           manifold = "sphere" }
-        : (tensor<3xf32>, !ebm.rngkey) -> (tensor<3xf32>, !ebm.rngkey)
+        : (tensor<3xf32>, tensor<2xi64>) -> (tensor<3xf32>, tensor<2xi64>)
     return %step#0 : tensor<3xf32>
   }
 

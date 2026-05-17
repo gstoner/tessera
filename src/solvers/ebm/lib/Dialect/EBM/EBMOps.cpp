@@ -5,12 +5,7 @@
 #include "mlir/IR/OpImplementation.h"
 
 using namespace mlir;
-
-namespace tessera {
-namespace ebm {
+using namespace tessera::ebm;
 
 #define GET_OP_CLASSES
 #include "EBMOps.cpp.inc"
-
-}  // namespace ebm
-}  // namespace tessera

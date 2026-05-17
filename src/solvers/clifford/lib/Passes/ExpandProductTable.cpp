@@ -115,14 +115,15 @@ struct ExpandProductTablePattern : public RewritePattern {
     // tensor.extract %lhs[%i_idx] : tensor<dim x elemTy>
     std::vector<Value> lhsCoeffs(dim), rhsCoeffs(dim);
     for (int64_t i = 0; i < dim; ++i) {
-      Value idx = arith::ConstantIndexOp::create(rewriter, loc, i);
-      lhsCoeffs[i] = tensor::ExtractOp::create(rewriter, loc, lhs, ValueRange{idx});
-      rhsCoeffs[i] = tensor::ExtractOp::create(rewriter, loc, rhs, ValueRange{idx});
+      Value idx = rewriter.create<arith::ConstantIndexOp>(loc, i);
+      lhsCoeffs[i] = rewriter.create<tensor::ExtractOp>(loc, lhs, ValueRange{idx});
+      rhsCoeffs[i] = rewriter.create<tensor::ExtractOp>(loc, rhs, ValueRange{idx});
     }
 
     // For each output coefficient k, accumulate the relevant (i, j) terms.
     auto zeroAttr = rewriter.getZeroAttr(elemTy);
-    Value zero = arith::ConstantOp::create(rewriter, loc, cast<TypedAttr>(zeroAttr));
+    Value zero = rewriter.create<arith::ConstantOp>(
+        loc, elemTy, cast<TypedAttr>(zeroAttr));
 
     std::vector<Value> outCoeffs(dim, zero);
     for (int64_t i = 0; i < dim; ++i) {
@@ -132,12 +133,12 @@ struct ExpandProductTablePattern : public RewritePattern {
         int outGrade = tessera::clifford::gradeOfMask(entry.result_mask);
         if (!wantGrade[outGrade]) continue;
         // term = lhs[i] * rhs[j]
-        Value prod = arith::MulFOp::create(rewriter, loc, lhsCoeffs[i], rhsCoeffs[j]);
+        Value prod = rewriter.create<arith::MulFOp>(loc, lhsCoeffs[i], rhsCoeffs[j]);
         Value updated;
         if (entry.sign == 1) {
-          updated = arith::AddFOp::create(rewriter, loc, outCoeffs[entry.result_mask], prod);
+          updated = rewriter.create<arith::AddFOp>(loc, outCoeffs[entry.result_mask], prod);
         } else {  // -1
-          updated = arith::SubFOp::create(rewriter, loc, outCoeffs[entry.result_mask], prod);
+          updated = rewriter.create<arith::SubFOp>(loc, outCoeffs[entry.result_mask], prod);
         }
         outCoeffs[entry.result_mask] = updated;
       }
@@ -145,7 +146,7 @@ struct ExpandProductTablePattern : public RewritePattern {
 
     // Build the result tensor: tensor.from_elements %c0, %c1, ..., %c{dim-1}.
     Value resultTensor =
-        tensor::FromElementsOp::create(rewriter, loc, lhsTy, outCoeffs);
+        rewriter.create<tensor::FromElementsOp>(loc, lhsTy, outCoeffs);
 
     rewriter.replaceOp(op, resultTensor);
     return success();

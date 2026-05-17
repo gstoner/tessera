@@ -40,25 +40,16 @@ int main(int argc, char **argv) {
   registry.insert<func::FuncDialect>();
 
   // Individual passes.
-  PassRegistration<>(tessera::createCliffordAnnotateAlgebraPass);
-  PassRegistration<>(tessera::createCliffordExpandProductTablePass);
-  PassRegistration<>(tessera::createCliffordGradeFusionPass);
-  PassRegistration<>(tessera::createCliffordRotorSandwichFoldPass);
+  registerPass(tessera::createCliffordAnnotateAlgebraPass);
+  registerPass(tessera::createCliffordExpandProductTablePass);
+  registerPass(tessera::createCliffordGradeFusionPass);
+  registerPass(tessera::createCliffordRotorSandwichFoldPass);
 
   // Canonical end-to-end pipeline alias.
-  // Pass ordering rationale:
-  //   - annotate first: validates the v1 signature allow-list and
-  //     attaches `tessera.clifford.canonical` markers.
-  //   - rotor-sandwich-fold second: matches `gp(gp(R, x), reverse(R))`
-  //     chains and rewrites to a single `rotor_sandwich`. Must run
-  //     before grade-fusion (which would obscure the chain by
-  //     attaching `output_grades` attrs to the inner geo_products).
-  //   - grade-fusion third: attaches `output_grades` on any
-  //     geo_product whose only consumer is a `grade` op.
-  //   - expand-product-table last: lowers every surviving geo_product
-  //     to an unrolled arith.mulf + arith.addf sequence driven by the
-  //     compile-time-known Cayley table, honoring `output_grades` for
-  //     grade-restricted contractions.
+  // Pass ordering: annotate → rotor-sandwich-fold → grade-fusion →
+  // expand-product-table.  rotor-sandwich-fold MUST run before
+  // grade-fusion (otherwise output_grades on the inner geo_products
+  // obscures the sandwich pattern).
   PassPipelineRegistration<> pipeline(
       "tessera-clifford-pipeline",
       "Annotate → rotor-sandwich-fold → grade-fusion → expand-product-table.",

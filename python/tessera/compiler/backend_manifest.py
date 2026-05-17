@@ -514,6 +514,158 @@ _METALIUM_PLANNED_GATED_KERNELS: dict[str, dict[str, object]] = {
 }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# GA9 (2026-05-17) — Clifford / Geometric-Algebra kernel manifest.
+#
+# Parallel to the tensor-op manifest above: the 17 `clifford_*` primitives
+# in `primitive_coverage.py` are not part of the tensor `OP_SPECS` catalog,
+# so they need a dedicated dispatch table.  `manifest_for()` checks the
+# `clifford_*` prefix and routes to `clifford_manifest_for()` below.
+#
+# Per Q4 of `ga_scope_lock.md`, the backend priority is:
+#   x86       → reference status (Python GA reference runs on x86 CPU).
+#   apple_cpu → reference status (same Python path; Accelerate hand-off
+#               for matmul-flavored ops is a GA9-followup).
+#   apple_gpu → planned status for v1 (custom MSL kernels for fused
+#               geo_product / rotor_sandwich are post-GA9 work).
+#   NVIDIA / ROCm / Metalium → planned (post-Phase G/H/I).
+#
+# Two headline ops (geo_product, rotor_sandwich) get expanded fp16/bf16
+# coverage on Apple GPU because they're the load-bearing primitives the
+# MSL kernels will fuse first; the rest carry fp32-only as the v1 baseline.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Canonical CPU dtype coverage for all 17 GA primitives.
+_CLIFFORD_CPU_DTYPES = ("fp32", "fp64")
+
+# Apple GPU dtype coverage for the two headline ops (geo_product, rotor_sandwich)
+# that the post-GA9 MSL fused kernels will target first.
+_CLIFFORD_APPLE_GPU_HEADLINE_DTYPES = ("fp32", "fp16", "bf16")
+
+# Apple GPU dtype coverage for the v1 baseline (fp32 only — MSL ports of
+# every GA op are GA10/GA11 follow-on conformance work).
+_CLIFFORD_APPLE_GPU_BASELINE_DTYPES = ("fp32",)
+
+# NVIDIA / ROCm / Metalium dtype targets for the planned-only entries.
+_CLIFFORD_PLANNED_GPU_DTYPES = ("fp32", "fp16", "bf16")
+
+
+# Per-op headline overrides: geo_product and rotor_sandwich light up
+# Apple GPU first because they're the primitives the post-GA9 fused MSL
+# kernels will target.  All other ops fall through to baseline coverage.
+_CLIFFORD_HEADLINE_OPS = frozenset({
+    "clifford_geometric_product",
+    "clifford_rotor_sandwich",
+})
+
+# All 17 GA primitives (12 GA3 core + 5 GA5 differential-form) registered
+# in `primitive_coverage.py` under `category="geometric_algebra"`.
+_CLIFFORD_PRIMITIVES = (
+    # GA3 core ops
+    "clifford_geometric_product",
+    "clifford_grade_projection",
+    "clifford_wedge",
+    "clifford_left_contraction",
+    "clifford_inner",
+    "clifford_reverse",
+    "clifford_grade_involution",
+    "clifford_conjugate",
+    "clifford_norm",
+    "clifford_exp",
+    "clifford_log",
+    "clifford_rotor_sandwich",
+    # GA5 differential-form ops
+    "clifford_hodge_star",
+    "clifford_ext_deriv",
+    "clifford_codiff",
+    "clifford_vec_deriv",
+    "clifford_integral",
+)
+
+
+def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
+    """Return the backend manifest entries for a `clifford_*` primitive.
+
+    All 17 GA primitives ship with `x86` + `apple_cpu` reference status
+    (the Python GA implementation in `tessera.ga.ops` is the v1
+    execution path on these targets — verified end-to-end by the GA10
+    Python conformance suite).  Apple GPU coverage is planned for v1;
+    the two headline ops (geo_product, rotor_sandwich) declare
+    fp32/fp16/bf16 slots so the post-GA9 MSL kernel work has a
+    pre-locked dtype target.  NVIDIA / ROCm / Metalium entries are
+    planned, gated on Phase G/H/I respectively.
+    """
+    if op_name not in _CLIFFORD_PRIMITIVES:
+        return []
+    entries: list[BackendKernelEntry] = []
+
+    # x86 — reference status (the Python GA ops run on every CPU target).
+    entries.append(BackendKernelEntry(
+        target="x86",
+        status=_REFERENCE_STATUS,
+        dtypes=_CLIFFORD_CPU_DTYPES,
+        feature_flags=("clifford_dialect", "numpy_reference"),
+        notes="Python GA reference path; GA8 unrolled arith.mulf via ExpandProductTable lit-tested",
+    ))
+
+    # Apple CPU — reference status, same Python path as x86. The
+    # Accelerate hand-off for matmul-flavored GA ops (geo_product
+    # batched contractions) is a GA9-followup performance optimization.
+    entries.append(BackendKernelEntry(
+        target="apple_cpu",
+        status=_REFERENCE_STATUS,
+        dtypes=_CLIFFORD_CPU_DTYPES,
+        feature_flags=("clifford_dialect", "numpy_reference"),
+        notes="Python GA reference; Accelerate hand-off for batched products pending GA9-followup",
+    ))
+
+    # Apple GPU — the two headline ops have shipped fused MSL kernels
+    # (Cl(3,0) f32, 2026-05-17); the rest remain planned.
+    if op_name in _CLIFFORD_HEADLINE_OPS:
+        entries.append(BackendKernelEntry(
+            target="apple_gpu",
+            status=_FUSED_KERNEL_STATUS,
+            dtypes=("fp32",),
+            feature_flags=("clifford_dialect", "msl", "metal"),
+            notes=(
+                "Fused MSL kernel: tessera_apple_gpu_"
+                + ("clifford_geo_product_cl30_f32"
+                   if op_name == "clifford_geometric_product"
+                   else "clifford_rotor_sandwich_cl30_f32")
+                + " (apple_gpu_runtime.mm); verified bitwise vs Python GA reference"
+            ),
+        ))
+    else:
+        entries.append(BackendKernelEntry(
+            target="apple_gpu",
+            status=_PLANNED_STATUS,
+            dtypes=_CLIFFORD_APPLE_GPU_BASELINE_DTYPES,
+            feature_flags=("clifford_dialect", "msl"),
+            notes="MSL coverage scheduled for GA10 follow-on",
+        ))
+
+    # NVIDIA — planned, gated on Phase G.  No per-arch breakout yet;
+    # the artifact will land when Phase G H100 BF16 GEMM is green.
+    entries.append(BackendKernelEntry(
+        target="nvidia_sm90",
+        status=_PLANNED_STATUS,
+        dtypes=_CLIFFORD_PLANNED_GPU_DTYPES,
+        feature_flags=("clifford_dialect", "wgmma"),
+        notes="Gated on Phase G; canonical bf16 Cl(3,0) bivector kernel is the first target",
+    ))
+
+    # ROCm — planned, gated on Phase H.
+    entries.append(BackendKernelEntry(
+        target="rocm",
+        status=_PLANNED_STATUS,
+        dtypes=_CLIFFORD_PLANNED_GPU_DTYPES,
+        feature_flags=("clifford_dialect", "mfma"),
+        notes="Gated on Phase H",
+    ))
+
+    return entries
+
+
 def _public_to_graph_name(public: str) -> str:
     """Convert a public op name (e.g., ``"matmul"``) to its catalog
     graph_name (e.g., ``"tessera.matmul"``)."""
@@ -544,7 +696,13 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     sm120 / rocm / metalium.  Each entry's status reflects whether the
     target ships a fused kernel, a reference path, an artifact-only stub,
     or has no plan.
+
+    GA9 (2026-05-17): `clifford_*` op names are dispatched to a
+    parallel `clifford_manifest_for()` table since they aren't part of
+    the tensor `OP_SPECS` catalog.
     """
+    if op_name.startswith("clifford_"):
+        return clifford_manifest_for(op_name)
     entries: list[BackendKernelEntry] = []
 
     # x86 AMX
@@ -746,13 +904,19 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
 
 
 def all_manifests() -> Mapping[str, list[BackendKernelEntry]]:
-    """Return the manifest for every op in ``OP_SPECS``.
+    """Return the manifest for every op in ``OP_SPECS`` plus every
+    `clifford_*` GA9 primitive.
 
     Useful for the dashboard renderer and for the audit walker that
     verifies dtype canonicalness across the full per-target matrix.
     """
     out: dict[str, list[BackendKernelEntry]] = {}
     for name in OP_SPECS:
+        m = manifest_for(name)
+        if m:
+            out[name] = m
+    # GA9: include clifford primitives that aren't in OP_SPECS.
+    for name in _CLIFFORD_PRIMITIVES:
         m = manifest_for(name)
         if m:
             out[name] = m

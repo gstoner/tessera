@@ -6,7 +6,7 @@ module {
   func.func @energy_chain(
       %x : tensor<32x4xf32>,
       %y : tensor<32x4xf32>,
-      %key : !ebm.rngkey) -> tensor<32x4xf32> {
+      %key : tensor<2xi64>) -> tensor<32x4xf32> {
 
     %e = "tessera_ebm.energy"(%x, %y) { energy_fn = @user_energy_fn }
         : (tensor<32x4xf32>, tensor<32x4xf32>) -> tensor<32xf32>
@@ -16,7 +16,7 @@ module {
           eta = 0.05 : f64,
           temperature = 1.0 : f64,
           manifold = "euclidean" }
-        : (tensor<32x4xf32>, !ebm.rngkey) -> (tensor<32x4xf32>, !ebm.rngkey)
+        : (tensor<32x4xf32>, tensor<2xi64>) -> (tensor<32x4xf32>, tensor<2xi64>)
 
     return %step#0 : tensor<32x4xf32>
   }

@@ -33,7 +33,9 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/BuiltinTypes.td"
+include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def Clifford_Dialect : Dialect {
@@ -52,24 +54,13 @@ def Clifford_Dialect : Dialect {
 }
 
 //===----------------------------------------------------------------------===//
-// Common attributes
+// Common attribute conventions
+//
+// `algebra` is an `I64ArrayAttr` `[p, q, r]` carrying the signature; v1
+// allow-list (per ga_scope_lock.md § Q1) is {(3,0,0), (1,3,0)} enforced by
+// `AnnotateAlgebraPass`. `dtype` is a `StrAttr` from the canonical set
+// {"fp32", "fp16", "bf16", "fp64"}.
 //===----------------------------------------------------------------------===//
-
-// Algebra signature `#clifford.algebra<p, q, r>` — for v1 stored as a
-// 3-entry I64ArrayAttr `[p, q, r]`. A future revision could give this its
-// own typed attribute; the array form is simpler for tablegen.
-def TS_AlgebraAttr : I64ArrayAttr;
-
-// Optional grade restriction — `[0, 2]` means scalar-plus-bivector.
-def TS_GradeSetAttr : OptionalAttr<I64ArrayAttr>;
-
-// `dtype` propagation — mirrors numeric_policy.storage at this layer.
-// Accepted values: "fp32" | "fp16" | "bf16" | "fp64".
-def TS_DTypeAttr : StrAttr;
-
-// `kind` for the annotation surface: "multivector" | "rotor" | "diff_form" |
-// "vector_field". Mirrors `tessera.ga.MultivectorSpec.kind`.
-def TS_KindAttr : OptionalAttr<StrAttr>;
 
 //===----------------------------------------------------------------------===//
 // Core multivector ops (GA3)
@@ -89,8 +80,8 @@ def CL_GeoProductOp : CliffordOp<"geo_product", [Pure]> {
   let arguments = (ins
     AnyType:$lhs,
     AnyType:$rhs,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype
   );
   let results = (outs AnyType:$result);
   let assemblyFormat = [{
@@ -104,8 +95,8 @@ def CL_GradeProjectionOp : CliffordOp<"grade", [Pure]> {
   let arguments = (ins
     AnyType:$value,
     I64ArrayAttr:$grades,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype
   );
   let results = (outs AnyType:$result);
   let assemblyFormat = [{
@@ -119,8 +110,8 @@ def CL_WedgeOp : CliffordOp<"wedge", [Pure]> {
   let arguments = (ins
     AnyType:$lhs,
     AnyType:$rhs,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype
   );
   let results = (outs AnyType:$result);
   let assemblyFormat = [{
@@ -134,8 +125,8 @@ def CL_LeftContractOp : CliffordOp<"left_contract", [Pure]> {
   let arguments = (ins
     AnyType:$lhs,
     AnyType:$rhs,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype
   );
   let results = (outs AnyType:$result);
   let assemblyFormat = [{
@@ -152,8 +143,8 @@ def CL_InnerOp : CliffordOp<"inner", [Pure]> {
   let arguments = (ins
     AnyType:$lhs,
     AnyType:$rhs,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype
   );
   let results = (outs AnyType:$result);
   let assemblyFormat = [{
@@ -166,8 +157,8 @@ def CL_NormOp : CliffordOp<"norm", [Pure]> {
   let summary = "Multivector norm |a| = sqrt(⟨a, a⟩).";
   let arguments = (ins
     AnyType:$value,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype
   );
   let results = (outs AnyType:$result);
   let assemblyFormat = [{
@@ -180,8 +171,8 @@ def CL_ReverseOp : CliffordOp<"reverse", [Pure]> {
   let summary = "Reversion anti-automorphism a†.";
   let arguments = (ins
     AnyType:$value,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype
   );
   let results = (outs AnyType:$result);
   let assemblyFormat = [{
@@ -194,8 +185,8 @@ def CL_GradeInvoluteOp : CliffordOp<"grade_involute", [Pure]> {
   let summary = "Grade-involution â (sign flip on odd grades).";
   let arguments = (ins
     AnyType:$value,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype
   );
   let results = (outs AnyType:$result);
   let assemblyFormat = [{
@@ -208,8 +199,8 @@ def CL_ConjugateOp : CliffordOp<"conjugate", [Pure]> {
   let summary = "Clifford conjugation: reverse ∘ grade_involute.";
   let arguments = (ins
     AnyType:$value,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype
   );
   let results = (outs AnyType:$result);
   let assemblyFormat = [{
@@ -222,8 +213,8 @@ def CL_HodgeStarOp : CliffordOp<"hodge_star", [Pure]> {
   let summary = "Hodge star ⋆ω = reverse(ω) · I.";
   let arguments = (ins
     AnyType:$value,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype
   );
   let results = (outs AnyType:$result);
   let assemblyFormat = [{
@@ -237,8 +228,8 @@ def CL_ExpOp : CliffordOp<"exp", [Pure]> {
     "Power-series exponential exp(a); closed-form for Cl(3,0) bivectors.";
   let arguments = (ins
     AnyType:$value,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype,
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype,
     DefaultValuedAttr<I64Attr, "24">:$terms
   );
   let results = (outs AnyType:$result);
@@ -252,8 +243,8 @@ def CL_LogOp : CliffordOp<"log", [Pure]> {
   let summary = "Logarithm log(a); closed-form for Cl(3,0) rotors.";
   let arguments = (ins
     AnyType:$value,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype,
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype,
     DefaultValuedAttr<I64Attr, "64">:$terms
   );
   let results = (outs AnyType:$result);
@@ -274,8 +265,8 @@ def CL_RotorSandwichOp : CliffordOp<"rotor_sandwich", [Pure]> {
   let arguments = (ins
     AnyType:$rotor,
     AnyType:$value,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype
   );
   let results = (outs AnyType:$result);
   let assemblyFormat = [{
@@ -297,8 +288,8 @@ def CL_ExtDerivOp : CliffordOp<"ext_deriv", [Pure]> {
   }];
   let arguments = (ins
     AnyType:$field,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype,
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype,
     F64ArrayAttr:$spacing
   );
   let results = (outs AnyType:$result);
@@ -312,8 +303,8 @@ def CL_CodiffOp : CliffordOp<"codiff", [Pure]> {
   let summary = "Codifferential d*ω = ±⋆ d ⋆ ω.";
   let arguments = (ins
     AnyType:$field,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype,
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype,
     F64ArrayAttr:$spacing
   );
   let results = (outs AnyType:$result);
@@ -327,8 +318,8 @@ def CL_VecDerivOp : CliffordOp<"vec_deriv", [Pure]> {
   let summary = "Geometric gradient ∂F = Σ_i e_i ∂_i F on a sampled field.";
   let arguments = (ins
     AnyType:$field,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype,
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype,
     F64ArrayAttr:$spacing
   );
   let results = (outs AnyType:$result);
@@ -347,8 +338,8 @@ def CL_IntegralOp : CliffordOp<"integral", [Pure]> {
   }];
   let arguments = (ins
     AnyType:$integrand,
-    TS_AlgebraAttr:$algebra,
-    TS_DTypeAttr:$dtype,
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype,
     StrAttr:$manifold_kind,
     StrAttr:$weights_ref
   );

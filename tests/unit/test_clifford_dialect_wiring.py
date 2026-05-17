@@ -213,9 +213,12 @@ def test_lit_fixture_annotate_algebra_checks_canonical_attr() -> None:
 
 
 def test_lit_fixture_rotor_sandwich_invokes_full_pipeline() -> None:
+    """The pipeline alias is invoked; FileCheck verifies the
+    rotor_sandwich op survives (RotorSandwichFold preserves it for
+    GA9 backend kernel lowering, not folds it back to primitives)."""
     fixture = (REPO_ROOT / "src/solvers/clifford/test/ir/rotor_sandwich.mlir").read_text()
     assert "--tessera-clifford-pipeline" in fixture
-    assert "rotor-sandwich-fold stub" in fixture
+    assert "tessera_clifford.rotor_sandwich" in fixture
 
 
 def test_lit_fixture_cl13_uses_minkowski_signature() -> None:
@@ -356,12 +359,13 @@ def test_cpp_cayley_shadow_matches_python_signature_table_byte_for_byte(signatur
 
 def test_expand_product_table_emits_arith_and_tensor_ops() -> None:
     body = (REPO_ROOT / "src/solvers/clifford/lib/Passes/ExpandProductTable.cpp").read_text()
-    # Builder calls for the lowered IR shape.
-    assert "tensor::ExtractOp::create" in body
-    assert "arith::MulFOp::create" in body
-    assert "arith::AddFOp::create" in body
-    assert "arith::SubFOp::create" in body
-    assert "tensor::FromElementsOp::create" in body
+    # Builder calls for the lowered IR shape (MLIR 21 uses
+    # `rewriter.create<>` template form).
+    assert "rewriter.create<tensor::ExtractOp>" in body
+    assert "rewriter.create<arith::MulFOp>" in body
+    assert "rewriter.create<arith::AddFOp>" in body
+    assert "rewriter.create<arith::SubFOp>" in body
+    assert "rewriter.create<tensor::FromElementsOp>" in body
     # Reads the optional output_grades attribute (grade-fusion savings).
     assert "tessera.clifford.output_grades" in body
     # Honors the v1 rank-1-only restriction with a diagnostic.

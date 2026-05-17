@@ -29,6 +29,9 @@ runtime, and phase/status claims:
 | Memory model | `docs/spec/MEMORY_MODEL_SPEC.md` |
 | Shape, layout, shard, and schedule feasibility system | `docs/spec/SHAPE_SYSTEM.md` |
 | Standard operator library | `docs/operations/Tessera_Standard_Operations.md` |
+| Clifford / geometric algebra primitive surface | `docs/spec/CLIFFORD_SPEC.md` |
+| Energy-based model primitive surface | `docs/spec/EBM_SPEC.md` |
+| GA + EBM execution status by implementation layer | `docs/spec/GA_EBM_EXECUTION_STATUS.md` |
 | Error handling and diagnostics | `docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md` |
 | Runtime C ABI | `docs/spec/RUNTIME_ABI_SPEC.md` |
 
@@ -120,6 +123,8 @@ Use these labels consistently in active docs:
 | Distributed collectives and planner foundation | implemented / scaffolded | `src/collectives/`, `python/tessera/testing/mock_collective.py`, `tests/unit/test_nccl_adapter.py` |
 | TPU target profile and StableHLO/Shardy artifacts | implemented / lit-testable | `python/tessera/compiler/tpu_target.py`, `src/compiler/codegen/Tessera_TPU_Backend/`, `tests/tessera-ir/phase4/` |
 | Solver, RNG, sparse, linalg, and resilience passes | implemented / lit-testable | `src/solvers/`, `tests/unit/test_*solver*.py`, `tests/tessera-ir/phase5/` |
+| Clifford / geometric algebra surface | implemented / lit-testable / hardware-runtime for documented Apple GPU fused kernels | `docs/spec/CLIFFORD_SPEC.md`, `docs/spec/GA_EBM_EXECUTION_STATUS.md`, `python/tessera/ga/`, `python/tessera/autodiff/geometric/`, `src/solvers/clifford/` |
+| Energy-based model surface | implemented / lit-testable / mock-runtime | `docs/spec/EBM_SPEC.md`, `docs/spec/GA_EBM_EXECUTION_STATUS.md`, `python/tessera/ebm/`, `src/solvers/ebm/` |
 | Runtime C ABI and Python wrapper | mock-runtime / hardware-runtime where C backend is built | `docs/spec/RUNTIME_ABI_SPEC.md`, `python/tessera/runtime.py`, `src/runtime/` |
 | ROCm and Apple artifact backends | implemented / lit-testable / artifact-only unless a backend doc says hardware-runtime | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_ROCM_Backend/`, `src/compiler/codegen/Tessera_Apple_Backend/`, target-contract tests |
 | Metalium, Cerebras, Rubin CPX backends | scaffolded / lit-testable unless a backend doc says hardware-runtime | `src/compiler/codegen/`, `tests/tessera-ir/phase8/`, backend-specific tests |

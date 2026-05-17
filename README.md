@@ -7,6 +7,13 @@ HPC. It makes tiles, explicit memory spaces, numerical precision, and
 distributed parallelism first-class compiler objects rather than runtime
 heuristics.
 
+Tessera also hosts compiler-native mathematical IR surfaces for structured
+models. The active Clifford / geometric algebra (`tessera.ga`) and
+energy-based model (`tessera.ebm`) tracks make algebra signatures,
+multivector grades, energy minimization, sampling loops, and manifold-aware
+integrators visible to the compiler rather than treating them as plain tensor
+conventions.
+
 Target work exists for NVIDIA, AMD ROCm, Google TPU, Apple Silicon, Tenstorrent
 Metalium, Cerebras, Rubin CPX, and x86 AMX/AVX512. Backend maturity varies by
 target: some paths execute through CPU/mock runtime support, while others are
@@ -72,6 +79,8 @@ Current high-level status:
 | Distributed APIs, cyclic sharding, collectives scaffolding | implemented / scaffolded |
 | TPU target profile and StableHLO/Shardy artifacts | implemented / lit-testable |
 | Solver, sparse/RNG, linalg, resilience, and autotuning foundations | implemented / lit-testable |
+| Clifford / geometric algebra Python surface, autodiff registry, dialect, and lowering passes | implemented / lit-testable; Apple GPU fused kernels for the documented GA surface |
+| Energy-based model Python surface, samplers, losses, partition estimators, dialect, and annotation passes | implemented / lit-testable / mock-runtime |
 | Runtime C ABI and Python wrapper | mock-runtime; hardware-runtime when C runtime is built |
 | ROCm and Apple Target IR artifact lowering | implemented / lit-testable / artifact-only |
 | Metalium, Cerebras, Rubin CPX backend trees | scaffolded / lit-testable unless backend docs say otherwise |
@@ -119,6 +128,38 @@ common paths are:
 
 ---
 
+## Mathematical IR Surfaces
+
+Tessera's GA + EBM work is the first compiler-native track where mathematical
+structure is part of the IR contract:
+
+- **Clifford / geometric algebra (`tessera.ga`)** — v1 supports `Cl(3,0)` and
+  `Cl(1,3)`, grade-aware `Multivector` values, geometric products, rotor
+  sandwich operations, differential-form primitives, and a parallel geometric
+  autodiff registry.
+- **Energy-based models (`tessera.ebm`)** — energy primitives, inner-loop
+  refinement, self-verification, Langevin / MALA / HMC / Gibbs samplers,
+  partition-function estimators, EBM losses, and manifold-aware sphere /
+  bivector Langevin reference paths.
+
+Key documents:
+
+| Document | What it covers |
+|----------|----------------|
+| [`docs/spec/CLIFFORD_SPEC.md`](docs/spec/CLIFFORD_SPEC.md) | Clifford signatures, multivector type contract, GA ops, autodiff, dialect, and lowering |
+| [`docs/spec/EBM_SPEC.md`](docs/spec/EBM_SPEC.md) | Energy primitive contract, inner-loop schedule, training losses, and EBM IR mapping |
+| [`docs/spec/GA_EBM_EXECUTION_STATUS.md`](docs/spec/GA_EBM_EXECUTION_STATUS.md) | Layered status for Python reference, MLIR/lit, manifests, and native execution |
+| [`docs/audit/ga_ebm_roadmap.md`](docs/audit/ga_ebm_roadmap.md) | Sprint roadmap and acceptance history for the GA + EBM tracks |
+
+Native execution status is layer-specific:
+
+| Component | Python reference | MLIR / lit | Backend manifest | Native execution |
+|-----------|------------------|------------|------------------|------------------|
+| GA signature, multivector values, ops, calculus, and autodiff | implemented | implemented / lit-testable for dialect and lowering fixtures | implemented for registered `clifford_*` primitives | Apple GPU fused path documented for the current GA surface; x86 and Apple CPU are reference-first; NVIDIA/ROCm planned |
+| EBM energy primitives, samplers, partition estimators, losses, and manifold-aware sampling | implemented | implemented / lit-testable for dialect and annotation-pass fixtures | implemented / partial by primitive class | mock-runtime through Python/NumPy reference; backend fusion and scheduling are not yet hardware-runtime claims |
+
+---
+
 ## Documentation
 
 | Document | What it covers |
@@ -127,6 +168,9 @@ common paths are:
 | [`docs/CANONICAL_API.md`](docs/CANONICAL_API.md) | Public API names and syntax |
 | [`docs/spec/PYTHON_API_SPEC.md`](docs/spec/PYTHON_API_SPEC.md) | Public Python symbols and signatures |
 | [`docs/spec/COMPILER_REFERENCE.md`](docs/spec/COMPILER_REFERENCE.md) | IR stack, pass registry, pipelines, compiler source map |
+| [`docs/spec/CLIFFORD_SPEC.md`](docs/spec/CLIFFORD_SPEC.md) | Clifford / geometric algebra primitive surface |
+| [`docs/spec/EBM_SPEC.md`](docs/spec/EBM_SPEC.md) | Energy-based model primitive surface |
+| [`docs/spec/GA_EBM_EXECUTION_STATUS.md`](docs/spec/GA_EBM_EXECUTION_STATUS.md) | GA + EBM execution status by implementation layer |
 | [`docs/spec/LOWERING_PIPELINE_SPEC.md`](docs/spec/LOWERING_PIPELINE_SPEC.md) | Pass contracts and invariants |
 | [`docs/spec/TARGET_IR_SPEC.md`](docs/spec/TARGET_IR_SPEC.md) | Schedule, Tile, and Target IR dialect details |
 | [`docs/spec/RUNTIME_ABI_SPEC.md`](docs/spec/RUNTIME_ABI_SPEC.md) | Runtime C ABI |

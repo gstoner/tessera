@@ -29,18 +29,28 @@ Programmers express computation in terms of tiles, groups, domains, and meshes.
 The compiler handles thread mapping, memory staging, pipeline scheduling, and
 collective insertion where those lowering paths are implemented.
 
+The sketch below shows the canonical Python surface; runnable end-to-end
+hardware examples are called out separately in backend-specific docs and tests.
+
 ```python
 import tessera
 
-D = tessera.domain.Rect((4, 128, 256))
 dist = tessera.dist.Block(mesh_axes=("dp", "tp"))
-X = tessera.array.from_domain(D, dtype="bf16", distribution=dist)
+A = tessera.array.from_domain(
+    tessera.domain.Rect((4, 128, 64)), dtype="fp16", distribution=dist
+)
+W = tessera.array.from_domain(
+    tessera.domain.Rect((4, 64, 256)), dtype="fp16", distribution=dist
+)
+Y = tessera.array.from_domain(
+    tessera.domain.Rect((4, 128, 256)), dtype="fp32", distribution=dist
+)
 
 @tessera.jit
 def step(W: tessera.Region["read"],
-         X: tessera.Region["read"],
+         A: tessera.Region["read"],
          Y: tessera.Region["write"]):
-    Y[:] = tessera.ops.gemm(X, W)
+    Y[:] = tessera.ops.gemm(A, W)
 
 @tessera.kernel
 def tp_gemm(A: tessera.f16[..., ...],
@@ -49,7 +59,7 @@ def tp_gemm(A: tessera.f16[..., ...],
     C[:] = tessera.ops.gemm(A, B)
 
 tessera.index_launch(axis="tp")(tp_gemm)(
-    X.parts("tp"), X.parts("tp"), X.parts("tp")
+    A.parts("tp"), W.parts("tp"), Y.parts("tp")
 )
 ```
 

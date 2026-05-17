@@ -20,6 +20,17 @@ add_subdirectory(tpp)
 add_subdirectory(spectral)
 add_subdirectory(linalg)               # parent linalg solver stack
 
+# GA7 — tessera_clifford dialect, behind a build flag (off by default in v1
+# so non-GA builds aren't affected).
+if(TESSERA_BUILD_CLIFFORD_BACKEND)
+  add_subdirectory(clifford)
+endif()
+
+# EBM5 — tessera_ebm dialect, behind a build flag.
+if(TESSERA_BUILD_EBM_BACKEND)
+  add_subdirectory(ebm)
+endif()
+
 add_custom_target(tessera_solvers DEPENDS
   tessera_solvers_dialects
   tessera_solvers_passes

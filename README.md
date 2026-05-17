@@ -79,7 +79,7 @@ Current high-level status:
 | Distributed APIs, cyclic sharding, collectives scaffolding | implemented / scaffolded |
 | TPU target profile and StableHLO/Shardy artifacts | implemented / lit-testable |
 | Solver, sparse/RNG, linalg, resilience, and autotuning foundations | implemented / lit-testable |
-| Clifford / geometric algebra Python surface, autodiff registry, dialect, and lowering passes | implemented / lit-testable; Apple GPU fused kernels for the documented GA surface |
+| Clifford / geometric algebra Python surface, autodiff registry, dialect, lowering passes, and Apple GPU fused kernels | implemented / lit-testable; Apple GPU fused kernels for all 17 registered GA primitives |
 | Energy-based model Python surface, samplers, losses, partition estimators, dialect, and annotation passes | implemented / lit-testable / mock-runtime |
 | Runtime C ABI and Python wrapper | mock-runtime; hardware-runtime when C runtime is built |
 | ROCm and Apple Target IR artifact lowering | implemented / lit-testable / artifact-only |
@@ -155,7 +155,7 @@ Native execution status is layer-specific:
 
 | Component | Python reference | MLIR / lit | Backend manifest | Native execution |
 |-----------|------------------|------------|------------------|------------------|
-| GA signature, multivector values, ops, calculus, and autodiff | implemented | implemented / lit-testable for dialect and lowering fixtures | implemented for registered `clifford_*` primitives | Apple GPU fused path documented for the current GA surface; x86 and Apple CPU are reference-first; NVIDIA/ROCm planned |
+| GA signature, multivector values, ops, calculus, and autodiff | implemented | implemented / lit-testable for dialect and lowering fixtures | implemented for registered `clifford_*` primitives | Apple GPU fused kernels for all 17 registered GA primitives; x86 and Apple CPU are reference-first; NVIDIA/ROCm planned |
 | EBM energy primitives, samplers, partition estimators, losses, and manifold-aware sampling | implemented | implemented / lit-testable for dialect and annotation-pass fixtures | implemented / partial by primitive class | mock-runtime through Python/NumPy reference; backend fusion and scheduling are not yet hardware-runtime claims |
 
 ---

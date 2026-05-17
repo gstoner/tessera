@@ -308,7 +308,7 @@ Clifford summary is:
 | Python reference | implemented | `python/tessera/ga/`, `python/tessera/autodiff/geometric/` |
 | MLIR dialect and lit fixtures | implemented / lit-testable | `src/solvers/clifford/` |
 | Backend manifest | implemented | `python/tessera/compiler/backend_manifest.py` |
-| Apple GPU native path | hardware-runtime for the documented fused GA surface | `src/compiler/codegen/Tessera_Apple_Backend/` and focused Apple GPU tests |
+| Apple GPU native path | hardware-runtime for all 17 registered GA primitives as fused MSL kernels | `src/compiler/codegen/Tessera_Apple_Backend/` and focused Apple GPU tests |
 | x86 / Apple CPU native GA kernels | reference-first | Python reference path; native batched kernels are follow-up work |
 | NVIDIA / ROCm GA kernels | planned | No v1 hardware-runtime claim |
 
@@ -319,6 +319,10 @@ Backend contract:
 - Hardware-runtime status requires a concrete backend build and test path.
 - Quantitative performance claims require benchmarks in addition to correctness
   tests.
+- For Apple GPU, the current Clifford manifest maps the full 17-op GA primitive
+  set to fused MSL kernels. `clifford_geometric_product` and
+  `clifford_rotor_sandwich` carry fp32/fp16/bf16; the other GA kernels are fp32
+  in v1.
 
 ## 8. Conformance Expectations
 

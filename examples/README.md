@@ -12,6 +12,10 @@ This directory contains examples and tutorials for using Tessera.
 - [`compiler/dnas/`](compiler/dnas/) - differentiable NAS Graph IR and schedule-search examples
 - [`compiler/ir_pipeline_tutorial/`](compiler/ir_pipeline_tutorial/) - Python to Graph/Schedule/Tile/Target IR walkthrough
 
+## Conformance Examples
+
+- [`conformance/apple_path_ga_ebm_demos.py`](conformance/apple_path_ga_ebm_demos.py) - visible GA + EBM demos for the Apple-path story: rotation-invariant point-cloud features and EBT-tiny inner-loop refinement
+
 ## Advanced Examples
 
 - [`advanced/Fast_dLLM_v2/`](advanced/Fast_dLLM_v2/) - diffusion LLM inference and parallel decoding
@@ -48,4 +52,7 @@ python3 examples/advanced/kv_cache_serving/demo.py --requests 8
 # Compiler examples
 PYTHONPATH=python python3 examples/compiler/dnas/dnas_schedule_autotune.py
 PYTHONPATH=python python3 examples/compiler/ir_pipeline_tutorial/tessera_ir_pipeline_demo.py
+
+# Conformance demos
+.venv/bin/python examples/conformance/apple_path_ga_ebm_demos.py
 ```

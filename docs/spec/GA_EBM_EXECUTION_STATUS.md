@@ -28,7 +28,7 @@ Status labels follow [`docs/README.md`](../README.md):
 | Component | Python reference | MLIR / lit | Backend manifest | Native execution |
 |-----------|------------------|------------|------------------|------------------|
 | GA signature and multivector values | implemented | n/a | n/a | mock-runtime via Python/NumPy reference |
-| GA primitive ops and calculus | implemented | lit-testable through `tessera_clifford` op fixtures and lowering fixtures | implemented for all registered `clifford_*` primitives | hardware-runtime for the documented Apple GPU fused GA surface; x86 and Apple CPU remain reference-first; NVIDIA/ROCm planned |
+| GA primitive ops and calculus | implemented | lit-testable through `tessera_clifford` op fixtures and lowering fixtures | implemented for all registered `clifford_*` primitives | hardware-runtime for all 17 registered Apple GPU fused GA kernels; x86 and Apple CPU remain reference-first; NVIDIA/ROCm planned |
 | GA geometric autodiff | implemented | n/a | n/a | mock-runtime via Python reference checks |
 | GA dialect and lowering passes | n/a | implemented / lit-testable | n/a | native execution only where a backend consumes the lowered artifacts |
 | EBM energy primitives | implemented | lit-testable through `tessera_ebm` parse/canonicalize fixtures | implemented for registered `ebm_*` primitives where manifests apply | mock-runtime via Python/NumPy reference |
@@ -72,8 +72,10 @@ manifest entry is not by itself a native execution claim. It is a contract that
 the compiler and audit tooling can inspect.
 
 For GA, all registered Clifford primitives have manifest coverage. Apple GPU
-fused entries are the most mature native backend surface. x86 and Apple CPU are
-reference-first for this track; NVIDIA and ROCm remain planned for GA.
+fused entries now cover all 17 registered GA primitives; the manifest test gate
+asserts `FUSED_APPLE_GPU_OPS == EXPECTED_CLIFFORD_OPS` and
+`PLANNED_APPLE_GPU_OPS == set()`. x86 and Apple CPU are reference-first for
+this track; NVIDIA and ROCm remain planned for GA.
 
 For EBM, manifests should be interpreted around the underlying primitive class:
 energy heads, sampler kernels, loss kernels, and candidate-loop scheduling do
@@ -87,7 +89,7 @@ Target IR artifact.
 
 Current high-confidence native claim:
 
-- Clifford Apple GPU fused kernels for the documented GA primitive surface.
+- Clifford Apple GPU fused kernels for all 17 registered GA primitives.
 
 Current non-claims:
 

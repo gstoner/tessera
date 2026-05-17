@@ -70,10 +70,11 @@ decision records are in:
 
 The roadmap records GA0 through GA11 and EBM0 through EBM8 as landed. That is
 credible at the Python/reference, registry, dialect-scaffold, pass-body, and
-test-contract layers. The remaining gap is not conceptual; it is execution
-maturity: native backend kernels, full MLIR/lit coverage for every EBM fixture,
-and quantitative performance validation still trail the mathematical and IR
-surface.
+test-contract layers. For GA specifically, Apple GPU fused-kernel coverage now
+spans all 17 registered primitives. The remaining gap is integration maturity:
+the GA kernels still need a normal Python/JIT → Clifford dialect → Apple
+lowering → Tessera runtime → benchmark path, and EBM still needs backend
+lowering plus quantitative performance validation.
 
 In short: the source base has moved from "Tessera can target many backends" to
 "Tessera can encode geometry and energy minimization as compiler-native
@@ -129,8 +130,10 @@ Compiler surface:
 Backend surface:
 
 - Backend manifest entries exist for all 17 GA primitives.
-- Apple GPU coverage is documented as fused for all 17 primitives in the
-  current roadmap and manifest path, with focused tests around the MSL surface.
+- Apple GPU coverage is fused for all 17 registered GA primitives. The final
+  GA11 symbols cover exp/log, exterior derivative, vector derivative,
+  codifferential, and integral; focused tests validate symbol export and
+  Python-reference agreement.
 - x86 / Apple CPU are presently reference-first paths; native batched C++
   kernels remain a next maturity step.
 

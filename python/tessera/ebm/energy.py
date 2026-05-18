@@ -269,6 +269,11 @@ def self_verify(
             f"got energies={e.shape}, candidates={c.shape}."
         )
     if beta is None:
+        # Apple GPU fast path — hard argmin via the native MSL kernel.
+        # Requires f32 + contiguous (B, K) / (B, K, D) inputs.
+        gpu_out = _try_apple_gpu_self_verify_hard_argmin_f32(e, c)
+        if gpu_out is not None:
+            return gpu_out
         idx = np.argmin(e, axis=1)
         b = np.arange(e.shape[0])
         return c[b, idx]
@@ -302,6 +307,7 @@ def decode_init(
     shape: Optional[Sequence[int]] = None,
     dtype: str = "fp32",
     std: float = 1.0,
+    mean: Optional[Any] = None,
 ) -> np.ndarray:
     """Initialize ``K`` candidate trajectories.
 
@@ -309,6 +315,13 @@ def decode_init(
         ``"noise"``      — draw Gaussian samples of ``shape`` from ``rng_key``.
         ``"base_model"`` — call ``base_model_fn(x)`` once and broadcast.
         ``"copy"``       — broadcast ``x`` itself ``K`` times along a new axis.
+
+    ``mean`` (optional, ``"noise"`` strategy only) — per-element offset
+    that's broadcast across the K dim and added after scaling.  When
+    provided + f32 + Apple-GPU runtime is up, the
+    ``ebm_decode_init_noise_apply_f32`` kernel applies the
+    ``base + std*noise`` combine on-device; otherwise the same is
+    computed via numpy.
 
     Returns array of shape ``(B, K, *event)`` where ``B`` is the batch
     dimension of ``x`` (or 1 if ``x`` is scalar / unbatched) and
@@ -328,7 +341,24 @@ def decode_init(
                 "for the per-candidate event."
             )
         full_shape = (batch, K, *shape)
-        return normal(rng_key, shape=full_shape, dtype=dtype, std=std)
+        # Generate noise with unit variance — caller-supplied `std` is
+        # applied via the affine combine below so the GPU fast path
+        # (which expects raw N(0,1) noise) and the numpy path share the
+        # same arithmetic structure.
+        noise = normal(rng_key, shape=full_shape, dtype=dtype, std=1.0)
+        if mean is None:
+            return (std * noise).astype(_np_dtype(dtype), copy=False)
+        # Apple GPU fast path — `out[i] = base[i % base_len] + std * noise[i]`.
+        # Activates for f32 inputs when the runtime is reachable.
+        mean_arr = _as_array(mean).astype(_np_dtype(dtype), copy=False)
+        if mean_arr.shape != full_shape:
+            mean_arr = np.broadcast_to(mean_arr, full_shape).astype(
+                _np_dtype(dtype), copy=False)
+        gpu_out = _try_apple_gpu_decode_init_noise_apply_f32(
+            mean_arr, noise, float(std))
+        if gpu_out is not None:
+            return gpu_out.reshape(full_shape)
+        return (mean_arr + std * noise).astype(_np_dtype(dtype), copy=False)
     if init_strategy == "base_model":
         if base_model_fn is None:
             raise ValueError(
@@ -355,10 +385,227 @@ def decode_init(
     )
 
 
+# ---------------------------------------------------------------------------
+# EBT-style multi-step refinement (Apple GPU fast path)
+# ---------------------------------------------------------------------------
+
+def refinement(
+    y0: Any, grad: Any, *, eta: float, T: int,
+) -> np.ndarray:
+    """Run ``T`` inner-step iterations with a fixed gradient snapshot.
+
+    Closed form: ``y_T = y0 - T * eta * grad``.  Equivalent to calling
+    ``inner_step`` ``T`` times in a loop, but the Apple GPU fast path
+    runs the whole T-step recurrence inside a single MSL kernel
+    (each thread keeps ``y_i`` in a register and loops T times),
+    eliminating the T-fold dispatch overhead.
+
+    Falls back to the closed-form numpy expression when the runtime
+    isn't available or the inputs aren't f32 / contiguous.
+    """
+    if T < 0:
+        raise ValueError(f"refinement requires T >= 0; got T={T}.")
+    y_arr = _as_array(y0)
+    grad_arr = _as_array(grad)
+    if y_arr.shape != grad_arr.shape:
+        raise ValueError(
+            f"refinement requires matching shapes; got y0={y_arr.shape}, "
+            f"grad={grad_arr.shape}."
+        )
+    if T == 0:
+        return y_arr.copy()
+    if y_arr.dtype == np.float32:
+        gpu_out = _try_apple_gpu_refinement_fused_f32(
+            y_arr, grad_arr, float(eta), int(T))
+        if gpu_out is not None:
+            return gpu_out
+    return (y_arr - float(T) * float(eta) * grad_arr).astype(
+        y_arr.dtype, copy=False)
+
+
+# ---------------------------------------------------------------------------
+# Energy specialization: quadratic (Apple GPU fast path)
+# ---------------------------------------------------------------------------
+
+def energy_quadratic(x: Any, y: Any) -> np.ndarray:
+    """Specialized quadratic energy ``E_b = 0.5 * ||x_b - y_b||^2``.
+
+    The dominant energy form in EBT / diffusion training (reconstruction
+    loss, Gaussian log-likelihood up to a constant).  Callers whose
+    ``model_fn(x, y)`` is documented to match this shape can swap in
+    ``energy_quadratic`` to opt into the
+    ``tessera_apple_gpu_ebm_energy_quadratic_f32`` kernel.
+
+    Falls back to numpy when the runtime isn't available or the inputs
+    aren't f32 / contiguous / rank-2 with matching shape.
+    """
+    x_arr = _as_array(x)
+    y_arr = _as_array(y)
+    if x_arr.shape != y_arr.shape:
+        raise ValueError(
+            f"energy_quadratic requires matching shapes; "
+            f"got x={x_arr.shape}, y={y_arr.shape}."
+        )
+    gpu_out = _try_apple_gpu_energy_quadratic_f32(x_arr, y_arr)
+    if gpu_out is not None:
+        return gpu_out
+    if x_arr.ndim == 0:
+        return np.asarray(0.5 * (x_arr - y_arr) ** 2)
+    return 0.5 * np.sum((x_arr - y_arr) ** 2, axis=tuple(range(1, x_arr.ndim)))
+
+
+# ---------------------------------------------------------------------------
+# Apple GPU dispatch helpers — share the pattern with ga.ops fast paths.
+# Each returns the GPU output or ``None``; callers fall back to numpy.
+# ---------------------------------------------------------------------------
+
+def _try_apple_gpu_refinement_fused_f32(
+    y0: np.ndarray, grad: np.ndarray, eta: float, T: int,
+) -> Optional[np.ndarray]:
+    """Run T inner-step iterations on Apple GPU in a single dispatch."""
+    if y0.dtype != np.float32 or grad.dtype != np.float32:
+        return None
+    if y0.shape != grad.shape:
+        return None
+    if not (y0.flags["C_CONTIGUOUS"] and grad.flags["C_CONTIGUOUS"]):
+        return None
+    try:
+        import ctypes
+        from tessera._apple_gpu_dispatch import bind_symbol
+    except ImportError:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_ebm_refinement_f32",
+        (ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_float, ctypes.c_int32,
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    out = np.zeros_like(y0)
+    n = int(y0.size)
+    p = ctypes.POINTER(ctypes.c_float)
+    fn(y0.ctypes.data_as(p), grad.ctypes.data_as(p),
+       ctypes.c_float(eta), ctypes.c_int32(T),
+       out.ctypes.data_as(p), ctypes.c_int32(n))
+    return out
+
+
+def _try_apple_gpu_self_verify_hard_argmin_f32(
+    energies: np.ndarray, candidates: np.ndarray,
+) -> Optional[np.ndarray]:
+    """Hard-argmin self_verify on Apple GPU.  Requires
+    ``energies.shape == (B, K)`` and ``candidates.shape == (B, K, D)``,
+    both f32 + C-contiguous."""
+    if energies.dtype != np.float32 or candidates.dtype != np.float32:
+        return None
+    if energies.ndim != 2 or candidates.ndim != 3:
+        return None
+    if candidates.shape[:2] != energies.shape:
+        return None
+    if not (energies.flags["C_CONTIGUOUS"] and candidates.flags["C_CONTIGUOUS"]):
+        return None
+    try:
+        import ctypes
+        from tessera._apple_gpu_dispatch import bind_symbol
+    except ImportError:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_ebm_self_verify_hard_argmin_f32",
+        (ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    B, K, D = candidates.shape
+    out = np.zeros((B, D), dtype=np.float32)
+    p = ctypes.POINTER(ctypes.c_float)
+    fn(energies.ctypes.data_as(p), candidates.ctypes.data_as(p),
+       out.ctypes.data_as(p),
+       ctypes.c_int32(B), ctypes.c_int32(K), ctypes.c_int32(D))
+    return out
+
+
+def _try_apple_gpu_energy_quadratic_f32(
+    x: np.ndarray, y: np.ndarray,
+) -> Optional[np.ndarray]:
+    """``E_b = 0.5 * ||x_b - y_b||^2`` on Apple GPU.  Requires
+    rank-2 f32 inputs with matching shape (B, D), contiguous."""
+    if x.dtype != np.float32 or y.dtype != np.float32:
+        return None
+    if x.ndim != 2 or x.shape != y.shape:
+        return None
+    if not (x.flags["C_CONTIGUOUS"] and y.flags["C_CONTIGUOUS"]):
+        return None
+    try:
+        import ctypes
+        from tessera._apple_gpu_dispatch import bind_symbol
+    except ImportError:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_ebm_energy_quadratic_f32",
+        (ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32, ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    B, D = x.shape
+    out = np.zeros(B, dtype=np.float32)
+    p = ctypes.POINTER(ctypes.c_float)
+    fn(x.ctypes.data_as(p), y.ctypes.data_as(p), out.ctypes.data_as(p),
+       ctypes.c_int32(B), ctypes.c_int32(D))
+    return out
+
+
+def _try_apple_gpu_decode_init_noise_apply_f32(
+    base: np.ndarray, noise: np.ndarray, std: float,
+) -> Optional[np.ndarray]:
+    """``out = base + std * noise`` on Apple GPU.  Both buffers must
+    be the same f32 shape; the result has the same shape too."""
+    if base.dtype != np.float32 or noise.dtype != np.float32:
+        return None
+    if base.shape != noise.shape:
+        return None
+    base_c = np.ascontiguousarray(base)
+    noise_c = np.ascontiguousarray(noise)
+    try:
+        import ctypes
+        from tessera._apple_gpu_dispatch import bind_symbol
+    except ImportError:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_ebm_decode_init_noise_apply_f32",
+        (ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32,
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_float,
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    n = int(noise_c.size)
+    base_flat = base_c.reshape(-1)
+    out = np.zeros(n, dtype=np.float32)
+    p = ctypes.POINTER(ctypes.c_float)
+    fn(base_flat.ctypes.data_as(p), ctypes.c_int32(int(base_flat.size)),
+       noise_c.ctypes.data_as(p), ctypes.c_float(float(std)),
+       out.ctypes.data_as(p), ctypes.c_int32(n))
+    return out.reshape(noise.shape)
+
+
 __all__ = [
     "decode_init",
     "energy",
+    "energy_quadratic",
     "inner_step",
     "langevin_step",
+    "refinement",
     "self_verify",
 ]

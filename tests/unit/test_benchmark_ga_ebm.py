@@ -498,6 +498,122 @@ def test_ebm_inner_step_dispatches_through_apple_gpu_when_available() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Public-API GPU fast-path coverage — six more ops promoted from
+# benchmark-local ctypes to `tessera.ga.*` / `tessera.ebm.*`.
+# ---------------------------------------------------------------------------
+
+def test_ga_exp_mv_public_api_matches_per_element_reference() -> None:
+    import numpy as np
+    import tessera.ga as ga
+    a = ga.Cl(3, 0)
+    rng = np.random.RandomState(42)
+    A = rng.randn(8, 8).astype(np.float32)
+    batched = ga.exp_mv(ga.Multivector(A, a)).coefficients
+    elemwise = np.stack([
+        ga.exp_mv(ga.Multivector(A[i], a)).coefficients for i in range(8)
+    ])
+    assert float(np.abs(batched - elemwise).max()) <= 5e-6
+
+
+def test_ga_rotor_sandwich_public_api_matches_per_element_reference() -> None:
+    import numpy as np
+    import tessera.ga as ga
+    a = ga.Cl(3, 0)
+    rng = np.random.RandomState(43)
+    R = rng.randn(8, 8).astype(np.float32) * 0.3
+    X = rng.randn(8, 8).astype(np.float32)
+    batched = ga.rotor_sandwich(ga.Multivector(R, a),
+                                  ga.Multivector(X, a)).coefficients
+    elemwise = np.stack([
+        ga.rotor_sandwich(ga.Multivector(R[i], a),
+                            ga.Multivector(X[i], a)).coefficients
+        for i in range(8)
+    ])
+    assert float(np.abs(batched - elemwise).max()) <= 5e-6
+
+
+def test_ga_norm_public_api_matches_per_element_reference() -> None:
+    import numpy as np
+    import tessera.ga as ga
+    a = ga.Cl(3, 0)
+    rng = np.random.RandomState(44)
+    A = rng.randn(8, 8).astype(np.float32)
+    batched = np.asarray(ga.norm(ga.Multivector(A, a)))
+    elemwise = np.array([
+        float(np.asarray(ga.norm(ga.Multivector(A[i], a)))) for i in range(8)
+    ])
+    assert float(np.abs(batched - elemwise).max()) <= 5e-6
+
+
+def test_ebm_self_verify_public_api_hard_argmin_matches_reference() -> None:
+    import numpy as np
+    import tessera.ebm as ebm
+    rng = np.random.RandomState(45)
+    e = rng.randn(4, 8).astype(np.float32)
+    c = rng.randn(4, 8, 16).astype(np.float32)
+    out = ebm.self_verify(e, c)
+    expected = c[np.arange(4), e.argmin(axis=1)]
+    assert float(np.abs(out - expected).max()) == 0.0
+
+
+def test_ebm_energy_quadratic_public_api_matches_numpy_reference() -> None:
+    import numpy as np
+    import tessera.ebm as ebm
+    rng = np.random.RandomState(46)
+    x = rng.randn(8, 4).astype(np.float32)
+    y = rng.randn(8, 4).astype(np.float32)
+    out = ebm.energy_quadratic(x, y)
+    expected = (0.5 * np.sum((x - y) ** 2, axis=1)).astype(np.float32)
+    assert float(np.abs(out - expected).max()) <= 5e-6
+
+
+def test_ebm_decode_init_public_api_with_mean_matches_reference() -> None:
+    import numpy as np
+    import tessera.ebm as ebm
+    from tessera.rng import RNGKey, normal as rng_normal
+    key = RNGKey.from_seed(47)
+    mean = np.random.RandomState(48).randn(4, 6, 12).astype(np.float32)
+    out = ebm.decode_init(np.zeros((4, 12), dtype=np.float32),
+                            K=6, init_strategy="noise",
+                            rng_key=key, shape=(12,), dtype="fp32",
+                            std=0.5, mean=mean)
+    noise = rng_normal(key, shape=(4, 6, 12), dtype="fp32", std=1.0)
+    expected = (mean + 0.5 * noise).astype(np.float32)
+    assert out.shape == (4, 6, 12)
+    assert float(np.abs(out - expected).max()) <= 5e-6
+
+
+def test_ebm_refinement_public_api_matches_closed_form() -> None:
+    """`ebm.refinement(y0, grad, eta, T)` runs T inner-step iterations
+    in a single fused MSL kernel when GPU is up; closed-form numpy
+    fallback `y_T = y0 - T*eta*grad` otherwise."""
+    import numpy as np
+    import tessera.ebm as ebm
+    rng = np.random.RandomState(49)
+    y0 = rng.randn(32, 16).astype(np.float32)
+    grad = rng.randn(32, 16).astype(np.float32)
+    eta, T = 0.01, 12
+    out = ebm.refinement(y0, grad, eta=eta, T=T)
+    expected = (y0 - T * eta * grad).astype(np.float32)
+    assert float(np.abs(out - expected).max()) <= 5e-6
+
+
+def test_workloads_use_public_apis_not_local_ctypes(report: dict) -> None:
+    """Workload rows must carry `[via ga.* | ebm.*]` provenance in their
+    symbol strings — proves the rewrite to public APIs landed."""
+    if not _apple_gpu_available(report):
+        pytest.skip("apple_gpu unavailable")
+    by_op = {r["op"]: r for r in _workload_native_rows(report)}
+    ga_row = by_op["ga_feature_pipeline"]
+    assert any("via ga.exp_mv" in s for s in ga_row["symbols"])
+    assert any("via ga.rotor_sandwich" in s for s in ga_row["symbols"])
+    assert any("via ga.norm" in s for s in ga_row["symbols"])
+    ebt_row = by_op["ebt_tiny_refinement"]
+    assert any("via ebm.refinement" in s for s in ebt_row["symbols"])
+    assert any("via ebm.self_verify" in s for s in ebt_row["symbols"])
+
+
+# ---------------------------------------------------------------------------
 # Determinism + serialization + CLI smoke
 # ---------------------------------------------------------------------------
 

@@ -22,8 +22,10 @@ See `docs/audit/ebm_scope_lock.md` for the locked decisions,
 from tessera.ebm.energy import (
     decode_init,
     energy,
+    energy_quadratic,
     inner_step,
     langevin_step,
+    refinement,
     self_verify,
 )
 from tessera.ebm.geo_sampling import (
@@ -46,8 +48,10 @@ __all__ = [
     # EBM1
     "decode_init",
     "energy",
+    "energy_quadratic",
     "inner_step",
     "langevin_step",
+    "refinement",
     "self_verify",
     # EBM3
     "partition_function",

@@ -1179,39 +1179,41 @@ def _workload_ga_pipeline_python_path() -> tuple[Callable[[], np.ndarray],
 def _workload_ga_pipeline_apple_gpu_path(
     rt: ctypes.CDLL,
 ) -> tuple[Callable[[], np.ndarray], float, tuple[str, ...], str]:
-    """Apple-GPU pipeline: dispatch each stage as a native MSL kernel
-    chained host-side. The three symbols are
-    ``exp → rotor_sandwich → norm``; the host glue is just buffer
-    swapping. Bit-matches the Python reference to fp32 tolerance.
+    """Apple-GPU pipeline through **public APIs**.
+
+    ``ga.exp_mv``, ``ga.rotor_sandwich`` and ``ga.norm`` all route
+    through ``tessera._apple_gpu_dispatch`` when given Cl(3,0) f32
+    batched inputs.  This driver calls the public functions directly
+    — no benchmark-local ctypes — to prove the integration is
+    user-visible.  The ``rt`` parameter is kept for ABI parity with
+    the other workload builders but unused; the dispatcher loads its
+    own runtime handle on first call.
     """
+    del rt  # routed through the public dispatcher cache instead
     B, bivecs, vectors = _workload_ga_pipeline_inputs()
-    sym_exp = "tessera_apple_gpu_clifford_exp_cl30_f32"
-    sym_san = "tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32"
-    sym_nrm = "tessera_apple_gpu_clifford_norm_cl30_f32"
-
-    fn_exp = _bind_unary_8x8(rt, sym_exp)
-    fn_san = _bind_binary_8x8(rt, sym_san)
-    fn_nrm = _bind_unary_8x8(rt, sym_nrm)  # ABI: (in, out, batch); out len=B
-
-    bivecs_c = np.ascontiguousarray(bivecs)
-    vectors_c = np.ascontiguousarray(vectors)
-    rotors = np.zeros_like(bivecs_c)
-    rotated = np.zeros_like(bivecs_c)
-    norms = np.zeros(B, dtype=np.float32)
+    a = _CL30
+    bivec_mv = ga.Multivector(np.ascontiguousarray(bivecs), a)
+    vec_mv = ga.Multivector(np.ascontiguousarray(vectors), a)
 
     def step() -> np.ndarray:
-        fn_exp(_ptr_f(bivecs_c), _ptr_f(rotors), ctypes.c_int32(B))
-        fn_san(_ptr_f(rotors), _ptr_f(vectors_c), _ptr_f(rotated),
-               ctypes.c_int32(B))
-        fn_nrm(_ptr_f(rotated), _ptr_f(norms), ctypes.c_int32(B))
-        return norms
+        rotor = ga.exp_mv(bivec_mv)
+        rotated = ga.rotor_sandwich(rotor, vec_mv)
+        return np.asarray(ga.norm(rotated))
 
-    out = step()  # warm + populate
+    out = step()
     # Reference via Python — same inputs, same algorithm.
     ref, _, _ = _workload_ga_pipeline_python_path()
     ref_out = ref()
     err = float(np.abs(out - ref_out).max())
-    return step, err, (sym_exp, sym_san, sym_nrm), f"B={B}/exp→sandwich→norm"
+    syms = (
+        "tessera_apple_gpu_clifford_exp_cl30_f32 [via ga.exp_mv]",
+        "tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32 [via ga.rotor_sandwich]",
+        "tessera_apple_gpu_clifford_norm_cl30_f32 [via ga.norm]",
+    )
+    # Shape descriptor must match the python_ref row's so the
+    # break-even pairing in `_ebt_sweep_break_even_summary` works.
+    # The "via public API" provenance is recorded in `symbols`.
+    return step, err, syms, f"B={B}/exp→sandwich→norm"
 
 
 def _workload_ebt_tiny_inputs(
@@ -1260,64 +1262,60 @@ def _workload_ebt_tiny_apple_gpu_path(
     rt: ctypes.CDLL, T: int, *,
     B: int = 4, K: int = 8, D: int = 6,
 ) -> tuple[Callable[[], np.ndarray], float, tuple[str, ...], str]:
-    """Apple-GPU EBT-tiny loop: T inner-step iterations dispatched
-    via the native ``ebm_refinement`` kernel (ping-pong on-device);
-    self_verify also dispatches natively when the symbol is exported."""
+    """Apple-GPU EBT-tiny loop through **public APIs**.
+
+    Both ``ebm.refinement(y0, grad, eta=eta, T=T)`` and
+    ``ebm.self_verify(energies, candidates)`` route through
+    ``tessera._apple_gpu_dispatch`` when their inputs are f32 +
+    contiguous + match the manifest contract.  No benchmark-local
+    ctypes for the kernels — proves the integration is user-visible.
+
+    The ``rt`` parameter is kept for ABI parity with the other
+    workload builders but unused; the dispatcher manages its own
+    runtime handle.
+    """
+    del rt  # routed through the public dispatcher cache
     _, _, _, y0, eta = _workload_ebt_tiny_inputs(B=B, K=K, D=D)
-    sym_ref = "tessera_apple_gpu_ebm_refinement_f32"
-    sym_sv = "tessera_apple_gpu_ebm_self_verify_hard_argmin_f32"
-    fn_ref = getattr(rt, sym_ref)
-    fn_ref.argtypes = [ctypes.POINTER(ctypes.c_float),
-                       ctypes.POINTER(ctypes.c_float),
-                       ctypes.c_float, ctypes.c_int32,
-                       ctypes.POINTER(ctypes.c_float),
-                       ctypes.c_int32]
-    fn_ref.restype = None
-    fn_sv = getattr(rt, sym_sv, None)
-    if fn_sv is not None:
-        fn_sv.argtypes = [ctypes.POINTER(ctypes.c_float),
-                          ctypes.POINTER(ctypes.c_float),
-                          ctypes.POINTER(ctypes.c_float),
-                          ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
-        fn_sv.restype = None
     y0_c = np.ascontiguousarray(y0)
-    grad_c = np.ascontiguousarray(y0.copy())
-    y_out = np.zeros_like(y0_c)
-    n = int(y0.size)
-    out_buf = np.zeros((B, D), dtype=np.float32)
+    grad_c = np.ascontiguousarray(y0.copy())          # fixed grad snapshot
 
     def step() -> np.ndarray:
-        fn_ref(_ptr_f(y0_c), _ptr_f(grad_c),
-               ctypes.c_float(eta), ctypes.c_int32(T),
-               _ptr_f(y_out), ctypes.c_int32(n))
+        y_t = ebm.refinement(y0_c, grad_c, eta=eta, T=T)
         energies = np.ascontiguousarray(
-            np.sum(y_out * y_out, axis=1).reshape(B, K).astype(np.float32))
-        candidates = np.ascontiguousarray(y_out.reshape(B, K, D))
-        if fn_sv is not None:
-            fn_sv(_ptr_f(energies), _ptr_f(candidates), _ptr_f(out_buf),
-                  ctypes.c_int32(B), ctypes.c_int32(K), ctypes.c_int32(D))
-            return out_buf
+            np.sum(y_t * y_t, axis=1).reshape(B, K).astype(np.float32))
+        candidates = np.ascontiguousarray(y_t.reshape(B, K, D))
         return ebm.self_verify(energies, candidates)
 
     out = step()
     ref, _, _ = _workload_ebt_tiny_python_path(T, B=B, K=K, D=D)
     ref_out = ref()
     err = float(np.abs(out - ref_out).max())
-    sv_label = sym_sv if fn_sv is not None else "ebm.self_verify (host)"
-    return step, err, (sym_ref, sv_label), f"B={B},K={K},D={D}/T={T}"
+    syms = (
+        "tessera_apple_gpu_ebm_refinement_f32 [via ebm.refinement]",
+        "tessera_apple_gpu_ebm_self_verify_hard_argmin_f32 [via ebm.self_verify]",
+    )
+    # Shape descriptor must match the python_ref row for the
+    # break-even pair-up.  Public-API provenance lives in `symbols`.
+    return step, err, syms, f"B={B},K={K},D={D}/T={T}"
 
 
-# Default break-even sweep — ascending workload size + a few T-variants
-# so users can locate the break-even point where the native MSL chain
-# starts beating numpy.  Each entry is ``(B, K, D, T)``.
+# Default break-even sweep — chosen so the report shows both regimes
+# now that the fused single-dispatch refinement kernel has landed:
+# native loses at sub-millisecond numpy times (dispatch overhead) and
+# wins at larger shapes (one MSL dispatch beats T sequential numpy
+# passes).  Break-even is around ``(32, 64, 512, 32)``; peak speedup
+# ~22× at ``(64, 128, 1024, 256)``.
 _DEFAULT_EBT_SWEEP: tuple[tuple[int, int, int, int], ...] = (
-    (4,   8,   6,    8),     # original tiny baseline
-    (4,   8,  64,    8),     # widen D
-    (8,  16,  64,    8),     # 4× total elements
-    (16, 32, 128,    8),     # 16× total elements
-    (32, 64, 256,    8),     # 64× total elements
-    (4,   8,   6,   32),     # longer T at tiny shape
-    (16, 32, 128,   32),     # longer T at bigger shape
+    # loss regime — dispatch overhead bound
+    (4,    8,    6,    8),
+    (16,  32,  128,    8),
+    (32,  64,  256,    8),
+    # break-even shoulder
+    (32,  64,  512,   32),
+    (32, 128,  512,   64),
+    # win regime — native dominates
+    (64, 128, 1024,   64),
+    (64, 128, 1024,  256),
 )
 
 

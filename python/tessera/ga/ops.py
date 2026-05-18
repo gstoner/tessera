@@ -197,9 +197,9 @@ def inner(a: Multivector, b: Multivector) -> np.ndarray:
 
     **Apple GPU fast path**: for ``Cl(3,0)`` f32 inputs with matching
     batch shape, this routes through
-    ``tessera_apple_gpu_clifford_inner_cl30_f32`` (the same kernel the
-    benchmark uses) via ``tessera._apple_gpu_dispatch``. Falls back
-    silently to the pure-Python path when the runtime is unavailable.
+    ``tessera_apple_gpu_clifford_inner_cl30_f32`` via
+    ``tessera._apple_gpu_dispatch``. Falls back silently to the
+    pure-Python path when the runtime is unavailable.
     """
     algebra = _same_algebra(a, b)
     if algebra.signature == (3, 0, 0):
@@ -209,21 +209,66 @@ def inner(a: Multivector, b: Multivector) -> np.ndarray:
     return geometric_product(a, reverse(b)).scalar_part()
 
 
+# ---------------------------------------------------------------------------
+# Apple GPU fast-path helpers — one per op.  Each returns either the
+# GPU output or ``None`` (caller falls back to numpy).  They all share
+# the same guard pattern: Cl(3,0) signature, f32 dtype, contiguous
+# 8-trailing-axis layout.
+# ---------------------------------------------------------------------------
+
+def _is_cl30_f32_8axis(*arrays: np.ndarray) -> bool:
+    """Common gate for the ``Cl(3,0)`` f32 GPU kernels."""
+    if not arrays:
+        return False
+    ref = arrays[0]
+    for arr in arrays:
+        if arr.dtype != np.float32:
+            return False
+        if arr.ndim < 1 or arr.shape[-1] != 8:
+            return False
+        if arr.shape != ref.shape:
+            return False
+    return True
+
+
+def _try_apple_gpu_unary_8x8_cl30_f32(
+    a: Multivector, symbol: str,
+) -> Optional[Multivector]:
+    """Generic ``(in[8], out[8], batch)`` Apple GPU dispatcher for
+    Cl(3,0) unary multivector ops (``exp_mv``, ``reverse``, ...)."""
+    if a.algebra.signature != (3, 0, 0):
+        return None
+    A = a.coefficients
+    if not _is_cl30_f32_8axis(A):
+        return None
+    try:
+        import ctypes
+        from tessera._apple_gpu_dispatch import bind_symbol
+    except ImportError:
+        return None
+    fn = bind_symbol(
+        symbol,
+        (ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    A_c = np.ascontiguousarray(A.reshape(-1, 8))
+    batch = A_c.shape[0]
+    out = np.zeros_like(A_c)
+    p = ctypes.POINTER(ctypes.c_float)
+    fn(A_c.ctypes.data_as(p), out.ctypes.data_as(p), ctypes.c_int32(batch))
+    return Multivector(out.reshape(A.shape), a.algebra)
+
+
 def _try_apple_gpu_inner_cl30_f32(
     a: Multivector, b: Multivector,
 ) -> Optional[np.ndarray]:
-    """Apple GPU fast path for the ``Cl(3,0)`` inner product.
-
-    Returns the (batch,) scalar array or ``None`` when the runtime
-    isn't loadable. Caller falls back to the numpy path on ``None``.
-    """
-    # Cheap guard rails — if any of these fail, give up immediately
-    # without paying the dispatch cost.
+    """``<a, b>`` on ``Cl(3,0)`` f32 batched inputs."""
     A = a.coefficients
     B = b.coefficients
-    if A.dtype != np.float32 or B.dtype != np.float32:
-        return None
-    if A.shape != B.shape or A.ndim < 1 or A.shape[-1] != 8:
+    if not _is_cl30_f32_8axis(A, B):
         return None
     try:
         import ctypes
@@ -247,6 +292,68 @@ def _try_apple_gpu_inner_cl30_f32(
     fn(A_c.ctypes.data_as(p), B_c.ctypes.data_as(p), out.ctypes.data_as(p),
        ctypes.c_int32(batch))
     return out.reshape(A.shape[:-1]) if A.ndim > 1 else out[0]
+
+
+def _try_apple_gpu_norm_cl30_f32(a: Multivector) -> Optional[np.ndarray]:
+    """``|a|`` on ``Cl(3,0)`` f32 batched input."""
+    if a.algebra.signature != (3, 0, 0):
+        return None
+    A = a.coefficients
+    if not _is_cl30_f32_8axis(A):
+        return None
+    try:
+        import ctypes
+        from tessera._apple_gpu_dispatch import bind_symbol
+    except ImportError:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_clifford_norm_cl30_f32",
+        (ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    A_c = np.ascontiguousarray(A.reshape(-1, 8))
+    batch = A_c.shape[0]
+    out = np.zeros(batch, dtype=np.float32)
+    p = ctypes.POINTER(ctypes.c_float)
+    fn(A_c.ctypes.data_as(p), out.ctypes.data_as(p), ctypes.c_int32(batch))
+    return out.reshape(A.shape[:-1]) if A.ndim > 1 else out[0]
+
+
+def _try_apple_gpu_rotor_sandwich_cl30_f32(
+    rotor: Multivector, x: Multivector,
+) -> Optional[Multivector]:
+    """``R x R†`` on ``Cl(3,0)`` f32 batched inputs."""
+    if rotor.algebra.signature != (3, 0, 0):
+        return None
+    R = rotor.coefficients
+    X = x.coefficients
+    if not _is_cl30_f32_8axis(R, X):
+        return None
+    try:
+        import ctypes
+        from tessera._apple_gpu_dispatch import bind_symbol
+    except ImportError:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32",
+        (ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    R_c = np.ascontiguousarray(R.reshape(-1, 8))
+    X_c = np.ascontiguousarray(X.reshape(-1, 8))
+    batch = R_c.shape[0]
+    out = np.zeros_like(R_c)
+    p = ctypes.POINTER(ctypes.c_float)
+    fn(R_c.ctypes.data_as(p), X_c.ctypes.data_as(p), out.ctypes.data_as(p),
+       ctypes.c_int32(batch))
+    return Multivector(out.reshape(R.shape), rotor.algebra)
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +401,16 @@ def norm_squared(a: Multivector) -> np.ndarray:
 
 
 def norm(a: Multivector) -> np.ndarray:
-    """Multivector norm ``|a| = sqrt(<a, a>)`` (clipped to non-negative inputs)."""
+    """Multivector norm ``|a| = sqrt(<a, a>)`` (clipped to non-negative inputs).
+
+    **Apple GPU fast path**: routes ``Cl(3,0)`` f32 batched inputs
+    through ``tessera_apple_gpu_clifford_norm_cl30_f32`` via the
+    shared dispatcher.  Falls back to the numpy clip+sqrt path
+    otherwise.
+    """
+    gpu_out = _try_apple_gpu_norm_cl30_f32(a)
+    if gpu_out is not None:
+        return gpu_out
     n2 = np.asarray(norm_squared(a))
     return np.sqrt(np.clip(n2, 0.0, None))
 
@@ -314,11 +430,22 @@ def _is_pure_bivector_3d(a: Multivector) -> bool:
 def exp_mv(a: Multivector, *, terms: int = 24) -> Multivector:
     """Exponential ``exp(a)``.
 
+    **Apple GPU fast path**: ``Cl(3,0)`` f32 batched inputs route
+    through ``tessera_apple_gpu_clifford_exp_cl30_f32``.  The native
+    kernel itself uses the closed-form Euler identity for pure
+    bivectors and a 24-term power series for the general case — same
+    contract as the Python ref below.
+
+
     For pure grade-2 multivectors in Cl(3,0), uses the closed-form
     Euler-like identity ``exp(B) = cos(|B|) + sin(|B|) * B / |B|``
     (with ``B² = −|B|²``). For the general case, truncated power
     series with ``terms`` terms (default 24 is sufficient for ``|a| ≲ 2``).
     """
+    gpu_out = _try_apple_gpu_unary_8x8_cl30_f32(
+        a, "tessera_apple_gpu_clifford_exp_cl30_f32")
+    if gpu_out is not None:
+        return gpu_out
     if _is_pure_bivector_3d(a):
         B_norm = np.asarray(norm(a))
         # Avoid division by zero for the zero bivector.
@@ -406,11 +533,18 @@ def rotor_from_axis(
 
 
 def rotor_sandwich(rotor: Multivector, x: Multivector) -> Multivector:
-    """Apply ``R x R†`` — rotor-conjugation rotation of ``x``."""
+    """Apply ``R x R†`` — rotor-conjugation rotation of ``x``.
+
+    **Apple GPU fast path**: ``Cl(3,0)`` f32 batched inputs route
+    through ``tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32``.
+    """
     if rotor.algebra != x.algebra:
         raise TesseraAlgebraError(
             f"rotor_sandwich: algebras must match; got {rotor.algebra!r} and {x.algebra!r}."
         )
+    gpu_out = _try_apple_gpu_rotor_sandwich_cl30_f32(rotor, x)
+    if gpu_out is not None:
+        return gpu_out
     return geometric_product(geometric_product(rotor, x), reverse(rotor))
 
 

@@ -5520,6 +5520,82 @@ extern "C" void tessera_apple_gpu_ebm_inner_step_f32(
 // Output:
 //   y_out — refined state, length n (= y0 - T*eta*grad for fixed grad)
 
+// ===========================================================================
+// EBM refinement (fused)  —  T inner steps of `y - eta * grad` in a
+// single Metal dispatch.  Each MSL thread keeps `y_i` in a register
+// and runs the T-step recurrence locally, so the whole refinement
+// chain costs one dispatch + one register-resident loop instead of
+// T host-side dispatches with ping-pong buffers.  This is what
+// `docs/status/ga_ebm_milestone.md` § "Known non-claims" #1 called out;
+// the fused kernel below is the fix.
+// ===========================================================================
+
+static NSString *const kEBMRefinementFusedF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void ebm_refinement_fused_f32(
+    device const float* y0    [[buffer(0)]],
+    device const float* grad  [[buffer(1)]],
+    constant float&     eta   [[buffer(2)]],
+    constant int32_t&   T     [[buffer(3)]],
+    device float*       y_out [[buffer(4)]],
+    constant int32_t&   n     [[buffer(5)]],
+    uint i [[thread_position_in_grid]])
+{
+    if ((int)i >= n) return;
+    // Pull both y0[i] and grad[i] into registers so the inner loop is
+    // pure ALU.  For fixed grad this reduces to a single FMA per step;
+    // the compiler typically unrolls when T is a small literal but we
+    // keep it data-driven so callers can sweep T freely.
+    float yi = y0[i];
+    const float gi = grad[i];
+    for (int t = 0; t < T; ++t) {
+        yi = yi - eta * gi;
+    }
+    y_out[i] = yi;
+}
+)MSL";
+
+static bool dispatch_ebm_refinement_fused_f32_msl(
+    MetalDeviceContext &ctx,
+    const float* y0, const float* grad, float eta, int32_t T,
+    float* y_out, int32_t n) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kEBMRefinementFusedF32Source, @"ebm_refinement_fused_f32");
+    if (!pso) return false;
+    NSUInteger bytes = sizeof(float) * (NSUInteger)n;
+    id<MTLBuffer> bY = [ctx.device newBufferWithBytes:y0 length:bytes
+                                                options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bG = [ctx.device newBufferWithBytes:grad length:bytes
+                                                options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bO = [ctx.device newBufferWithLength:bytes
+                                                options:MTLResourceStorageModeShared];
+    if (!bY || !bG || !bO) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bY offset:0 atIndex:0];
+    [enc setBuffer:bG offset:0 atIndex:1];
+    [enc setBytes:&eta length:sizeof(float) atIndex:2];
+    [enc setBytes:&T length:sizeof(int32_t) atIndex:3];
+    [enc setBuffer:bO offset:0 atIndex:4];
+    [enc setBytes:&n length:sizeof(int32_t) atIndex:5];
+    MTLSize grid = MTLSizeMake((NSUInteger)n, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)n,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(y_out, [bO contents], bytes);
+    return true;
+  }
+}
+
 extern "C" void tessera_apple_gpu_ebm_refinement_f32(
     const float* y0, const float* grad, float eta, int32_t T,
     float* y_out, int32_t n) {
@@ -5528,34 +5604,18 @@ extern "C" void tessera_apple_gpu_ebm_refinement_f32(
     if (y_out != y0) std::memcpy(y_out, y0, sizeof(float) * (size_t)n);
     return;
   }
-  // CPU reference fallback when the device isn't available.
-  if (!ctx.ok) {
-    std::vector<float> tmp(y0, y0 + n);
-    std::vector<float> nxt(n);
-    for (int32_t t = 0; t < T; ++t) {
-      reference_ebm_inner_step_f32(tmp.data(), grad, eta, nxt.data(), n);
-      std::swap(tmp, nxt);
-    }
-    std::memcpy(y_out, tmp.data(), sizeof(float) * (size_t)n);
-    return;
-  }
-  // On-device ping-pong loop.
-  std::vector<float> a(y0, y0 + n);
-  std::vector<float> b(n);
+  // Single-dispatch fused kernel — drops dispatch overhead from O(T)
+  // to O(1).  Closed-form on fixed grad: y_T = y_0 - T*eta*grad.
+  if (ctx.ok && dispatch_ebm_refinement_fused_f32_msl(
+          ctx, y0, grad, eta, T, y_out, n)) return;
+  // CPU fallback path (no device, or kernel compile failed).
+  std::vector<float> tmp(y0, y0 + n);
+  std::vector<float> nxt(n);
   for (int32_t t = 0; t < T; ++t) {
-    if (!dispatch_ebm_inner_step_f32_msl(ctx, a.data(), grad, eta,
-                                         b.data(), n)) {
-      // Mid-loop failure: complete the rest on the CPU.
-      for (int32_t k = t; k < T; ++k) {
-        reference_ebm_inner_step_f32(a.data(), grad, eta, b.data(), n);
-        std::swap(a, b);
-      }
-      std::memcpy(y_out, a.data(), sizeof(float) * (size_t)n);
-      return;
-    }
-    std::swap(a, b);
+    reference_ebm_inner_step_f32(tmp.data(), grad, eta, nxt.data(), n);
+    std::swap(tmp, nxt);
   }
-  std::memcpy(y_out, a.data(), sizeof(float) * (size_t)n);
+  std::memcpy(y_out, tmp.data(), sizeof(float) * (size_t)n);
 }
 
 // ===========================================================================

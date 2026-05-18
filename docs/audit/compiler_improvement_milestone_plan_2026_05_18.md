@@ -673,7 +673,40 @@ Acceptance:
   every existing clifford_jit test still passes against the extracted
   core).
 
-### M7 - Visual Complex / conformal pilot
+### M7 - Visual Complex / conformal pilot  **(2026-05-18: landed — 7-step sequence below)**
+
+**Status:** all 7 steps shipped + tested (87 new tests across 6
+test files).  Pivoted from the plan's first-choice ``Cl(0,1)``
+representation to a non-GA :class:`ComplexScalar` sibling kind
+because Cl(0,1) and Cl(2,0) are not in the v1 GA allow-list
+(``ga_scope_lock.md`` Q1).  The pivot matches Decision #15a:
+``Multivector`` is a sibling kind, ``ComplexScalar`` is the
+next sibling.
+
+Landed (2026-05-18):
+
+| Step | Capability | Module | Tests |
+|---|---|---|---|
+| 1 | ``tessera.complex`` namespace + :class:`ComplexScalar` sibling | `python/tessera/complex.py` | `test_complex_namespace.py` (10) |
+| 2 | ``complex_mul``, ``complex_exp``, ``complex_conjugate``, ``complex_abs`` + conformality | — | `test_complex_mul_exp.py` (18) |
+| 3 | ``mobius`` + circle-preservation + group law + pole policy | — | `test_complex_mobius.py` (7) |
+| 4 | ``stereographic`` / ``stereographic_inverse`` (S² ↔ ℂ) | — | `test_complex_stereographic.py` (12) |
+| 5 | ``conformal_jacobian``, ``laplacian_2d`` (5-point stencil) | — | `test_complex_jacobian_laplacian.py` (12) |
+| 6 | ``check_cauchy_riemann`` (numerical) + ``@analytic`` + ``NotHolomorphicError`` | — | `test_complex_cauchy_riemann.py` (21) |
+| 7 | ``conformal_energy_on_sphere`` → ``tessera.energy.norm_sq`` composition | — | `test_complex_conformal_energy.py` (7) |
+
+Follow-ups (not gating any other milestone):
+
+- **Symbolic Cauchy-Riemann path**: AST-lowered complex functions
+  could be CR-verified symbolically by composing M6's
+  ``energy_vjp``-style derivatives.  The numerical path shipped
+  today satisfies the M7 acceptance criteria; the symbolic path
+  would extend the verifier to compile-time checks rather than
+  probe-based.
+- **MSL codegen** for the 6 conformal primitives.  Today they
+  run as numpy reference; native Apple GPU paths would benefit
+  from M6 Step 4's Philox+MSL machinery, so this lands together
+  with M6 Step 4.
 
 Goal: use Needham's visual/conformal ideas to extend the mathematical IR lane.
 

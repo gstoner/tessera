@@ -312,9 +312,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 |---|---|---|---|---|
 | `rotor_sandwich_norm` | geometric_algebra | **shipped** | `python/tessera/compiler/canonical/rotor_sandwich_norm.py` | rotor_sandwich(R, V) followed by norm(.); GA vertical slice via @clifford_jit. |
 | `matmul_softmax_matmul` | attention | **shipped** | `python/tessera/compiler/canonical/matmul_softmax_matmul.py` | O = softmax(A @ B) @ C — Apple GPU 3-op fusion (numpy reference on non-Darwin). |
-| `conv2d_norm_activation` | cnn | **planned** | `(planned — no driver yet)` | conv2d → norm → activation; CPU/reference driver to be promoted from examples. |
+| `conv2d_norm_activation` | cnn | **shipped** | `python/tessera/compiler/canonical/conv2d_norm_activation.py` | conv2d_nhwc → layer_norm → gelu; numpy reference; honest fallback_reason since conv2d has no fused MSL kernel yet. |
 | `kv_cache_append_prune_read` | kv_cache | **planned** | `(planned — no driver yet)` | KV-cache decode state block; needs a new compile-report driver. |
-| `decode_init_inner_loop_self_verify` | energy_based_models | **planned** | `(planned — wraps tessera.ebm.* through a CompileReport)` | EBM decode_init → T inner-loop steps → self_verify; argmin over K. |
+| `decode_init_inner_loop_self_verify` | energy_based_models | **shipped** | `python/tessera/compiler/canonical/decode_init_inner_loop_self_verify.py` | EBM decode_init → T inner-loop steps → self_verify; argmin over K; native MSL on Apple GPU. |
 | `rotor_sandwich_ebt_tiny` | ga_ebm_composite | **planned** | `(planned — wraps the rotor_conditioned_ebt benchmark)` | rotor_sandwich → ebt_tiny; fused GA + EBM workload through public APIs. |
 
 ## Axes

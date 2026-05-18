@@ -51,6 +51,7 @@ when it differs from the checked-in copy.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -423,6 +424,145 @@ def render_markdown(rows: Iterable[OpSupportRow] | None = None) -> str:
 _DEFAULT_OUT = Path("docs/audit/generated/support_table.md")
 
 
+def _public_doc_paths() -> list[Path]:
+    """Public docs whose native-execution claims the lint scans.
+
+    The list is intentionally short — these are the entry points
+    that publicize the compiler's surface to readers who won't read
+    the generated table.  Adding to this list is fine; the lint
+    requires every claim to be grounded in the manifest.
+    """
+    return [
+        Path("README.md"),
+        Path("docs/README.md"),
+        Path("docs/status/ga_ebm_milestone.md"),
+        Path("docs/spec/GA_EBM_EXECUTION_STATUS.md"),
+        Path("benchmarks/apple_gpu/README.md"),
+    ]
+
+
+# Pattern: `tessera_<target>_<op>_<dtype>` symbols.  When a doc names
+# one of these, the manifest must have a `fused` entry for the (op,
+# target) pair.  Anything else is silent over-claiming.
+_TESSERA_SYMBOL_RE = re.compile(
+    r"tessera_(?P<target>apple_gpu|apple_cpu|x86|nvidia|rocm|metalium)_"
+    r"(?P<op>[A-Za-z0-9_]+?)_(?P<dtype>f32|f16|bf16|fp32|fp16)"
+)
+
+# Pattern: backtick-wrapped op names in the public-API form
+# (`clifford_norm`, `ebm_partition_exact`, ...) accompanied by a
+# native-claim word ("native", "fused", "hardware-runtime").
+_NATIVE_CLAIM_RE = re.compile(
+    r"`(?P<op>(?:clifford|ebm)_[a-z0-9_]+)`[^.\n]{0,160}?"
+    r"\b(?P<claim>native|fused|hardware-runtime|hardware runtime)\b",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class ClaimViolation:
+    """One claim_lint finding — points at a public doc making a
+    native claim the manifest can't substantiate."""
+    doc_path: str
+    line_no: int
+    claim: str
+    code: str
+
+    def format(self) -> str:
+        return f"{self.doc_path}:{self.line_no}: [{self.code}] {self.claim}"
+
+
+def _scan_doc_for_claims(path: Path) -> list[ClaimViolation]:
+    """Walk one doc and emit a ClaimViolation per unsupported claim."""
+    if not path.exists():
+        return []
+    text = path.read_text()
+    violations: list[ClaimViolation] = []
+
+    # Symbol-form claims.
+    for m in _TESSERA_SYMBOL_RE.finditer(text):
+        target = m.group("target")
+        op = m.group("op")
+        # Compute the line number for the diagnostic.
+        line_no = text.count("\n", 0, m.start()) + 1
+        # Resolve the op name back to a manifest entry.  The symbol
+        # encodes the op suffix (e.g., `clifford_rotor_sandwich_cl30`
+        # → `clifford_rotor_sandwich`).  Strip the trailing `_cl{p}{q}`
+        # suffix Clifford symbols carry.
+        op_clean = re.sub(r"_cl\d+$", "", op)
+        entries = bm.manifest_for(op_clean)
+        target_entries = [e for e in entries if e.target == target]
+        if not target_entries:
+            violations.append(ClaimViolation(
+                doc_path=str(path),
+                line_no=line_no,
+                claim=(
+                    f"references `tessera_{target}_{op}_{m.group('dtype')}` "
+                    f"but `backend_manifest` has no entry for "
+                    f"op={op_clean!r} target={target!r}"
+                ),
+                code="CLAIM_LINT_SYMBOL_UNGROUNDED",
+            ))
+            continue
+        # Symbol must map to a fused / reference entry — not `planned`.
+        statuses = {e.status for e in target_entries}
+        if statuses & {"planned", "artifact_only"} == statuses:
+            violations.append(ClaimViolation(
+                doc_path=str(path),
+                line_no=line_no,
+                claim=(
+                    f"names symbol `tessera_{target}_{op}_{m.group('dtype')}` "
+                    f"but manifest says status={sorted(statuses)} for "
+                    f"({op_clean}, {target}) — not a native execution path"
+                ),
+                code="CLAIM_LINT_SYMBOL_NOT_FUSED",
+            ))
+
+    # Native-claim-form findings around op-name backticks.
+    # Only check identifiers that map to a real manifest op — Python
+    # function names and benchmark-report keys that happen to share
+    # the `ebm_` / `clifford_` prefix are filtered out.
+    known_ops = set(bm._CLIFFORD_APPLE_GPU_FUSED) | set(bm._EBM_APPLE_GPU_FUSED)
+    for m in _NATIVE_CLAIM_RE.finditer(text):
+        op = m.group("op")
+        if op not in known_ops:
+            continue
+        line_no = text.count("\n", 0, m.start()) + 1
+        entries = bm.manifest_for(op)
+        if not any(e.status == "fused" for e in entries):
+            violations.append(ClaimViolation(
+                doc_path=str(path),
+                line_no=line_no,
+                claim=(
+                    f"claims `{op}` is {m.group('claim')!r} but no "
+                    f"manifest target ships a `fused` kernel "
+                    f"(statuses: {sorted({e.status for e in entries})})"
+                ),
+                code="CLAIM_LINT_NO_FUSED_KERNEL",
+            ))
+    return violations
+
+
+def run_claim_lint() -> list[ClaimViolation]:
+    """Run claim_lint across every doc in :func:`_public_doc_paths`."""
+    out: list[ClaimViolation] = []
+    for path in _public_doc_paths():
+        out.extend(_scan_doc_for_claims(path))
+    return out
+
+
+def _cmd_claim_lint(args: argparse.Namespace) -> int:
+    violations = run_claim_lint()
+    if not violations:
+        print("claim_lint: no violations across "
+              f"{len(_public_doc_paths())} doc(s)")
+        return 0
+    print(f"claim_lint: {len(violations)} violation(s)", file=sys.stderr)
+    for v in violations:
+        print(f"  {v.format()}", file=sys.stderr)
+    return 1
+
+
 def _cmd_support_table(args: argparse.Namespace) -> int:
     text = render_markdown()
     if args.check:
@@ -473,6 +613,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     p_st.set_defaults(func=_cmd_support_table)
 
+    p_cl = sub.add_parser(
+        "claim_lint",
+        help="scan public docs for unsupported native-execution claims",
+    )
+    p_cl.set_defaults(func=_cmd_claim_lint)
+
     args = parser.parse_args(argv)
     return args.func(args)
 
@@ -486,8 +632,10 @@ __all__ = [
     "AXIS_VALUE_GLYPHS",
     "AxisCell",
     "OpSupportRow",
+    "ClaimViolation",
     "all_support_rows",
     "render_markdown",
+    "run_claim_lint",
     "support_row_for",
     "main",
 ]

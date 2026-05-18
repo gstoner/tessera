@@ -27,10 +27,12 @@ the same program emit the same hash.
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Iterable, Iterator, Mapping, Optional
 
 from . import jit_bridge as _bridge
 from .fallback import FallbackReason
@@ -194,6 +196,59 @@ def routes_from_thread_trace() -> tuple[_bridge.JitBridgeRoute, ...]:
     return _bridge.current_dispatch_trace()
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Auto-emission sink — step 4 of the 2026-05-18 post-reassessment plan.
+#
+# Each frontend's compiled-callable can call :func:`emit_compile_report`
+# at the end of its ``__call__``.  The sink is a contextvar so emission
+# is thread-/task-safe and is a no-op unless a caller has opened a
+# :func:`capture_compile_reports` scope.  This means every frontend
+# can opt into uniform emission without any runtime overhead in the
+# default case.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SINK_VAR: contextvars.ContextVar[Optional[list["CompileReport"]]] = \
+    contextvars.ContextVar("tessera.compile_report_sink", default=None)
+
+
+@contextmanager
+def capture_compile_reports() -> Iterator[list["CompileReport"]]:
+    """Open a scope in which every frontend's ``__call__`` appends
+    its :class:`CompileReport` to the returned list.
+
+    Usage::
+
+        with capture_compile_reports() as reports:
+            f(x, y)              # @tessera.jit fn
+            clifford_demo(...)   # @clifford_jit fn
+        # reports now contains one CompileReport per call
+    """
+    sink: list[CompileReport] = []
+    token = _SINK_VAR.set(sink)
+    try:
+        yield sink
+    finally:
+        _SINK_VAR.reset(token)
+
+
+def emit_compile_report(report: "CompileReport") -> None:
+    """Push a :class:`CompileReport` to the active sink, if any.
+
+    Called by every frontend's ``__call__`` after the wrapped
+    function returns; outside of :func:`capture_compile_reports`
+    this is a no-op so the hot path stays cheap.
+    """
+    sink = _SINK_VAR.get()
+    if sink is not None:
+        sink.append(report)
+
+
+def active_sink_is_capturing() -> bool:
+    """Cheap probe — frontends can use this to skip the cost of
+    building a CompileReport when nobody is listening."""
+    return _SINK_VAR.get() is not None
+
+
 __all__ = [
     "FRONTEND_TESSERA_JIT",
     "FRONTEND_TEXTUAL",
@@ -207,4 +262,7 @@ __all__ = [
     "CompileReport",
     "hash_ir_text",
     "routes_from_thread_trace",
+    "capture_compile_reports",
+    "emit_compile_report",
+    "active_sink_is_capturing",
 ]

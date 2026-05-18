@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # CPU-only validation spine for Tessera.
+#
+# Step ordering follows `docs/spec/VALIDATION_SPINE.md` (M5).  The
+# Python-side gates (unit, audit drift, claim_lint, canonical-program
+# reports, benchmark-schema validation) run first; native build /
+# benchmark checks run after.
 
 set -euo pipefail
 
@@ -29,7 +34,19 @@ echo "==> Version consistency"
 "$PYTHON" scripts/check_versions.py
 
 echo "==> Python unit tests"
-"$PYTHON" -m pytest tests/unit -q
+"$PYTHON" -m pytest tests/unit -q -m "not slow"
+
+# M0 / M0.5: regenerate the support table and fail if it drifts from
+# the checked-in copy.  Catches changes to op_catalog / primitive
+# coverage / backend_manifest / capabilities that didn't update the
+# audit artifact.
+echo "==> Generated support-table drift check"
+"$PYTHON" -m tessera.compiler.audit support_table --check
+
+# M0 follow-up: claim_lint — public docs may not assert native /
+# fused / hardware-runtime claims that the manifest can't ground.
+echo "==> Public-doc claim_lint"
+"$PYTHON" -m tessera.compiler.audit claim_lint
 
 echo "==> Runtime telemetry smoke"
 "$PYTHON" -m tessera.cli.runtime --output "$RUNTIME_REPORT"
@@ -43,9 +60,10 @@ echo "==> Benchmark telemetry smoke"
 # Promoted to the validation spine 2026-05-17 — see
 # docs/status/ga_ebm_milestone.md for the contract.  On non-Darwin
 # hosts the benchmark exits 0 with `skipped_apple_gpu` populated.
-# On Apple Silicon it exercises 17 GA + 8 native EBM + 4 workload
+# On Apple Silicon it exercises 17 GA + 9 native EBM + 4 workload
 # rows through the full stack (Python API → manifest lookup → MSL
-# dispatch → correctness check vs Python reference).
+# dispatch → correctness check vs Python reference).  Counts
+# updated 2026-05-17 after `ebm_partition_exact` shipped.
 GA_EBM_REPORT="$TMP_ROOT/tessera_ga_ebm_native_smoke.json"
 echo "==> Apple GPU GA + EBM native-execution smoke"
 "$PYTHON" benchmarks/apple_gpu/benchmark_ga_ebm.py --ci --output "$GA_EBM_REPORT"

@@ -57,6 +57,16 @@ def _run_matmul_softmax_matmul() -> CompileReport:
     return run()
 
 
+def _run_conv2d_norm_activation() -> CompileReport:
+    from .conv2d_norm_activation import run
+    return run()
+
+
+def _run_decode_init_inner_loop_self_verify() -> CompileReport:
+    from .decode_init_inner_loop_self_verify import run
+    return run()
+
+
 CANONICAL_PROGRAMS: tuple[CanonicalProgram, ...] = (
     CanonicalProgram(
         program_id="rotor_sandwich_norm",
@@ -77,10 +87,10 @@ CANONICAL_PROGRAMS: tuple[CanonicalProgram, ...] = (
     CanonicalProgram(
         program_id="conv2d_norm_activation",
         family="cnn",
-        owner_file="(planned — no driver yet)",
-        run=None,
-        status="planned",
-        description="conv2d → norm → activation; CPU/reference driver to be promoted from examples.",
+        owner_file="python/tessera/compiler/canonical/conv2d_norm_activation.py",
+        run=_run_conv2d_norm_activation,
+        status="shipped",
+        description="conv2d_nhwc → layer_norm → gelu; numpy reference; honest fallback_reason since conv2d has no fused MSL kernel yet.",
     ),
     CanonicalProgram(
         program_id="kv_cache_append_prune_read",
@@ -93,10 +103,10 @@ CANONICAL_PROGRAMS: tuple[CanonicalProgram, ...] = (
     CanonicalProgram(
         program_id="decode_init_inner_loop_self_verify",
         family="energy_based_models",
-        owner_file="(planned — wraps tessera.ebm.* through a CompileReport)",
-        run=None,
-        status="planned",
-        description="EBM decode_init → T inner-loop steps → self_verify; argmin over K.",
+        owner_file="python/tessera/compiler/canonical/decode_init_inner_loop_self_verify.py",
+        run=_run_decode_init_inner_loop_self_verify,
+        status="shipped",
+        description="EBM decode_init → T inner-loop steps → self_verify; argmin over K; native MSL on Apple GPU.",
     ),
     CanonicalProgram(
         program_id="rotor_sandwich_ebt_tiny",

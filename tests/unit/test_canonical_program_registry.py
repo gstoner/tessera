@@ -48,12 +48,14 @@ def test_shipped_programs_have_a_runner() -> None:
             assert p.run is None, p.program_id
 
 
-def test_at_least_two_programs_are_shipped() -> None:
-    """M1 acceptance: at least two programs run in default CI."""
+def test_at_least_four_programs_are_shipped() -> None:
+    """M1.5 follow-up (post-reassessment): the suite ships at least
+    four canonical programs now that ``decode_init_inner_loop_self_verify``
+    and ``conv2d_norm_activation`` are wired."""
     shipped = canonical.shipped_programs()
-    assert len(shipped) >= 2, (
-        f"only {len(shipped)} programs marked shipped — M1 acceptance "
-        "criterion requires at least 2."
+    assert len(shipped) >= 4, (
+        f"only {len(shipped)} programs marked shipped — the M1.5 "
+        "follow-up requires at least 4 of 6 to be wired."
     )
 
 

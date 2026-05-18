@@ -265,27 +265,35 @@ class JitFn:
         against the actual argument shapes and re-run the constraint solver
         so violations raise a clear ``TesseraConstraintError`` at first call,
         not a downstream numpy / Accelerate error.
+
+        Step 4 (2026-05-18): auto-emits a :class:`CompileReport` to
+        the active sink (no-op when no sink is active).
         """
         self._enforce_call_time_constraints(args, kwargs)
-        if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
-            if self.execution_kind == "native_cpu":
-                return self._native_cpu_fast_call(args, kwargs)
-            return self.cpu_plan.execute(args, kwargs, self.arg_names)
-        if (
-            self.cpu_plan is not None
-            and self.cpu_plan.target_kind == "apple_cpu"
-            and self.compile_bundle is not None
-            and self.compile_bundle.executable
-        ):
-            return self._apple_cpu_fast_call(args, kwargs)
-        if (
-            self.cpu_plan is not None
-            and self.cpu_plan.target_kind == "apple_gpu"
-            and self.compile_bundle is not None
-            and self.compile_bundle.executable
-        ):
-            return self._apple_gpu_fast_call(args, kwargs)
-        return self._fn(*args, **kwargs)
+        try:
+            if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
+                if self.execution_kind == "native_cpu":
+                    return self._native_cpu_fast_call(args, kwargs)
+                return self.cpu_plan.execute(args, kwargs, self.arg_names)
+            if (
+                self.cpu_plan is not None
+                and self.cpu_plan.target_kind == "apple_cpu"
+                and self.compile_bundle is not None
+                and self.compile_bundle.executable
+            ):
+                return self._apple_cpu_fast_call(args, kwargs)
+            if (
+                self.cpu_plan is not None
+                and self.cpu_plan.target_kind == "apple_gpu"
+                and self.compile_bundle is not None
+                and self.compile_bundle.executable
+            ):
+                return self._apple_gpu_fast_call(args, kwargs)
+            return self._fn(*args, **kwargs)
+        finally:
+            from . import compile_report as _cr
+            if _cr.active_sink_is_capturing():
+                _cr.emit_compile_report(self.compile_report())
 
     def _enforce_call_time_constraints(
         self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
@@ -426,6 +434,43 @@ class JitFn:
     def ir_text(self) -> str:
         """Return the emitted Graph IR as MLIR text."""
         return self.graph_ir.to_mlir()
+
+    def compile_report(self):
+        """Synthesize a :class:`CompileReport` from this JitFn's
+        current state.
+
+        Step 4 of the 2026-05-18 post-reassessment plan: every JIT
+        frontend exposes a uniform CompileReport accessor.  No
+        execution happens here — the accessor reads ``graph_ir``,
+        ``target``, ``cpu_plan``, and the recent bridge trace.
+        """
+        from . import compile_report as _cr
+        target_kind = (
+            self.cpu_plan.target_kind if self.cpu_plan is not None
+            else normalize_target_kind(self.target)
+        )
+        ir_hashes = {"graph_ir": _cr.hash_ir_text(self.ir_text())}
+        target_decision = {
+            target_kind: (
+                f"cpu_plan={self.cpu_plan.target_kind if self.cpu_plan else 'none'}; "
+                f"compile_bundle.executable="
+                f"{bool(self.compile_bundle and self.compile_bundle.executable)}"
+            ),
+        }
+        # Pick up any routes the bridge captured during the most
+        # recent dispatch; the CPU fast path does not produce
+        # routes but apple_gpu does.
+        routes = _cr.routes_from_thread_trace()
+        return _cr.CompileReport(
+            program_id=getattr(self._fn, "__qualname__", "<jit_fn>"),
+            source=f"@tessera.jit({getattr(self._fn, '__qualname__', '?')})",
+            frontend=_cr.FRONTEND_TESSERA_JIT,
+            value_kind=_cr.VALUE_KIND_TENSOR,
+            target=target_kind,
+            ir_hashes=ir_hashes,
+            target_decision=target_decision,
+            proof_routes=routes,
+        )
 
     @property
     def effect(self) -> Effect:

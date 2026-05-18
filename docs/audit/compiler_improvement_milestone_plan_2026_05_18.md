@@ -604,6 +604,37 @@ operand refs, inline `#int:N` / `#float:V` literals).  M6 inherits
 that shape; the difference is the whitelist (energy primitives, not
 GA primitives) and the per-IR-op gradient pairing.
 
+**Step 3 gate (2026-05-18 post-reassessment).**  Step 3 starts a
+new IR layer (`grad_y` per op, fused energy+gradient kernels) and
+deserves the same level of inspectability the rest of the compiler
+just gained.  Hold Step 3 until **report/fallback proof is
+uniformly visible**:
+
+- [x] M0/M0.5 generated support table (drift-gated).
+- [x] M0 `claim_lint` lifting public docs to manifest truth.
+- [x] M1 `CompileReport` schema, two canonical drivers shipped.
+- [x] M1.5: four canonical drivers shipped (rotor_sandwich_norm,
+  matmul_softmax_matmul, decode_init_inner_loop_self_verify,
+  conv2d_norm_activation).
+- [x] M3 `native_required=True` + stable `FallbackReason` enum.
+- [x] M4 memory-model verifier (happens-before + memory-space).
+- [x] M5 `BenchmarkRow` schema + validation spine doc + no-silent-native gate.
+- [x] M6 Step 1 + Step 2 — shared `ast_ir` core, `@energy_jit`
+  whitelist + IR, lowering tests.
+- [x] **Step 4 (this reassessment)**: uniform `CompileReport`
+  emission across `@tessera.jit`, textual, and `@clifford_jit`
+  via `capture_compile_reports()` + `.compile_report()` accessors.
+- [ ] **Gate**: a CI assertion that every shipped canonical
+  program emits a `CompileReport` whose `report_hash()` is stable
+  AND whose `fallback_reason` is correctly populated.  Until this
+  is green, M6 Step 3 (gradient generation + fused energy kernels)
+  stays unimplemented.
+
+Once the gate is green, Step 3 begins with `grad_y` generation for
+the whitelisted energy ops, fused energy+gradient kernels, and
+on-device Philox RNG.  Steps 3+4 then ride on top of the same
+audit + report machinery rather than landing parallel proof paths.
+
 Deliverables:
 
 - **Step 1 - Lift the AST-to-IR core out of `clifford_jit`.**  Move

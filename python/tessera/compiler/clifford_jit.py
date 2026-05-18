@@ -362,7 +362,11 @@ class CliffordCompiledCallable:
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Execute the function under a ``jit_context`` span so every
-        op routes through the bridge and the trace is captured."""
+        op routes through the bridge and the trace is captured.
+
+        Auto-emits a CompileReport to the active sink (if any) —
+        see :func:`compile_report.capture_compile_reports`.
+        """
         # Snapshot the bridge state so we can restore it afterwards.
         prev_tracing = _bridge.tracing_enabled()
         _bridge.set_tracing_enabled(True)
@@ -375,6 +379,10 @@ class CliffordCompiledCallable:
             _bridge.set_tracing_enabled(prev_tracing)
         with self._last_routes_lock:
             self._last_routes = captured
+        # Step 4 auto-emit — no-op when no sink is active.
+        from . import compile_report as _cr  # local to avoid import cycle
+        if _cr.active_sink_is_capturing():
+            _cr.emit_compile_report(self.compile_report())
         return result
 
     def last_routes(self) -> tuple[_bridge.JitBridgeRoute, ...]:
@@ -396,6 +404,37 @@ class CliffordCompiledCallable:
         observed = self.last_routes() if routes is None else routes
         observed_ops = tuple(r.op_name for r in observed)
         return observed_ops == self.artifact.op_names()
+
+    def compile_report(self) -> "_cr.CompileReport":
+        """Synthesize a :class:`CompileReport` from this callable's
+        current artifact + last call's route trace.
+
+        Step 4 of the 2026-05-18 post-reassessment plan: every JIT
+        frontend (``@tessera.jit``, textual, ``@clifford_jit``)
+        exposes a uniform CompileReport accessor so the M5
+        no-silent-native rule applies everywhere.
+        """
+        from . import compile_report as _cr  # local import to avoid cycle
+        ir = self.artifact.ir
+        ir_text = ir.text() if ir is not None else ""
+        ir_hashes = (
+            {"graph_ir": _cr.hash_ir_text(ir_text)} if ir_text else {}
+        )
+        return _cr.CompileReport(
+            program_id=self.artifact.source_name,
+            source=f"@clifford_jit({self.artifact.source_name})",
+            frontend=_cr.FRONTEND_CLIFFORD_JIT,
+            value_kind=_cr.VALUE_KIND_MULTIVECTOR,
+            target=self.artifact.target,
+            ir_hashes=ir_hashes,
+            target_decision={
+                self.artifact.target: (
+                    f"plan_hash={self.artifact.plan_hash} via "
+                    f"{', '.join(self.artifact.manifest_sources) or 'manifest'}"
+                ),
+            },
+            proof_routes=self.last_routes(),
+        )
 
 
 def _validate_target(target: str) -> None:
@@ -612,6 +651,10 @@ class _IRCompiledCallable(CliffordCompiledCallable):
         )
         with self._last_routes_lock:
             self._last_routes = routes
+        # Step 4 auto-emit — no-op when no sink is active.
+        from . import compile_report as _cr
+        if _cr.active_sink_is_capturing():
+            _cr.emit_compile_report(self.compile_report())
         return result
 
 

@@ -656,6 +656,37 @@ def lower_text_to_graph_ir(source: str) -> GraphIRModule:
     return module
 
 
+def compile_report_for_text(
+    source: str,
+    *,
+    program_id: str = "<textual>",
+    target: str = "cpu",
+):
+    """Build a :class:`CompileReport` from a textual-frontend source.
+
+    Step 4 of the 2026-05-18 post-reassessment plan: the textual
+    frontend joins ``@tessera.jit`` and ``@clifford_jit`` in
+    emitting a uniform report.  Calling this function in a
+    :func:`compile_report.capture_compile_reports` scope appends the
+    result to the active sink.
+    """
+    from .. import compile_report as _cr
+    module = lower_text_to_graph_ir(source)
+    ir_text = module.to_mlir()
+    report = _cr.CompileReport(
+        program_id=program_id,
+        source="textual_frontend",
+        frontend=_cr.FRONTEND_TEXTUAL,
+        value_kind=_cr.VALUE_KIND_TENSOR,
+        target=target,
+        ir_hashes={"graph_ir": _cr.hash_ir_text(ir_text)},
+        target_decision={target: "textual frontend → GraphIRModule"},
+    )
+    if _cr.active_sink_is_capturing():
+        _cr.emit_compile_report(report)
+    return report
+
+
 def _lower_function(fn: Function) -> GraphIRFunction:
     defined = set()
     value_types: dict[str, Any] = {}

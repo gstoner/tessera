@@ -802,8 +802,23 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, object]] = {
         "notes": (
             "Affine Langevin step on Apple GPU — out[i] = y[i] - eta * "
             "grad[i] + noise_scale * noise[i]. Caller pre-generates noise "
-            "from tessera.rng (deterministic Philox); on-device RNG is a "
-            "follow-up sprint."
+            "from tessera.rng (deterministic Philox)."
+        ),
+    },
+    # M6 Step 4 (2026-05-18): on-device Philox-4x32-10 variant of
+    # langevin_step.  Generates standard-normal noise inside the MSL
+    # kernel from a (key, counter) tuple, eliminating the host noise
+    # buffer + upload.  Constants match tessera.compiler.philox.
+    "ebm_langevin_step_philox": {
+        "symbol": "tessera_apple_gpu_ebm_langevin_step_philox_f32",
+        "dtypes": ("fp32",),
+        "abi": ("(y:f32*, grad:f32*, eta:f32, noise_scale:f32, "
+                "key:u32*, counter:u32*, out:f32*, n:i32)"),
+        "notes": (
+            "Affine Langevin step with on-device Philox-4x32-10 RNG. "
+            "Per-thread counter = (counter[0]+i, counter[1..3]); Box-Muller "
+            "maps the first two uniforms to a standard normal.  Same "
+            "math as ebm_langevin_step but no host noise buffer."
         ),
     },
     # decode_init noise-apply: out[i] = base[i % base_len] + std * noise[i].
@@ -938,6 +953,10 @@ _EBM_PRIMITIVES: tuple[str, ...] = (
     "ebm_sphere_langevin",
     # EBT-tiny fused-pipeline optimization (2026-05-17).
     "ebm_ebt_tiny",
+    # M6 Step 4 (2026-05-18) — on-device Philox RNG variant of
+    # langevin_step (Apple GPU fused only; CPU reference path
+    # provided by the Python wrapper).
+    "ebm_langevin_step_philox",
 )
 
 

@@ -72,7 +72,12 @@ EXPECTED_NATIVE_EBM_OPS = {
 # All EBM ops that have a fused MSL kernel in the manifest — this set
 # is the source-of-truth for the manifest-completeness gate and
 # includes ``ebm_ebt_tiny`` (the workload-only optimization).
-ALL_NATIVE_EBM_MANIFEST_KEYS = EXPECTED_NATIVE_EBM_OPS | {"ebm_ebt_tiny"}
+ALL_NATIVE_EBM_MANIFEST_KEYS = (
+    EXPECTED_NATIVE_EBM_OPS
+    | {"ebm_ebt_tiny"}
+    # M6 Step 4 (2026-05-18): on-device Philox variant of langevin_step.
+    | {"ebm_langevin_step_philox"}
+)
 
 # EBM ops that still have no native dispatch.  Empty after the 9/9
 # closure — every EBM primitive now ships a fused MSL kernel.

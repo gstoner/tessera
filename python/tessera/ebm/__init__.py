@@ -28,6 +28,7 @@ from tessera.ebm.energy import (
     energy_quadratic,
     inner_step,
     langevin_step,
+    langevin_step_philox,
     refinement,
     self_verify,
 )
@@ -56,6 +57,7 @@ __all__ = [
     "energy_quadratic",
     "inner_step",
     "langevin_step",
+    "langevin_step_philox",
     "refinement",
     "self_verify",
     # EBM3

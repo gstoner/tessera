@@ -5707,6 +5707,183 @@ extern "C" void tessera_apple_gpu_ebm_langevin_step_f32(
 }
 
 // ===========================================================================
+// EBM langevin_step + on-device Philox-4x32-10 (M6 Step 4 runtime emission).
+//
+//   out[i] = y[i] - eta * grad[i] + noise_scale * z[i]
+//
+// where z[i] is a standard-normal sample produced ON-DEVICE from a
+// Philox-4x32-10 stream seeded by (key, counter).  Each thread i uses
+// counter = (counter_in[0] + i, counter_in[1], counter_in[2], counter_in[3]),
+// runs Philox, then maps the first two uniforms to a normal via Box-Muller.
+//
+// Constants are pinned to match `python/tessera/compiler/philox.py`
+// byte-for-byte.  The Python test `test_philox_msl_source_matches_mm`
+// (in tests/unit/test_philox_runtime.py) re-reads this kernel source
+// and verifies the constants.
+// ===========================================================================
+
+inline void reference_ebm_langevin_step_philox_f32(
+    const float* y, const float* grad,
+    float eta, float noise_scale,
+    const uint32_t key[2], const uint32_t counter[4],
+    float* out, int32_t n) {
+  // Host-side reference path mirrors the MSL kernel exactly so that
+  // benchmark/test code can dispatch through this fallback when the
+  // Metal runtime is unavailable and still see byte-identical numbers
+  // against the Python `philox_normal_pair` reference.
+  for (int32_t i = 0; i < n; ++i) {
+    uint32_t c[4] = {counter[0] + (uint32_t)i, counter[1],
+                     counter[2], counter[3]};
+    uint32_t k[2] = {key[0], key[1]};
+    for (int r = 0; r < 10; ++r) {
+      // round
+      uint64_t p0 = (uint64_t)0xD2511F53u * (uint64_t)c[0];
+      uint64_t p1 = (uint64_t)0xCD9E8D57u * (uint64_t)c[2];
+      uint32_t lo0 = (uint32_t)(p0 & 0xFFFFFFFFu);
+      uint32_t hi0 = (uint32_t)(p0 >> 32);
+      uint32_t lo1 = (uint32_t)(p1 & 0xFFFFFFFFu);
+      uint32_t hi1 = (uint32_t)(p1 >> 32);
+      uint32_t nc0 = hi1 ^ c[1] ^ k[0];
+      uint32_t nc1 = lo1;
+      uint32_t nc2 = hi0 ^ c[3] ^ k[1];
+      uint32_t nc3 = lo0;
+      c[0] = nc0; c[1] = nc1; c[2] = nc2; c[3] = nc3;
+      k[0] += 0x9E3779B9u;
+      k[1] += 0xBB67AE85u;
+    }
+    // To uniform (0, 1] then Box-Muller.
+    float u0 = ((float)c[0] + 0.5f) * 0x1.0p-32f;
+    float u1 = ((float)c[1] + 0.5f) * 0x1.0p-32f;
+    float r = std::sqrt(-2.0f * std::log(u0));
+    float theta = 2.0f * (float)M_PI * u1;
+    float z = r * std::cos(theta);
+    out[i] = y[i] - eta * grad[i] + noise_scale * z;
+  }
+}
+
+static NSString *const kEBMLangevinStepPhiloxF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+// Philox-4x32-10 constants — pinned to tessera.compiler.philox.
+constant constexpr uint PHILOX_M0 = 0xD2511F53u;
+constant constexpr uint PHILOX_M1 = 0xCD9E8D57u;
+constant constexpr uint PHILOX_W0 = 0x9E3779B9u;
+constant constexpr uint PHILOX_W1 = 0xBB67AE85u;
+
+inline void philox_mulhilo(uint a, uint b, thread uint &lo, thread uint &hi) {
+    ulong p = (ulong)a * (ulong)b;
+    lo = (uint)(p & 0xFFFFFFFFu);
+    hi = (uint)(p >> 32);
+}
+
+inline void philox_round(thread uint ctr[4], thread const uint key[2]) {
+    uint lo0, hi0, lo1, hi1;
+    philox_mulhilo(PHILOX_M0, ctr[0], lo0, hi0);
+    philox_mulhilo(PHILOX_M1, ctr[2], lo1, hi1);
+    uint c0 = hi1 ^ ctr[1] ^ key[0];
+    uint c1 = lo1;
+    uint c2 = hi0 ^ ctr[3] ^ key[1];
+    uint c3 = lo0;
+    ctr[0] = c0; ctr[1] = c1; ctr[2] = c2; ctr[3] = c3;
+}
+
+inline void philox_bump_key(thread uint key[2]) {
+    key[0] += PHILOX_W0;
+    key[1] += PHILOX_W1;
+}
+
+inline void philox_4x32_10(thread uint ctr[4], thread uint key[2]) {
+    for (int r = 0; r < 10; ++r) {
+        philox_round(ctr, key);
+        philox_bump_key(key);
+    }
+}
+
+kernel void ebm_langevin_step_philox_f32(
+    device const float* y         [[buffer(0)]],
+    device const float* grad      [[buffer(1)]],
+    constant float&     eta       [[buffer(2)]],
+    constant float&     noise_scale [[buffer(3)]],
+    constant uint4&     ctr_base  [[buffer(4)]],  // (c0, c1, c2, c3)
+    constant uint2&     key_in    [[buffer(5)]],  // (k0, k1)
+    device float*       out       [[buffer(6)]],
+    constant int32_t&   n         [[buffer(7)]],
+    uint i [[thread_position_in_grid]])
+{
+    if ((int)i >= n) return;
+    // Per-thread counter: stride one slot by i.
+    uint ctr[4] = {ctr_base.x + i, ctr_base.y, ctr_base.z, ctr_base.w};
+    uint key[2] = {key_in.x, key_in.y};
+    philox_4x32_10(ctr, key);
+    // Box-Muller from the first two uniforms.
+    constexpr float k = 0x1.0p-32f;
+    float u0 = ((float)ctr[0] + 0.5f) * k;
+    float u1 = ((float)ctr[1] + 0.5f) * k;
+    float r = sqrt(-2.0f * log(u0));
+    float theta = 2.0f * (float)M_PI_F * u1;
+    float z = r * cos(theta);
+    out[i] = y[i] - eta * grad[i] + noise_scale * z;
+}
+)MSL";
+
+static bool dispatch_ebm_langevin_step_philox_f32_msl(
+    MetalDeviceContext &ctx,
+    const float* y, const float* grad,
+    float eta, float noise_scale,
+    const uint32_t key[2], const uint32_t counter[4],
+    float* out, int32_t n) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kEBMLangevinStepPhiloxF32Source,
+        @"ebm_langevin_step_philox_f32");
+    if (!pso) return false;
+    NSUInteger bytes = sizeof(float) * (NSUInteger)n;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bY, ctx, y, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bG, ctx, grad, bytes);
+    TS_METAL_BUF_ACQUIRE(bO, ctx, bytes);
+    if (!bY || !bG || !bO) return false;
+    // Pack counter + key into uint4 / uint2 inline constants.
+    uint32_t ctr_pack[4] = {counter[0], counter[1], counter[2], counter[3]};
+    uint32_t key_pack[2] = {key[0], key[1]};
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bY offset:0 atIndex:0];
+    [enc setBuffer:bG offset:0 atIndex:1];
+    [enc setBytes:&eta length:sizeof(float) atIndex:2];
+    [enc setBytes:&noise_scale length:sizeof(float) atIndex:3];
+    [enc setBytes:ctr_pack length:sizeof(ctr_pack) atIndex:4];
+    [enc setBytes:key_pack length:sizeof(key_pack) atIndex:5];
+    [enc setBuffer:bO offset:0 atIndex:6];
+    [enc setBytes:&n length:sizeof(int32_t) atIndex:7];
+    MTLSize grid = MTLSizeMake((NSUInteger)n, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)n,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    if (_pool_ok) std::memcpy(out, [bO contents], bytes);
+    return _pool_ok;
+  }
+}
+
+extern "C" void tessera_apple_gpu_ebm_langevin_step_philox_f32(
+    const float* y, const float* grad,
+    float eta, float noise_scale,
+    const uint32_t* key, const uint32_t* counter,
+    float* out, int32_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_ebm_langevin_step_philox_f32_msl(
+          ctx, y, grad, eta, noise_scale, key, counter, out, n)) return;
+  reference_ebm_langevin_step_philox_f32(
+      y, grad, eta, noise_scale, key, counter, out, n);
+}
+
+// ===========================================================================
 // EBM decode_init noise-apply  —  out[i] = base[i % base_len] + std * noise[i]
 //
 // Implements `decode_init(strategy="noise")` semantics on-device: the

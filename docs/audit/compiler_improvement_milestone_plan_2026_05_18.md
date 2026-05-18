@@ -698,13 +698,25 @@ uniformly visible**:
   count, helper names).  18/18 tests including the cross-platform
   invariant lock.
 
-Step 3+4 remaining work (gated on apple_gpu_runtime.mm edits,
-which is the next sprint): actual MSL compilation of the
-Philox template inside ``apple_gpu_runtime.mm``; dispatcher
-edits for ``langevin_step`` / ``decode_init`` /
-``sphere_langevin`` to accept ``(key, counter)`` instead of a
-host-supplied noise buffer; benchmark row updates to verify
-the on-device noise path matches the Python reference.
+- [x] **Step 4 runtime emission (2026-05-18)**: the Philox MSL
+  template is now embedded in
+  ``src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm``
+  as the kernel ``ebm_langevin_step_philox_f32``.  New C ABI
+  symbol ``tessera_apple_gpu_ebm_langevin_step_philox_f32(y,
+  grad, eta, noise_scale, key[2], counter[4], out, n)``.
+  Manifest entry ``ebm_langevin_step_philox`` resolves through
+  ``jit_bridge.dispatch_via_manifest``.  Python wrapper
+  ``tessera.ebm.langevin_step_philox`` falls back to a numpy
+  reference (mirrors the MSL kernel byte-for-byte) when the
+  Apple GPU runtime isn't available.  14/14 tests including
+  the **cross-platform determinism check** that the Apple GPU
+  output matches the Python reference within fp32 tolerance.
+
+Remaining Step 4 work (deferred to a follow-up sprint, gated
+on more apple_gpu_runtime.mm edits): the same on-device-RNG
+pattern extended to ``decode_init`` and ``sphere_langevin``;
+benchmark-row updates that surface the on-device path's
+performance vs. the host-supplied-noise path.
 
 Deliverables:
 

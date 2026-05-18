@@ -661,6 +661,121 @@ def _try_apple_gpu_langevin_step_f32(
     return out
 
 
+def _try_apple_gpu_langevin_step_philox_f32(
+    y: np.ndarray, grad: np.ndarray,
+    eta: float, noise_scale: float,
+    key: np.ndarray, counter: np.ndarray,
+) -> Optional[np.ndarray]:
+    """M6 Step 4 — on-device Philox variant of langevin_step.
+
+    Generates the noise inside the MSL kernel from ``(key, counter)``
+    so no host noise buffer is uploaded.  Same math as
+    :func:`_try_apple_gpu_langevin_step_f32` but with an on-device
+    Box-Muller from Philox-4x32-10.
+    """
+    if y.dtype != np.float32 or grad.dtype != np.float32:
+        return None
+    if y.shape != grad.shape:
+        return None
+    if key.dtype != np.uint32 or key.shape != (2,):
+        return None
+    if counter.dtype != np.uint32 or counter.shape != (4,):
+        return None
+    y_c = np.ascontiguousarray(y)
+    g_c = np.ascontiguousarray(grad)
+    try:
+        import ctypes
+        from tessera.compiler import jit_bridge as _bridge
+    except ImportError:
+        return None
+    out = np.zeros_like(y_c)
+    n = int(y_c.size)
+    p_f = ctypes.POINTER(ctypes.c_float)
+    p_u = ctypes.POINTER(ctypes.c_uint32)
+    argtypes = (
+        p_f, p_f,
+        ctypes.c_float, ctypes.c_float,
+        p_u, p_u,
+        p_f, ctypes.c_int32,
+    )
+    args = (
+        y_c.ctypes.data_as(p_f), g_c.ctypes.data_as(p_f),
+        ctypes.c_float(eta), ctypes.c_float(noise_scale),
+        key.ctypes.data_as(p_u), counter.ctypes.data_as(p_u),
+        out.ctypes.data_as(p_f), ctypes.c_int32(n),
+    )
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            "ebm_langevin_step_philox", argtypes=argtypes, args=args,
+            args_summary=_bridge.shaped_summary(y_c, g_c),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
+    return out
+
+
+def langevin_step_philox(
+    y: Any, grad: Any, *,
+    eta: float, noise_scale: float,
+    key: Any, counter: Any,
+) -> np.ndarray:
+    """Langevin step with **on-device Philox** noise.
+
+    ``out[i] = y[i] - eta * grad[i] + noise_scale * z[i]``
+
+    where ``z[i]`` is drawn from a standard normal via Box-Muller on
+    Philox-4x32-10 outputs.  Per-thread counter is
+    ``(counter[0] + i, counter[1..3])`` — caller-supplied
+    counter slot 0 is the stream base, slots 1..3 are constant
+    across the call.
+
+    On Apple GPU this routes to ``tessera_apple_gpu_ebm_langevin_step_philox_f32``;
+    elsewhere it falls back to the numpy reference using
+    :func:`tessera.compiler.philox.philox_normal_pair`.  Both paths
+    produce byte-identical f32 output for the same inputs (the M6
+    Step 4 cross-platform invariant).
+    """
+    from tessera.compiler.philox import philox_4x32_10
+    y_arr = _as_array(y)
+    grad_arr = _as_array(grad)
+    key_arr = np.asarray(key, dtype=np.uint32).reshape(2)
+    ctr_arr = np.asarray(counter, dtype=np.uint32).reshape(4)
+    if y_arr.shape != grad_arr.shape:
+        raise ValueError(
+            f"langevin_step_philox requires matching shapes; got "
+            f"y={y_arr.shape}, grad={grad_arr.shape}"
+        )
+    # Try Apple GPU.
+    if y_arr.dtype == np.float32:
+        gpu = _try_apple_gpu_langevin_step_philox_f32(
+            y_arr, grad_arr,
+            float(eta), float(noise_scale),
+            key_arr, ctr_arr,
+        )
+        if gpu is not None:
+            return gpu
+    # Numpy reference: mirror the MSL kernel byte-for-byte.
+    flat_y = y_arr.reshape(-1)
+    flat_g = grad_arr.reshape(-1)
+    out = np.zeros_like(flat_y)
+    for i in range(flat_y.size):
+        ci = np.array(
+            [ctr_arr[0] + np.uint32(i), ctr_arr[1], ctr_arr[2], ctr_arr[3]],
+            dtype=np.uint32,
+        )
+        # First uniform pair → Box-Muller normal.
+        outs = philox_4x32_10(ci, key_arr)
+        u0 = (float(outs[0]) + 0.5) * (2.0 ** -32)
+        u1 = (float(outs[1]) + 0.5) * (2.0 ** -32)
+        r = float(np.sqrt(-2.0 * np.log(u0)))
+        theta = 2.0 * float(np.pi) * u1
+        z = r * float(np.cos(theta))
+        out[i] = float(flat_y[i]) - float(eta) * float(flat_g[i]) + float(noise_scale) * z
+    return out.reshape(y_arr.shape).astype(np.float32)
+
+
 def _try_apple_gpu_sphere_langevin_step_f32(
     x: np.ndarray, grad: np.ndarray, noise: np.ndarray,
     eta: float, noise_scale: float,

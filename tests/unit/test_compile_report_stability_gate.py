@@ -44,9 +44,17 @@ def _expected_fallback_for_program(program_id: str) -> FallbackReason | None:
     ``NON_DARWIN_HOST`` elsewhere.
     """
     is_darwin = sys.platform == "darwin"
-    # Reference-forced even on Darwin: conv2d still has no fused
-    # MSL kernel, so the canonical correctly reports REFERENCE_FORCED.
-    reference_forced_on_darwin = {"conv2d_norm_activation"}
+    # Reference-forced even on Darwin — drivers that build a
+    # CompileReport but execute pure numpy (no Metal dispatch).
+    # 2026-05-18 P1 fix: matmul_softmax_matmul and
+    # kv_cache_append_prune_read are added here because the driver
+    # bodies don't actually dispatch any fused kernel today; the
+    # honest report is REFERENCE_FORCED until they do.
+    reference_forced_on_darwin = {
+        "conv2d_norm_activation",
+        "matmul_softmax_matmul",
+        "kv_cache_append_prune_read",
+    }
     if program_id in reference_forced_on_darwin:
         return (
             FallbackReason.REFERENCE_FORCED if is_darwin
@@ -121,6 +129,44 @@ def test_shipped_canonical_envelope_fields_are_stable(program) -> None:
 
 
 @pytest.mark.parametrize("program", _SHIPPED, ids=lambda p: p.program_id)
+def test_shipped_canonical_no_silent_native(program) -> None:
+    """**M5 no-silent-native rule** applied at the CompileReport
+    layer (P1 reviewer fix, 2026-05-18).
+
+    If a report claims native execution — ``target != "cpu"`` and
+    ``fallback_reason is None`` — it MUST carry at least one piece
+    of proof:
+
+      * a non-empty ``proof_routes`` tuple (bridge dispatch trace),
+      * a non-empty ``ir_hashes`` map (compiled artifact present),
+      * an explicit symbol entry in ``target_decision`` values
+        (the manifest's C ABI name).
+
+    Without this gate, drivers can silently run pure numpy under
+    a ``target=apple_gpu`` banner.  The benchmark-row schema
+    already enforces this for benchmark JSON; this test brings
+    the CompileReport into the same contract."""
+    report = program.run()
+    if report.target == "cpu":
+        return  # cpu reports are honest by construction
+    if report.fallback_reason is not None:
+        return  # explicit fallback acknowledged
+    # Native claim → require proof.
+    has_routes = len(report.proof_routes) > 0
+    has_ir = bool(report.ir_hashes)
+    decision_text = " ".join(report.target_decision.values())
+    has_symbol = "tessera_" in decision_text
+    assert has_routes or has_ir or has_symbol, (
+        f"{program.program_id} claims native execution "
+        f"(target={report.target!r}, fallback_reason=None) but carries "
+        f"NO proof — neither proof_routes, ir_hashes, nor a "
+        f"tessera_* symbol in target_decision.  Either mark the "
+        f"driver with FallbackReason.REFERENCE_FORCED or wire it "
+        f"to an actual native dispatch."
+    )
+
+
+@pytest.mark.parametrize("program", _SHIPPED, ids=lambda p: p.program_id)
 def test_shipped_canonical_correctness_clears_tolerance(program) -> None:
     """Every shipped canonical must clear its own correctness
     tolerance.  A failure here means the reference baseline drifted
@@ -152,12 +198,22 @@ def test_all_shipped_canonicals_have_unique_report_hashes() -> None:
     assert not collisions, f"report hash collisions: {collisions}"
 
 
-def test_stability_gate_enumerates_at_least_four_canonicals() -> None:
+def test_stability_gate_enumerates_every_shipped_canonical() -> None:
     """The gate must cover every shipped program — parametrize
-    silently dropping rows would be invisible.  Cross-check the
-    count so the gate stays meaningful."""
-    assert len(_SHIPPED) >= 4, (
-        f"only {len(_SHIPPED)} shipped programs — the stability "
-        "gate covers each, but the M6 Step 3 prerequisite expects "
-        "at least the four canonicals from the post-reassessment plan"
+    silently dropping rows would be invisible.
+
+    P2 reviewer fix (2026-05-18): the suite is now 6/6 shipped,
+    so the gate asserts the full set rather than a lower bound.
+    """
+    from tessera.compiler import canonical
+    shipped_ids = {p.program_id for p in _SHIPPED}
+    registry_ids = {p.program_id for p in canonical.shipped_programs()}
+    assert shipped_ids == registry_ids, (
+        f"stability gate sees {sorted(shipped_ids)} but the registry "
+        f"reports {sorted(registry_ids)} shipped — they must match"
+    )
+    # And the suite must be at its current 6/6 count.  Bump the
+    # number when a new canonical lands; never lower it.
+    assert len(_SHIPPED) == 6, (
+        f"expected 6 shipped canonicals; got {len(_SHIPPED)}"
     )

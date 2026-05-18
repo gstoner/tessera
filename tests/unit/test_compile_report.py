@@ -214,12 +214,21 @@ def test_matmul_softmax_matmul_hash_is_deterministic() -> None:
 def test_matmul_softmax_matmul_target_decision_includes_apple_gpu_on_darwin() -> None:
     """On Darwin the decision row must mention the fused 3-op MSL
     kernel symbol so reports show exactly which fast path the
-    compiler intended."""
+    compiler intended.
+
+    P1 reviewer correction (2026-05-18): the driver body is still
+    numpy-only today, so the report honestly emits
+    ``fallback_reason=REFERENCE_FORCED`` even on Darwin.  The
+    ``apple_gpu`` target_decision row still names the intended
+    fused kernel — that's the compile-time decision; the
+    runtime falls back."""
+    from tessera.compiler.fallback import FallbackReason
     report = matmul_softmax_matmul.run()
     if sys.platform == "darwin":
         assert "apple_gpu" in report.target_decision
         assert "matmul_softmax_matmul_f32" in report.target_decision["apple_gpu"]
-        assert report.fallback_reason is None
+        # Honest reporting: no native dispatch, so REFERENCE_FORCED.
+        assert report.fallback_reason == FallbackReason.REFERENCE_FORCED
     else:
         assert "cpu" in report.target_decision
         assert report.fallback_reason is not None

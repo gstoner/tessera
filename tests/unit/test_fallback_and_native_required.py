@@ -268,13 +268,31 @@ def test_matmul_canonical_driver_native_required_raises_on_non_darwin() -> None:
     sys.platform != "darwin",
     reason="Apple GPU runtime only on Darwin",
 )
-def test_canonical_drivers_native_required_run_on_darwin() -> None:
-    """On Darwin both canonical drivers complete with
-    ``native_required=True`` and emit reports with no fallback."""
+def test_rotor_sandwich_norm_native_required_runs_on_darwin() -> None:
+    """``rotor_sandwich_norm`` actually dispatches the fused MSL
+    kernel via ``@clifford_jit`` on Darwin, so
+    ``native_required=True`` completes cleanly with no fallback."""
     r1 = rotor_sandwich_norm.run(native_required=True)
     assert r1.fallback_reason is None
-    r2 = matmul_softmax_matmul.run(native_required=True)
-    assert r2.fallback_reason is None
+
+
+@pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="Apple GPU runtime only on Darwin",
+)
+def test_matmul_softmax_matmul_native_required_raises_on_darwin() -> None:
+    """P1 reviewer correction (2026-05-18): the
+    ``matmul_softmax_matmul`` driver doesn't actually dispatch
+    the fused kernel today — it executes the numpy reference.
+    With ``native_required=True``, the M3 contract therefore
+    forces an honest :class:`TesseraNativeRequiredError` rather
+    than silently legitimizing the reference path."""
+    from tessera.compiler.fallback import (
+        FallbackReason, TesseraNativeRequiredError,
+    )
+    with pytest.raises(TesseraNativeRequiredError) as exc:
+        matmul_softmax_matmul.run(native_required=True)
+    assert exc.value.reason == FallbackReason.REFERENCE_FORCED
 
 
 def test_matmul_canonical_driver_default_falls_back_on_non_darwin() -> None:

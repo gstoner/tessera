@@ -101,10 +101,18 @@ def _target_decision_for_host() -> tuple[str, dict[str, str], FallbackReason | N
                     f"fused 3-op MSL kernel "
                     f"tessera_apple_gpu_matmul_softmax_matmul_f32 "
                     f"(matmul status={apple_matmul.status if apple_matmul else '?'}; "
-                    f"softmax status={apple_softmax.status if apple_softmax else '?'})"
+                    f"softmax status={apple_softmax.status if apple_softmax else '?'}). "
+                    "DRIVER NOTE: the driver itself currently runs the numpy "
+                    "reference; the symbol above is what an M3 native dispatch "
+                    "would target.  Report flags this with REFERENCE_FORCED."
                 )
             },
-            None,
+            # M5/M3 honest reporting (2026-05-18 reviewer fix): the
+            # driver does NOT actually dispatch the fused kernel today
+            # — the executable body below is pure numpy.  Report this
+            # truthfully via REFERENCE_FORCED rather than claim a
+            # native success.
+            FallbackReason.REFERENCE_FORCED,
         )
     return (
         "cpu",

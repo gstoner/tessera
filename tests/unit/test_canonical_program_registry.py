@@ -48,14 +48,20 @@ def test_shipped_programs_have_a_runner() -> None:
             assert p.run is None, p.program_id
 
 
-def test_at_least_four_programs_are_shipped() -> None:
-    """M1.5 follow-up (post-reassessment): the suite ships at least
-    four canonical programs now that ``decode_init_inner_loop_self_verify``
-    and ``conv2d_norm_activation`` are wired."""
+def test_every_canonical_is_shipped() -> None:
+    """M1.5 fully landed (P2 reviewer fix, 2026-05-18): all 6
+    canonical programs are shipped.  The registry's
+    ``shipped_programs()`` must equal the full ``CANONICAL_PROGRAMS``
+    tuple — no remaining ``status="planned"`` entries.
+
+    When a future canonical lands, both this test's count and
+    ``len(CANONICAL_PROGRAMS)`` move together.  When one is
+    intentionally promoted to ``planned`` again (e.g., gated on a
+    runtime feature), update the test to use a lower bound."""
     shipped = canonical.shipped_programs()
-    assert len(shipped) >= 4, (
-        f"only {len(shipped)} programs marked shipped — the M1.5 "
-        "follow-up requires at least 4 of 6 to be wired."
+    assert len(shipped) == len(canonical.CANONICAL_PROGRAMS), (
+        f"{len(shipped)} of {len(canonical.CANONICAL_PROGRAMS)} canonical "
+        "programs marked shipped — the suite should be at parity"
     )
 
 

@@ -92,19 +92,29 @@ def run(
     )
     is_darwin = sys.platform == "darwin"
     host_fail = classify_host(is_darwin=is_darwin, runtime_available=True)
-    if native_required and host_fail is not None:
+    # M5/M3 honest reporting (2026-05-18 reviewer fix): the driver
+    # executes paged numpy bookkeeping in :class:`KVCacheHandle`
+    # — there's no Metal kernel involved here, just a Python data
+    # structure.  Even on Darwin we surface this as REFERENCE_FORCED
+    # so the no-silent-native rule in the stability gate stays
+    # honest; a future FA-4 dispatch over the cache state can flip
+    # this to a real native success.
+    forced_reference = host_fail or FallbackReason.REFERENCE_FORCED
+    if native_required and forced_reference is not None:
         raise TesseraNativeRequiredError(
-            host_fail, target="apple_gpu", op_name=PROGRAM_ID,
+            forced_reference, target="apple_gpu", op_name=PROGRAM_ID,
         )
     target = "apple_gpu" if is_darwin else "cpu"
     target_decision = {
         target: (
             f"KVCacheHandle backend: paged numpy storage "
             f"(max_seq={ms}, num_heads={nh}, head_dim={hd}); "
-            "fused FA-4 path consumes this state at read time"
+            "fused FA-4 path consumes this state at read time. "
+            "DRIVER NOTE: today the driver itself does pure-Python "
+            "bookkeeping; REFERENCE_FORCED reflects that."
         )
     }
-    fallback_reason: FallbackReason | None = host_fail
+    fallback_reason: FallbackReason | None = forced_reference
 
     prev_tracing = bridge.tracing_enabled()
     bridge.set_tracing_enabled(True)

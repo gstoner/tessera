@@ -651,22 +651,34 @@ uniformly visible**:
 - [x] M0/M0.5 generated support table (drift-gated).
 - [x] M0 `claim_lint` lifting public docs to manifest truth.
 - [x] M1 `CompileReport` schema, two canonical drivers shipped.
-- [x] M1.5: four canonical drivers shipped (rotor_sandwich_norm,
-  matmul_softmax_matmul, decode_init_inner_loop_self_verify,
-  conv2d_norm_activation).
+- [x] M1.5: **all six canonical drivers shipped** —
+  rotor_sandwich_norm, matmul_softmax_matmul,
+  decode_init_inner_loop_self_verify, conv2d_norm_activation,
+  kv_cache_append_prune_read, rotor_sandwich_ebt_tiny.
+  (Honest-reporting note: matmul_softmax_matmul,
+  kv_cache_append_prune_read, and conv2d_norm_activation
+  emit ``fallback_reason=REFERENCE_FORCED`` even on Darwin
+  because their driver bodies don't dispatch a fused kernel
+  today — REFERENCE_FORCED is the M5/M3 contract for
+  "manifest-capable but not yet natively executed".)
 - [x] M3 `native_required=True` + stable `FallbackReason` enum.
 - [x] M4 memory-model verifier (happens-before + memory-space).
 - [x] M5 `BenchmarkRow` schema + validation spine doc + no-silent-native gate.
 - [x] M6 Step 1 + Step 2 — shared `ast_ir` core, `@energy_jit`
   whitelist + IR, lowering tests.
-- [x] **Step 4 (2026-05-18 reassessment)**: uniform `CompileReport`
-  emission across `@tessera.jit`, textual, and `@clifford_jit`
-  via `capture_compile_reports()` + `.compile_report()` accessors.
-- [x] **Gate (closed 2026-05-18)**: `test_compile_report_stability_gate`
-  parametrizes across every shipped canonical program (6 of 6) and
-  asserts each emits a stable `report_hash()`, correct
-  `fallback_reason`, and stable `frontend`/`value_kind`/`target`
-  triple.  40 tests pass; no hash collisions.
+- [x] **CompileReport auto-emission (2026-05-18 reassessment Step 4)**:
+  uniform `CompileReport` emission across `@tessera.jit`,
+  textual, and `@clifford_jit` via `capture_compile_reports()`
+  + `.compile_report()` accessors.  (Distinct from M6 Step 4
+  Philox below — same number, different sprint.)
+- [x] **Stability gate (closed 2026-05-18)**:
+  `test_compile_report_stability_gate` parametrizes across
+  every shipped canonical program (6 of 6) and asserts each
+  emits a stable `report_hash()`, correct `fallback_reason`,
+  and stable `frontend`/`value_kind`/`target` triple.
+  **26 tests** pass; no hash collisions.  Includes the
+  no-silent-native rule (target ≠ cpu + fallback_reason=None
+  must carry a proof: route, ir_hash, or symbol).
 - [x] **Step 3 start (2026-05-18)**: closed-form VJP table for the
   full 14-op energy whitelist landed in
   `python/tessera/compiler/energy_vjp.py`.  Every op has a
@@ -780,6 +792,18 @@ Follow-ups (not gating any other milestone):
   today satisfies the M7 acceptance criteria; the symbolic path
   would extend the verifier to compile-time checks rather than
   probe-based.
+
+  **Status note (P3 reviewer correction, 2026-05-18):** M6's
+  ``energy_vjp`` + ``energy_grad`` core is **structurally**
+  reusable for this symbolic CR path, but it is **specialized
+  to the energy whitelist** (14 ops covering quadratic forms,
+  norms, activations, MLP heads).  Building the M7 symbolic
+  verifier needs a parallel complex/conformal whitelist
+  (``complex_mul``, ``complex_exp``, ``mobius``, etc.), a
+  real/imag-extraction pass, and partial-derivative rules
+  for each whitelisted complex op.  Treat M7 as **partially
+  unblocked** — the architectural template is right; the
+  type-specific rules still need writing.
 - **MSL codegen** for the 6 conformal primitives.  Today they
   run as numpy reference; native Apple GPU paths would benefit
   from M6 Step 4's Philox+MSL machinery, so this lands together

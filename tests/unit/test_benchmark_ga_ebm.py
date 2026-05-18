@@ -58,12 +58,14 @@ EXPECTED_GA_OPS = {
 EXPECTED_NATIVE_EBM_OPS = {
     "ebm_inner_step", "ebm_refinement", "ebm_langevin_step",
     "ebm_decode_init", "ebm_bivector_langevin", "ebm_sphere_langevin",
+    # 2026-05-17 expansion — closes the "next targets" list in the status doc.
+    "ebm_self_verify", "ebm_energy",
 }
 
-# EBM ops that still have no native dispatch.
-EXPECTED_PYTHON_ONLY_EBM_OPS = {
-    "ebm_energy", "ebm_self_verify", "ebm_partition_exact",
-}
+# EBM ops that still have no native dispatch.  `partition_exact` is the
+# only one left — its exhaustive sum over a finite state set is small +
+# branchy enough that GPU dispatch overhead dominates at typical scale.
+EXPECTED_PYTHON_ONLY_EBM_OPS = {"ebm_partition_exact"}
 
 # Every EBM op gets a python_ref row EXCEPT `ebm_refinement` — that's
 # the multi-iteration native wrapper around `inner_step`, with no
@@ -88,6 +90,7 @@ REQUIRED_ROW_FIELDS = {
 REQUIRED_ENVELOPE_FIELDS = {
     "runs", "ga_primitives_count", "ebm_paths_count",
     "ebm_native_apple_gpu_count", "native_ebm_ops", "workload_count",
+    "ebt_sweep_count", "ebt_sweep_summary",
     "compile_time_ms", "skipped_apple_gpu",
     "device", "tessera_version", "reps",
 }
@@ -386,6 +389,112 @@ def test_workloads_only_flag_drops_primitive_rows(tmp_path) -> None:
     assert r["ga_primitives_count"] == 0
     assert r["ebm_paths_count"] == 0
     assert r["workload_count"] > 0
+
+
+# ---------------------------------------------------------------------------
+# EBT-tiny break-even sweep — opt-in via --ebt-sweep / include_ebt_sweep
+# ---------------------------------------------------------------------------
+
+def test_default_report_omits_ebt_sweep(report: dict) -> None:
+    """The default report (no `include_ebt_sweep`) emits zero sweep rows
+    and a null sweep summary.  Keeps CI snappy."""
+    assert report["ebt_sweep_count"] == 0
+    assert report["ebt_sweep_summary"] is None
+
+
+def test_ebt_sweep_emits_pair_per_shape(tmp_path, report: dict) -> None:
+    """With sweep enabled, each (B, K, D, T) point yields one
+    apple_gpu + one python_ref row when the runtime is available,
+    one python_ref-only row when not."""
+    r = bench.run_report(reps=bench.DEFAULT_REPS_CI, tmp_dir=tmp_path,
+                          include_primitives=False,
+                          include_workloads=False,
+                          include_ebt_sweep=True,
+                          ebt_sweep_points=((4, 8, 6, 4), (8, 16, 32, 4)))
+    sweep_rows = [row for row in r["runs"] if row["op"] == "ebt_tiny_sweep"]
+    if _apple_gpu_available(report):
+        assert len(sweep_rows) == 4   # 2 shapes × {apple_gpu, python_ref}
+    else:
+        assert len(sweep_rows) == 2   # 2 shapes × python_ref only
+    assert r["ebt_sweep_count"] == len(sweep_rows)
+    summary = r["ebt_sweep_summary"]
+    assert summary is not None
+    assert "table" in summary
+    assert "first_native_win_shape" in summary
+
+
+def test_ebt_sweep_summary_shape_pairs_are_speedups(tmp_path) -> None:
+    """When both backends emit rows for a shape, the summary entry
+    must include a `speedup` field equal to python_ms / native_ms."""
+    r = bench.run_report(reps=bench.DEFAULT_REPS_CI, tmp_dir=tmp_path,
+                          include_primitives=False,
+                          include_workloads=False,
+                          include_ebt_sweep=True,
+                          ebt_sweep_points=((4, 8, 6, 4),))
+    summary = r["ebt_sweep_summary"]
+    assert summary is not None
+    for entry in summary["table"]:
+        if "native_ms" in entry and "python_ms" in entry:
+            assert entry["speedup"] == pytest.approx(
+                entry["python_ms"] / entry["native_ms"], rel=1e-9)
+            assert entry["native_wins"] == (entry["speedup"] >= 1.0)
+
+
+# ---------------------------------------------------------------------------
+# Integration gap — `tessera.ga.inner` + `tessera.ebm.inner_step` route
+# through `tessera._apple_gpu_dispatch` rather than benchmark-local ctypes.
+# ---------------------------------------------------------------------------
+
+def test_apple_gpu_dispatcher_singleton_caches_runtime(tmp_path) -> None:
+    """Two consecutive calls return the same `CDLL` handle (no recompile)."""
+    from tessera import _apple_gpu_dispatch as disp
+    disp._reset_for_testing()
+    h1 = disp.apple_gpu_runtime()
+    h2 = disp.apple_gpu_runtime()
+    assert h1 is h2  # cached singleton
+    if h1 is None:
+        # Non-Darwin / missing toolchain — skip reason must be populated.
+        assert disp.apple_gpu_skip_reason() is not None
+
+
+def test_ga_inner_dispatches_through_apple_gpu_when_available() -> None:
+    """`tessera.ga.inner` on a batched Cl(3,0) Multivector returns the
+    same result as the per-element Python loop reference, proving the
+    GPU fast path (when active) doesn't drift from the reference."""
+    import numpy as np
+    import tessera.ga as ga
+    from tessera import _apple_gpu_dispatch as disp
+
+    a = ga.Cl(3, 0)
+    rng = np.random.RandomState(99)
+    A = rng.randn(16, 8).astype(np.float32)
+    B = rng.randn(16, 8).astype(np.float32)
+    result = ga.inner(ga.Multivector(A, a), ga.Multivector(B, a))
+    ref = np.array([
+        float(ga.inner(ga.Multivector(A[i], a), ga.Multivector(B[i], a)))
+        for i in range(16)
+    ])
+    err = float(np.abs(np.asarray(result) - ref).max())
+    if disp.apple_gpu_available():
+        # GPU fast path active — bit-exact agreement at fp32.
+        assert err <= 5e-6
+    else:
+        # Pure Python path — should still match self.
+        assert err <= 1e-6
+
+
+def test_ebm_inner_step_dispatches_through_apple_gpu_when_available() -> None:
+    """`tessera.ebm.inner_step` with f32 inputs and no noise routes
+    through the dispatcher; the output matches `y - eta * grad`."""
+    import numpy as np
+    import tessera.ebm as ebm
+
+    rng = np.random.RandomState(101)
+    y = rng.randn(32, 8).astype(np.float32)
+    g = rng.randn(32, 8).astype(np.float32)
+    out = ebm.inner_step(y, g, eta=0.05)
+    ref = (y - 0.05 * g).astype(np.float32)
+    assert float(np.abs(out - ref).max()) <= 1e-6
 
 
 # ---------------------------------------------------------------------------

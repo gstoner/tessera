@@ -24,7 +24,7 @@ Operations shipped in GA3:
 from __future__ import annotations
 
 import math
-from typing import Iterable, Union
+from typing import Iterable, Optional, Union
 
 import numpy as np
 
@@ -194,9 +194,59 @@ def inner(a: Multivector, b: Multivector) -> np.ndarray:
 
     Returns the scalar coefficient array (not a Multivector) — this is
     a bilinear form, not a multivector-valued op.
+
+    **Apple GPU fast path**: for ``Cl(3,0)`` f32 inputs with matching
+    batch shape, this routes through
+    ``tessera_apple_gpu_clifford_inner_cl30_f32`` (the same kernel the
+    benchmark uses) via ``tessera._apple_gpu_dispatch``. Falls back
+    silently to the pure-Python path when the runtime is unavailable.
     """
     algebra = _same_algebra(a, b)
+    if algebra.signature == (3, 0, 0):
+        gpu_out = _try_apple_gpu_inner_cl30_f32(a, b)
+        if gpu_out is not None:
+            return gpu_out
     return geometric_product(a, reverse(b)).scalar_part()
+
+
+def _try_apple_gpu_inner_cl30_f32(
+    a: Multivector, b: Multivector,
+) -> Optional[np.ndarray]:
+    """Apple GPU fast path for the ``Cl(3,0)`` inner product.
+
+    Returns the (batch,) scalar array or ``None`` when the runtime
+    isn't loadable. Caller falls back to the numpy path on ``None``.
+    """
+    # Cheap guard rails — if any of these fail, give up immediately
+    # without paying the dispatch cost.
+    A = a.coefficients
+    B = b.coefficients
+    if A.dtype != np.float32 or B.dtype != np.float32:
+        return None
+    if A.shape != B.shape or A.ndim < 1 or A.shape[-1] != 8:
+        return None
+    try:
+        import ctypes
+        from tessera._apple_gpu_dispatch import bind_symbol
+    except ImportError:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_clifford_inner_cl30_f32",
+        (ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    A_c = np.ascontiguousarray(A.reshape(-1, 8))
+    B_c = np.ascontiguousarray(B.reshape(-1, 8))
+    batch = A_c.shape[0]
+    out = np.zeros(batch, dtype=np.float32)
+    p = ctypes.POINTER(ctypes.c_float)
+    fn(A_c.ctypes.data_as(p), B_c.ctypes.data_as(p), out.ctypes.data_as(p),
+       ctypes.c_int32(batch))
+    return out.reshape(A.shape[:-1]) if A.ndim > 1 else out[0]
 
 
 # ---------------------------------------------------------------------------

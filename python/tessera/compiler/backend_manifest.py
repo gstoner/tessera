@@ -852,6 +852,32 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, object]] = {
             "MSL kernel. Single-thread dispatch (d is small)."
         ),
     },
+    # Hard-argmin self_verify — one threadgroup per batch row scans K
+    # energies + gathers the winning candidate row.
+    "ebm_self_verify": {
+        "symbol": "tessera_apple_gpu_ebm_self_verify_hard_argmin_f32",
+        "dtypes": ("fp32",),
+        "abi": ("(energies:f32*[BxK], candidates:f32*[BxKxD], "
+                "out:f32*[BxD], B:i32, K:i32, D:i32)"),
+        "notes": (
+            "Hard-argmin self_verify on Apple GPU — for each batch row, "
+            "find k* = argmin_k(energies[b, k]) and copy "
+            "candidates[b, k*, :] into out[b, :]. Soft-min (beta > 0) "
+            "is a separate kernel pending follow-up."
+        ),
+    },
+    # ebm_energy — quadratic specialization E_b = 0.5 * ||x_b - y_b||^2.
+    # Caller opts in when their model_fn matches this shape.
+    "ebm_energy": {
+        "symbol": "tessera_apple_gpu_ebm_energy_quadratic_f32",
+        "dtypes": ("fp32",),
+        "abi": "(x:f32*[BxD], y:f32*[BxD], energies:f32*[B], B:i32, D:i32)",
+        "notes": (
+            "Quadratic energy specialization E_b = 0.5 * ||x_b - y_b||^2 "
+            "on Apple GPU — the dominant EBT / diffusion energy form. "
+            "Arbitrary user energy_fn lifts to MSL is a follow-up sprint."
+        ),
+    },
 }
 
 # All EBM primitives currently covered by the manifest (the union of the

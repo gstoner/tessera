@@ -22,9 +22,11 @@ For every primitive the driver exercises the full stack:
 ## Status split (2026-05-17)
 
 - **GA**: full Apple GPU end-to-end benchmarked. 17/17 primitives `backend=apple_gpu`, `mode=fused`.
-- **EBM (native)**: **6/9 primitives** — `ebm_inner_step`, `ebm_refinement`, `ebm_langevin_step`, `ebm_decode_init`, `ebm_bivector_langevin`, `ebm_sphere_langevin`. `ebm_bivector_langevin` reuses the `ebm_langevin_step` kernel on grade-projected inputs — the GA-kernel-reuse demonstration the manifest documents.
-- **EBM (Python ref)**: 3/9 still no native — `ebm_energy`, `ebm_self_verify`, `ebm_partition_exact`. All 8 EBM ops with Python reference paths also emit a `python_ref` row so consumers can see the native vs reference speedup directly.
-- **Workloads**: 2 small composite chains — `ga_feature_pipeline` (`exp → rotor_sandwich → norm`) and `ebt_tiny_refinement` (K-candidate × T-step loop with native `ebm_refinement` + host `self_verify`). Both emit `apple_gpu` + `python_ref` rows.
+- **EBM (native)**: **8/9 primitives** — `ebm_inner_step`, `ebm_refinement`, `ebm_langevin_step`, `ebm_decode_init`, `ebm_bivector_langevin`, `ebm_sphere_langevin`, `ebm_self_verify`, `ebm_energy` (quadratic specialization). `ebm_bivector_langevin` reuses the `ebm_langevin_step` kernel on grade-projected inputs.
+- **EBM (Python ref)**: 1/9 still no native — `ebm_partition_exact` (exhaustive small-state sum, not GPU-shaped). All 8 promoted EBM ops also emit a `python_ref` row so the native-vs-reference speedup is visible per op.
+- **Workloads**: 2 small composite chains — `ga_feature_pipeline` (`exp → rotor_sandwich → norm`) and `ebt_tiny_refinement` (K-candidate × T-step loop with native `ebm_refinement` + native `ebm_self_verify`). Both emit `apple_gpu` + `python_ref` rows.
+- **EBT-tiny break-even sweep**: opt-in via `--ebt-sweep` — runs a 7-point `(B, K, D, T)` ladder and reports `first_native_win_shape` in the envelope. Currently `None` at the v1 ladder (real finding — see "Known non-claims" in the [milestone status doc](../../docs/status/ga_ebm_milestone.md)).
+- **Integration via `tessera.ga.*` / `tessera.ebm.*`**: `tessera.ga.inner` (Cl(3,0) batched f32) and `tessera.ebm.inner_step` (f32, no-noise) now route through [`tessera._apple_gpu_dispatch`](../../python/tessera/_apple_gpu_dispatch.py) transparently — calling them from user Python on Apple Silicon goes through the GPU.
 
 ## Workload mode — beyond per-primitive timing
 
@@ -56,6 +58,9 @@ python benchmarks/apple_gpu/benchmark_ga_ebm.py --primitives-only
 
 # Longer EBT refinement chain (T inner-step iterations on-device):
 python benchmarks/apple_gpu/benchmark_ga_ebm.py --refinement-T 32
+
+# Break-even sweep — adds 7 (B, K, D, T) sweep points + envelope summary:
+python benchmarks/apple_gpu/benchmark_ga_ebm.py --ebt-sweep
 ```
 
 Skips cleanly on non-Darwin or when `clang++` / the runtime source isn't available — the report still emits the 8 Python-reference EBM rows + 2 Python-reference workload rows with `skipped_apple_gpu` set.

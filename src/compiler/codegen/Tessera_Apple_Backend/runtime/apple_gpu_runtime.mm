@@ -5871,3 +5871,212 @@ extern "C" void tessera_apple_gpu_ebm_sphere_langevin_step_f32(
           ctx, x, grad, noise, eta, noise_scale, out, d)) return;
   reference_ebm_sphere_langevin_step_f32(x, grad, noise, eta, noise_scale, out, d);
 }
+
+// ===========================================================================
+// EBM self_verify  —  hard-argmin reduction over K candidates per batch
+//
+// Inputs:
+//   energies   — shape (B, K) row-major
+//   candidates — shape (B, K, D) row-major
+// Output:
+//   out        — shape (B, D)
+//
+// For each batch row b, find k* = argmin_k energies[b, k] and copy
+// candidates[b, k*, :] into out[b, :].  One threadgroup per batch row;
+// the lone thread does the K-way scan then the D copy.  This matches
+// the hard-argmin path of `tessera.ebm.self_verify(... beta=None)`.
+//
+// Soft-min (beta > 0) is a separate kernel — out of scope for v1.
+// ===========================================================================
+
+inline void reference_ebm_self_verify_hard_argmin_f32(
+    const float* energies, const float* candidates,
+    float* out, int32_t B, int32_t K, int32_t D) {
+  for (int32_t b = 0; b < B; ++b) {
+    int32_t best = 0;
+    float best_e = energies[b * K];
+    for (int32_t k = 1; k < K; ++k) {
+      float e = energies[b * K + k];
+      if (e < best_e) { best_e = e; best = k; }
+    }
+    const float* src = candidates + ((int64_t)b * K + best) * D;
+    std::memcpy(out + (int64_t)b * D, src, sizeof(float) * (size_t)D);
+  }
+}
+
+static NSString *const kEBMSelfVerifyHardArgminF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void ebm_self_verify_hard_argmin_f32(
+    device const float* energies   [[buffer(0)]],
+    device const float* candidates [[buffer(1)]],
+    device float*       out        [[buffer(2)]],
+    constant int32_t&   B          [[buffer(3)]],
+    constant int32_t&   K          [[buffer(4)]],
+    constant int32_t&   D          [[buffer(5)]],
+    uint b [[thread_position_in_grid]])
+{
+    if ((int)b >= B) return;
+    int best = 0;
+    float best_e = energies[(int)b * K];
+    for (int k = 1; k < K; ++k) {
+        float e = energies[(int)b * K + k];
+        if (e < best_e) { best_e = e; best = k; }
+    }
+    const device float* src = candidates + ((int)b * K + best) * D;
+    device float* dst = out + (int)b * D;
+    for (int i = 0; i < D; ++i) dst[i] = src[i];
+}
+)MSL";
+
+static bool dispatch_ebm_self_verify_hard_argmin_f32_msl(
+    MetalDeviceContext &ctx,
+    const float* energies, const float* candidates, float* out,
+    int32_t B, int32_t K, int32_t D) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kEBMSelfVerifyHardArgminF32Source,
+        @"ebm_self_verify_hard_argmin_f32");
+    if (!pso) return false;
+    NSUInteger eBytes = sizeof(float) * (NSUInteger)B * (NSUInteger)K;
+    NSUInteger cBytes = sizeof(float) * (NSUInteger)B * (NSUInteger)K * (NSUInteger)D;
+    NSUInteger oBytes = sizeof(float) * (NSUInteger)B * (NSUInteger)D;
+    id<MTLBuffer> bE = [ctx.device newBufferWithBytes:energies length:eBytes
+                                                options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bC = [ctx.device newBufferWithBytes:candidates length:cBytes
+                                                options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bO = [ctx.device newBufferWithLength:oBytes
+                                                options:MTLResourceStorageModeShared];
+    if (!bE || !bC || !bO) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bE offset:0 atIndex:0];
+    [enc setBuffer:bC offset:0 atIndex:1];
+    [enc setBuffer:bO offset:0 atIndex:2];
+    [enc setBytes:&B length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&D length:sizeof(int32_t) atIndex:5];
+    MTLSize grid = MTLSizeMake((NSUInteger)B, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)B,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(out, [bO contents], oBytes);
+    return true;
+  }
+}
+
+extern "C" void tessera_apple_gpu_ebm_self_verify_hard_argmin_f32(
+    const float* energies, const float* candidates, float* out,
+    int32_t B, int32_t K, int32_t D) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_ebm_self_verify_hard_argmin_f32_msl(
+          ctx, energies, candidates, out, B, K, D)) return;
+  reference_ebm_self_verify_hard_argmin_f32(energies, candidates, out, B, K, D);
+}
+
+// ===========================================================================
+// EBM energy (quadratic specialization)  —  E_b = 0.5 * ||x_b - y_b||^2
+//
+// The dominant energy form in EBT / diffusion models — covers
+// reconstruction loss + Gaussian log-likelihood up to a constant.  The
+// user-supplied `energy_fn(x, y)` in `tessera.ebm.energy` can be
+// arbitrary, so this is a specialization that callers opt into when
+// their energy_fn is documented to match this shape.
+//
+// Inputs:
+//   x, y — shape (B, D)
+// Output:
+//   energies — shape (B,)
+//
+// One threadgroup per batch row; the lone thread sums D squared diffs.
+// ===========================================================================
+
+inline void reference_ebm_energy_quadratic_f32(
+    const float* x, const float* y, float* energies,
+    int32_t B, int32_t D) {
+  for (int32_t b = 0; b < B; ++b) {
+    float acc = 0.0f;
+    for (int32_t d = 0; d < D; ++d) {
+      float diff = x[b * D + d] - y[b * D + d];
+      acc += diff * diff;
+    }
+    energies[b] = 0.5f * acc;
+  }
+}
+
+static NSString *const kEBMEnergyQuadraticF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void ebm_energy_quadratic_f32(
+    device const float* x        [[buffer(0)]],
+    device const float* y        [[buffer(1)]],
+    device float*       energies [[buffer(2)]],
+    constant int32_t&   B        [[buffer(3)]],
+    constant int32_t&   D        [[buffer(4)]],
+    uint b [[thread_position_in_grid]])
+{
+    if ((int)b >= B) return;
+    float acc = 0.0f;
+    for (int d = 0; d < D; ++d) {
+        float diff = x[(int)b * D + d] - y[(int)b * D + d];
+        acc += diff * diff;
+    }
+    energies[(int)b] = 0.5f * acc;
+}
+)MSL";
+
+static bool dispatch_ebm_energy_quadratic_f32_msl(
+    MetalDeviceContext &ctx,
+    const float* x, const float* y, float* energies,
+    int32_t B, int32_t D) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kEBMEnergyQuadraticF32Source, @"ebm_energy_quadratic_f32");
+    if (!pso) return false;
+    NSUInteger inBytes = sizeof(float) * (NSUInteger)B * (NSUInteger)D;
+    NSUInteger outBytes = sizeof(float) * (NSUInteger)B;
+    id<MTLBuffer> bX = [ctx.device newBufferWithBytes:x length:inBytes
+                                                options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bY = [ctx.device newBufferWithBytes:y length:inBytes
+                                                options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bO = [ctx.device newBufferWithLength:outBytes
+                                                options:MTLResourceStorageModeShared];
+    if (!bX || !bY || !bO) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bX offset:0 atIndex:0];
+    [enc setBuffer:bY offset:0 atIndex:1];
+    [enc setBuffer:bO offset:0 atIndex:2];
+    [enc setBytes:&B length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&D length:sizeof(int32_t) atIndex:4];
+    MTLSize grid = MTLSizeMake((NSUInteger)B, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)B,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(energies, [bO contents], outBytes);
+    return true;
+  }
+}
+
+extern "C" void tessera_apple_gpu_ebm_energy_quadratic_f32(
+    const float* x, const float* y, float* energies,
+    int32_t B, int32_t D) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_ebm_energy_quadratic_f32_msl(
+          ctx, x, y, energies, B, D)) return;
+  reference_ebm_energy_quadratic_f32(x, y, energies, B, D);
+}

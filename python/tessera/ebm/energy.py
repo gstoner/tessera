@@ -135,6 +135,15 @@ def inner_step(
             f"inner_step requires matching shapes; got y={y_arr.shape}, "
             f"grad={grad_arr.shape}."
         )
+    # Apple GPU fast path — closes the integration gap (#1 of
+    # docs/status/ga_ebm_milestone.md). Routes the no-noise f32 case
+    # to `tessera_apple_gpu_ebm_inner_step_f32` when the runtime is up.
+    # Bit-identical with the numpy path within fp32; falls back silently
+    # on non-Darwin / no runtime / unsupported dtype.
+    if noise_scale == 0.0 and y_arr.dtype == np.float32:
+        gpu_out = _try_apple_gpu_inner_step(y_arr, grad_arr, float(eta))
+        if gpu_out is not None:
+            return gpu_out
     out = y_arr - float(eta) * grad_arr
     if noise_scale > 0.0:
         if rng_key is None:
@@ -145,6 +154,41 @@ def inner_step(
         noise = normal(rng_key, shape=y_arr.shape, dtype=str(y_arr.dtype))
         out = out + float(noise_scale) * noise.astype(y_arr.dtype, copy=False)
     return out.astype(y_arr.dtype, copy=False)
+
+
+def _try_apple_gpu_inner_step(
+    y: np.ndarray, grad: np.ndarray, eta: float,
+) -> Optional[np.ndarray]:
+    """Try the Apple GPU dispatch path. Returns ``None`` when the
+    runtime isn't available — callers fall back to the numpy path.
+
+    Routed through ``tessera._apple_gpu_dispatch.bind_symbol`` so the
+    runtime dylib is compiled once per process and the ctypes binding
+    is cached. Only the no-noise, f32, contiguous case takes this path.
+    """
+    try:
+        import ctypes
+        from tessera._apple_gpu_dispatch import bind_symbol
+    except ImportError:
+        return None
+    if not (y.flags["C_CONTIGUOUS"] and grad.flags["C_CONTIGUOUS"]):
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_ebm_inner_step_f32",
+        (ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_float,
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    out = np.zeros_like(y)
+    n = int(y.size)
+    p = ctypes.POINTER(ctypes.c_float)
+    fn(y.ctypes.data_as(p), grad.ctypes.data_as(p), ctypes.c_float(eta),
+       out.ctypes.data_as(p), ctypes.c_int32(n))
+    return out
 
 
 # ---------------------------------------------------------------------------

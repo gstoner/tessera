@@ -930,6 +930,73 @@ def _ebm_sphere_langevin_apple_gpu_path(
     return dispatch, err, sym
 
 
+def _ebm_self_verify_apple_gpu_path(
+    rt: ctypes.CDLL,
+) -> tuple[Callable[[], np.ndarray], float, str]:
+    """Native Apple-GPU self_verify (hard argmin path).
+
+    One MSL threadgroup per batch row scans K energies and gathers
+    the winning candidate row.  Matches the hard-argmin path of
+    ``tessera.ebm.self_verify(... beta=None)``.
+    """
+    sym = "tessera_apple_gpu_ebm_self_verify_hard_argmin_f32"
+    fn = getattr(rt, sym)
+    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    fn.restype = None
+    B, K, D = 4, 8, 16
+    rng = np.random.RandomState(1060)
+    energies = np.ascontiguousarray(rng.randn(B, K).astype(np.float32))
+    candidates = np.ascontiguousarray(rng.randn(B, K, D).astype(np.float32))
+    out = np.zeros((B, D), dtype=np.float32)
+    expected = candidates[np.arange(B), energies.argmin(axis=1)]
+
+    def dispatch() -> np.ndarray:
+        fn(_ptr_f(energies), _ptr_f(candidates), _ptr_f(out),
+           ctypes.c_int32(B), ctypes.c_int32(K), ctypes.c_int32(D))
+        return out
+
+    dispatch()
+    err = float(np.abs(out - expected).max())
+    return dispatch, err, sym
+
+
+def _ebm_energy_apple_gpu_path(
+    rt: ctypes.CDLL,
+) -> tuple[Callable[[], np.ndarray], float, str]:
+    """Native Apple-GPU energy — quadratic specialization
+    ``E_b = 0.5 * ||x_b - y_b||^2``.
+
+    Callers opt into this specialization when their ``model_fn``
+    matches the quadratic form (true for diffusion noise prediction,
+    EBT reconstruction loss, Gaussian log-likelihood up to a constant).
+    """
+    sym = "tessera_apple_gpu_ebm_energy_quadratic_f32"
+    fn = getattr(rt, sym)
+    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.c_int32, ctypes.c_int32]
+    fn.restype = None
+    B, D = 8, 4
+    rng = np.random.RandomState(1070)
+    x = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    y = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    energies = np.zeros(B, dtype=np.float32)
+    expected = (0.5 * np.sum((x - y) ** 2, axis=1)).astype(np.float32)
+
+    def dispatch() -> np.ndarray:
+        fn(_ptr_f(x), _ptr_f(y), _ptr_f(energies),
+           ctypes.c_int32(B), ctypes.c_int32(D))
+        return energies
+
+    dispatch()
+    err = float(np.abs(energies - expected).max())
+    return dispatch, err, sym
+
+
 # Python-reference Langevin (kept for the non-Apple skip path).
 def _ebm_langevin_step_path() -> tuple[Callable[[], None], float]:
     rng = np.random.RandomState(1002)
@@ -1059,6 +1126,10 @@ def _NATIVE_EBM_BUILDERS(
          _ebm_bivector_langevin_apple_gpu_path, 1e-6),
         ("ebm_sphere_langevin",   "S^2/T=0.5",
          _ebm_sphere_langevin_apple_gpu_path,   1e-5),
+        ("ebm_self_verify",       "B=4,K=8,D=16",
+         _ebm_self_verify_apple_gpu_path,       0.0),
+        ("ebm_energy",            "B=8,D=4/quadratic",
+         _ebm_energy_apple_gpu_path,            1e-6),
     )
 
 
@@ -1143,7 +1214,9 @@ def _workload_ga_pipeline_apple_gpu_path(
     return step, err, (sym_exp, sym_san, sym_nrm), f"B={B}/exp→sandwich→norm"
 
 
-def _workload_ebt_tiny_inputs(seed: int = 2100):
+def _workload_ebt_tiny_inputs(
+    seed: int = 2100, B: int = 4, K: int = 8, D: int = 6,
+):
     """Deterministic inputs for the EBT-tiny refinement loop.
 
     The energy is E(y) = 0.5 * ||y||^2 ⇒ grad = y. With fixed grad
@@ -1152,30 +1225,29 @@ def _workload_ebt_tiny_inputs(seed: int = 2100):
     step; the snapshot variant is what `ebm_refinement` measures so
     we keep the workload consistent with it.
 
-    Returns (n_candidates=B*K rolled into a single ping-pong buffer,
-    D, eta).
+    Returns ``(B, K, D, y0[BK,D], eta)``.
     """
-    B, K, D = 4, 8, 6
     rng = np.random.RandomState(seed)
     y0 = rng.randn(B * K, D).astype(np.float32)
     eta = 0.02
     return B, K, D, y0, eta
 
 
-def _workload_ebt_tiny_python_path(T: int) -> tuple[Callable[[], np.ndarray],
-                                                     float, str]:
+def _workload_ebt_tiny_python_path(
+    T: int, *, B: int = 4, K: int = 8, D: int = 6,
+) -> tuple[Callable[[], np.ndarray], float, str]:
     """Python reference EBT-tiny loop:
         - K candidates per batch
-        - T inner steps of inner_step on a snapshot of grad = state_0
+        - T inner steps on a snapshot of grad = state_0
         - self_verify reduces K → 1 by argmin(energy)
     """
-    B, K, D, y0, eta = _workload_ebt_tiny_inputs()
+    _, _, _, y0, eta = _workload_ebt_tiny_inputs(B=B, K=K, D=D)
 
     def step() -> np.ndarray:
         grad = y0.copy()                          # fixed grad snapshot
         y = y0.copy()
         for _ in range(T):
-            y = ebm.inner_step(y, grad, eta=eta)  # numpy path
+            y = y - eta * grad                     # raw numpy, no dispatcher
         energies = np.sum(y * y, axis=1).reshape(B, K)
         candidates = y.reshape(B, K, D)
         return ebm.self_verify(energies, candidates)
@@ -1185,13 +1257,15 @@ def _workload_ebt_tiny_python_path(T: int) -> tuple[Callable[[], np.ndarray],
 
 
 def _workload_ebt_tiny_apple_gpu_path(
-    rt: ctypes.CDLL, T: int,
+    rt: ctypes.CDLL, T: int, *,
+    B: int = 4, K: int = 8, D: int = 6,
 ) -> tuple[Callable[[], np.ndarray], float, tuple[str, ...], str]:
     """Apple-GPU EBT-tiny loop: T inner-step iterations dispatched
     via the native ``ebm_refinement`` kernel (ping-pong on-device);
-    self_verify runs host-side (no MSL kernel yet)."""
-    B, K, D, y0, eta = _workload_ebt_tiny_inputs()
+    self_verify also dispatches natively when the symbol is exported."""
+    _, _, _, y0, eta = _workload_ebt_tiny_inputs(B=B, K=K, D=D)
     sym_ref = "tessera_apple_gpu_ebm_refinement_f32"
+    sym_sv = "tessera_apple_gpu_ebm_self_verify_hard_argmin_f32"
     fn_ref = getattr(rt, sym_ref)
     fn_ref.argtypes = [ctypes.POINTER(ctypes.c_float),
                        ctypes.POINTER(ctypes.c_float),
@@ -1199,26 +1273,52 @@ def _workload_ebt_tiny_apple_gpu_path(
                        ctypes.POINTER(ctypes.c_float),
                        ctypes.c_int32]
     fn_ref.restype = None
+    fn_sv = getattr(rt, sym_sv, None)
+    if fn_sv is not None:
+        fn_sv.argtypes = [ctypes.POINTER(ctypes.c_float),
+                          ctypes.POINTER(ctypes.c_float),
+                          ctypes.POINTER(ctypes.c_float),
+                          ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+        fn_sv.restype = None
     y0_c = np.ascontiguousarray(y0)
-    grad_c = np.ascontiguousarray(y0.copy())   # fixed grad snapshot
+    grad_c = np.ascontiguousarray(y0.copy())
     y_out = np.zeros_like(y0_c)
     n = int(y0.size)
+    out_buf = np.zeros((B, D), dtype=np.float32)
 
     def step() -> np.ndarray:
         fn_ref(_ptr_f(y0_c), _ptr_f(grad_c),
                ctypes.c_float(eta), ctypes.c_int32(T),
                _ptr_f(y_out), ctypes.c_int32(n))
-        energies = np.sum(y_out * y_out, axis=1).reshape(B, K)
-        candidates = y_out.reshape(B, K, D)
+        energies = np.ascontiguousarray(
+            np.sum(y_out * y_out, axis=1).reshape(B, K).astype(np.float32))
+        candidates = np.ascontiguousarray(y_out.reshape(B, K, D))
+        if fn_sv is not None:
+            fn_sv(_ptr_f(energies), _ptr_f(candidates), _ptr_f(out_buf),
+                  ctypes.c_int32(B), ctypes.c_int32(K), ctypes.c_int32(D))
+            return out_buf
         return ebm.self_verify(energies, candidates)
 
     out = step()
-    ref, _, _ = _workload_ebt_tiny_python_path(T)
+    ref, _, _ = _workload_ebt_tiny_python_path(T, B=B, K=K, D=D)
     ref_out = ref()
     err = float(np.abs(out - ref_out).max())
-    return step, err, (sym_ref, "ebm.self_verify (host)"), (
-        f"B={B},K={K},D={D}/T={T}"
-    )
+    sv_label = sym_sv if fn_sv is not None else "ebm.self_verify (host)"
+    return step, err, (sym_ref, sv_label), f"B={B},K={K},D={D}/T={T}"
+
+
+# Default break-even sweep — ascending workload size + a few T-variants
+# so users can locate the break-even point where the native MSL chain
+# starts beating numpy.  Each entry is ``(B, K, D, T)``.
+_DEFAULT_EBT_SWEEP: tuple[tuple[int, int, int, int], ...] = (
+    (4,   8,   6,    8),     # original tiny baseline
+    (4,   8,  64,    8),     # widen D
+    (8,  16,  64,    8),     # 4× total elements
+    (16, 32, 128,    8),     # 16× total elements
+    (32, 64, 256,    8),     # 64× total elements
+    (4,   8,   6,   32),     # longer T at tiny shape
+    (16, 32, 128,   32),     # longer T at bigger shape
+)
 
 
 def run_workload_apple_gpu(name: str, shape: str,
@@ -1365,7 +1465,10 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
                *,
                refinement_T: int = 8,
                include_primitives: bool = True,
-               include_workloads: bool = True) -> dict[str, Any]:
+               include_workloads: bool = True,
+               include_ebt_sweep: bool = False,
+               ebt_sweep_points: tuple[tuple[int, int, int, int], ...]
+                   = _DEFAULT_EBT_SWEEP) -> dict[str, Any]:
     """Top-level entry: build the report dict (no I/O).
 
     The report envelope records ``compile_time_ms`` (clang++ wall-clock
@@ -1432,7 +1535,7 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
             tolerance=2e-5, reps=reps, device=device, version=version,
         ))
 
-        # Workload pair 2: EBT-tiny refinement loop.
+        # Workload pair 2: EBT-tiny refinement loop (default shape).
         if rt is not None:
             dispatch, err, syms, shape = _workload_ebt_tiny_apple_gpu_path(
                 rt, refinement_T)
@@ -1446,12 +1549,35 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
             tolerance=1e-4, reps=reps, device=device, version=version,
         ))
 
+    # EBT-tiny break-even sweep — apples-to-apples timings across a
+    # ladder of (B, K, D, T) points so consumers can locate where the
+    # native MSL chain starts beating numpy.  Off by default (adds
+    # ~14 rows × reps dispatches); enable via --ebt-sweep.
+    if include_ebt_sweep:
+        for (B, K, D, T) in ebt_sweep_points:
+            if rt is not None:
+                dispatch, err, syms, shape = _workload_ebt_tiny_apple_gpu_path(
+                    rt, T, B=B, K=K, D=D)
+                rows.append(run_workload_apple_gpu(
+                    "ebt_tiny_sweep", shape, dispatch, err, syms,
+                    tolerance=1e-4, reps=reps,
+                    device=device, version=version,
+                ))
+            dispatch, err, shape = _workload_ebt_tiny_python_path(
+                T, B=B, K=K, D=D)
+            rows.append(run_workload_python(
+                "ebt_tiny_sweep", shape, dispatch, err,
+                tolerance=1e-4, reps=reps,
+                device=device, version=version,
+            ))
+
     ga_count = sum(1 for r in rows if r["op"].startswith("clifford_"))
     ebm_count = sum(1 for r in rows if r["op"].startswith("ebm_"))
     workload_count = sum(1 for r in rows if r.get("namespace") == "workload")
     ebm_native_count = sum(1 for r in rows
                             if r["op"].startswith("ebm_")
                             and r["backend"] == "apple_gpu")
+    sweep_count = sum(1 for r in rows if r["op"] == "ebt_tiny_sweep")
     return {
         "runs": rows,
         "ga_primitives_count": ga_count,
@@ -1459,12 +1585,50 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
         "ebm_native_apple_gpu_count": ebm_native_count,
         "native_ebm_ops": sorted(native_ebm_ops),
         "workload_count": workload_count,
+        "ebt_sweep_count": sweep_count,
+        "ebt_sweep_summary": (_ebt_sweep_break_even_summary(rows)
+                               if sweep_count else None),
         "compile_time_ms": compile_time_ms,
         "skipped_apple_gpu": skip_reason,
         "device": device,
         "tessera_version": version,
         "reps": reps,
     }
+
+
+def _ebt_sweep_break_even_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Produce a per-shape native-vs-numpy comparison table.
+
+    Pairs each ``ebt_tiny_sweep`` row by its ``shape`` descriptor and
+    computes ``speedup = python_ms / native_ms`` plus a boolean
+    ``native_wins`` (speedup > 1).  Useful as the headline of the
+    sweep — consumers can scan one column to see the break-even.
+    """
+    pairs: dict[str, dict[str, dict[str, Any]]] = {}
+    for r in rows:
+        if r["op"] != "ebt_tiny_sweep":
+            continue
+        pairs.setdefault(r["shape"], {})[r["backend"]] = r
+    table: list[dict[str, Any]] = []
+    for shape, by_backend in sorted(pairs.items()):
+        native = by_backend.get("apple_gpu")
+        python = by_backend.get("python_ref")
+        entry: dict[str, Any] = {"shape": shape}
+        if native is not None:
+            entry["native_ms"] = native["latency_ms"]
+        if python is not None:
+            entry["python_ms"] = python["latency_ms"]
+        if native is not None and python is not None and native["latency_ms"] > 0:
+            sp = python["latency_ms"] / native["latency_ms"]
+            entry["speedup"] = sp
+            entry["native_wins"] = sp >= 1.0
+        table.append(entry)
+    break_even = None
+    for entry in table:
+        if entry.get("native_wins"):
+            break_even = entry["shape"]
+            break
+    return {"table": table, "first_native_win_shape": break_even}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1482,6 +1646,11 @@ def main(argv: list[str] | None = None) -> int:
                         help="Skip workload mode (GA pipeline + EBT-tiny loop).")
     parser.add_argument("--workloads-only", action="store_true",
                         help="Skip per-primitive rows; only run composite workloads.")
+    parser.add_argument("--ebt-sweep", action="store_true",
+                        help=("Run the EBT-tiny break-even sweep — emits "
+                              "apple_gpu + python_ref rows for each "
+                              "(B, K, D, T) point in _DEFAULT_EBT_SWEEP and "
+                              "summarizes break-even in the envelope."))
     parser.add_argument("--output", type=Path, default=None,
                         help="JSON output path (stdout if omitted)")
     args = parser.parse_args(argv)
@@ -1491,7 +1660,8 @@ def main(argv: list[str] | None = None) -> int:
     include_workloads = not args.primitives_only
     report = run_report(reps=reps, refinement_T=args.refinement_T,
                         include_primitives=include_primitives,
-                        include_workloads=include_workloads)
+                        include_workloads=include_workloads,
+                        include_ebt_sweep=args.ebt_sweep)
     payload = json.dumps(report, indent=2, sort_keys=True, default=float)
     if args.output is not None:
         args.output.write_text(payload)

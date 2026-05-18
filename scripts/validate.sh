@@ -39,6 +39,17 @@ echo "==> Benchmark telemetry smoke"
 "$PYTHON" benchmarks/run_all.py --smoke --json-only --output "$BENCH_REPORT"
 "$PYTHON" benchmarks/perf_gate.py "$BENCH_REPORT" --baseline benchmarks/baselines/cpu_smoke.json
 
+# Apple-Silicon-aware GA/EBM native-execution health check.
+# Promoted to the validation spine 2026-05-17 — see
+# docs/status/ga_ebm_milestone.md for the contract.  On non-Darwin
+# hosts the benchmark exits 0 with `skipped_apple_gpu` populated.
+# On Apple Silicon it exercises 17 GA + 6 native EBM + 4 workload
+# rows through the full stack (Python API → manifest lookup → MSL
+# dispatch → correctness check vs Python reference).
+GA_EBM_REPORT="$TMP_ROOT/tessera_ga_ebm_native_smoke.json"
+echo "==> Apple GPU GA + EBM native-execution smoke"
+"$PYTHON" benchmarks/apple_gpu/benchmark_ga_ebm.py --ci --output "$GA_EBM_REPORT"
+
 echo "==> Standalone CPU runtime build and tests"
 cmake -S src/runtime -B "$RUNTIME_BUILD" -DCMAKE_BUILD_TYPE=Release -DTESSERA_BUILD_TESTS=ON
 cmake --build "$RUNTIME_BUILD" -j

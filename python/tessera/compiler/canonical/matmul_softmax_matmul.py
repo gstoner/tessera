@@ -29,6 +29,11 @@ from tessera.compiler.compile_report import (
     VALUE_KIND_TENSOR,
     hash_ir_text,
 )
+from tessera.compiler.fallback import (
+    FallbackReason,
+    TesseraNativeRequiredError,
+    classify_host,
+)
 
 
 PROGRAM_ID = "matmul_softmax_matmul"
@@ -70,7 +75,7 @@ def _ir_text(M: int, N: int, K: int) -> str:
     )
 
 
-def _target_decision_for_host() -> tuple[str, dict[str, str], str | None]:
+def _target_decision_for_host() -> tuple[str, dict[str, str], FallbackReason | None]:
     """Pick the report's target name + decision row + fallback reason.
 
     On Darwin: target=apple_gpu, decision row mentions the manifest
@@ -103,15 +108,31 @@ def _target_decision_for_host() -> tuple[str, dict[str, str], str | None]:
     return (
         "cpu",
         {"cpu": "non-Darwin host; numpy reference path"},
-        "non-Darwin host",
+        FallbackReason.NON_DARWIN_HOST,
     )
 
 
-def run(*, M: int = 32, N: int = 32, K: int = 32, seed: int = 0) -> CompileReport:
+def run(
+    *, M: int = 32, N: int = 32, K: int = 32, seed: int = 0,
+    native_required: bool = False,
+) -> CompileReport:
     """Build the canonical program, execute it, return a
-    :class:`CompileReport`."""
+    :class:`CompileReport`.
+
+    Parameters
+    ----------
+    native_required
+        **M3:** when ``True``, raises
+        :class:`fallback.TesseraNativeRequiredError` instead of
+        falling back to the numpy reference path on a non-Darwin
+        host.  M1 fallback behavior is preserved when ``False``.
+    """
     A, B, C = _make_inputs(M=M, N=N, K=K, seed=seed)
     target, target_decision, fallback_reason = _target_decision_for_host()
+    if native_required and fallback_reason is not None:
+        raise TesseraNativeRequiredError(
+            fallback_reason, target="apple_gpu", op_name=PROGRAM_ID,
+        )
 
     prev_tracing = bridge.tracing_enabled()
     bridge.set_tracing_enabled(True)

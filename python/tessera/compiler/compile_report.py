@@ -33,6 +33,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable, Mapping, Optional
 
 from . import jit_bridge as _bridge
+from .fallback import FallbackReason
 
 
 # Canonical strings — guarded by tests so misspellings get caught.
@@ -73,7 +74,7 @@ class CompileReport:
     ir_hashes: Mapping[str, str] = field(default_factory=dict)
     target_decision: Mapping[str, str] = field(default_factory=dict)
     diagnostics: tuple[str, ...] = ()
-    fallback_reason: Optional[str] = None
+    fallback_reason: Optional[str | FallbackReason] = None
     proof_routes: tuple[_bridge.JitBridgeRoute, ...] = ()
     timing_ms: Optional[Mapping[str, float]] = None
     correctness: Optional[Mapping[str, float]] = None
@@ -109,7 +110,11 @@ class CompileReport:
             "ir_hashes": dict(sorted(self.ir_hashes.items())),
             "target_decision": dict(sorted(self.target_decision.items())),
             "diagnostics": list(self.diagnostics),
-            "fallback_reason": self.fallback_reason,
+            "fallback_reason": (
+                self.fallback_reason.value
+                if isinstance(self.fallback_reason, FallbackReason)
+                else self.fallback_reason
+            ),
             "proof_routes": [
                 {
                     "op_name": r.op_name,
@@ -146,7 +151,11 @@ class CompileReport:
             "ir_hashes": dict(sorted(self.ir_hashes.items())),
             "target_decision": dict(sorted(self.target_decision.items())),
             "diagnostics": list(self.diagnostics),
-            "fallback_reason": self.fallback_reason,
+            "fallback_reason": (
+                self.fallback_reason.value
+                if isinstance(self.fallback_reason, FallbackReason)
+                else self.fallback_reason
+            ),
             "proof_routes": [
                 {
                     "op_name": r.op_name,

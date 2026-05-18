@@ -62,6 +62,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 from tessera.compiler import jit_bridge as _bridge
+from tessera.compiler import ast_ir as _ast_ir
 
 
 __all__ = [
@@ -170,283 +171,44 @@ class CliffordIRProgram:
         return "\n".join(lines)
 
 
-class _ASTLowerer(ast.NodeVisitor):
-    """Walks a single-return Clifford function body and emits
-    :class:`CliffordIROpCall` entries.
+# M6 Step 1 (2026-05-18): the previous ``_ASTLowerer`` lived here
+# but has been generalized into ``tessera.compiler.ast_ir``.  The
+# Clifford-specific config (namespace="ga", whitelist, error class)
+# is passed in by :func:`lower_function_to_ir` below.
 
-    Accepted forms:
-      - ``ast.FunctionDef`` whose body is exactly one ``ast.Return``.
-      - Return expression composed of nested ``ast.Call`` invocations
-        of ``tessera.ga.X`` attributes (where ``X`` is whitelisted in
-        :data:`_GA_ATTR_TO_OP_NAME`) and ``ast.Name`` operand
-        references.
-      - The ``ga`` alias is whatever name the user binds at import
-        (the AST sees the local name).  Both ``ga.foo(...)`` and the
-        less-common ``tessera.ga.foo(...)`` are accepted.
 
-    Anything else raises :class:`CliffordJitError` with a precise
-    location-tagged message.  This is the **compile-time guarantee**:
-    if lowering succeeds, every op is manifest-resolvable.
-    """
-
-    def __init__(self, fn_name: str) -> None:
-        self._fn_name = fn_name
-        self._tmp_counter = 0
-        self.ops: list[CliffordIROpCall] = []
-
-    def _next_tmp(self) -> str:
-        name = f"%t{self._tmp_counter}"
-        self._tmp_counter += 1
-        return name
-
-    def _err(self, node: ast.AST, msg: str) -> "CliffordJitError":
-        line = getattr(node, "lineno", "?")
-        col = getattr(node, "col_offset", "?")
-        return CliffordJitError(
-            f"clifford_jit({self._fn_name}) lowering: {msg} "
-            f"(at line {line}, col {col})"
-        )
-
-    def _is_ga_call(self, node: ast.AST) -> Optional[str]:
-        """If ``node`` is a call whose callee resolves through the
-        ``ga`` namespace (i.e. ``ga.<op>`` or any
-        ``<chain>.ga.<op>``), return the GA op name.  Otherwise
-        return ``None``.
-
-        The receiver must literally end in ``ga`` — ``foo.norm(x)``,
-        ``np.linalg.norm(x)``, and ``self.ga_helper(x)`` are
-        rejected.  Accepted shapes (where ``<op>`` is in
-        :data:`_GA_ATTR_TO_OP_NAME`):
-
-          - ``ga.<op>(...)``               — Name('ga').<op>
-          - ``tessera.ga.<op>(...)``       — Attribute(...).ga.<op>
-          - ``self.ga.<op>(...)``          — Attribute(...).ga.<op>
-          - Any deeper chain ending in ``.ga.<op>``.
-
-        The chain's *root* must be a ``Name`` — Calls, Subscripts,
-        etc. are rejected so the lowering doesn't have to reason
-        about dynamic dispatch.
-        """
-        if not isinstance(node, ast.Attribute):
-            return None
-        attr = node.attr
-        if attr not in _GA_ATTR_TO_OP_NAME:
-            return None
-        # The IMMEDIATE receiver must be either the ``ga`` Name or an
-        # Attribute whose final segment is ``ga`` (so the call reads
-        # ``<chain>.ga.<attr>``).
-        recv = node.value
-        if isinstance(recv, ast.Name):
-            if recv.id != "ga":
-                return None
-            return attr
-        if isinstance(recv, ast.Attribute):
-            if recv.attr != "ga":
-                return None
-            # Walk to the root — it must be a Name (no calls, no
-            # subscripts, no chains rooted in something we can't
-            # statically reason about).
-            root = recv.value
-            while isinstance(root, ast.Attribute):
-                root = root.value
-            if not isinstance(root, ast.Name):
-                return None
-            return attr
-        return None
-
-    def lower_expr(
-        self, expr: ast.AST,
-        *, env: Optional[dict[str, str]] = None,
-    ) -> str:
-        """Lower an expression to a CliffordIR operand reference.
-
-        ``Name`` nodes resolve through ``env`` (a binding map from
-        Python identifiers to SSA refs).  Unknown names raise.
-        ``Constant`` int / float literals encode inline as
-        ``#int:N`` / ``#float:N`` operand refs — the IR is still
-        string-based, the executor parses them back when binding
-        operands.  ``Call`` nodes recurse on their args, then emit
-        an :class:`CliffordIROpCall` and return the result's SSA
-        name.
-        """
-        if isinstance(expr, ast.Name):
-            if env is not None:
-                if expr.id not in env:
-                    raise self._err(
-                        expr,
-                        f"name {expr.id!r} is not a function argument or "
-                        "earlier-bound assignment",
-                    )
-                return env[expr.id]
-            return expr.id
-        if isinstance(expr, ast.Constant):
-            v = expr.value
-            if isinstance(v, bool):
-                # bool is a subclass of int — surface it separately so
-                # the executor can preserve the True/False identity.
-                return f"#bool:{int(v)}"
-            if isinstance(v, int):
-                return f"#int:{v}"
-            if isinstance(v, float):
-                return f"#float:{v!r}"
-            raise self._err(
-                expr,
-                "literal constants are limited to int / float / bool "
-                f"(got {type(v).__name__}: {v!r})",
-            )
-        if isinstance(expr, ast.UnaryOp) and isinstance(expr.op, ast.USub) \
-                and isinstance(expr.operand, ast.Constant):
-            # ``-2`` parses as ``UnaryOp(USub, Constant(2))`` — fold
-            # the negation into the literal so it survives lowering.
-            v = expr.operand.value
-            if isinstance(v, bool):
-                raise self._err(expr, "cannot negate a boolean literal")
-            if isinstance(v, int):
-                return f"#int:{-v}"
-            if isinstance(v, float):
-                return f"#float:{(-v)!r}"
-            raise self._err(
-                expr,
-                "literal constants are limited to int / float "
-                f"(got {type(v).__name__}: {v!r})",
-            )
-        if isinstance(expr, ast.Call):
-            attr = self._is_ga_call(expr.func)
-            if attr is None:
-                raise self._err(
-                    expr,
-                    "only ``tessera.ga.<op>(...)`` calls are allowed "
-                    f"(got {ast.dump(expr.func)})",
-                )
-            if expr.keywords:
-                raise self._err(
-                    expr,
-                    f"ga.{attr}: keyword arguments are not supported by "
-                    "the v1 AST lowering",
-                )
-            operand_refs = tuple(
-                self.lower_expr(a, env=env) for a in expr.args
-            )
-            result = self._next_tmp()
-            self.ops.append(CliffordIROpCall(
-                op_name=_GA_ATTR_TO_OP_NAME[attr],
-                operand_refs=operand_refs,
-                result_name=result,
-                python_attr=attr,
-            ))
-            return result
-        raise self._err(
-            expr,
-            f"unsupported expression type {type(expr).__name__} — "
-            "v1 AST lowering accepts only Name references and "
-            "tessera.ga.<op>(...) calls"
-        )
+_CLIFFORD_LOWERING_CONFIG = _ast_ir.LoweringConfig(
+    namespace="ga",
+    attr_to_op_name=_GA_ATTR_TO_OP_NAME,
+    error_prefix="clifford_jit",
+    error_class=CliffordJitError,
+)
 
 
 def lower_function_to_ir(fn: Callable[..., Any]) -> CliffordIRProgram:
     """Lower a Clifford-only function to :class:`CliffordIRProgram`
     via Python AST walking.
 
-    The function must have the form::
-
-        def name(arg1, arg2, ...):
-            return <ga-expression>
-
-    where ``<ga-expression>`` is built from function-argument Names
-    and ``tessera.ga.<op>(...)`` calls (per
-    :data:`_GA_ATTR_TO_OP_NAME`).  Any deviation raises
-    :class:`CliffordJitError`.
+    **M6 Step 1 (2026-05-18):** delegates to the shared
+    :func:`tessera.compiler.ast_ir.lower_function`.  The
+    Clifford-specific types stay backwards-compatible (same fields,
+    same ``text()`` prefix) — only the lowering pass is shared.
     """
-    try:
-        source = inspect.getsource(fn)
-    except (OSError, TypeError) as exc:
-        raise CliffordJitError(
-            f"clifford_jit({fn.__qualname__}): cannot read source "
-            f"({exc!s}); try defining the function in a regular .py "
-            "file or use the trace-capture fallback"
-        )
-    # Decorator + indentation cleanup so a stand-alone function-def
-    # AST parse works.
-    source = textwrap.dedent(source)
-    tree = ast.parse(source, mode="exec")
-    if not tree.body:
-        raise CliffordJitError(
-            f"clifford_jit({fn.__qualname__}): empty source after parse"
-        )
-    # Find the top-level FunctionDef — skip decorators.
-    func_def: Optional[ast.FunctionDef] = None
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            func_def = node  # type: ignore[assignment]
-            break
-    if func_def is None:
-        raise CliffordJitError(
-            f"clifford_jit({fn.__qualname__}): no FunctionDef found"
-        )
-    if isinstance(func_def, ast.AsyncFunctionDef):
-        raise CliffordJitError(
-            f"clifford_jit({fn.__qualname__}): async functions are not "
-            "supported by the v1 AST lowering"
-        )
-    # Reject keyword-only / vararg / kwarg signatures for v1 — they
-    # complicate the env binding.  Positional-only and standard
-    # positional args are fine.
-    if (func_def.args.kwonlyargs or func_def.args.vararg
-            or func_def.args.kwarg):
-        raise CliffordJitError(
-            f"clifford_jit({fn.__qualname__}): v1 only supports positional "
-            "arguments (no *args / **kwargs / keyword-only)"
-        )
-    arg_names = tuple(a.arg for a in func_def.args.args)
-    # Body must be a sequence of single-target ``name = EXPR``
-    # assignments followed by exactly one ``return EXPR``.  A leading
-    # docstring (Expr/Constant-string) is permitted.  No control flow,
-    # no augmented assignments, no tuple-unpacking targets.
-    body_stmts = list(func_def.body)
-    if (len(body_stmts) >= 2
-            and isinstance(body_stmts[0], ast.Expr)
-            and isinstance(body_stmts[0].value, ast.Constant)
-            and isinstance(body_stmts[0].value.value, str)):
-        body_stmts = body_stmts[1:]
-    if not body_stmts:
-        raise CliffordJitError(
-            f"clifford_jit({fn.__qualname__}): empty function body"
-        )
-    if not isinstance(body_stmts[-1], ast.Return):
-        raise CliffordJitError(
-            f"clifford_jit({fn.__qualname__}): v1 requires the function "
-            "to end with a single-return statement"
-        )
-    lowerer = _ASTLowerer(fn.__qualname__)
-    binding_map: dict[str, str] = {name: name for name in arg_names}
-    for stmt in body_stmts[:-1]:
-        if not isinstance(stmt, ast.Assign):
-            raise CliffordJitError(
-                f"clifford_jit({fn.__qualname__}): v1 only supports "
-                "simple ``name = expr`` assignments above the return "
-                f"(got {type(stmt).__name__})"
-            )
-        if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
-            raise CliffordJitError(
-                f"clifford_jit({fn.__qualname__}): v1 assignments must "
-                "have a single Name target (no tuples / attributes / "
-                "subscripts)"
-            )
-        # Lower RHS in the current env, then bind the LHS Name to the
-        # resulting SSA ref so subsequent statements can reference it.
-        rhs_ref = lowerer.lower_expr(stmt.value, env=binding_map)
-        binding_map[stmt.targets[0].id] = rhs_ref
-    ret_stmt = body_stmts[-1]
-    ret_expr = ret_stmt.value
-    if ret_expr is None:
-        raise CliffordJitError(
-            f"clifford_jit({fn.__qualname__}): function must return a value"
-        )
-    return_ref = lowerer.lower_expr(ret_expr, env=binding_map)
+    generic = _ast_ir.lower_function(
+        fn, _CLIFFORD_LOWERING_CONFIG,
+    )
     return CliffordIRProgram(
-        arg_names=arg_names,
-        ops=tuple(lowerer.ops),
-        return_ref=return_ref,
+        arg_names=generic.arg_names,
+        ops=tuple(
+            CliffordIROpCall(
+                op_name=op.op_name,
+                operand_refs=op.operand_refs,
+                result_name=op.result_name,
+                python_attr=op.python_attr,
+            )
+            for op in generic.ops
+        ),
+        return_ref=generic.return_ref,
     )
 
 
@@ -473,21 +235,12 @@ def _execute_ir(
     env: dict[str, Any] = dict(zip(ir.arg_names, args))
 
     def _resolve(ref: str) -> Any:
-        # Inline literals are encoded as ``#int:N`` / ``#float:V`` /
-        # ``#bool:0|1`` operand refs at lowering time so the IR stays
-        # all-string.  Decode them back here.
-        if ref.startswith("#int:"):
-            return int(ref[5:])
-        if ref.startswith("#float:"):
-            return float(ref[7:])
-        if ref.startswith("#bool:"):
-            return ref[6:] == "1"
-        if ref not in env:
-            raise CliffordJitError(
-                f"executor: operand ref {ref!r} is not in the env "
-                f"(known: {sorted(env)})"
-            )
-        return env[ref]
+        # M6 Step 1: literal decoding lives in the shared ast_ir
+        # module so a future energy_jit reuses the same encoding.
+        try:
+            return _ast_ir.resolve_operand(ref, env)
+        except KeyError as exc:
+            raise CliffordJitError(f"executor: {exc}") from exc
 
     prev_tracing = _bridge.tracing_enabled()
     _bridge.set_tracing_enabled(True)
@@ -685,14 +438,26 @@ def _validate_plan(plan: tuple[CliffordOpPlanEntry, ...]) -> None:
 
 def clifford_jit(
     *, target: str = "apple_gpu", dtype: str = "f32",
+    native_required: bool = False,
 ) -> Callable[[Callable[..., Any]], CliffordCompiledCallable]:
     """Decorator: compile a constrained Clifford-only function to an
     Apple-GPU op plan.
 
-    Decoration runs the function once with dummy or caller-supplied
-    inputs (see ``trace_with``) to capture the op plan, verifies the
-    plan against the backend manifest, and returns a
-    :class:`CliffordCompiledCallable` carrying the artifact.
+    Parameters
+    ----------
+    target
+        Target backend.  Only ``"apple_gpu"`` is supported in v1.
+    dtype
+        Element dtype.  Only ``"f32"`` is supported in v1.
+    native_required
+        **M3 deliverable.**  When ``True``, any condition that would
+        otherwise cause a runtime fallback (non-Darwin host, Metal
+        unavailable, manifest miss, shape envelope rejection) raises
+        :class:`fallback.TesseraNativeRequiredError` at call time with
+        a stable :class:`fallback.FallbackReason` code.  When
+        ``False`` (the default), the existing behavior is preserved:
+        the AST→IR validation still runs at decoration time, but
+        runtime conditions can route through the reference path.
 
     .. code-block:: python
 
@@ -727,11 +492,17 @@ def clifford_jit(
             ir = lower_function_to_ir(fn)
         except CliffordJitError as exc:
             if "cannot read source" in str(exc):
-                wrapper = _LazyCompiledCallable(fn, target=target, dtype=dtype)
+                wrapper = _LazyCompiledCallable(
+                    fn, target=target, dtype=dtype,
+                    native_required=native_required,
+                )
                 functools.update_wrapper(wrapper, fn)
                 return wrapper
             raise
-        wrapper = _IRCompiledCallable(fn, target=target, dtype=dtype, ir=ir)
+        wrapper = _IRCompiledCallable(
+            fn, target=target, dtype=dtype, ir=ir,
+            native_required=native_required,
+        )
         functools.update_wrapper(wrapper, fn)
         return wrapper
 
@@ -768,6 +539,7 @@ class _IRCompiledCallable(CliffordCompiledCallable):
         target: str,
         dtype: str,
         ir: CliffordIRProgram,
+        native_required: bool = False,
     ) -> None:
         plan_entries: list[CliffordOpPlanEntry] = []
         for op in ir.ops:
@@ -798,6 +570,7 @@ class _IRCompiledCallable(CliffordCompiledCallable):
         super().__init__(fn, artifact)
         self._target = target
         self._dtype = dtype
+        self._native_required = bool(native_required)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         if kwargs:
@@ -805,6 +578,34 @@ class _IRCompiledCallable(CliffordCompiledCallable):
                 f"clifford_jit({self.artifact.source_name}): keyword "
                 "arguments are not supported by the AST lowering"
             )
+        if self._native_required:
+            # M3: refuse to dispatch if the host can't actually run
+            # native MSL kernels — the alternative (silent reference
+            # fallback inside `tessera.ga.*`) is exactly what
+            # native_required exists to prevent.
+            from .fallback import (
+                FallbackReason,
+                TesseraNativeRequiredError,
+                classify_host,
+            )
+            import sys as _sys
+            is_darwin = _sys.platform == "darwin"
+            runtime_ok = True
+            if is_darwin:
+                try:
+                    from .. import _apple_gpu_dispatch as _agd
+                    runtime_ok = _agd.apple_gpu_available()
+                except Exception:
+                    runtime_ok = False
+            host_fail = classify_host(
+                is_darwin=is_darwin, runtime_available=runtime_ok,
+            )
+            if host_fail is not None:
+                raise TesseraNativeRequiredError(
+                    host_fail,
+                    target=self.artifact.target,
+                    op_name=self.artifact.source_name,
+                )
         assert self.artifact.ir is not None  # set by __init__
         result, routes = _execute_ir(
             self.artifact.ir, args, self.artifact.target,
@@ -824,7 +625,8 @@ class _LazyCompiledCallable(CliffordCompiledCallable):
     """
 
     def __init__(self, fn: Callable[..., Any], *,
-                 target: str, dtype: str) -> None:
+                 target: str, dtype: str,
+                 native_required: bool = False) -> None:
         # Placeholder artifact — replaced on first call.
         placeholder = CliffordCompiledArtifact(
             plan=(), target=target, dtype=dtype,
@@ -835,8 +637,31 @@ class _LazyCompiledCallable(CliffordCompiledCallable):
         self._dtype = dtype
         self._compiled = False
         self._compile_lock = threading.Lock()
+        self._native_required = bool(native_required)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        if self._native_required:
+            from .fallback import (
+                TesseraNativeRequiredError, classify_host,
+            )
+            import sys as _sys
+            is_darwin = _sys.platform == "darwin"
+            runtime_ok = True
+            if is_darwin:
+                try:
+                    from .. import _apple_gpu_dispatch as _agd
+                    runtime_ok = _agd.apple_gpu_available()
+                except Exception:
+                    runtime_ok = False
+            host_fail = classify_host(
+                is_darwin=is_darwin, runtime_available=runtime_ok,
+            )
+            if host_fail is not None:
+                raise TesseraNativeRequiredError(
+                    host_fail,
+                    target=self.artifact.target,
+                    op_name=self.artifact.source_name,
+                )
         if not self._compiled:
             with self._compile_lock:
                 if not self._compiled:

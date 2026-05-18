@@ -29,6 +29,11 @@ from tessera.compiler.compile_report import (
     VALUE_KIND_MULTIVECTOR,
     hash_ir_text,
 )
+from tessera.compiler.fallback import (
+    FallbackReason,
+    TesseraNativeRequiredError,
+    classify_host,
+)
 
 
 PROGRAM_ID = "rotor_sandwich_norm"
@@ -56,17 +61,22 @@ def _numpy_reference(a, R: np.ndarray, V: np.ndarray) -> np.ndarray:
     ])
 
 
-def run() -> CompileReport:
+def run(*, native_required: bool = False) -> CompileReport:
     """Build the canonical program, execute it, return a
     :class:`CompileReport`.
 
-    On Apple Silicon: lowers through ``@clifford_jit`` to fused MSL
-    kernels and records the resulting bridge route trace.  Elsewhere:
-    runs the numpy reference and reports the fallback reason.
+    Parameters
+    ----------
+    native_required
+        **M3:** when ``True``, raises
+        :class:`fallback.TesseraNativeRequiredError` instead of
+        falling back to numpy on a non-Darwin host.  The default
+        (``False``) preserves M1 behavior: report carries
+        ``fallback_reason=NON_DARWIN_HOST`` and runs numpy.
     """
     a, R, V = _make_inputs(seed=0)
 
-    @clifford_jit(target="apple_gpu")
+    @clifford_jit(target="apple_gpu", native_required=native_required)
     def point_cloud_rotor_invariant(rotor, points):
         rotated = ga.rotor_sandwich(rotor, points)
         return ga.norm(rotated)
@@ -76,6 +86,12 @@ def run() -> CompileReport:
     ir_hashes = {"graph_ir": hash_ir_text(ir_text)} if ir_text else {}
 
     is_darwin = sys.platform == "darwin"
+    host_fail = classify_host(is_darwin=is_darwin, runtime_available=True)
+    if native_required and host_fail is not None:
+        # Don't run anything — let the caller see the diagnostic.
+        raise TesseraNativeRequiredError(
+            host_fail, target="apple_gpu", op_name=PROGRAM_ID,
+        )
     target = "apple_gpu" if is_darwin else "cpu"
     target_decision = {
         target: (
@@ -83,7 +99,7 @@ def run() -> CompileReport:
             if is_darwin else "non-Darwin host; numpy reference"
         )
     }
-    fallback_reason = None if is_darwin else "non-Darwin host"
+    fallback_reason: FallbackReason | None = host_fail
 
     rotor = ga.Multivector(R, a)
     points = ga.Multivector(V, a)

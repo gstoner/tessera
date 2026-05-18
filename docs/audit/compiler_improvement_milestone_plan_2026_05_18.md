@@ -621,18 +621,24 @@ uniformly visible**:
 - [x] M5 `BenchmarkRow` schema + validation spine doc + no-silent-native gate.
 - [x] M6 Step 1 + Step 2 — shared `ast_ir` core, `@energy_jit`
   whitelist + IR, lowering tests.
-- [x] **Step 4 (this reassessment)**: uniform `CompileReport`
+- [x] **Step 4 (2026-05-18 reassessment)**: uniform `CompileReport`
   emission across `@tessera.jit`, textual, and `@clifford_jit`
   via `capture_compile_reports()` + `.compile_report()` accessors.
-- [ ] **Gate**: a CI assertion that every shipped canonical
-  program emits a `CompileReport` whose `report_hash()` is stable
-  AND whose `fallback_reason` is correctly populated.  Until this
-  is green, M6 Step 3 (gradient generation + fused energy kernels)
-  stays unimplemented.
+- [x] **Gate (closed 2026-05-18)**: `test_compile_report_stability_gate`
+  parametrizes across every shipped canonical program (6 of 6) and
+  asserts each emits a stable `report_hash()`, correct
+  `fallback_reason`, and stable `frontend`/`value_kind`/`target`
+  triple.  40 tests pass; no hash collisions.
+- [x] **Step 3 start (2026-05-18)**: closed-form VJP table for the
+  full 14-op energy whitelist landed in
+  `python/tessera/compiler/energy_vjp.py`.  Every op has a
+  finite-difference test (20/20 within 1e-3 to 1e-6 tolerance).
+  This is the symbolic-grad core that M6 Step 4's MSL codegen
+  will consume; M7's Cauchy-Riemann verifier can also reuse it.
 
-Once the gate is green, Step 3 begins with `grad_y` generation for
-the whitelisted energy ops, fused energy+gradient kernels, and
-on-device Philox RNG.  Steps 3+4 then ride on top of the same
+Step 3 remaining work: per-IR-op `grad_y` materialization at the
+codegen layer, fused energy+gradient kernels for T-step refinement,
+and on-device Philox RNG in MSL.  Steps 3+4 ride on top of the
 audit + report machinery rather than landing parallel proof paths.
 
 Deliverables:

@@ -67,6 +67,16 @@ def _run_decode_init_inner_loop_self_verify() -> CompileReport:
     return run()
 
 
+def _run_kv_cache_append_prune_read() -> CompileReport:
+    from .kv_cache_append_prune_read import run
+    return run()
+
+
+def _run_rotor_sandwich_ebt_tiny() -> CompileReport:
+    from .rotor_sandwich_ebt_tiny import run
+    return run()
+
+
 CANONICAL_PROGRAMS: tuple[CanonicalProgram, ...] = (
     CanonicalProgram(
         program_id="rotor_sandwich_norm",
@@ -95,10 +105,10 @@ CANONICAL_PROGRAMS: tuple[CanonicalProgram, ...] = (
     CanonicalProgram(
         program_id="kv_cache_append_prune_read",
         family="kv_cache",
-        owner_file="(planned — no driver yet)",
-        run=None,
-        status="planned",
-        description="KV-cache decode state block; needs a new compile-report driver.",
+        owner_file="python/tessera/compiler/canonical/kv_cache_append_prune_read.py",
+        run=_run_kv_cache_append_prune_read,
+        status="shipped",
+        description="KVCacheHandle append → prune → read; paged numpy storage today, FA-4 consumes this state.",
     ),
     CanonicalProgram(
         program_id="decode_init_inner_loop_self_verify",
@@ -111,10 +121,10 @@ CANONICAL_PROGRAMS: tuple[CanonicalProgram, ...] = (
     CanonicalProgram(
         program_id="rotor_sandwich_ebt_tiny",
         family="ga_ebm_composite",
-        owner_file="(planned — wraps the rotor_conditioned_ebt benchmark)",
-        run=None,
-        status="planned",
-        description="rotor_sandwich → ebt_tiny; fused GA + EBM workload through public APIs.",
+        owner_file="python/tessera/compiler/canonical/rotor_sandwich_ebt_tiny.py",
+        run=_run_rotor_sandwich_ebt_tiny,
+        status="shipped",
+        description="rotor_sandwich → ebt_tiny composite; both ops fused on Apple GPU; value_kind=mixed (GA + tensor).",
     ),
 )
 

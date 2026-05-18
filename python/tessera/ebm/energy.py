@@ -461,9 +461,16 @@ def ebt_tiny(
         return ebm.self_verify(e, c)          # hard argmin
 
     Inputs must be ``(B * K, D)``-shaped (flattened candidate axis)
-    and f32 for the GPU fast path; ``K`` and ``D`` are both bounded
-    by 256 (kernel register budget).  Falls back to the numpy
-    composition when any guard fails — caller pays no penalty.
+    and f32 for the GPU fast path.  ``K`` is bounded by 256
+    (threadgroup-size budget for the argmin reduction); ``D`` is
+    unbounded after the 2026-05-17 streaming-closed-form kernel
+    rewrite.  Falls back to the numpy composition when any guard
+    fails — caller pays no penalty.
+
+    Companion :func:`ebt_tiny_dispatched_on_gpu` reports whether the
+    most-recent ``ebt_tiny`` call on this thread actually fired on
+    the GPU (vs. fell back to numpy).  The benchmark and tests use
+    it to prove every native row really took the GPU path.
 
     Returns ``(B, D)`` best candidates.
     """
@@ -477,16 +484,48 @@ def ebt_tiny(
         raise ValueError(
             f"ebt_tiny requires y0.shape == (B*K, D) = "
             f"{(B*K, D)}; got {y_arr.shape}.")
-    if y_arr.dtype == np.float32 and K <= 256 and D <= 256 and T > 0:
+    _set_ebt_tiny_last_route("python_fallback")
+    if y_arr.dtype == np.float32 and K <= 256 and T > 0:
         gpu_out = _try_apple_gpu_ebt_tiny_f32(
             y_arr, grad_arr, float(eta), int(T), int(B), int(K), int(D))
         if gpu_out is not None:
+            _set_ebt_tiny_last_route("apple_gpu")
             return gpu_out
     # numpy fallback — same arithmetic structure.
     y_T = y_arr - (T * eta) * grad_arr
     energies = np.sum(y_T * y_T, axis=1).reshape(B, K)
     candidates = y_T.reshape(B, K, D)
     return candidates[np.arange(B), energies.argmin(axis=1)]
+
+
+# Thread-local "did the last ebt_tiny call hit the GPU?" probe.  The
+# benchmark + tests use this to prove every native-labeled workload
+# row really took the GPU path — covers the case where the guard
+# rejects the input (e.g., K > 256) and the function silently falls
+# back to numpy.  Cheap to maintain (one string write per call).
+import threading as _threading
+class _EbtTinyLastRoute(_threading.local):
+    def __init__(self) -> None:
+        super().__init__()
+        self.value: str = "unset"
+_EBT_TINY_LAST_ROUTE = _EbtTinyLastRoute()
+
+
+def _set_ebt_tiny_last_route(route: str) -> None:
+    _EBT_TINY_LAST_ROUTE.value = route
+
+
+def ebt_tiny_dispatched_on_gpu() -> bool:
+    """``True`` iff the most-recent :func:`ebt_tiny` call on this
+    thread ran on the GPU.  ``False`` after a fallback or when no
+    call has happened yet."""
+    return _EBT_TINY_LAST_ROUTE.value == "apple_gpu"
+
+
+def ebt_tiny_last_route() -> str:
+    """Diagnostic string: ``"apple_gpu"``, ``"python_fallback"``, or
+    ``"unset"``."""
+    return _EBT_TINY_LAST_ROUTE.value
 
 
 # ---------------------------------------------------------------------------
@@ -532,36 +571,45 @@ def _try_apple_gpu_ebt_tiny_f32(
     """Fused EBT-tiny pipeline on Apple GPU.
 
     Returns ``(B, D)`` array of best candidates or ``None`` to fall
-    back when the runtime isn't reachable or guard rails fail."""
+    back when the runtime isn't reachable or guard rails fail.
+
+    Post-2026-05-17 widening: ``D`` is unbounded (kernel streams the
+    closed-form expression).  ``K`` is still bounded by 256 — that's
+    the threadgroup-size budget for the K-way argmin reduction.
+    """
     if y0.dtype != np.float32 or grad.dtype != np.float32:
         return None
     if y0.size != B * K * D or grad.size != B * K * D:
         return None
-    if K > 256 or D > 256:
+    if K > 256:
         return None
     y0_c = np.ascontiguousarray(y0)
     grad_c = np.ascontiguousarray(grad)
     try:
         import ctypes
-        from tessera._apple_gpu_dispatch import bind_symbol
+        from tessera.compiler import jit_bridge as _bridge
     except ImportError:
-        return None
-    fn = bind_symbol(
-        "tessera_apple_gpu_ebm_ebt_tiny_refinement_argmin_f32",
-        (ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_float, ctypes.c_int32,
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32),
-    )
-    if fn is None:
         return None
     out = np.zeros((B, D), dtype=np.float32)
     p = ctypes.POINTER(ctypes.c_float)
-    fn(y0_c.ctypes.data_as(p), grad_c.ctypes.data_as(p),
-       ctypes.c_float(eta), ctypes.c_int32(T),
-       out.ctypes.data_as(p),
-       ctypes.c_int32(B), ctypes.c_int32(K), ctypes.c_int32(D))
+    argtypes = (ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_float, ctypes.c_int32,
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_int32, ctypes.c_int32, ctypes.c_int32)
+    args = (y0_c.ctypes.data_as(p), grad_c.ctypes.data_as(p),
+            ctypes.c_float(eta), ctypes.c_int32(T),
+            out.ctypes.data_as(p),
+            ctypes.c_int32(B), ctypes.c_int32(K), ctypes.c_int32(D))
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            "ebm_ebt_tiny", argtypes=argtypes, args=args,
+            args_summary=_bridge.shaped_summary(y0_c, grad_c),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
     return out
 
 

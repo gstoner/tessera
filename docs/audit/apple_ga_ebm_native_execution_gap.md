@@ -226,11 +226,20 @@ EBM is mature at the Python reference and dialect-intent layers:
 - `backend_manifest.py` marks those eight EBM rows as `apple_gpu=fused`.
 - `benchmark_ga_ebm.py --ci` emits native EBM rows and Python-reference rows
   side by side so speedup and correctness are visible in one report.
-- Workload mode benchmarks `ebt_tiny_refinement` using native
-  `ebm_refinement` plus native hard-argmin `self_verify`, paired with the Python
-  reference chain.
-- `--ebt-sweep` records the break-even ladder and currently reports
-  `first_native_win_shape=None`, documenting the dispatch-overhead finding.
+- Workload mode benchmarks `ebt_tiny_refinement` using the fused
+  single-dispatch `ebm.ebt_tiny` kernel (refinement + per-row energy +
+  K-way argmin in one Metal pass; streaming closed-form so D is
+  unbounded, K ≤ 256), paired with the Python reference chain.  Every
+  native row carries a `dispatched_on_gpu` proof bit so silent numpy
+  fallbacks (e.g., K > 256) are labeled `degraded_fallback` instead of
+  being mistaken for native wins.
+- `--ebt-sweep` records the break-even ladder.  After the kernel
+  widening + proof-of-dispatch hardening the sweep tags each shape
+  with `status="native_dispatched"` or `"degraded_fallback"` and only
+  computes a `speedup` for the former.  Headline numbers from a recent
+  M-series run: first native win at `B=16,K=32,D=128,T=8` (~1.1×),
+  peak ~55× at `B=64,K=128,D=1024,T=256`.  These will drift across
+  hosts; the schema + proof bit is the stable contract.
 
 What is missing:
 
@@ -238,8 +247,13 @@ What is missing:
 - `ebm_partition_exact` executes through Python/NumPy, not Apple GPU.
 - Arbitrary user-defined energy functions do not yet lower to native MSL; the
   current native `ebm_energy` row is the quadratic specialization.
-- Most EBM native rows are benchmark-driver C ABI dispatches today; only
-  `ebm_inner_step` routes through the public Python API dispatcher.
+- 14 of 26 fast paths route through the `jit_bridge` (12 GA + 2 EBM
+  including the `ga_feature_pipeline` and `ebt_tiny_refinement` workloads);
+  the remaining 12 fast paths (`grade_projection`, `ext_deriv`, `vec_deriv`,
+  `codiff`, `integral`, `langevin_step`, `decode_init`, `bivector_langevin`,
+  `sphere_langevin`, `refinement`, `self_verify`, `energy_quadratic`) still
+  call `_apple_gpu_dispatch.bind_symbol` directly — correctness-equivalent
+  but invisible to the route trace.
 
 Assessment: **EBM now has measured native Apple GPU coverage for the
 inner-loop/sampler/decode/self-verify/quadratic-energy slice, plus a tiny

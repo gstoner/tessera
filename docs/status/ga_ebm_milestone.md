@@ -13,10 +13,10 @@
 | **GA primitives (Clifford)** | ✅ all native + benchmarked | 17 / 17 fused MSL kernels on Apple GPU |
 | **EBM primitives (native)** | 🟡 close to complete, 1 to go | **8 / 9** with fused MSL kernels |
 | **EBM primitives (Python ref only)** | ⏳ 1 op | Only `ebm_partition_exact` — exhaustive small-state sum, not GPU-shaped |
-| **Workload benchmarks** | ✅ 2 composite chains, **all driven through public APIs** | `ga_feature_pipeline` (33× speedup); `ebt_tiny_refinement` (fused single-dispatch kernel) |
-| **EBT-tiny break-even sweep** | ✅ opt-in mode (`--ebt-sweep`) | After fused `ebt_tiny` kernel: **first native win at `B=32,K=64,D=512/T=32` (17.9×); peak 116× at `B=64,K=128,D=1024/T=256`** |
-| **GA / EBM via `tessera.ga.*` / `tessera.ebm.*`** | 🟢 **integration gap fully closed** | **17 / 17 GA + 9 / 9 native EBM** ops route through [`tessera._apple_gpu_dispatch`](../../python/tessera/_apple_gpu_dispatch.py) (incl. new `ebm.ebt_tiny`) |
-| **JIT / compiler bridge** | ✅ **landed** | [`tessera.compiler.jit_bridge`](../../python/tessera/compiler/jit_bridge.py) — Python frontend → manifest resolve → shared loader dispatch + thread-local route trace (`op`, `target`, `status`, `symbol`, `context`, `latency_ms`). Benchmark records per-row `routes` column proving each dispatch went through the bridge. |
+| **Workload benchmarks** | ✅ 2 composite chains, **all driven through public APIs**, every native row carries a `dispatched_on_gpu` proof bit | `ga_feature_pipeline` (decisive native win); `ebt_tiny_refinement` (loses at tiny default shape — honest reporting) |
+| **EBT-tiny break-even sweep** | ✅ opt-in mode (`--ebt-sweep`), summary tags each shape with `status="native_dispatched"` or `"degraded_fallback"` | Widened **streaming closed-form** kernel (any `D`; `K ≤ 256`). Recent M-series run: first native win at `B=16,K=32,D=128/T=8` (~1.1×); peak **~55× at `B=64,K=128,D=1024/T=256`**. Numbers will drift across hosts — the proof bit is the stable contract. |
+| **GA / EBM via `tessera.ga.*` / `tessera.ebm.*`** | 🟢 **integration gap fully closed** | **17 / 17 GA + 9 / 9 native EBM** ops route through [`tessera._apple_gpu_dispatch`](../../python/tessera/_apple_gpu_dispatch.py) (incl. `ebm.ebt_tiny`) |
+| **JIT / compiler bridge** | 🟡 **landed for 14 of 26 fast paths** | [`tessera.compiler.jit_bridge`](../../python/tessera/compiler/jit_bridge.py) — Python frontend → manifest resolve → shared loader dispatch + thread-local route trace. Bridge-migrated set: 12 GA ops (`inner`/`reverse`/`grade_involution`/`conjugate`/`hodge_star`/`exp`/`log`/`norm`/`geometric_product`/`wedge`/`left_contraction`/`rotor_sandwich`) + 2 EBM ops (`inner_step`, `ebt_tiny`). The remaining 12 fast paths still call `_apple_gpu_dispatch.bind_symbol` directly — correctness-equivalent but bypass the route trace. |
 | **Build / test gate** | ✅ deterministic CI test, **in `scripts/validate.sh` spine** | [`tests/unit/test_benchmark_ga_ebm.py`](../../tests/unit/test_benchmark_ga_ebm.py) — 118 tests + 20-test [`tests/unit/test_jit_bridge.py`](../../tests/unit/test_jit_bridge.py), graceful non-Darwin skip |
 
 ## What's claimed
@@ -46,14 +46,19 @@
 
 ## Known non-claims (do not over-promise)
 
-1. **`ebm_refinement` now wins at the right scale** (was open in the
-   previous revision of this doc). The new fused MSL kernel runs all
-   T inner-step iterations inside a single dispatch — each thread
-   keeps its `y_i` in a register and loops T times.  Break-even at
-   `(B=32, K=128, D=512, T=64)`; peak speedup 20.3× at
-   `(B=64, K=128, D=1024, T=256)`.  At sub-millisecond numpy times
-   (small shapes) the native kernel still loses to dispatch overhead
-   — that's reported honestly via the sweep summary.
+1. **EBT-tiny native wins are real, but the precise numbers drift.**
+   The 2026-05-17 streaming closed-form kernel rewrite removed the
+   per-thread D-vector register buffer (which had a hard 256-element
+   cap) — D is now unbounded; K is still bounded at 256 by the
+   threadgroup-size budget for the K-way argmin reduction.  Every
+   native row in the report carries a `dispatched_on_gpu` proof bit
+   sourced from `tessera.ebm.ebt_tiny_dispatched_on_gpu()` — silent
+   numpy fallbacks (e.g., `K > 256`) are now labeled
+   `status="degraded_fallback"` in the sweep summary instead of being
+   reported as native wins.  Headline speedups (~55× peak at
+   `B=64,K=128,D=1024,T=256` on a recent M-series run) will drift
+   across hosts and toolchain versions; the schema + proof bit is
+   the stable contract.
 
 2. **Some single-op EBM rows have native-vs-Python latency that is
    *worse* at small shapes.** Single-element pointwise kernels
@@ -62,13 +67,20 @@
    `ga_feature_pipeline` workload still wins 13× because the chained
    primitives amortize dispatch over real arithmetic.
 
-3. **Public-API GPU coverage is now complete** for both GA (17/17)
-   and native EBM (9/9 including the new `ebm.ebt_tiny` fused
-   pipeline).  Every `tessera.ga.*` and `tessera.ebm.*` user call
-   that has a fused MSL kernel transparently routes through
+3. **Public-API GPU coverage is complete** for both GA (17/17) and
+   native EBM (9/9 including the `ebm.ebt_tiny` fused pipeline).
+   Every `tessera.ga.*` and `tessera.ebm.*` user call that has a
+   fused MSL kernel transparently routes through
    `tessera._apple_gpu_dispatch` when the input shape + dtype match
    the manifest contract; on non-Darwin or with a mismatched dtype
    the numpy reference path runs instead.
+   **JIT-bridge coverage is partial** (14 of 26 fast paths): 12 GA
+   ops (the unary 8x8 / binary 8x8 / norm / inner families) and 2
+   EBM ops (`inner_step`, `ebt_tiny`) route through
+   `jit_bridge.dispatch_via_manifest` and produce route-trace rows;
+   the remaining 12 fast paths still call the shared loader
+   directly and are correctness-equivalent but invisible to the
+   trace.
 
 4. **No on-device RNG yet.**  The native `langevin_step` /
    `decode_init` / `sphere_langevin` kernels take a *host-supplied

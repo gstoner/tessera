@@ -23,14 +23,23 @@ on Apple GPU as of GA11, 2026-05-17):
   Weighted reduction (N×8, N → 8):
     integral
 
-EBM coverage (Python execution paths today — the EBM ops do not yet
-ship Apple GPU MSL kernels, but the geometric-Langevin path uses the
-GA primitives so the GA kernels accelerate it transitively when the
-analytic gradient is wired into them):
+EBM coverage (8 of 9 native MSL kernels + 1 Python reference):
 
-  energy, inner_step, langevin_step (analytic grad), self_verify,
-  decode_init, partition_function_exact,
-  bivector_langevin_step, sphere_langevin_step
+  Native MSL (Apple GPU): inner_step, refinement (fused single-dispatch
+    T-step closed-form), langevin_step, decode_init,
+    bivector_langevin_step (composition over langevin_step on
+    grade-projected inputs), sphere_langevin_step, self_verify
+    (hard-argmin), energy (quadratic specialization).
+  Native MSL (workload-only fused kernel): ebt_tiny (streaming
+    closed-form refinement + per-row energy + K-way argmin in one
+    Metal dispatch; K <= 256, D unbounded).
+  Python reference only: partition_function_exact (exhaustive
+    small-state sum, not GPU-shaped).
+
+Every native EBM row carries a ``dispatched_on_gpu`` proof bit
+sourced from ``tessera.ebm.ebt_tiny_dispatched_on_gpu()`` (for the
+fused workload kernel) or the jit_bridge route trace (for all the
+others) so a silent numpy fallback cannot mislabel a row as native.
 
 Output schema (matches ``benchmarks/benchmark_gemm.py`` for
 roofline-tool compatibility):
@@ -62,7 +71,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import numpy as np
 
@@ -1261,14 +1270,15 @@ def _workload_ebt_tiny_python_path(
 def _workload_ebt_tiny_apple_gpu_path(
     rt: ctypes.CDLL, T: int, *,
     B: int = 4, K: int = 8, D: int = 6,
-) -> tuple[Callable[[], np.ndarray], float, tuple[str, ...], str]:
+) -> tuple[Callable[[], np.ndarray], float, tuple[str, ...], str, bool]:
     """Apple-GPU EBT-tiny loop through the **fused public API**.
 
-    ``ebm.ebt_tiny(y0, grad, eta=eta, T=T, B=B, K=K, D=D)`` routes
-    through ``tessera._apple_gpu_dispatch`` to the fused MSL kernel
-    ``ebm_ebt_tiny_refinement_argmin_f32`` — a single dispatch that
-    runs T-step refinement in registers, computes squared-norm
-    energies per candidate, and hard-argmins over K, all on-device.
+    Returns ``(step, err, symbols, shape_descriptor, dispatched_on_gpu)``.
+    ``dispatched_on_gpu`` is the proof bit: it is ``True`` only when
+    the most-recent ``ebm.ebt_tiny`` call ran on the GPU.  Captured
+    via :func:`tessera.ebm.ebt_tiny_dispatched_on_gpu` so a silent
+    fallback to numpy (e.g., the input violates a guard rail) cannot
+    mislabel a row as native.
 
     The ``rt`` parameter is kept for ABI parity with the other
     workload builders but unused; the dispatcher manages its own
@@ -1283,13 +1293,14 @@ def _workload_ebt_tiny_apple_gpu_path(
         return ebm.ebt_tiny(y0_c, grad_c, eta=eta, T=T, B=B, K=K, D=D)
 
     out = step()
+    dispatched_on_gpu = ebm.ebt_tiny_dispatched_on_gpu()
     ref, _, _ = _workload_ebt_tiny_python_path(T, B=B, K=K, D=D)
     ref_out = ref()
     err = float(np.abs(out - ref_out).max())
     syms = (
         "tessera_apple_gpu_ebm_ebt_tiny_refinement_argmin_f32 [via ebm.ebt_tiny]",
     )
-    return step, err, syms, f"B={B},K={K},D={D}/T={T}"
+    return (step, err, syms, f"B={B},K={K},D={D}/T={T}", dispatched_on_gpu)
 
 
 # Default break-even sweep — chosen so the report shows both regimes
@@ -1316,21 +1327,37 @@ def run_workload_apple_gpu(name: str, shape: str,
                             dispatch: Callable, err: float,
                             symbols: tuple[str, ...],
                             tolerance: float, reps: int,
-                            device: str, version: str) -> dict[str, Any]:
+                            device: str, version: str, *,
+                            dispatched_on_gpu: Optional[bool] = None,
+                            ) -> dict[str, Any]:
+    """Build an ``apple_gpu`` workload row.
+
+    ``dispatched_on_gpu`` is the proof-of-dispatch bit.  When it's
+    ``False`` the row is degraded to ``backend="python_ref"`` +
+    ``mode="reference_chain"`` + ``ok=False`` so consumers can't
+    mistake a silent numpy fallback for a real native dispatch.  When
+    ``None`` (legacy workloads that don't yet provide the probe) the
+    bit defaults to ``True`` for backward compat.
+    """
     samples_ms = collect_samples(dispatch, reps)
     timing = timing_stats(samples_ms)
+    is_native = (dispatched_on_gpu is None) or bool(dispatched_on_gpu)
+    backend = "apple_gpu" if is_native else "python_ref"
+    mode = "fused_chain" if is_native else "reference_chain_fallback"
+    ok = (err <= tolerance) and is_native
     return {
-        "backend": "apple_gpu",
+        "backend": backend,
         "namespace": "workload",
         "op": name,
         "shape": shape,
         "dtype": "f32",
-        "mode": "fused_chain",
+        "mode": mode,
         "reps": reps,
         **timing,
         "max_abs_err": err,
         "tolerance": tolerance,
-        "ok": err <= tolerance,
+        "ok": ok,
+        "dispatched_on_gpu": is_native,
         "symbols": list(symbols),
         "device": device,
         "tessera_version": version,
@@ -1652,11 +1679,13 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
 
         # Workload pair 2: EBT-tiny refinement loop (default shape).
         if rt is not None:
-            dispatch, err, syms, shape = _workload_ebt_tiny_apple_gpu_path(
+            (dispatch, err, syms, shape,
+             dispatched_on_gpu) = _workload_ebt_tiny_apple_gpu_path(
                 rt, refinement_T)
             rows.append(run_workload_apple_gpu(
                 "ebt_tiny_refinement", shape, dispatch, err, syms,
                 tolerance=1e-4, reps=reps, device=device, version=version,
+                dispatched_on_gpu=dispatched_on_gpu,
             ))
         dispatch, err, shape = _workload_ebt_tiny_python_path(refinement_T)
         rows.append(run_workload_python(
@@ -1671,12 +1700,14 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
     if include_ebt_sweep:
         for (B, K, D, T) in ebt_sweep_points:
             if rt is not None:
-                dispatch, err, syms, shape = _workload_ebt_tiny_apple_gpu_path(
+                (dispatch, err, syms, shape,
+                 dispatched_on_gpu) = _workload_ebt_tiny_apple_gpu_path(
                     rt, T, B=B, K=K, D=D)
                 rows.append(run_workload_apple_gpu(
                     "ebt_tiny_sweep", shape, dispatch, err, syms,
                     tolerance=1e-4, reps=reps,
                     device=device, version=version,
+                    dispatched_on_gpu=dispatched_on_gpu,
                 ))
             dispatch, err, shape = _workload_ebt_tiny_python_path(
                 T, B=B, K=K, D=D)
@@ -1735,36 +1766,56 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
 def _ebt_sweep_break_even_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Produce a per-shape native-vs-numpy comparison table.
 
-    Pairs each ``ebt_tiny_sweep`` row by its ``shape`` descriptor and
-    computes ``speedup = python_ms / native_ms`` plus a boolean
-    ``native_wins`` (speedup > 1).  Useful as the headline of the
-    sweep — consumers can scan one column to see the break-even.
+    Speedup is only computed when the GPU attempt actually dispatched
+    on-device (``dispatched_on_gpu=True``).  A row whose GPU path
+    silently fell back to numpy lives in the table with
+    ``status="degraded_fallback"`` and no ``speedup`` column — the
+    sweep refuses to claim a win for shapes that didn't take the
+    native path.
     """
+    # Two slots per shape: the GPU-attempt row (any mode), and the
+    # explicit python_ref baseline row (``mode="reference_chain"``).
     pairs: dict[str, dict[str, dict[str, Any]]] = {}
     for r in rows:
         if r["op"] != "ebt_tiny_sweep":
             continue
-        pairs.setdefault(r["shape"], {})[r["backend"]] = r
+        slot_key = "baseline" if r.get("mode") == "reference_chain" else "native_attempt"
+        pairs.setdefault(r["shape"], {})[slot_key] = r
     table: list[dict[str, Any]] = []
-    for shape, by_backend in sorted(pairs.items()):
-        native = by_backend.get("apple_gpu")
-        python = by_backend.get("python_ref")
+    for shape, slots in sorted(pairs.items()):
+        native = slots.get("native_attempt")
+        python = slots.get("baseline")
         entry: dict[str, Any] = {"shape": shape}
         if native is not None:
             entry["native_ms"] = native["latency_ms"]
+            entry["native_dispatched_on_gpu"] = bool(
+                native.get("dispatched_on_gpu", False))
         if python is not None:
             entry["python_ms"] = python["latency_ms"]
-        if native is not None and python is not None and native["latency_ms"] > 0:
-            sp = python["latency_ms"] / native["latency_ms"]
-            entry["speedup"] = sp
-            entry["native_wins"] = sp >= 1.0
+        if native is not None and python is not None:
+            if native.get("dispatched_on_gpu") and native["latency_ms"] > 0:
+                sp = python["latency_ms"] / native["latency_ms"]
+                entry["speedup"] = sp
+                entry["native_wins"] = sp >= 1.0
+                entry["status"] = "native_dispatched"
+            else:
+                # Native attempt fell back to numpy — refuse to compute
+                # a "speedup" since both rows ran numpy and the
+                # comparison is meaningless.
+                entry["status"] = "degraded_fallback"
+                entry["native_wins"] = False
         table.append(entry)
     break_even = None
     for entry in table:
         if entry.get("native_wins"):
             break_even = entry["shape"]
             break
-    return {"table": table, "first_native_win_shape": break_even}
+    degraded = sum(1 for e in table if e.get("status") == "degraded_fallback")
+    return {
+        "table": table,
+        "first_native_win_shape": break_even,
+        "degraded_count": degraded,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:

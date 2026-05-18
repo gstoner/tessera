@@ -79,7 +79,8 @@ def geometric_product(a: Multivector, b: Multivector) -> Multivector:
     algebra = _same_algebra(a, b)
     if algebra.signature == (3, 0, 0):
         gpu_out = _try_apple_gpu_binary_8x8_cl30_f32(
-            a, b, "tessera_apple_gpu_clifford_geo_product_cl30_f32")
+            a, b, "tessera_apple_gpu_clifford_geo_product_cl30_f32",
+            op_name="clifford_geometric_product")
         if gpu_out is not None:
             return gpu_out
     table = algebra.product_table()
@@ -153,7 +154,8 @@ def wedge(a: Multivector, b: Multivector) -> Multivector:
     algebra = _same_algebra(a, b)
     if algebra.signature == (3, 0, 0):
         gpu_out = _try_apple_gpu_binary_8x8_cl30_f32(
-            a, b, "tessera_apple_gpu_clifford_wedge_cl30_f32")
+            a, b, "tessera_apple_gpu_clifford_wedge_cl30_f32",
+            op_name="clifford_wedge")
         if gpu_out is not None:
             return gpu_out
     table = algebra.product_table()
@@ -195,7 +197,8 @@ def left_contraction(a: Multivector, b: Multivector) -> Multivector:
     algebra = _same_algebra(a, b)
     if algebra.signature == (3, 0, 0):
         gpu_out = _try_apple_gpu_binary_8x8_cl30_f32(
-            a, b, "tessera_apple_gpu_clifford_left_contraction_cl30_f32")
+            a, b, "tessera_apple_gpu_clifford_left_contraction_cl30_f32",
+            op_name="clifford_left_contraction")
         if gpu_out is not None:
             return gpu_out
     table = algebra.product_table()
@@ -271,10 +274,17 @@ def _is_cl30_f32_8axis(*arrays: np.ndarray) -> bool:
 
 
 def _try_apple_gpu_unary_8x8_cl30_f32(
-    a: Multivector, symbol: str,
+    a: Multivector, symbol: str, *, op_name: Optional[str] = None,
 ) -> Optional[Multivector]:
     """Generic ``(in[8], out[8], batch)`` Apple GPU dispatcher for
-    Cl(3,0) unary multivector ops (``exp_mv``, ``reverse``, ...)."""
+    Cl(3,0) unary multivector ops (``exp_mv``, ``reverse``, ...).
+
+    Routes through :func:`tessera.compiler.jit_bridge.dispatch_via_manifest`
+    when ``op_name`` is supplied — the bridge then resolves the symbol
+    through the manifest and records the route in the thread-local
+    trace.  Falls back to a direct ``bind_symbol`` call when ``op_name``
+    is omitted (legacy callers).
+    """
     if a.algebra.signature != (3, 0, 0):
         return None
     A = a.coefficients
@@ -282,22 +292,34 @@ def _try_apple_gpu_unary_8x8_cl30_f32(
         return None
     try:
         import ctypes
-        from tessera._apple_gpu_dispatch import bind_symbol
     except ImportError:
-        return None
-    fn = bind_symbol(
-        symbol,
-        (ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32),
-    )
-    if fn is None:
         return None
     A_c = np.ascontiguousarray(A.reshape(-1, 8))
     batch = A_c.shape[0]
     out = np.zeros_like(A_c)
     p = ctypes.POINTER(ctypes.c_float)
-    fn(A_c.ctypes.data_as(p), out.ctypes.data_as(p), ctypes.c_int32(batch))
+    argtypes = (ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_int32)
+    args = (A_c.ctypes.data_as(p), out.ctypes.data_as(p), ctypes.c_int32(batch))
+    if op_name is not None:
+        try:
+            from tessera.compiler import jit_bridge as _bridge
+            ok = _bridge.dispatch_via_manifest(
+                op_name, argtypes=argtypes, args=args,
+                args_summary=_bridge.shaped_summary(A_c),
+            )
+        except _bridge.JitBridgeMiss:
+            return None
+        if not ok:
+            return None
+        return Multivector(out.reshape(A.shape), a.algebra)
+    # Legacy path — direct bind_symbol, no trace recording.
+    from tessera._apple_gpu_dispatch import bind_symbol
+    fn = bind_symbol(symbol, argtypes)
+    if fn is None:
+        return None
+    fn(*args)
     return Multivector(out.reshape(A.shape), a.algebra)
 
 
@@ -343,7 +365,8 @@ def _try_apple_gpu_inner_cl30_f32(
 
 
 def _try_apple_gpu_norm_cl30_f32(a: Multivector) -> Optional[np.ndarray]:
-    """``|a|`` on ``Cl(3,0)`` f32 batched input."""
+    """``|a|`` on ``Cl(3,0)`` f32 batched input — routed through the
+    JIT bridge so the route is traced + manifest-verified."""
     if a.algebra.signature != (3, 0, 0):
         return None
     A = a.coefficients
@@ -351,22 +374,27 @@ def _try_apple_gpu_norm_cl30_f32(a: Multivector) -> Optional[np.ndarray]:
         return None
     try:
         import ctypes
-        from tessera._apple_gpu_dispatch import bind_symbol
+        from tessera.compiler import jit_bridge as _bridge
     except ImportError:
-        return None
-    fn = bind_symbol(
-        "tessera_apple_gpu_clifford_norm_cl30_f32",
-        (ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32),
-    )
-    if fn is None:
         return None
     A_c = np.ascontiguousarray(A.reshape(-1, 8))
     batch = A_c.shape[0]
     out = np.zeros(batch, dtype=np.float32)
     p = ctypes.POINTER(ctypes.c_float)
-    fn(A_c.ctypes.data_as(p), out.ctypes.data_as(p), ctypes.c_int32(batch))
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            "clifford_norm",
+            argtypes=(ctypes.POINTER(ctypes.c_float),
+                      ctypes.POINTER(ctypes.c_float),
+                      ctypes.c_int32),
+            args=(A_c.ctypes.data_as(p), out.ctypes.data_as(p),
+                  ctypes.c_int32(batch)),
+            args_summary=_bridge.shaped_summary(A_c),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
     return out.reshape(A.shape[:-1]) if A.ndim > 1 else out[0]
 
 
@@ -375,16 +403,19 @@ def _try_apple_gpu_rotor_sandwich_cl30_f32(
 ) -> Optional[Multivector]:
     """``R x R†`` on ``Cl(3,0)`` f32 batched inputs."""
     return _try_apple_gpu_binary_8x8_cl30_f32(
-        rotor, x, "tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32")
+        rotor, x, "tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32",
+        op_name="clifford_rotor_sandwich")
 
 
 def _try_apple_gpu_binary_8x8_cl30_f32(
-    a: Multivector, b: Multivector, symbol: str,
+    a: Multivector, b: Multivector, symbol: str, *,
+    op_name: Optional[str] = None,
 ) -> Optional[Multivector]:
     """Generic Cl(3,0) f32 binary 8×8→8 Apple GPU dispatch helper.
 
     Used by ``geometric_product`` / ``wedge`` / ``left_contraction`` /
     ``rotor_sandwich`` — they share the ``(A, B, Out, batch)`` ABI.
+    Routes through the JIT bridge when ``op_name`` is supplied.
     """
     if a.algebra != b.algebra or a.algebra.signature != (3, 0, 0):
         return None
@@ -394,25 +425,37 @@ def _try_apple_gpu_binary_8x8_cl30_f32(
         return None
     try:
         import ctypes
-        from tessera._apple_gpu_dispatch import bind_symbol
     except ImportError:
-        return None
-    fn = bind_symbol(
-        symbol,
-        (ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32),
-    )
-    if fn is None:
         return None
     A_c = np.ascontiguousarray(A.reshape(-1, 8))
     B_c = np.ascontiguousarray(B.reshape(-1, 8))
     batch = A_c.shape[0]
     out = np.zeros_like(A_c)
     p = ctypes.POINTER(ctypes.c_float)
-    fn(A_c.ctypes.data_as(p), B_c.ctypes.data_as(p), out.ctypes.data_as(p),
-       ctypes.c_int32(batch))
+    argtypes = (ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_int32)
+    args = (A_c.ctypes.data_as(p), B_c.ctypes.data_as(p),
+            out.ctypes.data_as(p), ctypes.c_int32(batch))
+    if op_name is not None:
+        try:
+            from tessera.compiler import jit_bridge as _bridge
+            ok = _bridge.dispatch_via_manifest(
+                op_name, argtypes=argtypes, args=args,
+                args_summary=_bridge.shaped_summary(A_c, B_c),
+            )
+        except _bridge.JitBridgeMiss:
+            return None
+        if not ok:
+            return None
+        return Multivector(out.reshape(A.shape), a.algebra)
+    # Legacy direct-bind path.
+    from tessera._apple_gpu_dispatch import bind_symbol
+    fn = bind_symbol(symbol, argtypes)
+    if fn is None:
+        return None
+    fn(*args)
     return Multivector(out.reshape(A.shape), a.algebra)
 
 
@@ -464,7 +507,8 @@ def reverse(a: Multivector) -> Multivector:
     **Apple GPU fast path**: Cl(3,0) f32 batched inputs route through
     ``tessera_apple_gpu_clifford_reverse_cl30_f32``."""
     gpu_out = _try_apple_gpu_unary_8x8_cl30_f32(
-        a, "tessera_apple_gpu_clifford_reverse_cl30_f32")
+        a, "tessera_apple_gpu_clifford_reverse_cl30_f32",
+        op_name="clifford_reverse")
     if gpu_out is not None:
         return gpu_out
     signs = _grade_sign_array(a.algebra, lambda k: (-1) ** ((k * (k - 1)) // 2))
@@ -481,7 +525,8 @@ def grade_involution(a: Multivector) -> Multivector:
     **Apple GPU fast path**: Cl(3,0) f32 batched inputs route through
     ``tessera_apple_gpu_clifford_grade_involution_cl30_f32``."""
     gpu_out = _try_apple_gpu_unary_8x8_cl30_f32(
-        a, "tessera_apple_gpu_clifford_grade_involution_cl30_f32")
+        a, "tessera_apple_gpu_clifford_grade_involution_cl30_f32",
+        op_name="clifford_grade_involution")
     if gpu_out is not None:
         return gpu_out
     signs = _grade_sign_array(a.algebra, lambda k: (-1) ** k)
@@ -498,7 +543,8 @@ def conjugate(a: Multivector) -> Multivector:
     **Apple GPU fast path**: Cl(3,0) f32 batched inputs route through
     ``tessera_apple_gpu_clifford_conjugate_cl30_f32``."""
     gpu_out = _try_apple_gpu_unary_8x8_cl30_f32(
-        a, "tessera_apple_gpu_clifford_conjugate_cl30_f32")
+        a, "tessera_apple_gpu_clifford_conjugate_cl30_f32",
+        op_name="clifford_conjugate")
     if gpu_out is not None:
         return gpu_out
     return reverse(grade_involution(a))
@@ -556,7 +602,8 @@ def exp_mv(a: Multivector, *, terms: int = 24) -> Multivector:
     series with ``terms`` terms (default 24 is sufficient for ``|a| ≲ 2``).
     """
     gpu_out = _try_apple_gpu_unary_8x8_cl30_f32(
-        a, "tessera_apple_gpu_clifford_exp_cl30_f32")
+        a, "tessera_apple_gpu_clifford_exp_cl30_f32",
+        op_name="clifford_exp")
     if gpu_out is not None:
         return gpu_out
     if _is_pure_bivector_3d(a):
@@ -596,7 +643,8 @@ def log_mv(a: Multivector, *, terms: int = 64) -> Multivector:
     ``tessera_apple_gpu_clifford_log_cl30_f32``.
     """
     gpu_out = _try_apple_gpu_unary_8x8_cl30_f32(
-        a, "tessera_apple_gpu_clifford_log_cl30_f32")
+        a, "tessera_apple_gpu_clifford_log_cl30_f32",
+        op_name="clifford_log")
     if gpu_out is not None:
         return gpu_out
     if a.algebra.signature == (3, 0, 0):

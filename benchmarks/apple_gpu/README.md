@@ -24,23 +24,23 @@ For every primitive the driver exercises the full stack:
 - **GA**: full Apple GPU end-to-end benchmarked. 17/17 primitives `backend=apple_gpu`, `mode=fused`.
 - **EBM (native)**: **8/9 primitives** — `ebm_inner_step`, `ebm_refinement`, `ebm_langevin_step`, `ebm_decode_init`, `ebm_bivector_langevin`, `ebm_sphere_langevin`, `ebm_self_verify`, `ebm_energy` (quadratic specialization). `ebm_bivector_langevin` reuses the `ebm_langevin_step` kernel on grade-projected inputs.
 - **EBM (Python ref)**: 1/9 still no native — `ebm_partition_exact` (exhaustive small-state sum, not GPU-shaped). All 8 promoted EBM ops also emit a `python_ref` row so the native-vs-reference speedup is visible per op.
-- **Workloads**: 2 small composite chains — `ga_feature_pipeline` (`exp → rotor_sandwich → norm`) and `ebt_tiny_refinement` (K-candidate × T-step loop with native `ebm_refinement` + native `ebm_self_verify`). Both emit `apple_gpu` + `python_ref` rows.
-- **EBT-tiny break-even sweep**: opt-in via `--ebt-sweep` — runs a 7-point `(B, K, D, T)` ladder. After the fused `ebm.ebt_tiny` kernel (refinement + energy + argmin in one MSL dispatch): **first native win at `B=32,K=64,D=512/T=32` (17.9×); peak 116× at `B=64,K=128,D=1024/T=256`**.
+- **Workloads**: 2 small composite chains — `ga_feature_pipeline` (`exp → rotor_sandwich → norm`) and `ebt_tiny_refinement` (fused single-dispatch kernel `ebm.ebt_tiny`). Both emit `apple_gpu` + `python_ref` rows; native rows carry a `dispatched_on_gpu` proof bit so a silent fallback can't masquerade as native.
+- **EBT-tiny break-even sweep**: opt-in via `--ebt-sweep`. After the **streaming closed-form fused kernel** (no register-vector spill — works for any `D`, `K ≤ 256` is the only remaining bound): the sweep table includes a `status` per shape (`native_dispatched` vs `degraded_fallback`) and only computes `speedup` when the native attempt actually fired on-device. On a recent M-series run: **first native win at `B=16,K=32,D=128/T=8` (~1.1×); peak ~55× at `B=64,K=128,D=1024/T=256`**. Headline numbers will drift across machines + toolchain versions — the schema (with the dispatch proof + status) is the stable contract.
 - **Integration via `tessera.ga.*` / `tessera.ebm.*`**: **17 / 17 GA + 9 / 9 native EBM** ops route through [`tessera._apple_gpu_dispatch`](../../python/tessera/_apple_gpu_dispatch.py) transparently — every user-visible call with a fused kernel takes the GPU path when its inputs match the manifest contract. The workload benchmarks all call public APIs.
-- **JIT / compiler bridge**: [`tessera.compiler.jit_bridge`](../../python/tessera/compiler/jit_bridge.py) is the single hop between public APIs and the runtime. Each dispatch resolves through `backend_manifest.manifest_for(op)` → picks the `apple_gpu/fused` symbol → binds via the shared loader → records a `JitBridgeRoute(op, target, status, symbol, context, latency_ms)` in a thread-local trace. The benchmark emits a `namespace="jit_bridge"` row per traced op with a `routes` column showing the full chain.
+- **JIT / compiler bridge**: [`tessera.compiler.jit_bridge`](../../python/tessera/compiler/jit_bridge.py) is the single hop between public APIs and the runtime. **10 ops** (the bridge-migrated set, listed below) route through `dispatch_via_manifest` — manifest resolves `(op_name, target) → symbol`, the shared loader binds it, a `JitBridgeRoute(op, target, status, symbol, context, latency_ms)` row appends to the thread-local trace when tracing is on. The remaining fast paths still call `_apple_gpu_dispatch.bind_symbol` directly and are correctness-equivalent but invisible to the trace — migrating the long tail is an open follow-up.
+  - **Bridge-migrated GA ops**: `clifford_inner`, `clifford_reverse`, `clifford_grade_involution`, `clifford_conjugate`, `clifford_hodge_star`, `clifford_exp`, `clifford_log`, `clifford_norm`, `clifford_geometric_product`, `clifford_wedge`, `clifford_left_contraction`, `clifford_rotor_sandwich` (12 of 17 GA — covers the entire `ga_feature_pipeline` workload).
+  - **Bridge-migrated EBM ops**: `ebm_inner_step`, `ebm_ebt_tiny` (2 of 9 native EBM — covers the entire `ebt_tiny_refinement` workload).
 
 ## Workload mode — beyond per-primitive timing
 
 The two workloads exist because per-primitive timing tells only half the story: small primitives are dominated by host overhead, so the win-or-lose verdict only becomes meaningful once a real pipeline strings several kernels together. The workload rows make this explicit:
 
-| Workload | Stack | Native vs Python ref (sample) |
-|---|---|---:|
-| `ga_feature_pipeline` | `clifford_exp → clifford_rotor_sandwich → clifford_norm` on a batch of 32 | **13.2× faster** (0.73ms vs 9.57ms) |
-| `ebt_tiny_refinement` | `ebm_refinement_f32` (T=8 inner-step iterations) + native hard-argmin `self_verify` | currently loses at tiny scale — see notes |
+| Workload | Stack | Headline behavior |
+|---|---|---|
+| `ga_feature_pipeline` | `clifford_exp → clifford_rotor_sandwich → clifford_norm` on a batch of 32 | Native wins decisively (an order of magnitude) — the chain is arithmetically dense + the Python reference goes through `Multivector` object construction per element. |
+| `ebt_tiny_refinement` | `ebm.ebt_tiny` — one Metal dispatch that runs the entire T-step refinement, per-row energy, and K-way argmin in registers (with the 2026-05-17 streaming closed-form rewrite, any `D`; `K ≤ 256`). | At the default tiny shape `(B=4, K=8, D=6, T=8)` numpy wins (~0.2 ms dispatch floor beats microsecond closed-form numpy). The `--ebt-sweep` ladder shows the crossover — see the break-even sweep section. |
 
-`ebt_tiny_refinement` runs slower natively at the tested scale (B=4, K=8, D=6, T=8 → 192 floats per inner step) because the per-iteration Metal dispatch overhead (~0.2ms) dominates the ~250-flop affine combo numpy does in microseconds. The fact that the bench reports it honestly is the point — it tells you the **break-even** for `ebm_refinement` is somewhere around `n * T > a few thousand floats per dispatch`, useful information for kernel scheduling.
-
-`ga_feature_pipeline` shows the inverse: a 3-stage MSL chain on 32×8 inputs already wins by an order of magnitude because the GA primitives are arithmetically dense (rotor_sandwich is ~64 multiply-adds per element) and the Python reference goes through `Multivector` object construction per element.
+The native row's `dispatched_on_gpu` bit is the proof: if the public-API guard rejects the input (e.g., `K > 256`), the row is degraded to `backend="python_ref"` + `mode="reference_chain_fallback"` + `ok=False` rather than silently misleading consumers.
 
 ## Usage
 

@@ -50,7 +50,8 @@ def hodge_star(mv: Multivector) -> Multivector:
     """
     from tessera.ga.ops import _try_apple_gpu_unary_8x8_cl30_f32
     gpu_out = _try_apple_gpu_unary_8x8_cl30_f32(
-        mv, "tessera_apple_gpu_clifford_hodge_star_cl30_f32")
+        mv, "tessera_apple_gpu_clifford_hodge_star_cl30_f32",
+        op_name="clifford_hodge_star")
     if gpu_out is not None:
         return gpu_out
     algebra = mv.algebra

@@ -22,6 +22,8 @@ See `docs/audit/ebm_scope_lock.md` for the locked decisions,
 from tessera.ebm.energy import (
     decode_init,
     ebt_tiny,
+    ebt_tiny_dispatched_on_gpu,
+    ebt_tiny_last_route,
     energy,
     energy_quadratic,
     inner_step,

@@ -6197,9 +6197,16 @@ static NSString *const kEBMEBTTinyRefinementArgminF32Source = @R"MSL(
 using namespace metal;
 
 // One threadgroup per batch.  One thread per candidate (K <= 256 lanes).
-// Each thread runs the T-step refinement on its candidate row in a
-// register-local D-vector (D <= 256), computes the per-row energy, then
-// participates in a K-way argmin via threadgroup-shared scratch.
+// Streaming closed-form variant — the original kernel kept the full
+// refined candidate row in a per-thread register buffer
+// (``float y_local[256]``) which capped ``D`` at 256.  With a fixed
+// gradient ``y_T = y0 - T*eta*grad`` is the exact closed form of the
+// T-step recurrence, so each thread can stream through ``D`` once,
+// accumulating the squared-norm energy without materializing ``y_T``
+// anywhere.  The winning thread streams a second pass to write its
+// ``y_T`` row to ``out``.  No register-pressure cap on ``D`` — the
+// only remaining limit is ``K <= 256`` (threadgroup-size budget for
+// the argmin reduction).
 kernel void ebm_ebt_tiny_refinement_argmin_f32(
     device const float* y0    [[buffer(0)]],
     device const float* grad  [[buffer(1)]],
@@ -6217,17 +6224,16 @@ kernel void ebm_ebt_tiny_refinement_argmin_f32(
     int k = (int)tid.x;
     if (b >= B || k >= K) return;
 
-    // Per-thread register buffer for the refined candidate row.
-    float y_local[256];
+    // Closed-form coefficient: y_T[d] = y0[d] - T*eta*grad[d] for
+    // fixed grad.  Each thread streams D once to accumulate the
+    // squared-norm energy of its candidate.
+    float coeff = (float)T * eta;
     int64_t base = ((int64_t)b * K + k) * D;
-    for (int d = 0; d < D; ++d) y_local[d] = y0[base + d];
-    for (int t = 0; t < T; ++t) {
-        for (int d = 0; d < D; ++d) {
-            y_local[d] = y_local[d] - eta * grad[base + d];
-        }
-    }
     float e = 0.0f;
-    for (int d = 0; d < D; ++d) e += y_local[d] * y_local[d];
+    for (int d = 0; d < D; ++d) {
+        float yi = y0[base + d] - coeff * grad[base + d];
+        e += yi * yi;
+    }
 
     // K-way argmin via threadgroup-shared scratch.  K <= 256 lanes.
     threadgroup float  energies[256];
@@ -6243,17 +6249,19 @@ kernel void ebm_ebt_tiny_refinement_argmin_f32(
                 best = kk;
             }
         }
-        // Signal the winner index to all threads via the same scratch.
-        // Store it in slot 0 as a float-encoded int (well within fp32
-        // integer-representable range for K <= 2^24).
+        // Signal the winner index via the same scratch (well within
+        // fp32 integer-representable range for K <= 2^24).
         energies[0] = (float)best;
     }
     threadgroup_barrier(mem_flags::mem_threadgroup);
     int best_k = (int)energies[0];
 
+    // The winning thread streams D a second time to write y_T to out.
     if (k == best_k) {
+        int64_t base_winner = ((int64_t)b * K + best_k) * D;
         for (int d = 0; d < D; ++d) {
-            out[(int64_t)b * D + d] = y_local[d];
+            out[(int64_t)b * D + d] = y0[base_winner + d]
+                                       - coeff * grad[base_winner + d];
         }
     }
 }
@@ -6263,7 +6271,9 @@ static bool dispatch_ebm_ebt_tiny_refinement_argmin_f32_msl(
     MetalDeviceContext &ctx,
     const float* y0, const float* grad, float eta, int32_t T,
     float* out, int32_t B, int32_t K, int32_t D) {
-  if (K > 256 || D > 256) return false;
+  // K still bounded by the threadgroup-size budget; D is unbounded
+  // after the streaming-closed-form rewrite.
+  if (K > 256) return false;
   @autoreleasepool {
     id<MTLComputePipelineState> pso = compile_msl_kernel(
         ctx, kEBMEBTTinyRefinementArgminF32Source,
@@ -6305,7 +6315,7 @@ extern "C" void tessera_apple_gpu_ebm_ebt_tiny_refinement_argmin_f32(
     const float* y0, const float* grad, float eta, int32_t T,
     float* out, int32_t B, int32_t K, int32_t D) {
   MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && K <= 256 && D <= 256 &&
+  if (ctx.ok && K <= 256 &&
       dispatch_ebm_ebt_tiny_refinement_argmin_f32_msl(
           ctx, y0, grad, eta, T, out, B, K, D)) return;
   reference_ebm_ebt_tiny_refinement_argmin_f32(

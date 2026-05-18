@@ -152,6 +152,7 @@ These decisions are closed unless a new normative spec supersedes them.
 | Need | Command |
 |------|---------|
 | Python unit tests | `pytest tests/unit -v` |
+| GA + EBM native Apple GPU health check | `python benchmarks/apple_gpu/benchmark_ga_ebm.py --ci` |
 | Optional performance tests | `TESSERA_RUN_PERFORMANCE_TESTS=1 scripts/test.sh` |
 | Full CPU validation spine | `scripts/validate.sh` |
 | MLIR lit tests | `python -m lit tests/tessera-ir/ -v` |

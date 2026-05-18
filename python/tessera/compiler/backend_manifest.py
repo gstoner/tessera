@@ -752,14 +752,16 @@ def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
 # they need a dedicated table that `manifest_for()` routes to via the
 # `ebm_*` prefix.
 #
-# Status as of GA11 / EBM benchmark milestone:
+# Status as of the GA + EBM native benchmark milestone:
 #   - The Python reference path in `tessera.ebm` runs on every CPU host
 #     (x86 / apple_cpu) — both targets declare `reference`.
-#   - `ebm_inner_step` is the first EBM primitive with a fused MSL
-#     kernel on Apple GPU; `ebm_refinement` is its multi-iteration
-#     wrapper (EBT-style K-candidate × T-step inner refinement).
-#   - All other EBM primitives carry `apple_gpu = planned` — they
-#     execute via the Python reference path on Apple Silicon today.
+#   - Six EBM rows have fused Apple GPU MSL dispatch:
+#       ebm_inner_step, ebm_refinement, ebm_langevin_step,
+#       ebm_decode_init, ebm_bivector_langevin, ebm_sphere_langevin.
+#   - Three core benchmark rows remain Python-only on Apple GPU:
+#       ebm_energy, ebm_self_verify, ebm_partition_exact.
+#   - Other registered partition-estimator variants remain planned until
+#     they get dedicated benchmark rows and native kernels.
 # ─────────────────────────────────────────────────────────────────────────────
 
 _EBM_CPU_DTYPES = ("fp32", "fp64")

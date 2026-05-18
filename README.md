@@ -89,8 +89,8 @@ Current high-level status:
 | Distributed APIs, cyclic sharding, collectives scaffolding | implemented / scaffolded |
 | TPU target profile and StableHLO/Shardy artifacts | implemented / lit-testable |
 | Solver, sparse/RNG, linalg, resilience, and autotuning foundations | implemented / lit-testable |
-| Clifford / geometric algebra Python surface, autodiff registry, dialect, lowering passes, and Apple GPU fused kernels | implemented / lit-testable; Apple GPU fused kernels for all 17 registered GA primitives |
-| Energy-based model Python surface, samplers, losses, partition estimators, dialect, and annotation passes | implemented / lit-testable / mock-runtime |
+| Clifford / geometric algebra Python surface, autodiff registry, dialect, lowering passes, and Apple GPU fused kernels | implemented / lit-testable; 17/17 Apple GPU native primitives benchmarked |
+| Energy-based model Python surface, samplers, losses, partition estimators, dialect, annotation passes, and Apple GPU kernels | implemented / lit-testable; 6 native Apple GPU EBM ops benchmarked, 3 core rows remain Python-only |
 | Runtime C ABI and Python wrapper | mock-runtime; hardware-runtime when C runtime is built |
 | ROCm and Apple Target IR artifact lowering | implemented / lit-testable / artifact-only |
 | Metalium, Cerebras, Rubin CPX backend trees | scaffolded / lit-testable unless backend docs say otherwise |
@@ -165,8 +165,9 @@ Native execution status is layer-specific:
 
 | Component | Python reference | MLIR / lit | Backend manifest | Native execution |
 |-----------|------------------|------------|------------------|------------------|
-| GA signature, multivector values, ops, calculus, and autodiff | implemented | implemented / lit-testable for dialect and lowering fixtures | implemented for registered `clifford_*` primitives | Apple GPU fused kernels for all 17 registered GA primitives; x86 and Apple CPU are reference-first; NVIDIA/ROCm planned |
-| EBM energy primitives, samplers, partition estimators, losses, and manifold-aware sampling | implemented | implemented / lit-testable for dialect and annotation-pass fixtures | implemented / partial by primitive class | mock-runtime through Python/NumPy reference; backend fusion and scheduling are not yet hardware-runtime claims |
+| GA signature, multivector values, ops, calculus, and autodiff | implemented | implemented / lit-testable for dialect and lowering fixtures | implemented for registered `clifford_*` primitives | 17/17 Apple GPU native primitives benchmarked; x86 and Apple CPU are reference-first; NVIDIA/ROCm planned |
+| EBM energy primitives, samplers, partition estimators, losses, and manifold-aware sampling | implemented | implemented / lit-testable for dialect and annotation-pass fixtures | implemented for registered `ebm_*` primitives | 6 native Apple GPU ops benchmarked (`inner_step`, `refinement`, `langevin_step`, `decode_init`, `bivector_langevin`, `sphere_langevin`); 3 core rows remain Python-only (`energy`, `self_verify`, `partition_exact`) |
+| GA/EBM composite workloads | implemented as deterministic benchmark workloads | n/a | uses GA/EBM manifest-resolved symbols where native | `ga_feature_pipeline` and `ebt_tiny_refinement` benchmarked with Apple GPU and Python-reference rows |
 
 ---
 
@@ -197,6 +198,9 @@ pip install -e ".[dev]"
 
 # Python unit tests configured by pyproject.toml
 pytest tests/unit -v
+
+# GA + EBM native Apple GPU health check; skip-recording on non-Darwin
+python benchmarks/apple_gpu/benchmark_ga_ebm.py --ci
 
 # Optional performance tests
 TESSERA_RUN_PERFORMANCE_TESTS=1 scripts/test.sh

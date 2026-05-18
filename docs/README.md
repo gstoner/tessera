@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Documentation authority tree
-last_updated: 2026-05-11
+last_updated: 2026-05-18
 ---
 
 # Tessera Documentation Map
@@ -51,6 +51,11 @@ These documents remain normative only where they do not conflict with the normat
 Architecture, programming guide, reference, and tutorial documents are explanatory. They should link back to the normative root for API names, phase status, and implementation claims.
 
 Architecture readers should start with `docs/architecture/README.md`.
+
+Compiler planning readers should use
+`docs/audit/compiler_improvement_milestone_plan_2026_05_18.md` for the current
+source-base review, next compiler milestones, and the Visual Complex Analysis
+assessment. Older audit files remain useful historical context.
 
 Reliability and validation readers should start with
 `docs/guides/Tessera_QA_Reliability_Guide.md`. It is the hands-on guide for

@@ -1477,8 +1477,8 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
     cost across many runs and compare dispatch latency in isolation.
 
     Two coverage axes:
-      - ``include_primitives``: 17 GA primitives + 6 native EBM
-        primitives + 7 Python-reference EBM rows (so consumers can
+      - ``include_primitives``: 17 GA primitives + 8 native EBM
+        primitives + Python-reference EBM rows (so consumers can
         compute native-vs-reference speedup per op).
       - ``include_workloads``: GA feature pipeline (exp →
         rotor_sandwich → norm) + EBT-tiny refinement loop (decode_init

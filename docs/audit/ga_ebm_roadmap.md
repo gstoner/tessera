@@ -813,15 +813,15 @@ end-to-end rotor_sandwich smoke.
     [`benchmarks/apple_gpu/sample_ga_ebm_report.json`](../../benchmarks/apple_gpu/sample_ga_ebm_report.json)
     so future changes can compare schema + headline latencies.
     Documentation: [`benchmarks/apple_gpu/README.md`](../../benchmarks/apple_gpu/README.md).
-- ⏳ Native MSL kernels for the remaining 7 EBM ops
-  (`ebm_energy` / `ebm_langevin_step` / `ebm_self_verify` /
-  `ebm_decode_init` / `ebm_partition_exact` / `ebm_bivector_langevin`
-  / `ebm_sphere_langevin`) — `apple_gpu_status=planned` in the
-  manifest; promotion to `fused` is a focused follow-up sprint.
+- ✅ Native MSL kernels for the EBM Apple GPU set broadened again after this
+  checkpoint. Current canonical status lives in
+  [`docs/status/ga_ebm_milestone.md`](../status/ga_ebm_milestone.md):
+  **8/9 EBM primitives** are native on Apple GPU, with only
+  `ebm_partition_exact` remaining Python-reference.
 - ✅ **Native EBM coverage broadened + workload mode landed (2026-05-17,
   follow-up to the benchmark milestone).**
-  - **4 more native EBM primitives shipped**, bringing the total to
-    **6/9**: `ebm_langevin_step` (affine combo with caller-supplied
+  - **4 more native EBM primitives shipped**, bringing the total at this
+    checkpoint to **6/9**: `ebm_langevin_step` (affine combo with caller-supplied
     noise), `ebm_decode_init` (broadcast `mean + std*noise`),
     `ebm_bivector_langevin` (composition — same MSL kernel as
     `ebm_langevin_step` on grade-projected inputs, demonstrating the
@@ -831,12 +831,12 @@ end-to-end rotor_sandwich smoke.
     `tessera_apple_gpu_ebm_decode_init_noise_apply_f32`,
     `tessera_apple_gpu_ebm_sphere_langevin_step_f32`); the bivector
     case reuses `ebm_langevin_step_f32`.
-  - **`_EBM_APPLE_GPU_FUSED` table extended to 6 entries.** Manifest
-    now reports `apple_gpu_status=fused` for all 6 native ops and
-    `planned` for the remaining 3 (`ebm_energy`, `ebm_self_verify`,
-    `ebm_partition_exact`).  Python-ref rows for the natively-promoted
-    ops still emit so consumers see the native-vs-reference speedup
-    side-by-side in the report.
+  - **`_EBM_APPLE_GPU_FUSED` table extended to 6 entries at this
+    checkpoint.** A later follow-up expands the table to 8 entries with
+    native hard-argmin `self_verify` and quadratic `energy`; only
+    `ebm_partition_exact` remains Python-reference. Python-ref rows for
+    natively-promoted ops still emit so consumers see native-vs-reference
+    speedup side-by-side in the report.
   - **Workload mode added** (`--workloads-only` / `--primitives-only`
     CLI flags). Two composite chains:
     - **`ga_feature_pipeline`** — `clifford_exp → clifford_rotor_sandwich
@@ -844,16 +844,17 @@ end-to-end rotor_sandwich smoke.
       **13.2× speedup** vs Python reference (0.73 ms vs 9.57 ms on
       M-series Apple Silicon).
     - **`ebt_tiny_refinement`** — K-candidate × T-step loop using
-      native `ebm_refinement_f32` for the inner-step iterations
-      + host `self_verify`.  Documents the dispatch-overhead break-even
-      for the inner-step kernel.
-  - **Test count**: 64 → **80** (added native-EBM expansion + workload
-    coverage + CLI flag tests + manifest cross-checks for all 6 native
-    ops). All deterministic, all gracefully skip on non-Darwin.
+      native `ebm_refinement_f32` for the inner-step iterations. The
+      later 8/9 follow-up switches self-verification to native hard-argmin
+      `ebm_self_verify`. Documents the dispatch-overhead break-even for
+      the inner-step kernel.
+  - **Test count**: 64 → **80** at this checkpoint (later **88** with
+    dispatcher singleton, Python API routing, and EBT-sweep gates). All
+    deterministic, all gracefully skip on non-Darwin.
   - **Sample report** at
     [`benchmarks/apple_gpu/sample_ga_ebm_report.json`](../../benchmarks/apple_gpu/sample_ga_ebm_report.json)
-    regenerated with the broader coverage (35 rows total: 17 GA + 6
-    native EBM + 8 python_ref EBM + 4 workload).
+    regenerated with the broader coverage. The current schema is governed by
+    `tests/unit/test_benchmark_ga_ebm.py` and the milestone status page.
   - **Doc refresh**: [README](../../benchmarks/apple_gpu/README.md)
     documents the workload mode + the speedup story + the dispatch-
     overhead break-even discussion.

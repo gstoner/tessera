@@ -15,16 +15,19 @@ milestone:
 
 The short answer: **Apple GPU now has measured native GA + EBM benchmark
 coverage.** GA has 17/17 registered Clifford primitives benchmarked through
-native Apple GPU symbols. EBM has six native Apple GPU rows
+native Apple GPU symbols. EBM has eight native Apple GPU rows
 (`inner_step`, `refinement`, `langevin_step`, `decode_init`,
-`bivector_langevin`, `sphere_langevin`) and three Python-only core rows
-(`energy`, `self_verify`, `partition_exact`). Composite workload rows exist for
+`bivector_langevin`, `sphere_langevin`, hard-argmin `self_verify`, and
+quadratic `energy`) and one Python-only core row
+(`partition_exact`). Composite workload rows exist for
 `ga_feature_pipeline` and `ebt_tiny_refinement`, each paired with a
 Python-reference row.
 
-The remaining gap is narrower: these paths are benchmarked through the
-benchmark driver and manifest-resolved C ABI symbols, but not yet through the
-normal `@tessera.jit` Python API → dialect → lowering → runtime-dispatch route.
+The remaining gap is narrower: the benchmark paths are manifest-resolved native
+C ABI dispatches, and the first two public Python API fast paths
+(`tessera.ga.inner`, `tessera.ebm.inner_step`) now route through
+`tessera._apple_gpu_dispatch`. The broader `@tessera.jit` Python API → dialect
+→ lowering → runtime-dispatch route is still open.
 
 ## Local Verification
 
@@ -83,11 +86,12 @@ Native GA + EBM benchmark health check:
 Current contract:
 
 - 17 GA Apple GPU primitive rows (`backend=apple_gpu`, `mode=fused`).
-- 6 native EBM Apple GPU rows:
+- 8 native EBM Apple GPU rows:
   `ebm_inner_step`, `ebm_refinement`, `ebm_langevin_step`, `ebm_decode_init`,
-  `ebm_bivector_langevin`, `ebm_sphere_langevin`.
-- 3 Python-only EBM core rows:
-  `ebm_energy`, `ebm_self_verify`, `ebm_partition_exact`.
+  `ebm_bivector_langevin`, `ebm_sphere_langevin`, `ebm_self_verify`,
+  `ebm_energy` (quadratic specialization).
+- 1 Python-only EBM core row:
+  `ebm_partition_exact`.
 - 4 workload rows:
   `ga_feature_pipeline` and `ebt_tiny_refinement`, each as `apple_gpu` and
   `python_ref`.
@@ -101,7 +105,8 @@ Focused benchmark contract tests:
   tests/unit/test_ga_backend_manifest.py -q
 ```
 
-Result during this audit pass: **214 passed, 1 skipped**.
+Latest focused contract result: **88 benchmark tests** plus manifest coverage;
+the broader reported suite is **3557 passed, 1 skipped, 0 failures**.
 
 ## Current Apple CPU Path
 
@@ -208,33 +213,39 @@ EBM is mature at the Python reference and dialect-intent layers:
   pipelining.
 - Conformance demos verify RBM-style training, EBT-tiny inner-loop refinement,
   and GA/EBM bivector sampling.
-- `apple_gpu_runtime.mm` exports native EBM symbols for six benchmarked rows:
+- `apple_gpu_runtime.mm` exports native EBM symbols for eight benchmarked rows:
   `tessera_apple_gpu_ebm_inner_step_f32`,
   `tessera_apple_gpu_ebm_refinement_f32`,
   `tessera_apple_gpu_ebm_langevin_step_f32`,
   `tessera_apple_gpu_ebm_decode_init_noise_apply_f32`,
   `tessera_apple_gpu_ebm_langevin_step_f32` reused for
   `ebm_bivector_langevin`, and
-  `tessera_apple_gpu_ebm_sphere_langevin_step_f32`.
-- `backend_manifest.py` marks those six EBM rows as `apple_gpu=fused`.
+  `tessera_apple_gpu_ebm_sphere_langevin_step_f32`,
+  `tessera_apple_gpu_ebm_self_verify_hard_argmin_f32`,
+  `tessera_apple_gpu_ebm_energy_quadratic_f32`.
+- `backend_manifest.py` marks those eight EBM rows as `apple_gpu=fused`.
 - `benchmark_ga_ebm.py --ci` emits native EBM rows and Python-reference rows
   side by side so speedup and correctness are visible in one report.
 - Workload mode benchmarks `ebt_tiny_refinement` using native
-  `ebm_refinement` plus host-side `self_verify`, paired with the Python
+  `ebm_refinement` plus native hard-argmin `self_verify`, paired with the Python
   reference chain.
+- `--ebt-sweep` records the break-even ladder and currently reports
+  `first_native_win_shape=None`, documenting the dispatch-overhead finding.
 
 What is missing:
 
 - The EBM dialect annotation passes do not yet lower to Apple runtime calls.
-- `ebm_energy`, `ebm_self_verify`, and `ebm_partition_exact` execute through
-  Python/NumPy, not Apple GPU.
-- The EBM native rows are benchmark-driver C ABI dispatches today; the normal
-  compiler/JIT path does not yet route EBM dialect ops to those symbols.
+- `ebm_partition_exact` executes through Python/NumPy, not Apple GPU.
+- Arbitrary user-defined energy functions do not yet lower to native MSL; the
+  current native `ebm_energy` row is the quadratic specialization.
+- Most EBM native rows are benchmark-driver C ABI dispatches today; only
+  `ebm_inner_step` routes through the public Python API dispatcher.
 
 Assessment: **EBM now has measured native Apple GPU coverage for the
-inner-loop/sampler/decode slice, plus a tiny workload benchmark.** The next EBM
-gap is not proof-of-native-execution; it is compiler integration and the three
-remaining Python-only core rows.
+inner-loop/sampler/decode/self-verify/quadratic-energy slice, plus a tiny
+workload benchmark and break-even sweep.** The next EBM gap is not
+proof-of-native-execution; it is compiler integration, broader public API
+dispatch, and the remaining Python-only `partition_exact` row.
 
 ## Recommended Milestone
 
@@ -339,8 +350,8 @@ all of the following are true:
 ## Bottom Line
 
 Do not add more primitive breadth next. The Apple GPU backend already has
-complete fused-kernel coverage for the current 17-op Clifford surface and six
-native EBM rows. The valuable next step is integration: route one measured path
-through the normal compiler/runtime stack, then promote the remaining Python-only
-EBM rows (`energy`, `self_verify`, `partition_exact`) when they have native
-kernels and benchmark rows.
+complete fused-kernel coverage for the current 17-op Clifford surface and eight
+native EBM rows. The valuable next step is integration: route more public GA/EBM
+APIs and then one `@tessera.jit` path through the normal compiler/runtime stack.
+`ebm_partition_exact` can remain Python-reference until a GPU-shaped use case
+appears.

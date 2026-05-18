@@ -31,13 +31,14 @@ Status labels follow [`docs/README.md`](../README.md):
 | GA primitive ops and calculus | implemented | lit-testable through `tessera_clifford` op fixtures and lowering fixtures | implemented for all registered `clifford_*` primitives | hardware-runtime for 17/17 registered Apple GPU fused GA kernels, benchmarked by `benchmark_ga_ebm.py --ci`; x86 and Apple CPU remain reference-first; NVIDIA/ROCm planned |
 | GA geometric autodiff | implemented | n/a | n/a | mock-runtime via Python reference checks |
 | GA dialect and lowering passes | n/a | implemented / lit-testable | n/a | native execution only where a backend consumes the lowered artifacts |
-| EBM energy primitives | implemented | lit-testable through `tessera_ebm` parse/canonicalize fixtures | implemented for registered `ebm_*` primitives where manifests apply | `ebm_energy` remains a Python-only benchmark row; native energy fusion is planned |
+| EBM energy primitives | implemented | lit-testable through `tessera_ebm` parse/canonicalize fixtures | implemented for registered `ebm_*` primitives where manifests apply | Apple GPU hardware-runtime for quadratic `ebm_energy`; arbitrary user `energy_fn` lowering remains planned |
 | EBM samplers and partition estimators | implemented | scaffolded for future lowering | implemented / partial depending on primitive | Apple GPU hardware-runtime for `ebm_langevin_step`, `ebm_bivector_langevin`, and `ebm_sphere_langevin`; `ebm_partition_exact` remains Python-only |
 | EBM losses | implemented | n/a | n/a | mock-runtime through tensor loss/autodiff reference path |
 | EBM dialect and annotation passes | n/a | implemented / lit-testable | n/a | no standalone hardware-runtime claim; backend codegen required |
 | EBM inner-loop and decode primitives | implemented | lit-testable through EBM dialect fixtures | implemented for registered `ebm_*` primitives | Apple GPU hardware-runtime for `ebm_inner_step`, `ebm_refinement`, and `ebm_decode_init` |
+| EBM self-verification | implemented | lit-testable through EBM dialect fixtures | implemented for registered `ebm_*` primitives | Apple GPU hardware-runtime for hard-argmin `ebm_self_verify`; soft-min remains planned |
 | EBM manifold-aware GA sampling | implemented | represented through EBM/Clifford dialect surface | implemented / partial | Apple GPU hardware-runtime for `ebm_bivector_langevin` and `ebm_sphere_langevin` |
-| GA/EBM composite workloads | implemented in benchmark driver | n/a | uses manifest-resolved native symbols where available | `ga_feature_pipeline` and `ebt_tiny_refinement` emit Apple GPU and Python-reference benchmark rows |
+| GA/EBM composite workloads | implemented in benchmark driver | n/a | uses manifest-resolved native symbols where available | `ga_feature_pipeline`, `ebt_tiny_refinement`, and opt-in `--ebt-sweep` emit Apple GPU and Python-reference benchmark rows |
 
 ## Layer Notes
 
@@ -80,11 +81,11 @@ asserts `FUSED_APPLE_GPU_OPS == EXPECTED_CLIFFORD_OPS` and
 this track; NVIDIA and ROCm remain planned for GA.
 
 For EBM, manifests should be interpreted around the underlying primitive class.
-Apple GPU fused entries currently cover six benchmarked native ops:
+Apple GPU fused entries currently cover eight benchmarked native ops:
 `ebm_inner_step`, `ebm_refinement`, `ebm_langevin_step`, `ebm_decode_init`,
-`ebm_bivector_langevin`, and `ebm_sphere_langevin`. Three core benchmark rows
-remain Python-only on Apple GPU: `ebm_energy`, `ebm_self_verify`, and
-`ebm_partition_exact`.
+`ebm_bivector_langevin`, `ebm_sphere_langevin`, `ebm_self_verify`, and the
+quadratic specialization of `ebm_energy`. `ebm_partition_exact` remains
+Python-only on Apple GPU.
 
 ### Native Execution
 
@@ -95,18 +96,20 @@ Target IR artifact.
 Current high-confidence native claim:
 
 - Clifford Apple GPU fused kernels for all 17 registered GA primitives.
-- EBM Apple GPU fused kernels for six registered native rows:
+- EBM Apple GPU fused kernels for eight registered native rows:
   `inner_step`, `refinement`, `langevin_step`, `decode_init`,
-  `bivector_langevin`, and `sphere_langevin`.
-- Composite workload benchmark rows for `ga_feature_pipeline` and
-  `ebt_tiny_refinement`, each paired with Python-reference rows.
+  `bivector_langevin`, `sphere_langevin`, hard-argmin `self_verify`, and
+  quadratic `energy`.
+- Composite workload benchmark rows for `ga_feature_pipeline`,
+  `ebt_tiny_refinement`, and opt-in `--ebt-sweep`, each paired with
+  Python-reference rows.
 
 Current non-claims:
 
-- EBM energy/gradient fusion does not yet claim measured memory-traffic
-  reduction without backend codegen and benchmark evidence.
-- `ebm_self_verify`, `ebm_energy`, and `ebm_partition_exact` do not yet have
-  native Apple GPU kernels; they remain Python-reference rows in the benchmark.
+- Arbitrary user-defined EBM energy functions do not yet lower to native MSL;
+  the current native `ebm_energy` row is the quadratic specialization.
+- `ebm_partition_exact` does not yet have a native Apple GPU kernel; it remains
+  a Python-reference row in the benchmark.
 - EBM checkpointing and candidate pipelining beyond the measured
   `ebm_refinement` kernel are annotation-layer compiler transformations until a
   backend consumes them.
@@ -120,7 +123,7 @@ Use the repo virtualenv for the current GA + EBM native health check:
 .venv/bin/python benchmarks/apple_gpu/benchmark_ga_ebm.py --ci
 ```
 
-On Apple Silicon this emits 17 GA Apple GPU rows, six native EBM Apple GPU
+On Apple Silicon this emits 17 GA Apple GPU rows, eight native EBM Apple GPU
 rows, Python-reference EBM rows for comparison, and the GA/EBM workload rows.
 On non-Darwin hosts it records `skipped_apple_gpu` and still emits the
 Python-reference rows.

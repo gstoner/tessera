@@ -43,7 +43,7 @@ echo "==> Benchmark telemetry smoke"
 # Promoted to the validation spine 2026-05-17 — see
 # docs/status/ga_ebm_milestone.md for the contract.  On non-Darwin
 # hosts the benchmark exits 0 with `skipped_apple_gpu` populated.
-# On Apple Silicon it exercises 17 GA + 6 native EBM + 4 workload
+# On Apple Silicon it exercises 17 GA + 8 native EBM + 4 workload
 # rows through the full stack (Python API → manifest lookup → MSL
 # dispatch → correctness check vs Python reference).
 GA_EBM_REPORT="$TMP_ROOT/tessera_ga_ebm_native_smoke.json"

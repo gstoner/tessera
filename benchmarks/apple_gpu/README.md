@@ -5,7 +5,7 @@ Two benchmark drivers live here:
 | Driver | Coverage |
 |---|---|
 | [`benchmark_fusion.py`](benchmark_fusion.py) | Phase 8.4.x MSL fusion sweep — `matmul → softmax`, SwiGLU MLP block. Fused-vs-sequential pairing. |
-| [`benchmark_ga_ebm.py`](benchmark_ga_ebm.py) | GA + EBM end-to-end stack walk **plus workload mode**. 17 GA primitives + **6 native EBM primitives** + 8 Python-reference EBM rows + **4 workload rows** (GA feature pipeline + EBT-tiny refinement, each in apple_gpu + python_ref variants). |
+| [`benchmark_ga_ebm.py`](benchmark_ga_ebm.py) | GA + EBM end-to-end stack walk **plus workload mode**. 17 GA primitives + **8 native EBM primitives** + Python-reference comparison rows + **4 workload rows** (GA feature pipeline + EBT-tiny refinement, each in apple_gpu + python_ref variants), plus opt-in `--ebt-sweep`. |
 
 ## GA + EBM benchmark — what it walks
 
@@ -35,7 +35,7 @@ The two workloads exist because per-primitive timing tells only half the story: 
 | Workload | Stack | Native vs Python ref (sample) |
 |---|---|---:|
 | `ga_feature_pipeline` | `clifford_exp → clifford_rotor_sandwich → clifford_norm` on a batch of 32 | **13.2× faster** (0.73ms vs 9.57ms) |
-| `ebt_tiny_refinement` | `ebm_refinement_f32` (T=8 inner-step iterations on-device) + host `self_verify` | 0.01× (1.85ms vs 0.015ms) at tiny scale — see notes |
+| `ebt_tiny_refinement` | `ebm_refinement_f32` (T=8 inner-step iterations) + native hard-argmin `self_verify` | currently loses at tiny scale — see notes |
 
 `ebt_tiny_refinement` runs slower natively at the tested scale (B=4, K=8, D=6, T=8 → 192 floats per inner step) because the per-iteration Metal dispatch overhead (~0.2ms) dominates the ~250-flop affine combo numpy does in microseconds. The fact that the bench reports it honestly is the point — it tells you the **break-even** for `ebm_refinement` is somewhere around `n * T > a few thousand floats per dispatch`, useful information for kernel scheduling.
 
@@ -63,7 +63,7 @@ python benchmarks/apple_gpu/benchmark_ga_ebm.py --refinement-T 32
 python benchmarks/apple_gpu/benchmark_ga_ebm.py --ebt-sweep
 ```
 
-Skips cleanly on non-Darwin or when `clang++` / the runtime source isn't available — the report still emits the 8 Python-reference EBM rows + 2 Python-reference workload rows with `skipped_apple_gpu` set.
+Skips cleanly on non-Darwin or when `clang++` / the runtime source isn't available — the report still emits Python-reference EBM rows + Python-reference workload rows with `skipped_apple_gpu` set.
 
 ## Timing methodology
 
@@ -86,9 +86,11 @@ Skips cleanly on non-Darwin or when `clang++` / the runtime source isn't availab
 | `ebm_refinement` (T=8, native) | apple_gpu / fused | 2.16 | 1.78–3.39 |
 | `ebm_langevin_step` (native) | apple_gpu / fused | 0.25 | 0.23–0.46 |
 | `ebm_sphere_langevin` (native) | apple_gpu / fused | 0.27 | 0.24–0.42 |
+| `ebm_self_verify` (native hard argmin) | apple_gpu / fused | see sample JSON | see sample JSON |
+| `ebm_energy` (native quadratic specialization) | apple_gpu / fused | see sample JSON | see sample JSON |
 | `ga_feature_pipeline` (workload, native) | apple_gpu / fused_chain | 0.73 | 0.69–0.81 |
 | `ga_feature_pipeline` (workload, ref) | python_ref / reference_chain | 9.57 | 9.10–10.3 |
-| `ebm_energy` (Python ref) | python_ref / reference | 0.003 | 0.002–0.003 |
+| `ebm_partition_exact` (Python ref) | python_ref / reference | see sample JSON | see sample JSON |
 
 These exact numbers will drift across machines and toolchain versions. The **schema** is the stable contract — `tests/unit/test_benchmark_ga_ebm.py` enforces it.
 
@@ -123,9 +125,11 @@ Envelope fields:
 | `runs` | List of row dicts |
 | `ga_primitives_count` | Count of `clifford_*` rows |
 | `ebm_paths_count` | Count of `ebm_*` rows (native + python_ref) |
-| `ebm_native_apple_gpu_count` | Count of native EBM rows (6 when GPU available) |
+| `ebm_native_apple_gpu_count` | Count of native EBM rows (8 when GPU available) |
 | `native_ebm_ops` | Sorted list of EBM ops on `apple_gpu` |
 | `workload_count` | Count of `namespace=workload` rows |
+| `ebt_sweep_count` | Count of opt-in `ebt_tiny_sweep` rows |
+| `ebt_sweep_summary` | Break-even summary with per-shape speedup and `first_native_win_shape` |
 | `compile_time_ms` | clang++ wall-clock for the runtime dylib |
 | `skipped_apple_gpu` | Skip reason string (`null` when Apple GPU runs) |
 | `device`, `tessera_version`, `reps` | Provenance |

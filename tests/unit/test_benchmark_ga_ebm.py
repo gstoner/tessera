@@ -341,7 +341,7 @@ def test_ga_feature_pipeline_chains_three_known_msl_kernels(
 
 def test_ebt_tiny_workload_uses_ebm_refinement_kernel(report: dict) -> None:
     """The EBT-tiny workload must reference the native refinement kernel
-    + host-side self_verify."""
+    + native hard-argmin self_verify."""
     if not _apple_gpu_available(report):
         pytest.skip("apple_gpu unavailable")
     row = next(r for r in _workload_native_rows(report)

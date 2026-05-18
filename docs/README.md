@@ -32,6 +32,7 @@ runtime, and phase/status claims:
 | Clifford / geometric algebra primitive surface | `docs/spec/CLIFFORD_SPEC.md` |
 | Energy-based model primitive surface | `docs/spec/EBM_SPEC.md` |
 | GA + EBM execution status by implementation layer | `docs/spec/GA_EBM_EXECUTION_STATUS.md` |
+| GA + EBM native milestone status and health check | `docs/status/ga_ebm_milestone.md` |
 | Error handling and diagnostics | `docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md` |
 | Runtime C ABI | `docs/spec/RUNTIME_ABI_SPEC.md` |
 
@@ -124,7 +125,7 @@ Use these labels consistently in active docs:
 | TPU target profile and StableHLO/Shardy artifacts | implemented / lit-testable | `python/tessera/compiler/tpu_target.py`, `src/compiler/codegen/Tessera_TPU_Backend/`, `tests/tessera-ir/phase4/` |
 | Solver, RNG, sparse, linalg, and resilience passes | implemented / lit-testable | `src/solvers/`, `tests/unit/test_*solver*.py`, `tests/tessera-ir/phase5/` |
 | Clifford / geometric algebra surface | implemented / lit-testable / hardware-runtime for 17/17 registered Apple GPU fused GA kernels, benchmarked by `benchmark_ga_ebm.py --ci` | `docs/spec/CLIFFORD_SPEC.md`, `docs/spec/GA_EBM_EXECUTION_STATUS.md`, `python/tessera/ga/`, `python/tessera/autodiff/geometric/`, `src/solvers/clifford/` |
-| Energy-based model surface | implemented / lit-testable / hardware-runtime for 6 native Apple GPU EBM rows; 3 core rows remain Python-only | `docs/spec/EBM_SPEC.md`, `docs/spec/GA_EBM_EXECUTION_STATUS.md`, `python/tessera/ebm/`, `src/solvers/ebm/`, `benchmarks/apple_gpu/benchmark_ga_ebm.py` |
+| Energy-based model surface | implemented / lit-testable / hardware-runtime for 8/9 native Apple GPU EBM rows; `partition_exact` remains Python-only | `docs/spec/EBM_SPEC.md`, `docs/spec/GA_EBM_EXECUTION_STATUS.md`, `docs/status/ga_ebm_milestone.md`, `python/tessera/ebm/`, `src/solvers/ebm/`, `benchmarks/apple_gpu/benchmark_ga_ebm.py` |
 | Runtime C ABI and Python wrapper | mock-runtime / hardware-runtime where C backend is built | `docs/spec/RUNTIME_ABI_SPEC.md`, `python/tessera/runtime.py`, `src/runtime/` |
 | ROCm and Apple artifact backends | implemented / lit-testable / artifact-only unless a backend doc says hardware-runtime | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_ROCM_Backend/`, `src/compiler/codegen/Tessera_Apple_Backend/`, target-contract tests |
 | Metalium, Cerebras, Rubin CPX backends | scaffolded / lit-testable unless a backend doc says hardware-runtime | `src/compiler/codegen/`, `tests/tessera-ir/phase8/`, backend-specific tests |

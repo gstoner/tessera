@@ -27,8 +27,8 @@
   symbol as `ebm_langevin_step` on grade-projected inputs),
   `ebm_sphere_langevin`, `ebm_self_verify`, and `ebm_energy` (quadratic
   specialization).  Manifest: [`_EBM_APPLE_GPU_FUSED`](../../python/tessera/compiler/backend_manifest.py).
-- **Apple GPU C ABI surface**: 23 GA symbols + 7 EBM symbols (one kernel
-  is reused for `bivector_langevin`), all in
+- **Apple GPU C ABI surface**: GA primitive symbols + 7 EBM symbols (one EBM
+  kernel is reused for `bivector_langevin`), all in
   [`apple_gpu_runtime.mm`](../../src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm).
 - **Workload mode**: two composite benchmark chains stringing primitives together (`ga_feature_pipeline` + `ebt_tiny_refinement`), each emitting `apple_gpu` + `python_ref` rows so speedup is a single subtraction.
 - **EBT-tiny break-even sweep**: opt-in `--ebt-sweep` flag emits one apple_gpu + python_ref row per `(B, K, D, T)` point and summarizes `first_native_win_shape` in the envelope. At the v1 sweep ladder the native row hasn't beaten numpy yet — see "Known non-claims" #1 for why.
@@ -64,7 +64,7 @@
 3. **Most GA / EBM Python API calls still go through numpy.** Only
    `tessera.ga.inner` (batched Cl(3,0) f32) and `tessera.ebm.inner_step`
    (f32, no-noise, contiguous) currently route through the GPU
-   dispatcher.  The remaining 15 GA primitives + 6 native EBM
+   dispatcher.  The remaining 16 GA primitives + 7 native EBM
    primitives are reachable today only via the benchmark or by
    importing the runtime symbols directly.  Sweep through is open
    work — see "Next targets".

@@ -755,11 +755,12 @@ def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
 # Status as of the GA + EBM native benchmark milestone:
 #   - The Python reference path in `tessera.ebm` runs on every CPU host
 #     (x86 / apple_cpu) — both targets declare `reference`.
-#   - Six EBM rows have fused Apple GPU MSL dispatch:
+#   - Eight EBM rows have fused Apple GPU MSL dispatch:
 #       ebm_inner_step, ebm_refinement, ebm_langevin_step,
-#       ebm_decode_init, ebm_bivector_langevin, ebm_sphere_langevin.
-#   - Three core benchmark rows remain Python-only on Apple GPU:
-#       ebm_energy, ebm_self_verify, ebm_partition_exact.
+#       ebm_decode_init, ebm_bivector_langevin, ebm_sphere_langevin,
+#       ebm_self_verify, ebm_energy (quadratic specialization).
+#   - One core benchmark row remains Python-only on Apple GPU:
+#       ebm_partition_exact.
 #   - Other registered partition-estimator variants remain planned until
 #     they get dedicated benchmark rows and native kernels.
 # ─────────────────────────────────────────────────────────────────────────────

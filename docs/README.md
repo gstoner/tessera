@@ -33,6 +33,7 @@ runtime, and phase/status claims:
 | Energy-based model primitive surface | `docs/spec/EBM_SPEC.md` |
 | GA + EBM execution status by implementation layer | `docs/spec/GA_EBM_EXECUTION_STATUS.md` |
 | GA + EBM native milestone status and health check | `docs/status/ga_ebm_milestone.md` |
+| Generated 8-axis compiler support table (M0 / M0.5 — drift-gated by `tests/unit/test_compiler_audit.py`; regenerate via `python -m tessera.compiler.audit support_table`) | `docs/audit/generated/support_table.md` |
 | Error handling and diagnostics | `docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md` |
 | Runtime C ABI | `docs/spec/RUNTIME_ABI_SPEC.md` |
 

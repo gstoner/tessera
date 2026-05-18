@@ -22,8 +22,8 @@ For every primitive the driver exercises the full stack:
 ## Status split (2026-05-17)
 
 - **GA**: full Apple GPU end-to-end benchmarked. 17/17 primitives `backend=apple_gpu`, `mode=fused`.
-- **EBM (native)**: **8/9 primitives** — `ebm_inner_step`, `ebm_refinement`, `ebm_langevin_step`, `ebm_decode_init`, `ebm_bivector_langevin`, `ebm_sphere_langevin`, `ebm_self_verify`, `ebm_energy` (quadratic specialization). `ebm_bivector_langevin` reuses the `ebm_langevin_step` kernel on grade-projected inputs.
-- **EBM (Python ref)**: 1/9 still no native — `ebm_partition_exact` (exhaustive small-state sum, not GPU-shaped). All 8 promoted EBM ops also emit a `python_ref` row so the native-vs-reference speedup is visible per op.
+- **EBM (native)**: **9/9 primitives** — `ebm_inner_step`, `ebm_refinement`, `ebm_langevin_step`, `ebm_decode_init`, `ebm_bivector_langevin`, `ebm_sphere_langevin`, `ebm_self_verify`, `ebm_energy` (quadratic specialization), and `ebm_partition_exact` (single-dispatch stable logsumexp, 2026-05-17). `ebm_bivector_langevin` reuses the `ebm_langevin_step` kernel on grade-projected inputs.
+- **EBM (Python ref)**: every native EBM op also emits a `python_ref` row so the native-vs-reference speedup is visible per op.
 - **Workloads**: 2 small composite chains — `ga_feature_pipeline` (`exp → rotor_sandwich → norm`) and `ebt_tiny_refinement` (fused single-dispatch kernel `ebm.ebt_tiny`). Both emit `apple_gpu` + `python_ref` rows; native rows carry a `dispatched_on_gpu` proof bit so a silent fallback can't masquerade as native.
 - **EBT-tiny break-even sweep**: opt-in via `--ebt-sweep`. After the **streaming closed-form fused kernel** (no register-vector spill — works for any `D`, `K ≤ 256` is the only remaining bound): the sweep table includes a `status` per shape (`native_dispatched` vs `degraded_fallback`) and only computes `speedup` when the native attempt actually fired on-device. On a recent M-series run: **first native win at `B=16,K=32,D=128/T=8` (~1.1×); peak ~55× at `B=64,K=128,D=1024/T=256`**. Headline numbers will drift across machines + toolchain versions — the schema (with the dispatch proof + status) is the stable contract.
 - **Integration via `tessera.ga.*` / `tessera.ebm.*`**: **17 / 17 GA + 9 / 9 native EBM** ops route through [`tessera._apple_gpu_dispatch`](../../python/tessera/_apple_gpu_dispatch.py) transparently — every user-visible call with a fused kernel takes the GPU path when its inputs match the manifest contract. The workload benchmarks all call public APIs.
@@ -89,6 +89,7 @@ Skips cleanly on non-Darwin or when `clang++` / the runtime source isn't availab
 | `ebm_energy` (native quadratic specialization) | apple_gpu / fused | see sample JSON | see sample JSON |
 | `ga_feature_pipeline` (workload, native) | apple_gpu / fused_chain | 0.73 | 0.69–0.81 |
 | `ga_feature_pipeline` (workload, ref) | python_ref / reference_chain | 9.57 | 9.10–10.3 |
+| `ebm_partition_exact` (native stable logsumexp) | apple_gpu / fused | see sample JSON | see sample JSON |
 | `ebm_partition_exact` (Python ref) | python_ref / reference | see sample JSON | see sample JSON |
 
 These exact numbers will drift across machines and toolchain versions. The **schema** is the stable contract — `tests/unit/test_benchmark_ga_ebm.py` enforces it.

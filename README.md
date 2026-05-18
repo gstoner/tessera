@@ -90,7 +90,7 @@ Current high-level status:
 | TPU target profile and StableHLO/Shardy artifacts | implemented / lit-testable |
 | Solver, sparse/RNG, linalg, resilience, and autotuning foundations | implemented / lit-testable |
 | Clifford / geometric algebra Python surface, autodiff registry, dialect, lowering passes, and Apple GPU fused kernels | implemented / lit-testable; 17/17 Apple GPU native primitives benchmarked |
-| Energy-based model Python surface, samplers, losses, partition estimators, dialect, annotation passes, and Apple GPU kernels | implemented / lit-testable; 8/9 native Apple GPU EBM ops benchmarked, `partition_exact` remains Python-only |
+| Energy-based model Python surface, samplers, losses, partition estimators, dialect, annotation passes, and Apple GPU kernels | implemented / lit-testable; **9/9 native Apple GPU EBM ops benchmarked** (incl. `ebm_partition_exact` via stable-logsumexp MSL kernel, 2026-05-17) |
 | Runtime C ABI and Python wrapper | mock-runtime; hardware-runtime when C runtime is built |
 | ROCm and Apple Target IR artifact lowering | implemented / lit-testable / artifact-only |
 | Metalium, Cerebras, Rubin CPX backend trees | scaffolded / lit-testable unless backend docs say otherwise |
@@ -167,7 +167,7 @@ Native execution status is layer-specific:
 | Component | Python reference | MLIR / lit | Backend manifest | Native execution |
 |-----------|------------------|------------|------------------|------------------|
 | GA signature, multivector values, ops, calculus, and autodiff | implemented | implemented / lit-testable for dialect and lowering fixtures | implemented for registered `clifford_*` primitives | 17/17 Apple GPU native primitives benchmarked; x86 and Apple CPU are reference-first; NVIDIA/ROCm planned |
-| EBM energy primitives, samplers, partition estimators, losses, and manifold-aware sampling | implemented | implemented / lit-testable for dialect and annotation-pass fixtures | implemented for registered `ebm_*` primitives | 8/9 native Apple GPU ops benchmarked (`inner_step`, `refinement`, `langevin_step`, `decode_init`, `bivector_langevin`, `sphere_langevin`, `self_verify`, quadratic `energy`); `partition_exact` remains Python-only |
+| EBM energy primitives, samplers, partition estimators, losses, and manifold-aware sampling | implemented | implemented / lit-testable for dialect and annotation-pass fixtures | implemented for registered `ebm_*` primitives | **9/9 native Apple GPU ops benchmarked**: `inner_step`, `refinement`, `langevin_step`, `decode_init`, `bivector_langevin`, `sphere_langevin`, `self_verify`, quadratic `energy`, `partition_exact` (stable-logsumexp MSL kernel landed 2026-05-17) |
 | GA/EBM composite workloads | implemented as deterministic benchmark workloads | n/a | uses GA/EBM manifest-resolved symbols where native | `ga_feature_pipeline`, `ebt_tiny_refinement`, and opt-in `--ebt-sweep` benchmarked with Apple GPU and Python-reference rows |
 
 ---

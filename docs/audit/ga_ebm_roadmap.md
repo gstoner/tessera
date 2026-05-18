@@ -1,8 +1,8 @@
 ---
-status: Active (development roadmap — all 6 scope-lock questions resolved; GA7/GA8/EBM5/EBM6 dialects build on MLIR 21; **all 17 of 17** GA primitives ship fused MSL kernels on Apple GPU and route through public APIs; **8 of 9 EBM primitives** ship native MSL kernels — all reachable through `tessera.ebm.*`; **`ebm.ebt_tiny` fused single-dispatch kernel** (streaming closed-form, D unbounded / K ≤ 256) peaks at ~55× speedup with every native row carrying a `dispatched_on_gpu` proof bit; **JIT / compiler bridge wires all 26 fast paths** (17 GA + 9 native EBM); **compiler-integrated vertical slice landed** — `@clifford_jit(target="apple_gpu")` produces a traced op plan + manifest-resolved Apple target metadata + benchmark row, and the new **`rotor_conditioned_ebt` workload** fuses GA + EBM through public APIs at ~20× speedup; only `ebm_partition_exact` stays Python-ref. Single canonical status: [`docs/status/ga_ebm_milestone.md`](../status/ga_ebm_milestone.md))
+status: Active (development roadmap — all 6 scope-lock questions resolved; GA7/GA8/EBM5/EBM6 dialects build on MLIR 21; **all 17 of 17** GA primitives ship fused MSL kernels on Apple GPU and route through public APIs; **9 of 9 EBM primitives** ship native MSL kernels (incl. `ebm_partition_exact` via stable-logsumexp MSL kernel, 2026-05-17) — all reachable through `tessera.ebm.*`; **`ebm.ebt_tiny` fused single-dispatch kernel** (streaming closed-form, D unbounded / K ≤ 256) peaks at ~55× speedup with every native row carrying a `dispatched_on_gpu` proof bit; **JIT / compiler bridge wires all 26 fast paths** (17 GA + 9 native EBM); **compiler-integrated vertical slice landed** — `@clifford_jit(target="apple_gpu")` now does AST → CliffordIRProgram lowering at decoration time (replaced trace-capture); **`rotor_conditioned_ebt` workload** fuses GA + EBM through public APIs at ~20× speedup; **buffer pool RAII-hardened** via `TS_METAL_BUF_ACQUIRE` macros so early-return paths release by construction. Single canonical status: [`docs/status/ga_ebm_milestone.md`](../status/ga_ebm_milestone.md))
 classification: Audit / Plan
 authority: Sequences Geometric Algebra (Clifford) + Energy-Based Model primitive surfaces into Tessera
-last_updated: 2026-05-17
+last_updated: 2026-05-18
 ---
 
 # Tessera GA / EBM Roadmap — Geometric Algebra + Energy-Based Models
@@ -816,8 +816,9 @@ end-to-end rotor_sandwich smoke.
 - ✅ Native MSL kernels for the EBM Apple GPU set broadened again after this
   checkpoint. Current canonical status lives in
   [`docs/status/ga_ebm_milestone.md`](../status/ga_ebm_milestone.md):
-  **8/9 EBM primitives** are native on Apple GPU, with only
-  `ebm_partition_exact` remaining Python-reference.
+  **9/9 EBM primitives** are native on Apple GPU as of 2026-05-17 —
+  `ebm_partition_exact` shipped as a single-dispatch stable-logsumexp
+  MSL kernel, closing the long-standing 8/9 → 9/9 gap.
 - ✅ **Native EBM coverage broadened + workload mode landed (2026-05-17,
   follow-up to the benchmark milestone).**
   - **4 more native EBM primitives shipped**, bringing the total at this

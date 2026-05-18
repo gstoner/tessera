@@ -208,21 +208,49 @@ class _ASTLowerer(ast.NodeVisitor):
         )
 
     def _is_ga_call(self, node: ast.AST) -> Optional[str]:
-        """If ``node`` is ``<something>.<attr>(...)`` where ``<attr>``
-        is a recognized GA op, return the attribute name.  Otherwise
-        return ``None``."""
+        """If ``node`` is a call whose callee resolves through the
+        ``ga`` namespace (i.e. ``ga.<op>`` or any
+        ``<chain>.ga.<op>``), return the GA op name.  Otherwise
+        return ``None``.
+
+        The receiver must literally end in ``ga`` — ``foo.norm(x)``,
+        ``np.linalg.norm(x)``, and ``self.ga_helper(x)`` are
+        rejected.  Accepted shapes (where ``<op>`` is in
+        :data:`_GA_ATTR_TO_OP_NAME`):
+
+          - ``ga.<op>(...)``               — Name('ga').<op>
+          - ``tessera.ga.<op>(...)``       — Attribute(...).ga.<op>
+          - ``self.ga.<op>(...)``          — Attribute(...).ga.<op>
+          - Any deeper chain ending in ``.ga.<op>``.
+
+        The chain's *root* must be a ``Name`` — Calls, Subscripts,
+        etc. are rejected so the lowering doesn't have to reason
+        about dynamic dispatch.
+        """
         if not isinstance(node, ast.Attribute):
             return None
         attr = node.attr
         if attr not in _GA_ATTR_TO_OP_NAME:
             return None
-        # Accept ``ga.X`` (Name('ga')) or ``tessera.ga.X``
-        # (Attribute(value=Name('tessera'), attr='ga')) or
-        # ``T.ga.X`` (any nested attribute chain ending in 'ga').
-        value = node.value
-        while isinstance(value, ast.Attribute):
-            value = value.value
-        if isinstance(value, ast.Name):
+        # The IMMEDIATE receiver must be either the ``ga`` Name or an
+        # Attribute whose final segment is ``ga`` (so the call reads
+        # ``<chain>.ga.<attr>``).
+        recv = node.value
+        if isinstance(recv, ast.Name):
+            if recv.id != "ga":
+                return None
+            return attr
+        if isinstance(recv, ast.Attribute):
+            if recv.attr != "ga":
+                return None
+            # Walk to the root — it must be a Name (no calls, no
+            # subscripts, no chains rooted in something we can't
+            # statically reason about).
+            root = recv.value
+            while isinstance(root, ast.Attribute):
+                root = root.value
+            if not isinstance(root, ast.Name):
+                return None
             return attr
         return None
 

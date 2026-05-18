@@ -32,7 +32,7 @@ Status labels follow [`docs/README.md`](../README.md):
 | GA geometric autodiff | implemented | n/a | n/a | mock-runtime via Python reference checks |
 | GA dialect and lowering passes | n/a | implemented / lit-testable | n/a | native execution only where a backend consumes the lowered artifacts |
 | EBM energy primitives | implemented | lit-testable through `tessera_ebm` parse/canonicalize fixtures | implemented for registered `ebm_*` primitives where manifests apply | Apple GPU hardware-runtime for quadratic `ebm_energy`; arbitrary user `energy_fn` lowering remains planned |
-| EBM samplers and partition estimators | implemented | scaffolded for future lowering | implemented / partial depending on primitive | Apple GPU hardware-runtime for `ebm_langevin_step`, `ebm_bivector_langevin`, and `ebm_sphere_langevin`; `ebm_partition_exact` remains Python-only |
+| EBM samplers and partition estimators | implemented | scaffolded for future lowering | implemented / partial depending on primitive | Apple GPU hardware-runtime for `ebm_langevin_step`, `ebm_bivector_langevin`, `ebm_sphere_langevin`, and **`ebm_partition_exact`** (single-dispatch stable-logsumexp MSL kernel landed 2026-05-17); `ebm_partition_monte_carlo` and `ebm_partition_ais` remain Python-only |
 | EBM losses | implemented | n/a | n/a | mock-runtime through tensor loss/autodiff reference path |
 | EBM dialect and annotation passes | n/a | implemented / lit-testable | n/a | no standalone hardware-runtime claim; backend codegen required |
 | EBM inner-loop and decode primitives | implemented | lit-testable through EBM dialect fixtures | implemented for registered `ebm_*` primitives | Apple GPU hardware-runtime for `ebm_inner_step`, `ebm_refinement`, and `ebm_decode_init` |

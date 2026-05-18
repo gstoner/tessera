@@ -334,6 +334,78 @@ def test_lower_rejects_non_ga_call() -> None:
         lower_function_to_ir(f)
 
 
+def test_lower_rejects_call_on_unrelated_object_with_ga_method_name() -> None:
+    """``foo.norm(a)`` must not lower as ``clifford_norm`` just
+    because the attribute happens to share a name with a GA op.  The
+    receiver has to be the ``ga`` namespace (``ga.<op>`` or any
+    chain ending in ``.ga.<op>``)."""
+    class _Foo:
+        def norm(self, x):  # pragma: no cover — never called
+            return x
+
+    foo = _Foo()  # noqa: F841 — referenced inside f's source for AST
+
+    def f(a):
+        return foo.norm(a)   # bare receiver named foo, not ga
+
+    with pytest.raises(CliffordJitError, match="only ``tessera.ga"):
+        lower_function_to_ir(f)
+
+
+def test_lower_rejects_numpy_linalg_norm() -> None:
+    """``np.linalg.norm(a)`` — the chain ends in ``.norm`` but the
+    parent segment is ``linalg``, not ``ga``.  Reject."""
+    import numpy as np  # noqa: F401 — referenced inside f's source
+
+    def f(a):
+        return np.linalg.norm(a)
+
+    with pytest.raises(CliffordJitError, match="only ``tessera.ga"):
+        lower_function_to_ir(f)
+
+
+def test_lower_rejects_self_dot_norm() -> None:
+    """A method-style receiver (``self.norm(a)``) is rejected — the
+    immediate receiver is ``self``, not ``ga``."""
+    def f(self, a):
+        return self.norm(a)
+
+    with pytest.raises(CliffordJitError, match="only ``tessera.ga"):
+        lower_function_to_ir(f)
+
+
+def test_lower_accepts_tessera_dot_ga_chain() -> None:
+    """``tessera.ga.<op>`` is still accepted — the chain ends in
+    ``.ga.<op>`` with a Name root."""
+    import tessera  # noqa: F401 — referenced inside f's source
+
+    def f(a, b):
+        return tessera.ga.inner(a, b)
+
+    ir = lower_function_to_ir(f)
+    assert ir.ops[0].op_name == "clifford_inner"
+
+
+def test_lower_accepts_self_dot_ga_dot_op_chain() -> None:
+    """A chain ending in ``.ga.<op>`` is accepted regardless of how
+    deep the prefix is, as long as the root is a Name."""
+    def f(self, a, b):
+        return self.ga.inner(a, b)
+
+    ir = lower_function_to_ir(f)
+    assert ir.ops[0].op_name == "clifford_inner"
+
+
+def test_lower_rejects_call_dot_ga_chain() -> None:
+    """A chain whose prefix contains a Call (``get_lib().ga.inner``)
+    is rejected — we don't reason about dynamic receivers."""
+    def f(a, b):
+        return get_lib().ga.inner(a, b)  # noqa: F821 — intentional
+
+    with pytest.raises(CliffordJitError, match="only ``tessera.ga"):
+        lower_function_to_ir(f)
+
+
 def test_lower_rejects_binop_return() -> None:
     def f(a, b):
         return a + b

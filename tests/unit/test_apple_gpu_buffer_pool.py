@@ -134,6 +134,49 @@ def test_metal_buffer_guard_is_release_safe(runtime_src: str) -> None:
     )
 
 
+def test_native_ebm_ops_promoted_in_primitive_coverage() -> None:
+    """Every EBM op with a fused entry in ``_EBM_APPLE_GPU_FUSED`` must
+    have a matching registry row at ``status="partial"`` (Decision #25:
+    native kernel exists → at least partial, never planned).
+
+    This guard catches the inverse drift the user flagged: registry
+    saying ``planned`` while the manifest already ships a fused MSL
+    kernel.  The two tables are normative for different audiences
+    (manifest = runtime acceptance; registry = compiler contract),
+    but their status fields must not contradict each other.
+    """
+    from tessera.compiler import primitive_coverage as pc
+    from tessera.compiler import backend_manifest as bm
+    # Manifest → registry name mapping.  Most match 1:1; the two
+    # geometric Langevin entries use a ``_step`` suffix in the
+    # registry but the same fused kernel in the manifest.
+    manifest_to_registry = {
+        "ebm_inner_step":         "ebm_inner_step",
+        "ebm_langevin_step":      "ebm_langevin_step",
+        "ebm_decode_init":        "ebm_decode_init",
+        "ebm_self_verify":        "ebm_self_verify",
+        "ebm_energy":             "ebm_energy",
+        "ebm_partition_exact":    "ebm_partition_exact",
+        "ebm_bivector_langevin":  "ebm_bivector_langevin_step",
+        "ebm_sphere_langevin":    "ebm_sphere_langevin_step",
+    }
+    stale: list[str] = []
+    for manifest_name, registry_name in manifest_to_registry.items():
+        assert manifest_name in bm._EBM_APPLE_GPU_FUSED, (
+            f"manifest does not list {manifest_name!r}"
+        )
+        cov = pc.coverage_for(registry_name)
+        assert cov is not None, (
+            f"registry has no entry for {registry_name!r}"
+        )
+        if cov.status == "planned":
+            stale.append(
+                f"{registry_name}: registry status='planned' but manifest "
+                f"has fused entry {manifest_name!r}"
+            )
+    assert not stale, "stale registry status:\n  " + "\n  ".join(stale)
+
+
 def test_raii_macros_used_in_dispatchers(runtime_src: str) -> None:
     """Sanity: at least 50 dispatcher call sites use the macros.  If
     this count crashes to zero a regression must have reverted the

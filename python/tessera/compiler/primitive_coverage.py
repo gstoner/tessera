@@ -1934,6 +1934,29 @@ def _planned(
     )
 
 
+def _partial(
+    name: str,
+    category: str,
+    families: Iterable[str],
+    *,
+    references: Iterable[str] = ("jax.lax", "jax.numpy", "flax.nnx"),
+    notes: str = "",
+) -> PrimitiveCoverage:
+    """Same shape as :func:`_planned`, but ``status="partial"`` —
+    i.e., a Python reference + a fused native kernel both exist for
+    this primitive (per Decision #25, contract-axis completeness is
+    still the next gate)."""
+    return PrimitiveCoverage(
+        name=name,
+        category=category,
+        status="partial",
+        contract_status=_contracts(),
+        model_families=tuple(families),
+        references=tuple(references),
+        notes=notes,
+    )
+
+
 _PLANNED_ENTRIES: tuple[PrimitiveCoverage, ...] = (
     # ── S2: tensor algebra ───────────────────────────────────────────────
     _planned("reshape", "tensor_algebra", ("all",), references=("jax.numpy", "aten")),
@@ -2238,25 +2261,38 @@ _PLANNED_ENTRIES: tuple[PrimitiveCoverage, ...] = (
     # See docs/spec/EBM_SPEC.md and docs/audit/ga_ebm_roadmap.md § EBM1.
     # All five primitives are Tessera-native — no PyTorch/JAX wrappers
     # per Decision #23. References list reading-only inspiration.
-    _planned("ebm_energy", "ebm", ("EBT", "RBM", "score_matching"),
+    # 2026-05-18: all five plus `ebm_partition_exact` ship fused MSL
+    # kernels on Apple GPU (see ``_EBM_APPLE_GPU_FUSED``), so they
+    # promote from `planned` → `partial` per Decision #25 (Python
+    # ref + native kernel + tests; contract-axis completeness pending).
+    _partial("ebm_energy", "ebm", ("EBT", "RBM", "score_matching"),
              references=("LeCun 2006",),
-             notes="EBM1: user-provided scalar energy E(x, y; theta)."),
-    _planned("ebm_inner_step", "ebm", ("EBT", "RBM", "score_matching"),
+             notes="EBM1: user-provided scalar energy E(x, y; theta). "
+                   "Native fused MSL kernel (quadratic specialization) "
+                   "in ``_EBM_APPLE_GPU_FUSED[\"ebm_energy\"]``."),
+    _partial("ebm_inner_step", "ebm", ("EBT", "RBM", "score_matching"),
              references=("Du & Mordatch 2019",),
-             notes="EBM1: pluggable inner-loop update y' = y - eta*grad [+ noise]."),
-    _planned("ebm_langevin_step", "ebm", ("EBT", "RBM", "score_matching"),
+             notes="EBM1: pluggable inner-loop update y' = y - eta*grad [+ noise]. "
+                   "Fused MSL kernel ``tessera_apple_gpu_ebm_inner_step_f32``."),
+    _partial("ebm_langevin_step", "ebm", ("EBT", "RBM", "score_matching"),
              references=("Welling & Teh 2011",),
-             notes="EBM1: one Langevin step; consumes one RNGKey, returns next."),
-    _planned("ebm_self_verify", "ebm", ("EBT",),
+             notes="EBM1: one Langevin step; consumes one RNGKey, returns next. "
+                   "Fused MSL kernel ``tessera_apple_gpu_ebm_langevin_step_f32``."),
+    _partial("ebm_self_verify", "ebm", ("EBT",),
              references=("EBT 2025",),
-             notes="EBM1: argmin over K candidates; soft-min variant when beta>0."),
-    _planned("ebm_decode_init", "ebm", ("EBT",),
+             notes="EBM1: argmin over K candidates; soft-min variant when beta>0. "
+                   "Fused MSL kernel ``tessera_apple_gpu_ebm_self_verify_f32``."),
+    _partial("ebm_decode_init", "ebm", ("EBT",),
              references=("EBT 2025",),
-             notes="EBM1: initialize K candidate trajectories (noise/base_model/copy)."),
+             notes="EBM1: initialize K candidate trajectories (noise/base_model/copy). "
+                   "Fused MSL kernel ``tessera_apple_gpu_ebm_decode_init_noise_apply_f32``."),
     # ── EBM3: partition function estimators ──────────────────────────────
-    _planned("ebm_partition_exact", "ebm", ("RBM",),
+    _partial("ebm_partition_exact", "ebm", ("RBM",),
              references=("LeCun 2006",),
-             notes="EBM3: Z = Σ_s exp(-E(s)) over finite support."),
+             notes="EBM3: Z = Σ_s exp(-E(s)) over finite support — fused via "
+                   "stable logsumexp in a single MSL dispatch. Native fast "
+                   "path: ``tessera.ebm.partition_exact_from_energies`` → "
+                   "``tessera_apple_gpu_ebm_partition_exact_f32``."),
     _planned("ebm_partition_monte_carlo", "ebm", ("EBT", "RBM", "score_matching"),
              references=("Robert & Casella 2004",),
              notes="EBM3: importance-sampled Z with effective-sample-size diagnostic."),
@@ -2279,14 +2315,18 @@ _PLANNED_ENTRIES: tuple[PrimitiveCoverage, ...] = (
     # ── EBM7: manifold-aware Langevin integrators ────────────────────────
     # The GA + EBM merge point. State lives on a non-flat manifold;
     # gradient and noise are projected to the appropriate tangent space.
-    _planned("ebm_bivector_langevin_step", "ebm",
+    _partial("ebm_bivector_langevin_step", "ebm",
              ("orientation_diffusion", "SO_diffusion", "lie_group_ebm"),
              references=("Hestenes & Sobczyk", "Roberts & Stramer 2002"),
-             notes="EBM7: Langevin on the bivector (so(n)) subspace via grade projection."),
-    _planned("ebm_sphere_langevin_step", "ebm",
+             notes="EBM7: Langevin on the bivector (so(n)) subspace via grade projection. "
+                   "Fused via the shared ``tessera_apple_gpu_ebm_langevin_step_f32`` "
+                   "kernel applied to grade-2-projected inputs "
+                   "(manifest entry ``ebm_bivector_langevin``)."),
+    _partial("ebm_sphere_langevin_step", "ebm",
              ("orientation_diffusion", "vMF_sampling", "manifold_EBM"),
              references=("Roberts & Stramer 2002", "Brubaker et al. 2012"),
-             notes="EBM7: Riemannian Langevin on S^{d-1} via tangent projection + normalization retraction."),
+             notes="EBM7: Riemannian Langevin on S^{d-1} via tangent projection + normalization retraction. "
+                   "Fused MSL kernel ``tessera_apple_gpu_ebm_sphere_langevin_f32``."),
     _planned("ebm_bivector_langevin_sample", "ebm",
              ("orientation_diffusion", "lie_group_ebm"),
              references=("Hestenes & Sobczyk",),

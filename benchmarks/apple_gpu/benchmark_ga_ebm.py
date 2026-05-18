@@ -23,18 +23,20 @@ on Apple GPU as of GA11, 2026-05-17):
   Weighted reduction (N×8, N → 8):
     integral
 
-EBM coverage (8 of 9 native MSL kernels + 1 Python reference):
+EBM coverage (9 of 9 native MSL kernels — closed 2026-05-17):
 
   Native MSL (Apple GPU): inner_step, refinement (fused single-dispatch
     T-step closed-form), langevin_step, decode_init,
     bivector_langevin_step (composition over langevin_step on
     grade-projected inputs), sphere_langevin_step, self_verify
-    (hard-argmin), energy (quadratic specialization).
+    (hard-argmin), energy (quadratic specialization), partition_exact
+    (single-dispatch stable logsumexp: Z = exp(max + log(sum(exp(-E_i/T - max)))) ).
   Native MSL (workload-only fused kernel): ebt_tiny (streaming
     closed-form refinement + per-row energy + K-way argmin in one
     Metal dispatch; K <= 256, D unbounded).
-  Python reference only: partition_function_exact (exhaustive
-    small-state sum, not GPU-shaped).
+  Python reference (always emitted alongside native rows for the
+    native-vs-reference speedup column): partition_function_exact
+    (callable-energy variant), every native EBM op.
 
 Proof-of-dispatch coverage:
   - Native EBM primitive rows + JIT-bridge benchmark rows: every row

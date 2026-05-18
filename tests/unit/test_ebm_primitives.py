@@ -31,7 +31,9 @@ from tessera.rng import RNGKey
 
 def test_five_ebm1_primitives_registered_in_coverage() -> None:
     """EBM1 introduces the five core energy primitives; later sprints add
-    more under the same category. We assert the EBM1 subset is present."""
+    more under the same category. We assert the EBM1 subset is present
+    and that each entry has been promoted out of ``planned`` now that
+    Python + native Apple GPU paths both exist (Decision #25)."""
     from tessera.compiler import primitive_coverage as pc
 
     ebm_entries = {
@@ -46,7 +48,11 @@ def test_five_ebm1_primitives_registered_in_coverage() -> None:
     }
     assert expected_ebm1.issubset(ebm_entries.keys())
     for name in expected_ebm1:
-        assert ebm_entries[name].status == "planned"
+        # 2026-05-18: all five EBM1 primitives ship fused MSL kernels,
+        # so they live at ``status="partial"`` per Decision #25 (Python
+        # reference + native kernel + tests; contract-axis completeness
+        # still the next gate).
+        assert ebm_entries[name].status == "partial"
         assert ebm_entries[name].category == "ebm"
 
 

@@ -879,6 +879,24 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, object]] = {
             "Arbitrary user energy_fn lifts to MSL is a follow-up sprint."
         ),
     },
+    # ebm_ebt_tiny — fused EBT refinement + energy + hard-argmin in a
+    # single MSL dispatch.  Optimization for the ebt_tiny workload —
+    # the standalone refinement + self_verify chain loses at small
+    # shapes because per-dispatch overhead dominates; this fused
+    # kernel collapses both into one dispatch.
+    "ebm_ebt_tiny": {
+        "symbol": "tessera_apple_gpu_ebm_ebt_tiny_refinement_argmin_f32",
+        "dtypes": ("fp32",),
+        "abi": ("(y0:f32*[BxKxD], grad:f32*[BxKxD], eta:f32, T:i32, "
+                "out:f32*[BxD], B:i32, K:i32, D:i32)"),
+        "notes": (
+            "Fused EBT-tiny pipeline: T-step refinement in registers + "
+            "per-row squared-norm energy + K-way hard argmin, all in "
+            "one Metal dispatch.  K,D <= 256.  Bit-equivalent to the "
+            "ebm.refinement → ebm.self_verify chain but with one "
+            "dispatch instead of two."
+        ),
+    },
 }
 
 # All EBM primitives currently covered by the manifest (the union of the
@@ -899,6 +917,8 @@ _EBM_PRIMITIVES: tuple[str, ...] = (
     # EBM7 — manifold-aware integrators.
     "ebm_bivector_langevin",
     "ebm_sphere_langevin",
+    # EBT-tiny fused-pipeline optimization (2026-05-17).
+    "ebm_ebt_tiny",
 )
 
 

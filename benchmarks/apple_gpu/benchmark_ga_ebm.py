@@ -1262,13 +1262,13 @@ def _workload_ebt_tiny_apple_gpu_path(
     rt: ctypes.CDLL, T: int, *,
     B: int = 4, K: int = 8, D: int = 6,
 ) -> tuple[Callable[[], np.ndarray], float, tuple[str, ...], str]:
-    """Apple-GPU EBT-tiny loop through **public APIs**.
+    """Apple-GPU EBT-tiny loop through the **fused public API**.
 
-    Both ``ebm.refinement(y0, grad, eta=eta, T=T)`` and
-    ``ebm.self_verify(energies, candidates)`` route through
-    ``tessera._apple_gpu_dispatch`` when their inputs are f32 +
-    contiguous + match the manifest contract.  No benchmark-local
-    ctypes for the kernels — proves the integration is user-visible.
+    ``ebm.ebt_tiny(y0, grad, eta=eta, T=T, B=B, K=K, D=D)`` routes
+    through ``tessera._apple_gpu_dispatch`` to the fused MSL kernel
+    ``ebm_ebt_tiny_refinement_argmin_f32`` — a single dispatch that
+    runs T-step refinement in registers, computes squared-norm
+    energies per candidate, and hard-argmins over K, all on-device.
 
     The ``rt`` parameter is kept for ABI parity with the other
     workload builders but unused; the dispatcher manages its own
@@ -1280,22 +1280,15 @@ def _workload_ebt_tiny_apple_gpu_path(
     grad_c = np.ascontiguousarray(y0.copy())          # fixed grad snapshot
 
     def step() -> np.ndarray:
-        y_t = ebm.refinement(y0_c, grad_c, eta=eta, T=T)
-        energies = np.ascontiguousarray(
-            np.sum(y_t * y_t, axis=1).reshape(B, K).astype(np.float32))
-        candidates = np.ascontiguousarray(y_t.reshape(B, K, D))
-        return ebm.self_verify(energies, candidates)
+        return ebm.ebt_tiny(y0_c, grad_c, eta=eta, T=T, B=B, K=K, D=D)
 
     out = step()
     ref, _, _ = _workload_ebt_tiny_python_path(T, B=B, K=K, D=D)
     ref_out = ref()
     err = float(np.abs(out - ref_out).max())
     syms = (
-        "tessera_apple_gpu_ebm_refinement_f32 [via ebm.refinement]",
-        "tessera_apple_gpu_ebm_self_verify_hard_argmin_f32 [via ebm.self_verify]",
+        "tessera_apple_gpu_ebm_ebt_tiny_refinement_argmin_f32 [via ebm.ebt_tiny]",
     )
-    # Shape descriptor must match the python_ref row for the
-    # break-even pair-up.  Public-API provenance lives in `symbols`.
     return step, err, syms, f"B={B},K={K},D={D}/T={T}"
 
 

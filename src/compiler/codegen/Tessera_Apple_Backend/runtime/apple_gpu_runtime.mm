@@ -6140,3 +6140,174 @@ extern "C" void tessera_apple_gpu_ebm_energy_quadratic_f32(
           ctx, x, y, energies, B, D)) return;
   reference_ebm_energy_quadratic_f32(x, y, energies, B, D);
 }
+
+// ===========================================================================
+// EBT-tiny fused refinement → energy → hard-argmin
+//
+// Collapses the entire EBT-tiny pattern into one Metal dispatch:
+//   1. For each (b, k) candidate: run T inner-step iterations of
+//      ``y - eta * grad`` in registers (no buffer materialization)
+//   2. Compute ``e[b, k] = sum_d y_T[b, k, d]^2``
+//   3. Hard-argmin over the K dim and copy the winner to ``out[b, :]``
+//
+// Memory layout: y0 / grad are (B*K, D) row-major; out is (B, D).
+// Threadgroup geometry: one threadgroup per batch row (B groups), one
+// thread per candidate row (K threads).  Each thread keeps a local
+// register vector of D y-values; the candidate-K reduction happens via
+// a small threadgroup-shared scratch + a single sequential pass.
+// Bounded by `D <= 256` (kept in thread-local registers).
+//
+// This is the optimization that makes ``ebt_tiny_refinement`` win
+// at the default benchmark shape (B=4, K=8, D=6, T=8) — the existing
+// two-dispatch pipeline (refinement + self_verify) loses by ~2× at
+// that shape because per-dispatch overhead dominates the math.
+// ===========================================================================
+
+inline void reference_ebm_ebt_tiny_refinement_argmin_f32(
+    const float* y0, const float* grad, float eta, int32_t T,
+    float* out, int32_t B, int32_t K, int32_t D) {
+  for (int32_t b = 0; b < B; ++b) {
+    int32_t best_k = 0;
+    float best_e = std::numeric_limits<float>::infinity();
+    std::vector<float> best_y(D);
+    std::vector<float> y(D);
+    for (int32_t k = 0; k < K; ++k) {
+      int64_t base = ((int64_t)b * K + k) * D;
+      for (int32_t d = 0; d < D; ++d) y[d] = y0[base + d];
+      for (int32_t t = 0; t < T; ++t) {
+        for (int32_t d = 0; d < D; ++d) {
+          y[d] = y[d] - eta * grad[base + d];
+        }
+      }
+      float e = 0.0f;
+      for (int32_t d = 0; d < D; ++d) e += y[d] * y[d];
+      if (e < best_e) {
+        best_e = e;
+        best_k = k;
+        for (int32_t d = 0; d < D; ++d) best_y[d] = y[d];
+      }
+    }
+    (void)best_k;
+    for (int32_t d = 0; d < D; ++d) out[(int64_t)b * D + d] = best_y[d];
+  }
+}
+
+static NSString *const kEBMEBTTinyRefinementArgminF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+// One threadgroup per batch.  One thread per candidate (K <= 256 lanes).
+// Each thread runs the T-step refinement on its candidate row in a
+// register-local D-vector (D <= 256), computes the per-row energy, then
+// participates in a K-way argmin via threadgroup-shared scratch.
+kernel void ebm_ebt_tiny_refinement_argmin_f32(
+    device const float* y0    [[buffer(0)]],
+    device const float* grad  [[buffer(1)]],
+    constant float&     eta   [[buffer(2)]],
+    constant int32_t&   T     [[buffer(3)]],
+    device float*       out   [[buffer(4)]],
+    constant int32_t&   B     [[buffer(5)]],
+    constant int32_t&   K     [[buffer(6)]],
+    constant int32_t&   D     [[buffer(7)]],
+    uint3  gid  [[threadgroup_position_in_grid]],
+    uint3  tid  [[thread_position_in_threadgroup]],
+    uint3  tgs  [[threads_per_threadgroup]])
+{
+    int b = (int)gid.x;
+    int k = (int)tid.x;
+    if (b >= B || k >= K) return;
+
+    // Per-thread register buffer for the refined candidate row.
+    float y_local[256];
+    int64_t base = ((int64_t)b * K + k) * D;
+    for (int d = 0; d < D; ++d) y_local[d] = y0[base + d];
+    for (int t = 0; t < T; ++t) {
+        for (int d = 0; d < D; ++d) {
+            y_local[d] = y_local[d] - eta * grad[base + d];
+        }
+    }
+    float e = 0.0f;
+    for (int d = 0; d < D; ++d) e += y_local[d] * y_local[d];
+
+    // K-way argmin via threadgroup-shared scratch.  K <= 256 lanes.
+    threadgroup float  energies[256];
+    energies[k] = e;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    if (k == 0) {
+        int best = 0;
+        float best_e = energies[0];
+        for (int kk = 1; kk < K; ++kk) {
+            if (energies[kk] < best_e) {
+                best_e = energies[kk];
+                best = kk;
+            }
+        }
+        // Signal the winner index to all threads via the same scratch.
+        // Store it in slot 0 as a float-encoded int (well within fp32
+        // integer-representable range for K <= 2^24).
+        energies[0] = (float)best;
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    int best_k = (int)energies[0];
+
+    if (k == best_k) {
+        for (int d = 0; d < D; ++d) {
+            out[(int64_t)b * D + d] = y_local[d];
+        }
+    }
+}
+)MSL";
+
+static bool dispatch_ebm_ebt_tiny_refinement_argmin_f32_msl(
+    MetalDeviceContext &ctx,
+    const float* y0, const float* grad, float eta, int32_t T,
+    float* out, int32_t B, int32_t K, int32_t D) {
+  if (K > 256 || D > 256) return false;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kEBMEBTTinyRefinementArgminF32Source,
+        @"ebm_ebt_tiny_refinement_argmin_f32");
+    if (!pso) return false;
+    NSUInteger inBytes  = sizeof(float) * (NSUInteger)B * (NSUInteger)K * (NSUInteger)D;
+    NSUInteger outBytes = sizeof(float) * (NSUInteger)B * (NSUInteger)D;
+    id<MTLBuffer> bY = [ctx.device newBufferWithBytes:y0 length:inBytes
+                                                options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bG = [ctx.device newBufferWithBytes:grad length:inBytes
+                                                options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bO = [ctx.device newBufferWithLength:outBytes
+                                                options:MTLResourceStorageModeShared];
+    if (!bY || !bG || !bO) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bY offset:0 atIndex:0];
+    [enc setBuffer:bG offset:0 atIndex:1];
+    [enc setBytes:&eta length:sizeof(float) atIndex:2];
+    [enc setBytes:&T length:sizeof(int32_t) atIndex:3];
+    [enc setBuffer:bO offset:0 atIndex:4];
+    [enc setBytes:&B length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&D length:sizeof(int32_t) atIndex:7];
+    MTLSize grid = MTLSizeMake((NSUInteger)B, 1, 1);
+    MTLSize tg = MTLSizeMake((NSUInteger)K, 1, 1);
+    [enc dispatchThreadgroups:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(out, [bO contents], outBytes);
+    return true;
+  }
+}
+
+extern "C" void tessera_apple_gpu_ebm_ebt_tiny_refinement_argmin_f32(
+    const float* y0, const float* grad, float eta, int32_t T,
+    float* out, int32_t B, int32_t K, int32_t D) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && K <= 256 && D <= 256 &&
+      dispatch_ebm_ebt_tiny_refinement_argmin_f32_msl(
+          ctx, y0, grad, eta, T, out, B, K, D)) return;
+  reference_ebm_ebt_tiny_refinement_argmin_f32(
+      y0, grad, eta, T, out, B, K, D);
+}

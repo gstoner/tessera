@@ -21,6 +21,7 @@ See `docs/audit/ebm_scope_lock.md` for the locked decisions,
 
 from tessera.ebm.energy import (
     decode_init,
+    ebt_tiny,
     energy,
     energy_quadratic,
     inner_step,
@@ -48,6 +49,7 @@ __all__ = [
     # EBM1
     "decode_init",
     "energy",
+    "ebt_tiny",
     "energy_quadratic",
     "inner_step",
     "langevin_step",

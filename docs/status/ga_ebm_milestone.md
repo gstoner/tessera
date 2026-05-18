@@ -4,19 +4,19 @@
 > changes; everything else in the repo (READMEs, roadmap, audit) cites
 > the *claims* below rather than restating them.
 >
-> **Last updated:** 2026-05-17 (GA11 + EBM-broadening + workload mode + **fused refinement kernel + 7 public-API GPU paths**).
+> **Last updated:** 2026-05-17 (**full public-API GPU coverage + fused EBT-tiny optimization**).
 
 ## TL;DR
 
 | Surface | Status | Coverage |
 |---|---|---|
-| **GA primitives (Clifford)** | ✅ all native + benchmarked | 17 / 17 fused MSL kernels on Apple GPU; end-to-end report rows for every primitive |
-| **EBM primitives (native)** | 🟡 close to complete, 1 to go | **8 / 9** with fused MSL kernels (`ebm_refinement` now fused in a single dispatch — was T-step ping-pong) |
+| **GA primitives (Clifford)** | ✅ all native + benchmarked | 17 / 17 fused MSL kernels on Apple GPU |
+| **EBM primitives (native)** | 🟡 close to complete, 1 to go | **8 / 9** with fused MSL kernels |
 | **EBM primitives (Python ref only)** | ⏳ 1 op | Only `ebm_partition_exact` — exhaustive small-state sum, not GPU-shaped |
-| **Workload benchmarks** | ✅ 2 composite chains, **driven by public APIs** | `ga_feature_pipeline` (**27× speedup** vs Python ref at B=32); `ebt_tiny_refinement` (K-cand × T-step loop) |
-| **EBT-tiny break-even sweep** | ✅ opt-in mode (`--ebt-sweep`) | 7-point (B, K, D, T) ladder; **first native win at `B=32,K=128,D=512/T=64` (6.5×); peak 20.3× at `B=64,K=128,D=1024/T=256`** |
-| **GA / EBM via `tessera.ga.*` / `tessera.ebm.*`** | 🟢 **integration gap closed for 8 ops** | `ga.inner`, `ga.exp_mv`, `ga.rotor_sandwich`, `ga.norm`, `ebm.inner_step`, `ebm.refinement`, `ebm.self_verify`, `ebm.energy_quadratic`, `ebm.decode_init` all route through [`tessera._apple_gpu_dispatch`](../../python/tessera/_apple_gpu_dispatch.py) |
-| **Build / test gate** | ✅ deterministic CI test, **in `scripts/validate.sh` spine** | [`tests/unit/test_benchmark_ga_ebm.py`](../../tests/unit/test_benchmark_ga_ebm.py) — 96 tests, graceful non-Darwin skip |
+| **Workload benchmarks** | ✅ 2 composite chains, **all driven through public APIs** | `ga_feature_pipeline` (33× speedup); `ebt_tiny_refinement` (fused single-dispatch kernel) |
+| **EBT-tiny break-even sweep** | ✅ opt-in mode (`--ebt-sweep`) | After fused `ebt_tiny` kernel: **first native win at `B=32,K=64,D=512/T=32` (17.9×); peak 116× at `B=64,K=128,D=1024/T=256`** |
+| **GA / EBM via `tessera.ga.*` / `tessera.ebm.*`** | 🟢 **integration gap fully closed** | **17 / 17 GA + 9 / 9 native EBM** ops route through [`tessera._apple_gpu_dispatch`](../../python/tessera/_apple_gpu_dispatch.py) (incl. new `ebm.ebt_tiny`) |
+| **Build / test gate** | ✅ deterministic CI test, **in `scripts/validate.sh` spine** | [`tests/unit/test_benchmark_ga_ebm.py`](../../tests/unit/test_benchmark_ga_ebm.py) — 113 tests, graceful non-Darwin skip |
 
 ## What's claimed
 
@@ -60,15 +60,13 @@
    `ga_feature_pipeline` workload still wins 13× because the chained
    primitives amortize dispatch over real arithmetic.
 
-3. **Most GA / EBM Python API calls still go through numpy.** As of
-   this update, **9 ops** route through the dispatcher transparently:
-   `ga.inner` / `ga.exp_mv` / `ga.rotor_sandwich` / `ga.norm` and
-   `ebm.inner_step` / `ebm.refinement` / `ebm.self_verify` /
-   `ebm.energy_quadratic` / `ebm.decode_init` (the last only when a
-   `mean` kwarg is provided).  The remaining 13 GA primitives + 4
-   native-EBM primitives reach the GPU today only via the benchmark
-   or by importing the runtime symbols directly.  Sweep-through is
-   open work — see "Next targets".
+3. **Public-API GPU coverage is now complete** for both GA (17/17)
+   and native EBM (9/9 including the new `ebm.ebt_tiny` fused
+   pipeline).  Every `tessera.ga.*` and `tessera.ebm.*` user call
+   that has a fused MSL kernel transparently routes through
+   `tessera._apple_gpu_dispatch` when the input shape + dtype match
+   the manifest contract; on non-Darwin or with a mismatched dtype
+   the numpy reference path runs instead.
 
 4. **No on-device RNG yet.**  The native `langevin_step` /
    `decode_init` / `sphere_langevin` kernels take a *host-supplied
@@ -108,31 +106,30 @@ benchmarks/apple_gpu/sample_ga_ebm_report.json
 
 In priority order (descending):
 
-1. **Continue the public-API sweep**.  9 ops route through
-   `_apple_gpu_dispatch` today; the remaining 13 GA primitives
-   (reverse / grade_involution / conjugate / hodge_star / log_mv /
-   geometric_product / wedge / left_contraction / grade_projection /
-   ext_deriv / vec_deriv / codiff / integral) + 4 native-EBM
-   primitives (langevin_step / bivector_langevin / sphere_langevin /
-   energy with arbitrary energy_fn) all need the same `_try_apple_gpu_*`
-   helper + Python frontend hookup.  The pattern is small + repeatable.
+1. **Reduce per-dispatch host overhead** so the floor latency drops
+   below 0.2 ms.  Each `_try_apple_gpu_*` helper today calls
+   `newBufferWithBytes` (a memcpy into Metal-shared storage) and
+   `waitUntilCompleted` synchronously.  A per-thread buffer pool +
+   asynchronous command-queue scheduling could drop the floor from
+   ~0.2 ms to ~50 µs and let small-shape primitives stop losing to
+   numpy.  Compounds with everything below.
 
-2. **Reduce per-dispatch host overhead** so small-shape EBM rows stop
-   losing to numpy.  Each `_try_apple_gpu_*` helper today allocates a
-   fresh output buffer + does a `MTLBuffer newBufferWithBytes` copy.
-   A per-thread or per-process buffer pool + `MTLResourceStorageModeShared`
-   with direct pointers could drop the floor latency from ~0.2 ms to
-   ~50 µs and let the workload break-even drop dramatically.
-
-3. **On-device RNG (Philox in MSL)** for `langevin_step` /
+2. **On-device RNG (Philox in MSL)** for `langevin_step` /
    `decode_init` / `sphere_langevin` — removes the host-side noise
    pre-generation step + makes the kernels self-contained.
 
-4. **Lift arbitrary `energy_fn` to MSL** so the v2 `ebm_energy`
-   kernel isn't just a quadratic specialization.  Likely path:
-   restricted Python AST → MSL via a small visitor (covers
-   polynomials + a handful of activations).  Enables real EBT
-   refinement with per-step gradient recomputation natively.
+3. **Lift arbitrary `energy_fn` to MSL** so `ebm_energy` covers more
+   than the quadratic case.  Likely path: restricted Python AST →
+   MSL via a small visitor (covers polynomials + a handful of
+   activations).  Enables real EBT refinement with per-step gradient
+   recomputation natively.
+
+4. **More fused workloads** like `ebt_tiny`.  Candidates: a
+   GA-conditioned diffusion step (`rotor_sandwich` + `langevin_step`
+   chained), a sphere-Langevin chain with on-device retraction loop,
+   etc.  The pattern is: identify the multi-dispatch composition
+   that loses to numpy at small shapes and write one MSL kernel
+   that consumes the whole chain.
 
 5. **`ebm_partition_exact` stays reference** — small-state exhaustive
    sums are not GPU-shaped at typical scale.

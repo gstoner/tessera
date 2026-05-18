@@ -226,6 +226,19 @@ def langevin_step(
         grad = _as_array(grad_fn(y_arr)).astype(y_arr.dtype, copy=False)
     sample_key, next_key = rng_key.split(2)
     noise_scale = math.sqrt(2.0 * float(eta) * float(temperature))
+    # Apple GPU fast path — `y - eta*grad + noise_scale*noise` in a
+    # single MSL kernel.  Requires f32 + analytic grad (so we don't
+    # re-enter `_numerical_grad`, which would dominate the timing).
+    if y_arr.dtype == np.float32 and grad_fn is not None:
+        if noise_scale > 0.0:
+            noise = normal(sample_key, shape=y_arr.shape,
+                            dtype=str(y_arr.dtype)).astype(np.float32, copy=False)
+        else:
+            noise = np.zeros_like(y_arr)
+        gpu_out = _try_apple_gpu_langevin_step_f32(
+            y_arr, grad, noise, float(eta), float(noise_scale))
+        if gpu_out is not None:
+            return gpu_out, next_key
     out = inner_step(
         y_arr,
         grad,
@@ -424,6 +437,53 @@ def refinement(
 
 
 # ---------------------------------------------------------------------------
+# EBT-tiny fused pipeline (Apple GPU optimization)
+# ---------------------------------------------------------------------------
+
+def ebt_tiny(
+    y0: Any, grad: Any, *, eta: float, T: int, B: int, K: int, D: int,
+) -> np.ndarray:
+    """Fused EBT-tiny pipeline: refinement → squared-norm energy →
+    hard-argmin, all in a single Metal dispatch when the runtime is
+    available.
+
+    Equivalent to::
+
+        y_T = ebm.refinement(y0, grad, eta=eta, T=T)
+        e   = np.sum(y_T * y_T, axis=1).reshape(B, K)
+        c   = y_T.reshape(B, K, D)
+        return ebm.self_verify(e, c)          # hard argmin
+
+    Inputs must be ``(B * K, D)``-shaped (flattened candidate axis)
+    and f32 for the GPU fast path; ``K`` and ``D`` are both bounded
+    by 256 (kernel register budget).  Falls back to the numpy
+    composition when any guard fails — caller pays no penalty.
+
+    Returns ``(B, D)`` best candidates.
+    """
+    y_arr = _as_array(y0)
+    grad_arr = _as_array(grad)
+    if y_arr.shape != grad_arr.shape:
+        raise ValueError(
+            f"ebt_tiny requires matching shapes; got y0={y_arr.shape}, "
+            f"grad={grad_arr.shape}.")
+    if y_arr.shape != (B * K, D):
+        raise ValueError(
+            f"ebt_tiny requires y0.shape == (B*K, D) = "
+            f"{(B*K, D)}; got {y_arr.shape}.")
+    if y_arr.dtype == np.float32 and K <= 256 and D <= 256 and T > 0:
+        gpu_out = _try_apple_gpu_ebt_tiny_f32(
+            y_arr, grad_arr, float(eta), int(T), int(B), int(K), int(D))
+        if gpu_out is not None:
+            return gpu_out
+    # numpy fallback — same arithmetic structure.
+    y_T = y_arr - (T * eta) * grad_arr
+    energies = np.sum(y_T * y_T, axis=1).reshape(B, K)
+    candidates = y_T.reshape(B, K, D)
+    return candidates[np.arange(B), energies.argmin(axis=1)]
+
+
+# ---------------------------------------------------------------------------
 # Energy specialization: quadratic (Apple GPU fast path)
 # ---------------------------------------------------------------------------
 
@@ -458,6 +518,121 @@ def energy_quadratic(x: Any, y: Any) -> np.ndarray:
 # Apple GPU dispatch helpers — share the pattern with ga.ops fast paths.
 # Each returns the GPU output or ``None``; callers fall back to numpy.
 # ---------------------------------------------------------------------------
+
+def _try_apple_gpu_ebt_tiny_f32(
+    y0: np.ndarray, grad: np.ndarray, eta: float, T: int,
+    B: int, K: int, D: int,
+) -> Optional[np.ndarray]:
+    """Fused EBT-tiny pipeline on Apple GPU.
+
+    Returns ``(B, D)`` array of best candidates or ``None`` to fall
+    back when the runtime isn't reachable or guard rails fail."""
+    if y0.dtype != np.float32 or grad.dtype != np.float32:
+        return None
+    if y0.size != B * K * D or grad.size != B * K * D:
+        return None
+    if K > 256 or D > 256:
+        return None
+    y0_c = np.ascontiguousarray(y0)
+    grad_c = np.ascontiguousarray(grad)
+    try:
+        import ctypes
+        from tessera._apple_gpu_dispatch import bind_symbol
+    except ImportError:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_ebm_ebt_tiny_refinement_argmin_f32",
+        (ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_float, ctypes.c_int32,
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    out = np.zeros((B, D), dtype=np.float32)
+    p = ctypes.POINTER(ctypes.c_float)
+    fn(y0_c.ctypes.data_as(p), grad_c.ctypes.data_as(p),
+       ctypes.c_float(eta), ctypes.c_int32(T),
+       out.ctypes.data_as(p),
+       ctypes.c_int32(B), ctypes.c_int32(K), ctypes.c_int32(D))
+    return out
+
+
+def _try_apple_gpu_langevin_step_f32(
+    y: np.ndarray, grad: np.ndarray, noise: np.ndarray,
+    eta: float, noise_scale: float,
+) -> Optional[np.ndarray]:
+    """``out = y - eta*grad + noise_scale*noise`` on Apple GPU."""
+    if y.dtype != np.float32 or grad.dtype != np.float32 or noise.dtype != np.float32:
+        return None
+    if y.shape != grad.shape or y.shape != noise.shape:
+        return None
+    y_c = np.ascontiguousarray(y)
+    g_c = np.ascontiguousarray(grad)
+    n_c = np.ascontiguousarray(noise)
+    try:
+        import ctypes
+        from tessera._apple_gpu_dispatch import bind_symbol
+    except ImportError:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_ebm_langevin_step_f32",
+        (ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_float, ctypes.c_float,
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    out = np.zeros_like(y_c)
+    n = int(y_c.size)
+    p = ctypes.POINTER(ctypes.c_float)
+    fn(y_c.ctypes.data_as(p), g_c.ctypes.data_as(p), n_c.ctypes.data_as(p),
+       ctypes.c_float(eta), ctypes.c_float(noise_scale),
+       out.ctypes.data_as(p), ctypes.c_int32(n))
+    return out
+
+
+def _try_apple_gpu_sphere_langevin_step_f32(
+    x: np.ndarray, grad: np.ndarray, noise: np.ndarray,
+    eta: float, noise_scale: float,
+) -> Optional[np.ndarray]:
+    """Sphere Langevin step on Apple GPU: tangent projection +
+    Euler-Maruyama + retract, all in one MSL kernel."""
+    if x.dtype != np.float32 or grad.dtype != np.float32 or noise.dtype != np.float32:
+        return None
+    if x.ndim != 1 or x.shape != grad.shape or x.shape != noise.shape:
+        return None
+    x_c = np.ascontiguousarray(x)
+    g_c = np.ascontiguousarray(grad)
+    n_c = np.ascontiguousarray(noise)
+    try:
+        import ctypes
+        from tessera._apple_gpu_dispatch import bind_symbol
+    except ImportError:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_ebm_sphere_langevin_step_f32",
+        (ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_float, ctypes.c_float,
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    out = np.zeros_like(x_c)
+    d = int(x_c.size)
+    p = ctypes.POINTER(ctypes.c_float)
+    fn(x_c.ctypes.data_as(p), g_c.ctypes.data_as(p), n_c.ctypes.data_as(p),
+       ctypes.c_float(eta), ctypes.c_float(noise_scale),
+       out.ctypes.data_as(p), ctypes.c_int32(d))
+    return out
+
 
 def _try_apple_gpu_refinement_fused_f32(
     y0: np.ndarray, grad: np.ndarray, eta: float, T: int,
@@ -602,6 +777,7 @@ def _try_apple_gpu_decode_init_noise_apply_f32(
 
 __all__ = [
     "decode_init",
+    "ebt_tiny",
     "energy",
     "energy_quadratic",
     "inner_step",

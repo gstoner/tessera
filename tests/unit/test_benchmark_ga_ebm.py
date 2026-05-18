@@ -55,12 +55,21 @@ EXPECTED_GA_OPS = {
 }
 
 # EBM ops that ship native fused MSL kernels on Apple GPU.
+# Native EBM ops the benchmark emits as per-primitive rows (one
+# `apple_gpu` row per op).  `ebm_ebt_tiny` ships a fused MSL kernel
+# but is used only through the EBT-tiny workload — not as a separate
+# per-primitive row — so it lives in `ALL_NATIVE_EBM_MANIFEST_KEYS`
+# below rather than this set.
 EXPECTED_NATIVE_EBM_OPS = {
     "ebm_inner_step", "ebm_refinement", "ebm_langevin_step",
     "ebm_decode_init", "ebm_bivector_langevin", "ebm_sphere_langevin",
-    # 2026-05-17 expansion — closes the "next targets" list in the status doc.
     "ebm_self_verify", "ebm_energy",
 }
+
+# All EBM ops that have a fused MSL kernel in the manifest — this set
+# is the source-of-truth for the manifest-completeness gate and
+# includes ``ebm_ebt_tiny`` (the workload-only optimization).
+ALL_NATIVE_EBM_MANIFEST_KEYS = EXPECTED_NATIVE_EBM_OPS | {"ebm_ebt_tiny"}
 
 # EBM ops that still have no native dispatch.  `partition_exact` is the
 # only one left — its exhaustive sum over a finite state set is small +
@@ -339,26 +348,30 @@ def test_ga_feature_pipeline_chains_three_known_msl_kernels(
     assert any("clifford_norm" in s for s in syms)
 
 
-def test_ebt_tiny_workload_uses_ebm_refinement_kernel(report: dict) -> None:
-    """The EBT-tiny workload must reference the native refinement kernel
-    + native hard-argmin self_verify."""
+def test_ebt_tiny_workload_uses_fused_kernel(report: dict) -> None:
+    """The EBT-tiny workload must reference the fused single-dispatch
+    kernel (after the 2026-05-17 optimization that collapsed
+    refinement + self_verify into one MSL dispatch)."""
     if not _apple_gpu_available(report):
         pytest.skip("apple_gpu unavailable")
     row = next(r for r in _workload_native_rows(report)
                if r["op"] == "ebt_tiny_refinement")
     syms = row["symbols"]
-    assert any("ebm_refinement_f32" in s for s in syms)
-    assert any("self_verify" in s for s in syms)
+    assert any("ebt_tiny_refinement_argmin_f32" in s for s in syms), (
+        f"workload should now use the fused kernel; got symbols={syms}"
+    )
+    assert any("ebm.ebt_tiny" in s for s in syms)
 
 
 # ---------------------------------------------------------------------------
 # Manifest cross-check
 # ---------------------------------------------------------------------------
 
-def test_all_six_native_ebm_ops_in_fused_manifest_table() -> None:
-    """``_EBM_APPLE_GPU_FUSED`` must list every op the benchmark calls
-    native — keeps the manifest in lock-step with the runtime."""
-    assert set(bm._EBM_APPLE_GPU_FUSED.keys()) == EXPECTED_NATIVE_EBM_OPS
+def test_all_native_ebm_ops_in_fused_manifest_table() -> None:
+    """``_EBM_APPLE_GPU_FUSED`` must list every native-EBM op the
+    benchmark expects (including the workload-only ``ebm_ebt_tiny``
+    fused kernel) — keeps the manifest in lock-step with the runtime."""
+    assert set(bm._EBM_APPLE_GPU_FUSED.keys()) == ALL_NATIVE_EBM_MANIFEST_KEYS
 
 
 def test_manifest_for_routes_ebm_prefix_to_ebm_table() -> None:
@@ -583,6 +596,211 @@ def test_ebm_decode_init_public_api_with_mean_matches_reference() -> None:
     assert float(np.abs(out - expected).max()) <= 5e-6
 
 
+def test_ebm_ebt_tiny_public_api_matches_chained_reference() -> None:
+    """`ebm.ebt_tiny(...)` returns the same `(B, D)` best-candidate
+    matrix as the explicit `refinement → energy → self_verify` chain."""
+    import numpy as np
+    import tessera.ebm as ebm
+    B, K, D, T = 4, 8, 16, 6
+    rng = np.random.RandomState(2200)
+    y0 = rng.randn(B * K, D).astype(np.float32)
+    grad = rng.randn(B * K, D).astype(np.float32)
+    eta = 0.03
+    fused = ebm.ebt_tiny(y0, grad, eta=eta, T=T, B=B, K=K, D=D)
+
+    # Reference: closed-form refinement (fixed grad) + numpy argmin.
+    y_T = (y0 - T * eta * grad).astype(np.float32)
+    energies = np.sum(y_T * y_T, axis=1).reshape(B, K)
+    candidates = y_T.reshape(B, K, D)
+    expected = candidates[np.arange(B), energies.argmin(axis=1)]
+    assert fused.shape == (B, D)
+    assert float(np.abs(fused - expected).max()) <= 5e-5
+
+
+@pytest.mark.parametrize("op_name", [
+    "reverse", "grade_involution", "conjugate",
+])
+def test_ga_unary_signflip_public_api_matches_per_element_reference(
+        op_name: str) -> None:
+    """Sign-flip unaries: reverse / grade_involution / conjugate all
+    route through `_try_apple_gpu_unary_8x8_cl30_f32`."""
+    import numpy as np
+    import tessera.ga as ga
+    a = ga.Cl(3, 0)
+    fn = getattr(ga, op_name)
+    rng = np.random.RandomState(50)
+    A = rng.randn(8, 8).astype(np.float32)
+    batched = fn(ga.Multivector(A, a)).coefficients
+    elemwise = np.stack([
+        fn(ga.Multivector(A[i], a)).coefficients for i in range(8)
+    ])
+    assert float(np.abs(batched - elemwise).max()) <= 5e-6
+
+
+def test_ga_hodge_star_public_api_matches_per_element_reference() -> None:
+    import numpy as np
+    import tessera.ga as ga
+    a = ga.Cl(3, 0)
+    rng = np.random.RandomState(51)
+    A = rng.randn(8, 8).astype(np.float32)
+    batched = ga.hodge_star(ga.Multivector(A, a)).coefficients
+    elemwise = np.stack([
+        ga.hodge_star(ga.Multivector(A[i], a)).coefficients for i in range(8)
+    ])
+    assert float(np.abs(batched - elemwise).max()) <= 5e-6
+
+
+def test_ga_log_mv_public_api_matches_per_element_reference() -> None:
+    import numpy as np
+    import tessera.ga as ga
+    a = ga.Cl(3, 0)
+    rng = np.random.RandomState(52)
+    A = rng.randn(8, 8).astype(np.float32) * 0.3
+    batched = ga.log_mv(ga.Multivector(A, a)).coefficients
+    elemwise = np.stack([
+        ga.log_mv(ga.Multivector(A[i], a)).coefficients for i in range(8)
+    ])
+    assert float(np.abs(batched - elemwise).max()) <= 5e-6
+
+
+@pytest.mark.parametrize("op_name", [
+    "geometric_product", "wedge", "left_contraction",
+])
+def test_ga_binary_8x8_public_api_matches_per_element_reference(
+        op_name: str) -> None:
+    """Binary 8×8→8 ops all route through
+    `_try_apple_gpu_binary_8x8_cl30_f32`."""
+    import numpy as np
+    import tessera.ga as ga
+    a = ga.Cl(3, 0)
+    fn = getattr(ga, op_name)
+    rng = np.random.RandomState(53)
+    A = rng.randn(8, 8).astype(np.float32)
+    B = rng.randn(8, 8).astype(np.float32)
+    batched = fn(ga.Multivector(A, a), ga.Multivector(B, a)).coefficients
+    elemwise = np.stack([
+        fn(ga.Multivector(A[i], a),
+           ga.Multivector(B[i], a)).coefficients for i in range(8)
+    ])
+    assert float(np.abs(batched - elemwise).max()) <= 5e-6
+
+
+def test_ga_grade_projection_public_api_matches_per_element_reference() -> None:
+    import numpy as np
+    import tessera.ga as ga
+    a = ga.Cl(3, 0)
+    rng = np.random.RandomState(54)
+    A = rng.randn(8, 8).astype(np.float32)
+    grades = {0, 2}                      # even subalgebra
+    batched = ga.grade_projection(ga.Multivector(A, a), grades).coefficients
+    elemwise = np.stack([
+        ga.grade_projection(ga.Multivector(A[i], a),
+                              grades).coefficients for i in range(8)
+    ])
+    assert float(np.abs(batched - elemwise).max()) == 0.0
+
+
+@pytest.mark.parametrize("op_name", ["ext_deriv", "vec_deriv", "codiff"])
+def test_ga_field_op_public_api_matches_interior_reference(
+        op_name: str) -> None:
+    """Field ops (ext_deriv / vec_deriv / codiff) match the numpy
+    reference on interior cells (kernel zero-pads boundaries)."""
+    import numpy as np
+    import tessera.ga as ga
+    from tessera.ga.calculus import MultivectorField
+    a = ga.Cl(3, 0)
+    fn = getattr(__import__("tessera.ga.calculus",
+                             fromlist=[op_name]), op_name)
+    rng = np.random.RandomState(55)
+    F32 = rng.randn(5, 6, 7, 8).astype(np.float32)
+    F64 = F32.astype(np.float64)
+    spacing = (0.1, 0.2, 0.25)
+    field32 = MultivectorField(F32, a, spacing=spacing)
+    field64 = MultivectorField(F64, a, spacing=spacing)
+    gpu = fn(field32).values
+    ref = fn(field64).values.astype(np.float32)
+    sl = (slice(1, 4), slice(1, 5), slice(1, 6), slice(None))
+    assert float(np.abs(gpu[sl] - ref[sl]).max()) <= 1e-3
+
+
+def test_ga_integral_public_api_matches_weighted_sum() -> None:
+    import numpy as np
+    import tessera.ga as ga
+    from tessera.ga.calculus import MultivectorField, integral
+    from tessera.ga.manifold import Euclidean
+    a = ga.Cl(3, 0)
+    rng = np.random.RandomState(56)
+    D0, D1, D2 = 4, 4, 4
+    F = rng.randn(D0, D1, D2, 8).astype(np.float32)
+    field = MultivectorField(F, a, spacing=(1.0, 1.0, 1.0))
+    mf = Euclidean(bounds=[(0, 1)] * 3, resolution=(D0, D1, D2))
+    out = integral(field, mf)
+    expected = np.einsum("i,ij->j", mf.weights(),
+                          F.reshape(-1, 8)).astype(np.float32)
+    assert float(np.abs(out - expected).max()) <= 1e-3
+
+
+def test_ebm_langevin_step_public_api_matches_closed_form() -> None:
+    import numpy as np
+    import tessera.ebm as ebm
+    from tessera.rng import RNGKey
+    y = np.random.RandomState(57).randn(16, 4).astype(np.float32)
+    key = RNGKey.from_seed(57)
+    grad_fn = lambda yy: 2.0 * yy
+    energy_fn = lambda yy: np.sum(yy * yy, axis=1)
+    out, _ = ebm.langevin_step(y, energy_fn, eta=0.01, temperature=0.0,
+                                 rng_key=key, grad_fn=grad_fn)
+    # T=0 ⇒ noise contribution vanishes, pure GD.
+    expected = (y - 0.01 * 2.0 * y).astype(np.float32)
+    assert float(np.abs(out - expected).max()) <= 5e-6
+
+
+def test_ebm_bivector_langevin_public_api_matches_python_path() -> None:
+    """Bivector Langevin should produce identical output through the
+    public API regardless of whether the GPU fast path activates."""
+    import numpy as np
+    import tessera.ga as ga
+    import tessera.ebm as ebm
+    from tessera.rng import RNGKey
+    a = ga.Cl(3, 0)
+    coeffs = np.zeros(8, dtype=np.float32)
+    coeffs[3] = 0.5
+    coeffs[5] = -0.2
+    coeffs[6] = 0.3
+    state = ga.Multivector(coeffs, a)
+
+    def grad_fn(mv):
+        return ga.Multivector(mv.coefficients.copy(), mv.algebra)
+
+    key = RNGKey.from_seed(58)
+    out, _ = ebm.bivector_langevin_step(state, lambda m: 0.0,
+                                          eta=0.01, temperature=0.0,
+                                          rng_key=key, grad_fn=grad_fn)
+    # T=0 + grad=state ⇒ result is (1 - eta) * state on the grade-2 blades only.
+    for k in (3, 5, 6):
+        assert abs(float(out.coefficients[k]) - 0.99 * coeffs[k]) <= 5e-6
+    # Non-bivector blades stay zero.
+    for k in (0, 1, 2, 4, 7):
+        assert abs(float(out.coefficients[k])) <= 5e-6
+
+
+def test_ebm_sphere_langevin_public_api_matches_python_path() -> None:
+    """Sphere Langevin step (T=0) returns the unit-norm retraction
+    of `x - eta * tangent_grad`."""
+    import numpy as np
+    import tessera.ebm as ebm
+    from tessera.rng import RNGKey
+    x = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+    grad = np.array([-1.0, 0.0, 0.0], dtype=np.float32)
+    out, _ = ebm.sphere_langevin_step(x, lambda p: -float(p[0]),
+                                        eta=0.005, temperature=0.0,
+                                        rng_key=RNGKey.from_seed(59),
+                                        grad_fn=lambda p: grad)
+    # Tangent projection at x=(1,0,0): grad_tan = grad - <grad,x>x = 0.
+    # So x' = x, retract → x.
+    assert float(np.abs(out - x).max()) <= 1e-6
+
+
 def test_ebm_refinement_public_api_matches_closed_form() -> None:
     """`ebm.refinement(y0, grad, eta, T)` runs T inner-step iterations
     in a single fused MSL kernel when GPU is up; closed-form numpy
@@ -609,8 +827,10 @@ def test_workloads_use_public_apis_not_local_ctypes(report: dict) -> None:
     assert any("via ga.rotor_sandwich" in s for s in ga_row["symbols"])
     assert any("via ga.norm" in s for s in ga_row["symbols"])
     ebt_row = by_op["ebt_tiny_refinement"]
-    assert any("via ebm.refinement" in s for s in ebt_row["symbols"])
-    assert any("via ebm.self_verify" in s for s in ebt_row["symbols"])
+    # After the fused-kernel optimization, ebt_tiny calls the new
+    # ``ebm.ebt_tiny`` public API (single MSL dispatch) instead of
+    # the refinement+self_verify chain.
+    assert any("via ebm.ebt_tiny" in s for s in ebt_row["symbols"])
 
 
 # ---------------------------------------------------------------------------

@@ -127,6 +127,26 @@ def bivector_langevin_step(
     else:
         noise_mv = None
 
+    # Apple GPU fast path — the affine combination ``state - eta*grad +
+    # noise_scale*noise`` is exactly the ``ebm_langevin_step`` kernel
+    # operating on the grade-projected coefficient vectors.  Both
+    # ``grad_proj`` and ``noise_mv`` are already grade-restricted, so
+    # the result lives in the same subspace without a final
+    # grade-projection pass.
+    if state.dtype == np.float32:
+        from tessera.ebm.energy import _try_apple_gpu_langevin_step_f32
+        noise_c = (np.ascontiguousarray(noise_mv.coefficients,
+                                          dtype=np.float32)
+                    if noise_mv is not None
+                    else np.zeros_like(state.coefficients, dtype=np.float32))
+        gpu_out = _try_apple_gpu_langevin_step_f32(
+            np.ascontiguousarray(state.coefficients, dtype=np.float32),
+            np.ascontiguousarray(grad_proj.coefficients, dtype=np.float32),
+            noise_c, float(eta), float(noise_scale),
+        )
+        if gpu_out is not None:
+            return Multivector(gpu_out, algebra, grades=frozenset({grade})), next_key
+
     # State + (-eta) * grad + noise_scale * noise.
     new_state = state + (-float(eta)) * grad_proj
     if noise_mv is not None:
@@ -224,6 +244,29 @@ def sphere_langevin_step(
         raise ValueError(
             f"sphere_langevin_step requires |x| = 1 on entry; got |x| = {norm:.6f}."
         )
+
+    # Apple GPU fast path — the whole step (tangent projection +
+    # Euler-Maruyama + retract) is one MSL kernel.  Activates when the
+    # user passes f32 + an analytic ``grad_fn`` so the gradient query
+    # itself is cheap.
+    input_f32 = isinstance(x, np.ndarray) and x.dtype == np.float32
+    if input_f32 and grad_fn is not None:
+        sub_key, next_key = rng_key.split(2)
+        noise_scale = math.sqrt(2.0 * float(eta) * float(temperature))
+        if noise_scale > 0.0:
+            noise = normal(sub_key, shape=(x_arr.shape[0],),
+                            dtype="fp32").astype(np.float32, copy=False)
+        else:
+            noise = np.zeros(x_arr.shape[0], dtype=np.float32)
+        from tessera.ebm.energy import _try_apple_gpu_sphere_langevin_step_f32
+        grad_f32 = np.asarray(grad_fn(x_arr.astype(np.float32, copy=False)),
+                                dtype=np.float32)
+        gpu_out = _try_apple_gpu_sphere_langevin_step_f32(
+            x_arr.astype(np.float32, copy=False), grad_f32, noise,
+            float(eta), float(noise_scale),
+        )
+        if gpu_out is not None:
+            return gpu_out, next_key
 
     if grad_fn is None:
         # Numerical gradient via central differences.

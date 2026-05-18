@@ -72,8 +72,16 @@ def geometric_product(a: Multivector, b: Multivector) -> Multivector:
     Implemented as a per-blade-pair scatter into the result using the
     algebra's compile-time-cached Cayley table. Batch axes (leading
     dims of the coefficient arrays) are broadcast.
+
+    **Apple GPU fast path**: Cl(3,0) f32 batched inputs route through
+    ``tessera_apple_gpu_clifford_geo_product_cl30_f32``.
     """
     algebra = _same_algebra(a, b)
+    if algebra.signature == (3, 0, 0):
+        gpu_out = _try_apple_gpu_binary_8x8_cl30_f32(
+            a, b, "tessera_apple_gpu_clifford_geo_product_cl30_f32")
+        if gpu_out is not None:
+            return gpu_out
     table = algebra.product_table()
     dim = algebra.dim
     dtype = _promoted_dtype(a, b)
@@ -104,8 +112,23 @@ def geometric_product(a: Multivector, b: Multivector) -> Multivector:
 # ---------------------------------------------------------------------------
 
 def grade_projection(a: Multivector, k: _GradeArg) -> Multivector:
-    """Project ``a`` onto the subspace of the requested grade(s)."""
+    """Project ``a`` onto the subspace of the requested grade(s).
+
+    **Apple GPU fast path**: Cl(3,0) f32 batched inputs route through
+    ``tessera_apple_gpu_clifford_grade_projection_cl30_f32`` with the
+    blade-mask encoded as ``sum(1 << blade.mask for grades)``.
+    """
     grade_set = _coerce_grade_set(k, a.algebra)
+    if a.algebra.signature == (3, 0, 0):
+        # The MSL kernel uses a per-grade bitmask: bit g set iff grade g
+        # is kept.  Matches the GA10 conformance fixture's encoding —
+        # e.g., 0b0101 for grades {0, 2} (scalar + bivector subalgebra).
+        mask = 0
+        for g in grade_set:
+            mask |= (1 << int(g))
+        gpu_out = _try_apple_gpu_grade_projection_cl30_f32(a, mask)
+        if gpu_out is not None:
+            return Multivector(gpu_out.coefficients, a.algebra, grades=grade_set)
     coeffs = a.coefficients.copy()
     for blade in a.algebra.blades():
         if blade.grade not in grade_set:
@@ -123,8 +146,16 @@ def wedge(a: Multivector, b: Multivector) -> Multivector:
     For basis blades, ``e_I ∧ e_J = e_{I ∪ J}`` when the index sets are
     disjoint and ``0`` otherwise. The sign comes from reordering, same
     as the geometric product but with the disjoint-index gate.
+
+    **Apple GPU fast path**: Cl(3,0) f32 batched inputs route through
+    ``tessera_apple_gpu_clifford_wedge_cl30_f32``.
     """
     algebra = _same_algebra(a, b)
+    if algebra.signature == (3, 0, 0):
+        gpu_out = _try_apple_gpu_binary_8x8_cl30_f32(
+            a, b, "tessera_apple_gpu_clifford_wedge_cl30_f32")
+        if gpu_out is not None:
+            return gpu_out
     table = algebra.product_table()
     dim = algebra.dim
     dtype = _promoted_dtype(a, b)
@@ -157,8 +188,16 @@ def left_contraction(a: Multivector, b: Multivector) -> Multivector:
     result is the grade-``(s - r)`` part of ``a * b`` when ``s ≥ r``,
     else zero. The general multivector form is the sum of these
     grade-pure contributions.
+
+    **Apple GPU fast path**: Cl(3,0) f32 batched inputs route through
+    ``tessera_apple_gpu_clifford_left_contraction_cl30_f32``.
     """
     algebra = _same_algebra(a, b)
+    if algebra.signature == (3, 0, 0):
+        gpu_out = _try_apple_gpu_binary_8x8_cl30_f32(
+            a, b, "tessera_apple_gpu_clifford_left_contraction_cl30_f32")
+        if gpu_out is not None:
+            return gpu_out
     table = algebra.product_table()
     dim = algebra.dim
     dtype = _promoted_dtype(a, b)
@@ -326,11 +365,23 @@ def _try_apple_gpu_rotor_sandwich_cl30_f32(
     rotor: Multivector, x: Multivector,
 ) -> Optional[Multivector]:
     """``R x R†`` on ``Cl(3,0)`` f32 batched inputs."""
-    if rotor.algebra.signature != (3, 0, 0):
+    return _try_apple_gpu_binary_8x8_cl30_f32(
+        rotor, x, "tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32")
+
+
+def _try_apple_gpu_binary_8x8_cl30_f32(
+    a: Multivector, b: Multivector, symbol: str,
+) -> Optional[Multivector]:
+    """Generic Cl(3,0) f32 binary 8×8→8 Apple GPU dispatch helper.
+
+    Used by ``geometric_product`` / ``wedge`` / ``left_contraction`` /
+    ``rotor_sandwich`` — they share the ``(A, B, Out, batch)`` ABI.
+    """
+    if a.algebra != b.algebra or a.algebra.signature != (3, 0, 0):
         return None
-    R = rotor.coefficients
-    X = x.coefficients
-    if not _is_cl30_f32_8axis(R, X):
+    A = a.coefficients
+    B = b.coefficients
+    if not _is_cl30_f32_8axis(A, B):
         return None
     try:
         import ctypes
@@ -338,7 +389,7 @@ def _try_apple_gpu_rotor_sandwich_cl30_f32(
     except ImportError:
         return None
     fn = bind_symbol(
-        "tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32",
+        symbol,
         (ctypes.POINTER(ctypes.c_float),
          ctypes.POINTER(ctypes.c_float),
          ctypes.POINTER(ctypes.c_float),
@@ -346,14 +397,46 @@ def _try_apple_gpu_rotor_sandwich_cl30_f32(
     )
     if fn is None:
         return None
-    R_c = np.ascontiguousarray(R.reshape(-1, 8))
-    X_c = np.ascontiguousarray(X.reshape(-1, 8))
-    batch = R_c.shape[0]
-    out = np.zeros_like(R_c)
+    A_c = np.ascontiguousarray(A.reshape(-1, 8))
+    B_c = np.ascontiguousarray(B.reshape(-1, 8))
+    batch = A_c.shape[0]
+    out = np.zeros_like(A_c)
     p = ctypes.POINTER(ctypes.c_float)
-    fn(R_c.ctypes.data_as(p), X_c.ctypes.data_as(p), out.ctypes.data_as(p),
+    fn(A_c.ctypes.data_as(p), B_c.ctypes.data_as(p), out.ctypes.data_as(p),
        ctypes.c_int32(batch))
-    return Multivector(out.reshape(R.shape), rotor.algebra)
+    return Multivector(out.reshape(A.shape), a.algebra)
+
+
+def _try_apple_gpu_grade_projection_cl30_f32(
+    a: Multivector, grade_mask: int,
+) -> Optional[Multivector]:
+    """``Cl(3,0)`` f32 grade projection.  ABI is
+    ``(in, out, grade_mask, batch)``."""
+    if a.algebra.signature != (3, 0, 0):
+        return None
+    A = a.coefficients
+    if not _is_cl30_f32_8axis(A):
+        return None
+    try:
+        import ctypes
+        from tessera._apple_gpu_dispatch import bind_symbol
+    except ImportError:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_clifford_grade_projection_cl30_f32",
+        (ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32, ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    A_c = np.ascontiguousarray(A.reshape(-1, 8))
+    batch = A_c.shape[0]
+    out = np.zeros_like(A_c)
+    p = ctypes.POINTER(ctypes.c_float)
+    fn(A_c.ctypes.data_as(p), out.ctypes.data_as(p),
+       ctypes.c_int32(grade_mask), ctypes.c_int32(batch))
+    return Multivector(out.reshape(A.shape), a.algebra)
 
 
 # ---------------------------------------------------------------------------
@@ -367,7 +450,14 @@ def _grade_sign_array(algebra: Cl, sign_fn) -> np.ndarray:
 
 
 def reverse(a: Multivector) -> Multivector:
-    """Reversion ``a†``: blade of grade k picks up sign ``(-1)^{k(k-1)/2}``."""
+    """Reversion ``a†``: blade of grade k picks up sign ``(-1)^{k(k-1)/2}``.
+
+    **Apple GPU fast path**: Cl(3,0) f32 batched inputs route through
+    ``tessera_apple_gpu_clifford_reverse_cl30_f32``."""
+    gpu_out = _try_apple_gpu_unary_8x8_cl30_f32(
+        a, "tessera_apple_gpu_clifford_reverse_cl30_f32")
+    if gpu_out is not None:
+        return gpu_out
     signs = _grade_sign_array(a.algebra, lambda k: (-1) ** ((k * (k - 1)) // 2))
     return Multivector(
         a.coefficients * signs.astype(a.dtype, copy=False),
@@ -377,7 +467,14 @@ def reverse(a: Multivector) -> Multivector:
 
 
 def grade_involution(a: Multivector) -> Multivector:
-    """Grade involution ``â``: blade of grade k picks up sign ``(-1)^k``."""
+    """Grade involution ``â``: blade of grade k picks up sign ``(-1)^k``.
+
+    **Apple GPU fast path**: Cl(3,0) f32 batched inputs route through
+    ``tessera_apple_gpu_clifford_grade_involution_cl30_f32``."""
+    gpu_out = _try_apple_gpu_unary_8x8_cl30_f32(
+        a, "tessera_apple_gpu_clifford_grade_involution_cl30_f32")
+    if gpu_out is not None:
+        return gpu_out
     signs = _grade_sign_array(a.algebra, lambda k: (-1) ** k)
     return Multivector(
         a.coefficients * signs.astype(a.dtype, copy=False),
@@ -387,7 +484,14 @@ def grade_involution(a: Multivector) -> Multivector:
 
 
 def conjugate(a: Multivector) -> Multivector:
-    """Clifford conjugation: combination of reverse + grade involution."""
+    """Clifford conjugation: combination of reverse + grade involution.
+
+    **Apple GPU fast path**: Cl(3,0) f32 batched inputs route through
+    ``tessera_apple_gpu_clifford_conjugate_cl30_f32``."""
+    gpu_out = _try_apple_gpu_unary_8x8_cl30_f32(
+        a, "tessera_apple_gpu_clifford_conjugate_cl30_f32")
+    if gpu_out is not None:
+        return gpu_out
     return reverse(grade_involution(a))
 
 
@@ -478,7 +582,14 @@ def log_mv(a: Multivector, *, terms: int = 64) -> Multivector:
     and ``B̂`` is the unit bivector axis. Otherwise, truncated series
     ``log(a) = sum_{k≥1} (-1)^{k+1} (a - 1)^k / k`` — convergent when
     ``|a - 1| < 1``.
+
+    **Apple GPU fast path**: Cl(3,0) f32 batched inputs route through
+    ``tessera_apple_gpu_clifford_log_cl30_f32``.
     """
+    gpu_out = _try_apple_gpu_unary_8x8_cl30_f32(
+        a, "tessera_apple_gpu_clifford_log_cl30_f32")
+    if gpu_out is not None:
+        return gpu_out
     if a.algebra.signature == (3, 0, 0):
         # Treat `a` as a candidate rotor: scalar + bivector parts only.
         s = a.scalar_part()

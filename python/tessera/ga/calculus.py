@@ -44,7 +44,15 @@ def hodge_star(mv: Multivector) -> Multivector:
     This convention (Hestenes / Doran-Lasenby) gives the expected
     ``⋆⋆ω = ±ω`` involution with sign determined by signature parity
     and grade — see ``test_ga_calculus`` for the explicit table.
+
+    **Apple GPU fast path**: Cl(3,0) f32 batched inputs route through
+    ``tessera_apple_gpu_clifford_hodge_star_cl30_f32``.
     """
+    from tessera.ga.ops import _try_apple_gpu_unary_8x8_cl30_f32
+    gpu_out = _try_apple_gpu_unary_8x8_cl30_f32(
+        mv, "tessera_apple_gpu_clifford_hodge_star_cl30_f32")
+    if gpu_out is not None:
+        return gpu_out
     algebra = mv.algebra
     I = Multivector.from_blade(
         algebra.pseudoscalar, algebra, dtype=mv.dtype
@@ -244,7 +252,17 @@ def ext_deriv(field: MultivectorField) -> MultivectorField:
     ``dω = Σ_i (e_i ∧ ∂_i ω)`` — by construction antisymmetric, so
     ``d²ω = 0`` on the interior of the grid (modulo finite-difference
     boundary effects).
+
+    **Apple GPU fast path**: Cl(3,0) f32 fields on 3D grids route
+    through ``tessera_apple_gpu_clifford_ext_deriv_cl30_f32``.
+    Boundary cells are zero-padded by the kernel (the numpy path uses
+    `np.gradient` with one-sided 2nd-order at boundaries; the two
+    agree on interior cells to fp32 tolerance).
     """
+    gpu_out = _try_apple_gpu_field_op_cl30_f32(
+        field, "tessera_apple_gpu_clifford_ext_deriv_cl30_f32")
+    if gpu_out is not None:
+        return gpu_out
     algebra = field.algebra
     if field.spatial_ndim != algebra.n:
         raise TesseraAlgebraError(
@@ -265,7 +283,14 @@ def vec_deriv(field: MultivectorField) -> MultivectorField:
     wedge), so derivatives of grade-k components can produce
     components at grade ``k-1`` (via inner product) and ``k+1`` (via
     wedge).
+
+    **Apple GPU fast path**: Cl(3,0) f32 fields on 3D grids route
+    through ``tessera_apple_gpu_clifford_vec_deriv_cl30_f32``.
     """
+    gpu_out = _try_apple_gpu_field_op_cl30_f32(
+        field, "tessera_apple_gpu_clifford_vec_deriv_cl30_f32")
+    if gpu_out is not None:
+        return gpu_out
     algebra = field.algebra
     if field.spatial_ndim != algebra.n:
         raise TesseraAlgebraError(
@@ -313,8 +338,68 @@ def codiff(field: MultivectorField) -> MultivectorField:
     ``⋆ ∘ d ∘ ⋆`` composition without inserting the explicit sign —
     callers that need the strict ``d*`` sign convention should apply
     it themselves.
+
+    **Apple GPU fast path**: Cl(3,0) f32 fields on 3D grids route
+    through ``tessera_apple_gpu_clifford_codiff_cl30_f32``, which
+    composes three MSL dispatches (hodge → ext_deriv → hodge).
     """
+    gpu_out = _try_apple_gpu_field_op_cl30_f32(
+        field, "tessera_apple_gpu_clifford_codiff_cl30_f32")
+    if gpu_out is not None:
+        return gpu_out
     return hodge_star_field(ext_deriv(hodge_star_field(field)))
+
+
+# ---------------------------------------------------------------------------
+# Apple GPU dispatch helper — field ops share the same ``(F, Out,
+# D0, D1, D2, h0, h1, h2)`` ABI; one helper covers ext_deriv /
+# vec_deriv / codiff.
+# ---------------------------------------------------------------------------
+
+def _try_apple_gpu_field_op_cl30_f32(
+    field: "MultivectorField", symbol: str,
+) -> "Optional[MultivectorField]":
+    """Dispatch a Cl(3,0) f32 field op to its Apple GPU kernel.
+
+    Returns ``None`` when (a) the algebra isn't Cl(3,0), (b) the
+    grid isn't 3-D, (c) the dtype isn't f32, (d) the values aren't
+    C-contiguous, or (e) the runtime is unavailable.
+    """
+    from typing import Optional  # local for return-type docstring
+    from tessera.ga.signature import Cl  # noqa: F401
+
+    if field.algebra.signature != (3, 0, 0):
+        return None
+    if field.spatial_ndim != 3:
+        return None
+    if field.dtype != np.float32:
+        return None
+    if not field.values.flags["C_CONTIGUOUS"]:
+        return None
+    try:
+        import ctypes
+        from tessera._apple_gpu_dispatch import bind_symbol
+    except ImportError:
+        return None
+    fn = bind_symbol(
+        symbol,
+        (ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_float, ctypes.c_float, ctypes.c_float),
+    )
+    if fn is None:
+        return None
+    F = field.values
+    D0, D1, D2 = F.shape[0], F.shape[1], F.shape[2]
+    h0, h1, h2 = field.spacing
+    out = np.zeros_like(F)
+    p = ctypes.POINTER(ctypes.c_float)
+    fn(F.ctypes.data_as(p), out.ctypes.data_as(p),
+       ctypes.c_int32(D0), ctypes.c_int32(D1), ctypes.c_int32(D2),
+       ctypes.c_float(float(h0)), ctypes.c_float(float(h1)),
+       ctypes.c_float(float(h2)))
+    return MultivectorField(out, field.algebra, spacing=field.spacing)
 
 
 # ---------------------------------------------------------------------------
@@ -362,6 +447,13 @@ def integral(
         # Sum coefficient array weighted by per-cell volume.
         dim = integrand.algebra.dim
         flat = integrand.values.reshape(-1, dim)
+        # Apple GPU fast path — only for Cl(3,0) f32 fields where the
+        # native ``ebm_integral_cl30_f32`` kernel can accept the same
+        # ``(field[N,8], weights[N], out[8], n)`` layout.
+        gpu_out = _try_apple_gpu_integral_cl30_f32(
+            integrand, np.asarray(weights, dtype=np.float64))
+        if gpu_out is not None:
+            return gpu_out
         return np.einsum("i,ij->j", weights, flat)
 
     # Callable mode.
@@ -380,6 +472,49 @@ def integral(
         samples.append(out.coefficients)
     sample_arr = np.stack(samples, axis=0)
     return np.einsum("i,ij->j", weights, sample_arr)
+
+
+def _try_apple_gpu_integral_cl30_f32(
+    field: "MultivectorField", weights: np.ndarray,
+) -> "Optional[np.ndarray]":
+    """Apple GPU fast path for the Cl(3,0) field-mode integral.
+
+    Computes ``out[c] = Σ_i weights[i] * field[i, c]`` natively — the
+    same weighted-sum semantics the numpy ``einsum`` path uses.
+    Returns ``None`` to fall back when (a) the algebra isn't Cl(3,0),
+    (b) the field isn't f32, (c) the weights aren't convertible to
+    f32, or (d) the runtime isn't loadable.
+    """
+    if field.algebra.signature != (3, 0, 0):
+        return None
+    if field.dtype != np.float32:
+        return None
+    flat = np.ascontiguousarray(field.values.reshape(-1, 8))
+    if flat.shape[1] != 8:
+        return None
+    weights_f32 = np.ascontiguousarray(weights.astype(np.float32, copy=False))
+    if weights_f32.shape[0] != flat.shape[0]:
+        return None
+    try:
+        import ctypes
+        from tessera._apple_gpu_dispatch import bind_symbol
+    except ImportError:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_clifford_integral_cl30_f32",
+        (ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    out = np.zeros(8, dtype=np.float32)
+    n = flat.shape[0]
+    p = ctypes.POINTER(ctypes.c_float)
+    fn(flat.ctypes.data_as(p), weights_f32.ctypes.data_as(p),
+       out.ctypes.data_as(p), ctypes.c_int32(n))
+    return out
 
 
 __all__ = [

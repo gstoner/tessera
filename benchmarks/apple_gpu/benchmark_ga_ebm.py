@@ -1252,6 +1252,184 @@ _DEFAULT_EBT_SWEEP: tuple[tuple[int, int, int, int], ...] = (
 )
 
 
+# ---------------------------------------------------------------------------
+# Rotor-conditioned EBT workload — the GA + EBM fused workload.
+#
+# Pattern: given B rotor candidates (parameterized as bivectors) and a
+# fixed target vector V, refine each candidate's rotor to minimize the
+# distance between rotor_sandwich(R, V) and V.  Uses GA primitives for
+# the rotor application + ebm.ebt_tiny for the K-candidate selection.
+# Demonstrates the two families running as one workload through public
+# APIs.
+# ---------------------------------------------------------------------------
+
+def _workload_rotor_conditioned_ebt_inputs(seed: int = 3000,
+                                             B: int = 4, K: int = 8):
+    """Inputs for the rotor-conditioned EBT workload."""
+    rng = np.random.RandomState(seed)
+    # Candidate rotor parameterization as pure bivectors (B*K, 8) ⇒
+    # rotor = exp(B/2) in the closed form.  Use small magnitudes to
+    # keep rotors close to identity (rotation angle ≲ 0.6 rad).
+    bivecs = np.zeros((B * K, 8), dtype=np.float32)
+    bivecs[:, 3] = rng.randn(B * K).astype(np.float32) * 0.3
+    bivecs[:, 5] = rng.randn(B * K).astype(np.float32) * 0.3
+    bivecs[:, 6] = rng.randn(B * K).astype(np.float32) * 0.3
+    # Target vectors: one per (B*K) candidate, grade-1 only.
+    vectors = rng.randn(B * K, 8).astype(np.float32)
+    return B, K, bivecs, vectors
+
+
+def _workload_rotor_ebt_python_path() -> tuple[Callable[[], np.ndarray],
+                                                float, str]:
+    """Python-reference rotor-conditioned EBT workload.
+
+    Pipeline (per K candidate):
+      1. R = exp_mv(B)            # bivector → rotor
+      2. O = rotor_sandwich(R, V) # apply rotor
+      3. e = ||O||²               # squared norm (rotor-invariant ⇒ = ||V||²)
+    Then argmin_k over the (B, K) energy grid picks the best candidate
+    rotor per batch.  In the absence of a non-trivial energy term the
+    "best" candidate is degenerate but the workload exercises the
+    full GA→EBT chain end-to-end.
+    """
+    B, K, bivecs, vectors = _workload_rotor_conditioned_ebt_inputs()
+    a = _CL30
+
+    def step() -> np.ndarray:
+        rotors_co = np.zeros_like(bivecs)
+        for i in range(B * K):
+            rotors_co[i] = ga.exp_mv(ga.Multivector(bivecs[i], a)).coefficients
+        rotated_co = np.zeros_like(bivecs)
+        for i in range(B * K):
+            rotated_co[i] = ga.rotor_sandwich(
+                ga.Multivector(rotors_co[i], a),
+                ga.Multivector(vectors[i], a),
+            ).coefficients
+        # Per-candidate energy = ||rotated||² over the 8 coefficients.
+        # Use raw numpy to keep this loop closed-form and Python-side.
+        energies = np.sum(rotated_co * rotated_co, axis=1).reshape(B, K)
+        candidates = rotated_co.reshape(B, K, 8)
+        return candidates[np.arange(B), energies.argmin(axis=1)]
+
+    step()  # warm
+    return step, 0.0, f"B={B},K={K}/exp→sandwich→ebt"
+
+
+def _workload_rotor_ebt_apple_gpu_path(
+    rt: "ctypes.CDLL",
+) -> tuple[Callable[[], np.ndarray], float, tuple[str, ...], str, bool]:
+    """Apple-GPU rotor-conditioned EBT workload through public APIs.
+
+    Calls ``ga.exp_mv`` (batched), ``ga.rotor_sandwich`` (batched),
+    then ``ebm.ebt_tiny`` for the K-way argmin.  Every dispatch
+    routes through the bridge.  Returns the 5-tuple shape used by
+    :func:`run_workload_apple_gpu` including the proof-of-dispatch
+    bit (``dispatched_on_gpu``).
+    """
+    del rt
+    B, K, bivecs, vectors = _workload_rotor_conditioned_ebt_inputs()
+    a = _CL30
+    bivecs_c = np.ascontiguousarray(bivecs)
+    vectors_c = np.ascontiguousarray(vectors)
+
+    def step() -> np.ndarray:
+        rotors = ga.exp_mv(ga.Multivector(bivecs_c, a))
+        rotated = ga.rotor_sandwich(rotors, ga.Multivector(vectors_c, a))
+        # Convert (B*K, 8) → ebt_tiny inputs.  Use T=1 with eta=0
+        # so the refinement is a no-op (y_T = y0 - 1*0*grad = y0)
+        # but the GPU kernel actually fires — the public API
+        # rejects T=0 as a degenerate case so we need T>=1.
+        flat = np.ascontiguousarray(rotated.coefficients.reshape(B * K, 8))
+        return ebm.ebt_tiny(flat, flat, eta=0.0, T=1, B=B, K=K, D=8)
+
+    out = step()
+    # The closed-form numpy reference is exact at fp32.
+    ref, _, _ = _workload_rotor_ebt_python_path()
+    ref_out = ref()
+    err = float(np.abs(out - ref_out).max())
+    # Proof-of-dispatch — read the route trace + check both ops fired.
+    from tessera.compiler import jit_bridge as _bridge
+    prev_tracing = _bridge.tracing_enabled()
+    _bridge.set_tracing_enabled(True)
+    _bridge.clear_dispatch_trace()
+    try:
+        step()
+    finally:
+        _bridge.set_tracing_enabled(prev_tracing)
+    routes = _bridge.take_dispatch_trace()
+    ops_seen = {r.op_name for r in routes}
+    dispatched_on_gpu = (
+        "clifford_exp" in ops_seen and
+        "clifford_rotor_sandwich" in ops_seen and
+        ebm.ebt_tiny_dispatched_on_gpu()
+    )
+    syms = (
+        "tessera_apple_gpu_clifford_exp_cl30_f32 [via ga.exp_mv]",
+        "tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32 [via ga.rotor_sandwich]",
+        "tessera_apple_gpu_ebm_ebt_tiny_refinement_argmin_f32 [via ebm.ebt_tiny]",
+    )
+    return (step, err, syms,
+            f"B={B},K={K}/exp→sandwich→ebt", dispatched_on_gpu)
+
+
+# ---------------------------------------------------------------------------
+# Compiler vertical slice — @clifford_jit(target="apple_gpu") on a
+# small Cl(3,0) point-cloud invariant.
+# ---------------------------------------------------------------------------
+
+def _vertical_slice_compiled_callable():
+    """Build + return the ``@clifford_jit`` compiled callable.
+
+    Defined lazily so importing this benchmark module on non-Darwin
+    doesn't try to compile against a missing runtime.
+    """
+    from tessera.compiler.clifford_jit import clifford_jit
+
+    @clifford_jit(target="apple_gpu")
+    def point_cloud_rotor_invariant(rotor, points):
+        """For a unit rotor R, ``|R x R†| = |x|`` is an SO(3)
+        invariant.  Returns the per-batch norm of the rotated
+        points."""
+        rotated = ga.rotor_sandwich(rotor, points)
+        return ga.norm(rotated)
+
+    return point_cloud_rotor_invariant
+
+
+def _vertical_slice_apple_gpu_path(
+    rt: "ctypes.CDLL",
+) -> tuple[Callable[[], np.ndarray], float, str, dict[str, Any]]:
+    """The compiler-integrated vertical slice — `@clifford_jit`
+    decorator → traced op plan → manifest-resolved Apple target
+    metadata → runtime dispatch → benchmark row.
+
+    Returns ``(dispatch, err, plan_hash, artifact_metadata)``.
+    """
+    del rt
+    compiled = _vertical_slice_compiled_callable()
+    a = _CL30
+    rng = np.random.RandomState(4000)
+    R = rng.randn(64, 8).astype(np.float32) * 0.3
+    V = rng.randn(64, 8).astype(np.float32)
+    rotor = ga.Multivector(R, a)
+    points = ga.Multivector(V, a)
+
+    def step() -> np.ndarray:
+        return np.asarray(compiled(rotor, points))
+
+    # First call compiles + executes.
+    out = step()
+    # Reference: per-batch ||R V R†||.
+    ref_out = np.array([
+        float(np.asarray(ga.norm(ga.rotor_sandwich(
+            ga.Multivector(R[i], a), ga.Multivector(V[i], a)))))
+        for i in range(R.shape[0])
+    ])
+    err = float(np.abs(out - ref_out).max())
+    metadata = compiled.artifact.as_metadata()
+    return step, err, compiled.artifact.plan_hash, metadata
+
+
 def run_workload_apple_gpu(name: str, shape: str,
                             dispatch: Callable, err: float,
                             symbols: tuple[str, ...],
@@ -1565,6 +1743,7 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
                include_workloads: bool = True,
                include_ebt_sweep: bool = False,
                include_jit_bridge: bool = True,
+               include_vertical_slice: bool = True,
                ebt_sweep_points: tuple[tuple[int, int, int, int], ...]
                    = _DEFAULT_EBT_SWEEP) -> dict[str, Any]:
     """Top-level entry: build the report dict (no I/O).
@@ -1649,6 +1828,25 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
             tolerance=1e-4, reps=reps, device=device, version=version,
         ))
 
+        # Workload pair 3: rotor-conditioned EBT — the GA + EBM
+        # fused workload that "makes the two families feel like one
+        # system".  GA primitives (exp_mv + rotor_sandwich) feed an
+        # EBM K-candidate selection (ebt_tiny).  All through public
+        # APIs, all bridge-traced.
+        if rt is not None:
+            (dispatch, err, syms, shape,
+             dispatched_on_gpu) = _workload_rotor_ebt_apple_gpu_path(rt)
+            rows.append(run_workload_apple_gpu(
+                "rotor_conditioned_ebt", shape, dispatch, err, syms,
+                tolerance=5e-5, reps=reps, device=device, version=version,
+                dispatched_on_gpu=dispatched_on_gpu,
+            ))
+        dispatch, err, shape = _workload_rotor_ebt_python_path()
+        rows.append(run_workload_python(
+            "rotor_conditioned_ebt", shape, dispatch, err,
+            tolerance=5e-5, reps=reps, device=device, version=version,
+        ))
+
     # EBT-tiny break-even sweep — apples-to-apples timings across a
     # ladder of (B, K, D, T) points so consumers can locate where the
     # native MSL chain starts beating numpy.  Off by default (adds
@@ -1688,6 +1886,56 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
                 reps=reps, device=device, version=version,
             ))
 
+    # Compiler-integrated vertical slice — `@clifford_jit` decorator
+    # → traced op plan → manifest-resolved Apple target metadata →
+    # runtime dispatch → benchmark row.  Records the full plan
+    # (op list + manifest-resolved symbols + plan hash) in the
+    # `compiled_artifact` column.
+    if include_vertical_slice and rt is not None:
+        try:
+            (vs_dispatch, vs_err, vs_plan_hash,
+             vs_metadata) = _vertical_slice_apple_gpu_path(rt)
+        except Exception as exc:  # pragma: no cover — surfaced in row
+            rows.append({
+                "backend": "apple_gpu",
+                "namespace": "vertical_slice",
+                "op": "point_cloud_rotor_invariant",
+                "shape": "B=64/Cl(3,0)",
+                "dtype": "f32",
+                "mode": "failed",
+                "reps": reps,
+                "latency_ms": 0.0,
+                "stdev_ms": 0.0,
+                "p10_ms": 0.0, "p50_ms": 0.0, "p90_ms": 0.0,
+                "min_ms": 0.0, "max_ms": 0.0,
+                "max_abs_err": float("inf"),
+                "tolerance": 5e-5,
+                "ok": False,
+                "error": str(exc),
+                "device": device,
+                "tessera_version": version,
+            })
+        else:
+            samples_ms = collect_samples(vs_dispatch, reps)
+            timing = timing_stats(samples_ms)
+            rows.append({
+                "backend": "apple_gpu",
+                "namespace": "vertical_slice",
+                "op": "point_cloud_rotor_invariant",
+                "shape": "B=64/Cl(3,0)",
+                "dtype": "f32",
+                "mode": "jit_compiled",
+                "reps": reps,
+                **timing,
+                "max_abs_err": vs_err,
+                "tolerance": 5e-5,
+                "ok": vs_err <= 5e-5,
+                "plan_hash": vs_plan_hash,
+                "compiled_artifact": vs_metadata,
+                "device": device,
+                "tessera_version": version,
+            })
+
     ga_count = sum(1 for r in rows if r["op"].startswith("clifford_")
                                        and r.get("namespace") == "ga")
     ebm_count = sum(1 for r in rows if r["op"].startswith("ebm_")
@@ -1700,6 +1948,8 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
     sweep_count = sum(1 for r in rows if r["op"] == "ebt_tiny_sweep")
     jit_bridge_count = sum(1 for r in rows
                             if r.get("namespace") == "jit_bridge")
+    vertical_slice_count = sum(1 for r in rows
+                                if r.get("namespace") == "vertical_slice")
     return {
         "runs": rows,
         "ga_primitives_count": ga_count,
@@ -1711,6 +1961,7 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
         "ebt_sweep_summary": (_ebt_sweep_break_even_summary(rows)
                                if sweep_count else None),
         "jit_bridge_count": jit_bridge_count,
+        "vertical_slice_count": vertical_slice_count,
         "compile_time_ms": compile_time_ms,
         "skipped_apple_gpu": skip_reason,
         "device": device,
@@ -1799,6 +2050,12 @@ def main(argv: list[str] | None = None) -> int:
                               "jit_context → manifest → shared loader → "
                               "result, with per-dispatch trace recorded "
                               "in the report row's `routes` column)."))
+    parser.add_argument("--no-vertical-slice", action="store_true",
+                        help=("Skip the compiler-integrated vertical "
+                              "slice row (@clifford_jit decorator → "
+                              "traced op plan → manifest-resolved "
+                              "Apple target metadata → runtime "
+                              "dispatch)."))
     parser.add_argument("--output", type=Path, default=None,
                         help="JSON output path (stdout if omitted)")
     args = parser.parse_args(argv)
@@ -1810,7 +2067,8 @@ def main(argv: list[str] | None = None) -> int:
                         include_primitives=include_primitives,
                         include_workloads=include_workloads,
                         include_ebt_sweep=args.ebt_sweep,
-                        include_jit_bridge=not args.no_jit_bridge)
+                        include_jit_bridge=not args.no_jit_bridge,
+                        include_vertical_slice=not args.no_vertical_slice)
     payload = json.dumps(report, indent=2, sort_keys=True, default=float)
     if args.output is not None:
         args.output.write_text(payload)

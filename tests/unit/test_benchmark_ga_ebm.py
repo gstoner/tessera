@@ -86,7 +86,12 @@ EXPECTED_EBM_PYTHON_ROWS = (
     | EXPECTED_PYTHON_ONLY_EBM_OPS
 )
 
-EXPECTED_WORKLOAD_OPS = {"ga_feature_pipeline", "ebt_tiny_refinement"}
+EXPECTED_WORKLOAD_OPS = {
+    "ga_feature_pipeline",
+    "ebt_tiny_refinement",
+    # 2026-05-17 fused GA+EBM workload — exp → rotor_sandwich → ebt_tiny.
+    "rotor_conditioned_ebt",
+}
 
 REQUIRED_ROW_FIELDS = {
     "backend", "namespace", "op", "shape", "dtype", "mode", "reps",
@@ -947,6 +952,65 @@ def test_no_jit_bridge_flag_drops_jit_bridge_rows(tmp_path) -> None:
     rows = [row for row in r["runs"] if row.get("namespace") == "jit_bridge"]
     assert rows == []
     assert r["jit_bridge_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Compiler vertical slice + GA+EBM fused workload
+# ---------------------------------------------------------------------------
+
+def _vertical_slice_rows(report):
+    return _rows(report, lambda r: r.get("namespace") == "vertical_slice")
+
+
+def test_vertical_slice_row_emitted_when_runtime_available(report: dict) -> None:
+    if not _apple_gpu_available(report):
+        pytest.skip("apple_gpu unavailable")
+    rows = _vertical_slice_rows(report)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["op"] == "point_cloud_rotor_invariant"
+    assert row["backend"] == "apple_gpu"
+    assert row["mode"] == "jit_compiled"
+    assert row["ok"] is True
+    # Compiled artifact embedded in the row.
+    assert "plan_hash" in row
+    assert row["plan_hash"] != ""
+    assert "compiled_artifact" in row
+    art = row["compiled_artifact"]
+    assert art["target"] == "apple_gpu"
+    assert art["dtype"] == "f32"
+    # The traced plan should be ``rotor_sandwich → norm`` — every entry
+    # must carry the manifest-resolved symbol.
+    from tessera.compiler import jit_bridge as bridge_mod
+    plan_ops = [e["op"] for e in art["plan"]]
+    assert plan_ops == ["clifford_rotor_sandwich", "clifford_norm"]
+    for entry in art["plan"]:
+        assert entry["target"] == "apple_gpu"
+        assert entry["status"] == "fused"
+        assert entry["symbol"] == bridge_mod.lookup_apple_gpu_symbol(entry["op"])
+
+
+def test_vertical_slice_envelope_count(report: dict) -> None:
+    if not _apple_gpu_available(report):
+        pytest.skip("apple_gpu unavailable")
+    assert report["vertical_slice_count"] == 1
+
+
+def test_rotor_conditioned_ebt_workload_emits_apple_gpu_row(report: dict) -> None:
+    """The fused GA+EBM workload must emit a native row that
+    dispatched on GPU, with all three op families represented."""
+    if not _apple_gpu_available(report):
+        pytest.skip("apple_gpu unavailable")
+    rows = [r for r in _workload_native_rows(report)
+            if r["op"] == "rotor_conditioned_ebt"]
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["ok"] is True
+    assert row["dispatched_on_gpu"] is True
+    syms = row["symbols"]
+    assert any("ga.exp_mv" in s for s in syms)
+    assert any("ga.rotor_sandwich" in s for s in syms)
+    assert any("ebm.ebt_tiny" in s for s in syms)
 
 
 def test_compile_time_separated_from_dispatch_time(report: dict) -> None:

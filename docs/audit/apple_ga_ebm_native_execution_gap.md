@@ -1,9 +1,21 @@
 ---
-status: Active evaluation
-classification: Audit / Execution gap
-authority: Evaluates the Apple CPU/GPU path for the GA + EBM native execution milestone
+status: Historical (superseded by docs/status/ga_ebm_milestone.md)
+classification: Audit / Execution gap (frozen snapshot)
+authority: Original framing of the GA + EBM native-execution gap; kept for context only
 last_updated: 2026-05-17
 ---
+
+> ⚠️ **Historical snapshot.** This page captures the original
+> framing of the Apple GA + EBM native-execution gap (and the
+> running evaluation as that gap was closed).  The **canonical
+> current status** now lives at
+> [`docs/status/ga_ebm_milestone.md`](../status/ga_ebm_milestone.md)
+> — read that page for the up-to-date TL;DR, known non-claims, and
+> next targets.  This document is kept as a record of how the
+> milestone was reached; it is no longer updated as features ship.
+>
+> The roadmap [`docs/audit/ga_ebm_roadmap.md`](ga_ebm_roadmap.md)
+> is also still maintained as the sprint sequence.
 
 # Apple GA + EBM Native Execution Gap
 

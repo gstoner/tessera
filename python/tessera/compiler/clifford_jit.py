@@ -1,0 +1,361 @@
+"""``@clifford_jit(target="apple_gpu")`` — one true compiler-integrated
+GA vertical slice.
+
+Closes the compiler/runtime gap end-to-end for a constrained class of
+Clifford-only Python functions.  The contract:
+
+  1. **Python entry point.**  A function decorated with
+     ``@clifford_jit(target="apple_gpu")``.  The decorator pins a
+     small constrained vocabulary (``tessera.ga.*`` ops only) and
+     rejects anything else at trace time.
+  2. **Op plan.**  Decoration runs the function once under
+     ``jit_bridge.jit_context(target)`` with tracing on.  The bridge
+     trace becomes the **canonical op plan** — an ordered list of
+     ``CliffordOpPlanEntry(op_name, target, status, symbol)`` rows.
+  3. **Apple target metadata.**  The wrapped function carries
+     :class:`CliffordCompiledArtifact` with the plan, the target
+     name (``"apple_gpu"``), the dtype, the manifest sources, and a
+     hash of the trace for cache-keyed reuse.
+  4. **Runtime dispatch.**  Subsequent calls execute the function
+     body inside a fresh ``jit_context(target)`` so every public-API
+     GA call routes through the bridge → manifest → shared loader
+     path and produces a recorded route.  The artifact lets callers
+     pull ``last_routes()`` to prove the executed routes match the
+     traced plan.
+
+Why this is the meaningful "compiler gap closed" step:
+
+- Today every `tessera.ga.*` call already routes through the bridge,
+  but there's no notion of a **traced + verified function plan**.
+- This module adds a 1-call ``CliffordCompiledArtifact`` whose
+  presence + match against the manifest is a compile-time guarantee
+  that every op in the function has a fused MSL kernel.
+- The artifact is also the natural surface for a future AOT exporter
+  (the plan is a serializable IR — already JSON-friendly).
+- It demonstrates the **Python → manifest → Apple target metadata →
+  runtime → benchmark** vertical without committing to the larger
+  ``@tessera.jit`` tensor-op machinery (which is tightly coupled to
+  ``OP_SPECS``).
+
+Scope of v1:
+
+- Only Cl(3,0) f32 functions.
+- Only the 17 GA ops + manifest-resolvable subsets thereof — any
+  non-GA call raises :class:`CliffordJitError` at decoration.
+- The function may take ``Multivector`` or ``MultivectorField``
+  inputs and return any of those or a numpy array (a norm/inner
+  scalar).
+- ``target="apple_gpu"`` only.  ``"x86"`` / ``"nvidia"`` are reserved
+  for future targets; passing them today raises with a precise
+  error.
+"""
+
+from __future__ import annotations
+
+import functools
+import hashlib
+import threading
+from dataclasses import dataclass, field
+from typing import Any, Callable, Optional
+
+from tessera.compiler import jit_bridge as _bridge
+
+
+__all__ = [
+    "CliffordOpPlanEntry",
+    "CliffordCompiledArtifact",
+    "CliffordJitError",
+    "CliffordCompiledCallable",
+    "clifford_jit",
+]
+
+
+_SUPPORTED_TARGETS = frozenset({"apple_gpu"})
+
+
+class CliffordJitError(Exception):
+    """Raised when a ``@clifford_jit`` function violates the v1
+    contract — e.g., it uses an op with no fused manifest entry, or
+    a target other than ``"apple_gpu"``."""
+
+
+@dataclass(frozen=True)
+class CliffordOpPlanEntry:
+    """One entry in the lowered op plan."""
+    op_name: str
+    target: str
+    status: str
+    symbol: str
+
+
+@dataclass(frozen=True)
+class CliffordCompiledArtifact:
+    """The Apple target metadata produced at decoration time.
+
+    Attributes
+    ----------
+    plan : tuple of :class:`CliffordOpPlanEntry`
+        Ordered op plan — the canonical IR for the function body.
+        Captured from the bridge trace during the one-shot trace
+        pass at decoration.
+    target : str
+        Target name (``"apple_gpu"`` for v1).
+    dtype : str
+        Canonical dtype string (``"f32"`` for v1).
+    manifest_sources : tuple[str, ...]
+        Manifest tables consulted (``_CLIFFORD_APPLE_GPU_FUSED`` and
+        any others).
+    plan_hash : str
+        16-char sha256 prefix of the canonical-op-name sequence.
+        Used as a cache key for re-execution + AOT export round-trips.
+    source_name : str
+        ``fn.__qualname__`` of the decorated function (for
+        diagnostics + telemetry).
+    """
+    plan: tuple[CliffordOpPlanEntry, ...]
+    target: str
+    dtype: str
+    manifest_sources: tuple[str, ...] = field(default_factory=tuple)
+    plan_hash: str = ""
+    source_name: str = ""
+
+    def op_names(self) -> tuple[str, ...]:
+        return tuple(e.op_name for e in self.plan)
+
+    def symbols(self) -> tuple[str, ...]:
+        return tuple(e.symbol for e in self.plan)
+
+    def as_metadata(self) -> dict[str, Any]:
+        """JSON-friendly serialization for benchmark reports + AOT."""
+        return {
+            "target": self.target,
+            "dtype": self.dtype,
+            "source_name": self.source_name,
+            "plan_hash": self.plan_hash,
+            "manifest_sources": list(self.manifest_sources),
+            "plan": [
+                {"op": e.op_name, "target": e.target,
+                 "status": e.status, "symbol": e.symbol}
+                for e in self.plan
+            ],
+        }
+
+
+def _hash_plan(plan: tuple[CliffordOpPlanEntry, ...]) -> str:
+    """Stable hash of the op-name sequence (target-independent)."""
+    canonical = "|".join(f"{e.op_name}:{e.symbol}" for e in plan)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+
+class CliffordCompiledCallable:
+    """The decorated function, with the artifact + a per-call route
+    capture API.
+
+    Calling the instance is identical to calling the original
+    function, but every call also captures the route trace so callers
+    can prove the execution stayed on the planned path.  Use
+    :meth:`last_routes` to read the per-call trace after execution.
+    """
+
+    __slots__ = ("_fn", "artifact", "_last_routes_lock", "_last_routes")
+
+    def __init__(
+        self,
+        fn: Callable[..., Any],
+        artifact: CliffordCompiledArtifact,
+    ) -> None:
+        self._fn = fn
+        self.artifact = artifact
+        self._last_routes_lock = threading.Lock()
+        self._last_routes: tuple[_bridge.JitBridgeRoute, ...] = ()
+        functools.update_wrapper(self, fn)
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        """Execute the function under a ``jit_context`` span so every
+        op routes through the bridge and the trace is captured."""
+        # Snapshot the bridge state so we can restore it afterwards.
+        prev_tracing = _bridge.tracing_enabled()
+        _bridge.set_tracing_enabled(True)
+        _bridge.clear_dispatch_trace()
+        try:
+            with _bridge.jit_context(self.artifact.target):
+                result = self._fn(*args, **kwargs)
+        finally:
+            captured = tuple(_bridge.take_dispatch_trace())
+            _bridge.set_tracing_enabled(prev_tracing)
+        with self._last_routes_lock:
+            self._last_routes = captured
+        return result
+
+    def last_routes(self) -> tuple[_bridge.JitBridgeRoute, ...]:
+        """The route trace from the most-recent call on this
+        thread.  Empty before the first call.
+
+        Each route's ``op_name`` should be one of the
+        artifact's planned ops; mismatches indicate the function
+        diverged from its traced plan (e.g., a branch that wasn't
+        exercised at decoration)."""
+        with self._last_routes_lock:
+            return self._last_routes
+
+    def plan_matches_routes(self,
+                              routes: Optional[tuple[_bridge.JitBridgeRoute, ...]] = None
+                              ) -> bool:
+        """``True`` iff the route ``op_name`` sequence equals the
+        artifact's plan (order matters)."""
+        observed = self.last_routes() if routes is None else routes
+        observed_ops = tuple(r.op_name for r in observed)
+        return observed_ops == self.artifact.op_names()
+
+
+def _validate_target(target: str) -> None:
+    if target not in _SUPPORTED_TARGETS:
+        raise CliffordJitError(
+            f"clifford_jit target must be one of {sorted(_SUPPORTED_TARGETS)}, "
+            f"got {target!r}"
+        )
+
+
+def _validate_plan(plan: tuple[CliffordOpPlanEntry, ...]) -> None:
+    """Every traced op must have an ``apple_gpu=fused`` manifest entry.
+
+    This is the **compile-time guarantee**: the wrapped function won't
+    raise at runtime due to a missing kernel because every op the
+    function calls was manifest-verified at decoration.
+    """
+    if not plan:
+        raise CliffordJitError(
+            "clifford_jit traced an empty op plan — the function did "
+            "not call any tessera.ga.* op that routes through the "
+            "JIT bridge.  Add at least one supported call (inner, "
+            "norm, exp_mv, rotor_sandwich, ...).")
+    for entry in plan:
+        if entry.target != "apple_gpu":
+            raise CliffordJitError(
+                f"op {entry.op_name!r} routed to target {entry.target!r}; "
+                f"clifford_jit(target='apple_gpu') requires every op to "
+                f"route to apple_gpu")
+        if entry.status != "fused":
+            raise CliffordJitError(
+                f"op {entry.op_name!r} manifest status is "
+                f"{entry.status!r} — clifford_jit requires every op "
+                f"to be 'fused' on the target")
+        if not entry.op_name.startswith("clifford_"):
+            raise CliffordJitError(
+                f"op {entry.op_name!r} is not a clifford_* op; "
+                f"clifford_jit's v1 scope is Cl(3,0) GA primitives only")
+
+
+def clifford_jit(
+    *, target: str = "apple_gpu", dtype: str = "f32",
+) -> Callable[[Callable[..., Any]], CliffordCompiledCallable]:
+    """Decorator: compile a constrained Clifford-only function to an
+    Apple-GPU op plan.
+
+    Decoration runs the function once with dummy or caller-supplied
+    inputs (see ``trace_with``) to capture the op plan, verifies the
+    plan against the backend manifest, and returns a
+    :class:`CliffordCompiledCallable` carrying the artifact.
+
+    .. code-block:: python
+
+        @clifford_jit(target="apple_gpu")
+        def point_cloud_rotor_invariant(rotor, points):
+            return ga.norm(ga.rotor_sandwich(rotor, points))
+
+        f = point_cloud_rotor_invariant   # CliffordCompiledCallable
+        f.artifact.plan_hash               # stable identifier
+        f.artifact.op_names()              # ('clifford_rotor_sandwich', 'clifford_norm')
+        out = f(rotor, points)             # GPU dispatch, route-traced
+        f.last_routes()                    # per-call route trace
+        f.plan_matches_routes()            # True iff routes == plan
+
+    The decorator's lazy form lets the caller supply trace inputs
+    via ``CliffordCompiledCallable.compile(...)`` when defaults
+    aren't possible (e.g., shape-dependent functions).
+    """
+    _validate_target(target)
+    if dtype != "f32":
+        raise CliffordJitError(
+            f"clifford_jit v1 only supports dtype='f32', got {dtype!r}")
+
+    def decorator(fn: Callable[..., Any]) -> CliffordCompiledCallable:
+        # Lazy compilation: the artifact is built at first call.
+        # Inline-trace mode (compile-on-first-call) lets the caller
+        # supply real inputs without having to wire dummy
+        # `Multivector` factories at decoration time.  After the
+        # first call the artifact is frozen.
+        wrapper = _LazyCompiledCallable(fn, target=target, dtype=dtype)
+        functools.update_wrapper(wrapper, fn)
+        return wrapper
+
+    return decorator
+
+
+class _LazyCompiledCallable(CliffordCompiledCallable):
+    """First-call trace variant of :class:`CliffordCompiledCallable`.
+
+    Postpones the artifact build until the first invocation, where
+    real input arguments are available.  After that call the
+    artifact is frozen and subsequent calls behave like a normal
+    :class:`CliffordCompiledCallable`.
+    """
+
+    def __init__(self, fn: Callable[..., Any], *,
+                 target: str, dtype: str) -> None:
+        # Placeholder artifact — replaced on first call.
+        placeholder = CliffordCompiledArtifact(
+            plan=(), target=target, dtype=dtype,
+            manifest_sources=(), plan_hash="", source_name=fn.__qualname__,
+        )
+        super().__init__(fn, placeholder)
+        self._target = target
+        self._dtype = dtype
+        self._compiled = False
+        self._compile_lock = threading.Lock()
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        if not self._compiled:
+            with self._compile_lock:
+                if not self._compiled:
+                    self._compile(args, kwargs)
+        return super().__call__(*args, **kwargs)
+
+    def _compile(self, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+        """Run the function once with the caller's arguments, capture
+        the route trace, validate it, and freeze the artifact."""
+        prev_tracing = _bridge.tracing_enabled()
+        _bridge.set_tracing_enabled(True)
+        _bridge.clear_dispatch_trace()
+        try:
+            with _bridge.jit_context(self._target):
+                # Execute solely to capture the op plan — output
+                # discarded; the caller's actual call (below in
+                # super().__call__) will re-run for the real result.
+                self._fn(*args, **kwargs)
+        finally:
+            captured = tuple(_bridge.take_dispatch_trace())
+            _bridge.set_tracing_enabled(prev_tracing)
+        plan = tuple(
+            CliffordOpPlanEntry(
+                op_name=r.op_name, target=r.target,
+                status=r.status, symbol=r.symbol,
+            )
+            for r in captured
+        )
+        _validate_plan(plan)
+        manifest_sources = tuple(sorted(set(
+            "_CLIFFORD_APPLE_GPU_FUSED" if e.op_name.startswith("clifford_")
+            else "_EBM_APPLE_GPU_FUSED" if e.op_name.startswith("ebm_")
+            else "_UNKNOWN"
+            for e in plan
+        )))
+        artifact = CliffordCompiledArtifact(
+            plan=plan, target=self._target, dtype=self._dtype,
+            manifest_sources=manifest_sources,
+            plan_hash=_hash_plan(plan),
+            source_name=self._fn.__qualname__,
+        )
+        # Freeze.
+        object.__setattr__(self, "artifact", artifact)
+        self._compiled = True

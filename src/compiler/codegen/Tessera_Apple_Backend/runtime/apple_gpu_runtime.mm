@@ -57,7 +57,89 @@ struct MetalDeviceContext {
   // buffer so amortizes the ~1ms compile cost across kernel invocations.
   std::unordered_map<std::string, id<MTLComputePipelineState>> kernel_cache;
   std::mutex                                                   kernel_cache_mu;
+
+  // 2026-05-17 — Metal buffer pool.  Each dispatch helper used to
+  // call ``[device newBufferWithBytes:...]`` and let the buffer
+  // deallocate at the end of the @autoreleasepool.  Profiling
+  // showed those allocations cost ~50–100µs each on M-series — at
+  // least 3× the per-kernel dispatch floor for small kernels.  The
+  // pool below recycles `MTLResourceStorageModeShared` buffers
+  // keyed on size bucket so a typical pointwise kernel sequence
+  // re-uses the same backing storage across iterations.
+  //
+  // Buckets are powers of 2 from 16B to 4MB.  Buffers larger than
+  // the top bucket bypass the pool (rare; the GA/EBM workloads
+  // stay well under 4MB per buffer).
+  static constexpr size_t kBucketCount = 19;   // 16B → 4MB
+  static constexpr size_t kMinBucketLog2 = 4;  // log2(16)
+  std::vector<id<MTLBuffer>> buffer_pool[kBucketCount];
+  std::mutex                 buffer_pool_mu;
 };
+
+// Pick the smallest bucket whose capacity ≥ requested size.
+static inline size_t metal_buffer_bucket(size_t bytes) {
+  if (bytes == 0) return 0;
+  size_t log2 = 0;
+  size_t b = 1;
+  while (b < bytes) { b <<= 1; ++log2; }
+  if (log2 < MetalDeviceContext::kMinBucketLog2) {
+    return 0;
+  }
+  size_t bucket = log2 - MetalDeviceContext::kMinBucketLog2;
+  if (bucket >= MetalDeviceContext::kBucketCount) {
+    return MetalDeviceContext::kBucketCount;  // sentinel: too big
+  }
+  return bucket;
+}
+
+// Acquire a shared-storage buffer ≥ ``bytes`` from the pool, or
+// allocate fresh if the pool is empty / the request exceeds the
+// top bucket.  Caller is responsible for releasing via
+// :func:`metal_buffer_release`.
+static id<MTLBuffer> metal_buffer_acquire(MetalDeviceContext &ctx,
+                                           size_t bytes) {
+  size_t bucket = metal_buffer_bucket(bytes);
+  if (bucket >= MetalDeviceContext::kBucketCount) {
+    return [ctx.device newBufferWithLength:bytes
+                                   options:MTLResourceStorageModeShared];
+  }
+  {
+    std::lock_guard<std::mutex> lock(ctx.buffer_pool_mu);
+    auto &pool = ctx.buffer_pool[bucket];
+    if (!pool.empty()) {
+      id<MTLBuffer> buf = pool.back();
+      pool.pop_back();
+      return buf;
+    }
+  }
+  size_t cap = (size_t)1 << (bucket + MetalDeviceContext::kMinBucketLog2);
+  return [ctx.device newBufferWithLength:cap
+                                 options:MTLResourceStorageModeShared];
+}
+
+static void metal_buffer_release(MetalDeviceContext &ctx,
+                                  id<MTLBuffer> buf, size_t bytes) {
+  if (buf == nil) return;
+  size_t bucket = metal_buffer_bucket(bytes);
+  if (bucket >= MetalDeviceContext::kBucketCount) {
+    // Too big for the pool — let it dealloc.
+    return;
+  }
+  std::lock_guard<std::mutex> lock(ctx.buffer_pool_mu);
+  // Cap each bucket so the pool's footprint stays bounded.
+  if (ctx.buffer_pool[bucket].size() < 8) {
+    ctx.buffer_pool[bucket].push_back(buf);
+  }
+}
+
+// Convenience: acquire + memcpy host bytes into a shared buffer.
+static id<MTLBuffer> metal_buffer_acquire_with_bytes(
+    MetalDeviceContext &ctx, const void *src, size_t bytes) {
+  id<MTLBuffer> buf = metal_buffer_acquire(ctx, bytes);
+  if (buf == nil) return nil;
+  std::memcpy([buf contents], src, bytes);
+  return buf;
+}
 
 MetalDeviceContext &deviceContext() {
   static MetalDeviceContext ctx{nil, nil, false};
@@ -4227,11 +4309,10 @@ static bool dispatch_clifford_unary_8x8_f32_msl(
   @autoreleasepool {
     id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, source, entry);
     if (!pso) return false;
-    NSUInteger byteCount = sizeof(float) * (NSUInteger)batch * 8u;
-    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:byteCount
-                                                  options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufC = [ctx.device newBufferWithLength:byteCount
-                                                  options:MTLResourceStorageModeShared];
+    size_t byteCount = sizeof(float) * (size_t)batch * 8u;
+    // Pool path — recycle shared-storage buffers across dispatches.
+    id<MTLBuffer> bufA = metal_buffer_acquire_with_bytes(ctx, A, byteCount);
+    id<MTLBuffer> bufC = metal_buffer_acquire(ctx, byteCount);
     if (!bufA || !bufC) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -4247,9 +4328,11 @@ static bool dispatch_clifford_unary_8x8_f32_msl(
     [enc endEncoding];
     [cb commit];
     [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
-    std::memcpy(C, [bufC contents], byteCount);
-    return true;
+    bool ok = (cb.status == MTLCommandBufferStatusCompleted);
+    if (ok) std::memcpy(C, [bufC contents], byteCount);
+    metal_buffer_release(ctx, bufA, byteCount);
+    metal_buffer_release(ctx, bufC, byteCount);
+    return ok;
   }
 }
 
@@ -6282,14 +6365,11 @@ static bool dispatch_ebm_ebt_tiny_refinement_argmin_f32_msl(
         ctx, kEBMEBTTinyRefinementArgminF32Source,
         @"ebm_ebt_tiny_refinement_argmin_f32");
     if (!pso) return false;
-    NSUInteger inBytes  = sizeof(float) * (NSUInteger)B * (NSUInteger)K * (NSUInteger)D;
-    NSUInteger outBytes = sizeof(float) * (NSUInteger)B * (NSUInteger)D;
-    id<MTLBuffer> bY = [ctx.device newBufferWithBytes:y0 length:inBytes
-                                                options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bG = [ctx.device newBufferWithBytes:grad length:inBytes
-                                                options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bO = [ctx.device newBufferWithLength:outBytes
-                                                options:MTLResourceStorageModeShared];
+    size_t inBytes  = sizeof(float) * (size_t)B * (size_t)K * (size_t)D;
+    size_t outBytes = sizeof(float) * (size_t)B * (size_t)D;
+    id<MTLBuffer> bY = metal_buffer_acquire_with_bytes(ctx, y0, inBytes);
+    id<MTLBuffer> bG = metal_buffer_acquire_with_bytes(ctx, grad, inBytes);
+    id<MTLBuffer> bO = metal_buffer_acquire(ctx, outBytes);
     if (!bY || !bG || !bO) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -6308,9 +6388,12 @@ static bool dispatch_ebm_ebt_tiny_refinement_argmin_f32_msl(
     [enc endEncoding];
     [cb commit];
     [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
-    std::memcpy(out, [bO contents], outBytes);
-    return true;
+    bool ok = (cb.status == MTLCommandBufferStatusCompleted);
+    if (ok) std::memcpy(out, [bO contents], outBytes);
+    metal_buffer_release(ctx, bY, inBytes);
+    metal_buffer_release(ctx, bG, inBytes);
+    metal_buffer_release(ctx, bO, outBytes);
+    return ok;
   }
 }
 

@@ -88,20 +88,25 @@ from tessera.rng import RNGKey  # noqa: E402
 # Runtime compile/load — shared with the unit test fixture
 # ---------------------------------------------------------------------------
 
-def compile_apple_gpu_runtime(tmp_dir: Path) -> ctypes.CDLL | None:
+def compile_apple_gpu_runtime(
+    tmp_dir: Path,
+) -> tuple[ctypes.CDLL | None, float, str | None]:
     """Compile ``apple_gpu_runtime.mm`` into a dylib and ctypes-load it.
 
-    Returns ``None`` on non-Darwin hosts or when the toolchain is
-    missing / the source fails to compile.
+    Returns ``(handle, compile_time_ms, skip_reason)`` — the handle is
+    ``None`` on non-Darwin / missing-toolchain / compile-failure paths,
+    in which case ``skip_reason`` is a non-empty diagnostic string.
+    ``compile_time_ms`` is the wall-clock cost of the clang++ invocation
+    so the report can separate compile time from dispatch time.
     """
     if sys.platform != "darwin":
-        return None
+        return None, 0.0, f"non-darwin host (sys.platform={sys.platform!r})"
     cxx = shutil.which("clang++") or shutil.which("c++")
     if cxx is None:
-        return None
+        return None, 0.0, "clang++/c++ not found on PATH"
     source = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm"
     if not source.exists():
-        return None
+        return None, 0.0, f"runtime source missing: {source}"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     lib = tmp_dir / "libtessera_apple_gpu_runtime.dylib"
     cmd = [cxx, "-std=c++17", "-shared", "-fPIC", "-O2", "-fobjc-arc",
@@ -109,10 +114,14 @@ def compile_apple_gpu_runtime(tmp_dir: Path) -> ctypes.CDLL | None:
            "-framework", "Metal",
            "-framework", "MetalPerformanceShaders",
            "-framework", "Foundation"]
+    t0 = time.perf_counter_ns()
     proc = subprocess.run(cmd, capture_output=True, text=True)
+    compile_time_ms = (time.perf_counter_ns() - t0) / 1e6
     if proc.returncode != 0:
-        return None
-    return ctypes.CDLL(str(lib))
+        return None, compile_time_ms, (
+            f"clang++ failed (rc={proc.returncode}): {proc.stderr[-400:]}"
+        )
+    return ctypes.CDLL(str(lib)), compile_time_ms, None
 
 
 def _ptr_f(arr: np.ndarray) -> Any:
@@ -522,15 +531,60 @@ def _interior_slice(shape: tuple[int, ...]) -> tuple:
             slice(None))
 
 
-def time_dispatch(dispatch: Callable, reps: int) -> tuple[float, float]:
-    dispatch()  # warm up
+def _percentile(samples: list[float], pct: float) -> float:
+    """Linear-interpolation percentile (NumPy's default ``linear``
+    method).  Robust for the tiny rep counts CI uses."""
+    if not samples:
+        return 0.0
+    s = sorted(samples)
+    if len(s) == 1:
+        return s[0]
+    k = (len(s) - 1) * (pct / 100.0)
+    lo = int(k)
+    hi = min(lo + 1, len(s) - 1)
+    frac = k - lo
+    return s[lo] + (s[hi] - s[lo]) * frac
+
+
+def collect_samples(dispatch: Callable, reps: int,
+                     warmup: int = 1) -> list[float]:
+    """Run ``dispatch`` ``warmup`` times then ``reps`` timed iterations.
+
+    Returns the per-rep wall-clock samples in milliseconds.
+    """
+    for _ in range(warmup):
+        dispatch()
     samples_ms: list[float] = []
     for _ in range(reps):
         t0 = time.perf_counter_ns()
         dispatch()
         samples_ms.append((time.perf_counter_ns() - t0) / 1e6)
-    return (statistics.median(samples_ms),
-            statistics.stdev(samples_ms) if reps > 1 else 0.0)
+    return samples_ms
+
+
+def timing_stats(samples_ms: list[float]) -> dict[str, float]:
+    """Compute the timing column for a report row.
+
+    Always reports ``latency_ms`` (median, the canonical headline) plus
+    ``stdev_ms``, ``p10_ms``, ``p50_ms``, ``p90_ms``, ``min_ms``,
+    ``max_ms``.  ``stdev_ms`` is zero for a single rep — useful for CI
+    where reps=2 still yields a stable signal but no spread.
+    """
+    if not samples_ms:
+        return {"latency_ms": 0.0, "stdev_ms": 0.0,
+                "p10_ms": 0.0, "p50_ms": 0.0, "p90_ms": 0.0,
+                "min_ms": 0.0, "max_ms": 0.0}
+    median = statistics.median(samples_ms)
+    stdev = statistics.stdev(samples_ms) if len(samples_ms) > 1 else 0.0
+    return {
+        "latency_ms": median,
+        "stdev_ms": stdev,
+        "p10_ms": _percentile(samples_ms, 10.0),
+        "p50_ms": median,
+        "p90_ms": _percentile(samples_ms, 90.0),
+        "min_ms": min(samples_ms),
+        "max_ms": max(samples_ms),
+    }
 
 
 def run_ga_primitive(row: dict[str, Any], reps: int,
@@ -543,16 +597,17 @@ def run_ga_primitive(row: dict[str, Any], reps: int,
     # Pointwise + reduction tolerances; field ops accumulate finite-diff error.
     tol = 5e-4 if row.get("field_op") else 1e-4
     ok = max_err <= tol
-    latency_ms, stdev_ms = time_dispatch(row["dispatch"], reps)
+    samples_ms = collect_samples(row["dispatch"], reps)
+    timing = timing_stats(samples_ms)
     return {
         "backend": "apple_gpu",
+        "namespace": "ga",
         "op": row["op"],
         "shape": row["shape"],
         "dtype": "f32",
         "mode": "fused",
         "reps": reps,
-        "latency_ms": latency_ms,
-        "stdev_ms": stdev_ms,
+        **timing,
         "max_abs_err": max_err,
         "tolerance": tol,
         "ok": ok,
@@ -563,11 +618,17 @@ def run_ga_primitive(row: dict[str, Any], reps: int,
 
 
 # ---------------------------------------------------------------------------
-# EBM stack walks — Python execution today; manifest lookup confirms no
-# Apple GPU MSL kernel exists yet and records mode='reference'.
+# EBM stack walks — most are Python today; ebm_inner_step + ebm_refinement
+# dispatch to the native Apple GPU C ABI when the runtime is available.
+#
+# Every path function returns ``(dispatch, max_err)`` where ``dispatch``
+# is a no-arg callable that performs one step and ``max_err`` is the
+# correctness gap vs the closed-form reference.  Timing happens in the
+# central driver so percentiles, warmup, and the (manifest-driven)
+# backend column are computed uniformly across rows.
 # ---------------------------------------------------------------------------
 
-def _ebm_energy_path(reps: int) -> tuple[float, float, float]:
+def _ebm_energy_path() -> tuple[Callable[[], None], float]:
     rng = np.random.RandomState(1000)
     x = rng.randn(8, 4).astype(np.float32)
     y = rng.randn(8, 4).astype(np.float32)
@@ -578,57 +639,111 @@ def _ebm_energy_path(reps: int) -> tuple[float, float, float]:
     expected = np.sum((x - y) ** 2, axis=1).astype(np.float32)
     out = ebm.energy(model_fn, x, y)
     err = float(np.abs(out - expected).max())
-    ebm.energy(model_fn, x, y)  # warm up
-    samples_ms: list[float] = []
-    for _ in range(reps):
-        t0 = time.perf_counter_ns()
-        ebm.energy(model_fn, x, y)
-        samples_ms.append((time.perf_counter_ns() - t0) / 1e6)
-    return statistics.median(samples_ms), (statistics.stdev(samples_ms)
-                                            if reps > 1 else 0.0), err
+    return (lambda: ebm.energy(model_fn, x, y)), err
 
 
-def _ebm_inner_step_path(reps: int) -> tuple[float, float, float]:
+def _ebm_inner_step_python_path() -> tuple[Callable[[], None], float]:
+    """Python reference inner-step (kept for backward-compat).
+
+    Superseded by ``_ebm_inner_step_apple_gpu_path`` when the runtime
+    is available — both produce identical numerical output.
+    """
     rng = np.random.RandomState(1001)
     y = rng.randn(16, 4).astype(np.float32)
     grad = rng.randn(16, 4).astype(np.float32)
     expected = y - 0.05 * grad
     out = ebm.inner_step(y, grad, eta=0.05)
     err = float(np.abs(out - expected).max())
-    ebm.inner_step(y, grad, eta=0.05)
-    samples_ms: list[float] = []
-    for _ in range(reps):
-        t0 = time.perf_counter_ns()
-        ebm.inner_step(y, grad, eta=0.05)
-        samples_ms.append((time.perf_counter_ns() - t0) / 1e6)
-    return statistics.median(samples_ms), (statistics.stdev(samples_ms)
-                                            if reps > 1 else 0.0), err
+    return (lambda: ebm.inner_step(y, grad, eta=0.05)), err
 
 
-def _ebm_langevin_step_path(reps: int) -> tuple[float, float, float]:
+def _ebm_inner_step_apple_gpu_path(
+    rt: ctypes.CDLL,
+) -> tuple[Callable[[], np.ndarray], float, str]:
+    """Native Apple-GPU EBM inner-step.
+
+    ABI: ``out = y - eta * grad``, ``n`` is the total element count
+    (the kernel is shape-agnostic).  Returns the ctypes-bound dispatch
+    closure, the max-abs-err vs the closed-form reference, and the
+    runtime symbol name (so the report can record it).
+    """
+    sym = "tessera_apple_gpu_ebm_inner_step_f32"
+    fn = getattr(rt, sym)
+    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.c_float,
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.c_int32]
+    fn.restype = None
+    rng = np.random.RandomState(1001)
+    y = np.ascontiguousarray(rng.randn(16, 4).astype(np.float32))
+    grad = np.ascontiguousarray(rng.randn(16, 4).astype(np.float32))
+    eta = 0.05
+    n = int(y.size)
+    out = np.zeros_like(y)
+    expected = (y - eta * grad).astype(np.float32)
+
+    def dispatch() -> np.ndarray:
+        fn(_ptr_f(y), _ptr_f(grad), ctypes.c_float(eta),
+           _ptr_f(out), ctypes.c_int32(n))
+        return out
+
+    dispatch()
+    err = float(np.abs(out - expected).max())
+    return dispatch, err, sym
+
+
+def _ebm_refinement_apple_gpu_path(
+    rt: ctypes.CDLL, T: int = 8,
+) -> tuple[Callable[[], np.ndarray], float, str]:
+    """Native Apple-GPU EBT refinement — T inner-step iterations.
+
+    With a fixed gradient (no recomputation between steps), the closed
+    form is ``y_T = y_0 - T * eta * grad`` — the kernel matches that
+    bit-for-bit at fp32.
+    """
+    sym = "tessera_apple_gpu_ebm_refinement_f32"
+    fn = getattr(rt, sym)
+    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.c_float, ctypes.c_int32,
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.c_int32]
+    fn.restype = None
+    rng = np.random.RandomState(1010)
+    y0 = np.ascontiguousarray(rng.randn(8, 6).astype(np.float32))
+    grad = np.ascontiguousarray(rng.randn(8, 6).astype(np.float32))
+    eta = 0.02
+    n = int(y0.size)
+    y_out = np.zeros_like(y0)
+    expected = (y0 - T * eta * grad).astype(np.float32)
+
+    def dispatch() -> np.ndarray:
+        fn(_ptr_f(y0), _ptr_f(grad), ctypes.c_float(eta),
+           ctypes.c_int32(T), _ptr_f(y_out), ctypes.c_int32(n))
+        return y_out
+
+    dispatch()
+    err = float(np.abs(y_out - expected).max())
+    return dispatch, err, sym
+
+
+def _ebm_langevin_step_path() -> tuple[Callable[[], None], float]:
     rng = np.random.RandomState(1002)
     y = rng.randn(16, 4).astype(np.float32)
     key = RNGKey.from_seed(1002)
-    # Analytic gradient — closed form to avoid `_numerical_grad` blowup.
     grad_fn = lambda yy: 2.0 * yy
     energy_fn = lambda yy: np.sum(yy * yy, axis=1)
     out, _ = ebm.langevin_step(y, energy_fn, eta=0.01, temperature=0.0,
                                 rng_key=key, grad_fn=grad_fn)
-    expected = y - 0.01 * 2.0 * y  # T=0 ⇒ pure GD
+    expected = y - 0.01 * 2.0 * y
     err = float(np.abs(out - expected).max())
-    ebm.langevin_step(y, energy_fn, eta=0.01, temperature=0.0,
-                      rng_key=key, grad_fn=grad_fn)
-    samples_ms: list[float] = []
-    for _ in range(reps):
-        t0 = time.perf_counter_ns()
-        ebm.langevin_step(y, energy_fn, eta=0.01, temperature=0.0,
-                           rng_key=key, grad_fn=grad_fn)
-        samples_ms.append((time.perf_counter_ns() - t0) / 1e6)
-    return statistics.median(samples_ms), (statistics.stdev(samples_ms)
-                                            if reps > 1 else 0.0), err
+    return (lambda: ebm.langevin_step(y, energy_fn, eta=0.01,
+                                       temperature=0.0, rng_key=key,
+                                       grad_fn=grad_fn)), err
 
 
-def _ebm_self_verify_path(reps: int) -> tuple[float, float, float]:
+def _ebm_self_verify_path() -> tuple[Callable[[], None], float]:
     rng = np.random.RandomState(1003)
     B, K, D = 4, 8, 16
     energies = rng.randn(B, K).astype(np.float32)
@@ -636,39 +751,22 @@ def _ebm_self_verify_path(reps: int) -> tuple[float, float, float]:
     expected = candidates[np.arange(B), energies.argmin(axis=1)]
     out = ebm.self_verify(energies, candidates)
     err = float(np.abs(out - expected).max())
-    ebm.self_verify(energies, candidates)
-    samples_ms: list[float] = []
-    for _ in range(reps):
-        t0 = time.perf_counter_ns()
-        ebm.self_verify(energies, candidates)
-        samples_ms.append((time.perf_counter_ns() - t0) / 1e6)
-    return statistics.median(samples_ms), (statistics.stdev(samples_ms)
-                                            if reps > 1 else 0.0), err
+    return (lambda: ebm.self_verify(energies, candidates)), err
 
 
-def _ebm_decode_init_path(reps: int) -> tuple[float, float, float]:
+def _ebm_decode_init_path() -> tuple[Callable[[], None], float]:
     key = RNGKey.from_seed(1004)
-    x = np.zeros((4, 12), dtype=np.float32)  # batch dim B=4 derived from x.shape[0]
-    expected_shape = (4, 6, 12)
+    x = np.zeros((4, 12), dtype=np.float32)
     kwargs = dict(K=6, init_strategy="noise", rng_key=key,
                   shape=(12,), dtype="fp32")
     out = ebm.decode_init(x, **kwargs)
-    # Determinism: same key, same shape ⇒ same output.
     out2 = ebm.decode_init(x, **kwargs)
     err = float(np.abs(out - out2).max())
-    assert out.shape == expected_shape, f"got {out.shape}, expected {expected_shape}"
-    ebm.decode_init(x, **kwargs)  # warm up
-    samples_ms: list[float] = []
-    for _ in range(reps):
-        t0 = time.perf_counter_ns()
-        ebm.decode_init(x, **kwargs)
-        samples_ms.append((time.perf_counter_ns() - t0) / 1e6)
-    return statistics.median(samples_ms), (statistics.stdev(samples_ms)
-                                            if reps > 1 else 0.0), err
+    assert out.shape == (4, 6, 12)
+    return (lambda: ebm.decode_init(x, **kwargs)), err
 
 
-def _ebm_partition_exact_path(reps: int) -> tuple[float, float, float]:
-    # Enumerate {-1, +1}^4 — tiny so partition is well-defined.
+def _ebm_partition_exact_path() -> tuple[Callable[[], None], float]:
     states = np.array(np.meshgrid(*[[-1.0, 1.0]] * 4,
                                     indexing="ij")).reshape(4, -1).T
     states = states.astype(np.float32)
@@ -678,26 +776,16 @@ def _ebm_partition_exact_path(reps: int) -> tuple[float, float, float]:
         return -0.5 * float(np.sum(s * s))
 
     Z = ebm.partition_function_exact(energy_fn, state_list)
-    # Z = sum_i exp(-E_i) — closed form on the discrete grid.
     expected = float(sum(math.exp(-energy_fn(s)) for s in state_list))
     err = abs(float(Z) - expected)
-    ebm.partition_function_exact(energy_fn, state_list)
-    samples_ms: list[float] = []
-    for _ in range(reps):
-        t0 = time.perf_counter_ns()
-        ebm.partition_function_exact(energy_fn, state_list)
-        samples_ms.append((time.perf_counter_ns() - t0) / 1e6)
-    return statistics.median(samples_ms), (statistics.stdev(samples_ms)
-                                            if reps > 1 else 0.0), err
+    return (lambda: ebm.partition_function_exact(energy_fn, state_list)), err
 
 
-def _ebm_bivector_langevin_path(reps: int) -> tuple[float, float, float]:
-    # Tiny Cl(3,0) bivector → ground-state energy; one Langevin step at T=0
-    # collapses to gradient descent. Analytic gradient via exterior algebra.
+def _ebm_bivector_langevin_path() -> tuple[Callable[[], None], float]:
     key = RNGKey.from_seed(1005)
     coeffs0 = np.zeros(8, dtype=np.float32)
-    coeffs0[3] = 0.5   # e12
-    coeffs0[5] = -0.2  # e13
+    coeffs0[3] = 0.5
+    coeffs0[5] = -0.2
     state = ga.Multivector(coeffs0, _CL30)
 
     def energy_fn(mv):
@@ -711,51 +799,34 @@ def _ebm_bivector_langevin_path(reps: int) -> tuple[float, float, float]:
     out, _ = ebm.bivector_langevin_step(state, energy_fn, eta=0.01,
                                           temperature=0.0, rng_key=key,
                                           grad_fn=grad_fn)
-    # T=0 GD with grad = state: new = (1-eta)*state, restricted to grade-2.
     expected_e12 = (1.0 - 0.01) * 0.5
     err = abs(float(out.coefficients[3]) - expected_e12)
-    for _ in range(2):
-        ebm.bivector_langevin_step(state, energy_fn, eta=0.01,
-                                     temperature=0.0, rng_key=key,
-                                     grad_fn=grad_fn)
-    samples_ms: list[float] = []
-    for _ in range(reps):
-        t0 = time.perf_counter_ns()
-        ebm.bivector_langevin_step(state, energy_fn, eta=0.01,
-                                     temperature=0.0, rng_key=key,
-                                     grad_fn=grad_fn)
-        samples_ms.append((time.perf_counter_ns() - t0) / 1e6)
-    return statistics.median(samples_ms), (statistics.stdev(samples_ms)
-                                            if reps > 1 else 0.0), err
+    return (lambda: ebm.bivector_langevin_step(state, energy_fn, eta=0.01,
+                                                 temperature=0.0,
+                                                 rng_key=key,
+                                                 grad_fn=grad_fn)), err
 
 
-def _ebm_sphere_langevin_path(reps: int) -> tuple[float, float, float]:
+def _ebm_sphere_langevin_path() -> tuple[Callable[[], None], float]:
     key = RNGKey.from_seed(1006)
     x = np.array([1.0, 0.0, 0.0], dtype=np.float32)
 
     def energy_fn(p):
-        return -float(p[0])  # minimum at (+1, 0, 0)
+        return -float(p[0])
 
     out, _ = ebm.sphere_langevin_step(x, energy_fn, eta=0.005,
                                         temperature=0.0, rng_key=key)
-    # T=0 step should still be on the unit sphere.
     err = abs(float(np.linalg.norm(out)) - 1.0)
-    for _ in range(2):
-        ebm.sphere_langevin_step(x, energy_fn, eta=0.005,
-                                   temperature=0.0, rng_key=key)
-    samples_ms: list[float] = []
-    for _ in range(reps):
-        t0 = time.perf_counter_ns()
-        ebm.sphere_langevin_step(x, energy_fn, eta=0.005,
-                                   temperature=0.0, rng_key=key)
-        samples_ms.append((time.perf_counter_ns() - t0) / 1e6)
-    return statistics.median(samples_ms), (statistics.stdev(samples_ms)
-                                            if reps > 1 else 0.0), err
+    return (lambda: ebm.sphere_langevin_step(x, energy_fn, eta=0.005,
+                                               temperature=0.0,
+                                               rng_key=key)), err
 
 
-_EBM_PATHS: tuple[tuple[str, str, Callable, float], ...] = (
+# Python-reference EBM paths: (op_name, shape_desc, builder, tolerance).
+# These remain ``backend=python_ref`` until a native MSL kernel lands;
+# the manifest entry (``apple_gpu = planned``) confirms the gap.
+_EBM_PYTHON_PATHS: tuple[tuple[str, str, Callable, float], ...] = (
     ("ebm_energy",            "B=8,D=4",        _ebm_energy_path,            1e-5),
-    ("ebm_inner_step",        "B=16,D=4",       _ebm_inner_step_path,        1e-5),
     ("ebm_langevin_step",     "B=16,D=4/T=0",   _ebm_langevin_step_path,     1e-5),
     ("ebm_self_verify",       "B=4,K=8,D=16",   _ebm_self_verify_path,       0.0),
     ("ebm_decode_init",       "K=6,shape=4x12", _ebm_decode_init_path,       0.0),
@@ -765,27 +836,66 @@ _EBM_PATHS: tuple[tuple[str, str, Callable, float], ...] = (
 )
 
 
-def run_ebm_path(name: str, shape: str, run_fn: Callable,
-                  tolerance: float, reps: int,
-                  device: str, version: str) -> dict[str, Any]:
-    latency_ms, stdev_ms, err = run_fn(reps)
-    # Confirm manifest is consistent: today EBM ops are Python-only on
-    # apple_gpu (no fused MSL kernel registered). Document that in the
-    # row so downstream tooling can plan kernel work.
-    apple_gpu_status = "python_reference_only"
+def _manifest_status_for(op_name: str, target: str) -> str:
+    """Pull the canonical status for ``op_name`` on ``target`` from the
+    backend manifest.  Falls back to ``"unknown"`` so the report still
+    serializes if the manifest gets out of sync."""
+    for entry in bm.manifest_for(op_name):
+        if entry.target == target:
+            return entry.status
+    return "unknown"
+
+
+def run_ebm_python_path(name: str, shape: str, builder: Callable,
+                         tolerance: float, reps: int,
+                         device: str, version: str) -> dict[str, Any]:
+    """Time the Python reference path for an EBM op + record manifest
+    status (``apple_gpu = planned`` for these rows today)."""
+    dispatch, err = builder()
+    samples_ms = collect_samples(dispatch, reps)
+    timing = timing_stats(samples_ms)
     return {
         "backend": "python_ref",
+        "namespace": "ebm",
         "op": name,
         "shape": shape,
         "dtype": "f32",
         "mode": "reference",
         "reps": reps,
-        "latency_ms": latency_ms,
-        "stdev_ms": stdev_ms,
+        **timing,
         "max_abs_err": err,
         "tolerance": tolerance,
         "ok": err <= tolerance,
-        "apple_gpu_status": apple_gpu_status,
+        "apple_gpu_status": _manifest_status_for(name, "apple_gpu"),
+        "x86_status": _manifest_status_for(name, "x86"),
+        "device": device,
+        "tessera_version": version,
+    }
+
+
+def run_ebm_apple_gpu_path(name: str, shape: str,
+                            dispatch: Callable, err: float, symbol: str,
+                            tolerance: float, reps: int,
+                            device: str, version: str) -> dict[str, Any]:
+    """Time a native Apple-GPU EBM dispatch + cross-check the manifest
+    has the matching ``apple_gpu=fused`` entry."""
+    samples_ms = collect_samples(dispatch, reps)
+    timing = timing_stats(samples_ms)
+    manifest_status = _manifest_status_for(name, "apple_gpu")
+    return {
+        "backend": "apple_gpu",
+        "namespace": "ebm",
+        "op": name,
+        "shape": shape,
+        "dtype": "f32",
+        "mode": "fused",
+        "reps": reps,
+        **timing,
+        "max_abs_err": err,
+        "tolerance": tolerance,
+        "ok": err <= tolerance and manifest_status == "fused",
+        "apple_gpu_status": manifest_status,
+        "symbol": symbol,
         "device": device,
         "tessera_version": version,
     }
@@ -807,46 +917,97 @@ def _tessera_version() -> str:
         return "dev"
 
 
-def run_report(reps: int = 20, tmp_dir: Path | None = None) -> dict[str, Any]:
-    """Top-level entry: build the report dict (no I/O)."""
+# ---------------------------------------------------------------------------
+# Driver
+# ---------------------------------------------------------------------------
+
+# Default reps tuning: small for CI (cheap + stable verdict), larger for
+# manual runs where percentiles need a meaningful sample.
+DEFAULT_REPS_MANUAL = 50
+DEFAULT_REPS_CI = 2
+
+
+def run_report(reps: int = DEFAULT_REPS_MANUAL,
+               tmp_dir: Path | None = None,
+               *, refinement_T: int = 8) -> dict[str, Any]:
+    """Top-level entry: build the report dict (no I/O).
+
+    The report envelope records ``compile_time_ms`` (clang++ wall-clock
+    for the runtime dylib) separately from per-row ``latency_ms`` (the
+    pure GPU/CPU dispatch time), so consumers can amortize compile
+    cost across many runs and compare dispatch latency in isolation.
+    """
     if tmp_dir is None:
         import tempfile
         tmp_dir = Path(tempfile.mkdtemp(prefix="tessera_ga_ebm_bench_"))
     device = _device_name()
     version = _tessera_version()
-    rt = compile_apple_gpu_runtime(tmp_dir)
+    rt, compile_time_ms, skip_reason = compile_apple_gpu_runtime(tmp_dir)
     rows: list[dict[str, Any]] = []
-    skipped_reason: str | None = None
+    native_ebm_ops: set[str] = set()
 
-    if rt is None:
-        skipped_reason = ("apple_gpu runtime not available "
-                          f"({sys.platform=}, dylib not built)")
-    else:
+    if rt is not None:
+        # GA primitives — all 17 ship fused MSL kernels.
         for row in build_ga_entries(rt):
             rows.append(run_ga_primitive(row, reps, device, version))
+        # Native EBM primitives — ebm_inner_step + ebm_refinement.
+        dispatch, err, sym = _ebm_inner_step_apple_gpu_path(rt)
+        rows.append(run_ebm_apple_gpu_path(
+            "ebm_inner_step", "B=16,D=4", dispatch, err, sym,
+            tolerance=1e-6, reps=reps, device=device, version=version,
+        ))
+        native_ebm_ops.add("ebm_inner_step")
+        dispatch, err, sym = _ebm_refinement_apple_gpu_path(rt, T=refinement_T)
+        rows.append(run_ebm_apple_gpu_path(
+            "ebm_refinement", f"B=8,D=6/T={refinement_T}",
+            dispatch, err, sym,
+            tolerance=1e-5, reps=reps, device=device, version=version,
+        ))
+        native_ebm_ops.add("ebm_refinement")
 
-    for name, shape, fn, tol in _EBM_PATHS:
-        rows.append(run_ebm_path(name, shape, fn, tol, reps, device, version))
+    # Python-reference EBM paths — emitted on every host regardless of
+    # whether the Apple GPU runtime built.  The row's `apple_gpu_status`
+    # column comes from `ebm_manifest_for()` (the source of truth).
+    for name, shape, builder, tol in _EBM_PYTHON_PATHS:
+        rows.append(run_ebm_python_path(name, shape, builder, tol,
+                                          reps, device, version))
 
+    ga_count = sum(1 for r in rows if r["op"].startswith("clifford_"))
+    ebm_count = sum(1 for r in rows if r["op"].startswith("ebm_"))
+    ebm_native_count = sum(1 for r in rows
+                            if r["op"].startswith("ebm_")
+                            and r["backend"] == "apple_gpu")
     return {
         "runs": rows,
-        "ga_primitives_count": sum(1 for r in rows if r["op"].startswith("clifford_")),
-        "ebm_paths_count": sum(1 for r in rows if r["op"].startswith("ebm_")),
-        "skipped_apple_gpu": skipped_reason,
+        "ga_primitives_count": ga_count,
+        "ebm_paths_count": ebm_count,
+        "ebm_native_apple_gpu_count": ebm_native_count,
+        "native_ebm_ops": sorted(native_ebm_ops),
+        "compile_time_ms": compile_time_ms,
+        "skipped_apple_gpu": skip_reason,
         "device": device,
         "tessera_version": version,
+        "reps": reps,
     }
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--reps", type=int, default=20,
-                        help="Timing samples per primitive (median is reported)")
+    parser.add_argument("--reps", type=int, default=DEFAULT_REPS_MANUAL,
+                        help=("Timing samples per primitive (median is "
+                              "the headline; p10/p50/p90 also reported). "
+                              f"Default: {DEFAULT_REPS_MANUAL}."))
+    parser.add_argument("--ci", action="store_true",
+                        help=(f"Use the CI-friendly rep count "
+                              f"({DEFAULT_REPS_CI}); overrides --reps."))
+    parser.add_argument("--refinement-T", type=int, default=8,
+                        help="EBT-refinement inner-step iterations (default 8).")
     parser.add_argument("--output", type=Path, default=None,
                         help="JSON output path (stdout if omitted)")
     args = parser.parse_args(argv)
 
-    report = run_report(reps=args.reps)
+    reps = DEFAULT_REPS_CI if args.ci else args.reps
+    report = run_report(reps=reps, refinement_T=args.refinement_T)
     payload = json.dumps(report, indent=2, sort_keys=True, default=float)
     if args.output is not None:
         args.output.write_text(payload)

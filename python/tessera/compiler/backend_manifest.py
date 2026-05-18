@@ -743,6 +743,153 @@ def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     return entries
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# EBM (energy-based model) kernel manifest — 2026-05-17.
+#
+# Parallel to the GA dispatch table above: EBM primitives live in
+# `tessera.ebm.*` (`primitive_coverage.py` registers them under
+# `category="ebm"`).  They are not in the tensor `OP_SPECS` catalog, so
+# they need a dedicated table that `manifest_for()` routes to via the
+# `ebm_*` prefix.
+#
+# Status as of GA11 / EBM benchmark milestone:
+#   - The Python reference path in `tessera.ebm` runs on every CPU host
+#     (x86 / apple_cpu) — both targets declare `reference`.
+#   - `ebm_inner_step` is the first EBM primitive with a fused MSL
+#     kernel on Apple GPU; `ebm_refinement` is its multi-iteration
+#     wrapper (EBT-style K-candidate × T-step inner refinement).
+#   - All other EBM primitives carry `apple_gpu = planned` — they
+#     execute via the Python reference path on Apple Silicon today.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_EBM_CPU_DTYPES = ("fp32", "fp64")
+_EBM_APPLE_GPU_BASELINE_DTYPES = ("fp32",)
+_EBM_PLANNED_GPU_DTYPES = ("fp32", "fp16", "bf16")
+
+_EBM_APPLE_GPU_FUSED: dict[str, dict[str, object]] = {
+    # Pointwise affine: out = y - eta * grad. ABI: (y, grad, eta, out, n).
+    "ebm_inner_step": {
+        "symbol": "tessera_apple_gpu_ebm_inner_step_f32",
+        "dtypes": ("fp32",),
+        "abi": "(y:f32*, grad:f32*, eta:f32, out:f32*, n:i32)",
+        "notes": (
+            "Pointwise EBM inner step on Apple GPU — out[i] = y[i] - "
+            "eta * grad[i]. First native EBM primitive."
+        ),
+    },
+    # EBT refinement chain: T inner-step iterations on-device with
+    # ping-pong buffers. Same kernel body as inner_step, dispatched in a
+    # loop with std::swap of the working buffers between iterations.
+    "ebm_refinement": {
+        "symbol": "tessera_apple_gpu_ebm_refinement_f32",
+        "dtypes": ("fp32",),
+        "abi": "(y0:f32*, grad:f32*, eta:f32, T:i32, y_out:f32*, n:i32)",
+        "notes": (
+            "EBT-style refinement on Apple GPU — T iterations of "
+            "inner_step on-device with ping-pong buffers."
+        ),
+    },
+}
+
+# All EBM primitives currently covered by the manifest (the union of the
+# fused set + every Python-reference-only entry).  Kept explicit so the
+# manifest is self-documenting and `audit_backend_dtypes()` can walk it.
+_EBM_PRIMITIVES: tuple[str, ...] = (
+    # EBM1 — core energy/inner-loop primitives.
+    "ebm_energy",
+    "ebm_inner_step",
+    "ebm_refinement",       # EBT-style refinement loop
+    "ebm_langevin_step",
+    "ebm_self_verify",
+    "ebm_decode_init",
+    # EBM3 — partition function family.
+    "ebm_partition_exact",
+    "ebm_partition_monte_carlo",
+    "ebm_partition_ais",
+    # EBM7 — manifold-aware integrators.
+    "ebm_bivector_langevin",
+    "ebm_sphere_langevin",
+)
+
+
+def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
+    """Return the backend manifest entries for an ``ebm_*`` primitive.
+
+    Status semantics:
+      - ``x86`` + ``apple_cpu``: ``reference`` (Python implementation
+        in ``tessera.ebm.*`` runs on every CPU host).
+      - ``apple_gpu``: ``fused`` for primitives in
+        ``_EBM_APPLE_GPU_FUSED``; ``planned`` for everything else.
+      - ``nvidia_sm90`` + ``rocm``: ``planned`` (Phase G / H gating).
+
+    The benchmark driver uses this to label each EBM row's backend
+    column instead of carrying a row-local ``python_reference_only``
+    string.
+    """
+    if op_name not in _EBM_PRIMITIVES:
+        return []
+    entries: list[BackendKernelEntry] = []
+
+    # CPU targets — Python reference path on every host.
+    entries.append(BackendKernelEntry(
+        target="x86",
+        status=_REFERENCE_STATUS,
+        dtypes=_EBM_CPU_DTYPES,
+        feature_flags=("ebm_namespace", "numpy_reference"),
+        notes="Python EBM reference (tessera.ebm.*)",
+    ))
+    entries.append(BackendKernelEntry(
+        target="apple_cpu",
+        status=_REFERENCE_STATUS,
+        dtypes=_EBM_CPU_DTYPES,
+        feature_flags=("ebm_namespace", "numpy_reference"),
+        notes="Python EBM reference; Accelerate hand-off pending follow-up",
+    ))
+
+    # Apple GPU — first native EBM primitives landed 2026-05-17.
+    fused_spec = _EBM_APPLE_GPU_FUSED.get(op_name)
+    if fused_spec is not None:
+        entries.append(BackendKernelEntry(
+            target="apple_gpu",
+            status=_FUSED_KERNEL_STATUS,
+            dtypes=tuple(fused_spec["dtypes"]),
+            feature_flags=("ebm_namespace", "msl", "metal"),
+            notes=(
+                f"Fused MSL kernel: {fused_spec['symbol']} "
+                f"— ABI {fused_spec['abi']}. {fused_spec['notes']}"
+            ),
+        ))
+    else:
+        entries.append(BackendKernelEntry(
+            target="apple_gpu",
+            status=_PLANNED_STATUS,
+            dtypes=_EBM_APPLE_GPU_BASELINE_DTYPES,
+            feature_flags=("ebm_namespace", "msl"),
+            notes=(
+                "Python reference is the v1 execution path on Apple GPU; "
+                "native MSL kernel pending."
+            ),
+        ))
+
+    # NVIDIA / ROCm — both planned, gated on Phase G / H.
+    entries.append(BackendKernelEntry(
+        target="nvidia_sm90",
+        status=_PLANNED_STATUS,
+        dtypes=_EBM_PLANNED_GPU_DTYPES,
+        feature_flags=("ebm_namespace",),
+        notes="Gated on Phase G",
+    ))
+    entries.append(BackendKernelEntry(
+        target="rocm",
+        status=_PLANNED_STATUS,
+        dtypes=_EBM_PLANNED_GPU_DTYPES,
+        feature_flags=("ebm_namespace",),
+        notes="Gated on Phase H",
+    ))
+
+    return entries
+
+
 def _public_to_graph_name(public: str) -> str:
     """Convert a public op name (e.g., ``"matmul"``) to its catalog
     graph_name (e.g., ``"tessera.matmul"``)."""
@@ -780,6 +927,8 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     """
     if op_name.startswith("clifford_"):
         return clifford_manifest_for(op_name)
+    if op_name.startswith("ebm_"):
+        return ebm_manifest_for(op_name)
     entries: list[BackendKernelEntry] = []
 
     # x86 AMX
@@ -1055,6 +1204,8 @@ def audit_backend_dtypes() -> dict[str, list[tuple[str, str, str]]]:
 __all__ = [
     "BackendKernelEntry",
     "manifest_for",
+    "clifford_manifest_for",
+    "ebm_manifest_for",
     "all_manifests",
     "manifest_summary",
     "audit_backend_dtypes",

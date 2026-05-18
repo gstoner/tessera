@@ -1,5 +1,5 @@
 ---
-status: Active (development roadmap — all 6 scope-lock questions resolved; GA7/GA8/EBM5/EBM6 dialects build on MLIR 21; **all 17 of 17** GA primitives ship fused MSL kernels on Apple GPU; headline ops carry fp32+fp16+bf16, trig-MSL exp/log + 4 field-signature ops carry fp32)
+status: Active (development roadmap — all 6 scope-lock questions resolved; GA7/GA8/EBM5/EBM6 dialects build on MLIR 21; **all 17 of 17** GA primitives ship fused MSL kernels on Apple GPU and are end-to-end benchmarked; **2 of 9 EBM primitives** (`ebm_inner_step`, `ebm_refinement`) ship native MSL kernels — remaining 7 stay on the deterministic Python reference path with `apple_gpu_status=planned` in the manifest)
 classification: Audit / Plan
 authority: Sequences Geometric Algebra (Clifford) + Energy-Based Model primitive surfaces into Tessera
 last_updated: 2026-05-17
@@ -779,6 +779,45 @@ end-to-end rotor_sandwich smoke.
     `apple_gpu` status="fused" in
     [`backend_manifest.py`](../../python/tessera/compiler/backend_manifest.py).
     `PLANNED_APPLE_GPU_OPS` set is empty.
+- ✅ **GA + EBM end-to-end benchmark milestone (2026-05-17).**
+  - **GA: full Apple GPU end-to-end benchmarked.** All 17 primitives
+    walk Python API → manifest lookup → MSL dispatch → Metal execution
+    → correctness check → JSON report row via
+    [`benchmarks/apple_gpu/benchmark_ga_ebm.py`](../../benchmarks/apple_gpu/benchmark_ga_ebm.py).
+    Each row carries `backend=apple_gpu`, `mode=fused`, and the
+    manifest-resolved C ABI symbol.
+  - **EBM: first 2 native primitives shipped.**
+    `tessera_apple_gpu_ebm_inner_step_f32` (pointwise `out = y - eta*grad`)
+    and `tessera_apple_gpu_ebm_refinement_f32` (EBT-style T-step
+    inner refinement with ping-pong buffers) both land at
+    `backend=apple_gpu`, `mode=fused`. Remaining 7 EBM ops stay on
+    the Python reference path (`apple_gpu_status=planned` per the
+    manifest).
+  - **`ebm_manifest_for()` added to `backend_manifest.py`** parallel
+    to `clifford_manifest_for()`. `manifest_for("ebm_*")` routes
+    through it. Replaces the row-local `"python_reference_only"`
+    string with manifest-derived `apple_gpu_status`.
+  - **Timing methodology**: median (= headline `latency_ms`) +
+    `p10_ms` / `p50_ms` / `p90_ms` / `min_ms` / `max_ms` / `stdev_ms`;
+    `compile_time_ms` lives in the report envelope (separated from
+    per-row dispatch time so the ~2.3s clang++ runtime build doesn't
+    contaminate sub-millisecond kernel timings). CLI gains `--ci`
+    (reps=2 for tests) and `--refinement-T` (default 8).
+  - **CI test**: [`tests/unit/test_benchmark_ga_ebm.py`](../../tests/unit/test_benchmark_ga_ebm.py)
+    — **64 tests** (was 49), all deterministic, gracefully skip the
+    GPU paths on non-Darwin. Asserts schema, manifest-symbol parity
+    (GA + EBM), percentile monotonicity, native-vs-Python EBM split,
+    correctness vs Python reference for every primitive,
+    determinism across runs, and `manifest_for("ebm_*")` routing.
+  - **Sample report artifact** checked in at
+    [`benchmarks/apple_gpu/sample_ga_ebm_report.json`](../../benchmarks/apple_gpu/sample_ga_ebm_report.json)
+    so future changes can compare schema + headline latencies.
+    Documentation: [`benchmarks/apple_gpu/README.md`](../../benchmarks/apple_gpu/README.md).
+- ⏳ Native MSL kernels for the remaining 7 EBM ops
+  (`ebm_energy` / `ebm_langevin_step` / `ebm_self_verify` /
+  `ebm_decode_init` / `ebm_partition_exact` / `ebm_bivector_langevin`
+  / `ebm_sphere_langevin`) — `apple_gpu_status=planned` in the
+  manifest; promotion to `fused` is a focused follow-up sprint.
 - ⏳ Native C++ kernels in `Tessera_Clifford_x86_Backend/`: would
   enable Accelerate hand-off for batched products (currently the
   Python reference path is the v1 execution route on x86 + Apple CPU).

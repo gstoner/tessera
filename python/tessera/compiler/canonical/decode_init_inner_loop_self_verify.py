@@ -80,6 +80,37 @@ def _ir_text(B: int, K: int, D: int, T: int) -> str:
     )
 
 
+def run_per_step_gradient(
+    *, B: int = 2, K: int = 4, D: int = 8, T: int = 3, seed: int = 0,
+) -> np.ndarray:
+    """M6 Step 3 variant — every refinement step recomputes ``∇E(y)``
+    via :func:`tessera.compiler.energy_grad.refine` instead of
+    reusing a snapshot.
+
+    Returns the (B, K, D) refined candidates so the caller can
+    compare against the snapshot path.  This is the building
+    block for an MSL-fused energy+gradient kernel — same shape,
+    same outputs, but the gradient is materialized inside the
+    refinement loop rather than uploaded once.
+    """
+    from tessera import energy
+    from tessera.compiler.energy_grad import make_gradient_program, refine
+
+    _, candidates, _, _, T = _make_inputs(B=B, K=K, D=D, T=T, seed=seed)
+
+    def E(y):
+        return energy.norm_sq(y)
+
+    prog = make_gradient_program(E)
+    # Apply refinement to every (B, K) candidate row.
+    flat = candidates.reshape(B * K, D)
+    refined = np.stack(
+        [refine(flat[i], prog, T=T, eta=0.05) for i in range(flat.shape[0])],
+        axis=0,
+    )
+    return refined.reshape(B, K, D)
+
+
 def run(
     *, B: int = 2, K: int = 4, D: int = 8, T: int = 3, seed: int = 0,
     native_required: bool = False,

@@ -674,10 +674,37 @@ uniformly visible**:
   This is the symbolic-grad core that M6 Step 4's MSL codegen
   will consume; M7's Cauchy-Riemann verifier can also reuse it.
 
-Step 3 remaining work: per-IR-op `grad_y` materialization at the
-codegen layer, fused energy+gradient kernels for T-step refinement,
-and on-device Philox RNG in MSL.  Steps 3+4 ride on top of the
-audit + report machinery rather than landing parallel proof paths.
+- [x] **Step 3 grad_y + T-step refine (2026-05-18)**: shipped
+  `python/tessera/compiler/energy_grad.py` with
+  :class:`EnergyGradientProgram` (reverse-mode AD over the
+  closed-form VJP table) and :func:`refine` (T-step gradient
+  descent with build-once-reuse-per-step invariant — 16/16
+  tests including a finite-difference check on `mlp_head`,
+  convergence to a known quadratic minimum, and the
+  build-call-count invariant verifying refine doesn't rebuild
+  per step).
+- [x] **Step 3 wired into a canonical (2026-05-18)**: the
+  ``decode_init_inner_loop_self_verify`` canonical now exposes
+  :func:`run_per_step_gradient` — a sibling entry point that
+  uses :func:`refine` with per-step gradient recomputation.
+  The shape matches what an MSL-fused energy+gradient kernel
+  would emit.
+- [x] **Step 4 — Philox-4x32-10 reference + MSL template
+  (2026-05-18)**: `python/tessera/compiler/philox.py` ships
+  the pure-Python Philox-4x32-10 (verified against three
+  canonical reference vectors from the Random123 paper) plus
+  :func:`philox_msl_source`, an MSL source template that
+  matches the Python reference byte-for-byte (constants, round
+  count, helper names).  18/18 tests including the cross-platform
+  invariant lock.
+
+Step 3+4 remaining work (gated on apple_gpu_runtime.mm edits,
+which is the next sprint): actual MSL compilation of the
+Philox template inside ``apple_gpu_runtime.mm``; dispatcher
+edits for ``langevin_step`` / ``decode_init`` /
+``sphere_langevin`` to accept ``(key, counter)`` instead of a
+host-supplied noise buffer; benchmark row updates to verify
+the on-device noise path matches the Python reference.
 
 Deliverables:
 

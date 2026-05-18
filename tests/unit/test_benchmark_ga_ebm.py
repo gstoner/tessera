@@ -280,6 +280,14 @@ def test_each_native_ebm_row_passes_correctness_and_manifest_gate(
     assert row["mode"] == "fused"
     assert row["namespace"] == "ebm"
     assert row["apple_gpu_status"] == "fused"
+    # Bridge-trace proof of dispatch: the runner opens a one-shot trace
+    # span around the timed dispatch and confirms a route matching this
+    # op was recorded.  A False here means the public API silently fell
+    # back to numpy and the row was already degraded to python_ref.
+    assert row["dispatched_on_gpu"] is True, (
+        f"{op}: bridge trace did not record a native dispatch — the "
+        f"public API likely fell back to numpy"
+    )
     # Reported symbol must equal the one the manifest carries.
     spec = bm._EBM_APPLE_GPU_FUSED[op]
     assert row["symbol"] == spec["symbol"]

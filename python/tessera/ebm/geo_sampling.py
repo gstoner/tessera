@@ -143,6 +143,7 @@ def bivector_langevin_step(
             np.ascontiguousarray(state.coefficients, dtype=np.float32),
             np.ascontiguousarray(grad_proj.coefficients, dtype=np.float32),
             noise_c, float(eta), float(noise_scale),
+            bridge_op_name="ebm_bivector_langevin",
         )
         if gpu_out is not None:
             return Multivector(gpu_out, algebra, grades=frozenset({grade})), next_key

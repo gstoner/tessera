@@ -357,10 +357,21 @@ def codiff(field: MultivectorField) -> MultivectorField:
 # vec_deriv / codiff.
 # ---------------------------------------------------------------------------
 
+# Per-symbol → op_name mapping for the field-op family.  Lets the
+# helper route through the JIT bridge so the route trace records the
+# manifest-resolved op name (not just the raw C ABI symbol).
+_FIELD_OP_BRIDGE_OP_NAME = {
+    "tessera_apple_gpu_clifford_ext_deriv_cl30_f32": "clifford_ext_deriv",
+    "tessera_apple_gpu_clifford_vec_deriv_cl30_f32": "clifford_vec_deriv",
+    "tessera_apple_gpu_clifford_codiff_cl30_f32":    "clifford_codiff",
+}
+
+
 def _try_apple_gpu_field_op_cl30_f32(
     field: "MultivectorField", symbol: str,
 ) -> "Optional[MultivectorField]":
-    """Dispatch a Cl(3,0) f32 field op to its Apple GPU kernel.
+    """Dispatch a Cl(3,0) f32 field op to its Apple GPU kernel via the
+    JIT bridge.
 
     Returns ``None`` when (a) the algebra isn't Cl(3,0), (b) the
     grid isn't 3-D, (c) the dtype isn't f32, (d) the values aren't
@@ -377,29 +388,36 @@ def _try_apple_gpu_field_op_cl30_f32(
         return None
     if not field.values.flags["C_CONTIGUOUS"]:
         return None
+    op_name = _FIELD_OP_BRIDGE_OP_NAME.get(symbol)
+    if op_name is None:
+        return None  # unknown symbol — no manifest entry to resolve
     try:
         import ctypes
-        from tessera._apple_gpu_dispatch import bind_symbol
+        from tessera.compiler import jit_bridge as _bridge
     except ImportError:
-        return None
-    fn = bind_symbol(
-        symbol,
-        (ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
-         ctypes.c_float, ctypes.c_float, ctypes.c_float),
-    )
-    if fn is None:
         return None
     F = field.values
     D0, D1, D2 = F.shape[0], F.shape[1], F.shape[2]
     h0, h1, h2 = field.spacing
     out = np.zeros_like(F)
     p = ctypes.POINTER(ctypes.c_float)
-    fn(F.ctypes.data_as(p), out.ctypes.data_as(p),
-       ctypes.c_int32(D0), ctypes.c_int32(D1), ctypes.c_int32(D2),
-       ctypes.c_float(float(h0)), ctypes.c_float(float(h1)),
-       ctypes.c_float(float(h2)))
+    argtypes = (ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+                ctypes.c_float, ctypes.c_float, ctypes.c_float)
+    args = (F.ctypes.data_as(p), out.ctypes.data_as(p),
+            ctypes.c_int32(D0), ctypes.c_int32(D1), ctypes.c_int32(D2),
+            ctypes.c_float(float(h0)), ctypes.c_float(float(h1)),
+            ctypes.c_float(float(h2)))
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            op_name, argtypes=argtypes, args=args,
+            args_summary=_bridge.shaped_summary(F),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
     return MultivectorField(out, field.algebra, spacing=field.spacing)
 
 
@@ -498,23 +516,27 @@ def _try_apple_gpu_integral_cl30_f32(
         return None
     try:
         import ctypes
-        from tessera._apple_gpu_dispatch import bind_symbol
+        from tessera.compiler import jit_bridge as _bridge
     except ImportError:
-        return None
-    fn = bind_symbol(
-        "tessera_apple_gpu_clifford_integral_cl30_f32",
-        (ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32),
-    )
-    if fn is None:
         return None
     out = np.zeros(8, dtype=np.float32)
     n = flat.shape[0]
     p = ctypes.POINTER(ctypes.c_float)
-    fn(flat.ctypes.data_as(p), weights_f32.ctypes.data_as(p),
-       out.ctypes.data_as(p), ctypes.c_int32(n))
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            "clifford_integral",
+            argtypes=(ctypes.POINTER(ctypes.c_float),
+                      ctypes.POINTER(ctypes.c_float),
+                      ctypes.POINTER(ctypes.c_float),
+                      ctypes.c_int32),
+            args=(flat.ctypes.data_as(p), weights_f32.ctypes.data_as(p),
+                  out.ctypes.data_as(p), ctypes.c_int32(n)),
+            args_summary=_bridge.shaped_summary(flat, weights_f32),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
     return out
 
 

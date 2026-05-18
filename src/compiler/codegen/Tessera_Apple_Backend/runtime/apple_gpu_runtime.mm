@@ -6152,15 +6152,18 @@ extern "C" void tessera_apple_gpu_ebm_energy_quadratic_f32(
 //
 // Memory layout: y0 / grad are (B*K, D) row-major; out is (B, D).
 // Threadgroup geometry: one threadgroup per batch row (B groups), one
-// thread per candidate row (K threads).  Each thread keeps a local
-// register vector of D y-values; the candidate-K reduction happens via
-// a small threadgroup-shared scratch + a single sequential pass.
-// Bounded by `D <= 256` (kept in thread-local registers).
+// thread per candidate row (K threads).  After the 2026-05-17
+// streaming-closed-form rewrite (see the MSL kernel below), each
+// thread streams through D twice — once accumulating the squared-norm
+// energy, then again on the winning row to write y_T to out.  No
+// per-thread register vector ⇒ D is unbounded; only K is still
+// bounded at 256 by the threadgroup-size budget for the K-way
+// argmin reduction.
 //
-// This is the optimization that makes ``ebt_tiny_refinement`` win
-// at the default benchmark shape (B=4, K=8, D=6, T=8) — the existing
-// two-dispatch pipeline (refinement + self_verify) loses by ~2× at
-// that shape because per-dispatch overhead dominates the math.
+// This is the optimization that makes ``ebt_tiny_refinement`` win at
+// production shapes (B=64, K=128, D=1024, T=256) — the prior
+// two-dispatch refinement+self_verify pipeline was dispatch-overhead
+// bound, and the prior register-vector kernel hard-capped D at 256.
 // ===========================================================================
 
 inline void reference_ebm_ebt_tiny_refinement_argmin_f32(

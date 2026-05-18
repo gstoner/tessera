@@ -890,9 +890,11 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, object]] = {
         "abi": ("(y0:f32*[BxKxD], grad:f32*[BxKxD], eta:f32, T:i32, "
                 "out:f32*[BxD], B:i32, K:i32, D:i32)"),
         "notes": (
-            "Fused EBT-tiny pipeline: T-step refinement in registers + "
-            "per-row squared-norm energy + K-way hard argmin, all in "
-            "one Metal dispatch.  K,D <= 256.  Bit-equivalent to the "
+            "Fused EBT-tiny pipeline: streaming closed-form refinement "
+            "+ per-row squared-norm energy + K-way hard argmin, all in "
+            "one Metal dispatch.  K <= 256 (threadgroup-size budget for "
+            "the argmin reduction); D is unbounded after the 2026-05-17 "
+            "register-vector elimination.  Bit-equivalent to the "
             "ebm.refinement → ebm.self_verify chain but with one "
             "dispatch instead of two."
         ),

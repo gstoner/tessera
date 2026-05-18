@@ -462,8 +462,8 @@ def _try_apple_gpu_binary_8x8_cl30_f32(
 def _try_apple_gpu_grade_projection_cl30_f32(
     a: Multivector, grade_mask: int,
 ) -> Optional[Multivector]:
-    """``Cl(3,0)`` f32 grade projection.  ABI is
-    ``(in, out, grade_mask, batch)``."""
+    """``Cl(3,0)`` f32 grade projection — routed through the JIT
+    bridge.  ABI is ``(in, out, grade_mask, batch)``."""
     if a.algebra.signature != (3, 0, 0):
         return None
     A = a.coefficients
@@ -471,23 +471,27 @@ def _try_apple_gpu_grade_projection_cl30_f32(
         return None
     try:
         import ctypes
-        from tessera._apple_gpu_dispatch import bind_symbol
+        from tessera.compiler import jit_bridge as _bridge
     except ImportError:
-        return None
-    fn = bind_symbol(
-        "tessera_apple_gpu_clifford_grade_projection_cl30_f32",
-        (ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32, ctypes.c_int32),
-    )
-    if fn is None:
         return None
     A_c = np.ascontiguousarray(A.reshape(-1, 8))
     batch = A_c.shape[0]
     out = np.zeros_like(A_c)
     p = ctypes.POINTER(ctypes.c_float)
-    fn(A_c.ctypes.data_as(p), out.ctypes.data_as(p),
-       ctypes.c_int32(grade_mask), ctypes.c_int32(batch))
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            "clifford_grade_projection",
+            argtypes=(ctypes.POINTER(ctypes.c_float),
+                      ctypes.POINTER(ctypes.c_float),
+                      ctypes.c_int32, ctypes.c_int32),
+            args=(A_c.ctypes.data_as(p), out.ctypes.data_as(p),
+                  ctypes.c_int32(grade_mask), ctypes.c_int32(batch)),
+            args_summary=_bridge.shaped_summary(A_c),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
     return Multivector(out.reshape(A.shape), a.algebra)
 
 

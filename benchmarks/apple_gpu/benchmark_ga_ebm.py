@@ -36,10 +36,23 @@ EBM coverage (8 of 9 native MSL kernels + 1 Python reference):
   Python reference only: partition_function_exact (exhaustive
     small-state sum, not GPU-shaped).
 
-Every native EBM row carries a ``dispatched_on_gpu`` proof bit
-sourced from ``tessera.ebm.ebt_tiny_dispatched_on_gpu()`` (for the
-fused workload kernel) or the jit_bridge route trace (for all the
-others) so a silent numpy fallback cannot mislabel a row as native.
+Proof-of-dispatch coverage:
+  - Native EBM primitive rows + JIT-bridge benchmark rows: every row
+    carries a ``dispatched_on_gpu`` bit sourced from the
+    ``tessera.compiler.jit_bridge`` route trace (the runner opens a
+    one-shot trace span around the timed dispatch and confirms the
+    trace recorded the expected op).
+  - EBT-tiny workload + sweep rows: every row carries
+    ``dispatched_on_gpu`` from ``ebm.ebt_tiny_dispatched_on_gpu()``;
+    the sweep summary additionally tags each shape with
+    ``status="native_dispatched"`` vs ``"degraded_fallback"``.
+  - GA per-primitive rows: the runner builds each `dispatch` closure
+    by binding a local ctypes pointer; correctness is verified bit-
+    wise against the Python reference + the recorded symbol must
+    equal the manifest-resolved symbol (``test_each_ga_row_carries_
+    manifest_resolved_symbol`` in the unit-test sweep).
+  - In every case: a silent numpy fallback degrades the row's
+    ``backend`` to ``python_ref`` and its ``ok`` field to ``False``.
 
 Output schema (matches ``benchmarks/benchmark_gemm.py`` for
 roofline-tool compatibility):
@@ -669,35 +682,24 @@ def _ebm_inner_step_python_path() -> tuple[Callable[[], None], float]:
 def _ebm_inner_step_apple_gpu_path(
     rt: ctypes.CDLL,
 ) -> tuple[Callable[[], np.ndarray], float, str]:
-    """Native Apple-GPU EBM inner-step.
+    """Native Apple-GPU EBM inner-step via the public API.
 
-    ABI: ``out = y - eta * grad``, ``n`` is the total element count
-    (the kernel is shape-agnostic).  Returns the ctypes-bound dispatch
-    closure, the max-abs-err vs the closed-form reference, and the
-    runtime symbol name (so the report can record it).
+    Calls ``tessera.ebm.inner_step(y, grad, eta)`` directly so the
+    dispatch flows through the JIT bridge and the route trace
+    captures every invocation.  Returns ``(dispatch, err, symbol)``.
     """
+    del rt  # routed through the public dispatcher
     sym = "tessera_apple_gpu_ebm_inner_step_f32"
-    fn = getattr(rt, sym)
-    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.c_float,
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.c_int32]
-    fn.restype = None
     rng = np.random.RandomState(1001)
     y = np.ascontiguousarray(rng.randn(16, 4).astype(np.float32))
     grad = np.ascontiguousarray(rng.randn(16, 4).astype(np.float32))
     eta = 0.05
-    n = int(y.size)
-    out = np.zeros_like(y)
     expected = (y - eta * grad).astype(np.float32)
 
     def dispatch() -> np.ndarray:
-        fn(_ptr_f(y), _ptr_f(grad), ctypes.c_float(eta),
-           _ptr_f(out), ctypes.c_int32(n))
-        return out
+        return ebm.inner_step(y, grad, eta=eta)
 
-    dispatch()
+    out = dispatch()
     err = float(np.abs(out - expected).max())
     return dispatch, err, sym
 
@@ -705,35 +707,25 @@ def _ebm_inner_step_apple_gpu_path(
 def _ebm_refinement_apple_gpu_path(
     rt: ctypes.CDLL, T: int = 8,
 ) -> tuple[Callable[[], np.ndarray], float, str]:
-    """Native Apple-GPU EBT refinement — T inner-step iterations.
+    """Native Apple-GPU EBT refinement via the public API.
 
-    With a fixed gradient (no recomputation between steps), the closed
-    form is ``y_T = y_0 - T * eta * grad`` — the kernel matches that
-    bit-for-bit at fp32.
+    With a fixed gradient the closed form is ``y_T = y_0 − T·η·grad``
+    — the kernel matches that bit-for-bit at fp32.  Calls
+    ``ebm.refinement`` so the JIT bridge captures the dispatch.
     """
+    del rt  # routed through the public dispatcher
     sym = "tessera_apple_gpu_ebm_refinement_f32"
-    fn = getattr(rt, sym)
-    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.c_float, ctypes.c_int32,
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.c_int32]
-    fn.restype = None
     rng = np.random.RandomState(1010)
     y0 = np.ascontiguousarray(rng.randn(8, 6).astype(np.float32))
     grad = np.ascontiguousarray(rng.randn(8, 6).astype(np.float32))
     eta = 0.02
-    n = int(y0.size)
-    y_out = np.zeros_like(y0)
     expected = (y0 - T * eta * grad).astype(np.float32)
 
     def dispatch() -> np.ndarray:
-        fn(_ptr_f(y0), _ptr_f(grad), ctypes.c_float(eta),
-           ctypes.c_int32(T), _ptr_f(y_out), ctypes.c_int32(n))
-        return y_out
+        return ebm.refinement(y0, grad, eta=eta, T=T)
 
-    dispatch()
-    err = float(np.abs(y_out - expected).max())
+    out = dispatch()
+    err = float(np.abs(out - expected).max())
     return dispatch, err, sym
 
 
@@ -748,34 +740,32 @@ def _ebm_langevin_step_apple_gpu_path(
     Caller pre-generates ``noise`` from the same Philox stream the
     Python path uses so the two outputs are bit-identical at fp32.
     """
+    del rt  # routed through the public dispatcher
     sym = "tessera_apple_gpu_ebm_langevin_step_f32"
-    fn = getattr(rt, sym)
-    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.c_float, ctypes.c_float,
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.c_int32]
-    fn.restype = None
     rng = np.random.RandomState(1020)
     y = np.ascontiguousarray(rng.randn(16, 4).astype(np.float32))
     grad = np.ascontiguousarray(rng.randn(16, 4).astype(np.float32))
-    noise = np.ascontiguousarray(rng.randn(16, 4).astype(np.float32))
     eta = 0.01
     temperature = 1.0
-    noise_scale = float(math.sqrt(2.0 * eta * temperature))
-    n = int(y.size)
-    out = np.zeros_like(y)
-    expected = (y - eta * grad + noise_scale * noise).astype(np.float32)
+    key = RNGKey.from_seed(1020)
+    grad_fn = lambda yy: grad
+    energy_fn = lambda yy: np.sum(yy * yy, axis=1)
 
     def dispatch() -> np.ndarray:
-        fn(_ptr_f(y), _ptr_f(grad), _ptr_f(noise),
-           ctypes.c_float(eta), ctypes.c_float(noise_scale),
-           _ptr_f(out), ctypes.c_int32(n))
+        out, _ = ebm.langevin_step(y, energy_fn, eta=eta,
+                                     temperature=temperature,
+                                     rng_key=key, grad_fn=grad_fn)
         return out
 
-    dispatch()
-    err = float(np.abs(out - expected).max())
+    # Correctness: at temperature=0 the langevin step reduces to
+    # pure GD (no noise term).  Use that for a stable bit-check;
+    # this builder runs T>0 for the perf timing.
+    grad0 = grad
+    out_t0, _ = ebm.langevin_step(y, energy_fn, eta=eta, temperature=0.0,
+                                    rng_key=key, grad_fn=grad_fn)
+    expected = (y - eta * grad0).astype(np.float32)
+    err = float(np.abs(out_t0 - expected).max())
+    dispatch()  # warm + record one route
     return dispatch, err, sym
 
 
@@ -789,36 +779,27 @@ def _ebm_decode_init_apple_gpu_path(
     std * noise``.  Caller pre-generates the deterministic ``noise``
     buffer from the RNGKey.
     """
+    del rt  # routed through the public dispatcher
     sym = "tessera_apple_gpu_ebm_decode_init_noise_apply_f32"
-    fn = getattr(rt, sym)
-    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
-                   ctypes.c_int32,
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.c_float,
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.c_int32]
-    fn.restype = None
     rng = np.random.RandomState(1030)
-    # B=4, K=6, event=12 → 288-element output.
     B, K, E = 4, 6, 12
-    base = np.ascontiguousarray(rng.randn(B, E).astype(np.float32))  # per-batch mean
-    # Broadcast: base[b, e] → (b, k, e) for every k.
-    noise = np.ascontiguousarray(rng.randn(B, K, E).astype(np.float32))
+    base = np.ascontiguousarray(rng.randn(B, E).astype(np.float32))
+    mean = np.broadcast_to(base[:, None, :], (B, K, E)).astype(np.float32)
+    mean_c = np.ascontiguousarray(mean)
+    x = np.zeros((B, E), dtype=np.float32)
+    key = RNGKey.from_seed(1030)
     std = 0.5
-    n = int(noise.size)
-    base_flat = np.ascontiguousarray(np.broadcast_to(
-        base[:, None, :], (B, K, E)).reshape(-1).astype(np.float32))
-    base_len = int(base_flat.size)  # n; no broadcasting needed at kernel level
-    out = np.zeros_like(noise)
-    expected = (base_flat.reshape(B, K, E) + std * noise).astype(np.float32)
 
     def dispatch() -> np.ndarray:
-        fn(_ptr_f(base_flat), ctypes.c_int32(base_len),
-           _ptr_f(noise), ctypes.c_float(std),
-           _ptr_f(out), ctypes.c_int32(n))
-        return out
+        return ebm.decode_init(x, K=K, init_strategy="noise",
+                                 rng_key=key, shape=(E,), dtype="fp32",
+                                 std=std, mean=mean_c)
 
-    dispatch()
+    # Reference: same Philox stream → bitwise reproducible noise.
+    from tessera.rng import normal as _rng_normal
+    noise_ref = _rng_normal(key, shape=(B, K, E), dtype="fp32", std=1.0)
+    expected = (mean_c + std * noise_ref).astype(np.float32)
+    out = dispatch()
     err = float(np.abs(out - expected).max())
     return dispatch, err, sym
 
@@ -835,54 +816,36 @@ def _ebm_bivector_langevin_apple_gpu_path(
     grade-2 noise, then run a single langevin_step kernel.  This is
     the GA-kernel-reuse demonstration the manifest documents.
     """
+    del rt  # routed through the public dispatcher
     sym = "tessera_apple_gpu_ebm_langevin_step_f32"
-    fn = getattr(rt, sym)
-    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.c_float, ctypes.c_float,
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.c_int32]
-    fn.restype = None
-
-    # State: bivector blades only.
+    a = ga.Cl(3, 0)
     rng = np.random.RandomState(1040)
     coeffs = np.zeros(8, dtype=np.float32)
-    coeffs[3] = 0.5    # e12
-    coeffs[5] = -0.2   # e13
-    coeffs[6] = 0.3    # e23
-    # Gradient: full 8-vector that we grade-project to bivector subspace.
-    raw_grad = rng.randn(8).astype(np.float32)
-    grad_proj = np.zeros_like(raw_grad)
-    for k in (3, 5, 6):
-        grad_proj[k] = raw_grad[k]
-    # Noise: same projection.
-    raw_noise = rng.randn(8).astype(np.float32)
-    noise_proj = np.zeros_like(raw_noise)
-    for k in (3, 5, 6):
-        noise_proj[k] = raw_noise[k]
+    coeffs[3] = 0.5
+    coeffs[5] = -0.2
+    coeffs[6] = 0.3
+    state = ga.Multivector(coeffs, a)
+    grad_coeffs = rng.randn(8).astype(np.float32)
+    key = RNGKey.from_seed(1040)
     eta = 0.01
-    temperature = 1.0
-    noise_scale = float(math.sqrt(2.0 * eta * temperature))
-    n = 8
-    out = np.zeros(8, dtype=np.float32)
-    expected = coeffs - eta * grad_proj + noise_scale * noise_proj
 
-    state = np.ascontiguousarray(coeffs)
-    g = np.ascontiguousarray(grad_proj)
-    ns = np.ascontiguousarray(noise_proj)
+    def grad_fn(mv):
+        return ga.Multivector(grad_coeffs.copy(), mv.algebra)
 
     def dispatch() -> np.ndarray:
-        fn(_ptr_f(state), _ptr_f(g), _ptr_f(ns),
-           ctypes.c_float(eta), ctypes.c_float(noise_scale),
-           _ptr_f(out), ctypes.c_int32(n))
-        return out
+        new_state, _ = ebm.bivector_langevin_step(
+            state, lambda mv: 0.0, eta=eta, temperature=0.0,
+            rng_key=key, grad_fn=grad_fn,
+        )
+        return new_state.coefficients.astype(np.float32, copy=False)
 
-    dispatch()
-    # After the affine combo the non-bivector blades should still be 0.
-    err = float(max(np.abs(out - expected).max(),
-                    abs(out[0]), abs(out[1]), abs(out[2]),
-                    abs(out[4]), abs(out[7])))
+    out = dispatch()
+    # T=0 ⇒ new = grade_2_project(state - eta * grad).  Compute by hand.
+    grad_proj = np.zeros_like(grad_coeffs)
+    for k in (3, 5, 6):
+        grad_proj[k] = grad_coeffs[k]
+    expected = coeffs - eta * grad_proj
+    err = float(np.abs(out - expected).max())
     return dispatch, err, sym
 
 
@@ -896,45 +859,27 @@ def _ebm_sphere_langevin_apple_gpu_path(
     ``tessera.ebm.sphere_langevin_step`` semantically (with caller-
     supplied noise for determinism).
     """
+    del rt  # routed through the public dispatcher
     sym = "tessera_apple_gpu_ebm_sphere_langevin_step_f32"
-    fn = getattr(rt, sym)
-    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.c_float, ctypes.c_float,
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.c_int32]
-    fn.restype = None
-    # Start on the unit sphere.
     x = np.array([1.0, 0.0, 0.0], dtype=np.float32)
     rng = np.random.RandomState(1050)
     grad = rng.randn(3).astype(np.float32)
-    noise = rng.randn(3).astype(np.float32)
     eta = 0.005
-    temperature = 0.5
-    noise_scale = float(math.sqrt(2.0 * eta * temperature))
-    d = 3
-    out = np.zeros(3, dtype=np.float32)
-
-    # Reference: tangent project, step, retract.
-    gdot = float(np.dot(grad, x))
-    ndot = float(np.dot(noise, x))
-    grad_tan = grad - gdot * x
-    noise_tan = noise - ndot * x
-    y = x - eta * grad_tan + noise_scale * noise_tan
-    expected = (y / float(np.linalg.norm(y))).astype(np.float32)
-
-    x_c = np.ascontiguousarray(x)
-    g_c = np.ascontiguousarray(grad)
-    n_c = np.ascontiguousarray(noise)
+    key = RNGKey.from_seed(1050)
 
     def dispatch() -> np.ndarray:
-        fn(_ptr_f(x_c), _ptr_f(g_c), _ptr_f(n_c),
-           ctypes.c_float(eta), ctypes.c_float(noise_scale),
-           _ptr_f(out), ctypes.c_int32(d))
-        return out
+        out, _ = ebm.sphere_langevin_step(x, lambda p: -float(p[0]),
+                                            eta=eta, temperature=0.0,
+                                            rng_key=key,
+                                            grad_fn=lambda p: grad)
+        return np.asarray(out, dtype=np.float32)
 
-    dispatch()
+    out = dispatch()
+    # T=0 reference: tangent-project, step, retract.
+    gdot = float(np.dot(grad, x))
+    grad_tan = grad - gdot * x
+    y = x - eta * grad_tan
+    expected = (y / float(np.linalg.norm(y))).astype(np.float32)
     err = float(np.abs(out - expected).max())
     return dispatch, err, sym
 
@@ -948,26 +893,18 @@ def _ebm_self_verify_apple_gpu_path(
     the winning candidate row.  Matches the hard-argmin path of
     ``tessera.ebm.self_verify(... beta=None)``.
     """
+    del rt  # routed through the public dispatcher
     sym = "tessera_apple_gpu_ebm_self_verify_hard_argmin_f32"
-    fn = getattr(rt, sym)
-    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
-    fn.restype = None
     B, K, D = 4, 8, 16
     rng = np.random.RandomState(1060)
     energies = np.ascontiguousarray(rng.randn(B, K).astype(np.float32))
     candidates = np.ascontiguousarray(rng.randn(B, K, D).astype(np.float32))
-    out = np.zeros((B, D), dtype=np.float32)
     expected = candidates[np.arange(B), energies.argmin(axis=1)]
 
     def dispatch() -> np.ndarray:
-        fn(_ptr_f(energies), _ptr_f(candidates), _ptr_f(out),
-           ctypes.c_int32(B), ctypes.c_int32(K), ctypes.c_int32(D))
-        return out
+        return ebm.self_verify(energies, candidates)
 
-    dispatch()
+    out = dispatch()
     err = float(np.abs(out - expected).max())
     return dispatch, err, sym
 
@@ -982,27 +919,19 @@ def _ebm_energy_apple_gpu_path(
     matches the quadratic form (true for diffusion noise prediction,
     EBT reconstruction loss, Gaussian log-likelihood up to a constant).
     """
+    del rt  # routed through the public dispatcher
     sym = "tessera_apple_gpu_ebm_energy_quadratic_f32"
-    fn = getattr(rt, sym)
-    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.POINTER(ctypes.c_float),
-                   ctypes.c_int32, ctypes.c_int32]
-    fn.restype = None
     B, D = 8, 4
     rng = np.random.RandomState(1070)
     x = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
     y = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
-    energies = np.zeros(B, dtype=np.float32)
     expected = (0.5 * np.sum((x - y) ** 2, axis=1)).astype(np.float32)
 
     def dispatch() -> np.ndarray:
-        fn(_ptr_f(x), _ptr_f(y), _ptr_f(energies),
-           ctypes.c_int32(B), ctypes.c_int32(D))
-        return energies
+        return ebm.energy_quadratic(x, y)
 
-    dispatch()
-    err = float(np.abs(energies - expected).max())
+    out = dispatch()
+    err = float(np.abs(out - expected).max())
     return dispatch, err, sym
 
 
@@ -1428,25 +1357,52 @@ def run_ebm_apple_gpu_path(name: str, shape: str,
                             dispatch: Callable, err: float, symbol: str,
                             tolerance: float, reps: int,
                             device: str, version: str) -> dict[str, Any]:
-    """Time a native Apple-GPU EBM dispatch + cross-check the manifest
-    has the matching ``apple_gpu=fused`` entry."""
+    """Time a native Apple-GPU EBM dispatch + record proof of dispatch.
+
+    The bridge trace is the proof bit: we open a one-shot trace span
+    around a single dispatch, drain it, and confirm the trace recorded
+    at least one route with the expected ``op_name``.  If the dispatch
+    silently fell back to numpy (e.g., a guard rail rejected the
+    input), the trace stays empty and the row is degraded to
+    ``backend="python_ref"`` / ``mode="reference_fallback"`` /
+    ``ok=False`` so consumers can't mistake it for a native dispatch.
+    """
+    from tessera.compiler import jit_bridge as _bridge
+    # One-shot trace probe — single dispatch, drain the trace.
+    _bridge.clear_dispatch_trace()
+    prev_tracing = _bridge.tracing_enabled()
+    _bridge.set_tracing_enabled(True)
+    try:
+        dispatch()
+    finally:
+        _bridge.set_tracing_enabled(prev_tracing)
+    probe_routes = _bridge.take_dispatch_trace()
+    dispatched_on_gpu = any(
+        r.op_name == name and r.target == "apple_gpu" and r.status == "fused"
+        for r in probe_routes
+    )
+
     samples_ms = collect_samples(dispatch, reps)
     timing = timing_stats(samples_ms)
     manifest_status = _manifest_status_for(name, "apple_gpu")
+    backend = "apple_gpu" if dispatched_on_gpu else "python_ref"
+    mode = "fused" if dispatched_on_gpu else "reference_fallback"
+    ok = (err <= tolerance) and dispatched_on_gpu and manifest_status == "fused"
     return {
-        "backend": "apple_gpu",
+        "backend": backend,
         "namespace": "ebm",
         "op": name,
         "shape": shape,
         "dtype": "f32",
-        "mode": "fused",
+        "mode": mode,
         "reps": reps,
         **timing,
         "max_abs_err": err,
         "tolerance": tolerance,
-        "ok": err <= tolerance and manifest_status == "fused",
+        "ok": ok,
         "apple_gpu_status": manifest_status,
         "symbol": symbol,
+        "dispatched_on_gpu": dispatched_on_gpu,
         "device": device,
         "tessera_version": version,
     }

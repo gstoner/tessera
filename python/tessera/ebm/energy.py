@@ -615,9 +615,16 @@ def _try_apple_gpu_ebt_tiny_f32(
 
 def _try_apple_gpu_langevin_step_f32(
     y: np.ndarray, grad: np.ndarray, noise: np.ndarray,
-    eta: float, noise_scale: float,
+    eta: float, noise_scale: float, *,
+    bridge_op_name: str = "ebm_langevin_step",
 ) -> Optional[np.ndarray]:
-    """``out = y - eta*grad + noise_scale*noise`` on Apple GPU."""
+    """``out = y - eta*grad + noise_scale*noise`` on Apple GPU, via
+    the JIT bridge.
+
+    ``bridge_op_name`` lets `bivector_langevin_step` (which reuses
+    this kernel) record the manifest entry under its own name in the
+    route trace instead of the generic ``ebm_langevin_step``.
+    """
     if y.dtype != np.float32 or grad.dtype != np.float32 or noise.dtype != np.float32:
         return None
     if y.shape != grad.shape or y.shape != noise.shape:
@@ -627,26 +634,30 @@ def _try_apple_gpu_langevin_step_f32(
     n_c = np.ascontiguousarray(noise)
     try:
         import ctypes
-        from tessera._apple_gpu_dispatch import bind_symbol
+        from tessera.compiler import jit_bridge as _bridge
     except ImportError:
-        return None
-    fn = bind_symbol(
-        "tessera_apple_gpu_ebm_langevin_step_f32",
-        (ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_float, ctypes.c_float,
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32),
-    )
-    if fn is None:
         return None
     out = np.zeros_like(y_c)
     n = int(y_c.size)
     p = ctypes.POINTER(ctypes.c_float)
-    fn(y_c.ctypes.data_as(p), g_c.ctypes.data_as(p), n_c.ctypes.data_as(p),
-       ctypes.c_float(eta), ctypes.c_float(noise_scale),
-       out.ctypes.data_as(p), ctypes.c_int32(n))
+    argtypes = (ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_float, ctypes.c_float,
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_int32)
+    args = (y_c.ctypes.data_as(p), g_c.ctypes.data_as(p), n_c.ctypes.data_as(p),
+            ctypes.c_float(eta), ctypes.c_float(noise_scale),
+            out.ctypes.data_as(p), ctypes.c_int32(n))
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            bridge_op_name, argtypes=argtypes, args=args,
+            args_summary=_bridge.shaped_summary(y_c, g_c, n_c),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
     return out
 
 
@@ -655,7 +666,8 @@ def _try_apple_gpu_sphere_langevin_step_f32(
     eta: float, noise_scale: float,
 ) -> Optional[np.ndarray]:
     """Sphere Langevin step on Apple GPU: tangent projection +
-    Euler-Maruyama + retract, all in one MSL kernel."""
+    Euler-Maruyama + retract, all in one MSL kernel — via the JIT
+    bridge."""
     if x.dtype != np.float32 or grad.dtype != np.float32 or noise.dtype != np.float32:
         return None
     if x.ndim != 1 or x.shape != grad.shape or x.shape != noise.shape:
@@ -665,33 +677,37 @@ def _try_apple_gpu_sphere_langevin_step_f32(
     n_c = np.ascontiguousarray(noise)
     try:
         import ctypes
-        from tessera._apple_gpu_dispatch import bind_symbol
+        from tessera.compiler import jit_bridge as _bridge
     except ImportError:
-        return None
-    fn = bind_symbol(
-        "tessera_apple_gpu_ebm_sphere_langevin_step_f32",
-        (ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_float, ctypes.c_float,
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32),
-    )
-    if fn is None:
         return None
     out = np.zeros_like(x_c)
     d = int(x_c.size)
     p = ctypes.POINTER(ctypes.c_float)
-    fn(x_c.ctypes.data_as(p), g_c.ctypes.data_as(p), n_c.ctypes.data_as(p),
-       ctypes.c_float(eta), ctypes.c_float(noise_scale),
-       out.ctypes.data_as(p), ctypes.c_int32(d))
+    argtypes = (ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_float, ctypes.c_float,
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_int32)
+    args = (x_c.ctypes.data_as(p), g_c.ctypes.data_as(p), n_c.ctypes.data_as(p),
+            ctypes.c_float(eta), ctypes.c_float(noise_scale),
+            out.ctypes.data_as(p), ctypes.c_int32(d))
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            "ebm_sphere_langevin", argtypes=argtypes, args=args,
+            args_summary=_bridge.shaped_summary(x_c, g_c, n_c),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
     return out
 
 
 def _try_apple_gpu_refinement_fused_f32(
     y0: np.ndarray, grad: np.ndarray, eta: float, T: int,
 ) -> Optional[np.ndarray]:
-    """Run T inner-step iterations on Apple GPU in a single dispatch."""
+    """Run T inner-step iterations on Apple GPU via the JIT bridge."""
     if y0.dtype != np.float32 or grad.dtype != np.float32:
         return None
     if y0.shape != grad.shape:
@@ -700,34 +716,36 @@ def _try_apple_gpu_refinement_fused_f32(
         return None
     try:
         import ctypes
-        from tessera._apple_gpu_dispatch import bind_symbol
+        from tessera.compiler import jit_bridge as _bridge
     except ImportError:
-        return None
-    fn = bind_symbol(
-        "tessera_apple_gpu_ebm_refinement_f32",
-        (ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_float, ctypes.c_int32,
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32),
-    )
-    if fn is None:
         return None
     out = np.zeros_like(y0)
     n = int(y0.size)
     p = ctypes.POINTER(ctypes.c_float)
-    fn(y0.ctypes.data_as(p), grad.ctypes.data_as(p),
-       ctypes.c_float(eta), ctypes.c_int32(T),
-       out.ctypes.data_as(p), ctypes.c_int32(n))
+    argtypes = (ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_float, ctypes.c_int32,
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_int32)
+    args = (y0.ctypes.data_as(p), grad.ctypes.data_as(p),
+            ctypes.c_float(eta), ctypes.c_int32(T),
+            out.ctypes.data_as(p), ctypes.c_int32(n))
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            "ebm_refinement", argtypes=argtypes, args=args,
+            args_summary=_bridge.shaped_summary(y0, grad),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
     return out
 
 
 def _try_apple_gpu_self_verify_hard_argmin_f32(
     energies: np.ndarray, candidates: np.ndarray,
 ) -> Optional[np.ndarray]:
-    """Hard-argmin self_verify on Apple GPU.  Requires
-    ``energies.shape == (B, K)`` and ``candidates.shape == (B, K, D)``,
-    both f32 + C-contiguous."""
+    """Hard-argmin self_verify on Apple GPU via the JIT bridge."""
     if energies.dtype != np.float32 or candidates.dtype != np.float32:
         return None
     if energies.ndim != 2 or candidates.ndim != 3:
@@ -738,32 +756,35 @@ def _try_apple_gpu_self_verify_hard_argmin_f32(
         return None
     try:
         import ctypes
-        from tessera._apple_gpu_dispatch import bind_symbol
+        from tessera.compiler import jit_bridge as _bridge
     except ImportError:
-        return None
-    fn = bind_symbol(
-        "tessera_apple_gpu_ebm_self_verify_hard_argmin_f32",
-        (ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32),
-    )
-    if fn is None:
         return None
     B, K, D = candidates.shape
     out = np.zeros((B, D), dtype=np.float32)
     p = ctypes.POINTER(ctypes.c_float)
-    fn(energies.ctypes.data_as(p), candidates.ctypes.data_as(p),
-       out.ctypes.data_as(p),
-       ctypes.c_int32(B), ctypes.c_int32(K), ctypes.c_int32(D))
+    argtypes = (ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_int32, ctypes.c_int32, ctypes.c_int32)
+    args = (energies.ctypes.data_as(p), candidates.ctypes.data_as(p),
+            out.ctypes.data_as(p),
+            ctypes.c_int32(B), ctypes.c_int32(K), ctypes.c_int32(D))
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            "ebm_self_verify", argtypes=argtypes, args=args,
+            args_summary=_bridge.shaped_summary(energies, candidates),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
     return out
 
 
 def _try_apple_gpu_energy_quadratic_f32(
     x: np.ndarray, y: np.ndarray,
 ) -> Optional[np.ndarray]:
-    """``E_b = 0.5 * ||x_b - y_b||^2`` on Apple GPU.  Requires
-    rank-2 f32 inputs with matching shape (B, D), contiguous."""
+    """``E_b = 0.5 * ||x_b - y_b||^2`` on Apple GPU via the JIT bridge."""
     if x.dtype != np.float32 or y.dtype != np.float32:
         return None
     if x.ndim != 2 or x.shape != y.shape:
@@ -772,31 +793,34 @@ def _try_apple_gpu_energy_quadratic_f32(
         return None
     try:
         import ctypes
-        from tessera._apple_gpu_dispatch import bind_symbol
+        from tessera.compiler import jit_bridge as _bridge
     except ImportError:
-        return None
-    fn = bind_symbol(
-        "tessera_apple_gpu_ebm_energy_quadratic_f32",
-        (ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32, ctypes.c_int32),
-    )
-    if fn is None:
         return None
     B, D = x.shape
     out = np.zeros(B, dtype=np.float32)
     p = ctypes.POINTER(ctypes.c_float)
-    fn(x.ctypes.data_as(p), y.ctypes.data_as(p), out.ctypes.data_as(p),
-       ctypes.c_int32(B), ctypes.c_int32(D))
+    argtypes = (ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_int32, ctypes.c_int32)
+    args = (x.ctypes.data_as(p), y.ctypes.data_as(p), out.ctypes.data_as(p),
+            ctypes.c_int32(B), ctypes.c_int32(D))
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            "ebm_energy", argtypes=argtypes, args=args,
+            args_summary=_bridge.shaped_summary(x, y),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
     return out
 
 
 def _try_apple_gpu_decode_init_noise_apply_f32(
     base: np.ndarray, noise: np.ndarray, std: float,
 ) -> Optional[np.ndarray]:
-    """``out = base + std * noise`` on Apple GPU.  Both buffers must
-    be the same f32 shape; the result has the same shape too."""
+    """``out = base + std * noise`` on Apple GPU via the JIT bridge."""
     if base.dtype != np.float32 or noise.dtype != np.float32:
         return None
     if base.shape != noise.shape:
@@ -805,27 +829,31 @@ def _try_apple_gpu_decode_init_noise_apply_f32(
     noise_c = np.ascontiguousarray(noise)
     try:
         import ctypes
-        from tessera._apple_gpu_dispatch import bind_symbol
+        from tessera.compiler import jit_bridge as _bridge
     except ImportError:
-        return None
-    fn = bind_symbol(
-        "tessera_apple_gpu_ebm_decode_init_noise_apply_f32",
-        (ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32,
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_float,
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32),
-    )
-    if fn is None:
         return None
     n = int(noise_c.size)
     base_flat = base_c.reshape(-1)
     out = np.zeros(n, dtype=np.float32)
     p = ctypes.POINTER(ctypes.c_float)
-    fn(base_flat.ctypes.data_as(p), ctypes.c_int32(int(base_flat.size)),
-       noise_c.ctypes.data_as(p), ctypes.c_float(float(std)),
-       out.ctypes.data_as(p), ctypes.c_int32(n))
+    argtypes = (ctypes.POINTER(ctypes.c_float),
+                ctypes.c_int32,
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_float,
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_int32)
+    args = (base_flat.ctypes.data_as(p), ctypes.c_int32(int(base_flat.size)),
+            noise_c.ctypes.data_as(p), ctypes.c_float(float(std)),
+            out.ctypes.data_as(p), ctypes.c_int32(n))
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            "ebm_decode_init", argtypes=argtypes, args=args,
+            args_summary=_bridge.shaped_summary(base_flat, noise_c),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
     return out.reshape(noise.shape)
 
 

@@ -31,6 +31,7 @@ from tessera import ebm, ga
 from tessera.compiler import jit_bridge as bridge
 from tessera.compiler.compile_report import (
     CompileReport,
+    finalize_compile_report,
     FRONTEND_TESSERA_JIT,
     VALUE_KIND_MIXED,
     hash_ir_text,
@@ -150,7 +151,7 @@ def run(
     ref = _numpy_reference(R, V, grad, B, K, D, T, eta)
     max_abs_err = float(np.abs(winner - ref).max())
 
-    return CompileReport(
+    return finalize_compile_report(CompileReport(
         program_id=PROGRAM_ID,
         source=f"{__name__}.run",
         frontend=FRONTEND_TESSERA_JIT,
@@ -163,7 +164,7 @@ def run(
         proof_routes=routes,
         timing_ms={"end_to_end": elapsed_ms},
         correctness={"max_abs_err": max_abs_err, "tolerance": 5e-5},
-    )
+    ))
 
 
 if __name__ == "__main__":  # pragma: no cover

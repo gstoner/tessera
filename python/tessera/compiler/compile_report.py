@@ -249,6 +249,21 @@ def active_sink_is_capturing() -> bool:
     return _SINK_VAR.get() is not None
 
 
+def finalize_compile_report(report: "CompileReport") -> "CompileReport":
+    """Emit ``report`` to the active sink (if any) and return it.
+
+    Canonical drivers use this as the single exit point so the
+    M2 ``compile_session`` scope sees every shipped program's
+    report, not just calls that flow through ``@tessera.jit`` /
+    ``@clifford_jit`` / textual.
+
+    No-op when no sink is active — same cheap path as
+    :func:`emit_compile_report`.
+    """
+    emit_compile_report(report)
+    return report
+
+
 __all__ = [
     "FRONTEND_TESSERA_JIT",
     "FRONTEND_TEXTUAL",
@@ -265,4 +280,5 @@ __all__ = [
     "capture_compile_reports",
     "emit_compile_report",
     "active_sink_is_capturing",
+    "finalize_compile_report",
 ]

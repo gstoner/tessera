@@ -507,7 +507,45 @@ Acceptance:
 - At least two programs run in default CPU-only CI; Apple GPU variants skip
   cleanly when unavailable.
 
-### M2 - Frontend unification without losing specialization
+### M2 - Frontend unification without losing specialization  **(2026-05-18: landed — 4 of 5 sub-deliverables; Step 5 deferred)**
+
+**Status:** Steps 1–4 shipped + tested.  Step 5 (Python-Tile-IR ↔
+MLIR-lit equivalence) is filed as a follow-up because it
+requires building ``tessera-opt``, which is a separate
+infrastructure axis from the M2 frontend-unification thesis.
+
+Landed (2026-05-18):
+
+| Step | Capability | Module / Test |
+|---|---|---|
+| 1 | :class:`CompileSession` + ``compile_session()`` scope; capability cache + artifact-hash index + value-kind reduction | `python/tessera/compiler/compile_session.py` · `test_compile_session.py` (14) |
+| 2 | ``tessera.bridge`` boundary ops (``multivector_to_tensor`` / ``tensor_to_multivector`` / ``complex_to_tensor`` / ``tensor_to_complex``); ``value_kind_of`` (function, not attribute — Decision #15a) | `python/tessera/bridge.py` · `test_bridge_boundary_ops.py` (15) |
+| 3 | :class:`TesseraValueKindError` with source-span diagnostics; ``check_call_kinds`` helper; ``@clifford_jit`` runtime rejects non-Multivector arguments | (in `bridge.py`) · `test_mixed_op_diagnostics.py` (8) |
+| 4 | Cross-frontend integration tests — three frontends in one session, schema parity, distinct ``value_kind`` per report, deduplication | `test_compile_session_integration.py` (8) |
+| 5 | *Deferred:* Python Tile IR ↔ MLIR lit equivalence | Needs ``tessera-opt`` built; tracked as M2-Step-5 follow-up |
+
+**Decision #15a structural lock:** ``value_kind_of`` is a
+**function**, not a method/attribute on a sibling value (verified
+by ``test_value_kind_of_is_a_function_not_a_method`` — a regression
+that adds ``x.value_kind`` to any sibling type fails the test).
+Per-report ``value_kind`` is preserved by the session (verified by
+``test_session_does_not_mutate_per_report_value_kind``).
+
+**Canonical-driver patch:** all 6 canonical drivers now route their
+final ``CompileReport`` through ``finalize_compile_report`` so the
+session sees every shipped program's report exactly once.
+``rotor_sandwich_norm`` nests its inner ``@clifford_jit`` call in a
+discarded capture scope to avoid double-emit (driver report
+supersedes the decorator's auto-emit).
+
+Step 5 follow-up scope (when ``tessera-opt`` build lands):
+
+- Define canonical Tile IR text expectations for each of the 6
+  canonical programs.
+- Run ``tessera-opt`` to lower each program through the canonical
+  pipeline and ``FileCheck`` against the expected output.
+- Equivalence pass: Python object-model Tile IR must produce the
+  same op sequence as the C++ MLIR lowering on the same input.
 
 Goal: align general JIT, textual DSL, and Clifford JIT under one compile
 session model.

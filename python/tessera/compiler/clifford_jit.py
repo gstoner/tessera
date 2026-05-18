@@ -617,6 +617,19 @@ class _IRCompiledCallable(CliffordCompiledCallable):
                 f"clifford_jit({self.artifact.source_name}): keyword "
                 "arguments are not supported by the AST lowering"
             )
+        # M2 Step 3: every positional arg to a clifford_jit function
+        # must be a Multivector or a literal already encoded in the
+        # IR.  Reject anything else with a source-span diagnostic so
+        # users see exactly which arg has the wrong kind.
+        from .. import bridge as _bridge_kinds
+        if self.artifact.ir is not None:
+            arg_names = self.artifact.ir.arg_names
+            _bridge_kinds.check_call_kinds(
+                args,
+                expected="multivector",
+                op_name=f"@clifford_jit({self.artifact.source_name})",
+                arg_names=arg_names,
+            )
         if self._native_required:
             # M3: refuse to dispatch if the host can't actually run
             # native MSL kernels — the alternative (silent reference

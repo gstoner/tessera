@@ -27,6 +27,7 @@ from tessera.cache import KVCacheHandle
 from tessera.compiler import jit_bridge as bridge
 from tessera.compiler.compile_report import (
     CompileReport,
+    finalize_compile_report,
     FRONTEND_TESSERA_JIT,
     VALUE_KIND_TENSOR,
     hash_ir_text,
@@ -124,7 +125,7 @@ def run(
         max(np.abs(K_out - K_ref).max(), np.abs(V_out - V_ref).max())
     )
 
-    return CompileReport(
+    return finalize_compile_report(CompileReport(
         program_id=PROGRAM_ID,
         source=f"{__name__}.run",
         frontend=FRONTEND_TESSERA_JIT,
@@ -137,7 +138,7 @@ def run(
         proof_routes=routes,
         timing_ms={"end_to_end": elapsed_ms},
         correctness={"max_abs_err": max_abs_err, "tolerance": 1e-6},
-    )
+    ))
 
 
 if __name__ == "__main__":  # pragma: no cover

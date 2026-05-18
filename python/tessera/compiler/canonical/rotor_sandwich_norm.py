@@ -25,6 +25,7 @@ from tessera.compiler import jit_bridge as bridge
 from tessera.compiler.clifford_jit import clifford_jit
 from tessera.compiler.compile_report import (
     CompileReport,
+    finalize_compile_report,
     FRONTEND_CLIFFORD_JIT,
     VALUE_KIND_MULTIVECTOR,
     hash_ir_text,
@@ -104,9 +105,16 @@ def run(*, native_required: bool = False) -> CompileReport:
     rotor = ga.Multivector(R, a)
     points = ga.Multivector(V, a)
 
+    # M2 step 4 (2026-05-18): nest a fresh capture scope while
+    # invoking the @clifford_jit callable so its auto-emit lands
+    # in a discarded sub-sink, not in the parent compile_session.
+    # The driver itself is the canonical emit point for this
+    # program; we don't want an inner double-emit.
+    from tessera.compiler.compile_report import capture_compile_reports as _cap
     t0 = time.perf_counter_ns()
     if is_darwin:
-        out = point_cloud_rotor_invariant(rotor, points)
+        with _cap():
+            out = point_cloud_rotor_invariant(rotor, points)
         out_arr = np.asarray([float(np.asarray(out[i])) for i in range(R.shape[0])])
         # @clifford_jit's __call__ swallows the bridge trace into
         # last_routes(); read it back from there rather than the
@@ -121,7 +129,7 @@ def run(*, native_required: bool = False) -> CompileReport:
     ref = _numpy_reference(a, R, V)
     max_abs_err = float(np.abs(out_arr - ref).max())
 
-    return CompileReport(
+    return finalize_compile_report(CompileReport(
         program_id=PROGRAM_ID,
         source=f"{__name__}.run",
         frontend=FRONTEND_CLIFFORD_JIT,
@@ -134,7 +142,7 @@ def run(*, native_required: bool = False) -> CompileReport:
         proof_routes=routes,
         timing_ms={"end_to_end": elapsed_ms},
         correctness={"max_abs_err": max_abs_err, "tolerance": 5e-5},
-    )
+    ))
 
 
 if __name__ == "__main__":  # pragma: no cover

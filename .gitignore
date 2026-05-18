@@ -62,3 +62,10 @@ examples/advanced/**/runs/
 # Repo-local generated metadata/builds
 python/tessera.egg-info/
 research/sandbox_compilers/build/
+
+# Claude Code harness — transient scheduler / worktree / lock artifacts.
+# settings.local.json is per-user and should NOT be checked in either.
+.claude/*.lock
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+.claude/settings.local.json

@@ -81,11 +81,11 @@ asserts `FUSED_APPLE_GPU_OPS == EXPECTED_CLIFFORD_OPS` and
 this track; NVIDIA and ROCm remain planned for GA.
 
 For EBM, manifests should be interpreted around the underlying primitive class.
-Apple GPU fused entries currently cover eight benchmarked native ops:
+Apple GPU fused entries currently cover nine benchmarked native ops:
 `ebm_inner_step`, `ebm_refinement`, `ebm_langevin_step`, `ebm_decode_init`,
 `ebm_bivector_langevin`, `ebm_sphere_langevin`, `ebm_self_verify`, and the
-quadratic specialization of `ebm_energy`. `ebm_partition_exact` remains
-Python-only on Apple GPU.
+quadratic specialization of `ebm_energy`, plus `ebm_partition_exact` as a
+single-dispatch stable-logsumexp kernel over precomputed energies.
 
 ### Native Execution
 
@@ -96,10 +96,10 @@ Target IR artifact.
 Current high-confidence native claim:
 
 - Clifford Apple GPU fused kernels for all 17 registered GA primitives.
-- EBM Apple GPU fused kernels for eight registered native rows:
+- EBM Apple GPU fused kernels for nine registered native rows:
   `inner_step`, `refinement`, `langevin_step`, `decode_init`,
   `bivector_langevin`, `sphere_langevin`, hard-argmin `self_verify`, and
-  quadratic `energy`.
+  quadratic `energy`, plus stable-logsumexp `partition_exact`.
 - Composite workload benchmark rows for `ga_feature_pipeline`,
   `ebt_tiny_refinement`, and opt-in `--ebt-sweep`, each paired with
   Python-reference rows.
@@ -108,8 +108,9 @@ Current non-claims:
 
 - Arbitrary user-defined EBM energy functions do not yet lower to native MSL;
   the current native `ebm_energy` row is the quadratic specialization.
-- `ebm_partition_exact` does not yet have a native Apple GPU kernel; it remains
-  a Python-reference row in the benchmark.
+- `ebm_partition_monte_carlo` and `ebm_partition_ais` remain Python-reference
+  estimators; only exact partition over precomputed energies has a native
+  Apple GPU kernel.
 - EBM checkpointing and candidate pipelining beyond the measured
   `ebm_refinement` kernel are annotation-layer compiler transformations until a
   backend consumes them.

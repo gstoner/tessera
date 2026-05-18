@@ -256,7 +256,10 @@ EBM is mature at the Python reference and dialect-intent layers:
 What is missing:
 
 - The EBM dialect annotation passes do not yet lower to Apple runtime calls.
-- `ebm_partition_exact` executes through Python/NumPy, not Apple GPU.
+- `ebm_partition_monte_carlo` and `ebm_partition_ais` execute through
+  Python/NumPy; `ebm_partition_exact` is now superseded by the native
+  stable-logsumexp Apple GPU path tracked in
+  [`docs/status/ga_ebm_milestone.md`](../status/ga_ebm_milestone.md).
 - Arbitrary user-defined energy functions do not yet lower to native MSL; the
   current native `ebm_energy` row is the quadratic specialization.
 - **All 26 fast paths route through the `jit_bridge`** (17 GA + 9
@@ -377,8 +380,8 @@ all of the following are true:
 ## Bottom Line
 
 Do not add more primitive breadth next. The Apple GPU backend already has
-complete fused-kernel coverage for the current 17-op Clifford surface and eight
-native EBM rows. The valuable next step is integration: route more public GA/EBM
-APIs and then one `@tessera.jit` path through the normal compiler/runtime stack.
-`ebm_partition_exact` can remain Python-reference until a GPU-shaped use case
-appears.
+complete fused-kernel coverage for the current 17-op Clifford surface and all
+nine native EBM rows, including `ebm_partition_exact` as a stable-logsumexp
+kernel over precomputed energies. The valuable next step is integration: route
+the dialect annotation path and one broader `@tessera.jit` path through the
+normal compiler/runtime stack.

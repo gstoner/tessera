@@ -234,8 +234,12 @@ class _ASTLowerer(ast.NodeVisitor):
 
         ``Name`` nodes resolve through ``env`` (a binding map from
         Python identifiers to SSA refs).  Unknown names raise.
-        ``Call`` nodes recurse on their args, then emit an
-        :class:`CliffordIROpCall` and return the result's SSA name.
+        ``Constant`` int / float literals encode inline as
+        ``#int:N`` / ``#float:N`` operand refs — the IR is still
+        string-based, the executor parses them back when binding
+        operands.  ``Call`` nodes recurse on their args, then emit
+        an :class:`CliffordIROpCall` and return the result's SSA
+        name.
         """
         if isinstance(expr, ast.Name):
             if env is not None:
@@ -247,6 +251,37 @@ class _ASTLowerer(ast.NodeVisitor):
                     )
                 return env[expr.id]
             return expr.id
+        if isinstance(expr, ast.Constant):
+            v = expr.value
+            if isinstance(v, bool):
+                # bool is a subclass of int — surface it separately so
+                # the executor can preserve the True/False identity.
+                return f"#bool:{int(v)}"
+            if isinstance(v, int):
+                return f"#int:{v}"
+            if isinstance(v, float):
+                return f"#float:{v!r}"
+            raise self._err(
+                expr,
+                "literal constants are limited to int / float / bool "
+                f"(got {type(v).__name__}: {v!r})",
+            )
+        if isinstance(expr, ast.UnaryOp) and isinstance(expr.op, ast.USub) \
+                and isinstance(expr.operand, ast.Constant):
+            # ``-2`` parses as ``UnaryOp(USub, Constant(2))`` — fold
+            # the negation into the literal so it survives lowering.
+            v = expr.operand.value
+            if isinstance(v, bool):
+                raise self._err(expr, "cannot negate a boolean literal")
+            if isinstance(v, int):
+                return f"#int:{-v}"
+            if isinstance(v, float):
+                return f"#float:{(-v)!r}"
+            raise self._err(
+                expr,
+                "literal constants are limited to int / float "
+                f"(got {type(v).__name__}: {v!r})",
+            )
         if isinstance(expr, ast.Call):
             attr = self._is_ga_call(expr.func)
             if attr is None:
@@ -408,6 +443,24 @@ def _execute_ir(
     # imported by code that never decorates a GA function.
     import tessera.ga as ga
     env: dict[str, Any] = dict(zip(ir.arg_names, args))
+
+    def _resolve(ref: str) -> Any:
+        # Inline literals are encoded as ``#int:N`` / ``#float:V`` /
+        # ``#bool:0|1`` operand refs at lowering time so the IR stays
+        # all-string.  Decode them back here.
+        if ref.startswith("#int:"):
+            return int(ref[5:])
+        if ref.startswith("#float:"):
+            return float(ref[7:])
+        if ref.startswith("#bool:"):
+            return ref[6:] == "1"
+        if ref not in env:
+            raise CliffordJitError(
+                f"executor: operand ref {ref!r} is not in the env "
+                f"(known: {sorted(env)})"
+            )
+        return env[ref]
+
     prev_tracing = _bridge.tracing_enabled()
     _bridge.set_tracing_enabled(True)
     _bridge.clear_dispatch_trace()
@@ -422,9 +475,9 @@ def _execute_ir(
                         f"{op.python_attr!r} (mapped from "
                         f"op_name={op.op_name!r})"
                     )
-                operands = [env[ref] for ref in op.operand_refs]
+                operands = [_resolve(ref) for ref in op.operand_refs]
                 env[op.result_name] = fn(*operands)
-            result = env[ir.return_ref]
+            result = _resolve(ir.return_ref)
     finally:
         routes = tuple(_bridge.take_dispatch_trace())
         _bridge.set_tracing_enabled(prev_tracing)

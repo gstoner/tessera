@@ -133,6 +133,9 @@ static void metal_buffer_release(MetalDeviceContext &ctx,
 }
 
 // Convenience: acquire + memcpy host bytes into a shared buffer.
+// Underlying primitive — must use the raw acquire here (the
+// TS_METAL_BUF_ACQUIRE macro is defined below and is meant for
+// dispatcher call sites, not for this helper).
 static id<MTLBuffer> metal_buffer_acquire_with_bytes(
     MetalDeviceContext &ctx, const void *src, size_t bytes) {
   id<MTLBuffer> buf = metal_buffer_acquire(ctx, bytes);
@@ -140,6 +143,39 @@ static id<MTLBuffer> metal_buffer_acquire_with_bytes(
   std::memcpy([buf contents], src, bytes);
   return buf;
 }
+
+// RAII guard: acquires a buffer in its constructor and returns it to
+// the pool via :func:`metal_buffer_release` in its destructor — so
+// every exit path from a dispatcher (success, early `return false`,
+// caught exception) releases automatically.  Use the macros below
+// to keep call sites short.
+struct MetalBufferGuard {
+  MetalDeviceContext *ctx;
+  id<MTLBuffer> buf;
+  size_t bytes;
+  MetalBufferGuard(MetalDeviceContext &c, id<MTLBuffer> b, size_t n)
+      : ctx(&c), buf(b), bytes(n) {}
+  ~MetalBufferGuard() {
+    if (buf) metal_buffer_release(*ctx, buf, bytes);
+  }
+  MetalBufferGuard(const MetalBufferGuard&) = delete;
+  MetalBufferGuard& operator=(const MetalBufferGuard&) = delete;
+  MetalBufferGuard(MetalBufferGuard&& o) noexcept
+      : ctx(o.ctx), buf(o.buf), bytes(o.bytes) { o.buf = nil; }
+  MetalBufferGuard& operator=(MetalBufferGuard&&) = delete;
+};
+
+// Declare an `id<MTLBuffer> NAME` bound to a guarded acquire.  The
+// guard is named `_g_<NAME>` so multiple acquires in the same scope
+// don't collide.  Releases run automatically when the enclosing
+// scope exits.
+#define TS_METAL_BUF_ACQUIRE(NAME, CTX, BYTES) \
+  MetalBufferGuard _g_##NAME((CTX), metal_buffer_acquire((CTX), (BYTES)), (BYTES)); \
+  id<MTLBuffer> NAME = _g_##NAME.buf
+#define TS_METAL_BUF_ACQUIRE_WITH_BYTES(NAME, CTX, SRC, BYTES) \
+  MetalBufferGuard _g_##NAME((CTX), \
+      metal_buffer_acquire_with_bytes((CTX), (SRC), (BYTES)), (BYTES)); \
+  id<MTLBuffer> NAME = _g_##NAME.buf
 
 MetalDeviceContext &deviceContext() {
   static MetalDeviceContext ctx{nil, nil, false};
@@ -193,14 +229,9 @@ bool dispatch_mps_gemm_f32(MetalDeviceContext &ctx, const float* A,
     NSUInteger byteCountC = sizeof(float) * static_cast<NSUInteger>(M) *
                             static_cast<NSUInteger>(N);
 
-    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A
-                                                  length:byteCountA
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B
-                                                  length:byteCountB
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufC = [ctx.device newBufferWithLength:byteCountC
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, byteCountA);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, byteCountB);
+    TS_METAL_BUF_ACQUIRE(bufC, ctx, byteCountC);
     if (!bufA || !bufB || !bufC) return false;
 
     NSUInteger rowBytesA = sizeof(float) * static_cast<NSUInteger>(K);
@@ -371,14 +402,9 @@ bool dispatch_mps_gemm_f16(MetalDeviceContext &ctx, const uint16_t* A,
     NSUInteger byteCountC = sizeof(uint16_t) * static_cast<NSUInteger>(M) *
                             static_cast<NSUInteger>(N);
 
-    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A
-                                                  length:byteCountA
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B
-                                                  length:byteCountB
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufC = [ctx.device newBufferWithLength:byteCountC
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, byteCountA);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, byteCountB);
+    TS_METAL_BUF_ACQUIRE(bufC, ctx, byteCountC);
     if (!bufA || !bufB || !bufC) return false;
 
     NSUInteger rowBytesA = sizeof(uint16_t) * static_cast<NSUInteger>(K);
@@ -589,14 +615,9 @@ kernel void rope_f32(
 
     NSUInteger byteCount = sizeof(float) * static_cast<NSUInteger>(M) *
                            static_cast<NSUInteger>(K);
-    id<MTLBuffer> bufX = [ctx.device newBufferWithBytes:X
-                                                  length:byteCount
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufT = [ctx.device newBufferWithBytes:Theta
-                                                  length:byteCount
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, byteCount);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufT, ctx, Theta, byteCount);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, byteCount);
     if (!bufX || !bufT || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -699,14 +720,9 @@ kernel void rope_f16(
 
     NSUInteger byteCount = sizeof(uint16_t) * static_cast<NSUInteger>(M) *
                            static_cast<NSUInteger>(K);
-    id<MTLBuffer> bufX = [ctx.device newBufferWithBytes:X
-                                                  length:byteCount
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufT = [ctx.device newBufferWithBytes:Theta
-                                                  length:byteCount
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, byteCount);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufT, ctx, Theta, byteCount);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, byteCount);
     if (!bufX || !bufT || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -915,17 +931,10 @@ kernel void flash_attn_f32(
                          static_cast<NSUInteger>(D);
     NSUInteger oBytes = qBytes;
 
-    id<MTLBuffer> bufQ = [ctx.device newBufferWithBytes:Q
-                                                  length:qBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufK = [ctx.device newBufferWithBytes:K
-                                                  length:kvBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufV = [ctx.device newBufferWithBytes:V
-                                                  length:kvBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, kvBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, kvBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
     if (!bufQ || !bufK || !bufV || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -1123,17 +1132,10 @@ kernel void flash_attn_f16(
                          static_cast<NSUInteger>(Sk) * static_cast<NSUInteger>(D);
     NSUInteger oBytes = qBytes;
 
-    id<MTLBuffer> bufQ = [ctx.device newBufferWithBytes:Q
-                                                  length:qBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufK = [ctx.device newBufferWithBytes:K
-                                                  length:kvBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufV = [ctx.device newBufferWithBytes:V
-                                                  length:kvBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, kvBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, kvBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
     if (!bufQ || !bufK || !bufV || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -1315,11 +1317,8 @@ kernel void softmax_f32(
 
     NSUInteger byteCount = sizeof(float) * static_cast<NSUInteger>(M) *
                            static_cast<NSUInteger>(K);
-    id<MTLBuffer> bufX = [ctx.device newBufferWithBytes:X
-                                                  length:byteCount
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, byteCount);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, byteCount);
     if (!bufX || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -1425,11 +1424,8 @@ kernel void softmax_f16(
 
     NSUInteger byteCount = sizeof(uint16_t) * static_cast<NSUInteger>(M) *
                            static_cast<NSUInteger>(K);
-    id<MTLBuffer> bufX = [ctx.device newBufferWithBytes:X
-                                                  length:byteCount
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, byteCount);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, byteCount);
     if (!bufX || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -1539,11 +1535,8 @@ kernel void gelu_f32(
     if (!pso) return false;
 
     NSUInteger byteCount = sizeof(float) * static_cast<NSUInteger>(N);
-    id<MTLBuffer> bufX = [ctx.device newBufferWithBytes:X
-                                                  length:byteCount
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, byteCount);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, byteCount);
     if (!bufX || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -1620,11 +1613,8 @@ kernel void gelu_f16(
     if (!pso) return false;
 
     NSUInteger byteCount = sizeof(uint16_t) * static_cast<NSUInteger>(N);
-    id<MTLBuffer> bufX = [ctx.device newBufferWithBytes:X
-                                                  length:byteCount
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, byteCount);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, byteCount);
     if (!bufX || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -1791,14 +1781,9 @@ kernel void matmul_softmax_f32(
     NSUInteger oBytes = sizeof(float) * static_cast<NSUInteger>(M) *
                         static_cast<NSUInteger>(N);
 
-    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A
-                                                  length:aBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B
-                                                  length:bBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, bBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
     if (!bufA || !bufB || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -1975,12 +1960,9 @@ kernel void matmul_softmax_tiled_f32(
     NSUInteger oBytes = sizeof(float) * static_cast<NSUInteger>(M) *
                         static_cast<NSUInteger>(N);
 
-    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:aBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B length:bBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, bBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
     if (!bufA || !bufB || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -2125,14 +2107,9 @@ kernel void matmul_softmax_f16(
     NSUInteger oBytes = sizeof(uint16_t) * static_cast<NSUInteger>(M) *
                         static_cast<NSUInteger>(N);
 
-    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A
-                                                  length:aBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B
-                                                  length:bBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, bBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
     if (!bufA || !bufB || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -2345,14 +2322,10 @@ kernel void matmul_softmax_matmul_f32(
     NSUInteger oBytes = sizeof(float) * static_cast<NSUInteger>(M) *
                         static_cast<NSUInteger>(P);
 
-    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:aBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B length:bBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufC = [ctx.device newBufferWithBytes:C length:cBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, bBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufC, ctx, C, cBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
     if (!bufA || !bufB || !bufC || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -2461,14 +2434,10 @@ kernel void matmul_softmax_matmul_f16(
     NSUInteger oBytes = sizeof(uint16_t) * static_cast<NSUInteger>(M) *
                         static_cast<NSUInteger>(P);
 
-    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:aBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B length:bBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufC = [ctx.device newBufferWithBytes:C length:cBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, bBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufC, ctx, C, cBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
     if (!bufA || !bufB || !bufC || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -2693,12 +2662,9 @@ kernel void matmul_gelu_f32(
     NSUInteger oBytes = sizeof(float) * static_cast<NSUInteger>(M) *
                         static_cast<NSUInteger>(N);
 
-    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:aBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B length:bBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, bBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
     if (!bufA || !bufB || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -2779,12 +2745,9 @@ kernel void matmul_rmsnorm_f32(
     NSUInteger oBytes = sizeof(float) * static_cast<NSUInteger>(M) *
                         static_cast<NSUInteger>(N);
 
-    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:aBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B length:bBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, bBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
     if (!bufA || !bufB || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -2979,16 +2942,11 @@ kernel void swiglu_f32(
     NSUInteger wdBytes = sizeof(float) * (NSUInteger)H  * (NSUInteger)Kout;
     NSUInteger oBytes  = sizeof(float) * (NSUInteger)M  * (NSUInteger)Kout;
 
-    id<MTLBuffer> bufX  = [ctx.device newBufferWithBytes:X  length:xBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufWg = [ctx.device newBufferWithBytes:Wg length:wgBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufWu = [ctx.device newBufferWithBytes:Wu length:wuBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufWd = [ctx.device newBufferWithBytes:Wd length:wdBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO  = [ctx.device newBufferWithLength:oBytes
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, xBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWg, ctx, Wg, wgBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWu, ctx, Wu, wuBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWd, ctx, Wd, wdBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
     if (!bufX || !bufWg || !bufWu || !bufWd || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -3301,14 +3259,10 @@ kernel void linear_attn_f32(
     NSUInteger vBytes = sizeof(float) * (NSUInteger)B * H * S * D_v;
     NSUInteger oBytes = vBytes;
 
-    id<MTLBuffer> bufQ = [ctx.device newBufferWithBytes:Q length:qBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufK = [ctx.device newBufferWithBytes:K length:kBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufV = [ctx.device newBufferWithBytes:V length:vBytes
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:oBytes
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, kBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, vBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
     if (!bufQ || !bufK || !bufV || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -3757,12 +3711,9 @@ kernel void clifford_geo_product_cl30_f32(
 
     NSUInteger byteCount =
         sizeof(float) * static_cast<NSUInteger>(batch) * 8u;
-    id<MTLBuffer> bufA = [ctx.device newBufferWithBytes:A length:byteCount
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufB = [ctx.device newBufferWithBytes:B length:byteCount
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufC = [ctx.device newBufferWithLength:byteCount
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, byteCount);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, byteCount);
+    TS_METAL_BUF_ACQUIRE(bufC, ctx, byteCount);
     if (!bufA || !bufB || !bufC) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -3902,12 +3853,9 @@ kernel void clifford_rotor_sandwich_cl30_f32(
 
     NSUInteger byteCount =
         sizeof(float) * static_cast<NSUInteger>(batch) * 8u;
-    id<MTLBuffer> bufR = [ctx.device newBufferWithBytes:R length:byteCount
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufV = [ctx.device newBufferWithBytes:V length:byteCount
-                                                 options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:byteCount
-                                                 options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufR, ctx, R, byteCount);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, byteCount);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, byteCount);
     if (!bufR || !bufV || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -4311,8 +4259,8 @@ static bool dispatch_clifford_unary_8x8_f32_msl(
     if (!pso) return false;
     size_t byteCount = sizeof(float) * (size_t)batch * 8u;
     // Pool path — recycle shared-storage buffers across dispatches.
-    id<MTLBuffer> bufA = metal_buffer_acquire_with_bytes(ctx, A, byteCount);
-    id<MTLBuffer> bufC = metal_buffer_acquire(ctx, byteCount);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, byteCount);
+    TS_METAL_BUF_ACQUIRE(bufC, ctx, byteCount);
     if (!bufA || !bufC) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -4330,8 +4278,6 @@ static bool dispatch_clifford_unary_8x8_f32_msl(
     [cb waitUntilCompleted];
     bool ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (ok) std::memcpy(C, [bufC contents], byteCount);
-    metal_buffer_release(ctx, bufA, byteCount);
-    metal_buffer_release(ctx, bufC, byteCount);
     return ok;
   }
 }
@@ -4347,8 +4293,8 @@ static bool dispatch_clifford_unary_8x1_f32_msl(
     if (!pso) return false;
     NSUInteger inBytes  = sizeof(float) * (NSUInteger)batch * 8u;
     NSUInteger outBytes = sizeof(float) * (NSUInteger)batch;
-    id<MTLBuffer> bufA = metal_buffer_acquire_with_bytes(ctx, A, inBytes);
-    id<MTLBuffer> bufC = metal_buffer_acquire(ctx, outBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, inBytes);
+    TS_METAL_BUF_ACQUIRE(bufC, ctx, outBytes);
     if (!bufA || !bufC) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -4366,8 +4312,6 @@ static bool dispatch_clifford_unary_8x1_f32_msl(
     [cb waitUntilCompleted];
     bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (_pool_ok) std::memcpy(C, [bufC contents], outBytes);
-    metal_buffer_release(ctx, bufA, inBytes);
-    metal_buffer_release(ctx, bufC, outBytes);
     return _pool_ok;
   }
 }
@@ -4382,9 +4326,9 @@ static bool dispatch_clifford_binary_8x8_f32_msl(
     id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, source, entry);
     if (!pso) return false;
     NSUInteger byteCount = sizeof(float) * (NSUInteger)batch * 8u;
-    id<MTLBuffer> bufA = metal_buffer_acquire_with_bytes(ctx, A, byteCount);
-    id<MTLBuffer> bufB = metal_buffer_acquire_with_bytes(ctx, B, byteCount);
-    id<MTLBuffer> bufC = metal_buffer_acquire(ctx, byteCount);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, byteCount);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, byteCount);
+    TS_METAL_BUF_ACQUIRE(bufC, ctx, byteCount);
     if (!bufA || !bufB || !bufC) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -4403,9 +4347,6 @@ static bool dispatch_clifford_binary_8x8_f32_msl(
     [cb waitUntilCompleted];
     bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (_pool_ok) std::memcpy(C, [bufC contents], byteCount);
-    metal_buffer_release(ctx, bufA, byteCount);
-    metal_buffer_release(ctx, bufB, byteCount);
-    metal_buffer_release(ctx, bufC, byteCount);
     return _pool_ok;
   }
 }
@@ -4421,9 +4362,9 @@ static bool dispatch_clifford_binary_8x1_f32_msl(
     if (!pso) return false;
     NSUInteger inBytes  = sizeof(float) * (NSUInteger)batch * 8u;
     NSUInteger outBytes = sizeof(float) * (NSUInteger)batch;
-    id<MTLBuffer> bufA = metal_buffer_acquire_with_bytes(ctx, A, inBytes);
-    id<MTLBuffer> bufB = metal_buffer_acquire_with_bytes(ctx, B, inBytes);
-    id<MTLBuffer> bufC = metal_buffer_acquire(ctx, outBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, inBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, inBytes);
+    TS_METAL_BUF_ACQUIRE(bufC, ctx, outBytes);
     if (!bufA || !bufB || !bufC) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -4442,9 +4383,6 @@ static bool dispatch_clifford_binary_8x1_f32_msl(
     [cb waitUntilCompleted];
     bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (_pool_ok) std::memcpy(C, [bufC contents], outBytes);
-    metal_buffer_release(ctx, bufA, inBytes);
-    metal_buffer_release(ctx, bufB, inBytes);
-    metal_buffer_release(ctx, bufC, outBytes);
     return _pool_ok;
   }
 }
@@ -4460,8 +4398,8 @@ static bool dispatch_clifford_grade_projection_cl30_f32_msl(
         @"clifford_grade_projection_cl30_f32");
     if (!pso) return false;
     NSUInteger byteCount = sizeof(float) * (NSUInteger)batch * 8u;
-    id<MTLBuffer> bufA = metal_buffer_acquire_with_bytes(ctx, A, byteCount);
-    id<MTLBuffer> bufC = metal_buffer_acquire(ctx, byteCount);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, byteCount);
+    TS_METAL_BUF_ACQUIRE(bufC, ctx, byteCount);
     if (!bufA || !bufC) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -4480,8 +4418,6 @@ static bool dispatch_clifford_grade_projection_cl30_f32_msl(
     [cb waitUntilCompleted];
     bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (_pool_ok) std::memcpy(C, [bufC contents], byteCount);
-    metal_buffer_release(ctx, bufA, byteCount);
-    metal_buffer_release(ctx, bufC, byteCount);
     return _pool_ok;
   }
 }
@@ -4682,9 +4618,9 @@ static bool dispatch_clifford_geo_product_cl30_f16_msl(
         @"clifford_geo_product_cl30_f16");
     if (!pso) return false;
     NSUInteger byteCount = sizeof(uint16_t) * (NSUInteger)batch * 8u;
-    id<MTLBuffer> bufA = metal_buffer_acquire_with_bytes(ctx, A, byteCount);
-    id<MTLBuffer> bufB = metal_buffer_acquire_with_bytes(ctx, B, byteCount);
-    id<MTLBuffer> bufC = metal_buffer_acquire(ctx, byteCount);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, byteCount);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, byteCount);
+    TS_METAL_BUF_ACQUIRE(bufC, ctx, byteCount);
     if (!bufA || !bufB || !bufC) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -4703,9 +4639,6 @@ static bool dispatch_clifford_geo_product_cl30_f16_msl(
     [cb waitUntilCompleted];
     bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (_pool_ok) std::memcpy(C, [bufC contents], byteCount);
-    metal_buffer_release(ctx, bufA, byteCount);
-    metal_buffer_release(ctx, bufB, byteCount);
-    metal_buffer_release(ctx, bufC, byteCount);
     return _pool_ok;
   }
 }
@@ -4719,9 +4652,9 @@ static bool dispatch_clifford_rotor_sandwich_cl30_f16_msl(
         @"clifford_rotor_sandwich_cl30_f16");
     if (!pso) return false;
     NSUInteger byteCount = sizeof(uint16_t) * (NSUInteger)batch * 8u;
-    id<MTLBuffer> bufR = metal_buffer_acquire_with_bytes(ctx, R, byteCount);
-    id<MTLBuffer> bufV = metal_buffer_acquire_with_bytes(ctx, V, byteCount);
-    id<MTLBuffer> bufO = metal_buffer_acquire(ctx, byteCount);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufR, ctx, R, byteCount);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, byteCount);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, byteCount);
     if (!bufR || !bufV || !bufO) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -4740,9 +4673,6 @@ static bool dispatch_clifford_rotor_sandwich_cl30_f16_msl(
     [cb waitUntilCompleted];
     bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (_pool_ok) std::memcpy(Out, [bufO contents], byteCount);
-    metal_buffer_release(ctx, bufR, byteCount);
-    metal_buffer_release(ctx, bufV, byteCount);
-    metal_buffer_release(ctx, bufO, byteCount);
     return _pool_ok;
   }
 }
@@ -5298,8 +5228,8 @@ static bool dispatch_clifford_field_op_f32_msl(
     if (!pso) return false;
     NSUInteger byteCount = sizeof(float) * (NSUInteger)D0 * (NSUInteger)D1
                          * (NSUInteger)D2 * 8u;
-    id<MTLBuffer> bufF = metal_buffer_acquire_with_bytes(ctx, F, byteCount);
-    id<MTLBuffer> bufO = metal_buffer_acquire(ctx, byteCount);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufF, ctx, F, byteCount);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, byteCount);
     if (!bufF || !bufO) return false;
     CliffordGridParams P = {D0, D1, D2, h0, h1, h2};
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -5316,8 +5246,6 @@ static bool dispatch_clifford_field_op_f32_msl(
     [cb waitUntilCompleted];
     bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (_pool_ok) std::memcpy(Out, [bufO contents], byteCount);
-    metal_buffer_release(ctx, bufF, byteCount);
-    metal_buffer_release(ctx, bufO, byteCount);
     return _pool_ok;
   }
 }
@@ -5413,10 +5341,9 @@ static bool dispatch_clifford_integral_cl30_f32_msl(
     if (!pso) return false;
     NSUInteger fieldBytes = sizeof(float) * (NSUInteger)n * 8u;
     NSUInteger wBytes = sizeof(float) * (NSUInteger)n;
-    id<MTLBuffer> bufF = metal_buffer_acquire_with_bytes(ctx, field, fieldBytes);
-    id<MTLBuffer> bufW = metal_buffer_acquire_with_bytes(ctx, weights, wBytes);
-    id<MTLBuffer> bufO = [ctx.device newBufferWithLength:sizeof(float) * 8u
-                                                  options:MTLResourceStorageModeShared];
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufF, ctx, field, fieldBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufW, ctx, weights, wBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, sizeof(float) * 8u);
     if (!bufF || !bufW || !bufO) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -5432,9 +5359,8 @@ static bool dispatch_clifford_integral_cl30_f32_msl(
     [cb waitUntilCompleted];
     bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (_pool_ok) std::memcpy(out, [bufO contents], sizeof(float) * 8u);
-    metal_buffer_release(ctx, bufF, fieldBytes);
-    metal_buffer_release(ctx, bufW, wBytes);
     return _pool_ok;
+    // RAII guards release bufF / bufW / bufO at scope exit.
   }
 }
 
@@ -5547,9 +5473,9 @@ static bool dispatch_ebm_inner_step_f32_msl(
         ctx, kEBMInnerStepF32Source, @"ebm_inner_step_f32");
     if (!pso) return false;
     NSUInteger bytes = sizeof(float) * (NSUInteger)n;
-    id<MTLBuffer> bufY = metal_buffer_acquire_with_bytes(ctx, y, bytes);
-    id<MTLBuffer> bufG = metal_buffer_acquire_with_bytes(ctx, grad, bytes);
-    id<MTLBuffer> bufO = metal_buffer_acquire(ctx, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufY, ctx, y, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufG, ctx, grad, bytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, bytes);
     if (!bufY || !bufG || !bufO) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -5569,9 +5495,6 @@ static bool dispatch_ebm_inner_step_f32_msl(
     [cb waitUntilCompleted];
     bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (_pool_ok) std::memcpy(out, [bufO contents], bytes);
-    metal_buffer_release(ctx, bufY, bytes);
-    metal_buffer_release(ctx, bufG, bytes);
-    metal_buffer_release(ctx, bufO, bytes);
     return _pool_ok;
   }
 }
@@ -5649,9 +5572,9 @@ static bool dispatch_ebm_refinement_fused_f32_msl(
         ctx, kEBMRefinementFusedF32Source, @"ebm_refinement_fused_f32");
     if (!pso) return false;
     NSUInteger bytes = sizeof(float) * (NSUInteger)n;
-    id<MTLBuffer> bY = metal_buffer_acquire_with_bytes(ctx, y0, bytes);
-    id<MTLBuffer> bG = metal_buffer_acquire_with_bytes(ctx, grad, bytes);
-    id<MTLBuffer> bO = metal_buffer_acquire(ctx, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bY, ctx, y0, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bG, ctx, grad, bytes);
+    TS_METAL_BUF_ACQUIRE(bO, ctx, bytes);
     if (!bY || !bG || !bO) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -5672,9 +5595,6 @@ static bool dispatch_ebm_refinement_fused_f32_msl(
     [cb waitUntilCompleted];
     bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (_pool_ok) std::memcpy(y_out, [bO contents], bytes);
-    metal_buffer_release(ctx, bY, bytes);
-    metal_buffer_release(ctx, bG, bytes);
-    metal_buffer_release(ctx, bO, bytes);
     return _pool_ok;
   }
 }
@@ -5748,10 +5668,10 @@ static bool dispatch_ebm_langevin_step_f32_msl(
         ctx, kEBMLangevinStepF32Source, @"ebm_langevin_step_f32");
     if (!pso) return false;
     NSUInteger bytes = sizeof(float) * (NSUInteger)n;
-    id<MTLBuffer> bY = metal_buffer_acquire_with_bytes(ctx, y, bytes);
-    id<MTLBuffer> bG = metal_buffer_acquire_with_bytes(ctx, grad, bytes);
-    id<MTLBuffer> bN = metal_buffer_acquire_with_bytes(ctx, noise, bytes);
-    id<MTLBuffer> bO = metal_buffer_acquire(ctx, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bY, ctx, y, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bG, ctx, grad, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bN, ctx, noise, bytes);
+    TS_METAL_BUF_ACQUIRE(bO, ctx, bytes);
     if (!bY || !bG || !bN || !bO) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -5773,10 +5693,6 @@ static bool dispatch_ebm_langevin_step_f32_msl(
     [cb waitUntilCompleted];
     bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (_pool_ok) std::memcpy(out, [bO contents], bytes);
-    metal_buffer_release(ctx, bY, bytes);
-    metal_buffer_release(ctx, bG, bytes);
-    metal_buffer_release(ctx, bN, bytes);
-    metal_buffer_release(ctx, bO, bytes);
     return _pool_ok;
   }
 }
@@ -5847,12 +5763,10 @@ static bool dispatch_ebm_decode_init_noise_apply_f32_msl(
     NSUInteger outBytes = sizeof(float) * (NSUInteger)n;
     NSUInteger noiseBytes = sizeof(float) * (NSUInteger)n;
     NSUInteger baseBytes = sizeof(float) * (NSUInteger)std::max(1, base_len);
-    id<MTLBuffer> bB = [ctx.device
-        newBufferWithBytes:(base_len > 0 ? base : noise)
-                    length:baseBytes
-                   options:MTLResourceStorageModeShared];
-    id<MTLBuffer> bN = metal_buffer_acquire_with_bytes(ctx, noise, noiseBytes);
-    id<MTLBuffer> bO = metal_buffer_acquire(ctx, outBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bB, ctx,
+        (base_len > 0 ? base : noise), baseBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bN, ctx, noise, noiseBytes);
+    TS_METAL_BUF_ACQUIRE(bO, ctx, outBytes);
     if (!bB || !bN || !bO) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -5873,9 +5787,8 @@ static bool dispatch_ebm_decode_init_noise_apply_f32_msl(
     [cb waitUntilCompleted];
     bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (_pool_ok) std::memcpy(out, [bO contents], outBytes);
-    metal_buffer_release(ctx, bN, noiseBytes);
-    metal_buffer_release(ctx, bO, outBytes);
     return _pool_ok;
+    // RAII guards release bB / bN / bO at scope exit.
   }
 }
 
@@ -5976,10 +5889,10 @@ static bool dispatch_ebm_sphere_langevin_step_f32_msl(
         @"ebm_sphere_langevin_step_f32");
     if (!pso) return false;
     NSUInteger bytes = sizeof(float) * (NSUInteger)d;
-    id<MTLBuffer> bX = metal_buffer_acquire_with_bytes(ctx, x, bytes);
-    id<MTLBuffer> bG = metal_buffer_acquire_with_bytes(ctx, grad, bytes);
-    id<MTLBuffer> bN = metal_buffer_acquire_with_bytes(ctx, noise, bytes);
-    id<MTLBuffer> bO = metal_buffer_acquire(ctx, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bX, ctx, x, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bG, ctx, grad, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bN, ctx, noise, bytes);
+    TS_METAL_BUF_ACQUIRE(bO, ctx, bytes);
     if (!bX || !bG || !bN || !bO) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -5998,10 +5911,6 @@ static bool dispatch_ebm_sphere_langevin_step_f32_msl(
     [cb waitUntilCompleted];
     bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (_pool_ok) std::memcpy(out, [bO contents], bytes);
-    metal_buffer_release(ctx, bX, bytes);
-    metal_buffer_release(ctx, bG, bytes);
-    metal_buffer_release(ctx, bN, bytes);
-    metal_buffer_release(ctx, bO, bytes);
     return _pool_ok;
   }
 }
@@ -6085,9 +5994,9 @@ static bool dispatch_ebm_self_verify_hard_argmin_f32_msl(
     NSUInteger eBytes = sizeof(float) * (NSUInteger)B * (NSUInteger)K;
     NSUInteger cBytes = sizeof(float) * (NSUInteger)B * (NSUInteger)K * (NSUInteger)D;
     NSUInteger oBytes = sizeof(float) * (NSUInteger)B * (NSUInteger)D;
-    id<MTLBuffer> bE = metal_buffer_acquire_with_bytes(ctx, energies, eBytes);
-    id<MTLBuffer> bC = metal_buffer_acquire_with_bytes(ctx, candidates, cBytes);
-    id<MTLBuffer> bO = metal_buffer_acquire(ctx, oBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bE, ctx, energies, eBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bC, ctx, candidates, cBytes);
+    TS_METAL_BUF_ACQUIRE(bO, ctx, oBytes);
     if (!bE || !bC || !bO) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -6108,9 +6017,6 @@ static bool dispatch_ebm_self_verify_hard_argmin_f32_msl(
     [cb waitUntilCompleted];
     bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (_pool_ok) std::memcpy(out, [bO contents], oBytes);
-    metal_buffer_release(ctx, bE, eBytes);
-    metal_buffer_release(ctx, bC, cBytes);
-    metal_buffer_release(ctx, bO, oBytes);
     return _pool_ok;
   }
 }
@@ -6186,9 +6092,9 @@ static bool dispatch_ebm_energy_quadratic_f32_msl(
     if (!pso) return false;
     NSUInteger inBytes = sizeof(float) * (NSUInteger)B * (NSUInteger)D;
     NSUInteger outBytes = sizeof(float) * (NSUInteger)B;
-    id<MTLBuffer> bX = metal_buffer_acquire_with_bytes(ctx, x, inBytes);
-    id<MTLBuffer> bY = metal_buffer_acquire_with_bytes(ctx, y, inBytes);
-    id<MTLBuffer> bO = metal_buffer_acquire(ctx, outBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bX, ctx, x, inBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bY, ctx, y, inBytes);
+    TS_METAL_BUF_ACQUIRE(bO, ctx, outBytes);
     if (!bX || !bY || !bO) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -6208,9 +6114,6 @@ static bool dispatch_ebm_energy_quadratic_f32_msl(
     [cb waitUntilCompleted];
     bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (_pool_ok) std::memcpy(energies, [bO contents], outBytes);
-    metal_buffer_release(ctx, bX, inBytes);
-    metal_buffer_release(ctx, bY, inBytes);
-    metal_buffer_release(ctx, bO, outBytes);
     return _pool_ok;
   }
 }
@@ -6367,9 +6270,9 @@ static bool dispatch_ebm_ebt_tiny_refinement_argmin_f32_msl(
     if (!pso) return false;
     size_t inBytes  = sizeof(float) * (size_t)B * (size_t)K * (size_t)D;
     size_t outBytes = sizeof(float) * (size_t)B * (size_t)D;
-    id<MTLBuffer> bY = metal_buffer_acquire_with_bytes(ctx, y0, inBytes);
-    id<MTLBuffer> bG = metal_buffer_acquire_with_bytes(ctx, grad, inBytes);
-    id<MTLBuffer> bO = metal_buffer_acquire(ctx, outBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bY, ctx, y0, inBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bG, ctx, grad, inBytes);
+    TS_METAL_BUF_ACQUIRE(bO, ctx, outBytes);
     if (!bY || !bG || !bO) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -6390,9 +6293,6 @@ static bool dispatch_ebm_ebt_tiny_refinement_argmin_f32_msl(
     [cb waitUntilCompleted];
     bool ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (ok) std::memcpy(out, [bO contents], outBytes);
-    metal_buffer_release(ctx, bY, inBytes);
-    metal_buffer_release(ctx, bG, inBytes);
-    metal_buffer_release(ctx, bO, outBytes);
     return ok;
   }
 }
@@ -6486,8 +6386,8 @@ static bool dispatch_ebm_partition_exact_f32_msl(
     if (!pso) return false;
     size_t inBytes  = sizeof(float) * (size_t)n;
     size_t outBytes = sizeof(float);
-    id<MTLBuffer> bE = metal_buffer_acquire_with_bytes(ctx, energies, inBytes);
-    id<MTLBuffer> bO = metal_buffer_acquire(ctx, outBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bE, ctx, energies, inBytes);
+    TS_METAL_BUF_ACQUIRE(bO, ctx, outBytes);
     if (!bE || !bO) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -6503,8 +6403,6 @@ static bool dispatch_ebm_partition_exact_f32_msl(
     [cb waitUntilCompleted];
     bool ok = (cb.status == MTLCommandBufferStatusCompleted);
     if (ok) std::memcpy(out, [bO contents], outBytes);
-    metal_buffer_release(ctx, bE, inBytes);
-    metal_buffer_release(ctx, bO, outBytes);
     return ok;
   }
 }

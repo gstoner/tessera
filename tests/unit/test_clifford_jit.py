@@ -170,6 +170,35 @@ def test_per_call_route_trace_matches_plan() -> None:
 
 
 @darwin_only
+def test_decorated_function_with_int_literal_runs_end_to_end() -> None:
+    """``@clifford_jit`` accepts ``ga.grade_projection(a, k)`` with
+    an integer literal — the IR carries the literal as ``#int:k`` and
+    the executor decodes it back to a Python int at dispatch time."""
+    import tessera.ga as ga
+
+    @clifford_jit(target="apple_gpu")
+    def project_grade_2(a):
+        return ga.grade_projection(a, 2)
+
+    a = ga.Cl(3, 0)
+    rng = np.random.RandomState(7)
+    A = rng.randn(8, 8).astype(np.float32)
+    out = project_grade_2(ga.Multivector(A, a))
+    # Plan + IR record the literal.
+    assert project_grade_2.artifact.op_names() == ("clifford_grade_projection",)
+    ir = project_grade_2.artifact.ir
+    assert ir is not None
+    assert ir.ops[0].operand_refs == ("a", "#int:2")
+    # Output matches the reference projection.
+    ref = ga.grade_projection(ga.Multivector(A, a), 2)
+    assert np.allclose(out._coefficients, ref._coefficients, atol=1e-6)
+    # Confirm at least one route fired through the bridge.
+    routes = project_grade_2.last_routes()
+    assert routes
+    assert routes[0].op_name == "clifford_grade_projection"
+
+
+@darwin_only
 def test_compiled_artifact_metadata_is_json_serializable() -> None:
     """The artifact's ``as_metadata()`` output must be JSON-able for
     benchmark report embedding."""
@@ -381,6 +410,62 @@ def test_ir_op_call_is_immutable() -> None:
     )
     with pytest.raises((AttributeError, TypeError)):
         op.op_name = "clifford_norm"  # type: ignore[misc]
+
+
+def test_lower_accepts_int_literal_for_grade_projection() -> None:
+    """``ga.grade_projection(a, 2)`` — the int 2 is encoded as the
+    inline operand ref ``#int:2`` in the lowered IR."""
+    import tessera.ga as ga
+
+    def f(a):
+        return ga.grade_projection(a, 2)
+
+    ir = lower_function_to_ir(f)
+    assert len(ir.ops) == 1
+    op = ir.ops[0]
+    assert op.op_name == "clifford_grade_projection"
+    assert op.operand_refs == ("a", "#int:2")
+
+
+def test_lower_accepts_negative_int_literal() -> None:
+    """``ga.grade_projection(a, -1)`` lowers — the unary-minus is
+    folded into the literal so it survives the lowering."""
+    import tessera.ga as ga
+
+    def f(a):
+        return ga.grade_projection(a, -1)
+
+    ir = lower_function_to_ir(f)
+    assert ir.ops[0].operand_refs == ("a", "#int:-1")
+
+
+def test_lower_accepts_float_literal() -> None:
+    """Float literals encode as ``#float:V`` for full round-trip."""
+    import tessera.ga as ga
+
+    def f(a, b):
+        # ga.inner doesn't take a literal, but the lowerer should
+        # still parse it — wire a synthetic case through a binary
+        # GA op that accepts a literal-positional pass-through.  We
+        # use grade_projection here to exercise float parsing too
+        # (the executor would reject at runtime; lowering is
+        # purely structural).
+        return ga.grade_projection(a, 0.5)
+
+    ir = lower_function_to_ir(f)
+    assert ir.ops[0].operand_refs == ("a", "#float:0.5")
+
+
+def test_lower_rejects_string_literal() -> None:
+    """Non-numeric literals (strings) are still rejected — the
+    structured-IR contract limits operand refs to numeric scalars."""
+    import tessera.ga as ga
+
+    def f(a):
+        return ga.grade_projection(a, "two")  # type: ignore[arg-type]
+
+    with pytest.raises(CliffordJitError, match="literal constants"):
+        lower_function_to_ir(f)
 
 
 def test_decorator_artifact_metadata_embeds_ir() -> None:

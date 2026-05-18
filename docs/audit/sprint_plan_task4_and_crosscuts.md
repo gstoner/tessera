@@ -2,7 +2,7 @@
 status: Active sprint plan
 classification: Plan
 authority: Sequences Task 4 (Philox + energy lowering) and the four cross-cutting concerns flagged at the GA/EBM milestone close
-last_updated: 2026-05-17
+last_updated: 2026-05-18
 ---
 
 # Sprint plan — Task 4 + cross-cutting concerns
@@ -117,11 +117,41 @@ sprint.
 | 2 | #15a | Tensor attributes update | low | landed |
 | 3 | #25 | Category hardening sweep | low | landed |
 | 4 | GA6 prep | `multivector_check_grad` + planning doc + starter test | medium | landed |
-| 5 | EBM closure | Native `ebm_partition_exact` MSL kernel (logsumexp) — closes 8/9 → **9/9** | medium | this sprint |
-| 6 | Perf | **Finish buffer-pool sweep** — migrate all ~25 remaining dispatchers | medium (mechanical) | this sprint |
-| 7 | Compiler | **`@clifford_jit` AST → Graph-IR lowering** — replace trace-capture with real AST visitor + IR executor; same `rotor_sandwich → norm` demo | high | this sprint |
-| 8 | Wrap-up | Milestone + sample JSON | low | this sprint |
-| 9 | Next sprint | Task 4A (Philox-in-MSL) + Task 4B (energy lowering scaffold) | medium / high | **bumped to follow-on** |
+| 5 | EBM closure | Native `ebm_partition_exact` MSL kernel (logsumexp) — closes 8/9 → **9/9** | medium | **landed (2026-05-17)** |
+| 6 | Perf | Finish buffer-pool sweep — migrate all remaining dispatchers + harden early-return release safety | medium (mechanical) | **landed (2026-05-18) — RAII `TS_METAL_BUF_ACQUIRE` macros; every exit path release-safe by construction; locked by `test_apple_gpu_buffer_pool.py`** |
+| 7 | Compiler | `@clifford_jit` AST → Graph-IR lowering — replace trace-capture with real AST visitor + IR executor | high | **landed (2026-05-17) — extended (2026-05-18) to accept inline int/float/bool literals** |
+| 8 | Wrap-up | Milestone + sample JSON | low | landed |
+| 9 | Next sprint | Task 4A (Philox-in-MSL) + Task 4B (energy lowering scaffold) | medium / high | **next up** |
+
+## What landed this sprint (2026-05-18 wrap)
+
+- **EBM closure.** [`benchmark_manifest.py::_EBM_APPLE_GPU_FUSED`](../../python/tessera/compiler/backend_manifest.py)
+  now lists `ebm_partition_exact` with a stable-logsumexp MSL kernel
+  + `tessera.ebm.partition_exact_from_energies` public API.  The
+  Python-only EBM set is empty: **9 / 9** native.
+- **Buffer-pool sweep + hardening.**  The runtime defines two RAII
+  macros (`TS_METAL_BUF_ACQUIRE` / `TS_METAL_BUF_ACQUIRE_WITH_BYTES`)
+  that declare a stack-scoped `MetalBufferGuard` whose destructor
+  returns the buffer to the pool on **every** exit path (success,
+  early `return false;`, exception).  Every dispatcher in
+  [`apple_gpu_runtime.mm`](../../src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm)
+  uses the macros — there are no raw `[ctx.device newBufferWith*]`
+  calls outside the pool primitive, and no explicit
+  `metal_buffer_release` calls outside the guard's destructor.
+  Locked by 5 regression tests in
+  [`tests/unit/test_apple_gpu_buffer_pool.py`](../../tests/unit/test_apple_gpu_buffer_pool.py).
+- **`@clifford_jit` AST → IR lowering.**  Decoration walks the
+  function's AST, emits a `CliffordIRProgram` (SSA `%tN` refs +
+  per-op `CliffordIROpCall`), validates every op against
+  `_CLIFFORD_APPLE_GPU_FUSED`, and freezes a
+  `CliffordCompiledArtifact` whose `as_metadata()` embeds the IR.
+  Runtime walks the IR and dispatches each op through `jit_bridge`.
+  Trace-capture remains as a fallback for source-unreadable
+  callables.  Operand vocabulary covers function-arg Names, SSA
+  refs from earlier ops, and inline literal refs (`#int:N` /
+  `#float:V` / `#bool:0|1`) — so `ga.grade_projection(a, 2)`,
+  `ga.grade_projection(a, -1)`, etc. lower without lifting the
+  scalar into a synthetic op.
 
 ## Out of scope this sprint
 
@@ -131,3 +161,7 @@ sprint.
   demo (deferred with Task 4B).
 - On-device RNG (deferred with Task 4A).
 - GA6 actual VJP implementations — preparation only.
+- AST → IR control flow (if / for / while).  The current lowerer
+  accepts straight-line assignments + return; control flow lifts
+  to a follow-on sprint alongside the broader AST → MSL energy
+  lowering work.

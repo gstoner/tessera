@@ -1,6 +1,8 @@
 # Apple GPU backend — Phase 8 overview
 
 > **Status:** Phase 8.3 → 8.4.7 complete. The apple_gpu runtime path executes single-op and multi-op chains for matmul, rope, softmax, gelu, flash_attn, rmsnorm, plus four fused kernels covering attention and MLP blocks. f32 is fully wired; f16/bf16 are wired for matmul, rope, softmax, gelu, flash_attn, and matmul→softmax / flash_attn fusion.
+>
+> **GA / EBM (2026-05-18):** 17/17 GA primitives + 9/9 native EBM primitives ship fused MSL kernels. `@clifford_jit(target="apple_gpu")` does AST → `CliffordIRProgram` lowering at decoration time. Every dispatcher uses RAII `TS_METAL_BUF_ACQUIRE` macros for buffer-pool acquire — early-return paths are release-safe by construction. See [docs/status/ga_ebm_milestone.md](status/ga_ebm_milestone.md).
 
 This document is the canonical reference for how the apple_gpu backend hangs together — what each kernel is, when each fusion fires, where the cross-layer hooks live, and how to add a new kernel or fusion.
 

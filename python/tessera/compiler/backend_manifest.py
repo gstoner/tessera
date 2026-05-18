@@ -879,6 +879,23 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, object]] = {
             "Arbitrary user energy_fn lifts to MSL is a follow-up sprint."
         ),
     },
+    # ebm_partition_exact — stable logsumexp on a precomputed energies
+    # array.  Caller hands the kernel the per-state energies (typically
+    # produced by `ebm.energy_quadratic` or another `ebm_energy_*` call)
+    # plus a temperature; the kernel returns Z = Σ_i exp(-E_i/T).
+    # Single-thread MSL today (N is typically small for exhaustive
+    # state enumeration); parallel tree-reduction is a follow-up.
+    "ebm_partition_exact": {
+        "symbol": "tessera_apple_gpu_ebm_partition_exact_f32",
+        "dtypes": ("fp32",),
+        "abi": ("(energies:f32*[N], N:i32, temperature:f32, out:f32*)"),
+        "notes": (
+            "Stable logsumexp over a precomputed energies array — "
+            "Z = Σ_i exp(-E_i/T).  Closes the 8/9 → 9/9 native EBM "
+            "gap.  Caller provides the energies (any other EBM "
+            "energy kernel produces them)."
+        ),
+    },
     # ebm_ebt_tiny — fused EBT refinement + energy + hard-argmin in a
     # single MSL dispatch.  Optimization for the ebt_tiny workload —
     # the standalone refinement + self_verify chain loses at small

@@ -40,6 +40,7 @@ from tessera.ebm.geo_sampling import (
 )
 from tessera.ebm.partition import (
     partition_function,
+    partition_exact_from_energies,
     partition_function_ais,
     partition_function_exact,
     partition_function_monte_carlo,
@@ -59,6 +60,7 @@ __all__ = [
     "self_verify",
     # EBM3
     "partition_function",
+    "partition_exact_from_energies",
     "partition_function_ais",
     "partition_function_exact",
     "partition_function_monte_carlo",

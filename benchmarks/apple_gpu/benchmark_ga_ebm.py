@@ -935,6 +935,36 @@ def _ebm_energy_apple_gpu_path(
     return dispatch, err, sym
 
 
+def _ebm_partition_exact_apple_gpu_path(
+    rt: ctypes.CDLL,
+) -> tuple[Callable[[], np.ndarray], float, str]:
+    """Native Apple-GPU partition_exact — stable logsumexp over a
+    precomputed energies array.  Closes the 8/9 → 9/9 native EBM
+    gap.  Calls ``ebm.partition_exact_from_energies`` directly so
+    the JIT bridge captures the dispatch."""
+    del rt  # routed through the public dispatcher
+    sym = "tessera_apple_gpu_ebm_partition_exact_f32"
+    rng = np.random.RandomState(1080)
+    # 64 states is a typical small-state exhaustive-enumeration count;
+    # the kernel scales linearly in N so timing is informative here.
+    N = 64
+    energies = np.ascontiguousarray(rng.randn(N).astype(np.float32) * 2.0)
+    temperature = 1.0
+    expected = float(
+        np.exp(-energies.astype(np.float64) / temperature).sum()
+    )
+
+    def dispatch() -> np.ndarray:
+        return np.array([
+            ebm.partition_exact_from_energies(energies,
+                                                temperature=temperature)
+        ], dtype=np.float32)
+
+    out = dispatch()
+    err = float(abs(float(out[0]) - expected) / max(1.0, abs(expected)))
+    return dispatch, err, sym
+
+
 # Python-reference Langevin (kept for the non-Apple skip path).
 def _ebm_langevin_step_path() -> tuple[Callable[[], None], float]:
     rng = np.random.RandomState(1002)
@@ -1068,6 +1098,9 @@ def _NATIVE_EBM_BUILDERS(
          _ebm_self_verify_apple_gpu_path,       0.0),
         ("ebm_energy",            "B=8,D=4/quadratic",
          _ebm_energy_apple_gpu_path,            1e-6),
+        # 9/9 closure — partition_exact stable logsumexp.
+        ("ebm_partition_exact",   "N=64",
+         _ebm_partition_exact_apple_gpu_path,   1e-5),
     )
 
 

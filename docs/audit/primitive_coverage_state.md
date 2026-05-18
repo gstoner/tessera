@@ -271,6 +271,43 @@ mechanisms in `primitive_coverage.py`:
 `masking_effect_rule` (was 16), `lowering_rule` (was 77 partial),
 `tests` (was 69 partial).
 
+### GA + EBM category hardening (Decision #25, 2026-05-17)
+
+Decision #25 — `partial` ≠ ready — required the category-based
+hardening tables to be extended for the GA + EBM families.  The
+planned-entry consumer in `all_primitive_coverages()` previously
+bypassed `_apply_category_overrides`; that path now applies the
+classifier (matching the OP_SPECS + python_primitive paths).  Five
+category tables (`_SHARDING_RULE_BY_CATEGORY`,
+`_BATCHING_RULE_BY_CATEGORY`, `_TRANSPOSE_RULE_BY_CATEGORY`,
+`_SEMANTIC_RULES_BY_CATEGORY`, `_LOWERING_RULE_BY_CATEGORY`,
+`_TESTS_BY_CATEGORY`) now include explicit entries for
+`category="geometric_algebra"` and `category="ebm"`.
+
+Per-axis status for GA (17 primitives) and EBM (12 primitives)
+after the sweep:
+
+| Axis | GA (17) | EBM (12) |
+|---|---|---|
+| `math_semantics` | complete | complete |
+| `shape_rule` | complete | complete |
+| `dtype_layout_rule` | complete | complete |
+| `batching_rule` | complete | complete |
+| `lowering_rule` | complete | complete |
+| `tests` | complete | complete |
+| `transpose_rule` | partial | partial |
+| `sharding_rule` | partial | partial |
+| `vjp` | planned | planned |
+| `jvp` | planned | planned |
+| `masking_effect_rule` | planned | planned |
+| `backend_kernel` | planned | planned |
+
+`vjp` + `jvp` remain `planned` (closure scheduled for GA6 — see
+`docs/audit/sprint_plan_task4_and_crosscuts.md`).
+`masking_effect_rule` closes when the effect lattice is wired into
+the GA/EBM annotation passes.  `backend_kernel` closes with Phase G
+/ H / I per Decision #1.
+
 Cumulative per-axis improvement across this session's closure pass:
 
 | Axis | Before | After | Δ |

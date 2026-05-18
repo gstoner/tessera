@@ -32,8 +32,11 @@ from tessera.compiler.clifford_jit import (
     CliffordJitError,
     CliffordCompiledArtifact,
     CliffordCompiledCallable,
+    CliffordIROpCall,
+    CliffordIRProgram,
     CliffordOpPlanEntry,
     clifford_jit,
+    lower_function_to_ir,
 )
 
 
@@ -58,12 +61,14 @@ def test_decorator_returns_callable_wrapper() -> None:
     def f(a, b):
         return ga.inner(a, b)
 
-    # Lazy variant exposes itself as a CliffordCompiledCallable.
+    # AST → IR lowering runs at decoration time, so the artifact is
+    # already populated before any call.
     assert isinstance(f, CliffordCompiledCallable)
-    # Pre-compile artifact placeholder has empty plan + zero hash.
-    assert f.artifact.plan == ()
-    assert f.artifact.plan_hash == ""
     assert f.artifact.target == "apple_gpu"
+    assert f.artifact.op_names() == ("clifford_inner",)
+    assert f.artifact.plan_hash != ""
+    assert f.artifact.ir is not None
+    assert f.artifact.ir.arg_names == ("a", "b")
 
 
 # ---------------------------------------------------------------------------
@@ -193,17 +198,15 @@ def test_compiled_artifact_metadata_is_json_serializable() -> None:
 # Error semantics — bad ops detected at compile time
 # ---------------------------------------------------------------------------
 
-@darwin_only
-def test_function_with_no_ga_ops_raises_at_compile_time() -> None:
-    """A function that never calls a clifford_* op produces an empty
-    trace plan + raises ``CliffordJitError`` at first call."""
+def test_function_with_no_ga_ops_raises_at_decoration() -> None:
+    """A function that doesn't fit the AST grammar (here: pure
+    arithmetic without any ``ga.*`` call) is rejected at decoration
+    time — that's the new compile-time guarantee."""
 
-    @clifford_jit(target="apple_gpu")
-    def f(x):
-        return x + 1   # pure numpy; no GA op
-
-    with pytest.raises(CliffordJitError, match="empty op plan"):
-        f(np.zeros(4, dtype=np.float32))
+    with pytest.raises(CliffordJitError):
+        @clifford_jit(target="apple_gpu")
+        def f(x):
+            return x + 1   # pure numpy; no GA op
 
 
 # ---------------------------------------------------------------------------
@@ -231,3 +234,167 @@ def test_op_plan_entry_is_immutable() -> None:
     )
     with pytest.raises((AttributeError, TypeError)):
         entry.target = "rocm"   # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# AST → Clifford IR lowering — direct (no GPU dispatch)
+# ---------------------------------------------------------------------------
+
+def test_lower_function_to_ir_single_op() -> None:
+    import tessera.ga as ga
+
+    def f(a, b):
+        return ga.inner(a, b)
+
+    ir = lower_function_to_ir(f)
+    assert isinstance(ir, CliffordIRProgram)
+    assert ir.arg_names == ("a", "b")
+    assert len(ir.ops) == 1
+    op = ir.ops[0]
+    assert op.op_name == "clifford_inner"
+    assert op.python_attr == "inner"
+    assert op.operand_refs == ("a", "b")
+    assert op.result_name == ir.return_ref
+
+
+def test_lower_function_to_ir_nested_call_chain() -> None:
+    """rotor_sandwich → norm — the canonical vertical-slice demo."""
+    import tessera.ga as ga
+
+    def f(rotor, points):
+        return ga.norm(ga.rotor_sandwich(rotor, points))
+
+    ir = lower_function_to_ir(f)
+    assert ir.arg_names == ("rotor", "points")
+    assert len(ir.ops) == 2
+    inner, outer = ir.ops
+    assert inner.op_name == "clifford_rotor_sandwich"
+    assert inner.operand_refs == ("rotor", "points")
+    assert outer.op_name == "clifford_norm"
+    # outer consumes inner's result.
+    assert outer.operand_refs == (inner.result_name,)
+    assert ir.return_ref == outer.result_name
+
+
+def test_ir_text_round_trips_through_metadata() -> None:
+    import json
+    import tessera.ga as ga
+
+    def f(rotor, points):
+        return ga.norm(ga.rotor_sandwich(rotor, points))
+
+    ir = lower_function_to_ir(f)
+    text = ir.text()
+    assert "clifford_rotor_sandwich" in text
+    assert "clifford_norm" in text
+    assert "return" in text
+    # Metadata serializes cleanly.
+    meta = ir.as_metadata()
+    reloaded = json.loads(json.dumps(meta))
+    assert reloaded["arg_names"] == ["rotor", "points"]
+    assert [op["op"] for op in reloaded["ops"]] == [
+        "clifford_rotor_sandwich", "clifford_norm",
+    ]
+
+
+def test_lower_rejects_non_ga_call() -> None:
+    def f(a, b):
+        return min(a, b)  # not a ga.* call
+
+    with pytest.raises(CliffordJitError, match="only ``tessera.ga"):
+        lower_function_to_ir(f)
+
+
+def test_lower_rejects_binop_return() -> None:
+    def f(a, b):
+        return a + b
+
+    with pytest.raises(CliffordJitError, match="unsupported expression type"):
+        lower_function_to_ir(f)
+
+
+def test_lower_accepts_assignment_then_return() -> None:
+    """``rotated = ga.rotor_sandwich(...); return ga.norm(rotated)`` —
+    the canonical vertical-slice form used by the benchmark."""
+    import tessera.ga as ga
+
+    def f(rotor, points):
+        rotated = ga.rotor_sandwich(rotor, points)
+        return ga.norm(rotated)
+
+    ir = lower_function_to_ir(f)
+    assert len(ir.ops) == 2
+    assert ir.ops[0].op_name == "clifford_rotor_sandwich"
+    assert ir.ops[1].op_name == "clifford_norm"
+    # `rotated` is bound to the rotor_sandwich result; norm consumes it.
+    assert ir.ops[1].operand_refs == (ir.ops[0].result_name,)
+
+
+def test_lower_rejects_unknown_name_in_return() -> None:
+    import tessera.ga as ga
+
+    def f(a, b):
+        return ga.inner(a, c)  # noqa: F821 — intentional
+
+    with pytest.raises(CliffordJitError, match="not a function argument"):
+        lower_function_to_ir(f)
+
+
+def test_lower_rejects_branching_body() -> None:
+    import tessera.ga as ga
+
+    def f(a, b):
+        if a is b:
+            return ga.inner(a, b)
+        return ga.inner(b, a)
+
+    with pytest.raises(CliffordJitError, match="simple ``name = expr``"):
+        lower_function_to_ir(f)
+
+
+def test_lower_rejects_keyword_args_on_ga_call() -> None:
+    import tessera.ga as ga
+
+    def f(a):
+        return ga.grade_projection(a, k=2)
+
+    with pytest.raises(CliffordJitError, match="keyword arguments"):
+        lower_function_to_ir(f)
+
+
+def test_lower_rejects_varargs_signature() -> None:
+    import tessera.ga as ga
+
+    def f(a, b, *rest):
+        return ga.inner(a, b)
+
+    with pytest.raises(CliffordJitError, match="positional"):
+        lower_function_to_ir(f)
+
+
+def test_ir_op_call_is_immutable() -> None:
+    op = CliffordIROpCall(
+        op_name="clifford_inner",
+        operand_refs=("a", "b"),
+        result_name="%t0",
+        python_attr="inner",
+    )
+    with pytest.raises((AttributeError, TypeError)):
+        op.op_name = "clifford_norm"  # type: ignore[misc]
+
+
+def test_decorator_artifact_metadata_embeds_ir() -> None:
+    """The serialized metadata carries the IR — useful for AOT export
+    and benchmark-report introspection without rerunning the GPU."""
+    import tessera.ga as ga
+
+    @clifford_jit(target="apple_gpu")
+    def f(rotor, points):
+        return ga.norm(ga.rotor_sandwich(rotor, points))
+
+    meta = f.artifact.as_metadata()
+    assert "ir" in meta
+    assert meta["ir"]["arg_names"] == ["rotor", "points"]
+    assert [op["op"] for op in meta["ir"]["ops"]] == [
+        "clifford_rotor_sandwich", "clifford_norm",
+    ]

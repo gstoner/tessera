@@ -64,6 +64,9 @@ EXPECTED_NATIVE_EBM_OPS = {
     "ebm_inner_step", "ebm_refinement", "ebm_langevin_step",
     "ebm_decode_init", "ebm_bivector_langevin", "ebm_sphere_langevin",
     "ebm_self_verify", "ebm_energy",
+    # 2026-05-18 9/9 closure — stable logsumexp on a precomputed
+    # energies array.
+    "ebm_partition_exact",
 }
 
 # All EBM ops that have a fused MSL kernel in the manifest — this set
@@ -71,10 +74,9 @@ EXPECTED_NATIVE_EBM_OPS = {
 # includes ``ebm_ebt_tiny`` (the workload-only optimization).
 ALL_NATIVE_EBM_MANIFEST_KEYS = EXPECTED_NATIVE_EBM_OPS | {"ebm_ebt_tiny"}
 
-# EBM ops that still have no native dispatch.  `partition_exact` is the
-# only one left — its exhaustive sum over a finite state set is small +
-# branchy enough that GPU dispatch overhead dominates at typical scale.
-EXPECTED_PYTHON_ONLY_EBM_OPS = {"ebm_partition_exact"}
+# EBM ops that still have no native dispatch.  Empty after the 9/9
+# closure — every EBM primitive now ships a fused MSL kernel.
+EXPECTED_PYTHON_ONLY_EBM_OPS = set()
 
 # Every EBM op gets a python_ref row EXCEPT `ebm_refinement` — that's
 # the multi-iteration native wrapper around `inner_step`, with no

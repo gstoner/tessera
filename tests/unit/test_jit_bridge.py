@@ -67,8 +67,8 @@ def test_lookup_apple_gpu_symbol_resolves_ebm_inner_step() -> None:
 
 def test_lookup_apple_gpu_symbol_returns_none_for_unknown_op() -> None:
     assert bridge.lookup_apple_gpu_symbol("nonsense_op_name") is None
-    # Even an EBM op without a fast path returns None.
-    assert bridge.lookup_apple_gpu_symbol("ebm_partition_exact") is None
+    # EBM-prefixed names that aren't in `_EBM_APPLE_GPU_FUSED` return None.
+    assert bridge.lookup_apple_gpu_symbol("ebm_does_not_exist") is None
 
 
 def test_manifest_routes_ebm_prefix_through_ebm_table() -> None:
@@ -260,11 +260,14 @@ def test_dispatch_via_manifest_raises_for_unknown_op() -> None:
 
 
 def test_dispatch_via_manifest_raises_for_planned_only_op() -> None:
-    """Ops whose only manifest entry is ``planned`` raise too."""
+    """Ops whose only manifest entry is ``planned`` (no fused symbol)
+    raise :class:`JitBridgeMiss` — the bridge refuses to dispatch
+    anything it can't resolve through ``_EBM_APPLE_GPU_FUSED`` /
+    ``_CLIFFORD_APPLE_GPU_FUSED``."""
     import ctypes
     with pytest.raises(bridge.JitBridgeMiss):
         bridge.dispatch_via_manifest(
-            "ebm_partition_exact",
+            "ebm_partition_function_ais",
             argtypes=(ctypes.c_int32,),
             args=(ctypes.c_int32(0),),
         )

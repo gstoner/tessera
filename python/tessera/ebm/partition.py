@@ -63,6 +63,83 @@ def partition_function_exact(
     return math.exp(log_z)
 
 
+def partition_exact_from_energies(
+    energies: Any, *, temperature: float = 1.0,
+) -> float:
+    """Compute ``Z = Σ_i exp(-energies[i] / T)`` from precomputed
+    per-state energies.
+
+    Closes the 8/9 → 9/9 native EBM gap.  When ``energies`` is a
+    contiguous f32 numpy array and the Apple GPU runtime is
+    available, routes through ``tessera_apple_gpu_ebm_partition_exact_f32``
+    via the JIT bridge.  Otherwise falls back to a stable
+    log-sum-exp on the host.
+
+    Parameters
+    ----------
+    energies : array-like
+        Per-state energies ``E_i``, any shape (treated as flat).
+    temperature : float, default 1.0
+        Temperature ``T > 0``; smaller T sharpens around the mode.
+
+    Returns
+    -------
+    Z : float
+        Partition value ``Σ_i exp(-E_i / T)``.
+    """
+    if temperature <= 0.0:
+        raise ValueError(
+            f"partition_exact_from_energies requires temperature > 0; "
+            f"got temperature={temperature}.")
+    E = np.ascontiguousarray(np.asarray(energies)).reshape(-1)
+    if E.size == 0:
+        return 0.0
+    # Apple GPU fast path — f32 inputs only.
+    if E.dtype == np.float32:
+        z = _try_apple_gpu_partition_exact_f32(E, float(temperature))
+        if z is not None:
+            return float(z)
+    # Stable host fallback.
+    inv_t = 1.0 / float(temperature)
+    neg = -E.astype(np.float64, copy=False) * inv_t
+    max_neg = float(neg.max())
+    return float(math.exp(max_neg + math.log(float(np.exp(neg - max_neg).sum()))))
+
+
+def _try_apple_gpu_partition_exact_f32(
+    energies: np.ndarray, temperature: float,
+) -> Optional[float]:
+    """Apple GPU fast path for stable logsumexp partition.  Routes
+    through the JIT bridge so the route trace records the manifest-
+    resolved symbol."""
+    try:
+        import ctypes
+        from tessera.compiler import jit_bridge as _bridge
+    except ImportError:
+        return None
+    if energies.dtype != np.float32 or not energies.flags["C_CONTIGUOUS"]:
+        return None
+    out = np.zeros(1, dtype=np.float32)
+    p = ctypes.POINTER(ctypes.c_float)
+    n = int(energies.size)
+    argtypes = (ctypes.POINTER(ctypes.c_float),
+                ctypes.c_int32,
+                ctypes.c_float,
+                ctypes.POINTER(ctypes.c_float))
+    args = (energies.ctypes.data_as(p), ctypes.c_int32(n),
+            ctypes.c_float(temperature), out.ctypes.data_as(p))
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            "ebm_partition_exact", argtypes=argtypes, args=args,
+            args_summary=_bridge.shaped_summary(energies),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
+    return float(out[0])
+
+
 # ---------------------------------------------------------------------------
 # Monte Carlo (importance-sampled) partition estimate
 # ---------------------------------------------------------------------------

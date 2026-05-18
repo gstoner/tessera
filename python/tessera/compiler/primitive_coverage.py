@@ -575,6 +575,19 @@ _SHARDING_RULE_BY_CATEGORY: dict[str, str] = {
     "aot":                 "not_applicable",
     "serialization":       "not_applicable",
     "conformance":         "not_applicable",
+
+    # — GA + EBM (Decision #25, 2026-05-17): the GA primitives
+    #   shard naturally over the leading batch axis (pointwise on
+    #   the coefficient vector) — known rule; the field ops have
+    #   halo-exchange requirements like the stencil family ⇒ partial
+    #   pending Phase G mesh integration.  EBM primitives mostly
+    #   shard like elementwise pointwise ops on the candidate axis.
+    "geometric_algebra":   "partial",   # pointwise on batch axis is
+                                         # trivial; field ops are
+                                         # halo-bound (stencil-like)
+    "ebm":                 "partial",   # pointwise on (B, K) axes;
+                                         # collective reductions for
+                                         # partition functions
 }
 
 
@@ -668,6 +681,13 @@ _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
     "aot":                 "not_applicable",
     "serialization":       "not_applicable",
     "conformance":         "not_applicable",
+
+    # — GA + EBM (Decision #25, 2026-05-17): Clifford ops are
+    #   per-element on the batch axis ⇒ batching is trivial.  EBM
+    #   primitives accept ``(B, ...)`` shapes and operate pointwise,
+    #   same.
+    "geometric_algebra":   "complete",
+    "ebm":                 "complete",
 }
 
 _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
@@ -731,6 +751,16 @@ _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
     "conformance":         "not_applicable",
     "data":                "not_applicable",
     "tokenizer":           "not_applicable",
+
+    # — GA + EBM (Decision #25, 2026-05-17): Clifford ops are linear
+    #   in their multivector operands ⇒ transpose-rule is well-defined
+    #   per the algebra's reverse anti-automorphism (see GA6 planning
+    #   doc).  EBM primitives are mostly affine in y / grad ⇒ trivially
+    #   transposable, except for argmin self_verify (non-linear).
+    "geometric_algebra":   "partial",   # well-known dual; full VJP/JVP
+                                         # closure scheduled GA6
+    "ebm":                 "partial",   # argmin/argmax break linearity
+                                         # for self_verify; others linear
 }
 
 # Math semantics / shape rule / dtype-layout rule share the same verdict by
@@ -816,6 +846,18 @@ _SEMANTIC_RULES_BY_CATEGORY: dict[str, str] = {
     "serialization":       "not_applicable",
     "conformance":         "not_applicable",
     "schedule":            "complete",      # scalar functions of step
+
+    # — GA + EBM (Decision #25, 2026-05-17): both families have
+    #   closed-form mathematical semantics fully documented:
+    #     - GA: Cl(p,q,r) Cayley-table products + grade-projection +
+    #           Hodge-star + exterior derivative on a uniform grid
+    #     - EBM: y' = y - eta*∇E + sqrt(2eta T)*ξ Langevin step,
+    #            self_verify = hard / soft argmin, etc.
+    #   Shape + dtype rules follow from the closed-form definitions
+    #   (input shape determines output shape; dtype canonicalized via
+    #   tessera.dtype).
+    "geometric_algebra":   "complete",
+    "ebm":                 "complete",
 }
 
 _LOWERING_RULE_BY_CATEGORY: dict[str, str] = {
@@ -863,6 +905,18 @@ _LOWERING_RULE_BY_CATEGORY: dict[str, str] = {
     "state_update":        "complete",
     "state_space":         "complete",
     "stencil":             "complete",
+
+    # — GA + EBM (Decision #25, 2026-05-17): the Clifford dialect
+    #   (`tessera_clifford`) + EBM annotation passes (`tessera_ebm`)
+    #   ship as MLIR 21 dialects with GA8 ExpandProductTable and EBM6
+    #   inner-loop fusion already implemented.  Apple-GPU runtime
+    #   dispatch is wired through `jit_bridge.dispatch_via_manifest`
+    #   for every fused primitive — lowering coverage is complete on
+    #   the CPU + Apple-GPU axis.  Per Decision #1 the lowering for
+    #   NVIDIA / ROCm / Cerebras / Metalium remains gated on
+    #   Phase G / H / I.
+    "geometric_algebra":   "complete",
+    "ebm":                 "complete",
     # Everything else (tensor_algebra / layout_transform / indexing / sparse /
     # linalg / etc.) stays at whatever existing path set (partial for python
     # primitives without decomposition; complete for OP_SPECS imports).
@@ -1293,6 +1347,16 @@ _TESTS_BY_CATEGORY: dict[str, str] = {
     "conformance":         "not_applicable",
     "data":                "complete",       # test_data_pipeline.py (S15 surface)
     "tokenizer":           "complete",
+
+    # — GA + EBM (Decision #25, 2026-05-17): GA has dedicated test
+    #   files (test_ga_*, test_apple_gpu_clifford_*); EBM is tested
+    #   by test_ebm_*, test_benchmark_ga_ebm.py, test_jit_bridge.py
+    #   + the benchmark harness itself.  Every primitive has at
+    #   least one correctness test (per-shape native vs Python ref
+    #   in the benchmark sweep + dedicated VJP/JVP tests for the
+    #   handful with autodiff already shipped).
+    "geometric_algebra":   "complete",
+    "ebm":                 "complete",
 }
 
 
@@ -2303,6 +2367,33 @@ def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
         if entry.name in planned_names:
             raise ValueError(f"duplicate planned primitive coverage entry: {entry.name}")
         planned_names.add(entry.name)
+        # Decision #25 (2026-05-17): the planned-entry path didn't
+        # apply the multi-axis category overrides — only the
+        # OP_SPECS + python_primitive paths did.  Apply them here so
+        # GA + EBM entries (and any future ``_planned()`` family)
+        # get the same category-based axis promotion as the rest of
+        # the registry.  We rebuild the frozen dataclass with the
+        # promoted contract_status; the rest of the entry is
+        # preserved verbatim.
+        promoted = dict(entry.contract_status)
+        _apply_category_overrides(promoted, entry.category)
+        _apply_effect_overrides(promoted, entry.effect or "pure")
+        _apply_per_name_overrides(promoted, entry.name)
+        if promoted != entry.contract_status:
+            entry = PrimitiveCoverage(
+                name=entry.name,
+                category=entry.category,
+                status=entry.status,
+                contract_status=promoted,
+                model_families=entry.model_families,
+                references=entry.references,
+                notes=entry.notes,
+                existing_op=entry.existing_op,
+                graph_name=entry.graph_name,
+                effect=entry.effect,
+                lowering=entry.lowering,
+                metadata=entry.metadata,
+            )
         entries.setdefault(entry.name, entry)
     # GA9 (2026-05-17): planned entries don't go through
     # `_supplemental_metadata` so they miss the manifest attachment.

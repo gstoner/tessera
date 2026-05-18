@@ -26,6 +26,50 @@ specs. This document defines the public vocabulary those specs should use.
 | `distribution` | Mesh and sharding placement for distributed arrays. This is separate from both shape and layout. | `ShardSpec`, `MeshSpec`, `DistributedArray.shard_spec` |
 | `numeric_policy` | Tessera-specific numerics contract: storage type, accumulator type, rounding, quantization scale/axis, determinism, and optional math mode. | `NumericPolicy(storage, accum, rounding, scale, quant_axis, deterministic[, math_mode])` |
 
+## Multivector — A Parallel Tensor Kind (GA0 Scope Lock)
+
+Per Q2 of [`docs/audit/ga_scope_lock.md`](../audit/ga_scope_lock.md),
+the Geometric Algebra surface introduces a **sibling tensor kind**
+called `Multivector` rather than adding `grade` and `algebra` as a
+seventh and eighth canonical tensor attribute.  This keeps the six
+canonical tensor attributes above unchanged for the tensor kind,
+while giving Multivector its own kind-specific schema.
+
+A `Multivector` value carries:
+
+| Attribute | Meaning | Current representation |
+| --- | --- | --- |
+| `algebra` | Clifford signature `Cl(p, q, r)`. v1 supports `Cl(3, 0)` (3D Euclidean) and `Cl(1, 3)` (Minkowski) only. | `tessera.ga.Cl(p, q, r)`, `Multivector.algebra`, `Multivector.algebra.signature` |
+| `coefficients` | Coefficient array on the algebra's basis blades. Last axis size = `algebra.dim`; preceding axes are batch. | `Multivector.coefficients` (`np.ndarray` shape `(*batch, algebra.dim)`) |
+| `grades` | Set of grades present (subset of `{0, 1, …, algebra.n}`). `None` ⇒ all grades active; `grade_projection` narrows it. | `Multivector.grades`, `Multivector.active_grades` |
+| `dtype` | Coefficient element type. Same canonical dtype set as the tensor kind — `f32` / `f64` / `f16` / `bf16`. | `Multivector.dtype` (NumPy dtype, canonicalized at the public-API boundary) |
+| `shape` | Leading (batch) shape, **excluding** the algebra axis. A scalar (rank-0) Multivector has `shape=()`. | `Multivector.shape` (= `coefficients.shape[:-1]`) |
+
+A `MultivectorField` adds:
+
+| Attribute | Meaning | Current representation |
+| --- | --- | --- |
+| `spatial_ndim` | Rank of the underlying grid (3 for Cl(3,0) field ops `ext_deriv` / `vec_deriv` / `codiff`). | `MultivectorField.spatial_ndim` |
+| `spacing` | Per-axis grid step `h_i`. Read by every finite-difference op. | `MultivectorField.spacing` |
+| `spatial_shape` | Grid shape `(D_0, …, D_{spatial_ndim - 1})`. The algebra axis is the trailing dimension of `values`. | `MultivectorField.spatial_shape` |
+
+**Why a separate kind?**  The grade structure and Clifford-algebra
+signature don't compose meaningfully with the tensor kind's
+attributes (a tensor `layout` is orthogonal to a multivector
+`grade`; a tensor `distribution` over a mesh has no clean
+counterpart for the algebra axis).  Keeping Multivector parallel
+means the canonical six attributes stay clean for tensor ops, and
+Multivector-specific rules (grade-restricted subspaces, Cayley-table
+products) live in `tessera.ga` without leaking into the tensor IR.
+
+**Shared with the tensor kind**: dtype canonicalization (the same
+canonical dtype names + alias normalization apply), the broader
+`@jit(target=…)` lowering pipeline, and `tessera._apple_gpu_dispatch`
+for Apple GPU dispatch.  Manifest entries for Clifford ops live in
+the **parallel** `_CLIFFORD_APPLE_GPU_FUSED` table inside
+[`backend_manifest.py`](../../python/tessera/compiler/backend_manifest.py),
+not in the tensor `OP_SPECS` catalog.
+
 ## Dtype Names
 
 Tessera stores dtype metadata as canonical strings. The canonical spelling is

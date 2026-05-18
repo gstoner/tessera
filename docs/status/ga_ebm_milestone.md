@@ -4,34 +4,36 @@
 > changes; everything else in the repo (READMEs, roadmap, audit) cites
 > the *claims* below rather than restating them.
 >
-> **Last updated:** 2026-05-17 (**compiler-integrated vertical slice landed — `@clifford_jit(target="apple_gpu")` produces a traced op plan + manifest-resolved Apple target metadata + benchmark row; rotor-conditioned EBT workload fuses GA + EBM through public APIs**).
+> **Last updated:** 2026-05-18 (**9/9 native EBM closed (`ebm_partition_exact` fused via stable logsumexp); buffer-pool sweep complete (15 dispatchers migrated mechanically); `@clifford_jit` upgraded from trace-capture to AST → CliffordIRProgram lowering at decoration time — the rotor_sandwich → norm vertical slice now ships an actual IR**).
 
 ## TL;DR
 
 | Surface | Status | Coverage |
 |---|---|---|
 | **GA primitives (Clifford)** | ✅ all native + benchmarked | 17 / 17 fused MSL kernels on Apple GPU |
-| **EBM primitives (native)** | 🟡 close to complete, 1 to go | **8 / 9** with fused MSL kernels |
-| **EBM primitives (Python ref only)** | ⏳ 1 op | Only `ebm_partition_exact` — exhaustive small-state sum, not GPU-shaped |
+| **EBM primitives (native)** | ✅ **complete** | **9 / 9** with fused MSL kernels |
+| **EBM primitives (Python ref only)** | — | (none — `ebm_partition_exact` shipped 2026-05-17 with stable logsumexp) |
 | **Workload benchmarks** | ✅ 2 composite chains, **all driven through public APIs**, every native row carries a `dispatched_on_gpu` proof bit | `ga_feature_pipeline` (decisive native win); `ebt_tiny_refinement` (loses at tiny default shape — honest reporting) |
 | **EBT-tiny break-even sweep** | ✅ opt-in mode (`--ebt-sweep`), summary tags each shape with `status="native_dispatched"` or `"degraded_fallback"` | Widened **streaming closed-form** kernel (any `D`; `K ≤ 256`). Recent M-series run: first native win at `B=16,K=32,D=128/T=8` (~1.1×); peak **~55× at `B=64,K=128,D=1024/T=256`**. Numbers will drift across hosts — the proof bit is the stable contract. |
 | **GA / EBM via `tessera.ga.*` / `tessera.ebm.*`** | 🟢 **integration gap fully closed** | **17 / 17 GA + 9 / 9 native EBM** ops route through [`tessera._apple_gpu_dispatch`](../../python/tessera/_apple_gpu_dispatch.py) (incl. `ebm.ebt_tiny`) |
 | **JIT / compiler bridge** | ✅ **landed for all 26 fast paths** | [`tessera.compiler.jit_bridge`](../../python/tessera/compiler/jit_bridge.py) — Python frontend → manifest resolve → shared loader dispatch + thread-local route trace. **All 17 GA + 9 EBM** fast paths call `dispatch_via_manifest`; every public-API GPU dispatch produces a `JitBridgeRoute` row that records `(op, target, status, symbol, context, latency_ms)`. The benchmark's native EBM primitive rows + the JIT-bridge benchmark rows + the workload rows all use the trace as their proof-of-dispatch bit. |
-| **Compiler vertical slice** | ✅ **landed** | [`tessera.compiler.clifford_jit`](../../python/tessera/compiler/clifford_jit.py) — `@clifford_jit(target="apple_gpu")` decorator traces a Clifford-only function on first call, captures the op plan from the bridge trace, verifies every op against the manifest, and freezes a `CliffordCompiledArtifact` carrying the plan + plan hash + Apple target metadata.  Benchmark `vertical_slice` row embeds the full artifact JSON so reports show the compile-time plan. v1 demo: `point_cloud_rotor_invariant` (`rotor_sandwich → norm`). |
+| **Compiler vertical slice** | ✅ **AST → IR lowering** | [`tessera.compiler.clifford_jit`](../../python/tessera/compiler/clifford_jit.py) — `@clifford_jit(target="apple_gpu")` walks the function's AST at decoration time, emits a `CliffordIRProgram` (SSA-form `%tN` refs + per-op `CliffordIROpCall` entries), validates every op against `_CLIFFORD_APPLE_GPU_FUSED`, and freezes a `CliffordCompiledArtifact` whose `as_metadata()` embeds the IR. Runtime walks the IR and dispatches each op through `jit_bridge`. Replaces the older trace-capture path; that path remains as a fallback for source-unreadable callables (REPL / `exec`). v1 demo: `point_cloud_rotor_invariant` (`rotated = ga.rotor_sandwich(rotor, points); return ga.norm(rotated)`). |
 | **Fused GA + EBM workload** | ✅ **landed** | `rotor_conditioned_ebt` — `ga.exp_mv → ga.rotor_sandwich → ebm.ebt_tiny` through public APIs, all bridge-traced, native ~20× speedup vs the equivalent numpy chain on a recent M-series run. |
-| **Metal buffer pool** | 🟡 **partial — heavy-use dispatchers migrated** | `MetalDeviceContext` keeps a 19-bucket shared-storage buffer pool keyed by size class.  `dispatch_clifford_unary_8x8_f32_msl` and `dispatch_ebm_ebt_tiny_refinement_argmin_f32_msl` recycle buffers via `metal_buffer_acquire` / `metal_buffer_release`; the remaining ~25 dispatchers still call `newBufferWithBytes` directly — migration is mechanical, open follow-up. |
+| **Metal buffer pool** | ✅ **complete** | `MetalDeviceContext` keeps a 19-bucket shared-storage buffer pool keyed by size class.  All 18 dispatchers in `apple_gpu_runtime.mm` recycle buffers via `metal_buffer_acquire` / `metal_buffer_release` — 15 were migrated mechanically via `tools/migrate_buffer_pool.py` on 2026-05-17; the canonical `return true` epilogue is rewritten to `bool _pool_ok = ...; if (_pool_ok) memcpy; releases; return _pool_ok;` so releases run on both success + failure paths. |
 | **Build / test gate** | ✅ deterministic CI test, **in `scripts/validate.sh` spine** | [`tests/unit/test_benchmark_ga_ebm.py`](../../tests/unit/test_benchmark_ga_ebm.py) — 118 tests + 20-test [`tests/unit/test_jit_bridge.py`](../../tests/unit/test_jit_bridge.py), graceful non-Darwin skip |
 
 ## What's claimed
 
 - **17 / 17 GA primitives** ship fused MSL kernels on Apple GPU, each end-to-end benchmarked (Python API → manifest lookup → ctypes dispatch → Metal execution → correctness check vs Python reference). Manifest source of truth: [`backend_manifest.py::_CLIFFORD_APPLE_GPU_FUSED`](../../python/tessera/compiler/backend_manifest.py).
-- **8 / 9 EBM primitives** ship fused MSL kernels on Apple GPU:
+- **9 / 9 EBM primitives** ship fused MSL kernels on Apple GPU:
   `ebm_inner_step`, `ebm_refinement`, `ebm_langevin_step`,
   `ebm_decode_init`, `ebm_bivector_langevin` (kernel-reuse — same MSL
   symbol as `ebm_langevin_step` on grade-projected inputs),
-  `ebm_sphere_langevin`, `ebm_self_verify`, and `ebm_energy` (quadratic
-  specialization).  Manifest: [`_EBM_APPLE_GPU_FUSED`](../../python/tessera/compiler/backend_manifest.py).
-- **Apple GPU C ABI surface**: GA primitive symbols + 7 EBM symbols (one EBM
+  `ebm_sphere_langevin`, `ebm_self_verify`, `ebm_energy` (quadratic
+  specialization), and **`ebm_partition_exact`** (single-dispatch stable
+  logsumexp: `Z = exp(max + log(sum(exp(-E_i/T - max))))`). Manifest:
+  [`_EBM_APPLE_GPU_FUSED`](../../python/tessera/compiler/backend_manifest.py).
+- **Apple GPU C ABI surface**: GA primitive symbols + 8 EBM symbols (one EBM
   kernel is reused for `bivector_langevin`), all in
   [`apple_gpu_runtime.mm`](../../src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm).
 - **Workload mode**: two composite benchmark chains stringing primitives together (`ga_feature_pipeline` + `ebt_tiny_refinement`), each emitting `apple_gpu` + `python_ref` rows so speedup is a single subtraction.
@@ -130,34 +132,29 @@ benchmarks/apple_gpu/sample_ga_ebm_report.json
 
 In priority order (descending):
 
-1. **Finish the buffer-pool sweep.**  Two of ~27 dispatchers
-   currently recycle via `metal_buffer_acquire` / `_release`; the
-   remaining ones still call `newBufferWithBytes` directly.
-   Migration is mechanical (one diff per helper) and brings every
-   small-shape kernel's dispatch floor down uniformly.  Pair with
-   async command-queue scheduling (don't block `waitUntilCompleted`
-   inside the helper) for the next big perf step.
-
-2. **On-device RNG (Philox in MSL).**  The native `langevin_step` /
+1. **On-device RNG (Philox in MSL).**  The native `langevin_step` /
    `decode_init` / `sphere_langevin` kernels take a host-supplied
    noise buffer today; Philox-in-MSL lets the kernels generate
    their own deterministic noise from a 4-element seed.  Unblocks
    T-step Langevin chains where re-uploading noise each step is
-   the dominant cost.
+   the dominant cost.  Pair with async command-queue scheduling
+   (don't block `waitUntilCompleted` inside the helper) for the
+   next big perf step now that the buffer pool sweep is complete.
 
-3. **Lift arbitrary `energy_fn` to MSL** (paired with #2).  v1
+2. **Lift arbitrary `energy_fn` to MSL** (paired with #1).  v1
    `ebm_energy` is a quadratic specialization; a restricted
    Python-AST-to-MSL visitor (handles polynomial + a handful of
    activations) would enable real EBT refinement with per-step
    gradient recomputation natively, instead of fixed-gradient
    snapshots.
 
-4. **Broaden `@clifford_jit`** beyond the v1 Cl(3,0) f32 surface:
-   add Cl(1,3) support, fp16 dtype, and (longer term) lift the
-   "trace once at first call" model to a real AST → IR lowering so
-   shape-dependent branches don't silently fall off the plan.
+3. **Broaden `@clifford_jit`** beyond the v1 Cl(3,0) f32 surface:
+   add Cl(1,3) support, fp16 dtype, and lift the AST → IR lowering
+   beyond straight-line assignments (control flow + per-batch
+   loops). The IR is already in place — extending the lowerer is a
+   structural change, not a redesign.
 
-5. **More fused workloads** alongside `rotor_conditioned_ebt` and
+4. **More fused workloads** alongside `rotor_conditioned_ebt` and
    `ebt_tiny`.  Candidates: a sphere-Langevin chain with
    on-device retraction loop, a GA-conditioned diffusion step
    (`rotor_sandwich` + `langevin_step` chained).  Same pattern:
@@ -165,10 +162,7 @@ In priority order (descending):
    small shapes and write one MSL kernel that consumes the whole
    chain.
 
-6. **`ebm_partition_exact` stays reference** — small-state
-   exhaustive sums are not GPU-shaped at typical scale.
-
-7. **NVIDIA / AMD / Cerebras / Metalium** GA + EBM coverage — gated
+5. **NVIDIA / AMD / Cerebras / Metalium** GA + EBM coverage — gated
    on Phase G / H / I.
 
 ## Sources

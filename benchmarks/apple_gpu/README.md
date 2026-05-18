@@ -27,6 +27,7 @@ For every primitive the driver exercises the full stack:
 - **Workloads**: 2 small composite chains — `ga_feature_pipeline` (`exp → rotor_sandwich → norm`) and `ebt_tiny_refinement` (K-candidate × T-step loop with native `ebm_refinement` + native `ebm_self_verify`). Both emit `apple_gpu` + `python_ref` rows.
 - **EBT-tiny break-even sweep**: opt-in via `--ebt-sweep` — runs a 7-point `(B, K, D, T)` ladder. After the fused `ebm.ebt_tiny` kernel (refinement + energy + argmin in one MSL dispatch): **first native win at `B=32,K=64,D=512/T=32` (17.9×); peak 116× at `B=64,K=128,D=1024/T=256`**.
 - **Integration via `tessera.ga.*` / `tessera.ebm.*`**: **17 / 17 GA + 9 / 9 native EBM** ops route through [`tessera._apple_gpu_dispatch`](../../python/tessera/_apple_gpu_dispatch.py) transparently — every user-visible call with a fused kernel takes the GPU path when its inputs match the manifest contract. The workload benchmarks all call public APIs.
+- **JIT / compiler bridge**: [`tessera.compiler.jit_bridge`](../../python/tessera/compiler/jit_bridge.py) is the single hop between public APIs and the runtime. Each dispatch resolves through `backend_manifest.manifest_for(op)` → picks the `apple_gpu/fused` symbol → binds via the shared loader → records a `JitBridgeRoute(op, target, status, symbol, context, latency_ms)` in a thread-local trace. The benchmark emits a `namespace="jit_bridge"` row per traced op with a `routes` column showing the full chain.
 
 ## Workload mode — beyond per-primitive timing
 

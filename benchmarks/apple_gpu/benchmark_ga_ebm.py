@@ -1426,6 +1426,129 @@ def run_ebm_apple_gpu_path(name: str, shape: str,
 
 
 # ---------------------------------------------------------------------------
+# JIT-bridge benchmark — exercises the full Python → JIT-context →
+# manifest-resolve → shared-loader-dispatch → result path with the
+# bridge's trace recording on.  The bridge contract is:
+#
+#   1. ``tessera.ga.inner(a, b)`` (or any GA/EBM public API with a
+#      fast path) calls ``jit_bridge.dispatch_via_manifest(op_name=...)``
+#   2. The bridge looks up the apple_gpu symbol via the manifest
+#   3. The bridge binds it through ``tessera._apple_gpu_dispatch``
+#   4. The bridge records a ``JitBridgeRoute(op, target, symbol,
+#      context, latency_ms, ...)`` in the thread-local trace
+#
+# This benchmark wraps a tiny @jit(target="apple_gpu") span using the
+# bridge's ``jit_context`` so the route trace carries
+# ``context="jit:apple_gpu"`` for every dispatch — proving the route
+# end-to-end.
+# ---------------------------------------------------------------------------
+
+def _jit_bridge_ga_inner_path() -> tuple[Callable[[], np.ndarray],
+                                          float, "list[Any]"]:
+    """Run a small ``ga.inner`` workload under ``jit_context`` and
+    return ``(dispatch, max_abs_err_vs_numpy, routes_seen)``.
+
+    The dispatch closure resets the trace, runs the call, drains the
+    trace.  Each invocation produces exactly one route row.
+    """
+    from tessera.compiler import jit_bridge as _bridge
+    a = ga.Cl(3, 0)
+    rng = np.random.RandomState(3000)
+    A = rng.randn(32, 8).astype(np.float32)
+    B = rng.randn(32, 8).astype(np.float32)
+    mv_a = ga.Multivector(A, a)
+    mv_b = ga.Multivector(B, a)
+    expected = np.array([
+        float(ga.inner(ga.Multivector(A[i], a),
+                        ga.Multivector(B[i], a))) for i in range(32)
+    ])
+
+    last_routes: list[Any] = []
+
+    def dispatch() -> np.ndarray:
+        _bridge.clear_dispatch_trace()
+        with _bridge.jit_context("apple_gpu"):
+            out = ga.inner(mv_a, mv_b)
+        last_routes[:] = _bridge.take_dispatch_trace()
+        return np.asarray(out)
+
+    out = dispatch()
+    err = float(np.abs(out - expected).max())
+    return dispatch, err, last_routes
+
+
+def _jit_bridge_ebm_inner_step_path() -> tuple[Callable[[], np.ndarray],
+                                                 float, "list[Any]"]:
+    """Mirror of the GA case for ``ebm.inner_step``."""
+    from tessera.compiler import jit_bridge as _bridge
+    rng = np.random.RandomState(3001)
+    y = rng.randn(64, 16).astype(np.float32)
+    grad = rng.randn(64, 16).astype(np.float32)
+    eta = 0.05
+    expected = (y - eta * grad).astype(np.float32)
+
+    last_routes: list[Any] = []
+
+    def dispatch() -> np.ndarray:
+        _bridge.clear_dispatch_trace()
+        with _bridge.jit_context("apple_gpu"):
+            out = ebm.inner_step(y, grad, eta=eta)
+        last_routes[:] = _bridge.take_dispatch_trace()
+        return out
+
+    out = dispatch()
+    err = float(np.abs(out - expected).max())
+    return dispatch, err, last_routes
+
+
+def run_jit_bridge_path(name: str, shape: str, builder: Callable,
+                         tolerance: float, reps: int,
+                         device: str, version: str) -> dict[str, Any]:
+    """Time a bridge-mediated dispatch + record the routes.
+
+    The dispatch closure has already opened/closed a ``jit_context``
+    span, so the captured routes carry ``context="jit:apple_gpu"``.
+    Tracing is on for the duration of the timed loop so every
+    dispatch in the loop produces a route row in the shared
+    ``last_routes`` list the builder returns; we read the final
+    routes from that list (the closure itself drains the trace).
+    """
+    from tessera.compiler import jit_bridge as _bridge
+    dispatch, err, last_routes = builder()
+    prev_tracing = _bridge.tracing_enabled()
+    _bridge.set_tracing_enabled(True)
+    try:
+        samples_ms = collect_samples(dispatch, reps)
+    finally:
+        _bridge.set_tracing_enabled(prev_tracing)
+    timing = timing_stats(samples_ms)
+    # After the timed loop `last_routes` holds the route(s) captured
+    # by the most-recent dispatch — exactly what we want to record.
+    route_records = [
+        {"op": r.op_name, "target": r.target, "status": r.status,
+         "context": r.context, "symbol": r.symbol,
+         "latency_ms": r.latency_ms}
+        for r in last_routes
+    ]
+    return {
+        "backend": "apple_gpu",
+        "namespace": "jit_bridge",
+        "op": name,
+        "shape": shape,
+        "dtype": "f32",
+        "mode": "jit_resolved",
+        "reps": reps,
+        **timing,
+        "max_abs_err": err,
+        "tolerance": tolerance,
+        "ok": err <= tolerance,
+        "routes": route_records,
+        "device": device,
+        "tessera_version": version,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
 
@@ -1458,6 +1581,7 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
                include_primitives: bool = True,
                include_workloads: bool = True,
                include_ebt_sweep: bool = False,
+               include_jit_bridge: bool = True,
                ebt_sweep_points: tuple[tuple[int, int, int, int], ...]
                    = _DEFAULT_EBT_SWEEP) -> dict[str, Any]:
     """Top-level entry: build the report dict (no I/O).
@@ -1562,13 +1686,33 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
                 device=device, version=version,
             ))
 
-    ga_count = sum(1 for r in rows if r["op"].startswith("clifford_"))
-    ebm_count = sum(1 for r in rows if r["op"].startswith("ebm_"))
+    # JIT-bridge rows — exercise the full Python → JIT context →
+    # manifest resolve → shared-loader dispatch → result path and
+    # record each route in the report.
+    if include_jit_bridge and rt is not None:
+        for op_name, shape_desc, builder, tol in (
+            ("clifford_inner",  "B=32,D=8/Cl(3,0)",
+             _jit_bridge_ga_inner_path, 5e-5),
+            ("ebm_inner_step",  "B=64,D=16",
+             _jit_bridge_ebm_inner_step_path, 1e-6),
+        ):
+            rows.append(run_jit_bridge_path(
+                op_name, shape_desc, builder, tolerance=tol,
+                reps=reps, device=device, version=version,
+            ))
+
+    ga_count = sum(1 for r in rows if r["op"].startswith("clifford_")
+                                       and r.get("namespace") == "ga")
+    ebm_count = sum(1 for r in rows if r["op"].startswith("ebm_")
+                                        and r.get("namespace") == "ebm")
     workload_count = sum(1 for r in rows if r.get("namespace") == "workload")
     ebm_native_count = sum(1 for r in rows
                             if r["op"].startswith("ebm_")
-                            and r["backend"] == "apple_gpu")
+                            and r["backend"] == "apple_gpu"
+                            and r.get("namespace") == "ebm")
     sweep_count = sum(1 for r in rows if r["op"] == "ebt_tiny_sweep")
+    jit_bridge_count = sum(1 for r in rows
+                            if r.get("namespace") == "jit_bridge")
     return {
         "runs": rows,
         "ga_primitives_count": ga_count,
@@ -1579,6 +1723,7 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
         "ebt_sweep_count": sweep_count,
         "ebt_sweep_summary": (_ebt_sweep_break_even_summary(rows)
                                if sweep_count else None),
+        "jit_bridge_count": jit_bridge_count,
         "compile_time_ms": compile_time_ms,
         "skipped_apple_gpu": skip_reason,
         "device": device,
@@ -1642,6 +1787,11 @@ def main(argv: list[str] | None = None) -> int:
                               "apple_gpu + python_ref rows for each "
                               "(B, K, D, T) point in _DEFAULT_EBT_SWEEP and "
                               "summarizes break-even in the envelope."))
+    parser.add_argument("--no-jit-bridge", action="store_true",
+                        help=("Skip the JIT-bridge rows (Python → "
+                              "jit_context → manifest → shared loader → "
+                              "result, with per-dispatch trace recorded "
+                              "in the report row's `routes` column)."))
     parser.add_argument("--output", type=Path, default=None,
                         help="JSON output path (stdout if omitted)")
     args = parser.parse_args(argv)
@@ -1652,7 +1802,8 @@ def main(argv: list[str] | None = None) -> int:
     report = run_report(reps=reps, refinement_T=args.refinement_T,
                         include_primitives=include_primitives,
                         include_workloads=include_workloads,
-                        include_ebt_sweep=args.ebt_sweep)
+                        include_ebt_sweep=args.ebt_sweep,
+                        include_jit_bridge=not args.no_jit_bridge)
     payload = json.dumps(report, indent=2, sort_keys=True, default=float)
     if args.output is not None:
         args.output.write_text(payload)

@@ -100,6 +100,7 @@ REQUIRED_ENVELOPE_FIELDS = {
     "runs", "ga_primitives_count", "ebm_paths_count",
     "ebm_native_apple_gpu_count", "native_ebm_ops", "workload_count",
     "ebt_sweep_count", "ebt_sweep_summary",
+    "jit_bridge_count",
     "compile_time_ms", "skipped_apple_gpu",
     "device", "tessera_version", "reps",
 }
@@ -867,6 +868,77 @@ def test_main_writes_parseable_json_file(tmp_path: Path) -> None:
     ops = {r["op"] for r in payload["runs"]}
     assert EXPECTED_EBM_PYTHON_ROWS <= ops
     assert EXPECTED_WORKLOAD_OPS <= ops
+
+
+# ---------------------------------------------------------------------------
+# JIT-bridge rows — Python → jit_context → manifest → shared loader → result
+# ---------------------------------------------------------------------------
+
+def _jit_bridge_rows(report):
+    return _rows(report, lambda r: r.get("namespace") == "jit_bridge")
+
+
+def test_jit_bridge_rows_emitted_when_runtime_available(report: dict) -> None:
+    if not _apple_gpu_available(report):
+        pytest.skip("apple_gpu unavailable")
+    rows = _jit_bridge_rows(report)
+    ops = {r["op"] for r in rows}
+    assert ops == {"clifford_inner", "ebm_inner_step"}
+    assert report["jit_bridge_count"] == len(rows)
+
+
+def test_jit_bridge_rows_carry_routes_with_jit_context(report: dict) -> None:
+    """Each jit_bridge row must include a `routes` column populated by
+    the bridge's thread-local trace, and the context tag must mark
+    it as JIT-driven."""
+    if not _apple_gpu_available(report):
+        pytest.skip("apple_gpu unavailable")
+    for row in _jit_bridge_rows(report):
+        assert "routes" in row
+        assert isinstance(row["routes"], list)
+        assert len(row["routes"]) >= 1, (
+            f"{row['op']}: no routes recorded — bridge trace empty"
+        )
+        for route in row["routes"]:
+            assert route["target"] == "apple_gpu"
+            assert route["status"] == "fused"
+            assert route["context"] == "jit:apple_gpu"
+            assert "tessera_apple_gpu_" in route["symbol"]
+
+
+def test_jit_bridge_routes_resolve_via_manifest(report: dict) -> None:
+    """The symbol recorded in each route must be the one the manifest
+    resolves for that op — proves we went through the manifest."""
+    if not _apple_gpu_available(report):
+        pytest.skip("apple_gpu unavailable")
+    from tessera.compiler import jit_bridge as bridge_mod
+    for row in _jit_bridge_rows(report):
+        for route in row["routes"]:
+            expected = bridge_mod.lookup_apple_gpu_symbol(route["op"])
+            assert route["symbol"] == expected, (
+                f"{row['op']}: route symbol {route['symbol']!r} "
+                f"!= manifest-resolved {expected!r}"
+            )
+
+
+def test_jit_bridge_rows_pass_correctness_gate(report: dict) -> None:
+    if not _apple_gpu_available(report):
+        pytest.skip("apple_gpu unavailable")
+    for row in _jit_bridge_rows(report):
+        assert row["ok"] is True, (
+            f"{row['op']}: bridge route diverged from numpy ref — "
+            f"err={row['max_abs_err']} > tol={row['tolerance']}"
+        )
+
+
+def test_no_jit_bridge_flag_drops_jit_bridge_rows(tmp_path) -> None:
+    r = bench.run_report(reps=bench.DEFAULT_REPS_CI, tmp_dir=tmp_path,
+                          include_primitives=False,
+                          include_workloads=False,
+                          include_jit_bridge=False)
+    rows = [row for row in r["runs"] if row.get("namespace") == "jit_bridge"]
+    assert rows == []
+    assert r["jit_bridge_count"] == 0
 
 
 def test_compile_time_separated_from_dispatch_time(report: dict) -> None:

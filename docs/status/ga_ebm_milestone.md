@@ -4,7 +4,7 @@
 > changes; everything else in the repo (READMEs, roadmap, audit) cites
 > the *claims* below rather than restating them.
 >
-> **Last updated:** 2026-05-17 (**full public-API GPU coverage + fused EBT-tiny optimization**).
+> **Last updated:** 2026-05-17 (**JIT/compiler bridge: Python → manifest → shared loader, every dispatch traceable end-to-end**).
 
 ## TL;DR
 
@@ -16,7 +16,8 @@
 | **Workload benchmarks** | ✅ 2 composite chains, **all driven through public APIs** | `ga_feature_pipeline` (33× speedup); `ebt_tiny_refinement` (fused single-dispatch kernel) |
 | **EBT-tiny break-even sweep** | ✅ opt-in mode (`--ebt-sweep`) | After fused `ebt_tiny` kernel: **first native win at `B=32,K=64,D=512/T=32` (17.9×); peak 116× at `B=64,K=128,D=1024/T=256`** |
 | **GA / EBM via `tessera.ga.*` / `tessera.ebm.*`** | 🟢 **integration gap fully closed** | **17 / 17 GA + 9 / 9 native EBM** ops route through [`tessera._apple_gpu_dispatch`](../../python/tessera/_apple_gpu_dispatch.py) (incl. new `ebm.ebt_tiny`) |
-| **Build / test gate** | ✅ deterministic CI test, **in `scripts/validate.sh` spine** | [`tests/unit/test_benchmark_ga_ebm.py`](../../tests/unit/test_benchmark_ga_ebm.py) — 113 tests, graceful non-Darwin skip |
+| **JIT / compiler bridge** | ✅ **landed** | [`tessera.compiler.jit_bridge`](../../python/tessera/compiler/jit_bridge.py) — Python frontend → manifest resolve → shared loader dispatch + thread-local route trace (`op`, `target`, `status`, `symbol`, `context`, `latency_ms`). Benchmark records per-row `routes` column proving each dispatch went through the bridge. |
+| **Build / test gate** | ✅ deterministic CI test, **in `scripts/validate.sh` spine** | [`tests/unit/test_benchmark_ga_ebm.py`](../../tests/unit/test_benchmark_ga_ebm.py) — 118 tests + 20-test [`tests/unit/test_jit_bridge.py`](../../tests/unit/test_jit_bridge.py), graceful non-Darwin skip |
 
 ## What's claimed
 
@@ -33,6 +34,7 @@
 - **Workload mode**: two composite benchmark chains stringing primitives together (`ga_feature_pipeline` + `ebt_tiny_refinement`), each emitting `apple_gpu` + `python_ref` rows so speedup is a single subtraction.
 - **EBT-tiny break-even sweep**: opt-in `--ebt-sweep` flag emits one apple_gpu + python_ref row per `(B, K, D, T)` point and summarizes `first_native_win_shape` in the envelope. At the v1 sweep ladder the native row hasn't beaten numpy yet — see "Known non-claims" #1 for why.
 - **`tessera.ga.inner` and `tessera.ebm.inner_step` dispatch through `tessera._apple_gpu_dispatch`** on Apple Silicon — no benchmark-local ctypes required to get the GPU speedup. The dispatcher caches the compiled dylib + bound symbols across calls.
+- **JIT / compiler bridge ([`tessera.compiler.jit_bridge`](../../python/tessera/compiler/jit_bridge.py))** wires the four-stage pipeline: (1) the Python frontend calls `dispatch_via_manifest(op_name, args)`, (2) the bridge resolves the apple_gpu C ABI symbol via `manifest_for(op_name)`, (3) it binds the symbol through the shared loader, (4) it records a `JitBridgeRoute(op, target, status, symbol, context, latency_ms)` row in the thread-local trace. Inside a `jit_context("apple_gpu")` span the trace marks the context as `jit:apple_gpu`. The benchmark exposes this via `namespace="jit_bridge"` rows with a `routes` column proving each dispatch went through the bridge end-to-end.
 - **CI health check**: `python benchmarks/apple_gpu/benchmark_ga_ebm.py --ci` returns 0 + a parseable JSON report when Apple Silicon + clang++ are present; exits cleanly with `skipped_apple_gpu` reason on non-Darwin.  Wired into [`scripts/validate.sh`](../../scripts/validate.sh) so the full validation spine runs it.
 
 ## Tested hardware / toolchain

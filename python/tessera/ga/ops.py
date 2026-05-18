@@ -304,32 +304,41 @@ def _try_apple_gpu_unary_8x8_cl30_f32(
 def _try_apple_gpu_inner_cl30_f32(
     a: Multivector, b: Multivector,
 ) -> Optional[np.ndarray]:
-    """``<a, b>`` on ``Cl(3,0)`` f32 batched inputs."""
+    """``<a, b>`` on ``Cl(3,0)`` f32 batched inputs.
+
+    Routed through :mod:`tessera.compiler.jit_bridge` so the manifest
+    resolves the C ABI symbol and the shared loader binds + invokes
+    it.  Records a route trace row when bridge tracing is enabled.
+    """
     A = a.coefficients
     B = b.coefficients
     if not _is_cl30_f32_8axis(A, B):
         return None
     try:
         import ctypes
-        from tessera._apple_gpu_dispatch import bind_symbol
+        from tessera.compiler import jit_bridge as _bridge
     except ImportError:
-        return None
-    fn = bind_symbol(
-        "tessera_apple_gpu_clifford_inner_cl30_f32",
-        (ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32),
-    )
-    if fn is None:
         return None
     A_c = np.ascontiguousarray(A.reshape(-1, 8))
     B_c = np.ascontiguousarray(B.reshape(-1, 8))
     batch = A_c.shape[0]
     out = np.zeros(batch, dtype=np.float32)
     p = ctypes.POINTER(ctypes.c_float)
-    fn(A_c.ctypes.data_as(p), B_c.ctypes.data_as(p), out.ctypes.data_as(p),
-       ctypes.c_int32(batch))
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            "clifford_inner",
+            argtypes=(ctypes.POINTER(ctypes.c_float),
+                      ctypes.POINTER(ctypes.c_float),
+                      ctypes.POINTER(ctypes.c_float),
+                      ctypes.c_int32),
+            args=(A_c.ctypes.data_as(p), B_c.ctypes.data_as(p),
+                  out.ctypes.data_as(p), ctypes.c_int32(batch)),
+            args_summary=_bridge.shaped_summary(A_c, B_c),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
     return out.reshape(A.shape[:-1]) if A.ndim > 1 else out[0]
 
 

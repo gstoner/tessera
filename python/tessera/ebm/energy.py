@@ -162,32 +162,38 @@ def _try_apple_gpu_inner_step(
     """Try the Apple GPU dispatch path. Returns ``None`` when the
     runtime isn't available — callers fall back to the numpy path.
 
-    Routed through ``tessera._apple_gpu_dispatch.bind_symbol`` so the
-    runtime dylib is compiled once per process and the ctypes binding
-    is cached. Only the no-noise, f32, contiguous case takes this path.
+    Routed through :mod:`tessera.compiler.jit_bridge` so the manifest
+    resolves the C ABI symbol and the shared loader binds + invokes
+    it.  Records a route trace row when bridge tracing is enabled.
+    Only the no-noise, f32, contiguous case takes this path.
     """
     try:
         import ctypes
-        from tessera._apple_gpu_dispatch import bind_symbol
+        from tessera.compiler import jit_bridge as _bridge
     except ImportError:
         return None
     if not (y.flags["C_CONTIGUOUS"] and grad.flags["C_CONTIGUOUS"]):
         return None
-    fn = bind_symbol(
-        "tessera_apple_gpu_ebm_inner_step_f32",
-        (ctypes.POINTER(ctypes.c_float),
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_float,
-         ctypes.POINTER(ctypes.c_float),
-         ctypes.c_int32),
-    )
-    if fn is None:
-        return None
     out = np.zeros_like(y)
     n = int(y.size)
     p = ctypes.POINTER(ctypes.c_float)
-    fn(y.ctypes.data_as(p), grad.ctypes.data_as(p), ctypes.c_float(eta),
-       out.ctypes.data_as(p), ctypes.c_int32(n))
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            "ebm_inner_step",
+            argtypes=(ctypes.POINTER(ctypes.c_float),
+                      ctypes.POINTER(ctypes.c_float),
+                      ctypes.c_float,
+                      ctypes.POINTER(ctypes.c_float),
+                      ctypes.c_int32),
+            args=(y.ctypes.data_as(p), grad.ctypes.data_as(p),
+                  ctypes.c_float(eta),
+                  out.ctypes.data_as(p), ctypes.c_int32(n)),
+            args_summary=_bridge.shaped_summary(y, grad),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
     return out
 
 

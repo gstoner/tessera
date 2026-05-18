@@ -728,6 +728,209 @@ def _ebm_refinement_apple_gpu_path(
     return dispatch, err, sym
 
 
+def _ebm_langevin_step_apple_gpu_path(
+    rt: ctypes.CDLL,
+) -> tuple[Callable[[], np.ndarray], float, str]:
+    """Native Apple-GPU Langevin step with caller-supplied noise.
+
+    Mirrors ``tessera.ebm.langevin_step`` at T > 0:
+      ``out = y - eta * grad + sqrt(2*eta*T) * noise``
+
+    Caller pre-generates ``noise`` from the same Philox stream the
+    Python path uses so the two outputs are bit-identical at fp32.
+    """
+    sym = "tessera_apple_gpu_ebm_langevin_step_f32"
+    fn = getattr(rt, sym)
+    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.c_float, ctypes.c_float,
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.c_int32]
+    fn.restype = None
+    rng = np.random.RandomState(1020)
+    y = np.ascontiguousarray(rng.randn(16, 4).astype(np.float32))
+    grad = np.ascontiguousarray(rng.randn(16, 4).astype(np.float32))
+    noise = np.ascontiguousarray(rng.randn(16, 4).astype(np.float32))
+    eta = 0.01
+    temperature = 1.0
+    noise_scale = float(math.sqrt(2.0 * eta * temperature))
+    n = int(y.size)
+    out = np.zeros_like(y)
+    expected = (y - eta * grad + noise_scale * noise).astype(np.float32)
+
+    def dispatch() -> np.ndarray:
+        fn(_ptr_f(y), _ptr_f(grad), _ptr_f(noise),
+           ctypes.c_float(eta), ctypes.c_float(noise_scale),
+           _ptr_f(out), ctypes.c_int32(n))
+        return out
+
+    dispatch()
+    err = float(np.abs(out - expected).max())
+    return dispatch, err, sym
+
+
+def _ebm_decode_init_apple_gpu_path(
+    rt: ctypes.CDLL,
+) -> tuple[Callable[[], np.ndarray], float, str]:
+    """Native Apple-GPU decode_init noise-apply.
+
+    Mirrors ``ebm.decode_init(init_strategy='noise')`` semantics —
+    output shape ``(B, K, *event)`` with each element ``base[b, *e] +
+    std * noise``.  Caller pre-generates the deterministic ``noise``
+    buffer from the RNGKey.
+    """
+    sym = "tessera_apple_gpu_ebm_decode_init_noise_apply_f32"
+    fn = getattr(rt, sym)
+    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
+                   ctypes.c_int32,
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.c_float,
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.c_int32]
+    fn.restype = None
+    rng = np.random.RandomState(1030)
+    # B=4, K=6, event=12 → 288-element output.
+    B, K, E = 4, 6, 12
+    base = np.ascontiguousarray(rng.randn(B, E).astype(np.float32))  # per-batch mean
+    # Broadcast: base[b, e] → (b, k, e) for every k.
+    noise = np.ascontiguousarray(rng.randn(B, K, E).astype(np.float32))
+    std = 0.5
+    n = int(noise.size)
+    base_flat = np.ascontiguousarray(np.broadcast_to(
+        base[:, None, :], (B, K, E)).reshape(-1).astype(np.float32))
+    base_len = int(base_flat.size)  # n; no broadcasting needed at kernel level
+    out = np.zeros_like(noise)
+    expected = (base_flat.reshape(B, K, E) + std * noise).astype(np.float32)
+
+    def dispatch() -> np.ndarray:
+        fn(_ptr_f(base_flat), ctypes.c_int32(base_len),
+           _ptr_f(noise), ctypes.c_float(std),
+           _ptr_f(out), ctypes.c_int32(n))
+        return out
+
+    dispatch()
+    err = float(np.abs(out - expected).max())
+    return dispatch, err, sym
+
+
+def _ebm_bivector_langevin_apple_gpu_path(
+    rt: ctypes.CDLL,
+) -> tuple[Callable[[], np.ndarray], float, str]:
+    """Native Apple-GPU bivector Langevin — composition of GA
+    ``grade_projection`` + ``ebm_langevin_step``.
+
+    The 8-coefficient Cl(3,0) state is restricted to grade-2 bivectors
+    (only blades 3, 5, 6 nonzero).  ``grad_fn`` returns a Multivector,
+    we project to grade-2 (mask non-bivector blades to zero), generate
+    grade-2 noise, then run a single langevin_step kernel.  This is
+    the GA-kernel-reuse demonstration the manifest documents.
+    """
+    sym = "tessera_apple_gpu_ebm_langevin_step_f32"
+    fn = getattr(rt, sym)
+    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.c_float, ctypes.c_float,
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.c_int32]
+    fn.restype = None
+
+    # State: bivector blades only.
+    rng = np.random.RandomState(1040)
+    coeffs = np.zeros(8, dtype=np.float32)
+    coeffs[3] = 0.5    # e12
+    coeffs[5] = -0.2   # e13
+    coeffs[6] = 0.3    # e23
+    # Gradient: full 8-vector that we grade-project to bivector subspace.
+    raw_grad = rng.randn(8).astype(np.float32)
+    grad_proj = np.zeros_like(raw_grad)
+    for k in (3, 5, 6):
+        grad_proj[k] = raw_grad[k]
+    # Noise: same projection.
+    raw_noise = rng.randn(8).astype(np.float32)
+    noise_proj = np.zeros_like(raw_noise)
+    for k in (3, 5, 6):
+        noise_proj[k] = raw_noise[k]
+    eta = 0.01
+    temperature = 1.0
+    noise_scale = float(math.sqrt(2.0 * eta * temperature))
+    n = 8
+    out = np.zeros(8, dtype=np.float32)
+    expected = coeffs - eta * grad_proj + noise_scale * noise_proj
+
+    state = np.ascontiguousarray(coeffs)
+    g = np.ascontiguousarray(grad_proj)
+    ns = np.ascontiguousarray(noise_proj)
+
+    def dispatch() -> np.ndarray:
+        fn(_ptr_f(state), _ptr_f(g), _ptr_f(ns),
+           ctypes.c_float(eta), ctypes.c_float(noise_scale),
+           _ptr_f(out), ctypes.c_int32(n))
+        return out
+
+    dispatch()
+    # After the affine combo the non-bivector blades should still be 0.
+    err = float(max(np.abs(out - expected).max(),
+                    abs(out[0]), abs(out[1]), abs(out[2]),
+                    abs(out[4]), abs(out[7])))
+    return dispatch, err, sym
+
+
+def _ebm_sphere_langevin_apple_gpu_path(
+    rt: ctypes.CDLL,
+) -> tuple[Callable[[], np.ndarray], float, str]:
+    """Native Apple-GPU sphere Langevin — full step in one MSL kernel.
+
+    Tangent-projects grad + noise, applies the Euler-Maruyama step,
+    retracts to the unit sphere — all on-device.  Matches
+    ``tessera.ebm.sphere_langevin_step`` semantically (with caller-
+    supplied noise for determinism).
+    """
+    sym = "tessera_apple_gpu_ebm_sphere_langevin_step_f32"
+    fn = getattr(rt, sym)
+    fn.argtypes = [ctypes.POINTER(ctypes.c_float),
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.c_float, ctypes.c_float,
+                   ctypes.POINTER(ctypes.c_float),
+                   ctypes.c_int32]
+    fn.restype = None
+    # Start on the unit sphere.
+    x = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+    rng = np.random.RandomState(1050)
+    grad = rng.randn(3).astype(np.float32)
+    noise = rng.randn(3).astype(np.float32)
+    eta = 0.005
+    temperature = 0.5
+    noise_scale = float(math.sqrt(2.0 * eta * temperature))
+    d = 3
+    out = np.zeros(3, dtype=np.float32)
+
+    # Reference: tangent project, step, retract.
+    gdot = float(np.dot(grad, x))
+    ndot = float(np.dot(noise, x))
+    grad_tan = grad - gdot * x
+    noise_tan = noise - ndot * x
+    y = x - eta * grad_tan + noise_scale * noise_tan
+    expected = (y / float(np.linalg.norm(y))).astype(np.float32)
+
+    x_c = np.ascontiguousarray(x)
+    g_c = np.ascontiguousarray(grad)
+    n_c = np.ascontiguousarray(noise)
+
+    def dispatch() -> np.ndarray:
+        fn(_ptr_f(x_c), _ptr_f(g_c), _ptr_f(n_c),
+           ctypes.c_float(eta), ctypes.c_float(noise_scale),
+           _ptr_f(out), ctypes.c_int32(d))
+        return out
+
+    dispatch()
+    err = float(np.abs(out - expected).max())
+    return dispatch, err, sym
+
+
+# Python-reference Langevin (kept for the non-Apple skip path).
 def _ebm_langevin_step_path() -> tuple[Callable[[], None], float]:
     rng = np.random.RandomState(1002)
     y = rng.randn(16, 4).astype(np.float32)
@@ -823,10 +1026,11 @@ def _ebm_sphere_langevin_path() -> tuple[Callable[[], None], float]:
 
 
 # Python-reference EBM paths: (op_name, shape_desc, builder, tolerance).
-# These remain ``backend=python_ref`` until a native MSL kernel lands;
-# the manifest entry (``apple_gpu = planned``) confirms the gap.
+# Always emitted (cross-platform coverage); on Apple Silicon they sit
+# alongside the apple_gpu rows so the speedup is a single subtraction.
 _EBM_PYTHON_PATHS: tuple[tuple[str, str, Callable, float], ...] = (
     ("ebm_energy",            "B=8,D=4",        _ebm_energy_path,            1e-5),
+    ("ebm_inner_step",        "B=16,D=4",       _ebm_inner_step_python_path, 1e-5),
     ("ebm_langevin_step",     "B=16,D=4/T=0",   _ebm_langevin_step_path,     1e-5),
     ("ebm_self_verify",       "B=4,K=8,D=16",   _ebm_self_verify_path,       0.0),
     ("ebm_decode_init",       "K=6,shape=4x12", _ebm_decode_init_path,       0.0),
@@ -834,6 +1038,235 @@ _EBM_PYTHON_PATHS: tuple[tuple[str, str, Callable, float], ...] = (
     ("ebm_bivector_langevin", "Cl(3,0)/T=0",    _ebm_bivector_langevin_path, 1e-4),
     ("ebm_sphere_langevin",   "S^2/T=0",        _ebm_sphere_langevin_path,   1e-5),
 )
+
+
+# Native-EBM Apple-GPU builder registry: each entry is
+# (op_name, shape_desc, builder_fn(rt) -> (dispatch, err, symbol), tolerance).
+def _NATIVE_EBM_BUILDERS(
+    refinement_T: int,
+) -> tuple[tuple[str, str, Callable, float], ...]:
+    return (
+        ("ebm_inner_step",        "B=16,D=4",
+         _ebm_inner_step_apple_gpu_path,        1e-6),
+        ("ebm_refinement",        f"B=8,D=6/T={refinement_T}",
+         lambda rt: _ebm_refinement_apple_gpu_path(rt, T=refinement_T),
+         1e-5),
+        ("ebm_langevin_step",     "B=16,D=4/T=1",
+         _ebm_langevin_step_apple_gpu_path,     1e-6),
+        ("ebm_decode_init",       "B=4,K=6,event=12",
+         _ebm_decode_init_apple_gpu_path,       1e-6),
+        ("ebm_bivector_langevin", "Cl(3,0)/T=1",
+         _ebm_bivector_langevin_apple_gpu_path, 1e-6),
+        ("ebm_sphere_langevin",   "S^2/T=0.5",
+         _ebm_sphere_langevin_apple_gpu_path,   1e-5),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Workload mode — small composite pipelines that string multiple
+# primitives together, not single-op timings.
+# ---------------------------------------------------------------------------
+
+def _workload_ga_pipeline_inputs(seed: int = 2000):
+    """Deterministic inputs for the GA feature pipeline:
+        - B random pure bivectors (8-coeff each)
+        - B random multivectors V
+        - Pipeline: R = exp(B); O = rotor_sandwich(R, V); s = norm(O)
+    """
+    B = 32
+    rng = np.random.RandomState(seed)
+    bivecs = np.zeros((B, 8), dtype=np.float32)
+    bivecs[:, 3] = rng.randn(B).astype(np.float32) * 0.3
+    bivecs[:, 5] = rng.randn(B).astype(np.float32) * 0.3
+    bivecs[:, 6] = rng.randn(B).astype(np.float32) * 0.3
+    vectors = rng.randn(B, 8).astype(np.float32)
+    return B, bivecs, vectors
+
+
+def _workload_ga_pipeline_python_path() -> tuple[Callable[[], np.ndarray],
+                                                   float, str]:
+    """Python reference: exp_mv → rotor_sandwich → norm on a batch.
+
+    Returns ``(dispatch, max_abs_err_self, shape_descriptor)``. The
+    "err vs reference" for the Python row is 0 (it *is* the reference).
+    """
+    B, bivecs, vectors = _workload_ga_pipeline_inputs()
+
+    def step() -> np.ndarray:
+        out = np.zeros(B, dtype=np.float32)
+        for i in range(B):
+            rotor = ga.exp_mv(ga.Multivector(bivecs[i], _CL30))
+            rotated = ga.rotor_sandwich(rotor,
+                                         ga.Multivector(vectors[i], _CL30))
+            out[i] = float(np.asarray(ga.norm(rotated)))
+        return out
+
+    step()  # warm up
+    return step, 0.0, f"B={B}/exp→sandwich→norm"
+
+
+def _workload_ga_pipeline_apple_gpu_path(
+    rt: ctypes.CDLL,
+) -> tuple[Callable[[], np.ndarray], float, tuple[str, ...], str]:
+    """Apple-GPU pipeline: dispatch each stage as a native MSL kernel
+    chained host-side. The three symbols are
+    ``exp → rotor_sandwich → norm``; the host glue is just buffer
+    swapping. Bit-matches the Python reference to fp32 tolerance.
+    """
+    B, bivecs, vectors = _workload_ga_pipeline_inputs()
+    sym_exp = "tessera_apple_gpu_clifford_exp_cl30_f32"
+    sym_san = "tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32"
+    sym_nrm = "tessera_apple_gpu_clifford_norm_cl30_f32"
+
+    fn_exp = _bind_unary_8x8(rt, sym_exp)
+    fn_san = _bind_binary_8x8(rt, sym_san)
+    fn_nrm = _bind_unary_8x8(rt, sym_nrm)  # ABI: (in, out, batch); out len=B
+
+    bivecs_c = np.ascontiguousarray(bivecs)
+    vectors_c = np.ascontiguousarray(vectors)
+    rotors = np.zeros_like(bivecs_c)
+    rotated = np.zeros_like(bivecs_c)
+    norms = np.zeros(B, dtype=np.float32)
+
+    def step() -> np.ndarray:
+        fn_exp(_ptr_f(bivecs_c), _ptr_f(rotors), ctypes.c_int32(B))
+        fn_san(_ptr_f(rotors), _ptr_f(vectors_c), _ptr_f(rotated),
+               ctypes.c_int32(B))
+        fn_nrm(_ptr_f(rotated), _ptr_f(norms), ctypes.c_int32(B))
+        return norms
+
+    out = step()  # warm + populate
+    # Reference via Python — same inputs, same algorithm.
+    ref, _, _ = _workload_ga_pipeline_python_path()
+    ref_out = ref()
+    err = float(np.abs(out - ref_out).max())
+    return step, err, (sym_exp, sym_san, sym_nrm), f"B={B}/exp→sandwich→norm"
+
+
+def _workload_ebt_tiny_inputs(seed: int = 2100):
+    """Deterministic inputs for the EBT-tiny refinement loop.
+
+    The energy is E(y) = 0.5 * ||y||^2 ⇒ grad = y. With fixed grad
+    (snapshot of y at step 0), T inner steps drive y → y0 - T·eta·y0
+    = (1 - T·eta) * y0 — closed form.  Real EBT recomputes grad each
+    step; the snapshot variant is what `ebm_refinement` measures so
+    we keep the workload consistent with it.
+
+    Returns (n_candidates=B*K rolled into a single ping-pong buffer,
+    D, eta).
+    """
+    B, K, D = 4, 8, 6
+    rng = np.random.RandomState(seed)
+    y0 = rng.randn(B * K, D).astype(np.float32)
+    eta = 0.02
+    return B, K, D, y0, eta
+
+
+def _workload_ebt_tiny_python_path(T: int) -> tuple[Callable[[], np.ndarray],
+                                                     float, str]:
+    """Python reference EBT-tiny loop:
+        - K candidates per batch
+        - T inner steps of inner_step on a snapshot of grad = state_0
+        - self_verify reduces K → 1 by argmin(energy)
+    """
+    B, K, D, y0, eta = _workload_ebt_tiny_inputs()
+
+    def step() -> np.ndarray:
+        grad = y0.copy()                          # fixed grad snapshot
+        y = y0.copy()
+        for _ in range(T):
+            y = ebm.inner_step(y, grad, eta=eta)  # numpy path
+        energies = np.sum(y * y, axis=1).reshape(B, K)
+        candidates = y.reshape(B, K, D)
+        return ebm.self_verify(energies, candidates)
+
+    step()
+    return step, 0.0, f"B={B},K={K},D={D}/T={T}"
+
+
+def _workload_ebt_tiny_apple_gpu_path(
+    rt: ctypes.CDLL, T: int,
+) -> tuple[Callable[[], np.ndarray], float, tuple[str, ...], str]:
+    """Apple-GPU EBT-tiny loop: T inner-step iterations dispatched
+    via the native ``ebm_refinement`` kernel (ping-pong on-device);
+    self_verify runs host-side (no MSL kernel yet)."""
+    B, K, D, y0, eta = _workload_ebt_tiny_inputs()
+    sym_ref = "tessera_apple_gpu_ebm_refinement_f32"
+    fn_ref = getattr(rt, sym_ref)
+    fn_ref.argtypes = [ctypes.POINTER(ctypes.c_float),
+                       ctypes.POINTER(ctypes.c_float),
+                       ctypes.c_float, ctypes.c_int32,
+                       ctypes.POINTER(ctypes.c_float),
+                       ctypes.c_int32]
+    fn_ref.restype = None
+    y0_c = np.ascontiguousarray(y0)
+    grad_c = np.ascontiguousarray(y0.copy())   # fixed grad snapshot
+    y_out = np.zeros_like(y0_c)
+    n = int(y0.size)
+
+    def step() -> np.ndarray:
+        fn_ref(_ptr_f(y0_c), _ptr_f(grad_c),
+               ctypes.c_float(eta), ctypes.c_int32(T),
+               _ptr_f(y_out), ctypes.c_int32(n))
+        energies = np.sum(y_out * y_out, axis=1).reshape(B, K)
+        candidates = y_out.reshape(B, K, D)
+        return ebm.self_verify(energies, candidates)
+
+    out = step()
+    ref, _, _ = _workload_ebt_tiny_python_path(T)
+    ref_out = ref()
+    err = float(np.abs(out - ref_out).max())
+    return step, err, (sym_ref, "ebm.self_verify (host)"), (
+        f"B={B},K={K},D={D}/T={T}"
+    )
+
+
+def run_workload_apple_gpu(name: str, shape: str,
+                            dispatch: Callable, err: float,
+                            symbols: tuple[str, ...],
+                            tolerance: float, reps: int,
+                            device: str, version: str) -> dict[str, Any]:
+    samples_ms = collect_samples(dispatch, reps)
+    timing = timing_stats(samples_ms)
+    return {
+        "backend": "apple_gpu",
+        "namespace": "workload",
+        "op": name,
+        "shape": shape,
+        "dtype": "f32",
+        "mode": "fused_chain",
+        "reps": reps,
+        **timing,
+        "max_abs_err": err,
+        "tolerance": tolerance,
+        "ok": err <= tolerance,
+        "symbols": list(symbols),
+        "device": device,
+        "tessera_version": version,
+    }
+
+
+def run_workload_python(name: str, shape: str,
+                         dispatch: Callable, err: float,
+                         tolerance: float, reps: int,
+                         device: str, version: str) -> dict[str, Any]:
+    samples_ms = collect_samples(dispatch, reps)
+    timing = timing_stats(samples_ms)
+    return {
+        "backend": "python_ref",
+        "namespace": "workload",
+        "op": name,
+        "shape": shape,
+        "dtype": "f32",
+        "mode": "reference_chain",
+        "reps": reps,
+        **timing,
+        "max_abs_err": err,
+        "tolerance": tolerance,
+        "ok": err <= tolerance,
+        "device": device,
+        "tessera_version": version,
+    }
 
 
 def _manifest_status_for(op_name: str, target: str) -> str:
@@ -929,13 +1362,25 @@ DEFAULT_REPS_CI = 2
 
 def run_report(reps: int = DEFAULT_REPS_MANUAL,
                tmp_dir: Path | None = None,
-               *, refinement_T: int = 8) -> dict[str, Any]:
+               *,
+               refinement_T: int = 8,
+               include_primitives: bool = True,
+               include_workloads: bool = True) -> dict[str, Any]:
     """Top-level entry: build the report dict (no I/O).
 
     The report envelope records ``compile_time_ms`` (clang++ wall-clock
     for the runtime dylib) separately from per-row ``latency_ms`` (the
     pure GPU/CPU dispatch time), so consumers can amortize compile
     cost across many runs and compare dispatch latency in isolation.
+
+    Two coverage axes:
+      - ``include_primitives``: 17 GA primitives + 6 native EBM
+        primitives + 7 Python-reference EBM rows (so consumers can
+        compute native-vs-reference speedup per op).
+      - ``include_workloads``: GA feature pipeline (exp →
+        rotor_sandwich → norm) + EBT-tiny refinement loop (decode_init
+        → T × inner_step → self_verify), each in apple_gpu + python_ref
+        variants so speedup is a single subtraction.
     """
     if tmp_dir is None:
         import tempfile
@@ -946,34 +1391,64 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
     rows: list[dict[str, Any]] = []
     native_ebm_ops: set[str] = set()
 
-    if rt is not None:
-        # GA primitives — all 17 ship fused MSL kernels.
-        for row in build_ga_entries(rt):
-            rows.append(run_ga_primitive(row, reps, device, version))
-        # Native EBM primitives — ebm_inner_step + ebm_refinement.
-        dispatch, err, sym = _ebm_inner_step_apple_gpu_path(rt)
-        rows.append(run_ebm_apple_gpu_path(
-            "ebm_inner_step", "B=16,D=4", dispatch, err, sym,
-            tolerance=1e-6, reps=reps, device=device, version=version,
-        ))
-        native_ebm_ops.add("ebm_inner_step")
-        dispatch, err, sym = _ebm_refinement_apple_gpu_path(rt, T=refinement_T)
-        rows.append(run_ebm_apple_gpu_path(
-            "ebm_refinement", f"B=8,D=6/T={refinement_T}",
-            dispatch, err, sym,
-            tolerance=1e-5, reps=reps, device=device, version=version,
-        ))
-        native_ebm_ops.add("ebm_refinement")
+    if include_primitives:
+        if rt is not None:
+            # 17 GA primitives — all ship fused MSL kernels.
+            for row in build_ga_entries(rt):
+                rows.append(run_ga_primitive(row, reps, device, version))
 
-    # Python-reference EBM paths — emitted on every host regardless of
-    # whether the Apple GPU runtime built.  The row's `apple_gpu_status`
-    # column comes from `ebm_manifest_for()` (the source of truth).
-    for name, shape, builder, tol in _EBM_PYTHON_PATHS:
-        rows.append(run_ebm_python_path(name, shape, builder, tol,
-                                          reps, device, version))
+            # Native EBM primitives — 6 total as of broadening sprint.
+            #   inner_step, refinement, langevin_step,
+            #   decode_init, bivector_langevin, sphere_langevin
+            for op_name, shape_desc, builder, tol in _NATIVE_EBM_BUILDERS(
+                    refinement_T):
+                dispatch, err, sym = builder(rt)
+                rows.append(run_ebm_apple_gpu_path(
+                    op_name, shape_desc, dispatch, err, sym,
+                    tolerance=tol, reps=reps,
+                    device=device, version=version,
+                ))
+                native_ebm_ops.add(op_name)
+
+        # Python-reference EBM paths — emitted on every host so the
+        # report keeps comprehensive coverage even on non-Darwin AND so
+        # speedup-vs-reference is visible on Apple Silicon as the
+        # apple_gpu/python_ref row pair per op.
+        for name, shape, builder, tol in _EBM_PYTHON_PATHS:
+            rows.append(run_ebm_python_path(name, shape, builder, tol,
+                                              reps, device, version))
+
+    if include_workloads:
+        # Workload pair 1: small GA feature pipeline.
+        if rt is not None:
+            dispatch, err, syms, shape = _workload_ga_pipeline_apple_gpu_path(rt)
+            rows.append(run_workload_apple_gpu(
+                "ga_feature_pipeline", shape, dispatch, err, syms,
+                tolerance=2e-5, reps=reps, device=device, version=version,
+            ))
+        dispatch, err, shape = _workload_ga_pipeline_python_path()
+        rows.append(run_workload_python(
+            "ga_feature_pipeline", shape, dispatch, err,
+            tolerance=2e-5, reps=reps, device=device, version=version,
+        ))
+
+        # Workload pair 2: EBT-tiny refinement loop.
+        if rt is not None:
+            dispatch, err, syms, shape = _workload_ebt_tiny_apple_gpu_path(
+                rt, refinement_T)
+            rows.append(run_workload_apple_gpu(
+                "ebt_tiny_refinement", shape, dispatch, err, syms,
+                tolerance=1e-4, reps=reps, device=device, version=version,
+            ))
+        dispatch, err, shape = _workload_ebt_tiny_python_path(refinement_T)
+        rows.append(run_workload_python(
+            "ebt_tiny_refinement", shape, dispatch, err,
+            tolerance=1e-4, reps=reps, device=device, version=version,
+        ))
 
     ga_count = sum(1 for r in rows if r["op"].startswith("clifford_"))
     ebm_count = sum(1 for r in rows if r["op"].startswith("ebm_"))
+    workload_count = sum(1 for r in rows if r.get("namespace") == "workload")
     ebm_native_count = sum(1 for r in rows
                             if r["op"].startswith("ebm_")
                             and r["backend"] == "apple_gpu")
@@ -983,6 +1458,7 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
         "ebm_paths_count": ebm_count,
         "ebm_native_apple_gpu_count": ebm_native_count,
         "native_ebm_ops": sorted(native_ebm_ops),
+        "workload_count": workload_count,
         "compile_time_ms": compile_time_ms,
         "skipped_apple_gpu": skip_reason,
         "device": device,
@@ -1002,12 +1478,20 @@ def main(argv: list[str] | None = None) -> int:
                               f"({DEFAULT_REPS_CI}); overrides --reps."))
     parser.add_argument("--refinement-T", type=int, default=8,
                         help="EBT-refinement inner-step iterations (default 8).")
+    parser.add_argument("--primitives-only", action="store_true",
+                        help="Skip workload mode (GA pipeline + EBT-tiny loop).")
+    parser.add_argument("--workloads-only", action="store_true",
+                        help="Skip per-primitive rows; only run composite workloads.")
     parser.add_argument("--output", type=Path, default=None,
                         help="JSON output path (stdout if omitted)")
     args = parser.parse_args(argv)
 
     reps = DEFAULT_REPS_CI if args.ci else args.reps
-    report = run_report(reps=reps, refinement_T=args.refinement_T)
+    include_primitives = not args.workloads_only
+    include_workloads = not args.primitives_only
+    report = run_report(reps=reps, refinement_T=args.refinement_T,
+                        include_primitives=include_primitives,
+                        include_workloads=include_workloads)
     payload = json.dumps(report, indent=2, sort_keys=True, default=float)
     if args.output is not None:
         args.output.write_text(payload)

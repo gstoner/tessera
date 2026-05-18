@@ -1,5 +1,5 @@
 ---
-status: Active (development roadmap — all 6 scope-lock questions resolved; GA7/GA8/EBM5/EBM6 dialects build on MLIR 21; **all 17 of 17** GA primitives ship fused MSL kernels on Apple GPU and are end-to-end benchmarked; **2 of 9 EBM primitives** (`ebm_inner_step`, `ebm_refinement`) ship native MSL kernels — remaining 7 stay on the deterministic Python reference path with `apple_gpu_status=planned` in the manifest)
+status: Active (development roadmap — all 6 scope-lock questions resolved; GA7/GA8/EBM5/EBM6 dialects build on MLIR 21; **all 17 of 17** GA primitives ship fused MSL kernels on Apple GPU and are end-to-end benchmarked; **6 of 9 EBM primitives** ship native MSL kernels (`ebm_inner_step`, `ebm_refinement`, `ebm_langevin_step`, `ebm_decode_init`, `ebm_bivector_langevin`, `ebm_sphere_langevin`); 2 composite **workload benchmarks** land (`ga_feature_pipeline` — 13× speedup vs Python ref; `ebt_tiny_refinement` — K-cand × T-step loop); remaining 3 EBM ops (`ebm_energy` / `ebm_self_verify` / `ebm_partition_exact`) stay on Python reference with `apple_gpu_status=planned`)
 classification: Audit / Plan
 authority: Sequences Geometric Algebra (Clifford) + Energy-Based Model primitive surfaces into Tessera
 last_updated: 2026-05-17
@@ -818,6 +818,45 @@ end-to-end rotor_sandwich smoke.
   `ebm_decode_init` / `ebm_partition_exact` / `ebm_bivector_langevin`
   / `ebm_sphere_langevin`) — `apple_gpu_status=planned` in the
   manifest; promotion to `fused` is a focused follow-up sprint.
+- ✅ **Native EBM coverage broadened + workload mode landed (2026-05-17,
+  follow-up to the benchmark milestone).**
+  - **4 more native EBM primitives shipped**, bringing the total to
+    **6/9**: `ebm_langevin_step` (affine combo with caller-supplied
+    noise), `ebm_decode_init` (broadcast `mean + std*noise`),
+    `ebm_bivector_langevin` (composition — same MSL kernel as
+    `ebm_langevin_step` on grade-projected inputs, demonstrating the
+    GA-kernel-reuse pattern), and `ebm_sphere_langevin` (full
+    tangent-projection + retract in one MSL kernel).  Three new
+    runtime C ABI symbols (`tessera_apple_gpu_ebm_langevin_step_f32`,
+    `tessera_apple_gpu_ebm_decode_init_noise_apply_f32`,
+    `tessera_apple_gpu_ebm_sphere_langevin_step_f32`); the bivector
+    case reuses `ebm_langevin_step_f32`.
+  - **`_EBM_APPLE_GPU_FUSED` table extended to 6 entries.** Manifest
+    now reports `apple_gpu_status=fused` for all 6 native ops and
+    `planned` for the remaining 3 (`ebm_energy`, `ebm_self_verify`,
+    `ebm_partition_exact`).  Python-ref rows for the natively-promoted
+    ops still emit so consumers see the native-vs-reference speedup
+    side-by-side in the report.
+  - **Workload mode added** (`--workloads-only` / `--primitives-only`
+    CLI flags). Two composite chains:
+    - **`ga_feature_pipeline`** — `clifford_exp → clifford_rotor_sandwich
+      → clifford_norm` on a 32-element batch.  Headline:
+      **13.2× speedup** vs Python reference (0.73 ms vs 9.57 ms on
+      M-series Apple Silicon).
+    - **`ebt_tiny_refinement`** — K-candidate × T-step loop using
+      native `ebm_refinement_f32` for the inner-step iterations
+      + host `self_verify`.  Documents the dispatch-overhead break-even
+      for the inner-step kernel.
+  - **Test count**: 64 → **80** (added native-EBM expansion + workload
+    coverage + CLI flag tests + manifest cross-checks for all 6 native
+    ops). All deterministic, all gracefully skip on non-Darwin.
+  - **Sample report** at
+    [`benchmarks/apple_gpu/sample_ga_ebm_report.json`](../../benchmarks/apple_gpu/sample_ga_ebm_report.json)
+    regenerated with the broader coverage (35 rows total: 17 GA + 6
+    native EBM + 8 python_ref EBM + 4 workload).
+  - **Doc refresh**: [README](../../benchmarks/apple_gpu/README.md)
+    documents the workload mode + the speedup story + the dispatch-
+    overhead break-even discussion.
 - ⏳ Native C++ kernels in `Tessera_Clifford_x86_Backend/`: would
   enable Accelerate hand-off for batched products (currently the
   Python reference path is the v1 execution route on x86 + Apple CPU).

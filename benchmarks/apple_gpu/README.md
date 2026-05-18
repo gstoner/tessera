@@ -5,7 +5,7 @@ Two benchmark drivers live here:
 | Driver | Coverage |
 |---|---|
 | [`benchmark_fusion.py`](benchmark_fusion.py) | Phase 8.4.x MSL fusion sweep — `matmul → softmax`, SwiGLU MLP block. Fused-vs-sequential pairing. |
-| [`benchmark_ga_ebm.py`](benchmark_ga_ebm.py) | GA + EBM end-to-end stack walk. All 17 GA primitives ship fused MSL kernels (`backend=apple_gpu`, `mode=fused`); 2 EBM primitives (`ebm_inner_step`, `ebm_refinement`) ship the first native EBM MSL kernels; the remaining 7 EBM ops run via the Python reference path (`backend=python_ref`, `mode=reference`, `apple_gpu_status=planned`). |
+| [`benchmark_ga_ebm.py`](benchmark_ga_ebm.py) | GA + EBM end-to-end stack walk **plus workload mode**. 17 GA primitives + **6 native EBM primitives** + 8 Python-reference EBM rows + **4 workload rows** (GA feature pipeline + EBT-tiny refinement, each in apple_gpu + python_ref variants). |
 
 ## GA + EBM benchmark — what it walks
 
@@ -21,24 +21,44 @@ For every primitive the driver exercises the full stack:
 
 ## Status split (2026-05-17)
 
-- **GA**: full Apple GPU end-to-end benchmarked. 17/17 primitives `backend=apple_gpu`, `mode=fused`, each with a manifest-resolved C ABI symbol.
-- **EBM**: 2/9 primitives natively benchmarked on Apple GPU (`ebm_inner_step` + `ebm_refinement`); 7/9 stay on the deterministic Python reference path, manifest-marked `apple_gpu_status=planned`.
+- **GA**: full Apple GPU end-to-end benchmarked. 17/17 primitives `backend=apple_gpu`, `mode=fused`.
+- **EBM (native)**: **6/9 primitives** — `ebm_inner_step`, `ebm_refinement`, `ebm_langevin_step`, `ebm_decode_init`, `ebm_bivector_langevin`, `ebm_sphere_langevin`. `ebm_bivector_langevin` reuses the `ebm_langevin_step` kernel on grade-projected inputs — the GA-kernel-reuse demonstration the manifest documents.
+- **EBM (Python ref)**: 3/9 still no native — `ebm_energy`, `ebm_self_verify`, `ebm_partition_exact`. All 8 EBM ops with Python reference paths also emit a `python_ref` row so consumers can see the native vs reference speedup directly.
+- **Workloads**: 2 small composite chains — `ga_feature_pipeline` (`exp → rotor_sandwich → norm`) and `ebt_tiny_refinement` (K-candidate × T-step loop with native `ebm_refinement` + host `self_verify`). Both emit `apple_gpu` + `python_ref` rows.
+
+## Workload mode — beyond per-primitive timing
+
+The two workloads exist because per-primitive timing tells only half the story: small primitives are dominated by host overhead, so the win-or-lose verdict only becomes meaningful once a real pipeline strings several kernels together. The workload rows make this explicit:
+
+| Workload | Stack | Native vs Python ref (sample) |
+|---|---|---:|
+| `ga_feature_pipeline` | `clifford_exp → clifford_rotor_sandwich → clifford_norm` on a batch of 32 | **13.2× faster** (0.73ms vs 9.57ms) |
+| `ebt_tiny_refinement` | `ebm_refinement_f32` (T=8 inner-step iterations on-device) + host `self_verify` | 0.01× (1.85ms vs 0.015ms) at tiny scale — see notes |
+
+`ebt_tiny_refinement` runs slower natively at the tested scale (B=4, K=8, D=6, T=8 → 192 floats per inner step) because the per-iteration Metal dispatch overhead (~0.2ms) dominates the ~250-flop affine combo numpy does in microseconds. The fact that the bench reports it honestly is the point — it tells you the **break-even** for `ebm_refinement` is somewhere around `n * T > a few thousand floats per dispatch`, useful information for kernel scheduling.
+
+`ga_feature_pipeline` shows the inverse: a 3-stage MSL chain on 32×8 inputs already wins by an order of magnitude because the GA primitives are arithmetically dense (rotor_sandwich is ~64 multiply-adds per element) and the Python reference goes through `Multivector` object construction per element.
 
 ## Usage
 
 ```bash
-# Manual run (default 50 reps — enough samples for stable p10/p90):
+# Manual run (50 reps default — enough samples for stable p10/p90):
 python benchmarks/apple_gpu/benchmark_ga_ebm.py --output /tmp/ga_ebm.json
 
-# CI-friendly run (2 reps, used by the unit test):
+# CI-friendly run (2 reps, what the unit test uses):
 python benchmarks/apple_gpu/benchmark_ga_ebm.py --ci --output /tmp/ga_ebm.json
 
+# Workload-only mode (skip per-primitive rows):
+python benchmarks/apple_gpu/benchmark_ga_ebm.py --workloads-only
+
+# Primitives-only mode (skip composite workloads):
+python benchmarks/apple_gpu/benchmark_ga_ebm.py --primitives-only
+
 # Longer EBT refinement chain (T inner-step iterations on-device):
-python benchmarks/apple_gpu/benchmark_ga_ebm.py --refinement-T 32 \
-    --output /tmp/ga_ebm.json
+python benchmarks/apple_gpu/benchmark_ga_ebm.py --refinement-T 32
 ```
 
-Skips cleanly on non-Darwin or when `clang++` / the runtime source isn't available — the report still emits the 7 Python-reference EBM rows with `skipped_apple_gpu` set.
+Skips cleanly on non-Darwin or when `clang++` / the runtime source isn't available — the report still emits the 8 Python-reference EBM rows + 2 Python-reference workload rows with `skipped_apple_gpu` set.
 
 ## Timing methodology
 
@@ -57,10 +77,13 @@ Skips cleanly on non-Darwin or when `clang++` / the runtime source isn't availab
 | `clifford_geometric_product` | apple_gpu / fused | 0.22 | 0.21–0.27 |
 | `clifford_rotor_sandwich` | apple_gpu / fused | 0.40 | 0.38–0.48 |
 | `clifford_codiff` (3-stage MSL composition) | apple_gpu / fused | 0.69 | 0.65–0.79 |
-| `ebm_inner_step` (native) | apple_gpu / fused | 0.24 | 0.22–0.55 |
+| `ebm_inner_step` (native) | apple_gpu / fused | 0.26 | 0.22–0.59 |
 | `ebm_refinement` (T=8, native) | apple_gpu / fused | 2.16 | 1.78–3.39 |
-| `ebm_energy` (Python ref) | python_ref / reference | 0.002 | 0.002–0.003 |
-| `ebm_partition_exact` (Python ref) | python_ref / reference | 0.030 | 0.029–0.030 |
+| `ebm_langevin_step` (native) | apple_gpu / fused | 0.25 | 0.23–0.46 |
+| `ebm_sphere_langevin` (native) | apple_gpu / fused | 0.27 | 0.24–0.42 |
+| `ga_feature_pipeline` (workload, native) | apple_gpu / fused_chain | 0.73 | 0.69–0.81 |
+| `ga_feature_pipeline` (workload, ref) | python_ref / reference_chain | 9.57 | 9.10–10.3 |
+| `ebm_energy` (Python ref) | python_ref / reference | 0.003 | 0.002–0.003 |
 
 These exact numbers will drift across machines and toolchain versions. The **schema** is the stable contract — `tests/unit/test_benchmark_ga_ebm.py` enforces it.
 
@@ -71,11 +94,11 @@ Per-row fields:
 | Field | Type | Notes |
 |---|---|---|
 | `backend` | str | `"apple_gpu"` for fused MSL, `"python_ref"` for reference |
-| `namespace` | str | `"ga"` or `"ebm"` |
-| `op` | str | Primitive name (e.g., `clifford_geometric_product`, `ebm_inner_step`) |
+| `namespace` | str | `"ga"`, `"ebm"`, or `"workload"` |
+| `op` | str | Primitive or workload name |
 | `shape` | str | Human-readable shape descriptor |
 | `dtype` | str | `"f32"` for v1 |
-| `mode` | str | `"fused"` for native MSL, `"reference"` for Python |
+| `mode` | str | `"fused"` (single MSL kernel), `"reference"` (Python), `"fused_chain"` (multi-kernel workload), `"reference_chain"` (Python workload) |
 | `reps` | int | Number of timed iterations |
 | `latency_ms` | float | Median (= `p50_ms`) — headline |
 | `stdev_ms`, `min_ms`, `max_ms` | float | Spread |
@@ -83,7 +106,8 @@ Per-row fields:
 | `max_abs_err` | float | Max-abs-diff vs Python reference |
 | `tolerance` | float | Per-op tolerance gate |
 | `ok` | bool | True iff `max_abs_err <= tolerance` (and the manifest agrees for native rows) |
-| `symbol` | str | C ABI symbol name (native rows only) |
+| `symbol` | str | C ABI symbol name (single-kernel native rows) |
+| `symbols` | list[str] | Multi-kernel chain (workload rows) |
 | `apple_gpu_status` | str | Manifest-resolved status (`fused` / `planned`); EBM rows only |
 | `device`, `tessera_version` | str | Provenance |
 
@@ -92,10 +116,11 @@ Envelope fields:
 | Field | Notes |
 |---|---|
 | `runs` | List of row dicts |
-| `ga_primitives_count` | Count of `clifford_*` rows (17 when GPU available, 0 otherwise) |
-| `ebm_paths_count` | Count of `ebm_*` rows (9 when GPU available, 7 otherwise) |
-| `ebm_native_apple_gpu_count` | Count of native EBM rows (2 when GPU available) |
+| `ga_primitives_count` | Count of `clifford_*` rows |
+| `ebm_paths_count` | Count of `ebm_*` rows (native + python_ref) |
+| `ebm_native_apple_gpu_count` | Count of native EBM rows (6 when GPU available) |
 | `native_ebm_ops` | Sorted list of EBM ops on `apple_gpu` |
+| `workload_count` | Count of `namespace=workload` rows |
 | `compile_time_ms` | clang++ wall-clock for the runtime dylib |
 | `skipped_apple_gpu` | Skip reason string (`null` when Apple GPU runs) |
 | `device`, `tessera_version`, `reps` | Provenance |

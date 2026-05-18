@@ -5557,3 +5557,317 @@ extern "C" void tessera_apple_gpu_ebm_refinement_f32(
   }
   std::memcpy(y_out, a.data(), sizeof(float) * (size_t)n);
 }
+
+// ===========================================================================
+// EBM langevin_step  —  out[i] = y[i] - eta * grad[i] + noise_scale * noise[i]
+//
+// Caller pre-generates `noise` on the host (deterministic via the
+// `tessera.rng` Philox stream) and passes the buffer in.  This keeps
+// the kernel purely affine — no on-device RNG yet (that's a separate
+// Philox-in-MSL follow-up).  Matches the Python `tessera.ebm.langevin_step`
+// path bit-for-bit when (a) `grad_fn` is analytic and (b) `noise` is
+// the host-side sample from `tessera.rng.normal(key, ...)`.
+// ===========================================================================
+
+inline void reference_ebm_langevin_step_f32(
+    const float* y, const float* grad, const float* noise,
+    float eta, float noise_scale, float* out, int32_t n) {
+  for (int32_t i = 0; i < n; ++i) {
+    out[i] = y[i] - eta * grad[i] + noise_scale * noise[i];
+  }
+}
+
+static NSString *const kEBMLangevinStepF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void ebm_langevin_step_f32(
+    device const float* y           [[buffer(0)]],
+    device const float* grad        [[buffer(1)]],
+    device const float* noise       [[buffer(2)]],
+    constant float&     eta         [[buffer(3)]],
+    constant float&     noise_scale [[buffer(4)]],
+    device float*       out         [[buffer(5)]],
+    constant int32_t&   n           [[buffer(6)]],
+    uint i [[thread_position_in_grid]])
+{
+    if ((int)i >= n) return;
+    out[i] = y[i] - eta * grad[i] + noise_scale * noise[i];
+}
+)MSL";
+
+static bool dispatch_ebm_langevin_step_f32_msl(
+    MetalDeviceContext &ctx,
+    const float* y, const float* grad, const float* noise,
+    float eta, float noise_scale, float* out, int32_t n) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kEBMLangevinStepF32Source, @"ebm_langevin_step_f32");
+    if (!pso) return false;
+    NSUInteger bytes = sizeof(float) * (NSUInteger)n;
+    id<MTLBuffer> bY = [ctx.device newBufferWithBytes:y length:bytes
+                                                options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bG = [ctx.device newBufferWithBytes:grad length:bytes
+                                                options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bN = [ctx.device newBufferWithBytes:noise length:bytes
+                                                options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bO = [ctx.device newBufferWithLength:bytes
+                                                options:MTLResourceStorageModeShared];
+    if (!bY || !bG || !bN || !bO) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bY offset:0 atIndex:0];
+    [enc setBuffer:bG offset:0 atIndex:1];
+    [enc setBuffer:bN offset:0 atIndex:2];
+    [enc setBytes:&eta length:sizeof(float) atIndex:3];
+    [enc setBytes:&noise_scale length:sizeof(float) atIndex:4];
+    [enc setBuffer:bO offset:0 atIndex:5];
+    [enc setBytes:&n length:sizeof(int32_t) atIndex:6];
+    MTLSize grid = MTLSizeMake((NSUInteger)n, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)n,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(out, [bO contents], bytes);
+    return true;
+  }
+}
+
+extern "C" void tessera_apple_gpu_ebm_langevin_step_f32(
+    const float* y, const float* grad, const float* noise,
+    float eta, float noise_scale, float* out, int32_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_ebm_langevin_step_f32_msl(
+          ctx, y, grad, noise, eta, noise_scale, out, n)) return;
+  reference_ebm_langevin_step_f32(y, grad, noise, eta, noise_scale, out, n);
+}
+
+// ===========================================================================
+// EBM decode_init noise-apply  —  out[i] = base[i % base_len] + std * noise[i]
+//
+// Implements `decode_init(strategy="noise")` semantics on-device: the
+// caller pre-generates the `noise` buffer (deterministic from RNGKey)
+// and a `base` array (usually zeros for pure-noise init, or a small
+// per-batch mean for "base_model" + perturb).  The kernel broadcasts
+// `base` across the K × event dims and adds `std * noise`.
+//
+// `base_len` is the length of the `base` buffer; `n` is the total
+// output element count.  Set `base_len = 0` to use mean=0 (pure noise);
+// set `base_len = n` for no broadcasting.
+// ===========================================================================
+
+inline void reference_ebm_decode_init_noise_apply_f32(
+    const float* base, int32_t base_len, const float* noise,
+    float std, float* out, int32_t n) {
+  if (base_len == 0) {
+    for (int32_t i = 0; i < n; ++i) out[i] = std * noise[i];
+  } else {
+    for (int32_t i = 0; i < n; ++i)
+      out[i] = base[i % base_len] + std * noise[i];
+  }
+}
+
+static NSString *const kEBMDecodeInitNoiseApplyF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void ebm_decode_init_noise_apply_f32(
+    device const float* base     [[buffer(0)]],
+    constant int32_t&   base_len [[buffer(1)]],
+    device const float* noise    [[buffer(2)]],
+    constant float&     std_     [[buffer(3)]],
+    device float*       out      [[buffer(4)]],
+    constant int32_t&   n        [[buffer(5)]],
+    uint i [[thread_position_in_grid]])
+{
+    if ((int)i >= n) return;
+    float b = 0.0f;
+    if (base_len > 0) b = base[(int)i % base_len];
+    out[i] = b + std_ * noise[i];
+}
+)MSL";
+
+static bool dispatch_ebm_decode_init_noise_apply_f32_msl(
+    MetalDeviceContext &ctx,
+    const float* base, int32_t base_len, const float* noise,
+    float std_, float* out, int32_t n) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kEBMDecodeInitNoiseApplyF32Source,
+        @"ebm_decode_init_noise_apply_f32");
+    if (!pso) return false;
+    NSUInteger outBytes = sizeof(float) * (NSUInteger)n;
+    NSUInteger noiseBytes = sizeof(float) * (NSUInteger)n;
+    NSUInteger baseBytes = sizeof(float) * (NSUInteger)std::max(1, base_len);
+    id<MTLBuffer> bB = [ctx.device
+        newBufferWithBytes:(base_len > 0 ? base : noise)
+                    length:baseBytes
+                   options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bN = [ctx.device newBufferWithBytes:noise length:noiseBytes
+                                                options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bO = [ctx.device newBufferWithLength:outBytes
+                                                options:MTLResourceStorageModeShared];
+    if (!bB || !bN || !bO) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bB offset:0 atIndex:0];
+    [enc setBytes:&base_len length:sizeof(int32_t) atIndex:1];
+    [enc setBuffer:bN offset:0 atIndex:2];
+    [enc setBytes:&std_ length:sizeof(float) atIndex:3];
+    [enc setBuffer:bO offset:0 atIndex:4];
+    [enc setBytes:&n length:sizeof(int32_t) atIndex:5];
+    MTLSize grid = MTLSizeMake((NSUInteger)n, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)n,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(out, [bO contents], outBytes);
+    return true;
+  }
+}
+
+extern "C" void tessera_apple_gpu_ebm_decode_init_noise_apply_f32(
+    const float* base, int32_t base_len, const float* noise,
+    float std_, float* out, int32_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_ebm_decode_init_noise_apply_f32_msl(
+          ctx, base, base_len, noise, std_, out, n)) return;
+  reference_ebm_decode_init_noise_apply_f32(base, base_len, noise, std_, out, n);
+}
+
+// ===========================================================================
+// EBM sphere langevin_step  —  one Euler-Maruyama step on S^{d-1}
+//
+//   grad_tan   = grad - <grad, x> * x          (tangent projection)
+//   noise_tan  = noise - <noise, x> * x
+//   y          = x - eta * grad_tan + noise_scale * noise_tan
+//   out        = y / ||y||                       (retract to unit sphere)
+//
+// Single-thread MSL kernel since d is typically 3 — overhead of a
+// multi-thread reduction would dominate.  Caller supplies `noise`
+// (deterministic, host-generated from the RNGKey).
+// ===========================================================================
+
+inline void reference_ebm_sphere_langevin_step_f32(
+    const float* x, const float* grad, const float* noise,
+    float eta, float noise_scale, float* out, int32_t d) {
+  float gdot = 0.0f, ndot = 0.0f;
+  for (int32_t i = 0; i < d; ++i) {
+    gdot += grad[i] * x[i];
+    ndot += noise[i] * x[i];
+  }
+  float ynorm2 = 0.0f;
+  std::vector<float> y(d);
+  for (int32_t i = 0; i < d; ++i) {
+    float grad_tan = grad[i] - gdot * x[i];
+    float noise_tan = noise[i] - ndot * x[i];
+    y[i] = x[i] - eta * grad_tan + noise_scale * noise_tan;
+    ynorm2 += y[i] * y[i];
+  }
+  float ynorm = std::sqrt(ynorm2);
+  if (ynorm < 1e-12f) {
+    for (int32_t i = 0; i < d; ++i) out[i] = x[i];
+    return;
+  }
+  for (int32_t i = 0; i < d; ++i) out[i] = y[i] / ynorm;
+}
+
+static NSString *const kEBMSphereLangevinStepF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+// Single-threadgroup, single-thread kernel.  d is small (typically 3).
+// For larger d the dot products would benefit from a parallel reduction;
+// the v1 sphere step covers S^2 / S^3 which fit in a single iteration.
+kernel void ebm_sphere_langevin_step_f32(
+    device const float* x           [[buffer(0)]],
+    device const float* grad        [[buffer(1)]],
+    device const float* noise       [[buffer(2)]],
+    constant float&     eta         [[buffer(3)]],
+    constant float&     noise_scale [[buffer(4)]],
+    device float*       out         [[buffer(5)]],
+    constant int32_t&   d           [[buffer(6)]],
+    uint tid [[thread_position_in_grid]])
+{
+    if (tid != 0) return;
+    float gdot = 0.0f, ndot = 0.0f;
+    for (int i = 0; i < d; ++i) {
+        gdot += grad[i] * x[i];
+        ndot += noise[i] * x[i];
+    }
+    float ynorm2 = 0.0f;
+    // y stored in `out` first; renormalize in second pass.
+    for (int i = 0; i < d; ++i) {
+        float grad_tan = grad[i] - gdot * x[i];
+        float noise_tan = noise[i] - ndot * x[i];
+        float yi = x[i] - eta * grad_tan + noise_scale * noise_tan;
+        out[i] = yi;
+        ynorm2 += yi * yi;
+    }
+    float ynorm = sqrt(ynorm2);
+    if (ynorm < 1e-12f) {
+        for (int i = 0; i < d; ++i) out[i] = x[i];
+        return;
+    }
+    for (int i = 0; i < d; ++i) out[i] = out[i] / ynorm;
+}
+)MSL";
+
+static bool dispatch_ebm_sphere_langevin_step_f32_msl(
+    MetalDeviceContext &ctx,
+    const float* x, const float* grad, const float* noise,
+    float eta, float noise_scale, float* out, int32_t d) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kEBMSphereLangevinStepF32Source,
+        @"ebm_sphere_langevin_step_f32");
+    if (!pso) return false;
+    NSUInteger bytes = sizeof(float) * (NSUInteger)d;
+    id<MTLBuffer> bX = [ctx.device newBufferWithBytes:x length:bytes
+                                                options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bG = [ctx.device newBufferWithBytes:grad length:bytes
+                                                options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bN = [ctx.device newBufferWithBytes:noise length:bytes
+                                                options:MTLResourceStorageModeShared];
+    id<MTLBuffer> bO = [ctx.device newBufferWithLength:bytes
+                                                options:MTLResourceStorageModeShared];
+    if (!bX || !bG || !bN || !bO) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bX offset:0 atIndex:0];
+    [enc setBuffer:bG offset:0 atIndex:1];
+    [enc setBuffer:bN offset:0 atIndex:2];
+    [enc setBytes:&eta length:sizeof(float) atIndex:3];
+    [enc setBytes:&noise_scale length:sizeof(float) atIndex:4];
+    [enc setBuffer:bO offset:0 atIndex:5];
+    [enc setBytes:&d length:sizeof(int32_t) atIndex:6];
+    [enc dispatchThreads:MTLSizeMake(1, 1, 1)
+       threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(out, [bO contents], bytes);
+    return true;
+  }
+}
+
+extern "C" void tessera_apple_gpu_ebm_sphere_langevin_step_f32(
+    const float* x, const float* grad, const float* noise,
+    float eta, float noise_scale, float* out, int32_t d) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_ebm_sphere_langevin_step_f32_msl(
+          ctx, x, grad, noise, eta, noise_scale, out, d)) return;
+  reference_ebm_sphere_langevin_step_f32(x, grad, noise, eta, noise_scale, out, d);
+}

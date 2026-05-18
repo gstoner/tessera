@@ -789,6 +789,67 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, object]] = {
             "inner_step on-device with ping-pong buffers."
         ),
     },
+    # Pointwise Langevin step with caller-supplied noise buffer.
+    # ABI: (y, grad, noise, eta, noise_scale, out, n).
+    "ebm_langevin_step": {
+        "symbol": "tessera_apple_gpu_ebm_langevin_step_f32",
+        "dtypes": ("fp32",),
+        "abi": ("(y:f32*, grad:f32*, noise:f32*, eta:f32, noise_scale:f32, "
+                "out:f32*, n:i32)"),
+        "notes": (
+            "Affine Langevin step on Apple GPU — out[i] = y[i] - eta * "
+            "grad[i] + noise_scale * noise[i]. Caller pre-generates noise "
+            "from tessera.rng (deterministic Philox); on-device RNG is a "
+            "follow-up sprint."
+        ),
+    },
+    # decode_init noise-apply: out[i] = base[i % base_len] + std * noise[i].
+    # Caller pre-generates `noise` via tessera.rng; `base_len=0` means
+    # mean=0 (pure-noise init), `base_len=n` means no broadcasting.
+    "ebm_decode_init": {
+        "symbol": "tessera_apple_gpu_ebm_decode_init_noise_apply_f32",
+        "dtypes": ("fp32",),
+        "abi": ("(base:f32*, base_len:i32, noise:f32*, std:f32, "
+                "out:f32*, n:i32)"),
+        "notes": (
+            "decode_init(strategy='noise') applied on Apple GPU — "
+            "broadcasts `base` across K × event dims and adds `std * "
+            "noise[i]`. Caller pre-generates noise from RNGKey."
+        ),
+    },
+    # Geometric Langevin on bivectors — reuses ebm_langevin_step kernel
+    # because grade-restricted state + projected gradient + projected
+    # noise are all 8-coefficient affine ops. The "composition" entry
+    # documents that this op dispatches the same MSL kernel as
+    # ebm_langevin_step (no separate symbol), so the manifest reports
+    # the same symbol but a different ABI shape (grade-projected inputs).
+    "ebm_bivector_langevin": {
+        "symbol": "tessera_apple_gpu_ebm_langevin_step_f32",
+        "dtypes": ("fp32",),
+        "abi": ("(y:f32*[8], grad_proj:f32*[8], noise_proj:f32*[8], "
+                "eta:f32, noise_scale:f32, out:f32*[8])"),
+        "notes": (
+            "Bivector Langevin step on Apple GPU — composition of GA "
+            "grade_projection (already native; applied host-side via "
+            "tessera.ga.grade_projection or natively via "
+            "tessera_apple_gpu_clifford_grade_projection) + the affine "
+            "Langevin kernel above. Demonstrates GA-kernel reuse for "
+            "manifold-aware EBM sampling."
+        ),
+    },
+    # Sphere Langevin step — full tangent-projection + retract in one
+    # MSL kernel.  d is the ambient dimension (3 for S^2, etc.).
+    "ebm_sphere_langevin": {
+        "symbol": "tessera_apple_gpu_ebm_sphere_langevin_step_f32",
+        "dtypes": ("fp32",),
+        "abi": ("(x:f32*, grad:f32*, noise:f32*, eta:f32, noise_scale:f32, "
+                "out:f32*, d:i32)"),
+        "notes": (
+            "Sphere Langevin step on Apple GPU — tangent projection + "
+            "Euler-Maruyama update + retract to S^{d-1}, all in a single "
+            "MSL kernel. Single-thread dispatch (d is small)."
+        ),
+    },
 }
 
 # All EBM primitives currently covered by the manifest (the union of the

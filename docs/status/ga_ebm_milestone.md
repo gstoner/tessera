@@ -51,13 +51,21 @@
    per-thread D-vector register buffer (which had a hard 256-element
    cap) — D is now unbounded; K is still bounded at 256 by the
    threadgroup-size budget for the K-way argmin reduction.  Every
-   native row in the report carries a `dispatched_on_gpu` proof bit
-   sourced from `tessera.ebm.ebt_tiny_dispatched_on_gpu()` — silent
-   numpy fallbacks (e.g., `K > 256`) are now labeled
-   `status="degraded_fallback"` in the sweep summary instead of being
-   reported as native wins.  Headline speedups (~55× peak at
+   native row in the report carries a `dispatched_on_gpu` proof bit:
+   - **Native EBM primitive rows + JIT-bridge benchmark rows** —
+     proof bit sourced from the `tessera.compiler.jit_bridge` route
+     trace (a one-shot trace span around the timed dispatch).
+   - **EBT-tiny workload + `--ebt-sweep` rows** — proof bit sourced
+     from `tessera.ebm.ebt_tiny_dispatched_on_gpu()`; the sweep
+     summary additionally tags each shape with
+     `status="native_dispatched"` vs `"degraded_fallback"`.
+
+   Silent numpy fallbacks (e.g., `K > 256`) degrade the row's
+   `backend` to `python_ref`, its `ok` field to `False`, and (for
+   sweep rows) flag the shape as `degraded_fallback` instead of
+   reporting it as a native win.  Headline speedups (~55× peak at
    `B=64,K=128,D=1024,T=256` on a recent M-series run) will drift
-   across hosts and toolchain versions; the schema + proof bit is
+   across hosts and toolchain versions; the schema + proof bits are
    the stable contract.
 
 2. **Some single-op EBM rows have native-vs-Python latency that is
@@ -74,13 +82,12 @@
    `tessera._apple_gpu_dispatch` when the input shape + dtype match
    the manifest contract; on non-Darwin or with a mismatched dtype
    the numpy reference path runs instead.
-   **JIT-bridge coverage is partial** (14 of 26 fast paths): 12 GA
-   ops (the unary 8x8 / binary 8x8 / norm / inner families) and 2
-   EBM ops (`inner_step`, `ebt_tiny`) route through
-   `jit_bridge.dispatch_via_manifest` and produce route-trace rows;
-   the remaining 12 fast paths still call the shared loader
-   directly and are correctness-equivalent but invisible to the
-   trace.
+   **JIT-bridge coverage is also complete** (26 of 26 fast paths):
+   all 17 GA ops + all 9 native-EBM ops call
+   `jit_bridge.dispatch_via_manifest`, so every public-API GPU
+   dispatch produces a `JitBridgeRoute` row when tracing is on.
+   The benchmark uses the trace as proof of dispatch for native EBM
+   primitive rows + JIT-bridge benchmark rows.
 
 4. **No on-device RNG yet.**  The native `langevin_step` /
    `decode_init` / `sphere_langevin` kernels take a *host-supplied

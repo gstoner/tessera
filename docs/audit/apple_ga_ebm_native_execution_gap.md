@@ -247,13 +247,14 @@ What is missing:
 - `ebm_partition_exact` executes through Python/NumPy, not Apple GPU.
 - Arbitrary user-defined energy functions do not yet lower to native MSL; the
   current native `ebm_energy` row is the quadratic specialization.
-- 14 of 26 fast paths route through the `jit_bridge` (12 GA + 2 EBM
-  including the `ga_feature_pipeline` and `ebt_tiny_refinement` workloads);
-  the remaining 12 fast paths (`grade_projection`, `ext_deriv`, `vec_deriv`,
-  `codiff`, `integral`, `langevin_step`, `decode_init`, `bivector_langevin`,
-  `sphere_langevin`, `refinement`, `self_verify`, `energy_quadratic`) still
-  call `_apple_gpu_dispatch.bind_symbol` directly — correctness-equivalent
-  but invisible to the route trace.
+- **All 26 fast paths route through the `jit_bridge`** (17 GA + 9
+  native EBM, including `ebt_tiny`).  Every public-API GPU dispatch
+  produces a `JitBridgeRoute` row in the thread-local trace when
+  tracing is enabled, and the benchmark uses the trace as proof of
+  dispatch for native EBM primitive rows + JIT-bridge benchmark
+  rows.  `bivector_langevin` reuses the langevin_step kernel but
+  tags itself as `ebm_bivector_langevin` in the trace via the
+  helper's `bridge_op_name` kwarg.
 
 Assessment: **EBM now has measured native Apple GPU coverage for the
 inner-loop/sampler/decode/self-verify/quadratic-energy slice, plus a tiny

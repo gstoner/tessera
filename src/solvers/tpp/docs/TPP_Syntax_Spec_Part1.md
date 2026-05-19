@@ -1,10 +1,13 @@
 [MERGE_START: TPP_Syntax_Spec.md]
 
 # Tessera Tensor Processing Primitives (TPP) — Syntax & Semantics (v0.1)
-Status: Draft (compile-ready stubs included in `/tpp/`)
+Status: Active dialect/pipeline spec. The TPP dialect, 7 passes, and the
+`tpp-space-time` pipeline alias are wired into `tessera-opt`; the current lit
+fixtures live under `src/solvers/tpp/test/TPP`.
 
 This document is the **normative** BNF-inspired syntax for the `tessera.tpp` dialect, followed by
-well-defined semantics and lowering notes. See `/tpp/docs/TPP_Space_Time_Guide.md` for tutorials.
+well-defined semantics and lowering notes. See the other docs in
+`src/solvers/tpp/docs/` for tutorials and space-time examples.
 
 ---
 

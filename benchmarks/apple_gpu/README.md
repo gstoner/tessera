@@ -5,7 +5,7 @@ Two benchmark drivers live here:
 | Driver | Coverage |
 |---|---|
 | [`benchmark_fusion.py`](benchmark_fusion.py) | Phase 8.4.x MSL fusion sweep — `matmul → softmax`, SwiGLU MLP block. Fused-vs-sequential pairing. |
-| [`benchmark_ga_ebm.py`](benchmark_ga_ebm.py) | GA + EBM end-to-end stack walk **plus workload mode**. 17 GA primitives + **8 native EBM primitives** + Python-reference comparison rows + **4 workload rows** (GA feature pipeline + EBT-tiny refinement, each in apple_gpu + python_ref variants), plus opt-in `--ebt-sweep`. |
+| [`benchmark_ga_ebm.py`](benchmark_ga_ebm.py) | GA + EBM end-to-end stack walk **plus workload mode**. 17 GA primitives + **9 native EBM primitives** (including `ebm_partition_exact`) + Python-reference comparison rows + **4 workload rows** (GA feature pipeline + EBT-tiny refinement, each in apple_gpu + python_ref variants), plus opt-in `--ebt-sweep`. |
 
 ## GA + EBM benchmark — what it walks
 

@@ -70,11 +70,15 @@
 ---
 
 ## 12. Conformance
-- LIT tests included in `/tpp/test/` validate: halo inference, BC enforcement, fusion, RNG determinism, and pipeline alias.
+- LIT tests included in `src/solvers/tpp/test/TPP` currently validate the
+  `tpp-space-time` pipeline alias, halo inference, boundary-condition
+  lowering, and a shallow-water smoke path. Fusion and RNG-determinism tests
+  remain future conformance work.
 
 ---
 
 ## 13. Change Log
-- v0.1: initial types/attrs, key ops, pass stubs, tests, docs scaffold.
+- v0.1: initial types/attrs, key ops, pass registration, lit fixtures, and
+  docs scaffold.
 
 [MERGE_END: TPP_Syntax_Spec.md]

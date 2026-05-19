@@ -68,8 +68,8 @@ specific upstream `register*Translation()` call in
 
 ## What the Python CLI registers
 
-- 4 subcommands: `stablehlo`, `gguf`, `safetensors`, `info` (all
-  pass through `tessera.aot.{stablehlo_export, gguf_export,
-  safetensors_export}` from S14).
-- 1 pass-through subcommand: `mlir <args...>` invokes the C++
-  binary; reports a clean diagnostic if the binary isn't built.
+- 5 subcommands total.
+- `stablehlo`, `gguf`, `safetensors`, and `info` pass through
+  `tessera.aot.{stablehlo_export, gguf_export, safetensors_export}` from S14.
+- `mlir <args...>` invokes the C++ binary; reports a clean diagnostic if the
+  binary isn't built.

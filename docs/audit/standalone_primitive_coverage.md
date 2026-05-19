@@ -2,7 +2,7 @@
 status: Informative
 classification: Audit Dashboard
 authority: Companion dashboard for `docs/audit/execution_roadmap.md` S1
-last_updated: 2026-05-10
+last_updated: 2026-05-18 (status language refreshed)
 ---
 
 # Standalone Primitive Coverage
@@ -16,8 +16,9 @@ The source of truth for this dashboard is
 source of truth for currently accepted operators; this dashboard can include
 planned primitives without falsely marking them as supported.
 
-For a fuller audit narrative, see
-`docs/audit/primitive_coverage_state.md`.
+For historical audit narrative, see `docs/audit/primitive_coverage_state.md`.
+For current cross-layer support state, use
+`docs/audit/generated/support_table.md` and the registry source.
 
 ## Contract Axes
 
@@ -38,29 +39,18 @@ Every primitive is tracked across these contract fields:
 
 ## Current Registry State
 
-Generated from `all_primitive_coverages()` on 2026-05-10:
+The registry is intentionally rendered by code rather than maintained by hand.
+Use `python -m tessera.compiler.audit support_table --check` for the
+cross-layer support table and `render_markdown()` from
+`tessera.compiler.primitive_coverage` when a primitive-only table is needed.
 
-| Metric | Count |
-|---|---:|
-| Total tracked primitives | 373 |
-| Existing / shipped partial entries | 373 |
-| Planned entries | 0 |
-| Contract-complete entries | 0 |
-
-The current truth is that Tessera has a broad Python-reference surface, but no
-primitive should be treated as contract-complete yet. Contract completion still
-requires fully specified semantics, transform rules, lowering, backend kernels,
-and tests for each primitive.
-
-Current lowering metadata: `222` registered, `115` still `stub_required`, `32`
-not applicable, and `4` missing.
-
-Current backend metadata: `222` partial backend entries and `151`
-reference-only entries.
-
-Current contract schemas: `48` primitives are promoted to
-`explicit_semantic`; the rest remain `explicit_partial` until more contract
-axes are hardened.
+The current truth is that Tessera has a broad Python-reference surface and a
+growing set of native/runtime lanes, but primitive rows should not be treated
+as compiler-complete until their layered contract is complete. Contract
+completion still requires fully specified semantics, transform rules, lowering,
+backend kernels or explicit reference-only status, and tests for each
+primitive. Avoid copying registry totals into prose unless a test owns the
+snapshot.
 
 ## Milestone Groups
 

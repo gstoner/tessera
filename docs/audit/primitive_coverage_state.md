@@ -1,14 +1,23 @@
 ---
-status: Informative
-classification: Audit Snapshot
-authority: Derived from `python/tessera/compiler/primitive_coverage.py`
-last_updated: 2026-05-10
+status: Historical narrative snapshot
+classification: Superseded Audit Snapshot
+authority: Superseded by `python/tessera/compiler/primitive_coverage.py` and generated audit outputs
+last_updated: 2026-05-18 (status clarified; numeric body is historical)
 ---
 
 # Primitive Coverage State
 
-This is the cleaner current state of Tessera standalone-compiler primitive
-coverage.
+> **Historical note.** This document is a narrative snapshot from the
+> S-series contract-axis hardening work. It is useful for understanding how the
+> primitive registry evolved, but its embedded numeric counts are no longer the
+> current authority. For live state, use
+> `python/tessera/compiler/primitive_coverage.py`,
+> `docs/audit/standalone_primitive_coverage.md`, and
+> `docs/audit/generated/support_table.md` guarded by
+> `python -m tessera.compiler.audit support_table --check`.
+
+This records the state of Tessera standalone-compiler primitive coverage at the
+time of the snapshot.
 
 The important distinction:
 
@@ -22,7 +31,8 @@ The important distinction:
 
 ## Registry Summary
 
-Generated from `all_primitive_coverages()` on 2026-05-10:
+Generated from `all_primitive_coverages()` on 2026-05-10. These counts are
+historical; regenerate the dashboard for the current registry:
 
 | Metric | Count |
 |---|---:|

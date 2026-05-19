@@ -385,23 +385,19 @@ be turned into compiler-visible invariants and primitives.
 | Contour deformation and residues | Complex integration test or symbolic-numeric validation harness | Excellent for validating integration, branch cuts, and singularity diagnostics. |
 | Visual branch cuts and singularities | Diagnostics for discontinuities, poles, and invalid domains | Helps compiler errors become mathematical rather than only type-level. |
 
-### Proposed "Visual Complex" compiler lane
+### Visual Complex compiler lane
 
-Do not start with a full complex-analysis system. Start with a small lane that
-strengthens existing GA/EBM and solver work:
+The original recommendation was to start small rather than build a full
+complex-analysis system. That pilot has now landed as M7 using `ComplexScalar`
+as a sibling value kind:
 
-1. Add a `ComplexScalar` / `ComplexField` reference type or encode complex
-   scalars as `Cl(0,1)` or as the even subalgebra of `Cl(2,0)`. `Cl(0,1)`
-   is the direct two-component complex algebra; the `Cl(2,0)` even
-   subalgebra is better when the feature wants to stay inside the existing
-   Euclidean GA rotor story. The pilot must pin one choice in a decision log
-   before implementation.
-2. Add primitives: `complex_mul`, `complex_exp`, `mobius`, `stereographic`,
-   `conformal_jacobian`, `laplacian_2d`.
-3. Add a verifier for Cauchy-Riemann consistency on simple user functions.
-   This requires the same restricted AST and symbolic/numeric derivative
-   machinery as M6, so M7 should remain spec-only until the shared AST-to-IR
-   path exists.
+1. `ComplexScalar` is the chosen representation. The earlier `Cl(0,1)` and
+   `Cl(2,0)` options are deferred because they would widen the v1 GA
+   allow-list.
+2. The first primitives are implemented in the CPU/reference namespace, with
+   Apple GPU fast paths for the four GPU-beneficial kernels documented in M7.
+3. Cauchy-Riemann consistency has both numerical and symbolic verifier paths;
+   the symbolic path reuses the shared `ast_ir` core.
 4. Add a Needham-style visual conformance suite:
    - grid under `z^2`;
    - grid under `exp(z)`;
@@ -697,7 +693,7 @@ uniformly visible**:
 - [x] M4 memory-model verifier (happens-before + memory-space).
 - [x] M5 `BenchmarkRow` schema + validation spine doc + no-silent-native gate.
 - [x] **M5 follow-up — `tessera-translate` (Python + C++) shipped
-  (2026-05-18, closed; previously Python scaffold only).**
+  (2026-05-18, closed).**
   Python CLI ``tessera-translate`` at
   ``python/tessera/cli/translate.py`` with **5 subcommands**:
   ``stablehlo``/``gguf``/``safetensors``/``info`` (wrapping
@@ -1008,51 +1004,36 @@ Follow-ups (now closed — 2026-05-18):
   manifest documents this honestly — a future workload
   that motivates GPU paths for these can re-promote.
 
-Goal: use Needham's visual/conformal ideas to extend the mathematical IR lane.
+Current state:
 
-Dependency: the Cauchy-Riemann verifier needs symbolic partial
-derivatives on a Python AST subset - the same machinery M6 builds
-for `grad_y` over the energy-op whitelist.  **M7 should land after
-M6 so the symbolic-grad core can be reused.**  Keep M7 spec-only
-until M6's `ast_ir` module exists.
+- The original `Cl(0,1)` recommendation is superseded.  M7 landed on
+  `ComplexScalar`, a non-GA sibling value kind, because the v1 GA allow-list
+  excludes `Cl(0,1)` / `Cl(2,0)`.  This keeps Decision #15a intact:
+  structured mathematical values are sibling kinds, not tensor attributes.
+- The CPU/reference lane is broad: complex arithmetic, Mobius maps,
+  stereographic projection, conformal Jacobian / Laplacian helpers, contour
+  integration, winding/residue helpers, hyperbolic primitives, flow lines,
+  Riemann-surface lifting, Schwarz-Christoffel MVP + parameter solve, and
+  Weierstrass primitives are covered by focused unit tests.
+- The compile-time analytic lane is real: `complex_jit.py` reuses the shared
+  `ast_ir` core and has a dedicated complex/conformal whitelist for symbolic
+  Cauchy-Riemann diagnostics.
+- The Apple GPU lane is deliberately narrow: `complex_mul`, `complex_exp`,
+  `complex_stereographic`, and `complex_mobius` have fused MSL kernels and
+  manifest entries.  `complex_conjugate`, `complex_abs`,
+  `conformal_jacobian`, and `laplacian_2d` stay host-only until a workload
+  justifies a dispatch.
 
-Deliverables:
+Remaining M7 work:
 
-- **Pin the complex-scalar representation first.**  Three candidates:
-  - `Cl(0,1)` - a single basis vector with `e1^2 = -1`.  The
-    canonical 2-D complex algebra and the simplest path.
-  - Even subalgebra of `Cl(2,0)` - isomorphic to C but a derived
-    path; useful only if we also want to interoperate with 2-D GA
-    rotations in the same program.
-  - `ComplexScalar` sibling kind - non-GA, parallels Decision #15a's
-    Multivector treatment.  Best if complex doesn't share enough
-    machinery with GA to justify reuse.
-  Recommendation: start with **`Cl(0,1)`** (smallest surface area;
-  reuses the existing `ga.Cl(p, q, r)` constructor; defers the
-  sibling-kind question until concrete demand appears).
-- Add a small complex/conformal reference namespace
-  (`tessera.complex` or `tessera.conformal`).
-- Add `complex_mul`, `complex_exp`, `mobius`, `stereographic`,
-  `conformal_jacobian`, `laplacian_2d` primitives.  CPU/reference
-  first; Apple GPU artifact-only.
-- **Cauchy-Riemann verifier.**  Reuses M6's symbolic-grad core on a
-  user-supplied complex function: compute `du/dx`, `du/dy`, `dv/dx`,
-  `dv/dy` and check `du/dx = dv/dy` and `du/dy = -dv/dx` symbolically.
-  Diagnostic fires when a function is `@analytic`-marked but the
-  identities fail.
-- Add visual/numeric conformance fixtures for conformality and contour
-  integration.
-- Connect one conformal energy example to EBM (e.g., a harmonic
-  potential on the plane lifted via stereographic projection).
-
-Acceptance:
-
-- CPU reference tests prove conformality for `z^2`, `exp(z)`, and Mobius
-  examples.
-- A diagnostic catches a non-holomorphic function when marked analytic.
-- One EBM example runs over plane/sphere coordinates using the new primitives.
-- The Cauchy-Riemann verifier shares its symbolic-grad core with M6
-  (regression: M6's `grad_y` tests still pass after the extraction).
+- Add the complex/conformal family to the generated compiler support table so
+  the CPU/reference, symbolic, and Apple-GPU-fused boundaries are visible next
+  to GA/EBM.
+- Add a public status doc for the Visual Complex lane rather than letting this
+  audit plan be the only durable description of the surface.
+- Promote more conformal primitives to native runtime only after a benchmark
+  row proves that a GPU dispatch beats the host composition for the target
+  shapes.
 
 ### M8 - Accelerator backend expansion
 
@@ -1076,16 +1057,19 @@ Acceptance:
 
 ## Recommended next 30 days
 
-1. Weeks 1-3: land M0 and M0.5 as consolidation of existing schemas, with the
-   generated support table and drift gate.
-2. Weeks 3-4: land the M1 report schema plus two canonical programs, not the
-   full six-program suite.
-3. Week 4: add the M3 `native_required=True` option and stable fallback
-   diagnostics.
-4. M6: write the design only, explicitly extracting the `clifford_jit`
-   AST-to-IR template; no energy lowering code until M0/M1 are in place.
-5. M7: keep the Visual Complex lane spec-only and pin the `Cl(0,1)` versus
-   `Cl(2,0)` decision before any implementation.
+1. Stabilize the new current-state docs: keep `support_table --check`,
+   `claim_lint`, and the CompileReport stability gate in the default
+   validation spine.
+2. Extend the generated support table to cover the Visual Complex surface,
+   including the four fused Apple GPU kernels and the host-only conformal
+   helpers.
+3. Continue M6 Step 3 from symbolic VJP coverage into codegen: materialize
+   per-IR-op `grad_y`, then fuse energy + gradient kernels for the supported
+   whitelist before adding more energy ops.
+4. Keep M8 backend expansion honest: CUDA/HIP/TPU/Metalium/Cerebras claims
+   should stay artifact-only unless a native proof row exists.
+5. Reduce split-brain frontend status by making every shipped canonical program
+   emit a stable CompileReport and, where possible, a matching benchmark row.
 
 Each milestone that lands should append or update an Architecture Decision row
 in `CLAUDE.md` so the plan becomes part of the project's durable decision log
@@ -1100,8 +1084,9 @@ precise support labels, reproducible end-to-end reports, fewer split-brain
 frontend paths, stricter target legality, and a small number of native paths
 that prove the whole compiler rather than only individual pieces.
 
-The Needham-inspired direction is worth pursuing because it strengthens the
-same thesis as the Clifford/EBM work: mathematical structure should be in the
-IR, not hidden in tensor conventions. Start with conformality, Mobius maps,
-Riemann-sphere projection, and Cauchy-Riemann diagnostics; let performance
-follow once the semantics are crisp.
+The Needham-inspired direction has moved from roadmap to implemented pilot. It
+strengthens the same thesis as the Clifford/EBM work: mathematical structure
+should be compiler-visible, not hidden in tensor conventions. The next
+question is no longer whether the lane belongs in Tessera; it is which
+conformal primitives earn native runtime promotion beyond the four fused Apple
+GPU kernels already shipped.

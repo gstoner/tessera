@@ -81,7 +81,7 @@ tessera/
 │   ├── profiler/                    # Canonical tprof profiler runtime, CLI, reports
 │   ├── roofline_tools/              # Roofline ingestion/report helpers
 │   ├── tessera-opt/                 # MLIR opt-style driver
-│   ├── tessera-translate/           # Translation tools placeholder
+│   ├── tessera-translate/           # Python export CLI + C++ MLIR/SPIR-V translation driver
 │   └── CLI/                         # CLI starter snapshots
 │
 ├── scripts/                         # Build, validation, and CI utility scripts
@@ -124,7 +124,7 @@ example snapshot folders when they are kept for reference.
 | `src/solvers/linalg`         | `src/tessera_linalg_solvers`                    | Linear algebra solver scaffold grouped under the solver stack |
 | `src/solvers/scaling_resilience` | `src/tessera_scaling_resilience_v1_1`        | SR dialect and passes grouped below solvers |
 | `src/solvers/spectral`       | `src/spectral`                                   | Spectral/FFT dialect grouped below solvers |
-| `src/solvers/tpp`            | `src/tpp/tpp_v0_2`                               | TPP dialect grouped below solvers |
+| `src/solvers/tpp`            | `src/tpp/tpp_v0_2`                               | TPP dialect, passes, and `tpp-space-time` pipeline grouped below solvers |
 | `src/Operators`              | new                                              | Placeholder for operator library work (Phase 4+) |
 | `tests/kernel_tests`         | `tests/tessera_kernels_scaffold`                 | Original retained: has system tests, roofline script, profile_ncu.sh |
 | `examples/advanced/power_retention` | `examples/advanced/Power Retention/…/v0_9` | v0_9: HIP kernel, WGMMA, autotune, nlohmann_json integration |

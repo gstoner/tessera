@@ -133,8 +133,9 @@ Use the repo virtualenv for the current GA + EBM native health check:
 .venv/bin/python benchmarks/apple_gpu/benchmark_ga_ebm.py --ci
 ```
 
-On Apple Silicon this emits 17 GA Apple GPU rows, eight native EBM Apple GPU
-rows, Python-reference EBM rows for comparison, and the GA/EBM workload rows.
+On Apple Silicon this emits 17 GA Apple GPU rows, 9 native EBM Apple GPU
+rows including `ebm_partition_exact`, Python-reference EBM rows for
+comparison, and the GA/EBM workload rows.
 On non-Darwin hosts it records `skipped_apple_gpu` and still emits the
 Python-reference rows.
 

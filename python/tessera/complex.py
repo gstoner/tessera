@@ -130,7 +130,7 @@ class ComplexScalar:
         return cls(arr.astype(np.float64, copy=False),
                    np.zeros_like(arr, dtype=np.float64))
 
-    def to_numpy(self, *, dtype: np.dtype | str = np.complex128) -> np.ndarray:
+    def to_numpy(self, *, dtype: Any = np.complex128) -> np.ndarray:
         """Materialize as a numpy complex array."""
         return (self.re.astype(dtype) + 1j * self.im.astype(dtype))
 
@@ -159,7 +159,7 @@ def from_numpy(z: np.ndarray | complex) -> ComplexScalar:
     return ComplexScalar.from_numpy(z)
 
 
-def to_numpy(z: ComplexScalar, *, dtype: np.dtype | str = np.complex128) -> np.ndarray:
+def to_numpy(z: ComplexScalar, *, dtype: Any = np.complex128) -> np.ndarray:
     """Top-level alias of :meth:`ComplexScalar.to_numpy`."""
     return z.to_numpy(dtype=dtype)
 
@@ -929,9 +929,11 @@ def complex_sqrt(z: Any, *, branch: int = 0) -> ComplexScalar:
     a, b = _as_pair(z)
     if np.isscalar(a) or a.shape == ():
         if float(a) == 0.0 and float(b) == 0.0:
-            return ComplexScalar(np.float64(0.0), np.float64(0.0))
+            return ComplexScalar(np.array(0.0, dtype=np.float64),
+                                 np.array(0.0, dtype=np.float64))
     # sqrt(z) = exp(0.5 * log(z)) on the principal branch.
-    half = ComplexScalar(np.float64(0.5), np.float64(0.0))
+    half = ComplexScalar(np.array(0.5, dtype=np.float64),
+                         np.array(0.0, dtype=np.float64))
     principal = complex_exp(complex_mul(half, complex_log(z)))
     if branch == 0:
         return principal

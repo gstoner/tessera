@@ -402,7 +402,7 @@ class CliffordCompiledCallable:
         observed_ops = tuple(r.op_name for r in observed)
         return observed_ops == self.artifact.op_names()
 
-    def compile_report(self) -> "_cr.CompileReport":  # noqa: F821 (forward ref; runtime-import inside body)
+    def compile_report(self) -> "Any":  # CompileReport forward-ref; runtime-imported inside body
         """Synthesize a :class:`CompileReport` from this callable's
         current artifact + last call's route trace.
 
@@ -524,6 +524,7 @@ def clifford_jit(
         # promises.  If the function's source isn't readable
         # (REPL / exec / lambda defined via dynamic codegen) we fall
         # back to the trace-capture variant.
+        wrapper: Any
         try:
             ir = lower_function_to_ir(fn)
         except CliffordJitError as exc:

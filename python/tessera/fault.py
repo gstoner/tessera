@@ -92,7 +92,7 @@ def on_failure(
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
 
-        wrapper.__tessera_failure_policy__ = cfg
+        wrapper.__tessera_failure_policy__ = cfg  # type: ignore[attr-defined]
         return wrapper
 
     return decorator(fn) if fn is not None else decorator
@@ -113,7 +113,7 @@ def on_preempt(
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
 
-        wrapper.__tessera_preempt_policy__ = cfg
+        wrapper.__tessera_preempt_policy__ = cfg  # type: ignore[attr-defined]
         return wrapper
 
     return decorator(fn) if fn is not None else decorator

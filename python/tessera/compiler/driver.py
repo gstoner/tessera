@@ -182,7 +182,7 @@ class CompileArtifactBundle:
 
     def to_metadata(self) -> dict[str, Any]:
         artifact_hashes = self.artifact_hashes
-        profiling = {
+        profiling: dict[str, Any] = {
             "schema": COMPILER_TRACE_SCHEMA_VERSION,
             "op": self.request.function_name,
             "target": self.request.target,

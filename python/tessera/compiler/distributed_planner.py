@@ -265,7 +265,7 @@ class DistributedPlan:
         cls,
         num_layers: int,
         mesh_axes: Dict[str, int],
-        dp_axis: str = "dp",
+        dp_axis: Optional[str] = "dp",
         tp_axis: Optional[str] = "tp",
         pp_stages: int = 1,
     ) -> "DistributedPlan":

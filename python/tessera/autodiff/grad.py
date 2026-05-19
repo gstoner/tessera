@@ -23,7 +23,7 @@ etc.), keep using ``with tessera.autodiff.tape() as t: ... t.backward(loss)``.
 from __future__ import annotations
 
 import functools
-from typing import Callable, Sequence, Tuple, Union
+from typing import Any, Callable, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -123,7 +123,7 @@ def hvp(
     tangents,
     *,
     eps: float = 1e-4,
-) -> np.ndarray:
+) -> Any:
     """Hessian-vector product: ``H @ v`` where ``H = ∇² fn(primals)``.
 
     Computed via central finite difference of :func:`grad`:

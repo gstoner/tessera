@@ -20,7 +20,7 @@ Functional update semantics:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 
@@ -42,7 +42,7 @@ def _to_np_dtype(dtype: str):
     return _DTYPE_MAP[dtype]
 
 
-def _coerce_kv_input(name: str, arr: np.ndarray, num_heads: int, head_dim: int) -> np.ndarray:
+def _coerce_kv_input(name: str, arr: Any, num_heads: int, head_dim: int) -> np.ndarray:
     """Validate + reshape an incoming K/V chunk to ``(seq, num_heads, head_dim)``."""
     if hasattr(arr, "_data") and not isinstance(arr, np.ndarray):
         # DistributedArray / Parameter / similar
@@ -93,12 +93,14 @@ class KVCacheHandle:
     quantize_bits: int | None = None
     auto_evict: bool = False
 
-    # Mutable state — kept off the dataclass-generated `__init__` via field(...)
+    # Mutable state — kept off the dataclass-generated `__init__` via field(...).
+    # The ``Any`` typing reflects the late-init pattern: ``__post_init__``
+    # allocates the real ndarrays before any external method runs.
     current_seq: int = field(default=0, init=False)
-    keys: np.ndarray = field(default=None, init=False, repr=False)  # type: ignore[assignment]
-    values: np.ndarray = field(default=None, init=False, repr=False)  # type: ignore[assignment]
+    keys: Any = field(default=None, init=False, repr=False)
+    values: Any = field(default=None, init=False, repr=False)
     # Per-token scales: shape (2, max_seq, 1, 1) — only allocated when quantizing.
-    _scales: np.ndarray | None = field(default=None, init=False, repr=False)
+    _scales: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
         if self.num_heads <= 0 or self.head_dim <= 0 or self.max_seq <= 0:

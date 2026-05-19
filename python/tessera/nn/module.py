@@ -111,6 +111,13 @@ class Parameter:
     dtype pair (zero-initialized).
     """
 
+    # PEP 526 annotations (no defaults) so mypy sees the slot-backed
+    # attributes; they do not conflict with ``__slots__`` because no
+    # class-level value is assigned.
+    _data: "DistributedArray"
+    requires_grad: bool
+    _grad: Any
+
     __slots__ = ("_data", "requires_grad", "_grad", "__weakref__")
 
     def __init__(
@@ -229,6 +236,10 @@ class Buffer:
     masks, and any module state that should be persisted but never
     differentiated.
     """
+
+    # PEP 526 annotations — see ``Parameter`` for the rationale.
+    _data: "DistributedArray"
+    persistent: bool
 
     __slots__ = ("_data", "persistent", "__weakref__")
 
@@ -494,7 +505,9 @@ class Module:
         buffer_dict = {
             name: b for name, b in self.named_buffers() if b.persistent
         }
-        loadable = {**param_dict, **buffer_dict}
+        # ``Parameter | Buffer`` so mypy can see ``.shape`` and
+        # ``._data`` on both branches.
+        loadable: dict[str, "Parameter | Buffer"] = {**param_dict, **buffer_dict}
 
         if strict:
             extra_keys = set(sd) - set(loadable)

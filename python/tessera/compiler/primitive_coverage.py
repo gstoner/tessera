@@ -9,7 +9,7 @@ compiler.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from .op_catalog import OP_SPECS
 
@@ -35,7 +35,7 @@ def _vjp_registered_names() -> frozenset[str]:
     that only need the spec table.
     """
     try:
-        from tessera.autodiff.vjp import _VJPS  # type: ignore
+        from tessera.autodiff.vjp import _VJPS
     except Exception:
         return frozenset()
     return frozenset(_VJPS.keys())
@@ -174,7 +174,10 @@ class PrimitiveCoverage:
     graph_name: str | None = None
     effect: str = "pure"
     lowering: str | None = None
-    metadata: Mapping[str, str] = field(default_factory=dict)
+    # Metadata values are intentionally heterogeneous — strings,
+    # ``BackendKernelEntry`` tuples, ``NumericPolicy`` records, etc.
+    # — so the value type is widened from ``str`` to ``Any``.
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def missing_contracts(self) -> tuple[str, ...]:
         return tuple(
@@ -1854,7 +1857,7 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         # conformance} → not_applicable rule with a comprehensive table
         # covering all S2-S15 python-primitive categories.
         metadata["graph_ir_lowering"] = _graph_ir_lowering_for_category(
-            category, metadata["graph_ir_lowering"]
+            category, str(metadata["graph_ir_lowering"])
         )
         # Per-name override wins over category default.
         if name in _GRAPH_IR_LOWERING_OVERRIDES:
@@ -2619,7 +2622,9 @@ def assert_canonical_dtypes() -> None:
     reg = all_primitive_coverages()
     for name, key, dt in buckets["planned_gated"]:
         entry = reg.get(name)
-        status = (entry.metadata or {}).get("dtype_status")
+        # ``reg.get`` can return None for entries not in the registry;
+        # treat missing metadata as "no status declared".
+        status = (entry.metadata if entry is not None else {}).get("dtype_status")
         if status != "planned_gated":
             raise AssertionError(
                 f"{name}.{key} = {dt!r} is a planned/gated dtype but the "

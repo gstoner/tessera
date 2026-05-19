@@ -299,9 +299,12 @@ def _tree_add_scaled(tree, tangent, scale: float):
     if tangent is None:
         return tree
     if isinstance(tree, dict):
-        out = {}
+        out: dict = {}
         for key, value in tree.items():
-            if isinstance(value, (bool, str, int, np.integer)) and not isinstance(value, np.ndarray):
+            # Defensive guard against future tree containers that
+            # subclass both ndarray and (bool/str/int); statically
+            # unreachable today.
+            if isinstance(value, (bool, str, int, np.integer)) and not isinstance(value, np.ndarray):  # type: ignore[unreachable]
                 out[key] = value
             else:
                 out[key] = _tree_add_scaled(value, tangent.get(key) if isinstance(tangent, dict) else None, scale)

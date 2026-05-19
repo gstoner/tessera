@@ -291,7 +291,7 @@ class MockRankGroup:
         self._barrier_obj.wait()
 
         buffers = self._shared_buffers[key]
-        result = np.concatenate(buffers, axis=axis)  # type: ignore[arg-type]
+        result: np.ndarray = np.concatenate(buffers, axis=axis)  # type: ignore[arg-type]
         self._barrier_obj.wait()
 
         self._withdraw(key)

@@ -83,9 +83,14 @@ def _tree_numeric_vjp(fn, dout, tree, *, eps: float = 1e-5):
     if tree is None:
         return None
     if isinstance(tree, dict):
-        out = {}
+        out: dict = {}
         for key, value in tree.items():
-            if isinstance(value, (bool, str, int, np.integer)) and not isinstance(value, np.ndarray):
+            # ``np.ndarray`` is not a subclass of (bool, str, int,
+            # np.integer); the second ``isinstance`` check is a defense
+            # against future tree containers that subclass both.  mypy
+            # statically knows it's unreachable today, but the guard
+            # stays.
+            if isinstance(value, (bool, str, int, np.integer)) and not isinstance(value, np.ndarray):  # type: ignore[unreachable]
                 out[key] = None
                 continue
 

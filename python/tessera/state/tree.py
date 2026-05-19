@@ -178,7 +178,8 @@ class TreeDef:
     def num_leaves(self) -> int:
         if self.is_leaf:
             return 1
-        return sum(c.num_leaves() for c in self.children)  # type: ignore[union-attr]
+        assert self.children is not None
+        return sum(c.num_leaves() for c in self.children)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TreeDef):

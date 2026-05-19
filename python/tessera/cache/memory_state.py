@@ -89,8 +89,8 @@ class MemoryStateHandle:
             raise ValueError(f"capacity must be positive, got {self.capacity}")
         if self.key_dim <= 0:
             raise ValueError(f"key_dim must be positive, got {self.key_dim}")
-        if isinstance(self.value_dim, int):
-            object.__setattr__(self, "value_dim", (self.value_dim,))
+        if isinstance(self.value_dim, int):  # type: ignore[unreachable]
+            object.__setattr__(self, "value_dim", (self.value_dim,))  # type: ignore[unreachable]
         if self.eviction not in {"lru", "fifo", "score", "oldest"}:
             raise ValueError(
                 f"eviction must be 'lru'|'fifo'|'score'|'oldest', "

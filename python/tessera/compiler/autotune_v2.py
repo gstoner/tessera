@@ -24,7 +24,7 @@ import math
 import sqlite3
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from ..telemetry import make_event
 
@@ -496,6 +496,9 @@ class BayesianAutotuner:
                 self._best = res
             trial_id += 1
 
+        # By contract, the loop above sets ``self._best`` at least once
+        # because each trial produces a ``TuningResult``; assert for mypy.
+        assert self._best is not None
         return self._best
 
     # ------------------------------------------------------------------
@@ -531,7 +534,7 @@ class BayesianAutotuner:
             f"tflops = {self._best.tflops:.2f}}}}}"
         )
 
-    def schedule_artifact(self, arch: str = "generic") -> Dict[str, object]:
+    def schedule_artifact(self, arch: str = "generic") -> Dict[str, Any]:
         """Return a reproducible schedule artifact for deployment bundles."""
         tile = self._best.config.to_dict() if self._best is not None else {}
         latency_ms = self._best.latency_ms if self._best is not None else None
@@ -640,9 +643,9 @@ class BayesianAutotuner:
             f"numeric_policy = \"{shape['dtype']}@accum(f32)\"}}"
         )
 
-    def cost_measurements(self) -> List[Dict[str, float]]:
+    def cost_measurements(self) -> List[Dict[str, Any]]:
         """Return autotuner measurements for learned surrogate training."""
-        rows: List[Dict[str, float]] = []
+        rows: List[Dict[str, Any]] = []
         bytes_moved = 2.0 * (
             self.workload.M * self.workload.K
             + self.workload.K * self.workload.N

@@ -240,6 +240,30 @@ class _Parser:
         index = self.i + offset
         return self.tokens[index] if index < len(self.tokens) else None
 
+    def _require_token(self, what: str) -> Token:
+        """``peek()`` + assertion that the parser already knows the
+        token exists (e.g., the loop condition checked).  Narrows
+        ``Token | None`` to ``Token`` for mypy without changing
+        runtime behavior."""
+        token = self.peek()
+        if token is None:
+            raise FrontendSyntaxError(
+                f"unexpected end of input while parsing {what}",
+                self._span(None),
+            )
+        return token
+
+    def _peek_text(self) -> str:
+        """``peek().text`` with end-of-stream returning the empty
+        string.  Used in ``while`` conditions where the check
+        ``text != "}"`` should naturally terminate at EOF; the empty
+        string never matches a real punctuation token, so the loop
+        ends cleanly.  Avoids the ``while self.peek() and
+        self.peek().text != ...`` double-call pattern that mypy can't
+        narrow through."""
+        token = self.peek()
+        return token.text if token is not None else ""
+
     def accept(self, text: str) -> Optional[Token]:
         token = self.peek()
         if token and token.text == text:
@@ -284,7 +308,7 @@ class _Parser:
         meshes = []
         type_decls = []
         const_decls = []
-        while self.peek() and self.peek().text != "}":
+        while self._peek_text() != "}":
             token = self.peek()
             if token and token.text == "mesh":
                 meshes.append(self.parse_mesh())
@@ -295,6 +319,10 @@ class _Parser:
             elif token and token.text == "let":
                 const_decls.append(self.parse_const_decl())
             else:
+                # The loop guard ``self._peek_text() != "}"`` plus the
+                # elif chain above means ``token`` is guaranteed
+                # non-None here.  Narrow for mypy.
+                assert token is not None
                 raise FrontendSyntaxError(f"unsupported module declaration {token.text!r}", self._span(token))
         self.eat_text("}")
         return Module(name=name, funcs=funcs, meshes=meshes, type_decls=type_decls, const_decls=const_decls)
@@ -308,19 +336,19 @@ class _Parser:
         name = self.eat_ident()
         self.eat_text("(")
         params = []
-        if self.peek() and self.peek().text != ")":
+        if self._peek_text() != ")":
             params.append(self.parse_param())
             while self.accept(","):
                 params.append(self.parse_param())
         self.eat_text(")")
         return_type = None
-        if self.peek() and self.peek().kind == "ARROW":
+        if (_tk := self.peek()) is not None and _tk.kind == "ARROW":
             self.i += 1
             return_type = self.parse_type_until({"{", "@"})
-        attrs = self.parse_attr_block() if self.peek() and self.peek().text == "@" else {}
+        attrs = self.parse_attr_block() if self._peek_text() == "@" else {}
         self.eat_text("{")
         body = []
-        while self.peek() and self.peek().text != "}":
+        while self._peek_text() != "}":
             body.append(self.parse_stmt())
         self.eat_text("}")
         return Function(name=name, params=params, return_type=return_type, body=body, attrs=attrs, kind=kind, span=self._span(token))
@@ -339,7 +367,7 @@ class _Parser:
 
     def parse_mesh_attrs(self) -> dict[str, Any]:
         attrs: dict[str, Any] = {}
-        while self.peek() and self.peek().text != ">":
+        while self._peek_text() != ">":
             key = self.eat_ident()
             self.eat_text("=")
             attrs[key] = self.parse_attr_value()
@@ -395,7 +423,7 @@ class _Parser:
         if token.text == "return":
             self.i += 1
             values = []
-            if self.peek() and self.peek().text != ";":
+            if self._peek_text() != ";":
                 values = [self.parse_expr()]
                 while self.accept(","):
                     values.append(self.parse_expr())
@@ -418,7 +446,7 @@ class _Parser:
         name = self.eat_ident()
         slices: list[Optional[Expr]] = []
         if self.accept("["):
-            if self.peek() and self.peek().text != "]":
+            if self._peek_text() != "]":
                 slices.append(self.parse_optional_slice_expr())
                 while self.accept(","):
                     slices.append(self.parse_optional_slice_expr())
@@ -426,14 +454,14 @@ class _Parser:
         return LValue(name, slices, self._span(token))
 
     def parse_optional_slice_expr(self) -> Optional[Expr]:
-        if self.peek() and self.peek().text == ":":
+        if self._peek_text() == ":":
             self.i += 1
             return None
         expr = self.parse_expr()
-        if self.peek() and self.peek().text == ":":
+        if self._peek_text() == ":":
             # The current Graph IR object model only needs to know that this is
             # a sliced lvalue. Consume full range syntax to satisfy the grammar.
-            while self.peek() and self.peek().text not in {",", "]"}:
+            while self._peek_text() not in {",", "]"}:
                 self.i += 1
         return expr
 
@@ -455,7 +483,7 @@ class _Parser:
             self.eat_text(")")
         body = self.parse_block()
         else_body = []
-        if kind == "if" and self.peek() and self.peek().text == "else":
+        if kind == "if" and self._peek_text() == "else":
             self.i += 1
             else_body = self.parse_block()
         return Control(kind, body, else_body, self._span(token))
@@ -470,15 +498,17 @@ class _Parser:
     def parse_block(self) -> list[Stmt]:
         self.eat_text("{")
         body = []
-        while self.peek() and self.peek().text != "}":
+        while self._peek_text() != "}":
             body.append(self.parse_stmt())
         self.eat_text("}")
         return body
 
     def parse_expr(self) -> Expr:
         expr = self.parse_primary()
-        while self.peek() and self.peek().text in {"+", "-", "*", "/"}:
-            op = self.peek()
+        while self._peek_text() in {"+", "-", "*", "/"}:
+            # Loop guard guarantees peek() returns a non-None Token
+            # because the empty string from EOF doesn't match the set.
+            op = self._require_token("binary operator")
             self.i += 1
             rhs = self.parse_primary()
             expr = Binary(expr, op.text, rhs, getattr(expr, "span", self._span(op)))
@@ -505,17 +535,18 @@ class _Parser:
             expr = self.parse_expr()
             self.eat_text(")")
             return expr
-        if token.text == "tensor" and self.peek(1) and self.peek(1).text == "<":
+        peek1 = self.peek(1)
+        if token.text == "tensor" and peek1 is not None and peek1.text == "<":
             return self.parse_tensor_expr()
         name = self.parse_qualified_name()
         if self.accept("("):
             args = []
-            if self.peek() and self.peek().text != ")":
+            if self._peek_text() != ")":
                 args.append(self.parse_expr())
                 while self.accept(","):
                     args.append(self.parse_expr())
             self.eat_text(")")
-            attrs = self.parse_attr_block() if self.peek() and self.peek().text == "@" else {}
+            attrs = self.parse_attr_block() if self._peek_text() == "@" else {}
             return Call(name, args, attrs, self._span(token))
         return Name(name, self._span(token))
 
@@ -524,8 +555,10 @@ class _Parser:
         self.eat_keyword("tensor")
         self.eat_text("<")
         shape: list[str] = []
-        while self.peek() and self.peek().text not in {";", ">"}:
-            dim = self.peek()
+        while self._peek_text() not in {";", ">"}:
+            # Loop guard guarantees peek() returns a non-None Token
+            # (EOF returns "" which doesn't match the set).
+            dim = self._require_token("tensor dimension")
             if dim.text == "x":
                 self.i += 1
                 continue
@@ -547,8 +580,10 @@ class _Parser:
         if self.accept("("):
             depth = 1
             parts = [name, "("]
-            while self.peek() and depth:
+            while depth:
                 token = self.peek()
+                if token is None:
+                    break
                 self.i += 1
                 parts.append(token.text)
                 if token.text == "(":
@@ -568,7 +603,7 @@ class _Parser:
         self.eat_text("@")
         self.eat_text("{")
         attrs = {}
-        while self.peek() and self.peek().text != "}":
+        while self._peek_text() != "}":
             key = self.eat_ident()
             self.eat_text("=")
             attrs[key] = self.parse_attr_value()
@@ -583,7 +618,7 @@ class _Parser:
         if token.text == "[":
             self.i += 1
             values = []
-            while self.peek() and self.peek().text != "]":
+            while self._peek_text() != "]":
                 values.append(self.parse_attr_value())
                 self.accept(",")
             self.eat_text("]")

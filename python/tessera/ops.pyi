@@ -31,7 +31,14 @@ Activation = Literal["linear", "none", "relu", "silu", "gelu"]
 ReduceOp = Literal["sum", "max", "mean", "min", "prod"]
 
 
-class Tensor: ...
+#: Tessera ops are polymorphic across array carriers — numpy arrays,
+#: ``DistributedArray`` instances, and the future native tensor
+#: handle.  The stub aliases ``Tensor`` to ``Any`` so callers in
+#: ``nn/layers.py`` and elsewhere that work in numpy throughout the
+#: reference path type-check cleanly.  A future tightening pass can
+#: replace this with a ``Protocol`` once every carrier exposes the
+#: same minimal interface.
+Tensor = Any
 
 
 class NumericPolicy(TypedDict, total=False):
@@ -183,6 +190,7 @@ def flash_attn(
     causal: bool = ...,
     cache: Optional[Any] = ...,
     dropout_p: float = ...,
+    seed: Optional[int] = ...,
     params: Optional[FlashParams] = ...,
     deterministic: Optional[Determinism] = ...,
 ) -> Tensor: ...
@@ -336,3 +344,12 @@ def rearrange(x: Tensor, layout: Layout) -> Tensor: ...
 def pack(x: Tensor, layout: Layout) -> Tensor: ...
 def unpack(x: Tensor) -> Tensor: ...
 def tile_view(x: Tensor, BM: int, BN: int, BK: Optional[int] = ...) -> Tensor: ...
+
+
+# Fallback for the S-series / RL / spectral / recurrent / GA / EBM ops
+# that ship at runtime but aren't yet declared in this stub.  A
+# focused stub-completeness sprint can replace this catch-all with
+# explicit signatures op by op.  Until then ``__getattr__`` returning
+# ``Any`` keeps mypy from emitting false-positive "Module has no
+# attribute" errors against ops that demonstrably exist at runtime.
+def __getattr__(name: str) -> Any: ...

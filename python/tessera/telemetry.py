@@ -130,7 +130,8 @@ def classify_bottleneck(event: Mapping[str, Any]) -> str:
         return "failed_or_unmeasured"
     if event.get("op") in ("all_reduce", "all_gather", "reduce_scatter", "broadcast", "collective"):
         return "collective_or_overlap"
-    metadata = event.get("metadata") if isinstance(event.get("metadata"), Mapping) else {}
+    _meta = event.get("metadata")
+    metadata: Mapping[str, Any] = _meta if isinstance(_meta, Mapping) else {}
     bound = event.get("roofline_bound") or event.get("bound") or metadata.get("roofline_bound")
     if bound == "compute":
         return "compute_bound"

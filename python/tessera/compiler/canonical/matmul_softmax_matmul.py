@@ -113,7 +113,7 @@ def _target_decision_for_host() -> tuple[str, dict[str, str], FallbackReason | N
             # native success.
             FallbackReason.REFERENCE_FORCED,
         )
-    return (
+    return (  # type: ignore[unreachable]
         "cpu",
         {"cpu": "non-Darwin host; numpy reference path"},
         FallbackReason.NON_DARWIN_HOST,

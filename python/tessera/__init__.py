@@ -100,11 +100,16 @@ graph = types.SimpleNamespace(
     replay_capture=debug.replay_capture,
 )
 
+# ``autotune`` is a function used as a namespace for its companion
+# helpers (``.load`` / ``.cache_key`` / ``.schedule_artifact`` /
+# ``.RooflineCostModel``).  mypy treats assignments to function
+# attributes as ``[attr-defined]`` errors; type-ignore the
+# deliberately-dynamic namespace pattern.
 autotune = _autotune_module.autotune
-autotune.load = _autotune_module.load
-autotune.cache_key = _autotune_module.cache_key
-autotune.schedule_artifact = _autotune_module.schedule_artifact
-autotune.RooflineCostModel = _autotune_module.RooflineCostModel
+autotune.load = _autotune_module.load                     # type: ignore[attr-defined]
+autotune.cache_key = _autotune_module.cache_key           # type: ignore[attr-defined]
+autotune.schedule_artifact = _autotune_module.schedule_artifact  # type: ignore[attr-defined]
+autotune.RooflineCostModel = _autotune_module.RooflineCostModel  # type: ignore[attr-defined]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Phase 1: compiler API
@@ -1916,7 +1921,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         otherwise ``(None, None)``. Soft import — we don't want a hard
         dependency just for the fp8 fast path."""
         try:
-            import ml_dtypes  # type: ignore
+            import ml_dtypes
             return ml_dtypes.float8_e4m3fn, ml_dtypes.float8_e5m2
         except Exception:
             return None, None
@@ -1948,8 +1953,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     # generic helper.
     def _round_to_fp8_grid_numpy(x: "np.ndarray", *, format: str) -> "np.ndarray":
         spec = _FP8_FORMATS[format]
+        # The dict values are intentionally mixed (max_normal: float,
+        # mantissa_bits: int, exp_bias: int) but mypy widens to
+        # ``dict[str, float]``; cast the integer fields back.
         return _round_to_fp_grid_numpy(
-            x, max_normal=spec["max_normal"], mantissa_bits=spec["mantissa_bits"],
+            x, max_normal=spec["max_normal"], mantissa_bits=int(spec["mantissa_bits"]),
         )
 
     def quantize_fp8(x, *, format: str = "e4m3", scale=None):
@@ -2045,7 +2053,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         scaled = np.clip(x / scale, -max_normal, max_normal)
         rounded = _round_to_fp_grid_numpy(
             scaled, max_normal=max_normal,
-            mantissa_bits=spec["mantissa_bits"],
+            mantissa_bits=int(spec["mantissa_bits"]),
         )
         return rounded * np.float32(scale), np.float32(scale)
 
@@ -2074,7 +2082,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         scaled = np.clip(x / scale, -max_normal, max_normal)
         rounded = _round_to_fp_grid_numpy(
             scaled, max_normal=max_normal,
-            mantissa_bits=spec["mantissa_bits"],
+            mantissa_bits=int(spec["mantissa_bits"]),
         )
         return rounded * np.float32(scale), np.float32(scale)
 
@@ -2115,7 +2123,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         scaled = np.clip(blocked / scales_bcast, -max_normal, max_normal)
         rounded = _round_to_fp_grid_numpy(
             scaled, max_normal=max_normal,
-            mantissa_bits=_FP4_FORMATS["e2m1"]["mantissa_bits"],
+            mantissa_bits=int(_FP4_FORMATS["e2m1"]["mantissa_bits"]),
         )
         out = (rounded * scales_bcast).reshape(x.shape)
         return out.astype(np.float32), scales
@@ -2893,9 +2901,13 @@ def _make_ops_namespace() -> types.SimpleNamespace:
 
     def pad(x, pad_width, mode: str = "constant", constant_values=0):
         a = _unwrap(x)
+        # numpy's `pad` is heavily overloaded on the ``mode`` literal;
+        # we accept a free-form string at this layer (validated by
+        # numpy at runtime).  Cast through ``Any`` for mypy.
+        np_pad: Any = np.pad
         if mode == "constant":
-            return np.pad(a, pad_width, mode=mode, constant_values=constant_values)
-        return np.pad(a, pad_width, mode=mode)
+            return np_pad(a, pad_width, mode=mode, constant_values=constant_values)
+        return np_pad(a, pad_width, mode=mode)
 
     def tile(x, reps):
         return np.tile(_unwrap(x), reps)
@@ -3668,7 +3680,7 @@ class _DtypeAnnotation:
         self.layout = layout
 
     def __class_getitem__(cls, shape):
-        return cls(cls._dtype, shape)  # type: ignore[attr-defined]
+        return cls(cls._dtype, shape)
 
     def __getitem__(self, shape):
         return type(self)(shape)

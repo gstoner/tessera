@@ -39,11 +39,11 @@ Usage:
 """
 
 from __future__ import annotations
-from typing import ClassVar
+from typing import Any, ClassVar
 
 
 # Valid privilege modes and their properties
-_VALID_MODES = {
+_VALID_MODES: dict[str, dict[str, Any]] = {
     "read":       {"exclusive": False, "reduces": False, "op": None},
     "write":      {"exclusive": True,  "reduces": False, "op": None},
     "reduce_sum": {"exclusive": False, "reduces": True,  "op": "sum"},

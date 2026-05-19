@@ -24,7 +24,7 @@ API contract:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 
@@ -76,7 +76,9 @@ class LatentKVCacheHandle:
     auto_evict: bool = False
 
     current_seq: int = field(default=0, init=False)
-    latents: np.ndarray = field(default=None, init=False, repr=False)  # type: ignore[assignment]
+    # Late-init via ``__post_init__``; ``Any`` reflects the
+    # default=None → ndarray transition.
+    latents: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
         if self.latent_dim <= 0 or self.max_seq <= 0:

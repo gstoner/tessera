@@ -105,10 +105,14 @@ def _target_decision_for_host() -> tuple[str, dict[str, str], FallbackReason | N
         conv_entries = bm.manifest_for("conv2d")
         ln_entries = bm.manifest_for("layer_norm")
         gelu_entries = bm.manifest_for("gelu")
-        ag = lambda es: next((e for e in es if e.target == "apple_gpu"), None)
-        c_st = (ag(conv_entries).status if ag(conv_entries) else "?")
-        ln_st = (ag(ln_entries).status if ag(ln_entries) else "?")
-        gelu_st = (ag(gelu_entries).status if ag(gelu_entries) else "?")
+        def ag(es):
+            return next((e for e in es if e.target == "apple_gpu"), None)
+        # Cache once so mypy doesn't have to reconcile two calls
+        # returning the same Optional handle.
+        c_ag, ln_ag, gelu_ag = ag(conv_entries), ag(ln_entries), ag(gelu_entries)
+        c_st = c_ag.status if c_ag is not None else "?"
+        ln_st = ln_ag.status if ln_ag is not None else "?"
+        gelu_st = gelu_ag.status if gelu_ag is not None else "?"
         return (
             "apple_gpu",
             {
@@ -121,7 +125,7 @@ def _target_decision_for_host() -> tuple[str, dict[str, str], FallbackReason | N
             # numpy until conv2d gets a fused kernel.
             FallbackReason.REFERENCE_FORCED,
         )
-    return (
+    return (   # type: ignore[unreachable]
         "cpu",
         {"cpu": "non-Darwin host; numpy reference path"},
         FallbackReason.NON_DARWIN_HOST,

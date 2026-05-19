@@ -13,7 +13,7 @@ analytic VJP evaluated at ``dout = cotangent``.
 
 from __future__ import annotations
 
-from typing import Callable, Tuple
+from typing import Any, Callable, Tuple
 
 import numpy as np
 
@@ -115,6 +115,7 @@ def check_grad_geo(
             cotangent = rng.randn(*arr.shape).astype(np.float64)
 
     # Build dout in the form vjp_fn expects.
+    dout: Any
     if isinstance(out, Multivector):
         dout = Multivector(cotangent, out.algebra)
     else:

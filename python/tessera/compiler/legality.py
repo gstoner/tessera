@@ -207,7 +207,7 @@ def _check_kv_cache(
 ) -> None:
     if not operands and op != "tessera.kv_cache_create":
         diagnostics.append(LegalityDiagnostic("LEGALITY_OPERAND_ARITY", f"{op} requires a cache operand", "operand_arity"))
-    if "page_size" in attrs and int(attrs["page_size"]) <= 0:
+    if "page_size" in attrs and int(attrs["page_size"]) <= 0:  # type: ignore[call-overload]
         diagnostics.append(LegalityDiagnostic("LEGALITY_KV_CACHE_PAGE", "kv_cache page_size must be positive", "kv_cache_page"))
 
 

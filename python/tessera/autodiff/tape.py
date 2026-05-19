@@ -354,7 +354,7 @@ def _make_wrapper(name: str, original: Callable) -> Callable:
             active.record(name, tuple(array_descs), dict(kwargs), out, vjp_fn)
         return out
 
-    wrapped.__wrapped__ = original
+    wrapped.__wrapped__ = original  # type: ignore[attr-defined]
     # Preserve the op's `__name__` so callers that introspect (e.g., autotune)
     # still see e.g. "matmul" rather than "_traced_matmul".
     wrapped.__name__ = getattr(original, "__name__", name)

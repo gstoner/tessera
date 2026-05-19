@@ -19,7 +19,10 @@ from __future__ import annotations
 import functools
 import inspect
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+
+if TYPE_CHECKING:
+    from ..runtime import RuntimeArtifact
 
 from .constraints import Constraint, ConstraintSolver, TesseraConstraintError
 from .effects import Effect, EffectLattice, TesseraEffectError
@@ -317,7 +320,7 @@ class JitFn:
         # them once and reuse on every __call__. Without caching the small-
         # GEMM hot-path is dominated by metadata dict construction + the
         # SHA-256 over the artifact JSON inside `RuntimeArtifact.artifact_hash`.
-        self._cached_artifact: Optional["RuntimeArtifact"] = None  # noqa: F821 (forward ref; runtime-import below)
+        self._cached_artifact: Optional["RuntimeArtifact"] = None
         functools.update_wrapper(self, fn)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
@@ -393,9 +396,9 @@ class JitFn:
             if len(shape) != len(ir_arg.dim_names):
                 continue  # rank mismatch — let downstream surface a clearer error
             for dim_name, concrete in zip(ir_arg.dim_names, shape):
-                if not isinstance(dim_name, str):
-                    continue
-                # Symbolic dim names are typically uppercase (e.g., "M", "K").
+                # ``dim_name`` is statically typed ``str`` so the
+                # ``isidentifier`` / ``isnumeric`` guards below are the
+                # only runtime narrowing we need.
                 if not dim_name.isidentifier() or dim_name.isnumeric():
                     continue
                 prev = resolved.get(dim_name)
@@ -442,6 +445,11 @@ class JitFn:
 
         from tessera.runtime import _execute_native_cpu_metadata
 
+        # ``launch_args`` is typed ``Any`` because the metadata
+        # dispatcher accepts both the kwargs-dict form and the
+        # raw-args-tuple form depending on which path the
+        # ``cpu_plan`` shape selects.
+        launch_args: Any
         if kwargs and args:
             launch_args = {name: value for name, value in zip(self.arg_names, args)}
             launch_args.update(kwargs)
@@ -466,6 +474,8 @@ class JitFn:
                         f"(underlying error: {type(exc).__name__}: {exc})"
                     ),
                 ) from exc
+            # ``cpu_plan`` is None-checked at the entry point; narrow.
+            assert self.cpu_plan is not None
             return self.cpu_plan.execute(args, kwargs, self.arg_names)
 
     def _apple_cpu_fast_call(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Any:
@@ -478,6 +488,7 @@ class JitFn:
 
         from tessera.runtime import _execute_apple_cpu_accelerate_metadata
 
+        launch_args: Any
         if kwargs and args:
             launch_args = {name: value for name, value in zip(self.arg_names, args)}
             launch_args.update(kwargs)
@@ -499,6 +510,7 @@ class JitFn:
 
         from tessera.runtime import _execute_apple_gpu_mps_metadata
 
+        launch_args: Any
         if kwargs and args:
             launch_args = {name: value for name, value in zip(self.arg_names, args)}
             launch_args.update(kwargs)
@@ -1020,7 +1032,7 @@ def jit(
                 module,
                 source_origin=source_origin,
                 target=target_kind,
-                cpu_tile=tuple(int(v) for v in cpu_tile),
+                cpu_tile=(int(cpu_tile[0]), int(cpu_tile[1]), int(cpu_tile[2])),
                 options={
                     "cpu_tile": list(tuple(int(v) for v in cpu_tile)),
                     "deterministic": deterministic,
@@ -1063,7 +1075,7 @@ def jit(
             attn_config=resolved_attn,
             cpu_plan=cpu_plan,
             compile_bundle=compile_bundle,
-            cpu_tile=tuple(int(v) for v in cpu_tile),
+            cpu_tile=(int(cpu_tile[0]), int(cpu_tile[1]), int(cpu_tile[2])),
             source_origin=source_origin,
             lowering_diagnostics=diagnostics,
             native_required=native_required,

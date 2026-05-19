@@ -394,6 +394,8 @@ class BatchNorm1d(Module):
         normalized = (x_arr - mean_b) / np.sqrt(var_b + self.eps)
 
         if self.affine:
+            w_b: np.ndarray
+            b_b: np.ndarray
             if x_arr.ndim == 3:
                 w_b = self.weight._data._data.reshape(1, self.num_features, 1)
                 b_b = self.bias._data._data.reshape(1, self.num_features, 1)
@@ -804,7 +806,11 @@ class CastedLinear(Linear):
         self.cast_dtype = cast_dtype
 
     def forward(self, x: Any) -> np.ndarray:
-        return ops.cast(super().forward(x), self.cast_dtype)
+        # ``cast_dtype`` is a free-form string at this layer (validated
+        # downstream by ``tessera.dtype.canonicalize_dtype``); the
+        # narrower Literal type in the stub is for static callers, not
+        # for runtime-validated knobs like this one.
+        return ops.cast(super().forward(x), self.cast_dtype)  # type: ignore[arg-type]
 
 
 class CastedEmbedding(Embedding):
@@ -815,7 +821,10 @@ class CastedEmbedding(Embedding):
         self.cast_dtype = cast_dtype
 
     def forward(self, idx: Any) -> np.ndarray:
-        return ops.cast(super().forward(idx), self.cast_dtype)
+        # See ``CastedLinear.forward`` for the dtype narrowing
+        # rationale; we accept the str here and canonicalize at
+        # runtime via ``tessera.dtype``.
+        return ops.cast(super().forward(idx), self.cast_dtype)  # type: ignore[arg-type]
 
 
 # ─────────────────────────────────────────────────────────────────────────────

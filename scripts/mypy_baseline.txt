@@ -8,20 +8,17 @@
 #   * If the count is `> BASELINE`, the script fails and prints the new
 #     errors.
 #
-# The intent is to (a) prevent type regressions from new code while
-# (b) not blocking day-one CI on the legacy backlog.  Concrete
-# follow-ups, in priority order (high error counts first):
-#
-#   1. python/tessera/nn/layers.py        (71 errors)
-#   2. python/tessera/checkpoint.py       (58 errors)
-#   3. python/tessera/quantization.py     (52 errors)
-#   4. python/tessera/ga/multivector.py   (43 errors)
-#   5. python/tessera/server.py           (34 errors)
-#   6. python/tessera/nn/module.py        (28 errors)
+# Historical baseline: 357 errors, clustered in 6 files —
+# nn/layers.py (71), checkpoint.py (58), quantization.py (52),
+# ga/multivector.py (43), server.py (34), nn/module.py (28), plus a
+# long tail across ~30 other files.  All cleared in the 2026-05-19
+# mypy-backlog-cleanup sprint via PEP 526 slot annotations, cast()
+# narrowing for Mapping[str, object]→narrower types, and tightening
+# of variable annotations.  The ratchet now defends 0.
 #
 # Update this file after a focused cleanup sprint by re-running the
 # baseline command:
 #
 #   ./scripts/mypy_ratchet.sh --update-baseline
 #
-BASELINE=357
+BASELINE=0

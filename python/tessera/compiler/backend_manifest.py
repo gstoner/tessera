@@ -37,7 +37,7 @@ dashboard to surface.  The ``backend_kernel`` contract axis stays at
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Optional, Tuple
+from typing import Any, Mapping, Optional, Tuple
 
 from .capabilities import TARGET_CAPABILITIES, canonical_op
 from .op_catalog import OP_SPECS
@@ -232,7 +232,7 @@ class BackendKernelEntry:
 # ─────────────────────────────────────────────────────────────────────────────
 _APPLE_GPU_FUSED = ("fp32", "fp16", "bf16")
 
-_APPLE_GPU_KERNELS: dict[str, dict[str, object]] = {
+_APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     "matmul": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
@@ -428,7 +428,7 @@ _ROCM_KERNEL_MFU: dict[tuple[str, str], float] = {
 # x86 backend — AMX BF16 GEMM is the only currently-real execution path
 # (Phase 2).
 # ─────────────────────────────────────────────────────────────────────────────
-_X86_KERNELS: dict[str, dict[str, object]] = {
+_X86_KERNELS: dict[str, dict[str, Any]] = {
     "matmul": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("bf16",),
@@ -445,7 +445,7 @@ _X86_KERNELS: dict[str, dict[str, object]] = {
 # ─────────────────────────────────────────────────────────────────────────────
 # Apple CPU — Accelerate cblas_sgemm + BNNS fp16/bf16
 # ─────────────────────────────────────────────────────────────────────────────
-_APPLE_CPU_KERNELS: dict[str, dict[str, object]] = {
+_APPLE_CPU_KERNELS: dict[str, dict[str, Any]] = {
     "matmul": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32", "fp16", "bf16"),
@@ -473,7 +473,7 @@ _APPLE_CPU_KERNELS: dict[str, dict[str, object]] = {
 # pass currently lowers `tessera.tile.softmax` to a `dma + matmul`
 # decomposition; lit-testable, execution gated on Wormhole hardware).
 # ─────────────────────────────────────────────────────────────────────────────
-_METALIUM_KERNELS: dict[str, dict[str, object]] = {
+_METALIUM_KERNELS: dict[str, dict[str, Any]] = {
     "matmul": {
         "status": _ARTIFACT_STATUS,
         "dtypes": ("bf16", "fp32"),
@@ -505,7 +505,7 @@ _METALIUM_KERNELS: dict[str, dict[str, object]] = {
 # Metalium planned/gated dtype declarations.  `bfp8` / `bfp4` are the
 # Tenstorrent block-FP formats; entries that reference them carry
 # `metadata.dtype_status="planned_gated"` enforced by the registry walker.
-_METALIUM_PLANNED_GATED_KERNELS: dict[str, dict[str, object]] = {
+_METALIUM_PLANNED_GATED_KERNELS: dict[str, dict[str, Any]] = {
     "matmul": {
         "status": _PLANNED_STATUS,
         "dtypes": ("bfp8", "bfp4"),
@@ -769,7 +769,7 @@ _EBM_CPU_DTYPES = ("fp32", "fp64")
 _EBM_APPLE_GPU_BASELINE_DTYPES = ("fp32",)
 _EBM_PLANNED_GPU_DTYPES = ("fp32", "fp16", "bf16")
 
-_EBM_APPLE_GPU_FUSED: dict[str, dict[str, object]] = {
+_EBM_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
     # Pointwise affine: out = y - eta * grad. ABI: (y, grad, eta, out, n).
     "ebm_inner_step": {
         "symbol": "tessera_apple_gpu_ebm_inner_step_f32",
@@ -1067,7 +1067,7 @@ def _capability_status(target_name: str, op_name: str) -> tuple[str, tuple[str, 
 # ``laplacian_2d`` (small stencil, host numpy is faster at our typical
 # sizes) intentionally don't get manifest entries — they stay CPU-only
 # until a real workload demonstrates a GPU benefit.
-_COMPLEX_APPLE_GPU_FUSED: dict[str, dict[str, object]] = {
+_COMPLEX_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
     "complex_mul": {
         "symbol": "tessera_apple_gpu_complex_mul_f32",
         "dtypes": ("fp32",),

@@ -297,7 +297,7 @@ class GPUTargetProfile:
 
     def __post_init__(self) -> None:
         if not isinstance(self.isa, ISA):
-            try:
+            try:  # type: ignore[unreachable]
                 self.isa = ISA(int(self.isa))
             except (ValueError, KeyError):
                 raise TesseraTargetError(

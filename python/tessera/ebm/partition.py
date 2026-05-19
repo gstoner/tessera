@@ -267,9 +267,10 @@ def partition_function_ais(
                 p_key, accept_key, key = key.split(3)
                 p = normal(p_key, shape=y.shape, dtype="fp64").astype(np.float64, copy=False)
                 H0 = bridge_energy(y, beta_curr) + 0.5 * float(np.sum(p * p))
+                _grad_fn: Any = lambda yy, b=beta_curr: bridge_grad(yy, b)
                 q_new, p_new = _hmc_leapfrog(
                     y, p,
-                    lambda yy, b=beta_curr: bridge_grad(yy, b),
+                    _grad_fn,
                     mcmc_step_size, mcmc_n_leapfrog,
                     np.ones_like(y),
                 )

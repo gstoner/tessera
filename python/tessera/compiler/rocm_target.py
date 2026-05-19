@@ -273,7 +273,7 @@ class ROCmTargetProfile:
 
     def __post_init__(self) -> None:
         if not isinstance(self.arch, AMDArch):
-            try:
+            try:  # type: ignore[unreachable]
                 self.arch = AMDArch(int(self.arch))
             except (ValueError, KeyError):
                 raise TesseraROCmTargetError(

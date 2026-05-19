@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable, Mapping, Optional
+from typing import Any, Callable, Iterable, Mapping, Optional, cast
 
 
 SUPPORTED_BACKENDS = ("ptx", "rocm", "level_zero", "cpu")
@@ -72,20 +72,28 @@ class ModelManifest:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> "ModelManifest":
-        kv = data.get("kv_cache", {})
+        # JSON-deserialized fields come in as ``object``; narrow each
+        # one explicitly via ``cast`` so the downstream constructors
+        # don't fight mypy.  Runtime validation still happens through
+        # the ``str`` / ``int`` / ``dict`` constructors.
+        kv = cast(Mapping[str, Any], data.get("kv_cache", {}))
+        mesh_raw = cast(Mapping[str, Any], data.get("mesh", {}))
+        dtypes_raw = cast(Iterable[Any], data.get("dtypes", ()))
+        autotune_raw = cast(Mapping[str, Any], data.get("autotune", {}))
+        compat_raw = cast(Mapping[str, Any], data.get("compat", {}))
         return cls(
             name=str(data["name"]),
             version=str(data["version"]),
             entry=str(data["entry"]),
-            mesh={str(k): int(v) for k, v in dict(data.get("mesh", {})).items()},
-            dtypes=tuple(str(v) for v in data.get("dtypes", ())),
+            mesh={str(k): int(v) for k, v in dict(mesh_raw).items()},
+            dtypes=tuple(str(v) for v in dtypes_raw),
             kv_cache=KVCacheConfig(
                 pages=int(kv.get("pages", 0)),
                 page_size=str(kv.get("page_size", "")),
                 swap=str(kv.get("swap", kv.get("spill", "host_pinned"))),
             ),
-            autotune=dict(data.get("autotune", {})),
-            compat=dict(data.get("compat", {})),
+            autotune=dict(autotune_raw),
+            compat=dict(compat_raw),
         )
 
     def to_dict(self) -> dict:

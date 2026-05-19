@@ -310,7 +310,7 @@ class MemoryShardSpec:
             h = _fnv1a_64(arr.tobytes())
             return int(h % n_shards)
         if self.mode == MemoryMode.BUCKET:
-            fn = _MEMORY_BUCKET_FUNCTIONS.get(self.bucket_fn)
+            fn = _MEMORY_BUCKET_FUNCTIONS.get(self.bucket_fn or "")
             if fn is None:
                 raise ValueError(
                     f"MemoryShardSpec.bucket_fn={self.bucket_fn!r} is not "

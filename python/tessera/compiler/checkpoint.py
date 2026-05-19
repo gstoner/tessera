@@ -153,8 +153,8 @@ def checkpoint_jit(
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
 
-        wrapper.__tessera_checkpoint__ = True
-        wrapper.__tessera_checkpoint_config__ = cfg
+        wrapper.__tessera_checkpoint__ = True  # type: ignore[attr-defined]
+        wrapper.__tessera_checkpoint_config__ = cfg  # type: ignore[attr-defined]
         return wrapper
 
     if fn is not None:

@@ -125,7 +125,7 @@ class Block(Distribution):
     def __init__(self, mesh_axes: Tuple[str, ...]) -> None:
         if not mesh_axes:
             raise ValueError("Block distribution requires at least one mesh axis")
-        if isinstance(mesh_axes, str):
+        if isinstance(mesh_axes, str):  # type: ignore[unreachable]
             raise TypeError(
                 "mesh_axes must be a tuple of strings, not a single string. "
                 f"Did you mean Block(mesh_axes=({mesh_axes!r},)) ?"
@@ -179,7 +179,7 @@ class Cyclic(Distribution):
     def __init__(self, mesh_axes: Tuple[str, ...]) -> None:
         if not mesh_axes:
             raise ValueError("Cyclic distribution requires at least one mesh axis")
-        if isinstance(mesh_axes, str):
+        if isinstance(mesh_axes, str):  # type: ignore[unreachable]
             raise TypeError(
                 "mesh_axes must be a tuple of strings, not a single string. "
                 f"Did you mean Cyclic(mesh_axes=({mesh_axes!r},)) ?"

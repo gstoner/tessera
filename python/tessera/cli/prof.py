@@ -57,7 +57,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 max_trials=args.max_trials,
                 cache_path=args.cache,
             )
-            artifact = autotune.schedule_artifact(
+            artifact = autotune.schedule_artifact(  # type: ignore[attr-defined]
                 result,
                 op="matmul",
                 shapes=(M, N, K),

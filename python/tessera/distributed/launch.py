@@ -123,7 +123,7 @@ class _ShardDispatcher:
             # → calls tp_gemm(A[0],B[0],C[0]), tp_gemm(A[1],B[1],C[1]), ...
         """
         # Validate: all inputs must be lists of the same length
-        processed = []
+        processed: list[list[Any] | None] = []
         for arg in shard_lists:
             if isinstance(arg, list):
                 processed.append(arg)

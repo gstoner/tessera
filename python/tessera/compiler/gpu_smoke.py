@@ -47,8 +47,11 @@ def run_matmul_smoke(target: object = "nvidia_sm90", *, size: int = 16) -> Smoke
 
 
 def _run_nvidia_torch_smoke(target_name: str, *, size: int) -> SmokeResult:
+    # Soft import — torch is only used as a hardware-smoke oracle on
+    # hosts that happen to have it installed.  Tessera's runtime is
+    # explicitly torch-free (Decision #23).
     try:
-        import torch
+        import torch  # type: ignore[import-not-found]
     except Exception as exc:
         return _artifact_only(target_name, f"torch is unavailable: {exc}")
     if not torch.cuda.is_available():

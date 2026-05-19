@@ -146,6 +146,7 @@ def jacrev(
     one-hot cotangent. Uses ``retain_graph=True`` (Item 4) so the
     inner tape can be backward'd repeatedly.
     """
+    argnums_tuple: tuple[int, ...]
     if isinstance(argnums, int):
         argnums_tuple = (argnums,)
         singleton = True
@@ -212,6 +213,7 @@ def jacfwd(
 
     Uses the JVP engine in :mod:`tessera.autodiff.jvp`.
     """
+    argnums_tuple: tuple[int, ...]
     if isinstance(argnums, int):
         argnums_tuple = (argnums,)
         singleton = True

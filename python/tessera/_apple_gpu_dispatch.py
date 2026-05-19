@@ -141,7 +141,7 @@ def apple_gpu_runtime() -> Optional[ctypes.CDLL]:
         return _handle
     with _lock:
         if _loaded:
-            return _handle
+            return _handle  # type: ignore[unreachable]
         _handle, _dylib_path, _skip_reason = _compile_runtime()
         _loaded = True
     return _handle

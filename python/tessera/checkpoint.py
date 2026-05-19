@@ -11,7 +11,7 @@ import time
 import types
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Iterable, Mapping, Optional, cast
 
 import numpy as np
 
@@ -43,11 +43,17 @@ class TensorShard:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> "TensorShard":
+        # Cast helpers — JSON deserialization produces ``object`` and
+        # mypy can't narrow that to iterables / mappings without the
+        # explicit cast.  Runtime validation still happens through
+        # the ``str`` / ``int`` / ``dict`` constructors below.
+        shape_raw = cast(Iterable[Any], data.get("shape", ()))
+        sharding_raw = cast(Mapping[str, Any], data.get("sharding", {}))
         return cls(
             name=str(data["name"]),
-            shape=tuple(int(v) for v in data.get("shape", ())),
+            shape=tuple(int(v) for v in shape_raw),
             dtype=str(data.get("dtype", "unknown")),
-            sharding=dict(data.get("sharding", {})),
+            sharding=dict(sharding_raw),
             path=str(data.get("path", "")),
         )
 
@@ -87,18 +93,27 @@ class CheckpointManifest:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> "CheckpointManifest":
+        # Same Mapping[str, object] → narrower-types narrowing pattern
+        # as ``TensorShard.from_dict`` above.
+        version_raw = cast(Any, data.get("version", 1))
+        step_raw = cast(Optional[int], data.get("step"))
+        mesh_raw = cast(Mapping[str, Any], data.get("mesh", {}))
+        rng_raw = cast(Mapping[str, Any], data.get("rng", {}))
+        params_raw = cast(Iterable[Mapping[str, Any]], data.get("parameters", ()))
+        optimizer_raw = cast(Mapping[str, Any], data.get("optimizer", {}))
+        autotune_raw = cast(Mapping[str, Any], data.get("autotune_cache", {}))
         return cls(
-            version=int(data.get("version", 1)),
+            version=int(version_raw),
             tag=str(data["tag"]),
-            step=data.get("step"),
+            step=step_raw,
             backend=str(data.get("backend", "python")),
-            mesh=dict(data.get("mesh", {})),
+            mesh=dict(mesh_raw),
             numerics=str(data.get("numerics", "fast")),
-            rng=dict(data.get("rng", {})),
+            rng=dict(rng_raw),
             reduce_tree_id=str(data.get("reduce_tree_id", "")),
-            parameters=tuple(TensorShard.from_dict(p) for p in data.get("parameters", ())),
-            optimizer=dict(data.get("optimizer", {})),
-            autotune_cache=dict(data.get("autotune_cache", {})),
+            parameters=tuple(TensorShard.from_dict(p) for p in params_raw),
+            optimizer=dict(optimizer_raw),
+            autotune_cache=dict(autotune_raw),
             committed=bool(data.get("committed", False)),
         )
 
@@ -259,7 +274,12 @@ def save_state(
         **arrays,
     }
     with tmp.open("wb") as f:
-        np.savez(f, **payload)
+        # numpy's typeshed stubs declare ``savez(file, *args, **kwds)``
+        # with ``**kwds: bool`` because of the legacy ``compress=``
+        # keyword; in practice every other ``**kwds`` entry is an
+        # ndarray (the intended use).  Cast to ``Any`` so mypy
+        # accepts the polymorphic call.
+        np.savez(f, **payload)  # type: ignore[arg-type]
     if atomic:
         os.replace(tmp, target)
     return target

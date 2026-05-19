@@ -28,7 +28,11 @@ from tessera.ga.signature import Basis, Cl, TesseraAlgebraError
 
 
 _GradeArg = Union[int, Iterable[int]]
-_FloatDType = Union[str, np.dtype]
+# Allow callers to pass either a dtype string, a numpy dtype object,
+# OR a numpy dtype-aliasing type (``np.float32`` is a *type*, not a
+# ``np.dtype`` instance — numpy accepts the type and coerces, but
+# mypy's stubs annotate it as a distinct kind).  Accept all three.
+_FloatDType = Union[str, np.dtype, type]
 
 
 def _coerce_grades(grades: Optional[_GradeArg]) -> Optional[FrozenSet[int]]:
@@ -100,6 +104,9 @@ class MultivectorSpec:
             raise TesseraAlgebraError(
                 f"{self!r} is not grade-pure; cannot extract a single grade."
             )
+        # ``is_grade_pure()`` guarantees ``self.grades`` is non-None
+        # and contains exactly one element; narrow for mypy.
+        assert self.grades is not None
         return next(iter(self.grades))
 
     def __repr__(self) -> str:
@@ -125,6 +132,13 @@ class Multivector:
     dimension, or grades outside the algebra's range, raises
     ``TesseraAlgebraError``.
     """
+
+    # PEP 526 annotations (no defaults) so mypy sees the slot-backed
+    # attributes set via ``object.__setattr__``.  Same pattern as
+    # ``Parameter`` / ``Buffer`` in ``tessera.nn.module``.
+    _coefficients: "np.ndarray"
+    _algebra: Cl
+    _grades: "frozenset[int] | None"
 
     __slots__ = ("_coefficients", "_algebra", "_grades")
 
@@ -311,7 +325,11 @@ class Multivector:
     def __neg__(self) -> "Multivector":
         return Multivector(-self._coefficients, self._algebra, grades=self._grades)
 
-    def __mul__(self, scalar: float) -> "Multivector":
+    def __mul__(self, scalar: Any) -> "Multivector":
+        # Parameter is ``Any`` (not ``float``) so the explicit
+        # ``isinstance(scalar, Multivector)`` runtime guard below
+        # remains reachable.  Python's operator dispatch can hand us
+        # either side of the binop here, so we must defend at runtime.
         if isinstance(scalar, Multivector):
             # Reserve `*` for scalar multiplication; geometric_product is explicit.
             raise TypeError(
@@ -324,7 +342,7 @@ class Multivector:
 
     __rmul__ = __mul__
 
-    def __truediv__(self, scalar: float) -> "Multivector":
+    def __truediv__(self, scalar: Any) -> "Multivector":
         if isinstance(scalar, Multivector):
             raise TypeError(
                 "Multivector division by a Multivector is not provided; "

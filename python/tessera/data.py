@@ -117,7 +117,7 @@ class Dataset:
         return Dataset(zip(self, other))
 
     def unbatch(self) -> "Dataset":
-        out = []
+        out: list[Any] = []
         for batch in self:
             if isinstance(batch, Mapping):
                 n = len(next(iter(batch.values()))) if batch else 0

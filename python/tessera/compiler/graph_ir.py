@@ -87,7 +87,7 @@ def _mlir_dtype(dtype: Optional[str]) -> str:
         "int64": "i64",
         "bool": "i1",
     }
-    return mapping.get(dtype, dtype or "?")
+    return mapping.get(dtype or "", dtype or "?")
 
 
 def tensor_ir_type(
@@ -968,7 +968,9 @@ class _OpExtractor(ast.NodeVisitor):
             if op is None:
                 return None
             op.result = result_name or self._fresh()
-            self._value_types[f"%{op.result}"] = op.inferred_type if hasattr(op, "inferred_type") else _parse_mlir_tensor_type(op.result_type or "tensor<*x?>")
+            _ir_type = op.inferred_type if hasattr(op, "inferred_type") else _parse_mlir_tensor_type(op.result_type or "tensor<*x?>")
+            if _ir_type is not None:
+                self._value_types[f"%{op.result}"] = _ir_type
             self.ops.append(op)
             return f"%{op.result}"
         if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Mult)):
@@ -976,7 +978,9 @@ class _OpExtractor(ast.NodeVisitor):
             if op is None:
                 return None
             op.result = result_name or self._fresh()
-            self._value_types[f"%{op.result}"] = op.inferred_type if hasattr(op, "inferred_type") else _parse_mlir_tensor_type(op.result_type or "tensor<*x?>")
+            _ir_type = op.inferred_type if hasattr(op, "inferred_type") else _parse_mlir_tensor_type(op.result_type or "tensor<*x?>")
+            if _ir_type is not None:
+                self._value_types[f"%{op.result}"] = _ir_type
             self.ops.append(op)
             return f"%{op.result}"
         if isinstance(node, ast.Name):
@@ -1073,11 +1077,13 @@ class _OpExtractor(ast.NodeVisitor):
 
 
 def _span_from_ast(node: ast.AST) -> SourceSpan:
+    end_col_offset = getattr(node, "end_col_offset", None)
+    end_col = end_col_offset + 1 if end_col_offset is not None else None
     return SourceSpan(
         line=int(getattr(node, "lineno", 0) or 0),
         col=int(getattr(node, "col_offset", 0) or 0) + 1,
         end_line=getattr(node, "end_lineno", None),
-        end_col=(getattr(node, "end_col_offset", None) + 1) if getattr(node, "end_col_offset", None) is not None else None,
+        end_col=end_col,
     )
 
 

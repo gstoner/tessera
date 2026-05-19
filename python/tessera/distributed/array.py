@@ -12,7 +12,7 @@ Reference: docs/programming_guide/Tessera_Programming_Guide_Chapter4_Execution_M
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING, Optional, List, Tuple
+from typing import TYPE_CHECKING, Any, Optional, List, Tuple
 import numpy as np
 
 from .domain import Domain, Distribution
@@ -147,6 +147,7 @@ class DistributedArray:
                 _ = shard_spec.shard_size(dim_idx, full, mesh)  # raises if not divisible
 
         shape = domain.shape
+        data: Any
         if fill == "zeros":
             data = np.zeros(shape, dtype=np_dtype)
         elif fill == "ones":

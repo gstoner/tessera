@@ -878,7 +878,9 @@ def lower_tile_to_target_ir(tile_module: TileIRModule, *, target_kind: str) -> T
     target_kind = normalize_target(target_kind)
     if target_kind not in SUPPORTED_TARGETS:
         raise ValueError(f"target_ir does not support target {target_kind!r}")
-    attrs = {"tessera.ir.level": "target", "target": target_kind}
+    # Mixed-value attribute bag — values include strings, nested
+    # dicts (target_features), and bools.  Widen the value type.
+    attrs: dict[str, Any] = {"tessera.ir.level": "target", "target": target_kind}
     if target_kind == CPU_TARGET:
         attrs.update({"arch": "x86_64", "execution_mode": "numpy", "target_features": {"family": "cpu", "wall_clock": True, "device_timers": False}})
     elif target_kind in NVIDIA_TARGETS:

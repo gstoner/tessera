@@ -3418,16 +3418,17 @@ def _execute_runtime_cpu_op(op_name: str, operands: list[Any], kwargs: dict[str,
         return np.asarray(operands[0]) * rhs
     if op_name == "tessera.softmax":
         x = operands[0]
-        axis = int(kwargs.get("axis", -1))
-        e = np.exp(x - np.max(x, axis=axis, keepdims=True))
-        return e / np.sum(e, axis=axis, keepdims=True)
+        sm_axis = int(kwargs.get("axis", -1))
+        e = np.exp(x - np.max(x, axis=sm_axis, keepdims=True))
+        return e / np.sum(e, axis=sm_axis, keepdims=True)
     if op_name == "tessera.reduce":
         if str(kwargs.get("op", "sum")) != "sum":
             raise ValueError("runtime CPU reduce only supports op='sum'")
-        axis = kwargs.get("axis", None)
-        if axis is not None:
-            axis = int(axis)
-        return np.sum(operands[0], axis=axis, keepdims=bool(kwargs.get("keepdims", False)))
+        # ``axis`` can be None (reduce over all dims), an int, or
+        # a tuple of ints; widen the local variable accordingly.
+        axis_raw = kwargs.get("axis", None)
+        red_axis: Any = int(axis_raw) if axis_raw is not None else None
+        return np.sum(operands[0], axis=red_axis, keepdims=bool(kwargs.get("keepdims", False)))
     if op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}:
         x = np.asarray(operands[0])
         eps = float(kwargs.get("eps", 1e-5 if op_name == "tessera.rmsnorm" else 1e-6))
@@ -3453,6 +3454,9 @@ def _execute_runtime_cpu_op(op_name: str, operands: list[Any], kwargs: dict[str,
         m_hat = new_m / (1.0 - beta1**step)
         v_hat = new_v / (1.0 - beta2**step)
         return param - lr * m_hat / (np.sqrt(v_hat) + eps), new_m, new_v
+    # Type-widen so mypy accepts the assignment in the failure branch.
+    GRAPH_OP_TO_SPEC: Any
+    tessera: Any
     try:
         from tessera.compiler.op_catalog import GRAPH_OP_TO_SPEC
         import tessera

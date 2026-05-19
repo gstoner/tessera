@@ -381,7 +381,7 @@ def _eval_dim(dim_value: DimLike, bindings: Mapping[str, int]) -> Optional[int]:
         return dim_value
     if isinstance(dim_value, (Dim, DimProduct)):
         return dim_value.eval(bindings)
-    return None
+    return None  # type: ignore[unreachable]
 
 
 def _product_eval(shape: Iterable[DimLike], bindings: Mapping[str, int]) -> Optional[int]:

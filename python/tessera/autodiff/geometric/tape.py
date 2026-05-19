@@ -118,6 +118,7 @@ def multivector_grad(
     """
     import numpy as np
 
+    target_indices: tuple[int, ...]
     if isinstance(argnums, int):
         target_indices = (argnums,)
     else:

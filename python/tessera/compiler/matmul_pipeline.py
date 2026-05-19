@@ -566,8 +566,8 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
         return np.transpose(operands[0], axes)
     if op_name == "tessera.cast":
         dtype = str(kwargs.get("dtype", "fp32"))
-        dtype_map = {"bf16": np.float32, "fp16": np.float16, "fp32": np.float32, "fp64": np.float64}
-        return np.asarray(operands[0]).astype(dtype_map.get(dtype, np.float32))
+        cast_map: dict[str, Any] = {"bf16": np.float32, "fp16": np.float16, "fp32": np.float32, "fp64": np.float64}
+        return np.asarray(operands[0]).astype(cast_map.get(dtype, np.float32))
     if op_name == "tessera.dropout":
         x = np.asarray(operands[0])
         if not bool(kwargs.get("training", True)):
@@ -588,7 +588,7 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
     if op_name in {"tessera.rng_uniform", "tessera.rng_normal"}:
         shape = tuple(kwargs.get("shape", ()))
         dtype = str(kwargs.get("dtype", "fp32"))
-        dtype_map = {
+        dtype_map: dict[str, Any] = {
             "bf16": np.float32,
             "fp16": np.float16,
             "fp32": np.float32,
@@ -736,7 +736,6 @@ def _tensor_shape(type_text: str | None) -> tuple[int, ...]:
         except ValueError:
             return ()
     return tuple(dims)
-    return "nvidia_sm90"
 
 
 def _as_value(value: Any) -> Any:

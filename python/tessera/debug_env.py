@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Final
+from typing import Final, Optional
 
 # Canonical stage names used in dump filenames + env-var values.
 _VALID_STAGES: Final = frozenset({"graph", "schedule", "tile", "target"})
@@ -102,7 +102,7 @@ def dump_dir(value: str | None = None) -> Path | None:
     return p
 
 
-def should_dump(stage: str = None) -> bool:
+def should_dump(stage: Optional[str] = None) -> bool:
     """True when ``TESSERA_DEBUG_IR`` requests dumping. Pass ``stage`` to
     test a specific stage; omit to test "any dumping at all".
     """

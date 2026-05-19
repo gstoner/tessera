@@ -29,7 +29,7 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 
-ShapeLike = Union[int, Tuple[int, ...]]
+ShapeLike = Union[int, Tuple[int, ...], None]
 
 
 def _as_array(x):
@@ -187,7 +187,7 @@ class Beta(Distribution):
 
 def _gammaln(x: np.ndarray) -> np.ndarray:
     try:
-        from scipy.special import gammaln  # type: ignore
+        from scipy.special import gammaln
         return gammaln(x)
     except ImportError:
         # Vectorize math.lgamma — accurate to fp64 for positive arguments.
@@ -199,7 +199,7 @@ def _gammaln(x: np.ndarray) -> np.ndarray:
 
 def _digamma(x: np.ndarray) -> np.ndarray:
     try:
-        from scipy.special import digamma  # type: ignore
+        from scipy.special import digamma
         return digamma(x)
     except ImportError:
         # Pure-numpy: shift x up using recurrence digamma(x) = digamma(x+1) - 1/x

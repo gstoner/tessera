@@ -77,6 +77,11 @@ class MultivectorField:
     ``MultivectorField.from_callable(fn, algebra, grid_points)``.
     """
 
+    # PEP 526 annotations — see ``Parameter`` for the rationale.
+    _values: np.ndarray
+    _algebra: Cl
+    _spacing: Tuple[float, ...]
+
     __slots__ = ("_values", "_algebra", "_spacing")
 
     def __init__(

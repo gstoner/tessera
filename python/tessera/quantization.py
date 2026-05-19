@@ -32,14 +32,16 @@ def quantize_int8(x: Any, scale: float | None = None, zero_point: int = 0, *, sy
     """Quantize to int8 values and return ``(q, scale, zero_point)``."""
     x_arr = _asarray(x).astype(np.float32, copy=False)
     if symmetric:
-        scale = _symmetric_scale(x_arr, 127) if scale is None else np.float32(scale)
-        q = np.round(x_arr / scale).clip(-127, 127).astype(np.int8)
-        return q, np.float32(scale), 0
-    scale = np.float32(scale if scale is not None else ((x_arr.max() - x_arr.min()) / 255.0 if x_arr.size else 1.0))
-    if float(scale) == 0.0:
-        scale = np.float32(1.0)
-    q = np.round(x_arr / scale + zero_point).clip(-128, 127).astype(np.int8)
-    return q, scale, int(zero_point)
+        # Local `s: np.float32` so mypy doesn't have to reconcile the
+        # parameter's `float | None` type with the np.float32 widening.
+        s = _symmetric_scale(x_arr, 127) if scale is None else np.float32(scale)
+        q = np.round(x_arr / s).clip(-127, 127).astype(np.int8)
+        return q, np.float32(s), 0
+    s = np.float32(scale if scale is not None else ((x_arr.max() - x_arr.min()) / 255.0 if x_arr.size else 1.0))
+    if float(s) == 0.0:
+        s = np.float32(1.0)
+    q = np.round(x_arr / s + zero_point).clip(-128, 127).astype(np.int8)
+    return q, s, int(zero_point)
 
 
 def dequantize_int8(q: Any, scale: float, zero_point: int = 0) -> np.ndarray:
@@ -50,14 +52,14 @@ def quantize_int4(x: Any, scale: float | None = None, zero_point: int = 0, *, sy
     """Quantize to signed int4 values stored in int8 containers."""
     x_arr = _asarray(x).astype(np.float32, copy=False)
     if symmetric:
-        scale = _symmetric_scale(x_arr, 7) if scale is None else np.float32(scale)
-        q = np.round(x_arr / scale).clip(-7, 7).astype(np.int8)
-        return q, np.float32(scale), 0
-    scale = np.float32(scale if scale is not None else ((x_arr.max() - x_arr.min()) / 15.0 if x_arr.size else 1.0))
-    if float(scale) == 0.0:
-        scale = np.float32(1.0)
-    q = np.round(x_arr / scale + zero_point).clip(-8, 7).astype(np.int8)
-    return q, scale, int(zero_point)
+        s = _symmetric_scale(x_arr, 7) if scale is None else np.float32(scale)
+        q = np.round(x_arr / s).clip(-7, 7).astype(np.int8)
+        return q, np.float32(s), 0
+    s = np.float32(scale if scale is not None else ((x_arr.max() - x_arr.min()) / 15.0 if x_arr.size else 1.0))
+    if float(s) == 0.0:
+        s = np.float32(1.0)
+    q = np.round(x_arr / s + zero_point).clip(-8, 7).astype(np.int8)
+    return q, s, int(zero_point)
 
 
 def dequantize_int4(q: Any, scale: float, zero_point: int = 0) -> np.ndarray:

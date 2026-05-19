@@ -143,7 +143,7 @@ def safetensors_export(state: Mapping[str, Any], path: str | os.PathLike) -> Pat
     target = Path(path)
     arrays = {name: np.asarray(value) for name, value in state.items()}
     with target.open("wb") as f:
-        np.savez(f, **arrays)
+        np.savez(f, **arrays)  # type: ignore[arg-type]
     (target.with_suffix(target.suffix + ".json")).write_text(
         json.dumps(
             {
@@ -199,7 +199,7 @@ def compilation_cache(root: str | os.PathLike) -> CompilationCache:
 def _runtime_artifact_for(fn: Callable[..., Any], *, target: str) -> RuntimeArtifact:
     if hasattr(fn, "runtime_artifact"):
         try:
-            return fn.runtime_artifact()  # type: ignore[misc]
+            return fn.runtime_artifact()
         except TypeError:
             pass
     name = getattr(fn, "__name__", type(fn).__name__)

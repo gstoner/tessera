@@ -69,6 +69,7 @@ tessera-mlir = "tessera.cli.mlir:main"
 tessera-prof = "tessera.cli.prof:main"
 tessera-autotune = "tessera.cli.autotune:main"
 tessera-runtime-smoke = "tessera.cli.runtime:main"
+tessera-translate = "tessera.cli.translate:main"
 
 [tool.setuptools]
 package-dir = {"" = "python"}

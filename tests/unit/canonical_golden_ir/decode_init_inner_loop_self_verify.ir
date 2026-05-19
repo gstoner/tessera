@@ -1,0 +1,10 @@
+graph_ir {
+  %x          = tessera.placeholder shape=(8, 8) dtype=f32
+  %candidates = tessera.placeholder shape=(8, 8, 8) dtype=f32
+  %grad       = tessera.placeholder shape=(8, 8, 8) dtype=f32
+  %energies   = tessera.placeholder shape=(8, 8) dtype=f32
+  %candidates_0 = ebm.decode_init(%x, K=8)
+  %candidates_T = scf.for i in [0, 8) { ebm.inner_step(...) }
+  %winner       = ebm.self_verify(%energies, %candidates_T)
+  return %winner
+}

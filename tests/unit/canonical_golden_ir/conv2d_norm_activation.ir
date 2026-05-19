@@ -1,0 +1,10 @@
+graph_ir {
+  %x     = tessera.placeholder shape=(2, 4, 8, 8) dtype=f32 layout=NHWC
+  %w     = tessera.placeholder shape=(3, 3, 8, 8) dtype=f32
+  %gamma = tessera.placeholder shape=(8,) dtype=f32
+  %beta  = tessera.placeholder shape=(8,) dtype=f32
+  %y      = tessera.conv2d_nhwc(%x, %w)
+  %norm   = tessera.layer_norm(%y, %gamma, %beta)
+  %act    = tessera.gelu(%norm)
+  return %act
+}

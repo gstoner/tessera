@@ -507,12 +507,19 @@ Acceptance:
 - At least two programs run in default CPU-only CI; Apple GPU variants skip
   cleanly when unavailable.
 
-### M2 - Frontend unification without losing specialization  **(2026-05-18: landed — 4 of 5 sub-deliverables; Step 5 deferred)**
+### M2 - Frontend unification without losing specialization  **(2026-05-18: landed — 5 of 5 sub-deliverables; Python side complete, C++ FileCheck side awaits `tessera-opt` build)**
 
-**Status:** Steps 1–4 shipped + tested.  Step 5 (Python-Tile-IR ↔
-MLIR-lit equivalence) is filed as a follow-up because it
-requires building ``tessera-opt``, which is a separate
-infrastructure axis from the M2 frontend-unification thesis.
+**Status:** Steps 1–4 shipped + tested.  Step 5 **Python half landed
+(2026-05-18)** as the canonical-IR equivalence harness — see
+``tests/unit/test_canonical_ir_equivalence.py`` + the golden files
+under ``tests/unit/canonical_golden_ir/`` (5 ``*.ir`` files, one
+per shipped canonical with a deterministic ``_ir_text(...)``).
+The byte-identity test (``test_canonical_ir_text_matches_golden``,
+parametrized 5×) catches any silent Python-side IR drift.  The
+C++ MLIR FileCheck half of the equivalence (lowering each
+canonical through ``tessera-opt`` and FileChecking the result)
+remains gated on the MLIR 21 build; the Python side is the loud
+half of the contract and is now locked.
 
 Landed (2026-05-18):
 
@@ -662,8 +669,49 @@ uniformly visible**:
   today — REFERENCE_FORCED is the M5/M3 contract for
   "manifest-capable but not yet natively executed".)
 - [x] M3 `native_required=True` + stable `FallbackReason` enum.
+- [x] **M3 follow-up — reference vs. optimized split in benchmark
+  JSON (2026-05-18, closed).**  ``benchmarks/common/artifact_schema``
+  ships ``ExecutionKind`` enum with four values
+  (``reference``/``optimized_native``/``artifact_only``/``unknown``)
+  attached to every ``BenchmarkRow`` and surfaced through
+  ``to_dict()``/``flat_dict()``/``telemetry_for_row()``.  Independent
+  of ``CompilerPath`` (how we got to runtime) and ``RuntimeStatus``
+  (whether runtime executed).  Locked by
+  ``tests/unit/test_benchmark_execution_kind.py`` (8 tests,
+  CPU-only, non-slow).
 - [x] M4 memory-model verifier (happens-before + memory-space).
 - [x] M5 `BenchmarkRow` schema + validation spine doc + no-silent-native gate.
+- [x] **M5 follow-up — `tessera-translate` scaffold (2026-05-18,
+  closed).**  Python CLI ``tessera-translate`` shipped at
+  ``python/tessera/cli/translate.py`` with 4 subcommands
+  (stablehlo/gguf/safetensors/info) wrapping ``tessera.aot``
+  exports.  ``pyproject.toml`` registers it as a console script.
+  ``tools/tessera-translate/README.md`` documents the long-term
+  plan (C++ MLIR ``tessera-translate-mlir`` binary still gated on
+  ``tessera-opt`` against MLIR 21).  Locked by
+  ``tests/unit/test_cli_translate.py`` (4 tests).
+- [x] **M5 follow-up — TPP solver Python frontmatter
+  (2026-05-18, closed).**  ``python/tessera/solvers/tpp.py`` and
+  ``python/tessera/solvers/__init__.py`` ship the
+  ``tpp-space-time`` pipeline-alias name, 7 pass names, 2 type
+  names, 2 attr names, and an honest ``status()`` that returns
+  ``dialect_present=True``, ``passes_present=True``,
+  ``pipeline_alias_present=True``, ``python_driver_wired=False``,
+  ``lit_fixtures_runnable=False`` (the C++ side ships; Python
+  dispatch + lit gated on the ``tessera-opt`` build).  Locked
+  by ``tests/unit/test_solvers_tpp.py`` (7 tests, includes a
+  Python↔C++ pass-name drift gate).
+- [x] **`selective_ssm` Graph IR op (2026-05-18, closed).**
+  Added ``tessera.selective_ssm`` op to
+  ``python/tessera/compiler/op_catalog.py`` (state-space lowering
+  kind, stateful effect, arity 4–6).  Flipped
+  ``selective_ssm.graph_ir_lowering`` from ``missing`` to
+  ``registered`` in ``primitive_coverage.py``.  Registry now
+  reads **0 missing across all 374 entries** on the
+  ``graph_ir_lowering`` axis (was 1).  ``PYTHON_API_SPEC.md`` row
+  added so ``test_python_api_spec_lists_current_runtime_op_catalog``
+  passes.  Dashboard snapshot in
+  ``docs/audit/standalone_primitive_coverage.md`` regenerated.
 - [x] M6 Step 1 + Step 2 — shared `ast_ir` core, `@energy_jit`
   whitelist + IR, lowering tests.
 - [x] **CompileReport auto-emission (2026-05-18 reassessment Step 4)**:

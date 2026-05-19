@@ -26,6 +26,32 @@ class RuntimeStatus(str, Enum):
     MISSING_BACKEND = "missing_backend"
 
 
+class ExecutionKind(str, Enum):
+    """Reference vs. optimized split for benchmark rows.
+
+    Closes the M3 follow-up "per-target reference/optimized
+    distinction in benchmark JSON".  Independent of
+    :class:`CompilerPath` (which records how we got from source
+    to runtime) and :class:`RuntimeStatus` (which records whether
+    the runtime executed).  This axis records *which kind of
+    execution produced the numbers*:
+
+      * ``REFERENCE`` — naive NumPy / SciPy fallback.  Numbers are
+        correctness-bearing but performance-meaningless.
+      * ``OPTIMIZED_NATIVE`` — a real backend kernel ran
+        (Accelerate cblas, BNNS, MPS, MSL, x86 AMX, NVIDIA WGMMA,
+        ROCm MFMA, ...).  Numbers are performance-bearing.
+      * ``ARTIFACT_ONLY`` — IR / lowering succeeded but no
+        runtime executed; performance fields are unset.
+      * ``UNKNOWN`` — legacy benchmark rows that pre-date this
+        axis.  New rows should never use this.
+    """
+    REFERENCE = "reference"
+    OPTIMIZED_NATIVE = "optimized_native"
+    ARTIFACT_ONLY = "artifact_only"
+    UNKNOWN = "unknown"
+
+
 @dataclass(frozen=True)
 class ArtifactLevels:
     graph: bool = False
@@ -70,11 +96,13 @@ class BenchmarkRow:
     metrics: dict[str, Any] = field(default_factory=dict)
     telemetry: dict[str, Any] = field(default_factory=dict)
     reason: str = ""
+    execution_kind: ExecutionKind = ExecutionKind.UNKNOWN
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["compiler_path"] = self.compiler_path.value
         data["runtime_status"] = self.runtime_status.value
+        data["execution_kind"] = self.execution_kind.value
         return data
 
     def flat_dict(self) -> dict[str, Any]:
@@ -85,6 +113,7 @@ class BenchmarkRow:
             "target": self.operator.target,
             "compiler_path": self.compiler_path.value,
             "runtime_status": self.runtime_status.value,
+            "execution_kind": self.execution_kind.value,
             "reason": self.reason,
         }
         data.update({f"artifact_{k}": v for k, v in asdict(self.artifact_levels).items()})
@@ -131,6 +160,7 @@ def telemetry_for_row(
         metadata={
             "compiler_path": row.compiler_path.value,
             "runtime_status": row.runtime_status.value,
+            "execution_kind": row.execution_kind.value,
             "reason": row.reason,
             "shape_signature": row.operator.shape,
             **dict(metadata or {}),

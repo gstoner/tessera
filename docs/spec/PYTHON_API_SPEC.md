@@ -1403,6 +1403,7 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `rearrange(x, layout)`, `pack(x, layout)`, `unpack(x)`, `tile_view(x, BM, BN, BK=None)` | `(array, ...) → array` | `pure` / `movement` for materialized pack/unpack | Reference layout helpers; compiler-visible layout metadata |
 | `kv_cache_append(cache, key, value)` | `(cache, array, array) → cache` | `state` | Reference in-process KV cache helper |
 | `kv_cache_prune(cache, max_entries=None, max_seq=None)` | `(cache) → cache` | `state` | Reference in-process KV cache helper |
+| `selective_ssm(x, A, B, C, D=None, initial_state=None)` | `(array, array, array, array, [array, array]) → array` | `state` | Mamba2-style selective state-space scan; closed-form JVP through the recurrence shipped (see `tessera.selective_ssm` Graph IR op) |
 
 **Operator registry behavior:** `tessera.ops.registry` tracks reference,
 lowering, and runtime-kernel handlers. Current public runtime names are mirrored

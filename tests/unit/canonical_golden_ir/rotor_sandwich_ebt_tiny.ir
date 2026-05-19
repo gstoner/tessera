@@ -1,0 +1,9 @@
+graph_ir {
+  %R     = tessera.placeholder shape=(64, 8) dtype=f32 kind=multivector algebra=Cl(3,0)
+  %V     = tessera.placeholder shape=(64, 8) dtype=f32 kind=multivector algebra=Cl(3,0)
+  %grad  = tessera.placeholder shape=(64, 8) dtype=f32
+  %rot    = ga.rotor_sandwich(%R, %V)        // fused MSL
+  %y0     = ga.take_first(%rot, n=8)
+  %winner = ebm.ebt_tiny(%y0, %grad, eta=0.05, T=8, B=8, K=8, D=8)                       // fused MSL
+  return %winner
+}

@@ -1,0 +1,9 @@
+graph_ir {
+  %cache = tessera.kv_cache.create num_heads=2 head_dim=4 max_seq=8 dtype=f32
+  %K_in  = tessera.placeholder shape=(1, 2, 4) dtype=f32
+  %V_in  = tessera.placeholder shape=(1, 2, 4) dtype=f32
+  tessera.kv_cache.append(%cache, %K_in, %V_in)
+  tessera.kv_cache.prune(%cache, max_entries=4)
+  %K_out, %V_out = tessera.kv_cache.read(%cache)
+  return %K_out, %V_out
+}

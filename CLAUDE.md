@@ -210,8 +210,10 @@ The **x86 AMX/AVX512 backend** is the only fully wired execution path today. All
 | `tools/profiler/` | tprof runtime, CLI, Perfetto export |
 | `tools/roofline_tools/` | Roofline ingestion + HTML reports; CLI `cli_v2.py` with `one`/`multi` modes; Nsight CSV + Perfetto JSON ingestion; comm rooflines + overlap analysis |
 | `tools/CLI/Tessera_CLI_Starter_v0_1/` | CLI starter scaffold (CMakeLists + cmake + data + docs + tests + tools) |
-| `tools/tessera-translate/` | Placeholder — empty as of May 2026 |
+| `tools/tessera-translate/` | README scaffold (2026-05-18) — Python CLI `tessera-translate` (console script) routes through `tessera.cli.translate` for StableHLO / GGUF / SafeTensors export via `tessera.aot` (S14). C++ MLIR binary gated on `tessera-opt` building against MLIR 21. |
 | `python/tessera/cli/mlir.py` | `tessera-mlir` console-script entry — static IR inspection; `--mode=compile_artifact` reads JIT artifacts without launching |
+| `python/tessera/cli/translate.py` | `tessera-translate` console-script entry — 4 subcommands (stablehlo/gguf/safetensors/info) wrapping `tessera.aot` exports |
+| `python/tessera/solvers/tpp.py` | TPP solver Python frontmatter — declares the `tpp-space-time` pipeline alias + 7 pass names + dialect type/attr names. Honest `status()` returns `dialect_present=True`, `python_driver_wired=False` until `tessera-opt` builds. Locked by `tests/unit/test_solvers_tpp.py` (7 tests) |
 | `scripts/validate.sh` | CPU-only validation spine (version check + unit + runtime + benchmark smoke) |
 | `scripts/check_versions.py` | CMake/Python/runtime header version drift check |
 

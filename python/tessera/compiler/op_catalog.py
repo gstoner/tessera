@@ -281,6 +281,9 @@ _SPECS = [
     OpSpec("grpo_policy_loss", "tessera.rl.grpo_policy_loss", 2, 3, lowering="rl_loss"),
     OpSpec("cispo_policy_loss", "tessera.rl.cispo_policy_loss", 2, 3, lowering="rl_loss"),
     OpSpec("normalize_group_advantages", "tessera.rl.normalize_group_advantages", 1, 1, lowering="rl_loss"),
+    # State-space / Mamba2 selective scan.  Inputs: x, A, B, C, [D, initial_state].
+    # Lowered as a stateful sequence-axis scan (`state_space` lowering kind).
+    OpSpec("selective_ssm", "tessera.selective_ssm", 4, 6, effect="state", lowering="state_space"),
 ]
 
 OP_SPECS: dict[str, OpSpec] = {spec.public_name: spec for spec in _SPECS}

@@ -259,6 +259,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `softmax` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
 | `softmax_safe` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
 | `sum` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
+| `selective_ssm` | state_space | public | public | registered | complete | partial | reference | ready | none |
 | `kv_cache_append` | state_update | public | public | registered | complete | partial | reference | ready | none |
 | `kv_cache_prune` | state_update | public | public | registered | complete | partial | reference | ready | none |
 | `kv_cache_read` | state_update | public | public | registered | complete | partial | reference | ready | none |
@@ -303,6 +304,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | sparse | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | spectral | 9 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | stable_reduction | 7 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· |
+| state_space | 1 | PPGCpRN· |
 | state_update | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
 | stencil | 2 | PPGCpRN· PPGCpRN· |
 

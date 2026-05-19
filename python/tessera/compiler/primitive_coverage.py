@@ -1028,8 +1028,12 @@ _GRAPH_IR_LOWERING_OVERRIDES: dict[str, str] = {
     "depthwise_conv1d":      "registered",
     "online_softmax":        "registered",
     "online_softmax_state":  "registered",
-    # selective_ssm intentionally stays `missing` — a dedicated Mamba2
-    # Graph IR op is still warranted for the chunked-scan path.
+    # selective_ssm — dedicated Mamba2 Graph IR op landed (2026-05-18) as
+    # `tessera.selective_ssm` (state-space lowering kind, stateful effect).
+    # The closed-form JVP through the recurrence was already shipped; the
+    # `registered` flip below completes the Graph IR lowering brick that
+    # was the last remaining `missing` entry across the registry.
+    "selective_ssm":         "registered",
 }
 
 

@@ -1,0 +1,9 @@
+graph_ir {
+  %a = tessera.placeholder shape=(8, 8) dtype=f32
+  %b = tessera.placeholder shape=(8, 8) dtype=f32
+  %c = tessera.placeholder shape=(8, 8) dtype=f32
+  %scores = tessera.matmul(%a, %b)
+  %probs  = tessera.softmax(%scores)
+  %out    = tessera.matmul(%probs, %c)
+  return %out
+}

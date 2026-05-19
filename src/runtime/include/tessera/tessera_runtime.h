@@ -13,6 +13,14 @@ extern "C" {
 
 TsrStatus tsrInit(void);
 TsrStatus tsrShutdown(void);
+/// Inspect whether the runtime currently has any backends initialized.
+/// Writes 1 to ``*out`` when ``tsrInit`` has been called without a
+/// subsequent ``tsrShutdown``, 0 otherwise.  Safe to call before
+/// ``tsrInit``.  Mainly intended for tests / embedded-runtime
+/// lifecycles where the caller needs to query state across a
+/// shutdown/reinit cycle (see ``src/runtime/src/tessera_runtime.cpp``
+/// for the lifecycle rationale).
+TsrStatus tsrIsInitialized(int* out);
 
 TsrStatus tsrGetDeviceCount(int* count);
 TsrStatus tsrGetDevice(int index, tsrDevice* out);

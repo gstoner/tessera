@@ -133,3 +133,43 @@ def test_jit_decorator_threads_native_required() -> None:
         "its parameter must appear in jit()'s signature"
     )
     assert params["native_required"].default is False
+
+
+def test_compile_report_carries_last_fallback_reason() -> None:
+    """A recorded ``last_fallback_reason`` must appear in the
+    emitted CompileReport — not just sit on the JitFn instance.
+
+    Findings audit (2026-05-19) flagged that ``compile_report()``
+    recorded the field but didn't pass it into the
+    ``CompileReport(...)`` constructor.  That left downstream
+    consumers (audit dashboards, the stability gate,
+    ``capture_compile_reports`` sinks) unable to see when the
+    runtime ABI failed and we fell back."""
+    import numpy as np
+
+    import tessera
+
+    @tessera.jit
+    def identity(x):
+        return tessera.ops.add(x, x)
+
+    # Clean run: no fallback was set, so the report carries None.
+    x = np.zeros((4,), dtype=np.float32)
+    identity(x)
+    rep_clean = identity.compile_report()
+    assert rep_clean.fallback_reason is None, (
+        f"clean run leaked a fallback_reason: {rep_clean.fallback_reason!r}"
+    )
+
+    # Simulate a native-launch failure by stamping the field
+    # directly on the JitFn (as `_native_cpu_fast_call` does on
+    # exception paths).
+    identity.last_fallback_reason = FallbackReason.CAPABILITY_NOT_READY
+    rep_after = identity.compile_report()
+    assert rep_after.fallback_reason == FallbackReason.CAPABILITY_NOT_READY, (
+        f"compile_report() dropped the fallback_reason; got "
+        f"{rep_after.fallback_reason!r}"
+    )
+    # The serialized form (`.value`) is what the JSON-friendly
+    # CompileReport emit path uses.
+    assert rep_after.as_dict()["fallback_reason"] == "capability_not_ready"

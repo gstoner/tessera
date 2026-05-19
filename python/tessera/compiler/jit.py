@@ -551,6 +551,12 @@ class JitFn:
             ir_hashes=ir_hashes,
             target_decision=target_decision,
             proof_routes=routes,
+            # Surface the most recent native-launch fallback reason
+            # (set in ``_native_cpu_fast_call``).  ``None`` on a clean
+            # native run; populated when the runtime ABI raised and
+            # the JIT fell through to ``cpu_plan.execute`` without
+            # ``native_required=True``.
+            fallback_reason=self.last_fallback_reason,
         )
 
     @property

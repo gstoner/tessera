@@ -77,8 +77,16 @@ blk = JetBlock(jcfg)
 `advanced_feature_maps.linear_attention_rf` maintains a **rolling window** of per-block summaries and subtracts stale contributions when the window advances, enabling **block-wise streaming** over long contexts.
 
 
-## End-to-end example
-Run the minimal example:
+## Example scaffold (research stack required)
+
+> **STATUS:** scaffold — see [`STATUS.md`](STATUS.md). The example
+> imports `tessera.stdlib`, which is part of the upstream Jet-Nemotron
+> research stack and is **not** part of the standalone Tessera
+> compiler surface. Install the matching upstream stack to exercise
+> the example; the bundled `tests/test_sanity.py` will skip honestly
+> when stdlib is absent.
+
+Reference command (requires `tessera.stdlib` on `PYTHONPATH`):
 ```
 python examples/e2e_infer.py
 ```

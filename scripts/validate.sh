@@ -76,6 +76,20 @@ echo "==> Generated support-table drift check"
 echo "==> Public-doc claim_lint"
 "$PYTHON" -m tessera.compiler.audit claim_lint
 
+# Examples surface audit (Option A, 2026-05-19).  Pair of gates:
+#   1. examples_audit --check executes every `runnable` row + every
+#      `runnable_optional` row whose declared extras are importable;
+#      `scaffold` / `broken` rows are NOT executed.  Failure means a
+#      shipped example regressed.
+#   2. claim_lint scans the README of each scaffold/broken example
+#      for overclaim language (``runnable``, ``end-to-end demo``,
+#      ``working``).  Failure means docs over-promise vs. manifest.
+# Manifest of record: python/tessera/compiler/examples_manifest.py.
+echo "==> Examples surface audit"
+"$PYTHON" -m tessera.cli.examples_audit --check
+echo "==> Examples README claim_lint"
+"$PYTHON" -m tessera.cli.claim_lint --check
+
 echo "==> Runtime telemetry smoke"
 "$PYTHON" -m tessera.cli.runtime --output "$RUNTIME_REPORT"
 "$PYTHON" benchmarks/perf_gate.py "$RUNTIME_REPORT" --baseline benchmarks/baselines/cpu_smoke.json

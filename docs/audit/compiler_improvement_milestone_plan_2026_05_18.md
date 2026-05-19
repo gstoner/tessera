@@ -708,16 +708,23 @@ uniformly visible**:
   ``tools/tessera-translate/tessera-translate.cpp`` ships a thin
   ``mlirTranslateMain`` wrapper that registers every Tessera
   dialect (tessera / neighbors / TPP / Apple — conditional on
-  the build feature flags) on top of standard MLIR translations
-  (``--mlir-to-llvmir``, ``--import-llvm``, etc.).
+  the build feature flags) on top of **4 standard MLIR
+  translations**: ``--mlir-to-llvmir`` / ``--import-llvm`` /
+  ``--serialize-spirv`` / ``--deserialize-spirv``.
   ``tools/tessera-translate/CMakeLists.txt`` links
   ``MLIRTranslateLib`` + the LLVM-IR import/export libraries +
-  every Tessera dialect.  End-to-end smoke verified: a tiny
-  LLVM-dialect MLIR module translates to real LLVM IR text
-  (``define i32 @add(...) { ... %3 = add i32 ... ret i32 %3 }``).
-  Locked by ``tests/unit/test_cli_translate.py`` (6 tests) +
+  the SPIR-V translate-registration libs + every Tessera
+  dialect.  End-to-end smokes verified: (a) a tiny LLVM-dialect
+  MLIR module translates to real LLVM IR text
+  (``define i32 @add(...) { ... %3 = add i32 ... ret i32 %3 }``);
+  (b) a ``spirv.module`` round-trips through ``--serialize-spirv``
+  + ``--deserialize-spirv`` with SPIR-V magic ``0x07230203``
+  preserved.  Locked by ``tests/unit/test_cli_translate.py``
+  (6 tests) +
   ``tests/unit/test_tessera_opt_build.py::test_tessera_translate_mlir_*``
-  (2 tests).
+  (4 tests, including the documented-flag advert lock that
+  prevents the README from drifting ahead of the binary's actual
+  ``--help`` surface).
 - [x] **M5 follow-up — TPP solver wired into ``tessera-opt``
   (2026-05-18, closed; previously Python frontmatter only).**
   ``python/tessera/solvers/tpp.py`` and

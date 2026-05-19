@@ -17,6 +17,11 @@ target_link_libraries(tessera-translate-mlir PRIVATE
   MLIRLLVMToLLVMIRTranslation
   MLIRFromLLVMIRTranslationRegistration
   MLIRToLLVMIRTranslationRegistration
+  # SPIR-V translation surface.
+  MLIRSPIRVDialect
+  MLIRSPIRVSerialization
+  MLIRSPIRVDeserialization
+  MLIRSPIRVTranslateRegistration
 )
 
 # Pull in every upstream MLIR dialect.  Registration is conditional on

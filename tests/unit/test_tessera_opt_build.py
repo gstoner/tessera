@@ -218,6 +218,70 @@ def test_tessera_translate_mlir_translates_llvm_dialect_to_llvm_ir(
     assert "ret i32" in proc.stdout
 
 
+@_REQUIRES_TRANSLATE
+def test_tessera_translate_mlir_advertises_documented_flags() -> None:
+    """The four translation flags the README/source comment promise
+    must all appear in --help."""
+    out = subprocess.run(
+        [_TRANSLATE_MLIR, "--help"],
+        capture_output=True, text=True, timeout=10,
+    ).stdout
+    for flag in (
+        "--mlir-to-llvmir",
+        "--import-llvm",
+        "--serialize-spirv",
+        "--deserialize-spirv",
+    ):
+        assert flag in out, f"documented flag {flag!r} missing from --help"
+
+
+@_REQUIRES_TRANSLATE
+def test_tessera_translate_mlir_serializes_and_deserializes_spirv(
+    tmp_path: Path,
+) -> None:
+    """SPIR-V round-trip: spirv.module text → .spv binary → spirv.module text."""
+    src = tmp_path / "shader.mlir"
+    src.write_text(
+        '''
+spirv.module Logical GLSL450 requires #spirv.vce<v1.0, [Shader], []> {
+  spirv.func @main() "None" {
+    spirv.Return
+  }
+  spirv.EntryPoint "Vertex" @main
+}
+''',
+        encoding="utf-8",
+    )
+    spv = tmp_path / "shader.spv"
+    # Serialize.  `--no-implicit-module` is required because the input is
+    # a top-level `spirv.module`, not nested inside a `builtin.module`.
+    ser = subprocess.run(
+        [_TRANSLATE_MLIR, "--serialize-spirv", "--no-implicit-module",
+         str(src), "-o", str(spv)],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert ser.returncode == 0, (
+        f"serialize-spirv failed:\nstdout: {ser.stdout}\nstderr: {ser.stderr}"
+    )
+    assert spv.is_file() and spv.stat().st_size > 0
+    # SPIR-V binary magic number 0x07230203 (little-endian: 03 02 23 07).
+    assert spv.read_bytes()[:4] == bytes([0x03, 0x02, 0x23, 0x07]), (
+        f"output is not a SPIR-V binary; head: {spv.read_bytes()[:8]!r}"
+    )
+
+    # Deserialize back.
+    deser = subprocess.run(
+        [_TRANSLATE_MLIR, "--deserialize-spirv", str(spv)],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert deser.returncode == 0, (
+        f"deserialize-spirv failed:\nstdout: {deser.stdout}\nstderr: {deser.stderr}"
+    )
+    assert "spirv.module" in deser.stdout
+    assert "spirv.func @main" in deser.stdout
+    assert "spirv.EntryPoint" in deser.stdout
+
+
 @_REQUIRES_OPT
 def test_halo_infer_pass_annotates_stencil_apply(tmp_path: Path) -> None:
     """End-to-end smoke: feed a tiny stencil program through

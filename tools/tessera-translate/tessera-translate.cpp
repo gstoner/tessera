@@ -3,11 +3,12 @@
 // `tessera-translate-mlir` is the C++ MLIR-side counterpart to the Python
 // `tessera-translate` console script.  It is a thin wrapper around
 // `mlirTranslateMain` that registers the Tessera dialects on top of the
-// standard MLIR translations (LLVM IR, SPIR-V, etc.), so callers can do
-// things like::
+// MLIR LLVM-IR and SPIR-V translations, so callers can do things like::
 //
-//   tessera-translate-mlir --mlir-to-llvmir input.mlir > output.ll
-//   tessera-translate-mlir --print-registered-translations
+//   tessera-translate-mlir --mlir-to-llvmir   input.mlir > output.ll
+//   tessera-translate-mlir --import-llvm      input.ll   > output.mlir
+//   tessera-translate-mlir --serialize-spirv  input.mlir > output.spv
+//   tessera-translate-mlir --deserialize-spirv input.spv > output.mlir
 //
 // The Python `tessera-translate` console script (handled by
 // `tessera.cli.translate`) covers the format-export surface (StableHLO
@@ -48,27 +49,31 @@
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/InitAllTranslations.h"
 #include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/NVVM/NVVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/ROCDL/ROCDLToLLVMIRTranslation.h"
-#include "mlir/InitAllTranslations.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Target/LLVMIR/Import.h"
 #include "mlir/Tools/mlir-translate/MlirTranslateMain.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
 
 int main(int argc, char **argv) {
-  // Register the standard --mlir-to-llvmir / --import-llvm translations.
+  // Register the standard --mlir-to-llvmir / --import-llvm translations
+  // plus --serialize-spirv / --deserialize-spirv.
   mlir::registerToLLVMIRTranslation();
   mlir::registerFromLLVMIRTranslation();
+  mlir::registerToSPIRVTranslation();
+  mlir::registerFromSPIRVTranslation();
 
   mlir::DialectRegistry registry;
   // Register only the dialects we actually link.  This is a deliberate
   // narrower scope than `mlir::registerAllDialects()`: the translation
-  // surface is well-defined by the upstream LLVM-IR import/export plus
-  // the Tessera dialects below.
+  // surface is well-defined by the upstream LLVM-IR / SPIR-V import/export
+  // plus the Tessera dialects below.
   registry.insert<mlir::arith::ArithDialect,
                   mlir::bufferization::BufferizationDialect,
                   mlir::func::FuncDialect,
@@ -78,7 +83,8 @@ int main(int argc, char **argv) {
                   mlir::tensor::TensorDialect,
                   mlir::LLVM::LLVMDialect,
                   mlir::NVVM::NVVMDialect,
-                  mlir::ROCDL::ROCDLDialect>();
+                  mlir::ROCDL::ROCDLDialect,
+                  mlir::spirv::SPIRVDialect>();
   // Hook the LLVM-IR translation patterns for the dialects above.
   mlir::registerBuiltinDialectTranslation(registry);
   mlir::registerLLVMDialectTranslation(registry);

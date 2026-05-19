@@ -29,9 +29,11 @@ tessera-translate safetensors --in artifact.zip --out model.st
 tessera-translate info       --in artifact.zip
 
 # MLIR translation (C++ binary, called directly).
-tessera-translate-mlir --mlir-to-llvmir input.mlir   > output.ll
-tessera-translate-mlir --import-llvm    input.ll     > output.mlir
-tessera-translate-mlir --serialize-spirv input.mlir  > output.spv
+tessera-translate-mlir --mlir-to-llvmir              input.mlir > output.ll
+tessera-translate-mlir --import-llvm                 input.ll   > output.mlir
+tessera-translate-mlir --serialize-spirv --no-implicit-module \
+                                                     input.mlir > output.spv
+tessera-translate-mlir --deserialize-spirv           input.spv  > output.mlir
 
 # Or via the Python pass-through (auto-detects the C++ binary
 # under build/tools/tessera-translate/ or on PATH).
@@ -50,10 +52,19 @@ tessera-translate mlir --mlir-to-llvmir input.mlir > output.ll
   `tessera.solver`, `tessera_apple`, `tpp`) — conditional on the
   build options that pull each dialect in.
 - Standard MLIR dialects needed for translation: arith / func /
-  linalg / memref / scf / tensor / bufferization / LLVM / NVVM / ROCDL.
-- Standard MLIR translations: `--mlir-to-llvmir` /
-  `--import-llvm` plus the LLVM-IR dialect translation patterns
-  (builtin / LLVM / NVVM / ROCDL).
+  linalg / memref / scf / tensor / bufferization / LLVM / NVVM /
+  ROCDL / SPIR-V.
+- Standard MLIR translations:
+  - `--mlir-to-llvmir` / `--import-llvm` plus the LLVM-IR dialect
+    translation patterns (builtin / LLVM / NVVM / ROCDL).
+  - `--serialize-spirv` / `--deserialize-spirv`.
+
+The binary intentionally does **not** carry every translation MLIR
+ships with (e.g., `--mlir-to-cpp` would need `MLIREmitC`).  When
+you need a translation that isn't here yet, the fix is to add the
+specific upstream `register*Translation()` call in
+`tessera-translate.cpp` plus the matching `MLIR*` libs in
+`CMakeLists.txt` — same shape as the LLVM and SPIR-V paths.
 
 ## What the Python CLI registers
 

@@ -51,12 +51,23 @@ echo "==> Python type check (mypy ratchet)"
 # baseline via `scripts/mypy_ratchet.sh --update-baseline`.
 # Derive the mypy binary that lives next to the Python interpreter.
 PYTHON_BIN_DIR="$(dirname "$PYTHON")"
+_MYPY_INVOKE=""
 if [ -x "$PYTHON_BIN_DIR/mypy" ]; then
-  MYPY="$PYTHON_BIN_DIR/mypy" scripts/mypy_ratchet.sh
+  _MYPY_INVOKE="$PYTHON_BIN_DIR/mypy"
 elif "$PYTHON" -m mypy --version >/dev/null 2>&1; then
   # Fall back to invoking via `python -m mypy` for installs without
   # the console script.
-  MYPY="$PYTHON -m mypy" scripts/mypy_ratchet.sh
+  _MYPY_INVOKE="$PYTHON -m mypy"
+fi
+if [ -n "$_MYPY_INVOKE" ]; then
+  MYPY="$_MYPY_INVOKE" scripts/mypy_ratchet.sh
+  # Strict ratchet — runs mypy with --check-untyped-defs against
+  # scripts/mypy_strict_baseline.txt (currently 23).  Tracks the next
+  # frontier: errors that surface only when we ALSO check the bodies
+  # of untyped defs.  When it reaches 0, flip
+  # `check_untyped_defs = true` in pyproject.toml and retire the
+  # strict baseline file.
+  MYPY="$_MYPY_INVOKE" MYPY_STRICT=1 scripts/mypy_ratchet.sh
 else
   echo "warning: mypy not installed in this Python; skipping ratchet"
 fi

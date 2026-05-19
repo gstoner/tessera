@@ -2,9 +2,22 @@
 # Tessera mypy ratchet — track the legacy type-error baseline and
 # fail only when new errors land.
 #
+# Two parallel ratchets share this script:
+#
+#   * Standard policy (default) — reads scripts/mypy_baseline.txt;
+#     runs mypy with whatever pyproject.toml declares.  Baseline=0
+#     as of the 2026-05-19 cleanup sprint.
+#
+#   * Strict policy (MYPY_STRICT=1) — reads
+#     scripts/mypy_strict_baseline.txt; runs mypy with
+#     --check-untyped-defs to size the next ratchet frontier.
+#     Baseline=23 as of 2026-05-19.
+#
 # Usage:
-#   scripts/mypy_ratchet.sh                       # ratchet check
-#   scripts/mypy_ratchet.sh --update-baseline    # write a new baseline
+#   scripts/mypy_ratchet.sh                                  # standard
+#   scripts/mypy_ratchet.sh --update-baseline               # write standard baseline
+#   MYPY_STRICT=1 scripts/mypy_ratchet.sh                   # strict
+#   MYPY_STRICT=1 scripts/mypy_ratchet.sh --update-baseline # write strict baseline
 #
 # Exit codes:
 #   0  — error count is at or below the baseline (clean)
@@ -13,7 +26,17 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BASELINE_FILE="$REPO_ROOT/scripts/mypy_baseline.txt"
+
+MYPY_STRICT="${MYPY_STRICT:-0}"
+if [[ "$MYPY_STRICT" != "0" ]]; then
+  BASELINE_FILE="$REPO_ROOT/scripts/mypy_strict_baseline.txt"
+  MYPY_EXTRA_ARGS=(--check-untyped-defs)
+  RATCHET_LABEL="mypy ratchet (strict)"
+else
+  BASELINE_FILE="$REPO_ROOT/scripts/mypy_baseline.txt"
+  MYPY_EXTRA_ARGS=()
+  RATCHET_LABEL="mypy ratchet"
+fi
 
 if [[ ! -f "$BASELINE_FILE" ]]; then
   echo "error: missing baseline file: $BASELINE_FILE" >&2
@@ -56,7 +79,9 @@ REPORT_FILE=$(mktemp -t tessera-mypy-XXXXXX.txt)
 trap 'rm -f "$REPORT_FILE"' EXIT
 
 set +e
-"${MYPY_CMD[@]}" python/tessera/ --config-file pyproject.toml > "$REPORT_FILE" 2>&1
+# Guard MYPY_EXTRA_ARGS against `set -u` when the array is empty
+# (Bash 4.4+ syntax for "expand only if defined and non-empty").
+"${MYPY_CMD[@]}" python/tessera/ --config-file pyproject.toml ${MYPY_EXTRA_ARGS[@]+"${MYPY_EXTRA_ARGS[@]}"} > "$REPORT_FILE" 2>&1
 MYPY_RC=$?
 set -e
 
@@ -65,27 +90,31 @@ COUNT=$(grep -oE 'Found [0-9]+ error' "$REPORT_FILE" | head -1 | grep -oE '[0-9]
 COUNT=${COUNT:-0}
 
 if [[ "${1:-}" == "--update-baseline" ]]; then
-  echo "current mypy error count: $COUNT (was $BASELINE)"
+  echo "current ${RATCHET_LABEL} error count: $COUNT (was $BASELINE)"
   sed -i.bak "s/^BASELINE=.*/BASELINE=$COUNT/" "$BASELINE_FILE"
   rm -f "${BASELINE_FILE}.bak"
   echo "updated $BASELINE_FILE"
   exit 0
 fi
 
-echo "[mypy ratchet] errors=$COUNT  baseline=$BASELINE  (mypy rc=$MYPY_RC)"
+echo "[${RATCHET_LABEL}] errors=$COUNT  baseline=$BASELINE  (mypy rc=$MYPY_RC)"
 if (( COUNT > BASELINE )); then
   echo "" >&2
-  echo "FAIL: mypy error count increased ($BASELINE -> $COUNT)." >&2
+  echo "FAIL: ${RATCHET_LABEL} error count increased ($BASELINE -> $COUNT)." >&2
   echo "      New errors (or any error above the baseline) must be" >&2
   echo "      fixed or the baseline updated explicitly via:" >&2
-  echo "        scripts/mypy_ratchet.sh --update-baseline" >&2
+  if [[ "$MYPY_STRICT" != "0" ]]; then
+    echo "        MYPY_STRICT=1 scripts/mypy_ratchet.sh --update-baseline" >&2
+  else
+    echo "        scripts/mypy_ratchet.sh --update-baseline" >&2
+  fi
   echo "" >&2
   echo "      Full mypy output:" >&2
   cat "$REPORT_FILE" >&2
   exit 1
 fi
 if (( COUNT < BASELINE )); then
-  echo "[mypy ratchet] note: error count decreased ($BASELINE -> $COUNT)."
+  echo "[${RATCHET_LABEL}] note: error count decreased ($BASELINE -> $COUNT)."
   echo "                    Consider running with --update-baseline."
 fi
 exit 0

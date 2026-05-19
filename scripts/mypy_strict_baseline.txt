@@ -1,0 +1,47 @@
+# Tessera mypy strict baseline (2026-05-19)
+#
+# Runs `mypy --check-untyped-defs python/tessera/` and ratchets the
+# error count.  This is a *parallel* ratchet to scripts/mypy_baseline.txt:
+#
+#   * `scripts/mypy_baseline.txt`        — standard policy (BASELINE=0).
+#   * `scripts/mypy_strict_baseline.txt` — strict policy with
+#                                          --check-untyped-defs (BASELINE=23).
+#
+# The standard ratchet defends 0 errors under the policy declared in
+# pyproject.toml.  This strict ratchet defends the *next frontier*:
+# the errors that surface when we ALSO check the bodies of untyped
+# functions.  When this baseline reaches 0, flip
+# `check_untyped_defs = true` in pyproject.toml and delete this file.
+#
+# Current strict-mode error distribution (23 across 10 files):
+#
+#   8  python/tessera/autodiff/tape.py
+#   4  python/tessera/autodiff/transforms.py
+#   3  python/tessera/control.py
+#   2  python/tessera/autodiff/jvp.py
+#   1  python/tessera/nn/__init__.py
+#   1  python/tessera/distributed/parallel.py
+#   1  python/tessera/complex.py
+#   1  python/tessera/autodiff/vjp.py
+#   1  python/tessera/autodiff/rematerialize.py
+#   1  python/tessera/__init__.py
+#
+# Most are honest tightening opportunities — the autodiff tape's
+# `vars` variable flips between list and tuple, control / transforms
+# build axis tuples whose static element type is unhelpfully `None`,
+# and a handful of `attr-defined` cases reflect real escape-hatch
+# sites (`__wrapped__`, `_dtype`).  Each can be fixed without
+# behavior changes; the burn-down order to follow:
+#
+#   1. python/tessera/autodiff/tape.py        (8 — vars-typing)
+#   2. python/tessera/autodiff/transforms.py  (4 — axis-tuple typing)
+#   3. python/tessera/control.py              (3 — axis-tuple typing)
+#   4. python/tessera/autodiff/jvp.py         (2 — None-call + dict-int)
+#   5. long tail (6 files × 1 each)
+#
+# Run via:
+#
+#   MYPY_STRICT=1 ./scripts/mypy_ratchet.sh
+#   MYPY_STRICT=1 ./scripts/mypy_ratchet.sh --update-baseline
+#
+BASELINE=23

@@ -93,7 +93,7 @@ def rematerialize(fn: Callable) -> Callable:
             # return None for Parameter slots — the outer tape skips them.
             # Non-Parameter inputs return their cotangent normally so it
             # propagates up the outer tape.
-            d_in = []
+            d_in: list[np.ndarray | None] = []
             for desc in array_descs:
                 if desc.param is not None:
                     d_in.append(None)

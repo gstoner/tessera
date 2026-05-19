@@ -8,13 +8,26 @@
 #   * If the count is `> BASELINE`, the script fails and prints the new
 #     errors.
 #
-# Historical baseline: 357 errors, clustered in 6 files —
-# nn/layers.py (71), checkpoint.py (58), quantization.py (52),
-# ga/multivector.py (43), server.py (34), nn/module.py (28), plus a
-# long tail across ~30 other files.  All cleared in the 2026-05-19
-# mypy-backlog-cleanup sprint via PEP 526 slot annotations, cast()
-# narrowing for Mapping[str, object]→narrower types, and tightening
-# of variable annotations.  The ratchet now defends 0.
+# Historical baselines:
+#   * 2026-05-19 (initial)   — 357 errors clustered in 6 files
+#                              (nn/layers.py 71 / checkpoint.py 58 /
+#                              quantization.py 52 / ga/multivector.py 43 /
+#                              server.py 34 / nn/module.py 28 + long tail).
+#   * 2026-05-19 (clean)     — 0 under standard policy.  Strict ratchet
+#                              (`--check-untyped-defs`) reported 23 errors
+#                              concentrated in autodiff/tape.py (8),
+#                              transforms.py (4), control.py (3), jvp.py (2)
+#                              plus a 6-file long tail.
+#   * 2026-05-19 (strict-permanent) — 0 under `check_untyped_defs = true`.
+#                              autodiff/tape.py vars typing + record() arg
+#                              types fixed; transforms.py + control.py
+#                              axis-tuple typing fixed; jvp.py / vjp.py
+#                              `for _ in range(...)` collision with `**_`
+#                              kwargs fixed; _DtypeAnnotation gained a
+#                              ClassVar `_dtype` base; functools-wrapper
+#                              `__wrapped__` writes carry `# type: ignore`.
+#                              The strict ratchet retired — there's only
+#                              one baseline now and it defends 0.
 #
 # Update this file after a focused cleanup sprint by re-running the
 # baseline command:

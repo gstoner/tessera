@@ -219,7 +219,7 @@ warn_redundant_casts = true
 warn_unreachable = true
 no_implicit_reexport = false
 strict_optional = true
-check_untyped_defs = false   # ratchet to True in a focused sprint
+check_untyped_defs = true
 disallow_untyped_defs = false
 
 # Third-party packages without type stubs — ignore wholesale.

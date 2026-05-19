@@ -157,7 +157,7 @@ class FSDP(Module):
         # Lazy-build the ZeROConfig so this Python module doesn't pull in
         # solver_config at top-level import. Resolved on first attribute
         # access.
-        self._zero_config_cache = None
+        self._zero_config_cache: Any = None
 
     @property
     def zero_config(self):

@@ -60,14 +60,11 @@ elif "$PYTHON" -m mypy --version >/dev/null 2>&1; then
   _MYPY_INVOKE="$PYTHON -m mypy"
 fi
 if [ -n "$_MYPY_INVOKE" ]; then
+  # Single ratchet now defends 0 under the strict policy
+  # (``check_untyped_defs = true`` in pyproject.toml — flipped on
+  # 2026-05-19 after the strict burn-down sprint).  The parallel
+  # ``MYPY_STRICT=1`` ratchet retired in the same change.
   MYPY="$_MYPY_INVOKE" scripts/mypy_ratchet.sh
-  # Strict ratchet — runs mypy with --check-untyped-defs against
-  # scripts/mypy_strict_baseline.txt (currently 23).  Tracks the next
-  # frontier: errors that surface only when we ALSO check the bodies
-  # of untyped defs.  When it reaches 0, flip
-  # `check_untyped_defs = true` in pyproject.toml and retire the
-  # strict baseline file.
-  MYPY="$_MYPY_INVOKE" MYPY_STRICT=1 scripts/mypy_ratchet.sh
 else
   echo "warning: mypy not installed in this Python; skipping ratchet"
 fi

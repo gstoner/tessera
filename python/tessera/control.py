@@ -212,7 +212,8 @@ def pmap(
     """Reference SPMD map with mesh-axis introspection."""
 
     @functools.wraps(fn)
-    def wrapped(*args, **kwargs):
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        axes: tuple[int | None, ...]
         if in_axes is None:
             axes = tuple(None for _ in args)
         elif isinstance(in_axes, int):

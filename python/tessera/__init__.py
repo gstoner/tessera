@@ -24,6 +24,7 @@ import math
 import types
 import builtins
 from dataclasses import dataclass, field
+import typing
 from typing import Any, Callable
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3673,6 +3674,12 @@ from .runtime import (  # noqa: E402
 
 class _DtypeAnnotation:
     """Type annotation sentinel for Tessera dtype-annotated tensors."""
+
+    # Each subclass sets ``_dtype`` to a canonical dtype string
+    # (``fp16``, ``bf16``, ``fp32``, etc.).  The base default is
+    # ``fp32`` so the type-checker can see the attribute on the base
+    # class; subclass values always win.
+    _dtype: typing.ClassVar[str] = "fp32"
 
     def __init__(self, dtype: str, shape=None, layout: str | None = None) -> None:
         self.dtype = dtype

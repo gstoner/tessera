@@ -1166,7 +1166,10 @@ def jvp_ctc_loss(primals, tangents, *, blank=0, reduction="mean", **_):
 
     # Raw per-batch gradient: with reduction='sum' and dout=1.0 the per-batch
     # cotangent is uniformly 1, so the VJP returns exactly dL_b/dlog_probs.
-    grad_lp_raw, *_ = get_vjp("ctc_loss")(
+    ctc_vjp = get_vjp("ctc_loss")
+    if ctc_vjp is None:
+        raise RuntimeError("ctc_loss VJP is not registered")
+    grad_lp_raw, *_ = ctc_vjp(
         1.0, log_probs, targets, input_lengths, target_lengths,
         blank=blank, reduction="sum",
     )
@@ -2756,7 +2759,7 @@ def jvp_spectral_norm(primals, tangents, *, n_iter=1, eps=1e-12, **_):
     M = w_arr.reshape(w_arr.shape[0], -1)
     u = np.random.RandomState(0).randn(M.shape[0])
     u = u / (np.linalg.norm(u) + eps)
-    for _ in range(int(n_iter)):
+    for _i in range(int(n_iter)):
         v = M.T @ u
         v = v / (np.linalg.norm(v) + eps)
         u = M @ v

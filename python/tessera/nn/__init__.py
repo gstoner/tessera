@@ -122,7 +122,11 @@ def _phantom(name: str, hint: str) -> type:
             )
 
         def __call__(self, *args, **kwargs):
-            self.__init__(*args, **kwargs)
+            # Reuse __init__'s "this is a phantom" error message. Calling
+            # `type(self).__init__(self, ...)` instead of
+            # `self.__init__(...)` keeps mypy --check-untyped-defs happy
+            # (instance.__init__ binding is reported as unsound).
+            type(self).__init__(self, *args, **kwargs)
 
     _Phantom.__name__ = name
     _Phantom.__qualname__ = name

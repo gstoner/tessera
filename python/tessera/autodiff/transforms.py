@@ -21,7 +21,7 @@ appropriate tensor shape for higher-rank inputs.
 from __future__ import annotations
 
 import functools
-from typing import Callable, Sequence, Union
+from typing import Any, Callable, Sequence, Union
 
 import numpy as np
 
@@ -55,8 +55,9 @@ def vmap(
     leading dim is a Phase G follow-up.
     """
     @functools.wraps(fn)
-    def wrapped(*args, **kwargs):
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
         # Normalize in_axes to a per-argument tuple.
+        axes: tuple[int | None, ...]
         if in_axes is None:
             axes = tuple(None for _ in args)
         elif isinstance(in_axes, int):

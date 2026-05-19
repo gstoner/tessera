@@ -4171,7 +4171,7 @@ def vjp_spectral_norm(dout, w, *, n_iter=1, eps=1e-12, **_):
     M = w_arr.reshape(w_arr.shape[0], -1)
     u = np.random.RandomState(0).randn(M.shape[0])
     u = u / (np.linalg.norm(u) + eps)
-    for _ in range(int(n_iter)):
+    for _i in range(int(n_iter)):
         v = M.T @ u
         v = v / (np.linalg.norm(v) + eps)
         u = M @ v

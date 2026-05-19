@@ -83,36 +83,18 @@ def test_mypy_count_is_at_or_below_baseline() -> None:
 
 
 @pytest.mark.skipif(not _have(MYPY), reason="mypy not installed in this Python")
-def test_mypy_strict_count_is_at_or_below_strict_baseline() -> None:
-    """Strict-mode (``--check-untyped-defs``) error count must not
-    exceed ``scripts/mypy_strict_baseline.txt``.
+def test_check_untyped_defs_is_enabled() -> None:
+    """The strict policy must stay turned on once it's been enabled.
 
-    The standard ratchet (above) defends 0 under the policy in
-    ``pyproject.toml`` (which has ``check_untyped_defs = false``).
-    This strict ratchet is the next frontier: it forces mypy to
-    actually walk the bodies of untyped defs, surfacing the ~23
-    additional errors that are otherwise invisible.  Burn down the
-    strict baseline file-by-file (autodiff/tape.py is the largest
-    cluster); when it reaches 0, flip ``check_untyped_defs = true``
-    in pyproject.toml and retire the strict baseline file.
-
-    Update via:
-
-        MYPY_STRICT=1 scripts/mypy_ratchet.sh --update-baseline
+    The 2026-05-19 cleanup sprint flipped ``check_untyped_defs = true``
+    in ``pyproject.toml`` and retired the parallel strict ratchet.
+    This guard prevents a silent regression — anyone who flips the
+    flag back to ``false`` will fail this test.
     """
-    script = REPO_ROOT / "scripts" / "mypy_ratchet.sh"
-    baseline = REPO_ROOT / "scripts" / "mypy_strict_baseline.txt"
-    assert script.is_file(), f"missing ratchet script: {script}"
-    assert baseline.is_file(), f"missing strict baseline: {baseline}"
-    proc = subprocess.run(
-        ["bash", str(script)],
-        capture_output=True, text=True, timeout=300, cwd=str(REPO_ROOT),
-        env={**os.environ, "MYPY": MYPY, "MYPY_STRICT": "1"},
-    )
-    assert proc.returncode == 0, (
-        f"strict mypy ratchet reports an error-count regression "
-        f"(rc={proc.returncode}).\n\nratchet stdout:\n{proc.stdout}\n"
-        f"\nratchet stderr:\n{proc.stderr}\n\n"
-        f"Update the strict baseline (after a cleanup) via:\n"
-        f"  MYPY_STRICT=1 scripts/mypy_ratchet.sh --update-baseline"
+    pyproject = REPO_ROOT / "pyproject.toml"
+    text = pyproject.read_text(encoding="utf-8")
+    assert "check_untyped_defs = true" in text, (
+        "pyproject.toml must keep `check_untyped_defs = true` under "
+        "[tool.mypy].  Flipping it back to false would silently mask "
+        "the ~23 errors that the 2026-05-19 strict-burn-down cleared."
     )

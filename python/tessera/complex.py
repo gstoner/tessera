@@ -673,7 +673,7 @@ def analytic(
                 verified[0] = True
             return fn(z)
 
-        _wrap.__wrapped__ = fn
+        _wrap.__wrapped__ = fn  # type: ignore[attr-defined]
         _wrap.__name__ = getattr(fn, "__name__", "analytic_wrapped")
         _wrap.__qualname__ = getattr(fn, "__qualname__", _wrap.__name__)
         return _wrap

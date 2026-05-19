@@ -48,8 +48,8 @@ class TapeEntry:
     inputs: tuple[InputDesc, ...]
     kwargs: dict
     output_id: int
-    output: np.ndarray
-    vjp: Callable
+    output: np.ndarray | np.generic
+    vjp: Callable | None
 
 
 @dataclass
@@ -66,8 +66,8 @@ class Tape:
         op: str,
         inputs: tuple[InputDesc, ...],
         kwargs: dict,
-        output: np.ndarray,
-        vjp: Callable,
+        output: np.ndarray | np.generic,
+        vjp: Callable | None,
     ) -> None:
         self.entries.append(
             TapeEntry(
@@ -299,26 +299,29 @@ _WRAPPED: set[str] = set()
 
 
 def _make_wrapper(name: str, original: Callable) -> Callable:
-    def wrapped(*args, **kwargs):
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
         # Late import — avoids a load-time cycle through autodiff.__init__.
         from .mixed_precision import autocast_dtype, autocast_keep_fp32
 
         active = _ACTIVE_TAPE.get()
         if active is None:
-            forward_args = tuple(_to_forward_arg(a) for a in args)
+            # No-tape fast path — keep `fast_args` as its own variable so
+            # the type-narrower doesn't propagate the tuple type into the
+            # taped-path block below.
+            fast_args: tuple[Any, ...] = tuple(_to_forward_arg(a) for a in args)
             cast_dtype = autocast_dtype()
             if cast_dtype is not None:
                 if autocast_keep_fp32(name):
-                    forward_args = _autocast_args(forward_args, "fp32")
+                    fast_args = tuple(_autocast_args(fast_args, "fp32"))
                 else:
-                    forward_args = _autocast_args(forward_args, cast_dtype)
-            return original(*forward_args, **kwargs)
+                    fast_args = tuple(_autocast_args(fast_args, cast_dtype))
+            return original(*fast_args, **kwargs)
 
         # Tape active — describe each positional arg, pre-convert to numpy
         # for the forward call, and record only the array-like ones on the tape.
         descs_full = tuple(_describe(a) for a in args)
-        forward_args = []
-        array_descs = []
+        forward_args: list[Any] = []
+        array_descs: list[InputDesc] = []
         for a, d in zip(args, descs_full):
             if d is _NON_ARRAY:
                 forward_args.append(a)

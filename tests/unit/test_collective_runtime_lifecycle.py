@@ -69,6 +69,12 @@ def test_collective_runtime_lifecycle_smoke_succeeds() -> None:
         "[OK] 8 threads",
         "[OK] shutdown-while-submitting survived",
         "[OK] init-after-shutdown cycle",
+        # PerfettoTraceWriter must be internally thread-safe.  This
+        # is the prerequisite that made dropping the global mutex
+        # from the submit hot path safe; a future refactor that
+        # silently removes the writer's internal lock would fail
+        # this scenario before destabilizing the wider runtime.
+        "[OK] PerfettoTraceWriter survived",
         "[ALL OK]",
     ):
         assert marker in proc.stdout, (

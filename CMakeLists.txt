@@ -40,8 +40,23 @@ option(TESSERA_BUILD_EBM_BACKEND       "Build the Energy-Based-Model dialect (EB
 # The findings audit (2026-05-19) noted that the highest-leverage
 # static-analysis investment for Tessera's C++ surface is a sanitizer
 # build: TSAN would have caught the PerfettoTraceWriter race on its
-# first run, and ASAN would have caught the use-after-free shape that
-# the live-handle ratchet in tsrShutdown now prevents.
+# first run, and ASAN catches the use-after-free shape the
+# live-handle ratchet in tsrShutdown was added to prevent.  Two
+# smoke binaries exercise the surface under each sanitizer:
+#
+#   tessera-collective-runtime-smoke — collective `tessera_*` C ABI
+#                                       (qos, submit, shutdown, trace).
+#   tessera-runtime-abi-smoke         — device runtime `tsr*` C ABI
+#                                       (Init / Malloc / CreateStream /
+#                                       Free / Shutdown lifecycle,
+#                                       including the live-handle
+#                                       refusal path and an
+#                                       init-after-shutdown cycle).
+#
+# Both are driven by scripts/run_sanitizers.sh and locked by the
+# parametrized tests in tests/unit/test_sanitizer_smoke.py.  The
+# runtime smoke also runs unsanitized in every Python sweep via
+# tests/unit/test_runtime_abi_smoke.py.
 #
 # Mutually exclusive — pick one per build directory:
 #

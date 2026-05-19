@@ -69,6 +69,32 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND TESSERA_BUILD_TESTS)
 endif()
 
 # ------------------------------------------------------------------
+# Runtime ABI smoke — built in both standalone and monorepo builds.
+#
+# Exercises the public `tsr*` C ABI under whatever sanitizer the
+# build was configured with (ASAN red-zones catch handle-lifetime
+# corruption, TSAN catches counter races, UBSAN catches arithmetic
+# and aliasing UB).  This is the sanitizer-target counterpart to
+# `tessera-collective-runtime-smoke` — that one drives the collective
+# `tessera_*` surface, this one drives the device runtime `tsr*` ABI.
+# Together they cover both halves of the C-side surface.
+#
+# Drive under each sanitizer via `scripts/run_sanitizers.sh`; the
+# unsanitized build runs it as a normal ctest target.
+# ------------------------------------------------------------------
+if(TARGET tessera_runtime)
+    add_executable(tessera-runtime-abi-smoke
+        tools/tessera-runtime-abi-smoke/runtime_abi_smoke.cpp)
+    target_link_libraries(tessera-runtime-abi-smoke PRIVATE tessera_runtime)
+    target_compile_options(tessera-runtime-abi-smoke PRIVATE -UNDEBUG)
+    if(TESSERA_BUILD_TESTS)
+        enable_testing()
+        add_test(NAME tessera_runtime_abi_smoke
+                 COMMAND tessera-runtime-abi-smoke)
+    endif()
+endif()
+
+# ------------------------------------------------------------------
 # Install rules (active in both standalone and monorepo installs)
 # ------------------------------------------------------------------
 include(GNUInstallDirs)

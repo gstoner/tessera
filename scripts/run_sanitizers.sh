@@ -37,8 +37,26 @@ cmake_name() {
 }
 
 REQUESTED="${1:-asan tsan ubsan}"
-SMOKE_TARGET="tessera-collective-runtime-smoke"
-SMOKE_BINARY_REL="src/collectives/tools/tessera-collective-runtime-smoke/$SMOKE_TARGET"
+
+# Each smoke binary covers a different C-side surface:
+#
+#   tessera-collective-runtime-smoke (src/collectives/...) — drives the
+#     collective `tessera_*` entry points (qos_limit_set, submit_chunk_async,
+#     shutdown_runtime, trace_write).  Catches PerfettoTraceWriter races
+#     under TSAN, lifetime issues in the shared_ptr-based runtime slot.
+#
+#   tessera-runtime-abi-smoke (src/runtime/...) — drives the device
+#     runtime `tsr*` C ABI (tsrInit/tsrMalloc/tsrCreateStream/tsrFree/
+#     tsrShutdown).  Catches handle-lifetime corruption under ASAN
+#     (the use-after-free shape the live-handle ratchet prevents),
+#     counter-accounting races under TSAN, arithmetic UB under UBSAN.
+#
+# Both are built per sanitizer flavor and run sequentially so a
+# single regression in either surface fails the lane.
+declare -a SMOKES=(
+  "tessera-collective-runtime-smoke|src/collectives/tools/tessera-collective-runtime-smoke/tessera-collective-runtime-smoke"
+  "tessera-runtime-abi-smoke|src/runtime/tessera-runtime-abi-smoke"
+)
 
 run_one() {
   local label="$1"
@@ -75,27 +93,42 @@ run_one() {
     -DTESSERA_BUILD_EXAMPLES=OFF \
     "${llvm_flags[@]}" \
     >/dev/null
-  cmake --build "$build_dir" --target "$SMOKE_TARGET" -j
+  # Build every smoke target.
+  local targets=()
+  for entry in "${SMOKES[@]}"; do
+    targets+=("${entry%%|*}")
+  done
+  cmake --build "$build_dir" --target "${targets[@]}" -j
 
-  local binary="$build_dir/$SMOKE_BINARY_REL"
-  if [[ ! -x "$binary" ]]; then
-    echo "error: smoke binary not found at $binary" >&2
-    return 2
-  fi
-  echo
-  echo "--- running $SMOKE_TARGET under $label ---"
-  # Sanitizer runtime knobs — turn every report into an exit-failure
-  # so the script propagates the diagnostic.
   # macOS ASAN doesn't ship a leak detector; the linux runtime does.
-  # Detect platform and set options accordingly.
   local asan_opts="halt_on_error=1:abort_on_error=1:print_stacktrace=1"
   if [[ "$(uname -s)" == "Linux" ]]; then
     asan_opts="$asan_opts:detect_leaks=1"
   fi
-  ASAN_OPTIONS="$asan_opts" \
-  TSAN_OPTIONS="halt_on_error=1:print_stacktrace=1:second_deadlock_stack=1" \
-  UBSAN_OPTIONS="halt_on_error=1:print_stacktrace=1" \
-  "$binary"
+
+  # Run each smoke binary under the sanitizer runtime.  A failure
+  # in any binary fails the lane.
+  local lane_rc=0
+  for entry in "${SMOKES[@]}"; do
+    local target="${entry%%|*}"
+    local rel="${entry##*|}"
+    local binary="$build_dir/$rel"
+    if [[ ! -x "$binary" ]]; then
+      echo "error: smoke binary not found at $binary" >&2
+      lane_rc=2
+      continue
+    fi
+    echo
+    echo "--- running $target under $label ---"
+    if ! ASAN_OPTIONS="$asan_opts" \
+         TSAN_OPTIONS="halt_on_error=1:print_stacktrace=1:second_deadlock_stack=1" \
+         UBSAN_OPTIONS="halt_on_error=1:print_stacktrace=1" \
+         "$binary"; then
+      echo "error: $target failed under $label" >&2
+      lane_rc=1
+    fi
+  done
+  return $lane_rc
 }
 
 FAILED=()

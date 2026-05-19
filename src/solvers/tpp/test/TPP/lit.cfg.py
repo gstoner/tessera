@@ -9,7 +9,11 @@ needing to export ``PATH`` first.  We probe (in order):
   2. ``<repo>/build/tools/tessera-opt/tessera-opt`` (the
      canonical local build location used by
      ``cmake --build build --target tessera-opt``),
-  3. plain ``tessera-opt`` (relies on the caller's PATH).
+  3. plain ``tessera-opt`` resolved against the caller's PATH,
+  4. common LLVM 21 bin directories such as Homebrew and
+     ``/usr/lib/llvm-21/bin``,
+  5. plain ``tessera-opt`` as the literal substitution (leaves any
+     resolution failure to the test process).
 
 The same probe order is used for ``FileCheck`` — the lit RUN
 lines pipe into it, so it has to be findable too.

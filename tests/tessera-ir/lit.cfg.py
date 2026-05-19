@@ -11,7 +11,9 @@ without the caller needing to export ``PATH`` first.  Probe order:
      local build location used by
      ``cmake --build build --target tessera-opt``),
   3. plain ``tessera-opt`` resolved against the caller's PATH,
-  4. plain ``tessera-opt`` as the literal substitution (leaves any
+  4. common LLVM 21 bin directories such as Homebrew and
+     ``/usr/lib/llvm-21/bin``,
+  5. plain ``tessera-opt`` as the literal substitution (leaves any
      resolution failure to the test process).
 
 ``FileCheck`` follows the same probe order so the lit RUN lines

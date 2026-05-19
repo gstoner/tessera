@@ -26,9 +26,9 @@ Usage::
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import List
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +69,7 @@ class QueueCreateNode:
         if self.depth < 1:
             raise ValueError(f"queue depth must be >= 1, got {self.depth}")
         if self.queue_id < 0:
-            raise ValueError(f"queue_id must be >= 0")
+            raise ValueError("queue_id must be >= 0")
 
     def to_mlir(self) -> str:
         lines = [
@@ -107,7 +107,7 @@ class QueuePushNode:
         lines = [
             f'{self.token_val} = "tessera.queue.push"({self.data_val}, %queue_{self.queue_id}) {{',
             f'  stage = {self.stage} : i64',
-            f'}} : (!tessera.tile, !tessera.queue<bf16>) -> !tessera.async_token',
+            '} : (!tessera.tile, !tessera.queue<bf16>) -> !tessera.async_token',
         ]
         return "\n".join(lines)
 
@@ -133,7 +133,7 @@ class QueuePopNode:
         lines = [
             f'{self.out_val} = "tessera.queue.pop"(%queue_{self.queue_id}) {{',
             f'  stage = {self.stage} : i64',
-            f'}} : (!tessera.queue<bf16>) -> !tessera.tile',
+            '} : (!tessera.queue<bf16>) -> !tessera.tile',
         ]
         return "\n".join(lines)
 
@@ -164,7 +164,7 @@ class QueueBarrierNode:
         lines = [
             f'"tessera.queue.barrier"(%queue_{self.queue_id}) {{',
             f'  scope = "{self.scope}"',
-            f'}} : (!tessera.queue<bf16>) -> ()',
+            '} : (!tessera.queue<bf16>) -> ()',
         ]
         return "\n".join(lines)
 

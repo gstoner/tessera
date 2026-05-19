@@ -24,8 +24,8 @@ Usage::
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import List, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 
 # ---------------------------------------------------------------------------

@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Final, Iterable
+from typing import Final
 
 # Canonical stage names used in dump filenames + env-var values.
 _VALID_STAGES: Final = frozenset({"graph", "schedule", "tile", "target"})

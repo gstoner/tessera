@@ -31,8 +31,8 @@ import contextvars
 import hashlib
 import json
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field
-from typing import Any, Iterable, Iterator, Mapping, Optional
+from dataclasses import dataclass, field
+from typing import Any, Iterator, Mapping, Optional
 
 from . import jit_bridge as _bridge
 from .fallback import FallbackReason

@@ -22,7 +22,6 @@ Usage::
 from __future__ import annotations
 
 import inspect
-import traceback
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Sequence

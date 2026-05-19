@@ -19,7 +19,7 @@ The two binding modes coexist because ``check()`` is duck-typed.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, FrozenSet, List, Optional, Union
 
 from tessera.compiler.constraints import Constraint, TesseraConstraintError

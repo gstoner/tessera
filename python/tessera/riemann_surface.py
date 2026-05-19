@@ -27,7 +27,7 @@ from __future__ import annotations
 import cmath
 import math
 from dataclasses import dataclass
-from typing import Callable, Sequence
+from typing import Sequence
 
 
 @dataclass(frozen=True)

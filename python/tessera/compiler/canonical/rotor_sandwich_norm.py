@@ -21,7 +21,6 @@ import numpy as np
 
 import tessera
 from tessera import ga
-from tessera.compiler import jit_bridge as bridge
 from tessera.compiler.clifford_jit import clifford_jit
 from tessera.compiler.compile_report import (
     CompileReport,

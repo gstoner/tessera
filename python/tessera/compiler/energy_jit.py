@@ -42,9 +42,8 @@ Out of scope this step (deferred to M6 Steps 3/4):
 
 from __future__ import annotations
 
-import functools
-from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping
+from dataclasses import dataclass
+from typing import Any, Callable
 
 from tessera.compiler import ast_ir as _ast_ir
 

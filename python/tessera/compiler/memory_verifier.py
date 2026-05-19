@@ -31,7 +31,7 @@ in the diagnostic ``where`` payload when present.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Iterable, Optional
 
 from .tile_ir import TileFunction, TileIRModule, TileOp

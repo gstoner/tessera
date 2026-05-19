@@ -17,9 +17,9 @@ IR lowering:
 
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Tuple, Union, Optional
+from typing import Tuple
 
-from .shard import ShardSpec, MeshSpec
+from .shard import ShardSpec
 
 
 # ─────────────────────────────────────────────────────────────────────────────

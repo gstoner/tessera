@@ -11,7 +11,7 @@ from __future__ import annotations
 import contextvars
 import functools
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Sequence
 
 import numpy as np
 

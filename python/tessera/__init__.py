@@ -1094,7 +1094,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         Q = np.asarray(Q); K = np.asarray(K); V = np.asarray(V)
         if Q.ndim != 4 or K.ndim != 4 or V.ndim != 4:
             raise ValueError(
-                f"attn_sliding_window expects rank-4 (B, H, S, D) tensors"
+                "attn_sliding_window expects rank-4 (B, H, S, D) tensors"
             )
         if window_size <= 0:
             raise ValueError(f"window_size must be positive; got {window_size}")
@@ -1135,7 +1135,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         Q = np.asarray(Q); K_c = np.asarray(K_c); V_c = np.asarray(V_c)
         if Q.ndim != 4 or K_c.ndim != 4 or V_c.ndim != 4:
             raise ValueError(
-                f"attn_compressed_blocks expects rank-4 tensors"
+                "attn_compressed_blocks expects rank-4 tensors"
             )
         d = Q.shape[-1]
         scale = 1.0 / np.sqrt(d)

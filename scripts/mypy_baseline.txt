@@ -1,0 +1,27 @@
+# Tessera mypy baseline (2026-05-19)
+#
+# Captured count of pre-existing type errors at the moment ruff +
+# mypy landed.  The validation spine uses this as a **ratchet**:
+#
+#   * `scripts/validate.sh` runs mypy and counts the reported errors.
+#   * If the count is `<= BASELINE`, the script passes.
+#   * If the count is `> BASELINE`, the script fails and prints the new
+#     errors.
+#
+# The intent is to (a) prevent type regressions from new code while
+# (b) not blocking day-one CI on the legacy backlog.  Concrete
+# follow-ups, in priority order (high error counts first):
+#
+#   1. python/tessera/nn/layers.py        (71 errors)
+#   2. python/tessera/checkpoint.py       (58 errors)
+#   3. python/tessera/quantization.py     (52 errors)
+#   4. python/tessera/ga/multivector.py   (43 errors)
+#   5. python/tessera/server.py           (34 errors)
+#   6. python/tessera/nn/module.py        (28 errors)
+#
+# Update this file after a focused cleanup sprint by re-running the
+# baseline command:
+#
+#   ./scripts/mypy_ratchet.sh --update-baseline
+#
+BASELINE=357

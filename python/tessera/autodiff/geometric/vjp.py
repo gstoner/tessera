@@ -27,7 +27,6 @@ from tessera.ga.ops import (
     grade_involution,
     conjugate,
 )
-from tessera.ga.signature import Cl
 
 
 # ---------------------------------------------------------------------------

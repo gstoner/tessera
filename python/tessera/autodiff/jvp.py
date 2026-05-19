@@ -29,7 +29,7 @@ Custom JVPs register via :func:`register_jvp` (mirroring
 from __future__ import annotations
 
 import math
-from typing import Any, Callable, Dict, Tuple
+from typing import Callable, Dict, Tuple
 
 import numpy as np
 

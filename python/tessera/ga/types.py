@@ -19,7 +19,7 @@ takes the type as a proof obligation, not a runtime assertion.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, FrozenSet
+from typing import Any
 
 from tessera.ga.multivector import MultivectorSpec
 from tessera.ga.signature import Cl, TesseraAlgebraError

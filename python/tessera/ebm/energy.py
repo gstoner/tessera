@@ -16,7 +16,7 @@ backend lowering follows the GA scope lock's backend-priority order.
 from __future__ import annotations
 
 import math
-from typing import Any, Callable, Iterable, Optional, Sequence
+from typing import Any, Callable, Optional, Sequence
 
 import numpy as np
 

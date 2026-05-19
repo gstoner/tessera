@@ -31,7 +31,7 @@ import numpy as np
 
 from tessera.ga.multivector import Multivector
 from tessera.ga.ops import grade_projection
-from tessera.ga.signature import Cl, TesseraAlgebraError
+from tessera.ga.signature import TesseraAlgebraError
 from tessera.rng import RNGKey, _collect_chain, normal
 
 

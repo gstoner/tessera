@@ -23,7 +23,7 @@ etc.), keep using ``with tessera.autodiff.tape() as t: ... t.backward(loss)``.
 from __future__ import annotations
 
 import functools
-from typing import Any, Callable, Sequence, Tuple, Union
+from typing import Callable, Sequence, Tuple, Union
 
 import numpy as np
 

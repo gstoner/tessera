@@ -21,7 +21,7 @@ import ast
 import enum
 import inspect
 import textwrap
-from typing import Callable, Dict, FrozenSet, List, Optional, Set
+from typing import Callable, Dict, FrozenSet, List, Optional
 
 from .op_catalog import OP_SPECS
 

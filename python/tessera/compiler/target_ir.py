@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 
 from ..diagnostics import DiagnosticLevel, DiagnosticWhere, TesseraDiagnostic, TesseraErrorCode
-from .capabilities import get_target_capability, normalize_target
+from .capabilities import normalize_target
 from .tile_ir import TileIRModule, TileIRVerificationError, TileOp
 
 

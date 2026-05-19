@@ -134,7 +134,6 @@ def multivector_grad(
         return float(np.asarray(out))
 
     def grad_fn(*args, **kwargs):
-        from tessera.autodiff.geometric.check_grad import _numerical_grad_for_multivector
 
         out_grads = []
         for idx in target_indices:

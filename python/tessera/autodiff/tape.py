@@ -17,7 +17,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from .vjp import get_vjp, _VJPS
+from .vjp import get_vjp
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -122,10 +122,10 @@ class Tape:
         target_on_tape = any(e.output_id == target_id for e in self.entries)
         if not target_on_tape:
             raise TesseraAutodiffError(
-                f"backward target is not a tape-recorded output. Forward computation "
-                f"must produce `target` via tessera.ops.*; if your loss math runs in "
-                f"raw numpy, pass `cotangent=dy` and use the model output as `target`. "
-                f"See docs/spec/AUTODIFF_SPEC.md."
+                "backward target is not a tape-recorded output. Forward computation "
+                "must produce `target` via tessera.ops.*; if your loss math runs in "
+                "raw numpy, pass `cotangent=dy` and use the model output as `target`. "
+                "See docs/spec/AUTODIFF_SPEC.md."
             )
         if cotangent is None:
             arr = np.asarray(target)

@@ -38,11 +38,10 @@ identity ``℘'(z)² = 4℘³ − g₂℘ − g₃``.
 
 from __future__ import annotations
 
-import cmath
 import math
 from typing import Sequence
 
-from .contour import _simpson_complex_range, line_segment, contour_integral
+from .contour import line_segment, contour_integral
 
 
 # ─────────────────────────────────────────────────────────────────────────────

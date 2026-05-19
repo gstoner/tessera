@@ -23,7 +23,6 @@ Operations shipped in GA3:
 
 from __future__ import annotations
 
-import math
 from typing import Iterable, Optional, Union
 
 import numpy as np

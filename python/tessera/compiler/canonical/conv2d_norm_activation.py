@@ -27,7 +27,6 @@ from tessera.compiler.compile_report import (
 from tessera.compiler.fallback import (
     FallbackReason,
     TesseraNativeRequiredError,
-    classify_host,
 )
 
 

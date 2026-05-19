@@ -17,7 +17,7 @@ Reference: CLAUDE.md §CPU Collective Mock
 
 from __future__ import annotations
 import threading
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 import numpy as np
 
 

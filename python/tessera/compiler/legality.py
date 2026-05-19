@@ -6,7 +6,7 @@ should mirror these rule names as the native verifier grows coverage.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Iterable, Mapping, Optional, Sequence
 
 from .capabilities import CAPABILITY_REGISTRY_VERSION, canonical_op, normalize_target, supports_op

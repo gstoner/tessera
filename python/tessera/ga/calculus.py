@@ -21,14 +21,13 @@ GA8.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Tuple, Union
+from typing import Any, Callable, Optional, Tuple, Union
 
 import numpy as np
 
 from tessera.ga.multivector import Multivector
 from tessera.ga.ops import (
     geometric_product,
-    grade_projection,
     reverse,
 )
 from tessera.ga.signature import Cl, TesseraAlgebraError
@@ -377,7 +376,6 @@ def _try_apple_gpu_field_op_cl30_f32(
     grid isn't 3-D, (c) the dtype isn't f32, (d) the values aren't
     C-contiguous, or (e) the runtime is unavailable.
     """
-    from typing import Optional  # local for return-type docstring
     from tessera.ga.signature import Cl  # noqa: F401
 
     if field.algebra.signature != (3, 0, 0):

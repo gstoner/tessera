@@ -23,7 +23,7 @@ Reference: CLAUDE.md §Key Design Contracts — ConstraintSolver
 
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 
 # ─────────────────────────────────────────────────────────────────────────────

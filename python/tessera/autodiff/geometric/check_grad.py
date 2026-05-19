@@ -18,7 +18,6 @@ from typing import Callable, Tuple
 import numpy as np
 
 from tessera.ga.multivector import Multivector
-from tessera.ga.signature import Cl
 
 
 def _flatten_output_to_scalar(out, cotangent: np.ndarray) -> float:

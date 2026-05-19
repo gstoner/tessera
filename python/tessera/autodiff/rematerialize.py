@@ -30,13 +30,11 @@ from typing import Callable
 import numpy as np
 
 from .tape import (
-    InputDesc,
     TesseraAutodiffError,
     _ACTIVE_TAPE,
     _NON_ARRAY,
     _describe,
     _to_forward_arg,
-    tape as _tape,
 )
 
 

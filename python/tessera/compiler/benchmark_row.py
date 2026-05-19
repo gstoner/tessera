@@ -26,7 +26,7 @@ guarantee — :func:`validate_benchmark_row` rejects rows that claim
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
 from .compile_report import (

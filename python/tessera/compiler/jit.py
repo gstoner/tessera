@@ -317,7 +317,7 @@ class JitFn:
         # them once and reuse on every __call__. Without caching the small-
         # GEMM hot-path is dominated by metadata dict construction + the
         # SHA-256 over the artifact JSON inside `RuntimeArtifact.artifact_hash`.
-        self._cached_artifact: Optional["RuntimeArtifact"] = None
+        self._cached_artifact: Optional["RuntimeArtifact"] = None  # noqa: F821 (forward ref; runtime-import below)
         functools.update_wrapper(self, fn)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:

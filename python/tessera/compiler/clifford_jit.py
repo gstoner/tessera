@@ -52,11 +52,8 @@ Scope of v1:
 
 from __future__ import annotations
 
-import ast
 import functools
 import hashlib
-import inspect
-import textwrap
 import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
@@ -405,7 +402,7 @@ class CliffordCompiledCallable:
         observed_ops = tuple(r.op_name for r in observed)
         return observed_ops == self.artifact.op_names()
 
-    def compile_report(self) -> "_cr.CompileReport":
+    def compile_report(self) -> "_cr.CompileReport":  # noqa: F821 (forward ref; runtime-import inside body)
         """Synthesize a :class:`CompileReport` from this callable's
         current artifact + last call's route trace.
 
@@ -636,7 +633,6 @@ class _IRCompiledCallable(CliffordCompiledCallable):
             # fallback inside `tessera.ga.*`) is exactly what
             # native_required exists to prevent.
             from .fallback import (
-                FallbackReason,
                 TesseraNativeRequiredError,
                 classify_host,
             )

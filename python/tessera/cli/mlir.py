@@ -177,7 +177,7 @@ def render_ir(
         lines.append("}")
         return "\n".join(lines)
     if emit == "schedule-ir":
-        lines = header + [f'"tessera.schedule.module"() ({{']
+        lines = header + ['"tessera.schedule.module"() ({']
         for symbol in body:
             lines.append(f'  "tessera.schedule.entry"() {{sym_name = "{symbol.name}", source_line = {symbol.lineno}, target = "{target}"}}')
         lines.append('}) : () -> ()')
@@ -189,7 +189,7 @@ def render_ir(
         lines.append('}) : () -> ()')
         return "\n".join(lines)
 
-    lines = header + [f'"tessera.target.module"() ({{']
+    lines = header + ['"tessera.target.module"() ({']
     for symbol in body:
         lines.append(f'  "tessera.target.entry_stub"() {{sym_name = "{symbol.name}", source_line = {symbol.lineno}, target = "{target}"}}')
     lines.append('}) : () -> ()')

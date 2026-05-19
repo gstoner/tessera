@@ -60,7 +60,7 @@ from typing import Iterable, Mapping, Optional
 from . import backend_manifest as bm
 from . import capabilities as cap
 from . import primitive_coverage as pc
-from .op_catalog import OP_SPECS, OpSpec
+from .op_catalog import OP_SPECS
 
 
 def _coverage_for(name: str):

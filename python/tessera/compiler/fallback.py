@@ -130,7 +130,7 @@ class TesseraNativeRequiredError(RuntimeError):
         self.target = target
         self.op_name = op_name
         self.detail = detail
-        prefix = f"native_required=True: "
+        prefix = "native_required=True: "
         suffix = ""
         if target or op_name:
             scope = "/".join(s for s in (target, op_name) if s)

@@ -33,6 +33,34 @@ echo "==> Environment bootstrap"
 echo "==> Version consistency"
 "$PYTHON" scripts/check_versions.py
 
+echo "==> Python lint (ruff)"
+# ruff catches unused imports, undefined names, common bugs, security
+# smells (S301/S403 — pickle.loads), and a curated subset of pyupgrade
+# rules.  Config in pyproject.toml; baseline is "zero errors" — the
+# whole package is currently clean.
+if "$PYTHON" -m ruff --version >/dev/null 2>&1; then
+  "$PYTHON" -m ruff check python/tessera/
+else
+  echo "warning: ruff not installed in this Python (skipping lint)"
+fi
+
+echo "==> Python type check (mypy ratchet)"
+# mypy runs against the baseline tracked in scripts/mypy_baseline.txt.
+# Pass when the error count is at or below the baseline; fail loudly
+# when a new error lands.  After a focused cleanup sprint update the
+# baseline via `scripts/mypy_ratchet.sh --update-baseline`.
+# Derive the mypy binary that lives next to the Python interpreter.
+PYTHON_BIN_DIR="$(dirname "$PYTHON")"
+if [ -x "$PYTHON_BIN_DIR/mypy" ]; then
+  MYPY="$PYTHON_BIN_DIR/mypy" scripts/mypy_ratchet.sh
+elif "$PYTHON" -m mypy --version >/dev/null 2>&1; then
+  # Fall back to invoking via `python -m mypy` for installs without
+  # the console script.
+  MYPY="$PYTHON -m mypy" scripts/mypy_ratchet.sh
+else
+  echo "warning: mypy not installed in this Python; skipping ratchet"
+fi
+
 echo "==> Python unit tests"
 "$PYTHON" -m pytest tests/unit -q -m "not slow"
 
@@ -93,6 +121,21 @@ if [ -d build ]; then
   ctest --test-dir build --output-on-failure
 else
   echo "==> No repo build/ directory; skipping optional monorepo ctest"
+fi
+
+# Opt-in C++ sanitizer smoke.  Off by default because each sanitizer
+# build is ~2 minutes (Debug + sanitizer flags + collectives toolchain).
+# Enable in CI lanes that care about runtime-safety regressions:
+#   TESSERA_VALIDATE_SANITIZERS=1 scripts/validate.sh
+# Run a subset via:
+#   TESSERA_VALIDATE_SANITIZERS=asan scripts/validate.sh
+if [ "${TESSERA_VALIDATE_SANITIZERS:-0}" != "0" ]; then
+  case "${TESSERA_VALIDATE_SANITIZERS}" in
+    1|all|true) SANS="asan tsan ubsan" ;;
+    *)          SANS="${TESSERA_VALIDATE_SANITIZERS}" ;;
+  esac
+  echo "==> Sanitizer smoke ($SANS)"
+  scripts/run_sanitizers.sh $SANS
 fi
 
 echo "Tessera CPU validation spine passed"

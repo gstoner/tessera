@@ -12,10 +12,10 @@ Reference: docs/programming_guide/Tessera_Programming_Guide_Chapter4_Execution_M
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING, Optional, List, Tuple, Any
+from typing import TYPE_CHECKING, Optional, List, Tuple
 import numpy as np
 
-from .domain import Domain, Rect, Distribution, Block, Cyclic, Replicated
+from .domain import Domain, Distribution
 from .shard import ShardSpec, MeshSpec
 
 if TYPE_CHECKING:

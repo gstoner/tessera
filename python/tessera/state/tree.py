@@ -39,7 +39,6 @@ from typing import (
     Iterator,
     Mapping,
     Sequence,
-    Tuple,
 )
 
 

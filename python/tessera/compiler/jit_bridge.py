@@ -38,12 +38,11 @@ calls.
 
 from __future__ import annotations
 
-import ctypes
 import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterator, Optional, Sequence
+from typing import Any, Iterator, Optional, Sequence
 
 from tessera._apple_gpu_dispatch import bind_symbol as _bind_apple_gpu_symbol
 from tessera.compiler import backend_manifest as bm

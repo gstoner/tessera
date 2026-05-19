@@ -33,7 +33,6 @@ hyperbolic isometry (and vice versa for H⁺).  The distance is
 
 from __future__ import annotations
 
-import cmath
 import math
 from typing import Any
 

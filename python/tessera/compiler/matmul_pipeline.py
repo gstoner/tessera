@@ -19,7 +19,7 @@ from typing import Any, Mapping, Optional, Sequence
 import numpy as np
 
 from .graph_ir import GraphIRFunction, GraphIRModule, IROp
-from .capabilities import normalize_target as _normalize_target, supports_op
+from .capabilities import normalize_target as _normalize_target
 from .op_catalog import GRAPH_OP_TO_SPEC, LEGACY_GRAPH_OP_ALIASES, SUPPORTED_CPU_OPS, canonical_graph_op_name
 from .schedule_planner import SchedulePlanner
 from .schedule_ir import lower_graph_to_schedule_ir
@@ -287,7 +287,7 @@ def _render_target_ir(
         return _render_object_target_ir(module, tile=tile, target_kind=target_kind)
     lines = [
         'module attributes {tessera.ir.level = "target", target = "cpu"} {',
-        f'  "tessera.cpu.func"() ({{',
+        '  "tessera.cpu.func"() ({',
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
@@ -315,7 +315,7 @@ def _render_object_target_ir(
 def _render_rocm_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
     lines = [
         'module attributes {tessera.ir.level = "target", target = "rocm", arch = "gfx90a"} {',
-        f'  "tessera_rocm.func"() ({{',
+        '  "tessera_rocm.func"() ({',
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
@@ -349,7 +349,7 @@ def _render_rocm_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
 def _render_metalium_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
     lines = [
         'module attributes {tessera.ir.level = "target", target = "metalium", arch = "wormhole"} {',
-        f'  "tessera_metalium.program"() ({{',
+        '  "tessera_metalium.program"() ({',
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
@@ -378,7 +378,7 @@ def _render_metalium_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
 def _render_apple_cpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
     lines = [
         'module attributes {tessera.ir.level = "target", target = "apple_cpu", arch = "arm64-apple-silicon", execution_mode = "cpu_accelerate"} {',
-        f'  "tessera_apple.cpu.func"() ({{',
+        '  "tessera_apple.cpu.func"() ({',
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
@@ -407,7 +407,7 @@ def _render_apple_cpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str
 def _render_apple_gpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
     lines = [
         'module attributes {tessera.ir.level = "target", target = "apple_gpu", arch = "apple-metal", execution_mode = "metal_artifact"} {',
-        f'  "tessera_apple.gpu.func"() ({{',
+        '  "tessera_apple.gpu.func"() ({',
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
@@ -459,7 +459,7 @@ def _render_nvidia_target_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target
     }.get(target_kind, "sm_90a")
     lines = [
         f'module attributes {{tessera.ir.level = "target", target = "{target_kind}", arch = "{arch}"}} {{',
-        f'  "tessera_nvidia.func"() ({{',
+        '  "tessera_nvidia.func"() ({',
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)

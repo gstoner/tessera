@@ -17,7 +17,7 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 from .graph_ir import GraphIRModule
 from .capabilities import CAPABILITY_REGISTRY_VERSION, supports_op

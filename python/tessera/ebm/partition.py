@@ -16,7 +16,7 @@ non-trivial measure) waits for EBM7.
 from __future__ import annotations
 
 import math
-from typing import Any, Callable, Iterable, Optional, Sequence, Tuple
+from typing import Any, Callable, Iterable, Optional, Tuple
 
 import numpy as np
 

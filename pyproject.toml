@@ -46,7 +46,8 @@ dev = [
     "black>=22.0.0",
     "isort>=5.10.0",
     "flake8>=4.0.0",
-    "mypy>=0.950"
+    "mypy>=1.0.0",
+    "ruff>=0.6.0",
 ]
 gpu = [
     "nvidia-ml-py3>=7.352.0"
@@ -93,3 +94,140 @@ markers = [
     "slow: long-running tests excluded from quick local sweeps",
     "performance: deterministic compiler performance and benchmark proxy tests",
 ]
+
+# ----------------------------------------------------------------------------
+# Static analysis — ruff (lint) + mypy (type check)
+# ----------------------------------------------------------------------------
+#
+# The default sweep is the same shape as ``scripts/validate.sh`` runs:
+#
+#   ruff check python/tessera/
+#   mypy python/tessera/ --config-file pyproject.toml
+#
+# Findings audit (2026-05-19): we ship a deliberate baseline that
+# enables the high-signal rule families (E/F + bugbear + security)
+# while suppressing stylistic noise the codebase has lived with for a
+# while (multi-statement-per-line, ambiguous one-letter math names,
+# legitimate conditional imports).  When the maintainer wants a
+# stricter sweep, drop the per-rule ``ignore`` entries below.
+[tool.ruff]
+# Tessera doc strings + tabular dispatch tables are routinely long.
+# 120 is the project's pragmatic ceiling; the maintainer can ratchet
+# back to 100 once a focused reflow sprint lands.
+line-length = 120
+target-version = "py310"
+
+# Walk only the package tree; tests/ has its own conventions and the
+# build/ tree contains generated MLIR text we do not want to lint.
+src = ["python"]
+exclude = [
+    "build",
+    "research/sandbox_compilers",
+    "src/archive",
+    "docs/archive",
+]
+
+[tool.ruff.lint]
+# E/F = pycodestyle/pyflakes baseline.
+# B    = flake8-bugbear (common bugs — mutable default args, etc.).
+# S    = flake8-bandit (security smells — eval / pickle.loads / exec).
+# UP   = pyupgrade (modernize legacy syntax).
+select = ["E", "F", "B", "S", "UP"]
+ignore = [
+    # Stylistic — Tessera's compact `if x: return` and tabular DSL
+    # tables are deliberately one-line.  Reverting them would hurt
+    # readability of the IR-shaped code.
+    "E701",  # multiple-statements-on-one-line-colon
+    "E702",  # multiple-statements-on-one-line-semicolon
+    "E731",  # lambda-assignment (we use `_fn = lambda ...:` in dispatch tables)
+    # Module imports inside functions are deliberate cycle-breakers.
+    "E402",  # module-import-not-at-top-of-file
+    # Math/IR code uses single-letter identifiers (l = label, I = identity).
+    "E741",  # ambiguous-variable-name
+    # bugbear noise that doesn't apply to Tessera's loop/closure patterns.
+    "B007",  # unused-loop-control-variable (we name the index for readability)
+    "B008",  # function-call-in-default-argument (legitimate dataclass default)
+    "B009",  # get-attr-with-constant (used for safe defaults + dynamic lookup)
+    "B010",  # set-attr-with-constant (we use it to bypass frozen dataclasses)
+    "B011",  # assert-false-as-message (used in tests)
+    "B023",  # function-uses-loop-variable (intentional in closure factories)
+    "B024",  # abstract-base-class-without-abstract-method (we use it as a marker)
+    "B027",  # empty-method-in-abstract-base-class (intentional override stubs)
+    "B028",  # no-explicit-stacklevel
+    "B904",  # raise-without-from-inside-except (we re-raise w/ new context routinely)
+    "B905",  # zip-without-explicit-strict (defer; intentional same-length pairs)
+    # Tabular dispatch and long doc strings push past 100 chars; we
+    # ship a 120-char ceiling and silence the residual without
+    # rewriting every line in the docs/operator catalog.
+    "E501",  # line-too-long
+    # pyupgrade rules that touch parametric semantics; defer to a focused sprint.
+    "UP006", "UP007", "UP035", "UP045",
+    "UP022",  # replace-stdout-stderr (intentional in CLI scripts)
+    "UP028",  # yield-in-for-loop (we prefer the explicit form for readability)
+    "UP037",  # quoted-annotation (forward refs used to break import cycles)
+    # Security rules whose findings are flagged at the API surface
+    # already (P2 #6 from the 2026-05-19 review): we explicitly gate
+    # pickle.loads behind `allow_pickle` / `trust_treedef` opt-ins.
+    "S301",  # suspicious-pickle-usage
+    "S403",  # suspicious-pickle-import
+    "S404",  # suspicious-subprocess-import (we shell out to tessera-opt deliberately)
+    "S603",  # subprocess-without-shell-equals-true
+    "S607",  # start-process-with-partial-path
+    "S311",  # suspicious-non-cryptographic-random-usage (np.random in tests)
+    "S101",  # assert in tests
+    "S105",  # hardcoded-password-string (false positives on test fixtures)
+    "S106",  # hardcoded-password-func-arg
+    "S107",  # hardcoded-password-default
+    "S108",  # hardcoded-temp-file (we use /tmp/... in smoke binaries)
+    "S110",  # try-except-pass (used in best-effort dispatch fallbacks)
+    "S112",  # try-except-continue
+    "S608",  # hardcoded-sql-expression (false positive on `SELECT` in cache code)
+    # We deliberately keep some redefinitions/unused locals for
+    # introspection in audit walkers and op-catalog tables.
+    "F811",  # redefined-while-unused
+    "F841",  # unused-variable
+    "F402",  # import-shadowed-by-loop-var
+]
+
+[tool.ruff.lint.per-file-ignores]
+# __init__.py files re-export the package's public surface; the
+# imports look unused to ruff but are the entire point.
+"__init__.py" = ["F401"]
+# Test files commonly stash side-effecting imports and use `assert`.
+"tests/**" = ["F401", "S101", "S105", "S106", "S108"]
+# Conformance examples are pedagogical; lint at info level only.
+"examples/**" = ["F401", "F811", "F841", "B", "S"]
+# Benchmark harness scripts are entry points with deliberate
+# import-side-effects and command-line argparse boilerplate.
+"benchmarks/**" = ["F401", "S", "B"]
+# tools/ scripts run on dev machines with subprocess invocations.
+"tools/**" = ["S"]
+
+[tool.mypy]
+python_version = "3.10"
+mypy_path = "python"
+packages = ["tessera"]
+
+# Start permissive; we ratchet stricter rules family-by-family as the
+# codebase converges.  The high-signal flags below catch real bugs
+# (None returns where they're not declared, mismatched call signatures)
+# without drowning the report in 1000s of legacy-type findings.
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+no_implicit_reexport = false
+strict_optional = true
+check_untyped_defs = false   # ratchet to True in a focused sprint
+disallow_untyped_defs = false
+
+# Third-party packages without type stubs — ignore wholesale.
+[[tool.mypy.overrides]]
+module = [
+    "numpy.*",
+    "scipy.*",
+    "matplotlib.*",
+    "ml_dtypes.*",
+    "optuna.*",
+    "perfetto.*",
+]
+ignore_missing_imports = true

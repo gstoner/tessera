@@ -26,11 +26,11 @@ Limitations of this v1 implementation:
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
-from ..nn.module import Module, Parameter
+from ..nn.module import Module
 
 
 # ─────────────────────────────────────────────────────────────────────────────

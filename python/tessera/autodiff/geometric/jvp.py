@@ -18,7 +18,6 @@ from __future__ import annotations
 import numpy as np
 
 from tessera.autodiff.geometric.registry import register_jvp_geo
-from tessera.ga.multivector import Multivector
 from tessera.ga.ops import (
     conjugate,
     geometric_product,

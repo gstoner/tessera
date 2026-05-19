@@ -36,7 +36,7 @@ dashboard to surface.  The ``backend_kernel`` contract axis stays at
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Mapping, Optional, Tuple
 
 from .capabilities import TARGET_CAPABILITIES, canonical_op

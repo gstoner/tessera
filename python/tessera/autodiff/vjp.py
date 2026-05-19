@@ -4086,6 +4086,7 @@ def vjp_einsum(dout, *operands, equation=None, **_):
 
 def _numeric_conv_vjp(op_name, dout, *primals, **kwargs):
     from tessera import ops as _ops
+    from .tape import TesseraAutodiffError   # local import — avoids cycle with tape.py
     fn = getattr(_ops, op_name, None)
     if fn is None:
         raise TesseraAutodiffError(

@@ -37,7 +37,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Iterator, Optional
 
-from . import backend_manifest as _bm
 from .compile_report import CompileReport, capture_compile_reports
 
 

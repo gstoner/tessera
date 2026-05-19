@@ -20,7 +20,6 @@ Reference: docs/programming_guide/Tessera_Programming_Guide_Chapter4_Execution_M
 
 from __future__ import annotations
 import functools
-import inspect
 from typing import Callable, Any, List, Optional
 
 from .array import DistributedArray

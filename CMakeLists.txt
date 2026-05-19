@@ -34,6 +34,60 @@ option(TESSERA_BUILD_RUBINCPX_BACKEND  "Build Rubin CPX compiler backend (NVRubi
 option(TESSERA_BUILD_CLIFFORD_BACKEND  "Build the Clifford / Geometric-Algebra dialect (GA7+)" OFF)
 option(TESSERA_BUILD_EBM_BACKEND       "Build the Energy-Based-Model dialect (EBM5+)" OFF)
 
+# --------------------------------------------------------------------------
+# Sanitizers — runtime instrumentation for the C++ runtime + collectives.
+#
+# The findings audit (2026-05-19) noted that the highest-leverage
+# static-analysis investment for Tessera's C++ surface is a sanitizer
+# build: TSAN would have caught the PerfettoTraceWriter race on its
+# first run, and ASAN would have caught the use-after-free shape that
+# the live-handle ratchet in tsrShutdown now prevents.
+#
+# Mutually exclusive — pick one per build directory:
+#
+#   off    (default)
+#   address    →  -fsanitize=address,undefined  (AddressSanitizer + UBSan)
+#   thread     →  -fsanitize=thread             (ThreadSanitizer)
+#   undefined  →  -fsanitize=undefined          (UndefinedBehaviorSanitizer)
+#
+# Usage (separate build dirs per sanitizer):
+#
+#   cmake -B build-asan -DTESSERA_ENABLE_SANITIZERS=address
+#   cmake -B build-tsan -DTESSERA_ENABLE_SANITIZERS=thread
+#
+# Then build and run the smoke binary under each:
+#
+#   cmake --build build-asan --target tessera-collective-runtime-smoke
+#   build-asan/src/collectives/tools/tessera-collective-runtime-smoke/...
+#
+# Combined with a -DCMAKE_BUILD_TYPE=Debug build the sanitizers
+# emit precise line-number diagnostics on a violation.
+# --------------------------------------------------------------------------
+set(TESSERA_ENABLE_SANITIZERS "off" CACHE STRING
+  "C++ sanitizer build (off | address | thread | undefined)")
+set_property(CACHE TESSERA_ENABLE_SANITIZERS PROPERTY
+  STRINGS off address thread undefined)
+
+if(TESSERA_ENABLE_SANITIZERS STREQUAL "address")
+  set(_TESSERA_SAN_FLAGS "-fsanitize=address,undefined" "-fno-omit-frame-pointer" "-fno-sanitize-recover=all")
+elseif(TESSERA_ENABLE_SANITIZERS STREQUAL "thread")
+  set(_TESSERA_SAN_FLAGS "-fsanitize=thread" "-fno-omit-frame-pointer" "-fno-sanitize-recover=all")
+elseif(TESSERA_ENABLE_SANITIZERS STREQUAL "undefined")
+  set(_TESSERA_SAN_FLAGS "-fsanitize=undefined" "-fno-omit-frame-pointer" "-fno-sanitize-recover=all")
+elseif(TESSERA_ENABLE_SANITIZERS STREQUAL "off")
+  set(_TESSERA_SAN_FLAGS "")
+else()
+  message(FATAL_ERROR
+    "TESSERA_ENABLE_SANITIZERS must be one of: off, address, thread, undefined "
+    "(got: ${TESSERA_ENABLE_SANITIZERS})")
+endif()
+
+if(_TESSERA_SAN_FLAGS)
+  add_compile_options(${_TESSERA_SAN_FLAGS})
+  add_link_options(${_TESSERA_SAN_FLAGS})
+  message(STATUS "Sanitizers ON: ${TESSERA_ENABLE_SANITIZERS} (${_TESSERA_SAN_FLAGS})")
+endif()
+
 if(TESSERA_CPU_ONLY)
     set(TESSERA_ENABLE_CUDA OFF CACHE BOOL "Enable CUDA support" FORCE)
     set(TESSERA_ENABLE_HIP OFF CACHE BOOL "Enable ROCm/HIP support" FORCE)
@@ -165,6 +219,7 @@ message(STATUS "  Cerebras backend  : ${TESSERA_BUILD_CEREBRAS_BACKEND}")
 message(STATUS "  Rubin CPX backend : ${TESSERA_BUILD_RUBINCPX_BACKEND}")
 message(STATUS "  Clifford backend  : ${TESSERA_BUILD_CLIFFORD_BACKEND}")
 message(STATUS "  EBM backend       : ${TESSERA_BUILD_EBM_BACKEND}")
+message(STATUS "  Sanitizers        : ${TESSERA_ENABLE_SANITIZERS}")
 message(STATUS "  Build tests       : ${TESSERA_BUILD_TESTS}")
 message(STATUS "  Build examples    : ${TESSERA_BUILD_EXAMPLES}")
 message(STATUS "  Build Python      : ${TESSERA_BUILD_PYTHON}")

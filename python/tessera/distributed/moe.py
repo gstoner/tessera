@@ -25,8 +25,8 @@ Reference: CLAUDE.md §Phase 4 — MoE helpers
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Dict, List, NamedTuple, Optional, Tuple
+from dataclasses import dataclass
+from typing import NamedTuple, Optional
 import numpy as np
 
 

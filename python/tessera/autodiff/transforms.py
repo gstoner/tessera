@@ -21,13 +21,12 @@ appropriate tensor shape for higher-rank inputs.
 from __future__ import annotations
 
 import functools
-from typing import Any, Callable, Sequence, Tuple, Union
+from typing import Callable, Sequence, Union
 
 import numpy as np
 
 from .grad import grad
 from .jvp import jvp
-from .tape import TesseraAutodiffError, tape
 
 
 # ─────────────────────────────────────────────────────────────────────────────

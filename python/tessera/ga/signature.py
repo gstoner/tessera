@@ -35,7 +35,7 @@ per signature and cached via `functools.lru_cache`.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache
 from typing import Tuple
 
 
@@ -162,7 +162,7 @@ def _blade_product(
     return result_mask, sign
 
 
-@lru_cache(maxsize=None)
+@cache
 def _product_table(
     p: int, q: int, r: int
 ) -> Tuple[Tuple[Tuple[int, int], ...], ...]:
@@ -178,7 +178,7 @@ def _product_table(
     )
 
 
-@lru_cache(maxsize=None)
+@cache
 def _basis_list(p: int, q: int, r: int) -> Tuple[Basis, ...]:
     n = p + q + r
     dim = 1 << n

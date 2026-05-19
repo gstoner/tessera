@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from .testing.mock_collective import MockRank, MockRankGroup
+from .testing.mock_collective import MockRankGroup
 
 
 COLLECTIVE_STATUSES = {"mock", "single_process", "backend_unavailable", "hardware_runtime"}

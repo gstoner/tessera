@@ -1,0 +1,330 @@
+name: Validate
+
+# Six lanes, separately reported so branch protection can require the
+# fast ones (lint / unit / audit / build) without blocking on optional
+# work (lit / sanitizer).  See .github/BRANCH_PROTECTION.md for the
+# recommended required-check list.
+#
+# Mirrors scripts/validate.sh exactly — the local validation spine is
+# the source of truth.  When you add a step there, add a lane (or
+# extend one) here.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+  # Tessera is torch-free at runtime (Decision #23); CI installs the
+  # tight set of deps that the unit-test suite actually touches so a
+  # fresh runner doesn't pull the full transformers stack.
+  TESSERA_CI_PY_DEPS: >-
+    numpy>=1.21.0,<2.0.0
+    pytest>=7.0.0
+    pytest-cov>=4.0.0
+    pyyaml>=6.0.0
+    click>=8.0.0
+    rich>=12.0.0
+    tqdm>=4.64.0
+    scipy>=1.9.0
+    matplotlib>=3.5.0
+    ml_dtypes>=0.4.0
+    ruff>=0.6.0
+    mypy>=1.11.0
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────
+  # Lane 1 — lint  (ruff + mypy ratchet)   ~30s
+  # Required check.
+  # ────────────────────────────────────────────────────────────────────
+  lint:
+    name: lint (ruff + mypy ratchet)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install lint deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . --no-deps
+          # shellcheck disable=SC2086
+          python -m pip install $TESSERA_CI_PY_DEPS
+
+      - name: ruff check
+        run: python -m ruff check python/tessera/
+
+      - name: mypy ratchet (defends 0 under check_untyped_defs=true)
+        env:
+          MYPY: python -m mypy
+        run: bash scripts/mypy_ratchet.sh
+
+  # ────────────────────────────────────────────────────────────────────
+  # Lane 2 — unit  (pytest -m "not slow")   ~2min
+  # Required check.
+  # ────────────────────────────────────────────────────────────────────
+  unit:
+    name: unit (pytest -m "not slow")
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install unit-test deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . --no-deps
+          # shellcheck disable=SC2086
+          python -m pip install $TESSERA_CI_PY_DEPS
+
+      - name: pytest (CPU lane, not slow)
+        env:
+          PYTHONPATH: python
+        run: python -m pytest tests/unit -q -m "not slow"
+
+  # ────────────────────────────────────────────────────────────────────
+  # Lane 3 — audit  (support_table drift + claim_lint + examples)   ~10s
+  # Required check.
+  # ────────────────────────────────────────────────────────────────────
+  audit:
+    name: audit (drift + claim_lint + examples)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install audit deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . --no-deps
+          # shellcheck disable=SC2086
+          python -m pip install $TESSERA_CI_PY_DEPS
+
+      - name: support_table drift check
+        env:
+          PYTHONPATH: python
+        run: python -m tessera.compiler.audit support_table --check
+
+      - name: Public-doc claim_lint
+        env:
+          PYTHONPATH: python
+        run: python -m tessera.compiler.audit claim_lint
+
+      - name: Examples surface audit (runnable rows must execute)
+        env:
+          PYTHONPATH: python
+        run: python -m tessera.cli.examples_audit --check
+
+      - name: Examples README claim_lint (scaffold/broken overclaim guard)
+        env:
+          PYTHONPATH: python
+        run: python -m tessera.cli.claim_lint --check
+
+  # ────────────────────────────────────────────────────────────────────
+  # Lane 4 — build  (runtime + collectives compile-check)   ~5min
+  # Required check.
+  #
+  # We do NOT build tessera-opt / tessera-translate-mlir here because
+  # those require MLIR/LLVM 21 which is not in stock Ubuntu apt.  The
+  # lit lane handles that separately and is opt-in.
+  # ────────────────────────────────────────────────────────────────────
+  build:
+    name: build (runtime + collectives)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build
+
+      - name: Configure standalone CPU runtime
+        run: |
+          cmake -S src/runtime -B build/runtime \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DTESSERA_BUILD_TESTS=ON
+
+      - name: Build runtime + tessera-runtime-abi-smoke
+        run: cmake --build build/runtime --target tessera-runtime-abi-smoke
+
+      - name: Run runtime ctest
+        run: ctest --test-dir build/runtime --output-on-failure
+
+      - name: Collectives runtime compile-check
+        run: |
+          mkdir -p build/collectives
+          c++ -std=c++17 -Isrc/collectives/include \
+            -c src/collectives/lib/Dialect/Collective/Runtime/Execution.cpp \
+            -o build/collectives/execution.o
+
+      - name: Upload runtime build (for downstream lanes)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-build
+          path: build/runtime/
+          retention-days: 1
+          if-no-files-found: warn
+
+  # ────────────────────────────────────────────────────────────────────
+  # Lane 5 — lit  (MLIR FileCheck)   ~30s once MLIR is available
+  # Opt-in.  Not required.
+  #
+  # Stock GitHub-hosted Ubuntu doesn't carry MLIR 21, so the lane
+  # installs it via apt.llvm.org and gracefully skips if the install
+  # fails.  When MLIR 21 lands in the runner image, drop the install
+  # guard.
+  # ────────────────────────────────────────────────────────────────────
+  lit:
+    name: lit (MLIR FileCheck — opt-in)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Only run on PRs labeled `lit-smoke`, on manual dispatch, or on
+    # pushes to main.  Keeps the critical path fast.
+    if: >-
+      (github.event_name == 'workflow_dispatch')
+      || (github.event_name == 'pull_request'
+          && contains(github.event.pull_request.labels.*.name, 'lit-smoke'))
+      || (github.event_name == 'push'
+          && (github.ref == 'refs/heads/main'
+              || github.ref == 'refs/heads/master'))
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system deps + LLVM/MLIR 21
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build wget gnupg
+          # Try the official LLVM apt repo for LLVM 21.  Tessera builds
+          # against 21; older toolchains will fail the configure step.
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add - || true
+          codename="$(lsb_release -cs)"
+          echo "deb http://apt.llvm.org/${codename}/ llvm-toolchain-${codename}-21 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm21.list
+          sudo apt-get update || true
+          sudo apt-get install -y --no-install-recommends \
+            llvm-21-dev mlir-21-tools libmlir-21-dev clang-21 \
+            || { echo "::warning ::LLVM/MLIR 21 not available — skipping lit lane"; exit 0; }
+          python -m pip install --upgrade pip
+          python -m pip install lit FileCheck
+
+      - name: Configure + build tessera-opt
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DMLIR_DIR=/usr/lib/llvm-21/lib/cmake/mlir \
+            -DLLVM_DIR=/usr/lib/llvm-21/lib/cmake/llvm
+          cmake --build build --target tessera-opt
+
+      - name: Run lit smoke (TESSERA_VALIDATE_LIT=1)
+        env:
+          TESSERA_VALIDATE_LIT: "1"
+          PATH: "${{ github.workspace }}/build/tools/tessera-opt:/usr/lib/llvm-21/bin:${{ env.PATH }}"
+        run: |
+          lit tests/tessera-ir -v
+
+  # ────────────────────────────────────────────────────────────────────
+  # Lane 6 — sanitizer  (asan / tsan / ubsan smoke)   ~15min
+  # Opt-in via PR label `sanitizer-smoke`.  Not required.
+  # ────────────────────────────────────────────────────────────────────
+  sanitizer:
+    name: sanitizer (asan / tsan / ubsan — opt-in)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: >-
+      (github.event_name == 'workflow_dispatch')
+      || (github.event_name == 'pull_request'
+          && contains(github.event.pull_request.labels.*.name, 'sanitizer-smoke'))
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [asan, tsan, ubsan]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build
+
+      - name: Run sanitizer smoke (${{ matrix.sanitizer }})
+        run: bash scripts/run_sanitizers.sh ${{ matrix.sanitizer }}
+
+  # ────────────────────────────────────────────────────────────────────
+  # Aggregator — fan-in for branch protection.
+  #
+  # Required GitHub status checks accept only job names, so we publish
+  # a single "validate-required" check that succeeds iff every required
+  # lane succeeded.  Branch protection points at this single name.
+  # ────────────────────────────────────────────────────────────────────
+  validate-required:
+    name: validate-required
+    runs-on: ubuntu-latest
+    needs: [lint, unit, audit, build]
+    if: always()
+    steps:
+      - name: Verify required lanes succeeded
+        run: |
+          # `needs.<job>.result` is "success", "failure", "cancelled", or "skipped".
+          # We require every named lane to be "success".
+          required=(
+            "${{ needs.lint.result }}"
+            "${{ needs.unit.result }}"
+            "${{ needs.audit.result }}"
+            "${{ needs.build.result }}"
+          )
+          fail=0
+          for r in "${required[@]}"; do
+            if [ "$r" != "success" ]; then
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "::error ::Required validation lane failed: lint=${{ needs.lint.result }} unit=${{ needs.unit.result }} audit=${{ needs.audit.result }} build=${{ needs.build.result }}"
+            exit 1
+          fi
+          echo "All required lanes passed."

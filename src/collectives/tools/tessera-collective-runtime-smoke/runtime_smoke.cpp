@@ -50,7 +50,7 @@
 
 // The `extern "C"` entry points are declared inside the
 // `tessera::collective` namespace in Execution.h; the linker actually
-// resolves them by mangled C symbol, but the C++ compiler still
+// resolves them by unmangled C symbol, but the C++ compiler still
 // needs the qualified name to find the declaration.
 using tessera::collective::tessera_qos_limit_set;
 using tessera::collective::tessera_submit_chunk_async;

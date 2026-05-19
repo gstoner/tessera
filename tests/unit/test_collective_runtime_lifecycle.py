@@ -2,23 +2,25 @@
 
 Drives the ``tessera-collective-runtime-smoke`` binary (built from
 ``src/collectives/tools/tessera-collective-runtime-smoke/``) and
-asserts that the three lifecycle scenarios it exercises all pass:
+asserts that the four lifecycle / thread-safety scenarios it exercises
+all pass:
 
   1. Concurrent submitters across 8 threads do not corrupt state.
   2. ``tessera_shutdown_runtime()`` while a submit is in flight
      does not crash (``shared_ptr``-based slot keeps the runtime
      alive past the concurrent shutdown).
   3. Init-after-shutdown re-creates the runtime on demand.
+  4. ``PerfettoTraceWriter`` is internally synchronized and does not
+     lose events under direct concurrent mutation.
 
 Findings audit (2026-05-19) flagged the architectural concern that
-the global mutex was held through ``ExecRuntime::submit()``.  We
-investigated dropping the lock under submit but found that
-``ExecRuntime`` is not yet internally thread-safe
-(``PerfettoTraceWriter`` shares state without an internal mutex),
-so the current shipping state holds the mutex by design and the
-followup is to add an internal per-runtime lock.  This test
-locks the contract that survives today: safe under concurrent
-submits and across shutdown/reinit cycles.
+the global mutex was held through ``ExecRuntime::submit()``.  The
+runtime now drops that global lock before submit by returning a
+``shared_ptr`` strong reference from the runtime slot.  The prerequisite
+fix is that per-runtime components own their own synchronization:
+``TokenLimiter`` already did, and ``PerfettoTraceWriter`` now locks
+mutating methods and snapshots before flushing.  This test locks that
+shipping contract end to end.
 
 Skips cleanly when the binary isn't built (the smoke binary lives
 behind ``cmake --build build --target tessera-collective-runtime-smoke``).

@@ -128,42 +128,106 @@ def test_shipped_canonical_envelope_fields_are_stable(program) -> None:
     assert a.target == b.target
 
 
+def _native_proof_strength(report) -> dict[str, bool]:
+    """Decompose a CompileReport's native-proof signals.  Used by
+    the no-silent-native gate; **deliberately excludes
+    ``ir_hashes``** because every shipped canonical synthesizes a
+    Graph IR digest regardless of whether anything was dispatched.
+
+    Valid proofs:
+
+      * ``proof_routes`` non-empty — the bridge actually fired.
+      * ``plan_hash`` populated — a compiled artifact exists
+        (e.g., ``@clifford_jit.artifact.plan_hash``).
+      * A literal ``tessera_*`` C ABI symbol in
+        ``target_decision`` values — names what the kernel will be.
+    """
+    decision_text = " ".join(report.target_decision.values())
+    return {
+        "has_routes": len(report.proof_routes) > 0,
+        "has_plan_hash": bool(report.plan_hash),
+        "has_symbol": "tessera_" in decision_text,
+    }
+
+
 @pytest.mark.parametrize("program", _SHIPPED, ids=lambda p: p.program_id)
 def test_shipped_canonical_no_silent_native(program) -> None:
     """**M5 no-silent-native rule** applied at the CompileReport
-    layer (P1 reviewer fix, 2026-05-18).
+    layer (P1 reviewer fix + reviewer follow-up, 2026-05-18).
 
     If a report claims native execution — ``target != "cpu"`` and
-    ``fallback_reason is None`` — it MUST carry at least one piece
-    of proof:
+    ``fallback_reason is None`` — it MUST carry at least one of:
 
       * a non-empty ``proof_routes`` tuple (bridge dispatch trace),
-      * a non-empty ``ir_hashes`` map (compiled artifact present),
-      * an explicit symbol entry in ``target_decision`` values
-        (the manifest's C ABI name).
+      * a populated ``plan_hash`` (compiled artifact attached),
+      * a literal ``tessera_*`` C ABI symbol mentioned in
+        ``target_decision`` (the manifest fast path the report
+        intends to dispatch — coupled with the test that the
+        symbol resolves through ``jit_bridge``).
 
-    Without this gate, drivers can silently run pure numpy under
-    a ``target=apple_gpu`` banner.  The benchmark-row schema
-    already enforces this for benchmark JSON; this test brings
-    the CompileReport into the same contract."""
+    **Important: a Graph-IR hash alone does NOT count.**  Every
+    canonical synthesizes one whether or not anything dispatched,
+    so leaning on ``ir_hashes`` would silently legitimize a pure
+    numpy driver that claims native success.
+    """
     report = program.run()
     if report.target == "cpu":
         return  # cpu reports are honest by construction
     if report.fallback_reason is not None:
         return  # explicit fallback acknowledged
-    # Native claim → require proof.
-    has_routes = len(report.proof_routes) > 0
-    has_ir = bool(report.ir_hashes)
-    decision_text = " ".join(report.target_decision.values())
-    has_symbol = "tessera_" in decision_text
-    assert has_routes or has_ir or has_symbol, (
+    proof = _native_proof_strength(report)
+    assert any(proof.values()), (
         f"{program.program_id} claims native execution "
         f"(target={report.target!r}, fallback_reason=None) but carries "
-        f"NO proof — neither proof_routes, ir_hashes, nor a "
-        f"tessera_* symbol in target_decision.  Either mark the "
-        f"driver with FallbackReason.REFERENCE_FORCED or wire it "
-        f"to an actual native dispatch."
+        f"NO valid proof: {proof}.  Either set "
+        f"FallbackReason.REFERENCE_FORCED honestly, wire bridge "
+        f"routes via dispatch_via_manifest, attach a plan_hash from "
+        f"the compiled artifact, or name the tessera_* symbol in "
+        f"target_decision."
     )
+
+
+def test_no_silent_native_rejects_a_synthetic_ir_only_report() -> None:
+    """Regression test for the reviewer follow-up: a hypothetical
+    driver that ONLY populates ``ir_hashes`` (no routes, no
+    plan_hash, no symbol in target_decision) must be rejected
+    by the gate.  Catches a future regression that re-introduces
+    the ``has_ir`` branch."""
+    from tessera.compiler.compile_report import CompileReport
+    bad = CompileReport(
+        program_id="synthetic_bad",
+        source="t",
+        frontend="tessera.jit",
+        value_kind="tensor",
+        target="apple_gpu",     # claims native
+        fallback_reason=None,    # claims success
+        ir_hashes={"graph_ir": "abc123"},  # ONLY this — no routes, etc.
+        target_decision={"apple_gpu": "would-be fused kernel"},
+    )
+    proof = _native_proof_strength(bad)
+    assert not any(proof.values()), (
+        f"the gate accepted ir-only proof: {proof}.  The reviewer "
+        f"fix explicitly forbids ir_hashes alone as proof."
+    )
+
+
+def test_no_silent_native_accepts_plan_hash_only_report() -> None:
+    """Conversely, a driver with a real ``plan_hash`` (e.g., from
+    a @clifford_jit compiled artifact) is valid proof even if no
+    routes were captured."""
+    from tessera.compiler.compile_report import CompileReport
+    good = CompileReport(
+        program_id="synthetic_good",
+        source="t",
+        frontend="tessera.jit",
+        value_kind="tensor",
+        target="apple_gpu",
+        fallback_reason=None,
+        plan_hash="real_plan_hash_from_a_compiled_artifact",
+        target_decision={"apple_gpu": "compiled artifact bound"},
+    )
+    proof = _native_proof_strength(good)
+    assert proof["has_plan_hash"] and any(proof.values())
 
 
 @pytest.mark.parametrize("program", _SHIPPED, ids=lambda p: p.program_id)

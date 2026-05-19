@@ -784,30 +784,134 @@ Landed (2026-05-18):
 | 6 | ``check_cauchy_riemann`` (numerical) + ``@analytic`` + ``NotHolomorphicError`` | — | `test_complex_cauchy_riemann.py` (21) |
 | 7 | ``conformal_energy_on_sphere`` → ``tessera.energy.norm_sq`` composition | — | `test_complex_conformal_energy.py` (7) |
 
-Follow-ups (not gating any other milestone):
+Needham-completion bundles (2026-05-18, landing on top of M7):
 
-- **Symbolic Cauchy-Riemann path**: AST-lowered complex functions
-  could be CR-verified symbolically by composing M6's
-  ``energy_vjp``-style derivatives.  The numerical path shipped
-  today satisfies the M7 acceptance criteria; the symbolic path
-  would extend the verifier to compile-time checks rather than
-  probe-based.
+- [x] **Bundle B — cross-ratio + Möbius constructions (Needham Ch. 3)**:
+  `cross_ratio(z1, z2, z3, z4)` (the fundamental Möbius
+  invariant), `is_concyclic(...)` (real-valued cross-ratio test
+  for four points on a generalized circle), and
+  `mobius_from_three_points(src, dst)` (the canonical via-(0, 1, ∞)
+  construction).  19 tests including Möbius-invariance of the
+  cross-ratio, line-as-generalized-circle handling, ∞-point
+  triples in the Möbius constructor, round-trip identity, and
+  cross-ratio preservation by the constructed Möbius.
+- [x] **Bundle A — log / arg / pow + Wirtinger (Needham Ch. 2, 4-5)**:
+  `complex_arg` and `complex_log` (principal branch, NumPy-compatible
+  cut along the negative real axis — `log(-1) = +iπ` locked by
+  test); `complex_pow(z, w) = exp(w · log(z))`; **Wirtinger
+  primitives `dz` and `dbar`** as first-class operators (where
+  `dbar(f, z₀) = 0` is exactly the Cauchy-Riemann condition).
+  37 tests including branch-cut policy, log↔exp round-trip,
+  agreement with `numpy.log`/`numpy.power`, Wirtinger identities
+  on `z²`, `e^z`, `z̄`, `|z|²`, and a lock that the existing
+  `check_cauchy_riemann` residual equals `|dbar(f, z₀)|`.
+- [x] **Bundle C — integration theory (Needham Ch. 7-9)**:
+  `python/tessera/contour.py` ships `Contour` + `circle` /
+  `line_segment` / `polygon` constructors, `contour_integral`
+  (per-segment composite Simpson's, ε-nudged boundary samples
+  for polygons with discontinuous γ'), `winding_number`
+  (argument-variation method), `residue` (Cauchy formula), and
+  the worked-example helpers `argument_principle_count` +
+  `residue_theorem_sum`.  28 tests including Cauchy's theorem
+  (∮ analytic dz = 0), Cauchy's integral formula
+  (∮ dz/(z−a) = 2πi inside, 0 outside), winding numbers for
+  CCW/CW circles, the argument principle counting zeros minus
+  poles, and the residue theorem closing identity
+  (∮ f dz = 2πi · Σ residues).
+- [x] **Lower-priority Needham additions (lifted from
+  research follow-ups, 2026-05-18)**: shipped all six items
+  that were originally filed for "later if a workload motivates
+  it":
+  - **`complex_sqrt(z, branch=...)`** with explicit branch
+    selection (Ch. 2, 8); zero special-cased; matches
+    `numpy.sqrt` on the principal branch.  8 tests.
+  - **Hyperbolic primitives** (`tessera.hyperbolic`, Ch. 6):
+    `poincare_distance`, `upper_half_plane_distance`, Blaschke
+    disk-automorphism isometry helper, Cayley transform
+    `H⁺ ↔ 𝔻`.  Locks triangle inequality, isometry, and
+    cross-model consistency.  12 tests.
+  - **`flow_lines(f, ...)`** (`tessera.flow`, Ch. 10): 4th-order
+    Runge-Kutta streamline tracer for `dz/dt = f(z)` with
+    escape-radius guard; verified on constant / radial /
+    rotational / diagonal flows.  7 tests.
+  - **Riemann surface lifting** (`tessera.riemann_surface`,
+    Ch. 12): `RiemannSurfacePoint(z, branch)`, `lift_sqrt`
+    (2 sheets), `lift_log` (∞ sheets), and
+    `follow_path_on_riemann_surface` — walking CCW once around
+    0 flips the sqrt sheet (the canonical demo) and advances
+    log's branch by +1.  10 tests.
+  - **Schwarz–Christoffel mapping** (`tessera.conformal_advanced`,
+    Ch. 12): prevertex-given MVP via direct numerical integration
+    of the SC integrand.  4 tests.  **Follow-up
+    `schwarz_christoffel_parameter_solve` (2026-05-18) closed:**
+    full parameter-problem solver — given polygon vertices, solve
+    for the prevertices via damped Newton on side-length-ratio
+    residuals.  Fixes three prevertices by Möbius gauge
+    (``x_1 = -1``, ``x_2 = 0``, ``x_N = +∞``) and parameterizes
+    the remaining ``N−3`` free prevertices via log-spacings so
+    the strict ordering ``0 < x_3 < x_4 < ... < x_{N-1}`` is
+    structural rather than constrained.  Finite-difference
+    Jacobian; line-search step damping; integrable endpoint
+    singularities handled via ε-inset Simpson + ``t = x_lo + 1/u``
+    substitution for the segment to ``+∞``.  6 tests (triangle
+    short-circuit, vertex-count guard, clockwise-polygon
+    rejection, unit-square convergence, regular-pentagon
+    ordered prevertices, initial-guess length check).
+  - **Weierstrass ℘ elliptic function** (`tessera.conformal_advanced`,
+    Ch. 5): truncated-lattice-sum `weierstrass_p`,
+    `weierstrass_p_derivative`, `weierstrass_invariants`.
+    Verified evenness, two-period periodicity (1e-2 tolerance
+    for cutoff=16), and the elliptic-curve identity
+    ``℘'² = 4℘³ − g₂℘ − g₃``.  7 tests.  **Follow-up
+    `weierstrass_p_adaptive` (2026-05-18) closed:** adaptive
+    lattice-sum that grows the radius ring-by-ring until the
+    latest ring's contribution falls below ``tol``.  Returns
+    ``(value, cutoff_used, last_ring_magnitude)`` so callers
+    see both the converged value and the truncation error
+    bound.  6 tests (origin rejection, agreement with fixed
+    cutoff, error-bound monotonicity, tolerance-relaxes-cutoff
+    contract, evenness preserved, three-tuple shape).
 
-  **Status note (P3 reviewer correction, 2026-05-18):** M6's
-  ``energy_vjp`` + ``energy_grad`` core is **structurally**
-  reusable for this symbolic CR path, but it is **specialized
-  to the energy whitelist** (14 ops covering quadratic forms,
-  norms, activations, MLP heads).  Building the M7 symbolic
-  verifier needs a parallel complex/conformal whitelist
-  (``complex_mul``, ``complex_exp``, ``mobius``, etc.), a
-  real/imag-extraction pass, and partial-derivative rules
-  for each whitelisted complex op.  Treat M7 as **partially
-  unblocked** — the architectural template is right; the
-  type-specific rules still need writing.
-- **MSL codegen** for the 6 conformal primitives.  Today they
-  run as numpy reference; native Apple GPU paths would benefit
-  from M6 Step 4's Philox+MSL machinery, so this lands together
-  with M6 Step 4.
+Follow-ups (now closed — 2026-05-18):
+
+- [x] **Symbolic Cauchy-Riemann path**: shipped
+  `python/tessera/compiler/complex_jit.py` — re-uses the
+  shared ``ast_ir`` core for lowering, ships a dedicated
+  complex/conformal whitelist with explicit
+  `HOLOMORPHIC_OPS` vs `NON_HOLOMORPHIC_OPS` classification,
+  and exposes ``analytic_symbolic`` as a compile-time
+  decorator that raises :class:`NotHolomorphicError` at
+  decoration (no probing).  Walks the IR and names the
+  offending op + python attr.  22 tests:
+  whitelist-partition contract, IR lowering, holomorphic
+  positives (``z²``, ``e^z``, ``mobius``, chained
+  compositions), non-holomorphic negatives (``z̄``, ``|z|``,
+  ``z·|z|``), agreement with the numerical CR verifier on
+  shared cases, and the structural reuse lock (the M6
+  ``ast_ir`` core is the single AST→IR backbone).
+- [x] **MSL codegen for the conformal-primitive surface**:
+  4 fused MSL kernels shipped in
+  `src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm`
+  for the GPU-beneficial ops — ``complex_mul``,
+  ``complex_exp``, ``complex_stereographic``,
+  ``complex_mobius``.  Each has an RAII-pool dispatcher,
+  an extern "C" wrapper, a host-side reference fallback,
+  and a new ``_COMPLEX_APPLE_GPU_FUSED`` manifest table
+  routed via ``complex_manifest_for`` and
+  ``lookup_apple_gpu_symbol``.  Python wrappers in
+  ``tessera.complex`` dispatch f32 same-shape inputs
+  through ``jit_bridge`` and fall back to the existing
+  numpy paths otherwise.  23 tests including Apple-GPU
+  cross-platform determinism for each of the 4 kernels.
+
+  **Host-only by design** (no manifest entry):
+  ``complex_conjugate`` (one float negation),
+  ``complex_abs`` (sqrt of two squares),
+  ``conformal_jacobian`` (4-call host composition),
+  ``laplacian_2d`` (small stencil where host numpy beats
+  a GPU dispatch round-trip at our typical sizes).  The
+  manifest documents this honestly — a future workload
+  that motivates GPU paths for these can re-promote.
 
 Goal: use Needham's visual/conformal ideas to extend the mathematical IR lane.
 

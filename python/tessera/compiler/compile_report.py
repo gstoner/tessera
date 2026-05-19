@@ -80,6 +80,15 @@ class CompileReport:
     proof_routes: tuple[_bridge.JitBridgeRoute, ...] = ()
     timing_ms: Optional[Mapping[str, float]] = None
     correctness: Optional[Mapping[str, float]] = None
+    # Reviewer fix (2026-05-18): explicit compiled-artifact identity
+    # for drivers that have one but don't (or can't) carry bridge
+    # routes — e.g., a `@clifford_jit` callable run outside the
+    # bridge tracing scope.  Used by the M1 no-silent-native gate
+    # in test_compile_report_stability_gate.py as a stricter
+    # alternative to leaning on `ir_hashes` (which every driver
+    # populates with a synthetic Graph-IR digest).  Empty string
+    # / None ⇒ no compiled artifact attached.
+    plan_hash: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.frontend not in VALID_FRONTENDS:
@@ -131,6 +140,7 @@ class CompileReport:
             ],
             "timing_ms": dict(self.timing_ms) if self.timing_ms else None,
             "correctness": dict(self.correctness) if self.correctness else None,
+            "plan_hash": self.plan_hash,
         }
 
     def as_json(self, *, indent: int = 2) -> str:
@@ -170,6 +180,7 @@ class CompileReport:
                 for r in self.proof_routes
             ],
             "correctness": dict(self.correctness) if self.correctness else None,
+            "plan_hash": self.plan_hash,
         }
         blob = json.dumps(canonical, sort_keys=True).encode("utf-8")
         return hashlib.sha256(blob).hexdigest()[:16]

@@ -191,6 +191,14 @@ def lookup_apple_gpu_symbol(op_name: str) -> Optional[str]:
         if spec is None:
             return None
         return str(spec["symbol"])
+    if op_name.startswith("complex_"):
+        # M7 follow-up (2026-05-18): the conformal primitives use a
+        # parallel manifest table.  Only the 4 GPU-beneficial ops
+        # have a fused entry; the rest stay CPU-only.
+        spec = bm._COMPLEX_APPLE_GPU_FUSED.get(op_name)
+        if spec is None:
+            return None
+        return str(spec["symbol"])
     return None
 
 

@@ -1061,6 +1061,107 @@ def _capability_status(target_name: str, op_name: str) -> tuple[str, tuple[str, 
     return (op_cap.runtime_status, tuple(op_cap.dtypes))
 
 
+# M7 follow-up (2026-05-18) — MSL kernels for the conformal-primitive
+# surface.  Only the 4 ops with real GPU benefit ship native kernels;
+# ``conformal_jacobian`` (4-call host composition, no GPU win) and
+# ``laplacian_2d`` (small stencil, host numpy is faster at our typical
+# sizes) intentionally don't get manifest entries — they stay CPU-only
+# until a real workload demonstrates a GPU benefit.
+_COMPLEX_APPLE_GPU_FUSED: dict[str, dict[str, object]] = {
+    "complex_mul": {
+        "symbol": "tessera_apple_gpu_complex_mul_f32",
+        "dtypes": ("fp32",),
+        "abi": ("(a_re:f32*, a_im:f32*, b_re:f32*, b_im:f32*, "
+                "out_re:f32*, out_im:f32*, n:i32)"),
+        "notes": (
+            "Elementwise complex multiplication on Apple GPU — "
+            "(a + bi)(c + di) = (ac − bd) + (ad + bc)i."
+        ),
+    },
+    "complex_exp": {
+        "symbol": "tessera_apple_gpu_complex_exp_f32",
+        "dtypes": ("fp32",),
+        "abi": "(re:f32*, im:f32*, out_re:f32*, out_im:f32*, n:i32)",
+        "notes": (
+            "Elementwise complex exponential via Euler form — "
+            "e^(a+bi) = e^a · (cos b, sin b)."
+        ),
+    },
+    "complex_stereographic": {
+        "symbol": "tessera_apple_gpu_complex_stereographic_f32",
+        "dtypes": ("fp32",),
+        "abi": ("(x:f32*, y:f32*, z:f32*, out_re:f32*, out_im:f32*, n:i32)"),
+        "notes": (
+            "Stereographic projection S² → ℂ — f(x,y,z) = (x + iy) / "
+            "(1 − z).  North pole → ∞."
+        ),
+    },
+    "complex_mobius": {
+        "symbol": "tessera_apple_gpu_complex_mobius_f32",
+        "dtypes": ("fp32",),
+        "abi": ("(z_re:f32*, z_im:f32*, a_re:f32, a_im:f32, "
+                "b_re:f32, b_im:f32, c_re:f32, c_im:f32, "
+                "d_re:f32, d_im:f32, out_re:f32*, out_im:f32*, n:i32)"),
+        "notes": (
+            "Möbius transformation (az+b)/(cz+d) — broadcasts scalar "
+            "(a, b, c, d) across the input batch."
+        ),
+    },
+}
+
+
+_COMPLEX_PRIMITIVES: tuple[str, ...] = (
+    "complex_mul",
+    "complex_exp",
+    "complex_stereographic",
+    "complex_mobius",
+    # Host-only by design (no manifest entry above):
+    #   complex_conjugate, complex_abs, conformal_jacobian, laplacian_2d
+)
+
+
+def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
+    """Return backend manifest entries for a ``complex_*`` primitive
+    (M7 conformal surface).
+
+    Only the four GPU-beneficial complex ops have native Apple GPU
+    fused kernels; the rest of the M7 surface stays CPU-only by
+    design and returns an empty manifest list.
+    """
+    if op_name not in _COMPLEX_PRIMITIVES:
+        return []
+    entries: list[BackendKernelEntry] = []
+    # CPU targets — Python reference always available.
+    entries.append(BackendKernelEntry(
+        target="x86",
+        status=_REFERENCE_STATUS,
+        dtypes=("fp32",),
+        feature_flags=("complex_namespace", "numpy_reference"),
+        notes="Python complex reference (tessera.complex.*)",
+    ))
+    entries.append(BackendKernelEntry(
+        target="apple_cpu",
+        status=_REFERENCE_STATUS,
+        dtypes=("fp32",),
+        feature_flags=("complex_namespace", "numpy_reference"),
+        notes="Python complex reference (tessera.complex.*)",
+    ))
+    # Apple GPU — fused MSL kernel for the GPU-beneficial subset.
+    fused = _COMPLEX_APPLE_GPU_FUSED.get(op_name)
+    if fused is not None:
+        entries.append(BackendKernelEntry(
+            target="apple_gpu",
+            status=_FUSED_KERNEL_STATUS,
+            dtypes=tuple(fused["dtypes"]),
+            feature_flags=("complex_namespace", "msl", "metal"),
+            notes=(
+                f"Fused MSL kernel: {fused['symbol']} — "
+                f"ABI {fused['abi']}. {fused['notes']}"
+            ),
+        ))
+    return entries
+
+
 def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     """Return the backend manifest entries for ``op_name``.
 
@@ -1072,11 +1173,14 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     GA9 (2026-05-17): `clifford_*` op names are dispatched to a
     parallel `clifford_manifest_for()` table since they aren't part of
     the tensor `OP_SPECS` catalog.
+    M7 follow-up (2026-05-18): same pattern for `complex_*`.
     """
     if op_name.startswith("clifford_"):
         return clifford_manifest_for(op_name)
     if op_name.startswith("ebm_"):
         return ebm_manifest_for(op_name)
+    if op_name.startswith("complex_"):
+        return complex_manifest_for(op_name)
     entries: list[BackendKernelEntry] = []
 
     # x86 AMX

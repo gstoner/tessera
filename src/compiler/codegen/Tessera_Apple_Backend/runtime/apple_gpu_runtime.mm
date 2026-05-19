@@ -5884,6 +5884,401 @@ extern "C" void tessera_apple_gpu_ebm_langevin_step_philox_f32(
 }
 
 // ===========================================================================
+// M7 follow-up — MSL kernels for the conformal-primitive surface.
+//
+// Each function below has the same shape: an MSL kernel (element-wise
+// over a 1-D grid), a Python-callable extern "C" wrapper, and a CPU
+// reference path so non-Darwin hosts and runtime-load failures get the
+// same numerics.  Buffers come from the RAII pool.
+// ===========================================================================
+
+inline void reference_complex_mul_f32(
+    const float* a_re, const float* a_im,
+    const float* b_re, const float* b_im,
+    float* out_re, float* out_im, int32_t n) {
+  for (int32_t i = 0; i < n; ++i) {
+    out_re[i] = a_re[i] * b_re[i] - a_im[i] * b_im[i];
+    out_im[i] = a_re[i] * b_im[i] + a_im[i] * b_re[i];
+  }
+}
+
+static NSString *const kComplexMulF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void complex_mul_f32(
+    device const float* a_re [[buffer(0)]],
+    device const float* a_im [[buffer(1)]],
+    device const float* b_re [[buffer(2)]],
+    device const float* b_im [[buffer(3)]],
+    device float* out_re     [[buffer(4)]],
+    device float* out_im     [[buffer(5)]],
+    constant int32_t& n      [[buffer(6)]],
+    uint i [[thread_position_in_grid]])
+{
+    if ((int)i >= n) return;
+    float ar = a_re[i], ai = a_im[i], br = b_re[i], bi = b_im[i];
+    out_re[i] = ar * br - ai * bi;
+    out_im[i] = ar * bi + ai * br;
+}
+)MSL";
+
+static bool dispatch_complex_mul_f32_msl(
+    MetalDeviceContext &ctx,
+    const float* a_re, const float* a_im,
+    const float* b_re, const float* b_im,
+    float* out_re, float* out_im, int32_t n) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kComplexMulF32Source, @"complex_mul_f32");
+    if (!pso) return false;
+    NSUInteger bytes = sizeof(float) * (NSUInteger)n;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bAr, ctx, a_re, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bAi, ctx, a_im, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bBr, ctx, b_re, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bBi, ctx, b_im, bytes);
+    TS_METAL_BUF_ACQUIRE(bOr, ctx, bytes);
+    TS_METAL_BUF_ACQUIRE(bOi, ctx, bytes);
+    if (!bAr || !bAi || !bBr || !bBi || !bOr || !bOi) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bAr offset:0 atIndex:0];
+    [enc setBuffer:bAi offset:0 atIndex:1];
+    [enc setBuffer:bBr offset:0 atIndex:2];
+    [enc setBuffer:bBi offset:0 atIndex:3];
+    [enc setBuffer:bOr offset:0 atIndex:4];
+    [enc setBuffer:bOi offset:0 atIndex:5];
+    [enc setBytes:&n length:sizeof(int32_t) atIndex:6];
+    MTLSize grid = MTLSizeMake((NSUInteger)n, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)n,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    if (_pool_ok) {
+      std::memcpy(out_re, [bOr contents], bytes);
+      std::memcpy(out_im, [bOi contents], bytes);
+    }
+    return _pool_ok;
+  }
+}
+
+extern "C" void tessera_apple_gpu_complex_mul_f32(
+    const float* a_re, const float* a_im,
+    const float* b_re, const float* b_im,
+    float* out_re, float* out_im, int32_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_complex_mul_f32_msl(
+          ctx, a_re, a_im, b_re, b_im, out_re, out_im, n)) return;
+  reference_complex_mul_f32(a_re, a_im, b_re, b_im, out_re, out_im, n);
+}
+
+// ---------------------------------------------------------------------------
+// complex_exp: e^(a + b·i) = e^a · (cos b, sin b)
+// ---------------------------------------------------------------------------
+
+inline void reference_complex_exp_f32(
+    const float* re, const float* im,
+    float* out_re, float* out_im, int32_t n) {
+  for (int32_t i = 0; i < n; ++i) {
+    float ea = std::exp(re[i]);
+    out_re[i] = ea * std::cos(im[i]);
+    out_im[i] = ea * std::sin(im[i]);
+  }
+}
+
+static NSString *const kComplexExpF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void complex_exp_f32(
+    device const float* re   [[buffer(0)]],
+    device const float* im   [[buffer(1)]],
+    device float* out_re     [[buffer(2)]],
+    device float* out_im     [[buffer(3)]],
+    constant int32_t& n      [[buffer(4)]],
+    uint i [[thread_position_in_grid]])
+{
+    if ((int)i >= n) return;
+    float ea = exp(re[i]);
+    out_re[i] = ea * cos(im[i]);
+    out_im[i] = ea * sin(im[i]);
+}
+)MSL";
+
+static bool dispatch_complex_exp_f32_msl(
+    MetalDeviceContext &ctx,
+    const float* re, const float* im,
+    float* out_re, float* out_im, int32_t n) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kComplexExpF32Source, @"complex_exp_f32");
+    if (!pso) return false;
+    NSUInteger bytes = sizeof(float) * (NSUInteger)n;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bR, ctx, re, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bI, ctx, im, bytes);
+    TS_METAL_BUF_ACQUIRE(bOr, ctx, bytes);
+    TS_METAL_BUF_ACQUIRE(bOi, ctx, bytes);
+    if (!bR || !bI || !bOr || !bOi) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bR offset:0 atIndex:0];
+    [enc setBuffer:bI offset:0 atIndex:1];
+    [enc setBuffer:bOr offset:0 atIndex:2];
+    [enc setBuffer:bOi offset:0 atIndex:3];
+    [enc setBytes:&n length:sizeof(int32_t) atIndex:4];
+    MTLSize grid = MTLSizeMake((NSUInteger)n, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)n,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    if (_pool_ok) {
+      std::memcpy(out_re, [bOr contents], bytes);
+      std::memcpy(out_im, [bOi contents], bytes);
+    }
+    return _pool_ok;
+  }
+}
+
+extern "C" void tessera_apple_gpu_complex_exp_f32(
+    const float* re, const float* im,
+    float* out_re, float* out_im, int32_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_complex_exp_f32_msl(
+          ctx, re, im, out_re, out_im, n)) return;
+  reference_complex_exp_f32(re, im, out_re, out_im, n);
+}
+
+// ---------------------------------------------------------------------------
+// stereographic: forward projection (S² ⊂ ℝ³ → ℂ)
+// ---------------------------------------------------------------------------
+
+inline void reference_complex_stereographic_f32(
+    const float* x, const float* y, const float* z,
+    float* out_re, float* out_im, int32_t n) {
+  for (int32_t i = 0; i < n; ++i) {
+    float denom = 1.0f - z[i];
+    if (std::fabs(denom) < 1e-12f) {
+      out_re[i] = std::numeric_limits<float>::infinity();
+      out_im[i] = std::numeric_limits<float>::infinity();
+    } else {
+      out_re[i] = x[i] / denom;
+      out_im[i] = y[i] / denom;
+    }
+  }
+}
+
+static NSString *const kComplexStereographicF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void complex_stereographic_f32(
+    device const float* x    [[buffer(0)]],
+    device const float* y    [[buffer(1)]],
+    device const float* z    [[buffer(2)]],
+    device float* out_re     [[buffer(3)]],
+    device float* out_im     [[buffer(4)]],
+    constant int32_t& n      [[buffer(5)]],
+    uint i [[thread_position_in_grid]])
+{
+    if ((int)i >= n) return;
+    float denom = 1.0f - z[i];
+    if (fabs(denom) < 1e-12f) {
+        out_re[i] = INFINITY;
+        out_im[i] = INFINITY;
+    } else {
+        out_re[i] = x[i] / denom;
+        out_im[i] = y[i] / denom;
+    }
+}
+)MSL";
+
+static bool dispatch_complex_stereographic_f32_msl(
+    MetalDeviceContext &ctx,
+    const float* x, const float* y, const float* z,
+    float* out_re, float* out_im, int32_t n) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kComplexStereographicF32Source, @"complex_stereographic_f32");
+    if (!pso) return false;
+    NSUInteger bytes = sizeof(float) * (NSUInteger)n;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bX, ctx, x, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bY, ctx, y, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bZ, ctx, z, bytes);
+    TS_METAL_BUF_ACQUIRE(bOr, ctx, bytes);
+    TS_METAL_BUF_ACQUIRE(bOi, ctx, bytes);
+    if (!bX || !bY || !bZ || !bOr || !bOi) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bX offset:0 atIndex:0];
+    [enc setBuffer:bY offset:0 atIndex:1];
+    [enc setBuffer:bZ offset:0 atIndex:2];
+    [enc setBuffer:bOr offset:0 atIndex:3];
+    [enc setBuffer:bOi offset:0 atIndex:4];
+    [enc setBytes:&n length:sizeof(int32_t) atIndex:5];
+    MTLSize grid = MTLSizeMake((NSUInteger)n, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)n,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    if (_pool_ok) {
+      std::memcpy(out_re, [bOr contents], bytes);
+      std::memcpy(out_im, [bOi contents], bytes);
+    }
+    return _pool_ok;
+  }
+}
+
+extern "C" void tessera_apple_gpu_complex_stereographic_f32(
+    const float* x, const float* y, const float* z,
+    float* out_re, float* out_im, int32_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_complex_stereographic_f32_msl(
+          ctx, x, y, z, out_re, out_im, n)) return;
+  reference_complex_stereographic_f32(x, y, z, out_re, out_im, n);
+}
+
+// ---------------------------------------------------------------------------
+// mobius: f(z; a, b, c, d) = (a·z + b) / (c·z + d)
+// Scalar coefficients (a, b, c, d) broadcast across the input batch.
+// ---------------------------------------------------------------------------
+
+inline void reference_complex_mobius_f32(
+    const float* z_re, const float* z_im,
+    float a_re, float a_im, float b_re, float b_im,
+    float c_re, float c_im, float d_re, float d_im,
+    float* out_re, float* out_im, int32_t n) {
+  for (int32_t i = 0; i < n; ++i) {
+    float zr = z_re[i], zi = z_im[i];
+    // numerator = a*z + b
+    float nr = a_re * zr - a_im * zi + b_re;
+    float ni = a_re * zi + a_im * zr + b_im;
+    // denominator = c*z + d
+    float dr = c_re * zr - c_im * zi + d_re;
+    float di = c_re * zi + c_im * zr + d_im;
+    float denom = dr * dr + di * di;
+    if (denom < 1e-12f) {
+      out_re[i] = std::numeric_limits<float>::infinity();
+      out_im[i] = std::numeric_limits<float>::infinity();
+    } else {
+      out_re[i] = (nr * dr + ni * di) / denom;
+      out_im[i] = (ni * dr - nr * di) / denom;
+    }
+  }
+}
+
+static NSString *const kComplexMobiusF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void complex_mobius_f32(
+    device const float* z_re [[buffer(0)]],
+    device const float* z_im [[buffer(1)]],
+    constant float& a_re     [[buffer(2)]],
+    constant float& a_im     [[buffer(3)]],
+    constant float& b_re     [[buffer(4)]],
+    constant float& b_im     [[buffer(5)]],
+    constant float& c_re     [[buffer(6)]],
+    constant float& c_im     [[buffer(7)]],
+    constant float& d_re     [[buffer(8)]],
+    constant float& d_im     [[buffer(9)]],
+    device float* out_re     [[buffer(10)]],
+    device float* out_im     [[buffer(11)]],
+    constant int32_t& n      [[buffer(12)]],
+    uint i [[thread_position_in_grid]])
+{
+    if ((int)i >= n) return;
+    float zr = z_re[i], zi = z_im[i];
+    float nr = a_re * zr - a_im * zi + b_re;
+    float ni = a_re * zi + a_im * zr + b_im;
+    float dr = c_re * zr - c_im * zi + d_re;
+    float di = c_re * zi + c_im * zr + d_im;
+    float denom = dr * dr + di * di;
+    if (denom < 1e-12f) {
+        out_re[i] = INFINITY;
+        out_im[i] = INFINITY;
+    } else {
+        out_re[i] = (nr * dr + ni * di) / denom;
+        out_im[i] = (ni * dr - nr * di) / denom;
+    }
+}
+)MSL";
+
+static bool dispatch_complex_mobius_f32_msl(
+    MetalDeviceContext &ctx,
+    const float* z_re, const float* z_im,
+    float a_re, float a_im, float b_re, float b_im,
+    float c_re, float c_im, float d_re, float d_im,
+    float* out_re, float* out_im, int32_t n) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kComplexMobiusF32Source, @"complex_mobius_f32");
+    if (!pso) return false;
+    NSUInteger bytes = sizeof(float) * (NSUInteger)n;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bZr, ctx, z_re, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bZi, ctx, z_im, bytes);
+    TS_METAL_BUF_ACQUIRE(bOr, ctx, bytes);
+    TS_METAL_BUF_ACQUIRE(bOi, ctx, bytes);
+    if (!bZr || !bZi || !bOr || !bOi) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bZr offset:0 atIndex:0];
+    [enc setBuffer:bZi offset:0 atIndex:1];
+    [enc setBytes:&a_re length:sizeof(float) atIndex:2];
+    [enc setBytes:&a_im length:sizeof(float) atIndex:3];
+    [enc setBytes:&b_re length:sizeof(float) atIndex:4];
+    [enc setBytes:&b_im length:sizeof(float) atIndex:5];
+    [enc setBytes:&c_re length:sizeof(float) atIndex:6];
+    [enc setBytes:&c_im length:sizeof(float) atIndex:7];
+    [enc setBytes:&d_re length:sizeof(float) atIndex:8];
+    [enc setBytes:&d_im length:sizeof(float) atIndex:9];
+    [enc setBuffer:bOr offset:0 atIndex:10];
+    [enc setBuffer:bOi offset:0 atIndex:11];
+    [enc setBytes:&n length:sizeof(int32_t) atIndex:12];
+    MTLSize grid = MTLSizeMake((NSUInteger)n, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)n,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    if (_pool_ok) {
+      std::memcpy(out_re, [bOr contents], bytes);
+      std::memcpy(out_im, [bOi contents], bytes);
+    }
+    return _pool_ok;
+  }
+}
+
+extern "C" void tessera_apple_gpu_complex_mobius_f32(
+    const float* z_re, const float* z_im,
+    float a_re, float a_im, float b_re, float b_im,
+    float c_re, float c_im, float d_re, float d_im,
+    float* out_re, float* out_im, int32_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_complex_mobius_f32_msl(
+          ctx, z_re, z_im,
+          a_re, a_im, b_re, b_im, c_re, c_im, d_re, d_im,
+          out_re, out_im, n)) return;
+  reference_complex_mobius_f32(
+      z_re, z_im, a_re, a_im, b_re, b_im, c_re, c_im, d_re, d_im,
+      out_re, out_im, n);
+}
+
+// ===========================================================================
 // EBM decode_init noise-apply  —  out[i] = base[i % base_len] + std * noise[i]
 //
 // Implements `decode_init(strategy="noise")` semantics on-device: the

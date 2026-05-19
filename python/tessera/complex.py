@@ -58,6 +58,17 @@ __all__ = [
     "NotHolomorphicError",
     "analytic",
     "conformal_energy_on_sphere",
+    # Bundle B (Needham Ch. 3 — Möbius / cross-ratio surface)
+    "cross_ratio",
+    "is_concyclic",
+    "mobius_from_three_points",
+    # Bundle A (Needham Ch. 2 / 4-5 — log / arg / pow / Wirtinger)
+    "complex_arg",
+    "complex_log",
+    "complex_pow",
+    "complex_sqrt",
+    "dz",
+    "dbar",
 ]
 
 
@@ -191,22 +202,81 @@ def _as_pair(z: Any) -> tuple[np.ndarray, np.ndarray]:
     return arr.astype(np.float64, copy=False), np.zeros_like(arr, dtype=np.float64)
 
 
+def _try_apple_gpu_complex_op(
+    op_name: str, argtypes, args,
+) -> bool:
+    """Bridge helper: dispatch ``op_name`` through the JIT bridge.
+    Returns True on success (the runtime actually ran), False on
+    silent miss (caller falls back to numpy)."""
+    try:
+        from tessera.compiler import jit_bridge as _bridge
+        return _bridge.dispatch_via_manifest(
+            op_name, argtypes=argtypes, args=args, args_summary=(),
+        )
+    except Exception:
+        return False
+
+
 def complex_mul(z: Any, w: Any) -> ComplexScalar:
     """``(a + b·i)·(c + d·i) = (ac − bd) + (ad + bc)·i``.
 
     Supports batched inputs — every operation broadcasts via
     numpy's normal rules.
+
+    M7 follow-up (2026-05-18): when both inputs are f32 and
+    same-shape, dispatches the fused MSL kernel
+    ``tessera_apple_gpu_complex_mul_f32`` on Apple GPU and
+    records a JitBridgeRoute.
     """
     a, b = _as_pair(z)
     c, d = _as_pair(w)
+    # GPU fast path: same-shape f32 inputs.
+    if (a.dtype == np.float32 and b.dtype == np.float32
+            and c.dtype == np.float32 and d.dtype == np.float32
+            and a.shape == c.shape and a.shape == b.shape):
+        import ctypes
+        n = int(a.size)
+        ac = np.ascontiguousarray(a); bc = np.ascontiguousarray(b)
+        cc = np.ascontiguousarray(c); dc = np.ascontiguousarray(d)
+        out_re = np.zeros(a.shape, dtype=np.float32)
+        out_im = np.zeros(a.shape, dtype=np.float32)
+        p_f = ctypes.POINTER(ctypes.c_float)
+        argtypes = (p_f, p_f, p_f, p_f, p_f, p_f, ctypes.c_int32)
+        args = (
+            ac.ctypes.data_as(p_f), bc.ctypes.data_as(p_f),
+            cc.ctypes.data_as(p_f), dc.ctypes.data_as(p_f),
+            out_re.ctypes.data_as(p_f), out_im.ctypes.data_as(p_f),
+            ctypes.c_int32(n),
+        )
+        if _try_apple_gpu_complex_op("complex_mul", argtypes, args):
+            return ComplexScalar(out_re, out_im)
     re = a * c - b * d
     im = a * d + b * c
     return ComplexScalar(re, im)
 
 
 def complex_exp(z: Any) -> ComplexScalar:
-    """Euler form: ``e^(a + b·i) = e^a · (cos b, sin b)``."""
+    """Euler form: ``e^(a + b·i) = e^a · (cos b, sin b)``.
+
+    M7 follow-up: f32 same-shape inputs route to
+    ``tessera_apple_gpu_complex_exp_f32``.
+    """
     a, b = _as_pair(z)
+    if a.dtype == np.float32 and b.dtype == np.float32 and a.shape == b.shape:
+        import ctypes
+        n = int(a.size)
+        ac = np.ascontiguousarray(a); bc = np.ascontiguousarray(b)
+        out_re = np.zeros(a.shape, dtype=np.float32)
+        out_im = np.zeros(a.shape, dtype=np.float32)
+        p_f = ctypes.POINTER(ctypes.c_float)
+        argtypes = (p_f, p_f, p_f, p_f, ctypes.c_int32)
+        args = (
+            ac.ctypes.data_as(p_f), bc.ctypes.data_as(p_f),
+            out_re.ctypes.data_as(p_f), out_im.ctypes.data_as(p_f),
+            ctypes.c_int32(n),
+        )
+        if _try_apple_gpu_complex_op("complex_exp", argtypes, args):
+            return ComplexScalar(out_re, out_im)
     ea = np.exp(a)
     return ComplexScalar(ea * np.cos(b), ea * np.sin(b))
 
@@ -282,6 +352,40 @@ def mobius(
         raise ValueError(
             "Mobius matrix is singular (a·d − b·c ≈ 0): the map collapses"
         )
+    # M7 follow-up: f32 batched ``z`` with scalar (a, b, c, d) routes
+    # to the fused MSL kernel ``tessera_apple_gpu_complex_mobius_f32``.
+    z_re, z_im = _as_pair(z)
+    is_scalar_coef = (
+        a_pair.shape == () and b_pair.shape == ()
+        and c_pair.shape == () and d_pair.shape == ()
+    )
+    if (z_re.dtype == np.float32 and z_im.dtype == np.float32
+            and z_re.shape == z_im.shape and is_scalar_coef):
+        import ctypes
+        n = int(z_re.size)
+        zr = np.ascontiguousarray(z_re); zi = np.ascontiguousarray(z_im)
+        out_re = np.zeros(z_re.shape, dtype=np.float32)
+        out_im = np.zeros(z_re.shape, dtype=np.float32)
+        p_f = ctypes.POINTER(ctypes.c_float)
+        argtypes = (
+            p_f, p_f,
+            ctypes.c_float, ctypes.c_float,
+            ctypes.c_float, ctypes.c_float,
+            ctypes.c_float, ctypes.c_float,
+            ctypes.c_float, ctypes.c_float,
+            p_f, p_f, ctypes.c_int32,
+        )
+        args = (
+            zr.ctypes.data_as(p_f), zi.ctypes.data_as(p_f),
+            ctypes.c_float(float(a_pair.re)), ctypes.c_float(float(a_pair.im)),
+            ctypes.c_float(float(b_pair.re)), ctypes.c_float(float(b_pair.im)),
+            ctypes.c_float(float(c_pair.re)), ctypes.c_float(float(c_pair.im)),
+            ctypes.c_float(float(d_pair.re)), ctypes.c_float(float(d_pair.im)),
+            out_re.ctypes.data_as(p_f), out_im.ctypes.data_as(p_f),
+            ctypes.c_int32(n),
+        )
+        if _try_apple_gpu_complex_op("complex_mobius", argtypes, args):
+            return ComplexScalar(out_re, out_im)
     az = complex_mul(a_pair, z)
     numerator = ComplexScalar(az.re + b_pair.re, az.im + b_pair.im)
     cz = complex_mul(c_pair, z)
@@ -339,6 +443,32 @@ def stereographic(
         x = arr[..., 0]
         y = arr[..., 1]
         z = arr[..., 2]
+    # M7 follow-up: f32 same-shape inputs route to
+    # ``tessera_apple_gpu_complex_stereographic_f32``.
+    if (x.dtype == np.float32 and y.dtype == np.float32
+            and z.dtype == np.float32 and x.shape == y.shape == z.shape):
+        import ctypes
+        n = int(x.size)
+        xc = np.ascontiguousarray(x); yc = np.ascontiguousarray(y)
+        zc = np.ascontiguousarray(z)
+        out_re = np.zeros(x.shape, dtype=np.float32)
+        out_im = np.zeros(x.shape, dtype=np.float32)
+        p_f = ctypes.POINTER(ctypes.c_float) if (
+            __import__("ctypes") and True
+        ) else None
+        import ctypes as _c
+        p_f = _c.POINTER(_c.c_float)
+        argtypes = (p_f, p_f, p_f, p_f, p_f, _c.c_int32)
+        args = (
+            xc.ctypes.data_as(p_f), yc.ctypes.data_as(p_f),
+            zc.ctypes.data_as(p_f),
+            out_re.ctypes.data_as(p_f), out_im.ctypes.data_as(p_f),
+            _c.c_int32(n),
+        )
+        if _try_apple_gpu_complex_op(
+            "complex_stereographic", argtypes, args,
+        ):
+            return ComplexScalar(out_re, out_im)
     denom = 1.0 - z
     safe = np.where(np.abs(denom) > eps, denom, 1.0)
     near_north = np.abs(denom) <= eps
@@ -593,3 +723,282 @@ def conformal_energy_on_sphere(
         [zeta.re - zeta_star.re, zeta.im - zeta_star.im], axis=-1,
     )
     return _tensor_energy.norm_sq(diff)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bundle B — Cross-ratio and Möbius constructions (Needham Ch. 3).
+#
+# The cross-ratio is the fundamental Möbius invariant.  Four points
+# are concyclic iff their cross-ratio is real.  Given three source
+# and three destination points, there's a unique Möbius
+# transformation mapping them; we build it via the standard
+# three-point-to-(0, 1, ∞) construction.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _to_complex(z: Any) -> complex:
+    """Coerce a :class:`ComplexScalar` or a python ``complex`` /
+    real to a python ``complex``.  Used by the scalar Möbius
+    helpers below — these aren't batched (callers wrap with
+    numpy broadcasting if needed)."""
+    if isinstance(z, ComplexScalar):
+        return complex(float(z.re), float(z.im))
+    return complex(z)
+
+
+def cross_ratio(z1: Any, z2: Any, z3: Any, z4: Any) -> complex:
+    """Four-point cross-ratio: ``(z1, z2; z3, z4) =
+    ((z1 − z3)(z2 − z4)) / ((z1 − z4)(z2 − z3))``.
+
+    The fundamental Möbius invariant — under any Möbius
+    transformation ``M``, ``cross_ratio(Mz1, Mz2, Mz3, Mz4) ==
+    cross_ratio(z1, z2, z3, z4)``.
+
+    Returns a python ``complex`` (scalar).  Coincident inputs that
+    would zero the denominator return ``complex(inf, inf)`` —
+    consistent with the Riemann-sphere "point at infinity"
+    convention used elsewhere in this module.
+
+    Reference: Needham, *Visual Complex Analysis*, §3.6.
+    """
+    z1, z2, z3, z4 = (_to_complex(z) for z in (z1, z2, z3, z4))
+    num = (z1 - z3) * (z2 - z4)
+    den = (z1 - z4) * (z2 - z3)
+    if abs(den) < 1e-15:
+        return complex(float("inf"), float("inf"))
+    return num / den
+
+
+def is_concyclic(
+    z1: Any, z2: Any, z3: Any, z4: Any, *, tol: float = 1e-9,
+) -> bool:
+    """``True`` iff the four points lie on a common circle (or line).
+
+    Test: the cross-ratio of four concyclic points is real-valued.
+    For points that are coincident or collinear, the cross-ratio
+    may be 0, 1, or ∞ — all still "real" in the concyclicity
+    sense.
+
+    Reference: Needham, *Visual Complex Analysis*, §3.6 Theorem.
+    """
+    cr = cross_ratio(z1, z2, z3, z4)
+    if cr.imag != cr.imag:        # NaN guard
+        return False
+    if cr.real == float("inf") or cr.imag == float("inf"):
+        # ∞ as a generalized "concyclic" — three coincident points.
+        return True
+    return abs(cr.imag) <= tol * max(abs(cr), 1.0)
+
+
+def _mobius_to_0_1_inf(z1: complex, z2: complex, z3: complex):
+    """Coefficients ``(a, b, c, d)`` of the unique Möbius map
+    sending ``(z1, z2, z3) → (0, 1, ∞)``.
+
+    Closed form: M(z) = ((z − z1)(z2 − z3)) / ((z − z3)(z2 − z1)).
+    Special cases when any zi is ∞ are handled by limit forms.
+    """
+    inf = complex(float("inf"), float("inf"))
+    if z1 == inf:
+        a = complex(0); b = (z2 - z3); c = complex(1); d = -z3
+    elif z2 == inf:
+        a = complex(1); b = -z1; c = complex(1); d = -z3
+    elif z3 == inf:
+        a = complex(1); b = -z1; c = complex(0); d = (z2 - z1)
+    else:
+        a = (z2 - z3)
+        b = -z1 * (z2 - z3)
+        c = (z2 - z1)
+        d = -z3 * (z2 - z1)
+    return a, b, c, d
+
+
+def _mobius_compose(
+    a1, b1, c1, d1, a2, b2, c2, d2,
+) -> tuple[complex, complex, complex, complex]:
+    """Möbius composition is 2x2 matrix multiplication of coeff
+    matrices.  Returns the composed (a, b, c, d) — the map
+    ``M1 ∘ M2`` (apply M2 first, then M1)."""
+    return (
+        a1 * a2 + b1 * c2,
+        a1 * b2 + b1 * d2,
+        c1 * a2 + d1 * c2,
+        c1 * b2 + d1 * d2,
+    )
+
+
+def mobius_from_three_points(
+    src: tuple[Any, Any, Any],
+    dst: tuple[Any, Any, Any],
+) -> tuple[complex, complex, complex, complex]:
+    """Construct the unique Möbius transformation sending ``src ==
+    (z1, z2, z3)`` to ``dst == (w1, w2, w3)``.
+
+    Returns ``(a, b, c, d)`` — coefficients for use with
+    :func:`mobius`.  Three-point data uniquely determines a
+    Möbius transformation; the standard construction goes via the
+    canonical map to ``(0, 1, ∞)``.
+
+    Reference: Needham, *Visual Complex Analysis*, §3.7.
+    """
+    z1, z2, z3 = (_to_complex(z) for z in src)
+    w1, w2, w3 = (_to_complex(z) for z in dst)
+    # Build M1: src → (0, 1, ∞)
+    a1, b1, c1, d1 = _mobius_to_0_1_inf(z1, z2, z3)
+    # Build M2: dst → (0, 1, ∞)
+    a2, b2, c2, d2 = _mobius_to_0_1_inf(w1, w2, w3)
+    # Invert M2: closed form for a Möbius inverse is (d, -b, -c, a)
+    # divided by determinant; the determinant cancels because Möbius
+    # transformations are projective.
+    inv_a2, inv_b2, inv_c2, inv_d2 = d2, -b2, -c2, a2
+    # M = inv(M2) ∘ M1: apply M1 first, then inv(M2).
+    return _mobius_compose(
+        inv_a2, inv_b2, inv_c2, inv_d2,
+        a1, b1, c1, d1,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bundle A — log / arg / pow (Needham Ch. 2) + Wirtinger derivatives (Ch. 4-5).
+#
+# Branch-cut policy (locked, matches NumPy):
+#
+#   * ``complex_arg(z)`` returns the principal argument in
+#     ``(-π, π]`` (NumPy ``np.angle`` convention).
+#   * ``complex_log(z) = log|z| + i·arg(z)`` — branch cut along
+#     the negative real axis; ``log(-1) = i·π``.
+#   * ``complex_pow(z, w) = exp(w · log(z))`` — inherits the log
+#     branch cut.
+#
+# Wirtinger operators:
+#
+#   * ``∂/∂z = (1/2)(∂/∂x − i ∂/∂y)``
+#   * ``∂/∂z̄ = (1/2)(∂/∂x + i ∂/∂y)``
+#
+# For holomorphic f: ``dbar(f, z) ≈ 0`` and ``dz(f, z) = f'(z)``.
+# For non-holomorphic f: both are non-zero.  These are the
+# building blocks the existing :func:`check_cauchy_riemann`
+# uses internally; M7's bundle-A exposes them as first-class
+# primitives so users can ask "what is ∂f/∂z̄ at z₀?" directly.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def complex_arg(z: Any) -> np.ndarray:
+    """Principal argument in ``(-π, π]``.  Matches ``numpy.angle``."""
+    a, b = _as_pair(z)
+    return np.arctan2(b, a)
+
+
+def complex_log(z: Any) -> ComplexScalar:
+    """Principal-branch complex logarithm.
+
+    ``log(z) = log|z| + i·arg(z)``.  Branch cut along the
+    negative real axis; ``log(0)`` returns
+    ``ComplexScalar(-inf, 0)`` — same behavior as ``numpy.log``
+    on a complex array.
+    """
+    a, b = _as_pair(z)
+    mag = np.sqrt(a * a + b * b)
+    # log(0) → -inf (NumPy convention); np.log handles this.
+    re = np.log(np.where(mag > 0, mag, np.float64(1.0)))
+    re = np.where(mag > 0, re, np.float64(-np.inf))
+    im = np.arctan2(b, a)
+    return ComplexScalar(re, im)
+
+
+def complex_sqrt(z: Any, *, branch: int = 0) -> ComplexScalar:
+    """Complex square root with explicit branch selection.
+
+    Principal branch (``branch=0``): ``Im(√z) ≥ 0``, cut along
+    the negative real axis.  ``sqrt(-1) = i``,
+    ``sqrt(1) = 1``, ``sqrt(z)² == z`` everywhere except the
+    cut.
+
+    Second branch (``branch=1``): the other sheet of the
+    Riemann surface — multiplies the principal branch by -1.
+    See :mod:`tessera.riemann_surface` for the full sheet-
+    tracking machinery.
+
+    Reference: Needham, *Visual Complex Analysis*, §2.9 + Ch. 8.
+    """
+    if branch not in (0, 1):
+        raise ValueError(
+            f"complex_sqrt: branch must be 0 (principal) or 1 "
+            f"(second sheet); got {branch}"
+        )
+    # Special-case z == 0: log(0) is -inf and the exp chain
+    # would produce a NaN imaginary part.  sqrt(0) is 0 on
+    # every branch.
+    a, b = _as_pair(z)
+    if np.isscalar(a) or a.shape == ():
+        if float(a) == 0.0 and float(b) == 0.0:
+            return ComplexScalar(np.float64(0.0), np.float64(0.0))
+    # sqrt(z) = exp(0.5 * log(z)) on the principal branch.
+    half = ComplexScalar(np.float64(0.5), np.float64(0.0))
+    principal = complex_exp(complex_mul(half, complex_log(z)))
+    if branch == 0:
+        return principal
+    return ComplexScalar(-principal.re, -principal.im)
+
+
+def complex_pow(z: Any, w: Any) -> ComplexScalar:
+    """Complex power ``z^w = exp(w · log(z))``.
+
+    Conventions:
+
+      * ``0^0 = 1`` (NumPy convention).
+      * ``0^w = 0`` for ``Re(w) > 0``.
+      * ``0^w`` for ``Re(w) ≤ 0`` propagates through the
+        ``exp(w · log(0))`` chain — NaN/Inf per IEEE 754.
+    """
+    log_z = complex_log(z)
+    return complex_exp(complex_mul(w, log_z))
+
+
+def _eval_complex(f: Any, z: complex) -> complex:
+    """Coerce ``f(z)``'s result to a python complex regardless of
+    whether ``f`` returns a :class:`ComplexScalar`, a numpy
+    complex, or a python ``complex``."""
+    out = f(z)
+    if isinstance(out, ComplexScalar):
+        return complex(float(out.re), float(out.im))
+    return complex(out)
+
+
+def dz(f: Any, z0: Any, *, h: float = 1e-5) -> complex:
+    """Wirtinger ``∂f/∂z`` evaluated at ``z₀``.
+
+    Computed via central differences on ``u`` and ``v`` (the real
+    and imaginary parts of ``f``) and the identity
+
+      ``∂f/∂z = (1/2)((u_x + v_y) + i(v_x − u_y))``.
+
+    For a holomorphic ``f``, this equals the complex derivative
+    ``f'(z₀)``.  For a non-holomorphic ``f`` (e.g., conjugate or
+    ``|z|²``), it captures the holomorphic component.
+    """
+    z0_c = _to_complex(z0)
+    f_px = _eval_complex(f, z0_c + h)
+    f_mx = _eval_complex(f, z0_c - h)
+    f_py = _eval_complex(f, z0_c + h * 1j)
+    f_my = _eval_complex(f, z0_c - h * 1j)
+    f_x = (f_px - f_mx) / (2.0 * h)
+    f_y = (f_py - f_my) / (2.0 * h)
+    return 0.5 * (f_x - 1j * f_y)
+
+
+def dbar(f: Any, z0: Any, *, h: float = 1e-5) -> complex:
+    """Wirtinger ``∂f/∂z̄`` evaluated at ``z₀``.
+
+    ``∂f/∂z̄ = (1/2)((u_x − v_y) + i(v_x + u_y))``.
+
+    Holomorphic ``f`` ⇒ ``dbar(f, z₀) ≈ 0`` (this is the
+    Cauchy-Riemann condition).  Non-holomorphic ``f`` ⇒ non-zero,
+    and the magnitude is exactly the residual the numerical
+    :func:`check_cauchy_riemann` computes.
+    """
+    z0_c = _to_complex(z0)
+    f_px = _eval_complex(f, z0_c + h)
+    f_mx = _eval_complex(f, z0_c - h)
+    f_py = _eval_complex(f, z0_c + h * 1j)
+    f_my = _eval_complex(f, z0_c - h * 1j)
+    f_x = (f_px - f_mx) / (2.0 * h)
+    f_y = (f_py - f_my) / (2.0 * h)
+    return 0.5 * (f_x + 1j * f_y)

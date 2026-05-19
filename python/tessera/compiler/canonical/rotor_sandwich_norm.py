@@ -140,6 +140,13 @@ def run(*, native_required: bool = False) -> CompileReport:
         target_decision=target_decision,
         fallback_reason=fallback_reason,
         proof_routes=routes,
+        # Reviewer fix (2026-05-18): pipe the Clifford callable's
+        # plan_hash through so the no-silent-native gate has a
+        # second independent proof beyond the bridge route trace.
+        plan_hash=(
+            point_cloud_rotor_invariant.artifact.plan_hash
+            if point_cloud_rotor_invariant.artifact.plan_hash else None
+        ),
         timing_ms={"end_to_end": elapsed_ms},
         correctness={"max_abs_err": max_abs_err, "tolerance": 5e-5},
     ))

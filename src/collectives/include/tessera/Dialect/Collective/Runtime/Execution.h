@@ -84,6 +84,10 @@ extern "C" {
   void tessera_qos_release();
   void tessera_submit_chunk_async(const void* ptr, uint64_t bytes, int device, int stream);
   void tessera_trace_write(const char* path);
+  // Explicit teardown for embedded / notebook / reload-test lifecycles.
+  // Safe to call when the runtime was never initialized (no-op).
+  // Subsequent ``tessera_*`` calls re-initialize on demand.
+  void tessera_shutdown_runtime();
 }
 
 }} // ns

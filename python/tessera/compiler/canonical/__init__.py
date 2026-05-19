@@ -92,7 +92,12 @@ CANONICAL_PROGRAMS: tuple[CanonicalProgram, ...] = (
         owner_file="python/tessera/compiler/canonical/matmul_softmax_matmul.py",
         run=_run_matmul_softmax_matmul,
         status="shipped",
-        description="O = softmax(A @ B) @ C — Apple GPU 3-op fusion (numpy reference on non-Darwin).",
+        description=(
+            "O = softmax(A @ B) @ C — intended Apple GPU 3-op fused symbol "
+            "(matmul→softmax→matmul); driver currently runs the numpy "
+            "reference on every host and reports REFERENCE_FORCED so the "
+            "CompileReport stays honest about what executed."
+        ),
     ),
     CanonicalProgram(
         program_id="conv2d_norm_activation",

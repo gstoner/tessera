@@ -28,6 +28,7 @@ from .gpu_target import GPUTargetProfile, ISA  # noqa: F401 — re-exported for 
 from .attn_lower import FlashAttnLoweringConfig, SM90_DEFAULT  # noqa: F401
 from .driver import CompileArtifactBundle, compile_graph_module
 from .matmul_pipeline import JitDiagnostic, CPUPlan, normalize_target_kind
+from .fallback import FallbackReason, TesseraNativeRequiredError
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -49,11 +50,38 @@ class TesseraJitError(Exception):
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Phase 1: constraints are collected via tessera.require() calls that happen
-# *inside* @jit-decorated function bodies. Since we run the function body
-# eagerly in Phase 1, we intercept require() at decoration time by parsing
-# the AST. At call time, require() is a no-op (constraints already checked).
+# *inside* @jit-decorated function bodies.  Decoration-time collection is done
+# by parsing the AST (`_extract_require_calls` below); the runtime `require()`
+# function is intentionally a no-op outside an explicit decoration / trace
+# scope so that:
+#
+#   * `@jit`-decorated bodies that fall back to eager Python execution don't
+#     mutate process-global state on every call,
+#   * cross-test isolation is preserved (a `require()` in one test cannot
+#     leak into a later test's collection),
+#   * future tracing modes (or external constraint collectors) can opt in
+#     by pushing onto ``_ACTIVE_CONSTRAINTS`` via ``collect_constraints()``.
+#
+# We keep ``_ACTIVE_CONSTRAINTS`` as a thread-local *stack of lists* (not a
+# single global list) so concurrent traces in different threads don't clobber
+# each other.
 
-_ACTIVE_CONSTRAINTS: List[Constraint] = []
+import threading
+
+
+class _ConstraintTLS(threading.local):
+    """Thread-local stack of constraint-collection lists.
+
+    Each element of ``stack`` is the list a single ``collect_constraints()``
+    context manager appends to.  When the stack is empty, ``require()`` is a
+    true no-op (matching the docstring contract).
+    """
+    def __init__(self) -> None:
+        super().__init__()
+        self.stack: list[list[Constraint]] = []
+
+
+_ACTIVE_CONSTRAINTS = _ConstraintTLS()
 
 
 def require(constraint: Constraint) -> None:
@@ -61,9 +89,14 @@ def require(constraint: Constraint) -> None:
     Register a structural constraint on the enclosing @jit function.
 
     At decoration time: collected by ConstraintSolver and checked against
-    any concrete dimension bindings extracted from the type signature.
+    any concrete dimension bindings extracted from the type signature
+    (via ``_extract_require_calls`` — a static AST scan, *not* a runtime
+    side-effect on this function).
 
-    At call time (Phase 1): no-op. The constraint was already checked.
+    At call time: **no-op** unless the call is enclosed in a
+    :func:`collect_constraints` scope.  This guarantees that ``@jit``
+    functions that fall back to eager Python execution don't leak
+    constraints into process-global state on every call.
 
     Usage:
         @tessera.jit
@@ -71,7 +104,33 @@ def require(constraint: Constraint) -> None:
             tessera.require(tessera.constraint.Divisible("K", 64))
             return tessera.ops.gemm(A, B)
     """
-    _ACTIVE_CONSTRAINTS.append(constraint)
+    stack = _ACTIVE_CONSTRAINTS.stack
+    if stack:
+        stack[-1].append(constraint)
+
+
+class collect_constraints:
+    """Context manager that opts into runtime ``require()`` collection.
+
+    The collected list is the ``__enter__`` value::
+
+        with collect_constraints() as constraints:
+            my_jit_fn(*args)
+        # constraints :: list[Constraint]
+
+    Reserved for future tracing modes / external collectors; ordinary
+    @jit decoration uses the static AST scan and does not need this.
+    """
+    def __enter__(self) -> list[Constraint]:
+        self._scope: list[Constraint] = []
+        _ACTIVE_CONSTRAINTS.stack.append(self._scope)
+        return self._scope
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        popped = _ACTIVE_CONSTRAINTS.stack.pop()
+        assert popped is self._scope, (
+            "collect_constraints scope was popped out of order"
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -234,6 +293,7 @@ class JitFn:
         cpu_tile: Tuple[int, int, int] = (128, 128, 64),
         source_origin: str = "inspect",
         lowering_diagnostics: Optional[List[JitDiagnostic]] = None,
+        native_required: bool = False,
     ) -> None:
         self._fn = fn
         self.graph_ir = graph_ir
@@ -248,6 +308,10 @@ class JitFn:
         self.cpu_tile = tuple(int(v) for v in cpu_tile)
         self.source_origin = source_origin
         self.lowering_diagnostics = tuple(lowering_diagnostics or [])
+        self.native_required = bool(native_required)
+        # Last fallback reason (None on a native run).  Inspectable by
+        # callers + by CompileReport.fallback_reason emission.
+        self.last_fallback_reason: Optional[FallbackReason] = None
         # Phase 8.2 launch-overhead reduction: the artifact + its metadata
         # depend only on immutable construction inputs, so we lazily build
         # them once and reuse on every __call__. Without caching the small-
@@ -368,9 +432,12 @@ class JitFn:
     def _native_cpu_fast_call(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Any:
         """Dispatch eligible CPU rank-2 f32 GEMM through the native runtime ABI.
 
-        Guard failures fall back to the explicit NumPy reference plan, so
-        ``execution_kind`` remains a compile-time capability statement while
-        launch-time dtype/rank mismatches keep existing eager ergonomics.
+        Guard failures fall back to the explicit NumPy reference plan and
+        record the reason on ``self.last_fallback_reason`` so callers
+        (and the CompileReport emitted by ``runtime_artifact()``) see why
+        the native lane wasn't taken.  When the JIT was constructed with
+        ``native_required=True``, a launch-time failure raises
+        :class:`TesseraNativeRequiredError` instead of falling through.
         """
 
         from tessera.runtime import _execute_native_cpu_metadata
@@ -381,10 +448,24 @@ class JitFn:
         else:
             launch_args = kwargs if kwargs else args
         try:
-            return _execute_native_cpu_metadata(
+            result = _execute_native_cpu_metadata(
                 self.runtime_artifact().metadata or {}, launch_args
             )
-        except Exception:
+            # Clear any stale fallback reason from a prior call.
+            self.last_fallback_reason = None
+            return result
+        except Exception as exc:
+            self.last_fallback_reason = FallbackReason.CAPABILITY_NOT_READY
+            if self.native_required:
+                raise TesseraNativeRequiredError(
+                    FallbackReason.CAPABILITY_NOT_READY,
+                    target="cpu",
+                    op_name=getattr(self._fn, "__name__", ""),
+                    detail=(
+                        f"native CPU launch failed and native_required=True "
+                        f"(underlying error: {type(exc).__name__}: {exc})"
+                    ),
+                ) from exc
             return self.cpu_plan.execute(args, kwargs, self.arg_names)
 
     def _apple_cpu_fast_call(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Any:
@@ -788,6 +869,7 @@ def jit(
     cpu_tile: Tuple[int, int, int] = (128, 128, 64),
     source: Optional[str] = None,
     source_path: Optional[str] = None,
+    native_required: bool = False,
 ) -> Any:
     """
     Tessera JIT decorator — drives the compiler pipeline.
@@ -978,6 +1060,7 @@ def jit(
             cpu_tile=tuple(int(v) for v in cpu_tile),
             source_origin=source_origin,
             lowering_diagnostics=diagnostics,
+            native_required=native_required,
         )
 
     # Support both @jit and @jit(...) usage

@@ -20,7 +20,14 @@ struct tsrArtifact_t { std::string payload; };
 struct tsrKernel_t { std::string name; tsrArtifact_t* artifact; };
 
 static std::vector<tsrDevice_t*> g_devices;
-static std::once_flag g_init_once;
+// Explicit init flag (protected by `g_mu`).  We deliberately do NOT use
+// `std::once_flag` here: once a `std::once_flag` has fired, it never
+// re-arms, which would mean a later `tsrInit()` after `tsrShutdown()`
+// reported success but couldn't repopulate `g_devices`.  Long-running
+// processes (notebooks, embedded runtimes, reload tests) need clean
+// re-initialization after explicit shutdown, so we track the state
+// explicitly under the mutex.
+static bool g_initialized = false;
 static std::mutex g_mu;
 
 static thread_local std::string g_last_error;
@@ -63,21 +70,27 @@ void tsrClearLastError(void) { g_last_error.clear(); }
 
 // ---- Init / Shutdown ----
 TsrStatus tsrInit(void) {
-  std::call_once(g_init_once, [](){
-    std::lock_guard<std::mutex> lk(g_mu);
-    // Always have a CPU backend
-    auto* dev_cpu = new tsrDevice_t();
-    dev_cpu->be = CreateCpuBackend();
-    g_devices.push_back(dev_cpu);
+  std::lock_guard<std::mutex> lk(g_mu);
+  if (g_initialized) {
+    // Idempotent: second `tsrInit()` without an intervening shutdown is
+    // a benign success.
+    return TSR_STATUS_SUCCESS;
+  }
 
-    // Optional CUDA/HIP backends (stubs) if compiled in
-    if (auto cuda = CreateCudaBackend()) {
-      auto* d = new tsrDevice_t(); d->be = std::move(cuda); g_devices.push_back(d);
-    }
-    if (auto hip = CreateHipBackend()) {
-      auto* d = new tsrDevice_t(); d->be = std::move(hip); g_devices.push_back(d);
-    }
-  });
+  // Always have a CPU backend.
+  auto* dev_cpu = new tsrDevice_t();
+  dev_cpu->be = CreateCpuBackend();
+  g_devices.push_back(dev_cpu);
+
+  // Optional CUDA/HIP backends (stubs) if compiled in.
+  if (auto cuda = CreateCudaBackend()) {
+    auto* d = new tsrDevice_t(); d->be = std::move(cuda); g_devices.push_back(d);
+  }
+  if (auto hip = CreateHipBackend()) {
+    auto* d = new tsrDevice_t(); d->be = std::move(hip); g_devices.push_back(d);
+  }
+
+  g_initialized = true;
   return TSR_STATUS_SUCCESS;
 }
 
@@ -85,6 +98,21 @@ TsrStatus tsrShutdown(void) {
   std::lock_guard<std::mutex> lk(g_mu);
   for (auto* d : g_devices) delete d;
   g_devices.clear();
+  // Flip the initialized flag so a later `tsrInit()` repopulates the
+  // device list.  Without this, `std::call_once`'s "fire once forever"
+  // semantics would leave the runtime in a non-functional state after
+  // shutdown — a real glass jaw for notebooks / reload tests / embedded
+  // runtimes.
+  g_initialized = false;
+  return TSR_STATUS_SUCCESS;
+}
+
+// Internal: returns whether the runtime currently has any devices.
+// Exposed to tests via the C ABI under `tsrIsInitialized`.
+TsrStatus tsrIsInitialized(int* out) {
+  if (!out) { SetLastError("out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  std::lock_guard<std::mutex> lk(g_mu);
+  *out = g_initialized ? 1 : 0;
   return TSR_STATUS_SUCCESS;
 }
 

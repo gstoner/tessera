@@ -80,15 +80,15 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `sub` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `tan` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `tanh` | elementwise | public | public | registered | complete | partial | reference | ready | none |
-| `ebm_bivector_langevin` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | ready | benchmarked |
-| `ebm_decode_init` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `ebm_energy` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `ebm_inner_step` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `ebm_langevin_step` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `ebm_partition_exact` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `ebm_refinement` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | ready | benchmarked |
-| `ebm_self_verify` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `ebm_sphere_langevin` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | ready | benchmarked |
+| `ebm_bivector_langevin` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | unknown | benchmarked |
+| `ebm_decode_init` | energy_based_models | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `ebm_energy` | energy_based_models | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `ebm_inner_step` | energy_based_models | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `ebm_langevin_step` | energy_based_models | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `ebm_partition_exact` | energy_based_models | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `ebm_refinement` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | unknown | benchmarked |
+| `ebm_self_verify` | energy_based_models | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `ebm_sphere_langevin` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | unknown | benchmarked |
 | `adafactor` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
 | `adam` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
 | `adamw` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
@@ -96,23 +96,23 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `momentum` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
 | `sgd` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
 | `fused_epilogue` | fused_epilogue | public | public | registered | complete | partial | reference | ready | none |
-| `clifford_codiff` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_conjugate` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_exp` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_ext_deriv` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_geometric_product` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_grade_involution` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_grade_projection` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_hodge_star` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_inner` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_integral` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_left_contraction` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_log` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_norm` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_reverse` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_rotor_sandwich` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_vec_deriv` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_wedge` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
+| `clifford_codiff` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_conjugate` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_exp` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_ext_deriv` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_geometric_product` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_grade_involution` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_grade_projection` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_hodge_star` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_inner` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_integral` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_left_contraction` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_log` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_norm` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_reverse` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_rotor_sandwich` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_vec_deriv` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
+| `clifford_wedge` | geometric_algebra | public | public | not_applicable | complete | fused | fused | unknown | benchmarked |
 | `dynamic_slice` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `dynamic_update_slice` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `index_select` | indexing | public | public | registered | complete | partial | reference | ready | none |
@@ -275,10 +275,10 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | comparison | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | contraction | 1 | PPGCpRN· |
 | elementwise | 34 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| energy_based_models | 9 | PPnnFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnnFFNB PPnCFFNB PPnnFFNB |
+| energy_based_models | 9 | PPnnFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnnFF?B PPnCFF?B PPnnFF?B |
 | functional_optimizer_step | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | fused_epilogue | 1 | PPGCpRN· |
-| geometric_algebra | 17 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
+| geometric_algebra | 17 | PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B PPnCFF?B |
 | indexing | 11 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | layout_transform | 31 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | linalg_decomposition | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
@@ -313,7 +313,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | Program | Family | Status | Owner file | Description |
 |---|---|---|---|---|
 | `rotor_sandwich_norm` | geometric_algebra | **shipped** | `python/tessera/compiler/canonical/rotor_sandwich_norm.py` | rotor_sandwich(R, V) followed by norm(.); GA vertical slice via @clifford_jit. |
-| `matmul_softmax_matmul` | attention | **shipped** | `python/tessera/compiler/canonical/matmul_softmax_matmul.py` | O = softmax(A @ B) @ C — Apple GPU 3-op fusion (numpy reference on non-Darwin). |
+| `matmul_softmax_matmul` | attention | **shipped** | `python/tessera/compiler/canonical/matmul_softmax_matmul.py` | O = softmax(A @ B) @ C — intended Apple GPU 3-op fused symbol (matmul→softmax→matmul); driver currently runs the numpy reference on every host and reports REFERENCE_FORCED so the CompileReport stays honest about what executed. |
 | `conv2d_norm_activation` | cnn | **shipped** | `python/tessera/compiler/canonical/conv2d_norm_activation.py` | conv2d_nhwc → layer_norm → gelu; numpy reference; honest fallback_reason since conv2d has no fused MSL kernel yet. |
 | `kv_cache_append_prune_read` | kv_cache | **shipped** | `python/tessera/compiler/canonical/kv_cache_append_prune_read.py` | KVCacheHandle append → prune → read; paged numpy storage today, FA-4 consumes this state. |
 | `decode_init_inner_loop_self_verify` | energy_based_models | **shipped** | `python/tessera/compiler/canonical/decode_init_inner_loop_self_verify.py` | EBM decode_init → T inner-loop steps → self_verify; argmin over K; native MSL on Apple GPU. |

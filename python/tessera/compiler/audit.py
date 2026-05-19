@@ -109,6 +109,9 @@ AXIS_VALUE_GLYPHS: Mapping[str, str] = {
     # ─ runtime ─
     "ready":            "N",   # native
     "unsupported":      "X",
+    "unknown":          "?",   # target has no opinion on this op (no
+                                # explicit OpCapability entry and no
+                                # generic reference-execution feature)
     # ─ bench ─
     "benchmarked":      "B",
     "none":             "·",
@@ -247,23 +250,59 @@ def _axis_target_ir(op_name: str) -> AxisCell:
 
 
 def _axis_runtime(op_name: str) -> AxisCell:
-    # Walk every target's capability for this op; pick the most concrete.
+    """Audit the runtime axis for ``op_name``.
+
+    The cell value is the **most concrete runtime claim** the
+    capability registry can make across all targets for this op.
+    Critically: a missing per-op entry **does not promote to
+    ``target_cap.default_runtime_status``** — that would
+    overclaim ``runtime=ready`` for any primitive not explicitly
+    registered with a target (e.g., pure-Python S-series
+    primitives like ``tree_flatten`` / ``dataset_map``, where the
+    only runtime is the Python data-structure code).
+
+    Resolution per target:
+
+      * Explicit ``OpCapability`` registered  → use its
+        ``runtime_status`` verbatim.
+      * No explicit entry, target advertises a generic reference
+        fallback (the ``reference_execution`` feature) and the op
+        is in the canonical op catalog  → ``reference``
+        (the numpy/reference path runs it, but that's not a
+        *native* claim).
+      * Otherwise                              → ``unknown`` (the
+        target has no opinion on this op; do not claim a status).
+    """
     rank = {
         "ready": 0, "reference": 1, "fused": 0, "compileable": 2,
         "artifact_only": 3, "planned": 4, "unsupported": 5,
+        "unknown": 6,
     }
-    best_status = "planned"
+    best_status = "unknown"
     best_target = "unknown"
+    spec = OP_SPECS.get(op_name)
+    graph_name = spec.graph_name if spec is not None else f"tessera.{op_name}"
+
     for target_name, target_cap in cap.TARGET_CAPABILITIES.items():
-        # capabilities tracks `tessera.<op>` style names; try a few.
-        spec = OP_SPECS.get(op_name)
-        graph_name = spec.graph_name if spec is not None else f"tessera.{op_name}"
-        op_caps = target_cap.supported_ops.get(graph_name) or target_cap.supported_ops.get(op_name)
-        status = op_caps.runtime_status if op_caps is not None else target_cap.default_runtime_status
+        op_caps = (
+            target_cap.supported_ops.get(graph_name)
+            or target_cap.supported_ops.get(op_name)
+        )
+        if op_caps is not None:
+            status = op_caps.runtime_status
+        elif (
+            "reference_execution" in target_cap.features
+            and op_name in OP_SPECS
+        ):
+            # CPU-style generic numpy fallback: covers any op in the
+            # canonical catalog, but only via the reference path —
+            # never claim "ready" for that.
+            status = "reference"
+        else:
+            status = "unknown"
         if rank.get(status, 99) < rank.get(best_status, 99):
             best_status = status
             best_target = target_name
-    # Fold ready→ready (i.e. "native" on a backend that has the op wired).
     return AxisCell(best_status, f"capabilities[{best_target}]")
 
 

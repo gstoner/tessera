@@ -1,13 +1,23 @@
 #pragma once
 #include <cstdint>
 #include <cstddef>
+#include <cstring>
 #include <vector>
 #include <cmath>
 
 namespace tessera { namespace collective {
 
 inline uint16_t fp32_to_bf16(float f) {
-  uint32_t x = *reinterpret_cast<uint32_t*>(&f);
+  // Use ``memcpy`` for the bit-pattern transfer instead of a
+  // ``reinterpret_cast<uint32_t*>(&f)`` punned read.  The cast form
+  // violates strict aliasing (and is UB on most modern toolchains
+  // at -O2/-O3); ``memcpy`` is the standard-library idiom every
+  // compiler is required to recognize and lower to the same
+  // straight-line bit copy.  In C++20 this would be
+  // ``std::bit_cast<uint32_t>(f)``; we keep ``memcpy`` for C++17
+  // compatibility per the top-level ``CMakeLists`` ``CXX_STANDARD 17``.
+  uint32_t x;
+  std::memcpy(&x, &f, sizeof(x));
   uint16_t hi = static_cast<uint16_t>(x >> 16);
   // round-to-nearest-even
   uint32_t lsb = (x >> 15) & 1;

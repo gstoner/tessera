@@ -36,7 +36,11 @@ cmake_name() {
   esac
 }
 
-REQUESTED="${1:-asan tsan ubsan}"
+if (( $# > 0 )); then
+  REQUESTED="$*"
+else
+  REQUESTED="asan tsan ubsan"
+fi
 
 # Each smoke binary covers a different C-side surface:
 #

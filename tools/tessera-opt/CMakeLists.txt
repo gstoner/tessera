@@ -56,6 +56,20 @@ if(TARGET TesseraNeighbors)
   target_link_libraries(tessera-opt PRIVATE TesseraNeighbors)
 endif()
 
+# TPP solver dialect + passes + `-tpp-space-time` alias.
+if(TARGET TesseraTPPInit)
+  target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_TPP)
+  target_include_directories(tessera-opt PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/solvers/tpp/include
+    ${CMAKE_BINARY_DIR}/src/solvers/tpp/include/tpp/Dialect/TPP
+  )
+  target_link_libraries(tessera-opt PRIVATE
+    TesseraTPPInit
+    TesseraTPPDialect
+    TesseraTPPPasses
+  )
+endif()
+
 # Phase 8: Apple Silicon backend (TESSERA_BUILD_APPLE_BACKEND).
 # Only linked when the backend subdirectory has been added by src/CMakeLists.txt.
 if(TARGET TesseraApple)

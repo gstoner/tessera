@@ -66,6 +66,8 @@ research/sandbox_compilers/build/
 # lit test runtime artifacts (recreated on every `lit` invocation)
 tests/tessera-ir/**/Output/
 tests/tessera-ir/.lit_test_times.txt
+src/solvers/tpp/test/TPP/Output/
+src/solvers/tpp/test/TPP/.lit_test_times.txt
 
 # Claude Code harness — transient scheduler / worktree / lock artifacts.
 # settings.local.json is per-user and should NOT be checked in either.

@@ -1,46 +1,64 @@
 # tessera-translate
 
-Inter-IR text translation CLI for Tessera.
+Two complementary translation surfaces:
 
-## Status (2026-05-18)
+1. **Python `tessera-translate`** (console script, installed by
+   `pyproject.toml`).  Wraps `tessera.aot` exports for AOT artifact
+   → external format conversions (StableHLO text, GGUF binary,
+   SafeTensors).  No MLIR linkage required.
 
-**Python scaffold landed.**  The C++ MLIR translation tool (the MLIR
-`mlir-translate`-style binary that converts between MLIR text and
-external IR formats like StableHLO bytecode, GGUF metadata, or
-SafeTensors headers) is gated on `tessera-opt` building against
-MLIR 21.
+2. **C++ `tessera-translate-mlir`** binary.  MLIR-native translation
+   driver over the Tessera dialects + LLVM IR / SPIR-V.  Built via
+   `cmake --build build --target tessera-translate-mlir`.
 
-The Python module `python/tessera/cli/translate.py` ships the
-inter-IR translation surface that doesn't need the MLIR build:
-StableHLO/GGUF/SafeTensors export glue from `tessera.aot` (S14),
-exposed as a console script `tessera-translate` so callers have a
-stable entry point even before the C++ side lands.
+## Status (2026-05-18 — both shipped)
 
-## What lives here
+| Surface                    | Entry                               | Status   |
+|----------------------------|-------------------------------------|----------|
+| Python format export       | `tessera-translate <subcommand>`    | shipped  |
+| C++ MLIR translate         | `tessera-translate-mlir`            | shipped  |
+| Python `mlir` pass-through | `tessera-translate mlir <flags>`    | shipped  |
 
+## Usage
+
+```sh
+# AOT artifact → external format (Python).
+tessera-translate stablehlo  --in artifact.zip --out model.mlir
+tessera-translate gguf       --in artifact.zip --out model.gguf
+tessera-translate safetensors --in artifact.zip --out model.st
+tessera-translate info       --in artifact.zip
+
+# MLIR translation (C++ binary, called directly).
+tessera-translate-mlir --mlir-to-llvmir input.mlir   > output.ll
+tessera-translate-mlir --import-llvm    input.ll     > output.mlir
+tessera-translate-mlir --serialize-spirv input.mlir  > output.spv
+
+# Or via the Python pass-through (auto-detects the C++ binary
+# under build/tools/tessera-translate/ or on PATH).
+tessera-translate mlir --mlir-to-llvmir input.mlir > output.ll
+```
+
+## Files
+
+- `tessera-translate.cpp` — C++ MLIR translation driver source.
+- `CMakeLists.txt` — Builds the `tessera-translate-mlir` target.
 - `README.md` — this file.
 
-## What lives in `python/tessera/cli/translate.py`
+## What the C++ binary registers
 
-- `main(argv)` — CLI entry point.
-- Subcommands:
-  - `tessera-translate stablehlo --in <aot.zip> --out <stablehlo.mlir>`
-  - `tessera-translate gguf --in <aot.zip> --out <model.gguf>`
-  - `tessera-translate safetensors --in <aot.zip> --out <model.st>`
+- All Tessera dialects (`tessera`, `tessera.neighbors`,
+  `tessera.solver`, `tessera_apple`, `tpp`) — conditional on the
+  build options that pull each dialect in.
+- Standard MLIR dialects needed for translation: arith / func /
+  linalg / memref / scf / tensor / bufferization / LLVM / NVVM / ROCDL.
+- Standard MLIR translations: `--mlir-to-llvmir` /
+  `--import-llvm` plus the LLVM-IR dialect translation patterns
+  (builtin / LLVM / NVVM / ROCDL).
 
-Each subcommand dispatches through `tessera.aot.{stablehlo_export,
-gguf_export, safetensors_export}` (S14).
+## What the Python CLI registers
 
-## Future C++ tool
-
-When `tessera-opt` builds, this directory will hold:
-
-- `tessera-translate.cpp` — the MLIR binary entry point.
-- `CMakeLists.txt` — links MLIRIR + Tessera dialects.
-- `test/` — lit fixtures.
-
-The Python CLI and the C++ binary share the entry name
-`tessera-translate`; the Python wheel installs the console script,
-and the C++ build (when it lands) installs the binary under a
-distinguished name (e.g., `tessera-translate-mlir`) to avoid the
-collision.
+- 4 subcommands: `stablehlo`, `gguf`, `safetensors`, `info` (all
+  pass through `tessera.aot.{stablehlo_export, gguf_export,
+  safetensors_export}` from S14).
+- 1 pass-through subcommand: `mlir <args...>` invokes the C++
+  binary; reports a clean diagnostic if the binary isn't built.

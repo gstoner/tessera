@@ -61,16 +61,69 @@ def test_tessera_opt_runs_and_reports_a_version() -> None:
 
 @_REQUIRES_OPT
 def test_core_tessera_dialects_are_registered() -> None:
-    """The Tessera, Neighbors, Solver, and Apple dialects must all
-    be registered when ``tessera-opt`` builds with the full feature
-    set we ship out of the Apple host."""
+    """The Tessera, Neighbors, Solver, Apple, and TPP dialects must
+    all be registered when ``tessera-opt`` builds with the full
+    feature set we ship out of the Apple host."""
     out = _run_help()
     head_line = next((ln for ln in out.splitlines() if "Available Dialects" in ln), "")
-    for dialect in ("tessera", "tessera.neighbors", "tessera.solver", "tessera_apple"):
+    for dialect in (
+        "tessera",
+        "tessera.neighbors",
+        "tessera.solver",
+        "tessera_apple",
+        "tpp",
+    ):
         assert dialect in head_line, (
             f"dialect {dialect!r} missing from tessera-opt --help; "
             f"got: {head_line!r}"
         )
+
+
+@_REQUIRES_OPT
+def test_tpp_passes_and_pipeline_alias_are_registered() -> None:
+    """All 7 TPP individual passes and the ``tpp-space-time``
+    pipeline alias must show up in ``--help``."""
+    out = _run_help()
+    for pass_name in (
+        "tpp-legalize-space-time",
+        "tpp-halo-infer",
+        "tpp-fuse-stencil-time",
+        "tpp-async-prefetch",
+        "tpp-vectorize",
+        "tpp-distribute-halo",
+        "lower-tpp-to-target-ir",
+        "tpp-space-time",   # pipeline alias
+    ):
+        assert pass_name in out, (
+            f"TPP pass / alias {pass_name!r} not registered"
+        )
+
+
+@_REQUIRES_OPT
+def test_tpp_space_time_pipeline_runs(tmp_path: Path) -> None:
+    """End-to-end: feed a tiny TPP program through ``tpp-space-time``
+    and confirm the binary produces valid MLIR output."""
+    src = tmp_path / "tpp.mlir"
+    src.write_text(
+        '''
+        func.func @halo_example(%x: tensor<32x32xf32>) -> tensor<32x32xf32> {
+          %y = "tpp.grad"(%x) : (tensor<32x32xf32>) -> tensor<32x32xf32>
+          return %y : tensor<32x32xf32>
+        }
+        ''',
+        encoding="utf-8",
+    )
+    proc = subprocess.run(
+        [_TESSERA_OPT, "-allow-unregistered-dialect",
+         "-tpp-space-time", str(src)],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert proc.returncode == 0, (
+        f"tessera-opt failed:\nstdout: {proc.stdout}\nstderr: {proc.stderr}"
+    )
+    assert "tpp.halo" in proc.stdout, (
+        f"tpp-halo-infer step didn't run; stdout was:\n{proc.stdout}"
+    )
 
 
 @_REQUIRES_OPT
@@ -102,6 +155,67 @@ def test_neighbors_passes_are_registered() -> None:
         "tessera-topology-dynamic",
     ):
         assert pass_name in out, f"neighbors pass {pass_name!r} not registered"
+
+
+_DEFAULT_TRANSLATE_BUILD = (
+    REPO_ROOT / "build" / "tools" / "tessera-translate" / "tessera-translate-mlir"
+)
+
+
+def _find_tessera_translate_mlir() -> str | None:
+    if _DEFAULT_TRANSLATE_BUILD.is_file() and os.access(_DEFAULT_TRANSLATE_BUILD, os.X_OK):
+        return str(_DEFAULT_TRANSLATE_BUILD)
+    return shutil.which("tessera-translate-mlir")
+
+
+_TRANSLATE_MLIR = _find_tessera_translate_mlir()
+_REQUIRES_TRANSLATE = pytest.mark.skipif(
+    _TRANSLATE_MLIR is None,
+    reason=(
+        "tessera-translate-mlir not built; run "
+        "`cmake --build build --target tessera-translate-mlir`"
+    ),
+)
+
+
+@_REQUIRES_TRANSLATE
+def test_tessera_translate_mlir_runs_and_reports_version() -> None:
+    out = subprocess.run(
+        [_TRANSLATE_MLIR, "--version"],
+        capture_output=True, text=True, timeout=10,
+    ).stdout
+    assert "21." in out, f"unexpected --version output: {out!r}"
+
+
+@_REQUIRES_TRANSLATE
+def test_tessera_translate_mlir_translates_llvm_dialect_to_llvm_ir(
+    tmp_path: Path,
+) -> None:
+    """End-to-end: a tiny LLVM-dialect module → LLVM IR text."""
+    src = tmp_path / "add.mlir"
+    src.write_text(
+        '''
+        module {
+          llvm.func @add(%a: i32, %b: i32) -> i32 {
+            %0 = llvm.add %a, %b : i32
+            llvm.return %0 : i32
+          }
+        }
+        ''',
+        encoding="utf-8",
+    )
+    proc = subprocess.run(
+        [_TRANSLATE_MLIR, "--mlir-to-llvmir", str(src)],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert proc.returncode == 0, (
+        f"tessera-translate-mlir failed:\nstdout: {proc.stdout}\n"
+        f"stderr: {proc.stderr}"
+    )
+    # The translation produces real LLVM IR text.
+    assert "define i32 @add" in proc.stdout
+    assert "= add i32" in proc.stdout
+    assert "ret i32" in proc.stdout
 
 
 @_REQUIRES_OPT

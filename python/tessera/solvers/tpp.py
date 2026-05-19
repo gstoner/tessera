@@ -21,11 +21,13 @@ support tables) can reason about TPP without linking against
 ``tessera-opt``.  Actual lowering / execution requires
 ``tessera-opt`` built against MLIR 21.
 
-Status: **scaffold + Python frontmatter** (2026-05-18).  The C++
-dialect + passes ship; the Python ``solve(...)`` driver is not yet
-wired — it would dispatch through ``tessera-opt`` once that build
-lands.  See ``docs/audit/compiler_improvement_milestone_plan_2026_05_18.md``
-M5 / M8 follow-ups.
+Status: **dispatch wired via `tessera-opt` (2026-05-18).** TPP now
+registers its dialect + all 7 individual passes + the
+``tpp-space-time`` pipeline alias into ``tessera-opt``.  All 4 lit
+fixtures under ``src/solvers/tpp/test/TPP/`` pass.  Python
+``solve(...)`` driver still routes through subprocess into
+``tessera-opt`` rather than via embedded MLIR bindings — that
+remains a follow-up.
 """
 
 from __future__ import annotations
@@ -79,20 +81,24 @@ class TPPStatus:
 def status() -> TPPStatus:
     """Report what's wired and what isn't.
 
-    The C++ side ships (dialect + 7 passes + pipeline alias + 4 lit
-    fixtures); the Python driver dispatch and ``tessera-opt``-based
-    lit runs are gated on the MLIR 21 build pass landing.
+    The C++ side ships and is registered into ``tessera-opt``;
+    all 4 lit fixtures pass.  ``python_driver_wired`` records
+    whether the Python ``solve(...)`` driver dispatches via
+    embedded MLIR bindings (not yet — still goes through
+    subprocess invocations of ``tessera-opt``).
     """
     return TPPStatus(
         dialect_present=True,
         passes_present=True,
         pipeline_alias_present=True,
         python_driver_wired=False,
-        lit_fixtures_runnable=False,
+        lit_fixtures_runnable=True,
         notes=(
-            "TPP scaffold + Python frontmatter shipped 2026-05-18; "
-            "Python driver dispatch and `tessera-opt` lit runs gated "
-            "on the MLIR 21 build pass landing."
+            "TPP wired into tessera-opt 2026-05-18; dialect + 7 "
+            "passes + tpp-space-time alias all registered; 4/4 lit "
+            "fixtures pass.  Python `solve(...)` driver still calls "
+            "tessera-opt via subprocess rather than via embedded MLIR "
+            "bindings — embedded dispatch is a follow-up."
         ),
     )
 

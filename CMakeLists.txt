@@ -93,6 +93,7 @@ add_definitions(${LLVM_DEFINITIONS})
 # --------------------------------------------------------------------------
 add_subdirectory(src)
 add_subdirectory(tools/tessera-opt)
+add_subdirectory(tools/tessera-translate)
 
 set(TESSERA_COMPILER_FOUNDATION_DEPS
     TesseraIRTableGen

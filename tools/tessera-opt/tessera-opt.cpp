@@ -32,6 +32,10 @@
 #include "tessera/Dialect/Neighbors/Transforms/Passes.h"
 #endif
 
+#ifdef TESSERA_HAVE_TPP
+#include "tpp/InitTPP.h"
+#endif
+
 #ifdef TESSERA_HAVE_APPLE_BACKEND
 #include "Tessera/Target/Apple/Passes.h"
 #include "Tessera/Target/Apple/TesseraAppleDialect.h"
@@ -101,6 +105,12 @@ int main(int argc, char **argv) {
   tessera::neighbors::registerDynamicTopologyPass();
 #endif
 
+#ifdef TESSERA_HAVE_TPP
+  // TPP solver passes + `-tpp-space-time` pipeline alias.
+  tessera::tpp::registerTPPPasses();
+  tessera::tpp::registerTPPPipelines();
+#endif
+
 #ifdef TESSERA_HAVE_APPLE_BACKEND
   // Phase 8: Apple Silicon Target IR pipelines
   // (tessera-lower-to-apple_cpu, tessera-lower-to-apple_gpu).
@@ -135,6 +145,10 @@ int main(int argc, char **argv) {
 #endif
 #ifdef TESSERA_HAVE_NEIGHBORS
   tessera::neighbors::registerNeighborsDialect(registry);
+#endif
+
+#ifdef TESSERA_HAVE_TPP
+  tessera::tpp::registerTPPDialect(registry);
 #endif
 
 #ifdef TESSERA_HAVE_APPLE_BACKEND

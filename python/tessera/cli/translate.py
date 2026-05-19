@@ -9,19 +9,37 @@ single stable entry point::
     tessera-translate gguf       --in artifact.zip --out model.gguf
     tessera-translate safetensors --in artifact.zip --out model.st
 
-When the C++ ``tessera-translate`` MLIR binary lands (gated on
-``tessera-opt`` building against MLIR 21), it will install under
-``tessera-translate-mlir`` so this Python entry point keeps the
-short name.
+The C++ ``tessera-translate-mlir`` binary lands separately (built
+via ``cmake --build build --target tessera-translate-mlir``) and
+covers MLIR-native translations (``--mlir-to-llvmir``,
+``--import-llvm``, ``--serialize-spirv``).  The ``mlir`` subcommand
+on this Python CLI is a thin wrapper around it when the binary is
+on PATH or in the standard build directory.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Sequence
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_DEFAULT_TRANSLATE_BUILD = (
+    _REPO_ROOT / "build" / "tools" / "tessera-translate" / "tessera-translate-mlir"
+)
+
+
+def _find_tessera_translate_mlir() -> str | None:
+    """Locate the ``tessera-translate-mlir`` C++ binary."""
+    if _DEFAULT_TRANSLATE_BUILD.is_file() and os.access(_DEFAULT_TRANSLATE_BUILD, os.X_OK):
+        return str(_DEFAULT_TRANSLATE_BUILD)
+    return shutil.which("tessera-translate-mlir")
 
 
 def _cmd_stablehlo(args: argparse.Namespace) -> int:
@@ -65,6 +83,19 @@ def _cmd_safetensors(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_mlir_passthrough(rest: Sequence[str]) -> int:
+    """Pass-through to the C++ ``tessera-translate-mlir`` binary."""
+    binary = _find_tessera_translate_mlir()
+    if binary is None:
+        print(
+            "error: `tessera-translate-mlir` not found.  Build it with:\n"
+            "    cmake --build build --target tessera-translate-mlir",
+            file=sys.stderr,
+        )
+        return 127
+    return subprocess.call([binary, *rest])
+
+
 def _cmd_info(args: argparse.Namespace) -> int:
     """Print a one-shot summary of an AOT artifact."""
     from tessera import aot
@@ -80,6 +111,15 @@ def _cmd_info(args: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    argv = list(argv)
+    # The `mlir` subcommand forwards arbitrary flags to the C++ binary.
+    # argparse's REMAINDER can't reliably consume MLIR's `--foo` flags,
+    # so we intercept it here before constructing the parser.
+    if argv and argv[0] == "mlir":
+        return _cmd_mlir_passthrough(argv[1:])
+
     parser = argparse.ArgumentParser(
         prog="tessera-translate",
         description="Translate a Tessera AOT artifact to an external IR format.",
@@ -104,6 +144,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_info = sub.add_parser("info", help="Print AOT artifact summary")
     p_info.add_argument("--in", dest="input", required=True)
     p_info.set_defaults(func=_cmd_info)
+
+    # `mlir` subcommand is intercepted at the top of main() before
+    # argparse runs, so the flags after it forward cleanly to the C++
+    # binary.  We still register it as a no-op subparser so it shows
+    # up in --help.
+    sub.add_parser(
+        "mlir",
+        help="MLIR-side translation pass-through to tessera-translate-mlir "
+             "(e.g., `tessera-translate mlir --mlir-to-llvmir input.mlir`).  "
+             "All flags after `mlir` are forwarded.",
+    )
 
     args = parser.parse_args(argv)
     return int(args.func(args))

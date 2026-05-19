@@ -9,4 +9,7 @@ add_library(TesseraTPPPasses STATIC
   LowerTPPToTargetIR.cpp
   PassPipeline.cpp
 )
-target_link_libraries(TesseraTPPPasses PUBLIC MLIRIR)
+target_link_libraries(TesseraTPPPasses PUBLIC MLIRIR MLIRPass)
+target_include_directories(TesseraTPPPasses PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)

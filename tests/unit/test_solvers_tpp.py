@@ -66,17 +66,17 @@ def test_type_and_attr_names() -> None:
 
 
 def test_status_reports_cxx_present_python_driver_not_wired() -> None:
-    """Honest reporting: C++ side ships, Python dispatch doesn't yet."""
+    """Honest reporting: dialect + passes + alias + lit fixtures wired,
+    Python embedded-dispatch driver still pending."""
     s = tpp.status()
     assert s.dialect_present is True
     assert s.passes_present is True
     assert s.pipeline_alias_present is True
-    # Honest: until `tessera-opt` builds against MLIR 21, these can't
-    # be True.  Flipping these to True without the build pass landing
-    # is the exact "silent native" failure mode this gate prevents.
+    assert s.lit_fixtures_runnable is True
+    # Honest: ``solve()`` still subprocess-calls ``tessera-opt``
+    # instead of dispatching via embedded MLIR Python bindings.
     assert s.python_driver_wired is False
-    assert s.lit_fixtures_runnable is False
-    assert "MLIR 21" in s.notes or "build" in s.notes
+    assert "tessera-opt" in s.notes
 
 
 def test_pipeline_command_shape() -> None:

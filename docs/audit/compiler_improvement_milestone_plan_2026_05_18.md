@@ -696,26 +696,51 @@ uniformly visible**:
   CPU-only, non-slow).
 - [x] M4 memory-model verifier (happens-before + memory-space).
 - [x] M5 `BenchmarkRow` schema + validation spine doc + no-silent-native gate.
-- [x] **M5 follow-up — `tessera-translate` scaffold (2026-05-18,
-  closed).**  Python CLI ``tessera-translate`` shipped at
-  ``python/tessera/cli/translate.py`` with 4 subcommands
-  (stablehlo/gguf/safetensors/info) wrapping ``tessera.aot``
-  exports.  ``pyproject.toml`` registers it as a console script.
-  ``tools/tessera-translate/README.md`` documents the long-term
-  plan (C++ MLIR ``tessera-translate-mlir`` binary still gated on
-  ``tessera-opt`` against MLIR 21).  Locked by
-  ``tests/unit/test_cli_translate.py`` (4 tests).
-- [x] **M5 follow-up — TPP solver Python frontmatter
-  (2026-05-18, closed).**  ``python/tessera/solvers/tpp.py`` and
+- [x] **M5 follow-up — `tessera-translate` (Python + C++) shipped
+  (2026-05-18, closed; previously Python scaffold only).**
+  Python CLI ``tessera-translate`` at
+  ``python/tessera/cli/translate.py`` with **5 subcommands**:
+  ``stablehlo``/``gguf``/``safetensors``/``info`` (wrapping
+  ``tessera.aot`` exports) + ``mlir`` (pass-through to the C++
+  binary).  ``pyproject.toml`` registers it as a console script.
+  **C++ MLIR binary ``tessera-translate-mlir`` shipped
+  (2026-05-18, closed):** new
+  ``tools/tessera-translate/tessera-translate.cpp`` ships a thin
+  ``mlirTranslateMain`` wrapper that registers every Tessera
+  dialect (tessera / neighbors / TPP / Apple — conditional on
+  the build feature flags) on top of standard MLIR translations
+  (``--mlir-to-llvmir``, ``--import-llvm``, etc.).
+  ``tools/tessera-translate/CMakeLists.txt`` links
+  ``MLIRTranslateLib`` + the LLVM-IR import/export libraries +
+  every Tessera dialect.  End-to-end smoke verified: a tiny
+  LLVM-dialect MLIR module translates to real LLVM IR text
+  (``define i32 @add(...) { ... %3 = add i32 ... ret i32 %3 }``).
+  Locked by ``tests/unit/test_cli_translate.py`` (6 tests) +
+  ``tests/unit/test_tessera_opt_build.py::test_tessera_translate_mlir_*``
+  (2 tests).
+- [x] **M5 follow-up — TPP solver wired into ``tessera-opt``
+  (2026-05-18, closed; previously Python frontmatter only).**
+  ``python/tessera/solvers/tpp.py`` and
   ``python/tessera/solvers/__init__.py`` ship the
   ``tpp-space-time`` pipeline-alias name, 7 pass names, 2 type
-  names, 2 attr names, and an honest ``status()`` that returns
-  ``dialect_present=True``, ``passes_present=True``,
-  ``pipeline_alias_present=True``, ``python_driver_wired=False``,
-  ``lit_fixtures_runnable=False`` (the C++ side ships; Python
-  dispatch + lit gated on the ``tessera-opt`` build).  Locked
-  by ``tests/unit/test_solvers_tpp.py`` (7 tests, includes a
-  Python↔C++ pass-name drift gate).
+  names, 2 attr names.  **C++ side now actively dispatches:**
+  new ``src/solvers/tpp/include/tpp/InitTPP.h`` declares
+  ``registerTPPDialect``/``registerTPPPasses``/``registerTPPPipelines``;
+  ``src/solvers/tpp/lib/InitTPP.cpp`` registers all 7 passes via
+  ``mlir::registerPass(...)`` plus the ``tpp-space-time``
+  pipeline alias.  ``tessera-opt`` links the new
+  ``TesseraTPPInit`` static library via the ``TESSERA_HAVE_TPP``
+  compile-time guard.  Fixed an underlying dialect bug: TPP's
+  ``TPP.td`` lacked ``useDefaultAttributePrinterParser = 1``, so
+  attributes like ``#tpp.bc<"periodic">`` couldn't round-trip.
+  ``status()`` now returns
+  ``dialect_present=True / passes_present=True /
+  pipeline_alias_present=True / lit_fixtures_runnable=True /
+  python_driver_wired=False`` (honest about the remaining
+  embedded-MLIR Python binding gap).  4/4 lit fixtures under
+  ``src/solvers/tpp/test/TPP/`` pass.  Locked by
+  ``tests/unit/test_solvers_tpp.py`` (7 tests) +
+  ``tests/unit/test_tessera_opt_build.py::test_tpp_*`` (2 tests).
 - [x] **`selective_ssm` Graph IR op (2026-05-18, closed).**
   Added ``tessera.selective_ssm`` op to
   ``python/tessera/compiler/op_catalog.py`` (state-space lowering

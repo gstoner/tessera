@@ -41,9 +41,20 @@ def main():
     out = mlp_step(x, w)
     print("ran mlp_step")
     print("output shape:", out.shape)
-    print("uses compiled CPU path:", mlp_step.uses_compiled_path)
-    print("lowering:")
+    # Execution-kind introspection (the post-2026-05 JitFn surface,
+    # replacing the older single `uses_compiled_path` flag):
+    print("execution_kind:        ", mlp_step.execution_kind)
+    print("is_executable:         ", mlp_step.is_executable)
+    print("is_reference_execution:", mlp_step.is_reference_execution)
+    print("is_native_execution:   ", mlp_step.is_native_execution)
+    print("\nlowering:")
     print(mlp_step.explain_lowering())
+
+    print("\n==== lowering_artifacts() summary ====")
+    for artifact in mlp_step.lowering_artifacts():
+        # Each entry is a LoweringArtifact(level, text); show the
+        # level here and the text bodies below.
+        print(f" - {artifact.level}: {len(artifact.text or '')} chars")
 
     artifacts = {
         "graph": mlp_step.ir_text(),

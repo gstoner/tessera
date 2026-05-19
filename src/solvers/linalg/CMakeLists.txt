@@ -14,6 +14,15 @@ add_library(tessera_linalg_solver_passes STATIC
   lib/Passes/MixedPrecision.cpp
   lib/Passes/IterativeRefinement.cpp
 )
+# `SolverDialect.cpp` includes `TesseraLinalgSolverAttrs.cpp.inc` from
+# MLIR's tablegen output; that .inc emits `generatedAttributeParser`
+# / `generatedAttributePrinter` helpers that are only referenced when
+# the dialect overrides parseAttribute/printAttribute (we don't).
+# Silence the `-Wunused-function` warning for this one source file
+# so we don't have to mass-disable the rule everywhere.
+set_source_files_properties(
+  lib/Dialect/SolverDialect.cpp
+  PROPERTIES COMPILE_OPTIONS "-Wno-unused-function")
 target_include_directories(tessera_linalg_solver_passes
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include

@@ -18,7 +18,11 @@ using namespace tessera;
 
 namespace {
 
-static SmallVector<Range> get2DItrDomainFromResult(RankedTensorType resTy, Location loc, OpBuilder &b) {
+// Only referenced when ``TESSERA_ENABLE_TILING_INTERFACE`` is on; mark
+// maybe_unused so the default-off build doesn't emit the
+// ``-Wunused-function`` warning that the 2026-05-19 warning-budget
+// audit flagged.
+[[maybe_unused]] static SmallVector<Range> get2DItrDomainFromResult(RankedTensorType resTy, Location loc, OpBuilder &b) {
   auto c0 = b.create<arith::ConstantIndexOp>(loc, 0).getResult();
   auto c1 = b.create<arith::ConstantIndexOp>(loc, 1).getResult();
   auto s0 = b.create<arith::ConstantIndexOp>(loc, resTy.getDimSize(0)).getResult();

@@ -540,7 +540,7 @@ Landed (2026-05-18):
 | 2 | ``tessera.bridge`` boundary ops (``multivector_to_tensor`` / ``tensor_to_multivector`` / ``complex_to_tensor`` / ``tensor_to_complex``); ``value_kind_of`` (function, not attribute — Decision #15a) | `python/tessera/bridge.py` · `test_bridge_boundary_ops.py` (15) |
 | 3 | :class:`TesseraValueKindError` with source-span diagnostics; ``check_call_kinds`` helper; ``@clifford_jit`` runtime rejects non-Multivector arguments | (in `bridge.py`) · `test_mixed_op_diagnostics.py` (8) |
 | 4 | Cross-frontend integration tests — three frontends in one session, schema parity, distinct ``value_kind`` per report, deduplication | `test_compile_session_integration.py` (8) |
-| 5 | *Deferred:* Python Tile IR ↔ MLIR lit equivalence | Needs ``tessera-opt`` built; tracked as M2-Step-5 follow-up |
+| 5 | **Landed (both halves, 2026-05-18):** Python-emitted Tile-IR-shaped text byte-locked against `tests/unit/canonical_golden_ir/*.ir`; `tessera-opt` builds against MLIR 21 and the lit suite for the canonical lowering pipelines runs cleanly under `tests/tessera-ir/` (34/72 PASS, 19 UNSUPPORTED, 19 XFAIL, 0 FAIL). | `tests/unit/test_canonical_ir_equivalence.py` (13) + `tests/unit/test_tessera_opt_build.py` (9) + `tests/tessera-ir/lit.cfg.py` (probes `tessera-opt` and `FileCheck` automatically) |
 
 **Decision #15a structural lock:** ``value_kind_of`` is a
 **function**, not a method/attribute on a sibling value (verified
@@ -768,8 +768,16 @@ uniformly visible**:
   emits a stable `report_hash()`, correct `fallback_reason`,
   and stable `frontend`/`value_kind`/`target` triple.
   **26 tests** pass; no hash collisions.  Includes the
-  no-silent-native rule (target ≠ cpu + fallback_reason=None
-  must carry a proof: route, ir_hash, or symbol).
+  no-silent-native rule: target ≠ cpu + fallback_reason=None
+  must carry a proof — one of ``proof_routes`` (non-empty),
+  a ``plan_hash``, or a ``tessera_*`` runtime symbol in
+  ``target_decision``.  ``ir_hashes`` alone is **not**
+  accepted (every driver synthesizes a Graph IR digest, so
+  the ir-only check would silently pass for any program);
+  the test at
+  ``tests/unit/test_compile_report_stability_gate.py`` was
+  updated accordingly and a synthetic regression locks the
+  ir-only-rejection contract.
 - [x] **Step 3 start (2026-05-18)**: closed-form VJP table for the
   full 14-op energy whitelist landed in
   `python/tessera/compiler/energy_vjp.py`.  Every op has a

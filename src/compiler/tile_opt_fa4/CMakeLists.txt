@@ -61,6 +61,13 @@ add_mlir_library(TesseraQueueDialect
         MLIRIR
         MLIRSupport
 )
+# QueueOps.cpp includes `QueueTypes.cpp.inc` (tablegen output) which
+# emits `generatedTypeParser` / `generatedTypePrinter` helpers that
+# are only referenced when the dialect overrides parseType/printType
+# (we don't).  Silence `-Wunused-function` for this source file.
+set_source_files_properties(
+  lib/Dialect/Queue/QueueOps.cpp
+  PROPERTIES COMPILE_OPTIONS "-Wno-unused-function")
 target_include_directories(TesseraQueueDialect
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include

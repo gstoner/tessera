@@ -5,16 +5,27 @@ This is a **scaffold** with a minimal tokenizer and a tiny model config.
 Replace the tokenizer with your production one (SentencePiece/BPE) and
 load real weights via `llama_convert.py` if desired.
 
-Run (pseudo):
+Run from the package root::
+
+    cd examples/advanced/Jet_nemotron
     python examples/e2e_infer.py
 """
+import os
+import sys
 from dataclasses import dataclass
 from typing import List
 import math
 
-# Tessera imports (modeled)
-from tessera import Tensor
-from tessera_jetnemotron.transformer_block import Transformer, TransformerConfig
+# The supporting modules (`transformer_block.py`, `jetblock.py`, ...)
+# live one directory up from this file, not in a top-level
+# `tessera_jetnemotron` package.  Make them importable so the example
+# is self-contained.
+_JET_NEMOTRON_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _JET_NEMOTRON_ROOT not in sys.path:
+    sys.path.insert(0, _JET_NEMOTRON_ROOT)
+
+from tessera import Tensor  # noqa: E402
+from transformer_block import Transformer, TransformerConfig  # noqa: E402
 
 class MinimalTokenizer:
     def __init__(self, vocab: List[str] = None):

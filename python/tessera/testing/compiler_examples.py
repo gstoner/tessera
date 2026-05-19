@@ -13,13 +13,27 @@ from typing import Any, Callable, Mapping
 import numpy as np
 
 import tessera as ts
-from examples.conformance.s8_tiny_models.models import (
-    compile_attention_slice as s8_compile_attention_slice,
-    compile_mlp_slice as s8_compile_mlp_slice,
-)
 from tessera.compiler.jit import JitFn, jit
 from tessera.compiler.matmul_pipeline import normalize_target_kind
 from tessera.runtime import RuntimeArtifact, launch
+
+
+def _load_s8_compilers():
+    """Lazy import of the S8 tiny-model compilers.
+
+    The previous eager ``from examples.conformance.s8_tiny_models...``
+    import made ``tessera.testing`` (and therefore the top-level
+    ``tessera`` package, which re-exports it) depend on
+    ``examples/`` being on ``sys.path``.  That broke direct example
+    execution via the documented ``PYTHONPATH=python``.  Importing
+    only when the manifest is materialized keeps the test surface
+    available while making the package import standalone again.
+    """
+    from examples.conformance.s8_tiny_models.models import (
+        compile_attention_slice,
+        compile_mlp_slice,
+    )
+    return compile_mlp_slice, compile_attention_slice
 
 
 COMPILER_STAGES = (
@@ -79,7 +93,16 @@ def _common_artifact_stages(*, runtime: bool = False) -> tuple[str, ...]:
     return stages + (("runtime-executable",) if runtime else ())
 
 
-COMPILER_EXAMPLE_MANIFEST: tuple[CompilerExample, ...] = (
+def _build_manifest() -> tuple[CompilerExample, ...]:
+    """Construct the manifest on demand.
+
+    Defers the ``examples.conformance`` import to the first call so
+    importing ``tessera.testing`` does not require ``examples/`` to be
+    on ``sys.path``.  Cached by ``__getattr__`` below; this function
+    runs exactly once per process.
+    """
+    s8_compile_mlp_slice, s8_compile_attention_slice = _load_s8_compilers()
+    return (
     CompilerExample(
         "mlp_matmul_relu",
         mlp_path,
@@ -147,7 +170,23 @@ COMPILER_EXAMPLE_MANIFEST: tuple[CompilerExample, ...] = (
             np.ones((3, 3), dtype=np.float32) * 0.25,
         ),
     ),
-)
+    )
+
+
+# Module-level lazy accessor (PEP 562) so existing
+# ``from tessera.testing.compiler_examples import COMPILER_EXAMPLE_MANIFEST``
+# call sites still work, but ``examples/`` is only required on
+# ``sys.path`` when the manifest is actually consulted.
+_CACHED_MANIFEST: tuple[CompilerExample, ...] | None = None
+
+
+def __getattr__(name):  # noqa: F811 (PEP 562 module __getattr__)
+    if name == "COMPILER_EXAMPLE_MANIFEST":
+        global _CACHED_MANIFEST
+        if _CACHED_MANIFEST is None:
+            _CACHED_MANIFEST = _build_manifest()
+        return _CACHED_MANIFEST
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def qualify_compiler_example(example: CompilerExample, target: str, *, run: bool = False) -> CompilerExampleResult:
@@ -171,8 +210,15 @@ def qualify_compiler_example(example: CompilerExample, target: str, *, run: bool
 
 
 def qualify_compiler_examples(*, targets: tuple[str, ...] = FOUNDATION_TARGETS, run_runtime: bool = False) -> tuple[CompilerExampleResult, ...]:
+    # Materialize the manifest lazily — same surface as the
+    # module-level ``COMPILER_EXAMPLE_MANIFEST`` PEP 562 attribute,
+    # but the explicit ``_build_manifest()`` call here documents that
+    # we're triggering the ``examples.conformance`` import on demand.
+    global _CACHED_MANIFEST
+    if _CACHED_MANIFEST is None:
+        _CACHED_MANIFEST = _build_manifest()
     results: list[CompilerExampleResult] = []
-    for example in COMPILER_EXAMPLE_MANIFEST:
+    for example in _CACHED_MANIFEST:
         for target in targets:
             results.append(qualify_compiler_example(example, target, run=run_runtime))
     return tuple(results)
@@ -198,8 +244,13 @@ def _assert_claimed_stages(compiled: JitFn, artifact: RuntimeArtifact, claimed: 
         raise AssertionError("compile trace must contain at least one event")
 
 
+# ``COMPILER_EXAMPLE_MANIFEST`` is intentionally NOT a module-level
+# binding — it's resolved lazily via PEP 562 ``__getattr__`` above
+# so importing this module doesn't force ``examples.conformance``
+# onto ``sys.path``.  The ``noqa: F822`` below tells ruff this is a
+# deliberate dynamic re-export.
 __all__ = [
-    "COMPILER_EXAMPLE_MANIFEST",
+    "COMPILER_EXAMPLE_MANIFEST",  # noqa: F822 (resolved via PEP 562 __getattr__)
     "COMPILER_STAGES",
     "FOUNDATION_TARGETS",
     "CompilerExample",

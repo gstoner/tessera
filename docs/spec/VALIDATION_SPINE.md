@@ -19,7 +19,7 @@ maps unambiguously to **command**.
 | Layer | What it proves | Canonical command | Hardware required | CI default |
 |-------|----------------|-------------------|-------------------|------------|
 | **Python unit tests** | Python frontend, IR layers, audit, registries, error semantics | `pytest tests/unit -m "not slow"` | CPU only | yes |
-| **MLIR lit tests** | C++ pass + dialect contracts on canonical input MLIR | `python -m lit tests/tessera-ir -v` | CPU only (after building `tessera-opt`) | yes (when `tessera-opt` is built) |
+| **MLIR lit tests** | C++ pass + dialect contracts on canonical input MLIR | `lit tests/tessera-ir -v` (the console script; the `python -m lit` form does not work — lit's package has no `__main__`) | CPU only (after building `tessera-opt`) | opt-in: `TESSERA_VALIDATE_LIT=1 scripts/validate.sh` runs lit when both `lit` and `tessera-opt` are on PATH (or in `build/tools/tessera-opt/`); otherwise the layer is skipped with a clear diagnostic. |
 | **C++ build checks** | the C++ tree compiles against MLIR 21 / LLVM 21 | `cmake -B build && cmake --build build` | toolchain only | partial — gated on environment |
 | **Artifact-only target lowering** | `tessera-lower-to-{rocm,metalium,apple_gpu}` produce textual artifacts; **no execution** | `tessera-opt ... | FileCheck` | none | yes |
 | **Hardware-runtime smoke tests** | a fused symbol actually dispatches on the device | `pytest tests/unit -m hardware_apple_gpu` (or `-m hardware_nvidia`, etc.) | the named accelerator | no (skipped without hardware) |

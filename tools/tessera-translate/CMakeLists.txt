@@ -85,3 +85,11 @@ if(TARGET TesseraApple)
   target_compile_definitions(tessera-translate-mlir PRIVATE TESSERA_HAVE_APPLE_BACKEND)
   target_link_libraries(tessera-translate-mlir PRIVATE TesseraApple)
 endif()
+
+# Quiet the macOS linker's "ignoring duplicate libraries" warning
+# (Xcode 15+).  The duplicates come from the subdir libs pulling in
+# the same MLIR libs we list above; the linker correctly drops them.
+if(APPLE)
+  target_link_options(tessera-translate-mlir PRIVATE
+    "LINKER:-no_warn_duplicate_libraries")
+endif()

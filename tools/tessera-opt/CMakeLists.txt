@@ -18,6 +18,18 @@ target_link_libraries(tessera-opt PRIVATE
   MLIROptLib
 )
 
+# Quiet the macOS linker's "ignoring duplicate libraries" warning.
+# The duplicates come from the subdir libraries (TesseraIR /
+# tessera_solvers_passes / TesseraApple) listing the same MLIR
+# libs we list above; the linker correctly drops the dupes — it
+# just warns about doing so.  The warning was added in Xcode 15;
+# the `-no_warn_duplicate_libraries` flag silences it without
+# changing link behavior.
+if(APPLE)
+  target_link_options(tessera-opt PRIVATE
+    "LINKER:-no_warn_duplicate_libraries")
+endif()
+
 if(NOT ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA) OR
         (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA)))
   target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_CORE_TESSERA_IR)

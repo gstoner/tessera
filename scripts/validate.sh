@@ -123,6 +123,36 @@ else
   echo "==> No repo build/ directory; skipping optional monorepo ctest"
 fi
 
+# Opt-in MLIR lit smoke.  Skipped by default because lit only works
+# once `tessera-opt` has been built against MLIR 21 and the lit
+# binary is on PATH (lit's package has no `__main__`, so `python -m lit`
+# is NOT a valid invocation — only the console script form works).
+#
+# Set TESSERA_VALIDATE_LIT=1 to enable.  The runner does its own
+# tessera-opt / FileCheck probes so its lit.cfg.py works without
+# needing `PATH=build/tools/tessera-opt:$PATH` exported by the caller.
+if [ "${TESSERA_VALIDATE_LIT:-0}" != "0" ]; then
+  echo "==> MLIR lit smoke"
+  TESSERA_OPT_BIN="$ROOT/build/tools/tessera-opt/tessera-opt"
+  LIT_BIN="$(command -v lit || true)"
+  if [ -z "$LIT_BIN" ] && [ -n "${PYTHON_BIN_DIR:-}" ]; then
+    LIT_BIN="$PYTHON_BIN_DIR/lit"
+  fi
+  if [ -z "$LIT_BIN" ]; then
+    PYTHON_BIN_DIR_FALLBACK="$(dirname "$PYTHON")"
+    if [ -x "$PYTHON_BIN_DIR_FALLBACK/lit" ]; then
+      LIT_BIN="$PYTHON_BIN_DIR_FALLBACK/lit"
+    fi
+  fi
+  if [ ! -x "$TESSERA_OPT_BIN" ]; then
+    echo "warning: tessera-opt not built at $TESSERA_OPT_BIN — skipping lit smoke" >&2
+  elif [ -z "$LIT_BIN" ] || [ ! -x "$LIT_BIN" ]; then
+    echo "warning: lit binary not found (try 'pip install lit') — skipping lit smoke" >&2
+  else
+    "$LIT_BIN" tests/tessera-ir -v
+  fi
+fi
+
 # Opt-in C++ sanitizer smoke.  Off by default because each sanitizer
 # build is ~2 minutes (Debug + sanitizer flags + collectives toolchain).
 # Enable in CI lanes that care about runtime-safety regressions:

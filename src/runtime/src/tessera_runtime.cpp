@@ -84,18 +84,26 @@ void tsrEnableProfiling(int enable) { g_profiling_enabled = (enable != 0); }
 uint64_t tsrTimestampNowNs(void) { return NowNs(); }
 
 // ---- Status & error strings ----
+//
+// The switch below covers every value of ``TsrStatus``; we deliberately
+// omit a ``default:`` label so a future enum addition triggers
+// ``-Wswitch`` instead of being silently bucketed into "UNKNOWN".
+// The trailing ``return`` after the switch handles the out-of-range
+// case where a C ABI caller passed an integer cast from outside the
+// enum (still a legal TsrStatus value at the language level since
+// ``TsrStatus`` is an int-shaped enum at the ABI boundary).
 const char* tsrStatusString(TsrStatus s) {
   switch (s) {
-    case TSR_STATUS_SUCCESS: return "SUCCESS";
+    case TSR_STATUS_SUCCESS:          return "SUCCESS";
     case TSR_STATUS_INVALID_ARGUMENT: return "INVALID_ARGUMENT";
-    case TSR_STATUS_NOT_FOUND: return "NOT_FOUND";
-    case TSR_STATUS_ALREADY_EXISTS: return "ALREADY_EXISTS";
-    case TSR_STATUS_OUT_OF_MEMORY: return "OUT_OF_MEMORY";
-    case TSR_STATUS_UNIMPLEMENTED: return "UNIMPLEMENTED";
-    case TSR_STATUS_INTERNAL: return "INTERNAL";
-    case TSR_STATUS_DEVICE_ERROR: return "DEVICE_ERROR";
-    default: return "UNKNOWN";
+    case TSR_STATUS_NOT_FOUND:        return "NOT_FOUND";
+    case TSR_STATUS_ALREADY_EXISTS:   return "ALREADY_EXISTS";
+    case TSR_STATUS_OUT_OF_MEMORY:    return "OUT_OF_MEMORY";
+    case TSR_STATUS_UNIMPLEMENTED:    return "UNIMPLEMENTED";
+    case TSR_STATUS_INTERNAL:         return "INTERNAL";
+    case TSR_STATUS_DEVICE_ERROR:     return "DEVICE_ERROR";
   }
+  return "UNKNOWN";
 }
 const char* tsrGetLastError(void) { return g_last_error.c_str(); }
 void tsrClearLastError(void) { g_last_error.clear(); }

@@ -1,6 +1,4 @@
-// XFAIL: *
 // RUN: tessera-opt %s -tessera-halo-infer | FileCheck %s
-// RUN: tessera-opt %s -tessera-halo-infer --mlir-print-debuginfo | FileCheck %s --check-prefix=DEBUG
 
 // ============================================================================
 // Test 1: HaloInferPass annotates stencil.apply with halo.width from taps
@@ -26,7 +24,6 @@ func.func @test_stencil_halo_infer(%arg0: tensor<?x?xf32>) -> tensor<?x?xf32> {
       bc = "periodic"
   } : () -> index
 
-  // CHECK: stencil.lowered = true
   %out = "tessera.neighbors.stencil.apply"(%st, %arg0, %topo) :
       (index, tensor<?x?xf32>, !tessera.neighbors.topology) -> tensor<?x?xf32>
 

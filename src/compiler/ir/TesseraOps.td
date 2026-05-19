@@ -384,7 +384,7 @@ def Tessera_RetentionOp : Op<
 
 def Tessera_LightningAttentionOp : Op<
   Tessera_Dialect, "lightning_attention",
-  [Pure]
+  [Pure, AttrSizedOperandSegments]
 > {
   let summary = "Lightning linear attention with optional recurrent state";
   let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
@@ -411,7 +411,7 @@ def Tessera_GatedAttentionOp : Op<
 }
 
 class Tessera_DeltaAttentionOp<string mnemonic, string summaryText>
-  : Op<Tessera_Dialect, mnemonic, [Pure]> {
+  : Op<Tessera_Dialect, mnemonic, [Pure, AttrSizedOperandSegments]> {
   let summary = summaryText;
   let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
                         Optional<TensorType>:$gate,

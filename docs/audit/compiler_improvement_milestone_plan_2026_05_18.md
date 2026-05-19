@@ -507,19 +507,34 @@ Acceptance:
 - At least two programs run in default CPU-only CI; Apple GPU variants skip
   cleanly when unavailable.
 
-### M2 - Frontend unification without losing specialization  **(2026-05-18: landed — 5 of 5 sub-deliverables; Python side complete, C++ FileCheck side awaits `tessera-opt` build)**
+### M2 - Frontend unification without losing specialization  **(2026-05-18: landed — 5 of 5 sub-deliverables; both halves of Step 5 closed)**
 
-**Status:** Steps 1–4 shipped + tested.  Step 5 **Python half landed
-(2026-05-18)** as the canonical-IR equivalence harness — see
-``tests/unit/test_canonical_ir_equivalence.py`` + the golden files
-under ``tests/unit/canonical_golden_ir/`` (5 ``*.ir`` files, one
-per shipped canonical with a deterministic ``_ir_text(...)``).
-The byte-identity test (``test_canonical_ir_text_matches_golden``,
-parametrized 5×) catches any silent Python-side IR drift.  The
-C++ MLIR FileCheck half of the equivalence (lowering each
-canonical through ``tessera-opt`` and FileChecking the result)
-remains gated on the MLIR 21 build; the Python side is the loud
-half of the contract and is now locked.
+**Status:** Steps 1–4 shipped + tested.  Step 5 **both halves
+landed (2026-05-18):**
+
+- **Python half** — canonical-IR equivalence harness at
+  ``tests/unit/test_canonical_ir_equivalence.py`` + 5 golden files
+  under ``tests/unit/canonical_golden_ir/``.  Byte-identity test
+  parametrized over the 5 canonicals with deterministic
+  ``_ir_text(...)``; catches silent Python-side IR drift.  13 tests.
+- **C++ build half** — ``tessera-opt`` now builds against
+  **MLIR 21** (Homebrew ``llvm@21``, version 21.1.8) via
+  ``cmake --build build --target tessera-opt``.  Produces a
+  69 MB binary registering 4 dialects (tessera / tessera.neighbors
+  / tessera.solver / tessera_apple) + 70+ Tessera passes + 6
+  named lowering pipelines.  Fixes that landed: (a)
+  ``Tessera_DeltaAttentionOp`` and ``Tessera_LightningAttentionOp``
+  gained the ``AttrSizedOperandSegments`` trait (MLIR 21 stricter
+  check on multiple ``Optional<TensorType>`` operands); (b)
+  ``HaloInferPass::getDeltaValues`` now handles
+  ``DenseIntElementsAttr`` taps (the textual MLIR encoding for
+  ``dense<[1,0]> : tensor<2xi64>``).  Smoke tested by
+  ``tests/unit/test_tessera_opt_build.py`` (5 tests, skipped when
+  binary absent).
+- **Lit-side equivalence** — Phase 7 Neighbors lit fixtures (4 tests)
+  all PASS via ``tessera-opt``; full ``tests/tessera-ir`` suite:
+  34/72 PASS, 19 UNSUPPORTED (hardware-specific NVIDIA/ROCm), 19
+  XFAIL (older), **0 FAIL**.
 
 Landed (2026-05-18):
 

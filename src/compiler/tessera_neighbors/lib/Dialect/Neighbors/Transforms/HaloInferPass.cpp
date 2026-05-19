@@ -57,6 +57,15 @@ static llvm::SmallVector<int64_t> getDeltaValues(Attribute attr) {
     }
     return out;
   }
+
+  // Case 2: DenseIntElementsAttr (e.g., dense<[1, 0]> : tensor<2xi64>).
+  // This is what stencil.define op taps actually carry in the textual IR.
+  if (auto dense = llvm::dyn_cast<DenseIntElementsAttr>(attr)) {
+    llvm::SmallVector<int64_t> out;
+    for (auto v : dense.getValues<llvm::APInt>())
+      out.push_back(v.getSExtValue());
+    return out;
+  }
   return {};
 }
 

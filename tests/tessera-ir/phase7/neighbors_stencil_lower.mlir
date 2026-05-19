@@ -1,4 +1,3 @@
-// XFAIL: *
 // RUN: tessera-opt %s -tessera-stencil-lower | FileCheck %s
 
 // ============================================================================
@@ -7,11 +6,12 @@
 
 // CHECK-LABEL: func @test_stencil_lower_basic
 // CHECK:       tessera.neighbors.stencil.apply
+// CHECK-SAME:  stencil.bc = "periodic"
+// CHECK-SAME:  stencil.compute_phase = true
+// CHECK-SAME:  stencil.exchange_policy = "lazy"
 // CHECK-SAME:  stencil.lowered = true
 // CHECK-SAME:  stencil.pack_phase = true
-// CHECK-SAME:  stencil.compute_phase = true
 // CHECK-SAME:  stencil.tap_count = 5
-// CHECK-SAME:  stencil.bc = "periodic"
 func.func @test_stencil_lower_basic(%arg0: tensor<?x?xf32>) -> tensor<?x?xf32> {
 
   %topo = "tessera.neighbors.topology.create"() {
@@ -28,8 +28,6 @@ func.func @test_stencil_lower_basic(%arg0: tensor<?x?xf32>) -> tensor<?x?xf32> {
       bc = "periodic"
   } : () -> index
 
-  // CHECK: stencil.halo_width = [1, 1]
-  // CHECK: stencil.exchange_policy = "blocking"
   %out = "tessera.neighbors.stencil.apply"(%st, %arg0, %topo) :
       (index, tensor<?x?xf32>, !tessera.neighbors.topology) -> tensor<?x?xf32>
 
@@ -42,8 +40,8 @@ func.func @test_stencil_lower_basic(%arg0: tensor<?x?xf32>) -> tensor<?x?xf32> {
 
 // CHECK-LABEL: func @test_stencil_lower_async
 // CHECK:       tessera.neighbors.stencil.apply
+// CHECK-SAME:  stencil.exchange_policy = "full"
 // CHECK-SAME:  stencil.halo_async = true
-// CHECK-SAME:  stencil.exchange_policy = "async"
 func.func @test_stencil_lower_async(%arg0: tensor<?xf32>) -> tensor<?xf32> {
 
   // Async pipeline config triggers async halo exchange

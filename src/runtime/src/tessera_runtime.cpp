@@ -196,8 +196,31 @@ TsrStatus tsrGetDeviceProps(tsrDevice dev, tsrDeviceProps* props) {
 // ---- Streams / Events ----
 TsrStatus tsrCreateStream(tsrDevice dev, tsrStream* out) {
   if (!dev || !out) { SetLastError("dev/out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  // Allocate the backend stream FIRST and validate before we take any
+  // ownership.  If the backend reports failure (returns nullptr, e.g.,
+  // CUDA/HIP path on `cudaStreamCreate` failure), we must NOT:
+  //   * write a wrapper into ``*out`` — caller would think they own
+  //     a handle, but ``tsrDestroyStream`` would dereference a null
+  //     ``impl`` and the matching backend ``destroyStream(nullptr)``
+  //     is not contracted to tolerate that;
+  //   * increment ``g_live_streams`` — a failed create that bumped
+  //     the counter would trap ``tsrShutdown`` forever (the ratchet
+  //     refuses while any handle counter is non-zero).
+  // Propagate the backend error via ``consumeLastError`` so callers
+  // see *why* it failed.
+  tsr::Stream* impl = dev->be->createStream();
+  if (impl == nullptr) {
+    std::string msg;
+    TsrStatus backend_st = dev->be->consumeLastError(&msg);
+    if (backend_st != TSR_STATUS_SUCCESS && !msg.empty()) {
+      SetLastError(msg.c_str());
+      return backend_st;
+    }
+    SetLastError("backend->createStream returned NULL");
+    return TSR_STATUS_INTERNAL;
+  }
   auto s = new tsrStream_t();
-  s->impl = dev->be->createStream();
+  s->impl = impl;
   s->dev = dev;
   *out = s;
   { std::lock_guard<std::mutex> lk(g_mu); ++g_live_streams; }
@@ -221,8 +244,23 @@ TsrStatus tsrStreamSynchronize(tsrStream s) {
 
 TsrStatus tsrCreateEvent(tsrDevice dev, tsrEvent* out) {
   if (!dev || !out) { SetLastError("dev/out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  // See ``tsrCreateStream`` for the rationale — validate the backend
+  // event before taking ownership, so a CUDA/HIP create failure
+  // doesn't smuggle a NULL ``impl`` handle out to the caller or
+  // increment the live-event counter (which would trap tsrShutdown).
+  tsr::Event* impl = dev->be->createEvent();
+  if (impl == nullptr) {
+    std::string msg;
+    TsrStatus backend_st = dev->be->consumeLastError(&msg);
+    if (backend_st != TSR_STATUS_SUCCESS && !msg.empty()) {
+      SetLastError(msg.c_str());
+      return backend_st;
+    }
+    SetLastError("backend->createEvent returned NULL");
+    return TSR_STATUS_INTERNAL;
+  }
   auto e = new tsrEvent_t();
-  e->impl = dev->be->createEvent();
+  e->impl = impl;
   e->dev = dev;
   *out = e;
   { std::lock_guard<std::mutex> lk(g_mu); ++g_live_events; }

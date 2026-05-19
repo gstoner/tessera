@@ -191,3 +191,71 @@ def test_submit_snapshots_adapters_under_lock() -> None:
         "before calling into them — otherwise setNCCL/setRCCL "
         "writes race the read here."
     )
+
+
+# ---------------------------------------------------------------------------
+# Followup hardening (2026-05-19 review residual):
+# tsrCreateStream / tsrCreateEvent must validate the backend impl
+# pointer BEFORE bumping the live-handle counter.  A failing CUDA/HIP
+# create that bumped the counter would trap tsrShutdown forever
+# (the ratchet refuses while any counter is non-zero) and would smuggle
+# a NULL `impl` out to the caller.
+# ---------------------------------------------------------------------------
+
+def _create_body(symbol: str) -> str:
+    text = RUNTIME_CPP.read_text(encoding="utf-8")
+    idx = text.find(f"TsrStatus {symbol}(")
+    assert idx >= 0, f"{symbol} not found in tessera_runtime.cpp"
+    end = text.find("\n}\n", idx)
+    return text[idx:end] if end > 0 else text[idx:]
+
+
+def test_create_stream_validates_backend_impl_before_counter_bump() -> None:
+    body = _create_body("tsrCreateStream")
+    # The null check must appear before the counter increment.
+    null_check_idx = body.find("createStream returned NULL")
+    if null_check_idx < 0:
+        # Allow the alternative "impl == nullptr" branch wording too.
+        null_check_idx = body.find("impl == nullptr")
+    assert null_check_idx >= 0, (
+        "tsrCreateStream must reject a NULL backend impl before "
+        "bumping g_live_streams — otherwise a CUDA/HIP failure smuggles "
+        "an invalid handle out and traps tsrShutdown.  Source body:\n"
+        f"{body}"
+    )
+    counter_idx = body.find("++g_live_streams")
+    assert counter_idx > null_check_idx, (
+        "tsrCreateStream increments g_live_streams BEFORE checking the "
+        "backend's impl pointer — a failed create would unbalance the "
+        "counter and trap tsrShutdown."
+    )
+
+
+def test_create_event_validates_backend_impl_before_counter_bump() -> None:
+    body = _create_body("tsrCreateEvent")
+    null_check_idx = body.find("createEvent returned NULL")
+    if null_check_idx < 0:
+        null_check_idx = body.find("impl == nullptr")
+    assert null_check_idx >= 0, (
+        "tsrCreateEvent must reject a NULL backend impl before "
+        "bumping g_live_events.  Source body:\n"
+        f"{body}"
+    )
+    counter_idx = body.find("++g_live_events")
+    assert counter_idx > null_check_idx, (
+        "tsrCreateEvent increments g_live_events BEFORE checking the "
+        "backend's impl pointer."
+    )
+
+
+def test_create_paths_surface_backend_error_messages() -> None:
+    """When the backend reports failure via ``consumeLastError``, the
+    C ABI must propagate that string to ``tsrGetLastError`` — the
+    caller has to know *why* the create failed, not just that it did."""
+    for symbol in ("tsrCreateStream", "tsrCreateEvent"):
+        body = _create_body(symbol)
+        assert "consumeLastError" in body, (
+            f"{symbol}: must consult `dev->be->consumeLastError` on the "
+            f"failure path so CUDA/HIP errors propagate verbatim.  "
+            f"Source body:\n{body}"
+        )

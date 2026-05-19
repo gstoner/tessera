@@ -36,11 +36,22 @@ _LLVM_BIN_HINTS = (
 
 def _resolve(env_var: str, repo_relative: str, fallback: str) -> str:
     """Pick the first available location for a build binary."""
-    if env_var in os.environ:
-        return os.environ[env_var]
     repo_root = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "..")
     )
+    if env_var in os.environ:
+        override = os.environ[env_var]
+        # Caller-provided overrides must absolutize against the repo
+        # root.  Lit runs each fixture from its ``Output/`` subdir, so
+        # a relative path like ``build/tools/tessera-opt/tessera-opt``
+        # would resolve to ``Output/build/tools/.../tessera-opt`` and
+        # fail.  Honor absolute paths verbatim; expand a leading ``~``;
+        # otherwise join against the repo root.
+        if override.startswith("~"):
+            override = os.path.expanduser(override)
+        if not os.path.isabs(override):
+            override = os.path.abspath(os.path.join(repo_root, override))
+        return override
     if repo_relative:
         candidate = os.path.join(repo_root, repo_relative)
         if os.path.isfile(candidate) and os.access(candidate, os.X_OK):

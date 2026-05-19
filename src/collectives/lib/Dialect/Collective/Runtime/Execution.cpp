@@ -63,6 +63,16 @@ static std::shared_ptr<ExecRuntime> _grabRuntime(int tokens) {
 }
 
 extern "C" void tessera_qos_limit_set(int tokens) {
+  // Defensive clamp: ``TokenLimiter::acquire`` blocks on
+  // ``tokens_ > 0``; if a caller passes 0 (or negative) every
+  // subsequent submitter would deadlock waiting for a token that
+  // will never be released.  The minimum useful limit is 1.  We
+  // clamp silently because the C ABI returns ``void`` — a future
+  // revision could change the entry point's return type to
+  // surface the invalid argument as an error code.
+  if (tokens < 1) {
+    tokens = 1;
+  }
   auto rt = _grabRuntime(tokens);
   // Mutex released — ``TokenLimiter::set`` takes its own internal lock.
   rt->setMaxInflight(tokens);

@@ -270,13 +270,51 @@ def load_state(
     *,
     target_version: int | None = None,
     collections: tuple[str, ...] | list[str] | set[str] | None = None,
+    trust_treedef: bool = True,
 ) -> Any:
-    """Load a Tessera state tree saved by :func:`save_state`."""
+    """Load a Tessera state tree saved by :func:`save_state`.
+
+    .. warning::
+
+       The ``__treedef__`` blob in a state file is a pickled Python
+       object — loading it via :func:`pickle.loads` will execute
+       arbitrary code embedded in a malicious checkpoint.  Tessera
+       defaults to ``trust_treedef=True`` for ergonomic
+       same-process save/load, but you should pass
+       ``trust_treedef=False`` whenever the source of the file is
+       not under your control (downloaded checkpoints, shared
+       artifacts, multi-tenant storage, etc.).  When
+       ``trust_treedef=False`` the function returns a checksum-
+       verified leaf bundle and refuses to materialize the treedef.
+
+       Long-term, treedef persistence should move to a declarative
+       format that can be deserialized without code execution;
+       until then, ``trust_treedef`` is the explicit opt-out.
+
+    Parameters
+    ----------
+    path, target_version, collections
+        Standard load-state knobs.
+    trust_treedef
+        **Default: True** (preserves the existing save/load
+        ergonomics in same-process pipelines).  Set to ``False``
+        on any untrusted source.
+    """
     source = Path(path)
     if not source.exists():
         raise CheckpointError(f"state file not found: {source}")
     with np.load(source, allow_pickle=False) as data:
         manifest = json.loads(bytes(data["__manifest__"].tolist()).decode("utf-8"))
+        if not trust_treedef:
+            raise CheckpointError(
+                "load_state(trust_treedef=False): refusing to "
+                "deserialize the pickled treedef from an untrusted "
+                "source.  Returning the raw checksum-verified leaves "
+                "is not yet supported; track a declarative treedef "
+                "format in the milestone plan.  Pass "
+                "trust_treedef=True only for checkpoints from a "
+                "trusted source (e.g., your own training pipeline)."
+            )
         treedef = pickle.loads(bytes(data["__treedef__"].tolist()))
         leaves = []
         for meta in manifest["leaves"]:

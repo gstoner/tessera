@@ -11,8 +11,12 @@ methods do their own bookkeeping in Python and call into the
 runtime only for the FA-4 read path that downstream attention
 layers exercise.  This canonical program documents that honestly:
 ``target_decision`` names the handle backend, and
-``fallback_reason`` is ``None`` on Darwin (the handle is a real
-native data structure) and ``NON_DARWIN_HOST`` elsewhere.
+``fallback_reason`` is ``REFERENCE_FORCED`` on every host (the
+manifest is capable but the driver body does Python-side
+bookkeeping rather than dispatching a fused kernel; the M5/M3
+contract is to say so).  On non-Darwin hosts the reason carries
+``NON_DARWIN_HOST`` instead, which strictly subsumes
+``REFERENCE_FORCED``.
 """
 
 from __future__ import annotations

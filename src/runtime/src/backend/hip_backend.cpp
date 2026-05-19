@@ -222,28 +222,28 @@ class HipBackend final : public Backend {
   }
 
   // ------------------------------------------------------------------ kernel
-  void launchHostKernel(Stream* s,
-                        const tsrLaunchParams* params,
-                        tsrHostKernelFn kernel,
-                        void* user_payload) override {
-    if (!kernel) return;
-    if (s) {
-      auto* hs = static_cast<HipStream*>(s);
-      struct Ctx { tsrHostKernelFn fn; const tsrLaunchParams* p; void* payload; };
-      auto* ctx = new Ctx{kernel, params, user_payload};
-      // hipLaunchHostFunc is available in ROCm 5.6+.
-      hipError_t e = hipLaunchHostFunc(
-          hs->hip_stream,
-          [](void* arg) {
-            auto* c = reinterpret_cast<Ctx*>(arg);
-            c->fn(c->p, c->payload);
-            delete c;
-          },
-          ctx);
-      if (e == hipSuccess) return;
-      delete ctx;
+  TsrStatus launchHostKernel(Stream* /*s*/,
+                             const tsrLaunchParams* /*params*/,
+                             tsrHostKernelFn /*kernel*/,
+                             void* /*user_payload*/) override {
+    // See ``CudaBackend::launchHostKernel`` for the rationale —
+    // the ``fn(tsrKernelCtx*, tsrTileCoord*, tsrThreadCoord*)``
+    // contract from ``tsr_kernel.h`` can't be honored from a
+    // ``hipLaunchHostFunc`` callback that only carries a single
+    // ``void*`` payload.  Callers should route to the CPU
+    // device for host tile kernels.
+    return TSR_STATUS_UNIMPLEMENTED;
+  }
+
+  TsrStatus consumeLastError(std::string* msg) override {
+    hipError_t e = g_last_hip_err;
+    if (e == hipSuccess) return TSR_STATUS_SUCCESS;
+    g_last_hip_err = hipSuccess;     // consume — caller now owns it
+    if (msg) {
+      *msg = "hip: ";
+      *msg += hipGetErrorString(e);
     }
-    kernel(params, user_payload);
+    return TSR_STATUS_DEVICE_ERROR;
   }
 };
 

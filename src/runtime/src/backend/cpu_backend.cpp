@@ -112,10 +112,10 @@ class CpuBackend final : public Backend {
     ti->bar->wait();
   }
 
-  void launchHostKernel(Stream* s,
-                        const tsrLaunchParams* params,
-                        tsrHostKernelFn kernel,
-                        void* user_payload) override {
+  TsrStatus launchHostKernel(Stream* s,
+                             const tsrLaunchParams* params,
+                             tsrHostKernelFn kernel,
+                             void* user_payload) override {
     (void)s;
     // Execute one tile at a time. Inside each tile, reuse the backend's
     // persistent worker pool for logical tile threads. The pool is grown when
@@ -152,6 +152,7 @@ class CpuBackend final : public Backend {
       }
       pool_.WaitIdle();
     }
+    return TSR_STATUS_SUCCESS;
   }
 
   bool gemmF32(const float* a,

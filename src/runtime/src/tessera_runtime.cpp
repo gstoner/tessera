@@ -30,10 +30,42 @@ static std::vector<tsrDevice_t*> g_devices;
 static bool g_initialized = false;
 static std::mutex g_mu;
 
+// Live-handle accounting (protected by `g_mu`).  Streams, events, and
+// buffers all carry a raw `tsrDevice_t*` back-pointer.  If
+// `tsrShutdown()` deletes the underlying devices while handles are
+// still alive, any subsequent `tsrFree` / `tsrDestroyStream` / ...
+// dereferences a freed pointer.  We count outstanding handles so
+// `tsrShutdown` can refuse with a clear diagnostic instead of
+// silently corrupting memory.
+static uint64_t g_live_streams = 0;
+static uint64_t g_live_events = 0;
+static uint64_t g_live_buffers = 0;
+
+static uint64_t _liveHandleCount() {
+  // Caller must hold ``g_mu``.
+  return g_live_streams + g_live_events + g_live_buffers;
+}
+
 static thread_local std::string g_last_error;
 static bool g_profiling_enabled = true;
 
 static void SetLastError(const char* msg) { g_last_error = msg ? msg : ""; }
+
+// Consult the backend's per-thread last-error slot after a
+// ``void``-returning backend call.  If the backend reports a
+// device error, surface it via the C ABI's ``tsrGetLastError()``
+// channel and return the matching ``TsrStatus``.  This is how
+// CUDA/HIP errors that previously got swallowed by the C ABI now
+// propagate (P1 #3 from the 2026-05-19 static audit).
+static TsrStatus _PropagateBackendError(tsrDevice_t* dev) {
+  if (!dev) return TSR_STATUS_SUCCESS;
+  std::string msg;
+  TsrStatus st = dev->be->consumeLastError(&msg);
+  if (st != TSR_STATUS_SUCCESS) {
+    SetLastError(msg.c_str());
+  }
+  return st;
+}
 static uint64_t NowNs() {
   using namespace std::chrono;
   static const auto t0 = steady_clock::now();
@@ -96,6 +128,25 @@ TsrStatus tsrInit(void) {
 
 TsrStatus tsrShutdown(void) {
   std::lock_guard<std::mutex> lk(g_mu);
+  // Refuse to tear down devices while streams / events / buffers are
+  // still live — those handles carry raw ``tsrDevice_t*`` back-pointers
+  // and would dereference freed memory on a subsequent ``tsrFree`` /
+  // ``tsrDestroyStream`` / ``tsrDestroyEvent`` call.  This is the
+  // notebook-style use-after-free P1 the audit flagged; we surface it
+  // here as ``INVALID_ARGUMENT`` with a precise diagnostic instead of
+  // letting it become memory corruption.
+  if (uint64_t live = _liveHandleCount()) {
+    static thread_local std::string buf;
+    buf = "tsrShutdown: refusing to destroy devices with live handles "
+          "(streams=" + std::to_string(g_live_streams) +
+          ", events="  + std::to_string(g_live_events)  +
+          ", buffers=" + std::to_string(g_live_buffers) +
+          ", total="   + std::to_string(live) +
+          "); call tsrDestroyStream / tsrDestroyEvent / tsrFree for "
+          "every outstanding handle first";
+    SetLastError(buf.c_str());
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   for (auto* d : g_devices) delete d;
   g_devices.clear();
   // Flip the initialized flag so a later `tsrInit()` repopulates the
@@ -149,6 +200,7 @@ TsrStatus tsrCreateStream(tsrDevice dev, tsrStream* out) {
   s->impl = dev->be->createStream();
   s->dev = dev;
   *out = s;
+  { std::lock_guard<std::mutex> lk(g_mu); ++g_live_streams; }
   return TSR_STATUS_SUCCESS;
 }
 
@@ -156,13 +208,15 @@ TsrStatus tsrDestroyStream(tsrStream s) {
   if (!s) { SetLastError("s==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
   s->dev->be->destroyStream(s->impl);
   delete s;
+  { std::lock_guard<std::mutex> lk(g_mu);
+    if (g_live_streams) --g_live_streams; }
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrStreamSynchronize(tsrStream s) {
   if (!s) { SetLastError("s==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
   s->dev->be->streamSync(s->impl);
-  return TSR_STATUS_SUCCESS;
+  return _PropagateBackendError(s->dev);
 }
 
 TsrStatus tsrCreateEvent(tsrDevice dev, tsrEvent* out) {
@@ -171,31 +225,34 @@ TsrStatus tsrCreateEvent(tsrDevice dev, tsrEvent* out) {
   e->impl = dev->be->createEvent();
   e->dev = dev;
   *out = e;
+  { std::lock_guard<std::mutex> lk(g_mu); ++g_live_events; }
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrRecordEvent(tsrEvent e, tsrStream s) {
   if (!e || !s) { SetLastError("e/s==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
   e->dev->be->recordEvent(e->impl, s->impl);
-  return TSR_STATUS_SUCCESS;
+  return _PropagateBackendError(e->dev);
 }
 
 TsrStatus tsrWaitEvent(tsrEvent e, tsrStream s) {
   if (!e || !s) { SetLastError("e/s==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
   e->dev->be->waitEvent(e->impl, s->impl);
-  return TSR_STATUS_SUCCESS;
+  return _PropagateBackendError(e->dev);
 }
 
 TsrStatus tsrEventSynchronize(tsrEvent e) {
   if (!e) { SetLastError("e==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
   e->dev->be->eventSync(e->impl);
-  return TSR_STATUS_SUCCESS;
+  return _PropagateBackendError(e->dev);
 }
 
 TsrStatus tsrDestroyEvent(tsrEvent e) {
   if (!e) { SetLastError("e==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
   e->dev->be->destroyEvent(e->impl);
   delete e;
+  { std::lock_guard<std::mutex> lk(g_mu);
+    if (g_live_events) --g_live_events; }
   return TSR_STATUS_SUCCESS;
 }
 
@@ -214,26 +271,30 @@ TsrStatus tsrMalloc(tsrDevice dev, size_t bytes, tsrBuffer* out) {
   b->impl = impl;
   b->dev = dev;
   *out = b;
+  { std::lock_guard<std::mutex> lk(g_mu); ++g_live_buffers; }
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrFree(tsrBuffer b) {
   if (!b) { SetLastError("b==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
-  b->dev->be->free(b->impl);
+  tsrDevice_t* dev = b->dev;
+  dev->be->free(b->impl);
   delete b;
-  return TSR_STATUS_SUCCESS;
+  { std::lock_guard<std::mutex> lk(g_mu);
+    if (g_live_buffers) --g_live_buffers; }
+  return _PropagateBackendError(dev);
 }
 
 TsrStatus tsrMemset(tsrBuffer b, int value, size_t bytes) {
   if (!b) { SetLastError("b==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
   b->dev->be->memset(b->impl, value, bytes);
-  return TSR_STATUS_SUCCESS;
+  return _PropagateBackendError(b->dev);
 }
 
 TsrStatus tsrMemcpy(tsrBuffer dst, const tsrBuffer src, size_t bytes, TsrMemcpyKind kind) {
   if (!dst || !src) { SetLastError("dst/src==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
   dst->dev->be->memcpy(dst->impl, src->impl, bytes, kind);
-  return TSR_STATUS_SUCCESS;
+  return _PropagateBackendError(dst->dev);
 }
 
 TsrStatus tsrMap(tsrBuffer b, void** host_ptr, size_t* bytes) {
@@ -319,8 +380,13 @@ TsrStatus tsrLaunchHostTileKernel(tsrStream s,
                                   tsrHostKernelFn kernel,
                                   void* user_payload) {
   if (!s || !params || !kernel) { SetLastError("s/params/kernel==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
-  s->dev->be->launchHostKernel(s->impl, params, kernel, user_payload);
-  return TSR_STATUS_SUCCESS;
+  TsrStatus st = s->dev->be->launchHostKernel(s->impl, params, kernel, user_payload);
+  if (st == TSR_STATUS_UNIMPLEMENTED) {
+    SetLastError(
+      "launchHostTileKernel: this backend cannot honor the host tile "
+      "kernel ABI; route to the CPU device for host tile kernels");
+  }
+  return st;
 }
 
 TsrStatus tsrLaunchHostTileKernelSync(tsrDevice dev,

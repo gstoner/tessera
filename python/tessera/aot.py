@@ -72,7 +72,33 @@ def export(fn: Callable[..., Any], *example_inputs: Any, path: str | os.PathLike
     return artifact
 
 
-def load(path: str | os.PathLike) -> AOTArtifact:
+def load(path: str | os.PathLike, *, allow_pickle: bool = False) -> AOTArtifact:
+    """Load an AOT artifact.
+
+    Parameters
+    ----------
+    path
+        Directory containing ``artifact.json`` (and optionally a
+        ``callable.pkl`` sidecar with a pickled callable).
+    allow_pickle
+        **Default: False.**  When ``True``, also load the
+        ``callable.pkl`` sidecar via :func:`pickle.loads`.
+
+        .. warning::
+
+           ``pickle.loads`` will execute arbitrary code embedded in
+           a maliciously-crafted artifact.  Tessera defaults to
+           ``allow_pickle=False`` so an artifact received from an
+           untrusted source is safe to inspect — the IR, metadata,
+           and ABI signature load via JSON only.  Set
+           ``allow_pickle=True`` only when the artifact came from
+           a trusted source (e.g., your own build pipeline).
+
+           The long-term plan is to move ``callable`` persistence
+           to a declarative format that can be deserialized without
+           code execution; until then ``allow_pickle`` is the
+           opt-in gate.
+    """
     root = Path(path)
     data = json.loads((root / "artifact.json").read_text())
     rt_data = data["runtime_artifact"]
@@ -86,7 +112,7 @@ def load(path: str | os.PathLike) -> AOTArtifact:
     )
     fn = None
     callable_path = root / "callable.pkl"
-    if callable_path.exists():
+    if callable_path.exists() and allow_pickle:
         try:
             fn = pickle.loads(callable_path.read_bytes())
         except Exception:

@@ -9,11 +9,13 @@ which layers of the compiler stack are real.
 See :doc:`docs/audit/compiler_improvement_milestone_plan_2026_05_18`
 §M1 + §M1.5 for the full sequencing.
 
-This module is the **registry** for the 6-program suite.  M1 ships
-the first two programs (`rotor_sandwich_norm` and
-`matmul_softmax_matmul`); the remaining four are listed here with
-explicit ``status="planned"`` so the suite cannot silently look
-complete.
+This module is the **registry** for the 6-program suite.  All six
+programs are shipped as of M1.5 (2026-05-18) — see ``CANONICAL_PROGRAMS``
+below for the per-program description, and the milestone plan
+``docs/audit/compiler_improvement_milestone_plan_2026_05_18.md`` §M1.5
+for the honest-reporting notes (programs that don't yet have a fused
+backend symbol emit ``fallback_reason=REFERENCE_FORCED`` so the
+CompileReport stays accurate).
 """
 
 from __future__ import annotations

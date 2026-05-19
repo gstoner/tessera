@@ -233,31 +233,32 @@ class CudaBackend final : public Backend {
   }
 
   // ------------------------------------------------------------------ kernel
-  void launchHostKernel(Stream* s,
-                        const tsrLaunchParams* params,
-                        tsrHostKernelFn kernel,
-                        void* user_payload) override {
-    // For host-side "kernels" we simply invoke the function directly.
-    // In a full implementation this would enqueue via cudaLaunchHostFunc.
-    if (!kernel) return;
-    if (s) {
-      auto* cs = static_cast<CudaStream*>(s);
-      // Use cudaLaunchHostFunc if available (CUDA 10.0+).
-      struct Ctx { tsrHostKernelFn fn; const tsrLaunchParams* p; void* payload; };
-      auto* ctx = new Ctx{kernel, params, user_payload};
-      cudaError_t e = cudaLaunchHostFunc(
-          cs->cu_stream,
-          [](void* arg) {
-            auto* c = reinterpret_cast<Ctx*>(arg);
-            c->fn(c->p, c->payload);
-            delete c;
-          },
-          ctx);
-      if (e == cudaSuccess) return;
-      // Fallback: synchronous call
-      delete ctx;
+  TsrStatus launchHostKernel(Stream* /*s*/,
+                             const tsrLaunchParams* /*params*/,
+                             tsrHostKernelFn /*kernel*/,
+                             void* /*user_payload*/) override {
+    // Host tile kernels follow the
+    //   ``fn(tsrKernelCtx*, const tsrTileCoord*, const tsrThreadCoord*)``
+    // contract from ``tsr_kernel.h``.  The CPU backend implements the
+    // full nested grid×tile iteration to honor that ABI; the CUDA
+    // stream model has no equivalent (a ``cudaLaunchHostFunc``
+    // callback only receives a single ``void*`` payload, not the
+    // per-thread coords).  Returning ``TSR_STATUS_UNIMPLEMENTED``
+    // here lets callers route to the CPU device explicitly and
+    // avoids the pre-2026-05-19 bug where the launch site silently
+    // invoked ``fn(params, payload)`` with the wrong arg count.
+    return TSR_STATUS_UNIMPLEMENTED;
+  }
+
+  TsrStatus consumeLastError(std::string* msg) override {
+    cudaError_t e = g_last_cuda_err;
+    if (e == cudaSuccess) return TSR_STATUS_SUCCESS;
+    g_last_cuda_err = cudaSuccess;   // consume — caller now owns it
+    if (msg) {
+      *msg = "cuda: ";
+      *msg += cudaGetErrorString(e);
     }
-    kernel(params, user_payload);
+    return TSR_STATUS_DEVICE_ERROR;
   }
 };
 

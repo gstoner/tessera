@@ -78,9 +78,20 @@ def test_aot_export_load_run_and_text_exports(tmp_path):
     assert artifact.metadata["target"] == "cpu"
     np.testing.assert_array_equal(artifact.run(np.array([2])), [3])
 
-    loaded = ts.aot.load(tmp_path / "aot")
+    # ``aot.load`` defaults to ``allow_pickle=False`` so untrusted
+    # artifacts are safe to inspect.  This round-trip test is the
+    # same-process trusted-load case, so we opt in explicitly.
+    loaded = ts.aot.load(tmp_path / "aot", allow_pickle=True)
     np.testing.assert_array_equal(loaded.run(np.array([4])), [5])
     assert loaded.artifact_hash == artifact.artifact_hash
+
+    # Default load (untrusted-safe) returns the IR/metadata bundle
+    # without the picklable callable.
+    safe_loaded = ts.aot.load(tmp_path / "aot")
+    assert safe_loaded.artifact_hash == artifact.artifact_hash
+    assert safe_loaded.fn is None, (
+        "aot.load(allow_pickle=False) must NOT deserialize callable.pkl"
+    )
 
     stablehlo = ts.aot.stablehlo_export(artifact)
     assert "stablehlo reference export" in stablehlo

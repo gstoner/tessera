@@ -57,10 +57,23 @@ public:
       this->limiter_.release();
     };
 
+    // Snapshot the adapter pointers under ``mu_`` so concurrent
+    // ``setNCCL`` / ``setRCCL`` writes don't race with the read here.
+    // The unique_ptr ownership stays inside the class — we only
+    // capture the raw pointer (whose lifetime is bounded by the
+    // class) for the call below.
+    NCCLAdapter* nccl_snap = nullptr;
+    RCCLAdapter* rccl_snap = nullptr;
+    {
+      std::lock_guard<std::mutex> g(mu_);
+      nccl_snap = nccl_.get();
+      rccl_snap = rccl_.get();
+    }
+
     // Prefer NCCL/RCCL if enabled; otherwise immediate completion.
-    if (nccl_) nccl_->submitChunkAsync(d.ptr, d.bytes, d.device, d.stream, done);
-    else if (rccl_) rccl_->submitChunkAsync(d.ptr, d.bytes, d.device, d.stream, done);
-    else done();
+    if (nccl_snap)      nccl_snap->submitChunkAsync(d.ptr, d.bytes, d.device, d.stream, done);
+    else if (rccl_snap) rccl_snap->submitChunkAsync(d.ptr, d.bytes, d.device, d.stream, done);
+    else                done();
   }
 
   // Exposed to C hooks

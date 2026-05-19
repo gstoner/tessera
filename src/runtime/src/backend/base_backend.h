@@ -51,10 +51,18 @@ class Backend {
   virtual void waitEvent(Event* e, Stream* s) = 0;
   virtual void eventSync(Event* e) = 0;
 
-  virtual void launchHostKernel(Stream* s,
-                                const tsrLaunchParams* params,
-                                tsrHostKernelFn kernel,
-                                void* user_payload) = 0;
+  // Launch a host-portable tile kernel.  Returns TSR_STATUS_SUCCESS on
+  // dispatch (the kernel may still execute asynchronously on the
+  // backend's stream model), or a non-SUCCESS status when the backend
+  // cannot honor the per-tile/per-thread contract (e.g., GPU backends
+  // that have no equivalent host-side iteration semantics).  The CPU
+  // backend implements the full nested grid×tile iteration; the
+  // CUDA/HIP backends report TSR_STATUS_UNIMPLEMENTED so callers can
+  // route to the CPU device explicitly.
+  virtual TsrStatus launchHostKernel(Stream* s,
+                                     const tsrLaunchParams* params,
+                                     tsrHostKernelFn kernel,
+                                     void* user_payload) = 0;
 
   virtual bool gemmF32(const float* a,
                        const float* b,
@@ -67,6 +75,19 @@ class Backend {
   }
 
   virtual uint32_t workerThreadCount() const { return 0; }
+
+  // Consult-and-clear the backend's last device-level error.
+  // Returns ``TSR_STATUS_SUCCESS`` when no error is pending; writes
+  // the cleared error's human-readable message into ``*msg`` (when
+  // non-null) for any other status.  Called by the C ABI after
+  // ``void``-returning backend methods (``memcpy`` / ``memset`` /
+  // ``free`` / ``streamSync`` / ``recordEvent`` / ``waitEvent`` /
+  // ``eventSync``) so a failure inside the backend surfaces as a
+  // real ``TsrStatus`` instead of being swallowed.  The default
+  // implementation (CPU + reference backends) reports no error.
+  virtual TsrStatus consumeLastError(std::string* /*msg*/) {
+    return TSR_STATUS_SUCCESS;
+  }
 };
 
 // Factories

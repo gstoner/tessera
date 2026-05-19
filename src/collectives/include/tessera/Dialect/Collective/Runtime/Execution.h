@@ -87,6 +87,14 @@ extern "C" {
   // Explicit teardown for embedded / notebook / reload-test lifecycles.
   // Safe to call when the runtime was never initialized (no-op).
   // Subsequent ``tessera_*`` calls re-initialize on demand.
+  //
+  // Concurrency: this entry point is safe to call while another
+  // thread is inside ``tessera_submit_chunk_async`` — the in-flight
+  // submitter holds a ``shared_ptr`` to the runtime so the actual
+  // destruction is deferred until the last submit returns.  Callers
+  // must not, however, rely on any specific runtime *identity*
+  // surviving across a shutdown: the next submit may construct a
+  // fresh runtime with a freshly-configured ``TokenLimiter``.
   void tessera_shutdown_runtime();
 }
 

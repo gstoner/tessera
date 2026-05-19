@@ -4,6 +4,7 @@
 #include <fstream>
 #include <chrono>
 #include <map>
+#include <mutex>
 
 namespace tessera { namespace collective {
 
@@ -23,6 +24,7 @@ class PerfettoTraceWriter {
 public:
   void begin(const std::string& name, const std::string& cat, int pid, int tid) {
     TraceEvent e; e.name=name; e.cat=cat; e.ph='B'; e.pid=pid; e.tid=tid; e.ts_us=now();
+    std::lock_guard<std::mutex> g(mu_);
     events_.push_back(e);
   }
   void begin(const std::string& name, const std::string& cat, int pid, int tid,
@@ -30,27 +32,38 @@ public:
              const std::map<std::string, double>& nargs = {}) {
     TraceEvent e; e.name=name; e.cat=cat; e.ph='B'; e.pid=pid; e.tid=tid; e.ts_us=now();
     e.sargs=sargs; e.nargs=nargs;
+    std::lock_guard<std::mutex> g(mu_);
     events_.push_back(e);
   }
   void end(const std::string& name, const std::string& cat, int pid, int tid) {
     TraceEvent e; e.name=name; e.cat=cat; e.ph='E'; e.pid=pid; e.tid=tid; e.ts_us=now();
+    std::lock_guard<std::mutex> g(mu_);
     events_.push_back(e);
   }
   void counter(const std::string& name, double v, int pid, int tid) {
     TraceEvent e; e.name=name; e.cat="counter"; e.ph='C'; e.pid=pid; e.tid=tid; e.ts_us=now(); e.nargs["value"]=v;
+    std::lock_guard<std::mutex> g(mu_);
     events_.push_back(e);
   }
   void annotate(const std::string& key, const std::string& val) {
+    std::lock_guard<std::mutex> g(mu_);
     meta_[key] = val;
   }
 
   void write(const std::string& path) {
+    std::map<std::string,std::string> meta;
+    std::vector<TraceEvent> events;
+    {
+      std::lock_guard<std::mutex> g(mu_);
+      meta = meta_;
+      events = events_;
+    }
     std::ofstream f(path);
     f << "{\n";
-    if (!meta_.empty()) {
+    if (!meta.empty()) {
       f << "\"metadata\": {";
       bool first=true;
-      for (auto &kv : meta_) {
+      for (auto &kv : meta) {
         if (!first) f << ",";
         f << "\"" << escape(kv.first) << "\": \"" << escape(kv.second) << "\"";
         first=false;
@@ -58,8 +71,8 @@ public:
       f << "},\n";
     }
     f << "\"traceEvents\": [\n";
-    for (size_t i=0;i<events_.size();++i) {
-      const auto &e=events_[i];
+    for (size_t i=0;i<events.size();++i) {
+      const auto &e=events[i];
       f << " {";
       f << "\"name\":\"" << escape(e.name) << "\",";
       f << "\"cat\":\"" << escape(e.cat) << "\",";
@@ -81,7 +94,7 @@ public:
         f << "}";
       }
       f << " }";
-      if (i+1<events_.size()) f << ",";
+      if (i+1<events.size()) f << ",";
       f << "\n";
     }
     f << "] }\n";
@@ -104,6 +117,7 @@ private:
     auto t = steady_clock::now();
     return duration<double, std::micro>(t - t0).count();
   }
+  std::mutex mu_;
   std::map<std::string,std::string> meta_;
   std::vector<TraceEvent> events_;
 };

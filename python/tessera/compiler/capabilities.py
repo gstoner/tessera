@@ -145,6 +145,78 @@ def _ops(status: RuntimeStatus, names: tuple[str, ...], *, reason: str = "", dty
 _CPU_OPS = tuple(sorted(GRAPH_OP_TO_SPEC))
 _APPLE_GPU_READY = ("tessera.matmul", "tessera.flash_attn", "tessera.softmax", "tessera.softmax_safe", "tessera.gelu", "tessera.rope")
 
+# E1 (partial-ops uplift, 2026-05-20).  apple_gpu ships fused MSL kernels for
+# all 17 GA primitives (12 GA3 core + 5 GA5 differential-form) and 9 EBM
+# primitives.  This table mirrors ``backend_manifest._CLIFFORD_APPLE_GPU_FUSED``
+# + ``_EBM_APPLE_GPU_FUSED`` so the e2e_coverage audit walker's ``runtime``
+# axis resolves to ``fused`` (instead of ``unknown``) for these ops — that's
+# what flips them from PARTIAL → COMPLETE.  Per-op dtype tuples reflect the
+# actual kernel inventory: only geometric_product + rotor_sandwich ship
+# fp16/bf16 ports today; the other 15 GA ops and every EBM op are fp32-only
+# for v1.  Adding more dtype lanes is a backend-side change; this table just
+# teaches the capability registry what the manifest already says.
+_APPLE_GPU_FUSED_OPS: dict[str, tuple[str, ...]] = {
+    # GA3 core (12 ops)
+    "clifford_geometric_product": ("fp32", "fp16", "bf16"),
+    "clifford_rotor_sandwich":    ("fp32", "fp16", "bf16"),
+    "clifford_reverse":           ("fp32",),
+    "clifford_grade_involution":  ("fp32",),
+    "clifford_conjugate":         ("fp32",),
+    "clifford_norm":              ("fp32",),
+    "clifford_wedge":             ("fp32",),
+    "clifford_left_contraction":  ("fp32",),
+    "clifford_inner":             ("fp32",),
+    "clifford_grade_projection":  ("fp32",),
+    "clifford_exp":               ("fp32",),
+    "clifford_log":               ("fp32",),
+    # GA5 differential-form (5 ops)
+    "clifford_hodge_star":        ("fp32",),
+    "clifford_ext_deriv":         ("fp32",),
+    "clifford_vec_deriv":         ("fp32",),
+    "clifford_codiff":            ("fp32",),
+    "clifford_integral":          ("fp32",),
+    # EBM (9 ops with shipped MSL kernels)
+    "ebm_inner_step":             ("fp32",),
+    "ebm_refinement":             ("fp32",),
+    "ebm_langevin_step":          ("fp32",),
+    "ebm_decode_init":            ("fp32",),
+    "ebm_bivector_langevin":      ("fp32",),
+    "ebm_sphere_langevin":        ("fp32",),
+    "ebm_self_verify":            ("fp32",),
+    "ebm_energy":                 ("fp32",),
+    "ebm_partition_exact":        ("fp32",),
+    # E2 (partial-ops uplift, 2026-05-20) — M7 ``complex_*`` ops with
+    # fused Apple GPU MSL kernels.  Keyed by the **public** name (the
+    # backend manifest uses a ``complex_`` prefix on two of them —
+    # ``mobius`` → ``complex_mobius``, ``stereographic`` →
+    # ``complex_stereographic`` — but ``audit._axis_runtime`` looks the
+    # capability registry up by the public name, not the backend alias).
+    "complex_mul":                ("fp32",),
+    "complex_exp":                ("fp32",),
+    "mobius":                     ("fp32",),
+    "stereographic":              ("fp32",),
+}
+
+
+def _apple_gpu_fused_caps() -> dict[str, OpCapability]:
+    """Build per-op ``OpCapability(runtime_status='fused')`` entries from
+    ``_APPLE_GPU_FUSED_OPS``.  Keyed by ``canonical_op(name)`` to match
+    ``audit._axis_runtime``'s lookup path.
+    """
+    out: dict[str, OpCapability] = {}
+    for name, dtypes in _APPLE_GPU_FUSED_OPS.items():
+        key = canonical_op(name)
+        out[key] = OpCapability(
+            op_name=key,
+            runtime_status="fused",
+            dtypes=dtypes,
+            reason=(
+                f"Apple GPU ships a fused MSL kernel for {name} "
+                f"(backend_manifest._{'CLIFFORD' if name.startswith('clifford_') else 'EBM'}_APPLE_GPU_FUSED)"
+            ),
+        )
+    return out
+
 # Sprint G-2 (2026-05-11): expanded to match the planned NVIDIA kernel
 # inventory in `docs/nvidia_cuda13_kernel_inventory.md`.  Each entry
 # here ships a Target IR artifact under CUDA 13.2 U1.
@@ -395,6 +467,10 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         supported_ops={
             **_ops("ready", _APPLE_GPU_READY, reason="Apple GPU runtime shim supports this single-op smoke path"),
             **_ops("artifact_only", ("tessera.moe", "tessera.add", "tessera.mul"), reason="Apple GPU target contract exists but native execution is not wired for this op"),
+            # E1 (2026-05-20) — 26 fused GA + EBM MSL kernels.  These are
+            # the same kernels documented in ``backend_manifest`` and
+            # benchmarked end-to-end by ``benchmarks/apple_gpu/benchmark_ga_ebm.py``.
+            **_apple_gpu_fused_caps(),
         },
         supported_dtypes=("fp32", "f32"),
         features=("metal", "mps", "msl"),

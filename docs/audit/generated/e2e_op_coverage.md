@@ -24,25 +24,55 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 8 |
+| ``complete`` | 38 |
 | ``runnable_reference`` | 216 |
 | ``artifact_only`` | 0 |
-| ``partial`` | 47 |
+| ``partial`` | 17 |
 | ``planned`` | 0 |
 | **total** | **271** |
 
-## complete (8)
+## complete (38)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
 | ``flash_attn`` | attention | public | public | registered | partial | fused | ready | none |
 | ``gelu`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``ebm_bivector_langevin`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``ebm_decode_init`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``ebm_energy`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``ebm_inner_step`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``ebm_langevin_step`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``ebm_partition_exact`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``ebm_refinement`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``ebm_self_verify`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``ebm_sphere_langevin`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_codiff`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_conjugate`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_exp`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_ext_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_geometric_product`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_grade_involution`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_grade_projection`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_hodge_star`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_inner`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_integral`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_left_contraction`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_log`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_norm`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_reverse`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_rotor_sandwich`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_vec_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_wedge`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``gemm`` | loop_nest | public | public | registered | partial | fused | ready | none |
 | ``matmul`` | loop_nest | public | public | registered | partial | fused | ready | none |
 | ``rmsnorm`` | normalization | public | public | registered | partial | fused | ready | none |
 | ``rope`` | rotary_embedding | public | public | registered | partial | fused | ready | none |
 | ``softmax`` | stable_reduction | public | public | registered | partial | fused | ready | none |
 | ``softmax_safe`` | stable_reduction | public | public | registered | partial | fused | ready | none |
+| ``complex_exp`` | visual_complex | public | public | not_applicable | fused | fused | fused | none |
+| ``complex_mul`` | visual_complex | public | public | not_applicable | fused | fused | fused | none |
+| ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | fused | none |
+| ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | fused | none |
 
 ## runnable_reference (216)
 
@@ -265,45 +295,17 @@ each row into a single E2E tier.
 | ``conv2d`` | stencil | public | public | registered | partial | reference | ready | none |
 | ``conv3d`` | stencil | public | public | registered | partial | reference | ready | none |
 
-## partial (47)
+## partial (17)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
-| ``ebm_bivector_langevin`` | energy_based_models | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``ebm_decode_init`` | energy_based_models | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``ebm_energy`` | energy_based_models | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``ebm_inner_step`` | energy_based_models | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``ebm_langevin_step`` | energy_based_models | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``ebm_partition_exact`` | energy_based_models | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``ebm_refinement`` | energy_based_models | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``ebm_self_verify`` | energy_based_models | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``ebm_sphere_langevin`` | energy_based_models | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_codiff`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_conjugate`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_exp`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_ext_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_geometric_product`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_grade_involution`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_grade_projection`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_hodge_star`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_inner`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_integral`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_left_contraction`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_log`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_norm`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_reverse`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_rotor_sandwich`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_vec_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
-| ``clifford_wedge`` | geometric_algebra | public | public | not_applicable | fused | fused | unknown | benchmarked |
 | ``check_cauchy_riemann`` | visual_complex | public | public | missing | planned | planned | unknown | none |
 | ``complex_abs`` | visual_complex | public | public | missing | planned | planned | unknown | none |
 | ``complex_arg`` | visual_complex | public | public | missing | planned | planned | unknown | none |
 | ``complex_conjugate`` | visual_complex | public | public | missing | planned | planned | unknown | none |
 | ``complex_div`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``complex_exp`` | visual_complex | public | public | missing | fused | fused | unknown | none |
 | ``complex_jit`` | visual_complex | public | public | missing | planned | planned | unknown | none |
 | ``complex_log`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``complex_mul`` | visual_complex | public | public | missing | fused | fused | unknown | none |
 | ``complex_pow`` | visual_complex | public | public | missing | planned | planned | unknown | none |
 | ``complex_sqrt`` | visual_complex | public | public | missing | planned | planned | unknown | none |
 | ``conformal_energy_on_sphere`` | visual_complex | public | public | missing | planned | planned | unknown | none |
@@ -313,9 +315,7 @@ each row into a single E2E tier.
 | ``dz`` | visual_complex | public | public | missing | planned | planned | unknown | none |
 | ``is_concyclic`` | visual_complex | public | public | missing | planned | planned | unknown | none |
 | ``laplacian_2d`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``mobius`` | visual_complex | public | public | missing | fused | fused | unknown | none |
 | ``mobius_from_three_points`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``stereographic`` | visual_complex | public | public | missing | fused | fused | unknown | none |
 
 ## How to extend
 

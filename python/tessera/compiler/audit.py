@@ -276,6 +276,14 @@ def _axis_graph_ir(op_name: str) -> AxisCell:
         return AxisCell("not_applicable", "jit_bridge.manifest dispatch")
     if op_name.startswith("ebm_") and op_name in bm._EBM_APPLE_GPU_FUSED:
         return AxisCell("not_applicable", "jit_bridge.manifest dispatch")
+    # E2 (partial-ops uplift, 2026-05-20).  M7 ``complex_*`` ops with a
+    # fused MSL kernel are dispatched the same way as GA/EBM — through
+    # the manifest, not through a Graph IR ODS op.  Translate via
+    # ``_backend_lookup_name`` so the public names ``mobius`` /
+    # ``stereographic`` resolve to ``complex_mobius`` /
+    # ``complex_stereographic`` in the backend manifest.
+    if _backend_lookup_name(op_name) in bm._COMPLEX_APPLE_GPU_FUSED:
+        return AxisCell("not_applicable", "jit_bridge.manifest dispatch")
     cov = _coverage_for(op_name)
     if cov is not None:
         value = cov.metadata.get("graph_ir_lowering")

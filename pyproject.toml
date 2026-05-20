@@ -74,6 +74,7 @@ tessera-translate = "tessera.cli.translate:main"
 tessera-examples-audit = "tessera.cli.examples_audit:main"
 tessera-surface-audit = "tessera.cli.surface_audit:main"
 tessera-claim-lint = "tessera.cli.claim_lint:main"
+tessera-e2e-coverage = "tessera.cli.e2e_coverage:main"
 
 [tool.setuptools]
 package-dir = {"" = "python"}

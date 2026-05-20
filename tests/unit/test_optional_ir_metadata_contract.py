@@ -26,12 +26,32 @@ from tessera.compiler.graph_ir import (
     GraphIRModule,
     IROp,
 )
+from tessera.compiler.schedule_ir import (
+    ScheduleFunction,
+    ScheduleIRModule,
+    ScheduleOp,
+)
+from tessera.compiler.tile_ir import (
+    TileFunction,
+    TileIRModule,
+    TileOp,
+)
+from tessera.compiler.target_ir import (
+    TargetFunction,
+    TargetIRModule,
+    TargetOp,
+)
 
 
 # Fields that are genuinely required at construction time.  Each entry
 # has a rationale comment.  Adding to this set is a deliberate
 # architectural decision — bumping the architecture-plan revision is
 # expected.
+#
+# Issue 3 (2026-05-20) extended this gate to cover Schedule IR /
+# Tile IR / Target IR — the same optional-metadata contract applies
+# to every IR layer, not just Graph IR.  Adding a required field at
+# any layer is a breaking change.
 _GRANDFATHERED_REQUIRED_FIELDS: dict[type, frozenset[str]] = {
     IROp: frozenset({
         # ``result`` is positional but is allowed to be ``None`` —
@@ -50,6 +70,30 @@ _GRANDFATHERED_REQUIRED_FIELDS: dict[type, frozenset[str]] = {
         "name",
     }),
     GraphIRModule: frozenset(),
+    # ─── Schedule IR ─────────────────────────────────────────────
+    ScheduleFunction: frozenset({
+        "name",  # same rationale as GraphIRFunction.name
+    }),
+    ScheduleOp: frozenset({
+        "op_name",  # same rationale as IROp.op_name
+    }),
+    ScheduleIRModule: frozenset(),
+    # ─── Tile IR ─────────────────────────────────────────────────
+    TileFunction: frozenset({
+        "name",
+    }),
+    TileOp: frozenset({
+        "op_name",
+    }),
+    TileIRModule: frozenset(),
+    # ─── Target IR ───────────────────────────────────────────────
+    TargetFunction: frozenset({
+        "name",
+    }),
+    TargetOp: frozenset({
+        "op_name",
+    }),
+    TargetIRModule: frozenset(),
 }
 
 
@@ -79,7 +123,12 @@ class TestOptionalMetadataContract:
 
     @pytest.mark.parametrize(
         "cls",
-        [IROp, GraphIRFunction, GraphIRModule],
+        [
+            IROp, GraphIRFunction, GraphIRModule,
+            ScheduleOp, ScheduleFunction, ScheduleIRModule,
+            TileOp, TileFunction, TileIRModule,
+            TargetOp, TargetFunction, TargetIRModule,
+        ],
         ids=lambda cls: cls.__name__,
     )
     def test_no_required_field_outside_allowlist(self, cls: type) -> None:
@@ -107,7 +156,12 @@ class TestOptionalMetadataContract:
 
     @pytest.mark.parametrize(
         "cls",
-        [IROp, GraphIRFunction, GraphIRModule],
+        [
+            IROp, GraphIRFunction, GraphIRModule,
+            ScheduleOp, ScheduleFunction, ScheduleIRModule,
+            TileOp, TileFunction, TileIRModule,
+            TargetOp, TargetFunction, TargetIRModule,
+        ],
         ids=lambda cls: cls.__name__,
     )
     def test_allowlisted_fields_still_required(self, cls: type) -> None:

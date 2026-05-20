@@ -89,6 +89,24 @@ from .normalization import (
 )
 from . import frontend_lanes as lanes  # noqa: F401 — re-export as ts.compiler.lanes
 from .frontend_lanes import FrontendLane, FrontendLaneSpec
+from .cross_lane import (
+    CrossLaneViolation,
+    allowed_nestings,
+    detect_violation as detect_cross_lane_violation,
+    is_legal as is_cross_lane_legal,
+)
+from .ir_version import (
+    GRAPH_IR_SCHEMA_VERSION,
+    IR_VERSION_HISTORY,
+    migrate as migrate_ir_module,
+)
+from .e2e_coverage import (
+    E2ECoverageRow,
+    E2EStatus,
+    all_coverage_rows as all_e2e_coverage_rows,
+    coverage_row_for as e2e_coverage_row_for,
+    status_counts as e2e_status_counts,
+)
 
 __all__ = [
     "ConstraintSolver",
@@ -196,4 +214,19 @@ __all__ = [
     # the load-bearing contract.
     "NORMALIZATION_PIPELINE",
     "run_normalization_pipeline",
+    # Cross-lane composition rules (Issue 1, 2026-05-20).
+    "CrossLaneViolation",
+    "allowed_nestings",
+    "detect_cross_lane_violation",
+    "is_cross_lane_legal",
+    # IR versioning (Issue 2, 2026-05-20).
+    "GRAPH_IR_SCHEMA_VERSION",
+    "IR_VERSION_HISTORY",
+    "migrate_ir_module",
+    # E2E coverage audit (Issue 4, 2026-05-20).
+    "E2ECoverageRow",
+    "E2EStatus",
+    "all_e2e_coverage_rows",
+    "e2e_coverage_row_for",
+    "e2e_status_counts",
 ]

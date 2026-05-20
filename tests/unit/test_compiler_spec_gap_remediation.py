@@ -185,40 +185,47 @@ def test_lowering_spec_documents_python_object_model_path_and_debug_dumps():
 
 def test_backend_mvp_source_contracts_are_not_placeholders():
     tiling = TILING_INTERFACE.read_text(encoding="utf-8")
-    # B3 (2026-05-20): the file used to carry a pre-MLIR-17
-    # ``getMixedSizes`` / ``matmul_conservative_ranked_tensor``
-    # scaffold, which the original drift gate locked.  Under MLIR 21
-    # the auto-emission behavior changed (see
-    # ``TilingInterface_NOTES.md``), so the file is now a precisely
-    # documented deferred-work artifact instead of a stale scaffold.
-    # Lock the new evidence-of-real-work terms — they describe
-    # precisely what was removed, why, and what has to land before
-    # this file grows back its body.
+    # B3 v2 (2026-05-20): the file ships the real MLIR 21
+    # ``TilingInterface`` implementation for MatmulOp + Conv2DNHWCOp.
+    # Lock the canonical v2 sentinels — they prove (a) all four
+    # methods are defined on each op, (b) the v1 annotation
+    # contract (``matmul_conservative_ranked_tensor``) survived, and
+    # (c) the build flag defaults to ON.
     for term in (
-        "TilingInterface::Trait",          # confirms the ODS-side wiring is intact
-        "TESSERA_ENABLE_TILING_INTERFACE", # confirms the build guard is documented
-        "DeclareOpInterfaceMethods",       # confirms the MLIR-21 migration plan is referenced
-        "TilingInterface_NOTES.md",        # the deferred-work tracker
-        "default-failure",                 # documents the safe-fallback behavior
+        "matmul_conservative_ranked_tensor",   # v1 driver-observable annotation
+        "MatmulOp::getTiledImplementation",    # MLIR-21 sig on MatmulOp
+        "MatmulOp::getLoopIteratorTypes",
+        "Conv2DNHWCOp::getTiledImplementation",
+        "Conv2DNHWCOp::getLoopIteratorTypes",
+        "FailureOr<TilingResult>",              # MLIR-21 return type signature
+        "TESSERA_ENABLE_TILING_INTERFACE",      # build guard
     ):
         assert term in tiling, (
             f"expected sentinel {term!r} missing from TesseraTiling.cpp "
             "— see ``src/compiler/ir/TilingInterface_NOTES.md`` for the "
-            "v2 plan."
+            "v2 contract."
         )
-    # The classic placeholder phrasings the previous gate flagged
-    # must stay out of the file.
-    assert "return failure(); // TODO: implement with tensor.extract_slice" not in tiling
-    # The notes file must spell out the deferred work in detail so
-    # the next contributor doesn't re-create the stale scaffold.
+    # Anti-pattern placeholders that earlier scaffolds carried; the
+    # v2 file should never grow them back.
+    for anti_pattern in (
+        "return failure(); // TODO: implement with tensor.extract_slice",
+        "scaffolding with TODOs",
+        "Real implementation",
+    ):
+        assert anti_pattern not in tiling, (
+            f"placeholder phrase {anti_pattern!r} reappeared in "
+            "TesseraTiling.cpp — was the v2 implementation reverted?"
+        )
+    # The notes file must spell out v2 status + deferred work so the
+    # next contributor doesn't re-create the stale scaffold.
     notes = TILING_INTERFACE.parent.joinpath("TilingInterface_NOTES.md").read_text(
         encoding="utf-8"
     )
     for term in (
-        "external-model implementation",
-        "FailureOr<TilingResult>",
-        "out-parameter",
-        "default-failure",
+        "explicit method-list",                  # describes the MLIR-21 ODS fix
+        "FailureOr<TilingResult>",               # locks the MLIR-21 signature
+        "matmul_conservative_ranked_tensor",     # locks the v1 sentinel chain
+        "stride/pad",                            # documents the conv2d v3 deferred work
     ):
         assert term in notes, (
             f"expected sentinel {term!r} missing from "

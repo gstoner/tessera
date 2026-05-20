@@ -155,7 +155,15 @@ def Tessera_ArchRelaxAttr : EnumAttr<Tessera_Dialect, Tessera_ArchRelax, "arch_r
 def Tessera_MatmulOp : Op<
   Tessera_Dialect, "matmul",
   [Pure,
-   DeclareOpInterfaceMethods<TilingInterface>,
+   // B3 v2 (2026-05-20): explicit method list — required under MLIR 21
+   // for TilingInterface to emit per-Op method declarations on the
+   // generated header.  See src/compiler/ir/TilingInterface_NOTES.md.
+   DeclareOpInterfaceMethods<TilingInterface, [
+     "getLoopIteratorTypes",
+     "getIterationDomain",
+     "getTiledImplementation",
+     "getResultTilePosition",
+   ]>,
    DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
 > {
   let summary = "Matrix multiply (A @ B)";
@@ -172,7 +180,16 @@ def Tessera_MatmulOp : Op<
 
 def Tessera_Conv2DNHWCOp : Op<
   Tessera_Dialect, "conv2d_nhwc",
-  [Pure, DeclareOpInterfaceMethods<TilingInterface>]
+  [Pure,
+   // B3 v2 (2026-05-20): same explicit method list as MatmulOp.
+   // ``getTiledImplementation`` returns ``failure()`` until the
+   // stride/pad-aware window reconstruction lands (deferred v3 work).
+   DeclareOpInterfaceMethods<TilingInterface, [
+     "getLoopIteratorTypes",
+     "getIterationDomain",
+     "getTiledImplementation",
+     "getResultTilePosition",
+   ]>]
 > {
   let summary = "2D convolution NHWC x HWCF -> NHWC";
   let arguments = (ins TensorType:$input, TensorType:$filter,

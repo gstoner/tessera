@@ -1,62 +1,35 @@
 
 # TilingInterface — Status & Deferred Work
 
-> **B3 (2026-05-20):** the previous "scaffolding with TODOs" warning is
-> retired.  This document now describes the **actual** state of the
-> TilingInterface integration in the tessera dialect plus the precise
-> work that remains before the interface can drive real tiling
-> decisions.
+> **B3 v2 (2026-05-20):** the matmul TilingInterface implementation
+> shipped against the current MLIR 21 signatures.  Conv2DNHWCOp has
+> a real iteration domain + identity result-tile-position but its
+> `getTiledImplementation` continues to return `failure()` until the
+> stride/pad-aware window reconstruction lands (deferred v3 work).
 
 ## What's in tree today
 
-* **`TesseraOps.td`** declares `TilingInterface::Trait` on:
-  - `Tessera_MatmulOp` (via `DeclareOpInterfaceMethods<TilingInterface>`)
-  - `Tessera_Conv2DNHWCOp` (same)
+### ODS — `TesseraOps.td`
 
-  The trait inheritance is wired correctly — every `MatmulOp` /
-  `Conv2DNHWCOp` instance reports `isa<TilingInterface>() == true`,
-  so any pass that probes for the interface finds it.
+Both ops declare `TilingInterface` via the **explicit method-list**
+form (required by MLIR 21's ODS generator — see "Why explicit method
+list" below):
 
-* **`TesseraTiling.cpp`** is intentionally close-to-empty under the
-  default build (`TESSERA_ENABLE_TILING_INTERFACE=0`).  The dialect
-  inherits MLIR's default-failure implementations from
-  `TilingInterface::Trait`, which is the safe answer for any tile
-  driver: it cleanly tells the driver "this op can't be tiled by
-  this interface yet, fall back to your non-tiled lowering path."
+```tablegen
+DeclareOpInterfaceMethods<TilingInterface, [
+  "getLoopIteratorTypes",
+  "getIterationDomain",
+  "getTiledImplementation",
+  "getResultTilePosition",
+]>
+```
 
-* **CMake** links `MLIRTilingInterface` into `TesseraIR` so the
-  interface symbols are available at runtime.
+The generated `TesseraOps.h.inc` now declares all four methods on the
+`MatmulOp` and `Conv2DNHWCOp` C++ classes.
 
-## What's deferred (the v2 work)
+### C++ impl — `TesseraTiling.cpp`
 
-Under MLIR ≤16, `DeclareOpInterfaceMethods<TilingInterface>` would
-auto-emit per-Op method **declarations** that the C++ side would
-define.  Under MLIR 21 that auto-emission no longer happens for
-`TilingInterface` — its methods need either:
-
-1. **Explicit method-name list** on `DeclareOpInterfaceMethods<...>` in
-   the ODS, e.g.
-
-   ```tablegen
-   DeclareOpInterfaceMethods<TilingInterface, [
-     "getLoopIteratorTypes",
-     "getIterationDomain",
-     "getTiledImplementation",
-     "getResultTilePosition",
-   ]>
-   ```
-
-2. **An external-model implementation** registered in
-   `TesseraDialect.cpp` (preferred — keeps the ODS lean and lets us
-   evolve the impl without rebuilding the dialect proper):
-
-   ```cpp
-   // In TesseraDialect.cpp ::initialize()
-   MatmulOp::attachInterface<MatmulTilingModel>(*ctx);
-   Conv2DNHWCOp::attachInterface<Conv2DNHWCTilingModel>(*ctx);
-   ```
-
-The **MLIR 21 method signatures** the v2 work must satisfy:
+The four MLIR 21 method signatures the impl satisfies are:
 
 ```cpp
 SmallVector<utils::IteratorType> getLoopIteratorTypes();
@@ -67,67 +40,133 @@ FailureOr<TilingResult>           getTiledImplementation(
     ArrayRef<OpFoldResult> sizes);
 LogicalResult                     getResultTilePosition(
     OpBuilder &b, unsigned resultNumber,
-    ArrayRef<OpFoldResult> offsets,
-    ArrayRef<OpFoldResult> sizes,
+    ArrayRef<OpFoldResult> offsets, ArrayRef<OpFoldResult> sizes,
     SmallVector<OpFoldResult> &resultOffsets,
     SmallVector<OpFoldResult> &resultSizes);
 ```
 
-These differ from the pre-MLIR-17 signatures in three ways:
-- `getTiledImplementation` returns `FailureOr<TilingResult>` (was
-  `FailureOr<SmallVector<Operation *>>`).
-- `getResultTilePosition` takes out-parameters for the result
-  offsets/sizes and returns `LogicalResult` (was a `FailureOr`
-  returning the offset list).
-- `getLoopIteratorTypes` is mandatory (didn't exist in older MLIR).
+* **MatmulOp** — full v1 implementation against MLIR 21 signatures:
+  - `getLoopIteratorTypes()` → `{parallel, parallel}` (M, N).  The
+    K-axis reduction lives inside the cloned op, not in the iteration
+    domain.
+  - `getIterationDomain(b)` → static-shape `Range[0, M) × [0, N)`.
+  - `getTiledImplementation(b, offsets, sizes)` → clones the matmul
+    with the canonical annotation attrs
+    (`tessera.tiling_interface = "matmul_conservative_ranked_tensor"`,
+    `tessera.tile_rank = 2`, `tessera.full_k = K`) and returns a
+    populated `TilingResult`.  The cloned op keeps the full K
+    reduction — the v1 semantics are "split M / N into tiles; keep
+    K full inside the op."  Operand-tile extraction (`tensor.extract_slice`
+    on LHS/RHS) is a v2 follow-up.
+  - `getResultTilePosition(b, n, offsets, sizes, &resOff, &resSizes)` →
+    identity (the matmul's only result tile is exactly the iteration
+    tile).
 
-## v2 scope (matmul-first, conv2d deferred further)
+* **Conv2DNHWCOp** — partial implementation:
+  - `getLoopIteratorTypes()` → `{parallel, parallel, parallel, parallel}`
+    over (N, H, W, C).
+  - `getIterationDomain(b)` → static-shape four-axis Range.
+  - `getResultTilePosition(...)` → identity.
+  - `getTiledImplementation(...)` → `failure()` (see "Deferred work"
+    below).
 
-A focused v2 sprint can ship:
+### Build flag
 
-* **MatmulOp**: external-model impl with the v1 "conservative clone
-  + annotation attribute" semantics from the original scaffold,
-  ported to the new signatures.  Roughly 80 LOC + 1 lit fixture.
+Default ON: `TESSERA_ENABLE_TILING_INTERFACE=1` ships in every build.
+The opt-out remains `-DTESSERA_DISABLE_TILING_INTERFACE` for downstream
+consumers that prefer the old default-failure trait impls.
 
-* **Conv2DNHWCOp**: per-op iteration domain (parallel over N/H/W/C,
-  reduction over Kc/R/S), but `getTiledImplementation` returns
-  `failure()` until the stride/pad-aware window reconstruction
-  lands.  This stays honest about what's not yet built.
+### Driver-observable sentinels
 
-* **Lit fixture** under `tests/tessera-ir/transforms/tiling_interface/`
-  driving `linalg::tileToScfForOp` (or similar tile driver) against
-  a tessera.matmul to confirm the annotation attrs flow through.
+The matmul `getTiledImplementation` stamps three annotation attrs on
+the cloned op that a tile driver can FileCheck against:
 
-* **CMake flip**: enable `TESSERA_ENABLE_TILING_INTERFACE=1` by
-  default, with `-DTESSERA_DISABLE_TILING_INTERFACE=ON` as the
-  opt-out for downstream consumers.
+| Attribute | Value | Purpose |
+|---|---|---|
+| `tessera.tiling_interface` | `"matmul_conservative_ranked_tensor"` | proves the interface ran |
+| `tessera.tile_rank` | `2 : i64` | declares the per-tile rank |
+| `tessera.full_k` | `K : index` | records the (kept-full) reduction extent |
 
-## Why this isn't urgent
+## Why explicit method list
 
-No upstream pass in the tessera pipeline today consumes
-`TilingInterface` directly — the tile-IR work goes through the
-schedule/tile dialect lowering pipeline, not through the generic
-linalg-style tile-and-fuse driver.  The interface declaration sits in
-ODS so we can attach a concrete model when the first consumer (e.g., a
-linalg-bridge pass) actually needs it.
+Under MLIR ≤16, `DeclareOpInterfaceMethods<Interface>` (no method
+list) auto-emitted per-Op declarations for every method on the
+interface.  In MLIR 21 that auto-emission was tightened — for
+multi-method interfaces with default implementations like
+`TilingInterface`, the ODS generator now requires an explicit method
+list so it knows which decls the user intends to override (vs. which
+should fall through to MLIR's default-failure trait impls).
 
-The default-failure path keeps any opportunistic consumer (linalg
-tile drivers, the MLIR `-test-tiling-interface` opt suite, downstream
-forks) safe — they get a clean `failure()` instead of crashing on a
-missing implementation.
+The earlier B3-v1 attempt at flipping the build flag failed precisely
+because the ODS without an explicit method list produced no per-Op
+decls, so the out-of-line C++ defs couldn't bind.  The B3-v2 fix
+(this commit) lists every method explicitly, which is the MLIR 21
+canonical form.
 
-## How to regenerate this view
+## Deferred work (v3)
+
+### Conv2DNHWCOp stride/pad-aware tiling
+
+`Conv2DNHWCOp::getTiledImplementation` returns `failure()` because
+producing a correct convolution-window slice on a tile requires
+threading stride + pad metadata through the offset / size computation:
+
+* Output tile starting at `(n0, h0, w0, c0)` of size `(N, H, W, C)`
+  requires input window starting at
+  `(n0, h0 * stride_h - pad_h, w0 * stride_w - pad_w, 0)` of size
+  `(N, (H-1) * stride_h + R, (W-1) * stride_w + S, C_in)`.
+* Negative-offset cases need either explicit `tensor.pad` insertion or
+  bounds clamping on `tensor.extract_slice`.
+* Dilations multiply through the filter R / S axes.
+
+That's a focused ~150 LOC follow-up.  The iteration domain + result
+tile position are already correct in B3-v2; the v3 work is the
+operand-slice synthesis.
+
+### MatmulOp operand-tile extraction
+
+The B3-v2 matmul `getTiledImplementation` keeps K full inside the
+cloned op rather than extracting LHS / RHS operand slices.  A v2-of-v2
+sprint can promote this to true operand slicing:
+
+* Extract `LHS[m0:m0+M, :]` via `tensor.extract_slice` (full K).
+* Extract `RHS[:, n0:n0+N]` (full K).
+* Clone the matmul on the slices, producing a result of shape `(M, N)`.
+
+That's a useful intermediate step before K-loop tiling (which needs
+either an explicit reduction over partial accumulators, or a
+`linalg::ReduceOp` rewrite — both deferred).
+
+## Why no urgent consumer
+
+No upstream tessera pass in tree today drives `TilingInterface`
+directly.  The tile-IR work routes through the schedule/tile dialect
+lowering pipeline, not through generic linalg-style tile-and-fuse
+drivers.  The interface implementation is here so:
+
+1. **A linalg-bridge pass can attach to it** when the
+   tessera ↔ linalg interop lane lights up.
+2. **External MLIR tools** (`mlir-opt --transform-interpreter`,
+   `--test-tiling-interface` when MLIR is built with test passes)
+   can drive `tessera.matmul` through the same machinery used for
+   `linalg.matmul`.
+3. **Driver-observable sentinels** mean downstream forks can
+   FileCheck whether the interface flowed without depending on
+   tessera-internal lit infrastructure.
+
+## How to verify the v2 wiring
 
 ```bash
-# Confirm the trait is wired:
-grep -n "DeclareOpInterfaceMethods<TilingInterface>" \
-    src/compiler/ir/TesseraOps.td
-
-# Confirm the default-off build is clean:
+# 1. ODS regen + library build:
 cmake --build build --target TesseraIR
 
-# Confirm MLIR's default-failure path is what callers see today:
-build/tools/tessera-opt/tessera-opt --help | grep -i tiling
-# (no tessera-specific tiling pass — the only consumers would be
-#  generic linalg-style drivers we haven't yet plumbed through.)
+# 2. Confirm per-Op method decls appear in the generated header:
+awk '/^class MatmulOp /,/^};$/' build/src/compiler/ir/TesseraOps.h.inc \
+    | grep -E "getLoopIteratorTypes|getTiledImplementation|getIterationDomain|getResultTilePosition"
+
+# 3. Run the Python structural guard:
+pytest tests/unit/test_tiling_interface_matmul.py -v
+
+# 4. Confirm tessera-opt still loads after the rebuild:
+cmake --build build --target tessera-opt
 ```

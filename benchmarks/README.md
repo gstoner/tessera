@@ -14,10 +14,10 @@ is available.
 | `run_all.py` | Active | Orchestrates GEMM, attention, and collective suites; pass `--use-compiler` for current compiler artifact checks. |
 | `common/` | Active contract | Shared row schema, correctness helpers, and compiler artifact hooks used by benchmark suites. |
 | `Tessera_SuperBench/` | Active harness | GEMM uses the current JIT CPU path with telemetry/autotune artifacts; FlashAttention and Conv2D emit artifact-only compiler rows while running NumPy reference timing/correctness; collectives default to the Tessera mock facade. |
-| `spectral/` | Active benchmark | NumPy/PyTorch FFT/DCT/convolution benchmark with `--backend tessera-artifact` for Graph IR artifact rows. |
-| `Tessera_Operator_Benchmarks/` | Active C++ harness | CPU reference timing for all registered ops, Graph IR artifact coverage for all registered ops, `tessera.telemetry.v1` JSON summaries, and explicit `backend_unavailable` Tessera-runtime status. |
+| `spectral/` | Active benchmark | NumPy/PyTorch FFT/DCT/convolution benchmark with `--backend tessera-artifact` for Graph IR artifact rows. Native FFT lowering remains artifact-only until Tile/Target runtime support lands. |
+| `Tessera_Operator_Benchmarks/` | Active C++ harness | CPU reference timing for all 7 registered op groups, Graph IR artifact coverage, `tessera.telemetry.v1` JSON summaries, and explicit `backend_unavailable` Tessera-runtime status. |
 | `archive/matrix_multiplication/` | Archived | Blackwell concept sketch using non-existent APIs; future Blackwell work should land as Target IR tests/runtime kernels/operator cases. |
-| `DeepScholar-Bench/` | Research/speculative | Uses non-existent model APIs. Keep as research benchmark concept or move under `benchmarks/archive/` after review. |
+| `DeepScholar-Bench/` | Active CPU smoke | Current-API research-synthesis smoke using `@tessera.jit`, matmul, softmax, layer_norm, and NumPy text/source embeddings. LOTUS integration remains optional and guarded. |
 
 ## Quick Checks
 
@@ -27,6 +27,7 @@ PYTHONPATH=python python3 benchmarks/Tessera_SuperBench/benches/kernel/gemm_tess
 PYTHONPATH=python python3 benchmarks/Tessera_SuperBench/runner/bench_run.py --config benchmarks/Tessera_SuperBench/configs/compiler_smoke.yaml --out /tmp/tessera_superbench_smoke
 cmake -S benchmarks/Tessera_Operator_Benchmarks -B /tmp/tessera_opbench_build && cmake --build /tmp/tessera_opbench_build -j
 PYTHONPATH=python python3 benchmarks/Tessera_Operator_Benchmarks/scripts/opbench.py --config benchmarks/Tessera_Operator_Benchmarks/scripts/configs/quick_sweep.yaml --bin /tmp/tessera_opbench_build/opbench --out /tmp/tessera_opbench_quick
+PYTHONPATH=python python3 benchmarks/DeepScholar-Bench/tessera_deepscholar_model.py --output /tmp/tessera_deepscholar_smoke.json
 PYTHONPATH=python python3 benchmarks/spectral/spectral_bench.py --backend tessera-artifact --ops fft1d,dct2,conv1d_fft --sizes 64 --device cpu --repeats 1 --warmup 0 --outcsv /tmp/tessera_spectral.csv
 ```
 

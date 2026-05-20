@@ -79,6 +79,22 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
             "uses the same JSON schema."
         ),
     ),
+    SurfaceEntry(
+        directory="benchmarks/apple_gpu",
+        entry_point="benchmarks/apple_gpu/benchmark_fusion.py",
+        status="runnable",
+        command=(
+            "PYTHONPATH=python python benchmarks/apple_gpu/"
+            "benchmark_fusion.py --shapes 4x4x4 "
+            "--swiglu-shapes 1x4x4x4 --reps 2 "
+            "--output /tmp/tessera_apple_gpu_fusion_smoke.json"
+        ),
+        notes=(
+            "Apple GPU fusion sweep for matmul→softmax and SwiGLU. "
+            "Skips cleanly on non-Darwin; on Darwin it emits a JSON "
+            "row pair for fused vs sequential tiny shapes."
+        ),
+    ),
     # ── Linalg reference benchmark ───────────────────────────────────
     SurfaceEntry(
         directory="benchmarks/linalg",
@@ -105,8 +121,9 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
         status="compile_only",
         command=(
             "PYTHONPATH=.:python python benchmarks/spectral/"
-            "spectral_bench.py --ops fft --sizes 16 --batch 1 "
-            "--repeats 1 --warmup 0 --backend numpy"
+            "spectral_bench.py --ops fft1d --sizes 16 --batch 1 "
+            "--repeats 1 --warmup 0 --backend tessera-artifact "
+            "--outcsv /tmp/tessera_spectral_artifact_smoke.csv"
         ),
         notes=(
             "Spectral solver bench. The tessera-artifact backend "
@@ -125,13 +142,21 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
         ),
         status="compile_only",
         command=(
+            "cmake -S benchmarks/Tessera_Operator_Benchmarks "
+            "-B /tmp/tessera_opbench_audit_build && "
+            "cmake --build /tmp/tessera_opbench_audit_build -j2 && "
             "PYTHONPATH=.:python python benchmarks/"
-            "Tessera_Operator_Benchmarks/scripts/opbench.py --help"
+            "Tessera_Operator_Benchmarks/scripts/opbench.py --config "
+            "benchmarks/Tessera_Operator_Benchmarks/scripts/configs/"
+            "quick_sweep.yaml --bin /tmp/tessera_opbench_audit_build/"
+            "opbench --backend reference --out /tmp/tessera_opbench_audit"
         ),
         notes=(
-            "Operator-level harness. Requires a configured "
-            "``--config`` + ``--bin`` plus an artifact root; CI "
-            "smoke is the ``--help`` parse-only check."
+            "Operator-level C++ harness. The audit configures/builds "
+            "in ``/tmp`` and runs the quick reference sweep across "
+            "all seven operator groups. Deeper artifact and "
+            "tessera-runtime bridge sweeps are covered by the slow "
+            "operator-benchmark tests."
         ),
     ),
     SurfaceEntry(
@@ -157,16 +182,18 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
         entry_point=(
             "benchmarks/DeepScholar-Bench/tessera_deepscholar_model.py"
         ),
-        status="scaffold",
-        reason=(
-            "Research sketch — imports non-existent "
-            "``tessera.models.HierarchicalReasoningModel`` and "
-            "``tessera.attention.FlashMLA``. The whole module is "
-            "vocabulary borrowing against a future model surface that "
-            "isn't on the canonical Tessera API. Rewrite against the "
-            "current surface, or move to ``benchmarks/archive/``."
+        status="runnable",
+        command=(
+            "PYTHONPATH=python python benchmarks/DeepScholar-Bench/"
+            "tessera_deepscholar_model.py --output "
+            "/tmp/tessera_deepscholar_smoke.json"
         ),
-        notes="DeepScholar-Bench port — LOTUS framework integration sketch.",
+        notes=(
+            "CPU smoke benchmark using current APIs only: "
+            "``tessera.jit`` plus matmul / softmax / layer_norm over "
+            "NumPy-backed text embeddings. The optional LOTUS adapter "
+            "imports cleanly but remains guarded behind research extras."
+        ),
     ),
     # ── Shared harness library ───────────────────────────────────────
     SurfaceEntry(

@@ -152,10 +152,19 @@ def audit_filesystem(
     Catches stale rows (declared entry file missing on disk) without
     actually executing anything.  Empty list means clean.
 
-    ``require_status_md_for`` controls which statuses require a
+    ``require_status_md_for`` controls which statuses **require** a
     ``STATUS.md`` next to the directory.  ``archived`` directories
     don't need one by default since the row's ``reason`` is usually
     enough — but a surface can opt them in.
+
+    **STATUS.md as historical breadcrumb is also welcome.** A row whose
+    current status is ``runnable`` / ``runnable_optional`` /
+    ``compile_only`` may *optionally* ship a ``STATUS.md`` that
+    documents a prior ``broken`` → ``runnable`` transition (or other
+    notable history).  The audit never strips or complains about
+    these — they're useful narrative for anyone reading the directory
+    standalone.  ``tools/roofline_tools/STATUS.md`` (2026-05-19
+    repair) is the canonical example.
     """
 
     issues: list[str] = []

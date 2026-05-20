@@ -235,6 +235,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if sys.platform != "darwin":
+        if args.output is not None:
+            args.output.write_text(json.dumps({
+                "runs": [],
+                "skipped_apple_gpu": "non-Darwin host — no Metal device",
+            }, indent=2, sort_keys=True))
         print(
             "apple_gpu benchmark: skipping (non-Darwin host — no Metal device)",
             file=sys.stderr,

@@ -1,5 +1,11 @@
 # SPDX-License-Identifier: MIT
-import argparse, time, math, os, csv, json, sys
+import argparse
+import csv
+import json
+import math
+import os
+import sys
+import time
 from datetime import datetime
 from pathlib import Path
 import numpy as np
@@ -86,6 +92,7 @@ def _artifact_row(op, size, args, dev):
         np.nan,
         "artifact_only" if info.get("available") else "runtime_unavailable",
         "skipped",
+        "artifact_only",
         info.get("artifact_hash", ""),
         "Graph IR emitted; spectral Tile/Target runtime path is not executable yet" if info.get("available") else info.get("reason", "tessera import failed"),
     ]
@@ -104,6 +111,11 @@ def main():
     ap.add_argument("--repeats", type=int, default=50)
     ap.add_argument("--warmup", type=int, default=10)
     ap.add_argument("--outcsv", type=str, default="results/results.csv")
+    ap.add_argument(
+        "--append",
+        action="store_true",
+        help="Append to --outcsv instead of replacing it. Default is replace for reproducible smoke runs.",
+    )
     args = ap.parse_args()
 
     if args.device == "auto":
@@ -118,7 +130,7 @@ def main():
     outdir = os.path.dirname(args.outcsv)
     if outdir:
         os.makedirs(outdir, exist_ok=True)
-    need_header = not os.path.exists(args.outcsv)
+    need_header = args.append is False or not os.path.exists(args.outcsv)
 
     sizes = parse_sizes(args.sizes)
     dtype_np = np.float32 if args.dtype == "float32" else \
@@ -141,12 +153,13 @@ def main():
 
     ops = [o.strip() for o in args.ops.split(",") if o.strip()]
 
-    with open(args.outcsv, "a", newline="") as f:
+    mode = "a" if args.append else "w"
+    with open(args.outcsv, mode, newline="") as f:
         wr = csv.writer(f)
         if need_header:
             wr.writerow(["timestamp","op","device","backend","dtype","shape","batch","repeats",
                          "time_ms","gflops","gbs","ai","bytes","flops","err_rel",
-                         "compiler_path","runtime_status","artifact_hash","reason"])
+                         "compiler_path","runtime_status","execution_kind","artifact_hash","reason"])
 
         for op in ops:
             for size in sizes:
@@ -345,7 +358,7 @@ def main():
                              shape_str, args.batch, args.repeats, round(t*1e3,4),
                              round(gflops,3), round(gbs,3), round(ai,4),
                              int(bytes_mv), int(flops), err_rel,
-                             "reference", "executable", "", ""])
+                             "reference", "executable", "reference", "", ""])
 
 
 if __name__ == "__main__":

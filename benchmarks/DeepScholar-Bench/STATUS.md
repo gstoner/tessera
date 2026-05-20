@@ -1,38 +1,30 @@
-# Status: `scaffold`
+# Status: `runnable`
 
 Tracked by `python/tessera/compiler/benchmarks_manifest.py`.
 
-This directory is a **research sketch**, not a runnable benchmark today.
+This directory now has a **CPU smoke benchmark** that uses only the
+current Tessera compiler surface:
 
-## Why
+* `@tessera.jit`
+* `tessera.ops.matmul`
+* `tessera.ops.softmax`
+* `tessera.ops.layer_norm`
+* NumPy-backed deterministic text/source embeddings
 
-`tessera_deepscholar_model.py` imports several non-existent symbols:
+The smoke writes `tessera.deepscholar_smoke.v1` JSON with compiler
+metadata, artifact levels, execution kind, runtime status, and a
+correctness check against the same public operator chain.
 
-* `from tessera.models import HierarchicalReasoningModel` — there is
-  no `tessera.models` submodule on the canonical surface.
-* `from tessera.attention import FlashMLA, CitationAwareAttention` —
-  no `tessera.attention` submodule; the equivalent live API is
-  `tessera.nn.MultiHeadAttention` + the FlashMLA Tile IR path.
-* `@ts.application` decorator — does not exist; the closest live API
-  is `@tessera.jit`.
+## What is not claimed
 
-Importing the file therefore fails immediately:
+The full LOTUS/DeepScholar research workflow is not ported.  The
+optional `tessera_lotus_deepscholar.py` adapter imports cleanly without
+LOTUS or pandas, but it raises a clear optional-dependency error until
+that stack is installed and configured.
 
+## Smoke command
+
+```bash
+PYTHONPATH=python python benchmarks/DeepScholar-Bench/tessera_deepscholar_model.py \
+  --output /tmp/tessera_deepscholar_smoke.json
 ```
-ModuleNotFoundError: No module named 'tessera.models'
-```
-
-The DeepScholar evaluation harness itself (LOTUS framework integration)
-is a reasonable target; only the Tessera bindings need updating.
-
-## Path forward
-
-Either:
-
-1. Rewrite against the canonical surface (`@tessera.jit`, 
-   `tessera.nn.MultiHeadAttention`, the existing FlashMLA Tile IR
-   path) and promote the row to `runnable` once a smoke command exists.
-2. Move to `benchmarks/archive/` with a deprecation note.
-
-Until that decision lands, this scaffold ships unchanged.  The
-manifest's drift gate keeps the README honest.

@@ -72,15 +72,15 @@ class TestPerSurfaceManifests:
         assert total == len(mod.all_entries())
 
     @pytest.mark.parametrize("surface", SURFACES)
-    def test_no_duplicate_directories(self, surface: str) -> None:
+    def test_no_duplicate_entry_points(self, surface: str) -> None:
         mod = _manifest(surface)
         seen: set[str] = set()
         for entry in mod.all_entries():
-            assert entry.directory not in seen, (
-                f"{surface}: duplicate manifest row for "
-                f"{entry.directory}"
+            assert entry.entry_point not in seen, (
+                f"{surface}: duplicate manifest row for entry point "
+                f"{entry.entry_point}"
             )
-            seen.add(entry.directory)
+            seen.add(entry.entry_point)
 
 
 class TestGeneratedDashboardDriftGate:
@@ -129,6 +129,115 @@ class TestGeneratedDashboardDriftGate:
                 f"--surface={surface} --render`.\n\ndiff (truncated):\n"
                 f"{diff}"
             )
+
+    def test_operator_benchmark_coverage_doc_matches_render(self) -> None:
+        from tessera.compiler.operator_benchmarks_coverage import render_markdown
+
+        doc_path = GENERATED_DIR / "operator_benchmarks_coverage.md"
+        if not doc_path.exists():
+            pytest.fail(
+                f"missing {doc_path.relative_to(REPO_ROOT)} — regenerate via "
+                "`python -m tessera.cli.operator_benchmarks_coverage`"
+            )
+        on_disk = doc_path.read_text(encoding="utf-8")
+        rendered = render_markdown()
+        if on_disk != rendered:
+            from difflib import unified_diff
+            diff = "\n".join(
+                list(
+                    unified_diff(
+                        on_disk.splitlines()[:80],
+                        rendered.splitlines()[:80],
+                        lineterm="",
+                        fromfile="on_disk",
+                        tofile="render_markdown()",
+                    )
+                )[:40]
+            )
+            pytest.fail(
+                "operator_benchmarks_coverage.md is out of date. "
+                "Regenerate via `python -m tessera.cli.operator_benchmarks_coverage`."
+                f"\n\ndiff (truncated):\n{diff}"
+            )
+
+
+class TestHistoricalBreadcrumbStatusMd:
+    """A ``runnable`` row may *optionally* ship a ``STATUS.md`` as a
+    historical breadcrumb (e.g., documenting a prior
+    ``broken`` → ``runnable`` transition).  The audit must tolerate
+    these — they're useful narrative for anyone reading the directory
+    standalone.
+
+    Canonical example: ``tools/roofline_tools/STATUS.md``, kept as
+    a breadcrumb after the 2026-05-19 repair pass closed the original
+    ``ImportError`` for ``tprof_roofline.model.analyze``.
+    """
+
+    def test_runnable_with_status_md_does_not_trigger_audit_issue(self) -> None:
+        """The shared ``audit_filesystem`` walker only *requires*
+        STATUS.md for ``scaffold`` / ``broken`` (by default).  A
+        runnable row with a STATUS.md is allowed and must not be
+        flagged."""
+
+        import tempfile
+        import os
+        from tessera.compiler.surface_manifest import (
+            SurfaceEntry,
+            audit_filesystem,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            # Build a runnable row whose directory + entry point + a
+            # STATUS.md breadcrumb all exist on disk.
+            dir_path = Path(tmp) / "demo_runnable_with_breadcrumb"
+            dir_path.mkdir()
+            entry_path = dir_path / "entry.py"
+            entry_path.write_text("# breadcrumb demo")
+            (dir_path / "STATUS.md").write_text(
+                "# Status: `runnable`\n\n"
+                "## Historical note\n\n"
+                "This row used to be broken; repaired YYYY-MM-DD.\n"
+            )
+            rel_dir = str(dir_path.relative_to(REPO_ROOT)) \
+                if str(dir_path).startswith(str(REPO_ROOT)) \
+                else os.path.relpath(dir_path, REPO_ROOT)
+            # ``audit_filesystem`` resolves paths against the repo
+            # root, so we feed an entry that does so deliberately.
+            entry = SurfaceEntry(
+                directory=rel_dir,
+                entry_point=str(Path(rel_dir) / "entry.py"),
+                status="runnable",
+                command="python -c \"pass\"",
+            )
+            issues = audit_filesystem((entry,))
+            assert issues == [], (
+                "A runnable row with a STATUS.md breadcrumb must not "
+                "trigger an audit issue:\n" + "\n".join(issues)
+            )
+
+    def test_roofline_tools_keeps_its_breadcrumb(self) -> None:
+        """Lock the canonical historical-breadcrumb example: the
+        roofline_tools STATUS.md must continue to exist + announce
+        the prior failure mode so future audits have context."""
+
+        status_md = REPO_ROOT / "tools" / "roofline_tools" / "STATUS.md"
+        assert status_md.is_file(), (
+            f"missing historical-breadcrumb STATUS.md at {status_md}"
+        )
+        text = status_md.read_text(encoding="utf-8")
+        # The breadcrumb must say what the *current* status is AND
+        # carry a "Historical" / "Previously" / "Before the" marker
+        # so it can't be mistaken for stale documentation.
+        assert "runnable" in text, (
+            "roofline_tools STATUS.md must declare the current "
+            "status (`runnable`)"
+        )
+        history_markers = ("Historical", "Previously", "Before the")
+        assert any(m in text for m in history_markers), (
+            f"roofline_tools STATUS.md must carry one of the "
+            f"history markers {history_markers!r} so it's clearly a "
+            f"breadcrumb, not stale current-state documentation"
+        )
 
 
 class TestSurfaceAuditCLI:

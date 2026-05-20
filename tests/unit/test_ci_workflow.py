@@ -124,6 +124,54 @@ class TestWorkflowStructure:
                 f"  {condition}"
             )
 
+    def test_lit_lane_builds_both_mlir_binaries(self) -> None:
+        """The lit lane is responsible for both MLIR-bearing binaries.
+
+        ``tessera-opt`` runs FileCheck against the in-tree MLIR
+        fixtures; ``tessera-translate-mlir`` does the MLIR ↔ LLVM
+        IR + SPIR-V round-trips.  Both depend on MLIR/LLVM 21.  If
+        either target drops out of the lane, the matching unit
+        coverage (``test_tessera_opt_build.py`` /
+        ``test_cli_translate.py``) loses its execution-side proof
+        in CI even when the local ``scripts/validate.sh`` keeps it.
+        """
+
+        wf = _load_workflow()
+        lit = wf["jobs"]["lit"]
+        steps = lit.get("steps", [])
+        # Find the cmake-build step.
+        build_text = ""
+        for step in steps:
+            run = step.get("run", "")
+            if "cmake --build" in run:
+                build_text += run
+        assert build_text, "lit lane is missing a `cmake --build` step"
+        for target in ("tessera-opt", "tessera-translate-mlir"):
+            assert target in build_text, (
+                f"lit lane's cmake build step must include "
+                f"--target {target} so its proof tests have something "
+                f"to FileCheck against; current build text:\n{build_text}"
+            )
+
+    def test_lit_lane_runs_proof_tests_for_both_binaries(self) -> None:
+        """After building the two MLIR binaries the lit lane must
+        invoke the matching unit proof tests so a build that links
+        but produces a broken binary still fails CI."""
+
+        wf = _load_workflow()
+        lit = wf["jobs"]["lit"]
+        steps = lit.get("steps", [])
+        run_text = "\n".join(s.get("run", "") for s in steps)
+        for test_file in (
+            "test_cli_translate.py",
+            "test_tessera_opt_build.py",
+        ):
+            assert test_file in run_text, (
+                f"lit lane must invoke {test_file} so the cmake build "
+                f"is verified end-to-end (build + execution + "
+                f"FileCheck); current `run:` steps:\n{run_text}"
+            )
+
 
 class TestBranchProtectionDoc:
     def test_doc_exists(self) -> None:

@@ -131,6 +131,7 @@ def test_operator_bridge_maps_every_registered_operator_to_runtime_artifacts():
         row = _bridge_row(op)
         assert row["runtime_status"] == "success", (op, row.get("reason"))
         assert row["compiler_path"] == "jit_cpu_numpy"
+        assert row["execution_kind"] == "reference"
         assert row["correctness"]["passed"] is True
         assert row["telemetry"]["schema"] == "tessera.telemetry.v1"
         assert row["telemetry"]["op"] == op
@@ -150,6 +151,7 @@ def test_operator_bridge_artifact_mode_validates_full_spine_bundles():
     for op in REGISTERED_OPS:
         row = _bridge_row(op, mode="artifact")
         assert row["runtime_status"] == "artifact_only", (op, row.get("reason"))
+        assert row["execution_kind"] == "artifact_only"
         assert row["correctness"]["passed"] is None
         assert row["artifact_levels"]["graph"] is True
         assert row["artifact_levels"]["schedule"] is True
@@ -160,6 +162,7 @@ def test_operator_bridge_artifact_mode_validates_full_spine_bundles():
 def test_operator_bridge_native_runtime_milestone_is_explicitly_pending():
     row = _bridge_row("matmul", "runtime", "--runtime", "native")
     assert row["runtime_status"] == "backend_unavailable"
+    assert row["execution_kind"] == "unknown"
     assert "Native C ABI" in row["reason"]
 
 
@@ -209,6 +212,7 @@ print(json.dumps({
   "operator": {"name": op, "dtype": "f32", "shape": "cli", "target": "cpu"},
   "compiler_path": "artifact_only" if backend == "artifact" else "reference",
   "runtime_status": status,
+  "execution_kind": "artifact_only" if backend == "artifact" else "reference",
       "artifact_levels": {"graph": backend == "artifact", "schedule": False, "tile": False, "target": False, "artifact_hash": None},
   "correctness": {"max_error": 0, "relative_error": None, "tolerance": None, "passed": None},
   "profile": {"cpu_wall_ms": 0.1, "kernel_elapsed_ms": None, "memory_bytes": None, "launch_overhead_ms": None},
@@ -242,3 +246,4 @@ print(json.dumps({
     assert payload["telemetry_summary"]["schema"] == "tessera.telemetry.v1"
     assert payload["telemetry_summary"]["event_count"] == len(REGISTERED_OPS)
     assert {row["op"] for row in rows} == REGISTERED_OPS
+    assert {row["execution_kind"] for row in rows} == {"artifact_only"}

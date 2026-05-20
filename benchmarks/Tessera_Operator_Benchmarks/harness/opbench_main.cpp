@@ -55,6 +55,9 @@ static void emit_json(const std::string& op,
                       const OpArgs& args,
                       const std::string& reason,
                       const std::string& artifact_path = ""){
+  std::string execution_kind = runtime_status=="artifact_only" ? "artifact_only" :
+                               runtime_status=="executable" ? "reference" :
+                               "unknown";
   double tflops = res.gflops / 1000.0;
   double bandwidth_gbps = res.gbps;
   std::string telemetry_status = runtime_status=="executable" ? "ok" :
@@ -65,6 +68,7 @@ static void emit_json(const std::string& op,
             << "\"operator\":{\"name\":\"" << json_escape(op) << "\",\"dtype\":\"f32\",\"shape\":\"cli\",\"target\":\"cpu\"},"
             << "\"compiler_path\":\"" << compiler_path << "\","
             << "\"runtime_status\":\"" << runtime_status << "\","
+            << "\"execution_kind\":\"" << execution_kind << "\","
             << "\"artifact_levels\":{\"graph\":" << ((compiler_path=="artifact_only") ? "true" : "false")
             << ",\"schedule\":false,\"tile\":false,\"target\":false,\"artifact_hash\":null},"
             << "\"correctness\":{\"max_error\":" << res.l2_ref << ",\"relative_error\":null,\"tolerance\":null,\"passed\":null},"
@@ -85,6 +89,7 @@ static void emit_json(const std::string& op,
             << "\"metadata\":{\"backend\":\"" << json_escape(backend) << "\","
             << "\"compiler_path\":\"" << json_escape(compiler_path) << "\","
             << "\"runtime_status\":\"" << json_escape(runtime_status) << "\","
+            << "\"execution_kind\":\"" << json_escape(execution_kind) << "\","
             << "\"artifact_path\":\"" << json_escape(artifact_path) << "\","
             << "\"M\":" << args.M << ",\"N\":" << args.N << ",\"K\":" << args.K
             << ",\"Nn\":" << args.Nn << ",\"H\":" << args.H << ",\"W\":" << args.W

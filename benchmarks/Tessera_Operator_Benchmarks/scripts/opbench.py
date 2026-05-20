@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-import argparse, csv, itertools, json, os, pathlib, subprocess, sys, time
+import argparse
+import csv
+import itertools
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import time
 try:
   import yaml
 except ImportError as exc:
@@ -110,6 +118,7 @@ def _flatten_row(op, backend, iters, params, stats, dur):
     **params,
     "compiler_path": stats.get("compiler_path"),
     "runtime_status": stats.get("runtime_status"),
+    "execution_kind": stats.get("execution_kind"),
     "reason": stats.get("reason", ""),
     "avg_ms": profile.get("cpu_wall_ms"),
     "gflops": metrics.get("gflops"),

@@ -10,7 +10,9 @@ This package provides a reproducible, extensible harness to benchmark key spectr
 - Power spectrum / magnitude and simple low-pass “spectral pooling”
 
 It measures wall time, estimated FLOPs (for FFT/DCT and spectral conv), device memory traffic (approx.), arithmetic intensity (AI), GFLOP/s, and GB/s.
-Results are written to CSV and summarized into a small HTML report with PNG charts.
+Results are written to CSV and summarized into a small HTML report. If
+matplotlib is available the report includes PNG charts; otherwise it
+degrades to an HTML table with a clear "charts skipped" note.
 
 The harness **auto-detects** CPU/GPU availability and can run on:
 - **NumPy** (CPU)
@@ -36,6 +38,12 @@ python spectral_bench.py --ops fft1d,fft2d --sizes 1024,2048,4096,8192 --device 
 
 # Generate charts + HTML report from CSV:
 python spectral_report.py --results results/results.csv --outdir results/report
+
+# Emit compiler-artifact rows without executing a native FFT runtime:
+PYTHONPATH=.:../../python python spectral_bench.py \
+  --backend tessera-artifact --ops fft1d,dct2,conv1d_fft \
+  --sizes 64 --device cpu --repeats 1 --warmup 0 \
+  --outcsv /tmp/tessera_spectral_artifact.csv
 ```
 
 A convenience script runs a broader default sweep:
@@ -102,10 +110,12 @@ cmake --build build -j
 `results/results.csv` columns:
 
 ```
-timestamp, op, device, backend, dtype, shape, batch, repeats, time_ms, gflops, gbs, ai, bytes, flops, err_rel
+timestamp, op, device, backend, dtype, shape, batch, repeats, time_ms, gflops, gbs, ai, bytes, flops, err_rel, compiler_path, runtime_status, execution_kind, artifact_hash, reason
 ```
 
 - `err_rel` is a relative correctness check against a NumPy reference.
+- `execution_kind=artifact_only` and `runtime_status=skipped` means
+  Graph IR was emitted but native Tile/Target FFT execution was not run.
 
 ---
 

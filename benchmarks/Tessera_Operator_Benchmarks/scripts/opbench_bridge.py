@@ -258,6 +258,9 @@ def _row(
     telemetry.setdefault("schema", "tessera.telemetry.v1")
     telemetry.setdefault("source", "tessera_operator_bench")
     telemetry["op"] = ns.op
+    execution_kind = "artifact_only" if runtime_status == "artifact_only" else (
+        "reference" if runtime_status == "success" else "unknown"
+    )
     telemetry.setdefault("status", telemetry_status)
     telemetry.setdefault("metadata", {})
     telemetry["metadata"].update({
@@ -265,6 +268,7 @@ def _row(
         "runtime": ns.runtime,
         "compiler_path": compiler_path,
         "runtime_status": runtime_status,
+        "execution_kind": execution_kind,
         "artifact_hash": flags["artifact_hash"],
         "graph_hash": flags["graph_hash"],
         "schedule_hash": flags["schedule_hash"],
@@ -275,6 +279,7 @@ def _row(
         "operator": {"name": ns.op, "dtype": ns.dtype, "shape": "cli", "target": "cpu"},
         "compiler_path": compiler_path,
         "runtime_status": runtime_status,
+        "execution_kind": execution_kind,
         "artifact_levels": flags,
         "correctness": {
             "max_error": max_error,

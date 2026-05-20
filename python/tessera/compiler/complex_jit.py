@@ -98,7 +98,11 @@ class ComplexJitError(Exception):
 
 class NotHolomorphicError(ComplexJitError):
     """Raised by :func:`analytic_symbolic` when the IR contains a
-    non-holomorphic op.  Names the offending op + line/col."""
+    non-holomorphic op.  Names the offending op + line/col.
+
+    Carries the stable :class:`ConstrainedDiagnosticCode.COMPLEX_NON_HOLOMORPHIC`
+    code so callers can match on it without parsing the message.
+    """
 
     def __init__(self, op_name: str, python_attr: str,
                  fn_name: str = "") -> None:
@@ -112,6 +116,26 @@ class NotHolomorphicError(ComplexJitError):
             "ops is holomorphic only when every op is."
         )
         super().__init__(msg)
+
+    def to_diagnostic(self):
+        """Lift this exception into a unified
+        :class:`tessera.compiler.diagnostics.Diagnostic`."""
+
+        from .diagnostics import (
+            ConstrainedDiagnosticCode,
+            Diagnostic,
+        )
+
+        return Diagnostic.from_constrained(
+            code=ConstrainedDiagnosticCode.COMPLEX_NON_HOLOMORPHIC.value,
+            message=str(self),
+            lane="complex_jit",
+            detail={
+                "op_name": self.op_name,
+                "python_attr": self.python_attr,
+                "fn_name": self.fn_name,
+            },
+        )
 
 
 @dataclass(frozen=True)

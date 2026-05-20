@@ -107,7 +107,41 @@ _GA_ATTR_TO_OP_NAME: dict[str, str] = {
 class CliffordJitError(Exception):
     """Raised when a ``@clifford_jit`` function violates the v1
     contract — e.g., it uses an op with no fused manifest entry, or
-    a target other than ``"apple_gpu"``."""
+    a target other than ``"apple_gpu"``.
+
+    Carries an optional stable :class:`ConstrainedDiagnosticCode` so
+    callers (CI, ``.explain()``) can match against the code rather
+    than the free-form message text.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str | None = None,
+        source_position: Any = None,
+    ) -> None:
+        self.code = code
+        self.source_position = source_position
+        super().__init__(message)
+
+    def to_diagnostic(self) -> Any:
+        """Lift this exception into a
+        :class:`tessera.compiler.diagnostics.Diagnostic` for
+        ``.explain()`` consumption.  Lane is always ``clifford_jit``."""
+
+        from .diagnostics import (
+            ConstrainedDiagnosticCode,
+            Diagnostic,
+        )
+
+        code = self.code or ConstrainedDiagnosticCode.CLIFFORD_OP_NOT_WHITELISTED.value
+        return Diagnostic.from_constrained(
+            code=code,
+            message=str(self),
+            lane="clifford_jit",
+            source_position=self.source_position,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -436,9 +470,11 @@ class CliffordCompiledCallable:
 
 def _validate_target(target: str) -> None:
     if target not in _SUPPORTED_TARGETS:
+        from .diagnostics import ConstrainedDiagnosticCode as _Code
         raise CliffordJitError(
             f"clifford_jit target must be one of {sorted(_SUPPORTED_TARGETS)}, "
-            f"got {target!r}"
+            f"got {target!r}",
+            code=_Code.CLIFFORD_UNSUPPORTED_TARGET.value,
         )
 
 
@@ -449,23 +485,30 @@ def _validate_plan(plan: tuple[CliffordOpPlanEntry, ...]) -> None:
     raise at runtime due to a missing kernel because every op the
     function calls was manifest-verified at decoration.
     """
+    from .diagnostics import ConstrainedDiagnosticCode as _Code
     if not plan:
         raise CliffordJitError(
             "clifford_jit traced an empty op plan — the function did "
             "not call any tessera.ga.* op that routes through the "
             "JIT bridge.  Add at least one supported call (inner, "
-            "norm, exp_mv, rotor_sandwich, ...).")
+            "norm, exp_mv, rotor_sandwich, ...).",
+            code=_Code.CLIFFORD_EMPTY_OP_PLAN.value,
+        )
     for entry in plan:
         if entry.target != "apple_gpu":
             raise CliffordJitError(
                 f"op {entry.op_name!r} routed to target {entry.target!r}; "
                 f"clifford_jit(target='apple_gpu') requires every op to "
-                f"route to apple_gpu")
+                f"route to apple_gpu",
+                code=_Code.CLIFFORD_TARGET_MISMATCH.value,
+            )
         if entry.status != "fused":
             raise CliffordJitError(
                 f"op {entry.op_name!r} manifest status is "
                 f"{entry.status!r} — clifford_jit requires every op "
-                f"to be 'fused' on the target")
+                f"to be 'fused' on the target",
+                code=_Code.CLIFFORD_TARGET_MISMATCH.value,
+            )
         if not entry.op_name.startswith("clifford_"):
             raise CliffordJitError(
                 f"op {entry.op_name!r} is not a clifford_* op; "

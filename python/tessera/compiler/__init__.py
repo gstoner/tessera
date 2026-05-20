@@ -61,14 +61,20 @@ from .support import (
     tier,
 )
 from .diagnostics import (
+    ConstrainedDiagnosticCode,
     Diagnostic,
     DiagnosticCode,
     FallbackDecision,
     FallbackReason,
+    FrontendDiagnosticCode,
     JitDiagnosticCode,
+    SourceLocation,
     TesseraNativeRequiredError,
     classify_host,
 )
+from .symbol_table import SymbolEntry, SymbolTable
+from . import frontend_lanes as lanes  # noqa: F401 — re-export as ts.compiler.lanes
+from .frontend_lanes import FrontendLane, FrontendLaneSpec
 
 __all__ = [
     "ConstraintSolver",
@@ -140,12 +146,26 @@ __all__ = [
     "known_targets",
     "support",
     "tier",
-    # Public diagnostic-code taxonomy (P0-2, 2026-05-19).
+    # Public diagnostic-code taxonomy (P0-2 / F1+G2, 2026-05-19).
+    # Five vocabularies: JIT lane / textual DSL / constrained math /
+    # fallback / source-location.
+    "ConstrainedDiagnosticCode",
     "Diagnostic",
     "DiagnosticCode",
     "FallbackDecision",
     "FallbackReason",
+    "FrontendDiagnosticCode",
     "JitDiagnosticCode",
+    "SourceLocation",
     "TesseraNativeRequiredError",
     "classify_host",
+    # F2 substrate (2026-05-19) — shared scoped symbol table for
+    # every frontend lane.
+    "SymbolEntry",
+    "SymbolTable",
+    # F3 + U1 + U2 (2026-05-19) — frontend-lane registry +
+    # recommend() heuristic + .explain().lane surface.
+    "FrontendLane",
+    "FrontendLaneSpec",
+    "lanes",
 ]

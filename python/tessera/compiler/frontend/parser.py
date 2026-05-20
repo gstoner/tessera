@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from ..diagnostics import Diagnostic
 
 from ..graph_ir import (
     GraphIRConstant,
@@ -29,17 +32,74 @@ from ..op_catalog import get_op_spec
 
 
 class FrontendSyntaxError(SyntaxError):
-    def __init__(self, message: str, span: Optional[SourceSpan] = None) -> None:
+    """Textual-DSL parse error.
+
+    Carries a stable :class:`FrontendDiagnosticCode` so callers (CI,
+    ``.explain()``) can match against the code rather than the
+    free-form message text.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        span: Optional[SourceSpan] = None,
+        *,
+        code: Optional[str] = None,
+    ) -> None:
         self.span = span
+        # ``code`` is plumbed through as a string so existing callers
+        # that don't supply it stay backwards-compatible; the typed
+        # enum lives in tessera.compiler.diagnostics.FrontendDiagnosticCode.
+        self.code = code
         suffix = f" at {span.format()}" if span else ""
         super().__init__(f"{message}{suffix}")
+
+    def to_diagnostic(self) -> "Diagnostic":
+        """Lift this exception into a :class:`Diagnostic` for
+        ``.explain()`` consumption."""
+
+        # Late import keeps the parser module light at load time.
+        from ..diagnostics import (
+            Diagnostic,
+            FrontendDiagnosticCode,
+        )
+
+        code = self.code or FrontendDiagnosticCode.PARSE_UNEXPECTED_TOKEN.value
+        return Diagnostic.from_frontend(
+            code=code,
+            message=str(self).split(" at ")[0],  # strip span suffix
+            source_position=self.span,
+        )
 
 
 class FrontendSemanticError(Exception):
-    def __init__(self, message: str, span: Optional[SourceSpan] = None) -> None:
+    """Textual-DSL semantic error (op not in catalog, arity mismatch,
+    unresolvable result type)."""
+
+    def __init__(
+        self,
+        message: str,
+        span: Optional[SourceSpan] = None,
+        *,
+        code: Optional[str] = None,
+    ) -> None:
         self.span = span
+        self.code = code
         suffix = f" at {span.format()}" if span else ""
         super().__init__(f"{message}{suffix}")
+
+    def to_diagnostic(self) -> "Diagnostic":
+        from ..diagnostics import (
+            Diagnostic,
+            FrontendDiagnosticCode,
+        )
+
+        code = self.code or FrontendDiagnosticCode.SEMANTIC_UNKNOWN_OP.value
+        return Diagnostic.from_frontend(
+            code=code,
+            message=str(self).split(" at ")[0],
+            source_position=self.span,
+        )
 
 
 @dataclass(frozen=True)
@@ -71,7 +131,12 @@ def _lex(source: str) -> list[Token]:
     while pos < len(source):
         match = MASTER.match(source, pos)
         if match is None:
-            raise FrontendSyntaxError(f"unexpected character {source[pos]!r}", SourceSpan(line, col))
+            from ..diagnostics import FrontendDiagnosticCode as _Code
+            raise FrontendSyntaxError(
+                f"unexpected character {source[pos]!r}",
+                SourceSpan(line, col),
+                code=_Code.LEX_UNEXPECTED_CHAR.value,
+            )
         kind = match.lastgroup or ""
         text = match.group()
         if kind == "NEWLINE":
@@ -272,18 +337,32 @@ class _Parser:
         return None
 
     def eat_text(self, text: str) -> Token:
+        from ..diagnostics import FrontendDiagnosticCode as _Code
         token = self.peek()
         if not token or token.text != text:
             got = token.text if token else "EOF"
-            raise FrontendSyntaxError(f"expected {text!r}, got {got!r}", self._span(token))
+            code = (
+                _Code.PARSE_UNEXPECTED_EOF.value if token is None
+                else _Code.PARSE_UNEXPECTED_TOKEN.value
+            )
+            raise FrontendSyntaxError(
+                f"expected {text!r}, got {got!r}",
+                self._span(token),
+                code=code,
+            )
         self.i += 1
         return token
 
     def eat_ident(self) -> str:
+        from ..diagnostics import FrontendDiagnosticCode as _Code
         token = self.peek()
         if not token or token.kind != "IDENT":
             got = token.text if token else "EOF"
-            raise FrontendSyntaxError(f"expected identifier, got {got!r}", self._span(token))
+            raise FrontendSyntaxError(
+                f"expected identifier, got {got!r}",
+                self._span(token),
+                code=_Code.PARSE_EXPECTED_IDENTIFIER.value,
+            )
         self.i += 1
         return token.text
 

@@ -110,6 +110,11 @@ class Explain:
     diagnostics: tuple[Diagnostic, ...]
     next_actions: tuple[NextAction, ...]
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    lane: str = "tessera_jit"
+    """The frontend lane that lowered this function — one of
+    ``tessera_jit`` / ``textual_dsl`` / ``clifford_jit`` /
+    ``complex_jit`` / ``energy_jit``.  Surfaced in the first line of
+    the summary so developers see which verification rules applied."""
 
     @property
     def fallback_reason(self) -> Optional[FallbackReason]:
@@ -146,8 +151,9 @@ class Explain:
             "artifact_only": "△ artifact-only (IR emitted; not executed)",
             "fallback_eager": "× eager Python fallback (no compilation)",
         }.get(self.execution_kind, f"? {self.execution_kind}")
+        lane_label = f"[{self.lane}]" if self.lane and self.lane != "tessera_jit" else ""
         lines.append(
-            f"tessera.jit[{self.function_name!r} → {self.target}]: {kind_label}"
+            f"tessera.jit{lane_label}[{self.function_name!r} → {self.target}]: {kind_label}"
         )
         # Line 2: IR coverage.
         present = [name for name, value in self.ir.layers() if value is not None]
@@ -170,9 +176,14 @@ class Explain:
                 counts[d.severity] = counts.get(d.severity, 0) + 1
             parts = [f"{n} {sev}" for sev, n in sorted(counts.items())]
             top = self.diagnostics[0]
+            # Prefix the diagnostic detail with source position when
+            # available so `print(fn.explain())` shows users exactly
+            # where the issue sits.
+            pos = top.format_position()
+            pos_prefix = f"@{pos} " if pos else ""
             lines.append(
                 f"  Diagnostics: {', '.join(parts)} "
-                f"(first: {top.code_value} — {top.message[:60]}"
+                f"(first: {pos_prefix}{top.code_value} — {top.message[:60]}"
                 + ("..." if len(top.message) > 60 else "")
                 + ")"
             )
@@ -194,6 +205,7 @@ class Explain:
             "function_name": self.function_name,
             "target": self.target,
             "execution_kind": self.execution_kind,
+            "lane": self.lane,
             "is_native": self.is_native,
             "is_reference": self.is_reference,
             "is_artifact_only": self.is_artifact_only,
@@ -218,6 +230,11 @@ class Explain:
                     "code": d.code_value,
                     "message": d.message,
                     "detail": dict(d.detail),
+                    "source_position": (
+                        d.source_position.format()
+                        if d.source_position is not None else None
+                    ),
+                    "lane": d.lane,
                 }
                 for d in self.diagnostics
             ],
@@ -262,7 +279,15 @@ def _build_kernels(fn: "JitFn") -> tuple[Kernel, ...]:
 
 def _build_diagnostics(fn: "JitFn") -> tuple[Diagnostic, ...]:
     """Lift the JIT's lowering diagnostics + fallback reason into the
-    normalized :class:`Diagnostic` shape."""
+    normalized :class:`Diagnostic` shape.
+
+    Every emission from ``@tessera.jit`` is stamped with
+    ``lane="tessera_jit"`` so consumers can distinguish it from
+    textual-DSL / constrained-math-lane diagnostics without parsing
+    the code prefix.  The execution-side fallback diagnostic is
+    not lane-stamped because it fires *after* the frontend choice
+    is made.
+    """
 
     out: list[Diagnostic] = []
     for ld in fn.lowering_diagnostics:
@@ -270,6 +295,7 @@ def _build_diagnostics(fn: "JitFn") -> tuple[Diagnostic, ...]:
             severity=ld.severity,
             code=ld.code,
             message=ld.message,
+            lane="tessera_jit",
         ))
     if fn.last_fallback_reason is not None:
         out.append(Diagnostic.from_fallback(fn.last_fallback_reason))
@@ -361,6 +387,12 @@ def build_explain(fn: "JitFn") -> Explain:
     target = fn.target if fn.target else "cpu"
     if hasattr(target, "isa"):
         target = str(target)
+    # Derive lane from the GraphIR function attribute when present;
+    # fall back to "tessera_jit" for any JitFn that doesn't carry
+    # explicit lane provenance (the common case).
+    lane = "tessera_jit"
+    if fn.graph_ir.functions:
+        lane = getattr(fn.graph_ir.functions[0], "lane", "tessera_jit")
     return Explain(
         function_name=getattr(fn._fn, "__qualname__", "<jit_fn>"),
         target=str(target),
@@ -369,6 +401,7 @@ def build_explain(fn: "JitFn") -> Explain:
         kernels=kernels,
         diagnostics=diagnostics,
         next_actions=next_actions,
+        lane=lane,
         metadata={
             "is_executable": fn.is_executable,
             "has_target_artifacts": fn.has_target_artifacts,

@@ -1,20 +1,23 @@
 """Public diagnostic-code taxonomy for the Tessera compiler.
 
-Tessera emits diagnostics from two structurally different places:
+Tessera has three deliberate frontend lanes (Python ``@tessera.jit``,
+the textual DSL, and the constrained math lanes — ``@clifford_jit`` /
+``@complex_jit`` / ``@energy_jit``) plus an execution-side fallback
+classifier.  This module is the canonical home for **every** stable
+diagnostic vocabulary they emit:
 
-1. **Frontend / lowering** (:class:`JitDiagnosticCode`).  Stable
-   codes for AST-side issues — eager fallback paths, source
-   availability, lowering rejections.  Emitted by the JIT pipeline
-   in :mod:`tessera.compiler.matmul_pipeline` /
-   :mod:`tessera.compiler.jit`.
+1. :class:`JitDiagnosticCode` — Python ``@tessera.jit`` lane.
+   Source-availability, eager-fallback, lowering rejections.
+2. :class:`FrontendDiagnosticCode` — textual DSL lane.
+   Parse errors, semantic errors (unknown op, arity mismatch).
+3. :class:`ConstrainedDiagnosticCode` — Clifford / Complex / Energy
+   lanes.  Whitelist rejections, holomorphicity failures,
+   forbidden-op errors.
+4. :class:`FallbackReason` — execution-side, re-exported from
+   :mod:`tessera.compiler.fallback`.  Why did this run on numpy
+   instead of MSL?
 
-2. **Execution-side fallback** (:class:`FallbackReason`, re-exported
-   from :mod:`tessera.compiler.fallback`).  Stable codes for "why
-   did this run on numpy instead of MSL?".  Emitted by the runtime
-   dispatcher.
-
-This module is the canonical home for both vocabularies.  Each code
-is a string-typed enum so callers can:
+Each code is a string-typed enum so callers can:
 
   * Compare with ``is`` (``code is JitDiagnosticCode.SOURCE_UNAVAILABLE``)
   * Serialize to JSON without conversion
@@ -22,15 +25,18 @@ is a string-typed enum so callers can:
   * Match in tests against stable values (``code.value ==
     "JIT_SOURCE_UNAVAILABLE"``)
 
-The companion :class:`Diagnostic` dataclass normalizes the two
-vocabularies into a single shape consumable by ``JitFn.explain()``.
+The companion :class:`Diagnostic` dataclass normalizes every
+vocabulary into a single shape consumable by ``JitFn.explain()`` —
+including the optional :class:`SourceLocation` (re-exported from
+:mod:`tessera.compiler.graph_ir`) so positions plumb cleanly
+through every lane.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Mapping, Union
+from typing import Any, Mapping, Optional, Union
 
 from .fallback import (
     FallbackDecision,
@@ -39,6 +45,7 @@ from .fallback import (
     classify_host,
     message_for as fallback_message_for,
 )
+from .graph_ir import SourceSpan as SourceLocation
 
 
 class JitDiagnosticCode(str, Enum):
@@ -87,18 +94,103 @@ class JitDiagnosticCode(str, Enum):
     TARGET_IR_ARTIFACT_ONLY = "JIT_TARGET_IR_ARTIFACT_ONLY"
 
 
+class FrontendDiagnosticCode(str, Enum):
+    """Textual-DSL frontend (``tessera.compiler.frontend.parser``).
+
+    Stable codes for the regex-lexer + recursive-descent parser pair
+    that consumes the textual IR-like surface used by lit fixtures
+    and serialized IR round-trips.
+    """
+
+    #: Lexer encountered an unrecognized character.
+    LEX_UNEXPECTED_CHAR = "TEXTUAL_LEX_UNEXPECTED_CHAR"
+
+    #: Parser saw an unexpected token (not what the grammar expected).
+    PARSE_UNEXPECTED_TOKEN = "TEXTUAL_PARSE_UNEXPECTED_TOKEN"
+
+    #: Parser hit EOF in the middle of a statement / module / function.
+    PARSE_UNEXPECTED_EOF = "TEXTUAL_PARSE_UNEXPECTED_EOF"
+
+    #: Parser expected an identifier and got something else.
+    PARSE_EXPECTED_IDENTIFIER = "TEXTUAL_PARSE_EXPECTED_IDENTIFIER"
+
+    #: Parser found a module-declaration keyword it doesn't recognize.
+    PARSE_UNSUPPORTED_MODULE_DECL = "TEXTUAL_PARSE_UNSUPPORTED_MODULE_DECL"
+
+    #: Semantic pass: op name is not in the canonical catalog.
+    SEMANTIC_UNKNOWN_OP = "TEXTUAL_SEMANTIC_UNKNOWN_OP"
+
+    #: Semantic pass: op operand count doesn't match the catalog signature.
+    SEMANTIC_ARITY_MISMATCH = "TEXTUAL_SEMANTIC_ARITY_MISMATCH"
+
+    #: Semantic pass: result type couldn't be inferred for an op call.
+    SEMANTIC_RESULT_TYPE_UNRESOLVED = "TEXTUAL_SEMANTIC_RESULT_TYPE_UNRESOLVED"
+
+
+class ConstrainedDiagnosticCode(str, Enum):
+    """Constrained math lanes — ``@clifford_jit``, ``@complex_jit``,
+    ``@energy_jit``.
+
+    Each lane runs a whitelist-based AST → IR lowering with stricter
+    contracts than ``@tessera.jit`` (CR-verification, GA op
+    membership, forbidden-op rejection).  These codes appear when
+    the lane refuses to compile.
+    """
+
+    # ── Clifford / GA lane ────────────────────────────────────────────
+    #: An op outside the GA whitelist appears in the function body.
+    CLIFFORD_OP_NOT_WHITELISTED = "CLIFFORD_OP_NOT_WHITELISTED"
+
+    #: ``@clifford_jit`` traced an empty op plan — the function body
+    #: never called any ``tessera.ga.*`` op.
+    CLIFFORD_EMPTY_OP_PLAN = "CLIFFORD_EMPTY_OP_PLAN"
+
+    #: An op routed to a target other than the one ``@clifford_jit``
+    #: was decorated with.
+    CLIFFORD_TARGET_MISMATCH = "CLIFFORD_TARGET_MISMATCH"
+
+    #: ``@clifford_jit(target=...)`` got an unsupported target name.
+    CLIFFORD_UNSUPPORTED_TARGET = "CLIFFORD_UNSUPPORTED_TARGET"
+
+    # ── Complex / Visual Complex lane ─────────────────────────────────
+    #: ``@complex_jit`` / ``@analytic_symbolic`` rejected the function:
+    #: it contains a non-holomorphic op (``complex_conjugate``,
+    #: ``complex_abs``, ``complex_arg``, etc.).
+    COMPLEX_NON_HOLOMORPHIC = "COMPLEX_NON_HOLOMORPHIC"
+
+    #: Numerical ``@analytic`` decorator probed at random points and
+    #: found a Cauchy-Riemann residual exceeding ``atol``.
+    COMPLEX_CR_RESIDUAL_TOO_LARGE = "COMPLEX_CR_RESIDUAL_TOO_LARGE"
+
+    # ── Energy lane ───────────────────────────────────────────────────
+    #: ``@energy_jit`` rejected a forbidden op (the v1 whitelist is
+    #: small — most numpy/aten ops are excluded by design).
+    ENERGY_FORBIDDEN_OP = "ENERGY_FORBIDDEN_OP"
+
+    #: ``@energy_jit`` got a dtype it doesn't support (v1 only ships
+    #: ``f32``).
+    ENERGY_UNSUPPORTED_DTYPE = "ENERGY_UNSUPPORTED_DTYPE"
+
+
 # Union type for "any stable diagnostic code".  ``str`` is allowed
 # for backwards compatibility — the existing ``JitDiagnostic.code``
 # field is typed ``str`` and we don't want to break that contract.
-DiagnosticCode = Union[JitDiagnosticCode, FallbackReason, str]
+DiagnosticCode = Union[
+    JitDiagnosticCode,
+    FrontendDiagnosticCode,
+    ConstrainedDiagnosticCode,
+    FallbackReason,
+    str,
+]
 
 
 @dataclass(frozen=True)
 class Diagnostic:
     """Normalized diagnostic for ``JitFn.explain().diagnostics``.
 
-    Bridges the two vocabularies (JIT-side + fallback-side) so the
-    explain front door has a single shape to render.
+    Bridges every diagnostic vocabulary (JIT-side, textual-DSL-side,
+    constrained-math-side, fallback-side) into one shape the explain
+    front door can render.
     """
 
     severity: str
@@ -106,6 +198,7 @@ class Diagnostic:
 
     code: DiagnosticCode
     """Stable code — :class:`JitDiagnosticCode`,
+    :class:`FrontendDiagnosticCode`, :class:`ConstrainedDiagnosticCode`,
     :class:`FallbackReason`, or a free-form string for callers that
     haven't migrated yet."""
 
@@ -114,6 +207,20 @@ class Diagnostic:
 
     detail: Mapping[str, Any] = field(default_factory=dict)
     """Optional structured detail (target name, op name, shape, etc.)."""
+
+    source_position: Optional[SourceLocation] = None
+    """Optional source location (file/line/col).  Populated by every
+    emission site that has access to AST or lexer position info —
+    CPython AST nodes carry ``lineno``/``col_offset``; the textual
+    lexer tracks position per token; the constrained math lanes use
+    the same CPython AST shape as ``@tessera.jit``."""
+
+    lane: Optional[str] = None
+    """Optional frontend-lane provenance — one of ``tessera_jit`` /
+    ``textual_dsl`` / ``clifford_jit`` / ``complex_jit`` /
+    ``energy_jit``.  Lets ``.explain()`` distinguish "the Python
+    lane rejected this" from "the GA lane rejected this" without
+    consumers having to inspect the code prefix."""
 
     @property
     def code_value(self) -> str:
@@ -125,6 +232,14 @@ class Diagnostic:
             return code.value
         return str(code)
 
+    def format_position(self) -> str:
+        """Human-readable position string (``"line N col M"``), or
+        empty when no position is attached."""
+
+        if self.source_position is None:
+            return ""
+        return self.source_position.format()
+
     @classmethod
     def from_fallback(
         cls,
@@ -132,6 +247,8 @@ class Diagnostic:
         *,
         severity: str = "warning",
         detail: Mapping[str, Any] | None = None,
+        source_position: Optional[SourceLocation] = None,
+        lane: Optional[str] = None,
     ) -> "Diagnostic":
         """Lift a :class:`FallbackReason` into a :class:`Diagnostic`."""
 
@@ -140,6 +257,8 @@ class Diagnostic:
             code=reason,
             message=reason.message(),
             detail=dict(detail or {}),
+            source_position=source_position,
+            lane=lane,
         )
 
     @classmethod
@@ -150,23 +269,82 @@ class Diagnostic:
         *,
         severity: str = "warning",
         detail: Mapping[str, Any] | None = None,
+        source_position: Optional[SourceLocation] = None,
     ) -> "Diagnostic":
-        """Lift a JIT-side code into a :class:`Diagnostic`."""
+        """Lift a Python ``@tessera.jit`` lane code into a Diagnostic."""
 
         return cls(
             severity=severity,
             code=code,
             message=message,
             detail=dict(detail or {}),
+            source_position=source_position,
+            lane="tessera_jit",
+        )
+
+    @classmethod
+    def from_frontend(
+        cls,
+        code: FrontendDiagnosticCode | str,
+        message: str,
+        *,
+        severity: str = "error",
+        detail: Mapping[str, Any] | None = None,
+        source_position: Optional[SourceLocation] = None,
+    ) -> "Diagnostic":
+        """Lift a textual-DSL frontend code into a Diagnostic.
+
+        Default severity is ``error`` because the textual DSL refuses
+        to emit IR on a parse/semantic failure — there's no
+        eager-fallback equivalent.
+        """
+
+        return cls(
+            severity=severity,
+            code=code,
+            message=message,
+            detail=dict(detail or {}),
+            source_position=source_position,
+            lane="textual_dsl",
+        )
+
+    @classmethod
+    def from_constrained(
+        cls,
+        code: ConstrainedDiagnosticCode | str,
+        message: str,
+        *,
+        lane: str,
+        severity: str = "error",
+        detail: Mapping[str, Any] | None = None,
+        source_position: Optional[SourceLocation] = None,
+    ) -> "Diagnostic":
+        """Lift a constrained-math-lane code into a Diagnostic.
+
+        ``lane`` is required and must be one of ``clifford_jit`` /
+        ``complex_jit`` / ``energy_jit`` so the explain front door
+        knows which whitelist caught the rejection.
+        """
+
+        return cls(
+            severity=severity,
+            code=code,
+            message=message,
+            detail=dict(detail or {}),
+            source_position=source_position,
+            lane=lane,
         )
 
 
 __all__ = [
+    "ConstrainedDiagnosticCode",
     "Diagnostic",
     "DiagnosticCode",
     "FallbackDecision",
     "FallbackReason",
+    "FrontendDiagnosticCode",
     "JitDiagnosticCode",
+    "SourceLocation",
     "TesseraNativeRequiredError",
     "classify_host",
     "fallback_message_for",

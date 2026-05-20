@@ -50,7 +50,36 @@ from tessera.compiler import ast_ir as _ast_ir
 
 class EnergyJitError(Exception):
     """Raised when an ``@energy_jit`` function violates the v1
-    contract (op not in whitelist, unsupported AST shape, etc.)."""
+    contract (op not in whitelist, unsupported AST shape, etc.).
+
+    Carries an optional stable :class:`ConstrainedDiagnosticCode`
+    so callers can match against the code rather than the message.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str | None = None,
+    ) -> None:
+        self.code = code
+        super().__init__(message)
+
+    def to_diagnostic(self):
+        """Lift this exception into a unified
+        :class:`tessera.compiler.diagnostics.Diagnostic`."""
+
+        from .diagnostics import (
+            ConstrainedDiagnosticCode,
+            Diagnostic,
+        )
+
+        code = self.code or ConstrainedDiagnosticCode.ENERGY_FORBIDDEN_OP.value
+        return Diagnostic.from_constrained(
+            code=code,
+            message=str(self),
+            lane="energy_jit",
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -225,8 +254,11 @@ def energy_jit(
         E.artifact.ir.as_metadata()  # JSON-serializable form
     """
     if dtype != "f32":
+        from .diagnostics import ConstrainedDiagnosticCode as _Code
         raise EnergyJitError(
-            f"energy_jit v1 only supports dtype='f32', got {dtype!r}")
+            f"energy_jit v1 only supports dtype='f32', got {dtype!r}",
+            code=_Code.ENERGY_UNSUPPORTED_DTYPE.value,
+        )
 
     def decorator(fn: Callable[..., Any]) -> EnergyCompiledCallable:
         ir = lower_energy_function(fn)

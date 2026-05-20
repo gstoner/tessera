@@ -479,6 +479,15 @@ class GraphIRFunction:
     A single `func.func @name(...)` block in the Graph IR.
 
     Built by GraphIRBuilder when lowering a Python function.
+
+    The optional ``lane`` field records which frontend lane produced
+    the function — one of ``"tessera_jit"`` / ``"textual_dsl"`` /
+    ``"clifford_jit"`` / ``"complex_jit"`` / ``"energy_jit"``.  This
+    lets downstream passes apply lane-specific optimizations without
+    re-deriving lane membership (e.g., a ``@complex_jit`` function is
+    provably holomorphic, so anti-holomorphic-branch elimination is
+    safe).  Default is ``"tessera_jit"`` to match the most common
+    decoration path.
     """
     name: str
     args: List[IRArg] = field(default_factory=list)
@@ -486,6 +495,7 @@ class GraphIRFunction:
     body: List[IROp] = field(default_factory=list)
     fn_attrs: Dict[str, str] = field(default_factory=dict)
     return_values: List[str] = field(default_factory=list)
+    lane: str = "tessera_jit"
 
     def to_mlir(self, *, verify: bool = False) -> str:
         if verify:

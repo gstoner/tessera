@@ -6,6 +6,7 @@ Single CLI for the per-surface manifests:
 * ``benchmarks``   — backed by ``tessera.compiler.benchmarks_manifest``
 * ``research``     — backed by ``tessera.compiler.research_manifest``
 * ``tools``        — backed by ``tessera.compiler.tools_manifest``
+* ``tests``        — backed by ``tessera.compiler.tests_manifest``
 
 Subcommands
 -----------
@@ -47,7 +48,7 @@ from tessera.compiler.surface_manifest import SurfaceEntry
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _AUDIT_DIR = _REPO_ROOT / "docs" / "audit" / "generated"
 
-SURFACES = ("examples", "benchmarks", "research", "tools")
+SURFACES = ("examples", "benchmarks", "research", "tools", "tests")
 
 
 def _manifest_module(surface: str):
@@ -257,7 +258,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="tessera-surface-audit",
         description=(
             "Unified audit driver for the four per-surface manifests "
-            "(examples / benchmarks / research / tools)."
+            "(examples / benchmarks / research / tools / tests)."
         ),
     )
     p.add_argument(

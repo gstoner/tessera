@@ -45,7 +45,7 @@ from tessera.compiler.surface_manifest import SurfaceEntry
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-SURFACES = ("examples", "benchmarks", "research", "tools")
+SURFACES = ("examples", "benchmarks", "research", "tools", "tests")
 
 
 # Statuses that trigger the lint.  ``archived`` rows are scanned too
@@ -157,14 +157,109 @@ def _scanned_count(surface: str | None) -> int:
     return total
 
 
+# Sentinel SurfaceEntry used to fill the ``entry`` field on
+# api_reference violations — they aren't tied to a real manifest
+# row but ClaimViolation requires the field for uniform display.
+_API_REF_SENTINEL_ENTRY = SurfaceEntry(
+    directory="docs/reference",
+    entry_point="docs/reference/tessera-api-reference.md",
+    status="archived",  # not a runnable surface; just a doc target
+    reason="api_reference doc sentinel for claim_lint",
+)
+
+
+def find_api_reference_op_violations() -> list[ClaimViolation]:
+    """Phase P1-8 (Test-tree review, 2026-05-20).
+
+    Scan ``docs/reference/tessera-api-reference.md`` for any
+    ``tessera.<module>.<symbol>`` reference (where ``<module>`` is one
+    of ``ops`` / ``compiler`` / ``nn`` / ``autodiff`` / ``losses`` /
+    ``optim``) and assert each ``<symbol>`` is reachable on the live
+    ``tessera`` package.  This catches API drift in the doc — e.g.,
+    a renamed compiler helper or a removed op that the doc still
+    references.
+
+    Returns an empty list when the doc is clean.  Each violation
+    carries the file + line + the unresolved symbol.
+    """
+    doc = _REPO_ROOT / "docs" / "reference" / "tessera-api-reference.md"
+    if not doc.exists():
+        return []
+    import tessera
+
+    out: list[ClaimViolation] = []
+    # Match ``tessera.<module>.<symbol>`` inside backticks or prose.
+    # We only target known sub-modules to keep noise low; ad-hoc
+    # references to e.g. ``tessera.runtime.<X>`` aren't part of the
+    # public-surface contract.
+    pat = re.compile(
+        r"tessera\.(ops|compiler|nn|autodiff|losses|optim)"
+        r"\.([a-zA-Z_][a-zA-Z0-9_]*)"
+    )
+    for lineno, line in enumerate(doc.read_text(encoding="utf-8").splitlines(), 1):
+        for m in pat.finditer(line):
+            module, symbol = m.group(1), m.group(2)
+            try:
+                mod = getattr(tessera, module)
+            except AttributeError:
+                # ``tessera.<module>`` itself missing — bigger problem,
+                # report it once.
+                out.append(ClaimViolation(
+                    surface="api_reference",
+                    entry=_API_REF_SENTINEL_ENTRY,
+                    file=doc,
+                    line_no=lineno,
+                    line=line.strip(),
+                    pattern=f"tessera.{module}",
+                    description=(
+                        f"unresolved module ``tessera.{module}`` "
+                        "referenced in API ref"
+                    ),
+                ))
+                continue
+            # Resolve as attribute first; if that fails, try as a
+            # submodule (``tessera.compiler.clifford_jit`` is a
+            # submodule that ``getattr(tessera.compiler, 'clifford_jit')``
+            # won't find unless the parent has imported it eagerly).
+            resolved = hasattr(mod, symbol)
+            if not resolved:
+                import importlib
+                try:
+                    importlib.import_module(f"tessera.{module}.{symbol}")
+                    resolved = True
+                except ImportError:
+                    resolved = False
+            if not resolved:
+                out.append(ClaimViolation(
+                    surface="api_reference",
+                    entry=_API_REF_SENTINEL_ENTRY,
+                    file=doc,
+                    line_no=lineno,
+                    line=line.strip(),
+                    pattern=f"tessera.{module}.{symbol}",
+                    description=(
+                        f"``tessera.{module}.{symbol}`` is referenced "
+                        "in the API ref but does not exist on the "
+                        "live package"
+                    ),
+                ))
+    return out
+
+
 def _cmd_check(args: argparse.Namespace) -> int:
     violations = find_violations(args.surface)
-    scope = args.surface or "all surfaces"
+    # Phase P1-8: also scan the API reference doc for op references
+    # that no longer resolve.  This catches the doc-side of API drift
+    # (the surface-side is covered by find_violations above).
+    if args.surface in (None, "api_reference"):
+        violations.extend(find_api_reference_op_violations())
+    scope = args.surface or "all surfaces + api_reference"
     if not violations:
         print(
             f"[claim_lint:{scope}] clean — "
             f"{_scanned_count(args.surface)} "
-            f"scaffold/broken/archived directories scanned."
+            f"scaffold/broken/archived directories scanned + "
+            f"API reference op-name references resolved."
         )
         return 0
     print(f"[claim_lint:{scope}] FAIL — {len(violations)} overclaim(s):")

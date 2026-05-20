@@ -73,6 +73,18 @@ _STRUCTURE_GATES: tuple[Gate, ...] = (
         cmd=(PYTHON, "-m", "tessera.cli.e2e_coverage", "--check"),
         description="Generated e2e_op_coverage.md must match the registry.",
     ),
+    # Test-tree review P2-11 (2026-05-20): every release must
+    # confirm the test-tree manifest is current.  Catches the case
+    # where a new subtree lands without status classification.
+    Gate(
+        name="tests_manifest_drift",
+        cmd=(PYTHON, "-m", "tessera.cli.surface_audit",
+             "--surface=tests", "--check"),
+        description=(
+            "Generated tests_status.md must match the manifest + "
+            "every runnable / compile_only row's smoke must pass."
+        ),
+    ),
 )
 
 _APPLE_GPU_GATES: tuple[Gate, ...] = (

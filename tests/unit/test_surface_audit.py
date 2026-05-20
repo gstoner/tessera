@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 GENERATED_DIR = REPO_ROOT / "docs" / "audit" / "generated"
 
 
-SURFACES = ("examples", "benchmarks", "research", "tools")
+SURFACES = ("examples", "benchmarks", "research", "tools", "tests")
 
 
 def _manifest(surface: str):
@@ -93,6 +93,7 @@ class TestGeneratedDashboardDriftGate:
             ("benchmarks", "benchmarks_status.md"),
             ("research", "research_status.md"),
             ("tools", "tools_status.md"),
+            ("tests", "tests_status.md"),
         ],
     )
     def test_generated_doc_matches_render(
@@ -246,7 +247,7 @@ class TestSurfaceAuditCLI:
         assert hasattr(m, "main")
         assert hasattr(m, "build_parser")
         assert hasattr(m, "SURFACES")
-        assert m.SURFACES == ("examples", "benchmarks", "research", "tools")
+        assert m.SURFACES == ("examples", "benchmarks", "research", "tools", "tests")
 
     def test_command_chain_splits_on_double_ampersand(self) -> None:
         from tessera.cli.surface_audit import _run_entry

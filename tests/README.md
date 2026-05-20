@@ -7,8 +7,8 @@ contributors should start here.
 
 | Goal | Command |
 |---|---|
-| Daily edit-loop sanity check (~4,350 tests, ~2 min, < 256 MB RAM) | `pytest tests/unit/ -m "not slow" -q` |
-| Full Python suite including heavy benchmarks (~30 min, ~2 GB RAM) | `pytest tests/unit/ -q` |
+| Daily edit-loop sanity check (~4,750 fast tests, ~4 min, < 512 MB RAM) | `pytest tests/unit/ -m "not slow" -q` |
+| Full Python suite including heavy benchmarks (5,525 collected total; ~30 min full sweep, ~2 GB RAM) | `pytest tests/unit/ -q` |
 | MLIR lit fixtures (needs `tessera-opt` on `$PATH`) | `lit tests/tessera-ir/ -v` |
 | Just the autodiff slice (~213 tests, ~2 s) | `pytest tests/unit/test_autodiff_*.py tests/unit/test_conv1d_autodiff.py tests/unit/test_deferred_vjps.py tests/unit/test_sprint_*.py tests/unit/test_standalone_compiler_roadmap.py -q` |
 
@@ -40,6 +40,12 @@ Declared in `pyproject.toml` `[tool.pytest.ini_options]`:
 |---|---|
 | `slow` | Excluded from `-m "not slow"`. Currently applied module-wide to `test_benchmark_gemm.py`, `test_benchmark_compiler_contract.py`, `test_operator_benchmarks_contract.py` — these are the 30-min heavy tail. |
 | `performance` | Deterministic compiler performance / benchmark-proxy tests. |
+| `hardware_apple_gpu` | Tests that require a Darwin host with Metal hardware. Skipped silently when collecting on non-Darwin or in CI without hardware. |
+| `hardware_nvidia` | Tests that require an NVIDIA GPU with CUDA toolkit. |
+| `hardware_rocm` | Tests that require an AMD GPU with the ROCm toolkit. |
+| `hardware_tpu` | Tests that require a Google TPU. |
+
+The `hardware_*` markers are how `scripts/release_gate.py --target=<accel>` selects per-target tests for the release-gate hardware lane. Tests not yet using a marker still rely on `skipif(sys.platform != "darwin")`-style guards; landing the marker on each hardware test is incremental work and tracked in the tests-manifest dashboard.
 
 See [`MEMORY_AND_PERFORMANCE.md`](MEMORY_AND_PERFORMANCE.md) for what
 each marker actually costs.
@@ -53,10 +59,13 @@ each marker actually costs.
 
 ## Known pre-existing failures
 
-Three tests in `tests/unit/test_debug_env.py::TestDiffCommand` fail in
-the current dev environment because the `tessera-mlir diff` console
-entry isn't being resolved. They reproduce on `main` and are unrelated
-to the rest of the suite. Track them with the CLI's diff-subcommand fix.
+None.  The previous "three tests in
+`tests/unit/test_debug_env.py::TestDiffCommand` fail" note was retired
+on 2026-05-20 — the `tessera-mlir diff` console entry is fully wired
+and the affected tests pass on every supported host.  If you see a
+fresh "pre-existing failure" claim, please open an issue: the
+test-doc drift gate (`tests/unit/test_test_docs_drift.py`) is supposed
+to catch stale entries in this section.
 
 ## Related
 

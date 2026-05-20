@@ -114,6 +114,9 @@ echo "==> Surface audit (research)"
 "$PYTHON" -m tessera.cli.surface_audit --surface=research --check
 echo "==> Surface audit (tools)"
 "$PYTHON" -m tessera.cli.surface_audit --surface=tools --check
+# Test-tree review phase P2-11 (2026-05-20): tests-manifest is the
+# fifth audited surface — classifies every test subtree.
+"$PYTHON" -m tessera.cli.surface_audit --surface=tests --check
 echo "==> Surface README claim_lint (all surfaces)"
 "$PYTHON" -m tessera.cli.claim_lint --check
 

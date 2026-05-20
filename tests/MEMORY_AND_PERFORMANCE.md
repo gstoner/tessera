@@ -7,24 +7,31 @@ clock, parallelism budget) when running the Tessera Python test suites,
 and explains the `slow` marker boundary.
 
 If you only need one sentence: **the default daily-driver sweep
-(`pytest -m "not slow"`) peaks at ~213 MB resident and finishes in
-~31 seconds.** The numbers below were measured on Apple Silicon with
-Python 3.14; figures will vary by ~25% across machines but the orders of
-magnitude hold.
+(`pytest -m "not slow"`) peaks at ~125 MB resident and finishes in
+~4 minutes (measured 2026-05-20).** The numbers below were measured
+on Apple Silicon with Python 3.14 via `/usr/bin/time -l`; figures
+will vary by ~25% across machines but the orders of magnitude hold.
 
 ## Suite-by-suite footprint
 
+Measured 2026-05-20 against the current test tree (4,748 fast / 777
+deselected / 5,525 total collected via `pytest --collect-only`):
+
 | Suite | Tests | Wall clock | Peak RSS | Source of pressure |
 |---|---:|---:|---:|---|
-| **`-m "not slow"`** (default) | 2,214 | 31 s | **213 MB** (measured `/usr/bin/time -l`) | Python interpreter + pytest + numpy + tessera modules; small fp64 working arrays for autodiff tests |
-| **`-m slow`** (heavy benchmarks) | 776 | ~30 min (serial) | ~1.5–2 GB (estimated) | fp32 8192³ GEMM in `test_benchmark_gemm.py`; SuperBench subprocess in `test_benchmark_compiler_contract.py`; operator-bench bridge in `test_operator_benchmarks_contract.py` |
-| **Full suite** (`-m ""`) | 2,990 | ~30+ min | ~1.5–2 GB | Same as `slow`; pytest is serial by default so peaks aren't additive |
+| **`-m "not slow"`** (default) | 4,748 | ~4 min | **~125 MB** (measured `/usr/bin/time -l`) | Python interpreter + pytest + numpy + tessera modules; small fp64 working arrays for autodiff tests + the expanded S-series / Apple plan / B3 v2 coverage |
+| **`-m slow`** (heavy benchmarks) | 777 | ~30 min (serial) | ~1.5–2 GB (estimated) | fp32 8192³ GEMM in `test_benchmark_gemm.py`; SuperBench subprocess in `test_benchmark_compiler_contract.py`; operator-bench bridge in `test_operator_benchmarks_contract.py` |
+| **Full suite** (`-m ""`) | 5,525 | ~30+ min | ~1.5–2 GB | Same as `slow`; pytest is serial by default so peaks aren't additive |
 
-The measured fast-suite numbers (213 MB peak, 31 s) leave a comfortable
-margin on any modern machine. The killed run earlier in development hit
-memory pressure because the SuperBench / GEMM / operator-bench tests
-were unmarked at that time — they're now gated behind
-`pytestmark = pytest.mark.slow` and excluded from the default sweep.
+The measured fast-suite numbers (~125 MB peak, ~4 min) leave a
+comfortable margin on any modern machine.  Peak RSS dropped from the
+2026-05 baseline of ~213 MB because every heavy test that previously
+dominated steady-state allocation has been moved behind
+`pytestmark = pytest.mark.slow` — the fast lane is now allocation-disciplined.
+The wall-clock budget grew from ~31 s to ~4 min because the registry,
+audit, Apple, and S-series coverage all expanded; the test-doc drift
+gate (`tests/unit/test_test_docs_drift.py`) keeps this table in sync
+with the actual measurements going forward.
 
 ## What gets allocated where
 

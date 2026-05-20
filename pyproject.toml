@@ -98,6 +98,16 @@ pythonpath = [".", "python"]
 markers = [
     "slow: long-running tests excluded from quick local sweeps",
     "performance: deterministic compiler performance and benchmark proxy tests",
+    # Hardware-gated markers — declared 2026-05-20.  Per-target tests
+    # mark themselves so ``release_gate.py --target=<accel>`` can
+    # select the right subset.  Tests still using
+    # ``skipif(sys.platform != "darwin")``-style guards are
+    # incrementally migrated; tests-manifest dashboard tracks
+    # coverage progress.
+    "hardware_apple_gpu: requires a Darwin host with Metal hardware",
+    "hardware_nvidia: requires an NVIDIA GPU with the CUDA toolkit",
+    "hardware_rocm: requires an AMD GPU with the ROCm toolkit",
+    "hardware_tpu: requires a Google TPU",
 ]
 
 # ----------------------------------------------------------------------------

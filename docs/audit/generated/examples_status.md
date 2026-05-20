@@ -7,8 +7,8 @@ This dashboard lists every active ``examples/`` entry point and its **executable
 
 CI guards (run as part of ``scripts/validate.sh``):
 
-* ``python -m tessera.cli.examples_audit --check`` — executes every ``runnable`` row and ``runnable_optional`` rows whose extras are available; ``scaffold`` / ``archived`` rows are not executed.
-* ``python -m tessera.cli.claim_lint --check`` — scans each example README and flags overclaim language on ``scaffold`` / ``broken`` rows.
+* ``python -m tessera.cli.examples_audit --check`` — executes every ``runnable`` row and ``runnable_optional`` rows whose extras are available; ``scaffold`` / ``broken`` / ``archived`` rows are not executed.
+* ``python -m tessera.cli.claim_lint --check`` — scans each example README and flags overclaim language on ``scaffold`` / ``broken`` / ``archived`` rows.
 
 ``examples/archive/**`` is out of scope and not tracked here.
 

@@ -362,11 +362,11 @@ _SURFACE_INTRO = (
     "CI guards (run as part of ``scripts/validate.sh``):\n\n"
     "* ``python -m tessera.cli.examples_audit --check`` — executes "
     "every ``runnable`` row and ``runnable_optional`` rows whose "
-    "extras are available; ``scaffold`` / ``archived`` rows are not "
-    "executed.\n"
+    "extras are available; ``scaffold`` / ``broken`` / ``archived`` "
+    "rows are not executed.\n"
     "* ``python -m tessera.cli.claim_lint --check`` — scans each "
     "example README and flags overclaim language on ``scaffold`` / "
-    "``broken`` rows.\n\n"
+    "``broken`` / ``archived`` rows.\n\n"
     "``examples/archive/**`` is out of scope and not tracked here."
 )
 

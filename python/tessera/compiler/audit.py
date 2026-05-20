@@ -168,8 +168,13 @@ _BENCH_INVENTORY: frozenset[str] = frozenset({
 # pulling in the entire planned long-tail of primitive_coverage.
 # Source of truth: ``python/tessera/complex.py`` + the M7 rows in
 # ``primitive_coverage.py`` (category ``visual_complex``).
+#
+# 2026-05-19: dropped ``complex_add`` from the inventory.  There is no
+# ``def complex_add`` in ``python/tessera/complex.py`` — complex
+# addition is just ``+`` on numpy arrays.  Keeping the row would have
+# overclaimed ``api=public`` for a function that doesn't exist.
 _M7_INVENTORY: frozenset[str] = frozenset({
-    "complex_add", "complex_mul", "complex_div", "complex_exp",
+    "complex_mul", "complex_div", "complex_exp",
     "complex_log", "complex_sqrt", "complex_pow", "complex_conjugate",
     "complex_abs", "complex_arg",
     "mobius", "mobius_from_three_points",
@@ -179,6 +184,30 @@ _M7_INVENTORY: frozenset[str] = frozenset({
     "dz", "dbar", "laplacian_2d",
     "complex_jit",
 })
+
+
+# Backend-manifest naming alias.  The public API in
+# ``python/tessera/complex.py`` uses bare names (``mobius``,
+# ``stereographic``) but the fused Apple GPU MSL kernels are
+# registered under prefixed names (``complex_mobius``,
+# ``complex_stereographic``) in ``backend_manifest._COMPLEX_APPLE_GPU_FUSED``
+# so the C ABI symbol naming stays uniform with the other complex
+# kernels (``complex_mul``, ``complex_exp``).  The audit walker
+# consults this alias before looking up the backend manifest so the
+# support table reflects the real fused-kernel coverage instead of
+# silently underclaiming ``target_ir=planned``.
+_M7_BACKEND_ALIASES: dict[str, str] = {
+    "mobius": "complex_mobius",
+    "stereographic": "complex_stereographic",
+    # complex_mul / complex_exp use the same name on both sides.
+}
+
+
+def _backend_lookup_name(op_name: str) -> str:
+    """Return the name to use when looking ``op_name`` up in the
+    backend manifest / per-target fused-kernel sets."""
+
+    return _M7_BACKEND_ALIASES.get(op_name, op_name)
 
 
 def _axis_api(op_name: str) -> AxisCell:
@@ -249,8 +278,10 @@ def _axis_tile_ir(op_name: str) -> AxisCell:
     # a registry "partial" because the registry's backend_kernel axis
     # is intentionally the long-pole gate (Decision #25) and stays
     # `partial` until Phase G/H/I lights up distributed runtime.
-    if (op_name in bm._CLIFFORD_APPLE_GPU_FUSED or
-            op_name in bm._EBM_APPLE_GPU_FUSED):
+    backend_name = _backend_lookup_name(op_name)
+    if (backend_name in bm._CLIFFORD_APPLE_GPU_FUSED or
+            backend_name in bm._EBM_APPLE_GPU_FUSED or
+            backend_name in bm._COMPLEX_APPLE_GPU_FUSED):
         return AxisCell("fused", "backend_manifest fused entry")
     cov = _coverage_for(op_name)
     if cov is not None:
@@ -260,7 +291,10 @@ def _axis_tile_ir(op_name: str) -> AxisCell:
 
 
 def _axis_target_ir(op_name: str) -> AxisCell:
-    entries = bm.manifest_for(op_name)
+    # M7 ops (mobius, stereographic) live under prefixed names in
+    # backend_manifest; translate before lookup so the audit reflects
+    # the fused-kernel coverage that actually ships.
+    entries = bm.manifest_for(_backend_lookup_name(op_name))
     if not entries:
         return AxisCell("planned", "backend_manifest")
     # Best status across targets — rank ordering chooses the most concrete.

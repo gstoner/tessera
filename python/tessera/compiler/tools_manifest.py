@@ -186,7 +186,15 @@ _SURFACE_INTRO = (
     "This dashboard lists every active project under ``tools/``. "
     "Most rows are either Python CLI helpers (``runnable``) or "
     "C++ build targets (``compile_only``).  Broken rows ship with "
-    "a STATUS.md naming the failure mode."
+    "a STATUS.md naming the failure mode.\n\n"
+    "CI guards (run as part of ``scripts/validate.sh``):\n\n"
+    "* ``python -m tessera.cli.surface_audit --surface=tools "
+    "--check`` — executes every ``runnable`` row and "
+    "``compile_only`` smokes; ``scaffold`` / ``broken`` / "
+    "``archived`` rows are not executed.\n"
+    "* ``python -m tessera.cli.claim_lint --surface=tools "
+    "--check`` — flags overclaim language on ``scaffold`` / "
+    "``broken`` / ``archived`` rows."
 )
 
 

@@ -267,14 +267,13 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `conv3d` | stencil | public | public | registered | complete | partial | reference | ready | none |
 | `check_cauchy_riemann` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
 | `complex_abs` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `complex_add` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
 | `complex_arg` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
 | `complex_conjugate` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
 | `complex_div` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `complex_exp` | visual_complex | public | public | missing | planned | planned | fused | unknown | none |
+| `complex_exp` | visual_complex | public | public | missing | planned | fused | fused | unknown | none |
 | `complex_jit` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
 | `complex_log` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `complex_mul` | visual_complex | public | public | missing | planned | planned | fused | unknown | none |
+| `complex_mul` | visual_complex | public | public | missing | planned | fused | fused | unknown | none |
 | `complex_pow` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
 | `complex_sqrt` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
 | `conformal_energy_on_sphere` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
@@ -284,9 +283,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `dz` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
 | `is_concyclic` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
 | `laplacian_2d` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `mobius` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
+| `mobius` | visual_complex | public | public | missing | planned | fused | fused | unknown | none |
 | `mobius_from_three_points` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `stereographic` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
+| `stereographic` | visual_complex | public | public | missing | planned | fused | fused | unknown | none |
 
 ## Summary by family
 
@@ -329,7 +328,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | state_space | 1 | PPGCpRN· |
 | state_update | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
 | stencil | 2 | PPGCpRN· PPGCpRN· |
-| visual_complex | 22 | PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· PP···F?· PP····?· PP····?· PP···F?· PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· |
+| visual_complex | 21 | PP····?· PP····?· PP····?· PP····?· PP····?· PP··FF?· PP····?· PP····?· PP··FF?· PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· PP··FF?· PP····?· PP··FF?· |
 
 ## Canonical end-to-end programs (M1 / M1.5)
 

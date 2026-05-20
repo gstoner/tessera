@@ -2411,9 +2411,11 @@ _PLANNED_ENTRIES: tuple[PrimitiveCoverage, ...] = (
     # decorators do Cauchy-Riemann verification at decoration time.
     # 94 focused complex tests pass; contract-axis completeness and
     # native (Apple GPU) lowering are the next gates.
-    _partial("complex_add", "visual_complex", ("complex_analysis",),
-             references=("Needham — Visual Complex Analysis",),
-             notes="M7: ℂ-add; Python reference in tessera.complex."),
+    #
+    # 2026-05-19: dropped ``complex_add`` — there is no
+    # ``def complex_add`` in ``python/tessera/complex.py``.  Complex
+    # addition is just ``+`` on numpy arrays; no Tessera-specific
+    # primitive ships for it, so listing one was an overclaim.
     _partial("complex_mul", "visual_complex", ("complex_analysis",),
              references=("Needham — Visual Complex Analysis",),
              notes="M7: ℂ-mul; preserves Cauchy-Riemann under @analytic."),

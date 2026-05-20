@@ -250,6 +250,16 @@ def analytic_symbolic(fn: Callable[..., Any]) -> Callable[..., Any]:
     return fn
 
 
+# Public alias.  The M7 milestone doc + audit rows reference
+# ``@complex_jit`` as the canonical decorator name (parallel to
+# ``@clifford_jit`` for the GA family).  The implementation lives
+# under :func:`analytic_symbolic` for clarity in the decoration-time
+# logic; the alias gives the public surface the name users actually
+# type.  Both names point at the same function and are kept in
+# ``__all__`` so static analyzers see both.
+complex_jit = analytic_symbolic
+
+
 __all__ = [
     "ComplexJitError",
     "ComplexIRProgram",
@@ -261,4 +271,5 @@ __all__ = [
     "lower_complex_function",
     "is_holomorphic",
     "analytic_symbolic",
+    "complex_jit",
 ]

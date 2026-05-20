@@ -108,6 +108,13 @@ _SURFACE_INTRO = (
     "are not part of the production source tree.  The audit makes "
     "their runnable status explicit so a ``broken`` row gets fixed "
     "instead of silently rotting.\n\n"
+    "CI guards (run as part of ``scripts/validate.sh``):\n\n"
+    "* ``python -m tessera.cli.surface_audit --surface=research "
+    "--check`` — executes every ``runnable`` row; ``scaffold`` / "
+    "``broken`` / ``archived`` rows are not executed.\n"
+    "* ``python -m tessera.cli.claim_lint --surface=research "
+    "--check`` — flags overclaim language on ``scaffold`` / "
+    "``broken`` / ``archived`` rows.\n\n"
     "Per-project STATUS.md files (when present) explain the path "
     "forward."
 )

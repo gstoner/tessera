@@ -5,6 +5,11 @@
 
 This dashboard lists every active project under ``research/``. Research experiments live here per ``research/README.md`` — they are not part of the production source tree.  The audit makes their runnable status explicit so a ``broken`` row gets fixed instead of silently rotting.
 
+CI guards (run as part of ``scripts/validate.sh``):
+
+* ``python -m tessera.cli.surface_audit --surface=research --check`` — executes every ``runnable`` row; ``scaffold`` / ``broken`` / ``archived`` rows are not executed.
+* ``python -m tessera.cli.claim_lint --surface=research --check`` — flags overclaim language on ``scaffold`` / ``broken`` / ``archived`` rows.
+
 Per-project STATUS.md files (when present) explain the path forward.
 
 ## Status taxonomy

@@ -247,11 +247,11 @@ _SURFACE_INTRO = (
     "CI guards (run as part of ``scripts/validate.sh``):\n\n"
     "* ``python -m tessera.cli.surface_audit --surface=benchmarks "
     "--check`` — executes every ``runnable`` row and "
-    "``compile_only`` smokes; ``scaffold`` / ``archived`` rows are "
-    "not executed.\n"
+    "``compile_only`` smokes; ``scaffold`` / ``broken`` / "
+    "``archived`` rows are not executed.\n"
     "* ``python -m tessera.cli.claim_lint --surface=benchmarks "
     "--check`` — flags overclaim language on ``scaffold`` / "
-    "``broken`` rows."
+    "``broken`` / ``archived`` rows."
 )
 
 

@@ -152,6 +152,29 @@ def test_native_ga_ops_show_fused_at_target_ir() -> None:
         assert row.cells["bench"].status == "benchmarked", op
 
 
+def test_visual_complex_rows_match_public_api_and_backend_aliases() -> None:
+    """M7 rows use public ``tessera.complex`` names while honoring the
+    prefixed backend-manifest symbols.
+
+    ``mobius`` and ``stereographic`` are public API names, but their
+    native Apple GPU entries live under ``complex_mobius`` and
+    ``complex_stereographic`` in ``backend_manifest``.  The support
+    table must show those public rows as fused.  Conversely,
+    ``complex_add`` must stay absent because no public function with
+    that name exists.
+    """
+    rows = {row.op_name: row for row in audit.all_support_rows()}
+    assert "complex_add" not in rows
+
+    for op in ("complex_mul", "complex_exp", "mobius", "stereographic"):
+        row = rows[op]
+        assert row.family == "visual_complex"
+        assert row.cells["api"].status == "public"
+        assert row.cells["frontend"].status == "public"
+        assert row.cells["tile_ir"].status == "fused", op
+        assert row.cells["target_ir"].status == "fused", op
+
+
 def test_matmul_is_public_and_fused_at_target_ir() -> None:
     """Tensor-side sanity: the canonical matmul row is public,
     Graph-IR-registered, and fused on the best target."""

@@ -7,8 +7,8 @@ This dashboard lists every active ``benchmarks/`` entry point and its **executab
 
 CI guards (run as part of ``scripts/validate.sh``):
 
-* ``python -m tessera.cli.surface_audit --surface=benchmarks --check`` — executes every ``runnable`` row and ``compile_only`` smokes; ``scaffold`` / ``archived`` rows are not executed.
-* ``python -m tessera.cli.claim_lint --surface=benchmarks --check`` — flags overclaim language on ``scaffold`` / ``broken`` rows.
+* ``python -m tessera.cli.surface_audit --surface=benchmarks --check`` — executes every ``runnable`` row and ``compile_only`` smokes; ``scaffold`` / ``broken`` / ``archived`` rows are not executed.
+* ``python -m tessera.cli.claim_lint --surface=benchmarks --check`` — flags overclaim language on ``scaffold`` / ``broken`` / ``archived`` rows.
 
 ## Status taxonomy
 

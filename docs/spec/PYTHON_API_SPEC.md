@@ -1404,12 +1404,23 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `kv_cache_append(cache, key, value)` | `(cache, array, array) → cache` | `state` | Reference in-process KV cache helper |
 | `kv_cache_prune(cache, max_entries=None, max_seq=None)` | `(cache) → cache` | `state` | Reference in-process KV cache helper |
 | `selective_ssm(x, A, B, C, D=None, initial_state=None)` | `(array, array, array, array, [array, array]) → array` | `state` | Mamba2-style selective state-space scan; closed-form JVP through the recurrence shipped (see `tessera.selective_ssm` Graph IR op) |
-| `complex_mul(z, w)` / `complex_div(z, w, eps=1e-12)` / `complex_exp(z)` / `complex_log(z)` / `complex_sqrt(z, branch=0)` / `complex_pow(z, w)` | `(complex, complex) → complex` | `pure` | M7 Visual Complex Analysis pointwise math (Graph IR ops `tessera.complex_mul` / `complex_div` / `complex_exp` / `complex_log` / `complex_sqrt` / `complex_pow`); fused Apple GPU MSL kernel for `complex_mul`/`complex_exp`; NVIDIA / ROCm slots planned (Phase G / H). |
-| `complex_conjugate(z)` / `complex_abs(z)` / `complex_arg(z)` | `(complex) → complex/real` | `pure` | M7 pointwise complex helpers (Graph IR ops `tessera.complex_conjugate` / `complex_abs` / `complex_arg`); CPU reference, GPU slots planned. |
-| `mobius(z, a, b, c, d)` / `mobius_from_three_points(src, dst)` / `stereographic(x, y, z)` | Möbius / projective | `pure` | M7 Möbius transformation family (Graph IR ops `tessera.mobius` / `mobius_from_three_points` / `stereographic`); fused Apple GPU MSL kernels for `mobius`/`stereographic`. |
-| `cross_ratio(z1, z2, z3, z4)` / `is_concyclic(z1, z2, z3, z4)` / `check_cauchy_riemann(f)` | `(complex×4) → scalar` / certificate | `pure` | M7 projective invariants + holomorphicity certificate (Graph IR ops `tessera.cross_ratio` / `tessera.is_concyclic` / `tessera.check_cauchy_riemann`). |
-| `dz(f, z0, h=1e-5)` / `dbar(f, z0, h=1e-5)` / `laplacian_2d(f, ...)` | stencils | `pure` | M7 Wirtinger derivatives + Laplacian (Graph IR ops `tessera.dz` / `tessera.dbar` / `tessera.laplacian_2d`, `lowering="stencil"`). |
-| `conformal_jacobian(f, z0)` / `conformal_energy_on_sphere(f, ...)` | conformal | `pure` | M7 conformal Jacobian + spherical conformal energy (Graph IR ops `tessera.conformal_jacobian` / `tessera.conformal_energy_on_sphere`). |
+| `complex_mul(z, w)` / `complex_div(z, w, eps=1e-12)` / `complex_exp(z)` / `complex_log(z)` / `complex_sqrt(z, branch=0)` / `complex_pow(z, w)` | `(complex, complex) → complex` | `pure` | M7 Visual Complex Analysis pointwise math (Graph IR ops `tessera.complex_mul` / `complex_div` / `complex_exp` / `complex_log` / `complex_sqrt` / `complex_pow`). Fused Apple GPU MSL kernel ships for `complex_mul`/`complex_exp` (fp32). Long-tail (`complex_div`/`log`/`sqrt`/`pow`) runs via Python reference today (fp32-only); fp16/bf16 are planned target dtypes for the NVIDIA WGMMA / ROCm MFMA / Apple GPU MSL kernels that land in Phase G / H / M7 follow-up. |
+| `complex_conjugate(z)` / `complex_abs(z)` / `complex_arg(z)` | `(complex) → complex/real` | `pure` | M7 pointwise complex helpers (Graph IR ops `tessera.complex_conjugate` / `complex_abs` / `complex_arg`). CPU reference today is fp32-only; apple_gpu / nvidia_sm90+ / rocm slots are reserved with fp16/bf16 in the planned dtype matrix — those are target dtypes for the future native kernel, not currently-runnable dtypes. |
+| `mobius(z, a, b, c, d)` / `mobius_from_three_points(src, dst)` / `stereographic(x, y, z)` | Möbius / projective | `pure` | M7 Möbius transformation family (Graph IR ops `tessera.mobius` / `mobius_from_three_points` / `stereographic`). Fused Apple GPU MSL kernels ship for `mobius` + `stereographic` (fp32). `mobius_from_three_points` runs via Python reference today; native kernel slots reserved on every GPU target with fp32/fp16/bf16 listed as the planned kernel-target dtype set. |
+| `cross_ratio(z1, z2, z3, z4)` / `is_concyclic(z1, z2, z3, z4)` / `check_cauchy_riemann(f)` | `(complex×4) → scalar` / certificate | `pure` | M7 projective invariants + holomorphicity certificate (Graph IR ops `tessera.cross_ratio` / `tessera.is_concyclic` / `tessera.check_cauchy_riemann`). Python reference today is fp32; fp16/bf16 on the planned GPU slots are kernel target dtypes only. |
+| `dz(f, z0, h=1e-5)` / `dbar(f, z0, h=1e-5)` / `laplacian_2d(f, ...)` | stencils | `pure` | M7 Wirtinger derivatives + Laplacian (Graph IR ops `tessera.dz` / `tessera.dbar` / `tessera.laplacian_2d`, `lowering="stencil"`). Python reference today is fp32; planned GPU dtype matrix (fp32/fp16/bf16) describes the future stencil kernel, not what runs now. |
+| `conformal_jacobian(f, z0)` / `conformal_energy_on_sphere(f, ...)` | conformal | `pure` | M7 conformal Jacobian + spherical conformal energy (Graph IR ops `tessera.conformal_jacobian` / `tessera.conformal_energy_on_sphere`). Same dtype semantics as the rest of the M7 long-tail: fp32 reference today; fp16/bf16 are planned kernel-target dtypes. |
+
+> **Reading the dtype matrices.** Across the M7 family — and the rest
+> of the backend manifest — a dtype tuple is interpreted **against the
+> entry's status**: ``status="reference"`` lists dtypes that run
+> today via the Python path; ``status="fused"`` lists dtypes the
+> native kernel actually supports today; ``status="planned"`` lists
+> the target dtype matrix for the **unbuilt** native kernel. fp16 and
+> bf16 in a ``planned`` row are explicit kernel-author contracts for
+> Phase G / H / M7 follow-up, never claims about what runs in the
+> current runtime. See ``BackendKernelEntry.dtypes`` for the
+> normative interpretation.
 
 **Operator registry behavior:** `tessera.ops.registry` tracks reference,
 lowering, and runtime-kernel handlers. Current public runtime names are mirrored

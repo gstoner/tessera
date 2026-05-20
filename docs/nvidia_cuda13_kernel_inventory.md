@@ -331,3 +331,32 @@ Sprint G-6/G-7/G-8 will promote entries to `compileable` once
 - NCCL all-reduce numerical verification across 8x ranks
 - Profiler timeline capture (NVTX/CUPTI)
 - Multi-rank scaling tests
+
+---
+
+## 9. M7 Visual Complex Analysis (E3 follow-up)
+
+The M7 surface (`tessera.complex.*` — 4 fused ops + 16 long-tail) is
+the next NVIDIA kernel family after the matmul/attention baseline.
+Today only the **Python reference path** runs on the CPU lanes
+(`status="reference"`, `dtypes=("fp32",)` on x86/apple_cpu/cpu). The
+backend manifest reserves planned slots across every NVIDIA SM with:
+
+| Op family | Lowering target | Planned dtype matrix | Notes |
+|---|---|---|---|
+| `complex_mul` / `complex_div` / `complex_exp` / `complex_log` / `complex_sqrt` / `complex_pow` | Pointwise PTX (`cuComplex.h`-style intrinsics on packed `(re, im)` pairs) | **fp32 / fp16 / bf16** | fp16/bf16 are storage-side dtypes; complex math typically uses fp32 accum. |
+| `complex_conjugate` / `complex_abs` / `complex_arg` | Pointwise PTX | **fp32 / fp16 / bf16** | Same dtype semantics. |
+| `mobius` / `mobius_from_three_points` / `stereographic` | Pointwise PTX with broadcast scalar coefficients | **fp32 / fp16 / bf16** | Möbius matrix coefficients broadcast across the batch. |
+| `cross_ratio` / `is_concyclic` / `check_cauchy_riemann` | Small fixed-size projective math + reduction | **fp32 / fp16 / bf16** | Output is scalar / certificate; accum stays fp32. |
+| `dz` / `dbar` / `laplacian_2d` | WGMMA-irrelevant; 3×3 stencil kernel (one PTX thread per output element) | **fp32 / fp16 / bf16** | Stencil family — no WGMMA path; can share infra with conv2d depthwise. |
+| `conformal_jacobian` / `conformal_energy_on_sphere` | Stencil + reduction | **fp32 / fp16 / bf16** | conformal_energy_on_sphere reduces over S² grid. |
+
+**Important — read the dtype column against the entry's status.** All
+20 M7 rows are at `status="planned"` on the NVIDIA targets today; the
+fp16/bf16 entries describe what the **future native kernel will
+support**, not what runs in the runtime now. The fp32 reference path
+on CPU is the only execution path for these ops today.
+
+When the kernels actually land (Phase G follow-on), each row's status
+flips `planned → fused` and the dtype matrix above becomes the live
+kernel's contract unchanged.

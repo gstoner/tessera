@@ -316,3 +316,32 @@ Sprint H-6/H-7/H-8 will promote entries to `compileable` once
 - RCCL all-reduce numerical verification across 8x ranks
 - Profiler timeline capture (rocprof)
 - Multi-rank scaling tests
+
+---
+
+## 10. M7 Visual Complex Analysis (E3 follow-up)
+
+Parallel to the NVIDIA M7 plan (see
+`docs/nvidia_cuda13_kernel_inventory.md` §9). The backend manifest
+reserves `status="planned"` slots for every M7 op on the ROCm target
+with the matrix below; all 20 M7 ops run today **only** via the
+Python reference path on CPU (`status="reference"`,
+`dtypes=("fp32",)`).
+
+| Op family | Lowering target | Planned dtype matrix |
+|---|---|---|
+| `complex_mul/div/exp/log/sqrt/pow` | Pointwise AMDGCN (packed `(re, im)`) | **fp32 / fp16 / bf16** |
+| `complex_conjugate/abs/arg` | Pointwise AMDGCN | **fp32 / fp16 / bf16** |
+| `mobius` / `stereographic` / `mobius_from_three_points` | Pointwise AMDGCN with broadcast scalar coefficients | **fp32 / fp16 / bf16** |
+| `cross_ratio` / `is_concyclic` / `check_cauchy_riemann` | Small fixed-size projective math + reduction | **fp32 / fp16 / bf16** |
+| `dz` / `dbar` / `laplacian_2d` | 3×3 stencil (one AMDGCN lane per output element) | **fp32 / fp16 / bf16** |
+| `conformal_jacobian` / `conformal_energy_on_sphere` | Stencil + reduction | **fp32 / fp16 / bf16** |
+
+**Read the dtype column against the entry's status.** fp16/bf16 in
+the planned-status rows above describe **target dtypes for the
+unbuilt MFMA kernels**, not what runs today. The runnable runtime
+dtype is fp32-only via the Python reference path on CPU.
+
+Promotion gated on Phase H. When kernels land, status flips
+`planned → fused` and the dtype matrix becomes the live kernel's
+contract unchanged.

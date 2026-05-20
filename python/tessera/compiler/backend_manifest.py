@@ -84,8 +84,34 @@ class BackendKernelEntry:
         One of ``fused`` / ``reference`` / ``compileable`` /
         ``artifact_only`` / ``planned``.
     dtypes : tuple[str, ...]
-        Canonical dtype set this kernel supports.  Aliases normalized at
+        Canonical dtype set for this entry.  Aliases normalized at
         construction.
+
+        **Semantics depend on ``status`` (do not overread!):**
+
+          * ``fused`` → dtypes the fused kernel **actually supports
+            today** (e.g., Apple GPU matmul ships
+            ``("fp32", "fp16", "bf16")``).
+          * ``reference`` → dtypes the **Python / numpy reference path
+            runs today**.  The M7 ``complex_*`` family is fp32-only on
+            the reference path; tagging fp16/bf16 here would be an
+            overclaim.
+          * ``compileable`` → dtypes the lowering pipeline emits IR for.
+            Compilation works; execution may not.
+          * ``artifact_only`` → dtypes the Target IR artifact compiles
+            for under the pinned toolchain (CUDA 13.2 U1 / ROCm 7.2.3).
+            No host execution.
+          * ``planned`` → **target kernel dtypes for the unbuilt
+            kernel** — the matrix the future native kernel will
+            support, NOT the dtypes that run today.  When ``status``
+            flips to ``fused``, this set becomes the live kernel's
+            dtype matrix unchanged.
+
+        Concretely: a row reading
+        ``BackendKernelEntry(target="apple_gpu", status="planned",
+        dtypes=("fp32", "fp16", "bf16"))`` means "the planned MSL
+        kernel will support fp32/fp16/bf16 — today only fp32 runs,
+        via the matching ``status=reference`` row on a CPU target."
     feature_flags : tuple[str, ...]
         Target-specific feature flags (``wgmma`` / ``tcgen05_pair`` /
         ``mfma_f8`` / ``msl`` / etc.).
@@ -1153,9 +1179,25 @@ _M7_LONG_TAIL: tuple[str, ...] = (
     "conformal_energy_on_sphere",
 )
 
-# Per-op dtype matrix for M7 long-tail ops.  fp32 only for v1 — fp16 /
-# bf16 will land alongside the actual GPU kernels (the storage/accum
-# split for complex math typically wants fp16 storage + fp32 accum).
+# Per-op dtype matrix for M7 long-tail ops.
+#
+# ``_M7_LONG_TAIL_DTYPES`` is what the **Python reference path supports
+# today** — fp32 only.  This is the dtype set we use on
+# ``status="reference"`` entries (cpu / x86 / apple_cpu).  Treating
+# numpy's complex-pair representation as supporting fp16/bf16 today
+# would be an overclaim — those need explicit storage/accum-split
+# implementations.
+#
+# ``_M7_LONG_TAIL_PLANNED_GPU_DTYPES`` is the **target dtype matrix for
+# the unbuilt native kernels** — fp32 + fp16 + bf16.  This is what we
+# attach to ``status="planned"`` entries on apple_gpu / nvidia_sm90+ /
+# rocm so Phase G / H / M7-follow-up kernel work has a clear dtype
+# contract to satisfy.  When those kernels land and ``status`` flips
+# to ``fused``, this set becomes the live kernel's dtype matrix
+# unchanged (the storage/accum split for complex math typically wants
+# fp16 storage + fp32 accum, captured via the op's
+# ``NumericPolicy(storage=..., accum=...)`` in
+# ``primitive_coverage.py``).
 _M7_LONG_TAIL_DTYPES: tuple[str, ...] = ("fp32",)
 _M7_LONG_TAIL_PLANNED_GPU_DTYPES: tuple[str, ...] = ("fp32", "fp16", "bf16")
 
@@ -1236,9 +1278,11 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
             dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
             feature_flags=("complex_namespace", "msl", "metal"),
             notes=(
-                "Native MSL kernel slot reserved — runs today via the "
-                "Python reference path; promotion gated on the M7 "
-                "follow-up kernel sprint."
+                "Planned kernel target dtypes (fp32 + fp16 + bf16). "
+                "Today: this op runs only via the Python reference path "
+                "above (fp32-only); the fp16/bf16 entries here describe "
+                "what the future MSL kernel will support, not what runs "
+                "now. Promotion gated on the M7 follow-up kernel sprint."
             ),
         ))
     # NVIDIA — planned slots across SM_80 / SM_90 / SM_100 / SM_120.
@@ -1258,8 +1302,10 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
             dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
             feature_flags=flags,
             notes=(
-                "M7 kernel slot reserved; runs today via Python reference. "
-                "Promotion gated on Phase G."
+                "Planned WGMMA/tcgen05 kernel target dtypes "
+                "(fp32 + fp16 + bf16). Today: this op runs only via the "
+                "Python reference path (fp32-only); fp16/bf16 lanes "
+                "land with the actual Phase G kernel work."
             ),
             cuda_arch_min=arch_min,
             nvcc_version_min="13.2.1",
@@ -1271,8 +1317,10 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
         dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
         feature_flags=("complex_namespace", "mfma"),
         notes=(
-            "M7 kernel slot reserved; runs today via Python reference. "
-            "Promotion gated on Phase H."
+            "Planned MFMA kernel target dtypes (fp32 + fp16 + bf16). "
+            "Today: this op runs only via the Python reference path "
+            "(fp32-only); fp16/bf16 lanes land with the Phase H "
+            "kernel work."
         ),
         hipcc_version_min="7.2.3",
     ))

@@ -4,11 +4,26 @@
 > changes; everything else in the repo (READMEs, roadmap, audit) cites
 > the *claims* below rather than restating them.
 >
-> **Last updated:** 2026-05-19 — M7 surface visible in
+> **Last updated:** 2026-05-20 — E3 partial-ops uplift landed.  M7
+> long-tail ops now have OP_SPECS rows, the audit walker reports
+> ``runnable_reference`` (was ``partial``) for the 16 non-fused ops,
+> and the backend manifest reserves ``status="planned"`` slots across
+> apple_gpu / nvidia_sm80..120 / rocm with the target kernel dtype
+> matrix (fp32 + fp16 + bf16) so Phase G / H / M7 follow-up have a
+> stable hand-off point.  See ``docs/audit/partial_ops_uplift_plan.md``.
+>
+> **Dtype reading rule.** A ``planned`` row's dtype tuple is the
+> **target kernel dtype matrix** — what the unbuilt native kernel
+> will support — not what runs today.  Today the entire M7 surface
+> runs only via the **Python reference path on CPU** (fp32 only).
+> fp16/bf16 entries land alongside the actual kernels.  Across the
+> rest of the repo, see ``BackendKernelEntry.dtypes`` for the
+> normative interpretation.
+>
+> **Previous update (2026-05-19):** M7 surface visible in
 > `docs/audit/generated/support_table.md` (22 rows, family
 > `visual_complex`). Implementation + 94 focused tests had landed
-> earlier; this milestone closes the visibility gap that left M7 out
-> of the audit dashboard.
+> earlier; the 2026-05-19 milestone closed the audit-visibility gap.
 
 ## TL;DR
 
@@ -21,7 +36,9 @@
 | **Cauchy-Riemann verification** | ✅ Decoration-time gate | `check_cauchy_riemann`; backs the `@analytic` and `@complex_jit` decorators |
 | **`@complex_jit` symbolic frontend** | ✅ AST → symbolic-graph lowering | `python/tessera/compiler/complex_jit.py`; lowers a Python-source `f(z)` to a CR-verified symbolic graph |
 | **Support-table visibility** | ✅ **landed 2026-05-19** | 22 rows in `support_table.md` under family `visual_complex` |
-| **Native (Apple GPU) lowering** | 🟡 deferred | M7 surface routes through the CPU/numpy reference path. Native (MSL kernel) lanes are the next gate; planned to ride the same `_apple_gpu_dispatch` + manifest infrastructure that GA/EBM use. |
+| **Native (Apple GPU) lowering** | 🟢 4 fused + 16 planned slots | `complex_mul` / `complex_exp` / `mobius` / `stereographic` ship fused MSL kernels (fp32). The remaining 16 long-tail ops have `status="planned"` slots reserved in the backend manifest (fp32/fp16/bf16 target dtypes); execution lights up with the next M7 kernel sprint. |
+| **NVIDIA / ROCm lowering** | 🟡 planned slots reserved | Every M7 op has `status="planned"` rows across nvidia_sm80/90/100/120 + rocm with `(fp32, fp16, bf16)` as the **kernel target** dtype matrix — these are what the unbuilt kernels will support, not what runs today. Promotion gated on Phase G / Phase H. See §9 of `docs/nvidia_cuda13_kernel_inventory.md` + §10 of `docs/rocm_mfma_kernel_inventory.md`. |
+| **Today's execution path** | ✅ CPU reference (fp32) | The entire M7 surface runs today via `tessera.complex.*` on CPU with fp32 precision. fp16/bf16 are **not** runtime-supported yet — they're declared dtypes for the future native kernel. |
 | **Contract-axis completeness** | 🟡 partial | All 22 rows are at `status="partial"` in `primitive_coverage.py`. Math / shape / dtype / VJP / JVP / batching / transpose / sharding / lowering / kernel / tests axes need promotion before the M7 family can claim contract-complete. |
 
 ## What's claimed

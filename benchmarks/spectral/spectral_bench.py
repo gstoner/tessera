@@ -65,6 +65,143 @@ def pick_backend(device):
     return "numpy"
 
 
+def _tessera_runtime_row(op, size, args, dev):
+    """Phase A1 (2026-05-20) — exercise ``tessera.ops.<op>`` reference path.
+
+    Routes through ``tessera.ops.registry.dispatch(..., prefer_runtime=False)``
+    so we explicitly hit the numpy reference path that ``tessera.complex``
+    / the spectral primitives use today.  No native FFT kernel exists
+    yet on any backend — this lane is honest about that and reports
+    ``execution_kind="reference"`` + ``runtime_status="ready"``.  When
+    a native FFT lowering lands, the same lane will just start
+    producing faster numbers without any schema change.
+
+    Returns a row matching the same column schema as ``_artifact_row``.
+    """
+    import tessera  # local import to keep ``--backend numpy`` callers light
+
+    if isinstance(size, tuple):
+        H, W = size
+        shape_str = f"{H}x{W}"
+        n_elems = args.batch * H * W
+        shape = (args.batch, H, W)
+    else:
+        N = size
+        shape_str = f"{N}"
+        n_elems = args.batch * N
+        shape = (args.batch, N)
+
+    dtype_np = {
+        "float32": np.float32, "float64": np.float64,
+        "complex64": np.complex64, "complex128": np.complex128,
+    }[args.dtype]
+    bytes_mv = float(estimate_bytes(
+        n_elems,
+        dtype=np.float32 if args.dtype.startswith("float") else np.complex64,
+    ))
+
+    real_op = args.dtype.startswith("float")
+    rng = np.random.default_rng(seed=0xDEADBEEF)
+    if real_op:
+        x = rng.standard_normal(shape).astype(dtype_np)
+    else:
+        x = (rng.standard_normal(shape) + 1j * rng.standard_normal(shape)).astype(dtype_np)
+
+    # Map bench-level op names to ``tessera.ops`` registry entries.
+    _OP_DISPATCH = {
+        "fft1d":      ("rfft" if real_op else "fft", np.fft.rfft if real_op else np.fft.fft),
+        "fft2d":      ("rfft" if real_op else "fft", np.fft.rfft2 if real_op else np.fft.fft2),
+        "dct2":       ("dct",  lambda v: dct2_numpy(v, type=2, axis=-1)),
+        "conv1d_fft": ("spectral_conv", None),
+        "conv2d_fft": ("spectral_conv", None),
+        "spectrum":   ("rfft" if real_op else "fft", np.fft.rfft if real_op else np.fft.fft),
+    }
+    if op not in _OP_DISPATCH:
+        # Unknown op — emit a row that flags this rather than silently passing.
+        return [
+            datetime.now().isoformat(timespec="seconds"), op, dev, "tessera-runtime",
+            args.dtype, shape_str, args.batch, args.repeats,
+            0.0, 0.0, 0.0, 0.0, int(bytes_mv), 0,
+            float("nan"),
+            "unsupported", "skipped", "skipped", "",
+            f"op {op!r} not yet routed through tessera.ops.registry",
+        ]
+    ts_op, ref_fn = _OP_DISPATCH[op]
+    ts_entry = tessera.ops.registry.get(ts_op)
+    if ts_entry is None or ts_entry.reference is None:
+        return [
+            datetime.now().isoformat(timespec="seconds"), op, dev, "tessera-runtime",
+            args.dtype, shape_str, args.batch, args.repeats,
+            0.0, 0.0, 0.0, 0.0, int(bytes_mv), 0,
+            float("nan"),
+            "unsupported", "skipped", "skipped", "",
+            f"tessera.ops.registry has no reference for {ts_op!r}",
+        ]
+
+    # For conv ops, build a small filter so the reference call gets
+    # meaningful inputs.  For non-conv ops, just call ``op(x)``.
+    if op in ("conv1d_fft", "conv2d_fft"):
+        if op == "conv1d_fft":
+            K = max(3, n_elems // (args.batch * 8))
+            w = rng.standard_normal((K,)).astype(dtype_np)
+        else:
+            w = rng.standard_normal((3, 3)).astype(dtype_np)
+        call = lambda: ts_entry.reference(x, w)
+        ref_call = lambda: spectral_conv1d_fft(x, w, device="cpu", backend="numpy") \
+            if op == "conv1d_fft" \
+            else spectral_conv2d_fft(x, w, device="cpu", backend="numpy")
+    else:
+        call = lambda: ts_entry.reference(x)
+        ref_call = lambda: ref_fn(x)
+
+    t = timeit(call, args.repeats, args.warmup, device=dev)
+    # Correctness vs numpy/scipy reference (also via numpy under the hood,
+    # so equality is expected within float round-off).
+    try:
+        y_ts = call()
+        y_ref = ref_call()
+        if hasattr(y_ts, "shape") and hasattr(y_ref, "shape") and y_ts.shape == y_ref.shape:
+            num = np.linalg.norm(np.asarray(y_ts) - np.asarray(y_ref))
+            den = np.linalg.norm(np.asarray(y_ref)) + 1e-12
+            err_rel = float(num / den)
+        else:
+            err_rel = float("nan")
+    except Exception:
+        err_rel = float("nan")
+
+    flops = 0.0
+    if op in ("fft1d", "spectrum") and not isinstance(size, tuple):
+        flops = estimate_fft_flops(size, complex_op=not real_op, real_op=real_op) * args.batch
+    elif op == "fft2d" and isinstance(size, tuple):
+        flops = estimate_fft_flops(size, complex_op=not real_op, real_op=real_op) * args.batch
+    gflops = (flops / t) / 1e9 if t > 0 else 0.0
+    gbs = (bytes_mv / t) / 1e9 if t > 0 else 0.0
+    ai = flops / max(1.0, bytes_mv)
+
+    return [
+        datetime.now().isoformat(timespec="seconds"),
+        op,
+        dev,
+        "tessera-runtime",
+        args.dtype,
+        shape_str,
+        args.batch,
+        args.repeats,
+        t * 1000.0,
+        gflops,
+        gbs,
+        ai,
+        int(bytes_mv),
+        int(flops),
+        err_rel,
+        "tessera-reference",   # compiler_path
+        "ready",               # runtime_status (reference is ready today)
+        "reference",           # execution_kind
+        "",                    # artifact_hash
+        "Python reference path via tessera.ops.registry; native lowering pending",
+    ]
+
+
 def _artifact_row(op, size, args, dev):
     info = compiler_spectral_ir(op)
     if isinstance(size, tuple):
@@ -107,7 +244,8 @@ def main():
     ap.add_argument("--batch", type=int, default=1)
     ap.add_argument("--dtype", type=str, default="float32", choices=["float32","float64","complex64","complex128"])
     ap.add_argument("--device", type=str, default="auto", choices=["auto","cpu","cuda","rocm"])
-    ap.add_argument("--backend", type=str, default="auto", choices=["auto", "numpy", "torch", "tessera-artifact"])
+    ap.add_argument("--backend", type=str, default="auto",
+                    choices=["auto", "numpy", "torch", "tessera-artifact", "tessera-runtime"])
     ap.add_argument("--repeats", type=int, default=50)
     ap.add_argument("--warmup", type=int, default=10)
     ap.add_argument("--outcsv", type=str, default="results/results.csv")
@@ -165,6 +303,9 @@ def main():
             for size in sizes:
                 if backend == "tessera-artifact":
                     wr.writerow(_artifact_row(op, size, args, dev))
+                    continue
+                if backend == "tessera-runtime":
+                    wr.writerow(_tessera_runtime_row(op, size, args, dev))
                     continue
                 if isinstance(size, tuple):
                     H, W = size

@@ -114,24 +114,57 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
             "+ regression-bound for the reference path."
         ),
     ),
+    # ── Spectral correctness proof lane (Phase A3, 2026-05-20) ──────
+    SurfaceEntry(
+        directory="benchmarks/spectral",
+        entry_point="benchmarks/spectral/spectral_correctness.py",
+        status="runnable",
+        command=(
+            "PYTHONPATH=python python benchmarks/spectral/"
+            "spectral_correctness.py --output "
+            "/tmp/tessera_spectral_correctness.json"
+        ),
+        notes=(
+            "Builds + runs the C++ ``ts-spectral-correctness`` "
+            "microbench (Stockham vs naive DFT at N={64,128,256,512,"
+            "1024}), scrapes its key=value output into the standard "
+            "tessera.benchmark.v1 JSON schema, and exits non-zero on "
+            "any size that deviates more than the 1e-3 abs tolerance.  "
+            "This is the **correctness sentinel** every future native "
+            "FFT lowering certifies against — runs in <1s, self-"
+            "contained (no MLIR build dependency)."
+        ),
+    ),
     # ── Spectral benchmark ───────────────────────────────────────────
     SurfaceEntry(
         directory="benchmarks/spectral",
         entry_point="benchmarks/spectral/spectral_bench.py",
-        status="compile_only",
+        # Phase A1 (2026-05-20): the bench now ships a
+        # ``--backend tessera-runtime`` lane that calls every spectral
+        # op through ``tessera.ops.registry``'s reference path,
+        # producing real ``time_ms`` / ``gflops`` / ``gbs`` rows plus
+        # an ``err_rel`` correctness check against the numpy
+        # baseline.  Status flipped ``compile_only`` → ``runnable``.
+        # The original ``tessera-artifact`` smoke continues to ship
+        # for IR-emission validation (artifact_only rows in the same
+        # JSON schema).
+        status="runnable",
         command=(
             "PYTHONPATH=.:python python benchmarks/spectral/"
-            "spectral_bench.py --ops fft1d --sizes 16 --batch 1 "
-            "--repeats 1 --warmup 0 --backend tessera-artifact "
-            "--outcsv /tmp/tessera_spectral_artifact_smoke.csv"
+            "spectral_bench.py --ops fft1d --sizes 64,128 --batch 1 "
+            "--repeats 3 --warmup 1 --backend tessera-runtime "
+            "--outcsv /tmp/tessera_spectral_runtime_smoke.csv"
         ),
         notes=(
-            "Spectral solver bench. The tessera-artifact backend "
-            "emits IR but the Tile/Target runtime path is not "
-            "executable yet — status will flip to runnable when a "
-            "native FFT lowering lands.  Today the numpy backend "
-            "produces correctness rows; the tessera backend produces "
-            "artifact-only rows tagged as such in the JSON output."
+            "Spectral solver bench.  The ``tessera-runtime`` backend "
+            "routes through ``tessera.ops.registry``'s numpy "
+            "reference path for fft/ifft/rfft/irfft/dct/spectral_conv/"
+            "stft/istft, producing real latency + correctness rows "
+            "(``execution_kind=reference``).  Native FFT lowering "
+            "(WGMMA/MFMA/MSL) is the next gate — when it lands the "
+            "same lane reports faster numbers without any schema "
+            "change.  The legacy ``--backend tessera-artifact`` "
+            "smoke continues to ship IR-emission validation."
         ),
     ),
     # ── Operator + whole-model harnesses ─────────────────────────────
@@ -140,7 +173,16 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
         entry_point=(
             "benchmarks/Tessera_Operator_Benchmarks/scripts/opbench.py"
         ),
-        status="compile_only",
+        # Phase A2 (2026-05-20): the audit command actually builds AND
+        # executes the C++ reference sweep end-to-end across all seven
+        # operator groups (matmul / conv2d / flash_attention / reduce /
+        # elementwise / softmax_layernorm / transpose_gather), producing
+        # ``avg_ms`` / ``gflops`` / ``gbps`` rows in
+        # ``/tmp/tessera_opbench_audit/results.csv``.  Status flipped
+        # ``compile_only`` → ``runnable`` to match what the lane really
+        # delivers.  The artifact-mode + tessera-runtime-bridge sweeps
+        # remain slow-marked and stay off the critical path.
+        status="runnable",
         command=(
             "cmake -S benchmarks/Tessera_Operator_Benchmarks "
             "-B /tmp/tessera_opbench_audit_build && "
@@ -154,7 +196,8 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
         notes=(
             "Operator-level C++ harness. The audit configures/builds "
             "in ``/tmp`` and runs the quick reference sweep across "
-            "all seven operator groups. Deeper artifact and "
+            "all seven operator groups, producing real latency + "
+            "throughput numbers per row. Deeper artifact and "
             "tessera-runtime bridge sweeps are covered by the slow "
             "operator-benchmark tests."
         ),

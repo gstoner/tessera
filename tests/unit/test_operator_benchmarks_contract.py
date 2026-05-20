@@ -247,3 +247,58 @@ print(json.dumps({
     assert payload["telemetry_summary"]["event_count"] == len(REGISTERED_OPS)
     assert {row["op"] for row in rows} == REGISTERED_OPS
     assert {row["execution_kind"] for row in rows} == {"artifact_only"}
+
+
+def test_operator_reference_sweep_emits_numeric_rows(tmp_path):
+    """Phase A2 (2026-05-20): lock in the ``compile_only`` → ``runnable``
+    promotion of the operator-bench surface.  This test configures /
+    builds opbench from source and runs the reference sweep — the same
+    command ``benchmarks_manifest.py`` declares — then asserts every
+    one of the seven registered operators produces a numeric latency
+    row.  Marked ``slow`` via the module-level pytestmark.
+    """
+    import shutil
+
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("cmake not available in this environment")
+
+    build_dir = tmp_path / "opbench_build"
+    out_dir = tmp_path / "opbench_out"
+
+    subprocess.check_call(
+        [cmake, "-S", str(OPBENCH), "-B", str(build_dir)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
+    )
+    subprocess.check_call(
+        [cmake, "--build", str(build_dir), "-j", "2"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
+    )
+
+    subprocess.check_call(
+        [
+            sys.executable,
+            str(OPBENCH / "scripts" / "opbench.py"),
+            "--config", str(OPBENCH / "scripts" / "configs" / "quick_sweep.yaml"),
+            "--bin", str(build_dir / "opbench"),
+            "--backend", "reference",
+            "--out", str(out_dir),
+        ],
+        env={**os.environ, "PYTHONPATH": str(ROOT / "python")},
+        stdout=subprocess.DEVNULL,
+    )
+
+    csv_path = out_dir / "results.csv"
+    assert csv_path.exists(), "operator-bench reference sweep produced no CSV"
+    rows = list(csv.DictReader(csv_path.open()))
+    assert {row["op"] for row in rows} == REGISTERED_OPS, (
+        "reference sweep should cover every registered op"
+    )
+    # Every row should report a real latency number and the executable
+    # runtime status (matches what we manually confirmed during the
+    # status flip).  ``runtime_status == "executable"`` is the
+    # opbench-internal label; the manifest-level status is ``runnable``.
+    for row in rows:
+        assert row["runtime_status"] == "executable", row
+        avg_ms = float(row["avg_ms"])
+        assert avg_ms > 0.0, f"row reported avg_ms <= 0 for {row['op']}: {row}"

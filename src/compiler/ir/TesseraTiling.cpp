@@ -10,82 +10,42 @@
 using namespace mlir;
 using namespace tessera;
 
-// Define simple, conservative TilingInterface models.
-// Guard with a macro so you can enable/iterate without breaking builds.
+// TilingInterface conservative scaffolding for tessera ops.
+//
+// Status (2026-05-20):
+//   * The ODS in ``TesseraOps.td`` declares ``TilingInterface::Trait``
+//     on ``Tessera_MatmulOp`` and ``Tessera_Conv2DNHWCOp`` via
+//     ``DeclareOpInterfaceMethods<TilingInterface>``.  Under MLIR 21
+//     that declaration form does **not** auto-emit per-Op method
+//     stubs the same way it did in MLIR ≤16 — methods like
+//     ``getLoopIteratorTypes`` / ``getTiledImplementation`` /
+//     ``getResultTilePosition`` need either an explicit method-name
+//     list on ``DeclareOpInterfaceMethods<...>`` or an external
+//     model interface implementation registered against the dialect.
+//   * Until that switch lands, the dialect inherits MLIR's
+//     default-failure implementations from
+//     ``TilingInterface::Trait`` — every tile driver gets
+//     ``failure()`` from these ops, which is the safe answer.
+//   * Default state: ``TESSERA_ENABLE_TILING_INTERFACE`` is **off**.
+//     A pre-MLIR-21 v1 implementation lived in this file behind
+//     ``#if TESSERA_ENABLE_TILING_INTERFACE`` and was removed
+//     2026-05-20 because (a) it depended on the auto-emitted method
+//     declarations that MLIR 21 no longer produces and (b) the API
+//     signatures themselves changed (FailureOr<TilingResult>,
+//     out-param ``getResultTilePosition``).
+//   * The full follow-up is tracked in
+//     ``TilingInterface_NOTES.md``.
 #ifndef TESSERA_ENABLE_TILING_INTERFACE
-#define TESSERA_ENABLE_TILING_INTERFACE 0
+#  define TESSERA_ENABLE_TILING_INTERFACE 0
 #endif
-
-namespace {
-
-// Only referenced when ``TESSERA_ENABLE_TILING_INTERFACE`` is on; mark
-// maybe_unused so the default-off build doesn't emit the
-// ``-Wunused-function`` warning that the 2026-05-19 warning-budget
-// audit flagged.
-[[maybe_unused]] static SmallVector<Range> get2DItrDomainFromResult(RankedTensorType resTy, Location loc, OpBuilder &b) {
-  auto c0 = b.create<arith::ConstantIndexOp>(loc, 0).getResult();
-  auto c1 = b.create<arith::ConstantIndexOp>(loc, 1).getResult();
-  auto s0 = b.create<arith::ConstantIndexOp>(loc, resTy.getDimSize(0)).getResult();
-  auto s1 = b.create<arith::ConstantIndexOp>(loc, resTy.getDimSize(1)).getResult();
-  return {
-    Range{c0, s0, c1},
-    Range{c0, s1, c1},
-  };
-}
-
-} // namespace
 
 #if TESSERA_ENABLE_TILING_INTERFACE
-::mlir::FailureOr<SmallVector<OpFoldResult>> tessera::MatmulOp::getMixedSizes(OpBuilder &b) {
-  auto resTy = dyn_cast<RankedTensorType>(getResult().getType());
-  if (!resTy || resTy.getRank() != 2) return failure();
-  SmallVector<OpFoldResult> sizes;
-  sizes.push_back(b.getIndexAttr(resTy.getDimSize(0)));
-  sizes.push_back(b.getIndexAttr(resTy.getDimSize(1)));
-  return sizes;
-}
-::mlir::FailureOr<SmallVector<Range>> tessera::MatmulOp::getIterationDomain(OpBuilder &b) {
-  auto resTy = dyn_cast<RankedTensorType>(getResult().getType());
-  if (!resTy || resTy.getRank() != 2) return failure();
-  return get2DItrDomainFromResult(resTy, getLoc(), b);
-}
-::mlir::FailureOr<SmallVector<Operation *>> tessera::MatmulOp::getTiledImplementation(
-    OpBuilder &b, ArrayRef<OpFoldResult> offsets, ArrayRef<OpFoldResult> sizes) {
-  auto lhsTy = dyn_cast<RankedTensorType>(getLhs().getType());
-  auto rhsTy = dyn_cast<RankedTensorType>(getRhs().getType());
-  auto resTy = dyn_cast<RankedTensorType>(getResult().getType());
-  if (!lhsTy || !rhsTy || !resTy ||
-      lhsTy.getRank() != 2 || rhsTy.getRank() != 2 || resTy.getRank() != 2 ||
-      offsets.size() != 2 || sizes.size() != 2)
-    return failure();
-
-  Operation *cloned = b.clone(*getOperation());
-  cloned->setAttr("tessera.tiling_interface", b.getStringAttr("matmul_conservative_ranked_tensor"));
-  cloned->setAttr("tessera.tile_rank", b.getI64IntegerAttr(2));
-  cloned->setAttr("tessera.full_k", b.getIndexAttr(lhsTy.getDimSize(1)));
-  return SmallVector<Operation *>{cloned};
-}
-::mlir::FailureOr<SmallVector<OpFoldResult>> tessera::MatmulOp::getResultTilePosition(
-    OpBuilder &b, unsigned, ArrayRef<OpFoldResult> offsets, ArrayRef<OpFoldResult> sizes) {
-  return SmallVector<OpFoldResult>(offsets.begin(), offsets.end());
-}
-
-::mlir::FailureOr<SmallVector<Range>> tessera::Conv2DNHWCOp::getIterationDomain(OpBuilder &b) {
-  auto resTy = dyn_cast<RankedTensorType>(getResult().getType());
-  if (!resTy || resTy.getRank() < 4) return failure();
-  // Tile H,W as iter domain; keep N,C untiled in this simple model.
-  Location loc = getLoc();
-  SmallVector<Range> dom;
-  dom.push_back(Range{b.create<arith::ConstantIndexOp>(loc, 0), b.create<arith::ConstantIndexOp>(loc, resTy.getDimSize(1)), b.create<arith::ConstantIndexOp>(loc, 1)}); // H
-  dom.push_back(Range{b.create<arith::ConstantIndexOp>(loc, 0), b.create<arith::ConstantIndexOp>(loc, resTy.getDimSize(2)), b.create<arith::ConstantIndexOp>(loc, 1)}); // W
-  return dom;
-}
-::mlir::FailureOr<SmallVector<Operation *>> tessera::Conv2DNHWCOp::getTiledImplementation(
-    OpBuilder &, ArrayRef<OpFoldResult>, ArrayRef<OpFoldResult>) {
-  return failure(); // Explicitly scaffolded: safe conv window reconstruction needs padding/stride metadata.
-}
-::mlir::FailureOr<SmallVector<OpFoldResult>> tessera::Conv2DNHWCOp::getResultTilePosition(
-    OpBuilder &, unsigned, ArrayRef<OpFoldResult> offsets, ArrayRef<OpFoldResult> sizes) {
-  return SmallVector<OpFoldResult>(offsets.begin(), offsets.end());
-}
-#endif
+// Intentionally empty until the ODS-side switch lands.  Re-defining
+// the interface methods here against the current MLIR 21 signatures
+// requires either:
+//   * ``DeclareOpInterfaceMethods<TilingInterface, ["getLoop...", ...]>``
+//     listing every method we mean to implement, or
+//   * a separate ``ExternalModel<...>`` implementation registered
+//     in ``TesseraDialect.cpp`` (preferred — keeps ODS lean).
+// See ``TilingInterface_NOTES.md`` for the full plan.
+#endif  // TESSERA_ENABLE_TILING_INTERFACE

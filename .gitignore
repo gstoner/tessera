@@ -3,6 +3,9 @@
 build/
 build-*/
 cmake-build-*/
+# CMake/CTest staging directories beneath tools/** (the CLI starter
+# scaffold uses _build/ — keep those local artifacts out of git).
+**/_build/
 *.o
 *.a
 *.so

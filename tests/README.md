@@ -7,7 +7,7 @@ contributors should start here.
 
 | Goal | Command |
 |---|---|
-| Daily edit-loop sanity check (2,214 tests, ~31 s, < 256 MB RAM) | `pytest tests/unit/ -m "not slow" -q` |
+| Daily edit-loop sanity check (~4,350 tests, ~2 min, < 256 MB RAM) | `pytest tests/unit/ -m "not slow" -q` |
 | Full Python suite including heavy benchmarks (~30 min, ~2 GB RAM) | `pytest tests/unit/ -q` |
 | MLIR lit fixtures (needs `tessera-opt` on `$PATH`) | `lit tests/tessera-ir/ -v` |
 | Just the autodiff slice (~213 tests, ~2 s) | `pytest tests/unit/test_autodiff_*.py tests/unit/test_conv1d_autodiff.py tests/unit/test_deferred_vjps.py tests/unit/test_sprint_*.py tests/unit/test_standalone_compiler_roadmap.py -q` |

@@ -125,7 +125,7 @@ Envelope fields:
 | `runs` | List of row dicts |
 | `ga_primitives_count` | Count of `clifford_*` rows |
 | `ebm_paths_count` | Count of `ebm_*` rows (native + python_ref) |
-| `ebm_native_apple_gpu_count` | Count of native EBM rows (8 when GPU available) |
+| `ebm_native_apple_gpu_count` | Count of native EBM rows (9 when GPU available; includes `ebm_partition_exact`) |
 | `native_ebm_ops` | Sorted list of EBM ops on `apple_gpu` |
 | `workload_count` | Count of `namespace=workload` rows |
 | `ebt_sweep_count` | Count of opt-in `ebt_tiny_sweep` rows |

@@ -140,12 +140,33 @@ jobs:
           PYTHONPATH: python
         run: python -m tessera.compiler.audit claim_lint
 
-      - name: Examples surface audit (runnable rows must execute)
+      # Four-surface audit (examples / benchmarks / research / tools).
+      # Each surface declares its entry points in
+      # python/tessera/compiler/<surface>_manifest.py.  Drift gates on
+      # the generated dashboards live in tests/unit/test_surface_audit.py
+      # (run in the `unit` lane).  These steps execute the runnable
+      # rows + check for README overclaim language.
+      - name: Surface audit (examples)
         env:
           PYTHONPATH: python
-        run: python -m tessera.cli.examples_audit --check
+        run: python -m tessera.cli.surface_audit --surface=examples --check
 
-      - name: Examples README claim_lint (scaffold/broken overclaim guard)
+      - name: Surface audit (benchmarks)
+        env:
+          PYTHONPATH: python
+        run: python -m tessera.cli.surface_audit --surface=benchmarks --check
+
+      - name: Surface audit (research)
+        env:
+          PYTHONPATH: python
+        run: python -m tessera.cli.surface_audit --surface=research --check
+
+      - name: Surface audit (tools)
+        env:
+          PYTHONPATH: python
+        run: python -m tessera.cli.surface_audit --surface=tools --check
+
+      - name: Surface README claim_lint (all surfaces)
         env:
           PYTHONPATH: python
         run: python -m tessera.cli.claim_lint --check

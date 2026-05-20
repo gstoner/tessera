@@ -120,9 +120,9 @@ Use `tessera.ops`.
 | `gemm`, `matmul` | Phase 1-3 implemented |
 | `layer_norm`, `softmax`, `gelu`, `relu`, `transpose`, `cast` | Phase 1-3 implemented |
 | `dropout` | Phase 1-3 implemented with random effect |
-| `conv2d` | Phase 1 stub / Graph IR op support |
+| `conv2d` | Implemented — NHWC + NCHW Module forms (`tessera.nn.Conv2d` / `Conv2dNCHW`); Graph IR op + VJP/JVP registered. |
 | `flash_attn` | Phase 1 naive path; Phase 3 SM_90+ FA-4 lowering path |
-| `all_reduce`, `reduce_scatter`, `all_gather` | Phase 1 stubs; Phase 4 planned distributed lowering |
+| `all_reduce`, `reduce_scatter`, `all_gather` | Implemented — Phase 4 distributed lowering (`GPUCollectiveInsertionPass`); NCCL/RCCL adapters wired; VJP+JVP registered for all four collectives. |
 | `fused_epilogue` | Phase 1-3 implemented where supported by canonicalization/lowering |
 
 ## GPU Targeting
@@ -141,23 +141,38 @@ def flash_fwd(Q, K, V):
 
 ## Inspection
 
-Current public inspection supports Graph IR:
+The compiler exposes all four IR layers as inspectable objects on the
+JIT artifact:
 
 ```python
 print(flash_fwd.graph_ir.to_mlir())
+print(flash_fwd.schedule_ir)   # Schedule IR (mesh / pipeline)
+print(flash_fwd.tile_ir)       # Tile IR (warps / TMA / async_copy)
+print(flash_fwd.target_ir)     # per-target final IR
 ```
 
-Schedule IR, Tile IR, and Target IR inspection helpers are Phase 4 planned.
+See `examples/compiler/ir_pipeline_tutorial/tessera_ir_pipeline_demo.py`
+for a runnable walkthrough that prints all four layers for a tiny MLP.
+For static inspection without launching, `tessera-mlir
+--mode=compile_artifact --symbol=<name>` reads the JIT artifact directly
+(see `docs/guides/Tessera_Debugging_Tools_Guide.md`).
 
-## Future APIs
+## Roadmap (formerly "Future APIs")
 
-The following areas are roadmap items and should be labeled as future examples in docs:
+These rows were authored when Phases 4–6 were planned.  The status
+below reflects the post-Phase-8 reality (Apple operational; Cerebras /
+Metalium / Apple backends shipped under Phase 7-8; the S-series
+standalone-compiler track shipped S0–S15 + autodiff coverage).  For
+the current per-component picture, read
+`docs/audit/generated/support_table.md` (drift-gated) rather than this
+table.
 
-| Area | Phase |
-|------|-------|
-| NCCL/RCCL collectives and cluster execution | Phase 4 planned |
-| TPU StableHLO backend | Phase 4 planned |
-| Autodiff transforms and custom VJP/JVP | Phase 5 planned |
-| Activation checkpointing and ZeRO sharding | Phase 5 planned |
-| Bayesian autotuning | Phase 5 planned |
-| Runtime Python wrapper | Phase 6 planned |
+| Area | Status |
+|------|--------|
+| NCCL/RCCL collectives + cluster execution | Implemented (Phase 4) — `GPUCollectiveInsertionPass`, NCCL/RCCL adapters, `ChunkPlanner`, `CollectiveScheduler`. |
+| TPU StableHLO backend | Implemented — `tpu_target.py` + `Tessera_TPU_Backend/` (StableHLO + Shardy export); quantized dot lit-tested. |
+| Autodiff transforms + custom VJP/JVP | Implemented — `tessera.autodiff` v1 ships 241 VJPs + 236 JVPs; `tessera.custom.custom_vjp` / `custom_jvp` user-facing. |
+| Activation checkpointing + ZeRO sharding | Implemented — `tessera.autodiff.rematerialize` + ZeRO stage 2 via `OptimizerShardPass`. |
+| Bayesian autotuning | Implemented — `tessera.autotune` + `compiler/autotune_v2.py` (Optuna TPE + Hyperband + SQLite cache v2). |
+| Runtime Python wrapper | Implemented — `tessera.runtime.TesseraRuntime` over the C ABI. |
+| ROCm MFMA + RubinCPX + Cerebras + Metalium + Apple backends | Implemented (Phase 7–8). |

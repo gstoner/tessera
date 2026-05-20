@@ -72,6 +72,7 @@ tessera-autotune = "tessera.cli.autotune:main"
 tessera-runtime-smoke = "tessera.cli.runtime:main"
 tessera-translate = "tessera.cli.translate:main"
 tessera-examples-audit = "tessera.cli.examples_audit:main"
+tessera-surface-audit = "tessera.cli.surface_audit:main"
 tessera-claim-lint = "tessera.cli.claim_lint:main"
 
 [tool.setuptools]

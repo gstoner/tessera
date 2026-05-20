@@ -84,18 +84,31 @@ echo "==> Generated support-table drift check"
 echo "==> Public-doc claim_lint"
 "$PYTHON" -m tessera.compiler.audit claim_lint
 
-# Examples surface audit (Option A, 2026-05-19).  Pair of gates:
-#   1. examples_audit --check executes every `runnable` row + every
+# Four-surface audit (Option A → Phase B follow-up, 2026-05-19).
+# Each surface declares its entry points in a per-surface manifest:
+#   * python/tessera/compiler/examples_manifest.py
+#   * python/tessera/compiler/benchmarks_manifest.py
+#   * python/tessera/compiler/research_manifest.py
+#   * python/tessera/compiler/tools_manifest.py
+# Gates:
+#   1. surface_audit --check executes every `runnable` row + every
 #      `runnable_optional` row whose declared extras are importable;
-#      `scaffold` / `broken` rows are NOT executed.  Failure means a
-#      shipped example regressed.
-#   2. claim_lint scans the README of each scaffold/broken example
-#      for overclaim language (``runnable``, ``end-to-end demo``,
-#      ``working``).  Failure means docs over-promise vs. manifest.
-# Manifest of record: python/tessera/compiler/examples_manifest.py.
-echo "==> Examples surface audit"
-"$PYTHON" -m tessera.cli.examples_audit --check
-echo "==> Examples README claim_lint"
+#      `compile_only` rows run their lightweight smoke; `scaffold` /
+#      `broken` / `archived` rows are NOT executed.  Failure means
+#      a shipped row regressed.
+#   2. claim_lint scans the README of every scaffold / broken /
+#      archived row for overclaim language (``runnable``,
+#      ``end-to-end demo``, ``working``).  Failure means docs
+#      over-promise vs. manifest.
+echo "==> Surface audit (examples)"
+"$PYTHON" -m tessera.cli.surface_audit --surface=examples --check
+echo "==> Surface audit (benchmarks)"
+"$PYTHON" -m tessera.cli.surface_audit --surface=benchmarks --check
+echo "==> Surface audit (research)"
+"$PYTHON" -m tessera.cli.surface_audit --surface=research --check
+echo "==> Surface audit (tools)"
+"$PYTHON" -m tessera.cli.surface_audit --surface=tools --check
+echo "==> Surface README claim_lint (all surfaces)"
 "$PYTHON" -m tessera.cli.claim_lint --check
 
 echo "==> Runtime telemetry smoke"

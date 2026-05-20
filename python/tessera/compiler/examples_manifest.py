@@ -40,104 +40,26 @@ cheap to inspect from CI scripts and standalone test runners.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-# Repo root, derived without importing tessera (manifest must stay
-# import-cheap for CLI tools that run before tessera is installed).
+from tessera.compiler.surface_manifest import (
+    ALLOWED_STATUSES,
+    SurfaceEntry,
+    audit_filesystem as _audit_filesystem_shared,
+    render_markdown as _render_markdown_shared,
+    status_counts as _status_counts_shared,
+)
+
+# Repo root, derived without importing tessera.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-ALLOWED_STATUSES = (
-    "runnable",
-    "runnable_optional",
-    "compile_only",
-    "scaffold",
-    "broken",
-)
-
-
-@dataclass(frozen=True)
-class ExampleEntry:
-    """One row of the examples surface audit.
-
-    Attributes
-    ----------
-    directory:
-        Path to the example directory (relative to repo root).  This is
-        the unit the audit tracks — most directories have one canonical
-        entry point but the audit row is per-directory.
-    entry_point:
-        Path to the executable file (relative to repo root).  For
-        ``compile_only`` rows this may be a module file that's loaded
-        via ``python -c`` rather than executed directly.
-    status:
-        One of :data:`ALLOWED_STATUSES`.
-    command:
-        Exact shell command to run the entry from the repo root.  Only
-        populated for rows where the audit actually executes something
-        (``runnable``, ``runnable_optional``, ``compile_only``).
-        ``None`` for ``scaffold``/``broken`` rows.
-    extras_required:
-        Optional list of importable module names that gate the run.
-        For ``runnable_optional`` rows the audit imports each and skips
-        the row (not a failure) if any are missing.
-    reason:
-        Human-readable explanation of why the row is ``scaffold`` or
-        ``broken``.  Required for those two statuses; empty otherwise.
-    notes:
-        Free-text supplementary notes.  Surfaced in the generated doc.
-    """
-
-    directory: str
-    entry_point: str
-    status: str
-    command: str | None = None
-    extras_required: tuple[str, ...] = ()
-    reason: str = ""
-    notes: str = ""
-
-    def __post_init__(self) -> None:
-        if self.status not in ALLOWED_STATUSES:
-            raise ValueError(
-                f"ExampleEntry({self.directory!r}): status={self.status!r} "
-                f"is not one of {ALLOWED_STATUSES!r}."
-            )
-        if self.status in ("runnable", "runnable_optional", "compile_only"):
-            if not self.command:
-                raise ValueError(
-                    f"ExampleEntry({self.directory!r}): status={self.status!r} "
-                    f"requires a 'command' field."
-                )
-        if self.status in ("scaffold", "broken") and not self.reason:
-            raise ValueError(
-                f"ExampleEntry({self.directory!r}): status={self.status!r} "
-                f"requires a non-empty 'reason'."
-            )
-        if self.status == "runnable_optional" and not self.extras_required:
-            raise ValueError(
-                f"ExampleEntry({self.directory!r}): status='runnable_optional' "
-                f"requires at least one entry in 'extras_required'."
-            )
-
-    @property
-    def directory_path(self) -> Path:
-        return _REPO_ROOT / self.directory
-
-    @property
-    def entry_point_path(self) -> Path:
-        return _REPO_ROOT / self.entry_point
-
-    def resolve_extras_available(self) -> bool:
-        """Return True iff every ``extras_required`` module is importable."""
-
-        import importlib.util
-
-        for mod in self.extras_required:
-            if importlib.util.find_spec(mod) is None:
-                return False
-        return True
+# Backwards-compatible alias — pre-2026-05-19 callers referenced
+# ``ExampleEntry`` directly; the dataclass moved to ``surface_manifest``
+# so every surface (examples / benchmarks / research / tools) shares
+# the same row shape.
+ExampleEntry = SurfaceEntry
 
 
 # Per-entry registry. Order is preserved in the generated doc and is
@@ -400,10 +322,7 @@ def entries_by_status(status: str) -> tuple[ExampleEntry, ...]:
 
 
 def status_counts() -> dict[str, int]:
-    out = dict.fromkeys(ALLOWED_STATUSES, 0)
-    for e in _ENTRIES:
-        out[e.status] = out[e.status] + 1
-    return out
+    return _status_counts_shared(_ENTRIES)
 
 
 def find_by_directory(directory: str) -> ExampleEntry | None:
@@ -427,99 +346,41 @@ def audit_filesystem(
     actually executing anything.  Empty list means clean.
     """
 
-    issues: list[str] = []
     rows = tuple(entries) if entries is not None else _ENTRIES
-    for entry in rows:
-        if not entry.directory_path.is_dir():
-            issues.append(
-                f"{entry.directory}: directory does not exist on disk"
-            )
-            continue
-        if not entry.entry_point_path.exists():
-            issues.append(
-                f"{entry.directory}: entry_point {entry.entry_point!r} "
-                f"does not exist on disk"
-            )
-        if entry.status in ("scaffold", "broken"):
-            status_md = entry.directory_path / "STATUS.md"
-            if not status_md.exists():
-                issues.append(
-                    f"{entry.directory}: status={entry.status!r} "
-                    f"requires a STATUS.md but none was found"
-                )
-    return issues
+    return _audit_filesystem_shared(rows)
 
 
 # ─────────────────────────────────────────────────────────────────────────
 # Doc renderer.
 # ─────────────────────────────────────────────────────────────────────────
 
-_DOC_HEADER = """\
-<!-- AUTO-GENERATED by python/tessera/compiler/examples_manifest.py. DO NOT EDIT BY HAND. -->
-<!-- Regenerate via: python -m tessera.cli.examples_audit --render -->
 
-# Tessera Examples — Status Audit
-
-This dashboard lists every active ``examples/`` entry point and its
-**executable status**.  It is regenerated from
-``python/tessera/compiler/examples_manifest.py``.
-
-The 5-element status taxonomy:
-
-| Status              | Meaning                                                       |
-|---------------------|---------------------------------------------------------------|
-| ``runnable``          | Runs on default venv + CPU-only CI (must pass ``--check``).     |
-| ``runnable_optional`` | Runs when declared ``extras_required`` are importable.          |
-| ``compile_only``      | Emits IR/artifacts but does not execute the workload.         |
-| ``scaffold``          | Intentionally illustrative; not runnable today.               |
-| ``broken``            | Expected to run, currently fails — followup needed.           |
-
-CI guards (run as part of ``scripts/validate.sh``):
-
-* ``python -m tessera.cli.examples_audit --check`` — executes every
-  ``runnable`` row and ``runnable_optional`` rows whose extras are
-  available; ``scaffold`` rows are not executed.
-* ``python -m tessera.cli.claim_lint --check`` — scans each example
-  README and flags overclaim language (``runnable``, ``working``,
-  ``end-to-end``) on ``scaffold``/``broken`` rows.
-
-``examples/archive/**`` is out of scope and not tracked here.
-"""
+_SURFACE_INTRO = (
+    "This dashboard lists every active ``examples/`` entry point and "
+    "its **executable status**.  It is regenerated from "
+    "``python/tessera/compiler/examples_manifest.py``.\n\n"
+    "CI guards (run as part of ``scripts/validate.sh``):\n\n"
+    "* ``python -m tessera.cli.examples_audit --check`` — executes "
+    "every ``runnable`` row and ``runnable_optional`` rows whose "
+    "extras are available; ``scaffold`` / ``archived`` rows are not "
+    "executed.\n"
+    "* ``python -m tessera.cli.claim_lint --check`` — scans each "
+    "example README and flags overclaim language on ``scaffold`` / "
+    "``broken`` rows.\n\n"
+    "``examples/archive/**`` is out of scope and not tracked here."
+)
 
 
 def render_markdown(entries: Iterable[ExampleEntry] | None = None) -> str:
     """Render the full ``examples_status.md`` from the manifest."""
 
     rows = tuple(entries) if entries is not None else _ENTRIES
-    counts = status_counts()
-    lines: list[str] = [_DOC_HEADER, ""]
-    lines.append("## Counts")
-    lines.append("")
-    lines.append("| Status | Count |")
-    lines.append("|--------|------:|")
-    for status in ALLOWED_STATUSES:
-        lines.append(f"| ``{status}`` | {counts[status]} |")
-    lines.append(f"| **total** | **{len(rows)}** |")
-    lines.append("")
-    lines.append("## Entries")
-    lines.append("")
-    lines.append("| Directory | Status | Entry point | Command / Reason |")
-    lines.append("|-----------|--------|-------------|------------------|")
-    for entry in rows:
-        cell: str
-        if entry.status in ("scaffold", "broken"):
-            cell = entry.reason
-        elif entry.status == "runnable_optional":
-            extras = ", ".join(f"``{m}``" for m in entry.extras_required)
-            cell = f"``{entry.command}``<br/>extras: {extras}"
-        else:
-            cell = f"``{entry.command}``"
-        lines.append(
-            f"| ``{entry.directory}`` | ``{entry.status}`` | "
-            f"``{entry.entry_point}`` | {cell} |"
-        )
-    lines.append("")
-    return "\n".join(lines) + "\n"
+    return _render_markdown_shared(
+        surface_title="Tessera Examples — Status Audit",
+        surface_intro=_SURFACE_INTRO,
+        entries=rows,
+        regenerate_command="python -m tessera.cli.examples_audit --render",
+    )
 
 
 __all__ = [

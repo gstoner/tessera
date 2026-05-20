@@ -162,6 +162,25 @@ _BENCH_INVENTORY: frozenset[str] = frozenset({
 })
 
 
+# M7 Visual Complex Analysis primitives — public via tessera.complex.*
+# and the @complex_jit / @analytic decorators.  Same opt-in pattern as
+# _BENCH_INVENTORY so M7 appears in the per-op support matrix without
+# pulling in the entire planned long-tail of primitive_coverage.
+# Source of truth: ``python/tessera/complex.py`` + the M7 rows in
+# ``primitive_coverage.py`` (category ``visual_complex``).
+_M7_INVENTORY: frozenset[str] = frozenset({
+    "complex_add", "complex_mul", "complex_div", "complex_exp",
+    "complex_log", "complex_sqrt", "complex_pow", "complex_conjugate",
+    "complex_abs", "complex_arg",
+    "mobius", "mobius_from_three_points",
+    "cross_ratio", "is_concyclic", "stereographic",
+    "check_cauchy_riemann",
+    "conformal_jacobian", "conformal_energy_on_sphere",
+    "dz", "dbar", "laplacian_2d",
+    "complex_jit",
+})
+
+
 def _axis_api(op_name: str) -> AxisCell:
     if op_name in OP_SPECS:
         return AxisCell("public", "op_catalog")
@@ -171,6 +190,8 @@ def _axis_api(op_name: str) -> AxisCell:
         return AxisCell("public", "tessera.ga.*")
     if op_name.startswith("ebm_") and op_name in bm._EBM_APPLE_GPU_FUSED:
         return AxisCell("public", "tessera.ebm.*")
+    if op_name in _M7_INVENTORY:
+        return AxisCell("public", "tessera.complex.*")
     return AxisCell("missing", "op_catalog")
 
 
@@ -188,6 +209,8 @@ def _axis_frontend(op_name: str) -> AxisCell:
         return AxisCell("public", "@clifford_jit / tessera.ga.*")
     if op_name.startswith("ebm_") and op_name in bm._EBM_APPLE_GPU_FUSED:
         return AxisCell("public", "tessera.ebm.*")
+    if op_name in _M7_INVENTORY:
+        return AxisCell("public", "@complex_jit / tessera.complex.*")
     return AxisCell("missing", "op_catalog")
 
 
@@ -357,11 +380,16 @@ def _candidate_op_names() -> list[str]:
     """The op-name population the table covers.
 
     Today: every op in the public catalog, plus every benchmarked GA/EBM
-    primitive.  This deliberately excludes the long-tail planned
-    primitives in :mod:`primitive_coverage` so the table stays focused
-    on ops the user can actually call.
+    primitive, plus the M7 Visual Complex Analysis surface.  This
+    deliberately excludes the long-tail planned primitives in
+    :mod:`primitive_coverage` so the table stays focused on ops the
+    user can actually call.
     """
-    names: set[str] = set(OP_SPECS.keys()) | set(_BENCH_INVENTORY)
+    names: set[str] = (
+        set(OP_SPECS.keys())
+        | set(_BENCH_INVENTORY)
+        | set(_M7_INVENTORY)
+    )
     return sorted(names)
 
 

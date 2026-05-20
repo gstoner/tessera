@@ -39,13 +39,19 @@ GENERATED_DOC = REPO_ROOT / "docs" / "audit" / "generated" / "examples_status.md
 
 
 class TestManifestShape:
-    def test_status_taxonomy_is_5_elements(self) -> None:
+    def test_status_taxonomy_is_6_elements(self) -> None:
+        # 2026-05-19 — extended from 5 to 6 by adding ``archived``
+        # when the per-surface (benchmarks / research / tools)
+        # manifest infrastructure landed.  ``archived`` distinguishes
+        # "intentionally retired" from ``scaffold`` (planned but not
+        # built) and ``broken`` (claimed working but failing).
         assert ALLOWED_STATUSES == (
             "runnable",
             "runnable_optional",
             "compile_only",
             "scaffold",
             "broken",
+            "archived",
         )
 
     def test_every_entry_has_legal_status(self) -> None:

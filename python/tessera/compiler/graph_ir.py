@@ -399,6 +399,18 @@ class IROp:
     source_span: Optional["SourceSpan"] = None
     inferred_type: Optional[IRType] = None
     numeric_policy: Optional[Any] = None  # NumericPolicy when populated
+    # Phase A (2026-05-20) — optional metadata fields.  Producers
+    # fill what they know; consumers must tolerate ``None`` /
+    # ``frozenset()`` defaults.  See
+    # docs/architecture/frontend_substrate_plan.md for the contract.
+    value_kind: Optional[str] = None
+    """Optional value-kind tag — ``"tensor"`` / ``"multivector"`` /
+    ``"complex"`` / ``"energy"`` / ``"mixed"``.  ``None`` means the
+    producer didn't set it (distinct from "definitely tensor")."""
+    verification_facts: frozenset[str] = field(default_factory=frozenset)
+    """Lane-invariant facts about this op — e.g., ``{"holomorphic"}``
+    for ops projected from a ``@complex_jit`` view, ``{"ga_only"}``
+    for Clifford views.  Empty when no invariants are claimed."""
 
     def to_mlir(self, indent: str = "  ") -> str:
         ops_str = ", ".join(self.operands)
@@ -516,6 +528,17 @@ class GraphIRFunction:
     fn_attrs: Dict[str, str] = field(default_factory=dict)
     return_values: List[str] = field(default_factory=list)
     lane: str = "tessera_jit"
+    # Phase A (2026-05-20) — function-level optional metadata.
+    verification_facts: frozenset[str] = field(default_factory=frozenset)
+    """Function-level lane invariants — e.g.,
+    ``{"holomorphic", "complex_jit_verified"}`` for a function
+    projected from a ``@complex_jit`` view.  Empty when no
+    invariants are claimed."""
+    source_hash: Optional[str] = None
+    """Optional SHA-256 of the function's source text.  Useful for
+    cache invalidation, drift detection, and reproducibility
+    proofs.  ``None`` when the producer doesn't have the source
+    (e.g., textual-DSL parse without a backing file)."""
 
     def to_mlir(self, *, verify: bool = False) -> str:
         if verify:

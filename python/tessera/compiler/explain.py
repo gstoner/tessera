@@ -208,6 +208,12 @@ class Kernel:
     """E.g., ``ready`` / ``reference`` / ``unknown``."""
     source: str
     """Where this resolution came from (op_catalog / manifest / etc.)."""
+    value_kind: Optional[str] = None
+    """Optional value-kind tag from the underlying ``IROp.value_kind``.
+    ``None`` when the producer didn't claim a kind."""
+    verification_facts: frozenset[str] = field(default_factory=frozenset)
+    """Lane-invariant facts the producing op claims (e.g.,
+    ``{"holomorphic"}`` for ops from a ``@complex_jit`` view)."""
 
 
 @dataclass(frozen=True)
@@ -390,7 +396,16 @@ def _build_kernels(fn: "JitFn") -> tuple[Kernel, ...]:
             source = f"support_table[{info.family}]"
         except KeyError:
             pass
-        out.append(Kernel(op_name=name, runtime_status=runtime, source=source))
+        out.append(Kernel(
+            op_name=name,
+            runtime_status=runtime,
+            source=source,
+            # Phase A — surface optional IR metadata when present.
+            # Tolerate None / empty defaults (the "consumers must
+            # tolerate missing metadata" contract).
+            value_kind=op.value_kind,
+            verification_facts=op.verification_facts,
+        ))
     return tuple(out)
 
 

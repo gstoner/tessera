@@ -39,6 +39,9 @@ GA / Clifford-algebra lane.  Every op must be a fused Apple GPU MSL kernel; the 
 **Diagnostic codes:** `CLIFFORD_*`  
 **`fn.explain()` supported:** not yet  
 **Op-name patterns accepted:** `clifford_`, `ga.`  
+**Graph IR view adapter:** `CliffordIRProgram.to_graph_ir_view()` — see `docs/spec/COMPILER_REFERENCE.md` § "Constrained-lane Graph IR views".  
+**Verification facts emitted:** `ga_whitelisted`  
+**Op `value_kind` stamped:** `multivector`  
 
 ### `complex_jit`
 
@@ -47,6 +50,9 @@ Visual Complex Analysis lane (M7).  Refuses functions containing anti-holomorphi
 **Diagnostic codes:** `COMPLEX_*`  
 **`fn.explain()` supported:** not yet  
 **Op-name patterns accepted:** `complex_`, `mobius`, `stereographic`, `cross_ratio`  
+**Graph IR view adapter:** `ComplexIRProgram.to_graph_ir_view()` — see `docs/spec/COMPILER_REFERENCE.md` § "Constrained-lane Graph IR views".  
+**Verification facts emitted:** `holomorphic (conditional — only when every op is in HOLOMORPHIC_OPS)`  
+**Op `value_kind` stamped:** `complex`  
 
 ### `energy_jit`
 
@@ -55,6 +61,9 @@ Energy-based-model lane.  Accepts only ops from the energy/EBM whitelist; v1 fp3
 **Diagnostic codes:** `ENERGY_*`  
 **`fn.explain()` supported:** not yet  
 **Op-name patterns accepted:** `energy_`, `ebm_`  
+**Graph IR view adapter:** `EnergyIRProgram.to_graph_ir_view()` — see `docs/spec/COMPILER_REFERENCE.md` § "Constrained-lane Graph IR views".  
+**Verification facts emitted:** `energy_whitelisted`  
+**Op `value_kind` stamped:** `energy`  
 
 ## Python query API
 

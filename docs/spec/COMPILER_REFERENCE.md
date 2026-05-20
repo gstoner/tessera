@@ -195,3 +195,44 @@ These decisions are closed unless a new normative spec supersedes them.
 | Python runtime wrapper | `python/tessera/runtime.py` |
 | Solvers and resilience | `src/solvers/` |
 | Neighbor dialect | `src/compiler/tessera_neighbors/` |
+
+## Constrained-lane Graph IR views (Phase B substrate)
+
+The constrained math lanes (`@clifford_jit`, `@complex_jit`,
+`@energy_jit`) keep their own narrower IR types — `CliffordIRProgram`,
+`ComplexIRProgram`, `EnergyIRProgram`. Each is the source of truth
+for execution dispatch.
+
+For cross-cutting tooling (audit, explain, normalization passes),
+each program type exposes a `to_graph_ir_view() -> GraphIRModule`
+adapter. The view is a **projection**, not a normalization or
+execution lowering.
+
+### Contract (normative)
+
+| Contract point | Required behavior | Rationale |
+|---|---|---|
+| **Op shape** | 1:1 projection: each op in the constrained IR's `ops` tuple maps to exactly one `IROp` in `view.functions[0].body`, in the same order. No reordering, merging, or splitting. | The view is for inspection, not optimization. Consumers (e.g., `support_table` audit) rely on the op count and order matching the constrained IR's `as_metadata()` output. |
+| **Op naming** | Canonical names only. The view uses the op_name stored in the constrained `IROpCall` (e.g., `mobius`, `complex_mul`, `clifford_geometric_product`, `energy_quadratic`) — **never** backend-aliased names (`complex_mobius`, `complex_stereographic`). | The audit walker maintains `_M7_BACKEND_ALIASES` separately for backend-manifest lookup. Backend aliases are an artifact of C ABI symbol naming, not the public op vocabulary. |
+| **Mutability** | Fresh deep copy of `IROp` / `GraphIRFunction` / `GraphIRModule` per `to_graph_ir_view()` call. Two successive calls must return distinct mutable objects. | Downstream passes (Phase C normalization) mutate ops in place. A shared reference would let one consumer corrupt another's view. |
+| **Lane stamping** | `view.functions[0].lane` is **always** set to the source lane: `"clifford_jit"` / `"complex_jit"` / `"energy_jit"`. | Lane-aware passes (`tessera.compiler.lane_passes`) need to know which whitelist invariant holds for this function. |
+| **Verification facts** | `view.functions[0].verification_facts` carries the lane's invariants — `{"ga_whitelisted"}` for Clifford, `{"holomorphic"}` for Complex (only when every op is in `HOLOMORPHIC_OPS`), `{"energy_whitelisted"}` for Energy. | Phase D optimization passes (deferred) will read these to choose lane-safe transforms. E.g., DBE consults `holomorphic` before eliminating `check_cauchy_riemann`. |
+| **No execution** | The view is **never** the source of truth for runtime dispatch. Calling a constrained lane's compiled callable still consults the constrained IR + its lane-specific dispatcher; the view is read-only tooling. | Folding the view into execution would re-introduce the "constrained lanes lower into Graph IR" failure mode (see `docs/architecture/frontend_substrate_plan.md`). |
+
+### Drift gate
+
+`tests/unit/test_to_graph_ir_view_contract.py` exercises all three
+adapters against the contract above:
+
+  * 1:1 op-shape: `len(view.body) == len(program.ops)` + op names
+    match in order.
+  * Canonical names: no `complex_mobius` / `complex_stereographic`
+    leakage in the view (rejected via a denylist).
+  * Fresh deep copy: mutating one view's `body` doesn't affect a
+    second view from the same program.
+  * Lane stamping: each adapter's view carries the expected lane.
+  * Verification facts: each adapter's view carries the expected
+    invariant set.
+
+Adding a new constrained lane requires both a `to_graph_ir_view()`
+method and a corresponding row in the drift-gate's parametrize list.

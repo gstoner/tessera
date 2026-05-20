@@ -56,7 +56,10 @@ import functools
 import hashlib
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
+
+if TYPE_CHECKING:
+    from .graph_ir import GraphIRModule
 
 from tessera.compiler import jit_bridge as _bridge
 from tessera.compiler import ast_ir as _ast_ir
@@ -200,6 +203,42 @@ class CliffordIRProgram:
             )
         lines.append(f"  return {self.return_ref}")
         return "\n".join(lines)
+
+    def to_graph_ir_view(
+        self,
+        *,
+        function_name: str = "clifford_fn",
+    ) -> "GraphIRModule":
+        """Project this program into a Graph IR module for audit /
+        explain / normalization consumption.
+
+        Phase B (2026-05-20).  The returned module is a 1:1
+        projection: each :class:`CliffordIROpCall` becomes one
+        :class:`IROp` with the canonical ``clifford_*`` op name.
+        Backend aliases (if any future kernel renames the symbol)
+        are **not** applied — the audit walker handles backend
+        lookup separately via ``_M7_BACKEND_ALIASES``.
+
+        Contract spec: ``docs/spec/COMPILER_REFERENCE.md``
+        § "Constrained-lane Graph IR views".
+
+        Lane stamping: ``view.functions[0].lane = "clifford_jit"``.
+        Verification facts: ``{"ga_whitelisted"}`` — the
+        decoration-time whitelist already proved every op is in
+        the GA family.
+        """
+
+        from ._view_helpers import build_graph_ir_view
+
+        return build_graph_ir_view(
+            function_name=function_name,
+            arg_names=self.arg_names,
+            ops=self.ops,
+            return_ref=self.return_ref,
+            lane="clifford_jit",
+            verification_facts=frozenset({"ga_whitelisted"}),
+            value_kind="multivector",
+        )
 
 
 # M6 Step 1 (2026-05-18): the previous ``_ASTLowerer`` lived here

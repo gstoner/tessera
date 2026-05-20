@@ -85,6 +85,25 @@ class FrontendLaneSpec:
     "any op" (the general lanes); the constrained lanes carry
     explicit prefixes."""
 
+    graph_ir_view_method: str = ""
+    """Class.method name of the ``to_graph_ir_view()`` adapter for
+    this lane's IR program.  Empty when the lane emits Graph IR
+    natively (``tessera_jit`` / ``textual_dsl``) — no adapter
+    needed.  Phase B (2026-05-20): the three constrained lanes
+    declare their adapter here so the docs + drift-gate
+    parametrize lists agree."""
+
+    verification_facts_emitted: tuple[str, ...] = ()
+    """Verification-facts strings the lane's view stamps on the
+    projected ``GraphIRFunction``.  Used by Phase D optimization
+    passes (deferred) to know which transforms are safe.  Empty
+    for lanes that don't emit views (Graph IR natively)."""
+
+    value_kind_emitted: str = ""
+    """``IROp.value_kind`` the view's adapter stamps on every op.
+    Examples: ``multivector`` (Clifford), ``complex`` (Complex),
+    ``energy`` (Energy).  Empty when no view is emitted."""
+
     notes: str = ""
 
 
@@ -140,6 +159,9 @@ _LANE_REGISTRY: tuple[FrontendLaneSpec, ...] = (
         diagnostic_codes=("CLIFFORD_*",),
         explain_supported=False,
         op_name_patterns=("clifford_", "ga.",),
+        graph_ir_view_method="CliffordIRProgram.to_graph_ir_view",
+        verification_facts_emitted=("ga_whitelisted",),
+        value_kind_emitted="multivector",
         notes=(
             "GA / Clifford-algebra lane.  Every op must be a "
             "fused Apple GPU MSL kernel; the decorator-time check "
@@ -163,6 +185,11 @@ _LANE_REGISTRY: tuple[FrontendLaneSpec, ...] = (
             "stereographic",
             "cross_ratio",
         ),
+        graph_ir_view_method="ComplexIRProgram.to_graph_ir_view",
+        verification_facts_emitted=(
+            "holomorphic (conditional — only when every op is in HOLOMORPHIC_OPS)",
+        ),
+        value_kind_emitted="complex",
         notes=(
             "Visual Complex Analysis lane (M7).  Refuses functions "
             "containing anti-holomorphic ops (conjugate, abs, arg) "
@@ -182,6 +209,9 @@ _LANE_REGISTRY: tuple[FrontendLaneSpec, ...] = (
         diagnostic_codes=("ENERGY_*",),
         explain_supported=False,
         op_name_patterns=("energy_", "ebm_"),
+        graph_ir_view_method="EnergyIRProgram.to_graph_ir_view",
+        verification_facts_emitted=("energy_whitelisted",),
+        value_kind_emitted="energy",
         notes=(
             "Energy-based-model lane.  Accepts only ops from the "
             "energy/EBM whitelist; v1 fp32-only.  Pairs with the "
@@ -383,6 +413,29 @@ def render_markdown() -> str:
                 + ", ".join(f"`{p}`" for p in spec.op_name_patterns)
                 + "  "
             )
+        # Phase B view adapter — surface the method + facts/value_kind
+        # the view stamps so developers can read the audit surface
+        # without diving into source.
+        if spec.graph_ir_view_method:
+            lines.append(
+                f"**Graph IR view adapter:** "
+                f"`{spec.graph_ir_view_method}()` — see "
+                f"`docs/spec/COMPILER_REFERENCE.md` § "
+                f"\"Constrained-lane Graph IR views\".  "
+            )
+            if spec.verification_facts_emitted:
+                lines.append(
+                    "**Verification facts emitted:** "
+                    + ", ".join(
+                        f"`{f}`" for f in spec.verification_facts_emitted
+                    )
+                    + "  "
+                )
+            if spec.value_kind_emitted:
+                lines.append(
+                    f"**Op `value_kind` stamped:** "
+                    f"`{spec.value_kind_emitted}`  "
+                )
         lines.append("")
     lines.append("## Python query API")
     lines.append("")

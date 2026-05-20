@@ -186,6 +186,49 @@ class ComplexIRProgram:
         lines.append(f"  return {self.return_ref}")
         return "\n".join(lines)
 
+    def to_graph_ir_view(
+        self,
+        *,
+        function_name: str = "complex_fn",
+    ) -> "Any":
+        """Project this program into a Graph IR module for audit /
+        explain / normalization consumption.
+
+        Phase B (2026-05-20).  The op names in the constrained IR
+        are already canonical (``mobius``, ``stereographic``,
+        ``complex_mul``, ``complex_exp``) — the backend aliases
+        (``complex_mobius``, ``complex_stereographic``) live only
+        in :mod:`tessera.compiler.backend_manifest` and are applied
+        downstream by the audit walker.
+
+        Lane stamping: ``view.functions[0].lane = "complex_jit"``.
+
+        Verification facts: ``{"holomorphic"}`` **only** when every
+        op in this program is in :data:`HOLOMORPHIC_OPS`.  A
+        program with even one non-holomorphic op (``complex_abs``,
+        ``complex_conjugate``, ``stereographic``, etc.) projects
+        without the holomorphic fact — passes that depend on it
+        won't fire.
+
+        Contract spec: ``docs/spec/COMPILER_REFERENCE.md``
+        § "Constrained-lane Graph IR views".
+        """
+
+        from ._view_helpers import build_graph_ir_view
+
+        facts: frozenset[str] = frozenset()
+        if all(c.op_name in HOLOMORPHIC_OPS for c in self.ops):
+            facts = frozenset({"holomorphic"})
+        return build_graph_ir_view(
+            function_name=function_name,
+            arg_names=self.arg_names,
+            ops=self.ops,
+            return_ref=self.return_ref,
+            lane="complex_jit",
+            verification_facts=facts,
+            value_kind="complex",
+        )
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Lowering

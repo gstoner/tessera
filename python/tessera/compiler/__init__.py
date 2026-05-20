@@ -83,6 +83,10 @@ from .graph_ir_cache import (
     clear_graph_ir_cache,
 )
 from .dry_run import dry_run
+from .normalization import (
+    NORMALIZATION_PIPELINE,
+    run_normalization_pipeline,
+)
 from . import frontend_lanes as lanes  # noqa: F401 — re-export as ts.compiler.lanes
 from .frontend_lanes import FrontendLane, FrontendLaneSpec
 
@@ -187,4 +191,9 @@ __all__ = [
     "graph_ir_cache_stats",
     # U4 (2026-05-19) — dry-run compile for static analysis.
     "dry_run",
+    # Phase C skeleton (2026-05-20) — normalization pipeline order.
+    # Pass bodies land in subsequent commits; the tuple ordering is
+    # the load-bearing contract.
+    "NORMALIZATION_PIPELINE",
+    "run_normalization_pipeline",
 ]

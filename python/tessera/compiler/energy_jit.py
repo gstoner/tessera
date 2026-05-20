@@ -152,6 +152,36 @@ class EnergyIRProgram:
         lines.append(f"  return {self.return_ref}")
         return "\n".join(lines)
 
+    def to_graph_ir_view(
+        self,
+        *,
+        function_name: str = "energy_fn",
+    ) -> "Any":
+        """Project this program into a Graph IR module for audit /
+        explain / normalization consumption.
+
+        Phase B (2026-05-20).  Op names are already canonical
+        (``energy_quadratic``, ``energy_softmax``, etc.).
+
+        Lane stamping: ``view.functions[0].lane = "energy_jit"``.
+        Verification facts: ``{"energy_whitelisted"}``.
+
+        Contract spec: ``docs/spec/COMPILER_REFERENCE.md``
+        § "Constrained-lane Graph IR views".
+        """
+
+        from ._view_helpers import build_graph_ir_view
+
+        return build_graph_ir_view(
+            function_name=function_name,
+            arg_names=self.arg_names,
+            ops=self.ops,
+            return_ref=self.return_ref,
+            lane="energy_jit",
+            verification_facts=frozenset({"energy_whitelisted"}),
+            value_kind="energy",
+        )
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Lowering

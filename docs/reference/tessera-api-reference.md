@@ -243,6 +243,49 @@ For static inspection without launching, `tessera-mlir
 --mode=compile_artifact --symbol=<name>` reads the JIT artifact directly
 (see `docs/guides/Tessera_Debugging_Tools_Guide.md`).
 
+## Constrained-lane Graph IR views (Phase B, 2026-05-20)
+
+The constrained math lanes (`@clifford_jit`, `@complex_jit`,
+`@energy_jit`) keep their own narrower IR types but expose a
+`to_graph_ir_view() -> GraphIRModule` adapter for tooling that
+wants to consume any lane uniformly:
+
+```python
+from tessera.compiler.clifford_jit import lower_function_to_ir
+program = lower_function_to_ir(my_clifford_fn)
+view = program.to_graph_ir_view()
+# Now view.functions[0].lane == "clifford_jit",
+#     view.functions[0].verification_facts == {"ga_whitelisted"}
+```
+
+The view is a **1:1 projection** with the canonical op-name
+vocabulary; it is **never** the source of truth for execution
+(the constrained lanes keep that sovereignty).  Full contract in
+[`docs/spec/COMPILER_REFERENCE.md`](../spec/COMPILER_REFERENCE.md)
+§ "Constrained-lane Graph IR views".
+
+## Optional IR metadata (Phase A, 2026-05-20)
+
+Graph IR carries cross-cutting metadata as **optional** fields —
+producers fill what they know; consumers tolerate missing values:
+
+| Field | Type | Where it lives | What it means |
+|---|---|---|---|
+| `IROp.source_span` | `SourceSpan \| None` | per-op | line/col from the source frontend |
+| `IROp.numeric_policy` | `NumericPolicy \| None` | per-op | storage / accum / scale (G3) |
+| `IROp.value_kind` | `str \| None` | per-op | `tensor` / `multivector` / `complex` / `energy` |
+| `IROp.verification_facts` | `frozenset[str]` | per-op | lane invariants (`holomorphic`, `ga_only`, ...) |
+| `GraphIRFunction.lane` | `str` | per-fn | `tessera_jit` / `textual_dsl` / `clifford_jit` / `complex_jit` / `energy_jit` |
+| `GraphIRFunction.verification_facts` | `frozenset[str]` | per-fn | function-level lane invariants |
+| `GraphIRFunction.source_hash` | `str \| None` | per-fn | SHA-256 of the source text |
+
+The drift-gate `tests/unit/test_optional_ir_metadata_contract.py`
+asserts new fields stay optional unless explicitly grandfathered.
+Adding a required IR field is a breaking change that fails CI.
+
+Architecture rationale and the phased plan (A → B → C → D) live in
+[`docs/architecture/frontend_substrate_plan.md`](../architecture/frontend_substrate_plan.md).
+
 ## Roadmap (formerly "Future APIs")
 
 These rows were authored when Phases 4–6 were planned.  The status

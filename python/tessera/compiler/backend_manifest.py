@@ -1120,18 +1120,87 @@ _COMPLEX_PRIMITIVES: tuple[str, ...] = (
 )
 
 
-def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
-    """Return backend manifest entries for a ``complex_*`` primitive
-    (M7 conformal surface).
+# E3 (2026-05-20) — every M7 Visual Complex op (4 fused + 16 long-tail)
+# routes through ``complex_manifest_for``.  The 16 long-tail ops don't
+# yet ship native MSL / WGMMA / MFMA kernels; the manifest declares
+# ``reference`` status on CPU targets and ``planned`` slots on
+# apple_gpu / nvidia_sm90+ / rocm so the IR has reserved slots ready
+# for Phase G / H / M7-follow-up kernel work to slot into.  The audit
+# walker now sees a populated manifest for the entire M7 surface
+# (not just the 4 fused ops), which is what flips them out of
+# ``target_ir=planned``.
+_M7_LONG_TAIL: tuple[str, ...] = (
+    # Pointwise complex math (7) — all elementwise on packed (re, im).
+    "complex_div",
+    "complex_log",
+    "complex_sqrt",
+    "complex_pow",
+    "complex_conjugate",
+    "complex_abs",
+    "complex_arg",
+    # Möbius / projective family (1 — the other 2 are already fused).
+    "mobius_from_three_points",
+    # Cross-ratio / cocircularity / Cauchy-Riemann certificate (3).
+    "cross_ratio",
+    "is_concyclic",
+    "check_cauchy_riemann",
+    # Wirtinger derivatives + Laplacian (3 stencils on (re, im) grid).
+    "dz",
+    "dbar",
+    "laplacian_2d",
+    # Conformal Jacobian + energy on sphere (2).
+    "conformal_jacobian",
+    "conformal_energy_on_sphere",
+)
 
-    Only the four GPU-beneficial complex ops have native Apple GPU
-    fused kernels; the rest of the M7 surface stays CPU-only by
-    design and returns an empty manifest list.
+# Per-op dtype matrix for M7 long-tail ops.  fp32 only for v1 — fp16 /
+# bf16 will land alongside the actual GPU kernels (the storage/accum
+# split for complex math typically wants fp16 storage + fp32 accum).
+_M7_LONG_TAIL_DTYPES: tuple[str, ...] = ("fp32",)
+_M7_LONG_TAIL_PLANNED_GPU_DTYPES: tuple[str, ...] = ("fp32", "fp16", "bf16")
+
+
+def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
+    """Return backend manifest entries for a M7 Visual Complex primitive.
+
+    Coverage tiers:
+      * **Fused (4)** — ``complex_mul``, ``complex_exp``,
+        ``complex_mobius``, ``complex_stereographic``.  Ship native MSL
+        kernels on Apple GPU; the audit reads ``target_ir=fused``.
+      * **Long-tail (16)** — the rest of the M7 surface
+        (``complex_div``/``log``/``sqrt``/``pow``/``conjugate``/``abs``/
+        ``arg``, ``mobius_from_three_points``, ``cross_ratio``,
+        ``is_concyclic``, ``check_cauchy_riemann``, ``dz``, ``dbar``,
+        ``laplacian_2d``, ``conformal_jacobian``,
+        ``conformal_energy_on_sphere``).  These run today via the
+        Python reference path in ``tessera.complex.*``; native kernel
+        slots on apple_gpu / nvidia_sm90+ / rocm are reserved as
+        ``planned`` so the audit walker reflects the future intent
+        (and Phase G / H / M7-follow-up work knows which slots to
+        target).
+
+    Returns an empty list for ops outside the M7 inventory.
     """
-    if op_name not in _COMPLEX_PRIMITIVES:
+    in_fused = op_name in _COMPLEX_PRIMITIVES
+    in_long_tail = op_name in _M7_LONG_TAIL
+    if not (in_fused or in_long_tail):
         return []
     entries: list[BackendKernelEntry] = []
-    # CPU targets — Python reference always available.
+    # CPU targets — Python reference always available for the entire
+    # M7 surface (the numpy code in ``tessera.complex.*`` runs on
+    # cpu / x86 / apple_cpu without any backend-specific dispatch).
+    # The ``cpu`` entry mirrors the generic catalog path's "numpy
+    # reference always available as fallback" emission — needed so
+    # ``support.tier()`` sees a ``target_ir=reference`` row on the
+    # ``cpu`` target and reports REFERENCE_ONLY instead of falling
+    # through to the runtime=ready NATIVE_READY branch.
+    entries.append(BackendKernelEntry(
+        target="cpu",
+        status=_REFERENCE_STATUS,
+        dtypes=("fp32",),
+        feature_flags=("numpy", "reference_execution"),
+        notes="numpy reference path (tessera.complex.*)",
+    ))
     entries.append(BackendKernelEntry(
         target="x86",
         status=_REFERENCE_STATUS,
@@ -1146,7 +1215,8 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
         feature_flags=("complex_namespace", "numpy_reference"),
         notes="Python complex reference (tessera.complex.*)",
     ))
-    # Apple GPU — fused MSL kernel for the GPU-beneficial subset.
+    # Apple GPU — fused MSL kernel for the 4-op fused subset; planned
+    # slot (with full dtype matrix) for the long-tail.
     fused = _COMPLEX_APPLE_GPU_FUSED.get(op_name)
     if fused is not None:
         entries.append(BackendKernelEntry(
@@ -1159,6 +1229,53 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 f"ABI {fused['abi']}. {fused['notes']}"
             ),
         ))
+    elif in_long_tail:
+        entries.append(BackendKernelEntry(
+            target="apple_gpu",
+            status=_PLANNED_STATUS,
+            dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
+            feature_flags=("complex_namespace", "msl", "metal"),
+            notes=(
+                "Native MSL kernel slot reserved — runs today via the "
+                "Python reference path; promotion gated on the M7 "
+                "follow-up kernel sprint."
+            ),
+        ))
+    # NVIDIA — planned slots across SM_80 / SM_90 / SM_100 / SM_120.
+    # The 4 fused ops are the canonical first kernels for Phase G; the
+    # long-tail is gated on the same Phase G milestone.  cuComplex.h-style
+    # PTX intrinsics cover complex_log / sqrt / pow / div / conjugate /
+    # abs / arg trivially once the SM_90 BF16 GEMM baseline is green.
+    for target_name, flags, arch_min in (
+        ("nvidia_sm80",  ("complex_namespace", "wmma"),      "sm_80"),
+        ("nvidia_sm90",  ("complex_namespace", "wgmma"),     "sm_90a"),
+        ("nvidia_sm100", ("complex_namespace", "tcgen05"),   "sm_100a"),
+        ("nvidia_sm120", ("complex_namespace", "tcgen05"),   "sm_120a"),
+    ):
+        entries.append(BackendKernelEntry(
+            target=target_name,
+            status=_PLANNED_STATUS,
+            dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
+            feature_flags=flags,
+            notes=(
+                "M7 kernel slot reserved; runs today via Python reference. "
+                "Promotion gated on Phase G."
+            ),
+            cuda_arch_min=arch_min,
+            nvcc_version_min="13.2.1",
+        ))
+    # ROCm — planned slot, gated on Phase H.
+    entries.append(BackendKernelEntry(
+        target="rocm",
+        status=_PLANNED_STATUS,
+        dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
+        feature_flags=("complex_namespace", "mfma"),
+        notes=(
+            "M7 kernel slot reserved; runs today via Python reference. "
+            "Promotion gated on Phase H."
+        ),
+        hipcc_version_min="7.2.3",
+    ))
     return entries
 
 
@@ -1179,7 +1296,14 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
         return clifford_manifest_for(op_name)
     if op_name.startswith("ebm_"):
         return ebm_manifest_for(op_name)
-    if op_name.startswith("complex_"):
+    # E3 (2026-05-20): route every M7 Visual Complex op through
+    # ``complex_manifest_for`` — the 9 non-prefixed names (mobius /
+    # cross_ratio / dz / dbar / laplacian_2d / ...) need the same
+    # CPU-reference + GPU-planned-slot treatment as the prefixed
+    # ones, but they don't carry a ``complex_`` prefix.
+    if (op_name.startswith("complex_")
+            or op_name in _COMPLEX_APPLE_GPU_FUSED
+            or op_name in _M7_LONG_TAIL):
         return complex_manifest_for(op_name)
     entries: list[BackendKernelEntry] = []
 

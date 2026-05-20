@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 38 |
-| ``runnable_reference`` | 216 |
+| ``runnable_reference`` | 232 |
 | ``artifact_only`` | 0 |
-| ``partial`` | 17 |
+| ``partial`` | 0 |
 | ``planned`` | 0 |
-| **total** | **271** |
+| **total** | **270** |
 
 ## complete (38)
 
@@ -69,12 +69,12 @@ each row into a single E2E tier.
 | ``rope`` | rotary_embedding | public | public | registered | partial | fused | ready | none |
 | ``softmax`` | stable_reduction | public | public | registered | partial | fused | ready | none |
 | ``softmax_safe`` | stable_reduction | public | public | registered | partial | fused | ready | none |
-| ``complex_exp`` | visual_complex | public | public | not_applicable | fused | fused | fused | none |
-| ``complex_mul`` | visual_complex | public | public | not_applicable | fused | fused | fused | none |
-| ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | fused | none |
-| ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | fused | none |
+| ``complex_exp`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
+| ``complex_mul`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
+| ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
+| ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (216)
+## runnable_reference (232)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -294,28 +294,22 @@ each row into a single E2E tier.
 | ``kv_cache_read`` | state_update | public | public | registered | partial | reference | ready | none |
 | ``conv2d`` | stencil | public | public | registered | partial | reference | ready | none |
 | ``conv3d`` | stencil | public | public | registered | partial | reference | ready | none |
-
-## partial (17)
-
-| Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
-|---|---|---|---|---|---|---|---|---|
-| ``check_cauchy_riemann`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``complex_abs`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``complex_arg`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``complex_conjugate`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``complex_div`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``complex_jit`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``complex_log`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``complex_pow`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``complex_sqrt`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``conformal_energy_on_sphere`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``conformal_jacobian`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``cross_ratio`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``dbar`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``dz`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``is_concyclic`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``laplacian_2d`` | visual_complex | public | public | missing | planned | planned | unknown | none |
-| ``mobius_from_three_points`` | visual_complex | public | public | missing | planned | planned | unknown | none |
+| ``check_cauchy_riemann`` | visual_complex | public | public | registered | partial | reference | ready | none |
+| ``complex_abs`` | visual_complex | public | public | registered | partial | reference | ready | none |
+| ``complex_arg`` | visual_complex | public | public | registered | partial | reference | ready | none |
+| ``complex_conjugate`` | visual_complex | public | public | registered | partial | reference | ready | none |
+| ``complex_div`` | visual_complex | public | public | registered | partial | reference | ready | none |
+| ``complex_log`` | visual_complex | public | public | registered | partial | reference | ready | none |
+| ``complex_pow`` | visual_complex | public | public | registered | partial | reference | ready | none |
+| ``complex_sqrt`` | visual_complex | public | public | registered | partial | reference | ready | none |
+| ``conformal_energy_on_sphere`` | visual_complex | public | public | registered | partial | reference | ready | none |
+| ``conformal_jacobian`` | visual_complex | public | public | registered | partial | reference | ready | none |
+| ``cross_ratio`` | visual_complex | public | public | registered | partial | reference | ready | none |
+| ``dbar`` | visual_complex | public | public | registered | partial | reference | ready | none |
+| ``dz`` | visual_complex | public | public | registered | partial | reference | ready | none |
+| ``is_concyclic`` | visual_complex | public | public | registered | partial | reference | ready | none |
+| ``laplacian_2d`` | visual_complex | public | public | registered | partial | reference | ready | none |
+| ``mobius_from_three_points`` | visual_complex | public | public | registered | partial | reference | ready | none |
 
 ## How to extend
 

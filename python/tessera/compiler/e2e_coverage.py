@@ -191,11 +191,28 @@ def coverage_row_for(op_name: str) -> E2ECoverageRow:
     )
 
 
+# Decorator aliases — names that appear in ``_M7_INVENTORY`` /
+# similar inventories for *discoverability*, not because they're ops.
+# ``complex_jit`` is the @-decorator factory that lowers a Python
+# source function via ``analytic_symbolic``; treating it as an op
+# would forever pin one row at ``partial`` (no Graph IR / no kernel /
+# nothing to benchmark) even though that's precisely the right shape
+# for a decorator surface.  Excluded from E2E op coverage; still
+# visible in ``support_table.md`` because the support audit is the
+# right place to document decorator surfaces.
+_DECORATOR_ALIASES: frozenset[str] = frozenset({
+    "complex_jit",
+})
+
+
 def all_coverage_rows() -> list[E2ECoverageRow]:
-    """E2E coverage for every op the audit walker enumerates."""
+    """E2E coverage for every op the audit walker enumerates,
+    minus decorator aliases (see ``_DECORATOR_ALIASES``)."""
 
     return [
-        coverage_row_for(name) for name in _audit._candidate_op_names()
+        coverage_row_for(name)
+        for name in _audit._candidate_op_names()
+        if name not in _DECORATOR_ALIASES
     ]
 
 

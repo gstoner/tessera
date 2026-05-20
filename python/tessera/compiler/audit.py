@@ -422,6 +422,13 @@ def _family_for(op_name: str) -> str:
         return "geometric_algebra"
     if op_name.startswith("ebm_"):
         return "energy_based_models"
+    # E3 (2026-05-20): M7 Visual Complex ops are registered in OP_SPECS
+    # with ``lowering="elementwise" / "stencil" / "stable_reduction"``
+    # — the lowering tag identifies the *pass* that handles the op,
+    # not its display family.  Pin them to the ``visual_complex``
+    # family so support_table / e2e_coverage group them together.
+    if op_name in _M7_INVENTORY:
+        return "visual_complex"
     spec = OP_SPECS.get(op_name)
     if spec is not None:
         return spec.lowering or "elementwise"

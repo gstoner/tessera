@@ -1404,6 +1404,12 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `kv_cache_append(cache, key, value)` | `(cache, array, array) → cache` | `state` | Reference in-process KV cache helper |
 | `kv_cache_prune(cache, max_entries=None, max_seq=None)` | `(cache) → cache` | `state` | Reference in-process KV cache helper |
 | `selective_ssm(x, A, B, C, D=None, initial_state=None)` | `(array, array, array, array, [array, array]) → array` | `state` | Mamba2-style selective state-space scan; closed-form JVP through the recurrence shipped (see `tessera.selective_ssm` Graph IR op) |
+| `complex_mul(z, w)` / `complex_div(z, w, eps=1e-12)` / `complex_exp(z)` / `complex_log(z)` / `complex_sqrt(z, branch=0)` / `complex_pow(z, w)` | `(complex, complex) → complex` | `pure` | M7 Visual Complex Analysis pointwise math (Graph IR ops `tessera.complex_mul` / `complex_div` / `complex_exp` / `complex_log` / `complex_sqrt` / `complex_pow`); fused Apple GPU MSL kernel for `complex_mul`/`complex_exp`; NVIDIA / ROCm slots planned (Phase G / H). |
+| `complex_conjugate(z)` / `complex_abs(z)` / `complex_arg(z)` | `(complex) → complex/real` | `pure` | M7 pointwise complex helpers (Graph IR ops `tessera.complex_conjugate` / `complex_abs` / `complex_arg`); CPU reference, GPU slots planned. |
+| `mobius(z, a, b, c, d)` / `mobius_from_three_points(src, dst)` / `stereographic(x, y, z)` | Möbius / projective | `pure` | M7 Möbius transformation family (Graph IR ops `tessera.mobius` / `mobius_from_three_points` / `stereographic`); fused Apple GPU MSL kernels for `mobius`/`stereographic`. |
+| `cross_ratio(z1, z2, z3, z4)` / `is_concyclic(z1, z2, z3, z4)` / `check_cauchy_riemann(f)` | `(complex×4) → scalar` / certificate | `pure` | M7 projective invariants + holomorphicity certificate (Graph IR ops `tessera.cross_ratio` / `tessera.is_concyclic` / `tessera.check_cauchy_riemann`). |
+| `dz(f, z0, h=1e-5)` / `dbar(f, z0, h=1e-5)` / `laplacian_2d(f, ...)` | stencils | `pure` | M7 Wirtinger derivatives + Laplacian (Graph IR ops `tessera.dz` / `tessera.dbar` / `tessera.laplacian_2d`, `lowering="stencil"`). |
+| `conformal_jacobian(f, z0)` / `conformal_energy_on_sphere(f, ...)` | conformal | `pure` | M7 conformal Jacobian + spherical conformal energy (Graph IR ops `tessera.conformal_jacobian` / `tessera.conformal_energy_on_sphere`). |
 
 **Operator registry behavior:** `tessera.ops.registry` tracks reference,
 lowering, and runtime-kernel handlers. Current public runtime names are mirrored

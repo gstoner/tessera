@@ -265,27 +265,27 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `kv_cache_read` | state_update | public | public | registered | complete | partial | reference | ready | none |
 | `conv2d` | stencil | public | public | registered | complete | partial | reference | ready | none |
 | `conv3d` | stencil | public | public | registered | complete | partial | reference | ready | none |
-| `check_cauchy_riemann` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `complex_abs` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `complex_arg` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `complex_conjugate` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `complex_div` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `complex_exp` | visual_complex | public | public | not_applicable | planned | fused | fused | fused | none |
-| `complex_jit` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `complex_log` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `complex_mul` | visual_complex | public | public | not_applicable | planned | fused | fused | fused | none |
-| `complex_pow` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `complex_sqrt` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `conformal_energy_on_sphere` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `conformal_jacobian` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `cross_ratio` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `dbar` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `dz` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `is_concyclic` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `laplacian_2d` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `mobius` | visual_complex | public | public | not_applicable | planned | fused | fused | fused | none |
-| `mobius_from_three_points` | visual_complex | public | public | missing | planned | planned | planned | unknown | none |
-| `stereographic` | visual_complex | public | public | not_applicable | planned | fused | fused | fused | none |
+| `check_cauchy_riemann` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `complex_abs` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `complex_arg` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `complex_conjugate` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `complex_div` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `complex_exp` | visual_complex | public | public | not_applicable | complete | fused | fused | ready | none |
+| `complex_jit` | visual_complex | public | public | registered | complete | planned | planned | unknown | none |
+| `complex_log` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `complex_mul` | visual_complex | public | public | not_applicable | complete | fused | fused | ready | none |
+| `complex_pow` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `complex_sqrt` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `conformal_energy_on_sphere` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `conformal_jacobian` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `cross_ratio` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `dbar` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `dz` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `is_concyclic` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `laplacian_2d` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `mobius` | visual_complex | public | public | not_applicable | complete | fused | fused | ready | none |
+| `mobius_from_three_points` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `stereographic` | visual_complex | public | public | not_applicable | complete | fused | fused | ready | none |
 
 ## Summary by family
 
@@ -328,7 +328,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | state_space | 1 | PPGCpRN· |
 | state_update | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
 | stencil | 2 | PPGCpRN· PPGCpRN· |
-| visual_complex | 21 | PP····?· PP····?· PP····?· PP····?· PP····?· PPn·FFF· PP····?· PP····?· PPn·FFF· PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· PP····?· PPn·FFF· PP····?· PPn·FFF· |
+| visual_complex | 21 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGC··?· PPGCpRN· PPnCFFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· |
 
 ## Canonical end-to-end programs (M1 / M1.5)
 

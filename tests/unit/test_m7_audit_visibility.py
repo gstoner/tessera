@@ -119,19 +119,36 @@ class TestM7BackendAlias:
                 f"got {row.cells['target_ir'].status!r}"
             )
 
-    def test_non_aliased_m7_ops_still_planned(self) -> None:
-        """Sanity check the alias map is narrow — ops we did NOT
-        alias still report target_ir=planned, so we're not over-
-        promoting the rest of the M7 family."""
+    def test_non_aliased_m7_ops_report_reference(self) -> None:
+        """E3 (2026-05-20): the M7 long-tail ops have no fused MSL
+        kernel today, but they're not overclaimed as ``fused`` either.
+        After E3 they read as ``target_ir=reference`` — the CPU
+        manifest (x86 + apple_cpu) ships the Python reference path,
+        and apple_gpu / nvidia_sm90+ / rocm have ``planned`` slots
+        reserved for the M7 kernel follow-up.
+        """
 
         from tessera.compiler.audit import support_row_for
+        from tessera.compiler.backend_manifest import manifest_for
 
-        # `cross_ratio` and `dz` have no fused MSL kernel today;
-        # they should still read as `planned` on the lowering axes.
         for op_name in ("cross_ratio", "dz", "laplacian_2d"):
             row = support_row_for(op_name)
-            assert row.cells["target_ir"].status == "planned", (
-                f"{op_name} unexpectedly reports "
-                f"target_ir={row.cells['target_ir'].status!r}; the "
-                f"alias map widened too far."
+            # Reference status comes from x86/apple_cpu CPU entries.
+            assert row.cells["target_ir"].status == "reference", (
+                f"{op_name} reports target_ir="
+                f"{row.cells['target_ir'].status!r}; expected "
+                f"'reference' (the M7 long-tail runs via Python "
+                f"reference on CPU; native-kernel slots are reserved "
+                f"as planned on the GPU targets)."
             )
+            # The manifest must carry planned slots for the GPU
+            # targets so Phase G / H / M7-follow-up knows where to
+            # land the actual kernels.
+            entries = {e.target: e.status for e in manifest_for(op_name)}
+            for gpu in ("apple_gpu", "nvidia_sm90", "rocm"):
+                assert entries.get(gpu) == "planned", (
+                    f"{op_name}: expected {gpu}=planned, got "
+                    f"{entries.get(gpu)!r} — every M7 long-tail op "
+                    f"should reserve a native-kernel slot for that "
+                    f"target."
+                )

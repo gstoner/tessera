@@ -591,6 +591,15 @@ _SHARDING_RULE_BY_CATEGORY: dict[str, str] = {
     "ebm":                 "partial",   # pointwise on (B, K) axes;
                                          # collective reductions for
                                          # partition functions
+
+    # — M7 Visual Complex Analysis (E3, 2026-05-20).  Most ops are
+    #   pointwise on packed (re, im) tensors and shard trivially over
+    #   batch (complete).  Differential operators (dz/dbar/laplacian_2d)
+    #   are stencils → partial pending halo exchange.  conformal_energy
+    #   reduces over a sphere → standard all-reduce.  Keep at `partial`
+    #   for the family-wide setting — per-name overrides (when added)
+    #   can promote the pointwise cases.
+    "visual_complex":      "partial",
 }
 
 
@@ -691,6 +700,12 @@ _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
     #   same.
     "geometric_algebra":   "complete",
     "ebm":                 "complete",
+
+    # — M7 Visual Complex Analysis (E3, 2026-05-20): every M7 op
+    #   takes a batched (re, im) tensor and operates pointwise (or on
+    #   small fixed-size point tuples for cross_ratio etc.).  Adding a
+    #   vmap axis is the canonical batching form for the entire family.
+    "visual_complex":      "complete",
 }
 
 _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
@@ -764,6 +779,15 @@ _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
                                          # closure scheduled GA6
     "ebm":                 "partial",   # argmin/argmax break linearity
                                          # for self_verify; others linear
+
+    # — M7 Visual Complex Analysis (E3, 2026-05-20): Wirtinger
+    #   derivatives give a complete VJP/JVP closure for holomorphic
+    #   primitives (complex_mul/exp/log/sqrt/pow/div, mobius) — their
+    #   linear-transpose dual is the conjugate operator.  Anti-holomorphic
+    #   (complex_conjugate, complex_abs, complex_arg) and structural
+    #   ops (cross_ratio, is_concyclic, conformal_*) require per-name
+    #   declarations; mark the family `partial` until that closure lands.
+    "visual_complex":      "partial",
 }
 
 # Math semantics / shape rule / dtype-layout rule share the same verdict by
@@ -861,6 +885,13 @@ _SEMANTIC_RULES_BY_CATEGORY: dict[str, str] = {
     #   tessera.dtype).
     "geometric_algebra":   "complete",
     "ebm":                 "complete",
+
+    # — M7 Visual Complex Analysis (E3, 2026-05-20): every M7 primitive
+    #   has a closed-form complex-analysis definition documented in
+    #   Needham (Visual Complex Analysis).  Shape rules follow from the
+    #   packed (re, im) → packed (re, im) layout; dtype is fp32 today
+    #   (extends to fp16/bf16 with the standard storage/accum split).
+    "visual_complex":      "complete",
 }
 
 _LOWERING_RULE_BY_CATEGORY: dict[str, str] = {
@@ -920,6 +951,15 @@ _LOWERING_RULE_BY_CATEGORY: dict[str, str] = {
     #   Phase G / H / I.
     "geometric_algebra":   "complete",
     "ebm":                 "complete",
+
+    # — M7 Visual Complex Analysis (E3, 2026-05-20): pointwise ops
+    #   decompose through OP_SPECS elementwise primitives (add/mul/
+    #   exp/log/sqrt + atan2 for complex_arg); structural ops
+    #   (cross_ratio / is_concyclic / mobius_from_three_points)
+    #   decompose through dense matmul + complex_div; differential
+    #   ops (dz / dbar / laplacian_2d) decompose through the stencil
+    #   family.  Decomposition path exists today.
+    "visual_complex":      "complete",
     # Everything else (tensor_algebra / layout_transform / indexing / sparse /
     # linalg / etc.) stays at whatever existing path set (partial for python
     # primitives without decomposition; complete for OP_SPECS imports).
@@ -1005,6 +1045,12 @@ _GRAPH_IR_LOWERING_BY_CATEGORY: dict[str, str] = {
     "linalg_solver":       "registered",
     "linalg_decomposition":"registered",
     "sparse":              "registered",
+
+    # — M7 Visual Complex Analysis (E3, 2026-05-20): each M7 op has a
+    #   dedicated OP_SPECS entry (tessera.complex_log / .complex_sqrt /
+    #   .mobius_from_three_points / .laplacian_2d / etc.) registered
+    #   alongside the existing OP_SPECS family.
+    "visual_complex":      "registered",
 }
 
 
@@ -1364,6 +1410,12 @@ _TESTS_BY_CATEGORY: dict[str, str] = {
     #   handful with autodiff already shipped).
     "geometric_algebra":   "complete",
     "ebm":                 "complete",
+
+    # — M7 Visual Complex Analysis (E3, 2026-05-20): focused test
+    #   coverage lives in ``tests/unit/test_complex_*`` (~94 tests
+    #   across complex_mul/exp/log/sqrt/conjugate/abs/arg/mobius/
+    #   stereographic/cross_ratio/dz/dbar/laplacian_2d/conformal_*).
+    "visual_complex":      "complete",
 }
 
 
@@ -2513,7 +2565,22 @@ def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
         _apply_category_overrides(promoted, entry.category)
         _apply_effect_overrides(promoted, entry.effect or "pure")
         _apply_per_name_overrides(promoted, entry.name)
-        if promoted != entry.contract_status:
+        # E3 (2026-05-20): apply the same Graph IR lowering classifier
+        # to planned/partial entries as the python-primitive path uses
+        # (line 1859 area).  Without this, registry entries built via
+        # ``_partial`` / ``_planned`` never get the
+        # ``metadata.graph_ir_lowering`` field populated, which makes
+        # the audit's ``_axis_graph_ir`` walker fall through to
+        # ``missing`` even when the category-table classifier says
+        # ``registered``.
+        category_gir = _graph_ir_lowering_for_category(
+            entry.category, str(entry.metadata.get("graph_ir_lowering", ""))
+        )
+        new_metadata = dict(entry.metadata)
+        if category_gir and "graph_ir_lowering" not in new_metadata:
+            new_metadata["graph_ir_lowering"] = category_gir
+        metadata_changed = new_metadata != dict(entry.metadata)
+        if promoted != entry.contract_status or metadata_changed:
             entry = PrimitiveCoverage(
                 name=entry.name,
                 category=entry.category,
@@ -2526,7 +2593,7 @@ def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
                 graph_name=entry.graph_name,
                 effect=entry.effect,
                 lowering=entry.lowering,
-                metadata=entry.metadata,
+                metadata=new_metadata,
             )
         entries.setdefault(entry.name, entry)
     # GA9 (2026-05-17): planned entries don't go through

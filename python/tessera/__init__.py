@@ -3293,6 +3293,35 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "kimi_delta_attention": kimi_delta_attention,
         "modified_delta_attention": modified_delta_attention,
     }
+    # E3 (2026-05-20) — M7 Visual Complex Analysis numpy reference
+    # surface.  All 20 M7 ops live in ``tessera.complex.*`` and have
+    # closed-form numpy implementations today; wire them into the
+    # ops registry so ``tessera.ops.registry.list()`` reports them
+    # alongside the rest of the OP_SPECS catalog.
+    from tessera import complex as _ts_complex  # noqa: E402
+    m7_references = {
+        "complex_mul":                _ts_complex.complex_mul,
+        "complex_div":                _ts_complex.complex_div,
+        "complex_exp":                _ts_complex.complex_exp,
+        "complex_log":                _ts_complex.complex_log,
+        "complex_sqrt":               _ts_complex.complex_sqrt,
+        "complex_pow":                _ts_complex.complex_pow,
+        "complex_conjugate":          _ts_complex.complex_conjugate,
+        "complex_abs":                _ts_complex.complex_abs,
+        "complex_arg":                _ts_complex.complex_arg,
+        "mobius":                     _ts_complex.mobius,
+        "mobius_from_three_points":   _ts_complex.mobius_from_three_points,
+        "stereographic":              _ts_complex.stereographic,
+        "cross_ratio":                _ts_complex.cross_ratio,
+        "is_concyclic":               _ts_complex.is_concyclic,
+        "check_cauchy_riemann":       _ts_complex.check_cauchy_riemann,
+        "dz":                         _ts_complex.dz,
+        "dbar":                       _ts_complex.dbar,
+        "laplacian_2d":               _ts_complex.laplacian_2d,
+        "conformal_jacobian":         _ts_complex.conformal_jacobian,
+        "conformal_energy_on_sphere": _ts_complex.conformal_energy_on_sphere,
+    }
+    references.update(m7_references)
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
         _register_lowering(op_name, lambda *args, _op=op_name, **kwargs: {"op": _op, "status": "artifact_only"}, backend="graph_ir")

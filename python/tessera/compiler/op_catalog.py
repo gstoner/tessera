@@ -284,6 +284,44 @@ _SPECS = [
     # State-space / Mamba2 selective scan.  Inputs: x, A, B, C, [D, initial_state].
     # Lowered as a stateful sequence-axis scan (`state_space` lowering kind).
     OpSpec("selective_ssm", "tessera.selective_ssm", 4, 6, effect="state", lowering="state_space"),
+
+    # M7 Visual Complex Analysis (E3, 2026-05-20).  These ops give the
+    # M7 long-tail a real Graph IR identity so the frontend can emit
+    # stable op names instead of treating ``tessera.complex.*`` calls
+    # as opaque host code.  Lowering kinds:
+    #   - ``elementwise``: pointwise over packed (re, im) tensors.
+    #     Same lowering family as ``gelu`` / ``silu`` / ``sigmoid``.
+    #   - ``stencil``: Wirtinger derivatives ∂/∂z + ∂/∂z̄ + Laplacian
+    #     are 3×3 stencils on the (re, im) field.  Halo width = 1.
+    # The first 4 (complex_mul/exp + mobius/stereographic) are already
+    # E2-promoted via manifest dispatch — we list them here too so the
+    # Graph IR builder can emit canonical tessera.* op names instead
+    # of falling through to the opaque-call path.
+    # — Pointwise complex math (7) —
+    OpSpec("complex_mul",        "tessera.complex_mul",        2, 2),
+    OpSpec("complex_div",        "tessera.complex_div",        2, 2),
+    OpSpec("complex_exp",        "tessera.complex_exp",        1, 1),
+    OpSpec("complex_log",        "tessera.complex_log",        1, 1),
+    OpSpec("complex_sqrt",       "tessera.complex_sqrt",       1, 1),
+    OpSpec("complex_pow",        "tessera.complex_pow",        2, 2),
+    OpSpec("complex_conjugate",  "tessera.complex_conjugate",  1, 1),
+    OpSpec("complex_abs",        "tessera.complex_abs",        1, 1),
+    OpSpec("complex_arg",        "tessera.complex_arg",        1, 1),
+    # — Möbius / projective family (3) —
+    OpSpec("mobius",                   "tessera.mobius",                   2, 2),
+    OpSpec("mobius_from_three_points", "tessera.mobius_from_three_points", 2, 2),
+    OpSpec("stereographic",            "tessera.stereographic",            1, 1),
+    # — Cross-ratio / cocircularity / Cauchy-Riemann certificate (3) —
+    OpSpec("cross_ratio",          "tessera.cross_ratio",          4, 4),
+    OpSpec("is_concyclic",         "tessera.is_concyclic",         4, 4),
+    OpSpec("check_cauchy_riemann", "tessera.check_cauchy_riemann", 1, 1, lowering="stencil"),
+    # — Wirtinger derivatives + Laplacian (3 stencils) —
+    OpSpec("dz",           "tessera.dz",           1, 1, lowering="stencil"),
+    OpSpec("dbar",         "tessera.dbar",         1, 1, lowering="stencil"),
+    OpSpec("laplacian_2d", "tessera.laplacian_2d", 1, 1, lowering="stencil"),
+    # — Conformal Jacobian + energy on sphere (2) —
+    OpSpec("conformal_jacobian",         "tessera.conformal_jacobian",         1, 1, lowering="stencil"),
+    OpSpec("conformal_energy_on_sphere", "tessera.conformal_energy_on_sphere", 1, 1, lowering="stable_reduction"),
 ]
 
 OP_SPECS: dict[str, OpSpec] = {spec.public_name: spec for spec in _SPECS}

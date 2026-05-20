@@ -210,6 +210,29 @@ def _backend_lookup_name(op_name: str) -> str:
     return _M7_BACKEND_ALIASES.get(op_name, op_name)
 
 
+def m7_fused_public_ops() -> frozenset[str]:
+    """Return the public-facing M7 op names that ship a fused backend kernel.
+
+    Derived from ``_M7_INVENTORY`` + ``_M7_BACKEND_ALIASES`` +
+    ``backend_manifest._COMPLEX_APPLE_GPU_FUSED`` — never hardcoded.
+    Tests use this as the canonical "M7 fused" list so a new fused
+    complex kernel automatically widens every M7 regression guard.
+
+    Today (2026-05-19) this returns ``{complex_mul, complex_exp,
+    mobius, stereographic}``.  When a new entry lands in
+    ``_COMPLEX_APPLE_GPU_FUSED`` (e.g., ``complex_log``,
+    ``complex_sqrt``, a fused conformal Jacobian) it shows up here
+    automatically — no test edits required.
+    """
+
+    out: set[str] = set()
+    for public_name in _M7_INVENTORY:
+        backend_name = _backend_lookup_name(public_name)
+        if backend_name in bm._COMPLEX_APPLE_GPU_FUSED:
+            out.add(public_name)
+    return frozenset(out)
+
+
 def _axis_api(op_name: str) -> AxisCell:
     if op_name in OP_SPECS:
         return AxisCell("public", "op_catalog")

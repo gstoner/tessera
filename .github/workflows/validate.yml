@@ -269,21 +269,32 @@ jobs:
             llvm-21-dev mlir-21-tools libmlir-21-dev clang-21 \
             || { echo "::warning ::LLVM/MLIR 21 not available — skipping lit lane"; exit 0; }
           python -m pip install --upgrade pip
-          python -m pip install lit FileCheck
+          python -m pip install -e . --no-deps
+          python -m pip install lit FileCheck pytest numpy pyyaml
 
-      - name: Configure + build tessera-opt
+      - name: Configure + build MLIR tools
         run: |
           cmake -S . -B build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DMLIR_DIR=/usr/lib/llvm-21/lib/cmake/mlir \
             -DLLVM_DIR=/usr/lib/llvm-21/lib/cmake/llvm
-          cmake --build build --target tessera-opt
+          cmake --build build --target tessera-opt tessera-translate-mlir
+
+      - name: Run MLIR tool proof tests
+        env:
+          PYTHONPATH: python
+          PATH: "${{ github.workspace }}/build/tools/tessera-opt:${{ github.workspace }}/build/tools/tessera-translate:/usr/lib/llvm-21/bin:${{ env.PATH }}"
+        run: |
+          python -m pytest \
+            tests/unit/test_cli_translate.py \
+            tests/unit/test_tessera_opt_build.py \
+            -q
 
       - name: Run lit smoke (TESSERA_VALIDATE_LIT=1)
         env:
           TESSERA_VALIDATE_LIT: "1"
-          PATH: "${{ github.workspace }}/build/tools/tessera-opt:/usr/lib/llvm-21/bin:${{ env.PATH }}"
+          PATH: "${{ github.workspace }}/build/tools/tessera-opt:${{ github.workspace }}/build/tools/tessera-translate:/usr/lib/llvm-21/bin:${{ env.PATH }}"
         run: |
           lit tests/tessera-ir -v
 

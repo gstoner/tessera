@@ -1,5 +1,6 @@
+import base64
 from typing import Optional, List
-import base64, csv, json
+
 from .model import RooflineResult, CommEvent
 from .plot import plot_roofline_with_comm, plot_roofline
 
@@ -8,13 +9,13 @@ HTML_TMPL = """<!DOCTYPE html>
 <meta charset="utf-8"/>
 <title>Roofline Report</title>
 <style>
-body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 20px; }
-table { border-collapse: collapse; width: 100%; margin-top: 1rem;}
-th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
-th { background: #666; color: #fff; }
-.figure { text-align: center; margin: 1rem auto; }
-.caption { color: #555; font-size: 0.9rem; }
-.tab { margin-top: 1rem; }
+body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 20px; }}
+table {{ border-collapse: collapse; width: 100%; margin-top: 1rem;}}
+th, td {{ border: 1px solid #ccc; padding: 6px 8px; text-align: left; }}
+th {{ background: #666; color: #fff; }}
+.figure {{ text-align: center; margin: 1rem auto; }}
+.caption {{ color: #555; font-size: 0.9rem; }}
+.tab {{ margin-top: 1rem; }}
 </style>
 </head><body>
 <h1>Roofline Report</h1>

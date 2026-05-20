@@ -3,7 +3,7 @@
 
 # Tessera Tools — Status Audit
 
-This dashboard lists every active project under ``tools/``. Most rows are either Python CLI helpers (``runnable``) or C++ build targets (``compile_only``).  Broken rows ship with a STATUS.md naming the failure mode.
+This dashboard lists every active project under ``tools/``. Most rows are either Python CLI helpers (``runnable``) or C++ build targets (``compile_only``).  Archived rows ship with a STATUS.md naming why they are kept in-tree but no longer treated as active compiler tool surfaces.
 
 CI guards (run as part of ``scripts/validate.sh``):
 
@@ -25,12 +25,12 @@ CI guards (run as part of ``scripts/validate.sh``):
 
 | Status | Count |
 |--------|------:|
-| ``runnable`` | 2 |
+| ``runnable`` | 3 |
 | ``runnable_optional`` | 0 |
-| ``compile_only`` | 3 |
+| ``compile_only`` | 2 |
 | ``scaffold`` | 0 |
-| ``broken`` | 1 |
-| ``archived`` | 0 |
+| ``broken`` | 0 |
+| ``archived`` | 1 |
 | **total** | **6** |
 
 ## Entries
@@ -39,8 +39,8 @@ CI guards (run as part of ``scripts/validate.sh``):
 |-----------|--------|-------------|------------------|
 | ``tools/tessera-opt`` | ``compile_only`` | ``tools/tessera-opt/tessera-opt.cpp`` | ``python -c "import pathlib; assert pathlib.Path('tools/tessera-opt/CMakeLists.txt').is_file(); print('tessera-opt structural smoke ok — build owned by lit lane')"`` |
 | ``tools/tessera-translate`` | ``runnable`` | ``python/tessera/cli/translate.py`` | ``PYTHONPATH=python python -m tessera.cli.translate --help`` |
-| ``tools/profiler`` | ``compile_only`` | ``tools/profiler/cli/tprof.cpp`` | ``python -c "import pathlib; assert pathlib.Path('tools/profiler/CMakeLists.txt').is_file(); print('profiler structural smoke ok — build owned by build lane')"`` |
+| ``tools/profiler`` | ``compile_only`` | ``tools/profiler/cli/tprof.cpp`` | ``python -c "import pathlib; assert pathlib.Path('tools/profiler/CMakeLists.txt').is_file(); assert pathlib.Path('tests/unit/test_tools_subprojects.py').is_file(); print('profiler build smoke owned by test_tools_subprojects + validate.sh')"`` |
 | ``tools/profiler/scripts`` | ``runnable`` | ``tools/profiler/scripts/tprof_report.py`` | ``PYTHONPATH=python python tools/profiler/scripts/tprof_report.py --help`` |
-| ``tools/roofline_tools`` | ``broken`` | ``tools/roofline_tools/tools/roofline/cli_v2.py`` | ``cli_v2.py`` imports ``from tprof_roofline.model import DevicePeaks, analyze``, but the bundled ``tprof_roofline/model.py`` does not export ``analyze`` — ImportError at module load.  Either rename the import to a symbol that exists, or add ``analyze`` to the model module. |
-| ``tools/CLI/Tessera_CLI_Starter_v0_1`` | ``compile_only`` | ``tools/CLI/Tessera_CLI_Starter_v0_1/CMakeLists.txt`` | ``python -c "import pathlib; assert pathlib.Path('tools/CLI/Tessera_CLI_Starter_v0_1/CMakeLists.txt').is_file(); print('cli starter structural smoke ok')"`` |
+| ``tools/roofline_tools`` | ``runnable`` | ``tools/roofline_tools/tools/roofline/cli_v2.py`` | ``python tools/roofline_tools/tools/roofline/cli_v2.py one --peaks tools/roofline_tools/tools/roofline/peaks/sm90_with_links.yaml --input tools/roofline_tools/tools/roofline/examples/nsight_min.csv --fmt nsight --dtype fp32 --outdir /tmp/tessera_roofline_tools_audit --export-json /tmp/tessera_roofline_tools_audit/classification.json`` |
+| ``tools/CLI/Tessera_CLI_Starter_v0_1`` | ``archived`` | ``tools/CLI/Tessera_CLI_Starter_v0_1/CMakeLists.txt`` | Historical standalone CLI starter suite.  It remains in-tree for reference, but the active compiler tools are the root ``tools/tessera-opt`` and ``tools/tessera-translate`` surfaces. |
 

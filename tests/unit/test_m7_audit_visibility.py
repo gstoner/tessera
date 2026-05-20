@@ -19,8 +19,6 @@ from __future__ import annotations
 
 import importlib
 
-import pytest
-
 
 class TestM7Inventory:
     def test_no_complex_add_overclaim(self) -> None:
@@ -73,32 +71,53 @@ class TestM7BackendAlias:
                 f"backend_manifest._COMPLEX_APPLE_GPU_FUSED."
             )
 
-    @pytest.mark.parametrize(
-        "op_name,expected_tile_ir,expected_target_ir",
-        [
-            ("mobius", "fused", "fused"),
-            ("stereographic", "fused", "fused"),
-            ("complex_mul", "fused", "fused"),
-            ("complex_exp", "fused", "fused"),
-        ],
-    )
-    def test_audit_reports_fused_for_aliased_ops(
-        self,
-        op_name: str,
-        expected_tile_ir: str,
-        expected_target_ir: str,
-    ) -> None:
-        from tessera.compiler.audit import support_row_for
+    def test_audit_reports_fused_for_every_aliased_op(self) -> None:
+        """Every M7 public op with a fused backend kernel must read as
+        ``tile_ir=fused`` and ``target_ir=fused`` in the support table.
 
-        row = support_row_for(op_name)
-        assert row.cells["tile_ir"].status == expected_tile_ir, (
-            f"{op_name}: expected tile_ir={expected_tile_ir!r}, "
-            f"got {row.cells['tile_ir'].status!r}"
+        The set of fused public ops is **derived** from
+        ``audit.m7_fused_public_ops()`` rather than hardcoded — a new
+        fused complex kernel widens this guard automatically and the
+        matching guard in
+        ``tests/unit/test_compiler_audit.py::test_visual_complex_rows_match_public_api_and_backend_aliases``
+        widens at the same time (single source of truth).
+
+        Floor invariant: the helper must today return at least
+        ``{complex_mul, complex_exp, mobius, stereographic}`` —
+        i.e., the four fused complex kernels that landed in
+        ``_COMPLEX_APPLE_GPU_FUSED`` as of the M7 milestone (2026-05-19).
+        Any regression that drops one will both fail this test and
+        leave the helper undercounting.
+        """
+
+        from tessera.compiler.audit import (
+            m7_fused_public_ops,
+            support_row_for,
         )
-        assert row.cells["target_ir"].status == expected_target_ir, (
-            f"{op_name}: expected target_ir={expected_target_ir!r}, "
-            f"got {row.cells['target_ir'].status!r}"
+
+        fused_ops = m7_fused_public_ops()
+        # Floor invariant — the four M7 ops that have native MSL
+        # kernels today must all be present.  Adding rows to
+        # _COMPLEX_APPLE_GPU_FUSED widens the set further;
+        # never let it shrink below this floor without an explicit
+        # baseline update + a paired test edit.
+        floor = {"complex_mul", "complex_exp", "mobius", "stereographic"}
+        assert floor.issubset(fused_ops), (
+            f"m7_fused_public_ops() dropped below the floor:\n"
+            f"  expected ⊇ {sorted(floor)}\n"
+            f"  got       {sorted(fused_ops)}"
         )
+
+        for op_name in sorted(fused_ops):
+            row = support_row_for(op_name)
+            assert row.cells["tile_ir"].status == "fused", (
+                f"{op_name}: expected tile_ir='fused', "
+                f"got {row.cells['tile_ir'].status!r}"
+            )
+            assert row.cells["target_ir"].status == "fused", (
+                f"{op_name}: expected target_ir='fused', "
+                f"got {row.cells['target_ir'].status!r}"
+            )
 
     def test_non_aliased_m7_ops_still_planned(self) -> None:
         """Sanity check the alias map is narrow — ops we did NOT

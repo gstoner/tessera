@@ -10,10 +10,11 @@ Features:
 
 ```bash
 # Build
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
+cmake -S tools/profiler -B build/tprof -DCMAKE_BUILD_TYPE=Release
+cmake --build build/tprof -j
 
 # Generate traces and a report using device peaks from YAML.
-./build/tools/profiler/tprof \
+./build/tprof/tprof \
   --demo-out demo.trace.json \
   --perfetto-out demo.perfetto.json \
   --report-out demo.report.html \
@@ -21,7 +22,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
   --arch sm90
 
 # Print peaks for CI logs.
-./build/tools/profiler/tprof peaks print --peaks tools/profiler/scripts/peaks_sample.yaml --arch sm90
+./build/tprof/tprof peaks print --peaks tools/profiler/scripts/peaks_sample.yaml --arch sm90
 
 # View report locally.
 python3 tools/profiler/scripts/tprof_view.py --root . --file demo.report.html

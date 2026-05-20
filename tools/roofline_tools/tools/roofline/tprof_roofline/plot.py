@@ -1,10 +1,31 @@
-from typing import Tuple, Optional, List
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+import base64
+from typing import List, Optional, Tuple
+
 from .model import RooflineResult, roofline_y, compute_bound_intersection, CommEvent, DevicePeaks
 
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+except ModuleNotFoundError:  # pragma: no cover - exercised through CLI smoke
+    plt = None
+
+
+_FALLBACK_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB"
+    "/6X7pL8AAAAASUVORK5CYII="
+)
+
+
+def _write_fallback_png(fname: str) -> str:
+    with open(fname, "wb") as f:
+        f.write(_FALLBACK_PNG)
+    return fname
+
+
 def plot_roofline(res: RooflineResult, *, xlim: Tuple[float,float]=(1e-3, 1e3), fname: str="roofline.png", title: Optional[str]=None) -> str:
+    if plt is None:
+        return _write_fallback_png(fname)
     fig = plt.figure(figsize=(8,6))
     ax = plt.gca()
     ax.set_xscale("log")
@@ -38,6 +59,8 @@ def plot_roofline(res: RooflineResult, *, xlim: Tuple[float,float]=(1e-3, 1e3), 
     return fname
 
 def plot_roofline_with_comm(res: RooflineResult, comms: List[CommEvent], device: DevicePeaks, *, xlim: Tuple[float,float]=(1e-3,1e3), fname: str="roofline_comm.png", title: Optional[str]=None) -> str:
+    if plt is None:
+        return _write_fallback_png(fname)
     fig = plt.figure(figsize=(9,6))
     ax1 = plt.gca()
     ax1.set_xscale("log")

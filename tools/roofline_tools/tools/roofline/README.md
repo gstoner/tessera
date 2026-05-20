@@ -10,23 +10,32 @@ This extends the base tool with:
 ## One device (CSV, Perfetto, or Nsight)
 ```bash
 # CSV
-python3 tools/roofline/cli_v2.py one --peaks tools/roofline/peaks/sm90_with_links.yaml   --input tools/roofline/examples/nsight_min.csv --fmt nsight --dtype bf16_tensor --outdir out/
+python3 tools/roofline_tools/tools/roofline/cli_v2.py one \
+  --peaks tools/roofline_tools/tools/roofline/peaks/sm90_with_links.yaml \
+  --input tools/roofline_tools/tools/roofline/examples/nsight_min.csv \
+  --fmt nsight --dtype bf16_tensor --outdir out/
 
 # Perfetto (compute + comm)
-python3 tools/roofline/cli_v2.py one --peaks tools/roofline/peaks/sm90_with_links.yaml   --input tools/roofline/examples/trace_perfetto_mixed.json --fmt perfetto --dtype bf16_tensor --outdir out/   --export-csv out/classify.csv --export-json out/classify.json
+python3 tools/roofline_tools/tools/roofline/cli_v2.py one \
+  --peaks tools/roofline_tools/tools/roofline/peaks/sm90_with_links.yaml \
+  --input tools/roofline_tools/tools/roofline/examples/trace_perfetto_mixed.json \
+  --fmt perfetto --dtype bf16_tensor --outdir out/ \
+  --export-csv out/classify.csv --export-json out/classify.json
 ```
 
 ## Multi-device tabs
 ```bash
-python3 tools/roofline/cli_v2.py multi --pairs '[
-  {"peaks":"tools/roofline/peaks/sm90_with_links.yaml","input":"tools/roofline/examples/trace_perfetto_mixed.json","fmt":"perfetto","dtype":"bf16_tensor"},
-  {"peaks":"tools/roofline/peaks/sm90_with_links.yaml","input":"tools/roofline/examples/nsight_min.csv","fmt":"nsight","dtype":"fp32"}
+python3 tools/roofline_tools/tools/roofline/cli_v2.py multi --pairs '[
+  {"peaks":"tools/roofline_tools/tools/roofline/peaks/sm90_with_links.yaml","input":"tools/roofline_tools/tools/roofline/examples/trace_perfetto_mixed.json","fmt":"perfetto","dtype":"bf16_tensor"},
+  {"peaks":"tools/roofline_tools/tools/roofline/peaks/sm90_with_links.yaml","input":"tools/roofline_tools/tools/roofline/examples/nsight_min.csv","fmt":"nsight","dtype":"fp32"}
 ]' --outdir out_multi/
 ```
 
 ## Peaks auto-generation
 ```bash
-python3 -m tools.roofline.tprof_roofline.peaks_auto tools/roofline/peaks/auto.yaml
+PYTHONPATH=tools/roofline_tools/tools/roofline \
+  python3 -m tprof_roofline.peaks_auto \
+  tools/roofline_tools/tools/roofline/peaks/auto.yaml
 ```
 
 ### Perfetto schema (what to emit from your exporter)

@@ -1,6 +1,7 @@
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 import math
+from dataclasses import dataclass, field
+from typing import Dict, List, Tuple
+
 import yaml
 
 @dataclass
@@ -17,7 +18,7 @@ class DevicePeaks:
 
     @staticmethod
     def from_yaml(path: str) -> "DevicePeaks":
-        with open(path, "r") as f:
+        with open(path) as f:
             data = yaml.safe_load(f)
         links = []
         for L in data.get("links", []) or []:
@@ -119,3 +120,31 @@ class RooflineResult:
             else:
                 out.append(math.log10(oi) - math.log10(knee))
         return out
+
+
+def analyze(
+    kernels: List[KernelSample],
+    device: DevicePeaks,
+    dtype_key: str = "fp32",
+) -> RooflineResult:
+    """Classify kernel samples against a device roofline envelope."""
+
+    if dtype_key not in device.compute_peaks_GFLOPs:
+        available = ", ".join(sorted(device.compute_peaks_GFLOPs))
+        raise ValueError(
+            f"dtype_key={dtype_key!r} is not available for {device.name!r}; "
+            f"available dtype keys: {available}"
+        )
+
+    points = [
+        (sample.operational_intensity, sample.achieved_GFLOPs)
+        for sample in kernels
+    ]
+    return RooflineResult(
+        device=device,
+        samples=list(kernels),
+        dtype_key=dtype_key,
+        points=points,
+        compute_peak_GFLOPs=device.compute_peaks_GFLOPs[dtype_key],
+        mem_bw_GBps=device.hbm_bw_GBps,
+    )

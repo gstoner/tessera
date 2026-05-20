@@ -12,13 +12,12 @@ Most rows here are either:
 * ``compile_only`` — C++ binaries (``tessera-opt``, the C++ profiler)
   that exist as build targets and are exercised by their respective
   CI lanes after ``cmake --build``.
-* ``broken`` — entries with known import/build issues.  Each ships a
-  STATUS.md naming the failure mode.
+* ``archived`` — historical subprojects kept in-tree for reference,
+  but no longer treated as active compiler toolchain surface.
 
 The CLI starter (``tools/CLI/Tessera_CLI_Starter_v0_1``) is a
-scaffold project that produces a runnable binary via CMake; its row
-is ``compile_only`` because the smoke probe is the build, not an
-execution.
+historical standalone scaffold.  It remains tracked for reference,
+but its active tool expectations are archived.
 """
 
 from __future__ import annotations
@@ -54,8 +53,10 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
             "MLIR opt-style driver — registers 5 dialects (tessera, "
             "tessera.neighbors, tessera.solver, tessera_apple, tpp) "
             "+ 70+ passes + 6 named lowering pipelines.  Requires "
-            "MLIR/LLVM 21 — the real cmake-build/lit smoke is owned "
-            "by the opt-in ``lit`` CI lane."
+            "MLIR/LLVM 21 — proof tests live in "
+            "``tests/unit/test_tessera_opt_build.py`` and the "
+            "real cmake-build/lit smoke is owned by the opt-in "
+            "``lit`` CI lane."
         ),
     ),
     # ── Tessera-translate (Python CLI + C++ MLIR binary) ─────────────
@@ -73,7 +74,10 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
             "binary (``tessera-translate-mlir``, "
             "``tools/tessera-translate/tessera-translate.cpp``) "
             "handles MLIR-native translation flags.  CI smoke is "
-            "the Python CLI's ``--help``."
+            "the Python CLI's ``--help``; MLIR binary proof lives "
+            "in ``tests/unit/test_cli_translate.py``, "
+            "``tests/unit/test_tessera_opt_build.py``, and the "
+            "opt-in ``lit`` CI lane."
         ),
     ),
     # ── C++ profiler ─────────────────────────────────────────────────
@@ -83,14 +87,15 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
         status="compile_only",
         command=(
             "python -c \"import pathlib; "
-            "assert pathlib.Path('tools/profiler/CMakeLists.txt')."
-            "is_file(); "
-            "print('profiler structural smoke ok — build owned by build lane')\""
+            "assert pathlib.Path('tools/profiler/CMakeLists.txt').is_file(); "
+            "assert pathlib.Path('tests/unit/test_tools_subprojects.py').is_file(); "
+            "print('profiler build smoke owned by test_tools_subprojects + validate.sh')\""
         ),
         notes=(
             "C++ profiler (tprof) — runtime, Perfetto trace writer, "
-            "and report generator.  The real cmake-build smoke is "
-            "owned by the ``build`` CI lane in validate.yml."
+            "and report generator.  It is build-smoked by "
+            "``tests/unit/test_tools_subprojects.py`` and by "
+            "``scripts/validate.sh``."
         ),
     ),
     SurfaceEntry(
@@ -113,39 +118,39 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
         entry_point=(
             "tools/roofline_tools/tools/roofline/cli_v2.py"
         ),
-        status="broken",
-        reason=(
-            "``cli_v2.py`` imports ``from tprof_roofline.model "
-            "import DevicePeaks, analyze``, but the bundled "
-            "``tprof_roofline/model.py`` does not export "
-            "``analyze`` — ImportError at module load.  Either "
-            "rename the import to a symbol that exists, or add "
-            "``analyze`` to the model module."
+        status="runnable",
+        command=(
+            "python tools/roofline_tools/tools/roofline/cli_v2.py one "
+            "--peaks tools/roofline_tools/tools/roofline/peaks/"
+            "sm90_with_links.yaml "
+            "--input tools/roofline_tools/tools/roofline/examples/"
+            "nsight_min.csv "
+            "--fmt nsight --dtype fp32 "
+            "--outdir /tmp/tessera_roofline_tools_audit "
+            "--export-json /tmp/tessera_roofline_tools_audit/"
+            "classification.json"
         ),
         notes=(
             "Ingests Nsight CSV + Perfetto JSON traces and emits "
-            "roofline-annotated HTML.  Status will flip to "
-            "runnable once the import is restored."
+            "roofline-annotated HTML.  The audit smoke runs the "
+            "bundled Nsight CSV example into ``/tmp``."
         ),
     ),
     # ── CLI starter scaffold ─────────────────────────────────────────
     SurfaceEntry(
         directory="tools/CLI/Tessera_CLI_Starter_v0_1",
         entry_point="tools/CLI/Tessera_CLI_Starter_v0_1/CMakeLists.txt",
-        status="compile_only",
-        command=(
-            "python -c \"import pathlib; "
-            "assert pathlib.Path("
-            "'tools/CLI/Tessera_CLI_Starter_v0_1/CMakeLists.txt')."
-            "is_file(); "
-            "print('cli starter structural smoke ok')\""
+        status="archived",
+        reason=(
+            "Historical standalone CLI starter suite.  It remains "
+            "in-tree for reference, but the active compiler tools "
+            "are the root ``tools/tessera-opt`` and "
+            "``tools/tessera-translate`` surfaces."
         ),
         notes=(
             "C++ CLI starter — scaffolds tessera-{compile,run,opt,"
             "inspect,profiler,autotune,new} binaries.  CMake stages "
-            "into ``_build/`` (gitignored as of 2026-05-19).  The "
-            "audit's smoke is structural; the build itself is owned "
-            "by a downstream CMake lane when one lands."
+            "into ``_build/`` (gitignored as of 2026-05-19)."
         ),
     ),
 )
@@ -185,8 +190,9 @@ def audit_filesystem(
 _SURFACE_INTRO = (
     "This dashboard lists every active project under ``tools/``. "
     "Most rows are either Python CLI helpers (``runnable``) or "
-    "C++ build targets (``compile_only``).  Broken rows ship with "
-    "a STATUS.md naming the failure mode.\n\n"
+    "C++ build targets (``compile_only``).  Archived rows ship with "
+    "a STATUS.md naming why they are kept in-tree but no longer "
+    "treated as active compiler tool surfaces.\n\n"
     "CI guards (run as part of ``scripts/validate.sh``):\n\n"
     "* ``python -m tessera.cli.surface_audit --surface=tools "
     "--check`` — executes every ``runnable`` row and "

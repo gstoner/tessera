@@ -162,15 +162,30 @@ def test_visual_complex_rows_match_public_api_and_backend_aliases() -> None:
     table must show those public rows as fused.  Conversely,
     ``complex_add`` must stay absent because no public function with
     that name exists.
+
+    The list of fused public ops is **derived** via
+    :func:`audit.m7_fused_public_ops` rather than hardcoded — the
+    parametrized check in
+    ``tests/unit/test_m7_audit_visibility.py`` reads from the same
+    helper, so a new fused complex kernel widens both guards
+    automatically.  This test focuses on the per-row *shape*
+    (``api`` / ``frontend`` / ``family`` + ``complex_add`` absence);
+    the parametrized version focuses on tile/target axis status.
     """
     rows = {row.op_name: row for row in audit.all_support_rows()}
     assert "complex_add" not in rows
 
-    for op in ("complex_mul", "complex_exp", "mobius", "stereographic"):
+    fused_ops = audit.m7_fused_public_ops()
+    assert fused_ops, (
+        "m7_fused_public_ops() returned an empty set — at minimum "
+        "complex_mul / complex_exp / mobius / stereographic must "
+        "have fused backend entries"
+    )
+    for op in sorted(fused_ops):
         row = rows[op]
-        assert row.family == "visual_complex"
-        assert row.cells["api"].status == "public"
-        assert row.cells["frontend"].status == "public"
+        assert row.family == "visual_complex", op
+        assert row.cells["api"].status == "public", op
+        assert row.cells["frontend"].status == "public", op
         assert row.cells["tile_ir"].status == "fused", op
         assert row.cells["target_ir"].status == "fused", op
 

@@ -14,10 +14,10 @@
 >
 > **Dtype reading rule.** A ``planned`` row's dtype tuple is the
 > **target kernel dtype matrix** — what the unbuilt native kernel
-> will support — not what runs today.  Today the entire M7 surface
-> runs only via the **Python reference path on CPU** (fp32 only).
-> fp16/bf16 entries land alongside the actual kernels.  Across the
-> rest of the repo, see ``BackendKernelEntry.dtypes`` for the
+> will support — not what runs today.  The default/reference M7 path
+> runs on CPU in fp32; four ops also have fused Apple GPU fp32 native
+> kernels. fp16/bf16 entries land alongside the future kernels. Across
+> the rest of the repo, see ``BackendKernelEntry.dtypes`` for the
 > normative interpretation.
 >
 > **Previous update (2026-05-19):** M7 surface visible in
@@ -38,7 +38,7 @@
 | **Support-table visibility** | ✅ **landed 2026-05-19** | 22 rows in `support_table.md` under family `visual_complex` |
 | **Native (Apple GPU) lowering** | 🟢 4 fused + 16 planned slots | `complex_mul` / `complex_exp` / `mobius` / `stereographic` ship fused MSL kernels (fp32). The remaining 16 long-tail ops have `status="planned"` slots reserved in the backend manifest (fp32/fp16/bf16 target dtypes); execution lights up with the next M7 kernel sprint. |
 | **NVIDIA / ROCm lowering** | 🟡 planned slots reserved | Every M7 op has `status="planned"` rows across nvidia_sm80/90/100/120 + rocm with `(fp32, fp16, bf16)` as the **kernel target** dtype matrix — these are what the unbuilt kernels will support, not what runs today. Promotion gated on Phase G / Phase H. See §9 of `docs/nvidia_cuda13_kernel_inventory.md` + §10 of `docs/rocm_mfma_kernel_inventory.md`. |
-| **Today's execution path** | ✅ CPU reference (fp32) | The entire M7 surface runs today via `tessera.complex.*` on CPU with fp32 precision. fp16/bf16 are **not** runtime-supported yet — they're declared dtypes for the future native kernel. |
+| **Today's execution path** | ✅ CPU reference default + 4 Apple GPU native kernels | The default/reference path runs via `tessera.complex.*` on CPU with fp32 precision. `complex_mul`, `complex_exp`, `mobius`, and `stereographic` also have fused Apple GPU fp32 kernels. fp16/bf16 are **not** runtime-supported yet — they're declared dtypes for future native kernels. |
 | **E2E coverage classification** | ✅ no partial rows | E2E audit classifies 4 fused Apple-GPU ops as `complete` and 16 long-tail ops as `runnable_reference`; `complex_jit` remains a decorator/front-end surface rather than an op-counted primitive. |
 
 ## What's claimed

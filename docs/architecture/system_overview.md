@@ -69,7 +69,11 @@ Each layer has its own spec document:
 
 ## What Works Today
 
-### Python Frontend (Phase 1)
+The section names below preserve the original compiler walkthrough order but
+avoid using phase labels as status claims. For current readiness, prefer the
+generated support and E2E dashboards.
+
+### Python Frontend
 
 | Component | Status | Location |
 |-----------|--------|----------|
@@ -85,7 +89,7 @@ Each layer has its own spec document:
 | `MockRankGroup` — thread-based multi-rank collective testing | ✅ | `python/tessera/testing/mock_collective.py` |
 | `tessera.dist.Cyclic` — cyclic `ShardSpec` construction; backend runtime behavior is target-dependent | ✅ / scaffolded runtime | `python/tessera/distributed/domain.py` |
 
-### C++ x86 Lowering (Phase 2)
+### C++ x86 Lowering
 
 | Component | Status | Location |
 |-----------|--------|----------|
@@ -97,7 +101,7 @@ Each layer has its own spec document:
 | `tessera-lower-to-x86` named pipeline | ✅ | registered in transforms lib |
 | x86 AMX BF16 + AVX-512 GEMM kernels | ✅ | `src/compiler/codegen/tessera_x86_backend/` |
 
-### NVIDIA GPU Backend (Phase 3)
+### NVIDIA GPU Backend
 
 | Component | Status | Location |
 |-----------|--------|----------|
@@ -177,7 +181,7 @@ src/
 │   ├── DistributionLoweringPass.cpp tessera.shard → schedule.mesh.*
 │   ├── TilingPass.cpp              matmul → scf.for tiled loops
 │   ├── TileToX86Pass.cpp           tiled matmul → x86 C calls
-│   └── TileIRLoweringPass.cpp      flash_attn → FA-4 tile ops (Phase 3)
+│   └── TileIRLoweringPass.cpp      flash_attn → FA-4 tile ops
 │
 ├── programming_model/ir/schedule/
 │   └── ScheduleMeshPipelineOps.td  mesh.define, mesh.region, pipeline.region,
@@ -196,7 +200,7 @@ src/
 │                                   NVFlashAttnKernelEmitter
 │
 └── runtime/include/tessera/
-    └── tessera_runtime.h           C ABI header (Phase 6 implementation)
+    └── tessera_runtime.h           C ABI header and lifecycle surface
 ```
 
 ---
@@ -215,9 +219,9 @@ src/
 
 6. **Effects are inferred, not declared.** Only `@jit(deterministic=True)` and `@jit(seed=N)` are user-declared. The `EffectLattice` infers everything else.
 
-7. **CPU-first, then GPU.** Phase 1 targets x86 AMX via the existing `tessera_x86_backend`. All GPU-specific IR ops are gated behind `target_profile.isa >= ISA.SM_90`.
+7. **CPU-first, then GPU.** CPU reference/x86 paths are the validation base. GPU-specific IR ops are gated by target profile and backend capability.
 
-8. **Mock collectives use threads, not processes.** Phase 1 multi-rank tests run in-process with Python threads as fake ranks, avoiding NCCL/MPI dependency.
+8. **Mock collectives use threads, not processes.** Multi-rank tests run in-process with Python threads as fake ranks where native NCCL/MPI is not required.
 
 ---
 

@@ -30,6 +30,14 @@ flowchart TD
   E --> F
 ```
 
+## How To Read Current Status
+
+Use the generated dashboards for status claims instead of older phase labels:
+`docs/audit/generated/support_table.md` is the per-op compiler-support truth,
+`docs/audit/generated/e2e_op_coverage.md` is the execution-path truth, and
+`docs/spec/VALIDATION_SPINE.md` is the command/CI truth. Architecture guides
+explain shape and intent; the dashboards say what is proven today.
+
 ## Current Capability Table
 
 | Area | Current status | Primary references |

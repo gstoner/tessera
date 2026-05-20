@@ -12,8 +12,8 @@ that spec, the spec wins. Tensor attribute and dtype vocabulary lives in
 `docs/reference/tessera_tensor_attributes.md`.
 
 > **Start here:** for a runnable, narrated tour of the compiler surface in
-> ~80 lines — `@tessera.jit` → `fn(...)` → `fn.explain()` →
-> `tessera.compiler.support(op)` → `tessera.from_text(...)` — see
+> ~80 lines — `@ts.jit` → `fn(...)` → `fn.explain()` →
+> `ts.compiler.support(op)` → `ts.from_text(...)` — see
 > [`examples/getting_started/compile_and_explain.py`](../../examples/getting_started/compile_and_explain.py).
 
 ## Import Pattern
@@ -29,17 +29,17 @@ examples unless a spec explicitly names a submodule import.
 
 | API | Status | Purpose |
 |-----|--------|---------|
-| `@tessera.jit` | Implemented | Compile a Python function to Graph IR; build Schedule / Tile / Target IR; return a `JitFn`. |
-| `@tessera.kernel` | Implemented | Mark a tile-level function for `index_launch`. |
-| `tessera.from_text(source, name=None, **jit_kwargs)` | Implemented (2026-05-19) | Notebook-safe factory: exec a source string and JIT the named function. Replaces the `exec(...) + ts.jit(..., source=...)` dance for REPL / Jupyter contexts. |
+| `@ts.jit` | Implemented | Compile a Python function to Graph IR; build Schedule / Tile / Target IR; return a `JitFn`. |
+| `@ts.kernel` | Implemented | Mark a tile-level function for `index_launch`. |
+| `ts.from_text(source, name=None, **jit_kwargs)` | Implemented (2026-05-19) | Notebook-safe factory: exec a source string and JIT the named function. Replaces the `exec(...) + ts.jit(..., source=...)` dance for REPL / Jupyter contexts. |
 
 ```python
-@tessera.jit
-def matmul_step(A: tessera.Tensor["M", "K"], B: tessera.Tensor["K", "N"]):
-    return tessera.ops.gemm(A, B)
+@ts.jit
+def matmul_step(A: ts.Tensor["M", "K"], B: ts.Tensor["K", "N"]):
+    return ts.ops.gemm(A, B)
 
 # Notebook-safe construction when @jit can't read source (REPL, heredoc):
-fn = tessera.from_text("""
+fn = ts.from_text("""
     def gelu_then_norm(x):
         return ts.ops.layer_norm(ts.ops.gelu(x))
 """)
@@ -79,7 +79,7 @@ sources; `.explain()` consumes them under the hood.
 
 ### Strict native dispatch with `native_required=True`
 
-Pass `native_required=True` to `@tessera.jit` to refuse the reference
+Pass `native_required=True` to `@ts.jit` to refuse the reference
 fallback path.  Any condition that would otherwise silently drop to the
 numpy backend raises `tessera.compiler.TesseraNativeRequiredError` with a
 stable `FallbackReason` code:
@@ -87,9 +87,9 @@ stable `FallbackReason` code:
 ```python
 from tessera.compiler import FallbackReason, TesseraNativeRequiredError
 
-@tessera.jit(target="apple_gpu", native_required=True)
+@ts.jit(target="apple_gpu", native_required=True)
 def fast_matmul(a, b):
-    return tessera.ops.matmul(a, b)
+    return ts.ops.matmul(a, b)
 
 try:
     fast_matmul(a, b)
@@ -99,21 +99,44 @@ except TesseraNativeRequiredError as exc:
     raise
 ```
 
+Unsupported targets should be handled by checking the support table first
+when possible, then letting `native_required=True` turn accidental fallback
+into a typed failure:
+
+```python
+support = ts.compiler.support("matmul").for_target("apple_gpu")
+if support.tier is not ts.compiler.Tier.NATIVE_READY:
+    print(f"apple_gpu matmul is {support.tier.value}; using reference path")
+
+@ts.jit(target="apple_gpu", native_required=True)
+def must_be_native(a, b):
+    return ts.ops.matmul(a, b)
+
+try:
+    must_be_native(a, b)
+except TesseraNativeRequiredError as exc:
+    assert exc.reason in {
+        FallbackReason.NON_DARWIN_HOST,
+        FallbackReason.CAPABILITY_NOT_READY,
+        FallbackReason.REFERENCE_FORCED,
+    }
+```
+
 ### Per-op readiness query
 
-`tessera.compiler.support(op_name)` returns the same data the audit table
+`ts.compiler.support(op_name)` returns the same data the audit table
 in `docs/audit/generated/support_table.md` renders, exposed as Python:
 
 ```python
-info = tessera.compiler.support("matmul")
+info = ts.compiler.support("matmul")
 info.family                                   # "loop_nest"
 info.best_tier                                # Tier.NATIVE_READY
 info.for_target("apple_gpu").tier             # Tier.NATIVE_READY
 info.for_target("cpu").tier                   # Tier.REFERENCE_ONLY
 
-tessera.compiler.tier("matmul")               # best-tier rollup
-tessera.compiler.tier("matmul", target="apple_gpu")  # per-target
-tessera.compiler.is_native_supported("matmul", target="apple_gpu")  # True
+ts.compiler.tier("matmul")               # best-tier rollup
+ts.compiler.tier("matmul", target="apple_gpu")  # per-target
+ts.compiler.is_native_supported("matmul", target="apple_gpu")  # True
 ```
 
 Tier values: `NATIVE_READY` / `REFERENCE_ONLY` / `ARTIFACT_ONLY` / `PLANNED`.
@@ -123,13 +146,13 @@ Tier values: `NATIVE_READY` / `REFERENCE_ONLY` / `ARTIFACT_ONLY` / `PLANNED`.
 `Region[...]` is a type annotation only. It lowers to privilege/effect attributes in Graph IR.
 
 ```python
-@tessera.jit
+@ts.jit
 def update(
-    X: tessera.Region["read"],
-    W: tessera.Region["read"],
-    Y: tessera.Region["write"],
+    X: ts.Region["read"],
+    W: ts.Region["read"],
+    Y: ts.Region["write"],
 ):
-    Y[:] = tessera.ops.gemm(X, W)
+    Y[:] = ts.ops.gemm(X, W)
 ```
 
 Valid modes are:
@@ -147,15 +170,15 @@ Valid modes are:
 Domains describe shape. Distributions describe placement. Keep them separate.
 
 ```python
-D = tessera.domain.Rect((4, 128, 256))
-dist = tessera.dist.Block(mesh_axes=("dp", "tp"))
-X = tessera.array.from_domain(D, dtype="bf16", distribution=dist)
+D = ts.domain.Rect((4, 128, 256))
+dist = ts.dist.Block(mesh_axes=("dp", "tp"))
+X = ts.array.from_domain(D, dtype="bf16", distribution=dist)
 ```
 
-`tessera.dist.Cyclic` is part of the public distribution vocabulary.  Shard
+`ts.dist.Cyclic` is part of the public distribution vocabulary.  Shard
 materialization remains backend- and layout-gated, so unsupported cyclic
 layouts fail explicitly instead of implying native execution.  Use
-`tessera.compiler.support(...)`, `docs/audit/generated/support_table.md`, and
+`ts.compiler.support(...)`, `docs/audit/generated/support_table.md`, and
 `docs/audit/generated/e2e_op_coverage.md` for the current per-target truth.
 
 Tensor attributes are split across logical shape (`shape`), storage dtype
@@ -166,14 +189,14 @@ such as `"f32"` normalize before storage.
 
 ## Index Launch
 
-`index_launch` dispatches a `@tessera.kernel` function over shard lists.
+`index_launch` dispatches a `@ts.kernel` function over shard lists.
 
 ```python
-@tessera.kernel
-def tp_gemm(A: tessera.f16[..., ...], B: tessera.f16[..., ...], C: tessera.mut_f32[..., ...]):
-    C[:] = tessera.ops.gemm(A, B)
+@ts.kernel
+def tp_gemm(A: ts.f16[..., ...], B: ts.f16[..., ...], C: ts.mut_f32[..., ...]):
+    C[:] = ts.ops.gemm(A, B)
 
-tessera.index_launch(axis="tp")(tp_gemm)(
+ts.index_launch(axis="tp")(tp_gemm)(
     A.parts("tp"),
     B.parts("tp"),
     C.parts("tp"),
@@ -187,26 +210,26 @@ capability- and validation-gated; consult `docs/spec/VALIDATION_SPINE.md` and
 
 ## Constraints
 
-Use `tessera.require(...)` inside `@tessera.jit` functions.
+Use `ts.require(...)` inside `@ts.jit` functions.
 
 ```python
-@tessera.jit(bindings={"K": 128})
-def aligned_gemm(A: tessera.Tensor["M", "K"], B: tessera.Tensor["K", "N"]):
-    tessera.require(tessera.constraint.Divisible("K", 64))
-    return tessera.ops.gemm(A, B)
+@ts.jit(bindings={"K": 128})
+def aligned_gemm(A: ts.Tensor["M", "K"], B: ts.Tensor["K", "N"]):
+    ts.require(ts.constraint.Divisible("K", 64))
+    return ts.ops.gemm(A, B)
 ```
 
 Implemented constraints:
 
 | API | Meaning |
 |-----|---------|
-| `tessera.constraint.Divisible(dim, divisor)` | `dim % divisor == 0` |
-| `tessera.constraint.Range(dim, lo, hi)` | `lo <= dim <= hi` |
-| `tessera.constraint.Equal(dim_a, dim_b)` | `dim_a == dim_b` |
+| `ts.constraint.Divisible(dim, divisor)` | `dim % divisor == 0` |
+| `ts.constraint.Range(dim, lo, hi)` | `lo <= dim <= hi` |
+| `ts.constraint.Equal(dim_a, dim_b)` | `dim_a == dim_b` |
 
 ## Operations
 
-Use `tessera.ops`.
+Use `ts.ops`.
 
 | API | Status |
 |-----|--------|
@@ -215,7 +238,7 @@ Use `tessera.ops`.
 | `dropout` | Implemented with a random effect in the Python/compiler surface; native lowering remains target-specific. |
 | `conv2d` | Implemented — NHWC + NCHW Module forms (`tessera.nn.Conv2d` / `Conv2dNCHW`); Graph IR op + VJP/JVP registered. |
 | `flash_attn` | Implemented with reference execution and NVIDIA-oriented Tile/Target artifact paths; native execution is target-gated. |
-| `all_reduce`, `reduce_scatter`, `all_gather` | Implemented — Phase 4 distributed lowering (`GPUCollectiveInsertionPass`); NCCL/RCCL adapters wired; VJP+JVP registered for all four collectives. |
+| `all_reduce`, `reduce_scatter`, `all_gather` | Implemented distributed lowering (`GPUCollectiveInsertionPass`); NCCL/RCCL adapters wired; VJP+JVP registered for all four collectives. Production multi-rank execution is validation-gated. |
 | `fused_epilogue` | Implemented where supported by canonicalization/lowering; target support varies by backend capability. |
 
 ## GPU Targeting
@@ -224,12 +247,12 @@ Use `tessera.ops`.
 from tessera.compiler.gpu_target import GPUTargetProfile, ISA
 from tessera.compiler.attn_lower import FlashAttnLoweringConfig
 
-@tessera.jit(
+@ts.jit(
     target=GPUTargetProfile(isa=ISA.SM_90, warps_per_cta=4),
     attn_config=FlashAttnLoweringConfig(tile_q=64, tile_kv=64, causal=True),
 )
 def flash_fwd(Q, K, V):
-    return tessera.ops.flash_attn(Q, K, V, causal=True)
+    return ts.ops.flash_attn(Q, K, V, causal=True)
 ```
 
 ## Inspection
@@ -295,20 +318,17 @@ Architecture rationale and the phased plan (A → B → C → D) live in
 
 ## Roadmap (formerly "Future APIs")
 
-These rows were authored when Phases 4–6 were planned.  The status
-below reflects the post-Phase-8 reality (Apple operational; Cerebras /
-Metalium / Apple backends shipped under Phase 7-8; the S-series
-standalone-compiler track shipped S0–S15 + autodiff coverage).  For
-the current per-component picture, read
-`docs/audit/generated/support_table.md` (drift-gated) rather than this
-table.
+These rows were authored as a historical roadmap. The status below is a
+human-readable summary; for the current per-component picture, read
+`docs/audit/generated/support_table.md` and
+`docs/audit/generated/e2e_op_coverage.md` rather than this table.
 
 | Area | Status |
 |------|--------|
-| NCCL/RCCL collectives + cluster execution | Implemented (Phase 4) — `GPUCollectiveInsertionPass`, NCCL/RCCL adapters, `ChunkPlanner`, `CollectiveScheduler`. |
+| NCCL/RCCL collectives + cluster execution | Implemented lowering and adapter surfaces — `GPUCollectiveInsertionPass`, NCCL/RCCL adapters, `ChunkPlanner`, `CollectiveScheduler`; production multi-rank execution remains validation-gated. |
 | TPU StableHLO backend | Implemented — `tpu_target.py` + `Tessera_TPU_Backend/` (StableHLO + Shardy export); quantized dot lit-tested. |
 | Autodiff transforms + custom VJP/JVP | Implemented — `tessera.autodiff` v1 ships 241 VJPs + 236 JVPs; `tessera.custom.custom_vjp` / `custom_jvp` user-facing. |
 | Activation checkpointing + ZeRO sharding | Implemented — `tessera.autodiff.rematerialize` + ZeRO stage 2 via `OptimizerShardPass`. |
 | Bayesian autotuning | Implemented — `tessera.autotune` + `compiler/autotune_v2.py` (Optuna TPE + Hyperband + SQLite cache v2). |
 | Runtime Python wrapper | Implemented — `tessera.runtime.TesseraRuntime` over the C ABI. |
-| ROCm MFMA + RubinCPX + Cerebras + Metalium + Apple backends | Implemented (Phase 7–8). |
+| ROCm MFMA + RubinCPX + Cerebras + Metalium + Apple backends | Backend surfaces implemented to varying levels; native execution is target- and validation-gated. |

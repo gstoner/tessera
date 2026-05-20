@@ -15,7 +15,11 @@ last_updated: 2026-05-20
 > CPU execution is covered by the current smoke suite; CUDA/HIP behavior remains
 > target- and hardware-gated. Do not infer production readiness from ABI
 > presence alone — use `docs/spec/VALIDATION_SPINE.md` and
-> `docs/spec/CONFORMANCE.md` for the validation spine.
+> `docs/spec/CONFORMANCE.md` for the validation spine. The concrete smoke
+> binaries are `tessera-runtime-abi-smoke` and
+> `tessera-collective-runtime-smoke`; Python wrappers live in
+> `tests/unit/test_runtime_abi_smoke.py` and
+> `tests/unit/test_sanitizer_smoke.py`.
 
 ---
 
@@ -165,11 +169,15 @@ a descriptive message. For `TSR_STATUS_UNIMPLEMENTED`, the message names the mis
 
 ```c
 TsrStatus tsrInit(void);
+TsrStatus tsrIsInitialized(int* out);
 TsrStatus tsrShutdown(void);
 ```
 
 - `tsrInit` must be the first call. Initialises the backend registry and enumerates devices.
   Safe to call multiple times (idempotent after first success).
+- `tsrIsInitialized` writes `1` to `out` after a successful `tsrInit` and `0`
+  after `tsrShutdown`. It is intended for tests, embedding layers, and reload
+  guards; callers still need to check every API return status.
 - `tsrShutdown` releases all backend resources. All handles become invalid after this call.
 
 ### 5.2 Device Enumeration
@@ -250,10 +258,10 @@ TsrStatus tsrUnmap(tsrBuffer b);
 - `tsrMalloc` allocates `bytes` bytes on the specified device. The buffer is uninitialized.
 - `tsrMemset` fills with a byte value (`value` is cast to `unsigned char`).
 - `tsrMemcpy` is synchronous with respect to the host (blocks until complete).
-  Use streams + events for asynchronous transfers (Phase 4+ GPU backend).
+  Use streams + events for asynchronous transfers where the backend supports them.
 - `tsrMap` / `tsrUnmap` provide host-accessible pointer to buffer contents.
   On the CPU backend this is a zero-copy pointer into the allocation.
-  On GPU backends (Phase 6) this maps into unified/pinned memory.
+  On GPU backends this maps into unified/pinned memory when supported.
 
 **Ownership:** The caller owns the `tsrBuffer` handle and must call `tsrFree` when done.
 Freeing a buffer that is in-flight on a stream is undefined behaviour.
@@ -526,5 +534,8 @@ of the stable C ABI unless a future runtime replay API promotes them.
 | Launch validation | `src/runtime/include/tessera/tsr_shape.h` |
 | Version macros | `src/runtime/include/tessera/tsr_version.h` |
 | Backend abstract class | `src/runtime/src/backend/base_backend.h` |
-| Phase 6 deliverables | `CLAUDE.md` §Phase 6 |
-| Benchmark integration | `benchmarks/` (Phase 6) |
+| Runtime implementation notes | `CLAUDE.md` architecture-decision log |
+| Benchmark integration | `benchmarks/` |
+| Runtime ABI smoke binary | `src/runtime/tools/tessera-runtime-abi-smoke/runtime_abi_smoke.cpp` |
+| Collective runtime smoke binary | `src/collectives/tools/tessera-collective-runtime-smoke/runtime_smoke.cpp` |
+| Python smoke wrappers | `tests/unit/test_runtime_abi_smoke.py`, `tests/unit/test_sanitizer_smoke.py` |

@@ -1,4 +1,4 @@
-# Plan: enable and harden the 47 partial ops
+# Execution Record: 47 Partial Ops Uplift
 
 > **Status:** Completed execution record (2026-05-20).
 > Backed by the live audit data in

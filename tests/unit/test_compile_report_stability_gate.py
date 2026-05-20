@@ -276,8 +276,10 @@ def test_stability_gate_enumerates_every_shipped_canonical() -> None:
         f"stability gate sees {sorted(shipped_ids)} but the registry "
         f"reports {sorted(registry_ids)} shipped — they must match"
     )
-    # And the suite must be at its current 6/6 count.  Bump the
-    # number when a new canonical lands; never lower it.
-    assert len(_SHIPPED) == 6, (
-        f"expected 6 shipped canonicals; got {len(_SHIPPED)}"
+    # And the suite must be at its current 8/8 count.  Apple
+    # follow-ups #1 + #2 (2026-05-20) added ``matmul_gelu`` and
+    # ``visual_complex_fused``.  Bump the number when a new
+    # canonical lands; never lower it.
+    assert len(_SHIPPED) == 8, (
+        f"expected 8 shipped canonicals; got {len(_SHIPPED)}"
     )

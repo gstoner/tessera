@@ -2935,11 +2935,25 @@ def _apple_gpu_dispatch_matmul_gelu(operands: list[Any], np: Any) -> Any:
     N = b.shape[1]
     out = np.zeros((M, N), dtype=np.float32)
     fused = _apple_gpu_matmul_gelu_f32()
+    # Apple plan phase D — emit a unified JitBridgeRoute so the
+    # generic-tensor lane's proof envelope matches GA/EBM/M7.
+    import time as _time
+    from tessera.compiler import jit_bridge as _bridge
+    _t0 = _time.perf_counter_ns()
     fused(
         a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
         b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
         out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
         ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
+    )
+    _latency_ms = (_time.perf_counter_ns() - _t0) / 1e6
+    _bridge.record_driver_route(
+        op_name="matmul_gelu",
+        target="apple_gpu",
+        status="fused",
+        symbol="tessera_apple_gpu_matmul_gelu_f32",
+        latency_ms=_latency_ms,
+        args_summary=_bridge.shaped_summary(a, b),
     )
     return out
 

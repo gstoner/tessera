@@ -432,14 +432,28 @@ def stereographic(
     ComplexScalar
         The projected point in ℂ.
     """
+    # Preserve the input dtype when the caller hands us float32 (this
+    # is what unlocks the fp32 Apple GPU dispatch branch below; the
+    # earlier unconditional ``dtype=np.float64`` cast made the f32
+    # branch unreachable from any caller — M7 follow-up fix
+    # 2026-05-20 / Apple follow-up #2).  Non-float inputs (Python
+    # ints, e.g.) still default to float64.
+    def _as_real(c: Any) -> np.ndarray:
+        arr = np.asarray(c)
+        if arr.dtype == np.float32:
+            return arr
+        return arr.astype(np.float64, copy=False)
+
     if isinstance(p, tuple) and len(p) == 3:
-        x, y, z = (np.asarray(c, dtype=np.float64) for c in p)
+        x, y, z = (_as_real(c) for c in p)
     else:
-        arr = np.asarray(p, dtype=np.float64)
+        arr = np.asarray(p)
         if arr.shape[-1] != 3:
             raise ValueError(
                 f"stereographic: expected 3-vector or last-axis 3; got {arr.shape}"
             )
+        if arr.dtype != np.float32:
+            arr = arr.astype(np.float64, copy=False)
         x = arr[..., 0]
         y = arr[..., 1]
         z = arr[..., 2]

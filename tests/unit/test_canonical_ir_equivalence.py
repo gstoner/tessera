@@ -47,6 +47,9 @@ _SHAPES_FOR_GOLDEN: dict[str, tuple[int, ...]] = {
     "kv_cache_append_prune_read":         (2, 4, 8, 1, 4),
     "decode_init_inner_loop_self_verify": (8, 8, 8, 8),
     "rotor_sandwich_ebt_tiny":            (8, 8, 8, 8),
+    # Apple follow-ups #1 + #2 (2026-05-20).
+    "matmul_gelu":                        (8, 8, 8),
+    "visual_complex_fused":               (8,),
 }
 
 

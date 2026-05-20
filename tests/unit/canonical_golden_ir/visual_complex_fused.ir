@@ -1,0 +1,9 @@
+graph_ir {
+  %z = tessera.placeholder shape=(8,) dtype=complex64
+  %w = tessera.placeholder shape=(8,) dtype=complex64
+  %m  = tessera.complex_mul(%z, %w)
+  %e  = tessera.complex_exp(%z)
+  %mb = tessera.mobius(%z, a, b, c, d)
+  %st = tessera.stereographic(x, y, z)
+  return %m, %e, %mb, %st
+}

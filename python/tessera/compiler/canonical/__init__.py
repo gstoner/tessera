@@ -79,6 +79,16 @@ def _run_rotor_sandwich_ebt_tiny() -> CompileReport:
     return run()
 
 
+def _run_matmul_gelu() -> CompileReport:
+    from .matmul_gelu import run
+    return run()
+
+
+def _run_visual_complex_fused() -> CompileReport:
+    from .visual_complex_fused import run
+    return run()
+
+
 CANONICAL_PROGRAMS: tuple[CanonicalProgram, ...] = (
     CanonicalProgram(
         program_id="rotor_sandwich_norm",
@@ -95,10 +105,11 @@ CANONICAL_PROGRAMS: tuple[CanonicalProgram, ...] = (
         run=_run_matmul_softmax_matmul,
         status="shipped",
         description=(
-            "O = softmax(A @ B) @ C — intended Apple GPU 3-op fused symbol "
-            "(matmul→softmax→matmul); driver currently runs the numpy "
-            "reference on every host and reports REFERENCE_FORCED so the "
-            "CompileReport stays honest about what executed."
+            "O = softmax(A @ B) @ C — dispatches the fused 3-op MSL "
+            "kernel ``tessera_apple_gpu_matmul_softmax_matmul_f32`` on "
+            "Darwin within envelope (N + P ≤ 256).  Outside the envelope "
+            "and on non-Darwin hosts, falls back to numpy with a "
+            "precise REFERENCE_FORCED note."
         ),
     ),
     CanonicalProgram(
@@ -132,6 +143,37 @@ CANONICAL_PROGRAMS: tuple[CanonicalProgram, ...] = (
         run=_run_rotor_sandwich_ebt_tiny,
         status="shipped",
         description="rotor_sandwich → ebt_tiny composite; both ops fused on Apple GPU; value_kind=mixed (GA + tensor).",
+    ),
+    # Apple follow-up #1 (2026-05-20) — second generic-tensor canonical
+    # to dispatch the real fused MSL kernel on Darwin.
+    CanonicalProgram(
+        program_id="matmul_gelu",
+        family="mlp",
+        owner_file="python/tessera/compiler/canonical/matmul_gelu.py",
+        run=_run_matmul_gelu,
+        status="shipped",
+        description=(
+            "O = gelu(A @ B) — dispatches the fused 2-op MSL kernel "
+            "``tessera_apple_gpu_matmul_gelu_f32`` on Darwin within "
+            "envelope (N ≤ 256).  Emits a unified JitBridgeRoute via "
+            "the same proof-route plumbing as matmul_softmax_matmul."
+        ),
+    ),
+    # Apple follow-up #2 (2026-05-20) — Visual Complex canonical
+    # exercising all 4 fused M7 kernels in one report.
+    CanonicalProgram(
+        program_id="visual_complex_fused",
+        family="visual_complex",
+        owner_file="python/tessera/compiler/canonical/visual_complex_fused.py",
+        run=_run_visual_complex_fused,
+        status="shipped",
+        description=(
+            "Sequential exercise of complex_mul / complex_exp / mobius / "
+            "stereographic — the 4 fused M7 Apple GPU kernels.  Each "
+            "step routes through ``tessera.complex.*`` on top of the "
+            "shipped MSL symbols; the report carries one proof_routes "
+            "row per op."
+        ),
     ),
 )
 

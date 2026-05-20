@@ -1,0 +1,7 @@
+graph_ir {
+  %a = tessera.placeholder shape=(8, 8) dtype=f32
+  %b = tessera.placeholder shape=(8, 8) dtype=f32
+  %scores = tessera.matmul(%a, %b)
+  %out    = tessera.gelu(%scores)
+  return %out
+}

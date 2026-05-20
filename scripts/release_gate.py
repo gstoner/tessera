@@ -156,13 +156,40 @@ _APPLE_GPU_GATES: tuple[Gate, ...] = (
 )
 
 
+# Apple follow-up #3 (2026-05-20): NVIDIA and ROCm get
+# target-map drift gates today.  The full hardware-proof lanes
+# (canonical native dispatch, per-target benchmarks,
+# hardware-marked tests) land alongside Phase G / Phase H bring-up
+# and append to ``_NVIDIA_STRUCTURE_GATES`` / ``_ROCM_STRUCTURE_GATES``
+# the same way ``_APPLE_GPU_GATES`` does.
+_NVIDIA_STRUCTURE_GATES: tuple[Gate, ...] = (
+    Gate(
+        name="nvidia_target_map_drift",
+        cmd=(PYTHON, "-m", "tessera.cli.gpu_target_map",
+             "--target=nvidia_sm90", "--check"),
+        description=(
+            "Generated nvidia_sm90_target_map.md must match "
+            "``capabilities[nvidia_sm90]`` + ``backend_manifest``."
+        ),
+    ),
+)
+_ROCM_STRUCTURE_GATES: tuple[Gate, ...] = (
+    Gate(
+        name="rocm_target_map_drift",
+        cmd=(PYTHON, "-m", "tessera.cli.gpu_target_map",
+             "--target=rocm", "--check"),
+        description=(
+            "Generated rocm_target_map.md must match "
+            "``capabilities[rocm]`` + ``backend_manifest``."
+        ),
+    ),
+)
+
+
 _GATE_MATRIX: dict[str, tuple[Gate, ...]] = {
     "apple_gpu": _STRUCTURE_GATES + _APPLE_GPU_GATES,
-    # Placeholders for future hardware lanes — the structure-only
-    # entries are correct today; per-target gates land alongside the
-    # real backend bring-up.
-    "nvidia_sm90": _STRUCTURE_GATES,
-    "rocm": _STRUCTURE_GATES,
+    "nvidia_sm90": _STRUCTURE_GATES + _NVIDIA_STRUCTURE_GATES,
+    "rocm": _STRUCTURE_GATES + _ROCM_STRUCTURE_GATES,
 }
 
 

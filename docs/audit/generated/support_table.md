@@ -335,11 +335,13 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | Program | Family | Status | Owner file | Description |
 |---|---|---|---|---|
 | `rotor_sandwich_norm` | geometric_algebra | **shipped** | `python/tessera/compiler/canonical/rotor_sandwich_norm.py` | rotor_sandwich(R, V) followed by norm(.); GA vertical slice via @clifford_jit. |
-| `matmul_softmax_matmul` | attention | **shipped** | `python/tessera/compiler/canonical/matmul_softmax_matmul.py` | O = softmax(A @ B) @ C — intended Apple GPU 3-op fused symbol (matmul→softmax→matmul); driver currently runs the numpy reference on every host and reports REFERENCE_FORCED so the CompileReport stays honest about what executed. |
+| `matmul_softmax_matmul` | attention | **shipped** | `python/tessera/compiler/canonical/matmul_softmax_matmul.py` | O = softmax(A @ B) @ C — dispatches the fused 3-op MSL kernel ``tessera_apple_gpu_matmul_softmax_matmul_f32`` on Darwin within envelope (N + P ≤ 256).  Outside the envelope and on non-Darwin hosts, falls back to numpy with a precise REFERENCE_FORCED note. |
 | `conv2d_norm_activation` | cnn | **shipped** | `python/tessera/compiler/canonical/conv2d_norm_activation.py` | conv2d_nhwc → layer_norm → gelu; numpy reference; honest fallback_reason since conv2d has no fused MSL kernel yet. |
 | `kv_cache_append_prune_read` | kv_cache | **shipped** | `python/tessera/compiler/canonical/kv_cache_append_prune_read.py` | KVCacheHandle append → prune → read; paged numpy storage today, FA-4 consumes this state. |
 | `decode_init_inner_loop_self_verify` | energy_based_models | **shipped** | `python/tessera/compiler/canonical/decode_init_inner_loop_self_verify.py` | EBM decode_init → T inner-loop steps → self_verify; argmin over K; native MSL on Apple GPU. |
 | `rotor_sandwich_ebt_tiny` | ga_ebm_composite | **shipped** | `python/tessera/compiler/canonical/rotor_sandwich_ebt_tiny.py` | rotor_sandwich → ebt_tiny composite; both ops fused on Apple GPU; value_kind=mixed (GA + tensor). |
+| `matmul_gelu` | mlp | **shipped** | `python/tessera/compiler/canonical/matmul_gelu.py` | O = gelu(A @ B) — dispatches the fused 2-op MSL kernel ``tessera_apple_gpu_matmul_gelu_f32`` on Darwin within envelope (N ≤ 256).  Emits a unified JitBridgeRoute via the same proof-route plumbing as matmul_softmax_matmul. |
+| `visual_complex_fused` | visual_complex | **shipped** | `python/tessera/compiler/canonical/visual_complex_fused.py` | Sequential exercise of complex_mul / complex_exp / mobius / stereographic — the 4 fused M7 Apple GPU kernels.  Each step routes through ``tessera.complex.*`` on top of the shipped MSL symbols; the report carries one proof_routes row per op. |
 
 ## Axes
 

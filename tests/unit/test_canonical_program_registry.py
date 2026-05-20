@@ -17,10 +17,12 @@ from tessera.compiler import canonical
 # Registry shape
 # ---------------------------------------------------------------------------
 
-def test_registry_has_six_programs() -> None:
-    """The plan pins exactly six canonical programs.  Adding a
-    seventh is a deliberate decision; this test catches drift."""
-    assert len(canonical.CANONICAL_PROGRAMS) == 6
+def test_registry_has_eight_programs() -> None:
+    """The plan pins exactly eight canonical programs.  Apple
+    follow-ups #1 + #2 (2026-05-20) added ``matmul_gelu`` and
+    ``visual_complex_fused`` to the original six.  Adding a ninth
+    is a deliberate decision; this test catches drift."""
+    assert len(canonical.CANONICAL_PROGRAMS) == 8
 
 
 def test_program_ids_are_unique() -> None:

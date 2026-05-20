@@ -85,6 +85,23 @@ echo "==> Generated support-table drift check"
 echo "==> Apple target map drift check"
 "$PYTHON" -m tessera.cli.apple_target_map --check
 
+# Apple follow-up #3 (2026-05-20): NVIDIA + ROCm dashboards mirror
+# the Apple target map (artifact_only / planned today; auto-promotes
+# when Phase G/H hardware bring-up lights up).
+echo "==> GPU target map drift checks (NVIDIA + ROCm)"
+"$PYTHON" -m tessera.cli.gpu_target_map --target=nvidia_sm90 --check
+"$PYTHON" -m tessera.cli.gpu_target_map --target=rocm --check
+
+# Apple follow-up #4 (2026-05-20): the Apple release gate is the
+# external-release blocker for any release claiming Apple support.
+# Run it as part of the CPU validation spine on Darwin so a stale
+# Apple claim fails CI before it can ship.  See
+# ``docs/status/apple_release_gate.md`` for the policy.
+if [ "$(uname)" = "Darwin" ]; then
+    echo "==> Apple release gate (--target=apple_gpu)"
+    "$PYTHON" scripts/release_gate.py --target=apple_gpu
+fi
+
 # M0 follow-up: claim_lint — public docs may not assert native /
 # fused / hardware-runtime claims that the manifest can't ground.
 echo "==> Public-doc claim_lint"

@@ -52,7 +52,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from .graph_ir import GraphIRFunction
+from .graph_ir import GraphIRFunction, IROp
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -67,68 +67,137 @@ def canonicalize_op_names(fn: GraphIRFunction) -> None:
 
     ``tessera.matmul`` → ``matmul``.  Aliases that backend lookup
     re-adds (``complex_mobius``) are NOT introduced here — this pass
-    only strips, never aliases.
-
-    **Phase C body — TODO.**  Today this is a no-op stub.  The
-    real implementation iterates ``fn.body`` and rewrites
-    ``op.op_name`` in place.
+    only strips, never aliases.  The audit walker handles backend
+    aliasing separately via ``_M7_BACKEND_ALIASES``.
 
     Idempotent: stripping ``"matmul"`` of its (absent) prefix
     leaves it ``"matmul"``.
     """
-    # TODO(phase-c-body-1): implement.
-    _ = fn  # silence unused-arg lint until the body lands
+
+    for op in fn.body:
+        if op.op_name.startswith("tessera."):
+            op.op_name = op.op_name[len("tessera."):]
 
 
 def propagate_source_positions(fn: GraphIRFunction) -> None:
-    """Plumb AST ``lineno``/``col_offset`` into ``IROp.source_span``
-    when the producer left it unset.
+    """Plumb source spans onto downstream ops that the AST visitor
+    couldn't tag.
 
-    The Python ``@tessera.jit`` AST visitor already populates this
-    for most ops; this pass fills the gaps (e.g., synthetic ops
-    introduced by canonicalization).
+    The Python ``@tessera.jit`` AST visitor already populates
+    ``source_span`` for ops it lowered directly.  Synthetic ops
+    introduced by later passes (or by constrained-view adapters
+    that don't track source positions) end up with
+    ``source_span=None``.  This pass fills the gap by inheriting
+    from the **unique producer** of one of the op's operands:
 
-    **Phase C body — TODO.**
+      * If the op has at least one operand whose producer carries
+        a span, use the first such producer's span.
+      * If no producer carries a span (or the op has no operands),
+        leave ``source_span=None``.
 
-    Idempotent: ops that already carry a span are left untouched.
+    Idempotent: ops that already carry a span are skipped.
     """
-    # TODO(phase-c-body-2): implement.
-    _ = fn
+
+    # Build a result-name → producing op map so we can resolve
+    # ``%t0`` references back to the op that emitted them.  Both
+    # ``%t0`` and ``t0`` forms are inserted so consumers can use
+    # either notation.
+    producer: dict[str, IROp] = {}
+    for op in fn.body:
+        if op.result is not None:
+            producer[op.result] = op
+            producer[f"%{op.result}"] = op
+
+    for op in fn.body:
+        if op.source_span is not None:
+            continue
+        for operand in op.operands:
+            upstream = producer.get(operand)
+            if upstream is None or upstream.source_span is None:
+                continue
+            op.source_span = upstream.source_span
+            break
 
 
 def set_lane_provenance(fn: GraphIRFunction) -> None:
     """Ensure ``fn.lane`` is set to a real lane value.
 
-    Default is already ``"tessera_jit"`` in the dataclass; this
-    pass exists so future producers that forget the field still
-    get a sensible lane.
+    The dataclass default is already ``"tessera_jit"``, so this
+    pass is a safety net for producers that explicitly clear the
+    field (e.g., assign ``fn.lane = ""``) or accidentally set it
+    to ``None``.  Real lane values are left alone.
 
-    **Phase C body — TODO.**
-
-    Idempotent: a function with a real lane is left alone.
+    Idempotent: an already-set lane is preserved.
     """
-    # TODO(phase-c-body-3): implement.
-    _ = fn
+
+    valid_lanes = (
+        "tessera_jit",
+        "textual_dsl",
+        "clifford_jit",
+        "complex_jit",
+        "energy_jit",
+    )
+    if fn.lane not in valid_lanes:
+        fn.lane = "tessera_jit"
 
 
 def propagate_value_kinds(fn: GraphIRFunction) -> None:
     """Stamp ``IROp.value_kind`` based on the op's catalog entry.
 
-    ``matmul`` → ``tensor``, ``clifford_*`` → ``multivector``,
-    ``complex_*`` → ``complex``, ``energy_*`` → ``energy``,
-    ``ebm_*`` → ``energy``.
+    Routing rules (first match wins):
 
-    Producers that already set ``value_kind`` (e.g., the constrained
-    view adapters) keep their choice.  ``None`` is upgraded to a
-    derived kind when the op is in the catalog; otherwise stays
-    ``None``.
+      * ``clifford_*``                      → ``multivector``
+      * ``complex_*`` / ``mobius`` /
+        ``stereographic`` / ``mobius_from_three_points``
+        / ``cross_ratio`` / ``is_concyclic``
+        / ``conformal_jacobian`` /
+        ``conformal_energy_on_sphere`` /
+        ``dz`` / ``dbar`` / ``laplacian_2d`` /
+        ``check_cauchy_riemann``            → ``complex``
+      * ``energy_*`` / ``ebm_*``            → ``energy``
+      * op-name appears in ``OP_SPECS``     → ``tensor``
+      * otherwise                           → leave ``None``
 
-    **Phase C body — TODO.**
+    Producers that already set ``value_kind`` (e.g., the
+    constrained view adapters) keep their choice.
 
     Idempotent: ops with a non-None ``value_kind`` are skipped.
     """
-    # TODO(phase-c-body-4): implement.
-    _ = fn
+
+    # Late import — primitive_coverage is heavyweight; only pull
+    # it in when this pass actually runs against a non-trivial fn.
+    from .op_catalog import OP_SPECS
+
+    # M7 op-name set lifted from audit._M7_INVENTORY (the
+    # registry's source of truth for the Visual Complex surface).
+    # Keeping the set local avoids a normalize→audit→normalize
+    # import cycle.
+    _M7_NAMES = frozenset({
+        "complex_mul", "complex_div", "complex_exp", "complex_log",
+        "complex_sqrt", "complex_pow", "complex_conjugate",
+        "complex_abs", "complex_arg",
+        "mobius", "mobius_from_three_points",
+        "cross_ratio", "is_concyclic", "stereographic",
+        "check_cauchy_riemann",
+        "conformal_jacobian", "conformal_energy_on_sphere",
+        "dz", "dbar", "laplacian_2d",
+        "complex_jit",
+    })
+
+    for op in fn.body:
+        if op.value_kind is not None:
+            continue
+        name = op.op_name
+        if name.startswith("clifford_"):
+            op.value_kind = "multivector"
+        elif name.startswith("complex_") or name in _M7_NAMES:
+            op.value_kind = "complex"
+        elif name.startswith("energy_") or name.startswith("ebm_"):
+            op.value_kind = "energy"
+        elif name in OP_SPECS:
+            op.value_kind = "tensor"
+        # else: leave None — per the architecture-doc rule that
+        # producers can't accidentally lie via a default like "tensor".
 
 
 def propagate_numeric_policy(fn: GraphIRFunction) -> None:
@@ -148,23 +217,50 @@ def propagate_numeric_policy(fn: GraphIRFunction) -> None:
 
 def propagate_verification_facts(fn: GraphIRFunction) -> None:
     """Derive ``IROp.verification_facts`` from the function's lane
-    + the op's catalog category.
+    + the op's catalog membership.
 
-    A ``complex_jit`` function's ops inherit ``{"holomorphic"}``
-    when the op is in ``HOLOMORPHIC_OPS``; otherwise they get
-    no fact.  Same idea for Clifford / Energy.
+    Rules:
 
-    The constrained-lane view adapters already stamp this on
+      * ``fn.lane == "clifford_jit"`` AND ``op.op_name`` starts with
+        ``clifford_``                  → ``{"ga_only"}``
+      * ``fn.lane == "complex_jit"`` AND ``op.op_name`` is in the
+        holomorphic whitelist          → ``{"holomorphic"}``
+      * ``fn.lane == "energy_jit"`` AND ``op.op_name`` starts with
+        ``energy_`` or ``ebm_``        → ``{"energy_whitelisted"}``
+      * Otherwise                       → leave empty
+
+    The constrained-lane view adapters already stamp these on
     every op — but a ``@tessera.jit`` function that accidentally
-    calls a Clifford op would not.  This pass closes that gap.
+    routes through a Clifford / Complex / Energy op would not.
+    This pass closes that gap.
 
-    **Phase C body — TODO.**
-
-    Idempotent: ops with non-empty ``verification_facts`` are
-    skipped.
+    Producers that already populated ``verification_facts`` keep
+    their choice.  Idempotent: a non-empty set is left alone.
     """
-    # TODO(phase-c-body-5): implement.
-    _ = fn
+
+    # Holomorphic whitelist — mirrors complex_jit.HOLOMORPHIC_OPS.
+    # Inlined here so this module doesn't pull in complex_jit
+    # (which imports ast_ir + dataclasses — keep normalization
+    # cheap to import).
+    _HOLOMORPHIC_OPS = frozenset({
+        "complex_mul",
+        "complex_exp",
+        "complex_div",
+        "mobius",
+    })
+
+    for op in fn.body:
+        if op.verification_facts:
+            continue
+        name = op.op_name
+        if fn.lane == "clifford_jit" and name.startswith("clifford_"):
+            op.verification_facts = frozenset({"ga_only"})
+        elif fn.lane == "complex_jit" and name in _HOLOMORPHIC_OPS:
+            op.verification_facts = frozenset({"holomorphic"})
+        elif fn.lane == "energy_jit" and (
+            name.startswith("energy_") or name.startswith("ebm_")
+        ):
+            op.verification_facts = frozenset({"energy_whitelisted"})
 
 
 # ─────────────────────────────────────────────────────────────────────

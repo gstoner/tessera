@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-05-19
+last_updated: 2026-05-20
 ---
 
 # Tessera API Reference
@@ -152,7 +152,11 @@ dist = tessera.dist.Block(mesh_axes=("dp", "tp"))
 X = tessera.array.from_domain(D, dtype="bf16", distribution=dist)
 ```
 
-`tessera.dist.Cyclic` exists as a Phase 4 planned distribution; in Phases 1-3 it raises `NotImplementedError` when shard specs are materialized.
+`tessera.dist.Cyclic` is part of the public distribution vocabulary.  Shard
+materialization remains backend- and layout-gated, so unsupported cyclic
+layouts fail explicitly instead of implying native execution.  Use
+`tessera.compiler.support(...)`, `docs/audit/generated/support_table.md`, and
+`docs/audit/generated/e2e_op_coverage.md` for the current per-target truth.
 
 Tensor attributes are split across logical shape (`shape`), storage dtype
 (`dtype`), layout (`layout`), execution target (`target`), distribution
@@ -176,7 +180,10 @@ tessera.index_launch(axis="tp")(tp_gemm)(
 )
 ```
 
-Phase 1 uses sequential/mock execution. Production NCCL/RCCL-backed distributed execution is Phase 4 planned.
+`index_launch` supports local/mock execution paths and distributed lowering
+surfaces.  Hardware-backed multi-rank execution through NCCL/RCCL is
+capability- and validation-gated; consult `docs/spec/VALIDATION_SPINE.md` and
+`docs/spec/CONFORMANCE.md` before treating a target as production-ready.
 
 ## Constraints
 
@@ -203,13 +210,13 @@ Use `tessera.ops`.
 
 | API | Status |
 |-----|--------|
-| `gemm`, `matmul` | Phase 1-3 implemented |
-| `layer_norm`, `softmax`, `gelu`, `relu`, `transpose`, `cast` | Phase 1-3 implemented |
-| `dropout` | Phase 1-3 implemented with random effect |
+| `gemm`, `matmul` | Implemented with CPU reference execution and target-gated native/artifact paths. Apple GPU native dispatch is available only where the support table reports it. |
+| `layer_norm`, `softmax`, `gelu`, `relu`, `transpose`, `cast` | Implemented with CPU reference execution; selected ops also have fused/native target paths reported by the generated support table. |
+| `dropout` | Implemented with a random effect in the Python/compiler surface; native lowering remains target-specific. |
 | `conv2d` | Implemented — NHWC + NCHW Module forms (`tessera.nn.Conv2d` / `Conv2dNCHW`); Graph IR op + VJP/JVP registered. |
-| `flash_attn` | Phase 1 naive path; Phase 3 SM_90+ FA-4 lowering path |
+| `flash_attn` | Implemented with reference execution and NVIDIA-oriented Tile/Target artifact paths; native execution is target-gated. |
 | `all_reduce`, `reduce_scatter`, `all_gather` | Implemented — Phase 4 distributed lowering (`GPUCollectiveInsertionPass`); NCCL/RCCL adapters wired; VJP+JVP registered for all four collectives. |
-| `fused_epilogue` | Phase 1-3 implemented where supported by canonicalization/lowering |
+| `fused_epilogue` | Implemented where supported by canonicalization/lowering; target support varies by backend capability. |
 
 ## GPU Targeting
 

@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Runtime C ABI
-last_updated: 2026-04-26
+last_updated: 2026-05-20
 ---
 
 # Tessera Runtime ABI Specification
@@ -10,10 +10,12 @@ last_updated: 2026-04-26
 > **Canonical reference.** This document is grounded in the actual header files under
 > `src/runtime/include/tessera/`. It is the only normative runtime ABI reference.
 >
-> **Phase status:** The C ABI headers are complete and well-defined. Production runtime
-> wiring for CPU/CUDA/HIP backends and the Python `TesseraRuntime` wrapper are Phase 6
-> planned. Current Phase 1-3 tests use Python-level stubs and mock collectives, not the
-> runtime C ABI as the primary execution path.
+> **Current-state note (2026-05-20):** The C ABI is implemented and exercised
+> by runtime-ABI smoke tests, sanitizer lanes, and the Python runtime wrapper.
+> CPU execution is covered by the current smoke suite; CUDA/HIP behavior remains
+> target- and hardware-gated. Do not infer production readiness from ABI
+> presence alone — use `docs/spec/VALIDATION_SPINE.md` and
+> `docs/spec/CONFORMANCE.md` for the validation spine.
 
 ---
 
@@ -33,7 +35,8 @@ The ABI is versioned (`MAJOR.MINOR.PATCH`) and follows semantic versioning. Brea
 increment `MAJOR`. The current version is **0.2.0** (see `tsr_version.h`).
 
 All public functions are declared `extern "C"`, making the ABI callable from both C and C++.
-Python bindings (Phase 6) will wrap these via ctypes/cffi.
+Python bindings wrap the runtime surface through `tessera.runtime.TesseraRuntime`
+and related helpers. Backend coverage remains validation-gated.
 
 ---
 

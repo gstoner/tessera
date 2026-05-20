@@ -1,10 +1,10 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-04-26
+last_updated: 2026-05-20
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
 
 
 # Tessera System Overview
@@ -25,16 +25,18 @@ Target hardware: NVIDIA (SM90 Hopper, SM100 Blackwell), AMD ROCm, Google TPU, Ce
 
 ---
 
-## Phase Status
+## Capability Status
 
-| Phase | Focus | Status |
-|-------|-------|--------|
-| **Phase 1** | Python frontend — `@jit`, `Region`, `Domain`, `ShardSpec`, `DistributedArray`, `ConstraintSolver`, `EffectLattice`, `GraphIRBuilder` | ✅ Complete |
-| **Phase 2** | C++ x86 lowering — `DistributionLoweringPass`, `EffectAnnotationPass`, `TilingPass`, `TileToX86Pass`; `tessera-lower-to-x86` pipeline | ✅ Complete |
-| **Phase 3** | NVIDIA GPU backend — `GPUTargetProfile`, `TileIRLoweringPass`, `WarpSpecializationPass`, `AsyncCopyLoweringPass`, `NVWGMMALoweringPass`, `NVTMADescriptorPass`, `NVFlashAttnKernelEmitter`; FA-4 Attn dialect; `tessera-lower-to-gpu` pipeline | ✅ Complete |
-| **Phase 4** | Distributed training — NCCL/RCCL collectives, TPU StableHLO backend, Cyclic MoE distribution | 🔲 Next |
-| **Phase 5** | Scaling & resilience — activation checkpointing, ZeRO optimizer sharding, Bayesian autotuner, sparse/RNG solvers | 🔲 Future |
-| **Phase 6** | ROCm full MFMA, runtime C ABI, production diagnostics, benchmark suite | 🔲 Future |
+| Area | Current status |
+|------|----------------|
+| **Python frontend** | Implemented: `@tessera.jit`, `@tessera.kernel`, `fn.explain()`, `from_text`, support queries, constraints, effects, and Graph IR emission. |
+| **IR stack** | Graph/Schedule/Tile/Target IR are implemented and inspectable; metadata normalization and constrained-lane Graph IR views are in place. |
+| **CPU / x86 lowering** | Implemented for supported paths, with reference execution and AMX/AVX-512-oriented backend hooks. |
+| **NVIDIA GPU lowering** | Tile/Target artifact path implemented for supported kernels; runtime/native readiness is target- and op-gated. |
+| **Apple GPU native path** | Fused native kernels exist for the audited GA/EBM and selected Visual Complex surfaces. |
+| **ROCm** | MFMA/WMMA capability modeling is present, including `gfx1200`; native execution is still capability-gated. |
+| **Distributed / collectives** | Lowering and adapter surfaces exist; production multi-rank execution is validation-gated. |
+| **Runtime ABI** | C ABI and Python wrapper exist, with runtime smoke and sanitizer coverage. |
 
 ---
 

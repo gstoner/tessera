@@ -4,7 +4,7 @@ classification: Informative
 last_updated: 2026-05-06
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
 
 
 # Tessera Compiler — Target IR Design
@@ -104,7 +104,10 @@ wgmma.mma_async.aligned.m64n128k32.f32.fp8.fp8.fp32 ...
 
 - Schedule IR attributes (`block`, `warp`, `vector`) flow into Target IR kernels.  
 - Autotune caches store **final target binaries per arch**.  
-- Fatbin packaging is Phase 6 planned. The intended package metadata bundles Graph IR, Schedule IR, Tile IR, Target IR, and tuned binaries.
+- Fatbin/package emission is not the default developer path yet. Artifact
+  metadata already tracks Graph IR, Schedule IR, Tile IR, Target IR, and tuned
+  binaries where a backend emits them; target-specific packaging remains
+  validation-gated.
 
 ---
 

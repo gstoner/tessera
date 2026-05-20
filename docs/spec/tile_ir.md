@@ -444,7 +444,7 @@ metadata cannot represent the same information.
 | `tessera.attn.*` (FA-4 ops) | Phase 3 | ✅ Complete |
 | `tessera.queue.*` (warp specialization) | Phase 3 | ✅ Complete |
 | `tessera.tcgen05.*` (TMEM / SM_100) | Phase 3 (ODS defined) | stubbed / lit-testable until real Blackwell PTX operands land |
-| Collective ops (`tile.comm`) | Phase 4 planned | 🔲 Planned |
+| Collective ops (`tile.comm`) | distributed extension | planned / adapter-gated; see collective lowering and validation docs |
 | ROCm MFMA Tile IR path | backend extension | planned / scaffolded in ROCm Target IR |
 
 ---

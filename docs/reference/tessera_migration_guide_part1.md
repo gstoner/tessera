@@ -2,10 +2,18 @@
 status: Pre-canonical
 classification: Pre-canonical
 authority: Archived old-API reference; not current implementation guidance
-last_updated: 2026-04-26
+last_updated: 2026-05-20
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Historical guide notice (2026-05-20):** This document is pre-canonical
+> migration material, not a current support claim. It predates
+> `fn.explain()`, the frontend-lane registry, generated support dashboards,
+> E2E op coverage, and current runtime validation. Treat examples and benefit
+> language as conceptual only; validate current APIs and target readiness
+> against `docs/spec/PYTHON_API_SPEC.md`,
+> `docs/reference/tessera-api-reference.md`,
+> `docs/audit/generated/support_table.md`, and
+> `docs/audit/generated/e2e_op_coverage.md`.
 
 
 # Tessera Migration Guide Part 1 - Assessment, Planning, and Basic Migration

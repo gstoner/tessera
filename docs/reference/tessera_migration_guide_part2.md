@@ -1,10 +1,19 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-04-26
+last_updated: 2026-05-20
 ---
 
 # Tessera Migration Guide Part 2 - Advanced Strategies, Testing, and Success Stories
+
+> **Historical guide notice (2026-05-20):** This document is pre-canonical
+> migration material and should not be read as a current compiler support
+> matrix. The migration phases below are project-management phases for a
+> hypothetical migration, not Tessera implementation phases. Validate current
+> APIs and target readiness against `docs/spec/PYTHON_API_SPEC.md`,
+> `docs/reference/tessera-api-reference.md`,
+> `docs/audit/generated/support_table.md`, and
+> `docs/audit/generated/e2e_op_coverage.md`.
 
 This document continues from Part 1, covering advanced migration strategies, comprehensive testing frameworks, real-world success stories, and best practices for large-scale Tessera adoption.
 

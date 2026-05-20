@@ -2,14 +2,20 @@
 status: Informative
 classification: Informative
 authority: Architecture entry point; defers normative details to docs/spec/
-last_updated: 2026-04-26
+last_updated: 2026-05-20
 ---
 
 # Tessera Architecture Index
 
 Start here for the current Tessera architecture. This page is the entry point for architecture readers; detailed behavior is specified by the canonical specs linked below.
 
-Tessera is a pre-alpha, tile-centric programming model and compiler. The current implemented architecture covers Phases 1-3: Python frontend, x86 lowering, and NVIDIA SM_90+ GPU lowering for supported paths. Distributed training, extended autodiff/checkpointing/autotuning, and production runtime wiring are planned in later phases.
+Tessera is a pre-alpha, tile-centric programming model and compiler. The
+implemented architecture now extends beyond the original Phase 1-3 framing:
+the Python frontend, Graph/Schedule/Tile/Target IR stack, runtime ABI, Apple
+GPU fused-kernel path, GA/EBM lanes, Visual Complex audit surface, and multiple
+validation spines are live in varying degrees. Treat phase labels in older
+architecture guides as design history unless a generated dashboard or canonical
+spec restates the claim.
 
 ## Architecture At A Glance
 
@@ -20,20 +26,20 @@ flowchart TD
   C --> D1["x86 Path<br/>TilingPass -> TileToX86Pass<br/>AMX/AVX-512 backend calls"]
   C --> D2["GPU Path<br/>TileIRLoweringPass<br/>tile.*, tessera.attn.*, tessera.queue.*"]
   D2 --> E["Target IR<br/>NVIDIA TMA, WGMMA, mbarrier<br/>LLVM NVPTX / PTX"]
-  D1 --> F["Runtime / Host Integration<br/>Phase 6 production C ABI wiring planned"]
+  D1 --> F["Runtime / Host Integration<br/>C ABI + Python wrapper; target-gated execution"]
   E --> F
 ```
 
-## Current Phase Table
+## Current Capability Table
 
-| Phase | Scope | Status | Primary references |
-|-------|-------|--------|--------------------|
-| Phase 1 | Python frontend: `@tessera.jit`, `@tessera.kernel`, `Region`, domains/distributions, constraints, effects, Graph IR emission | Complete | `docs/CANONICAL_API.md`, `docs/spec/PYTHON_API_SPEC.md`, `docs/spec/GRAPH_IR_SPEC.md` |
-| Phase 2 | x86 lowering: distribution lowering, canonicalization, tiling, AMX/AVX-512 backend calls | Complete | `docs/spec/COMPILER_REFERENCE.md`, `docs/spec/LOWERING_PIPELINE_SPEC.md` |
-| Phase 3 | NVIDIA GPU lowering: GPU target profile, FA-4 Tile IR, warp specialization, async copy lowering, WGMMA/TMA target lowering | Complete | `docs/spec/TARGET_IR_SPEC.md`, `docs/spec/LOWERING_PIPELINE_SPEC.md` |
-| Phase 4 | Distributed training: NCCL/RCCL collectives, TPU StableHLO, Cyclic distribution, pipeline parallelism | Planned | `docs/spec/COMPILER_REFERENCE.md`, `docs/spec/TARGET_IR_SPEC.md` |
-| Phase 5 | Scaling and resilience: autodiff expansion, activation checkpointing, ZeRO sharding, Bayesian autotuning | Planned | `docs/README.md`, `docs/spec/COMPILER_REFERENCE.md` |
-| Phase 6 | Production runtime: Runtime C ABI wiring, Python runtime wrapper, ROCm MFMA completion, benchmark suite | Planned | `docs/spec/RUNTIME_ABI_SPEC.md`, `docs/spec/CONFORMANCE.md` |
+| Area | Current status | Primary references |
+|------|----------------|--------------------|
+| Python frontend + Graph IR | Implemented and documented; `fn.explain()`, `from_text`, support queries, and typed diagnostics are the current developer surface. | `docs/spec/PYTHON_API_SPEC.md`, `docs/reference/tessera-api-reference.md`, `docs/spec/GRAPH_IR_SPEC.md` |
+| Schedule / Tile / Target IR | Implemented as inspectable compiler layers; some target paths are artifact-only or hardware-gated. | `docs/spec/COMPILER_REFERENCE.md`, `docs/spec/LOWERING_PIPELINE_SPEC.md`, `docs/spec/TARGET_IR_SPEC.md` |
+| Runtime ABI | C ABI and Python wrapper exist; smoke and sanitizer coverage guard lifecycle and handle behavior. | `docs/spec/RUNTIME_ABI_SPEC.md`, `docs/spec/VALIDATION_SPINE.md` |
+| Native/runtime execution | Complete for a small audited subset; most ops are CPU-reference or artifact-only today. | `docs/audit/generated/e2e_op_coverage.md`, `docs/audit/generated/support_table.md` |
+| Distributed / collective surfaces | Lowering, adapter, and validation surfaces exist; production multi-rank readiness is target-gated. | `docs/spec/CONFORMANCE.md`, `docs/spec/VALIDATION_SPINE.md` |
+| GA / EBM / Visual Complex lanes | Public constrained lanes with audit visibility; native coverage differs by family and target. | `docs/status/ga_ebm_milestone.md`, `docs/status/visual_complex_milestone.md` |
 
 ## Canonical Specs
 

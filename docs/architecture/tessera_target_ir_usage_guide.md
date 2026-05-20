@@ -5,7 +5,7 @@ authority: Target IR usage examples; normative op semantics and ABI in docs/spec
 last_updated: 2026-04-30
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
 
 # Tessera Target IR — Usage Guide
 
@@ -205,7 +205,7 @@ The x86 backend (`src/compiler/codegen/tessera_x86_backend/`) implements these
 functions with AMX BF16 tiles or AVX-512 fallback. This path is fully functional
 in Phase 2 and is the recommended CPU validation path before deploying to GPU.
 
-### AMD ROCm — MFMA (Phase 6)
+### AMD ROCm — MFMA / WMMA
 
 ```mlir
 // MFMA lowering for gfx90a (MI210/250)
@@ -217,7 +217,12 @@ in Phase 2 and is the recommended CPU validation path before deploying to GPU.
 rocdl.ds.read.b128 %addr : (!llvm.ptr<3>) -> vector<4xi32>
 ```
 
-Full MFMA coverage for gfx90a / gfx94x / gfx120x is Phase 6 planned.
+ROCm target support is split by architecture family. CDNA targets use MFMA
+shapes where the inventory reports them; RDNA4 / `gfx1200` is modeled as
+WMMA-only, including FP8/BF8 and planned-gated INT4 coverage. See
+`docs/rocm_mfma_kernel_inventory.md` and
+`docs/audit/hardware_dtype_support_matrix.md` for the current dtype and
+instruction matrix.
 
 ---
 
@@ -280,8 +285,10 @@ print(my_kernel.graph_ir.to_mlir())
 # : (tensor<...xbf16>, tensor<...xbf16>, tensor<...xbf16>) -> tensor<...xbf16>
 ```
 
-Tile IR and Target IR inspection helpers are Phase 4 planned. Until then, use
-`tessera-opt` on the `.mlir` text output with the named pipeline flag:
+Tile IR and Target IR are inspectable through `fn.explain()` and the lower-level
+`schedule_ir`, `tile_ir`, `target_ir`, and `lowering_artifacts()` accessors.
+For C++ pass debugging, use `tessera-opt` on the `.mlir` text output with the
+named pipeline flag:
 
 ```bash
 tessera-opt my_module.mlir \

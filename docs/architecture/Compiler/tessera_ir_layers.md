@@ -5,7 +5,7 @@ authority: IR layer narrative; normative op semantics defer to docs/spec/
 last_updated: 2026-04-30
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
 
 # Tessera IR Layers
 
@@ -323,8 +323,8 @@ All pointers are address-space-qualified global pointers. Scalar uniforms are
 | Target IR — NVIDIA WGMMA / TMA / mbarrier (SM_90+) | ✅ Phase 3 complete |
 | Target IR — Apple and AMD/ROCm artifact lowering | ✅ implemented / lit-testable / artifact-only |
 | Target IR — AMD MFMA native runtime coverage | 🔲 planned beyond artifact path |
-| Target IR — Runtime C ABI wired for launch | 🔲 Phase 6 planned |
-| Distributed collectives in Schedule/Target IR | 🔲 Phase 4 planned |
+| Target IR — Runtime C ABI wired for launch | ✅ implemented for the runtime ABI smoke path; backend execution remains target-gated |
+| Distributed collectives in Schedule/Target IR | ✅ lowering/adapters present; production multi-rank readiness is validation-gated |
 
 ---
 

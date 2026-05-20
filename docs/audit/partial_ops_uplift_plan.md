@@ -1,10 +1,11 @@
 # Plan: enable and harden the 47 partial ops
 
-> **Status:** Active execution plan (2026-05-20).
+> **Status:** Completed execution record (2026-05-20).
 > Backed by the live audit data in
 > `docs/audit/generated/e2e_op_coverage.md`.
-> Counts in this doc are accurate at landing time; the source of
-> truth for ongoing tracking is the regenerated dashboard.
+> E1, E2, and E3 landed after this plan was written. The dashboard now
+> reports `partial=0`; keep this file as the rationale and execution
+> record, not as an active TODO list.
 
 ## The three buckets
 

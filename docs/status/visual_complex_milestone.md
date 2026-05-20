@@ -39,7 +39,7 @@
 | **Native (Apple GPU) lowering** | 🟢 4 fused + 16 planned slots | `complex_mul` / `complex_exp` / `mobius` / `stereographic` ship fused MSL kernels (fp32). The remaining 16 long-tail ops have `status="planned"` slots reserved in the backend manifest (fp32/fp16/bf16 target dtypes); execution lights up with the next M7 kernel sprint. |
 | **NVIDIA / ROCm lowering** | 🟡 planned slots reserved | Every M7 op has `status="planned"` rows across nvidia_sm80/90/100/120 + rocm with `(fp32, fp16, bf16)` as the **kernel target** dtype matrix — these are what the unbuilt kernels will support, not what runs today. Promotion gated on Phase G / Phase H. See §9 of `docs/nvidia_cuda13_kernel_inventory.md` + §10 of `docs/rocm_mfma_kernel_inventory.md`. |
 | **Today's execution path** | ✅ CPU reference (fp32) | The entire M7 surface runs today via `tessera.complex.*` on CPU with fp32 precision. fp16/bf16 are **not** runtime-supported yet — they're declared dtypes for the future native kernel. |
-| **Contract-axis completeness** | 🟡 partial | All 22 rows are at `status="partial"` in `primitive_coverage.py`. Math / shape / dtype / VJP / JVP / batching / transpose / sharding / lowering / kernel / tests axes need promotion before the M7 family can claim contract-complete. |
+| **E2E coverage classification** | ✅ no partial rows | E2E audit classifies 4 fused Apple-GPU ops as `complete` and 16 long-tail ops as `runnable_reference`; `complex_jit` remains a decorator/front-end surface rather than an op-counted primitive. |
 
 ## What's claimed
 
@@ -64,22 +64,19 @@
 
 ## What's NOT claimed
 
-- **No native (Apple GPU / NVIDIA / ROCm) MSL/PTX/AMDGCN kernels for
-  the M7 family.** The current execution path is numpy-backed
-  CPU reference. A future M7.1 milestone is expected to add fused
-  MSL kernels (`complex_mul`, `complex_exp`, `mobius`,
-  `stereographic`) on Apple GPU using the same manifest-backed
-  dispatch the GA / EBM primitives use.
+- **No native kernels for the 16 long-tail M7 ops.** Four Apple GPU
+  kernels (`complex_mul`, `complex_exp`, `mobius`, `stereographic`)
+  are fused today; the remaining long-tail ops run through the
+  fp32 Python reference path until their planned backend slots are
+  implemented.
 - **No `tessera.complex` integration with the broader autodiff tape
   yet.** `@analytic` and `@complex_jit` verify CR at decoration time;
   the per-primitive VJPs / JVPs are not yet registered against
   `tessera.autodiff.vjp._VJPS` (so the registry's `vjp` axis reads
   `planned` for the M7 family).
-- **No M7 entries in `op_catalog.OP_SPECS`.** The audit picks them
-  up via the curated `_M7_INVENTORY` set in
-  `python/tessera/compiler/audit.py`, parallel to `_BENCH_INVENTORY`
-  for GA/EBM. This is intentional — they're "callable today via
-  `tessera.complex.*`" but not yet "registered as Graph IR ops."
+- **No claim that planned fp16/bf16 rows execute today.** Long-tail
+  M7 `planned` backend rows reserve future native-kernel dtypes; the
+  current reference execution path is fp32-only.
 
 ## How to reproduce the claims
 

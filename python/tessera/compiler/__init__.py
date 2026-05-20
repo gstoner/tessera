@@ -51,6 +51,24 @@ from .gpu_smoke import SmokeResult, run_matmul_smoke
 from .jit import jit, TesseraJitError
 from .driver import CompileArtifactBundle, CompileRequest, CompileTraceEvent, compile_graph_module
 from .frontend import FrontendSemanticError, FrontendSyntaxError, lower_text_to_graph_ir, parse_text
+from .support import (
+    OpSupport,
+    TargetSupport,
+    Tier,
+    is_native_supported,
+    known_targets,
+    support,
+    tier,
+)
+from .diagnostics import (
+    Diagnostic,
+    DiagnosticCode,
+    FallbackDecision,
+    FallbackReason,
+    JitDiagnosticCode,
+    TesseraNativeRequiredError,
+    classify_host,
+)
 
 __all__ = [
     "ConstraintSolver",
@@ -111,4 +129,23 @@ __all__ = [
     "FrontendSyntaxError",
     "lower_text_to_graph_ir",
     "parse_text",
+    # Public support / tier query API (P0-1, 2026-05-19).  Thin
+    # wrapper over audit.support_row_for + backend_manifest +
+    # capabilities.  No parallel registry — these always reflect
+    # the same data the support_table dashboard renders.
+    "OpSupport",
+    "TargetSupport",
+    "Tier",
+    "is_native_supported",
+    "known_targets",
+    "support",
+    "tier",
+    # Public diagnostic-code taxonomy (P0-2, 2026-05-19).
+    "Diagnostic",
+    "DiagnosticCode",
+    "FallbackDecision",
+    "FallbackReason",
+    "JitDiagnosticCode",
+    "TesseraNativeRequiredError",
+    "classify_host",
 ]

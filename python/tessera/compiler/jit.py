@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 if TYPE_CHECKING:
     from ..runtime import RuntimeArtifact
+    from .explain import Explain
 
 from .constraints import Constraint, ConstraintSolver, TesseraConstraintError
 from .effects import Effect, EffectLattice, TesseraEffectError
@@ -525,7 +526,13 @@ class JitFn:
             raise TesseraJitError(f"apple_gpu launch failed: {exc}") from exc
 
     def ir_text(self) -> str:
-        """Return the emitted Graph IR as MLIR text."""
+        """Return the emitted Graph IR as MLIR text.
+
+        .. note:: ``fn.explain().ir.graph`` returns the same string.
+           ``ir_text()`` is kept as a stable lower-level entry point;
+           new code should prefer ``.explain()`` for the unified
+           view across all four IR layers.
+        """
         return self.graph_ir.to_mlir()
 
     def compile_report(self):
@@ -536,6 +543,12 @@ class JitFn:
         frontend exposes a uniform CompileReport accessor.  No
         execution happens here — the accessor reads ``graph_ir``,
         ``target``, ``cpu_plan``, and the recent bridge trace.
+
+        .. note:: ``fn.explain()`` is the front door for developers —
+           it consumes ``compile_report`` under the hood and adds
+           per-op kernel resolution, IR layers, and next-action
+           hints.  Keep using ``compile_report()`` directly for
+           benchmark/JSON serialization paths.
         """
         from . import compile_report as _cr
         target_kind = (
@@ -627,7 +640,14 @@ class JitFn:
         return self.cpu_plan is not None
 
     def lowering_artifacts(self):
-        """Return Graph/Schedule/Tile/Target artifacts for the compiled path."""
+        """Return Graph/Schedule/Tile/Target artifacts for the compiled path.
+
+        .. note:: ``fn.explain().ir`` exposes the same four layers as
+           strings on a typed namespace (``.graph``/``.schedule``/
+           ``.tile``/``.target``).  Use ``lowering_artifacts()`` when
+           you need the raw artifact objects (e.g., for hash
+           verification); use ``.explain()`` for the human view.
+        """
 
         if self.cpu_plan is None:
             return ()
@@ -650,6 +670,12 @@ class JitFn:
         rebuilding the artifact + recomputing its SHA-256 every call is pure
         overhead. The cached artifact is shared between inspection callers and
         the apple_cpu fast path so they observe consistent metadata.
+
+        .. note:: ``fn.explain()`` surfaces the artifact's key fields
+           (execution kind, target, IR hashes) in a human-readable
+           summary.  Continue calling ``runtime_artifact()`` directly
+           when you need the raw artifact for ABI/runtime dispatch
+           or for ``Apple CPU`` fast-path metadata.
         """
 
         if self._cached_artifact is not None:
@@ -858,9 +884,43 @@ class JitFn:
         )
 
     def explain_lowering(self) -> str:
-        """Return a human-readable explanation of compile vs fallback status."""
+        """Return a human-readable explanation of compile vs fallback status.
+
+        .. deprecated:: 2026-05-19
+           Prefer ``fn.explain()`` — the single front door that unifies
+           lowering diagnostics, fallback reasons, IR layers, and
+           next-action hints.  This method stays as a data source for
+           callers that need only the diagnostic list as text.
+        """
 
         return "\n".join(d.format() for d in self.lowering_diagnostics)
+
+    def explain(self) -> "Explain":
+        """Return a single opinionated diagnostic for this JIT function.
+
+        ``print(fn.explain())`` answers four questions in a 5-line
+        summary:
+
+          1. What ran?  (``execution_kind``)
+          2. Was it native / reference / artifact / fallback?
+          3. Why?  (fallback reason, lowering diagnostics)
+          4. What should I do next?  (hints with stable IDs)
+
+        Structured fields hang off the :class:`~tessera.compiler.explain.Explain`
+        object: ``.ir``, ``.kernels``, ``.diagnostics``,
+        ``.next_actions``.  Each is read-only and JSON-serializable
+        via ``.as_dict()``.
+
+        This is the front door — the legacy inspection methods
+        (``ir_text``, ``schedule_ir``, ``tile_ir``, ``target_ir``,
+        ``lowering_artifacts``, ``runtime_artifact``,
+        ``compile_report``, ``explain_lowering``) stay as
+        underlying data sources but new code should call
+        ``.explain()``.
+        """
+
+        from . import explain as explain_mod
+        return explain_mod.build_explain(self)
 
     def __repr__(self) -> str:
         target_str = f" target={self.target!r}" if self.target else ""

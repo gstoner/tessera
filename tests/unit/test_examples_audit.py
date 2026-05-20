@@ -78,13 +78,21 @@ class TestManifestShape:
                 f"{entry.directory} is {entry.status!r} but has no reason"
             )
 
-    def test_no_duplicate_directories(self) -> None:
+    def test_no_duplicate_entry_points(self) -> None:
+        """Two entries may share a ``directory`` (e.g.,
+        ``examples/getting_started`` hosts both ``basic_tensor_ops.py``
+        and the ``compile_and_explain.py`` tour) but the
+        ``entry_point`` must be unique — that's the actual identity
+        of an audit row.  Matches the contract in
+        ``test_surface_audit.py``."""
+
         seen: set[str] = set()
         for entry in all_entries():
-            assert entry.directory not in seen, (
-                f"duplicate manifest entry for {entry.directory}"
+            assert entry.entry_point not in seen, (
+                f"duplicate manifest entry for entry_point "
+                f"{entry.entry_point}"
             )
-            seen.add(entry.directory)
+            seen.add(entry.entry_point)
 
 
 class TestManifestFilesystem:

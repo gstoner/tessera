@@ -199,28 +199,37 @@ def build_cpu_plan(
 
 
 def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagnostic:
-    """Return a diagnostic explaining compile-path or fallback status."""
+    """Return a diagnostic explaining compile-path or fallback status.
+
+    The ``code`` field of the returned :class:`JitDiagnostic` is a
+    string for backwards compatibility, but its values are taken
+    verbatim from :class:`tessera.compiler.diagnostics.JitDiagnosticCode`
+    so callers can match against ``JitDiagnosticCode.EAGER_FALLBACK_EMPTY.value``
+    etc. instead of string literals.
+    """
+
+    from .diagnostics import JitDiagnosticCode as _Code
 
     target = normalize_target_kind(target)
     if not module.functions:
-        return JitDiagnostic("warning", "JIT_EAGER_FALLBACK_EMPTY", "no Graph IR function was emitted")
+        return JitDiagnostic("warning", _Code.EAGER_FALLBACK_EMPTY.value, "no Graph IR function was emitted")
     fn = module.functions[0]
     if not fn.body:
-        return JitDiagnostic("warning", "JIT_EAGER_FALLBACK_EMPTY", "no Graph IR function body was emitted")
+        return JitDiagnostic("warning", _Code.EAGER_FALLBACK_EMPTY.value, "no Graph IR function body was emitted")
     unsupported = [op for op in fn.body if _canonical_op_name(op.op_name) not in SUPPORTED_CPU_OPS]
     if unsupported:
         names = ", ".join(sorted(SUPPORTED_CPU_OPS))
         seen = unsupported[0].op_name
         return JitDiagnostic(
             "warning",
-            "JIT_EAGER_FALLBACK_UNSUPPORTED_OP",
+            _Code.EAGER_FALLBACK_UNSUPPORTED_OP.value,
             f"op {seen!r} is not supported by the CPU compiler path; supported ops: {names}",
         )
     bad_arity = [op for op in fn.body if not _valid_arity(op)]
     if bad_arity:
         return JitDiagnostic(
             "warning",
-            "JIT_EAGER_FALLBACK_ARITY",
+            _Code.EAGER_FALLBACK_ARITY.value,
             f"op {bad_arity[0].op_name!r} has unsupported operand count",
         )
     unknown = [
@@ -231,18 +240,18 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
     if unknown:
         return JitDiagnostic(
             "warning",
-            "JIT_EAGER_FALLBACK_UNSUPPORTED_BODY",
+            _Code.EAGER_FALLBACK_UNSUPPORTED_BODY.value,
             "CPU compiler needs named values for every supported op; using eager Python fallback",
         )
     if target == "cpu":
         return JitDiagnostic(
             "info",
-            "JIT_COMPILED_CPU",
+            _Code.COMPILED_CPU.value,
             f"compiled {fn.name} through Graph IR -> Schedule IR -> Tile IR -> Target IR -> CPU",
         )
     return JitDiagnostic(
         "info",
-        "JIT_TARGET_IR_ARTIFACT_ONLY",
+        _Code.TARGET_IR_ARTIFACT_ONLY.value,
         (
             f"compiled {fn.name} through Graph IR -> Schedule IR -> Tile IR -> "
             f"{target} Target IR artifact; native execution is not wired"

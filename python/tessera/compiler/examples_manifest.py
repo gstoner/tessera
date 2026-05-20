@@ -76,6 +76,22 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
         notes="Canonical @tessera.jit walkthrough — add, RMSNorm, SwiGLU on CPU.",
     ),
     ExampleEntry(
+        directory="examples/getting_started",
+        entry_point=(
+            "examples/getting_started/compile_and_explain.py"
+        ),
+        status="runnable",
+        command=(
+            "PYTHONPATH=python python examples/getting_started/"
+            "compile_and_explain.py"
+        ),
+        notes=(
+            "Canonical compiler tour (P0-4, 2026-05-19). Walks through "
+            "@tessera.jit → fn() → fn.explain() → ts.compiler.support() "
+            "→ ts.from_text() in ~80 lines.  Linked from README.md."
+        ),
+    ),
+    ExampleEntry(
         directory="examples/getting_started/tessera_flash_attention_demo",
         entry_point=(
             "examples/getting_started/tessera_flash_attention_demo/examples/"

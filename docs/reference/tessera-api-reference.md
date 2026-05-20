@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-05-11
+last_updated: 2026-05-19
 ---
 
 # Tessera API Reference
@@ -11,26 +11,112 @@ specification is `docs/spec/PYTHON_API_SPEC.md`; if this guide disagrees with
 that spec, the spec wins. Tensor attribute and dtype vocabulary lives in
 `docs/reference/tessera_tensor_attributes.md`.
 
+> **Start here:** for a runnable, narrated tour of the compiler surface in
+> ~80 lines — `@tessera.jit` → `fn(...)` → `fn.explain()` →
+> `tessera.compiler.support(op)` → `tessera.from_text(...)` — see
+> [`examples/getting_started/compile_and_explain.py`](../../examples/getting_started/compile_and_explain.py).
+
 ## Import Pattern
 
 ```python
-import tessera
+import tessera as ts
 ```
 
-Use the top-level `tessera` namespace for public examples unless a spec explicitly names a submodule import.
+Use the top-level `tessera` namespace (commonly aliased `ts`) for public
+examples unless a spec explicitly names a submodule import.
 
 ## Decorators
 
 | API | Status | Purpose |
 |-----|--------|---------|
-| `@tessera.jit` | Phase 1-3 implemented | Compile a Python function to Graph IR. |
-| `@tessera.kernel` | Phase 1-3 implemented | Mark a tile-level function for `index_launch`. |
+| `@tessera.jit` | Implemented | Compile a Python function to Graph IR; build Schedule / Tile / Target IR; return a `JitFn`. |
+| `@tessera.kernel` | Implemented | Mark a tile-level function for `index_launch`. |
+| `tessera.from_text(source, name=None, **jit_kwargs)` | Implemented (2026-05-19) | Notebook-safe factory: exec a source string and JIT the named function. Replaces the `exec(...) + ts.jit(..., source=...)` dance for REPL / Jupyter contexts. |
 
 ```python
 @tessera.jit
 def matmul_step(A: tessera.Tensor["M", "K"], B: tessera.Tensor["K", "N"]):
     return tessera.ops.gemm(A, B)
+
+# Notebook-safe construction when @jit can't read source (REPL, heredoc):
+fn = tessera.from_text("""
+    def gelu_then_norm(x):
+        return ts.ops.layer_norm(ts.ops.gelu(x))
+""")
 ```
+
+### `JitFn.explain()` — the inspection front door
+
+Every JIT'd function carries an `.explain()` method that answers four
+questions in one call:
+
+1. **What ran?** (`execution_kind` — `native_cpu` / `reference_cpu` /
+   `native_gpu` / `artifact_only` / `fallback_eager`).
+2. **Was it native / reference / artifact / fallback?** (`is_native`,
+   `is_reference`, `is_artifact_only`, `is_fallback` predicates).
+3. **Why?** (typed `diagnostics` list — each entry carries a stable code
+   from `tessera.compiler.JitDiagnosticCode` / `FallbackReason`).
+4. **What should I do next?** (typed `next_actions` list with stable codes
+   like `INSPECT_IR_LAYERS`, `USE_NATIVE_REQUIRED_TO_DIAGNOSE`,
+   `PROVIDE_SOURCE_FOR_NOTEBOOK`).
+
+```python
+ex = matmul_step.explain()
+print(ex)                       # 5-line opinionated summary
+ex.execution_kind               # "reference_cpu"
+ex.ir.graph                     # Graph IR as MLIR text
+ex.ir.target                    # Target IR
+ex.kernels                      # per-op resolution list
+ex.diagnostics                  # typed Diagnostic list
+ex.next_actions                 # typed NextAction list
+ex.as_dict()                    # JSON-serializable
+```
+
+The legacy inspection methods (`ir_text()`, `schedule_ir`, `tile_ir`,
+`target_ir`, `lowering_artifacts()`, `runtime_artifact()`,
+`compile_report()`, `explain_lowering()`) remain as stable lower-level data
+sources; `.explain()` consumes them under the hood.
+
+### Strict native dispatch with `native_required=True`
+
+Pass `native_required=True` to `@tessera.jit` to refuse the reference
+fallback path.  Any condition that would otherwise silently drop to the
+numpy backend raises `tessera.compiler.TesseraNativeRequiredError` with a
+stable `FallbackReason` code:
+
+```python
+from tessera.compiler import FallbackReason, TesseraNativeRequiredError
+
+@tessera.jit(target="apple_gpu", native_required=True)
+def fast_matmul(a, b):
+    return tessera.ops.matmul(a, b)
+
+try:
+    fast_matmul(a, b)
+except TesseraNativeRequiredError as exc:
+    if exc.reason is FallbackReason.NON_DARWIN_HOST:
+        pytest.skip("Apple GPU only")
+    raise
+```
+
+### Per-op readiness query
+
+`tessera.compiler.support(op_name)` returns the same data the audit table
+in `docs/audit/generated/support_table.md` renders, exposed as Python:
+
+```python
+info = tessera.compiler.support("matmul")
+info.family                                   # "loop_nest"
+info.best_tier                                # Tier.NATIVE_READY
+info.for_target("apple_gpu").tier             # Tier.NATIVE_READY
+info.for_target("cpu").tier                   # Tier.REFERENCE_ONLY
+
+tessera.compiler.tier("matmul")               # best-tier rollup
+tessera.compiler.tier("matmul", target="apple_gpu")  # per-target
+tessera.compiler.is_native_supported("matmul", target="apple_gpu")  # True
+```
+
+Tier values: `NATIVE_READY` / `REFERENCE_ONLY` / `ARTIFACT_ONLY` / `PLANNED`.
 
 ## Region Privileges
 

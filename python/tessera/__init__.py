@@ -118,6 +118,7 @@ autotune.RooflineCostModel = _autotune_module.RooflineCostModel  # type: ignore[
 from . import compiler
 
 from .compiler.jit import jit, require, TesseraJitError
+from .compiler.from_text import from_text
 from .compiler.constraints import (
     ConstraintSolver,
     Divisible,

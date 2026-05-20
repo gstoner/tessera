@@ -174,6 +174,11 @@ Native execution status is layer-specific:
 
 ## Documentation
 
+**Start here:** [`examples/getting_started/compile_and_explain.py`](examples/getting_started/compile_and_explain.py)
+is the canonical compiler tour — `@tessera.jit` → `fn(...)` →
+`fn.explain()` → `tessera.compiler.support(op)` → `tessera.from_text(...)`
+in ~80 lines.  Runs on CPU, no accelerator required.
+
 | Document | What it covers |
 |----------|----------------|
 | [`docs/README.md`](docs/README.md) | Documentation authority tree and status labels |

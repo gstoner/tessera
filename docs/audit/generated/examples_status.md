@@ -27,19 +27,20 @@ CI guards (run as part of ``scripts/validate.sh``):
 
 | Status | Count |
 |--------|------:|
-| ``runnable`` | 11 |
+| ``runnable`` | 12 |
 | ``runnable_optional`` | 1 |
 | ``compile_only`` | 0 |
 | ``scaffold`` | 6 |
 | ``broken`` | 0 |
 | ``archived`` | 0 |
-| **total** | **18** |
+| **total** | **19** |
 
 ## Entries
 
 | Directory | Status | Entry point | Command / Reason |
 |-----------|--------|-------------|------------------|
 | ``examples/getting_started`` | ``runnable`` | ``examples/getting_started/basic_tensor_ops.py`` | ``PYTHONPATH=python python examples/getting_started/basic_tensor_ops.py`` |
+| ``examples/getting_started`` | ``runnable`` | ``examples/getting_started/compile_and_explain.py`` | ``PYTHONPATH=python python examples/getting_started/compile_and_explain.py`` |
 | ``examples/getting_started/tessera_flash_attention_demo`` | ``runnable_optional`` | ``examples/getting_started/tessera_flash_attention_demo/examples/flash_attention_demo.py`` | ``PYTHONPATH=python:examples/getting_started/tessera_flash_attention_demo python examples/getting_started/tessera_flash_attention_demo/examples/flash_attention_demo.py``<br/>extras: ``torch`` |
 | ``examples/compiler/ir_pipeline_tutorial`` | ``runnable`` | ``examples/compiler/ir_pipeline_tutorial/tessera_ir_pipeline_demo.py`` | ``PYTHONPATH=python python examples/compiler/ir_pipeline_tutorial/tessera_ir_pipeline_demo.py`` |
 | ``examples/compiler/dnas`` | ``runnable`` | ``examples/compiler/dnas/dnas_schedule_autotune.py`` | ``PYTHONPATH=python python examples/compiler/dnas/dnas_schedule_autotune.py`` |

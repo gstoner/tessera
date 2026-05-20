@@ -140,7 +140,7 @@ class TestH2MFMATableSync:
     def test_mfma_table_total_count(self):
         body = MFMA_TABLE_PATH.read_text()
         # Per `_MFMA_VARIANTS`: gfx90a=2, gfx940=6, gfx942=6, gfx950=8,
-        # gfx1100=0  →  total = 22
+        # gfx1100=0, gfx1200=0  →  total = 22
         match = re.search(r"Total shapes across all ROCm 7.2.3 arches: (\d+)", body)
         assert match is not None
         assert int(match.group(1)) == 22

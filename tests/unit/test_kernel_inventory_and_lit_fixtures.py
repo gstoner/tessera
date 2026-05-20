@@ -273,7 +273,8 @@ class TestH3RocmInventoryDoc:
     def test_doc_mentions_arch_families(self):
         doc = (REPO / "docs" / "rocm_mfma_kernel_inventory.md").read_text()
         for arch in ("gfx90a", "gfx940", "gfx942", "gfx950", "gfx1100",
-                     "CDNA 2", "CDNA 3", "CDNA 4", "RDNA 3",
+                     "gfx1200", "CDNA 2", "CDNA 3", "CDNA 4", "RDNA 3",
+                     "RDNA 4",
                      "MI300X", "MI325X"):
             assert arch in doc, f"{arch} missing from inventory"
 

@@ -167,6 +167,7 @@ class TestROCmToolchainPin:
         assert ROCmTargetProfile(arch=AMDArch.GFX_942).hipcc_arch == "gfx942"
         assert ROCmTargetProfile(arch=AMDArch.GFX_950).hipcc_arch == "gfx950"
         assert ROCmTargetProfile(arch=AMDArch.GFX_1100).hipcc_arch == "gfx1100"
+        assert ROCmTargetProfile(arch=AMDArch.GFX_1200).hipcc_arch == "gfx1200"
 
 
 class TestROCmFeatureMatrix:
@@ -208,6 +209,18 @@ class TestROCmFeatureMatrix:
         assert p.threads_per_wave == 32   # RDNA wavefront = 32
         assert p.dtype_set == frozenset({"fp32", "bf16", "fp16", "int8"})
 
+    def test_gfx1200_rdna4_wmma_f8(self):
+        from tessera.compiler.rocm_target import ROCmTargetProfile, AMDArch
+        p = ROCmTargetProfile(arch=AMDArch.GFX_1200)
+        assert not p.supports_mfma
+        assert p.supports_wmma
+        assert p.threads_per_wave == 32
+        assert p.dtype_set == frozenset({
+            "fp32", "bf16", "fp16",
+            "fp8_e4m3", "fp8_e5m2",
+            "int8", "int32", "int4",
+        })
+
 
 class TestROCmMFMAShapeTable:
     def test_cdna2_shapes_minimal(self):
@@ -240,11 +253,15 @@ class TestROCmMFMAShapeTable:
         from tessera.compiler.rocm_target import mfma_variants, AMDArch
         assert mfma_variants(AMDArch.GFX_1100) == frozenset()
 
+    def test_rdna4_has_no_mfma_shapes(self):
+        from tessera.compiler.rocm_target import mfma_variants, AMDArch
+        assert mfma_variants(AMDArch.GFX_1200) == frozenset()
+
 
 class TestROCmCapabilityRegistry:
     @pytest.mark.parametrize("name", [
         "rocm", "rocm_gfx90a", "rocm_gfx940",
-        "rocm_gfx942", "rocm_gfx950", "rocm_gfx1100",
+        "rocm_gfx942", "rocm_gfx950", "rocm_gfx1100", "rocm_gfx1200",
     ])
     def test_rocm_723_marker_present(self, name):
         cap = TARGET_CAPABILITIES[name]
@@ -269,6 +286,13 @@ class TestROCmCapabilityRegistry:
         cap = TARGET_CAPABILITIES["rocm_gfx1100"]
         assert "wmma_f16" in cap.features
         assert "mfma" not in cap.features
+
+    def test_gfx1200_has_wmma_f8_dtype_matrix(self):
+        cap = TARGET_CAPABILITIES["rocm_gfx1200"]
+        assert "wmma_f8" in cap.features
+        assert "mfma" not in cap.features
+        for dt in ("fp8_e4m3", "fp8_e5m2", "int32", "int4"):
+            assert dt in cap.supported_dtypes
 
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ last_updated: 2026-05-11
 # ROCm 7.2.3 MFMA Kernel Inventory
 
 > Hardware-free reference enumerating every fused kernel Tessera plans
-> to ship on AMD CDNA 3 / CDNA 4 / RDNA 3 under ROCm 7.2.3 + HIP 7.2.3.
+> to ship on AMD CDNA 3 / CDNA 4 / RDNA 3 / RDNA 4 under ROCm 7.2.3 + HIP 7.2.3.
 > Companion to `docs/nvidia_cuda13_kernel_inventory.md` (parallel
 > coverage tracking) and `docs/apple_gpu_kernel_inventory.md`.
 
@@ -19,7 +19,8 @@ ROCm backend. It captures:
    rocBLAS 5.0, MIOpen 3.5).
 2. The **shipped + planned fused kernel surface** across CDNA 2
    (gfx90a / MI250), CDNA 3 (gfx940 / MI300A, gfx942 / MI300X),
-   CDNA 4 (gfx950 / MI325X), and RDNA 3 (gfx1100 / RX 7900-series).
+   CDNA 4 (gfx950 / MI325X), RDNA 3 (gfx1100 / RX 7900-series),
+   and RDNA 4 / GFX12 (gfx1200).
 3. The **MFMA instruction shape contract** per kernel
    ((M, N, K, K_blocks)), LDS layout, dtype variant, and expected MFU.
 4. The **AMDGCN intrinsic patterns** lit fixtures (H-4) validate against.
@@ -37,7 +38,7 @@ ROCm backend. It captures:
 | RCCL | **2.22** (bundled with ROCm 7.2.3) |
 | rocBLAS | **≥ 5.0.0** |
 | MIOpen | **≥ 3.5.0** |
-| hipcc arch strings | `gfx90a`, `gfx940`, `gfx942`, `gfx950`, `gfx1100` |
+| hipcc arch strings | `gfx90a`, `gfx940`, `gfx942`, `gfx950`, `gfx1100`, `gfx1200` |
 
 Pinned in `python/tessera/compiler/rocm_target.py` as
 `TESSERA_TARGET_ROCM`, `TESSERA_TARGET_HIP`,
@@ -51,23 +52,31 @@ Pinned in `python/tessera/compiler/rocm_target.py` as
 The full matrix lives in `_ROCM_7_2_FEATURES` (`rocm_target.py`).
 Summary:
 
-| Feature | gfx90a | gfx940 | gfx942 | gfx950 | gfx1100 |
-|---|:-:|:-:|:-:|:-:|:-:|
-| `mfma` (baseline) | ✅ | ✅ | ✅ | ✅ | — |
-| `mfma_f8` | — | ✅ | ✅ | ✅ | — |
-| `mfma_xf32` | — | ✅ | ✅ | ✅ | — |
-| `mfma_f4` | — | — | — | ✅ | — |
-| `mfma_f6` | — | — | — | ✅ | — |
-| `wmma_f16` | — | — | — | — | ✅ |
-| `wmma_bf16` | — | — | — | — | ✅ |
-| `lds_async_copy` | — | ✅ | ✅ | ✅ | — |
-| `buffer_load_lds` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `global_load_lds` | — | ✅ | ✅ | ✅ | — |
-| `cluster_mode` | — | — | — | ✅ | — |
-| `xnack` | ✅ | ✅ | ✅ | ✅ | — |
-| `sram_ecc` | ✅ | ✅ | ✅ | ✅ | — |
+| Feature | gfx90a | gfx940 | gfx942 | gfx950 | gfx1100 | gfx1200 |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| `mfma` (baseline) | ✅ | ✅ | ✅ | ✅ | — | — |
+| `mfma_f8` | — | ✅ | ✅ | ✅ | — | — |
+| `mfma_xf32` | — | ✅ | ✅ | ✅ | — | — |
+| `mfma_f4` | — | — | — | ✅ | — | — |
+| `mfma_f6` | — | — | — | ✅ | — | — |
+| `wmma_f16` | — | — | — | — | ✅ | ✅ |
+| `wmma_bf16` | — | — | — | — | ✅ | ✅ |
+| `wmma_f8` | — | — | — | — | 🟡 | ✅ |
+| `wmma_i4` | — | — | — | — | — | ✅ |
+| `scalar_load_u8_u16_i8_i16` | — | — | — | — | — | ✅ |
+| `lds_async_copy` | — | ✅ | ✅ | ✅ | — | — |
+| `buffer_load_lds` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `global_load_lds` | — | ✅ | ✅ | ✅ | — | — |
+| `cluster_mode` | — | — | — | ✅ | — | — |
+| `xnack` | ✅ | ✅ | ✅ | ✅ | — | — |
+| `sram_ecc` | ✅ | ✅ | ✅ | ✅ | — | — |
 
-**Wavefront width:** CDNA = 64 lanes; RDNA = 32 lanes.
+**Wavefront width:** CDNA = 64 lanes; RDNA = 32 lanes.  `gfx1200`
+is tracked as an RDNA4 / GFX12 WMMA-class artifact-planning target,
+not a CDNA MFMA target.  AMD instruction spelling maps as follows:
+`FP8`/`F8` → Tessera `fp8_e4m3`; `BF8` → Tessera `fp8_e5m2`;
+`IU4` → planned-gated Tessera `int4` until a distinct unsigned
+packed-4 storage policy exists.
 
 ---
 
@@ -82,23 +91,31 @@ lower to (`_MFMA_VARIANTS` in `rocm_target.py`):
 | **gfx940 / gfx942** (CDNA 3) | + (32, 32, 16, 1) [FP8], (16, 16, 32, 1) [FP8], (32, 32, 4, 1) [XF32], (16, 16, 8, 1) [XF32] |
 | **gfx950** (CDNA 4) | + (32, 32, 32, 1) [FP4], (16, 16, 64, 1) [FP4] |
 | **gfx1100** (RDNA 3) | ∅ — WMMA only, no MFMA |
+| **gfx1200** (RDNA 4 / GFX12) | ∅ — WMMA/rocWMMA only, no MFMA |
 
 ---
 
 ## 4. Per-arch dtype matrix
 
-| dtype | gfx90a | gfx940 / gfx942 | gfx950 | gfx1100 |
-|---|:-:|:-:|:-:|:-:|
-| `fp64` | ✅ | ✅ | ✅ | — |
-| `fp32` | ✅ | ✅ | ✅ | ✅ |
-| `bf16` | ✅ | ✅ | ✅ | ✅ |
-| `fp16` | ✅ | ✅ | ✅ | ✅ |
-| `fp8_e4m3` | — | ✅ | ✅ | — |
-| `fp8_e5m2` | — | ✅ | ✅ | — |
-| `fp6_e2m3` | — | — | ✅ | — |
-| `fp6_e3m2` | — | — | ✅ | — |
-| `fp4_e2m1` | — | — | ✅ | — |
-| `int8` | ✅ | ✅ | ✅ | ✅ |
+| dtype | gfx90a | gfx940 / gfx942 | gfx950 | gfx1100 | gfx1200 |
+|---|:-:|:-:|:-:|:-:|:-:|
+| `fp64` | ✅ | ✅ | ✅ | — | — |
+| `fp32` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `bf16` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `fp16` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `fp8_e4m3` | — | ✅ | ✅ | — | ✅ |
+| `fp8_e5m2` | — | ✅ | ✅ | — | ✅ |
+| `fp6_e2m3` | — | — | ✅ | — | — |
+| `fp6_e3m2` | — | — | ✅ | — | — |
+| `fp4_e2m1` | — | — | ✅ | — | — |
+| `int8` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `int32` | — | — | — | — | ✅ |
+| `int4` | — | — | — | — | 🟡 |
+
+`gfx1200` also exposes scalar load instructions for unsigned/signed
+8-bit and 16-bit values (`s_load_u8`, `s_load_u16`, `s_load_i8`,
+`s_load_i16`).  Tessera documents those as scalar/storage support, not
+as accelerated matrix dtypes.
 
 ---
 
@@ -251,12 +268,25 @@ llvm.amdgcn.buffer.load.lds                  # buffer → LDS (gfx9x baseline)
 llvm.amdgcn.s.barrier                        # wave-front barrier
 ```
 
-### RDNA 3 WMMA (gfx1100)
+### RDNA 3 / RDNA 4 WMMA (gfx1100 / gfx1200)
 
 ```
 llvm.amdgcn.wmma.f32.16x16x16.f16            # WMMA bf16/fp16
 llvm.amdgcn.wmma.f32.16x16x16.bf16
+llvm.amdgcn.wmma.f32.16x16x16.f8             # GFX12 planning target
+llvm.amdgcn.wmma.f32.16x16x16.bf8            # GFX12 planning target
+llvm.amdgcn.wmma.i32.16x16x32.iu4            # GFX12 IU4 -> int32
+llvm.amdgcn.swmmac.f32.16x16x32.f16          # GFX12 SWMMAC FP16 -> FP32
+llvm.amdgcn.swmmac.f32.16x16x32.bf16         # GFX12 SWMMAC BF16 -> FP32
+llvm.amdgcn.swmmac.i32.16x16x32.iu8          # GFX12 SWMMAC INT8 -> INT32
+llvm.amdgcn.swmmac.i32.16x16x32.iu4          # GFX12 SWMMAC INT4 -> INT32
+llvm.amdgcn.swmmac.i32.16x16x64.iu4          # GFX12 SWMMAC INT4 -> INT32
 ```
+
+GFX12 scalar prefetch / load notes tracked for future scheduler work:
+`s_prefetch_inst`, `s_prefetch_inst_pc_rel`, `s_prefetch_data`,
+`s_prefetch_data_pc_rel`, `s_buffer_prefetch_data`, plus scalar
+`s_load_u16`, `s_load_u8`, `s_load_i16`, and `s_load_i8`.
 
 ### XNACK / SRAM-ECC control (CDNA)
 
@@ -288,7 +318,7 @@ Sprint H-6/H-7/H-8 will promote entries to `compileable` once
 | Component | Path |
 |---|---|
 | Toolchain pin + feature matrix | `python/tessera/compiler/rocm_target.py` |
-| Per-target capability registry | `python/tessera/compiler/capabilities.py` (`rocm`, `rocm_gfx90a`..`rocm_gfx1100`) |
+| Per-target capability registry | `python/tessera/compiler/capabilities.py` (`rocm`, `rocm_gfx90a`..`rocm_gfx1200`) |
 | Per-kernel MFMA shape + MFU tables | `python/tessera/compiler/backend_manifest.py` (`_ROCM_KERNEL_MFMA_SHAPES`, `_ROCM_KERNEL_MFU`) |
 | BackendKernelEntry schema (G-3) | `python/tessera/compiler/backend_manifest.py` |
 | MLIR pass library | `src/compiler/codegen/Tessera_ROCM_Backend/` (MFMA full coverage, ROCm lowering) |

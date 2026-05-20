@@ -129,6 +129,11 @@ _DTYPE_ALIASES: dict[str, str] = {
     "f32": "fp32", "float32": "fp32", "float": "fp32",
     "f16": "fp16", "float16": "fp16", "half": "fp16",
     "bfloat16": "bf16",
+    # AMD / rocWMMA instruction spelling.  Tessera stores the explicit
+    # 8-bit float encodings; AMD docs often abbreviate E4M3 as FP8/F8
+    # and E5M2-style bfloat8 as BF8.
+    "f8": "fp8_e4m3", "fp8": "fp8_e4m3", "float8": "fp8_e4m3",
+    "bf8": "fp8_e5m2", "bfloat8": "fp8_e5m2",
     # Integer family (MLIR-style + numpy-style)
     "i8": "int8",
     "i16": "int16",

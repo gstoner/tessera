@@ -438,6 +438,27 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         supported_dtypes=("bf16", "fp16", "fp32", "int8"),
         features=("wmma_f16", "wmma_bf16", "buffer_load_lds", "rocm_7_2_3"),
     ),
+    "rocm_gfx1200": TargetCapability(
+        name="rocm_gfx1200",
+        aliases=("gfx1200", "gfx12", "rdna4", "rx9000"),
+        family="rocm",
+        runtime_backend="hip",
+        default_runtime_status="artifact_only",
+        supported_ops=_ops(
+            "artifact_only",
+            ("tessera.matmul",),
+            reason=(
+                "ROCm 7.2.3 GFX12/RDNA 4 WMMA artifact planning target; "
+                "HIP execution remains gated"
+            ),
+        ),
+        supported_dtypes=(
+            "bf16", "fp16", "fp32",
+            "fp8_e4m3", "fp8_e5m2",
+            "int8", "int32", "int4",
+        ),
+        features=("wmma_f16", "wmma_bf16", "wmma_f8", "buffer_load_lds", "rocm_7_2_3"),
+    ),
     "metalium": TargetCapability(
         name="metalium",
         aliases=("metalium", "tt_metalium", "tt"),

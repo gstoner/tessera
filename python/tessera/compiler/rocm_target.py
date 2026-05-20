@@ -8,6 +8,7 @@ Per-ISA feature matrix covers:
   - gfx94x (CDNA 3, MI300A / MI300X)
   - gfx950 (CDNA 4, MI325X / future)
   - gfx1100 (RDNA 3, prosumer; kept for completeness)
+  - gfx1200 (RDNA 4 / GFX12 consumer class)
 
 Each ISA exposes a feature dict + a dtype set + MFMA-instruction
 variants.  ``rocm_feature_status(isa, name)`` queries individual flags;
@@ -26,8 +27,10 @@ class AMDArch(IntEnum):
     """AMD GPU architecture identifiers under ROCm 7.2.3.
 
     Values encode ``int(gfx_id)`` so comparisons work for CDNA-family
-    ordering: gfx950 (CDNA 4) > gfx942 (CDNA 3 MI300X) > gfx940 (CDNA 3
-    MI300A) > gfx90a (CDNA 2 MI250).
+    ordering: gfx1200 (RDNA 4) > gfx1100 (RDNA 3) and gfx950
+    (CDNA 4) > gfx942 (CDNA 3 MI300X) > gfx940 (CDNA 3 MI300A) >
+    gfx90a (CDNA 2 MI250).  CDNA/RDNA comparisons are ordering
+    conveniences only; feature gates below remain architecture-specific.
     """
 
     GFX_90A = 90       # MI250 — CDNA 2 (kept for completeness)
@@ -35,6 +38,7 @@ class AMDArch(IntEnum):
     GFX_942 = 942      # MI300X — CDNA 3 discrete
     GFX_950 = 950      # MI325X — CDNA 4
     GFX_1100 = 1100    # RDNA 3 prosumer (RX 7900-series)
+    GFX_1200 = 1200    # RDNA 4 / GFX12 prosumer
 
 
 #: Target ROCm release that Tessera's AMD backend is built against.
@@ -52,6 +56,7 @@ _LDS_BYTES: dict[AMDArch, int] = {
     AMDArch.GFX_942:  65536,
     AMDArch.GFX_950:  163840,   # CDNA 4 doubles LDS
     AMDArch.GFX_1100: 65536,
+    AMDArch.GFX_1200: 65536,
 }
 
 
@@ -62,6 +67,7 @@ _MAX_WAVES: dict[AMDArch, int] = {
     AMDArch.GFX_942:  32,
     AMDArch.GFX_950:  32,
     AMDArch.GFX_1100: 16,
+    AMDArch.GFX_1200: 16,
 }
 
 
@@ -93,6 +99,16 @@ _ROCM_DTYPES: dict[AMDArch, frozenset[str]] = {
     }),
     AMDArch.GFX_1100: frozenset({
         "fp32", "bf16", "fp16", "int8",
+    }),
+    AMDArch.GFX_1200: frozenset({
+        # GFX12 / RDNA 4 rocWMMA-class surface.  Keep this as an
+        # architecture capability matrix, not a native-execution claim:
+        # Tessera's ROCm backend remains artifact_only until HIP execution
+        # validation lands.
+        "fp32", "bf16", "fp16",
+        "fp8_e4m3", "fp8_e5m2",
+        "int8", "int32",
+        "int4",
     }),
 }
 
@@ -187,6 +203,30 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
         "xnack":               "not_supported",
         "sram_ecc":            "not_supported",
     },
+    AMDArch.GFX_1200: {
+        # RDNA 4 / GFX12 — WMMA/rocWMMA-class target.  Public ROCm docs
+        # list GFX12 matrix datatypes/instructions including FP8/BF8 WMMA
+        # variants, FP16/BF16 SWMMAC, and I32 IU8/IU4 accumulators.
+        # Tessera maps FP8/BF8 to fp8_e4m3/fp8_e5m2 and keeps IU4 as
+        # planned-gated int4 until a first-class unsigned packed-4 storage
+        # policy exists.  Tessera models the executable
+        # compiler surface conservatively: WMMA-class features are ready
+        # for artifact planning, MFMA/CDNA features stay unavailable.
+        "mfma":                "not_supported",
+        "mfma_f8":             "not_supported",
+        "mfma_xf32":           "not_supported",
+        "mfma_f4":             "not_supported",
+        "mfma_f6":             "not_supported",
+        "wmma_f16":            "ready",
+        "wmma_bf16":           "ready",
+        "wmma_f8":             "ready",
+        "lds_async_copy":      "not_supported",
+        "buffer_load_lds":     "ready",
+        "global_load_lds":     "not_supported",
+        "cluster_mode":        "not_supported",
+        "xnack":               "not_supported",
+        "sram_ecc":            "not_supported",
+    },
 }
 
 
@@ -229,6 +269,7 @@ _MFMA_VARIANTS: dict[AMDArch, frozenset[tuple[int, int, int, int]]] = {
         (16, 16, 8, 1),
     }),
     AMDArch.GFX_1100: frozenset(),  # RDNA 3 has WMMA, not MFMA
+    AMDArch.GFX_1200: frozenset(),  # RDNA 4 has WMMA, not MFMA
 }
 
 
@@ -239,6 +280,7 @@ _ROCM_ARCH_STRINGS: dict[AMDArch, str] = {
     AMDArch.GFX_942:  "gfx942",
     AMDArch.GFX_950:  "gfx950",
     AMDArch.GFX_1100: "gfx1100",
+    AMDArch.GFX_1200: "gfx1200",
 }
 
 
@@ -251,7 +293,7 @@ class ROCmTargetProfile:
     """Describes the ROCm/AMD target for a ``@jit(target=...)`` function.
 
     Attributes:
-        arch              : AMDArch enum (gfx94x / gfx950 / gfx1100)
+        arch              : AMDArch enum (gfx94x / gfx950 / gfx1100 / gfx1200)
         waves_per_cu      : Wave count per CU (must be in [1, _MAX_WAVES])
         lds_bytes         : Override LDS budget; None = use generation default
         pipeline_stages   : Software pipeline depth (>=1)
@@ -261,7 +303,7 @@ class ROCmTargetProfile:
         .supports_mfma          → CDNA family (gfx90a+, excludes RDNA)
         .supports_mfma_f8       → gfx940+
         .supports_mfma_f4       → gfx950+
-        .supports_wmma          → RDNA 3 (gfx1100)
+        .supports_wmma          → RDNA 3/4 (gfx1100 / gfx1200)
         .lds_capacity_bytes     → generation-specific default
     """
 
@@ -345,7 +387,7 @@ class ROCmTargetProfile:
     @property
     def threads_per_wave(self) -> int:
         # AMD wavefronts are 64 lanes on CDNA, 32 on RDNA.
-        return 32 if self.arch == AMDArch.GFX_1100 else 64
+        return 32 if self.arch in {AMDArch.GFX_1100, AMDArch.GFX_1200} else 64
 
     @property
     def rocm_features(self) -> frozenset[str]:

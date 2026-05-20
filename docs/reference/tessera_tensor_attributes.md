@@ -85,7 +85,7 @@ canonical spelling.
 | FP32 | `fp32` | `f32`; default user-facing floating dtype for accelerator-friendly examples |
 | FP16 | `fp16` | `f16` |
 | BF16 | `bf16` | Preferred reduced-precision training/inference dtype where target support exists |
-| FP8 | `fp8_e4m3`, `fp8_e5m2` | Low-precision storage/quantization families; backend support is target-gated |
+| FP8 | `fp8_e4m3`, `fp8_e5m2` | Low-precision storage/quantization families; backend support is target-gated. AMD GFX12 instruction spellings `FP8` / `F8` normalize to `fp8_e4m3`; `BF8` / `bfloat8` normalize to `fp8_e5m2`. |
 | FP6 | `fp6_e2m3`, `fp6_e3m2` | Low-precision storage/quantization families; backend support is target-gated |
 | FP4 | `fp4_e2m1` | Low-precision storage/quantization family; backend support is target-gated |
 | NVFP4 | `nvfp4` | NVIDIA block-scaled FP4 policy name; do not alias to OCP FP4 or AMD MXFP4 |
@@ -98,7 +98,7 @@ canonical spelling.
 | --- | --- | --- |
 | Unsigned integers | `uint8`, `uint16`, `uint32`, `uint64` | Planned Graph IR mappings; storage legality should be separate from acceleration legality |
 | Complex | `complex64`, `complex128`; possible future `complex32` | Planned; no canonical Graph IR complex dtype family today |
-| Direct packed INT4 | `int4` | Planned/gated; current quantized paths should not imply a first-class packed int4 tensor type |
+| Direct packed INT4 | `int4` | Planned/gated; current quantized paths should not imply a first-class packed int4 tensor type. AMD GFX12 `IU4` WMMA/SWMMAC instructions are tracked against this planned-gated dtype until Tessera grows a separate unsigned packed-4 policy. |
 | AMD MX formats | `mxfp8`, `mxfp6`, `mxfp4` | Planned/gated; needs block-scale metadata and ROCm/CDNA target gates |
 | Tenstorrent BFP/block formats | `bfp8`, `bfp4`, `blockfp8`, `blockfp4` | Planned/gated; do not alias to OCP FP8/FP4, AMD MXFP, or NVIDIA NVFP4 |
 | TF32 | Not a storage dtype | Model as `math_mode="tf32"` on `fp32` tensors or numeric policy, not as `dtype="tf32"` |

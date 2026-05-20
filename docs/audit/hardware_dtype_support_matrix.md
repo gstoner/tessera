@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Hardware Dtype Audit
-last_updated: 2026-05-11
+last_updated: 2026-05-20
 ---
 
 # Hardware Dtype Support Matrix
@@ -57,7 +57,7 @@ compiler support remains governed by `python/tessera/compiler/graph_ir.py`,
 | INT8 | `int8`, `i8` | N | N | N | N | N? | S/E | N | N | N | N | Matrix INT8 is common on datacenter GPUs, Tenstorrent Tensix, and CPU AI paths through AMX/VNNI-style instructions. |
 | UINT8 | `uint8`, `u8` | S | S | S | S | S? | S | S | S | S | S | Byte/token/image storage. Tessera still needs explicit Graph IR unsigned mappings. |
 | UINT16/32/64 | `uint16`, `uint32`, `uint64` | S | S | S | S | S? | S | S | - | S | S | General scalar/storage support on host/device APIs; not a primary tensor-core dtype family. |
-| INT4 | `int4`, `i4` | - | P | P/E | P/E | P/E? | P/E | P | P | E | E | Hardware may support packed low-bit quantization through libraries or historical instruction forms, but Tessera has no first-class direct int4 IR/storage policy today. |
+| INT4 | `int4`, `i4` | P | P | P/E | P/E | P/E? | P/E | P | P | E | E | AMD GFX12 exposes IU4 WMMA/SWMMAC variants that accumulate to INT32; Tessera tracks this as planned-gated `int4` until a separate unsigned packed-4 storage policy exists. |
 | MX formats | proposed `mxfp8`, `mxfp6`, `mxfp4` | - | N/P | - | - | - | - | - | - | - | - | MI355X is the primary target in this list with documented MXFP8/MXFP6/MXFP4 throughput. These need explicit Tessera canonical names and block-scale metadata. |
 | Tenstorrent BFP | proposed `bfp8_b`, `bfp4_b`, `blockfp*` | - | - | - | - | - | - | N/P | N/P | - | - | Tenstorrent BLOCKFP/BFP formats are block-floating formats with shared exponent policy and should not be folded into OCP FP8, AMD MXFP, or NVIDIA NVFP4. |
 | BOOL | `bool` | S | S | S | S | S? | S | S | S | S | S | Predicate/mask storage; backend lowering should treat it separately from numeric tensor compute. |
@@ -72,6 +72,18 @@ compiler support remains governed by `python/tessera/compiler/graph_ir.py`,
 | AMD MX formats | Add canonical names `mxfp8`, `mxfp6`, and `mxfp4` with block-scale metadata and ROCm/CDNA4 target gates. |
 | Tenstorrent BFP formats | Add separate `bfp*`/`blockfp*` policy names if Metalium lowering needs native Tensix formats. Do not alias them to OCP FP8/FP4. |
 | Apple CPU/GPU | Keep Apple M1 Max focused on `fp32`/`fp16`/integer storage plus reference or framework BF16 where available; do not claim FP8/FP4 native support. |
+
+## Tessera Compiler Mapping
+
+The active compiler registry now exposes the AMD GFX12 row as
+`rocm_gfx1200` in `python/tessera/compiler/capabilities.py` and
+`AMDArch.GFX_1200` in `python/tessera/compiler/rocm_target.py`.
+It is an `artifact_only` RDNA4 / WMMA-class planning target, not a
+native execution claim.  Its current target-level dtype matrix is:
+
+| Target | Compiler dtype matrix | Notes |
+|---|---|---|
+| `rocm_gfx1200` | `fp32`, `bf16`, `fp16`, `fp8_e4m3`, `fp8_e5m2`, `int8`, `int32`, `int4` | ROCm GFX12 / RDNA4 WMMA-class artifact target.  AMD `FP8` / `BF8` instruction names map to Tessera `fp8_e4m3` / `fp8_e5m2`; `IU4` maps to planned-gated `int4`.  `bool` remains canonical storage / predicate vocabulary, but is not advertised as an accelerated matrix dtype. |
 
 ## Evidence Sources
 

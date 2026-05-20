@@ -153,7 +153,12 @@ def test_spec_and_hardware_audit_include_supported_or_planned_dtype_names():
 
 
 def test_target_capability_dtypes_use_canonical_names_or_documented_aliases():
-    allowed = CANONICAL_DTYPES | set(ALIASES)
+    from tessera.dtype import planned_gated_dtypes
+
+    # Target capability rows may include planned-gated architecture dtypes
+    # such as GFX12 IU4 / Tessera ``int4``.  Those are architecture
+    # capability facts, not first-class Graph IR storage claims.
+    allowed = CANONICAL_DTYPES | set(ALIASES) | planned_gated_dtypes()
 
     for target in TARGET_CAPABILITIES.values():
         assert set(target.supported_dtypes) <= allowed

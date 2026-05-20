@@ -27,8 +27,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Iterable, Mapping, Optional
 
 from .diagnostics import (
+    ConstrainedDiagnosticCode,
     Diagnostic,
     FallbackReason,
+    FrontendDiagnosticCode,
     JitDiagnosticCode,
 )
 
@@ -44,6 +46,121 @@ NEXT_NATIVE_REQUIRED = "USE_NATIVE_REQUIRED_TO_DIAGNOSE"
 NEXT_INSPECT_IR = "INSPECT_IR_LAYERS"
 NEXT_CHECK_SUPPORT = "CHECK_TS_COMPILER_SUPPORT"
 NEXT_NO_ACTION = "NO_ACTION_REQUIRED"
+
+# Lane-specific actionable hints — U3 (2026-05-19).  Each maps a
+# diagnostic code to the canonical "what should I do?" answer.
+NEXT_REWRITE_TO_GA_OPS = "REWRITE_USING_GA_OPS"
+NEXT_REWRITE_HOLOMORPHIC = "REWRITE_USING_HOLOMORPHIC_OPS"
+NEXT_USE_ENERGY_WHITELIST = "USE_ENERGY_WHITELIST_OPS"
+NEXT_SWITCH_LANE_TO_TESSERA_JIT = "SWITCH_LANE_TO_TESSERA_JIT"
+NEXT_USE_FP32_FOR_ENERGY = "USE_FP32_FOR_ENERGY_JIT"
+NEXT_USE_APPLE_GPU_TARGET = "USE_APPLE_GPU_TARGET_FOR_CLIFFORD"
+NEXT_FIX_TEXTUAL_SYNTAX = "FIX_TEXTUAL_SYNTAX"
+
+# Diagnostic-code → NextAction message lookup.  Stable codes flow
+# in; humanized prescriptions flow out.  Keep this table flat — it
+# should be readable as "if you see X, do Y" without traversal.
+#
+# The keys are the ``.value`` of the lane-specific enum members so
+# this table doesn't have to import every enum (avoids circular
+# imports during type-checking).
+_DIAGNOSTIC_CODE_NEXT_ACTIONS: dict[str, tuple[str, str]] = {
+    # ── Constrained math lanes ───────────────────────────────────────
+    ConstrainedDiagnosticCode.CLIFFORD_OP_NOT_WHITELISTED.value: (
+        NEXT_REWRITE_TO_GA_OPS,
+        "Rewrite using tessera.ga ops "
+        "(geometric_product / wedge / inner / rotor_sandwich), "
+        "or switch to @tessera.jit for general tensor work.",
+    ),
+    ConstrainedDiagnosticCode.CLIFFORD_EMPTY_OP_PLAN.value: (
+        NEXT_REWRITE_TO_GA_OPS,
+        "Function body did not call any tessera.ga.* op. "
+        "Add at least one fused-on-target call, or switch to "
+        "@tessera.jit if GA isn't actually needed.",
+    ),
+    ConstrainedDiagnosticCode.CLIFFORD_TARGET_MISMATCH.value: (
+        NEXT_USE_APPLE_GPU_TARGET,
+        "@clifford_jit currently only fuses on apple_gpu. "
+        "Either use target='apple_gpu' (default) or switch to "
+        "@tessera.jit for cross-target support.",
+    ),
+    ConstrainedDiagnosticCode.CLIFFORD_UNSUPPORTED_TARGET.value: (
+        NEXT_USE_APPLE_GPU_TARGET,
+        "@clifford_jit only supports target='apple_gpu' in v1. "
+        "Use @tessera.jit for cross-target compilation.",
+    ),
+    ConstrainedDiagnosticCode.COMPLEX_NON_HOLOMORPHIC.value: (
+        NEXT_REWRITE_HOLOMORPHIC,
+        "Function contains a non-holomorphic op "
+        "(complex_conjugate / complex_abs / complex_arg / dbar). "
+        "Use the holomorphic subset (complex_mul / complex_exp / "
+        "complex_log / mobius / stereographic), or switch to "
+        "@tessera.jit if anti-holomorphic ops are intentional.",
+    ),
+    ConstrainedDiagnosticCode.COMPLEX_CR_RESIDUAL_TOO_LARGE.value: (
+        NEXT_REWRITE_HOLOMORPHIC,
+        "Cauchy-Riemann residual exceeded tolerance. "
+        "Check that every branch of the function is holomorphic, "
+        "or relax the @analytic atol parameter if the residual is "
+        "numerically explainable.",
+    ),
+    ConstrainedDiagnosticCode.ENERGY_FORBIDDEN_OP.value: (
+        NEXT_USE_ENERGY_WHITELIST,
+        "Function uses an op outside the @energy_jit v1 whitelist. "
+        "Use only quadratic / softmax_energy / partition / "
+        "log_partition ops, or switch to @tessera.jit for the "
+        "general surface.",
+    ),
+    ConstrainedDiagnosticCode.ENERGY_UNSUPPORTED_DTYPE.value: (
+        NEXT_USE_FP32_FOR_ENERGY,
+        "@energy_jit v1 only ships fp32. Use dtype='f32' on the "
+        "decorator, or wait for v2 which will add fp16/bf16.",
+    ),
+    # ── Textual DSL ───────────────────────────────────────────────────
+    FrontendDiagnosticCode.PARSE_UNEXPECTED_TOKEN.value: (
+        NEXT_FIX_TEXTUAL_SYNTAX,
+        "Textual DSL parser saw an unexpected token. "
+        "Check the BNF in docs/spec/LANGUAGE_AND_IR_SPEC.md for "
+        "the expected grammar at this position.",
+    ),
+    FrontendDiagnosticCode.PARSE_UNEXPECTED_EOF.value: (
+        NEXT_FIX_TEXTUAL_SYNTAX,
+        "Textual DSL parser hit EOF mid-statement. "
+        "Likely a missing closing brace, paren, or semicolon.",
+    ),
+    FrontendDiagnosticCode.SEMANTIC_UNKNOWN_OP.value: (
+        NEXT_CHECK_SUPPORT,
+        "Op name not found in the canonical catalog. "
+        "Check tessera.compiler.support(op) for the per-op "
+        "readiness picture, and confirm the op name matches the "
+        "support_table.md vocabulary.",
+    ),
+    # ── JIT lane ──────────────────────────────────────────────────────
+    JitDiagnosticCode.SOURCE_UNAVAILABLE.value: (
+        NEXT_PROVIDE_SOURCE,
+        "AST inspection failed — likely a REPL / notebook / heredoc. "
+        "Use tessera.from_text(source) for notebook-safe "
+        "construction, or pass source=... to @tessera.jit.",
+    ),
+}
+
+
+def next_action_for_diagnostic(
+    diagnostic: Diagnostic,
+) -> Optional["NextAction"]:
+    """Look up the canonical NextAction for ``diagnostic.code_value``.
+
+    Returns ``None`` when the code has no registered next-action
+    (e.g., info-level codes like ``JIT_COMPILED_CPU`` that don't
+    need a fix).  Lane-specific entries (Clifford / Complex /
+    Energy / textual DSL) are populated in
+    :data:`_DIAGNOSTIC_CODE_NEXT_ACTIONS`.
+    """
+
+    pair = _DIAGNOSTIC_CODE_NEXT_ACTIONS.get(diagnostic.code_value)
+    if pair is None:
+        return None
+    return NextAction(code=pair[0], message=pair[1])
 
 
 @dataclass(frozen=True)
@@ -306,51 +423,78 @@ def _build_next_actions(
     fn: "JitFn",
     diagnostics: Iterable[Diagnostic],
 ) -> tuple[NextAction, ...]:
-    """Derive actionable hints from execution kind + diagnostics."""
+    """Derive actionable hints from execution kind + diagnostics.
+
+    U3 (2026-05-19) — every diagnostic with a registered next-action
+    in :data:`_DIAGNOSTIC_CODE_NEXT_ACTIONS` contributes a targeted
+    hint.  Lane-specific codes (Clifford whitelist rejection,
+    Complex non-holomorphic, Energy forbidden op, textual DSL parse
+    errors) produce *actionable* prescriptions instead of the
+    generic ``INSPECT_IR_LAYERS`` fallback.
+
+    Hints are deduplicated by code so the same advice doesn't fire
+    multiple times when a function emits several diagnostics with
+    the same root cause.
+    """
 
     actions: list[NextAction] = []
+    seen_codes: set[str] = set()
     diags = list(diagnostics)
-    # Source unavailable → say so explicitly.
-    for d in diags:
-        if d.code is JitDiagnosticCode.SOURCE_UNAVAILABLE or (
-            isinstance(d.code, str) and d.code == "JIT_SOURCE_UNAVAILABLE"
-        ):
-            actions.append(NextAction(
-                NEXT_PROVIDE_SOURCE,
-                "Pass `source=...` to @jit, or use `tessera.from_text(...)` "
-                "for notebook-safe construction.",
-            ))
-            break
 
-    # Fallback reasons → install / opt-out hints.
+    # Pass 1 — pull targeted hints out of the lane-aware lookup
+    # table.  Every diagnostic that has a registered next-action
+    # contributes one; duplicates by code are skipped.
+    for d in diags:
+        hint = next_action_for_diagnostic(d)
+        if hint is None:
+            continue
+        if hint.code in seen_codes:
+            continue
+        seen_codes.add(hint.code)
+        actions.append(hint)
+
+    # Fallback reasons → install / opt-out hints.  These are
+    # NOT in the lookup table because they depend on the
+    # ``last_fallback_reason`` attribute of the JitFn, not on a
+    # standalone diagnostic.
     if fn.last_fallback_reason is FallbackReason.NON_DARWIN_HOST:
-        actions.append(NextAction(
-            NEXT_INSTALL_APPLE_GPU,
-            "Apple GPU runtime requires macOS.  Set target='cpu' or run "
-            "on a Darwin host.",
-        ))
+        if NEXT_INSTALL_APPLE_GPU not in seen_codes:
+            actions.append(NextAction(
+                NEXT_INSTALL_APPLE_GPU,
+                "Apple GPU runtime requires macOS.  Set target='cpu' or run "
+                "on a Darwin host.",
+            ))
+            seen_codes.add(NEXT_INSTALL_APPLE_GPU)
     elif fn.last_fallback_reason is FallbackReason.APPLE_GPU_RUNTIME_UNAVAILABLE:
-        actions.append(NextAction(
-            NEXT_INSTALL_APPLE_GPU,
-            "Apple GPU runtime failed to initialize.  Check `metal-cli` "
-            "and re-run; otherwise stay on the reference path.",
-        ))
+        if NEXT_INSTALL_APPLE_GPU not in seen_codes:
+            actions.append(NextAction(
+                NEXT_INSTALL_APPLE_GPU,
+                "Apple GPU runtime failed to initialize.  Check `metal-cli` "
+                "and re-run; otherwise stay on the reference path.",
+            ))
+            seen_codes.add(NEXT_INSTALL_APPLE_GPU)
 
     # If artifact_only, surface IR inspection as the next move.
-    if fn.execution_kind == "artifact_only":
+    if fn.execution_kind == "artifact_only" and NEXT_INSPECT_IR not in seen_codes:
         actions.append(NextAction(
             NEXT_INSPECT_IR,
             "Target IR was emitted but no native dispatch is wired. "
             "Inspect `.ir.target` or check `ts.compiler.support(op).targets`.",
         ))
+        seen_codes.add(NEXT_INSPECT_IR)
 
     # If reference + user might have wanted native, suggest native_required
-    if fn.execution_kind == "reference_cpu" and fn.target not in (None, "cpu", "auto"):
+    if (
+        fn.execution_kind == "reference_cpu"
+        and fn.target not in (None, "cpu", "auto")
+        and NEXT_NATIVE_REQUIRED not in seen_codes
+    ):
         actions.append(NextAction(
             NEXT_NATIVE_REQUIRED,
             "Compiled to reference CPU even though target was set. "
             "Pass `native_required=True` to surface the exact fallback reason.",
         ))
+        seen_codes.add(NEXT_NATIVE_REQUIRED)
 
     # If clean native, hint at the support API for next-step exploration.
     if not actions and fn.execution_kind in ("native_cpu", "native_gpu"):
@@ -415,10 +559,18 @@ __all__ = [
     "Kernel",
     "NextAction",
     "NEXT_CHECK_SUPPORT",
+    "NEXT_FIX_TEXTUAL_SYNTAX",
     "NEXT_INSPECT_IR",
     "NEXT_INSTALL_APPLE_GPU",
     "NEXT_NATIVE_REQUIRED",
     "NEXT_NO_ACTION",
     "NEXT_PROVIDE_SOURCE",
+    "NEXT_REWRITE_HOLOMORPHIC",
+    "NEXT_REWRITE_TO_GA_OPS",
+    "NEXT_SWITCH_LANE_TO_TESSERA_JIT",
+    "NEXT_USE_APPLE_GPU_TARGET",
+    "NEXT_USE_ENERGY_WHITELIST",
+    "NEXT_USE_FP32_FOR_ENERGY",
     "build_explain",
+    "next_action_for_diagnostic",
 ]

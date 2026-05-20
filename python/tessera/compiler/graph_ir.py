@@ -369,7 +369,26 @@ class IRArg:
 
 @dataclass
 class IROp:
-    """A single emitted op in the Graph IR function body."""
+    """A single emitted op in the Graph IR function body.
+
+    Optional metadata fields (G3, 2026-05-19) — populated by the
+    ``propagate_numeric_policy`` pass and consumed by lowering /
+    audit / ``.explain()``.  Default ``None`` keeps existing
+    producers backward-compatible: an op with no policy attached is
+    treated as having an implicit policy matching its
+    ``result_type`` storage.
+
+    Attributes
+    ----------
+    result, op_name, operands, operand_types, result_type, attrs,
+    kwargs, source_span, inferred_type:
+        Core op fields.
+    numeric_policy:
+        Optional :class:`tessera.compiler.primitive_coverage.NumericPolicy`
+        record.  When populated, downstream passes can read storage /
+        accumulator / scale / math_mode without re-deriving from op
+        name.  See :func:`tessera.compiler.numeric_policy_pass.propagate_numeric_policy`.
+    """
     result: Optional[str]     # None for void ops (e.g. copy/store)
     op_name: str              # e.g. "tessera.matmul"
     operands: List[str]       # e.g. ["%X", "%W"]
@@ -379,6 +398,7 @@ class IROp:
     kwargs: Dict[str, Any] = field(default_factory=dict)
     source_span: Optional["SourceSpan"] = None
     inferred_type: Optional[IRType] = None
+    numeric_policy: Optional[Any] = None  # NumericPolicy when populated
 
     def to_mlir(self, indent: str = "  ") -> str:
         ops_str = ", ".join(self.operands)

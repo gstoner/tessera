@@ -1055,7 +1055,6 @@ def jit(
 
         # ── Step 6: emit Graph IR ────────────────────────────────────────────
         try:
-            builder = GraphIRBuilder()
             effect_tag = inferred_effect.name if deterministic or inferred_effect != Effect.pure else None
             # Attach GPU target attrs to the module when target is provided.
             if isinstance(target, GPUTargetProfile):
@@ -1064,15 +1063,42 @@ def jit(
                 target_attr = f'{{name = "{target_kind}"}}'
             else:
                 target_attr = None
-            builder.lower(fn, effect_tag=effect_tag, target_attr=target_attr, source_text=source_text)
-            module = builder.module()
-            diagnostics = []
-            for frontend_diag in builder.diagnostics:
-                diagnostics.append(JitDiagnostic(
-                    frontend_diag.severity,
-                    frontend_diag.code,
-                    frontend_diag.format(),
-                ))
+            # G4 memoization (2026-05-19) — process-local cache keyed on
+            # source_text + effect_tag + target_attr.  Hits skip
+            # AST → Graph IR rebuild entirely; misses fall through to
+            # the normal builder path and stash the result.  See
+            # tessera.compiler.graph_ir_cache for the cache shape.
+            from . import graph_ir_cache as _gic
+            module = _gic.lookup(
+                source_text,
+                effect_tag=effect_tag,
+                target_attr=target_attr,
+            )
+            diagnostics: list[JitDiagnostic] = []
+            if module is not None:
+                # Cache hit — diagnostics were rebuilt above for source
+                # availability but we still need the SOURCE_PROVIDED
+                # signal when applicable.  Skip eager-fallback paths.
+                pass
+            else:
+                builder = GraphIRBuilder()
+                builder.lower(
+                    fn, effect_tag=effect_tag,
+                    target_attr=target_attr, source_text=source_text,
+                )
+                module = builder.module()
+                for frontend_diag in builder.diagnostics:
+                    diagnostics.append(JitDiagnostic(
+                        frontend_diag.severity,
+                        frontend_diag.code,
+                        frontend_diag.format(),
+                    ))
+                # Stash the fresh module — the next decoration with
+                # the same source/target will hit instead.
+                _gic.store(
+                    source_text, module,
+                    effect_tag=effect_tag, target_attr=target_attr,
+                )
             if source_text is None:
                 diagnostics.append(JitDiagnostic(
                     "warning",

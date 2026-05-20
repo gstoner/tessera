@@ -84,6 +84,10 @@ def from_text(
     *,
     name: Optional[str] = None,
     namespace: Optional[dict[str, Any]] = None,
+    target: Any = None,
+    deterministic: bool = False,
+    seed: Optional[int] = None,
+    native_required: bool = False,
     **jit_kwargs: Any,
 ) -> Callable[..., Any]:
     """Compile a JIT function from a source string.
@@ -101,16 +105,48 @@ def from_text(
     namespace:
         Optional extra names to expose during ``exec`` (in addition
         to the default ``ts``/``tessera``/``np`` aliases).
+    target:
+        Forwarded to ``@tessera.jit(target=...)`` — accepts a
+        :class:`GPUTargetProfile` instance or one of the documented
+        string aliases (``"rocm"`` / ``"metalium"`` / ``"apple_cpu"``
+        / ``"apple_gpu"``).  Documented as a first-class kwarg in U5
+        (2026-05-19) so notebook flows don't have to drill through
+        ``**jit_kwargs``.
+    deterministic:
+        Forwarded to ``@tessera.jit(deterministic=...)``.  Refuses
+        functions with non-seeded random effects when ``True``.
+    seed:
+        Forwarded to ``@tessera.jit(seed=...)`` — required when
+        ``deterministic=True`` and the function uses random ops.
+    native_required:
+        Forwarded to ``@tessera.jit(native_required=...)``.  Raises
+        :class:`~tessera.compiler.TesseraNativeRequiredError` on
+        any fallback condition instead of silently dropping to the
+        reference path.
     **jit_kwargs:
-        Forwarded to :func:`tessera.compiler.jit.jit`.  ``source=``
-        is populated automatically from the dedented input — don't
-        pass it manually.
+        Forwarded to :func:`tessera.compiler.jit.jit` for any
+        remaining options.  ``source=`` is populated automatically
+        from the dedented input — don't pass it manually.
 
     Returns
     -------
     JitFn
         A standard ``@tessera.jit``-decorated function suitable for
         immediate invocation or ``.explain()`` inspection.
+
+    Examples
+    --------
+
+    Notebook-style construction with a target + native_required::
+
+        f = tessera.from_text(
+            \"\"\"
+                def f(x, y):
+                    return ts.ops.matmul(x, y)
+            \"\"\",
+            target="apple_gpu",
+            native_required=True,
+        )
     """
 
     if "source" in jit_kwargs:
@@ -158,7 +194,15 @@ def from_text(
 
     # Route through @tessera.jit with source= populated so AST
     # inspection succeeds.  The decorator emits an info-level
-    # ``JIT_SOURCE_PROVIDED`` diagnostic.
+    # ``JIT_SOURCE_PROVIDED`` diagnostic.  Documented kwargs
+    # (target / deterministic / seed / native_required) override
+    # any matching values that slipped through **jit_kwargs.
+    if target is not None:
+        jit_kwargs["target"] = target
+    if seed is not None:
+        jit_kwargs["seed"] = seed
+    jit_kwargs["deterministic"] = deterministic
+    jit_kwargs["native_required"] = native_required
     return _jit(fn, source=dedented, **jit_kwargs)
 
 

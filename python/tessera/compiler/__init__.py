@@ -73,6 +73,16 @@ from .diagnostics import (
     classify_host,
 )
 from .symbol_table import SymbolEntry, SymbolTable
+from .numeric_policy_pass import (
+    propagate_numeric_policy,
+    propagate_numeric_policy_module,
+    validate_numeric_policy_chain,
+)
+from .graph_ir_cache import (
+    cache_stats as graph_ir_cache_stats,
+    clear_graph_ir_cache,
+)
+from .dry_run import dry_run
 from . import frontend_lanes as lanes  # noqa: F401 — re-export as ts.compiler.lanes
 from .frontend_lanes import FrontendLane, FrontendLaneSpec
 
@@ -168,4 +178,13 @@ __all__ = [
     "FrontendLane",
     "FrontendLaneSpec",
     "lanes",
+    # G3 (2026-05-19) — numeric_policy propagation through Graph IR.
+    "propagate_numeric_policy",
+    "propagate_numeric_policy_module",
+    "validate_numeric_policy_chain",
+    # G4 (2026-05-19) — Graph IR memoization by source hash.
+    "clear_graph_ir_cache",
+    "graph_ir_cache_stats",
+    # U4 (2026-05-19) — dry-run compile for static analysis.
+    "dry_run",
 ]

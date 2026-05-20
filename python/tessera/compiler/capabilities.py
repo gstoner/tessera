@@ -485,6 +485,17 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="apple",
         runtime_backend="metal",
         default_runtime_status="artifact_only",
+        # C-fix (Apple plan, 2026-05-20): expand the target-level
+        # dtype tuple so it matches what per-op manifest entries
+        # actually advertise.  Previously this said only
+        # ("fp32", "f32"), but shipped MSL kernels for matmul /
+        # softmax / gelu / rope / flash_attn carry fp16 + bf16 ports
+        # (mixed precision: half I/O + fp32 accumulators).  Honest
+        # tuple = union of dtypes any apple_gpu kernel supports.
+        # Per-op truth still lives in ``backend_manifest._APPLE_GPU_KERNELS``
+        # / ``_CLIFFORD_APPLE_GPU_FUSED`` / ``_EBM_APPLE_GPU_FUSED``
+        # / ``_COMPLEX_APPLE_GPU_FUSED`` and remains the source of
+        # truth for "does this specific op support this dtype today".
         supported_ops={
             **_ops("ready", _APPLE_GPU_READY, reason="Apple GPU runtime shim supports this single-op smoke path"),
             **_ops("artifact_only", ("tessera.moe", "tessera.add", "tessera.mul"), reason="Apple GPU target contract exists but native execution is not wired for this op"),
@@ -493,7 +504,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             # benchmarked end-to-end by ``benchmarks/apple_gpu/benchmark_ga_ebm.py``.
             **_apple_gpu_fused_caps(),
         },
-        supported_dtypes=("fp32", "f32"),
+        supported_dtypes=("fp32", "f32", "fp16", "bf16"),
         features=("metal", "mps", "msl"),
     ),
 }

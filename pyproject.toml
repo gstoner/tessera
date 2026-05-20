@@ -75,6 +75,7 @@ tessera-examples-audit = "tessera.cli.examples_audit:main"
 tessera-surface-audit = "tessera.cli.surface_audit:main"
 tessera-claim-lint = "tessera.cli.claim_lint:main"
 tessera-e2e-coverage = "tessera.cli.e2e_coverage:main"
+tessera-apple-target-map = "tessera.cli.apple_target_map:main"
 
 [tool.setuptools]
 package-dir = {"" = "python"}

@@ -79,6 +79,12 @@ echo "==> Python unit tests"
 echo "==> Generated support-table drift check"
 "$PYTHON" -m tessera.compiler.audit support_table --check
 
+# Apple plan phase A (2026-05-20): per-op apple_cpu vs apple_gpu map.
+# Drifts if capabilities.py / backend_manifest.py / driver.py change
+# without regenerating ``docs/audit/generated/apple_target_map.md``.
+echo "==> Apple target map drift check"
+"$PYTHON" -m tessera.cli.apple_target_map --check
+
 # M0 follow-up: claim_lint — public docs may not assert native /
 # fused / hardware-runtime claims that the manifest can't ground.
 echo "==> Public-doc claim_lint"

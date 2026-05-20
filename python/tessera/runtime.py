@@ -3114,6 +3114,13 @@ def _apple_gpu_dispatch_matmul_softmax_matmul(operands: list[Any], np: Any) -> A
             c = np.ascontiguousarray(c, dtype=np.float32)
         out = np.zeros((M, P), dtype=np.float32)
         fused = _apple_gpu_matmul_softmax_matmul_f32()
+        # Phase D (Apple plan, 2026-05-20): record the unified proof
+        # route the same way GA/EBM/M7 manifest dispatch does, so
+        # ``CompileReport.proof_routes`` carries a row for the
+        # generic-tensor lane too.
+        import time as _time
+        from tessera.compiler import jit_bridge as _bridge
+        _t0 = _time.perf_counter_ns()
         fused(
             a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
             b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
@@ -3121,6 +3128,15 @@ def _apple_gpu_dispatch_matmul_softmax_matmul(operands: list[Any], np: Any) -> A
             out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
             ctypes.c_int32(M), ctypes.c_int32(K),
             ctypes.c_int32(N), ctypes.c_int32(P),
+        )
+        _latency_ms = (_time.perf_counter_ns() - _t0) / 1e6
+        _bridge.record_driver_route(
+            op_name="matmul_softmax_matmul",
+            target="apple_gpu",
+            status="fused",
+            symbol="tessera_apple_gpu_matmul_softmax_matmul_f32",
+            latency_ms=_latency_ms,
+            args_summary=_bridge.shaped_summary(a, b, c),
         )
         return out
 

@@ -46,13 +46,13 @@ def _expected_fallback_for_program(program_id: str) -> FallbackReason | None:
     is_darwin = sys.platform == "darwin"
     # Reference-forced even on Darwin — drivers that build a
     # CompileReport but execute pure numpy (no Metal dispatch).
-    # 2026-05-18 P1 fix: matmul_softmax_matmul and
-    # kv_cache_append_prune_read are added here because the driver
-    # bodies don't actually dispatch any fused kernel today; the
-    # honest report is REFERENCE_FORCED until they do.
+    # Phase E (Apple plan, 2026-05-20) removed ``matmul_softmax_matmul``
+    # from this list: the canonical now actually dispatches the
+    # fused MSL kernel via the apple_gpu runtime shim within the
+    # documented shape envelope (N + P ≤ 256).  ``conv2d_norm_activation``
+    # and ``kv_cache_append_prune_read`` remain numpy-only.
     reference_forced_on_darwin = {
         "conv2d_norm_activation",
-        "matmul_softmax_matmul",
         "kv_cache_append_prune_read",
     }
     if program_id in reference_forced_on_darwin:

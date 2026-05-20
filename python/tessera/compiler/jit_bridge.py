@@ -52,6 +52,7 @@ __all__ = [
     "JitBridgeRoute",
     "JitBridgeMiss",
     "dispatch_via_manifest",
+    "record_driver_route",
     "lookup_apple_gpu_symbol",
     "take_dispatch_trace",
     "current_dispatch_trace",
@@ -275,6 +276,51 @@ def dispatch_via_manifest(
             args_summary=tuple(args_summary),
         ))
     return True
+
+
+# ---------------------------------------------------------------------------
+# Phase D (Apple plan, 2026-05-20) — unified proof envelope for the
+# generic-tensor lane.  The GA/EBM/M7 path always goes through
+# ``dispatch_via_manifest`` above, which appends a ``JitBridgeRoute``
+# trace row on success.  The generic-tensor lane in
+# ``runtime.py::_apple_gpu_dispatch_*`` loads symbols directly and
+# previously emitted no trace row, so canonical reports came back
+# with ``proof_routes=()``.  This helper closes the gap: the
+# generic-tensor dispatch helpers call it after a successful native
+# kernel invocation, and the resulting ``JitBridgeRoute`` carries
+# the same five-field envelope (op_name, target, status, symbol,
+# latency_ms + args_summary) as the manifest-dispatch path.
+# ---------------------------------------------------------------------------
+
+
+def record_driver_route(
+    op_name: str,
+    *,
+    target: str,
+    status: str,
+    symbol: str,
+    latency_ms: float,
+    args_summary: tuple[str, ...] = (),
+) -> None:
+    """Append a ``JitBridgeRoute`` trace row from the generic-tensor
+    driver path.  No-op if tracing isn't enabled.
+
+    The ``context`` field is forced to ``"driver"`` so consumers can
+    distinguish bridge-dispatch (``"direct"`` / ``"jit:<target>"`` /
+    ``"test"``) from driver-dispatch (``"driver"``) when reading
+    proof_routes back."""
+
+    if not _STATE.tracing_enabled:
+        return
+    _STATE.trace.append(JitBridgeRoute(
+        op_name=op_name,
+        target=target,
+        status=status,
+        symbol=symbol,
+        context="driver",
+        latency_ms=latency_ms,
+        args_summary=tuple(args_summary),
+    ))
 
 
 # ---------------------------------------------------------------------------

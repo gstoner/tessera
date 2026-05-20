@@ -280,18 +280,37 @@ def test_rotor_sandwich_norm_native_required_runs_on_darwin() -> None:
     sys.platform != "darwin",
     reason="Apple GPU runtime only on Darwin",
 )
-def test_matmul_softmax_matmul_native_required_raises_on_darwin() -> None:
-    """P1 reviewer correction (2026-05-18): the
-    ``matmul_softmax_matmul`` driver doesn't actually dispatch
-    the fused kernel today — it executes the numpy reference.
-    With ``native_required=True``, the M3 contract therefore
-    forces an honest :class:`TesseraNativeRequiredError` rather
-    than silently legitimizing the reference path."""
+def test_matmul_softmax_matmul_native_required_succeeds_on_darwin() -> None:
+    """Phase E (Apple plan, 2026-05-20): the canonical now dispatches
+    the fused MSL kernel on Darwin.  With ``native_required=True``
+    and a shape inside the documented envelope (N + P ≤ 256), the
+    run completes successfully — no ``TesseraNativeRequiredError``
+    raised — and the report carries ``fallback_reason = None``.
+    """
+    report = matmul_softmax_matmul.run(native_required=True)
+    assert report.fallback_reason is None, (
+        "default-shape Darwin run with native_required=True should "
+        "execute the fused MSL kernel without fallback"
+    )
+    assert report.target == "apple_gpu"
+    assert "NATIVE DISPATCH" in report.target_decision["apple_gpu"]
+
+
+@pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="Apple GPU runtime only on Darwin",
+)
+def test_matmul_softmax_matmul_native_required_raises_outside_envelope_on_darwin() -> None:
+    """Phase E (2026-05-20): outside the kernel's documented shape
+    envelope (N + P ≤ 256), the canonical still raises
+    ``TesseraNativeRequiredError`` with ``REFERENCE_FORCED`` because
+    the numpy fallback isn't a native dispatch.
+    """
     from tessera.compiler.fallback import (
         FallbackReason, TesseraNativeRequiredError,
     )
     with pytest.raises(TesseraNativeRequiredError) as exc:
-        matmul_softmax_matmul.run(native_required=True)
+        matmul_softmax_matmul.run(M=32, N=512, K=32, native_required=True)
     assert exc.value.reason == FallbackReason.REFERENCE_FORCED
 
 

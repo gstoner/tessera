@@ -114,6 +114,26 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
             "+ regression-bound for the reference path."
         ),
     ),
+    # ── Apple CPU execution-kind microbench (Apple plan B, 2026-05-20) ──
+    SurfaceEntry(
+        directory="benchmarks/apple_cpu",
+        entry_point="benchmarks/apple_cpu/benchmark_execution_kind.py",
+        status="runnable",
+        command=(
+            "PYTHONPATH=python python benchmarks/apple_cpu/"
+            "benchmark_execution_kind.py --ci --output "
+            "/tmp/tessera_apple_cpu_execution_kind.json"
+        ),
+        notes=(
+            "Empirically proves the apple_cpu ``execution_kind`` axis "
+            "in ``apple_target_map.py``: matmul tracks numpy's "
+            "Accelerate-backed cblas_sgemm (proof of "
+            "``accelerate_native``); layer_norm / softmax / gelu "
+            "naturally track numpy (proof of ``numpy_reference``). "
+            "The empirical gate is ratio-based since macOS numpy "
+            "already routes through Accelerate."
+        ),
+    ),
     # ── Spectral correctness proof lane (Phase A3, 2026-05-20) ──────
     SurfaceEntry(
         directory="benchmarks/spectral",

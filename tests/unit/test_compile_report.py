@@ -212,26 +212,46 @@ def test_matmul_softmax_matmul_hash_is_deterministic() -> None:
 
 
 def test_matmul_softmax_matmul_target_decision_includes_apple_gpu_on_darwin() -> None:
-    """On Darwin the decision row must mention the fused 3-op MSL
-    kernel symbol so reports show exactly which fast path the
-    compiler intended.
-
-    P1 reviewer correction (2026-05-18): the driver body is still
-    numpy-only today, so the report honestly emits
-    ``fallback_reason=REFERENCE_FORCED`` even on Darwin.  The
-    ``apple_gpu`` target_decision row still names the intended
-    fused kernel — that's the compile-time decision; the
-    runtime falls back."""
+    """On Darwin the canonical dispatches the fused 3-op MSL kernel
+    via the apple_gpu runtime shim — phase E of the Apple plan
+    (2026-05-20).  Inside the documented shape envelope (N + P ≤ 256)
+    the report carries ``fallback_reason = None`` and the
+    target_decision row reads ``NATIVE DISPATCH``.  Outside the
+    envelope the canonical still falls back to numpy with
+    ``REFERENCE_FORCED`` so the report stays honest.
+    """
     from tessera.compiler.fallback import FallbackReason
     report = matmul_softmax_matmul.run()
     if sys.platform == "darwin":
         assert "apple_gpu" in report.target_decision
         assert "matmul_softmax_matmul_f32" in report.target_decision["apple_gpu"]
-        # Honest reporting: no native dispatch, so REFERENCE_FORCED.
-        assert report.fallback_reason == FallbackReason.REFERENCE_FORCED
+        # Default shape (M=N=K=32) is inside the kernel's documented
+        # envelope (N + P ≤ 256), so dispatch succeeds: no fallback.
+        assert report.fallback_reason is None, (
+            "default-shape Darwin run should hit the native MSL kernel; "
+            f"got fallback_reason={report.fallback_reason!r}"
+        )
+        assert "NATIVE DISPATCH" in report.target_decision["apple_gpu"]
     else:
         assert "cpu" in report.target_decision
         assert report.fallback_reason is not None
+
+
+def test_matmul_softmax_matmul_outside_envelope_falls_back_to_reference() -> None:
+    """Phase E (2026-05-20) — the fused MSL kernel's documented
+    envelope is N + P ≤ 256.  Above that the canonical falls back
+    to numpy with ``REFERENCE_FORCED`` and the target_decision row
+    explains why.  Verifies the canonical reports the gap honestly
+    rather than silently dispatching numpy under the apple_gpu
+    label."""
+    if sys.platform != "darwin":
+        pytest.skip("Darwin-only: tests the apple_gpu envelope check")
+    from tessera.compiler.fallback import FallbackReason
+    # N = 512 is outside the envelope; canonical must report
+    # REFERENCE_FORCED with the shape note.
+    report = matmul_softmax_matmul.run(M=32, N=512, K=32)
+    assert report.fallback_reason == FallbackReason.REFERENCE_FORCED
+    assert "envelope" in report.target_decision["apple_gpu"].lower()
 
 
 def test_matmul_softmax_matmul_carries_ir_hash() -> None:

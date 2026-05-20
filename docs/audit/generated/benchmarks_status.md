@@ -25,13 +25,13 @@ CI guards (run as part of ``scripts/validate.sh``):
 
 | Status | Count |
 |--------|------:|
-| ``runnable`` | 9 |
+| ``runnable`` | 10 |
 | ``runnable_optional`` | 0 |
 | ``compile_only`` | 2 |
 | ``scaffold`` | 0 |
 | ``broken`` | 0 |
 | ``archived`` | 1 |
-| **total** | **12** |
+| **total** | **13** |
 
 ## Entries
 
@@ -42,6 +42,7 @@ CI guards (run as part of ``scripts/validate.sh``):
 | ``benchmarks/apple_gpu`` | ``runnable`` | ``benchmarks/apple_gpu/benchmark_ga_ebm.py`` | ``PYTHONPATH=python python benchmarks/apple_gpu/benchmark_ga_ebm.py --ci --output /tmp/tessera_ga_ebm_smoke.json`` |
 | ``benchmarks/apple_gpu`` | ``runnable`` | ``benchmarks/apple_gpu/benchmark_fusion.py`` | ``PYTHONPATH=python python benchmarks/apple_gpu/benchmark_fusion.py --shapes 4x4x4 --swiglu-shapes 1x4x4x4 --reps 2 --output /tmp/tessera_apple_gpu_fusion_smoke.json`` |
 | ``benchmarks/linalg`` | ``runnable`` | ``benchmarks/linalg/linalg_bench.py`` | ``PYTHONPATH=python python benchmarks/linalg/linalg_bench.py --smoke --output /tmp/tessera_linalg_smoke.json`` |
+| ``benchmarks/apple_cpu`` | ``runnable`` | ``benchmarks/apple_cpu/benchmark_execution_kind.py`` | ``PYTHONPATH=python python benchmarks/apple_cpu/benchmark_execution_kind.py --ci --output /tmp/tessera_apple_cpu_execution_kind.json`` |
 | ``benchmarks/spectral`` | ``runnable`` | ``benchmarks/spectral/spectral_correctness.py`` | ``PYTHONPATH=python python benchmarks/spectral/spectral_correctness.py --output /tmp/tessera_spectral_correctness.json`` |
 | ``benchmarks/spectral`` | ``runnable`` | ``benchmarks/spectral/spectral_bench.py`` | ``PYTHONPATH=.:python python benchmarks/spectral/spectral_bench.py --ops fft1d --sizes 64,128 --batch 1 --repeats 3 --warmup 1 --backend tessera-runtime --outcsv /tmp/tessera_spectral_runtime_smoke.csv`` |
 | ``benchmarks/Tessera_Operator_Benchmarks`` | ``runnable`` | ``benchmarks/Tessera_Operator_Benchmarks/scripts/opbench.py`` | ``cmake -S benchmarks/Tessera_Operator_Benchmarks -B /tmp/tessera_opbench_audit_build && cmake --build /tmp/tessera_opbench_audit_build -j2 && PYTHONPATH=.:python python benchmarks/Tessera_Operator_Benchmarks/scripts/opbench.py --config benchmarks/Tessera_Operator_Benchmarks/scripts/configs/quick_sweep.yaml --bin /tmp/tessera_opbench_audit_build/opbench --backend reference --out /tmp/tessera_opbench_audit`` |

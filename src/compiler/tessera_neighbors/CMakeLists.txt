@@ -42,6 +42,7 @@ add_library(TesseraNeighbors
     lib/Dialect/Neighbors/Transforms/BoundaryConditionLowerPass.cpp
     lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp
     lib/Dialect/Neighbors/Transforms/HaloMeshIntegrationPass.cpp
+    lib/Dialect/Neighbors/Transforms/HaloTransportLowerPass.cpp
     lib/Dialect/Neighbors/Transforms/PipelineOverlapPass.cpp
     lib/Dialect/Neighbors/Transforms/DynamicTopologyPass.cpp
 )

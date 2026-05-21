@@ -87,6 +87,14 @@ std::unique_ptr<::mlir::Pass> createLowerSwigluFusionToAppleGPUPass();
 /// reference path.
 std::unique_ptr<::mlir::Pass> createLowerLinearAttnToAppleGPUPass();
 
+/// tessera.attn_local_window_2d (rank-5, f32, patch*D ≤ 1024) → func.call
+/// into the Apple GPU runtime shim's 2D local-window attention MSL kernel.
+/// Sub-2 (2026-05-20) — single-device tiled lowering for the
+/// CorrDiff-style spatial-attention surface.  Out-of-envelope inputs
+/// (non-f32, dynamic shape, oversized patch) fall through to the host
+/// reference path.
+std::unique_ptr<::mlir::Pass> createLowerAttnLocalWindow2DToAppleGPUPass();
+
 /// tessera.mla_decode_fused (rank-3 Q + rank-2 weights, f32) →
 /// func.call into the Apple GPU runtime shim. attention_variants_plan,
 /// MLA-2 — DeepSeek MLA decode as a single GPU dispatch. Today the

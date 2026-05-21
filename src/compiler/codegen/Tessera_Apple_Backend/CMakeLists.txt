@@ -46,6 +46,7 @@ add_library(TesseraApple STATIC
   lib/Target/Apple/Lowering/MatmulRMSNormFusionToAppleGPU.cpp
   lib/Target/Apple/Lowering/SwigluFusionToAppleGPU.cpp
   lib/Target/Apple/Lowering/LinearAttnToAppleGPU.cpp
+  lib/Target/Apple/Lowering/AttnLocalWindow2DToAppleGPU.cpp
   lib/Target/Apple/Lowering/MLADecodeFusionToAppleGPU.cpp
   lib/Target/Apple/Lowering/NativeSparseAttnFusionToAppleGPU.cpp
 )

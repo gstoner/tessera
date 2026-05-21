@@ -59,6 +59,47 @@ LogicalResult FusedEpilogueOp::verify() {
   return success();
 }
 
+LogicalResult AttnLocalWindow2DOp::verify() {
+  // Q, K, V must all be ranked rank-5 tensors of the same element type.
+  auto qTy = dyn_cast<RankedTensorType>(getQ().getType());
+  auto kTy = dyn_cast<RankedTensorType>(getK().getType());
+  auto vTy = dyn_cast<RankedTensorType>(getV().getType());
+  if (!qTy || !kTy || !vTy)
+    return emitOpError("Q, K, V must be ranked tensors");
+  if (qTy.getRank() != 5 || kTy.getRank() != 5 || vTy.getRank() != 5)
+    return emitOpError(
+        "Q, K, V must all be rank-5 (B, H, Hq, Wq, D) tensors");
+  if (qTy.getElementType() != kTy.getElementType()
+      || qTy.getElementType() != vTy.getElementType())
+    return emitOpError("Q, K, V element types must match");
+
+  // window = [rh, rw], non-negative.
+  auto window = getWindow();
+  if (window.size() != 2)
+    return emitOpError("window must be [rh, rw] (length 2)");
+  for (auto a : window) {
+    auto i = dyn_cast<IntegerAttr>(a);
+    if (!i || i.getInt() < 0)
+      return emitOpError("window half-widths must be non-negative integers");
+  }
+
+  // K/V spatial axes (Hk, Wk) must match.
+  for (int axis : {2, 3}) {
+    if (kTy.isDynamicDim(axis) || vTy.isDynamicDim(axis)) continue;
+    if (kTy.getDimSize(axis) != vTy.getDimSize(axis))
+      return emitOpError("K and V must agree on spatial axis ") << axis;
+  }
+  // For self-attention v1, Q and K share spatial layout.  When either is
+  // dynamic we leave the check to runtime.
+  for (int axis : {2, 3}) {
+    if (qTy.isDynamicDim(axis) || kTy.isDynamicDim(axis)) continue;
+    if (qTy.getDimSize(axis) != kTy.getDimSize(axis))
+      return emitOpError(
+          "Q and K must share spatial layout on axis ") << axis;
+  }
+  return success();
+}
+
 LogicalResult DropoutOp::verify() { return success(); }
 LogicalResult KVCacheCreateOp::verify() { return success(); }
 LogicalResult RingCreateOp::verify() { return success(); }

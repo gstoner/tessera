@@ -113,6 +113,7 @@ PassPipelineRegistration<> gAppleGPURuntimePipeline(
       pm.addPass(createLowerRopeToAppleGPUPass());
       pm.addPass(createLowerFlashAttnToAppleGPUPass());
       pm.addPass(createLowerLinearAttnToAppleGPUPass());
+      pm.addPass(createLowerAttnLocalWindow2DToAppleGPUPass());
       pm.addPass(createLowerSoftmaxToAppleGPUPass());
       pm.addPass(createLowerGeluToAppleGPUPass());
     });

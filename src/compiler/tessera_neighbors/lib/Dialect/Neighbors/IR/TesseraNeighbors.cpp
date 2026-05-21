@@ -273,6 +273,68 @@ struct HaloExchangeOp
   }
 };
 
+// -- halo.pack / halo.transport / halo.unpack -----------------------------
+//
+// Sub-4 (2026-05-20) — HaloTransportLowerPass synthesises these three ops
+// from a halo.exchange via the OperationState path, so they only need to
+// be registered with the dialect.  They use generic-form parse/print
+// (the parser checks dialect membership; custom syntax is unnecessary).
+
+struct HaloPackOp
+    : Op<HaloPackOp, OpTrait::ZeroSuccessors, OpTrait::ZeroRegions,
+         OpTrait::OneResult, OpTrait::AtLeastNOperands<1>::Impl> {
+  using Op::Op;
+  static llvm::StringRef getOperationName() {
+    return "tessera.neighbors.halo.pack";
+  }
+  static llvm::ArrayRef<llvm::StringRef> getAttributeNames() { return {}; }
+  static ParseResult parse(OpAsmParser &p, OperationState &result) {
+    OpAsmParser::UnresolvedOperand in;
+    Type t;
+    if (p.parseOperand(in) || p.parseColonType(t) ||
+        p.parseOptionalAttrDict(result.attributes) ||
+        p.resolveOperand(in, t, result.operands))
+      return failure();
+    result.addTypes(t);
+    return success();
+  }
+  void print(OpAsmPrinter &p) {
+    p << " " << getOperand(0) << " : " << getOperand(0).getType();
+    p.printOptionalAttrDict((*this)->getAttrs());
+  }
+  LogicalResult verify() { return success(); }
+};
+
+struct HaloTransportOp
+    : Op<HaloTransportOp, OpTrait::ZeroSuccessors, OpTrait::ZeroRegions,
+         OpTrait::OneResult, OpTrait::AtLeastNOperands<1>::Impl> {
+  using Op::Op;
+  static llvm::StringRef getOperationName() {
+    return "tessera.neighbors.halo.transport";
+  }
+  static llvm::ArrayRef<llvm::StringRef> getAttributeNames() { return {}; }
+  static ParseResult parse(OpAsmParser &, OperationState &) {
+    return failure();
+  }
+  void print(OpAsmPrinter &) {}
+  LogicalResult verify() { return success(); }
+};
+
+struct HaloUnpackOp
+    : Op<HaloUnpackOp, OpTrait::ZeroSuccessors, OpTrait::ZeroRegions,
+         OpTrait::OneResult, OpTrait::AtLeastNOperands<2>::Impl> {
+  using Op::Op;
+  static llvm::StringRef getOperationName() {
+    return "tessera.neighbors.halo.unpack";
+  }
+  static llvm::ArrayRef<llvm::StringRef> getAttributeNames() { return {}; }
+  static ParseResult parse(OpAsmParser &, OperationState &) {
+    return failure();
+  }
+  void print(OpAsmPrinter &) {}
+  LogicalResult verify() { return success(); }
+};
+
 // -- neighbor.read ----------------------------------------------------------
 struct NeighborReadOp
     : Op<NeighborReadOp, OpTrait::ZeroSuccessors,
@@ -402,6 +464,7 @@ NeighborsDialect::NeighborsDialect(MLIRContext *ctx)
   addTypes<TopologyType, HaloType>();
   addAttributes<DeltaArrayAttr>();
   addOperations<CreateTopologyOp, HaloRegionOp, HaloExchangeOp,
+                HaloPackOp, HaloTransportOp, HaloUnpackOp,
                 NeighborReadOp, StencilDefineOp, StencilApplyOp,
                 PipelineConfigOp>();
 }

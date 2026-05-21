@@ -83,6 +83,10 @@ def test_dialect_cpp_registers_all_seven_ops() -> None:
         "CreateTopologyOp",
         "HaloRegionOp",
         "HaloExchangeOp",
+        # Sub-4 (2026-05-20) — halo transport triple.
+        "HaloPackOp",
+        "HaloTransportOp",
+        "HaloUnpackOp",
         "NeighborReadOp",
         "StencilDefineOp",
         "StencilApplyOp",

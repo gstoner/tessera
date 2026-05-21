@@ -104,6 +104,7 @@ int main(int argc, char **argv) {
   tessera::neighbors::registerBoundaryConditionLowerPass();
   tessera::neighbors::registerStencilLoopMaterializePass();
   tessera::neighbors::registerHaloMeshIntegrationPass();
+  tessera::neighbors::registerHaloTransportLowerPass();
   tessera::neighbors::registerPipelineOverlapPass();
   tessera::neighbors::registerDynamicTopologyPass();
 #endif

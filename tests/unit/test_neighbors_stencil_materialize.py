@@ -112,6 +112,29 @@ def test_pass_registered_in_tessera_opt() -> None:
     assert "registerStencilLoopMaterializePass" in opt.read_text()
 
 
+def test_pass_supports_rank_n_via_recursive_helper() -> None:
+    """Sub-3 — the pass must use a recursive ``buildNest`` helper so
+    rank-3 / rank-4 stencils materialize through the same machinery.
+    Pinning the helper's name keeps refactors honest about the contract."""
+    text = MAT_CPP.read_text()
+    assert "buildNest" in text
+    # The pass advertises rank-N capability in its description.
+    assert "rank-N" in text or "Rank-N" in text
+
+
+def test_rank3_lit_fixture_exists() -> None:
+    rank3_fixture = (
+        REPO_ROOT / "tests" / "tessera-ir" / "phase7"
+        / "neighbors_stencil_materialize_rank3.mlir"
+    )
+    assert rank3_fixture.exists()
+    text = rank3_fixture.read_text()
+    # Functions covering rank-3 + rank-4 + mixed-BC.
+    assert "test_materialize_rank3_periodic_7pt" in text
+    assert "test_materialize_rank3_mixed_bc" in text
+    assert "test_materialize_rank4_periodic" in text
+
+
 def test_lit_fixture_chains_three_passes() -> None:
     """The fixture has to chain stencil-lower → bc-lower → materialize."""
     text = LIT_FIXTURE.read_text()

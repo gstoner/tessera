@@ -5,6 +5,7 @@ void registerStencilLowerPass();
 void registerBoundaryConditionLowerPass();
 void registerStencilLoopMaterializePass();
 void registerHaloMeshIntegrationPass();
+void registerHaloTransportLowerPass();
 void registerPipelineOverlapPass();
 void registerDynamicTopologyPass();
 }} // namespace

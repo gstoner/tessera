@@ -635,6 +635,51 @@ def Tessera_AttnTopKBlocksOp : Op<
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
+// Gap 4 / Sub-1 (2026-05-20) — 2D local-window attention for spatial
+// grids.  Each query at position (h, w) attends to a
+// (2*window_h+1) × (2*window_w+1) neighbourhood centred at (h, w).
+// Same halo / sharding shape as 2D stencils — the same
+// HaloMeshIntegrationPass picks it up via the `halo_aware` metadata in
+// primitive_coverage.py.
+//
+// Operand shapes:
+//   q, k, v : rank-5 tensors  (B, H, Hq, Wq, D)
+//   o       : rank-5 tensor   (B, H, Hq, Wq, D)  — same shape as q
+//
+// Optional attributes:
+//   halo.width : I64ArrayAttr [rh, rw] mirroring the Python kwarg, so
+//                the integration pass can read width without re-parsing.
+//   numeric_policy : optional dictionary carrying {storage, accum,
+//                math_mode} per the NumericPolicy spec.
+def Tessera_AttnLocalWindow2DOp : Op<
+  Tessera_Dialect, "attn_local_window_2d",
+  [Pure]
+> {
+  let summary = "2D local-window attention for spatial grids "
+                "(weather/climate / ViT local bias / neural CA)";
+  let description = [{
+    Computes per-(h, w) local attention over a fixed-size 2D neighbourhood:
+
+        scores(h, w, ph, pw) = Q(h, w) · K(h + ph - rh, w + pw - rw) / √D
+        weights              = masked-softmax over (ph, pw)
+        O(h, w)              = Σ_(ph, pw) weights · V(h + ph - rh, w + pw - rw)
+
+    where ``(rh, rw) = window``.  Edge positions are masked (the gather
+    is clipped to in-range indices and the masked-softmax zeros their
+    contribution), matching the numpy reference in
+    ``tessera.ops.attn_local_window_2d``.
+
+    The op carries an optional ``halo.width = [rh, rw]`` attribute so
+    the ``HaloMeshIntegrationPass`` can insert ``halo.exchange`` ops on
+    rank boundaries without re-parsing kwargs.
+  }];
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        I64ArrayAttr:$window);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 def Tessera_DeepSeekSparseAttentionOp : Op<
   Tessera_Dialect, "deepseek_sparse_attention",
   [Pure]
@@ -963,6 +1008,13 @@ def Tessera_NeighborsHaloRegionOp
     : Tessera_NeighborsGenericOp<"neighbors.halo.region">;
 def Tessera_NeighborsHaloExchangeOp
     : Tessera_NeighborsGenericOp<"neighbors.halo.exchange">;
+// Sub-4 (2026-05-20) — halo transport triple lowered from halo.exchange.
+def Tessera_NeighborsHaloPackOp
+    : Tessera_NeighborsGenericOp<"neighbors.halo.pack">;
+def Tessera_NeighborsHaloTransportOp
+    : Tessera_NeighborsGenericOp<"neighbors.halo.transport">;
+def Tessera_NeighborsHaloUnpackOp
+    : Tessera_NeighborsGenericOp<"neighbors.halo.unpack">;
 def Tessera_NeighborsNeighborReadOp
     : Tessera_NeighborsGenericOp<"neighbors.neighbor.read">;
 def Tessera_NeighborsStencilDefineOp

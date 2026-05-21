@@ -82,6 +82,35 @@ VALID_CONTRACT_STATUSES: frozenset[str] = frozenset({"complete", "partial", "pla
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Ask 4-B (2026-05-20) — Halo-aware primitive registry.  Ops in this map
+# declare that they require a ghost-cell exchange along one or more
+# spatial axes when their input is sharded across a mesh.  The
+# ``HaloMeshIntegrationPass`` C++ pass uses this set as its canonical
+# enumeration of "ops whose sharded inputs need halo.exchange inserted
+# before them"; downstream tooling (target map renderers, lit fixture
+# generators) consult the same set.
+#
+# Each entry maps the op name → the keyword argument from which the halo
+# width is derived.  For stencils the width comes from the IR-level
+# ``stencil.halo_width`` (set by HaloInferPass), not from a kwarg, so
+# they are absent from this Python table — the C++ pass reads the IR
+# attribute directly.  Window-attention-shaped ops carry the window as
+# a Python kwarg and need a one-line mapping to the IR attribute name.
+_HALO_AWARE_OPS: dict[str, dict[str, str]] = {
+    "attn_local_window_2d": {
+        "halo_width_from_kwarg": "window",
+        # IR attribute name the lowering layer must set on the Graph IR
+        # op so HaloMeshIntegrationPass can read width without re-parsing
+        # the kwargs.
+        "halo_width_attr": "attn.window",
+        # The spatial axes the window covers (rank-relative).  For
+        # rank-5 (B, H, Hq, Wq, D) tensors the halo applies to axes
+        # (Hq, Wq) which are indices 2 and 3.
+        "spatial_axes": "2,3",
+    },
+}
+
+
 # Sprint C2 — NumericPolicy as a first-class registry attribute (2026-05-11).
 #
 # Per `docs/reference/tessera_tensor_attributes.md`, numeric_policy is the
@@ -1534,6 +1563,11 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         manifest = _manifest_for_name(name)
         if manifest is not None:
             metadata["backend_kernel_manifest"] = manifest
+        # Ask 4-B (2026-05-20): attach halo_aware metadata for ops that
+        # the HaloMeshIntegrationPass should wrap with halo.exchange when
+        # their inputs are sharded.
+        if name in _HALO_AWARE_OPS:
+            metadata["halo_aware"] = dict(_HALO_AWARE_OPS[name])
         entries[name] = PrimitiveCoverage(
             name=name,
             category=_EXISTING_CATEGORIES.get(name, spec.lowering),

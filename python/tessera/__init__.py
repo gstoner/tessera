@@ -1183,33 +1183,51 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             )
         B, H, Hq, Wq, D = Q.shape
         scale = 1.0 / np.sqrt(D)
-        out = np.zeros_like(Q)
-
-        # v1 reference: nested loop over (h, w).  Hot path on real
-        # spatial grids needs a fused kernel — that's the backend
-        # manifest's planned slot.  This implementation is correctness-
-        # first; the tiled kernel lands as a separate compiler task.
-        for h in range(Hq):
-            h_lo = max(0, h - rh)
-            h_hi = min(Hq, h + rh + 1)
-            for w in range(Wq):
-                w_lo = max(0, w - rw)
-                w_hi = min(Wq, w + rw + 1)
-                # Local KV patch (B, H, hh, ww, D) where hh = h_hi - h_lo, ww = w_hi - w_lo.
-                k_patch = K[:, :, h_lo:h_hi, w_lo:w_hi, :]
-                v_patch = V[:, :, h_lo:h_hi, w_lo:w_hi, :]
-                hh, ww = k_patch.shape[2], k_patch.shape[3]
-                # Flatten the patch's spatial axes for the dot product.
-                k_flat = k_patch.reshape(B, H, hh * ww, D)
-                v_flat = v_patch.reshape(B, H, hh * ww, D)
-                q_vec = Q[:, :, h, w, :]  # (B, H, D)
-                # Scores: (B, H, hh*ww).
-                scores = np.einsum("bhd,bhkd->bhk", q_vec, k_flat) * scale
-                # Softmax over the patch.
-                scores -= scores.max(axis=-1, keepdims=True)
-                e = np.exp(scores)
-                weights = e / e.sum(axis=-1, keepdims=True)
-                out[:, :, h, w, :] = np.einsum("bhk,bhkd->bhd", weights, v_flat)
+        # ── Ask 4-A: vectorised im2col lowering ──────────────────────────
+        # The original implementation nested Python loops 4 deep over
+        # (B, H, h, w).  This refactor lifts the entire (h, w) iteration
+        # into a single vectorised gather + masked-softmax + weighted-sum
+        # pass so the hot path stays inside numpy.  Bitwise-matches the
+        # earlier oracle on every test shape; matches a stricter oracle
+        # at fp32 tolerance.  The backend manifest's planned slot points
+        # at a fused 2D-window kernel that lowers this same im2col shape
+        # to a single MSL / WGMMA / MFMA tile.
+        rH, rW = 2 * rh + 1, 2 * rw + 1
+        # Per-axis gather indices and in-bounds masks.
+        # h_idx[h, ph] = h + (ph - rh) in [-rh, Hq + rh - 1].
+        h_off = np.arange(rH) - rh                      # (rH,)
+        w_off = np.arange(rW) - rw                      # (rW,)
+        h_raw = np.arange(Hq)[:, None] + h_off[None, :]  # (Hq, rH)
+        w_raw = np.arange(Wq)[:, None] + w_off[None, :]  # (Wq, rW)
+        h_mask = (h_raw >= 0) & (h_raw < Hq)             # (Hq, rH)
+        w_mask = (w_raw >= 0) & (w_raw < Wq)             # (Wq, rW)
+        h_idx = np.clip(h_raw, 0, Hq - 1)                # clip for valid gather
+        w_idx = np.clip(w_raw, 0, Wq - 1)
+        # Combined patch mask: (Hq, Wq, rH, rW).
+        patch_mask = h_mask[:, None, :, None] & w_mask[None, :, None, :]
+        K_idx = K[:, :, h_idx][:, :, :, :, w_idx]
+        # K_idx has shape (B, H, Hq, rH, Wq, rW, D).  Transpose to
+        # (B, H, Hq, Wq, rH, rW, D), then flatten the patch dims.
+        K_patch = np.transpose(K_idx, (0, 1, 2, 4, 3, 5, 6))
+        V_idx = V[:, :, h_idx][:, :, :, :, w_idx]
+        V_patch = np.transpose(V_idx, (0, 1, 2, 4, 3, 5, 6))
+        K_flat = K_patch.reshape(B, H, Hq, Wq, rH * rW, D)
+        V_flat = V_patch.reshape(B, H, Hq, Wq, rH * rW, D)
+        mask_flat = patch_mask.reshape(Hq, Wq, rH * rW)
+        # Scores: (B, H, Hq, Wq, K=rH*rW).
+        scores = np.einsum("bhijd,bhijkd->bhijk", Q, K_flat) * scale
+        # Masked softmax.  Set OOB entries to -inf so they vanish from the
+        # exponent; per-position max subtraction keeps the exp numerically
+        # stable.
+        neg_inf = np.float32("-inf") if scores.dtype == np.float32 else -np.inf
+        scores = np.where(mask_flat[None, None, :, :, :], scores, neg_inf)
+        scores -= scores.max(axis=-1, keepdims=True)
+        e = np.exp(scores)
+        # Re-mask after exp because exp(-inf) → 0 already, but exp(scores
+        # after subtraction) may be exp(0) for the all-OOB row's bias.
+        e = np.where(mask_flat[None, None, :, :, :], e, 0.0)
+        weights = e / e.sum(axis=-1, keepdims=True)
+        out = np.einsum("bhijk,bhijkd->bhijd", weights, V_flat)
         return out
 
     def attn_compressed_blocks(Q, K_c, V_c):

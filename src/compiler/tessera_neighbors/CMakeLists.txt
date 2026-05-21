@@ -40,6 +40,8 @@ add_library(TesseraNeighbors
     lib/Dialect/Neighbors/Transforms/HaloInferPass.cpp
     lib/Dialect/Neighbors/Transforms/StencilLowerPass.cpp
     lib/Dialect/Neighbors/Transforms/BoundaryConditionLowerPass.cpp
+    lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp
+    lib/Dialect/Neighbors/Transforms/HaloMeshIntegrationPass.cpp
     lib/Dialect/Neighbors/Transforms/PipelineOverlapPass.cpp
     lib/Dialect/Neighbors/Transforms/DynamicTopologyPass.cpp
 )
@@ -51,6 +53,10 @@ target_link_libraries(TesseraNeighbors
         MLIRIR
         MLIRPass
         MLIRSupport
+        MLIRArithDialect
+        MLIRSCFDialect
+        MLIRTensorDialect
+        MLIRFuncDialect
 )
 
 # ODS / tablegen: wire tessera_neighbors.td here when tablegen stubs are added.

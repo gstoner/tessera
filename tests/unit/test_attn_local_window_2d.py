@@ -173,6 +173,38 @@ class TestRegistry:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+class TestVectorizedTiling:
+    """Ask 4-A — the im2col vectorised path replaces the original 4-deep
+    Python loop.  These tests pin the parity with the explicit oracle on
+    a larger shape than the basic Forward suite covers, plus the
+    asymmetric-window edge case, plus a no-Python-loop sanity check."""
+
+    def test_larger_shape_matches_oracle(self):
+        Q, K, V = _make_qkv_2d(B=4, H=4, Hq=8, Wq=8, D=16, seed=123)
+        got = ts.ops.attn_local_window_2d(Q, K, V, window=(2, 2))
+        expected = _numpy_oracle(Q, K, V, (2, 2))
+        np.testing.assert_allclose(got, expected, rtol=1e-5, atol=1e-6)
+
+    def test_asymmetric_large_window(self):
+        Q, K, V = _make_qkv_2d(B=2, H=2, Hq=5, Wq=7, D=4, seed=99)
+        got = ts.ops.attn_local_window_2d(Q, K, V, window=(2, 3))
+        expected = _numpy_oracle(Q, K, V, (2, 3))
+        np.testing.assert_allclose(got, expected, rtol=1e-5, atol=1e-6)
+
+    def test_implementation_has_no_python_loop_over_spatial_axes(self):
+        """The body of attn_local_window_2d should not iterate over
+        (Hq, Wq) with a Python ``for`` loop — the vectorised path lifts
+        the whole iteration into a single einsum + masked-softmax."""
+        import inspect
+        src = inspect.getsource(ts.ops.attn_local_window_2d)
+        # Permit the documented im2col pre-compute loops (a `for` in a
+        # comment is fine; an actual ``for h in range(Hq)`` is not).
+        # The vectorised path uses np.arange + np.clip + np.einsum, so
+        # there is no ``for h in range(Hq)`` line.
+        assert "for h in range(Hq)" not in src
+        assert "for w in range(Wq)" not in src
+
+
 class TestAutodiff:
     def test_vjp_dQ_matches_finite_diff(self):
         Q, K, V = _make_qkv_2d(B=1, H=1, Hq=3, Wq=3, D=4, seed=11)

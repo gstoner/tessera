@@ -73,8 +73,8 @@ dependencies as named diagnostics rather than silent crashes.
 | **Halo / Neighbors** (Phase 7) | stencil-lower → bc-lower → halo-mesh-integration → halo-transport-lower | `stencil.bc`→`stencil.bc.modes`; bc.modes→materialize; halo.exchange→transport-triple | ✅ **Gap-3 lands** — `test_neighbors_pass_order_matrix.py` |
 | **Spectral solver** | LegalizeSpectral → SpectralMXP → TransposePlan → Autotune → LowerToTargetIR → DistributedFFT | annotation-driven planning passes; each consumes the previous's attrs | ✅ **Gap-3 lands** — `test_spectral_pass_order_matrix.py` |
 | **x86 lowering (Phase 2)** | DistributionLowering → EffectAnnotation → Tiling → TileToX86 | EffectAnnotation must precede CollectiveInsertion (Architecture Decision in CLAUDE.md) | ⚠️ — happy-path lit covered in `phase2/full_pipeline.mlir`; reorder matrix planned |
-| **NVIDIA SM_90** | EffectAnnotation → Canonicalize → SwigluFusion → MLA/NSA/Hybrid/Lightning/Delta fusion → DistributionLowering → TileIRLowering → WarpSpec → AsyncCopy → WGMMA → TMA → NVFlashAttnEmitter | 13 passes; many implicit fusion-order deps | ⏳ — planned, paired with NVIDIA backend enablement |
-| **Apple GPU runtime** | 9 lowerings: matmul→softmax→matmul fusion → matmul→softmax / gelu / rmsnorm fusions → per-op (matmul mps, rope, flash_attn, softmax, gelu, linear-attn, attn_local_window_2d) | "longest fusion first" — a per-op pass running before its fusion stealing the op is the canonical failure | ⚠️ — happy-path lit covered per-op; reorder matrix is the next add |
+| **NVIDIA SM_90** | EffectAnnotation → Canonicalize → SwigluFusion → MLA/NSA/Hybrid/Lightning/Delta fusion → DistributionLowering → TileIRLowering → WarpSpec → AsyncCopy → WGMMA → TMA → NVFlashAttnEmitter | 13 passes; many implicit fusion-order deps | ⏳ — explicit plan: `docs/audit/nvidia_rocm_execute_and_compare_plan.md`; paired with Phase G hardware enablement |
+| **Apple GPU runtime** | 14 lowerings: NSA / MLA / SwiGLU / matmul→softmax→matmul fusions → matmul→softmax / gelu / rmsnorm fusions → per-op (matmul mps, rope, flash_attn, linear-attn, attn_local_window_2d, softmax, gelu) | "longest fusion first" — a per-op pass running before its fusion stealing the op is the canonical failure | ✅ **shipped 2026-05-21** — `test_apple_gpu_pass_order_matrix.py` (18 tests; 11 dependency pairs locked) |
 | **TPP space-time** | 7 passes via `tpp-space-time` | space-time decomposition order | ⏳ — happy-path covered; reorder matrix planned |
 | **NV Rubin CPX** | 4 CPX passes | CPX-specific | ⏳ — separate driver `tessera-cpx-opt`; reorder matrix planned |
 | **Phase 5 core solvers** | 11 solver passes (Sparse, RNG, Newton, Trig, Periodic, …) | Some pass-order requirements documented in CLAUDE.md | ⏳ — happy-path covered; reorder matrix planned |
@@ -112,6 +112,8 @@ Today's coverage:
 | Stencil materialization | **no oracle yet** — pass emits IR but no execution lane runs it | ⏳ — **deferred to Gap 1** (NVIDIA/AMD GPU enablement) |
 | 2D window attention native lowering | Python `attn_local_window_2d` is the oracle today; native MSL kernel doesn't execute yet | ⏳ — paired with Apple GPU kernel ship |
 | MLA decode fused / NSA fused | Host reference matches fused path | ⚠️ — happy-path; full envelope sweep planned |
+| **Halo transport (pack/transport/unpack triples)** | `test_halo_execution_lane.py` — IR parameters → mock-collective execution → numpy oracle, bitwise compare | ✅ **shipped 2026-05-21** — first end-to-end execute-and-compare lane; template for future hardware lanes |
+| **CorrDiff IR-visible (stencil + window-attn + halo)** | `test_corrdiff_ir_visible.py` — proves three workstreams compose in one IR flow | ✅ **shipped 2026-05-21** — capstone integration test |
 
 **The standing rule:** every new lowering pass that emits IR which
 *can be executed* must ship with an oracle compare in the same PR.
@@ -123,16 +125,26 @@ explicitly tagged as waiting on Gap 1 / native kernel ship.
 
 ## Recommendations (prioritized)
 
-1. ✅ **Ship now:** Halo + Spectral pass-order matrices (Gap 3).
-2. ✅ **Ship now:** BC parser + splitComma + feature_map enum fuzz (Gap 2).
-3. ⏳ **Next sprint:** Apple GPU runtime pipeline reorder matrix
-   (most-likely future bug source — a new fusion pass slipping ahead
-   of a peer).
-4. ⏳ **Paired with NVIDIA enablement:** Phase 3 NVIDIA SM_90 reorder
-   matrix + end-to-end execute-and-compare lane (Gap 1).
-5. ⏳ **Backlog:** TPP, CPX, Phase 5 reorder matrices; dtype + jit-target
-   fuzz lanes (low-priority because Python validation is already
-   crash-safe).
+1. ✅ **Shipped:** Halo + Spectral pass-order matrices (Gap 3).
+2. ✅ **Shipped:** BC parser + splitComma + feature_map enum fuzz (Gap 2).
+3. ✅ **Shipped 2026-05-21:** Apple GPU runtime pipeline reorder matrix
+   (14 passes, 11 dependency pairs, longest-fusion-first contract locked).
+4. ✅ **Shipped 2026-05-21:** HaloMeshIntegrationPass extension to
+   recognise `attn_local_window_2d` (closes the loop on Sub-1's
+   `_HALO_AWARE_OPS` registry).
+5. ✅ **Shipped 2026-05-21:** Halo execute-and-compare lane — first
+   Layer-6 oracle test in the project; template for future hardware
+   lanes.
+6. ✅ **Shipped 2026-05-21:** CorrDiff IR-visible fixture — proves the
+   three Phase 7 workstreams compose in one IR flow.
+7. ⏳ **Backlog (gated on Phase G):** NVIDIA SM_90 pass-order matrix
+   + runtime ABI lock + H100 execute-and-compare lane.  Full plan:
+   `docs/audit/nvidia_rocm_execute_and_compare_plan.md`.
+8. ⏳ **Backlog (gated on Phase H):** ROCm CDNA/RDNA pass-order matrix
+   + per-arch runtime ABI lock + MI300X/MI325X execute-and-compare
+   lane.  Same plan doc.
+9. ⏳ **Backlog (low priority):** TPP, CPX, Phase 5 reorder matrices;
+   dtype + jit-target fuzz lanes (Python validation already crash-safe).
 
 ## Cost summary
 
@@ -142,8 +154,15 @@ explicitly tagged as waiting on Gap 1 / native kernel ship.
 | Halo pass-order matrix | ~4 hours | ✅ |
 | Spectral pass-order matrix | ~3 hours | ✅ |
 | BC parser + peers fuzz | ~3 hours | ✅ |
-| Apple GPU reorder matrix | ~4 hours (next sprint) | ⏳ |
-| NVIDIA pipeline + execute-and-compare | multi-week (paired with hardware) | ⏳ |
+| Apple GPU reorder matrix | ~3 hours | ✅ shipped 2026-05-21 |
+| HaloMeshIntegrationPass `attn_local_window_2d` extension | ~3 hours | ✅ shipped 2026-05-21 |
+| Halo execute-and-compare lane | ~3 hours | ✅ shipped 2026-05-21 |
+| CorrDiff IR-visible fixture | ~2 hours | ✅ shipped 2026-05-21 |
+| NVIDIA/ROCm plan doc | ~1 hour | ✅ shipped 2026-05-21 |
+| NVIDIA SM_90 matrix + ABI lock + H100 oracle | ~7 days (gated on hardware) | ⏳ |
+| ROCm matrix + ABI lock + MI300X/MI325X oracle | ~10-15 days (gated on hardware) | ⏳ |
 
-Total this drop: ~10 engineering hours.  Total backlog through NVIDIA
-enablement: multi-week, gated on Gap 1 prerequisites being met.
+Total shipped 2026-05-20/21: ~22 engineering hours.  Total backlog
+through NVIDIA + ROCm hardware enablement: ~17-22 engineering days,
+gated on hardware access per the deferral in
+`docs/audit/nvidia_rocm_execute_and_compare_plan.md`.

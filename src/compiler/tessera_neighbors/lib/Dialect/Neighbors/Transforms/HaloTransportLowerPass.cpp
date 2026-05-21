@@ -88,6 +88,11 @@ struct HaloTransportLowerPass
 
     // Carry mesh.axis if present.
     auto meshAxis = op->getAttrOfType<StringAttr>("mesh.axis");
+    // Carry source_op provenance from HaloMeshIntegrationPass so a
+    // downstream consumer can tell whether a triple came from a
+    // stencil-driven or attn-driven halo.exchange.  Preserving this
+    // is what makes the CorrDiff IR-visible fixture verifiable.
+    auto sourceOp = op->getAttrOfType<StringAttr>("source_op");
 
     // Threaded SSA value: pack/transport/unpack chain produces a new
     // field-shaped tensor that becomes the input for the next side.
@@ -99,6 +104,8 @@ struct HaloTransportLowerPass
     });
     if (meshAxis)
       commonAttrs.push_back({StringAttr::get(ctx, "mesh.axis"), meshAxis});
+    if (sourceOp)
+      commonAttrs.push_back({StringAttr::get(ctx, "source_op"), sourceOp});
 
     // For each axis: skip width=0, otherwise emit (lo, hi) pack/transport/
     // unpack triples that thread the field through.  The two sides on

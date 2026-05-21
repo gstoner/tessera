@@ -111,8 +111,9 @@ struct HaloMeshIntegrationPass
     return "tessera-halo-mesh-integration";
   }
   StringRef getDescription() const final {
-    return "Insert halo.exchange before sharded stencil.apply ops and "
-           "reconcile per-axis BC against the mesh axis policy";
+    return "Insert halo.exchange before sharded stencil.apply and "
+           "attn_local_window_2d ops; reconcile per-axis BC against "
+           "the mesh axis policy";
   }
 
   void runOnOperation() override {
@@ -120,15 +121,92 @@ struct HaloMeshIntegrationPass
     MLIRContext *ctx = mod.getContext();
     StringRef meshPolicy = meshPolicyOpt;
 
-    SmallVector<Operation *> applyOps;
+    SmallVector<Operation *> stencilOps;
+    SmallVector<Operation *> attnWindow2DOps;
     mod.walk([&](Operation *op) {
-      if (op->getName().getStringRef() == "tessera.neighbors.stencil.apply"
-          && !op->hasAttr("halo.mesh_integrated"))
-        applyOps.push_back(op);
+      StringRef name = op->getName().getStringRef();
+      if (op->hasAttr("halo.mesh_integrated"))
+        return;
+      if (name == "tessera.neighbors.stencil.apply")
+        stencilOps.push_back(op);
+      // Ask 4-B / closing-the-loop (2026-05-21): also walk halo-aware
+      // Graph IR ops listed in primitive_coverage._HALO_AWARE_OPS.
+      // attn_local_window_2d is the first such non-stencil consumer.
+      else if (name == "tessera.attn_local_window_2d")
+        attnWindow2DOps.push_back(op);
     });
 
-    for (Operation *op : applyOps)
+    for (Operation *op : stencilOps)
       processOne(op, ctx, meshPolicy);
+    for (Operation *op : attnWindow2DOps)
+      processAttnLocalWindow2D(op, ctx, meshPolicy);
+  }
+
+  // -------------------------------------------------------------------
+  // processAttnLocalWindow2D — Sub-2 closing-the-loop.
+  //
+  // The Graph IR op carries its halo width as a `window` attribute
+  // (I64ArrayAttr [rh, rw]).  This handler reads that, derives the
+  // equivalent halo.width = [rh, rw] for the integration walker, and
+  // inserts halo.exchange before the op when its Q operand traces back
+  // to a function argument.
+  //
+  // No BC reconciliation — attn_local_window_2d's edge handling is
+  // intrinsic (masked-softmax zeros OOB contributions), so a stencil-
+  // style BC-vs-mesh conflict can't arise.
+  // -------------------------------------------------------------------
+  void processAttnLocalWindow2D(Operation *op, MLIRContext *ctx,
+                                  StringRef meshPolicy) {
+    OpBuilder b(op);
+    Location loc = op->getLoc();
+
+    Operation *meshRegion = findEnclosingMeshRegion(op);
+
+    // Q is operand 0; K, V are operands 1, 2.  We trace each of them
+    // back to find whether *any* is sharded (consumed from a func.func
+    // arg).  In the common case the three operands share provenance.
+    bool anyFromArg = false;
+    for (unsigned i : {0u, 1u, 2u}) {
+      if (op->getNumOperands() <= i) continue;
+      Value v = op->getOperand(i);
+      if (llvm::isa<BlockArgument>(v)) {
+        anyFromArg = true;
+        break;
+      }
+    }
+
+    auto window = op->getAttrOfType<ArrayAttr>("window");
+    if (!window || window.size() != 2) {
+      // No window — leave the op alone; the lowering pass will reject.
+      return;
+    }
+
+    if (meshRegion && anyFromArg) {
+      // Build a halo.exchange for the Q operand.  K and V follow the
+      // same sharding pattern in CorrDiff-style workloads; emit one
+      // exchange and let the downstream transport pass widen if needed.
+      Value q = op->getOperand(0);
+      OperationState xSt(loc, "tessera.neighbors.halo.exchange");
+      xSt.addOperands({q});
+      xSt.addTypes({q.getType()});
+      // Reuse the window as halo.width so the transport-lower pass
+      // gets the same per-axis width contract as for stencils.
+      xSt.addAttribute("halo.width", window);
+      if (auto axis = meshRegion->getAttrOfType<StringAttr>("axis"))
+        xSt.addAttribute("mesh.axis", axis);
+      xSt.addAttribute("inserted_by",
+                       b.getStringAttr("halo-mesh-integration"));
+      // Provenance — distinguish from stencil-driven exchanges.
+      xSt.addAttribute("source_op",
+                       b.getStringAttr("tessera.attn_local_window_2d"));
+      Operation *xOp = b.create(xSt);
+      op->setOperand(0, xOp->getResult(0));
+    }
+
+    // Sentinel — same key as stencil.apply path for consistency.
+    op->setAttr("halo.mesh_integrated", b.getBoolAttr(true));
+    op->setAttr("halo.mesh_policy", b.getStringAttr(meshPolicy));
+    op->setAttr("halo.window", window);
   }
 
   void processOne(Operation *op, MLIRContext *ctx, StringRef meshPolicy) {

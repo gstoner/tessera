@@ -140,6 +140,54 @@ def _find_tessera_opt() -> str | None:
     return None
 
 
+def test_pass_wraps_sharded_attn_local_window_2d() -> None:
+    """Closing-the-loop (2026-05-21) — the pass now recognises
+    tessera.attn_local_window_2d as a halo-aware consumer and inserts
+    halo.exchange before it just like for stencil.apply."""
+    binary = _find_tessera_opt()
+    if binary is None:
+        pytest.skip("tessera-opt not built")
+    awl_fixture = (
+        REPO_ROOT / "tests" / "tessera-ir" / "phase7"
+        / "halo_mesh_integration_attn_local_window_2d.mlir"
+    )
+    assert awl_fixture.exists()
+    r = subprocess.run(
+        [binary, "--allow-unregistered-dialect",
+         "-tessera-halo-mesh-integration", str(awl_fixture)],
+        capture_output=True, text=True, timeout=30,
+    )
+    if (
+        r.returncode != 0
+        and "Did you mean" in r.stderr
+        and "tessera-halo-mesh-integration" in r.stderr
+    ):
+        pytest.skip("tessera-opt predates the pass — rebuild required")
+    assert r.returncode == 0, r.stderr
+    out = r.stdout
+    # halo.exchange inserted with the attn-specific provenance.
+    assert 'source_op = "tessera.attn_local_window_2d"' in out
+    # halo.window attribute carries the original window through.
+    assert "halo.window = [1, 1]" in out
+    assert "halo.window = [2, 3]" in out
+    # Unsharded variant did NOT get a halo.exchange wrapper.
+    unsharded_section = out.split("unsharded_attn_local_window_2d")[1]
+    # Up to the next func, count halo.exchange occurrences.
+    next_func = unsharded_section.find("func.func")
+    relevant = (unsharded_section[:next_func]
+                if next_func != -1 else unsharded_section)
+    assert "tessera.neighbors.halo.exchange" not in relevant
+
+
+def test_source_walks_attn_local_window_2d_in_addition_to_stencil() -> None:
+    """Structural guard: the C++ pass source must match both op names."""
+    text = PASS_CPP.read_text()
+    assert '"tessera.neighbors.stencil.apply"' in text
+    assert '"tessera.attn_local_window_2d"' in text
+    # The new handler is documented.
+    assert "processAttnLocalWindow2D" in text
+
+
 def test_pass_runs_against_lit_fixture() -> None:
     binary = _find_tessera_opt()
     if binary is None:

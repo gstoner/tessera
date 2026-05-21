@@ -31,6 +31,34 @@ PYTHONPATH=python python3 benchmarks/DeepScholar-Bench/tessera_deepscholar_model
 PYTHONPATH=python python3 benchmarks/spectral/spectral_bench.py --backend tessera-artifact --ops fft1d,dct2,conv1d_fft --sizes 64 --device cpu --repeats 1 --warmup 0 --outcsv /tmp/tessera_spectral.csv
 ```
 
+## Library-layer benchmarks (Phase 7)
+
+A separate family from the operator/roofline benchmarks above.  Each
+**category** is a generic compiler-surface label that captures the
+primitive composition under test; each **proving workload** is a small,
+domain-specific instantiation that anchors the category to a real paper
+or canonical model.  The category label is what summaries, audit docs,
+and talks should lead with — the workload name preserves the external
+anchor for "yes, real surface, real reference."
+
+| Category                | Proving workload(s)                                  | Source                                  |
+|-------------------------|------------------------------------------------------|-----------------------------------------|
+| Gridded-AI core         | (generic; no domain-specific anchor yet)             | `benchmarks/grid_ai_core/`              |
+| **Diffusion grid core** | `corrdiff_core` (NVIDIA CorrDiff regional weather)   | `benchmarks/corrdiff/`                  |
+| Clifford / GA core      | (generic; Cl(3, 0) rotor-sandwich chain)             | `benchmarks/clifford_core/`             |
+| Energy / EBM core       | (generic; quadratic energy + annealed Langevin)      | `benchmarks/energy_core/`               |
+| Cross-lane core         | `visual_complex_core` (M7 visual-complex milestone)  | `benchmarks/visual_complex_core/`       |
+
+Each library-layer benchmark ships:
+  * A small Python core (config + model + oracle + harness).
+  * An IR-visible lit fixture in `tests/tessera-ir/phase7/`.
+  * A Python guard exercising forward determinism + oracle parity +
+    canonical Architecture-Decision-#12 JSON schema.
+
+The audit doc
+(`docs/audit/compiler_correctness_testing_audit.md`) tracks the
+six-layer compiler-correctness coverage for each category.
+
 ## Refactor Direction
 
 - Promote compiler-backed benchmark kernels into small Python modules that expose

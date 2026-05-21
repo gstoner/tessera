@@ -105,7 +105,7 @@ Today's coverage:
 |---|---|---|
 | `attn_local_window_2d` | `_numpy_oracle` in `test_attn_local_window_2d.py` | ✅ |
 | Halo transport (pack/transport/unpack) | `tessera.testing.halo_transport` mock-collective | ✅ |
-| CorrDiff forward | deterministic numpy reference baked into the model | ✅ |
+| **diffusion grid core** (proving workload: `corrdiff_core`) | deterministic numpy reference baked into the model | ✅ |
 | Linear attention | `_linear_attn_reference` (host fallback in same test as MSL kernel) | ✅ |
 | FA-4 sparse attention | `_attention_vjp` numeric finite-diff fallback | ⚠️ — VJP only; forward pass implicit |
 | Spectral (fft/ifft/rfft/irfft/stft/istft/dct) | `np.fft.*` references in `test_spectral_solver_passes.py` | ✅ |
@@ -113,7 +113,7 @@ Today's coverage:
 | 2D window attention native lowering | Python `attn_local_window_2d` is the oracle today; native MSL kernel doesn't execute yet | ⏳ — paired with Apple GPU kernel ship |
 | MLA decode fused / NSA fused | Host reference matches fused path | ⚠️ — happy-path; full envelope sweep planned |
 | **Halo transport (pack/transport/unpack triples)** | `test_halo_execution_lane.py` — IR parameters → mock-collective execution → numpy oracle, bitwise compare | ✅ **shipped 2026-05-21** — first end-to-end execute-and-compare lane; template for future hardware lanes |
-| **CorrDiff IR-visible (stencil + window-attn + halo)** | `test_corrdiff_ir_visible.py` — proves three workstreams compose in one IR flow | ✅ **shipped 2026-05-21** — capstone integration test |
+| **diffusion grid core IR-visible** (stencil + window-attn + halo, via `corrdiff_core` workload) | `test_corrdiff_ir_visible.py` — proves three workstreams compose in one IR flow | ✅ **shipped 2026-05-21** — capstone integration test |
 
 **The standing rule:** every new lowering pass that emits IR which
 *can be executed* must ship with an oracle compare in the same PR.

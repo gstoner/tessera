@@ -1,5 +1,24 @@
 # CorrDiff-core benchmark
 
+> **Category: diffusion grid core.**
+> ``corrdiff_core`` is the **targeted proving workload** in this
+> category — a small port of NVIDIA's CorrDiff regional-weather
+> diffusion model.  The name preserves the CorrDiff anchor (so the
+> benchmark stays pointable: "yes, real external paper, real surface,
+> Tessera expresses it").
+>
+> In higher-level summaries — audit docs, talks, README indices —
+> prefer the category label **diffusion grid core** to emphasise that
+> the underlying primitive composition (conv2d + local-window
+> attention + RNG diffusion + checkpoint over a tiled field) is
+> generic and applies far beyond regional weather: atmospheric
+> chemistry, MRI denoising, neural cellular automata, tomographic
+> reconstruction.
+>
+> Sister surfaces: ``benchmarks/grid_ai_core`` (non-diffusion gridded
+> AI), ``benchmarks/clifford_core``, ``benchmarks/energy_core``,
+> ``benchmarks/visual_complex_core``.
+
 A small regional-weather diffusion benchmark exercising the
 compiler-pipeline pieces shipped in Phase 7:
 

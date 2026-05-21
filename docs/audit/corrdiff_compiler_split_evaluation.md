@@ -409,77 +409,135 @@ blocker — it requires extending the launch params ABI to pass a serialized arg
 via a `hipModuleLaunchKernel` / `hipExtModuleLaunchKernel` call instead of the host-func
 shortcut — but it must be explicitly resolved before any ROCm kernel runs.
 
-### 8.2 Adding MI455x as a Target
+### 8.2 GFX1250 Architectural Profile — What LLVM Tells Us
 
-MI455x is not in the codebase. It is likely a CDNA 5 or next-generation AMD architecture
-released after the current toolchain pin. Adding it is mechanical once the hardware spec
-is known. The checklist:
+GFX1250 is confirmed in LLVM (initial stub: commit
+[llvm/llvm-project@6997465](https://github.com/llvm/llvm-project/commit/69974658f079cec82a9fc13dd4993ab1e072c811),
+Sept 2025 follow-on adding `cluster_load_async_to_lds`). The architecture has several
+properties that matter for Tessera:
 
-**Required information from AMD/hardware team:**
-- GFX arch string (e.g., `gfx960` — confirm exact value)
-- ROCm minimum version (may require updating from 7.2.3)
-- MFMA instruction shapes (M×N×K×K_blocks per supported dtype)
-- New feature flags (any beyond CDNA 4's mfma_f4/mfma_f6/cluster_mode)
-- LDS bytes and max waves per CU
+| Property | GFX1250 | Existing CDNA (gfx90a–gfx950) |
+|----------|---------|-------------------------------|
+| Wavefront size | **Wave32** | Wave64 |
+| Matrix instruction | **WMMA** (not MFMA) | MFMA |
+| Async memory | `cluster_load_async_to_lds` | `lds_async_copy` |
+| LDS atomic barriers | 29-bit count + 3-bit phase (new) | Standard |
+| Feature set base | `+gfx12-insts`, `+gfx1250-insts` | `+gfx9-insts` |
+| Chip type | Chiplet (2nm compute + 3nm I/O) | Monolithic/multi-die |
 
-**Code changes (all mechanical, ~1 day once spec is confirmed):**
+**The key implication:** GFX1250 is structurally more like GFX_1100 (RDNA3, Wave32, WMMA)
+and GFX_1200 (RDNA4, Wave32, WMMA) than like the CDNA line. Tessera already has the
+WMMA-capable path for GFX_1100/GFX_1200 — GFX_1250 extends that, not the MFMA path.
+
+The `_MFMA_VARIANTS` table is **not the right home** for GFX1250 shapes. The entry will
+be empty (like GFX_1100/GFX_1200 today), and the WMMA instruction shapes belong in a
+`_WMMA_VARIANTS` table that doesn't yet exist in `rocm_target.py`.
+
+### 8.3 Adding GFX1250 to Tessera
+
+**Code changes — `rocm_target.py` (enum registration, ~half day):**
 
 ```python
-# 1. python/tessera/compiler/rocm_target.py
 class AMDArch(IntEnum):
-    ...
-    GFX_960 = 960   # MI455x — confirm exact value
+    GFX_90A  = 90    # MI250, CDNA 2, Wave64, MFMA
+    GFX_940  = 940   # MI300A, CDNA 3, Wave64, MFMA
+    GFX_942  = 942   # MI300X, CDNA 3, Wave64, MFMA
+    GFX_950  = 950   # MI325X, CDNA 4, Wave64, MFMA+F4/F6
+    GFX_1100 = 1100  # RDNA 3, Wave32, WMMA
+    GFX_1200 = 1200  # RDNA 4, Wave32, WMMA+FP8
+    GFX_1250 = 1250  # MI455x (Helios), Wave32, WMMA — NEW
 
-_LDS_BYTES       = { ..., AMDArch.GFX_960: 65536 }  # verify
-_MAX_WAVES_PER_CU = { ..., AMDArch.GFX_960: 16 }    # verify
-_ROCM_ARCH_STRINGS = { ..., AMDArch.GFX_960: "gfx960" }  # confirm string
-
-_ROCM_7_2_FEATURES = {  # or bump to ROCM_X_Y_FEATURES if version changes
+_WAVEFRONT_SIZE = {
     ...,
-    AMDArch.GFX_960: {
-        "mfma": True, "mfma_f8": True, "mfma_xf32": True,
-        "mfma_f4": True, "mfma_f6": True,
-        # any new MI455x-specific flags
-    }
+    AMDArch.GFX_1250: 32,  # same as RDNA path
 }
 
+_ROCM_ARCH_STRINGS = {
+    ...,
+    AMDArch.GFX_1250: "gfx1250",
+}
+
+# MFMA table: empty for GFX_1250 (uses WMMA, not MFMA)
 _MFMA_VARIANTS = {
     ...,
-    AMDArch.GFX_960: [
-        # copy from MI325X (gfx950) as baseline; update from MI455x spec
-        {"M": 32, "N": 32, "K": 8,  "K_blocks": 1, "dtype": "bf16"},
-        {"M": 16, "N": 16, "K": 16, "K_blocks": 1, "dtype": "bf16"},
-        # ... full shape table from AMD ISA guide
-    ]
+    AMDArch.GFX_1250: [],  # WMMA-only arch
+}
+
+# NEW table needed — parallel to _MFMA_VARIANTS
+_WMMA_VARIANTS = {
+    AMDArch.GFX_1100: [
+        {"M": 16, "N": 16, "K": 16, "dtype": "fp16"},
+        {"M": 16, "N": 16, "K": 16, "dtype": "bf16"},
+        {"M": 16, "N": 16, "K": 16, "dtype": "int8"},
+    ],
+    AMDArch.GFX_1200: [
+        # GFX12 adds FP8
+        {"M": 16, "N": 16, "K": 16, "dtype": "fp16"},
+        {"M": 16, "N": 16, "K": 16, "dtype": "bf16"},
+        {"M": 16, "N": 16, "K": 32, "dtype": "fp8_e4m3"},
+        {"M": 16, "N": 16, "K": 32, "dtype": "fp8_e5m2"},
+    ],
+    AMDArch.GFX_1250: [
+        # Confirm exact shapes from AMD ISA guide for MI455x
+        # Placeholder based on GFX12 baseline — update when spec confirmed
+        {"M": 16, "N": 16, "K": 16, "dtype": "fp16"},
+        {"M": 16, "N": 16, "K": 16, "dtype": "bf16"},
+        {"M": 16, "N": 16, "K": 32, "dtype": "fp8_e4m3"},
+        {"M": 16, "N": 16, "K": 32, "dtype": "fp8_e5m2"},
+        # MI455x may also support scaled_wmma or block-scaled variants
+    ],
+}
+
+_ROCM_7_2_FEATURES = {
+    ...,
+    AMDArch.GFX_1250: {
+        "mfma": False,        # WMMA arch, not MFMA
+        "wmma": True,
+        "wmma_f8": True,      # confirm
+        "lds_async_copy": False,
+        "cluster_load_async_to_lds": True,  # confirmed in LLVM
+        "fp8_conversion": True,
+        "gfx12_insts": True,
+        "gfx1250_insts": True,
+        # confirm: atomic barrier instructions (29-bit count + 3-bit phase)
+    }
 }
 ```
 
+**Schema extension — `generate_mfma_table.py` and `mfma_table.inc`:**
+
+The existing X-macro `TESSERA_MFMA_VARIANT(arch_id, arch_name, M, N, K, K_blocks)` only
+covers MFMA. Need a parallel macro for WMMA:
+
+```c
+// mfma_table.inc addition
+TESSERA_WMMA_VARIANT(1250, gfx1250, 16, 16, 16, fp16)
+TESSERA_WMMA_VARIANT(1250, gfx1250, 16, 16, 16, bf16)
+TESSERA_WMMA_VARIANT(1250, gfx1250, 16, 16, 32, fp8_e4m3)
+TESSERA_WMMA_VARIANT(1250, gfx1250, 16, 16, 32, fp8_e5m2)
+```
+
+The C++ lowering pass (`MFMAFullCoveragePass`) reads `mfma_table.inc` — it needs a
+parallel `WMMALoweringPass` that reads the WMMA table for GFX_1100/GFX_1200/GFX_1250.
+
+**Capabilities entry:**
+
 ```python
-# 2. python/tessera/compiler/capabilities.py
-TARGET_CAPABILITIES["rocm_gfx960"] = TargetCapability(
-    family="rocm", arch="gfx960", runtime_backend="hip",
-    available=False,  # flip to True when hardware is present in CI
+TARGET_CAPABILITIES["rocm_gfx1250"] = TargetCapability(
+    family="rocm", arch="gfx1250", runtime_backend="hip",
+    wavefront_size=32,
+    available=False,  # flip to True when hardware is in CI
+    matrix_instruction="wmma",  # not "mfma"
     ...
 )
 ```
 
-```bash
-# 3. Regenerate MFMA table (automatic)
-python scripts/generate_mfma_table.py
-# Verify: src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/mfma_table.inc
-```
-
-```python
-# 4. tests/unit/test_target_toolchain_pins.py
-class TestGFX960Features(TestAMDArchBase):
-    arch = AMDArch.GFX_960
-    # assert expected feature flags, MFMA shapes, dtype coverage
-```
-
-If MI455x requires ROCm > 7.2.3, also update `TESSERA_TARGET_ROCM` in `rocm_target.py`,
-`cmake/TesseraToolchainPins.cmake`, `src/collectives/include/.../AdapterVersionPin.h`
-(RCCL pin), and `scripts/probe_collective_libs.py`. The toolchain consistency test
-(`test_target_toolchain_pins.py`) will catch any drift.
+**What to confirm from hardware / AMD ISA doc before finalizing:**
+- Exact WMMA shapes for MI455x (M×N×K per dtype) — GFX12 shapes are a reasonable baseline
+- Whether `scaled_wmma` (block-scaled variant) is supported, and its shape table
+- ROCm version required (7.2.3 may cover initial support; confirm)
+- LDS bytes and max waves per CU for MI455x specifically
+- Interconnect: Pensando Vulcano NIC bandwidth (for `ChunkPlanner.cpp` chunk size tuning)
 
 ### 8.3 Phase H-ROCm: A Formal Track Is Needed
 

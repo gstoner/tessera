@@ -1375,6 +1375,7 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `mla_decode(Q, K_latent, V_latent, W_k=None, W_v=None, ...)` | `(array,array,array,optional array,optional array) → array` | `state` | S7 MLA decode wrapper over latent expansion and `flash_attn` |
 | `mla_decode_fused(x, w_dkv, w_uk, w_uv, q, *, scale=None, causal=False)` | `(array,array,array,array,array) → array` | `state` | MLA-1 — DeepSeek MLA decode block as a single op (result of the Schedule IR `tessera-mla-fusion` pass) |
 | `attn_sliding_window(Q, K, V, *, window_size, causal=True)` | `(array,array,array) → array` | `state` | NSA-1 branch — sliding-window dense local attention |
+| `attn_local_window_2d(Q, K, V, *, window=(1,1))` | `(array,array,array) → array` | `state` | Gap 4 — 2D local-window attention for spatial grids (weather/climate, ViT-style local bias); Q/K/V rank-5 `(B, H, Hq, Wq, D)` |
 | `attn_compressed_blocks(Q, K_c, V_c)` | `(array,array,array) → array` | `state` | NSA-1 branch — attention over per-block compressed K/V summaries |
 | `attn_top_k_blocks(Q, K, V, *, scores, top_k, block_size, causal=True)` | `(array,array,array) → array` | `state` | NSA-1 branch — top-k block-selected attention |
 | `deepseek_sparse_attention(Q, K, V, gate_logits=None, ...)` | `(array,array,array,optional array) → array` | `state` | DeepSeek/NSA wrapper composing sliding, compressed, and top-k branches |

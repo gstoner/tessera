@@ -1121,6 +1121,32 @@ def vjp_attn_sliding_window(dout, Q, K, V, *, window_size, causal=True, **_):
     return _attention_vjp(dout, Q, K, V, mask=mask)
 
 
+@_vjp("attn_local_window_2d")
+def vjp_attn_local_window_2d(dout, Q, K, V, *, window=(1, 1), **_):
+    """Gap 4 (2026-05-20): VJP for 2D local-window attention.
+
+    Per-(Hq, Wq) window masks make the analytical Jacobian
+    structurally awkward (the mask shape varies per query position),
+    so we use the numeric-finite-difference fallback the
+    ``attn_top_k_blocks`` family uses — correct, slower, and trivially
+    replaced when a fused 2D-window kernel lands.
+    """
+    from tessera import ops as _ops
+    original = getattr(
+        _ops.attn_local_window_2d, "__wrapped__", _ops.attn_local_window_2d,
+    )
+    args = [Q, K, V]
+    return tuple(
+        _numeric_vjp_arg(
+            lambda a, i=i: original(
+                *(args[:i] + [a] + args[i + 1:]), window=window,
+            ),
+            dout, arg,
+        )
+        for i, arg in enumerate(args)
+    )
+
+
 @_vjp("attn_compressed_blocks")
 def vjp_attn_compressed_blocks(dout, Q, K_c, V_c, **_):
     return _attention_vjp(dout, Q, K_c, V_c)

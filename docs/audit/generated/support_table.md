@@ -16,6 +16,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | Op | Family | api | frontend | graph_ir | schedule_ir | tile_ir | target_ir | runtime | bench |
 |----|--------|---|---|---|---|---|---|---|---|
 | `attn_compressed_blocks` | attention | public | public | registered | complete | partial | reference | ready | none |
+| `attn_local_window_2d` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `attn_sliding_window` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `attn_top_k_blocks` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `deepseek_sparse_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
@@ -291,7 +292,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 
 | Family | Count | Glyphs (one column per op, axes packed L→R) |
 |--------|------:|------|
-| attention | 20 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| attention | 21 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | collective | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | comparison | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | contraction | 1 | PPGCpRN· |

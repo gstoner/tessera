@@ -340,6 +340,10 @@ _NVIDIA_KERNEL_TILE_SHAPES: dict[str, dict[str, tuple]] = {
     "attn_top_k_blocks":        {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
     "attn_compressed_blocks":   {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
     "attn_sliding_window":      {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
+    # 2D local-window attention — H×W spatial neighborhoods for weather/grid
+    # workloads.  Same WGMMA tile as sliding-window 1D; cluster=1 since each
+    # (h, w) center attends to a small fixed patch.
+    "attn_local_window_2d":     {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
     # MiniMax Lightning — linear-attention with delta-rule recurrence.
     # The recurrence runs as a sequence of small (32, 32, 16) WGMMAs.
     "lightning_attention":      {"wgmma_shape": (32, 32, 16),  "cluster": (1, 1, 1)},
@@ -425,6 +429,7 @@ _ROCM_KERNEL_MFMA_SHAPES: dict[str, tuple[int, int, int, int]] = {
     "attn_top_k_blocks":        (16, 16, 16, 1),
     "attn_compressed_blocks":   (16, 16, 16, 1),
     "attn_sliding_window":      (16, 16, 16, 1),
+    "attn_local_window_2d":     (16, 16, 16, 1),
     "lightning_attention":      (16, 16, 16, 1),
     "linear_attn":              (16, 16, 16, 1),
     "gated_deltanet":           (16, 16, 16, 1),

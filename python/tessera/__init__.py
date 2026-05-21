@@ -1128,6 +1128,90 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         weights = e / row_sum
         return np.matmul(weights, V)
 
+    def attn_local_window_2d(Q, K, V, *, window=(1, 1)):
+        """2D local-window attention for spatial grids (Gap 4, 2026-05-20).
+
+        Generalizes ``attn_sliding_window`` from a 1D sequence axis to a
+        2D spatial grid.  Each query at grid position ``(h, w)`` attends
+        to a ``(2 * window[0] + 1) × (2 * window[1] + 1)`` neighborhood
+        of keys centered at the same position.
+
+        Shapes:
+            Q : ``(B, H, Hq, Wq, D)``
+            K : ``(B, H, Hk, Wk, D)`` — Hk = Hq, Wk = Wq for self-attention
+            V : ``(B, H, Hk, Wk, D)``
+            window : ``(rh, rw)`` half-widths (rh=rw=1 ⇒ 3×3 neighborhood)
+            output : ``(B, H, Hq, Wq, D)``
+
+        Use cases:
+            * weather / climate models — Q-cells attend to local KV-patches
+            * vision transformers with spatial locality bias
+            * neural cellular automata
+
+        v1 reference is a straightforward numpy implementation: for each
+        (h, w) we materialize a (2rh+1)(2rw+1)-key local block, compute
+        standard attention against it, and write back to the output.
+        Native lowering is a stencil-shaped 2D-window kernel — manifest
+        slot reserved across apple_gpu / nvidia_sm90 / rocm.
+        """
+        if hasattr(Q, "_data"): Q = Q._data
+        if hasattr(K, "_data"): K = K._data
+        if hasattr(V, "_data"): V = V._data
+        Q = np.asarray(Q); K = np.asarray(K); V = np.asarray(V)
+        if Q.ndim != 5 or K.ndim != 5 or V.ndim != 5:
+            raise ValueError(
+                "attn_local_window_2d expects rank-5 (B, H, Hq, Wq, D) tensors; "
+                f"got Q.ndim={Q.ndim}, K.ndim={K.ndim}, V.ndim={V.ndim}"
+            )
+        if K.shape[2:4] != V.shape[2:4]:
+            raise ValueError(
+                "K and V must agree on spatial axes (Hk, Wk); "
+                f"got K.shape[2:4]={K.shape[2:4]}, V.shape[2:4]={V.shape[2:4]}"
+            )
+        if Q.shape[2:4] != K.shape[2:4]:
+            # v1 restriction — same spatial layout for Q and K/V.  A
+            # future extension can support strided / downsampled KV.
+            raise ValueError(
+                "attn_local_window_2d v1 requires Q and K to share spatial "
+                f"axes; got Q={Q.shape[2:4]} K={K.shape[2:4]}"
+            )
+
+        rh, rw = window
+        if rh < 0 or rw < 0:
+            raise ValueError(
+                f"window half-widths must be non-negative; got {window!r}"
+            )
+        B, H, Hq, Wq, D = Q.shape
+        scale = 1.0 / np.sqrt(D)
+        out = np.zeros_like(Q)
+
+        # v1 reference: nested loop over (h, w).  Hot path on real
+        # spatial grids needs a fused kernel — that's the backend
+        # manifest's planned slot.  This implementation is correctness-
+        # first; the tiled kernel lands as a separate compiler task.
+        for h in range(Hq):
+            h_lo = max(0, h - rh)
+            h_hi = min(Hq, h + rh + 1)
+            for w in range(Wq):
+                w_lo = max(0, w - rw)
+                w_hi = min(Wq, w + rw + 1)
+                # Local KV patch (B, H, hh, ww, D) where hh = h_hi - h_lo, ww = w_hi - w_lo.
+                k_patch = K[:, :, h_lo:h_hi, w_lo:w_hi, :]
+                v_patch = V[:, :, h_lo:h_hi, w_lo:w_hi, :]
+                hh, ww = k_patch.shape[2], k_patch.shape[3]
+                # Flatten the patch's spatial axes for the dot product.
+                k_flat = k_patch.reshape(B, H, hh * ww, D)
+                v_flat = v_patch.reshape(B, H, hh * ww, D)
+                q_vec = Q[:, :, h, w, :]  # (B, H, D)
+                # Scores: (B, H, hh*ww).
+                scores = np.einsum("bhd,bhkd->bhk", q_vec, k_flat) * scale
+                # Softmax over the patch.
+                scores -= scores.max(axis=-1, keepdims=True)
+                e = np.exp(scores)
+                weights = e / e.sum(axis=-1, keepdims=True)
+                out[:, :, h, w, :] = np.einsum("bhk,bhkd->bhd", weights, v_flat)
+        return out
+
     def attn_compressed_blocks(Q, K_c, V_c):
         """NSA branch 2 — attention over compressed-block summaries.
 
@@ -3086,6 +3170,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "power_attn": power_attn,
         "retention": retention,
         "attn_sliding_window": attn_sliding_window,
+        # Gap 4 (2026-05-20): 2D spatial-grid local-window attention.
+        "attn_local_window_2d": attn_local_window_2d,
         "attn_compressed_blocks": attn_compressed_blocks,
         "attn_top_k_blocks": attn_top_k_blocks,
         # Phase F-MoR — Mixture of Recursions primitives.
@@ -3385,6 +3471,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         kimi_delta_attention=kimi_delta_attention,
         modified_delta_attention=modified_delta_attention,
         attn_sliding_window=attn_sliding_window,
+        attn_local_window_2d=attn_local_window_2d,
         attn_compressed_blocks=attn_compressed_blocks,
         attn_top_k_blocks=attn_top_k_blocks,
         compress_blocks=compress_blocks,

@@ -254,6 +254,7 @@ def _merge_contract_status(
 _EXISTING_MODEL_FAMILIES: dict[str, tuple[str, ...]] = {
     "attn_compressed_blocks": ("Linformer/cosFormer", "Megalodon/Griffin"),
     "attn_sliding_window": ("Megalodon/Griffin",),
+    "attn_local_window_2d": ("weather/spatial grids",),
     "attn_top_k_blocks": ("Titans/Atlas", "Megalodon/Griffin"),
     "conv2d": ("diffusion", "JEPA"),
     "conv3d": ("diffusion",),
@@ -443,6 +444,7 @@ for _name in (
     "mla_decode", "mla_decode_fused",
     # ── Sparse attention (MoSA + MiniMax sparse path) ────────────────
     "attn_sliding_window", "attn_top_k_blocks", "attn_compressed_blocks",
+    "attn_local_window_2d",
     # ── Linear / recurrent attention (Lightning, Megalodon) ──────────
     "linear_attn", "linear_attn_state", "power_attn", "retention",
     # ── Reasoning-model attention family (S-series 2026-05-10) ───────
@@ -1186,6 +1188,7 @@ _NUMERIC_POLICY_BY_NAME_FACTORIES: dict[str, "Callable[[], NumericPolicy]"] = {
     "kimi_delta_attention":       _attn_policy,
     "modified_delta_attention":   _attn_policy,
     "attn_sliding_window":        _attn_policy,
+    "attn_local_window_2d":       _attn_policy,
     "attn_compressed_blocks":     _attn_policy,
     "attn_top_k_blocks":          _attn_policy,
     # ── Spectral family ────────────────────────────────────────────────

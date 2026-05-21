@@ -406,6 +406,19 @@ def jvp_attn_sliding_window(primals, tangents, **kwargs):
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
 
 
+@_jvp("attn_local_window_2d")
+def jvp_attn_local_window_2d(primals, tangents, **kwargs):
+    """Gap 4 (2026-05-20): JVP for 2D local-window attention via the
+    numeric forward-mode rule (matches the 1D sliding-window pattern)."""
+    from tessera import ops as _ops
+    fn = getattr(
+        _ops.attn_local_window_2d, "__wrapped__", _ops.attn_local_window_2d,
+    )
+    return _numeric_jvp_rule(
+        lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents,
+    )
+
+
 @_jvp("attn_compressed_blocks")
 def jvp_attn_compressed_blocks(primals, tangents, **kwargs):
     from tessera import ops as _ops

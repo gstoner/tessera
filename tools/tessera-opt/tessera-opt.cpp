@@ -101,6 +101,7 @@ int main(int argc, char **argv) {
   // pipeline overlap, dynamic topology).
   tessera::neighbors::registerHaloInferPass();
   tessera::neighbors::registerStencilLowerPass();
+  tessera::neighbors::registerBoundaryConditionLowerPass();
   tessera::neighbors::registerPipelineOverlapPass();
   tessera::neighbors::registerDynamicTopologyPass();
 #endif

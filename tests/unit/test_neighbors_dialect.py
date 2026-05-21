@@ -28,6 +28,7 @@ TESSERA_OPT_CMAKE = REPO_ROOT / "tools" / "tessera-opt" / "CMakeLists.txt"
 PASS_REGISTRATION_FNS = (
     "registerHaloInferPass",
     "registerStencilLowerPass",
+    "registerBoundaryConditionLowerPass",
     "registerPipelineOverlapPass",
     "registerDynamicTopologyPass",
 )
@@ -55,6 +56,7 @@ def test_each_pass_cpp_defines_its_registration_fn() -> None:
     pass_cpp_files = {
         "HaloInferPass.cpp": "registerHaloInferPass",
         "StencilLowerPass.cpp": "registerStencilLowerPass",
+        "BoundaryConditionLowerPass.cpp": "registerBoundaryConditionLowerPass",
         "PipelineOverlapPass.cpp": "registerPipelineOverlapPass",
         "DynamicTopologyPass.cpp": "registerDynamicTopologyPass",
     }

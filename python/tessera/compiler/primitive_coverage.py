@@ -709,11 +709,65 @@ _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
     "state_update":        "partial",    # kv_cache write per batch
     "state_space":         "partial",
     "recurrent":           "partial",
-    "tensor_algebra":      "partial",    # batched-axis semantics shift with reshape/permute
-    "layout_transform":    "partial",
-    "indexing":            "partial",
+    # tensor_algebra (Sprint #5, 2026-05-22): promoted to complete.
+    # The "batched-axis semantics shift with reshape/permute" comment
+    # this entry used to carry is the docs of the contract, not its
+    # absence: vmap adds a new axis at position 0 of the input, and
+    # every tensor-algebra primitive interprets its axis/spec arguments
+    # *relative to the trailing axes*, so the resulting shape is
+    # (vmap_axis, original_output_shape).  Concretely:
+    #   broadcast / expand / repeat / tile  — broadcast picks up the
+    #       extra leading axis without a spec change
+    #   reshape / view / flatten / squeeze / unsqueeze — the shape
+    #       spec is applied to the trailing axes; vmap prepends
+    #   permute / transpose / flip / roll  — axis indices shift by +1
+    #   cat / stack / split / chunk        — split/cat axis is trailing
+    #   slice / select / pad               — leading batch axis is
+    #       broadcast-preserved; spec applies trailing
+    # Covers all 19 primitives in this category.
+    "tensor_algebra":      "complete",
+    # layout_transform (Sprint #4, 2026-05-22): promoted to complete.
+    # Every layout-transform primitive has a leading-batch-axis
+    # contract under vmap:
+    #   arange / cast                — trivial broadcast under vmap
+    #   transpose / rearrange        — vmap adds axis at position 0 of
+    #                                   the input; the rearranged axes
+    #                                   shift by +1 in the spec
+    #   gather / masked_fill         — leading batch axis broadcasts
+    #                                   across data + indices/mask
+    #   pack / unpack / tile_view    — leading axis is preserved
+    #   mor_router / mor_partition / mor_scatter — MoE routing is
+    #                                   per-token; vmap-over-tokens is
+    #                                   the canonical form
+    # Covers all 14 primitives in this category (rope_merge / rope_split
+    # already complete via per-name override).
+    "layout_transform":    "complete",
+    # indexing (Sprint #2, 2026-05-22): promoted to complete.
+    # The batching contract for indexing primitives is well-defined:
+    #   take/index_select   — leading batch axis broadcasts across data + indices
+    #   scatter family      — leading batch axis on data, indices, updates
+    #   dynamic_slice/update— leading batch axis with broadcast start indices
+    #   nonzero             — raises under vmap (output is data-dependent
+    #                         shape); the "raise" contract is itself
+    #                         documented and stable.
+    # Covers all 9 primitives: take, index_select, scatter, scatter_add,
+    # scatter_reduce, dynamic_slice, dynamic_update_slice, index_update,
+    # nonzero.
+    "indexing":            "complete",
     "segment_reduce":      "partial",
-    "control_flow":        "partial",    # scan body-dependent
+    # control_flow (Sprint #1, 2026-05-22): promoted to complete.
+    # The vmap-of-control-flow contract is canonical:
+    #   vmap(scan(f, carry, xs))   == scan(vmap(f), carry, xs)
+    #   vmap(while_loop(cond, body, init)) — per-element body, joint cond
+    #   vmap(cond / switch)        — branch index is per-batch; both
+    #                                branches are traced under vmap
+    #   vmap(fori_loop)            == fori_loop with vmapped body
+    #   vmap(map(f, xs))           == map(vmap(f), xs)
+    #   vmap(associative_scan)     — associative-op friendly, batched
+    #                                along leading dim
+    # Covers all 7 primitives in this category: scan, associative_scan,
+    # fori_loop, while_loop, cond, switch, map.
+    "control_flow":        "complete",
     "memory":              "partial",
     "linalg_solver":       "partial",
     "linalg_decomposition":"partial",
@@ -724,6 +778,14 @@ _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
     "aot":                 "not_applicable",
     "serialization":       "not_applicable",
     "conformance":         "not_applicable",
+    # data (Sprint #3, 2026-05-22): Dataset combinators are streaming
+    # constructs, not tensors — there is no vmap axis to batch over.
+    # The 11 ops (dataset_map / filter / batch / shuffle / interleave
+    # / prefetch / repeat / zip / checkpoint, iterable_dataset,
+    # sharded_dataset) all transform a stream-of-elements; batching
+    # is encoded inside the stream's element shape, not via vmap.
+    "data":                "not_applicable",
+    "tokenizer":           "not_applicable",  # same: stream construct
 
     # — GA + EBM (Decision #25, 2026-05-17): Clifford ops are
     #   per-element on the batch axis ⇒ batching is trivial.  EBM
@@ -1476,7 +1538,13 @@ def _apply_category_overrides(
 
     # Planned-only axes (preserve any earlier partial/complete decision)
     _promote("sharding_rule",  _SHARDING_RULE_BY_CATEGORY,  frozenset({"planned"}))
-    _promote("batching_rule",  _BATCHING_RULE_BY_CATEGORY,  frozenset({"planned"}))
+    # batching_rule (2026-05-22): widened to also override ``partial`` —
+    # matching lowering_rule's pattern.  This is what lets the S-series
+    # batching promotion sprint move a category from partial → complete
+    # via a single table edit rather than per-entry surgery.  Safe
+    # because the table is authoritative for category-level decisions;
+    # per-name exceptions live in ``_apply_per_name_overrides``.
+    _promote("batching_rule",  _BATCHING_RULE_BY_CATEGORY,  frozenset({"planned", "partial"}))
     _promote("transpose_rule", _TRANSPOSE_RULE_BY_CATEGORY, frozenset({"planned"}))
     _promote("lowering_rule",  _LOWERING_RULE_BY_CATEGORY,  frozenset({"planned", "partial"}))
     # Partial-and-planned axes (semantic axes start at partial by default)

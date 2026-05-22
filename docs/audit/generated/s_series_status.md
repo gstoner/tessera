@@ -14,7 +14,7 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 99 | 334 |
+| `batching_rule` | 36 | 397 |
 | `transpose_rule` | 158 | 275 |
 | `sharding_rule` | 189 | 244 |
 | `lowering_rule` | 0 | 433 |
@@ -24,11 +24,11 @@
 
 | sprint | category | total | batching | transpose | sharding | lowering | backend |
 |---|---|---:|---:|---:|---:|---:|---:|
-| S2 | `tensor_algebra` | 19 | 19 | 19 | 19 | — | 19 |
+| S2 | `tensor_algebra` | 19 | — | 19 | 19 | — | 19 |
 | S2 | `reduction` | 14 | — | — | — | — | 14 |
 | S2 | `comparison` | 6 | — | — | — | — | 6 |
 | S2 | `numeric_helper` | 15 | — | — | — | — | 15 |
-| S5 | `control_flow` | 7 | 7 | 7 | 7 | — | 7 |
+| S5 | `control_flow` | 7 | — | 7 | 7 | — | 7 |
 | S7 | `attention` | 21 | — | 21 | 21 | — | 21 |
 | S7 | `position_encoding` | 2 | — | — | — | — | 2 |
 | S7 | `normalization` | 7 | — | — | 7 | — | 7 |
@@ -41,8 +41,8 @@
 | S11 | `rl_loss` | 4 | — | — | 3 | — | 4 |
 | M6 | `ebm` | 12 | — | 12 | 12 | — | 12 |
 | M7 | `visual_complex` | 1 | — | 1 | 1 | — | 1 |
-| S15 | `data` | 11 | 11 | — | 11 | — | 11 |
-| S15 | `tokenizer` | 5 | 5 | — | 5 | — | 5 |
+| S15 | `data` | 11 | — | — | 11 | — | 11 |
+| S15 | `tokenizer` | 5 | — | — | 5 | — | 5 |
 | other | `aot` | 6 | — | — | — | — | 6 |
 | other | `collective` | 10 | 10 | — | — | — | 10 |
 | other | `conformance` | 4 | — | — | — | — | 4 |
@@ -51,8 +51,8 @@
 | other | `extension` | 6 | — | — | — | — | 6 |
 | other | `functional_optimizer_step` | 6 | 6 | 6 | — | — | 6 |
 | other | `fused_epilogue` | 1 | — | — | 1 | — | 1 |
-| other | `indexing` | 9 | 9 | 9 | 9 | — | 9 |
-| other | `layout_transform` | 14 | 12 | 12 | 12 | — | 14 |
+| other | `indexing` | 9 | — | 9 | 9 | — | 9 |
+| other | `layout_transform` | 14 | — | 12 | 12 | — | 14 |
 | other | `linalg_decomposition` | 3 | 3 | 3 | 3 | — | 3 |
 | other | `linalg_solver` | 1 | 1 | 1 | 1 | — | 1 |
 | other | `logical` | 8 | — | — | — | — | 8 |
@@ -87,15 +87,15 @@
 
 | Sprint | Primitives | Open batching | Open transpose | Open sharding | Open backend |
 |---|---:|---:|---:|---:|---:|
-| S2 | 54 | 19 | 19 | 19 | 54 |
-| S5 | 7 | 7 | 7 | 7 | 7 |
+| S2 | 54 | 0 | 19 | 19 | 54 |
+| S5 | 7 | 0 | 7 | 7 | 7 |
 | S7 | 50 | 0 | 38 | 45 | 50 |
 | S10 | 18 | 3 | 10 | 7 | 18 |
 | S11 | 30 | 0 | 0 | 3 | 30 |
-| S15 | 16 | 16 | 0 | 16 | 16 |
+| S15 | 16 | 0 | 0 | 16 | 16 |
 | M6 | 12 | 0 | 12 | 12 | 12 |
 | M7 | 1 | 0 | 1 | 1 | 1 |
-| other | 245 | 54 | 71 | 79 | 245 |
+| other | 245 | 33 | 71 | 79 | 245 |
 
 ## Closure trajectory
 

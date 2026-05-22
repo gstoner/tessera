@@ -28,6 +28,8 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Support/LogicalResult.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSwitch.h"
 
 // ODS-generated declarations (produced by mlir-tblgen from Attn.td).
 // Include the generated header; actual path depends on CMake binary dir.
@@ -49,8 +51,45 @@ mlir::LogicalResult LseSaveOp::verify() {
   return mlir::success();
 }
 
+// Sprint V6c (2026-05-22) — target-aware tile size limits.
+//
+// Per-SM (tile_q_max, tile_kv_max) for the FA-4 ScaledDotProduct kernel.
+// Generalizes the V3 FlashAttnOp head_dim pattern to the FA-4 Tile IR
+// op family.  Numbers come from the canonical FA-2/FA-3/FA-4 kernel
+// shapes documented in `docs/nvidia_cuda13_kernel_inventory.md` +
+// CLAUDE.md Phase 3 description.
+//
+// sm_70 / sm_75 / sm_80 / sm_86 / sm_89  — FA-2 baseline: 64 × 128
+// sm_90 / sm_90a / sm_100 / sm_100a / sm_120 / sm_120a — FA-3/FA-4: 128 × 256
+// no SM tag — CPU reference; no tile-size limit applied.
+//
+// Returns {0, 0} when the SM is unknown (so the verifier skips the
+// check rather than rejecting unrecognized strings).
+static std::pair<int64_t, int64_t>
+maxTileSizesForTargetSm(llvm::StringRef sm) {
+  return llvm::StringSwitch<std::pair<int64_t, int64_t>>(sm)
+      .Case("sm_70",   {64, 128})
+      .Case("sm_75",   {64, 128})
+      .Case("sm_80",   {64, 128})
+      .Case("sm_86",   {64, 128})
+      .Case("sm_89",   {64, 128})
+      .Case("sm_90",   {128, 256})
+      .Case("sm_90a",  {128, 256})
+      .Case("sm_100",  {128, 256})
+      .Case("sm_100a", {128, 256})
+      .Case("sm_120",  {128, 256})
+      .Case("sm_120a", {128, 256})
+      .Default({0, 0});  // unknown / no limit applied
+}
+
 // ── ScaledDotProductOp verifier ───────────────────────────────────────────
 // query: [tile_q × d_k]  key: [tile_kv × d_k]  → scores: [tile_q × tile_kv]
+//
+// Sprint V6c (2026-05-22): also walks the parent op chain for a
+// `tessera.target_sm` attribute and enforces the per-SM (tile_q, tile_kv)
+// ceiling.  The Q tile size is read from query.dim(0); the KV tile
+// size from key.dim(0).  Functions without the attribute (CPU
+// reference path) skip the target-aware check.
 mlir::LogicalResult ScaledDotProductOp::verify() {
   auto qType = mlir::dyn_cast<mlir::RankedTensorType>(getQuery().getType());
   auto kType = mlir::dyn_cast<mlir::RankedTensorType>(getKey().getType());
@@ -66,6 +105,31 @@ mlir::LogicalResult ScaledDotProductOp::verify() {
   double scale = getScale().convertToDouble();
   if (scale <= 0.0 && scale != -1.0)
     return emitOpError("scale must be positive (or -1.0 as sentinel)");
+  // Sprint V6c — target-aware tile size limits.  Walk parent op chain
+  // for `tessera.target_sm`; enforce per-SM (tile_q_max, tile_kv_max).
+  mlir::Operation *parent = (*this)->getParentOp();
+  while (parent && !parent->hasAttr("tessera.target_sm"))
+    parent = parent->getParentOp();
+  if (parent) {
+    if (auto attr = mlir::dyn_cast<mlir::StringAttr>(
+            parent->getAttr("tessera.target_sm"))) {
+      auto [tileQMax, tileKvMax] = maxTileSizesForTargetSm(attr.getValue());
+      if (tileQMax > 0 && !qType.isDynamicDim(0)
+          && qType.getDimSize(0) > tileQMax)
+        return emitOpError("tile_q=")
+               << qType.getDimSize(0)
+               << " exceeds the SM " << attr.getValue()
+               << " ScaledDotProduct kernel limit of " << tileQMax
+               << " (Sprint V6c FA-4 tile size table)";
+      if (tileKvMax > 0 && !kType.isDynamicDim(0)
+          && kType.getDimSize(0) > tileKvMax)
+        return emitOpError("tile_kv=")
+               << kType.getDimSize(0)
+               << " exceeds the SM " << attr.getValue()
+               << " ScaledDotProduct kernel limit of " << tileKvMax
+               << " (Sprint V6c FA-4 tile size table)";
+    }
+  }
   return mlir::success();
 }
 

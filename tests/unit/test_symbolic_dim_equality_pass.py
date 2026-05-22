@@ -124,29 +124,40 @@ def test_lit_fixture_present() -> None:
     )
 
 
-def test_lit_fixture_covers_one_positive_two_negative() -> None:
-    """V5 scope: 1 positive + 2 negative cases.  Pin that explicitly.
-    V5 exercises the two diagnostic codes whose ops are registered in
-    the Tessera dialect today: SYMDIM_BINDING_VIOLATION (function-level)
-    and SYMDIM_MATMUL_CONTRACT_VIOLATION (tessera.matmul).  The reshape
-    branch is in the pass body but not lit-exercised yet — tessera.reshape
-    is a V2 ODS addition tracked in SHAPE_SYSTEM §11.2."""
+def test_lit_fixture_covers_one_positive_three_negative() -> None:
+    """V5 scope was 1 positive + 2 negative; V6a (2026-05-22)
+    registered `tessera.reshape` as an ODS op, so the lit fixture now
+    exercises the reshape branch end-to-end too — 1 positive + 3
+    negative.  The three negative codes lit-exercised through the
+    real C++ binary are:
+
+      SYMDIM_BINDING_VIOLATION
+      SYMDIM_RESHAPE_VIOLATION            (added in V6a)
+      SYMDIM_MATMUL_CONTRACT_VIOLATION
+
+    Pin the count and the positive function name so a future V6.1
+    addition (e.g., transpose violation case) fails this test and
+    forces the count update."""
     text = LIT_FIXTURE.read_text()
-    # `expected-error` appears once per negative case AND once in the
-    # explanatory header comment listing the codes — but each `// ----- `
-    # split-input section can only have at most one `// expected-error`
-    # directive (the one that's @-anchored).  Count those.
     expected_errors = text.count("// expected-error @+1")
-    assert expected_errors == 2, (
-        f"V5 lit fixture must contain exactly 2 @+1-anchored "
-        f"`expected-error` directives (binding violation + matmul "
-        f"contract violation); got {expected_errors}.  If V5.1 added "
-        f"new cases, update this test to match."
+    assert expected_errors == 3, (
+        f"V5+V6a lit fixture must contain exactly 3 @+1-anchored "
+        f"`expected-error` directives (binding + reshape + matmul "
+        f"contract); got {expected_errors}.  If V6.1 added new "
+        f"cases, update this test to match."
     )
     # The positive case is the func.func without expected-error.
     assert "func.func @symdim_transpose_ok" in text, (
         "positive lit case 'symdim_transpose_ok' missing"
     )
+    # Confirm each of the three negative case function names is
+    # present.  Pin them so a refactor that renames one fails here.
+    for name in (
+        "@symdim_binding_broken",
+        "@symdim_reshape_product_broken",
+        "@symdim_matmul_contract_broken",
+    ):
+        assert name in text, f"V5+V6a lit case {name!r} missing"
 
 
 def test_pass_argument_name_stable() -> None:
@@ -156,4 +167,67 @@ def test_pass_argument_name_stable() -> None:
     text = PASS_CPP.read_text()
     assert '"tessera-symdim-equality"' in text, (
         "pass argument name must be tessera-symdim-equality"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint V6b (2026-05-22) — pipeline integration guards.  The pass must be
+# inserted into the canonical named lowering pipelines after
+# DistributionLoweringPass so broken `where D = H * Dh` clauses are caught
+# automatically (not just when the user explicitly opts in via
+# --tessera-symdim-equality standalone).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+_V6B_PIPELINE_LIT = (
+    REPO_ROOT / "tests" / "tessera-ir" / "phase2"
+    / "sprint_v6b_symdim_in_pipeline.mlir"
+)
+
+
+def test_v6b_pipeline_integration_lit_fixture_present() -> None:
+    """Lit fixture must run via the named pipeline (not the standalone
+    pass) so the integration is exercised end-to-end."""
+    assert _V6B_PIPELINE_LIT.exists(), (
+        f"V6b pipeline integration lit fixture missing: "
+        f"{_V6B_PIPELINE_LIT.relative_to(REPO_ROOT)}"
+    )
+    text = _V6B_PIPELINE_LIT.read_text()
+    assert "RUN: tessera-opt --tessera-lower-to-x86" in text, (
+        "V6b lit fixture must invoke the named pipeline "
+        "`--tessera-lower-to-x86`, not the standalone pass"
+    )
+    assert "SYMDIM_BINDING_VIOLATION" in text, (
+        "V6b lit fixture must exercise the same stable diagnostic "
+        "the standalone pass emits"
+    )
+
+
+@pytest.mark.parametrize("pipeline", [
+    "lowerToX86",
+    "lowerToGPU",
+    "buildCUDA13Pipeline",
+])
+def test_v6b_pass_wired_into_named_pipelines(pipeline: str) -> None:
+    """The 3 named pipelines must each call
+    createSymbolicDimEqualityPass() after createDistributionLoweringPass()."""
+    cpp = PASSES_CPP.read_text()
+    # Find the pipeline body and check ordering of two pass calls.
+    idx = cpp.find(pipeline)
+    assert idx >= 0, f"named pipeline {pipeline!r} not found in Passes.cpp"
+    # Window over the pipeline body — generous to handle multi-line.
+    window = cpp[idx: idx + 3000]
+    dist_pos = window.find("createDistributionLoweringPass()")
+    symdim_pos = window.find("createSymbolicDimEqualityPass()")
+    assert dist_pos >= 0, (
+        f"pipeline {pipeline!r} must call createDistributionLoweringPass()"
+    )
+    assert symdim_pos >= 0, (
+        f"pipeline {pipeline!r} must call createSymbolicDimEqualityPass() "
+        "(Sprint V6b integration)"
+    )
+    assert symdim_pos > dist_pos, (
+        f"pipeline {pipeline!r}: SymbolicDimEqualityPass must run AFTER "
+        "DistributionLoweringPass — the V6b contract is to catch breaks "
+        "caused by distribution lowering"
     )

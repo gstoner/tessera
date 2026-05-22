@@ -455,14 +455,27 @@ items:**
    `tessera.matmul` ops checking the per-op dim-name contract.
    Four stable diagnostic codes: `SYMDIM_BINDING_VIOLATION`,
    `SYMDIM_RESHAPE_VIOLATION`, `SYMDIM_TRANSPOSE_VIOLATION`,
-   `SYMDIM_MATMUL_CONTRACT_VIOLATION`.  Lit fixture:
-   `tests/tessera-ir/phase2/sprint_v5_symdim_equality.mlir`
-   (1 positive + 2 negative, exercising the binding + matmul
-   contract codes — transpose / reshape branches exist in the
-   pass body but reshape is not yet a registered Tessera op, so
-   only the registered-op codes are lit-exercised today).
-   **Status: V1 closed; pipeline integration + reshape ODS op
-   are V2 followups.**
+   `SYMDIM_MATMUL_CONTRACT_VIOLATION`.
+
+   **Sprint V6a closure (2026-05-22):** `tessera.reshape`
+   registered as a proper ODS op in `TesseraOps.td` +
+   `TesseraOps.cpp` with element-count-preserving verifier; the
+   V5 reshape branch is now exercised end-to-end through the
+   real C++ binary (lit fixture grew from 1 positive + 2
+   negative → 1 positive + 3 negative covering all 3 stable
+   diagnostic codes whose ops are now registered).
+
+   **Sprint V6b closure (2026-05-22):**
+   `--tessera-symdim-equality` is now inserted into the three
+   named lowering pipelines (`tessera-lower-to-x86`,
+   `tessera-lower-to-gpu`, `tessera-nvidia-pipeline` family)
+   AFTER `DistributionLoweringPass`, so broken `where D = H * Dh`
+   clauses are caught automatically mid-flight.  Lit fixture
+   `tests/tessera-ir/phase2/sprint_v6b_symdim_in_pipeline.mlir`
+   proves the pass fires inside the named pipeline.
+
+   **Status: V1 closed; V6a/b followups landed; SSA-value
+   flow propagation + affine/Presburger reasoning remain V3+.**
 3. **`LayoutLegalityPass` skeleton + first rule.** **Sprint V2
    closure (2026-05-22):** `src/transforms/lib/LayoutLegalityPass.cpp`
    ships with the canonical 8-name layout accept-set

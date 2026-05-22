@@ -46,6 +46,12 @@ void registerTesseraPasses() {
         pm.addPass(createLightningAttnFusionPass());
         pm.addPass(createDeltaAttnChunkingPass());
         pm.addPass(createDistributionLoweringPass());
+        // Sprint V6b (2026-05-22): re-check symbolic-dim equality
+        // AFTER DistributionLoweringPass so a downstream pass that
+        // accidentally breaks a `where D = H * Dh` clause fails
+        // here with a stable diagnostic (SYMDIM_*).  Ops without
+        // dim-name annotations are skipped silently.
+        pm.addPass(createSymbolicDimEqualityPass());
         pm.addPass(createTilingPass());
         pm.addPass(createTileToX86Pass());
       });
@@ -150,6 +156,9 @@ void registerTesseraPasses() {
         pm.addPass(createLightningAttnFusionPass());
         pm.addPass(createDeltaAttnChunkingPass());
         pm.addPass(createDistributionLoweringPass());
+        // Sprint V6b (2026-05-22): symbolic-dim equality recheck
+        // after distribution lowering (see lowerToX86 comment).
+        pm.addPass(createSymbolicDimEqualityPass());
         pm.addPass(createTileIRLoweringPass());
         pm.addPass(createWarpSpecializationPass());
         pm.addPass(createAsyncCopyLoweringPass());
@@ -195,6 +204,8 @@ void registerTesseraPasses() {
     pm.addPass(createLightningAttnFusionPass());
     pm.addPass(createDeltaAttnChunkingPass());
     pm.addPass(createDistributionLoweringPass());
+    // Sprint V6b (2026-05-22): symbolic-dim equality recheck.
+    pm.addPass(createSymbolicDimEqualityPass());
     pm.addPass(createTileIRLoweringPass());
     pm.addPass(createWarpSpecializationPass());
     pm.addPass(createAsyncCopyLoweringPass());

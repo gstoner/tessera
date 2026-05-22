@@ -97,6 +97,32 @@ LogicalResult FlashAttnOp::verify() {
   return success();
 }
 
+// Sprint V6a (2026-05-22) — ReshapeOp: element-count-preserving.
+// Input and output may have different rank, but their static dims
+// must multiply to the same number and the element type must match.
+// Dynamic dims are unconstrained (the runtime witness checks at
+// dispatch time).
+LogicalResult ReshapeOp::verify() {
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (!inTy || !outTy) return success();
+  if (inTy.getElementType() != outTy.getElementType())
+    return emitOpError("reshape must preserve element type");
+  // Static-dim product equality: only check when both shapes are
+  // fully static.  Otherwise the runtime witness covers it.
+  if (!inTy.hasStaticShape() || !outTy.hasStaticShape()) return success();
+  int64_t inProd = 1;
+  for (int64_t i = 0, e = inTy.getRank(); i < e; ++i)
+    inProd *= inTy.getDimSize(i);
+  int64_t outProd = 1;
+  for (int64_t i = 0, e = outTy.getRank(); i < e; ++i)
+    outProd *= outTy.getDimSize(i);
+  if (inProd != outProd)
+    return emitOpError("reshape must preserve element count: input has ")
+           << inProd << " elements but output has " << outProd;
+  return success();
+}
+
 // Sprint V1 (2026-05-22) — TransposeOp: rank-preserving permutation.
 LogicalResult TransposeOp::verify() {
   auto inTy = dyn_cast<RankedTensorType>(getX().getType());

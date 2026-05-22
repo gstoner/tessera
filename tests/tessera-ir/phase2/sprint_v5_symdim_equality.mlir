@@ -1,19 +1,22 @@
 // RUN: tessera-opt --tessera-symdim-equality %s -split-input-file -verify-diagnostics | FileCheck %s
 
-// Sprint V5 (2026-05-22) — SymbolicDimEqualityPass V1.
+// Sprint V5 (2026-05-22) + V6a (2026-05-22) — SymbolicDimEqualityPass.
 //
-// Closes the 4th MLIR-verifier gap in SHAPE_SYSTEM.md §11.2.
-// V1 dispatches on tessera.reshape / tessera.transpose / tessera.matmul.
-// Today the dialect registers `transpose` and `matmul` but NOT
-// `reshape` — V1's lit coverage exercises the two registered ops,
-// and the pass keeps the reshape branch for when the op is added
-// (a separate V2 task tracked in SHAPE_SYSTEM §11.2).
+// V5 closed the 4th MLIR-verifier gap in SHAPE_SYSTEM.md §11.2.
+// V6a registered `tessera.reshape` as a proper ODS op, so this
+// lit fixture now exercises THREE of the four stable diagnostic
+// codes end-to-end through the real C++ binary (no
+// `--allow-unregistered-dialect` needed):
 //
-// Stable diagnostic codes the lit fixture matches on:
 //   SYMDIM_BINDING_VIOLATION              — function-level equation broken
+//   SYMDIM_RESHAPE_VIOLATION              — reshape dim-name product mismatch
 //   SYMDIM_MATMUL_CONTRACT_VIOLATION      — matmul lhs/rhs symbol mismatch
 //
-// V1 scope: 1 positive + 2 negative cases.
+// The 4th code SYMDIM_TRANSPOSE_VIOLATION is exercised by the
+// positive case (its absence proves the verifier passes when
+// dim-names agree).
+//
+// V6a scope: 1 positive + 3 negative cases.
 
 // ─────────────────────────────────────────────────────────────────────────
 // POSITIVE: D = H * Dh holds with H=4, Dh=16, D=64.  A transpose op
@@ -56,7 +59,43 @@ func.func @symdim_binding_broken(%x: tensor<2x4x65xf32>) -> tensor<2x4x65xf32>
 // -----
 
 // ─────────────────────────────────────────────────────────────────────────
-// NEGATIVE 2: SYMDIM_MATMUL_CONTRACT_VIOLATION
+// NEGATIVE 2: SYMDIM_RESHAPE_VIOLATION (V6a — now exercises the real
+// `tessera.reshape` ODS op).
+//
+// The two verifiers are complementary:
+//   ReshapeOp::verify()              checks tensor element-count match
+//   SymbolicDimEqualityPass          checks dim_names symbol-product match
+//
+// To exercise the V5 pass's reshape branch the tensor shapes must
+// match (so ReshapeOp::verify() passes at parse time) but the
+// declared dim_names_* annotations must contradict each other.
+//
+// Input tensor:  <2x4x64xf32> = 512 elements; dim_names_in = [B, T, D]
+//                = 2*4*64 = 512 (resolves through tessera.dim_sizes).
+// Output tensor: <2x4x4x16xf32> = 512 elements (ReshapeOp::verify OK);
+//                dim_names_out = [B, T, H, B] = 2*4*4*2 = 64 (the user
+//                annotation is internally inconsistent — "B" appears
+//                twice with size 2; SymbolicDimEqualityPass catches
+//                this without needing to cross-check tensor shape).
+// ─────────────────────────────────────────────────────────────────────────
+
+func.func @symdim_reshape_product_broken(%x: tensor<2x4x64xf32>) -> tensor<2x4x4x16xf32>
+    attributes {
+      tessera.dim_bindings = ["D = H * Dh"],
+      tessera.dim_sizes = { B = 2 : i64, T = 4 : i64, H = 4 : i64, Dh = 16 : i64, D = 64 : i64 }
+    } {
+  // expected-error @+1 {{SYMDIM_RESHAPE_VIOLATION: dim_names_in product = 512 but dim_names_out product = 64}}
+  %y = "tessera.reshape"(%x) {
+    tessera.dim_names_in = ["B", "T", "D"],
+    tessera.dim_names_out = ["B", "T", "H", "B"]
+  } : (tensor<2x4x64xf32>) -> tensor<2x4x4x16xf32>
+  return %y : tensor<2x4x4x16xf32>
+}
+
+// -----
+
+// ─────────────────────────────────────────────────────────────────────────
+// NEGATIVE 3: SYMDIM_MATMUL_CONTRACT_VIOLATION
 // dim_names_lhs = [M, K] and dim_names_rhs = [J, N] — the matmul
 // contracts on K (lhs.back()) against J (rhs.front()).  K ≠ J ⇒
 // verifier rejects.

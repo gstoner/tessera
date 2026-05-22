@@ -51,6 +51,8 @@ V3_LIT = (
         ('def Tessera_LayerNormOp', 'layer_norm'),
         # MoeDispatchOp
         ('def Tessera_MoeDispatchOp', 'moe_dispatch'),
+        # Sprint V6a — ReshapeOp registered as ODS op
+        ('def Tessera_ReshapeOp', 'reshape'),
     ],
 )
 def test_sprint_v1_op_has_hasverifier(op_def_marker) -> None:
@@ -74,6 +76,10 @@ _V1_VERIFIER_SIGNATURES = (
     "LogicalResult TransposeOp::verify()",
     "LogicalResult LayerNormOp::verify()",
     "LogicalResult MoeDispatchOp::verify()",
+    # Sprint V6a (2026-05-22) — tessera.reshape registered as ODS op
+    # so V5's SymbolicDimEqualityPass can exercise the reshape branch
+    # end-to-end without --allow-unregistered-dialect.
+    "LogicalResult ReshapeOp::verify()",
 )
 
 
@@ -97,6 +103,9 @@ _V1_DIAGNOSTIC_PHRASES = (
     "eps must be positive for stable rsqrt",
     # MoeDispatchOp
     "token count mismatch",
+    # Sprint V6a — ReshapeOp
+    "reshape must preserve element type",
+    "reshape must preserve element count",
 )
 
 
@@ -206,6 +215,88 @@ def test_sprint_v3_flash_attn_consults_parent_target_sm() -> None:
         "diagnostic phrase 'exceeds the SM' must be in FlashAttnOp "
         "verifier — lit fixture relies on it"
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint V6c (2026-05-22) — target-aware verifier on ScaledDotProductOp
+# (FA-4 Tile IR).  The verifier code lives in a different file (FA-4
+# Tile IR has its own dialect lib) so pin its source explicitly.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_ATTN_OPS_CPP = (
+    REPO_ROOT / "src" / "compiler" / "tile_opt_fa4" / "lib" / "Dialect"
+    / "Attn" / "AttnOps.cpp"
+)
+_V6C_LIT = (
+    REPO_ROOT / "tests" / "tessera-ir" / "phase3"
+    / "sprint_v6c_scaled_dot_product_target_aware.mlir"
+)
+
+
+def test_sprint_v6c_scaled_dot_product_tile_size_table_present() -> None:
+    """The per-SM (tile_q, tile_kv) table must be in AttnOps.cpp."""
+    cpp = _ATTN_OPS_CPP.read_text()
+    assert "maxTileSizesForTargetSm" in cpp, (
+        "ScaledDotProductOp::verify() must consult "
+        "maxTileSizesForTargetSm() — Sprint V6c closure regressed"
+    )
+    for sm in ("sm_80", "sm_90", "sm_90a", "sm_100", "sm_120", "sm_120a"):
+        assert f'"{sm}"' in cpp, (
+            f"V6c tile-size table is missing SM variant {sm!r}"
+        )
+
+
+def test_sprint_v6c_diagnostic_phrases_present() -> None:
+    """Stable diagnostic phrases V6c lit fixture matches on."""
+    cpp = _ATTN_OPS_CPP.read_text()
+    for phrase in (
+        "tile_q=",
+        "tile_kv=",
+        "ScaledDotProduct kernel limit of",
+        "Sprint V6c FA-4 tile size table",
+    ):
+        assert phrase in cpp, (
+            f"V6c diagnostic phrase missing: {phrase!r}"
+        )
+
+
+def test_sprint_v6c_scaled_dot_product_consults_parent_target_sm() -> None:
+    """Mirrors Sprint V3 FlashAttnOp pattern — walk parents for
+    tessera.target_sm."""
+    cpp = _ATTN_OPS_CPP.read_text()
+    assert "tessera.target_sm" in cpp, (
+        "ScaledDotProductOp::verify() must consult parent's "
+        "tessera.target_sm attribute (Sprint V6c)"
+    )
+
+
+def test_sprint_v6c_lit_fixture_deferred_to_v7() -> None:
+    """V6c verifier code is implemented + compiled, but its end-to-end
+    lit exercise is deferred to Sprint V7 because the `tessera.attn`
+    dialect is not yet registered in tessera-opt (see the two existing
+    XFAIL'd scaled_dot_product fixtures: flash_attn_full.mlir,
+    tile_ir_lowering.mlir).
+
+    This test confirms NO orphan V6c lit fixture exists.  When V7
+    registers the Attn dialect AND adds a V6c lit fixture, this test
+    will need to be updated to assert the new fixture's content."""
+    orphan_path = (
+        REPO_ROOT / "tests" / "tessera-ir" / "phase3"
+        / "sprint_v6c_scaled_dot_product_target_aware.mlir"
+    )
+    if orphan_path.exists():
+        text = orphan_path.read_text()
+        # Allow the fixture to exist ONLY if it's marked as
+        # explicitly deferred (REQUIRES feature gate that lit.cfg
+        # doesn't yet define) — otherwise it would cause lit
+        # `Unresolved` results.
+        assert "REQUIRES: tessera-attn-dialect-registered" in text, (
+            f"V6c lit fixture {orphan_path.relative_to(REPO_ROOT)} "
+            f"must either be deleted OR carry "
+            f"`REQUIRES: tessera-attn-dialect-registered` so lit "
+            f"skips it cleanly (the dialect isn't registered in "
+            f"tessera-opt until Sprint V7 lands)."
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

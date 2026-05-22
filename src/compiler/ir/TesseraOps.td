@@ -768,6 +768,29 @@ def Tessera_TransposeOp : Op<
   let hasVerifier = 1;
 }
 
+// Sprint V6a (2026-05-22): ReshapeOp registration.  V5
+// `SymbolicDimEqualityPass` already dispatches on `tessera.reshape`
+// by op name; this ODS registration activates the dispatch branch
+// end-to-end (lit fixtures no longer need
+// `--allow-unregistered-dialect`).
+//
+// Contract: input and output must have the same element type and
+// the same product of static dims when both are concrete.  The
+// reshape is shape-changing (rank may differ) but element-count
+// preserving.  Per-op `tessera.dim_names_in` / `tessera.dim_names_out`
+// attributes (read by SymbolicDimEqualityPass) are optional discardable
+// attrs — they don't appear in the ODS argument list.
+def Tessera_ReshapeOp : Op<
+  Tessera_Dialect, "reshape",
+  [Pure]
+> {
+  let summary = "Element-count-preserving tensor reshape";
+  let arguments = (ins TensorType:$x);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 def Tessera_CastOp : Op<
   Tessera_Dialect, "cast",
   [Pure]

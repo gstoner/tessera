@@ -1,13 +1,60 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-05-11
+last_updated: 2026-05-22
 ---
 
 # Tessera Python API Specification
-**Status:** Normative — grounded in `python/tessera/` Phase 1–3 implementation plus S-series standalone compiler updates  
-**Last updated:** May 11, 2026  
+**Status:** Normative — grounded in `python/tessera/` Phase 1–3 implementation plus S-series standalone compiler updates
+**Last updated:** May 22, 2026
 **Authority:** This document specifies every public Python symbol in Tessera Phases 1–3. For naming disputes, `docs/CANONICAL_API.md` is the final arbiter. For compiler internals (pass pipeline, IR layers), see `docs/spec/COMPILER_REFERENCE.md`.
+
+---
+
+## Documentation refresh (2026-05-22)
+
+The 2026-05-06 spec gap audit (`docs/audit/compiler_spec_gap_audit.md`)
+flagged the developer-tool surface as ahead of the prose in this spec.
+Resolution as of 2026-05-22:
+
+- **Debug surface** — Beyond §16 (Error Types), the public `tessera.debug`
+  module now exports `DebugTrace`, `GraphTrace`, `summarize_tensor`,
+  `debug_trace`, `trace_graph`, `export_graphviz`, `debug_value`,
+  `debug_artifact`, `debug_barrier`, `replay_capture`, `replay_manifest`,
+  `save_replay_manifest`, `check_grad`, and `check_determinism`. These
+  are the canonical developer contracts; their normative source is
+  `python/tessera/debug.py` (526 LOC) and the documented user-facing
+  surface is `docs/guides/Tessera_Debugging_Tools_Guide.md`.
+- **Profiling and autotuning** — `tessera.profiler` (wraps
+  `tools/profiler/`) and `tessera.autotune` (wraps
+  `compiler/autotune_v2.py`) are public; CLIs are `tessera-prof` and
+  `tessera-autotune`. Their normative behaviour is locked by
+  `tests/unit/test_cli_debug_profile_commands.py` and
+  `tests/unit/test_profiling_autotuning_foundation.py`.
+- **MLIR CLI** — `tessera-mlir` (entry: `python/tessera/cli/mlir.py`, 425
+  LOC) emits metadata, diagnostics, Chrome trace JSON, GraphViz, and
+  supports `--mode=compile_artifact --symbol=name` to inspect real JIT
+  artifacts without launching tensors.
+- **Translate CLI** — `tessera-translate` (entry:
+  `python/tessera/cli/translate.py`) routes through `tessera.aot` (S14)
+  for StableHLO / GGUF / SafeTensors export plus an `mlir` subcommand
+  that pass-throughs to the C++ `tessera-translate-mlir` binary.
+- **S-series surfaces (S2–S15)** — `tessera.rng`, `tessera.state`,
+  `tessera.control`, `tessera.sharding`, `tessera.losses`,
+  `tessera.optim`, `tessera.quantization`, `tessera.data`,
+  `tessera.aot`, `tessera.custom`, `tessera.memory`, and `tessera.rl`
+  (PPO/GRPO/CISPO) are all public, with normative contracts in their
+  respective modules and primitive coverage tracked by the auto-generated
+  `docs/audit/generated/support_table.md`. Do not duplicate counts here;
+  treat the generated dashboard as the source of truth.
+
+This refresh keeps the spec body authoritative for Phases 1–3 surfaces
+and cross-links the additional Python surfaces above to their
+implementation source rather than restating them in normative prose.
+The 2026-05-22 sharding mock-mesh proofs (Sprints #17–#20) live in
+`tests/unit/test_*_sharding_mock_mesh.py` and are the source of truth
+for sharding-rule contract claims; they do not introduce new public
+Python symbols beyond what is already specified here.
 
 ---
 

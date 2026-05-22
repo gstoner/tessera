@@ -49,7 +49,7 @@ The **x86 AMX/AVX512 backend** is the broadest fully wired execution path. Apple
 | Phase 4 | ✅ Complete | Distributed training — Cyclic distribution, NCCL/RCCL adapters, `CollectiveInsertionPass`, `PipelineStageInsertionPass`, TPU quantized dot, `DistributedPlan`, `PipelinePlan`, MoE helpers — 127 tests |
 | Phase 5 | ✅ Complete | Solver passes (11 core + 2 linalg + 3 SR), `BayesianAutotuner`, checkpoint decorator, `solver_config.py` — 176 tests |
 | Phase 6 | ✅ Complete | `TesseraRuntime` Python wrapper, CUDA/HIP backends (real calls), ROCm MFMA coverage, benchmark runners, `ErrorReporter`, `ShapeInferencePass` — 170 tests |
-| Phase 7 | 🟡 In progress | Neighbors dialect (halo/stencil) wired into `tessera-opt`; Cerebras WSE-3 (487 LOC, real) and Tenstorrent Metalium (550 LOC, real) backends landed with `tessera-lower-to-metalium` pipeline alias |
+| Phase 7 | 🟢 Lit-verified | Neighbors dialect (halo/stencil) wired into `tessera-opt`, 4/4 phase7 lit fixtures + 4/4 TPP lit fixtures passing; Cerebras WSE-3 (487 LOC, real) and Tenstorrent Metalium (550 LOC, real) backends landed with `tessera-lower-to-metalium` pipeline alias. Real hardware execution stays gated on Phase G/H lit-up. |
 | Phase 8 | 🟢 Apple operational | Hardware-free Target IR — `tessera_rocm.mfma`, `tessera_metalium.dma/matmul`, `tessera_apple.cpu/gpu.*` ODS dialects between Tile IR and hardware-specific lowering; `@jit(target="rocm"/"metalium"/"apple_cpu"/"apple_gpu")` string targets. **Apple M-Series CPU (8.2)** — `@jit(target="apple_cpu")` via Accelerate (cblas_sgemm + BNNS f16/bf16). **Apple M-Series GPU (8.3 → 8.4.7)** — `@jit(target="apple_gpu")` via MPS + custom MSL kernels: 9 kernel concepts × {f32, f16, bf16} = 26 runtime symbols; 4 fused chains (matmul→softmax, matmul→gelu, matmul→rmsnorm, matmul→softmax→matmul); threadgroup-tiled f32 matmul_softmax for N up to 8192. See `docs/apple_gpu_overview.md`. |
 | **S-series** (standalone compiler track) | 🟢 S0/S1 + S2–S15 + reasoning-model attention/RL coverage landed | **S0** locks scope (data pipeline, training step, custom-op API, AOT export all in-scope; PyTorch/JAX/Flax reference vocabularies only). **S1** registry at `python/tessera/compiler/primitive_coverage.py` tracks primitives across 12 contract axes and consults `tessera.autodiff.vjp._VJPS` / `autodiff.jvp._JVPS` so registered (V/J)VPs auto-flip to `complete`. Do not hard-code counts here; generated docs are the current truth. Guards: `tests/unit/test_standalone_compiler_roadmap.py`, `python -m tessera.compiler.audit support_table --check`, and the generated dashboard drift checks. **S2–S15 Python reference shipped:** S2 reductions/stability/numeric helpers/comparisons; S3 pytrees/state taxonomy; S4 RNG; S5 control/autodiff transforms; S6 sharding/collectives; S7 NN functional + reasoning-model attention family; S9 quantization; S10 optimizers; S11 losses + `tessera.rl` PPO/GRPO/CISPO; S12 checkpointing; S13 custom-op API; S14 AOT + cache; S15 data pipeline. Contract-axis hardening now distinguishes Python-reference, Graph IR, backend manifest, runtime, and benchmark proof instead of treating all "shipped" rows alike. |
 | RubinCPX | ✅ Built | `tessera.target.cpx` dialect, 4 passes, `tessera-cpx-opt` driver, `TESSERA_BUILD_RUBINCPX_BACKEND` CMake option |
@@ -314,7 +314,7 @@ Default: `tile_q=64, tile_kv=64, pipeline_stages=2`. Stored as `tessera.tile_q`/
 
 ---
 
-## Phase 7 — In Progress
+## Phase 7 — Lit-Verified
 
 ### Neighbors Dialect (Halo/Stencil)
 

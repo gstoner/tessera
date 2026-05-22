@@ -1,13 +1,68 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-04-26
+last_updated: 2026-05-22
 ---
 
 # Tessera Lowering Pipeline Specification
-**Status:** Normative — grounded in `src/transforms/lib/` and `src/compiler/tile_opt_fa4/lib/` Phase 1–3 implementations  
-**Last updated:** April 26, 2026  
+**Status:** Normative — grounded in `src/transforms/lib/` and `src/compiler/tile_opt_fa4/lib/` Phase 1–8 implementations
+**Last updated:** May 22, 2026
 **Cross-references:** `docs/spec/COMPILER_REFERENCE.md` §Pass Pipeline Registry, `docs/spec/GRAPH_IR_SPEC.md`, `docs/spec/TARGET_IR_SPEC.md`
+
+---
+
+## Documentation refresh (2026-05-22)
+
+The 2026-05-06 audit asked this spec to (a) name all 6+ shipped lowering
+pipelines (not just x86/gpu), (b) add a target-path status table for
+the Python `compile_graph_module` driver, and (c) document the
+Python-side object-model lowering. Status:
+
+### Shipped named lowering pipelines (canonical truth)
+
+CLAUDE.md Architecture Decision #19 + #20 are normative for these. The
+current set registered in `tools/tessera-opt/tessera-opt.cpp` is:
+
+| Pipeline | Target | Phase | Status |
+|----------|--------|-------|--------|
+| `tessera-lower-to-x86` | x86 AMX/AVX-512 | 2 | ✅ executable runtime |
+| `tessera-lower-to-gpu` | NVIDIA SM_80+ WGMMA/TMA | 3 | 🟡 IR artifact; runtime gated on Phase G |
+| `tessera-lower-to-rocm` | AMD ROCm MFMA (gfx90a / 940 / 942 / 950 / 1100) | 8 | 🟡 artifact; runtime gated on Phase H |
+| `tessera-lower-to-metalium` | Tenstorrent Metalium | 7/8 | 🟡 artifact + tile-local matmul |
+| `tessera-lower-to-apple_cpu` | Apple Silicon CPU (artifact) | 8.1 | ✅ lit-testable |
+| `tessera-lower-to-apple_cpu-runtime` | Apple Silicon CPU (Accelerate cblas_sgemm + BNNS f16/bf16) | 8.2 | ✅ executable runtime |
+| `tessera-lower-to-apple_gpu` | Apple Silicon GPU (artifact) | 8.1 | ✅ lit-testable |
+| `tessera-lower-to-apple_gpu-runtime` | Apple Silicon GPU (MPS + 26 custom MSL kernels) | 8.3 → 8.4.7 | ✅ executable runtime |
+| `tessera-cpx-pipeline` / `tessera-cpx-context-pipeline` | NV Rubin CPX | — | ✅ separate `tessera-cpx-opt` driver |
+| `tessera-nvidia-pipeline-{sm90,sm100,sm120}` | NVIDIA target-specific composition | 3+ | 🟡 G-5 named alias (Sprint G/H/I batch 3) |
+| `tessera-spectral-pipeline` | Spectral solver end-to-end | 5 | ✅ via `ts-spectral-opt` |
+| `tpp-space-time` | Tensor Parallel Primitives | 5 | ✅ via `tessera-opt` (4/4 lit fixtures) |
+
+The §1 table below lists only the original x86 / GPU canonical pair to
+keep that section focused on Phase 2–3 contract; the full inventory
+above is the current truth.
+
+### Python driver lowering paths
+
+`python/tessera/compiler/jit.py::JitFn` accepts `target=` as either a
+`GPUTargetProfile` or a string alias. String dispatch goes through
+`compiler/matmul_pipeline.py`; valid string targets per CLAUDE.md
+Architecture Decision #20 are: `"rocm"`, `"metalium"`, `"apple_cpu"`,
+`"apple_gpu"`. The Python object-model lowering passes (preserve debug
+markers across Schedule and Tile lowering, drop them at Target IR) are
+in `python/tessera/compiler/{schedule_ir,tile_ir,target_ir}.py`. Source
+of truth for marker elision is `target_ir.py`; lit fixtures verify the
+contract under `tests/tessera-ir/`.
+
+### Halo + spectral pass-order matrices
+
+The halo (stencil → bc-lower → halo-mesh-integration → halo-transport)
+and spectral (LegalizeSpectral → SpectralMXP → TransposePlan → Autotune
+→ LowerToTargetIR → DistributedFFT) pass-order contracts shipped under
+`tests/tessera-ir/` lit fixtures and Layer-6 execute-and-compare lanes
+(`tests/unit/test_halo_execution_lane.py`,
+`tests/unit/test_spectral_solver_passes.py`). They are documented
+end-to-end in `docs/audit/compiler_correctness_testing_audit.md`.
 
 ---
 

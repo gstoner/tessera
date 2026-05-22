@@ -2,13 +2,46 @@
 status: Normative
 classification: Normative
 authority: Tile IR op set and dialect semantics; defers Schedule IR and Target IR details to docs/spec/TARGET_IR_SPEC.md
-last_updated: 2026-04-26
+last_updated: 2026-05-22
 ---
 
 # Tessera Tile IR Specification (Normative)
 
-**Version:** 0.3.0  
+**Version:** 0.3.0
 **Authority:** This document specifies the Tile IR op set, dialect structure, and verifier rules. For the full Target IR dialect (WGMMA, TMA, mbarrier) see `docs/spec/TARGET_IR_SPEC.md`. For the lowering passes that produce Tile IR from Schedule IR, see `docs/spec/LOWERING_PIPELINE_SPEC.md`.
+
+---
+
+## Documentation refresh (2026-05-22)
+
+The 2026-05-06 audit asked Tile IR to clarify the status of debug
+markers and to settle the `tshared.alloc` vs `tile.alloc_shared` naming
+question. Resolution:
+
+- **`tile.debug_artifact` and `tile.debug_barrier` are metadata-only**,
+  not normative Tile IR ops. They propagate through
+  `python/tessera/compiler/tile_ir.py` so debug inspection works
+  across Schedule + Tile lowering, but they are **elided** by
+  `target_ir.py` before Target IR codegen. Their Python source is the
+  authoritative contract; no Tile IR ODS op is created for them.
+- **Canonical name for shared memory allocation is `tile.alloc_shared`**
+  (matches the PM verifier and tests). Older spec text referencing
+  `tshared.alloc` is a documentation alias; the implementation accepts
+  the canonical form only.
+- **TilingInterface methods on `MatmulOp` are real** as of Sprint B3-v2
+  (2026-05): the matmul tiling interface follows MLIR 21 signatures
+  with a lit fixture under `tests/tessera-ir/phase2/` + Python guard.
+  `Conv2DNHWCOp` has an honest `failure()` scaffold and is explicitly
+  marked scaffolded.
+- **TMEM / tcgen05 path stays scaffolded**: the `LowerTileToPTX.cpp`
+  body emits a schematic Blackwell PTX form. Real PTX operands and
+  target gating remain in the Sprint G-4 NVIDIA lit fixture set under
+  `tests/tessera-ir/phase3/cuda13/`. CLAUDE.md Architecture Decision
+  #21 (unsupported lowering must emit a stable diagnostic) covers the
+  "lower with honest gating" contract for TMEM today.
+- **FA-4 Attn + Queue dialects** are normative Tile IR layers (see
+  `src/compiler/tile_opt_fa4/include/tessera/Dialect/{Attn,Queue}/`)
+  and remain lit-testable. The 4/4 FA-4 lit fixtures pass.
 
 ---
 

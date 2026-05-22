@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Runtime C ABI
-last_updated: 2026-05-20
+last_updated: 2026-05-22
 ---
 
 # Tessera Runtime ABI Specification
@@ -10,7 +10,7 @@ last_updated: 2026-05-20
 > **Canonical reference.** This document is grounded in the actual header files under
 > `src/runtime/include/tessera/`. It is the only normative runtime ABI reference.
 >
-> **Current-state note (2026-05-20):** The C ABI is implemented and exercised
+> **Current-state note (2026-05-22):** The C ABI is implemented and exercised
 > by runtime-ABI smoke tests, sanitizer lanes, and the Python runtime wrapper.
 > CPU execution is covered by the current smoke suite; CUDA/HIP behavior remains
 > target- and hardware-gated. Do not infer production readiness from ABI
@@ -20,6 +20,49 @@ last_updated: 2026-05-20
 > `tessera-collective-runtime-smoke`; Python wrappers live in
 > `tests/unit/test_runtime_abi_smoke.py` and
 > `tests/unit/test_sanitizer_smoke.py`.
+
+---
+
+## Documentation refresh (2026-05-22)
+
+The 2026-05-06 audit asked this spec to cross-link the debugging guide
+and to clarify that replay manifests are **not** part of the C ABI.
+Resolution:
+
+- **Replay manifests are Python-side developer contracts**, not C ABI
+  surface. They are produced by `tessera.debug.save_replay_manifest`
+  and consumed by `tessera.debug.replay_capture`. Their schema is in
+  `python/tessera/debug.py` (526 LOC); user-facing documentation is
+  `docs/guides/Tessera_Debugging_Tools_Guide.md`. The C ABI is
+  unaffected by replay manifest presence.
+- **Apple CPU + Apple GPU runtime symbols** are exported through the
+  same C ABI:
+  - `apple_cpu_runtime.cpp` exports `tessera_apple_cpu_gemm_{f32,f16,bf16}`
+    plus `tessera_apple_cpu_gemm_f32_batched` (rank-3) — wired in
+    Phase 8.2.
+  - `apple_gpu_runtime` (Objective-C++ shim) exports **26 C ABI
+    symbols** across 9 kernel concepts × {f32, f16, bf16}, including
+    4 fused chains (matmul→softmax, matmul→gelu, matmul→rmsnorm,
+    matmul→softmax→matmul). Inventory:
+    `docs/apple_gpu_kernel_inventory.md`.
+- **Backend-kernel manifest** — `python/tessera/compiler/backend_manifest.py`
+  synthesizes per-target × per-dtype kernel coverage from
+  `capabilities.TARGET_CAPABILITIES` and is **observational metadata**
+  on the registry — not a runtime ABI requirement. Five statuses today:
+  `fused` / `compileable` / `reference` / `artifact_only` / `planned`.
+  Locked by `tests/unit/test_backend_kernel_manifest.py` (33 tests).
+- **Collective adapter version pin** — `src/collectives/include/.../AdapterVersionPin.h`
+  enforces NCCL ≥ 2.22 / RCCL ≥ 2.22 at C++ compile time via `#error`
+  directives. The 8-symbol surface (`ncclAllReduce`, `ReduceScatter`,
+  `AllGather`, `Send`, `Recv`, `CommInitRank`, `GetVersion`,
+  `GetErrorString`) is probed by `scripts/probe_collective_libs.py`.
+- **See also (developer tooling, not ABI):**
+  `docs/guides/Tessera_Debugging_Tools_Guide.md` (replay, debug
+  artifacts, debug traces),
+  `docs/guides/Tessera_Profiling_And_Autotuning_Guide.md` (tprof
+  telemetry, autotune cache),
+  `docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md` (stable
+  diagnostic codes).
 
 ---
 

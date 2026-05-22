@@ -1,14 +1,54 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-04-26
+last_updated: 2026-05-22
 ---
 
 # Tessera Graph IR Specification
 **Status:** Normative — grounded in `src/compiler/ir/TesseraOps.td` and `src/transforms/lib/CanonicalizeTesseraIR.cpp`
-**Last updated:** April 26, 2026
+**Last updated:** May 22, 2026
 **Dialect name:** `tessera`
 **C++ namespace:** `::tessera`
+
+---
+
+## Documentation refresh (2026-05-22)
+
+The 2026-05-06 spec gap audit asked Graph IR to clarify the status of
+debug-marker operations. Resolution:
+
+- **Debug markers are metadata-only**, not normative Graph IR ops. The
+  Python-side helpers `tessera.debug.debug_value`, `debug_artifact`, and
+  `debug_barrier` attach inspection markers that propagate through
+  Schedule and Tile lowering and are **dropped before Target IR
+  codegen** (the elision contract is documented in
+  `docs/spec/TARGET_IR_SPEC.md`). They do not introduce new ODS ops in
+  the `tessera` dialect.
+- **Source-position metadata** — every Graph IR op carries a stable
+  `loc` chain back to Python source; `python/tessera/diagnostics.py`
+  (`ErrorReporter`) walks the chain to emit source-attributed errors.
+  This is a contract, not a developer convenience — `TesseraShapeError`
+  always reports a `loc` (or the literal `"<unknown location>"` when
+  unavailable, per Architecture Decision #13).
+- **Numeric policy propagation (Sprint G3)** — Graph IR carries a
+  `numeric_policy` attribute (`storage / accum / rounding / scale /
+  quant_axis / deterministic / math_mode`) on the 67 ops with intrinsic
+  storage/accumulator coupling. Source of truth:
+  `python/tessera/compiler/primitive_coverage.py::NumericPolicy`.
+- **Lane provenance (Sprint F2/G1)** — Graph IR ops carry a
+  `lane_provenance` attribute when emitted from the GA, EBM, or Visual
+  Complex front-end lanes; this is metadata for cross-lane composition
+  detection (Issue #1) and is **not** a normative IR contract for
+  downstream passes.
+- **Attention-family Graph IR ops** — `flash_attn`, `mla_decode`,
+  `deepseek_sparse_attention`, `lightning_attention`, `kimi_delta`,
+  `gated_deltanet`, etc., are normative Graph IR ops registered in
+  `TesseraOps.td` and lowered by
+  `src/transforms/lib/AttentionFamilyPasses.cpp`.
+
+The Graph IR ODS definitions in `src/compiler/ir/TesseraOps.td` remain
+the single source of truth for the op set; this spec stays in sync via
+`tests/unit/test_compiler_spec_gap_remediation.py`.
 
 ---
 

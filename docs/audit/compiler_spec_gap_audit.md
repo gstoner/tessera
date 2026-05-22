@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Audit
-last_updated: 2026-05-06
+last_updated: 2026-05-22
 ---
 
 # Compiler Spec Gap Audit
@@ -12,6 +12,27 @@ spec set in `docs/spec/`. It excludes `archive/src/`, `archive/docs/`,
 points at them.
 
 The companion matrix is `docs/audit/compiler_spec_gap_matrix.md`.
+
+## 2026-05-22 Closure note
+
+The "Spec Needs Update" backlog below was addressed in a focused doc
+refresh on 2026-05-22.  Each spec received a `## Documentation refresh
+(2026-05-22)` section anchoring its specific drift items to the
+current implementation source.  Specs touched:
+
+| Spec | Refresh anchor |
+|------|----------------|
+| `PYTHON_API_SPEC.md` | Public debug / profile / autotune surfaces + S-series modules cross-linked to `python/tessera/debug.py`, CLIs, and the generated `support_table.md`. |
+| `GRAPH_IR_SPEC.md` | Debug markers declared metadata-only (no ODS ops); numeric_policy + lane_provenance documented as Graph IR attributes; attention-family ops cross-linked to `AttentionFamilyPasses.cpp`. |
+| `LOWERING_PIPELINE_SPEC.md` | Full inventory of 9+ shipped named lowering pipelines (x86, gpu, rocm, metalium, apple_cpu, apple_cpu-runtime, apple_gpu, apple_gpu-runtime, cpx, nvidia-pipeline, spectral, tpp); Python driver lowering paths; halo + spectral pass-order matrices. |
+| `TILE_IR.md` | `tile.debug_artifact` / `tile.debug_barrier` declared metadata-only; canonical name `tile.alloc_shared` reaffirmed; TilingInterface real on MatmulOp; TMEM/tcgen05 still scaffolded. |
+| `TARGET_IR_SPEC.md` | Normative marker-elision contract; compile-artifact metadata vs C ABI separation; per-backend status table; G/H/I pre-work landed. |
+| `RUNTIME_ABI_SPEC.md` | Replay manifests declared NOT part of the C ABI; Apple CPU + GPU symbol exports documented (26 GPU symbols); collective adapter version pin (NCCL/RCCL ≥ 2.22). |
+| `CONFORMANCE.md` | Already closed 2026-05-20 (header cleanup landed earlier); kept linked to `VALIDATION_SPINE.md`. |
+
+The MEMORY_MODEL_SPEC.md and SHAPE_SYSTEM.md items remain as informative
+sub-tasks (P2 priority in the implementation backlog below) — they
+require new verifier evidence, not just doc refresh.
 
 ## Executive Summary
 

@@ -46,7 +46,7 @@ landed in May 2026.  It provides:
 | Apple GPU fused kernels          | ✅ 4 / 20             | `complex_mul`, `complex_exp`, `mobius`, `stereographic` |
 | Apple GPU planned (16 long-tail) | 🟡 manifest reserved  | `status="planned"` slots with fp32/fp16/bf16 dtype matrix |
 | NVIDIA / ROCm                    | 🟡 manifest reserved  | `status="planned"` per Phase G / H pre-work |
-| Support-table visibility         | ✅ shipped            | 22 rows under family `visual_complex` in `docs/audit/generated/support_table.md` |
+| Support-table visibility         | ✅ shipped            | 20 primitive rows under family `visual_complex` in `docs/audit/generated/support_table.md` |
 | Public benchmark                 | 🟡 indirect           | covered by `benchmarks/visual_complex_core` (cross-lane GA × EBM library benchmark) |
 | Drift gate                       | ✅ shipped            | `tessera.compiler.audit support_table --check` (covers M7 rows) |
 
@@ -64,7 +64,7 @@ PYTHONPATH=python pytest tests/unit/test_complex_*.py \
     tests/unit/test_analytic_decorator.py \
     tests/unit/test_complex_jit_*.py -v
 
-# Generated support-table drift gate (covers all 22 M7 rows):
+# Generated support-table drift gate (covers all 20 M7 primitive rows):
 PYTHONPATH=python python -m tessera.compiler.audit support_table --check
 
 # Cross-lane (GA × EBM) library benchmark (uses Visual Complex ops):
@@ -91,7 +91,7 @@ PYTHONPATH=.:python python benchmarks/visual_complex_core/core.py \
 |----------------------------------|---------------------------------------------------|
 | Python reference + decorators    | `python/tessera/complex.py`                        |
 | Symbolic `@complex_jit` frontend | `python/tessera/compiler/complex_jit.py`           |
-| Primitive coverage (22 rows)     | `python/tessera/compiler/primitive_coverage.py` — search `# ── M7:` |
+| Primitive coverage (20 rows)     | `python/tessera/compiler/primitive_coverage.py` — search `# ── M7:` |
 | Backend manifest entries         | `python/tessera/compiler/backend_manifest.py`      |
 | Conformal helpers                | `python/tessera/conformal_advanced.py`             |
 | Tests                            | `tests/unit/test_complex_*.py`, `test_analytic_decorator.py`, `test_complex_jit_*.py` |

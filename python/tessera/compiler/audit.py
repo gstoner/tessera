@@ -162,8 +162,8 @@ _BENCH_INVENTORY: frozenset[str] = frozenset({
 })
 
 
-# M7 Visual Complex Analysis primitives — public via tessera.complex.*
-# and the @complex_jit / @analytic decorators.  Same opt-in pattern as
+# M7 Visual Complex Analysis primitives — public via tessera.complex.*.
+# @complex_jit / @analytic are frontend lanes, not primitive rows. Same opt-in pattern as
 # _BENCH_INVENTORY so M7 appears in the per-op support matrix without
 # pulling in the entire planned long-tail of primitive_coverage.
 # Source of truth: ``python/tessera/complex.py`` + the M7 rows in
@@ -182,7 +182,6 @@ _M7_INVENTORY: frozenset[str] = frozenset({
     "check_cauchy_riemann",
     "conformal_jacobian", "conformal_energy_on_sphere",
     "dz", "dbar", "laplacian_2d",
-    "complex_jit",
 })
 
 
@@ -262,7 +261,7 @@ def _axis_frontend(op_name: str) -> AxisCell:
     if op_name.startswith("ebm_") and op_name in bm._EBM_APPLE_GPU_FUSED:
         return AxisCell("public", "tessera.ebm.*")
     if op_name in _M7_INVENTORY:
-        return AxisCell("public", "@complex_jit / tessera.complex.*")
+        return AxisCell("public", "tessera.complex.*")
     return AxisCell("missing", "op_catalog")
 
 

@@ -26,7 +26,7 @@
 > normative interpretation.
 >
 > **Previous update (2026-05-19):** M7 surface visible in
-> `docs/audit/generated/support_table.md` (22 rows, family
+> `docs/audit/generated/support_table.md` (20 primitive rows, family
 > `visual_complex`). Implementation + 94 focused tests had landed
 > earlier; the 2026-05-19 milestone closed the audit-visibility gap.
 
@@ -40,7 +40,7 @@
 | **Wirtinger calculus** | ✅ Python reference + tests | `dz` (∂/∂z), `dbar` (∂/∂z̄), `laplacian_2d` (4 ∂² /∂z∂z̄) |
 | **Cauchy-Riemann verification** | ✅ Decoration-time gate | `check_cauchy_riemann`; backs the `@analytic` and `@complex_jit` decorators |
 | **`@complex_jit` symbolic frontend** | ✅ AST → symbolic-graph lowering | `python/tessera/compiler/complex_jit.py`; lowers a Python-source `f(z)` to a CR-verified symbolic graph |
-| **Support-table visibility** | ✅ **landed 2026-05-19** | 22 rows in `support_table.md` under family `visual_complex` |
+| **Support-table visibility** | ✅ **landed 2026-05-19** | 20 primitive rows in `support_table.md` under family `visual_complex` |
 | **Native (Apple GPU) lowering** | 🟢 4 fused + 16 planned slots | `complex_mul` / `complex_exp` / `mobius` / `stereographic` ship fused MSL kernels (fp32). The remaining 16 long-tail ops have `status="planned"` slots reserved in the backend manifest (fp32/fp16/bf16 target dtypes); execution lights up with the next M7 kernel sprint. |
 | **NVIDIA / ROCm lowering** | 🟡 planned slots reserved | Every M7 op has `status="planned"` rows across nvidia_sm80/90/100/120 + rocm with `(fp32, fp16, bf16)` as the **kernel target** dtype matrix — these are what the unbuilt kernels will support, not what runs today. Promotion gated on Phase G / Phase H. See §9 of `docs/nvidia_cuda13_kernel_inventory.md` + §10 of `docs/rocm_mfma_kernel_inventory.md`. |
 | **Today's execution path** | ✅ CPU reference default + 4 Apple GPU native kernels | The default/reference path runs via `tessera.complex.*` on CPU with fp32 precision. `complex_mul`, `complex_exp`, `mobius`, and `stereographic` also have fused Apple GPU fp32 kernels. fp16/bf16 are **not** runtime-supported yet — they're declared dtypes for future native kernels. |
@@ -48,7 +48,7 @@
 
 ## What's claimed
 
-- **22 primitives** registered in `primitive_coverage.py` with category
+- **20 primitives** registered in `primitive_coverage.py` with category
   `visual_complex`. Each carries a Needham reference and a one-line
   semantic note.
 - **94 focused complex tests** pass in `tests/unit/` covering:
@@ -62,8 +62,8 @@
   - Runtime bridge tests verifying the symbolic graph re-evaluates to
     the numpy reference within float-precision tolerance
 - **Per-axis visibility** in `docs/audit/generated/support_table.md`:
-  the 22 rows render with `api=public` + `frontend=public` (source:
-  `@complex_jit / tessera.complex.*`), and partial/planned glyphs on
+  the 20 primitive rows render with `api=public` + `frontend=public` (source:
+  `tessera.complex.*`), and partial/planned glyphs on
   the remaining axes — exactly the GA/EBM contract that lets the
   table read as honest signal rather than aspiration.
 
@@ -104,7 +104,7 @@ grep "^\| .*visual_complex" docs/audit/generated/support_table.md
 |---|---|
 | Python reference + decorators | `python/tessera/complex.py` |
 | Symbolic `@complex_jit` frontend | `python/tessera/compiler/complex_jit.py` |
-| Primitive coverage registry (22 rows) | `python/tessera/compiler/primitive_coverage.py` — search `# ── M7:` |
+| Primitive coverage registry (20 rows) | `python/tessera/compiler/primitive_coverage.py` — search `# ── M7:` |
 | Support-table inventory | `python/tessera/compiler/audit.py` — `_M7_INVENTORY` |
 | Conformal energy helpers | `python/tessera/conformal_advanced.py` |
 | Tests | `tests/unit/test_complex_*.py`, `tests/unit/test_analytic_decorator.py`, `tests/unit/test_complex_jit_*.py` |

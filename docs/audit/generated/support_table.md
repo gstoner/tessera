@@ -272,7 +272,6 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `complex_conjugate` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
 | `complex_div` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
 | `complex_exp` | visual_complex | public | public | not_applicable | complete | fused | fused | ready | none |
-| `complex_jit` | visual_complex | public | public | registered | complete | planned | planned | unknown | none |
 | `complex_log` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
 | `complex_mul` | visual_complex | public | public | not_applicable | complete | fused | fused | ready | none |
 | `complex_pow` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
@@ -329,7 +328,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | state_space | 1 | PPGCpRN· |
 | state_update | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
 | stencil | 2 | PPGCpRN· PPGCpRN· |
-| visual_complex | 21 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGC··?· PPGCpRN· PPnCFFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· |
+| visual_complex | 20 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· |
 
 ## Canonical end-to-end programs (M1 / M1.5)
 

@@ -32,6 +32,7 @@ from tessera.compiler.s_series_status import (
     render_markdown,
     tally_by_category,
 )
+from tessera.compiler.primitive_coverage import all_primitive_coverages
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DASHBOARD = REPO_ROOT / "docs" / "audit" / "generated" / "s_series_status.md"
@@ -162,7 +163,53 @@ def test_aggregate_counts_in_rendered_dashboard() -> None:
 def test_dashboard_calls_out_phase_g_gate_explicitly() -> None:
     """The closure-trajectory note must explicitly explain why
     backend_kernel is universally open — so future readers don't see
-    "433 open entries on backend_kernel" and panic."""
+    "backend_kernel is universally open" and panic."""
     text = render_markdown()
     assert "Phase G/H/I" in text
     assert "lowering_rule` is closed" in text
+
+
+def test_sprint_19_bucket_a_sharding_promotions_are_closed() -> None:
+    """Sprint #19 Bucket A is the promote-now sharding set from the
+    sharding partial audit: host/reference partition-spec rules are
+    closed and need neither mock mesh nor hardware proof."""
+    closed = {
+        "ppo_policy_loss",
+        "grpo_policy_loss",
+        "cispo_policy_loss",
+        "kv_cache_append",
+        "kv_cache_prune",
+        "kv_cache_read",
+        "online_softmax_state",
+        "bidirectional_scan",
+        "gru_cell",
+        "simple_rnn_cell",
+        "ebm_energy",
+        "ebm_self_verify",
+        "ebm_decode_init",
+        "clifford_geometric_product",
+        "clifford_wedge",
+        "clifford_inner",
+        "clifford_left_contraction",
+        "clifford_rotor_sandwich",
+        "clifford_grade_projection",
+        "clifford_reverse",
+        "clifford_norm",
+        "clifford_conjugate",
+        "clifford_grade_involution",
+        "clifford_hodge_star",
+        "clifford_exp",
+        "clifford_log",
+        "lora_linear",
+    }
+    entries = all_primitive_coverages()
+    assert {
+        name for name in closed
+        if entries[name].contract_status["sharding_rule"] != "complete"
+    } == set()
+
+
+def test_complex_jit_is_not_counted_as_a_primitive_contract() -> None:
+    """``complex_jit`` is a frontend decorator, not a primitive op; it
+    must stay out of the primitive-contract dashboard."""
+    assert "complex_jit" not in all_primitive_coverages()

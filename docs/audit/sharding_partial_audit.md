@@ -1,19 +1,19 @@
 ---
 status: Informative
-classification: Sharding-axis audit (classification only, no promotions)
+classification: Sharding-axis audit plus Sprint #19 Bucket A closure
 authority: Companion to `docs/audit/standalone_primitive_coverage.md` and `docs/audit/generated/s_series_status.md`
 last_updated: 2026-05-22
 ---
 
-# Sharding-rule partial audit (Sprint #18, 2026-05-22)
+# Sharding-rule partial audit (Sprint #18 / #19, 2026-05-22)
 
 The `sharding_rule` contract axis stood at **104 partial** entries after the
 2026-05-22 sharding-rule promotion sprint closed 8 categories
 (`stencil`, `pooling`, `tensor_algebra`, `layout_transform`, `indexing`,
 `sort`, `grad_transform`, `control_flow` — 189 → 104 open).
 
-This document classifies **every remaining partial** into one of three
-buckets so the next promotion sprints can be sized honestly:
+This document originally classified **every remaining partial** into one of
+three buckets so the next promotion sprints could be sized honestly:
 
 * **Bucket A — promote-now (host/reference semantics fully documented):** the
   partition-spec rule is decidable at host level; no mesh runtime needed.
@@ -24,14 +24,40 @@ buckets so the next promotion sprints can be sized honestly:
   RCCL, real distributed FFT all-to-all, or hardware-distributed execution.
   Promotion is honestly blocked until the corresponding Phase ships.
 
-**This document does NOT promote anything.** Classification first; each
-bucket then becomes the candidate set for a separate, focused sprint.
+Sprint #19 has now closed Bucket A. Bucket B/C remain classification-only
+until their mock-mesh or real-hardware proof lands.
+
+## Sprint #19 Bucket A closure
+
+Sprint #19 closed the promote-now set with host/reference partition-spec
+rules only; no mock mesh or hardware claim was required.
+
+| Change | Count | Result |
+|--------|------:|--------|
+| RL losses | 3 | `ppo_policy_loss`, `grpo_policy_loss`, and `cispo_policy_loss` promote to `sharding_rule=complete`. |
+| State updates | 4 | `kv_cache_append`, `kv_cache_prune`, `kv_cache_read`, and `online_softmax_state` promote to `complete`. |
+| Recurrent batch-shardable ops | 3 | `bidirectional_scan`, `gru_cell`, and `simple_rnn_cell` promote to `complete` for the documented non-state-axis rule. |
+| EBM pointwise ops | 3 | `ebm_energy`, `ebm_self_verify`, and `ebm_decode_init` promote to `complete`. |
+| GA pointwise ops | 13 | Non-differential Clifford ops promote to `complete`; the four differential/halo-bound ops remain partial. |
+| LoRA adapter | 1 | `lora_linear` follows `linear_general` partitioning and promotes to `complete`. |
+| `complex_jit` decorator | 1 | Removed from primitive-contract counting; it is a frontend decorator, not a primitive. |
+
+Current dashboard state after regeneration:
+
+| Axis | Open | Complete |
+|------|-----:|---------:|
+| `sharding_rule` | 76 | 356 |
+| `backend_kernel` | 432 | 0 |
+
+The initial audit called the Bucket A size "24/25" in prose, but the explicit
+name list closes **28 dashboard entries**: 27 sharding promotions plus the
+`complex_jit` registry-classification fix.
 
 ## Summary
 
 | Bucket | Count | Categories |
 |--------|------:|-----------|
-| **A** | **24** | rl_loss (3), state_update (4 — KV cache by head), recurrent (3 — batch-sharded), ebm pointwise (3), GA pointwise (13), lora_linear, complex_jit decorator |
+| **A** | **closed: 28 dashboard entries** | rl_loss (3), state_update (4 — KV cache by head), recurrent (3 — batch-sharded), ebm pointwise (3), GA pointwise (13), lora_linear, complex_jit decorator cleanup |
 | **B** | **47** | attention (14 standard + family), contraction (1), fused_epilogue (1), GA differential (4), loop_nest (7), model_layer (3), normalization (7), projection (1), segment_reduce (1), sparse-CSR (3), ebm sampling (8) |
 | **C** | **33** | linalg_decomposition (3), linalg_solver (1), moe (1), moe_transport (2), spectral (9), state_space (1), reasoning-model attention with fused kernels (7), sparse-COO (1), recurrent state-axis (0 — folded into B), ebm bivector/sphere Langevin (4), GA codiff field ops (would belong here if not already in B), normalization with feature-axis collectives on real fabric (already in B) |
 | **Total** | **104** | |
@@ -42,33 +68,30 @@ walker chooses the higher bucket — see per-category notes below.)
 
 ## Bucket A — promote-now
 
-These 24 entries have closed-form host-level partition-spec rules. The
+These entries have closed-form host-level partition-spec rules. The
 rule is decidable without a mesh runtime, and CLAUDE.md Decision #25's
-"is the contract documented?" question is yes. Future promotion sprint
-just edits the per-name override or category table.
+"is the contract documented?" question is yes. Sprint #19 has applied
+the per-name overrides and regenerated the dashboard.
 
 ### rl_loss (3)
 `ppo_policy_loss`, `grpo_policy_loss`, `cispo_policy_loss` — pure
 reductions to a scalar loss; the canonical `psum` over data-parallel
 rank is the same pattern `_SHARDING_RULE_BY_CATEGORY["loss"] = "complete"`
-uses. Currently held at `partial` only because `_RL_LOSS_HARDENED`
-hard-codes `"sharding_rule": "partial"`.
+uses. These now promote through `_RL_LOSS_HARDENED`.
 
-**Promotion path:** flip `_RL_LOSS_HARDENED["sharding_rule"]` from
-`"partial"` to `"complete"`. One edit closes 3 entries.
+**Closure:** `_RL_LOSS_HARDENED["sharding_rule"] = "complete"`.
 
 ### state_update (4)
 `kv_cache_append`, `kv_cache_prune`, `kv_cache_read`, `online_softmax_state` —
 KV cache shards by head axis (the canonical transformer-TP partition for
 KV); `online_softmax_state` carries a streaming softmax row state that
 broadcasts across data-parallel ranks. Per-name overrides in
-`_EXISTING_CONTRACT_OVERRIDES` set `kv_cache_*["sharding_rule"] = "partial"`;
-the comment at line 357 says "sharding along the head axis is
-well-understood but lives behind Phase G."
+`_EXISTING_CONTRACT_OVERRIDES` now sets `kv_cache_*["sharding_rule"] =
+"complete"`.
 
-**Promotion path:** the contract IS the head-axis partition — host-level
+**Closure:** the contract IS the head-axis partition — host-level
 KVCacheHandle layout proves it. Mock-mesh proof is desirable but not
-required for the contract claim. Future sprint can promote and add a
+required for the contract claim. A future hardening sprint can add a
 parallel `tests/unit/test_kv_cache_sharding_mock_mesh.py` that walks the
 handle layout under a mocked 2-rank head split.
 
@@ -77,7 +100,7 @@ handle layout under a mocked 2-rank head split.
 batch axis (the canonical case) is trivial; state-axis sharding is C.
 Currently `partial` covers both.
 
-**Promotion path:** the existing partial-shape claim is conservative.
+**Closure:** the existing partial-shape claim was conservative.
 Family-level promotion is honest if we declare the contract as
 "shardable along non-state axes; state axis requires real distributed
 recurrence semantics."
@@ -87,7 +110,7 @@ recurrence semantics."
 (B, K) with no cross-shard reduction. The Apple GPU backend manifest
 already ships these as fused kernels.
 
-**Promotion path:** category `ebm` currently sits at `partial` because
+**Closure:** category `ebm` currently sits at `partial` because
 of the sampling subfamily; splitting via per-name override is the path.
 
 ### GA pointwise (13)
@@ -101,14 +124,13 @@ already documents this; the category-level `partial` is set conservatively
 to cover the differential 4 (`clifford_codiff`, `clifford_vec_deriv`,
 `clifford_ext_deriv`, `clifford_integral`) which are halo-bound.
 
-**Promotion path:** per-name overrides for the 13 pointwise ops.
+**Closure:** per-name overrides for the 13 pointwise ops.
 
 ### Other (2)
 - `lora_linear` — two small matmuls per layer; sharding follows the base
   `linear_general` pattern. Could ride a `model_layer` per-name override.
-- `complex_jit` — a **decorator**, not a primitive. The fact that it
-  carries `sharding_rule=partial` is a registry-classification bug;
-  promote to `not_applicable` via per-name override.
+- `complex_jit` — a **decorator**, not a primitive. The registry entry was
+  removed so the primitive dashboard counts only primitive contracts.
 
 ## Bucket B — mock-mesh (needs `MockRankGroup`)
 
@@ -228,11 +250,11 @@ to verify the hash-sharding doesn't collide.
 
 | Sprint candidate | Bucket | Expected close | Effort |
 |------------------|--------|---------------:|--------|
-| #19a — `_RL_LOSS_HARDENED["sharding_rule"] = "complete"` | A | 3 | trivial |
-| #19b — KV cache per-name `"sharding_rule"` flip | A | 4 | small |
-| #19c — GA pointwise per-name (13 ops) | A | 13 | small (table extension) |
-| #19d — `ebm` per-name pointwise (3 ops) + `lora_linear` + `complex_jit` N/A | A | 5 | small |
-| **Sprint #19 cumulative** | A | **25** | **single PR** |
+| #19a — `_RL_LOSS_HARDENED["sharding_rule"] = "complete"` | A | 3 | done |
+| #19b — KV cache + online softmax state per-name `"sharding_rule"` flip | A | 4 | done |
+| #19c — recurrent batch-axis + GA pointwise per-name | A | 16 | done |
+| #19d — `ebm` per-name pointwise (3 ops) + `lora_linear` + `complex_jit` removal | A | 5 | done |
+| **Sprint #19 cumulative** | A | **28** | **done** |
 | #20a — attention mock-mesh test + `_ATTN_HARDENED["sharding_rule"] = "complete"` | B | 14 | medium |
 | #20b — loop_nest mock-mesh test + category promotion | B | 7 | medium |
 | #20c — normalization + projection + contraction + fused_epilogue + model_layer (subset) mock-mesh | B | 14 | medium |
@@ -241,16 +263,15 @@ to verify the hash-sharding doesn't collide.
 | **Sprint #20 cumulative** | B | **47** | **multi-PR sub-sprint** |
 | Sprint #21 onwards | C | **33** | **Phase G/H/I gated** |
 
-After Sprints #19+#20 land, the `sharding_rule` axis would stand at
-**~33 partial entries**, all genuinely Phase G/H/I-gated.
+After Sprint #20 lands, the `sharding_rule` axis should stand near
+**~29-33 partial entries**, depending on which Bucket B names require
+real-hardware reclassification during mock-mesh proof.
 
 ## Notes / corrigenda
 
-- `complex_jit` is a decorator factory, not a primitive op; its presence
-  in the sharding-rule tally is itself a registry-classification bug
-  worth tracking separately. The proposed fix (per-name override
-  `"sharding_rule": "not_applicable"`) is the same shape as the
-  `ppo_policy_loss` `transpose_rule` declaration.
+- `complex_jit` is a decorator factory, not a primitive op; Sprint #19
+  removed it from primitive-contract counting. It remains documented as a
+  frontend lane in the Visual Complex status docs.
 - Several attention names appear in `_EXISTING_CONTRACT_OVERRIDES` via
   `_ATTN_HARDENED` (24 names total — `flash_attn`, the MLA family, the
   sparse/linear/recurrent family, AND the 7 reasoning-model fused

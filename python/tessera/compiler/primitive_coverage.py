@@ -343,8 +343,9 @@ _EXISTING_CATEGORIES: dict[str, str] = {
 #   - `math_semantics`/`shape_rule`/`dtype_layout_rule`/`batching_rule`/
 #     `masking_effect_rule` → "complete" when the contract is determinate.
 #   - `transpose_rule`/`sharding_rule` → "partial" for ops that have
-#     well-understood TP/SP placement but no compiler-level sharding pass
-#     yet (this becomes "complete" with Phase G's mesh integration).
+#     well-understood TP/SP placement but still need mock-mesh or real
+#     hardware proof. Per-name Sprint #19 Bucket A entries promote to
+#     "complete" when the host/reference partition-spec rule is closed.
 #   - `vjp`/`jvp` → "not_applicable" for state-effect or non-differentiable
 #     ops (KV cache writes, RNG samplers, structural ops).
 #   - `backend_kernel` stays `partial` until each backend ships a real
@@ -354,8 +355,9 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
     # `append` concatenates K/V slices along the sequence axis;
     # `prune` drops oldest entries beyond the configured window. These are
     # state mutators; gradient never flows through a cache write. Math /
-    # shape / dtype / batching contracts are determinate; sharding along
-    # the head axis is well-understood but lives behind Phase G.
+    # shape / dtype / batching contracts are determinate; Sprint #19
+    # Bucket A promotes sharding to complete because the host-level
+    # KVCacheHandle layout defines the head-axis partition rule.
     "kv_cache_append": {
         "vjp": "not_applicable",
         "jvp": "not_applicable",
@@ -365,7 +367,7 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
         "dtype_layout_rule": "complete",
         "masking_effect_rule": "complete",
         "batching_rule": "complete",
-        "sharding_rule": "partial",
+        "sharding_rule": "complete",
     },
     "kv_cache_prune": {
         "vjp": "not_applicable",
@@ -376,7 +378,7 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
         "dtype_layout_rule": "complete",
         "masking_effect_rule": "complete",
         "batching_rule": "complete",
-        "sharding_rule": "partial",
+        "sharding_rule": "complete",
     },
     "kv_cache_read": {
         "vjp": "not_applicable",
@@ -387,7 +389,7 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
         "dtype_layout_rule": "complete",
         "masking_effect_rule": "complete",
         "batching_rule": "complete",
-        "sharding_rule": "partial",
+        "sharding_rule": "complete",
     },
     # ── Position encodings: pure 2-D rotations on the last-axis pair ────
     # All axes are determinate: rotation preserves shape, applies a known
@@ -476,9 +478,36 @@ _RL_LOSS_HARDENED: dict[str, str] = {
     "dtype_layout_rule": "complete",
     "batching_rule": "complete",
     "transpose_rule": "not_applicable",
-    "sharding_rule": "partial",
+    # Sprint #19 Bucket A: policy-gradient losses are scalar/per-sample
+    # reductions; the canonical data-parallel psum pattern matches the
+    # regular loss-family sharding rule.
+    "sharding_rule": "complete",
     "masking_effect_rule": "not_applicable",
 }
+
+_SHARDING_COMPLETE: dict[str, str] = {"sharding_rule": "complete"}
+
+_GA_POINTWISE_SHARDING_NAMES: frozenset[str] = frozenset({
+    "clifford_geometric_product",
+    "clifford_wedge",
+    "clifford_inner",
+    "clifford_left_contraction",
+    "clifford_rotor_sandwich",
+    "clifford_grade_projection",
+    "clifford_reverse",
+    "clifford_norm",
+    "clifford_conjugate",
+    "clifford_grade_involution",
+    "clifford_hodge_star",
+    "clifford_exp",
+    "clifford_log",
+})
+
+_EBM_POINTWISE_SHARDING_NAMES: frozenset[str] = frozenset({
+    "ebm_energy",
+    "ebm_self_verify",
+    "ebm_decode_init",
+})
 
 for _name in (
     # ── Standard attention wrappers ──────────────────────────────────
@@ -502,6 +531,18 @@ for _name in (
 
 for _name in ("ppo_policy_loss", "grpo_policy_loss", "cispo_policy_loss"):
     _EXISTING_CONTRACT_OVERRIDES[_name] = _RL_LOSS_HARDENED
+
+for _name in (
+    "online_softmax_state",
+    "bidirectional_scan",
+    "gru_cell",
+    "simple_rnn_cell",
+    "lora_linear",
+):
+    _EXISTING_CONTRACT_OVERRIDES[_name] = _SHARDING_COMPLETE
+
+for _name in _GA_POINTWISE_SHARDING_NAMES | _EBM_POINTWISE_SHARDING_NAMES:
+    _EXISTING_CONTRACT_OVERRIDES[_name] = _SHARDING_COMPLETE
 del _name
 
 # Set of names whose contract is hardened beyond the default
@@ -1793,6 +1834,7 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         _apply_category_overrides(contract_status, lowering)
         _apply_effect_overrides(contract_status, effect)
         _apply_per_name_overrides(contract_status, name)
+        contract_status.update(_EXISTING_CONTRACT_OVERRIDES.get(name, {}))
         # Sprint B (2026-05-11): supplemental_public_ops default to "missing"
         # (they're outside OP_SPECS), but per-name overrides flip
         # depthwise_conv1d / online_softmax / online_softmax_state to
@@ -2131,6 +2173,7 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         _apply_category_overrides(contract, category)
         _apply_per_name_overrides(contract, name)
         contract.update(contract_overrides.get(name, {}))
+        contract.update(_EXISTING_CONTRACT_OVERRIDES.get(name, {}))
         metadata = {
             "implementation": "python_reference",
             "contract_schema": "explicit_partial",
@@ -2771,11 +2814,6 @@ _PLANNED_ENTRIES: tuple[PrimitiveCoverage, ...] = (
              ("complex_analysis", "harmonic_analysis"),
              references=("Needham — Visual Complex Analysis",),
              notes="M7: Δ = 4 ∂² /∂z∂z̄; harmonic ⇔ real-part of holomorphic."),
-    _partial("complex_jit", "visual_complex", ("complex_analysis",),
-             references=("Needham — Visual Complex Analysis",),
-             notes="M7: ``@complex_jit`` symbolic decorator — lowers a "
-                   "Python-source f(z) to a Cauchy-Riemann-verified "
-                   "symbolic graph; backs the M7 decoration-time gate."),
 )
 
 
@@ -2798,6 +2836,7 @@ def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
         _apply_category_overrides(promoted, entry.category)
         _apply_effect_overrides(promoted, entry.effect or "pure")
         _apply_per_name_overrides(promoted, entry.name)
+        promoted.update(_EXISTING_CONTRACT_OVERRIDES.get(entry.name, {}))
         # E3 (2026-05-20): apply the same Graph IR lowering classifier
         # to planned/partial entries as the python-primitive path uses
         # (line 1859 area).  Without this, registry entries built via

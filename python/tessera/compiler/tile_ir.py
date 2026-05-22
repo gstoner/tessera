@@ -96,6 +96,17 @@ class TileFunction:
     name: str
     body: list[TileOp] = field(default_factory=list)
     target: str = "cpu"
+    # Sprint M5 (2026-05-22) — per-function attributes carried into
+    # the memory-model verifier.  Currently used to declare:
+    #   ``deterministic = True``   — opts the body into the
+    #     deterministic / strict numeric profile (MEMORY_MODEL_SPEC §7),
+    #     which makes the verifier reject nondeterministic float
+    #     atomic reductions.
+    #   ``numeric_profile = "deterministic" | "strict"`` — equivalent
+    #     to the boolean above.
+    # Other keys are reserved for future per-function carriers (e.g.,
+    # explicit mesh axis declarations).
+    attrs: dict[str, Any] = field(default_factory=dict)
 
     def to_mlir(self, indent: str = "  ") -> str:
         lines = [f"{indent}\"tessera.tile.func\"() ({{"]

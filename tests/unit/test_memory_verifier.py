@@ -238,3 +238,195 @@ def test_state_does_not_leak_between_functions() -> None:
         TileFunction("b", body=[_wait(stage=0)], target="apple_gpu"),
     ])
     assert "MEM_WAIT_WITHOUT_COPY" in _codes(module)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint M5 (2026-05-22) — atomic op attribute validation
+#
+# MEMORY_MODEL_SPEC §5 enumerates 5 orders, 6 scopes, and 9 atomic ops.
+# Verifier rejects out-of-set attributes with stable diagnostic codes.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+from tessera.compiler.memory_verifier import (
+    VALID_ATOMIC_ORDERS, VALID_SYNC_SCOPES, VALID_ATOMIC_OPS,
+    NONDETERMINISTIC_FLOAT_DTYPES, REDUCTION_ATOMIC_OPS,
+)
+
+
+def _atomic(*, op: str = "add", order: str = "acq_rel",
+            scope: str = "block", dtype: str = "int32", **attrs) -> TileOp:
+    base = {"atomic_op": op, "order": order, "scope": scope, "dtype": dtype}
+    base.update(attrs)
+    return TileOp("tile.atomic", attrs=base)
+
+
+def _fence(*, scope: str = "device", **attrs) -> TileOp:
+    base = {"scope": scope}
+    base.update(attrs)
+    return TileOp("tile.fence", attrs=base)
+
+
+def test_valid_atomic_orders_is_canonical_set() -> None:
+    """Memory model §5 — the 5 canonical orders."""
+    assert VALID_ATOMIC_ORDERS == frozenset({
+        "relaxed", "acquire", "release", "acq_rel", "seq_cst",
+    })
+
+
+def test_valid_sync_scopes_is_canonical_set() -> None:
+    """Memory model §3 — the 6 canonical scopes."""
+    assert VALID_SYNC_SCOPES == frozenset({
+        "thread", "warp", "block", "cluster", "device", "mesh",
+    })
+
+
+def test_valid_atomic_ops_is_canonical_set() -> None:
+    """Memory model §5 — the 9 canonical atomic ops."""
+    assert VALID_ATOMIC_OPS == frozenset({
+        "add", "sub", "min", "max", "and", "or", "xor", "exchange", "cas",
+    })
+
+
+def test_atomic_with_all_valid_attrs_passes() -> None:
+    """Every (order, scope, op) tuple from the canonical sets passes."""
+    for order in VALID_ATOMIC_ORDERS:
+        for scope in VALID_SYNC_SCOPES:
+            module = _module(_atomic(order=order, scope=scope))
+            assert verify_memory_model(module).ok, (
+                f"order={order}, scope={scope} flagged unexpectedly"
+            )
+
+
+def test_atomic_with_invalid_order_is_an_error() -> None:
+    module = _module(_atomic(order="weird"))
+    assert "MEM_ATOMIC_INVALID_ORDER" in _codes(module)
+
+
+def test_atomic_with_invalid_scope_is_an_error() -> None:
+    module = _module(_atomic(scope="planetary"))
+    assert "MEM_ATOMIC_INVALID_SCOPE" in _codes(module)
+
+
+def test_atomic_with_invalid_op_is_an_error() -> None:
+    module = _module(_atomic(op="mul"))
+    assert "MEM_ATOMIC_INVALID_OP" in _codes(module)
+
+
+def test_atomic_without_explicit_order_or_scope_passes() -> None:
+    """Verifier only checks attributes that ARE declared; missing
+    attrs are not auto-flagged here (the structural verifier in
+    tile_ir.py handles required-attr enforcement)."""
+    module = _module(TileOp("tile.atomic", attrs={"atomic_op": "add"}))
+    assert verify_memory_model(module).ok
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint M5 (2026-05-22) — fence scope validation
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_fence_with_valid_scopes_passes() -> None:
+    """All 6 canonical sync scopes are legal fence scopes."""
+    for scope in VALID_SYNC_SCOPES:
+        module = _module(_fence(scope=scope))
+        assert verify_memory_model(module).ok, (
+            f"fence scope={scope} flagged unexpectedly"
+        )
+
+
+def test_fence_with_invalid_scope_is_an_error() -> None:
+    module = _module(_fence(scope="planetary"))
+    assert "MEM_FENCE_INVALID_SCOPE" in _codes(module)
+
+
+def test_fence_without_scope_attr_passes_unchanged() -> None:
+    """When the caller doesn't annotate scope, the verifier passes —
+    structural validation of fence presence belongs elsewhere."""
+    module = _module(TileOp("tile.fence", attrs={}))
+    assert verify_memory_model(module).ok
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint M5 (2026-05-22) — deterministic profile rejects nondeterministic
+# float atomic reductions (MEMORY_MODEL_SPEC §7)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _deterministic_fn(*ops: TileOp, **attrs) -> TileFunction:
+    base_attrs = {"deterministic": True}
+    base_attrs.update(attrs)
+    return TileFunction(name="f", body=list(ops), target="apple_gpu",
+                        attrs=base_attrs)
+
+
+def _deterministic_module(*ops: TileOp) -> TileIRModule:
+    return TileIRModule(functions=[_deterministic_fn(*ops)])
+
+
+def test_nondeterministic_float_dtypes_is_canonical_set() -> None:
+    """Float dtypes that produce nondeterministic atomic reductions —
+    all storage floats today."""
+    assert NONDETERMINISTIC_FLOAT_DTYPES == frozenset({
+        "fp64", "fp32", "fp16", "bf16",
+        "fp8_e4m3", "fp8_e5m2", "fp6_e2m3", "fp6_e3m2", "fp4_e2m1", "nvfp4",
+    })
+
+
+def test_reduction_atomic_ops_is_canonical_set() -> None:
+    """Atomic ops whose float variants are reductions (and therefore
+    nondeterministic without a fixed tree)."""
+    assert REDUCTION_ATOMIC_OPS == frozenset({"add", "sub", "min", "max"})
+
+
+def test_deterministic_profile_rejects_float_atomic_add() -> None:
+    """The canonical Megatron-TP float `atomic.add` reduction must be
+    rejected under the deterministic profile."""
+    module = _deterministic_module(
+        _atomic(op="add", dtype="fp32", order="acq_rel", scope="device"),
+    )
+    assert "MEM_DETERMINISTIC_NONDETERMINISTIC_REDUCTION" in _codes(module)
+
+
+@pytest.mark.parametrize("dtype", sorted(NONDETERMINISTIC_FLOAT_DTYPES))
+def test_deterministic_profile_rejects_every_float_dtype(dtype: str) -> None:
+    """Every storage-float dtype is rejected for atomic reductions
+    under the deterministic profile."""
+    module = _deterministic_module(_atomic(op="add", dtype=dtype))
+    assert "MEM_DETERMINISTIC_NONDETERMINISTIC_REDUCTION" in _codes(module)
+
+
+def test_deterministic_profile_allows_integer_atomic_add() -> None:
+    """Integer atomics are deterministic by definition — atomicity is
+    sufficient.  The verifier must not flag them under deterministic."""
+    module = _deterministic_module(_atomic(op="add", dtype="int32"))
+    assert "MEM_DETERMINISTIC_NONDETERMINISTIC_REDUCTION" not in _codes(module)
+
+
+def test_deterministic_profile_allows_float_atomic_exchange() -> None:
+    """``exchange`` and ``cas`` are not reductions — they're
+    deterministic by construction (each lane sees a defined RMW).
+    Must not be flagged even on float dtypes."""
+    module = _deterministic_module(_atomic(op="exchange", dtype="fp32"))
+    assert "MEM_DETERMINISTIC_NONDETERMINISTIC_REDUCTION" not in _codes(module)
+
+
+def test_non_deterministic_profile_allows_float_atomic_add() -> None:
+    """Without `deterministic=True`, float atomic.add is legal — the
+    verifier only enforces under deterministic / strict profiles."""
+    module = _module(_atomic(op="add", dtype="fp32"))  # default attrs
+    assert "MEM_DETERMINISTIC_NONDETERMINISTIC_REDUCTION" not in _codes(module)
+
+
+def test_strict_numeric_profile_also_rejects_float_atomic_add() -> None:
+    """`numeric_profile="strict"` is equivalent to `deterministic=True`
+    per the §7 contract — both reject nondeterministic float
+    reductions."""
+    fn = TileFunction(
+        name="f",
+        body=[_atomic(op="add", dtype="fp32")],
+        target="apple_gpu",
+        attrs={"numeric_profile": "strict"},
+    )
+    module = TileIRModule(functions=[fn])
+    assert "MEM_DETERMINISTIC_NONDETERMINISTIC_REDUCTION" in _codes(module)

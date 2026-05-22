@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Memory ordering, visibility, synchronization, and determinism model
-last_updated: 2026-04-28
+last_updated: 2026-05-22
 ---
 
 # Tessera Memory Model Specification
@@ -10,6 +10,35 @@ last_updated: 2026-04-28
 This specification defines Tessera visibility and ordering guarantees for
 loads, stores, synchronization primitives, atomics, asynchronous movement,
 transaction barriers, and distributed mesh execution.
+
+## Documentation refresh (2026-05-22)
+
+Sprint M5 (2026-05-22) added structural verifier rules for three areas
+that the 2026-05-06 spec gap audit flagged as `planned`:
+
+- **Scoped atomic attribute validation** — `MEM_ATOMIC_INVALID_OP`,
+  `MEM_ATOMIC_INVALID_ORDER`, `MEM_ATOMIC_INVALID_SCOPE` codes reject
+  out-of-set values for the 9 canonical atomic ops × 5 orders × 6
+  scopes documented in §3 + §5.
+- **Device-wide and other fence scope validation** —
+  `MEM_FENCE_INVALID_SCOPE` rejects fence ops whose `scope` attribute
+  is not in the 6 canonical scope set.
+- **Deterministic profile reduction enforcement** —
+  `MEM_DETERMINISTIC_NONDETERMINISTIC_REDUCTION` rejects float atomic
+  reductions (`add`/`sub`/`min`/`max` on `fp64`/`fp32`/`fp16`/`bf16`/
+  `fp8_*`/`fp6_*`/`fp4_*`/`nvfp4`) on `TileFunction` instances that
+  declare `attrs["deterministic"] = True` or
+  `attrs["numeric_profile"] in ("deterministic", "strict")` per §7.
+
+The full happens-before race checker (Section 8 "Happens-Before") is
+still genuinely planned — it requires real dataflow analysis, not just
+attribute validation. Section 11 below has been updated to reflect
+that these three rows are now `structural verifier` with evidence.
+
+Implementation source:
+`python/tessera/compiler/memory_verifier.py::_verify_atomic`,
+`_verify_fence`, `_function_is_deterministic`. Locked by **19 new
+tests** in `tests/unit/test_memory_verifier.py` (46 total).
 
 ## 1. Memory Spaces
 
@@ -255,13 +284,16 @@ deterministic mesh-reduction enforcement for native collectives.
 
 | Enforcement area | Current status | Evidence / next step |
 |------------------|----------------|----------------------|
-| `tile.async_copy` / wait-stage pairing | lit-testable | FA-4 and Tile IR lowering tests |
+| `tile.async_copy` / wait-stage pairing | lit-testable | FA-4 and Tile IR lowering tests; `MEM_WAIT_WITHOUT_COPY` |
 | Hopper+ `tile.mbarrier.*` contracts | lit-testable | target-contract and Tile IR tests |
 | Stream/event ordering in CPU runtime | implemented / mock-runtime | runtime ABI and CPU backend tests |
-| Scoped atomics | structural verifier | validates order/scope attributes; backend lowering tests still planned |
-| Device-wide fences | planned | add target capability checks and diagnostics |
-| Complete happens-before race checking | planned | add Graph/Schedule/Tile verifier tests |
-| Deterministic native mesh reductions | planned | add native collective runtime acceptance tests |
+| Scoped atomic attribute validation (Sprint M5) | structural verifier | `_verify_atomic` validates 9 ops × 5 orders × 6 scopes per §3 + §5; `MEM_ATOMIC_INVALID_{OP,ORDER,SCOPE}`; tests in `test_memory_verifier.py` |
+| Fence scope attribute validation (Sprint M5) | structural verifier | `_verify_fence` validates the 6 canonical scopes per §3; `MEM_FENCE_INVALID_SCOPE`; tests in `test_memory_verifier.py` |
+| Deterministic profile reduction enforcement (Sprint M5) | structural verifier | `_verify_atomic` + `_function_is_deterministic` reject float atomic reductions under `deterministic=True` per §7; `MEM_DETERMINISTIC_NONDETERMINISTIC_REDUCTION`; tests in `test_memory_verifier.py` |
+| Backend lowering of atomics to PTX/HIP/Metal | planned | NVIDIA `atom.*` / `red.*` + ROCm flat/global/LDS atomics + Apple atomic intrinsics — Phase G/H/I gate |
+| Device-wide fence target capability gating | planned | add target capability checks + diagnostics for legality of `fence.device()` on each backend |
+| Complete happens-before race checking | planned | requires dataflow analysis; add Graph/Schedule/Tile verifier tests for illegal aliasing patterns |
+| Deterministic native mesh reductions (collective execution) | planned | add native NCCL/RCCL acceptance tests that verify stable reduction tree under `deterministic=True` |
 
 Required diagnostic payloads:
 

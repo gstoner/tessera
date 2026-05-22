@@ -125,12 +125,30 @@ def test_tile_ir_spec_uses_canonical_alloc_shared_and_mbarrier_status():
 def test_memory_shape_and_conformance_specs_record_deferred_work_truthfully():
     memory = MEMORY_SPEC.read_text(encoding="utf-8")
     for term in (
+        # The conservative framing must remain — the memory model is
+        # not fully enforced today, even after Sprint M5 (2026-05-22).
         "Current enforcement is intentionally narrower than the full memory model",
-        "Scoped atomics | structural verifier",
+        # Sprint M5 promoted these 3 rows from `planned` → `structural
+        # verifier`.  The test pins the post-promotion wording so a
+        # silent regression on the verifier surface fails here.
+        "Scoped atomic attribute validation (Sprint M5) | structural verifier",
+        "Fence scope attribute validation (Sprint M5) | structural verifier",
+        "Deterministic profile reduction enforcement (Sprint M5) | structural verifier",
+        # These rows remain `planned` — they require dataflow analysis
+        # or hardware-runtime evidence, not just attribute validation.
         "Complete happens-before race checking | planned",
-        "Deterministic native mesh reductions | planned",
+        "Deterministic native mesh reductions (collective execution) | planned",
+        # The Sprint M5 diagnostic codes must be referenced in the spec
+        # so users searching for a diagnostic find the contract.
+        "MEM_ATOMIC_INVALID_OP",
+        "MEM_FENCE_INVALID_SCOPE",
+        "MEM_DETERMINISTIC_NONDETERMINISTIC_REDUCTION",
     ):
-        assert term in memory
+        assert term in memory, (
+            f"MEMORY_MODEL_SPEC.md missing required phrase {term!r} — "
+            "either restore the §11 enforcement table or update this "
+            "test if the spec has intentionally moved"
+        )
 
     shape = SHAPE_SPEC.read_text(encoding="utf-8")
     for term in (

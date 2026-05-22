@@ -2,13 +2,29 @@
 status: Normative
 classification: Normative
 authority: Shape, layout, shard, and schedule feasibility contract
-last_updated: 2026-04-28
+last_updated: 2026-05-22
 ---
 
 # Tessera Shape System Specification
 
-**Version:** 0.4.0  
+**Version:** 0.4.1
 **Status:** Normative for compiler behavior unless marked Informative.
+
+## Documentation refresh (2026-05-22)
+
+The 2026-05-06 spec gap audit asked this spec to **identify MLIR verifier
+gaps explicitly**. Section 11 below was added in response — it maps
+each contract to where it is currently checked (Python decoration-time,
+Python call-time, MLIR pass, runtime witness) or names it as a verifier
+gap with the file path that would own the check.
+
+Section 9 (Current Implementation Map) and Section 10 (Dynamic Shape
+Support Matrix) remain authoritative for layer-by-layer status; this
+refresh adds the per-contract granularity the audit requested.
+
+Locked by `tests/unit/test_shape_verifier_gap_map.py` (structural
+guard) — the per-contract table below must agree with the
+implementation inventory it cites.
 
 The Tessera Shape System extends the type system with tensor dimensions,
 layouts, distributed shards, and schedule constraints. Its purpose is to catch
@@ -375,3 +391,80 @@ def gemm(A: ts.Tensor["M", "K"], B: ts.Tensor["K", "N"]):
 
 For polymorphic call sites, omit `bindings=` and let call-time enforcement
 validate each new concrete shape.
+
+---
+
+## 11. MLIR Verifier Gap Enumeration (Sprint S5, 2026-05-22)
+
+Per the 2026-05-06 spec gap audit's "identify MLIR verifier gaps
+explicitly" ask, this section maps each shape-system contract to where
+it is enforced today vs. where it is a gap. The legend:
+
+- **PY-DT** = Python decoration-time check (decorator inspects bindings + signature)
+- **PY-CT** = Python call-time check (`JitFn.__call__` resolves symbolic dims from actual args)
+- **MLIR-PASS** = MLIR pass-level check (typically `ShapeInferencePass` or per-pass verifier)
+- **MLIR-VERIFIER** = MLIR ODS op-level verifier (`mlir::OpTrait` / `verify()`)
+- **RT-WITNESS** = Runtime shape witness (`RuntimeShapeWitness` + refinement)
+- **GAP** = no enforcement today; named with the file that would own it
+
+### 11.1 Per-contract enforcement matrix
+
+| Contract | Where checked today | Evidence | Gap (if any) |
+|----------|--------------------|---------|---------------|
+| Symbolic dim equality (`Equal(A, B)`) | PY-DT, PY-CT | `python/tessera/compiler/constraints.py::ConstraintSolver.check`; `tests/unit/test_constraints.py` | **MLIR-PASS** — symbolic-dim equality is not re-checked at the MLIR level after Graph IR lowering; would belong in `src/compiler/diagnostics/ShapeInferencePass.cpp` |
+| Concrete dim divisibility (`Divisible(D, k)`) | PY-DT, PY-CT | `constraints.py::Divisible`; `tests/unit/test_constraints.py`, `test_dynamic_shapes.py` | **MLIR-PASS** — schedule feasibility check uses Python `check_schedule_tile`; MLIR equivalent not yet a verifier |
+| Range constraints (`Range(D, lo, hi)`) | PY-DT, PY-CT | `constraints.py::Range`; `tests/unit/test_constraints.py` | **MLIR-PASS** — same gap pattern as divisibility |
+| Derived dim products (`D = H * Dh`) | PY-DT, PY-CT | `constraints.py::Derived`; `shape.py::DimProduct`; `tests/unit/test_shape_system_foundation.py` | **MLIR-PASS** — product factorization not verified at MLIR level after Graph IR; only inference-by-binding today |
+| Mesh axis name existence | PY-DT, PY-CT | `shape.py::check_shard`; `distributed/shard.py::MeshSpec` | **MLIR-PASS** — `tessera.shard` ops do not have an ODS verifier that checks mesh axis name against the active `MeshSpec` (`src/compiler/ir/TesseraOps.td`) |
+| Shard divisibility (`B % dp == 0`) | PY-DT | `shape.py::check_shard`; `tests/unit/test_shape_system_foundation.py` | **MLIR-VERIFIER** — would belong on the `tessera.shard` op; today the check fires before Graph IR emission |
+| Layout cast insertion (producer/consumer disagreement) | PY (frontend) | `compiler/graph_ir.py` inserts `layout_cast` ops | **MLIR-PASS** — no pass-level verifier enforces "every producer layout matches consumer accept-set"; would belong as a `LayoutLegalityPass` |
+| NumPy-style broadcasting | PY (op shape rule) | `shape.py::broadcast_shape`; verified via Graph IR `inferElementwise` | **MLIR-VERIFIER** — elementwise ops do not have an ODS verifier for the broadcasting rule (only inference); per-op `verify()` would catch shape mismatches at parse time |
+| Matmul inner-dim equality | PY (op rule) + MLIR-PASS | `shape.py::matmul_shape`; `ShapeInferencePass.cpp::inferMatmul` | **MLIR-VERIFIER** — `tessera.matmul` ODS does not have a custom verifier; inference catches mismatches but only when both shapes are concrete |
+| FlashAttn shape rule | PY (op rule) + MLIR-PASS | `inferFlashAttn` in ShapeInferencePass | **MLIR-VERIFIER** — same gap pattern as matmul |
+| Reshape / Transpose / Concat / Slice / Reduce shape rules | MLIR-PASS | 8 per-op rules in `ShapeInferencePass.cpp` (inferReshape, inferTranspose, inferConcat, inferSlice, inferReduce) | **MLIR-VERIFIER** for per-op verifiers; inference handles correctness today |
+| Tile fragment size legality (WGMMA/MFMA/TCgen05) | MLIR-PASS + lit | FA-4 Tile IR lowering tests under `tests/tessera-ir/phase3/cuda13/`; lit FileCheck on emitted PTX | **MLIR-VERIFIER** — `tile.mma` / `tile.wgmma` ODS verifiers do not enforce fragment-size legality per target; relies on the lowering pass to gate |
+| Shared-memory bank/vector alignment | structural verifier (lit) | Tile IR lowering tests for `tile.alloc_shared` | **MLIR-PASS** — no dedicated alignment legality pass; falls out of lowering failure if violated |
+| Async copy / TMA / mbarrier memory-model legality | PY-VERIFIER + lit | `compiler/memory_verifier.py` (Sprint M4 + M5); `tests/unit/test_memory_verifier.py` (46 tests) | None — memory-model verifier covers the Tile IR layer; backend lowering is Phase G/H/I |
+| Runtime shape witnesses | RT-WITNESS | `shape.py::RuntimeShapeWitness`; `JitFn.__call__` re-runs ConstraintSolver | None — the witness contract IS the runtime check |
+
+### 11.2 Summary of gaps
+
+The audit's "MLIR verifier gaps" ask, condensed:
+
+1. **No ODS-level shape verifiers on `tessera.*` ops.** Inference catches
+   shape mismatches in `ShapeInferencePass` but not at parse time.
+   Adding `let hasVerifier = 1;` + a `verify()` method to `MatmulOp`,
+   `FlashAttnOp`, elementwise ops, and `ShardOp` in
+   `src/compiler/ir/TesseraOps.td` would catch malformed IR before any
+   pass runs. **Status: planned.**
+2. **No MLIR-level pass that re-checks symbolic dim equality after
+   lowering.** Python `ConstraintSolver` handles decoration- and
+   call-time; a post-`DistributionLoweringPass` checker would catch
+   any pass that accidentally broke a `where D = H * Dh` clause.
+   **Status: planned.**
+3. **No `LayoutLegalityPass`.** Layout cast insertion happens in the
+   Python frontend; a Schedule IR pass that verifies "every producer
+   layout matches consumer accept-set" would catch later-pass bugs
+   that drop or insert wrong casts. **Status: planned.**
+4. **`tile.mma` / `tile.wgmma` lack target-aware verifiers.** Fragment
+   size legality is enforced by lowering failure today; an ODS verifier
+   would surface the violation earlier with a clearer diagnostic.
+   **Status: planned.**
+
+### 11.3 Active evidence pointers
+
+Specs that claim stronger MLIR-verifier coverage should cite tests; the
+following are the canonical evidence files:
+
+| Surface | File |
+|---------|------|
+| Python constraint solver | `python/tessera/compiler/constraints.py`; `tests/unit/test_constraints.py` |
+| Python shape objects + helpers | `python/tessera/shape.py`; `tests/unit/test_shape_system_foundation.py` |
+| MLIR per-op shape inference | `src/compiler/diagnostics/ShapeInferencePass.cpp`; `tests/unit/test_shape_inference.py` |
+| Dynamic shape call-time enforcement | `python/tessera/compiler/jit.py::JitFn._enforce_call_time_constraints`; `tests/unit/test_dynamic_shapes.py` |
+| Memory-model verifier (Tile IR layer) | `python/tessera/compiler/memory_verifier.py`; `tests/unit/test_memory_verifier.py` (46 tests) |
+| Runtime shape witnesses | `python/tessera/shape.py::RuntimeShapeWitness`; `tests/unit/test_shape_system_foundation.py` |
+
+A primitive that claims a contract not in §11.1 above must add a row
+here with the file path that owns the check, or downgrade the claim to
+`planned`.

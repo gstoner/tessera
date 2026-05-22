@@ -106,6 +106,42 @@ LEGAL_ASYNC_COPY_TRANSITIONS: frozenset[tuple[str, str]] = frozenset({
     ("host",     "global"),    # ingest path (rarely used at Tile IR level)
 })
 
+# Sprint M5 (2026-05-22) — atomic op attribute validation.
+#
+# Memory model §5 lists 5 valid memory orders and 6 valid scopes.
+# The verifier rejects atomics that name an order/scope outside these
+# sets and emits ``MEM_ATOMIC_INVALID_ORDER`` / ``MEM_ATOMIC_INVALID_SCOPE``.
+# This is a *structural* attribute-validity check — it does not
+# attempt to verify happens-before for atomic chains.
+VALID_ATOMIC_ORDERS: frozenset[str] = frozenset({
+    "relaxed", "acquire", "release", "acq_rel", "seq_cst",
+})
+
+VALID_SYNC_SCOPES: frozenset[str] = frozenset({
+    "thread", "warp", "block", "cluster", "device", "mesh",
+})
+
+VALID_ATOMIC_OPS: frozenset[str] = frozenset({
+    "add", "sub", "min", "max", "and", "or", "xor", "exchange", "cas",
+})
+
+# Sprint M5 (2026-05-22) — deterministic-profile reduction rule.
+#
+# Memory model §7 says deterministic / strict profiles must not use
+# nondeterministic float atomic reductions for aggregation.  The
+# verifier flags any atomic op with a float dtype + reduction-style
+# op (add / sub / min / max) when the enclosing function carries
+# ``deterministic=True``.  Integer atomics are deterministic by
+# definition (atomicity is sufficient).
+NONDETERMINISTIC_FLOAT_DTYPES: frozenset[str] = frozenset({
+    "fp64", "fp32", "fp16", "bf16",
+    "fp8_e4m3", "fp8_e5m2", "fp6_e2m3", "fp6_e3m2", "fp4_e2m1", "nvfp4",
+})
+
+REDUCTION_ATOMIC_OPS: frozenset[str] = frozenset({
+    "add", "sub", "min", "max",
+})
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Verifier
@@ -244,7 +280,107 @@ def _verify_queue_pop_or_barrier(op: TileOp, state: _MemoryStateTracker) -> None
     # `barrier` waits but does not consume — leave the count alone.
 
 
-def _walk(ops: Iterable[TileOp], state: _MemoryStateTracker) -> None:
+def _verify_atomic(
+    op: TileOp, state: _MemoryStateTracker, *, deterministic: bool,
+) -> None:
+    """Sprint M5 (2026-05-22) — validate atomic op order/scope/op
+    attributes and flag nondeterministic float-atomic reductions under
+    deterministic profiles.  Memory model §5 + §7."""
+    op_kind = op.attrs.get("atomic_op")
+    if op_kind is not None and str(op_kind) not in VALID_ATOMIC_OPS:
+        state.diagnostics.append(MemoryModelDiagnostic(
+            severity="error",
+            message=(
+                f"atomic op {op_kind!r} is not in the canonical set "
+                f"{sorted(VALID_ATOMIC_OPS)}"
+            ),
+            code="MEM_ATOMIC_INVALID_OP",
+            op_name=op.op_name,
+            where=_location(op),
+        ))
+    order = op.attrs.get("order")
+    if order is not None and str(order) not in VALID_ATOMIC_ORDERS:
+        state.diagnostics.append(MemoryModelDiagnostic(
+            severity="error",
+            message=(
+                f"atomic order {order!r} is not in the canonical set "
+                f"{sorted(VALID_ATOMIC_ORDERS)}; see MEMORY_MODEL_SPEC §5"
+            ),
+            code="MEM_ATOMIC_INVALID_ORDER",
+            op_name=op.op_name,
+            where=_location(op),
+        ))
+    scope = op.attrs.get("scope")
+    if scope is not None and str(scope) not in VALID_SYNC_SCOPES:
+        state.diagnostics.append(MemoryModelDiagnostic(
+            severity="error",
+            message=(
+                f"atomic scope {scope!r} is not in the canonical set "
+                f"{sorted(VALID_SYNC_SCOPES)}; see MEMORY_MODEL_SPEC §3"
+            ),
+            code="MEM_ATOMIC_INVALID_SCOPE",
+            op_name=op.op_name,
+            where=_location(op),
+        ))
+    if deterministic and op_kind is not None:
+        dtype = op.attrs.get("dtype")
+        if (
+            dtype is not None
+            and str(dtype) in NONDETERMINISTIC_FLOAT_DTYPES
+            and str(op_kind) in REDUCTION_ATOMIC_OPS
+        ):
+            state.diagnostics.append(MemoryModelDiagnostic(
+                severity="error",
+                message=(
+                    f"float atomic {op_kind!r} on dtype {dtype!r} is "
+                    "nondeterministic and rejected under "
+                    "deterministic / strict numeric profiles; use a "
+                    "fixed reduction tree (see MEMORY_MODEL_SPEC §7)"
+                ),
+                code="MEM_DETERMINISTIC_NONDETERMINISTIC_REDUCTION",
+                op_name=op.op_name,
+                where=_location(op),
+            ))
+
+
+def _verify_fence(op: TileOp, state: _MemoryStateTracker) -> None:
+    """Sprint M5 (2026-05-22) — validate fence scope attribute.
+    Memory model §3 + §4."""
+    scope = op.attrs.get("scope")
+    if scope is None:
+        return  # caller didn't annotate; nothing to verify
+    if str(scope) not in VALID_SYNC_SCOPES:
+        state.diagnostics.append(MemoryModelDiagnostic(
+            severity="error",
+            message=(
+                f"fence scope {scope!r} is not in the canonical set "
+                f"{sorted(VALID_SYNC_SCOPES)}; see MEMORY_MODEL_SPEC §3"
+            ),
+            code="MEM_FENCE_INVALID_SCOPE",
+            op_name=op.op_name,
+            where=_location(op),
+        ))
+
+
+def _function_is_deterministic(fn: TileFunction) -> bool:
+    """A TileFunction carries `deterministic=True` either as a top
+    attribute or via its target's numeric profile.  We accept both
+    surfaces so user code can opt in at either layer.
+    """
+    attrs = getattr(fn, "attrs", None) or {}
+    if attrs.get("deterministic") is True:
+        return True
+    if attrs.get("numeric_profile") in ("deterministic", "strict"):
+        return True
+    return False
+
+
+def _walk(
+    ops: Iterable[TileOp],
+    state: _MemoryStateTracker,
+    *,
+    deterministic: bool = False,
+) -> None:
     for op in ops:
         if op.op_name == "tile.async_copy":
             _verify_async_copy(op, state)
@@ -256,7 +392,11 @@ def _walk(ops: Iterable[TileOp], state: _MemoryStateTracker) -> None:
             _verify_queue_push(op, state)
         elif op.op_name in {"tessera.queue.pop", "tessera.queue.barrier"}:
             _verify_queue_pop_or_barrier(op, state)
-        _walk(op.body, state)
+        elif op.op_name in {"tile.atomic", "tessera.atomic", "atomic"}:
+            _verify_atomic(op, state, deterministic=deterministic)
+        elif op.op_name in {"tile.fence", "tessera.fence", "fence.device"}:
+            _verify_fence(op, state)
+        _walk(op.body, state, deterministic=deterministic)
 
 
 def verify_memory_model(
@@ -278,7 +418,7 @@ def verify_memory_model(
         functions = tuple(module_or_function.functions)
     for fn in functions:
         state = _MemoryStateTracker()
-        _walk(fn.body, state)
+        _walk(fn.body, state, deterministic=_function_is_deterministic(fn))
         diagnostics.extend(state.diagnostics)
     return MemoryModelVerificationResult(tuple(diagnostics))
 
@@ -301,6 +441,11 @@ __all__ = [
     "MemoryModelVerificationError",
     "VALID_MEMORY_SPACES",
     "LEGAL_ASYNC_COPY_TRANSITIONS",
+    "VALID_ATOMIC_ORDERS",
+    "VALID_SYNC_SCOPES",
+    "VALID_ATOMIC_OPS",
+    "NONDETERMINISTIC_FLOAT_DTYPES",
+    "REDUCTION_ATOMIC_OPS",
     "verify_memory_model",
     "assert_memory_model_ok",
 ]

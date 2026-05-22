@@ -30,9 +30,32 @@ current implementation source.  Specs touched:
 | `RUNTIME_ABI_SPEC.md` | Replay manifests declared NOT part of the C ABI; Apple CPU + GPU symbol exports documented (26 GPU symbols); collective adapter version pin (NCCL/RCCL ≥ 2.22). |
 | `CONFORMANCE.md` | Already closed 2026-05-20 (header cleanup landed earlier); kept linked to `VALIDATION_SPINE.md`. |
 
-The MEMORY_MODEL_SPEC.md and SHAPE_SYSTEM.md items remain as informative
-sub-tasks (P2 priority in the implementation backlog below) — they
-require new verifier evidence, not just doc refresh.
+**Sprint M5 + S5 (2026-05-22)** subsequently closed both remaining
+P2 items:
+
+- **MEMORY_MODEL_SPEC.md** received 3 new structural verifier rules
+  in `python/tessera/compiler/memory_verifier.py` for scoped atomic
+  attributes (`MEM_ATOMIC_INVALID_OP/ORDER/SCOPE`), fence scope
+  (`MEM_FENCE_INVALID_SCOPE`), and deterministic-profile reduction
+  enforcement (`MEM_DETERMINISTIC_NONDETERMINISTIC_REDUCTION`). §11
+  enforcement table was updated to reflect 3 promotions from `planned`
+  → `structural verifier` with test evidence. **19 new tests** in
+  `tests/unit/test_memory_verifier.py` (46 total).
+
+- **SHAPE_SYSTEM.md** added §11 MLIR Verifier Gap Enumeration — a
+  per-contract enforcement matrix mapping each shape contract to where
+  it's checked (PY-DT / PY-CT / MLIR-PASS / MLIR-VERIFIER /
+  RT-WITNESS / GAP) plus a §11.2 canonical-gap list naming the 4 named
+  MLIR-verifier gaps (no ODS-level shape verifiers; no MLIR symbolic
+  dim equality re-check; no LayoutLegalityPass; `tile.mma`/`tile.wgmma`
+  target verifiers). **17 new tests** in
+  `tests/unit/test_shape_verifier_gap_map.py` lock evidence-file
+  presence + canonical gap names.
+
+Net: 36 new tests across the 2 specs; the spec-gap audit is now
+fully closed for the original 9-item list. The 4 named MLIR verifier
+gaps remain as a future Phase G/H/I priority but are tracked
+structurally instead of being silent drift.
 
 ## Executive Summary
 

@@ -108,21 +108,29 @@ def test_primitive_coverage_imports_existing_ops_as_partial_entries():
     assert matmul.graph_name == "tessera.matmul"
     # matmul has VJP+JVP registered and the contract-axis hardening passes
     # promoted math / shape / dtype / batching / transpose / lowering / tests
-    # to `complete` via the category classifier. What's still incomplete is
-    # the mesh-dependent sharding rule and the hardware backend kernel —
-    # both gated behind Phase G integration.
+    # to `complete` via the category classifier.  Sprint #20b
+    # (2026-05-22) added the loop_nest mock-mesh proof
+    # (tests/unit/test_loop_nest_sharding_mock_mesh.py), which closed
+    # `sharding_rule` for the matmul / gemm / batched_gemm core via
+    # the Megatron-style column-parallel + row-parallel decomposition.
+    # The only remaining gate is `backend_kernel`, which stays open
+    # until Phase G/H/I hardware lanes light up.
     assert matmul.contract_status["lowering_rule"] == "complete"
     assert matmul.contract_status["vjp"] == "complete"
     assert matmul.contract_status["jvp"] == "complete"
     assert matmul.contract_status["batching_rule"] == "complete"
     assert matmul.contract_status["transpose_rule"] == "complete"
     assert matmul.contract_status["math_semantics"] == "complete"
+    assert matmul.contract_status["sharding_rule"] == "complete"
     assert "vjp" not in matmul.missing_contracts()
     assert "jvp" not in matmul.missing_contracts()
-    # The remaining gates for a fully contract-complete `matmul`.
-    assert "sharding_rule" in matmul.missing_contracts(), (
-        "sharding_rule should remain partial pending Phase G mesh integration"
+    assert "sharding_rule" not in matmul.missing_contracts(), (
+        "sharding_rule for matmul is closed by the Sprint #20b "
+        "Megatron-TP mock-mesh proof; if this assertion regresses, "
+        "_SHARDING_RULE_BY_CATEGORY['loop_nest'] was downgraded or a "
+        "stronger per-name override was added."
     )
+    # The remaining gate for a fully contract-complete `matmul`.
     assert "backend_kernel" in matmul.missing_contracts(), (
         "backend_kernel should remain partial pending Phase G hardware execution"
     )

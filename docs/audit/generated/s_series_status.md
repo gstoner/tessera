@@ -16,7 +16,7 @@
 |---|---:|---:|
 | `batching_rule` | 36 | 396 |
 | `transpose_rule` | 40 | 392 |
-| `sharding_rule` | 59 | 373 |
+| `sharding_rule` | 56 | 376 |
 | `lowering_rule` | 0 | 432 |
 | `backend_kernel` | 432 | 0 |
 
@@ -55,7 +55,7 @@
 | other | `linalg_decomposition` | 3 | 3 | 3 | 3 | — | 3 |
 | other | `linalg_solver` | 1 | 1 | 1 | 1 | — | 1 |
 | other | `logical` | 8 | — | — | — | — | 8 |
-| other | `loop_nest` | 7 | — | — | 4 | — | 7 |
+| other | `loop_nest` | 7 | — | — | 1 | — | 7 |
 | other | `model_layer` | 4 | — | — | 3 | — | 4 |
 | other | `moe` | 1 | 1 | 1 | 1 | — | 1 |
 | other | `moe_transport` | 2 | 2 | 2 | 2 | — | 2 |
@@ -93,7 +93,7 @@
 | S11 | 30 | 0 | 0 | 0 | 30 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
 | M6 | 12 | 0 | 12 | 9 | 12 |
-| other | 245 | 33 | 25 | 32 | 245 |
+| other | 245 | 33 | 25 | 29 | 245 |
 
 ## Closure trajectory
 

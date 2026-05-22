@@ -439,6 +439,29 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
         "sharding_rule": "complete",
         "masking_effect_rule": "not_applicable",
     },
+    # ── factorized_matmul (Sprint #20b, 2026-05-22) ──────────────────────
+    # Documented exception inside the loop_nest category.  The
+    # underlying matmul shards trivially (proven for matmul/gemm/
+    # batched_gemm by the Megatron-style mock-mesh tests in
+    # tests/unit/test_loop_nest_sharding_mock_mesh.py), but
+    # factorized_matmul applies a rank-r SVD truncation as a post-hoc
+    # epilogue.  Truncation is NOT compositional under column-parallel
+    # sharding — truncating each (M, N_local) shard separately produces
+    # a different rank-r approximation than truncating the full
+    # (M, N) output.  See
+    # ``test_factorized_matmul_truncation_is_not_compositional`` for
+    # the numerical proof.  sharding_rule stays at `partial` until a
+    # canonical "shard-the-matmul-then-truncate-the-gathered-output"
+    # pass body lands.
+    "factorized_matmul": {
+        "math_semantics": "complete",
+        "shape_rule": "complete",
+        "dtype_layout_rule": "complete",
+        "batching_rule": "complete",
+        "transpose_rule": "complete",
+        "sharding_rule": "partial",
+        "masking_effect_rule": "not_applicable",
+    },
 }
 
 # ── Shared override dicts for attention family + RL losses ──────────────
@@ -644,7 +667,16 @@ _SHARDING_RULE_BY_CATEGORY: dict[str, str] = {
 
     # — Attention & friends: known TP/SP patterns, mesh-dependent —
     "attention":           "partial",
-    "loop_nest":           "partial",   # matmul/gemm/conv — TP along contract axis
+    # loop_nest (Sprint #20b, 2026-05-22): promoted to complete.
+    # matmul / gemm / batched_gemm are proven by the Megatron-style
+    # column-parallel and row-parallel mock-mesh tests in
+    # tests/unit/test_loop_nest_sharding_mock_mesh.py — linearity of
+    # matmul under the distributive law makes both TP forms
+    # mechanical.  factorized_matmul is the documented exception
+    # (rank-r SVD truncation is not compositional under sharding) and
+    # is held at `partial` via a per-name override in
+    # ``_EXISTING_CONTRACT_OVERRIDES``.
+    "loop_nest":           "complete",
     "model_layer":         "partial",
     "contraction":         "partial",   # einsum
     "projection":          "partial",

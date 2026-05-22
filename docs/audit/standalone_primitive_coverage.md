@@ -137,7 +137,7 @@ the high-risk S1 entries and milestone sentinels. Tests compare these rows to
 <!-- BEGIN GENERATED PRIMITIVE COVERAGE SNAPSHOT -->
 | Primitive | Category | Status | Existing op | Lowering gate | Backend gate | Missing contracts | Model families |
 |-----------|----------|--------|-------------|---------------|--------------|-------------------|----------------|
-| `matmul` | loop_nest | partial | yes | registered | partial | sharding_rule, backend_kernel | - |
+| `matmul` | loop_nest | partial | yes | registered | partial | backend_kernel | - |
 | `permute` | tensor_algebra | partial | yes | registered | partial | backend_kernel | - |
 | `collective_permute` | collective | partial | yes | registered | reference_only | batching_rule, backend_kernel | all |
 | `scan` | control_flow | partial | yes | not_applicable | reference_only | backend_kernel | all |

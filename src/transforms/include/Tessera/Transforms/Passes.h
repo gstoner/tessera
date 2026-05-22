@@ -204,6 +204,23 @@ std::unique_ptr<mlir::Pass> createLightningAttnFusionPass();
 std::unique_ptr<mlir::Pass> createDeltaAttnChunkingPass();
 std::unique_ptr<mlir::Pass> createHybridAttnExpandPass();
 
+// ── Sprint V2 (2026-05-22) — LayoutLegalityPass skeleton ─────────────────
+//
+// Closes the "no LayoutLegalityPass" item in SHAPE_SYSTEM.md §11.2.
+// First rule: `tessera.cast` ops whose `tessera.layout` attribute names
+// a layout outside the canonical accept-set (row_major / col_major /
+// nhwc / nchw / bhsd / tile / bsr / packed) emit
+// `LAYOUT_LEGALITY_UNKNOWN_LAYOUT` and fail the pass.
+//
+// Future rules (declared in `LayoutLegalityPass.cpp` as comment-only
+// placeholders): producer/consumer accept-set mismatches without an
+// intervening cast; identity-cascade folding.
+//
+// Registered standalone as `--tessera-layout-legality`.  Inserted into
+// the named lowering pipelines in a follow-up sprint once the rule
+// surface is large enough.
+std::unique_ptr<mlir::Pass> createLayoutLegalityPass();
+
 void registerTesseraPasses();
 
 } // namespace tessera

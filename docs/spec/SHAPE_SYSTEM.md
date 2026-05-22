@@ -429,27 +429,52 @@ it is enforced today vs. where it is a gap. The legend:
 
 ### 11.2 Summary of gaps
 
-The audit's "MLIR verifier gaps" ask, condensed:
+The audit's "MLIR verifier gaps" ask, condensed.  **Sprint V1+V2+V3
+(2026-05-22) corrected the framing and closed three of the four
+items:**
 
-1. **No ODS-level shape verifiers on `tessera.*` ops.** Inference catches
-   shape mismatches in `ShapeInferencePass` but not at parse time.
-   Adding `let hasVerifier = 1;` + a `verify()` method to `MatmulOp`,
-   `FlashAttnOp`, elementwise ops, and `ShardOp` in
-   `src/compiler/ir/TesseraOps.td` would catch malformed IR before any
-   pass runs. **Status: planned.**
+1. **ODS-level shape verifiers on `tessera.*` ops.** Original gap
+   wording was inaccurate — 15 ops in `TesseraOps.td` already had
+   `let hasVerifier = 1;` + a `verify()` body in `TesseraOps.cpp`
+   (`MatmulOp`, `Conv2DNHWCOp`, `FlashAttnOp`, `FusedEpilogueOp`,
+   `AttnLocalWindow2DOp`, plus 10 archsearch / state ops).  Coverage
+   was uneven across the dialect.  **Sprint V1 closure (2026-05-22):**
+   added `hasVerifier = 1;` + real `verify()` for `TransposeOp`,
+   `LayerNormOp`, `MoeDispatchOp` with 9 stable diagnostic phrases
+   and 9 lit-fixture cases (`tests/tessera-ir/phase2/sprint_v1_verifiers.mlir`).
+   The "uneven coverage" subgap remains for the rest of the dialect
+   (op-by-op work as needs arise).  **Status: partially closed.**
 2. **No MLIR-level pass that re-checks symbolic dim equality after
    lowering.** Python `ConstraintSolver` handles decoration- and
    call-time; a post-`DistributionLoweringPass` checker would catch
    any pass that accidentally broke a `where D = H * Dh` clause.
    **Status: planned.**
-3. **No `LayoutLegalityPass`.** Layout cast insertion happens in the
-   Python frontend; a Schedule IR pass that verifies "every producer
-   layout matches consumer accept-set" would catch later-pass bugs
-   that drop or insert wrong casts. **Status: planned.**
-4. **`tile.mma` / `tile.wgmma` lack target-aware verifiers.** Fragment
-   size legality is enforced by lowering failure today; an ODS verifier
-   would surface the violation earlier with a clearer diagnostic.
-   **Status: planned.**
+3. **`LayoutLegalityPass` skeleton + first rule.** **Sprint V2
+   closure (2026-05-22):** `src/transforms/lib/LayoutLegalityPass.cpp`
+   ships with the canonical 8-name layout accept-set
+   (`row_major / col_major / nhwc / nchw / bhsd / tile / bsr / packed`),
+   first rule (`tessera.cast` with non-canonical `tessera.layout`
+   attribute emits `LAYOUT_LEGALITY_UNKNOWN_LAYOUT` and fails the
+   pass), registered as `--tessera-layout-legality` in
+   `Passes.cpp`, wired into the `TesseraPasses` CMake target, and
+   exercised by `tests/tessera-ir/phase2/sprint_v2_layout_legality.mlir`
+   (positive: row_major, bhsd, no-attr; negative: exotic_block_format).
+   Future rules (producer/consumer accept-set mismatch detection,
+   identity-cascade folding) are documented as comment-only placeholders
+   in the pass source.  **Status: skeleton + 1 rule closed.**
+4. **Target-aware verifier on the canonical attention/MMA op family.**
+   **Sprint V3 closure (2026-05-22):** `FlashAttnOp::verify()` extended
+   to walk the parent op chain for a `tessera.target_sm` attribute and
+   enforce the per-SM `head_dim` ceiling from
+   `docs/nvidia_cuda13_kernel_inventory.md` (sm_70/75/80/86/89 ≤ 128;
+   sm_90/100/120 ≤ 256; no SM tag ⇒ no limit applied — CPU path
+   unaffected).  Diagnostic phrase `head_dim=N exceeds the SM <sm> ...`
+   exercised by `tests/tessera-ir/phase3/sprint_v3_flash_attn_target_aware.mlir`
+   (positive: sm_90 at 256; negative: sm_90 at 257; negative: sm_80 at
+   256).  Generalizing this pattern to `tile.mma` / `tile.wgmma` /
+   `tessera.attn.scaled_dot_product` for tile-shape legality is the
+   next slice.  **Status: head_dim ceiling closed; tile-shape legality
+   planned.**
 
 ### 11.3 Active evidence pointers
 

@@ -154,22 +154,56 @@ def test_shape_inference_pass_has_per_op_rules() -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-_CANONICAL_GAP_NAMES = (
-    "No ODS-level shape verifiers on `tessera.*` ops.",
+# Sprint V1+V2+V3 (2026-05-22) re-shaped §11.2.  Three items are
+# closed and one remains planned.  The phrases below pin both the
+# closures (so a regression on the verifier code triggers here) and
+# the remaining planned item.
+_CANONICAL_GAP_PHRASES_CLOSURE = (
+    # Sprint V1 — partial closure of the per-op verifier coverage gap.
+    # Test against tokens that always appear on a single line in the
+    # spec (avoid multi-word phrases that may straddle a markdown
+    # word-wrap).
+    "Sprint V1 closure",
+    "TransposeOp",
+    "MoeDispatchOp",
+    # Sprint V2 — LayoutLegalityPass skeleton + first rule.
+    "tessera-layout-legality",
+    "LAYOUT_LEGALITY_UNKNOWN_LAYOUT",
+    # Sprint V3 — target-aware FlashAttnOp head_dim ceiling.
+    "Sprint V3 closure",
+    "tessera.target_sm",
+)
+
+_CANONICAL_GAP_PHRASES_PLANNED = (
+    # The one gap that genuinely stays planned — needs a post-lowering
+    # MLIR pass that re-runs symbolic-dim equality across the IR.
     "No MLIR-level pass that re-checks symbolic dim equality after",
-    "No `LayoutLegalityPass`.",
-    "`tile.mma` / `tile.wgmma` lack target-aware verifiers.",
 )
 
 
-def test_spec_lists_canonical_gaps() -> None:
-    """The spec's §11.2 summary must list the 4 canonical gaps. If
-    one is closed, the spec must be updated to remove the line (and
-    add a row to §11.1 with the closing evidence)."""
+def test_spec_records_sprint_v1_v2_v3_closures() -> None:
+    """SHAPE_SYSTEM.md §11.2 must record the 3 closures Sprint V1+V2+V3
+    landed.  If a closure regresses (e.g. someone reverts the
+    `LayoutLegalityPass.cpp` source), this test fails — pointing the
+    fixer at the right spec section."""
     spec = (REPO_ROOT / "docs" / "spec" / "SHAPE_SYSTEM.md").read_text()
-    missing = [g for g in _CANONICAL_GAP_NAMES if g not in spec]
+    missing = [g for g in _CANONICAL_GAP_PHRASES_CLOSURE if g not in spec]
     assert not missing, (
-        f"SHAPE_SYSTEM.md §11.2 is missing canonical gap entries: "
-        f"{missing}. If a gap was closed, update §11.1 with the "
-        f"closing evidence and remove the §11.2 entry."
+        f"SHAPE_SYSTEM.md §11.2 is missing Sprint V1+V2+V3 closure "
+        f"phrases: {missing}.  If a closure was reverted, restore the "
+        f"verifier code AND the spec; do not edit one without the "
+        f"other."
+    )
+
+
+def test_spec_lists_remaining_planned_gap() -> None:
+    """The one remaining genuine MLIR-verifier gap (no post-lowering
+    symbolic-dim equality re-check) must stay listed as planned until
+    a future sprint addresses it."""
+    spec = (REPO_ROOT / "docs" / "spec" / "SHAPE_SYSTEM.md").read_text()
+    missing = [g for g in _CANONICAL_GAP_PHRASES_PLANNED if g not in spec]
+    assert not missing, (
+        f"SHAPE_SYSTEM.md §11.2 is missing remaining planned gaps: "
+        f"{missing}.  If the gap was closed, update §11.1 with the "
+        f"closing evidence and update this test."
     )

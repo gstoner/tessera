@@ -93,6 +93,14 @@ void registerTesseraPasses() {
   ::mlir::registerPass([]() { return createLightningAttnFusionPass(); });
   ::mlir::registerPass([]() { return createDeltaAttnChunkingPass(); });
 
+  // ── Sprint V2 (2026-05-22) — Layout legality skeleton ─────────────────
+  // Closes the "no LayoutLegalityPass" gap in SHAPE_SYSTEM.md §11.2.
+  // First rule: tessera.cast with `tessera.layout` attribute outside
+  // the canonical accept-set emits LAYOUT_LEGALITY_UNKNOWN_LAYOUT and
+  // signals pass failure.  Registered standalone for now; inserted into
+  // x86 / GPU pipelines in a follow-up sprint.
+  ::mlir::registerPass([]() { return createLayoutLegalityPass(); });
+
   // ── Phase F5 adjoint collective insertion ──────────────────────────────────
   // Runs after AutodiffPass on functions carrying both
   // tessera.autodiff="reverse" and tessera.weight_sharding. Plans

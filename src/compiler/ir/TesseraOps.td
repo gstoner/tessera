@@ -318,6 +318,10 @@ def Tessera_MoeDispatchOp : Op<Tessera_Dialect, "moe_dispatch", []> {
   let arguments = (ins TensorType:$x, TensorType:$route);
   let results = (outs TensorType:$partials);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  // Sprint V1 (2026-05-22): leading-axis token-count match between
+  // the input token tensor ``x`` and the expert routing tensor
+  // ``route``.  Both must agree on dim 0 when statically known.
+  let hasVerifier = 1;
 }
 
 def Tessera_MoeCombineOp : Op<Tessera_Dialect, "moe_combine", []> {
@@ -491,6 +495,11 @@ def Tessera_LayerNormOp : Tessera_UnaryPureOp<"layer_norm", "LayerNorm over the 
   let arguments = (ins TensorType:$x,
                        OptionalAttr<F64Attr>:$eps,
                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
+  // Sprint V1 (2026-05-22): shape-preserving normalization.  Input
+  // and output ranks + static dims must agree.  ``eps`` (when set)
+  // must be positive — required for ``rsqrt(var + eps)`` stability
+  // per MEMORY_MODEL_SPEC §7 numerics.
+  let hasVerifier = 1;
 }
 
 def Tessera_SoftmaxOp : Tessera_UnaryPureOp<"softmax", "Softmax over an explicit or innermost axis"> {
@@ -752,6 +761,11 @@ def Tessera_TransposeOp : Op<
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  // Sprint V1 (2026-05-22): rank-preserving permutation.  Input and
+  // output must have the same rank; the multiset of static dim sizes
+  // must be a permutation (dynamic dims are unconstrained).  Element
+  // type must match.
+  let hasVerifier = 1;
 }
 
 def Tessera_CastOp : Op<

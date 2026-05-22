@@ -53,9 +53,49 @@ P2 items:
   presence + canonical gap names.
 
 Net: 36 new tests across the 2 specs; the spec-gap audit is now
-fully closed for the original 9-item list. The 4 named MLIR verifier
-gaps remain as a future Phase G/H/I priority but are tracked
-structurally instead of being silent drift.
+fully closed for the original 9-item list.
+
+**MLIR Verifier Sprint V1+V2+V3 (2026-05-22)** subsequently closed
+**3 of the 4 named MLIR-verifier gaps**:
+
+- **V1** (per-op verifier coverage, partial): added `let hasVerifier =
+  1;` + `verify()` for `TransposeOp` (rank + permutation + element
+  type), `LayerNormOp` (shape-preserve + eps > 0), `MoeDispatchOp`
+  (leading-axis token-count match) in
+  `src/compiler/ir/TesseraOps.td` + `TesseraOps.cpp`.  Lit fixture:
+  `tests/tessera-ir/phase2/sprint_v1_verifiers.mlir` (9 cases,
+  positive + negative).  Original gap wording was inaccurate — 15 ops
+  already had verifiers; the closure addresses the coverage subgap.
+- **V2** (LayoutLegalityPass skeleton): new
+  `src/transforms/lib/LayoutLegalityPass.cpp` with the canonical
+  8-name layout accept-set (row_major / col_major / nhwc / nchw /
+  bhsd / tile / bsr / packed) and first rule (`tessera.cast` with
+  non-canonical `tessera.layout` attribute → fails pass with
+  `LAYOUT_LEGALITY_UNKNOWN_LAYOUT`).  Registered as
+  `--tessera-layout-legality` + wired into the `TesseraPasses` CMake
+  target.  Lit fixture:
+  `tests/tessera-ir/phase2/sprint_v2_layout_legality.mlir`.
+- **V3** (target-aware verifier on the canonical attention/MMA op
+  family): `FlashAttnOp::verify()` extended to walk for a
+  `tessera.target_sm` parent attribute and enforce per-SM head_dim
+  ceiling (sm_70–89 ≤ 128, sm_90/100/120 ≤ 256, no SM ⇒ no limit).
+  Lit fixture:
+  `tests/tessera-ir/phase3/sprint_v3_flash_attn_target_aware.mlir`.
+
+**24 new structural-guard tests** in
+`tests/unit/test_mlir_verifier_sprint.py` pin the .td / .cpp /
+CMake / lit fixture content so a future edit that softens the
+diagnostic wording fails immediately.
+
+**Build + lit verification (2026-05-22):**
+`cmake --build build --target tessera-opt` succeeded;
+`lit tests/tessera-ir/phase{2,3}/sprint_v*.mlir` reports 3/3 PASS
+through the rebuilt C++ binary.
+
+**Remaining MLIR-verifier gap (1 of 4):** no post-lowering MLIR
+pass that re-checks symbolic-dim equality.  Tracked in SHAPE_SYSTEM
+§11.2 as the single remaining planned item; structurally guarded by
+`test_spec_lists_remaining_planned_gap`.
 
 ## Executive Summary
 

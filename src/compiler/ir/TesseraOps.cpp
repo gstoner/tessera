@@ -3,7 +3,10 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/Support/LogicalResult.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringSwitch.h"
+
+#include <algorithm>
 
 using namespace mlir;
 
@@ -39,6 +42,31 @@ LogicalResult Conv2DNHWCOp::verify() {
   return success();
 }
 
+// Sprint V3 (2026-05-22) — target-aware head_dim limits.
+//
+// Per-SM max head_dim for the fused flash-attention kernel.  Numbers
+// come from `docs/apple_gpu_kernel_inventory.md` (Apple GPU MSL
+// kernel ships head_dim ≤ 256) + Sprint G-2 NVIDIA kernel inventory.
+// SM_80 / SM_86 / SM_89: 128 (legacy FA-2/3 limit).
+// SM_90 / SM_100 / SM_120 + Apple Hopper-class: 256.
+// CPU / Apple CPU: no SM tag ⇒ no limit applied here (CPU path runs
+// the numpy reference, which has no fragment-size constraint).
+static int64_t maxHeadDimForTargetSm(StringRef sm) {
+  return llvm::StringSwitch<int64_t>(sm)
+      .Case("sm_70", 128)
+      .Case("sm_75", 128)
+      .Case("sm_80", 128)
+      .Case("sm_86", 128)
+      .Case("sm_89", 128)
+      .Case("sm_90", 256)
+      .Case("sm_90a", 256)
+      .Case("sm_100", 256)
+      .Case("sm_100a", 256)
+      .Case("sm_120", 256)
+      .Case("sm_120a", 256)
+      .Default(-1);  // unknown / no limit applied
+}
+
 LogicalResult FlashAttnOp::verify() {
   if (getHeadDim() <= 0)
     return emitOpError("head_dim must be positive");
@@ -47,6 +75,98 @@ LogicalResult FlashAttnOp::verify() {
     if (p < 0.0 || p >= 1.0)
       return emitOpError("dropout_p must satisfy 0 <= p < 1");
   }
+  // Sprint V3 (2026-05-22): target-aware head_dim ceiling.  When the
+  // parent function carries ``tessera.target_sm = "sm_XX"`` (set by
+  // ``DistributionLoweringPass`` from ``GPUTargetProfile`` or by the
+  // string-target dispatcher), enforce the per-SM head_dim limit.
+  // Functions without the attribute (CPU path) skip this check.
+  Operation* parent = (*this)->getParentOp();
+  while (parent && !parent->hasAttr("tessera.target_sm"))
+    parent = parent->getParentOp();
+  if (parent) {
+    if (auto attr = dyn_cast<StringAttr>(parent->getAttr("tessera.target_sm"))) {
+      int64_t limit = maxHeadDimForTargetSm(attr.getValue());
+      if (limit > 0 && getHeadDim() > limit)
+        return emitOpError("head_dim=")
+               << getHeadDim() << " exceeds the SM "
+               << attr.getValue()
+               << " flash-attention kernel limit of " << limit
+               << " (Sprint G-2 NVIDIA kernel inventory)";
+    }
+  }
+  return success();
+}
+
+// Sprint V1 (2026-05-22) — TransposeOp: rank-preserving permutation.
+LogicalResult TransposeOp::verify() {
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (!inTy || !outTy) return success();
+  if (inTy.getRank() != outTy.getRank())
+    return emitOpError("transpose must preserve rank: ")
+           << inTy.getRank() << " -> " << outTy.getRank();
+  if (inTy.getElementType() != outTy.getElementType())
+    return emitOpError("transpose must preserve element type");
+  // Multiset of static dim sizes must agree; dynamic dims contribute
+  // nothing to the check (they could legitimately be any size).
+  SmallVector<int64_t> inDims, outDims;
+  for (int64_t i = 0, e = inTy.getRank(); i < e; ++i) {
+    if (!ShapedType::isDynamic(inTy.getDimSize(i)))
+      inDims.push_back(inTy.getDimSize(i));
+    if (!ShapedType::isDynamic(outTy.getDimSize(i)))
+      outDims.push_back(outTy.getDimSize(i));
+  }
+  if (inDims.size() == outDims.size()) {
+    SmallVector<int64_t> a(inDims.begin(), inDims.end());
+    SmallVector<int64_t> b(outDims.begin(), outDims.end());
+    std::sort(a.begin(), a.end());
+    std::sort(b.begin(), b.end());
+    if (a != b)
+      return emitOpError(
+          "output static dims must be a permutation of input static dims");
+  }
+  return success();
+}
+
+// Sprint V1 (2026-05-22) — LayerNormOp: shape-preserving + eps > 0.
+LogicalResult LayerNormOp::verify() {
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (inTy && outTy) {
+    if (inTy.getRank() != outTy.getRank())
+      return emitOpError("layer_norm must preserve rank");
+    if (inTy.getElementType() != outTy.getElementType())
+      return emitOpError("layer_norm must preserve element type");
+    for (int64_t i = 0, e = inTy.getRank(); i < e; ++i) {
+      int64_t in = inTy.getDimSize(i);
+      int64_t out = outTy.getDimSize(i);
+      if (!ShapedType::isDynamic(in) && !ShapedType::isDynamic(out)
+          && in != out)
+        return emitOpError("layer_norm must preserve dim ") << i;
+    }
+  }
+  if (auto eps = getEps()) {
+    double v = eps->convertToDouble();
+    if (!(v > 0.0))
+      return emitOpError("eps must be positive for stable rsqrt; got ") << v;
+  }
+  return success();
+}
+
+// Sprint V1 (2026-05-22) — MoeDispatchOp: token-count match on dim 0.
+LogicalResult MoeDispatchOp::verify() {
+  auto xTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto routeTy = dyn_cast<RankedTensorType>(getRoute().getType());
+  if (!xTy || !routeTy) return success();
+  if (xTy.getRank() < 1 || routeTy.getRank() < 1)
+    return emitOpError(
+        "moe_dispatch requires rank >= 1 token and route tensors");
+  int64_t xN = xTy.getDimSize(0);
+  int64_t rN = routeTy.getDimSize(0);
+  if (!ShapedType::isDynamic(xN) && !ShapedType::isDynamic(rN)
+      && xN != rN)
+    return emitOpError("token count mismatch: x[0]=")
+           << xN << " route[0]=" << rN;
   return success();
 }
 

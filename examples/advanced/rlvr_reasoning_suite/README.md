@@ -16,7 +16,7 @@ rewards:
 The archived source material lives under:
 
 ```text
-examples/archive/advanced/consolidated_rl_sources/
+archive/examples/advanced/consolidated_rl_sources/
 ```
 
 ## Quick Start

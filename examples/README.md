@@ -30,7 +30,7 @@ This directory contains examples and tutorials for using Tessera.
 - [`advanced/speculative_decoding/`](advanced/speculative_decoding/) - tree/speculative decoding scheduler
 - [`advanced/Tessera_Empirical_Software_Agent/`](advanced/Tessera_Empirical_Software_Agent/) - agentic kernel autotuning loop
 
-Archived advanced examples are preserved under [`archive/advanced/`](archive/advanced/).
+Archived advanced examples are preserved under [`archive/examples/advanced/`](../archive/examples/advanced/).
 
 ## Optimization
 

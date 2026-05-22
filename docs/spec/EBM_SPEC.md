@@ -3,7 +3,7 @@ status: Normative (live specification)
 classification: Spec
 authority: Defines the EBM (Energy-Based Models) primitive surface across all four Tessera IR levels
 last_updated: 2026-05-16
-provenance: Adapted from `examples/archive/advanced/EBT/Tessera_EBT_Package_v1/docs/EBT_in_Tessera.md` (archived)
+provenance: Adapted from `archive/examples/advanced/EBT/Tessera_EBT_Package_v1/docs/EBT_in_Tessera.md` (archived)
 ---
 
 # Tessera EBM Specification
@@ -19,7 +19,7 @@ diffusion, and the geometric-Langevin demo (EBM7). The `tessera.ebm`
 namespace is the home for all of them.
 
 Provenance: adapted from the archived `Tessera_EBT_Package_v1` design
-([EBT_in_Tessera.md](../../examples/archive/advanced/EBT/Tessera_EBT_Package_v1/docs/EBT_in_Tessera.md)),
+([EBT_in_Tessera.md](../../archive/examples/advanced/EBT/Tessera_EBT_Package_v1/docs/EBT_in_Tessera.md)),
 with the EBM0 revisions documented in [`docs/audit/ebm_scope_lock.md`](../audit/ebm_scope_lock.md):
 functional state, explicit `RNGKey`, broader namespace, MLP energy head.
 
@@ -189,7 +189,7 @@ EBM1 ships pure-Python reference implementations on numpy arrays —
 same shape as the S2–S15 reference surface. EBM5 brings the IR
 dialect; EBM6 brings fusion; backend lowering follows Q4.
 
-The archived runner ([`ebt_runner.h`](../../examples/archive/advanced/EBT/Tessera_EBT_Package_v1/models/ebt/runtime/ebt_runner.h))
+The archived runner ([`ebt_runner.h`](../../archive/examples/advanced/EBT/Tessera_EBT_Package_v1/models/ebt/runtime/ebt_runner.h))
 is a useful reference for the C++ runtime shim signatures that will
 land alongside EBM5. The functional revisions: the live shim takes
 an explicit `RNGKey` and returns the consumed key, no mutable state.

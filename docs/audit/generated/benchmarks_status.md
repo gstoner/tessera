@@ -49,5 +49,5 @@ CI guards (run as part of ``scripts/validate.sh``):
 | ``benchmarks/Tessera_SuperBench`` | ``compile_only`` | ``benchmarks/Tessera_SuperBench/runner/bench_run.py`` | ``PYTHONPATH=.:python python benchmarks/Tessera_SuperBench/runner/bench_run.py --help`` |
 | ``benchmarks/DeepScholar-Bench`` | ``runnable`` | ``benchmarks/DeepScholar-Bench/tessera_deepscholar_model.py`` | ``PYTHONPATH=python python benchmarks/DeepScholar-Bench/tessera_deepscholar_model.py --output /tmp/tessera_deepscholar_smoke.json`` |
 | ``benchmarks/common`` | ``compile_only`` | ``benchmarks/common/__init__.py`` | ``PYTHONPATH=python python -c "import sys; sys.path.insert(0,'benchmarks'); from common import correctness, compiler_contract, artifact_schema; print('ok')"`` |
-| ``benchmarks/archive/matrix_multiplication`` | ``archived`` | ``benchmarks/archive/matrix_multiplication/blackwell_matmul_tessera.py`` | Pre-Phase-6 matmul benchmark. Superseded by ``benchmark_gemm.py`` + ``run_all.py``. Kept in-tree for historical replay; not part of the current performance story. |
+| ``archive/benchmarks/matrix_multiplication`` | ``archived`` | ``archive/benchmarks/matrix_multiplication/blackwell_matmul_tessera.py`` | Pre-Phase-6 matmul benchmark. Superseded by ``benchmark_gemm.py`` + ``run_all.py``. Kept in-tree for historical replay; not part of the current performance story. |
 

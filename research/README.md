@@ -22,5 +22,5 @@ appropriate canonical folder and leave a short note in that project's README.
 
 ## Archive
 
-Stale research snapshots should move to `research/archive/`, not into
-`src/archive/`, unless they were previously production source.
+Stale research snapshots should move to `archive/research/`, not into
+`archive/src/`, unless they were previously production source.

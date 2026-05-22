@@ -100,5 +100,5 @@ for the prioritized backlog that will unblock the scaffolds above.
 
 Older, duplicate, or superseded drops:
 
-- `examples/archive/advanced/`
-- `examples/archive/advanced/consolidated_rl_sources/` — RL source drops folded into `rlvr_reasoning_suite/`
+- `archive/examples/advanced/`
+- `archive/examples/advanced/consolidated_rl_sources/` — RL source drops folded into `rlvr_reasoning_suite/`

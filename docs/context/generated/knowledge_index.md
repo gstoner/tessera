@@ -31,7 +31,7 @@ Use this generated index for navigation, then verify claims against the canonica
 | ID | Name | Authority | Primary References | Relations |
 | --- | --- | --- | --- | --- |
 | `doc.documentation_authority_tree` | Documentation Authority Tree | normative | docs/README.md | doc.compiler_reference -> phase_status |
-| `doc.canonical_api` | Canonical API | normative | docs/CANONICAL_API.md | api.python_frontend -> defined_by; supersedes -> docs/archive/pre_canonical/api |
+| `doc.canonical_api` | Canonical API | normative | docs/CANONICAL_API.md | api.python_frontend -> defined_by; supersedes -> archive/docs/pre_canonical/api |
 | `doc.compiler_reference` | Compiler Reference | normative | docs/spec/COMPILER_REFERENCE.md | phase_status -> doc.documentation_authority_tree |
 | `doc.agent_context_readme` | Agent Context README | informative | docs/context/README.md | explained_by -> docs/context/README.md |
 | `doc.agent_context_ontology` | Agent Context Ontology | informative | docs/context/ontology.yaml | doc.agent_knowledge_map -> defined_by; tool.context_output_generator -> depends_on |

@@ -30,7 +30,7 @@ SuperBench / GEMM tail.
 | `tests/regression/` | Regression cases that locked in past bug fixes | Auto-run with unit |
 | `tests/tessera_numerical_validation/` | Reference-vs-runtime comparisons for compiled CPU/mock and future hardware backends | Opt-in pytest suite |
 | `tests/tessera_tests/` | Test utilities and harness fixtures | Shared infra |
-| `tests/archive/` | Historical tests preserved for reference; not run | n/a |
+| `archive/tests/` | Historical tests preserved for reference; not run | n/a |
 
 ## Markers
 

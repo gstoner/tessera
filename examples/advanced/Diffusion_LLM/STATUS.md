@@ -30,7 +30,7 @@ Either:
 1. Rewrite `tessera_diffusion_llm.py` against the canonical Tessera
    surface and drop the torch dependency from the supporting package
    (large effort, ~weeks of focused work).
-2. Or delete this directory and move it under `examples/archive/` with
+2. Or delete this directory and move it under `archive/examples/` with
    a banner pointing at the equivalent S11/S15 reference primitives in
    `python/tessera/`.
 

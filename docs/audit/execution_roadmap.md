@@ -1242,7 +1242,7 @@ from "easy" tokens routing to lower depths.
   token-depth utilization.
 - KV-cache-share-first / KV-cache-recursion policies for attention
   inside the inner layer (the example folder at
-  `examples/archive/advanced/Tessera_MoR/` sketches the design).
+  `archive/examples/advanced/Tessera_MoR/` sketches the design).
 
 ---
 

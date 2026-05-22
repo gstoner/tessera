@@ -2,7 +2,7 @@
 // Tessera Energy-Based Model dialect (EBM5).
 //
 // Resurrected from the archived `tessera.ebt` design (see
-// `examples/archive/advanced/EBT/Tessera_EBT_Package_v1/`) with the EBM0
+// `archive/examples/advanced/EBT/Tessera_EBT_Package_v1/`) with the EBM0
 // revisions: functional state, explicit RNGKey, broader namespace
 // `tessera_ebm` (covers RBM, EBT, score-matching, manifold-aware EBM7).
 //

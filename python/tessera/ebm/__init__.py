@@ -7,7 +7,7 @@ the namespace and adapts the archived EBT design into
 energy primitive surface, samplers, partition function, and losses.
 
 Scope-locked at EBM0:
-    - Revive `examples/archive/advanced/EBT/Tessera_EBT_Package_v1/` as
+    - Revive `archive/examples/advanced/EBT/Tessera_EBT_Package_v1/` as
       the seed for EBM5 (Graph IR dialect). Archived files stay archived;
       the live surface re-derives content from them.
     - Functional state + explicit RNGKey throughout (no mutable runner).

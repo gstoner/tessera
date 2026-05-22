@@ -13,7 +13,7 @@ deferred question (Q5 — manifold set for EBM7).
 
 ## Q6 — Archived EBT package: **revive as seed for EBM5**
 
-Locked. [`examples/archive/advanced/EBT/Tessera_EBT_Package_v1/`](../../examples/archive/advanced/EBT/Tessera_EBT_Package_v1/)
+Locked. [`archive/examples/advanced/EBT/Tessera_EBT_Package_v1/`](../../archive/examples/advanced/EBT/Tessera_EBT_Package_v1/)
 is the design seed for the live EBM track:
 
 - `docs/EBT_in_Tessera.md` → adapted into [`docs/spec/EBM_SPEC.md`](../spec/EBM_SPEC.md)
@@ -107,7 +107,7 @@ EBM1 (energy primitive surface — Euclidean baseline) is now unblocked.
 ## Archive disposition (operational)
 
 The archive is NOT moved or deleted in this sprint. It stays at
-`examples/archive/advanced/EBT/Tessera_EBT_Package_v1/` per the
+`archive/examples/advanced/EBT/Tessera_EBT_Package_v1/` per the
 project's archive policy (Architecture: archive is excluded from build,
 not deleted). The live surface re-derives content from it:
 

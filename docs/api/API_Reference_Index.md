@@ -96,14 +96,14 @@
 
 ## Archived Pre-Canonical Volumes
 
-The old four-volume API reference was moved to `docs/archive/pre_canonical/api/`.
+The old four-volume API reference was moved to `archive/docs/pre_canonical/api/`.
 Those files predate the normative spec and are retained for historical reference only.
 
 | Volume | Contents | Status |
 |--------|----------|--------|
-| [Vol 1: Frontend & Type System](../archive/pre_canonical/api/Tessera_API_Vol1_Frontend_and_TypeSystem.md) | Python/Rust APIs, type system, numerical policies, effects | Archived |
-| [Vol 2: Operations](../archive/pre_canonical/api/Tessera_API_Vol2_Operations.md) | Normalization, activations, attention, positional encodings, distributed ops | Archived |
-| [Vol 3: IR & Target](../archive/pre_canonical/api/Tessera_API_Vol3_IR_and_Target.md) | Graph IR, Schedule IR, Tile IR, Target IR, passes | Archived |
-| [Vol 4: Runtime & Deployment](../archive/pre_canonical/api/Tessera_API_Vol4_Runtime_and_Deployment.md) | Runtime engine, host-device, autotuning, profiling, deployment | Archived |
+| [Vol 1: Frontend & Type System](../../archive/docs/pre_canonical/api/Tessera_API_Vol1_Frontend_and_TypeSystem.md) | Python/Rust APIs, type system, numerical policies, effects | Archived |
+| [Vol 2: Operations](../../archive/docs/pre_canonical/api/Tessera_API_Vol2_Operations.md) | Normalization, activations, attention, positional encodings, distributed ops | Archived |
+| [Vol 3: IR & Target](../../archive/docs/pre_canonical/api/Tessera_API_Vol3_IR_and_Target.md) | Graph IR, Schedule IR, Tile IR, Target IR, passes | Archived |
+| [Vol 4: Runtime & Deployment](../../archive/docs/pre_canonical/api/Tessera_API_Vol4_Runtime_and_Deployment.md) | Runtime engine, host-device, autotuning, profiling, deployment | Archived |
 
 For all new work, use the **canonical references** in the table at the top of this document.

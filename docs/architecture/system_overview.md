@@ -130,7 +130,7 @@ generated support and E2E dashboards.
 
 ## System Concepts Carried Forward
 
-The older `docs/archive/old_concepts/tessera_system_architecture.md` blueprint included several useful system concepts that remain valid as design direction, but not as implemented behavior:
+The older `archive/docs/old_concepts/tessera_system_architecture.md` blueprint included several useful system concepts that remain valid as design direction, but not as implemented behavior:
 
 | Concept | Current status |
 |---------|----------------|
@@ -207,9 +207,9 @@ src/
 
 ## Key Design Decisions (Locked)
 
-1. **Python frontend is permanent.** No Rust frontend layer. The MLIR C++ pass pipeline handles performance-critical compilation. See `docs/archive/old_concepts/Rust_Frontend_Research/` for the rejected proposal.
+1. **Python frontend is permanent.** No Rust frontend layer. The MLIR C++ pass pipeline handles performance-critical compilation. See `archive/docs/old_concepts/Rust_Frontend_Research/` for the rejected proposal.
 
-2. **Static AOT compilation only.** No tracing JIT tier. ConstraintSolver runs at decoration time; effects are inferred statically. See `docs/archive/old_concepts/Tracing_JIT_Research/` for the rejected research.
+2. **Static AOT compilation only.** No tracing JIT tier. ConstraintSolver runs at decoration time; effects are inferred statically. See `archive/docs/old_concepts/Tracing_JIT_Research/` for the rejected research.
 
 3. **Region is a type annotation, not a runtime wrapper.** `Region["read"]` participates in Python's type annotation system and lowers to `tessera.effect` attrs on Graph IR func arguments. It does not wrap tensors at runtime.
 
@@ -235,5 +235,5 @@ src/
 | Graph IR op catalog + canonicalization | `docs/spec/GRAPH_IR_SPEC.md` |
 | Every pass: input/output/invariants | `docs/spec/LOWERING_PIPELINE_SPEC.md` |
 | FA-4 Attn dialect, TMA ops, WGMMA, Schedule Mesh | `docs/spec/TARGET_IR_SPEC.md` |
-| Historical architecture blueprint | `docs/archive/old_concepts/tessera_system_architecture.md` |
+| Historical architecture blueprint | `archive/docs/old_concepts/tessera_system_architecture.md` |
 | Programming guide | `docs/programming_guide/` |

@@ -93,11 +93,13 @@ tessera/
 ├── cmake/                           # CMake find-modules and helpers
 ├── research/                        # Experimental research prototypes outside production build
 │
-└── src/archive/                     # Superseded / pre-production work (not built)
-    ├── PDDL_Instruct/               # PDDL-based instruction synthesis experiments
-    ├── Sandbox_Toy_compilers/       # Frontend-to-backend sample compilers
-    ├── tpp_old/                     # Superseded TPP snapshot
-    └── tile_opt_fa4_old/            # Superseded FA4 snapshots
+├── archive/                         # Superseded / pre-production work (not built)
+│   ├── benchmarks/                  # Archived benchmark concepts
+│   ├── docs/                        # Pre-canonical documentation
+│   ├── examples/                    # Archived examples and source drops
+│   ├── research/                    # Archived research prototypes
+│   ├── src/                         # Superseded production-source snapshots
+│   └── tests/                       # Historical test suites
 ```
 
 Local/generated directories such as `build/`, `.venv/`, `__pycache__/`, and
@@ -109,8 +111,8 @@ components.
 ## Component Versioning Table
 
 The table below records notable promotions into canonical `src/` and why.
-Superseded versions may remain under `src/archive/`, `docs/archive/`, or legacy
-example snapshot folders when they are kept for reference.
+Superseded versions may remain under `archive/<area>/` when they are kept for
+reference.
 
 | Canonical path               | Promoted from                                    | Rationale |
 |------------------------------|--------------------------------------------------|-----------|
@@ -130,12 +132,12 @@ example snapshot folders when they are kept for reference.
 | `examples/advanced/power_retention` | `examples/advanced/Power Retention/…/v0_9` | v0_9: HIP kernel, WGMMA, autotune, nlohmann_json integration |
 | `research/pddl_instruct`     | `src/PDDL_Instruct/pddl_instruct_tessera_v1`     | Experimental research prototype moved out of the active `src/` surface |
 | `research/sandbox_compilers` | `src/Sandbox_Toy_compilers/…`                    | Experimental sample compilers moved out of the active `src/` surface |
-| `src/archive/tpp_old`        | `src/tpp_old`                                    | Superseded by canonical `src/solvers/tpp` |
-| `src/archive/tile_opt_fa4_old` | `src/tile_opt_fa4_old`                         | Superseded by canonical `src/compiler/tile_opt_fa4` |
+| `archive/src/tpp_old`        | `src/tpp_old`                                    | Superseded by canonical `src/solvers/tpp` |
+| `archive/src/tile_opt_fa4_old` | `src/tile_opt_fa4_old`                         | Superseded by canonical `src/compiler/tile_opt_fa4` |
 | `src/compiler/codegen/Tessera_TPU_Backend` | `src/compiler/codegen/Tessera_TPU_Backend_Starter_Advanced` | Advanced TPU backend promoted to single canonical TPU backend folder |
 | `src/compiler/docs/pass_reference` | `src/compiler/passes`                     | Pass reference markdown grouped with compiler documentation |
-| `docs/archive/pre_canonical/api` | `docs/api/Tessera_API_Vol*.md`               | Pre-canonical API volumes archived behind canonical API docs |
-| `docs/archive/pre_canonical/model` | `docs/Tessera_Deep_Learning_Programming_Model.md` | Pre-canonical model guide archived due old API examples |
+| `archive/docs/pre_canonical/api` | `docs/api/Tessera_API_Vol*.md`               | Pre-canonical API volumes archived behind canonical API docs |
+| `archive/docs/pre_canonical/model` | `docs/Tessera_Deep_Learning_Programming_Model.md` | Pre-canonical model guide archived due old API examples |
 | `docs/architecture/`         | `src/compiler/tessera_target_ir_doc3b.md`        | Architecture doc migrated out of src/ |
 | `docs/tutorials/Flash_Attention_in_Tessera.md` | `docs/tutorials/Flash Attention_in_Tessera.md` | Space in filename removed |
 | `python/tessera/telemetry.py` | new                                             | Shared telemetry schema for profiler, autotune, benchmarks, and runtime smoke |
@@ -150,13 +152,12 @@ example snapshot folders when they are kept for reference.
 
 ## Archive Policy
 
-Files under `src/archive/` and `docs/archive/` are **not included in the
-production build or active documentation lint**. Research prototypes under
-`research/` and legacy example snapshots under `examples/advanced/` are likewise
-outside the production build unless explicitly wired by CMake. They exist for
-reference, future graduation to an active component, or deletion after review.
-New production work should land in the canonical component folder, not beside an
-archived copy.
+Files under `archive/` are **not included in the production build or active
+documentation lint**. Research prototypes under `research/` and legacy example
+snapshots under `examples/advanced/` are likewise outside the production build
+unless explicitly wired by CMake. They exist for reference, future graduation to
+an active component, or deletion after review. New production work should land
+in the canonical component folder, not beside an archived copy.
 
 ---
 

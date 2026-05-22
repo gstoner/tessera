@@ -7,7 +7,7 @@ last_updated: 2026-05-06
 # Compiler Spec Gap Audit
 
 This audit compares the active compiler implementation against the normative
-spec set in `docs/spec/`. It excludes `src/archive/`, `docs/archive/`,
+spec set in `docs/spec/`. It excludes `archive/src/`, `archive/docs/`,
 `research/`, and legacy example snapshots unless an active spec explicitly
 points at them.
 

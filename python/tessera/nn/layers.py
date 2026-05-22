@@ -1498,7 +1498,7 @@ class MixtureOfRecursions(Module):
     steps (the canonical MoR contract). To use a depth-specific layer
     family instead, wrap a `ModuleList` or write a custom Module.
 
-    See ``examples/archive/advanced/Tessera_MoR/`` for the design notes
+    See ``archive/examples/advanced/Tessera_MoR/`` for the design notes
     that motivated the API.
     """
 

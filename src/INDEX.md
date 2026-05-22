@@ -11,7 +11,7 @@ Reflects post-reorganization structure: compiler consolidation, `solvers/core/` 
 | Folder | Purpose |
 |--------|---------|
 | `Operators/` | Placeholder — operator library (Phase 4+) |
-| `archive/` | Superseded / retired material — do not build |
+| `../archive/src/` | Superseded / retired source material — do not build |
 | `collectives/` | Collective IR, ExecRuntime, NCCL/RCCL adapter stubs |
 | `compiler/` | All compiler components (IR, codegen, passes, tooling) |
 | `runtime/` | C ABI runtime — device, stream, buffer, kernel launch |
@@ -244,14 +244,14 @@ Superseded material — retained for reference only. Do not add build targets he
 
 | Folder | Superseded by |
 |--------|--------------|
-| `archive/PDDL_Instruct/` | n/a — research scratch |
-| `archive/Sandbox_Toy_compilers/` | Full compiler stack |
-| `archive/Tessera_RubinCPX_Compiler_v1_1/` | `compiler/codegen/Tessera_RubinCPX_Backend/` |
-| `archive/Tessera_TPU_Backend_Starter/` | `compiler/codegen/Tessera_TPU_Backend/` |
-| `archive/codegen_prototypes/` | Promoted to proper modules or discarded |
-| `archive/tessera_scaling_resilience_v1/` | `solvers/scaling_resilience/` |
-| `archive/tile_opt_fa4_old/` | `compiler/tile_opt_fa4/` |
-| `archive/tpp_old/` | `solvers/tpp/` |
+| `../archive/src/PDDL_Instruct/` | n/a — research scratch |
+| `../archive/src/Sandbox_Toy_compilers/` | Full compiler stack |
+| `../archive/src/Tessera_RubinCPX_Compiler_v1_1/` | `compiler/codegen/Tessera_RubinCPX_Backend/` |
+| `../archive/src/Tessera_TPU_Backend_Starter/` | `compiler/codegen/Tessera_TPU_Backend/` |
+| `../archive/src/codegen_prototypes/` | Promoted to proper modules or discarded |
+| `../archive/src/tessera_scaling_resilience_v1/` | `solvers/scaling_resilience/` |
+| `../archive/src/tile_opt_fa4_old/` | `compiler/tile_opt_fa4/` |
+| `../archive/src/tpp_old/` | `solvers/tpp/` |
 
 ---
 

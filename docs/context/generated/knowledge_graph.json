@@ -845,7 +845,7 @@
       "historical": true,
       "relation": "supersedes",
       "source": "doc.canonical_api",
-      "target": "docs/archive/pre_canonical/api"
+      "target": "archive/docs/pre_canonical/api"
     },
     {
       "relation": "phase_status",

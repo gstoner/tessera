@@ -383,7 +383,7 @@ _SURFACE_INTRO = (
     "* ``python -m tessera.cli.claim_lint --check`` — scans each "
     "example README and flags overclaim language on ``scaffold`` / "
     "``broken`` / ``archived`` rows.\n\n"
-    "``examples/archive/**`` is out of scope and not tracked here."
+    "``archive/examples/**`` is out of scope and not tracked here."
 )
 
 

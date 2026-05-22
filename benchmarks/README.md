@@ -16,7 +16,7 @@ is available.
 | `Tessera_SuperBench/` | Active harness | GEMM uses the current JIT CPU path with telemetry/autotune artifacts; FlashAttention and Conv2D emit artifact-only compiler rows while running NumPy reference timing/correctness; collectives default to the Tessera mock facade. |
 | `spectral/` | Active benchmark | NumPy/PyTorch FFT/DCT/convolution benchmark with `--backend tessera-artifact` for Graph IR artifact rows. Native FFT lowering remains artifact-only until Tile/Target runtime support lands. |
 | `Tessera_Operator_Benchmarks/` | Active C++ harness | CPU reference timing for all 7 registered op groups, Graph IR artifact coverage, `tessera.telemetry.v1` JSON summaries, and explicit `backend_unavailable` Tessera-runtime status. |
-| `archive/matrix_multiplication/` | Archived | Blackwell concept sketch using non-existent APIs; future Blackwell work should land as Target IR tests/runtime kernels/operator cases. |
+| `../archive/benchmarks/matrix_multiplication/` | Archived | Blackwell concept sketch using non-existent APIs; future Blackwell work should land as Target IR tests/runtime kernels/operator cases. |
 | `DeepScholar-Bench/` | Active CPU smoke | Current-API research-synthesis smoke using `@tessera.jit`, matmul, softmax, layer_norm, and NumPy text/source embeddings. LOTUS integration remains optional and guarded. |
 
 ## Quick Checks
@@ -64,5 +64,5 @@ six-layer compiler-correctness coverage for each category.
 - Promote compiler-backed benchmark kernels into small Python modules that expose
   Graph/Schedule/Tile/Target artifacts alongside timing rows.
 - Keep analytical roofline/proxy benchmarks, but label them explicitly.
-- Move purely speculative benchmark concepts to `benchmarks/archive/` once they
+- Move purely speculative benchmark concepts to `archive/benchmarks/` once they
   are no longer feeding active compiler/runtime work.

@@ -116,10 +116,10 @@ class TestManifestFilesystem:
             )
 
     def test_archive_not_in_manifest(self) -> None:
-        """``examples/archive/**`` is intentionally out of scope."""
+        """``archive/examples/**`` is intentionally out of scope."""
 
         for entry in all_entries():
-            assert "examples/archive" not in entry.directory, entry
+            assert "archive/examples" not in entry.directory, entry
 
 
 class TestGeneratedDashboardDriftGate:

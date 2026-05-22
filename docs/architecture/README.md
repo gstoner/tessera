@@ -77,7 +77,7 @@ explain shape and intent; the dashboards say what is proven today.
 
 ## Historical Material
 
-Pre-canonical architecture material lives in `docs/archive/old_concepts/` or `docs/archive/pre_canonical/`. It is retained for design history only. Do not use archived documents as implementation guidance unless the canonical specs explicitly restore a concept.
+Pre-canonical architecture material lives in `archive/docs/old_concepts/` or `archive/docs/pre_canonical/`. It is retained for design history only. Do not use archived documents as implementation guidance unless the canonical specs explicitly restore a concept.
 
 ## Rules For New Architecture Docs
 

@@ -1498,7 +1498,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         ``step``. Returns a bool ndarray of shape ``(B, S)``.
 
         ``step`` is 1-indexed (matches the recursion-block layout in
-        ``examples/archive/advanced/Tessera_MoR/``).
+        ``archive/examples/advanced/Tessera_MoR/``).
         """
         if hasattr(x, "_data"): x = x._data
         if hasattr(depth, "_data"): depth = depth._data

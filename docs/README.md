@@ -103,7 +103,7 @@ serving SRE guidance, use `docs/guides/Tessera_Inference_Server_Guide.md`.
 
 ## Archive
 
-Pre-canonical or superseded material lives under `docs/archive/pre_canonical/`. Archived documents are retained for design history only and must not be treated as current API or implementation guidance.
+Pre-canonical or superseded material lives under `archive/docs/pre_canonical/`. Archived documents are retained for design history only and must not be treated as current API or implementation guidance.
 
 ## Status Labels
 

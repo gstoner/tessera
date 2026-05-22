@@ -196,8 +196,8 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
     ),
     # ── Archived material ───────────────────────────────────────────
     SurfaceEntry(
-        directory="tests/archive",
-        entry_point="tests/archive",
+        directory="archive/tests",
+        entry_point="archive/tests",
         status="archived",
         reason=(
             "Historical tests preserved for reference; not run in "

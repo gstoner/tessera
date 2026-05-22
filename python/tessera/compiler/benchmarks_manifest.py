@@ -9,7 +9,7 @@ surface.  Powers two CI gates:
     each benchmark README for overclaim language on
     ``scaffold`` / ``broken`` / ``archived`` rows.
 
-``benchmarks/archive/**`` is in scope here (unlike examples) because
+``archive/benchmarks/**`` is in scope here (unlike examples) because
 some archived suites are kept in-tree for replay against historical
 baselines, and we want them visible in the dashboard.
 """
@@ -277,9 +277,9 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
     ),
     # ── Archived material ────────────────────────────────────────────
     SurfaceEntry(
-        directory="benchmarks/archive/matrix_multiplication",
+        directory="archive/benchmarks/matrix_multiplication",
         entry_point=(
-            "benchmarks/archive/matrix_multiplication/"
+            "archive/benchmarks/matrix_multiplication/"
             "blackwell_matmul_tessera.py"
         ),
         status="archived",
@@ -289,7 +289,7 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
             "historical replay; not part of the current performance "
             "story."
         ),
-        notes="See benchmarks/archive/README.md for the deprecation note.",
+        notes="See archive/benchmarks/README.md for the deprecation note.",
     ),
 )
 

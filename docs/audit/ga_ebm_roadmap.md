@@ -19,7 +19,7 @@ compiler:
 These are deliberately **Tessera-native** additions. Per Architecture Decision
 #23, we do not wrap PyTorch / JAX / Flax — we reimplement the math at the
 compiler primitive level. The EBM track has an archived design precedent in
-[`examples/archive/advanced/EBT/`](../../examples/archive/advanced/EBT/) which
+[`archive/examples/advanced/EBT/`](../../archive/examples/advanced/EBT/) which
 will be promoted to a live S-series surface; the GA track is greenfield.
 
 The user-facing justification: "we do not need another PyTorch." Existing
@@ -159,7 +159,7 @@ Recommendation: **A** for v1. — **Locked: A.** See
 
 ### Q6 — EBT package: revive or rewrite ✅ LOCKED: revive as seed for EBM5
 
-[`examples/archive/advanced/EBT/Tessera_EBT_Package_v1/`](../../examples/archive/advanced/EBT/Tessera_EBT_Package_v1/)
+[`archive/examples/advanced/EBT/Tessera_EBT_Package_v1/`](../../archive/examples/advanced/EBT/Tessera_EBT_Package_v1/)
 has a `tessera.ebt` dialect design, IR samples, and a runner skeleton — all
 archived (excluded from build per Decision: archive policy).
 
@@ -1188,7 +1188,7 @@ verifies all 12 EBM files exist and the TD/Canonicalize/driver have the
 expected structure. MLIR-21 build + lit run is a separate sprint.
 
 **Provenance note.** The archived `tessera.ebt` design at
-[`examples/archive/advanced/EBT/Tessera_EBT_Package_v1/`](../../examples/archive/advanced/EBT/Tessera_EBT_Package_v1/)
+[`archive/examples/advanced/EBT/Tessera_EBT_Package_v1/`](../../archive/examples/advanced/EBT/Tessera_EBT_Package_v1/)
 was used as the seed per the EBM0 scope lock. The live `tessera.ebm`
 dialect renames + generalizes the archived IR (functional state,
 explicit RNGKey, broader scope covering RBM/EBT/score-matching/manifold

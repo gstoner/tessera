@@ -484,7 +484,7 @@ relations:
     target: test.context_generated_outputs
   - source: doc.canonical_api
     relation: supersedes
-    target: docs/archive/pre_canonical/api
+    target: archive/docs/pre_canonical/api
     historical: true
     authoritative: false
   - source: doc.compiler_reference

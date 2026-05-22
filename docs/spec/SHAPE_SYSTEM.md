@@ -442,7 +442,22 @@ items:**
    added `hasVerifier = 1;` + real `verify()` for `TransposeOp`,
    `LayerNormOp`, `MoeDispatchOp` with 9 stable diagnostic phrases
    and 9 lit-fixture cases (`tests/tessera-ir/phase2/sprint_v1_verifiers.mlir`).
-   The "uneven coverage" subgap remains for the rest of the dialect
+
+   **Sprint V4b closure (2026-05-22):** added shape-preserve + attribute-
+   bounds verifiers to the long-tail per-op set: `CastOp` (rank +
+   static-dim preservation; element type may differ), `SoftmaxOp`
+   (rank + static-dim preservation; optional `axis` must satisfy
+   `-rank <= axis < rank`), `RopeOp` (rank + element type + static-dim
+   preservation), and `DropoutOp` (probability must satisfy
+   `0.0 <= p < 1.0`; shape preserved).  Previously `DropoutOp::verify()`
+   was a trivial `return success();` stub; V4b replaces it with the
+   real check.  Stable diagnostic phrases: `cast must preserve {rank,dim}`,
+   `softmax must preserve {rank,dim}`, `axis out of range`,
+   `rope must preserve {rank,element type,dim}`,
+   `dropout probability must satisfy 0.0 <= p < 1.0`.  Lit fixture
+   `tests/tessera-ir/phase2/sprint_v4b_per_op_verifiers.mlir` carries
+   4 positive cases and 7 negative cases across all four ops.
+   The "uneven coverage" subgap remains for any further dialect ops
    (op-by-op work as needs arise).  **Status: partially closed.**
 2. **MLIR-level symbolic dim equality re-check after lowering.**
    **Sprint V5 closure (2026-05-22):**
@@ -488,9 +503,19 @@ items:**
    is declared — existing V5/V6a/V6b functions keep working
    unchanged.
 
-   **Status: V1 + V2-flow shipped; affine/Presburger reasoning
-   beyond simple products and cross-function symbol-table tracking
-   remain V3+.**
+   **Sprint V3a closure (2026-05-22):** Affine reasoning for
+   non-product bindings landed.  The binding parser now accepts
+   sum-of-products RHSes such as `D = H * Dh + K` and bare-symbol
+   terms such as `Total = A + B + C`.  Multi-term bindings render
+   `value of RHS (sum of products) = N`; single-term bindings keep
+   V5's `product of RHS = N` wording for backward compatibility.
+   Lit fixture: `tests/tessera-ir/phase2/sprint_v3a_affine_bindings.mlir`
+   (1 multi-term holds + 1 multi-term broken + 1 V5 single-product
+   still works + 1 sum-of-3-singletons).
+
+   **Status: V1 + V2-flow + V3a shipped; cross-function symbol-table
+   tracking and SSA flow through `scf.for` / `scf.if` bodies remain
+   V3b / V3c.**
 3. **`LayoutLegalityPass` skeleton + first rule.** **Sprint V2
    closure (2026-05-22):** `src/transforms/lib/LayoutLegalityPass.cpp`
    ships with the canonical 8-name layout accept-set
@@ -501,9 +526,17 @@ items:**
    `Passes.cpp`, wired into the `TesseraPasses` CMake target, and
    exercised by `tests/tessera-ir/phase2/sprint_v2_layout_legality.mlir`
    (positive: row_major, bhsd, no-attr; negative: exotic_block_format).
-   Future rules (producer/consumer accept-set mismatch detection,
-   identity-cascade folding) are documented as comment-only placeholders
-   in the pass source.  **Status: skeleton + 1 rule closed.**
+   **Sprint V4a closure (2026-05-22):** Producer/consumer accept-set
+   rule shipped.  `--tessera-layout-legality` now also walks each
+   `tessera.matmul` operand's def-using op for a `tessera.layout`
+   attribute and rejects layouts outside matmul's stricter
+   `{row_major, col_major}` accept-set with stable code
+   `LAYOUT_LEGALITY_PRODUCER_CONSUMER_MISMATCH`.  Lit fixture
+   `tests/tessera-ir/phase2/sprint_v4a_layout_producer_consumer.mlir`
+   (positive: row_major OK + no-producer-attr OK; negative: bsr-lhs,
+   packed-rhs).  Identity-cascade folding remains a comment-only
+   placeholder.  **Status: skeleton + 2 rules closed; identity-cascade
+   folding planned.**
 4. **Target-aware verifier on the canonical attention/MMA op family.**
    **Sprint V3 closure (2026-05-22):** `FlashAttnOp::verify()` extended
    to walk the parent op chain for a `tessera.target_sm` attribute and

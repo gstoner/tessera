@@ -246,7 +246,108 @@ LogicalResult AttnLocalWindow2DOp::verify() {
   return success();
 }
 
-LogicalResult DropoutOp::verify() { return success(); }
+// Sprint V4b (2026-05-22) — CastOp: shape-preserving element-type
+// conversion.  Input and output must have the same rank + agreeing
+// static dim sizes; only the element type may differ.
+LogicalResult CastOp::verify() {
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (!inTy || !outTy) return success();
+  if (inTy.getRank() != outTy.getRank())
+    return emitOpError("cast must preserve rank: ")
+           << inTy.getRank() << " -> " << outTy.getRank();
+  for (int64_t i = 0, e = inTy.getRank(); i < e; ++i) {
+    int64_t in = inTy.getDimSize(i);
+    int64_t out = outTy.getDimSize(i);
+    if (!ShapedType::isDynamic(in) && !ShapedType::isDynamic(out)
+        && in != out)
+      return emitOpError("cast must preserve dim ") << i
+             << ": " << in << " vs " << out;
+  }
+  return success();
+}
+
+// Sprint V4b (2026-05-22) — SoftmaxOp: shape-preserving normalization
+// over an explicit axis.  When ``axis`` is set, normalize to
+// canonical (non-negative) form and require ``-rank <= axis < rank``.
+LogicalResult SoftmaxOp::verify() {
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (inTy && outTy) {
+    if (inTy.getRank() != outTy.getRank())
+      return emitOpError("softmax must preserve rank");
+    if (inTy.getElementType() != outTy.getElementType())
+      return emitOpError("softmax must preserve element type");
+    for (int64_t i = 0, e = inTy.getRank(); i < e; ++i) {
+      int64_t in = inTy.getDimSize(i);
+      int64_t out = outTy.getDimSize(i);
+      if (!ShapedType::isDynamic(in) && !ShapedType::isDynamic(out)
+          && in != out)
+        return emitOpError("softmax must preserve dim ") << i;
+    }
+    if (auto axisOpt = getAxis()) {
+      int64_t axis = *axisOpt;
+      int64_t rank = inTy.getRank();
+      if (axis < -rank || axis >= rank)
+        return emitOpError("axis out of range: got ")
+               << axis << " for rank-" << rank << " input "
+               << "(expected -" << rank << " <= axis < " << rank << ")";
+    }
+  }
+  return success();
+}
+
+// Sprint V4b (2026-05-22) — RopeOp: shape-preserving position
+// embedding.  Input and output ranks + static dim sizes must agree.
+LogicalResult RopeOp::verify() {
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (!inTy || !outTy) return success();
+  if (inTy.getRank() != outTy.getRank())
+    return emitOpError("rope must preserve rank: ")
+           << inTy.getRank() << " -> " << outTy.getRank();
+  if (inTy.getElementType() != outTy.getElementType())
+    return emitOpError("rope must preserve element type");
+  for (int64_t i = 0, e = inTy.getRank(); i < e; ++i) {
+    int64_t in = inTy.getDimSize(i);
+    int64_t out = outTy.getDimSize(i);
+    if (!ShapedType::isDynamic(in) && !ShapedType::isDynamic(out)
+        && in != out)
+      return emitOpError("rope must preserve dim ") << i
+             << ": " << in << " vs " << out;
+  }
+  return success();
+}
+
+// Sprint V4b (2026-05-22) — DropoutOp: probability bounds + shape
+// preservation.  ``p`` must satisfy ``0.0 <= p < 1.0`` (p=1 would
+// zero every element; we reject as ill-defined rather than silently
+// emit a zero tensor).
+LogicalResult DropoutOp::verify() {
+  if (auto p = getP()) {
+    double v = p->convertToDouble();
+    if (!(v >= 0.0) || !(v < 1.0))
+      return emitOpError(
+          "dropout probability must satisfy 0.0 <= p < 1.0; got ") << v;
+  }
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (inTy && outTy) {
+    if (inTy.getRank() != outTy.getRank())
+      return emitOpError("dropout must preserve rank");
+    if (inTy.getElementType() != outTy.getElementType())
+      return emitOpError("dropout must preserve element type");
+    for (int64_t i = 0, e = inTy.getRank(); i < e; ++i) {
+      int64_t in = inTy.getDimSize(i);
+      int64_t out = outTy.getDimSize(i);
+      if (!ShapedType::isDynamic(in) && !ShapedType::isDynamic(out)
+          && in != out)
+        return emitOpError("dropout must preserve dim ") << i;
+    }
+  }
+  return success();
+}
+
 LogicalResult KVCacheCreateOp::verify() { return success(); }
 LogicalResult RingCreateOp::verify() { return success(); }
 LogicalResult ArchParameterOp::verify() { return success(); }

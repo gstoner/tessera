@@ -104,12 +104,62 @@ struct LayoutLegality
            "packed}.  See SHAPE_SYSTEM.md §2.1.";
   }
 
+  // Sprint V4a (2026-05-22) — producer/consumer accept-set rule.
+  //
+  // For canonical compute ops we know which layouts the kernel
+  // actually consumes.  When a consumer's operand carries a
+  // `tessera.layout` attribute that isn't in the consumer's
+  // accept-set AND no `tessera.cast` op intervenes to convert it,
+  // emit `LAYOUT_LEGALITY_PRODUCER_CONSUMER_MISMATCH`.
+  //
+  // V4a covers `tessera.matmul` whose lhs/rhs must each be
+  // row_major or col_major (the FA-4 kernels and x86 AMX both
+  // accept these).  Future rules can extend per consumer.
+  static const llvm::StringSet<> &matmulAcceptSet() {
+    static const llvm::StringSet<> kSet = {"row_major", "col_major"};
+    return kSet;
+  }
+
+  static LogicalResult checkMatmulOperandLayouts(Operation *op) {
+    if (op->getName().getStringRef() != "tessera.matmul") return success();
+    if (op->getNumOperands() < 2) return success();
+    // Reach back through the def-use chain to find a `tessera.layout`
+    // attribute on the producer.  V4a only walks 1 step (the
+    // immediate producer); future rules can widen.
+    auto operandLayout = [](Value v) -> StringRef {
+      Operation *prod = v.getDefiningOp();
+      if (!prod) return StringRef();
+      auto attr = prod->getAttrOfType<StringAttr>("tessera.layout");
+      return attr ? attr.getValue() : StringRef();
+    };
+    bool failed = false;
+    const char *names[] = {"lhs", "rhs"};
+    for (int i = 0; i < 2; ++i) {
+      StringRef layout = operandLayout(op->getOperand(i));
+      if (layout.empty()) continue;  // no layout attr → no enforcement
+      if (matmulAcceptSet().contains(layout)) continue;
+      // The producer's layout attribute is the layout that reaches
+      // matmul — regardless of whether the producer is a cast op or
+      // any other op.  matmul rejects.  The user must insert another
+      // cast that converts to row_major or col_major.
+      op->emitOpError(
+          "LAYOUT_LEGALITY_PRODUCER_CONSUMER_MISMATCH: tessera.matmul "
+          "operand '")
+          << names[i] << "' has layout \"" << layout
+          << "\" but matmul's accept-set is {row_major, col_major}. "
+          << "Insert a `tessera.cast` to convert.";
+      failed = true;
+    }
+    return failed ? failure() : success();
+  }
+
   void runOnOperation() override {
     ModuleOp module = getOperation();
     bool anyError = false;
     module.walk([&](Operation *op) {
-      if (failed(checkCastLayout(op)))
-        anyError = true;
+      if (failed(checkCastLayout(op))) anyError = true;
+      // Sprint V4a: producer/consumer accept-set rule for matmul.
+      if (failed(checkMatmulOperandLayouts(op))) anyError = true;
     });
     if (anyError)
       signalPassFailure();

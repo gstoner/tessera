@@ -71,9 +71,35 @@ namespace {
 // Binding parser
 // ─────────────────────────────────────────────────────────────────────────
 
+// Sprint V3a (2026-05-22): widened Binding shape from a single
+// product to a sum-of-products (affine form).
+//
+// V1 (V5) only accepted bindings of the form "D = H * Dh" — a
+// single product term.  V3a extends this to
+// "D = H * Dh + K" (sum of products).  Each term is still a
+// product of symbols (no division, no constants), but multiple
+// terms can be combined with `+`.  When evaluating the RHS the
+// pass sums the products of resolved symbols.
+//
+// Examples accepted by V3a (and rejected by V5):
+//   "D = H * Dh + K"             — flash attention block + residual
+//   "S = A * B + C * D"          — sum of two contractions
+//   "N = M * K"                  — V5-compatible (single term)
+//   "Total = Group_a + Group_b"  — sum of singletons (each is a
+//                                    1-symbol product)
+//
+// Out of scope for V3a:
+//   constants ("D = H * Dh + 4") — would need integer literal
+//                                   parsing; tracked as V3a.1
+//   subtraction / negation       — V3a.2
+//   parenthesized groups         — V3a.3
 struct Binding {
   std::string lhs;
-  SmallVector<std::string, 4> rhs;
+  // Each inner vector is one PRODUCT term.  V3a accepts multiple
+  // terms; their sum is the RHS value.  V5 produced a single-term
+  // sum-of-products (rhs = {{a,b,c}}), so V3a is fully backward
+  // compatible.
+  SmallVector<SmallVector<std::string, 4>, 2> terms;
 };
 
 // Trim ASCII whitespace from both ends.
@@ -85,8 +111,40 @@ static StringRef trim(StringRef s) {
   return s;
 }
 
-// Parse "D = H * Dh" → {lhs="D", rhs={"H", "Dh"}}.
-// Returns std::nullopt for malformed inputs.
+// Split a string on a single character at the top level (no nested
+// parens, no escapes — V3a operates on a flat product/sum grammar).
+static SmallVector<StringRef, 4>
+splitOn(StringRef s, char delim) {
+  SmallVector<StringRef, 4> parts;
+  size_t pos = 0;
+  while (pos < s.size()) {
+    auto next = s.find(delim, pos);
+    StringRef tok = (next == StringRef::npos)
+                        ? s.substr(pos)
+                        : s.substr(pos, next - pos);
+    parts.push_back(tok);
+    if (next == StringRef::npos) break;
+    pos = next + 1;
+  }
+  return parts;
+}
+
+// Parse a single product term: "H * Dh * X" → {"H", "Dh", "X"}.
+// Returns std::nullopt for malformed input (empty token).
+static std::optional<SmallVector<std::string, 4>>
+parseProductTerm(StringRef raw) {
+  SmallVector<std::string, 4> syms;
+  for (StringRef tok : splitOn(raw, '*')) {
+    tok = trim(tok);
+    if (tok.empty()) return std::nullopt;
+    syms.push_back(tok.str());
+  }
+  return syms;
+}
+
+// Sprint V3a: parse `lhs = term + term + ...` where each term is a
+// product of symbols.  Sprint V5's "lhs = sym * sym * sym" is the
+// single-term case.
 static std::optional<Binding> parseBinding(StringRef raw) {
   auto eq = raw.find('=');
   if (eq == StringRef::npos) return std::nullopt;
@@ -95,18 +153,11 @@ static std::optional<Binding> parseBinding(StringRef raw) {
   if (lhs.empty() || rhs.empty()) return std::nullopt;
   Binding b;
   b.lhs = lhs.str();
-  // Split RHS on '*' tokens.
-  size_t pos = 0;
-  while (pos < rhs.size()) {
-    auto star = rhs.find('*', pos);
-    StringRef tok = (star == StringRef::npos)
-                        ? rhs.substr(pos)
-                        : rhs.substr(pos, star - pos);
-    tok = trim(tok);
-    if (tok.empty()) return std::nullopt;
-    b.rhs.push_back(tok.str());
-    if (star == StringRef::npos) break;
-    pos = star + 1;
+  // V3a: split RHS into product terms on '+', then parse each.
+  for (StringRef termStr : splitOn(rhs, '+')) {
+    auto term = parseProductTerm(trim(termStr));
+    if (!term) return std::nullopt;
+    b.terms.push_back(*term);
   }
   return b;
 }
@@ -158,9 +209,29 @@ readDimNames(Operation *op, StringRef attrName) {
   return names;
 }
 
+// Sprint V3a (2026-05-22): evaluate the sum-of-products RHS of a
+// binding using the dim_sizes table.  All symbols in every term
+// must be bound for the binding to evaluate; otherwise std::nullopt.
+static std::optional<int64_t>
+evaluateBindingRHS(const Binding &b,
+                   const llvm::DenseMap<StringRef, int64_t> &sizes) {
+  int64_t sum = 0;
+  for (const auto &term : b.terms) {
+    int64_t prod = 1;
+    for (const auto &r : term) {
+      auto it = sizes.find(r);
+      if (it == sizes.end()) return std::nullopt;  // unresolved
+      prod *= it->second;
+    }
+    sum += prod;
+  }
+  return sum;
+}
+
 // Resolve a symbol via dim_sizes; if not directly in dim_sizes try
-// resolving via one of the bindings (single level — no recursion in
-// V1 to keep the algorithm trivially terminating).
+// resolving via one of the bindings (single level — no recursion to
+// keep the algorithm trivially terminating).  Sprint V3a: bindings
+// are now sum-of-products instead of single products.
 static std::optional<int64_t>
 resolveSymbol(StringRef sym,
               const llvm::DenseMap<StringRef, int64_t> &sizes,
@@ -169,13 +240,7 @@ resolveSymbol(StringRef sym,
   if (it != sizes.end()) return it->second;
   for (const auto &b : bindings) {
     if (b.lhs != sym) continue;
-    int64_t prod = 1;
-    for (const auto &r : b.rhs) {
-      auto rIt = sizes.find(r);
-      if (rIt == sizes.end()) return std::nullopt;  // unresolved
-      prod *= rIt->second;
-    }
-    return prod;
+    return evaluateBindingRHS(b, sizes);
   }
   return std::nullopt;
 }
@@ -205,26 +270,38 @@ struct SymbolicDimEquality
     for (const auto &b : bindings) {
       auto lhsIt = sizes.find(b.lhs);
       if (lhsIt == sizes.end()) continue;  // LHS unbound; nothing to check
-      int64_t prod = 1;
-      bool rhsBound = true;
-      for (const auto &r : b.rhs) {
-        auto rIt = sizes.find(r);
-        if (rIt == sizes.end()) { rhsBound = false; break; }
-        prod *= rIt->second;
-      }
-      if (!rhsBound) continue;
-      if (prod != lhsIt->second) {
+      auto rhsValue = evaluateBindingRHS(b, sizes);
+      if (!rhsValue) continue;  // RHS has unresolved symbols
+      if (*rhsValue != lhsIt->second) {
         // Build the equation text in one string so the diagnostic is a
         // single coherent line (lit `expected-error` matches one msg).
+        // Sprint V3a (2026-05-22): renders sum-of-products with ` + `
+        // separating terms and ` * ` separating symbols within each
+        // term.  Single-term bindings render unchanged from V5.
         std::string rhsText;
-        for (size_t i = 0; i < b.rhs.size(); ++i) {
-          if (i) rhsText += " * ";
-          rhsText += b.rhs[i];
+        for (size_t i = 0; i < b.terms.size(); ++i) {
+          if (i) rhsText += " + ";
+          for (size_t j = 0; j < b.terms[i].size(); ++j) {
+            if (j) rhsText += " * ";
+            rhsText += b.terms[i][j];
+          }
         }
-        fn.emitOpError("SYMDIM_BINDING_VIOLATION: binding '")
-            << b.lhs << " = " << rhsText << "' violated: "
-            << b.lhs << " = " << lhsIt->second
-            << " but product of RHS = " << prod;
+        // Pick the V5 wording when there's a single term, the V3a
+        // sum-of-products wording when multi-term.  This keeps V5
+        // lit fixtures matching `product of RHS` while V3a lit
+        // fixtures match `value of RHS` for sums.
+        if (b.terms.size() == 1) {
+          fn.emitOpError("SYMDIM_BINDING_VIOLATION: binding '")
+              << b.lhs << " = " << rhsText << "' violated: "
+              << b.lhs << " = " << lhsIt->second
+              << " but product of RHS = " << *rhsValue;
+        } else {
+          fn.emitOpError("SYMDIM_BINDING_VIOLATION: binding '")
+              << b.lhs << " = " << rhsText << "' violated: "
+              << b.lhs << " = " << lhsIt->second
+              << " but value of RHS (sum of products) = "
+              << *rhsValue;
+        }
         failed = true;
       }
     }

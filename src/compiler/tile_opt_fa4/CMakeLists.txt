@@ -29,11 +29,18 @@ add_mlir_library(TesseraAttnDialect
     LINK_LIBS PUBLIC
         MLIRIR
         MLIRSupport
+        # Sprint V7b (2026-05-22): TesseraIR provides the parent
+        # TesseraDialect class that anchors the eager-load extension.
+        TesseraIR
 )
 target_include_directories(TesseraAttnDialect
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}
+        # Sprint V7b: visibility of TesseraOps.h for the eager-load
+        # extension's parent-dialect anchor.
+        ${CMAKE_SOURCE_DIR}/src/compiler/ir/include
+        ${CMAKE_BINARY_DIR}/src/compiler/ir
 )
 
 # ------------------------------------------------------------------

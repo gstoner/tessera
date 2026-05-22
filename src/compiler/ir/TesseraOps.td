@@ -220,6 +220,9 @@ def Tessera_RopeOp : Op<Tessera_Dialect, "rope", [Pure]> {
   let arguments = (ins TensorType:$x, TensorType:$theta);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  // Sprint V4b (2026-05-22): shape-preserving position embedding.
+  // Input and output ranks + static dim sizes must agree.
+  let hasVerifier = 1;
 }
 
 def Tessera_NTKRopeOp : Op<Tessera_Dialect, "ntk_rope", [Pure]> {
@@ -506,6 +509,10 @@ def Tessera_SoftmaxOp : Tessera_UnaryPureOp<"softmax", "Softmax over an explicit
   let arguments = (ins TensorType:$x,
                        OptionalAttr<I64Attr>:$axis,
                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
+  // Sprint V4b (2026-05-22): shape-preserving normalization over an
+  // explicit axis.  If ``axis`` is set, ``-rank <= axis < rank``.
+  // Input and output ranks + static dim sizes must agree.
+  let hasVerifier = 1;
 }
 
 def Tessera_GeluOp : Tessera_UnaryPureOp<"gelu", "Gaussian error linear unit">;
@@ -799,10 +806,16 @@ def Tessera_CastOp : Op<
                         OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  // Sprint V4b (2026-05-22): shape-preserving element-type
+  // conversion.  Input and output must have the same rank + static
+  // dim sizes; only the element type may differ.
+  let hasVerifier = 1;
 }
 
 def Tessera_DropoutOp : Op<Tessera_Dialect, "dropout", []> {
   let summary = "Reference random dropout with optional deterministic seed";
+  // Sprint V4b (2026-05-22): dropout probability must be in [0, 1).
+  // Shape is preserved; element type is preserved.
   let arguments = (ins TensorType:$x,
                        OptionalAttr<F64Attr>:$p,
                        OptionalAttr<I64Attr>:$seed,

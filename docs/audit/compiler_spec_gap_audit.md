@@ -237,11 +237,79 @@ verified below). All structural guards green. C++ build clean.
 structural guards) = **17 new tests**, all passing.  Plus 2 new lit
 fixtures: V2-flow propagation + V7's intent doc (V6c).
 
+**Sprint V7b + V3a + V4a + V4b (2026-05-22) closure**:
+
+- **V7b — tessera.attn parser eager-load**: Added a
+  `DialectRegistry::addExtension` anchored on the parent
+  `tessera::TesseraDialect` so that whenever a context loads the
+  Graph IR dialect, the extension callback eagerly calls
+  `ctx->getOrLoadDialect<TesseraAttnDialect>()`.  The MLIR parser
+  now recognises `tessera.attn.scaled_dot_product` in standalone
+  IR fixtures with no pass referencing the dialect.  V6c lit
+  fixture was recreated without `XFAIL`/`REQUIRES` and now passes
+  end-to-end through the real `tessera-opt` binary.  Linkage:
+  `TesseraIR` added to `TesseraAttnDialect`'s `LINK_LIBS PUBLIC`
+  plus include dirs for the Graph IR headers.
+
+- **V3a — affine non-product bindings**: `SymbolicDimEqualityPass`
+  now accepts sum-of-products RHSes (`D = H * Dh + K`, bare-symbol
+  sums like `Total = A + B + C`).  New `Binding.terms`
+  representation `SmallVector<SmallVector<std::string>>` carries
+  one inner vector per `+`-separated term, each holding the
+  `*`-separated factors.  Two parser helpers (`splitOn`,
+  `parseProductTerm`) and one evaluator (`evaluateBindingRHS`)
+  cover both V5 single-product and V3a sum-of-products paths.
+  Diagnostic wording is split: V5 form keeps `product of RHS = N`
+  for backward compatibility; multi-term bindings render
+  `value of RHS (sum of products) = N`.  Lit fixture:
+  `tests/tessera-ir/phase2/sprint_v3a_affine_bindings.mlir`.
+
+- **V4a — LayoutLegality producer/consumer rule**: Added
+  `matmulAcceptSet()` and `checkMatmulOperandLayouts()` to
+  `LayoutLegalityPass.cpp`.  For each `tessera.matmul`, the pass
+  walks the def-using op of each operand for a `tessera.layout`
+  attribute and rejects layouts outside `{row_major, col_major}`
+  (matmul's stricter accept-set) with new stable diagnostic code
+  `LAYOUT_LEGALITY_PRODUCER_CONSUMER_MISMATCH`.  Initial draft
+  skipped cast producers; removed that — canonical cast layouts
+  (`bsr`, `packed`) live in V2's wider 8-layout accept-set but not
+  in matmul's, so the cast's layout attribute IS what we should
+  check against.  Lit fixture:
+  `tests/tessera-ir/phase2/sprint_v4a_layout_producer_consumer.mlir`.
+
+- **V4b — long-tail per-op verifiers**: Promoted four ops to real
+  verifiers — `CastOp` (rank + static-dim preservation; element
+  type may differ), `SoftmaxOp` (rank + static-dim preservation
+  + optional `axis` bounds check `-rank <= axis < rank`),
+  `RopeOp` (rank + element type + static-dim preservation), and
+  `DropoutOp` (probability must satisfy `0.0 <= p < 1.0`; shape
+  preserved — previously `LogicalResult DropoutOp::verify()
+  { return success(); }`).  Added `let hasVerifier = 1;` to the
+  three ops that didn't already declare it.  11 new stable
+  diagnostic phrases; lit fixture
+  `tests/tessera-ir/phase2/sprint_v4b_per_op_verifiers.mlir` with
+  4 positive cases and 7 negative cases.
+
+**Tests added this round (V7b/V3a/V4a/V4b)**: 8 new structural guards
+in `test_mlir_verifier_sprint.py` (1 V7b + 2 V3a + 2 V4a + 8 V4b for
+hasVerifier/impl/phrase/fixture = 13; net +8 after consolidation),
+bringing the verifier-sprint guard count from 50 → **58 passing**.
+Three new lit fixtures (`sprint_v3a_affine_bindings.mlir`,
+`sprint_v4a_layout_producer_consumer.mlir`,
+`sprint_v4b_per_op_verifiers.mlir`) bring the full Tessera-IR lit
+sweep to **57 PASS / 19 UNSUPPORTED / 19 XFAIL / 0 FAIL** (up from
+92 → 95 tests discovered).
+
 **Remaining V3+ work** (in priority order):
-- V7b: tessera.attn parser lazy-load fix
-- V3 affine/Presburger reasoning beyond simple symbol products
-- V3 cross-function (inter-procedural) symbol-table tracking
-- V3 SSA-value flow tracking through scf.for / scf.if bodies
+- V3b (deferred) — cross-function (inter-procedural) symbol-table
+  tracking: requires walking `func.call` sites to propagate
+  dim-names across function boundaries.  Issue #162.
+- V3c (deferred) — SSA-value flow tracking through `scf.for` and
+  `scf.if` body regions: requires per-region dim-name maps and
+  yield-result propagation.  Issue #163.
+- Identity-cascade folding for LayoutLegalityPass (cascade of
+  layout casts within a function whose net effect is identity
+  should fold; currently flagged only as comment placeholder).
 
 ## Executive Summary
 

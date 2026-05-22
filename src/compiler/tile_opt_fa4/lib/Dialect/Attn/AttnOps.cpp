@@ -24,12 +24,19 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
+
+// Sprint V7b (2026-05-22): the Attn dialect anchors its eager-load
+// extension on the parent `tessera` (Graph IR) dialect.  Including
+// TesseraOps.h pulls in the TesseraDialect class declaration without
+// dragging the full IR header surface.
+#include "Tessera/IR/TesseraOps.h"
 
 // ODS-generated declarations (produced by mlir-tblgen from Attn.td).
 // Include the generated header; actual path depends on CMake binary dir.
@@ -158,8 +165,30 @@ void TesseraAttnDialect::initialize() {
 // dialect via `tessera::attn::registerAttnDialect(registry)`.
 // Mirrors the canonical Apple backend pattern
 // (`tessera::apple::registerAppleDialect()`).
+//
+// Sprint V7b (2026-05-22): eager-load the dialect when the parent
+// `tessera` Graph IR dialect loads.  Without this extension, MLIR's
+// op-name parser sees `tessera.attn.scaled_dot_product`, splits on
+// the first dot, and routes the op into the `tessera` dialect (which
+// rejects unknown ops).  The longest-prefix fallback against
+// REGISTERED dialects doesn't trigger unless a pass already loaded
+// `tessera.attn` into the context.
+//
+// The extension below ties Attn's load to the Graph IR's load: every
+// time MLIRContext loads `tessera`, the extension callback runs and
+// `getOrLoadDialect<TesseraAttnDialect>()` makes the Attn dialect
+// available for op-name lookup.  This is the canonical MLIR pattern
+// for dotted dialect names that ship together with a parent dialect.
 void registerAttnDialect(::mlir::DialectRegistry &registry) {
   registry.insert<TesseraAttnDialect>();
+  // V7b: eager-load tessera.attn whenever the tessera Graph IR
+  // dialect loads.  This is the canonical MLIR DialectExtension
+  // pattern — the lambda fires once per MLIRContext, immediately
+  // after the parent `tessera` dialect attaches.
+  registry.addExtension(
+      +[](::mlir::MLIRContext *ctx, ::tessera::TesseraDialect *) {
+        ctx->getOrLoadDialect<TesseraAttnDialect>();
+      });
 }
 
 } // namespace attn

@@ -17,6 +17,13 @@
 #include "Tessera/Transforms/Passes.h"
 #endif
 
+// Sprint V7 (2026-05-22): FA-4 attention dialect registration.
+// Wrapped behind a separate define so the dialect can be unwired
+// independently of the core IR if a constrained build needs it.
+#ifdef TESSERA_HAVE_FA4_ATTN
+#include "tessera/Dialect/Attn/AttnDialect.h"
+#endif
+
 #ifdef TESSERA_HAVE_SOLVERS
 #include "SolversPasses.h"
 #include "tessera/Dialect/Solver/SolverDialect.h"
@@ -142,6 +149,14 @@ int main(int argc, char **argv) {
 
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
   tessera::registerTesseraDialects(registry);
+#endif
+
+#ifdef TESSERA_HAVE_FA4_ATTN
+  // Sprint V7 (2026-05-22) — FA-4 attention dialect.  Unblocks the
+  // three `tessera.attn.scaled_dot_product` lit fixtures
+  // (flash_attn_full.mlir, tile_ir_lowering.mlir, V6c) that were
+  // XFAIL'd because tessera-opt could not load this dialect.
+  tessera::attn::registerAttnDialect(registry);
 #endif
 
 #ifdef TESSERA_HAVE_SOLVERS

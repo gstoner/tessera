@@ -39,6 +39,19 @@ if(NOT ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA) OR
   )
 endif()
 
+# Sprint V7 (2026-05-22): link the FA-4 attention dialect into
+# tessera-opt so `tessera.attn.scaled_dot_product` and friends are
+# recognized at parse time.  The library is exported by
+# src/compiler/tile_opt_fa4/CMakeLists.txt as TesseraAttnDialect.
+if(TARGET TesseraAttnDialect)
+  target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_FA4_ATTN)
+  target_include_directories(tessera-opt PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/compiler/tile_opt_fa4/include
+    ${CMAKE_BINARY_DIR}/src/compiler/tile_opt_fa4
+  )
+  target_link_libraries(tessera-opt PRIVATE TesseraAttnDialect)
+endif()
+
 if(TARGET tessera_solvers_passes AND TARGET tessera_linalg_solver_passes)
   target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_SOLVERS)
   target_include_directories(tessera-opt PRIVATE

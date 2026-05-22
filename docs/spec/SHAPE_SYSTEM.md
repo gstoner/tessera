@@ -474,8 +474,23 @@ items:**
    `tests/tessera-ir/phase2/sprint_v6b_symdim_in_pipeline.mlir`
    proves the pass fires inside the named pipeline.
 
-   **Status: V1 closed; V6a/b followups landed; SSA-value
-   flow propagation + affine/Presburger reasoning remain V3+.**
+   **Sprint V2-flow closure (2026-05-22):**
+   SSA-value dim-name propagation added.  The pass now reads
+   function-level `tessera.arg_dim_names` (ArrayAttr-of-ArrayAttr
+   naming each dim of each function argument) and propagates
+   through `tessera.transpose / matmul / reshape` ops without
+   requiring per-op `dim_names_in/out` annotations.  Inferred
+   dim-names cross-check against any explicit per-op annotation
+   and emit `SYMDIM_FLOW_INCONSISTENCY` on disagreement.  Lit
+   fixture: `tests/tessera-ir/phase2/sprint_v2_flow_propagation.mlir`
+   (1 positive + 1 negative + 1 backward-compat).  V1's behaviour
+   is preserved as the fall-through when no `tessera.arg_dim_names`
+   is declared — existing V5/V6a/V6b functions keep working
+   unchanged.
+
+   **Status: V1 + V2-flow shipped; affine/Presburger reasoning
+   beyond simple products and cross-function symbol-table tracking
+   remain V3+.**
 3. **`LayoutLegalityPass` skeleton + first rule.** **Sprint V2
    closure (2026-05-22):** `src/transforms/lib/LayoutLegalityPass.cpp`
    ships with the canonical 8-name layout accept-set

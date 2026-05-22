@@ -203,6 +203,105 @@ def test_v6b_pipeline_integration_lit_fixture_present() -> None:
     )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint V2-flow (2026-05-22) — SSA-value dim-name propagation.
+# Lifts the V1 pass from "best-effort verifier of explicit per-op
+# annotations" to "actually infers dim-names through op chains and
+# cross-checks them against any explicit per-op declarations".
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+_V2_FLOW_LIT = (
+    REPO_ROOT / "tests" / "tessera-ir" / "phase2"
+    / "sprint_v2_flow_propagation.mlir"
+)
+
+
+def test_v2_flow_diagnostic_code_present() -> None:
+    """The new SYMDIM_FLOW_INCONSISTENCY diagnostic code must be in
+    the pass source so lit fixtures + future spec cross-links can
+    match on it."""
+    text = PASS_CPP.read_text()
+    assert "SYMDIM_FLOW_INCONSISTENCY" in text, (
+        "SymbolicDimEqualityPass.cpp must emit SYMDIM_FLOW_INCONSISTENCY "
+        "when propagated dim-names disagree with explicit per-op "
+        "annotations (Sprint V2-flow)"
+    )
+
+
+def test_v2_flow_arg_dim_names_attribute_documented() -> None:
+    """The function-level attribute V2-flow seeds from must be named
+    in the source."""
+    text = PASS_CPP.read_text()
+    assert "tessera.arg_dim_names" in text, (
+        "Pass source must reference tessera.arg_dim_names — that's the "
+        "function-level attribute V2-flow seeds the SSA-value dim map "
+        "from"
+    )
+
+
+@pytest.mark.parametrize("symbol", [
+    "ValueDimMap",
+    "readArgDimNames",
+    "crossCheck",
+    "propagateThroughFunction",
+])
+def test_v2_flow_pipeline_helpers_present(symbol: str) -> None:
+    """V2-flow added 4 new helpers — pin their names so a refactor
+    can't silently drop the flow tracking machinery."""
+    text = PASS_CPP.read_text()
+    assert symbol in text, (
+        f"V2-flow helper {symbol!r} missing from pass source"
+    )
+
+
+def test_v2_flow_propagation_rules_documented() -> None:
+    """V2 documents which ops it propagates through.  Pin those
+    decisions so a future contributor can't drop a rule without
+    updating the doc."""
+    text = PASS_CPP.read_text()
+    # The pass-source comment block must mention each rule.
+    for rule_marker in (
+        "transpose:",
+        "matmul:",
+        "reshape:",
+    ):
+        assert rule_marker in text, (
+            f"V2-flow rule documentation missing: {rule_marker!r}"
+        )
+
+
+def test_v2_flow_lit_fixture_present() -> None:
+    """V2-flow ships with a positive + negative + backward-compat case."""
+    assert _V2_FLOW_LIT.exists(), (
+        f"V2-flow lit fixture missing: {_V2_FLOW_LIT.relative_to(REPO_ROOT)}"
+    )
+    text = _V2_FLOW_LIT.read_text()
+    assert "tessera.arg_dim_names" in text
+    assert "SYMDIM_FLOW_INCONSISTENCY" in text
+    expected_errors = text.count("// expected-error @+1")
+    assert expected_errors == 1, (
+        f"V2-flow lit fixture must contain exactly 1 @+1-anchored "
+        f"expected-error directive (the FLOW_INCONSISTENCY case); "
+        f"got {expected_errors}"
+    )
+    # Positive cases (one with arg_dim_names, one without).
+    assert "@flow_propagation_ok" in text
+    assert "@flow_no_arg_names_falls_through" in text
+
+
+def test_v2_flow_backward_compatible_with_v1() -> None:
+    """V2-flow must NOT break functions that worked under V1 (no
+    arg_dim_names declared).  The pass source's
+    propagateThroughFunction returns success() early when the seed
+    map is empty — pin that branch."""
+    text = PASS_CPP.read_text()
+    assert "fall through to V1 behaviour" in text, (
+        "propagateThroughFunction must explicitly fall through to V1 "
+        "when no flow seeds are present — backward compatibility lock"
+    )
+
+
 @pytest.mark.parametrize("pipeline", [
     "lowerToX86",
     "lowerToGPU",

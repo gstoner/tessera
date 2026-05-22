@@ -313,6 +313,161 @@ struct SymbolicDimEquality
     return success();
   }
 
+  // ── Sprint V2-flow (2026-05-22) — SSA-value dim-name propagation ─────
+  //
+  // Per-function map: SSA value → list of symbolic dim names.  Built
+  // by seeding from `tessera.arg_dim_names` (one inner ArrayAttr per
+  // function argument) and walking ops in linear program order
+  // (Graph IR is largely straight-line at this stage; future SSA-CFG
+  // pass-through can extend the walker to dominate-handle scf.for /
+  // scf.if bodies).  Inferred per-op contracts feed the V1 verifier:
+  // a mismatch between an inferred dim-name list and an explicit
+  // `tessera.dim_names_in` annotation emits SYMDIM_FLOW_INCONSISTENCY.
+  //
+  // Diagnostic codes added:
+  //   SYMDIM_FLOW_INCONSISTENCY — propagated dim-names disagree with
+  //                                explicit per-op annotation.
+  //
+  // Propagation rules (V2 minimal):
+  //   transpose: out_names = in_names (multiset preserved; positional
+  //              info isn't tracked in V2 since the op carries no
+  //              `perm` attribute).
+  //   matmul:    out_names = lhs_names[:-1] + rhs_names[-1:]
+  //              (canonical matmul shape; transposeA/B not handled
+  //              in V2 — those declare it via explicit per-op attrs).
+  //   reshape:   out_names = explicit `tessera.dim_names_out` if
+  //              present; otherwise unknown (V2 doesn't infer factor
+  //              splits without explicit declaration).
+  //   any other op: propagation stops at the boundary (unknown).
+  //
+  // Flow tracking is OPT-IN: when neither tessera.arg_dim_names nor
+  // any explicit per-op dim_names attrs exist, V2 falls through to
+  // V1 behaviour (silent skip).
+
+  using DimNameList = SmallVector<std::string, 4>;
+  using ValueDimMap = llvm::DenseMap<Value, DimNameList>;
+
+  static std::optional<DimNameList>
+  readArgDimNames(func::FuncOp fn, unsigned argIdx) {
+    auto arr = fn->getAttrOfType<ArrayAttr>("tessera.arg_dim_names");
+    if (!arr) return std::nullopt;
+    if (argIdx >= arr.size()) return std::nullopt;
+    auto inner = dyn_cast<ArrayAttr>(arr[argIdx]);
+    if (!inner) return std::nullopt;
+    DimNameList names;
+    for (Attribute a : inner) {
+      if (auto s = dyn_cast<StringAttr>(a))
+        names.push_back(s.getValue().str());
+      else
+        return std::nullopt;
+    }
+    return names;
+  }
+
+  static LogicalResult crossCheck(
+      Operation *op, StringRef attrName,
+      ArrayRef<std::string> propagated) {
+    auto declared = readDimNames(op, attrName);
+    if (!declared) return success();  // user didn't declare; nothing to compare
+    if (declared->size() != propagated.size()
+        || !std::equal(declared->begin(), declared->end(),
+                       propagated.begin())) {
+      op->emitOpError(
+          "SYMDIM_FLOW_INCONSISTENCY: propagated dim-names disagree "
+          "with explicit '")
+          << attrName << "' annotation";
+      return failure();
+    }
+    return success();
+  }
+
+  static LogicalResult propagateThroughFunction(
+      func::FuncOp fn,
+      const llvm::DenseMap<StringRef, int64_t> &sizes,
+      ArrayRef<Binding> bindings) {
+    (void)sizes;
+    (void)bindings;
+    ValueDimMap valueDims;
+    // Seed function arguments from tessera.arg_dim_names.
+    for (unsigned i = 0, e = fn.getNumArguments(); i < e; ++i) {
+      auto names = readArgDimNames(fn, i);
+      if (names) valueDims[fn.getArgument(i)] = *names;
+    }
+    if (valueDims.empty()) {
+      // No flow seeds → fall through to V1 behaviour.  This keeps the
+      // pass backward-compatible with functions that don't carry the
+      // `tessera.arg_dim_names` attribute yet.
+      return success();
+    }
+    bool failed = false;
+    // Walk ops in program order (Graph IR straight-line block bodies).
+    for (Block &block : fn.getBody()) {
+      for (Operation &opRef : block) {
+        Operation *op = &opRef;
+        StringRef name = op->getName().getStringRef();
+
+        if (name == "tessera.transpose") {
+          if (op->getNumOperands() < 1 || op->getNumResults() < 1) continue;
+          auto it = valueDims.find(op->getOperand(0));
+          if (it == valueDims.end()) continue;
+          // V2: propagate the multiset (per-position order isn't
+          // recoverable without an explicit `perm` attr).  Cross-check
+          // against explicit `tessera.dim_names_in` if present.
+          if (mlir::failed(
+                  crossCheck(op, "tessera.dim_names_in", it->second)))
+            failed = true;
+          // Propagate to result.  If user declared
+          // tessera.dim_names_out explicitly we trust it; otherwise
+          // mark the result with the multiset (positions unknown).
+          auto declared = readDimNames(op, "tessera.dim_names_out");
+          valueDims[op->getResult(0)] =
+              declared ? *declared : it->second;
+
+        } else if (name == "tessera.matmul") {
+          if (op->getNumOperands() < 2 || op->getNumResults() < 1) continue;
+          auto lhsIt = valueDims.find(op->getOperand(0));
+          auto rhsIt = valueDims.find(op->getOperand(1));
+          if (lhsIt == valueDims.end() || rhsIt == valueDims.end()) continue;
+          if (mlir::failed(crossCheck(
+                  op, "tessera.dim_names_lhs", lhsIt->second)))
+            failed = true;
+          if (mlir::failed(crossCheck(
+                  op, "tessera.dim_names_rhs", rhsIt->second)))
+            failed = true;
+          // Infer result: lhs[:-1] + rhs[-1:].
+          DimNameList out;
+          for (size_t i = 0; i + 1 < lhsIt->second.size(); ++i)
+            out.push_back(lhsIt->second[i]);
+          if (!rhsIt->second.empty())
+            out.push_back(rhsIt->second.back());
+          valueDims[op->getResult(0)] = out;
+
+        } else if (name == "tessera.reshape") {
+          if (op->getNumResults() < 1) continue;
+          // V2 doesn't infer reshape splits without explicit
+          // declaration.  Use the user's explicit out names if
+          // present; otherwise leave the result unbound.
+          auto declared = readDimNames(op, "tessera.dim_names_out");
+          if (declared) valueDims[op->getResult(0)] = *declared;
+          // Cross-check input against propagated value.
+          if (op->getNumOperands() >= 1) {
+            auto it = valueDims.find(op->getOperand(0));
+            if (it != valueDims.end()) {
+              if (mlir::failed(crossCheck(
+                      op, "tessera.dim_names_in", it->second)))
+                failed = true;
+            }
+          }
+
+        } else {
+          // Unknown op: propagation stops at the boundary.  Result
+          // SSA values are left unbound in the map.
+        }
+      }
+    }
+    return failed ? mlir::failure() : mlir::success();
+  }
+
   void runOnOperation() override {
     bool anyFailure = false;
     getOperation().walk([&](func::FuncOp fn) {
@@ -320,6 +475,12 @@ struct SymbolicDimEquality
       auto bindings = readBindings(fn);
       // Function-level binding equation check.
       if (failed(checkBindings(fn, bindings, sizes)))
+        anyFailure = true;
+      // Sprint V2-flow: SSA-value dim-name propagation + cross-checks.
+      // Runs BEFORE the per-op contract walk so propagated names can
+      // trigger SYMDIM_FLOW_INCONSISTENCY before the per-op walker
+      // catches them as standalone violations.
+      if (failed(propagateThroughFunction(fn, sizes, bindings)))
         anyFailure = true;
       // Per-op contracts.
       fn.walk([&](Operation *op) {

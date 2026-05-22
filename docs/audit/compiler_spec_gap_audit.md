@@ -190,6 +190,59 @@ verified below). All structural guards green. C++ build clean.
 - Same pattern available for other un-registered Tile IR dialects
   (`tessera.queue`, etc.) once needed.
 
+**Sprint V7 + V2-flow (2026-05-22) closure**:
+
+- **V7 (partial — registration plumbing landed):** Created public
+  header `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/AttnDialect.h`
+  mirroring the Apple backend pattern; added
+  `tessera::attn::registerAttnDialect(DialectRegistry&)` body in
+  `AttnOps.cpp`; wired through `tools/tessera-opt/tessera-opt.cpp`
+  under a new `TESSERA_HAVE_FA4_ATTN` ifdef; updated
+  `tools/tessera-opt/CMakeLists.txt` to link `TesseraAttnDialect`.
+  Build green; dialect appears in `--show-dialects`; symbols
+  linked into the binary (verified via `nm`).  Python structural
+  guards (`tests/unit/test_attn_dialect_registration.py`, 6 tests)
+  pin the registration plumbing.
+
+  **V7 remaining work (V7b):** MLIR parser does not lazy-load
+  the dialect for standalone IR fixtures (no pass references it,
+  so the longest-prefix dialect lookup never triggers
+  `getOrLoadDialect<TesseraAttnDialect>`).  The 3 lit fixtures
+  using `tessera.attn.scaled_dot_product`
+  (`flash_attn_full.mlir`, `tile_ir_lowering.mlir`, V6c) remain
+  XFAIL'd.  V7b will investigate eager-load via `MlirOptMainConfig`
+  or migrate the dialect class from tablegen to hand-written
+  (matching the `NeighborsDialect` pattern that works).
+
+- **V2-flow (SSA-value dim-name propagation):** Extended
+  `SymbolicDimEqualityPass` with a per-function flow tracker.
+  New helpers: `ValueDimMap`, `readArgDimNames`, `crossCheck`,
+  `propagateThroughFunction`.  Reads
+  `tessera.arg_dim_names` (ArrayAttr-of-ArrayAttr) from each
+  `func.func`, propagates through
+  `tessera.{transpose,matmul,reshape}` ops, cross-checks against
+  any explicit `tessera.dim_names_{in,out,lhs,rhs}` annotations.
+  Adds `SYMDIM_FLOW_INCONSISTENCY` diagnostic code.  Lit fixture:
+  `tests/tessera-ir/phase2/sprint_v2_flow_propagation.mlir`
+  (1 positive + 1 negative + 1 backward-compat).  Python
+  structural guards extended with 11 new V2-flow tests pinning
+  the helpers, propagation rules, and backward-compat fall-through.
+
+  Backward compat: when no `tessera.arg_dim_names` is declared,
+  V2-flow returns success() early — existing V5/V6a/V6b
+  functions keep working unchanged.  Verified by the
+  `flow_no_arg_names_falls_through` positive case.
+
+**Tests added this round**: 6 (V7 structural guards) + 11 (V2-flow
+structural guards) = **17 new tests**, all passing.  Plus 2 new lit
+fixtures: V2-flow propagation + V7's intent doc (V6c).
+
+**Remaining V3+ work** (in priority order):
+- V7b: tessera.attn parser lazy-load fix
+- V3 affine/Presburger reasoning beyond simple symbol products
+- V3 cross-function (inter-procedural) symbol-table tracking
+- V3 SSA-value flow tracking through scf.for / scf.if bodies
+
 ## Executive Summary
 
 Tessera has a real compiler spine in place: Python and textual DSL frontends,

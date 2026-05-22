@@ -153,6 +153,15 @@ void TesseraAttnDialect::initialize() {
       >();
 }
 
+// Sprint V7 (2026-05-22): public registration entry so external
+// tools (tessera-opt and future translation drivers) can load this
+// dialect via `tessera::attn::registerAttnDialect(registry)`.
+// Mirrors the canonical Apple backend pattern
+// (`tessera::apple::registerAppleDialect()`).
+void registerAttnDialect(::mlir::DialectRegistry &registry) {
+  registry.insert<TesseraAttnDialect>();
+}
+
 } // namespace attn
 } // namespace tessera
 

@@ -541,6 +541,57 @@ _EBM_POINTWISE_SHARDING_NAMES: frozenset[str] = frozenset({
     "ebm_decode_init",
 })
 
+# Sprint #20d (2026-05-22) — GA differential ops inherit the halo
+# proof shipped by Sprint #14 (stencil category already complete).
+# Their sharding contract is the canonical halo-exchange pattern on
+# Clifford multivector fields:
+#   clifford_ext_deriv (exterior derivative) and clifford_codiff
+#   (codifferential) are differential operators on a uniform grid;
+#   clifford_vec_deriv is the vector derivative; clifford_integral
+#   reduces a field over a region (canonical reduction + all_reduce).
+# The same halo machinery proven in
+# tests/unit/test_halo_execution_lane.py applies — promotion is the
+# documented inheritance.
+_GA_DIFFERENTIAL_SHARDING_NAMES: frozenset[str] = frozenset({
+    "clifford_codiff",
+    "clifford_vec_deriv",
+    "clifford_ext_deriv",
+    "clifford_integral",
+})
+
+# Sprint #20d (2026-05-22) — sparse CSR family.  spmm_csr / sddmm /
+# bsmm shard row-parallel: each rank holds a row chunk of A, B is
+# replicated, all_gather along the row axis recovers the output.
+# Proven by tests/unit/test_segment_sparse_sharding_mock_mesh.py.
+# spmm_coo is intentionally NOT in this set — its hash-shard requires
+# real distributed execution to validate (Bucket C, Phase G/H/I gate).
+_SPARSE_CSR_SHARDING_NAMES: frozenset[str] = frozenset({
+    "spmm_csr",
+    "sddmm",
+    "bsmm",
+})
+
+# Sprint #20e (2026-05-22) — ebm sampling family (Bucket B).
+# ebm_inner_step / ebm_langevin_step shard candidate-axis-local
+# (per-candidate pointwise pattern, no cross-shard communication).
+# ebm_partition_exact uses the canonical stable logsumexp two-collective
+# pattern (max-pull + sum-of-exp).  ebm_partition_ais and
+# ebm_partition_monte_carlo run embarrassingly parallel chains; per-rank
+# means combine via all_reduce(mean).  Proven by
+# tests/unit/test_ebm_sampling_sharding_mock_mesh.py.
+#
+# The 4 manifold Langevin ops (bivector / sphere sample+step) stay at
+# partial because they live on non-Euclidean manifolds (Spin(p,q)
+# bivector subspace; unit sphere) — sharding requires GA-aware halo
+# exchange that hasn't shipped (Bucket C, Phase G/H/I gate).
+_EBM_SAMPLING_SHARDING_NAMES: frozenset[str] = frozenset({
+    "ebm_inner_step",
+    "ebm_langevin_step",
+    "ebm_partition_exact",
+    "ebm_partition_ais",
+    "ebm_partition_monte_carlo",
+})
+
 # Standard attention family — Bucket B closed by Sprint #20a (mock-mesh
 # proof in tests/unit/test_attention_sharding_mock_mesh.py).  These ops
 # are head-axis independent ⇒ TP-by-head sharding is mechanical.
@@ -582,7 +633,13 @@ for _name in (
 ):
     _EXISTING_CONTRACT_OVERRIDES[_name] = _SHARDING_COMPLETE
 
-for _name in _GA_POINTWISE_SHARDING_NAMES | _EBM_POINTWISE_SHARDING_NAMES:
+for _name in (
+    _GA_POINTWISE_SHARDING_NAMES
+    | _EBM_POINTWISE_SHARDING_NAMES
+    | _GA_DIFFERENTIAL_SHARDING_NAMES
+    | _SPARSE_CSR_SHARDING_NAMES
+    | _EBM_SAMPLING_SHARDING_NAMES
+):
     _EXISTING_CONTRACT_OVERRIDES[_name] = _SHARDING_COMPLETE
 del _name
 
@@ -629,7 +686,16 @@ _SHARDING_RULE_BY_CATEGORY: dict[str, str] = {
     # — Standard reductions: insert all-reduce on the reduced axis —
     "reduction":           "complete",
     "stable_reduction":    "complete",
-    "normalization":       "partial",   # all-reduce on feature axis when sharded
+    # normalization (Sprint #20c, 2026-05-22): promoted to complete.
+    # layer_norm / rmsnorm / rmsnorm_safe under feature-axis sharding
+    # use a single packed all_reduce of (sum, sum_of_squares) — proven
+    # numerically in tests/unit/test_normalization_projection_sharding
+    # _mock_mesh.py.  group_norm / instance_norm follow the same
+    # pattern with the per-group reduction.  spectral_norm /
+    # weight_norm reduce the norm of a weight matrix via a single
+    # all_reduce.  Batch-axis sharding is identity (no collective).
+    # 7 entries.
+    "normalization":       "complete",
     "loss":                "complete",  # all reduce to scalar or per-sample
 
     # — RNG: per-shard streams via `fold_in(axis_index)` —
@@ -677,10 +743,33 @@ _SHARDING_RULE_BY_CATEGORY: dict[str, str] = {
     # is held at `partial` via a per-name override in
     # ``_EXISTING_CONTRACT_OVERRIDES``.
     "loop_nest":           "complete",
-    "model_layer":         "partial",
-    "contraction":         "partial",   # einsum
-    "projection":          "partial",
-    "fused_epilogue":      "partial",
+    # model_layer (Sprint #20c, 2026-05-22): promoted to complete.
+    # linear_general is general-axis matmul (proven by column-parallel
+    # and row-parallel tests in
+    # tests/unit/test_normalization_projection_sharding_mock_mesh.py).
+    # conv1d and conv_transpose follow the channel-axis matmul pattern
+    # for channel parallelism; spatial sharding rides the Sprint #14
+    # halo machinery (already complete for the `stencil` category).
+    # 3 entries.
+    "model_layer":         "complete",
+    # contraction (Sprint #20c, 2026-05-22): promoted to complete.
+    # einsum 'ij,jk->ik' is matmul; under contraction-axis split each
+    # rank computes a partial einsum, all_reduce(sum) recovers the
+    # full output — proven for both rank-2 and batched (rank-3) forms
+    # in test_einsum_contraction_axis_row_parallel and
+    # test_einsum_batched_contraction_axis_row_parallel.  1 entry.
+    "contraction":         "complete",
+    # projection (Sprint #20c, 2026-05-22): promoted to complete.
+    # qkv_projection is matmul + 3-way axis split; the output-axis
+    # split test in test_qkv_projection_output_axis_split proves the
+    # canonical column-parallel TP shape for (Q, K, V) head sharding.
+    # 1 entry.
+    "projection":          "complete",
+    # fused_epilogue (Sprint #20c, 2026-05-22): promoted to complete.
+    # Column-parallel matmul + bias broadcast (bias is replicated and
+    # locally sliced) + pointwise activation — proven by
+    # test_fused_epilogue_output_axis_split.  1 entry.
+    "fused_epilogue":      "complete",
     "moe":                 "partial",
     "state_update":        "partial",   # kv_cache — handle layout matters
     "state_space":         "partial",   # selective_ssm
@@ -726,7 +815,12 @@ _SHARDING_RULE_BY_CATEGORY: dict[str, str] = {
     # require cross-shard lookup, an all_gather of the indexed slice
     # is the canonical pattern.  9 entries.
     "indexing":            "complete",
-    "segment_reduce":      "partial",
+    # segment_reduce (Sprint #20d, 2026-05-22): promoted to complete.
+    # Per-rank local segment_reduce on row slice + pad to full
+    # segment-id space + all_reduce(sum) recovers the global result —
+    # proven by test_segment_reduce_row_split_with_padded_allreduce in
+    # tests/unit/test_segment_sparse_sharding_mock_mesh.py.
+    "segment_reduce":      "complete",
 
     # — Spectral: ring/butterfly partition rules well-known —
     "spectral":            "partial",

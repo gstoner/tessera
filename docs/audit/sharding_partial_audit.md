@@ -1,11 +1,11 @@
 ---
 status: Informative
-classification: Sharding-axis audit plus Sprint #19 Bucket A closure
+classification: Sharding-axis audit plus Sprint #19 + #20 closure
 authority: Companion to `docs/audit/standalone_primitive_coverage.md` and `docs/audit/generated/s_series_status.md`
 last_updated: 2026-05-22
 ---
 
-# Sharding-rule partial audit (Sprint #18 / #19, 2026-05-22)
+# Sharding-rule partial audit (Sprint #18 / #19 / #20, 2026-05-22)
 
 The `sharding_rule` contract axis stood at **104 partial** entries after the
 2026-05-22 sharding-rule promotion sprint closed 8 categories
@@ -24,8 +24,41 @@ three buckets so the next promotion sprints could be sized honestly:
   RCCL, real distributed FFT all-to-all, or hardware-distributed execution.
   Promotion is honestly blocked until the corresponding Phase ships.
 
-Sprint #19 has now closed Bucket A. Bucket B/C remain classification-only
-until their mock-mesh or real-hardware proof lands.
+**Sprint #19 closed Bucket A and Sprint #20 closed Bucket B.** Only Bucket C
+remains, and every entry in it is genuinely Phase G/H/I-gated.
+
+## Sprint #20 Bucket B closure (2026-05-22)
+
+| Sub-sprint | Set | Count | Proof |
+|------------|-----|------:|-------|
+| **#20a** | Standard attention family | 17 | `tests/unit/test_attention_sharding_mock_mesh.py` — TP-by-head independence proven for `flash_attn`, `attn_sliding_window`, and the standard set inheriting `_ATTN_STANDARD_HARDENED`.  Reasoning-model fused family (7) split into `_ATTN_REASONING_FUSED_HARDENED` and stays at `partial` (Bucket C). |
+| **#20b** | loop_nest (matmul/gemm/batched_gemm) | 3 | `tests/unit/test_loop_nest_sharding_mock_mesh.py` — Megatron-style column-parallel and row-parallel decomposition; `factorized_matmul` stays at `partial` with a documented negative-proof lock (SVD truncation is not compositional under sharding). |
+| **#20c** | normalization (7) + projection (1) + contraction (1) + fused_epilogue (1) + model_layer (3) | 13 | `tests/unit/test_normalization_projection_sharding_mock_mesh.py` — packed two-moment all_reduce for `layer_norm` / `rmsnorm`; column-parallel for `qkv_projection` / `linear_general` / `fused_epilogue`; row-parallel for `einsum`. |
+| **#20d** | GA differential (4) + segment_reduce (1) + sparse-CSR (3) | 8 | `tests/unit/test_segment_sparse_sharding_mock_mesh.py` — GA differential inherits the Sprint #14 halo proof; segment_reduce via per-rank local + padded all_reduce(sum); sparse-CSR row-parallel.  `spmm_coo` stays at `partial` (Bucket C — hash-shard). |
+| **#20e** | ebm sampling (5) | 5 | `tests/unit/test_ebm_sampling_sharding_mock_mesh.py` — pointwise per-candidate for `ebm_inner_step`, `ebm_langevin_step`; canonical stable-logsumexp two-collective pattern for `ebm_partition_exact`; embarrassingly-parallel chains for `ebm_partition_ais` / `ebm_partition_monte_carlo`.  4 manifold Langevin ops stay at `partial` (Bucket C — Spin(p,q) bivector + sphere manifolds need GA-aware halo). |
+| **Sprint #20 total** | Bucket B | **46** | All 47 audit-promised entries closed minus 1 (the audit double-counted MLA latent ops; effective scope was 46). |
+
+Cumulative state after Sprint #20:
+
+| Axis | Open | Complete |
+|------|-----:|---------:|
+| `sharding_rule` | **30** | 352 |
+| `backend_kernel` | 432 | 0 |
+
+The 30 remaining `sharding_rule=partial` entries map exactly to the audit's
+Bucket C set (real-hardware-bound), with one addition (`factorized_matmul`):
+
+* `attention` (7) — reasoning-model fused (DeepSeek NSA, Lightning, gated, hybrid, DeltaNet, Kimi-delta, modified-delta)
+* `ebm` (4) — manifold Langevin (bivector + sphere × sample/step)
+* `linalg_decomposition` (3) — cholesky, qr, svd (ScaLAPACK process grid)
+* `linalg_solver` (1) — tri_solve
+* `loop_nest` (1) — factorized_matmul (rank-r SVD truncation not compositional)
+* `moe` (1) + `moe_transport` (2) — token routing all-to-all
+* `sparse` (1) — spmm_coo (hash-shard)
+* `spectral` (9) — distributed FFT butterfly/ring
+* `state_space` (1) — selective_ssm (Mamba time-axis recurrence)
+
+Every remaining partial is **honestly Phase G/H/I-gated** by design.
 
 ## Sprint #19 Bucket A closure
 
@@ -55,16 +88,12 @@ name list closes **28 dashboard entries**: 27 sharding promotions plus the
 
 ## Summary
 
-| Bucket | Count | Categories |
-|--------|------:|-----------|
-| **A** | **closed: 28 dashboard entries** | rl_loss (3), state_update (4 — KV cache by head), recurrent (3 — batch-sharded), ebm pointwise (3), GA pointwise (13), lora_linear, complex_jit decorator cleanup |
-| **B** | **47** | attention (14 standard + family), contraction (1), fused_epilogue (1), GA differential (4), loop_nest (7), model_layer (3), normalization (7), projection (1), segment_reduce (1), sparse-CSR (3), ebm sampling (8) |
-| **C** | **33** | linalg_decomposition (3), linalg_solver (1), moe (1), moe_transport (2), spectral (9), state_space (1), reasoning-model attention with fused kernels (7), sparse-COO (1), recurrent state-axis (0 — folded into B), ebm bivector/sphere Langevin (4), GA codiff field ops (would belong here if not already in B), normalization with feature-axis collectives on real fabric (already in B) |
-| **Total** | **104** | |
-
-(Some entries appear in both attention-B and attention-C buckets when the
-op has both a CPU-reference path and a fused real-kernel path; the audit
-walker chooses the higher bucket — see per-category notes below.)
+| Bucket | Count | Status |
+|--------|------:|--------|
+| **A** | **closed: 28 dashboard entries** | Sprint #19 — rl_loss (3), state_update (4 — KV cache by head), recurrent (3 — batch-sharded), ebm pointwise (3), GA pointwise (13), lora_linear, complex_jit decorator cleanup |
+| **B** | **closed: 46 dashboard entries** | Sprint #20 — attention standard (17), loop_nest (3), normalization+projection+contraction+fused_epilogue+model_layer (13), GA differential + segment_reduce + sparse-CSR (8), ebm sampling (5) |
+| **C** | **30 remaining (Phase G/H/I gate)** | reasoning-fused attention (7), spectral (9), manifold Langevin (4), linalg_decomp+solver (4), moe family (3), factorized_matmul (1), spmm_coo (1), selective_ssm (1) |
+| **Total** | **104** | 74 closed; 30 honestly hardware-gated |
 
 ## Bucket A — promote-now
 

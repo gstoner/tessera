@@ -16,7 +16,7 @@
 |---|---:|---:|
 | `batching_rule` | 36 | 396 |
 | `transpose_rule` | 40 | 392 |
-| `sharding_rule` | 56 | 376 |
+| `sharding_rule` | 30 | 402 |
 | `lowering_rule` | 0 | 432 |
 | `backend_kernel` | 432 | 0 |
 
@@ -31,37 +31,37 @@
 | S5 | `control_flow` | 7 | — | — | — | — | 7 |
 | S7 | `attention` | 21 | — | — | 7 | — | 21 |
 | S7 | `position_encoding` | 2 | — | — | — | — | 2 |
-| S7 | `normalization` | 7 | — | — | 7 | — | 7 |
+| S7 | `normalization` | 7 | — | — | — | — | 7 |
 | S7 | `memory` | 3 | — | — | — | — | 3 |
-| S7 | `geometric_algebra` | 17 | — | — | 4 | — | 17 |
+| S7 | `geometric_algebra` | 17 | — | — | — | — | 17 |
 | S10 | `optimizer` | 3 | 3 | 3 | — | — | 3 |
 | S10 | `schedule` | 8 | — | — | — | — | 8 |
 | S10 | `grad_transform` | 7 | — | — | — | — | 7 |
 | S11 | `loss` | 26 | — | — | — | — | 26 |
 | S11 | `rl_loss` | 4 | — | — | — | — | 4 |
-| M6 | `ebm` | 12 | — | 12 | 9 | — | 12 |
+| M6 | `ebm` | 12 | — | 12 | 4 | — | 12 |
 | S15 | `data` | 11 | — | — | — | — | 11 |
 | S15 | `tokenizer` | 5 | — | — | — | — | 5 |
 | other | `aot` | 6 | — | — | — | — | 6 |
 | other | `collective` | 10 | 10 | — | — | — | 10 |
 | other | `conformance` | 4 | — | — | — | — | 4 |
-| other | `contraction` | 1 | — | — | 1 | — | 1 |
+| other | `contraction` | 1 | — | — | — | — | 1 |
 | other | `elementwise` | 48 | — | — | — | — | 48 |
 | other | `extension` | 6 | — | — | — | — | 6 |
 | other | `functional_optimizer_step` | 6 | 6 | 6 | — | — | 6 |
-| other | `fused_epilogue` | 1 | — | — | 1 | — | 1 |
+| other | `fused_epilogue` | 1 | — | — | — | — | 1 |
 | other | `indexing` | 9 | — | — | — | — | 9 |
 | other | `layout_transform` | 14 | — | — | — | — | 14 |
 | other | `linalg_decomposition` | 3 | 3 | 3 | 3 | — | 3 |
 | other | `linalg_solver` | 1 | 1 | 1 | 1 | — | 1 |
 | other | `logical` | 8 | — | — | — | — | 8 |
 | other | `loop_nest` | 7 | — | — | 1 | — | 7 |
-| other | `model_layer` | 4 | — | — | 3 | — | 4 |
+| other | `model_layer` | 4 | — | — | — | — | 4 |
 | other | `moe` | 1 | 1 | 1 | 1 | — | 1 |
 | other | `moe_transport` | 2 | 2 | 2 | 2 | — | 2 |
 | other | `numerics` | 1 | — | — | — | — | 1 |
 | other | `pooling` | 4 | — | 4 | — | — | 4 |
-| other | `projection` | 1 | — | — | 1 | — | 1 |
+| other | `projection` | 1 | — | — | — | — | 1 |
 | other | `quantization` | 6 | — | — | — | — | 6 |
 | other | `quantize` | 8 | — | — | — | — | 8 |
 | other | `random_mask` | 1 | — | — | — | — | 1 |
@@ -69,11 +69,11 @@
 | other | `recurrent` | 3 | 3 | 3 | — | — | 3 |
 | other | `rng` | 18 | — | — | — | — | 18 |
 | other | `rotary_embedding` | 1 | — | — | — | — | 1 |
-| other | `segment_reduce` | 1 | 1 | 1 | 1 | — | 1 |
+| other | `segment_reduce` | 1 | 1 | 1 | — | — | 1 |
 | other | `serialization` | 6 | — | — | — | — | 6 |
 | other | `sharding` | 3 | — | — | — | — | 3 |
 | other | `sort` | 3 | — | — | — | — | 3 |
-| other | `sparse` | 4 | 4 | 4 | 4 | — | 4 |
+| other | `sparse` | 4 | 4 | 4 | 1 | — | 4 |
 | other | `spectral` | 9 | — | — | 9 | — | 9 |
 | other | `stable_reduction` | 9 | — | — | — | — | 9 |
 | other | `state_space` | 1 | 1 | — | 1 | — | 1 |
@@ -88,12 +88,12 @@
 |---|---:|---:|---:|---:|---:|
 | S2 | 54 | 0 | 0 | 0 | 54 |
 | S5 | 7 | 0 | 0 | 0 | 7 |
-| S7 | 50 | 0 | 0 | 18 | 50 |
+| S7 | 50 | 0 | 0 | 7 | 50 |
 | S10 | 18 | 3 | 3 | 0 | 18 |
 | S11 | 30 | 0 | 0 | 0 | 30 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
-| M6 | 12 | 0 | 12 | 9 | 12 |
-| other | 245 | 33 | 25 | 29 | 245 |
+| M6 | 12 | 0 | 12 | 4 | 12 |
+| other | 245 | 33 | 25 | 19 | 245 |
 
 ## Closure trajectory
 

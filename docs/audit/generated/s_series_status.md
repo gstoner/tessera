@@ -15,8 +15,8 @@
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
 | `batching_rule` | 36 | 397 |
-| `transpose_rule` | 158 | 275 |
-| `sharding_rule` | 189 | 244 |
+| `transpose_rule` | 41 | 392 |
+| `sharding_rule` | 104 | 329 |
 | `lowering_rule` | 0 | 433 |
 | `backend_kernel` | 433 | 0 |
 
@@ -24,25 +24,25 @@
 
 | sprint | category | total | batching | transpose | sharding | lowering | backend |
 |---|---|---:|---:|---:|---:|---:|---:|
-| S2 | `tensor_algebra` | 19 | — | 19 | 19 | — | 19 |
+| S2 | `tensor_algebra` | 19 | — | — | — | — | 19 |
 | S2 | `reduction` | 14 | — | — | — | — | 14 |
 | S2 | `comparison` | 6 | — | — | — | — | 6 |
 | S2 | `numeric_helper` | 15 | — | — | — | — | 15 |
-| S5 | `control_flow` | 7 | — | 7 | 7 | — | 7 |
-| S7 | `attention` | 21 | — | 21 | 21 | — | 21 |
+| S5 | `control_flow` | 7 | — | — | — | — | 7 |
+| S7 | `attention` | 21 | — | — | 21 | — | 21 |
 | S7 | `position_encoding` | 2 | — | — | — | — | 2 |
 | S7 | `normalization` | 7 | — | — | 7 | — | 7 |
 | S7 | `memory` | 3 | — | — | — | — | 3 |
-| S7 | `geometric_algebra` | 17 | — | 17 | 17 | — | 17 |
+| S7 | `geometric_algebra` | 17 | — | — | 17 | — | 17 |
 | S10 | `optimizer` | 3 | 3 | 3 | — | — | 3 |
 | S10 | `schedule` | 8 | — | — | — | — | 8 |
-| S10 | `grad_transform` | 7 | — | 7 | 7 | — | 7 |
+| S10 | `grad_transform` | 7 | — | — | — | — | 7 |
 | S11 | `loss` | 26 | — | — | — | — | 26 |
 | S11 | `rl_loss` | 4 | — | — | 3 | — | 4 |
 | M6 | `ebm` | 12 | — | 12 | 12 | — | 12 |
 | M7 | `visual_complex` | 1 | — | 1 | 1 | — | 1 |
-| S15 | `data` | 11 | — | — | 11 | — | 11 |
-| S15 | `tokenizer` | 5 | — | — | 5 | — | 5 |
+| S15 | `data` | 11 | — | — | — | — | 11 |
+| S15 | `tokenizer` | 5 | — | — | — | — | 5 |
 | other | `aot` | 6 | — | — | — | — | 6 |
 | other | `collective` | 10 | 10 | — | — | — | 10 |
 | other | `conformance` | 4 | — | — | — | — | 4 |
@@ -51,20 +51,20 @@
 | other | `extension` | 6 | — | — | — | — | 6 |
 | other | `functional_optimizer_step` | 6 | 6 | 6 | — | — | 6 |
 | other | `fused_epilogue` | 1 | — | — | 1 | — | 1 |
-| other | `indexing` | 9 | — | 9 | 9 | — | 9 |
-| other | `layout_transform` | 14 | — | 12 | 12 | — | 14 |
+| other | `indexing` | 9 | — | — | — | — | 9 |
+| other | `layout_transform` | 14 | — | — | — | — | 14 |
 | other | `linalg_decomposition` | 3 | 3 | 3 | 3 | — | 3 |
 | other | `linalg_solver` | 1 | 1 | 1 | 1 | — | 1 |
 | other | `logical` | 8 | — | — | — | — | 8 |
-| other | `loop_nest` | 7 | — | 3 | 7 | — | 7 |
+| other | `loop_nest` | 7 | — | — | 7 | — | 7 |
 | other | `model_layer` | 4 | — | — | 4 | — | 4 |
 | other | `moe` | 1 | 1 | 1 | 1 | — | 1 |
 | other | `moe_transport` | 2 | 2 | 2 | 2 | — | 2 |
 | other | `numerics` | 1 | — | — | — | — | 1 |
-| other | `pooling` | 4 | — | 4 | 4 | — | 4 |
+| other | `pooling` | 4 | — | 4 | — | — | 4 |
 | other | `projection` | 1 | — | — | 1 | — | 1 |
-| other | `quantization` | 6 | — | 6 | — | — | 6 |
-| other | `quantize` | 8 | — | 8 | — | — | 8 |
+| other | `quantization` | 6 | — | — | — | — | 6 |
+| other | `quantize` | 8 | — | — | — | — | 8 |
 | other | `random_mask` | 1 | — | — | — | — | 1 |
 | other | `random_source` | 2 | — | — | — | — | 2 |
 | other | `recurrent` | 3 | 3 | 3 | 3 | — | 3 |
@@ -73,29 +73,29 @@
 | other | `segment_reduce` | 1 | 1 | 1 | 1 | — | 1 |
 | other | `serialization` | 6 | — | — | — | — | 6 |
 | other | `sharding` | 3 | — | — | — | — | 3 |
-| other | `sort` | 3 | — | — | 3 | — | 3 |
+| other | `sort` | 3 | — | — | — | — | 3 |
 | other | `sparse` | 4 | 4 | 4 | 4 | — | 4 |
 | other | `spectral` | 9 | — | — | 9 | — | 9 |
 | other | `stable_reduction` | 9 | — | — | — | — | 9 |
 | other | `state_space` | 1 | 1 | — | 1 | — | 1 |
 | other | `state_tree` | 10 | — | — | — | — | 10 |
 | other | `state_update` | 4 | 1 | — | 4 | — | 4 |
-| other | `stencil` | 8 | — | 8 | 8 | — | 8 |
+| other | `stencil` | 8 | — | — | — | — | 8 |
 | other | `transform` | 11 | — | — | — | — | 11 |
 
 ## Roll-up by sprint
 
 | Sprint | Primitives | Open batching | Open transpose | Open sharding | Open backend |
 |---|---:|---:|---:|---:|---:|
-| S2 | 54 | 0 | 19 | 19 | 54 |
-| S5 | 7 | 0 | 7 | 7 | 7 |
-| S7 | 50 | 0 | 38 | 45 | 50 |
-| S10 | 18 | 3 | 10 | 7 | 18 |
+| S2 | 54 | 0 | 0 | 0 | 54 |
+| S5 | 7 | 0 | 0 | 0 | 7 |
+| S7 | 50 | 0 | 0 | 45 | 50 |
+| S10 | 18 | 3 | 3 | 0 | 18 |
 | S11 | 30 | 0 | 0 | 3 | 30 |
-| S15 | 16 | 0 | 0 | 16 | 16 |
+| S15 | 16 | 0 | 0 | 0 | 16 |
 | M6 | 12 | 0 | 12 | 12 | 12 |
 | M7 | 1 | 0 | 1 | 1 | 1 |
-| other | 245 | 33 | 71 | 79 | 245 |
+| other | 245 | 33 | 25 | 43 | 245 |
 
 ## Closure trajectory
 

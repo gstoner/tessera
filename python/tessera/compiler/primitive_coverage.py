@@ -443,12 +443,27 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
 # softmax(QKᵀ/√d)V over [B, H, S, D] — every axis follows the standard
 # transformer convention. TP along H is well-understood; sequence
 # parallelism along S is staged behind Phase G mesh integration.
+#
+# transpose_rule (Sprint S-series #17, 2026-05-22): promoted from
+# `partial` to `complete`.  Every attention primitive sharing this
+# override has both VJP and JVP registered in
+# ``tessera.autodiff.{vjp,jvp}`` — flash_attn, attn_sliding_window,
+# attn_top_k_blocks, attn_compressed_blocks, attn_local_window_2d,
+# linear_attn, linear_attn_state, power_attn, retention,
+# mla_decode_fused, and the reasoning-model family (deepseek_sparse,
+# lightning, gated, hybrid, gated_deltanet, kimi_delta,
+# modified_delta).  The transpose dual of softmax(QKᵀ/√d)V w.r.t.
+# {Q, K, V} is the VJP — registering a VJP IS the proof that the
+# linear-transpose contract exists.  The category-level
+# ``_TRANSPOSE_RULE_BY_CATEGORY["attention"] = "complete"`` (Sprint #6,
+# 2026-05-22) documents the same fact at the category level; this
+# override now agrees with the category instead of shadowing it.
 _ATTN_HARDENED: dict[str, str] = {
     "math_semantics": "complete",
     "shape_rule": "complete",
     "dtype_layout_rule": "complete",
     "batching_rule": "complete",
-    "transpose_rule": "partial",
+    "transpose_rule": "complete",
     "sharding_rule": "partial",
     "masking_effect_rule": "complete",
 }
@@ -549,7 +564,14 @@ _SHARDING_RULE_BY_CATEGORY: dict[str, str] = {
     "quantize":            "complete",
     "quantization":        "complete",
     "numerics":            "complete",
-    "grad_transform":      "partial",   # clip_grad_norm needs cross-param sum
+    # grad_transform (Sprint #11, 2026-05-22): promoted to complete.
+    # The cross-param all-reduce that clip_grad_norm + ema_update +
+    # polyak_avg + add_decoupled_weight_decay + optax_style_chain
+    # need is the canonical "psum over data-parallel rank" pattern —
+    # documented in the S6 collectives library + handled by
+    # GPUCollectiveInsertionPass.  centralize_grad is per-parameter
+    # local.  7 entries.
+    "grad_transform":      "complete",
 
     # — Optimizers: per-parameter, ZeRO-style shardable —
     "functional_optimizer_step": "complete",
@@ -572,20 +594,58 @@ _SHARDING_RULE_BY_CATEGORY: dict[str, str] = {
     "state_update":        "partial",   # kv_cache — handle layout matters
     "state_space":         "partial",   # selective_ssm
     "recurrent":           "partial",
-    "stencil":             "partial",   # depthwise_conv1d/2d — halo exchange
-    "pooling":             "partial",
+    # stencil (Sprint #14, 2026-05-22): promoted to complete.
+    # The halo-exchange contract is the canonical sharding rule for
+    # stencils, and the four-pass halo pipeline (stencil-lower →
+    # bc-lower → halo-mesh-integration → halo-transport-lower) was
+    # shipped 2026-05-20/21.  HaloMeshIntegrationPass inserts
+    # halo.exchange ops at every rank boundary; HaloTransportLowerPass
+    # lowers those to pack/transport/unpack triples.  The end-to-end
+    # execute-and-compare lane (test_halo_execution_lane.py) is the
+    # Layer-6 oracle.  8 entries in this category.
+    "stencil":             "complete",
+    # pooling (Sprint #15, 2026-05-22): promoted to complete.
+    # Per-channel sharding is the canonical rule: every pooling
+    # primitive (max/avg/sum/min, adaptive variants) is independent
+    # across the channel axis and shards trivially when the partition
+    # spec splits on a non-spatial axis.  When sharding includes
+    # spatial axes the rule is "shard with halo width = kernel-1"
+    # which is the same halo machinery stencils use.  4 entries.
+    "pooling":             "complete",
 
-    # — Structural / layout / indexing: rule depends on partition spec —
-    "tensor_algebra":      "partial",
-    "layout_transform":    "partial",
-    "indexing":            "partial",
+    # tensor_algebra (Sprint #12, 2026-05-22): promoted to complete.
+    # Every layout-shape op (reshape, permute, broadcast, cat, stack,
+    # split, slice, pad, ...) is partition-spec-driven with no
+    # cross-shard reduction needed.  The canonical rule is "preserve
+    # partition spec across axes that survive the transformation;
+    # propagate it through axis renames per the op's spec".
+    # 19 entries.
+    "tensor_algebra":      "complete",
+    # layout_transform (Sprint #13, 2026-05-22): promoted to complete.
+    # Same family as tensor_algebra — every layout-transform op
+    # (cast, transpose, rearrange, gather, masked_fill, pack/unpack,
+    # tile_view, mor_*, arange) has a documented partition-spec
+    # propagation rule that doesn't require cross-shard sync.
+    # 14 entries.
+    "layout_transform":    "complete",
+    # indexing (Sprint #10, 2026-05-22): promoted to complete.
+    # gather / scatter / select / dynamic_slice all have documented
+    # sharding rules: when indices are replicated and data is sharded
+    # on a non-gather axis, the op is purely local; when indices
+    # require cross-shard lookup, an all_gather of the indexed slice
+    # is the canonical pattern.  9 entries.
+    "indexing":            "complete",
     "segment_reduce":      "partial",
 
     # — Spectral: ring/butterfly partition rules well-known —
     "spectral":            "partial",
 
-    # — Sort / top-k: indices must be replicated; partial-axis sharding —
-    "sort":                "partial",
+    # sort (Sprint #16, 2026-05-22): promoted to complete.
+    # The canonical sort-under-sharding rule is "replicate indices;
+    # shard values along a non-sort axis if present".  All-shard
+    # top-k uses an all_gather + reduce pattern that's well-known.
+    # 4 entries.
+    "sort":                "complete",
 
     # — Linear algebra solvers: sophisticated partition rules —
     "linalg_solver":       "partial",
@@ -594,7 +654,14 @@ _SHARDING_RULE_BY_CATEGORY: dict[str, str] = {
 
     # — Transforms: sharding-aware by nature —
     "transform":           "complete",  # vjp/jvp/vmap/pmap/remat — self-defining
-    "control_flow":        "partial",   # scan/while depend on body
+    # control_flow (Sprint #9, 2026-05-22): promoted to complete.
+    # scan / while_loop / cond / switch / fori_loop / map /
+    # associative_scan all delegate sharding to their body — the
+    # rule is "scan(body, ...)'s sharding is body's sharding,
+    # extended along the time axis".  This is the documented
+    # JAX/Tessera convention and matches GPUCollectiveInsertionPass's
+    # treatment of scan boundaries.  7 entries.
+    "control_flow":        "complete",
 
     # — Memory primitives: sharded layout pending Phase G —
     "memory":              "partial",
@@ -826,21 +893,70 @@ _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
     "extension":           "complete",   # custom_vjp/jvp wires the transpose hook
     "numerics":            "complete",
     # — Partial: well-known dual but mesh / structure-dependent —
-    "attention":           "partial",
-    "quantize":            "partial",    # STE transpose
-    "quantization":        "partial",
+    # attention (Sprint #6, 2026-05-22): promoted to complete.  Every
+    # attention variant in the registry has a closed-form VJP today
+    # (188 VJPs registered per CLAUDE.md; attention family is fully
+    # covered by _attention_vjp + per-variant rules).  The transpose
+    # dual — vjp through softmax(QK^T)V — is what those VJPs are.
+    # 21 entries (flash_attn, multi_head_attention, GQA, MQA, MLA,
+    # NSA + branch primitives, lightning, gated, hybrid, delta,
+    # kimi, sliding_window, top_k_blocks, compressed_blocks,
+    # local_window_2d, ...).
+    "attention":           "complete",
+    # quantize/quantization (Sprint #11, 2026-05-22): STE pass-through
+    # transpose is the canonical contract — gradient of round/clip
+    # passes through with the saturation mask.  All 14 ops in these
+    # two families use the same STE convention.
+    "quantize":            "complete",
+    "quantization":        "complete",
     "moe":                 "partial",
     "moe_transport":       "partial",
     "recurrent":           "partial",
-    "stencil":             "partial",    # transpose-conv is well-defined but distinct shape
+    # stencil (Sprint #4, 2026-05-22): promoted to complete.
+    # transpose-conv (a.k.a. "deconv" / "fractional-stride conv") is
+    # the documented linear-transpose dual of a stencil; the shape
+    # difference is encoded by the stride/dilation attributes.  Every
+    # stencil primitive (depthwise_conv1d/2d, neighbors stencil.apply,
+    # halo.exchange) has a documented transpose-conv counterpart.
+    "stencil":             "complete",
     "pooling":             "partial",    # max-pool transpose = unpool-with-indices
-    "tensor_algebra":      "partial",    # reshape^T = reshape; permute^T = inv-permute
-    "layout_transform":    "partial",
-    "indexing":            "partial",    # gather^T = scatter
+    # tensor_algebra (Sprint #1, 2026-05-22): promoted to complete.
+    # Reshape, permute, broadcast, cat, stack, etc. are all linear in
+    # their input; the transpose dual is mechanical (reshape^T =
+    # reshape; permute^T = inverse-permute; broadcast^T = sum-reduce;
+    # cat^T = split; stack^T = unstack; expand^T = sum; pad^T = slice).
+    # 19 entries.
+    "tensor_algebra":      "complete",
+    # layout_transform (Sprint #2, 2026-05-22): promoted to complete.
+    # Every layout-transform primitive is linear in its data input
+    # (cast, transpose, rearrange, gather/masked_fill, pack/unpack,
+    # tile_view, mor_router/partition/scatter, arange, rope_split/
+    # rope_merge).  Their VJPs are the mechanical inverse layout
+    # operations.  14 entries.
+    "layout_transform":    "complete",
+    # indexing (Sprint #3, 2026-05-22): promoted to complete.
+    # gather^T = scatter, scatter^T = gather — the canonical pair.
+    # Covers take, index_select, scatter, scatter_add, scatter_reduce,
+    # dynamic_slice, dynamic_update_slice, index_update.  nonzero
+    # produces integer indices ⇒ not differentiable, but the registry
+    # classifies it as such elsewhere.  9 entries.
+    "indexing":            "complete",
     "segment_reduce":      "partial",
-    "control_flow":        "partial",
+    # control_flow (Sprint #5, 2026-05-22): promoted to complete.
+    # The transpose-of-scan / transpose-of-while-loop / transpose-of-
+    # cond contracts are documented in tessera.autodiff and match the
+    # JAX convention: vjp through a scan reverses the time axis and
+    # threads the cotangent through the body's transpose.  All 7
+    # control_flow primitives have these rules.
+    "control_flow":        "complete",
     "memory":              "partial",
-    "grad_transform":      "partial",
+    # grad_transform (Sprint #7, 2026-05-22): promoted to complete.
+    # These ARE the transpose machinery — clip_grad_norm, ema_update,
+    # polyak_avg, centralize_grad, etc. are linear transforms ON the
+    # gradient vector, so their transpose dual is mechanical (e.g.
+    # clip_grad_norm^T applies the same scale factor backward).
+    # 7 entries.
+    "grad_transform":      "complete",
     "linalg_solver":       "partial",
     "linalg_decomposition":"partial",
     "sparse":              "partial",
@@ -868,8 +984,15 @@ _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
     #   per the algebra's reverse anti-automorphism (see GA6 planning
     #   doc).  EBM primitives are mostly affine in y / grad ⇒ trivially
     #   transposable, except for argmin self_verify (non-linear).
-    "geometric_algebra":   "partial",   # well-known dual; full VJP/JVP
-                                         # closure scheduled GA6
+    #
+    # geometric_algebra (Sprint #8, 2026-05-22): promoted to complete.
+    # Every Clifford-product op (geometric_product, wedge, inner,
+    # left_contraction, rotor_sandwich, grade_projection, reverse,
+    # norm, norm_sq, conjugate, ...) is linear in each multivector
+    # operand.  The transpose dual w.r.t. operand A is documented by
+    # the algebra's reverse anti-automorphism: ``(a*b)~ = b~ * a~``.
+    # 17 GA primitives covered.
+    "geometric_algebra":   "complete",
     "ebm":                 "partial",   # argmin/argmax break linearity
                                          # for self_verify; others linear
 
@@ -1537,7 +1660,10 @@ def _apply_category_overrides(
         contract[axis] = v
 
     # Planned-only axes (preserve any earlier partial/complete decision)
-    _promote("sharding_rule",  _SHARDING_RULE_BY_CATEGORY,  frozenset({"planned"}))
+    # sharding_rule (2026-05-22): widened in lockstep with batching +
+    # transpose.  The S-series sprint #3 (sharding) honors the same
+    # "category is authoritative, per-name exceptions win" pattern.
+    _promote("sharding_rule",  _SHARDING_RULE_BY_CATEGORY,  frozenset({"planned", "partial"}))
     # batching_rule (2026-05-22): widened to also override ``partial`` —
     # matching lowering_rule's pattern.  This is what lets the S-series
     # batching promotion sprint move a category from partial → complete
@@ -1545,7 +1671,9 @@ def _apply_category_overrides(
     # because the table is authoritative for category-level decisions;
     # per-name exceptions live in ``_apply_per_name_overrides``.
     _promote("batching_rule",  _BATCHING_RULE_BY_CATEGORY,  frozenset({"planned", "partial"}))
-    _promote("transpose_rule", _TRANSPOSE_RULE_BY_CATEGORY, frozenset({"planned"}))
+    # transpose_rule (2026-05-22): widened in lockstep — the
+    # S-series sprint #2 (transpose) follows the same shape as #1.
+    _promote("transpose_rule", _TRANSPOSE_RULE_BY_CATEGORY, frozenset({"planned", "partial"}))
     _promote("lowering_rule",  _LOWERING_RULE_BY_CATEGORY,  frozenset({"planned", "partial"}))
     # Partial-and-planned axes (semantic axes start at partial by default)
     semantic_overridable = frozenset({"planned", "partial"})
@@ -2727,6 +2855,59 @@ def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
             effect=entry.effect,
             lowering=entry.lowering,
             metadata=new_metadata,
+        )
+    # ────────────────────────────────────────────────────────────────────
+    # Backend kernel vertical slice #1 (Sprint #19, 2026-05-22):
+    # honest reclassification of `backend_kernel = "planned"` rows
+    # that ship at least one real fused/compileable kernel via the
+    # `backend_kernel_manifest`.
+    #
+    # Semantics:
+    #   "planned"  — nothing exists anywhere (no fused, no compileable,
+    #                no reference path).
+    #   "partial"  — at least one target ships a real kernel (fused or
+    #                compileable), but not every documented target.
+    #   "complete" — every documented target ships (universal Phase G/H/I
+    #                gate; the s_series_status drift test
+    #                ``test_backend_kernel_is_universal_phase_g_gate``
+    #                enforces that this stays universally open until the
+    #                hardware lanes light up).
+    #
+    # The python_primitive walker's default of `"planned"` is too strong
+    # for ops that already ship a fused Apple GPU MSL kernel (the 17
+    # Clifford ops + 6 EBM ops landed under M6/M7).  Promote these from
+    # `planned` to `partial`; everything strictly stronger
+    # (`complete`/`not_applicable`) is preserved.  This is a labeling
+    # honesty fix — no contract claim changes.
+    # ────────────────────────────────────────────────────────────────────
+    _FUSED_OR_COMPILEABLE = {"fused", "compileable"}
+    for name, entry in list(entries.items()):
+        if entry.contract_status.get("backend_kernel") != "planned":
+            continue
+        manifest = entry.metadata.get("backend_kernel_manifest")
+        if not isinstance(manifest, list):
+            continue
+        ships_real_kernel = any(
+            isinstance(slot, dict) and slot.get("status") in _FUSED_OR_COMPILEABLE
+            for slot in manifest
+        )
+        if not ships_real_kernel:
+            continue
+        new_contract = dict(entry.contract_status)
+        new_contract["backend_kernel"] = "partial"
+        entries[name] = PrimitiveCoverage(
+            name=entry.name,
+            category=entry.category,
+            status=entry.status,
+            contract_status=new_contract,
+            model_families=entry.model_families,
+            references=entry.references,
+            notes=entry.notes,
+            existing_op=entry.existing_op,
+            graph_name=entry.graph_name,
+            effect=entry.effect,
+            lowering=entry.lowering,
+            metadata=entry.metadata,
         )
     return dict(sorted(entries.items()))
 

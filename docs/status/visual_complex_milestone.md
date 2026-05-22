@@ -1,5 +1,10 @@
-# Visual Complex Analysis (M7) — milestone status
+# Visual Complex Analysis (M7) — milestone status (engineering-internal)
 
+> **Engineering audit; not the public landing page.**  External
+> readers, partners, and downstream tooling should land on
+> [`docs/status/visual_complex.md`](visual_complex.md) (one-page
+> public status) and follow links back here for the engineering claims.
+>
 > **One-page canonical status.** Update this page when something
 > changes; everything else in the repo (READMEs, roadmap, audit) cites
 > the *claims* below rather than restating them.

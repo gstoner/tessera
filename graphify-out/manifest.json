@@ -1,0 +1,2257 @@
+{
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/tools/tessera-runtime-abi-smoke/runtime_abi_smoke.cpp": {
+    "mtime": 1779200574.3794575,
+    "ast_hash": "ff09e4d2e3743cfe205eee369ceb7d5e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/include/tessera/tsr_kernel.h": {
+    "mtime": 1777517247.4297175,
+    "ast_hash": "035365e8e4e7f5d23ab505815af742da",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/include/tessera/tsr_types.h": {
+    "mtime": 1777516995.9085002,
+    "ast_hash": "ac1a9d421881b4d34125a2fcb41f3430",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/include/tessera/tsr_status.h": {
+    "mtime": 1756618374.0,
+    "ast_hash": "af75235c61d55eb95aab70b0bd3f05f2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/include/tessera/tessera_runtime.h": {
+    "mtime": 1779192000.7887013,
+    "ast_hash": "60d33ded8f579596239d2d6b0d2b4d7c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/include/tessera/tsr_shape.h": {
+    "mtime": 1756618374.0,
+    "ast_hash": "cb7dbb7a838b41682b07b81bf9a575cc",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/include/tessera/tsr_version.h": {
+    "mtime": 1777828955.934867,
+    "ast_hash": "a58db6bd5adbe57dcce89a94d0b5cb9c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/tests/test_tile_reduction.cpp": {
+    "mtime": 1756618374.0,
+    "ast_hash": "59db08a03639fa711663ff5ea1b6f2e0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/tests/test_cpu_native.cpp": {
+    "mtime": 1778166068.2346919,
+    "ast_hash": "6240b40dca0df87c551e11a60daa88f4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/tests/test_runtime.cpp": {
+    "mtime": 1756618374.0,
+    "ast_hash": "2ce240e865d3fe4fc1715fe1b0cf8a95",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/src/tessera_runtime.cpp": {
+    "mtime": 1779202609.975732,
+    "ast_hash": "b736561caaa36abaffc6b615e5a4ba2c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/src/util/logging.h": {
+    "mtime": 1756618374.0,
+    "ast_hash": "0868be917e723339afc20e84fcda674d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/src/scheduler/tile_scheduler.h": {
+    "mtime": 1778165993.0071902,
+    "ast_hash": "b0265eb8c81c45a31717f395b4c0a7c7",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/src/scheduler/tile_scheduler.cpp": {
+    "mtime": 1778165999.6700783,
+    "ast_hash": "7b3b32e502c56856b19df1e811551e56",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/src/backend/base_backend.h": {
+    "mtime": 1779195605.8238645,
+    "ast_hash": "d19ba02675308e189b8a1347aa2b6e9b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/src/backend/cpu_backend.cpp": {
+    "mtime": 1779195410.2506728,
+    "ast_hash": "18215d937548145a8a2230237a9a5ec4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/src/backend/hip_backend.cpp": {
+    "mtime": 1779195638.8858159,
+    "ast_hash": "4e748aeb00ec30cec709421f7f0d1e59",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/src/backend/cuda_backend.cpp": {
+    "mtime": 1779195622.239757,
+    "ast_hash": "ef1b55f2ab1c453bfb5b1dffab8c2da8",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/ebm/tools/ts-ebm-opt.cpp": {
+    "mtime": 1779045852.790039,
+    "ast_hash": "c602a60252d0e3acb62d3b48b5dfe481",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/ebm/test/lit.cfg.py": {
+    "mtime": 1779040339.501659,
+    "ast_hash": "276287e34fad48866085f8c79fd48b65",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/ebm/include/tessera/EBM/EBMPasses.h": {
+    "mtime": 1779040297.475184,
+    "ast_hash": "41633622aa801205d4ac935207aa9523",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/ebm/include/tessera/EBM/EBMDialect.h": {
+    "mtime": 1779045584.1494968,
+    "ast_hash": "86836adaab717332abcb029097c8f86e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/ebm/lib/Passes/FuseEnergyGrad.cpp": {
+    "mtime": 1779045738.0342581,
+    "ast_hash": "a3d560f7c2e0f3ce108612325ea16e50",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/ebm/lib/Passes/CheckpointInnerLoop.cpp": {
+    "mtime": 1779045748.9161184,
+    "ast_hash": "6b64847d75ba6e3f06eb2bc2f728ff79",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/ebm/lib/Passes/Canonicalize.cpp": {
+    "mtime": 1779041425.9141078,
+    "ast_hash": "3b0db6125da7d5a1f90222cba8fe7982",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/ebm/lib/Passes/PipelineCandidates.cpp": {
+    "mtime": 1779045742.4475064,
+    "ast_hash": "e6ef7ff5db3e30be50436af0ae0ded45",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/ebm/lib/Dialect/EBM/EBMOps.cpp": {
+    "mtime": 1779045624.1765773,
+    "ast_hash": "132fdda97c969acb2325dbe43ec488f1",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/ebm/lib/Dialect/EBM/EBMDialect.cpp": {
+    "mtime": 1779045619.6774592,
+    "ast_hash": "316ff3e06123a9b42297eae15ba92872",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/clifford/tools/ts-clifford-opt.cpp": {
+    "mtime": 1779045805.4417043,
+    "ast_hash": "ba0151c586a7db7c8f28d0109cdb1084",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/clifford/test/lit.cfg.py": {
+    "mtime": 1779040180.1015396,
+    "ast_hash": "cb342ef4598aef2d3c63352b50da6c35",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/clifford/include/tessera/Clifford/CliffordPasses.h": {
+    "mtime": 1779040113.0320477,
+    "ast_hash": "13c3a7cb2083954678fe7cd5d40edf2f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/clifford/include/tessera/Clifford/CliffordDialect.h": {
+    "mtime": 1779045580.7550106,
+    "ast_hash": "b648cd09ba2bcf63ba6bc2bd7ec067af",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/clifford/lib/Passes/GradeFusion.cpp": {
+    "mtime": 1779040865.8615692,
+    "ast_hash": "f6f9b3cc9d2c8e8ee34471146a345d68",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/clifford/lib/Passes/RotorSandwichFold.cpp": {
+    "mtime": 1779040891.315807,
+    "ast_hash": "34a2d971c01e8aa4ec957cb6a7c9292b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/clifford/lib/Passes/CayleyTable.h": {
+    "mtime": 1779040811.683508,
+    "ast_hash": "68f07a2de4922de586a6752870fd079e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/clifford/lib/Passes/ExpandProductTable.cpp": {
+    "mtime": 1779045692.6075435,
+    "ast_hash": "763e9e9c9d07cb406eb4824d1ead423a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/clifford/lib/Passes/AnnotateAlgebra.cpp": {
+    "mtime": 1779040792.6576405,
+    "ast_hash": "3d4d584df65b9f815217d525bef38331",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/clifford/lib/Dialect/Clifford/CliffordOps.cpp": {
+    "mtime": 1779045615.7085204,
+    "ast_hash": "9898a349042563bb1d408f04567189e1",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/clifford/lib/Dialect/Clifford/CliffordDialect.cpp": {
+    "mtime": 1779045611.1650026,
+    "ast_hash": "2c22442a9172dfbaf5dc57c616c565dd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/passes/ImplicitLower.cpp": {
+    "mtime": 1777902402.2169137,
+    "ast_hash": "0d20303b0887bf3312641581294799e5",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/passes/SparsePrecond.cpp": {
+    "mtime": 1777342735.7312753,
+    "ast_hash": "70d92287e1c44eba68ed20a3ce81e299",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/passes/NewtonAutodiff.cpp": {
+    "mtime": 1777902406.527747,
+    "ast_hash": "7ad2ee81c5e3718e81af666ef5c4b4a1",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/passes/SparseSolverSpecialize.cpp": {
+    "mtime": 1777342742.6735678,
+    "ast_hash": "08e4a10fa4aba5fb171e7573872b6192",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/passes/RNGQMCPlan.cpp": {
+    "mtime": 1779293602.7862012,
+    "ast_hash": "93ad1856e109ebf7bdc9935f4e9d0286",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/passes/PeriodicHalo.cpp": {
+    "mtime": 1777902416.547076,
+    "ast_hash": "9c9a823ad385482246729d727be56728",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/passes/SolversPasses.h": {
+    "mtime": 1777260587.6531281,
+    "ast_hash": "3b6c4ab437d346b20a945fd0420119d9",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/passes/SolversPasses.cpp": {
+    "mtime": 1777902216.4821675,
+    "ast_hash": "16d0de88ff7f6ad773a76b1bf8a36e21",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/passes/SparseInspector.cpp": {
+    "mtime": 1777902222.015364,
+    "ast_hash": "0539da4598ec9d4f78a6e680cd8f8f9d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/passes/ContinuationGuard.cpp": {
+    "mtime": 1777342824.8964684,
+    "ast_hash": "95b1a28bcf9e57714c75566990fbe66c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/passes/ParamBatchPlan.cpp": {
+    "mtime": 1777902411.640678,
+    "ast_hash": "a695ae72307e0f754902fc37afcae56e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/passes/RNGStreamAssign.cpp": {
+    "mtime": 1777902397.8643854,
+    "ast_hash": "75e5e6bd6482f01bdc34f1659b926d08",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/passes/RNGLegalize.cpp": {
+    "mtime": 1777902391.0234969,
+    "ast_hash": "ec21fdae21672f627ea870ceccb90422",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/passes/TrigInit.cpp": {
+    "mtime": 1777902463.1115723,
+    "ast_hash": "6b16c0e82eaf2efc771199e332c72692",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/linalg/tools/tessera-opt/main.cpp": {
+    "mtime": 1777260772.5616863,
+    "ast_hash": "e86c6d6a88480b5a99bfc07385c8c1e1",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/linalg/include/tessera/Solvers/LinalgPasses.h": {
+    "mtime": 1777260500.2365007,
+    "ast_hash": "419ad248f4f3a7d323c6ef59315a9fff",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/linalg/include/tessera/Dialect/Solver/SolverDialect.h": {
+    "mtime": 1777902813.8000886,
+    "ast_hash": "783ea668cb9b64282fb81845b235bdaf",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/linalg/lib/Passes/IterativeRefinement.cpp": {
+    "mtime": 1777948837.4634404,
+    "ast_hash": "368f635e50df2c42f30ae1982e68eef9",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/linalg/lib/Passes/MixedPrecision.cpp": {
+    "mtime": 1777948830.1634724,
+    "ast_hash": "c7d4c0dab66526598b6a349ed6107551",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/linalg/lib/Dialect/SolverDialect.cpp": {
+    "mtime": 1779214433.215161,
+    "ast_hash": "a537462df3d9684987c2a70033351bfd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/test/TPP/lit.cfg.py": {
+    "mtime": 1779215936.5799584,
+    "ast_hash": "003f02b2d22c7a11f1f351b1f082336e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/include/tpp/InitTPP.h": {
+    "mtime": 1779156980.8359766,
+    "ast_hash": "7cda83f26b6676fbb0af85994ad0f470",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/InitTPP.cpp": {
+    "mtime": 1779157172.3625524,
+    "ast_hash": "9f5f3b1d08b30222bd66597cea125aec",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/Passes/LegalizeSpaceTime.cpp": {
+    "mtime": 1778071740.766464,
+    "ast_hash": "4f23a7c2c00c7faa4ebacf9ca1a00925",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/Passes/VectorizeTPP.cpp": {
+    "mtime": 1778071740.8750536,
+    "ast_hash": "37d154ddf6e32ff5124e32d96924ab50",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/Passes/DistributeHalo.cpp": {
+    "mtime": 1778071740.66671,
+    "ast_hash": "2f7a555c9866b6723270242056b77594",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/Passes/HaloInfer.cpp": {
+    "mtime": 1778071755.8392453,
+    "ast_hash": "55385773bc464c2e58a25702083a7bc8",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/Passes/FuseStencilTime.cpp": {
+    "mtime": 1778071740.7152548,
+    "ast_hash": "b70e2e790b21d0a06d1486e8f3616f4b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/Passes/AsyncPrefetch.cpp": {
+    "mtime": 1778071740.6168587,
+    "ast_hash": "a55385fb81ccff23c9ace58b32ea7d88",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/Passes/PassPipeline.cpp": {
+    "mtime": 1779157028.9227395,
+    "ast_hash": "833931f59f653493b44b199e6b8516b4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/Passes/LowerTPPToTargetIR.cpp": {
+    "mtime": 1778071740.8154185,
+    "ast_hash": "aaad33b601784e707fac14b4ccd74fda",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/Dialect/TPP/TPPDialect.cpp": {
+    "mtime": 1778072287.215158,
+    "ast_hash": "facc8efdab77ed8af03a8700a709127c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/Dialect/TPP/TPPTypes.cpp": {
+    "mtime": 1778072378.3799093,
+    "ast_hash": "c202de8fa4fb7701a40ca48cf48a8e7a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/Dialect/TPP/TPPOps.cpp": {
+    "mtime": 1778072371.752932,
+    "ast_hash": "8800bfdff2808fc34a16da3851b5cda7",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/Dialect/TPP/TPPAttrs.cpp": {
+    "mtime": 1778072365.8245485,
+    "ast_hash": "0797dde784c649ae68dc5d252b0d53cf",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/tools/ts-spectral-opt.cpp": {
+    "mtime": 1778472555.5595677,
+    "ast_hash": "ac3f64f4847d47e3f4922039ba4bdfe4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/test/lit.cfg.py": {
+    "mtime": 1757706156.0,
+    "ast_hash": "34a9e0727130c957d089e05f7b11a19e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/include/tessera/Spectral/SpectralPasses.h": {
+    "mtime": 1757706156.0,
+    "ast_hash": "64d51b0bad9d9264c810ee2750d2a468",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/include/tessera/Spectral/SpectralDialect.h": {
+    "mtime": 1757706156.0,
+    "ast_hash": "990c7a902e01022ee89a820d1776c16c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/benchmarks/correctness_microbench.cpp": {
+    "mtime": 1779293253.186745,
+    "ast_hash": "1da7622eb62feda41b50661fac3024fe",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/scripts/gen_roofline.py": {
+    "mtime": 1757706156.0,
+    "ast_hash": "4680ea810072e9c79d811656becc25fe",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/lib/Passes/Autotune.cpp": {
+    "mtime": 1778472496.7835546,
+    "ast_hash": "a64694cc3bde7b8752ced5ca9171e4d6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/lib/Passes/LowerToTargetIR.cpp": {
+    "mtime": 1778472516.6075473,
+    "ast_hash": "557d8e147120e13605dad4f868186e70",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/lib/Passes/TransposePlan.cpp": {
+    "mtime": 1778472475.1351938,
+    "ast_hash": "4531d0c59874fb84e50af7dd88800532",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/lib/Passes/DistributedFFT.cpp": {
+    "mtime": 1778472535.3614247,
+    "ast_hash": "8c6f168f7c25e0b75206eb2e29aaa609",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/lib/Passes/LegalizeSpectral.cpp": {
+    "mtime": 1778472427.6351771,
+    "ast_hash": "524fbac609baebd51d914ecc6629bd05",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/lib/Passes/SpectralMXP.cpp": {
+    "mtime": 1778472455.9150774,
+    "ast_hash": "d8e63131c0060b05024a3ae23dce3cce",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/lib/TargetHooks/CPU/StockhamRadix4.cpp": {
+    "mtime": 1757706156.0,
+    "ast_hash": "c46d87d9dfe0819e7baab0bc0e9d4231",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/lib/Dialect/Spectral/SpectralOps.cpp": {
+    "mtime": 1757706156.0,
+    "ast_hash": "2ed2880ed7fe587f28bd01482423e17d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/lib/Dialect/Spectral/SpectralDialect.cpp": {
+    "mtime": 1757706156.0,
+    "ast_hash": "bc7106a38f97f840d797dea7403972d1",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/scaling_resilience/include/tessera/sr/Passes.h": {
+    "mtime": 1757967018.0,
+    "ast_hash": "860380bafbf51ff1e3ff95a092a8fa27",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/scaling_resilience/include/tessera/sr/Dialect.h": {
+    "mtime": 1757967018.0,
+    "ast_hash": "7c10c6e5a1df764058dae50f30d9b665",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/scaling_resilience/docs/manifest.schema.json": {
+    "mtime": 1757967018.0,
+    "ast_hash": "a61f3b100f0f63465f01b523a6e0e603",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/scaling_resilience/lib/sr/passes/OptimizerShardPass.cpp": {
+    "mtime": 1778071353.7662728,
+    "ast_hash": "3564338c69d9f0dbfaa96e96792ab9aa",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/scaling_resilience/lib/sr/passes/ExportDeploymentManifestPass.cpp": {
+    "mtime": 1778071397.8988566,
+    "ast_hash": "7eaf84d790f831777c973790288efa2d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/scaling_resilience/lib/sr/passes/ResilienceRestartPass.cpp": {
+    "mtime": 1778071326.494023,
+    "ast_hash": "fcb2d2a10dc0de334892e8d04eaa4372",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/scaling_resilience/lib/sr/passes/RegisterPasses.cpp": {
+    "mtime": 1778071423.8203495,
+    "ast_hash": "ee829e18d2f7eba2d29f5b117b46bf2a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/scaling_resilience/lib/sr/passes/InsertRecomputePass.cpp": {
+    "mtime": 1778071317.0307727,
+    "ast_hash": "df6257be9908804c60a357ab634f41a6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/scaling_resilience/lib/sr/dialect/SROps.cpp": {
+    "mtime": 1757967018.0,
+    "ast_hash": "e2819c3cfd66e41a2a9ea463f63d7a7d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/scaling_resilience/lib/sr/dialect/SRDialect.cpp": {
+    "mtime": 1757967018.0,
+    "ast_hash": "0b675fb451fb95b7053f96d0060f9e9f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/include/Tessera/Transforms/Passes.h": {
+    "mtime": 1778454846.1818447,
+    "ast_hash": "567de1c9e2c1cce0eb370d71fd7556fd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/TilingPass.cpp": {
+    "mtime": 1777949197.1097689,
+    "ast_hash": "2e1c1a977cac730bb58b32391dbb84ec",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/AutodiffPass.cpp": {
+    "mtime": 1778364999.804978,
+    "ast_hash": "0d17ad013c1db045f95bf7ccf4075ba6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/SwigluFusionPass.cpp": {
+    "mtime": 1778373293.3173294,
+    "ast_hash": "96a8b034503d958ec2804c993592073f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/VerifyTesseraIR.cpp": {
+    "mtime": 1777949472.7532184,
+    "ast_hash": "bd255fc71093b199a6e56b2973755c94",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/MLAFusionPass.cpp": {
+    "mtime": 1778384210.2734983,
+    "ast_hash": "ef02cd00b477404f245891f31bd0fce5",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/DistributionLoweringPass.cpp": {
+    "mtime": 1777949182.4770105,
+    "ast_hash": "1bd3a795e3b462db03fb80728a508e43",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/CanonicalizeTesseraIR.cpp": {
+    "mtime": 1777949437.489651,
+    "ast_hash": "3e037251bd3ab22b4db2c02a8edfea3b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/PipelineStageInsertionPass.cpp": {
+    "mtime": 1777949261.5630403,
+    "ast_hash": "f0f2c54ca5b7eea3ef22aa88022188e0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/Passes.cpp": {
+    "mtime": 1778514218.5825584,
+    "ast_hash": "6aa0fd568f9c3c03cad2fb550abf3b4e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/MigrateTesseraIR.cpp": {
+    "mtime": 1777949480.2481947,
+    "ast_hash": "f29cd33a2fa50d960daa0bb0337335f8",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/NativeSparseAttnFusionPass.cpp": {
+    "mtime": 1778384988.6450045,
+    "ast_hash": "3ed75cdca2a3795f17b57c2477fda232",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/GPUCollectiveInsertionPass.cpp": {
+    "mtime": 1777949256.4786398,
+    "ast_hash": "5b466aaf0cc75d3a0ed1580c456649de",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/TileIRLoweringPass.cpp": {
+    "mtime": 1777949206.3385222,
+    "ast_hash": "344130764afe9bebf8a32c35a05d9d69",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/AdjointCollectiveInsertionPass.cpp": {
+    "mtime": 1778364805.6318336,
+    "ast_hash": "95ac5b07a1e987b0f5e078ad9180ade3",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/AttentionFamilyPasses.cpp": {
+    "mtime": 1778454860.5223076,
+    "ast_hash": "c20ed96ed6ccd75eba1b1501e554087b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/TileToX86Pass.cpp": {
+    "mtime": 1778422190.5979156,
+    "ast_hash": "f8cf8d8a5b6220fd1e71a1baf069ca32",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/EffectAnnotationPass.cpp": {
+    "mtime": 1777949189.515035,
+    "ast_hash": "52df611c24915e1e2076c7d14b38ec31",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/tools/tessera-trace-demo/trace_demo.cpp": {
+    "mtime": 1757125850.0,
+    "ast_hash": "5f512f660ef0e81dbba6fce31cb1208d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/tools/tessera-collective-opt/tessera-collective-opt.cpp": {
+    "mtime": 1757125850.0,
+    "ast_hash": "ccc533a19463715fd6336bbd1775d328",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/tools/tessera-exec-demo/exec_demo.cpp": {
+    "mtime": 1757125850.0,
+    "ast_hash": "3c231dc4909c08f34a81546ee07573a6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/tools/tessera-collective-runtime-smoke/runtime_smoke.cpp": {
+    "mtime": 1779194422.5663013,
+    "ast_hash": "7a2960f8d6411df23043effcb57c4c01",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/include/tessera/Dialect/Collective/Runtime/Adapters.h": {
+    "mtime": 1777303398.9776902,
+    "ast_hash": "aff8450b4c2c66e84119e776dde8c3b8",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/include/tessera/Dialect/Collective/Runtime/Policy.h": {
+    "mtime": 1757125850.0,
+    "ast_hash": "fe1ebaab3301242e9017504317376477",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/include/tessera/Dialect/Collective/Runtime/Execution.h": {
+    "mtime": 1779195321.066878,
+    "ast_hash": "5b7063231a29eedb6ec165c6e92739b7",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/include/tessera/Dialect/Collective/Runtime/PerfettoTrace.h": {
+    "mtime": 1779192749.8764832,
+    "ast_hash": "85e844efa959e6cabf629e595ca79b62",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/include/tessera/Dialect/Collective/Runtime/Packing.h": {
+    "mtime": 1779190980.776847,
+    "ast_hash": "c3a1c6588b2e867965c874290efd917f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/include/tessera/Dialect/Collective/Runtime/AdapterVersionPin.h": {
+    "mtime": 1778514492.6392152,
+    "ast_hash": "c2937dd5cfcd211afd6a061e556651fb",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/include/tessera/Dialect/Collective/Runtime/TokenLimiter.h": {
+    "mtime": 1757125850.0,
+    "ast_hash": "85aed46ff10d793838e56aea3d1d106b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/lib/Dialect/Collective/IR/CollectiveOps.cpp": {
+    "mtime": 1757125850.0,
+    "ast_hash": "713aab548bbb76fbd979d3e56a94c7e3",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/lib/Dialect/Collective/IR/CollectiveTypes.cpp": {
+    "mtime": 1757125850.0,
+    "ast_hash": "dc8535f64929b0eafec2d54422da4381",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/lib/Dialect/Collective/Runtime/Execution.cpp": {
+    "mtime": 1779195305.1756053,
+    "ast_hash": "5a7508da2caa76f824965363919de866",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/TesseraDialect.cpp": {
+    "mtime": 1777948934.2649813,
+    "ast_hash": "bcd2744cd5375e12c04e3640a4529ba1",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/TesseraOps.cpp": {
+    "mtime": 1779335413.0348077,
+    "ast_hash": "f228a44dad8afc52ec34ca90aa5ba0c3",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/AdjointInterface.cpp": {
+    "mtime": 1778364717.613447,
+    "ast_hash": "97b242c5c019e002428b09cec1d33240",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/TesseraTiling.cpp": {
+    "mtime": 1779303179.0410042,
+    "ast_hash": "1d3a9225f84a782d9209b452a15382bf",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/include/Tessera/IR/Dialects.h": {
+    "mtime": 1777260428.4655085,
+    "ast_hash": "bb90d306d74c78b6c2e97bb4e9d927a6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/include/Tessera/IR/TesseraOps.h": {
+    "mtime": 1778364625.299981,
+    "ast_hash": "958b5f3c1a6779a3564487558c1f42a8",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/programming_model/tools/tessera-opt/PassPipelinesPM11.cpp": {
+    "mtime": 1778087056.3114662,
+    "ast_hash": "1ed18662a894df0de8787ddd2e6a46fd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/programming_model/ir/ScheduleOps.cpp": {
+    "mtime": 1778087071.9778607,
+    "ast_hash": "47890216d31ace2afbfa779bd4754438",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/tools/tessera-cerebras-opt.cpp": {
+    "mtime": 1756878608.0,
+    "ast_hash": "82cd182a3478fa94dbe75e99783cbcb3",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/tools/tessera-cerebras-codegen.cpp": {
+    "mtime": 1756878048.0,
+    "ast_hash": "6e1ae8e873e1652d8943774549c4b43f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/tools/demo_emit.py": {
+    "mtime": 1756876980.0,
+    "ast_hash": "0a891cf9a95d33c9d9615d9ae27aee08",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/include/tessera/targets/cerebras/Passes.h": {
+    "mtime": 1777262158.8322191,
+    "ast_hash": "3c8ba925543cc7ae7c6905c2fcd20fb0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/tests/lit.cfg.py": {
+    "mtime": 1756878286.0,
+    "ast_hash": "88abd9bb0d160c2d8acf4e9e17b2dfbb",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/examples/gemm/host_run_gemm.py": {
+    "mtime": 1756876980.0,
+    "ast_hash": "0383201424f794cf1a92d40e9e24631b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/examples/flashattn_tiny/host_run_flashattn.py": {
+    "mtime": 1756876980.0,
+    "ast_hash": "906a672f2c23b9063369145ea49cfd8d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/lib/CerebrasDialect.cpp": {
+    "mtime": 1756878286.0,
+    "ast_hash": "c6fd9c6a3205936e75bfb89f6114e0b3",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/lib/CSLEmitPass.cpp": {
+    "mtime": 1756878800.0,
+    "ast_hash": "7aa3c3fba333098770a945a27e3c5b69",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/lib/Passes.cpp": {
+    "mtime": 1777262158.925022,
+    "ast_hash": "5b4cf14c2c80d7e693d19106f64b8771",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/lib/LowerTTargetToCerebras.cpp": {
+    "mtime": 1777262158.878726,
+    "ast_hash": "05cbc3f7303fcf662e47ade49a63a7e3",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/lib/CerebrasCanonicalize.cpp": {
+    "mtime": 1756878608.0,
+    "ast_hash": "089d3025c54efa758a7b12c601276e36",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/tessera/targets/cerebras/bank_vectorizer.py": {
+    "mtime": 1756876980.0,
+    "ast_hash": "80bb273a13bc8700e1159e43464d8e45",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/tessera/targets/cerebras/layout.py": {
+    "mtime": 1756876980.0,
+    "ast_hash": "3bac81905d82d386a8ce00b6f633fcdd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/tessera/targets/cerebras/lowering.py": {
+    "mtime": 1756876980.0,
+    "ast_hash": "10af11ab936d687b29ec7fd3d019d9cd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/tessera/targets/cerebras/__init__.py": {
+    "mtime": 1756876980.0,
+    "ast_hash": "39816bbabfe62b96e107dfae3344a1ad",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/tessera/targets/cerebras/csl_codegen.py": {
+    "mtime": 1756876980.0,
+    "ast_hash": "04f11cf55dac335004f69924ec4c1997",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/tessera/targets/cerebras/runtime.py": {
+    "mtime": 1756876980.0,
+    "ast_hash": "e331a4cb0c8fdf8616bb933dec7f1d5d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/tools/tessera-tpu-opt.cpp": {
+    "mtime": 1777262158.7859218,
+    "ast_hash": "f6a57aa4b61a1307881a878b68ff07a0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/include/tessera/tpu/TesseraTPUPasses.h": {
+    "mtime": 1777262165.0748081,
+    "ast_hash": "da682e777f855642c22364f81e3cebaa",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/runtime/pjrt_runner.cc": {
+    "mtime": 1777241296.4692707,
+    "ast_hash": "1ef3fa67aa1bd1b189e54181d99d45a7",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/tests/lit/lit.cfg.py": {
+    "mtime": 1756916774.0,
+    "ast_hash": "55f9f247854faa9495cd4467a2bfb686",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/src/passes/TesseraToStableHLO.cpp": {
+    "mtime": 1777262112.3455462,
+    "ast_hash": "0b0881e9e8a354f0360b0e8c1cee21c3",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/src/passes/TesseraShardingAnnotator.cpp": {
+    "mtime": 1756916774.0,
+    "ast_hash": "ab92871e30dca4bb42ab22a3e9d1ba87",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/src/passes/TesseraShardyExport.cpp": {
+    "mtime": 1777464338.2951999,
+    "ast_hash": "fde336bcdcdbdc390514e5e928846f99",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/src/passes/RegisterPasses.cpp": {
+    "mtime": 1777262158.7394435,
+    "ast_hash": "b01a167015130f20299ba61d76b67828",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/src/passes/TesseraAttentionToStableHLO.cpp": {
+    "mtime": 1756917340.0,
+    "ast_hash": "7b89131a2af96f8596c726719b80e9d2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/src/passes/TesseraConvEpilogueToStableHLO.cpp": {
+    "mtime": 1756917340.0,
+    "ast_hash": "fc96882b644ff537f09fb9a2590db07f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/include/tessera/x86/amx_runtime.h": {
+    "mtime": 1756794138.0,
+    "ast_hash": "1b6ef95c258d25de2011975dc6542644",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/include/tessera/x86/target.h": {
+    "mtime": 1777262027.257731,
+    "ast_hash": "c1c83f41f1ef982900d5220659c17355",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/tests/test_gemm.cpp": {
+    "mtime": 1756793930.0,
+    "ast_hash": "8a7c4976b07bb973484f6ee7d4015ea5",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/tests/test_gemm_reference_tails.cpp": {
+    "mtime": 1777262204.0064714,
+    "ast_hash": "6f7b56b6b8b01946f809675e11abd1ec",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/scripts/report_gemm.py": {
+    "mtime": 1756794470.0,
+    "ast_hash": "6e61b5d0f779fc3c4ffd416395941738",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/src/backend_x86.cpp": {
+    "mtime": 1777262027.3050303,
+    "ast_hash": "4e97984c0a1e26401e678ce7b6fe7194",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/src/lowering_x86_mlir.cpp": {
+    "mtime": 1756793930.0,
+    "ast_hash": "faeaabd5f7eb9aba20bf02b2a4a70bd6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/src/kernels/epilogue.cpp": {
+    "mtime": 1756794138.0,
+    "ast_hash": "1842483be25557d961e89c85d9d77053",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/src/kernels/amx_gemm_bf16.cpp": {
+    "mtime": 1777262027.3993223,
+    "ast_hash": "78e2837ba9a4726348e38f90c5b1c7a1",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_vnni_gemm_int8.cpp": {
+    "mtime": 1756794138.0,
+    "ast_hash": "c64948cddc62b639f2aa85d8dbb7959f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_bf16.cpp": {
+    "mtime": 1777262038.0965834,
+    "ast_hash": "961c933b9d95879b6891b962d0bc0fed",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/src/kernels/amx_gemm_int8.cpp": {
+    "mtime": 1756794138.0,
+    "ast_hash": "502197adde00f566173d2bf9e4d134c0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/src/runtime/amx_runtime.cpp": {
+    "mtime": 1756794138.0,
+    "ast_hash": "d304e17604d1220525a24f092c5fe91a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/tools/tessera-cpx-opt/tessera-cpx-opt.cpp": {
+    "mtime": 1777296275.4316235,
+    "ast_hash": "024c628da04b02e6e91aa72f34267429",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/test/lit.cfg.py": {
+    "mtime": 1777292918.0261748,
+    "ast_hash": "a619411ba4a916dbc3e4f29af2f8573e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/include/tessera/Target/NVRubinCPX/NVRubinCPX.h": {
+    "mtime": 1777296041.9814703,
+    "ast_hash": "8db48dc19cb64782be9d3aa3e7c7cf86",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/include/tessera/Transforms/Passes.h": {
+    "mtime": 1777293001.4657469,
+    "ast_hash": "007bd9778166d8ef49a4ec89a099d2cc",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/lib/Target/NVRubinCPX/CPXTargetIROps.cpp": {
+    "mtime": 1777296070.298806,
+    "ast_hash": "602257d23b4a5681a2f33c2e1ce3fbf4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/lib/Target/NVRubinCPX/CPXTargetIRTypes.cpp": {
+    "mtime": 1777296089.580898,
+    "ast_hash": "2313da9b8315730aa97d706cd26e7317",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/lib/Target/NVRubinCPX/NVRubinCPX.cpp": {
+    "mtime": 1777296056.205816,
+    "ast_hash": "b5a8958695d302ffc0b1ce4677549fc9",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/lib/Transforms/Passes.cpp": {
+    "mtime": 1777296104.3219035,
+    "ast_hash": "3eb4774a2b804c814b6e784b395129ae",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/lib/Transforms/Video/VideoIngestFuse.cpp": {
+    "mtime": 1777296222.1388867,
+    "ast_hash": "ca0a0bc194a8a8aa14be2c6552929082",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/lib/Transforms/KVTransport/LowerKVTransport.cpp": {
+    "mtime": 1777296146.1821406,
+    "ast_hash": "4bee1252d6e9a7750b440f46d8216888",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/lib/Transforms/Partition/PartitionLongContext.cpp": {
+    "mtime": 1777296258.30253,
+    "ast_hash": "96ed7bf2e02b7427bebbf89916616cd4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/lib/Transforms/Vectorize/NVFP4Vectorize.cpp": {
+    "mtime": 1777296180.8629832,
+    "ast_hash": "8412b090491fb384ba988d02b927f20a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/include/Tessera/Target/Apple/TesseraAppleDialect.h": {
+    "mtime": 1777862718.3574057,
+    "ast_hash": "f825de435b67e4a9bfba872bec2d893a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/include/Tessera/Target/Apple/Passes.h": {
+    "mtime": 1779336344.848903,
+    "ast_hash": "0ebb32a7c68828aba293f461d02d3b6e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_cpu_runtime.cpp": {
+    "mtime": 1778074062.6369207,
+    "ast_hash": "e89cc90f3685c81bfea4da626fb31d9d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime_stub.cpp": {
+    "mtime": 1778385147.254641,
+    "ast_hash": "c895fd09a697607d7be05e0a0135e99f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm": {
+    "mtime": 1779142196.6651497,
+    "ast_hash": "fccc791538bce0f497d7b159fa580ffe",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Passes.cpp": {
+    "mtime": 1779336366.4270833,
+    "ast_hash": "ed9ce485f0cdea1ecec75b702e43ad09",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/TesseraAppleDialect.cpp": {
+    "mtime": 1777863314.4429839,
+    "ast_hash": "b98a16b2a782955e791d7d63d0fc41c4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/GeluToAppleGPU.cpp": {
+    "mtime": 1778327141.7335894,
+    "ast_hash": "530239179e00d6fce998b9ab05cbb24f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/SwigluFusionToAppleGPU.cpp": {
+    "mtime": 1778373605.9194002,
+    "ast_hash": "3a3dd8a32e2fe6e652da4a4eb701502c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/LinearAttnToAppleGPU.cpp": {
+    "mtime": 1778383598.3128834,
+    "ast_hash": "0b474eecd0d19cb96367dfa53fb22445",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/MatmulSoftmaxMatmulFusionToAppleGPU.cpp": {
+    "mtime": 1778332312.9469082,
+    "ast_hash": "acc027f8d7d36d972523050963cfe674",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/MatmulToAppleGPU.cpp": {
+    "mtime": 1778327141.7343686,
+    "ast_hash": "370ac966905a342adbfb1f4f4acb4906",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/FlashAttnToAppleGPU.cpp": {
+    "mtime": 1778332312.9462066,
+    "ast_hash": "ae845a15fcd2bec3b080584db7189abe",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/AttnLocalWindow2DToAppleGPU.cpp": {
+    "mtime": 1779336337.050077,
+    "ast_hash": "488e5fa24d9741fd64bc2ae991e2b803",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/RopeToAppleGPU.cpp": {
+    "mtime": 1778327141.7348945,
+    "ast_hash": "dacd92be93a60fe8fa267c685e5084a2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/MatmulGeluFusionToAppleGPU.cpp": {
+    "mtime": 1778332797.7400918,
+    "ast_hash": "c62bde45fffa7b225b6207343a642925",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/MatmulToAppleCPU.cpp": {
+    "mtime": 1777941402.9675555,
+    "ast_hash": "e6d078aff24e326bb1614d697fddd9d3",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/MLADecodeFusionToAppleGPU.cpp": {
+    "mtime": 1778384444.7999551,
+    "ast_hash": "4b60de6553b82004cd9bbb0295487ee0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/TileToApple.cpp": {
+    "mtime": 1778422190.5968816,
+    "ast_hash": "cf5167cd4e5d78630654b34b87bae7ed",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/NativeSparseAttnFusionToAppleGPU.cpp": {
+    "mtime": 1778385061.233022,
+    "ast_hash": "c4aa1bc3e175588217f3dac01ccc0a0f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/SoftmaxToAppleGPU.cpp": {
+    "mtime": 1778327141.735416,
+    "ast_hash": "ac06855189a63694cd6987446ec8e8f2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/MatmulSoftmaxFusionToAppleGPU.cpp": {
+    "mtime": 1778332312.946649,
+    "ast_hash": "2d480145ac86268966449b116255c4fa",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/MatmulRMSNormFusionToAppleGPU.cpp": {
+    "mtime": 1778332797.7404146,
+    "ast_hash": "5e5ae21f6a560408ea5f4fa8e51f80b0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/NVFlashAttnKernelEmitter.cpp": {
+    "mtime": 1777949305.0908995,
+    "ast_hash": "bdc617317f88af94496fd640ee6ee20b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/NVWGMMALoweringPass.cpp": {
+    "mtime": 1777949299.5723171,
+    "ast_hash": "a3b06e6113326c834ab22e0dbfa4943a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/NVTMADescriptorPass.cpp": {
+    "mtime": 1777262056.8894436,
+    "ast_hash": "b31939a78a0005fbf7de637e9e85c187",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera_nvidia_opt.cpp": {
+    "mtime": 1777905802.251824,
+    "ast_hash": "214cd7ac762d31a55fa88c16ce5d51c4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/lit.cfg.py": {
+    "mtime": 1777906018.9288585,
+    "ast_hash": "5841b9943442e22081fdc374d763a3f0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/include/tessera/gpu/cuda_driver.h": {
+    "mtime": 1756795102.0,
+    "ast_hash": "2f3ff41301896e7fdbdfb05c509074be",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/include/tessera/gpu/target.h": {
+    "mtime": 1756795102.0,
+    "ast_hash": "faf1c9a2ece0b759c1e45f5fab98ae10",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/include/tessera/gpu/BackendRegistration.h": {
+    "mtime": 1777905771.7799633,
+    "ast_hash": "6a6c4c92f31301b9479b49352955e97d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/scripts/run_gpu_bench_and_report.sh": {
+    "mtime": 1756795616.0,
+    "ast_hash": "6dc464c790e3e69991db2f8870eabcff",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/scripts/gpu_report.py": {
+    "mtime": 1756795616.0,
+    "ast_hash": "a63aa0473d7b19561262a41cebb7402a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/IR/TesseraNVIDIADialect.cpp": {
+    "mtime": 1777906061.5271792,
+    "ast_hash": "4922b71b18052b4e56099e101cd125fe",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": {
+    "mtime": 1777905947.0265012,
+    "ast_hash": "d465cb4f48dd681a902110cf6a6a4327",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/src/lowering_nvvm_mlir.cpp": {
+    "mtime": 1756795102.0,
+    "ast_hash": "08e88316c4f9df88b62eab635d0aac27",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/src/lowering_nvtile_mlir.cpp": {
+    "mtime": 1756795288.0,
+    "ast_hash": "142ee3d6f375209a02ee1ee152104f7f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/src/backend_gpu.cpp": {
+    "mtime": 1756795616.0,
+    "ast_hash": "f367459f4f7969fa1d8ac7ab124851ec",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/src/runtime/cuda_driver.cpp": {
+    "mtime": 1756795102.0,
+    "ast_hash": "c826eb245b1e0014255df09b89dec865",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/src/runtime/nvrtc_jit.cpp": {
+    "mtime": 1756795102.0,
+    "ast_hash": "0f5161e6fc9dd37f95bbc7754d35cca9",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera_rocm_emit.cpp": {
+    "mtime": 1756880188.0,
+    "ast_hash": "daf1e47952ee153ae67e556dc6b57d05",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera_rocm_opt.cpp": {
+    "mtime": 1777903442.8468122,
+    "ast_hash": "2bf419cb242ffa8a1866b0be6ef89488",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/test/lit.cfg.py": {
+    "mtime": 1756880188.0,
+    "ast_hash": "69d4105c8134ff638b7b55d8b8932c1c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/MemSpace.h": {
+    "mtime": 1756880188.0,
+    "ast_hash": "7758a1fc12bd4ca9690da682b5080b3d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/Passes.h": {
+    "mtime": 1777903476.3525333,
+    "ast_hash": "c45818320c699a2c8ed4fedfe835d705",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/MFMTables.h": {
+    "mtime": 1756880188.0,
+    "ast_hash": "9b5d6b18e05af563ac372fd2fba18d3c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/ABI.h": {
+    "mtime": 1756880188.0,
+    "ast_hash": "78db57427ce32bba0b16ce93afac4d24",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/loader.h": {
+    "mtime": 1756880188.0,
+    "ast_hash": "d6fa6225a406b6e3ccccad9ffe0afd40",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/loader.cpp": {
+    "mtime": 1756880188.0,
+    "ast_hash": "263945d58c5c8f7417e1f1f3fd4d0f2d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/launcher.cpp": {
+    "mtime": 1756880188.0,
+    "ast_hash": "e1172bcf14a38a530b2a811bfd549a80",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/examples/launch_vec_add.cpp": {
+    "mtime": 1756880188.0,
+    "ast_hash": "520ad9379b071069d7258cdd103ffd91",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/lib/IR/TesseraROCMOps.cpp": {
+    "mtime": 1777904846.6753461,
+    "ast_hash": "b99ebbfab281db6918cd5b53fdeae88a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/lib/IR/ABI.cpp": {
+    "mtime": 1756880188.0,
+    "ast_hash": "c5ced9197c31f9d001da9f162d00b147",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/lib/IR/MemSpace.cpp": {
+    "mtime": 1777903076.2445085,
+    "ast_hash": "4eb6b0111d52c9673e06ce6802e49af4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/lib/IR/MFMTables.cpp": {
+    "mtime": 1777903109.4762979,
+    "ast_hash": "2c23643b4bc5e7f1324b53fae95dce35",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": {
+    "mtime": 1777902329.2438564,
+    "ast_hash": "1aefd03a7764a0f01d7760cf3ae70de0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/KernelABI.cpp": {
+    "mtime": 1777905128.6048346,
+    "ast_hash": "44566caf1f5fdacc877c7fd44f28ad62",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp": {
+    "mtime": 1777903142.2103784,
+    "ast_hash": "8afeb1b7f02ead132016de29c7663828",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp": {
+    "mtime": 1777905051.108391,
+    "ast_hash": "39581185e027ae792ac5e3615b593d51",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/external/ck_bridge/ck_bridge.cpp": {
+    "mtime": 1756880188.0,
+    "ast_hash": "149a0aa48e49e0f50ca637431915ab84",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/external/ck_bridge/ck_bridge.h": {
+    "mtime": 1756880188.0,
+    "ast_hash": "dd89f979fec2ff3f1041b042ec95e2c3",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/tools/tessera-metalium-opt/main.cpp": {
+    "mtime": 1756875038.0,
+    "ast_hash": "41464eefee6c79ec8648b05635b49de4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/tools/metalium-codegen-demo/main.cpp": {
+    "mtime": 1756874334.0,
+    "ast_hash": "2cab17ac98382becd6f3214950b39499",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/test/metalium/lit.cfg.py": {
+    "mtime": 1756875038.0,
+    "ast_hash": "75ade56a39f9dcae67469f3c23c37378",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/include/Tessera/Target/Metalium/MetaliumCodegen.h": {
+    "mtime": 1756874134.0,
+    "ast_hash": "269ad98b0d34e8bd82c5c644b147024e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/include/Tessera/Target/Metalium/Passes.h": {
+    "mtime": 1777261999.4452481,
+    "ast_hash": "8694bff1847b4d62e91b1f639c859f57",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/include/Tessera/Target/Metalium/TesseraMetaliumDialect.h": {
+    "mtime": 1756874134.0,
+    "ast_hash": "9aea9c111c84868174db452cd9e92425",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/include/Tessera/Target/Metalium/MetaliumBufferPlanner.h": {
+    "mtime": 1756874334.0,
+    "ast_hash": "179aaec44be8778fd368384b751eff9b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/include/Tessera/Target/Metalium/Util/MemSpace.h": {
+    "mtime": 1756874712.0,
+    "ast_hash": "db3aef2f762885a7240ecf81875157b7",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/lib/Target/Metalium/Passes.cpp": {
+    "mtime": 1777849760.077331,
+    "ast_hash": "3798a4d1fdf31f72dc3c4041c35b37a0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/lib/Target/Metalium/TesseraMetaliumDialect.cpp": {
+    "mtime": 1756874134.0,
+    "ast_hash": "62c5f10c9f7d666f1c57814c2cff7003",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/lib/Target/Metalium/Util/MemSpace.cpp": {
+    "mtime": 1756874734.0,
+    "ast_hash": "495307b4c153b073cee0347aeb91874d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/lib/Target/Metalium/Lowering/TileToMetalium.cpp": {
+    "mtime": 1778422190.5974073,
+    "ast_hash": "4bdcb9f8f06fe47b573229f9651b5ca8",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/lib/Target/Metalium/Codegen/MetaliumCodegen.cpp": {
+    "mtime": 1756874134.0,
+    "ast_hash": "1427837658707fbdd8a5be6de29a043a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/lib/Target/Metalium/Codegen/MetaliumBufferPlanner.cpp": {
+    "mtime": 1756874334.0,
+    "ast_hash": "32c08a2e742be726b6d4c020f4df228e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/mlir/TesseraMLIRPlugin.cpp": {
+    "mtime": 1777464411.29335,
+    "ast_hash": "f3fbee4d9f9acc6dd699507177f73a6b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/mlir/include/Tessera/TesseraMLIRPlugin.h": {
+    "mtime": 1777464378.0319588,
+    "ast_hash": "988dd88981648cd32383dcb6d4855402",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/mlir/lib/Schedule/TesseraScheduleIR.cpp": {
+    "mtime": 1777464445.9994948,
+    "ast_hash": "ca7bf192a26b13e52a9b80740fb1984e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/mlir/lib/Target/TesseraTargetIR.cpp": {
+    "mtime": 1777464463.8371642,
+    "ast_hash": "f6c46bc97144eb17c6c12b8cd051b6c9",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/mlir/lib/Graph/TesseraGraphIR.cpp": {
+    "mtime": 1777464428.0935063,
+    "ast_hash": "dad03205b94ccffe3798d1f676906de9",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tessera_neighbors/include/tessera/Dialect/Neighbors/IR/NeighborsDialect.h": {
+    "mtime": 1777835850.9729602,
+    "ast_hash": "4555d1a80f7861a1bfce9e8767ab99c7",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tessera_neighbors/include/tessera/Dialect/Neighbors/Transforms/Passes.h": {
+    "mtime": 1779335751.997349,
+    "ast_hash": "a0a9592869c01a54b2ab6df5dcd348be",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/IR/TesseraNeighbors.cpp": {
+    "mtime": 1779336029.1365745,
+    "ast_hash": "97a26b2401a549c31e8fd4029ea9c747",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp": {
+    "mtime": 1779335230.947929,
+    "ast_hash": "8a0eb1e1475f0db77b2bd4cd744cabcc",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/HaloInferPass.cpp": {
+    "mtime": 1779155837.4698098,
+    "ast_hash": "a549f936bd38d73445ba62ff878a593b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/DynamicTopologyPass.cpp": {
+    "mtime": 1777463833.4206476,
+    "ast_hash": "0f0b363ae00a5e879f4ba69ff27e30a9",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/BoundaryConditionLowerPass.cpp": {
+    "mtime": 1779330514.0714872,
+    "ast_hash": "ebd6fc1a282c7fecbbe7339da543d040",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/HaloMeshIntegrationPass.cpp": {
+    "mtime": 1779376752.5267384,
+    "ast_hash": "fda041a69a6612bd7381dce3515491f0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/PipelineOverlapPass.cpp": {
+    "mtime": 1777900992.7034936,
+    "ast_hash": "ff08107b95aad518602fbec3941cedb6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/HaloTransportLowerPass.cpp": {
+    "mtime": 1779377108.874467,
+    "ast_hash": "ce958874007a6f56753e6aaea96775ae",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLowerPass.cpp": {
+    "mtime": 1777463780.8997014,
+    "ast_hash": "0ccbff3b059d5393548802b9f77b8d1f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tile_opt_fa4/lib/WarpSpecializationPass.cpp": {
+    "mtime": 1777949266.3989544,
+    "ast_hash": "8b4f973b3705176bb15557daa47a710b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tile_opt_fa4/lib/AsyncCopyLoweringPass.cpp": {
+    "mtime": 1777949294.098831,
+    "ast_hash": "d54738bcaf6f24e3b4dd6b284d2ac3f2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tile_opt_fa4/lib/Conversion/TesseraScheduleToTarget/LowerScheduleToTarget.cpp": {
+    "mtime": 1759009668.0,
+    "ast_hash": "94859fe2d92ba0a4a20b536f5b7c9a91",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tile_opt_fa4/lib/Conversion/TesseraTileToPTX/LowerTileToPTX.cpp": {
+    "mtime": 1778087018.851804,
+    "ast_hash": "9b45913e520b919535295fe0c6a298d4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnVerifiers.cpp": {
+    "mtime": 1777949014.7565198,
+    "ast_hash": "a4dbf14f2d8e65898d8a07ee032d7767",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp": {
+    "mtime": 1777949119.046928,
+    "ast_hash": "15e750bace1d07ff25ac474c11335331",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tile_opt_fa4/lib/Dialect/Queue/QueueOps.cpp": {
+    "mtime": 1779214433.215205,
+    "ast_hash": "c9013a0bc11d6605320df12127f1e010",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tile_opt_fa4/lib/Dialect/Queue/QueueVerifiers.cpp": {
+    "mtime": 1759009668.0,
+    "ast_hash": "9c44ce9ab31b5e82f1e2add09dcedd01",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/diagnostics/ShapeInferencePass.cpp": {
+    "mtime": 1778071277.6457613,
+    "ast_hash": "df19651c4d67872d1eec4bbcae1bfeea",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/diagnostics/ErrorReporter.cpp": {
+    "mtime": 1778071287.9655473,
+    "ast_hash": "dcc7cecfd1a84e3ab6b99bf60fc06579",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/tessera_autotuner/hyperband.py": {
+    "mtime": 1756798728.0,
+    "ast_hash": "502a8d01923db563b7150414018d5a6e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/tessera_autotuner/cache.py": {
+    "mtime": 1756798728.0,
+    "ast_hash": "51c8ce33a518f8049a986344bc4d2c3e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/tessera_autotuner/__init__.py": {
+    "mtime": 1756798728.0,
+    "ast_hash": "de56a8e958cf23375c28456ed4be772f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/tessera_autotuner/spaces.py": {
+    "mtime": 1756798728.0,
+    "ast_hash": "4ab433c3e3b4d614ee8f21e9a2f99ea5",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/tessera_autotuner/cli.py": {
+    "mtime": 1756798728.0,
+    "ast_hash": "47c58077047d515e951f45cd264f0d56",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/tessera_autotuner/utils.py": {
+    "mtime": 1756798728.0,
+    "ast_hash": "eb67b5107256a89cf2347214f1b6ba41",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/tessera_autotuner/search.py": {
+    "mtime": 1756798728.0,
+    "ast_hash": "f6d7a435a7cd705192c96cb852cec26f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/tessera_autotuner/evaluate.py": {
+    "mtime": 1777828385.9226182,
+    "ast_hash": "dd61ea7edff3c0266094ee70b68bf40b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/tessera_autotuner/report.py": {
+    "mtime": 1756798728.0,
+    "ast_hash": "9420ae8adf5c531f4d084371d3e5ad00",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/include/tessera/ResolveTesseraAttrsPass.h": {
+    "mtime": 1756798728.0,
+    "ast_hash": "de3c6104ff5d065b98318067c821aac7",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/examples/hb_demo.py": {
+    "mtime": 1756798728.0,
+    "ast_hash": "cf574acfd2559affc5b34bc890d0696e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/configs/matmul_sm90.json": {
+    "mtime": 1756798728.0,
+    "ast_hash": "6f44406128ed90fb7cc7c1a1d15e53e9",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/lib/ResolveTesseraAttrsPass.cpp": {
+    "mtime": 1756798728.0,
+    "ast_hash": "cd5f883d5f6c204a75d315dccb5501c2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/CMakeLists.txt": {
+    "mtime": 1777905833.5203366,
+    "ast_hash": "9c871be80799023a74827a1e8bf456ed",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/INDEX.md": {
+    "mtime": 1779400908.470646,
+    "ast_hash": "c531ed72f4c334ac3b1f510093a5c84f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/CMakeLists.txt": {
+    "mtime": 1779200660.896802,
+    "ast_hash": "e5822ba7df613b1f7eabf716aae8b50c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/docs/APPLY_INSTRUCTIONS.md": {
+    "mtime": 1779400862.6296668,
+    "ast_hash": "76704930ef27d3acf6aa471e57212984",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/runtime/docs/Runtime_Quickstart.md": {
+    "mtime": 1779400862.6299043,
+    "ast_hash": "f4cb59fbe49da1ea40b325767b90997a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/CMakeLists.txt": {
+    "mtime": 1779040353.058026,
+    "ast_hash": "c68038d40b348a18e68a7ac37d0ad174",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/ebm/CMakeLists.txt": {
+    "mtime": 1779045828.3467083,
+    "ast_hash": "b3c84324cb0a012e632fad980ff1f52f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/clifford/CMakeLists.txt": {
+    "mtime": 1779045822.3967028,
+    "ast_hash": "6ebb74afc793a969af3e1b5532eece16",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/passes/CMakeLists.txt": {
+    "mtime": 1777260476.31776,
+    "ast_hash": "d27507822d96f09ae1185e3830dcbc76",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/core/dialects/CMakeLists.txt": {
+    "mtime": 1777260547.628884,
+    "ast_hash": "9bb1b69912547e307a8893d2885effff",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/linalg/CMakeLists.txt": {
+    "mtime": 1779214401.641585,
+    "ast_hash": "dc9170dd0c920b7f2520f2b50e440252",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/linalg/README.md": {
+    "mtime": 1779400862.630448,
+    "ast_hash": "5f11b65de69c6ed7560dabe4c1627cba",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/linalg/docs/Tessera_Linalg_Solvers_Spec.md": {
+    "mtime": 1779400862.6308432,
+    "ast_hash": "2411d404fd3c36a45287c1d69eafac22",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/CMakeLists.txt": {
+    "mtime": 1777141645.3492672,
+    "ast_hash": "6139fa39b5f9bccca85a9841a4c95c47",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/README.md": {
+    "mtime": 1779400862.6320612,
+    "ast_hash": "56c30eb934cf1bc63a395775f1039fb4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/test/CMakeLists.txt": {
+    "mtime": 1757715324.0,
+    "ast_hash": "ef0ae6ec67bf369dbf82f72e95b6664f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/test/TPP/CMakeLists.txt": {
+    "mtime": 1757715324.0,
+    "ast_hash": "a80967580d4a600aa1094f8a473cb867",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/ci/CMakeLists.txt": {
+    "mtime": 1757715324.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/ci/github_actions_tpp.yml": {
+    "mtime": 1777254650.4700108,
+    "ast_hash": "2470522922447715e73e3e56ffda9da3",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/include/CMakeLists.txt": {
+    "mtime": 1757715324.0,
+    "ast_hash": "f18324ef2ea416806b2c513d7e2c0290",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/include/tpp/CMakeLists.txt": {
+    "mtime": 1757715324.0,
+    "ast_hash": "22d0a818f4fc72d5b79fc03be770e4e6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/include/tpp/Dialect/CMakeLists.txt": {
+    "mtime": 1757715324.0,
+    "ast_hash": "ef0ae6ec67bf369dbf82f72e95b6664f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/include/tpp/Dialect/TPP/CMakeLists.txt": {
+    "mtime": 1778072002.6531138,
+    "ast_hash": "7680d95a680123aea16b3e2975914470",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/include/tpp/Interfaces/CMakeLists.txt": {
+    "mtime": 1757715324.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/docs/CMakeLists.txt": {
+    "mtime": 1757715324.0,
+    "ast_hash": "25eeb01f5fd18209e3280151473b7def",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/docs/TPP_Syntax_Spec_Part1.md": {
+    "mtime": 1779400862.6327465,
+    "ast_hash": "ab1e3ba1f67d100ef2053a835f23b637",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/docs/TPP_Syntax_Spec_Part2.md": {
+    "mtime": 1779400862.6329937,
+    "ast_hash": "4ef9960a3c69fb93009794cedf78d2de",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/docs/TPP_Space_Time_Guide.md": {
+    "mtime": 1779400862.6324456,
+    "ast_hash": "230d525d3ba74e6be7bfb6b3e06e0152",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/docs/wireup_notes.md": {
+    "mtime": 1779400862.6332679,
+    "ast_hash": "6164cc4153f64e7ca8548c00a0af8607",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/CMakeLists.txt": {
+    "mtime": 1779157044.108044,
+    "ast_hash": "8bdc3c87de80e07c32ae9c53504047e3",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/Passes/CMakeLists.txt": {
+    "mtime": 1779157130.0705135,
+    "ast_hash": "eb27c0f8c9891f6d2611912125be34b5",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/Dialect/CMakeLists.txt": {
+    "mtime": 1757715324.0,
+    "ast_hash": "ef0ae6ec67bf369dbf82f72e95b6664f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/tpp/lib/Dialect/TPP/CMakeLists.txt": {
+    "mtime": 1778072274.9593003,
+    "ast_hash": "13c6db49ec372611827253d37a46ab14",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/CMakeLists.txt": {
+    "mtime": 1777141687.9279547,
+    "ast_hash": "f2da8373336a3aa7a946d698512235da",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/docs/Tessera_Spectral_Guide.md": {
+    "mtime": 1779400862.6318252,
+    "ast_hash": "71ae09d7ddeeb3eacb03a0ae7e4569c4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/spectral/reports/roofline_template.html": {
+    "mtime": 1757706156.0,
+    "ast_hash": "1d5bbf6852078d105fe80d0aa2c12d65",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/scaling_resilience/CMakeLists.txt": {
+    "mtime": 1777900422.5848482,
+    "ast_hash": "6a0ed5205e611e085d4c80cb9d843ea0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/scaling_resilience/README.md": {
+    "mtime": 1779400862.6311147,
+    "ast_hash": "3c7f480e5862cd91730ca7925987abbc",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/scaling_resilience/docs/Scaling_and_Resilience_Spec_Part2.md": {
+    "mtime": 1779400862.6316028,
+    "ast_hash": "79f748cc86ad79df1b7147add680478c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/solvers/scaling_resilience/docs/Scaling_and_Resilience_Spec_Part1.md": {
+    "mtime": 1779400862.6314,
+    "ast_hash": "7f5d32d750c5d6120915921269a45b33",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/CMakeLists.txt": {
+    "mtime": 1756922056.0,
+    "ast_hash": "577129b045d29262599ecdd842d202bd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/CMakeLists.txt": {
+    "mtime": 1778454865.613279,
+    "ast_hash": "84a487e7027be70faf191d7c2bfd76d1",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/CMakeLists.txt": {
+    "mtime": 1777141670.156687,
+    "ast_hash": "abd0e7fcd603b2c0d9525c40777e99cb",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/README.md": {
+    "mtime": 1779400862.612749,
+    "ast_hash": "6521812b77d2d17df1bbea7287e75a88",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/tools/CMakeLists.txt": {
+    "mtime": 1779192635.1091835,
+    "ast_hash": "ada115c7b38ed7132627e606db6f4be2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/tools/tessera-trace-demo/CMakeLists.txt": {
+    "mtime": 1757125850.0,
+    "ast_hash": "8de3887ac376af54cec080d42b9e50ed",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/tools/tessera-collective-opt/CMakeLists.txt": {
+    "mtime": 1757125850.0,
+    "ast_hash": "673a4eced0b4a90057e4d116f50c5af0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/tools/tessera-exec-demo/CMakeLists.txt": {
+    "mtime": 1757125850.0,
+    "ast_hash": "f49a2193b3c61fa0d10c6d2a4f0cf110",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/tools/tessera-collective-runtime-smoke/CMakeLists.txt": {
+    "mtime": 1779192621.7927506,
+    "ast_hash": "8a2f92be3d87d06fe4aae56250e36a1b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/test/CMakeLists.txt": {
+    "mtime": 1757125850.0,
+    "ast_hash": "97bd75245cc7ee8041b843e6a3f9afac",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/docs/Tessera_Collectives_IR_and_Planner_Draft.md": {
+    "mtime": 1779400862.6134415,
+    "ast_hash": "99413d317591db71417f2416f4e58fda",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/docs/Tessera_Collectives_Overlap_Design.md": {
+    "mtime": 1779400862.6138554,
+    "ast_hash": "dc80b1da0cfed8c826853587b084bcda",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/docs/README_v1_4.md": {
+    "mtime": 1779400862.6130788,
+    "ast_hash": "1095763f0372bd4683f34b78158cec64",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/lib/Dialect/Collective/IR/CMakeLists.txt": {
+    "mtime": 1757125850.0,
+    "ast_hash": "8866972586610a3fddfedc713684eb93",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/collectives/lib/Dialect/Collective/Runtime/CMakeLists.txt": {
+    "mtime": 1757125850.0,
+    "ast_hash": "2bcdff70fedef096ff01bf1bbf81ee15",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/CMakeLists.txt": {
+    "mtime": 1778364661.987531,
+    "ast_hash": "c53434dfa3514ca4dcbcc3d68f3a3384",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/TilingInterface_NOTES.md": {
+    "mtime": 1779400862.6260204,
+    "ast_hash": "0c56a8338e0ed4dc288bdb1c75afec94",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/docs/deep_learning_semantic_core.md": {
+    "mtime": 1779400862.6215827,
+    "ast_hash": "344d075a279d71e58d220b5c0b0e0719",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/docs/pass_reference/tessera_schedule_ir_passes.md": {
+    "mtime": 1779400862.6230378,
+    "ast_hash": "b647ddfed8cdcc68bf577fd3769deeb2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/docs/pass_reference/tessera_target_ir_doc5_runtime.md": {
+    "mtime": 1779400862.6247978,
+    "ast_hash": "4d877178d4c41c042c4ceace1af7d115",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/docs/pass_reference/tessera_graph_ir_passes.md": {
+    "mtime": 1779400862.6225252,
+    "ast_hash": "5571c3057f92ecfa7d3d0634ad5648ec",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/docs/pass_reference/tessera_target_ir_doc1.md": {
+    "mtime": 1779400862.6233335,
+    "ast_hash": "96fe7ba18318e8f241c17baa7327be51",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/docs/pass_reference/tessera_target_ir_doc4_complete.md": {
+    "mtime": 1779400862.6243565,
+    "ast_hash": "7b6f9aaf47969e7fa13c4ee62d32fe74",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/docs/pass_reference/tessera_target_ir_doc2.md": {
+    "mtime": 1779400862.6237419,
+    "ast_hash": "74f941aa10fb11f686d96e79fd08f244",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/docs/pass_reference/tessera_tile_ir_passes.md": {
+    "mtime": 1779400862.6257052,
+    "ast_hash": "02d02587027a89518f7e9ac26258278c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/docs/pass_reference/tessera_compiler_passes_overview.md": {
+    "mtime": 1779400862.6218848,
+    "ast_hash": "b2745ac3de8e8f82cb9a724614ec76b6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/docs/pass_reference/tessera_target_ir_doc8_summary.md": {
+    "mtime": 1779400862.625154,
+    "ast_hash": "311dc039e04cf45c9856461e0233e6a6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/programming_model/CMakeLists.txt": {
+    "mtime": 1778071201.9634447,
+    "ast_hash": "260a5ab4ea0d95211dc0721c58bf4766",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/programming_model/README_v1_1_patch.md": {
+    "mtime": 1779400862.6262536,
+    "ast_hash": "31f5edb3c8d224c0f095ec74fa38f123",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/programming_model/docs/Tessera_Programming_Model_v1_1_Plan_20250917_212640.md": {
+    "mtime": 1779400862.6271238,
+    "ast_hash": "e0b2b593c49fbf126b778fe82b50ced9",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/programming_model/docs/Memory_Execution_Model_v1_1.md": {
+    "mtime": 1779400862.6264973,
+    "ast_hash": "24aee245ac8eb4ad828d7130de4d457d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/programming_model/docs/Tessera_Programming_Model_v1_1_Tasks_20250917_212640.md": {
+    "mtime": 1779400862.6275334,
+    "ast_hash": "84ae1804afa8486b732ab965224354d1",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/programming_model/docs/Parallelism_Constructs_v1_1.md": {
+    "mtime": 1779400862.6267831,
+    "ast_hash": "209ccc2fbde28f15e364e5ce9f7a3130",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/CMakeLists.txt": {
+    "mtime": 1777241296.6273408,
+    "ast_hash": "9340b71a14621d475f11678970620def",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/README.md": {
+    "mtime": 1779400862.615555,
+    "ast_hash": "8ad819b8b3c64a57370d8124a414ec0f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/tools/CMakeLists.txt": {
+    "mtime": 1756878048.0,
+    "ast_hash": "3a51879c868b3f24296a4cd94f89f9c5",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/include/CMakeLists.txt": {
+    "mtime": 1756878048.0,
+    "ast_hash": "9b715a6d8f168388acf8e49cd31ee78a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/include/tessera/CMakeLists.txt": {
+    "mtime": 1756878048.0,
+    "ast_hash": "583a3d27b09c84644e47351a9d8cf836",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/include/tessera/targets/CMakeLists.txt": {
+    "mtime": 1756878048.0,
+    "ast_hash": "0936e1af22d0d61f0e15571f27e4ff8a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/tests/CMakeLists.txt": {
+    "mtime": 1756878048.0,
+    "ast_hash": "a80967580d4a600aa1094f8a473cb867",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/docs/Mapping.md": {
+    "mtime": 1779400862.615813,
+    "ast_hash": "89d4fe507dee4b8ec1880ca03a0d5abd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/docs/tessera/INDEX.md": {
+    "mtime": 1779400862.616082,
+    "ast_hash": "a07c2e9a6e446de909399a533b879ece",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/examples/gemm/README.md": {
+    "mtime": 1779400862.616545,
+    "ast_hash": "66752c59c5dae17bdb5a4a4cdbaae675",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/examples/flashattn_tiny/README.md": {
+    "mtime": 1779400862.616321,
+    "ast_hash": "8cb519582a0575f116c22f266d0c475e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Cerebras_backend/lib/CMakeLists.txt": {
+    "mtime": 1777261938.8403182,
+    "ast_hash": "9ddf5ef38752a91b95272e9e9c532a25",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/CMakeLists.txt": {
+    "mtime": 1777241296.266593,
+    "ast_hash": "e5df9f356aa6589638f705d294be5db4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/README.md": {
+    "mtime": 1779400862.6188114,
+    "ast_hash": "3bd264ac975f440debb1f22c9665dadd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/docs/PJRT_Execution.md": {
+    "mtime": 1779400862.6192462,
+    "ast_hash": "0c293d069f8cd2a7317d2014a4e4be9d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/docs/Tessera_TPU_Backend_Design.md": {
+    "mtime": 1779400862.619736,
+    "ast_hash": "42f37d1889836ebc29356118e2af456f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/docs/Shardy_Export.md": {
+    "mtime": 1779400862.6194777,
+    "ast_hash": "229f5445573a336052d483d7952cec57",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_TPU_Backend/docs/FlashAttention_Lowering.md": {
+    "mtime": 1779400862.6190274,
+    "ast_hash": "b54767f14af97bd1a12ea8f2a997950c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/CMakeLists.txt": {
+    "mtime": 1777262204.0537002,
+    "ast_hash": "23803e92a4d4101de58175e86a98ff2a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/README.md": {
+    "mtime": 1779400862.6208422,
+    "ast_hash": "595ec1de4f1677c9d453544c624de57c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/docs/tessera_target_ir_to_x86.md": {
+    "mtime": 1779400862.6210766,
+    "ast_hash": "e988f7c0155c4e342a8cf1a49245cbdd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_x86_backend/docs/x86_backend_overview.md": {
+    "mtime": 1779400862.621322,
+    "ast_hash": "6880753424f16407a5578a9ff618f19c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/CMakeLists.txt": {
+    "mtime": 1777295737.0173264,
+    "ast_hash": "445c116bd80726b720ab3a58f799d6cc",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/README.md": {
+    "mtime": 1779400862.6175458,
+    "ast_hash": "3b8f41a27a751cc9076949801e8d1ece",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/tools/tessera-cpx-opt/CMakeLists.txt": {
+    "mtime": 1777296279.8157134,
+    "ast_hash": "a35f25677726fb6fb415babd8936c993",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/test/CMakeLists.txt": {
+    "mtime": 1777293078.9613295,
+    "ast_hash": "962b7ec74e29c236a2562f0b6756f50a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/include/CMakeLists.txt": {
+    "mtime": 1777296018.258453,
+    "ast_hash": "e9a0d12e671bd73ee2025f2586632921",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/docs/CPX_Pass_Pipelines.md": {
+    "mtime": 1779400862.6179862,
+    "ast_hash": "ed06e02568db9db87a6cdc8bd6ba45d0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/docs/CPX_Target_IR.md": {
+    "mtime": 1779400862.6185803,
+    "ast_hash": "123596e6b17af8f0162c86abfd4de1c8",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/docs/CPX_Runtime_Scheduler.md": {
+    "mtime": 1779400862.6182234,
+    "ast_hash": "390a67f8ae665fb07d40660fb98a5ff0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/docs/CPX_Autotune_Profiling.md": {
+    "mtime": 1779400862.6177804,
+    "ast_hash": "1404328f94de21912cb952e689f9a20f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_RubinCPX_Backend/lib/CMakeLists.txt": {
+    "mtime": 1777296027.6670907,
+    "ast_hash": "3bdb85f2788a76b3d923ba10361ee5a9",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/CMakeLists.txt": {
+    "mtime": 1779336360.4563172,
+    "ast_hash": "0534230d0f888a00df8c8d5724e05437",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/README.md": {
+    "mtime": 1779400862.6152525,
+    "ast_hash": "f524d54dd85894adfc2cfcdc337088e0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/CMakeLists.txt": {
+    "mtime": 1777906019.0018725,
+    "ast_hash": "037867302688c2fae90f2bb1abf79c83",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/README.md": {
+    "mtime": 1779400862.6199613,
+    "ast_hash": "94da30f3833528d8ad9e7d4c211b7360",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/CMakeLists.txt": {
+    "mtime": 1777905802.224777,
+    "ast_hash": "ff291f3a2df84ffe0e5a708589c4216a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/CMakeLists.txt": {
+    "mtime": 1777906018.903761,
+    "ast_hash": "06e11400458c636072d6b7520971101f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/docs/nvtile_tma_quickstart.md": {
+    "mtime": 1779400862.6203885,
+    "ast_hash": "2358f725812d9c5ae6e6d576cb0d33fc",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/docs/tile_ir_to_nvgpu_nvvm_ptx.md": {
+    "mtime": 1779400862.620596,
+    "ast_hash": "51b6f9a081fd1f08864ace0b50cde5cc",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/docs/gpu_backend_overview.md": {
+    "mtime": 1779400862.6201901,
+    "ast_hash": "bb3d2d47c6a9f1ac563b928ae9f2cf5f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/IR/CMakeLists.txt": {
+    "mtime": 1777905671.7644072,
+    "ast_hash": "8fd1fa1ceba449a86492737770acf3f6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/CMakeLists.txt": {
+    "mtime": 1777905751.2156374,
+    "ast_hash": "8f03da5fab3f5211778c1a13056913bb",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/CMakeLists.txt": {
+    "mtime": 1756880188.0,
+    "ast_hash": "caee57169a98946f4542626d87093be7",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/README.md": {
+    "mtime": 1779400862.617066,
+    "ast_hash": "fe9153d737e7e62ef2392ac645ab7b4b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/tools/CMakeLists.txt": {
+    "mtime": 1777903534.0996099,
+    "ast_hash": "aef02dba8ae6051708f9c0dd18478b19",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/test/CMakeLists.txt": {
+    "mtime": 1777904972.9636178,
+    "ast_hash": "1ab4880e2f3f2db27cb6290639c9a538",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/ci/CMakeLists.txt": {
+    "mtime": 1756880188.0,
+    "ast_hash": "f45c9cdcd00430319d6e474824d354ed",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/CMakeLists.txt": {
+    "mtime": 1756880188.0,
+    "ast_hash": "0c2e82b740b4faaea3272a86608ab46d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/docs/Tessera_ROCM_Backend_v3.md": {
+    "mtime": 1779400862.6173003,
+    "ast_hash": "2777c82b86474868b195c01e329c673f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/.github/workflows/build.yml": {
+    "mtime": 1756880188.0,
+    "ast_hash": "3ca0bf3fed588ef50f06f613c43b0a85",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/lib/CMakeLists.txt": {
+    "mtime": 1777262234.4946337,
+    "ast_hash": "dcab027213a68831e4a610c6d6484b23",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/lib/IR/CMakeLists.txt": {
+    "mtime": 1777903035.656021,
+    "ast_hash": "3ce1f5f515c8869e26e172ef8ac779e9",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/CMakeLists.txt": {
+    "mtime": 1777902322.632783,
+    "ast_hash": "ce0ab7a688ae8227a14ce6aa667c2db1",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_ROCM_Backend/external/ck_bridge/CMakeLists.txt": {
+    "mtime": 1756880188.0,
+    "ast_hash": "bc87cbefa3e2f88c9cb8b3cb3e788091",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/CMakeLists.txt": {
+    "mtime": 1777849739.6741962,
+    "ast_hash": "93bd73cef0e86e866e212a3c9639bd37",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Metalium_Backend/README.md": {
+    "mtime": 1779400862.6168065,
+    "ast_hash": "90d555f5128cca8530ebc213e2037d6f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tessera_neighbors/CMakeLists.txt": {
+    "mtime": 1779335754.4938018,
+    "ast_hash": "6043d9988b06be777dbe659f1b9b10e9",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tessera_neighbors/README.md": {
+    "mtime": 1779400862.6277974,
+    "ast_hash": "df5538d5553e1ca8bf7b235bfa7bc3c9",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tessera_neighbors/SPEC_Neighbors_and_Halo.md": {
+    "mtime": 1779400862.628049,
+    "ast_hash": "e788eca5b7faf5a7966e1a1393d6631d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tessera_neighbors/docs/Neighbors_and_Halo.md": {
+    "mtime": 1779400862.6282907,
+    "ast_hash": "e102ea5c6f9e65979bcf3e184293bf7e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tile_opt_fa4/CMakeLists.txt": {
+    "mtime": 1779214421.409161,
+    "ast_hash": "3c26e5eb1bb525113b79186500962e50",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tile_opt_fa4/cmake/CMakeLists_additions_v1_3.txt": {
+    "mtime": 1759009668.0,
+    "ast_hash": "5adc043aab01146a6cf99ee4d8a2d13c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tile_opt_fa4/docs/AppNote_FA4_in_Tessera_v1_3_Addendum.md": {
+    "mtime": 1779400862.6289606,
+    "ast_hash": "d5c64c2cd7542b155bb790264078f2df",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tile_opt_fa4/docs/CHANGELOG_v1_1.md": {
+    "mtime": 1779400862.6292074,
+    "ast_hash": "9d5a8e4367c104aade176a86dcb5c292",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tile_opt_fa4/docs/AppNote_FA4_in_Tessera_v1_2.md": {
+    "mtime": 1779400862.6287038,
+    "ast_hash": "6f1b9523120b9d70373217a752b47690",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/tile_opt_fa4/docs/Life_of_a_Tile_FA4.md": {
+    "mtime": 1779400862.6294417,
+    "ast_hash": "af290c84aecfb6a2a7019011ca031fa6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/CMakeLists.txt": {
+    "mtime": 1756798728.0,
+    "ast_hash": "e1dda6adf12ede187c2e324630ef830d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/README.md": {
+    "mtime": 1779400862.6141052,
+    "ast_hash": "dd26f393f70746c20d602cd3d664d6ea",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/docs/Autotune_Architecture_Part1.md": {
+    "mtime": 1779400862.6143591,
+    "ast_hash": "c25d5b26cc162dfb981a426dfefc4ee8",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/docs/ResolvePass_README.md": {
+    "mtime": 1779400862.6149197,
+    "ast_hash": "87454ce54cac2f1b87307be895e1414c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/autotuning/tessera/tools/autotune/docs/Autotune_Architecture_Part2.md": {
+    "mtime": 1779400862.6146674,
+    "ast_hash": "b31d9183ffa729f196c16369ef4b72d7",
+    "semantic_hash": ""
+  }
+}

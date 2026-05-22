@@ -43,7 +43,7 @@ Out of scope this step (deferred to M6 Steps 3/4):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from tessera.compiler import ast_ir as _ast_ir
 
@@ -258,6 +258,190 @@ class EnergyCompiledCallable:
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self._fn(*args, **kwargs)
+
+    # ─────────────────────────────────────────────────────────────────
+    # M6 Slice 1 (2026-05-22) — gradient + refine integration.
+    #
+    # Until now, users decorating an energy function with @energy_jit
+    # got back a callable carrying only the forward IR.  To compute
+    # ∂E/∂y they had to manually call ``make_gradient_program(fn)`` —
+    # a friction point that meant the @energy_jit lane could not be
+    # the everyday truth source for energy + gradient + refinement.
+    #
+    # These four accessors close the gap:
+    #
+    #   .gradient_program  : lazily built EnergyGradientProgram,
+    #                         cached on the instance.  Build cost paid
+    #                         once; per-call work is forward + reverse
+    #                         + cotangent accumulation only.
+    #   .grad_y(env)       : ∂E/∂y for an env binding y + params.
+    #   .refine(y0, T, η)  : T-step gradient descent (loop alias for
+    #                         the energy_grad.refine() function with
+    #                         the cached program).
+    #   .fused_report()    : inspectable dict describing the energy
+    #                         IR + paired VJP chain — what an MSL
+    #                         fused energy+grad kernel would compile
+    #                         from when M6 Step 4 lands.
+    # ─────────────────────────────────────────────────────────────────
+
+    @property
+    def gradient_program(self) -> "Any":  # EnergyGradientProgram forward-ref
+        """Lazily built + cached :class:`EnergyGradientProgram` for
+        this artifact's IR.  Build happens once per instance; reuse
+        across many ``grad_y`` / ``refine`` calls.
+
+        Lazy + thread-unsafe by design: the build is fast and idempotent;
+        the first thread to access wins, subsequent threads see the
+        cached instance.  If thread-safety becomes important, wrap in
+        an :class:`RLock` here (no other caller of this property needs
+        to change).
+        """
+        cached = getattr(self, "_gradient_program", None)
+        if cached is None:
+            from .energy_grad import make_gradient_program
+            cached = make_gradient_program(self.artifact.ir)
+            self._gradient_program = cached
+        return cached
+
+    def grad_y(self, env: "Mapping[str, Any]") -> Any:
+        """Reverse-mode autodiff: ∂E/∂y where ``y`` is the first
+        positional argument in the energy function's signature.
+
+        ``env`` binds every named arg by its source-code name (so for
+        ``def E(y, W): ...`` you pass ``{"y": ..., "W": ...}``).
+        Returns a numpy array shaped like ``env[y_name]``.
+        """
+        return self.gradient_program.grad_y(env)
+
+    def refine(
+        self,
+        y0: Any,
+        *,
+        T: int,
+        eta: float,
+        params: "Mapping[str, Any] | None" = None,
+    ) -> Any:
+        """``T`` steps of gradient descent against the gradient program:
+
+            y ← y − η · grad_y(y, *params)
+
+        The gradient program is built once (lazy cache) and reused
+        across every step — mirroring the invariant the future fused
+        MSL kernel will satisfy: bind once, loop T times.
+
+        Returns the refined ``y`` as a numpy array.
+        """
+        from .energy_grad import refine as _refine
+        return _refine(y0, self.gradient_program, T=T, eta=eta, params=params)
+
+    def fused_report(self) -> dict[str, Any]:
+        """Inspectable description of the energy IR + paired VJP
+        chain.  This is what an MSL fused energy+gradient kernel
+        would compile from when M6 Step 4 lands — exposing it now
+        lets external tooling (status dashboards, autotuners, design
+        reviews) reason about the fused shape without waiting for
+        codegen.
+
+        Returns a dict matching the CompileReport-style envelope so
+        consumers can serialise + diff uniformly.  Fields:
+
+          forward_ops     : list of {op_name, operand_refs, result_name}
+                            from the EnergyIRProgram.
+          gradient_chain  : list of {op_name, has_vjp, arity} — the
+                            backward pass the gradient program will
+                            run; empty if any op lacks a VJP (in
+                            which case the build raises and this
+                            method surfaces the failure mode in the
+                            ``errors`` field).
+          fusion_class    : 'forward_only' | 'forward_and_grad'.  M6
+                            Step 4 will lower 'forward_and_grad' to a
+                            single MSL dispatch; Step 3 lowers
+                            forward_only.
+          arg_names       : tuple, mirrors ir.arg_names.
+          return_ref      : str, mirrors ir.return_ref.
+          errors          : tuple of strings — empty on success.
+        """
+        from .energy_vjp import has_vjp
+        # Inline import to avoid a hard dep on the lookup table here.
+        from .energy_grad import _OP_ARITY
+
+        forward_ops = [
+            {
+                "op_name": op.op_name,
+                "operand_refs": list(op.operand_refs),
+                "result_name": op.result_name,
+            }
+            for op in self.artifact.ir.ops
+        ]
+
+        gradient_chain: list[dict[str, Any]] = []
+        errors: list[str] = []
+        all_have_vjp = True
+        for op in self.artifact.ir.ops:
+            has = has_vjp(op.op_name)
+            arity = _OP_ARITY.get(op.op_name, 0)
+            gradient_chain.append({
+                "op_name": op.op_name,
+                "has_vjp": bool(has),
+                "arity": arity,
+            })
+            if not has:
+                all_have_vjp = False
+                errors.append(
+                    f"no VJP registered for {op.op_name!r}; "
+                    "fused energy+gradient kernel cannot lower this op"
+                )
+
+        fusion_class = "forward_and_grad" if all_have_vjp else "forward_only"
+
+        return {
+            "program_id": self.artifact.source_name,
+            "source": f"@energy_jit({self.artifact.source_name})",
+            "target": self.artifact.target,
+            "dtype": self.artifact.dtype,
+            "arg_names": list(self.artifact.ir.arg_names),
+            "return_ref": self.artifact.ir.return_ref,
+            "forward_ops": forward_ops,
+            "gradient_chain": gradient_chain,
+            "fusion_class": fusion_class,
+            "errors": errors,
+        }
+
+    # ─────────────────────────────────────────────────────────────────
+    # Slice 4 (2026-05-22) — CompileReport canonical schema.
+    #
+    # Every JIT frontend (@tessera.jit, textual, @clifford_jit,
+    # @energy_jit) must expose a uniform CompileReport accessor so the
+    # M5 no-silent-native rule + the M1 stability gate apply to every
+    # shipped lane.  energy_jit funnels through the same AST-constrained
+    # template as clifford_jit, so it reports as FRONTEND_CLIFFORD_JIT
+    # with the source disambiguating "energy_jit" vs other constrained
+    # lanes.  Value kind is `tensor` (energy outputs are scalar/tensor,
+    # never multivector).
+    # ─────────────────────────────────────────────────────────────────
+
+    def compile_report(self) -> "Any":  # CompileReport forward-ref
+        """Synthesize a :class:`CompileReport` from this callable's
+        artifact.  Same shape as ``CliffordCompiledCallable.compile_report``
+        so cross-lane consumers (CI, audit, status dashboards) can
+        treat both uniformly."""
+        from . import compile_report as _cr  # local to avoid cycle
+        ir = self.artifact.ir
+        ir_text = ir.text() if ir is not None else ""
+        ir_hashes = (
+            {"graph_ir": _cr.hash_ir_text(ir_text)} if ir_text else {}
+        )
+        return _cr.CompileReport(
+            program_id=self.artifact.source_name,
+            source=f"@energy_jit({self.artifact.source_name})",
+            frontend=_cr.FRONTEND_CLIFFORD_JIT,
+            value_kind=_cr.VALUE_KIND_TENSOR,
+            target=self.artifact.target,
+            ir_hashes=ir_hashes,
+            target_decision={
+                self.artifact.target: f"energy_jit({self.artifact.dtype})"
+            },
+        )
 
 
 def energy_jit(

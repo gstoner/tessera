@@ -101,6 +101,14 @@ void registerTesseraPasses() {
   // x86 / GPU pipelines in a follow-up sprint.
   ::mlir::registerPass([]() { return createLayoutLegalityPass(); });
 
+  // ── Sprint V5 (2026-05-22) — Symbolic dim equality verifier ───────────
+  // Closes the 4th MLIR-verifier gap in SHAPE_SYSTEM.md §11.2.
+  // Reads `tessera.dim_bindings` + `tessera.dim_sizes` on each
+  // func.func and validates the equations + per-op dim-name contracts
+  // for reshape / transpose / matmul.  Registered standalone; inserted
+  // after DistributionLoweringPass in named pipelines in V2.
+  ::mlir::registerPass([]() { return createSymbolicDimEqualityPass(); });
+
   // ── Phase F5 adjoint collective insertion ──────────────────────────────────
   // Runs after AutodiffPass on functions carrying both
   // tessera.autodiff="reverse" and tessera.weight_sharding. Plans

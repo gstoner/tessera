@@ -221,6 +221,26 @@ std::unique_ptr<mlir::Pass> createHybridAttnExpandPass();
 // surface is large enough.
 std::unique_ptr<mlir::Pass> createLayoutLegalityPass();
 
+// ── Sprint V5 (2026-05-22) — SymbolicDimEqualityPass ─────────────────────
+//
+// Closes the 4th and final MLIR-verifier gap in SHAPE_SYSTEM.md §11.2:
+// "No MLIR-level pass that re-checks symbolic dim equality after
+// lowering."  Reads function-level `tessera.dim_bindings` (equations
+// like "D = H * Dh") + `tessera.dim_sizes` (symbol → i64) and
+// validates the equations.  Walks `tessera.reshape`, `tessera.transpose`,
+// `tessera.matmul` ops carrying `tessera.dim_names_*` attributes and
+// checks the local permutation / product / contracting-dim contracts.
+//
+// Stable diagnostic codes (for SHAPE_SYSTEM §11 cross-linking):
+//   SYMDIM_BINDING_VIOLATION
+//   SYMDIM_RESHAPE_VIOLATION
+//   SYMDIM_TRANSPOSE_VIOLATION
+//   SYMDIM_MATMUL_CONTRACT_VIOLATION
+//
+// Registered as `--tessera-symdim-equality`.  Ops without dim-name
+// attributes are skipped (best-effort verifier, not a hard requirement).
+std::unique_ptr<mlir::Pass> createSymbolicDimEqualityPass();
+
 void registerTesseraPasses();
 
 } // namespace tessera

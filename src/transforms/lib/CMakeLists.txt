@@ -43,6 +43,9 @@ add_library(TesseraPasses
   # Sprint V2 (2026-05-22) — layout legality skeleton (SHAPE_SYSTEM §11.2 closure).
   LayoutLegalityPass.cpp
 
+  # Sprint V5 (2026-05-22) — symbolic dim equality verifier (SHAPE_SYSTEM §11.2 closure).
+  SymbolicDimEqualityPass.cpp
+
   # Phase 6 diagnostics
   ${CMAKE_SOURCE_DIR}/src/compiler/diagnostics/ShapeInferencePass.cpp
   ${CMAKE_SOURCE_DIR}/src/compiler/diagnostics/ErrorReporter.cpp

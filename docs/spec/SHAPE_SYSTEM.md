@@ -444,11 +444,25 @@ items:**
    and 9 lit-fixture cases (`tests/tessera-ir/phase2/sprint_v1_verifiers.mlir`).
    The "uneven coverage" subgap remains for the rest of the dialect
    (op-by-op work as needs arise).  **Status: partially closed.**
-2. **No MLIR-level pass that re-checks symbolic dim equality after
-   lowering.** Python `ConstraintSolver` handles decoration- and
-   call-time; a post-`DistributionLoweringPass` checker would catch
-   any pass that accidentally broke a `where D = H * Dh` clause.
-   **Status: planned.**
+2. **MLIR-level symbolic dim equality re-check after lowering.**
+   **Sprint V5 closure (2026-05-22):**
+   `src/transforms/lib/SymbolicDimEqualityPass.cpp` ships as
+   `--tessera-symdim-equality`.  It reads function-level
+   `tessera.dim_bindings` (ArrayAttr of equation strings like
+   `"D = H * Dh"`) and `tessera.dim_sizes` (DictionaryAttr of
+   symbol → i64), validates each equation when both sides are
+   bound, and walks `tessera.reshape` / `tessera.transpose` /
+   `tessera.matmul` ops checking the per-op dim-name contract.
+   Four stable diagnostic codes: `SYMDIM_BINDING_VIOLATION`,
+   `SYMDIM_RESHAPE_VIOLATION`, `SYMDIM_TRANSPOSE_VIOLATION`,
+   `SYMDIM_MATMUL_CONTRACT_VIOLATION`.  Lit fixture:
+   `tests/tessera-ir/phase2/sprint_v5_symdim_equality.mlir`
+   (1 positive + 2 negative, exercising the binding + matmul
+   contract codes — transpose / reshape branches exist in the
+   pass body but reshape is not yet a registered Tessera op, so
+   only the registered-op codes are lit-exercised today).
+   **Status: V1 closed; pipeline integration + reshape ODS op
+   are V2 followups.**
 3. **`LayoutLegalityPass` skeleton + first rule.** **Sprint V2
    closure (2026-05-22):** `src/transforms/lib/LayoutLegalityPass.cpp`
    ships with the canonical 8-name layout accept-set

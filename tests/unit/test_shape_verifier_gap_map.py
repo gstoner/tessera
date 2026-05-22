@@ -174,10 +174,21 @@ _CANONICAL_GAP_PHRASES_CLOSURE = (
     "tessera.target_sm",
 )
 
-_CANONICAL_GAP_PHRASES_PLANNED = (
-    # The one gap that genuinely stays planned — needs a post-lowering
-    # MLIR pass that re-runs symbolic-dim equality across the IR.
-    "No MLIR-level pass that re-checks symbolic dim equality after",
+_CANONICAL_GAP_PHRASES_PLANNED: tuple[str, ...] = (
+    # Sprint V5 (2026-05-22) closed the symbolic-dim-equality gap.
+    # All four originally-named MLIR-verifier gaps from the
+    # 2026-05-22 SHAPE_SYSTEM.md §11.2 set are now closed at V1.
+    # If a new gap is introduced or a partial closure regresses,
+    # add a phrase here AND record the open work in §11.2.
+)
+
+
+# Sprint V5 (2026-05-22) — V5 closure must be recorded in §11.2.
+_CANONICAL_V5_CLOSURE_PHRASES = (
+    "Sprint V5 closure",
+    "SYMDIM_BINDING_VIOLATION",
+    "SYMDIM_MATMUL_CONTRACT_VIOLATION",
+    "tessera-symdim-equality",
 )
 
 
@@ -196,14 +207,31 @@ def test_spec_records_sprint_v1_v2_v3_closures() -> None:
     )
 
 
-def test_spec_lists_remaining_planned_gap() -> None:
-    """The one remaining genuine MLIR-verifier gap (no post-lowering
-    symbolic-dim equality re-check) must stay listed as planned until
-    a future sprint addresses it."""
+def test_no_remaining_planned_gaps() -> None:
+    """After Sprint V5 closed the 4th and final MLIR-verifier gap,
+    the planned-gap list is empty.  If a regression re-opens a gap,
+    add a phrase to `_CANONICAL_GAP_PHRASES_PLANNED` AND record the
+    open work in §11.2 — keep doc + test in lockstep."""
+    if not _CANONICAL_GAP_PHRASES_PLANNED:
+        return  # All four originally-named gaps closed at V5.
     spec = (REPO_ROOT / "docs" / "spec" / "SHAPE_SYSTEM.md").read_text()
     missing = [g for g in _CANONICAL_GAP_PHRASES_PLANNED if g not in spec]
     assert not missing, (
         f"SHAPE_SYSTEM.md §11.2 is missing remaining planned gaps: "
         f"{missing}.  If the gap was closed, update §11.1 with the "
         f"closing evidence and update this test."
+    )
+
+
+def test_spec_records_sprint_v5_closure() -> None:
+    """Sprint V5 (2026-05-22) closed the 4th MLIR-verifier gap.
+    The spec must reference the closure with its specific evidence
+    (pass name + 2 stable diagnostic codes lit-exercised)."""
+    spec = (REPO_ROOT / "docs" / "spec" / "SHAPE_SYSTEM.md").read_text()
+    missing = [g for g in _CANONICAL_V5_CLOSURE_PHRASES if g not in spec]
+    assert not missing, (
+        f"SHAPE_SYSTEM.md §11.2 is missing Sprint V5 closure phrases: "
+        f"{missing}.  If V5 was reverted, restore the verifier code "
+        f"(SymbolicDimEqualityPass.cpp) AND the spec; do not edit one "
+        f"without the other."
     )

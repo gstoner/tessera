@@ -92,10 +92,45 @@ diagnostic wording fails immediately.
 `lit tests/tessera-ir/phase{2,3}/sprint_v*.mlir` reports 3/3 PASS
 through the rebuilt C++ binary.
 
-**Remaining MLIR-verifier gap (1 of 4):** no post-lowering MLIR
-pass that re-checks symbolic-dim equality.  Tracked in SHAPE_SYSTEM
-§11.2 as the single remaining planned item; structurally guarded by
-`test_spec_lists_remaining_planned_gap`.
+**MLIR Verifier Sprint V5 (2026-05-22)** closed the **4th and final**
+MLIR-verifier gap.  All four originally-named MLIR-verifier gaps
+from the 2026-05-22 SHAPE_SYSTEM.md §11.2 set are now closed at V1:
+
+- **V5 (post-lowering symbolic dim equality re-check):** new
+  `src/transforms/lib/SymbolicDimEqualityPass.cpp` registered as
+  `--tessera-symdim-equality`.  Reads function-level
+  `tessera.dim_bindings` (ArrayAttr of equation strings) and
+  `tessera.dim_sizes` (DictionaryAttr of symbol → i64); validates
+  the equation when both sides are bound; walks `tessera.reshape /
+  transpose / matmul` ops checking per-op dim-name contracts.
+  Four stable diagnostic codes (`SYMDIM_BINDING_VIOLATION`,
+  `SYMDIM_RESHAPE_VIOLATION`, `SYMDIM_TRANSPOSE_VIOLATION`,
+  `SYMDIM_MATMUL_CONTRACT_VIOLATION`).  Lit fixture:
+  `tests/tessera-ir/phase2/sprint_v5_symdim_equality.mlir`
+  (1 positive transpose + 2 negative: binding + matmul contract;
+  the reshape branch is in the pass body but `tessera.reshape` is
+  not yet registered in the dialect — V2 followup).
+
+**19 new structural-guard tests** in
+`tests/unit/test_symbolic_dim_equality_pass.py` pin the pass source,
+diagnostic codes, attribute names, op dispatch list, CMake / Passes.h
+/ Passes.cpp registration, and lit fixture content.
+
+**Build + lit verification (2026-05-22):**
+`cmake --build build --target tessera-opt` succeeded with the new
+`SymbolicDimEqualityPass.cpp` source compiled into `TesseraPasses`;
+`lit tests/tessera-ir/phase2/sprint_v5_symdim_equality.mlir` reports
+1/1 PASS through the rebuilt C++ binary.
+
+**The original 4-item MLIR-verifier gap set is now fully closed.**
+Followup work tracked as V2 (not V1 regression):
+- Register `tessera.reshape` as a proper ODS op so the reshape lit
+  case can be exercised end-to-end.
+- Insert `--tessera-symdim-equality` into the named lowering pipelines
+  after `DistributionLoweringPass`.
+- Add SSA-value flow tracking (auto-propagate dim names through ops
+  without explicit per-op annotations).
+- Affine / Presburger reasoning beyond simple symbol products.
 
 ## Executive Summary
 

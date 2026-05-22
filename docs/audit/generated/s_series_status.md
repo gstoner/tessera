@@ -16,7 +16,7 @@
 |---|---:|---:|
 | `batching_rule` | 36 | 396 |
 | `transpose_rule` | 40 | 392 |
-| `sharding_rule` | 76 | 356 |
+| `sharding_rule` | 59 | 373 |
 | `lowering_rule` | 0 | 432 |
 | `backend_kernel` | 432 | 0 |
 
@@ -29,7 +29,7 @@
 | S2 | `comparison` | 6 | — | — | — | — | 6 |
 | S2 | `numeric_helper` | 15 | — | — | — | — | 15 |
 | S5 | `control_flow` | 7 | — | — | — | — | 7 |
-| S7 | `attention` | 21 | — | — | 21 | — | 21 |
+| S7 | `attention` | 21 | — | — | 7 | — | 21 |
 | S7 | `position_encoding` | 2 | — | — | — | — | 2 |
 | S7 | `normalization` | 7 | — | — | 7 | — | 7 |
 | S7 | `memory` | 3 | — | — | — | — | 3 |
@@ -55,7 +55,7 @@
 | other | `linalg_decomposition` | 3 | 3 | 3 | 3 | — | 3 |
 | other | `linalg_solver` | 1 | 1 | 1 | 1 | — | 1 |
 | other | `logical` | 8 | — | — | — | — | 8 |
-| other | `loop_nest` | 7 | — | — | 7 | — | 7 |
+| other | `loop_nest` | 7 | — | — | 4 | — | 7 |
 | other | `model_layer` | 4 | — | — | 3 | — | 4 |
 | other | `moe` | 1 | 1 | 1 | 1 | — | 1 |
 | other | `moe_transport` | 2 | 2 | 2 | 2 | — | 2 |
@@ -88,12 +88,12 @@
 |---|---:|---:|---:|---:|---:|
 | S2 | 54 | 0 | 0 | 0 | 54 |
 | S5 | 7 | 0 | 0 | 0 | 7 |
-| S7 | 50 | 0 | 0 | 32 | 50 |
+| S7 | 50 | 0 | 0 | 18 | 50 |
 | S10 | 18 | 3 | 3 | 0 | 18 |
 | S11 | 30 | 0 | 0 | 0 | 30 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
 | M6 | 12 | 0 | 12 | 9 | 12 |
-| other | 245 | 33 | 25 | 35 | 245 |
+| other | 245 | 33 | 25 | 32 | 245 |
 
 ## Closure trajectory
 

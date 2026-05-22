@@ -443,24 +443,33 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
 
 # ── Shared override dicts for attention family + RL losses ──────────────
 # softmax(QKᵀ/√d)V over [B, H, S, D] — every axis follows the standard
-# transformer convention. TP along H is well-understood; sequence
-# parallelism along S is staged behind Phase G mesh integration.
+# transformer convention.
 #
-# transpose_rule (Sprint S-series #17, 2026-05-22): promoted from
-# `partial` to `complete`.  Every attention primitive sharing this
-# override has both VJP and JVP registered in
-# ``tessera.autodiff.{vjp,jvp}`` — flash_attn, attn_sliding_window,
-# attn_top_k_blocks, attn_compressed_blocks, attn_local_window_2d,
-# linear_attn, linear_attn_state, power_attn, retention,
-# mla_decode_fused, and the reasoning-model family (deepseek_sparse,
-# lightning, gated, hybrid, gated_deltanet, kimi_delta,
-# modified_delta).  The transpose dual of softmax(QKᵀ/√d)V w.r.t.
-# {Q, K, V} is the VJP — registering a VJP IS the proof that the
-# linear-transpose contract exists.  The category-level
-# ``_TRANSPOSE_RULE_BY_CATEGORY["attention"] = "complete"`` (Sprint #6,
-# 2026-05-22) documents the same fact at the category level; this
-# override now agrees with the category instead of shadowing it.
-_ATTN_HARDENED: dict[str, str] = {
+# Sprint #20a (2026-05-22) split the attention family into two override
+# dicts so the standard family can promote `sharding_rule` to `complete`
+# (proven by tests/unit/test_attention_sharding_mock_mesh.py via
+# TP-by-head MockRankGroup proof) while the reasoning-model fused
+# family stays at `partial` (their target-specific fused kernels need
+# Phase G/H/I backend validation):
+#
+#   _ATTN_STANDARD_HARDENED       — sharding_rule = complete (Bucket B closed)
+#   _ATTN_REASONING_FUSED_HARDENED — sharding_rule = partial (Bucket C gated)
+#
+# transpose_rule (Sprint #17, 2026-05-22) was promoted across both groups
+# — every name has both VJP and JVP registered in
+# ``tessera.autodiff.{vjp,jvp}``, and the transpose dual of
+# softmax(QKᵀ/√d)V w.r.t. {Q, K, V} IS the VJP.
+_ATTN_STANDARD_HARDENED: dict[str, str] = {
+    "math_semantics": "complete",
+    "shape_rule": "complete",
+    "dtype_layout_rule": "complete",
+    "batching_rule": "complete",
+    "transpose_rule": "complete",
+    "sharding_rule": "complete",
+    "masking_effect_rule": "complete",
+}
+
+_ATTN_REASONING_FUSED_HARDENED: dict[str, str] = {
     "math_semantics": "complete",
     "shape_rule": "complete",
     "dtype_layout_rule": "complete",
@@ -509,6 +518,9 @@ _EBM_POINTWISE_SHARDING_NAMES: frozenset[str] = frozenset({
     "ebm_decode_init",
 })
 
+# Standard attention family — Bucket B closed by Sprint #20a (mock-mesh
+# proof in tests/unit/test_attention_sharding_mock_mesh.py).  These ops
+# are head-axis independent ⇒ TP-by-head sharding is mechanical.
 for _name in (
     # ── Standard attention wrappers ──────────────────────────────────
     "flash_attn", "multi_head_attention", "gqa_attention", "mqa_attention",
@@ -520,14 +532,20 @@ for _name in (
     "attn_local_window_2d",
     # ── Linear / recurrent attention (Lightning, Megalodon) ──────────
     "linear_attn", "linear_attn_state", "power_attn", "retention",
-    # ── Reasoning-model attention family (S-series 2026-05-10) ───────
-    # Each has a dedicated ODS op in TesseraOps.td and a corresponding pass
-    # in src/transforms/lib/AttentionFamilyPasses.cpp.
+):
+    _EXISTING_CONTRACT_OVERRIDES[_name] = _ATTN_STANDARD_HARDENED
+
+# Reasoning-model attention family — Bucket C (Phase G/H/I gate). Each
+# has a dedicated ODS op in TesseraOps.td and a corresponding pass in
+# src/transforms/lib/AttentionFamilyPasses.cpp; their sharding rule is
+# tied to the target-specific fused kernel and stays at `partial` until
+# backend validation lands.
+for _name in (
     "deepseek_sparse_attention", "lightning_attention", "gated_attention",
     "hybrid_attention", "gated_deltanet", "kimi_delta_attention",
     "modified_delta_attention",
 ):
-    _EXISTING_CONTRACT_OVERRIDES[_name] = _ATTN_HARDENED
+    _EXISTING_CONTRACT_OVERRIDES[_name] = _ATTN_REASONING_FUSED_HARDENED
 
 for _name in ("ppo_policy_loss", "grpo_policy_loss", "cispo_policy_loss"):
     _EXISTING_CONTRACT_OVERRIDES[_name] = _RL_LOSS_HARDENED
@@ -2896,41 +2914,52 @@ def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
             metadata=new_metadata,
         )
     # ────────────────────────────────────────────────────────────────────
-    # Backend kernel vertical slice #1 (Sprint #19, 2026-05-22):
+    # Backend kernel vertical slice (Sprint #19 + #19b, 2026-05-22):
     # honest reclassification of `backend_kernel = "planned"` rows
-    # that ship at least one real fused/compileable kernel via the
+    # that ship at least one real implementation via the
     # `backend_kernel_manifest`.
     #
-    # Semantics:
-    #   "planned"  — nothing exists anywhere (no fused, no compileable,
-    #                no reference path).
-    #   "partial"  — at least one target ships a real kernel (fused or
-    #                compileable), but not every documented target.
+    # Semantics (Sprint #19b widening, 2026-05-22):
+    #   "planned"  — no manifest, or every manifest slot is itself
+    #                `planned`/`artifact_only` (no executable code path).
+    #                `artifact_only` means Target IR ships but cannot
+    #                execute (Phase G/H/I gate) — labeling that as
+    #                `partial` would be misleading.
+    #   "partial"  — at least one manifest slot ships an executable
+    #                implementation: `fused`, `compileable`, or
+    #                `reference` (the Python eval path).  This matches
+    #                the `_existing_contracts` walker's default
+    #                `backend_kernel="partial"` for OP_SPECS entries
+    #                (every catalog op has at least a numpy reference);
+    #                python_primitive rows with the same shape now
+    #                label consistently.
     #   "complete" — every documented target ships (universal Phase G/H/I
     #                gate; the s_series_status drift test
     #                ``test_backend_kernel_is_universal_phase_g_gate``
     #                enforces that this stays universally open until the
     #                hardware lanes light up).
     #
-    # The python_primitive walker's default of `"planned"` is too strong
-    # for ops that already ship a fused Apple GPU MSL kernel (the 17
-    # Clifford ops + 6 EBM ops landed under M6/M7).  Promote these from
-    # `planned` to `partial`; everything strictly stronger
-    # (`complete`/`not_applicable`) is preserved.  This is a labeling
-    # honesty fix — no contract claim changes.
+    # Sprint #19a (initial pass) flipped 23 GA/EBM entries with fused
+    # Apple GPU MSL kernels.  Sprint #19b widens to recognize
+    # ``reference`` so the two EBM partition rows
+    # (`ebm_partition_ais`, `ebm_partition_monte_carlo`) align with the
+    # OP_SPECS walker.  This is a labeling honesty fix only — no
+    # contract claim changes; `open_n = partial + planned` stays
+    # invariant so the universal Phase G gate test is unaffected.
     # ────────────────────────────────────────────────────────────────────
-    _FUSED_OR_COMPILEABLE = {"fused", "compileable"}
+    _REAL_IMPLEMENTATION_STATUSES = {"fused", "compileable", "reference"}
     for name, entry in list(entries.items()):
         if entry.contract_status.get("backend_kernel") != "planned":
             continue
         manifest = entry.metadata.get("backend_kernel_manifest")
         if not isinstance(manifest, list):
             continue
-        ships_real_kernel = any(
-            isinstance(slot, dict) and slot.get("status") in _FUSED_OR_COMPILEABLE
+        ships_real_impl = any(
+            isinstance(slot, dict)
+            and slot.get("status") in _REAL_IMPLEMENTATION_STATUSES
             for slot in manifest
         )
-        if not ships_real_kernel:
+        if not ships_real_impl:
             continue
         new_contract = dict(entry.contract_status)
         new_contract["backend_kernel"] = "partial"

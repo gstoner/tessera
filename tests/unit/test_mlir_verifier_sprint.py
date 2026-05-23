@@ -59,6 +59,25 @@ V3C_LIT = (
 SYMDIM_PASS = (
     REPO_ROOT / "src" / "transforms" / "lib" / "SymbolicDimEqualityPass.cpp"
 )
+# Sprint V8 (2026-05-22) targets:
+QUEUE_TD = (
+    REPO_ROOT / "src" / "compiler" / "tile_opt_fa4"
+    / "include" / "tessera" / "Dialect" / "Queue" / "Queue.td"
+)
+QUEUE_VERIFIERS_CPP = (
+    REPO_ROOT / "src" / "compiler" / "tile_opt_fa4"
+    / "lib" / "Dialect" / "Queue" / "QueueVerifiers.cpp"
+)
+QUEUE_DIALECT_H = (
+    REPO_ROOT / "src" / "compiler" / "tile_opt_fa4"
+    / "include" / "tessera" / "Dialect" / "Queue" / "QueueDialect.h"
+)
+SHAPE_INFERENCE_LIT = (
+    REPO_ROOT / "tests" / "tessera-ir" / "phase6" / "shape_inference.mlir"
+)
+SHAPE_INFERENCE_PASS_CPP = (
+    REPO_ROOT / "src" / "compiler" / "diagnostics" / "ShapeInferencePass.cpp"
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -607,6 +626,151 @@ def test_sprint_v3c_lit_fixture_shape() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Sprint V8 — Queue verifier real bodies + shape_inference XFAIL audit
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "op_def",
+    [
+        "def CreateOp",
+        "def PushOp",
+        "def PopOp",
+    ],
+)
+def test_sprint_v8_queue_op_has_hasverifier(op_def: str) -> None:
+    """V8 added `let hasVerifier = 1;` to the 3 queue ops so the
+    ODS-generated framework actually calls our verify() bodies."""
+    td = QUEUE_TD.read_text()
+    idx = td.find(op_def)
+    assert idx >= 0, f"queue op definition missing: {op_def}"
+    window = td[idx: idx + 600]
+    assert "let hasVerifier = 1;" in window, (
+        f"{op_def} missing `let hasVerifier = 1;` — V8 closure regressed"
+    )
+
+
+_V8_VERIFIER_SIGNATURES = (
+    "LogicalResult CreateOp::verify()",
+    "LogicalResult PushOp::verify()",
+    "LogicalResult PopOp::verify()",
+)
+
+
+@pytest.mark.parametrize("sig", _V8_VERIFIER_SIGNATURES)
+def test_sprint_v8_queue_verifier_impl_present(sig: str) -> None:
+    """Each V8 queue op must have a real (non-trivial) verify() body
+    in QueueVerifiers.cpp.  The pre-V8 file held 3 orphan
+    `return success();` free functions that no codepath ever called."""
+    cpp = QUEUE_VERIFIERS_CPP.read_text()
+    assert sig in cpp, (
+        f"V8 verifier impl missing: {sig!r} — Sprint V8 closure regressed"
+    )
+    # Reject the old free-function stub form.
+    for old in (
+        "LogicalResult verifyCreate(Operation *op)",
+        "LogicalResult verifyPush(Operation *op)",
+        "LogicalResult verifyPop(Operation *op)",
+    ):
+        assert old not in cpp, (
+            f"V8 regression: old orphan stub still in QueueVerifiers.cpp: {old!r}"
+        )
+
+
+_V8_DIAGNOSTIC_CODES = (
+    "QUEUE_CREATE_OPERAND_COUNT",
+    "QUEUE_PUSH_QUEUE_PROVENANCE",
+    "QUEUE_PUSH_TILE_TYPE",
+    "QUEUE_POP_QUEUE_PROVENANCE",
+    "QUEUE_POP_TOKEN_PROVENANCE",
+    "QUEUE_POP_TILE_TYPE",
+)
+
+
+@pytest.mark.parametrize("code", _V8_DIAGNOSTIC_CODES)
+def test_sprint_v8_queue_diagnostic_codes_present(code: str) -> None:
+    cpp = QUEUE_VERIFIERS_CPP.read_text()
+    assert code in cpp, (
+        f"V8 diagnostic code missing: {code!r} — closure regressed"
+    )
+
+
+def test_sprint_v8_queue_dialect_registration_header() -> None:
+    """V8 ships `QueueDialect.h` with a public
+    `registerQueueDialect(DialectRegistry&)` mirroring the V7 Attn
+    pattern, so tessera-opt can load the dialect at startup."""
+    assert QUEUE_DIALECT_H.exists(), (
+        f"V8 regression: {QUEUE_DIALECT_H.name} missing"
+    )
+    text = QUEUE_DIALECT_H.read_text()
+    assert "registerQueueDialect" in text, (
+        "V8 regression: public registration entry missing in QueueDialect.h"
+    )
+
+
+def test_sprint_v8_queue_eager_load_extension_present() -> None:
+    """The V7b-style DialectExtension anchored on TesseraDialect must
+    eager-load `tessera.queue` so the dotted-prefix op-name parser
+    routes correctly when programmatic users load only the parent
+    Graph IR dialect."""
+    cpp = (
+        REPO_ROOT / "src" / "compiler" / "tile_opt_fa4"
+        / "lib" / "Dialect" / "Queue" / "QueueOps.cpp"
+    ).read_text()
+    assert "registerQueueDialect" in cpp, (
+        "V8 regression: registerQueueDialect body missing in QueueOps.cpp"
+    )
+    assert "addExtension" in cpp, (
+        "V8 regression: DialectExtension eager-load missing in QueueOps.cpp"
+    )
+    assert "tessera::TesseraDialect" in cpp, (
+        "V8 regression: extension must anchor on the Graph IR TesseraDialect"
+    )
+
+
+def test_sprint_v8_shape_inference_lit_no_longer_xfail() -> None:
+    """V8 rewrote the shape_inference fixture to use the canonical
+    Graph IR op names (matmul / transpose / flash_attn / reshape) so
+    it parses cleanly through the registered dialect.  The XFAIL
+    marker must be gone — drift gate against a regression that
+    reintroduces unregistered op names."""
+    assert SHAPE_INFERENCE_LIT.exists(), "shape_inference.mlir missing"
+    text = SHAPE_INFERENCE_LIT.read_text()
+    assert "// XFAIL" not in text, (
+        "V8 regression: shape_inference.mlir must NOT carry XFAIL — "
+        "V8 fixed the unregistered op-name issue"
+    )
+    # The fixture must use the canonical flash_attn name, NOT the
+    # historical flash_attention spelling.
+    assert "tessera.flash_attn" in text, (
+        "V8 regression: shape_inference.mlir should use the canonical "
+        "tessera.flash_attn op name"
+    )
+    # And must NOT use the unregistered elementwise_add name in any
+    # actual op-use line (the historical comment in the file header is
+    # fine — it documents what V8 fixed).  Filter to lines without `//`.
+    op_use_lines = [
+        ln for ln in text.splitlines()
+        if "tessera.elementwise_add" in ln and not ln.lstrip().startswith("//")
+    ]
+    assert not op_use_lines, (
+        "V8 regression: shape_inference.mlir reintroduced the "
+        f"unregistered tessera.elementwise_add op name in: {op_use_lines!r}"
+    )
+
+
+def test_sprint_v8_shape_inference_pass_dispatches_canonical_name() -> None:
+    """The pass must recognize the canonical `tessera.flash_attn` op
+    name.  The legacy `tessera.flash_attention` is kept as a soft
+    alias so any IR still using it routes correctly."""
+    cpp = SHAPE_INFERENCE_PASS_CPP.read_text()
+    assert '"tessera.flash_attn"' in cpp, (
+        "V8 regression: ShapeInferencePass must dispatch on "
+        "`tessera.flash_attn` (the canonical Graph IR op name)"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Lit fixture presence (the C++ build verifies behaviour; lit existence
 # is the structural guard)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -614,7 +778,8 @@ def test_sprint_v3c_lit_fixture_shape() -> None:
 
 @pytest.mark.parametrize(
     "path",
-    [V1_LIT, V2_LIT, V3_LIT, V3A_LIT, V3B_LIT, V3C_LIT, V4A_LIT, V4B_LIT],
+    [V1_LIT, V2_LIT, V3_LIT, V3A_LIT, V3B_LIT, V3C_LIT, V4A_LIT, V4B_LIT,
+     SHAPE_INFERENCE_LIT],
 )
 def test_sprint_lit_fixtures_present(path: Path) -> None:
     assert path.exists(), (
@@ -625,7 +790,12 @@ def test_sprint_lit_fixtures_present(path: Path) -> None:
     assert "RUN: tessera-opt" in text, (
         f"{path.name} must start with `// RUN: tessera-opt ...`"
     )
-    assert "expected-error" in text, (
+    # V8 (2026-05-22) loosened: positive-only fixtures (e.g.,
+    # shape_inference.mlir, which exercises a forward-propagation pass)
+    # don't carry `expected-error` markers — they rely on `CHECK:`
+    # directives to validate the pass output.  Accept either.
+    assert ("expected-error" in text) or ("CHECK:" in text), (
         f"{path.name} must include at least one `expected-error` "
-        "negative case so the verifier is actually exercised"
+        "negative case OR a `CHECK:` directive so the pass is "
+        "actually exercised"
     )

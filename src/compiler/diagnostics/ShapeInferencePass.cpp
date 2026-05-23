@@ -231,7 +231,14 @@ static std::optional<Shape> inferShape(
   if (name == "tessera.matmul")          return inferMatmul(op, table);
   if (name.starts_with("tessera.elementwise"))
                                           return inferElementwise(op, table);
-  if (name == "tessera.flash_attention") return inferFlashAttn(op, table);
+  // Sprint V8 (2026-05-22): the canonical Graph IR op name is
+  // `tessera.flash_attn` (see TesseraOps.td).  The historical
+  // `tessera.flash_attention` form was an unregistered placeholder
+  // used by the original shape_inference.mlir fixture; both names
+  // now route through inferFlashAttn so the pass stays compatible
+  // with any IR that still uses the legacy spelling.
+  if (name == "tessera.flash_attn" || name == "tessera.flash_attention")
+                                          return inferFlashAttn(op, table);
   if (name == "tessera.reshape")         return inferReshape(op);
   if (name == "tessera.transpose")       return inferTranspose(op, table);
   if (name == "tessera.concat")          return inferConcat(op, table);

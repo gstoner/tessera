@@ -52,6 +52,19 @@ if(TARGET TesseraAttnDialect)
   target_link_libraries(tessera-opt PRIVATE TesseraAttnDialect)
 endif()
 
+# Sprint V8 (2026-05-22): link the FA-4 tile-queue dialect into
+# tessera-opt so `tessera.queue.create / push / pop` ops + the
+# `!tessera.queue.tile_queue` / `!tessera.queue.token` types are
+# recognized at parse time.  Mirrors the V7 Attn pattern above.
+if(TARGET TesseraQueueDialect)
+  target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_FA4_QUEUE)
+  target_include_directories(tessera-opt PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/compiler/tile_opt_fa4/include
+    ${CMAKE_BINARY_DIR}/src/compiler/tile_opt_fa4
+  )
+  target_link_libraries(tessera-opt PRIVATE TesseraQueueDialect)
+endif()
+
 if(TARGET tessera_solvers_passes AND TARGET tessera_linalg_solver_passes)
   target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_SOLVERS)
   target_include_directories(tessera-opt PRIVATE

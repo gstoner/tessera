@@ -67,6 +67,10 @@ add_mlir_library(TesseraQueueDialect
     LINK_LIBS PUBLIC
         MLIRIR
         MLIRSupport
+        # Sprint V8 (2026-05-22): TesseraIR provides the parent
+        # TesseraDialect class that anchors the eager-load extension
+        # (same pattern V7b used for TesseraAttnDialect).
+        TesseraIR
 )
 # QueueOps.cpp includes `QueueTypes.cpp.inc` (tablegen output) which
 # emits `generatedTypeParser` / `generatedTypePrinter` helpers that
@@ -79,6 +83,10 @@ target_include_directories(TesseraQueueDialect
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}
+        # Sprint V8: visibility of TesseraOps.h for the eager-load
+        # extension's parent-dialect anchor.
+        ${CMAKE_SOURCE_DIR}/src/compiler/ir/include
+        ${CMAKE_BINARY_DIR}/src/compiler/ir
 )
 
 # ------------------------------------------------------------------

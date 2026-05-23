@@ -301,15 +301,68 @@ sweep to **57 PASS / 19 UNSUPPORTED / 19 XFAIL / 0 FAIL** (up from
 92 → 95 tests discovered).
 
 **Remaining V3+ work** (in priority order):
-- V3b (deferred) — cross-function (inter-procedural) symbol-table
-  tracking: requires walking `func.call` sites to propagate
-  dim-names across function boundaries.  Issue #162.
-- V3c (deferred) — SSA-value flow tracking through `scf.for` and
-  `scf.if` body regions: requires per-region dim-name maps and
-  yield-result propagation.  Issue #163.
 - Identity-cascade folding for LayoutLegalityPass (cascade of
   layout casts within a function whose net effect is identity
   should fold; currently flagged only as comment placeholder).
+- Further affine reasoning beyond sum-of-products: subtraction,
+  parenthesized groups, integer literals (V3a follow-ups).
+
+**Sprint V3b + V3c (2026-05-22) closure**:
+
+- **V3b — interprocedural dim-name tracking via func.call:**
+  `SymbolicDimEqualityPass` now builds a module-level `SymbolTable`
+  in `runOnOperation()` and walks `func.call` ops as part of the
+  per-function propagation.  When a call's callee declares
+  `tessera.arg_dim_names`, the pass cross-checks each operand's
+  propagated dim-names against the callee's declared names
+  position-by-position; mismatch ⇒ `SYMDIM_CALL_ARG_MISMATCH`.
+  The pass also reads `tessera.ret_dim_names` on the callee and
+  seeds the call result values' dim-names, so names flow ACROSS
+  the call boundary into subsequent ops in the caller.  Indirect
+  calls (`func.call_indirect`) are out of scope.  Lit fixture:
+  `tests/tessera-ir/phase2/sprint_v3b_interprocedural.mlir`
+  (1 negative case + 3 positive paths).
+
+- **V3c — scf.for / scf.if region propagation:** New mutual
+  recursion between `propagateThroughOp` and a new helper
+  `propagateThroughBlock` lets the walker descend into region
+  bodies.  For `scf.for`, body block args[1:] inherit dim-names
+  from the corresponding init operands; the `scf.yield` operands'
+  propagated names must match the iter_args' expected names
+  (loop must be name-invariant) ⇒ `SYMDIM_LOOP_YIELD_MISMATCH`
+  on conflict; scf.for result values inherit the iter_args'
+  names.  For `scf.if`, both regions are walked and their
+  `scf.yield` operands' names compared per-result; mismatch ⇒
+  `SYMDIM_IF_BRANCH_MISMATCH`.  Lit fixture:
+  `tests/tessera-ir/phase2/sprint_v3c_scf_propagation.mlir`
+  (2 negative cases + 2 positive cases).
+
+**Tests added (V3b/V3c)**: 6 new structural guards in
+`test_mlir_verifier_sprint.py` (3 V3b + 3 V3c), bringing the
+verifier-sprint guard count from 58 → **64 passing**.  Two new lit
+fixtures: V3b interprocedural + V3c scf propagation.
+
+**Phase G/H/I hardware-gated frontier (Sprint M, 2026-05-22)**:
+
+A new dedicated audit doc `docs/audit/phase_ghi_hardware_frontier.md`
+captures the honest answer to "what's hardware-blocked vs. still
+hardware-free?"  Highlights:
+
+- Registry's authoritative count: **0 entries at
+  `backend_kernel = complete`** across all 432 entries; 273
+  `partial`, 159 `planned`.  By design of the registry, this can
+  only move with real NVIDIA / ROCm / Metalium hardware proofs.
+- All major hardware-free axes (`math_semantics`, `shape_rule`,
+  `dtype_layout_rule`, `lowering_rule`, `tests`) are already at
+  zero partial/planned.
+- Residual hardware-free closure work is small: 53 vjp + 53 jvp
+  `planned` (mostly N/A audit candidates), 37 masking_effect_rule
+  planned (mostly device-state ops).
+- Apple GPU is the only target with backend execution fully
+  closed on this machine; Sprint M adds the first model-shaped
+  E2E proof under `tests/unit/test_apple_gpu_mla_e2e.py` covering
+  a single-layer MLA-style multi-head attention decoder across 3
+  shape parametrizations.
 
 ## Executive Summary
 

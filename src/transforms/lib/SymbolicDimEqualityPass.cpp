@@ -53,9 +53,11 @@
 
 #include "Tessera/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
@@ -458,10 +460,241 @@ struct SymbolicDimEquality
     return success();
   }
 
+  // ── Sprint V3b (2026-05-22) — interprocedural via func.call ──────────
+  //
+  // When a caller invokes a callee whose `tessera.arg_dim_names` is
+  // declared, V3b cross-checks that the propagated dim-names at the
+  // call-site operands match the callee's declared arg names
+  // position-by-position.  Mismatch ⇒ SYMDIM_CALL_ARG_MISMATCH.
+  //
+  // Additionally, V3b reads `tessera.ret_dim_names` on the callee
+  // (ArrayAttr-of-ArrayAttr, one inner list per result) and seeds the
+  // caller's `valueDims` for each `func.call` result, so dim-names
+  // flow through the call boundary.
+  //
+  // V3b only handles the *direct* call form (`func.call @callee(...)`)
+  // — indirect calls via `func.call_indirect` are out of scope (they
+  // need a symbol-table-free analysis).
+  static std::optional<DimNameList>
+  readRetDimNames(func::FuncOp fn, unsigned resIdx) {
+    auto arr = fn->getAttrOfType<ArrayAttr>("tessera.ret_dim_names");
+    if (!arr) return std::nullopt;
+    if (resIdx >= arr.size()) return std::nullopt;
+    auto inner = dyn_cast<ArrayAttr>(arr[resIdx]);
+    if (!inner) return std::nullopt;
+    DimNameList names;
+    for (Attribute a : inner) {
+      if (auto s = dyn_cast<StringAttr>(a))
+        names.push_back(s.getValue().str());
+      else
+        return std::nullopt;
+    }
+    return names;
+  }
+
+  // ── Sprint V3c (2026-05-22) — scf.for / scf.if region propagation ────
+  //
+  // scf.for body block:  args = [induction_var, iter_args...]
+  //   - iter_args[i] inherits the caller-side init operand's dim-names
+  //   - the body's `scf.yield` operands must match iter_args' dim-names
+  //     (loop-invariant naming) ⇒ SYMDIM_LOOP_YIELD_MISMATCH on conflict
+  //   - the scf.for result values inherit the iter_args' dim-names
+  //
+  // scf.if:
+  //   - both regions terminate in `scf.yield`
+  //   - the two branches must yield values with matching dim-names
+  //     (so the result's dim-names are well-defined regardless of
+  //     branch taken) ⇒ SYMDIM_IF_BRANCH_MISMATCH on conflict
+  //   - the scf.if result values inherit the (matching) yield dim-names
+
+  // Forward declaration: walking a block can recurse into scf.for /
+  // scf.if regions, which themselves walk inner blocks.
+  static bool propagateThroughBlock(Block &block,
+                                    ValueDimMap &valueDims,
+                                    SymbolTable *symtab);
+
+  // Handle a single op in the program-order walker.  Returns true if
+  // any cross-check or yield-match diagnostic fired.
+  static bool propagateThroughOp(Operation *op,
+                                 ValueDimMap &valueDims,
+                                 SymbolTable *symtab) {
+    bool failed = false;
+    StringRef name = op->getName().getStringRef();
+
+    if (name == "tessera.transpose") {
+      if (op->getNumOperands() < 1 || op->getNumResults() < 1) return false;
+      auto it = valueDims.find(op->getOperand(0));
+      if (it == valueDims.end()) return false;
+      if (mlir::failed(crossCheck(op, "tessera.dim_names_in", it->second)))
+        failed = true;
+      auto declared = readDimNames(op, "tessera.dim_names_out");
+      valueDims[op->getResult(0)] = declared ? *declared : it->second;
+
+    } else if (name == "tessera.matmul") {
+      if (op->getNumOperands() < 2 || op->getNumResults() < 1) return false;
+      auto lhsIt = valueDims.find(op->getOperand(0));
+      auto rhsIt = valueDims.find(op->getOperand(1));
+      if (lhsIt == valueDims.end() || rhsIt == valueDims.end()) return false;
+      if (mlir::failed(crossCheck(op, "tessera.dim_names_lhs", lhsIt->second)))
+        failed = true;
+      if (mlir::failed(crossCheck(op, "tessera.dim_names_rhs", rhsIt->second)))
+        failed = true;
+      DimNameList out;
+      for (size_t i = 0; i + 1 < lhsIt->second.size(); ++i)
+        out.push_back(lhsIt->second[i]);
+      if (!rhsIt->second.empty())
+        out.push_back(rhsIt->second.back());
+      valueDims[op->getResult(0)] = out;
+
+    } else if (name == "tessera.reshape") {
+      if (op->getNumResults() < 1) return false;
+      auto declared = readDimNames(op, "tessera.dim_names_out");
+      if (declared) valueDims[op->getResult(0)] = *declared;
+      if (op->getNumOperands() >= 1) {
+        auto it = valueDims.find(op->getOperand(0));
+        if (it != valueDims.end()) {
+          if (mlir::failed(crossCheck(op, "tessera.dim_names_in", it->second)))
+            failed = true;
+        }
+      }
+
+    } else if (auto call = dyn_cast<func::CallOp>(op)) {
+      // Sprint V3b — interprocedural cross-check + return propagation.
+      if (!symtab) return false;
+      auto callee =
+          dyn_cast_or_null<func::FuncOp>(symtab->lookup(call.getCallee()));
+      if (!callee) return false;  // unresolved (extern) — skip
+      // 1. Cross-check each call operand against the callee's
+      //    declared arg_dim_names[i] when both are present.
+      for (unsigned i = 0, e = call.getNumOperands(); i < e; ++i) {
+        auto calleeArgNames = readArgDimNames(callee, i);
+        if (!calleeArgNames) continue;
+        auto it = valueDims.find(call.getOperand(i));
+        if (it == valueDims.end()) continue;
+        if (it->second.size() != calleeArgNames->size()
+            || !std::equal(it->second.begin(), it->second.end(),
+                           calleeArgNames->begin())) {
+          op->emitOpError(
+              "SYMDIM_CALL_ARG_MISMATCH: call to '@")
+              << call.getCallee() << "' arg " << i
+              << " propagated dim-names disagree with callee's "
+              << "tessera.arg_dim_names";
+          failed = true;
+        }
+      }
+      // 2. Seed call result values from callee's ret_dim_names.
+      for (unsigned i = 0, e = call.getNumResults(); i < e; ++i) {
+        auto retNames = readRetDimNames(callee, i);
+        if (retNames) valueDims[call.getResult(i)] = *retNames;
+      }
+
+    } else if (auto forOp = dyn_cast<scf::ForOp>(op)) {
+      // Sprint V3c — scf.for iter_args propagation + yield invariance.
+      // Seed the body's block args[1:] (skip induction var) from the
+      // call-site init operands' propagated dim-names.
+      Block &body = forOp.getRegion().front();
+      auto iterArgs = body.getArguments().drop_front(1);  // skip ind var
+      auto initOperands = forOp.getInitArgs();
+      assert(iterArgs.size() == initOperands.size());
+      // Save expected names per iter_arg so we can cross-check yield.
+      SmallVector<std::optional<DimNameList>, 4> expectedNames;
+      for (auto [iterArg, init] :
+           llvm::zip_equal(iterArgs, initOperands)) {
+        auto it = valueDims.find(init);
+        if (it != valueDims.end()) {
+          valueDims[iterArg] = it->second;
+          expectedNames.push_back(it->second);
+        } else {
+          expectedNames.push_back(std::nullopt);
+        }
+      }
+      // Recurse into body block.
+      if (propagateThroughBlock(body, valueDims, symtab))
+        failed = true;
+      // Find the scf.yield terminator and check each yielded value's
+      // propagated dim-names match the corresponding iter_arg's
+      // expected names.  Mismatch ⇒ SYMDIM_LOOP_YIELD_MISMATCH.
+      Operation *term = body.getTerminator();
+      if (auto yieldOp = dyn_cast<scf::YieldOp>(term)) {
+        for (unsigned i = 0, e = yieldOp.getNumOperands(); i < e; ++i) {
+          if (i >= expectedNames.size() || !expectedNames[i]) continue;
+          auto yi = valueDims.find(yieldOp.getOperand(i));
+          if (yi == valueDims.end()) continue;
+          if (yi->second.size() != expectedNames[i]->size()
+              || !std::equal(yi->second.begin(), yi->second.end(),
+                             expectedNames[i]->begin())) {
+            yieldOp->emitOpError(
+                "SYMDIM_LOOP_YIELD_MISMATCH: scf.for yield operand ")
+                << i << " dim-names disagree with the corresponding "
+                << "iter_arg's dim-names (loop must be name-invariant)";
+            failed = true;
+          }
+        }
+      }
+      // Seed scf.for results from iter_args' expected names.
+      for (unsigned i = 0, e = forOp.getNumResults(); i < e; ++i) {
+        if (i < expectedNames.size() && expectedNames[i])
+          valueDims[forOp.getResult(i)] = *expectedNames[i];
+      }
+
+    } else if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
+      // Sprint V3c — scf.if: both branches must yield matching names.
+      // Walk both regions; collect per-result dim-names from each
+      // branch's terminator; cross-check; seed scf.if results.
+      auto walkBranch = [&](Region &region)
+          -> SmallVector<std::optional<DimNameList>, 4> {
+        SmallVector<std::optional<DimNameList>, 4> out;
+        if (region.empty()) return out;
+        Block &block = region.front();
+        if (propagateThroughBlock(block, valueDims, symtab))
+          failed = true;
+        Operation *term = block.getTerminator();
+        if (auto yieldOp = dyn_cast<scf::YieldOp>(term)) {
+          for (Value v : yieldOp.getOperands()) {
+            auto it = valueDims.find(v);
+            if (it != valueDims.end()) out.push_back(it->second);
+            else out.push_back(std::nullopt);
+          }
+        }
+        return out;
+      };
+      auto thenNames = walkBranch(ifOp.getThenRegion());
+      auto elseNames = walkBranch(ifOp.getElseRegion());
+      // Compare per-result.  Only when both branches have names do we
+      // require agreement.  If `else` region is empty (no-else if),
+      // skip the comparison — there's nothing to disagree with.
+      bool hasElse = !ifOp.getElseRegion().empty();
+      for (unsigned i = 0, e = ifOp.getNumResults(); i < e; ++i) {
+        std::optional<DimNameList> chosen;
+        if (i < thenNames.size() && thenNames[i]) chosen = thenNames[i];
+        if (hasElse && i < elseNames.size() && elseNames[i]) {
+          if (chosen) {
+            if (chosen->size() != elseNames[i]->size()
+                || !std::equal(chosen->begin(), chosen->end(),
+                               elseNames[i]->begin())) {
+              ifOp->emitOpError(
+                  "SYMDIM_IF_BRANCH_MISMATCH: scf.if result ")
+                  << i << " has different dim-names in then-branch "
+                  << "vs else-branch";
+              failed = true;
+              continue;
+            }
+          } else {
+            chosen = elseNames[i];
+          }
+        }
+        if (chosen) valueDims[ifOp.getResult(i)] = *chosen;
+      }
+    }
+    // Unknown op: propagation stops at the boundary.
+    return failed;
+  }
+
   static LogicalResult propagateThroughFunction(
       func::FuncOp fn,
       const llvm::DenseMap<StringRef, int64_t> &sizes,
-      ArrayRef<Binding> bindings) {
+      ArrayRef<Binding> bindings,
+      SymbolTable *symtab) {
     (void)sizes;
     (void)bindings;
     ValueDimMap valueDims;
@@ -471,93 +704,34 @@ struct SymbolicDimEquality
       if (names) valueDims[fn.getArgument(i)] = *names;
     }
     if (valueDims.empty()) {
-      // No flow seeds → fall through to V1 behaviour.  This keeps the
-      // pass backward-compatible with functions that don't carry the
-      // `tessera.arg_dim_names` attribute yet.
+      // No flow seeds → fall through to V1 behaviour.  Backward-compat
+      // path: existing V5/V6a/V6b functions keep working unchanged.
       return success();
     }
     bool failed = false;
-    // Walk ops in program order (Graph IR straight-line block bodies).
     for (Block &block : fn.getBody()) {
-      for (Operation &opRef : block) {
-        Operation *op = &opRef;
-        StringRef name = op->getName().getStringRef();
-
-        if (name == "tessera.transpose") {
-          if (op->getNumOperands() < 1 || op->getNumResults() < 1) continue;
-          auto it = valueDims.find(op->getOperand(0));
-          if (it == valueDims.end()) continue;
-          // V2: propagate the multiset (per-position order isn't
-          // recoverable without an explicit `perm` attr).  Cross-check
-          // against explicit `tessera.dim_names_in` if present.
-          if (mlir::failed(
-                  crossCheck(op, "tessera.dim_names_in", it->second)))
-            failed = true;
-          // Propagate to result.  If user declared
-          // tessera.dim_names_out explicitly we trust it; otherwise
-          // mark the result with the multiset (positions unknown).
-          auto declared = readDimNames(op, "tessera.dim_names_out");
-          valueDims[op->getResult(0)] =
-              declared ? *declared : it->second;
-
-        } else if (name == "tessera.matmul") {
-          if (op->getNumOperands() < 2 || op->getNumResults() < 1) continue;
-          auto lhsIt = valueDims.find(op->getOperand(0));
-          auto rhsIt = valueDims.find(op->getOperand(1));
-          if (lhsIt == valueDims.end() || rhsIt == valueDims.end()) continue;
-          if (mlir::failed(crossCheck(
-                  op, "tessera.dim_names_lhs", lhsIt->second)))
-            failed = true;
-          if (mlir::failed(crossCheck(
-                  op, "tessera.dim_names_rhs", rhsIt->second)))
-            failed = true;
-          // Infer result: lhs[:-1] + rhs[-1:].
-          DimNameList out;
-          for (size_t i = 0; i + 1 < lhsIt->second.size(); ++i)
-            out.push_back(lhsIt->second[i]);
-          if (!rhsIt->second.empty())
-            out.push_back(rhsIt->second.back());
-          valueDims[op->getResult(0)] = out;
-
-        } else if (name == "tessera.reshape") {
-          if (op->getNumResults() < 1) continue;
-          // V2 doesn't infer reshape splits without explicit
-          // declaration.  Use the user's explicit out names if
-          // present; otherwise leave the result unbound.
-          auto declared = readDimNames(op, "tessera.dim_names_out");
-          if (declared) valueDims[op->getResult(0)] = *declared;
-          // Cross-check input against propagated value.
-          if (op->getNumOperands() >= 1) {
-            auto it = valueDims.find(op->getOperand(0));
-            if (it != valueDims.end()) {
-              if (mlir::failed(crossCheck(
-                      op, "tessera.dim_names_in", it->second)))
-                failed = true;
-            }
-          }
-
-        } else {
-          // Unknown op: propagation stops at the boundary.  Result
-          // SSA values are left unbound in the map.
-        }
-      }
+      if (propagateThroughBlock(block, valueDims, symtab))
+        failed = true;
     }
     return failed ? mlir::failure() : mlir::success();
   }
 
   void runOnOperation() override {
     bool anyFailure = false;
+    // Sprint V3b — module-level symbol table for func.call resolution.
+    SymbolTable symtab(getOperation());
     getOperation().walk([&](func::FuncOp fn) {
       auto sizes = readDimSizes(fn);
       auto bindings = readBindings(fn);
       // Function-level binding equation check.
       if (failed(checkBindings(fn, bindings, sizes)))
         anyFailure = true;
-      // Sprint V2-flow: SSA-value dim-name propagation + cross-checks.
-      // Runs BEFORE the per-op contract walk so propagated names can
-      // trigger SYMDIM_FLOW_INCONSISTENCY before the per-op walker
-      // catches them as standalone violations.
-      if (failed(propagateThroughFunction(fn, sizes, bindings)))
+      // Sprint V2-flow + V3b + V3c: SSA-value dim-name propagation
+      // with interprocedural call-site and scf.for/scf.if region
+      // support.  Runs BEFORE the per-op contract walk so propagated
+      // names trigger SYMDIM_FLOW_INCONSISTENCY before per-op walker
+      // catches them.
+      if (failed(propagateThroughFunction(fn, sizes, bindings, &symtab)))
         anyFailure = true;
       // Per-op contracts.
       fn.walk([&](Operation *op) {
@@ -574,6 +748,19 @@ struct SymbolicDimEquality
     if (anyFailure) signalPassFailure();
   }
 };
+
+// Out-of-class definition: mutually recursive with propagateThroughOp.
+bool SymbolicDimEquality::propagateThroughBlock(
+    Block &block,
+    ValueDimMap &valueDims,
+    SymbolTable *symtab) {
+  bool failed = false;
+  for (Operation &opRef : block) {
+    if (propagateThroughOp(&opRef, valueDims, symtab))
+      failed = true;
+  }
+  return failed;
+}
 
 }  // namespace
 

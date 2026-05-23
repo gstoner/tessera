@@ -513,9 +513,33 @@ items:**
    (1 multi-term holds + 1 multi-term broken + 1 V5 single-product
    still works + 1 sum-of-3-singletons).
 
-   **Status: V1 + V2-flow + V3a shipped; cross-function symbol-table
-   tracking and SSA flow through `scf.for` / `scf.if` bodies remain
-   V3b / V3c.**
+   **Sprint V3b closure (2026-05-22):** Interprocedural dim-name
+   tracking landed.  The pass builds a module-level `SymbolTable`,
+   walks `func.call` ops, and cross-checks each caller's propagated
+   dim-names against the callee's declared `tessera.arg_dim_names`
+   position-by-position.  Mismatch ⇒ `SYMDIM_CALL_ARG_MISMATCH`.
+   The pass also reads `tessera.ret_dim_names` on the callee and
+   seeds the call result values, so dim-names flow ACROSS the call
+   boundary into subsequent ops in the caller.  Lit fixture:
+   `tests/tessera-ir/phase2/sprint_v3b_interprocedural.mlir`
+   (1 caller-callee match + 1 mismatch + 1 ret_dim_names propagation
+   + 1 backward-compat no-callee-decl).
+
+   **Sprint V3c closure (2026-05-22):** SSA flow through `scf.for`
+   and `scf.if` region bodies landed.  For `scf.for`, iter_args
+   inherit dim-names from init operands, the body is walked
+   recursively, and the `scf.yield` operands must match the
+   iter_args' names (loop must be name-invariant) ⇒
+   `SYMDIM_LOOP_YIELD_MISMATCH` on conflict.  For `scf.if`, both
+   branches' yields must agree ⇒ `SYMDIM_IF_BRANCH_MISMATCH` on
+   conflict; the scf.if result inherits the (matching) yield names.
+   Lit fixture: `tests/tessera-ir/phase2/sprint_v3c_scf_propagation.mlir`
+   (scf.for invariant + scf.for yield mismatch + scf.if branches
+   agree + scf.if branches disagree).
+
+   **Status: V1 + V2-flow + V3a + V3b + V3c all shipped.  Further
+   affine/Presburger reasoning beyond sum-of-products (subtraction,
+   parens, integer literals) remains as backlog.**
 3. **`LayoutLegalityPass` skeleton + first rule.** **Sprint V2
    closure (2026-05-22):** `src/transforms/lib/LayoutLegalityPass.cpp`
    ships with the canonical 8-name layout accept-set

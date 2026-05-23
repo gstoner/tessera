@@ -48,6 +48,14 @@ V4B_LIT = (
     REPO_ROOT / "tests" / "tessera-ir" / "phase2"
     / "sprint_v4b_per_op_verifiers.mlir"
 )
+V3B_LIT = (
+    REPO_ROOT / "tests" / "tessera-ir" / "phase2"
+    / "sprint_v3b_interprocedural.mlir"
+)
+V3C_LIT = (
+    REPO_ROOT / "tests" / "tessera-ir" / "phase2"
+    / "sprint_v3c_scf_propagation.mlir"
+)
 SYMDIM_PASS = (
     REPO_ROOT / "src" / "transforms" / "lib" / "SymbolicDimEqualityPass.cpp"
 )
@@ -501,12 +509,113 @@ def test_sprint_v4b_lit_fixture_shape() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Sprint V3b — interprocedural dim-name tracking via func.call
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_sprint_v3b_pass_walks_func_call() -> None:
+    """V3b extended SymbolicDimEqualityPass with a module-level
+    SymbolTable + a `func::CallOp` walker that cross-checks the
+    caller's propagated dim-names against the callee's declared
+    `tessera.arg_dim_names`, and seeds call results from
+    `tessera.ret_dim_names`."""
+    cpp = SYMDIM_PASS.read_text()
+    assert "SymbolTable symtab" in cpp, (
+        "V3b regression: module-level SymbolTable must be built in "
+        "runOnOperation() for interprocedural call resolution"
+    )
+    assert "func::CallOp" in cpp, (
+        "V3b regression: pass must dispatch on func::CallOp"
+    )
+    assert "readRetDimNames" in cpp, (
+        "V3b regression: ret_dim_names helper missing"
+    )
+    assert "SYMDIM_CALL_ARG_MISMATCH" in cpp, (
+        "V3b regression: stable diagnostic code missing"
+    )
+    # Sentinel: V3b's propagation seeds call-result dim-names from
+    # the callee's tessera.ret_dim_names so they flow through the call
+    # boundary into subsequent ops.
+    assert "tessera.ret_dim_names" in cpp, (
+        "V3b regression: return-dim-name attribute name not referenced"
+    )
+
+
+def test_sprint_v3b_lit_fixture_shape() -> None:
+    assert V3B_LIT.exists(), "V3b lit fixture missing"
+    text = V3B_LIT.read_text()
+    assert "SYMDIM_CALL_ARG_MISMATCH" in text, (
+        "V3b lit fixture must lock the diagnostic code"
+    )
+    # 1 negative case (mismatched arg names).
+    assert text.count("// expected-error @+1") == 1, (
+        "V3b lit fixture should have exactly 1 expected-error case"
+    )
+    # Positive cases: callee_ok, callee_returns_bd propagation,
+    # backward-compat (no callee decl) ⇒ 3 CHECK-LABEL pairs.
+    assert text.count("CHECK-LABEL:") >= 6, (
+        "V3b lit fixture should pin multiple positive paths "
+        "(at least 3 caller/callee pairs)"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint V3c — scf.for / scf.if dim-name propagation
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_sprint_v3c_pass_handles_scf_for_and_if() -> None:
+    """V3c extended SymbolicDimEqualityPass to recurse into scf.for
+    and scf.if body regions; both must produce dim-name-consistent
+    results."""
+    cpp = SYMDIM_PASS.read_text()
+    assert "scf::ForOp" in cpp, (
+        "V3c regression: scf.for must be handled in propagateThroughOp"
+    )
+    assert "scf::IfOp" in cpp, (
+        "V3c regression: scf.if must be handled in propagateThroughOp"
+    )
+    assert "scf::YieldOp" in cpp, (
+        "V3c regression: yield terminator inspection missing"
+    )
+    assert "SYMDIM_LOOP_YIELD_MISMATCH" in cpp, (
+        "V3c regression: scf.for invariance diagnostic missing"
+    )
+    assert "SYMDIM_IF_BRANCH_MISMATCH" in cpp, (
+        "V3c regression: scf.if branch-agreement diagnostic missing"
+    )
+    # Sentinel: propagateThroughBlock is the mutually-recursive helper
+    # that lets scf.for / scf.if descend into body regions.
+    assert "propagateThroughBlock" in cpp, (
+        "V3c regression: block-recursion helper missing"
+    )
+
+
+def test_sprint_v3c_lit_fixture_shape() -> None:
+    assert V3C_LIT.exists(), "V3c lit fixture missing"
+    text = V3C_LIT.read_text()
+    assert "SYMDIM_LOOP_YIELD_MISMATCH" in text, (
+        "V3c lit fixture must lock the loop-yield diagnostic code"
+    )
+    assert "SYMDIM_IF_BRANCH_MISMATCH" in text, (
+        "V3c lit fixture must lock the if-branch diagnostic code"
+    )
+    # 2 negative cases (scf.for yield mismatch + scf.if branch mismatch).
+    assert text.count("// expected-error @+1") == 2, (
+        "V3c lit fixture should have exactly 2 expected-error cases"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Lit fixture presence (the C++ build verifies behaviour; lit existence
 # is the structural guard)
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("path", [V1_LIT, V2_LIT, V3_LIT, V3A_LIT, V4A_LIT, V4B_LIT])
+@pytest.mark.parametrize(
+    "path",
+    [V1_LIT, V2_LIT, V3_LIT, V3A_LIT, V3B_LIT, V3C_LIT, V4A_LIT, V4B_LIT],
+)
 def test_sprint_lit_fixtures_present(path: Path) -> None:
     assert path.exists(), (
         f"lit fixture missing: {path.relative_to(REPO_ROOT)} — "

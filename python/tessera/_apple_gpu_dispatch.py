@@ -178,9 +178,17 @@ def bind_symbol(
 
     The cache key includes ``argtypes`` + ``restype`` so two callers
     asking for the same symbol with conflicting signatures get
-    independent bindings (rare but well-defined). Most callers will
-    re-use the same signature, in which case the cached function is
-    returned immediately.
+    independent bindings.  This is implemented by constructing a
+    fresh function pointer per signature via
+    :func:`ctypes.CFUNCTYPE`, which gives each caller its own
+    ``argtypes``/``restype`` slots — earlier versions reused the
+    ``getattr(CDLL, symbol)`` cached ``_FuncPtr`` and mutated its
+    attributes, which silently aliased the signature across all
+    callers (2026-05-22 fix).
+
+    All work runs under :data:`_lock` so concurrent first-binders of
+    the same ``(symbol, argtypes, restype)`` triple agree on a single
+    cached pointer.
     """
     handle = apple_gpu_runtime()
     if handle is None:
@@ -189,14 +197,31 @@ def bind_symbol(
     cached = _symbol_cache.get(cache_key)
     if cached is not None:
         return cached
-    try:
-        fn = getattr(handle, symbol)
-    except AttributeError:
-        return None
-    fn.argtypes = list(argtypes)
-    fn.restype = restype
-    _symbol_cache[cache_key] = fn
-    return fn
+    with _lock:
+        # Re-check after acquiring the lock in case a concurrent
+        # caller populated the slot while we were waiting.
+        cached = _symbol_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        try:
+            # Verify the symbol exists in the dylib (resolves
+            # immediately on most platforms).  We do not keep the
+            # returned _FuncPtr — its mutable .argtypes/.restype are
+            # the source of the cross-signature aliasing bug.
+            getattr(handle, symbol)
+        except AttributeError:
+            return None
+        # Build a true-independent function prototype.  Each call to
+        # CFUNCTYPE creates a fresh class with its own argtypes/restype;
+        # binding it via the (symbol, handle) tuple resolves the symbol
+        # against the dylib without touching the CDLL's _FuncPtr cache.
+        # The ``restype`` parameter is typed ``object`` for ergonomic
+        # call sites (callers pass ctypes types or ``None``); the
+        # cast below narrows it back to what CFUNCTYPE actually expects.
+        proto = ctypes.CFUNCTYPE(restype, *argtypes)  # type: ignore[arg-type]
+        fn = proto((symbol, handle))
+        _symbol_cache[cache_key] = fn
+        return fn
 
 
 # Convenience: test helpers and benchmark code occasionally need to

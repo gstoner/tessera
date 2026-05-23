@@ -188,7 +188,14 @@ class MockRankGroup:
         # Shared state for collectives
         self._barrier_obj = threading.Barrier(n)
         self._lock = threading.Lock()
-        self._shared_buffers: Dict[str, List[Optional[np.ndarray]]] = {}
+        # 2026-05-22: keys are now (kind, generation) tuples to avoid the
+        # repeated-collective race where a fast rank re-enters the same
+        # collective and deposits into a slot a slow rank hasn't yet
+        # finished withdrawing from. Per-rank generation counters stay
+        # in lockstep because the protocol requires all ranks to issue
+        # the same collectives in the same order.
+        self._shared_buffers: Dict[Any, List[Optional[np.ndarray]]] = {}
+        self._rank_generations: Dict[int, Dict[str, int]] = {}
 
         # Build rank objects
         self.ranks: List[MockRank] = [
@@ -256,7 +263,7 @@ class MockRankGroup:
 
     def _all_reduce(self, rank: int, tensor: np.ndarray, op: str) -> np.ndarray:
         """All-reduce: all ranks contribute, all get the result."""
-        key = "all_reduce"
+        key = ("all_reduce", self._next_gen(rank, "all_reduce"))
         self._deposit(key, rank, tensor)
         self._barrier_obj.wait()
 
@@ -286,7 +293,7 @@ class MockRankGroup:
 
     def _all_gather(self, rank: int, tensor: np.ndarray, axis: int) -> np.ndarray:
         """All-gather: collect shard from each rank, concatenate."""
-        key = "all_gather"
+        key = ("all_gather", self._next_gen(rank, "all_gather"))
         self._deposit(key, rank, tensor)
         self._barrier_obj.wait()
 
@@ -312,7 +319,7 @@ class MockRankGroup:
                 f"all_to_all: scatter_axis {scatter_axis} size {dim_size} not divisible "
                 f"by world_size {self.world_size}"
             )
-        key = "all_to_all"
+        key = ("all_to_all", self._next_gen(rank, "all_to_all"))
         self._deposit(key, rank, tensor)
         self._barrier_obj.wait()
 
@@ -329,14 +336,30 @@ class MockRankGroup:
 
     # ── Buffer management ────────────────────────────────────────────────────
 
-    def _deposit(self, key: str, rank: int, tensor: np.ndarray) -> None:
+    def _next_gen(self, rank: int, kind: str) -> int:
+        """Return-and-increment the per-rank generation counter for
+        ``kind``. Because the protocol requires every rank to invoke
+        the same collectives in the same order, counters across ranks
+        stay in lockstep — all ranks see the same generation for their
+        Nth invocation of a given kind, so they all deposit into and
+        withdraw from the same ``(kind, gen)`` slot. This eliminates
+        the repeated-collective race where a fast rank's deposit for
+        invocation N+1 could be popped by a slow rank's withdraw for
+        invocation N."""
+        with self._lock:
+            ranks = self._rank_generations.setdefault(rank, {})
+            gen = ranks.get(kind, 0)
+            ranks[kind] = gen + 1
+            return gen
+
+    def _deposit(self, key: Any, rank: int, tensor: np.ndarray) -> None:
         """Thread-safe deposit of a tensor into the shared buffer slot."""
         with self._lock:
             if key not in self._shared_buffers:
                 self._shared_buffers[key] = [None] * self.world_size
             self._shared_buffers[key][rank] = tensor.copy()
 
-    def _withdraw(self, key: str) -> None:
+    def _withdraw(self, key: Any) -> None:
         """Clear the shared buffer slot (called after all ranks have read)."""
         with self._lock:
             self._shared_buffers.pop(key, None)

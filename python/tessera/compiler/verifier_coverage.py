@@ -311,11 +311,11 @@ def render_dashboard() -> str:
     lines.append("# MLIR Verifier Coverage Dashboard")
     lines.append("")
     lines.append(
-        f"Generated from `python/tessera/compiler/verifier_coverage.py`.  "
-        f"Don't edit by hand — run "
-        f"`python -m tessera.compiler.audit verifier_coverage --write` "
-        f"to refresh.  Drift is gated by "
-        f"`tests/unit/test_verifier_coverage.py`."
+        "Generated from `python/tessera/compiler/verifier_coverage.py`.  "
+        "Don't edit by hand — run "
+        "`python -m tessera.compiler.audit verifier_coverage --write` "
+        "to refresh.  Drift is gated by "
+        "`tests/unit/test_verifier_coverage.py`."
     )
     lines.append("")
     lines.append("## Summary")

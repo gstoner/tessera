@@ -3147,4 +3147,10 @@ def jvp_selective_ssm(primals, tangents, *, gate=None, state=None,
     return y, dy
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# Arch-7 (2026-05-22) — family-subpackage import hook (mirrors vjp.py).
+# ─────────────────────────────────────────────────────────────────────────
+from . import jvps  # noqa: F401, E402 — import-side-effect registration hook
+
+
 __all__ = ["register_jvp", "get_jvp", "jvp"]

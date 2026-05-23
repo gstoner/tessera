@@ -57,12 +57,24 @@ _ARTIFACT_STATUS = "artifact_only"
 _COMPILEABLE_STATUS = "compileable"   # Sprint G/H follow-up: passes ptxas/hipcc
 _PLANNED_STATUS = "planned"
 
+# Arch-3 (2026-05-22) — top rung of the readiness ladder.  An entry
+# only qualifies for ``hardware_verified`` when it carries BOTH a
+# ``runtime_symbol`` AND an ``execute_compare_fixture`` checked into
+# the test tree.  This is the missing definition that makes the
+# registry's per-primitive ``backend_kernel = "complete"`` axis a
+# computable property (a primitive is complete iff every declared
+# target row is ``hardware_verified``).  Today (2026-05-22) zero
+# entries claim this status — flipping the first one requires real
+# NVIDIA / ROCm / Metalium hardware proof.
+_HARDWARE_VERIFIED_STATUS = "hardware_verified"
+
 _VALID_STATUSES = frozenset({
     _FUSED_KERNEL_STATUS,
     _REFERENCE_STATUS,
     _ARTIFACT_STATUS,
     _COMPILEABLE_STATUS,
     _PLANNED_STATUS,
+    _HARDWARE_VERIFIED_STATUS,
 })
 
 
@@ -163,6 +175,35 @@ class BackendKernelEntry:
     hipcc_version_min: Optional_str = None
     expected_mfu: Optional_float = None
     roofline_target: Optional_str = None
+    # Arch-3 (2026-05-22) — execute-and-compare hooks.  All optional so
+    # existing constructors continue to work.  When ``status ==
+    # "hardware_verified"`` the validator below requires
+    # ``runtime_symbol`` AND ``execute_compare_fixture`` to be set.
+    shape_envelope: Optional_str = None
+    """Free-form envelope description (e.g., ``"M*N*K <= 2^30"``,
+    ``"head_dim <= 256"``, ``"single tile, threadgroup <= 1024"``).
+    Documents the validated shape range without imposing parseable
+    syntax — the prose form is enough for human review and audit
+    citation."""
+    runtime_symbol: Optional_str = None
+    """C ABI symbol of the kernel that runs at dispatch time (e.g.,
+    ``"tessera_apple_gpu_matmul_softmax_matmul_f32"``).  ``None`` for
+    artifact-only / planned entries that don't expose a runtime entry
+    point."""
+    lit_fixture: Optional_str = None
+    """Path (relative to repo root) to the lit fixture that exercises
+    the kernel at the IR layer.  ``None`` when the entry's coverage
+    is only Python-level."""
+    execute_compare_fixture: Optional_str = None
+    """Path (relative to repo root) to the Python test that runs the
+    kernel and compares against a numpy / reference oracle.  This is
+    the binary proof of hardware execution.  ``None`` until the
+    proof lands.  Required for ``status == "hardware_verified"``."""
+    benchmark_json: Optional_str = None
+    """Path to a benchmark JSON file in the canonical
+    ``benchmarks/...`` tree that records latency / MFU for this
+    kernel.  ``None`` until benchmarked.  Recommended for
+    ``hardware_verified`` entries but not strictly required."""
 
     def __post_init__(self) -> None:
         from ..dtype import canonicalize_dtype
@@ -222,6 +263,28 @@ class BackendKernelEntry:
                     f"expected_mfu must be in [0, 1], got {self.expected_mfu}"
                 )
 
+        # Arch-3 (2026-05-22) — hardware_verified contract.  This is
+        # the top rung of the readiness ladder; an entry only qualifies
+        # when it carries both an executable runtime entry point AND a
+        # checked-in numerical-proof test.  Without the test fixture
+        # there's no evidence the kernel actually produces correct
+        # output on real hardware — so we refuse to let the status
+        # claim more than ``fused`` / ``reference``.
+        if self.status == _HARDWARE_VERIFIED_STATUS:
+            if not self.runtime_symbol:
+                raise ValueError(
+                    f"status='hardware_verified' requires runtime_symbol "
+                    f"to be set; got target={self.target!r}"
+                )
+            if not self.execute_compare_fixture:
+                raise ValueError(
+                    f"status='hardware_verified' requires "
+                    f"execute_compare_fixture to point at a Python "
+                    f"test that numerically validates the kernel; got "
+                    f"target={self.target!r}, runtime_symbol="
+                    f"{self.runtime_symbol!r}"
+                )
+
     def as_dict(self) -> dict[str, object]:
         out: dict[str, object] = {
             "target": self.target,
@@ -247,7 +310,43 @@ class BackendKernelEntry:
             out["expected_mfu"] = self.expected_mfu
         if self.roofline_target is not None:
             out["roofline_target"] = self.roofline_target
+        # Arch-3 (2026-05-22) — execute-and-compare hooks.
+        if self.shape_envelope is not None:
+            out["shape_envelope"] = self.shape_envelope
+        if self.runtime_symbol is not None:
+            out["runtime_symbol"] = self.runtime_symbol
+        if self.lit_fixture is not None:
+            out["lit_fixture"] = self.lit_fixture
+        if self.execute_compare_fixture is not None:
+            out["execute_compare_fixture"] = self.execute_compare_fixture
+        if self.benchmark_json is not None:
+            out["benchmark_json"] = self.benchmark_json
         return out
+
+    @property
+    def is_hardware_verified(self) -> bool:
+        """Arch-3 (2026-05-22) — convenience predicate for status checks."""
+        return self.status == _HARDWARE_VERIFIED_STATUS
+
+
+def primitive_is_complete(entries: tuple["BackendKernelEntry", ...]) -> bool:
+    """Arch-3 (2026-05-22) — compute the registry-level
+    ``backend_kernel = "complete"`` axis from a primitive's full target
+    row set.
+
+    A primitive's backend_kernel axis flips to ``"complete"`` iff
+    EVERY declared target is ``hardware_verified``.  This makes
+    ``backend_kernel`` a *computed* property of the manifest rather
+    than a hand-flipped status field — closing the definition gap
+    that the V8 Phase G/H/I audit doc surfaced.
+
+    Returns False (the registry stays ``partial``) if any target row
+    is below ``hardware_verified``.  An empty tuple returns False
+    (no declared targets ⇒ nothing to verify ⇒ not complete).
+    """
+    if not entries:
+        return False
+    return all(e.status == _HARDWARE_VERIFIED_STATUS for e in entries)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

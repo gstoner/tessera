@@ -1,0 +1,133 @@
+# MLIR Verifier Coverage Dashboard
+
+Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by hand — run `python -m tessera.compiler.audit verifier_coverage --write` to refresh.  Drift is gated by `tests/unit/test_verifier_coverage.py`.
+
+## Summary
+
+| Status | Count | Meaning |
+|--------|-------|---------|
+| `real`         |   19 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `trivial_stub` |    9 | `hasVerifier = 1;` + trivial `return success();` stub. |
+| `absent`       |    0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
+| `no_verifier`  |   75 | No verifier declared.  TD constraints suffice — fine for many ops. |
+| **Total**      |  103 | |
+
+## Per-dialect details
+
+### `src/compiler/ir/TesseraOps.td`
+
+| Op | Status |
+|----|--------|
+| `ALiBiOp` | `no_verifier` |
+| `AdafactorOp` | `no_verifier` |
+| `AdamOp` | `no_verifier` |
+| `AdamWOp` | `no_verifier` |
+| `AllGatherOp` | `no_verifier` |
+| `AllReduceOp` | `no_verifier` |
+| `ArchGumbelSoftmaxOp` | `trivial_stub` |
+| `ArchHardConcreteOp` | `trivial_stub` |
+| `ArchMixedOp` | `trivial_stub` |
+| `ArchParameterOp` | `trivial_stub` |
+| `ArchSTEOneHotOp` | `trivial_stub` |
+| `ArchSwitchOp` | `trivial_stub` |
+| `ArchWeightedSumOp` | `trivial_stub` |
+| `AttnCompressedBlocksOp` | `no_verifier` |
+| `AttnLocalWindow2DOp` | `real` |
+| `AttnSlidingWindowOp` | `no_verifier` |
+| `AttnTopKBlocksOp` | `no_verifier` |
+| `CachePageLookupOp` | `no_verifier` |
+| `CastOp` | `real` |
+| `Conv2DNHWCOp` | `real` |
+| `CustomAdjointCallOp` | `no_verifier` |
+| `DCTOp` | `no_verifier` |
+| `DeepSeekSparseAttentionOp` | `no_verifier` |
+| `DequantizeFP4Op` | `no_verifier` |
+| `DequantizeFP8Op` | `no_verifier` |
+| `DropoutOp` | `real` |
+| `FFTOp` | `no_verifier` |
+| `FlashAttnOp` | `real` |
+| `FusedEpilogueOp` | `real` |
+| `GQAAttentionOp` | `no_verifier` |
+| `GatedAttentionOp` | `no_verifier` |
+| `GatedDeltaNetOp` | `no_verifier` |
+| `GeluOp` | `no_verifier` |
+| `HybridAttentionOp` | `no_verifier` |
+| `IFFTOp` | `no_verifier` |
+| `IRFFTOp` | `no_verifier` |
+| `KVCacheAppendOp` | `no_verifier` |
+| `KVCacheCreateOp` | `trivial_stub` |
+| `KVCachePruneOp` | `no_verifier` |
+| `KimiDeltaAttentionOp` | `no_verifier` |
+| `LatentKVCompressOp` | `no_verifier` |
+| `LatentKVExpandKOp` | `no_verifier` |
+| `LatentKVExpandVOp` | `no_verifier` |
+| `LayerNormOp` | `real` |
+| `LightningAttentionOp` | `no_verifier` |
+| `LinearAttnOp` | `no_verifier` |
+| `LinearAttnStateOp` | `no_verifier` |
+| `LionOp` | `no_verifier` |
+| `MLADecodeFusedOp` | `no_verifier` |
+| `MLADecodeOp` | `no_verifier` |
+| `MQAAttentionOp` | `no_verifier` |
+| `MatmulOp` | `real` |
+| `ModifiedDeltaAttentionOp` | `no_verifier` |
+| `MoeCombineOp` | `no_verifier` |
+| `MoeDispatchOp` | `real` |
+| `MomentumOp` | `no_verifier` |
+| `MorPartitionOp` | `no_verifier` |
+| `MorRouterOp` | `no_verifier` |
+| `MorScatterOp` | `no_verifier` |
+| `MultiHeadAttentionOp` | `no_verifier` |
+| `NTKRopeOp` | `no_verifier` |
+| `NativeSparseAttnFusedOp` | `no_verifier` |
+| `NeighborsHaloExchangeOp` | `no_verifier` |
+| `NeighborsHaloPackOp` | `no_verifier` |
+| `NeighborsHaloRegionOp` | `no_verifier` |
+| `NeighborsHaloTransportOp` | `no_verifier` |
+| `NeighborsHaloUnpackOp` | `no_verifier` |
+| `NeighborsNeighborReadOp` | `no_verifier` |
+| `NeighborsPipelineConfigOp` | `no_verifier` |
+| `NeighborsStencilApplyOp` | `no_verifier` |
+| `NeighborsStencilDefineOp` | `no_verifier` |
+| `NeighborsTopologyCreateOp` | `no_verifier` |
+| `PowerAttnOp` | `no_verifier` |
+| `QuantizeFP4Op` | `no_verifier` |
+| `QuantizeFP8Op` | `no_verifier` |
+| `RFFTOp` | `no_verifier` |
+| `RMSNormSafeOp` | `no_verifier` |
+| `ReduceScatterOp` | `no_verifier` |
+| `ReluOp` | `no_verifier` |
+| `ReshapeOp` | `real` |
+| `RetentionOp` | `no_verifier` |
+| `RingCreateOp` | `trivial_stub` |
+| `RopeMergeOp` | `no_verifier` |
+| `RopeOp` | `real` |
+| `RopeSplitOp` | `no_verifier` |
+| `SigmoidOp` | `no_verifier` |
+| `SiluMulOp` | `no_verifier` |
+| `SinOp` | `no_verifier` |
+| `SoftmaxOp` | `real` |
+| `SoftmaxSafeOp` | `no_verifier` |
+| `SpectralConvOp` | `no_verifier` |
+| `SwigluFusedOp` | `no_verifier` |
+| `TransposeOp` | `real` |
+
+### `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td`
+
+| Op | Status |
+|----|--------|
+| `CausalMaskOp` | `no_verifier` |
+| `DropoutMaskOp` | `no_verifier` |
+| `LseAccumulateOp` | `no_verifier` |
+| `LseLoadOp` | `no_verifier` |
+| `LseSaveOp` | `real` |
+| `OnlineSoftmaxOp` | `real` |
+| `ScaledDotProductOp` | `real` |
+
+### `src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td`
+
+| Op | Status |
+|----|--------|
+| `CreateOp` | `real` |
+| `PopOp` | `real` |
+| `PushOp` | `real` |

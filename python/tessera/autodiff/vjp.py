@@ -4259,4 +4259,16 @@ def vjp_online_softmax_state(dout, *primals, **_):
     )
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# Arch-7 (2026-05-22) — family-subpackage import hook.
+#
+# When the migration starts moving families into `vjps/<family>.py`, those
+# files import `register_vjp` from this module and register at import
+# time.  This trailing import triggers their side effects without
+# creating an import cycle (vjps/__init__.py imports from vjp.py;
+# vjp.py imports vjps last so register_vjp is fully defined first).
+# ─────────────────────────────────────────────────────────────────────────
+from . import vjps  # noqa: F401, E402 — import-side-effect registration hook
+
+
 __all__ = ["register_vjp", "get_vjp", "_VJPS"]

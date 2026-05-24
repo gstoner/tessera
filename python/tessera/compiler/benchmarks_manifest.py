@@ -275,6 +275,98 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
             "by every benchmark; the CI command is an import smoke."
         ),
     ),
+    # ── Domain-core library workloads (2026-05-20 sprint) ───────────
+    # Each *_core directory ships a domain-neutral library workload
+    # (composition of Tessera primitives) plus a matching pytest
+    # fixture under ``tests/unit/test_<name>_core_benchmark.py`` that
+    # numerically validates the composition.  None of them ships a
+    # standalone runnable benchmark harness today — the proof-of-life
+    # is the pytest entry, which is why they're marked ``compile_only``
+    # rather than ``runnable``.
+    SurfaceEntry(
+        directory="benchmarks/clifford_core",
+        entry_point="benchmarks/clifford_core/core.py",
+        status="compile_only",
+        command=(
+            "PYTHONPATH=.:python python -c "
+            "\"from benchmarks.clifford_core.core import "
+            "RotorSampler; print('ok')\""
+        ),
+        notes=(
+            "Clifford-algebra library workload (Cl(3, 0) — 8 blades). "
+            "Composes ``tessera.ga.*`` primitives (rotor sampling, "
+            "sandwich rotation, geometric product, grade projection, "
+            "norm_squared).  Pytest contract lives at "
+            "``tests/unit/test_clifford_core_benchmark.py``."
+        ),
+    ),
+    SurfaceEntry(
+        directory="benchmarks/corrdiff",
+        entry_point="benchmarks/corrdiff/benchmark_corrdiff.py",
+        status="runnable",
+        command=(
+            "PYTHONPATH=.:python python benchmarks/corrdiff/"
+            "benchmark_corrdiff.py --reps 2 --output "
+            "/tmp/tessera_corrdiff_smoke.json"
+        ),
+        notes=(
+            "Diffusion grid core (was: CorrDiff).  Standalone benchmark "
+            "harness sweeps (B, H, W, C_hid, heads, window) configs and "
+            "emits canonical tessera.benchmark.v1 JSON.  Library lives "
+            "at ``corrdiff_core.py``; pytest contract at "
+            "``tests/unit/test_corrdiff_core_benchmark.py``."
+        ),
+    ),
+    SurfaceEntry(
+        directory="benchmarks/energy_core",
+        entry_point="benchmarks/energy_core/core.py",
+        status="compile_only",
+        command=(
+            "PYTHONPATH=.:python python -c "
+            "\"from benchmarks.energy_core.core import "
+            "annealing_schedule; print('ok')\""
+        ),
+        notes=(
+            "Energy-based model library workload — quadratic energy, "
+            "stable logsumexp partition, Langevin step, linear annealing. "
+            "Composes ``tessera.ebm.*`` primitives.  Pytest contract: "
+            "``tests/unit/test_energy_core_benchmark.py``."
+        ),
+    ),
+    SurfaceEntry(
+        directory="benchmarks/grid_ai_core",
+        entry_point="benchmarks/grid_ai_core/core.py",
+        status="compile_only",
+        command=(
+            "PYTHONPATH=.:python python -c "
+            "\"from benchmarks.grid_ai_core.core import "
+            "tile_field; print('ok')\""
+        ),
+        notes=(
+            "Gridded-AI library workload (non-diffusion).  Composes "
+            "tiled field input, 5-point local stencil feature, 2D "
+            "local-window attention, conv/fused block, deterministic "
+            "noise, halo oracle.  Matching MLIR fixture at "
+            "``tests/tessera-ir/phase7/grid_ai_core_ir_visible.mlir``.  "
+            "Pytest contract: ``tests/unit/test_grid_ai_core_benchmark.py``."
+        ),
+    ),
+    SurfaceEntry(
+        directory="benchmarks/visual_complex_core",
+        entry_point="benchmarks/visual_complex_core/core.py",
+        status="compile_only",
+        command=(
+            "PYTHONPATH=.:python python -c "
+            "\"from benchmarks.visual_complex_core.core import "
+            "clifford_energy; print('ok')\""
+        ),
+        notes=(
+            "M7 cross-lane GA × EBM library workload.  Composes "
+            "RotorSampler (from clifford_core) + Langevin step (from "
+            "energy_core) into a single Clifford-norm energy flow.  "
+            "Pytest contract: ``tests/unit/test_visual_complex_core_benchmark.py``."
+        ),
+    ),
     # ── Archived material ────────────────────────────────────────────
     SurfaceEntry(
         directory="archive/benchmarks/matrix_multiplication",

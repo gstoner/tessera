@@ -25,13 +25,13 @@ CI guards (run as part of ``scripts/validate.sh``):
 
 | Status | Count |
 |--------|------:|
-| ``runnable`` | 10 |
+| ``runnable`` | 11 |
 | ``runnable_optional`` | 0 |
-| ``compile_only`` | 2 |
+| ``compile_only`` | 6 |
 | ``scaffold`` | 0 |
 | ``broken`` | 0 |
 | ``archived`` | 1 |
-| **total** | **13** |
+| **total** | **18** |
 
 ## Entries
 
@@ -49,5 +49,10 @@ CI guards (run as part of ``scripts/validate.sh``):
 | ``benchmarks/Tessera_SuperBench`` | ``compile_only`` | ``benchmarks/Tessera_SuperBench/runner/bench_run.py`` | ``PYTHONPATH=.:python python benchmarks/Tessera_SuperBench/runner/bench_run.py --help`` |
 | ``benchmarks/DeepScholar-Bench`` | ``runnable`` | ``benchmarks/DeepScholar-Bench/tessera_deepscholar_model.py`` | ``PYTHONPATH=python python benchmarks/DeepScholar-Bench/tessera_deepscholar_model.py --output /tmp/tessera_deepscholar_smoke.json`` |
 | ``benchmarks/common`` | ``compile_only`` | ``benchmarks/common/__init__.py`` | ``PYTHONPATH=python python -c "import sys; sys.path.insert(0,'benchmarks'); from common import correctness, compiler_contract, artifact_schema; print('ok')"`` |
+| ``benchmarks/clifford_core`` | ``compile_only`` | ``benchmarks/clifford_core/core.py`` | ``PYTHONPATH=.:python python -c "from benchmarks.clifford_core.core import RotorSampler; print('ok')"`` |
+| ``benchmarks/corrdiff`` | ``runnable`` | ``benchmarks/corrdiff/benchmark_corrdiff.py`` | ``PYTHONPATH=.:python python benchmarks/corrdiff/benchmark_corrdiff.py --reps 2 --output /tmp/tessera_corrdiff_smoke.json`` |
+| ``benchmarks/energy_core`` | ``compile_only`` | ``benchmarks/energy_core/core.py`` | ``PYTHONPATH=.:python python -c "from benchmarks.energy_core.core import annealing_schedule; print('ok')"`` |
+| ``benchmarks/grid_ai_core`` | ``compile_only`` | ``benchmarks/grid_ai_core/core.py`` | ``PYTHONPATH=.:python python -c "from benchmarks.grid_ai_core.core import tile_field; print('ok')"`` |
+| ``benchmarks/visual_complex_core`` | ``compile_only`` | ``benchmarks/visual_complex_core/core.py`` | ``PYTHONPATH=.:python python -c "from benchmarks.visual_complex_core.core import clifford_energy; print('ok')"`` |
 | ``archive/benchmarks/matrix_multiplication`` | ``archived`` | ``archive/benchmarks/matrix_multiplication/blackwell_matmul_tessera.py`` | Pre-Phase-6 matmul benchmark. Superseded by ``benchmark_gemm.py`` + ``run_all.py``. Kept in-tree for historical replay; not part of the current performance story. |
 

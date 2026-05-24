@@ -93,7 +93,8 @@ def test_readme_fast_count_is_current() -> None:
     # or ``~N,NNN tests``.  Look at the first 60 lines.
     head = "\n".join(text.splitlines()[:60])
     # Pattern: "~4,750 fast tests" or "4750 fast tests" or "4,748 fast tests"
-    matches = re.findall(r"~?([\d,]+)\s+(?:fast )?tests?", head)
+    # Require at least one digit so a bare comma doesn't match.
+    matches = re.findall(r"~?(\d[\d,]*)\s+(?:fast )?tests?", head)
     assert matches, (
         f"README at {README.relative_to(ROOT)} doesn't mention any "
         f"fast-suite test count — adding ~N text in the Quick start "

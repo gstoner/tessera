@@ -31,7 +31,7 @@ from tessera import optim
 from tessera import quantization
 from tessera import rl
 from tessera import sharding
-from tessera.nn import functional as F
+from tessera.nn import functional
 
 ops = tessera.ops
 
@@ -48,23 +48,23 @@ class TestPoolingFamily:
         self.x = rng.standard_normal((1, 1, 4, 4)).astype(np.float32)
 
     def test_max_pool_2x2_matches_numpy(self) -> None:
-        y = F.max_pool(self.x, kernel_size=2, stride=2)
+        y = functional.max_pool(self.x, kernel_size=2, stride=2)
         # numpy reference: reshape into 2×2 tiles, take max.
         expect = self.x.reshape(1, 1, 2, 2, 2, 2).max(axis=(3, 5))
         np.testing.assert_allclose(y, expect, rtol=1e-6)
 
     def test_min_pool_2x2_matches_numpy(self) -> None:
-        y = F.min_pool(self.x, kernel_size=2, stride=2)
+        y = functional.min_pool(self.x, kernel_size=2, stride=2)
         expect = self.x.reshape(1, 1, 2, 2, 2, 2).min(axis=(3, 5))
         np.testing.assert_allclose(y, expect, rtol=1e-6)
 
     def test_avg_pool_2x2_matches_numpy(self) -> None:
-        y = F.avg_pool(self.x, kernel_size=2, stride=2)
+        y = functional.avg_pool(self.x, kernel_size=2, stride=2)
         expect = self.x.reshape(1, 1, 2, 2, 2, 2).mean(axis=(3, 5))
         np.testing.assert_allclose(y, expect, rtol=1e-6)
 
     def test_adaptive_pool_reduces_to_target_shape(self) -> None:
-        y = F.adaptive_pool(self.x, output_size=(2, 2))
+        y = functional.adaptive_pool(self.x, output_size=(2, 2))
         assert y.shape == (1, 1, 2, 2)
 
 
@@ -80,7 +80,7 @@ class TestRecurrentCells:
         h = rng.standard_normal((2, 4)).astype(np.float32)
         W_ih = rng.standard_normal((3, 4)).astype(np.float32) * 0.1
         W_hh = rng.standard_normal((4, 4)).astype(np.float32) * 0.1
-        y = F.simple_rnn_cell(x, h, W_ih, W_hh)
+        y = functional.simple_rnn_cell(x, h, W_ih, W_hh)
         expect = np.tanh(x @ W_ih + h @ W_hh)
         np.testing.assert_allclose(y, expect, rtol=1e-5, atol=1e-6)
 
@@ -89,7 +89,7 @@ class TestRecurrentCells:
         h = np.zeros((1, 2), dtype=np.float32)
         W_ih = np.eye(2, dtype=np.float32)
         W_hh = np.zeros((2, 2), dtype=np.float32)
-        y = F.simple_rnn_cell(x, h, W_ih, W_hh, activation="relu")
+        y = functional.simple_rnn_cell(x, h, W_ih, W_hh, activation="relu")
         # ReLU(I @ [1, -1]) = [1, 0]
         np.testing.assert_allclose(y, np.array([[1.0, 0.0]]), rtol=1e-6)
 
@@ -99,7 +99,7 @@ class TestRecurrentCells:
         h = rng.standard_normal((2, 4)).astype(np.float32)
         W_ih = rng.standard_normal((3, 12)).astype(np.float32) * 0.1  # 3 gates * 4
         W_hh = rng.standard_normal((4, 12)).astype(np.float32) * 0.1
-        y = F.gru_cell(x, h, W_ih, W_hh)
+        y = functional.gru_cell(x, h, W_ih, W_hh)
         assert y.shape == (2, 4)
         assert np.all(np.isfinite(y))
 
@@ -116,7 +116,7 @@ class TestNormalizationFamily:
         # at unit L2 norm across the remaining dims.
         rng = np.random.default_rng(3)
         w = rng.standard_normal((5, 3)).astype(np.float32)
-        wn = F.weight_norm(w, axis=0)
+        wn = functional.weight_norm(w, axis=0)
         # Each of the 5 rows should be unit-norm.
         norms = np.linalg.norm(wn, axis=1)
         np.testing.assert_allclose(norms, np.ones(5), atol=1e-5)
@@ -124,7 +124,7 @@ class TestNormalizationFamily:
     def test_spectral_norm_unit_top_singular(self) -> None:
         rng = np.random.default_rng(4)
         w = rng.standard_normal((4, 4)).astype(np.float32)
-        wn = F.spectral_norm(w)
+        wn = functional.spectral_norm(w)
         # Top singular value of result should be ~1.
         sv = np.linalg.svd(wn, compute_uv=False)[0]
         np.testing.assert_allclose(sv, 1.0, atol=1e-4)
@@ -132,7 +132,7 @@ class TestNormalizationFamily:
     def test_instance_norm_zero_mean_unit_var_per_sample_channel(self) -> None:
         rng = np.random.default_rng(5)
         x = rng.standard_normal((2, 3, 8, 8)).astype(np.float32)
-        y = F.instance_norm(x)
+        y = functional.instance_norm(x)
         # Per (N, C) plane: mean ~ 0, var ~ 1.
         for n in range(2):
             for c in range(3):
@@ -471,7 +471,7 @@ class TestModelLayerExtras:
         # (4-1)*2 - 0 + 3 = 9.
         x = rng.standard_normal((1, 2, 4)).astype(np.float32)
         w = rng.standard_normal((2, 3, 3)).astype(np.float32) * 0.1
-        y = F.conv_transpose(x, w, stride=2)
+        y = functional.conv_transpose(x, w, stride=2)
         assert y.shape[0] == 1
         assert y.shape[1] == 3
         assert np.all(np.isfinite(y))
@@ -483,7 +483,7 @@ class TestModelLayerExtras:
         # rank-2 LoRA: a is (4, r), b is (r, 5)
         a = rng.standard_normal((4, 2)).astype(np.float32) * 0.01
         b = rng.standard_normal((2, 5)).astype(np.float32) * 0.01
-        y = F.lora_linear(x, w, a, b, alpha=1.0)
+        y = functional.lora_linear(x, w, a, b, alpha=1.0)
         # LoRA: y = x @ (w + alpha * (a @ b)).  The implementation may
         # promote to fp64 internally; tolerate ~1e-4 relative error
         # from fp32 round-trips.

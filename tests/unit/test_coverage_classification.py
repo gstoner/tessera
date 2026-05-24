@@ -88,16 +88,24 @@ def test_classification_buckets_sum_to_total() -> None:
 
 def test_actionable_bucket_does_not_explode() -> None:
     """The ``needs_direct_test`` bucket is the test debt frontier.
-    Cap it at 80 — going above means a wave of unexposed primitives
-    was added without writing tests OR without a classification rule
-    landing in ``coverage_classification.py``."""
+    Post Audit-D-3, the baseline is **0** — every primitive flagged
+    by the audit has at least one direct numerical test in
+    ``test_thin_op_direct_coverage.py`` or
+    ``test_thin_op_direct_coverage_extra.py``.
+
+    Cap at 25 to absorb new primitives landing between audit cycles
+    without immediately blocking the build; any growth here is real
+    test debt that should be addressed (either by writing a direct
+    test or by adding a classification override saying why the op
+    doesn't need one)."""
     summary = classification_summary()
     actionable = summary[NEEDS_DIRECT_TEST]
-    assert actionable <= 80, (
-        f"`needs_direct_test` bucket ballooned to {actionable} "
-        f"(baseline ~50).  Either: (a) write direct tests for the "
-        f"new ops, or (b) add a classification rule in "
-        f"`coverage_classification.py` if the ops are actually "
+    assert actionable <= 25, (
+        f"`needs_direct_test` bucket grew to {actionable} (baseline "
+        f"is 0 as of Audit-D-3).  Either: (a) write a direct test in "
+        f"`tests/unit/test_thin_op_direct_coverage_extra.py`, or "
+        f"(b) add a classification rule in "
+        f"`coverage_classification.py` if the new ops are actually "
         f"covered by a family wrapper."
     )
 
@@ -194,29 +202,30 @@ def test_sentinel_op_in_expected_bucket(
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_actionable_bucket_contains_known_primitives() -> None:
-    """Smoke check: at least some of these well-known mathematical
-    primitives should still be in the actionable bucket OR have been
-    tested out of it.  Loosely worded — only fails if NONE of them
-    show up, which would mean either everything's tested (yay!) or
-    the classifier broke (boo)."""
+def test_flagship_primitives_have_left_actionable_bucket() -> None:
+    """As of Audit-D-3, every flagship primitive (qr, svd, pooling,
+    norms, …) has direct numerical tests and has exited the actionable
+    bucket.  Lock that in — if any of them returns to the bucket, a
+    test file was deleted or a regression broke the op."""
     actionable_names = {c.op_name for c in needs_direct_test_ops()}
-    primitive_candidates = {
+    flagships = {
         "qr", "svd", "stft", "istft", "spmm_coo",
         "conv3d", "conv_transpose", "spectral_norm", "lora_linear",
-        "max_pool", "avg_pool", "adaptive_pool",
+        "max_pool", "avg_pool", "adaptive_pool", "min_pool",
         "simple_rnn_cell", "gru_cell", "weight_norm", "instance_norm",
+        "psum", "pmean", "pmax", "pmin",
+        "ppo_policy_loss", "grpo_policy_loss", "cispo_policy_loss",
+        "lamb", "muon", "nesterov",
+        "quantize_int8", "dequantize_int8", "fake_quantize",
+        "memory_write", "moe_combine", "log_softmax", "sigmoid_safe",
     }
-    # Either the actionable bucket still contains some of them, OR
-    # the test suite has covered all of them (the goal).
-    overlap = actionable_names & primitive_candidates
-    if not overlap:
-        # All flagship primitives now tested — print a "victory" note
-        # but don't fail.  The drift gate is for regressions, not
-        # for celebrating progress.
-        return
-    # If overlap exists, just sanity-check the bucket is non-empty.
-    assert len(actionable_names) > 0
+    regressions = actionable_names & flagships
+    assert not regressions, (
+        f"Flagship primitives back in the actionable bucket: "
+        f"{sorted(regressions)}.  Either a direct-coverage test was "
+        f"deleted, or the op broke and the test no longer references "
+        f"it via a recognized module pattern."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────

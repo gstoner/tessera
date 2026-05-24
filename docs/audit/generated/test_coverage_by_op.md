@@ -7,11 +7,11 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **432** ops in `primitive_coverage` registry.
-- **1265** total Python-test references, **387** total lit-fixture references.
-- **137** ops have **zero** references in either test surface.
-- **291** ops have ≤1 reference ("thinly tested").
-- **24** ops have ≥10 references ("well tested").
-- **42** ops have at least one associated `pytest.raises` negative test.
+- **1389** total Python-test references, **387** total lit-fixture references.
+- **121** ops have **zero** references in either test surface.
+- **240** ops have ≤1 reference ("thinly tested").
+- **25** ops have ≥10 references ("well tested").
+- **46** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
@@ -40,14 +40,13 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **291** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **240** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
 | `abs` |    1 |    0 |    1 |
 | `absolute` |    1 |    0 |    1 |
 | `acos` |    1 |    0 |    1 |
-| `adaptive_pool` |    1 |    0 |    1 |
 | `alibi` |    1 |    0 |    1 |
 | `amax` |    1 |    0 |    1 |
 | `amin` |    1 |    0 |    1 |
@@ -60,18 +59,15 @@ These **291** ops have at most one test reference across the whole test surface.
 | `atan` |    1 |    0 |    1 |
 | `atan2` |    1 |    0 |    1 |
 | `autocast` |    0 |    0 |    0 |
-| `avg_pool` |    0 |    0 |    0 |
 | `axis_index` |    0 |    0 |    0 |
 | `axis_name` |    0 |    0 |    0 |
 | `axis_size` |    0 |    0 |    0 |
-| `bidirectional_scan` |    1 |    0 |    1 |
 | `binary_cross_entropy_loss` |    1 |    0 |    1 |
 | `bitwise_and` |    1 |    0 |    1 |
 | `bitwise_not` |    1 |    0 |    1 |
 | `bitwise_or` |    1 |    0 |    1 |
 | `bitwise_xor` |    1 |    0 |    1 |
 | `broadcast` |    1 |    0 |    1 |
-| `broadcast_to_axis` |    0 |    0 |    0 |
 | `calibration_observer` |    0 |    0 |    0 |
 | `ceil` |    1 |    0 |    1 |
 | `centralize_grad` |    1 |    0 |    1 |
@@ -97,12 +93,16 @@ These **291** ops have at most one test reference across the whole test surface.
 | `clifford_rotor_sandwich` |    1 |    0 |    1 |
 | `clifford_vec_deriv` |    0 |    0 |    0 |
 | `clifford_wedge` |    0 |    0 |    0 |
-| `collective_permute` |    1 |    0 |    1 |
-| `complex_abs` |    0 |    0 |    0 |
 | `complex_arg` |    0 |    0 |    0 |
-| `complex_conjugate` |    0 |    0 |    0 |
-| `complex_div` |    0 |    0 |    0 |
-| `complex_exp` |    0 |    0 |    0 |
+| `complex_div` |    1 |    0 |    1 |
 | `complex_log` |    0 |    0 |    0 |
+| `complex_pow` |    0 |    0 |    0 |
+| `complex_sqrt` |    0 |    0 |    0 |
+| `cond` |    0 |    0 |    0 |
+| `conformal_jacobian` |    0 |    0 |    0 |
+| `contrastive_divergence_loss` |    0 |    0 |    0 |
+| `cos` |    1 |    0 |    1 |
+| `cosh` |    1 |    0 |    1 |
+| `cosine_warmup_lr` |    1 |    0 |    1 |
 
-_(231 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(180 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_

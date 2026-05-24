@@ -78,6 +78,11 @@ _FAMILY_MODULES: tuple[str, ...] = (
     "cache",
     "nn",
     "checkpoint",
+    # Sub-modules used directly by tests (``from tessera.nn import
+    # functional as F`` is common, and ``tessera.complex`` carries the
+    # M7 visual-complex op surface).
+    "functional",
+    "complex",
 )
 
 

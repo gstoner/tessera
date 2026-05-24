@@ -1,30 +1,43 @@
-"""Arch-1 (2026-05-22) — Central registry of MLIR verifier / pass diagnostic codes.
+"""Arch-1 (2026-05-22) — Central registry of Tessera diagnostic codes.
 
 Before this sprint, diagnostic codes (e.g., ``SYMDIM_BINDING_VIOLATION``,
 ``QUEUE_PUSH_QUEUE_PROVENANCE``) were defined only at the C++ ``emitOpError``
 site.  Discovering them required ``grep`` across ``src/``; their meaning lived
 in the surrounding code comments and in sprint-specific lit fixtures.
 
-This module is the single Python-side source of truth that:
+TSOL-2 (2026-05-22) extends the registry to cover three Python-side
+families too, so MLIR and Python codes share one drift gate:
 
-  * Names every code Tessera emits, with severity / pass-origin /
-    human summary / fix-hint / spec back-link.
-  * Lets a drift gate cross-check: every ``"FOO_BAR_BAZ:`` substring in
-    a C++ ``emitOpError`` is in the registry, and every registered code
-    appears in at least one C++ file.
+  * ``E_*``        — :class:`tessera.diagnostics.TesseraErrorCode` enum
+                     (raised by Python frontend / shape inference paths).
+  * ``JIT_*``      — :class:`tessera.compiler.JitDiagnosticCode` enum
+                     (JIT-level outcomes from P0-2 sprint).
+  * ``TS_ERR_*``   — TSOL spec contracts.  Listed for spec traceability;
+                     status reflects whether they're implemented in
+                     Python today (most are advisory contracts the
+                     implementation should honor as it grows).
+
+This module is the single source of truth that:
+
+  * Names every code Tessera emits or contractually promises, with
+    severity / pass-origin / human summary / fix-hint / spec back-link
+    / language (mlir vs python) / status (implemented vs spec_contract).
+  * Lets a drift gate cross-check across BOTH src/ (C++) and
+    python/tessera/ (Python) emission sites.
 
 The registry is consulted by:
 
-  * ``tests/unit/test_diagnostic_codes.py`` (drift gate).
+  * ``tests/unit/test_diagnostic_code_registry.py`` (drift gate).
   * ``docs/audit/diagnostic_codes.md`` (generated dashboard).
   * Future ``JitFn.explain()`` extensions that translate raw MLIR
     diagnostic strings to actionable Python guidance.
 
-The format of a diagnostic code in C++ is:
+Code emission patterns scanned by the drift gate:
 
-    op->emitOpError("CODE_NAME: human-readable detail...")
-
-The drift gate matches the all-caps prefix before the first ``:``.
+  * C++ (MLIR-side): ``op->emitOpError("CODE_NAME: human detail...")``
+    — the regex matches the all-caps prefix before the first ``:``.
+  * Python (E_*/JIT_*): ``"CODE_NAME"`` as a string literal in
+    enum values or assertion messages.
 """
 
 from __future__ import annotations
@@ -34,16 +47,21 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class DiagnosticCode:
-    """One MLIR verifier / pass diagnostic code.
+    """One Tessera diagnostic code.
 
     Fields
     ------
     code
-        The all-caps token before the ``:`` in ``emitOpError`` calls.
+        The token Tessera emits.  For MLIR codes this is the all-caps
+        prefix before the ``:`` in ``emitOpError`` calls; for Python
+        ``E_*`` / ``JIT_*`` codes it's the enum value string; for
+        TSOL ``TS_ERR_*`` it's the contract identifier from the spec.
     pass_origin
-        Symbolic name of the pass or verifier that emits the code.
-        Use the C++ class name (``SymbolicDimEquality``) or a
-        ``Dialect.OpName`` form (``Queue.PushOp::verify``).
+        Symbolic name of the pass / verifier / Python module that
+        emits the code.  Use the C++ class name (``SymbolicDimEquality``)
+        for MLIR codes or the Python module path
+        (``tessera.diagnostics``) for Python codes.  TSOL contracts
+        use ``"TSOL spec"``.
     severity
         ``"error"`` (default — failure of ``verify()`` / pass) or
         ``"warning"`` (advisory; rarely used today).
@@ -57,6 +75,17 @@ class DiagnosticCode:
         ``"docs/spec/SHAPE_SYSTEM.md §11.2"``).
     sprint
         Which sprint introduced the code, for archaeological context.
+    language
+        TSOL-2 (2026-05-22): ``"mlir"`` for C++ ``emitOpError`` codes,
+        ``"python"`` for Python-side enum values / exception messages.
+        Drives which source tree the drift gate scans for the code's
+        emission site.
+    status
+        TSOL-2 (2026-05-22): ``"implemented"`` (default — the code is
+        emitted by real code today) or ``"spec_contract"`` (named in
+        the TSOL spec but no Python emission site exists yet — the
+        registry tracks it for spec traceability without requiring
+        an implementation today).
     """
 
     code: str
@@ -66,6 +95,8 @@ class DiagnosticCode:
     fix_hint: str
     spec: str | None
     sprint: str
+    language: str = "mlir"
+    status: str = "implemented"
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -73,6 +104,372 @@ class DiagnosticCode:
 # ─────────────────────────────────────────────────────────────────────────
 
 REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
+    # ── Python-side: TesseraErrorCode enum (TSOL-2, 2026-05-22) ──────────
+    # These E_* codes live in `python/tessera/diagnostics.py`.  The
+    # enum class is `TesseraErrorCode`; values are emitted via raised
+    # exceptions like `TesseraShapeError`.
+    DiagnosticCode(
+        code="E_SHAPE_MISMATCH",
+        pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary=(
+            "A shape contract failed at Python frontend / shape "
+            "inference / runtime witness time."
+        ),
+        fix_hint=(
+            "Inspect the JIT signature's symbolic dims against the "
+            "actual call-site shapes; the `TesseraShapeError` message "
+            "carries the offending op + source location."
+        ),
+        spec="docs/spec/SHAPE_SYSTEM.md",
+        sprint="Phase 1",
+        language="python",
+        status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_TARGET_CODEGEN",
+        pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary=(
+            "Backend code generation failed (NVIDIA / ROCm / Apple / "
+            "x86 lowering chain rejected the IR)."
+        ),
+        fix_hint=(
+            "Check whether the op + dtype is in the target's "
+            "capability matrix; see `docs/audit/standalone_primitive_coverage.md`."
+        ),
+        spec="docs/spec/TARGET_IR_SPEC.md",
+        sprint="Phase 6",
+        language="python",
+        status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_TILE_LOWERING",
+        pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary=(
+            "Tile IR lowering rejected the schedule (warp / tile / "
+            "mma fragment shape illegal for target)."
+        ),
+        fix_hint=(
+            "Verify the schedule's tile knobs against the target "
+            "profile's accept-set (e.g., WGMMA tile shapes from "
+            "`docs/nvidia_cuda13_kernel_inventory.md`)."
+        ),
+        spec="docs/spec/TILE_IR.md",
+        sprint="Phase 3",
+        language="python",
+        status="implemented",
+    ),
+    # TesseraErrorCode long-tail (TSOL-2, 2026-05-22): register the
+    # remaining 22 enum values for completeness.  Each one is a real
+    # E_* string emitted via the enum in
+    # `python/tessera/diagnostics.py`; the drift gate verifies
+    # presence in the Python source tree.
+    DiagnosticCode(
+        code="E_CACHE_IO", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="Schedule cache read/write failed.",
+        fix_hint="Inspect filesystem permissions on the cache path or clear stale entries.",
+        spec=None, sprint="Phase 6", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_COMM_INIT", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="NCCL / RCCL / NVSHMEM collective initialization failed.",
+        fix_hint="Check that the matched library version meets the NCCL/RCCL ≥ 2.22 pin.",
+        spec=None, sprint="Phase 4", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_DESYNC", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="Ranks diverged in a collective protocol (different reduce trees / shapes).",
+        fix_hint="Ensure every rank invokes collectives in the same order with matching shapes.",
+        spec=None, sprint="Phase 4", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_DRIVER", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="Underlying device driver returned an error.",
+        fix_hint="Check the driver version against the pinned CUDA 13.2 / ROCm 7.2.3 minima.",
+        spec=None, sprint="Phase 6", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_GRAPH_INVALID", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="Graph IR failed validation (cycles, dangling references, mismatched effects).",
+        fix_hint="Inspect via `tessera.compiler.dry_run(fn)` to see which op tripped validation.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_ILLEGAL_ADDRESS", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="A kernel accessed memory outside the allocated region.",
+        fix_hint="Run under cuda-memcheck / hip-sanitizer; check tile boundary conditions.",
+        spec=None, sprint="Phase 6", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_LAUNCH_BAD_LAYOUT", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="Kernel launch parameters declare a layout incompatible with the kernel's accept-set.",
+        fix_hint="Insert a `tessera.cast` to convert to a layout in the kernel's accept-set.",
+        spec="docs/spec/SHAPE_SYSTEM.md", sprint="Phase 3",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_LAUNCH_DEVICE_MISMATCH", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="Kernel launch targeted a different device than the input tensor's residence.",
+        fix_hint="Move tensors via `tensor.to(device)` before launch.",
+        spec=None, sprint="Phase 6", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_LAUNCH_INVALID_SHAPE", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="Kernel launch shape (blocks/threads/cluster) is invalid for the target.",
+        fix_hint="Consult the target profile's launch constraints in `gpu_target.py`.",
+        spec=None, sprint="Phase 3", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_LAUNCH_STREAM_BUSY", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="Submitted launch but the target stream is already in an error state.",
+        fix_hint="Synchronize and check the prior async error via the runtime's last-error API.",
+        spec=None, sprint="Phase 6", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_LOSS_SCALING", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="Mixed-precision loss scaling lost too many gradient bits.",
+        fix_hint="Lower the initial scale or enable dynamic scaling via `GradScaler`.",
+        spec=None, sprint="Phase 5", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_MISALIGNED_ACCESS", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="A kernel performed a misaligned load/store (vectorized access on bad address).",
+        fix_hint="Inspect tile alignment; ensure shared-memory bank sizes match the tile contract.",
+        spec=None, sprint="Phase 3", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_NAN_INF", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="NaN / Inf detected in tensor output (caught by NaN/Inf guard).",
+        fix_hint="Enable mixed-precision loss scaling or check op numerical stability.",
+        spec=None, sprint="Phase 5", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_NONDETERMINISTIC", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="Deterministic mode was requested but the chosen path can't honor it.",
+        fix_hint="Disable the offending fast-path or accept nondeterminism via numeric policy.",
+        spec="docs/operations/Tessera_Standard_Operations.md §Determinism Contract",
+        sprint="Phase 5", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_OOM", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="Host or device allocation failed.",
+        fix_hint="Reduce batch/sequence dimensions or inspect buffer-pool stats.",
+        spec=None, sprint="Phase 6", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_SCHEDULE_FUSE_FAIL", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="Schedule-IR fusion pass rejected the requested fusion.",
+        fix_hint="Inspect via `tessera.compiler.dry_run(fn)`; some fusions need explicit attrs.",
+        spec=None, sprint="Phase 3", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_TIMEOUT", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="A compute kernel exceeded its watchdog deadline.",
+        fix_hint="Increase the watchdog budget or split the work into smaller launches.",
+        spec=None, sprint="Phase 6", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_TIMEOUT_COMM", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="A collective operation exceeded its watchdog deadline.",
+        fix_hint="Check rank health and topology; verify NCCL/RCCL fabric is healthy.",
+        spec=None, sprint="Phase 4", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_TOPOLOGY", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="The mesh topology declared by the user is inconsistent with the device fabric.",
+        fix_hint="Verify the mesh axes match the physical topology (NVL/PCIe/RDMA).",
+        spec=None, sprint="Phase 4", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_TUNE_MEASURE_FAIL", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="Autotuner measurement run failed (kernel crashed during timing).",
+        fix_hint="Inspect the autotuner SQLite cache for the failing config; mark as bad.",
+        spec=None, sprint="Phase 5", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_TUNE_SPACE_EMPTY", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="Autotuner search space evaluated to zero valid configs.",
+        fix_hint="Relax constraints in the autotuner search spec or fall back to a default tile.",
+        spec=None, sprint="Phase 5", language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="E_UNKNOWN", pass_origin="tessera.diagnostics.TesseraErrorCode",
+        severity="error",
+        summary="An unclassified Tessera failure occurred.",
+        fix_hint="Inspect the wrapped exception chain for the underlying cause.",
+        spec=None, sprint="Phase 1", language="python", status="implemented",
+    ),
+
+    # ── Python-side: JitDiagnosticCode enum (P0-2 sprint) ───────────────
+    # These JIT_* codes live in `python/tessera/compiler/diagnostics.py`.
+    # The enum class is `JitDiagnosticCode`; values are tagged onto
+    # `Diagnostic` instances surfaced by `JitFn.explain()`.
+    DiagnosticCode(
+        code="JIT_COMPILED_CPU",
+        pass_origin="tessera.compiler.JitDiagnosticCode",
+        severity="warning",
+        summary=(
+            "JIT compiled the function down the CPU lane — useful "
+            "context, not a failure."
+        ),
+        fix_hint=(
+            "No action required; this is an informational telemetry "
+            "code emitted on successful CPU compilation."
+        ),
+        spec=None,
+        sprint="P0-2",
+        language="python",
+        status="implemented",
+    ),
+    DiagnosticCode(
+        code="JIT_EAGER_FALLBACK_ARITY",
+        pass_origin="tessera.compiler.JitDiagnosticCode",
+        severity="warning",
+        summary=(
+            "JIT fell back to eager-Python execution because the "
+            "function's arity didn't match the expected JIT shape."
+        ),
+        fix_hint=(
+            "Inspect the function signature; the JIT requires a "
+            "fixed positional arity for compiled paths."
+        ),
+        spec=None,
+        sprint="P0-2",
+        language="python",
+        status="implemented",
+    ),
+    DiagnosticCode(
+        code="JIT_EAGER_FALLBACK_EMPTY",
+        pass_origin="tessera.compiler.JitDiagnosticCode",
+        severity="warning",
+        summary=(
+            "JIT fell back to eager-Python because the function "
+            "produced an empty Graph IR (no ops emitted)."
+        ),
+        fix_hint=(
+            "Confirm the function calls at least one `tessera.ops.*` "
+            "or `tessera.nn.*` API; pure Python bodies don't lower."
+        ),
+        spec=None,
+        sprint="P0-2",
+        language="python",
+        status="implemented",
+    ),
+    DiagnosticCode(
+        code="JIT_EAGER_FALLBACK_UNSUPPORTED_BODY",
+        pass_origin="tessera.compiler.JitDiagnosticCode",
+        severity="warning",
+        summary=(
+            "JIT fell back to eager-Python because the function body "
+            "used a Python construct the IR builder can't translate."
+        ),
+        fix_hint=(
+            "Rewrite control flow using `tessera.control.cond` / "
+            "`scan` / `while_loop` rather than native Python."
+        ),
+        spec=None,
+        sprint="P0-2",
+        language="python",
+        status="implemented",
+    ),
+    DiagnosticCode(
+        code="JIT_EAGER_FALLBACK_UNSUPPORTED_OP",
+        pass_origin="tessera.compiler.JitDiagnosticCode",
+        severity="warning",
+        summary=(
+            "JIT fell back to eager-Python because the function "
+            "called an op the IR builder doesn't yet recognize."
+        ),
+        fix_hint=(
+            "Check `op_catalog.py` for the canonical op name + "
+            "namespace; some `tessera.nn.*` paths still route to "
+            "Python today."
+        ),
+        spec=None,
+        sprint="P0-2",
+        language="python",
+        status="implemented",
+    ),
+    DiagnosticCode(
+        code="JIT_SOURCE_PROVIDED",
+        pass_origin="tessera.compiler.JitDiagnosticCode",
+        severity="warning",
+        summary=(
+            "JIT compiled using source provided via "
+            "`tessera.from_text(source=...)` rather than inspected "
+            "via `inspect.getsource(fn)`."
+        ),
+        fix_hint=(
+            "Informational; no action required unless the source "
+            "is unexpectedly empty."
+        ),
+        spec=None,
+        sprint="P0-2",
+        language="python",
+        status="implemented",
+    ),
+    DiagnosticCode(
+        code="JIT_SOURCE_UNAVAILABLE",
+        pass_origin="tessera.compiler.JitDiagnosticCode",
+        severity="error",
+        summary=(
+            "JIT couldn't inspect the function source (heredoc / "
+            "REPL / lambda) so no constraint enforcement is possible."
+        ),
+        fix_hint=(
+            "Pass the source explicitly via "
+            "`tessera.from_text(source=...)` or move the function "
+            "into an importable module."
+        ),
+        spec=None,
+        sprint="P0-2",
+        language="python",
+        status="implemented",
+    ),
+    DiagnosticCode(
+        code="JIT_TARGET_IR_ARTIFACT_ONLY",
+        pass_origin="tessera.compiler.JitDiagnosticCode",
+        severity="warning",
+        summary=(
+            "JIT compiled the function down to Target IR but the "
+            "current backend ships only an artifact (no runtime "
+            "dispatch path)."
+        ),
+        fix_hint=(
+            "Inspect via `tessera.compiler.dry_run(fn)` or "
+            "`JitFn.runtime_artifact()` to confirm artifact-only "
+            "status is expected for the target."
+        ),
+        spec=None,
+        sprint="P0-2",
+        language="python",
+        status="implemented",
+    ),
+
     # ── LayoutLegalityPass (V2 + V4a) ────────────────────────────────────
     DiagnosticCode(
         code="LAYOUT_LEGALITY_PRODUCER_CONSUMER_MISMATCH",
@@ -331,6 +728,131 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/spec/SHAPE_SYSTEM.md §11.2",
         sprint="V5",
     ),
+
+    # ── TSOL spec contracts (TSOL-2, 2026-05-22) ─────────────────────────
+    # The TS_ERR_* family is named in the TSOL spec at
+    # `docs/operations/Tessera_Standard_Operations.md` §"Error Handling".
+    # status="spec_contract" — these codes are listed for spec
+    # traceability today; the Python implementation currently raises
+    # `TesseraShapeError` / `TesseraTargetError` / etc. with the E_*
+    # enum values from above.  When the implementation grows TS_ERR_*
+    # tagging (a future sprint), flip status to "implemented" and the
+    # drift gate will require a Python emission site.
+    DiagnosticCode(
+        code="TS_ERR_BACKEND_FAILURE",
+        pass_origin="TSOL spec",
+        severity="error",
+        summary=(
+            "Wrapped backend failure (CUDA / ROCm / NCCL / RCCL / "
+            "NVSHMEM / Metal / x86 runtime returned an error)."
+        ),
+        fix_hint=(
+            "Inspect the wrapped backend error message in the exception "
+            "chain; check toolchain pin (CUDA 13.2 / ROCm 7.2.3) "
+            "compatibility with the installed driver."
+        ),
+        spec="docs/operations/Tessera_Standard_Operations.md §Error Handling",
+        sprint="TSOL spec",
+        language="python",
+        status="spec_contract",
+    ),
+    DiagnosticCode(
+        code="TS_ERR_INVALID_ARG",
+        pass_origin="TSOL spec",
+        severity="error",
+        summary=(
+            "An operator received an invalid value, option, or "
+            "malformed metadata (e.g., negative axis on a "
+            "single-axis op, bad reduction op string)."
+        ),
+        fix_hint=(
+            "Check the op's signature in "
+            "`docs/operations/Tessera_Standard_Operations.md` "
+            "against the call-site arguments."
+        ),
+        spec="docs/operations/Tessera_Standard_Operations.md §Error Handling",
+        sprint="TSOL spec",
+        language="python",
+        status="spec_contract",
+    ),
+    DiagnosticCode(
+        code="TS_ERR_NONDETERMINISM",
+        pass_origin="TSOL spec",
+        severity="error",
+        summary=(
+            "Deterministic mode was requested but the chosen backend "
+            "cannot honor it (e.g., NCCL ring schedule isn't "
+            "deterministic on this build, or a fused kernel uses "
+            "atomic accumulation)."
+        ),
+        fix_hint=(
+            "Disable the offending fast-path via numeric policy or "
+            "switch to a backend with deterministic guarantees; see "
+            "`docs/operations/Tessera_Standard_Operations.md` "
+            "§Determinism Contract."
+        ),
+        spec="docs/operations/Tessera_Standard_Operations.md §Determinism Contract",
+        sprint="TSOL spec",
+        language="python",
+        status="spec_contract",
+    ),
+    DiagnosticCode(
+        code="TS_ERR_OOM",
+        pass_origin="TSOL spec",
+        severity="error",
+        summary=(
+            "Allocation failed (host or device).  Includes "
+            "command-buffer / scratch-buffer / KV-cache exhaustion "
+            "as well as raw `cudaMalloc` / `hipMalloc` failures."
+        ),
+        fix_hint=(
+            "Shrink batch / sequence dimensions, increase memory "
+            "budget, or check the buffer-pool capacity via "
+            "`tessera.runtime.memory_stats()`."
+        ),
+        spec="docs/operations/Tessera_Standard_Operations.md §Error Handling",
+        sprint="TSOL spec",
+        language="python",
+        status="spec_contract",
+    ),
+    DiagnosticCode(
+        code="TS_ERR_SHAPE_MISMATCH",
+        pass_origin="TSOL spec",
+        severity="error",
+        summary=(
+            "TSOL spec-level shape contract failed.  Maps to today's "
+            "Python `TesseraShapeError` / `E_SHAPE_MISMATCH` until the "
+            "spec contract codes are wired into raises directly."
+        ),
+        fix_hint=(
+            "Same as `E_SHAPE_MISMATCH`: inspect the JIT signature "
+            "against the call-site shapes."
+        ),
+        spec="docs/operations/Tessera_Standard_Operations.md §Error Handling",
+        sprint="TSOL spec",
+        language="python",
+        status="spec_contract",
+    ),
+    DiagnosticCode(
+        code="TS_ERR_UNSUPPORTED_DTYPE",
+        pass_origin="TSOL spec",
+        severity="error",
+        summary=(
+            "The backend or operator can't support the requested "
+            "storage dtype / numeric policy (e.g., FP4 on a pre-"
+            "Blackwell NVIDIA GPU)."
+        ),
+        fix_hint=(
+            "Consult the per-target dtype matrix in "
+            "`docs/audit/standalone_primitive_coverage.md`; downcast "
+            "via `tessera.dtype.canonicalize` if a fallback is "
+            "acceptable."
+        ),
+        spec="docs/operations/Tessera_Standard_Operations.md §Error Handling",
+        sprint="TSOL spec",
+        language="python",
+        status="spec_contract",
+    ),
 )
 
 
@@ -362,6 +884,17 @@ def codes_by_sprint(sprint: str) -> tuple[DiagnosticCode, ...]:
     return tuple(c for c in REGISTERED_CODES if c.sprint == sprint)
 
 
+def codes_by_language(language: str) -> tuple[DiagnosticCode, ...]:
+    """TSOL-2: return all codes for a given language ("mlir" or "python")."""
+    return tuple(c for c in REGISTERED_CODES if c.language == language)
+
+
+def codes_by_status(status: str) -> tuple[DiagnosticCode, ...]:
+    """TSOL-2: return all codes by implementation status
+    ("implemented" or "spec_contract")."""
+    return tuple(c for c in REGISTERED_CODES if c.status == status)
+
+
 __all__ = [
     "DiagnosticCode",
     "REGISTERED_CODES",
@@ -369,4 +902,6 @@ __all__ = [
     "code_lookup",
     "codes_by_pass",
     "codes_by_sprint",
+    "codes_by_language",
+    "codes_by_status",
 ]

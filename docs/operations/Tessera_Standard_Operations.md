@@ -2,8 +2,17 @@
 status: Normative
 classification: Normative
 authority: Canonical standard operator library guidance; defers exact implemented Python behavior to docs/spec/PYTHON_API_SPEC.md and IR semantics to docs/spec/GRAPH_IR_SPEC.md
-last_updated: 2026-04-28
+last_updated: 2026-05-22
+generated_dashboard: docs/audit/generated/tsol_coverage.md
 ---
+
+> **Status note (2026-05-22 refresh):** The per-op tables below were
+> rewritten against `primitive_coverage.py` truth on 2026-05-22.
+> Numeric per-axis counts live in the generated dashboard at
+> [`docs/audit/generated/tsol_coverage.md`](../audit/generated/tsol_coverage.md).
+> When that dashboard drifts from the registry, the
+> `tests/unit/test_tsol_coverage.py` gate fails — don't hand-edit
+> the status labels here without checking the dashboard first.
 
 # Tessera Standard Operator Library
 
@@ -50,18 +59,35 @@ op = tessera.ops
 
 The canonical documentation form remains `tessera.ops.<name>`.
 
-## Phase Status
+## Status Vocabulary
 
-TSOL uses phase labels so the operator catalog can describe the intended
-standard library without pretending every backend path is complete.
+The per-op catalog below uses six axes from `primitive_coverage.py`
+(math / shape / dtype / VJP / JVP / sharding) plus a single
+`backend_kernel` summary.  Glyphs:
 
-| Status | Meaning |
-|--------|---------|
-| Phase 1-3 implemented | Current public behavior exists in the Python surface, Graph IR, or supported lowering path. |
-| Phase 4 planned | Distributed, collective, mesh, and communication behavior is planned or partially modeled. |
-| Phase 5 planned | Autodiff, checkpointing, optimizer state, quantization workflows, and autotuning expansion. |
-| Phase 6 planned | Production runtime ABI, typed wrappers, observability hooks, and broad backend coverage. |
-| Spec anchor | Semantics are reserved now so code, docs, and tests converge on one name. |
+| Glyph | Meaning |
+|-------|---------|
+| ✅ `complete` | Contract is implemented + tested.  Math / shape / dtype / VJP / JVP are typically complete across the entire TSOL surface today. |
+| ◐ `partial` | Contract has a closed-form rule + tests on the reference path, but the full target × dtype matrix isn't filled in.  Most often appears on `sharding_rule` (Phase G mesh integration pending) and `backend_kernel` (real hardware proof pending). |
+| ◯ `planned` | Spec reserves the name; the contract hasn't been written yet.  Zero TSOL ops today carry this status. |
+| – `N/A` | Contract doesn't apply for this op (e.g., RNG ops have no VJP; structural reshape ops have no math semantics distinct from shape). |
+
+**Headline summary (2026-05-22 dashboard):**
+
+- 47 / 47 canonical TSOL ops have a registry entry.
+- 47 / 47 are `complete` on math / shape / dtype / lowering.
+- 41 / 47 have `complete` VJP; the 6 remaining are RNG / pure-layout
+  ops where VJP is N/A.
+- 40 / 47 have `complete` JVP; the 7 remaining are dropout + RNG +
+  pure-layout ops where JVP is N/A.
+- 31 / 47 have `complete` sharding; 16 sit at `partial` pending
+  Phase G mesh verification.
+- **0 / 47** claim `complete` `backend_kernel` — by registry design
+  this requires real NVIDIA / ROCm / Metalium hardware proof
+  (see [Phase G/H/I frontier audit](../audit/phase_ghi_hardware_frontier.md)).
+  The `◐ partial` status documents which targets have shipping
+  kernels today (Apple GPU + x86 paths are real; the rest are
+  artifact-only).
 
 ## Tensor, Dtype, Layout, And Numeric Policy
 
@@ -125,74 +151,91 @@ pure < random < movement < state < collective < memory < io < top
 
 ### Linear Algebra
 
-| Operation | Canonical API | Status | Notes |
-|-----------|---------------|--------|-------|
-| GEMM | `tessera.ops.gemm(A, B, *, epilogue=None)` | Phase 1-3 implemented | Lowers as canonical matmul where compiled. |
-| Matmul | `tessera.ops.matmul(A, B, *, epilogue=None)` | Phase 1-3 implemented | Preferred public name; `gemm` remains accepted. |
-| Batched GEMM | `tessera.ops.batched_gemm(A, B)` | Spec anchor | Strided or pointer-array batches. |
-| Einsum | `tessera.ops.einsum(spec, *tensors)` | Spec anchor | Lowers to contractions, reductions, and layout transforms. |
-| Factorized matmul | `tessera.ops.factorized_matmul(A, B, *, rank)` | Spec anchor | Low-rank trade-off operator. |
-| Triangular solve | `tessera.ops.tri_solve(A, b, *, lower=True)` | Spec anchor | Backend may fall back to CPU in early phases. |
-| Decompositions | `cholesky`, `qr`, `svd` | Spec anchor | Numeric policy must declare accumulator/result dtype. |
+| Operation | Canonical API | math | shape | dtype | vjp | jvp | sharding | backend |
+|-----------|---------------|------|-------|-------|-----|-----|----------|---------|
+| GEMM | `tessera.ops.gemm(A, B, *, epilogue=None)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| Matmul | `tessera.ops.matmul(A, B, *, epilogue=None)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| Batched GEMM | `tessera.ops.batched_gemm(A, B)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| Einsum | `tessera.ops.einsum(spec, *tensors)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| Factorized matmul | `tessera.ops.factorized_matmul(A, B, *, rank)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
+| Triangular solve | `tessera.ops.tri_solve(A, b, *, lower=True)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
+| Cholesky | `tessera.ops.cholesky(A)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
+| QR | `tessera.ops.qr(A)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
+| SVD | `tessera.ops.svd(A)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
 
 ### Neural Network Primitives
 
-| Operation | Canonical API | Status | Notes |
-|-----------|---------------|--------|-------|
-| Conv2D/3D | `tessera.ops.conv2d`, `tessera.ops.conv3d` | Phase 1-3 implemented for `conv2d` stub/IR path | Supports layout and fused epilogue contracts. |
-| LayerNorm | `tessera.ops.layer_norm(x, *, eps=1e-5)` | Phase 1-3 implemented | Deterministic reduction when requested. |
-| RMSNorm | `tessera.ops.rmsnorm(x, *, eps=1e-5)` | Spec anchor | Safe normalization primitive. |
-| Softmax | `tessera.ops.softmax(x, *, axis=-1)` | Phase 1-3 implemented | Numerically stable baseline; safe variants lower to stable kernels. |
-| GELU/ReLU/SiLU | `gelu`, `relu`, `silu` | Phase 1-3 implemented for GELU/ReLU | Activation epilogues should fuse. |
-| Dropout | `tessera.ops.dropout(x, p, *, rng=None, training=True)` | Phase 1-3 implemented | Random effect; deterministic mode requires stable RNG policy. |
-| QKV projection | `tessera.ops.qkv_projection(x, W_qkv)` | Spec anchor | Tensor-parallel friendly projection. |
-| FlashAttention | `tessera.ops.flash_attn(Q, K, V, *, scale=None, causal=False, cache=None, dropout_p=0.0)` | Phase 1-3 implemented for tensor inputs; stateful cache path planned | Uses online softmax and schedule artifacts in optimized lowering. |
-| RoPE | `tessera.ops.rope(x, theta, *, axes="qk")` | Spec anchor | Rotation policy is part of op attrs. |
-| MoE | `tessera.ops.moe`, `moe_dispatch`, `moe_combine` | Phase 4 planned | Transport hooks cover NCCL, NVSHMEM, and DeepEP-style paths. |
+| Operation | Canonical API | math | shape | dtype | vjp | jvp | sharding | backend |
+|-----------|---------------|------|-------|-------|-----|-----|----------|---------|
+| Conv2D | `tessera.ops.conv2d(x, w, ...)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| Conv3D | `tessera.ops.conv3d(x, w, ...)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| LayerNorm | `tessera.ops.layer_norm(x, *, eps=1e-5)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| RMSNorm | `tessera.ops.rmsnorm(x, *, eps=1e-5)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| Softmax | `tessera.ops.softmax(x, *, axis=-1)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| GELU | `tessera.ops.gelu(x)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| ReLU | `tessera.ops.relu(x)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| SiLU | `tessera.ops.silu(x)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| Dropout | `tessera.ops.dropout(x, p, *, rng=None, training=True)` | ✅ | ✅ | ✅ | ✅ | – | ✅ | ◐ |
+| QKV projection | `tessera.ops.qkv_projection(x, W_qkv)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| FlashAttention | `tessera.ops.flash_attn(Q, K, V, *, scale=None, causal=False, cache=None, dropout_p=0.0)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| RoPE | `tessera.ops.rope(x, theta, *, axes="qk")` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| MoE | `tessera.ops.moe(x, ...)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
+| MoE dispatch | `tessera.ops.moe_dispatch(x, route)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
+| MoE combine | `tessera.ops.moe_combine(parts, route)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
 
 ### Spectral Operators
 
-| Operation | Canonical API | Status | Notes |
-|-----------|---------------|--------|-------|
-| FFT/IFFT | `tessera.ops.fft(x, *, axes=None)`, `ifft` | Spec anchor | Spectral dialect support exists; TSOL fixes public spelling. |
-| RFFT/IRFFT | `tessera.ops.rfft`, `irfft` | Spec anchor | Real transform variants. |
-| STFT/ISTFT | `tessera.ops.stft`, `istft` | Spec anchor | Windowing included in operator semantics. |
-| Spectral filter | `tessera.ops.spectral_filter(Xf, Hf)` | Spec anchor | Complex dtype aware. |
+| Operation | Canonical API | math | shape | dtype | vjp | jvp | sharding | backend |
+|-----------|---------------|------|-------|-------|-----|-----|----------|---------|
+| FFT | `tessera.ops.fft(x, *, axes=None)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
+| IFFT | `tessera.ops.ifft(x, *, axes=None)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
+| RFFT | `tessera.ops.rfft(x, *, axes=None)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
+| IRFFT | `tessera.ops.irfft(x, *, axes=None)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
+| STFT | `tessera.ops.stft(x, *, n_fft, hop, win)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
+| ISTFT | `tessera.ops.istft(Xf, *, n_fft, hop, win)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
+| Spectral filter | `tessera.ops.spectral_filter(Xf, Hf)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
 
 ### Sparse, Segment, And Graph Operators
 
-| Operation | Canonical API | Status | Notes |
-|-----------|---------------|--------|-------|
-| COO/CSR SpMM | `tessera.ops.spmm_coo`, `spmm_csr` | Spec anchor | Sparse format metadata must be explicit. |
-| SDDMM | `tessera.ops.sddmm(A, B, mask)` | Spec anchor | Useful for sparse attention. |
-| Block-sparse matmul | `tessera.ops.bsmm(X, W_bsr)` | Spec anchor | BSR block sizes should align to tensor-core tiles. |
-| Segment reduce | `tessera.ops.segment_reduce(x, seg_ids, *, op="sum")` | Spec anchor | Reduction op must declare deterministic behavior. |
+| Operation | Canonical API | math | shape | dtype | vjp | jvp | sharding | backend |
+|-----------|---------------|------|-------|-------|-----|-----|----------|---------|
+| COO SpMM | `tessera.ops.spmm_coo(A, B)` | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
+| CSR SpMM | `tessera.ops.spmm_csr(A, B)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| SDDMM | `tessera.ops.sddmm(A, B, mask)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| Block-sparse matmul | `tessera.ops.bsmm(X, W_bsr)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| Segment reduce | `tessera.ops.segment_reduce(x, seg_ids, *, op="sum")` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
 
 ### RNG And Initialization
 
-| Operation | Canonical API | Status | Notes |
-|-----------|---------------|--------|-------|
-| Uniform RNG | `tessera.ops.rng_uniform(shape, *, dtype, seed, lo, hi)` | Spec anchor | Counter-based Philox-style contract. |
-| Normal RNG | `tessera.ops.rng_normal(shape, *, dtype, seed, mean, std)` | Spec anchor | Stable stream assignment under deterministic mode. |
-| Dropout | `tessera.ops.dropout(x, p, *, rng=None)` | Phase 1-3 implemented | Shares RNG contract. |
+| Operation | Canonical API | math | shape | dtype | vjp | jvp | sharding | backend |
+|-----------|---------------|------|-------|-------|-----|-----|----------|---------|
+| Uniform RNG | `tessera.ops.rng_uniform(shape, *, dtype, seed, lo, hi)` | ✅ | ✅ | ✅ | – | – | ✅ | ◐ |
+| Normal RNG | `tessera.ops.rng_normal(shape, *, dtype, seed, mean, std)` | ✅ | ✅ | ✅ | – | – | ✅ | ◐ |
+| Dropout | `tessera.ops.dropout(x, p, *, rng=None)` | ✅ | ✅ | ✅ | ✅ | – | ✅ | ◐ |
 
 ### Collectives
 
-| Operation | Canonical API | Status | Notes |
-|-----------|---------------|--------|-------|
-| All-reduce | `tessera.ops.all_reduce(x, *, axis="dp", op="sum", deterministic=None)` | Phase 4 planned | Current Python path is single-rank no-op. |
-| Reduce-scatter | `tessera.ops.reduce_scatter(x, *, axis="dp", op="sum", deterministic=None)` | Phase 4 planned | Should lower through typed async collectives. |
-| All-gather | `tessera.ops.all_gather(x, *, axis="dp", deterministic=None)` | Phase 4 planned | Future-aware value semantics. |
-| All-to-all | `tessera.ops.all_to_all(x, *, axis, deterministic=None)` | Phase 4 planned | Required for MoE and sequence sharding. |
+| Operation | Canonical API | math | shape | dtype | vjp | jvp | sharding | backend |
+|-----------|---------------|------|-------|-------|-----|-----|----------|---------|
+| All-reduce | `tessera.ops.all_reduce(x, *, axis="dp", op="sum", deterministic=None)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| Reduce-scatter | `tessera.ops.reduce_scatter(x, *, axis="dp", op="sum", deterministic=None)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| All-gather | `tessera.ops.all_gather(x, *, axis="dp", deterministic=None)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| All-to-all | `tessera.ops.all_to_all(x, *, axis, deterministic=None)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+
+Collectives run today on the thread-based `MockRankGroup` for tests
+and on `NCCLAdapter` / `RCCLAdapter` for production paths (the
+adapters are wired but require real GPU hardware for execution
+proof — see [Phase G/H/I frontier audit](../audit/phase_ghi_hardware_frontier.md)).
 
 ### Layout And Packing
 
-| Operation | Canonical API | Status | Notes |
-|-----------|---------------|--------|-------|
-| Transpose | `tessera.ops.transpose(x, perm=None)` | Phase 1-3 implemented | May fold into producer/consumer attrs. |
-| Rearrange | `tessera.ops.rearrange(x, layout)` | Spec anchor | Canonical layout transform. |
-| Pack/unpack | `tessera.ops.pack(x, layout)`, `unpack(x)` | Spec anchor | Movement effect when materialized. |
-| Tile view | `tessera.ops.tile_view(x, BM, BN, BK=None)` | Spec anchor | Feeds Schedule and Tile IR contracts. |
+| Operation | Canonical API | math | shape | dtype | vjp | jvp | sharding | backend |
+|-----------|---------------|------|-------|-------|-----|-----|----------|---------|
+| Transpose | `tessera.ops.transpose(x, perm=None)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
+| Rearrange | `tessera.ops.rearrange(x, layout)` | ✅ | ✅ | ✅ | – | – | ✅ | ◐ |
+| Pack | `tessera.ops.pack(x, layout)` | ✅ | ✅ | ✅ | – | – | ✅ | ◐ |
+| Unpack | `tessera.ops.unpack(x)` | ✅ | ✅ | ✅ | – | – | ✅ | ◐ |
+| Tile view | `tessera.ops.tile_view(x, BM, BN, BK=None)` | ✅ | ✅ | ✅ | – | – | ✅ | ◐ |
 
 ## Fusion And Epilogues
 
@@ -247,7 +290,8 @@ Autotuned operators should produce or consume a schedule artifact containing:
 
 ## Error Handling
 
-All TSOL operators raise Tessera errors with stable codes:
+All TSOL operators raise Tessera errors with stable codes.  The
+canonical TSOL contract codes:
 
 | Code | Meaning |
 |------|---------|
@@ -257,6 +301,21 @@ All TSOL operators raise Tessera errors with stable codes:
 | `TS_ERR_BACKEND_FAILURE` | Wrapped backend failure such as CUDA, ROCm, NCCL, RCCL, or NVSHMEM. |
 | `TS_ERR_OOM` | Allocation failed. |
 | `TS_ERR_NONDETERMINISM` | Deterministic mode was requested but cannot be honored. |
+
+**Implementation note (TSOL-2, 2026-05-22):** the canonical
+`TS_ERR_*` family above is a contract.  Today's Python
+implementation raises exceptions from
+:class:`tessera.diagnostics.TesseraErrorCode` whose values are
+prefixed `E_*` (e.g., `E_SHAPE_MISMATCH`, `E_OOM`,
+`E_NONDETERMINISTIC`).  The mapping from `TS_ERR_*` to `E_*` is
+captured in the unified diagnostic-code registry at
+`python/tessera/compiler/diagnostic_codes.py` (Arch-1 + TSOL-2)
+with drift gating at
+`tests/unit/test_diagnostic_code_registry.py`.
+
+The registry also covers MLIR-level diagnostic codes (`SYMDIM_*`,
+`QUEUE_*`, `LAYOUT_LEGALITY_*`) and the JIT-level outcome codes
+(`JIT_*`) — one place to discover every code Tessera emits.
 
 ## Python Type Stubs
 

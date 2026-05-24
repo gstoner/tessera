@@ -40,13 +40,16 @@ from tessera.compiler.diagnostic_codes import (
     REGISTERED_CODES,
     all_codes,
     code_lookup,
+    codes_by_language,
     codes_by_pass,
     codes_by_sprint,
+    codes_by_status,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = REPO_ROOT / "src"
+PYTHON_TESSERA_ROOT = REPO_ROOT / "python" / "tessera"
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -88,6 +91,39 @@ def _scan_codes_in_cpp() -> dict[str, set[Path]]:
     return codes
 
 
+# TSOL-2 (2026-05-22): scan Python source for E_* / JIT_* / TS_ERR_*
+# emissions.  The pattern matches enum values + string-literal raises;
+# we keep the same shape as the C++ scan so the drift gate stays
+# symmetric.
+_PYTHON_CODE_PATTERNS = (
+    re.compile(r'"(E_[A-Z][A-Z0-9_]{1,})"'),
+    re.compile(r'"(JIT_[A-Z][A-Z0-9_]{2,})"'),
+    re.compile(r'"(TS_ERR_[A-Z][A-Z0-9_]{2,})"'),
+)
+
+
+def _scan_codes_in_python() -> dict[str, set[Path]]:
+    """Return ``code -> {paths that emit it}`` by scanning every .py
+    file under python/tessera/.  Excludes the diagnostic_codes.py
+    registry itself (it lists every code by definition) so the gate
+    measures real emission sites, not the manifest."""
+    codes: dict[str, set[Path]] = {}
+    registry_file = (
+        PYTHON_TESSERA_ROOT / "compiler" / "diagnostic_codes.py"
+    )
+    for path in PYTHON_TESSERA_ROOT.rglob("*.py"):
+        if path == registry_file:
+            continue
+        try:
+            text = path.read_text(errors="replace")
+        except OSError:
+            continue
+        for pattern in _PYTHON_CODE_PATTERNS:
+            for match in pattern.finditer(text):
+                codes.setdefault(match.group(1), set()).add(path)
+    return codes
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Structural tests
 # ─────────────────────────────────────────────────────────────────────────
@@ -117,14 +153,37 @@ def test_registered_codes_have_no_duplicates() -> None:
         seen.add(entry.code)
 
 
-def test_registered_codes_are_alphabetized() -> None:
-    """Registry order is alphabetical for easy review.  When adding
-    new codes, slot them in sorted position rather than appending."""
-    codes = [c.code for c in REGISTERED_CODES]
-    assert codes == sorted(codes), (
-        "REGISTERED_CODES must be alphabetised; out-of-order codes: "
-        f"{[c for c, s in zip(codes, sorted(codes)) if c != s]}"
-    )
+def test_registered_codes_group_by_language_and_prefix() -> None:
+    """The registry organises codes by language (mlir / python) and
+    by prefix family (E_*, JIT_*, TS_ERR_*, SYMDIM_*, QUEUE_*,
+    LAYOUT_LEGALITY_*).  We don't enforce strict alphabetisation
+    across the registry (low-value churn when adding new prefixes);
+    we do verify the prefix-to-language mapping stays sensible."""
+    # Each prefix maps to exactly one language.
+    prefix_to_lang: dict[str, str] = {}
+    for c in REGISTERED_CODES:
+        prefix = c.code.split("_", 1)[0]
+        if prefix in prefix_to_lang:
+            assert prefix_to_lang[prefix] == c.language, (
+                f"prefix {prefix!r} declared in both "
+                f"{prefix_to_lang[prefix]!r} and {c.language!r} languages"
+            )
+        else:
+            prefix_to_lang[prefix] = c.language
+    # Canonical mapping (locked sentinels).
+    expected = {
+        "E": "python",
+        "JIT": "python",
+        "TS": "python",          # TS_ERR_* codes
+        "SYMDIM": "mlir",
+        "QUEUE": "mlir",
+        "LAYOUT": "mlir",         # LAYOUT_LEGALITY_*
+    }
+    for prefix, lang in expected.items():
+        assert prefix_to_lang.get(prefix) == lang, (
+            f"prefix {prefix!r} expected to be {lang!r} language, got "
+            f"{prefix_to_lang.get(prefix)!r}"
+        )
 
 
 def test_lookup_helpers_work() -> None:
@@ -149,8 +208,9 @@ def test_lookup_helpers_work() -> None:
 
 
 def test_every_cpp_code_is_registered() -> None:
-    """Every diagnostic code that appears in C++ source must be in the
-    registry.  This is the gate against undocumented codes."""
+    """Every MLIR diagnostic code that appears in C++ source must be
+    in the registry.  This is the gate against undocumented MLIR-side
+    codes."""
     cpp_codes = _scan_codes_in_cpp()
     registered = set(all_codes())
     unregistered = {
@@ -171,16 +231,86 @@ def test_every_cpp_code_is_registered() -> None:
         pytest.fail("\n".join(msg_lines))
 
 
-def test_every_registered_code_appears_in_cpp() -> None:
-    """Every registered code must appear in at least one C++ file.
-    Catches stale registry entries left behind after a code rename or
-    removal."""
+def test_every_mlir_registered_code_appears_in_cpp() -> None:
+    """Every MLIR-language registered code must appear in at least one
+    C++ file.  Catches stale registry entries left behind after a
+    code rename or removal."""
     cpp_codes = _scan_codes_in_cpp()
-    missing = [c.code for c in REGISTERED_CODES if c.code not in cpp_codes]
+    mlir_codes = [c for c in REGISTERED_CODES if c.language == "mlir"]
+    missing = [c.code for c in mlir_codes if c.code not in cpp_codes]
     assert not missing, (
-        f"Registered diagnostic codes that don't appear in any C++ file: "
-        f"{missing}.  Either restore the C++ emission site or remove the "
-        f"stale entry from REGISTERED_CODES."
+        f"Registered MLIR diagnostic codes that don't appear in any "
+        f"C++ file: {missing}.  Either restore the C++ emission site "
+        f"or remove the stale entry from REGISTERED_CODES."
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# TSOL-2 (2026-05-22) — Python-side drift gates
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def test_every_python_code_is_registered() -> None:
+    """Every E_* / JIT_* / TS_ERR_* code that appears in Python source
+    (outside the registry itself) must be in the registry."""
+    py_codes = _scan_codes_in_python()
+    registered = set(all_codes())
+    unregistered = {
+        code: paths for code, paths in py_codes.items()
+        if code not in registered
+    }
+    if unregistered:
+        msg_lines = ["Unregistered Python diagnostic codes found:"]
+        for code, paths in sorted(unregistered.items()):
+            relpath = sorted(p.relative_to(REPO_ROOT) for p in paths)[0]
+            msg_lines.append(f"  - {code!r} in {relpath}")
+        msg_lines.append(
+            "Add a DiagnosticCode entry with language='python' in "
+            "`python/tessera/compiler/diagnostic_codes.py`."
+        )
+        pytest.fail("\n".join(msg_lines))
+
+
+def test_python_implemented_codes_appear_in_python_source() -> None:
+    """Every Python-language registered code with status='implemented'
+    must appear in at least one .py file.  Codes with
+    status='spec_contract' are exempt — they document a TSOL contract
+    that hasn't been wired into Python emission sites yet."""
+    py_codes = _scan_codes_in_python()
+    implemented_python = [
+        c for c in REGISTERED_CODES
+        if c.language == "python" and c.status == "implemented"
+    ]
+    missing = [c.code for c in implemented_python if c.code not in py_codes]
+    assert not missing, (
+        f"Registered Python codes claimed as 'implemented' that don't "
+        f"appear in any .py file: {missing}.  Either flip their status "
+        f"to 'spec_contract' or restore the Python emission site."
+    )
+
+
+def test_codes_by_language_helper() -> None:
+    mlir = codes_by_language("mlir")
+    python = codes_by_language("python")
+    # All codes are partitioned cleanly across the two languages.
+    assert len(mlir) + len(python) == len(REGISTERED_CODES)
+    # Each MLIR code's pass_origin reflects an MLIR pass / verifier;
+    # not a Python module.
+    for c in mlir:
+        assert "tessera.compiler" not in c.pass_origin, (
+            f"MLIR code {c.code!r} claims a Python pass_origin"
+        )
+
+
+def test_codes_by_status_helper() -> None:
+    impl = codes_by_status("implemented")
+    contracts = codes_by_status("spec_contract")
+    assert len(impl) + len(contracts) == len(REGISTERED_CODES)
+    # Today's TSOL-2 baseline: exactly 6 TS_ERR_* codes are
+    # spec_contract.
+    ts_err = [c for c in contracts if c.code.startswith("TS_ERR_")]
+    assert len(ts_err) == 6, (
+        f"Expected 6 TS_ERR_* spec contracts; got {len(ts_err)}"
     )
 
 
@@ -208,6 +338,24 @@ _LOCKED_SENTINEL_CODES = (
     "QUEUE_POP_QUEUE_PROVENANCE",
     "QUEUE_POP_TOKEN_PROVENANCE",
     "QUEUE_POP_TILE_TYPE",
+    # TSOL-2 (2026-05-22) — Python-side family sentinels.
+    "E_SHAPE_MISMATCH",
+    "E_TILE_LOWERING",
+    "E_TARGET_CODEGEN",
+    "JIT_SOURCE_UNAVAILABLE",
+    "JIT_SOURCE_PROVIDED",
+    "JIT_EAGER_FALLBACK_EMPTY",
+    "JIT_EAGER_FALLBACK_UNSUPPORTED_OP",
+    "JIT_EAGER_FALLBACK_ARITY",
+    "JIT_EAGER_FALLBACK_UNSUPPORTED_BODY",
+    "JIT_COMPILED_CPU",
+    "JIT_TARGET_IR_ARTIFACT_ONLY",
+    "TS_ERR_INVALID_ARG",
+    "TS_ERR_SHAPE_MISMATCH",
+    "TS_ERR_UNSUPPORTED_DTYPE",
+    "TS_ERR_BACKEND_FAILURE",
+    "TS_ERR_OOM",
+    "TS_ERR_NONDETERMINISM",
 )
 
 
@@ -217,6 +365,10 @@ def test_locked_sentinel_code_present(code: str) -> None:
     assert entry is not None, (
         f"locked sentinel diagnostic code missing: {code}"
     )
-    assert entry.severity == "error"
+    # JIT_* codes are legitimately warnings (informational telemetry);
+    # E_* / SYMDIM_* / QUEUE_* / LAYOUT_LEGALITY_* / TS_ERR_* are errors.
+    assert entry.severity in ("error", "warning"), (
+        f"invalid severity for {code}: {entry.severity!r}"
+    )
     assert entry.summary, f"empty summary for {code}"
     assert entry.fix_hint, f"empty fix_hint for {code}"

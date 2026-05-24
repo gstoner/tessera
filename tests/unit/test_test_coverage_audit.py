@@ -54,14 +54,15 @@ def test_total_op_count_floor() -> None:
 
 
 def test_total_reference_count_floor() -> None:
-    """Locked at the Audit-D landing — total Python + lit refs across
-    every op should stay near the 2,390 baseline.  Floor at 1,800
-    absorbs ordinary churn but flags a sweep that accidentally
-    deletes whole test files."""
+    """Locked at the Audit-D-2 landing.  Total Python + lit refs is
+    ~1,650 with the vectorized scanner (which counts each location
+    once instead of once-per-pattern).  Floor at 1,300 absorbs
+    ordinary churn but flags a sweep that accidentally deletes
+    whole test files."""
     summary = coverage_summary()
     total = summary["total_python_refs"] + summary["total_lit_refs"]
-    assert total >= 1800, (
-        f"Total test references across all ops dropped below 1,800 "
+    assert total >= 1300, (
+        f"Total test references across all ops dropped below 1,300 "
         f"(got {total} = {summary['total_python_refs']} py + "
         f"{summary['total_lit_refs']} lit).  Did a test sweep get "
         f"deleted by accident?"
@@ -69,11 +70,12 @@ def test_total_reference_count_floor() -> None:
 
 
 def test_well_tested_op_count_floor() -> None:
-    """At Audit-D landing, 41 ops have ≥10 references.  Floor at 30
-    means most heavy hitters retained meaningful coverage."""
+    """At Audit-D-2 landing, 24 ops have ≥10 references (vectorized
+    scanner — was 41 with the older over-counting scanner).  Floor
+    at 18 catches loss of any major heavy hitter."""
     summary = coverage_summary()
-    assert summary["well_tested"] >= 30, (
-        f"Well-tested op count (≥10 refs) dropped below 30 "
+    assert summary["well_tested"] >= 18, (
+        f"Well-tested op count (≥10 refs) dropped below 18 "
         f"(got {summary['well_tested']})."
     )
 
@@ -97,23 +99,24 @@ def test_ops_with_negative_tests_floor() -> None:
 
 
 # (op_name, minimum_total_refs).  Floors are set to roughly half the
-# current count — they catch real regressions while absorbing a 50%
-# sweep without a doc update.
+# current count — they catch real regressions while absorbing ordinary
+# churn.  Counts are from the vectorized scanner (each match location
+# counted exactly once).
 _SENTINEL_OP_FLOORS = (
-    ("matmul",     200),    # currently 425
-    ("flash_attn",  60),    # currently 141
-    ("gemm",        50),    # currently 131
-    ("softmax",     50),    # currently 121
-    ("reduce",      50),    # currently 128
-    ("mul",         50),    # currently 106
-    ("add",         30),    # currently  72
-    ("relu",        20),    # currently  52
-    ("dropout",     15),    # currently  38
-    ("gelu",        15),    # currently  38
-    ("rope",        15),    # currently  37
-    ("transpose",   15),    # currently  35
-    ("layer_norm",  12),    # currently  32
-    ("cast",        10),    # currently  28
+    ("matmul",     150),    # currently 302
+    ("flash_attn",  50),    # currently  99
+    ("gemm",        35),    # currently  71
+    ("softmax",     40),    # currently  81
+    ("reduce",      30),    # currently  64
+    ("mul",         25),    # currently  53
+    ("add",         18),    # currently  36
+    ("relu",        15),    # currently  31
+    ("dropout",     10),    # currently  22
+    ("gelu",        12),    # currently  26
+    ("rope",        10),    # currently  24
+    ("transpose",   12),    # currently  25
+    ("layer_norm",   8),    # currently  19
+    ("cast",        12),    # currently  26
 )
 
 
@@ -147,19 +150,19 @@ def test_sentinel_op_reference_count_floor(op_name: str, floor: int) -> None:
 def test_matmul_has_negative_tests() -> None:
     rows = {r.op_name: r for r in collect_op_test_coverage()}
     matmul = rows["matmul"]
-    assert matmul.negative_refs >= 5, (
+    assert matmul.negative_refs >= 4, (
         f"matmul lost negative-test coverage (got "
         f"{matmul.negative_refs} pytest.raises near references; "
-        f"baseline ~18)."
+        f"baseline 9)."
     )
 
 
 def test_gemm_has_negative_tests() -> None:
     rows = {r.op_name: r for r in collect_op_test_coverage()}
     gemm = rows["gemm"]
-    assert gemm.negative_refs >= 5, (
+    assert gemm.negative_refs >= 3, (
         f"gemm lost negative-test coverage (got {gemm.negative_refs} "
-        f"pytest.raises near references; baseline ~16)."
+        f"pytest.raises near references; baseline 6)."
     )
 
 
@@ -169,14 +172,17 @@ def test_gemm_has_negative_tests() -> None:
 
 
 def test_thinly_tested_count_does_not_balloon() -> None:
-    """At Audit-D landing, 241/432 ops have ≤1 reference.  Many are
-    legitimate (alias rollups, S15 data combinators tested elsewhere,
-    optimizer / schedule helpers under conformance smoke tests, etc.).
-    Cap at 300 — going above that means we've added a wave of
-    unexposed primitives without writing tests."""
+    """At Audit-D-2 landing, ~291/432 ops have ≤1 reference under
+    the vectorized scanner.  Many are legitimate (alias rollups, S15
+    data combinators tested elsewhere, optimizer / schedule helpers
+    under conformance smoke tests, etc.) — the classification
+    audit at ``test_coverage_classification.md`` triages the buckets.
+    Cap at 350 — going above that means we've added a wave of
+    unexposed primitives without writing tests OR without a
+    classification rule landing."""
     summary = coverage_summary()
-    assert summary["thinly_tested"] <= 300, (
-        f"Thinly-tested op count rose above 300 "
+    assert summary["thinly_tested"] <= 350, (
+        f"Thinly-tested op count rose above 350 "
         f"(got {summary['thinly_tested']}).  A wave of unexposed "
         f"primitives was added without tests."
     )

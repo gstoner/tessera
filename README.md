@@ -2,10 +2,16 @@
 
 **Pre-alpha. Breaking changes expected. Not production-ready.**
 
-Tessera is a tile-centric programming model and compiler for deep learning and
-HPC. It makes tiles, explicit memory spaces, numerical precision, and
-distributed parallelism first-class compiler objects rather than runtime
-heuristics.
+Tessera is a **standalone, tile-centric programming model and compiler** for
+deep learning and HPC. It makes tiles, explicit memory spaces, numerical
+precision, and distributed parallelism first-class compiler objects rather than
+runtime heuristics.
+
+**Standalone means runtime-independent of PyTorch, JAX, and Flax.** Those are
+reference vocabularies only — the Tessera runtime never imports them. The
+Python frontend, training step, data pipeline, custom-op API, and AOT export
+are all in-scope (S-series, see below); file-format compatibility (e.g.
+SentencePiece protobufs, SafeTensors, GGUF) is the single permitted concession.
 
 Tessera also hosts compiler-native mathematical IR surfaces for structured
 models. The active Clifford / geometric algebra (`tessera.ga`) and
@@ -16,8 +22,11 @@ conventions.
 
 Target work exists for NVIDIA, AMD ROCm, Google TPU, Apple Silicon, Tenstorrent
 Metalium, Cerebras, Rubin CPX, and x86 AMX/AVX512. Backend maturity varies by
-target: some paths execute through CPU/mock runtime support, while others are
-currently artifact-only or lit-testable compiler paths. See
+target: x86 AMX and Apple Silicon (CPU + GPU) execute natively today; NVIDIA
+and ROCm have toolchain-pinned Target IR + lit fixtures with native execution
+gated on real hardware (Phase G/H — see
+[`docs/audit/phase_ghi_hardware_frontier.md`](docs/audit/phase_ghi_hardware_frontier.md));
+other paths are artifact-only or lit-testable. See
 [`docs/README.md`](docs/README.md) for the status labels used across docs.
 
 ---
@@ -78,22 +87,30 @@ Use these status words consistently:
 | scaffolded | Directory, API shape, or design skeleton exists, but behavior is incomplete or artifact-only. |
 | planned | Design direction only. |
 
-Current high-level status:
+Current high-level status (as of May 2026):
 
 | Area | Status |
 |------|--------|
 | Python frontend, textual DSL frontend, constraints, effects, Graph IR | implemented |
-| Object-backed Graph/Schedule/Tile IR and CPU/NVIDIA/Apple/ROCm Target IR artifacts | implemented / lit-testable |
-| CPU/x86 lowering artifacts and NumPy-backed execution path | implemented / mock-runtime |
-| NVIDIA SM90+ FA-4, WGMMA/TMA, and Blackwell TCGEN05/TMEM target artifacts | implemented / lit-testable |
-| Distributed APIs, cyclic sharding, collectives scaffolding | implemented / scaffolded |
-| TPU target profile and StableHLO/Shardy artifacts | implemented / lit-testable |
-| Solver, sparse/RNG, linalg, resilience, and autotuning foundations | implemented / lit-testable |
-| Clifford / geometric algebra Python surface, autodiff registry, dialect, lowering passes, and Apple GPU fused kernels | implemented / lit-testable; 17/17 Apple GPU native primitives benchmarked |
-| Energy-based model Python surface, samplers, losses, partition estimators, dialect, annotation passes, and Apple GPU kernels | implemented / lit-testable; **9/9 native Apple GPU EBM ops benchmarked** (incl. `ebm_partition_exact` via stable-logsumexp MSL kernel, 2026-05-17) |
+| Object-backed Graph / Schedule / Tile IR + per-target Target IR artifacts | implemented / lit-testable |
+| **x86 AMX BF16 + AVX512 lowering and execution** (Phase 2) | **implemented / hardware-runtime** |
+| **Apple Silicon CPU** via Accelerate (cblas_sgemm rank-2/rank-3 + BNNS f16/bf16) (Phase 8.2) | **implemented / hardware-runtime** |
+| **Apple Silicon GPU** via MPS + custom MSL kernels — 26 runtime symbols across 9 kernel concepts × {f32, f16, bf16}, 4 fused chains (matmul→softmax, matmul→gelu, matmul→rmsnorm, matmul→softmax→matmul), MLA E2E proof (Phases 8.3 → 8.4.7) | **implemented / hardware-runtime (Darwin)** |
+| NVIDIA SM_90+ FA-4, WGMMA/TMA, Blackwell TCGEN05/TMEM target artifacts; **CUDA 13.2 Update 1 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase G) |
+| ROCm MFMA gfx90a / gfx94x / gfx950 / gfx1100; **ROCm 7.2.3 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase H) |
+| TPU target profile and StableHLO / Shardy artifacts | implemented / lit-testable |
+| Distributed APIs, cyclic sharding, NCCL/RCCL adapters (≥ 2.22 pin) | implemented / scaffolded |
+| Solver, sparse/RNG, linalg, scaling-resilience, **spectral (all 6 passes shipped)**, TPP | implemented / lit-testable |
+| **S-series standalone compiler track** (S0–S15): RNG, state/pytrees, control flow, sharding, NN functional, quantization, optimizers, losses, **`tessera.rl` PPO/GRPO/CISPO**, AOT export, custom-primitive API, dataset combinators + tokenizers | implemented (Python reference); 432 entries × 12 contract axes tracked in `primitive_coverage.py` |
+| **Reasoning-model attention family** — DeepSeek sparse attention, MiniMax Lightning, Kimi-Delta, gated/hybrid/MLA decode + RL post-training losses, all with VJP+JVP | implemented / lit-testable |
+| Clifford / geometric algebra Python surface, autodiff registry, dialect, lowering passes, and Apple GPU fused kernels | implemented / lit-testable; **17/17 Apple GPU GA primitives benchmarked** |
+| Energy-based model Python surface, samplers, losses, partition estimators, dialect, annotation passes, and Apple GPU kernels | implemented / lit-testable; **9/9 native Apple GPU EBM ops benchmarked** (incl. `ebm_partition_exact` via stable-logsumexp MSL kernel) |
 | Runtime C ABI and Python wrapper | mock-runtime; hardware-runtime when C runtime is built |
-| ROCm and Apple Target IR artifact lowering | implemented / lit-testable / artifact-only |
-| Metalium, Cerebras, Rubin CPX backend trees | scaffolded / lit-testable unless backend docs say otherwise |
+| Cerebras WSE-3, Tenstorrent Metalium, Rubin CPX backend trees | scaffolded / lit-testable |
+| **Audit-as-data infrastructure** — 5 manifest families + 17 op-level audit dashboards drift-gated by `tests/unit/` | implemented |
+
+The 5,750-test fast unit suite passes under `-m "not slow"` in ~4 minutes;
+the full Python suite collects ~6,530 tests including heavy benchmark contracts.
 
 ---
 
@@ -118,23 +135,28 @@ Tile IR     (tile.* ops, tessera.attn.* FA-4 ops, tessera.queue.* barriers)
 Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, TPU, Apple, ...)
 ```
 
-The Python compiler now carries object models and verifier checks for Graph IR,
-Schedule IR, Tile IR, and CPU/x86, NVIDIA/CUDA, Apple, and ROCm Target IR. The JIT artifact spine emits
-textual MLIR-like inspection strings from those objects; native hardware
-execution remains target-specific and is claimed only where backend docs say so.
+The Python compiler carries object models and verifier checks for Graph IR,
+Schedule IR, Tile IR, and CPU/x86, NVIDIA/CUDA, Apple, and ROCm Target IR.
+The JIT artifact spine emits textual MLIR-like inspection strings from those
+objects; native hardware execution remains target-specific and is claimed only
+where backend docs say so.
 
 Primary named pipelines and target paths are tracked in
-[`docs/spec/COMPILER_REFERENCE.md`](docs/spec/COMPILER_REFERENCE.md). The most
-common paths are:
+[`docs/spec/COMPILER_REFERENCE.md`](docs/spec/COMPILER_REFERENCE.md). The
+canonical pipelines registered in `tessera-opt` today:
 
-| Path | Status |
+| Pipeline | Status |
 |------|--------|
-| `tessera-lower-to-x86` | implemented |
-| `tessera-lower-to-gpu` | implemented / lit-testable |
+| `tessera-lower-to-x86` | implemented (hardware-runtime via AMX) |
+| `tessera-lower-to-gpu` (NVIDIA SM_90 default) | implemented / lit-testable |
+| `tessera-nvidia-pipeline-{sm90,sm100,sm120}` (per-SM aliases) | implemented / lit-testable |
 | `tessera-lower-to-rocm` | implemented / lit-testable / artifact-only |
-| `tessera-lower-to-apple_cpu` | implemented / lit-testable / artifact-only |
-| `tessera-lower-to-apple_gpu` | implemented / lit-testable / artifact-only |
+| `tessera-lower-to-apple_cpu` (artifact) / `tessera-lower-to-apple_cpu-runtime` (Accelerate) | implemented / hardware-runtime |
+| `tessera-lower-to-apple_gpu` (artifact) / `tessera-lower-to-apple_gpu-runtime` (MPS + custom MSL) | implemented / hardware-runtime |
 | `tessera-lower-to-metalium` | scaffolded / target-contract artifacts |
+| `tpp-space-time` (Tensor Parallel Primitives) | implemented / lit-testable |
+| `ts-spectral-pipeline` (Spectral / FFT) | implemented / lit-testable |
+| `tessera-cpx-pipeline` / `tessera-cpx-context-pipeline` (NV Rubin CPX) | implemented (separate `tessera-cpx-opt` driver) |
 
 ---
 
@@ -151,6 +173,10 @@ structure is part of the IR contract:
   refinement, self-verification, Langevin / MALA / HMC / Gibbs samplers,
   partition-function estimators, EBM losses, and manifold-aware sphere /
   bivector Langevin reference paths.
+- **Reasoning-model attention family + RL** — DeepSeek sparse attention, MiniMax
+  Lightning, Kimi-Delta, gated/hybrid/MLA decode (each with VJP+JVP); `tessera.rl`
+  ships PPO/GRPO/CISPO policy losses for post-training. Backed by
+  `src/transforms/lib/AttentionFamilyPasses.cpp`.
 
 Key documents:
 
@@ -172,6 +198,37 @@ Native execution status is layer-specific:
 
 ---
 
+## Audit-as-Data
+
+Status truth for many areas of the repo is rendered from machine-readable
+registries, not prose. The 5 **surface manifests** under
+`python/tessera/compiler/`:
+
+- `examples_manifest.py` → [`docs/audit/generated/examples_status.md`](docs/audit/generated/examples_status.md)
+- `benchmarks_manifest.py` → [`docs/audit/generated/benchmarks_status.md`](docs/audit/generated/benchmarks_status.md)
+- `research_manifest.py` → [`docs/audit/generated/research_status.md`](docs/audit/generated/research_status.md)
+- `tools_manifest.py` → [`docs/audit/generated/tools_status.md`](docs/audit/generated/tools_status.md)
+- `tests_manifest.py` → [`docs/audit/generated/tests_status.md`](docs/audit/generated/tests_status.md)
+
+Plus 13 op-level / compiler-level audit registries covering primitive
+coverage (`primitive_coverage.py` — 432 entries × 12 contract axes), backend
+kernel manifests, MLIR verifier coverage, dialect registration, named-pipeline
+registry, diagnostic codes, docs freshness, effect lattice, runtime C ABI
+surface, test coverage by op family, TSOL canonical-op coverage, and
+Apple GPU/CPU target maps. Each dashboard is drift-gated by a test in
+`tests/unit/`. When you wonder "is X tested / shipped / supported?", the
+answer is one of these registries.
+
+CLIs that consume them:
+
+- `tessera-surface-audit --surface=<examples|benchmarks|research|tools|tests>`
+- `tessera-claim-lint --surface=<…>`
+- `tessera-apple-target-map`, `tessera-gpu-target-map`
+- `tessera-e2e-coverage`, `tessera-examples-audit`
+- `tessera-operator-benchmarks-coverage`
+
+---
+
 ## Documentation
 
 **Start here:** [`examples/getting_started/compile_and_explain.py`](examples/getting_started/compile_and_explain.py)
@@ -185,14 +242,19 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 | [`docs/CANONICAL_API.md`](docs/CANONICAL_API.md) | Public API names and syntax |
 | [`docs/spec/PYTHON_API_SPEC.md`](docs/spec/PYTHON_API_SPEC.md) | Public Python symbols and signatures |
 | [`docs/spec/COMPILER_REFERENCE.md`](docs/spec/COMPILER_REFERENCE.md) | IR stack, pass registry, pipelines, compiler source map |
+| [`docs/spec/AUTODIFF_SPEC.md`](docs/spec/AUTODIFF_SPEC.md) | Tape-based reverse-mode autodiff (Tier 2) design |
 | [`docs/spec/CLIFFORD_SPEC.md`](docs/spec/CLIFFORD_SPEC.md) | Clifford / geometric algebra primitive surface |
 | [`docs/spec/EBM_SPEC.md`](docs/spec/EBM_SPEC.md) | Energy-based model primitive surface |
 | [`docs/spec/GA_EBM_EXECUTION_STATUS.md`](docs/spec/GA_EBM_EXECUTION_STATUS.md) | GA + EBM execution status by implementation layer |
 | [`docs/spec/LOWERING_PIPELINE_SPEC.md`](docs/spec/LOWERING_PIPELINE_SPEC.md) | Pass contracts and invariants |
 | [`docs/spec/TARGET_IR_SPEC.md`](docs/spec/TARGET_IR_SPEC.md) | Schedule, Tile, and Target IR dialect details |
 | [`docs/spec/RUNTIME_ABI_SPEC.md`](docs/spec/RUNTIME_ABI_SPEC.md) | Runtime C ABI |
+| [`docs/reference/tessera_tensor_attributes.md`](docs/reference/tessera_tensor_attributes.md) | Normative tensor attributes + dtype names (six attributes, canonical/alias/planned-gated dtype sets, promotion rules) |
+| [`docs/audit/execution_roadmap.md`](docs/audit/execution_roadmap.md) | Phases A–I + S-series S0–S15 standalone compiler track with per-task acceptance criteria |
+| [`docs/audit/phase_ghi_hardware_frontier.md`](docs/audit/phase_ghi_hardware_frontier.md) | Hardware-gated frontier — what's blocked on real NVIDIA / ROCm / Metalium |
 | [`docs/architecture/README.md`](docs/architecture/README.md) | Architecture guide index |
 | [`docs/guides/Tessera_Developer_Frontend_End_To_End.md`](docs/guides/Tessera_Developer_Frontend_End_To_End.md) | First executable frontend path and IR inspection |
+| [`docs/apple_gpu_overview.md`](docs/apple_gpu_overview.md) | Apple GPU architecture story (Phase 8.3 → 8.4.7) |
 
 ---
 
@@ -202,8 +264,11 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 # Python development install
 pip install -e ".[dev]"
 
-# Python unit tests configured by pyproject.toml
-pytest tests/unit -v
+# Daily edit-loop sanity check (~5,750 fast tests, ~4 min, < 512 MB RAM)
+pytest tests/unit/ -m "not slow" -q
+
+# Full Python suite including heavy benchmarks (~6,530 collected; ~30 min)
+pytest tests/unit/ -q
 
 # GA + EBM native Apple GPU health check; skip-recording on non-Darwin
 python benchmarks/apple_gpu/benchmark_ga_ebm.py --ci
@@ -212,8 +277,11 @@ python benchmarks/apple_gpu/benchmark_ga_ebm.py --ci
 TESSERA_RUN_PERFORMANCE_TESTS=1 scripts/test.sh
 
 # CPU validation spine: versions, unit tests, runtime and benchmark smokes,
-# standalone runtime/profiler builds, and collectives compile check
+# standalone runtime/profiler builds, collectives compile check, audit lane
 scripts/validate.sh
+
+# Per-target release gate (the canonical Apple release blocker)
+scripts/release_gate.py --target=apple_gpu
 
 # Type check
 mypy python/tessera/
@@ -244,6 +312,19 @@ build/tools/tessera-opt/tessera-opt tests/tessera-ir/phase8/apple_gpu_lowering.m
   | /opt/homebrew/opt/llvm@21/bin/FileCheck tests/tessera-ir/phase8/apple_gpu_lowering.mlir
 ```
 
+NVIDIA / ROCm toolchain checks (skip cleanly when toolchains absent):
+
+```bash
+# Validate CUDA 13.2 U1 PTX patterns against installed nvcc
+python scripts/validate_nvcc_compile.py
+
+# Validate ROCm 7.2.3 AMDGCN intrinsics against installed hipcc
+python scripts/validate_hipcc_compile.py
+
+# Probe NCCL/RCCL ≥ 2.22 symbols at runtime
+python scripts/probe_collective_libs.py
+```
+
 Documentation checks:
 
 ```bash
@@ -254,41 +335,76 @@ scripts/lint_docs.sh
 
 ## Project Layout
 
+For the full canonical layout see [`PROJECT_STRUCTURE.md`](PROJECT_STRUCTURE.md).
+A compressed view of the active surface:
+
 ```text
 python/tessera/
-  compiler/              @jit, textual frontend, Graph/Schedule/Tile/Target IR, pipelines
+  __init__.py            Public surface — re-exports core, jit, dist, ops, dtype, …
+  core/                  Tensor, Module, fundamental abstractions
+  compiler/              @jit, textual frontend, IR objects, target maps, audit modules
   distributed/           Region, domain, dist, array, shard, index_launch, MoE helpers
-  testing/               Mock collectives, compiler and QA helpers
-  cli/                   tessera-mlir, tessera-prof, tessera-runtime-smoke
-  runtime.py             Python wrapper over the runtime C ABI with mock fallback
+  nn/                    Stateful module / layers / functional / utils
+  autodiff/              Tape, VJPs, JVPs, mixed-precision, rematerialize (Tier 2)
+  cache/                 KVCacheHandle + MemoryStateHandle persistent state ABI
+  ebm/                   Energy-based model primitives (M6)
+  ga/                    Geometric Algebra / Clifford primitives (M5/M7)
+  state/                 Pytree primitives + state-collection taxonomy
+  testing/               Mock collectives and Python test helpers
+  cli/                   tessera-mlir, tessera-prof, tessera-translate,
+                         tessera-runtime-smoke, tessera-surface-audit,
+                         tessera-claim-lint, tessera-{apple,gpu}-target-map,
+                         tessera-e2e-coverage, tessera-examples-audit,
+                         tessera-operator-benchmarks-coverage, tessera-autotune
+  runtime.py             ctypes wrapper over the runtime C ABI
   profiler.py            Runtime profiler facade
   autotune.py            Public autotuning facade
+  dtype.py               Canonical dtype enforcement + Dtype + result_type
+  diagnostics.py         ErrorReporter, ShapeInferenceEngine
+  debug.py               DebugTrace, GraphTrace, check_grad, check_determinism
+  telemetry.py           Shared telemetry event/report schema
+  # S-series reference surface modules:
+  aot.py · checkpoint.py · control.py · custom.py · data.py · losses.py ·
+  memory.py · optim.py · quantization.py · rl.py · rng.py · sharding.py
+  # Domain modules:
+  complex.py · conformal_advanced.py · contour.py · distributions.py ·
+  energy.py · flow.py · hyperbolic.py · riemann_surface.py · server.py …
 
 src/
-  compiler/ir/           Core Tessera Graph IR ODS and C++ dialect sources
+  compiler/ir/           Core Tessera Graph IR ODS + C++ dialect sources
   compiler/mlir/         MLIR plugin integration
-  compiler/programming_model/  Schedule/programming-model IR
+  compiler/programming_model/  Schedule / programming-model IR
   compiler/tile_opt_fa4/ FA-4 attention and queue dialects/passes
-  compiler/tessera_neighbors/  Neighbor/halo/stencil dialect and passes
+  compiler/tessera_neighbors/  Neighbor / halo / stencil dialect and passes
   compiler/codegen/      x86, NVIDIA, ROCm, TPU, Apple, Metalium, Cerebras, Rubin CPX
-  collectives/           Collective IR and runtime scaffolding
-  runtime/               Runtime C ABI, CPU/CUDA/HIP backend code, scheduler tests
-  solvers/               Core solver, linalg, scaling-resilience, spectral, TPP work
-  transforms/            Canonicalization and lowering passes
+  compiler/diagnostics/  ErrorReporter, ShapeInferencePass
+  compiler/autotuning/   Autotuner v1 framework
+  collectives/           Collective IR + NCCL/RCCL adapters + chunk planner
+  runtime/               Runtime C ABI, CPU/CUDA/HIP backends, scheduler tests
+  solvers/               core, linalg, scaling_resilience, spectral, tpp,
+                         clifford (M5), ebm (M6)
+  transforms/            Canonicalization, lowering, named pipelines
 
 tests/
   unit/                  Python unit and compiler-contract tests
-  tessera-ir/            MLIR lit tests by phase/path
+  tessera-ir/            MLIR lit tests by phase / path
   kernel_tests/          System-level kernel and roofline scaffolds
   performance/           Optional performance sweeps
   tessera_numerical_validation/ Numerical reference validation
+  integration/, regression/, tessera_tests/
 
 docs/
-  spec/                  Normative specs
+  spec/                  Normative specs (14 files)
   architecture/          Design documents
-  guides/                Developer, runtime, profiling, QA, reliability guides
-  programming_guide/     User-facing programming guide chapters
-  archive/               Historical/pre-canonical material
+  guides/                11 developer guides (~3,400 LOC)
+  programming_guide/     11-chapter user manual + Appendix NVL72
+  reference/             Tensor attribute + dtype reference, migration guide
+  operations/            Canonical operation catalog (TSOL)
+  audit/                 Audit reports + generated/ dashboards (drift-gated)
+  status/                Per-milestone status docs
+  tutorials/             Flash Attention, performance tuning
+  context/               Auto-generated context outputs
+  benchmarks/            Benchmark-related documentation
 ```
 
 ---
@@ -303,6 +419,24 @@ docs/
    separate objects.
 5. Constraint checks run at decoration time when concrete bindings are
    available.
+6. **Tessera is a standalone compiler.** PyTorch, JAX, and Flax are reference
+   vocabularies only — never imported by the runtime. File-format compatibility
+   (SafeTensors, GGUF, SentencePiece protobufs) is the single permitted
+   concession.
+7. Each backend exposes a **hardware-free Target IR** layer between Tile IR
+   and final emission (e.g. `tessera_rocm.mfma`, `tessera_apple.gpu.metal_kernel`).
+   This is what makes backends lit-testable and what
+   `tests/unit/test_target_ir_contract.py` validates.
+8. **`primitive_coverage.py` is the standalone compiler's audit truth.**
+   Adding a primitive means updating both the runtime catalog (op_catalog.py)
+   and the audit registry; (V)JP / (J)VP registration auto-promotes the
+   matching contract axes.
+9. Generated dashboards under `docs/audit/generated/` are **not edited by
+   hand** — every one is drift-gated by a test that compares the live
+   registry to the on-disk snapshot.
+
+For the full design rationale (22 numbered decisions), see
+[`CLAUDE.md`](CLAUDE.md).
 
 ---
 

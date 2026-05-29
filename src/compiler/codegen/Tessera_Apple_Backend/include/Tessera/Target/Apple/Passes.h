@@ -50,6 +50,17 @@ std::unique_ptr<::mlir::Pass> createLowerSoftmaxToAppleGPUPass();
 /// custom-MSL gelu kernel. Phase 8.4.2.
 std::unique_ptr<::mlir::Pass> createLowerGeluToAppleGPUPass();
 
+/// Tier-1 unary activations (silu/relu/sigmoid/tanh/softplus/exp/log/sqrt/
+/// rsqrt/neg/abs, f32/f16) → op-coded MPSGraph unary runtime call. 2026-05-29.
+std::unique_ptr<::mlir::Pass> createLowerUnaryToAppleGPUPass();
+
+/// tessera.silu_mul (SwiGLU gate, f32) → MPSGraph binary runtime call.
+std::unique_ptr<::mlir::Pass> createLowerSiluMulToAppleGPUPass();
+
+/// Tier-1 last-axis row ops (layer_norm/rmsnorm/rmsnorm_safe/log_softmax,
+/// f32/f16) → MPSGraph row-op runtime calls (unweighted norms). 2026-05-29.
+std::unique_ptr<::mlir::Pass> createLowerRowOpToAppleGPUPass();
+
 /// Fused tessera.matmul → tessera.softmax (rank-2, f32, axis=-1, N <= 256)
 /// → func.call into the Apple GPU runtime shim's fused custom-MSL kernel.
 /// Phase 8.4.3 — first multi-op fusion. Must run before the single-op

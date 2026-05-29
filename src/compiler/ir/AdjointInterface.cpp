@@ -128,6 +128,13 @@ POINTWISE_BUILD_ADJOINT(GeluOp, "gelu")
 POINTWISE_BUILD_ADJOINT(ReluOp, "relu")
 POINTWISE_BUILD_ADJOINT(SigmoidOp, "sigmoid")
 POINTWISE_BUILD_ADJOINT(SinOp, "sin")
+// Tier-1 MPSGraph-lane ops (2026-05-29). Each has a Python VJP the runtime
+// resolves via the custom_adjoint_call placeholder keyed by name.
+POINTWISE_BUILD_ADJOINT(SiluOp, "silu")
+POINTWISE_BUILD_ADJOINT(TanhOp, "tanh")
+POINTWISE_BUILD_ADJOINT(SoftplusOp, "softplus")
+POINTWISE_BUILD_ADJOINT(RmsNormOp, "rmsnorm")
+POINTWISE_BUILD_ADJOINT(LogSoftmaxOp, "log_softmax")
 
 #undef POINTWISE_BUILD_ADJOINT
 

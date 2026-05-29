@@ -519,6 +519,24 @@ def Tessera_GeluOp : Tessera_UnaryPureOp<"gelu", "Gaussian error linear unit">;
 def Tessera_ReluOp : Tessera_UnaryPureOp<"relu", "Rectified linear unit">;
 def Tessera_SigmoidOp : Tessera_UnaryPureOp<"sigmoid", "Sigmoid activation">;
 def Tessera_SinOp : Tessera_UnaryPureOp<"sin", "Sine elementwise op">;
+// Tier-1 activations lowered by the Apple GPU MPSGraph lane (2026-05-29).
+def Tessera_SiluOp : Tessera_UnaryPureOp<"silu", "SiLU / swish activation (x * sigmoid(x))">;
+def Tessera_TanhOp : Tessera_UnaryPureOp<"tanh", "Hyperbolic tangent activation">;
+def Tessera_SoftplusOp : Tessera_UnaryPureOp<"softplus", "Softplus activation (log(1 + exp(x)))">;
+
+// RMSNorm (unweighted) over the innermost dimension; eps optional.
+def Tessera_RmsNormOp : Tessera_UnaryPureOp<"rmsnorm", "RMSNorm over the innermost dimension"> {
+  let arguments = (ins TensorType:$x,
+                       OptionalAttr<F64Attr>:$eps,
+                       OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
+}
+
+// Log-softmax over an explicit or innermost axis.
+def Tessera_LogSoftmaxOp : Tessera_UnaryPureOp<"log_softmax", "Log-softmax over an explicit or innermost axis"> {
+  let arguments = (ins TensorType:$x,
+                       OptionalAttr<I64Attr>:$axis,
+                       OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
+}
 
 // Phase 8.4.8 Stage 2a — fused silu-and-multiply primitive.
 // Anchors the SwiGLU `matmul → silu_mul → matmul` chain that Stage 2b's

@@ -245,16 +245,28 @@ instead of falling back to host numpy. Build adds
 loader). Tests: `tests/unit/test_apple_gpu_mpsgraph_lane.py` and the full
 decoder-layer proof `tests/unit/test_apple_gpu_llama_decoder_layer.py`.
 
+### Landed since the lane shipped (2026-05-29)
+
+- **MSL gelu tanh overflow — fixed.** The hand-written MSL gelu kernels
+  (`gelu_f32`/`_f16` and the fused `matmul_gelu_f32`) clamp the tanh argument to
+  `[-30, 30]`, so they no longer NaN for large activations (|x| ≳ 16).
+- **MPSGraph graph caching — landed.** Each compiled graph is cached by
+  `(shape-class, opcode, dtype, shape[, eps, weighted])` and reused across calls;
+  `tessera_apple_gpu_mpsgraph_cache_size()` exposes the live count.
+- **Compile-time MLIR path — landed.** `silu`/`tanh`/`softplus`/`rmsnorm`/
+  `log_softmax` are registered `tessera` dialect ops; passes
+  `tessera-unary-to-apple_gpu` / `tessera-silu-mul-to-apple_gpu` /
+  `tessera-rowop-to-apple_gpu` lower the Tier-1 ops in
+  `tessera-lower-to-apple_gpu-runtime` (lit: `phase8/apple_gpu_tier1_lowering.mlir`).
+
 ## Followups (deliberately deferred)
 
-- **MSL gelu tanh overflow** — the hand-written MSL gelu kernel NaNs for
-  |x| ≳ 16 (tanh overflow); the MPSGraph gelu path is robust and is used by the
-  `matmul_gelu` compose. Fixing the MSL kernel itself is a tracked follow-up.
 - **Native f16/bf16 *fused* MSL kernels** for tiled matmul_softmax and the MLP
   fusions — today f16/bf16 large-N uses the (correct, on-GPU) matmul+MPSGraph
-  compose rather than a single fused kernel.
-- **MPSGraph executable caching** — graphs are currently built per call; caching
-  the compiled `MPSGraphExecutable` by (op, dtype, rank) would cut per-call cost.
+  compose rather than a single fused kernel. This is a perf-only optimization
+  (correctness/on-GPU execution already hold) tracked as a spawned follow-up.
+- **MPSGraphExecutable compilation** — the lane caches `MPSGraph` objects; a
+  further step is precompiling to `MPSGraphExecutable` for lower per-dispatch cost.
 - **Chain extension** — `matmul → softmax → matmul → gelu`, `softmax → matmul → matmul`, etc.
 - **Conv2D / pooling** kernels — the apple_gpu envelope is currently dense-matmul-shaped (MPSGraph can supply these too).
 - **Multi-batch matmul** — matmul currently rank-2; rank-3 batched would mirror the CPU path

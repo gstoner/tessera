@@ -23,6 +23,7 @@ to a numpy reference, so the correctness assertions hold on any platform.
 
 from __future__ import annotations
 
+import ctypes
 import sys
 
 import numpy as np
@@ -214,5 +215,56 @@ def test_runtime_reports_metal_available():
                 "tessera_apple_gpu_rmsnorm_gpu_f32",
                 "tessera_apple_gpu_log_softmax_f32",
                 "tessera_apple_gpu_mpsgraph_softmax_f32",
-                "tessera_apple_gpu_mpsgraph_binary_f32"):
+                "tessera_apple_gpu_mpsgraph_binary_f32",
+                "tessera_apple_gpu_mpsgraph_cache_size"):
         assert hasattr(rt, sym), sym
+
+
+# ── MSL gelu large-activation regression (the spawned fix) ──────────────────
+@pytest.mark.parametrize("scale", [1.0, 10.0, 50.0, 200.0])
+def test_gelu_no_nan_for_large_activations(scale):
+    # The hand-written MSL gelu kernel used to NaN for |x| >~ 16 (tanh
+    # overflow); the argument is now clamped. Exercise the single-op gelu
+    # dispatch (which uses the MSL kernel on Darwin).
+    rng = np.random.RandomState(12)
+    x = (rng.randn(8, 64).astype(np.float32)) * scale
+    out = np.asarray(R._apple_gpu_dispatch_gelu("tessera.gelu", [x], np))
+    assert not np.isnan(out).any(), f"gelu NaN at scale={scale}"
+    # tanh saturates, so the clamped result matches the clamped reference.
+    t = np.clip(0.7978845608028654 * (x + 0.044715 * x ** 3), -30.0, 30.0)
+    ref = 0.5 * x * (1.0 + np.tanh(t))
+    np.testing.assert_allclose(out, ref, rtol=1e-4, atol=1e-4)
+
+
+# ── MPSGraph executable caching ─────────────────────────────────────────────
+@pytest.mark.skipif(not DARWIN, reason="MPSGraph cache is Darwin-only")
+def test_mpsgraph_graph_cache_reuses_across_calls():
+    """Repeated dispatches with the same (op, dtype, shape) signature reuse a
+    single cached MPSGraph; new signatures add one entry each."""
+    rt = R._load_apple_gpu_runtime()
+    cache_size = rt.tessera_apple_gpu_mpsgraph_cache_size
+    cache_size.restype = ctypes.c_int32
+
+    rng = np.random.RandomState(13)
+    # Distinctive flat sizes no other test uses, so the (op, dtype, shape)
+    # signatures are guaranteed fresh and the deltas are exact.
+    x = rng.randn(1, 771).astype(np.float32)
+
+    # Warm once so the signature is definitely present, then measure that
+    # repeats add nothing.
+    R._apple_gpu_dispatch_unary("tessera.silu", [x], np)
+    base = cache_size()
+    for _ in range(6):
+        R._apple_gpu_dispatch_unary("tessera.silu", [x], np)
+    assert cache_size() == base, "repeated same-signature calls must reuse the graph"
+
+    # A different op at the same shape adds exactly one graph.
+    for _ in range(3):
+        R._apple_gpu_dispatch_unary("tessera.relu", [x], np)
+    assert cache_size() == base + 1
+
+    # A different shape adds exactly one more graph.
+    x2 = rng.randn(1, 387).astype(np.float32)
+    for _ in range(3):
+        R._apple_gpu_dispatch_unary("tessera.silu", [x2], np)
+    assert cache_size() == base + 2

@@ -116,6 +116,13 @@ PassPipelineRegistration<> gAppleGPURuntimePipeline(
       pm.addPass(createLowerAttnLocalWindow2DToAppleGPUPass());
       pm.addPass(createLowerSoftmaxToAppleGPUPass());
       pm.addPass(createLowerGeluToAppleGPUPass());
+      // 2026-05-29 — MPSGraph Tier-1 lane: activations, SwiGLU gate, and
+      // last-axis row ops (layer_norm / rmsnorm / log_softmax). These match
+      // distinct op names, so order among them is immaterial; they run after
+      // the fusions so a fused chain still claims its pieces first.
+      pm.addPass(createLowerUnaryToAppleGPUPass());
+      pm.addPass(createLowerSiluMulToAppleGPUPass());
+      pm.addPass(createLowerRowOpToAppleGPUPass());
     });
 
 } // namespace

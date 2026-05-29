@@ -1526,6 +1526,9 @@ kernel void gelu_f32(
     float v = x[gid];
     // sqrt(2/pi) = 0.7978845608028654
     float t = 0.7978845608028654f * (v + 0.044715f * v * v * v);
+    // Metal fast-math tanh overflows to NaN for large |t| (|x| >~ 16);
+    // tanh saturates to +/-1 well before +/-30, so clamp the argument.
+    t = clamp(t, -30.0f, 30.0f);
     out[gid] = 0.5f * v * (1.0f + tanh(t));
 }
 )MSL";
@@ -1604,6 +1607,9 @@ kernel void gelu_f16(
     if (gid >= (uint)N) return;
     float v = float(x[gid]);
     float t = 0.7978845608028654f * (v + 0.044715f * v * v * v);
+    // Metal fast-math tanh overflows to NaN for large |t| (|x| >~ 16);
+    // tanh saturates to +/-1 well before +/-30, so clamp the argument.
+    t = clamp(t, -30.0f, 30.0f);
     out[gid] = half(0.5f * v * (1.0f + tanh(t)));
 }
 )MSL";
@@ -2646,6 +2652,9 @@ kernel void matmul_gelu_f32(
     for (int n = 0; n < N; ++n) {
         float v = scores[n];
         float t = 0.7978845608028654f * (v + 0.044715f * v * v * v);
+    // Metal fast-math tanh overflows to NaN for large |t| (|x| >~ 16);
+    // tanh saturates to +/-1 well before +/-30, so clamp the argument.
+    t = clamp(t, -30.0f, 30.0f);
         O[o_off + n] = 0.5f * v * (1.0f + tanh(t));
     }
 }
@@ -7089,6 +7098,28 @@ static inline MPSGraphTensor *mpsg_down(MPSGraph *g, MPSGraphTensor *t,
                                         : [g castTensor:t toType:ioType name:nil];
 }
 
+// Compiled-graph cache: build the MPSGraph once per (shape-class, opcode,
+// dtype, shape[, eps]) signature and reuse it across calls — only the feed
+// MPSGraphTensorData (the actual buffers) change per call. Value is
+// @[graph, @[placeholders...], outputTensor]; the static dictionary keeps the
+// graph/placeholders/output alive past each call's @autoreleasepool drain.
+static NSMutableDictionary<NSString *, NSArray *> *mpsg_graph_cache() {
+  static NSMutableDictionary *cache = nil;
+  static std::once_flag once;
+  std::call_once(once, [] { cache = [[NSMutableDictionary alloc] init]; });
+  return cache;
+}
+static std::mutex g_mpsg_graph_mu;
+
+static NSArray *mpsg_cache_get(NSString *key) {
+  std::lock_guard<std::mutex> lock(g_mpsg_graph_mu);
+  return mpsg_graph_cache()[key];
+}
+static void mpsg_cache_put(NSString *key, NSArray *entry) {
+  std::lock_guard<std::mutex> lock(g_mpsg_graph_mu);
+  mpsg_graph_cache()[key] = entry;
+}
+
 static bool mpsg_run_unary(MetalDeviceContext &ctx, int op, const void *x,
                            void *out, int64_t n, MPSDataType ioType,
                            size_t elemSize) {
@@ -7097,12 +7128,25 @@ static bool mpsg_run_unary(MetalDeviceContext &ctx, int op, const void *x,
     size_t bytes = (size_t)n * elemSize;
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, x, bytes);
     if (!bufX) return false;
-    MPSGraph *g = [MPSGraph new];
     NSArray<NSNumber *> *shape = @[ @(n) ];
-    MPSGraphTensor *ph = [g placeholderWithShape:shape dataType:ioType name:nil];
-    MPSGraphTensor *yf = mpsg_unary_node(g, mpsg_up(g, ph, ioType), op);
-    if (!yf) return false;
-    MPSGraphTensor *y = mpsg_down(g, yf, ioType);
+    NSString *key = [NSString stringWithFormat:@"u:%d:%d:%lld", op, (int)ioType,
+                                               (long long)n];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *ph;
+    MPSGraphTensor *y;
+    if (entry) {
+      g = entry[0];
+      ph = ((NSArray *)entry[1])[0];
+      y = entry[2];
+    } else {
+      g = [MPSGraph new];
+      ph = [g placeholderWithShape:shape dataType:ioType name:nil];
+      MPSGraphTensor *yf = mpsg_unary_node(g, mpsg_up(g, ph, ioType), op);
+      if (!yf) return false;
+      y = mpsg_down(g, yf, ioType);
+      mpsg_cache_put(key, @[ g, @[ ph ], y ]);
+    }
     MPSGraphTensorData *xd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:shape dataType:ioType];
     NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
@@ -7125,14 +7169,29 @@ static bool mpsg_run_binary(MetalDeviceContext &ctx, int op, const void *a,
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, a, bytes);
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, b, bytes);
     if (!bufA || !bufB) return false;
-    MPSGraph *g = [MPSGraph new];
     NSArray<NSNumber *> *shape = @[ @(n) ];
-    MPSGraphTensor *pa = [g placeholderWithShape:shape dataType:ioType name:nil];
-    MPSGraphTensor *pb = [g placeholderWithShape:shape dataType:ioType name:nil];
-    MPSGraphTensor *yf =
-        mpsg_binary_node(g, mpsg_up(g, pa, ioType), mpsg_up(g, pb, ioType), op);
-    if (!yf) return false;
-    MPSGraphTensor *y = mpsg_down(g, yf, ioType);
+    NSString *key = [NSString stringWithFormat:@"b:%d:%d:%lld", op, (int)ioType,
+                                               (long long)n];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *pa;
+    MPSGraphTensor *pb;
+    MPSGraphTensor *y;
+    if (entry) {
+      g = entry[0];
+      pa = ((NSArray *)entry[1])[0];
+      pb = ((NSArray *)entry[1])[1];
+      y = entry[2];
+    } else {
+      g = [MPSGraph new];
+      pa = [g placeholderWithShape:shape dataType:ioType name:nil];
+      pb = [g placeholderWithShape:shape dataType:ioType name:nil];
+      MPSGraphTensor *yf =
+          mpsg_binary_node(g, mpsg_up(g, pa, ioType), mpsg_up(g, pb, ioType), op);
+      if (!yf) return false;
+      y = mpsg_down(g, yf, ioType);
+      mpsg_cache_put(key, @[ g, @[ pa, pb ], y ]);
+    }
     MPSGraphTensorData *ad =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:shape dataType:ioType];
     MPSGraphTensorData *bd =
@@ -7161,59 +7220,96 @@ static bool mpsg_run_rowop(MetalDeviceContext &ctx, int kind, const void *x,
     size_t cbytes = (size_t)cols * elemSize;
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, x, xbytes);
     if (!bufX) return false;
-    MPSGraph *g = [MPSGraph new];
+    // gamma / beta buffers are acquired regardless (unused placeholders feed
+    // from x's bytes when the op has no gamma/beta).
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufG, ctx, gamma ? gamma : x, cbytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, beta ? beta : x, cbytes);
     NSArray<NSNumber *> *xs = @[ @(rows), @(cols) ];
     NSArray<NSNumber *> *gs = @[ @(cols) ];
     NSArray<NSNumber *> *axis1 = @[ @1 ];
-    MPSGraphTensor *px = [g placeholderWithShape:xs dataType:ioType name:nil];
-    MPSGraphTensor *xf = mpsg_up(g, px, ioType);
-    NSMutableDictionary *feeds = [NSMutableDictionary dictionary];
-    feeds[px] = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:xs dataType:ioType];
-    MPSGraphTensor *yf = nil;
-
-    // gamma / beta placeholders are declared up front (ARC keeps the
-    // backing buffers alive through the enclosing autoreleasepool).
-    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufG, ctx, gamma ? gamma : x, cbytes);
-    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, beta ? beta : x, cbytes);
-
-    if (kind == 0 || kind == 1) {
-      MPSGraphTensor *epsc = [g constantWithScalar:(double)eps dataType:MPSDataTypeFloat32];
-      MPSGraphTensor *pg = [g placeholderWithShape:gs dataType:ioType name:nil];
-      MPSGraphTensor *gf = mpsg_up(g, pg, ioType);
-      feeds[pg] = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufG shape:gs dataType:ioType];
-      if (kind == 0) {  // layer_norm
-        MPSGraphTensor *mean = [g meanOfTensor:xf axes:axis1 name:nil];
-        MPSGraphTensor *diff = [g subtractionWithPrimaryTensor:xf secondaryTensor:mean name:nil];
-        MPSGraphTensor *sq = [g multiplicationWithPrimaryTensor:diff secondaryTensor:diff name:nil];
-        MPSGraphTensor *var = [g meanOfTensor:sq axes:axis1 name:nil];
-        MPSGraphTensor *ve = [g additionWithPrimaryTensor:var secondaryTensor:epsc name:nil];
-        MPSGraphTensor *denom = [g squareRootWithTensor:ve name:nil];
-        MPSGraphTensor *norm = [g divisionWithPrimaryTensor:diff secondaryTensor:denom name:nil];
-        MPSGraphTensor *scaled = [g multiplicationWithPrimaryTensor:norm secondaryTensor:gf name:nil];
-        MPSGraphTensor *pb = [g placeholderWithShape:gs dataType:ioType name:nil];
-        MPSGraphTensor *bf = mpsg_up(g, pb, ioType);
-        feeds[pb] = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:gs dataType:ioType];
-        yf = [g additionWithPrimaryTensor:scaled secondaryTensor:bf name:nil];
-      } else {  // rmsnorm
-        MPSGraphTensor *sq = [g multiplicationWithPrimaryTensor:xf secondaryTensor:xf name:nil];
-        MPSGraphTensor *ms = [g meanOfTensor:sq axes:axis1 name:nil];
-        MPSGraphTensor *me = [g additionWithPrimaryTensor:ms secondaryTensor:epsc name:nil];
-        MPSGraphTensor *denom = [g squareRootWithTensor:me name:nil];
-        MPSGraphTensor *norm = [g divisionWithPrimaryTensor:xf secondaryTensor:denom name:nil];
-        yf = [g multiplicationWithPrimaryTensor:norm secondaryTensor:gf name:nil];
+    // eps is baked into the graph as a constant, so it is part of the key;
+    // weighted-ness (gamma/beta present) changes the graph too. The MLIR
+    // lowering passes the unweighted form (gamma == beta == nullptr) for the
+    // unweighted tessera.layer_norm / tessera.rmsnorm ops; the Python runtime
+    // passes ones/zeros (weighted). Both are supported.
+    NSString *key = [NSString stringWithFormat:@"r:%d:%d:%d:%d:%a:%d:%d", kind,
+                                               (int)ioType, rows, cols, eps,
+                                               gamma ? 1 : 0, beta ? 1 : 0];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    NSArray *phs;
+    MPSGraphTensor *y;
+    if (entry) {
+      g = entry[0];
+      phs = entry[1];
+      y = entry[2];
+    } else {
+      g = [MPSGraph new];
+      MPSGraphTensor *px = [g placeholderWithShape:xs dataType:ioType name:nil];
+      MPSGraphTensor *xf = mpsg_up(g, px, ioType);
+      NSMutableArray *P = [NSMutableArray arrayWithObject:px];
+      MPSGraphTensor *yf = nil;
+      if (kind == 0 || kind == 1) {
+        MPSGraphTensor *epsc = [g constantWithScalar:(double)eps dataType:MPSDataTypeFloat32];
+        bool weighted = (gamma != nullptr);
+        bool hasBeta = (beta != nullptr);
+        MPSGraphTensor *gf = nil;
+        if (weighted) {
+          MPSGraphTensor *pg = [g placeholderWithShape:gs dataType:ioType name:nil];
+          gf = mpsg_up(g, pg, ioType);
+          [P addObject:pg];
+        }
+        if (kind == 0) {  // layer_norm
+          MPSGraphTensor *mean = [g meanOfTensor:xf axes:axis1 name:nil];
+          MPSGraphTensor *diff = [g subtractionWithPrimaryTensor:xf secondaryTensor:mean name:nil];
+          MPSGraphTensor *sq = [g multiplicationWithPrimaryTensor:diff secondaryTensor:diff name:nil];
+          MPSGraphTensor *var = [g meanOfTensor:sq axes:axis1 name:nil];
+          MPSGraphTensor *ve = [g additionWithPrimaryTensor:var secondaryTensor:epsc name:nil];
+          MPSGraphTensor *denom = [g squareRootWithTensor:ve name:nil];
+          MPSGraphTensor *norm = [g divisionWithPrimaryTensor:diff secondaryTensor:denom name:nil];
+          yf = weighted
+                   ? [g multiplicationWithPrimaryTensor:norm secondaryTensor:gf name:nil]
+                   : norm;
+          if (hasBeta) {
+            MPSGraphTensor *pb = [g placeholderWithShape:gs dataType:ioType name:nil];
+            MPSGraphTensor *bf = mpsg_up(g, pb, ioType);
+            [P addObject:pb];
+            yf = [g additionWithPrimaryTensor:yf secondaryTensor:bf name:nil];
+          }
+        } else {  // rmsnorm
+          MPSGraphTensor *sq = [g multiplicationWithPrimaryTensor:xf secondaryTensor:xf name:nil];
+          MPSGraphTensor *ms = [g meanOfTensor:sq axes:axis1 name:nil];
+          MPSGraphTensor *me = [g additionWithPrimaryTensor:ms secondaryTensor:epsc name:nil];
+          MPSGraphTensor *denom = [g squareRootWithTensor:me name:nil];
+          MPSGraphTensor *norm = [g divisionWithPrimaryTensor:xf secondaryTensor:denom name:nil];
+          yf = weighted
+                   ? [g multiplicationWithPrimaryTensor:norm secondaryTensor:gf name:nil]
+                   : norm;
+        }
+      } else if (kind == 2) {  // softmax over last axis (numerically stable)
+        yf = [g softMaxWithTensor:xf axis:1 name:nil];
+      } else {  // log_softmax = (x - max) - log(sum(exp(x - max)))
+        MPSGraphTensor *m = [g reductionMaximumWithTensor:xf axes:axis1 name:nil];
+        MPSGraphTensor *xm = [g subtractionWithPrimaryTensor:xf secondaryTensor:m name:nil];
+        MPSGraphTensor *e = [g exponentWithTensor:xm name:nil];
+        MPSGraphTensor *s = [g reductionSumWithTensor:e axes:axis1 name:nil];
+        MPSGraphTensor *lse = [g logarithmWithTensor:s name:nil];
+        yf = [g subtractionWithPrimaryTensor:xm secondaryTensor:lse name:nil];
       }
-    } else if (kind == 2) {  // softmax over last axis (numerically stable)
-      yf = [g softMaxWithTensor:xf axis:1 name:nil];
-    } else {  // log_softmax = (x - max) - log(sum(exp(x - max)))
-      MPSGraphTensor *m = [g reductionMaximumWithTensor:xf axes:axis1 name:nil];
-      MPSGraphTensor *xm = [g subtractionWithPrimaryTensor:xf secondaryTensor:m name:nil];
-      MPSGraphTensor *e = [g exponentWithTensor:xm name:nil];
-      MPSGraphTensor *s = [g reductionSumWithTensor:e axes:axis1 name:nil];
-      MPSGraphTensor *lse = [g logarithmWithTensor:s name:nil];
-      yf = [g subtractionWithPrimaryTensor:xm secondaryTensor:lse name:nil];
+      if (!yf) return false;
+      y = mpsg_down(g, yf, ioType);
+      phs = [P copy];
+      mpsg_cache_put(key, @[ g, phs, y ]);
     }
-    if (!yf) return false;
-    MPSGraphTensor *y = mpsg_down(g, yf, ioType);
+    NSMutableDictionary *feeds = [NSMutableDictionary dictionary];
+    feeds[phs[0]] =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:xs dataType:ioType];
+    if (phs.count >= 2)
+      feeds[phs[1]] =
+          [[MPSGraphTensorData alloc] initWithMTLBuffer:bufG shape:gs dataType:ioType];
+    if (phs.count >= 3)
+      feeds[phs[2]] =
+          [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:gs dataType:ioType];
     NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
                                             feeds:feeds
                                     targetTensors:@[ y ]
@@ -7226,6 +7322,13 @@ static bool mpsg_run_rowop(MetalDeviceContext &ctx, int kind, const void *x,
 }
 
 }  // namespace
+
+// Number of distinct (shape-class, opcode, dtype, shape) MPSGraphs cached.
+// Used by tests to verify graph reuse across repeated dispatches.
+extern "C" int32_t tessera_apple_gpu_mpsgraph_cache_size(void) {
+  std::lock_guard<std::mutex> lock(g_mpsg_graph_mu);
+  return (int32_t)[mpsg_graph_cache() count];
+}
 
 // ---- C ABI: unary -----------------------------------------------------------
 extern "C" void tessera_apple_gpu_mpsgraph_unary_f32(int32_t op, const float *x,

@@ -1,6 +1,6 @@
 """Apple GPU pipeline pass-order matrix.
 
-The ``tessera-lower-to-apple_gpu-runtime`` pipeline composes 14 lowering
+The ``tessera-lower-to-apple_gpu-runtime`` pipeline composes 17 lowering
 passes that *must* run in a specific order: every fusion lowering has to
 fire before the per-op lowering it competes with, or the per-op lowering
 will steal pieces of an op chain that should have been fused into a
@@ -28,7 +28,7 @@ APPLE_PASSES_CPP = (
 )
 
 
-# Canonical order of the 14 lowering passes in tessera-lower-to-apple_gpu-
+# Canonical order of the 17 lowering passes in tessera-lower-to-apple_gpu-
 # runtime.  This list is the source of truth — any reorder requires an
 # explicit edit *and* the docstring on Passes.cpp must update to explain
 # why.  Comments before each pass capture the ordering contract:
@@ -52,6 +52,12 @@ APPLE_GPU_CANONICAL_ORDER = [
     # ── Per-op element-wise ──────────────────────────────────────────
     "createLowerSoftmaxToAppleGPUPass",
     "createLowerGeluToAppleGPUPass",
+    # ── MPSGraph Tier-1 lane (2026-05-29): activations / SwiGLU gate /
+    #    last-axis row ops. Each owns a distinct op name, so order among
+    #    them is immaterial; they run after the fusions. ───────────────
+    "createLowerUnaryToAppleGPUPass",
+    "createLowerSiluMulToAppleGPUPass",
+    "createLowerRowOpToAppleGPUPass",
 ]
 
 
@@ -84,8 +90,8 @@ def test_apple_gpu_runtime_pipeline_alias_is_documented() -> None:
     assert '"tessera-lower-to-apple_gpu-runtime"' in src
 
 
-def test_apple_gpu_pipeline_has_exactly_fourteen_passes() -> None:
-    """Lock the count.  Adding a 15th pass must update this file +
+def test_apple_gpu_pipeline_has_exactly_seventeen_passes() -> None:
+    """Lock the count.  Adding another pass must update this file +
     APPLE_GPU_CANONICAL_ORDER + the architecture doc — a deliberate
     three-step change rather than a silent slip-in."""
     passes = _extract_apple_gpu_runtime_passes()

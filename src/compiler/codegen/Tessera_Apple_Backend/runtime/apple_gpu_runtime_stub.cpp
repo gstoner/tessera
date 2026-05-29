@@ -894,7 +894,11 @@ extern "C" void tessera_apple_gpu_layer_norm_f32(const float* x, const float* ga
     for (int32_t c = 0; c < cols; ++c) { double d = row[c] - mean; var += d * d; }
     var /= cols;
     double inv = 1.0 / std::sqrt(var + eps);
-    for (int32_t c = 0; c < cols; ++c) o[c] = (float)(((row[c] - mean) * inv) * gamma[c] + beta[c]);
+    for (int32_t c = 0; c < cols; ++c) {
+      double g = gamma ? gamma[c] : 1.0;
+      double b = beta ? beta[c] : 0.0;
+      o[c] = (float)(((row[c] - mean) * inv) * g + b);
+    }
   }
 }
 extern "C" void tessera_apple_gpu_layer_norm_f16(const uint16_t* x, const uint16_t*,
@@ -912,7 +916,8 @@ extern "C" void tessera_apple_gpu_rmsnorm_gpu_f32(const float* x, const float* g
     for (int32_t c = 0; c < cols; ++c) ms += (double)row[c] * row[c];
     ms /= cols;
     double inv = 1.0 / std::sqrt(ms + eps);
-    for (int32_t c = 0; c < cols; ++c) o[c] = (float)(row[c] * inv * gamma[c]);
+    for (int32_t c = 0; c < cols; ++c)
+      o[c] = (float)(row[c] * inv * (gamma ? gamma[c] : 1.0));
   }
 }
 extern "C" void tessera_apple_gpu_rmsnorm_gpu_f16(const uint16_t* x, const uint16_t*,
@@ -952,6 +957,11 @@ extern "C" void tessera_apple_gpu_log_softmax_f32(const float* x, float* out,
 extern "C" void tessera_apple_gpu_log_softmax_f16(const uint16_t* x, uint16_t* out,
                                                   int32_t rows, int32_t cols) {
   std::memcpy(out, x, static_cast<std::size_t>(rows) * cols * 2);
+}
+
+extern "C" int32_t tessera_apple_gpu_mpsgraph_cache_size(void) {
+  // No Metal -> no MPSGraph cache.
+  return 0;
 }
 
 extern "C" int32_t tessera_apple_gpu_runtime_msl_cache_size(void) {

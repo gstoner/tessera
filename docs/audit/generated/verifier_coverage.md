@@ -9,8 +9,8 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 | `real`         |   19 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` |    9 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent`       |    0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
-| `no_verifier`  |   75 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total**      |  103 | |
+| `no_verifier`  |   80 | No verifier declared.  TD constraints suffice — fine for many ops. |
+| **Total**      |  108 | |
 
 ## Per-dialect details
 
@@ -66,6 +66,7 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 | `LinearAttnOp` | `no_verifier` |
 | `LinearAttnStateOp` | `no_verifier` |
 | `LionOp` | `no_verifier` |
+| `LogSoftmaxOp` | `no_verifier` |
 | `MLADecodeFusedOp` | `no_verifier` |
 | `MLADecodeOp` | `no_verifier` |
 | `MQAAttentionOp` | `no_verifier` |
@@ -100,16 +101,20 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 | `ReshapeOp` | `real` |
 | `RetentionOp` | `no_verifier` |
 | `RingCreateOp` | `trivial_stub` |
+| `RmsNormOp` | `no_verifier` |
 | `RopeMergeOp` | `no_verifier` |
 | `RopeOp` | `real` |
 | `RopeSplitOp` | `no_verifier` |
 | `SigmoidOp` | `no_verifier` |
 | `SiluMulOp` | `no_verifier` |
+| `SiluOp` | `no_verifier` |
 | `SinOp` | `no_verifier` |
 | `SoftmaxOp` | `real` |
 | `SoftmaxSafeOp` | `no_verifier` |
+| `SoftplusOp` | `no_verifier` |
 | `SpectralConvOp` | `no_verifier` |
 | `SwigluFusedOp` | `no_verifier` |
+| `TanhOp` | `no_verifier` |
 | `TransposeOp` | `real` |
 
 ### `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td`

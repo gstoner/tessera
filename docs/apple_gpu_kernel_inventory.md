@@ -73,8 +73,25 @@ the dispatcher passes `(b, a)`.
 `matmul_softmax` keep their single-kernel f32 fast paths (N ≤ 256, plus the
 tiled f32 `matmul_softmax`); outside that envelope (f16/bf16, or large N) the
 dispatchers now compose the GPU matmul with an MPSGraph epilogue instead of
-falling back to host numpy. The gelu epilogue uses the MPSGraph `gelu` node
-because the hand-written MSL gelu overflows `tanh` for large activations.
+falling back to host numpy. The gelu epilogue uses the MPSGraph `gelu` node;
+the hand-written MSL gelu kernels were also fixed (2026-05-29) to clamp the
+tanh argument to `[-30, 30]` so they no longer overflow to NaN for large
+activations (|x| ≳ 16).
+
+**Graph caching:** the MPSGraph lane caches each compiled graph by
+`(shape-class, opcode, dtype, shape[, eps, weighted])`, so repeated dispatches
+with the same signature reuse one `MPSGraph` and only swap the feed buffers.
+`tessera_apple_gpu_mpsgraph_cache_size()` reports the live count (used by tests
+to assert reuse).
+
+**Compile-time / MLIR path:** the Tier-1 ops are first-class `tessera` dialect
+ops (`silu`/`tanh`/`softplus`/`rmsnorm`/`log_softmax` were registered alongside
+the existing `relu`/`sigmoid`/`gelu`/`layer_norm`/`softmax`/`silu_mul`), and
+three C++ lowering passes — `tessera-unary-to-apple_gpu`,
+`tessera-silu-mul-to-apple_gpu`, `tessera-rowop-to-apple_gpu` — lower them to
+the runtime calls inside the `tessera-lower-to-apple_gpu-runtime` pipeline
+(the unweighted norms pass a null gamma/beta). Lit-checked by
+[tests/tessera-ir/phase8/apple_gpu_tier1_lowering.mlir](../tests/tessera-ir/phase8/apple_gpu_tier1_lowering.mlir).
 
 ## Capability + diagnostic symbols
 

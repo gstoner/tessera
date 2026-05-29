@@ -831,6 +831,129 @@ extern "C" void tessera_apple_gpu_native_sparse_attn_f32(
   std::memset(O, 0, sizeof(float) * static_cast<std::size_t>(B) * H * S * D);
 }
 
+// ---- MPSGraph lane (non-Apple reference fallbacks, 2026-05-29) -------------
+// Mirror the C ABI of the MPSGraph-backed Tier-1 / long-tail lane so the
+// symbol surface is identical across platforms. Op codes match the .mm.
+extern "C" void tessera_apple_gpu_mpsgraph_unary_f32(int32_t op, const float* x,
+                                                     float* out, int64_t n) {
+  for (int64_t i = 0; i < n; ++i) {
+    float v = x[i];
+    switch (op) {
+      case 0: out[i] = v > 0 ? v : 0.0f; break;
+      case 1: out[i] = 1.0f / (1.0f + std::exp(-v)); break;
+      case 2: out[i] = std::tanh(v); break;
+      case 3: out[i] = std::log1p(std::exp(v)); break;
+      case 4: out[i] = v / (1.0f + std::exp(-v)); break;
+      case 5: out[i] = 0.5f * v * (1.0f + std::tanh(0.7978845608028654f * (v + 0.044715f * v * v * v))); break;
+      case 6: out[i] = std::exp(v); break;
+      case 7: out[i] = std::log(v); break;
+      case 8: out[i] = std::sqrt(v); break;
+      case 9: out[i] = 1.0f / std::sqrt(v); break;
+      case 10: out[i] = -v; break;
+      case 11: out[i] = std::fabs(v); break;
+      default: out[i] = v; break;
+    }
+  }
+}
+extern "C" void tessera_apple_gpu_mpsgraph_unary_f16(int32_t, const uint16_t* x,
+                                                     uint16_t* out, int64_t n) {
+  std::memcpy(out, x, static_cast<std::size_t>(n) * 2);
+}
+extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float* a,
+                                                      const float* b, float* out,
+                                                      int64_t n) {
+  for (int64_t i = 0; i < n; ++i) {
+    float x = a[i], y = b[i];
+    switch (op) {
+      case 0: out[i] = x + y; break;
+      case 1: out[i] = x - y; break;
+      case 2: out[i] = x * y; break;
+      case 3: out[i] = x / y; break;
+      case 4: out[i] = x > y ? x : y; break;
+      case 5: out[i] = x < y ? x : y; break;
+      case 6: out[i] = x * (y / (1.0f + std::exp(-y))); break;
+      default: out[i] = x; break;
+    }
+  }
+}
+extern "C" void tessera_apple_gpu_mpsgraph_binary_f16(int32_t, const uint16_t* a,
+                                                      const uint16_t*, uint16_t* out,
+                                                      int64_t n) {
+  std::memcpy(out, a, static_cast<std::size_t>(n) * 2);
+}
+extern "C" void tessera_apple_gpu_layer_norm_f32(const float* x, const float* gamma,
+                                                 const float* beta, float* out,
+                                                 int32_t rows, int32_t cols, float eps) {
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* row = x + static_cast<std::size_t>(r) * cols;
+    float* o = out + static_cast<std::size_t>(r) * cols;
+    double mean = 0.0;
+    for (int32_t c = 0; c < cols; ++c) mean += row[c];
+    mean /= cols;
+    double var = 0.0;
+    for (int32_t c = 0; c < cols; ++c) { double d = row[c] - mean; var += d * d; }
+    var /= cols;
+    double inv = 1.0 / std::sqrt(var + eps);
+    for (int32_t c = 0; c < cols; ++c) o[c] = (float)(((row[c] - mean) * inv) * gamma[c] + beta[c]);
+  }
+}
+extern "C" void tessera_apple_gpu_layer_norm_f16(const uint16_t* x, const uint16_t*,
+                                                 const uint16_t*, uint16_t* out,
+                                                 int32_t rows, int32_t cols, float) {
+  std::memcpy(out, x, static_cast<std::size_t>(rows) * cols * 2);
+}
+extern "C" void tessera_apple_gpu_rmsnorm_gpu_f32(const float* x, const float* gamma,
+                                                  float* out, int32_t rows,
+                                                  int32_t cols, float eps) {
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* row = x + static_cast<std::size_t>(r) * cols;
+    float* o = out + static_cast<std::size_t>(r) * cols;
+    double ms = 0.0;
+    for (int32_t c = 0; c < cols; ++c) ms += (double)row[c] * row[c];
+    ms /= cols;
+    double inv = 1.0 / std::sqrt(ms + eps);
+    for (int32_t c = 0; c < cols; ++c) o[c] = (float)(row[c] * inv * gamma[c]);
+  }
+}
+extern "C" void tessera_apple_gpu_rmsnorm_gpu_f16(const uint16_t* x, const uint16_t*,
+                                                  uint16_t* out, int32_t rows,
+                                                  int32_t cols, float) {
+  std::memcpy(out, x, static_cast<std::size_t>(rows) * cols * 2);
+}
+extern "C" void tessera_apple_gpu_mpsgraph_softmax_f32(const float* x, float* out,
+                                                       int32_t rows, int32_t cols) {
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* row = x + static_cast<std::size_t>(r) * cols;
+    float* o = out + static_cast<std::size_t>(r) * cols;
+    float m = row[0];
+    for (int32_t c = 1; c < cols; ++c) m = row[c] > m ? row[c] : m;
+    double s = 0.0;
+    for (int32_t c = 0; c < cols; ++c) { o[c] = std::exp(row[c] - m); s += o[c]; }
+    for (int32_t c = 0; c < cols; ++c) o[c] = (float)(o[c] / s);
+  }
+}
+extern "C" void tessera_apple_gpu_mpsgraph_softmax_f16(const uint16_t* x, uint16_t* out,
+                                                       int32_t rows, int32_t cols) {
+  std::memcpy(out, x, static_cast<std::size_t>(rows) * cols * 2);
+}
+extern "C" void tessera_apple_gpu_log_softmax_f32(const float* x, float* out,
+                                                  int32_t rows, int32_t cols) {
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* row = x + static_cast<std::size_t>(r) * cols;
+    float* o = out + static_cast<std::size_t>(r) * cols;
+    float m = row[0];
+    for (int32_t c = 1; c < cols; ++c) m = row[c] > m ? row[c] : m;
+    double s = 0.0;
+    for (int32_t c = 0; c < cols; ++c) s += std::exp(row[c] - m);
+    float lse = m + (float)std::log(s);
+    for (int32_t c = 0; c < cols; ++c) o[c] = row[c] - lse;
+  }
+}
+extern "C" void tessera_apple_gpu_log_softmax_f16(const uint16_t* x, uint16_t* out,
+                                                  int32_t rows, int32_t cols) {
+  std::memcpy(out, x, static_cast<std::size_t>(rows) * cols * 2);
+}
+
 extern "C" int32_t tessera_apple_gpu_runtime_msl_cache_size(void) {
   // No Metal -> no MSL cache. Tests gate this on platform.
   return -1;

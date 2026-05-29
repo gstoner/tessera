@@ -1841,7 +1841,42 @@ _APPLE_GPU_MSL_OPS = frozenset({
     "tessera.softmax_safe",
     "tessera.gelu",
 })
-_APPLE_GPU_RUNTIME_OPS = _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS
+
+# 2026-05-29 — MetalPerformanceShadersGraph-backed Tier-1 / long-tail lane.
+# op_name -> unary opcode (must match apple_gpu_runtime.mm mpsg_unary_node).
+_APPLE_GPU_UNARY_OPCODES = {
+    "tessera.relu": 0,
+    "tessera.sigmoid": 1,
+    "tessera.sigmoid_safe": 1,
+    "tessera.tanh": 2,
+    "tessera.softplus": 3,
+    "tessera.silu": 4,
+    "tessera.exp": 6,
+    "tessera.log": 7,
+    "tessera.sqrt": 8,
+    "tessera.rsqrt": 9,
+    "tessera.neg": 10,
+    "tessera.negative": 10,
+    "tessera.abs": 11,
+    "tessera.absolute": 11,
+}
+# op_name -> rowop kind (0 layer_norm, 1 rmsnorm, 3 log_softmax). Softmax stays
+# on its dedicated MSL path for single-op; the MPSGraph softmax symbol is used
+# by the f16/bf16 fused-chain completion below.
+_APPLE_GPU_ROWOP_KINDS = {
+    "tessera.layer_norm": 0,
+    "tessera.rmsnorm": 1,
+    "tessera.rmsnorm_safe": 1,
+    "tessera.log_softmax": 3,
+}
+_APPLE_GPU_MPSGRAPH_OPS = (
+    frozenset(_APPLE_GPU_UNARY_OPCODES)
+    | frozenset(_APPLE_GPU_ROWOP_KINDS)
+    | frozenset({"tessera.silu_mul"})
+)
+_APPLE_GPU_RUNTIME_OPS = (
+    _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
+)
 
 
 def _execute_apple_gpu_mps_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -2006,6 +2041,24 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
         elif op_name == "tessera.gelu":
             values[str(result)] = _apple_gpu_dispatch_gelu(
                 op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                np,
+            )
+        elif op_name in _APPLE_GPU_UNARY_OPCODES:
+            values[str(result)] = _apple_gpu_dispatch_unary(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                np,
+            )
+        elif op_name in _APPLE_GPU_ROWOP_KINDS:
+            values[str(result)] = _apple_gpu_dispatch_rowop(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name == "tessera.silu_mul":
+            values[str(result)] = _apple_gpu_dispatch_silu_mul(
                 [_as_numpy(values[name]) for name in operand_names],
                 np,
             )
@@ -2770,6 +2823,312 @@ def _apple_gpu_gelu_bf16() -> Any:
     return sym
 
 
+# ---------------------------------------------------------------------------
+# MetalPerformanceShadersGraph lane (2026-05-29) — Tier-1 activations /
+# normalizations and the long tail. One parametrized runner per shape class
+# in apple_gpu_runtime.mm; these helpers pick the symbol by element type and
+# fall back to numpy when Metal is unavailable. bf16 upcasts to f32, runs on
+# the GPU, and downcasts (mirrors the bf16 matmul path).
+# ---------------------------------------------------------------------------
+def _apple_gpu_mpsgraph_unary_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_unary_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.c_int32,
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int64,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_mpsgraph_unary_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_unary_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.c_int32,
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int64,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_mpsgraph_binary_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_binary_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.c_int32,
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int64,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_layer_norm_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_layer_norm_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,
+        ctypes.c_int32,
+        ctypes.c_float,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_rmsnorm_gpu_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_rmsnorm_gpu_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,
+        ctypes.c_int32,
+        ctypes.c_float,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_log_softmax_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_log_softmax_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_mpsgraph_softmax_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_softmax_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_unary_numpy(op_name: str, x: Any, np: Any) -> Any:
+    """Host reference matching apple_gpu_runtime.mm mpsg_unary_node."""
+    f = x.astype(np.float32)
+    return {
+        "tessera.relu": lambda v: np.maximum(0.0, v),
+        "tessera.sigmoid": lambda v: 1.0 / (1.0 + np.exp(-v)),
+        "tessera.sigmoid_safe": lambda v: 1.0 / (1.0 + np.exp(-v)),
+        "tessera.tanh": np.tanh,
+        "tessera.softplus": lambda v: np.maximum(v, 0.0) + np.log1p(np.exp(-np.abs(v))),
+        "tessera.silu": lambda v: v / (1.0 + np.exp(-v)),
+        "tessera.exp": np.exp,
+        "tessera.log": np.log,
+        "tessera.sqrt": np.sqrt,
+        "tessera.rsqrt": lambda v: 1.0 / np.sqrt(v),
+        "tessera.neg": lambda v: -v,
+        "tessera.negative": lambda v: -v,
+        "tessera.abs": np.abs,
+        "tessera.absolute": np.abs,
+    }[op_name](f)
+
+
+def _apple_gpu_dispatch_unary(op_name: str, operands: list[Any], np: Any) -> Any:
+    """Elementwise unary via the MPSGraph lane. Shape-agnostic (flattened).
+    f32 + f16 run natively on the GPU; bf16 upcasts to f32, runs, downcasts."""
+    if len(operands) < 1:
+        raise ValueError(f"{op_name!r} requires one operand")
+    op = _APPLE_GPU_UNARY_OPCODES[op_name]
+    x = np.asarray(operands[0])
+    shape = x.shape
+    n = int(x.size)
+    bf16_dtype = _bfloat16_dtype()
+
+    if x.dtype == np.float32:
+        xf = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
+        sym = _apple_gpu_mpsgraph_unary_f32()
+        if sym is not None:
+            out = np.empty(n, dtype=np.float32)
+            sym(ctypes.c_int32(op),
+                xf.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                ctypes.c_int64(n))
+            return out.reshape(shape)
+        return _apple_gpu_unary_numpy(op_name, x, np).reshape(shape)
+
+    if x.dtype == np.float16:
+        xf = np.ascontiguousarray(x, dtype=np.float16).reshape(-1)
+        sym = _apple_gpu_mpsgraph_unary_f16()
+        if sym is not None:
+            out = np.empty(n, dtype=np.float16)
+            sym(ctypes.c_int32(op),
+                xf.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                ctypes.c_int64(n))
+            return out.reshape(shape)
+        return _apple_gpu_unary_numpy(op_name, x, np).astype(np.float16).reshape(shape)
+
+    if bf16_dtype is not None and x.dtype == bf16_dtype:
+        # Upcast -> GPU f32 -> downcast (mirrors the bf16 matmul path).
+        x32 = np.ascontiguousarray(x.astype(np.float32)).reshape(-1)
+        sym = _apple_gpu_mpsgraph_unary_f32()
+        if sym is not None:
+            out = np.empty(n, dtype=np.float32)
+            sym(ctypes.c_int32(op),
+                x32.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                ctypes.c_int64(n))
+            return out.reshape(shape).astype(bf16_dtype)
+        return _apple_gpu_unary_numpy(op_name, x, np).astype(bf16_dtype).reshape(shape)
+
+    return _apple_gpu_unary_numpy(op_name, x, np).astype(x.dtype).reshape(shape)
+
+
+def _apple_gpu_rowop_numpy(kind: int, x: Any, eps: float, np: Any) -> Any:
+    f = x.astype(np.float32)
+    if kind == 0:  # layer_norm (unweighted)
+        mu = f.mean(axis=-1, keepdims=True)
+        var = f.var(axis=-1, keepdims=True)
+        return (f - mu) / np.sqrt(var + eps)
+    if kind == 1:  # rmsnorm (unweighted)
+        return f / np.sqrt(np.mean(f * f, axis=-1, keepdims=True) + eps)
+    # log_softmax
+    m = f.max(axis=-1, keepdims=True)
+    shifted = f - m
+    return shifted - np.log(np.sum(np.exp(shifted), axis=-1, keepdims=True))
+
+
+def _apple_gpu_dispatch_rowop(op_name: str, operands: list[Any], kwargs: dict,
+                              np: Any) -> Any:
+    """Row-wise op over the last axis via the MPSGraph lane: layer_norm /
+    rmsnorm (unweighted, gamma=1 beta=0) and log_softmax. Any rank is folded
+    to [rows, cols]. f32 native; f16/bf16 upcast -> GPU f32 -> downcast."""
+    if len(operands) < 1:
+        raise ValueError(f"{op_name!r} requires one operand")
+    kind = _APPLE_GPU_ROWOP_KINDS[op_name]
+    eps_default = 1e-6 if op_name == "tessera.rmsnorm_safe" else 1e-5
+    eps = float(kwargs.get("eps", eps_default))
+    x = np.asarray(operands[0])
+    if x.ndim < 1 or x.shape[-1] < 1:
+        return _apple_gpu_rowop_numpy(kind, x, eps, np).astype(x.dtype)
+    shape = x.shape
+    cols = int(shape[-1])
+    rows = int(x.size // cols)
+    out_dtype = x.dtype
+    x32 = np.ascontiguousarray(x.astype(np.float32)).reshape(rows, cols)
+
+    sym = None
+    if kind == 0:
+        sym = _apple_gpu_layer_norm_f32()
+    elif kind == 1:
+        sym = _apple_gpu_rmsnorm_gpu_f32()
+    else:
+        sym = _apple_gpu_log_softmax_f32()
+
+    if sym is None:
+        return _apple_gpu_rowop_numpy(kind, x, eps, np).astype(out_dtype)
+
+    out = np.empty((rows, cols), dtype=np.float32)
+    fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    if kind == 0:
+        gamma = np.ones(cols, dtype=np.float32)
+        beta = np.zeros(cols, dtype=np.float32)
+        sym(fp(x32), fp(gamma), fp(beta), fp(out),
+            ctypes.c_int32(rows), ctypes.c_int32(cols), ctypes.c_float(eps))
+    elif kind == 1:
+        gamma = np.ones(cols, dtype=np.float32)
+        sym(fp(x32), fp(gamma), fp(out),
+            ctypes.c_int32(rows), ctypes.c_int32(cols), ctypes.c_float(eps))
+    else:
+        sym(fp(x32), fp(out), ctypes.c_int32(rows), ctypes.c_int32(cols))
+    return out.reshape(shape).astype(out_dtype)
+
+
+def _apple_gpu_dispatch_silu_mul(operands: list[Any], np: Any) -> Any:
+    """silu_mul(a, b) = silu(a) * b, via the MPSGraph binary lane. The runtime
+    opcode 6 computes a' * silu(b'), so we pass (a'=b, b'=a) to get silu(a)*b.
+    f32 native; f16/bf16 upcast -> GPU f32 -> downcast."""
+    if len(operands) != 2:
+        raise ValueError("silu_mul requires two operands (a, b)")
+    a = np.asarray(operands[0])
+    b = np.asarray(operands[1])
+    shape = a.shape
+    n = int(a.size)
+    out_dtype = a.dtype
+    sym = _apple_gpu_mpsgraph_binary_f32()
+
+    def _ref() -> Any:
+        af = a.astype(np.float32)
+        bf = b.astype(np.float32)
+        return (af / (1.0 + np.exp(-af))) * bf
+
+    if sym is None:
+        return _ref().astype(out_dtype).reshape(shape)
+
+    # opcode 6 = first * silu(second); pass (b, a) -> b * silu(a) = silu(a)*b.
+    first = np.ascontiguousarray(b.astype(np.float32)).reshape(-1)
+    second = np.ascontiguousarray(a.astype(np.float32)).reshape(-1)
+    out = np.empty(n, dtype=np.float32)
+    fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    sym(ctypes.c_int32(6), fp(first), fp(second), fp(out), ctypes.c_int64(n))
+    return out.reshape(shape).astype(out_dtype)
+
+
+def _apple_gpu_dispatch_mpsgraph_softmax(x: Any, np: Any) -> Any:
+    """Row softmax over the last axis via the MPSGraph lane — no N limit.
+    Used to complete the f16/bf16 (and f32 N>8192) matmul->softmax chain by
+    composing the GPU matmul with this epilogue. f32 native; f16/bf16 upcast
+    -> GPU f32 -> downcast."""
+    x = np.asarray(x)
+    out_dtype = x.dtype
+    if x.ndim < 1 or x.shape[-1] < 1:
+        f = x.astype(np.float32)
+        e = np.exp(f - f.max(axis=-1, keepdims=True))
+        return (e / e.sum(axis=-1, keepdims=True)).astype(out_dtype)
+    shape = x.shape
+    cols = int(shape[-1])
+    rows = int(x.size // cols)
+    sym = _apple_gpu_mpsgraph_softmax_f32()
+    if sym is None:
+        f = x.astype(np.float32)
+        e = np.exp(f - f.max(axis=-1, keepdims=True))
+        return (e / e.sum(axis=-1, keepdims=True)).astype(out_dtype)
+    x32 = np.ascontiguousarray(x.astype(np.float32)).reshape(rows, cols)
+    out = np.empty((rows, cols), dtype=np.float32)
+    fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    sym(fp(x32), fp(out), ctypes.c_int32(rows), ctypes.c_int32(cols))
+    return out.reshape(shape).astype(out_dtype)
+
+
 def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
     """Phase 8.4.3 + 8.4.4.2 — dispatch a fused matmul -> softmax(axis=-1)
     chain through the apple_gpu runtime shim's purpose-built MSL kernel.
@@ -2798,6 +3157,13 @@ def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
         and b.shape[1] <= n_max
         and a.dtype == b.dtype
     ):
+        # Outside the single fused-kernel envelope (notably f16/bf16 with
+        # N>256, where no tiled fused variant exists yet): compose the GPU
+        # matmul with the MPSGraph softmax epilogue (no N limit) so the chain
+        # still runs on-device instead of falling back to host numpy.
+        if a.ndim == 2 and b.ndim == 2 and a.shape[1] == b.shape[0]:
+            scores = _apple_gpu_dispatch_matmul("tessera.matmul", [a, b], np)
+            return _apple_gpu_dispatch_mpsgraph_softmax(scores, np)
         scores = np.matmul(a, b)
         e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
         return e / np.sum(e, axis=-1, keepdims=True)
@@ -2909,6 +3275,54 @@ def _apple_gpu_matmul_softmax_bf16() -> Any:
     return sym
 
 
+def _apple_gpu_dispatch_gelu_gpu(x: Any, np: Any) -> Any:
+    """gelu(x) via the MPSGraph unary lane (op 5). Used as the matmul_gelu
+    epilogue: the hand-written MSL gelu kernel overflows its tanh for large
+    activations (|x| >~ 16 -> NaN), whereas MPSGraph's tanh node is robust.
+    f32/f16 native; bf16 upcast -> GPU f32 -> downcast."""
+    x = np.asarray(x)
+    shape = x.shape
+    n = int(x.size)
+    bf16_dtype = _bfloat16_dtype()
+
+    def _ref() -> Any:
+        f = x.astype(np.float32)
+        return 0.5 * f * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (f + 0.044715 * f ** 3)))
+
+    if x.dtype == np.float32:
+        sym = _apple_gpu_mpsgraph_unary_f32()
+        if sym is None:
+            return _ref().reshape(shape)
+        xf = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
+        out = np.empty(n, dtype=np.float32)
+        sym(ctypes.c_int32(5),
+            xf.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), ctypes.c_int64(n))
+        return out.reshape(shape)
+    if x.dtype == np.float16:
+        sym = _apple_gpu_mpsgraph_unary_f16()
+        if sym is None:
+            return _ref().astype(np.float16).reshape(shape)
+        xf = np.ascontiguousarray(x, dtype=np.float16).reshape(-1)
+        out = np.empty(n, dtype=np.float16)
+        sym(ctypes.c_int32(5),
+            xf.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+            out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+            ctypes.c_int64(n))
+        return out.reshape(shape)
+    if bf16_dtype is not None and x.dtype == bf16_dtype:
+        sym = _apple_gpu_mpsgraph_unary_f32()
+        if sym is None:
+            return _ref().astype(bf16_dtype).reshape(shape)
+        x32 = np.ascontiguousarray(x.astype(np.float32)).reshape(-1)
+        out = np.empty(n, dtype=np.float32)
+        sym(ctypes.c_int32(5),
+            x32.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), ctypes.c_int64(n))
+        return out.reshape(shape).astype(bf16_dtype)
+    return _ref().astype(x.dtype).reshape(shape)
+
+
 def _apple_gpu_dispatch_matmul_gelu(operands: list[Any], np: Any) -> Any:
     """Phase 8.4.7 — dispatch a fused matmul -> gelu chain through the
     apple_gpu runtime shim. f32 only this phase; outside the envelope
@@ -2924,6 +3338,13 @@ def _apple_gpu_dispatch_matmul_gelu(operands: list[Any], np: Any) -> Any:
         and b.shape[1] <= 256
         and a.dtype == np.float32 and b.dtype == np.float32
     ):
+        # Outside the f32 / N<=256 single-kernel fast path: compose the GPU
+        # matmul (f16/bf16 native, any N) with the GPU gelu epilogue so
+        # f16/bf16 and large-N still execute on-device. Both sub-dispatchers
+        # degrade to numpy automatically when Metal is unavailable.
+        if a.ndim == 2 and b.ndim == 2 and a.shape[1] == b.shape[0]:
+            scores = _apple_gpu_dispatch_matmul("tessera.matmul", [a, b], np)
+            return _apple_gpu_dispatch_gelu_gpu(scores, np)
         scores = np.matmul(a, b)
         return 0.5 * scores * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) *
                                               (scores + 0.044715 * scores ** 3)))
@@ -2987,6 +3408,14 @@ def _apple_gpu_dispatch_matmul_rmsnorm(operands: list[Any], eps: float, np: Any)
         and b.shape[1] <= 256
         and a.dtype == np.float32 and b.dtype == np.float32
     ):
+        # Outside the f32 / N<=256 single-kernel fast path: compose the GPU
+        # matmul with the GPU rmsnorm epilogue (MPSGraph, any N) so f16/bf16
+        # and large-N still execute on-device.
+        if a.ndim == 2 and b.ndim == 2 and a.shape[1] == b.shape[0]:
+            scores = _apple_gpu_dispatch_matmul("tessera.matmul", [a, b], np)
+            return _apple_gpu_dispatch_rowop(
+                "tessera.rmsnorm", [scores], {"eps": eps}, np
+            )
         scores = np.matmul(a, b)
         rms = np.sqrt(np.mean(scores * scores, axis=-1, keepdims=True) + eps)
         return scores / rms
@@ -3374,6 +3803,8 @@ def _build_apple_gpu_runtime_shared(root: Path) -> Path:
             "-framework", "Foundation",
             "-framework", "Metal",
             "-framework", "MetalPerformanceShaders",
+            # 2026-05-29: MPSGraph-backed Tier-1 / long-tail execution lane.
+            "-framework", "MetalPerformanceShadersGraph",
         ])
     subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     return out

@@ -58,6 +58,7 @@ def apple_gpu_runtime(tmp_path_factory):
         "-o", str(lib),
         "-framework", "Metal",
         "-framework", "MetalPerformanceShaders",
+        "-framework", "MetalPerformanceShadersGraph",
         "-framework", "Foundation",
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)

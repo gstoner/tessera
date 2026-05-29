@@ -4,9 +4,9 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 
 ## Headline
 
-- **80** unique `extern "C" tessera_*` C ABI symbols across all backends.
+- **92** unique `extern "C" tessera_*` C ABI symbols across all backends.
 - **6 / 6** core runtime headers present.
-- **42** Apple GPU kernel families with per-dtype variants.
+- **48** Apple GPU kernel families with per-dtype variants.
 
 ## Core runtime headers
 
@@ -23,7 +23,7 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 
 | Backend | Unique tessera_* symbols |
 |---------|-------------------------:|
-| `apple` | 69 |
+| `apple` | 81 |
 | `nvidia` | 3 |
 | `x86` | 8 |
 
@@ -61,7 +61,9 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 | `ebm_sphere_langevin_step` | `f32` |
 | `flash_attn` | `bf16`, `f16`, `f32` |
 | `gelu` | `bf16`, `f16`, `f32` |
+| `layer_norm` | `f16`, `f32` |
 | `linear_attn` | `f32` |
+| `log_softmax` | `f16`, `f32` |
 | `matmul_gelu` | `f32` |
 | `matmul_rmsnorm` | `f32` |
 | `matmul_softmax` | `bf16`, `f16`, `f32` |
@@ -69,7 +71,11 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 | `matmul_softmax_tiled` | `f32` |
 | `mla_decode` | `f32` |
 | `mps_matmul` | `bf16`, `f16`, `f32` |
+| `mpsgraph_binary` | `f16`, `f32` |
+| `mpsgraph_softmax` | `f16`, `f32` |
+| `mpsgraph_unary` | `f16`, `f32` |
 | `native_sparse_attn` | `f32` |
+| `rmsnorm_gpu` | `f16`, `f32` |
 | `rope` | `bf16`, `f16`, `f32` |
 | `softmax` | `bf16`, `f16`, `f32` |
 | `swiglu` | `bf16`, `f16`, `f32` |

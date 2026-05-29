@@ -33,6 +33,7 @@
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #import <MetalPerformanceShaders/MetalPerformanceShaders.h>
+#import <MetalPerformanceShadersGraph/MetalPerformanceShadersGraph.h>
 
 #include <algorithm>
 #include <cmath>
@@ -6985,4 +6986,424 @@ extern "C" void tessera_apple_gpu_ebm_partition_exact_f32(
   if (ctx.ok && dispatch_ebm_partition_exact_f32_msl(
           ctx, energies, n, temperature, out)) return;
   reference_ebm_partition_exact_f32(energies, n, temperature, out);
+}
+
+//===----------------------------------------------------------------------===//
+// MPSGraph long-tail + Tier-1 execution lane (2026-05-29)
+//
+// Rather than hand-writing one MSL kernel per pointwise / normalization op,
+// this lane routes a broad set of ops through MetalPerformanceShadersGraph —
+// Apple's optimizing graph compiler.  One small set of C ABI entry points
+// (op-coded unary, op-coded binary, layer_norm, rmsnorm, softmax,
+// log_softmax) covers the Tier-1 activation/normalization surface and the
+// long tail, and — by composing with the existing MPS matmul — lets the
+// f16/bf16 fused MLP/attention chains run with no N<=256 limit.
+//
+// Convention: all internal compute is fp32 (inputs cast up, outputs cast
+// down) matching the rest of the backend's "fp16 I/O + fp32 accumulator"
+// numerics.  f32 and f16 symbols share one parametrized runner; bf16 is
+// handled host-side by upcasting to f32 (see runtime.py), mirroring the
+// existing bf16 matmul path.
+//
+// Op codes (must match python/tessera/runtime.py):
+//   unary:  0 relu  1 sigmoid  2 tanh  3 softplus  4 silu  5 gelu_tanh
+//           6 exp   7 log      8 sqrt  9 rsqrt     10 neg  11 abs
+//   binary: 0 add   1 sub      2 mul   3 div       4 max   5 min
+//           6 silu_mul (a * silu(b))
+//   rowop:  0 layer_norm  1 rmsnorm  2 softmax  3 log_softmax
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+static MPSGraphTensor *mpsg_unary_node(MPSGraph *g, MPSGraphTensor *x, int op) {
+  switch (op) {
+    case 0: return [g reLUWithTensor:x name:nil];
+    case 1: return [g sigmoidWithTensor:x name:nil];
+    case 2: return [g tanhWithTensor:x name:nil];
+    case 3: {  // softplus = log(1 + exp(x))
+      MPSGraphTensor *e = [g exponentWithTensor:x name:nil];
+      MPSGraphTensor *one = [g constantWithScalar:1.0 dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *s = [g additionWithPrimaryTensor:e secondaryTensor:one name:nil];
+      return [g logarithmWithTensor:s name:nil];
+    }
+    case 4: {  // silu = x * sigmoid(x)
+      MPSGraphTensor *s = [g sigmoidWithTensor:x name:nil];
+      return [g multiplicationWithPrimaryTensor:x secondaryTensor:s name:nil];
+    }
+    case 5: {  // gelu tanh-approx: 0.5*x*(1 + tanh(sqrt(2/pi)*(x + 0.044715*x^3)))
+      MPSGraphTensor *c0 = [g constantWithScalar:0.7978845608028654 dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *c1 = [g constantWithScalar:0.044715 dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *half = [g constantWithScalar:0.5 dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *one = [g constantWithScalar:1.0 dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *x2 = [g multiplicationWithPrimaryTensor:x secondaryTensor:x name:nil];
+      MPSGraphTensor *x3 = [g multiplicationWithPrimaryTensor:x2 secondaryTensor:x name:nil];
+      MPSGraphTensor *c1x3 = [g multiplicationWithPrimaryTensor:c1 secondaryTensor:x3 name:nil];
+      MPSGraphTensor *inner = [g additionWithPrimaryTensor:x secondaryTensor:c1x3 name:nil];
+      MPSGraphTensor *scaled = [g multiplicationWithPrimaryTensor:c0 secondaryTensor:inner name:nil];
+      MPSGraphTensor *t = [g tanhWithTensor:scaled name:nil];
+      MPSGraphTensor *tp1 = [g additionWithPrimaryTensor:t secondaryTensor:one name:nil];
+      MPSGraphTensor *hx = [g multiplicationWithPrimaryTensor:half secondaryTensor:x name:nil];
+      return [g multiplicationWithPrimaryTensor:hx secondaryTensor:tp1 name:nil];
+    }
+    case 6: return [g exponentWithTensor:x name:nil];
+    case 7: return [g logarithmWithTensor:x name:nil];
+    case 8: return [g squareRootWithTensor:x name:nil];
+    case 9: {  // rsqrt = 1 / sqrt(x)
+      MPSGraphTensor *s = [g squareRootWithTensor:x name:nil];
+      MPSGraphTensor *one = [g constantWithScalar:1.0 dataType:MPSDataTypeFloat32];
+      return [g divisionWithPrimaryTensor:one secondaryTensor:s name:nil];
+    }
+    case 10: return [g negativeWithTensor:x name:nil];
+    case 11: return [g absoluteWithTensor:x name:nil];
+    default: return nil;
+  }
+}
+
+static MPSGraphTensor *mpsg_binary_node(MPSGraph *g, MPSGraphTensor *a,
+                                        MPSGraphTensor *b, int op) {
+  switch (op) {
+    case 0: return [g additionWithPrimaryTensor:a secondaryTensor:b name:nil];
+    case 1: return [g subtractionWithPrimaryTensor:a secondaryTensor:b name:nil];
+    case 2: return [g multiplicationWithPrimaryTensor:a secondaryTensor:b name:nil];
+    case 3: return [g divisionWithPrimaryTensor:a secondaryTensor:b name:nil];
+    case 4: return [g maximumWithPrimaryTensor:a secondaryTensor:b name:nil];
+    case 5: return [g minimumWithPrimaryTensor:a secondaryTensor:b name:nil];
+    case 6: {  // silu_mul = a * silu(b) = a * b * sigmoid(b)
+      MPSGraphTensor *s = [g sigmoidWithTensor:b name:nil];
+      MPSGraphTensor *sb = [g multiplicationWithPrimaryTensor:b secondaryTensor:s name:nil];
+      return [g multiplicationWithPrimaryTensor:a secondaryTensor:sb name:nil];
+    }
+    default: return nil;
+  }
+}
+
+static inline MPSGraphTensor *mpsg_up(MPSGraph *g, MPSGraphTensor *t,
+                                      MPSDataType ioType) {
+  return (ioType == MPSDataTypeFloat32)
+             ? t
+             : [g castTensor:t toType:MPSDataTypeFloat32 name:nil];
+}
+static inline MPSGraphTensor *mpsg_down(MPSGraph *g, MPSGraphTensor *t,
+                                        MPSDataType ioType) {
+  return (ioType == MPSDataTypeFloat32) ? t
+                                        : [g castTensor:t toType:ioType name:nil];
+}
+
+static bool mpsg_run_unary(MetalDeviceContext &ctx, int op, const void *x,
+                           void *out, int64_t n, MPSDataType ioType,
+                           size_t elemSize) {
+  if (n <= 0) return true;
+  @autoreleasepool {
+    size_t bytes = (size_t)n * elemSize;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, x, bytes);
+    if (!bufX) return false;
+    MPSGraph *g = [MPSGraph new];
+    NSArray<NSNumber *> *shape = @[ @(n) ];
+    MPSGraphTensor *ph = [g placeholderWithShape:shape dataType:ioType name:nil];
+    MPSGraphTensor *yf = mpsg_unary_node(g, mpsg_up(g, ph, ioType), op);
+    if (!yf) return false;
+    MPSGraphTensor *y = mpsg_down(g, yf, ioType);
+    MPSGraphTensorData *xd =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:shape dataType:ioType];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{ph : xd}
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
+static bool mpsg_run_binary(MetalDeviceContext &ctx, int op, const void *a,
+                            const void *b, void *out, int64_t n,
+                            MPSDataType ioType, size_t elemSize) {
+  if (n <= 0) return true;
+  @autoreleasepool {
+    size_t bytes = (size_t)n * elemSize;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, a, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, b, bytes);
+    if (!bufA || !bufB) return false;
+    MPSGraph *g = [MPSGraph new];
+    NSArray<NSNumber *> *shape = @[ @(n) ];
+    MPSGraphTensor *pa = [g placeholderWithShape:shape dataType:ioType name:nil];
+    MPSGraphTensor *pb = [g placeholderWithShape:shape dataType:ioType name:nil];
+    MPSGraphTensor *yf =
+        mpsg_binary_node(g, mpsg_up(g, pa, ioType), mpsg_up(g, pb, ioType), op);
+    if (!yf) return false;
+    MPSGraphTensor *y = mpsg_down(g, yf, ioType);
+    MPSGraphTensorData *ad =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:shape dataType:ioType];
+    MPSGraphTensorData *bd =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:shape dataType:ioType];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{pa : ad, pb : bd}
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
+// Row-wise op over the last axis of an [rows, cols] tensor.
+// kind: 0 layer_norm (gamma+beta), 1 rmsnorm (gamma), 2 softmax, 3 log_softmax.
+static bool mpsg_run_rowop(MetalDeviceContext &ctx, int kind, const void *x,
+                           const void *gamma, const void *beta, void *out,
+                           int32_t rows, int32_t cols, float eps,
+                           MPSDataType ioType, size_t elemSize) {
+  if (rows <= 0 || cols <= 0) return true;
+  @autoreleasepool {
+    int64_t n = (int64_t)rows * (int64_t)cols;
+    size_t xbytes = (size_t)n * elemSize;
+    size_t cbytes = (size_t)cols * elemSize;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, x, xbytes);
+    if (!bufX) return false;
+    MPSGraph *g = [MPSGraph new];
+    NSArray<NSNumber *> *xs = @[ @(rows), @(cols) ];
+    NSArray<NSNumber *> *gs = @[ @(cols) ];
+    NSArray<NSNumber *> *axis1 = @[ @1 ];
+    MPSGraphTensor *px = [g placeholderWithShape:xs dataType:ioType name:nil];
+    MPSGraphTensor *xf = mpsg_up(g, px, ioType);
+    NSMutableDictionary *feeds = [NSMutableDictionary dictionary];
+    feeds[px] = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:xs dataType:ioType];
+    MPSGraphTensor *yf = nil;
+
+    // gamma / beta placeholders are declared up front (ARC keeps the
+    // backing buffers alive through the enclosing autoreleasepool).
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufG, ctx, gamma ? gamma : x, cbytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, beta ? beta : x, cbytes);
+
+    if (kind == 0 || kind == 1) {
+      MPSGraphTensor *epsc = [g constantWithScalar:(double)eps dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *pg = [g placeholderWithShape:gs dataType:ioType name:nil];
+      MPSGraphTensor *gf = mpsg_up(g, pg, ioType);
+      feeds[pg] = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufG shape:gs dataType:ioType];
+      if (kind == 0) {  // layer_norm
+        MPSGraphTensor *mean = [g meanOfTensor:xf axes:axis1 name:nil];
+        MPSGraphTensor *diff = [g subtractionWithPrimaryTensor:xf secondaryTensor:mean name:nil];
+        MPSGraphTensor *sq = [g multiplicationWithPrimaryTensor:diff secondaryTensor:diff name:nil];
+        MPSGraphTensor *var = [g meanOfTensor:sq axes:axis1 name:nil];
+        MPSGraphTensor *ve = [g additionWithPrimaryTensor:var secondaryTensor:epsc name:nil];
+        MPSGraphTensor *denom = [g squareRootWithTensor:ve name:nil];
+        MPSGraphTensor *norm = [g divisionWithPrimaryTensor:diff secondaryTensor:denom name:nil];
+        MPSGraphTensor *scaled = [g multiplicationWithPrimaryTensor:norm secondaryTensor:gf name:nil];
+        MPSGraphTensor *pb = [g placeholderWithShape:gs dataType:ioType name:nil];
+        MPSGraphTensor *bf = mpsg_up(g, pb, ioType);
+        feeds[pb] = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:gs dataType:ioType];
+        yf = [g additionWithPrimaryTensor:scaled secondaryTensor:bf name:nil];
+      } else {  // rmsnorm
+        MPSGraphTensor *sq = [g multiplicationWithPrimaryTensor:xf secondaryTensor:xf name:nil];
+        MPSGraphTensor *ms = [g meanOfTensor:sq axes:axis1 name:nil];
+        MPSGraphTensor *me = [g additionWithPrimaryTensor:ms secondaryTensor:epsc name:nil];
+        MPSGraphTensor *denom = [g squareRootWithTensor:me name:nil];
+        MPSGraphTensor *norm = [g divisionWithPrimaryTensor:xf secondaryTensor:denom name:nil];
+        yf = [g multiplicationWithPrimaryTensor:norm secondaryTensor:gf name:nil];
+      }
+    } else if (kind == 2) {  // softmax over last axis (numerically stable)
+      yf = [g softMaxWithTensor:xf axis:1 name:nil];
+    } else {  // log_softmax = (x - max) - log(sum(exp(x - max)))
+      MPSGraphTensor *m = [g reductionMaximumWithTensor:xf axes:axis1 name:nil];
+      MPSGraphTensor *xm = [g subtractionWithPrimaryTensor:xf secondaryTensor:m name:nil];
+      MPSGraphTensor *e = [g exponentWithTensor:xm name:nil];
+      MPSGraphTensor *s = [g reductionSumWithTensor:e axes:axis1 name:nil];
+      MPSGraphTensor *lse = [g logarithmWithTensor:s name:nil];
+      yf = [g subtractionWithPrimaryTensor:xm secondaryTensor:lse name:nil];
+    }
+    if (!yf) return false;
+    MPSGraphTensor *y = mpsg_down(g, yf, ioType);
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:feeds
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
+}  // namespace
+
+// ---- C ABI: unary -----------------------------------------------------------
+extern "C" void tessera_apple_gpu_mpsgraph_unary_f32(int32_t op, const float *x,
+                                                     float *out, int64_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_unary(ctx, op, x, out, n, MPSDataTypeFloat32, 4)) return;
+  // host reference fallback
+  for (int64_t i = 0; i < n; ++i) {
+    float v = x[i];
+    switch (op) {
+      case 0: out[i] = v > 0 ? v : 0.0f; break;
+      case 1: out[i] = 1.0f / (1.0f + std::exp(-v)); break;
+      case 2: out[i] = std::tanh(v); break;
+      case 3: out[i] = std::log1p(std::exp(v)); break;
+      case 4: out[i] = v / (1.0f + std::exp(-v)); break;
+      case 5: out[i] = 0.5f * v * (1.0f + std::tanh(0.7978845608028654f * (v + 0.044715f * v * v * v))); break;
+      case 6: out[i] = std::exp(v); break;
+      case 7: out[i] = std::log(v); break;
+      case 8: out[i] = std::sqrt(v); break;
+      case 9: out[i] = 1.0f / std::sqrt(v); break;
+      case 10: out[i] = -v; break;
+      case 11: out[i] = std::fabs(v); break;
+      default: out[i] = v; break;
+    }
+  }
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_unary_f16(int32_t op,
+                                                     const uint16_t *x,
+                                                     uint16_t *out, int64_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_unary(ctx, op, x, out, n, MPSDataTypeFloat16, 2)) return;
+  // No host-side half arithmetic here: python upcasts on fallback.
+  std::memcpy(out, x, (size_t)n * 2);
+}
+
+// ---- C ABI: binary ----------------------------------------------------------
+extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float *a,
+                                                      const float *b, float *out,
+                                                      int64_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_binary(ctx, op, a, b, out, n, MPSDataTypeFloat32, 4)) return;
+  for (int64_t i = 0; i < n; ++i) {
+    float x = a[i], y = b[i];
+    switch (op) {
+      case 0: out[i] = x + y; break;
+      case 1: out[i] = x - y; break;
+      case 2: out[i] = x * y; break;
+      case 3: out[i] = x / y; break;
+      case 4: out[i] = x > y ? x : y; break;
+      case 5: out[i] = x < y ? x : y; break;
+      case 6: out[i] = x * (y / (1.0f + std::exp(-y))); break;
+      default: out[i] = x; break;
+    }
+  }
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_binary_f16(int32_t op,
+                                                      const uint16_t *a,
+                                                      const uint16_t *b,
+                                                      uint16_t *out, int64_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_binary(ctx, op, a, b, out, n, MPSDataTypeFloat16, 2)) return;
+  std::memcpy(out, a, (size_t)n * 2);
+}
+
+// ---- C ABI: row ops ---------------------------------------------------------
+extern "C" void tessera_apple_gpu_layer_norm_f32(const float *x,
+                                                 const float *gamma,
+                                                 const float *beta, float *out,
+                                                 int32_t rows, int32_t cols,
+                                                 float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_rowop(ctx, 0, x, gamma, beta, out, rows, cols, eps,
+                               MPSDataTypeFloat32, 4)) return;
+  for (int32_t r = 0; r < rows; ++r) {
+    const float *row = x + (size_t)r * cols;
+    float *o = out + (size_t)r * cols;
+    double mean = 0.0;
+    for (int32_t c = 0; c < cols; ++c) mean += row[c];
+    mean /= cols;
+    double var = 0.0;
+    for (int32_t c = 0; c < cols; ++c) { double d = row[c] - mean; var += d * d; }
+    var /= cols;
+    double inv = 1.0 / std::sqrt(var + eps);
+    for (int32_t c = 0; c < cols; ++c)
+      o[c] = (float)(((row[c] - mean) * inv) * gamma[c] + beta[c]);
+  }
+}
+
+extern "C" void tessera_apple_gpu_layer_norm_f16(const uint16_t *x,
+                                                 const uint16_t *gamma,
+                                                 const uint16_t *beta,
+                                                 uint16_t *out, int32_t rows,
+                                                 int32_t cols, float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_rowop(ctx, 0, x, gamma, beta, out, rows, cols, eps,
+                               MPSDataTypeFloat16, 2)) return;
+  std::memcpy(out, x, (size_t)rows * cols * 2);
+}
+
+extern "C" void tessera_apple_gpu_rmsnorm_gpu_f32(const float *x,
+                                                  const float *gamma, float *out,
+                                                  int32_t rows, int32_t cols,
+                                                  float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_rowop(ctx, 1, x, gamma, nullptr, out, rows, cols, eps,
+                               MPSDataTypeFloat32, 4)) return;
+  for (int32_t r = 0; r < rows; ++r) {
+    const float *row = x + (size_t)r * cols;
+    float *o = out + (size_t)r * cols;
+    double ms = 0.0;
+    for (int32_t c = 0; c < cols; ++c) ms += (double)row[c] * row[c];
+    ms /= cols;
+    double inv = 1.0 / std::sqrt(ms + eps);
+    for (int32_t c = 0; c < cols; ++c) o[c] = (float)(row[c] * inv * gamma[c]);
+  }
+}
+
+extern "C" void tessera_apple_gpu_rmsnorm_gpu_f16(const uint16_t *x,
+                                                  const uint16_t *gamma,
+                                                  uint16_t *out, int32_t rows,
+                                                  int32_t cols, float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_rowop(ctx, 1, x, gamma, nullptr, out, rows, cols, eps,
+                               MPSDataTypeFloat16, 2)) return;
+  std::memcpy(out, x, (size_t)rows * cols * 2);
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_softmax_f32(const float *x,
+                                                       float *out, int32_t rows,
+                                                       int32_t cols) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_rowop(ctx, 2, x, nullptr, nullptr, out, rows, cols,
+                               0.0f, MPSDataTypeFloat32, 4)) return;
+  for (int32_t r = 0; r < rows; ++r) {
+    const float *row = x + (size_t)r * cols;
+    float *o = out + (size_t)r * cols;
+    float m = row[0];
+    for (int32_t c = 1; c < cols; ++c) m = row[c] > m ? row[c] : m;
+    double s = 0.0;
+    for (int32_t c = 0; c < cols; ++c) { o[c] = std::exp(row[c] - m); s += o[c]; }
+    for (int32_t c = 0; c < cols; ++c) o[c] = (float)(o[c] / s);
+  }
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_softmax_f16(const uint16_t *x,
+                                                       uint16_t *out,
+                                                       int32_t rows,
+                                                       int32_t cols) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_rowop(ctx, 2, x, nullptr, nullptr, out, rows, cols,
+                               0.0f, MPSDataTypeFloat16, 2)) return;
+  std::memcpy(out, x, (size_t)rows * cols * 2);
+}
+
+extern "C" void tessera_apple_gpu_log_softmax_f32(const float *x, float *out,
+                                                  int32_t rows, int32_t cols) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_rowop(ctx, 3, x, nullptr, nullptr, out, rows, cols,
+                               0.0f, MPSDataTypeFloat32, 4)) return;
+  for (int32_t r = 0; r < rows; ++r) {
+    const float *row = x + (size_t)r * cols;
+    float *o = out + (size_t)r * cols;
+    float m = row[0];
+    for (int32_t c = 1; c < cols; ++c) m = row[c] > m ? row[c] : m;
+    double s = 0.0;
+    for (int32_t c = 0; c < cols; ++c) s += std::exp(row[c] - m);
+    float lse = m + (float)std::log(s);
+    for (int32_t c = 0; c < cols; ++c) o[c] = row[c] - lse;
+  }
+}
+
+extern "C" void tessera_apple_gpu_log_softmax_f16(const uint16_t *x,
+                                                  uint16_t *out, int32_t rows,
+                                                  int32_t cols) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_rowop(ctx, 3, x, nullptr, nullptr, out, rows, cols,
+                               0.0f, MPSDataTypeFloat16, 2)) return;
+  std::memcpy(out, x, (size_t)rows * cols * 2);
 }

@@ -81,6 +81,7 @@ def test_apple_gpu_mla_decode_runtime_shim_exposes_symbol(tmp_path):
             "-framework", "Foundation",
             "-framework", "Metal",
             "-framework", "MetalPerformanceShaders",
+            "-framework", "MetalPerformanceShadersGraph",
         ]
     else:
         source = backend / "apple_gpu_runtime_stub.cpp"

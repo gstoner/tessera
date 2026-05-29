@@ -316,6 +316,7 @@ def test_apple_gpu_linear_attn_runtime_shim_matches_python_op(tmp_path):
             "-framework", "Foundation",
             "-framework", "Metal",
             "-framework", "MetalPerformanceShaders",
+            "-framework", "MetalPerformanceShadersGraph",
         ]
     else:
         source = backend / "apple_gpu_runtime_stub.cpp"
@@ -429,6 +430,7 @@ def test_apple_gpu_linear_attn_runtime_shim_supports_elu_feature_map(tmp_path):
             "-framework", "Foundation",
             "-framework", "Metal",
             "-framework", "MetalPerformanceShaders",
+            "-framework", "MetalPerformanceShadersGraph",
         ]
     else:
         source = backend / "apple_gpu_runtime_stub.cpp"

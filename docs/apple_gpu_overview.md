@@ -221,12 +221,42 @@ The cache means the ~1ms MSL compile cost is paid once per unique kernel per pro
 
 ---
 
+## MPSGraph lane — Tier-1 ops + long tail (2026-05-29)
+
+A second execution lane routes the Tier-1 activation / normalization surface
+(and a broad long tail) through Apple's **MetalPerformanceShadersGraph**
+optimizing graph compiler, rather than hand-writing one MSL kernel per op.
+One parametrized runner per shape class lives in `apple_gpu_runtime.mm`:
+
+- **unary** (op-coded): relu / sigmoid(`_safe`) / tanh / softplus / **silu** /
+  exp / log / sqrt / rsqrt / neg / abs
+- **binary**: **silu_mul** (`silu(a) * b`, the SwiGLU gate)
+- **row ops** over the last axis: **layer_norm**, **rmsnorm**(`_safe`),
+  **log_softmax**, softmax (no `N ≤ 256` limit)
+
+These dispatch on `@jit(target="apple_gpu")` to `execution_mode = metal_runtime`
+(f32 + f16 native; bf16 host-upcasts to f32 → GPU → downcast). The lane also
+**completes the f16/bf16 + large-N fused-chain matrix**: `matmul_gelu`,
+`matmul_rmsnorm`, and `matmul_softmax` keep their f32 single-kernel fast paths,
+and outside that envelope now compose the GPU matmul with an MPSGraph epilogue
+instead of falling back to host numpy. Build adds
+`-framework MetalPerformanceShadersGraph` in three places (CMake, the
+`runtime.py` on-the-fly compile, and the `_apple_gpu_dispatch.py` bridge
+loader). Tests: `tests/unit/test_apple_gpu_mpsgraph_lane.py` and the full
+decoder-layer proof `tests/unit/test_apple_gpu_llama_decoder_layer.py`.
+
 ## Followups (deliberately deferred)
 
-- **More dtype variants** for tiled matmul_softmax (f16/bf16 tiled), MLP fusions (f16/bf16), 3-op fusion threadgroup tiling
-- **MPSGraph baseline benchmarks** for matmul vs MPS — needs a separate dependency
+- **MSL gelu tanh overflow** — the hand-written MSL gelu kernel NaNs for
+  |x| ≳ 16 (tanh overflow); the MPSGraph gelu path is robust and is used by the
+  `matmul_gelu` compose. Fixing the MSL kernel itself is a tracked follow-up.
+- **Native f16/bf16 *fused* MSL kernels** for tiled matmul_softmax and the MLP
+  fusions — today f16/bf16 large-N uses the (correct, on-GPU) matmul+MPSGraph
+  compose rather than a single fused kernel.
+- **MPSGraph executable caching** — graphs are currently built per call; caching
+  the compiled `MPSGraphExecutable` by (op, dtype, rank) would cut per-call cost.
 - **Chain extension** — `matmul → softmax → matmul → gelu`, `softmax → matmul → matmul`, etc.
-- **Conv2D / pooling** kernels — the apple_gpu envelope is currently dense-matmul-shaped
+- **Conv2D / pooling** kernels — the apple_gpu envelope is currently dense-matmul-shaped (MPSGraph can supply these too).
 - **Multi-batch matmul** — matmul currently rank-2; rank-3 batched would mirror the CPU path
 
 ---

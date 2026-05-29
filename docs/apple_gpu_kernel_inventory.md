@@ -45,6 +45,37 @@ The `matmul_softmax_f32` symbol is a **router** as of Phase 8.4.6: per-thread va
 | `tessera_apple_gpu_matmul_softmax_matmul_f16` | `matmul → softmax → matmul` (f16) | MSL fused (mixed precision) | 8.4.5 | rank-2, N ≤ 256, P ≤ 256 |
 | `tessera_apple_gpu_matmul_softmax_matmul_bf16` | `matmul → softmax → matmul` (bf16) | fp32-conversion + MSL | 8.4.5 | rank-2, N ≤ 256, P ≤ 256 |
 
+## MetalPerformanceShadersGraph (MPSGraph) lane — Tier-1 + long tail (2026-05-29)
+
+Rather than hand-writing one MSL kernel per pointwise / normalization op, these
+symbols route through Apple's **MPSGraph** optimizing graph compiler. One
+parametrized runner per shape class covers the Tier-1 activation /
+normalization surface (and a broad long tail) and — by composing with the MPS
+matmul — completes the f16/bf16 (and large-N) fused MLP / attention chains.
+Compute is fp32 internally (inputs cast up, outputs cast down); bf16 upcasts
+host-side. None of these carry the per-thread `N ≤ 256` limit.
+
+| Symbol | Graph IR op(s) | Shape class | dtypes |
+|--------|----------------|-------------|--------|
+| `tessera_apple_gpu_mpsgraph_unary_f32` / `_f16` | `relu`/`sigmoid`(`_safe`)/`tanh`/`softplus`/`silu`/`exp`/`log`/`sqrt`/`rsqrt`/`neg`/`abs` (op-coded) | elementwise, any shape | f32, f16 (bf16 host-upcast) |
+| `tessera_apple_gpu_mpsgraph_binary_f32` / `_f16` | `silu_mul` (+ add/sub/mul/div/max/min reserved) | elementwise, any shape | f32, f16 (bf16 host-upcast) |
+| `tessera_apple_gpu_layer_norm_f32` / `_f16` | `tessera.layer_norm` | row op over last axis | f32, f16 |
+| `tessera_apple_gpu_rmsnorm_gpu_f32` / `_f16` | `tessera.rmsnorm` / `tessera.rmsnorm_safe` | row op over last axis | f32, f16 |
+| `tessera_apple_gpu_log_softmax_f32` / `_f16` | `tessera.log_softmax` | row op over last axis | f32, f16 |
+| `tessera_apple_gpu_mpsgraph_softmax_f32` / `_f16` | `tessera.softmax` (no N limit) | row op over last axis | f32, f16 |
+
+Op codes (unary / binary) are defined in `apple_gpu_runtime.mm` and mirrored in
+`python/tessera/runtime.py` (`_APPLE_GPU_UNARY_OPCODES`). `silu_mul(a, b)` is
+`silu(a) * b`; the runtime binary opcode 6 computes `first * silu(second)`, so
+the dispatcher passes `(b, a)`.
+
+**Fused-chain dtype completion:** `matmul_gelu` / `matmul_rmsnorm` /
+`matmul_softmax` keep their single-kernel f32 fast paths (N ≤ 256, plus the
+tiled f32 `matmul_softmax`); outside that envelope (f16/bf16, or large N) the
+dispatchers now compose the GPU matmul with an MPSGraph epilogue instead of
+falling back to host numpy. The gelu epilogue uses the MPSGraph `gelu` node
+because the hand-written MSL gelu overflows `tanh` for large activations.
+
 ## Capability + diagnostic symbols
 
 | Symbol | Purpose |

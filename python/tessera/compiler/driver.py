@@ -380,13 +380,39 @@ _APPLE_GPU_MSL_OPS: frozenset[str] = frozenset({
     "tessera.softmax",
     "tessera.softmax_safe",
     "tessera.gelu",
-    # `tessera.silu_mul` doesn't ship a standalone MSL kernel today (it's
-    # only meaningful as part of the SwiGLU fusion chain). Keeping it out
-    # of this set means a lone silu_mul falls back to the metal_artifact
-    # contract — exactly the behavior we want until per-op coverage lands.
 })
 
-_APPLE_GPU_RUNTIME_OPS: frozenset[str] = _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS
+# 2026-05-29 — Tier-1 activations / normalizations dispatched through the
+# MetalPerformanceShadersGraph lane (one parametrized runner per shape class,
+# fp32 compute, f16 native + bf16 host-upcast). These previously fell back to
+# the numpy reference path; they now execute on the GPU. `silu_mul` runs as a
+# standalone binary op here (silu(a)*b); the fused SwiGLU chain still wins via
+# the 4-op fusion check when the surrounding matmuls are present.
+_APPLE_GPU_MPSGRAPH_OPS: frozenset[str] = frozenset({
+    "tessera.relu",
+    "tessera.sigmoid",
+    "tessera.sigmoid_safe",
+    "tessera.tanh",
+    "tessera.softplus",
+    "tessera.silu",
+    "tessera.exp",
+    "tessera.log",
+    "tessera.sqrt",
+    "tessera.rsqrt",
+    "tessera.neg",
+    "tessera.negative",
+    "tessera.abs",
+    "tessera.absolute",
+    "tessera.layer_norm",
+    "tessera.rmsnorm",
+    "tessera.rmsnorm_safe",
+    "tessera.log_softmax",
+    "tessera.silu_mul",
+})
+
+_APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
+    _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
+)
 
 
 def is_apple_gpu_mps_op(op_name: str) -> bool:

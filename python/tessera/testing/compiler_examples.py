@@ -136,7 +136,10 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
     CompilerExample(
         "rmsnorm_safe",
         rmsnorm_path,
-        {target: _common_artifact_stages(runtime=target == "x86") for target in FOUNDATION_TARGETS},
+        # 2026-05-29: apple_gpu single rmsnorm/rmsnorm_safe programs are now
+        # runtime-executable through the MetalPerformanceShadersGraph lane
+        # (no N<=256 limit). x86 keeps the AMX runtime path.
+        {target: _common_artifact_stages(runtime=target in {"x86", "apple_gpu"}) for target in FOUNDATION_TARGETS},
         runtime_args=(np.array([[1.0, 2.0, 4.0]], dtype=np.float32),),
     ),
     CompilerExample(

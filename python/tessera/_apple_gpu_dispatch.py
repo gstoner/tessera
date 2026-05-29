@@ -118,6 +118,8 @@ def _compile_runtime() -> tuple[Optional[ctypes.CDLL], Optional[Path],
                "-x", "objective-c++", str(source), "-o", str(lib),
                "-framework", "Metal",
                "-framework", "MetalPerformanceShaders",
+               # 2026-05-29: MPSGraph-backed Tier-1 / long-tail execution lane.
+               "-framework", "MetalPerformanceShadersGraph",
                "-framework", "Foundation"]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:

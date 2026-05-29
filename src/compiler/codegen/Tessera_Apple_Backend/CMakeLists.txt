@@ -120,6 +120,7 @@ if(APPLE)
     "-framework Foundation"
     "-framework Metal"
     "-framework MetalPerformanceShaders"
+    "-framework MetalPerformanceShadersGraph"
   )
 else()
   # On non-Darwin compile a portable C++ stub that exposes the same C ABI but

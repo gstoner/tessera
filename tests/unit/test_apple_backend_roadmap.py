@@ -656,7 +656,8 @@ def test_apple_gpu_runtime_shim_exposes_mps_matmul_symbol(tmp_path):
                "-x", "objective-c++", str(source), "-o", str(lib),
                "-framework", "Foundation",
                "-framework", "Metal",
-               "-framework", "MetalPerformanceShaders"]
+               "-framework", "MetalPerformanceShaders",
+               "-framework", "MetalPerformanceShadersGraph"]
     else:
         source = backend / "apple_gpu_runtime_stub.cpp"
         lib = tmp_path / "libtessera_apple_gpu_runtime.so"
@@ -813,7 +814,8 @@ def test_apple_gpu_msl_runtime_caches_kernel_pipeline_state(tmp_path):
            "-x", "objective-c++", str(source), "-o", str(lib),
            "-framework", "Foundation",
            "-framework", "Metal",
-           "-framework", "MetalPerformanceShaders"]
+           "-framework", "MetalPerformanceShaders",
+               "-framework", "MetalPerformanceShadersGraph"]
     subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
     runtime = ctypes.CDLL(str(lib))
@@ -968,7 +970,8 @@ def test_apple_gpu_flash_attn_runtime_shim_correctness(tmp_path):
                "-x", "objective-c++", str(source), "-o", str(lib),
                "-framework", "Foundation",
                "-framework", "Metal",
-               "-framework", "MetalPerformanceShaders"]
+               "-framework", "MetalPerformanceShaders",
+               "-framework", "MetalPerformanceShadersGraph"]
     else:
         source = backend / "apple_gpu_runtime_stub.cpp"
         lib = tmp_path / "libtessera_apple_gpu_runtime.so"
@@ -1113,7 +1116,8 @@ def test_apple_gpu_softmax_runtime_shim_correctness(tmp_path):
                "-x", "objective-c++", str(source), "-o", str(lib),
                "-framework", "Foundation",
                "-framework", "Metal",
-               "-framework", "MetalPerformanceShaders"]
+               "-framework", "MetalPerformanceShaders",
+               "-framework", "MetalPerformanceShadersGraph"]
     else:
         source = backend / "apple_gpu_runtime_stub.cpp"
         lib = tmp_path / "libtessera_apple_gpu_runtime.so"
@@ -1239,7 +1243,8 @@ def test_apple_gpu_matmul_softmax_fusion_runtime_shim_correctness(tmp_path):
                "-x", "objective-c++", str(source), "-o", str(lib),
                "-framework", "Foundation",
                "-framework", "Metal",
-               "-framework", "MetalPerformanceShaders"]
+               "-framework", "MetalPerformanceShaders",
+               "-framework", "MetalPerformanceShadersGraph"]
     else:
         source = backend / "apple_gpu_runtime_stub.cpp"
         lib = tmp_path / "libtessera_apple_gpu_runtime.so"
@@ -1382,7 +1387,8 @@ def test_apple_gpu_matmul_runtime_shim_exposes_f16_and_bf16_symbols(tmp_path):
                "-x", "objective-c++", str(source), "-o", str(lib),
                "-framework", "Foundation",
                "-framework", "Metal",
-               "-framework", "MetalPerformanceShaders"]
+               "-framework", "MetalPerformanceShaders",
+               "-framework", "MetalPerformanceShadersGraph"]
     else:
         source = backend / "apple_gpu_runtime_stub.cpp"
         lib = tmp_path / "libtessera_apple_gpu_runtime.so"
@@ -1602,7 +1608,8 @@ def test_apple_gpu_msl_dtype_runtime_shim_exposes_all_symbols(tmp_path):
                "-x", "objective-c++", str(source), "-o", str(lib),
                "-framework", "Foundation",
                "-framework", "Metal",
-               "-framework", "MetalPerformanceShaders"]
+               "-framework", "MetalPerformanceShaders",
+               "-framework", "MetalPerformanceShadersGraph"]
     else:
         source = backend / "apple_gpu_runtime_stub.cpp"
         lib = tmp_path / "libtessera_apple_gpu_runtime.so"
@@ -1747,7 +1754,8 @@ def test_apple_gpu_fused_dtype_runtime_shim_exposes_all_symbols(tmp_path):
                "-x", "objective-c++", str(source), "-o", str(lib),
                "-framework", "Foundation",
                "-framework", "Metal",
-               "-framework", "MetalPerformanceShaders"]
+               "-framework", "MetalPerformanceShaders",
+               "-framework", "MetalPerformanceShadersGraph"]
     else:
         source = backend / "apple_gpu_runtime_stub.cpp"
         lib = tmp_path / "libtessera_apple_gpu_runtime.so"
@@ -1894,7 +1902,8 @@ def test_apple_gpu_attn_block_runtime_shim_exposes_3op_fusion_symbols(tmp_path):
                "-x", "objective-c++", str(source), "-o", str(lib),
                "-framework", "Foundation",
                "-framework", "Metal",
-               "-framework", "MetalPerformanceShaders"]
+               "-framework", "MetalPerformanceShaders",
+               "-framework", "MetalPerformanceShadersGraph"]
     else:
         source = backend / "apple_gpu_runtime_stub.cpp"
         lib = tmp_path / "libtessera_apple_gpu_runtime.so"
@@ -1979,7 +1988,8 @@ def test_apple_gpu_matmul_softmax_tiled_runtime_shim_exposes_symbol(tmp_path):
                "-x", "objective-c++", str(source), "-o", str(lib),
                "-framework", "Foundation",
                "-framework", "Metal",
-               "-framework", "MetalPerformanceShaders"]
+               "-framework", "MetalPerformanceShaders",
+               "-framework", "MetalPerformanceShadersGraph"]
     else:
         source = backend / "apple_gpu_runtime_stub.cpp"
         lib = tmp_path / "libtessera_apple_gpu_runtime.so"
@@ -2119,7 +2129,8 @@ def test_apple_gpu_mlp_fusion_runtime_shim_exposes_symbols(tmp_path):
                "-x", "objective-c++", str(source), "-o", str(lib),
                "-framework", "Foundation",
                "-framework", "Metal",
-               "-framework", "MetalPerformanceShaders"]
+               "-framework", "MetalPerformanceShaders",
+               "-framework", "MetalPerformanceShadersGraph"]
     else:
         source = backend / "apple_gpu_runtime_stub.cpp"
         lib = tmp_path / "libtessera_apple_gpu_runtime.so"
@@ -2258,7 +2269,8 @@ def test_apple_gpu_swiglu_runtime_shim_exposes_swiglu_symbols(tmp_path):
                "-x", "objective-c++", str(source), "-o", str(lib),
                "-framework", "Foundation",
                "-framework", "Metal",
-               "-framework", "MetalPerformanceShaders"]
+               "-framework", "MetalPerformanceShaders",
+               "-framework", "MetalPerformanceShadersGraph"]
     else:
         source = backend / "apple_gpu_runtime_stub.cpp"
         lib = tmp_path / "libtessera_apple_gpu_runtime.so"

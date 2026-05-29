@@ -3141,13 +3141,18 @@ def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
     a = np.asarray(operands[0])
     b = np.asarray(operands[1])
 
-    # Phase 8.4.6 — N upper bound depends on dtype. f32 has the
-    # threadgroup-tiled variant (capped at 8192); f16/bf16 are still
-    # limited to 256 (per-thread stack-array bound until tiled variants
-    # land in a future phase).
+    # Phase 8.4.6 + native-half tiled — N upper bound depends on dtype. f32
+    # has the threadgroup-tiled variant (capped at 8192); f16/bf16 now also
+    # have native tiled fused kernels (per-thread for N<=256, threadgroup-
+    # tiled up to 8192), so the single-kernel envelope matches f32 when the
+    # tiled symbol is present. Older builds without it stay at 256.
     bf16_dtype = _bfloat16_dtype()
     if a.dtype == np.float32:
         n_max = 8192
+    elif a.dtype == np.float16:
+        n_max = 8192 if _apple_gpu_matmul_softmax_tiled_f16() is not None else 256
+    elif bf16_dtype is not None and a.dtype == bf16_dtype:
+        n_max = 8192 if _apple_gpu_matmul_softmax_tiled_bf16() is not None else 256
     else:
         n_max = 256
 
@@ -3192,7 +3197,10 @@ def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
         if not b.flags.c_contiguous:
             b = np.ascontiguousarray(b, dtype=np.float16)
         out = np.zeros((M, N), dtype=np.float16)
-        fused_f16 = _apple_gpu_matmul_softmax_f16()
+        # Per-thread kernel for N<=256 (no threadgroup sync, faster);
+        # threadgroup-tiled native kernel for larger N.
+        fused_f16 = (_apple_gpu_matmul_softmax_f16() if N <= 256
+                     else _apple_gpu_matmul_softmax_tiled_f16())
         if fused_f16 is not None:
             fused_f16(
                 a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
@@ -3212,7 +3220,8 @@ def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
         if not b.flags.c_contiguous:
             b = np.ascontiguousarray(b, dtype=bf16_dtype)
         out = np.zeros((M, N), dtype=bf16_dtype)
-        fused_bf16 = _apple_gpu_matmul_softmax_bf16()
+        fused_bf16 = (_apple_gpu_matmul_softmax_bf16() if N <= 256
+                      else _apple_gpu_matmul_softmax_tiled_bf16())
         if fused_bf16 is not None:
             fused_bf16(
                 a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
@@ -3275,6 +3284,36 @@ def _apple_gpu_matmul_softmax_bf16() -> Any:
     return sym
 
 
+def _apple_gpu_matmul_softmax_tiled_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_matmul_softmax_tiled_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_matmul_softmax_tiled_bf16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_matmul_softmax_tiled_bf16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
 def _apple_gpu_dispatch_gelu_gpu(x: Any, np: Any) -> Any:
     """gelu(x) via the MPSGraph unary lane (op 5). Used as the matmul_gelu
     epilogue: the hand-written MSL gelu kernel overflows its tanh for large
@@ -3323,10 +3362,46 @@ def _apple_gpu_dispatch_gelu_gpu(x: Any, np: Any) -> Any:
     return _ref().astype(x.dtype).reshape(shape)
 
 
+def _apple_gpu_matmul_gelu_fused_half(a: Any, b: Any, np: Any) -> Any:
+    """Native single fused matmul -> gelu MSL kernel for f16/bf16, N<=256.
+    Returns the result array, or None when not applicable (wrong dtype, rank,
+    N>256, or the half symbol isn't exported by the loaded runtime) so the
+    caller can fall through to the compose path."""
+    bf16_dtype = _bfloat16_dtype()
+    if not (a.ndim == 2 and b.ndim == 2 and a.shape[1] == b.shape[0]
+            and b.shape[1] <= 256 and a.dtype == b.dtype):
+        return None
+    if a.dtype == np.float16:
+        fused = _apple_gpu_matmul_gelu_f16()
+        dt = np.float16
+    elif bf16_dtype is not None and a.dtype == bf16_dtype:
+        fused = _apple_gpu_matmul_gelu_bf16()
+        dt = bf16_dtype
+    else:
+        return None
+    if fused is None:
+        return None
+    if not a.flags.c_contiguous:
+        a = np.ascontiguousarray(a, dtype=dt)
+    if not b.flags.c_contiguous:
+        b = np.ascontiguousarray(b, dtype=dt)
+    M, K = a.shape
+    N = b.shape[1]
+    out = np.zeros((M, N), dtype=dt)
+    fused(
+        a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
+    )
+    return out
+
+
 def _apple_gpu_dispatch_matmul_gelu(operands: list[Any], np: Any) -> Any:
-    """Phase 8.4.7 — dispatch a fused matmul -> gelu chain through the
-    apple_gpu runtime shim. f32 only this phase; outside the envelope
-    (rank, dtype, N>256) falls back to numpy."""
+    """Phase 8.4.7 + native-half — dispatch a fused matmul -> gelu chain
+    through the apple_gpu runtime shim. f32 and (N<=256) f16/bf16 run as a
+    single fused MSL kernel; large-N and dtype-less paths compose GPU matmul
+    with the MPSGraph gelu epilogue; numpy is the final fallback."""
 
     if len(operands) != 2:
         raise ValueError("matmul_gelu fusion requires two operands (A, B)")
@@ -3338,7 +3413,12 @@ def _apple_gpu_dispatch_matmul_gelu(operands: list[Any], np: Any) -> Any:
         and b.shape[1] <= 256
         and a.dtype == np.float32 and b.dtype == np.float32
     ):
-        # Outside the f32 / N<=256 single-kernel fast path: compose the GPU
+        # f16/bf16 with N<=256: native single fused MSL kernel when present
+        # (half I/O, fp32 accumulators) — one dispatch instead of composing.
+        native = _apple_gpu_matmul_gelu_fused_half(a, b, np)
+        if native is not None:
+            return native
+        # Otherwise (large-N, or no native half symbol): compose the GPU
         # matmul (f16/bf16 native, any N) with the GPU gelu epilogue so
         # f16/bf16 and large-N still execute on-device. Both sub-dispatchers
         # degrade to numpy automatically when Metal is unavailable.
@@ -3392,11 +3472,78 @@ def _apple_gpu_matmul_gelu_f32() -> Any:
     return sym
 
 
+def _apple_gpu_matmul_gelu_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_matmul_gelu_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_matmul_gelu_bf16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_matmul_gelu_bf16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_matmul_rmsnorm_fused_half(a: Any, b: Any, eps: float,
+                                         np: Any) -> Any:
+    """Native single fused matmul -> rmsnorm MSL kernel for f16/bf16, N<=256.
+    Returns the result array, or None when not applicable so the caller can
+    fall through to the compose path."""
+    bf16_dtype = _bfloat16_dtype()
+    if not (a.ndim == 2 and b.ndim == 2 and a.shape[1] == b.shape[0]
+            and b.shape[1] <= 256 and a.dtype == b.dtype):
+        return None
+    if a.dtype == np.float16:
+        fused = _apple_gpu_matmul_rmsnorm_f16()
+        dt = np.float16
+    elif bf16_dtype is not None and a.dtype == bf16_dtype:
+        fused = _apple_gpu_matmul_rmsnorm_bf16()
+        dt = bf16_dtype
+    else:
+        return None
+    if fused is None:
+        return None
+    if not a.flags.c_contiguous:
+        a = np.ascontiguousarray(a, dtype=dt)
+    if not b.flags.c_contiguous:
+        b = np.ascontiguousarray(b, dtype=dt)
+    M, K = a.shape
+    N = b.shape[1]
+    out = np.zeros((M, N), dtype=dt)
+    fused(
+        a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
+        ctypes.c_float(eps),
+    )
+    return out
+
+
 def _apple_gpu_dispatch_matmul_rmsnorm(operands: list[Any], eps: float, np: Any) -> Any:
-    """Phase 8.4.7 — dispatch a fused matmul -> rmsnorm chain through the
-    apple_gpu runtime shim. f32 only this phase. eps is passed in by the
-    metadata-layer dispatcher (it knows the rmsnorm vs rmsnorm_safe
-    default and any explicit override)."""
+    """Phase 8.4.7 + native-half — dispatch a fused matmul -> rmsnorm chain
+    through the apple_gpu runtime shim. f32 and (N<=256) f16/bf16 run as a
+    single fused MSL kernel; large-N composes GPU matmul + MPSGraph epilogue.
+    eps is passed in by the metadata-layer dispatcher (it knows the rmsnorm
+    vs rmsnorm_safe default and any explicit override)."""
 
     if len(operands) != 2:
         raise ValueError("matmul_rmsnorm fusion requires two operands (A, B)")
@@ -3408,7 +3555,12 @@ def _apple_gpu_dispatch_matmul_rmsnorm(operands: list[Any], eps: float, np: Any)
         and b.shape[1] <= 256
         and a.dtype == np.float32 and b.dtype == np.float32
     ):
-        # Outside the f32 / N<=256 single-kernel fast path: compose the GPU
+        # f16/bf16 with N<=256: native single fused MSL kernel when present
+        # (half I/O, fp32 accumulators) — one dispatch instead of composing.
+        native = _apple_gpu_matmul_rmsnorm_fused_half(a, b, eps, np)
+        if native is not None:
+            return native
+        # Otherwise (large-N, or no native half symbol): compose the GPU
         # matmul with the GPU rmsnorm epilogue (MPSGraph, any N) so f16/bf16
         # and large-N still execute on-device.
         if a.ndim == 2 and b.ndim == 2 and a.shape[1] == b.shape[0]:
@@ -3444,6 +3596,38 @@ def _apple_gpu_matmul_rmsnorm_f32() -> Any:
         ctypes.POINTER(ctypes.c_float),
         ctypes.POINTER(ctypes.c_float),
         ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_float,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_matmul_rmsnorm_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_matmul_rmsnorm_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_float,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_matmul_rmsnorm_bf16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_matmul_rmsnorm_bf16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
         ctypes.c_float,
     ]
@@ -3740,9 +3924,17 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_matmul_bf16")
                 # Phase 8.4.6 — threadgroup-tiled matmul_softmax_f32 (lifts N constraint).
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_tiled_f32")
+                # Native-half tiled matmul_softmax (f16/bf16 large-N single kernel).
+                getattr(lib, "tessera_apple_gpu_matmul_softmax_tiled_f16")
+                getattr(lib, "tessera_apple_gpu_matmul_softmax_tiled_bf16")
                 # Phase 8.4.7 — MLP block fusions (matmul -> gelu, matmul -> rmsnorm).
                 getattr(lib, "tessera_apple_gpu_matmul_gelu_f32")
                 getattr(lib, "tessera_apple_gpu_matmul_rmsnorm_f32")
+                # Native-half MLP-block fusions (f16/bf16 single fused kernel).
+                getattr(lib, "tessera_apple_gpu_matmul_gelu_f16")
+                getattr(lib, "tessera_apple_gpu_matmul_gelu_bf16")
+                getattr(lib, "tessera_apple_gpu_matmul_rmsnorm_f16")
+                getattr(lib, "tessera_apple_gpu_matmul_rmsnorm_bf16")
                 # Phase 8.4.8 — SwiGLU MLP-block fusion (Stage 3 of the
                 # SwiGLU Performance Plan). f32 native MSL + f16/bf16
                 # reference fallback today; native half MSL is a follow-up.

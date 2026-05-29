@@ -460,6 +460,37 @@ extern "C" void tessera_apple_gpu_matmul_softmax_bf16(const uint16_t* A,
   for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_stub(Of[i]);
 }
 
+// Native-half tiled variants. On non-Darwin the tiling is a no-op; route to the
+// same reference path so f16/bf16 large-N chains stay numerically correct.
+
+extern "C" void tessera_apple_gpu_matmul_softmax_tiled_f16(const uint16_t* A,
+                                                           const uint16_t* B,
+                                                           uint16_t* O,
+                                                           int32_t M, int32_t N,
+                                                           int32_t K) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Of(static_cast<std::size_t>(M) * N);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = half_to_float_stub(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = half_to_float_stub(B[i]);
+  reference_matmul_softmax_f32(Af.data(), Bf.data(), Of.data(), M, N, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_half_stub(Of[i]);
+}
+
+extern "C" void tessera_apple_gpu_matmul_softmax_tiled_bf16(const uint16_t* A,
+                                                            const uint16_t* B,
+                                                            uint16_t* O,
+                                                            int32_t M, int32_t N,
+                                                            int32_t K) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Of(static_cast<std::size_t>(M) * N);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = bfloat16_to_float_stub(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = bfloat16_to_float_stub(B[i]);
+  reference_matmul_softmax_f32(Af.data(), Bf.data(), Of.data(), M, N, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_stub(Of[i]);
+}
+
 // Phase 8.4.5 — fp32/fp16/bf16 stubs for fused matmul -> softmax -> matmul.
 
 namespace {
@@ -595,6 +626,63 @@ extern "C" void tessera_apple_gpu_matmul_rmsnorm_f32(const float* A,
                                                      int32_t M, int32_t N,
                                                      int32_t K, float eps) {
   reference_matmul_rmsnorm_f32_stub(A, B, O, M, N, K, eps);
+}
+
+// f16/bf16 MLP-block fusion stubs — convert to fp32, reuse the reference, cast
+// back. Mirrors the native-half MSL kernels' fp32-accumulator convention.
+
+extern "C" void tessera_apple_gpu_matmul_gelu_f16(const uint16_t* A,
+                                                  const uint16_t* B, uint16_t* O,
+                                                  int32_t M, int32_t N,
+                                                  int32_t K) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Of(static_cast<std::size_t>(M) * N);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = half_to_float_stub(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = half_to_float_stub(B[i]);
+  reference_matmul_gelu_f32_stub(Af.data(), Bf.data(), Of.data(), M, N, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_half_stub(Of[i]);
+}
+
+extern "C" void tessera_apple_gpu_matmul_gelu_bf16(const uint16_t* A,
+                                                   const uint16_t* B,
+                                                   uint16_t* O, int32_t M,
+                                                   int32_t N, int32_t K) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Of(static_cast<std::size_t>(M) * N);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = bfloat16_to_float_stub(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = bfloat16_to_float_stub(B[i]);
+  reference_matmul_gelu_f32_stub(Af.data(), Bf.data(), Of.data(), M, N, K);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_stub(Of[i]);
+}
+
+extern "C" void tessera_apple_gpu_matmul_rmsnorm_f16(const uint16_t* A,
+                                                     const uint16_t* B,
+                                                     uint16_t* O, int32_t M,
+                                                     int32_t N, int32_t K,
+                                                     float eps) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Of(static_cast<std::size_t>(M) * N);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = half_to_float_stub(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = half_to_float_stub(B[i]);
+  reference_matmul_rmsnorm_f32_stub(Af.data(), Bf.data(), Of.data(), M, N, K, eps);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_half_stub(Of[i]);
+}
+
+extern "C" void tessera_apple_gpu_matmul_rmsnorm_bf16(const uint16_t* A,
+                                                      const uint16_t* B,
+                                                      uint16_t* O, int32_t M,
+                                                      int32_t N, int32_t K,
+                                                      float eps) {
+  std::vector<float> Af(static_cast<std::size_t>(M) * K);
+  std::vector<float> Bf(static_cast<std::size_t>(K) * N);
+  std::vector<float> Of(static_cast<std::size_t>(M) * N);
+  for (std::size_t i = 0; i < Af.size(); ++i) Af[i] = bfloat16_to_float_stub(A[i]);
+  for (std::size_t i = 0; i < Bf.size(); ++i) Bf[i] = bfloat16_to_float_stub(B[i]);
+  reference_matmul_rmsnorm_f32_stub(Af.data(), Bf.data(), Of.data(), M, N, K, eps);
+  for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_stub(Of[i]);
 }
 
 // Phase 8.4.8 — SwiGLU MLP-block fusion stubs (Stage 3).

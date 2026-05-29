@@ -105,9 +105,9 @@ _APPLE_GPU_SENTINEL_FAMILIES = (
     ("matmul_softmax", 3),               # 2-op fusion
     ("matmul_softmax_matmul", 3),        # 3-op fusion (full attention)
     ("swiglu", 3),
-    ("matmul_softmax_tiled", 1),         # f32 threadgroup-tiled variant
-    ("matmul_gelu", 1),                  # MLP block fusion
-    ("matmul_rmsnorm", 1),
+    ("matmul_softmax_tiled", 3),         # f32 + native-half (f16/bf16) tiled
+    ("matmul_gelu", 3),                  # MLP block fusion, f32/f16/bf16
+    ("matmul_rmsnorm", 3),
     ("mla_decode", 1),
     ("native_sparse_attn", 1),
     ("linear_attn", 1),

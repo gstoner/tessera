@@ -170,12 +170,76 @@ def test_matmul_rmsnorm_f16_large_n():
 def test_matmul_softmax_f16_large_n():
     rng = np.random.RandomState(10)
     a = (rng.randn(16, 64) * 0.5).astype(np.float16)
-    b = (rng.randn(64, 512) * 0.5).astype(np.float16)  # >256: no fused f16 kernel
+    b = (rng.randn(64, 512) * 0.5).astype(np.float16)  # >256: native tiled f16
     out = np.asarray(R._apple_gpu_dispatch_matmul_softmax([a, b], np))
     s = a.astype(np.float32) @ b.astype(np.float32)
     e = np.exp(s - s.max(-1, keepdims=True))
     np.testing.assert_allclose(out.astype(np.float32), e / e.sum(-1, keepdims=True),
                                rtol=5e-2, atol=5e-3)
+
+
+# ── native single-kernel f16/bf16 fused chains (N<=256) ─────────────────────
+def test_matmul_gelu_f16_small_n_native_fused():
+    # N=128 <= 256: routes through tessera_apple_gpu_matmul_gelu_f16 (one
+    # dispatch) rather than composing GPU matmul + MPSGraph gelu.
+    rng = np.random.RandomState(20)
+    a = (rng.randn(8, 32) * 0.5).astype(np.float16)
+    b = (rng.randn(32, 128) * 0.5).astype(np.float16)
+    out = np.asarray(R._apple_gpu_dispatch_matmul_gelu([a, b], np))
+    assert out.dtype == np.float16
+    assert not np.isnan(out.astype(np.float32)).any()
+    ref = _gelu(a.astype(np.float32) @ b.astype(np.float32))
+    np.testing.assert_allclose(out.astype(np.float32), ref, rtol=5e-2, atol=5e-2)
+
+
+def test_matmul_rmsnorm_f16_small_n_native_fused():
+    rng = np.random.RandomState(21)
+    a = (rng.randn(8, 32) * 0.5).astype(np.float16)
+    b = (rng.randn(32, 128) * 0.5).astype(np.float16)
+    out = np.asarray(R._apple_gpu_dispatch_matmul_rmsnorm([a, b], 1e-5, np))
+    assert out.dtype == np.float16
+    s = a.astype(np.float32) @ b.astype(np.float32)
+    ref = s / np.sqrt((s * s).mean(-1, keepdims=True) + 1e-5)
+    np.testing.assert_allclose(out.astype(np.float32), ref, rtol=5e-2, atol=5e-2)
+
+
+def test_matmul_gelu_bf16_small_n_native_fused():
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    bf16 = ml_dtypes.bfloat16
+    rng = np.random.RandomState(22)
+    a = (rng.randn(8, 32) * 0.5).astype(bf16)
+    b = (rng.randn(32, 128) * 0.5).astype(bf16)
+    out = np.asarray(R._apple_gpu_dispatch_matmul_gelu([a, b], np))
+    assert out.dtype == bf16
+    ref = _gelu(a.astype(np.float32) @ b.astype(np.float32))
+    np.testing.assert_allclose(out.astype(np.float32), ref, rtol=8e-2, atol=8e-2)
+
+
+def test_matmul_rmsnorm_bf16_small_n_native_fused():
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    bf16 = ml_dtypes.bfloat16
+    rng = np.random.RandomState(23)
+    a = (rng.randn(8, 32) * 0.5).astype(bf16)
+    b = (rng.randn(32, 128) * 0.5).astype(bf16)
+    out = np.asarray(R._apple_gpu_dispatch_matmul_rmsnorm([a, b], 1e-5, np))
+    assert out.dtype == bf16
+    s = a.astype(np.float32) @ b.astype(np.float32)
+    ref = s / np.sqrt((s * s).mean(-1, keepdims=True) + 1e-5)
+    np.testing.assert_allclose(out.astype(np.float32), ref, rtol=8e-2, atol=8e-2)
+
+
+def test_matmul_softmax_bf16_large_n_native_tiled():
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    bf16 = ml_dtypes.bfloat16
+    rng = np.random.RandomState(24)
+    a = (rng.randn(16, 64) * 0.5).astype(bf16)
+    b = (rng.randn(64, 512) * 0.5).astype(bf16)  # >256: native tiled bf16
+    out = np.asarray(R._apple_gpu_dispatch_matmul_softmax([a, b], np))
+    assert out.dtype == bf16
+    s = a.astype(np.float32) @ b.astype(np.float32)
+    e = np.exp(s - s.max(-1, keepdims=True))
+    np.testing.assert_allclose(out.astype(np.float32), e / e.sum(-1, keepdims=True),
+                               rtol=8e-2, atol=8e-3)
 
 
 # ── on-device dispatch gate via @jit (source must be a real module) ─────────
@@ -203,6 +267,29 @@ def test_jit_tier1_ops_metal_runtime_on_darwin():
     out = np.asarray(_jit_silu(x))
     np.testing.assert_allclose(out, _silu(x), rtol=1e-5, atol=1e-5)
     assert _jit_silu.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
+
+
+def test_native_half_fused_symbols_are_exported():
+    """The native-half fused-chain symbols must be present in the loaded
+    runtime (Darwin .mm or portable stub) so the dispatchers can prefer a
+    single fused kernel over the compose path."""
+    rt = R._load_apple_gpu_runtime()
+    for sym in (
+        "tessera_apple_gpu_matmul_softmax_tiled_f16",
+        "tessera_apple_gpu_matmul_softmax_tiled_bf16",
+        "tessera_apple_gpu_matmul_gelu_f16",
+        "tessera_apple_gpu_matmul_gelu_bf16",
+        "tessera_apple_gpu_matmul_rmsnorm_f16",
+        "tessera_apple_gpu_matmul_rmsnorm_bf16",
+    ):
+        assert hasattr(rt, sym), sym
+    # The ctypes loaders bind argtypes without raising.
+    assert R._apple_gpu_matmul_softmax_tiled_f16() is not None
+    assert R._apple_gpu_matmul_softmax_tiled_bf16() is not None
+    assert R._apple_gpu_matmul_gelu_f16() is not None
+    assert R._apple_gpu_matmul_gelu_bf16() is not None
+    assert R._apple_gpu_matmul_rmsnorm_f16() is not None
+    assert R._apple_gpu_matmul_rmsnorm_bf16() is not None
 
 
 @pytest.mark.skipif(not DARWIN, reason="Metal device required")

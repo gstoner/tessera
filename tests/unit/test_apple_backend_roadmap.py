@@ -2146,6 +2146,103 @@ def test_apple_gpu_mlp_fusion_runtime_shim_exposes_symbols(tmp_path):
         assert sym is not None, f"missing C ABI symbol: {name}"
 
 
+def test_apple_gpu_native_half_fused_runtime_shim(tmp_path):
+    """Compile the apple_gpu runtime shim and exercise the native-half fused
+    symbols (matmul_gelu / matmul_rmsnorm / matmul_softmax_tiled f16+bf16)
+    numerically. f16 I/O uses uint16 views; the kernels accumulate in fp32."""
+
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        pytest.skip("C++ compiler is not available")
+
+    backend = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
+    if sys.platform == "darwin":
+        source = backend / "apple_gpu_runtime.mm"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.dylib"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", "-fobjc-arc",
+               "-x", "objective-c++", str(source), "-o", str(lib),
+               "-framework", "Foundation",
+               "-framework", "Metal",
+               "-framework", "MetalPerformanceShaders",
+               "-framework", "MetalPerformanceShadersGraph"]
+    else:
+        source = backend / "apple_gpu_runtime_stub.cpp"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.so"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(lib)]
+    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    runtime = ctypes.CDLL(str(lib))
+
+    def f16_bits(arr):
+        return arr.astype(np.float16).view(np.uint16)
+
+    def bits_to_f16(arr):
+        return arr.view(np.float16)
+
+    rng = np.random.RandomState(311)
+
+    # matmul -> gelu (f16), N<=256.
+    for name in ("tessera_apple_gpu_matmul_gelu_f16",
+                 "tessera_apple_gpu_matmul_rmsnorm_f16",
+                 "tessera_apple_gpu_matmul_softmax_tiled_f16"):
+        assert getattr(runtime, name, None) is not None, name
+
+    M, K, N = 8, 16, 64
+    A = (rng.randn(M, K) * 0.5).astype(np.float16)
+    B = (rng.randn(K, N) * 0.5).astype(np.float16)
+    Au = np.ascontiguousarray(f16_bits(A))
+    Bu = np.ascontiguousarray(f16_bits(B))
+
+    # gelu
+    sym = runtime.tessera_apple_gpu_matmul_gelu_f16
+    sym.argtypes = [ctypes.POINTER(ctypes.c_uint16)] * 3 + [ctypes.c_int32] * 3
+    sym.restype = None
+    Ou = np.zeros(M * N, dtype=np.uint16)
+    sym(Au.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        Bu.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        Ou.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        M, N, K)
+    out = bits_to_f16(Ou).reshape(M, N).astype(np.float32)
+    s = A.astype(np.float32) @ B.astype(np.float32)
+    gelu_ref = 0.5 * s * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (s + 0.044715 * s ** 3)))
+    np.testing.assert_allclose(out, gelu_ref, rtol=5e-2, atol=5e-2)
+
+    # rmsnorm
+    sym = runtime.tessera_apple_gpu_matmul_rmsnorm_f16
+    sym.argtypes = [ctypes.POINTER(ctypes.c_uint16)] * 3 + [ctypes.c_int32] * 3 + [ctypes.c_float]
+    sym.restype = None
+    Ou = np.zeros(M * N, dtype=np.uint16)
+    sym(Au.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        Bu.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        Ou.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        M, N, K, ctypes.c_float(1e-5))
+    out = bits_to_f16(Ou).reshape(M, N).astype(np.float32)
+    rms_ref = s / np.sqrt((s * s).mean(-1, keepdims=True) + 1e-5)
+    np.testing.assert_allclose(out, rms_ref, rtol=5e-2, atol=5e-2)
+
+    # softmax tiled, large N
+    Nbig = 512
+    Bbig = (rng.randn(K, Nbig) * 0.5).astype(np.float16)
+    Bbu = np.ascontiguousarray(f16_bits(Bbig))
+    sym = runtime.tessera_apple_gpu_matmul_softmax_tiled_f16
+    sym.argtypes = [ctypes.POINTER(ctypes.c_uint16)] * 3 + [ctypes.c_int32] * 3
+    sym.restype = None
+    Ou = np.zeros(M * Nbig, dtype=np.uint16)
+    sym(Au.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        Bbu.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        Ou.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        M, Nbig, K)
+    out = bits_to_f16(Ou).reshape(M, Nbig).astype(np.float32)
+    sb = A.astype(np.float32) @ Bbig.astype(np.float32)
+    e = np.exp(sb - sb.max(-1, keepdims=True))
+    np.testing.assert_allclose(out, e / e.sum(-1, keepdims=True), rtol=5e-2, atol=5e-3)
+
+    # bf16 symbols exist with the same ABI.
+    for name in ("tessera_apple_gpu_matmul_gelu_bf16",
+                 "tessera_apple_gpu_matmul_rmsnorm_bf16",
+                 "tessera_apple_gpu_matmul_softmax_tiled_bf16"):
+        assert getattr(runtime, name, None) is not None, name
+
+
 def test_apple_cpu_bf16_disabled_when_ml_dtypes_missing(monkeypatch):
     """When ml_dtypes isn't installed the bf16 dtype probe returns None and
     the runtime falls through to numpy. Verified by stubbing the import to

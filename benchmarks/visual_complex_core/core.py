@@ -211,7 +211,7 @@ class VisualComplexCoreModel:
         cur_mv = Multivector(x_coeffs.astype(np.float32, copy=True), self._algebra)
         for r in rotors:
             cur_mv = ga.rotor_sandwich(r, cur_mv)
-        cur = np.asarray(cur_mv.coefficients, dtype=np.float32, copy=True)
+        cur = np.array(cur_mv.coefficients, dtype=np.float32, copy=True)
 
         # EBM lane: annealed Langevin chain on coefficient vector with
         # analytic gradient of clifford_energy.

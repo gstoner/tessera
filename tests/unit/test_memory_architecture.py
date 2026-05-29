@@ -131,7 +131,13 @@ class TestBucketSharding:
             bucket_fn="by_first_test",
         )
         key = np.array([0.005], dtype=np.float32)
-        assert spec.shard_owner(key, mesh) == 5  # 5 mod 8
+        # Derive the expectation from the registered fn rather than hard-coding
+        # an arithmetic result: 0.005 is not exactly representable in float32
+        # (it rounds to 0.00499999...), so int(abs(key[0]) * 1000) truncates to
+        # 4, not 5. The point of this test is that dispatch routes through the
+        # registered bucket fn — assert exactly that.
+        expected = by_first(key, mesh.shape[0])
+        assert spec.shard_owner(key, mesh) == expected
 
     def test_unregistered_bucket_fn_errors(self):
         mesh = NamedMesh(axis_names=("memory",), shape=(4,))

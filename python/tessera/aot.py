@@ -143,7 +143,7 @@ def safetensors_export(state: Mapping[str, Any], path: str | os.PathLike) -> Pat
     target = Path(path)
     arrays = {name: np.asarray(value) for name, value in state.items()}
     with target.open("wb") as f:
-        np.savez(f, **arrays)  # type: ignore[arg-type]
+        np.savez(f, **arrays)
     (target.with_suffix(target.suffix + ".json")).write_text(
         json.dumps(
             {

@@ -303,7 +303,7 @@ def _scan_all_files_vectorized() -> tuple[
     dict[str, set[Path]],               # negative_refs_by_op[op] = {paths_with_nearby_raises}
     dict[str, set[str]],                # dtypes_by_op[op]
     dict[str, int],                     # lit_refs_by_op[op]
-    dict[Path, list[tuple[int, int]]],  # raises_lines_by_path: [(line, char_offset)]
+    dict[Path, list[int]],              # raises_by_path[path] = [line numbers]
 ]:
     """Walk every test file ONCE and collect per-op reference data.
 

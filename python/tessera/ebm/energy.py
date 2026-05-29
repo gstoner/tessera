@@ -71,7 +71,7 @@ def _numerical_grad(
     """
     base = y.astype(np.float64, copy=True)
     grad = np.zeros_like(base)
-    it = np.nditer(base, flags=["multi_index"], op_flags=["readonly"])
+    it = np.nditer(base, flags=["multi_index"], op_flags=[["readonly"]])
     while not it.finished:
         idx = it.multi_index
         original = base[idx]

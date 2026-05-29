@@ -51,7 +51,7 @@ def _run_nvidia_torch_smoke(target_name: str, *, size: int) -> SmokeResult:
     # hosts that happen to have it installed.  Tessera's runtime is
     # explicitly torch-free (Decision #23).
     try:
-        import torch  # type: ignore[import-not-found]
+        import torch
     except Exception as exc:
         return _artifact_only(target_name, f"torch is unavailable: {exc}")
     if not torch.cuda.is_available():

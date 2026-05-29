@@ -280,7 +280,7 @@ def save_state(
         # keyword; in practice every other ``**kwds`` entry is an
         # ndarray (the intended use).  Cast to ``Any`` so mypy
         # accepts the polymorphic call.
-        np.savez(f, **payload)  # type: ignore[arg-type]
+        np.savez(f, **payload)
     if atomic:
         os.replace(tmp, target)
     return target

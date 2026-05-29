@@ -331,7 +331,8 @@ def jvp_linear_general(primals, tangents, *, axis=-1, **_):
     )
     if bias is not None:
         y = y + bias
-        dy = dy + dbias
+        if dbias is not None:
+            dy = dy + dbias
     return y, dy
 
 

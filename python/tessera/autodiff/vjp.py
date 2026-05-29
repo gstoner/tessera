@@ -64,7 +64,7 @@ def _numeric_vjp_arg(fn, dout, arg, *, eps: float = 1e-5):
     arr = np.asarray(arg, dtype=np.float64)
     grad = np.zeros_like(arr, dtype=np.float64)
     dout_arr = np.asarray(dout, dtype=np.float64)
-    it = np.nditer(arr, flags=["multi_index"], op_flags=["readwrite"])
+    it = np.nditer(arr, flags=["multi_index"], op_flags=[["readwrite"]])
     while not it.finished:
         idx = it.multi_index
         plus = arr.copy()
@@ -1534,7 +1534,7 @@ def vjp_conv1d(
     w_arr = np.asarray(weight, dtype=np.float64)
     do = np.asarray(dout, dtype=np.float64)
     n, c_in, length = x_arr.shape
-    c_out, _, kernel = w_arr.shape
+    c_out, _w_cin, kernel = w_arr.shape
     out_len = do.shape[-1]
     padded = np.pad(x_arr, ((0, 0), (0, 0), (padding, padding)))
     dx_padded = np.zeros_like(padded, dtype=np.float64)

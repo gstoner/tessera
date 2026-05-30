@@ -4845,6 +4845,132 @@ def _apple_gpu_matmul_softmax_matmul_bf16() -> Any:
     return sym
 
 
+_DEVTENSOR_API_CONFIGURED = False
+
+
+def _apple_gpu_devtensor_api() -> Any:
+    """Configure + return the device-tensor C ABI (R0). None when unavailable."""
+    runtime = _load_apple_gpu_runtime()
+    if getattr(runtime, "ts_dev_alloc", None) is None:
+        return None
+    global _DEVTENSOR_API_CONFIGURED
+    if not _DEVTENSOR_API_CONFIGURED:
+        vp, i64, i32 = ctypes.c_void_p, ctypes.c_int64, ctypes.c_int32
+        runtime.ts_dev_alloc.argtypes = [i64]; runtime.ts_dev_alloc.restype = vp
+        runtime.ts_dev_contents.argtypes = [vp]; runtime.ts_dev_contents.restype = vp
+        runtime.ts_dev_nbytes.argtypes = [vp]; runtime.ts_dev_nbytes.restype = i64
+        runtime.ts_dev_upload.argtypes = [vp, vp, i64]; runtime.ts_dev_upload.restype = None
+        runtime.ts_dev_download.argtypes = [vp, vp, i64]; runtime.ts_dev_download.restype = None
+        runtime.ts_dev_free.argtypes = [vp]; runtime.ts_dev_free.restype = None
+        runtime.ts_dev_is_metal.argtypes = []; runtime.ts_dev_is_metal.restype = i32
+        _DEVTENSOR_API_CONFIGURED = True
+    return runtime
+
+
+class DeviceTensor:
+    """An opaque, GPU-resident tensor (R0).
+
+    Wraps one shared (unified-memory) Metal buffer. On Apple Silicon
+    ``[buf contents]`` is a CPU pointer to the *same* bytes the GPU sees, so
+    after the one-time ``from_numpy`` copy there are **no further host↔device
+    copies**: ``.numpy()`` returns a zero-copy view, and (from R1 on) a producer
+    op's output can feed a consumer op without any host round-trip. On non-Apple
+    hosts the handle is backed by plain host memory, so the surface is portable.
+
+    Lifetime is explicit — call ``free()`` (or rely on ``__del__``). Holding a
+    ``.numpy()`` view alive past ``free()`` is a use-after-free; copy first with
+    ``.copy_to_host()`` if you need to outlive the handle."""
+
+    __slots__ = ("_handle", "shape", "dtype", "_rt", "_freed")
+
+    def __init__(self, handle: Any, shape: Any, dtype: Any, rt: Any) -> None:
+        import numpy as _np
+        self._handle = handle
+        self.shape = tuple(int(s) for s in shape)
+        self.dtype = _np.dtype(dtype)
+        self._rt = rt
+        self._freed = False
+
+    @property
+    def nbytes(self) -> int:
+        n = self.dtype.itemsize
+        for s in self.shape:
+            n *= s
+        return int(n)
+
+    @staticmethod
+    def is_metal() -> bool:
+        rt = _apple_gpu_devtensor_api()
+        return bool(rt is not None and rt.ts_dev_is_metal() == 1)
+
+    @classmethod
+    def from_numpy(cls, arr: Any) -> "DeviceTensor | None":
+        """Allocate a device tensor and copy ``arr`` into its shared storage
+        once. Returns None when the device-tensor ABI is unavailable."""
+        import numpy as _np
+        rt = _apple_gpu_devtensor_api()
+        if rt is None:
+            return None
+        a = _np.ascontiguousarray(arr)
+        handle = rt.ts_dev_alloc(ctypes.c_int64(int(a.nbytes)))
+        if not handle:
+            return None
+        rt.ts_dev_upload(handle, a.ctypes.data_as(ctypes.c_void_p),
+                         ctypes.c_int64(int(a.nbytes)))
+        return cls(handle, a.shape, a.dtype, rt)
+
+    @classmethod
+    def empty(cls, shape: Any, dtype: Any) -> "DeviceTensor | None":
+        import numpy as _np
+        rt = _apple_gpu_devtensor_api()
+        if rt is None:
+            return None
+        dt = _np.dtype(dtype)
+        nbytes = dt.itemsize
+        for s in shape:
+            nbytes *= int(s)
+        handle = rt.ts_dev_alloc(ctypes.c_int64(int(nbytes)))
+        if not handle:
+            return None
+        return cls(handle, shape, dt, rt)
+
+    def numpy(self) -> Any:
+        """Zero-copy numpy view over the shared storage (no download). Valid
+        only while the handle is alive."""
+        import numpy as _np
+        if self._freed:
+            raise RuntimeError("DeviceTensor used after free()")
+        ptr = self._rt.ts_dev_contents(self._handle)
+        buf = (ctypes.c_byte * self.nbytes).from_address(int(ptr))
+        return _np.frombuffer(memoryview(buf), dtype=self.dtype).reshape(self.shape)
+
+    def copy_to_host(self) -> Any:
+        """A standalone host copy that outlives the handle."""
+        return self.numpy().copy()
+
+    @property
+    def handle(self) -> Any:
+        """The raw `void*` handle (for handle-taking kernels in R1)."""
+        return self._handle
+
+    def free(self) -> None:
+        if not self._freed and self._handle:
+            self._rt.ts_dev_free(self._handle)
+            self._freed = True
+            self._handle = None
+
+    def __del__(self) -> None:
+        try:
+            self.free()
+        except Exception:
+            pass
+
+    def __repr__(self) -> str:
+        loc = "metal" if DeviceTensor.is_metal() else "host"
+        return (f"DeviceTensor(shape={self.shape}, dtype={self.dtype.name}, "
+                f"{loc}, freed={self._freed})")
+
+
 def _load_apple_gpu_runtime() -> ctypes.CDLL:
     """Phase 8.3: locate or compile the apple_gpu runtime shared library.
 

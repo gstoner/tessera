@@ -17,6 +17,34 @@
 
 #if !defined(__APPLE__)
 
+#include <cstdlib>
+
+// R0 — persistent device-tensor handle, non-Apple reference. Backed by plain
+// host memory (no Metal); ts_dev_contents returns that pointer so the Python
+// DeviceTensor behaves identically (zero-copy numpy view), just on the CPU.
+struct TsDeviceTensor {
+  void* data;
+  int64_t nbytes;
+};
+extern "C" TsDeviceTensor* ts_dev_alloc(int64_t nbytes) {
+  if (nbytes <= 0) return nullptr;
+  void* p = std::calloc(1, static_cast<std::size_t>(nbytes));
+  if (!p) return nullptr;
+  return new TsDeviceTensor{p, nbytes};
+}
+extern "C" void* ts_dev_contents(TsDeviceTensor* t) { return t ? t->data : nullptr; }
+extern "C" int64_t ts_dev_nbytes(TsDeviceTensor* t) { return t ? t->nbytes : 0; }
+extern "C" void ts_dev_upload(TsDeviceTensor* t, const void* src, int64_t n) {
+  if (t && src && n > 0 && n <= t->nbytes) std::memcpy(t->data, src, static_cast<std::size_t>(n));
+}
+extern "C" void ts_dev_download(TsDeviceTensor* t, void* dst, int64_t n) {
+  if (t && dst && n > 0 && n <= t->nbytes) std::memcpy(dst, t->data, static_cast<std::size_t>(n));
+}
+extern "C" void ts_dev_free(TsDeviceTensor* t) {
+  if (t) { std::free(t->data); delete t; }
+}
+extern "C" int32_t ts_dev_is_metal(void) { return 0; }
+
 namespace {
 
 inline void reference_gemm_f32(const float* A, const float* B, float* C,

@@ -59,6 +59,16 @@ struct MetalDeviceContext {
   std::unordered_map<std::string, id<MTLComputePipelineState>> kernel_cache;
   std::mutex                                                   kernel_cache_mu;
 
+  // Metal 4 lane caches — the MTL4 command queue, the MTL4 compiler, and the
+  // MTL4-compiled compute pipelines (keyed by msl_source + entry_point) are all
+  // created lazily under @available(macOS 26.0) and reused across calls, so the
+  // ~ms MSL+pipeline compile cost is paid once instead of per dispatch. The
+  // pipeline state type is the shared id<MTLComputePipelineState>.
+  std::unordered_map<std::string, id<MTLComputePipelineState>> mtl4_pipeline_cache;
+  std::mutex                                                   mtl4_mu;
+  id                                                           mtl4_queue;     // id<MTL4CommandQueue>
+  id                                                           mtl4_compiler;  // id<MTL4Compiler>
+
   // 2026-05-17 — Metal buffer pool.  Each dispatch helper used to
   // call ``[device newBufferWithBytes:...]`` and let the buffer
   // deallocate at the end of the @autoreleasepool.  Profiling
@@ -638,6 +648,58 @@ id<MTLComputePipelineState> compile_msl_kernel(MetalDeviceContext &ctx,
   if (it != ctx.kernel_cache.end()) return it->second;
   ctx.kernel_cache.emplace(std::move(key), pso);
   return pso;
+}
+
+// Metal 4 lane — cached MTL4 compute pipeline (MSL 4.0 source compiled via the
+// MTL4Compiler). Mirrors compile_msl_kernel but for the MTL4 path; the MSL
+// compile + pipeline build are paid once per (source, entry) and reused.
+API_AVAILABLE(macos(26.0), ios(26.0))
+id<MTLComputePipelineState> compile_mtl4_pipeline(MetalDeviceContext &ctx,
+                                                  NSString *source,
+                                                  NSString *entry) {
+  std::string key;
+  key.append([source UTF8String]);
+  key.push_back('\x1f');
+  key.append([entry UTF8String]);
+  {
+    std::lock_guard<std::mutex> lock(ctx.mtl4_mu);
+    auto it = ctx.mtl4_pipeline_cache.find(key);
+    if (it != ctx.mtl4_pipeline_cache.end()) return it->second;
+  }
+  NSError *err = nil;
+  MTLCompileOptions *co = [[MTLCompileOptions alloc] init];
+  co.languageVersion = MTLLanguageVersion4_0;
+  id<MTLLibrary> lib = [ctx.device newLibraryWithSource:source options:co error:&err];
+  if (!lib) return nil;
+  MTL4LibraryFunctionDescriptor *fd = [[MTL4LibraryFunctionDescriptor alloc] init];
+  fd.name = entry;
+  fd.library = lib;
+  MTL4ComputePipelineDescriptor *pd = [[MTL4ComputePipelineDescriptor alloc] init];
+  pd.computeFunctionDescriptor = fd;
+  id<MTL4Compiler> compiler;
+  {
+    std::lock_guard<std::mutex> lock(ctx.mtl4_mu);
+    if (!ctx.mtl4_compiler)
+      ctx.mtl4_compiler = [ctx.device newCompilerWithDescriptor:[[MTL4CompilerDescriptor alloc] init] error:&err];
+    compiler = (id<MTL4Compiler>)ctx.mtl4_compiler;
+  }
+  if (!compiler) return nil;
+  id<MTLComputePipelineState> pso =
+      [compiler newComputePipelineStateWithDescriptor:pd compilerTaskOptions:nil error:&err];
+  if (!pso) return nil;
+  std::lock_guard<std::mutex> lock(ctx.mtl4_mu);
+  auto it = ctx.mtl4_pipeline_cache.find(key);
+  if (it != ctx.mtl4_pipeline_cache.end()) return it->second;
+  ctx.mtl4_pipeline_cache.emplace(std::move(key), pso);
+  return pso;
+}
+
+// Metal 4 lane — one MTL4 command queue per device, created lazily + reused.
+API_AVAILABLE(macos(26.0), ios(26.0))
+id<MTL4CommandQueue> mtl4_shared_queue(MetalDeviceContext &ctx) {
+  std::lock_guard<std::mutex> lock(ctx.mtl4_mu);
+  if (!ctx.mtl4_queue) ctx.mtl4_queue = [ctx.device newMTL4CommandQueue];
+  return (id<MTL4CommandQueue>)ctx.mtl4_queue;
 }
 
 bool dispatch_rope_msl(MetalDeviceContext &ctx, const float* X,
@@ -8598,23 +8660,9 @@ extern "C" int32_t tessera_apple_gpu_mtl4_scan_f32(const float *Wh,
   @autoreleasepool {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       id<MTLDevice> dev = ctx.device;
-      // 1. MSL 4.0 library + MTL4 compute pipeline.
-      MTLCompileOptions *co = [[MTLCompileOptions alloc] init];
-      co.languageVersion = MTLLanguageVersion4_0;
       NSError *err = nil;
-      id<MTLLibrary> lib = [dev newLibraryWithSource:kMTL4ScanMSL options:co error:&err];
-      if (!lib) return 0;
-      MTL4LibraryFunctionDescriptor *fd = [[MTL4LibraryFunctionDescriptor alloc] init];
-      fd.name = @"cf_scan_msl";
-      fd.library = lib;
-      MTL4ComputePipelineDescriptor *pd = [[MTL4ComputePipelineDescriptor alloc] init];
-      pd.computeFunctionDescriptor = fd;
-      id<MTL4Compiler> compiler = [dev newCompilerWithDescriptor:[[MTL4CompilerDescriptor alloc] init] error:&err];
-      if (!compiler) return 0;
-      id<MTLComputePipelineState> pso =
-          [compiler newComputePipelineStateWithDescriptor:pd
-                                      compilerTaskOptions:nil
-                                                    error:&err];
+      // 1. Cached MTL4 compute pipeline (compiled once per source/entry).
+      id<MTLComputePipelineState> pso = compile_mtl4_pipeline(ctx, kMTL4ScanMSL, @"cf_scan_msl");
       if (!pso) return 0;
 
       // 2. Shared buffers (unified memory — no copies).
@@ -8643,8 +8691,8 @@ extern "C" int32_t tessera_apple_gpu_mtl4_scan_f32(const float *Wh,
       id<MTLBuffer> bufs[6] = {bWh, bWx, bXs, bIn, bYs, bDm};
       for (int i = 0; i < 6; ++i) [at setAddress:bufs[i].gpuAddress atIndex:i];
 
-      // 5. MTL4 command model: queue / allocator / command buffer / encoder.
-      id<MTL4CommandQueue> queue = [dev newMTL4CommandQueue];
+      // 5. MTL4 command model: cached queue + per-call allocator/buffer/encoder.
+      id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
       id<MTL4CommandAllocator> alloc = [dev newCommandAllocator];
       id<MTL4CommandBuffer> cb = [dev newCommandBuffer];
       if (!queue || !alloc || !cb) return 0;
@@ -8663,7 +8711,11 @@ extern "C" int32_t tessera_apple_gpu_mtl4_scan_f32(const float *Wh,
       [queue commit:cbs count:1];
       id<MTLSharedEvent> ev = [dev newSharedEvent];
       [queue signalEvent:ev value:1];
-      if (![ev waitUntilSignaledValue:1 timeoutMS:10000]) return 0;
+      bool done = [ev waitUntilSignaledValue:1 timeoutMS:10000];
+      // The queue is cached + shared, so its per-call residency set must be
+      // removed (queue residency-set limit is 32).
+      [queue removeResidencySet:res];
+      if (!done) return 0;
 
       std::memcpy(ys, [bYs contents], (size_t)T * d * 4);
       return 1;
@@ -8718,22 +8770,8 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float *A,
   @autoreleasepool {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       id<MTLDevice> dev = ctx.device;
-      MTLCompileOptions *co = [[MTLCompileOptions alloc] init];
-      co.languageVersion = MTLLanguageVersion4_0;
       NSError *err = nil;
-      id<MTLLibrary> lib = [dev newLibraryWithSource:kMTL4MatmulMSL options:co error:&err];
-      if (!lib) return 0;
-      MTL4LibraryFunctionDescriptor *fd = [[MTL4LibraryFunctionDescriptor alloc] init];
-      fd.name = @"mtl4_matmul_sg";
-      fd.library = lib;
-      MTL4ComputePipelineDescriptor *pd = [[MTL4ComputePipelineDescriptor alloc] init];
-      pd.computeFunctionDescriptor = fd;
-      id<MTL4Compiler> compiler = [dev newCompilerWithDescriptor:[[MTL4CompilerDescriptor alloc] init] error:&err];
-      if (!compiler) return 0;
-      id<MTLComputePipelineState> pso =
-          [compiler newComputePipelineStateWithDescriptor:pd
-                                      compilerTaskOptions:nil
-                                                    error:&err];
+      id<MTLComputePipelineState> pso = compile_mtl4_pipeline(ctx, kMTL4MatmulMSL, @"mtl4_matmul_sg");
       if (!pso) return 0;
 
       MTLResourceOptions ro = MTLResourceStorageModeShared;
@@ -8757,7 +8795,7 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float *A,
       id<MTLBuffer> bufs[4] = {bA, bB, bC, bD};
       for (int i = 0; i < 4; ++i) [at setAddress:bufs[i].gpuAddress atIndex:i];
 
-      id<MTL4CommandQueue> queue = [dev newMTL4CommandQueue];
+      id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
       id<MTL4CommandAllocator> alloc = [dev newCommandAllocator];
       id<MTL4CommandBuffer> cb = [dev newCommandBuffer];
       if (!queue || !alloc || !cb) return 0;
@@ -8776,7 +8814,9 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float *A,
       [queue commit:cbs count:1];
       id<MTLSharedEvent> ev = [dev newSharedEvent];
       [queue signalEvent:ev value:1];
-      if (![ev waitUntilSignaledValue:1 timeoutMS:10000]) return 0;
+      bool done = [ev waitUntilSignaledValue:1 timeoutMS:10000];
+      [queue removeResidencySet:res];   // cached/shared queue — limit 32
+      if (!done) return 0;
 
       std::memcpy(C, [bC contents], (size_t)M * N * 4);
       return 1;

@@ -412,8 +412,17 @@ _APPLE_GPU_MPSGRAPH_OPS: frozenset[str] = frozenset({
     "tessera.silu_mul",
 })
 
+# 2026-05-29 — Tier-2 projection ops routed through the matmul / bmm lane:
+# linear_general (x @ W (+ bias), last-axis contraction) and qkv_projection
+# (x @ W_qkv then split-3).
+_APPLE_GPU_PROJECTION_OPS: frozenset[str] = frozenset({
+    "tessera.linear_general",
+    "tessera.qkv_projection",
+})
+
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
+    | _APPLE_GPU_PROJECTION_OPS
 )
 
 

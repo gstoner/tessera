@@ -1876,8 +1876,13 @@ _APPLE_GPU_MPSGRAPH_OPS = (
     | frozenset(_APPLE_GPU_ROWOP_KINDS)
     | frozenset({"tessera.silu_mul"})
 )
+# 2026-05-29 — Tier-2 projections routed through the matmul / bmm lane.
+_APPLE_GPU_PROJECTION_OPS = frozenset(
+    {"tessera.linear_general", "tessera.qkv_projection"}
+)
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
+    | _APPLE_GPU_PROJECTION_OPS
 )
 
 
@@ -2061,6 +2066,17 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             )
         elif op_name == "tessera.silu_mul":
             values[str(result)] = _apple_gpu_dispatch_silu_mul(
+                [_as_numpy(values[name]) for name in operand_names],
+                np,
+            )
+        elif op_name == "tessera.linear_general":
+            values[str(result)] = _apple_gpu_dispatch_linear_general(
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name == "tessera.qkv_projection":
+            values[str(result)] = _apple_gpu_dispatch_qkv_projection(
                 [_as_numpy(values[name]) for name in operand_names],
                 np,
             )
@@ -2376,6 +2392,44 @@ def _apple_gpu_dispatch_bmm(a: Any, b: Any, np: Any) -> Any:
         fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         sym(fp(a2), fp(b2), fp(out), *dims)
     return out.reshape(out_shape).astype(out_dtype)
+
+
+def _apple_gpu_dispatch_linear_general(operands: list[Any], kwargs: dict,
+                                       np: Any) -> Any:
+    """tessera.linear_general — axis-flexible linear projection. The common
+    last-axis contraction with a rank-2 weight (x[..., K] @ W[K, N] (+ bias))
+    routes through the GPU matmul / bmm lane; the general tensordot case falls
+    back to a numpy reference."""
+    if len(operands) < 2:
+        raise ValueError("linear_general requires (x, W[, bias])")
+    x = np.asarray(operands[0])
+    W = np.asarray(operands[1])
+    bias = np.asarray(operands[2]) if len(operands) > 2 else None
+    axis = kwargs.get("axis", -1)
+
+    if isinstance(axis, int):
+        ax = axis if axis >= 0 else x.ndim + axis
+        if ax == x.ndim - 1 and W.ndim == 2 and x.shape[-1] == W.shape[0]:
+            y = np.asarray(
+                _apple_gpu_dispatch_matmul("tessera.matmul", [x, W], np))
+            return y if bias is None else (y + bias)
+        axes = (ax,)
+    else:
+        axes = tuple(a if a >= 0 else x.ndim + a for a in axis)
+    y = np.tensordot(x, W, axes=(axes, tuple(range(len(axes)))))
+    return y if bias is None else (y + bias)
+
+
+def _apple_gpu_dispatch_qkv_projection(operands: list[Any], np: Any) -> Any:
+    """tessera.qkv_projection — y = x @ W_qkv, split into (Q, K, V) along the
+    last axis. The matmul runs on the GPU matmul / bmm lane; the split is host
+    glue."""
+    if len(operands) < 2:
+        raise ValueError("qkv_projection requires (x, W_qkv)")
+    x = np.asarray(operands[0])
+    W = np.asarray(operands[1])
+    y = np.asarray(_apple_gpu_dispatch_matmul("tessera.matmul", [x, W], np))
+    return tuple(np.split(y, 3, axis=-1))
 
 
 def _apple_gpu_mps_matmul_f32() -> Any:

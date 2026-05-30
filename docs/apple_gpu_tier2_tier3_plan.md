@@ -29,10 +29,10 @@
 
 | Order | Op(s) | Approach | Effort |
 |---|---|---|---|
-| **1** | **`bmm` (batched / rank-3 matmul)** — keystone | MPSGraph `matrixMultiplication` handles leading batch dims **and broadcasting** (needed for GQA `[B,H,M,K] @ [B,1,K,N]`). New `tessera_apple_gpu_bmm_{f32,f16,bf16}` symbols with a `b_broadcast` flag; reuse the cached-graph infra + buffer pool. Keep the rank-2 MPS fast path. | Med · low risk |
-| 2 | **`qkv_projection`, `linear_general`** | Thin dispatchers: reshape contracted axes → `bmm`/`matmul` → reshape. `qkv_projection` = one fused proj + host split. | Low |
-| 3 | **`multi_head_attention`** | Extend the existing `matmul_softmax_matmul` fused kernel with a **batch dim** (per-head = batch) → one dispatch instead of the MLA-proof's per-head loop. | Med |
-| 4 | **`gqa_attention`, `mqa_attention`** | flash_attn is already batched over `B`; add a **`num_kv_heads`/`group_size`** param so query head `h` reads KV group `h // (H/G)` (MQA = 1 KV head). **Ph1:** broadcast KV via `bmm` (correctness-first). **Ph2:** native KV-group indexing in the MSL kernel (bandwidth win). | Med (Ph1 Low) |
+| **1 ✅** | **`bmm` (batched / rank-3 matmul)** — keystone | **DONE** (`tessera_apple_gpu_bmm_{f32,f16}` + bf16 host-upcast, with a `b_broadcast` flag; reuses the cached-graph infra + buffer pool; rank-4+ folds to batch). `tests/unit/test_apple_gpu_bmm.py`. | Med · low risk |
+| 2 ✅ | **`qkv_projection`, `linear_general`** | **DONE** — `runtime.py` dispatchers route `tessera.linear_general` (last-axis `x@W(+bias)`) and `tessera.qkv_projection` (`x@W` then split-3) through the matmul/`bmm` lane; `_APPLE_GPU_PROJECTION_OPS` gating → `metal_runtime`. `tests/unit/test_apple_gpu_projections.py`. | Low |
+| 3 ✅ | **`multi_head_attention`** | **DONE (via bmm composition)** — a full MHA block composes from the Tier-2 ops: `qkv_projection → bmm(Q,Kᵀ)·scale → softmax → bmm(_,V) → linear_general`, batch = B·H (no per-head loop), and head_dim is unbounded (no flash_attn ≤256 limit). `tests/unit/test_apple_gpu_batched_mha.py`. A single fused batched `matmul_softmax_matmul` kernel remains a perf follow-up. | Med |
+| 4 | **`gqa_attention`, `mqa_attention`** | flash_attn is already batched over `B`; **GQA/MQA Phase-1 (repeat-KV → flash_attn) is already implemented in `nn.functional`**. Remaining: native KV-group indexing in the MSL kernel (bandwidth win, Ph2). | Med (Ph1 done) |
 | 5 | **`mla_decode` / `mla_decode_fused`** | Promote the host-reference `mla_decode_f32` symbol to a real kernel built on `bmm` (latent up-proj / absorb-K) + the existing `rope` kernel (decoupled rope) + batched attention. Phase: explicit-KV → compressed-KV → decoupled-rope. | Med–High (last) |
 
 ## Tier 3 — re-scoped around MPSGraph (the lever)

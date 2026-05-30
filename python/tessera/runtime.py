@@ -4969,6 +4969,20 @@ class DeviceTensor:
                              f"count mismatch ({cur} != {n})")
         return DeviceTensor(self._handle, shape, self.dtype, self._rt, owns=False)
 
+    def prefix_view(self, n_rows: int) -> "DeviceTensor":
+        """A **non-owning** view of the first ``n_rows`` rows of a 2-D+ buffer,
+        shape ``(n_rows, *self.shape[1:])``. The prefix starts at offset 0 and is
+        contiguous, so a growing resident KV cache can expose its populated
+        window ``[current_seq, ...]`` with **no copy** — the foundation of R4's
+        device-resident cache."""
+        if not self.shape:
+            raise ValueError("prefix_view requires a non-scalar tensor")
+        n_rows = int(n_rows)
+        if n_rows < 0 or n_rows > self.shape[0]:
+            raise ValueError(f"prefix_view {n_rows} out of range [0, {self.shape[0]}]")
+        return DeviceTensor(self._handle, (n_rows,) + self.shape[1:], self.dtype,
+                            self._rt, owns=False)
+
     @property
     def handle(self) -> Any:
         """The raw `void*` handle (for handle-taking kernels in R1)."""

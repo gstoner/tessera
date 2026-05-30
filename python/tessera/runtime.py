@@ -1897,9 +1897,11 @@ _APPLE_GPU_REDUCE_OPS = {
     "tessera.cumprod": ("scan", 1),
 }
 _APPLE_GPU_REDUCTION_OPS = frozenset(_APPLE_GPU_REDUCE_OPS)
+# 2026-05-30 — Tier-3 conv2d via the MPSGraph convolution2D node (NHWC/HWIO).
+_APPLE_GPU_CONV_OPS = frozenset({"tessera.conv2d"})
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
-    | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS
+    | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
 )
 
 
@@ -2100,6 +2102,12 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
         elif op_name in _APPLE_GPU_REDUCE_OPS:
             values[str(result)] = _apple_gpu_dispatch_reduce(
                 op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name in _APPLE_GPU_CONV_OPS:
+            values[str(result)] = _apple_gpu_dispatch_conv2d(
                 [_as_numpy(values[name]) for name in operand_names],
                 kwargs,
                 np,
@@ -2594,6 +2602,93 @@ def _apple_gpu_dispatch_reduce(op_name: str, operands: list[Any], kwargs: dict,
             full[a] = 1
         res = res.reshape(full)
     return res
+
+
+def _apple_gpu_conv2d_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_conv2d_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.POINTER(ctypes.c_float)] * 4 + [ctypes.c_int32] * 14
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_conv2d_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_conv2d_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.POINTER(ctypes.c_uint16)] * 4 + [ctypes.c_int32] * 14
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_dispatch_conv2d(operands: list[Any], kwargs: dict, np: Any) -> Any:
+    """Tier-3 2-D convolution via MPSGraph (NHWC source, HWIO weights).
+
+    X is [N, H, W, Cin]; weight is [kH, kW, Cin/groups, Cout]; optional bias is
+    [Cout]; output is [N, outH, outW, Cout]. ``stride``/``padding``/``dilation``
+    accept an int or a 2-tuple; ``groups`` defaults to 1. f32/f16 run natively;
+    bf16 runs via a host fp32 round-trip; any other dtype (or an unavailable
+    runtime) returns None so the caller falls back to the numpy reference."""
+    X = np.asarray(operands[0])
+    W = np.asarray(operands[1])
+    bias = None
+    if len(operands) > 2 and operands[2] is not None:
+        bias = np.asarray(operands[2])
+    if X.ndim != 4 or W.ndim != 4:
+        return None
+
+    def _pair(v: Any) -> tuple[int, int]:
+        if isinstance(v, (tuple, list)):
+            return int(v[0]), int(v[1])
+        return int(v), int(v)
+
+    sH, sW = _pair(kwargs.get("stride", 1))
+    pH, pW = _pair(kwargs.get("padding", 0))
+    dH, dW = _pair(kwargs.get("dilation", 1))
+    groups = int(kwargs.get("groups", 1))
+    N, H, Wd, Cin = (int(s) for s in X.shape)
+    kH, kW, cinG, Cout = (int(s) for s in W.shape)
+    if groups <= 0 or Cin % groups or Cout % groups or cinG != Cin // groups:
+        return None
+    outH = (H + 2 * pH - dH * (kH - 1) - 1) // sH + 1
+    outW = (Wd + 2 * pW - dW * (kW - 1) - 1) // sW + 1
+    if outH <= 0 or outW <= 0:
+        return None
+    out_dtype = X.dtype
+    bf16 = _bfloat16_dtype()
+    iattrs = [ctypes.c_int32(v) for v in
+              (N, H, Wd, Cin, Cout, kH, kW, sH, sW, pH, pW, dH, dW, groups)]
+
+    if out_dtype == np.float16:
+        sym = _apple_gpu_conv2d_f16()
+        if sym is None:
+            return None
+        up = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+        xh = np.ascontiguousarray(X).view(np.uint16)
+        wh = np.ascontiguousarray(W).view(np.uint16)
+        bh = (np.ascontiguousarray(bias).view(np.uint16)
+              if bias is not None else None)
+        out = np.zeros((N, outH, outW, Cout), dtype=np.uint16)
+        sym(up(xh), up(wh), up(bh) if bh is not None else None, up(out), *iattrs)
+        return out.view(np.float16)
+
+    is_bf16 = bf16 is not None and out_dtype == bf16
+    is_f32 = out_dtype == np.float32
+    if not (is_f32 or is_bf16):
+        return None
+    sym = _apple_gpu_conv2d_f32()
+    if sym is None:
+        return None
+    fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    xf = np.ascontiguousarray(X.astype(np.float32))
+    wf = np.ascontiguousarray(W.astype(np.float32))
+    bf = np.ascontiguousarray(bias.astype(np.float32)) if bias is not None else None
+    out = np.zeros((N, outH, outW, Cout), dtype=np.float32)
+    sym(fp(xf), fp(wf), fp(bf) if bf is not None else None, fp(out), *iattrs)
+    return out.astype(out_dtype)
 
 
 def _apple_gpu_flash_attn_gqa_f32() -> Any:

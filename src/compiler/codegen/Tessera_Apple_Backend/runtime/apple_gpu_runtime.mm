@@ -8783,3 +8783,200 @@ extern "C" void tessera_apple_gpu_flash_attn_gqa_bf16(
                                        D, scale, causal);
   for (size_t i = 0; i < of.size(); ++i) O[i] = gqa_f32_to_bf16(of[i]);
 }
+
+//===----------------------------------------------------------------------===//
+// conv2d — MPSGraph convolution2D (NHWC source, HWIO weights) (2026-05-30)
+//
+// Tier-3 vision primitive. Source X is [N, H, W, Cin], weights Wt are
+// [kH, kW, Cin/groups, Cout] (HWIO), optional bias is [Cout]. Output O is
+// [N, outH, outW, Cout] with
+//   outH = (H + 2*padH - dilationH*(kH-1) - 1) / strideH + 1
+//   outW = (W + 2*padW - dilationW*(kW-1) - 1) / strideW + 1
+// Compute runs in fp32 internally (f16 inputs cast up, result cast down);
+// graphs are cached by signature like the rest of the MPSGraph lane.
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+static inline int32_t conv2d_out_dim(int32_t in, int32_t k, int32_t stride,
+                                     int32_t pad, int32_t dilation) {
+  int32_t eff = dilation * (k - 1) + 1;
+  if (in + 2 * pad < eff) return 0;
+  return (in + 2 * pad - eff) / stride + 1;
+}
+
+static bool mpsg_run_conv2d(MetalDeviceContext &ctx, const void *X,
+                            const void *Wt, const void *bias, void *O, int32_t N,
+                            int32_t H, int32_t W, int32_t Cin, int32_t Cout,
+                            int32_t kH, int32_t kW, int32_t strideH,
+                            int32_t strideW, int32_t padH, int32_t padW,
+                            int32_t dilationH, int32_t dilationW, int32_t groups,
+                            MPSDataType ioType, size_t elemSize) {
+  int32_t outH = conv2d_out_dim(H, kH, strideH, padH, dilationH);
+  int32_t outW = conv2d_out_dim(W, kW, strideW, padW, dilationW);
+  if (N <= 0 || outH <= 0 || outW <= 0 || Cout <= 0 || groups <= 0) return true;
+  if (Cin % groups != 0 || Cout % groups != 0) return false;
+  @autoreleasepool {
+    size_t xBytes = (size_t)N * H * W * Cin * elemSize;
+    size_t wBytes = (size_t)kH * kW * (Cin / groups) * Cout * elemSize;
+    size_t oBytes = (size_t)N * outH * outW * Cout * elemSize;
+    size_t bBytes = (size_t)Cout * elemSize;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, xBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufW, ctx, Wt, wBytes);
+    // bias is optional: acquire its buffer from the pool when present, else a
+    // 1-element placeholder (never fed into the graph) so the RAII guard owns
+    // every Metal allocation in this dispatcher.
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, bias ? bias : Wt,
+                                    bias ? bBytes : elemSize);
+    if (!bufX || !bufW || (bias && !bufB)) return false;
+    NSArray<NSNumber *> *xShape = @[ @(N), @(H), @(W), @(Cin) ];
+    NSArray<NSNumber *> *wShape = @[ @(kH), @(kW), @(Cin / groups), @(Cout) ];
+    NSArray<NSNumber *> *bShape = @[ @(Cout) ];
+    NSString *key = [NSString
+        stringWithFormat:@"conv2d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d",
+                         (int)ioType, N, H, W, Cin, Cout, kH, kW, strideH,
+                         strideW, padH, padW, dilationH, dilationW, groups,
+                         bias ? 1 : 0];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *px, *pw, *pb = nil, *y;
+    if (entry) {
+      g = entry[0];
+      NSArray *phs = (NSArray *)entry[1];
+      px = phs[0];
+      pw = phs[1];
+      pb = (bias && phs.count > 2) ? phs[2] : nil;
+      y = entry[2];
+    } else {
+      g = [MPSGraph new];
+      px = [g placeholderWithShape:xShape dataType:ioType name:nil];
+      pw = [g placeholderWithShape:wShape dataType:ioType name:nil];
+      MPSGraphConvolution2DOpDescriptor *desc =
+          [MPSGraphConvolution2DOpDescriptor
+              descriptorWithStrideInX:strideW
+                            strideInY:strideH
+                      dilationRateInX:dilationW
+                      dilationRateInY:dilationH
+                               groups:groups
+                          paddingLeft:padW
+                         paddingRight:padW
+                           paddingTop:padH
+                        paddingBottom:padH
+                         paddingStyle:MPSGraphPaddingStyleExplicit
+                           dataLayout:MPSGraphTensorNamedDataLayoutNHWC
+                        weightsLayout:MPSGraphTensorNamedDataLayoutHWIO];
+      MPSGraphTensor *conv =
+          [g convolution2DWithSourceTensor:mpsg_up(g, px, ioType)
+                             weightsTensor:mpsg_up(g, pw, ioType)
+                                descriptor:desc
+                                      name:nil];
+      if (bias) {
+        pb = [g placeholderWithShape:bShape dataType:ioType name:nil];
+        conv = [g additionWithPrimaryTensor:conv
+                            secondaryTensor:mpsg_up(g, pb, ioType)
+                                       name:nil];
+      }
+      y = mpsg_down(g, conv, ioType);
+      NSArray *phs = bias ? @[ px, pw, pb ] : @[ px, pw ];
+      mpsg_cache_put(key, @[ g, phs, y ]);
+    }
+    MPSGraphTensorData *xd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:xShape dataType:ioType];
+    MPSGraphTensorData *wd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufW shape:wShape dataType:ioType];
+    NSMutableDictionary *feeds =
+        [@{px : xd, pw : wd} mutableCopy];
+    if (bias && pb) {
+      MPSGraphTensorData *bd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:ioType];
+      feeds[pb] = bd;
+    }
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:feeds
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:O strideBytes:nil];
+    return true;
+  }
+}
+
+static void reference_conv2d_f32(const float *X, const float *Wt,
+                                 const float *bias, float *O, int32_t N,
+                                 int32_t H, int32_t W, int32_t Cin, int32_t Cout,
+                                 int32_t kH, int32_t kW, int32_t strideH,
+                                 int32_t strideW, int32_t padH, int32_t padW,
+                                 int32_t dilationH, int32_t dilationW,
+                                 int32_t groups) {
+  int32_t outH = conv2d_out_dim(H, kH, strideH, padH, dilationH);
+  int32_t outW = conv2d_out_dim(W, kW, strideW, padW, dilationW);
+  if (outH <= 0 || outW <= 0 || groups <= 0 || Cin % groups || Cout % groups)
+    return;
+  int32_t cinG = Cin / groups;
+  int32_t coutG = Cout / groups;
+  for (int32_t n = 0; n < N; ++n)
+    for (int32_t oy = 0; oy < outH; ++oy)
+      for (int32_t ox = 0; ox < outW; ++ox)
+        for (int32_t oc = 0; oc < Cout; ++oc) {
+          int32_t grp = oc / coutG;
+          double acc = bias ? (double)bias[oc] : 0.0;
+          for (int32_t ky = 0; ky < kH; ++ky) {
+            int32_t iy = oy * strideH + ky * dilationH - padH;
+            if (iy < 0 || iy >= H) continue;
+            for (int32_t kx = 0; kx < kW; ++kx) {
+              int32_t ix = ox * strideW + kx * dilationW - padW;
+              if (ix < 0 || ix >= W) continue;
+              for (int32_t ic = 0; ic < cinG; ++ic) {
+                int32_t icAbs = grp * cinG + ic;
+                double xv = X[(((size_t)n * H + iy) * W + ix) * Cin + icAbs];
+                double wv =
+                    Wt[(((size_t)ky * kW + kx) * cinG + ic) * Cout + oc];
+                acc += xv * wv;
+              }
+            }
+          }
+          O[(((size_t)n * outH + oy) * outW + ox) * Cout + oc] = (float)acc;
+        }
+}
+
+}  // namespace
+
+extern "C" int32_t tessera_apple_gpu_conv2d_out_h(int32_t H, int32_t kH,
+                                                  int32_t strideH, int32_t padH,
+                                                  int32_t dilationH) {
+  return conv2d_out_dim(H, kH, strideH, padH, dilationH);
+}
+
+extern "C" int32_t tessera_apple_gpu_conv2d_out_w(int32_t W, int32_t kW,
+                                                  int32_t strideW, int32_t padW,
+                                                  int32_t dilationW) {
+  return conv2d_out_dim(W, kW, strideW, padW, dilationW);
+}
+
+extern "C" void tessera_apple_gpu_conv2d_f32(
+    const float *X, const float *Wt, const float *bias, float *O, int32_t N,
+    int32_t H, int32_t W, int32_t Cin, int32_t Cout, int32_t kH, int32_t kW,
+    int32_t strideH, int32_t strideW, int32_t padH, int32_t padW,
+    int32_t dilationH, int32_t dilationW, int32_t groups) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_conv2d(ctx, X, Wt, bias, O, N, H, W, Cin, Cout, kH, kW,
+                                strideH, strideW, padH, padW, dilationH,
+                                dilationW, groups, MPSDataTypeFloat32, 4))
+    return;
+  reference_conv2d_f32(X, Wt, bias, O, N, H, W, Cin, Cout, kH, kW, strideH,
+                       strideW, padH, padW, dilationH, dilationW, groups);
+}
+
+extern "C" void tessera_apple_gpu_conv2d_f16(
+    const uint16_t *X, const uint16_t *Wt, const uint16_t *bias, uint16_t *O,
+    int32_t N, int32_t H, int32_t W, int32_t Cin, int32_t Cout, int32_t kH,
+    int32_t kW, int32_t strideH, int32_t strideW, int32_t padH, int32_t padW,
+    int32_t dilationH, int32_t dilationW, int32_t groups) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_conv2d(ctx, X, Wt, bias, O, N, H, W, Cin, Cout, kH, kW,
+                                strideH, strideW, padH, padW, dilationH,
+                                dilationW, groups, MPSDataTypeFloat16, 2))
+    return;
+  int32_t outH = conv2d_out_dim(H, kH, strideH, padH, dilationH);
+  int32_t outW = conv2d_out_dim(W, kW, strideW, padW, dilationW);
+  if (outH > 0 && outW > 0)
+    std::memset(O, 0, (size_t)N * outH * outW * Cout * 2);
+}

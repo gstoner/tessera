@@ -1225,4 +1225,77 @@ extern "C" void tessera_apple_gpu_flash_attn_gqa_bf16(const uint16_t* Q, const u
   for (std::size_t i = 0; i < of.size(); ++i) O[i] = gqa_f32_to_bf16_stub(of[i]);
 }
 
+// ---- conv2d non-Apple reference (NHWC source, HWIO weights) (2026-05-30) ----
+static inline int32_t conv2d_out_dim_stub(int32_t in, int32_t k, int32_t stride,
+                                          int32_t pad, int32_t dilation) {
+  int32_t eff = dilation * (k - 1) + 1;
+  if (in + 2 * pad < eff) return 0;
+  return (in + 2 * pad - eff) / stride + 1;
+}
+extern "C" int32_t tessera_apple_gpu_conv2d_out_h(int32_t H, int32_t kH,
+                                                  int32_t strideH, int32_t padH,
+                                                  int32_t dilationH) {
+  return conv2d_out_dim_stub(H, kH, strideH, padH, dilationH);
+}
+extern "C" int32_t tessera_apple_gpu_conv2d_out_w(int32_t W, int32_t kW,
+                                                  int32_t strideW, int32_t padW,
+                                                  int32_t dilationW) {
+  return conv2d_out_dim_stub(W, kW, strideW, padW, dilationW);
+}
+static void reference_conv2d_f32_stub(const float* X, const float* Wt,
+                                      const float* bias, float* O, int32_t N,
+                                      int32_t H, int32_t W, int32_t Cin,
+                                      int32_t Cout, int32_t kH, int32_t kW,
+                                      int32_t strideH, int32_t strideW,
+                                      int32_t padH, int32_t padW,
+                                      int32_t dilationH, int32_t dilationW,
+                                      int32_t groups) {
+  int32_t outH = conv2d_out_dim_stub(H, kH, strideH, padH, dilationH);
+  int32_t outW = conv2d_out_dim_stub(W, kW, strideW, padW, dilationW);
+  if (outH <= 0 || outW <= 0 || groups <= 0 || Cin % groups || Cout % groups)
+    return;
+  int32_t cinG = Cin / groups, coutG = Cout / groups;
+  for (int32_t n = 0; n < N; ++n)
+    for (int32_t oy = 0; oy < outH; ++oy)
+      for (int32_t ox = 0; ox < outW; ++ox)
+        for (int32_t oc = 0; oc < Cout; ++oc) {
+          int32_t grp = oc / coutG;
+          double acc = bias ? static_cast<double>(bias[oc]) : 0.0;
+          for (int32_t ky = 0; ky < kH; ++ky) {
+            int32_t iy = oy * strideH + ky * dilationH - padH;
+            if (iy < 0 || iy >= H) continue;
+            for (int32_t kx = 0; kx < kW; ++kx) {
+              int32_t ix = ox * strideW + kx * dilationW - padW;
+              if (ix < 0 || ix >= W) continue;
+              for (int32_t ic = 0; ic < cinG; ++ic) {
+                int32_t icAbs = grp * cinG + ic;
+                double xv = X[(((std::size_t)n * H + iy) * W + ix) * Cin + icAbs];
+                double wv = Wt[(((std::size_t)ky * kW + kx) * cinG + ic) * Cout + oc];
+                acc += xv * wv;
+              }
+            }
+          }
+          O[(((std::size_t)n * outH + oy) * outW + ox) * Cout + oc] =
+              static_cast<float>(acc);
+        }
+}
+extern "C" void tessera_apple_gpu_conv2d_f32(
+    const float* X, const float* Wt, const float* bias, float* O, int32_t N,
+    int32_t H, int32_t W, int32_t Cin, int32_t Cout, int32_t kH, int32_t kW,
+    int32_t strideH, int32_t strideW, int32_t padH, int32_t padW,
+    int32_t dilationH, int32_t dilationW, int32_t groups) {
+  reference_conv2d_f32_stub(X, Wt, bias, O, N, H, W, Cin, Cout, kH, kW, strideH,
+                            strideW, padH, padW, dilationH, dilationW, groups);
+}
+extern "C" void tessera_apple_gpu_conv2d_f16(
+    const uint16_t*, const uint16_t*, const uint16_t*, uint16_t* O, int32_t N,
+    int32_t H, int32_t W, int32_t, int32_t Cout, int32_t kH, int32_t kW,
+    int32_t strideH, int32_t strideW, int32_t padH, int32_t padW,
+    int32_t dilationH, int32_t dilationW, int32_t) {
+  int32_t outH = conv2d_out_dim_stub(H, kH, strideH, padH, dilationH);
+  int32_t outW = conv2d_out_dim_stub(W, kW, strideW, padW, dilationW);
+  if (outH > 0 && outW > 0)
+    std::memset(O, 0, static_cast<std::size_t>(N) * outH * outW * Cout * 2);
+}
+
 #endif // !__APPLE__

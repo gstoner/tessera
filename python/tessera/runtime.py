@@ -1880,9 +1880,26 @@ _APPLE_GPU_MPSGRAPH_OPS = (
 _APPLE_GPU_PROJECTION_OPS = frozenset(
     {"tessera.linear_general", "tessera.qkv_projection"}
 )
+# 2026-05-29 — Tier-3 reductions / scans via the MPSGraph reduce lane.
+# op_name -> (kind, op_code); kinds: "reduce" (scalar per row), "arg" (int
+# index), "scan" (cumulative, same shape).
+_APPLE_GPU_REDUCE_OPS = {
+    "tessera.reduce": ("reduce", 0),   # sum
+    "tessera.mean": ("reduce", 1),
+    "tessera.amax": ("reduce", 2),
+    "tessera.amin": ("reduce", 3),
+    "tessera.prod": ("reduce", 4),
+    "tessera.var": ("reduce", 5),
+    "tessera.std": ("reduce", 6),
+    "tessera.argmax": ("arg", 0),
+    "tessera.argmin": ("arg", 1),
+    "tessera.cumsum": ("scan", 0),
+    "tessera.cumprod": ("scan", 1),
+}
+_APPLE_GPU_REDUCTION_OPS = frozenset(_APPLE_GPU_REDUCE_OPS)
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
-    | _APPLE_GPU_PROJECTION_OPS
+    | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS
 )
 
 
@@ -2078,6 +2095,13 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
         elif op_name == "tessera.qkv_projection":
             values[str(result)] = _apple_gpu_dispatch_qkv_projection(
                 [_as_numpy(values[name]) for name in operand_names],
+                np,
+            )
+        elif op_name in _APPLE_GPU_REDUCE_OPS:
+            values[str(result)] = _apple_gpu_dispatch_reduce(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
                 np,
             )
         else:
@@ -2430,6 +2454,146 @@ def _apple_gpu_dispatch_qkv_projection(operands: list[Any], np: Any) -> Any:
     W = np.asarray(operands[1])
     y = np.asarray(_apple_gpu_dispatch_matmul("tessera.matmul", [x, W], np))
     return tuple(np.split(y, 3, axis=-1))
+
+
+def _apple_gpu_mpsgraph_reduce_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_reduce_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.c_int32, ctypes.POINTER(ctypes.c_float),
+                    ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_mpsgraph_argreduce_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_argreduce_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.c_int32, ctypes.POINTER(ctypes.c_float),
+                    ctypes.POINTER(ctypes.c_int32), ctypes.c_int32, ctypes.c_int32]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_mpsgraph_scan_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_scan_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.c_int32, ctypes.POINTER(ctypes.c_float),
+                    ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_dispatch_reduce(op_name: str, operands: list[Any], kwargs: dict,
+                               np: Any) -> Any:
+    """Reductions / scans via the MPSGraph lane. Arbitrary axis/keepdims are
+    folded to a [rows, cols] last-axis reduction by transposing the reduced
+    axes to the end. f16/bf16 upcast to f32 (fp32 reduction numerics). Falls
+    back to numpy for non-float dtypes or when Metal is unavailable."""
+    x = np.asarray(operands[0])
+    kind, op = _APPLE_GPU_REDUCE_OPS[op_name]
+    axis = kwargs.get("axis", -1 if kind == "scan" else None)
+    keepdims = bool(kwargs.get("keepdims", False))
+    ddof = int(kwargs.get("ddof", 0))
+    out_dtype = x.dtype
+    bf16 = _bfloat16_dtype()
+    is_float = (x.dtype in (np.float32, np.float16)
+                or (bf16 is not None and x.dtype == bf16))
+    fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+
+    def _ref() -> Any:
+        if kind == "reduce":
+            f = {0: np.sum, 1: np.mean, 2: np.amax, 3: np.amin, 4: np.prod}.get(op)
+            if f is not None:
+                return f(x, axis=axis, keepdims=keepdims)
+            if op == 5:
+                return np.var(x, axis=axis, keepdims=keepdims, ddof=ddof)
+            return np.std(x, axis=axis, keepdims=keepdims, ddof=ddof)
+        if kind == "arg":
+            r = (np.argmax if op == 0 else np.argmin)(x, axis=axis)
+            return np.expand_dims(r, axis) if (keepdims and axis is not None) else r
+        return (np.cumsum if op == 0 else np.cumprod)(x, axis=axis)
+
+    if not is_float or x.ndim == 0:
+        return _ref()
+    xf = np.ascontiguousarray(x.astype(np.float32))
+    n = x.ndim
+
+    if kind == "scan":
+        ax = axis if axis is not None else -1
+        ax = ax if ax >= 0 else n + ax
+        perm = [i for i in range(n) if i != ax] + [ax]
+        inv = list(np.argsort(perm))
+        xt = np.ascontiguousarray(np.transpose(xf, perm))
+        inner = int(xt.shape[-1])
+        outer = int(xt.size // inner) if inner else 0
+        sym = _apple_gpu_mpsgraph_scan_f32()
+        if sym is None:
+            return _ref()
+        out = np.empty((outer, inner), np.float32)
+        sym(ctypes.c_int32(op), fp(xt.reshape(outer, inner)), fp(out),
+            ctypes.c_int32(outer), ctypes.c_int32(inner))
+        res = np.transpose(out.reshape(xt.shape), inv)
+        return res.astype(out_dtype)
+
+    # reduce / arg: normalize the reduced axes.
+    if axis is None:
+        axes = tuple(range(n))
+    elif isinstance(axis, int):
+        axes = (axis if axis >= 0 else n + axis,)
+    else:
+        axes = tuple(a if a >= 0 else n + a for a in axis)
+    if kind == "arg" and len(axes) != 1 and axis is not None:
+        return _ref()
+    kept = [i for i in range(n) if i not in axes]
+    perm = kept + list(axes)
+    xt = np.ascontiguousarray(np.transpose(xf, perm))
+    inner = 1
+    for a in axes:
+        inner *= int(x.shape[a])
+    outer = int(xt.size // inner) if inner else 0
+    kept_shape = tuple(int(x.shape[i]) for i in kept)
+
+    if kind == "reduce":
+        sym = _apple_gpu_mpsgraph_reduce_f32()
+        if sym is None:
+            return _ref()
+        out = np.empty(max(outer, 1), np.float32)
+        sym(ctypes.c_int32(op), fp(xt.reshape(outer, inner)), fp(out),
+            ctypes.c_int32(outer), ctypes.c_int32(inner))
+        if op in (5, 6) and ddof != 0 and inner > ddof:
+            factor = inner / (inner - ddof)
+            out = out * (factor if op == 5 else np.sqrt(factor))
+        res = out.reshape(kept_shape) if kept_shape else out.reshape(())
+        if keepdims:
+            full = [int(s) for s in x.shape]
+            for a in axes:
+                full[a] = 1
+            res = res.reshape(full)
+        return res.astype(out_dtype)
+
+    # arg
+    sym = _apple_gpu_mpsgraph_argreduce_f32()
+    if sym is None:
+        return _ref()
+    out = np.empty(max(outer, 1), np.int32)
+    sym(ctypes.c_int32(op),
+        fp(np.ascontiguousarray(xt.reshape(outer, inner))),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+        ctypes.c_int32(outer), ctypes.c_int32(inner))
+    res = out.astype(np.int64)
+    res = res.reshape(kept_shape) if kept_shape else res.reshape(())
+    if keepdims and axis is not None:
+        full = [int(s) for s in x.shape]
+        for a in axes:
+            full[a] = 1
+        res = res.reshape(full)
+    return res
 
 
 def _apple_gpu_mps_matmul_f32() -> Any:

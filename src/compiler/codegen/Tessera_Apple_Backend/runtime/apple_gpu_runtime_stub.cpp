@@ -1083,4 +1083,43 @@ extern "C" void tessera_apple_gpu_bmm_f16(const uint16_t*, const uint16_t*,
   std::memset(O, 0, static_cast<std::size_t>(batch) * M * N * 2);
 }
 
+// ---- Tier-3 reduction lane non-Apple reference (2026-05-29) ----------------
+extern "C" void tessera_apple_gpu_mpsgraph_reduce_f32(int32_t op, const float* x,
+                                                      float* out, int32_t rows,
+                                                      int32_t cols) {
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* row = x + static_cast<std::size_t>(r) * cols;
+    double acc;
+    switch (op) {
+      case 0: case 1: { double s = 0; for (int32_t c = 0; c < cols; ++c) s += row[c]; acc = op == 1 ? s / cols : s; break; }
+      case 2: { double m = row[0]; for (int32_t c = 1; c < cols; ++c) m = row[c] > m ? row[c] : m; acc = m; break; }
+      case 3: { double m = row[0]; for (int32_t c = 1; c < cols; ++c) m = row[c] < m ? row[c] : m; acc = m; break; }
+      case 4: { double p = 1; for (int32_t c = 0; c < cols; ++c) p *= row[c]; acc = p; break; }
+      default: { double s = 0; for (int32_t c = 0; c < cols; ++c) s += row[c]; double m = s / cols; double v = 0; for (int32_t c = 0; c < cols; ++c) { double d = row[c] - m; v += d * d; } v /= cols; acc = op == 6 ? std::sqrt(v) : v; break; }
+    }
+    out[r] = static_cast<float>(acc);
+  }
+}
+extern "C" void tessera_apple_gpu_mpsgraph_argreduce_f32(int32_t op, const float* x,
+                                                         int32_t* out, int32_t rows,
+                                                         int32_t cols) {
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* row = x + static_cast<std::size_t>(r) * cols;
+    int32_t best = 0;
+    for (int32_t c = 1; c < cols; ++c)
+      if ((op == 0 && row[c] > row[best]) || (op == 1 && row[c] < row[best])) best = c;
+    out[r] = best;
+  }
+}
+extern "C" void tessera_apple_gpu_mpsgraph_scan_f32(int32_t op, const float* x,
+                                                    float* out, int32_t rows,
+                                                    int32_t cols) {
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* row = x + static_cast<std::size_t>(r) * cols;
+    float* o = out + static_cast<std::size_t>(r) * cols;
+    double acc = op == 1 ? 1.0 : 0.0;
+    for (int32_t c = 0; c < cols; ++c) { acc = op == 1 ? acc * row[c] : acc + row[c]; o[c] = static_cast<float>(acc); }
+  }
+}
+
 #endif // !__APPLE__

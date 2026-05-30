@@ -420,9 +420,16 @@ _APPLE_GPU_PROJECTION_OPS: frozenset[str] = frozenset({
     "tessera.qkv_projection",
 })
 
+# 2026-05-29 — Tier-3 reductions / scans via the MPSGraph reduce lane.
+_APPLE_GPU_REDUCTION_OPS: frozenset[str] = frozenset({
+    "tessera.reduce", "tessera.mean", "tessera.amax", "tessera.amin",
+    "tessera.prod", "tessera.var", "tessera.std", "tessera.argmax",
+    "tessera.argmin", "tessera.cumsum", "tessera.cumprod",
+})
+
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
-    | _APPLE_GPU_PROJECTION_OPS
+    | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS
 )
 
 

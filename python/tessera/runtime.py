@@ -2607,13 +2607,36 @@ def _apple_gpu_flash_attn_gqa_f32() -> Any:
     return sym
 
 
+def _apple_gpu_flash_attn_gqa_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_flash_attn_gqa_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.POINTER(ctypes.c_uint16)] * 4 + [ctypes.c_int32] * 6 + [
+        ctypes.c_float, ctypes.c_int32]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_flash_attn_gqa_bf16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_flash_attn_gqa_bf16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.POINTER(ctypes.c_uint16)] * 4 + [ctypes.c_int32] * 6 + [
+        ctypes.c_float, ctypes.c_int32]
+    sym.restype = None
+    return sym
+
+
 def _apple_gpu_dispatch_gqa(Q: Any, K: Any, V: Any, num_q_heads: int,
                             num_kv_heads: int, np: Any, scale: float | None = None,
                             causal: bool = False) -> Any:
     """Native GQA/MQA flash attention with KV-group indexing (no repeated KV).
     Q is [..., q_heads, Sq, D]; K/V are [..., kv_heads, Sk, D] (kv_heads <
     q_heads). The leading dims fold to the batch; query head h reads KV group
-    h // (q_heads/kv_heads). f32 native; f16/bf16 upcast to f32. Returns the
+    h // (q_heads/kv_heads). f32/f16 run natively; bf16 runs natively via a
+    fp32-conversion kernel; any other float dtype upcasts to f32. Returns the
     attention output shaped like Q, or None (caller falls back) when the shape /
     dtype is unsupported."""
     import math as _math
@@ -2633,6 +2656,35 @@ def _apple_gpu_dispatch_gqa(Q: Any, K: Any, V: Any, num_q_heads: int,
     Gkv = int(np.prod(K.shape[:-2]))  # total kv heads
     if Bq != (Bq // num_q_heads) * num_q_heads or Gkv != (Bq // num_q_heads) * num_kv_heads:
         return None
+    sc = float(scale) if scale is not None else 1.0 / _math.sqrt(D)
+
+    # ml_dtypes.bfloat16 is the bf16 boundary dtype when available.
+    try:
+        import ml_dtypes as _ml_dtypes
+        _bf16 = _ml_dtypes.bfloat16
+    except Exception:  # pragma: no cover - soft dep
+        _bf16 = None
+
+    is_f16 = (out_dtype == np.float16)
+    is_bf16 = (_bf16 is not None and out_dtype == _bf16)
+
+    # --- Native half-width paths (uint16 ABI; no f32 round-trip on host) ---
+    if is_f16 or is_bf16:
+        sym = _apple_gpu_flash_attn_gqa_f16() if is_f16 else _apple_gpu_flash_attn_gqa_bf16()
+        if sym is not None:
+            qh = np.ascontiguousarray(Q).reshape(Bq, Sq, D).view(np.uint16)
+            kh = np.ascontiguousarray(K).reshape(Gkv, Sk, D).view(np.uint16)
+            vh = np.ascontiguousarray(V).reshape(Gkv, Sk, D).view(np.uint16)
+            outh = np.zeros((Bq, Sq, D), dtype=np.uint16)
+            up = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+            sym(up(qh), up(kh), up(vh), up(outh),
+                ctypes.c_int32(Bq), ctypes.c_int32(num_q_heads),
+                ctypes.c_int32(num_kv_heads), ctypes.c_int32(Sq),
+                ctypes.c_int32(Sk), ctypes.c_int32(D), ctypes.c_float(sc),
+                ctypes.c_int32(1 if causal else 0))
+            return outh.reshape(Q.shape).view(out_dtype)
+        # Native symbol unavailable (non-Apple / old runtime) — fall through to f32.
+
     sym = _apple_gpu_flash_attn_gqa_f32()
     if sym is None:
         return None
@@ -2640,7 +2692,6 @@ def _apple_gpu_dispatch_gqa(Q: Any, K: Any, V: Any, num_q_heads: int,
     kf = np.ascontiguousarray(K.astype(np.float32)).reshape(Gkv, Sk, D)
     vf = np.ascontiguousarray(V.astype(np.float32)).reshape(Gkv, Sk, D)
     out = np.zeros((Bq, Sq, D), dtype=np.float32)
-    sc = float(scale) if scale is not None else 1.0 / _math.sqrt(D)
     fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
     sym(fp(qf), fp(kf), fp(vf), fp(out),
         ctypes.c_int32(Bq), ctypes.c_int32(num_q_heads),

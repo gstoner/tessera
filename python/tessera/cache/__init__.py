@@ -20,5 +20,11 @@ from __future__ import annotations
 from .handle import KVCacheHandle
 from .latent import LatentKVCacheHandle
 from .memory_state import MemoryStateHandle
+from .mla_paged import MLAPagedDecoder
 
-__all__ = ["KVCacheHandle", "LatentKVCacheHandle", "MemoryStateHandle"]
+__all__ = [
+    "KVCacheHandle",
+    "LatentKVCacheHandle",
+    "MemoryStateHandle",
+    "MLAPagedDecoder",
+]

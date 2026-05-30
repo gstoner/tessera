@@ -8125,6 +8125,100 @@ extern "C" void tessera_apple_gpu_mpsgraph_binary_f16(int32_t op,
   std::memcpy(out, a, (size_t)n * 2);
 }
 
+//===----------------------------------------------------------------------===//
+// Phase-G Rung 0 — control-flow lowering: a bounded scan lowered into ONE
+// MPSGraph control-flow executable via -forLoopWithLowerBound:upperBound:step:.
+// Recurrence: carry_{i+1} = tanh(carry_i @ Wh + x_i @ Wx); ys[i] = carry_{i+1}.
+// The trip count and every carry/body tensor are static-shape, so the loop and
+// its body run as one dispatched graph. Per-step outputs are recovered by
+// scattering each iteration's carry into an [T,d] accumulator at row `index`.
+// This is the reusable machinery (index gather + carry threading + per-step
+// scatter-accumulate) every higher control-flow rung reuses. See
+// docs/apple_gpu_control_flow_lowering.md.
+//===----------------------------------------------------------------------===//
+extern "C" int32_t tessera_apple_gpu_cf_scan_f32(const float *Wh, const float *Wx,
+                                                 const float *xseq,
+                                                 const float *init, float *ys,
+                                                 int32_t T, int32_t d, int32_t m) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || T <= 0 || d <= 0 || m <= 0) return 0;  // caller falls back
+  if (!Wh || !Wx || !xseq || !init || !ys) return 0;
+  @autoreleasepool {
+    MPSDataType F = MPSDataTypeFloat32;
+    MPSGraph *g = [MPSGraph new];
+    MPSGraphTensor *pWh = [g placeholderWithShape:@[ @(d), @(d) ] dataType:F name:nil];
+    MPSGraphTensor *pWx = [g placeholderWithShape:@[ @(m), @(d) ] dataType:F name:nil];
+    MPSGraphTensor *pXs = [g placeholderWithShape:@[ @(T), @(m) ] dataType:F name:nil];
+    MPSGraphTensor *pInit = [g placeholderWithShape:@[ @1, @(d) ] dataType:F name:nil];
+    MPSGraphTensor *accInit = [g constantWithScalar:0.0 shape:@[ @(T), @(d) ] dataType:F];
+    MPSGraphTensor *lb = [g constantWithScalar:0 dataType:MPSDataTypeInt32];
+    MPSGraphTensor *ub = [g constantWithScalar:T dataType:MPSDataTypeInt32];
+    MPSGraphTensor *st = [g constantWithScalar:1 dataType:MPSDataTypeInt32];
+
+    NSArray<MPSGraphTensor *> *results = [g
+        forLoopWithLowerBound:lb
+                   upperBound:ub
+                         step:st
+         initialBodyArguments:@[ pInit, accInit ]
+                         body:^NSArray<MPSGraphTensor *> *(
+                             MPSGraphTensor *index,
+                             NSArray<MPSGraphTensor *> *args) {
+                           MPSGraphTensor *carry = args[0];  // [1, d]
+                           MPSGraphTensor *acc = args[1];    // [T, d]
+                           MPSGraphTensor *idx =
+                               [g reshapeTensor:index withShape:@[ @1 ] name:nil];
+                           MPSGraphTensor *xi =
+                               [g gatherWithUpdatesTensor:pXs
+                                            indicesTensor:idx
+                                                     axis:0
+                                          batchDimensions:0
+                                                     name:nil];  // [1, m]
+                           MPSGraphTensor *hh =
+                               [g matrixMultiplicationWithPrimaryTensor:carry
+                                                       secondaryTensor:pWh
+                                                                  name:nil];
+                           MPSGraphTensor *xx =
+                               [g matrixMultiplicationWithPrimaryTensor:xi
+                                                       secondaryTensor:pWx
+                                                                  name:nil];
+                           MPSGraphTensor *sum =
+                               [g additionWithPrimaryTensor:hh
+                                            secondaryTensor:xx
+                                                       name:nil];
+                           MPSGraphTensor *newCarry =
+                               [g tanhWithTensor:sum name:nil];  // [1, d]
+                           MPSGraphTensor *newAcc =
+                               [g scatterWithDataTensor:acc
+                                          updatesTensor:newCarry
+                                          indicesTensor:idx
+                                                   axis:0
+                                                   mode:MPSGraphScatterModeSet
+                                                   name:nil];
+                           return @[ newCarry, newAcc ];
+                         }
+                         name:nil];
+    MPSGraphTensor *ysT = results[1];  // [T, d]
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bWh, ctx, Wh, (size_t)d * d * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bWx, ctx, Wx, (size_t)m * d * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bXs, ctx, xseq, (size_t)T * m * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bIn, ctx, init, (size_t)d * 4);
+    if (!bWh || !bWx || !bXs || !bIn) return 0;
+    MPSGraphTensorData *dWh = [[MPSGraphTensorData alloc] initWithMTLBuffer:bWh shape:@[ @(d), @(d) ] dataType:F];
+    MPSGraphTensorData *dWx = [[MPSGraphTensorData alloc] initWithMTLBuffer:bWx shape:@[ @(m), @(d) ] dataType:F];
+    MPSGraphTensorData *dXs = [[MPSGraphTensorData alloc] initWithMTLBuffer:bXs shape:@[ @(T), @(m) ] dataType:F];
+    MPSGraphTensorData *dIn = [[MPSGraphTensorData alloc] initWithMTLBuffer:bIn shape:@[ @1, @(d) ] dataType:F];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{pWh : dWh, pWx : dWx, pXs : dXs, pInit : dIn}
+                                    targetTensors:@[ ysT ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[ysT];
+    if (!od) return 0;
+    [[od mpsndarray] readBytes:ys strideBytes:nil];
+    return 1;
+  }
+}
+
 // ---- C ABI: row ops ---------------------------------------------------------
 extern "C" void tessera_apple_gpu_layer_norm_f32(const float *x,
                                                  const float *gamma,

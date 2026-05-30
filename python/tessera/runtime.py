@@ -5161,6 +5161,11 @@ def _apple_gpu_enc_api() -> Any:
         runtime.tessera_apple_gpu_rowop_dev_f32_enc.restype = i32
         runtime.tessera_apple_gpu_gumbel_argmax_dev_f32_enc.argtypes = [vp, vp, vp, vp, i32, i32, f32]
         runtime.tessera_apple_gpu_gumbel_argmax_dev_f32_enc.restype = i32
+        i64 = ctypes.c_int64
+        runtime.tessera_apple_gpu_unary_dev_f32_enc.argtypes = [vp, vp, vp, i64, i32]
+        runtime.tessera_apple_gpu_unary_dev_f32_enc.restype = i32
+        runtime.tessera_apple_gpu_binary_dev_f32_enc.argtypes = [vp, vp, vp, vp, i64, i32]
+        runtime.tessera_apple_gpu_binary_dev_f32_enc.restype = i32
         _ENC_API_CONFIGURED = True
     return runtime
 
@@ -5272,6 +5277,66 @@ class AppleGPUEncodeSession:
         self._outputs.append(out)
         return out
 
+    def _unary(self, X: "DeviceTensor", op: int) -> "DeviceTensor | None":
+        import numpy as _np
+        if self._handle is None or self._committed or X.dtype != _np.float32:
+            return None
+        n = int(_np.prod(X.shape)) if X.shape else 1
+        out = DeviceTensor.empty(X.shape, _np.float32)
+        if out is None:
+            return None
+        rc = self._rt.tessera_apple_gpu_unary_dev_f32_enc(
+            self._handle, X.handle, out.handle, ctypes.c_int64(n),
+            ctypes.c_int32(int(op)))
+        if rc != 1:
+            out.free()
+            return None
+        self._outputs.append(out)
+        return out
+
+    def _binary(self, A: "DeviceTensor", B: "DeviceTensor",
+                op: int) -> "DeviceTensor | None":
+        import numpy as _np
+        if self._handle is None or self._committed:
+            return None
+        if A.dtype != _np.float32 or B.dtype != _np.float32:
+            return None
+        n = int(_np.prod(A.shape)) if A.shape else 1
+        if (int(_np.prod(B.shape)) if B.shape else 1) != n:
+            return None        # same-shape elementwise (broadcast happens host-side)
+        out = DeviceTensor.empty(A.shape, _np.float32)
+        if out is None:
+            return None
+        rc = self._rt.tessera_apple_gpu_binary_dev_f32_enc(
+            self._handle, A.handle, B.handle, out.handle, ctypes.c_int64(n),
+            ctypes.c_int32(int(op)))
+        if rc != 1:
+            out.free()
+            return None
+        self._outputs.append(out)
+        return out
+
+    def relu(self, X: "DeviceTensor") -> "DeviceTensor | None":
+        """Encode an elementwise ReLU (layout-agnostic, valid after commit)."""
+        return self._unary(X, 0)
+
+    def silu(self, X: "DeviceTensor") -> "DeviceTensor | None":
+        """Encode an elementwise SiLU = ``x * sigmoid(x)``."""
+        return self._unary(X, 4)
+
+    def add(self, A: "DeviceTensor", B: "DeviceTensor") -> "DeviceTensor | None":
+        """Encode an elementwise add (residuals, additive attention masks)."""
+        return self._binary(A, B, 0)
+
+    def mul(self, A: "DeviceTensor", B: "DeviceTensor") -> "DeviceTensor | None":
+        """Encode an elementwise multiply."""
+        return self._binary(A, B, 2)
+
+    def silu_mul(self, A: "DeviceTensor", B: "DeviceTensor") -> "DeviceTensor | None":
+        """Encode SwiGLU activation ``silu(A) * B`` (matches ``ops.silu_mul``)."""
+        t = self.silu(A)
+        return self._binary(t, B, 2) if t is not None else None
+
     def commit(self) -> None:
         """Commit the encoded command buffer and wait for completion. After
         this, every encoded output's storage holds its result."""
@@ -5371,6 +5436,10 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 # Attention. Host-reference path today; fully fused MSL
                 # kernel is a follow-up.
                 getattr(lib, "tessera_apple_gpu_native_sparse_attn_f32")
+                # R2 (cont.) — encoded flat elementwise unary/binary, so the
+                # command-buffer session can express full transformer/MLP blocks.
+                getattr(lib, "tessera_apple_gpu_unary_dev_f32_enc")
+                getattr(lib, "tessera_apple_gpu_binary_dev_f32_enc")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

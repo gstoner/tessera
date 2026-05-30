@@ -24,7 +24,7 @@ These are useful as design sketches and don't need any compiler features. They r
 | [`kv_cache_serving/`](kv_cache_serving/) | TurboQuant/DuoAttention/Mooncake-style cache-compression planner. Estimates memory; does not execute attention. |
 | [`long_context_attention/`](long_context_attention/) | Retrieval-head vs. streaming-head specialization classifier. Pure heuristics. |
 | [`rlvr_reasoning_suite/`](rlvr_reasoning_suite/) | GRPO/RLVR rollout batching + reward accounting. No Tessera ops. |
-| [`speculative_decoding/`](speculative_decoding/) | Yggdrasil/Medusa/EAGLE tree-decoding scheduler. Tree expansion only. |
+| [`gumiho/`](gumiho/) | Gumiho (ICML'25) hybrid speculative decoding — serial 2-layer Transformer + 5 parallel MLP heads + Full Tree Attention, draft+verify on the Apple GPU/CPU backend, validated vs numpy. |
 | [`Tessera_Empirical_Software_Agent/`](Tessera_Empirical_Software_Agent/) | Tree-search agent skeleton with kernel-autotuning task. LLM hooks are stubs. |
 
 ### Compiler smoke tests (build Graph IR directly)

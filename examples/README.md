@@ -27,7 +27,7 @@ This directory contains examples and tutorials for using Tessera.
 - [`advanced/power_retention/`](advanced/power_retention/) - retention and PowerAttention kernels
 - [`advanced/long_context_attention/`](advanced/long_context_attention/) - retrieval-head vs streaming-head planning
 - [`advanced/kv_cache_serving/`](advanced/kv_cache_serving/) - compressed KV-cache and disaggregated serving planner
-- [`advanced/speculative_decoding/`](advanced/speculative_decoding/) - tree/speculative decoding scheduler
+- [`advanced/gumiho/`](advanced/gumiho/) - Gumiho (ICML'25) hybrid speculative decoding on the Apple GPU/CPU backend
 - [`advanced/Tessera_Empirical_Software_Agent/`](advanced/Tessera_Empirical_Software_Agent/) - agentic kernel autotuning loop
 
 Archived advanced examples are preserved under [`archive/examples/advanced/`](../archive/examples/advanced/).

@@ -165,14 +165,19 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
         notes="Per-head role classification + cache-bytes estimator.",
     ),
     ExampleEntry(
-        directory="examples/advanced/speculative_decoding",
-        entry_point="examples/advanced/speculative_decoding/demo.py",
+        directory="examples/advanced/gumiho",
+        entry_point="examples/advanced/gumiho/demo.py",
         status="runnable",
         command=(
-            "PYTHONPATH=python:examples/advanced/speculative_decoding "
-            "python examples/advanced/speculative_decoding/demo.py"
+            "PYTHONPATH=python:examples/advanced/gumiho "
+            "python examples/advanced/gumiho/demo.py"
         ),
-        notes="Tree-shaped speculative-decoding scheduling demo.",
+        notes=(
+            "Gumiho (ICML'25) hybrid speculative decoding — serial 2-layer "
+            "Transformer head + 5 parallel MLP heads + Full Tree Attention, "
+            "draft compute on the Apple GPU/CPU backend, verify/advance via "
+            "tessera.speculative."
+        ),
     ),
     ExampleEntry(
         directory="examples/advanced/rlvr_reasoning_suite",

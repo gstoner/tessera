@@ -37,7 +37,7 @@ already know how `@tessera.jit`, `tessera.ops.*`, `tessera.nn.*`, and
 | `mla` | ✅ smoke | Latent compress/expand + RoPE split/merge + `tessera.cache.LatentKVCacheHandle`. | FlashMLA absorb-K kernel (Phase G). |
 | `power_retention` | ❌ stub | — | Retention/power attention op (CUDA kernel sketch only). |
 | `rlvr_reasoning_suite` | ✅ | GRPO/RLVR rollout batching + reward accounting. | — |
-| `speculative_decoding` | ✅ | `tessera.speculative.{expand_tree, batch_verify, advance_kv, SpeculativeStep}`. | — |
+| `gumiho` | ✅ | Hybrid speculative decoding (Gumiho, ICML'25): serial 2-layer Transformer + 5 parallel MLP heads + Full Tree Attention; draft+verify dense math on `@jit(target="apple_gpu"/"apple_cpu")`, acceptance/advance via `tessera.speculative`. | Single-kernel `@jit` of the whole loop (Phase G). |
 
 ## Naming changes (decoration / compilation)
 

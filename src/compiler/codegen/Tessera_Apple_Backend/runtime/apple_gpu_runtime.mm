@@ -9370,3 +9370,197 @@ extern "C" void tessera_apple_gpu_mla_decode_rope_f32(
   reference_bsmm_f32(A.data(), Bt.data(), C.data(), O, batch, Sq, Skv, dv, dh,
                      scale);
 }
+
+//===----------------------------------------------------------------------===//
+// MLA decode with weight absorption + decoupled RoPE (2026-05-30)
+//
+// The real MLA bandwidth win. Instead of materializing per-head K/V from the
+// cached latent, the up-projection weights absorb into the query/output so
+// attention runs directly against the compressed latent (shared across heads):
+//
+//   q_abs   = q_nope @ Wukᵀ                       (absorb up-K into the query)
+//   s_nope  = q_abs @ c_kvᵀ                        (score vs latent — no k_nope)
+//   s_rope  = rope(q_rope) @ rope(k_rope)ᵀ         (k_rope shared across heads)
+//   attn    = softmax((s_nope + s_rope)·scale)
+//   ctx     = attn @ c_kv                          (context in latent space)
+//   O       = ctx @ Wuv                            (absorb up-V into the output)
+//
+// The KV cache therefore stores only c_kv [Skv, Dl] + k_rope [Skv, dr] (shared
+// across all H heads) rather than per-head K/V. Mathematically identical to the
+// explicit-K decoupled-RoPE path. One cached MPSGraph runs the whole decode;
+// RoPE + the (compute-only) tiling of shared operands to the B·H batch happen
+// on the host. scale = 1/sqrt(dn + dr).  rotation_style: 0 interleaved, 1 half.
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+static bool mpsg_run_mla_absorb_f32(MetalDeviceContext &ctx, const float *qn,
+                                    const float *qr, const float *ckv,
+                                    const float *krope, const float *Wukt,
+                                    const float *Wuv, float *O, int32_t BH,
+                                    int32_t Sq, int32_t Skv, int32_t dn,
+                                    int32_t dr, int32_t dv, int32_t Dl) {
+  if (BH <= 0 || Sq <= 0 || Skv <= 0 || dv <= 0 || Dl <= 0) return true;
+  float scale = 1.0f / std::sqrt((float)(dn + dr));
+  @autoreleasepool {
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bqn, ctx, qn, (size_t)BH * Sq * dn * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bqr, ctx, qr, (size_t)BH * Sq * dr * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bckv, ctx, ckv, (size_t)BH * Skv * Dl * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bkr, ctx, krope, (size_t)BH * Skv * dr * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bwukt, ctx, Wukt, (size_t)BH * dn * Dl * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bwuv, ctx, Wuv, (size_t)BH * Dl * dv * 4);
+    if (!bqn || !bqr || !bckv || !bkr || !bwukt || !bwuv) return false;
+    NSArray<NSNumber *> *qnS = @[ @(BH), @(Sq), @(dn) ];
+    NSArray<NSNumber *> *qrS = @[ @(BH), @(Sq), @(dr) ];
+    NSArray<NSNumber *> *ckvS = @[ @(BH), @(Skv), @(Dl) ];
+    NSArray<NSNumber *> *krS = @[ @(BH), @(Skv), @(dr) ];
+    NSArray<NSNumber *> *wuktS = @[ @(BH), @(dn), @(Dl) ];
+    NSArray<NSNumber *> *wuvS = @[ @(BH), @(Dl), @(dv) ];
+    NSString *key = [NSString stringWithFormat:@"mlaabsorb:%d:%d:%d:%d:%d:%d:%d",
+                                               BH, Sq, Skv, dn, dr, dv, Dl];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *pqn, *pqr, *pckv, *pkr, *pwukt, *pwuv, *y;
+    if (entry) {
+      g = entry[0];
+      NSArray *p = (NSArray *)entry[1];
+      pqn = p[0]; pqr = p[1]; pckv = p[2]; pkr = p[3]; pwukt = p[4]; pwuv = p[5];
+      y = entry[2];
+    } else {
+      g = [MPSGraph new];
+      pqn = [g placeholderWithShape:qnS dataType:MPSDataTypeFloat32 name:nil];
+      pqr = [g placeholderWithShape:qrS dataType:MPSDataTypeFloat32 name:nil];
+      pckv = [g placeholderWithShape:ckvS dataType:MPSDataTypeFloat32 name:nil];
+      pkr = [g placeholderWithShape:krS dataType:MPSDataTypeFloat32 name:nil];
+      pwukt = [g placeholderWithShape:wuktS dataType:MPSDataTypeFloat32 name:nil];
+      pwuv = [g placeholderWithShape:wuvS dataType:MPSDataTypeFloat32 name:nil];
+      MPSGraphTensor *qabs = [g matrixMultiplicationWithPrimaryTensor:pqn secondaryTensor:pwukt name:nil];        // [BH,Sq,Dl]
+      MPSGraphTensor *ckvT = [g transposeTensor:pckv dimension:1 withDimension:2 name:nil];                      // [BH,Dl,Skv]
+      MPSGraphTensor *sNope = [g matrixMultiplicationWithPrimaryTensor:qabs secondaryTensor:ckvT name:nil];      // [BH,Sq,Skv]
+      MPSGraphTensor *krT = [g transposeTensor:pkr dimension:1 withDimension:2 name:nil];                        // [BH,dr,Skv]
+      MPSGraphTensor *sRope = [g matrixMultiplicationWithPrimaryTensor:pqr secondaryTensor:krT name:nil];        // [BH,Sq,Skv]
+      MPSGraphTensor *s = [g additionWithPrimaryTensor:sNope secondaryTensor:sRope name:nil];
+      MPSGraphTensor *scaled = [g multiplicationWithPrimaryTensor:s
+                                  secondaryTensor:[g constantWithScalar:(double)scale dataType:MPSDataTypeFloat32]
+                                             name:nil];
+      MPSGraphTensor *attn = [g softMaxWithTensor:scaled axis:2 name:nil];
+      MPSGraphTensor *ctxT = [g matrixMultiplicationWithPrimaryTensor:attn secondaryTensor:pckv name:nil];       // [BH,Sq,Dl]
+      y = [g matrixMultiplicationWithPrimaryTensor:ctxT secondaryTensor:pwuv name:nil];                          // [BH,Sq,dv]
+      mpsg_cache_put(key, @[ g, @[ pqn, pqr, pckv, pkr, pwukt, pwuv ], y ]);
+    }
+    MPSGraphTensorData *dqn = [[MPSGraphTensorData alloc] initWithMTLBuffer:bqn shape:qnS dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *dqr = [[MPSGraphTensorData alloc] initWithMTLBuffer:bqr shape:qrS dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *dckv = [[MPSGraphTensorData alloc] initWithMTLBuffer:bckv shape:ckvS dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *dkr = [[MPSGraphTensorData alloc] initWithMTLBuffer:bkr shape:krS dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *dwukt = [[MPSGraphTensorData alloc] initWithMTLBuffer:bwukt shape:wuktS dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *dwuv = [[MPSGraphTensorData alloc] initWithMTLBuffer:bwuv shape:wuvS dataType:MPSDataTypeFloat32];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{pqn : dqn, pqr : dqr, pckv : dckv, pkr : dkr, pwukt : dwukt, pwuv : dwuv}
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:O strideBytes:nil];
+    return true;
+  }
+}
+
+// Host reference for the absorbed decode (fallback + cross-check).
+static void reference_mla_absorb_f32(const float *qn, const float *qr,
+                                     const float *ckv, const float *krope,
+                                     const float *Wukt, const float *Wuv,
+                                     float *O, int32_t BH, int32_t Sq,
+                                     int32_t Skv, int32_t dn, int32_t dr,
+                                     int32_t dv, int32_t Dl) {
+  float scale = 1.0f / std::sqrt((float)(dn + dr));
+  std::vector<double> qabs(Dl), score(Skv);
+  for (int32_t b = 0; b < BH; ++b) {
+    const float *qnb = qn + (size_t)b * Sq * dn;
+    const float *qrb = qr + (size_t)b * Sq * dr;
+    const float *ckvb = ckv + (size_t)b * Skv * Dl;
+    const float *krb = krope + (size_t)b * Skv * dr;
+    const float *wuktb = Wukt + (size_t)b * dn * Dl;
+    const float *wuvb = Wuv + (size_t)b * Dl * dv;
+    float *Ob = O + (size_t)b * Sq * dv;
+    for (int32_t i = 0; i < Sq; ++i) {
+      for (int32_t l = 0; l < Dl; ++l) {
+        double acc = 0;
+        for (int32_t d = 0; d < dn; ++d) acc += (double)qnb[i * dn + d] * wuktb[d * Dl + l];
+        qabs[l] = acc;
+      }
+      double mx = -1e30;
+      for (int32_t j = 0; j < Skv; ++j) {
+        double sn = 0;
+        for (int32_t l = 0; l < Dl; ++l) sn += qabs[l] * ckvb[j * Dl + l];
+        double sr = 0;
+        for (int32_t d = 0; d < dr; ++d) sr += (double)qrb[i * dr + d] * krb[j * dr + d];
+        score[j] = (sn + sr) * scale;
+        mx = std::max(mx, score[j]);
+      }
+      double den = 0;
+      for (int32_t j = 0; j < Skv; ++j) { double e = std::exp(score[j] - mx); score[j] = e; den += e; }
+      for (int32_t d = 0; d < dv; ++d) {
+        double acc = 0;
+        for (int32_t j = 0; j < Skv; ++j) {
+          // O[i,d] = sum_j w_j * (ckv[j] · Wuv[:,d])
+          double cv = 0;
+          for (int32_t l = 0; l < Dl; ++l) cv += ckvb[j * Dl + l] * wuvb[l * dv + d];
+          acc += (score[j] / den) * cv;
+        }
+        Ob[i * dv + d] = (float)acc;
+      }
+    }
+  }
+}
+
+}  // namespace
+
+extern "C" void tessera_apple_gpu_mla_absorb_decode_f32(
+    const float *q_nope, const float *q_rope, const float *c_kv,
+    const float *k_rope, const float *Wuk_t, const float *Wuv,
+    const float *cosQ, const float *sinQ, const float *cosK, const float *sinK,
+    float *O, int32_t B, int32_t H, int32_t Sq, int32_t Skv, int32_t dn,
+    int32_t dr, int32_t dv, int32_t Dl, int32_t rotation_style) {
+  if (B <= 0 || H <= 0 || Sq <= 0 || Skv <= 0 || dn < 0 || dr < 0 || dv <= 0 ||
+      Dl <= 0 || (dr % 2) != 0)
+    return;
+  int32_t BH = B * H, halfdr = dr / 2;
+  // Host: apply RoPE to q_rope (per head) + k_rope (shared); tile shared
+  // operands to the B·H batch (compute-only — the cache still stores c_kv +
+  // k_rope, not these tiles).
+  std::vector<float> qn((size_t)BH * Sq * dn);
+  std::vector<float> qr((size_t)BH * Sq * dr);
+  std::vector<float> ckv((size_t)BH * Skv * Dl);
+  std::vector<float> kr((size_t)BH * Skv * dr);
+  std::vector<float> wukt((size_t)BH * dn * Dl);
+  std::vector<float> wuv((size_t)BH * Dl * dv);
+  std::vector<float> tmp(dr);
+  for (int32_t b = 0; b < B; ++b) {
+    for (int32_t h = 0; h < H; ++h) {
+      int32_t bh = b * H + h;
+      std::memcpy(qn.data() + (size_t)bh * Sq * dn,
+                  q_nope + (size_t)bh * Sq * dn, (size_t)Sq * dn * sizeof(float));
+      for (int32_t i = 0; i < Sq; ++i)
+        mla_rope_apply(q_rope + ((size_t)bh * Sq + i) * dr,
+                       cosQ + (size_t)i * halfdr, sinQ + (size_t)i * halfdr,
+                       qr.data() + ((size_t)bh * Sq + i) * dr, dr, rotation_style);
+      std::memcpy(ckv.data() + (size_t)bh * Skv * Dl,
+                  c_kv + (size_t)b * Skv * Dl, (size_t)Skv * Dl * sizeof(float));
+      for (int32_t j = 0; j < Skv; ++j)
+        mla_rope_apply(k_rope + ((size_t)b * Skv + j) * dr,
+                       cosK + (size_t)j * halfdr, sinK + (size_t)j * halfdr,
+                       kr.data() + ((size_t)bh * Skv + j) * dr, dr, rotation_style);
+      std::memcpy(wukt.data() + (size_t)bh * dn * Dl,
+                  Wuk_t + (size_t)h * dn * Dl, (size_t)dn * Dl * sizeof(float));
+      std::memcpy(wuv.data() + (size_t)bh * Dl * dv,
+                  Wuv + (size_t)h * Dl * dv, (size_t)Dl * dv * sizeof(float));
+    }
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_mla_absorb_f32(ctx, qn.data(), qr.data(), ckv.data(),
+                                        kr.data(), wukt.data(), wuv.data(), O,
+                                        BH, Sq, Skv, dn, dr, dv, Dl))
+    return;
+  reference_mla_absorb_f32(qn.data(), qr.data(), ckv.data(), kr.data(),
+                           wukt.data(), wuv.data(), O, BH, Sq, Skv, dn, dr, dv, Dl);
+}

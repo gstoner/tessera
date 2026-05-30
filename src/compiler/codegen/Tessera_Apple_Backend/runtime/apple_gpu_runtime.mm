@@ -8463,6 +8463,92 @@ extern "C" int32_t tessera_apple_gpu_cf_while_generate_f32(
   }
 }
 
+//===----------------------------------------------------------------------===//
+// Metal 4 — live capability probe (M0). Rather than reading version strings,
+// this actually *creates* the Metal 4 objects under @available(macOS 26.0) and
+// reports which succeed, so the runtime knows whether an MTL4 lane is usable on
+// this machine. Metal 4 is an additive lane alongside MPSGraph (which still
+// runs on the classic command model). Caps bitmask:
+//   1  MTL4CommandQueue   2  MTL4CommandAllocator   4  MTL4Compiler
+//   8  MTLTensor          16 MSL 4.0 library compile
+// See docs/apple_gpu_metal4_adoption.md.
+//===----------------------------------------------------------------------===//
+extern "C" int32_t tessera_apple_gpu_metal4_probe(int32_t *caps_out) {
+  if (caps_out) *caps_out = 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  int32_t caps = 0;
+  @autoreleasepool {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      id<MTLDevice> dev = ctx.device;
+      id<MTL4CommandQueue> q = [dev newMTL4CommandQueue];
+      if (q) caps |= 1;
+      id<MTL4CommandAllocator> alloc = [dev newCommandAllocator];
+      if (alloc) caps |= 2;
+      MTL4CompilerDescriptor *cd = [[MTL4CompilerDescriptor alloc] init];
+      NSError *cerr = nil;
+      id<MTL4Compiler> comp = [dev newCompilerWithDescriptor:cd error:&cerr];
+      if (comp) caps |= 4;
+      MTLTensorDescriptor *td = [[MTLTensorDescriptor alloc] init];
+      const NSInteger dims[1] = {8};
+      td.dimensions = [[MTLTensorExtents alloc] initWithRank:1 values:dims];
+      td.dataType = MTLTensorDataTypeFloat32;
+      td.usage = MTLTensorUsageCompute;
+      td.storageMode = MTLStorageModeShared;
+      NSError *terr = nil;
+      id<MTLTensor> t = [dev newTensorWithDescriptor:td error:&terr];
+      if (t) caps |= 8;
+      MTLCompileOptions *opts = [[MTLCompileOptions alloc] init];
+      opts.languageVersion = MTLLanguageVersion4_0;
+      NSError *lerr = nil;
+      id<MTLLibrary> lib = [dev
+          newLibraryWithSource:@"#include <metal_stdlib>\nusing namespace metal;\n"
+                                "kernel void ts_noop() {}"
+                       options:opts
+                         error:&lerr];
+      if (lib) caps |= 16;
+    }
+  }
+  if (caps_out) *caps_out = caps;
+  return caps != 0 ? 1 : 0;
+}
+
+// Metal 4 M1 — round-trip n elements of `in` through a native MTLTensor of the
+// given dtype (0 f32, 1 f16, 2 bf16) into `out`, proving the typed resource
+// stores + retrieves data. Returns 0 (caller falls back) when MTLTensor is
+// unavailable. This is the foundation for an MTLTensor-backed DeviceTensor.
+extern "C" int32_t tessera_apple_gpu_metal4_tensor_roundtrip(const void *in,
+                                                             void *out, int32_t n,
+                                                             int32_t dtype_code) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || n <= 0 || !in || !out) return 0;
+  @autoreleasepool {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      MTLTensorDataType dt = (dtype_code == 1)   ? MTLTensorDataTypeFloat16
+                             : (dtype_code == 2) ? MTLTensorDataTypeBFloat16
+                                                 : MTLTensorDataTypeFloat32;
+      MTLTensorDescriptor *td = [[MTLTensorDescriptor alloc] init];
+      const NSInteger dims[1] = {n};
+      td.dimensions = [[MTLTensorExtents alloc] initWithRank:1 values:dims];
+      td.dataType = dt;
+      td.usage = MTLTensorUsageCompute;
+      td.storageMode = MTLStorageModeShared;
+      NSError *err = nil;
+      id<MTLTensor> t = [ctx.device newTensorWithDescriptor:td error:&err];
+      if (!t) return 0;
+      const NSInteger z[1] = {0};
+      const NSInteger one[1] = {1};
+      MTLTensorExtents *origin = [[MTLTensorExtents alloc] initWithRank:1 values:z];
+      MTLTensorExtents *sdim = [[MTLTensorExtents alloc] initWithRank:1 values:dims];
+      MTLTensorExtents *strides = [[MTLTensorExtents alloc] initWithRank:1 values:one];
+      [t replaceSliceOrigin:origin sliceDimensions:sdim withBytes:in strides:strides];
+      [t getBytes:out strides:strides fromSliceOrigin:origin sliceDimensions:sdim];
+      return 1;
+    }
+  }
+  return 0;
+}
+
 // ---- C ABI: row ops ---------------------------------------------------------
 extern "C" void tessera_apple_gpu_layer_norm_f32(const float *x,
                                                  const float *gamma,

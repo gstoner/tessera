@@ -3985,6 +3985,58 @@ def apple_gpu_cf_while_generate(W, lm, h_init, start_token, eos_token, max_steps
     return out, step
 
 
+def apple_gpu_metal4_caps() -> dict:
+    """Live Metal 4 capability probe (M0). Actually creates the Metal 4 objects
+    on-device and reports which are usable on this machine. All ``False`` off
+    Tahoe / non-Darwin. See docs/apple_gpu_metal4_adoption.md."""
+    keys = ("command_queue", "command_allocator", "compiler", "tensor", "msl4")
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_metal4_probe", None)
+    if sym is None:
+        return {"available": False, **{k: False for k in keys}, "bits": 0}
+    sym.argtypes = [ctypes.POINTER(ctypes.c_int32)]
+    sym.restype = ctypes.c_int32
+    caps = ctypes.c_int32(0)
+    rc = sym(ctypes.byref(caps))
+    bits = int(caps.value)
+    return {
+        "available": rc == 1,
+        "command_queue": bool(bits & 1),
+        "command_allocator": bool(bits & 2),
+        "compiler": bool(bits & 4),
+        "tensor": bool(bits & 8),
+        "msl4": bool(bits & 16),
+        "bits": bits,
+    }
+
+
+def apple_gpu_metal4_tensor_roundtrip(arr: Any, np: Any) -> Any:
+    """Round-trip ``arr`` (f32/f16/bf16) through a native Metal 4 ``MTLTensor``
+    of the same dtype and return it — proving the typed resource stores +
+    retrieves data on this machine (M1). Falls back to a numpy copy when
+    MTLTensor is unavailable, so the contract holds everywhere."""
+    bf16 = _bfloat16_dtype()
+    a = np.ascontiguousarray(arr)
+    code = {np.dtype(np.float32): 0, np.dtype(np.float16): 1}.get(a.dtype, None)
+    if code is None and bf16 is not None and a.dtype == np.dtype(bf16):
+        code = 2
+    if code is None:                                   # promote unknown dtypes
+        a = np.ascontiguousarray(arr, np.float32)
+        code = 0
+    out = np.empty_like(a)
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_metal4_tensor_roundtrip", None)
+    rc = 0
+    if sym is not None:
+        sym.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32]
+        sym.restype = ctypes.c_int32
+        rc = sym(a.ctypes.data_as(ctypes.c_void_p), out.ctypes.data_as(ctypes.c_void_p),
+                 ctypes.c_int32(int(a.size)), ctypes.c_int32(int(code)))
+    if rc != 1:
+        out = a.copy()
+    return out
+
+
 def _apple_gpu_layer_norm_f32() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_layer_norm_f32", None)
@@ -5578,6 +5630,9 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_cf_serial_draft_f32")
                 # Phase-G Rung 2 — predicate-driven while generation.
                 getattr(lib, "tessera_apple_gpu_cf_while_generate_f32")
+                # Metal 4 — capability probe (M0) + MTLTensor round-trip (M1).
+                getattr(lib, "tessera_apple_gpu_metal4_probe")
+                getattr(lib, "tessera_apple_gpu_metal4_tensor_roundtrip")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

@@ -8549,6 +8549,129 @@ extern "C" int32_t tessera_apple_gpu_metal4_tensor_roundtrip(const void *in,
   return 0;
 }
 
+//===----------------------------------------------------------------------===//
+// Metal 4 M2 + Phase-G → MSL4 bridge — the bounded scan recurrence as a
+// hand-written MSL kernel with a NATIVE in-kernel for-loop, dispatched through
+// the full MTL4 command model (MTL4Compiler pipeline + argument table +
+// residency set + async-commit sync). Where the Phase-G control-flow rungs
+// express the loop as an MPSGraph forLoop, here the loop is ordinary MSL
+// control flow inside one kernel — one thread runs the whole sequential scan.
+// This is both the first real MTL4 dispatch and the concrete demonstration that
+// Phase-G control flow maps onto MSL 4.0. See docs/apple_gpu_metal4_adoption.md
+// and docs/apple_gpu_control_flow_lowering.md.
+//===----------------------------------------------------------------------===//
+static NSString *kMTL4ScanMSL = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+// dims = {T, d, m}. carry/nxt are thread-local (d <= 256 envelope).
+kernel void cf_scan_msl(device const float *Wh   [[buffer(0)]],
+                        device const float *Wx   [[buffer(1)]],
+                        device const float *xseq [[buffer(2)]],
+                        device const float *init [[buffer(3)]],
+                        device float       *ys   [[buffer(4)]],
+                        device const int   *dims [[buffer(5)]]) {
+  int T = dims[0], d = dims[1], m = dims[2];
+  float carry[256];
+  for (int j = 0; j < d; ++j) carry[j] = init[j];
+  for (int t = 0; t < T; ++t) {              // <-- native MSL control flow
+    float nxt[256];
+    for (int j = 0; j < d; ++j) {
+      float acc = 0.0f;
+      for (int k = 0; k < d; ++k) acc += carry[k] * Wh[k * d + j];
+      for (int k = 0; k < m; ++k) acc += xseq[t * m + k] * Wx[k * d + j];
+      nxt[j] = tanh(acc);
+    }
+    for (int j = 0; j < d; ++j) { carry[j] = nxt[j]; ys[t * d + j] = nxt[j]; }
+  }
+}
+)MSL";
+
+extern "C" int32_t tessera_apple_gpu_mtl4_scan_f32(const float *Wh,
+                                                   const float *Wx,
+                                                   const float *xseq,
+                                                   const float *init, float *ys,
+                                                   int32_t T, int32_t d,
+                                                   int32_t m) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || T <= 0 || d <= 0 || d > 256 || m <= 0) return 0;
+  if (!Wh || !Wx || !xseq || !init || !ys) return 0;
+  @autoreleasepool {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      id<MTLDevice> dev = ctx.device;
+      // 1. MSL 4.0 library + MTL4 compute pipeline.
+      MTLCompileOptions *co = [[MTLCompileOptions alloc] init];
+      co.languageVersion = MTLLanguageVersion4_0;
+      NSError *err = nil;
+      id<MTLLibrary> lib = [dev newLibraryWithSource:kMTL4ScanMSL options:co error:&err];
+      if (!lib) return 0;
+      MTL4LibraryFunctionDescriptor *fd = [[MTL4LibraryFunctionDescriptor alloc] init];
+      fd.name = @"cf_scan_msl";
+      fd.library = lib;
+      MTL4ComputePipelineDescriptor *pd = [[MTL4ComputePipelineDescriptor alloc] init];
+      pd.computeFunctionDescriptor = fd;
+      id<MTL4Compiler> compiler = [dev newCompilerWithDescriptor:[[MTL4CompilerDescriptor alloc] init] error:&err];
+      if (!compiler) return 0;
+      id<MTLComputePipelineState> pso =
+          [compiler newComputePipelineStateWithDescriptor:pd
+                                      compilerTaskOptions:nil
+                                                    error:&err];
+      if (!pso) return 0;
+
+      // 2. Shared buffers (unified memory — no copies).
+      MTLResourceOptions ro = MTLResourceStorageModeShared;
+      id<MTLBuffer> bWh = [dev newBufferWithBytes:Wh length:(size_t)d * d * 4 options:ro];
+      id<MTLBuffer> bWx = [dev newBufferWithBytes:Wx length:(size_t)m * d * 4 options:ro];
+      id<MTLBuffer> bXs = [dev newBufferWithBytes:xseq length:(size_t)T * m * 4 options:ro];
+      id<MTLBuffer> bIn = [dev newBufferWithBytes:init length:(size_t)d * 4 options:ro];
+      id<MTLBuffer> bYs = [dev newBufferWithLength:(size_t)T * d * 4 options:ro];
+      int dims[3] = {T, d, m};
+      id<MTLBuffer> bDm = [dev newBufferWithBytes:dims length:sizeof(dims) options:ro];
+      if (!bWh || !bWx || !bXs || !bIn || !bYs || !bDm) return 0;
+
+      // 3. Residency set (MTL4 has no automatic tracking).
+      id<MTLResidencySet> res = [dev newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
+      if (!res) return 0;
+      for (id<MTLBuffer> b : {bWh, bWx, bXs, bIn, bYs, bDm}) [res addAllocation:b];
+      [res commit];
+      [res requestResidency];
+
+      // 4. Argument table — bind buffer GPU addresses by index.
+      MTL4ArgumentTableDescriptor *atd = [[MTL4ArgumentTableDescriptor alloc] init];
+      atd.maxBufferBindCount = 6;
+      id<MTL4ArgumentTable> at = [dev newArgumentTableWithDescriptor:atd error:&err];
+      if (!at) return 0;
+      id<MTLBuffer> bufs[6] = {bWh, bWx, bXs, bIn, bYs, bDm};
+      for (int i = 0; i < 6; ++i) [at setAddress:bufs[i].gpuAddress atIndex:i];
+
+      // 5. MTL4 command model: queue / allocator / command buffer / encoder.
+      id<MTL4CommandQueue> queue = [dev newMTL4CommandQueue];
+      id<MTL4CommandAllocator> alloc = [dev newCommandAllocator];
+      id<MTL4CommandBuffer> cb = [dev newCommandBuffer];
+      if (!queue || !alloc || !cb) return 0;
+      [queue addResidencySet:res];
+      [cb beginCommandBufferWithAllocator:alloc];
+      id<MTL4ComputeCommandEncoder> enc = [cb computeCommandEncoder];
+      [enc setComputePipelineState:pso];
+      [enc setArgumentTable:at];
+      [enc dispatchThreadgroups:MTLSizeMake(1, 1, 1)
+          threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
+      [enc endEncoding];
+      [cb endCommandBuffer];
+
+      // 6. Commit + CPU sync via a shared event.
+      const id<MTL4CommandBuffer> cbs[1] = {cb};
+      [queue commit:cbs count:1];
+      id<MTLSharedEvent> ev = [dev newSharedEvent];
+      [queue signalEvent:ev value:1];
+      if (![ev waitUntilSignaledValue:1 timeoutMS:10000]) return 0;
+
+      std::memcpy(ys, [bYs contents], (size_t)T * d * 4);
+      return 1;
+    }
+  }
+  return 0;
+}
+
 // ---- C ABI: row ops ---------------------------------------------------------
 extern "C" void tessera_apple_gpu_layer_norm_f32(const float *x,
                                                  const float *gamma,

@@ -90,7 +90,52 @@ research-grade and out of scope here. What *is* tractable and worth doing is the
   verify/accept of a real speculative step stay host-side).
 - **Rung 3 — frontier.** The dynamic trie/top-k/variable-accept parts. Needs a
   treeless fixed-shape reformulation or a monolithic MSL kernel. Explicitly
-  out of scope until an algorithm change makes it static-shaped.
+  out of scope **for the MPSGraph route** — but see the MSL 4.0 mapping below,
+  which reopens it.
+
+## Mapping to MSL 4.0 (Metal 4) — a second lowering route
+
+There are **two** ways to put a control-flow loop on the Apple GPU, and they
+have very different expressiveness:
+
+1. **MPSGraph control-flow ops** (Rungs 0–2). The loop is a graph node
+   (`forLoop` / `while` / `if`); the body is a static-shape dataflow subgraph.
+   Mature, handles the matmul/reduction bodies for free — but **every tensor in
+   the body and carry must have a static shape**, which is what puts dynamic
+   allocation / data-dependent shapes out of reach.
+
+2. **Hand-written MSL with native in-kernel control flow** (Metal 4, M2). The
+   loop is an ordinary `for` / `while` / `if` *inside one MSL kernel*, dispatched
+   through the MTL4 command model. Only the kernel's **I/O buffer** shapes are
+   fixed; everything inside the kernel — trip counts, indices, branches — is
+   ordinary, fully data-dependent code.
+
+`tessera_apple_gpu_mtl4_scan_f32` (M2) implements the Rung-0 recurrence the
+*second* way — the scan loop is a literal MSL `for` loop, one thread runs the
+whole sequence — and it matches the MPSGraph `forLoop` scan bit-close (~1e-7).
+So the two routes are interchangeable for the static cases:
+
+| Phase-G construct | MPSGraph route | MSL 4.0 route |
+|---|---|---|
+| `scan` / `fori_loop` (Rung 0/1) | `forLoopWithLowerBound:` | native `for` loop ✅ (M2) |
+| `while_loop` (Rung 2) | `whileWithInitialInputs:` | native `while` loop |
+| `cond` / `switch` | `ifWithPredicateTensor:` | native `if` |
+| **variable trip count / early break** | fixed upper bound + masking only | **native — real data-dependent loop** |
+| **data-dependent indexing** | gather/scatter, static shapes | **native pointer/index arithmetic** |
+| **dynamic allocation (trie)** | ❌ impossible | ⚠️ via a fixed-capacity preallocated buffer + in-kernel cursor |
+
+The key consequence: **MSL native control flow is strictly more expressive than
+MPSGraph's static-shape loops.** The Rung-3 blockers — variable accepted-prefix
+length, data-dependent FTA path selection, the prefix trie — are *control flow*,
+not arithmetic, and MSL expresses arbitrary control flow inside a kernel. The one
+thing MSL still can't do is heap allocation, but a draft tree of bounded size
+fits a **fixed-capacity preallocated buffer** with an in-kernel write cursor — so
+a *treeless / bounded-tree* speculative step becomes a single MSL kernel rather
+than the "research-grade" item the MPSGraph route declared it. That is the path
+to Rung 3, now that the Metal 4 MSL-kernel dispatch (M2) exists. The trade-off is
+that the MSL route is hand-written (no automatic shape/dtype coverage, no free
+matmul fusion), so it earns its place only where the MPSGraph route can't go —
+i.e. the dynamic frontier.
 
 ## Compiler-track tie-in
 

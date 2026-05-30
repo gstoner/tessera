@@ -58,3 +58,51 @@ def test_metal4_tensor_roundtrip_preserves_shape_size():
     rt = R.apple_gpu_metal4_tensor_roundtrip(a, np)
     assert rt.shape == a.shape
     np.testing.assert_array_equal(rt, a)
+
+
+def _numpy_scan(Wh, Wx, xseq, init):
+    c = init.astype(np.float64)
+    ys = np.empty((xseq.shape[0], Wh.shape[0]), np.float64)
+    for t in range(xseq.shape[0]):
+        c = np.tanh(c @ Wh.astype(np.float64)
+                    + xseq[t].astype(np.float64) @ Wx.astype(np.float64))
+        ys[t] = c
+    return ys
+
+
+def test_mtl4_scan_msl_loop_matches_numpy_and_mpsgraph():
+    """M2 + Phase-G->MSL4: the scan recurrence as a hand-written MSL kernel with
+    a native in-kernel for-loop, dispatched through the full MTL4 command model.
+    Matches numpy and agrees with the MPSGraph forLoop scan (Rung 0)."""
+    rng = np.random.default_rng(0)
+    T, d, m = 6, 8, 4
+    Wh = rng.standard_normal((d, d)).astype(np.float32) * 0.3
+    Wx = rng.standard_normal((m, d)).astype(np.float32) * 0.3
+    xseq = rng.standard_normal((T, m)).astype(np.float32) * 0.3
+    init = rng.standard_normal(d).astype(np.float32) * 0.1
+
+    ys, ran = R.apple_gpu_mtl4_scan(Wh, Wx, xseq, init, np)
+    np.testing.assert_allclose(ys.astype(np.float64),
+                               _numpy_scan(Wh, Wx, xseq, init),
+                               rtol=1e-4, atol=1e-5)
+    # The MSL-loop lowering and the MPSGraph-forLoop lowering must agree.
+    ys_mps = R.apple_gpu_cf_scan(Wh, Wx, xseq, init, np)
+    np.testing.assert_allclose(ys.astype(np.float64), ys_mps.astype(np.float64),
+                               rtol=1e-4, atol=1e-5)
+    # On a Tahoe machine with Metal 4, the real MTL4 dispatch must have run.
+    if R.apple_gpu_metal4_caps()["available"]:
+        assert ran
+
+
+def test_mtl4_scan_falls_back_cleanly():
+    # Even without Metal 4 the contract holds (numpy fallback), correct + shaped.
+    rng = np.random.default_rng(3)
+    Wh = rng.standard_normal((4, 4)).astype(np.float32) * 0.3
+    Wx = rng.standard_normal((4, 4)).astype(np.float32) * 0.3
+    xseq = rng.standard_normal((3, 4)).astype(np.float32) * 0.3
+    init = rng.standard_normal(4).astype(np.float32)
+    ys, _ran = R.apple_gpu_mtl4_scan(Wh, Wx, xseq, init, np)
+    assert ys.shape == (3, 4)
+    np.testing.assert_allclose(ys.astype(np.float64),
+                               _numpy_scan(Wh, Wx, xseq, init),
+                               rtol=1e-4, atol=1e-5)

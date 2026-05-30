@@ -1,9 +1,12 @@
 # Metal 4 adoption — design + ladder
 
-> Status: **design + M0 probe/PoC + M1 MTLTensor landing.** This machine runs
-> macOS 26.5 (Tahoe) with SDK 26.5, so the full Metal 4 surface is available:
+> Status: **M0 + M1 + M2 landed.** This machine runs macOS 26.5 (Tahoe) with
+> SDK 26.5, so the full Metal 4 surface is available:
 > `MTL4CommandQueue/Buffer/Allocator/Encoder`, `MTLTensor`, MSL 4.0
-> (`MTLLanguageVersion4_0`) — all `API_AVAILABLE(macos(26.0))`.
+> (`MTLLanguageVersion4_0`) — all `API_AVAILABLE(macos(26.0))`. M2 lands the
+> first real kernel through the full MTL4 command model, which doubles as the
+> concrete **Phase-G → MSL 4.0** mapping (see
+> docs/apple_gpu_control_flow_lowering.md).
 
 ## Why this is *additive*, not an upgrade
 
@@ -56,10 +59,15 @@ forced.
   variant behind the capability flag, validated against the existing
   buffer-based `DeviceTensor` (round-trip + dtype incl. bf16). The typed-resource
   foundation for MTL4 kernels.
-- **M2 — first MTL4 + MSL-4.0 compute kernel.** A real elementwise/matmul kernel
-  written in MSL 4.0 (using the `tensor` type), compiled to an MTL4 pipeline,
-  dispatched on the MTL4 queue, validated + benchmarked vs the MPSGraph path
-  (dispatch-overhead delta).
+- **M2 — first MTL4 + MSL-4.0 compute kernel (landed).**
+  `tessera_apple_gpu_mtl4_scan_f32` runs the Rung-0 scan recurrence as a
+  hand-written MSL kernel with a **native in-kernel `for` loop**, dispatched
+  through the **full MTL4 command model**: MSL 4.0 library → `MTL4Compiler`
+  pipeline → `MTLResidencySet` (explicit residency) → `MTL4ArgumentTable`
+  (GPU-address binding) → `MTL4CommandQueue`/allocator/command-buffer/encoder →
+  `MTLSharedEvent` CPU sync. Validated bit-close against numpy *and* the MPSGraph
+  `forLoop` scan (~1e-7). This is also the concrete **Phase-G → MSL 4.0**
+  demonstration (control flow as MSL, not an MPSGraph node).
 - **M3 — cooperative-tensor-op fused kernel.** A fused attention or matmul using
   SIMD-group cooperative tensor ops — the perf payoff (direct tensor-unit use,
   fusion control). Benchmarked vs MPSGraph.

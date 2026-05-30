@@ -1331,6 +1331,13 @@ extern "C" int32_t tessera_apple_gpu_metal4_tensor_roundtrip(const void* in,
   std::memcpy(out, in, (std::size_t)n * elem);
   return 1;
 }
+// Metal 4 M2 MSL-loop scan — no Metal 4 off Darwin; caller falls back to numpy.
+extern "C" int32_t tessera_apple_gpu_mtl4_scan_f32(const float*, const float*,
+                                                   const float*, const float*,
+                                                   float*, int32_t, int32_t,
+                                                   int32_t) {
+  return 0;
+}
 
 extern "C" int32_t tessera_apple_gpu_cf_serial_draft_f32(
     const float* embed, const float* fc_in, const float* ln1_all,

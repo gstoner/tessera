@@ -1404,6 +1404,20 @@ extern "C" void tessera_apple_gpu_bmm_f16(const uint16_t*, const uint16_t*,
   // runtime.py upcasts to f32 on the fallback path.
   std::memset(O, 0, static_cast<std::size_t>(batch) * M * N * 2);
 }
+// R1 device-resident bmm — non-Apple reference. The handles are host-memory
+// backed, so this is the same bmm into O->data.
+extern "C" int32_t tessera_apple_gpu_bmm_dev_f32(TsDeviceTensor* A,
+                                                 TsDeviceTensor* B,
+                                                 TsDeviceTensor* O, int32_t batch,
+                                                 int32_t M, int32_t N, int32_t K,
+                                                 int32_t b_broadcast) {
+  if (!A || !B || !O) return 0;
+  tessera_apple_gpu_bmm_f32(static_cast<const float*>(A->data),
+                            static_cast<const float*>(B->data),
+                            static_cast<float*>(O->data), batch, M, N, K,
+                            b_broadcast);
+  return 1;
+}
 
 // ---- Tier-3 reduction lane non-Apple reference (2026-05-29) ----------------
 extern "C" void tessera_apple_gpu_mpsgraph_reduce_f32(int32_t op, const float* x,

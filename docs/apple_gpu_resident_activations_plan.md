@@ -102,8 +102,8 @@ removes the per-op syncs.
 
 | Phase | Scope | Effort | Risk |
 |---|---|---|---|
-| **R0** | `DeviceTensor` handle + buffer registry (`alloc`/`wrap`/`upload`/`download`/`free`); zero-copy `wrap` of numpy via shared buffers; Python `DeviceTensor` + lazy `_as_numpy`. No kernel changes. | Med | Low |
-| **R1** | Handle-taking entry points for the hot decode ops (matmul/bmm/absorb_decode/rowops/gumbel). Keep host-ptr variants for compat. Dispatch loop threads handles; materialize lazily. | Med–Large | Med |
+| **R0 ✅** | **DONE** — `DeviceTensor` handle + `ts_dev_alloc/contents/nbytes/upload/download/free/is_metal`; shared-buffer storage with zero-copy `.numpy()` view + lazy host materialization; non-Apple host-memory parity. `tests/unit/test_apple_gpu_device_tensor.py` (13). | Med | Low |
+| **R1 🟡** | **Started** — first handle-taking entry point: `tessera_apple_gpu_bmm_dev_f32(TsDeviceTensor A,B,O,…)` consumes the inputs' shared buffers in place and writes the MPSGraph result straight into the output buffer (`resultsDictionary`) — **no host upload, no readback** — so a chain of `_apple_gpu_bmm_device` calls keeps intermediates on-GPU. Shares the bmm graph cache; host-ptr path kept. `tests/unit/test_apple_gpu_resident_bmm.py` (6, incl. a 4-deep chain). **Remaining:** extend handle entry points to absorb_decode / rowops / gumbel and thread handles through the metadata dispatch loop with lazy materialization. | Med–Large | Med |
 | **R2** | **Command-buffer batching** — one `encodeToCommandBuffer:` per op-chain, single commit + wait. The core perf lever. | Large | **High** |
 | **R3** | Persistent decode-loop state — logits resident → Gumbel sampler consumes a device handle → only the token id reads back. | Med | Med |
 | **R4** | Device-resident KV cache — `c_kv`/`k_rope` and the paged blocks live in device buffers; gather/append happen on-device. | Large | Med–High |

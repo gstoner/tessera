@@ -1435,6 +1435,91 @@ extern "C" int32_t tessera_apple_gpu_bmm_dev_f32_enc(TsEncodeSession* s,
   return tessera_apple_gpu_bmm_dev_f32(A, B, O, batch, M, N, K, b_broadcast);
 }
 
+// R2 rowop / gumbel device + encode — non-Apple references into O->data.
+static void rowop_ref_host(int kind, const float* x, const float* gamma,
+                           float* o, int32_t rows, int32_t cols, float eps) {
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* xr = x + static_cast<std::size_t>(r) * cols;
+    float* orow = o + static_cast<std::size_t>(r) * cols;
+    if (kind == 0 || kind == 1) {  // layer_norm / rmsnorm
+      double mean = 0.0;
+      if (kind == 0) { for (int32_t c = 0; c < cols; ++c) mean += xr[c]; mean /= cols; }
+      double v = 0.0;
+      for (int32_t c = 0; c < cols; ++c) {
+        double d = (kind == 0) ? (xr[c] - mean) : xr[c];
+        v += d * d;
+      }
+      v /= cols;
+      double denom = std::sqrt(v + eps);
+      for (int32_t c = 0; c < cols; ++c) {
+        double d = (kind == 0) ? (xr[c] - mean) : xr[c];
+        double nv = d / denom;
+        if (gamma) nv *= gamma[c];
+        orow[c] = static_cast<float>(nv);
+      }
+    } else {  // softmax (2) / log_softmax (3)
+      double mx = -1e30;
+      for (int32_t c = 0; c < cols; ++c) mx = std::max(mx, (double)xr[c]);
+      double sum = 0.0;
+      for (int32_t c = 0; c < cols; ++c) sum += std::exp(xr[c] - mx);
+      for (int32_t c = 0; c < cols; ++c) {
+        double e = xr[c] - mx;
+        orow[c] = static_cast<float>(kind == 2 ? std::exp(e) / sum : e - std::log(sum));
+      }
+    }
+  }
+}
+extern "C" int32_t tessera_apple_gpu_rowop_dev_f32(TsDeviceTensor* X,
+                                                   TsDeviceTensor* gamma,
+                                                   TsDeviceTensor* O, int32_t kind,
+                                                   int32_t rows, int32_t cols,
+                                                   float eps) {
+  if (!X || !O) return 0;
+  rowop_ref_host(kind, static_cast<const float*>(X->data),
+                 gamma ? static_cast<const float*>(gamma->data) : nullptr,
+                 static_cast<float*>(O->data), rows, cols, eps);
+  return 1;
+}
+extern "C" int32_t tessera_apple_gpu_rowop_dev_f32_enc(TsEncodeSession* s,
+                                                       TsDeviceTensor* X,
+                                                       TsDeviceTensor* gamma,
+                                                       TsDeviceTensor* O,
+                                                       int32_t kind, int32_t rows,
+                                                       int32_t cols, float eps) {
+  if (!s) return 0;
+  return tessera_apple_gpu_rowop_dev_f32(X, gamma, O, kind, rows, cols, eps);
+}
+extern "C" int32_t tessera_apple_gpu_gumbel_argmax_dev_f32(TsDeviceTensor* logits,
+                                                           TsDeviceTensor* gumbel,
+                                                           TsDeviceTensor* out_ids,
+                                                           int32_t rows,
+                                                           int32_t cols,
+                                                           float inv_temp) {
+  if (!logits || !gumbel || !out_ids) return 0;
+  const float* L = static_cast<const float*>(logits->data);
+  const float* G = static_cast<const float*>(gumbel->data);
+  int32_t* out = static_cast<int32_t*>(out_ids->data);
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* Lr = L + static_cast<std::size_t>(r) * cols;
+    const float* Gr = G + static_cast<std::size_t>(r) * cols;
+    int32_t best = 0;
+    float bs = Lr[0] * inv_temp + Gr[0];
+    for (int32_t c = 1; c < cols; ++c) {
+      float sv = Lr[c] * inv_temp + Gr[c];
+      if (sv > bs) { bs = sv; best = c; }
+    }
+    out[r] = best;
+  }
+  return 1;
+}
+extern "C" int32_t tessera_apple_gpu_gumbel_argmax_dev_f32_enc(
+    TsEncodeSession* s, TsDeviceTensor* logits, TsDeviceTensor* gumbel,
+    TsDeviceTensor* out_ids, int32_t rows, int32_t cols, float inv_temp) {
+  if (!s) return 0;
+  return tessera_apple_gpu_gumbel_argmax_dev_f32(logits, gumbel, out_ids, rows,
+                                                 cols, inv_temp);
+}
+
 // ---- Tier-3 reduction lane non-Apple reference (2026-05-29) ----------------
 extern "C" void tessera_apple_gpu_mpsgraph_reduce_f32(int32_t op, const float* x,
                                                       float* out, int32_t rows,

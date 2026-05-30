@@ -137,6 +137,52 @@ def test_mtl4_pipeline_caching_survives_many_calls():
         assert ran
 
 
+def test_m4_routing_default_off_and_toggle():
+    # M4 capability-gated routing is OFF by default (the MTL4 matmul kernel is
+    # correct but slower than MPS today); the flag toggles cleanly.
+    import tessera as ts
+
+    @ts.jit(target="apple_gpu")
+    def mm(a, b):
+        return ts.ops.matmul(a, b)
+
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((16, 8)).astype(np.float32) * 0.1
+    B = rng.standard_normal((8, 16)).astype(np.float32) * 0.1
+    ref = A.astype(np.float64) @ B.astype(np.float64)
+    prev = R.apple_gpu_mtl4_routing_enabled()
+    try:
+        R.set_apple_gpu_mtl4_routing(False)
+        assert not R.apple_gpu_mtl4_routing_enabled()
+        np.testing.assert_allclose(np.asarray(mm(A, B)).astype(np.float64), ref,
+                                   rtol=1e-4, atol=1e-4)          # MPS path
+        R.set_apple_gpu_mtl4_routing(True)
+        assert R.apple_gpu_mtl4_routing_enabled()
+        # 8-multiple f32 -> routed onto MTL4 when capable, else MPS; either way
+        # the result must be correct.
+        np.testing.assert_allclose(np.asarray(mm(A, B)).astype(np.float64), ref,
+                                   rtol=1e-4, atol=1e-4)
+    finally:
+        R.set_apple_gpu_mtl4_routing(prev)
+
+
+def test_m4_route_predicate_gates_envelope():
+    a = np.ones((8, 8), np.float32)
+    b = np.ones((8, 8), np.float32)
+    prev = R.apple_gpu_mtl4_routing_enabled()
+    try:
+        R.set_apple_gpu_mtl4_routing(False)
+        assert R._mtl4_route_matmul_f32(a, b, np) is None          # disabled
+        R.set_apple_gpu_mtl4_routing(True)
+        # ineligible: f16 dtype, and non-8-multiple dims -> None (MPS fallback).
+        assert R._mtl4_route_matmul_f32(a.astype(np.float16),
+                                        b.astype(np.float16), np) is None
+        assert R._mtl4_route_matmul_f32(np.ones((7, 8), np.float32),
+                                        np.ones((8, 8), np.float32), np) is None
+    finally:
+        R.set_apple_gpu_mtl4_routing(prev)
+
+
 def test_mtl4_scan_falls_back_cleanly():
     # Even without Metal 4 the contract holds (numpy fallback), correct + shaped.
     rng = np.random.default_rng(3)

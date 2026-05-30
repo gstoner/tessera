@@ -86,8 +86,23 @@ forced.
   call removes its per-call `MTLResidencySet` after sync (the queue's
   residency-set limit is 32). This is the prerequisite for a meaningful
   MTL4-vs-MPSGraph benchmark and for M4 routing.
-- **M4 — capability-gated routing.** Route selected ops (e.g., the resident
-  decode chain) to the MTL4 lane when the probe passes; MPSGraph otherwise.
+- **M4 — capability-gated routing (landed, opt-in).** The plumbing to route a
+  real op onto the MTL4 lane is in place: `_mtl4_route_matmul_f32` in
+  `runtime.py` redirects an eligible `@jit(target="apple_gpu")` matmul to the M3
+  `simdgroup_matrix` kernel, gated on (a) the routing flag, (b) the cached MTL4
+  capability probe reporting `command_queue` + `compiler`, and (c) the op
+  envelope (rank-2 f32, M/N/K multiples of 8). Anything outside the envelope —
+  or any non-capable machine — returns `None` and falls through to the MPSGraph
+  path unchanged. Toggled by `set_apple_gpu_mtl4_routing(bool)` /
+  `TESSERA_APPLE_GPU_MTL4_ROUTE=1`; `apple_gpu_mtl4_routing_enabled()` reads it.
+  **Routing is OFF by default, and deliberately so:** a matmul micro-benchmark on
+  this M-series Mac (Tahoe) found the MTL4 `simdgroup_matrix` kernel is currently
+  **slower than MPS** — MTL4/MPS latency ratios **1.91× (64³), 2.05× (128³),
+  2.20× (256³), 3.21× (512³)**. MPS's vendor matmul is hard to beat with a
+  straightforward cooperative-tile kernel; flipping the default on would regress
+  perf. So M4 ships the *mechanism* (correct, validated bit-close to numpy/MPS
+  when enabled) and leaves the *policy* off until a faster MTL4 kernel (e.g.
+  MSL 4.0 `tensor` cooperative ops, better tiling/double-buffering) clears MPS.
 
 ## Trade-offs + risks
 
@@ -96,8 +111,10 @@ forced.
   per-shape coverage is on us.
 - **OS-gated.** Everything requires macOS 26+. The runtime must degrade cleanly
   everywhere else (probe → unavailable → MPSGraph).
-- **Unproven perf delta.** The dispatch-overhead and tensor-core wins are real in
-  principle; M2/M3 must *measure* them before any routing (M4) is justified.
+- **Measured perf delta (so far: MPS wins).** The M4 matmul micro-benchmark found
+  the MTL4 `simdgroup_matrix` kernel 1.9–3.2× *slower* than MPS on this Mac, so
+  routing stays opt-in/off. The dispatch-overhead and tensor-core wins are real in
+  principle but a kernel must actually clear MPS before the default flips.
 - **Not a migration.** This never removes the MPSGraph lane. If the MTL4 lane
   doesn't pay off, it stays a capability-gated experiment with zero cost to the
   default path.
@@ -111,3 +128,14 @@ forced.
   buffer-based path behind the capability flag.
 - Unit tests skip when the probe reports unavailable; no regression to the
   MPSGraph lane.
+
+## Acceptance (M4)
+
+- Routing is OFF by default; `apple_gpu_mtl4_routing_enabled()` reflects the flag
+  and `set_apple_gpu_mtl4_routing(bool)` / `TESSERA_APPLE_GPU_MTL4_ROUTE` toggle it.
+- With routing enabled, an eligible (rank-2 f32, 8-multiple M/N/K)
+  `@jit(target="apple_gpu")` matmul routes onto the MTL4 lane and returns a result
+  bit-close to numpy/MPS; out-of-envelope shapes/dtypes and non-capable machines
+  fall through to MPSGraph unchanged.
+- `_mtl4_route_matmul_f32` returns `None` (not a wrong result) whenever the flag is
+  off, the dtype/shape is ineligible, or the capability probe is missing.

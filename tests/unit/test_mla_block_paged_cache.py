@@ -177,6 +177,68 @@ def test_utilization_and_footprint():
     assert explicit / pool.cache_bytes_per_token() > 8.0
 
 
+def test_decode_batch_same_length_grouped():
+    """Same-length sequences are dispatched together (B>1); the batched result
+    must match per-sequence single decodes exactly."""
+    pool, Wuk_t, Wuv, dims = _pool(num_blocks=32, block_size=4)
+    H, dn, dr, dv, Dl = dims
+    rng = np.random.RandomState(20)
+    L = 7
+    queries = {}
+    for sid in ("s0", "s1", "s2", "s3"):          # all length 7 -> one group
+        pool.add_sequence(sid)
+        pool.append(sid, rng.randn(L, Dl).astype(np.float32),
+                    rng.randn(L, dr).astype(np.float32))
+        queries[sid] = (rng.randn(H, dn).astype(np.float32),
+                        rng.randn(H, dr).astype(np.float32))
+    batched = pool.decode_batch(queries)
+    for sid, (qn, qr) in queries.items():
+        single = pool.decode(sid, qn, qr)         # per-sequence path
+        np.testing.assert_allclose(batched[sid], single, rtol=1e-5, atol=1e-5)
+
+
+def test_decode_batch_mixed_lengths_grouping():
+    """Mixed lengths form multiple groups; every sequence still matches its own
+    single decode regardless of group size (including singletons)."""
+    pool, Wuk_t, Wuv, dims = _pool(num_blocks=64, block_size=4)
+    H, dn, dr, dv, Dl = dims
+    rng = np.random.RandomState(21)
+    # lengths: two at 5, three at 8, one at 3
+    spec = {"a": 5, "b": 5, "c": 8, "d": 8, "e": 8, "f": 3}
+    queries = {}
+    for sid, L in spec.items():
+        pool.add_sequence(sid)
+        pool.append(sid, rng.randn(L, Dl).astype(np.float32),
+                    rng.randn(L, dr).astype(np.float32))
+        queries[sid] = (rng.randn(H, dn).astype(np.float32),
+                        rng.randn(H, dr).astype(np.float32))
+    batched = pool.decode_batch(queries)
+    assert set(batched) == set(spec)
+    for sid, (qn, qr) in queries.items():
+        np.testing.assert_allclose(batched[sid], pool.decode(sid, qn, qr),
+                                   rtol=1e-5, atol=1e-5)
+
+
+def test_absorb_decode_batch_matches_per_seq():
+    """The batched helper equals stacking single-sequence decodes."""
+    from tessera.cache.mla_paged import absorb_decode_batch, absorb_decode_one
+    rng = np.random.RandomState(22)
+    G, H, dn, dr, dv, Dl, S = 3, 4, 16, 8, 16, 32, 6
+    Wuk_t = (rng.randn(H, dn, Dl) * 0.3).astype(np.float32)
+    Wuv = (rng.randn(H, Dl, dv) * 0.3).astype(np.float32)
+    qn = (rng.randn(G, H, dn) * 0.3).astype(np.float32)
+    qr = (rng.randn(G, H, dr) * 0.3).astype(np.float32)
+    ckv = (rng.randn(G, S, Dl) * 0.3).astype(np.float32)
+    kr = (rng.randn(G, S, dr) * 0.3).astype(np.float32)
+    key_pos, q_pos = np.arange(S), S - 1
+    batched = absorb_decode_batch(qn, qr, ckv, kr, Wuk_t, Wuv, key_pos, q_pos,
+                                  10000.0, "interleaved")
+    for g in range(G):
+        single = absorb_decode_one(qn[g], qr[g], ckv[g], kr[g], Wuk_t, Wuv,
+                                   key_pos, q_pos, 10000.0, "interleaved")
+        np.testing.assert_allclose(batched[g], single, rtol=1e-5, atol=1e-5)
+
+
 def test_sequence_lifecycle_errors():
     pool, _, _, (H, dn, dr, dv, Dl) = _pool()
     with pytest.raises(MLABlockPagedCacheError):

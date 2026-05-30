@@ -94,6 +94,32 @@ def test_mtl4_scan_msl_loop_matches_numpy_and_mpsgraph():
         assert ran
 
 
+@pytest.mark.parametrize("M,N,K", [(8, 8, 8), (16, 24, 32), (64, 32, 16)])
+def test_mtl4_matmul_cooperative_matches_numpy(M, N, K):
+    """M3: matmul via MSL cooperative-matrix ops (simdgroup_matrix → matrix
+    units), dispatched through the MTL4 command model. Bit-close to numpy."""
+    rng = np.random.default_rng(M + N + K)
+    A = rng.standard_normal((M, K)).astype(np.float32) * 0.1
+    B = rng.standard_normal((K, N)).astype(np.float32) * 0.1
+    C, ran = R.apple_gpu_mtl4_matmul_sg(A, B, np)
+    np.testing.assert_allclose(C.astype(np.float64),
+                               A.astype(np.float64) @ B.astype(np.float64),
+                               rtol=1e-4, atol=1e-4)
+    if R.apple_gpu_metal4_caps()["available"]:
+        assert ran
+
+
+def test_mtl4_matmul_non_multiple_of_8_falls_back():
+    # The simdgroup kernel needs M/N/K multiples of 8; otherwise numpy fallback.
+    A = np.ones((7, 8), np.float32)
+    B = np.ones((8, 8), np.float32)
+    C, ran = R.apple_gpu_mtl4_matmul_sg(A, B, np)
+    assert not ran
+    np.testing.assert_allclose(C.astype(np.float64),
+                               A.astype(np.float64) @ B.astype(np.float64),
+                               rtol=1e-5)
+
+
 def test_mtl4_scan_falls_back_cleanly():
     # Even without Metal 4 the contract holds (numpy fallback), correct + shaped.
     rng = np.random.default_rng(3)

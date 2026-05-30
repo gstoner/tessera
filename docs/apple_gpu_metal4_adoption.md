@@ -1,6 +1,6 @@
 # Metal 4 adoption — design + ladder
 
-> Status: **M0 + M1 + M2 landed.** This machine runs macOS 26.5 (Tahoe) with
+> Status: **M0 + M1 + M2 + M3 landed.** This machine runs macOS 26.5 (Tahoe) with
 > SDK 26.5, so the full Metal 4 surface is available:
 > `MTL4CommandQueue/Buffer/Allocator/Encoder`, `MTLTensor`, MSL 4.0
 > (`MTLLanguageVersion4_0`) — all `API_AVAILABLE(macos(26.0))`. M2 lands the
@@ -68,9 +68,16 @@ forced.
   `MTLSharedEvent` CPU sync. Validated bit-close against numpy *and* the MPSGraph
   `forLoop` scan (~1e-7). This is also the concrete **Phase-G → MSL 4.0**
   demonstration (control flow as MSL, not an MPSGraph node).
-- **M3 — cooperative-tensor-op fused kernel.** A fused attention or matmul using
-  SIMD-group cooperative tensor ops — the perf payoff (direct tensor-unit use,
-  fusion control). Benchmarked vs MPSGraph.
+- **M3 — cooperative-matrix matmul (landed).**
+  `tessera_apple_gpu_mtl4_matmul_sg_f32` computes `C = A @ B` with MSL
+  `simdgroup_matrix` cooperative tiles — each 32-lane SIMD group computes an 8×8
+  output tile via `simdgroup_multiply_accumulate`, hitting the GPU matrix units —
+  dispatched through the MTL4 command model (reusing the M2 machinery). M/N/K
+  multiples of 8; validated bit-close to numpy (≤1e-7). The first kernel on the
+  Metal 4 lane to use the matrix/tensor units directly. (MSL 4.0 also ships a
+  newer general `tensor` cooperative-op type — a follow-up; `simdgroup_matrix` is
+  the established path. Per-call pipeline compilation is not yet cached — a
+  perf follow-up before any M4 routing.)
 - **M4 — capability-gated routing.** Route selected ops (e.g., the resident
   decode chain) to the MTL4 lane when the probe passes; MPSGraph otherwise.
 

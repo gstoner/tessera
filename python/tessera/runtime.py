@@ -4881,15 +4881,17 @@ class DeviceTensor:
     ``.numpy()`` view alive past ``free()`` is a use-after-free; copy first with
     ``.copy_to_host()`` if you need to outlive the handle."""
 
-    __slots__ = ("_handle", "shape", "dtype", "_rt", "_freed")
+    __slots__ = ("_handle", "shape", "dtype", "_rt", "_freed", "_owns")
 
-    def __init__(self, handle: Any, shape: Any, dtype: Any, rt: Any) -> None:
+    def __init__(self, handle: Any, shape: Any, dtype: Any, rt: Any,
+                 owns: bool = True) -> None:
         import numpy as _np
         self._handle = handle
         self.shape = tuple(int(s) for s in shape)
         self.dtype = _np.dtype(dtype)
         self._rt = rt
         self._freed = False
+        self._owns = owns  # non-owning views (reshape_view) never free the buffer
 
     @property
     def nbytes(self) -> int:
@@ -4948,14 +4950,36 @@ class DeviceTensor:
         """A standalone host copy that outlives the handle."""
         return self.numpy().copy()
 
+    def reshape_view(self, *shape: Any) -> "DeviceTensor":
+        """A **non-owning** view of the same device buffer with a new shape
+        (same element count + dtype). Used to chain ops with shape changes
+        *without* a host round-trip — e.g. a bmm output ``[H,1,N]`` viewed as a
+        rowop input ``[H,N]`` — so the chain stays in one command buffer. The
+        view never frees the buffer; the original owner does."""
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+            shape = tuple(shape[0])
+        n = 1
+        for s in shape:
+            n *= int(s)
+        cur = 1
+        for s in self.shape:
+            cur *= s
+        if n != cur:
+            raise ValueError(f"reshape_view {self.shape} -> {shape}: element "
+                             f"count mismatch ({cur} != {n})")
+        return DeviceTensor(self._handle, shape, self.dtype, self._rt, owns=False)
+
     @property
     def handle(self) -> Any:
         """The raw `void*` handle (for handle-taking kernels in R1)."""
         return self._handle
 
     def free(self) -> None:
-        if not self._freed and self._handle:
+        if not self._freed and self._owns and self._handle:
             self._rt.ts_dev_free(self._handle)
+            self._freed = True
+            self._handle = None
+        elif not self._owns:
             self._freed = True
             self._handle = None
 
@@ -5030,11 +5054,15 @@ def _apple_gpu_enc_api() -> Any:
         return None
     global _ENC_API_CONFIGURED
     if not _ENC_API_CONFIGURED:
-        vp, i32 = ctypes.c_void_p, ctypes.c_int32
+        vp, i32, f32 = ctypes.c_void_p, ctypes.c_int32, ctypes.c_float
         runtime.ts_enc_begin.argtypes = []; runtime.ts_enc_begin.restype = vp
         runtime.ts_enc_commit_wait.argtypes = [vp]; runtime.ts_enc_commit_wait.restype = None
         runtime.tessera_apple_gpu_bmm_dev_f32_enc.argtypes = [vp, vp, vp, vp, i32, i32, i32, i32, i32]
         runtime.tessera_apple_gpu_bmm_dev_f32_enc.restype = i32
+        runtime.tessera_apple_gpu_rowop_dev_f32_enc.argtypes = [vp, vp, vp, vp, i32, i32, i32, f32]
+        runtime.tessera_apple_gpu_rowop_dev_f32_enc.restype = i32
+        runtime.tessera_apple_gpu_gumbel_argmax_dev_f32_enc.argtypes = [vp, vp, vp, vp, i32, i32, f32]
+        runtime.tessera_apple_gpu_gumbel_argmax_dev_f32_enc.restype = i32
         _ENC_API_CONFIGURED = True
     return runtime
 
@@ -5084,6 +5112,62 @@ class AppleGPUEncodeSession:
             self._handle, A.handle, B.handle, out.handle, ctypes.c_int32(batch),
             ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
             ctypes.c_int32(1 if bcast else 0))
+        if rc != 1:
+            out.free()
+            return None
+        self._outputs.append(out)
+        return out
+
+    def rowop(self, X: "DeviceTensor", kind: int, gamma: "DeviceTensor | None" = None,
+              eps: float = 1e-6) -> "DeviceTensor | None":
+        """Encode a row op: kind 0 layer_norm, 1 rmsnorm, 2 softmax, 3
+        log_softmax. ``X`` is ``[rows, cols]``; optional ``gamma`` is ``[cols]``."""
+        import numpy as _np
+        if self._handle is None or self._committed or X.dtype != _np.float32:
+            return None
+        if len(X.shape) != 2:
+            return None
+        rows, cols = X.shape
+        if gamma is not None and (gamma.dtype != _np.float32 or gamma.shape != (cols,)):
+            return None
+        out = DeviceTensor.empty((rows, cols), _np.float32)
+        if out is None:
+            return None
+        rc = self._rt.tessera_apple_gpu_rowop_dev_f32_enc(
+            self._handle, X.handle, gamma.handle if gamma is not None else None,
+            out.handle, ctypes.c_int32(int(kind)), ctypes.c_int32(rows),
+            ctypes.c_int32(cols), ctypes.c_float(float(eps)))
+        if rc != 1:
+            out.free()
+            return None
+        self._outputs.append(out)
+        return out
+
+    def rmsnorm(self, X: "DeviceTensor", gamma: "DeviceTensor | None" = None,
+                eps: float = 1e-6) -> "DeviceTensor | None":
+        return self.rowop(X, 1, gamma, eps)
+
+    def softmax(self, X: "DeviceTensor") -> "DeviceTensor | None":
+        return self.rowop(X, 2)
+
+    def gumbel(self, logits: "DeviceTensor", gumbel_noise: "DeviceTensor",
+               inv_temp: float = 1.0) -> "DeviceTensor | None":
+        """Encode a Gumbel-max sample: ``argmax(logits/T + gumbel_noise)`` per
+        row. ``logits`` / ``gumbel_noise`` are ``[rows, vocab]`` f32; returns an
+        int32 ``[rows]`` device tensor of token ids (valid after commit)."""
+        import numpy as _np
+        if self._handle is None or self._committed or logits.dtype != _np.float32:
+            return None
+        if len(logits.shape) != 2 or gumbel_noise.shape != logits.shape:
+            return None
+        rows, cols = logits.shape
+        out = DeviceTensor.empty((rows,), _np.int32)
+        if out is None:
+            return None
+        rc = self._rt.tessera_apple_gpu_gumbel_argmax_dev_f32_enc(
+            self._handle, logits.handle, gumbel_noise.handle, out.handle,
+            ctypes.c_int32(rows), ctypes.c_int32(cols),
+            ctypes.c_float(float(inv_temp)))
         if rc != 1:
             out.free()
             return None

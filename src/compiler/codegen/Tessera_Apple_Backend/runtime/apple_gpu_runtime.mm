@@ -7928,6 +7928,87 @@ static bool mpsg_run_binary(MetalDeviceContext &ctx, int op, const void *a,
 
 // Row-wise op over the last axis of an [rows, cols] tensor.
 // kind: 0 layer_norm (gamma+beta), 1 rmsnorm (gamma), 2 softmax, 3 log_softmax.
+// Get-or-build the cached rowop graph (kind 0 layer_norm, 1 rmsnorm, 2 softmax,
+// 3 log_softmax). `phs_out` is [x] (+ gamma if hasGamma, + beta if hasBeta).
+// Shared by the run + R2 device/encode paths.
+static MPSGraph *mpsg_rowop_graph(int kind, int32_t rows, int32_t cols,
+                                  float eps, bool hasGamma, bool hasBeta,
+                                  MPSDataType ioType, NSArray **phs_out,
+                                  MPSGraphTensor **y_out) {
+  NSArray<NSNumber *> *xs = @[ @(rows), @(cols) ];
+  NSArray<NSNumber *> *gs = @[ @(cols) ];
+  NSArray<NSNumber *> *axis1 = @[ @1 ];
+  NSString *key = [NSString stringWithFormat:@"r:%d:%d:%d:%d:%a:%d:%d", kind,
+                                             (int)ioType, rows, cols, eps,
+                                             hasGamma ? 1 : 0, hasBeta ? 1 : 0];
+  NSArray *entry = mpsg_cache_get(key);
+  MPSGraph *g;
+  NSArray *phs;
+  MPSGraphTensor *y;
+  if (entry) {
+    g = entry[0];
+    phs = entry[1];
+    y = entry[2];
+  } else {
+    g = [MPSGraph new];
+    MPSGraphTensor *px = [g placeholderWithShape:xs dataType:ioType name:nil];
+    MPSGraphTensor *xf = mpsg_up(g, px, ioType);
+    NSMutableArray *P = [NSMutableArray arrayWithObject:px];
+    MPSGraphTensor *yf = nil;
+    if (kind == 0 || kind == 1) {
+      MPSGraphTensor *epsc = [g constantWithScalar:(double)eps dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *gf = nil;
+      if (hasGamma) {
+        MPSGraphTensor *pg = [g placeholderWithShape:gs dataType:ioType name:nil];
+        gf = mpsg_up(g, pg, ioType);
+        [P addObject:pg];
+      }
+      if (kind == 0) {  // layer_norm
+        MPSGraphTensor *mean = [g meanOfTensor:xf axes:axis1 name:nil];
+        MPSGraphTensor *diff = [g subtractionWithPrimaryTensor:xf secondaryTensor:mean name:nil];
+        MPSGraphTensor *sq = [g multiplicationWithPrimaryTensor:diff secondaryTensor:diff name:nil];
+        MPSGraphTensor *var = [g meanOfTensor:sq axes:axis1 name:nil];
+        MPSGraphTensor *ve = [g additionWithPrimaryTensor:var secondaryTensor:epsc name:nil];
+        MPSGraphTensor *denom = [g squareRootWithTensor:ve name:nil];
+        MPSGraphTensor *norm = [g divisionWithPrimaryTensor:diff secondaryTensor:denom name:nil];
+        yf = hasGamma
+                 ? [g multiplicationWithPrimaryTensor:norm secondaryTensor:gf name:nil]
+                 : norm;
+        if (hasBeta) {
+          MPSGraphTensor *pb = [g placeholderWithShape:gs dataType:ioType name:nil];
+          MPSGraphTensor *bf = mpsg_up(g, pb, ioType);
+          [P addObject:pb];
+          yf = [g additionWithPrimaryTensor:yf secondaryTensor:bf name:nil];
+        }
+      } else {  // rmsnorm
+        MPSGraphTensor *sq = [g multiplicationWithPrimaryTensor:xf secondaryTensor:xf name:nil];
+        MPSGraphTensor *ms = [g meanOfTensor:sq axes:axis1 name:nil];
+        MPSGraphTensor *me = [g additionWithPrimaryTensor:ms secondaryTensor:epsc name:nil];
+        MPSGraphTensor *denom = [g squareRootWithTensor:me name:nil];
+        MPSGraphTensor *norm = [g divisionWithPrimaryTensor:xf secondaryTensor:denom name:nil];
+        yf = hasGamma
+                 ? [g multiplicationWithPrimaryTensor:norm secondaryTensor:gf name:nil]
+                 : norm;
+      }
+    } else if (kind == 2) {  // softmax over last axis (numerically stable)
+      yf = [g softMaxWithTensor:xf axis:1 name:nil];
+    } else {  // log_softmax = (x - max) - log(sum(exp(x - max)))
+      MPSGraphTensor *m = [g reductionMaximumWithTensor:xf axes:axis1 name:nil];
+      MPSGraphTensor *xm = [g subtractionWithPrimaryTensor:xf secondaryTensor:m name:nil];
+      MPSGraphTensor *e = [g exponentWithTensor:xm name:nil];
+      MPSGraphTensor *s = [g reductionSumWithTensor:e axes:axis1 name:nil];
+      MPSGraphTensor *lse = [g logarithmWithTensor:s name:nil];
+      yf = [g subtractionWithPrimaryTensor:xm secondaryTensor:lse name:nil];
+    }
+    y = yf ? mpsg_down(g, yf, ioType) : nil;
+    phs = [P copy];
+    mpsg_cache_put(key, @[ g, phs, y ? y : px ]);
+  }
+  *phs_out = phs;
+  *y_out = y;
+  return g;
+}
+
 static bool mpsg_run_rowop(MetalDeviceContext &ctx, int kind, const void *x,
                            const void *gamma, const void *beta, void *out,
                            int32_t rows, int32_t cols, float eps,
@@ -7945,81 +8026,11 @@ static bool mpsg_run_rowop(MetalDeviceContext &ctx, int kind, const void *x,
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, beta ? beta : x, cbytes);
     NSArray<NSNumber *> *xs = @[ @(rows), @(cols) ];
     NSArray<NSNumber *> *gs = @[ @(cols) ];
-    NSArray<NSNumber *> *axis1 = @[ @1 ];
-    // eps is baked into the graph as a constant, so it is part of the key;
-    // weighted-ness (gamma/beta present) changes the graph too. The MLIR
-    // lowering passes the unweighted form (gamma == beta == nullptr) for the
-    // unweighted tessera.layer_norm / tessera.rmsnorm ops; the Python runtime
-    // passes ones/zeros (weighted). Both are supported.
-    NSString *key = [NSString stringWithFormat:@"r:%d:%d:%d:%d:%a:%d:%d", kind,
-                                               (int)ioType, rows, cols, eps,
-                                               gamma ? 1 : 0, beta ? 1 : 0];
-    NSArray *entry = mpsg_cache_get(key);
-    MPSGraph *g;
     NSArray *phs;
     MPSGraphTensor *y;
-    if (entry) {
-      g = entry[0];
-      phs = entry[1];
-      y = entry[2];
-    } else {
-      g = [MPSGraph new];
-      MPSGraphTensor *px = [g placeholderWithShape:xs dataType:ioType name:nil];
-      MPSGraphTensor *xf = mpsg_up(g, px, ioType);
-      NSMutableArray *P = [NSMutableArray arrayWithObject:px];
-      MPSGraphTensor *yf = nil;
-      if (kind == 0 || kind == 1) {
-        MPSGraphTensor *epsc = [g constantWithScalar:(double)eps dataType:MPSDataTypeFloat32];
-        bool weighted = (gamma != nullptr);
-        bool hasBeta = (beta != nullptr);
-        MPSGraphTensor *gf = nil;
-        if (weighted) {
-          MPSGraphTensor *pg = [g placeholderWithShape:gs dataType:ioType name:nil];
-          gf = mpsg_up(g, pg, ioType);
-          [P addObject:pg];
-        }
-        if (kind == 0) {  // layer_norm
-          MPSGraphTensor *mean = [g meanOfTensor:xf axes:axis1 name:nil];
-          MPSGraphTensor *diff = [g subtractionWithPrimaryTensor:xf secondaryTensor:mean name:nil];
-          MPSGraphTensor *sq = [g multiplicationWithPrimaryTensor:diff secondaryTensor:diff name:nil];
-          MPSGraphTensor *var = [g meanOfTensor:sq axes:axis1 name:nil];
-          MPSGraphTensor *ve = [g additionWithPrimaryTensor:var secondaryTensor:epsc name:nil];
-          MPSGraphTensor *denom = [g squareRootWithTensor:ve name:nil];
-          MPSGraphTensor *norm = [g divisionWithPrimaryTensor:diff secondaryTensor:denom name:nil];
-          yf = weighted
-                   ? [g multiplicationWithPrimaryTensor:norm secondaryTensor:gf name:nil]
-                   : norm;
-          if (hasBeta) {
-            MPSGraphTensor *pb = [g placeholderWithShape:gs dataType:ioType name:nil];
-            MPSGraphTensor *bf = mpsg_up(g, pb, ioType);
-            [P addObject:pb];
-            yf = [g additionWithPrimaryTensor:yf secondaryTensor:bf name:nil];
-          }
-        } else {  // rmsnorm
-          MPSGraphTensor *sq = [g multiplicationWithPrimaryTensor:xf secondaryTensor:xf name:nil];
-          MPSGraphTensor *ms = [g meanOfTensor:sq axes:axis1 name:nil];
-          MPSGraphTensor *me = [g additionWithPrimaryTensor:ms secondaryTensor:epsc name:nil];
-          MPSGraphTensor *denom = [g squareRootWithTensor:me name:nil];
-          MPSGraphTensor *norm = [g divisionWithPrimaryTensor:xf secondaryTensor:denom name:nil];
-          yf = weighted
-                   ? [g multiplicationWithPrimaryTensor:norm secondaryTensor:gf name:nil]
-                   : norm;
-        }
-      } else if (kind == 2) {  // softmax over last axis (numerically stable)
-        yf = [g softMaxWithTensor:xf axis:1 name:nil];
-      } else {  // log_softmax = (x - max) - log(sum(exp(x - max)))
-        MPSGraphTensor *m = [g reductionMaximumWithTensor:xf axes:axis1 name:nil];
-        MPSGraphTensor *xm = [g subtractionWithPrimaryTensor:xf secondaryTensor:m name:nil];
-        MPSGraphTensor *e = [g exponentWithTensor:xm name:nil];
-        MPSGraphTensor *s = [g reductionSumWithTensor:e axes:axis1 name:nil];
-        MPSGraphTensor *lse = [g logarithmWithTensor:s name:nil];
-        yf = [g subtractionWithPrimaryTensor:xm secondaryTensor:lse name:nil];
-      }
-      if (!yf) return false;
-      y = mpsg_down(g, yf, ioType);
-      phs = [P copy];
-      mpsg_cache_put(key, @[ g, phs, y ]);
-    }
+    MPSGraph *g = mpsg_rowop_graph(kind, rows, cols, eps, gamma != nullptr,
+                                   beta != nullptr, ioType, &phs, &y);
+    if (!y) return false;
     NSMutableDictionary *feeds = [NSMutableDictionary dictionary];
     feeds[phs[0]] =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:xs dataType:ioType];
@@ -8669,6 +8680,38 @@ static void reference_reduce(int op, const float *x, float *out, int32_t rows,
 // RNG — argmax(z + g) with g_i = -log(-log(u_i)) draws from softmax(z). The
 // per-row reduction over the vocab runs on-GPU (the throughput win for batched
 // sampling of many concurrent sequences).
+static MPSGraph *mpsg_gumbel_graph(int32_t rows, int32_t cols, float invT,
+                                   MPSGraphTensor **pl_out,
+                                   MPSGraphTensor **pg_out,
+                                   MPSGraphTensor **y_out) {
+  NSArray<NSNumber *> *xs = @[ @(rows), @(cols) ];
+  NSString *key = [NSString stringWithFormat:@"gumbel:%d:%d:%a", rows, cols, invT];
+  NSArray *entry = mpsg_cache_get(key);
+  MPSGraph *g;
+  MPSGraphTensor *pl, *pg, *y;
+  if (entry) {
+    g = entry[0];
+    pl = ((NSArray *)entry[1])[0];
+    pg = ((NSArray *)entry[1])[1];
+    y = entry[2];
+  } else {
+    g = [MPSGraph new];
+    pl = [g placeholderWithShape:xs dataType:MPSDataTypeFloat32 name:nil];
+    pg = [g placeholderWithShape:xs dataType:MPSDataTypeFloat32 name:nil];
+    MPSGraphTensor *scaled = [g multiplicationWithPrimaryTensor:pl
+                                secondaryTensor:[g constantWithScalar:(double)invT dataType:MPSDataTypeFloat32]
+                                           name:nil];
+    MPSGraphTensor *scores = [g additionWithPrimaryTensor:scaled secondaryTensor:pg name:nil];
+    MPSGraphTensor *idx = [g reductionArgMaximumWithTensor:scores axis:1 name:nil];
+    y = [g castTensor:idx toType:MPSDataTypeInt32 name:nil];
+    mpsg_cache_put(key, @[ g, @[ pl, pg ], y ]);
+  }
+  *pl_out = pl;
+  *pg_out = pg;
+  *y_out = y;
+  return g;
+}
+
 static bool mpsg_run_gumbel_argmax(MetalDeviceContext &ctx, const float *logits,
                                    const float *gumbel, int32_t *out,
                                    int32_t rows, int32_t cols, float invT) {
@@ -8679,27 +8722,8 @@ static bool mpsg_run_gumbel_argmax(MetalDeviceContext &ctx, const float *logits,
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufG, ctx, gumbel, xbytes);
     if (!bufL || !bufG) return false;
     NSArray<NSNumber *> *xs = @[ @(rows), @(cols) ];
-    NSString *key = [NSString stringWithFormat:@"gumbel:%d:%d:%a", rows, cols, invT];
-    NSArray *entry = mpsg_cache_get(key);
-    MPSGraph *g;
     MPSGraphTensor *pl, *pg, *y;
-    if (entry) {
-      g = entry[0];
-      pl = ((NSArray *)entry[1])[0];
-      pg = ((NSArray *)entry[1])[1];
-      y = entry[2];
-    } else {
-      g = [MPSGraph new];
-      pl = [g placeholderWithShape:xs dataType:MPSDataTypeFloat32 name:nil];
-      pg = [g placeholderWithShape:xs dataType:MPSDataTypeFloat32 name:nil];
-      MPSGraphTensor *scaled = [g multiplicationWithPrimaryTensor:pl
-                                  secondaryTensor:[g constantWithScalar:(double)invT dataType:MPSDataTypeFloat32]
-                                             name:nil];
-      MPSGraphTensor *scores = [g additionWithPrimaryTensor:scaled secondaryTensor:pg name:nil];
-      MPSGraphTensor *idx = [g reductionArgMaximumWithTensor:scores axis:1 name:nil];
-      y = [g castTensor:idx toType:MPSDataTypeInt32 name:nil];
-      mpsg_cache_put(key, @[ g, @[ pl, pg ], y ]);
-    }
+    MPSGraph *g = mpsg_gumbel_graph(rows, cols, invT, &pl, &pg, &y);
     MPSGraphTensorData *ld = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufL shape:xs dataType:MPSDataTypeFloat32];
     MPSGraphTensorData *gd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufG shape:xs dataType:MPSDataTypeFloat32];
     NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
@@ -8713,7 +8737,103 @@ static bool mpsg_run_gumbel_argmax(MetalDeviceContext &ctx, const float *logits,
   }
 }
 
+// R2 — device-resident + encode variants for rowop (norms/softmax) and gumbel,
+// so a full decode step (proj/attn/logits via bmm + norm/softmax via rowop +
+// sample via gumbel) batches into ONE command buffer. f32 only.
+static bool encode_or_run_rowop_dev(MPSCommandBuffer *cb, MetalDeviceContext &ctx,
+                                    int kind, id<MTLBuffer> bufX,
+                                    id<MTLBuffer> bufG, id<MTLBuffer> bufO,
+                                    int32_t rows, int32_t cols, float eps) {
+  if (rows <= 0 || cols <= 0) return true;
+  if (!bufX || !bufO) return false;
+  bool hasGamma = (bufG != nil);
+  NSArray<NSNumber *> *xs = @[ @(rows), @(cols) ];
+  NSArray<NSNumber *> *gs = @[ @(cols) ];
+  NSArray *phs;
+  MPSGraphTensor *y;
+  MPSGraph *g = mpsg_rowop_graph(kind, rows, cols, eps, hasGamma, false,
+                                 MPSDataTypeFloat32, &phs, &y);
+  if (!y) return false;
+  NSMutableDictionary *feeds = [NSMutableDictionary dictionary];
+  feeds[phs[0]] = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:xs dataType:MPSDataTypeFloat32];
+  if (hasGamma && phs.count >= 2)
+    feeds[phs[1]] = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufG shape:gs dataType:MPSDataTypeFloat32];
+  MPSGraphTensorData *od = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufO shape:xs dataType:MPSDataTypeFloat32];
+  if (cb)
+    [g encodeToCommandBuffer:cb feeds:feeds targetOperations:nil resultsDictionary:@{y : od} executionDescriptor:nil];
+  else
+    [g runWithMTLCommandQueue:ctx.queue feeds:feeds targetOperations:nil resultsDictionary:@{y : od}];
+  return true;
+}
+
+static bool encode_or_run_gumbel_dev(MPSCommandBuffer *cb, MetalDeviceContext &ctx,
+                                     id<MTLBuffer> bufL, id<MTLBuffer> bufG,
+                                     id<MTLBuffer> bufO, int32_t rows,
+                                     int32_t cols, float invT) {
+  if (rows <= 0 || cols <= 0) return true;
+  if (!bufL || !bufG || !bufO) return false;
+  NSArray<NSNumber *> *xs = @[ @(rows), @(cols) ];
+  MPSGraphTensor *pl, *pg, *y;
+  MPSGraph *g = mpsg_gumbel_graph(rows, cols, invT, &pl, &pg, &y);
+  MPSGraphTensorData *ld = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufL shape:xs dataType:MPSDataTypeFloat32];
+  MPSGraphTensorData *gd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufG shape:xs dataType:MPSDataTypeFloat32];
+  // argMax keeps the reduced axis (size 1) -> [rows,1]; match it so the result
+  // writes correctly into the [rows] int32 output buffer.
+  MPSGraphTensorData *od = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufO shape:@[ @(rows), @1 ] dataType:MPSDataTypeInt32];
+  if (cb)
+    [g encodeToCommandBuffer:cb feeds:@{pl : ld, pg : gd} targetOperations:nil resultsDictionary:@{y : od} executionDescriptor:nil];
+  else
+    [g runWithMTLCommandQueue:ctx.queue feeds:@{pl : ld, pg : gd} targetOperations:nil resultsDictionary:@{y : od}];
+  return true;
+}
+
 }  // namespace
+
+// rowop: X [rows,cols], optional gamma [cols], O [rows,cols]. kind 0 layer_norm
+// (unweighted/gamma), 1 rmsnorm, 2 softmax, 3 log_softmax.
+extern "C" int32_t tessera_apple_gpu_rowop_dev_f32(TsDeviceTensor *X,
+                                                   TsDeviceTensor *gamma,
+                                                   TsDeviceTensor *O, int32_t kind,
+                                                   int32_t rows, int32_t cols,
+                                                   float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !X || !O) return 0;
+  return encode_or_run_rowop_dev(nil, ctx, kind, X->buf, gamma ? gamma->buf : nil,
+                                 O->buf, rows, cols, eps) ? 1 : 0;
+}
+extern "C" int32_t tessera_apple_gpu_rowop_dev_f32_enc(TsEncodeSession *s,
+                                                       TsDeviceTensor *X,
+                                                       TsDeviceTensor *gamma,
+                                                       TsDeviceTensor *O,
+                                                       int32_t kind, int32_t rows,
+                                                       int32_t cols, float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !O) return 0;
+  return encode_or_run_rowop_dev(s->cb, ctx, kind, X->buf,
+                                 gamma ? gamma->buf : nil, O->buf, rows, cols,
+                                 eps) ? 1 : 0;
+}
+
+// gumbel: logits + gumbel [rows,cols] f32, out_ids [rows] int32.
+extern "C" int32_t tessera_apple_gpu_gumbel_argmax_dev_f32(TsDeviceTensor *logits,
+                                                           TsDeviceTensor *gumbel,
+                                                           TsDeviceTensor *out_ids,
+                                                           int32_t rows,
+                                                           int32_t cols,
+                                                           float inv_temp) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !logits || !gumbel || !out_ids) return 0;
+  return encode_or_run_gumbel_dev(nil, ctx, logits->buf, gumbel->buf,
+                                  out_ids->buf, rows, cols, inv_temp) ? 1 : 0;
+}
+extern "C" int32_t tessera_apple_gpu_gumbel_argmax_dev_f32_enc(
+    TsEncodeSession *s, TsDeviceTensor *logits, TsDeviceTensor *gumbel,
+    TsDeviceTensor *out_ids, int32_t rows, int32_t cols, float inv_temp) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !logits || !gumbel || !out_ids) return 0;
+  return encode_or_run_gumbel_dev(s->cb, ctx, logits->buf, gumbel->buf,
+                                  out_ids->buf, rows, cols, inv_temp) ? 1 : 0;
+}
 
 extern "C" void tessera_apple_gpu_gumbel_argmax_f32(const float *logits,
                                                     const float *gumbel,

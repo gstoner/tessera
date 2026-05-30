@@ -126,6 +126,43 @@ def absorb_decode_one(q_nope, q_rope, c_kv, k_rope, Wuk_t, Wuv, key_pos, q_pos,
                              sinK, rotation_style)
 
 
+def absorb_decode_batch(q_nope, q_rope, c_kv, k_rope, Wuk_t, Wuv, key_pos, q_pos,
+                        rope_base, rotation_style):
+    """Batched weight-absorbed decode for ``G`` sequences that share the same
+    cached length (and therefore the same RoPE positions) — one kernel dispatch
+    instead of ``G`` calls.
+
+    q_nope ``[G,H,dn]``, q_rope ``[G,H,dr]``, c_kv ``[G,S,Dl]``,
+    k_rope ``[G,S,dr]``; ``key_pos`` ``[S]`` and ``q_pos`` (scalar) are shared
+    across the group. Returns ``[G, H, dv]``. Falls back to a per-sequence numpy
+    reference when the GPU symbol is unavailable."""
+    qn = np.ascontiguousarray(q_nope, np.float32)
+    qr = np.ascontiguousarray(q_rope, np.float32)
+    c_kv = np.ascontiguousarray(c_kv, np.float32)
+    k_rope = np.ascontiguousarray(k_rope, np.float32)
+    G, H = qn.shape[0], qn.shape[1]
+    rope_dim = qr.shape[-1]
+    cosK, sinK = _rope_tables(np.asarray(key_pos), rope_dim, rope_base)
+    cosQ, sinQ = _rope_tables(np.asarray([q_pos]), rope_dim, rope_base)
+    try:
+        from .. import runtime as R
+        dispatch = getattr(R, "_apple_gpu_mla_absorb_decode", None)
+    except Exception:  # pragma: no cover
+        dispatch = None
+    if dispatch is not None:
+        # kernel batches over B = G: q [G,H,1,*], c_kv/k_rope [G,S,*].
+        res = dispatch(qn[:, :, None, :], qr[:, :, None, :], c_kv, k_rope,
+                       Wuk_t, Wuv, cosQ, sinQ, cosK, sinK, np,
+                       rotation_style=rotation_style)
+        if res is not None:
+            return np.ascontiguousarray(res[:, :, 0, :])
+    out = np.empty((G, H, Wuv.shape[-1]), np.float32)
+    for g in range(G):
+        out[g] = _reference_absorb(qn[g], qr[g], c_kv[g], k_rope[g], Wuk_t, Wuv,
+                                   cosQ, sinQ, cosK, sinK, rotation_style)
+    return out
+
+
 class MLAPagedDecoder:
     """Single-sequence MLA decoder over a paged latent + rope cache.
 

@@ -42,7 +42,7 @@ from typing import Any, Hashable
 
 import numpy as np
 
-from .mla_paged import absorb_decode_one
+from .mla_paged import absorb_decode_batch, absorb_decode_one
 
 _DTYPE_MAP = {"fp16": np.float16, "bf16": np.float32, "fp32": np.float32,
               "fp64": np.float64}
@@ -255,10 +255,47 @@ class MLABlockPagedCache:
         """Decode a batch of concurrent sequences. ``queries`` maps
         ``seq_id -> (q_nope, q_rope)``; returns ``seq_id -> [num_heads, v_dim]``.
 
-        Sequences are ragged (different lengths), so each is decoded against its
-        own block-table'd window."""
-        return {sid: self.decode(sid, qn, qr)
-                for sid, (qn, qr) in queries.items()}
+        Sequences are ragged, but those sharing a cached length share RoPE
+        positions, so they are **grouped by length and dispatched together**
+        (one ``B = group_size`` kernel call per length) instead of looping
+        per sequence — a throughput win when many concurrent requests sit at the
+        same decode step."""
+        # group seq ids by current length
+        by_len: dict[int, list] = {}
+        for sid, (qn, qr) in queries.items():
+            st = self._seq(sid)
+            if st.length == 0:
+                raise MLABlockPagedCacheError(
+                    f"sequence {sid!r} is empty; append before decoding")
+            by_len.setdefault(st.length, []).append((sid, qn, qr))
+
+        out: dict = {}
+        for L, items in by_len.items():
+            G = len(items)
+            qn_stack = np.empty((G, self.num_heads, self.nope_dim), np.float32)
+            qr_stack = np.empty((G, self.num_heads, self.rope_dim), np.float32)
+            c_stack = np.empty((G, L, self.latent_dim), np.float32)
+            r_stack = np.empty((G, L, self.rope_dim), np.float32)
+            for i, (sid, qn, qr) in enumerate(items):
+                qn = np.ascontiguousarray(qn, np.float32)
+                qr = np.ascontiguousarray(qr, np.float32)
+                if qn.shape != (self.num_heads, self.nope_dim):
+                    raise ValueError(
+                        f"q_nope for {sid!r} must be "
+                        f"{(self.num_heads, self.nope_dim)}; got {qn.shape}")
+                if qr.shape != (self.num_heads, self.rope_dim):
+                    raise ValueError(
+                        f"q_rope for {sid!r} must be "
+                        f"{(self.num_heads, self.rope_dim)}; got {qr.shape}")
+                c_kv, k_rope = self._gather(self._seq(sid))
+                qn_stack[i], qr_stack[i] = qn, qr
+                c_stack[i], r_stack[i] = c_kv, k_rope
+            res = absorb_decode_batch(qn_stack, qr_stack, c_stack, r_stack,
+                                      self.Wuk_t, self.Wuv, np.arange(L), L - 1,
+                                      self.rope_base, self.rotation_style)
+            for i, (sid, _, _) in enumerate(items):
+                out[sid] = np.ascontiguousarray(res[i])
+        return out
 
     def __repr__(self) -> str:
         return (f"MLABlockPagedCache(num_blocks={self.num_blocks}, "

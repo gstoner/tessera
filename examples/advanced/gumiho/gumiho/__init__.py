@@ -18,6 +18,7 @@ from .decode import (
     run_precision_demo,
     run_training_demo,
 )
+from .onchip import OnchipStepSummary, run_onchip_step_demo
 from .prefix_shared import (
     PrefixSharedVerifier,
     PrefixSharingSummary,
@@ -46,6 +47,8 @@ __all__ = [
     "ResidentSerialDraft",
     "ResidentDraftResult",
     "validate_resident_draft",
+    "OnchipStepSummary",
+    "run_onchip_step_demo",
     "ForLoopDraftResult",
     "serial_draft_forloop",
     "validate_serial_forloop",

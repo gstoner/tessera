@@ -109,6 +109,30 @@ learnable structure to generalize across contexts; a production Gumiho trains a
 real draft on a real corpus. Swap in a trained target + corpus and the same code
 path measures real-workload acceptance.
 
+## On-device speculative step — composed kernels (`--mode onchip`)
+
+`--mode onchip` composes the Phase-G device kernels into one greedy speculative
+step:
+
+```
+serial_draft(forLoop, Rung 1) + parallel + tree_verify   [MPSGraph / backend]
+        → spec_accept                                     [MSL kernel, Rung 3]
+```
+
+The draft and verify are static-shape MPSGraph work; the **accept** — per-path
+accept-while-match with an early break (a data-dependent trip count), longest-
+prefix selection, and the bonus token — is the *dynamic* control flow MPSGraph
+can't express, so it runs as the single MSL kernel `apple_gpu_msl_spec_accept`
+(Rung 3). The on-device accept is cross-checked against a host reference.
+
+```
+backend=metal paths=8 | best_path=0 accepted=2 [14, 30] bonus=12 | matches_host=True
+```
+
+(With `distill_steps>0` the draft is distilled on the step's own context first,
+so the accepted length is non-zero; untrained, the greedy draft rarely matches
+the target's greedy token.)
+
 ## GPU-resident serial draft (one command buffer per token)
 
 `--mode resident` runs the serial head's autoregressive draft **GPU-resident**:

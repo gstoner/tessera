@@ -15,7 +15,8 @@ for path in (ROOT, REPO / "python"):
     if text not in sys.path:
         sys.path.insert(0, text)
 
-from mla import MultiLatentAttentionNumpy, build_toy_graph_ir, compile_toy_graph, tiny_config
+from mla import (MultiLatentAttentionNumpy, build_toy_graph_ir, compile_toy_graph,
+                 run_gpu_decode_demo, tiny_config)
 
 
 def main() -> int:
@@ -47,6 +48,25 @@ def main() -> int:
         round(result.kv_cache_reduction, 4),
         bundle.request.target,
         bundle.execution_mode,
+    )
+
+    # New Apple GPU MLA decode surfaces: weight absorption, paged + block-paged
+    # serving, and the GPU-resident decode loop — validated against numpy.
+    g = run_gpu_decode_demo(cfg)
+    assert g.absorbed_matches_explicit, "weight absorption != explicit decode"
+    assert g.paged_matches_reference, "MLAPagedDecoder != reference"
+    assert g.block_paged_matches_reference, "MLABlockPagedCache != reference"
+    assert g.resident_loop_tokens == 4
+    assert g.cache_bytes_per_token_explicit > g.cache_bytes_per_token_latent
+    ratio = g.cache_bytes_per_token_explicit / g.cache_bytes_per_token_latent
+    print(
+        "OK mla gpu-decode:",
+        g.backend,
+        "absorbed==explicit", g.absorbed_matches_explicit,
+        "paged==ref", g.paged_matches_reference,
+        "block_paged==ref", g.block_paged_matches_reference,
+        "resident_tokens", g.resident_loop_tokens,
+        f"kv_cache_ratio {ratio:.1f}x",
     )
     return 0
 

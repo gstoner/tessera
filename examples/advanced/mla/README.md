@@ -5,10 +5,37 @@ design note for a full Hopper/Blackwell-style Multi-Latent Attention
 implementation.
 
 Contents:
-- `mla/` — dependency-light NumPy MLA reference and Graph IR compiler smoke.
+- `mla/` — dependency-light NumPy MLA reference, Graph IR compiler smoke, **and
+  `gpu_decode.py` driving the shipped Apple GPU MLA decode surfaces**.
 - `ir/flash_mla_tiny.mlir` — parser-valid current-dialect Graph IR tensor skeleton.
-- `tests/smoke_random.py` — NumPy shape/cache smoke plus Graph -> Schedule -> Tile -> Apple Target IR artifact check.
+- `tests/smoke_random.py` — NumPy shape/cache smoke, Graph -> Schedule -> Tile ->
+  Apple Target IR artifact check, **plus the GPU-decode demo validated vs numpy**.
 - `flashmla_tessera.md` — full design note for native MLA kernels, paged latent KV cache, RoPE split, and weight absorption.
+
+## Apple GPU MLA decode (shipped)
+
+`mla.run_gpu_decode_demo(cfg)` exercises the MLA decode work now in the Tessera
+runtime, driven from this example's config and cross-checked against a numpy
+reference (it runs on the GPU on Apple Silicon, and falls back to numpy
+elsewhere):
+
+- **Weight absorption** (`runtime._apple_gpu_mla_absorb_decode`) — attention runs
+  directly against the cached latent; verified **numerically identical** to the
+  explicit decoupled-RoPE path.
+- **Paged single-sequence decode** (`tessera.cache.MLAPagedDecoder`).
+- **GPU-resident multi-step decode loop** (`tessera.cache.ResidentMLADecoder`) —
+  weights uploaded once, each step in one command buffer, only the token id reads
+  back.
+- **Concurrent block-paged serving** (`tessera.cache.MLABlockPagedCache`).
+
+Expected GPU-decode line:
+
+```text
+OK mla gpu-decode: metal absorbed==explicit True paged==ref True block_paged==ref True resident_tokens 4 kv_cache_ratio 7.2x
+```
+
+(The `kv_cache_ratio` is the per-token cache footprint of the compressed latent +
+shared rope key vs. explicit per-head K/V.)
 
 ## Quick Start
 

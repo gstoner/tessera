@@ -2793,6 +2793,58 @@ def _apple_gpu_dispatch_conv3d(operands: list[Any], kwargs: dict, np: Any) -> An
     return out.astype(out_dtype)
 
 
+def _apple_gpu_mla_decode_rope_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mla_decode_rope_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.POINTER(ctypes.c_float)] * 10 + [ctypes.c_int32] * 8
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_mla_decode_rope(Qn: Any, Qr: Any, Kn: Any, Kr: Any, V: Any,
+                               cosQ: Any, sinQ: Any, cosK: Any, sinK: Any,
+                               np: Any, rotation_style: str = "interleaved") -> Any:
+    """MLA decode with decoupled RoPE (explicit per-head K).
+
+    DeepSeek-style MLA: each head's query/key splits into a no-position part
+    (``dn``) and a RoPE-carrying part (``dr``); the key RoPE part is shared
+    across heads. Once RoPE is applied and ``[nope ; rope]`` is concatenated,
+    the score is standard MHA with head_dim ``dn + dr``; the heavy attention
+    runs on-GPU via the fused ``bsmm`` kernel.
+
+    Shapes (all f32): Qn ``[B,H,Sq,dn]``, Qr ``[B,H,Sq,dr]``,
+    Kn ``[B,H,Skv,dn]``, Kr ``[B,Skv,dr]`` (shared), V ``[B,H,Skv,dv]``,
+    cosQ/sinQ ``[Sq,dr/2]``, cosK/sinK ``[Skv,dr/2]``. Returns O ``[B,H,Sq,dv]``.
+    ``rotation_style`` is ``"interleaved"`` (NeoX even/odd) or ``"half"``
+    (GPT-J split-halves). Returns None when the runtime symbol is unavailable."""
+    style = 0 if str(rotation_style).lower().startswith("inter") else 1
+    Qn = np.ascontiguousarray(Qn, np.float32)
+    Qr = np.ascontiguousarray(Qr, np.float32)
+    Kn = np.ascontiguousarray(Kn, np.float32)
+    Kr = np.ascontiguousarray(Kr, np.float32)
+    V = np.ascontiguousarray(V, np.float32)
+    cosQ = np.ascontiguousarray(cosQ, np.float32)
+    sinQ = np.ascontiguousarray(sinQ, np.float32)
+    cosK = np.ascontiguousarray(cosK, np.float32)
+    sinK = np.ascontiguousarray(sinK, np.float32)
+    B, H, Sq, dn = (int(s) for s in Qn.shape)
+    dr = int(Qr.shape[-1])
+    Skv = int(Kn.shape[-2])
+    dv = int(V.shape[-1])
+    sym = _apple_gpu_mla_decode_rope_f32()
+    if sym is None:
+        return None
+    fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    O = np.zeros((B, H, Sq, dv), np.float32)
+    sym(fp(Qn), fp(Qr), fp(Kn), fp(Kr), fp(V), fp(cosQ), fp(sinQ), fp(cosK),
+        fp(sinK), fp(O), ctypes.c_int32(B), ctypes.c_int32(H),
+        ctypes.c_int32(Sq), ctypes.c_int32(Skv), ctypes.c_int32(dn),
+        ctypes.c_int32(dr), ctypes.c_int32(dv), ctypes.c_int32(style))
+    return O
+
+
 def _apple_gpu_flash_attn_gqa_f32() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_flash_attn_gqa_f32", None)

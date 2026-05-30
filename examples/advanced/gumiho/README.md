@@ -88,12 +88,26 @@ training surface). Two details keep it exact and tractable:
   `p_target/p_draft ≈ 1`, so correct tokens are actually accepted — argmax-only
   distillation over-rejects and barely moves the accepted length.
 
-**Honesty note:** this is a tiny in-distribution demo. The draft is distilled on
-the target's own generation trajectories (the contexts the decoder visits) and
-measured on the same prompts — it demonstrates the *mechanism* (distillation →
-acceptance↑ → speedup), not generalization. A random target has no learnable
-structure to generalize across unseen contexts; real Gumiho trains a real draft
-on a real corpus. The decode loop itself is genuine speculative decoding.
+## What this example is
+
+A complete, validated speculative-decoding pipeline on Apple Silicon: a faithful
+Gumiho draft (serial Transformer + parallel MLP heads + Full Tree Attention), its
+draft and tree-verification dense math executing on the Tessera Apple GPU/CPU
+backend, a distillation loop driven by Tessera's own autograd and optimizer, and
+a multi-step decode that **measures** the acceptance length and per-target-pass
+speedup. Every dense kernel is cross-checked against a float64 numpy reference,
+and the decode loop is genuine speculative decoding (Leviathan acceptance +
+`advance_kv`). It exercises a real slice of the stack end to end —
+embeddings, projections, attention with a tree mask, SwiGLU, `tessera.autodiff`,
+`tessera.optim`, `tessera.speculative`, and the Apple runtime.
+
+**Scope.** The models are small seeded synthetics and the draft is distilled on
+the target's own generation trajectories, then measured on the same prompts, so
+the reported speedup demonstrates the *mechanism* (distillation → acceptance↑ →
+speedup) rather than generalization to unseen text. A random target has no
+learnable structure to generalize across contexts; a production Gumiho trains a
+real draft on a real corpus. Swap in a trained target + corpus and the same code
+path measures real-workload acceptance.
 
 ## Notes
 

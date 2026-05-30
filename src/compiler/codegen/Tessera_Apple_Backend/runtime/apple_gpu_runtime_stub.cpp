@@ -120,6 +120,11 @@ inline uint16_t float_to_half_stub(float v) {
   return uint16_t(sign | (uint32_t(exp) << 10) | (frac >> 13));
 }
 
+// Forward-declare the bf16 bit helpers (defined later in the GQA section) so the
+// MLA decode stubs above them can convert bf16 at the boundary.
+static inline float gqa_bf16_to_f32_stub(uint16_t b);
+static inline uint16_t gqa_f32_to_bf16_stub(float v);
+
 inline float bfloat16_to_float_stub(uint16_t b) {
   uint32_t f = static_cast<uint32_t>(b) << 16;
   float out;
@@ -908,6 +913,50 @@ extern "C" void tessera_apple_gpu_mla_decode_f32(const float* X,
                                 S_q, D_h);
 }
 
+// compressed-KV mla_decode f16 / bf16 non-Apple reference.
+extern "C" void tessera_apple_gpu_mla_decode_f16(
+    const uint16_t* X, const uint16_t* Wdkv, const uint16_t* Wuk,
+    const uint16_t* Wuv, const uint16_t* Q, uint16_t* O, int32_t B, int32_t S_kv,
+    int32_t D_x, int32_t D_lat, int32_t S_q, int32_t D_h) {
+  if (B <= 0 || S_kv <= 0 || D_x <= 0 || D_lat <= 0 || S_q <= 0 || D_h <= 0)
+    return;
+  auto c = [](const uint16_t* p, std::size_t n) {
+    std::vector<float> v(n);
+    for (std::size_t i = 0; i < n; ++i) v[i] = half_to_float_stub(p[i]);
+    return v;
+  };
+  std::vector<float> xf = c(X, (std::size_t)S_kv * D_x),
+                     wd = c(Wdkv, (std::size_t)D_x * D_lat),
+                     wk = c(Wuk, (std::size_t)D_lat * D_h),
+                     wv = c(Wuv, (std::size_t)D_lat * D_h),
+                     qf = c(Q, (std::size_t)B * S_q * D_h),
+                     of((std::size_t)B * S_q * D_h);
+  reference_mla_decode_f32_stub(xf.data(), wd.data(), wk.data(), wv.data(),
+                                qf.data(), of.data(), B, S_kv, D_x, D_lat, S_q, D_h);
+  for (std::size_t i = 0; i < of.size(); ++i) O[i] = float_to_half_stub(of[i]);
+}
+extern "C" void tessera_apple_gpu_mla_decode_bf16(
+    const uint16_t* X, const uint16_t* Wdkv, const uint16_t* Wuk,
+    const uint16_t* Wuv, const uint16_t* Q, uint16_t* O, int32_t B, int32_t S_kv,
+    int32_t D_x, int32_t D_lat, int32_t S_q, int32_t D_h) {
+  if (B <= 0 || S_kv <= 0 || D_x <= 0 || D_lat <= 0 || S_q <= 0 || D_h <= 0)
+    return;
+  auto c = [](const uint16_t* p, std::size_t n) {
+    std::vector<float> v(n);
+    for (std::size_t i = 0; i < n; ++i) v[i] = gqa_bf16_to_f32_stub(p[i]);
+    return v;
+  };
+  std::vector<float> xf = c(X, (std::size_t)S_kv * D_x),
+                     wd = c(Wdkv, (std::size_t)D_x * D_lat),
+                     wk = c(Wuk, (std::size_t)D_lat * D_h),
+                     wv = c(Wuv, (std::size_t)D_lat * D_h),
+                     qf = c(Q, (std::size_t)B * S_q * D_h),
+                     of((std::size_t)B * S_q * D_h);
+  reference_mla_decode_f32_stub(xf.data(), wd.data(), wk.data(), wv.data(),
+                                qf.data(), of.data(), B, S_kv, D_x, D_lat, S_q, D_h);
+  for (std::size_t i = 0; i < of.size(); ++i) O[i] = gqa_f32_to_bf16_stub(of[i]);
+}
+
 // ---- MLA decode with decoupled RoPE — non-Apple reference (2026-05-30) ------
 static inline void mla_rope_apply_stub(const float* x, const float* cosr,
                                        const float* sinr, float* out, int32_t dr,
@@ -979,6 +1028,58 @@ extern "C" void tessera_apple_gpu_mla_decode_rope_f32(
         }
       }
     }
+}
+
+// decoupled-rope mla_decode_rope f16 / bf16 non-Apple reference.
+extern "C" void tessera_apple_gpu_mla_decode_rope_f16(
+    const uint16_t* Qn, const uint16_t* Qr, const uint16_t* Kn,
+    const uint16_t* Kr, const uint16_t* V, const float* cosQ, const float* sinQ,
+    const float* cosK, const float* sinK, uint16_t* O, int32_t B, int32_t H,
+    int32_t Sq, int32_t Skv, int32_t dn, int32_t dr, int32_t dv,
+    int32_t rotation_style) {
+  if (B <= 0 || H <= 0 || Sq <= 0 || Skv <= 0 || dn < 0 || dr < 0 || dv <= 0 ||
+      (dr % 2) != 0 || (dn + dr) <= 0)
+    return;
+  auto c = [](const uint16_t* p, std::size_t n) {
+    std::vector<float> v(n);
+    for (std::size_t i = 0; i < n; ++i) v[i] = half_to_float_stub(p[i]);
+    return v;
+  };
+  std::vector<float> qn = c(Qn, (std::size_t)B * H * Sq * dn),
+                     qr = c(Qr, (std::size_t)B * H * Sq * dr),
+                     kn = c(Kn, (std::size_t)B * H * Skv * dn),
+                     kr = c(Kr, (std::size_t)B * Skv * dr),
+                     vf = c(V, (std::size_t)B * H * Skv * dv),
+                     of((std::size_t)B * H * Sq * dv);
+  tessera_apple_gpu_mla_decode_rope_f32(qn.data(), qr.data(), kn.data(),
+      kr.data(), vf.data(), cosQ, sinQ, cosK, sinK, of.data(), B, H, Sq, Skv,
+      dn, dr, dv, rotation_style);
+  for (std::size_t i = 0; i < of.size(); ++i) O[i] = float_to_half_stub(of[i]);
+}
+extern "C" void tessera_apple_gpu_mla_decode_rope_bf16(
+    const uint16_t* Qn, const uint16_t* Qr, const uint16_t* Kn,
+    const uint16_t* Kr, const uint16_t* V, const float* cosQ, const float* sinQ,
+    const float* cosK, const float* sinK, uint16_t* O, int32_t B, int32_t H,
+    int32_t Sq, int32_t Skv, int32_t dn, int32_t dr, int32_t dv,
+    int32_t rotation_style) {
+  if (B <= 0 || H <= 0 || Sq <= 0 || Skv <= 0 || dn < 0 || dr < 0 || dv <= 0 ||
+      (dr % 2) != 0 || (dn + dr) <= 0)
+    return;
+  auto c = [](const uint16_t* p, std::size_t n) {
+    std::vector<float> v(n);
+    for (std::size_t i = 0; i < n; ++i) v[i] = gqa_bf16_to_f32_stub(p[i]);
+    return v;
+  };
+  std::vector<float> qn = c(Qn, (std::size_t)B * H * Sq * dn),
+                     qr = c(Qr, (std::size_t)B * H * Sq * dr),
+                     kn = c(Kn, (std::size_t)B * H * Skv * dn),
+                     kr = c(Kr, (std::size_t)B * Skv * dr),
+                     vf = c(V, (std::size_t)B * H * Skv * dv),
+                     of((std::size_t)B * H * Sq * dv);
+  tessera_apple_gpu_mla_decode_rope_f32(qn.data(), qr.data(), kn.data(),
+      kr.data(), vf.data(), cosQ, sinQ, cosK, sinK, of.data(), B, H, Sq, Skv,
+      dn, dr, dv, rotation_style);
+  for (std::size_t i = 0; i < of.size(); ++i) O[i] = gqa_f32_to_bf16_stub(of[i]);
 }
 
 // ---- MLA decode with weight absorption — non-Apple reference (2026-05-30) ---

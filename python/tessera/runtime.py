@@ -2793,12 +2793,40 @@ def _apple_gpu_dispatch_conv3d(operands: list[Any], kwargs: dict, np: Any) -> An
     return out.astype(out_dtype)
 
 
+def _apple_gpu_mla_decode_sym(suffix: str) -> Any:
+    """Compressed-KV mla_decode symbol (f32 / f16 / bf16). f32 uses float
+    pointers; f16/bf16 use uint16 pointers. ABI: X,Wdkv,Wuk,Wuv,Q,O + 6 ints."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, f"tessera_apple_gpu_mla_decode_{suffix}", None)
+    if sym is None:
+        return None
+    ptr = (ctypes.POINTER(ctypes.c_float) if suffix == "f32"
+           else ctypes.POINTER(ctypes.c_uint16))
+    sym.argtypes = [ptr] * 6 + [ctypes.c_int32] * 6
+    sym.restype = None
+    return sym
+
+
 def _apple_gpu_mla_decode_rope_f32() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_mla_decode_rope_f32", None)
     if sym is None:
         return None
     sym.argtypes = [ctypes.POINTER(ctypes.c_float)] * 10 + [ctypes.c_int32] * 8
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_mla_decode_rope_half(suffix: str) -> Any:
+    """f16 / bf16 decoupled-RoPE symbol: 5 uint16 tensor inputs + 4 f32 cos/sin
+    + uint16 output (matching the C ABI)."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, f"tessera_apple_gpu_mla_decode_rope_{suffix}", None)
+    if sym is None:
+        return None
+    u16 = ctypes.POINTER(ctypes.c_uint16)
+    f32 = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [u16] * 5 + [f32] * 4 + [u16] + [ctypes.c_int32] * 8
     sym.restype = None
     return sym
 
@@ -2814,35 +2842,52 @@ def _apple_gpu_mla_decode_rope(Qn: Any, Qr: Any, Kn: Any, Kr: Any, V: Any,
     the score is standard MHA with head_dim ``dn + dr``; the heavy attention
     runs on-GPU via the fused ``bsmm`` kernel.
 
-    Shapes (all f32): Qn ``[B,H,Sq,dn]``, Qr ``[B,H,Sq,dr]``,
-    Kn ``[B,H,Skv,dn]``, Kr ``[B,Skv,dr]`` (shared), V ``[B,H,Skv,dv]``,
-    cosQ/sinQ ``[Sq,dr/2]``, cosK/sinK ``[Skv,dr/2]``. Returns O ``[B,H,Sq,dv]``.
-    ``rotation_style`` is ``"interleaved"`` (NeoX even/odd) or ``"half"``
-    (GPT-J split-halves). Returns None when the runtime symbol is unavailable."""
+    Dtype is taken from ``Qn`` (the five tensor inputs share it): **f32**/**f16**
+    run natively (f16 ⇒ f16 bsmm I/O, fp32 accumulation), **bf16** via a host
+    round-trip. cos/sin tables stay f32. Shapes: Qn ``[B,H,Sq,dn]``,
+    Qr ``[B,H,Sq,dr]``, Kn ``[B,H,Skv,dn]``, Kr ``[B,Skv,dr]`` (shared),
+    V ``[B,H,Skv,dv]``, cos/sin ``[Sq|Skv, dr/2]``. Returns O ``[B,H,Sq,dv]`` in
+    the input dtype. ``rotation_style`` is ``"interleaved"`` or ``"half"``."""
     style = 0 if str(rotation_style).lower().startswith("inter") else 1
+    Qn0 = np.asarray(Qn)
+    out_dtype = Qn0.dtype
+    bf16 = _bfloat16_dtype()
+    cosQ = np.ascontiguousarray(cosQ, np.float32)
+    sinQ = np.ascontiguousarray(sinQ, np.float32)
+    cosK = np.ascontiguousarray(cosK, np.float32)
+    sinK = np.ascontiguousarray(sinK, np.float32)
+    fpf = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    B, H, Sq, dn = (int(s) for s in Qn0.shape)
+    dr = int(np.asarray(Qr).shape[-1])
+    Skv = int(np.asarray(Kn).shape[-2])
+    dv = int(np.asarray(V).shape[-1])
+    iargs = [ctypes.c_int32(v) for v in (B, H, Sq, Skv, dn, dr, dv, style)]
+
+    is_f16 = (out_dtype == np.float16)
+    is_bf16 = (bf16 is not None and out_dtype == bf16)
+    if is_f16 or is_bf16:
+        sym = _apple_gpu_mla_decode_rope_half("f16" if is_f16 else "bf16")
+        if sym is not None:
+            up = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+            ten = [np.ascontiguousarray(a).view(np.uint16) for a in
+                   (Qn, Qr, Kn, Kr, V)]
+            O = np.zeros((B, H, Sq, dv), np.uint16)
+            sym(up(ten[0]), up(ten[1]), up(ten[2]), up(ten[3]), up(ten[4]),
+                fpf(cosQ), fpf(sinQ), fpf(cosK), fpf(sinK), up(O), *iargs)
+            return O.view(out_dtype)
+
     Qn = np.ascontiguousarray(Qn, np.float32)
     Qr = np.ascontiguousarray(Qr, np.float32)
     Kn = np.ascontiguousarray(Kn, np.float32)
     Kr = np.ascontiguousarray(Kr, np.float32)
     V = np.ascontiguousarray(V, np.float32)
-    cosQ = np.ascontiguousarray(cosQ, np.float32)
-    sinQ = np.ascontiguousarray(sinQ, np.float32)
-    cosK = np.ascontiguousarray(cosK, np.float32)
-    sinK = np.ascontiguousarray(sinK, np.float32)
-    B, H, Sq, dn = (int(s) for s in Qn.shape)
-    dr = int(Qr.shape[-1])
-    Skv = int(Kn.shape[-2])
-    dv = int(V.shape[-1])
     sym = _apple_gpu_mla_decode_rope_f32()
     if sym is None:
         return None
-    fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
     O = np.zeros((B, H, Sq, dv), np.float32)
-    sym(fp(Qn), fp(Qr), fp(Kn), fp(Kr), fp(V), fp(cosQ), fp(sinQ), fp(cosK),
-        fp(sinK), fp(O), ctypes.c_int32(B), ctypes.c_int32(H),
-        ctypes.c_int32(Sq), ctypes.c_int32(Skv), ctypes.c_int32(dn),
-        ctypes.c_int32(dr), ctypes.c_int32(dv), ctypes.c_int32(style))
-    return O
+    sym(fpf(Qn), fpf(Qr), fpf(Kn), fpf(Kr), fpf(V), fpf(cosQ), fpf(sinQ),
+        fpf(cosK), fpf(sinK), fpf(O), *iargs)
+    return O.astype(out_dtype) if out_dtype != np.float32 else O
 
 
 def _apple_gpu_mla_absorb_decode_f32() -> Any:

@@ -120,6 +120,23 @@ def test_mtl4_matmul_non_multiple_of_8_falls_back():
                                rtol=1e-5)
 
 
+def test_mtl4_pipeline_caching_survives_many_calls():
+    """The MTL4 pipeline + command queue are cached/shared. Many repeated calls
+    must stay correct — before the per-call residency-set removal this tripped
+    the queue's 32-residency-set limit around call ~33."""
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((16, 16)).astype(np.float32) * 0.1
+    B = rng.standard_normal((16, 16)).astype(np.float32) * 0.1
+    ref = A.astype(np.float64) @ B.astype(np.float64)
+    C = None
+    ran = False
+    for _ in range(40):
+        C, ran = R.apple_gpu_mtl4_matmul_sg(A, B, np)
+    np.testing.assert_allclose(C.astype(np.float64), ref, rtol=1e-4, atol=1e-4)
+    if R.apple_gpu_metal4_caps()["available"]:
+        assert ran
+
+
 def test_mtl4_scan_falls_back_cleanly():
     # Even without Metal 4 the contract holds (numpy fallback), correct + shaped.
     rng = np.random.default_rng(3)

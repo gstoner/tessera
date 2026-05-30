@@ -76,8 +76,16 @@ forced.
   multiples of 8; validated bit-close to numpy (≤1e-7). The first kernel on the
   Metal 4 lane to use the matrix/tensor units directly. (MSL 4.0 also ships a
   newer general `tensor` cooperative-op type — a follow-up; `simdgroup_matrix` is
-  the established path. Per-call pipeline compilation is not yet cached — a
-  perf follow-up before any M4 routing.)
+  the established path.)
+- **MTL4 pipeline caching (landed).** The MTL4 compute pipeline (MSL 4.0 compile
+  + `MTL4Compiler` pipeline build), the `MTL4Compiler`, and the
+  `MTL4CommandQueue` are now created once per `(source, entry)` / per device and
+  reused (`compile_mtl4_pipeline` / `mtl4_shared_queue`, mirroring the classic
+  `compile_msl_kernel` cache). Cold (first/compile) → warm (cached) for the M3
+  matmul: **~58 ms → ~0.46 ms (~125×)**. Because the queue is now shared, each
+  call removes its per-call `MTLResidencySet` after sync (the queue's
+  residency-set limit is 32). This is the prerequisite for a meaningful
+  MTL4-vs-MPSGraph benchmark and for M4 routing.
 - **M4 — capability-gated routing.** Route selected ops (e.g., the resident
   decode chain) to the MTL4 lane when the probe passes; MPSGraph otherwise.
 

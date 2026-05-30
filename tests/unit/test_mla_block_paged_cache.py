@@ -1,0 +1,192 @@
+"""Multi-sequence block-paged MLA cache — vLLM-style paged attention (2026-05-30).
+
+`tessera.cache.MLABlockPagedCache` manages many concurrent sequences over a
+single physical block pool with per-sequence block tables, on-demand allocation,
+and free-on-finish. These tests validate the memory manager (allocation / free /
+reuse / non-contiguous block tables / pool exhaustion) and cross-check decode
+correctness against the already-validated single-sequence `MLAPagedDecoder`.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from tessera.cache import (MLABlockPagedCache, MLABlockPagedCacheError,
+                           MLAPagedDecoder)
+
+
+def _weights(H=4, dn=16, dr=8, dv=16, Dl=32, seed=0):
+    rng = np.random.RandomState(seed)
+    Wuk = (rng.randn(H, Dl, dn) * 0.3).astype(np.float32)
+    Wuv = (rng.randn(H, Dl, dv) * 0.3).astype(np.float32)
+    Wuk_t = np.ascontiguousarray(np.swapaxes(Wuk, 1, 2))
+    return Wuk_t, Wuv, (H, dn, dr, dv, Dl)
+
+
+def _pool(num_blocks=8, block_size=4, **kw):
+    Wuk_t, Wuv, (H, dn, dr, dv, Dl) = _weights(**kw)
+    return MLABlockPagedCache(num_heads=H, nope_dim=dn, rope_dim=dr, v_dim=dv,
+                              latent_dim=Dl, Wuk_t=Wuk_t, Wuv=Wuv,
+                              num_blocks=num_blocks, block_size=block_size), \
+        Wuk_t, Wuv, (H, dn, dr, dv, Dl)
+
+
+def _ref_decoder(Wuk_t, Wuv, dims, max_seq=256):
+    H, dn, dr, dv, Dl = dims
+    return MLAPagedDecoder(num_heads=H, nope_dim=dn, rope_dim=dr, v_dim=dv,
+                           latent_dim=Dl, Wuk_t=Wuk_t, Wuv=Wuv, max_seq=max_seq)
+
+
+def test_block_allocation_grows_with_length():
+    pool, _, _, (H, dn, dr, dv, Dl) = _pool(num_blocks=8, block_size=4)
+    rng = np.random.RandomState(1)
+    pool.add_sequence("a")
+    assert pool.num_used_blocks == 0
+    # 4 tokens -> exactly 1 block
+    pool.append("a", rng.randn(4, Dl).astype(np.float32),
+                rng.randn(4, dr).astype(np.float32))
+    assert pool.num_used_blocks == 1 and len(pool.block_table("a")) == 1
+    # 1 more token -> spills into a 2nd block
+    pool.append("a", rng.randn(1, Dl).astype(np.float32),
+                rng.randn(1, dr).astype(np.float32))
+    assert pool.num_used_blocks == 2 and pool.sequence_length("a") == 5
+
+
+def test_free_returns_blocks_and_reuses_them():
+    pool, _, _, (H, dn, dr, dv, Dl) = _pool(num_blocks=4, block_size=4)
+    rng = np.random.RandomState(2)
+    pool.add_sequence("a")
+    pool.append("a", rng.randn(8, Dl).astype(np.float32),
+                rng.randn(8, dr).astype(np.float32))   # 2 blocks
+    assert pool.num_free_blocks == 2
+    used_blocks = set(pool.block_table("a"))
+    pool.free_sequence("a")
+    assert pool.num_free_blocks == 4 and pool.num_sequences == 0
+    # a new sequence reclaims the freed pages
+    pool.add_sequence("b")
+    pool.append("b", rng.randn(8, Dl).astype(np.float32),
+                rng.randn(8, dr).astype(np.float32))
+    assert pool.num_free_blocks == 2
+    assert set(pool.block_table("b")) == used_blocks  # same physical pages reused
+
+
+def test_non_contiguous_block_tables():
+    """Interleaving appends across two sequences gives each a non-contiguous
+    set of physical blocks — the block table indirection must still decode
+    correctly."""
+    pool, Wuk_t, Wuv, dims = _pool(num_blocks=8, block_size=2)
+    H, dn, dr, dv, Dl = dims
+    rng = np.random.RandomState(3)
+    pool.add_sequence("a")
+    pool.add_sequence("b")
+    a_c, a_r, b_c, b_r = [], [], [], []
+    for _ in range(3):  # interleave so blocks alternate a,b,a,b,...
+        ca, ra = rng.randn(2, Dl).astype(np.float32), rng.randn(2, dr).astype(np.float32)
+        cb, rb = rng.randn(2, Dl).astype(np.float32), rng.randn(2, dr).astype(np.float32)
+        pool.append("a", ca, ra); a_c.append(ca); a_r.append(ra)
+        pool.append("b", cb, rb); b_c.append(cb); b_r.append(rb)
+    bt_a, bt_b = pool.block_table("a"), pool.block_table("b")
+    # a's blocks are not a contiguous run (b's blocks are interspersed)
+    assert bt_a != list(range(bt_a[0], bt_a[0] + len(bt_a)))
+    assert set(bt_a).isdisjoint(bt_b)
+
+    # decode a matches a fresh single-seq decoder fed a's tokens
+    ref = _ref_decoder(Wuk_t, Wuv, dims)
+    ref.append(np.concatenate(a_c), np.concatenate(a_r))
+    qn, qr = rng.randn(H, dn).astype(np.float32), rng.randn(H, dr).astype(np.float32)
+    np.testing.assert_allclose(pool.decode("a", qn, qr), ref.decode(qn, qr),
+                               rtol=1e-4, atol=1e-4)
+
+
+def test_concurrent_ragged_decode_batch():
+    """Three concurrent sequences of different lengths decode in one batch; each
+    must match an independent single-sequence decoder."""
+    pool, Wuk_t, Wuv, dims = _pool(num_blocks=32, block_size=4)
+    H, dn, dr, dv, Dl = dims
+    rng = np.random.RandomState(4)
+    lengths = {"x": 3, "y": 9, "z": 16}
+    refs, queries = {}, {}
+    for sid, L in lengths.items():
+        pool.add_sequence(sid)
+        c = rng.randn(L, Dl).astype(np.float32)
+        r = rng.randn(L, dr).astype(np.float32)
+        pool.append(sid, c, r)
+        ref = _ref_decoder(Wuk_t, Wuv, dims)
+        ref.append(c, r)
+        refs[sid] = ref
+        queries[sid] = (rng.randn(H, dn).astype(np.float32),
+                        rng.randn(H, dr).astype(np.float32))
+
+    outs = pool.decode_batch(queries)
+    assert set(outs) == set(lengths)
+    for sid, (qn, qr) in queries.items():
+        assert outs[sid].shape == (H, dv)
+        np.testing.assert_allclose(outs[sid], refs[sid].decode(qn, qr),
+                                   rtol=1e-4, atol=1e-4)
+
+
+def test_incremental_decode_loop_matches_single_seq():
+    """Token-by-token decode of two concurrent sequences tracks two independent
+    single-sequence decoders step for step."""
+    pool, Wuk_t, Wuv, dims = _pool(num_blocks=32, block_size=4)
+    H, dn, dr, dv, Dl = dims
+    rng = np.random.RandomState(5)
+    refA, refB = _ref_decoder(Wuk_t, Wuv, dims), _ref_decoder(Wuk_t, Wuv, dims)
+    pool.add_sequence("A"); pool.add_sequence("B")
+    for step in range(6):
+        for sid, ref in (("A", refA), ("B", refB)):
+            c, r = rng.randn(1, Dl).astype(np.float32), rng.randn(1, dr).astype(np.float32)
+            pool.append(sid, c, r)
+            ref.append(c, r)
+            qn, qr = rng.randn(H, dn).astype(np.float32), rng.randn(H, dr).astype(np.float32)
+            np.testing.assert_allclose(pool.decode(sid, qn, qr),
+                                       ref.decode(qn, qr), rtol=1e-4, atol=1e-4)
+
+
+def test_pool_exhaustion_then_recovery():
+    pool, _, _, (H, dn, dr, dv, Dl) = _pool(num_blocks=2, block_size=4)
+    rng = np.random.RandomState(6)
+    pool.add_sequence("a")
+    pool.append("a", rng.randn(8, Dl).astype(np.float32),
+                rng.randn(8, dr).astype(np.float32))   # uses both blocks
+    assert pool.num_free_blocks == 0
+    pool.add_sequence("b")
+    with pytest.raises(MLABlockPagedCacheError):
+        pool.append("b", rng.randn(1, Dl).astype(np.float32),
+                    rng.randn(1, dr).astype(np.float32))
+    # free a and retry — now it fits
+    pool.free_sequence("a")
+    pool.append("b", rng.randn(1, Dl).astype(np.float32),
+                rng.randn(1, dr).astype(np.float32))
+    assert pool.sequence_length("b") == 1
+
+
+def test_utilization_and_footprint():
+    pool, _, _, (H, dn, dr, dv, Dl) = _pool(num_blocks=10, block_size=4,
+                                            H=128, dn=128, dr=64, dv=128, Dl=512)
+    rng = np.random.RandomState(7)
+    pool.add_sequence("a")
+    pool.append("a", rng.randn(8, Dl).astype(np.float32),
+                rng.randn(8, dr).astype(np.float32))
+    assert pool.num_used_blocks == 2
+    assert abs(pool.utilization - 0.2) < 1e-9
+    # latent + rope per token vs explicit per-head K/V
+    explicit = H * (dn + dr + dv) * 4
+    assert pool.cache_bytes_per_token() == (512 + 64) * 4
+    assert explicit / pool.cache_bytes_per_token() > 8.0
+
+
+def test_sequence_lifecycle_errors():
+    pool, _, _, (H, dn, dr, dv, Dl) = _pool()
+    with pytest.raises(MLABlockPagedCacheError):
+        pool.decode("ghost", np.zeros((H, dn), np.float32),
+                    np.zeros((H, dr), np.float32))
+    pool.add_sequence("a")
+    with pytest.raises(MLABlockPagedCacheError):
+        pool.add_sequence("a")                 # duplicate
+    with pytest.raises(MLABlockPagedCacheError):
+        pool.decode("a", np.zeros((H, dn), np.float32),
+                    np.zeros((H, dr), np.float32))  # empty
+    with pytest.raises(MLABlockPagedCacheError):
+        pool.free_sequence("nope")

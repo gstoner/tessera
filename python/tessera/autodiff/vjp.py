@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 import copy
-from typing import Callable
+from typing import Any, Callable
 
 import numpy as np
 
@@ -64,7 +64,10 @@ def _numeric_vjp_arg(fn, dout, arg, *, eps: float = 1e-5):
     arr = np.asarray(arg, dtype=np.float64)
     grad = np.zeros_like(arr, dtype=np.float64)
     dout_arr = np.asarray(dout, dtype=np.float64)
-    it = np.nditer(arr, flags=["multi_index"], op_flags=[["readwrite"]])
+    # numpy 1.x / 2.x typeshed disagree on the op_flags shape (flat vs nested);
+    # both forms are valid at runtime, so type the value as Any to stay portable.
+    op_flags: Any = [["readwrite"]]
+    it = np.nditer(arr, flags=["multi_index"], op_flags=op_flags)
     while not it.finished:
         idx = it.multi_index
         plus = arr.copy()

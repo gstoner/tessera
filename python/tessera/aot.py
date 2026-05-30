@@ -143,7 +143,10 @@ def safetensors_export(state: Mapping[str, Any], path: str | os.PathLike) -> Pat
     target = Path(path)
     arrays = {name: np.asarray(value) for name, value in state.items()}
     with target.open("wb") as f:
-        np.savez(f, **arrays)
+        # np.savez's overloads confuse mypy on **kwargs, and the numpy 1.x vs
+        # 2.x stubs disagree; call through an Any alias to stay portable.
+        savez: Any = np.savez
+        savez(f, **arrays)
     (target.with_suffix(target.suffix + ".json")).write_text(
         json.dumps(
             {

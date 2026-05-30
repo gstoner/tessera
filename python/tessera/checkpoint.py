@@ -278,9 +278,10 @@ def save_state(
         # numpy's typeshed stubs declare ``savez(file, *args, **kwds)``
         # with ``**kwds: bool`` because of the legacy ``compress=``
         # keyword; in practice every other ``**kwds`` entry is an
-        # ndarray (the intended use).  Cast to ``Any`` so mypy
-        # accepts the polymorphic call.
-        np.savez(f, **payload)
+        # ndarray (the intended use).  Call through an Any alias so mypy
+        # accepts the polymorphic call across numpy 1.x / 2.x stubs.
+        savez: Any = np.savez
+        savez(f, **payload)
     if atomic:
         os.replace(tmp, target)
     return target

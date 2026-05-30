@@ -8030,3 +8030,111 @@ extern "C" void tessera_apple_gpu_log_softmax_f16(const uint16_t *x,
                                0.0f, MPSDataTypeFloat16, 2)) return;
   std::memcpy(out, x, (size_t)rows * cols * 2);
 }
+
+//===----------------------------------------------------------------------===//
+// Batched matmul (bmm) — Tier-2 keystone (2026-05-29)
+//
+// MPSGraph-backed batched / rank-3 matmul with batch broadcasting (the B
+// operand may carry batch=1 to be shared across all A batches — the GQA/MQA
+// KV-sharing shape). A: [batch, M, K], B: [b_batch, K, N] (b_batch == batch or
+// 1), O: [batch, M, N]. f32 + f16 native (fp32 compute); bf16 upcasts host-side
+// in runtime.py, matching the unary lane convention. Reuses the MPSGraph
+// graph cache + buffer pool.
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+static void reference_bmm_f32(const float *A, const float *B, float *O,
+                              int32_t batch, int32_t M, int32_t N, int32_t K,
+                              int b_broadcast) {
+  for (int32_t bi = 0; bi < batch; ++bi) {
+    const float *a = A + (size_t)bi * M * K;
+    const float *b = B + (size_t)(b_broadcast ? 0 : bi) * K * N;
+    float *o = O + (size_t)bi * M * N;
+    for (int32_t m = 0; m < M; ++m)
+      for (int32_t n = 0; n < N; ++n) {
+        float s = 0.0f;
+        for (int32_t k = 0; k < K; ++k)
+          s += a[(size_t)m * K + k] * b[(size_t)k * N + n];
+        o[(size_t)m * N + n] = s;
+      }
+  }
+}
+
+static bool mpsg_run_bmm(MetalDeviceContext &ctx, const void *a, const void *b,
+                         void *out, int32_t batch, int32_t M, int32_t N,
+                         int32_t K, bool b_broadcast, MPSDataType ioType,
+                         size_t elemSize) {
+  if (batch <= 0 || M <= 0 || N <= 0 || K <= 0) return true;
+  @autoreleasepool {
+    int32_t bBatch = b_broadcast ? 1 : batch;
+    size_t aBytes = (size_t)batch * M * K * elemSize;
+    size_t bBytes = (size_t)bBatch * K * N * elemSize;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, a, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, b, bBytes);
+    if (!bufA || !bufB) return false;
+    NSArray<NSNumber *> *aShape = @[ @(batch), @(M), @(K) ];
+    NSArray<NSNumber *> *bShape = @[ @(bBatch), @(K), @(N) ];
+    NSString *key = [NSString stringWithFormat:@"bmm:%d:%d:%d:%d:%d:%d",
+                                               (int)ioType, batch, M, N, K,
+                                               (int)b_broadcast];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *pa;
+    MPSGraphTensor *pb;
+    MPSGraphTensor *y;
+    if (entry) {
+      g = entry[0];
+      pa = ((NSArray *)entry[1])[0];
+      pb = ((NSArray *)entry[1])[1];
+      y = entry[2];
+    } else {
+      g = [MPSGraph new];
+      pa = [g placeholderWithShape:aShape dataType:ioType name:nil];
+      pb = [g placeholderWithShape:bShape dataType:ioType name:nil];
+      MPSGraphTensor *yf =
+          [g matrixMultiplicationWithPrimaryTensor:mpsg_up(g, pa, ioType)
+                                   secondaryTensor:mpsg_up(g, pb, ioType)
+                                              name:nil];
+      y = mpsg_down(g, yf, ioType);
+      mpsg_cache_put(key, @[ g, @[ pa, pb ], y ]);
+    }
+    MPSGraphTensorData *ad =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:aShape dataType:ioType];
+    MPSGraphTensorData *bd =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:ioType];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{pa : ad, pb : bd}
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
+}  // namespace
+
+extern "C" void tessera_apple_gpu_bmm_f32(const float *A, const float *B,
+                                          float *O, int32_t batch, int32_t M,
+                                          int32_t N, int32_t K,
+                                          int32_t b_broadcast) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_bmm(ctx, A, B, O, batch, M, N, K, b_broadcast != 0,
+                             MPSDataTypeFloat32, 4))
+    return;
+  reference_bmm_f32(A, B, O, batch, M, N, K, b_broadcast);
+}
+
+extern "C" void tessera_apple_gpu_bmm_f16(const uint16_t *A, const uint16_t *B,
+                                          uint16_t *O, int32_t batch, int32_t M,
+                                          int32_t N, int32_t K,
+                                          int32_t b_broadcast) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_bmm(ctx, A, B, O, batch, M, N, K, b_broadcast != 0,
+                             MPSDataTypeFloat16, 2))
+    return;
+  // No host-side half GEMM here; runtime.py upcasts to f32 on the fallback.
+  std::memset(O, 0, (size_t)batch * M * N * 2);
+}

@@ -1833,7 +1833,9 @@ def _load_apple_cpu_runtime() -> ctypes.CDLL:
     return _apple_cpu_runtime
 
 
-_APPLE_GPU_MPS_OPS = frozenset({"tessera.matmul", "tessera.gemm"})
+_APPLE_GPU_MPS_OPS = frozenset(
+    {"tessera.matmul", "tessera.gemm", "tessera.batched_gemm"}
+)
 _APPLE_GPU_MSL_OPS = frozenset({
     "tessera.rope",
     "tessera.flash_attn",
@@ -2212,6 +2214,12 @@ def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
     a = np.asarray(operands[0])
     b = np.asarray(operands[1])
 
+    # Batched / rank-3+ matmul → the MPSGraph bmm lane (Tier-2 keystone). Covers
+    # batched_gemm and rank-3 matmul, incl. a shared (broadcast) B operand.
+    if a.ndim >= 3 or b.ndim >= 3:
+        res = _apple_gpu_dispatch_bmm(a, b, np)
+        return res if res is not None else np.matmul(a, b)
+
     if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
         return np.matmul(a, b)
     if a.dtype != b.dtype:
@@ -2275,6 +2283,99 @@ def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
         return (a.astype(np.float32) @ b.astype(np.float32)).astype(bf16_dtype)
 
     return np.matmul(a, b)
+
+
+def _apple_gpu_bmm_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_bmm_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_bmm_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_bmm_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_dispatch_bmm(a: Any, b: Any, np: Any) -> Any:
+    """Batched / rank-3+ matmul via the MPSGraph bmm lane. A is [..., M, K];
+    B is [..., K, N] (matching leading dims) or a shared/broadcast operand
+    ([K, N], or leading dims all 1). Returns the result, or None when the shape
+    or dtype isn't supported so the caller falls back to numpy. f32/f16 native;
+    bf16 upcasts to f32 on-GPU then downcasts."""
+    a = np.asarray(a)
+    b = np.asarray(b)
+    if a.ndim < 3 or b.ndim < 2 or a.shape[-1] != b.shape[-2]:
+        return None
+    M = int(a.shape[-2])
+    K = int(a.shape[-1])
+    N = int(b.shape[-1])
+    batch = 1
+    for d in a.shape[:-2]:
+        batch *= int(d)
+
+    if b.ndim == 2:
+        b_broadcast = True
+    elif b.shape[:-2] == a.shape[:-2]:
+        b_broadcast = False
+    elif all(int(d) == 1 for d in b.shape[:-2]):
+        b_broadcast = True
+    else:
+        return None  # mixed broadcast — let numpy handle it
+
+    out_shape = tuple(a.shape[:-1]) + (N,)
+    out_dtype = a.dtype
+    bf16_dtype = _bfloat16_dtype()
+
+    if a.dtype == np.float32 and b.dtype == np.float32:
+        sym = _apple_gpu_bmm_f32()
+        compute_dt, half = np.float32, False
+    elif a.dtype == np.float16 and b.dtype == np.float16:
+        sym = _apple_gpu_bmm_f16()
+        compute_dt, half = np.float16, True
+    elif (bf16_dtype is not None and a.dtype == bf16_dtype
+          and b.dtype == bf16_dtype):
+        sym = _apple_gpu_bmm_f32()  # upcast path
+        compute_dt, half = np.float32, False
+    else:
+        return None
+    if sym is None:
+        return None
+
+    a2 = np.ascontiguousarray(a.reshape(batch, M, K).astype(compute_dt))
+    bbatch = 1 if b_broadcast else batch
+    b2 = np.ascontiguousarray(b.reshape(bbatch, K, N).astype(compute_dt))
+    out = np.zeros((batch, M, N), dtype=compute_dt)
+    bc = ctypes.c_int32(1 if b_broadcast else 0)
+    dims = (ctypes.c_int32(batch), ctypes.c_int32(M), ctypes.c_int32(N),
+            ctypes.c_int32(K), bc)
+    if half:
+        up = lambda arr: arr.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+        sym(up(a2), up(b2), up(out), *dims)
+    else:
+        fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        sym(fp(a2), fp(b2), fp(out), *dims)
+    return out.reshape(out_shape).astype(out_dtype)
 
 
 def _apple_gpu_mps_matmul_f32() -> Any:

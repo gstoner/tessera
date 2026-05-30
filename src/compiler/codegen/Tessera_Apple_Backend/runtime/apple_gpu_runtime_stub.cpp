@@ -1390,6 +1390,41 @@ extern "C" int32_t tessera_apple_gpu_cf_serial_draft_f32(
   return 1;
 }
 
+// Phase-G Rung 2 — predicate-driven greedy generation, non-Apple reference.
+// Mirrors the MPSGraph while: loop while (step < max && last != eos).
+extern "C" int32_t tessera_apple_gpu_cf_while_generate_f32(
+    const float* W, const float* lm, const float* h_init, int32_t start_token,
+    int32_t eos_token, int32_t max_steps, int32_t* tokens_out, int32_t* n_out,
+    int32_t d, int32_t V) {
+  if (!W || !lm || !h_init || !tokens_out || !n_out || d <= 0 || V <= 0 ||
+      max_steps <= 0)
+    return 0;
+  std::vector<float> h(h_init, h_init + d), hp(d), logits(V);
+  int last = start_token, step = 0;
+  while (step < max_steps && last != eos_token) {
+    for (int j = 0; j < d; ++j) {
+      double a = 0.0;
+      for (int k = 0; k < d; ++k) a += (double)h[k] * W[k * d + j];
+      hp[j] = (float)std::tanh(a);
+    }
+    for (int j = 0; j < V; ++j) {
+      double a = 0.0;
+      for (int k = 0; k < d; ++k) a += (double)hp[k] * lm[k * V + j];
+      logits[j] = (float)a;
+    }
+    int am = 0;
+    float best = logits[0];
+    for (int j = 1; j < V; ++j)
+      if (logits[j] > best) { best = logits[j]; am = j; }
+    tokens_out[step] = am;
+    for (int j = 0; j < d; ++j) h[j] = hp[j];
+    last = am;
+    ++step;
+  }
+  *n_out = step;
+  return 1;
+}
+
 extern "C" void tessera_apple_gpu_mpsgraph_binary_f16(int32_t, const uint16_t* a,
                                                       const uint16_t*, uint16_t* out,
                                                       int64_t n) {

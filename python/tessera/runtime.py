@@ -3937,6 +3937,54 @@ def apple_gpu_cf_serial_draft(embed, fc_in, ln1_all, ln2_all, wv_all, wo_all,
     return tokens.astype(np.int64), hiddens
 
 
+def _apple_gpu_cf_while_generate_f32() -> Any:
+    """Phase-G Rung 2 predicate-driven while-generate symbol. None when absent."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_cf_while_generate_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    ip = ctypes.POINTER(ctypes.c_int32)
+    sym.argtypes = [fp, fp, fp, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+                    ip, ip, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def apple_gpu_cf_while_generate(W, lm, h_init, start_token, eos_token, max_steps,
+                                d, V, np) -> Any:
+    """Greedy generation ``token = argmax((hidden = tanh(hidden @ W)) @ lm)``
+    looped via a single MPSGraph ``while`` until the EOS token or ``max_steps``.
+    Returns ``(tokens[list], n_generated)``. Falls back to a numpy while-loop."""
+    W = np.ascontiguousarray(W, np.float32)
+    lm = np.ascontiguousarray(lm, np.float32)
+    h_init = np.ascontiguousarray(h_init, np.float32).reshape(1, -1)
+    sym = _apple_gpu_cf_while_generate_f32()
+    if sym is not None:
+        toks = np.zeros(int(max_steps), np.int32)
+        n = np.zeros(1, np.int32)
+        fp = ctypes.POINTER(ctypes.c_float)
+        ip = ctypes.POINTER(ctypes.c_int32)
+        rc = sym(W.ctypes.data_as(fp), lm.ctypes.data_as(fp),
+                 h_init.ctypes.data_as(fp), ctypes.c_int32(int(start_token)),
+                 ctypes.c_int32(int(eos_token)), ctypes.c_int32(int(max_steps)),
+                 toks.ctypes.data_as(ip), n.ctypes.data_as(ip),
+                 ctypes.c_int32(int(d)), ctypes.c_int32(int(V)))
+        if rc == 1:
+            k = int(n[0])
+            return [int(t) for t in toks[:k]], k
+    # numpy fallback — same predicate (loop while step<max and last!=eos).
+    h = h_init.astype(np.float64).reshape(-1)
+    Wf, lmf = W.astype(np.float64), lm.astype(np.float64)
+    out, last, step = [], int(start_token), 0
+    while step < int(max_steps) and last != int(eos_token):
+        h = np.tanh(h @ Wf)
+        last = int(np.argmax(h @ lmf))
+        out.append(last)
+        step += 1
+    return out, step
+
+
 def _apple_gpu_layer_norm_f32() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_layer_norm_f32", None)
@@ -5528,6 +5576,8 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_cf_scan_f32")
                 # Phase-G Rung 1 — serial draft as a forLoop.
                 getattr(lib, "tessera_apple_gpu_cf_serial_draft_f32")
+                # Phase-G Rung 2 — predicate-driven while generation.
+                getattr(lib, "tessera_apple_gpu_cf_while_generate_f32")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

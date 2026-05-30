@@ -4037,6 +4037,49 @@ def apple_gpu_metal4_tensor_roundtrip(arr: Any, np: Any) -> Any:
     return out
 
 
+def _apple_gpu_mtl4_scan_f32() -> Any:
+    """Metal 4 M2 MSL-loop scan symbol. None when unavailable."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mtl4_scan_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [fp, fp, fp, fp, fp, ctypes.c_int32, ctypes.c_int32,
+                    ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def apple_gpu_mtl4_scan(Wh: Any, Wx: Any, xseq: Any, init: Any, np: Any):
+    """Bounded scan ``carry_{i+1} = tanh(carry_i @ Wh + x_i @ Wx)`` run as a
+    hand-written MSL kernel (native in-kernel for-loop) dispatched through the
+    full Metal 4 command model. Returns ``(ys[T, d], ran_on_mtl4)``; falls back
+    to a numpy scan when Metal 4 is unavailable. See
+    docs/apple_gpu_metal4_adoption.md."""
+    Wh = np.ascontiguousarray(Wh, np.float32)
+    Wx = np.ascontiguousarray(Wx, np.float32)
+    xseq = np.ascontiguousarray(xseq, np.float32)
+    init = np.ascontiguousarray(init, np.float32).reshape(-1)
+    T, m = xseq.shape
+    d = Wh.shape[0]
+    ys = np.empty((T, d), np.float32)
+    sym = _apple_gpu_mtl4_scan_f32()
+    fp = ctypes.POINTER(ctypes.c_float)
+    rc = 0
+    if sym is not None:
+        rc = sym(Wh.ctypes.data_as(fp), Wx.ctypes.data_as(fp),
+                 xseq.ctypes.data_as(fp), init.ctypes.data_as(fp),
+                 ys.ctypes.data_as(fp), ctypes.c_int32(T), ctypes.c_int32(d),
+                 ctypes.c_int32(m))
+    if rc != 1:
+        carry = init.astype(np.float64)
+        for t in range(T):
+            carry = np.tanh(carry @ Wh.astype(np.float64)
+                            + xseq[t].astype(np.float64) @ Wx.astype(np.float64))
+            ys[t] = carry.astype(np.float32)
+    return ys, rc == 1
+
+
 def _apple_gpu_layer_norm_f32() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_layer_norm_f32", None)
@@ -5633,6 +5676,8 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 # Metal 4 — capability probe (M0) + MTLTensor round-trip (M1).
                 getattr(lib, "tessera_apple_gpu_metal4_probe")
                 getattr(lib, "tessera_apple_gpu_metal4_tensor_roundtrip")
+                # Metal 4 M2 — MSL-loop scan through the MTL4 command model.
+                getattr(lib, "tessera_apple_gpu_mtl4_scan_f32")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

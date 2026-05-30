@@ -3975,6 +3975,82 @@ inline void reference_mla_decode_f32(const float* X, const float* Wdkv,
   }
 }
 
+// The MPSGraph cached-graph helpers are defined later in this TU; forward
+// declare them so the MLA decode (which appears earlier) can reuse the cache.
+static NSArray *mpsg_cache_get(NSString *key);
+static void mpsg_cache_put(NSString *key, NSArray *entry);
+
+// GPU MLA decode — compressed-KV (no rope yet). One cached MPSGraph fuses the
+// whole decode: latent down-projection c = X@Wdkv, the K/V up-projections
+// K = c@Wuk and V = c@Wuv, then attention O = softmax((Q@Kᵀ)·scale)@V with the
+// B·S_q query rows folded to a single matmul dimension (K/V are shared across
+// batch, so no batched-broadcast is needed). All matmuls accumulate in fp32.
+static bool mpsg_run_mla_decode_f32(MetalDeviceContext &ctx, const float *X,
+                                    const float *Wdkv, const float *Wuk,
+                                    const float *Wuv, const float *Q, float *O,
+                                    int32_t B, int32_t S_kv, int32_t D_x,
+                                    int32_t D_lat, int32_t S_q, int32_t D_h) {
+  if (B <= 0 || S_kv <= 0 || D_x <= 0 || D_lat <= 0 || S_q <= 0 || D_h <= 0)
+    return true;
+  int32_t M = B * S_q;  // folded query rows
+  @autoreleasepool {
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, (size_t)S_kv * D_x * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWdkv, ctx, Wdkv, (size_t)D_x * D_lat * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWuk, ctx, Wuk, (size_t)D_lat * D_h * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWuv, ctx, Wuv, (size_t)D_lat * D_h * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, (size_t)M * D_h * 4);
+    if (!bufX || !bufWdkv || !bufWuk || !bufWuv || !bufQ) return false;
+    NSArray<NSNumber *> *xShape = @[ @(S_kv), @(D_x) ];
+    NSArray<NSNumber *> *wdkvShape = @[ @(D_x), @(D_lat) ];
+    NSArray<NSNumber *> *wukShape = @[ @(D_lat), @(D_h) ];
+    NSArray<NSNumber *> *wuvShape = @[ @(D_lat), @(D_h) ];
+    NSArray<NSNumber *> *qShape = @[ @(M), @(D_h) ];
+    float scale = 1.0f / std::sqrt((float)D_h);
+    NSString *key = [NSString stringWithFormat:@"mla:%d:%d:%d:%d:%d:%d", B,
+                                               S_kv, D_x, D_lat, S_q, D_h];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *px, *pwdkv, *pwuk, *pwuv, *pq, *y;
+    if (entry) {
+      g = entry[0];
+      NSArray *phs = (NSArray *)entry[1];
+      px = phs[0]; pwdkv = phs[1]; pwuk = phs[2]; pwuv = phs[3]; pq = phs[4];
+      y = entry[2];
+    } else {
+      g = [MPSGraph new];
+      px = [g placeholderWithShape:xShape dataType:MPSDataTypeFloat32 name:nil];
+      pwdkv = [g placeholderWithShape:wdkvShape dataType:MPSDataTypeFloat32 name:nil];
+      pwuk = [g placeholderWithShape:wukShape dataType:MPSDataTypeFloat32 name:nil];
+      pwuv = [g placeholderWithShape:wuvShape dataType:MPSDataTypeFloat32 name:nil];
+      pq = [g placeholderWithShape:qShape dataType:MPSDataTypeFloat32 name:nil];
+      MPSGraphTensor *c = [g matrixMultiplicationWithPrimaryTensor:px secondaryTensor:pwdkv name:nil];
+      MPSGraphTensor *K = [g matrixMultiplicationWithPrimaryTensor:c secondaryTensor:pwuk name:nil];
+      MPSGraphTensor *V = [g matrixMultiplicationWithPrimaryTensor:c secondaryTensor:pwuv name:nil];
+      MPSGraphTensor *Kt = [g transposeTensor:K dimension:0 withDimension:1 name:nil];
+      MPSGraphTensor *scores = [g matrixMultiplicationWithPrimaryTensor:pq secondaryTensor:Kt name:nil];
+      MPSGraphTensor *scaled = [g multiplicationWithPrimaryTensor:scores
+                                   secondaryTensor:[g constantWithScalar:(double)scale dataType:MPSDataTypeFloat32]
+                                              name:nil];
+      MPSGraphTensor *attn = [g softMaxWithTensor:scaled axis:1 name:nil];
+      y = [g matrixMultiplicationWithPrimaryTensor:attn secondaryTensor:V name:nil];
+      mpsg_cache_put(key, @[ g, @[ px, pwdkv, pwuk, pwuv, pq ], y ]);
+    }
+    MPSGraphTensorData *xd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:xShape dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *wdkvd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufWdkv shape:wdkvShape dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *wukd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufWuk shape:wukShape dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *wuvd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufWuv shape:wuvShape dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *qd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufQ shape:qShape dataType:MPSDataTypeFloat32];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{px : xd, pwdkv : wdkvd, pwuk : wukd, pwuv : wuvd, pq : qd}
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:O strideBytes:nil];
+    return true;
+  }
+}
+
 } // namespace
 
 extern "C" void tessera_apple_gpu_mla_decode_f32(const float* X,
@@ -3985,6 +4061,10 @@ extern "C" void tessera_apple_gpu_mla_decode_f32(const float* X,
                                                   int32_t B, int32_t S_kv,
                                                   int32_t D_x, int32_t D_lat,
                                                   int32_t S_q, int32_t D_h) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_mla_decode_f32(ctx, X, Wdkv, Wuk, Wuv, Q, O, B, S_kv,
+                                        D_x, D_lat, S_q, D_h))
+    return;
   reference_mla_decode_f32(X, Wdkv, Wuk, Wuv, Q, O, B, S_kv, D_x, D_lat, S_q, D_h);
 }
 

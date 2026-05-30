@@ -21,7 +21,6 @@ the Metal encode session is unavailable, so the loop is portable.
 
 from __future__ import annotations
 
-import math
 from typing import Any, Optional
 
 import numpy as np

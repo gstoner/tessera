@@ -244,5 +244,9 @@ module = [
     "ml_dtypes.*",
     "optuna.*",
     "perfetto.*",
+    # torch is a soft import only — a hardware-smoke oracle gated behind
+    # try/except (Decision #23 keeps Tessera torch-free at runtime). It is not a
+    # dependency, so there are no stubs; ignore the missing import.
+    "torch.*",
 ]
 ignore_missing_imports = true

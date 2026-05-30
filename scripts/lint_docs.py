@@ -112,8 +112,19 @@ def resolve_doc_link(root: Path, source: Path, target: str) -> Path | None:
     return (source.parent / target).resolve()
 
 
+# A trailing location annotation on a path is a pointer, not part of the file
+# name: ``foo.py:42``, ``foo.py:42+``, ``foo.py:42-99``, ``foo.py:42–99`` (en/em
+# dash), ``foo.py:~42``. Strip it before the existence check (the ``path:line``
+# convention is documented in CLAUDE.md).
+_LINE_ANNOTATION = re.compile(r":~?\d+(?:\s*[-–—]\s*\d*)?\+?$")
+
+
 def normalize_inline_path(raw: str) -> str | None:
     candidate = raw.strip().strip(PATH_TRAILING)
+    candidate = _LINE_ANNOTATION.sub("", candidate)
+    # pytest node ids (``test_x.py::TestY::test_z``) point at a test, not a file.
+    if "::" in candidate:
+        candidate = candidate.split("::", 1)[0]
     if not candidate.startswith(PATH_PREFIXES):
         return None
     if any(token in candidate for token in ("*", "...", "…", "{", "}", "$")):
@@ -121,6 +132,20 @@ def normalize_inline_path(raw: str) -> str | None:
     if " " in candidate:
         return None
     return candidate
+
+
+def _inline_path_exists(root: Path, candidate: str) -> bool:
+    """A reference resolves if the path exists, or — for an extension-less
+    module reference (``python/tessera/ops``) — ``<path>.py`` or
+    ``<path>/__init__.py`` exists."""
+    p = root / candidate
+    if p.exists():
+        return True
+    if not p.suffix:
+        return ((root / (candidate + ".py")).exists()
+                or (root / (candidate + ".pyi")).exists()
+                or (p / "__init__.py").exists())
+    return False
 
 
 def lint_markdown_links(root: Path, path: Path, text: str) -> list[str]:
@@ -148,7 +173,7 @@ def lint_inline_paths(root: Path, path: Path, text: str) -> list[str]:
         candidate = normalize_inline_path(match.group(1))
         if candidate is None:
             continue
-        if not (root / candidate).exists():
+        if not _inline_path_exists(root, candidate):
             line_number = text.count("\n", 0, match.start()) + 1
             findings.append(f"{rel}:{line_number}: missing path reference: {candidate}")
     return findings

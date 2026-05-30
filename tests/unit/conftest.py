@@ -253,3 +253,70 @@ def attn_bench():
 @pytest.fixture
 def coll_bench():
     return CollectiveBenchmark(peak_bw_gbps=600.0, latency_us=5.0)
+
+
+# ---------------------------------------------------------------------------
+# Apple GPU is a macOS-only backend (Metal / MPSGraph). Its runtime-EXECUTION
+# tests build + run the Metal runtime and assert numeric results that need a
+# real Metal device — they cannot pass on the Linux CI runner (no Metal; the
+# non-Apple stub deliberately returns degenerate values for some half-precision
+# ops). So, like the `lit` / `sanitizer` validate lanes are opt-in, these tests
+# SKIP on non-Darwin instead of failing. Platform-agnostic Apple tests
+# (target-IR text, backend manifest, pass-order, buffer-pool source scan,
+# claim-lint) are intentionally NOT listed and keep running on Linux.
+# ---------------------------------------------------------------------------
+_APPLE_GPU_EXECUTION_TESTS = frozenset({
+    "test_apple_backend_roadmap.py",
+    "test_apple_gpu_batched_mha.py",
+    "test_apple_gpu_bmm.py",
+    "test_apple_gpu_conv2d.py",
+    "test_apple_gpu_conv3d.py",
+    "test_apple_gpu_device_tensor.py",
+    "test_apple_gpu_encode_session.py",
+    "test_apple_gpu_fused_attention.py",
+    "test_apple_gpu_gqa.py",
+    "test_apple_gpu_gumbel_sampler.py",
+    "test_apple_gpu_llama_decoder_layer.py",
+    "test_apple_gpu_mla_absorb_dtypes.py",
+    "test_apple_gpu_mla_decode_gpu.py",
+    "test_apple_gpu_mla_decoupled_rope.py",
+    "test_apple_gpu_mla_e2e.py",
+    "test_apple_gpu_mla_secondary_dtypes.py",
+    "test_apple_gpu_mla_weight_absorb.py",
+    "test_apple_gpu_mpsgraph_lane.py",
+    "test_apple_gpu_projections.py",
+    "test_apple_gpu_reductions.py",
+    "test_apple_gpu_resident_block_paged.py",
+    "test_apple_gpu_resident_bmm.py",
+    "test_apple_gpu_resident_decode_loop.py",
+    "test_apple_gpu_resident_decode_step.py",
+    "test_apple_gpu_resident_kv.py",
+    "test_apple_gpu_clifford_msl.py",
+    "test_apple_gpu_clifford_msl_full.py",
+    "test_apple_gpu_clifford_msl_ga11.py",
+    "test_attn_local_window_2d_apple_gpu.py",
+    "test_apple_proof_envelope_unified.py",
+    "test_benchmark_ga_ebm.py",
+    "test_linear_attn.py",
+    "test_native_sparse_attn.py",
+    "test_mla_decode_fusion.py",
+    "test_mla_paged_decoder.py",
+    "test_mla_block_paged_cache.py",
+    "test_phase_ghi_lane2.py",
+    "test_example_mla_gpu_decode.py",
+    "test_example_diffusion_mdlm.py",
+})
+
+_APPLE_GPU_SKIP = pytest.mark.skip(
+    reason="Apple GPU (Metal) runtime-execution test — macOS only; skipped on "
+           "non-Darwin (no Metal device)."
+)
+
+
+def pytest_collection_modifyitems(config, items):
+    if sys.platform == "darwin":
+        return
+    for item in items:
+        fspath = getattr(item, "fspath", None)
+        if fspath is not None and fspath.basename in _APPLE_GPU_EXECUTION_TESTS:
+            item.add_marker(_APPLE_GPU_SKIP)

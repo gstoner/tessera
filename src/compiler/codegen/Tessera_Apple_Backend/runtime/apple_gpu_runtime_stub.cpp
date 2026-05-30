@@ -1405,6 +1405,23 @@ extern "C" void tessera_apple_gpu_mpsgraph_argreduce_f32(int32_t op, const float
     out[r] = best;
   }
 }
+extern "C" void tessera_apple_gpu_gumbel_argmax_f32(const float* logits,
+                                                    const float* gumbel,
+                                                    int32_t* out, int32_t rows,
+                                                    int32_t cols,
+                                                    float inv_temp) {
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* L = logits + static_cast<std::size_t>(r) * cols;
+    const float* G = gumbel + static_cast<std::size_t>(r) * cols;
+    int32_t best = 0;
+    float bs = L[0] * inv_temp + G[0];
+    for (int32_t c = 1; c < cols; ++c) {
+      float s = L[c] * inv_temp + G[c];
+      if (s > bs) { bs = s; best = c; }
+    }
+    out[r] = best;
+  }
+}
 extern "C" void tessera_apple_gpu_mpsgraph_scan_f32(int32_t op, const float* x,
                                                     float* out, int32_t rows,
                                                     int32_t cols) {

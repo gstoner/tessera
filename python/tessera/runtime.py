@@ -2482,6 +2482,97 @@ def _apple_gpu_mpsgraph_reduce_f32() -> Any:
     return sym
 
 
+def _apple_gpu_gumbel_argmax_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_gumbel_argmax_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float),
+                    ctypes.POINTER(ctypes.c_int32), ctypes.c_int32,
+                    ctypes.c_int32, ctypes.c_float]
+    sym.restype = None
+    return sym
+
+
+def _gumbel_noise_from_key(shape: tuple, key: Any, np: Any) -> Any:
+    """Gumbel(0,1) noise g = -log(-log(u)) from the canonical Philox stream, so
+    sampling is deterministic + reproducible (and bit-exact vs a CPU reference)
+    without an on-GPU RNG. ``key`` is a ``tessera.rng.RNGKey``; if None, a
+    seed-0 key is used."""
+    from . import rng as _rng
+    if key is None:
+        key = _rng.RNGKey.from_seed(0)
+    u = np.asarray(_rng.uniform(key, shape, dtype="fp32"))
+    u = np.clip(u, 1e-9, 1.0 - 1e-7).astype(np.float32)
+    return (-np.log(-np.log(u))).astype(np.float32)
+
+
+def _apply_topk_topp_mask(logits: Any, top_k: int, top_p: float, np: Any) -> Any:
+    """Mask logits to -inf outside the top-k / top-p (nucleus) set, per row.
+    Operates on a [rows, vocab] f32 copy."""
+    out = logits.astype(np.float32, copy=True)
+    neg_inf = np.float32(-1e30)
+    if top_k and top_k > 0 and top_k < out.shape[-1]:
+        # keep the top_k largest per row; threshold = k-th largest
+        kth = np.partition(out, -top_k, axis=-1)[:, -top_k][:, None]
+        out = np.where(out < kth, neg_inf, out)
+    if top_p and 0.0 < top_p < 1.0:
+        order = np.argsort(-out, axis=-1)
+        sorted_logits = np.take_along_axis(out, order, axis=-1)
+        m = sorted_logits.max(-1, keepdims=True)
+        probs = np.exp(sorted_logits - m)
+        probs /= probs.sum(-1, keepdims=True)
+        cum = np.cumsum(probs, axis=-1)
+        # keep tokens up to and including the one that crosses top_p
+        keep = cum - probs <= top_p
+        keep[:, 0] = True  # always keep the most probable token
+        mask_sorted = np.where(keep, sorted_logits, neg_inf)
+        out = np.empty_like(out)
+        np.put_along_axis(out, order, mask_sorted, axis=-1)
+    return out
+
+
+def _apple_gpu_gumbel_sample(logits: Any, np: Any, *, key: Any = None,
+                             temperature: float = 1.0, top_k: int = 0,
+                             top_p: float = 0.0, greedy: bool = False) -> Any:
+    """GPU Gumbel-max categorical sampler — draws one token id per row of
+    ``logits`` ``[..., vocab]``.
+
+    ``argmax(logits/T + g)`` with Gumbel noise ``g`` (from the Philox ``key``)
+    is an exact draw from ``softmax(logits/T)``; the per-row argmax over the
+    vocab runs on-GPU (the throughput win for batched sampling). ``greedy=True``
+    (or ``temperature==0``) returns the plain argmax. ``top_k`` / ``top_p``
+    restrict the candidate set (host-side mask). Reproducible: same ``key`` +
+    logits ⇒ same tokens. Returns int64 ids shaped like the leading dims of
+    ``logits``; falls back to numpy when the GPU symbol is unavailable."""
+    arr = np.asarray(logits, dtype=np.float32)
+    lead = arr.shape[:-1]
+    vocab = int(arr.shape[-1])
+    rows2d = arr.reshape(-1, vocab)
+    rows = int(rows2d.shape[0])
+
+    masked = _apply_topk_topp_mask(rows2d, top_k, top_p, np)
+    if greedy or temperature == 0.0:
+        gumbel = np.zeros((rows, vocab), np.float32)
+        inv_temp = 1.0
+    else:
+        gumbel = _gumbel_noise_from_key((rows, vocab), key, np)
+        inv_temp = 1.0 / float(temperature)
+
+    sym = _apple_gpu_gumbel_argmax_f32()
+    masked = np.ascontiguousarray(masked, np.float32)
+    gumbel = np.ascontiguousarray(gumbel, np.float32)
+    if sym is not None:
+        out = np.zeros(rows, np.int32)
+        fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        sym(fp(masked), fp(gumbel), out.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+            ctypes.c_int32(rows), ctypes.c_int32(vocab), ctypes.c_float(inv_temp))
+        ids = out.astype(np.int64)
+    else:
+        ids = np.argmax(masked * inv_temp + gumbel, axis=-1).astype(np.int64)
+    return ids.reshape(lead) if lead else ids.reshape(())
+
+
 def _apple_gpu_mpsgraph_argreduce_f32() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_argreduce_f32", None)

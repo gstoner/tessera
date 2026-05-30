@@ -68,6 +68,22 @@ def test_distillation_lifts_accepted_length(gumiho_mod):
     assert after.trained and not before.trained
 
 
+def test_resident_serial_draft_matches_host(gumiho_mod):
+    from gumiho.model import make_weights
+
+    cfg = gumiho_mod.tiny_config()
+    weights = make_weights(cfg, seed=0)
+    r = gumiho_mod.validate_resident_draft(cfg, weights, seed=0)
+    # The resident command-buffer draft must reproduce the host SerialHead
+    # token-for-token, and collapse the per-op dispatches into 1 buffer/token.
+    assert r.matches_host
+    assert r.backend in ("metal", "numpy")
+    if r.backend == "metal":
+        assert r.command_buffers == cfg.serial_tokens
+        assert r.host_dispatch_equiv > r.command_buffers
+        assert r.max_logit_abs_err < 1e-3
+
+
 def test_multistep_decode_accounting(gumiho_mod):
     import numpy as np
     from gumiho.model import make_weights

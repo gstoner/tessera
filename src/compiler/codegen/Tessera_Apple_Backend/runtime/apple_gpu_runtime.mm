@@ -8471,6 +8471,107 @@ extern "C" int32_t tessera_apple_gpu_bmm_dev_f32_enc(TsEncodeSession *s,
 }
 
 //===----------------------------------------------------------------------===//
+// R2 (cont.) — encoded flat elementwise unary/binary ops. These let a single
+// command buffer express full transformer/MLP blocks (residual adds, SwiGLU,
+// ReLU heads, additive tree-attention masks) alongside bmm/rowop/gumbel —
+// not just the MLA decode chain. Shapes collapse to a flat element count;
+// elementwise ops are layout-agnostic. unary op: 0 relu, 4 silu (see
+// mpsg_unary_node); binary op: 0 add, 2 mul (see mpsg_binary_node).
+//===----------------------------------------------------------------------===//
+namespace {
+static bool mpsg_encode_unary_dev(MPSCommandBuffer *cb, id<MTLBuffer> bufX,
+                                  id<MTLBuffer> bufO, int64_t n, int op,
+                                  MPSDataType ioType) {
+  if (n <= 0) return true;
+  if (!cb || !bufX || !bufO) return false;
+  NSArray<NSNumber *> *shape = @[ @(n) ];
+  NSString *key = [NSString stringWithFormat:@"ue:%d:%d:%lld", op, (int)ioType,
+                                             (long long)n];
+  NSArray *entry = mpsg_cache_get(key);
+  MPSGraph *g;
+  MPSGraphTensor *ph;
+  MPSGraphTensor *y;
+  if (entry) {
+    g = entry[0];
+    ph = ((NSArray *)entry[1])[0];
+    y = entry[2];
+  } else {
+    g = [MPSGraph new];
+    ph = [g placeholderWithShape:shape dataType:ioType name:nil];
+    MPSGraphTensor *yf = mpsg_unary_node(g, mpsg_up(g, ph, ioType), op);
+    if (!yf) return false;
+    y = mpsg_down(g, yf, ioType);
+    mpsg_cache_put(key, @[ g, @[ ph ], y ]);
+  }
+  MPSGraphTensorData *xd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:shape dataType:ioType];
+  MPSGraphTensorData *od = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufO shape:shape dataType:ioType];
+  [g encodeToCommandBuffer:cb feeds:@{ph : xd} targetOperations:nil
+         resultsDictionary:@{y : od} executionDescriptor:nil];
+  return true;
+}
+static bool mpsg_encode_binary_dev(MPSCommandBuffer *cb, id<MTLBuffer> bufA,
+                                   id<MTLBuffer> bufB, id<MTLBuffer> bufO,
+                                   int64_t n, int op, MPSDataType ioType) {
+  if (n <= 0) return true;
+  if (!cb || !bufA || !bufB || !bufO) return false;
+  NSArray<NSNumber *> *shape = @[ @(n) ];
+  NSString *key = [NSString stringWithFormat:@"be:%d:%d:%lld", op, (int)ioType,
+                                             (long long)n];
+  NSArray *entry = mpsg_cache_get(key);
+  MPSGraph *g;
+  MPSGraphTensor *pa;
+  MPSGraphTensor *pb;
+  MPSGraphTensor *y;
+  if (entry) {
+    g = entry[0];
+    pa = ((NSArray *)entry[1])[0];
+    pb = ((NSArray *)entry[1])[1];
+    y = entry[2];
+  } else {
+    g = [MPSGraph new];
+    pa = [g placeholderWithShape:shape dataType:ioType name:nil];
+    pb = [g placeholderWithShape:shape dataType:ioType name:nil];
+    MPSGraphTensor *yf =
+        mpsg_binary_node(g, mpsg_up(g, pa, ioType), mpsg_up(g, pb, ioType), op);
+    if (!yf) return false;
+    y = mpsg_down(g, yf, ioType);
+    mpsg_cache_put(key, @[ g, @[ pa, pb ], y ]);
+  }
+  MPSGraphTensorData *ad = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:shape dataType:ioType];
+  MPSGraphTensorData *bd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:shape dataType:ioType];
+  MPSGraphTensorData *od = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufO shape:shape dataType:ioType];
+  [g encodeToCommandBuffer:cb feeds:@{pa : ad, pb : bd} targetOperations:nil
+         resultsDictionary:@{y : od} executionDescriptor:nil];
+  return true;
+}
+}  // namespace
+
+extern "C" int32_t tessera_apple_gpu_unary_dev_f32_enc(TsEncodeSession *s,
+                                                       TsDeviceTensor *X,
+                                                       TsDeviceTensor *O,
+                                                       int64_t n, int32_t op) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !O) return 0;
+  return mpsg_encode_unary_dev(s->cb, X->buf, O->buf, n, (int)op,
+                               MPSDataTypeFloat32)
+             ? 1
+             : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_binary_dev_f32_enc(TsEncodeSession *s,
+                                                        TsDeviceTensor *A,
+                                                        TsDeviceTensor *B,
+                                                        TsDeviceTensor *O,
+                                                        int64_t n, int32_t op) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !A || !B || !O) return 0;
+  return mpsg_encode_binary_dev(s->cb, A->buf, B->buf, O->buf, n, (int)op,
+                                MPSDataTypeFloat32)
+             ? 1
+             : 0;
+}
+
+//===----------------------------------------------------------------------===//
 // R4 (block-paged) — on-GPU non-contiguous block-table gather. Given a resident
 // physical block pool [num_blocks, block_size, dim] and a sequence's block table
 // (int32 [n] of physical block ids), MPSGraph gathers those (possibly

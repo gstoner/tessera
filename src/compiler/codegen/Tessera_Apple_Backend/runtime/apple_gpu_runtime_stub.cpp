@@ -1489,6 +1489,36 @@ extern "C" int32_t tessera_apple_gpu_rowop_dev_f32_enc(TsEncodeSession* s,
   if (!s) return 0;
   return tessera_apple_gpu_rowop_dev_f32(X, gamma, O, kind, rows, cols, eps);
 }
+// R2 (cont.) — flat elementwise unary/binary, non-Apple reference into O->data.
+// unary op: 0 relu, 4 silu. binary op: 0 add, 2 mul.
+extern "C" int32_t tessera_apple_gpu_unary_dev_f32_enc(TsEncodeSession* s,
+                                                       TsDeviceTensor* X,
+                                                       TsDeviceTensor* O,
+                                                       int64_t n, int32_t op) {
+  if (!s || !X || !O) return 0;
+  const float* x = static_cast<const float*>(X->data);
+  float* o = static_cast<float*>(O->data);
+  for (int64_t i = 0; i < n; ++i) {
+    float v = x[i];
+    o[i] = (op == 0) ? (v > 0.f ? v : 0.f)
+                     : (op == 4) ? v / (1.f + std::exp(-v)) : v;
+  }
+  return 1;
+}
+extern "C" int32_t tessera_apple_gpu_binary_dev_f32_enc(TsEncodeSession* s,
+                                                        TsDeviceTensor* A,
+                                                        TsDeviceTensor* B,
+                                                        TsDeviceTensor* O,
+                                                        int64_t n, int32_t op) {
+  if (!s || !A || !B || !O) return 0;
+  const float* a = static_cast<const float*>(A->data);
+  const float* b = static_cast<const float*>(B->data);
+  float* o = static_cast<float*>(O->data);
+  for (int64_t i = 0; i < n; ++i) {
+    o[i] = (op == 0) ? a[i] + b[i] : (op == 2) ? a[i] * b[i] : a[i];
+  }
+  return 1;
+}
 extern "C" int32_t tessera_apple_gpu_gumbel_argmax_dev_f32(TsDeviceTensor* logits,
                                                            TsDeviceTensor* gumbel,
                                                            TsDeviceTensor* out_ids,

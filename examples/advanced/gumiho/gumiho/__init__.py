@@ -16,6 +16,11 @@ from .decode import (
     run_multistep_decode,
     run_training_demo,
 )
+from .resident import (
+    ResidentDraftResult,
+    ResidentSerialDraft,
+    validate_resident_draft,
+)
 from .training import distill, trajectory_contexts
 
 __all__ = [
@@ -28,4 +33,7 @@ __all__ = [
     "run_training_demo",
     "distill",
     "trajectory_contexts",
+    "ResidentSerialDraft",
+    "ResidentDraftResult",
+    "validate_resident_draft",
 ]

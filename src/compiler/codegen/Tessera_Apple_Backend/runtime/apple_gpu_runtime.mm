@@ -8313,7 +8313,73 @@ static bool mpsg_run_bmm(MetalDeviceContext &ctx, const void *a, const void *b,
   }
 }
 
+// R1 — device-resident bmm: inputs + output are existing shared MTLBuffers
+// (from DeviceTensor handles), so there is NO host upload and NO readback. The
+// MPSGraph result is written straight into the output buffer via
+// resultsDictionary, leaving it resident for the next op. Shares the bmm graph
+// cache key, so it reuses the same compiled graph as the host-ptr path.
+static bool mpsg_run_bmm_dev(MetalDeviceContext &ctx, id<MTLBuffer> bufA,
+                             id<MTLBuffer> bufB, id<MTLBuffer> bufO,
+                             int32_t batch, int32_t M, int32_t N, int32_t K,
+                             bool b_broadcast, MPSDataType ioType) {
+  if (batch <= 0 || M <= 0 || N <= 0 || K <= 0) return true;
+  if (!bufA || !bufB || !bufO) return false;
+  @autoreleasepool {
+    int32_t bBatch = b_broadcast ? 1 : batch;
+    NSArray<NSNumber *> *aShape = @[ @(batch), @(M), @(K) ];
+    NSArray<NSNumber *> *bShape = @[ @(bBatch), @(K), @(N) ];
+    NSArray<NSNumber *> *oShape = @[ @(batch), @(M), @(N) ];
+    NSString *key = [NSString stringWithFormat:@"bmm:%d:%d:%d:%d:%d:%d",
+                                               (int)ioType, batch, M, N, K,
+                                               (int)b_broadcast];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *pa, *pb, *y;
+    if (entry) {
+      g = entry[0];
+      pa = ((NSArray *)entry[1])[0];
+      pb = ((NSArray *)entry[1])[1];
+      y = entry[2];
+    } else {
+      g = [MPSGraph new];
+      pa = [g placeholderWithShape:aShape dataType:ioType name:nil];
+      pb = [g placeholderWithShape:bShape dataType:ioType name:nil];
+      MPSGraphTensor *yf =
+          [g matrixMultiplicationWithPrimaryTensor:mpsg_up(g, pa, ioType)
+                                   secondaryTensor:mpsg_up(g, pb, ioType)
+                                              name:nil];
+      y = mpsg_down(g, yf, ioType);
+      mpsg_cache_put(key, @[ g, @[ pa, pb ], y ]);
+    }
+    MPSGraphTensorData *ad = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:aShape dataType:ioType];
+    MPSGraphTensorData *bd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:ioType];
+    MPSGraphTensorData *od = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufO shape:oShape dataType:ioType];
+    [g runWithMTLCommandQueue:ctx.queue
+                        feeds:@{pa : ad, pb : bd}
+             targetOperations:nil
+            resultsDictionary:@{y : od}];
+    return true;
+  }
+}
+
 }  // namespace
+
+// R1 device-resident bmm entry point. A/B/O are TsDeviceTensor handles whose
+// shared buffers are used in place. Returns 1 on a real GPU run, 0 otherwise
+// (caller falls back to the host-ptr path).
+extern "C" int32_t tessera_apple_gpu_bmm_dev_f32(TsDeviceTensor *A,
+                                                 TsDeviceTensor *B,
+                                                 TsDeviceTensor *O,
+                                                 int32_t batch, int32_t M,
+                                                 int32_t N, int32_t K,
+                                                 int32_t b_broadcast) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !A || !B || !O) return 0;
+  return mpsg_run_bmm_dev(ctx, A->buf, B->buf, O->buf, batch, M, N, K,
+                          b_broadcast != 0, MPSDataTypeFloat32)
+             ? 1
+             : 0;
+}
 
 extern "C" void tessera_apple_gpu_bmm_f32(const float *A, const float *B,
                                           float *O, int32_t batch, int32_t M,

@@ -4971,6 +4971,55 @@ class DeviceTensor:
                 f"{loc}, freed={self._freed})")
 
 
+_BMM_DEV_CONFIGURED = False
+
+
+def _apple_gpu_bmm_dev_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_bmm_dev_f32", None)
+    if sym is None:
+        return None
+    global _BMM_DEV_CONFIGURED
+    if not _BMM_DEV_CONFIGURED:
+        vp, i32 = ctypes.c_void_p, ctypes.c_int32
+        sym.argtypes = [vp, vp, vp, i32, i32, i32, i32, i32]
+        sym.restype = i32
+        _BMM_DEV_CONFIGURED = True
+    return sym
+
+
+def _apple_gpu_bmm_device(A: "DeviceTensor", B: "DeviceTensor",
+                          b_broadcast: bool = False) -> "DeviceTensor | None":
+    """R1 — device-resident batched matmul. Both inputs are ``DeviceTensor``s
+    (shapes ``[batch, M, K]`` and ``[batch|1, K, N]``); the result is a new
+    ``DeviceTensor`` ``[batch, M, N]`` that stays on-device — **no host upload
+    or readback**, so it can feed the next op directly. f32 only. Returns None
+    when the device path is unavailable."""
+    import numpy as _np
+    if A.dtype != _np.float32 or B.dtype != _np.float32:
+        return None
+    if len(A.shape) != 3 or len(B.shape) != 3:
+        return None
+    batch, M, K = A.shape
+    bBatch, K2, N = B.shape
+    if K2 != K or (bBatch != batch and bBatch != 1):
+        return None
+    bcast = (bBatch == 1 and batch != 1) or bool(b_broadcast)
+    sym = _apple_gpu_bmm_dev_f32()
+    if sym is None:
+        return None
+    out = DeviceTensor.empty((batch, M, N), _np.float32)
+    if out is None:
+        return None
+    rc = sym(A.handle, B.handle, out.handle, ctypes.c_int32(batch),
+             ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
+             ctypes.c_int32(1 if bcast else 0))
+    if rc != 1:
+        out.free()
+        return None
+    return out
+
+
 def _load_apple_gpu_runtime() -> ctypes.CDLL:
     """Phase 8.3: locate or compile the apple_gpu runtime shared library.
 

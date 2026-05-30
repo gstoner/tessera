@@ -22,6 +22,7 @@ from .latent import LatentKVCacheHandle
 from .memory_state import MemoryStateHandle
 from .mla_block_paged import MLABlockPagedCache, MLABlockPagedCacheError
 from .mla_paged import MLAPagedDecoder
+from .resident_decode import ResidentMLADecoder
 
 __all__ = [
     "KVCacheHandle",
@@ -30,4 +31,5 @@ __all__ = [
     "MLAPagedDecoder",
     "MLABlockPagedCache",
     "MLABlockPagedCacheError",
+    "ResidentMLADecoder",
 ]

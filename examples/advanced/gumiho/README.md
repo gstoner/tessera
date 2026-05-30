@@ -130,6 +130,39 @@ numerically identical). The tree-verification phase stays host-orchestrated
 because FTA's top-k selection and prefix trie are data-dependent control flow;
 this targets the serial draft, which is a pure resident dense chain.
 
+## Half-precision draft (f16 / bf16)
+
+`--mode precision --dtype f16|bf16` runs the draft heads in half precision on the
+Apple GPU (native `half` MSL with fp32 accumulation; bf16 host-upcast). Because
+accumulation stays fp32, the logits barely move and the discrete serial tokens
+match the f32 path:
+
+```
+dtype=f16  backend=metal-f16  serial_tokens_match=True  target_logit_err_vs_f32=0.0040
+dtype=bf16 backend=metal-bf16 serial_tokens_match=True  target_logit_err_vs_f32=0.0218
+```
+
+The backend's `compute_dtype` threads through every dense op (`matmul`,
+`rmsnorm`, `silu_mul`, `relu`, `softmax`); off Metal it falls back to f32.
+
+## Paged-KV prefix sharing
+
+`--mode prefix` decodes over the **full growing context** with the context's K/V
+served from a `tessera.cache.KVCacheHandle`. The naive verifier recomputes the
+whole context + tree every step; the prefix-shared verifier prefills the context
+K/V **once**, appends only the accepted tokens, and recomputes K/V for just the
+tree nodes — so each step touches `N` rows instead of `C + N`:
+
+```
+prompts=4 steps=43 tokens=100 | K/V rows 1199 vs 1740 naive (31% fewer)
+verify_matches=True (err=1.68e-07)
+```
+
+`PrefixSharedVerifier.verify_tree` reproduces `build_draft`'s target log-probs
+bit-for-bit (same attention, just a cached prefix). The saving compounds with
+context length — at real context sizes the tree is tiny next to the prefix, so
+prefix sharing removes nearly all of the per-step context recompute.
+
 ## Notes
 
 - **Weights are tiny seeded synthetics** — the example validates the

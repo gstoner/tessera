@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 
+import numpy as np
+
 from gumiho import (
     GumihoConfig,
     run_gumiho_demo,
@@ -14,15 +16,19 @@ from gumiho.resident import validate_resident_draft
 def main() -> None:
     parser = argparse.ArgumentParser(description="Gumiho hybrid speculative decoding")
     parser.add_argument("--mode", default="decode",
-                        choices=["step", "decode", "resident"],
+                        choices=["step", "decode", "resident", "precision",
+                                 "prefix"],
                         help="step: one validated speculative step; "
                              "decode: distill + multi-step decode with speedup; "
                              "resident: GPU-resident serial draft (one command "
-                             "buffer per token)")
+                             "buffer per token); precision: f16/bf16 draft vs "
+                             "f32; prefix: paged-KV prefix-sharing decode")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--target", default="apple_gpu",
                         choices=["apple_gpu", "apple_cpu", "numpy"],
                         help="compute backend for the draft + verify math")
+    parser.add_argument("--dtype", default="f16", choices=["f16", "bf16"],
+                        help="half-precision dtype for --mode precision")
     parser.add_argument("--serial-tokens", type=int, default=2)
     parser.add_argument("--parallel-heads", type=int, default=5)
     parser.add_argument("--top-paths", type=int, default=8)
@@ -43,6 +49,25 @@ def main() -> None:
         print(f"schedule = serial_head({cfg.serial_tokens}) + "
               f"parallel_heads({cfg.parallel_heads}) -> FTA top-{cfg.fta_top_paths} "
               f"-> tree_verify -> accept -> advance_kv")
+        return
+
+    if args.mode == "precision":
+        from gumiho import run_precision_demo
+        s = run_precision_demo(cfg, seed=args.seed, dtype=args.dtype)
+        print("== Gumiho half-precision draft (f16/bf16 vs f32) ==")
+        print(s)
+        return
+
+    if args.mode == "prefix":
+        from gumiho import run_prefix_sharing_demo
+        weights = make_weights(cfg, seed=args.seed)
+        rng = np.random.default_rng(args.seed)
+        prompts = rng.integers(0, cfg.vocab, size=(args.prompts, cfg.context_len),
+                               dtype=np.int64)
+        s = run_prefix_sharing_demo(cfg, weights, prompts=prompts,
+                                    max_new_tokens=args.max_new_tokens, seed=args.seed)
+        print("== Gumiho paged-KV prefix-sharing decode ==")
+        print(s)
         return
 
     if args.mode == "resident":

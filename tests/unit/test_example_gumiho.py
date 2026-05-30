@@ -10,6 +10,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 _EX = Path(__file__).resolve().parents[2] / "examples" / "advanced" / "gumiho"
@@ -66,6 +67,55 @@ def test_distillation_lifts_accepted_length(gumiho_mod):
     assert after.mean_accepted_length > before.mean_accepted_length + 1.0
     assert after.speedup_vs_vanilla > 2.0
     assert after.trained and not before.trained
+
+
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+def test_half_precision_draft(gumiho_mod, dtype):
+    s = gumiho_mod.run_precision_demo(gumiho_mod.tiny_config(), seed=0, dtype=dtype)
+    # Half precision keeps fp32 accumulation -> serial argmax tokens match f32
+    # and the target logits stay close; off Metal it falls back to f32 (err 0).
+    assert s.serial_tokens_match
+    assert s.draft_paths > 0
+    tol = 0.05 if dtype == "f16" else 0.2
+    assert s.max_logit_abs_err < tol
+
+
+def test_prefix_sharing_matches_and_saves(gumiho_mod):
+    from gumiho.model import make_weights
+
+    cfg = gumiho_mod.tiny_config()
+    weights = make_weights(cfg, seed=0)
+    rng = np.random.default_rng(0)
+    prompts = rng.integers(0, cfg.vocab, size=(3, cfg.context_len), dtype=np.int64)
+    s = gumiho_mod.run_prefix_sharing_demo(cfg, weights, prompts=prompts,
+                                           max_new_tokens=16, seed=0)
+    # Prefix-shared verify reproduces the naive target log-probs...
+    assert s.verify_matches_recompute
+    assert s.max_target_logprob_err < 1e-4
+    # ...while computing strictly fewer K/V rows across the decode.
+    assert s.shared_kv_rows < s.naive_kv_rows
+    assert s.kv_rows_saved > 0
+
+
+def test_prefix_shared_single_verify_equals_build_draft(gumiho_mod):
+    import numpy as _np
+    from gumiho.backend import NumpyBackend
+    from gumiho.draft import build_draft
+    from gumiho.model import ParallelHeads, SerialHead, TargetModel, make_weights
+    from gumiho.prefix_shared import PrefixSharedVerifier
+
+    cfg = gumiho_mod.tiny_config()
+    w = make_weights(cfg, seed=1)
+    be = NumpyBackend(eps=cfg.rmsnorm_eps)
+    ctx = _np.random.default_rng(1).integers(0, cfg.vocab, size=cfg.context_len,
+                                             dtype=_np.int64)
+    tgt = TargetModel(w, cfg)
+    lh, _ = tgt.forward(be, ctx)
+    bundle = build_draft(be, cfg, tgt, SerialHead(w, cfg), ParallelHeads(w, cfg),
+                         context_tokens=ctx, last_hidden=lh[-1])
+    res = PrefixSharedVerifier(w, cfg).verify_tree(ctx, bundle)
+    assert _np.max(_np.abs(res.target_log_probs - bundle.target_log_probs)) < 1e-5
+    assert res.kv_rows_per_verify < res.kv_rows_full_recompute
 
 
 def test_resident_serial_draft_matches_host(gumiho_mod):

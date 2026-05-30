@@ -137,6 +137,51 @@ def run_multistep_decode(cfg: GumihoConfig, weights, *, prompts: np.ndarray,
         tokens_per_step=tps, speedup_vs_vanilla=tps)
 
 
+@dataclass(frozen=True)
+class PrecisionSummary:
+    dtype: str
+    backend: str
+    serial_tokens_match: bool
+    max_logit_abs_err: float
+    draft_paths: int
+
+    def __str__(self) -> str:  # pragma: no cover - cosmetic
+        return (f"dtype={self.dtype} backend={self.backend} | "
+                f"serial_tokens_match={self.serial_tokens_match} | "
+                f"target_logit_err_vs_f32={self.max_logit_abs_err:.4f} | "
+                f"draft_paths={self.draft_paths}")
+
+
+def run_precision_demo(cfg: GumihoConfig | None = None, *, seed: int = 0,
+                       dtype: str = "f16") -> PrecisionSummary:
+    """Run the draft in ``dtype`` (f16/bf16) on the Apple GPU and compare the
+    target forward + serial tokens against the f32 path. Half precision keeps
+    fp32 accumulation inside the GPU kernels, so logits stay close and the
+    discrete serial tokens match."""
+    cfg = cfg or tiny_config()
+    weights = make_weights(cfg, seed=seed)
+    rng = np.random.default_rng(seed)
+    context = rng.integers(0, cfg.vocab, size=cfg.context_len, dtype=np.int64)
+
+    be32 = make_backend("apple_gpu", eps=cfg.rmsnorm_eps, compute_dtype="f32")
+    half = make_backend("apple_gpu", eps=cfg.rmsnorm_eps, compute_dtype=dtype)
+    target = TargetModel(weights, cfg)
+    serial = SerialHead(weights, cfg)
+
+    h32, l32 = target.forward(be32, context)
+    hh, lh = target.forward(half, context)
+    logit_err = float(np.max(np.abs(np.asarray(l32, np.float32)
+                                    - np.asarray(lh, np.float32))))
+    t32, _, _ = serial.generate(be32, target, h32[-1], int(context[-1]))
+    th, _, _ = serial.generate(half, target, hh[-1], int(context[-1]))
+    bundle = _draft_for(half, cfg, weights, context)   # full FTA draft in half
+
+    return PrecisionSummary(
+        dtype=dtype, backend=half.name,
+        serial_tokens_match=(list(t32) == list(th)),
+        max_logit_abs_err=logit_err, draft_paths=bundle.num_paths)
+
+
 def run_training_demo(cfg: GumihoConfig | None = None, *, seed: int = 0,
                       target: str = "apple_gpu", num_prompts: int = 8,
                       horizon: int = 24, max_new_tokens: int = 24,

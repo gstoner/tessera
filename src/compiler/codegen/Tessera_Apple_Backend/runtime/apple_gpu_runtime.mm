@@ -8631,3 +8631,155 @@ extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f16(const uint16_t *A,
     return;
   std::memset(O, 0, (size_t)batch * M * P * 2);
 }
+
+// Forward decl: main already defines the f32 GQA kernel earlier in this TU.
+extern "C" void tessera_apple_gpu_flash_attn_gqa_f32(const float *, const float *, const float *, float *, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, float, int32_t);
+
+// flash_attn GQA — f16 (native) + bf16 (fp32-conversion) (2026-05-29)
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+bool dispatch_flash_attn_gqa_msl_f16(MetalDeviceContext &ctx, const uint16_t *Q,
+                                     const uint16_t *K, const uint16_t *V,
+                                     uint16_t *O, int32_t B, int32_t q_heads,
+                                     int32_t kv_heads, int32_t Sq, int32_t Sk,
+                                     int32_t D, float scale, int32_t causal) {
+  static NSString *const kSrc = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+#define TESSERA_GQA_MAX_D 256
+kernel void flash_attn_gqa_f16(
+    device const half*  Q       [[buffer(0)]],
+    device const half*  K       [[buffer(1)]],
+    device const half*  V       [[buffer(2)]],
+    device half*        O       [[buffer(3)]],
+    constant int&       B       [[buffer(4)]],
+    constant int&       q_heads [[buffer(5)]],
+    constant int&       kv_heads[[buffer(6)]],
+    constant int&       Sq      [[buffer(7)]],
+    constant int&       Sk      [[buffer(8)]],
+    constant int&       D       [[buffer(9)]],
+    constant float&     scale   [[buffer(10)]],
+    constant int&       causal  [[buffer(11)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    if (gid.y >= (uint)B || gid.x >= (uint)Sq) return;
+    int batch = (int)gid.y;
+    int q_row = (int)gid.x;
+    if (D > TESSERA_GQA_MAX_D) return;
+    int b_outer = batch / q_heads;
+    int q_head  = batch % q_heads;
+    int group   = q_heads / kv_heads;
+    int kv_batch = b_outer * kv_heads + (q_head / group);
+    int q_off = batch * Sq * D + q_row * D;
+    int kv_base = kv_batch * Sk * D;
+    float m = -INFINITY;
+    float l = 0.0f;
+    float o[TESSERA_GQA_MAX_D];
+    for (int d = 0; d < D; ++d) o[d] = 0.0f;
+    for (int k_row = 0; k_row < Sk; ++k_row) {
+        if (causal != 0 && k_row > q_row) break;
+        int k_off = kv_base + k_row * D;
+        float score = 0.0f;
+        for (int d = 0; d < D; ++d) score += float(Q[q_off + d]) * float(K[k_off + d]);
+        score *= scale;
+        float new_m = max(m, score);
+        float exp_old = exp(m - new_m);
+        float exp_score = exp(score - new_m);
+        float new_l = l * exp_old + exp_score;
+        for (int d = 0; d < D; ++d) o[d] = o[d] * exp_old + float(V[k_off + d]) * exp_score;
+        m = new_m;
+        l = new_l;
+    }
+    if (l == 0.0f) { for (int d = 0; d < D; ++d) O[q_off + d] = half(0.0f); }
+    else { float inv = 1.0f / l; for (int d = 0; d < D; ++d) O[q_off + d] = half(o[d] * inv); }
+}
+)MSL";
+  if (q_heads <= 0 || kv_heads <= 0 || q_heads % kv_heads != 0) return false;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kSrc, @"flash_attn_gqa_f16");
+    if (!pso) return false;
+    int32_t kv_outer = (B / q_heads) * kv_heads;
+    NSUInteger qBytes = sizeof(uint16_t) * (NSUInteger)B * Sq * D;
+    NSUInteger kvBytes = sizeof(uint16_t) * (NSUInteger)kv_outer * Sk * D;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, kvBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, kvBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, qBytes);
+    if (!bufQ || !bufK || !bufV || !bufO) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufO offset:0 atIndex:3];
+    [enc setBytes:&B length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&q_heads length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&kv_heads length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&Sq length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&Sk length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&D length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&scale length:sizeof(float) atIndex:10];
+    [enc setBytes:&causal length:sizeof(int32_t) atIndex:11];
+    MTLSize grid = MTLSizeMake((NSUInteger)Sq, (NSUInteger)B, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)Sq, 32);
+    NSUInteger tg_y = std::min<NSUInteger>((NSUInteger)B,
+        pso.maxTotalThreadsPerThreadgroup / std::max<NSUInteger>(tg_x, 1));
+    if (tg_y == 0) tg_y = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, tg_y, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(O, [bufO contents], qBytes);
+    return true;
+  }
+}
+
+// bf16 <-> f32 bit helpers (top 16 bits of f32).
+static inline float gqa_bf16_to_f32(uint16_t b) {
+  uint32_t f = (uint32_t)b << 16;
+  float out;
+  std::memcpy(&out, &f, sizeof(out));
+  return out;
+}
+static inline uint16_t gqa_f32_to_bf16(float v) {
+  uint32_t f;
+  std::memcpy(&f, &v, sizeof(f));
+  uint32_t lsb = (f >> 16) & 1u;
+  return (uint16_t)((f + 0x7FFFu + lsb) >> 16);
+}
+
+}  // namespace
+
+extern "C" void tessera_apple_gpu_flash_attn_gqa_f16(
+    const uint16_t *Q, const uint16_t *K, const uint16_t *V, uint16_t *O,
+    int32_t B, int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk,
+    int32_t D, float scale, int32_t causal) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_flash_attn_gqa_msl_f16(ctx, Q, K, V, O, B, q_heads,
+                                                kv_heads, Sq, Sk, D, scale, causal))
+    return;
+  std::memset(O, 0, (size_t)B * Sq * D * 2);  // python upcasts on fallback
+}
+
+extern "C" void tessera_apple_gpu_flash_attn_gqa_bf16(
+    const uint16_t *Q, const uint16_t *K, const uint16_t *V, uint16_t *O,
+    int32_t B, int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk,
+    int32_t D, float scale, int32_t causal) {
+  // fp32-conversion path (MSL has no native bf16): convert, run the f32 GQA
+  // kernel, convert back.
+  int32_t kv_outer = (q_heads > 0) ? (B / q_heads) * kv_heads : B;
+  std::vector<float> qf((size_t)B * Sq * D), kf((size_t)kv_outer * Sk * D),
+      vf((size_t)kv_outer * Sk * D), of((size_t)B * Sq * D);
+  for (size_t i = 0; i < qf.size(); ++i) qf[i] = gqa_bf16_to_f32(Q[i]);
+  for (size_t i = 0; i < kf.size(); ++i) kf[i] = gqa_bf16_to_f32(K[i]);
+  for (size_t i = 0; i < vf.size(); ++i) vf[i] = gqa_bf16_to_f32(V[i]);
+  tessera_apple_gpu_flash_attn_gqa_f32(qf.data(), kf.data(), vf.data(),
+                                       of.data(), B, q_heads, kv_heads, Sq, Sk,
+                                       D, scale, causal);
+  for (size_t i = 0; i < of.size(); ++i) O[i] = gqa_f32_to_bf16(of[i]);
+}

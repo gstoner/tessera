@@ -89,14 +89,40 @@ def test_gqa_symbol_exported():
     assert R._apple_gpu_flash_attn_gqa_f32() is not None
 
 
-def test_gqa_f16_upcasts():
+@pytest.mark.skipif(not DARWIN, reason="native half-width GQA symbols are Darwin-only")
+def test_gqa_f16_bf16_symbols_exported():
+    rt = R._load_apple_gpu_runtime()
+    assert hasattr(rt, "tessera_apple_gpu_flash_attn_gqa_f16")
+    assert hasattr(rt, "tessera_apple_gpu_flash_attn_gqa_bf16")
+    assert R._apple_gpu_flash_attn_gqa_f16() is not None
+    assert R._apple_gpu_flash_attn_gqa_bf16() is not None
+
+
+def test_gqa_f16_native():
+    # f16 runs through the native half kernel (uint16 ABI, fp32 accumulators).
     rng = np.random.RandomState(3)
     B, H, G, S, D = 1, 4, 2, 6, 16
     Q = (rng.randn(B, H, S, D) * 0.5).astype(np.float16)
     K = (rng.randn(B, G, S, D) * 0.5).astype(np.float16)
     V = (rng.randn(B, G, S, D) * 0.5).astype(np.float16)
     out = R._apple_gpu_dispatch_gqa(Q, K, V, H, G, np)
-    assert out.dtype == np.float16
+    assert out is not None and out.dtype == np.float16
     ref = _ref_gqa(Q.astype(np.float32), K.astype(np.float32), V.astype(np.float32),
                    H, G, 1.0 / math.sqrt(D), False)
     np.testing.assert_allclose(out.astype(np.float32), ref, rtol=3e-2, atol=3e-2)
+
+
+def test_gqa_bf16_native():
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    bf16 = ml_dtypes.bfloat16
+    rng = np.random.RandomState(4)
+    B, H, G, S, D = 2, 8, 2, 5, 16
+    Qf = (rng.randn(B, H, S, D) * 0.5).astype(np.float32)
+    Kf = (rng.randn(B, G, S, D) * 0.5).astype(np.float32)
+    Vf = (rng.randn(B, G, S, D) * 0.5).astype(np.float32)
+    Q, K, V = Qf.astype(bf16), Kf.astype(bf16), Vf.astype(bf16)
+    out = R._apple_gpu_dispatch_gqa(Q, K, V, H, G, np)
+    assert out is not None and out.dtype == bf16
+    ref = _ref_gqa(Qf, Kf, Vf, H, G, 1.0 / math.sqrt(D), False)
+    # bf16 has ~8 bits of mantissa — looser tolerance than f16.
+    np.testing.assert_allclose(out.astype(np.float32), ref, rtol=6e-2, atol=6e-2)

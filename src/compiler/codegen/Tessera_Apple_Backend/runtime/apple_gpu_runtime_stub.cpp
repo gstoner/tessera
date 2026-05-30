@@ -1191,4 +1191,38 @@ extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f16(const uint16_t*, const uint1
   std::memset(O, 0, static_cast<std::size_t>(batch) * M * P * 2);
 }
 
+// ---- flash_attn GQA f16/bf16 non-Apple reference (2026-05-30) --------------
+static inline float gqa_bf16_to_f32_stub(uint16_t b) {
+  uint32_t f = static_cast<uint32_t>(b) << 16; float o; std::memcpy(&o, &f, sizeof(o)); return o;
+}
+static inline uint16_t gqa_f32_to_bf16_stub(float v) {
+  uint32_t f; std::memcpy(&f, &v, sizeof(f)); uint32_t lsb = (f >> 16) & 1u;
+  return static_cast<uint16_t>((f + 0x7FFFu + lsb) >> 16);
+}
+extern "C" void tessera_apple_gpu_flash_attn_gqa_f16(const uint16_t*, const uint16_t*,
+                                                     const uint16_t*, uint16_t* O,
+                                                     int32_t B, int32_t, int32_t,
+                                                     int32_t Sq, int32_t, int32_t D,
+                                                     float, int32_t) {
+  std::memset(O, 0, static_cast<std::size_t>(B) * Sq * D * 2);  // python upcasts on fallback
+}
+extern "C" void tessera_apple_gpu_flash_attn_gqa_bf16(const uint16_t* Q, const uint16_t* K,
+                                                      const uint16_t* V, uint16_t* O,
+                                                      int32_t B, int32_t q_heads,
+                                                      int32_t kv_heads, int32_t Sq,
+                                                      int32_t Sk, int32_t D, float scale,
+                                                      int32_t causal) {
+  int32_t kv_outer = (q_heads > 0) ? (B / q_heads) * kv_heads : B;
+  std::vector<float> qf(static_cast<std::size_t>(B) * Sq * D),
+      kf(static_cast<std::size_t>(kv_outer) * Sk * D),
+      vf(static_cast<std::size_t>(kv_outer) * Sk * D),
+      of(static_cast<std::size_t>(B) * Sq * D);
+  for (std::size_t i = 0; i < qf.size(); ++i) qf[i] = gqa_bf16_to_f32_stub(Q[i]);
+  for (std::size_t i = 0; i < kf.size(); ++i) kf[i] = gqa_bf16_to_f32_stub(K[i]);
+  for (std::size_t i = 0; i < vf.size(); ++i) vf[i] = gqa_bf16_to_f32_stub(V[i]);
+  tessera_apple_gpu_flash_attn_gqa_f32(qf.data(), kf.data(), vf.data(), of.data(),
+                                       B, q_heads, kv_heads, Sq, Sk, D, scale, causal);
+  for (std::size_t i = 0; i < of.size(); ++i) O[i] = gqa_f32_to_bf16_stub(of[i]);
+}
+
 #endif // !__APPLE__

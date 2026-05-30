@@ -2855,6 +2855,21 @@ def _apple_gpu_mla_absorb_decode_f32() -> Any:
     return sym
 
 
+def _apple_gpu_mla_absorb_decode_half(suffix: str) -> Any:
+    """f16 / bf16 absorb symbol: 6 uint16 tensor inputs + uint16 output, with
+    f32 cos/sin tables in between (matching the C ABI)."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, f"tessera_apple_gpu_mla_absorb_decode_{suffix}", None)
+    if sym is None:
+        return None
+    u16 = ctypes.POINTER(ctypes.c_uint16)
+    f32 = ctypes.POINTER(ctypes.c_float)
+    # q_nope,q_rope,c_kv,k_rope,Wuk_t,Wuv (u16) | cosQ,sinQ,cosK,sinK (f32) | O (u16)
+    sym.argtypes = [u16] * 6 + [f32] * 4 + [u16] + [ctypes.c_int32] * 9
+    sym.restype = None
+    return sym
+
+
 def _apple_gpu_mla_absorb_decode(q_nope: Any, q_rope: Any, c_kv: Any,
                                  k_rope: Any, Wuk_t: Any, Wuv: Any, cosQ: Any,
                                  sinQ: Any, cosK: Any, sinK: Any, np: Any,
@@ -2868,16 +2883,48 @@ def _apple_gpu_mla_absorb_decode(q_nope: Any, q_rope: Any, c_kv: Any,
     only ``c_kv [B,Skv,Dl]`` + the shared ``k_rope [B,Skv,dr]``. Mathematically
     identical to the explicit-K decoupled-RoPE path.
 
-    Shapes (all f32): q_nope ``[B,H,Sq,dn]``, q_rope ``[B,H,Sq,dr]``,
-    c_kv ``[B,Skv,Dl]`` (shared), k_rope ``[B,Skv,dr]`` (shared),
-    Wuk_t ``[H,dn,Dl]`` (= Wukᵀ, absorb-K), Wuv ``[H,Dl,dv]`` (absorb-V),
-    cosQ/sinQ ``[Sq,dr/2]``, cosK/sinK ``[Skv,dr/2]``. Returns O ``[B,H,Sq,dv]``.
-    ``rotation_style`` is ``"interleaved"`` or ``"half"``. Returns None when the
-    runtime symbol is unavailable."""
+    Dtype is taken from ``q_nope``: **f32** and **f16** run natively (f16 carries
+    f16 I/O on-GPU at half the cache-read bandwidth, fp32 accumulation); **bf16**
+    runs via a host fp32 round-trip. The cos/sin tables are always f32. The six
+    tensor inputs must share the dtype. Shapes: q_nope ``[B,H,Sq,dn]``,
+    q_rope ``[B,H,Sq,dr]``, c_kv ``[B,Skv,Dl]``, k_rope ``[B,Skv,dr]``,
+    Wuk_t ``[H,dn,Dl]``, Wuv ``[H,Dl,dv]``, cos/sin ``[Sq|Skv, dr/2]``. Returns
+    O ``[B,H,Sq,dv]`` in the input dtype. Returns None when unavailable."""
     style = 0 if str(rotation_style).lower().startswith("inter") else 1
+    qn0 = np.asarray(q_nope)
+    out_dtype = qn0.dtype
+    bf16 = _bfloat16_dtype()
+    cosQ = np.ascontiguousarray(cosQ, np.float32)
+    sinQ = np.ascontiguousarray(sinQ, np.float32)
+    cosK = np.ascontiguousarray(cosK, np.float32)
+    sinK = np.ascontiguousarray(sinK, np.float32)
+    fpf = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+
+    is_f16 = (out_dtype == np.float16)
+    is_bf16 = (bf16 is not None and out_dtype == bf16)
+    if is_f16 or is_bf16:
+        sym = _apple_gpu_mla_absorb_decode_half("f16" if is_f16 else "bf16")
+        if sym is not None:
+            ten = [np.ascontiguousarray(a).view(np.uint16) for a in
+                   (q_nope, q_rope, c_kv, k_rope, Wuk_t, Wuv)]
+            qn, qr, ckv, kr, wukt, wuv = ten
+            B, H, Sq, dn = (int(s) for s in qn0.shape)
+            dr = int(np.asarray(q_rope).shape[-1])
+            Skv, Dl = int(np.asarray(c_kv).shape[-2]), int(np.asarray(c_kv).shape[-1])
+            dv = int(np.asarray(Wuv).shape[-1])
+            up = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+            O = np.zeros((B, H, Sq, dv), np.uint16)
+            sym(up(qn), up(qr), up(ckv), up(kr), up(wukt), up(wuv),
+                fpf(cosQ), fpf(sinQ), fpf(cosK), fpf(sinK), up(O),
+                ctypes.c_int32(B), ctypes.c_int32(H), ctypes.c_int32(Sq),
+                ctypes.c_int32(Skv), ctypes.c_int32(dn), ctypes.c_int32(dr),
+                ctypes.c_int32(dv), ctypes.c_int32(Dl), ctypes.c_int32(style))
+            return O.view(out_dtype)
+        # fall through to f32 if the half symbol is unavailable
+
     arrs = [np.ascontiguousarray(a, np.float32) for a in
-            (q_nope, q_rope, c_kv, k_rope, Wuk_t, Wuv, cosQ, sinQ, cosK, sinK)]
-    qn, qr, ckv, kr, wukt, wuv, cosQ, sinQ, cosK, sinK = arrs
+            (q_nope, q_rope, c_kv, k_rope, Wuk_t, Wuv)]
+    qn, qr, ckv, kr, wukt, wuv = arrs
     B, H, Sq, dn = (int(s) for s in qn.shape)
     dr = int(qr.shape[-1])
     Skv, Dl = int(ckv.shape[-2]), int(ckv.shape[-1])
@@ -2885,14 +2932,13 @@ def _apple_gpu_mla_absorb_decode(q_nope: Any, q_rope: Any, c_kv: Any,
     sym = _apple_gpu_mla_absorb_decode_f32()
     if sym is None:
         return None
-    fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
     O = np.zeros((B, H, Sq, dv), np.float32)
-    sym(fp(qn), fp(qr), fp(ckv), fp(kr), fp(wukt), fp(wuv), fp(cosQ), fp(sinQ),
-        fp(cosK), fp(sinK), fp(O), ctypes.c_int32(B), ctypes.c_int32(H),
-        ctypes.c_int32(Sq), ctypes.c_int32(Skv), ctypes.c_int32(dn),
-        ctypes.c_int32(dr), ctypes.c_int32(dv), ctypes.c_int32(Dl),
-        ctypes.c_int32(style))
-    return O
+    sym(fpf(qn), fpf(qr), fpf(ckv), fpf(kr), fpf(wukt), fpf(wuv), fpf(cosQ),
+        fpf(sinQ), fpf(cosK), fpf(sinK), fpf(O), ctypes.c_int32(B),
+        ctypes.c_int32(H), ctypes.c_int32(Sq), ctypes.c_int32(Skv),
+        ctypes.c_int32(dn), ctypes.c_int32(dr), ctypes.c_int32(dv),
+        ctypes.c_int32(Dl), ctypes.c_int32(style))
+    return O.astype(out_dtype) if out_dtype != np.float32 else O
 
 
 def _apple_gpu_flash_attn_gqa_f32() -> Any:

@@ -1045,6 +1045,62 @@ extern "C" void tessera_apple_gpu_mla_absorb_decode_f32(
     }
 }
 
+// f16 / bf16 non-Apple absorb decode: convert to fp32, run the fp32 reference,
+// convert back.
+extern "C" void tessera_apple_gpu_mla_absorb_decode_f16(
+    const uint16_t* q_nope, const uint16_t* q_rope, const uint16_t* c_kv,
+    const uint16_t* k_rope, const uint16_t* Wuk_t, const uint16_t* Wuv,
+    const float* cosQ, const float* sinQ, const float* cosK, const float* sinK,
+    uint16_t* O, int32_t B, int32_t H, int32_t Sq, int32_t Skv, int32_t dn,
+    int32_t dr, int32_t dv, int32_t Dl, int32_t rotation_style) {
+  if (B <= 0 || H <= 0 || Sq <= 0 || Skv <= 0 || dn < 0 || dr < 0 || dv <= 0 ||
+      Dl <= 0 || (dr % 2) != 0)
+    return;
+  auto cvt = [](const uint16_t* p, std::size_t n) {
+    std::vector<float> v(n);
+    for (std::size_t i = 0; i < n; ++i) v[i] = half_to_float_stub(p[i]);
+    return v;
+  };
+  std::vector<float> qn = cvt(q_nope, (std::size_t)B * H * Sq * dn);
+  std::vector<float> qr = cvt(q_rope, (std::size_t)B * H * Sq * dr);
+  std::vector<float> ck = cvt(c_kv, (std::size_t)B * Skv * Dl);
+  std::vector<float> kr = cvt(k_rope, (std::size_t)B * Skv * dr);
+  std::vector<float> wk = cvt(Wuk_t, (std::size_t)H * dn * Dl);
+  std::vector<float> wv = cvt(Wuv, (std::size_t)H * Dl * dv);
+  std::vector<float> of((std::size_t)B * H * Sq * dv);
+  tessera_apple_gpu_mla_absorb_decode_f32(qn.data(), qr.data(), ck.data(),
+      kr.data(), wk.data(), wv.data(), cosQ, sinQ, cosK, sinK, of.data(), B, H,
+      Sq, Skv, dn, dr, dv, Dl, rotation_style);
+  for (std::size_t i = 0; i < of.size(); ++i) O[i] = float_to_half_stub(of[i]);
+}
+
+extern "C" void tessera_apple_gpu_mla_absorb_decode_bf16(
+    const uint16_t* q_nope, const uint16_t* q_rope, const uint16_t* c_kv,
+    const uint16_t* k_rope, const uint16_t* Wuk_t, const uint16_t* Wuv,
+    const float* cosQ, const float* sinQ, const float* cosK, const float* sinK,
+    uint16_t* O, int32_t B, int32_t H, int32_t Sq, int32_t Skv, int32_t dn,
+    int32_t dr, int32_t dv, int32_t Dl, int32_t rotation_style) {
+  if (B <= 0 || H <= 0 || Sq <= 0 || Skv <= 0 || dn < 0 || dr < 0 || dv <= 0 ||
+      Dl <= 0 || (dr % 2) != 0)
+    return;
+  auto cvt = [](const uint16_t* p, std::size_t n) {
+    std::vector<float> v(n);
+    for (std::size_t i = 0; i < n; ++i) v[i] = gqa_bf16_to_f32_stub(p[i]);
+    return v;
+  };
+  std::vector<float> qn = cvt(q_nope, (std::size_t)B * H * Sq * dn);
+  std::vector<float> qr = cvt(q_rope, (std::size_t)B * H * Sq * dr);
+  std::vector<float> ck = cvt(c_kv, (std::size_t)B * Skv * Dl);
+  std::vector<float> kr = cvt(k_rope, (std::size_t)B * Skv * dr);
+  std::vector<float> wk = cvt(Wuk_t, (std::size_t)H * dn * Dl);
+  std::vector<float> wv = cvt(Wuv, (std::size_t)H * Dl * dv);
+  std::vector<float> of((std::size_t)B * H * Sq * dv);
+  tessera_apple_gpu_mla_absorb_decode_f32(qn.data(), qr.data(), ck.data(),
+      kr.data(), wk.data(), wv.data(), cosQ, sinQ, cosK, sinK, of.data(), B, H,
+      Sq, Skv, dn, dr, dv, Dl, rotation_style);
+  for (std::size_t i = 0; i < of.size(); ++i) O[i] = gqa_f32_to_bf16_stub(of[i]);
+}
+
 // attention_variants_plan, NSA-5 — non-Apple stub.
 // Zero-fills the output (the Apple-side reference has the full impl).
 extern "C" void tessera_apple_gpu_native_sparse_attn_f32(

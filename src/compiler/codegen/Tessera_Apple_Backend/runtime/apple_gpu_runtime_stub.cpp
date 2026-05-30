@@ -1316,6 +1316,22 @@ inline void cf_rms(const float* x, const float* g, float* o, int d, float eps) {
   for (int j = 0; j < d; ++j) o[j] = (float)(x[j] / den * g[j]);
 }
 }  // namespace
+
+// Metal 4 capability probe — non-Apple reference: no Metal 4 here.
+extern "C" int32_t tessera_apple_gpu_metal4_probe(int32_t* caps_out) {
+  if (caps_out) *caps_out = 0;
+  return 0;
+}
+// Metal 4 MTLTensor round-trip — non-Apple reference: plain memcpy.
+extern "C" int32_t tessera_apple_gpu_metal4_tensor_roundtrip(const void* in,
+                                                             void* out, int32_t n,
+                                                             int32_t dtype_code) {
+  if (!in || !out || n <= 0) return 0;
+  std::size_t elem = (dtype_code == 1 || dtype_code == 2) ? 2 : 4;
+  std::memcpy(out, in, (std::size_t)n * elem);
+  return 1;
+}
+
 extern "C" int32_t tessera_apple_gpu_cf_serial_draft_f32(
     const float* embed, const float* fc_in, const float* ln1_all,
     const float* ln2_all, const float* wv_all, const float* wo_all,

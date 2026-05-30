@@ -69,6 +69,20 @@ def test_distillation_lifts_accepted_length(gumiho_mod):
     assert after.trained and not before.trained
 
 
+def test_gpu_mask_add_matches_numpy(gumiho_mod):
+    """The FTA tree-attention mask add runs on the GPU `add` op (MPSGraph binary
+    op 0), bit-exact against numpy — so the mask is no longer host glue."""
+    from gumiho.backend import make_backend
+
+    be = make_backend("apple_gpu")
+    rng = np.random.default_rng(0)
+    scores = rng.standard_normal((2, 5, 5)).astype(np.float32)
+    mask = np.triu(np.full((5, 5), -1e30, np.float32), 1)
+    got = be.add(scores, np.broadcast_to(mask, (2, 5, 5)))
+    np.testing.assert_array_equal(got, scores + mask[None, :, :])
+    assert be.name in ("metal", "numpy")
+
+
 @pytest.mark.parametrize("dtype", ["f16", "bf16"])
 def test_half_precision_draft(gumiho_mod, dtype):
     s = gumiho_mod.run_precision_demo(gumiho_mod.tiny_config(), seed=0, dtype=dtype)

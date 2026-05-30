@@ -111,7 +111,8 @@ def _attention(backend, h: np.ndarray, layer: _Layer, cfg: GumihoConfig,
     scale = 1.0 / math.sqrt(dh)
     scores = backend.matmul(qh, kh.transpose(0, 2, 1)) * scale   # [H,T,T] (GPU bmm)
     if add_mask is not None:
-        scores = np.asarray(scores) + add_mask[None, :, :]
+        # additive tree/causal mask, applied on the GPU add op (broadcast over H)
+        scores = backend.add(scores, np.broadcast_to(add_mask, (H, T, T)))
     attn = backend.softmax(np.asarray(scores).reshape(H * T, T)).reshape(H, T, T)
     ctx = backend.matmul(attn, vh)                   # [H,T,dh] (GPU bmm)
     ctx = np.ascontiguousarray(np.asarray(ctx).transpose(1, 0, 2).reshape(T, d))

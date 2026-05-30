@@ -8443,7 +8443,78 @@ static void reference_reduce(int op, const float *x, float *out, int32_t rows,
   }
 }
 
+// Gumbel-max categorical sampler: ids = argmax(logits/T + gumbel) per row.
+// The Gumbel noise is supplied by the caller (generated from the Philox stream
+// on the host) so sampling is deterministic + reproducible without an on-GPU
+// RNG — argmax(z + g) with g_i = -log(-log(u_i)) draws from softmax(z). The
+// per-row reduction over the vocab runs on-GPU (the throughput win for batched
+// sampling of many concurrent sequences).
+static bool mpsg_run_gumbel_argmax(MetalDeviceContext &ctx, const float *logits,
+                                   const float *gumbel, int32_t *out,
+                                   int32_t rows, int32_t cols, float invT) {
+  if (rows <= 0 || cols <= 0) return true;
+  @autoreleasepool {
+    size_t xbytes = (size_t)rows * cols * 4;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufL, ctx, logits, xbytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufG, ctx, gumbel, xbytes);
+    if (!bufL || !bufG) return false;
+    NSArray<NSNumber *> *xs = @[ @(rows), @(cols) ];
+    NSString *key = [NSString stringWithFormat:@"gumbel:%d:%d:%a", rows, cols, invT];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *pl, *pg, *y;
+    if (entry) {
+      g = entry[0];
+      pl = ((NSArray *)entry[1])[0];
+      pg = ((NSArray *)entry[1])[1];
+      y = entry[2];
+    } else {
+      g = [MPSGraph new];
+      pl = [g placeholderWithShape:xs dataType:MPSDataTypeFloat32 name:nil];
+      pg = [g placeholderWithShape:xs dataType:MPSDataTypeFloat32 name:nil];
+      MPSGraphTensor *scaled = [g multiplicationWithPrimaryTensor:pl
+                                  secondaryTensor:[g constantWithScalar:(double)invT dataType:MPSDataTypeFloat32]
+                                             name:nil];
+      MPSGraphTensor *scores = [g additionWithPrimaryTensor:scaled secondaryTensor:pg name:nil];
+      MPSGraphTensor *idx = [g reductionArgMaximumWithTensor:scores axis:1 name:nil];
+      y = [g castTensor:idx toType:MPSDataTypeInt32 name:nil];
+      mpsg_cache_put(key, @[ g, @[ pl, pg ], y ]);
+    }
+    MPSGraphTensorData *ld = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufL shape:xs dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *gd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufG shape:xs dataType:MPSDataTypeFloat32];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{pl : ld, pg : gd}
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
 }  // namespace
+
+extern "C" void tessera_apple_gpu_gumbel_argmax_f32(const float *logits,
+                                                    const float *gumbel,
+                                                    int32_t *out, int32_t rows,
+                                                    int32_t cols,
+                                                    float inv_temp) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_gumbel_argmax(ctx, logits, gumbel, out, rows, cols, inv_temp))
+    return;
+  for (int32_t r = 0; r < rows; ++r) {
+    const float *L = logits + (size_t)r * cols;
+    const float *G = gumbel + (size_t)r * cols;
+    int32_t best = 0;
+    float bs = L[0] * inv_temp + G[0];
+    for (int32_t c = 1; c < cols; ++c) {
+      float s = L[c] * inv_temp + G[c];
+      if (s > bs) { bs = s; best = c; }
+    }
+    out[r] = best;
+  }
+}
 
 extern "C" void tessera_apple_gpu_mpsgraph_reduce_f32(int32_t op, const float *x,
                                                       float *out, int32_t rows,

@@ -54,3 +54,30 @@ def test_gumiho_deterministic_across_seeds(gumiho_mod):
     a = gumiho_mod.run_gumiho_demo(gumiho_mod.tiny_config(), seed=3, target="numpy")
     b = gumiho_mod.run_gumiho_demo(gumiho_mod.tiny_config(), seed=3, target="numpy")
     assert a.accepted_prefix == b.accepted_prefix
+
+
+# ── distillation + multi-step decode (the speculative-decoding win) ──────────
+def test_distillation_lifts_accepted_length(gumiho_mod):
+    before, after = gumiho_mod.run_training_demo(
+        gumiho_mod.tiny_config(), seed=0, target="numpy",
+        num_prompts=6, horizon=20, max_new_tokens=16, train_steps=400)
+    # Untrained accepts ~<1 token/step; distillation should clear it by a wide
+    # margin and beat vanilla (1.0 token / target pass) decisively.
+    assert after.mean_accepted_length > before.mean_accepted_length + 1.0
+    assert after.speedup_vs_vanilla > 2.0
+    assert after.trained and not before.trained
+
+
+def test_multistep_decode_accounting(gumiho_mod):
+    import numpy as np
+    from gumiho.model import make_weights
+
+    cfg = gumiho_mod.tiny_config()
+    weights = make_weights(cfg, seed=0)
+    prompts = np.zeros((2, cfg.context_len), dtype=np.int64)
+    m = gumiho_mod.run_multistep_decode(
+        cfg, weights, prompts=prompts, max_new_tokens=12, target="numpy")
+    # tokens/step == mean_accepted + 1 bonus, and we generated >= the request.
+    assert abs(m.tokens_per_step - (m.mean_accepted_length + 1.0)) < 1e-9
+    assert m.tokens_generated >= 12
+    assert m.speedup_vs_vanilla == m.tokens_per_step

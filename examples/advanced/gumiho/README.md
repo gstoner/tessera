@@ -40,20 +40,60 @@ Gumiho correctly (not just that it prints a schedule).
 ## Quick Start
 
 ```bash
-# Real Apple GPU path (Metal); falls back to numpy off Darwin:
-python3 examples/advanced/gumiho/demo.py --target apple_gpu
+# Multi-step decode: distill the draft, then measure acceptance + speedup:
+python3 examples/advanced/gumiho/demo.py --mode decode --target apple_gpu
+
+# One validated speculative step (backend vs numpy cross-check):
+python3 examples/advanced/gumiho/demo.py --mode step --target apple_gpu
 
 # Accelerate (CPU) path, or the pure numpy reference:
-python3 examples/advanced/gumiho/demo.py --target apple_cpu
-python3 examples/advanced/gumiho/demo.py --target numpy
+python3 examples/advanced/gumiho/demo.py --mode decode --target apple_cpu
+python3 examples/advanced/gumiho/demo.py --mode decode --target numpy
 ```
 
-Sample output:
+`--mode step` output (backend cross-checked against numpy):
 
 ```
 backend=metal | draft=2serial+5parallel=7 | FTA paths=8 tree_nodes=27 |
 accepted=1 [31] | kv 4->5 | match_ref=True (max_logp_err=1.60e-06) validated=True
 ```
+
+`--mode decode` output (distillation → measured speedup):
+
+```
+[untrained] backend=metal ... mean_accepted=0.86 tokens/step=1.86 speedup=1.86x
+[trained]   backend=metal ... mean_accepted=3.62 tokens/step=4.62 speedup=4.62x
+distillation lifted tokens/target-pass 1.86 -> 4.62 (2.49x), vanilla = 1.00
+```
+
+## Distillation + the speculative-decoding win
+
+Out of the box the draft heads are random, so the target accepts ~1 token/step.
+`--mode decode` first **distills** the heads against the target (the
+target is deterministic, so its continuation is a clean supervised signal) and
+then runs a **multi-step decode**, reporting **mean accepted length** and
+**tokens per target pass** (= speedup vs. vanilla autoregressive decode, which
+commits 1 token/pass).
+
+Training uses **Tessera's own autograd + optimizer**: the draft forward is
+written in `tessera.ops`, `tessera.autodiff.grad` differentiates it, and
+`tessera.optim.adam` applies the updates (the S10/S11 standalone-compiler
+training surface). Two details keep it exact and tractable:
+
+- The serial head runs at **T=1**, so its self-attention is degenerate
+  (`softmax` of one score = 1) and reduces to a value projection — we train the
+  value slice of `Wqkv` and write it back, leaving inference untouched.
+- The distillation target is the target's **distribution** (soft labels), not
+  its argmax. Matching the distribution makes the Leviathan acceptance ratio
+  `p_target/p_draft ≈ 1`, so correct tokens are actually accepted — argmax-only
+  distillation over-rejects and barely moves the accepted length.
+
+**Honesty note:** this is a tiny in-distribution demo. The draft is distilled on
+the target's own generation trajectories (the contexts the decoder visits) and
+measured on the same prompts — it demonstrates the *mechanism* (distillation →
+acceptance↑ → speedup), not generalization. A random target has no learnable
+structure to generalize across unseen contexts; real Gumiho trains a real draft
+on a real corpus. The decode loop itself is genuine speculative decoding.
 
 ## Notes
 

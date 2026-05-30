@@ -9,6 +9,23 @@ math runs on the Apple GPU/CPU compiler backend; acceptance + KV advance reuse
 """
 
 from .config import GumihoConfig, tiny_config
-from .decode import GumihoSummary, run_gumiho_demo
+from .decode import (
+    DecodeMetrics,
+    GumihoSummary,
+    run_gumiho_demo,
+    run_multistep_decode,
+    run_training_demo,
+)
+from .training import distill, trajectory_contexts
 
-__all__ = ["GumihoConfig", "tiny_config", "GumihoSummary", "run_gumiho_demo"]
+__all__ = [
+    "GumihoConfig",
+    "tiny_config",
+    "GumihoSummary",
+    "run_gumiho_demo",
+    "DecodeMetrics",
+    "run_multistep_decode",
+    "run_training_demo",
+    "distill",
+    "trajectory_contexts",
+]

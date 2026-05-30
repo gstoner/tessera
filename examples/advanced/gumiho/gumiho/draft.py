@@ -36,6 +36,14 @@ class DraftBundle:
     target_log_probs: np.ndarray  # [P, total_draft] float64
     num_tree_nodes: int          # unique trie nodes verified in one target pass
     num_paths: int
+    path_node_ids: np.ndarray    # [P, total_draft+1] int64 — trie node per position
+    node_target_argmax: np.ndarray  # [num_nodes] int64 — target greedy token AT each node
+
+    def bonus_token(self, path_idx: int, accepted_len: int) -> int:
+        """The target's greedy next token after ``accepted_len`` accepted draft
+        tokens on ``path_idx`` — free, from the same verification pass."""
+        pred_node = int(self.path_node_ids[path_idx, accepted_len])
+        return int(self.node_target_argmax[pred_node])
 
 
 def _topk(logp: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
@@ -135,6 +143,13 @@ def build_draft(
     _hidden, logits = target.forward(backend, seq, add_mask=mask)
     log_probs = logits - _logsumexp_rows(logits)           # [S, V]
 
+    # Target's greedy token predicted at each trie node (node 0 = root = last
+    # context position) — supplies the free "bonus" token after acceptance.
+    node_argmax = np.empty(num_nodes, np.int64)
+    node_argmax[0] = int(np.argmax(log_probs[C - 1]))
+    for n in range(1, num_nodes):
+        node_argmax[n] = int(np.argmax(log_probs[seq_index[n]]))
+
     # 8. Gather per-path target log-probs. Token t_p is predicted by the node
     #    holding t_{p-1} (or the last context position for p == 1).
     target_lp = np.empty((P, depth), np.float64)
@@ -150,6 +165,8 @@ def build_draft(
         target_log_probs=target_lp,
         num_tree_nodes=num_nodes,
         num_paths=P,
+        path_node_ids=path_node_ids,
+        node_target_argmax=node_argmax,
     )
 
 

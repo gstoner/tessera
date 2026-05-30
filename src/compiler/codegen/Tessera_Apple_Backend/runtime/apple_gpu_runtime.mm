@@ -8382,6 +8382,87 @@ extern "C" int32_t tessera_apple_gpu_cf_serial_draft_f32(
   }
 }
 
+//===----------------------------------------------------------------------===//
+// Phase-G Rung 2 — predicate-driven control flow: a bounded greedy-generation
+// loop lowered into ONE MPSGraph -whileWithInitialInputs:before:after:. Unlike
+// the fixed-trip forLoop (Rungs 0/1), the trip count is **data-dependent**: the
+// loop runs until it emits the EOS token or hits `max_steps`. Body per step:
+//   hidden = tanh(hidden @ W);  token = argmax(hidden @ lm);  out[step] = token
+// before-block predicate: (step < max_steps) AND (last_token != eos).
+// `n_out` returns the number of tokens generated (eos inclusive). This is the
+// variable-trip control-flow primitive; the decode body is intentionally small
+// (the dynamic verify/accept of a real speculative step stay host-side). See
+// docs/apple_gpu_control_flow_lowering.md.
+//===----------------------------------------------------------------------===//
+extern "C" int32_t tessera_apple_gpu_cf_while_generate_f32(
+    const float *W, const float *lm, const float *h_init, int32_t start_token,
+    int32_t eos_token, int32_t max_steps, int32_t *tokens_out, int32_t *n_out,
+    int32_t d, int32_t V) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || d <= 0 || V <= 0 || max_steps <= 0) return 0;
+  if (!W || !lm || !h_init || !tokens_out || !n_out) return 0;
+  @autoreleasepool {
+    MPSDataType F = MPSDataTypeFloat32, I = MPSDataTypeInt32;
+    MPSGraph *g = [MPSGraph new];
+    MPSGraphTensor *pW = [g placeholderWithShape:@[ @(d), @(d) ] dataType:F name:nil];
+    MPSGraphTensor *pLm = [g placeholderWithShape:@[ @(d), @(V) ] dataType:F name:nil];
+    MPSGraphTensor *pH0 = [g placeholderWithShape:@[ @1, @(d) ] dataType:F name:nil];
+    MPSGraphTensor *tok0 = [g constantWithScalar:start_token shape:@[ @1 ] dataType:I];
+    MPSGraphTensor *step0 = [g constantWithScalar:0 shape:@[ @1 ] dataType:I];
+    MPSGraphTensor *out0 = [g constantWithScalar:0 shape:@[ @(max_steps) ] dataType:I];
+    MPSGraphTensor *maxT = [g constantWithScalar:max_steps shape:@[ @1 ] dataType:I];
+    MPSGraphTensor *eosT = [g constantWithScalar:eos_token shape:@[ @1 ] dataType:I];
+    MPSGraphTensor *oneT = [g constantWithScalar:1 shape:@[ @1 ] dataType:I];
+
+    NSArray<MPSGraphTensor *> *results = [g
+        whileWithInitialInputs:@[ pH0, tok0, step0, out0 ]
+        before:^MPSGraphTensor *(
+            NSArray<MPSGraphTensor *> *inputs,
+            NSMutableArray<MPSGraphTensor *> *bodyResults) {
+          [bodyResults addObjectsFromArray:inputs];  // forward carry to `after`
+          MPSGraphTensor *lastTok = inputs[1];
+          MPSGraphTensor *step = inputs[2];
+          MPSGraphTensor *lt = [g lessThanWithPrimaryTensor:step secondaryTensor:maxT name:nil];
+          MPSGraphTensor *ne = [g notEqualWithPrimaryTensor:lastTok secondaryTensor:eosT name:nil];
+          MPSGraphTensor *cond = [g logicalANDWithPrimaryTensor:lt secondaryTensor:ne name:nil];
+          return [g reshapeTensor:cond withShape:@[ @1 ] name:nil];
+        }
+        after:^NSArray<MPSGraphTensor *> *(NSArray<MPSGraphTensor *> *args) {
+          MPSGraphTensor *h = args[0];     // [1, d]
+          MPSGraphTensor *step = args[2];  // [1] int
+          MPSGraphTensor *out = args[3];   // [max] int
+          MPSGraphTensor *hp = [g tanhWithTensor:[g matrixMultiplicationWithPrimaryTensor:h secondaryTensor:pW name:nil] name:nil];
+          MPSGraphTensor *logits = [g matrixMultiplicationWithPrimaryTensor:hp secondaryTensor:pLm name:nil];  // [1,V]
+          MPSGraphTensor *am = [g reductionArgMaximumWithTensor:logits axis:1 name:nil];  // [1,1] int
+          MPSGraphTensor *tok = [g reshapeTensor:[g castTensor:am toType:MPSDataTypeInt32 name:nil] withShape:@[ @1 ] name:nil];
+          MPSGraphTensor *outp = [g scatterWithDataTensor:out updatesTensor:tok indicesTensor:step axis:0 mode:MPSGraphScatterModeSet name:nil];
+          MPSGraphTensor *stepp = [g additionWithPrimaryTensor:step secondaryTensor:oneT name:nil];
+          return @[ hp, tok, stepp, outp ];
+        }
+        name:nil];
+    MPSGraphTensor *stepT = results[2];  // [1] int — count generated
+    MPSGraphTensor *outT = results[3];   // [max] int
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bW, ctx, W, (size_t)d * d * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bLm, ctx, lm, (size_t)d * V * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bH0, ctx, h_init, (size_t)d * 4);
+    if (!bW || !bLm || !bH0) return 0;
+    MPSGraphTensorData *dW = [[MPSGraphTensorData alloc] initWithMTLBuffer:bW shape:@[ @(d), @(d) ] dataType:F];
+    MPSGraphTensorData *dLm = [[MPSGraphTensorData alloc] initWithMTLBuffer:bLm shape:@[ @(d), @(V) ] dataType:F];
+    MPSGraphTensorData *dH0 = [[MPSGraphTensorData alloc] initWithMTLBuffer:bH0 shape:@[ @1, @(d) ] dataType:F];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{pW : dW, pLm : dLm, pH0 : dH0}
+                                    targetTensors:@[ stepT, outT ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *sod = res[stepT];
+    MPSGraphTensorData *ood = res[outT];
+    if (!sod || !ood) return 0;
+    [[sod mpsndarray] readBytes:n_out strideBytes:nil];
+    [[ood mpsndarray] readBytes:tokens_out strideBytes:nil];
+    return 1;
+  }
+}
+
 // ---- C ABI: row ops ---------------------------------------------------------
 extern "C" void tessera_apple_gpu_layer_norm_f32(const float *x,
                                                  const float *gamma,

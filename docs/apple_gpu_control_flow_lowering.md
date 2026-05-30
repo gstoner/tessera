@@ -1,9 +1,10 @@
 # Apple GPU control-flow lowering (Phase G) — design + ladder
 
-> Status: **Rungs 0 + 1 landed** — Rung 0 (bounded `scan` → single MPSGraph
-> control-flow executable) and Rung 1 (the Gumiho serial draft as one
-> `forLoop` dispatch). Rungs 2–3 scoped below. This is the on-Apple slice of
-> the Phase-G "single-kernel `@jit` of a control-flow loop" frontier.
+> Status: **Rungs 0 + 1 + 2 landed** — Rung 0 (bounded `scan` → MPSGraph
+> `forLoop`), Rung 1 (the Gumiho serial draft as one `forLoop`), and Rung 2
+> (predicate-driven `while` generation with EOS early-stop). Rung 3 (the
+> dynamic frontier) remains out of scope. This is the on-Apple slice of the
+> Phase-G "single-kernel `@jit` of a control-flow loop" frontier.
 
 ## The problem
 
@@ -77,10 +78,16 @@ research-grade and out of scope here. What *is* tractable and worth doing is the
   dispatches), validated token-for-token against the host `SerialHead`
   (hidden err ~6e-7). Exposed as `gumiho.validate_serial_forloop` /
   `serial_draft_forloop`; `demo.py --mode forloop`.
-- **Rung 2 — bounded `while` decode.** A `whileWithInitialInputs:…` over the
-  decode steps with a fixed upper bound and a `max_new_tokens` predicate,
-  carrying a fixed-capacity output buffer. Covers the *static* parts of a decode
-  step; the dynamic verify/accept stay host-side.
+- **Rung 2 — predicate-driven `while` generation (landed).** A
+  `whileWithInitialInputs:before:after:` greedy-generation loop with a
+  **data-dependent** trip count: `token = argmax((hidden = tanh(hidden @ W)) @
+  lm)` looped until the EOS token or `max_steps`. The `before` block returns the
+  scalar predicate `(step < max) AND (last_token != eos)`; the `after` block
+  runs the body and scatters each token into a fixed-capacity `[max_steps]`
+  buffer. `tessera_apple_gpu_cf_while_generate_f32` returns the tokens + the
+  actual count. This is the variable-trip control-flow primitive — distinct from
+  the fixed-trip `forLoop`. The body is intentionally small (the dynamic
+  verify/accept of a real speculative step stay host-side).
 - **Rung 3 — frontier.** The dynamic trie/top-k/variable-accept parts. Needs a
   treeless fixed-shape reformulation or a monolithic MSL kernel. Explicitly
   out of scope until an algorithm change makes it static-shaped.

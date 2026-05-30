@@ -427,9 +427,12 @@ _APPLE_GPU_REDUCTION_OPS: frozenset[str] = frozenset({
     "tessera.argmin", "tessera.cumsum", "tessera.cumprod",
 })
 
+# 2026-05-30 — Tier-3 conv2d via the MPSGraph convolution2D node (NHWC/HWIO).
+_APPLE_GPU_CONV_OPS: frozenset[str] = frozenset({"tessera.conv2d"})
+
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
-    | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS
+    | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
 )
 
 

@@ -8219,6 +8219,169 @@ extern "C" int32_t tessera_apple_gpu_cf_scan_f32(const float *Wh, const float *W
   }
 }
 
+//===----------------------------------------------------------------------===//
+// Phase-G Rung 1 — the Gumiho serial draft as a single MPSGraph control-flow
+// executable. Reuses the Rung-0 machinery (index gather + carry threading +
+// per-step scatter) with a transformer-block body: the fixed-trip
+// autoregressive serial head runs in ONE -forLoopWithLowerBound: dispatch.
+//
+// Body at step i (carry = (hidden[1,d], token[1] int)):
+//   e   = embed[token]                                   gather
+//   x   = concat(hidden, e)                              [1, 2d]
+//   s   = x @ fc_in                                      [1, d]
+//   for layer in 0..L-1:   (T=1 attention => value-only: v@Wo)
+//     s = s + (rmsnorm(s,ln1) @ Wv) @ Wo
+//     s = s + silu_mul(rmsnorm(s,ln2) @ Wg, _ @ Wu) @ Wd
+//   logits = rmsnorm(s,snorm) @ lm_head                  [1, V]
+//   token' = argmax(logits);  hidden' = s
+//   scatter token' -> tokens[i];  scatter s -> hidden[i]
+// All weights are fed as placeholders; per-layer weights are static-sliced from
+// the [L, ...] inputs inside the (C++-unrolled) layer loop. See
+// docs/apple_gpu_control_flow_lowering.md.
+//===----------------------------------------------------------------------===//
+namespace {
+// rmsnorm(x,gamma) = x / sqrt(mean(x^2)+eps) * gamma, all in-graph.
+static MPSGraphTensor *mpsg_rmsnorm_node(MPSGraph *g, MPSGraphTensor *x,
+                                         MPSGraphTensor *gamma, float eps) {
+  MPSGraphTensor *sq = [g multiplicationWithPrimaryTensor:x secondaryTensor:x name:nil];
+  MPSGraphTensor *ms = [g meanOfTensor:sq axes:@[ @(-1) ] name:nil];
+  MPSGraphTensor *epsT = [g constantWithScalar:eps dataType:MPSDataTypeFloat32];
+  MPSGraphTensor *den = [g squareRootWithTensor:[g additionWithPrimaryTensor:ms secondaryTensor:epsT name:nil] name:nil];
+  MPSGraphTensor *n = [g divisionWithPrimaryTensor:x secondaryTensor:den name:nil];
+  return [g multiplicationWithPrimaryTensor:n secondaryTensor:gamma name:nil];
+}
+// static slice row li of an [L, a, b] tensor -> [a, b] (or [L, a] -> [a]).
+static MPSGraphTensor *mpsg_layer_slice(MPSGraph *g, MPSGraphTensor *all, int li,
+                                        NSArray<NSNumber *> *outShape) {
+  MPSGraphTensor *s = [g sliceTensor:all dimension:0 start:li length:1 name:nil];
+  return [g reshapeTensor:s withShape:outShape name:nil];
+}
+}  // namespace
+
+extern "C" int32_t tessera_apple_gpu_cf_serial_draft_f32(
+    const float *embed, const float *fc_in, const float *ln1_all,
+    const float *ln2_all, const float *wv_all, const float *wo_all,
+    const float *wg_all, const float *wu_all, const float *wd_all,
+    const float *snorm, const float *lm_head, const float *h_init,
+    int32_t root_token, int32_t *tokens_out, float *hidden_out, int32_t T,
+    int32_t L, int32_t d, int32_t ffn, int32_t V, float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || T <= 0 || L <= 0 || d <= 0 || ffn <= 0 || V <= 0) return 0;
+  @autoreleasepool {
+    MPSDataType F = MPSDataTypeFloat32, I = MPSDataTypeInt32;
+    MPSGraph *g = [MPSGraph new];
+    MPSGraphTensor *pEmbed = [g placeholderWithShape:@[ @(V), @(d) ] dataType:F name:nil];
+    MPSGraphTensor *pFcIn = [g placeholderWithShape:@[ @(2 * d), @(d) ] dataType:F name:nil];
+    MPSGraphTensor *pLn1 = [g placeholderWithShape:@[ @(L), @(d) ] dataType:F name:nil];
+    MPSGraphTensor *pLn2 = [g placeholderWithShape:@[ @(L), @(d) ] dataType:F name:nil];
+    MPSGraphTensor *pWv = [g placeholderWithShape:@[ @(L), @(d), @(d) ] dataType:F name:nil];
+    MPSGraphTensor *pWo = [g placeholderWithShape:@[ @(L), @(d), @(d) ] dataType:F name:nil];
+    MPSGraphTensor *pWg = [g placeholderWithShape:@[ @(L), @(d), @(ffn) ] dataType:F name:nil];
+    MPSGraphTensor *pWu = [g placeholderWithShape:@[ @(L), @(d), @(ffn) ] dataType:F name:nil];
+    MPSGraphTensor *pWd = [g placeholderWithShape:@[ @(L), @(ffn), @(d) ] dataType:F name:nil];
+    MPSGraphTensor *pSn = [g placeholderWithShape:@[ @1, @(d) ] dataType:F name:nil];
+    MPSGraphTensor *pLm = [g placeholderWithShape:@[ @(d), @(V) ] dataType:F name:nil];
+    MPSGraphTensor *pH0 = [g placeholderWithShape:@[ @1, @(d) ] dataType:F name:nil];
+    MPSGraphTensor *pTok0 = [g placeholderWithShape:@[ @1 ] dataType:I name:nil];
+    MPSGraphTensor *tokAcc = [g constantWithScalar:0 shape:@[ @(T) ] dataType:I];
+    MPSGraphTensor *hidAcc = [g constantWithScalar:0.0 shape:@[ @(T), @(d) ] dataType:F];
+    MPSGraphTensor *lb = [g constantWithScalar:0 dataType:I];
+    MPSGraphTensor *ub = [g constantWithScalar:T dataType:I];
+    MPSGraphTensor *st = [g constantWithScalar:1 dataType:I];
+
+    NSArray<MPSGraphTensor *> *results = [g
+        forLoopWithLowerBound:lb
+                   upperBound:ub
+                         step:st
+         initialBodyArguments:@[ pH0, pTok0, tokAcc, hidAcc ]
+                         body:^NSArray<MPSGraphTensor *> *(
+                             MPSGraphTensor *index,
+                             NSArray<MPSGraphTensor *> *args) {
+                           MPSGraphTensor *hid = args[0];   // [1,d]
+                           MPSGraphTensor *tok = args[1];   // [1] int
+                           MPSGraphTensor *tAcc = args[2];  // [T] int
+                           MPSGraphTensor *hAcc = args[3];  // [T,d]
+                           MPSGraphTensor *idx = [g reshapeTensor:index withShape:@[ @1 ] name:nil];
+                           MPSGraphTensor *e = [g gatherWithUpdatesTensor:pEmbed indicesTensor:tok axis:0 batchDimensions:0 name:nil];  // [1,d]
+                           MPSGraphTensor *x = [g concatTensor:hid withTensor:e dimension:1 name:nil];  // [1,2d]
+                           MPSGraphTensor *s = [g matrixMultiplicationWithPrimaryTensor:x secondaryTensor:pFcIn name:nil];  // [1,d]
+                           for (int li = 0; li < L; ++li) {
+                             MPSGraphTensor *ln1 = mpsg_layer_slice(g, pLn1, li, @[ @1, @(d) ]);
+                             MPSGraphTensor *ln2 = mpsg_layer_slice(g, pLn2, li, @[ @1, @(d) ]);
+                             MPSGraphTensor *wv = mpsg_layer_slice(g, pWv, li, @[ @(d), @(d) ]);
+                             MPSGraphTensor *wo = mpsg_layer_slice(g, pWo, li, @[ @(d), @(d) ]);
+                             MPSGraphTensor *wg = mpsg_layer_slice(g, pWg, li, @[ @(d), @(ffn) ]);
+                             MPSGraphTensor *wu = mpsg_layer_slice(g, pWu, li, @[ @(d), @(ffn) ]);
+                             MPSGraphTensor *wd = mpsg_layer_slice(g, pWd, li, @[ @(ffn), @(d) ]);
+                             MPSGraphTensor *n1 = mpsg_rmsnorm_node(g, s, ln1, eps);
+                             MPSGraphTensor *v = [g matrixMultiplicationWithPrimaryTensor:n1 secondaryTensor:wv name:nil];
+                             MPSGraphTensor *attn = [g matrixMultiplicationWithPrimaryTensor:v secondaryTensor:wo name:nil];
+                             s = [g additionWithPrimaryTensor:s secondaryTensor:attn name:nil];
+                             MPSGraphTensor *n2 = mpsg_rmsnorm_node(g, s, ln2, eps);
+                             MPSGraphTensor *gate = [g matrixMultiplicationWithPrimaryTensor:n2 secondaryTensor:wg name:nil];
+                             MPSGraphTensor *up = [g matrixMultiplicationWithPrimaryTensor:n2 secondaryTensor:wu name:nil];
+                             // silu_mul = silu(gate) * up = (gate*sigmoid(gate)) * up
+                             MPSGraphTensor *sig = [g sigmoidWithTensor:gate name:nil];
+                             MPSGraphTensor *silu = [g multiplicationWithPrimaryTensor:gate secondaryTensor:sig name:nil];
+                             MPSGraphTensor *act = [g multiplicationWithPrimaryTensor:silu secondaryTensor:up name:nil];
+                             MPSGraphTensor *down = [g matrixMultiplicationWithPrimaryTensor:act secondaryTensor:wd name:nil];
+                             s = [g additionWithPrimaryTensor:s secondaryTensor:down name:nil];
+                           }
+                           MPSGraphTensor *sn = mpsg_rmsnorm_node(g, s, pSn, eps);
+                           MPSGraphTensor *logits = [g matrixMultiplicationWithPrimaryTensor:sn secondaryTensor:pLm name:nil];  // [1,V]
+                           MPSGraphTensor *am = [g reductionArgMaximumWithTensor:logits axis:1 name:nil];  // [1,1] int32
+                           MPSGraphTensor *newTok = [g reshapeTensor:[g castTensor:am toType:MPSDataTypeInt32 name:nil] withShape:@[ @1 ] name:nil];
+                           MPSGraphTensor *newTAcc = [g scatterWithDataTensor:tAcc updatesTensor:newTok indicesTensor:idx axis:0 mode:MPSGraphScatterModeSet name:nil];
+                           MPSGraphTensor *newHAcc = [g scatterWithDataTensor:hAcc updatesTensor:s indicesTensor:idx axis:0 mode:MPSGraphScatterModeSet name:nil];
+                           return @[ s, newTok, newTAcc, newHAcc ];
+                         }
+                         name:nil];
+    MPSGraphTensor *tokT = results[2];  // [T] int
+    MPSGraphTensor *hidT = results[3];  // [T, d]
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bEmb, ctx, embed, (size_t)V * d * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bFc, ctx, fc_in, (size_t)2 * d * d * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bL1, ctx, ln1_all, (size_t)L * d * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bL2, ctx, ln2_all, (size_t)L * d * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bWv, ctx, wv_all, (size_t)L * d * d * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bWo, ctx, wo_all, (size_t)L * d * d * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bWg, ctx, wg_all, (size_t)L * d * ffn * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bWu, ctx, wu_all, (size_t)L * d * ffn * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bWd, ctx, wd_all, (size_t)L * ffn * d * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bSn, ctx, snorm, (size_t)d * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bLm, ctx, lm_head, (size_t)d * V * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bH0, ctx, h_init, (size_t)d * 4);
+    int32_t root = root_token;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bT0, ctx, &root, sizeof(int32_t));
+    if (!bEmb || !bFc || !bWv || !bWo || !bWg || !bWu || !bWd || !bLm) return 0;
+    auto TD = [&](id<MTLBuffer> b, NSArray<NSNumber *> *sh, MPSDataType dt) {
+      return [[MPSGraphTensorData alloc] initWithMTLBuffer:b shape:sh dataType:dt];
+    };
+    NSDictionary *feeds = @{
+      pEmbed : TD(bEmb, @[ @(V), @(d) ], F),
+      pFcIn : TD(bFc, @[ @(2 * d), @(d) ], F),
+      pLn1 : TD(bL1, @[ @(L), @(d) ], F),
+      pLn2 : TD(bL2, @[ @(L), @(d) ], F),
+      pWv : TD(bWv, @[ @(L), @(d), @(d) ], F),
+      pWo : TD(bWo, @[ @(L), @(d), @(d) ], F),
+      pWg : TD(bWg, @[ @(L), @(d), @(ffn) ], F),
+      pWu : TD(bWu, @[ @(L), @(d), @(ffn) ], F),
+      pWd : TD(bWd, @[ @(L), @(ffn), @(d) ], F),
+      pSn : TD(bSn, @[ @1, @(d) ], F),
+      pLm : TD(bLm, @[ @(d), @(V) ], F),
+      pH0 : TD(bH0, @[ @1, @(d) ], F),
+      pTok0 : TD(bT0, @[ @1 ], I),
+    };
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue feeds:feeds targetTensors:@[ tokT, hidT ] targetOperations:nil];
+    MPSGraphTensorData *tod = res[tokT];
+    MPSGraphTensorData *hod = res[hidT];
+    if (!tod || !hod) return 0;
+    [[tod mpsndarray] readBytes:tokens_out strideBytes:nil];
+    [[hod mpsndarray] readBytes:hidden_out strideBytes:nil];
+    return 1;
+  }
+}
+
 // ---- C ABI: row ops ---------------------------------------------------------
 extern "C" void tessera_apple_gpu_layer_norm_f32(const float *x,
                                                  const float *gamma,

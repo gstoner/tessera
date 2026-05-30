@@ -24,9 +24,12 @@ from .prefix_shared import (
     run_prefix_sharing_demo,
 )
 from .resident import (
+    ForLoopDraftResult,
     ResidentDraftResult,
     ResidentSerialDraft,
+    serial_draft_forloop,
     validate_resident_draft,
+    validate_serial_forloop,
 )
 from .training import distill, trajectory_contexts
 
@@ -43,6 +46,9 @@ __all__ = [
     "ResidentSerialDraft",
     "ResidentDraftResult",
     "validate_resident_draft",
+    "ForLoopDraftResult",
+    "serial_draft_forloop",
+    "validate_serial_forloop",
     "PrecisionSummary",
     "run_precision_demo",
     "PrefixSharedVerifier",

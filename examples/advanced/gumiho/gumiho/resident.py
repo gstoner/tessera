@@ -31,6 +31,67 @@ from .config import GumihoConfig
 from .model import GumihoWeights, SerialHead, TargetModel
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase-G Rung 1 — the serial draft as a single MPSGraph forLoop dispatch
+# ─────────────────────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class ForLoopDraftResult:
+    tokens: list
+    matches_host: bool
+    max_hidden_err: float
+    dispatches: int               # 1 — the whole serial loop is one graph
+    host_dispatch_equiv: int      # per-op dispatches the host loop would issue
+    backend: str
+
+
+def _pack_serial_weights(cfg: GumihoConfig, w: GumihoWeights) -> dict:
+    d = cfg.d_model
+    stk = lambda a: np.stack([getattr(layer, a) for layer in w.serial_layers])  # noqa: E731
+    return dict(
+        embed=w.embed, fc_in=w.serial_fc_in, ln1_all=stk("ln1"), ln2_all=stk("ln2"),
+        wv_all=np.stack([layer.wqkv[:, 2 * d:3 * d] for layer in w.serial_layers]),
+        wo_all=stk("wo"), wg_all=stk("w_gate"), wu_all=stk("w_up"),
+        wd_all=stk("w_down"), snorm=w.serial_norm, lm_head=w.lm_head)
+
+
+def serial_draft_forloop(cfg: GumihoConfig, weights: GumihoWeights, h_init, root_token):
+    """Run the serial draft as one MPSGraph control-flow executable. Returns
+    ``(tokens, hiddens)`` or ``None`` when the forLoop symbol is unavailable."""
+    p = _pack_serial_weights(cfg, weights)
+    return R.apple_gpu_cf_serial_draft(
+        p["embed"], p["fc_in"], p["ln1_all"], p["ln2_all"], p["wv_all"], p["wo_all"],
+        p["wg_all"], p["wu_all"], p["wd_all"], p["snorm"], p["lm_head"], h_init,
+        int(root_token), cfg.serial_tokens, cfg.serial_layers, cfg.d_model,
+        cfg.ffn_hidden, cfg.vocab, cfg.rmsnorm_eps, np)
+
+
+def validate_serial_forloop(cfg: GumihoConfig, weights: GumihoWeights, *,
+                            seed: int = 0) -> ForLoopDraftResult:
+    """Run the serial-draft forLoop and check it matches the host SerialHead."""
+    from .backend import NumpyBackend
+
+    rng = np.random.default_rng(seed)
+    ctx = rng.integers(0, cfg.vocab, size=cfg.context_len, dtype=np.int64)
+    be = NumpyBackend(eps=cfg.rmsnorm_eps)
+    tgt = TargetModel(weights, cfg)
+    sh = SerialHead(weights, cfg)
+    lh, _ = tgt.forward(be, ctx)
+    h_init, root = lh[-1], int(ctx[-1])
+    htoks, _, hhid = sh.generate(be, tgt, h_init, root)
+    ops_equiv = (2 + 10 * cfg.serial_layers + 1) * cfg.serial_tokens
+
+    res = serial_draft_forloop(cfg, weights, h_init, root)
+    if res is None:                                   # off-Metal fallback
+        return ForLoopDraftResult([int(t) for t in htoks], True, 0.0, 0,
+                                  ops_equiv, "numpy")
+    gtoks, ghid = res
+    hh = np.stack([np.asarray(h, np.float64) for h in hhid])
+    err = float(np.max(np.abs(ghid.astype(np.float64) - hh)))
+    matches = (list(int(t) for t in gtoks) == list(int(t) for t in htoks)) and err < 1e-3
+    return ForLoopDraftResult([int(t) for t in gtoks], matches, err, 1,
+                              ops_equiv, "metal")
+
+
 @dataclass(frozen=True)
 class ResidentDraftResult:
     tokens: list

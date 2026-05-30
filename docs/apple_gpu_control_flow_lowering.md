@@ -1,8 +1,9 @@
 # Apple GPU control-flow lowering (Phase G) — design + ladder
 
-> Status: **Rung 0 landing** (bounded `scan` → single MPSGraph control-flow
-> executable). Rungs 1–3 scoped below. This is the on-Apple slice of the
-> Phase-G "single-kernel `@jit` of a control-flow loop" frontier.
+> Status: **Rungs 0 + 1 landed** — Rung 0 (bounded `scan` → single MPSGraph
+> control-flow executable) and Rung 1 (the Gumiho serial draft as one
+> `forLoop` dispatch). Rungs 2–3 scoped below. This is the on-Apple slice of
+> the Phase-G "single-kernel `@jit` of a control-flow loop" frontier.
 
 ## The problem
 
@@ -67,11 +68,15 @@ research-grade and out of scope here. What *is* tractable and worth doing is the
   `tessera_apple_gpu_cf_scan_f32`; validated bit-close against a numpy scan.
   This is the reusable machinery (body subgraph + carry threading + per-step
   accumulation) every higher rung needs.
-- **Rung 1 — serial draft as a forLoop.** Reuse Rung 0's machinery with the
-  serial-block body (`fc_in → [RMSNorm → value-attn → SwiGLU → residual]×L →
-  RMSNorm → LM head → argmax → embed-gather`), carry = `(hidden, token)`,
-  accumulating the per-step draft tokens. One dispatch for the whole serial
-  draft, replacing the host 2-step loop in `gumiho/resident.py`.
+- **Rung 1 — serial draft as a forLoop (landed).** Reuses Rung 0's machinery
+  with the serial-block body (`fc_in → [RMSNorm → value-attn → SwiGLU →
+  residual]×L → RMSNorm → LM head → argmax → embed-gather`), carry =
+  `(hidden, token)`, accumulating per-step tokens + hiddens via index-scatter.
+  `tessera_apple_gpu_cf_serial_draft_f32` runs the whole autoregressive serial
+  draft in **one** `forLoop` dispatch (vs ~`(2+10L+1)·T` per-op host
+  dispatches), validated token-for-token against the host `SerialHead`
+  (hidden err ~6e-7). Exposed as `gumiho.validate_serial_forloop` /
+  `serial_draft_forloop`; `demo.py --mode forloop`.
 - **Rung 2 — bounded `while` decode.** A `whileWithInitialInputs:…` over the
   decode steps with a fixed upper bound and a `max_new_tokens` predicate,
   carrying a fixed-capacity output buffer. Covers the *static* parts of a decode

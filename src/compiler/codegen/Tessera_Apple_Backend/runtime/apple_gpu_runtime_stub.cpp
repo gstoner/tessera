@@ -981,6 +981,70 @@ extern "C" void tessera_apple_gpu_mla_decode_rope_f32(
     }
 }
 
+// ---- MLA decode with weight absorption — non-Apple reference (2026-05-30) ---
+// Attention runs directly against the cached latent c_kv (shared across heads);
+// the up-proj weights Wukᵀ / Wuv absorb into the query / output.
+extern "C" void tessera_apple_gpu_mla_absorb_decode_f32(
+    const float* q_nope, const float* q_rope, const float* c_kv,
+    const float* k_rope, const float* Wuk_t, const float* Wuv,
+    const float* cosQ, const float* sinQ, const float* cosK, const float* sinK,
+    float* O, int32_t B, int32_t H, int32_t Sq, int32_t Skv, int32_t dn,
+    int32_t dr, int32_t dv, int32_t Dl, int32_t rotation_style) {
+  if (B <= 0 || H <= 0 || Sq <= 0 || Skv <= 0 || dn < 0 || dr < 0 || dv <= 0 ||
+      Dl <= 0 || (dr % 2) != 0)
+    return;
+  int32_t halfdr = dr / 2;
+  float scale = 1.0f / std::sqrt(static_cast<float>(dn + dr));
+  std::vector<double> qabs(Dl), score(Skv);
+  std::vector<float> qrr(dr), krr((std::size_t)Skv * dr);
+  for (int32_t b = 0; b < B; ++b)
+    for (int32_t h = 0; h < H; ++h) {
+      int32_t bh = b * H + h;
+      // pre-rope the shared key once per batch/head (k_rope shared across h)
+      for (int32_t j = 0; j < Skv; ++j)
+        mla_rope_apply_stub(k_rope + ((std::size_t)b * Skv + j) * dr,
+                            cosK + (std::size_t)j * halfdr,
+                            sinK + (std::size_t)j * halfdr,
+                            krr.data() + (std::size_t)j * dr, dr, rotation_style);
+      for (int32_t i = 0; i < Sq; ++i) {
+        const float* qnb = q_nope + ((std::size_t)bh * Sq + i) * dn;
+        mla_rope_apply_stub(q_rope + ((std::size_t)bh * Sq + i) * dr,
+                            cosQ + (std::size_t)i * halfdr,
+                            sinQ + (std::size_t)i * halfdr, qrr.data(), dr,
+                            rotation_style);
+        const float* wuktb = Wuk_t + (std::size_t)h * dn * Dl;
+        for (int32_t l = 0; l < Dl; ++l) {
+          double acc = 0;
+          for (int32_t d = 0; d < dn; ++d) acc += (double)qnb[d] * wuktb[d * Dl + l];
+          qabs[l] = acc;
+        }
+        const float* ckvb = c_kv + (std::size_t)b * Skv * Dl;
+        double mx = -1e30;
+        for (int32_t j = 0; j < Skv; ++j) {
+          double sn = 0;
+          for (int32_t l = 0; l < Dl; ++l) sn += qabs[l] * ckvb[j * Dl + l];
+          double sr = 0;
+          for (int32_t d = 0; d < dr; ++d) sr += (double)qrr[d] * krr[(std::size_t)j * dr + d];
+          score[j] = (sn + sr) * scale;
+          mx = std::max(mx, score[j]);
+        }
+        double den = 0;
+        for (int32_t j = 0; j < Skv; ++j) { double e = std::exp(score[j] - mx); score[j] = e; den += e; }
+        const float* wuvb = Wuv + (std::size_t)h * Dl * dv;
+        float* o = O + ((std::size_t)bh * Sq + i) * dv;
+        for (int32_t d = 0; d < dv; ++d) {
+          double acc = 0;
+          for (int32_t j = 0; j < Skv; ++j) {
+            double cv = 0;
+            for (int32_t l = 0; l < Dl; ++l) cv += ckvb[j * Dl + l] * wuvb[l * dv + d];
+            acc += (score[j] / den) * cv;
+          }
+          o[d] = (float)acc;
+        }
+      }
+    }
+}
+
 // attention_variants_plan, NSA-5 — non-Apple stub.
 // Zero-fills the output (the Apple-side reference has the full impl).
 extern "C" void tessera_apple_gpu_native_sparse_attn_f32(

@@ -2845,6 +2845,56 @@ def _apple_gpu_mla_decode_rope(Qn: Any, Qr: Any, Kn: Any, Kr: Any, V: Any,
     return O
 
 
+def _apple_gpu_mla_absorb_decode_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mla_absorb_decode_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.POINTER(ctypes.c_float)] * 11 + [ctypes.c_int32] * 9
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_mla_absorb_decode(q_nope: Any, q_rope: Any, c_kv: Any,
+                                 k_rope: Any, Wuk_t: Any, Wuv: Any, cosQ: Any,
+                                 sinQ: Any, cosK: Any, sinK: Any, np: Any,
+                                 rotation_style: str = "interleaved") -> Any:
+    """MLA decode with **weight absorption** + decoupled RoPE — the real MLA
+    bandwidth win.
+
+    Attention runs directly against the cached compressed latent ``c_kv``
+    (shared across heads); the up-projection weights absorb into the query /
+    output so per-head K/V are never materialized. The KV cache therefore stores
+    only ``c_kv [B,Skv,Dl]`` + the shared ``k_rope [B,Skv,dr]``. Mathematically
+    identical to the explicit-K decoupled-RoPE path.
+
+    Shapes (all f32): q_nope ``[B,H,Sq,dn]``, q_rope ``[B,H,Sq,dr]``,
+    c_kv ``[B,Skv,Dl]`` (shared), k_rope ``[B,Skv,dr]`` (shared),
+    Wuk_t ``[H,dn,Dl]`` (= Wukᵀ, absorb-K), Wuv ``[H,Dl,dv]`` (absorb-V),
+    cosQ/sinQ ``[Sq,dr/2]``, cosK/sinK ``[Skv,dr/2]``. Returns O ``[B,H,Sq,dv]``.
+    ``rotation_style`` is ``"interleaved"`` or ``"half"``. Returns None when the
+    runtime symbol is unavailable."""
+    style = 0 if str(rotation_style).lower().startswith("inter") else 1
+    arrs = [np.ascontiguousarray(a, np.float32) for a in
+            (q_nope, q_rope, c_kv, k_rope, Wuk_t, Wuv, cosQ, sinQ, cosK, sinK)]
+    qn, qr, ckv, kr, wukt, wuv, cosQ, sinQ, cosK, sinK = arrs
+    B, H, Sq, dn = (int(s) for s in qn.shape)
+    dr = int(qr.shape[-1])
+    Skv, Dl = int(ckv.shape[-2]), int(ckv.shape[-1])
+    dv = int(wuv.shape[-1])
+    sym = _apple_gpu_mla_absorb_decode_f32()
+    if sym is None:
+        return None
+    fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    O = np.zeros((B, H, Sq, dv), np.float32)
+    sym(fp(qn), fp(qr), fp(ckv), fp(kr), fp(wukt), fp(wuv), fp(cosQ), fp(sinQ),
+        fp(cosK), fp(sinK), fp(O), ctypes.c_int32(B), ctypes.c_int32(H),
+        ctypes.c_int32(Sq), ctypes.c_int32(Skv), ctypes.c_int32(dn),
+        ctypes.c_int32(dr), ctypes.c_int32(dv), ctypes.c_int32(Dl),
+        ctypes.c_int32(style))
+    return O
+
+
 def _apple_gpu_flash_attn_gqa_f32() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_flash_attn_gqa_f32", None)

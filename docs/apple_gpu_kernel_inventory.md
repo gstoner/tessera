@@ -63,6 +63,13 @@ host-side. None of these carry the per-thread `N ≤ 256` limit.
 | `tessera_apple_gpu_rmsnorm_gpu_f32` / `_f16` | `tessera.rmsnorm` / `tessera.rmsnorm_safe` | row op over last axis | f32, f16 |
 | `tessera_apple_gpu_log_softmax_f32` / `_f16` | `tessera.log_softmax` | row op over last axis | f32, f16 |
 | `tessera_apple_gpu_mpsgraph_softmax_f32` / `_f16` | `tessera.softmax` (no N limit) | row op over last axis | f32, f16 |
+| `tessera_apple_gpu_bmm_f32` / `_f16` | `tessera.matmul` (rank-3+) / `tessera.batched_gemm` | batched matmul `[batch,M,K]@[batch,K,N]` with a `b_broadcast` flag for a shared `[1,K,N]` B | f32, f16 (bf16 host-upcast) |
+
+**Batched matmul (`bmm`) — Tier-2 keystone (2026-05-29):** MPSGraph
+`matrixMultiplication` handles leading batch dims + broadcasting. `runtime.py`
+folds rank-4+ leading dims into a single batch and routes a shared/`[K,N]` B
+operand through the `b_broadcast` path (projections + GQA KV-sharing). See
+[`apple_gpu_tier2_tier3_plan.md`](apple_gpu_tier2_tier3_plan.md).
 
 Op codes (unary / binary) are defined in `apple_gpu_runtime.mm` and mirrored in
 `python/tessera/runtime.py` (`_APPLE_GPU_UNARY_OPCODES`). `silu_mul(a, b)` is

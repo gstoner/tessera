@@ -372,6 +372,8 @@ def _is_apple_cpu_accelerate_executable(cpu_plan: CPUPlan | None) -> bool:
 _APPLE_GPU_MPS_OPS: frozenset[str] = frozenset({
     "tessera.matmul",
     "tessera.gemm",
+    # 2026-05-29 — batched / rank-3 matmul via the MPSGraph bmm lane (Tier-2).
+    "tessera.batched_gemm",
 })
 
 _APPLE_GPU_MSL_OPS: frozenset[str] = frozenset({

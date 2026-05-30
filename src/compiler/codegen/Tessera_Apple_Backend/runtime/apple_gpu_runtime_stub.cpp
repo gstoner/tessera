@@ -1057,4 +1057,30 @@ extern "C" int32_t tessera_apple_gpu_runtime_msl_cache_size(void) {
   return -1;
 }
 
+// ---- Batched matmul (bmm) non-Apple reference (2026-05-29) -----------------
+extern "C" void tessera_apple_gpu_bmm_f32(const float* A, const float* B,
+                                          float* O, int32_t batch, int32_t M,
+                                          int32_t N, int32_t K,
+                                          int32_t b_broadcast) {
+  for (int32_t bi = 0; bi < batch; ++bi) {
+    const float* a = A + static_cast<std::size_t>(bi) * M * K;
+    const float* b = B + static_cast<std::size_t>(b_broadcast ? 0 : bi) * K * N;
+    float* o = O + static_cast<std::size_t>(bi) * M * N;
+    for (int32_t m = 0; m < M; ++m)
+      for (int32_t n = 0; n < N; ++n) {
+        float s = 0.0f;
+        for (int32_t k = 0; k < K; ++k)
+          s += a[static_cast<std::size_t>(m) * K + k] *
+               b[static_cast<std::size_t>(k) * N + n];
+        o[static_cast<std::size_t>(m) * N + n] = s;
+      }
+  }
+}
+extern "C" void tessera_apple_gpu_bmm_f16(const uint16_t*, const uint16_t*,
+                                          uint16_t* O, int32_t batch, int32_t M,
+                                          int32_t N, int32_t, int32_t) {
+  // runtime.py upcasts to f32 on the fallback path.
+  std::memset(O, 0, static_cast<std::size_t>(batch) * M * N * 2);
+}
+
 #endif // !__APPLE__

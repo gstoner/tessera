@@ -19,6 +19,7 @@ same split the ``test_apple_gpu_batched_mha.py`` block uses.
 
 from __future__ import annotations
 
+import ctypes
 from typing import Any
 
 import numpy as np
@@ -83,6 +84,9 @@ class NumpyBackend:
     def matmul(self, a: Any, b: Any) -> np.ndarray:
         return np.asarray(a, np.float64) @ np.asarray(b, np.float64)
 
+    def add(self, a: Any, b: Any) -> np.ndarray:
+        return np.asarray(a, np.float64) + np.asarray(b, np.float64)
+
     def rmsnorm(self, x: Any, gamma: Any) -> np.ndarray:
         d = np.asarray(x, np.float64)
         n = d / np.sqrt((d * d).mean(-1, keepdims=True) + self.eps)
@@ -141,6 +145,30 @@ class AppleBackend:
 
     def matmul(self, a: Any, b: Any) -> np.ndarray:
         return self._matmul(a, b)
+
+    def add(self, a: Any, b: Any) -> np.ndarray:
+        """Elementwise add on the GPU (additive attention masks, residuals).
+
+        ``tessera.add`` isn't in the per-op apple_gpu dispatch envelope, so we
+        call the MPSGraph binary symbol (op 0 = add) directly — the same kernel
+        the R2 encode session uses. f32 on device (the mask's ``-1e30`` masks
+        cleanly in f32); broadcasting is done host-side before the flat add."""
+        a = np.ascontiguousarray(np.asarray(a), np.float32)
+        b = np.asarray(b)
+        if b.shape != a.shape:
+            b = np.broadcast_to(b, a.shape)
+        b = np.ascontiguousarray(b, np.float32)
+        sym = R._apple_gpu_mpsgraph_binary_f32() if self.target == "apple_gpu" else None
+        if sym is None:
+            return a + b
+        out = np.empty(a.size, np.float32)
+        fp = ctypes.POINTER(ctypes.c_float)
+        sym(ctypes.c_int32(0),
+            a.reshape(-1).ctypes.data_as(fp),
+            b.reshape(-1).ctypes.data_as(fp),
+            out.ctypes.data_as(fp),
+            ctypes.c_int64(a.size))
+        return out.reshape(a.shape)
 
     def rmsnorm(self, x: Any, gamma: Any) -> np.ndarray:
         # Heavy normalize on-device (unweighted, fp32 internal); gamma is host glue.

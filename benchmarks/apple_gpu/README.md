@@ -1,11 +1,30 @@
 # Apple GPU benchmarks
 
-Two benchmark drivers live here:
+Benchmark drivers live here:
 
 | Driver | Coverage |
 |---|---|
 | [`benchmark_fusion.py`](benchmark_fusion.py) | Phase 8.4.x MSL fusion sweep — `matmul → softmax`, SwiGLU MLP block. Fused-vs-sequential pairing. |
+| [`benchmark_encode_session.py`](benchmark_encode_session.py) | R2 command-buffer batching — a dependent bmm chain per-op (one sync/op) vs. batched into one command buffer. |
+| [`benchmark_gumiho.py`](benchmark_gumiho.py) | Gumiho speculative decoding — algorithmic tokens-per-target-pass + resident vs per-op serial draft wall-clock. |
 | [`benchmark_ga_ebm.py`](benchmark_ga_ebm.py) | GA + EBM end-to-end stack walk **plus workload mode**. 17 GA primitives + **9 native EBM primitives** (including `ebm_partition_exact`) + Python-reference comparison rows + **4 workload rows** (GA feature pipeline + EBT-tiny refinement, each in apple_gpu + python_ref variants), plus opt-in `--ebt-sweep`. |
+
+## Gumiho speculative-decoding benchmark
+
+[`benchmark_gumiho.py`](benchmark_gumiho.py) emits the standard JSON schema with
+two op groups:
+
+- `op="gumiho_decode"` — **tokens committed per target forward pass** for
+  `vanilla` (1.0), `speculative_untrained`, and `speculative_trained` (rows
+  carry `tokens_per_step`, `speedup_vs_vanilla`, `mean_accepted_length`,
+  `tokens_per_sec`). This is the model-size-independent speculative win. On a
+  recent M-series run: untrained ~1.86×, trained ~4.33× tokens/pass; trained
+  also wins ~2.3× on wall-clock throughput because 4.3 tokens/step amortizes the
+  verify.
+- `op="gumiho_serial_draft"` — `resident` (one command buffer per token) vs.
+  `per_op` serial-draft wall-clock; `speedup_vs_per_op` ~2.6× from removing the
+  per-op CPU↔GPU sync. Headline numbers drift across machines/toolchains — the
+  schema is the stable contract.
 
 ## GA + EBM benchmark — what it walks
 

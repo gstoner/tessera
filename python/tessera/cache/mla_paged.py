@@ -86,6 +86,46 @@ def _reference_absorb(q_nope, q_rope, c_kv, k_rope, Wuk_t, Wuv,
     return O
 
 
+def _rope_tables(positions: np.ndarray, rope_dim: int, rope_base: float):
+    half = rope_dim // 2
+    inv = rope_base ** (-(np.arange(half, dtype=np.float64) * 2.0 / rope_dim))
+    ang = positions.astype(np.float64)[:, None] * inv[None, :]
+    return np.cos(ang).astype(np.float32), np.sin(ang).astype(np.float32)
+
+
+def absorb_decode_one(q_nope, q_rope, c_kv, k_rope, Wuk_t, Wuv, key_pos, q_pos,
+                      rope_base, rotation_style):
+    """Single-sequence weight-absorbed MLA decode against a cached window.
+
+    Shared by :class:`MLAPagedDecoder` and the multi-sequence block cache so
+    there is one decode implementation. q_nope ``[H,dn]``, q_rope ``[H,dr]``,
+    c_kv ``[S,Dl]``, k_rope ``[S,dr]``, Wuk_t ``[H,dn,Dl]``, Wuv ``[H,Dl,dv]``;
+    ``key_pos`` is the absolute RoPE position of each cached token, ``q_pos`` the
+    query's absolute position. Runs the Apple GPU absorbed kernel when available,
+    else a numpy reference. Returns ``[H, dv]``."""
+    qn = np.ascontiguousarray(q_nope, np.float32)
+    qr = np.ascontiguousarray(q_rope, np.float32)
+    c_kv = np.ascontiguousarray(c_kv, np.float32)
+    k_rope = np.ascontiguousarray(k_rope, np.float32)
+    rope_dim = qr.shape[-1]
+    cosK, sinK = _rope_tables(np.asarray(key_pos), rope_dim, rope_base)
+    cosQ, sinQ = _rope_tables(np.asarray([q_pos]), rope_dim, rope_base)
+    # GPU path: kernel wants [B,H,Sq,*] with B=Sq=1.
+    try:
+        from .. import runtime as R
+        dispatch = getattr(R, "_apple_gpu_mla_absorb_decode", None)
+    except Exception:  # pragma: no cover
+        dispatch = None
+    if dispatch is not None:
+        res = dispatch(qn[None, :, None, :], qr[None, :, None, :], c_kv[None],
+                       k_rope[None], Wuk_t, Wuv, cosQ, sinQ, cosK, sinK, np,
+                       rotation_style=rotation_style)
+        if res is not None:
+            return np.ascontiguousarray(res[0, :, 0, :])
+    return _reference_absorb(qn, qr, c_kv, k_rope, Wuk_t, Wuv, cosQ, sinQ, cosK,
+                             sinK, rotation_style)
+
+
 class MLAPagedDecoder:
     """Single-sequence MLA decoder over a paged latent + rope cache.
 
@@ -201,13 +241,6 @@ class MLAPagedDecoder:
         return self
 
     # ------------------------------------------------------------------
-    def _rope_tables(self, positions: np.ndarray):
-        half = self.rope_dim // 2
-        inv = self.rope_base ** (
-            -(np.arange(half, dtype=np.float64) * 2.0 / self.rope_dim))
-        ang = positions.astype(np.float64)[:, None] * inv[None, :]
-        return np.cos(ang).astype(np.float32), np.sin(ang).astype(np.float32)
-
     def decode(self, q_nope: Any, q_rope: Any,
                query_pos: Optional[int] = None) -> np.ndarray:
         """Decode a single query against the full cached window.
@@ -234,34 +267,9 @@ class MLAPagedDecoder:
         key_pos = self._abs_base + np.arange(S)
         if query_pos is None:
             query_pos = self._abs_base + S - 1
-        cosK, sinK = self._rope_tables(key_pos)
-        cosQ, sinQ = self._rope_tables(np.asarray([query_pos]))
-
-        out = self._gpu_decode(qn, qr, c_kv, k_rope, cosQ, sinQ, cosK, sinK)
-        if out is None:
-            out = _reference_absorb(qn, qr, c_kv, k_rope, self.Wuk_t, self.Wuv,
-                                    cosQ, sinQ, cosK, sinK, self.rotation_style)
-        return out
-
-    def _gpu_decode(self, qn, qr, c_kv, k_rope, cosQ, sinQ, cosK, sinK):
-        """Try the on-GPU absorbed kernel; return None to fall back."""
-        try:
-            from .. import runtime as R
-        except Exception:  # pragma: no cover
-            return None
-        dispatch = getattr(R, "_apple_gpu_mla_absorb_decode", None)
-        if dispatch is None:
-            return None
-        # kernel wants [B,H,Sq,*] with B=Sq=1
-        qn4 = qn[None, :, None, :]
-        qr4 = qr[None, :, None, :]
-        ckv3 = c_kv[None]
-        kr3 = k_rope[None]
-        res = dispatch(qn4, qr4, ckv3, kr3, self.Wuk_t, self.Wuv, cosQ, sinQ,
-                       cosK, sinK, np, rotation_style=self.rotation_style)
-        if res is None:
-            return None
-        return np.ascontiguousarray(res[0, :, 0, :])
+        return absorb_decode_one(qn, qr, c_kv, k_rope, self.Wuk_t, self.Wuv,
+                                 key_pos, query_pos, self.rope_base,
+                                 self.rotation_style)
 
     def __repr__(self) -> str:
         return (f"MLAPagedDecoder(num_heads={self.num_heads}, "

@@ -17,14 +17,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Gumiho hybrid speculative decoding")
     parser.add_argument("--mode", default="decode",
                         choices=["step", "decode", "resident", "precision",
-                                 "prefix", "forloop"],
+                                 "prefix", "forloop", "onchip"],
                         help="step: one validated speculative step; "
                              "decode: distill + multi-step decode with speedup; "
                              "resident: GPU-resident serial draft (one command "
                              "buffer per token); precision: f16/bf16 draft vs "
                              "f32; prefix: paged-KV prefix-sharing decode; "
                              "forloop: serial draft as one MPSGraph control-flow "
-                             "(Phase-G Rung 1)")
+                             "(Phase-G Rung 1); onchip: composed on-device "
+                             "speculative step (draft+verify MPSGraph + Rung-3 "
+                             "MSL accept)")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--target", default="apple_gpu",
                         choices=["apple_gpu", "apple_cpu", "numpy"],
@@ -70,6 +72,16 @@ def main() -> None:
                                     max_new_tokens=args.max_new_tokens, seed=args.seed)
         print("== Gumiho paged-KV prefix-sharing decode ==")
         print(s)
+        return
+
+    if args.mode == "onchip":
+        from gumiho import run_onchip_step_demo
+        s = run_onchip_step_demo(cfg, seed=args.seed, target=args.target,
+                                 distill_steps=300)
+        print("== Gumiho on-device speculative step (composed kernels) ==")
+        print(s)
+        print("pipeline = serial_draft(forLoop, Rung 1) + parallel + tree_verify "
+              "(MPSGraph) -> spec_accept (MSL, Rung 3)")
         return
 
     if args.mode == "forloop":

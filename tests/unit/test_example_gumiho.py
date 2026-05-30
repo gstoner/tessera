@@ -132,6 +132,22 @@ def test_prefix_shared_single_verify_equals_build_draft(gumiho_mod):
     assert res.kv_rows_per_verify < res.kv_rows_full_recompute
 
 
+def test_onchip_step_accept_matches_host(gumiho_mod):
+    """Compose the on-device speculative step: draft + verify (MPSGraph) feed the
+    Rung-3 MSL accept kernel. The on-device accept must match the host reference,
+    and a distilled draft must accept more than the untrained one."""
+    cfg = gumiho_mod.tiny_config()
+    untrained = gumiho_mod.run_onchip_step_demo(cfg, seed=0, target="numpy")
+    assert untrained.matches_host
+    assert 0 <= untrained.accepted_length <= cfg.total_draft_tokens
+    assert untrained.num_paths == cfg.fta_top_paths
+
+    trained = gumiho_mod.run_onchip_step_demo(cfg, seed=0, target="numpy",
+                                              distill_steps=250)
+    assert trained.matches_host
+    assert trained.accepted_length >= untrained.accepted_length
+
+
 def test_serial_draft_forloop_matches_host(gumiho_mod):
     """Phase-G Rung 1: the serial draft lowered into one MPSGraph control-flow
     executable reproduces the host SerialHead token-for-token, in one dispatch."""

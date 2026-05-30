@@ -8503,3 +8503,131 @@ extern "C" void tessera_apple_gpu_flash_attn_gqa_f32(
   reference_flash_attn_gqa_f32(Q, K, V, O, B, q_heads, kv_heads, Sq, Sk, D,
                                scale, causal);
 }
+
+//===----------------------------------------------------------------------===//
+// Fused batched matmul -> softmax -> matmul (2026-05-29)
+//
+// O = softmax((A @ B) * scale, axis=-1) @ C, per batch — the batched attention
+// block in a single dispatch (vs the bmm + softmax + bmm 3-call compose).
+// A:[batch,M,K] B:[batch,K,N] C:[batch,N,P] -> O:[batch,M,P]. For attention
+// A=Q, B=Kᵀ, C=V. MPSGraph fuses the whole graph; f32 + f16 native (fp32
+// compute), bf16 host-upcast. Reuses the graph cache + buffer pool.
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+static bool mpsg_run_bsmm(MetalDeviceContext &ctx, const void *A, const void *B,
+                          const void *C, void *O, int32_t batch, int32_t M,
+                          int32_t N, int32_t P, int32_t K, float scale,
+                          MPSDataType ioType, size_t elemSize) {
+  if (batch <= 0 || M <= 0 || N <= 0 || P <= 0 || K <= 0) return true;
+  @autoreleasepool {
+    size_t aBytes = (size_t)batch * M * K * elemSize;
+    size_t bBytes = (size_t)batch * K * N * elemSize;
+    size_t cBytes = (size_t)batch * N * P * elemSize;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, bBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufC, ctx, C, cBytes);
+    if (!bufA || !bufB || !bufC) return false;
+    NSArray<NSNumber *> *aShape = @[ @(batch), @(M), @(K) ];
+    NSArray<NSNumber *> *bShape = @[ @(batch), @(K), @(N) ];
+    NSArray<NSNumber *> *cShape = @[ @(batch), @(N), @(P) ];
+    NSString *key = [NSString stringWithFormat:@"bsmm:%d:%d:%d:%d:%d:%d:%a",
+                                               (int)ioType, batch, M, N, P, K,
+                                               scale];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *pa, *pb, *pc, *y;
+    if (entry) {
+      g = entry[0];
+      pa = ((NSArray *)entry[1])[0];
+      pb = ((NSArray *)entry[1])[1];
+      pc = ((NSArray *)entry[1])[2];
+      y = entry[2];
+    } else {
+      g = [MPSGraph new];
+      pa = [g placeholderWithShape:aShape dataType:ioType name:nil];
+      pb = [g placeholderWithShape:bShape dataType:ioType name:nil];
+      pc = [g placeholderWithShape:cShape dataType:ioType name:nil];
+      MPSGraphTensor *s = [g matrixMultiplicationWithPrimaryTensor:mpsg_up(g, pa, ioType)
+                                                   secondaryTensor:mpsg_up(g, pb, ioType)
+                                                              name:nil];
+      MPSGraphTensor *scaled = [g multiplicationWithPrimaryTensor:s
+                                  secondaryTensor:[g constantWithScalar:(double)scale dataType:MPSDataTypeFloat32]
+                                             name:nil];
+      MPSGraphTensor *attn = [g softMaxWithTensor:scaled axis:2 name:nil];
+      MPSGraphTensor *yf = [g matrixMultiplicationWithPrimaryTensor:attn
+                                                   secondaryTensor:mpsg_up(g, pc, ioType)
+                                                              name:nil];
+      y = mpsg_down(g, yf, ioType);
+      mpsg_cache_put(key, @[ g, @[ pa, pb, pc ], y ]);
+    }
+    MPSGraphTensorData *ad = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:aShape dataType:ioType];
+    MPSGraphTensorData *bd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:ioType];
+    MPSGraphTensorData *cd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufC shape:cShape dataType:ioType];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{pa : ad, pb : bd, pc : cd}
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:O strideBytes:nil];
+    return true;
+  }
+}
+
+static void reference_bsmm_f32(const float *A, const float *B, const float *C,
+                               float *O, int32_t batch, int32_t M, int32_t N,
+                               int32_t P, int32_t K, float scale) {
+  std::vector<double> s((size_t)M * N);
+  for (int32_t bi = 0; bi < batch; ++bi) {
+    const float *a = A + (size_t)bi * M * K;
+    const float *b = B + (size_t)bi * K * N;
+    const float *c = C + (size_t)bi * N * P;
+    float *o = O + (size_t)bi * M * P;
+    for (int32_t m = 0; m < M; ++m) {
+      double mx = -1e30;
+      for (int32_t n = 0; n < N; ++n) {
+        double acc = 0;
+        for (int32_t k = 0; k < K; ++k) acc += (double)a[m * K + k] * b[k * N + n];
+        acc *= scale;
+        s[(size_t)m * N + n] = acc;
+        mx = std::max(mx, acc);
+      }
+      double den = 0;
+      for (int32_t n = 0; n < N; ++n) { double e = std::exp(s[(size_t)m * N + n] - mx); s[(size_t)m * N + n] = e; den += e; }
+      for (int32_t p = 0; p < P; ++p) {
+        double acc = 0;
+        for (int32_t n = 0; n < N; ++n) acc += s[(size_t)m * N + n] / den * c[n * P + p];
+        o[(size_t)m * P + p] = (float)acc;
+      }
+    }
+  }
+}
+
+}  // namespace
+
+extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f32(const float *A, const float *B,
+                                                    const float *C, float *O,
+                                                    int32_t batch, int32_t M,
+                                                    int32_t N, int32_t P, int32_t K,
+                                                    float scale) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_bsmm(ctx, A, B, C, O, batch, M, N, P, K, scale,
+                              MPSDataTypeFloat32, 4))
+    return;
+  reference_bsmm_f32(A, B, C, O, batch, M, N, P, K, scale);
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f16(const uint16_t *A,
+                                                    const uint16_t *B,
+                                                    const uint16_t *C,
+                                                    uint16_t *O, int32_t batch,
+                                                    int32_t M, int32_t N, int32_t P,
+                                                    int32_t K, float scale) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_bsmm(ctx, A, B, C, O, batch, M, N, P, K, scale,
+                              MPSDataTypeFloat16, 2))
+    return;
+  std::memset(O, 0, (size_t)batch * M * P * 2);
+}

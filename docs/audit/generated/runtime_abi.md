@@ -4,9 +4,9 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 
 ## Headline
 
-- **105** unique `extern "C" tessera_*` C ABI symbols across all backends.
+- **107** unique `extern "C" tessera_*` C ABI symbols across all backends.
 - **6 / 6** core runtime headers present.
-- **53** Apple GPU kernel families with per-dtype variants.
+- **54** Apple GPU kernel families with per-dtype variants.
 
 ## Core runtime headers
 
@@ -23,7 +23,7 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 
 | Backend | Unique tessera_* symbols |
 |---------|-------------------------:|
-| `apple` | 94 |
+| `apple` | 96 |
 | `nvidia` | 3 |
 | `x86` | 8 |
 
@@ -75,6 +75,7 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 | `mps_matmul` | `bf16`, `f16`, `f32` |
 | `mpsgraph_argreduce` | `f32` |
 | `mpsgraph_binary` | `f16`, `f32` |
+| `mpsgraph_bsmm` | `f16`, `f32` |
 | `mpsgraph_reduce` | `f32` |
 | `mpsgraph_scan` | `f32` |
 | `mpsgraph_softmax` | `f16`, `f32` |

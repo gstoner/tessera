@@ -2649,6 +2649,79 @@ def _apple_gpu_dispatch_gqa(Q: Any, K: Any, V: Any, num_q_heads: int,
     return out.reshape(Q.shape).astype(out_dtype)
 
 
+def _apple_gpu_bsmm_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_bsmm_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.POINTER(ctypes.c_float)] * 4 + [ctypes.c_int32] * 5 + [
+        ctypes.c_float]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_bsmm_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_bsmm_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.POINTER(ctypes.c_uint16)] * 4 + [ctypes.c_int32] * 5 + [
+        ctypes.c_float]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_dispatch_batched_attention(Q: Any, K: Any, V: Any, np: Any,
+                                          scale: float | None = None) -> Any:
+    """Fused batched attention O = softmax((Q @ Kᵀ) * scale) @ V in a single
+    dispatch (vs the bmm + softmax + bmm compose). Q/K/V are [..., T, D]; the
+    leading dims fold to the batch. f32 + f16 native (fp32 compute); bf16
+    upcasts. Returns None for unsupported shapes/dtypes so the caller can fall
+    back to the compose path."""
+    import math as _math
+    Q = np.asarray(Q)
+    K = np.asarray(K)
+    V = np.asarray(V)
+    if Q.ndim < 2 or K.ndim < 2 or V.ndim < 2:
+        return None
+    T, D = int(Q.shape[-2]), int(Q.shape[-1])
+    Sk = int(K.shape[-2])
+    if K.shape[-1] != D or V.shape[-1] != D or V.shape[-2] != Sk:
+        return None
+    batch = int(np.prod(Q.shape[:-2])) if Q.ndim > 2 else 1
+    if (int(np.prod(K.shape[:-2])) if K.ndim > 2 else 1) != batch:
+        return None
+    out_dtype = Q.dtype
+    sc = float(scale) if scale is not None else 1.0 / _math.sqrt(D)
+    bf16 = _bfloat16_dtype()
+    if Q.dtype == np.float32:
+        sym, half = _apple_gpu_bsmm_f32(), False
+    elif Q.dtype == np.float16:
+        sym, half = _apple_gpu_bsmm_f16(), True
+    elif bf16 is not None and Q.dtype == bf16:
+        sym, half = _apple_gpu_bsmm_f32(), False  # upcast
+    else:
+        return None
+    if sym is None:
+        return None
+    dt = np.float16 if half else np.float32
+    a = np.ascontiguousarray(Q.astype(dt)).reshape(batch, T, D)
+    # B = Kᵀ per batch: [batch, D, Sk]
+    bmat = np.ascontiguousarray(
+        K.astype(dt).reshape(batch, Sk, D).transpose(0, 2, 1))
+    c = np.ascontiguousarray(V.astype(dt)).reshape(batch, Sk, D)
+    out = np.zeros((batch, T, D), dtype=dt)
+    dims = (ctypes.c_int32(batch), ctypes.c_int32(T), ctypes.c_int32(Sk),
+            ctypes.c_int32(D), ctypes.c_int32(D), ctypes.c_float(sc))
+    if half:
+        up = lambda arr: arr.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+        sym(up(a), up(bmat), up(c), up(out), *dims)
+    else:
+        fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        sym(fp(a), fp(bmat), fp(c), fp(out), *dims)
+    return out.reshape(Q.shape).astype(out_dtype)
+
+
 def _apple_gpu_mps_matmul_f32() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = runtime.tessera_apple_gpu_mps_matmul_f32

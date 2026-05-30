@@ -1155,4 +1155,40 @@ extern "C" void tessera_apple_gpu_flash_attn_gqa_f32(
   }
 }
 
+// ---- fused batched matmul->softmax->matmul non-Apple reference -------------
+extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f32(const float* A, const float* B,
+                                                    const float* C, float* O,
+                                                    int32_t batch, int32_t M,
+                                                    int32_t N, int32_t P, int32_t K,
+                                                    float scale) {
+  std::vector<double> s(static_cast<std::size_t>(M) * N);
+  for (int32_t bi = 0; bi < batch; ++bi) {
+    const float* a = A + static_cast<std::size_t>(bi) * M * K;
+    const float* b = B + static_cast<std::size_t>(bi) * K * N;
+    const float* c = C + static_cast<std::size_t>(bi) * N * P;
+    float* o = O + static_cast<std::size_t>(bi) * M * P;
+    for (int32_t m = 0; m < M; ++m) {
+      double mx = -1e30;
+      for (int32_t n = 0; n < N; ++n) {
+        double acc = 0;
+        for (int32_t k = 0; k < K; ++k) acc += static_cast<double>(a[m * K + k]) * b[k * N + n];
+        acc *= scale; s[static_cast<std::size_t>(m) * N + n] = acc; mx = std::max(mx, acc);
+      }
+      double den = 0;
+      for (int32_t n = 0; n < N; ++n) { double e = std::exp(s[static_cast<std::size_t>(m) * N + n] - mx); s[static_cast<std::size_t>(m) * N + n] = e; den += e; }
+      for (int32_t p = 0; p < P; ++p) {
+        double acc = 0;
+        for (int32_t n = 0; n < N; ++n) acc += s[static_cast<std::size_t>(m) * N + n] / den * c[n * P + p];
+        o[static_cast<std::size_t>(m) * P + p] = static_cast<float>(acc);
+      }
+    }
+  }
+}
+extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f16(const uint16_t*, const uint16_t*,
+                                                    const uint16_t*, uint16_t* O,
+                                                    int32_t batch, int32_t M, int32_t,
+                                                    int32_t P, int32_t, float) {
+  std::memset(O, 0, static_cast<std::size_t>(batch) * M * P * 2);
+}
+
 #endif // !__APPLE__

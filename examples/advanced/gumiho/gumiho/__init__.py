@@ -12,9 +12,16 @@ from .config import GumihoConfig, tiny_config
 from .decode import (
     DecodeMetrics,
     GumihoSummary,
+    PrecisionSummary,
     run_gumiho_demo,
     run_multistep_decode,
+    run_precision_demo,
     run_training_demo,
+)
+from .prefix_shared import (
+    PrefixSharedVerifier,
+    PrefixSharingSummary,
+    run_prefix_sharing_demo,
 )
 from .resident import (
     ResidentDraftResult,
@@ -36,4 +43,9 @@ __all__ = [
     "ResidentSerialDraft",
     "ResidentDraftResult",
     "validate_resident_draft",
+    "PrecisionSummary",
+    "run_precision_demo",
+    "PrefixSharedVerifier",
+    "PrefixSharingSummary",
+    "run_prefix_sharing_demo",
 ]

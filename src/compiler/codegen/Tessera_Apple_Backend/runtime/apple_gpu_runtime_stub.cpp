@@ -1298,4 +1298,70 @@ extern "C" void tessera_apple_gpu_conv2d_f16(
     std::memset(O, 0, static_cast<std::size_t>(N) * outH * outW * Cout * 2);
 }
 
+// ---- conv3d non-Apple reference (NDHWC source, DHWIO weights) (2026-05-30) --
+extern "C" int32_t tessera_apple_gpu_conv3d_out_dim(int32_t in, int32_t k,
+                                                    int32_t stride, int32_t pad,
+                                                    int32_t dilation) {
+  return conv2d_out_dim_stub(in, k, stride, pad, dilation);
+}
+static void reference_conv3d_f32_stub(
+    const float* X, const float* Wt, const float* bias, float* O, int32_t N,
+    int32_t iD, int32_t iH, int32_t iW, int32_t Cin, int32_t Cout, int32_t kD,
+    int32_t kH, int32_t kW, int32_t sD, int32_t sH, int32_t sW, int32_t pD,
+    int32_t pH, int32_t pW, int32_t dD, int32_t dH, int32_t dW, int32_t groups) {
+  int32_t oD = conv2d_out_dim_stub(iD, kD, sD, pD, dD);
+  int32_t oH = conv2d_out_dim_stub(iH, kH, sH, pH, dH);
+  int32_t oW = conv2d_out_dim_stub(iW, kW, sW, pW, dW);
+  if (oD <= 0 || oH <= 0 || oW <= 0 || groups <= 0 || Cin % groups ||
+      Cout % groups)
+    return;
+  int32_t cinG = Cin / groups, coutG = Cout / groups;
+  for (int32_t n = 0; n < N; ++n)
+    for (int32_t od = 0; od < oD; ++od)
+      for (int32_t oh = 0; oh < oH; ++oh)
+        for (int32_t ow = 0; ow < oW; ++ow)
+          for (int32_t oc = 0; oc < Cout; ++oc) {
+            int32_t grp = oc / coutG;
+            double acc = bias ? static_cast<double>(bias[oc]) : 0.0;
+            for (int32_t kd = 0; kd < kD; ++kd) {
+              int32_t id = od * sD + kd * dD - pD;
+              if (id < 0 || id >= iD) continue;
+              for (int32_t kh = 0; kh < kH; ++kh) {
+                int32_t ih = oh * sH + kh * dH - pH;
+                if (ih < 0 || ih >= iH) continue;
+                for (int32_t kw = 0; kw < kW; ++kw) {
+                  int32_t iw = ow * sW + kw * dW - pW;
+                  if (iw < 0 || iw >= iW) continue;
+                  for (int32_t ic = 0; ic < cinG; ++ic) {
+                    double xv = X[((((std::size_t)n * iD + id) * iH + ih) * iW + iw) * Cin + grp * cinG + ic];
+                    double wv = Wt[((((std::size_t)kd * kH + kh) * kW + kw) * cinG + ic) * Cout + oc];
+                    acc += xv * wv;
+                  }
+                }
+              }
+            }
+            O[((((std::size_t)n * oD + od) * oH + oh) * oW + ow) * Cout + oc] =
+                static_cast<float>(acc);
+          }
+}
+extern "C" void tessera_apple_gpu_conv3d_f32(
+    const float* X, const float* Wt, const float* bias, float* O, int32_t N,
+    int32_t iD, int32_t iH, int32_t iW, int32_t Cin, int32_t Cout, int32_t kD,
+    int32_t kH, int32_t kW, int32_t sD, int32_t sH, int32_t sW, int32_t pD,
+    int32_t pH, int32_t pW, int32_t dD, int32_t dH, int32_t dW, int32_t groups) {
+  reference_conv3d_f32_stub(X, Wt, bias, O, N, iD, iH, iW, Cin, Cout, kD, kH, kW,
+                            sD, sH, sW, pD, pH, pW, dD, dH, dW, groups);
+}
+extern "C" void tessera_apple_gpu_conv3d_f16(
+    const uint16_t*, const uint16_t*, const uint16_t*, uint16_t* O, int32_t N,
+    int32_t iD, int32_t iH, int32_t iW, int32_t, int32_t Cout, int32_t kD,
+    int32_t kH, int32_t kW, int32_t sD, int32_t sH, int32_t sW, int32_t pD,
+    int32_t pH, int32_t pW, int32_t dD, int32_t dH, int32_t dW, int32_t) {
+  int32_t oD = conv2d_out_dim_stub(iD, kD, sD, pD, dD);
+  int32_t oH = conv2d_out_dim_stub(iH, kH, sH, pH, dH);
+  int32_t oW = conv2d_out_dim_stub(iW, kW, sW, pW, dW);
+  if (oD > 0 && oH > 0 && oW > 0)
+    std::memset(O, 0, static_cast<std::size_t>(N) * oD * oH * oW * Cout * 2);
+}
+
 #endif // !__APPLE__

@@ -8980,3 +8980,201 @@ extern "C" void tessera_apple_gpu_conv2d_f16(
   if (outH > 0 && outW > 0)
     std::memset(O, 0, (size_t)N * outH * outW * Cout * 2);
 }
+
+//===----------------------------------------------------------------------===//
+// conv3d — im2col + MPSGraph batched matmul (NDHWC source, DHWIO weights)
+// (2026-05-30)
+//
+// MPSGraph has no 3-D convolution node, so conv3d is lowered to the classic
+// im2col + GEMM decomposition: the spatial patches are gathered on the host
+// into a column matrix laid out per-group as [groups, rows, K] (rows =
+// N*oD*oH*oW, K = kD*kH*kW*Cin/groups), the weights are regrouped to
+// [groups, K, Cout/groups], and the dominant GEMM runs on-GPU as a single
+// MPSGraph batched matmul (fp32 accumulation). Bias + scatter back to NDHWC
+// happen on the host. f16 I/O converts to fp32 at the boundary.
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+// GPU batched matmul A[g,M,K] @ B[g,K,Ncols] -> O[g,M,Ncols], fp32, cached.
+static bool mpsg_conv3d_batched_matmul_f32(MetalDeviceContext &ctx,
+                                           const float *A, const float *B,
+                                           float *O, int32_t G, int32_t M,
+                                           int32_t K, int32_t Ncols) {
+  if (G <= 0 || M <= 0 || K <= 0 || Ncols <= 0) return true;
+  @autoreleasepool {
+    size_t aBytes = (size_t)G * M * K * 4;
+    size_t bBytes = (size_t)G * K * Ncols * 4;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, bBytes);
+    if (!bufA || !bufB) return false;
+    NSArray<NSNumber *> *aShape = @[ @(G), @(M), @(K) ];
+    NSArray<NSNumber *> *bShape = @[ @(G), @(K), @(Ncols) ];
+    NSString *key = [NSString
+        stringWithFormat:@"conv3dmm:%d:%d:%d:%d", G, M, K, Ncols];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *pa, *pb, *y;
+    if (entry) {
+      g = entry[0];
+      pa = ((NSArray *)entry[1])[0];
+      pb = ((NSArray *)entry[1])[1];
+      y = entry[2];
+    } else {
+      g = [MPSGraph new];
+      pa = [g placeholderWithShape:aShape dataType:MPSDataTypeFloat32 name:nil];
+      pb = [g placeholderWithShape:bShape dataType:MPSDataTypeFloat32 name:nil];
+      y = [g matrixMultiplicationWithPrimaryTensor:pa secondaryTensor:pb name:nil];
+      mpsg_cache_put(key, @[ g, @[ pa, pb ], y ]);
+    }
+    MPSGraphTensorData *ad = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:aShape dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *bd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:MPSDataTypeFloat32];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{pa : ad, pb : bd}
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:O strideBytes:nil];
+    return true;
+  }
+}
+
+static inline int32_t conv3d_out_dim(int32_t in, int32_t k, int32_t stride,
+                                     int32_t pad, int32_t dilation) {
+  return conv2d_out_dim(in, k, stride, pad, dilation);
+}
+
+// fp32 core: host im2col + GPU GEMM + host bias/scatter. on_gpu=false runs a
+// pure-host GEMM (reference path). Returns false only on a hard GPU failure.
+static bool conv3d_core_f32(MetalDeviceContext *ctx, const float *X,
+                            const float *Wt, const float *bias, float *O,
+                            int32_t N, int32_t iD, int32_t iH, int32_t iW,
+                            int32_t Cin, int32_t Cout, int32_t kD, int32_t kH,
+                            int32_t kW, int32_t sD, int32_t sH, int32_t sW,
+                            int32_t pD, int32_t pH, int32_t pW, int32_t dD,
+                            int32_t dH, int32_t dW, int32_t groups) {
+  int32_t oD = conv3d_out_dim(iD, kD, sD, pD, dD);
+  int32_t oH = conv3d_out_dim(iH, kH, sH, pH, dH);
+  int32_t oW = conv3d_out_dim(iW, kW, sW, pW, dW);
+  if (oD <= 0 || oH <= 0 || oW <= 0 || groups <= 0 || Cin % groups ||
+      Cout % groups)
+    return true;
+  int32_t cinG = Cin / groups, coutG = Cout / groups;
+  int32_t K = kD * kH * kW * cinG;
+  int32_t rows = N * oD * oH * oW;
+  if (K <= 0 || rows <= 0) return true;
+
+  // im2col -> cols[g, r, kk]; weights -> wg[g, kk, oc']
+  std::vector<float> cols((size_t)groups * rows * K, 0.0f);
+  std::vector<float> wg((size_t)groups * K * coutG);
+  for (int32_t g = 0; g < groups; ++g)
+    for (int32_t kk = 0; kk < K; ++kk)
+      for (int32_t oc = 0; oc < coutG; ++oc)
+        wg[((size_t)g * K + kk) * coutG + oc] =
+            Wt[(size_t)kk * Cout + g * coutG + oc];
+
+  for (int32_t n = 0; n < N; ++n)
+    for (int32_t od = 0; od < oD; ++od)
+      for (int32_t oh = 0; oh < oH; ++oh)
+        for (int32_t ow = 0; ow < oW; ++ow) {
+          int32_t r = ((n * oD + od) * oH + oh) * oW + ow;
+          for (int32_t kd = 0; kd < kD; ++kd) {
+            int32_t id = od * sD + kd * dD - pD;
+            if (id < 0 || id >= iD) continue;
+            for (int32_t kh = 0; kh < kH; ++kh) {
+              int32_t ih = oh * sH + kh * dH - pH;
+              if (ih < 0 || ih >= iH) continue;
+              for (int32_t kw = 0; kw < kW; ++kw) {
+                int32_t iw = ow * sW + kw * dW - pW;
+                if (iw < 0 || iw >= iW) continue;
+                int32_t kbase = ((kd * kH + kh) * kW + kw) * cinG;
+                for (int32_t g = 0; g < groups; ++g) {
+                  const float *xp =
+                      X + ((((size_t)n * iD + id) * iH + ih) * iW + iw) * Cin +
+                      g * cinG;
+                  float *cp = cols.data() +
+                              ((size_t)g * rows + r) * K + kbase;
+                  for (int32_t ic = 0; ic < cinG; ++ic) cp[ic] = xp[ic];
+                }
+              }
+            }
+          }
+        }
+
+  std::vector<float> mm((size_t)groups * rows * coutG);
+  bool ran = false;
+  if (ctx && ctx->ok)
+    ran = mpsg_conv3d_batched_matmul_f32(*ctx, cols.data(), wg.data(),
+                                         mm.data(), groups, rows, K, coutG);
+  if (!ran) {
+    for (int32_t g = 0; g < groups; ++g)
+      for (int32_t r = 0; r < rows; ++r)
+        for (int32_t oc = 0; oc < coutG; ++oc) {
+          double acc = 0;
+          const float *cp = cols.data() + ((size_t)g * rows + r) * K;
+          const float *wp = wg.data() + (size_t)g * K * coutG;
+          for (int32_t kk = 0; kk < K; ++kk) acc += (double)cp[kk] * wp[kk * coutG + oc];
+          mm[((size_t)g * rows + r) * coutG + oc] = (float)acc;
+        }
+  }
+
+  // scatter mm[g,r,oc'] (+ bias) -> O[n,od,oh,ow, g*coutG+oc']
+  for (int32_t g = 0; g < groups; ++g)
+    for (int32_t r = 0; r < rows; ++r)
+      for (int32_t oc = 0; oc < coutG; ++oc) {
+        int32_t ocAbs = g * coutG + oc;
+        float v = mm[((size_t)g * rows + r) * coutG + oc];
+        if (bias) v += bias[ocAbs];
+        O[(size_t)r * Cout + ocAbs] = v;
+      }
+  return true;
+}
+
+}  // namespace
+
+extern "C" int32_t tessera_apple_gpu_conv3d_out_dim(int32_t in, int32_t k,
+                                                    int32_t stride, int32_t pad,
+                                                    int32_t dilation) {
+  return conv2d_out_dim(in, k, stride, pad, dilation);
+}
+
+extern "C" void tessera_apple_gpu_conv3d_f32(
+    const float *X, const float *Wt, const float *bias, float *O, int32_t N,
+    int32_t iD, int32_t iH, int32_t iW, int32_t Cin, int32_t Cout, int32_t kD,
+    int32_t kH, int32_t kW, int32_t sD, int32_t sH, int32_t sW, int32_t pD,
+    int32_t pH, int32_t pW, int32_t dD, int32_t dH, int32_t dW, int32_t groups) {
+  MetalDeviceContext &ctx = deviceContext();
+  conv3d_core_f32(ctx.ok ? &ctx : nullptr, X, Wt, bias, O, N, iD, iH, iW, Cin,
+                  Cout, kD, kH, kW, sD, sH, sW, pD, pH, pW, dD, dH, dW, groups);
+}
+
+extern "C" void tessera_apple_gpu_conv3d_f16(
+    const uint16_t *X, const uint16_t *Wt, const uint16_t *bias, uint16_t *O,
+    int32_t N, int32_t iD, int32_t iH, int32_t iW, int32_t Cin, int32_t Cout,
+    int32_t kD, int32_t kH, int32_t kW, int32_t sD, int32_t sH, int32_t sW,
+    int32_t pD, int32_t pH, int32_t pW, int32_t dD, int32_t dH, int32_t dW,
+    int32_t groups) {
+  int32_t oD = conv2d_out_dim(iD, kD, sD, pD, dD);
+  int32_t oH = conv2d_out_dim(iH, kH, sH, pH, dH);
+  int32_t oW = conv2d_out_dim(iW, kW, sW, pW, dW);
+  if (oD <= 0 || oH <= 0 || oW <= 0 || groups <= 0 || Cin % groups ||
+      Cout % groups)
+    return;
+  size_t xn = (size_t)N * iD * iH * iW * Cin;
+  size_t wn = (size_t)kD * kH * kW * (Cin / groups) * Cout;
+  size_t on = (size_t)N * oD * oH * oW * Cout;
+  std::vector<float> xf(xn), wf(wn), of(on);
+  std::vector<float> bf;
+  for (size_t i = 0; i < xn; ++i) xf[i] = half_to_float_gpu(X[i]);
+  for (size_t i = 0; i < wn; ++i) wf[i] = half_to_float_gpu(Wt[i]);
+  if (bias) {
+    bf.resize(Cout);
+    for (int32_t i = 0; i < Cout; ++i) bf[i] = half_to_float_gpu(bias[i]);
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  conv3d_core_f32(ctx.ok ? &ctx : nullptr, xf.data(), wf.data(),
+                  bias ? bf.data() : nullptr, of.data(), N, iD, iH, iW, Cin,
+                  Cout, kD, kH, kW, sD, sH, sW, pD, pH, pW, dD, dH, dW, groups);
+  for (size_t i = 0; i < on; ++i) O[i] = float_to_half_gpu(of[i]);
+}

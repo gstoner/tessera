@@ -2285,6 +2285,11 @@ def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
             a = np.ascontiguousarray(a, dtype=np.float32)
         if not b.flags.c_contiguous:
             b = np.ascontiguousarray(b, dtype=np.float32)
+        # M4: capability-gated routing onto the Metal 4 lane (opt-in); falls
+        # through to the default MPS path when disabled / out of envelope.
+        routed = _mtl4_route_matmul_f32(a, b, np)
+        if routed is not None:
+            return routed
         out = np.zeros((a.shape[0], b.shape[1]), dtype=np.float32)
         gemm = _apple_gpu_mps_matmul_f32()
         gemm(
@@ -4114,6 +4119,54 @@ def apple_gpu_mtl4_matmul_sg(A: Any, B: Any, np: Any):
     if rc != 1:
         C = (A.astype(np.float64) @ B.astype(np.float64)).astype(np.float32)
     return C, rc == 1
+
+
+# ── M4 — capability-gated routing of real ops onto the Metal 4 lane ───────────
+# OFF by default: the MTL4 cooperative-matrix kernel is *correct* but its naive
+# 8x8 tiling is ~2–3x slower than the tuned MPS matmul, so routing only pays off
+# once a faster MTL4 kernel (better tiling / MSL 4.0 `tensor` cooperative ops)
+# lands. The mechanism is here so flipping it on is a one-liner then.
+_MTL4_ROUTING_ENABLED = os.environ.get("TESSERA_APPLE_GPU_MTL4_ROUTE", "0") in ("1", "true", "True")
+_MTL4_CAPS_CACHE: dict | None = None
+
+
+def _mtl4_caps_cached() -> dict:
+    """Probe Metal 4 capabilities once (the probe creates GPU objects, so it is
+    not cheap to call per-op) and cache the result."""
+    global _MTL4_CAPS_CACHE
+    if _MTL4_CAPS_CACHE is None:
+        _MTL4_CAPS_CACHE = apple_gpu_metal4_caps()
+    return _MTL4_CAPS_CACHE
+
+
+def set_apple_gpu_mtl4_routing(enabled: bool) -> None:
+    """Enable/disable routing eligible ops (today: rank-2 f32 matmul with
+    8-multiple M/N/K) onto the Metal 4 lane. Also settable at import via
+    ``TESSERA_APPLE_GPU_MTL4_ROUTE=1``. See docs/apple_gpu_metal4_adoption.md."""
+    global _MTL4_ROUTING_ENABLED
+    _MTL4_ROUTING_ENABLED = bool(enabled)
+
+
+def apple_gpu_mtl4_routing_enabled() -> bool:
+    return _MTL4_ROUTING_ENABLED
+
+
+def _mtl4_route_matmul_f32(a: Any, b: Any, np: Any) -> Any:
+    """Capability + envelope gate: return the MTL4-routed matmul result, or
+    ``None`` to fall back to the (default) MPS path."""
+    if not _MTL4_ROUTING_ENABLED:
+        return None
+    if a.ndim != 2 or b.ndim != 2 or a.dtype != np.float32 or b.dtype != np.float32:
+        return None
+    M, K = a.shape
+    K2, N = b.shape
+    if K2 != K or M % 8 or N % 8 or K % 8:
+        return None
+    caps = _mtl4_caps_cached()
+    if not (caps.get("command_queue") and caps.get("compiler")):
+        return None
+    C, ran = apple_gpu_mtl4_matmul_sg(a, b, np)
+    return C if ran else None
 
 
 def apple_gpu_msl_spec_accept(draft_paths: Any, target_greedy: Any, np: Any):

@@ -47,7 +47,7 @@ CI guards (run as part of ``scripts/validate.sh``):
 | ``examples/conformance`` | ``runnable`` | ``examples/conformance/apple_path_ga_ebm_demos.py`` | ``python examples/conformance/apple_path_ga_ebm_demos.py`` |
 | ``examples/advanced/kv_cache_serving`` | ``runnable`` | ``examples/advanced/kv_cache_serving/demo.py`` | ``PYTHONPATH=python:examples/advanced/kv_cache_serving python examples/advanced/kv_cache_serving/demo.py`` |
 | ``examples/advanced/long_context_attention`` | ``runnable`` | ``examples/advanced/long_context_attention/demo.py`` | ``PYTHONPATH=python:examples/advanced/long_context_attention python examples/advanced/long_context_attention/demo.py`` |
-| ``examples/advanced/speculative_decoding`` | ``runnable`` | ``examples/advanced/speculative_decoding/demo.py`` | ``PYTHONPATH=python:examples/advanced/speculative_decoding python examples/advanced/speculative_decoding/demo.py`` |
+| ``examples/advanced/gumiho`` | ``runnable`` | ``examples/advanced/gumiho/demo.py`` | ``PYTHONPATH=python:examples/advanced/gumiho python examples/advanced/gumiho/demo.py`` |
 | ``examples/advanced/rlvr_reasoning_suite`` | ``runnable`` | ``examples/advanced/rlvr_reasoning_suite/run_demo.py`` | ``PYTHONPATH=python:examples/advanced/rlvr_reasoning_suite python examples/advanced/rlvr_reasoning_suite/run_demo.py --steps 1 --group-size 2 --log examples/advanced/rlvr_reasoning_suite/runs/rewards.jsonl`` |
 | ``examples/advanced/mla`` | ``runnable`` | ``examples/advanced/mla/tests/smoke_random.py`` | ``python examples/advanced/mla/tests/smoke_random.py`` |
 | ``examples/advanced/Fast_dLLM_v2`` | ``runnable`` | ``examples/advanced/Fast_dLLM_v2/tests/smoke_random.py`` | ``python examples/advanced/Fast_dLLM_v2/tests/smoke_random.py`` |

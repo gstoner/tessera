@@ -63,7 +63,7 @@ ahead of compiler capability:
 
 - **3 are scaffolds** referencing phantom APIs (`Diffusion_LLM`, `Jet_nemotron`, `power_retention`)
 - **3 are compiler-smoke tests** building Graph IR directly to bypass the missing Pythonic layer (`Fast_dLLM_v2`, `MLA`, `Nemotron_Nano_12B_v2`)
-- **4 are pure-Python planning utilities** with zero Tessera op usage (`speculative_decoding`, `kv_cache_serving`, `long_context_attention`, `rlvr_reasoning_suite`)
+- **3 are pure-Python planning utilities** with zero Tessera op usage (`long_context_attention`, `rlvr_reasoning_suite`, and the archived `speculative_decoding` toy; `kv_cache_serving` and `gumiho` now execute on the Apple backend)
 - **1 is an integration framework skeleton** (`Tessera_Empirical_Software_Agent`)
 
 Conclusion: examples encode an ambitious vision of where the compiler is going.
@@ -85,7 +85,7 @@ This document tracks the capability gaps that block them from running today.
 | mla | 259 | ✅ smoke | ✅ | N/A | Theme 5 ops + `LatentKVCacheHandle` ship today; FlashMLA absorb-K kernel = Phase G |
 | power_retention | 2 | ❌ | ❌ stub | N/A | Out of scope — folder is a CUDA kernel sketch only |
 | rlvr_reasoning_suite | 195 | ✅ | ✅ no ops | N/A | — |
-| speculative_decoding | 67 | ✅ | ✅ | N/A | Closed — `tessera.speculative.{expand_tree, batch_verify, advance_kv, SpeculativeStep}` ship today |
+| gumiho | ~600 | ✅ | ✅ Apple GPU/CPU | numpy-validated | Gumiho (ICML'25) hybrid speculative decoding; draft+FTA-verify run on the Apple backend. The `speculative_decoding` string toy was archived (`examples/archive/`); `tessera.speculative.*` scheduler stays. |
 
 "Smoke" = builds Graph IR via internal compiler hooks rather than `@tessera.jit`,
 intended as a compile-path test rather than an end-to-end demo.

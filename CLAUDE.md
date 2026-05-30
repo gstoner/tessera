@@ -739,7 +739,7 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | **Standalone primitive coverage historical narrative** (per-sprint shipped surface + contract-axis hardening context; numeric counts are superseded by generated docs) | `docs/audit/primitive_coverage_state.md` |
 | **Standalone primitive coverage registry** (the source of truth that renders the dashboard) | `python/tessera/compiler/primitive_coverage.py` |
 | **NVIDIA execution audit** (Phase G1 — per-component status + 8-task punch list to first H100 BF16 GEMM) | `docs/audit/nvidia_execution_audit.md` |
-| Examples (most are README/stub scaffolds) | `examples/` — `getting_started/basic_tensor_ops.py` (canonical `@tessera.jit`), `compiler/`, `advanced/` (10+ subdirs: speculative_decoding, long_context_attention, kv_cache_serving, MoE, MLA, Nemotron, Jet_Nemotron, Fast_dLLM, RLVR), `optimization/`, `integration/`. |
+| Examples (most are README/stub scaffolds) | `examples/` — `getting_started/basic_tensor_ops.py` (canonical `@tessera.jit`), `compiler/`, `advanced/` (10+ subdirs: gumiho, long_context_attention, kv_cache_serving, MoE, MLA, Nemotron, Jet_Nemotron, Fast_dLLM, RLVR), `optimization/`, `integration/`. |
 | Style guide | `tessera_style_guide.md` |
 | Claude Code skill map | `skills.md` |
 | Project structure | `PROJECT_STRUCTURE.md` |

@@ -224,7 +224,7 @@ layout. They should be gitignored.
 | `kv_cache_serving/` | KV cache + paging on Apple/x86 |
 | `long_context_attention/` | Long-context attention variants |
 | `mla/` | Multi-head Latent Attention (DeepSeek-style) |
-| `speculative_decoding/` | Speculative decoding harness |
+| `gumiho/` | Gumiho (ICML'25) hybrid speculative decoding on the Apple backend |
 | `Diffusion_LLM/` | Diffusion-LLM hybrid surface |
 | `Fast_dLLM_v2/` | Fast diffusion-LM port v2 |
 | `Jet_nemotron/` | Jet-Nemotron port |

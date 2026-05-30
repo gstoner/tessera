@@ -2596,6 +2596,59 @@ def _apple_gpu_dispatch_reduce(op_name: str, operands: list[Any], kwargs: dict,
     return res
 
 
+def _apple_gpu_flash_attn_gqa_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_flash_attn_gqa_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.POINTER(ctypes.c_float)] * 4 + [ctypes.c_int32] * 6 + [
+        ctypes.c_float, ctypes.c_int32]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_dispatch_gqa(Q: Any, K: Any, V: Any, num_q_heads: int,
+                            num_kv_heads: int, np: Any, scale: float | None = None,
+                            causal: bool = False) -> Any:
+    """Native GQA/MQA flash attention with KV-group indexing (no repeated KV).
+    Q is [..., q_heads, Sq, D]; K/V are [..., kv_heads, Sk, D] (kv_heads <
+    q_heads). The leading dims fold to the batch; query head h reads KV group
+    h // (q_heads/kv_heads). f32 native; f16/bf16 upcast to f32. Returns the
+    attention output shaped like Q, or None (caller falls back) when the shape /
+    dtype is unsupported."""
+    import math as _math
+    Q = np.asarray(Q)
+    K = np.asarray(K)
+    V = np.asarray(V)
+    if Q.ndim < 3 or K.ndim < 3 or V.ndim < 3:
+        return None
+    if num_q_heads % max(num_kv_heads, 1) != 0:
+        return None
+    Sq, D = int(Q.shape[-2]), int(Q.shape[-1])
+    Sk = int(K.shape[-2])
+    if D > 256 or K.shape[-1] != D or V.shape[-1] != D:
+        return None
+    out_dtype = Q.dtype
+    Bq = int(np.prod(Q.shape[:-2]))   # total query heads
+    Gkv = int(np.prod(K.shape[:-2]))  # total kv heads
+    if Bq != (Bq // num_q_heads) * num_q_heads or Gkv != (Bq // num_q_heads) * num_kv_heads:
+        return None
+    sym = _apple_gpu_flash_attn_gqa_f32()
+    if sym is None:
+        return None
+    qf = np.ascontiguousarray(Q.astype(np.float32)).reshape(Bq, Sq, D)
+    kf = np.ascontiguousarray(K.astype(np.float32)).reshape(Gkv, Sk, D)
+    vf = np.ascontiguousarray(V.astype(np.float32)).reshape(Gkv, Sk, D)
+    out = np.zeros((Bq, Sq, D), dtype=np.float32)
+    sc = float(scale) if scale is not None else 1.0 / _math.sqrt(D)
+    fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    sym(fp(qf), fp(kf), fp(vf), fp(out),
+        ctypes.c_int32(Bq), ctypes.c_int32(num_q_heads),
+        ctypes.c_int32(num_kv_heads), ctypes.c_int32(Sq), ctypes.c_int32(Sk),
+        ctypes.c_int32(D), ctypes.c_float(sc), ctypes.c_int32(1 if causal else 0))
+    return out.reshape(Q.shape).astype(out_dtype)
+
+
 def _apple_gpu_mps_matmul_f32() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = runtime.tessera_apple_gpu_mps_matmul_f32

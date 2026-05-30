@@ -1122,4 +1122,37 @@ extern "C" void tessera_apple_gpu_mpsgraph_scan_f32(int32_t op, const float* x,
   }
 }
 
+// ---- flash_attn GQA non-Apple reference (2026-05-29) -----------------------
+extern "C" void tessera_apple_gpu_flash_attn_gqa_f32(
+    const float* Q, const float* K, const float* V, float* O, int32_t B,
+    int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal) {
+  int32_t group = (kv_heads > 0) ? q_heads / kv_heads : 1;
+  for (int32_t b = 0; b < B; ++b) {
+    int32_t kv_batch = (b / q_heads) * kv_heads + (b % q_heads) / (group > 0 ? group : 1);
+    const float* Kb = K + static_cast<std::size_t>(kv_batch) * Sk * D;
+    const float* Vb = V + static_cast<std::size_t>(kv_batch) * Sk * D;
+    for (int32_t q = 0; q < Sq; ++q) {
+      const float* qp = Q + (static_cast<std::size_t>(b) * Sq + q) * D;
+      float* op = O + (static_cast<std::size_t>(b) * Sq + q) * D;
+      double m = -1e30, l = 0.0;
+      std::vector<double> o(D, 0.0);
+      for (int32_t k = 0; k < Sk; ++k) {
+        if (causal != 0 && k > q) break;
+        const float* kp = Kb + static_cast<std::size_t>(k) * D;
+        double s = 0.0;
+        for (int32_t d = 0; d < D; ++d) s += static_cast<double>(qp[d]) * kp[d];
+        s *= scale;
+        double nm = std::max(m, s);
+        double eo = std::exp(m - nm), es = std::exp(s - nm);
+        l = l * eo + es;
+        for (int32_t d = 0; d < D; ++d) o[d] = o[d] * eo + Vb[static_cast<std::size_t>(k) * D + d] * es;
+        m = nm;
+      }
+      if (l == 0.0) for (int32_t d = 0; d < D; ++d) op[d] = 0.0f;
+      else for (int32_t d = 0; d < D; ++d) op[d] = static_cast<float>(o[d] / l);
+    }
+  }
+}
+
 #endif // !__APPLE__

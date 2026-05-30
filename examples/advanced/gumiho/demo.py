@@ -17,12 +17,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Gumiho hybrid speculative decoding")
     parser.add_argument("--mode", default="decode",
                         choices=["step", "decode", "resident", "precision",
-                                 "prefix"],
+                                 "prefix", "forloop"],
                         help="step: one validated speculative step; "
                              "decode: distill + multi-step decode with speedup; "
                              "resident: GPU-resident serial draft (one command "
                              "buffer per token); precision: f16/bf16 draft vs "
-                             "f32; prefix: paged-KV prefix-sharing decode")
+                             "f32; prefix: paged-KV prefix-sharing decode; "
+                             "forloop: serial draft as one MPSGraph control-flow "
+                             "(Phase-G Rung 1)")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--target", default="apple_gpu",
                         choices=["apple_gpu", "apple_cpu", "numpy"],
@@ -68,6 +70,18 @@ def main() -> None:
                                     max_new_tokens=args.max_new_tokens, seed=args.seed)
         print("== Gumiho paged-KV prefix-sharing decode ==")
         print(s)
+        return
+
+    if args.mode == "forloop":
+        from gumiho import validate_serial_forloop
+        weights = make_weights(cfg, seed=args.seed)
+        r = validate_serial_forloop(cfg, weights, seed=args.seed)
+        print("== Gumiho serial draft as one MPSGraph control-flow (Phase-G Rung 1) ==")
+        print(f"backend={r.backend} tokens={r.tokens} matches_host={r.matches_host} "
+              f"(max_hidden_err={r.max_hidden_err:.2e})")
+        print(f"dispatches={r.dispatches} (one forLoop graph) vs "
+              f"~{r.host_dispatch_equiv} per-op host dispatches — the whole "
+              f"autoregressive serial loop is lowered into a single kernel")
         return
 
     if args.mode == "resident":

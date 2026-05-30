@@ -1305,6 +1305,91 @@ extern "C" int32_t tessera_apple_gpu_cf_scan_f32(const float* Wh, const float* W
   return 1;
 }
 
+// Phase-G Rung 1 — serial draft, non-Apple reference. Mirrors the MPSGraph
+// forLoop body (value-only T=1 attention + SwiGLU), autoregressive over T steps.
+namespace {
+inline void cf_rms(const float* x, const float* g, float* o, int d, float eps) {
+  double ms = 0.0;
+  for (int j = 0; j < d; ++j) ms += (double)x[j] * x[j];
+  ms /= d;
+  double den = std::sqrt(ms + eps);
+  for (int j = 0; j < d; ++j) o[j] = (float)(x[j] / den * g[j]);
+}
+}  // namespace
+extern "C" int32_t tessera_apple_gpu_cf_serial_draft_f32(
+    const float* embed, const float* fc_in, const float* ln1_all,
+    const float* ln2_all, const float* wv_all, const float* wo_all,
+    const float* wg_all, const float* wu_all, const float* wd_all,
+    const float* snorm, const float* lm_head, const float* h_init,
+    int32_t root_token, int32_t* tokens_out, float* hidden_out, int32_t T,
+    int32_t L, int32_t d, int32_t ffn, int32_t V, float eps) {
+  if (T <= 0 || L <= 0 || d <= 0 || ffn <= 0 || V <= 0) return 0;
+  std::vector<float> hid(h_init, h_init + d), x(2 * d), s(d), n(d), v(d), attn(d);
+  std::vector<float> gate(ffn), up(ffn), act(ffn), down(d), sn(d), logits(V);
+  int tok = root_token;
+  for (int step = 0; step < T; ++step) {
+    for (int j = 0; j < d; ++j) x[j] = hid[j];
+    for (int j = 0; j < d; ++j) x[d + j] = embed[(size_t)tok * d + j];
+    for (int j = 0; j < d; ++j) {
+      double a = 0.0;
+      for (int k = 0; k < 2 * d; ++k) a += (double)x[k] * fc_in[k * d + j];
+      s[j] = (float)a;
+    }
+    for (int li = 0; li < L; ++li) {
+      const float* ln1 = ln1_all + (size_t)li * d;
+      const float* ln2 = ln2_all + (size_t)li * d;
+      const float* wv = wv_all + (size_t)li * d * d;
+      const float* wo = wo_all + (size_t)li * d * d;
+      const float* wg = wg_all + (size_t)li * d * ffn;
+      const float* wu = wu_all + (size_t)li * d * ffn;
+      const float* wd = wd_all + (size_t)li * ffn * d;
+      cf_rms(s.data(), ln1, n.data(), d, eps);
+      for (int j = 0; j < d; ++j) {
+        double a = 0.0;
+        for (int k = 0; k < d; ++k) a += (double)n[k] * wv[k * d + j];
+        v[j] = (float)a;
+      }
+      for (int j = 0; j < d; ++j) {
+        double a = 0.0;
+        for (int k = 0; k < d; ++k) a += (double)v[k] * wo[k * d + j];
+        s[j] += (float)a;
+      }
+      cf_rms(s.data(), ln2, n.data(), d, eps);
+      for (int j = 0; j < ffn; ++j) {
+        double a = 0.0;
+        for (int k = 0; k < d; ++k) a += (double)n[k] * wg[k * ffn + j];
+        gate[j] = (float)a;
+      }
+      for (int j = 0; j < ffn; ++j) {
+        double a = 0.0;
+        for (int k = 0; k < d; ++k) a += (double)n[k] * wu[k * ffn + j];
+        up[j] = (float)a;
+      }
+      for (int j = 0; j < ffn; ++j) act[j] = gate[j] / (1.f + std::exp(-gate[j])) * up[j];
+      for (int j = 0; j < d; ++j) {
+        double a = 0.0;
+        for (int k = 0; k < ffn; ++k) a += (double)act[k] * wd[k * d + j];
+        s[j] += (float)a;
+      }
+    }
+    cf_rms(s.data(), snorm, sn.data(), d, eps);
+    for (int j = 0; j < V; ++j) {
+      double a = 0.0;
+      for (int k = 0; k < d; ++k) a += (double)sn[k] * lm_head[k * V + j];
+      logits[j] = (float)a;
+    }
+    int am = 0;
+    float best = logits[0];
+    for (int j = 1; j < V; ++j)
+      if (logits[j] > best) { best = logits[j]; am = j; }
+    tokens_out[step] = am;
+    for (int j = 0; j < d; ++j) hidden_out[(size_t)step * d + j] = s[j];
+    for (int j = 0; j < d; ++j) hid[j] = s[j];
+    tok = am;
+  }
+  return 1;
+}
+
 extern "C" void tessera_apple_gpu_mpsgraph_binary_f16(int32_t, const uint16_t* a,
                                                       const uint16_t*, uint16_t* out,
                                                       int64_t n) {

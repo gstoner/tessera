@@ -132,6 +132,22 @@ def test_prefix_shared_single_verify_equals_build_draft(gumiho_mod):
     assert res.kv_rows_per_verify < res.kv_rows_full_recompute
 
 
+def test_serial_draft_forloop_matches_host(gumiho_mod):
+    """Phase-G Rung 1: the serial draft lowered into one MPSGraph control-flow
+    executable reproduces the host SerialHead token-for-token, in one dispatch."""
+    from gumiho.model import make_weights
+
+    cfg = gumiho_mod.tiny_config()
+    weights = make_weights(cfg, seed=0)
+    r = gumiho_mod.validate_serial_forloop(cfg, weights, seed=0)
+    assert r.matches_host
+    assert r.backend in ("metal", "numpy")
+    if r.backend == "metal":
+        assert r.dispatches == 1                 # the whole loop is one graph
+        assert r.host_dispatch_equiv > 1
+        assert r.max_hidden_err < 1e-3
+
+
 def test_resident_serial_draft_matches_host(gumiho_mod):
     from gumiho.model import make_weights
 

@@ -3895,6 +3895,48 @@ def apple_gpu_cf_scan(Wh: Any, Wx: Any, xseq: Any, init: Any, np: Any) -> Any:
     return ys
 
 
+def _apple_gpu_cf_serial_draft_f32() -> Any:
+    """Phase-G Rung 1 serial-draft forLoop symbol. None when unavailable."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_cf_serial_draft_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    ip = ctypes.POINTER(ctypes.c_int32)
+    sym.argtypes = ([fp] * 12 + [ctypes.c_int32, ip, fp]
+                    + [ctypes.c_int32] * 5 + [ctypes.c_float])
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def apple_gpu_cf_serial_draft(embed, fc_in, ln1_all, ln2_all, wv_all, wo_all,
+                              wg_all, wu_all, wd_all, snorm, lm_head, h_init,
+                              root_token, T, L, d, ffn, V, eps, np) -> Any:
+    """The Gumiho serial draft (``T`` autoregressive steps) as a single MPSGraph
+    control-flow executable. Per-layer weights are packed ``[L, ...]``. Returns
+    ``(tokens[T] int64, hiddens[T, d] f32)`` or ``None`` when the symbol is
+    unavailable (caller falls back to the host serial head)."""
+    sym = _apple_gpu_cf_serial_draft_f32()
+    if sym is None:
+        return None
+    arrs = [np.ascontiguousarray(a, np.float32) for a in
+            (embed, fc_in, ln1_all, ln2_all, wv_all, wo_all, wg_all, wu_all,
+             wd_all, snorm, lm_head, h_init)]
+    tokens = np.empty(int(T), np.int32)
+    hiddens = np.empty((int(T), int(d)), np.float32)
+    fp = ctypes.POINTER(ctypes.c_float)
+    ip = ctypes.POINTER(ctypes.c_int32)
+    rc = sym(*[a.ctypes.data_as(fp) for a in arrs],
+             ctypes.c_int32(int(root_token)),
+             tokens.ctypes.data_as(ip), hiddens.ctypes.data_as(fp),
+             ctypes.c_int32(int(T)), ctypes.c_int32(int(L)), ctypes.c_int32(int(d)),
+             ctypes.c_int32(int(ffn)), ctypes.c_int32(int(V)),
+             ctypes.c_float(float(eps)))
+    if rc != 1:
+        return None
+    return tokens.astype(np.int64), hiddens
+
+
 def _apple_gpu_layer_norm_f32() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_layer_norm_f32", None)
@@ -5484,6 +5526,8 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_binary_dev_f32_enc")
                 # Phase-G Rung 0 — control-flow scan via MPSGraph forLoop.
                 getattr(lib, "tessera_apple_gpu_cf_scan_f32")
+                # Phase-G Rung 1 — serial draft as a forLoop.
+                getattr(lib, "tessera_apple_gpu_cf_serial_draft_f32")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

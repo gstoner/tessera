@@ -9258,3 +9258,115 @@ extern "C" void tessera_apple_gpu_conv3d_f16(
                   Cout, kD, kH, kW, sD, sH, sW, pD, pH, pW, dD, dH, dW, groups);
   for (size_t i = 0; i < on; ++i) O[i] = float_to_half_gpu(of[i]);
 }
+
+//===----------------------------------------------------------------------===//
+// MLA decode with decoupled RoPE (explicit per-head K) (2026-05-30)
+//
+// DeepSeek-style MLA splits each head's query/key into a no-position-encoding
+// part (dim dn) and a RoPE-carrying part (dim dr). The RoPE key part is SHARED
+// across heads (one vector per position). Once RoPE is applied to the rope
+// parts and `[nope ; rope]` is concatenated per head (broadcasting the shared
+// key-rope across heads), the score reduces to standard MHA with head_dim
+// dh = dn + dr:  O = softmax((Qfull @ Kfullᵀ)·scale) @ V.  So we assemble Qfull
+// / Kfullᵀ / V on the host (cheap, elementwise RoPE + concat) and run the heavy
+// fused attention on-GPU via the existing bsmm (matmul→softmax→matmul) kernel.
+//
+// rotation_style: 0 = interleaved (NeoX even/odd pairs), 1 = half (GPT-J split
+// halves). cos/sin tables are [S, dr/2]. This matches the switchable RoPE
+// convention requested for the kernel.
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+// Apply RoPE to one rope-part vector x[dr] -> out[dr], cos/sin are [dr/2].
+static inline void mla_rope_apply(const float *x, const float *cosr,
+                                  const float *sinr, float *out, int32_t dr,
+                                  int32_t style) {
+  int32_t half = dr / 2;
+  if (style == 0) {  // interleaved: pairs (2p, 2p+1)
+    for (int32_t p = 0; p < half; ++p) {
+      float a = x[2 * p], b = x[2 * p + 1], c = cosr[p], s = sinr[p];
+      out[2 * p] = a * c - b * s;
+      out[2 * p + 1] = a * s + b * c;
+    }
+  } else {  // half: pairs (p, p+half)
+    for (int32_t p = 0; p < half; ++p) {
+      float a = x[p], b = x[p + half], c = cosr[p], s = sinr[p];
+      out[p] = a * c - b * s;
+      out[p + half] = b * c + a * s;
+    }
+  }
+}
+
+// Assemble A = Qfull[batch, Sq, dh], Bt = Kfullᵀ[batch, dh, Skv], C = V[batch,
+// Skv, dv] from the decoupled-RoPE inputs (batch = B*H, dh = dn + dr).
+static void mla_rope_assemble_f32(const float *Qn, const float *Qr,
+                                  const float *Kn, const float *Kr,
+                                  const float *V, const float *cosQ,
+                                  const float *sinQ, const float *cosK,
+                                  const float *sinK, int32_t B, int32_t H,
+                                  int32_t Sq, int32_t Skv, int32_t dn,
+                                  int32_t dr, int32_t dv, int32_t style,
+                                  std::vector<float> &A, std::vector<float> &Bt,
+                                  std::vector<float> &C) {
+  int32_t dh = dn + dr;
+  int32_t halfdr = dr / 2;
+  A.assign((size_t)B * H * Sq * dh, 0.0f);
+  Bt.assign((size_t)B * H * dh * Skv, 0.0f);
+  C.assign((size_t)B * H * Skv * dv, 0.0f);
+  std::vector<float> tmp(dr);
+  for (int32_t b = 0; b < B; ++b) {
+    for (int32_t h = 0; h < H; ++h) {
+      int32_t bh = b * H + h;
+      // Qfull rows
+      for (int32_t i = 0; i < Sq; ++i) {
+        const float *qn = Qn + (((size_t)bh * Sq + i) * dn);
+        const float *qr = Qr + (((size_t)bh * Sq + i) * dr);
+        float *arow = A.data() + (((size_t)bh * Sq + i) * dh);
+        for (int32_t d = 0; d < dn; ++d) arow[d] = qn[d];
+        mla_rope_apply(qr, cosQ + (size_t)i * halfdr, sinQ + (size_t)i * halfdr,
+                       tmp.data(), dr, style);
+        for (int32_t d = 0; d < dr; ++d) arow[dn + d] = tmp[d];
+      }
+      // Kfullᵀ columns: Bt[bh, d, j] = Kfull[bh, j, d]. Kr is shared across h.
+      for (int32_t j = 0; j < Skv; ++j) {
+        const float *kn = Kn + (((size_t)bh * Skv + j) * dn);
+        const float *kr = Kr + (((size_t)b * Skv + j) * dr);  // shared (no h)
+        float *btbase = Bt.data() + ((size_t)bh * dh * Skv);
+        for (int32_t d = 0; d < dn; ++d) btbase[(size_t)d * Skv + j] = kn[d];
+        mla_rope_apply(kr, cosK + (size_t)j * halfdr, sinK + (size_t)j * halfdr,
+                       tmp.data(), dr, style);
+        for (int32_t d = 0; d < dr; ++d)
+          btbase[(size_t)(dn + d) * Skv + j] = tmp[d];
+      }
+      // V passthrough
+      const float *vsrc = V + ((size_t)bh * Skv * dv);
+      float *cdst = C.data() + ((size_t)bh * Skv * dv);
+      std::memcpy(cdst, vsrc, (size_t)Skv * dv * sizeof(float));
+    }
+  }
+}
+
+}  // namespace
+
+extern "C" void tessera_apple_gpu_mla_decode_rope_f32(
+    const float *Qn, const float *Qr, const float *Kn, const float *Kr,
+    const float *V, const float *cosQ, const float *sinQ, const float *cosK,
+    const float *sinK, float *O, int32_t B, int32_t H, int32_t Sq, int32_t Skv,
+    int32_t dn, int32_t dr, int32_t dv, int32_t rotation_style) {
+  if (B <= 0 || H <= 0 || Sq <= 0 || Skv <= 0 || dn < 0 || dr < 0 || dv <= 0 ||
+      (dr % 2) != 0 || (dn + dr) <= 0)
+    return;
+  int32_t dh = dn + dr;
+  int32_t batch = B * H;
+  float scale = 1.0f / std::sqrt((float)dh);
+  std::vector<float> A, Bt, C;
+  mla_rope_assemble_f32(Qn, Qr, Kn, Kr, V, cosQ, sinQ, cosK, sinK, B, H, Sq,
+                        Skv, dn, dr, dv, rotation_style, A, Bt, C);
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_bsmm(ctx, A.data(), Bt.data(), C.data(), O, batch, Sq,
+                              Skv, dv, dh, scale, MPSDataTypeFloat32, 4))
+    return;
+  reference_bsmm_f32(A.data(), Bt.data(), C.data(), O, batch, Sq, Skv, dv, dh,
+                     scale);
+}

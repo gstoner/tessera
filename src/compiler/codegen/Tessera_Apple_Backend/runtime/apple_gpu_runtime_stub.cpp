@@ -908,6 +908,79 @@ extern "C" void tessera_apple_gpu_mla_decode_f32(const float* X,
                                 S_q, D_h);
 }
 
+// ---- MLA decode with decoupled RoPE — non-Apple reference (2026-05-30) ------
+static inline void mla_rope_apply_stub(const float* x, const float* cosr,
+                                       const float* sinr, float* out, int32_t dr,
+                                       int32_t style) {
+  int32_t half = dr / 2;
+  if (style == 0) {
+    for (int32_t p = 0; p < half; ++p) {
+      float a = x[2 * p], b = x[2 * p + 1], c = cosr[p], s = sinr[p];
+      out[2 * p] = a * c - b * s;
+      out[2 * p + 1] = a * s + b * c;
+    }
+  } else {
+    for (int32_t p = 0; p < half; ++p) {
+      float a = x[p], b = x[p + half], c = cosr[p], s = sinr[p];
+      out[p] = a * c - b * s;
+      out[p + half] = b * c + a * s;
+    }
+  }
+}
+extern "C" void tessera_apple_gpu_mla_decode_rope_f32(
+    const float* Qn, const float* Qr, const float* Kn, const float* Kr,
+    const float* V, const float* cosQ, const float* sinQ, const float* cosK,
+    const float* sinK, float* O, int32_t B, int32_t H, int32_t Sq, int32_t Skv,
+    int32_t dn, int32_t dr, int32_t dv, int32_t rotation_style) {
+  if (B <= 0 || H <= 0 || Sq <= 0 || Skv <= 0 || dn < 0 || dr < 0 || dv <= 0 ||
+      (dr % 2) != 0 || (dn + dr) <= 0)
+    return;
+  int32_t dh = dn + dr, halfdr = dr / 2;
+  float scale = 1.0f / std::sqrt(static_cast<float>(dh));
+  std::vector<float> qf(dh), kf(dh), tmp(dr), scores(Skv);
+  for (int32_t b = 0; b < B; ++b)
+    for (int32_t h = 0; h < H; ++h) {
+      int32_t bh = b * H + h;
+      for (int32_t i = 0; i < Sq; ++i) {
+        const float* qn = Qn + (((std::size_t)bh * Sq + i) * dn);
+        const float* qr = Qr + (((std::size_t)bh * Sq + i) * dr);
+        for (int32_t d = 0; d < dn; ++d) qf[d] = qn[d];
+        mla_rope_apply_stub(qr, cosQ + (std::size_t)i * halfdr,
+                            sinQ + (std::size_t)i * halfdr, tmp.data(), dr,
+                            rotation_style);
+        for (int32_t d = 0; d < dr; ++d) qf[dn + d] = tmp[d];
+        double mx = -1e30;
+        for (int32_t j = 0; j < Skv; ++j) {
+          const float* kn = Kn + (((std::size_t)bh * Skv + j) * dn);
+          const float* kr = Kr + (((std::size_t)b * Skv + j) * dr);
+          for (int32_t d = 0; d < dn; ++d) kf[d] = kn[d];
+          mla_rope_apply_stub(kr, cosK + (std::size_t)j * halfdr,
+                              sinK + (std::size_t)j * halfdr, tmp.data(), dr,
+                              rotation_style);
+          for (int32_t d = 0; d < dr; ++d) kf[dn + d] = tmp[d];
+          double acc = 0;
+          for (int32_t d = 0; d < dh; ++d) acc += (double)qf[d] * kf[d];
+          scores[j] = (float)(acc * scale);
+          mx = std::max(mx, (double)scores[j]);
+        }
+        double den = 0;
+        for (int32_t j = 0; j < Skv; ++j) {
+          double e = std::exp((double)scores[j] - mx);
+          scores[j] = (float)e;
+          den += e;
+        }
+        float* o = O + (((std::size_t)bh * Sq + i) * dv);
+        for (int32_t d = 0; d < dv; ++d) {
+          double acc = 0;
+          for (int32_t j = 0; j < Skv; ++j)
+            acc += (double)scores[j] / den *
+                   V[((std::size_t)bh * Skv + j) * dv + d];
+          o[d] = (float)acc;
+        }
+      }
+    }
+}
+
 // attention_variants_plan, NSA-5 — non-Apple stub.
 // Zero-fills the output (the Apple-side reference has the full impl).
 extern "C" void tessera_apple_gpu_native_sparse_attn_f32(

@@ -19,7 +19,7 @@ three buckets so the next promotion sprints could be sized honestly:
   partition-spec rule is decidable at host level; no mesh runtime needed.
 * **Bucket B — mock-mesh (needs `MockRankGroup` round-trip):** the rule is
   documented but its correctness depends on a multi-rank collective trace
-  that today's `tests/testing/mock_collective.py` thread-mocks can exercise.
+  that today's `python/tessera/testing/mock_collective.py` thread-mocks can exercise.
 * **Bucket C — real-hardware (Phase G/H/I gate):** validation requires NCCL,
   RCCL, real distributed FFT all-to-all, or hardware-distributed execution.
   Promotion is honestly blocked until the corresponding Phase ships.
@@ -165,7 +165,7 @@ to cover the differential 4 (`clifford_codiff`, `clifford_vec_deriv`,
 
 These 47 entries have documented rules but the cross-shard collective
 behavior should be exercised under the `MockRankGroup` thread-based
-fake-rank harness (see `tests/testing/mock_collective.py`) before
+fake-rank harness (see `python/tessera/testing/mock_collective.py`) before
 flipping the axis. Mock-mesh proof is cheap and CPU-only.
 
 ### attention — standard family (14)

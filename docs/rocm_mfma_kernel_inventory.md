@@ -244,7 +244,7 @@ No MFMA — LDS-based cooperative reductions.
 ## 6. AMDGCN intrinsic patterns (Sprint H-4 lit fixtures validate these)
 
 Each lit fixture under
-`tests/tessera-ir/phase8/rocm_7_2/kernel_name.mlir` asserts on the
+`tests/tessera-ir/phase8/rocm_7_2/` asserts on the
 following AMDGCN intrinsic text patterns:
 
 ### CDNA 2 / CDNA 3 / CDNA 4 MFMA (gfx90a / gfx94x / gfx950)

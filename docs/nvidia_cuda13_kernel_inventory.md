@@ -219,7 +219,7 @@ or single-tile elementwise. Recorded shape is `None`.
 ## 5. PTX assembly patterns (Sprint G-4 lit fixtures validate these)
 
 Each lit fixture under
-`tests/tessera-ir/phase3/cuda13/kernel_name.mlir` asserts on the
+`tests/tessera-ir/phase3/cuda13/` asserts on the
 following PTX text patterns:
 
 ### WGMMA (SM_90+)

@@ -254,7 +254,7 @@ path in `runtime.py` for NVIDIA targets.
 
 ### 5.3 NVL72-Specific Gaps for First-Class Support
 
-The NVL72 appendix (see `docs/programming_guide/Appendix_NVL72.md`) describes a
+The NVL72 appendix (see `docs/programming_guide/Tessera_Programming_Guide_Appendix_NVL72.md`) describes a
 72-GPU system with 9 NVSwitch domains × 8 GPUs/domain, 1.8 TB/s bisection bandwidth.
 To make NVL72 a first-class target:
 
@@ -604,4 +604,4 @@ once the ISA is confirmed.
 - `scripts/generate_mfma_table.py` — MFMA table codegen
 - `src/compiler/tessera_neighbors/` — Halo/stencil dialect (Phase 7)
 - `python/tessera/sharding.py` — NamedMesh, shard_map reference
-- `docs/programming_guide/Appendix_NVL72.md` — 72-GPU topology design
+- `docs/programming_guide/Tessera_Programming_Guide_Appendix_NVL72.md` — 72-GPU topology design

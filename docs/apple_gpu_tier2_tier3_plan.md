@@ -31,8 +31,9 @@
 |---|---|---|---|
 | **1 ✅** | **`bmm` (batched / rank-3 matmul)** — keystone | **DONE** (`tessera_apple_gpu_bmm_{f32,f16}` + bf16 host-upcast, with a `b_broadcast` flag; reuses the cached-graph infra + buffer pool; rank-4+ folds to batch). `tests/unit/test_apple_gpu_bmm.py`. | Med · low risk |
 | 2 ✅ | **`qkv_projection`, `linear_general`** | **DONE** — `runtime.py` dispatchers route `tessera.linear_general` (last-axis `x@W(+bias)`) and `tessera.qkv_projection` (`x@W` then split-3) through the matmul/`bmm` lane; `_APPLE_GPU_PROJECTION_OPS` gating → `metal_runtime`. `tests/unit/test_apple_gpu_projections.py`. | Low |
-| 3 ✅ | **`multi_head_attention`** | **DONE (via bmm composition)** — a full MHA block composes from the Tier-2 ops: `qkv_projection → bmm(Q,Kᵀ)·scale → softmax → bmm(_,V) → linear_general`, batch = B·H (no per-head loop), and head_dim is unbounded (no flash_attn ≤256 limit). `tests/unit/test_apple_gpu_batched_mha.py`. A single fused batched `matmul_softmax_matmul` kernel remains a perf follow-up. | Med |
-| 4 | **`gqa_attention`, `mqa_attention`** | flash_attn is already batched over `B`; **GQA/MQA Phase-1 (repeat-KV → flash_attn) is already implemented in `nn.functional`**. Remaining: native KV-group indexing in the MSL kernel (bandwidth win, Ph2). | Med (Ph1 done) |
+| 3 ✅ | **`multi_head_attention`** | **DONE** — composes via bmm (`tests/unit/test_apple_gpu_batched_mha.py`) **and** the fused single-dispatch `bsmm` kernel below (`tests/unit/test_apple_gpu_fused_attention.py`). Both batch = B·H, head_dim unbounded. | Med |
+| 3b ✅ | **fused batched `matmul_softmax_matmul`** | **DONE** — `tessera_apple_gpu_mpsgraph_bsmm_{f32,f16}`: `softmax((Q@Kᵀ)·scale)@V` per batch in one MPSGraph dispatch (vs the 3-call compose). | Med |
+| 4 ✅ | **`gqa_attention`, `mqa_attention`** | **DONE** — Ph1 (repeat-KV → flash_attn) already in `nn.functional`; **Ph2 native KV-group indexing landed** (`flash_attn_gqa_f32` reads KV group `h//(H/G)` with no repeated KV — the bandwidth win). `tests/unit/test_apple_gpu_gqa.py`. f16/bf16 fused variant is a follow-up. | Med (done) |
 | 5 | **`mla_decode` / `mla_decode_fused`** | Promote the host-reference `mla_decode_f32` symbol to a real kernel built on `bmm` (latent up-proj / absorb-K) + the existing `rope` kernel (decoupled rope) + batched attention. Phase: explicit-KV → compressed-KV → decoupled-rope. | Med–High (last) |
 
 ## Tier 3 — re-scoped around MPSGraph (the lever)
@@ -41,7 +42,7 @@ MPSGraph nodes cover most of what the original framing assumed needed bespoke MS
 
 | Item | Mapping | Effort | Recommendation |
 |---|---|---|---|
-| **Reductions** (`sum`/`mean`/`var`/`std`/`amax`/`amin`/`prod`/`argmax`/`argmin`/`cumsum`/`cumprod`) | Extend the MPSGraph lane with an op-coded reduce runner — the lane already uses `meanOfTensor:axes:`, `reductionSumWithTensor:axes:`, `reductionMaximumWithTensor:`. `cumsum`→`cumulativeSumWithTensor:axis:`, `argmax`→`reductionArgMaximumWithTensor:axis:`. No N limit; reuses the cached-graph infra. | Low–Med | **Do it** (high reuse) |
+| **Reductions** (`sum`/`mean`/`var`/`std`/`amax`/`amin`/`prod`/`argmax`/`argmin`/`cumsum`/`cumprod`) | **DONE** — `tessera_apple_gpu_mpsgraph_{reduce,argreduce,scan}_f32`; `runtime.py` normalizes arbitrary axis/keepdims/ddof by folding reduced axes to the last dim. `tests/unit/test_apple_gpu_reductions.py` (51). | Low–Med | **Done** |
 | **`dropout`, `rng_normal`, `rng_uniform`** | (a) MPSGraph random nodes — quick but **won't bit-match the CPU Philox stream** (breaks Decision #18); (b) hand-written Philox MSL for bit-exactness. | Med / Low | **Defer** (training-side); MSL if pursued |
 | **`conv2d` / `conv3d`** | MPSGraph `convolution2DWithSourceTensor:weightsTensor:descriptor:` (full stride/pad/dilation); conv3d → im2col + `bmm` fallback. | Med / High | **Defer** unless vision models enter scope |
 

@@ -109,6 +109,27 @@ learnable structure to generalize across contexts; a production Gumiho trains a
 real draft on a real corpus. Swap in a trained target + corpus and the same code
 path measures real-workload acceptance.
 
+## GPU-resident serial draft (one command buffer per token)
+
+`--mode resident` runs the serial head's autoregressive draft **GPU-resident**:
+the serial weights are uploaded once and stay on-device, and a whole serial step
+(`fc_in → [RMSNorm → value-attn → residual → RMSNorm → SwiGLU → residual] ×2 →
+RMSNorm → LM head`) is encoded into **one** Metal command buffer via
+`runtime.AppleGPUEncodeSession`. Only the sampled token id and the carry hidden
+read back each step — the ~20+ dense ops no longer round-trip host↔GPU per op.
+
+```
+backend=metal tokens=[31, 5] matches_host=True (max_logit_err=4.24e-07)
+command_buffers=2 vs ~46 per-op host dispatches (23x fewer GPU syncs)
+```
+
+It reuses the R2 encode ops — `bmm` / `rmsnorm` / `add` / `silu_mul` — and is
+validated token-for-token against the host `SerialHead` (the T=1 self-attention
+reduces to a value projection, so it uses the value slice of `Wqkv` and is
+numerically identical). The tree-verification phase stays host-orchestrated
+because FTA's top-k selection and prefix trie are data-dependent control flow;
+this targets the serial draft, which is a pure resident dense chain.
+
 ## Notes
 
 - **Weights are tiny seeded synthetics** — the example validates the

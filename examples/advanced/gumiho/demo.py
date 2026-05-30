@@ -2,14 +2,23 @@ from __future__ import annotations
 
 import argparse
 
-from gumiho import GumihoConfig, run_gumiho_demo, run_training_demo
+from gumiho import (
+    GumihoConfig,
+    run_gumiho_demo,
+    run_training_demo,
+)
+from gumiho.model import make_weights
+from gumiho.resident import validate_resident_draft
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Gumiho hybrid speculative decoding")
-    parser.add_argument("--mode", default="decode", choices=["step", "decode"],
+    parser.add_argument("--mode", default="decode",
+                        choices=["step", "decode", "resident"],
                         help="step: one validated speculative step; "
-                             "decode: distill + multi-step decode with speedup")
+                             "decode: distill + multi-step decode with speedup; "
+                             "resident: GPU-resident serial draft (one command "
+                             "buffer per token)")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--target", default="apple_gpu",
                         choices=["apple_gpu", "apple_cpu", "numpy"],
@@ -34,6 +43,19 @@ def main() -> None:
         print(f"schedule = serial_head({cfg.serial_tokens}) + "
               f"parallel_heads({cfg.parallel_heads}) -> FTA top-{cfg.fta_top_paths} "
               f"-> tree_verify -> accept -> advance_kv")
+        return
+
+    if args.mode == "resident":
+        weights = make_weights(cfg, seed=args.seed)
+        r = validate_resident_draft(cfg, weights, seed=args.seed)
+        print("== Gumiho GPU-resident serial draft (one command buffer/token) ==")
+        print(f"backend={r.backend} tokens={r.tokens} matches_host={r.matches_host} "
+              f"(max_logit_err={r.max_logit_abs_err:.2e})")
+        reduction = r.host_dispatch_equiv / max(r.command_buffers, 1)
+        print(f"command_buffers={r.command_buffers} vs "
+              f"~{r.host_dispatch_equiv} per-op host dispatches "
+              f"({reduction:.0f}x fewer GPU syncs); weights resident, only the "
+              f"token id + carry hidden read back")
         return
 
     before, after = run_training_demo(

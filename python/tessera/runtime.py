@@ -5020,6 +5020,91 @@ def _apple_gpu_bmm_device(A: "DeviceTensor", B: "DeviceTensor",
     return out
 
 
+_ENC_API_CONFIGURED = False
+
+
+def _apple_gpu_enc_api() -> Any:
+    """Configure + return the R2 encode-session ABI. None when unavailable."""
+    runtime = _load_apple_gpu_runtime()
+    if getattr(runtime, "ts_enc_begin", None) is None:
+        return None
+    global _ENC_API_CONFIGURED
+    if not _ENC_API_CONFIGURED:
+        vp, i32 = ctypes.c_void_p, ctypes.c_int32
+        runtime.ts_enc_begin.argtypes = []; runtime.ts_enc_begin.restype = vp
+        runtime.ts_enc_commit_wait.argtypes = [vp]; runtime.ts_enc_commit_wait.restype = None
+        runtime.tessera_apple_gpu_bmm_dev_f32_enc.argtypes = [vp, vp, vp, vp, i32, i32, i32, i32, i32]
+        runtime.tessera_apple_gpu_bmm_dev_f32_enc.restype = i32
+        _ENC_API_CONFIGURED = True
+    return runtime
+
+
+class AppleGPUEncodeSession:
+    """R2 — command-buffer batching. Encode a chain of device-resident ops into
+    **one** command buffer and commit + wait **once**, removing the per-op
+    CPU↔GPU sync that dominates small-batch decode.
+
+    Encoded outputs are **deferred**: a returned ``DeviceTensor`` is only valid
+    after ``commit()`` (or the ``with`` block exits). Use as a context manager::
+
+        with AppleGPUEncodeSession() as s:
+            c = s.bmm(a, b)        # encoded, not yet computed
+            d = s.bmm(c, e)        # consumes c's buffer; one command buffer
+        result = d.numpy()         # valid after the block commits + waits
+    """
+
+    def __init__(self) -> None:
+        self._rt = _apple_gpu_enc_api()
+        self._handle = None if self._rt is None else self._rt.ts_enc_begin()
+        self._committed = False
+        self._outputs: list = []
+
+    @property
+    def available(self) -> bool:
+        return self._handle is not None
+
+    def bmm(self, A: "DeviceTensor", B: "DeviceTensor",
+            b_broadcast: bool = False) -> "DeviceTensor | None":
+        import numpy as _np
+        if self._handle is None or self._committed:
+            return None
+        if A.dtype != _np.float32 or B.dtype != _np.float32:
+            return None
+        if len(A.shape) != 3 or len(B.shape) != 3:
+            return None
+        batch, M, K = A.shape
+        bBatch, K2, N = B.shape
+        if K2 != K or (bBatch != batch and bBatch != 1):
+            return None
+        bcast = (bBatch == 1 and batch != 1) or bool(b_broadcast)
+        out = DeviceTensor.empty((batch, M, N), _np.float32)
+        if out is None:
+            return None
+        rc = self._rt.tessera_apple_gpu_bmm_dev_f32_enc(
+            self._handle, A.handle, B.handle, out.handle, ctypes.c_int32(batch),
+            ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
+            ctypes.c_int32(1 if bcast else 0))
+        if rc != 1:
+            out.free()
+            return None
+        self._outputs.append(out)
+        return out
+
+    def commit(self) -> None:
+        """Commit the encoded command buffer and wait for completion. After
+        this, every encoded output's storage holds its result."""
+        if self._handle is not None and not self._committed:
+            self._rt.ts_enc_commit_wait(self._handle)
+            self._committed = True
+            self._handle = None
+
+    def __enter__(self) -> "AppleGPUEncodeSession":
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self.commit()
+
+
 def _load_apple_gpu_runtime() -> ctypes.CDLL:
     """Phase 8.3: locate or compile the apple_gpu runtime shared library.
 

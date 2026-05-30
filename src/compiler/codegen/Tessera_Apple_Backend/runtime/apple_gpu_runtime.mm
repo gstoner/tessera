@@ -8318,6 +8318,44 @@ static bool mpsg_run_bmm(MetalDeviceContext &ctx, const void *a, const void *b,
 // MPSGraph result is written straight into the output buffer via
 // resultsDictionary, leaving it resident for the next op. Shares the bmm graph
 // cache key, so it reuses the same compiled graph as the host-ptr path.
+// Get-or-build the cached bmm graph + its placeholders/output tensor. Shared by
+// the synchronous-run, device-resident-run, and R2 encode paths.
+static MPSGraph *mpsg_bmm_graph(int32_t batch, int32_t M, int32_t N, int32_t K,
+                                bool b_broadcast, MPSDataType ioType,
+                                MPSGraphTensor **pa_out,
+                                MPSGraphTensor **pb_out,
+                                MPSGraphTensor **y_out) {
+  int32_t bBatch = b_broadcast ? 1 : batch;
+  NSArray<NSNumber *> *aShape = @[ @(batch), @(M), @(K) ];
+  NSArray<NSNumber *> *bShape = @[ @(bBatch), @(K), @(N) ];
+  NSString *key = [NSString stringWithFormat:@"bmm:%d:%d:%d:%d:%d:%d",
+                                             (int)ioType, batch, M, N, K,
+                                             (int)b_broadcast];
+  NSArray *entry = mpsg_cache_get(key);
+  MPSGraph *g;
+  MPSGraphTensor *pa, *pb, *y;
+  if (entry) {
+    g = entry[0];
+    pa = ((NSArray *)entry[1])[0];
+    pb = ((NSArray *)entry[1])[1];
+    y = entry[2];
+  } else {
+    g = [MPSGraph new];
+    pa = [g placeholderWithShape:aShape dataType:ioType name:nil];
+    pb = [g placeholderWithShape:bShape dataType:ioType name:nil];
+    MPSGraphTensor *yf =
+        [g matrixMultiplicationWithPrimaryTensor:mpsg_up(g, pa, ioType)
+                                 secondaryTensor:mpsg_up(g, pb, ioType)
+                                            name:nil];
+    y = mpsg_down(g, yf, ioType);
+    mpsg_cache_put(key, @[ g, @[ pa, pb ], y ]);
+  }
+  *pa_out = pa;
+  *pb_out = pb;
+  *y_out = y;
+  return g;
+}
+
 static bool mpsg_run_bmm_dev(MetalDeviceContext &ctx, id<MTLBuffer> bufA,
                              id<MTLBuffer> bufB, id<MTLBuffer> bufO,
                              int32_t batch, int32_t M, int32_t N, int32_t K,
@@ -8329,28 +8367,8 @@ static bool mpsg_run_bmm_dev(MetalDeviceContext &ctx, id<MTLBuffer> bufA,
     NSArray<NSNumber *> *aShape = @[ @(batch), @(M), @(K) ];
     NSArray<NSNumber *> *bShape = @[ @(bBatch), @(K), @(N) ];
     NSArray<NSNumber *> *oShape = @[ @(batch), @(M), @(N) ];
-    NSString *key = [NSString stringWithFormat:@"bmm:%d:%d:%d:%d:%d:%d",
-                                               (int)ioType, batch, M, N, K,
-                                               (int)b_broadcast];
-    NSArray *entry = mpsg_cache_get(key);
-    MPSGraph *g;
     MPSGraphTensor *pa, *pb, *y;
-    if (entry) {
-      g = entry[0];
-      pa = ((NSArray *)entry[1])[0];
-      pb = ((NSArray *)entry[1])[1];
-      y = entry[2];
-    } else {
-      g = [MPSGraph new];
-      pa = [g placeholderWithShape:aShape dataType:ioType name:nil];
-      pb = [g placeholderWithShape:bShape dataType:ioType name:nil];
-      MPSGraphTensor *yf =
-          [g matrixMultiplicationWithPrimaryTensor:mpsg_up(g, pa, ioType)
-                                   secondaryTensor:mpsg_up(g, pb, ioType)
-                                              name:nil];
-      y = mpsg_down(g, yf, ioType);
-      mpsg_cache_put(key, @[ g, @[ pa, pb ], y ]);
-    }
+    MPSGraph *g = mpsg_bmm_graph(batch, M, N, K, b_broadcast, ioType, &pa, &pb, &y);
     MPSGraphTensorData *ad = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:aShape dataType:ioType];
     MPSGraphTensorData *bd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:ioType];
     MPSGraphTensorData *od = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufO shape:oShape dataType:ioType];
@@ -8362,7 +8380,84 @@ static bool mpsg_run_bmm_dev(MetalDeviceContext &ctx, id<MTLBuffer> bufA,
   }
 }
 
+// R2 — encode a bmm into a shared command buffer (no commit/sync here). Metal's
+// automatic hazard tracking orders a later op that reads an earlier op's output
+// buffer, so a whole op-chain can be encoded into one command buffer and
+// committed once. Tensor-data wrappers are retained until commit by the encoded
+// command buffer (which retains the underlying MTLBuffers), so no autoreleasepool.
+static bool mpsg_encode_bmm_dev(MPSCommandBuffer *cb, id<MTLBuffer> bufA,
+                                id<MTLBuffer> bufB, id<MTLBuffer> bufO,
+                                int32_t batch, int32_t M, int32_t N, int32_t K,
+                                bool b_broadcast, MPSDataType ioType) {
+  if (batch <= 0 || M <= 0 || N <= 0 || K <= 0) return true;
+  if (!cb || !bufA || !bufB || !bufO) return false;
+  int32_t bBatch = b_broadcast ? 1 : batch;
+  NSArray<NSNumber *> *aShape = @[ @(batch), @(M), @(K) ];
+  NSArray<NSNumber *> *bShape = @[ @(bBatch), @(K), @(N) ];
+  NSArray<NSNumber *> *oShape = @[ @(batch), @(M), @(N) ];
+  MPSGraphTensor *pa, *pb, *y;
+  MPSGraph *g = mpsg_bmm_graph(batch, M, N, K, b_broadcast, ioType, &pa, &pb, &y);
+  MPSGraphTensorData *ad = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:aShape dataType:ioType];
+  MPSGraphTensorData *bd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:ioType];
+  MPSGraphTensorData *od = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufO shape:oShape dataType:ioType];
+  [g encodeToCommandBuffer:cb
+                     feeds:@{pa : ad, pb : bd}
+             targetOperations:nil
+         resultsDictionary:@{y : od}
+       executionDescriptor:nil];
+  return true;
+}
+
 }  // namespace
+
+//===----------------------------------------------------------------------===//
+// R2 — command-buffer batching: encode N device-resident ops into ONE command
+// buffer and commit + wait once, removing the per-op CPU↔GPU sync that
+// dominates small-batch decode. A TsEncodeSession owns one MPSCommandBuffer
+// wrapping a fresh MTLCommandBuffer; ops encode into it; ts_enc_commit_wait
+// commits + waits + frees.
+//===----------------------------------------------------------------------===//
+
+struct TsEncodeSession {
+  MPSCommandBuffer *cb;
+  id<MTLCommandBuffer> mtlcb;
+};
+
+extern "C" TsEncodeSession *ts_enc_begin(void) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return nullptr;
+  @autoreleasepool {
+    id<MTLCommandBuffer> mtlcb = [ctx.queue commandBuffer];
+    if (!mtlcb) return nullptr;
+    MPSCommandBuffer *cb = [MPSCommandBuffer commandBufferWithCommandBuffer:mtlcb];
+    return new TsEncodeSession{cb, mtlcb};
+  }
+}
+
+extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
+  if (!s) return;
+  [s->cb commit];
+  [s->mtlcb waitUntilCompleted];
+  s->cb = nil;
+  s->mtlcb = nil;
+  delete s;
+}
+
+// Encoded device-resident bmm — appends to the session's command buffer.
+extern "C" int32_t tessera_apple_gpu_bmm_dev_f32_enc(TsEncodeSession *s,
+                                                     TsDeviceTensor *A,
+                                                     TsDeviceTensor *B,
+                                                     TsDeviceTensor *O,
+                                                     int32_t batch, int32_t M,
+                                                     int32_t N, int32_t K,
+                                                     int32_t b_broadcast) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !A || !B || !O) return 0;
+  return mpsg_encode_bmm_dev(s->cb, A->buf, B->buf, O->buf, batch, M, N, K,
+                             b_broadcast != 0, MPSDataTypeFloat32)
+             ? 1
+             : 0;
+}
 
 // R1 device-resident bmm entry point. A/B/O are TsDeviceTensor handles whose
 // shared buffers are used in place. Returns 1 on a real GPU run, 0 otherwise

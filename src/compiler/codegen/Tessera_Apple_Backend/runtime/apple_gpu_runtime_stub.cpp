@@ -1419,6 +1419,22 @@ extern "C" int32_t tessera_apple_gpu_bmm_dev_f32(TsDeviceTensor* A,
   return 1;
 }
 
+// R2 — encode session, non-Apple reference. No command buffer; encoded ops run
+// immediately into O->data and commit is a no-op, so results stay correct.
+struct TsEncodeSession { int dummy; };
+extern "C" TsEncodeSession* ts_enc_begin(void) { return new TsEncodeSession{0}; }
+extern "C" void ts_enc_commit_wait(TsEncodeSession* s) { delete s; }
+extern "C" int32_t tessera_apple_gpu_bmm_dev_f32_enc(TsEncodeSession* s,
+                                                     TsDeviceTensor* A,
+                                                     TsDeviceTensor* B,
+                                                     TsDeviceTensor* O,
+                                                     int32_t batch, int32_t M,
+                                                     int32_t N, int32_t K,
+                                                     int32_t b_broadcast) {
+  if (!s) return 0;
+  return tessera_apple_gpu_bmm_dev_f32(A, B, O, batch, M, N, K, b_broadcast);
+}
+
 // ---- Tier-3 reduction lane non-Apple reference (2026-05-29) ----------------
 extern "C" void tessera_apple_gpu_mpsgraph_reduce_f32(int32_t op, const float* x,
                                                       float* out, int32_t rows,

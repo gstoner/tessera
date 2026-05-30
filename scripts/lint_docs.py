@@ -47,6 +47,15 @@ TEXT_SUFFIXES = {
 
 DEFAULT_PATHS = ("docs", "src", "README.md", "PROJECT_STRUCTURE.md", "examples/README.md")
 
+# Planning / audit / status docs describe *future* or hypothetical state and
+# deliberately reference paths that do not exist yet (planned backends, roadmap
+# files, out-of-scope features, illustrative placeholders).  Inline-path
+# existence linting is wrong for them by design, so it is skipped for these
+# subtrees.  Forbidden-term, "Production Ready", and broken-markdown-link checks
+# still apply everywhere — only the "does this code path exist today" check is
+# relaxed for roadmap content.
+PLANNING_DOC_SUBTREES = ("audit", "architecture", "status")
+
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]+\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 INLINE_CODE = re.compile(r"`([^`\n]+)`")
 FENCED_BLOCK = re.compile(r"```.*?```", re.DOTALL)
@@ -65,6 +74,16 @@ PATH_TRAILING = ".,;:)]}"
 
 def is_archive_path(path: Path) -> bool:
     return "archive" in path.parts
+
+
+def is_planning_doc(rel: Path) -> bool:
+    """True for roadmap/audit/status docs that intentionally reference paths
+    which do not exist yet — these are exempt from inline-path existence linting."""
+    return (
+        len(rel.parts) >= 2
+        and rel.parts[0] == "docs"
+        and rel.parts[1] in PLANNING_DOC_SUBTREES
+    )
 
 
 def is_text_file(path: Path) -> bool:
@@ -201,7 +220,8 @@ def lint_file(root: Path, path: Path) -> list[str]:
 
     if rel.parts and (rel.parts[0] == "docs" or rel.as_posix() in {"README.md", "examples/README.md"}):
         findings.extend(lint_markdown_links(root, path, text))
-        findings.extend(lint_inline_paths(root, path, text))
+        if not is_planning_doc(rel):
+            findings.extend(lint_inline_paths(root, path, text))
     return findings
 
 

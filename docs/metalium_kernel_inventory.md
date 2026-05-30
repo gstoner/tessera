@@ -135,7 +135,7 @@ walker.
 Today the Tessera Metalium backend sits firmly at `artifact_only`.
 Lit-testable lowering of matmul + DMA + softmax + LayerNorm + RMSNorm
 is achievable hardware-free (and tested in
-`tests/unit/test_metalium_backend_inventory.py`).
+`tests/unit/test_kernel_inventory_and_lit_fixtures.py`).
 
 ---
 

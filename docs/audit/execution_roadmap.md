@@ -1109,7 +1109,7 @@ computations as Graph IR rather than tape-walked numpy.
 - `tools/tessera-opt` — register the pass + a `tessera-autodiff` pipeline
 
 **Acceptance:**
-- A `@jit` function with `@autodiff.reverse` lowers to Graph IR with adjoint ops.
+- A `@jit` function with `@tessera.autodiff.reverse` lowers to Graph IR with adjoint ops.
 - `tessera-opt --tessera-autodiff` on a forward IR produces a forward+backward IR.
 - Numerical equivalence with Tier 2 v1 numpy reference.
 

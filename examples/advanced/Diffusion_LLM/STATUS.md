@@ -1,8 +1,32 @@
-# Status: `scaffold`
+# Status: `scaffold` (+ runnable GPU demo)
 
 Tracked by `python/tessera/compiler/examples_manifest.py`.
 
-This directory is a **research sketch**, not a runnable example today.
+The original `tessera_diffusion_llm/` package + `tessera_diffusion_llm.py` remain
+a **research sketch** (torch-dependent, references non-existent APIs — see below).
+
+**New:** `gpu_denoise.py` is a standalone, **torch-free, runnable** MDLM
+(masked-diffusion LM) denoising demo on the canonical Tessera surface. It drives
+the Apple GPU work that landed in the runtime — the bidirectional backbone
+(RMSNorm + attention via device `bmm` → softmax → `bmm` + MLP through the device
+`rowop`/`bmm` kernels) and **per-step token sampling via the GPU Gumbel-max
+sampler** (`runtime._apple_gpu_gumbel_sample`) — through a full iterative
+unmasking loop, cross-checked against numpy and deterministic by seed:
+
+```bash
+PYTHONPATH=python python examples/advanced/Diffusion_LLM/gpu_denoise.py
+# OK diffusion mdlm: metal steps 6 all_unmasked True backbone==np True sampler==np True deterministic True
+```
+
+Diffusion LMs are the workload where on-device sampling matters most — every
+denoising step samples, so the Gumbel sampler is on the critical path. Covered by
+`tests/unit/test_example_diffusion_mdlm.py`.
+
+---
+
+## The original sketch (still torch-dependent)
+
+This part is **not** runnable today.
 
 ## Why
 

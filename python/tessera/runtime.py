@@ -5026,6 +5026,50 @@ def _apple_gpu_bmm_dev_f32() -> Any:
     return sym
 
 
+_ROWOP_DEV_CONFIGURED = False
+
+
+def _apple_gpu_rowop_dev_sym() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_rowop_dev_f32", None)
+    if sym is None:
+        return None
+    global _ROWOP_DEV_CONFIGURED
+    if not _ROWOP_DEV_CONFIGURED:
+        vp, i32, f32 = ctypes.c_void_p, ctypes.c_int32, ctypes.c_float
+        sym.argtypes = [vp, vp, vp, i32, i32, i32, f32]
+        sym.restype = i32
+        _ROWOP_DEV_CONFIGURED = True
+    return sym
+
+
+def _apple_gpu_rowop_device(X: "DeviceTensor", kind: int,
+                            gamma: "DeviceTensor | None" = None,
+                            eps: float = 1e-6) -> "DeviceTensor | None":
+    """Standalone (non-session) device-resident row op: kind 0 layer_norm,
+    1 rmsnorm, 2 softmax, 3 log_softmax. ``X`` ``[rows, cols]`` -> resident
+    ``[rows, cols]``; optional ``gamma`` ``[cols]``."""
+    import numpy as _np
+    if X.dtype != _np.float32 or len(X.shape) != 2:
+        return None
+    rows, cols = X.shape
+    if gamma is not None and gamma.shape != (cols,):
+        return None
+    sym = _apple_gpu_rowop_dev_sym()
+    if sym is None:
+        return None
+    out = DeviceTensor.empty((rows, cols), _np.float32)
+    if out is None:
+        return None
+    rc = sym(X.handle, gamma.handle if gamma is not None else None, out.handle,
+             ctypes.c_int32(int(kind)), ctypes.c_int32(rows),
+             ctypes.c_int32(cols), ctypes.c_float(float(eps)))
+    if rc != 1:
+        out.free()
+        return None
+    return out
+
+
 _GATHER_DEV_CONFIGURED = False
 
 

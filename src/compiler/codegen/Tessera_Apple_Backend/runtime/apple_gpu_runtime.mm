@@ -201,6 +201,65 @@ MetalDeviceContext &deviceContext() {
   return ctx;
 }
 
+//===----------------------------------------------------------------------===//
+// R0 — persistent device-tensor handle (GPU-resident activations).
+//
+// A TsDeviceTensor owns one shared (`MTLResourceStorageModeShared`) MTLBuffer.
+// Because Apple Silicon is unified-memory, `[buf contents]` is a CPU pointer to
+// the *same* bytes the GPU sees, so once a value lives in a TsDeviceTensor the
+// host can read/write it with zero further copies — and a producer op's output
+// can feed a consumer op without any host round-trip (wired in R1). The handle
+// is an opaque `void*` across the ABI; Python wraps it in `runtime.DeviceTensor`
+// with a numpy view over the shared storage and lazy host materialization.
+//===----------------------------------------------------------------------===//
+
+struct TsDeviceTensor {
+  id<MTLBuffer> buf;
+  int64_t nbytes;
+};
+
+extern "C" TsDeviceTensor *ts_dev_alloc(int64_t nbytes) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || nbytes <= 0) return nullptr;
+  @autoreleasepool {
+    id<MTLBuffer> b = [ctx.device newBufferWithLength:(NSUInteger)nbytes
+                                              options:MTLResourceStorageModeShared];
+    if (!b) return nullptr;
+    return new TsDeviceTensor{b, nbytes};
+  }
+}
+
+// CPU pointer to the shared storage — a numpy view over this is zero-copy and
+// stays coherent with the GPU (unified memory).
+extern "C" void *ts_dev_contents(TsDeviceTensor *t) {
+  return t ? [t->buf contents] : nullptr;
+}
+
+extern "C" int64_t ts_dev_nbytes(TsDeviceTensor *t) {
+  return t ? t->nbytes : 0;
+}
+
+extern "C" void ts_dev_upload(TsDeviceTensor *t, const void *src, int64_t n) {
+  if (t && src && n > 0 && n <= t->nbytes) std::memcpy([t->buf contents], src, (size_t)n);
+}
+
+extern "C" void ts_dev_download(TsDeviceTensor *t, void *dst, int64_t n) {
+  if (t && dst && n > 0 && n <= t->nbytes) std::memcpy(dst, [t->buf contents], (size_t)n);
+}
+
+extern "C" void ts_dev_free(TsDeviceTensor *t) {
+  if (t) {
+    t->buf = nil;  // ARC releases the buffer
+    delete t;
+  }
+}
+
+// Introspection: 1 when a real Metal device backs the handles (vs the non-Apple
+// host-memory reference path).
+extern "C" int32_t ts_dev_is_metal(void) {
+  return deviceContext().ok ? 1 : 0;
+}
+
 // Reference fallback. Used when MTLCreateSystemDefaultDevice() returns nil
 // (unlikely on Darwin GUI sessions, but possible in headless CI). Same shape
 // as the CPU runtime's reference path.

@@ -52,24 +52,32 @@ def test_no_raw_newbuffer_in_dispatchers(runtime_src: str) -> None:
     raw = list(re.finditer(
         r"\[ctx\.device\s+newBufferWith(?:Bytes|Length)", src,
     ))
-    # The only allowed raw calls are inside ``metal_buffer_acquire``
-    # itself — find the function's brace range and exclude calls
-    # inside it.
-    primitive_re = re.compile(
-        r"static\s+id<MTLBuffer>\s+metal_buffer_acquire\s*\(",
-    )
-    pm = primitive_re.search(src)
-    assert pm is not None, "metal_buffer_acquire primitive missing"
-    brace = src.find("{", pm.end())
-    depth = 1; pos = brace + 1
-    while pos < len(src) and depth > 0:
-        if src[pos] == "{": depth += 1
-        elif src[pos] == "}": depth -= 1
-        pos += 1
-    primitive_end = pos
+
+    def _fn_range(signature_re: str) -> tuple[int, int]:
+        m = re.search(signature_re, src)
+        assert m is not None, f"function not found: {signature_re}"
+        brace = src.find("{", m.end())
+        depth = 1
+        pos = brace + 1
+        while pos < len(src) and depth > 0:
+            if src[pos] == "{":
+                depth += 1
+            elif src[pos] == "}":
+                depth -= 1
+            pos += 1
+        return m.start(), pos
+
+    # Raw calls are allowed inside the pool primitive (per-call buffers) AND
+    # inside ts_dev_alloc — the R0 persistent device-tensor allocator, whose
+    # buffer is long-lived and freed explicitly via ts_dev_free, so the
+    # "leak on early return" rationale doesn't apply.
+    allowed = [
+        _fn_range(r"static\s+id<MTLBuffer>\s+metal_buffer_acquire\s*\("),
+        _fn_range(r"TsDeviceTensor\s*\*\s*ts_dev_alloc\s*\("),
+    ]
     offending = [
         m for m in raw
-        if not (pm.start() <= m.start() <= primitive_end)
+        if not any(lo <= m.start() <= hi for lo, hi in allowed)
     ]
     assert not offending, (
         f"{len(offending)} raw [ctx.device newBufferWith*] call(s) "

@@ -1344,6 +1344,30 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float*, const floa
                                                         int32_t) {
   return 0;
 }
+// Phase-G Rung 3 — dynamic speculative accept+select, non-Apple reference
+// (same logic the MSL kernel runs, so it's correct everywhere).
+extern "C" int32_t tessera_apple_gpu_msl_spec_accept(const int32_t* draft,
+                                                     const int32_t* target,
+                                                     int32_t* out, int32_t P,
+                                                     int32_t depth) {
+  if (!draft || !target || !out || P <= 0 || depth <= 0) return 0;
+  int best_path = 0, best_len = -1, best_bonus = 0;
+  for (int p = 0; p < P; ++p) {
+    int len = 0;
+    for (int i = 0; i < depth; ++i) {
+      if (draft[p * depth + i] == target[p * (depth + 1) + i]) len++;
+      else break;
+    }
+    if (len > best_len) {
+      best_len = len; best_path = p;
+      best_bonus = target[p * (depth + 1) + len];
+    }
+  }
+  out[0] = best_path; out[1] = best_len; out[2] = best_bonus;
+  for (int i = 0; i < depth; ++i)
+    out[3 + i] = (i < best_len) ? draft[best_path * depth + i] : -1;
+  return 1;
+}
 
 extern "C" int32_t tessera_apple_gpu_cf_serial_draft_f32(
     const float* embed, const float* fc_in, const float* ln1_all,

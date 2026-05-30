@@ -4116,6 +4116,51 @@ def apple_gpu_mtl4_matmul_sg(A: Any, B: Any, np: Any):
     return C, rc == 1
 
 
+def apple_gpu_msl_spec_accept(draft_paths: Any, target_greedy: Any, np: Any):
+    """Phase-G Rung 3 — the dynamic speculative-verify control flow as one MSL
+    kernel. ``draft_paths`` is ``[P, depth]`` candidate tokens; ``target_greedy``
+    is ``[P, depth+1]`` the target's greedy token at each position along each
+    path. Per path the kernel accepts draft tokens while they match (breaking at
+    the first mismatch — a data-dependent trip count), keeps the longest accepted
+    prefix, and returns the bonus (the target's correction). Returns
+    ``(best_path, accepted_len, bonus, accepted_tokens)``. The C reference (and
+    a numpy fallback) keep the contract off Metal."""
+    draft = np.ascontiguousarray(draft_paths, np.int32)
+    target = np.ascontiguousarray(target_greedy, np.int32)
+    P, depth = draft.shape
+    if target.shape != (P, depth + 1):
+        raise ValueError(f"target_greedy must be [P, depth+1]={(P, depth + 1)}; "
+                         f"got {target.shape}")
+    out = np.empty(3 + depth, np.int32)
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_msl_spec_accept", None)
+    rc = 0
+    if sym is not None:
+        ip = ctypes.POINTER(ctypes.c_int32)
+        sym.argtypes = [ip, ip, ip, ctypes.c_int32, ctypes.c_int32]
+        sym.restype = ctypes.c_int32
+        rc = sym(draft.ctypes.data_as(ip), target.ctypes.data_as(ip),
+                 out.ctypes.data_as(ip), ctypes.c_int32(P), ctypes.c_int32(depth))
+    if rc != 1:
+        best_path, best_len, best_bonus = 0, -1, 0
+        for p in range(P):
+            length = 0
+            for i in range(depth):
+                if int(draft[p, i]) == int(target[p, i]):
+                    length += 1
+                else:
+                    break
+            if length > best_len:
+                best_len, best_path = length, p
+                best_bonus = int(target[p, length])
+        out[0], out[1], out[2] = best_path, best_len, best_bonus
+        for i in range(depth):
+            out[3 + i] = int(draft[best_path, i]) if i < best_len else -1
+    accepted_len = int(out[1])
+    return (int(out[0]), accepted_len, int(out[2]),
+            [int(out[3 + i]) for i in range(accepted_len)])
+
+
 def _apple_gpu_layer_norm_f32() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_layer_norm_f32", None)
@@ -5716,6 +5761,8 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_mtl4_scan_f32")
                 # Metal 4 M3 — cooperative-matrix matmul (simdgroup_matrix).
                 getattr(lib, "tessera_apple_gpu_mtl4_matmul_sg_f32")
+                # Phase-G Rung 3 — dynamic speculative accept as one MSL kernel.
+                getattr(lib, "tessera_apple_gpu_msl_spec_accept")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

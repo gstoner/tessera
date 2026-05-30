@@ -1520,6 +1520,32 @@ extern "C" int32_t tessera_apple_gpu_gumbel_argmax_dev_f32_enc(
                                                  cols, inv_temp);
 }
 
+// R4 block-table gather — non-Apple reference into out->data.
+extern "C" int32_t tessera_apple_gpu_gather_blocks_dev_f32(
+    TsDeviceTensor* pool, TsDeviceTensor* block_table, TsDeviceTensor* out,
+    int32_t num_blocks, int32_t n, int32_t block_size, int32_t dim) {
+  if (!pool || !block_table || !out) return 0;
+  const float* P = static_cast<const float*>(pool->data);
+  const int32_t* idx = static_cast<const int32_t*>(block_table->data);
+  float* O = static_cast<float*>(out->data);
+  std::size_t blk = static_cast<std::size_t>(block_size) * dim;
+  for (int32_t i = 0; i < n; ++i) {
+    int32_t b = idx[i];
+    if (b < 0 || b >= num_blocks) b = 0;
+    std::memcpy(O + static_cast<std::size_t>(i) * blk,
+                P + static_cast<std::size_t>(b) * blk, blk * sizeof(float));
+  }
+  return 1;
+}
+extern "C" int32_t tessera_apple_gpu_gather_blocks_dev_f32_enc(
+    TsEncodeSession* s, TsDeviceTensor* pool, TsDeviceTensor* block_table,
+    TsDeviceTensor* out, int32_t num_blocks, int32_t n, int32_t block_size,
+    int32_t dim) {
+  if (!s) return 0;
+  return tessera_apple_gpu_gather_blocks_dev_f32(pool, block_table, out,
+                                                 num_blocks, n, block_size, dim);
+}
+
 // ---- Tier-3 reduction lane non-Apple reference (2026-05-29) ----------------
 extern "C" void tessera_apple_gpu_mpsgraph_reduce_f32(int32_t op, const float* x,
                                                       float* out, int32_t rows,

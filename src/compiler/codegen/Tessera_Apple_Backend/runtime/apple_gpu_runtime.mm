@@ -8470,6 +8470,73 @@ extern "C" int32_t tessera_apple_gpu_bmm_dev_f32_enc(TsEncodeSession *s,
              : 0;
 }
 
+//===----------------------------------------------------------------------===//
+// R4 (block-paged) — on-GPU non-contiguous block-table gather. Given a resident
+// physical block pool [num_blocks, block_size, dim] and a sequence's block table
+// (int32 [n] of physical block ids), MPSGraph gathers those (possibly
+// scattered) blocks along axis 0 into a contiguous window
+// [n, block_size, dim] — the device-resident equivalent of vLLM's paged gather,
+// with no host round-trip.
+//===----------------------------------------------------------------------===//
+namespace {
+static bool mpsg_run_gather_blocks(MetalDeviceContext &ctx, id<MTLBuffer> pool,
+                                   id<MTLBuffer> idx, id<MTLBuffer> out,
+                                   MPSCommandBuffer *cb, int32_t num_blocks,
+                                   int32_t n, int32_t block_size, int32_t dim) {
+  if (num_blocks <= 0 || n <= 0 || block_size <= 0 || dim <= 0) return true;
+  if (!pool || !idx || !out) return false;
+  @autoreleasepool {
+    NSArray<NSNumber *> *poolShape = @[ @(num_blocks), @(block_size), @(dim) ];
+    NSArray<NSNumber *> *idxShape = @[ @(n) ];
+    NSArray<NSNumber *> *outShape = @[ @(n), @(block_size), @(dim) ];
+    NSString *key = [NSString stringWithFormat:@"gblk:%d:%d:%d:%d", num_blocks,
+                                               n, block_size, dim];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *pp, *pi, *y;
+    if (entry) {
+      g = entry[0];
+      pp = ((NSArray *)entry[1])[0];
+      pi = ((NSArray *)entry[1])[1];
+      y = entry[2];
+    } else {
+      g = [MPSGraph new];
+      pp = [g placeholderWithShape:poolShape dataType:MPSDataTypeFloat32 name:nil];
+      pi = [g placeholderWithShape:idxShape dataType:MPSDataTypeInt32 name:nil];
+      y = [g gatherWithUpdatesTensor:pp indicesTensor:pi axis:0 batchDimensions:0 name:nil];
+      mpsg_cache_put(key, @[ g, @[ pp, pi ], y ]);
+    }
+    MPSGraphTensorData *pd = [[MPSGraphTensorData alloc] initWithMTLBuffer:pool shape:poolShape dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *id_ = [[MPSGraphTensorData alloc] initWithMTLBuffer:idx shape:idxShape dataType:MPSDataTypeInt32];
+    MPSGraphTensorData *od = [[MPSGraphTensorData alloc] initWithMTLBuffer:out shape:outShape dataType:MPSDataTypeFloat32];
+    if (cb)
+      [g encodeToCommandBuffer:cb feeds:@{pp : pd, pi : id_} targetOperations:nil resultsDictionary:@{y : od} executionDescriptor:nil];
+    else
+      [g runWithMTLCommandQueue:ctx.queue feeds:@{pp : pd, pi : id_} targetOperations:nil resultsDictionary:@{y : od}];
+    return true;
+  }
+}
+}  // namespace
+
+extern "C" int32_t tessera_apple_gpu_gather_blocks_dev_f32(
+    TsDeviceTensor *pool, TsDeviceTensor *block_table, TsDeviceTensor *out,
+    int32_t num_blocks, int32_t n, int32_t block_size, int32_t dim) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !pool || !block_table || !out) return 0;
+  return mpsg_run_gather_blocks(ctx, pool->buf, block_table->buf, out->buf, nil,
+                                num_blocks, n, block_size, dim) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_gather_blocks_dev_f32_enc(
+    TsEncodeSession *s, TsDeviceTensor *pool, TsDeviceTensor *block_table,
+    TsDeviceTensor *out, int32_t num_blocks, int32_t n, int32_t block_size,
+    int32_t dim) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !pool || !block_table || !out) return 0;
+  return mpsg_run_gather_blocks(ctx, pool->buf, block_table->buf, out->buf,
+                                s->cb, num_blocks, n, block_size, dim) ? 1 : 0;
+}
+
 // R1 device-resident bmm entry point. A/B/O are TsDeviceTensor handles whose
 // shared buffers are used in place. Returns 1 on a real GPU run, 0 otherwise
 // (caller falls back to the host-ptr path).

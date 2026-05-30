@@ -5026,6 +5026,46 @@ def _apple_gpu_bmm_dev_f32() -> Any:
     return sym
 
 
+_GATHER_DEV_CONFIGURED = False
+
+
+def _apple_gpu_gather_blocks_dev_sym() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_gather_blocks_dev_f32", None)
+    if sym is None:
+        return None
+    global _GATHER_DEV_CONFIGURED
+    if not _GATHER_DEV_CONFIGURED:
+        vp, i32 = ctypes.c_void_p, ctypes.c_int32
+        sym.argtypes = [vp, vp, vp, i32, i32, i32, i32]
+        sym.restype = i32
+        _GATHER_DEV_CONFIGURED = True
+    return sym
+
+
+def _apple_gpu_gather_blocks_device(pool: "DeviceTensor",
+                                    block_table: "DeviceTensor",
+                                    num_blocks: int, n: int, block_size: int,
+                                    dim: int) -> "DeviceTensor | None":
+    """R4 (block-paged) — gather ``n`` physical blocks (by ``block_table`` int32
+    ids) from the resident pool ``[num_blocks, block_size, dim]`` into a
+    contiguous resident window ``[n, block_size, dim]`` on-GPU. No host copy."""
+    import numpy as _np
+    sym = _apple_gpu_gather_blocks_dev_sym()
+    if sym is None:
+        return None
+    out = DeviceTensor.empty((n, block_size, dim), _np.float32)
+    if out is None:
+        return None
+    rc = sym(pool.handle, block_table.handle, out.handle,
+             ctypes.c_int32(num_blocks), ctypes.c_int32(n),
+             ctypes.c_int32(block_size), ctypes.c_int32(dim))
+    if rc != 1:
+        out.free()
+        return None
+    return out
+
+
 def _apple_gpu_bmm_device(A: "DeviceTensor", B: "DeviceTensor",
                           b_broadcast: bool = False) -> "DeviceTensor | None":
     """R1 — device-resident batched matmul. Both inputs are ``DeviceTensor``s

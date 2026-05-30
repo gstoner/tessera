@@ -1,10 +1,12 @@
 # Apple GPU control-flow lowering (Phase G) — design + ladder
 
-> Status: **Rungs 0 + 1 + 2 landed** — Rung 0 (bounded `scan` → MPSGraph
-> `forLoop`), Rung 1 (the Gumiho serial draft as one `forLoop`), and Rung 2
-> (predicate-driven `while` generation with EOS early-stop). Rung 3 (the
-> dynamic frontier) remains out of scope. This is the on-Apple slice of the
-> Phase-G "single-kernel `@jit` of a control-flow loop" frontier.
+> Status: **Rungs 0 + 1 + 2 landed; Rung 3 first slice via MSL.** Rung 0
+> (bounded `scan` → MPSGraph `forLoop`), Rung 1 (the Gumiho serial draft as one
+> `forLoop`), Rung 2 (predicate-driven `while` generation with EOS early-stop),
+> and Rung 3's dynamic speculative-accept control flow as a single MSL kernel
+> (`tessera_apple_gpu_msl_spec_accept`) — the part MPSGraph can't express. This
+> is the on-Apple slice of the Phase-G "single-kernel `@jit` of a control-flow
+> loop" frontier.
 
 ## The problem
 
@@ -88,10 +90,17 @@ research-grade and out of scope here. What *is* tractable and worth doing is the
   actual count. This is the variable-trip control-flow primitive — distinct from
   the fixed-trip `forLoop`. The body is intentionally small (the dynamic
   verify/accept of a real speculative step stay host-side).
-- **Rung 3 — frontier.** The dynamic trie/top-k/variable-accept parts. Needs a
-  treeless fixed-shape reformulation or a monolithic MSL kernel. Explicitly
-  out of scope **for the MPSGraph route** — but see the MSL 4.0 mapping below,
-  which reopens it.
+- **Rung 3 — dynamic frontier, via MSL (first slice landed).** Out of scope for
+  the MPSGraph route, but the MSL route reaches it (see the mapping below).
+  `tessera_apple_gpu_msl_spec_accept` runs the **dynamic speculative-verify
+  control flow** — per-path accept-while-match with an early `break` (a
+  data-dependent trip count), cross-path longest-prefix selection, and the bonus
+  token — as a **single MSL kernel over fixed-capacity candidate buffers** (no
+  trie, no heap). This is exactly the variable-trip / data-dependent control
+  flow MPSGraph's static-shape graph can't express, validated against a numpy
+  reference. The remaining dynamic pieces (full draft-model forward feeding it,
+  top-k path *generation*) compose the static MPSGraph kernels with this MSL
+  accept kernel.
 
 ## Mapping to MSL 4.0 (Metal 4) — a second lowering route
 

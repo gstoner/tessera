@@ -97,6 +97,53 @@ def test_cf_while_generate_early_stops_on_eos():
     assert toks[-1] == eos                          # eos is included
 
 
+def _ref_spec_accept(draft, target):
+    P, depth = draft.shape
+    bp, bl, bb = 0, -1, 0
+    for p in range(P):
+        length = 0
+        for i in range(depth):
+            if int(draft[p, i]) == int(target[p, i]):
+                length += 1
+            else:
+                break
+        if length > bl:
+            bl, bp = length, p
+            bb = int(target[p, length])
+    return bp, bl, bb, [int(draft[bp, i]) for i in range(bl)]
+
+
+def test_rung3_spec_accept_multipath():
+    """Phase-G Rung 3 via MSL: the dynamic speculative accept+select (variable-
+    trip loops + cross-path argmax + bonus) as one MSL kernel — the frontier the
+    MPSGraph route can't express. Longest-accepted-prefix path wins."""
+    draft = np.array([[7, 3, 9, 1], [7, 8, 2, 4], [7, 3, 5, 6]], np.int32)
+    target = np.array([[7, 3, 0, 0, 0], [7, 0, 0, 0, 0], [7, 3, 5, 0, 9]], np.int32)
+    got = R.apple_gpu_msl_spec_accept(draft, target, np)
+    assert got == _ref_spec_accept(draft, target)
+    assert got[:3] == (2, 3, 0)            # path 2, len 3, bonus target[2][3]=0
+
+
+def test_rung3_spec_accept_full_accept_bonus():
+    # A fully-accepted path: bonus is the target token after the whole prefix.
+    draft = np.array([[1, 2, 3]], np.int32)
+    target = np.array([[1, 2, 3, 9]], np.int32)   # depth+1; last col = bonus
+    bp, ln, bonus, acc = R.apple_gpu_msl_spec_accept(draft, target, np)
+    assert (bp, ln, bonus, acc) == (0, 3, 9, [1, 2, 3])
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2, 3])
+def test_rung3_spec_accept_matches_reference_random(seed):
+    rng = np.random.default_rng(seed)
+    P, depth, V = 8, 7, 16
+    draft = rng.integers(0, V, size=(P, depth), dtype=np.int32)
+    target = rng.integers(0, V, size=(P, depth + 1), dtype=np.int32)
+    # make a couple of paths share a prefix with the target so accepts vary
+    target[:, 0] = draft[:, 0]
+    got = R.apple_gpu_msl_spec_accept(draft, target, np)
+    assert got == _ref_spec_accept(draft, target)
+
+
 def test_cf_scan_symbol_or_fallback():
     # On Metal the symbol must be present; off Metal the numpy fallback still
     # returns a correct, correctly-shaped result.

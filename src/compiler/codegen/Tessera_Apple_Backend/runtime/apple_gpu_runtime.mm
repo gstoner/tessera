@@ -8785,6 +8785,83 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float *A,
   return 0;
 }
 
+//===----------------------------------------------------------------------===//
+// Phase-G Rung 3 via MSL — the DYNAMIC speculative-verify control flow as one
+// MSL kernel, the part MPSGraph's static-shape graph cannot express. Given a
+// fixed-capacity set of candidate paths (no trie, no heap), the kernel:
+//   * per path: accepts draft tokens while they match the target's greedy
+//     token, breaking at the first mismatch  (data-dependent trip count);
+//   * across paths: keeps the longest accepted prefix  (argmax);
+//   * emits the bonus token (the target's correction after the accepted prefix).
+// All of this — variable-trip loops, early break, data-dependent indexing — is
+// ordinary MSL control flow; only the I/O buffer capacities are fixed. This is
+// the Rung-3 frontier the MPSGraph route declared out of scope, made tractable
+// by the MSL route (see docs/apple_gpu_control_flow_lowering.md "Mapping to
+// MSL 4.0"). Dispatched via the cached classic MSL path (works macOS 12+).
+//===----------------------------------------------------------------------===//
+extern "C" int32_t tessera_apple_gpu_msl_spec_accept(const int32_t *draft_paths,
+                                                     const int32_t *target_greedy,
+                                                     int32_t *out, int32_t P,
+                                                     int32_t depth) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || P <= 0 || depth <= 0 || !draft_paths || !target_greedy || !out)
+    return 0;
+  static NSString *const kSpecAcceptMSL = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+// draft  : [P, depth]      candidate tokens per path
+// target : [P, depth+1]    target greedy token at each position along the path
+// out    : [3 + depth]     {best_path, accepted_len, bonus, accepted tokens...}
+kernel void spec_accept(device const int *draft  [[buffer(0)]],
+                        device const int *target [[buffer(1)]],
+                        device int       *out    [[buffer(2)]],
+                        constant int     &P      [[buffer(3)]],
+                        constant int     &depth  [[buffer(4)]],
+                        uint tid [[thread_position_in_grid]]) {
+  if (tid != 0) return;                  // single thread runs the dynamic logic
+  int best_path = 0, best_len = -1, best_bonus = 0;
+  for (int p = 0; p < P; ++p) {
+    int len = 0;
+    for (int i = 0; i < depth; ++i) {
+      if (draft[p * depth + i] == target[p * (depth + 1) + i]) len++;
+      else break;                         // data-dependent early break
+    }
+    if (len > best_len) {
+      best_len = len; best_path = p;
+      best_bonus = target[p * (depth + 1) + len];
+    }
+  }
+  out[0] = best_path; out[1] = best_len; out[2] = best_bonus;
+  for (int i = 0; i < depth; ++i)
+    out[3 + i] = (i < best_len) ? draft[best_path * depth + i] : -1;
+}
+)MSL";
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, kSpecAcceptMSL, @"spec_accept");
+    if (!pso) return 0;
+    MTLResourceOptions ro = MTLResourceStorageModeShared;
+    id<MTLBuffer> bD = [ctx.device newBufferWithBytes:draft_paths length:(size_t)P * depth * 4 options:ro];
+    id<MTLBuffer> bT = [ctx.device newBufferWithBytes:target_greedy length:(size_t)P * (depth + 1) * 4 options:ro];
+    id<MTLBuffer> bO = [ctx.device newBufferWithLength:(size_t)(3 + depth) * 4 options:ro];
+    if (!bD || !bT || !bO) return 0;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bD offset:0 atIndex:0];
+    [enc setBuffer:bT offset:0 atIndex:1];
+    [enc setBuffer:bO offset:0 atIndex:2];
+    [enc setBytes:&P length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&depth length:sizeof(int32_t) atIndex:4];
+    [enc dispatchThreads:MTLSizeMake(1, 1, 1) threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return 0;
+    std::memcpy(out, [bO contents], (size_t)(3 + depth) * 4);
+    return 1;
+  }
+}
+
 // ---- C ABI: row ops ---------------------------------------------------------
 extern "C" void tessera_apple_gpu_layer_norm_f32(const float *x,
                                                  const float *gamma,

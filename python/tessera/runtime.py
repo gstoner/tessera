@@ -4080,6 +4080,42 @@ def apple_gpu_mtl4_scan(Wh: Any, Wx: Any, xseq: Any, init: Any, np: Any):
     return ys, rc == 1
 
 
+def _apple_gpu_mtl4_matmul_sg_f32() -> Any:
+    """Metal 4 M3 cooperative-matrix matmul symbol. None when unavailable."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mtl4_matmul_sg_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [fp, fp, fp, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def apple_gpu_mtl4_matmul_sg(A: Any, B: Any, np: Any):
+    """``C = A @ B`` via an MSL cooperative-matrix kernel (``simdgroup_matrix``,
+    the GPU matrix-unit path) dispatched through the Metal 4 command model.
+    ``M``, ``N``, ``K`` must be multiples of 8. Returns ``(C[M, N], ran_on_mtl4)``;
+    falls back to numpy when Metal 4 / the 8-tile envelope doesn't apply. See
+    docs/apple_gpu_metal4_adoption.md."""
+    A = np.ascontiguousarray(A, np.float32)
+    B = np.ascontiguousarray(B, np.float32)
+    M, K = A.shape
+    K2, N = B.shape
+    C = np.empty((M, N), np.float32)
+    rc = 0
+    if K2 == K and M % 8 == 0 and N % 8 == 0 and K % 8 == 0:
+        sym = _apple_gpu_mtl4_matmul_sg_f32()
+        if sym is not None:
+            fp = ctypes.POINTER(ctypes.c_float)
+            rc = sym(A.ctypes.data_as(fp), B.ctypes.data_as(fp),
+                     C.ctypes.data_as(fp), ctypes.c_int32(M), ctypes.c_int32(N),
+                     ctypes.c_int32(K))
+    if rc != 1:
+        C = (A.astype(np.float64) @ B.astype(np.float64)).astype(np.float32)
+    return C, rc == 1
+
+
 def _apple_gpu_layer_norm_f32() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_layer_norm_f32", None)
@@ -5678,6 +5714,8 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_metal4_tensor_roundtrip")
                 # Metal 4 M2 — MSL-loop scan through the MTL4 command model.
                 getattr(lib, "tessera_apple_gpu_mtl4_scan_f32")
+                # Metal 4 M3 — cooperative-matrix matmul (simdgroup_matrix).
+                getattr(lib, "tessera_apple_gpu_mtl4_matmul_sg_f32")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

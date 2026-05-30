@@ -1338,6 +1338,12 @@ extern "C" int32_t tessera_apple_gpu_mtl4_scan_f32(const float*, const float*,
                                                    int32_t) {
   return 0;
 }
+// Metal 4 M3 cooperative-matrix matmul — no Metal 4 off Darwin; numpy fallback.
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float*, const float*,
+                                                        float*, int32_t, int32_t,
+                                                        int32_t) {
+  return 0;
+}
 
 extern "C" int32_t tessera_apple_gpu_cf_serial_draft_f32(
     const float* embed, const float* fc_in, const float* ln1_all,

@@ -8672,6 +8672,119 @@ extern "C" int32_t tessera_apple_gpu_mtl4_scan_f32(const float *Wh,
   return 0;
 }
 
+//===----------------------------------------------------------------------===//
+// Metal 4 M3 — fused matmul via MSL cooperative tensor ops (simdgroup_matrix),
+// dispatched through the MTL4 command model. simdgroup_matrix is the SIMD-group
+// cooperative matrix API that targets the GPU matrix/tensor units: each
+// threadgroup (one 32-lane SIMD group) computes one 8x8 output tile, looping
+// over K in 8-wide tiles with simdgroup_multiply_accumulate. M/N/K must be
+// multiples of 8. (MSL 4.0 also adds a more general `tensor` cooperative-op
+// type; simdgroup_matrix is the established cooperative path used here.) See
+// docs/apple_gpu_metal4_adoption.md.
+//===----------------------------------------------------------------------===//
+static NSString *kMTL4MatmulMSL = @R"MSL(
+#include <metal_stdlib>
+#include <metal_simdgroup_matrix>
+using namespace metal;
+// C[M,N] = A[M,K] @ B[K,N]; dims = {M, N, K}. One 8x8 output tile per threadgroup.
+kernel void mtl4_matmul_sg(device const float *A    [[buffer(0)]],
+                           device const float *B    [[buffer(1)]],
+                           device float       *C    [[buffer(2)]],
+                           device const int   *dims [[buffer(3)]],
+                           uint2 tg [[threadgroup_position_in_grid]]) {
+  int M = dims[0], N = dims[1], K = dims[2];
+  int row = int(tg.y) * 8;
+  int col = int(tg.x) * 8;
+  if (row >= M || col >= N) return;
+  simdgroup_float8x8 acc = simdgroup_float8x8(0.0f);
+  for (int k = 0; k < K; k += 8) {
+    simdgroup_float8x8 a, b;
+    simdgroup_load(a, A + row * K + k, K);   // 8x8 tile of A at (row, k)
+    simdgroup_load(b, B + k * N + col, N);   // 8x8 tile of B at (k, col)
+    simdgroup_multiply_accumulate(acc, a, b, acc);
+  }
+  simdgroup_store(acc, C + row * N + col, N);
+}
+)MSL";
+
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float *A,
+                                                        const float *B, float *C,
+                                                        int32_t M, int32_t N,
+                                                        int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || M <= 0 || N <= 0 || K <= 0) return 0;
+  if (M % 8 || N % 8 || K % 8) return 0;     // 8-tile envelope
+  if (!A || !B || !C) return 0;
+  @autoreleasepool {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      id<MTLDevice> dev = ctx.device;
+      MTLCompileOptions *co = [[MTLCompileOptions alloc] init];
+      co.languageVersion = MTLLanguageVersion4_0;
+      NSError *err = nil;
+      id<MTLLibrary> lib = [dev newLibraryWithSource:kMTL4MatmulMSL options:co error:&err];
+      if (!lib) return 0;
+      MTL4LibraryFunctionDescriptor *fd = [[MTL4LibraryFunctionDescriptor alloc] init];
+      fd.name = @"mtl4_matmul_sg";
+      fd.library = lib;
+      MTL4ComputePipelineDescriptor *pd = [[MTL4ComputePipelineDescriptor alloc] init];
+      pd.computeFunctionDescriptor = fd;
+      id<MTL4Compiler> compiler = [dev newCompilerWithDescriptor:[[MTL4CompilerDescriptor alloc] init] error:&err];
+      if (!compiler) return 0;
+      id<MTLComputePipelineState> pso =
+          [compiler newComputePipelineStateWithDescriptor:pd
+                                      compilerTaskOptions:nil
+                                                    error:&err];
+      if (!pso) return 0;
+
+      MTLResourceOptions ro = MTLResourceStorageModeShared;
+      id<MTLBuffer> bA = [dev newBufferWithBytes:A length:(size_t)M * K * 4 options:ro];
+      id<MTLBuffer> bB = [dev newBufferWithBytes:B length:(size_t)K * N * 4 options:ro];
+      id<MTLBuffer> bC = [dev newBufferWithLength:(size_t)M * N * 4 options:ro];
+      int dims[3] = {M, N, K};
+      id<MTLBuffer> bD = [dev newBufferWithBytes:dims length:sizeof(dims) options:ro];
+      if (!bA || !bB || !bC || !bD) return 0;
+
+      id<MTLResidencySet> res = [dev newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
+      if (!res) return 0;
+      for (id<MTLBuffer> b : {bA, bB, bC, bD}) [res addAllocation:b];
+      [res commit];
+      [res requestResidency];
+
+      MTL4ArgumentTableDescriptor *atd = [[MTL4ArgumentTableDescriptor alloc] init];
+      atd.maxBufferBindCount = 4;
+      id<MTL4ArgumentTable> at = [dev newArgumentTableWithDescriptor:atd error:&err];
+      if (!at) return 0;
+      id<MTLBuffer> bufs[4] = {bA, bB, bC, bD};
+      for (int i = 0; i < 4; ++i) [at setAddress:bufs[i].gpuAddress atIndex:i];
+
+      id<MTL4CommandQueue> queue = [dev newMTL4CommandQueue];
+      id<MTL4CommandAllocator> alloc = [dev newCommandAllocator];
+      id<MTL4CommandBuffer> cb = [dev newCommandBuffer];
+      if (!queue || !alloc || !cb) return 0;
+      [queue addResidencySet:res];
+      [cb beginCommandBufferWithAllocator:alloc];
+      id<MTL4ComputeCommandEncoder> enc = [cb computeCommandEncoder];
+      [enc setComputePipelineState:pso];
+      [enc setArgumentTable:at];
+      // one 32-lane SIMD group per 8x8 output tile
+      [enc dispatchThreadgroups:MTLSizeMake(N / 8, M / 8, 1)
+          threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+      [enc endEncoding];
+      [cb endCommandBuffer];
+
+      const id<MTL4CommandBuffer> cbs[1] = {cb};
+      [queue commit:cbs count:1];
+      id<MTLSharedEvent> ev = [dev newSharedEvent];
+      [queue signalEvent:ev value:1];
+      if (![ev waitUntilSignaledValue:1 timeoutMS:10000]) return 0;
+
+      std::memcpy(C, [bC contents], (size_t)M * N * 4);
+      return 1;
+    }
+  }
+  return 0;
+}
+
 // ---- C ABI: row ops ---------------------------------------------------------
 extern "C" void tessera_apple_gpu_layer_norm_f32(const float *x,
                                                  const float *gamma,

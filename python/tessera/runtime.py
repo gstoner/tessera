@@ -3853,6 +3853,48 @@ def _apple_gpu_mpsgraph_binary_f32() -> Any:
     return sym
 
 
+def _apple_gpu_cf_scan_f32() -> Any:
+    """Phase-G Rung 0 control-flow scan symbol (MPSGraph forLoop). None when
+    unavailable."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_cf_scan_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [fp, fp, fp, fp, fp,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def apple_gpu_cf_scan(Wh: Any, Wx: Any, xseq: Any, init: Any, np: Any) -> Any:
+    """Bounded scan ``carry_{i+1} = tanh(carry_i @ Wh + x_i @ Wx)`` lowered to a
+    single MPSGraph control-flow executable; returns the per-step carries
+    ``ys`` of shape ``[T, d]``. Falls back to a numpy scan off Metal."""
+    Wh = np.ascontiguousarray(Wh, np.float32)
+    Wx = np.ascontiguousarray(Wx, np.float32)
+    xseq = np.ascontiguousarray(xseq, np.float32)
+    init = np.ascontiguousarray(init, np.float32).reshape(-1)
+    T, m = xseq.shape
+    d = Wh.shape[0]
+    ys = np.empty((T, d), np.float32)
+    sym = _apple_gpu_cf_scan_f32()
+    fp = ctypes.POINTER(ctypes.c_float)
+    rc = 0
+    if sym is not None:
+        rc = sym(Wh.ctypes.data_as(fp), Wx.ctypes.data_as(fp),
+                 xseq.ctypes.data_as(fp), init.ctypes.data_as(fp),
+                 ys.ctypes.data_as(fp), ctypes.c_int32(T), ctypes.c_int32(d),
+                 ctypes.c_int32(m))
+    if rc != 1:
+        carry = init.astype(np.float64)
+        for t in range(T):
+            carry = np.tanh(carry @ Wh.astype(np.float64)
+                            + xseq[t].astype(np.float64) @ Wx.astype(np.float64))
+            ys[t] = carry.astype(np.float32)
+    return ys
+
+
 def _apple_gpu_layer_norm_f32() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_layer_norm_f32", None)
@@ -5440,6 +5482,8 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 # command-buffer session can express full transformer/MLP blocks.
                 getattr(lib, "tessera_apple_gpu_unary_dev_f32_enc")
                 getattr(lib, "tessera_apple_gpu_binary_dev_f32_enc")
+                # Phase-G Rung 0 — control-flow scan via MPSGraph forLoop.
+                getattr(lib, "tessera_apple_gpu_cf_scan_f32")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

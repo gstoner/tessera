@@ -1286,6 +1286,25 @@ extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float* a
     }
   }
 }
+// Phase-G Rung 0 — control-flow scan, non-Apple reference. Same recurrence the
+// MPSGraph forLoop computes: carry_{i+1} = tanh(carry_i @ Wh + x_i @ Wx).
+extern "C" int32_t tessera_apple_gpu_cf_scan_f32(const float* Wh, const float* Wx,
+                                                 const float* xseq,
+                                                 const float* init, float* ys,
+                                                 int32_t T, int32_t d, int32_t m) {
+  if (!Wh || !Wx || !xseq || !init || !ys || T <= 0 || d <= 0 || m <= 0) return 0;
+  for (int t = 0; t < T; ++t) {
+    const float* prev = (t == 0) ? init : &ys[(t - 1) * d];
+    for (int j = 0; j < d; ++j) {
+      double acc = 0.0;
+      for (int k = 0; k < d; ++k) acc += (double)prev[k] * Wh[k * d + j];
+      for (int k = 0; k < m; ++k) acc += (double)xseq[t * m + k] * Wx[k * d + j];
+      ys[t * d + j] = (float)std::tanh(acc);
+    }
+  }
+  return 1;
+}
+
 extern "C" void tessera_apple_gpu_mpsgraph_binary_f16(int32_t, const uint16_t* a,
                                                       const uint16_t*, uint16_t* out,
                                                       int64_t n) {

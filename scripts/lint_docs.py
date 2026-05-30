@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import functools
+import os
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -153,17 +156,58 @@ def normalize_inline_path(raw: str) -> str | None:
     return candidate
 
 
+@functools.lru_cache(maxsize=1)
+def _git_tracked(root_str: str) -> frozenset[str] | None:
+    """Exact-case set of git-tracked paths (posix-relative), or ``None`` when
+    the tree is not a git checkout / git is unavailable.  This is the casing
+    Linux CI checks out — authoritative even on a case-insensitive working tree
+    whose on-disk filenames disagree with the index."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", root_str, "ls-files", "-z"],
+            capture_output=True, text=True, check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return frozenset(p for p in out.stdout.split("\0") if p)
+
+
+def _exists_case_sensitive(root: Path, rel: str) -> bool:
+    """True only if ``root/rel`` exists with *exact* casing.  ``Path.exists()``
+    on macOS/Windows is case-insensitive, so a wrong-case reference
+    (``CONFORMANCE.md`` for ``conformance.md``) passes locally but breaks on
+    case-sensitive Linux CI.  Prefer git's tracked-path set (matches CI's
+    checkout exactly); fall back to an ``os.listdir`` walk when git is absent."""
+    rel = rel.strip("/")
+    tracked = _git_tracked(str(root))
+    if tracked is not None:
+        if rel in tracked:
+            return True
+        prefix = rel + "/"
+        return any(p.startswith(prefix) for p in tracked)
+    cur = root
+    for part in Path(rel).parts:
+        if part in ("", "."):
+            continue
+        try:
+            if part not in os.listdir(cur):
+                return False
+        except (OSError, NotADirectoryError):
+            return False
+        cur = cur / part
+    return True
+
+
 def _inline_path_exists(root: Path, candidate: str) -> bool:
-    """A reference resolves if the path exists, or — for an extension-less
-    module reference (``python/tessera/ops``) — ``<path>.py`` or
+    """A reference resolves if the path exists (exact case), or — for an
+    extension-less module reference (``python/tessera/ops``) — ``<path>.py`` or
     ``<path>/__init__.py`` exists."""
-    p = root / candidate
-    if p.exists():
+    if _exists_case_sensitive(root, candidate):
         return True
-    if not p.suffix:
-        return ((root / (candidate + ".py")).exists()
-                or (root / (candidate + ".pyi")).exists()
-                or (p / "__init__.py").exists())
+    if not Path(candidate).suffix:
+        return (_exists_case_sensitive(root, candidate + ".py")
+                or _exists_case_sensitive(root, candidate + ".pyi")
+                or _exists_case_sensitive(root, candidate + "/__init__.py"))
     return False
 
 

@@ -4570,6 +4570,41 @@ class AppleGPUMLPSession:
             Y = Y + self._bias[None, :]
         return _mtl4_epilogue_act_numpy(Y, self._act_code, np)
 
+    def run_dev(self, X: Any, Y: Any = None) -> Any:
+        """R0-bridge device-resident step: ``X`` is a :class:`DeviceTensor`
+        already on the GPU (f16/bf16, shape ``[M, K]``); returns a resident
+        :class:`DeviceTensor` ``Y[M,N] (f32) = act(X @ W + bias)`` with **no host
+        round-trip** — X is not uploaded and Y is not downloaded, so a decode loop
+        keeps the activation resident across steps. Allocates ``Y`` if not given.
+        Falls back to a host compute (writing into ``Y``'s shared storage) when
+        Metal 4 is unavailable. See docs/apple_gpu_metal4_adoption.md (M8/R0)."""
+        np = self._np
+        if not isinstance(X, DeviceTensor):
+            raise TypeError("run_dev expects a DeviceTensor X (use DeviceTensor.from_numpy)")
+        if len(X.shape) != 2 or int(X.shape[1]) != self._K:
+            raise ValueError(f"X must be [M, {self._K}]; got shape {X.shape}")
+        M = int(X.shape[0])
+        if Y is None:
+            Y = DeviceTensor.empty((M, self._N), np.float32)
+            if Y is None:
+                raise RuntimeError("device-tensor ABI unavailable for run_dev")
+        elif not isinstance(Y, DeviceTensor) or tuple(Y.shape) != (M, self._N):
+            raise ValueError(f"Y must be a DeviceTensor of shape ({M}, {self._N})")
+        if self._handle is not None:
+            run = _apple_gpu_mtl4_mlp_session_run_dev_sym()
+            if run is not None:
+                rc = run(self._handle, X.handle, Y.handle, ctypes.c_int32(M))
+                if rc == 1:
+                    return Y
+        # host fallback — compute into Y's shared storage (stays "resident")
+        Xh = X.numpy().astype(np.float32)
+        Yh = Xh @ self._W.astype(np.float32)
+        if self._bias is not None:
+            Yh = Yh + self._bias[None, :]
+        Yh = _mtl4_epilogue_act_numpy(Yh, self._act_code, np)
+        Y.numpy()[...] = Yh.astype(np.float32)
+        return Y
+
     def close(self) -> None:
         if self._handle is not None:
             destroy = _apple_gpu_mtl4_mlp_session_destroy_sym()
@@ -4636,6 +4671,17 @@ def _apple_gpu_mtl4_mlp_session_run_sym() -> Any:
         return None
     sym.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16),
                     ctypes.POINTER(ctypes.c_float), ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def _apple_gpu_mtl4_mlp_session_run_dev_sym() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mtl4_mlp_session_run_dev", None)
+    if sym is None:
+        return None
+    # (handle, X devtensor, Y devtensor, M) — X/Y are opaque void* handles.
+    sym.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32]
     sym.restype = ctypes.c_int32
     return sym
 

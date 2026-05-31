@@ -219,6 +219,45 @@ half precision the cooperative op is the better lever than TM's hand-rolled
 simdgroup GEMM. TM's clean tile DSL (`rt`/`st`/`gl` types, warp/group ops) is a
 nice model for a future Tile-IR→MSL lowering, but not a perf win.
 
+## R-series device-resident lane — Metal 4 review (2026)
+
+Re-examined R0–R4 (the GPU-resident-activation surface) against the better Metal 4
+documentation to see whether any should adopt the MTL4 command model / typed
+`MTLTensor` resources.
+
+- **R0 (`TsDeviceTensor`)** — a shared `MTLBuffer` + nbytes. *The one genuine
+  Metal 4 gap.* It fed the MPSGraph lane (R1/R2/R4) fine, but **could not feed the
+  MTL4 cooperative (matrix-unit) lane** without a host round-trip — every MTL4 path
+  re-uploaded host arrays via `newBufferWithBytes`. **Fixed (R0→MTLTensor bridge):**
+  `TsDeviceTensor` now carries a lazily-created, cached **buffer-backed `MTLTensor`
+  view** (`ts_dev_tensor_view`, cached by `(inner, outer, dt)`), and a new
+  `tessera_apple_gpu_mtl4_mlp_session_run_dev(handle, X, Y, M)` binds resident X/Y
+  tensor views straight into the M8 session's argument table — **no X upload, no Y
+  download**. `AppleGPUMLPSession.run_dev(X_devtensor[, Y_devtensor])` exposes it;
+  bit-exact vs `run()`/reference (rel 0.0 f16/bf16), guarded by
+  `test_apple_gpu_metal4.py::test_mtl4_mlp_session_run_dev_*` (4 tests).
+
+  **Honest perf note:** at decode sizes the per-step saving is **within noise**
+  (0.96–1.13× across M=1..32, K=4096) — on unified memory the saved memcpy (X ≈ 8 KB,
+  Y ≈ 16–44 KB) is negligible against the ~1–2 ms dispatch+compute. The bridge's
+  value is **architectural**: it's the missing capability that lets a resident
+  activation reach the matrix-unit lane at all without a round-trip. The latency
+  win materializes only when it removes a *download→reupload between successive MTL4
+  ops* (zero-copy chaining), not for one isolated session step. Full round-trip-free
+  MLP stacking additionally needs a resident f32→f16 cast between layers (follow-up).
+
+- **R1 (`bmm_dev`), R2 (`TsEncodeSession`: bmm/unary/binary/gather/rowop/gumbel),
+  R4 (block-paged gather)** — all **MPSGraph-based on the classic command model**,
+  consuming R0 buffers zero-copy *within the MPSGraph lane*. **They cannot move to
+  the MTL4 command model:** MPSGraph has zero MTL4 support (it only encodes to a
+  classic `MTLCommandBuffer`), so a port would mean abandoning MPSGraph. They are
+  already optimal for that lane — R2's "encode N ops into one command buffer, commit
+  once" is the right MPSGraph amortization. Their MTL4 analogue already exists
+  *separately* as the M8 resident-weight session + P2/P3 reusable-object dispatch.
+  **Verdict: leave R1/R2/R4 as-is.**
+
+- **R3** — unassigned; the R-series numbering skips it.
+
 ## Verification against the Metal 4 SDK headers (2026 review)
 
 The API claims in this doc and in `apple_gpu_metal4_adoption.md` were

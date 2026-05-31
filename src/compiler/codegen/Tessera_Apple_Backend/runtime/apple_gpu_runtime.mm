@@ -251,6 +251,14 @@ MetalDeviceContext &deviceContext() {
 struct TsDeviceTensor {
   id<MTLBuffer> buf;
   int64_t nbytes;
+  // R0→MTLTensor bridge: a lazily-created, cached buffer-backed MTLTensor view so
+  // a resident activation can feed the Metal 4 cooperative (matrix-unit) lane with
+  // zero host round-trip. Bare `id` (not `id<MTLTensor>`) keeps the struct free of
+  // the macos(26) availability annotation; cached by (inner, outer, dt).
+  id tensorView;
+  int viewInner;
+  int viewOuter;
+  int viewDt;
 };
 
 extern "C" TsDeviceTensor *ts_dev_alloc(int64_t nbytes) {
@@ -260,7 +268,7 @@ extern "C" TsDeviceTensor *ts_dev_alloc(int64_t nbytes) {
     id<MTLBuffer> b = [ctx.device newBufferWithLength:(NSUInteger)nbytes
                                               options:MTLResourceStorageModeShared];
     if (!b) return nullptr;
-    return new TsDeviceTensor{b, nbytes};
+    return new TsDeviceTensor{b, nbytes, nil, 0, 0, -1};
   }
 }
 
@@ -284,6 +292,7 @@ extern "C" void ts_dev_download(TsDeviceTensor *t, void *dst, int64_t n) {
 
 extern "C" void ts_dev_free(TsDeviceTensor *t) {
   if (t) {
+    t->tensorView = nil;  // ARC releases the cached MTLTensor view
     t->buf = nil;  // ARC releases the buffer
     delete t;
   }
@@ -9198,6 +9207,27 @@ static id<MTLTensor> make_buffer_tensor(id<MTLDevice> dev, id<MTLBuffer> buf,
   return [buf newTensorWithDescriptor:td offset:0 error:&e];
 }
 
+// R0→MTLTensor bridge — a cached buffer-backed MTLTensor view over a resident
+// device tensor's shared storage, so the MTL4 cooperative lane can bind it
+// directly (no `newBufferWithBytes` upload). The view is rebuilt only when the
+// requested (inner, outer, dt) differs from the cached one — so a steady decode
+// loop (same M,K each step) creates it once and reuses it.
+API_AVAILABLE(macos(26.0), ios(26.0))
+static id<MTLTensor> ts_dev_tensor_view(TsDeviceTensor *t, int inner, int outer,
+                                        MTLTensorDataType dt) {
+  if (!t || !t->buf) return nil;
+  if (t->tensorView && t->viewInner == inner && t->viewOuter == outer &&
+      t->viewDt == (int)dt)
+    return (id<MTLTensor>)t->tensorView;
+  id<MTLTensor> v = make_buffer_tensor(deviceContext().device, t->buf, inner, outer, dt);
+  if (!v) return nil;
+  t->tensorView = v;
+  t->viewInner = inner;
+  t->viewOuter = outer;
+  t->viewDt = (int)dt;
+  return v;
+}
+
 // Shared MPP matmul2d dispatch. A, B are 16-bit (f16 or bf16) bit patterns; C is
 // f32. When `fused`, also binds `bias` (length N, may be null) + {has_bias, act}
 // and runs the epilogue entry. Returns 1 if it ran on the tensor-op lane, else 0.
@@ -9535,6 +9565,51 @@ extern "C" int32_t tessera_apple_gpu_mtl4_mlp_session_run(void *handle,
     if (!done) return 0;
     std::memcpy(Y, [bY contents], (size_t)M * N * 4);
     return 1;
+  }
+  return 0;
+}
+
+// R0 bridge — device-resident decode step: X and Y are TsDeviceTensors already on
+// the GPU. Binds their cached MTLTensor views directly, so neither X is uploaded
+// nor Y downloaded — the activation stays resident across the step (and across a
+// decode loop, the only per-call cost is the dispatch). Otherwise identical to
+// the host-pointer `_run`. Returns 1 if it ran on the matrix-unit lane.
+extern "C" int32_t tessera_apple_gpu_mtl4_mlp_session_run_dev(void *handle,
+    TsDeviceTensor *X, TsDeviceTensor *Y, int32_t M) {
+  if (!handle || !X || !Y || M <= 0) return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !X->buf || !Y->buf) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    TesseraMlpSession *s = (TesseraMlpSession *)handle;
+    int K = s->K, N = s->N;
+    if (X->nbytes < (int64_t)M * K * 2 || Y->nbytes < (int64_t)M * N * 4) return 0;
+    id<MTLTensor> tX = ts_dev_tensor_view(X, K, M, (MTLTensorDataType)s->dt);
+    id<MTLTensor> tY = ts_dev_tensor_view(Y, N, M, MTLTensorDataTypeFloat32);
+    if (!tX || !tY) return 0;
+    id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
+    if (!queue) return 0;
+    NSError *err = nil;
+    bool done = false;
+    {
+      std::lock_guard<std::mutex> lock(ctx.mtl4_dispatch_mu);
+      id<MTLResidencySet> resStep = [ctx.device newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
+      if (!resStep) return 0;
+      [resStep addAllocation:X->buf]; [resStep addAllocation:Y->buf];
+      [resStep commit];
+      [resStep requestResidency];
+      [queue addResidencySet:resStep];
+      done = mtl4_encode_and_wait(ctx, queue, (id<MTLComputePipelineState>)s->pso,
+          ^(id<MTL4ArgumentTable> at) {
+            [at setResource:tX.gpuResourceID atBufferIndex:0];
+            [at setResource:((id<MTLTensor>)s->tW).gpuResourceID atBufferIndex:1];
+            [at setResource:tY.gpuResourceID atBufferIndex:2];
+            [at setAddress:((id<MTLBuffer>)s->bBias).gpuAddress atIndex:3];
+            [at setAddress:((id<MTLBuffer>)s->bParams).gpuAddress atIndex:4];
+          }, MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1), MTLSizeMake(128, 1, 1));
+      [queue removeResidencySet:resStep];
+    }
+    // No memcpy: Y stays resident in its device tensor (zero download).
+    return done ? 1 : 0;
   }
   return 0;
 }

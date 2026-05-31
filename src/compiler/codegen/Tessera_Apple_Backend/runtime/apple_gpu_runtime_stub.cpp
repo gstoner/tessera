@@ -1378,6 +1378,12 @@ extern "C" int32_t tessera_apple_gpu_mtl4_mlp_session_run(void*, const uint16_t*
                                                           int32_t) {
   return 0;
 }
+// R0 bridge — device-resident decode step; no Metal 4 off Darwin (session_create
+// returns null, so this is never reached with a real handle).
+extern "C" int32_t tessera_apple_gpu_mtl4_mlp_session_run_dev(void*, TsDeviceTensor*,
+                                                              TsDeviceTensor*, int32_t) {
+  return 0;
+}
 extern "C" void tessera_apple_gpu_mtl4_mlp_session_destroy(void*) {}
 // Metal 4 P4 — MTL4Archive pipeline persistence; no Metal 4 off Darwin.
 extern "C" int32_t tessera_apple_gpu_mtl4_archive_enable(const char*) { return 0; }

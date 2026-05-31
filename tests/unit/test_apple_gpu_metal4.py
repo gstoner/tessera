@@ -309,6 +309,86 @@ def test_mtl4_mlp_session_matches_oneshot_epilogue():
     np.testing.assert_allclose(Y_sess, Y_one, rtol=1e-3, atol=1e-3)
 
 
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+def test_mtl4_mlp_session_run_dev_matches_run(dtype):
+    """R0→MTLTensor bridge: run_dev() takes a resident DeviceTensor X and writes a
+    resident DeviceTensor Y (no host round-trip), binding buffer-backed MTLTensor
+    views into the matrix-unit lane. It must produce the same values as the
+    host-pointer run() and the composed reference, across decode-step shapes, and
+    Y must come back as a live DeviceTensor."""
+    if dtype == "bf16":
+        ml = pytest.importorskip("ml_dtypes")
+        cast, tol = ml.bfloat16, 6e-2
+    else:
+        cast, tol = np.float16, 3e-2
+    DeviceTensor = R.DeviceTensor
+    K, N = 256, 512
+    rng = np.random.default_rng(11)
+    W = (rng.standard_normal((K, N)) * 0.05).astype(cast)
+    bias = (rng.standard_normal(N) * 0.1).astype(np.float32)
+    with R.AppleGPUMLPSession(W, np, bias=bias, act="silu", dtype=dtype) as sess:
+        for M in (1, 8, 64, 100):
+            X = (rng.standard_normal((M, K)) * 0.1).astype(cast)
+            Y_host = sess.run(X)
+            Xd = DeviceTensor.from_numpy(X)
+            assert Xd is not None
+            Yd = sess.run_dev(Xd)
+            try:
+                assert isinstance(Yd, DeviceTensor)
+                assert Yd.shape == (M, N) and Yd.dtype == np.float32
+                Y_dev = Yd.numpy()
+                ref = _mlp_ref(X, W, bias, "silu", np)
+                den = np.maximum(1e-2, np.abs(ref))
+                assert float(np.max(np.abs(Y_dev.astype(np.float64) - ref) / den)) < tol
+                # device-resident path agrees with the host-pointer path
+                np.testing.assert_allclose(Y_dev, Y_host, rtol=1e-3, atol=1e-3)
+            finally:
+                Yd.free()
+                Xd.free()
+
+
+def test_mtl4_mlp_session_run_dev_reuses_resident_buffers():
+    """A decode loop can reuse one resident X and one resident Y across steps —
+    run_dev writes into the supplied Y (cached tensor view, no realloc)."""
+    DeviceTensor = R.DeviceTensor
+    K, N = 128, 256
+    rng = np.random.default_rng(5)
+    W = (rng.standard_normal((K, N)) * 0.05).astype(np.float16)
+    with R.AppleGPUMLPSession(W, np, act="relu", dtype="f16") as sess:
+        Xd = DeviceTensor.from_numpy((rng.standard_normal((4, K)) * 0.1).astype(np.float16))
+        Yd = DeviceTensor.empty((4, N), np.float32)
+        assert Xd is not None and Yd is not None
+        try:
+            for step in range(3):
+                # overwrite the resident X in place, recompute into the same Y
+                Xd.numpy()[...] = (rng.standard_normal((4, K)) * 0.1).astype(np.float16)
+                out = sess.run_dev(Xd, Yd)
+                assert out is Yd
+                ref = _mlp_ref(Xd.numpy(), W, None, "relu", np)
+                den = np.maximum(1e-2, np.abs(ref))
+                assert float(np.max(np.abs(Yd.numpy().astype(np.float64) - ref) / den)) < 3e-2
+        finally:
+            Yd.free()
+            Xd.free()
+
+
+def test_mtl4_mlp_session_run_dev_rejects_bad_inputs():
+    DeviceTensor = R.DeviceTensor
+    K, N = 64, 128
+    rng = np.random.default_rng(2)
+    W = (rng.standard_normal((K, N)) * 0.1).astype(np.float16)
+    with R.AppleGPUMLPSession(W, np, act="none", dtype="f16") as sess:
+        with pytest.raises(TypeError):
+            sess.run_dev(np.zeros((4, K), np.float16))  # not a DeviceTensor
+        Xbad = DeviceTensor.from_numpy(np.zeros((4, K + 1), np.float16))
+        assert Xbad is not None
+        try:
+            with pytest.raises(ValueError):
+                sess.run_dev(Xbad)  # wrong K
+        finally:
+            Xbad.free()
+
+
 def test_mtl4_mlp_session_run_after_close_uses_fallback():
     # close() releases resident weights; further run() still returns correct
     # values via the numpy fallback (no crash, no stale handle use).

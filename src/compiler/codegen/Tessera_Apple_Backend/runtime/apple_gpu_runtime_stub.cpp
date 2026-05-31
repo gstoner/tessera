@@ -1344,6 +1344,12 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float*, const floa
                                                         int32_t) {
   return 0;
 }
+// Metal 4 M6 — MPP matmul2d fp16 tensor-op; no Metal 4 off Darwin; numpy fallback.
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_f16(const uint16_t*, const uint16_t*,
+                                                       float*, int32_t, int32_t,
+                                                       int32_t) {
+  return 0;
+}
 // Phase-G Rung 3 — dynamic speculative accept+select, non-Apple reference
 // (same logic the MSL kernel runs, so it's correct everywhere).
 extern "C" int32_t tessera_apple_gpu_msl_spec_accept(const int32_t* draft,

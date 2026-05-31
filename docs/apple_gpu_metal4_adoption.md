@@ -1,6 +1,6 @@
 # Metal 4 adoption — design + ladder
 
-> Status: **M0 + M1 + M2 + M3 + M4 + M5 landed.** This machine runs macOS 26.5 (Tahoe) with
+> Status: **M0 + M1 + M2 + M3 + M4 + M5 + M6 landed.** This machine runs macOS 26.5 (Tahoe) with
 > SDK 26.5, so the full Metal 4 surface is available:
 > `MTL4CommandQueue/Buffer/Allocator/Encoder`, `MTLTensor`, MSL 4.0
 > (`MTLLanguageVersion4_0`) — all `API_AVAILABLE(macos(26.0))`. M2 lands the
@@ -146,6 +146,44 @@ forced.
 
   Tested by `tests/unit/test_apple_gpu_metal4.py::test_mtl4_matmul_cooperative_matches_numpy`
   (general + fast paths, partial-tile, multi-threadgroup, and aligned shapes).
+- **M6 — fp16 matmul via the MSL 4.0 cooperative `tensor` op (landed; BEATS MPS).**
+  M5 established that the `simdgroup_matrix` **f32** path plateaus at ~80% of MPS
+  and that MPP `matmul2d` has no f32 cooperative path. M6 takes the rung where the
+  tensor units actually pay off: **fp16**. `tessera_apple_gpu_mtl4_matmul2d_f16`
+  computes `C[M,N] (f32) = A[M,K] (f16) @ B[K,N] (f16)` with
+  `mpp::tensor_ops::matmul2d` — Apple's MetalPerformancePrimitives cooperative
+  tensor op — on a **64×64 tile / 4 SIMD groups**, accumulating into a float
+  `cooperative_tensor` that is stored to the output. The plumbing that the M5
+  investigation found necessary:
+  - **Real `MTLTensor` arguments**, not in-kernel `tensor_inline` views (the
+    cooperative `run` path rejects pointer-backed tensors). Each operand is a
+    **buffer-backed `MTLTensor`** (`[MTLBuffer newTensorWithDescriptor:offset:error:]`)
+    with innermost-first extents `(cols, rows)`, packed strides `(1, inner)`,
+    `MTLTensorUsageCompute`, bound to an `MTL4ArgumentTable` via
+    `setResource:tensor.gpuResourceID atBufferIndex:`.
+  - Input tensor element type must be **non-`const`** half (the cooperative-tensor
+    type check rejects `const half`), and the destination must be a float
+    `cooperative_tensor` (`cT.store` requires matching element type).
+  - Compiled at runtime through `compile_mtl4_pipeline` (already sets
+    `MTLLanguageVersion4_0`); the MPP framework MSL headers resolve with no extra
+    host link. Arbitrary M/N/K — `matmul2d.slice()` edge-checks partial tiles.
+
+  **Measured (M-series, Tahoe, f16→f32, GPU best-of-3, MPP vs MPS, identical
+  synced-loop methodology):** MPP **beats MPS** — **3884 vs 3303 GFLOP/s (1.18×)
+  at 1024³, 6508 vs 5883 (1.11×) at 2048³**, and **ties at 4096³** (6675 vs 6619).
+  A tile sweep confirmed 64×64/4-SIMD-group is the best config (128×64/8 and
+  128×128/8 are close; 128×128/4 and 256×128/8 are 3–5× worse — wrong tile:SIMD
+  ratio). This is the first MTL4 kernel to **clear MPS**, and the reason is
+  precisely that fp16 runs on the matrix units while f32 does not.
+
+  **Routing:** exposed + validated, but **OFF by default** like the rest of the
+  MTL4 lane — the GPU-kernel win is ~1.1× and MTL4's per-call dispatch + the f16→
+  f32 buffer-copy overhead erode it end-to-end. The mechanism is in place to flip
+  fp16 matmul onto this lane if/when the per-call overhead is amortized (resident
+  tensors, batched command buffers). Tested by
+  `tests/unit/test_apple_gpu_metal4.py::test_mtl4_matmul2d_f16_matches_numpy`
+  (aligned, partial, and non-square shapes; f32-accumulated, bit-close to the
+  fp16-reference product).
 
 ## Trade-offs + risks
 

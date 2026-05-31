@@ -126,6 +126,48 @@ def test_mtl4_matmul_cooperative_matches_numpy(M, N, K):
         assert ran
 
 
+@pytest.mark.parametrize(
+    "M,N,K",
+    [
+        (8, 8, 8),        # tiny (< one 64x64 tile)
+        (64, 64, 64),     # single MPP tile
+        (128, 96, 80),    # partial tile, K spans multiple chunks
+        (100, 72, 48),    # none 64/8-aligned -> matmul2d slice() edge-checks
+        (256, 256, 256),  # several full tiles
+        (512, 128, 320),  # non-square, large K
+    ],
+)
+def test_mtl4_matmul2d_f16_matches_numpy(M, N, K):
+    """M6: fp16 matmul via the MSL 4.0 cooperative `tensor` op
+    (MetalPerformancePrimitives matmul2d) on the GPU matrix units, with real
+    MTLTensor arguments bound through an MTL4ArgumentTable. f16 in, f32 out;
+    accumulation is fp32 so it stays bit-close to the fp16-reference product
+    across aligned, partial, and non-square shapes."""
+    rng = np.random.default_rng(M + N + K)
+    A = (rng.standard_normal((M, K)) * 0.25).astype(np.float16)
+    B = (rng.standard_normal((K, N)) * 0.25).astype(np.float16)
+    C, ran = R.apple_gpu_mtl4_matmul2d_f16(A, B, np)
+    assert C.dtype == np.float32
+    ref = A.astype(np.float64) @ B.astype(np.float64)
+    den = np.maximum(1e-2, np.abs(ref))
+    assert float(np.max(np.abs(C.astype(np.float64) - ref) / den)) < 3e-2
+    # On a Tahoe machine with Metal 4, the MPP tensor-op must have run on-GPU.
+    if R.apple_gpu_metal4_caps()["available"]:
+        assert ran
+
+
+def test_mtl4_matmul2d_f16_falls_back_cleanly():
+    # Off Tahoe / non-Darwin the contract still holds via the numpy fp16 ref.
+    rng = np.random.default_rng(11)
+    A = (rng.standard_normal((24, 40)) * 0.2).astype(np.float16)
+    B = (rng.standard_normal((40, 16)) * 0.2).astype(np.float16)
+    C, _ran = R.apple_gpu_mtl4_matmul2d_f16(A, B, np)
+    assert C.shape == (24, 16) and C.dtype == np.float32
+    ref = A.astype(np.float64) @ B.astype(np.float64)
+    den = np.maximum(1e-2, np.abs(ref))
+    assert float(np.max(np.abs(C.astype(np.float64) - ref) / den)) < 3e-2
+
+
 def test_mtl4_matmul_non_multiple_of_8_falls_back():
     # The simdgroup kernel needs M/N/K multiples of 8; otherwise numpy fallback.
     A = np.ones((7, 8), np.float32)

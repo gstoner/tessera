@@ -8977,6 +8977,125 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float *A,
 }
 
 //===----------------------------------------------------------------------===//
+// Metal 4 M6 — fp16 matmul via the MSL 4.0 cooperative `tensor` op
+// (MetalPerformancePrimitives `mpp::tensor_ops::matmul2d`), the real tensor-unit
+// path. C[M,N](f32) = A[M,K](f16) @ B[K,N](f16). Unlike the simdgroup_matrix
+// kernels above (whose f32 path tops out ~80% of MPS), the MPP fp16 cooperative
+// op runs on the matrix units and BEATS MPS fp16 here (~1.1-1.18x at N=1024-2048,
+// ties at 4096, GPU best-of-3). It requires the MSL 4.0 `tensor` type, real
+// MTLTensors bound via an MTL4ArgumentTable (in-kernel `tensor_inline` views are
+// rejected by the cooperative run path), and a float `cooperative_tensor`
+// accumulator stored to the device tensor. Tile 64x64 / 4 SIMD groups (the
+// fastest of the configs swept). Arbitrary M/N/K (matmul2d slice() edge-checks
+// partial tiles). See docs/apple_gpu_metal4_adoption.md (M6).
+//===----------------------------------------------------------------------===//
+static NSString *kMTL4Matmul2dF16MSL = @R"MSL(
+#include <metal_stdlib>
+#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>
+using namespace metal;
+using namespace mpp::tensor_ops;
+// 64x64 output tile per threadgroup, 4 SIMD groups (128 threads). f16 in, f32 out.
+kernel void mtl4_matmul2d_f16(tensor<device half,  dextents<int32_t, 2>> A [[buffer(0)]],
+                              tensor<device half,  dextents<int32_t, 2>> B [[buffer(1)]],
+                              tensor<device float, dextents<int32_t, 2>> C [[buffer(2)]],
+                              uint2 tg [[threadgroup_position_in_grid]]) {
+  constexpr auto desc = matmul2d_descriptor(64, 64, static_cast<int>(dynamic_extent));
+  matmul2d<desc, execution_simdgroups<4>> op;
+  auto mA = A.slice(0, tg.x * 64);
+  auto mB = B.slice(tg.y * 64, 0);
+  auto mC = C.slice(tg.y * 64, tg.x * 64);
+  // float cooperative_tensor accumulator -> store (f32) to the device tensor.
+  auto cT = op.get_destination_cooperative_tensor<decltype(mA), decltype(mB), float>();
+  op.run(mA, mB, cT);   // mode::multiply overwrites; no pre-zero needed
+  cT.store(mC);
+}
+)MSL";
+
+// A, B are fp16 (uint16_t bit patterns); C is fp32. Returns 1 if it ran on the
+// MPP tensor-op lane, else 0 (caller falls back). M/N/K any positive sizes.
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_f16(const uint16_t *A,
+                                                       const uint16_t *B, float *C,
+                                                       int32_t M, int32_t N,
+                                                       int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || M <= 0 || N <= 0 || K <= 0 || !A || !B || !C) return 0;
+  @autoreleasepool {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      id<MTLDevice> dev = ctx.device;
+      NSError *err = nil;
+      id<MTLComputePipelineState> pso =
+          compile_mtl4_pipeline(ctx, kMTL4Matmul2dF16MSL, @"mtl4_matmul2d_f16");
+      if (!pso) return 0;
+
+      MTLResourceOptions ro = MTLResourceStorageModeShared;
+      id<MTLBuffer> bA = [dev newBufferWithBytes:A length:(size_t)M * K * 2 options:ro];
+      id<MTLBuffer> bB = [dev newBufferWithBytes:B length:(size_t)K * N * 2 options:ro];
+      id<MTLBuffer> bC = [dev newBufferWithLength:(size_t)M * N * 4 options:ro];
+      if (!bA || !bB || !bC) return 0;
+
+      // Buffer-backed MTLTensors. Extents are innermost-first (cols, rows);
+      // packed row-major strides (1, inner). usage=Compute.
+      auto makeTensor = [&](id<MTLBuffer> buf, int inner, int outer,
+                            MTLTensorDataType dt) -> id<MTLTensor> {
+        MTLTensorDescriptor *td = [[MTLTensorDescriptor alloc] init];
+        NSInteger dims[2] = {inner, outer}, strd[2] = {1, inner};
+        td.dimensions = [[MTLTensorExtents alloc] initWithRank:2 values:dims];
+        td.strides = [[MTLTensorExtents alloc] initWithRank:2 values:strd];
+        td.dataType = dt;
+        td.usage = MTLTensorUsageCompute;
+        NSError *e = nil;
+        return [buf newTensorWithDescriptor:td offset:0 error:&e];
+      };
+      id<MTLTensor> tA = makeTensor(bA, K, M, MTLTensorDataTypeFloat16);
+      id<MTLTensor> tB = makeTensor(bB, N, K, MTLTensorDataTypeFloat16);
+      id<MTLTensor> tC = makeTensor(bC, N, M, MTLTensorDataTypeFloat32);
+      if (!tA || !tB || !tC) return 0;
+
+      id<MTLResidencySet> res = [dev newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
+      if (!res) return 0;
+      for (id<MTLBuffer> b : {bA, bB, bC}) [res addAllocation:b];
+      [res commit];
+      [res requestResidency];
+
+      MTL4ArgumentTableDescriptor *atd = [[MTL4ArgumentTableDescriptor alloc] init];
+      atd.maxBufferBindCount = 3;
+      id<MTL4ArgumentTable> at = [dev newArgumentTableWithDescriptor:atd error:&err];
+      if (!at) return 0;
+      [at setResource:tA.gpuResourceID atBufferIndex:0];
+      [at setResource:tB.gpuResourceID atBufferIndex:1];
+      [at setResource:tC.gpuResourceID atBufferIndex:2];
+
+      id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
+      id<MTL4CommandAllocator> alloc = [dev newCommandAllocator];
+      id<MTL4CommandBuffer> cb = [dev newCommandBuffer];
+      if (!queue || !alloc || !cb) return 0;
+      [queue addResidencySet:res];
+      [cb beginCommandBufferWithAllocator:alloc];
+      id<MTL4ComputeCommandEncoder> enc = [cb computeCommandEncoder];
+      [enc setComputePipelineState:pso];
+      [enc setArgumentTable:at];
+      // 64x64 output tile per threadgroup; tg.x tiles M, tg.y tiles N; 4 SIMD groups.
+      [enc dispatchThreadgroups:MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1)
+          threadsPerThreadgroup:MTLSizeMake(128, 1, 1)];
+      [enc endEncoding];
+      [cb endCommandBuffer];
+
+      const id<MTL4CommandBuffer> cbs[1] = {cb};
+      [queue commit:cbs count:1];
+      id<MTLSharedEvent> ev = [dev newSharedEvent];
+      [queue signalEvent:ev value:1];
+      bool done = [ev waitUntilSignaledValue:1 timeoutMS:10000];
+      [queue removeResidencySet:res];
+      if (!done) return 0;
+
+      std::memcpy(C, [bC contents], (size_t)M * N * 4);
+      return 1;
+    }
+  }
+  return 0;
+}
+
+//===----------------------------------------------------------------------===//
 // Phase-G Rung 3 via MSL — the DYNAMIC speculative-verify control flow as one
 // MSL kernel, the part MPSGraph's static-shape graph cannot express. Given a
 // fixed-capacity set of candidate paths (no trie, no heap), the kernel:

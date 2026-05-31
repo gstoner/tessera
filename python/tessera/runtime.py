@@ -4121,6 +4121,48 @@ def apple_gpu_mtl4_matmul_sg(A: Any, B: Any, np: Any):
     return C, rc == 1
 
 
+def _apple_gpu_mtl4_matmul2d_f16_sym() -> Any:
+    """Metal 4 M6 MPP matmul2d fp16 tensor-op symbol. None when unavailable."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mtl4_matmul2d_f16", None)
+    if sym is None:
+        return None
+    u16 = ctypes.POINTER(ctypes.c_uint16)
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [u16, u16, fp, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def apple_gpu_mtl4_matmul2d_f16(A: Any, B: Any, np: Any):
+    """``C[f32] = A[f16] @ B[f16]`` via the MSL 4.0 cooperative ``tensor`` op
+    (MetalPerformancePrimitives ``matmul2d``) on the GPU matrix units, dispatched
+    through the Metal 4 command model with MTLTensor-bound arguments. Unlike the
+    ``simdgroup_matrix`` f32 kernel (which tops out ~80% of MPS), this fp16 path
+    *beats* MPS fp16 (~1.1-1.18x at N=1024-2048). Any ``M``/``N``/``K`` (matmul2d
+    edge-checks partial tiles). Returns ``(C[M, N] float32, ran_on_mtl4)``; falls
+    back to a numpy fp16 reference when Metal 4 is unavailable. See
+    docs/apple_gpu_metal4_adoption.md (M6)."""
+    A = np.ascontiguousarray(A, np.float16)
+    B = np.ascontiguousarray(B, np.float16)
+    M, K = A.shape
+    K2, N = B.shape
+    C = np.empty((M, N), np.float32)
+    rc = 0
+    if K2 == K:
+        sym = _apple_gpu_mtl4_matmul2d_f16_sym()
+        if sym is not None:
+            u16 = ctypes.POINTER(ctypes.c_uint16)
+            fp = ctypes.POINTER(ctypes.c_float)
+            rc = sym(A.view(np.uint16).ctypes.data_as(u16),
+                     B.view(np.uint16).ctypes.data_as(u16),
+                     C.ctypes.data_as(fp), ctypes.c_int32(M), ctypes.c_int32(N),
+                     ctypes.c_int32(K))
+    if rc != 1:
+        C = (A.astype(np.float32) @ B.astype(np.float32)).astype(np.float32)
+    return C, rc == 1
+
+
 # ── M4 — capability-gated routing of real ops onto the Metal 4 lane ───────────
 # OFF by default: the MTL4 cooperative-matrix kernel is *correct* but still
 # slower than the tuned MPS matmul end-to-end. M5 added a register-blocked,
@@ -5819,6 +5861,8 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_mtl4_scan_f32")
                 # Metal 4 M3 — cooperative-matrix matmul (simdgroup_matrix).
                 getattr(lib, "tessera_apple_gpu_mtl4_matmul_sg_f32")
+                # Metal 4 M6 — MPP matmul2d fp16 tensor-op (MSL 4.0 cooperative).
+                getattr(lib, "tessera_apple_gpu_mtl4_matmul2d_f16")
                 # Phase-G Rung 3 — dynamic speculative accept as one MSL kernel.
                 getattr(lib, "tessera_apple_gpu_msl_spec_accept")
                 _apple_gpu_runtime = lib

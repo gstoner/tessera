@@ -176,7 +176,7 @@ jobs:
   # Required check.
   #
   # We do NOT build tessera-opt / tessera-translate-mlir here because
-  # those require MLIR/LLVM 21 which is not in stock Ubuntu apt.  The
+  # those require MLIR/LLVM 22 which is not in stock Ubuntu apt.  The
   # lit lane handles that separately and is opt-in.
   # ────────────────────────────────────────────────────────────────────
   build:
@@ -231,9 +231,9 @@ jobs:
   # Lane 5 — lit  (MLIR FileCheck)   ~30s once MLIR is available
   # Opt-in.  Not required.
   #
-  # Stock GitHub-hosted Ubuntu doesn't carry MLIR 21, so the lane
+  # Stock GitHub-hosted Ubuntu doesn't carry MLIR 22, so the lane
   # installs it via apt.llvm.org and gracefully skips if the install
-  # fails.  When MLIR 21 lands in the runner image, drop the install
+  # fails.  When MLIR 22 lands in the runner image, drop the install
   # guard.
   # ────────────────────────────────────────────────────────────────────
   lit:
@@ -257,21 +257,21 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install system deps + LLVM/MLIR 21
+      - name: Install system deps + LLVM/MLIR 22
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build wget gnupg
-          # Try the official LLVM apt repo for LLVM 21.  Tessera builds
-          # against 21; older toolchains will fail the configure step.
+          # Try the official LLVM apt repo for LLVM 22.  Tessera builds
+          # against 22; older toolchains will fail the configure step.
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add - || true
           codename="$(lsb_release -cs)"
-          echo "deb http://apt.llvm.org/${codename}/ llvm-toolchain-${codename}-21 main" \
-            | sudo tee /etc/apt/sources.list.d/llvm21.list
+          echo "deb http://apt.llvm.org/${codename}/ llvm-toolchain-${codename}-22 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm22.list
           sudo apt-get update || true
           sudo apt-get install -y --no-install-recommends \
-            llvm-21-dev mlir-21-tools libmlir-21-dev clang-21 \
-            || { echo "::warning ::LLVM/MLIR 21 not available — skipping lit lane"; exit 0; }
+            llvm-22-dev mlir-22-tools libmlir-22-dev clang-22 \
+            || { echo "::warning ::LLVM/MLIR 22 not available — skipping lit lane"; exit 0; }
           python -m pip install --upgrade pip
           python -m pip install -e . --no-deps
           python -m pip install lit FileCheck pytest numpy pyyaml
@@ -282,14 +282,14 @@ jobs:
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DTESSERA_BUILD_EXAMPLES=ON \
-            -DMLIR_DIR=/usr/lib/llvm-21/lib/cmake/mlir \
-            -DLLVM_DIR=/usr/lib/llvm-21/lib/cmake/llvm
+            -DMLIR_DIR=/usr/lib/llvm-22/lib/cmake/mlir \
+            -DLLVM_DIR=/usr/lib/llvm-22/lib/cmake/llvm
           cmake --build build --target tessera-opt tessera-translate-mlir
 
       - name: Run MLIR tool proof tests
         env:
           PYTHONPATH: python
-          PATH: "${{ github.workspace }}/build/tools/tessera-opt:${{ github.workspace }}/build/tools/tessera-translate:/usr/lib/llvm-21/bin:${{ env.PATH }}"
+          PATH: "${{ github.workspace }}/build/tools/tessera-opt:${{ github.workspace }}/build/tools/tessera-translate:/usr/lib/llvm-22/bin:${{ env.PATH }}"
         run: |
           python -m pytest \
             tests/unit/test_cli_translate.py \
@@ -299,7 +299,7 @@ jobs:
       - name: Run lit smoke (TESSERA_VALIDATE_LIT=1)
         env:
           TESSERA_VALIDATE_LIT: "1"
-          PATH: "${{ github.workspace }}/build/tools/tessera-opt:${{ github.workspace }}/build/tools/tessera-translate:/usr/lib/llvm-21/bin:${{ env.PATH }}"
+          PATH: "${{ github.workspace }}/build/tools/tessera-opt:${{ github.workspace }}/build/tools/tessera-translate:/usr/lib/llvm-22/bin:${{ env.PATH }}"
         run: |
           lit tests/tessera-ir -v
 

@@ -1,7 +1,7 @@
 """M2-Step-5 — Python object-model Tile IR equivalence harness.
 
 Closes the M2 follow-up that was previously gated on ``tessera-opt``
-building against MLIR 21.  This test locks the *Python side* of
+building against MLIR 22.  This test locks the *Python side* of
 the equivalence claim: for each shipped canonical-program driver,
 the Python-emitted IR text is byte-identical to a checked-in
 golden file, and the canonical's ``hash_ir_text`` digest matches.

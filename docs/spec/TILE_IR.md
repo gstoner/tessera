@@ -29,7 +29,7 @@ question. Resolution:
   `tshared.alloc` is a documentation alias; the implementation accepts
   the canonical form only.
 - **TilingInterface methods on `MatmulOp` are real** as of Sprint B3-v2
-  (2026-05): the matmul tiling interface follows MLIR 21 signatures
+  (2026-05): the matmul tiling interface follows MLIR 22 signatures
   with a lit fixture under `tests/tessera-ir/phase2/` + Python guard.
   `Conv2DNHWCOp` has an honest `failure()` scaffold and is explicitly
   marked scaffolded.

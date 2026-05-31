@@ -2,7 +2,7 @@
 
 These tests **skip** when ``tessera-opt`` isn't on the PATH or in
 the standard build directory.  When the binary is present (i.e.,
-after a successful C++ build against MLIR 21), the tests assert
+after a successful C++ build against MLIR 22), the tests assert
 that the headline pipeline aliases and dialects register as
 expected.
 
@@ -22,20 +22,24 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_BUILD = REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"
+DEFAULT_BUILD_CANDIDATES = (
+    REPO_ROOT / "build-llvm22" / "tools" / "tessera-opt" / "tessera-opt",
+    REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt",
+)
 
 
 def _find_tessera_opt() -> str | None:
     """Locate the ``tessera-opt`` binary; ``None`` when unavailable."""
-    if DEFAULT_BUILD.is_file() and os.access(DEFAULT_BUILD, os.X_OK):
-        return str(DEFAULT_BUILD)
+    for candidate in DEFAULT_BUILD_CANDIDATES:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
     return shutil.which("tessera-opt")
 
 
 _TESSERA_OPT = _find_tessera_opt()
 _REQUIRES_OPT = pytest.mark.skipif(
     _TESSERA_OPT is None,
-    reason="tessera-opt not built; run `cmake --build build --target tessera-opt`",
+    reason="tessera-opt not built; run `cmake --build build-llvm22 --target tessera-opt`",
 )
 
 
@@ -53,10 +57,10 @@ def test_tessera_opt_runs_and_reports_a_version() -> None:
     out = subprocess.run(
         [_TESSERA_OPT, "--version"], capture_output=True, text=True, timeout=10,
     ).stdout
-    # Homebrew packaging emits "Homebrew LLVM version 21.x.y"; LLVM
-    # vanilla emits "LLVM version 21.x.y".  Both contain "21." which is
+    # Homebrew packaging emits "Homebrew LLVM version 22.x.y"; LLVM
+    # vanilla emits "LLVM version 22.x.y".  Both contain "22." which is
     # the version pin we care about.
-    assert "21." in out, f"unexpected --version output: {out!r}"
+    assert "22." in out, f"unexpected --version output: {out!r}"
 
 
 @_REQUIRES_OPT

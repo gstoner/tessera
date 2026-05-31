@@ -303,17 +303,18 @@ scripts/release_gate.py --target=apple_gpu
 mypy python/tessera/
 ```
 
-C++/MLIR builds require LLVM/MLIR 21 or newer:
+C++/MLIR builds require LLVM/MLIR 22 or newer:
 
 ```bash
 # Convenience build wrapper; defaults to CPU-only unless CUDA/HIP is enabled
 scripts/build.sh
 
-# Or configure explicitly, for example on macOS with Homebrew LLVM 21
+# Or configure explicitly, for example on macOS with Homebrew LLVM 22
+LLVM_PREFIX="$(brew --prefix llvm)"
 cmake -S . -B build \
-  -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/llvm@21 \
-  -DLLVM_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/llvm \
-  -DMLIR_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/mlir \
+  -DCMAKE_PREFIX_PATH="$LLVM_PREFIX" \
+  -DLLVM_DIR="$LLVM_PREFIX/lib/cmake/llvm" \
+  -DMLIR_DIR="$LLVM_PREFIX/lib/cmake/mlir" \
   -DTESSERA_CPU_ONLY=ON
 
 cmake --build build --parallel
@@ -325,7 +326,7 @@ python -m lit tests/tessera-ir/ -v
 # directly with the LLVM FileCheck installed alongside Homebrew LLVM:
 build/tools/tessera-opt/tessera-opt tests/tessera-ir/phase8/apple_gpu_lowering.mlir \
   -tessera-lower-to-apple_gpu --allow-unregistered-dialect \
-  | /opt/homebrew/opt/llvm@21/bin/FileCheck tests/tessera-ir/phase8/apple_gpu_lowering.mlir
+  | "$LLVM_PREFIX/bin/FileCheck" tests/tessera-ir/phase8/apple_gpu_lowering.mlir
 ```
 
 NVIDIA / ROCm toolchain checks (skip cleanly when toolchains absent):

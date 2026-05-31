@@ -11,8 +11,8 @@ without the caller needing to export ``PATH`` first.  Probe order:
      local build location used by
      ``cmake --build build --target tessera-opt``),
   3. plain ``tessera-opt`` resolved against the caller's PATH,
-  4. common LLVM 21 bin directories such as Homebrew and
-     ``/usr/lib/llvm-21/bin``,
+  4. common LLVM 22 bin directories such as Homebrew and
+     ``/usr/lib/llvm-22/bin``,
   5. plain ``tessera-opt`` as the literal substitution (leaves any
      resolution failure to the test process).
 
@@ -24,13 +24,13 @@ import os, shutil, subprocess, lit.formats
 
 
 # Common Homebrew / system LLVM install locations to probe when
-# the binary isn't on PATH.  Pinned to MLIR 21 — see CLAUDE.md.
+# the binary isn't on PATH.  Pinned to MLIR 22.
 _LLVM_BIN_HINTS = (
-    "/opt/homebrew/opt/llvm@21/bin",
     "/opt/homebrew/opt/llvm/bin",
-    "/usr/local/opt/llvm@21/bin",
+    "/opt/homebrew/opt/llvm@22/bin",
     "/usr/local/opt/llvm/bin",
-    "/usr/lib/llvm-21/bin",
+    "/usr/local/opt/llvm@22/bin",
+    "/usr/lib/llvm-22/bin",
 )
 
 

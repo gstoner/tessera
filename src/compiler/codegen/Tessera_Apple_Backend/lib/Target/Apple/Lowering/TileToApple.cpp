@@ -97,6 +97,33 @@ bool isKVCache(llvm::StringRef name) {
   return name.starts_with("tessera.kv_cache.");
 }
 
+// G3 — the full set of Graph IR ops the Apple GPU runtime executes natively.
+// This MIRRORS the Python runtime envelope
+// driver._APPLE_GPU_{MPS,MSL,MPSGRAPH}_OPS (the single source of truth): MPS
+// (matmul/gemm/batched_gemm), custom MSL (rope/flash_attn/softmax[_safe]/gelu),
+// and the MPSGraph Tier-1 activations/norms. The drift test
+// `test_apple_gpu_tile_pass_status_matches_envelope` runs this pass over every
+// envelope op and fails if the two ever diverge — so adding a runtime op in
+// driver.py forces a matching update here.
+bool isAppleGpuRuntimeOp(llvm::StringRef n) {
+  static constexpr llvm::StringLiteral kRuntimeOps[] = {
+      // MPS
+      "tessera.matmul", "tessera.gemm", "tessera.batched_gemm",
+      // custom MSL
+      "tessera.rope", "tessera.flash_attn", "tessera.softmax",
+      "tessera.softmax_safe", "tessera.gelu",
+      // MPSGraph Tier-1 activations / norms
+      "tessera.abs", "tessera.absolute", "tessera.exp", "tessera.layer_norm",
+      "tessera.log", "tessera.log_softmax", "tessera.neg", "tessera.negative",
+      "tessera.relu", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.rsqrt",
+      "tessera.sigmoid", "tessera.sigmoid_safe", "tessera.silu",
+      "tessera.silu_mul", "tessera.softplus", "tessera.sqrt", "tessera.tanh"};
+  for (const auto &r : kRuntimeOps)
+    if (n == r)
+      return true;
+  return false;
+}
+
 // Tile-level op that the lowering should consume. The Python text pipeline
 // keeps the Graph IR op name as the `source` attribute on the Tile IR op, so
 // we match either the Graph IR spelling directly or any tile.* op carrying a
@@ -280,6 +307,17 @@ struct LowerTileToAppleGPUPass
               ? op->getAttrOfType<StringAttr>("source").getValue()
               : name;
 
+      // G3 — execution status MUST mirror the Python runtime envelope
+      // (driver._APPLE_GPU_{MPS,MSL}_OPS), the single source of truth: matmul /
+      // gemm (MPS) and rope / flash_attn / softmax[_safe] / gelu (custom MSL)
+      // execute on the GPU at runtime ("metal_runtime"); everything else stays an
+      // inspection-only artifact ("artifact_only"). The drift test
+      // test_apple_gpu_tile_pass_status_matches_envelope enforces this agreement.
+      const bool runtimeClass =
+          isAppleGpuRuntimeOp(name) || isAppleGpuRuntimeOp(src);
+      const llvm::StringRef execStatus =
+          runtimeClass ? "metal_runtime" : "artifact_only";
+
       bool emittedKernel = false;
       if (isKVCache(name) || isKVCache(src)) {
         // kv_cache_coverage_matrix.md (2026-05-10) — Apple GPU mirrors
@@ -304,7 +342,7 @@ struct LowerTileToAppleGPUPass
         extra.emplace_back(builder.getStringAttr("framework"),
                            builder.getStringAttr("Metal"));
         extra.emplace_back(builder.getStringAttr("status"),
-                           builder.getStringAttr("artifact_only"));
+                           builder.getStringAttr(execStatus));
         extra.emplace_back(builder.getStringAttr("grid"),
                            builder.getStringAttr("bhn"));
         extra.emplace_back(builder.getStringAttr("threadgroup"),
@@ -320,7 +358,7 @@ struct LowerTileToAppleGPUPass
         extra.emplace_back(builder.getStringAttr("framework"),
                            builder.getStringAttr("MPSGraph"));
         extra.emplace_back(builder.getStringAttr("status"),
-                           builder.getStringAttr("artifact_only"));
+                           builder.getStringAttr(execStatus));
         extra.emplace_back(builder.getStringAttr("grid"),
                            builder.getStringAttr("mn_tiles"));
         extra.emplace_back(builder.getStringAttr("threadgroup"),
@@ -336,7 +374,7 @@ struct LowerTileToAppleGPUPass
         extra.emplace_back(builder.getStringAttr("framework"),
                            builder.getStringAttr("MPSGraph"));
         extra.emplace_back(builder.getStringAttr("status"),
-                           builder.getStringAttr("artifact_only"));
+                           builder.getStringAttr(execStatus));
         extra.emplace_back(builder.getStringAttr("grid"),
                            builder.getStringAttr("rows"));
         extra.emplace_back(builder.getStringAttr("threadgroup"),
@@ -352,7 +390,7 @@ struct LowerTileToAppleGPUPass
         extra.emplace_back(builder.getStringAttr("framework"),
                            builder.getStringAttr("Metal"));
         extra.emplace_back(builder.getStringAttr("status"),
-                           builder.getStringAttr("artifact_only"));
+                           builder.getStringAttr(execStatus));
         extra.emplace_back(builder.getStringAttr("grid"),
                            builder.getStringAttr("tokens_heads"));
         extra.emplace_back(builder.getStringAttr("threadgroup"),
@@ -370,7 +408,7 @@ struct LowerTileToAppleGPUPass
         extra.emplace_back(builder.getStringAttr("threadgroup_memory"),
                            builder.getStringAttr("auto"));
         extra.emplace_back(builder.getStringAttr("status"),
-                           builder.getStringAttr("artifact_only"));
+                           builder.getStringAttr(execStatus));
         extra.emplace_back(builder.getStringAttr("grid"),
                            builder.getStringAttr("elements"));
         extra.emplace_back(builder.getStringAttr("temporary_memory"),

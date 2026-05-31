@@ -69,7 +69,20 @@ match existing passes (`VerifyTesseraIR` `m.emitError`, `AutodiffPass`
 - **Accept:** either a lit fixture shows a non-trivial transform, OR the docs +
   pass registry no longer assert it's implemented.
 
-### 3. Tile→Apple (C++) align with the Python/runtime Metal-4 surface
+### 3. Tile→Apple (C++) align with the Python/runtime Metal-4 surface — ✅ DONE (2026-05-31)
+**Landed:** `TileToApple.cpp`'s GPU pass now tags each lowered
+`tessera_apple.gpu.metal_kernel` with `status = "metal_runtime"` for the **full**
+runtime envelope — `isAppleGpuRuntimeOp` mirrors
+`driver._APPLE_GPU_{MPS,MSL,MPSGRAPH}_OPS` (27 ops: MPS matmul/gemm/batched_gemm,
+MSL rope/flash_attn/softmax[_safe]/gelu, MPSGraph Tier-1 activations/norms) — and
+`"artifact_only"` for everything else (was a blanket `artifact_only`).
+**Compile-verified + lit-verified** against the real MLIR 21.1.8 build:
+`apple_gpu_lowering.mlir` updated (matmul/softmax/rope/flash_attn →
+`metal_runtime`, generic op → `artifact_only`) + 2 other phase8 Apple fixtures
+still pass. **Single-source enforcer:** `test_apple_gpu_tile_pass_status_matches_envelope`
+runs the real pass over every `driver` envelope op and fails if the C++ list and
+the Python envelope ever diverge.
+
 - **Target:** the C++ Apple pass emits target ops that reflect the *actual*
   runtime envelope (MPS / MSL / MTL4 cooperative / MPSGraph), not a blanket
   `artifact_only` Metal contract — driven by the same envelope `driver.py` uses.

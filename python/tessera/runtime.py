@@ -4163,6 +4163,122 @@ def apple_gpu_mtl4_matmul2d_f16(A: Any, B: Any, np: Any):
     return C, rc == 1
 
 
+def _apple_gpu_mtl4_matmul2d_sym(name: str, *, fused: bool) -> Any:
+    """Loader for an MPP matmul2d symbol (plain or fused-epilogue). None when
+    the symbol is missing."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, name, None)
+    if sym is None:
+        return None
+    u16 = ctypes.POINTER(ctypes.c_uint16)
+    fp = ctypes.POINTER(ctypes.c_float)
+    i32 = ctypes.c_int32
+    if fused:
+        # (A, B, C, bias, act, M, N, K)
+        sym.argtypes = [u16, u16, fp, fp, i32, i32, i32, i32]
+    else:
+        # (A, B, C, M, N, K)
+        sym.argtypes = [u16, u16, fp, i32, i32, i32]
+    sym.restype = i32
+    return sym
+
+
+def apple_gpu_mtl4_matmul2d_bf16(A: Any, B: Any, np: Any):
+    """``C[f32] = A[bf16] @ B[bf16]`` via the MSL 4.0 cooperative ``tensor`` op
+    (MetalPerformancePrimitives ``matmul2d``) on the GPU matrix units — the bf16
+    sibling of :func:`apple_gpu_mtl4_matmul2d_f16`, same MTLTensor-bound MTL4 path
+    and 64x64/4-SIMD-group kernel. Returns ``(C[M, N] float32, ran_on_mtl4)``;
+    numpy fallback off Metal 4. See docs/apple_gpu_metal4_adoption.md (M6)."""
+    bf16 = _bfloat16_dtype()
+    if bf16 is None:
+        raise RuntimeError("bf16 matmul2d requires the optional ml_dtypes package")
+    A = np.ascontiguousarray(A, bf16)
+    B = np.ascontiguousarray(B, bf16)
+    M, K = A.shape
+    K2, N = B.shape
+    C = np.empty((M, N), np.float32)
+    rc = 0
+    if K2 == K:
+        sym = _apple_gpu_mtl4_matmul2d_sym("tessera_apple_gpu_mtl4_matmul2d_bf16",
+                                           fused=False)
+        if sym is not None:
+            u16 = ctypes.POINTER(ctypes.c_uint16)
+            fp = ctypes.POINTER(ctypes.c_float)
+            rc = sym(A.view(np.uint16).ctypes.data_as(u16),
+                     B.view(np.uint16).ctypes.data_as(u16),
+                     C.ctypes.data_as(fp), ctypes.c_int32(M), ctypes.c_int32(N),
+                     ctypes.c_int32(K))
+    if rc != 1:
+        C = (A.astype(np.float32) @ B.astype(np.float32)).astype(np.float32)
+    return C, rc == 1
+
+
+_MTL4_EPILOGUE_ACT = {"none": 0, "relu": 1, "gelu": 2, "silu": 3}
+
+
+def apple_gpu_mtl4_matmul2d_epilogue(A: Any, B: Any, np: Any, *, bias: Any = None,
+                                     act: str = "none", dtype: str = "f16"):
+    """Fused ``C[f32] = act(A @ B + bias)`` in one MPP ``matmul2d`` dispatch — the
+    bias (per output column, length ``N``) and activation are applied IN-REGISTER
+    on the float ``cooperative_tensor`` before the single store, so there is no
+    extra device round-trip. ``dtype`` selects the f16/bf16 input kernel; ``act``
+    is one of ``none``/``relu``/``gelu``/``silu``. Returns ``(C[M, N] float32,
+    ran_on_mtl4)``; numpy fallback off Metal 4. See
+    docs/apple_gpu_metal4_adoption.md (M7)."""
+    if act not in _MTL4_EPILOGUE_ACT:
+        raise ValueError(f"act must be one of {sorted(_MTL4_EPILOGUE_ACT)}; got {act!r}")
+    act_code = _MTL4_EPILOGUE_ACT[act]
+    if dtype == "bf16":
+        in_dtype = _bfloat16_dtype()
+        if in_dtype is None:
+            raise RuntimeError("bf16 epilogue requires the optional ml_dtypes package")
+        entry = "tessera_apple_gpu_mtl4_matmul2d_epilogue_bf16"
+    elif dtype == "f16":
+        in_dtype = np.float16
+        entry = "tessera_apple_gpu_mtl4_matmul2d_epilogue_f16"
+    else:
+        raise ValueError(f"dtype must be 'f16' or 'bf16'; got {dtype!r}")
+    A = np.ascontiguousarray(A, in_dtype)
+    B = np.ascontiguousarray(B, in_dtype)
+    M, K = A.shape
+    K2, N = B.shape
+    bias_arr = None
+    if bias is not None:
+        bias_arr = np.ascontiguousarray(bias, np.float32).reshape(-1)
+        if bias_arr.shape[0] != N:
+            raise ValueError(f"bias length must be N={N}; got {bias_arr.shape[0]}")
+    C = np.empty((M, N), np.float32)
+    rc = 0
+    if K2 == K:
+        sym = _apple_gpu_mtl4_matmul2d_sym(entry, fused=True)
+        if sym is not None:
+            u16 = ctypes.POINTER(ctypes.c_uint16)
+            fp = ctypes.POINTER(ctypes.c_float)
+            bias_ptr = bias_arr.ctypes.data_as(fp) if bias_arr is not None else None
+            rc = sym(A.view(np.uint16).ctypes.data_as(u16),
+                     B.view(np.uint16).ctypes.data_as(u16),
+                     C.ctypes.data_as(fp), bias_ptr, ctypes.c_int32(act_code),
+                     ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K))
+    if rc != 1:
+        C = (A.astype(np.float32) @ B.astype(np.float32)).astype(np.float32)
+        if bias_arr is not None:
+            C = C + bias_arr[None, :]
+        C = _mtl4_epilogue_act_numpy(C, act_code, np)
+    return C, rc == 1
+
+
+def _mtl4_epilogue_act_numpy(x: Any, act_code: int, np: Any) -> Any:
+    """numpy reference matching the in-kernel epilogue activations (M7)."""
+    if act_code == 1:
+        return np.maximum(0.0, x)
+    if act_code == 2:  # gelu (tanh approximation, matches the MSL kernel)
+        t = 0.7978845608028654 * (x + 0.044715 * x ** 3)
+        return 0.5 * x * (1.0 + np.tanh(t))
+    if act_code == 3:  # silu
+        return x / (1.0 + np.exp(-x))
+    return x
+
+
 # ── M4 — capability-gated routing of real ops onto the Metal 4 lane ───────────
 # OFF by default: the MTL4 cooperative-matrix kernel is *correct* but still
 # slower than the tuned MPS matmul end-to-end. M5 added a register-blocked,
@@ -5863,6 +5979,10 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_mtl4_matmul_sg_f32")
                 # Metal 4 M6 — MPP matmul2d fp16 tensor-op (MSL 4.0 cooperative).
                 getattr(lib, "tessera_apple_gpu_mtl4_matmul2d_f16")
+                # Metal 4 M6/M7 — bf16 sibling + fused-epilogue (bias/act) kernels.
+                getattr(lib, "tessera_apple_gpu_mtl4_matmul2d_bf16")
+                getattr(lib, "tessera_apple_gpu_mtl4_matmul2d_epilogue_f16")
+                getattr(lib, "tessera_apple_gpu_mtl4_matmul2d_epilogue_bf16")
                 # Phase-G Rung 3 — dynamic speculative accept as one MSL kernel.
                 getattr(lib, "tessera_apple_gpu_msl_spec_accept")
                 _apple_gpu_runtime = lib

@@ -156,6 +156,94 @@ def test_mtl4_matmul2d_f16_matches_numpy(M, N, K):
         assert ran
 
 
+@pytest.mark.parametrize("M,N,K", [(64, 64, 64), (128, 96, 80), (100, 72, 48), (256, 256, 256)])
+def test_mtl4_matmul2d_bf16_matches_numpy(M, N, K):
+    """M6 bf16 sibling: bf16 matmul via MPP matmul2d on the matrix units, same
+    MTLTensor-bound MTL4 path as the f16 kernel. fp32 accumulation keeps it close
+    to the bf16-reference product."""
+    ml = pytest.importorskip("ml_dtypes")
+    bf16 = ml.bfloat16
+    rng = np.random.default_rng(M + N + K)
+    A = (rng.standard_normal((M, K)) * 0.25).astype(bf16)
+    B = (rng.standard_normal((K, N)) * 0.25).astype(bf16)
+    C, ran = R.apple_gpu_mtl4_matmul2d_bf16(A, B, np)
+    assert C.dtype == np.float32
+    ref = A.astype(np.float64) @ B.astype(np.float64)
+    den = np.maximum(1e-2, np.abs(ref))
+    assert float(np.max(np.abs(C.astype(np.float64) - ref) / den)) < 6e-2
+    if R.apple_gpu_metal4_caps()["available"]:
+        assert ran
+
+
+def _epi_ref(ref, bias, act, np):
+    if bias is not None:
+        ref = ref + bias[None, :].astype(np.float64)
+    if act == "relu":
+        return np.maximum(0.0, ref)
+    if act == "gelu":
+        t = 0.7978845608028654 * (ref + 0.044715 * ref ** 3)
+        return 0.5 * ref * (1.0 + np.tanh(t))
+    if act == "silu":
+        return ref / (1.0 + np.exp(-ref))
+    return ref
+
+
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+@pytest.mark.parametrize("act", ["none", "relu", "gelu", "silu"])
+def test_mtl4_matmul2d_epilogue_fuses_bias_and_activation(dtype, act):
+    """M7: bias (per output column) + activation fused IN-REGISTER on the float
+    cooperative_tensor before the single store — one MPP matmul2d dispatch, no
+    extra device round-trip. Matches the numpy reference for both input dtypes
+    and all four activations."""
+    if dtype == "bf16":
+        ml = pytest.importorskip("ml_dtypes")
+        cast = ml.bfloat16
+        tol = 6e-2
+    else:
+        cast = np.float16
+        tol = 3e-2
+    M, N, K = 128, 96, 64
+    rng = np.random.default_rng(hash((dtype, act)) % 1000)
+    A = (rng.standard_normal((M, K)) * 0.25).astype(cast)
+    B = (rng.standard_normal((K, N)) * 0.25).astype(cast)
+    bias = (rng.standard_normal(N) * 0.5).astype(np.float32)
+    C, ran = R.apple_gpu_mtl4_matmul2d_epilogue(A, B, np, bias=bias, act=act, dtype=dtype)
+    assert C.dtype == np.float32
+    ref = _epi_ref(A.astype(np.float64) @ B.astype(np.float64), bias, act, np)
+    den = np.maximum(1e-2, np.abs(ref))
+    assert float(np.max(np.abs(C.astype(np.float64) - ref) / den)) < tol
+    if R.apple_gpu_metal4_caps()["available"]:
+        assert ran
+
+
+def test_mtl4_matmul2d_epilogue_bias_is_per_output_column():
+    """Lock the bias axis: with A=B=0 the fused result is exactly the per-column
+    bias broadcast across rows (catches a row/col index swap in the kernel)."""
+    M, N, K = 64, 128, 32
+    A = np.zeros((M, K), np.float16)
+    B = np.zeros((K, N), np.float16)
+    bias = np.arange(N).astype(np.float32)
+    C, _ran = R.apple_gpu_mtl4_matmul2d_epilogue(A, B, np, bias=bias, act="none", dtype="f16")
+    np.testing.assert_array_equal(C, np.broadcast_to(bias, (M, N)))
+
+
+def test_mtl4_matmul2d_epilogue_no_bias_relu():
+    # bias=None path (binds a dummy buffer, has_bias=0) + relu still correct.
+    rng = np.random.default_rng(5)
+    A = (rng.standard_normal((72, 48)) * 0.3).astype(np.float16)
+    B = (rng.standard_normal((48, 80)) * 0.3).astype(np.float16)
+    C, _ = R.apple_gpu_mtl4_matmul2d_epilogue(A, B, np, bias=None, act="relu", dtype="f16")
+    ref = np.maximum(0.0, A.astype(np.float64) @ B.astype(np.float64))
+    den = np.maximum(1e-2, np.abs(ref))
+    assert float(np.max(np.abs(C.astype(np.float64) - ref) / den)) < 3e-2
+
+
+def test_mtl4_matmul2d_epilogue_rejects_bad_act():
+    with pytest.raises(ValueError):
+        R.apple_gpu_mtl4_matmul2d_epilogue(np.ones((8, 8), np.float16),
+                                           np.ones((8, 8), np.float16), np, act="elu")
+
+
 def test_mtl4_matmul2d_f16_falls_back_cleanly():
     # Off Tahoe / non-Darwin the contract still holds via the numpy fp16 ref.
     rng = np.random.default_rng(11)

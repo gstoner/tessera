@@ -1,6 +1,6 @@
 # Metal 4 adoption — design + ladder
 
-> Status: **M0 + M1 + M2 + M3 + M4 + M5 + M6 landed.** This machine runs macOS 26.5 (Tahoe) with
+> Status: **M0 + M1 + M2 + M3 + M4 + M5 + M6 + M7 landed.** This machine runs macOS 26.5 (Tahoe) with
 > SDK 26.5, so the full Metal 4 surface is available:
 > `MTL4CommandQueue/Buffer/Allocator/Encoder`, `MTLTensor`, MSL 4.0
 > (`MTLLanguageVersion4_0`) — all `API_AVAILABLE(macos(26.0))`. M2 lands the
@@ -184,6 +184,35 @@ forced.
   `tests/unit/test_apple_gpu_metal4.py::test_mtl4_matmul2d_f16_matches_numpy`
   (aligned, partial, and non-square shapes; f32-accumulated, bit-close to the
   fp16-reference product).
+- **M6 (cont.) — bf16 sibling (landed).** `tessera_apple_gpu_mtl4_matmul2d_bf16`
+  is the identical MPP `matmul2d` path with `bfloat` input tensors
+  (`MTLTensorDataTypeBFloat16`) → f32 cooperative accumulator → f32 output. This
+  matters more than fp16: **MPS has no native bf16 GEMM**, so Tessera's existing
+  `tessera_apple_gpu_mps_matmul_bf16` falls back to an on-host fp32 conversion.
+  The native MPP bf16 tensor op is **~10× that conversion fallback** end-to-end
+  (2048³: ~12 ms vs ~149 ms) — bf16 is the clearest case for routing onto the
+  MTL4 lane. Correct to ≤6e-2 vs the bf16-reference product (fp32 accumulation).
+  Tested by `test_mtl4_matmul2d_bf16_matches_numpy`.
+- **M7 — fused epilogue (bias + activation), landed; essentially free.** Because
+  the matmul result lands in a float `cooperative_tensor` that is live in
+  registers across the SIMD groups, M7 applies **bias (per output column) +
+  activation in-register before the single store** — no extra device round-trip.
+  `tessera_apple_gpu_mtl4_matmul2d_epilogue_{f16,bf16}(A, B, C, bias, act, M,N,K)`
+  with `act` ∈ {none, relu, gelu(tanh), silu}; Python
+  `apple_gpu_mtl4_matmul2d_epilogue(..., bias=, act=, dtype=)`. The per-element
+  walk uses the real cooperative_tensor API — `get_capacity()`,
+  `is_valid_element(i)` (the actual mask accessor; `get_mask` does not exist),
+  `operator[]`, and `get_multidimensional_index(i)` whose `index[0]` is the
+  N/column axis (locked by `test_mtl4_matmul2d_epilogue_bias_is_per_output_column`,
+  which sets A=B=0 and asserts the result equals the per-column bias). **Measured
+  cost of the fused epilogue vs the bare matmul: ~0% (+6% at 1024³, −10% at 2048³
+  — noise).** That is the whole point: the alternative is a second elementwise
+  kernel that re-reads and re-writes the full M×N output (a memory-bound round
+  trip the fusion eliminates). Correct for both dtypes × all four activations
+  (tested by `test_mtl4_matmul2d_epilogue_fuses_bias_and_activation`). Routing
+  stays OFF by default (same per-call-overhead reasoning as M6); the fused kernel
+  is the natural thing to route a `linear → bias → activation` block onto once the
+  lane is amortized, since it collapses three ops into one dispatch.
 
 ## Trade-offs + risks
 

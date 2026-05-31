@@ -1344,10 +1344,28 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float*, const floa
                                                         int32_t) {
   return 0;
 }
-// Metal 4 M6 — MPP matmul2d fp16 tensor-op; no Metal 4 off Darwin; numpy fallback.
+// Metal 4 M6/M7 — MPP matmul2d {f16,bf16} (+ fused epilogue); no Metal 4 off
+// Darwin; numpy fallback in the Python wrappers.
 extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_f16(const uint16_t*, const uint16_t*,
                                                        float*, int32_t, int32_t,
                                                        int32_t) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_bf16(const uint16_t*, const uint16_t*,
+                                                        float*, int32_t, int32_t,
+                                                        int32_t) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_epilogue_f16(const uint16_t*, const uint16_t*,
+                                                               float*, const float*,
+                                                               int32_t, int32_t, int32_t,
+                                                               int32_t) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_epilogue_bf16(const uint16_t*, const uint16_t*,
+                                                                float*, const float*,
+                                                                int32_t, int32_t, int32_t,
+                                                                int32_t) {
   return 0;
 }
 // Phase-G Rung 3 — dynamic speculative accept+select, non-Apple reference

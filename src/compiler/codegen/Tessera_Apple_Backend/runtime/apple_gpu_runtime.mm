@@ -8977,54 +8977,108 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float *A,
 }
 
 //===----------------------------------------------------------------------===//
-// Metal 4 M6 — fp16 matmul via the MSL 4.0 cooperative `tensor` op
-// (MetalPerformancePrimitives `mpp::tensor_ops::matmul2d`), the real tensor-unit
-// path. C[M,N](f32) = A[M,K](f16) @ B[K,N](f16). Unlike the simdgroup_matrix
-// kernels above (whose f32 path tops out ~80% of MPS), the MPP fp16 cooperative
-// op runs on the matrix units and BEATS MPS fp16 here (~1.1-1.18x at N=1024-2048,
-// ties at 4096, GPU best-of-3). It requires the MSL 4.0 `tensor` type, real
-// MTLTensors bound via an MTL4ArgumentTable (in-kernel `tensor_inline` views are
-// rejected by the cooperative run path), and a float `cooperative_tensor`
-// accumulator stored to the device tensor. Tile 64x64 / 4 SIMD groups (the
-// fastest of the configs swept). Arbitrary M/N/K (matmul2d slice() edge-checks
-// partial tiles). See docs/apple_gpu_metal4_adoption.md (M6).
+// Metal 4 M6/M7 — fp16 + bf16 matmul (+ fused epilogue) via the MSL 4.0
+// cooperative `tensor` op (MetalPerformancePrimitives `mpp::tensor_ops::matmul2d`),
+// the real tensor-unit path. C[M,N](f32) = A[M,K] @ B[K,N] for {f16, bf16}.
+// Unlike the simdgroup_matrix kernels above (whose f32 path tops out ~80% of MPS),
+// the MPP cooperative op runs on the matrix units and BEATS MPS fp16 here
+// (~1.1-1.18x at N=1024-2048, GPU best-of-3); bf16 follows the identical pattern.
+// Requires the MSL 4.0 `tensor` type, real MTLTensors bound via an
+// MTL4ArgumentTable (in-kernel `tensor_inline` views are rejected by the
+// cooperative run path), and a float `cooperative_tensor` accumulator stored to
+// the device tensor. Tile 64x64 / 4 SIMD groups (fastest of the configs swept).
+//
+// M7 — fused epilogue. Because the result lands in a float `cooperative_tensor`
+// (live in registers across the SIMD groups), a bias + activation epilogue is
+// applied IN-REGISTER before the single store — no extra device round-trip. The
+// per-element walk uses the cooperative_tensor API: `get_capacity()`,
+// `is_valid_element(i)` (the real mask accessor), `operator[]`, and
+// `get_multidimensional_index(i)` (local tile coord; index[0] is the N/column
+// axis, so bias is per output column). act codes: 0 none, 1 relu, 2 gelu(tanh),
+// 3 silu. Arbitrary M/N/K (matmul2d slice() edge-checks partial tiles).
+// See docs/apple_gpu_metal4_adoption.md (M6/M7).
 //===----------------------------------------------------------------------===//
-static NSString *kMTL4Matmul2dF16MSL = @R"MSL(
+static NSString *kMTL4Matmul2dMSL = @R"MSL(
 #include <metal_stdlib>
 #include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>
 using namespace metal;
 using namespace mpp::tensor_ops;
-// 64x64 output tile per threadgroup, 4 SIMD groups (128 threads). f16 in, f32 out.
-kernel void mtl4_matmul2d_f16(tensor<device half,  dextents<int32_t, 2>> A [[buffer(0)]],
-                              tensor<device half,  dextents<int32_t, 2>> B [[buffer(1)]],
-                              tensor<device float, dextents<int32_t, 2>> C [[buffer(2)]],
-                              uint2 tg [[threadgroup_position_in_grid]]) {
-  constexpr auto desc = matmul2d_descriptor(64, 64, static_cast<int>(dynamic_extent));
-  matmul2d<desc, execution_simdgroups<4>> op;
-  auto mA = A.slice(0, tg.x * 64);
-  auto mB = B.slice(tg.y * 64, 0);
-  auto mC = C.slice(tg.y * 64, tg.x * 64);
-  // float cooperative_tensor accumulator -> store (f32) to the device tensor.
-  auto cT = op.get_destination_cooperative_tensor<decltype(mA), decltype(mB), float>();
-  op.run(mA, mB, cT);   // mode::multiply overwrites; no pre-zero needed
-  cT.store(mC);
-}
+
+// Plain: C(f32) = A(ET) @ B(ET). 64x64 tile / 4 SIMD groups (128 threads).
+#define TS_MM2D_PLAIN(NAME, ET) \
+kernel void NAME(tensor<device ET,    dextents<int32_t,2>> A [[buffer(0)]], \
+                 tensor<device ET,    dextents<int32_t,2>> B [[buffer(1)]], \
+                 tensor<device float, dextents<int32_t,2>> C [[buffer(2)]], \
+                 uint2 tg [[threadgroup_position_in_grid]]) { \
+  constexpr auto desc = matmul2d_descriptor(64, 64, static_cast<int>(dynamic_extent)); \
+  matmul2d<desc, execution_simdgroups<4>> op; \
+  auto mA = A.slice(0, tg.x * 64); auto mB = B.slice(tg.y * 64, 0); \
+  auto mC = C.slice(tg.y * 64, tg.x * 64); \
+  auto cT = op.get_destination_cooperative_tensor<decltype(mA), decltype(mB), float>(); \
+  op.run(mA, mB, cT); cT.store(mC); }
+
+// Fused epilogue: C = act(A@B + bias[col]). bias per output column (N); act 0..3.
+#define TS_MM2D_EPI(NAME, ET) \
+kernel void NAME(tensor<device ET,    dextents<int32_t,2>> A [[buffer(0)]], \
+                 tensor<device ET,    dextents<int32_t,2>> B [[buffer(1)]], \
+                 tensor<device float, dextents<int32_t,2>> C [[buffer(2)]], \
+                 device const float *bias [[buffer(3)]], \
+                 constant int2 &p [[buffer(4)]], \
+                 uint2 tg [[threadgroup_position_in_grid]]) { \
+  constexpr auto desc = matmul2d_descriptor(64, 64, static_cast<int>(dynamic_extent)); \
+  matmul2d<desc, execution_simdgroups<4>> op; \
+  auto mA = A.slice(0, tg.x * 64); auto mB = B.slice(tg.y * 64, 0); \
+  auto mC = C.slice(tg.y * 64, tg.x * 64); \
+  auto cT = op.get_destination_cooperative_tensor<decltype(mA), decltype(mB), float>(); \
+  op.run(mA, mB, cT); \
+  int has_bias = p.x, act = p.y; \
+  for (uint16_t i = 0; i < cT.get_capacity(); ++i) { \
+    if (!cT.is_valid_element(i)) continue; \
+    float v = cT[i]; \
+    if (has_bias) { auto id = cT.get_multidimensional_index(i); \
+      v += bias[int(tg.y) * 64 + int(id[0])]; } \
+    if (act == 1) v = fmax(0.0f, v); \
+    else if (act == 2) { float t = 0.7978845608028654f * (v + 0.044715f * v * v * v); \
+      v = 0.5f * v * (1.0f + tanh(t)); } \
+    else if (act == 3) v = v / (1.0f + exp(-v)); \
+    cT[i] = v; } \
+  cT.store(mC); }
+
+TS_MM2D_PLAIN(mtl4_matmul2d_f16,  half)
+TS_MM2D_PLAIN(mtl4_matmul2d_bf16, bfloat)
+TS_MM2D_EPI(mtl4_matmul2d_epilogue_f16,  half)
+TS_MM2D_EPI(mtl4_matmul2d_epilogue_bf16, bfloat)
 )MSL";
 
-// A, B are fp16 (uint16_t bit patterns); C is fp32. Returns 1 if it ran on the
-// MPP tensor-op lane, else 0 (caller falls back). M/N/K any positive sizes.
-extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_f16(const uint16_t *A,
-                                                       const uint16_t *B, float *C,
-                                                       int32_t M, int32_t N,
-                                                       int32_t K) {
+// Buffer-backed MTLTensor: extents innermost-first (cols, rows); packed
+// row-major strides (1, inner); usage=Compute. Returns nil on failure.
+API_AVAILABLE(macos(26.0), ios(26.0))
+static id<MTLTensor> make_buffer_tensor(id<MTLDevice> dev, id<MTLBuffer> buf,
+                                        int inner, int outer, MTLTensorDataType dt) {
+  MTLTensorDescriptor *td = [[MTLTensorDescriptor alloc] init];
+  NSInteger dims[2] = {inner, outer}, strd[2] = {1, inner};
+  td.dimensions = [[MTLTensorExtents alloc] initWithRank:2 values:dims];
+  td.strides = [[MTLTensorExtents alloc] initWithRank:2 values:strd];
+  td.dataType = dt;
+  td.usage = MTLTensorUsageCompute;
+  NSError *e = nil;
+  return [buf newTensorWithDescriptor:td offset:0 error:&e];
+}
+
+// Shared MPP matmul2d dispatch. A, B are 16-bit (f16 or bf16) bit patterns; C is
+// f32. When `fused`, also binds `bias` (length N, may be null) + {has_bias, act}
+// and runs the epilogue entry. Returns 1 if it ran on the tensor-op lane, else 0.
+static int32_t mtl4_matmul2d_dispatch(NSString *entry, MTLTensorDataType dt,
+                                      const uint16_t *A, const uint16_t *B, float *C,
+                                      int32_t M, int32_t N, int32_t K,
+                                      bool fused, const float *bias, int32_t act) {
   MetalDeviceContext &ctx = deviceContext();
   if (!ctx.ok || M <= 0 || N <= 0 || K <= 0 || !A || !B || !C) return 0;
   @autoreleasepool {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       id<MTLDevice> dev = ctx.device;
       NSError *err = nil;
-      id<MTLComputePipelineState> pso =
-          compile_mtl4_pipeline(ctx, kMTL4Matmul2dF16MSL, @"mtl4_matmul2d_f16");
+      id<MTLComputePipelineState> pso = compile_mtl4_pipeline(ctx, kMTL4Matmul2dMSL, entry);
       if (!pso) return 0;
 
       MTLResourceOptions ro = MTLResourceStorageModeShared;
@@ -9032,38 +9086,40 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_f16(const uint16_t *A,
       id<MTLBuffer> bB = [dev newBufferWithBytes:B length:(size_t)K * N * 2 options:ro];
       id<MTLBuffer> bC = [dev newBufferWithLength:(size_t)M * N * 4 options:ro];
       if (!bA || !bB || !bC) return 0;
-
-      // Buffer-backed MTLTensors. Extents are innermost-first (cols, rows);
-      // packed row-major strides (1, inner). usage=Compute.
-      auto makeTensor = [&](id<MTLBuffer> buf, int inner, int outer,
-                            MTLTensorDataType dt) -> id<MTLTensor> {
-        MTLTensorDescriptor *td = [[MTLTensorDescriptor alloc] init];
-        NSInteger dims[2] = {inner, outer}, strd[2] = {1, inner};
-        td.dimensions = [[MTLTensorExtents alloc] initWithRank:2 values:dims];
-        td.strides = [[MTLTensorExtents alloc] initWithRank:2 values:strd];
-        td.dataType = dt;
-        td.usage = MTLTensorUsageCompute;
-        NSError *e = nil;
-        return [buf newTensorWithDescriptor:td offset:0 error:&e];
-      };
-      id<MTLTensor> tA = makeTensor(bA, K, M, MTLTensorDataTypeFloat16);
-      id<MTLTensor> tB = makeTensor(bB, N, K, MTLTensorDataTypeFloat16);
-      id<MTLTensor> tC = makeTensor(bC, N, M, MTLTensorDataTypeFloat32);
+      id<MTLTensor> tA = make_buffer_tensor(dev, bA, K, M, dt);
+      id<MTLTensor> tB = make_buffer_tensor(dev, bB, N, K, dt);
+      id<MTLTensor> tC = make_buffer_tensor(dev, bC, N, M, MTLTensorDataTypeFloat32);
       if (!tA || !tB || !tC) return 0;
+
+      id<MTLBuffer> bBias = nil, bP = nil;
+      if (fused) {
+        int has_bias = bias ? 1 : 0;
+        float zero = 0.0f;
+        bBias = bias ? [dev newBufferWithBytes:bias length:(size_t)N * 4 options:ro]
+                     : [dev newBufferWithBytes:&zero length:4 options:ro];
+        int params[2] = {has_bias, act};
+        bP = [dev newBufferWithBytes:params length:sizeof(params) options:ro];
+        if (!bBias || !bP) return 0;
+      }
 
       id<MTLResidencySet> res = [dev newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
       if (!res) return 0;
-      for (id<MTLBuffer> b : {bA, bB, bC}) [res addAllocation:b];
+      [res addAllocation:bA]; [res addAllocation:bB]; [res addAllocation:bC];
+      if (fused) { [res addAllocation:bBias]; [res addAllocation:bP]; }
       [res commit];
       [res requestResidency];
 
       MTL4ArgumentTableDescriptor *atd = [[MTL4ArgumentTableDescriptor alloc] init];
-      atd.maxBufferBindCount = 3;
+      atd.maxBufferBindCount = fused ? 5 : 3;
       id<MTL4ArgumentTable> at = [dev newArgumentTableWithDescriptor:atd error:&err];
       if (!at) return 0;
       [at setResource:tA.gpuResourceID atBufferIndex:0];
       [at setResource:tB.gpuResourceID atBufferIndex:1];
       [at setResource:tC.gpuResourceID atBufferIndex:2];
+      if (fused) {
+        [at setAddress:bBias.gpuAddress atIndex:3];
+        [at setAddress:bP.gpuAddress atIndex:4];
+      }
 
       id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
       id<MTL4CommandAllocator> alloc = [dev newCommandAllocator];
@@ -9093,6 +9149,38 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_f16(const uint16_t *A,
     }
   }
   return 0;
+}
+
+// A, B fp16 (uint16_t bit patterns); C fp32. Returns 1 if it ran on the MPP lane.
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_f16(const uint16_t *A,
+                                                       const uint16_t *B, float *C,
+                                                       int32_t M, int32_t N, int32_t K) {
+  return mtl4_matmul2d_dispatch(@"mtl4_matmul2d_f16", MTLTensorDataTypeFloat16,
+                                A, B, C, M, N, K, /*fused=*/false, nullptr, 0);
+}
+
+// A, B bf16 (uint16_t bit patterns); C fp32.
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_bf16(const uint16_t *A,
+                                                        const uint16_t *B, float *C,
+                                                        int32_t M, int32_t N, int32_t K) {
+  return mtl4_matmul2d_dispatch(@"mtl4_matmul2d_bf16", MTLTensorDataTypeBFloat16,
+                                A, B, C, M, N, K, /*fused=*/false, nullptr, 0);
+}
+
+// Fused: C = act(A(f16) @ B(f16) + bias). bias may be null; act 0..3.
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_epilogue_f16(
+    const uint16_t *A, const uint16_t *B, float *C, const float *bias,
+    int32_t act, int32_t M, int32_t N, int32_t K) {
+  return mtl4_matmul2d_dispatch(@"mtl4_matmul2d_epilogue_f16", MTLTensorDataTypeFloat16,
+                                A, B, C, M, N, K, /*fused=*/true, bias, act);
+}
+
+// Fused: C = act(A(bf16) @ B(bf16) + bias). bias may be null; act 0..3.
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_epilogue_bf16(
+    const uint16_t *A, const uint16_t *B, float *C, const float *bias,
+    int32_t act, int32_t M, int32_t N, int32_t K) {
+  return mtl4_matmul2d_dispatch(@"mtl4_matmul2d_epilogue_bf16", MTLTensorDataTypeBFloat16,
+                                A, B, C, M, N, K, /*fused=*/true, bias, act);
 }
 
 //===----------------------------------------------------------------------===//

@@ -312,6 +312,40 @@ def test_mtl4_mlp_session_run_after_close_uses_fallback():
     assert float(np.max(np.abs(Y.astype(np.float64) - ref) / den)) < 3e-2
 
 
+def test_mtl4_bf16_is_default_routed_and_correct():
+    """P5: bf16 matmul on @jit(target="apple_gpu") routes to the native MPP
+    tensor-op by default (MPS has no native bf16 GEMM), preserving bf16 output and
+    staying correct. The toggle forces the legacy fp32-conversion path."""
+    ml = pytest.importorskip("ml_dtypes")
+    bf16 = ml.bfloat16
+    import tessera as ts
+
+    @ts.jit(target="apple_gpu")
+    def mm(a, b):
+        return ts.ops.matmul(a, b)
+
+    rng = np.random.default_rng(1)
+    A = (rng.standard_normal((64, 128)) * 0.1).astype(bf16)
+    B = (rng.standard_normal((128, 96)) * 0.1).astype(bf16)
+    ref = A.astype(np.float64) @ B.astype(np.float64)
+    den = np.maximum(1e-2, np.abs(ref))
+
+    assert R.apple_gpu_mtl4_bf16_default_enabled()  # on by default
+    prev = R.apple_gpu_mtl4_bf16_default_enabled()
+    try:
+        Y = np.asarray(mm(A, B))
+        assert Y.dtype == bf16
+        assert float(np.max(np.abs(Y.astype(np.float64) - ref) / den)) < 6e-2
+        # router returns a bf16 array when capable, None when disabled
+        R.set_apple_gpu_mtl4_bf16_default(False)
+        assert R._mtl4_route_matmul2d_bf16(A, B, np) is None
+        Y2 = np.asarray(mm(A, B))  # legacy fp32-conversion path
+        assert Y2.dtype == bf16
+        assert float(np.max(np.abs(Y2.astype(np.float64) - ref) / den)) < 6e-2
+    finally:
+        R.set_apple_gpu_mtl4_bf16_default(prev)
+
+
 def test_mtl4_matmul2d_f16_falls_back_cleanly():
     # Off Tahoe / non-Darwin the contract still holds via the numpy fp16 ref.
     rng = np.random.default_rng(11)

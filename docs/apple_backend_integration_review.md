@@ -54,39 +54,39 @@ scope exit.
   points) now acquires A/B/C through `TS_METAL_BUF_ACQUIRE*`. Correctness
   unchanged; recycles on repeated same-size calls (buffers > 4 MB still bypass
   the pool and allocate fresh, which is correct).
-- **Follow-up:** apply the same to the M8 session `run()` X/Y buffers, the M2
-  scan, and the M3/M5 simdgroup matmul. The session's per-run X/Y are the
-  highest-value remaining target (decode hot path). The tiny bias/params buffers
-  are not worth pooling.
+- **Done (extended):** the M8 session `run()` X/Y buffers and `msl_spec_accept`
+  now also use the pool (the latter fixed a pre-existing red
+  `test_apple_gpu_buffer_pool` assertion). **Follow-up:** the M2 scan and M3/M5
+  simdgroup matmul still allocate raw; the tiny bias/params buffers are not worth
+  pooling.
 
-### P2 — per-dispatch MTL4 object churn (residency set, argument table, allocator, command buffer)
+### P2 — per-dispatch MTL4 object churn (argument table, allocator, command buffer) *(done)*
 
-Each MTL4 dispatch creates a **new** `MTLResidencySet` (and calls `commit` +
-`requestResidency`, which is a kernel transition), a **new** `MTL4ArgumentTable`,
-a **new** `MTL4CommandAllocator`, and a **new** `MTL4CommandBuffer`. The Metal 4
-design intends these to be **reused**: `MTL4CommandAllocator` has `reset`, the
-docs state an `MTL4CommandBuffer` "can be reused immediately after committing,"
-and a residency set is meant to be committed once and kept resident.
+Each MTL4 dispatch used to create a **new** `MTL4ArgumentTable`,
+`MTL4CommandAllocator`, and `MTL4CommandBuffer`. The Metal 4 design intends these
+to be reused: `MTL4CommandAllocator` has `reset`, and an `MTL4CommandBuffer` "can
+be reused immediately after committing."
 
-- **Recommendation:** add a small per-queue pool to `MetalDeviceContext`: one
-  reusable command allocator + command buffer (reset/begin each dispatch), and a
-  cached argument table per binding-arity (3 for plain, 5 for fused). The M8
-  session already proves the residency-set-reuse win; generalize it. Expected to
-  remove most of the small-size per-call overhead that keeps routing OFF.
+- **Done:** `MetalDeviceContext` now holds a reusable allocator + command buffer
+  + argument table (`maxBufferBindCount = 8`, covers all current kernels), reset
+  + rebound each dispatch via `mtl4_encode_and_wait`. A dedicated
+  `mtl4_dispatch_mu` serializes the encode→commit→wait sequence, which makes the
+  reuse correct (and loses no overlap — the single shared queue already serializes
+  GPU work). Wired into `mtl4_matmul2d_dispatch` (plain + epilogue, f16/bf16) and
+  the M8 session `run()`. **Measured:** repeated small epilogue (64×256×256) went
+  0.61 ms → **0.28 ms** (~2.2×) on top of P1. The per-call `MTLResidencySet` is
+  still created fresh (commit + `requestResidency` are unavoidable kernel calls);
+  reusing the set object is a minor remaining nicety.
 
-### P3 — `MTLSharedEvent` created per dispatch
+### P3 — `MTLSharedEvent` created per dispatch *(done)*
 
-Every MTL4 dispatch does `id<MTLSharedEvent> ev = [dev newSharedEvent]` then
-signals value 1. Apple's "Running an ML model on the GPU timeline" sample
-explicitly treats the shared event as a **reusable resource** created once and
-advanced with `signaledValue + 1`.
+Every MTL4 dispatch used to `[dev newSharedEvent]` then signal value 1. Apple's
+"Running an ML model on the GPU timeline" sample treats the event as a reusable
+resource advanced with `signaledValue + 1`.
 
-- **Recommendation:** cache one `MTLSharedEvent` per device and advance a
-  monotonic value. **Caveat:** under concurrent submission the signal values must
-  stay monotonic (you cannot signal a lower value after a higher one), so either
-  serialize MTL4 submission behind `mtl4_mu` for the commit+signal pair, or keep
-  per-call events when concurrency is expected. Low absolute cost; do it
-  alongside P2.
+- **Done:** one `MTLSharedEvent` per device, advanced by a monotonic counter
+  (`mtl4_event_val`) in `mtl4_encode_and_wait`. Correct under the `mtl4_dispatch_mu`
+  serialization (no out-of-order signals). Folded into the P2 helper.
 
 ### P4 — no MTL4 binary archive (pipelines recompiled each process)
 
@@ -98,16 +98,21 @@ MTL4 pipelines are cached in-process but recompiled on every fresh process start
   on (device, OS, source hash); load it at `deviceContext()` init. Meaningful for
   CLI / short-lived processes and for first-token latency.
 
-### P5 — bf16 matmul still routes to an fp32-conversion fallback
+### P5 — bf16 matmul routes to the native tensor-op by default *(done)*
 
-The default Apple GPU bf16 matmul (`tessera_apple_gpu_mps_matmul_bf16`) converts
-to fp32 on the host because **MPS has no native bf16 GEMM**. M6 added a native
-bf16 `matmul2d` tensor-op that is ~10× that fallback.
+The legacy Apple GPU bf16 matmul (`tessera_apple_gpu_mps_matmul_bf16`) converts
+to fp32 on the host because **MPS has no native bf16 GEMM**.
 
-- **Recommendation:** once P1+P2+P3 amortize the MTL4 per-call overhead, route
-  `@jit(target="apple_gpu")` bf16 matmul to `tessera_apple_gpu_mtl4_matmul2d_bf16`
-  by default (it is strictly better than the conversion path). This is the
-  clearest case where the MTL4 lane should become the default for a dtype.
+- **Done:** `_apple_gpu_dispatch_matmul` now routes rank-2 bf16 matmul to
+  `tessera_apple_gpu_mtl4_matmul2d_bf16` **by default** when Metal 4 is available
+  (`_mtl4_route_matmul2d_bf16`), casting the f32 accumulator back to bf16 to
+  preserve the bf16-in/bf16-out contract. Unlike the f32 lane (opt-in), bf16 is
+  default-ON because there is no good MPS bf16 path to regress against. Toggle via
+  `TESSERA_APPLE_GPU_MTL4_BF16=0` / `set_apple_gpu_mtl4_bf16_default(False)`.
+  **Measured end-to-end (`@jit(target="apple_gpu")` bf16 matmul):** MTL4-default
+  vs forced-legacy = **14.7× (1024³), 11.8× (2048³)** faster. First default
+  routing flip onto the MTL4 lane. (f32 remains opt-in: the MPS f32 GEMM is
+  well-tuned and the hand kernel only reaches ~80% of it.)
 
 ### P6 — fused `linear+bias+activation` not recognized at compile time
 
@@ -128,18 +133,19 @@ does not use. This is **correct for now** — hand-written cooperative kernels g
 the fusion control MPSGraph/CoreML cannot — but worth revisiting if Tessera ever
 wants to run whole compiled subgraphs on the ML encoder.
 
-## Recommended sequence
+## Status
 
-1. **P2 + P3** (reuse command allocator / buffer / argument table / shared event)
-   — the largest remaining per-call overhead, and the prerequisite for any
-   default routing flip.
-2. **P1 follow-up** (pool the session run + scan + simdgroup matmul buffers).
-3. **P5** (default bf16 → MTL4) and **P6** (compile-time epilogue fusion) — the
-   two changes that turn the lane from "validated but off" into a real default
-   win for half-precision transformer blocks.
-4. **P4** (MTL4Archive) for process-start latency.
+- **Done:** P1 (buffer pool on matmul2d + session + spec_accept), P2 + P3
+  (reuse allocator / command buffer / argument table / shared event, serialized),
+  P5 (default bf16 → native MTL4, **11.8–14.7×** the legacy fallback).
+- **Remaining:** P6 (compile-time `linear+bias+act` Graph IR chain recognition so
+  the fusion auto-applies under `@jit`), P4 (`MTL4Archive` for process-start
+  pipeline latency), P1 tail (pool the M2 scan + M3/M5 simdgroup matmul), and the
+  minor P2 nicety of reusing the per-call residency-set object.
 
 Net: the kernels are correct and competitive (fp16 matmul beats MPS, bf16 beats
-the conversion fallback, the epilogue fuses for free); the gap to "most optimal"
-is now almost entirely **per-call host-side overhead amortization**, which P1–P3
-address directly and which the M8 session already validated as worth ~3.3×.
+the conversion fallback ~10–15×, the epilogue fuses for free, the session
+amortizes decode); the per-call host-side overhead that kept the lane off is now
+largely removed (P1–P3), and bf16 is the first dtype routed onto MTL4 by default
+(P5). The remaining work (P4/P6) is feature/latency polish, not a correctness or
+throughput gap.

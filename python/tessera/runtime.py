@@ -2328,6 +2328,11 @@ def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
             a = np.ascontiguousarray(a, dtype=bf16_dtype)
         if not b.flags.c_contiguous:
             b = np.ascontiguousarray(b, dtype=bf16_dtype)
+        # P5: default to the native MPP matmul2d tensor-op (~10x the fp32-conversion
+        # MPS fallback). Falls through to the legacy path off Metal 4 / when disabled.
+        routed = _mtl4_route_matmul2d_bf16(a, b, np)
+        if routed is not None:
+            return routed
         out = np.zeros((a.shape[0], b.shape[1]), dtype=bf16_dtype)
         gemm_bf16 = _apple_gpu_mps_matmul_bf16()
         if gemm_bf16 is not None:
@@ -4459,6 +4464,42 @@ def _mtl4_route_matmul_f32(a: Any, b: Any, np: Any) -> Any:
         return None
     C, ran = apple_gpu_mtl4_matmul_sg(a, b, np)
     return C if ran else None
+
+
+# P5 — native bf16 matmul is the DEFAULT on apple_gpu (unlike the f32 lane, which
+# stays opt-in). MPS has no native bf16 GEMM, so the legacy bf16 path converts to
+# fp32 on the host; the MPP `matmul2d` tensor-op is ~10x faster, so it is the
+# better default whenever Metal 4 is available. Toggle with
+# TESSERA_APPLE_GPU_MTL4_BF16=0 / set_apple_gpu_mtl4_bf16_default(False) (e.g. to
+# force the legacy path for comparison). See docs/apple_gpu_metal4_adoption.md (P5).
+_MTL4_BF16_DEFAULT = os.environ.get("TESSERA_APPLE_GPU_MTL4_BF16", "1") not in ("0", "false", "False")
+
+
+def set_apple_gpu_mtl4_bf16_default(enabled: bool) -> None:
+    global _MTL4_BF16_DEFAULT
+    _MTL4_BF16_DEFAULT = bool(enabled)
+
+
+def apple_gpu_mtl4_bf16_default_enabled() -> bool:
+    return _MTL4_BF16_DEFAULT
+
+
+def _mtl4_route_matmul2d_bf16(a: Any, b: Any, np: Any) -> Any:
+    """Default bf16 matmul → native MPP ``matmul2d`` (beats the fp32-conversion
+    MPS fallback ~10x). Returns a bf16 result (the f32 accumulator cast back to
+    bf16 to preserve the bf16-in/bf16-out contract), or ``None`` to fall back."""
+    if not _MTL4_BF16_DEFAULT:
+        return None
+    bf16 = _bfloat16_dtype()
+    if bf16 is None or a.dtype != bf16 or b.dtype != bf16 or a.ndim != 2 or b.ndim != 2:
+        return None
+    if a.shape[1] != b.shape[0]:
+        return None
+    caps = _mtl4_caps_cached()
+    if not (caps.get("command_queue") and caps.get("compiler")):
+        return None
+    C, ran = apple_gpu_mtl4_matmul2d_bf16(a, b, np)  # f32 output
+    return C.astype(bf16) if ran else None
 
 
 def apple_gpu_msl_spec_accept(draft_paths: Any, target_greedy: Any, np: Any):

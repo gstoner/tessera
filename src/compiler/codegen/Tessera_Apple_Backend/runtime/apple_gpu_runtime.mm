@@ -69,6 +69,20 @@ struct MetalDeviceContext {
   id                                                           mtl4_queue;     // id<MTL4CommandQueue>
   id                                                           mtl4_compiler;  // id<MTL4Compiler>
 
+  // P2/P3 — reusable per-dispatch MTL4 objects. Recreating the command
+  // allocator / command buffer / argument table / shared event on every
+  // dispatch was the last big chunk of per-call overhead. They are reset+rebound
+  // instead, which is safe because `mtl4_dispatch_mu` serializes the
+  // encode→commit→wait sequence (and the single shared queue serializes GPU work
+  // regardless, so no overlap is lost). The shared event advances a monotonic
+  // value per dispatch. See docs/apple_backend_integration_review.md (P2/P3).
+  id        mtl4_allocator;   // id<MTL4CommandAllocator>
+  id        mtl4_cmdbuf;      // id<MTL4CommandBuffer>
+  id        mtl4_argtable;    // id<MTL4ArgumentTable> (maxBufferBindCount = 8)
+  id        mtl4_event;       // id<MTLSharedEvent>
+  uint64_t  mtl4_event_val;   // monotonic signal counter
+  std::mutex mtl4_dispatch_mu;
+
   // 2026-05-17 — Metal buffer pool.  Each dispatch helper used to
   // call ``[device newBufferWithBytes:...]`` and let the buffer
   // deallocate at the end of the @autoreleasepool.  Profiling
@@ -700,6 +714,52 @@ id<MTL4CommandQueue> mtl4_shared_queue(MetalDeviceContext &ctx) {
   std::lock_guard<std::mutex> lock(ctx.mtl4_mu);
   if (!ctx.mtl4_queue) ctx.mtl4_queue = [ctx.device newMTL4CommandQueue];
   return (id<MTL4CommandQueue>)ctx.mtl4_queue;
+}
+
+// P2/P3 — lazily create the reusable per-dispatch MTL4 objects. Call with
+// ctx.mtl4_dispatch_mu held. The argument table is sized for the widest current
+// kernel (5 bindings: A,B,C,bias,params); 8 leaves headroom.
+API_AVAILABLE(macos(26.0), ios(26.0))
+static void mtl4_ensure_dispatch_objects(MetalDeviceContext &ctx) {
+  id<MTLDevice> dev = ctx.device;
+  if (!ctx.mtl4_allocator) ctx.mtl4_allocator = [dev newCommandAllocator];
+  if (!ctx.mtl4_cmdbuf)    ctx.mtl4_cmdbuf = [dev newCommandBuffer];
+  if (!ctx.mtl4_event)     ctx.mtl4_event = [dev newSharedEvent];
+  if (!ctx.mtl4_argtable) {
+    MTL4ArgumentTableDescriptor *atd = [[MTL4ArgumentTableDescriptor alloc] init];
+    atd.maxBufferBindCount = 8;
+    ctx.mtl4_argtable = [dev newArgumentTableWithDescriptor:atd error:nil];
+  }
+}
+
+// P2/P3 — encode + commit + wait on the reusable allocator/command-buffer/event.
+// Call with ctx.mtl4_dispatch_mu held and the residency set already attached to
+// the queue. `bind` configures the (reused) argument table. Returns completion.
+API_AVAILABLE(macos(26.0), ios(26.0))
+static bool mtl4_encode_and_wait(MetalDeviceContext &ctx, id<MTL4CommandQueue> queue,
+                                 id<MTLComputePipelineState> pso,
+                                 void (^bind)(id<MTL4ArgumentTable>),
+                                 MTLSize grid, MTLSize tpg) {
+  mtl4_ensure_dispatch_objects(ctx);
+  id<MTL4CommandAllocator> alloc = (id<MTL4CommandAllocator>)ctx.mtl4_allocator;
+  id<MTL4CommandBuffer> cb = (id<MTL4CommandBuffer>)ctx.mtl4_cmdbuf;
+  id<MTL4ArgumentTable> at = (id<MTL4ArgumentTable>)ctx.mtl4_argtable;
+  id<MTLSharedEvent> ev = (id<MTLSharedEvent>)ctx.mtl4_event;
+  if (!alloc || !cb || !at || !ev) return false;
+  bind(at);
+  [alloc reset];
+  [cb beginCommandBufferWithAllocator:alloc];
+  id<MTL4ComputeCommandEncoder> enc = [cb computeCommandEncoder];
+  [enc setComputePipelineState:pso];
+  [enc setArgumentTable:at];
+  [enc dispatchThreadgroups:grid threadsPerThreadgroup:tpg];
+  [enc endEncoding];
+  [cb endCommandBuffer];
+  const id<MTL4CommandBuffer> cbs[1] = {cb};
+  [queue commit:cbs count:1];
+  uint64_t v = ++ctx.mtl4_event_val;
+  [queue signalEvent:ev value:v];
+  return [ev waitUntilSignaledValue:v timeoutMS:10000];
 }
 
 bool dispatch_rope_msl(MetalDeviceContext &ctx, const float* X,
@@ -9106,46 +9166,32 @@ static int32_t mtl4_matmul2d_dispatch(NSString *entry, MTLTensorDataType dt,
         if (!bBias || !bP) return 0;
       }
 
-      id<MTLResidencySet> res = [dev newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
-      if (!res) return 0;
-      [res addAllocation:bA]; [res addAllocation:bB]; [res addAllocation:bC];
-      if (fused) { [res addAllocation:bBias]; [res addAllocation:bP]; }
-      [res commit];
-      [res requestResidency];
-
-      MTL4ArgumentTableDescriptor *atd = [[MTL4ArgumentTableDescriptor alloc] init];
-      atd.maxBufferBindCount = fused ? 5 : 3;
-      id<MTL4ArgumentTable> at = [dev newArgumentTableWithDescriptor:atd error:&err];
-      if (!at) return 0;
-      [at setResource:tA.gpuResourceID atBufferIndex:0];
-      [at setResource:tB.gpuResourceID atBufferIndex:1];
-      [at setResource:tC.gpuResourceID atBufferIndex:2];
-      if (fused) {
-        [at setAddress:bBias.gpuAddress atIndex:3];
-        [at setAddress:bP.gpuAddress atIndex:4];
-      }
-
       id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
-      id<MTL4CommandAllocator> alloc = [dev newCommandAllocator];
-      id<MTL4CommandBuffer> cb = [dev newCommandBuffer];
-      if (!queue || !alloc || !cb) return 0;
-      [queue addResidencySet:res];
-      [cb beginCommandBufferWithAllocator:alloc];
-      id<MTL4ComputeCommandEncoder> enc = [cb computeCommandEncoder];
-      [enc setComputePipelineState:pso];
-      [enc setArgumentTable:at];
-      // 64x64 output tile per threadgroup; tg.x tiles M, tg.y tiles N; 4 SIMD groups.
-      [enc dispatchThreadgroups:MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1)
-          threadsPerThreadgroup:MTLSizeMake(128, 1, 1)];
-      [enc endEncoding];
-      [cb endCommandBuffer];
-
-      const id<MTL4CommandBuffer> cbs[1] = {cb};
-      [queue commit:cbs count:1];
-      id<MTLSharedEvent> ev = [dev newSharedEvent];
-      [queue signalEvent:ev value:1];
-      bool done = [ev waitUntilSignaledValue:1 timeoutMS:10000];
-      [queue removeResidencySet:res];
+      if (!queue) return 0;
+      // P2/P3 — serialize encode→commit→wait so the reusable allocator / command
+      // buffer / argument table / shared event are safe to reset+rebind.
+      bool done = false;
+      {
+        std::lock_guard<std::mutex> lock(ctx.mtl4_dispatch_mu);
+        id<MTLResidencySet> res = [dev newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
+        if (!res) return 0;
+        [res addAllocation:bA]; [res addAllocation:bB]; [res addAllocation:bC];
+        if (fused) { [res addAllocation:bBias]; [res addAllocation:bP]; }
+        [res commit];
+        [res requestResidency];
+        [queue addResidencySet:res];
+        // 64x64 output tile per threadgroup; tg.x tiles M, tg.y tiles N; 4 SIMD groups.
+        done = mtl4_encode_and_wait(ctx, queue, pso, ^(id<MTL4ArgumentTable> at) {
+          [at setResource:tA.gpuResourceID atBufferIndex:0];
+          [at setResource:tB.gpuResourceID atBufferIndex:1];
+          [at setResource:tC.gpuResourceID atBufferIndex:2];
+          if (fused) {
+            [at setAddress:bBias.gpuAddress atIndex:3];
+            [at setAddress:bP.gpuAddress atIndex:4];
+          }
+        }, MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1), MTLSizeMake(128, 1, 1));
+        [queue removeResidencySet:res];
+      }
       if (!done) return 0;
 
       std::memcpy(C, [bC contents], (size_t)M * N * 4);
@@ -9257,45 +9303,33 @@ extern "C" int32_t tessera_apple_gpu_mtl4_mlp_session_run(void *handle,
     id<MTLDevice> dev = ctx.device;
     NSError *err = nil;
     int K = s->K, N = s->N;
-    MTLResourceOptions ro = MTLResourceStorageModeShared;
-    id<MTLBuffer> bX = [dev newBufferWithBytes:X length:(size_t)M * K * 2 options:ro];
-    id<MTLBuffer> bY = [dev newBufferWithLength:(size_t)M * N * 4 options:ro];
+    // Pooled per-step X/Y (synced before return) + reusable dispatch objects.
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bX, ctx, X, (size_t)M * K * 2);
+    TS_METAL_BUF_ACQUIRE(bY, ctx, (size_t)M * N * 4);
     id<MTLTensor> tX = make_buffer_tensor(dev, bX, K, M, (MTLTensorDataType)s->dt);
     id<MTLTensor> tY = make_buffer_tensor(dev, bY, N, M, MTLTensorDataTypeFloat32);
     if (!bX || !bY || !tX || !tY) return 0;
-    id<MTLResidencySet> resStep = [dev newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
-    if (!resStep) return 0;
-    [resStep addAllocation:bX]; [resStep addAllocation:bY];
-    [resStep commit];
-    [resStep requestResidency];
-    MTL4ArgumentTableDescriptor *atd = [[MTL4ArgumentTableDescriptor alloc] init];
-    atd.maxBufferBindCount = 5;
-    id<MTL4ArgumentTable> at = [dev newArgumentTableWithDescriptor:atd error:&err];
-    if (!at) return 0;
-    [at setResource:tX.gpuResourceID atBufferIndex:0];
-    [at setResource:((id<MTLTensor>)s->tW).gpuResourceID atBufferIndex:1];
-    [at setResource:tY.gpuResourceID atBufferIndex:2];
-    [at setAddress:((id<MTLBuffer>)s->bBias).gpuAddress atIndex:3];
-    [at setAddress:((id<MTLBuffer>)s->bParams).gpuAddress atIndex:4];
     id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
-    id<MTL4CommandAllocator> alloc = [dev newCommandAllocator];
-    id<MTL4CommandBuffer> cb = [dev newCommandBuffer];
-    if (!queue || !alloc || !cb) return 0;
-    [queue addResidencySet:resStep];
-    [cb beginCommandBufferWithAllocator:alloc];
-    id<MTL4ComputeCommandEncoder> enc = [cb computeCommandEncoder];
-    [enc setComputePipelineState:(id<MTLComputePipelineState>)s->pso];
-    [enc setArgumentTable:at];
-    [enc dispatchThreadgroups:MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1)
-        threadsPerThreadgroup:MTLSizeMake(128, 1, 1)];
-    [enc endEncoding];
-    [cb endCommandBuffer];
-    const id<MTL4CommandBuffer> cbs[1] = {cb};
-    [queue commit:cbs count:1];
-    id<MTLSharedEvent> ev = [dev newSharedEvent];
-    [queue signalEvent:ev value:1];
-    bool done = [ev waitUntilSignaledValue:1 timeoutMS:10000];
-    [queue removeResidencySet:resStep];
+    if (!queue) return 0;
+    bool done = false;
+    {
+      std::lock_guard<std::mutex> lock(ctx.mtl4_dispatch_mu);
+      id<MTLResidencySet> resStep = [dev newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
+      if (!resStep) return 0;
+      [resStep addAllocation:bX]; [resStep addAllocation:bY];
+      [resStep commit];
+      [resStep requestResidency];
+      [queue addResidencySet:resStep];
+      done = mtl4_encode_and_wait(ctx, queue, (id<MTLComputePipelineState>)s->pso,
+          ^(id<MTL4ArgumentTable> at) {
+            [at setResource:tX.gpuResourceID atBufferIndex:0];
+            [at setResource:((id<MTLTensor>)s->tW).gpuResourceID atBufferIndex:1];
+            [at setResource:tY.gpuResourceID atBufferIndex:2];
+            [at setAddress:((id<MTLBuffer>)s->bBias).gpuAddress atIndex:3];
+            [at setAddress:((id<MTLBuffer>)s->bParams).gpuAddress atIndex:4];
+          }, MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1), MTLSizeMake(128, 1, 1));
+      [queue removeResidencySet:resStep];
+    }
     if (!done) return 0;
     std::memcpy(Y, [bY contents], (size_t)M * N * 4);
     return 1;

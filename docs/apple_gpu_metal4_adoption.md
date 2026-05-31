@@ -239,6 +239,19 @@ forced.
   mirrors the existing `matmul→gelu` / `matmul→rmsnorm` chain detection in
   `runtime.py` + `driver.py`, extended with a bias operand and the f16/bf16 gate.
 
+## P-series — overhead amortization + first default routing flip (landed)
+
+Following the integration review below: **P1** put the MTL4 lane on the shared
+buffer pool; **P2/P3** made the command allocator / command buffer / argument
+table / shared event reusable (reset+rebound per dispatch, serialized by
+`mtl4_dispatch_mu`) — repeated small epilogue dropped 0.61 ms → 0.28 ms; **P5**
+routes `@jit(target="apple_gpu")` **bf16 matmul to the native `matmul2d` tensor-op
+by default** (`_mtl4_route_matmul2d_bf16`, toggle `TESSERA_APPLE_GPU_MTL4_BF16`),
+measured **11.8–14.7× faster** than the legacy fp32-conversion fallback — the
+first dtype routed onto the MTL4 lane by default. (f32 stays opt-in; MPS's f32
+GEMM is well-tuned.) Remaining: P6 (compile-time `linear+bias+act` chain
+recognition) and P4 (`MTL4Archive`).
+
 ## Integration review
 
 A Metal-4-grounded audit of how the whole Apple GPU backend uses the device

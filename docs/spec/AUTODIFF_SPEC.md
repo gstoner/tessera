@@ -27,7 +27,7 @@ last_updated: 2026-05-09
 
 | Item | Status |
 |------|--------|
-| Graph/Tile IR adjoint ops | **✅ Phase F4 landed** — `AdjointInterface` ODS + `AutodiffPass.cpp` verified end-to-end on MLIR 21. |
+| Graph/Tile IR adjoint ops | **✅ Phase F4 landed** — `AdjointInterface` ODS + `AutodiffPass.cpp` verified end-to-end on MLIR 22. |
 | Effect-aware adjoint collective insertion | **✅ Phase F5 landed** — `tessera.distributed.DDP` / `FSDP` validate against `mock_collective`. |
 | Activation checkpointing / rematerialization | **✅ Phase F2 landed** — `tessera.autodiff.rematerialize` (alias `checkpoint`). |
 | Mixed-precision autocast + loss scaling | **✅ Phase F1 landed** — `tessera.autodiff.autocast(dtype)` + `GradScaler`. fp8 backend lowering still pending Phase G. |

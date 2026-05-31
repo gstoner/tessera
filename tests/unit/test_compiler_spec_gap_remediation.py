@@ -203,7 +203,7 @@ def test_lowering_spec_documents_python_object_model_path_and_debug_dumps():
 
 def test_backend_mvp_source_contracts_are_not_placeholders():
     tiling = TILING_INTERFACE.read_text(encoding="utf-8")
-    # B3 v2 (2026-05-20): the file ships the real MLIR 21
+    # B3 v2 (2026-05-20): the file ships the real MLIR 22
     # ``TilingInterface`` implementation for MatmulOp + Conv2DNHWCOp.
     # Lock the canonical v2 sentinels — they prove (a) all four
     # methods are defined on each op, (b) the v1 annotation

@@ -2,16 +2,16 @@
 (B3 v2, 2026-05-20).
 
 The B3-v1 work landed a deferred-work doc + a precisely-documented
-stub; B3-v2 ships the actual MLIR 21 ``TilingInterface`` impl for
+stub; B3-v2 ships the actual MLIR 22 ``TilingInterface`` impl for
 ``tessera.matmul`` and ``tessera.conv2d_nhwc``.  These guards lock the
 v2 invariants:
 
   * ODS declares the explicit method list on
     ``DeclareOpInterfaceMethods<TilingInterface, [...]>`` for both
-    ops (the only form MLIR 21's ODS generator picks up).
+    ops (the only form MLIR 22's ODS generator picks up).
   * The C++ impl file carries the canonical annotation sentinel
     (``matmul_conservative_ranked_tensor``) plus all four method
-    definitions matching the MLIR 21 signatures.
+    definitions matching the MLIR 22 signatures.
   * The build flag default is ON; the
     ``-DTESSERA_DISABLE_TILING_INTERFACE`` opt-out is documented in
     the source.
@@ -42,7 +42,7 @@ GENERATED_HEADER_CANDIDATES = (
 
 def test_ods_declares_explicit_method_list_for_matmul() -> None:
     """B3 v2 lock: MatmulOp's TilingInterface decl uses the explicit
-    method-list form (the only form MLIR 21 picks up reliably)."""
+    method-list form (the only form MLIR 22 picks up reliably)."""
 
     ods = TESSERA_OPS_TD.read_text(encoding="utf-8")
     # Find the MatmulOp block + extract its bracket bundle.
@@ -91,7 +91,7 @@ def test_ods_declares_explicit_method_list_for_conv2d() -> None:
 
 
 def test_cpp_impl_defines_all_four_matmul_methods() -> None:
-    """The C++ side actually defines the four MLIR 21 methods on
+    """The C++ side actually defines the four MLIR 22 methods on
     MatmulOp with the correct return types."""
 
     cpp = TESSERA_TILING_CPP.read_text(encoding="utf-8")
@@ -109,9 +109,9 @@ def test_cpp_impl_defines_all_four_matmul_methods() -> None:
         "v1 conservative annotation sentinel missing — the tile "
         "interface lost its driver-observable hook."
     )
-    # MLIR 21 return type for getTiledImplementation.
+    # MLIR 22 return type for getTiledImplementation.
     assert "FailureOr<TilingResult>" in cpp, (
-        "TilingInterface return type drifted from MLIR 21 signature"
+        "TilingInterface return type drifted from MLIR 22 signature"
     )
 
 

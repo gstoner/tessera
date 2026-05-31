@@ -315,17 +315,19 @@ cmake -S . -B build \
   -DCMAKE_PREFIX_PATH="$LLVM_PREFIX" \
   -DLLVM_DIR="$LLVM_PREFIX/lib/cmake/llvm" \
   -DMLIR_DIR="$LLVM_PREFIX/lib/cmake/mlir" \
-  -DTESSERA_CPU_ONLY=ON
+  -DLLVM_EXTERNAL_LIT="$(brew --prefix lit)/bin/lit" \
+  -DTESSERA_CPU_ONLY=ON \
+  -DTESSERA_BUILD_APPLE_BACKEND=ON
 
 cmake --build build --parallel
 
 # MLIR lit tests require a built tessera-opt on PATH
-python -m lit tests/tessera-ir/ -v
+lit tests/tessera-ir/ -v
 
 # If the Python lit package is not installed, run a focused Apple contract
 # directly with the LLVM FileCheck installed alongside Homebrew LLVM:
 build/tools/tessera-opt/tessera-opt tests/tessera-ir/phase8/apple_gpu_lowering.mlir \
-  -tessera-lower-to-apple_gpu --allow-unregistered-dialect \
+  --pass-pipeline='builtin.module(tessera-lower-to-apple_gpu)' --allow-unregistered-dialect \
   | "$LLVM_PREFIX/bin/FileCheck" tests/tessera-ir/phase8/apple_gpu_lowering.mlir
 ```
 

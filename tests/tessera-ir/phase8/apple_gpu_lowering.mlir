@@ -1,4 +1,4 @@
-// RUN: tessera-opt %s -tessera-lower-to-apple_gpu --allow-unregistered-dialect | FileCheck %s
+// RUN: tessera-opt %s --pass-pipeline='builtin.module(tessera-lower-to-apple_gpu)' --allow-unregistered-dialect | FileCheck %s
 
 // Exercises the tessera-lower-to-apple_gpu pipeline. Verifies that:
 //   - matmul / softmax / rope -> Metal/MPS-shaped kernel artifact + dispatch

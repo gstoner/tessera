@@ -222,9 +222,9 @@ hardware).
 
 | Profile | Required test suites | How to run |
 |---------|---------------------|------------|
-| T0 | `tests/unit/` plus Phase 2 lit fixtures | `pytest tests/unit -v && python -m lit tests/tessera-ir/phase2/ -v` |
-| T1 compiler subset | T0 plus Phase 3 and relevant Phase 6 runtime fixtures | `pytest tests/unit -v && python -m lit tests/tessera-ir/phase3/ tests/tessera-ir/phase6/ -v` |
-| T2 compiler subset | T1 subset plus Phase 4 distributed/TPU fixtures | `pytest tests/unit -v && python -m lit tests/tessera-ir/phase4/ -v` |
+| T0 | `tests/unit/` plus Phase 2 lit fixtures | `pytest tests/unit -v && lit tests/tessera-ir/phase2/ -v` |
+| T1 compiler subset | T0 plus Phase 3 and relevant Phase 6 runtime fixtures | `pytest tests/unit -v && lit tests/tessera-ir/phase3/ tests/tessera-ir/phase6/ -v` |
+| T2 compiler subset | T1 subset plus Phase 4 distributed/TPU fixtures | `pytest tests/unit -v && lit tests/tessera-ir/phase4/ -v` |
 | Full T1/T2 native runtime | Hardware-backed backend suites | Backend-specific CUDA/HIP/NCCL/RCCL/MPI commands; not required for hardware-free CI. |
 
 GPU tests that require SM_90+ hardware may be skipped with `@pytest.mark.skipif`
@@ -260,7 +260,7 @@ The MLIR lit tests verify IR structural properties that cannot be tested at
 the Python layer:
 
 ```bash
-python -m lit tests/tessera-ir/ -v
+lit tests/tessera-ir/ -v
 ```
 
 Each lit test uses `// CHECK:` directives. A conformant implementation shall
@@ -339,7 +339,7 @@ For T1, additionally:
 
 - [ ] `GPUTargetProfile(isa=ISA.SM_90)` accepted without error
 - [ ] `pytest tests/unit/ -v` — all green, excluding explicitly documented hardware/unrelated skips or failures
-- [ ] `python -m lit tests/tessera-ir/phase3/ -v` — all pass
+- [ ] `lit tests/tessera-ir/phase3/ -v` — all pass
 - [ ] `tessera.flash_attn` in Graph IR lowers to `tessera.attn.scaled_dot_product`
 - [ ] `WarpSpecializationPass` assigns producer/consumer roles
 - [ ] WGMMA fallback path fires for `isa < ISA.SM_90`

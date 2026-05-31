@@ -1,4 +1,4 @@
-// RUN: tessera-opt %s -tessera-lower-to-apple_cpu --allow-unregistered-dialect | FileCheck %s
+// RUN: tessera-opt %s --pass-pipeline='builtin.module(tessera-lower-to-apple_cpu)' --allow-unregistered-dialect | FileCheck %s
 
 // Exercises the tessera-lower-to-apple_cpu pipeline against synthetic Tile IR
 // inputs (the same op-name spellings the Python pipeline produces in

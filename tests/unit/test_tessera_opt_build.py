@@ -24,12 +24,17 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BUILD_CANDIDATES = (
     REPO_ROOT / "build-llvm22" / "tools" / "tessera-opt" / "tessera-opt",
+    REPO_ROOT / "build-llvm22-make" / "tools" / "tessera-opt" / "tessera-opt",
     REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt",
 )
 
 
 def _find_tessera_opt() -> str | None:
     """Locate the ``tessera-opt`` binary; ``None`` when unavailable."""
+    if explicit := os.environ.get("TESSERA_OPT_PATH"):
+        candidate = Path(explicit)
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
     for candidate in DEFAULT_BUILD_CANDIDATES:
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate)

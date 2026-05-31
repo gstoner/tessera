@@ -125,9 +125,11 @@ ops `tessera.cholesky` + `tessera.tri_solve` (via `_APPLE_GPU_LINALG_OPS` in
 `execution_mode="metal_runtime"` on Darwin. **f16/bf16** inputs compute in f32 and
 cast back; **f64** routes to numpy (full precision). **`apple_gpu_qr`** —
 Cholesky-QR (`G=AᵀA`, `R=chol(G)ᵀ`, `Q=A·R⁻¹`) reusing the GPU chol+tri-solve, with
-a `‖QᵀQ−I‖` verify → numpy-Householder fallback. **`apple_gpu_svd`** — deferred to
-numpy (no MPS eigensolver; Jacobi-MSL is future work). Tests:
-`tests/unit/test_apple_gpu_linalg.py` (42).
+a `‖QᵀQ−I‖` verify → numpy-Householder fallback. **`apple_gpu_svd`** — custom
+one-sided **Jacobi MSL kernel** (`tessera_apple_gpu_svd_f32`; one threadgroup,
+column-pair rotations to convergence), host sort + `‖UΣVh−A‖` verify → numpy
+fallback (m<n / full_matrices / f64). Tests:
+`tests/unit/test_apple_gpu_linalg.py` (51).
 
 ## Capability + diagnostic symbols
 

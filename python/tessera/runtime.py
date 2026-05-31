@@ -3177,13 +3177,40 @@ def apple_gpu_qr(A: Any, np: Any) -> Any:
 
 
 def apple_gpu_svd(A: Any, np: Any, *, full_matrices: bool = False) -> Any:
-    """Singular value decomposition ``A = U·diag(S)·Vh``. **Deferred to numpy** —
-    MPS ships no SVD (nor eigensolver) kernel, and a numerically-robust one-sided
-    Jacobi SVD in MSL is a substantial standalone kernel (iterative pairwise
-    column rotations to convergence) not yet implemented. Provided for surface
-    parity; always computes on the CPU and returns ``(U, S, Vh, ran_on_gpu=False)``.
-    See docs/apple_backend_integration_review.md (linalg) for the Jacobi-MSL plan."""
-    out_dt, _, fb_dt = _linalg_dtype_policy(A, np)
+    """Reduced singular value decomposition ``A = U·diag(S)·Vh`` (``U`` m×n, ``S``
+    n descending, ``Vh`` n×n) — **GPU-resident via a custom one-sided Jacobi MSL
+    kernel** (MPS has no SVD/eigensolver). Rotates column pairs to mutual
+    orthogonality, then σ = column norms, U = normalized columns, V = accumulated
+    rotations. f16/bf16 compute in f32 and cast back.
+
+    The GPU path covers ``full_matrices=False`` with ``m ≥ n``; the result is
+    **verified** (``‖U·Σ·Vh − A‖``) and, on failure — or for ``full_matrices=True``,
+    ``m < n``, or f64 — it **falls back to numpy**. Returns
+    ``(U, S, Vh, ran_on_gpu)``. Validate by reconstruction / orthonormality, not
+    elementwise (SVD is unique only up to signs of paired singular vectors)."""
+    out_dt, gpu_ok, fb_dt = _linalg_dtype_policy(A, np)
+    A2 = np.ascontiguousarray(A, np.float32)
+    if gpu_ok and not full_matrices and A2.ndim == 2 and A2.shape[0] >= A2.shape[1] >= 1:
+        sym = _apple_gpu_linalg_sym(
+            "tessera_apple_gpu_svd_f32",
+            [ctypes.POINTER(ctypes.c_float)] * 4 + [ctypes.c_int32, ctypes.c_int32])
+        if sym is not None:
+            m, n = int(A2.shape[0]), int(A2.shape[1])
+            fp = ctypes.POINTER(ctypes.c_float)
+            U = np.empty((m, n), np.float32)
+            S = np.empty(n, np.float32)
+            V = np.empty((n, n), np.float32)   # right vectors as columns
+            rc = sym(A2.ctypes.data_as(fp), U.ctypes.data_as(fp),
+                     S.ctypes.data_as(fp), V.ctypes.data_as(fp),
+                     ctypes.c_int32(m), ctypes.c_int32(n))
+            if rc == 1:
+                order = np.argsort(-S)               # descending (numpy convention)
+                U, S, V = U[:, order], S[order], V[:, order]
+                # Verify reconstruction before trusting the iterative result.
+                recon = float(np.abs((U * S) @ V.T - A2).max() / (np.abs(A2).max() + 1e-30))
+                if recon < 1e-3:
+                    return (U.astype(out_dt), S.astype(out_dt),
+                            np.ascontiguousarray(V.T).astype(out_dt), True)
     U, S, Vh = np.linalg.svd(np.asarray(A, fb_dt), full_matrices=full_matrices)
     return U.astype(out_dt), S.astype(out_dt), Vh.astype(out_dt), False
 

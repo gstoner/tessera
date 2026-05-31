@@ -295,11 +295,57 @@ def test_qr_f16_dtype_preserved():
                 A.astype(np.float32)) < 5e-3
 
 
-# ── SVD — deferred to numpy (no MPS/eigensolver kernel) ───────────────────────
-def test_svd_deferred_to_numpy_but_correct():
-    A = np.random.default_rng(2).standard_normal((10, 6)).astype(np.float32)
+# ── SVD via one-sided Jacobi (custom MSL) ─────────────────────────────────────
+@pytest.mark.parametrize("m,n", [(8, 8), (16, 4), (64, 32), (128, 16), (50, 50)])
+def test_svd_matches_numpy(m, n):
+    A = np.random.default_rng(m * 3 + n).standard_normal((m, n)).astype(np.float32)
     U, S, Vh, ran = R.apple_gpu_svd(A, np)
-    assert ran is False                                  # honest: no GPU path
-    recon = (U * S) @ Vh
-    assert _rel(recon, A) < TOL
-    assert np.all(np.diff(S) <= 1e-5)                    # descending singular values
+    assert U.shape == (m, n) and S.shape == (n,) and Vh.shape == (n, n)
+    assert _rel((U * S) @ Vh, A) < 1e-4                       # reconstruction
+    assert float(np.abs(U.T @ U - np.eye(n)).max()) < 1e-3    # U orthonormal cols
+    assert float(np.abs(Vh @ Vh.T - np.eye(n)).max()) < 1e-3  # V orthonormal
+    assert np.all(np.diff(S) <= 1e-4)                         # descending
+    s_np = np.linalg.svd(A.astype(np.float64), compute_uv=False)
+    assert float(np.abs(S.astype(np.float64) - s_np).max() / s_np.max()) < 1e-3
+    if _on_metal():
+        assert ran is True
+
+
+def test_svd_rank_deficient():
+    rng = np.random.default_rng(1)
+    A = (rng.standard_normal((20, 2)) @ rng.standard_normal((2, 6))).astype(np.float32)
+    U, S, Vh, _ = R.apple_gpu_svd(A, np)
+    assert _rel((U * S) @ Vh, A) < 1e-4
+    assert float(np.abs(S[2:]).max()) < 1e-3                  # rank 2 -> tail σ ≈ 0
+
+
+def test_svd_clustered_singular_values():
+    rng = np.random.default_rng(0)
+    Q, _ = np.linalg.qr(rng.standard_normal((8, 4)))
+    A = (Q * np.array([3.0, 3.0, 3.0, 1.0])).astype(np.float32)
+    U, S, Vh, _ = R.apple_gpu_svd(A, np)
+    assert _rel((U * S) @ Vh, A) < 1e-4
+    np.testing.assert_allclose(np.sort(S)[::-1], [3, 3, 3, 1], atol=1e-3)
+
+
+def test_svd_f16_dtype_preserved():
+    A = np.random.default_rng(2).standard_normal((32, 8)).astype(np.float16)
+    U, S, Vh, ran = R.apple_gpu_svd(A, np)
+    assert U.dtype == np.float16 and S.dtype == np.float16 and Vh.dtype == np.float16
+    assert _rel((U.astype(np.float32) * S.astype(np.float32)) @ Vh.astype(np.float32),
+                A.astype(np.float32)) < 5e-3
+
+
+def test_svd_wide_matrix_falls_back():
+    # m < n is outside the GPU path (m >= n only) -> numpy, still correct.
+    A = np.random.default_rng(3).standard_normal((4, 10)).astype(np.float32)
+    U, S, Vh, ran = R.apple_gpu_svd(A, np)
+    assert ran is False
+    assert _rel((U * S) @ Vh, A) < TOL
+
+
+def test_svd_full_matrices_falls_back():
+    A = np.random.default_rng(4).standard_normal((8, 5)).astype(np.float32)
+    U, S, Vh, ran = R.apple_gpu_svd(A, np, full_matrices=True)
+    assert ran is False
+    assert U.shape == (8, 8) and Vh.shape == (5, 5)

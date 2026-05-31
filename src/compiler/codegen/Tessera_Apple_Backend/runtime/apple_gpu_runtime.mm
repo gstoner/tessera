@@ -951,6 +951,163 @@ id<MTLComputePipelineState> compile_msl_kernel(MetalDeviceContext &ctx,
   return pso;
 }
 
+//===----------------------------------------------------------------------===//
+// SVD via one-sided Jacobi (custom MSL) — the SVD/eigensolver gap MPS doesn't
+// fill. One threadgroup per matrix, T threads cooperating. Rotates pairs of
+// *columns* of a working copy W (= A) by Givens/Jacobi rotations (accumulated
+// into V) until every column pair is mutually orthogonal; then σ_k = ‖W[:,k]‖,
+// U[:,k] = W[:,k]/σ_k, and V holds the right singular vectors (as columns). The
+// m-dimensional dot products (α,β,γ) reduce through a threadgroup tree; a sweep
+// that applies no rotation means convergence. Unsorted on the GPU; the Python
+// wrapper sorts σ descending, permutes U/V, and verifies ‖UΣVᵀ−A‖ before
+// trusting the result. f32, m ≥ n, single matrix (rank-2). NB: one threadgroup =
+// correctness-first, not a throughput win — see docs.
+//===----------------------------------------------------------------------===//
+namespace {
+constexpr int kSvdThreads = 128;
+
+bool dispatch_svd_jacobi_f32(MetalDeviceContext &ctx, const float *A, float *U,
+                             float *S, float *V, int32_t M, int32_t N) {
+  if (!ctx.ok || !A || !U || !S || !V || M <= 0 || N <= 0 || M < N) return false;
+  static NSString *const kSvdSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+#define TS_SVD_THREADS 128
+
+kernel void svd_jacobi_f32(
+    device float* W        [[buffer(0)]],   // M x N, in = A, out = U·Σ (col-scaled)
+    device float* V        [[buffer(1)]],   // N x N, out = right vectors (columns)
+    device float* S        [[buffer(2)]],   // N,     out = singular values (unsorted)
+    constant int& M        [[buffer(3)]],
+    constant int& N        [[buffer(4)]],
+    constant int& maxSweeps[[buffer(5)]],
+    uint lid [[thread_position_in_threadgroup]])
+{
+    const int T = TS_SVD_THREADS;
+    int li = (int)lid;
+    threadgroup float sa[TS_SVD_THREADS];
+    threadgroup float sb[TS_SVD_THREADS];
+    threadgroup float sg[TS_SVD_THREADS];
+    threadgroup float crot[2];   // {c, s}
+    threadgroup int   info[2];   // {do_rotation, n_rotations_this_sweep}
+    const float eps = 1e-7f;
+
+    // V = I
+    for (int idx = li; idx < N * N; idx += T)
+        V[idx] = ((idx / N) == (idx % N)) ? 1.0f : 0.0f;
+    threadgroup_barrier(mem_flags::mem_device | mem_flags::mem_threadgroup);
+
+    for (int sweep = 0; sweep < maxSweeps; ++sweep) {
+        if (li == 0) info[1] = 0;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (int p = 0; p < N - 1; ++p) {
+            for (int q = p + 1; q < N; ++q) {
+                // α=Σ Wp², β=Σ Wq², γ=Σ Wp·Wq  (one pass over the M rows).
+                float pa = 0.0f, pb = 0.0f, pg = 0.0f;
+                for (int i = li; i < M; i += T) {
+                    float wp = W[i * N + p], wq = W[i * N + q];
+                    pa += wp * wp; pb += wq * wq; pg += wp * wq;
+                }
+                sa[li] = pa; sb[li] = pb; sg[li] = pg;
+                threadgroup_barrier(mem_flags::mem_threadgroup);
+                for (int s = T / 2; s > 0; s >>= 1) {
+                    if (li < s) { sa[li]+=sa[li+s]; sb[li]+=sb[li+s]; sg[li]+=sg[li+s]; }
+                    threadgroup_barrier(mem_flags::mem_threadgroup);
+                }
+                if (li == 0) {
+                    float alpha = sa[0], beta = sb[0], gamma = sg[0];
+                    int rot = 0; float c = 1.0f, s = 0.0f;
+                    if (fabs(gamma) > eps * sqrt(max(alpha * beta, 0.0f))) {
+                        rot = 1;
+                        float zeta = (beta - alpha) / (2.0f * gamma);
+                        float t = (zeta >= 0.0f ? 1.0f : -1.0f) /
+                                  (fabs(zeta) + sqrt(1.0f + zeta * zeta));
+                        if (zeta == 0.0f) t = 1.0f;   // α==β, γ≠0 -> 45° rotation
+                        c = 1.0f / sqrt(1.0f + t * t);
+                        s = c * t;
+                        info[1] += 1;
+                    }
+                    crot[0] = c; crot[1] = s; info[0] = rot;
+                }
+                threadgroup_barrier(mem_flags::mem_threadgroup);
+                if (info[0]) {
+                    float c = crot[0], s = crot[1];
+                    for (int i = li; i < M; i += T) {
+                        float wp = W[i * N + p], wq = W[i * N + q];
+                        W[i * N + p] = c * wp - s * wq;
+                        W[i * N + q] = s * wp + c * wq;
+                    }
+                    for (int i = li; i < N; i += T) {
+                        float vp = V[i * N + p], vq = V[i * N + q];
+                        V[i * N + p] = c * vp - s * vq;
+                        V[i * N + q] = s * vp + c * vq;
+                    }
+                    threadgroup_barrier(mem_flags::mem_device | mem_flags::mem_threadgroup);
+                }
+            }
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        if (info[1] == 0) break;   // a full sweep with no rotation -> converged
+    }
+
+    // σ_k = ‖W[:,k]‖ ; U[:,k] = W[:,k]/σ_k.
+    for (int k = 0; k < N; ++k) {
+        float ps = 0.0f;
+        for (int i = li; i < M; i += T) { float w = W[i * N + k]; ps += w * w; }
+        sa[li] = ps;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (int s = T / 2; s > 0; s >>= 1) {
+            if (li < s) sa[li] += sa[li + s];
+            threadgroup_barrier(mem_flags::mem_threadgroup);
+        }
+        float sigma = sqrt(sa[0]);
+        if (li == 0) S[k] = sigma;
+        float inv = sigma > 1e-30f ? 1.0f / sigma : 0.0f;
+        for (int i = li; i < M; i += T) W[i * N + k] *= inv;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+}
+)MSL";
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, kSvdSource, @"svd_jacobi_f32");
+    if (!pso) return false;
+    size_t wB = (size_t)M * N * 4, vB = (size_t)N * N * 4, sB = (size_t)N * 4;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bW, ctx, A, wB);
+    TS_METAL_BUF_ACQUIRE(bV, ctx, vB);
+    TS_METAL_BUF_ACQUIRE(bS, ctx, sB);
+    if (!bW || !bV || !bS) return false;
+    int maxSweeps = 60;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bW offset:0 atIndex:0];
+    [enc setBuffer:bV offset:0 atIndex:1];
+    [enc setBuffer:bS offset:0 atIndex:2];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&maxSweeps length:sizeof(int32_t) atIndex:5];
+    [enc dispatchThreadgroups:MTLSizeMake(1, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(kSvdThreads, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(U, [bW contents], wB);
+    std::memcpy(V, [bV contents], vB);
+    std::memcpy(S, [bS contents], sB);
+    return true;
+  }
+}
+}  // namespace
+
+// One-sided Jacobi SVD: A (M×N row-major f32, M≥N) -> U (M×N), S (N, unsorted),
+// V (N×N, right vectors as columns). 1 if it ran on the GPU, else 0. The caller
+// sorts σ descending + verifies reconstruction.
+extern "C" int32_t tessera_apple_gpu_svd_f32(const float *A, float *U, float *S,
+                                             float *V, int32_t M, int32_t N) {
+  return dispatch_svd_jacobi_f32(deviceContext(), A, U, S, V, M, N) ? 1 : 0;
+}
+
 // Metal 4 lane — cached MTL4 compute pipeline (MSL 4.0 source compiled via the
 // MTL4Compiler). Mirrors compile_msl_kernel but for the MTL4 path; the MSL
 // compile + pipeline build are paid once per (source, entry) and reused.

@@ -321,15 +321,26 @@ dtype is f64) it **falls back to numpy Householder QR**, so the returned `Q` is
 always orthonormal. Tall/square (m ≥ n), reduced mode. Validated by
 reconstruction + orthonormality (QR is unique only up to column signs).
 
-**SVD (deferred, honest).** `apple_gpu_svd` exists for surface parity but always
-computes on numpy (`ran_on_gpu=False`) — MPS ships no SVD/eigensolver kernel, and
-a robust one-sided **Jacobi SVD in MSL** (iterative pairwise column rotations to
-convergence, ‖off-diagonal‖→0) is a substantial standalone kernel left as future
-work. The wrapper documents the design.
+**SVD (landed — one-sided Jacobi MSL).** MPS ships no SVD/eigensolver, so
+`apple_gpu_svd` is a **custom MSL kernel**: one threadgroup per matrix, T=128
+threads cooperating; it rotates pairs of *columns* of a working copy by
+Givens/Jacobi rotations (accumulated into V) until every pair is mutually
+orthogonal (a sweep with no rotation = converged), then σₖ = ‖col‖, U = normalized
+columns, V = accumulated rotations. The m-dim dot products (α,β,γ) reduce through a
+threadgroup tree; the sweep+pair loops run inside the kernel. The Python wrapper
+sorts σ descending, builds `Vh = Vᵀ`, and **verifies `‖U·Σ·Vh − A‖`** before
+trusting the iterative result — falling back to numpy on failure, or for
+`full_matrices=True` / `m < n` / f64. f16/bf16 compute in f32. Validated vs numpy:
+reconstruction + U/V orthonormality ~1e-6, σ-match ~1e-6, and exact on
+rank-deficient (tail σ = 0) and clustered/repeated σ. **Honest perf note: one
+threadgroup per matrix is correctness/capability-first, not a throughput win** —
+it's the GPU SVD *capability*, not a fast SVD.
 
 **Remaining follow-ups.** Native **batched** (one dispatch for the whole batch)
-if MPS ever exposes a batch stride for decomposition; the **Jacobi-MSL SVD**.
-Honest perf note: the batched per-matrix loop is correctness/capability-first —
+if MPS ever exposes a batch stride for decomposition; a **parallel
+(Brent–Luk tournament) Jacobi** if SVD throughput ever matters; `m < n` /
+`full_matrices` on-GPU. Honest perf note: the batched per-matrix loop is
+correctness/capability-first —
 each slice is a full GPU encode+commit+wait, so for many small matrices it is
 **not** a speed win over numpy's batched LAPACK; the value is keeping the work
 on-GPU when it's part of a larger resident pipeline.

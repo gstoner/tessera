@@ -14,7 +14,7 @@ from typing import Any, Iterable, Optional
 
 from ..diagnostics import DiagnosticLevel, DiagnosticWhere, TesseraDiagnostic, TesseraErrorCode
 from .capabilities import normalize_target
-from .tile_ir import TileIRModule, TileIRVerificationError, TileOp
+from .tile_ir import TILE_METADATA_OPS, TileIRModule, TileIRVerificationError, TileOp
 
 
 APPLE_CPU_TARGET = "apple_cpu"
@@ -1164,7 +1164,12 @@ def _lower_tile_ops(
 
 def _flatten_tile_ops(ops: Iterable[TileOp]) -> Iterable[TileOp]:
     for op in ops:
-        if op.op_name == "tile.group":
+        # tile.group + the placement/layout/schedule-plan metadata markers
+        # (TILE_METADATA_OPS) carry no compute: drop the marker itself but still
+        # recurse into its body so the compute ops inside tile.mesh.region reach
+        # Target lowering. Without this, the catch-all below would mis-lower a
+        # metadata marker into a spurious compute target op.
+        if op.op_name == "tile.group" or op.op_name in TILE_METADATA_OPS:
             yield from _flatten_tile_ops(op.body)
         else:
             yield op

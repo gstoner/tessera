@@ -18,6 +18,11 @@ from .schedule_ir import ScheduleIRModule, ScheduleIRVerificationError, Schedule
 
 TILE_MEMORY_OPS = {"tile.async_copy", "tile.wait_async"}
 QUEUE_OPS = {"tessera.queue.create", "tessera.queue.push", "tessera.queue.pop", "tessera.queue.barrier"}
+# Pure-metadata marker ops carried into Tile IR to explain placement / layout /
+# the schedule plan. They emit NO compute — Target lowering filters them (and
+# recurses into tile.mesh.region bodies). See _lower_schedule_ops / target_ir.
+TILE_METADATA_OPS = {"tile.mesh.define", "tile.layout", "tile.placement",
+                     "tile.artifact", "tile.mesh.region", "tile.debug_artifact"}
 ATTN_OPS = {"tessera.attn.scaled_dot_product", "tessera.attn.online_softmax", "tessera.attn.lse_save", "tessera.attn.attend_v"}
 
 
@@ -206,13 +211,29 @@ def lower_schedule_to_tile_ir(schedule_module: ScheduleIRModule, *, target_kind:
 def _lower_schedule_ops(ops: list[ScheduleOp]) -> list[TileOp]:
     lowered: list[TileOp] = []
     for op in ops:
-        if op.op_name in {"schedule.mesh.define", "schedule.layout", "schedule.artifact"}:
+        # Placement / layout / schedule-plan metadata is PRESERVED into Tile IR
+        # (was dropped) so the Tile layer can explain real placement + movement,
+        # not just the compute skeleton. These are pure-metadata marker ops:
+        # Tile→Target filters them (see target_ir._flatten_tile_ops) so they emit
+        # no compute, exactly like tile.debug_artifact.
+        if op.op_name == "schedule.mesh.define":
+            lowered.append(TileOp("tile.mesh.define", dict(op.attrs)))
+            continue
+        if op.op_name == "schedule.layout":
+            lowered.append(TileOp("tile.layout", dict(op.attrs)))
+            continue
+        if op.op_name == "schedule.artifact":
+            lowered.append(TileOp("tile.artifact", dict(op.attrs)))
             continue
         if op.op_name == "schedule.debug_artifact":
             lowered.append(TileOp("tile.debug_artifact", dict(op.attrs)))
             continue
         if op.op_name == "schedule.mesh.region":
-            lowered.extend(_lower_schedule_ops(op.body[:-1]))
+            # Keep the mesh-placement scope as a Tile region (carrying mesh+axis)
+            # instead of inlining + losing the association. The body's compute ops
+            # still flow to Target lowering (which recurses into the region body).
+            inner = _lower_schedule_ops(op.body[:-1])  # drop the schedule.yield
+            lowered.append(TileOp("tile.mesh.region", dict(op.attrs), body=inner))
             continue
         if op.op_name == "schedule.pipeline.region":
             lowered.extend(_lower_pipeline_region(op))

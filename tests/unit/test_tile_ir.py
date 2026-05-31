@@ -130,3 +130,46 @@ def test_tile_ir_to_mlir_blocks_invalid_module():
     ])
     with pytest.raises(TileIRVerificationError, match="TILE_IR_WAIT_STAGE"):
         module.to_mlir()
+
+
+def test_schedule_to_tile_preserves_placement_metadata():
+    """G1: Schedule→Tile must PRESERVE mesh / layout / schedule-plan metadata
+    (previously dropped) so Tile IR explains real placement + movement, while the
+    compute inside a mesh region still flows through. The metadata markers must
+    NOT leak into Target lowering as spurious compute ops."""
+    from tessera.compiler.target_ir import lower_tile_to_target_ir
+
+    module = ScheduleIRModule(functions=[
+        ScheduleFunction("main", body=[
+            ScheduleOp("schedule.mesh.define",
+                       {"sym_name": "M", "dims": [2], "axis_names": ["dp"]}),
+            ScheduleOp("schedule.layout",
+                       {"operands": ["x"], "layout": "row_major", "ordinal": 0}),
+            ScheduleOp("schedule.mesh.region", {"mesh": "M", "axis": "dp"}, body=[
+                ScheduleOp("schedule.pipeline.region",
+                           {"schedule": "1f1b", "micro_batches": 2}, body=[
+                               ScheduleOp("schedule.stage", {"devices": ["gpu:0"]},
+                                          body=[ScheduleOp("schedule.yield")]),
+                               ScheduleOp("schedule.yield"),
+                           ]),
+                ScheduleOp("schedule.yield"),
+            ]),
+            ScheduleOp("schedule.artifact", {"hash": "h", "arch": "cpu"}),
+        ])
+    ])
+    assert module.verify().ok
+    tile = lower_schedule_to_tile_ir(module, target_kind="cpu")
+    text = tile.to_mlir()
+    # placement / layout / plan metadata preserved into Tile IR
+    assert "tile.mesh.define" in text
+    assert "tile.layout" in text
+    assert "tile.artifact" in text
+    assert "tile.mesh.region" in text
+    assert "dp" in text                       # mesh-axis association carried through
+
+    # Target lowering still succeeds and does NOT emit the metadata markers as
+    # compute (they're filtered like tile.debug_artifact).
+    target_text = lower_tile_to_target_ir(tile, target_kind="cpu").to_mlir()
+    assert "tile.mesh" not in target_text
+    assert "tile.artifact" not in target_text
+    assert "tile.layout" not in target_text

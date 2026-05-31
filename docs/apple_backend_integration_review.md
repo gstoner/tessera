@@ -56,9 +56,10 @@ scope exit.
   the pool and allocate fresh, which is correct).
 - **Done (extended):** the M8 session `run()` X/Y buffers and `msl_spec_accept`
   now also use the pool (the latter fixed a pre-existing red
-  `test_apple_gpu_buffer_pool` assertion). **Follow-up:** the M2 scan and M3/M5
-  simdgroup matmul still allocate raw; the tiny bias/params buffers are not worth
-  pooling.
+  `test_apple_gpu_buffer_pool` assertion).
+- **Done (M2/M3/M5):** the M2 scan (`Wh/Wx/xseq/init/ys`) and M3/M5 simdgroup
+  matmul (`A/B/C`) large buffers now acquire through `TS_METAL_BUF_ACQUIRE*` too;
+  the tiny dims/bias/params buffers stay fresh raw allocs (not worth pooling).
 
 ### P2 — per-dispatch MTL4 object churn (argument table, allocator, command buffer) *(done)*
 
@@ -74,14 +75,22 @@ be reused immediately after committing."
   reuse correct (and loses no overlap — the single shared queue already serializes
   GPU work). Wired into `mtl4_matmul2d_dispatch` (plain + epilogue, f16/bf16) and
   the M8 session `run()`. **Measured:** repeated small epilogue (64×256×256) went
-  0.61 ms → **0.28 ms** (~2.2×) on top of P1. The per-call `MTLResidencySet` is
-  still created fresh (commit + `requestResidency` are unavoidable kernel calls);
-  reusing the set object is a minor remaining nicety. **Header-check note:**
-  `MTL4CommandBuffer` exposes `useResidencySet:` / `useResidencySets:count:` —
-  per-command-buffer residency that is the more granular intended path than our
-  queue-level `addResidencySet:`/`removeResidencySet:` churn (and sidesteps the
-  queue's 32-residency-set ceiling). `[cb useResidencySet:res]` with one reused,
-  repopulated set is the clean form of the residual above.
+  0.61 ms → **0.28 ms** (~2.2×) on top of P1.
+- **Done (residency-set reuse):** `MetalDeviceContext` now holds **one reusable
+  `MTLResidencySet`**, repopulated per dispatch (`mtl4_set_residency`:
+  removeAll + addAllocation + commit + requestResidency) and attached to the
+  command buffer via **`[cb useResidencySet:res]`** inside `mtl4_encode_and_wait`
+  — the granular intended path — instead of a fresh set + queue
+  `addResidencySet:`/`removeResidencySet:` per dispatch. Wired into
+  `mtl4_matmul2d_dispatch` (plain + epilogue), the conv lane (both stages share
+  the one set), and the M8 session `run()`/`run_dev()` (W/bias/params stay
+  resident via the session's persistent queue-level `resW`; only X/Y go in the
+  per-step set). **Perf is neutral** (0.94–1.06×, in the noise — `commit` +
+  `requestResidency` were the real per-call cost and are unavoidable), but it
+  **eliminates the queue's 32-residency-set ceiling** (a latent footgun under
+  many/racing dispatches) and matches the intended Metal 4 API. Kept for
+  robustness, not speed. (The bespoke M2 scan / M3/M5 paths still create their own
+  per-call set — cold paths, not worth converting.)
 
 ### P3 — `MTLSharedEvent` created per dispatch *(done)*
 

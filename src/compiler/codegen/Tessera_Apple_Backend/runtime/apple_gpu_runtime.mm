@@ -93,6 +93,12 @@ struct MetalDeviceContext {
   id        mtl4_cmdbuf;      // id<MTL4CommandBuffer>
   id        mtl4_argtable;    // id<MTL4ArgumentTable> (maxBufferBindCount = 8)
   id        mtl4_event;       // id<MTLSharedEvent>
+  // Reusable per-dispatch residency set — repopulated each call (removeAll +
+  // addAllocation + commit + requestResidency) and attached to the command
+  // buffer via `useResidencySet:` (per-cmdbuf, the granular intended path), so we
+  // avoid creating a fresh MTLResidencySet + queue addResidencySet/remove churn
+  // every dispatch (and sidestep the queue's 32-residency-set ceiling).
+  id        mtl4_residency;   // id<MTLResidencySet>
   uint64_t  mtl4_event_val;   // monotonic signal counter
   std::mutex mtl4_dispatch_mu;
 
@@ -1412,6 +1418,28 @@ static void mtl4_ensure_dispatch_objects(MetalDeviceContext &ctx) {
     atd.maxBufferBindCount = 8;
     ctx.mtl4_argtable = [dev newArgumentTableWithDescriptor:atd error:nil];
   }
+  if (!ctx.mtl4_residency) {
+    ctx.mtl4_residency = [dev newResidencySetWithDescriptor:
+        [[MTLResidencySetDescriptor alloc] init] error:nil];
+  }
+}
+
+// Repopulate the reusable residency set with `count` allocations and make them
+// resident. Returns the set (nil on failure). Pair with mtl4_encode_and_wait,
+// which attaches it to the command buffer via `useResidencySet:`. Caller holds
+// ctx.mtl4_dispatch_mu (the set is shared, like the other reusable objects).
+API_AVAILABLE(macos(26.0), ios(26.0))
+static id<MTLResidencySet> mtl4_set_residency(MetalDeviceContext &ctx,
+                                              id<MTLBuffer> const *bufs, int count) {
+  mtl4_ensure_dispatch_objects(ctx);
+  id<MTLResidencySet> rs = (id<MTLResidencySet>)ctx.mtl4_residency;
+  if (!rs) return nil;
+  [rs removeAllAllocations];
+  for (int i = 0; i < count; ++i)
+    if (bufs[i]) [rs addAllocation:bufs[i]];
+  [rs commit];
+  [rs requestResidency];
+  return rs;
 }
 
 // P2/P3 — encode + commit + wait on the reusable allocator/command-buffer/event.
@@ -1421,7 +1449,8 @@ API_AVAILABLE(macos(26.0), ios(26.0))
 static bool mtl4_encode_and_wait(MetalDeviceContext &ctx, id<MTL4CommandQueue> queue,
                                  id<MTLComputePipelineState> pso,
                                  void (^bind)(id<MTL4ArgumentTable>),
-                                 MTLSize grid, MTLSize tpg) {
+                                 MTLSize grid, MTLSize tpg,
+                                 id<MTLResidencySet> res = nil) {
   mtl4_ensure_dispatch_objects(ctx);
   id<MTL4CommandAllocator> alloc = (id<MTL4CommandAllocator>)ctx.mtl4_allocator;
   id<MTL4CommandBuffer> cb = (id<MTL4CommandBuffer>)ctx.mtl4_cmdbuf;
@@ -1431,6 +1460,9 @@ static bool mtl4_encode_and_wait(MetalDeviceContext &ctx, id<MTL4CommandQueue> q
   bind(at);
   [alloc reset];
   [cb beginCommandBufferWithAllocator:alloc];
+  // Per-command-buffer residency (granular intended path) — keeps `res`'s
+  // allocations resident for this dispatch without queue-level add/remove churn.
+  if (res) [cb useResidencySet:res];
   id<MTL4ComputeCommandEncoder> enc = [cb computeCommandEncoder];
   [enc setComputePipelineState:pso];
   [enc setArgumentTable:at];
@@ -9417,13 +9449,14 @@ extern "C" int32_t tessera_apple_gpu_mtl4_scan_f32(const float *Wh,
       id<MTLComputePipelineState> pso = compile_mtl4_pipeline(ctx, kMTL4ScanMSL, @"cf_scan_msl");
       if (!pso) return 0;
 
-      // 2. Shared buffers (unified memory — no copies).
+      // 2. Shared buffers (unified memory — no copies). Pooled (synced before
+      // scope exit); the tiny dims buffer stays a fresh raw alloc.
       MTLResourceOptions ro = MTLResourceStorageModeShared;
-      id<MTLBuffer> bWh = [dev newBufferWithBytes:Wh length:(size_t)d * d * 4 options:ro];
-      id<MTLBuffer> bWx = [dev newBufferWithBytes:Wx length:(size_t)m * d * 4 options:ro];
-      id<MTLBuffer> bXs = [dev newBufferWithBytes:xseq length:(size_t)T * m * 4 options:ro];
-      id<MTLBuffer> bIn = [dev newBufferWithBytes:init length:(size_t)d * 4 options:ro];
-      id<MTLBuffer> bYs = [dev newBufferWithLength:(size_t)T * d * 4 options:ro];
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bWh, ctx, Wh, (size_t)d * d * 4);
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bWx, ctx, Wx, (size_t)m * d * 4);
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bXs, ctx, xseq, (size_t)T * m * 4);
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bIn, ctx, init, (size_t)d * 4);
+      TS_METAL_BUF_ACQUIRE(bYs, ctx, (size_t)T * d * 4);
       int dims[3] = {T, d, m};
       id<MTLBuffer> bDm = [dev newBufferWithBytes:dims length:sizeof(dims) options:ro];
       if (!bWh || !bWx || !bXs || !bIn || !bYs || !bDm) return 0;
@@ -9674,9 +9707,11 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float *A,
       if (!pso) return 0;
 
       MTLResourceOptions ro = MTLResourceStorageModeShared;
-      id<MTLBuffer> bA = [dev newBufferWithBytes:A length:(size_t)M * K * 4 options:ro];
-      id<MTLBuffer> bB = [dev newBufferWithBytes:B length:(size_t)K * N * 4 options:ro];
-      id<MTLBuffer> bC = [dev newBufferWithLength:(size_t)M * N * 4 options:ro];
+      // Large A/B/C through the buffer pool (synced before scope exit, so safe to
+      // recycle); the tiny dims buffer stays a fresh raw alloc (not worth pooling).
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bA, ctx, A, (size_t)M * K * 4);
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bB, ctx, B, (size_t)K * N * 4);
+      TS_METAL_BUF_ACQUIRE(bC, ctx, (size_t)M * N * 4);
       int dims[3] = {M, N, K};
       id<MTLBuffer> bD = [dev newBufferWithBytes:dims length:sizeof(dims) options:ro];
       if (!bA || !bB || !bC || !bD) return 0;
@@ -9886,13 +9921,9 @@ static int32_t mtl4_matmul2d_dispatch(NSString *entry, MTLTensorDataType dt,
       bool done = false;
       {
         std::lock_guard<std::mutex> lock(ctx.mtl4_dispatch_mu);
-        id<MTLResidencySet> res = [dev newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
+        id<MTLBuffer> rbufs[5] = {bA, bB, bC, fused ? bBias : nil, fused ? bP : nil};
+        id<MTLResidencySet> res = mtl4_set_residency(ctx, rbufs, fused ? 5 : 3);
         if (!res) return 0;
-        [res addAllocation:bA]; [res addAllocation:bB]; [res addAllocation:bC];
-        if (fused) { [res addAllocation:bBias]; [res addAllocation:bP]; }
-        [res commit];
-        [res requestResidency];
-        [queue addResidencySet:res];
         // 64x64 output tile per threadgroup; tg.x tiles M, tg.y tiles N; 4 SIMD groups.
         done = mtl4_encode_and_wait(ctx, queue, pso, ^(id<MTL4ArgumentTable> at) {
           [at setResource:tA.gpuResourceID atBufferIndex:0];
@@ -9902,8 +9933,7 @@ static int32_t mtl4_matmul2d_dispatch(NSString *entry, MTLTensorDataType dt,
             [at setAddress:bBias.gpuAddress atIndex:3];
             [at setAddress:bP.gpuAddress atIndex:4];
           }
-        }, MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1), MTLSizeMake(128, 1, 1));
-        [queue removeResidencySet:res];
+        }, MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1), MTLSizeMake(128, 1, 1), res);
       }
       if (!done) return 0;
 
@@ -10027,19 +10057,15 @@ static int32_t mtl4_conv2d_dispatch(MTLTensorDataType dt, bool bf16,
       bool done = false;
       {
         std::lock_guard<std::mutex> lock(ctx.mtl4_dispatch_mu);
-        NSError *err = nil;
-        id<MTLResidencySet> res = [dev newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
+        id<MTLBuffer> rbufs[7] = {bX, bW, bCol, bY, bIP, bBias, bP};
+        id<MTLResidencySet> res = mtl4_set_residency(ctx, rbufs, 7);
         if (!res) return 0;
-        for (id<MTLBuffer> b : {bX, bW, bCol, bY, bIP, bBias, bP}) [res addAllocation:b];
-        [res commit];
-        [res requestResidency];
-        [queue addResidencySet:res];
         // Stage 1 — GPU im2col (X -> bCol). col never leaves the device.
         done = mtl4_encode_and_wait(ctx, queue, imp, ^(id<MTL4ArgumentTable> at) {
           [at setAddress:bX.gpuAddress atIndex:0];
           [at setAddress:bCol.gpuAddress atIndex:1];
           [at setAddress:bIP.gpuAddress atIndex:2];
-        }, MTLSizeMake((M * Kk + 255) / 256, 1, 1), MTLSizeMake(256, 1, 1));
+        }, MTLSizeMake((M * Kk + 255) / 256, 1, 1), MTLSizeMake(256, 1, 1), res);
         // Stage 2 — matmul2d epilogue (col @ W + bias, act -> Y) on the matrix units.
         if (done)
           done = mtl4_encode_and_wait(ctx, queue, mmp, ^(id<MTL4ArgumentTable> at) {
@@ -10048,8 +10074,7 @@ static int32_t mtl4_conv2d_dispatch(MTLTensorDataType dt, bool bf16,
             [at setResource:tY.gpuResourceID atBufferIndex:2];
             [at setAddress:bBias.gpuAddress atIndex:3];
             [at setAddress:bP.gpuAddress atIndex:4];
-          }, MTLSizeMake((M + 63) / 64, (Nn + 63) / 64, 1), MTLSizeMake(128, 1, 1));
-        [queue removeResidencySet:res];
+          }, MTLSizeMake((M + 63) / 64, (Nn + 63) / 64, 1), MTLSizeMake(128, 1, 1), res);
       }
       if (!done) return 0;
       std::memcpy(Y, [bY contents], (size_t)M * Nn * 4);
@@ -10156,12 +10181,11 @@ extern "C" int32_t tessera_apple_gpu_mtl4_mlp_session_run(void *handle,
     bool done = false;
     {
       std::lock_guard<std::mutex> lock(ctx.mtl4_dispatch_mu);
-      id<MTLResidencySet> resStep = [dev newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
+      // Only the per-step X/Y need adding — W/bias/params stay resident via the
+      // session's persistent queue-level resW.
+      id<MTLBuffer> rbufs[2] = {bX, bY};
+      id<MTLResidencySet> resStep = mtl4_set_residency(ctx, rbufs, 2);
       if (!resStep) return 0;
-      [resStep addAllocation:bX]; [resStep addAllocation:bY];
-      [resStep commit];
-      [resStep requestResidency];
-      [queue addResidencySet:resStep];
       done = mtl4_encode_and_wait(ctx, queue, (id<MTLComputePipelineState>)s->pso,
           ^(id<MTL4ArgumentTable> at) {
             [at setResource:tX.gpuResourceID atBufferIndex:0];
@@ -10169,8 +10193,7 @@ extern "C" int32_t tessera_apple_gpu_mtl4_mlp_session_run(void *handle,
             [at setResource:tY.gpuResourceID atBufferIndex:2];
             [at setAddress:((id<MTLBuffer>)s->bBias).gpuAddress atIndex:3];
             [at setAddress:((id<MTLBuffer>)s->bParams).gpuAddress atIndex:4];
-          }, MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1), MTLSizeMake(128, 1, 1));
-      [queue removeResidencySet:resStep];
+          }, MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1), MTLSizeMake(128, 1, 1), resStep);
     }
     if (!done) return 0;
     std::memcpy(Y, [bY contents], (size_t)M * N * 4);
@@ -10202,12 +10225,10 @@ extern "C" int32_t tessera_apple_gpu_mtl4_mlp_session_run_dev(void *handle,
     bool done = false;
     {
       std::lock_guard<std::mutex> lock(ctx.mtl4_dispatch_mu);
-      id<MTLResidencySet> resStep = [ctx.device newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
+      // Resident X/Y device tensors; W/bias/params via the persistent queue-level resW.
+      id<MTLBuffer> rbufs[2] = {X->buf, Y->buf};
+      id<MTLResidencySet> resStep = mtl4_set_residency(ctx, rbufs, 2);
       if (!resStep) return 0;
-      [resStep addAllocation:X->buf]; [resStep addAllocation:Y->buf];
-      [resStep commit];
-      [resStep requestResidency];
-      [queue addResidencySet:resStep];
       done = mtl4_encode_and_wait(ctx, queue, (id<MTLComputePipelineState>)s->pso,
           ^(id<MTL4ArgumentTable> at) {
             [at setResource:tX.gpuResourceID atBufferIndex:0];
@@ -10215,8 +10236,7 @@ extern "C" int32_t tessera_apple_gpu_mtl4_mlp_session_run_dev(void *handle,
             [at setResource:tY.gpuResourceID atBufferIndex:2];
             [at setAddress:((id<MTLBuffer>)s->bBias).gpuAddress atIndex:3];
             [at setAddress:((id<MTLBuffer>)s->bParams).gpuAddress atIndex:4];
-          }, MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1), MTLSizeMake(128, 1, 1));
-      [queue removeResidencySet:resStep];
+          }, MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1), MTLSizeMake(128, 1, 1), resStep);
     }
     // No memcpy: Y stays resident in its device tensor (zero download).
     return done ? 1 : 0;

@@ -47,6 +47,10 @@ from tessera.compiler.fallback import (
 PROGRAM_ID = "matmul_softmax_matmul"
 
 
+def _is_darwin() -> bool:
+    return sys.platform == "darwin"
+
+
 def _make_inputs(M: int = 32, N: int = 32, K: int = 32, seed: int = 0):
     rng = np.random.RandomState(seed)
     A = rng.randn(M, K).astype(np.float32)
@@ -86,7 +90,7 @@ def _try_apple_gpu_dispatch(A: np.ndarray, B: np.ndarray, C: np.ndarray):
     fallback-reason string used to populate ``REFERENCE_FORCED`` if
     the dispatch couldn't proceed.
     """
-    if sys.platform != "darwin":
+    if not _is_darwin():
         return None, "non-Darwin host"
     try:
         from tessera.runtime import _apple_gpu_dispatch_matmul_softmax_matmul
@@ -123,7 +127,7 @@ def _target_decision_for_host(dispatched_native: bool, fallback_note: str | None
     Elsewhere:
         target = ``cpu``, ``NON_DARWIN_HOST``.
     """
-    if sys.platform != "darwin":
+    if not _is_darwin():
         return (
             "cpu",
             {"cpu": "non-Darwin host; numpy reference path"},

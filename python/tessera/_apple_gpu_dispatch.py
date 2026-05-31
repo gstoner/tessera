@@ -61,6 +61,10 @@ _dylib_path: Optional[Path] = None
 _symbol_cache: dict[tuple, Callable] = {}
 
 
+def _is_darwin() -> bool:
+    return sys.platform == "darwin"
+
+
 def _find_runtime_source() -> Optional[Path]:
     """Locate ``apple_gpu_runtime.mm``. Prefers the path adjacent to
     this module (when shipped in a wheel), falls back to the repo
@@ -89,7 +93,7 @@ def _compile_runtime() -> tuple[Optional[ctypes.CDLL], Optional[Path],
     None; otherwise ``handle`` is None and ``skip_reason`` is a short
     diagnostic string.
     """
-    if sys.platform != "darwin":
+    if not _is_darwin():
         return None, None, f"non-darwin host (sys.platform={sys.platform!r})"
     cxx = shutil.which("clang++") or shutil.which("c++")
     if cxx is None:

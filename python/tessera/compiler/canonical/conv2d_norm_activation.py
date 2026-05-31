@@ -33,6 +33,10 @@ from tessera.compiler.fallback import (
 PROGRAM_ID = "conv2d_norm_activation"
 
 
+def _is_darwin() -> bool:
+    return sys.platform == "darwin"
+
+
 def _make_inputs(
     *, N: int = 1, H: int = 8, W: int = 8, C: int = 4, K: int = 8,
     R: int = 3, S: int = 3, seed: int = 0,
@@ -98,7 +102,7 @@ def _ir_text(N: int, H: int, W: int, C: int, K: int, R: int, S: int) -> str:
 
 
 def _target_decision_for_host() -> tuple[str, dict[str, str], FallbackReason | None]:
-    if sys.platform == "darwin":
+    if _is_darwin():
         # conv2d does not yet have a fused MSL kernel on Apple GPU;
         # layer_norm + gelu do.  The target_decision documents the
         # split honestly so claim_lint never sees a false claim here.
@@ -125,7 +129,7 @@ def _target_decision_for_host() -> tuple[str, dict[str, str], FallbackReason | N
             # numpy until conv2d gets a fused kernel.
             FallbackReason.REFERENCE_FORCED,
         )
-    return (   # type: ignore[unreachable]
+    return (
         "cpu",
         {"cpu": "non-Darwin host; numpy reference path"},
         FallbackReason.NON_DARWIN_HOST,

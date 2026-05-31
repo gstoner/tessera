@@ -4,9 +4,9 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 
 ## Headline
 
-- **125** unique `extern "C" tessera_*` C ABI symbols across all backends.
+- **152** unique `extern "C" tessera_*` C ABI symbols across all backends.
 - **6 / 6** core runtime headers present.
-- **59** Apple GPU kernel families with per-dtype variants.
+- **70** Apple GPU kernel families with per-dtype variants.
 
 ## Core runtime headers
 
@@ -23,7 +23,7 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 
 | Backend | Unique tessera_* symbols |
 |---------|-------------------------:|
-| `apple` | 114 |
+| `apple` | 141 |
 | `nvidia` | 3 |
 | `x86` | 8 |
 
@@ -32,6 +32,10 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 | Op family | dtypes |
 |-----------|--------|
 | `bmm` | `f16`, `f32` |
+| `bmm_dev` | `f32` |
+| `cf_scan` | `f32` |
+| `cf_serial_draft` | `f32` |
+| `cf_while_generate` | `f32` |
 | `clifford_codiff_cl30` | `f32` |
 | `clifford_exp_cl30` | `f32` |
 | `clifford_ext_deriv_cl30` | `f32` |
@@ -64,8 +68,10 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 | `ebm_sphere_langevin_step` | `f32` |
 | `flash_attn` | `bf16`, `f16`, `f32` |
 | `flash_attn_gqa` | `bf16`, `f16`, `f32` |
+| `gather_blocks_dev` | `f32` |
 | `gelu` | `bf16`, `f16`, `f32` |
 | `gumbel_argmax` | `f32` |
+| `gumbel_argmax_dev` | `f32` |
 | `layer_norm` | `f16`, `f32` |
 | `linear_attn` | `f32` |
 | `log_softmax` | `f16`, `f32` |
@@ -85,9 +91,14 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 | `mpsgraph_scan` | `f32` |
 | `mpsgraph_softmax` | `f16`, `f32` |
 | `mpsgraph_unary` | `f16`, `f32` |
+| `mtl4_matmul2d` | `bf16`, `f16` |
+| `mtl4_matmul2d_epilogue` | `bf16`, `f16` |
+| `mtl4_matmul_sg` | `f32` |
+| `mtl4_scan` | `f32` |
 | `native_sparse_attn` | `f32` |
 | `rmsnorm_gpu` | `f16`, `f32` |
 | `rope` | `bf16`, `f16`, `f32` |
+| `rowop_dev` | `f32` |
 | `softmax` | `bf16`, `f16`, `f32` |
 | `swiglu` | `bf16`, `f16`, `f32` |
 

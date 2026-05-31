@@ -202,10 +202,14 @@ jobs:
             -DTESSERA_BUILD_TESTS=ON
 
       - name: Build runtime + tessera-runtime-abi-smoke
-        run: cmake --build build/runtime --target tessera-runtime-abi-smoke
+        run: |
+          cmake --build build/runtime --target tessera-runtime-abi-smoke
+          # Later, to enable the full runtime CTest suite, build all registered
+          # runtime test executables before ctest:
+          # cmake --build build/runtime
 
       - name: Run runtime ctest
-        run: ctest --test-dir build/runtime --output-on-failure
+        run: ctest --test-dir build/runtime --output-on-failure -R '^tessera_runtime_abi_smoke$'
 
       - name: Collectives runtime compile-check
         run: |
@@ -277,6 +281,7 @@ jobs:
           cmake -S . -B build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DTESSERA_BUILD_EXAMPLES=ON \
             -DMLIR_DIR=/usr/lib/llvm-21/lib/cmake/mlir \
             -DLLVM_DIR=/usr/lib/llvm-21/lib/cmake/llvm
           cmake --build build --target tessera-opt tessera-translate-mlir

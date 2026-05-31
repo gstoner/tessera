@@ -42,6 +42,10 @@ from tessera.compiler.fallback import (
 PROGRAM_ID = "matmul_gelu"
 
 
+def _is_darwin() -> bool:
+    return sys.platform == "darwin"
+
+
 def _make_inputs(M: int = 32, N: int = 32, K: int = 32, seed: int = 0):
     """Build deterministic ``(A, B)``.
 
@@ -87,7 +91,7 @@ def _try_apple_gpu_dispatch(A: np.ndarray, B: np.ndarray):
     success, ``None`` on failure; ``error_reason`` populates
     ``REFERENCE_FORCED`` when the dispatch can't proceed.
     """
-    if sys.platform != "darwin":
+    if not _is_darwin():
         return None, "non-Darwin host"
     try:
         from tessera.runtime import _apple_gpu_dispatch_matmul_gelu
@@ -111,7 +115,7 @@ def _try_apple_gpu_dispatch(A: np.ndarray, B: np.ndarray):
 def _target_decision_for_host(
     dispatched_native: bool, fallback_note: str | None,
 ) -> tuple[str, dict[str, str], FallbackReason | None]:
-    if sys.platform != "darwin":
+    if not _is_darwin():
         return (
             "cpu",
             {"cpu": "non-Darwin host; numpy reference path"},

@@ -46,6 +46,10 @@ from tessera.compiler.fallback import (
 PROGRAM_ID = "visual_complex_fused"
 
 
+def _is_darwin() -> bool:
+    return sys.platform == "darwin"
+
+
 def _make_inputs(N: int = 16, seed: int = 0) -> dict[str, Any]:
     """Deterministic small batched inputs for the four fused ops."""
     rng = np.random.RandomState(seed)
@@ -118,7 +122,7 @@ def _run_native_or_reference(
     a, b_, c, d = inputs["mobius_coeffs"]
     xyz = inputs["stereo_xyz"]
 
-    if sys.platform != "darwin":
+    if not _is_darwin():
         return {}, False, "non-Darwin host"
 
     try:
@@ -141,7 +145,7 @@ def _run_native_or_reference(
 def _target_decision_for_host(
     dispatched_native: bool, n_routes: int, fallback_note: str | None,
 ) -> tuple[str, dict[str, str], FallbackReason | None]:
-    if sys.platform != "darwin":
+    if not _is_darwin():
         return (
             "cpu",
             {"cpu": "non-Darwin host; numpy reference path for all 4 M7 ops"},

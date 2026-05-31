@@ -1056,12 +1056,18 @@ def compile(module_ir: str | RuntimeArtifact, target: str | None = None, options
 def load_artifact(path_or_bytes: str | bytes | os.PathLike[str] | RuntimeArtifact) -> RuntimeArtifact:
     if isinstance(path_or_bytes, RuntimeArtifact):
         return path_or_bytes
-    if isinstance(path_or_bytes, (str, os.PathLike)) and Path(path_or_bytes).exists():
-        return RuntimeArtifact.from_json(Path(path_or_bytes).read_text(encoding="utf-8"))
     if isinstance(path_or_bytes, bytes):
         return RuntimeArtifact.from_json(path_or_bytes)
     if isinstance(path_or_bytes, str):
+        payload = path_or_bytes.lstrip()
+        if payload.startswith(("{", "[")):
+            return RuntimeArtifact.from_json(path_or_bytes)
+        candidate = Path(path_or_bytes)
+        if candidate.exists():
+            return RuntimeArtifact.from_json(candidate.read_text(encoding="utf-8"))
         return RuntimeArtifact.from_json(path_or_bytes)
+    if isinstance(path_or_bytes, os.PathLike) and Path(path_or_bytes).exists():
+        return RuntimeArtifact.from_json(Path(path_or_bytes).read_text(encoding="utf-8"))
     raise TypeError(f"unsupported artifact input: {type(path_or_bytes)!r}")
 
 
@@ -6316,7 +6322,16 @@ def _build_apple_gpu_runtime_shared(root: Path) -> Path:
             # 2026-05-29: MPSGraph-backed Tier-1 / long-tail execution lane.
             "-framework", "MetalPerformanceShadersGraph",
         ])
-    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except subprocess.CalledProcessError as exc:
+        detail = (
+            f"Apple GPU runtime compile failed (rc={exc.returncode}).\n"
+            f"command: {' '.join(cmd)}\n"
+            f"stdout:\n{exc.stdout or ''}\n"
+            f"stderr:\n{exc.stderr or ''}"
+        )
+        raise RuntimeError(detail) from exc
     return out
 
 

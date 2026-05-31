@@ -39,6 +39,7 @@ from typing import Any, List, Mapping, Optional
 
 from .telemetry import TELEMETRY_SCHEMA_VERSION, make_event, telemetry_report
 from .compiler.capabilities import get_target_capability, normalize_target, runtime_status as compiler_runtime_status
+from .compiler.execution_matrix import executor_for_metadata as _exec_row_for_metadata, lookup as _exec_row_lookup
 
 
 # ---------------------------------------------------------------------------
@@ -1188,7 +1189,18 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
             },
         }
     if target != "cpu":
+        # G4 — consult the single-source execution matrix instead of hard-coding
+        # the "non-CPU = unimplemented" rule. Today the matrix has no executor
+        # for non-Apple non-CPU targets (NVIDIA/ROCm/Metalium/TPU), so the
+        # behavior is the same; but adding a new backend executor only requires
+        # one matrix row + one runtime fn (no second hard-coded branch here).
+        # The Apple-CPU and Apple-GPU branches above are themselves entries in
+        # the matrix — they handle their compiler_path before reaching here.
         _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
+        unim_status = "unimplemented" if cap.available else "missing_backend"
+        unim_reason = (f"{target} generated artifact execution is not wired to "
+                       f"the runtime ABI yet (see "
+                       f"docs/audit/generated/runtime_execution_matrix.md)")
         telemetry = make_event(
             "runtime.launch",
             source="runtime",
@@ -1196,20 +1208,20 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
             arch=target,
             kernel_id=str(metadata.get("kernel_id", "artifact")),
             graph_hash=artifact.artifact_hash,
-            status="unimplemented" if cap.available else "missing_backend",
+            status=unim_status,
             metadata={
                 "compiler_path": str(metadata.get("compiler_path", "artifact_only")),
                 "execution_kind": str(metadata.get("execution_kind", "artifact_only")),
-                "reason": f"{target} generated artifact execution is not wired to the runtime ABI yet",
+                "reason": unim_reason,
             },
         )
         return {
             "ok": False,
-            "runtime_status": "unimplemented" if cap.available else "missing_backend",
+            "runtime_status": unim_status,
             "compiler_path": str(metadata.get("compiler_path", "artifact_only")),
             "execution_kind": str(metadata.get("execution_kind", "artifact_only")),
             "artifact_hash": artifact.artifact_hash,
-            "reason": f"{target} generated artifact execution is not wired to the runtime ABI yet",
+            "reason": unim_reason,
             "telemetry": telemetry,
         }
     if metadata.get("executable") is True and metadata.get("execution_kind") == "native_cpu":

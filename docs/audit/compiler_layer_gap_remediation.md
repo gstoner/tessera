@@ -90,7 +90,30 @@ the Python envelope ever diverge.
   ops from artifact-only ones, consistent with `driver._APPLE_GPU_*` + the
   capability registry.
 
-### 4. Single-source runtime execution matrix
+### 4. Single-source runtime execution matrix — ✅ DONE (2026-05-31)
+**Landed:** new `python/tessera/compiler/execution_matrix.py` is the **one place**
+that maps `(target, compiler_path) -> ExecutionRow(execution_kind, executable,
+executor_id, runtime_status, reason, execution_mode)`. Four executable rows
+today (`apple_cpu/apple_cpu_accelerate`, `apple_gpu/apple_gpu_mps`,
+`cpu/native_cpu`, `cpu/jit_cpu_numpy`) + an explicit `_UNIMPLEMENTED_TARGETS`
+list (NVIDIA SMs, ROCm GFXs, metalium). `runtime.launch()`'s non-CPU
+`unimplemented` fallthrough now cites the matrix (was hard-coded `target != "cpu"
+-> unimplemented`); the Apple-CPU / Apple-GPU / CPU branches above it already
+match what the matrix says so the matrix is the derivable truth. Dashboard at
+**`docs/audit/generated/runtime_execution_matrix.md`** (regenerate via
+`python3 -c 'from tessera.compiler.execution_matrix import write_dashboard;
+write_dashboard()'`). **Drift test** `test_runtime_execution_matrix.py` (15
+tests) enforces: matrix↔capabilities cross-check (every row's target + every
+unimplemented target is in `TARGET_CAPABILITIES`); every `KNOWN_EXECUTORS` entry
+is used by some row; executable rows have an executor_id (and vice versa);
+executable + unimplemented sets are disjoint; lookup semantics; dashboard
+byte-equal to live `render_dashboard()`; `runtime.launch()` imports the matrix
+and its fallthrough reason cites the dashboard. Caught a real inconsistency
+during validation (`'reference_cpu'` was in `KNOWN_EXECUTORS` but no row used it
+— it's an internal fallback inside the native_cpu branch, not a directly
+dispatched executor; removed from the catalog with a comment). 990 affected
+tests green, zero regressions.
+
 - **Target:** one registry function that, given (target, op, dtype), returns the
   authoritative execution status (`ready` / `metal_runtime` / `artifact_only` /
   `unimplemented`), consumed by `runtime.launch()`, `capabilities.py`, and a

@@ -3,6 +3,8 @@
 #include <mutex>
 #include <cstring>
 #include <string>
+#include <sstream>
+#include <unordered_map>
 #include <cassert>
 #include <chrono>
 #include "backend/base_backend.h"
@@ -16,8 +18,65 @@ struct tsrDevice_t { std::unique_ptr<Backend> be; };
 struct tsrStream_t { tsr::Stream* impl; tsrDevice_t* dev; };
 struct tsrEvent_t  { tsr::Event*  impl; tsrDevice_t* dev; };
 struct tsrBuffer_t { tsr::Buffer* impl; tsrDevice_t* dev; };
-struct tsrArtifact_t { std::string payload; };
-struct tsrKernel_t { std::string name; tsrArtifact_t* artifact; };
+
+// G5 — Artifact / Kernel lifecycle for the CPU backend.
+//
+// An artifact carries a name->host-fn map and a serializable payload. The
+// payload is the canonical text form ("TSRART1\n<n>\n<name>\t<fn_ptr_hex>\n..."),
+// so it round-trips through tsrCompileArtifact -> tsrLoadArtifact bit-exactly.
+// Host functions are registered process-wide via tsrRegisterHostKernel(name, fn);
+// tsrCompileArtifact takes the *names* to bundle (passed in `module_ir` as a
+// comma-separated list of registered names — the natural minimal "compile" for
+// pre-registered CPU host kernels). A full MLIR-to-host-fn JIT is a separate
+// gap; this lane is honest about being the lifecycle layer over host kernels.
+struct tsrArtifact_t {
+  std::string payload;                                // canonical text form
+  std::unordered_map<std::string, tsrHostKernelFn> kernels;   // name -> fn
+};
+struct tsrKernel_t { std::string name; tsrHostKernelFn fn; tsrArtifact_t* artifact; };
+
+namespace {
+// Process-wide registry of host kernels available for artifact bundling.
+std::mutex g_host_kernel_mu;
+std::unordered_map<std::string, tsrHostKernelFn> g_host_kernels;
+
+constexpr const char *kArtifactMagic = "TSRART1";
+
+std::string serializeArtifact(
+    const std::unordered_map<std::string, tsrHostKernelFn>& kernels) {
+  std::ostringstream out;
+  out << kArtifactMagic << '\n' << kernels.size() << '\n';
+  // Deterministic order: sort names. Critical for bit-exact round-trip.
+  std::vector<std::string> names;
+  names.reserve(kernels.size());
+  for (auto& kv : kernels) names.push_back(kv.first);
+  std::sort(names.begin(), names.end());
+  for (auto& n : names) {
+    out << n << '\t' << reinterpret_cast<std::uintptr_t>(kernels.at(n)) << '\n';
+  }
+  return out.str();
+}
+
+bool parseArtifact(const std::string& payload,
+                   std::unordered_map<std::string, tsrHostKernelFn>& out) {
+  std::istringstream in(payload);
+  std::string magic; std::getline(in, magic);
+  if (magic != kArtifactMagic) return false;
+  std::size_t n = 0; { std::string nstr; std::getline(in, nstr);
+    try { n = std::stoull(nstr); } catch (...) { return false; } }
+  out.reserve(n);
+  for (std::size_t i = 0; i < n; ++i) {
+    std::string line; std::getline(in, line);
+    auto tab = line.find('\t');
+    if (tab == std::string::npos) return false;
+    std::string name = line.substr(0, tab);
+    std::uintptr_t addr = 0;
+    try { addr = std::stoull(line.substr(tab + 1)); } catch (...) { return false; }
+    out[std::move(name)] = reinterpret_cast<tsrHostKernelFn>(addr);
+  }
+  return true;
+}
+}  // namespace
 
 static std::vector<tsrDevice_t*> g_devices;
 // Explicit init flag (protected by `g_mu`).  We deliberately do NOT use
@@ -357,22 +416,63 @@ TsrStatus tsrUnmap(tsrBuffer b) {
 }
 
 // ---- Generated artifact ABI skeleton ----
+// G5 — Artifact lifecycle for the CPU host-kernel ABI.
+//
+// `module_ir` is interpreted as a comma-separated list of names previously
+// registered via tsrRegisterHostKernel. The bundled artifact captures those
+// (name -> fn) entries and serializes a canonical text payload for round-trip
+// through tsrLoadArtifact. Non-CPU codegen JIT remains a separate gap (we
+// honestly return UNIMPLEMENTED for any name that isn't in the host registry).
+// `options` is reserved for future flags (e.g. dtype/target); for the CPU lane
+// the registry plus the request names are sufficient.
 TsrStatus tsrCompileArtifact(const char* module_ir,
                              const tsrCompileOptions* options,
                              tsrArtifact* out) {
-  (void)module_ir;
   (void)options;
-  (void)out;
-  SetLastError("generated artifact compilation is not wired to the runtime ABI yet");
-  return TSR_STATUS_UNIMPLEMENTED;
+  if (!module_ir || !out) { SetLastError("module_ir/out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  std::unique_ptr<tsrArtifact_t> a(new tsrArtifact_t);
+  std::string spec(module_ir);
+  // Split on commas; trim whitespace. Empty spec -> empty artifact (valid).
+  std::lock_guard<std::mutex> lk(g_host_kernel_mu);
+  std::size_t i = 0;
+  while (i <= spec.size()) {
+    std::size_t j = spec.find(',', i);
+    if (j == std::string::npos) j = spec.size();
+    // trim
+    std::size_t a0 = i, b0 = j;
+    while (a0 < b0 && std::isspace((unsigned char)spec[a0])) ++a0;
+    while (b0 > a0 && std::isspace((unsigned char)spec[b0 - 1])) --b0;
+    if (a0 < b0) {
+      std::string name = spec.substr(a0, b0 - a0);
+      auto it = g_host_kernels.find(name);
+      if (it == g_host_kernels.end()) {
+        std::string msg = "tsrCompileArtifact: kernel '" + name +
+            "' is not registered (call tsrRegisterHostKernel first; non-CPU "
+            "codegen JIT is a separate gap)";
+        SetLastError(msg.c_str());
+        return TSR_STATUS_UNIMPLEMENTED;
+      }
+      a->kernels[name] = it->second;
+    }
+    if (j == spec.size()) break;
+    i = j + 1;
+  }
+  a->payload = serializeArtifact(a->kernels);
+  *out = a.release();
+  return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrLoadArtifact(const void* bytes, size_t bytes_len, tsrArtifact* out) {
-  (void)bytes;
-  (void)bytes_len;
-  (void)out;
-  SetLastError("generated artifact loading is not wired to the runtime ABI yet");
-  return TSR_STATUS_UNIMPLEMENTED;
+  if (!bytes || !out) { SetLastError("bytes/out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  std::unique_ptr<tsrArtifact_t> a(new tsrArtifact_t);
+  a->payload.assign(static_cast<const char*>(bytes), bytes_len);
+  if (!parseArtifact(a->payload, a->kernels)) {
+    SetLastError("tsrLoadArtifact: payload is not a valid Tessera artifact "
+                 "(expected TSRART1 magic + name/fn table)");
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
+  *out = a.release();
+  return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrDestroyArtifact(tsrArtifact artifact) {
@@ -381,20 +481,51 @@ TsrStatus tsrDestroyArtifact(tsrArtifact artifact) {
 }
 
 TsrStatus tsrGetKernel(tsrArtifact artifact, const char* name, tsrKernel* out) {
-  (void)artifact;
-  (void)name;
-  (void)out;
-  SetLastError("generated artifact kernel lookup is not wired to the runtime ABI yet");
-  return TSR_STATUS_UNIMPLEMENTED;
+  if (!artifact || !name || !out) { SetLastError("artifact/name/out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  auto it = artifact->kernels.find(name);
+  if (it == artifact->kernels.end() || !it->second) {
+    std::string msg = "tsrGetKernel: artifact does not contain kernel '";
+    msg += name; msg += "'";
+    SetLastError(msg.c_str());
+    return TSR_STATUS_NOT_FOUND;
+  }
+  std::unique_ptr<tsrKernel_t> k(new tsrKernel_t{name, it->second, artifact});
+  *out = k.release();
+  return TSR_STATUS_SUCCESS;
 }
 
+// G5 — Launch a kernel obtained via tsrGetKernel. The `args` convention for the
+// CPU host-kernel ABI: args[0] = const tsrLaunchParams* (non-null);
+// args[1] = void* user_payload (may be null). nargs must be >= 1.
+// The kernel itself is a tsrHostKernelFn that the CPU backend's
+// launchHostKernel already knows how to execute.
 TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel, void** args, size_t nargs) {
-  (void)s;
-  (void)kernel;
-  (void)args;
-  (void)nargs;
-  SetLastError("generated artifact kernel launch is not wired to the runtime ABI yet");
-  return TSR_STATUS_UNIMPLEMENTED;
+  if (!s || !kernel || !kernel->fn) { SetLastError("s/kernel==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  if (!args || nargs < 1) {
+    SetLastError("tsrLaunchKernel(host): args[0] must be a tsrLaunchParams* "
+                 "(args[1] optional user payload)");
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
+  const tsrLaunchParams* params = static_cast<const tsrLaunchParams*>(args[0]);
+  void* user_payload = nargs >= 2 ? args[1] : nullptr;
+  return tsrLaunchHostTileKernel(s, params, kernel->fn, user_payload);
+}
+
+// G5 — Register a host kernel under a name so tsrCompileArtifact can bundle it.
+// Idempotent: re-registering the same name with the same fn is a no-op; a
+// conflicting re-registration returns INVALID_ARGUMENT.
+TsrStatus tsrRegisterHostKernel(const char* name, tsrHostKernelFn fn) {
+  if (!name || !fn) { SetLastError("name/fn==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  std::lock_guard<std::mutex> lk(g_host_kernel_mu);
+  auto it = g_host_kernels.find(name);
+  if (it != g_host_kernels.end() && it->second != fn) {
+    std::string msg = "tsrRegisterHostKernel: '"; msg += name;
+    msg += "' is already registered with a different function";
+    SetLastError(msg.c_str());
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
+  g_host_kernels[name] = fn;
+  return TSR_STATUS_SUCCESS;
 }
 
 // ---- Shape helpers ----

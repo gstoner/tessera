@@ -46,8 +46,19 @@ TsrStatus tsrMemcpy(tsrBuffer dst, const tsrBuffer src, size_t bytes, TsrMemcpyK
 TsrStatus tsrMap(tsrBuffer b, void** host_ptr, size_t* bytes);
 TsrStatus tsrUnmap(tsrBuffer b);
 
-// Generated artifact ABI skeleton. These return UNIMPLEMENTED until generated
-// Tile/Target artifacts are wired into backend-specific runtime launchers.
+// G5 — Artifact lifecycle for the CPU host-kernel ABI (wired end-to-end).
+//
+// `tsrCompileArtifact` interprets `module_ir` as a comma-separated list of
+// kernel names previously registered via `tsrRegisterHostKernel`. The artifact
+// captures those (name -> host fn) entries and serializes a canonical payload
+// for round-trip through `tsrLoadArtifact`. Non-CPU codegen JIT is a separate
+// gap — an unregistered name returns TSR_STATUS_UNIMPLEMENTED with a precise
+// error. `tsrLaunchKernel(args, nargs)` convention for the CPU lane:
+//   args[0] = const tsrLaunchParams* (required);
+//   args[1] = void* user_payload (optional);
+//   nargs >= 1.
+// The launch is performed via the CPU backend's existing host-kernel ABI
+// (tsrLaunchHostTileKernel).
 TsrStatus tsrCompileArtifact(const char* module_ir,
                              const tsrCompileOptions* options,
                              tsrArtifact* out);
@@ -55,6 +66,12 @@ TsrStatus tsrLoadArtifact(const void* bytes, size_t bytes_len, tsrArtifact* out)
 TsrStatus tsrDestroyArtifact(tsrArtifact artifact);
 TsrStatus tsrGetKernel(tsrArtifact artifact, const char* name, tsrKernel* out);
 TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel, void** args, size_t nargs);
+
+// Register a CPU host-kernel function under a name so `tsrCompileArtifact` can
+// bundle it. Idempotent for the same (name, fn); conflicting re-registration
+// returns TSR_STATUS_INVALID_ARGUMENT. Required before compiling an artifact
+// that references this kernel.
+TsrStatus tsrRegisterHostKernel(const char* name, tsrHostKernelFn fn);
 
 // Host portable tile kernel launch with shared memory/barrier support.
 // The user_ctx passed to kernel is a (tsrKernelCtx*).

@@ -123,7 +123,28 @@ tests green, zero regressions.
   `runtime.launch()` and `capabilities.py` both read the matrix; the Apple
   executable envelopes are represented as data, not special-cased code.
 
-### 5. C ABI artifact compile / load / get-kernel / launch
+### 5. C ABI artifact compile / load / get-kernel / launch — ✅ DONE (2026-05-31, CPU end-to-end)
+**Landed:** the four `tsr*Artifact` lifecycle functions that returned
+`TSR_STATUS_UNIMPLEMENTED` now wire end-to-end for the CPU backend, on top of
+the working `tsrLaunchHostTileKernel`. New `tsrRegisterHostKernel(name, fn)`
+puts a CPU host kernel into a process-wide registry;
+`tsrCompileArtifact("<name1>,<name2>,...", opts, &out)` bundles them with a
+canonical text payload (`TSRART1` magic + sorted `name\tfn_ptr` table);
+`tsrLoadArtifact(bytes, len, &out)` round-trips the bytes back to a live
+artifact and **rejects garbage with `INVALID_ARGUMENT`**; `tsrGetKernel` looks
+up by name (returns `NOT_FOUND`, not silent success, for unknown names);
+`tsrLaunchKernel(s, k, args, nargs)` interprets `args[0] = const tsrLaunchParams*`
++ `args[1] = void* user_payload` and routes through the existing
+`tsrLaunchHostTileKernel`. Unregistered kernels in `tsrCompileArtifact` still
+return `UNIMPLEMENTED` (honest — non-CPU codegen JIT is a separate gap).
+**Real C++ end-to-end verified:** `tests/unit/test_runtime_artifact_abi.py` (3
+tests) compiles two C harnesses against `libtessera_runtime.a` and exercises
+(a) the full lifecycle (register → compile → getkernel → launch + correct
+`NOT_FOUND`/`UNIMPLEMENTED` semantics) and (b) serialize → `tsrLoadArtifact` →
+launch on the re-loaded artifact + garbage rejection; plus a source-level
+regression guard that fails if any of the four bodies regresses to a bare
+`return TSR_STATUS_UNIMPLEMENTED`. 985 affected tests green, zero regressions.
+
 - **Target:** wire the `tsr*Artifact` lifecycle for at least the CPU backend
   (compile a Graph/Tile IR artifact → loadable object → `tsrGetKernel` →
   `tsrLaunchKernel`), end-to-end, with the other backends returning honest

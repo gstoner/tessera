@@ -117,8 +117,12 @@ only — batched / non-f32 fall back to numpy.
 | `tessera_apple_gpu_tri_solve_f32` | `tessera.tri_solve` | MPSMatrixSolveTriangular | rank-2 f32; `lower`/`trans`/`unit` flags |
 
 Python: `runtime.apple_gpu_{cholesky, solve, cholesky_solve, tri_solve}(...)` →
-`(result, ran_on_gpu)`. **Batched (`ndim>2`) f32** loops the rank-2 kernel
-per matrix (MPS decomp/solve are single-matrix per encode — no native batch).
+`(result, ran_on_gpu)`. **Batched (`ndim>2`) Cholesky / triangular-solve /
+cholesky-solve** run **custom MSL grid kernels** (`tessera_apple_gpu_cholesky_batched_f32`,
+`tessera_apple_gpu_tri_solve_batched_f32` — one threadgroup per matrix), **measured
+40–388× a per-matrix MPS loop**; cholesky-solve = batched chol + 2 batched
+tri-solves. Batched general `solve` (LU) still loops the rank-2 MPS kernel (no
+batched-LU MSL yet). MPS decomp/solve are single-matrix per encode.
 **`@jit(target="apple_gpu")` dispatch** is wired for the two registered Graph IR
 ops `tessera.cholesky` + `tessera.tri_solve` (via `_APPLE_GPU_LINALG_OPS` in
 `driver.py` + `runtime.py::_apple_gpu_dispatch_linalg`), so they report

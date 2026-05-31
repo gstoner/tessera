@@ -387,3 +387,56 @@ def test_svd_large_n_uses_sequential_fallback():
     assert float(np.abs(np.sort(S)[::-1] - s_np).max() / s_np.max()) < 1e-3
     if _on_metal():
         assert ran is True
+
+
+# ── Batched factorizations via custom MSL grid kernels (≫ per-matrix MPS loop) ──
+def test_batched_cholesky_large_batch():
+    B, n = 64, 24
+    A = np.stack([_spd(n, k) for k in range(B)])
+    L, ran = R.apple_gpu_cholesky(A, np)
+    assert L.shape == (B, n, n)
+    assert _rel(L, np.linalg.cholesky(A.astype(np.float64))) < TOL
+    assert _rel(L @ np.swapaxes(L, -1, -2), A) < TOL
+    if _on_metal():
+        assert ran is True
+
+
+def test_batched_cholesky_solve_large():
+    B, n, nrhs = 48, 16, 4
+    A = np.stack([_spd(n, k) for k in range(B)])
+    Bm = np.random.default_rng(3).standard_normal((B, n, nrhs)).astype(np.float32)
+    X, ran = R.apple_gpu_cholesky_solve(A, Bm, np)
+    assert X.shape == (B, n, nrhs)
+    ref = np.stack([np.linalg.solve(A[k].astype(np.float64), Bm[k].astype(np.float64))
+                    for k in range(B)])
+    assert _rel(X, ref) < TOL
+    if _on_metal():
+        assert ran is True
+
+
+def test_batched_cholesky_non_pd_falls_back():
+    # One not-PD matrix in the batch -> the grid kernel flags it -> numpy fallback,
+    # which raises LinAlgError (matching a pure-numpy batched cholesky).
+    good = _spd(3, 0)
+    bad = np.array([[1.0, 2.0, 0.0], [2.0, 1.0, 0.0], [0.0, 0.0, 1.0]], np.float32)
+    A = np.stack([good, bad])
+    with pytest.raises(np.linalg.LinAlgError):
+        R.apple_gpu_cholesky(A, np)
+
+
+def test_batched_tri_solve_all_flags():
+    B, n, nrhs = 16, 12, 3
+    rng = np.random.default_rng(9)
+    base = np.stack([rng.standard_normal((n, n)).astype(np.float32)
+                     + n * np.eye(n, dtype=np.float32) for _ in range(B)])
+    for lower in (True, False):
+        for trans in (False, True):
+            Bm = rng.standard_normal((B, n, nrhs)).astype(np.float32)
+            X, ran = R.apple_gpu_tri_solve(base, Bm, np, lower=lower, trans=trans)
+            tri = np.tril(base) if lower else np.triu(base)
+            M = np.swapaxes(tri, -1, -2) if trans else tri
+            ref = np.stack([np.linalg.solve(M[k].astype(np.float64),
+                                            Bm[k].astype(np.float64)) for k in range(B)])
+            assert _rel(X, ref) < TOL, (lower, trans)
+            if _on_metal():
+                assert ran is True

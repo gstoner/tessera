@@ -1322,6 +1322,276 @@ extern "C" int32_t tessera_apple_gpu_svd_bl_batched_f32(const float *A, float *U
   return dispatch_svd_jacobi_bl_f32(deviceContext(), A, U, S, V, batch, M, N) ? 1 : 0;
 }
 
+//===----------------------------------------------------------------------===//
+// Batched dense factorizations / solves (custom MSL, one threadgroup per matrix,
+// grid of `batch`). MPS's Cholesky/solve are single-matrix per encode, so the
+// Python batched path used to loop them per matrix; these grid-batched kernels
+// keep the whole GPU busy across the batch (same pattern + win as batched SVD).
+// f32, single threadgroup per matrix. See docs/apple_backend_integration_review.md.
+//===----------------------------------------------------------------------===//
+namespace {
+constexpr int kBatchLinalgThreads = 128;
+
+// Batched Cholesky: A (n×n SPD) -> L lower with A = L·Lᵀ (left-looking, column by
+// column). Per-matrix status: 0 ok, 1 not positive-definite.
+bool dispatch_cholesky_batched_f32(MetalDeviceContext &ctx, const float *A,
+                                   float *L, int32_t *status, int32_t batch,
+                                   int32_t n) {
+  if (!ctx.ok || !A || !L || !status || batch <= 0 || n <= 0) return false;
+  static NSString *const kSrc = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+#define TS_CHOL_THREADS 128
+kernel void cholesky_batched_f32(
+    device const float* A [[buffer(0)]],
+    device float*       L [[buffer(1)]],
+    device int*         status [[buffer(2)]],
+    constant int&       n [[buffer(3)]],
+    uint lid [[thread_position_in_threadgroup]],
+    uint bid [[threadgroup_position_in_grid]])
+{
+    const int T = TS_CHOL_THREADS;
+    int li = (int)lid;
+    device const float* Ab = A + (size_t)bid * (size_t)n * (size_t)n;
+    device float*       Lb = L + (size_t)bid * (size_t)n * (size_t)n;
+    threadgroup float red[TS_CHOL_THREADS];
+    threadgroup float diag[1];
+    threadgroup int   bad[1];
+    for (int idx = li; idx < n * n; idx += T) Lb[idx] = Ab[idx];
+    if (li == 0) bad[0] = 0;
+    threadgroup_barrier(mem_flags::mem_device | mem_flags::mem_threadgroup);
+    for (int k = 0; k < n; ++k) {
+        // diagonal d = A[k,k] - Σ_{j<k} L[k,j]²
+        float ps = 0.0f;
+        for (int j = li; j < k; j += T) { float v = Lb[k * n + j]; ps += v * v; }
+        red[li] = ps;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (int s = T / 2; s > 0; s >>= 1) {
+            if (li < s) red[li] += red[li + s];
+            threadgroup_barrier(mem_flags::mem_threadgroup);
+        }
+        if (li == 0) {
+            float d = Lb[k * n + k] - red[0];
+            if (d <= 0.0f) { bad[0] = 1; d = 1.0f; }   // not PD: flag, avoid NaN
+            diag[0] = sqrt(d);
+            Lb[k * n + k] = diag[0];
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        float invd = 1.0f / diag[0];
+        for (int i = k + 1 + li; i < n; i += T) {
+            float s = 0.0f;
+            for (int j = 0; j < k; ++j) s += Lb[i * n + j] * Lb[k * n + j];
+            Lb[i * n + k] = (Lb[i * n + k] - s) * invd;
+        }
+        threadgroup_barrier(mem_flags::mem_device | mem_flags::mem_threadgroup);
+    }
+    for (int idx = li; idx < n * n; idx += T) {   // zero strict upper triangle
+        if ((idx % n) > (idx / n)) Lb[idx] = 0.0f;
+    }
+    if (li == 0) status[bid] = bad[0];
+}
+)MSL";
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, kSrc, @"cholesky_batched_f32");
+    if (!pso) return false;
+    size_t mB = (size_t)batch * n * n * 4, sB = (size_t)batch * 4;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bA, ctx, A, mB);
+    TS_METAL_BUF_ACQUIRE(bL, ctx, mB);
+    TS_METAL_BUF_ACQUIRE(bSt, ctx, sB);
+    if (!bA || !bL || !bSt) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bA offset:0 atIndex:0];
+    [enc setBuffer:bL offset:0 atIndex:1];
+    [enc setBuffer:bSt offset:0 atIndex:2];
+    [enc setBytes:&n length:sizeof(int32_t) atIndex:3];
+    [enc dispatchThreadgroups:MTLSizeMake((NSUInteger)batch, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(kBatchLinalgThreads, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(L, [bL contents], mB);
+    std::memcpy(status, [bSt contents], sB);
+    return true;
+  }
+}
+
+// Batched triangular solve: op(tri(A))·X = B, one threadgroup per matrix.
+// tri = lower (lower=1) or upper; op = transpose when trans=1; unit diagonal when
+// unit=1. Forward/back substitution over the n rows; the nrhs right-hand sides
+// run in parallel across threads. A is n×n, B/X are n×nrhs, all row-major f32.
+bool dispatch_tri_solve_batched_f32(MetalDeviceContext &ctx, const float *A,
+                                    const float *B, float *X, int32_t batch,
+                                    int32_t n, int32_t nrhs, int32_t lower,
+                                    int32_t trans, int32_t unit) {
+  if (!ctx.ok || !A || !B || !X || batch <= 0 || n <= 0 || nrhs <= 0) return false;
+  static NSString *const kSrc = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+#define TS_TRSV_THREADS 128
+kernel void tri_solve_batched_f32(
+    device const float* A [[buffer(0)]],
+    device const float* B [[buffer(1)]],
+    device float*       X [[buffer(2)]],
+    constant int&       n [[buffer(3)]],
+    constant int&       nrhs [[buffer(4)]],
+    constant int&       lower [[buffer(5)]],
+    constant int&       trans [[buffer(6)]],
+    constant int&       unit  [[buffer(7)]],
+    uint lid [[thread_position_in_threadgroup]],
+    uint bid [[threadgroup_position_in_grid]])
+{
+    const int T = TS_TRSV_THREADS;
+    int li = (int)lid;
+    device const float* Ab = A + (size_t)bid * (size_t)n * (size_t)n;
+    device const float* Bb = B + (size_t)bid * (size_t)n * (size_t)nrhs;
+    device float*       Xb = X + (size_t)bid * (size_t)n * (size_t)nrhs;
+    // op(tri(A)) is lower-triangular iff (lower XOR trans) == false... work it out:
+    //   effective lower-triangular  <=>  (lower && !trans) || (!lower && trans)
+    bool effLower = (lower != 0) != (trans != 0);
+    // A_op[r,c] = trans ? A[c,r] : A[r,c]; only the tri(A) triangle is read.
+    for (int rr = 0; rr < n; ++rr) {
+        int r = effLower ? rr : (n - 1 - rr);   // forward if lower, back if upper
+        // each thread handles a subset of the nrhs columns
+        for (int col = li; col < nrhs; col += T) {
+            float acc = Bb[r * nrhs + col];
+            // sum over already-solved rows j (j<r if lower, j>r if upper)
+            int jstart = effLower ? 0 : r + 1;
+            int jend   = effLower ? r : n;
+            for (int j = jstart; j < jend; ++j) {
+                float a = trans ? Ab[j * n + r] : Ab[r * n + j];  // op(A)[r,j]
+                acc -= a * Xb[j * nrhs + col];
+            }
+            float d = unit ? 1.0f : (trans ? Ab[r * n + r] : Ab[r * n + r]);
+            Xb[r * nrhs + col] = acc / d;
+        }
+        threadgroup_barrier(mem_flags::mem_device | mem_flags::mem_threadgroup);
+    }
+}
+)MSL";
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, kSrc, @"tri_solve_batched_f32");
+    if (!pso) return false;
+    size_t aB = (size_t)batch * n * n * 4, rB = (size_t)batch * n * nrhs * 4;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bA, ctx, A, aB);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bB, ctx, B, rB);
+    TS_METAL_BUF_ACQUIRE(bX, ctx, rB);
+    if (!bA || !bB || !bX) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bA offset:0 atIndex:0];
+    [enc setBuffer:bB offset:0 atIndex:1];
+    [enc setBuffer:bX offset:0 atIndex:2];
+    [enc setBytes:&n length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&nrhs length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&lower length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&trans length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&unit length:sizeof(int32_t) atIndex:7];
+    [enc dispatchThreadgroups:MTLSizeMake((NSUInteger)batch, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(kBatchLinalgThreads, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(X, [bX contents], rB);
+    return true;
+  }
+}
+}  // namespace
+
+extern "C" int32_t tessera_apple_gpu_cholesky_batched_f32(const float *A, float *L,
+                                                          int32_t *status,
+                                                          int32_t batch, int32_t n) {
+  return dispatch_cholesky_batched_f32(deviceContext(), A, L, status, batch, n) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_tri_solve_batched_f32(
+    const float *A, const float *B, float *X, int32_t batch, int32_t n,
+    int32_t nrhs, int32_t lower, int32_t trans, int32_t unit) {
+  return dispatch_tri_solve_batched_f32(deviceContext(), A, B, X, batch, n, nrhs,
+                                        lower, trans, unit) ? 1 : 0;
+}
+
+//===----------------------------------------------------------------------===//
+// R0 resident dtype cast — an on-device elementwise cast between two resident
+// DeviceTensors (f32 <-> f16/bf16), no host round-trip. This is the missing link
+// for round-trip-free MLP stacking: the M8 session's `run_dev` outputs f32, the
+// next layer's matmul wants f16/bf16, so a resident cast lets the whole stack
+// stay on the GPU. mode: 0 f32->f16, 1 f32->bf16, 2 f16->f32, 3 bf16->f32.
+//===----------------------------------------------------------------------===//
+namespace {
+bool dispatch_dev_cast(MetalDeviceContext &ctx, id<MTLBuffer> src, id<MTLBuffer> dst,
+                       int64_t n, int mode) {
+  if (!ctx.ok || !src || !dst || n <= 0) return false;
+  static NSString *const kSrc = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+// f32 -> half: one thread per element; out is `half*` (16-bit).
+kernel void dev_cast_f32_to_f16(device const float* in [[buffer(0)]],
+                                device half* out        [[buffer(1)]],
+                                constant int& n         [[buffer(2)]],
+                                uint gid [[thread_position_in_grid]]) {
+    if ((int)gid < n) out[gid] = (half)in[gid];
+}
+kernel void dev_cast_f16_to_f32(device const half* in [[buffer(0)]],
+                                device float* out      [[buffer(1)]],
+                                constant int& n        [[buffer(2)]],
+                                uint gid [[thread_position_in_grid]]) {
+    if ((int)gid < n) out[gid] = (float)in[gid];
+}
+// f32 -> bf16: top 16 bits with round-to-nearest-even. out is ushort (bf16 bits).
+kernel void dev_cast_f32_to_bf16(device const float* in [[buffer(0)]],
+                                 device ushort* out      [[buffer(1)]],
+                                 constant int& n         [[buffer(2)]],
+                                 uint gid [[thread_position_in_grid]]) {
+    if ((int)gid >= n) return;
+    uint u = as_type<uint>(in[gid]);
+    uint lsb = (u >> 16) & 1u;
+    uint rounded = u + 0x7fffu + lsb;
+    out[gid] = (ushort)(rounded >> 16);
+}
+kernel void dev_cast_bf16_to_f32(device const ushort* in [[buffer(0)]],
+                                 device float* out        [[buffer(1)]],
+                                 constant int& n          [[buffer(2)]],
+                                 uint gid [[thread_position_in_grid]]) {
+    if ((int)gid < n) out[gid] = as_type<float>((uint)in[gid] << 16);
+}
+)MSL";
+  NSString *entry = mode == 0 ? @"dev_cast_f32_to_f16"
+                  : mode == 1 ? @"dev_cast_f32_to_bf16"
+                  : mode == 2 ? @"dev_cast_f16_to_f32"
+                              : @"dev_cast_bf16_to_f32";
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, kSrc, entry);
+    if (!pso) return false;
+    int32_t ni = (int32_t)n;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:src offset:0 atIndex:0];
+    [enc setBuffer:dst offset:0 atIndex:1];
+    [enc setBytes:&ni length:sizeof(int32_t) atIndex:2];
+    [enc dispatchThreads:MTLSizeMake((NSUInteger)n, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(std::min<NSUInteger>(256, (NSUInteger)n), 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    return cb.status == MTLCommandBufferStatusCompleted;
+  }
+}
+}  // namespace
+
+// Resident dtype cast between two DeviceTensors. `n` elements. mode: 0 f32->f16,
+// 1 f32->bf16, 2 f16->f32, 3 bf16->f32. 1 if it ran on the GPU, else 0.
+extern "C" int32_t ts_dev_cast(TsDeviceTensor *src, TsDeviceTensor *dst,
+                               int64_t n, int32_t mode) {
+  if (!src || !dst) return 0;
+  return dispatch_dev_cast(deviceContext(), src->buf, dst->buf, n, (int)mode) ? 1 : 0;
+}
+
 // Metal 4 lane — cached MTL4 compute pipeline (MSL 4.0 source compiled via the
 // MTL4Compiler). Mirrors compile_msl_kernel but for the MTL4 path; the MSL
 // compile + pipeline build are paid once per (source, entry) and reused.
@@ -10001,6 +10271,44 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_epilogue_bf16(
     int32_t act, int32_t M, int32_t N, int32_t K) {
   return mtl4_matmul2d_dispatch(@"mtl4_matmul2d_epilogue_bf16", MTLTensorDataTypeBFloat16,
                                 A, B, C, M, N, K, /*fused=*/true, bias, act);
+}
+
+// R0 — general device-resident matmul2d: A, B, C are DeviceTensors (A/B f16 or
+// bf16 per `bf16`, C f32) — *both* operands stay resident (no host upload), so
+// resident activations feed the matrix-unit lane directly (the both-resident
+// complement to the M8 session's resident-W run_dev). C = A @ B, (M×K)·(K×N).
+// 1 if it ran on the MPP cooperative lane, else 0.
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_dev(TsDeviceTensor *A,
+    TsDeviceTensor *B, TsDeviceTensor *C, int32_t M, int32_t N, int32_t K,
+    int32_t bf16) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !A || !B || !C || M <= 0 || N <= 0 || K <= 0) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    MTLTensorDataType dt = bf16 ? MTLTensorDataTypeBFloat16 : MTLTensorDataTypeFloat16;
+    id<MTLComputePipelineState> pso = compile_mtl4_pipeline(
+        ctx, kMTL4Matmul2dMSL, bf16 ? @"mtl4_matmul2d_bf16" : @"mtl4_matmul2d_f16");
+    if (!pso) return 0;
+    id<MTLTensor> tA = ts_dev_tensor_view(A, K, M, dt);
+    id<MTLTensor> tB = ts_dev_tensor_view(B, N, K, dt);
+    id<MTLTensor> tC = ts_dev_tensor_view(C, N, M, MTLTensorDataTypeFloat32);
+    if (!tA || !tB || !tC) return 0;
+    id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
+    if (!queue) return 0;
+    bool done = false;
+    {
+      std::lock_guard<std::mutex> lock(ctx.mtl4_dispatch_mu);
+      id<MTLBuffer> rbufs[3] = {A->buf, B->buf, C->buf};
+      id<MTLResidencySet> res = mtl4_set_residency(ctx, rbufs, 3);
+      if (!res) return 0;
+      done = mtl4_encode_and_wait(ctx, queue, pso, ^(id<MTL4ArgumentTable> at) {
+        [at setResource:tA.gpuResourceID atBufferIndex:0];
+        [at setResource:tB.gpuResourceID atBufferIndex:1];
+        [at setResource:tC.gpuResourceID atBufferIndex:2];
+      }, MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1), MTLSizeMake(128, 1, 1), res);
+    }
+    return done ? 1 : 0;
+  }
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//

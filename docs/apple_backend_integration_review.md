@@ -252,8 +252,24 @@ documentation to see whether any should adopt the MTL4 command model / typed
   value is **architectural**: it's the missing capability that lets a resident
   activation reach the matrix-unit lane at all without a round-trip. The latency
   win materializes only when it removes a *download→reupload between successive MTL4
-  ops* (zero-copy chaining), not for one isolated session step. Full round-trip-free
-  MLP stacking additionally needs a resident f32→f16 cast between layers (follow-up).
+  ops* (zero-copy chaining), not for one isolated session step.
+
+  **Resident MLP chaining (built, measured — capability yes, speedup no).** Added
+  the two pieces for round-trip-free stacking: a **resident f32↔f16/bf16 cast**
+  (`DeviceTensor.cast_to`, an elementwise MSL kernel — the M8 `run_dev` outputs f32,
+  the next layer wants f16) and a **general both-operands-resident matmul**
+  (`apple_gpu_matmul2d_dev` / `tessera_apple_gpu_mtl4_matmul2d_dev` — the complement
+  to the fixed-weight session, for e.g. resident `Q @ Kᵀ`). A 3-layer MLP now runs
+  entirely on the GPU (`run_dev` → resident `cast_to(f16)` → next layer), **bit-exact
+  vs numpy**. **But it is *slower*, not faster** — 0.49–0.81× the host
+  round-trip path (`run()` + numpy cast per layer), even with all intermediates
+  preallocated (so it's the extra per-layer cast **dispatch+sync**, not buffer
+  churn). The unified-memory verdict from the single-op bridge holds at chain
+  scale: a host round-trip is a cheap memcpy, and any added GPU dispatch costs more.
+  So these ship as **correct, tested capabilities** (resident dtype conversion;
+  both-resident matmul) — *not* wired as an auto fast-path. A real win would need a
+  **fused f16-output epilogue** (session writes f16 directly, no separate cast
+  dispatch), and even then likely marginal given the memcpy is cheap.
 
 - **R1 (`bmm_dev`), R2 (`TsEncodeSession`: bmm/unary/binary/gather/rowop/gumbel),
   R4 (block-paged gather)** — all **MPSGraph-based on the classic command model**,

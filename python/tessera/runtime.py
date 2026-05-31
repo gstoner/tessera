@@ -3036,22 +3036,76 @@ def _linalg_dtype_policy(A: Any, np: Any) -> Any:
     return out_dt, gpu_ok, fb_dt
 
 
+def _apple_gpu_cholesky_batched_msl(A2: Any, np: Any) -> Any:
+    """Batched (…, n, n) Cholesky via the grid MSL kernel (one threadgroup per
+    matrix). ``A2`` is f32 contiguous. Returns L (same leading dims) or None
+    (kernel unavailable, or any matrix not positive-definite → let numpy raise)."""
+    sym = _apple_gpu_linalg_sym(
+        "tessera_apple_gpu_cholesky_batched_f32",
+        [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float),
+         ctypes.POINTER(ctypes.c_int32), ctypes.c_int32, ctypes.c_int32])
+    if sym is None:
+        return None
+    n = int(A2.shape[-1])
+    lead = A2.shape[:-2]
+    B = 1
+    for d in lead:
+        B *= int(d)
+    fp = ctypes.POINTER(ctypes.c_float)
+    ip = ctypes.POINTER(ctypes.c_int32)
+    flat = np.ascontiguousarray(A2.reshape(B, n, n))
+    L = np.empty((B, n, n), np.float32)
+    st = np.zeros(B, np.int32)
+    rc = sym(flat.ctypes.data_as(fp), L.ctypes.data_as(fp), st.ctypes.data_as(ip),
+             ctypes.c_int32(B), ctypes.c_int32(n))
+    if rc != 1 or bool(st.any()):     # not-PD anywhere -> numpy fallback raises
+        return None
+    return L.reshape(A2.shape)
+
+
+def _apple_gpu_tri_solve_batched_msl(A2: Any, B2: Any, np: Any, *, lower: bool,
+                                     trans: bool, unit: bool) -> Any:
+    """Batched (…, n, n) / (…, n, nrhs) triangular solve via the grid MSL kernel.
+    ``A2``/``B2`` are f32 contiguous with matching leading dims. Returns X (leading
+    dims + (n, nrhs)) or None."""
+    sym = _apple_gpu_linalg_sym(
+        "tessera_apple_gpu_tri_solve_batched_f32",
+        [ctypes.POINTER(ctypes.c_float)] * 3 + [ctypes.c_int32] * 6)
+    if sym is None:
+        return None
+    n = int(A2.shape[-1])
+    nrhs = int(B2.shape[-1])
+    lead = A2.shape[:-2]
+    B = 1
+    for d in lead:
+        B *= int(d)
+    fp = ctypes.POINTER(ctypes.c_float)
+    i32 = ctypes.c_int32
+    Af = np.ascontiguousarray(A2.reshape(B, n, n))
+    Bf = np.ascontiguousarray(B2.reshape(B, n, nrhs))
+    X = np.empty((B, n, nrhs), np.float32)
+    rc = sym(Af.ctypes.data_as(fp), Bf.ctypes.data_as(fp), X.ctypes.data_as(fp),
+             i32(B), i32(n), i32(nrhs), i32(1 if lower else 0),
+             i32(1 if trans else 0), i32(1 if unit else 0))
+    return X.reshape(lead + (n, nrhs)) if rc == 1 else None
+
+
 def apple_gpu_cholesky(A: Any, np: Any) -> Any:
     """Lower Cholesky factor ``L`` of an SPD matrix ``A`` (``A = L·Lᵀ``), matching
     ``numpy.linalg.cholesky``. f16/bf16/f32 on the GPU (f16/bf16 compute in f32 and
-    cast back; rank-2 = one dispatch, batched = per-matrix loop); f64 + fallbacks
-    on numpy. Returns ``(L, ran_on_gpu)`` with ``L`` in the input float dtype.
-    Raises ``numpy.linalg.LinAlgError`` (via the fallback) if ``A`` is not PD."""
+    cast back; rank-2 = one MPS dispatch, batched = a single grid MSL dispatch,
+    one threadgroup per matrix); f64 + fallbacks on numpy. Returns
+    ``(L, ran_on_gpu)`` with ``L`` in the input float dtype. Raises
+    ``numpy.linalg.LinAlgError`` (via the fallback) if ``A`` is not PD."""
     out_dt, gpu_ok, fb_dt = _linalg_dtype_policy(A, np)
     A2 = np.ascontiguousarray(A, np.float32)
     if gpu_ok and A2.ndim >= 2 and A2.shape[-1] == A2.shape[-2]:
-        core = lambda a, _b: _apple_gpu_chol_2d(a, np)
         if A2.ndim == 2:
-            L = core(A2, None)
+            L = _apple_gpu_chol_2d(A2, np)                  # MPS single matrix
             if L is not None:
                 return L.astype(out_dt), True
         else:
-            out = _apple_gpu_batched_linalg(A2, None, core, int(A2.shape[-1]), np)
+            out = _apple_gpu_cholesky_batched_msl(A2, np)   # grid MSL (≫ per-matrix)
             if out is not None:
                 return out.astype(out_dt), True
     return np.linalg.cholesky(np.asarray(A, fb_dt)).astype(out_dt), False
@@ -3094,8 +3148,26 @@ def apple_gpu_solve(A: Any, B: Any, np: Any) -> Any:
 
 def apple_gpu_cholesky_solve(A: Any, B: Any, np: Any) -> Any:
     """SPD linear solve ``A·X = B`` via Cholesky factorization (faster + more
-    stable than LU for symmetric-positive-definite ``A``). f32 on the GPU (rank-2
-    + batched); else numpy. Returns ``(X float32, ran_on_gpu)``."""
+    stable than LU for symmetric-positive-definite ``A``). Rank-2 uses the MPS
+    factor+solve; **batched runs the grid MSL Cholesky + two grid MSL triangular
+    solves** (``L·Y = B`` then ``Lᵀ·X = Y``) — all single grid dispatches. f64 /
+    not-PD fall back to numpy. Returns ``(X, ran_on_gpu)``."""
+    out_dt, gpu_ok, _ = _linalg_dtype_policy(A, np)
+    A2 = np.ascontiguousarray(A, np.float32)
+    B1 = np.ascontiguousarray(np.asarray(B, np.float32))
+    if (gpu_ok and A2.ndim >= 3 and A2.shape[-1] == A2.shape[-2]):
+        vec = B1.ndim == A2.ndim - 1
+        B2 = B1[..., None] if vec else B1
+        if B2.ndim == A2.ndim and B2.shape[:-1] == A2.shape[:-1]:
+            L = _apple_gpu_cholesky_batched_msl(A2, np)            # A = L·Lᵀ
+            if L is not None:
+                Y = _apple_gpu_tri_solve_batched_msl(L, B2, np, lower=True,
+                                                     trans=False, unit=False)
+                X = (None if Y is None else
+                     _apple_gpu_tri_solve_batched_msl(L, Y, np, lower=True,
+                                                      trans=True, unit=False))
+                if X is not None:
+                    return ((X[..., 0] if vec else X)).astype(out_dt), True
     return _apple_gpu_solve_impl(A, B, np, "tessera_apple_gpu_solve_cholesky_f32")
 
 
@@ -3121,7 +3193,8 @@ def apple_gpu_tri_solve(A: Any, B: Any, np: Any, *, lower: bool = True,
             return ((X[..., 0] if vec else X)).astype(out_dt), True
     elif gpu_ok and (A2.ndim >= 3 and A2.shape[-1] == A2.shape[-2]
           and B2.ndim == A2.ndim and B2.shape[:-1] == A2.shape[:-1]):
-        out = _apple_gpu_batched_linalg(A2, B2, core, int(B2.shape[-1]), np)
+        out = _apple_gpu_tri_solve_batched_msl(A2, B2, np, lower=lower, trans=trans,
+                                               unit=unit)        # grid MSL kernel
         if out is not None:
             return ((out[..., 0] if vec else out)).astype(out_dt), True
     Af = np.asarray(A, fb_dt)
@@ -4681,6 +4754,28 @@ def apple_gpu_command_queue_handle() -> int:
     (0 off Metal). Serialize any work you enqueue on it against Tessera's own use.
     See :func:`apple_gpu_device_handle`."""
     return _apple_gpu_raw_handle("tessera_apple_gpu_command_queue_handle")
+
+
+def apple_gpu_matmul2d_dev(A: Any, B: Any, C: Any, *, bf16: bool = False) -> bool:
+    """R0 — general device-resident matmul ``C = A @ B`` where A, B, C are
+    :class:`DeviceTensor`s (A/B f16 or bf16 per ``bf16``, C f32, shapes M×K · K×N).
+    *Both* operands stay resident (no host upload) — the both-resident complement
+    to the M8 session's fixed-weight ``run_dev`` (e.g. attention ``Q @ Kᵀ`` where
+    both are resident activations). Returns True if it ran on the matrix-unit lane.
+
+    Note: like the R0 bridge generally, this is a *capability* (resident operands),
+    not a throughput win on unified memory — see the integration review."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mtl4_matmul2d_dev", None)
+    if sym is None:
+        return False
+    sym.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int32] * 4
+    sym.restype = ctypes.c_int32
+    M, K = int(A.shape[0]), int(A.shape[1])
+    N = int(B.shape[1])
+    rc = sym(A.handle, B.handle, C.handle, ctypes.c_int32(M), ctypes.c_int32(N),
+             ctypes.c_int32(K), ctypes.c_int32(1 if bf16 else 0))
+    return rc == 1
 
 
 def apple_gpu_metal4_tensor_roundtrip(arr: Any, np: Any) -> Any:
@@ -6296,6 +6391,8 @@ def _apple_gpu_devtensor_api() -> Any:
         runtime.ts_dev_is_metal.argtypes = []; runtime.ts_dev_is_metal.restype = i32
         if getattr(runtime, "ts_dev_mtl_buffer", None) is not None:
             runtime.ts_dev_mtl_buffer.argtypes = [vp]; runtime.ts_dev_mtl_buffer.restype = vp
+        if getattr(runtime, "ts_dev_cast", None) is not None:
+            runtime.ts_dev_cast.argtypes = [vp, vp, i64, i32]; runtime.ts_dev_cast.restype = i32
         _DEVTENSOR_API_CONFIGURED = True
     return runtime
 
@@ -6434,6 +6531,40 @@ class DeviceTensor:
             return 0
         p = sym(self._handle)
         return int(p) if p else 0
+
+    def cast_to(self, dtype: Any) -> "DeviceTensor":
+        """Resident dtype cast (f32 ↔ f16/bf16) to a **new** DeviceTensor, entirely
+        on the GPU — no host round-trip. The missing link for round-trip-free MLP
+        stacking (M8 ``run_dev`` outputs f32; the next layer's matmul wants
+        f16/bf16). Falls back to a host cast off Metal."""
+        import numpy as _np
+        if self._freed:
+            raise RuntimeError("DeviceTensor used after free()")
+        bf16 = _bfloat16_dtype()
+        dst_dt = _np.dtype(dtype)
+        src_dt = self.dtype
+        _MODE = {  # (src, dst) -> kernel mode
+            (_np.dtype(_np.float32), _np.dtype(_np.float16)): 0,
+            (_np.dtype(_np.float16), _np.dtype(_np.float32)): 2,
+        }
+        if bf16 is not None:
+            _MODE[(_np.dtype(_np.float32), _np.dtype(bf16))] = 1
+            _MODE[(_np.dtype(bf16), _np.dtype(_np.float32))] = 3
+        out = DeviceTensor.empty(self.shape, dst_dt)
+        n = 1
+        for s in self.shape:
+            n *= int(s)
+        mode = _MODE.get((src_dt, dst_dt))
+        sym = getattr(self._rt, "ts_dev_cast", None)
+        if out is not None and mode is not None and sym is not None and not self._freed:
+            rc = sym(self._handle, out._handle, ctypes.c_int64(n), ctypes.c_int32(mode))
+            if rc == 1:
+                return out
+        # host fallback — cast through numpy on the shared storage
+        if out is None:
+            out = DeviceTensor.empty(self.shape, dst_dt)
+        out.numpy()[...] = self.numpy().astype(dst_dt)
+        return out
 
     def free(self) -> None:
         if not self._freed and self._owns and self._handle:

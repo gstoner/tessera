@@ -128,6 +128,23 @@ extern "C" int32_t tessera_apple_gpu_svd_batched_f32(const float*, float*, float
 extern "C" int32_t tessera_apple_gpu_svd_bl_batched_f32(const float*, float*, float*,
                                                         float*, int32_t, int32_t,
                                                         int32_t) { return 0; }
+// Batched factorizations/solves — no Metal off Darwin; Python uses numpy.
+extern "C" int32_t tessera_apple_gpu_cholesky_batched_f32(const float*, float*,
+                                                          int32_t*, int32_t,
+                                                          int32_t) { return 0; }
+extern "C" int32_t tessera_apple_gpu_tri_solve_batched_f32(const float*, const float*,
+                                                           float*, int32_t, int32_t,
+                                                           int32_t, int32_t, int32_t,
+                                                           int32_t) { return 0; }
+// R0 resident cast + general resident matmul2d — no Metal off Darwin.
+extern "C" int32_t ts_dev_cast(TsDeviceTensor*, TsDeviceTensor*, int64_t, int32_t) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_dev(TsDeviceTensor*, TsDeviceTensor*,
+                                                       TsDeviceTensor*, int32_t,
+                                                       int32_t, int32_t, int32_t) {
+  return 0;
+}
 
 namespace {
 

@@ -306,29 +306,71 @@ report `execution_mode="metal_runtime"` on Darwin and compute on the GPU
 `apple_gpu_cholesky_solve`) remain direct `runtime.*` utilities — there is no
 `tessera.solve` Graph IR op to route through `@jit`.
 
-**Remaining follow-ups.** **f16** (MPS decomposition is f32-only — would need a
-different route); native **batched** (one dispatch for the whole batch) if MPS
-ever exposes a batch stride for decomposition; **QR/SVD** have no MPS kernel at
-all (custom MSL or a different route). Honest perf note: the batched per-matrix
-loop is correctness/capability-first — each slice is a full GPU
-encode+commit+wait, so for many small matrices it is **not** a speed win over
-numpy's batched LAPACK; the value is keeping the work on-GPU when it's part of a
-larger resident pipeline.
+**f16 / bf16 (landed).** MPS decomposition is f32-only, so a `_linalg_dtype_policy`
+at the Python boundary runs f16/bf16 inputs on the GPU **in f32 and casts the
+result back** (the bf16-matmul pattern); f32 is native; **f64 routes to numpy in
+full precision** (it previously silently downcast to f32 — fixed). Covers
+cholesky / solve / cholesky_solve / tri_solve.
+
+**QR (landed — Cholesky-QR, GPU, verified).** No MPS QR kernel, so
+`apple_gpu_qr` reuses the lane: `G = AᵀA`, `R = chol(G)ᵀ` (upper, +diagonal),
+`Q = A·R⁻¹` via one lower-triangular solve — all on the existing GPU Cholesky +
+tri-solve kernels, no new MSL. Cholesky-QR loses ~κ(A)² accuracy, so the result
+is **verified** (`‖QᵀQ − I‖`); if it fails tolerance (or the Gram isn't PD, or
+dtype is f64) it **falls back to numpy Householder QR**, so the returned `Q` is
+always orthonormal. Tall/square (m ≥ n), reduced mode. Validated by
+reconstruction + orthonormality (QR is unique only up to column signs).
+
+**SVD (deferred, honest).** `apple_gpu_svd` exists for surface parity but always
+computes on numpy (`ran_on_gpu=False`) — MPS ships no SVD/eigensolver kernel, and
+a robust one-sided **Jacobi SVD in MSL** (iterative pairwise column rotations to
+convergence, ‖off-diagonal‖→0) is a substantial standalone kernel left as future
+work. The wrapper documents the design.
+
+**Remaining follow-ups.** Native **batched** (one dispatch for the whole batch)
+if MPS ever exposes a batch stride for decomposition; the **Jacobi-MSL SVD**.
+Honest perf note: the batched per-matrix loop is correctness/capability-first —
+each slice is a full GPU encode+commit+wait, so for many small matrices it is
+**not** a speed win over numpy's batched LAPACK; the value is keeping the work
+on-GPU when it's part of a larger resident pipeline.
+
+## GPU-native RNG lane (opt-in, 2026)
+
+`MPSMatrixRandomPhilox`-backed uniform / normal f32 fills:
+`tessera_apple_gpu_random_{uniform,normal}_f32` (Python
+`apple_gpu_random_uniform` / `apple_gpu_random_normal` → `(array, ran_on_gpu)`).
+Philox-family (matching Tessera's S4 RNG family) and deterministic by `seed`, but
+the stream is **not** bit-identical to Tessera's CPU Philox — so it is a
+**separate opt-in surface, deliberately not wired into the deterministic
+`tessera.rng` samplers** (that would break CPU/GPU equality + `check_determinism`,
+Decision #18). Use it for large on-device random fills where generating on the CPU
+and uploading would dominate. Validated by distribution (range/mean/std) + seed
+determinism; guarded by `tests/unit/test_apple_gpu_rng.py`.
 
 ## MPS device-caps / PackedFloat3 / MPSMatrixRandom — assessment (2026)
 
 Quick verdicts on three further MPS surfaces, checked against the Tahoe SDK:
 
 - **`MPSDeviceSupportsSimdReduction` / `SimdShuffle` / `SimdShuffleAndFill` /
-  `SimdgroupBarrier`** — these capability flags are **Swift-only `MPSDeviceCaps`
-  values** (not in the public C/Obj-C headers we compile against) and, more to the
-  point, are **unconditionally true on every Apple GPU that runs MSL 4.0 / Metal
-  4** (M-series, A11+). Querying them in the backend buys nothing — there's no
-  target in our envelope that lacks them. The *intrinsics themselves*
-  (`simd_sum`/`simd_max`/`simd_shuffle`) **are** a real lever: a SIMD-group row
-  reduction skips the threadgroup-memory round-trip our softmax/rmsnorm/layernorm
-  MSL kernels currently use. So the optimization worth pursuing is using the simd
-  reduction intrinsics in those rowop kernels — **not** wiring the cap queries.
+  `SimdgroupBarrier`** — these are **Swift-only `MPSDeviceCaps`** (not in the C
+  headers we compile) and are **unconditionally true on every Apple GPU that runs
+  MSL 4.0** (M-series). **Shipped anyway as honest introspection:**
+  `tessera_apple_gpu_simd_caps()` (Python `apple_gpu_simd_caps()`) queries the
+  active device via `MTLGPUFamily` and returns a 4-bit mask
+  (reduction / shuffle / shuffle-and-fill / simdgroup-barrier). On this M-series
+  Mac it reports `0xF` (all four). Guarded by `test_apple_gpu_metal4.py`.
+
+  **SIMD-reduction rowop optimization — tried, measured slower, reverted.** The
+  one place a SIMD-group reduction could replace a threadgroup-memory tree is the
+  tiled fused `matmul_softmax_tiled_{f32,f16}` kernels (`T == 32 == one
+  SIMD-group`, so `simd_max`/`simd_sum` collapse the ~10-barrier tg_max/tg_sum
+  tree to two ops). Implemented it, verified bit-correct, and **A/B-benchmarked vs
+  the tree across M=128–256, N=1024–2048: 0.72–0.93× (slower).** These kernels are
+  **matmul-K-loop + global-write bound, not reduction-bound**, and `simd_sum`/
+  `simd_max` (which lower to a 5-deep shuffle dependency chain) cost more than the
+  on-chip 32-lane tree here. Reverted the kernels (with an in-code note); kept the
+  caps probe. Same discipline as the ThunderMittens result: the "obvious"
+  optimization regressed, so it doesn't ship.
 - **`MPSPackedFloat3`** — a 12-byte packed 3-vector for **ray-tracing / geometry
   acceleration structures** (`MPSRayIntersector` et al.). It is **not a tensor-math
   type** and has no role in a DL/HPC compiler; using it "for math ops" would be a

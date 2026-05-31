@@ -122,8 +122,12 @@ per matrix (MPS decomp/solve are single-matrix per encode — no native batch).
 **`@jit(target="apple_gpu")` dispatch** is wired for the two registered Graph IR
 ops `tessera.cholesky` + `tessera.tri_solve` (via `_APPLE_GPU_LINALG_OPS` in
 `driver.py` + `runtime.py::_apple_gpu_dispatch_linalg`), so they report
-`execution_mode="metal_runtime"` on Darwin. Tests:
-`tests/unit/test_apple_gpu_linalg.py` (33).
+`execution_mode="metal_runtime"` on Darwin. **f16/bf16** inputs compute in f32 and
+cast back; **f64** routes to numpy (full precision). **`apple_gpu_qr`** —
+Cholesky-QR (`G=AᵀA`, `R=chol(G)ᵀ`, `Q=A·R⁻¹`) reusing the GPU chol+tri-solve, with
+a `‖QᵀQ−I‖` verify → numpy-Householder fallback. **`apple_gpu_svd`** — deferred to
+numpy (no MPS eigensolver; Jacobi-MSL is future work). Tests:
+`tests/unit/test_apple_gpu_linalg.py` (42).
 
 ## Capability + diagnostic symbols
 
@@ -131,6 +135,18 @@ ops `tessera.cholesky` + `tessera.tri_solve` (via `_APPLE_GPU_LINALG_OPS` in
 |--------|---------|
 | `tessera_apple_gpu_runtime_has_metal` | Returns 1 on Darwin with Metal device available, 0 otherwise |
 | `tessera_apple_gpu_runtime_msl_cache_size` | Returns count of cached `MTLComputePipelineState` instances (used by tests to verify cache hits) |
+| `tessera_apple_gpu_simd_caps` | SIMD-feature bitmask of the active GPU (reduction/shuffle/shuffle-and-fill/simdgroup-barrier); `0xF` on M-series. Python `apple_gpu_simd_caps()` |
+
+## GPU-native RNG lane (opt-in)
+
+Philox-family fills via `MPSMatrixRandomPhilox` — separate opt-in stream, **not**
+bit-identical to `tessera.rng` (Decision #18), so never wired into the
+deterministic samplers. Deterministic by `seed`.
+
+| Symbol | Distribution | Python |
+|--------|-------------|--------|
+| `tessera_apple_gpu_random_uniform_f32` | uniform `[lo, hi)` | `apple_gpu_random_uniform(shape, seed=, low=, high=)` |
+| `tessera_apple_gpu_random_normal_f32` | normal `(mean, std)` | `apple_gpu_random_normal(shape, seed=, mean=, std=)` |
 
 ## ABI summary
 

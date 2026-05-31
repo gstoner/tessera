@@ -44,6 +44,14 @@ extern "C" void ts_dev_free(TsDeviceTensor* t) {
   if (t) { std::free(t->data); delete t; }
 }
 extern "C" int32_t ts_dev_is_metal(void) { return 0; }
+// SIMD-feature caps — no Metal device off Darwin, so no SIMD intrinsics.
+extern "C" int32_t tessera_apple_gpu_simd_caps(void) { return 0; }
+// GPU-native RNG (opt-in) — no Metal off Darwin; return 0 so Python uses its
+// own RNG fallback.
+extern "C" int32_t tessera_apple_gpu_random_uniform_f32(float*, int64_t, uint64_t,
+                                                        float, float) { return 0; }
+extern "C" int32_t tessera_apple_gpu_random_normal_f32(float*, int64_t, uint64_t,
+                                                       float, float) { return 0; }
 
 namespace {
 

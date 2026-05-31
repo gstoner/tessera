@@ -775,3 +775,28 @@ def test_p8_im2col_matches_explicit_gather():
                 exp[i] = patch.reshape(-1)
                 i += 1
     np.testing.assert_array_equal(col, exp)
+
+
+# ── SIMD-feature capability probe ─────────────────────────────────────────────
+def test_simd_caps_shape_and_consistency():
+    caps = R.apple_gpu_simd_caps()
+    for k in ("available", "reduction", "shuffle", "shuffle_and_fill",
+              "simdgroup_barrier", "bits"):
+        assert k in caps
+    # `available` mirrors the reduction bit; bits is the OR of the set features.
+    assert caps["available"] == caps["reduction"]
+    expect = ((1 if caps["reduction"] else 0) | (2 if caps["shuffle"] else 0)
+              | (4 if caps["shuffle_and_fill"] else 0)
+              | (8 if caps["simdgroup_barrier"] else 0))
+    assert caps["bits"] == expect
+
+
+def test_simd_caps_full_on_apple_silicon():
+    # Every Apple-Silicon GPU (M-series) exposes the full SIMD intrinsic set.
+    if R.DeviceTensor.is_metal():
+        caps = R.apple_gpu_simd_caps()
+        assert caps["bits"] == 15
+        assert all(caps[k] for k in ("reduction", "shuffle", "shuffle_and_fill",
+                                     "simdgroup_barrier"))
+    else:
+        assert R.apple_gpu_simd_caps()["bits"] == 0

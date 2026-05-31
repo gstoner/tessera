@@ -218,3 +218,88 @@ def test_jit_tri_solve_matches_numpy():
     b = np.random.default_rng(5).standard_normal((8, 3)).astype(np.float32)
     X = np.asarray(_jit_tri_solve(A, b))
     assert _rel(X, np.linalg.solve(np.tril(A).astype(np.float64), b.astype(np.float64))) < TOL
+
+
+# ── f16 / bf16 / f64 dtype policy ─────────────────────────────────────────────
+@pytest.mark.parametrize("npdt,tol", [(np.float16, 3e-3), (np.float32, TOL)])
+def test_cholesky_dtype_preserved(npdt, tol):
+    A = _spd(8, 1).astype(npdt)
+    L, ran = R.apple_gpu_cholesky(A, np)
+    assert L.dtype == np.dtype(npdt)              # input float dtype preserved
+    ref = np.linalg.cholesky(_spd(8, 1).astype(np.float64))
+    assert _rel(L.astype(np.float64), ref) < tol
+    if _on_metal():
+        assert ran is True
+
+
+def test_cholesky_bf16_preserved():
+    ml = pytest.importorskip("ml_dtypes")
+    A = _spd(8, 1).astype(ml.bfloat16)
+    L, ran = R.apple_gpu_cholesky(A, np)
+    assert L.dtype == np.dtype(ml.bfloat16)
+    ref = np.linalg.cholesky(_spd(8, 1).astype(np.float64))
+    assert _rel(L.astype(np.float64), ref) < 5e-2
+
+
+def test_f64_stays_on_numpy_full_precision():
+    # f64 must NOT silently downcast to f32 on the GPU — it routes to numpy and
+    # keeps full double precision.
+    A = _spd(8, 1).astype(np.float64)
+    L, ran = R.apple_gpu_cholesky(A, np)
+    assert L.dtype == np.float64
+    assert ran is False
+    assert _rel(L, np.linalg.cholesky(A)) < 1e-12   # f64-accurate
+
+
+def test_f16_solve_and_tri_solve():
+    A = _wellcond(8, 2).astype(np.float16)
+    b = np.random.default_rng(3).standard_normal((8, 2)).astype(np.float16)
+    X, ran = R.apple_gpu_solve(A, b, np)
+    assert X.dtype == np.float16
+    ref = np.linalg.solve(_wellcond(8, 2).astype(np.float64),
+                          b.astype(np.float64))
+    assert _rel(X.astype(np.float64), ref) < 5e-3
+    At = np.tril(_wellcond(8, 4)).astype(np.float16)
+    Xt, _ = R.apple_gpu_tri_solve(At, b, np, lower=True)
+    assert Xt.dtype == np.float16
+
+
+# ── QR via Cholesky-QR (GPU) with verified Householder fallback ───────────────
+@pytest.mark.parametrize("m,n", [(8, 8), (16, 4), (64, 32), (128, 16)])
+def test_qr_well_conditioned_on_gpu(m, n):
+    A = np.random.default_rng(m + n).standard_normal((m, n)).astype(np.float32)
+    Q, Rm, ran = R.apple_gpu_qr(A, np)
+    assert Q.shape == (m, n) and Rm.shape == (n, n)
+    assert _rel(Q @ Rm, A) < 1e-4                       # reconstruction
+    assert float(np.abs(Q.T @ Q - np.eye(n)).max()) < 1e-3   # orthonormal
+    assert float(np.abs(np.tril(Rm, -1)).max()) == 0.0       # R upper-triangular
+    if _on_metal():
+        assert ran is True
+
+
+def test_qr_ill_conditioned_falls_back_orthonormal():
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((20, 5)).astype(np.float32)
+    A[:, 4] = A[:, 0] + 1e-7 * A[:, 4]   # near rank-deficient -> Cholesky-QR fails
+    Q, Rm, ran = R.apple_gpu_qr(A, np)
+    assert ran is False                  # verification rejected the GPU result
+    assert _rel(Q @ Rm, A) < 1e-4
+    assert float(np.abs(Q.T @ Q - np.eye(5)).max()) < 1e-4   # still orthonormal
+
+
+def test_qr_f16_dtype_preserved():
+    A = np.random.default_rng(1).standard_normal((32, 8)).astype(np.float16)
+    Q, Rm, ran = R.apple_gpu_qr(A, np)
+    assert Q.dtype == np.float16 and Rm.dtype == np.float16
+    assert _rel(Q.astype(np.float32) @ Rm.astype(np.float32),
+                A.astype(np.float32)) < 5e-3
+
+
+# ── SVD — deferred to numpy (no MPS/eigensolver kernel) ───────────────────────
+def test_svd_deferred_to_numpy_but_correct():
+    A = np.random.default_rng(2).standard_normal((10, 6)).astype(np.float32)
+    U, S, Vh, ran = R.apple_gpu_svd(A, np)
+    assert ran is False                                  # honest: no GPU path
+    recon = (U * S) @ Vh
+    assert _rel(recon, A) < TOL
+    assert np.all(np.diff(S) <= 1e-5)                    # descending singular values

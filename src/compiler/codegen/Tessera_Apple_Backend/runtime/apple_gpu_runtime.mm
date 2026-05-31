@@ -47,10 +47,23 @@
 
 namespace {
 
+// SIMD-feature capability bits returned by tessera_apple_gpu_simd_caps() and
+// used to gate the SIMD-reduction rowop fast path. On every Apple-Silicon GPU
+// (M-series = MTLGPUFamilyApple7+) all four are present; the probe exists so the
+// gate is honest (and so a hypothetical device without SIMD reduction cleanly
+// falls back to the threadgroup-tree / reference path).
+enum TsSimdCaps : int32_t {
+  kTsSimdReduction      = 1,  // simd_sum / simd_max / simd_prefix_*
+  kTsSimdShuffle        = 2,  // simd_shuffle / simd_shuffle_xor
+  kTsSimdShuffleAndFill = 4,  // simd_shuffle_and_fill_down / _up
+  kTsSimdgroupBarrier   = 8,  // simdgroup_barrier
+};
+
 struct MetalDeviceContext {
   id<MTLDevice>       device;
   id<MTLCommandQueue> queue;
   bool                ok;
+  int32_t             simd_caps = 0;  // TsSimdCaps bitmask (0 until device init)
 
   // Phase 8.4 — MSL kernel cache. Keyed by (msl_source + entry_point) so
   // multiple kernels in the same source unit (uncommon but legal) cache
@@ -231,9 +244,30 @@ MetalDeviceContext &deviceContext() {
       ctx.device = dev;
       ctx.queue = q;
       ctx.ok = true;
+      // SIMD-feature detection. Apple7 (M1) and later expose the full set of
+      // SIMD reduction + shuffle(+fill) + simdgroup_barrier intrinsics; Mac2
+      // discrete GPUs likewise. Older Apple4/5 GPUs have shuffle + barrier
+      // (Metal 2.0) but not the reduction/shuffle-and-fill (Metal 2.1) family.
+      int32_t caps = 0;
+      if ([dev supportsFamily:MTLGPUFamilyApple7] ||
+          [dev supportsFamily:MTLGPUFamilyMac2]) {
+        caps = kTsSimdReduction | kTsSimdShuffle | kTsSimdShuffleAndFill |
+               kTsSimdgroupBarrier;
+      } else if ([dev supportsFamily:MTLGPUFamilyApple4]) {
+        caps = kTsSimdShuffle | kTsSimdgroupBarrier;
+      }
+      ctx.simd_caps = caps;
     }
   });
   return ctx;
+}
+
+// Introspection: the SIMD-feature capability bitmask of the active GPU (see
+// TsSimdCaps). 0 when no Metal device. Used by the SIMD-reduction rowop fast
+// path and exposed to Python as apple_gpu_simd_caps().
+extern "C" int32_t tessera_apple_gpu_simd_caps(void) {
+  MetalDeviceContext &ctx = deviceContext();
+  return ctx.ok ? ctx.simd_caps : 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -569,6 +603,66 @@ extern "C" int32_t tessera_apple_gpu_tri_solve_f32(const float *A, const float *
     std::memcpy(X, [bX contents], rB);
     return 0;
   }
+}
+
+//===----------------------------------------------------------------------===//
+// GPU-native RNG lane (opt-in) — uniform / normal f32 fills via
+// MPSMatrixRandomPhilox. Philox-family (matching Tessera's S4 RNG family) but
+// the stream is NOT bit-identical to Tessera's CPU Philox — different
+// counter/key layout — so this is a SEPARATE opt-in path, never wired into the
+// deterministic tessera.rng samplers (that would break the CPU/GPU-equality +
+// check_determinism contracts, Decision #18). Determinism here is defined by the
+// `seed` argument under MPS's own generator. Returns 1 on a GPU run, else 0
+// (Python falls back to its own RNG).
+//===----------------------------------------------------------------------===//
+namespace {
+bool dispatch_mps_random_f32(MetalDeviceContext &ctx, float *out, int64_t n,
+                             uint64_t seed, bool normal, float a, float b) {
+  if (!ctx.ok || !out || n <= 0) return false;
+  @autoreleasepool {
+    NSUInteger cols = (NSUInteger)n;
+    NSUInteger rowBytes = ((cols * 4 + 15) / 16) * 16;  // 16-byte aligned
+    TS_METAL_BUF_ACQUIRE(bOut, ctx, (size_t)rowBytes);
+    if (!bOut) return false;
+    MPSMatrixDescriptor *d =
+        [MPSMatrixDescriptor matrixDescriptorWithRows:1 columns:cols
+                                             rowBytes:rowBytes
+                                             dataType:MPSDataTypeFloat32];
+    MPSMatrix *m = [[MPSMatrix alloc] initWithBuffer:bOut descriptor:d];
+    MPSMatrixRandomDistributionDescriptor *dist =
+        normal ? [MPSMatrixRandomDistributionDescriptor
+                     normalDistributionDescriptorWithMean:a standardDeviation:b]
+               : [MPSMatrixRandomDistributionDescriptor
+                     uniformDistributionDescriptorWithMinimum:a maximum:b];
+    MPSMatrixRandomPhilox *rng =
+        [[MPSMatrixRandomPhilox alloc] initWithDevice:ctx.device
+                                  destinationDataType:MPSDataTypeFloat32
+                                                 seed:(NSUInteger)seed
+                               distributionDescriptor:dist];
+    if (!m || !dist || !rng) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    [rng encodeToCommandBuffer:cb destinationMatrix:m];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(out, [bOut contents], (size_t)cols * 4);
+    return true;
+  }
+}
+}  // namespace
+
+// Uniform f32 in [lo, hi). 1 if it ran on the GPU, else 0.
+extern "C" int32_t tessera_apple_gpu_random_uniform_f32(float *out, int64_t n,
+                                                        uint64_t seed, float lo,
+                                                        float hi) {
+  return dispatch_mps_random_f32(deviceContext(), out, n, seed, false, lo, hi) ? 1 : 0;
+}
+
+// Normal f32 with given mean + standard deviation. 1 if it ran on the GPU.
+extern "C" int32_t tessera_apple_gpu_random_normal_f32(float *out, int64_t n,
+                                                       uint64_t seed, float mean,
+                                                       float stddev) {
+  return dispatch_mps_random_f32(deviceContext(), out, n, seed, true, mean, stddev) ? 1 : 0;
 }
 
 //===---------------------------------------------------------------------===//
@@ -2342,6 +2436,10 @@ kernel void matmul_softmax_tiled_f32(
     threadgroup_barrier(mem_flags::mem_threadgroup);
 
     // Step 2: per-thread partial row max -> threadgroup max reduction.
+    // (A simd_max(local_max) variant was benchmarked and measured 0.72-0.93x —
+    // slower — because these kernels are matmul/write-bound, not reduction-bound,
+    // and simd_max/simd_sum cost more than the 32-lane on-chip tree here. See
+    // docs/apple_backend_integration_review.md, SIMD-reduction section.)
     float local_max = -INFINITY;
     for (int n = lid_i; n < N; n += T) local_max = max(local_max, tg_scores[n]);
     tg_max[lid_i] = local_max;
@@ -2702,7 +2800,8 @@ kernel void matmul_softmax_tiled_f16(
     }
     threadgroup_barrier(mem_flags::mem_threadgroup);
 
-    // Step 2: per-thread partial row max -> threadgroup max reduction.
+    // Step 2: per-thread partial row max -> threadgroup max reduction. (SIMD-group
+    // simd_max was benchmarked slower here — see the f32 kernel note.)
     float local_max = -INFINITY;
     for (int n = lid_i; n < N; n += T) local_max = max(local_max, tg_scores[n]);
     tg_max[lid_i] = local_max;

@@ -3019,46 +3019,69 @@ def _apple_gpu_batched_linalg(A2: Any, B2: Any, core: Any, out_tail_cols: int,
     return np.stack(outs).reshape(A2.shape[:-2] + (n, out_tail_cols)).astype(np.float32)
 
 
+def _linalg_dtype_policy(A: Any, np: Any) -> Any:
+    """Dtype policy for the GPU linalg lane. MPS decomposition/solve are f32-only,
+    so f16/bf16 inputs run on the GPU *in f32* and the result is cast back to the
+    input dtype (the bf16-matmul pattern); f32 is native; f64 (or anything
+    needing >f32 precision) skips the GPU and computes on numpy in f64 so we never
+    silently lose precision. Returns ``(out_dtype, gpu_ok, fallback_dtype)``."""
+    dt = np.asarray(A).dtype
+    bf16 = _bfloat16_dtype()
+    # ml_dtypes.bfloat16 is a numpy *extension* dtype — np.issubdtype(.., floating)
+    # is False for it, so check it explicitly to preserve bf16 on output.
+    is_float = np.issubdtype(dt, np.floating) or (bf16 is not None and dt == bf16)
+    out_dt = dt if is_float else np.float32
+    gpu_ok = dt != np.float64  # f64 -> numpy (GPU would downcast to f32)
+    fb_dt = np.float64 if dt == np.float64 else np.float32
+    return out_dt, gpu_ok, fb_dt
+
+
 def apple_gpu_cholesky(A: Any, np: Any) -> Any:
     """Lower Cholesky factor ``L`` of an SPD matrix ``A`` (``A = L·Lᵀ``), matching
-    ``numpy.linalg.cholesky``. f32 on the GPU (rank-2 = one dispatch; batched =
-    per-matrix loop); else numpy. Returns ``(L float32, ran_on_gpu)``. Raises
-    ``numpy.linalg.LinAlgError`` (via the fallback) if ``A`` is not PD."""
+    ``numpy.linalg.cholesky``. f16/bf16/f32 on the GPU (f16/bf16 compute in f32 and
+    cast back; rank-2 = one dispatch, batched = per-matrix loop); f64 + fallbacks
+    on numpy. Returns ``(L, ran_on_gpu)`` with ``L`` in the input float dtype.
+    Raises ``numpy.linalg.LinAlgError`` (via the fallback) if ``A`` is not PD."""
+    out_dt, gpu_ok, fb_dt = _linalg_dtype_policy(A, np)
     A2 = np.ascontiguousarray(A, np.float32)
-    if A2.ndim >= 2 and A2.shape[-1] == A2.shape[-2]:
+    if gpu_ok and A2.ndim >= 2 and A2.shape[-1] == A2.shape[-2]:
         core = lambda a, _b: _apple_gpu_chol_2d(a, np)
         if A2.ndim == 2:
             L = core(A2, None)
             if L is not None:
-                return L, True
+                return L.astype(out_dt), True
         else:
             out = _apple_gpu_batched_linalg(A2, None, core, int(A2.shape[-1]), np)
             if out is not None:
-                return out, True
-    return np.linalg.cholesky(A2).astype(np.float32), False
+                return out.astype(out_dt), True
+    return np.linalg.cholesky(np.asarray(A, fb_dt)).astype(out_dt), False
 
 
 def _apple_gpu_solve_impl(A: Any, B: Any, np: Any, symname: str) -> Any:
     """Shared body for the Cholesky/LU full-solve wrappers (``A·X = B``)."""
+    out_dt, gpu_ok, fb_dt = _linalg_dtype_policy(A, np)
     A2 = np.ascontiguousarray(A, np.float32)
     B1 = np.ascontiguousarray(np.asarray(B, np.float32))
     vec = B1.ndim == A2.ndim - 1           # stacked-vector RHS (numpy convention)
     B2 = B1[..., None] if vec else B1
     core = lambda a, b: _apple_gpu_solve_2d(a, b, np, symname)
-    if (A2.ndim == 2 and A2.shape[0] == A2.shape[1]
+    if gpu_ok and (A2.ndim == 2 and A2.shape[0] == A2.shape[1]
             and B2.ndim == 2 and B2.shape[0] == A2.shape[0]):
         X = core(A2, B2)
         if X is not None:
-            return (X[..., 0] if vec else X), True
-    elif (A2.ndim >= 3 and A2.shape[-1] == A2.shape[-2]
+            return ((X[..., 0] if vec else X)).astype(out_dt), True
+    elif gpu_ok and (A2.ndim >= 3 and A2.shape[-1] == A2.shape[-2]
           and B2.ndim == A2.ndim and B2.shape[:-1] == A2.shape[:-1]):
         out = _apple_gpu_batched_linalg(A2, B2, core, int(B2.shape[-1]), np)
         if out is not None:
-            return (out[..., 0] if vec else out), True
+            return ((out[..., 0] if vec else out)).astype(out_dt), True
     # B2 (always […, n, nrhs]) keeps np.linalg.solve well-defined for batched
     # vector RHS across numpy 1.x/2.x; squeeze the trailing axis back off.
-    X = np.linalg.solve(A2, B2).astype(np.float32)
-    return (X[..., 0] if vec else X), False
+    Af = np.asarray(A, fb_dt)
+    Bf = np.asarray(B, fb_dt)
+    Bf = Bf[..., None] if vec else Bf
+    X = np.linalg.solve(Af, Bf)
+    return ((X[..., 0] if vec else X)).astype(out_dt), False
 
 
 def apple_gpu_solve(A: Any, B: Any, np: Any) -> Any:
@@ -3082,32 +3105,151 @@ def apple_gpu_tri_solve(A: Any, B: Any, np: Any, *, lower: bool = True,
     or upper triangle of ``A``; ``op`` is transpose when ``trans``; the diagonal
     is unit when ``unit``. Only the relevant triangle is read (matching
     ``np.tril``/``np.triu`` + ``np.linalg.solve``). f32 on the GPU (rank-2 +
-    batched); else numpy. ``B`` may be ``[…, n]`` or ``[…, n, nrhs]``. Returns
-    ``(X, ran_on_gpu)``."""
+    batched). f16/bf16 compute in f32 and cast back; f64 stays on numpy. ``B`` may
+    be ``[…, n]`` or ``[…, n, nrhs]``. Returns ``(X, ran_on_gpu)`` in the input
+    float dtype."""
+    out_dt, gpu_ok, fb_dt = _linalg_dtype_policy(A, np)
     A2 = np.ascontiguousarray(A, np.float32)
     B1 = np.ascontiguousarray(np.asarray(B, np.float32))
     vec = B1.ndim == A2.ndim - 1
     B2 = B1[..., None] if vec else B1
     core = lambda a, b: _apple_gpu_tri_2d(a, b, np, lower, trans, unit)
-    if (A2.ndim == 2 and A2.shape[0] == A2.shape[1]
+    if gpu_ok and (A2.ndim == 2 and A2.shape[0] == A2.shape[1]
             and B2.ndim == 2 and B2.shape[0] == A2.shape[0]):
         X = core(A2, B2)
         if X is not None:
-            return (X[..., 0] if vec else X), True
-    elif (A2.ndim >= 3 and A2.shape[-1] == A2.shape[-2]
+            return ((X[..., 0] if vec else X)).astype(out_dt), True
+    elif gpu_ok and (A2.ndim >= 3 and A2.shape[-1] == A2.shape[-2]
           and B2.ndim == A2.ndim and B2.shape[:-1] == A2.shape[:-1]):
         out = _apple_gpu_batched_linalg(A2, B2, core, int(B2.shape[-1]), np)
         if out is not None:
-            return (out[..., 0] if vec else out), True
-    tri = np.tril(A2) if lower else np.triu(A2)
+            return ((out[..., 0] if vec else out)).astype(out_dt), True
+    Af = np.asarray(A, fb_dt)
+    Bf = np.asarray(B, fb_dt)
+    Bf = Bf[..., None] if vec else Bf
+    tri = np.tril(Af) if lower else np.triu(Af)
     if unit:
         tri = tri.copy()
-        idx = np.arange(int(A2.shape[-1]))
+        idx = np.arange(int(Af.shape[-1]))
         tri[..., idx, idx] = 1.0
     if trans:
         tri = np.swapaxes(tri, -1, -2)
-    X = np.linalg.solve(tri, B2).astype(np.float32)
-    return (X[..., 0] if vec else X), False
+    X = np.linalg.solve(tri, Bf)
+    return ((X[..., 0] if vec else X)).astype(out_dt), False
+
+
+def apple_gpu_qr(A: Any, np: Any) -> Any:
+    """Reduced QR factorization ``A = Q·R`` (``Q`` m×n orthonormal columns, ``R``
+    n×n upper-triangular) for a tall/square matrix (m ≥ n) — **GPU-resident via
+    Cholesky-QR**, reusing the GPU Cholesky + triangular-solve kernels (MPS has no
+    QR kernel): ``G = AᵀA``, ``R = chol(G)ᵀ`` (upper, positive diagonal), ``Q =
+    A·R⁻¹`` (one lower-triangular solve). f16/bf16 compute in f32 and cast back.
+
+    Cholesky-QR is fast but loses ~κ(A)² accuracy. The result is **verified**
+    (``‖QᵀQ − I‖`` checked); if it fails the orthonormality tolerance — or the
+    Gram isn't positive-definite, or the dtype is f64 — it **falls back to numpy's
+    Householder QR**. So the returned ``Q`` is always orthonormal. Returns
+    ``(Q, R, ran_on_gpu)``. Validate by reconstruction (``Q·R ≈ A``) /
+    orthonormality (``QᵀQ ≈ I``), not elementwise vs numpy — QR is unique only up
+    to column signs and this returns the positive-R-diagonal variant."""
+    out_dt, gpu_ok, fb_dt = _linalg_dtype_policy(A, np)
+    A2 = np.ascontiguousarray(A, np.float32)
+    if gpu_ok and A2.ndim == 2 and A2.shape[0] >= A2.shape[1] >= 1:
+        try:
+            n = int(A2.shape[1])
+            G = A2.T @ A2                            # n×n Gram (small)
+            L, ran_c = apple_gpu_cholesky(G, np)     # G = L·Lᵀ, L lower
+            if ran_c:
+                R = np.ascontiguousarray(L.T)        # upper-tri, positive diag
+                # Q·R = A  ⟺  L·Qᵀ = Aᵀ  (L = Rᵀ lower-triangular)
+                Qt, ran_s = apple_gpu_tri_solve(L, A2.T, np, lower=True)
+                if ran_s:
+                    Q = np.ascontiguousarray(Qt.T)
+                    # Verify orthonormality — Cholesky-QR degrades as κ(A)², and a
+                    # barely-PD Gram still factors but yields a non-orthonormal Q.
+                    ortho_err = float(np.abs(Q.T @ Q - np.eye(n, dtype=np.float32)).max())
+                    if ortho_err < 1e-3:
+                        return Q.astype(out_dt), R.astype(out_dt), True
+        except np.linalg.LinAlgError:
+            pass  # Gram not PD (ill-conditioned / rank-deficient) -> Householder
+    Q, R = np.linalg.qr(np.asarray(A, fb_dt))
+    return Q.astype(out_dt), R.astype(out_dt), False
+
+
+def apple_gpu_svd(A: Any, np: Any, *, full_matrices: bool = False) -> Any:
+    """Singular value decomposition ``A = U·diag(S)·Vh``. **Deferred to numpy** —
+    MPS ships no SVD (nor eigensolver) kernel, and a numerically-robust one-sided
+    Jacobi SVD in MSL is a substantial standalone kernel (iterative pairwise
+    column rotations to convergence) not yet implemented. Provided for surface
+    parity; always computes on the CPU and returns ``(U, S, Vh, ran_on_gpu=False)``.
+    See docs/apple_backend_integration_review.md (linalg) for the Jacobi-MSL plan."""
+    out_dt, _, fb_dt = _linalg_dtype_policy(A, np)
+    U, S, Vh = np.linalg.svd(np.asarray(A, fb_dt), full_matrices=full_matrices)
+    return U.astype(out_dt), S.astype(out_dt), Vh.astype(out_dt), False
+
+
+# ── GPU-native RNG lane (opt-in) — MPSMatrixRandomPhilox ──────────────────────
+# Philox-family (matching Tessera's S4 RNG family) but the stream is NOT
+# bit-identical to Tessera's CPU Philox — so this is a SEPARATE opt-in surface,
+# deliberately NOT wired into the deterministic tessera.rng samplers (that would
+# break CPU/GPU equality + check_determinism, Decision #18). Determinism here is
+# by the `seed` argument under MPS's own generator. Use it for large on-device
+# random fills where generating on CPU + uploading would dominate.
+
+def _apple_gpu_random_sym(name: str) -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, name, None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int64,
+                    ctypes.c_uint64, ctypes.c_float, ctypes.c_float]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def _apple_gpu_random(shape: Any, np: Any, *, seed: int, normal: bool,
+                      a: float, b: float, symname: str) -> Any:
+    """Shared body: fill ``shape`` with f32 random values on the GPU (uniform or
+    normal). Returns ``(array, ran_on_gpu)``; numpy fallback off Metal."""
+    shape = tuple(int(s) for s in (shape if isinstance(shape, (tuple, list)) else (shape,)))
+    n = 1
+    for s in shape:
+        n *= s
+    out = np.empty(n, np.float32)
+    sym = _apple_gpu_random_sym(symname)
+    if sym is not None and n > 0:
+        rc = sym(out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                 ctypes.c_int64(n), ctypes.c_uint64(int(seed) & 0xFFFFFFFFFFFFFFFF),
+                 ctypes.c_float(a), ctypes.c_float(b))
+        if rc == 1:
+            return out.reshape(shape), True
+    # numpy fallback — NOT the same stream as the GPU (nor as tessera.rng); this
+    # path only guarantees the requested distribution + shape.
+    rng = np.random.default_rng(int(seed))
+    if normal:
+        vals = rng.normal(a, b, size=n).astype(np.float32)
+    else:
+        vals = rng.uniform(a, b, size=n).astype(np.float32)
+    return vals.reshape(shape), False
+
+
+def apple_gpu_random_uniform(shape: Any, np: Any, *, seed: int = 0,
+                             low: float = 0.0, high: float = 1.0) -> Any:
+    """Opt-in GPU-native uniform f32 fill in ``[low, high)`` via
+    MPSMatrixRandomPhilox. Returns ``(array float32, ran_on_gpu)``. The stream is
+    Philox-family but **not** bit-identical to ``tessera.rng`` / numpy — use only
+    where a separate GPU RNG stream is acceptable."""
+    return _apple_gpu_random(shape, np, seed=seed, normal=False, a=float(low),
+                             b=float(high), symname="tessera_apple_gpu_random_uniform_f32")
+
+
+def apple_gpu_random_normal(shape: Any, np: Any, *, seed: int = 0,
+                            mean: float = 0.0, std: float = 1.0) -> Any:
+    """Opt-in GPU-native normal f32 fill (given ``mean``/``std``) via
+    MPSMatrixRandomPhilox. Returns ``(array float32, ran_on_gpu)``. Separate
+    stream from ``tessera.rng`` (see :func:`apple_gpu_random_uniform`)."""
+    return _apple_gpu_random(shape, np, seed=seed, normal=True, a=float(mean),
+                             b=float(std), symname="tessera_apple_gpu_random_normal_f32")
 
 
 def _apple_gpu_dispatch_linalg(op_name: str, operands: list[Any], kwargs: dict,
@@ -4426,6 +4568,34 @@ def apple_gpu_metal4_caps() -> dict:
         "compiler": bool(bits & 4),
         "tensor": bool(bits & 8),
         "msl4": bool(bits & 16),
+        "bits": bits,
+    }
+
+
+_SIMD_CAP_BITS = {
+    "reduction": 1,        # simd_sum / simd_max / simd_prefix_*
+    "shuffle": 2,          # simd_shuffle / simd_shuffle_xor
+    "shuffle_and_fill": 4,  # simd_shuffle_and_fill_down / _up
+    "simdgroup_barrier": 8,
+}
+
+
+def apple_gpu_simd_caps() -> dict:
+    """SIMD-feature capability probe of the active GPU. Reports which SIMD-group
+    intrinsics the device supports (``reduction``/``shuffle``/``shuffle_and_fill``/
+    ``simdgroup_barrier``) — all True on Apple-Silicon (M-series); all False off
+    Metal. Returns ``{available, <feature>: bool, ..., bits}``. Used to document /
+    gate SIMD-reduction kernel paths."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_simd_caps", None)
+    if sym is None:
+        return {"available": False, **{k: False for k in _SIMD_CAP_BITS}, "bits": 0}
+    sym.argtypes = []
+    sym.restype = ctypes.c_int32
+    bits = int(sym())
+    return {
+        "available": bool(bits & _SIMD_CAP_BITS["reduction"]),
+        **{name: bool(bits & b) for name, b in _SIMD_CAP_BITS.items()},
         "bits": bits,
     }
 

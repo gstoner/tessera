@@ -478,7 +478,7 @@ lowerings; runtime kernels can be registered separately.
 | `tessera.ops.softmax(x, axis=-1)` | `(array) → array` | Pure effect |
 | `tessera.ops.gelu(x)` | `(array) → array` | Pure effect |
 | `tessera.ops.silu(x)` | `(array) → array` | Pure effect |
-| `tessera.ops.swiglu(x, W_gate, W_up, W_down)` | `(array, array, array, array) → array` | Reference SwiGLU MLP block; lowers to fused MLP-block kernel where supported (Apple GPU `matmul→gelu`/`matmul→rmsnorm` pattern; fused `silu`-variant is **planned**, see [SwiGLU Performance Plan](#swiglu-performance-plan) below) |
+| `tessera.ops.swiglu(x, W_gate, W_up, W_down)` | `(array, array, array, array) → array` | Reference SwiGLU MLP block; lowers to a fused MLP-block kernel on Apple GPU (Phase 8.4.8 — the fused 4-op `silu`-variant `tessera_apple_gpu_swiglu_{f32,f16,bf16}` is **landed**; see [SwiGLU Performance Plan](#swiglu-performance-plan) below) |
 | `tessera.ops.relu(x)` | `(array) → array` | Pure effect |
 | `tessera.ops.transpose(x, axes=None)` | `(array) → array` | Pure effect |
 | `tessera.ops.cast(x, dtype)` | `(array, str) → array` | Pure effect |

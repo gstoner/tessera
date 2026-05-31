@@ -30,6 +30,26 @@ prove it?".  The fields:
 * **proof_test** — the test or benchmark that exercises this
   op's Apple-native path.
 
+## Metal 4 lane (not captured by the framework column above)
+
+The ``framework`` column reflects each op's **default** apple_gpu lane
+(MPSGraph / MetalPerformanceShaders / MSL). A **parallel Metal 4 lane**
+(macOS 26+, MSL 4.0) runs the MetalPerformancePrimitives cooperative
+``matmul2d`` on the GPU matrix units and is *not* shown per-row here
+(it lives in ``runtime.py``'s router, not ``capabilities``/``manifest``/
+``driver``). Summary — see ``docs/apple_gpu_metal4_adoption.md`` (ladder)
+and ``docs/apple_backend_integration_review.md`` (review):
+
+* **matmul** — bf16 routes to ``tessera_apple_gpu_mtl4_matmul2d_bf16`` by
+  **default** (M6/P5; beats the fp32-conversion fallback ~10–15×); fp16
+  ``matmul2d`` beats MPS but stays opt-in; f32 stays on MPS.
+* **linear+bias+activation** — ``matmul→add(bias)→{gelu,relu,silu}`` in
+  f16/bf16 auto-fuses to one ``matmul2d`` epilogue dispatch (M7/P6).
+* **conv2d** — f16/bf16 via im2col + the matmul2d epilogue, opt-in
+  (``TESSERA_APPLE_GPU_MTL4_CONV=1``) pending a GPU im2col (P8).
+* Resident-weight MLP-block **session** (M8) + MTL4 pipeline **archives**
+  (P4) amortize decode / process-start overhead.
+
 ## Counts by family
 
 | Family | Rows | apple_gpu fused | apple_cpu accelerate_native |

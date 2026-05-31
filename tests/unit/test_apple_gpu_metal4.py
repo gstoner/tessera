@@ -34,7 +34,12 @@ def test_metal4_probe_matches_bits():
     expect = (caps["command_queue"] * 1 + caps["command_allocator"] * 2
               + caps["compiler"] * 4 + caps["tensor"] * 8 + caps["msl4"] * 16)
     assert caps["bits"] == expect
-    assert caps["available"] == (caps["bits"] != 0)
+    # "available" requires the FULL MTL4 stack (all 5 core bits), not any single
+    # bit — the cooperative lanes need queue + allocator + compiler + tensor + MSL4.
+    assert caps["available"] == (caps["bits"] == (1 | 2 | 4 | 8 | 16))
+    if caps["available"]:
+        assert caps["command_queue"] and caps["command_allocator"]
+        assert caps["compiler"] and caps["tensor"] and caps["msl4"]
 
 
 @pytest.mark.parametrize("dtype", ["f32", "f16", "bf16"])
@@ -175,6 +180,14 @@ def test_mtl4_matmul2d_bf16_matches_numpy(M, N, K):
         assert ran
 
 
+def _seed(*parts) -> int:
+    """Deterministic RNG seed from the parametrize args. (Python's built-in
+    hash() of strings is PYTHONHASHSEED-randomized per process, which made these
+    tests flaky run-to-run.)"""
+    s = "|".join(str(p) for p in parts)
+    return sum((i + 1) * ord(c) for i, c in enumerate(s))
+
+
 def _epi_ref(ref, bias, act, np):
     if bias is not None:
         ref = ref + bias[None, :].astype(np.float64)
@@ -203,7 +216,7 @@ def test_mtl4_matmul2d_epilogue_fuses_bias_and_activation(dtype, act):
         cast = np.float16
         tol = 3e-2
     M, N, K = 128, 96, 64
-    rng = np.random.default_rng(hash((dtype, act)) % 1000)
+    rng = np.random.default_rng(_seed(dtype, act))
     A = (rng.standard_normal((M, K)) * 0.25).astype(cast)
     B = (rng.standard_normal((K, N)) * 0.25).astype(cast)
     bias = (rng.standard_normal(N) * 0.5).astype(np.float32)
@@ -384,16 +397,18 @@ def test_p6_linear_bias_act_fuses_to_epilogue(dtype, act):
     expected_kind = "matmul_bias" if act == "none" else f"matmul_bias_{act}"
     assert driver._apple_gpu_chain_kind(f.cpu_plan) == expected_kind
 
-    rng = np.random.default_rng(hash((dtype, act)) % 1000)
+    rng = np.random.default_rng(_seed(dtype, act))
     M, N, K = 64, 96, 128
     x = (rng.standard_normal((M, K)) * 0.2).astype(cast)
     W = (rng.standard_normal((K, N)) * 0.1).astype(cast)
     b = (rng.standard_normal(N) * 0.3).astype(cast)
     Y = np.asarray(f(x, W, b))
     assert Y.dtype == cast  # fused result drops in at the chain's dtype
-    ref = x.astype(np.float64) @ W.astype(np.float64) + b[None, :].astype(np.float64)
-    ref = _epi_ref(x.astype(np.float64) @ W.astype(np.float64), b.astype(np.float64), act, np) \
-        if act != "none" else ref
+    ref = _epi_ref(x.astype(np.float64) @ W.astype(np.float64),
+                   b.astype(np.float64), act, np)
+    # Y is quantized to the chain's dtype; quantize the reference the same way so
+    # the comparison isolates compute correctness from output rounding.
+    ref = ref.astype(cast).astype(np.float64)
     den = np.maximum(1e-2, np.abs(ref))
     assert float(np.max(np.abs(Y.astype(np.float64) - ref) / den)) < tol
 
@@ -618,7 +633,7 @@ def test_p8_conv2d_matmul2d_lane(dtype, act, K, st, pad, dil):
         cast = ml.bfloat16
     else:
         cast = np.float16
-    rng = np.random.default_rng(hash((dtype, act, K, st, pad, dil)) % 10000)
+    rng = np.random.default_rng(_seed(dtype, act, K, st, pad, dil))
     Ci, Co = 16, 32
     X = (rng.standard_normal((1, 9, 9, Ci)) * 0.3).astype(np.float32)
     W = (rng.standard_normal((K, K, Ci, Co)) * 0.1).astype(np.float32)

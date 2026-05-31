@@ -2825,12 +2825,16 @@ def _apple_gpu_conv2d_f16() -> Any:
 # tensor units (f16/bf16). This is the robust arbitrary-size conv lane; the native
 # MPP `convolution2d` cooperative op is verified single-tile but its multi-tile
 # grid convention is undocumented (see docs/apple_backend_integration_review.md P8).
-# OPT-IN, OFF by default: unlike P5 matmul (where MPS had no bf16 GEMM), conv's
-# legacy bf16 path already runs the well-tuned MPSGraph *f32* conv + a host cast
-# (fast), so this lane's *host* im2col gather currently makes it ~1.5-2x slower.
-# The matmul runs on the matrix units (f16/bf16, fused bias+act); the win needs a
-# GPU im2col to keep the gather on-device (the perf follow-up). Toggle with
-# TESSERA_APPLE_GPU_MTL4_CONV=1 / set_apple_gpu_mtl4_conv_routing(True).
+# OPT-IN, OFF by default. The unfold now runs ON the GPU (an MSL im2col kernel —
+# `apple_gpu_conv2d` prefers the on-device `tessera_apple_gpu_mtl4_conv2d_*`
+# symbol, host im2col only as a fallback), and the matmul runs on the matrix
+# units (f16/bf16, fused bias+act). But this still loses to MPSGraph's *fused*
+# conv (~0.55-0.77x): materializing the `col` matrix is extra memory traffic that
+# a fused/direct/Winograd conv avoids — so unlike P5 matmul (where MPS had no
+# bf16 GEMM), conv has no easy default-win. A default win needs the native MPP
+# `convolution2d` cooperative op (no col materialization; its multi-tile tiling
+# is undocumented) or a direct conv. Toggle: TESSERA_APPLE_GPU_MTL4_CONV=1 /
+# set_apple_gpu_mtl4_conv_routing(True).
 _MTL4_CONV_ROUTE = os.environ.get(
     "TESSERA_APPLE_GPU_MTL4_CONV", "0") in ("1", "true", "True")
 
@@ -2861,21 +2865,66 @@ def _im2col_nhwc(X: Any, kH: int, kW: int, sH: int, sW: int,
     return np.ascontiguousarray(col), OH, OW
 
 
+def _apple_gpu_mtl4_conv2d_sym(dtype: str) -> Any:
+    """P8 on-device conv symbol (GPU im2col + matmul2d epilogue). None if absent."""
+    runtime = _load_apple_gpu_runtime()
+    name = "tessera_apple_gpu_mtl4_conv2d_bf16" if dtype == "bf16" else "tessera_apple_gpu_mtl4_conv2d_f16"
+    sym = getattr(runtime, name, None)
+    if sym is None:
+        return None
+    u16 = ctypes.POINTER(ctypes.c_uint16)
+    fp = ctypes.POINTER(ctypes.c_float)
+    i32 = ctypes.c_int32
+    sym.argtypes = [u16, u16, fp, fp, i32] + [i32] * 13
+    sym.restype = i32
+    return sym
+
+
 def apple_gpu_conv2d(X: Any, W: Any, np: Any, *, bias: Any = None, act: str = "none",
                      stride=1, padding=0, dilation=1, dtype: str = "f16"):
-    """P8 — 2-D convolution as im2col + the fused ``matmul2d`` epilogue on the GPU
-    matrix units. ``X`` is NHWC, ``W`` is HWIO ``[kH,kW,Cin,Cout]``, ``bias`` is
-    ``[Cout]``, ``act`` in {none,relu,gelu,silu}. groups=1 only. Returns
-    ``(Y[N,OH,OW,Cout], ran_on_mtl4)``; numpy fallback when Metal 4 is
-    unavailable. See docs/apple_backend_integration_review.md (P8)."""
+    """P8 — 2-D convolution on the GPU matrix units via im2col + the fused
+    ``matmul2d`` epilogue. ``X`` is NHWC, ``W`` is HWIO ``[kH,kW,Cin,Cout]``,
+    ``bias`` is ``[Cout]``, ``act`` in {none,relu,gelu,silu}. groups=1 only.
+    Prefers the on-device path (GPU im2col, ``col`` never leaves the GPU); falls
+    back to a host im2col + the epilogue when the on-device symbol didn't run.
+    Returns ``(Y[N,OH,OW,Cout] float32, ran_on_mtl4)``; numpy fallback off Metal 4.
+    See docs/apple_backend_integration_review.md (P8)."""
     def _pair(v):
         return (int(v[0]), int(v[1])) if isinstance(v, (tuple, list)) else (int(v), int(v))
     sH, sW = _pair(stride); pH, pW = _pair(padding); dH, dW = _pair(dilation)
-    kH, kW, Cin, Cout = (int(s) for s in W.shape)
-    col, OH, OW = _im2col_nhwc(np.asarray(X, np.float32), kH, kW, sH, sW, pH, pW, dH, dW, np)
-    Wr = np.asarray(W, np.float32).reshape(kH * kW * Cin, Cout)
-    Y, ran = apple_gpu_mtl4_matmul2d_epilogue(col, Wr, np, bias=bias, act=act, dtype=dtype)
-    return Y.reshape(int(X.shape[0]), OH, OW, Cout), ran
+    N = int(X.shape[0]); kH, kW, Cin, Cout = (int(s) for s in W.shape)
+    H, Wd = int(X.shape[1]), int(X.shape[2])
+    OH = (H + 2 * pH - dH * (kH - 1) - 1) // sH + 1
+    OW = (Wd + 2 * pW - dW * (kW - 1) - 1) // sW + 1
+    act_code = _MTL4_EPILOGUE_ACT.get(act)
+    if act_code is None:
+        raise ValueError(f"act must be one of {sorted(_MTL4_EPILOGUE_ACT)}; got {act!r}")
+    in_dtype = _bfloat16_dtype() if dtype == "bf16" else np.float16
+    if in_dtype is None:
+        raise RuntimeError("bf16 conv requires the optional ml_dtypes package")
+    Xc = np.ascontiguousarray(X, in_dtype)
+    Wr = np.ascontiguousarray(np.asarray(W, in_dtype).reshape(kH * kW * Cin, Cout))
+    bias_f = np.ascontiguousarray(bias, np.float32).reshape(-1) if bias is not None else None
+
+    # On-device path: GPU im2col → matmul2d epilogue (col stays on the GPU).
+    sym = _apple_gpu_mtl4_conv2d_sym(dtype)
+    if sym is not None:
+        u16 = ctypes.POINTER(ctypes.c_uint16)
+        fp = ctypes.POINTER(ctypes.c_float)
+        Y = np.empty((N * OH * OW, Cout), np.float32)
+        rc = sym(Xc.view(np.uint16).ctypes.data_as(u16),
+                 Wr.view(np.uint16).ctypes.data_as(u16),
+                 bias_f.ctypes.data_as(fp) if bias_f is not None else None,
+                 Y.ctypes.data_as(fp), ctypes.c_int32(act_code),
+                 *[ctypes.c_int32(v) for v in
+                   (N, H, Wd, Cin, Cout, kH, kW, sH, sW, pH, pW, dH, dW)])
+        if rc == 1:
+            return Y.reshape(N, OH, OW, Cout), True
+
+    # Fallback: host im2col + the epilogue (also numpy-falls-back off Metal 4).
+    col, OH2, OW2 = _im2col_nhwc(np.asarray(X, np.float32), kH, kW, sH, sW, pH, pW, dH, dW, np)
+    Y, ran = apple_gpu_mtl4_matmul2d_epilogue(col, Wr, np, bias=bias_f, act=act, dtype=dtype)
+    return Y.reshape(N, OH2, OW2, Cout), ran
 
 
 def _apple_gpu_dispatch_conv2d(operands: list[Any], kwargs: dict, np: Any) -> Any:
@@ -4166,8 +4215,11 @@ def apple_gpu_metal4_caps() -> dict:
     caps = ctypes.c_int32(0)
     rc = sym(ctypes.byref(caps))
     bits = int(caps.value)
+    # "available" = the full MTL4 lane is usable (all 5 core bits), not just any
+    # single bit — matches the C probe + the doc (MTL4 + MTLTensor + MSL 4.0).
+    _METAL4_FULL = 1 | 2 | 4 | 8 | 16
     return {
-        "available": rc == 1,
+        "available": rc == 1 and bits == _METAL4_FULL,
         "command_queue": bool(bits & 1),
         "command_allocator": bool(bits & 2),
         "compiler": bool(bits & 4),
@@ -6345,6 +6397,9 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 # Metal 4 P4 — MTL4Archive pipeline persistence.
                 getattr(lib, "tessera_apple_gpu_mtl4_archive_enable")
                 getattr(lib, "tessera_apple_gpu_mtl4_archive_flush")
+                # P8 — on-device conv (GPU im2col + matmul2d epilogue).
+                getattr(lib, "tessera_apple_gpu_mtl4_conv2d_f16")
+                getattr(lib, "tessera_apple_gpu_mtl4_conv2d_bf16")
                 # Phase-G Rung 3 — dynamic speculative accept as one MSL kernel.
                 getattr(lib, "tessera_apple_gpu_msl_spec_accept")
                 _apple_gpu_runtime = lib

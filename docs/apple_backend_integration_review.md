@@ -160,12 +160,22 @@ accumulated, any size, stride/padding/dilation, groups=1). `runtime.apple_gpu_co
 reference across f16/bf16 × {none,relu,gelu,silu} × stride/pad/dilation × 1×1
 (`tests/unit/test_apple_gpu_metal4.py::test_p8_conv2d_matmul2d_lane`).
 
-**Opt-in, OFF by default** (`TESSERA_APPLE_GPU_MTL4_CONV=1` /
-`set_apple_gpu_mtl4_conv_routing`). Unlike P5 matmul, conv's legacy bf16 path
-already runs the well-tuned MPSGraph *f32* conv + a host cast (fast), so the
-lane's *host* im2col gather currently makes it ~1.5–2× slower. The matmul is on
-the matrix units; the win needs a **GPU im2col** so the gather stays on-device
-(the perf follow-up — then it flips on like P5).
+**GPU im2col (landed).** The unfold now runs **on the GPU** (an MSL `im2col`
+kernel; `apple_gpu_conv2d` prefers the on-device `tessera_apple_gpu_mtl4_conv2d_*`
+symbol — `col` never leaves the GPU — with host im2col only as a fallback). Two
+MTL4 dispatches (im2col → matmul2d epilogue) in the reusable-object path; correct
+to ≤2e-5 across stride/padding/dilation/1×1 (a partial-M-tile grid-swap bug was
+found + fixed — the matmul2d kernel slices A-rows by `tg.x`, so the conv grid must
+be `(M_tiles, N_tiles)`).
+
+**Still opt-in, OFF by default.** On-device im2col removed the host-gather cost
+(host ~0.5× → GPU ~0.55–0.77× of MPSGraph) but **still loses to MPSGraph's *fused*
+conv** (f16 0.65–0.77×; bf16 0.54–0.57× vs the MPSGraph-f32 legacy path).
+Materializing the `col` matrix is extra memory traffic a fused/direct/Winograd
+conv avoids — so unlike P5 matmul, conv has **no easy default-win via im2col**.
+The path to beating MPSGraph is the native MPP `convolution2d` cooperative op (no
+col materialization — multi-tile tiling undocumented) or a direct conv, not
+materialized im2col. Toggle `TESSERA_APPLE_GPU_MTL4_CONV=1`.
 
 **Native `mpp::tensor_ops::convolution2d` — investigated, conventions cracked,
 multi-tile blocked.** The cooperative conv op compiles and is **bit-correct

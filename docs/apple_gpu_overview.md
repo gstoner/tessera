@@ -1,6 +1,8 @@
 # Apple GPU backend — Phase 8 overview
 
-> **Status:** Phase 8.3 → 8.4.7 complete. The apple_gpu runtime path executes single-op and multi-op chains for matmul, rope, softmax, gelu, flash_attn, rmsnorm, plus four fused kernels covering attention and MLP blocks. f32 is fully wired; f16/bf16 are wired for matmul, rope, softmax, gelu, flash_attn, and matmul→softmax / flash_attn fusion.
+> **Status:** Phase 8.3 → 8.4.8 complete, **plus the Metal 4 lane (M0–M8 + P-series)**. The apple_gpu runtime path executes single-op and multi-op chains for matmul, rope, softmax, gelu, flash_attn, rmsnorm, swiglu, plus fused kernels covering attention and MLP blocks. f32 is fully wired; f16/bf16 are wired for matmul, rope, softmax, gelu, flash_attn, and the fusion chains.
+>
+> **Metal 4 (macOS 26+ / MSL 4.0) — authoritative ladder: [apple_gpu_metal4_adoption.md](apple_gpu_metal4_adoption.md); review: [apple_backend_integration_review.md](apple_backend_integration_review.md).** A parallel lane alongside MPSGraph using the MTL4 command model + `MTLTensor` + the MetalPerformancePrimitives cooperative `matmul2d`: M6 fp16 matmul (beats MPS) + bf16 (beats the conversion fallback ~10–15×), M7 fused bias+activation epilogue, M8 resident-weight MLP-block session, P2/P3 reusable-object dispatch, P4 pipeline archives, **P5 default bf16 matmul routing**, **P6 compile-time `linear+bias+act` → epilogue fusion**, P8 conv on the matrix units (im2col + matmul2d, opt-in). The classic kernels below are unchanged and remain the default for f32.
 >
 > **GA / EBM (2026-05-18):** 17/17 GA primitives + 9/9 native EBM primitives ship fused MSL kernels. `@clifford_jit(target="apple_gpu")` does AST → `CliffordIRProgram` lowering at decoration time. Every dispatcher uses RAII `TS_METAL_BUF_ACQUIRE` macros for buffer-pool acquire — early-return paths are release-safe by construction. See [docs/status/ga_ebm_milestone.md](status/ga_ebm_milestone.md).
 

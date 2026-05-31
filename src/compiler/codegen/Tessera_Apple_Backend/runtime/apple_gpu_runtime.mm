@@ -8700,7 +8700,12 @@ extern "C" int32_t tessera_apple_gpu_metal4_probe(int32_t *caps_out) {
     }
   }
   if (caps_out) *caps_out = caps;
-  return caps != 0 ? 1 : 0;
+  // "available" means the FULL MTL4 lane is usable, not just any single bit:
+  // the cooperative matmul2d/epilogue/session paths all need the command queue,
+  // a command allocator, the MTL4 compiler, MTLTensor, and MSL 4.0. A partial
+  // stack (some bit missing) must report unavailable so lanes skip cleanly.
+  const int32_t kFull = 1 | 2 | 4 | 8 | 16;   // queue|alloc|compiler|tensor|msl4
+  return caps == kFull ? 1 : 0;
 }
 
 // Metal 4 M1 — round-trip n elements of `in` through a native MTLTensor of the
@@ -9299,6 +9304,135 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_epilogue_bf16(
     int32_t act, int32_t M, int32_t N, int32_t K) {
   return mtl4_matmul2d_dispatch(@"mtl4_matmul2d_epilogue_bf16", MTLTensorDataTypeBFloat16,
                                 A, B, C, M, N, K, /*fused=*/true, bias, act);
+}
+
+//===----------------------------------------------------------------------===//
+// P8 (perf) — on-device conv2d: GPU im2col + the matmul2d epilogue, with the
+// unfolded `col` matrix kept on the GPU between the two dispatches (no host
+// im2col gather — the bottleneck that made the conv lane slower than MPSGraph).
+// Stage 1: an MSL gather writes col[M=N*OH*OW, Kk=kH*kW*Cin] from NHWC X
+// (zero-padded, strided, dilated). Stage 2: the existing matmul2d epilogue
+// kernel computes Y(f32) = act(col @ Wr + bias) on the matrix units, reading
+// col as a device MTLTensor. f16/bf16. See docs/apple_backend_integration_review.md (P8).
+//===----------------------------------------------------------------------===//
+static NSString *kIm2colMSL = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+// p = {N,H,W,Cin,kH,kW,sH,sW,pH,pW,dH,dW,OH,OW}. One thread per col element.
+#define TS_IM2COL(NAME, ET) \
+kernel void NAME(device const ET *X [[buffer(0)]], device ET *col [[buffer(1)]], \
+                 constant int *p [[buffer(2)]], uint gid [[thread_position_in_grid]]) { \
+  int N=p[0],H=p[1],W=p[2],Cin=p[3],kH=p[4],kW=p[5],sH=p[6],sW=p[7]; \
+  int pH=p[8],pW=p[9],dH=p[10],dW=p[11],OH=p[12],OW=p[13]; \
+  int Kk=kH*kW*Cin, M=N*OH*OW; \
+  if ((int)gid >= M*Kk) return; \
+  int row=(int)gid/Kk, k=(int)gid%Kk; \
+  int n=row/(OH*OW), r=row%(OH*OW), oh=r/OW, ow=r%OW; \
+  int kh=k/(kW*Cin), kk=k%(kW*Cin), kw=kk/Cin, ci=kk%Cin; \
+  int ih=oh*sH - pH + kh*dH, iw=ow*sW - pW + kw*dW; \
+  ET v = (ET)0; \
+  if (ih>=0 && ih<H && iw>=0 && iw<W) v = X[((n*H+ih)*W+iw)*Cin + ci]; \
+  col[gid] = v; }
+TS_IM2COL(im2col_f16, half)
+TS_IM2COL(im2col_bf16, bfloat)
+)MSL";
+
+// X NHWC (uint16 f16/bf16), W HWIO reshaped to [Kk, Cout] (uint16), bias [Cout]
+// (f32, may be null), Y [N*OH*OW, Cout] (f32). act 0..3. Returns 1 if it ran.
+static int32_t mtl4_conv2d_dispatch(MTLTensorDataType dt, bool bf16,
+                                    const uint16_t *X, const uint16_t *Wr,
+                                    const float *bias, float *Y, int32_t act,
+                                    int32_t N, int32_t H, int32_t W, int32_t Cin,
+                                    int32_t Cout, int32_t kH, int32_t kW,
+                                    int32_t sH, int32_t sW, int32_t pH, int32_t pW,
+                                    int32_t dH, int32_t dW) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !X || !Wr || !Y) return 0;
+  @autoreleasepool {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      int OH = (H + 2 * pH - dH * (kH - 1) - 1) / sH + 1;
+      int OW = (W + 2 * pW - dW * (kW - 1) - 1) / sW + 1;
+      if (OH <= 0 || OW <= 0) return 0;
+      int M = N * OH * OW, Kk = kH * kW * Cin, Nn = Cout;
+      id<MTLDevice> dev = ctx.device;
+      id<MTLComputePipelineState> imp = compile_mtl4_pipeline(
+          ctx, kIm2colMSL, bf16 ? @"im2col_bf16" : @"im2col_f16");
+      id<MTLComputePipelineState> mmp = compile_mtl4_pipeline(
+          ctx, kMTL4Matmul2dMSL, bf16 ? @"mtl4_matmul2d_epilogue_bf16"
+                                      : @"mtl4_matmul2d_epilogue_f16");
+      if (!imp || !mmp) return 0;
+
+      MTLResourceOptions ro = MTLResourceStorageModeShared;
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bX, ctx, X, (size_t)N * H * W * Cin * 2);
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bW, ctx, Wr, (size_t)Kk * Nn * 2);
+      TS_METAL_BUF_ACQUIRE(bCol, ctx, (size_t)M * Kk * 2);   // stays on-GPU
+      TS_METAL_BUF_ACQUIRE(bY, ctx, (size_t)M * Nn * 4);
+      if (!bX || !bW || !bCol || !bY) return 0;
+      int ip[14] = {N, H, W, Cin, kH, kW, sH, sW, pH, pW, dH, dW, OH, OW};
+      id<MTLBuffer> bIP = [dev newBufferWithBytes:ip length:sizeof(ip) options:ro];
+      int has_bias = bias ? 1 : 0;
+      float zero = 0.0f;
+      id<MTLBuffer> bBias = bias ? [dev newBufferWithBytes:bias length:(size_t)Nn * 4 options:ro]
+                                 : [dev newBufferWithBytes:&zero length:4 options:ro];
+      int mp[2] = {has_bias, act};
+      id<MTLBuffer> bP = [dev newBufferWithBytes:mp length:sizeof(mp) options:ro];
+      // col / W / Y as device MTLTensors for the matmul2d stage.
+      id<MTLTensor> tCol = make_buffer_tensor(dev, bCol, Kk, M, dt);
+      id<MTLTensor> tW = make_buffer_tensor(dev, bW, Nn, Kk, dt);
+      id<MTLTensor> tY = make_buffer_tensor(dev, bY, Nn, M, MTLTensorDataTypeFloat32);
+      if (!bIP || !bBias || !bP || !tCol || !tW || !tY) return 0;
+
+      id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
+      if (!queue) return 0;
+      bool done = false;
+      {
+        std::lock_guard<std::mutex> lock(ctx.mtl4_dispatch_mu);
+        NSError *err = nil;
+        id<MTLResidencySet> res = [dev newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
+        if (!res) return 0;
+        for (id<MTLBuffer> b : {bX, bW, bCol, bY, bIP, bBias, bP}) [res addAllocation:b];
+        [res commit];
+        [res requestResidency];
+        [queue addResidencySet:res];
+        // Stage 1 — GPU im2col (X -> bCol). col never leaves the device.
+        done = mtl4_encode_and_wait(ctx, queue, imp, ^(id<MTL4ArgumentTable> at) {
+          [at setAddress:bX.gpuAddress atIndex:0];
+          [at setAddress:bCol.gpuAddress atIndex:1];
+          [at setAddress:bIP.gpuAddress atIndex:2];
+        }, MTLSizeMake((M * Kk + 255) / 256, 1, 1), MTLSizeMake(256, 1, 1));
+        // Stage 2 — matmul2d epilogue (col @ W + bias, act -> Y) on the matrix units.
+        if (done)
+          done = mtl4_encode_and_wait(ctx, queue, mmp, ^(id<MTL4ArgumentTable> at) {
+            [at setResource:tCol.gpuResourceID atBufferIndex:0];
+            [at setResource:tW.gpuResourceID atBufferIndex:1];
+            [at setResource:tY.gpuResourceID atBufferIndex:2];
+            [at setAddress:bBias.gpuAddress atIndex:3];
+            [at setAddress:bP.gpuAddress atIndex:4];
+          }, MTLSizeMake((M + 63) / 64, (Nn + 63) / 64, 1), MTLSizeMake(128, 1, 1));
+        [queue removeResidencySet:res];
+      }
+      if (!done) return 0;
+      std::memcpy(Y, [bY contents], (size_t)M * Nn * 4);
+      return 1;
+    }
+  }
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_mtl4_conv2d_f16(
+    const uint16_t *X, const uint16_t *Wr, const float *bias, float *Y, int32_t act,
+    int32_t N, int32_t H, int32_t W, int32_t Cin, int32_t Cout, int32_t kH, int32_t kW,
+    int32_t sH, int32_t sW, int32_t pH, int32_t pW, int32_t dH, int32_t dW) {
+  return mtl4_conv2d_dispatch(MTLTensorDataTypeFloat16, false, X, Wr, bias, Y, act,
+                              N, H, W, Cin, Cout, kH, kW, sH, sW, pH, pW, dH, dW);
+}
+
+extern "C" int32_t tessera_apple_gpu_mtl4_conv2d_bf16(
+    const uint16_t *X, const uint16_t *Wr, const float *bias, float *Y, int32_t act,
+    int32_t N, int32_t H, int32_t W, int32_t Cin, int32_t Cout, int32_t kH, int32_t kW,
+    int32_t sH, int32_t sW, int32_t pH, int32_t pW, int32_t dH, int32_t dW) {
+  return mtl4_conv2d_dispatch(MTLTensorDataTypeBFloat16, true, X, Wr, bias, Y, act,
+                              N, H, W, Cin, Cout, kH, kW, sH, sW, pH, pW, dH, dW);
 }
 
 //===----------------------------------------------------------------------===//

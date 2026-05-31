@@ -1,6 +1,6 @@
 # Apple GPU kernel inventory
 
-> Last updated: Phase 8.4.7 complete. See [`apple_gpu_overview.md`](apple_gpu_overview.md) for the architecture story.
+> Last updated: Phase 8.4.8 complete + the Metal 4 lane (M0–M8 + P-series — fp16/bf16 cooperative `matmul2d`, fused bias+activation epilogue, resident-weight session, default bf16 matmul routing, `linear+bias+act` fusion, conv via im2col+matmul2d). See [`apple_gpu_overview.md`](apple_gpu_overview.md) for the architecture story, [`apple_gpu_metal4_adoption.md`](apple_gpu_metal4_adoption.md) for the Metal 4 ladder, and [`apple_backend_integration_review.md`](apple_backend_integration_review.md) for the integration review.
 
 The runtime dispatches one of these C ABI symbols per Graph IR op or recognized fusion chain. All symbols live in `src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm` (Darwin) and `apple_gpu_runtime_stub.cpp` (non-Darwin).
 

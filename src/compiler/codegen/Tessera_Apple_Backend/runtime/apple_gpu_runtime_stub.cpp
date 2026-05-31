@@ -1382,6 +1382,59 @@ extern "C" void tessera_apple_gpu_mtl4_mlp_session_destroy(void*) {}
 // Metal 4 P4 — MTL4Archive pipeline persistence; no Metal 4 off Darwin.
 extern "C" int32_t tessera_apple_gpu_mtl4_archive_enable(const char*) { return 0; }
 extern "C" int32_t tessera_apple_gpu_mtl4_archive_flush(void) { return 0; }
+// P8 — GPU im2col conv. Non-Apple reference: f16/bf16 -> f32 conv (Wr is the
+// HWIO weights reshaped to [kH*kW*Cin, Cout], byte-identical, so the existing
+// HWIO f32 reference applies), + bias + activation, -> f32 Y. The f32 conv
+// reference + out-dim helper are defined further down, so forward-declare them.
+static inline int32_t conv2d_out_dim_stub(int32_t in, int32_t k, int32_t stride,
+                                          int32_t pad, int32_t dilation);
+static void reference_conv2d_f32_stub(const float* X, const float* Wt,
+    const float* bias, float* O, int32_t N, int32_t H, int32_t W, int32_t Cin,
+    int32_t Cout, int32_t kH, int32_t kW, int32_t strideH, int32_t strideW,
+    int32_t padH, int32_t padW, int32_t dilationH, int32_t dilationW, int32_t groups);
+static void tessera_conv2d_mtl4_ref_stub(const uint16_t* X, const uint16_t* Wr,
+    const float* bias, float* Y, int32_t act, int32_t N, int32_t H, int32_t W,
+    int32_t Cin, int32_t Cout, int32_t kH, int32_t kW, int32_t sH, int32_t sW,
+    int32_t pH, int32_t pW, int32_t dH, int32_t dW, bool is_bf16) {
+  int32_t OH = conv2d_out_dim_stub(H, kH, sH, pH, dH);
+  int32_t OW = conv2d_out_dim_stub(W, kW, sW, pW, dW);
+  if (OH <= 0 || OW <= 0) return;
+  auto cvt = [&](uint16_t h) {
+    return is_bf16 ? gqa_bf16_to_f32_stub(h) : half_to_float_stub(h);
+  };
+  std::size_t xN = static_cast<std::size_t>(N) * H * W * Cin;
+  std::size_t wN = static_cast<std::size_t>(kH) * kW * Cin * Cout;
+  std::vector<float> Xf(xN), Wf(wN);
+  for (std::size_t i = 0; i < xN; ++i) Xf[i] = cvt(X[i]);
+  for (std::size_t i = 0; i < wN; ++i) Wf[i] = cvt(Wr[i]);
+  reference_conv2d_f32_stub(Xf.data(), Wf.data(), bias, Y, N, H, W, Cin, Cout,
+                            kH, kW, sH, sW, pH, pW, dH, dW, 1);
+  std::size_t oN = static_cast<std::size_t>(N) * OH * OW * Cout;
+  for (std::size_t i = 0; i < oN; ++i) {
+    float v = Y[i];
+    if (act == 1) v = v > 0 ? v : 0.0f;
+    else if (act == 2) { float t = 0.7978845608028654f * (v + 0.044715f * v * v * v);
+                         v = 0.5f * v * (1.0f + std::tanh(t)); }
+    else if (act == 3) v = v / (1.0f + std::exp(-v));
+    Y[i] = v;
+  }
+}
+extern "C" int32_t tessera_apple_gpu_mtl4_conv2d_f16(
+    const uint16_t* X, const uint16_t* Wr, const float* bias, float* Y, int32_t act,
+    int32_t N, int32_t H, int32_t W, int32_t Cin, int32_t Cout, int32_t kH, int32_t kW,
+    int32_t sH, int32_t sW, int32_t pH, int32_t pW, int32_t dH, int32_t dW) {
+  tessera_conv2d_mtl4_ref_stub(X, Wr, bias, Y, act, N, H, W, Cin, Cout, kH, kW,
+                               sH, sW, pH, pW, dH, dW, false);
+  return 1;
+}
+extern "C" int32_t tessera_apple_gpu_mtl4_conv2d_bf16(
+    const uint16_t* X, const uint16_t* Wr, const float* bias, float* Y, int32_t act,
+    int32_t N, int32_t H, int32_t W, int32_t Cin, int32_t Cout, int32_t kH, int32_t kW,
+    int32_t sH, int32_t sW, int32_t pH, int32_t pW, int32_t dH, int32_t dW) {
+  tessera_conv2d_mtl4_ref_stub(X, Wr, bias, Y, act, N, H, W, Cin, Cout, kH, kW,
+                               sH, sW, pH, pW, dH, dW, true);
+  return 1;
+}
 // Phase-G Rung 3 — dynamic speculative accept+select, non-Apple reference
 // (same logic the MSL kernel runs, so it's correct everywhere).
 extern "C" int32_t tessera_apple_gpu_msl_spec_accept(const int32_t* draft,
@@ -1628,11 +1681,19 @@ extern "C" void tessera_apple_gpu_bmm_f32(const float* A, const float* B,
       }
   }
 }
-extern "C" void tessera_apple_gpu_bmm_f16(const uint16_t*, const uint16_t*,
+extern "C" void tessera_apple_gpu_bmm_f16(const uint16_t* A, const uint16_t* B,
                                           uint16_t* O, int32_t batch, int32_t M,
-                                          int32_t N, int32_t, int32_t) {
-  // runtime.py upcasts to f32 on the fallback path.
-  std::memset(O, 0, static_cast<std::size_t>(batch) * M * N * 2);
+                                          int32_t N, int32_t K, int32_t b_broadcast) {
+  // Non-Apple reference: f16 -> f32 -> bmm -> f16 (runtime.py trusts the symbol
+  // on every platform, so the stub must compute, not zero-fill).
+  std::size_t aN = static_cast<std::size_t>(batch) * M * K;
+  std::size_t bN = static_cast<std::size_t>(b_broadcast ? 1 : batch) * K * N;
+  std::size_t oN = static_cast<std::size_t>(batch) * M * N;
+  std::vector<float> Af(aN), Bf(bN), Of(oN);
+  for (std::size_t i = 0; i < aN; ++i) Af[i] = half_to_float_stub(A[i]);
+  for (std::size_t i = 0; i < bN; ++i) Bf[i] = half_to_float_stub(B[i]);
+  tessera_apple_gpu_bmm_f32(Af.data(), Bf.data(), Of.data(), batch, M, N, K, b_broadcast);
+  for (std::size_t i = 0; i < oN; ++i) O[i] = float_to_half_stub(Of[i]);
 }
 // R1 device-resident bmm — non-Apple reference. The handles are host-memory
 // backed, so this is the same bmm into O->data.
@@ -2028,14 +2089,30 @@ extern "C" void tessera_apple_gpu_conv2d_f32(
                             strideW, padH, padW, dilationH, dilationW, groups);
 }
 extern "C" void tessera_apple_gpu_conv2d_f16(
-    const uint16_t*, const uint16_t*, const uint16_t*, uint16_t* O, int32_t N,
-    int32_t H, int32_t W, int32_t, int32_t Cout, int32_t kH, int32_t kW,
+    const uint16_t* X, const uint16_t* Wt, const uint16_t* bias, uint16_t* O,
+    int32_t N, int32_t H, int32_t W, int32_t Cin, int32_t Cout, int32_t kH, int32_t kW,
     int32_t strideH, int32_t strideW, int32_t padH, int32_t padW,
-    int32_t dilationH, int32_t dilationW, int32_t) {
+    int32_t dilationH, int32_t dilationW, int32_t groups) {
   int32_t outH = conv2d_out_dim_stub(H, kH, strideH, padH, dilationH);
   int32_t outW = conv2d_out_dim_stub(W, kW, strideW, padW, dilationW);
-  if (outH > 0 && outW > 0)
-    std::memset(O, 0, static_cast<std::size_t>(N) * outH * outW * Cout * 2);
+  if (outH <= 0 || outW <= 0 || groups <= 0) return;
+  // Non-Apple reference: f16 -> f32 -> conv -> f16 (the stub must compute).
+  std::size_t xN = static_cast<std::size_t>(N) * H * W * Cin;
+  std::size_t wN = static_cast<std::size_t>(kH) * kW * (Cin / groups) * Cout;
+  std::size_t oN = static_cast<std::size_t>(N) * outH * outW * Cout;
+  std::vector<float> Xf(xN), Wf(wN), Of(oN), Bf;
+  for (std::size_t i = 0; i < xN; ++i) Xf[i] = half_to_float_stub(X[i]);
+  for (std::size_t i = 0; i < wN; ++i) Wf[i] = half_to_float_stub(Wt[i]);
+  const float* bptr = nullptr;
+  if (bias) {
+    Bf.resize(Cout);
+    for (int32_t i = 0; i < Cout; ++i) Bf[i] = half_to_float_stub(bias[i]);
+    bptr = Bf.data();
+  }
+  reference_conv2d_f32_stub(Xf.data(), Wf.data(), bptr, Of.data(), N, H, W, Cin,
+                            Cout, kH, kW, strideH, strideW, padH, padW,
+                            dilationH, dilationW, groups);
+  for (std::size_t i = 0; i < oN; ++i) O[i] = float_to_half_stub(Of[i]);
 }
 
 // ---- conv3d non-Apple reference (NDHWC source, DHWIO weights) (2026-05-30) --

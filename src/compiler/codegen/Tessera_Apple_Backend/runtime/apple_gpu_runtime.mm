@@ -402,6 +402,175 @@ extern "C" void tessera_apple_gpu_mps_matmul_f32(const float* A,
   reference_gemm_f32(A, B, C, M, N, K);
 }
 
+//===----------------------------------------------------------------------===//
+// GPU linear-algebra lane — Cholesky / LU / triangular solve via the
+// MetalPerformanceShaders MPSMatrix* fixed-function kernels. This is the one
+// capability MPSGraph cannot provide (it has no matrix-decomposition ops), so
+// these dense f32 factorizations/solves are the only GPU path for
+// tessera.ops.{cholesky, solve, cholesky_solve, tri_solve} — previously
+// numpy/CPU only. Rank-2 f32; batched + f16 are follow-ups. Each returns 0 on a
+// successful GPU run and a non-zero code otherwise (Metal unavailable = -1, or a
+// singular / non-positive-definite matrix = 2), so the Python wrapper cleanly
+// falls back to the numpy reference. All matrices are row-major (MPSMatrix
+// native), matching numpy's storage so no transpose is needed at the boundary.
+//===----------------------------------------------------------------------===//
+namespace {
+
+// Row-major MPSMatrix over an existing buffer (4-byte elements: f32 or uint32).
+static MPSMatrix *ts_mps_mat(id<MTLBuffer> buf, int rows, int cols, MPSDataType dt) {
+  MPSMatrixDescriptor *d =
+      [MPSMatrixDescriptor matrixDescriptorWithRows:(NSUInteger)rows
+                                            columns:(NSUInteger)cols
+                                           rowBytes:(NSUInteger)cols * 4
+                                           dataType:dt];
+  return [[MPSMatrix alloc] initWithBuffer:buf descriptor:d];
+}
+
+// The MPSMatrixDecompositionStatus int written into the status buffer.
+static int ts_decomp_status(id<MTLBuffer> s) {
+  return s ? *((const int *)[s contents]) : -1;
+}
+
+}  // namespace
+
+// Cholesky: A (n×n SPD, row-major f32) -> L lower-triangular with A = L·Lᵀ. The
+// strict upper triangle of L is zeroed to match numpy.linalg.cholesky. 0 on
+// success; 2 if A is not positive-definite; -1 if Metal is unavailable.
+extern "C" int32_t tessera_apple_gpu_cholesky_f32(const float *A, float *L, int32_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !A || !L || n <= 0) return -1;
+  @autoreleasepool {
+    size_t bytes = (size_t)n * n * 4;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bA, ctx, A, bytes);
+    TS_METAL_BUF_ACQUIRE(bR, ctx, bytes);
+    TS_METAL_BUF_ACQUIRE(bS, ctx, sizeof(int));
+    if (!bA || !bR || !bS) return -1;
+    MPSMatrix *mA = ts_mps_mat(bA, n, n, MPSDataTypeFloat32);
+    MPSMatrix *mR = ts_mps_mat(bR, n, n, MPSDataTypeFloat32);
+    MPSMatrixDecompositionCholesky *chol = [[MPSMatrixDecompositionCholesky alloc]
+        initWithDevice:ctx.device lower:YES order:(NSUInteger)n];
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    [chol encodeToCommandBuffer:cb sourceMatrix:mA resultMatrix:mR status:bS];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return -1;
+    if (ts_decomp_status(bS) != MPSMatrixDecompositionStatusSuccess) return 2;
+    const float *R = (const float *)[bR contents];
+    for (int i = 0; i < n; ++i)
+      for (int j = 0; j < n; ++j)
+        L[(size_t)i * n + j] = (j <= i) ? R[(size_t)i * n + j] : 0.0f;
+    return 0;
+  }
+}
+
+// SPD solve: factor A = L·Lᵀ (Cholesky) then solve A·X = B for X. A is n×n
+// row-major f32; B/X are n×nrhs row-major f32. 0 on success; 2 if not PD.
+extern "C" int32_t tessera_apple_gpu_solve_cholesky_f32(const float *A, const float *B,
+                                                        float *X, int32_t n, int32_t nrhs) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !A || !B || !X || n <= 0 || nrhs <= 0) return -1;
+  @autoreleasepool {
+    size_t aB = (size_t)n * n * 4, rB = (size_t)n * nrhs * 4;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bA, ctx, A, aB);
+    TS_METAL_BUF_ACQUIRE(bL, ctx, aB);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bB, ctx, B, rB);
+    TS_METAL_BUF_ACQUIRE(bX, ctx, rB);
+    TS_METAL_BUF_ACQUIRE(bS, ctx, sizeof(int));
+    if (!bA || !bL || !bB || !bX || !bS) return -1;
+    MPSMatrix *mA = ts_mps_mat(bA, n, n, MPSDataTypeFloat32);
+    MPSMatrix *mL = ts_mps_mat(bL, n, n, MPSDataTypeFloat32);
+    MPSMatrix *mB = ts_mps_mat(bB, n, nrhs, MPSDataTypeFloat32);
+    MPSMatrix *mX = ts_mps_mat(bX, n, nrhs, MPSDataTypeFloat32);
+    MPSMatrixDecompositionCholesky *chol = [[MPSMatrixDecompositionCholesky alloc]
+        initWithDevice:ctx.device lower:YES order:(NSUInteger)n];
+    MPSMatrixSolveCholesky *solve = [[MPSMatrixSolveCholesky alloc]
+        initWithDevice:ctx.device upper:NO order:(NSUInteger)n
+        numberOfRightHandSides:(NSUInteger)nrhs];
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    [chol encodeToCommandBuffer:cb sourceMatrix:mA resultMatrix:mL status:bS];
+    [solve encodeToCommandBuffer:cb sourceMatrix:mL rightHandSideMatrix:mB solutionMatrix:mX];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return -1;
+    if (ts_decomp_status(bS) != MPSMatrixDecompositionStatusSuccess) return 2;
+    std::memcpy(X, [bX contents], rB);
+    return 0;
+  }
+}
+
+// General solve: factor A = P·L·U (LU with partial pivoting) then solve A·X = B.
+// A is n×n row-major f32; B/X are n×nrhs row-major f32. 0 on success; 2 if
+// singular.
+extern "C" int32_t tessera_apple_gpu_solve_lu_f32(const float *A, const float *B,
+                                                  float *X, int32_t n, int32_t nrhs) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !A || !B || !X || n <= 0 || nrhs <= 0) return -1;
+  @autoreleasepool {
+    size_t aB = (size_t)n * n * 4, rB = (size_t)n * nrhs * 4, pB = (size_t)n * 4;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bA, ctx, A, aB);
+    TS_METAL_BUF_ACQUIRE(bLU, ctx, aB);
+    TS_METAL_BUF_ACQUIRE(bP, ctx, pB);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bB, ctx, B, rB);
+    TS_METAL_BUF_ACQUIRE(bX, ctx, rB);
+    TS_METAL_BUF_ACQUIRE(bS, ctx, sizeof(int));
+    if (!bA || !bLU || !bP || !bB || !bX || !bS) return -1;
+    MPSMatrix *mA = ts_mps_mat(bA, n, n, MPSDataTypeFloat32);
+    MPSMatrix *mLU = ts_mps_mat(bLU, n, n, MPSDataTypeFloat32);
+    MPSMatrix *mP = ts_mps_mat(bP, 1, n, MPSDataTypeUInt32);
+    MPSMatrix *mB = ts_mps_mat(bB, n, nrhs, MPSDataTypeFloat32);
+    MPSMatrix *mX = ts_mps_mat(bX, n, nrhs, MPSDataTypeFloat32);
+    MPSMatrixDecompositionLU *lu = [[MPSMatrixDecompositionLU alloc]
+        initWithDevice:ctx.device rows:(NSUInteger)n columns:(NSUInteger)n];
+    MPSMatrixSolveLU *solve = [[MPSMatrixSolveLU alloc]
+        initWithDevice:ctx.device transpose:NO order:(NSUInteger)n
+        numberOfRightHandSides:(NSUInteger)nrhs];
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    [lu encodeToCommandBuffer:cb sourceMatrix:mA resultMatrix:mLU pivotIndices:mP status:bS];
+    [solve encodeToCommandBuffer:cb sourceMatrix:mLU rightHandSideMatrix:mB
+                   pivotIndices:mP solutionMatrix:mX];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return -1;
+    if (ts_decomp_status(bS) != MPSMatrixDecompositionStatusSuccess) return 2;
+    std::memcpy(X, [bX contents], rB);
+    return 0;
+  }
+}
+
+// Triangular solve: solve op(tri(A))·X = B where tri(A) is the lower (lower=1)
+// or upper (lower=0) triangle of A, op is transpose when trans=1, and the
+// diagonal is treated as unit when unit=1. Only the relevant triangle of A is
+// read (BLAS trsm semantics), matching numpy's np.tril/np.triu. A is n×n,
+// B/X are n×nrhs, all row-major f32. 0 on success; -1 if Metal unavailable.
+extern "C" int32_t tessera_apple_gpu_tri_solve_f32(const float *A, const float *B,
+                                                   float *X, int32_t n, int32_t nrhs,
+                                                   int32_t lower, int32_t trans,
+                                                   int32_t unit) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !A || !B || !X || n <= 0 || nrhs <= 0) return -1;
+  @autoreleasepool {
+    size_t aB = (size_t)n * n * 4, rB = (size_t)n * nrhs * 4;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bA, ctx, A, aB);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bB, ctx, B, rB);
+    TS_METAL_BUF_ACQUIRE(bX, ctx, rB);
+    if (!bA || !bB || !bX) return -1;
+    MPSMatrix *mA = ts_mps_mat(bA, n, n, MPSDataTypeFloat32);
+    MPSMatrix *mB = ts_mps_mat(bB, n, nrhs, MPSDataTypeFloat32);
+    MPSMatrix *mX = ts_mps_mat(bX, n, nrhs, MPSDataTypeFloat32);
+    MPSMatrixSolveTriangular *solve = [[MPSMatrixSolveTriangular alloc]
+        initWithDevice:ctx.device right:NO upper:(lower ? NO : YES)
+             transpose:(trans ? YES : NO) unit:(unit ? YES : NO)
+                 order:(NSUInteger)n numberOfRightHandSides:(NSUInteger)nrhs alpha:1.0];
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    [solve encodeToCommandBuffer:cb sourceMatrix:mA rightHandSideMatrix:mB solutionMatrix:mX];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return -1;
+    std::memcpy(X, [bX contents], rB);
+    return 0;
+  }
+}
+
 //===---------------------------------------------------------------------===//
 // Phase 8.4.4 — fp16 / bf16 matmul (mirrors Phase 8.2 BNNS bf16 pattern)
 //

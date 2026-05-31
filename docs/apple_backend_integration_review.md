@@ -258,6 +258,49 @@ documentation to see whether any should adopt the MTL4 command model / typed
 
 - **R3** — unassigned; the R-series numbering skips it.
 
+## GPU linear-algebra lane — Cholesky / LU / triangular solve (2026)
+
+**Shipped.** A dense f32 linear-algebra lane on the GPU via the
+MetalPerformanceShaders `MPSMatrix*` fixed-function kernels —
+`MPSMatrixDecompositionCholesky`, `MPSMatrixDecompositionLU`,
+`MPSMatrixSolveCholesky`, `MPSMatrixSolveLU`, `MPSMatrixSolveTriangular`. This is
+the **one capability MPSGraph cannot provide** — it has no matrix-decomposition
+ops — so before this lane `tessera.ops.{cholesky, solve, cholesky_solve,
+tri_solve}` had **no GPU path at all** (numpy/CPU reference only), despite having
+VJPs registered. It's the single place the legacy `MPSMatrix*` family offers
+something nothing else in the Apple stack can.
+
+Runtime C ABI (rank-2 f32): `tessera_apple_gpu_cholesky_f32`,
+`tessera_apple_gpu_solve_cholesky_f32`, `tessera_apple_gpu_solve_lu_f32`,
+`tessera_apple_gpu_tri_solve_f32`. Each returns `0` on a successful GPU run, `2`
+for a singular / non-positive-definite matrix, `-1` if Metal is unavailable — so
+the Python wrapper cleanly falls back to numpy (which raises the same
+`LinAlgError` a pure-numpy call would). Python:
+`runtime.apple_gpu_{cholesky, solve, cholesky_solve, tri_solve}(...)`, each
+returning `(result, ran_on_gpu)`.
+
+- **Matrices are row-major** (MPSMatrix native) — matches numpy storage, so **no
+  transpose at the boundary** (verified bit-correct first try). Cholesky uses
+  `lower:YES` and zeroes the strict-upper triangle to match
+  `numpy.linalg.cholesky`; the solves chain decomposition → solve internally (LU
+  pivots fed straight from `MPSMatrixDecompositionLU` into `MPSMatrixSolveLU`).
+- **Triangular solve** reads only the relevant triangle (BLAS trsm semantics),
+  matching `np.tril`/`np.triu`; `lower`/`trans`/`unit` flags all supported.
+- **Correctness:** rel ≤ 2e-4 vs an f64 numpy reference across Cholesky (+
+  reconstruction), SPD solve, general LU solve (matrix + vector RHS), and
+  triangular solve over the full `{lower,upper}×{trans}×{unit}` matrix. Uses the
+  RAII buffer pool (`TS_METAL_BUF_ACQUIRE*`) like every other dispatcher. Guarded
+  by `tests/unit/test_apple_gpu_linalg.py` (24 tests).
+
+**Scope / follow-ups.** Rank-2 f32 only this lane; **batched (`ndim>2`) and
+non-f32 inputs fall back to numpy** (still correct) — batched GPU (one dispatch
+per matrix, or MPSMatrix's batch stride) and f16 are the natural next steps. The
+lane is currently reached via the direct `runtime.apple_gpu_*` functions (the
+same way `apple_gpu_conv2d` started); wiring it into the eager
+`tessera.ops.{cholesky,…}` / the `@jit(target="apple_gpu")` dispatch so model
+code picks it up automatically is a follow-up. QR/SVD have no MPS kernel — they'd
+need a custom MSL or a different route.
+
 ## Verification against the Metal 4 SDK headers (2026 review)
 
 The API claims in this doc and in `apple_gpu_metal4_adoption.md` were

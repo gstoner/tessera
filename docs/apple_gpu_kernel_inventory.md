@@ -100,6 +100,25 @@ the runtime calls inside the `tessera-lower-to-apple_gpu-runtime` pipeline
 (the unweighted norms pass a null gamma/beta). Lit-checked by
 [tests/tessera-ir/phase8/apple_gpu_tier1_lowering.mlir](../tests/tessera-ir/phase8/apple_gpu_tier1_lowering.mlir).
 
+## Linear-algebra kernels (MPSMatrix — the one MPSGraph-can't lane)
+
+Dense f32 factorizations/solves via the MetalPerformanceShaders `MPSMatrix*`
+fixed-function kernels — MPSGraph has no matrix-decomposition ops, so this is the
+only GPU path for these. Each returns `0` (ran on GPU) / `2` (singular or
+non-positive-definite) / `-1` (no Metal); the Python wrapper falls back to the
+numpy reference otherwise. Row-major (no transpose at the boundary). Rank-2 f32
+only — batched / non-f32 fall back to numpy.
+
+| Symbol | Graph IR op | Backend | Constraints |
+|--------|-------------|---------|-------------|
+| `tessera_apple_gpu_cholesky_f32` | `tessera.cholesky` | MPSMatrixDecompositionCholesky | rank-2 SPD f32; strict-upper zeroed (numpy parity) |
+| `tessera_apple_gpu_solve_cholesky_f32` | `tessera.cholesky_solve` | Cholesky decomp + MPSMatrixSolveCholesky | rank-2 SPD f32, `[n,nrhs]` RHS |
+| `tessera_apple_gpu_solve_lu_f32` | `tessera.solve` | LU decomp + MPSMatrixSolveLU (partial pivot) | rank-2 f32, `[n,nrhs]` RHS |
+| `tessera_apple_gpu_tri_solve_f32` | `tessera.tri_solve` | MPSMatrixSolveTriangular | rank-2 f32; `lower`/`trans`/`unit` flags |
+
+Python: `runtime.apple_gpu_{cholesky, solve, cholesky_solve, tri_solve}(...)` →
+`(result, ran_on_gpu)`. Tests: `tests/unit/test_apple_gpu_linalg.py` (24).
+
 ## Capability + diagnostic symbols
 
 | Symbol | Purpose |

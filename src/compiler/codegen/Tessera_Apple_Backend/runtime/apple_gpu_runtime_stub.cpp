@@ -89,6 +89,25 @@ extern "C" void tessera_apple_gpu_mps_matmul_f32(const float* A,
   reference_gemm_f32(A, B, C, M, N, K);
 }
 
+// GPU linear-algebra lane — no Metal off Darwin; return -1 so the Python wrapper
+// falls back to the numpy reference (np.linalg.cholesky / solve / triangular).
+extern "C" int32_t tessera_apple_gpu_cholesky_f32(const float*, float*, int32_t) {
+  return -1;
+}
+extern "C" int32_t tessera_apple_gpu_solve_cholesky_f32(const float*, const float*,
+                                                        float*, int32_t, int32_t) {
+  return -1;
+}
+extern "C" int32_t tessera_apple_gpu_solve_lu_f32(const float*, const float*,
+                                                  float*, int32_t, int32_t) {
+  return -1;
+}
+extern "C" int32_t tessera_apple_gpu_tri_solve_f32(const float*, const float*,
+                                                   float*, int32_t, int32_t,
+                                                   int32_t, int32_t, int32_t) {
+  return -1;
+}
+
 namespace {
 
 // Phase 8.4.4 — fp16/bf16 bit-pattern conversion helpers for the non-Darwin

@@ -94,10 +94,27 @@ def test_mtl4_scan_msl_loop_matches_numpy_and_mpsgraph():
         assert ran
 
 
-@pytest.mark.parametrize("M,N,K", [(8, 8, 8), (16, 24, 32), (64, 32, 16)])
+@pytest.mark.parametrize(
+    "M,N,K",
+    [
+        # general (bounds-checked 32x32) path — non-64/16-aligned shapes
+        (8, 8, 8),       # single 8x8 sub-tile (< one 32x32 threadgroup tile)
+        (16, 24, 32),    # partial 32x32 tile, K spans 2 BK slabs
+        (64, 32, 16),    # multi-threadgroup in M
+        (40, 56, 24),    # M,N not 32-multiples -> exercises zero-pad + store mask
+        (128, 96, 32),   # N=96 not a 64-multiple -> general path
+        # fast (register-blocked vectorized 64x64) path — M%64,N%64,K%16 aligned
+        (64, 64, 16),    # single fast threadgroup tile
+        (128, 128, 128), # several fast tiles each way, multi-slab K
+        (192, 256, 64),  # non-square aligned, exercises 2x4 SIMD-group grid
+    ],
+)
 def test_mtl4_matmul_cooperative_matches_numpy(M, N, K):
-    """M3: matmul via MSL cooperative-matrix ops (simdgroup_matrix → matrix
-    units), dispatched through the MTL4 command model. Bit-close to numpy."""
+    """M3/M5: matmul via MSL cooperative-matrix ops (simdgroup_matrix → matrix
+    units). Aligned shapes (M%64,N%64,K%16) take the register-blocked vectorized
+    64x64 fast kernel; others take the bounds-checked 32x32 double-buffered
+    kernel. Both dispatch through the MTL4 command model and are bit-close to
+    numpy across partial- and multi-tile shapes."""
     rng = np.random.default_rng(M + N + K)
     A = rng.standard_normal((M, K)).astype(np.float32) * 0.1
     B = rng.standard_normal((K, N)).astype(np.float32) * 0.1

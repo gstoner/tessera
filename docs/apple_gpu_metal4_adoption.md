@@ -1,6 +1,6 @@
 # Metal 4 adoption — design + ladder
 
-> Status: **M0 + M1 + M2 + M3 landed.** This machine runs macOS 26.5 (Tahoe) with
+> Status: **M0 + M1 + M2 + M3 + M4 + M5 landed.** This machine runs macOS 26.5 (Tahoe) with
 > SDK 26.5, so the full Metal 4 surface is available:
 > `MTL4CommandQueue/Buffer/Allocator/Encoder`, `MTLTensor`, MSL 4.0
 > (`MTLLanguageVersion4_0`) — all `API_AVAILABLE(macos(26.0))`. M2 lands the
@@ -103,6 +103,49 @@ forced.
   perf. So M4 ships the *mechanism* (correct, validated bit-close to numpy/MPS
   when enabled) and leaves the *policy* off until a faster MTL4 kernel (e.g.
   MSL 4.0 `tensor` cooperative ops, better tiling/double-buffering) clears MPS.
+- **M5 — register-blocked, vectorized GEMM (landed; ~80% of MPS, ties at 1024).**
+  The M3 matmul gave one 8×8 output tile to one SIMD group and streamed A/B
+  straight from device memory — *zero* data reuse, so every output tile re-read
+  its whole row/column band (2–4.8× slower than MPS, widening with size). M5
+  rewrites `mtl4_matmul_sg` into **two kernels** chosen at dispatch:
+  - **fast path** (`mtl4_matmul_sg_fast`, used when M%64==0, N%64==0, K%16==0):
+    a register-blocked GEMM — each threadgroup computes a **64×64** output tile
+    with **eight 32-lane SIMD groups** (256 threads, 2×4 layout) each owning a
+    32×16 region (a **4×2 array of `simdgroup_float8x8` accumulators**, 8 per
+    thread — deliberately ≤8 to avoid register spill). K is walked in **BK=16**
+    slabs staged into threadgroup memory with **vectorized `float4` loads** and
+    **double-buffered** (next slab prefetched while the current computes).
+  - **general path** (`mtl4_matmul_sg`, any other M%8/N%8 shape, any K): a
+    bounds-checked 32×32 / 4-SIMD-group double-buffered kernel (zero-pad on load,
+    masked store) so correctness holds across all envelope shapes.
+
+  **Measured (M-series, Tahoe, f32, pure GPU-kernel time, best-of-3):** the fast
+  kernel hits **~6.6 TFLOP/s** vs the M3/32×32 prototype's ~2.4 — a **~2.8×
+  kernel speedup** — reaching **~80% of MPS** (8.2–8.3 TFLOP/s) and matching MPS
+  around N=1024. **It still does not beat MPS at 2048+, so routing stays OFF.**
+  Knobs swept and rejected: single-buffering, BK∈{8,32}, 128×64/128×128/64×128
+  tiles, and threadgroup bank-conflict padding all landed at ~6.0–6.6 TFLOP/s
+  (64×64 double-buffered was best); a 64×64 tile with 4×4 (=16) accumulators
+  *spills registers* and is ~3× worse. The simdgroup_matrix f32 path has
+  **plateaued at ~80% of MPS** here.
+
+  **MSL 4.0 cooperative `tensor` ops (MetalPerformancePrimitives `matmul2d`) —
+  investigated, not the f32 answer.** The MPP `mpp::tensor_ops::matmul2d`
+  cooperative-tensor op **does compile at runtime** via `newLibraryWithSource:`
+  with `MTLLanguageVersion4_0` (the framework headers resolve), but: (1) it has
+  **no f32×f32→f32 path under `execution_simdgroups`** — strict/relaxed f32 is
+  only supported under `execution_thread` (single-thread, not a fast GEMM). The
+  matrix units accelerate **fp16/bf16**, which is where `matmul2d` wins; f32 (our
+  production matmul dtype) does not benefit. (2) Even for fp16, the cooperative
+  `run` path requires **`tensor_handle` operands** (real `MTLTensor` bound via an
+  `MTL4ArgumentTable`), not in-kernel `tensor_inline` views built from a device
+  pointer. So adopting MPP means routing **fp16/bf16** matmul onto MTLTensor-bound
+  tensor args — a separate integration, and the genuine next rung if the MTL4
+  lane is to clear MPS (for half precision). For **f32**, the register-blocked
+  simdgroup_matrix kernel above is the realistic ceiling.
+
+  Tested by `tests/unit/test_apple_gpu_metal4.py::test_mtl4_matmul_cooperative_matches_numpy`
+  (general + fast paths, partial-tile, multi-threadgroup, and aligned shapes).
 
 ## Trade-offs + risks
 

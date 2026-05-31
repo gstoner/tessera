@@ -8727,35 +8727,177 @@ extern "C" int32_t tessera_apple_gpu_mtl4_scan_f32(const float *Wh,
 //===----------------------------------------------------------------------===//
 // Metal 4 M3 — fused matmul via MSL cooperative tensor ops (simdgroup_matrix),
 // dispatched through the MTL4 command model. simdgroup_matrix is the SIMD-group
-// cooperative matrix API that targets the GPU matrix/tensor units: each
-// threadgroup (one 32-lane SIMD group) computes one 8x8 output tile, looping
-// over K in 8-wide tiles with simdgroup_multiply_accumulate. M/N/K must be
-// multiples of 8. (MSL 4.0 also adds a more general `tensor` cooperative-op
-// type; simdgroup_matrix is the established cooperative path used here.) See
+// cooperative matrix API that targets the GPU matrix/tensor units.
+//
+// M5 — threadgroup-staged tiling + double-buffering (the kernel that has to
+// clear MPS before M4 routing flips on). The original M3 kernel gave one 8x8
+// output tile to one SIMD group and streamed A/B straight from device memory:
+// zero reuse, so every output tile re-read its whole row/column band — 2-4.8x
+// slower than MPS and widening with size (pure bandwidth bound).
+//
+// This kernel computes a BM(32) x BN(32) output tile per threadgroup with four
+// 32-lane SIMD groups (128 threads) laid out 2x2; each SIMD group owns a 16x16
+// region = a 2x2 array of simdgroup_float8x8 accumulators. The K dimension is
+// walked in BK(16)-wide slabs that are cooperatively staged into threadgroup
+// memory once and then re-read by all four SIMD groups (the reuse win), and the
+// next slab is prefetched into a second threadgroup buffer while the current one
+// is consumed (double-buffering, to hide the global->threadgroup load latency).
+// Out-of-range rows/cols are zero-padded on load and skipped on store, so any
+// M/N multiple of 8 and any K work (the dispatch keeps the 8-multiple envelope).
+// (MSL 4.0 also adds a more general `tensor` cooperative-op type; simdgroup_matrix
+// is the established cooperative path used here.) See
 // docs/apple_gpu_metal4_adoption.md.
 //===----------------------------------------------------------------------===//
 static NSString *kMTL4MatmulMSL = @R"MSL(
 #include <metal_stdlib>
 #include <metal_simdgroup_matrix>
 using namespace metal;
-// C[M,N] = A[M,K] @ B[K,N]; dims = {M, N, K}. One 8x8 output tile per threadgroup.
+
+constant constexpr int BM = 32;   // output-tile rows per threadgroup
+constant constexpr int BN = 32;   // output-tile cols per threadgroup
+constant constexpr int BK = 16;   // K-slab width staged per step
+constant constexpr int SG = 16;   // 16x16 region per SIMD group (2x2 of 8x8)
+constant constexpr int NT = 2;    // 8x8 tiles per SIMD-group axis (SG/8)
+
+// C[M,N] = A[M,K] @ B[K,N]; dims = {M, N, K}. One 32x32 output tile per
+// threadgroup, 4 SIMD groups (128 threads) in a 2x2 layout each owning a 16x16
+// region (2x2 of 8x8 accumulators), double-buffered K slabs.
 kernel void mtl4_matmul_sg(device const float *A    [[buffer(0)]],
                            device const float *B    [[buffer(1)]],
                            device float       *C    [[buffer(2)]],
                            device const int   *dims [[buffer(3)]],
-                           uint2 tg [[threadgroup_position_in_grid]]) {
+                           uint2 tg  [[threadgroup_position_in_grid]],
+                           uint  tid [[thread_index_in_threadgroup]],
+                           uint  sgid [[simdgroup_index_in_threadgroup]]) {
   int M = dims[0], N = dims[1], K = dims[2];
-  int row = int(tg.y) * 8;
-  int col = int(tg.x) * 8;
-  if (row >= M || col >= N) return;
-  simdgroup_float8x8 acc = simdgroup_float8x8(0.0f);
-  for (int k = 0; k < K; k += 8) {
-    simdgroup_float8x8 a, b;
-    simdgroup_load(a, A + row * K + k, K);   // 8x8 tile of A at (row, k)
-    simdgroup_load(b, B + k * N + col, N);   // 8x8 tile of B at (k, col)
-    simdgroup_multiply_accumulate(acc, a, b, acc);
+  int brow = int(tg.y) * BM;   // threadgroup output-tile origin
+  int bcol = int(tg.x) * BN;
+
+  // Double-buffered staging: As[buf][BM*BK], Bs[buf][BK*BN] -> 16 KB total.
+  threadgroup float As[2][BM * BK];
+  threadgroup float Bs[2][BK * BN];
+
+  // 2x2 SIMD-group layout; each owns a 16x16 region = 2x2 of 8x8 tiles.
+  int sg_row = int(sgid) / 2, sg_col = int(sgid) % 2;
+  int r0 = sg_row * SG, c0 = sg_col * SG;
+  simdgroup_float8x8 acc[NT][NT];
+  for (int i = 0; i < NT; ++i)
+    for (int j = 0; j < NT; ++j) acc[i][j] = make_filled_simdgroup_matrix<float, 8, 8>(0.0f);
+
+  // Cooperative stage of the K-slab at k0 into buffer `buf` (128 threads load
+  // BM*BK + BK*BN = 1024 + 1024 = 2048 floats, 16 each). Zero-pad out of range.
+  auto stage = [&](int buf, int k0) {
+    for (int e = int(tid); e < BM * BK; e += 128) {
+      int r = e / BK, kk = e % BK;
+      int gr = brow + r, gk = k0 + kk;
+      As[buf][e] = (gr < M && gk < K) ? A[gr * K + gk] : 0.0f;
+    }
+    for (int e = int(tid); e < BK * BN; e += 128) {
+      int kk = e / BN, c = e % BN;
+      int gk = k0 + kk, gc = bcol + c;
+      Bs[buf][e] = (gk < K && gc < N) ? B[gk * N + gc] : 0.0f;
+    }
+  };
+
+  int buf = 0;
+  stage(0, 0);
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+  for (int k0 = 0; k0 < K; k0 += BK) {
+    int nextk = k0 + BK;
+    if (nextk < K) stage(buf ^ 1, nextk);   // prefetch next slab while computing
+    for (int kk = 0; kk < BK; kk += 8) {
+      simdgroup_float8x8 a[NT], b[NT];
+      for (int i = 0; i < NT; ++i)
+        simdgroup_load(a[i], As[buf] + (r0 + i * 8) * BK + kk, BK);
+      for (int j = 0; j < NT; ++j)
+        simdgroup_load(b[j], Bs[buf] + kk * BN + (c0 + j * 8), BN);
+      for (int i = 0; i < NT; ++i)
+        for (int j = 0; j < NT; ++j)
+          simdgroup_multiply_accumulate(acc[i][j], a[i], b[j], acc[i][j]);
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    buf ^= 1;
   }
-  simdgroup_store(acc, C + row * N + col, N);
+
+  // Store each in-range 8x8 sub-tile. M%8==0 && N%8==0 => an in-range origin
+  // implies the full 8x8 is in range.
+  for (int i = 0; i < NT; ++i)
+    for (int j = 0; j < NT; ++j) {
+      int gr = brow + r0 + i * 8, gc = bcol + c0 + j * 8;
+      if (gr < M && gc < N) simdgroup_store(acc[i][j], C + gr * N + gc, N);
+    }
+}
+
+// M5 fast path — register-blocked, vectorized GEMM for aligned shapes
+// (M%64==0, N%64==0, K%16==0). Each threadgroup computes a 64x64 output tile
+// with 8 SIMD groups (256 threads) in a 2x4 layout, each SIMD group owning a
+// 32x16 region = a 4x2 array of simdgroup_float8x8 accumulators (8 per thread,
+// no register spill). K is walked in 16-wide slabs staged into threadgroup
+// memory with vectorized float4 loads and double-buffered (next slab prefetched
+// while the current computes). On this M-series Mac this hits ~6.6 TFLOP/s f32
+// (best-of-3, GPU-timed) — ~2.8x the general kernel above and ~80% of MPS (it
+// ties MPS around N=1024). No bounds checks: caller must guarantee alignment.
+// (Apple's MSL 4.0 MetalPerformancePrimitives `matmul2d` cooperative tensor op
+// has no f32 path under execution_simdgroups — only fp16/bf16 — so the matrix
+// units don't help f32; this register-blocked simdgroup_matrix kernel is the
+// f32 ceiling. See docs/apple_gpu_metal4_adoption.md (M5).)
+constant constexpr int FBM = 64, FBN = 64, FBK = 16;   // tile + K-slab
+constant constexpr int FSGC = 4;                        // SIMD-group cols (2 rows x 4 cols)
+constant constexpr int FNR = 4, FNC = 2;                // 8x8 accumulators per SIMD group
+kernel void mtl4_matmul_sg_fast(device const float *A    [[buffer(0)]],
+                                device const float *B    [[buffer(1)]],
+                                device float       *C    [[buffer(2)]],
+                                device const int   *dims [[buffer(3)]],
+                                uint2 tg  [[threadgroup_position_in_grid]],
+                                uint  tid [[thread_index_in_threadgroup]],
+                                uint  sgid [[simdgroup_index_in_threadgroup]]) {
+  int N = dims[1], K = dims[2];
+  int brow = int(tg.y) * FBM, bcol = int(tg.x) * FBN;
+  threadgroup float As[2][FBM * FBK];
+  threadgroup float Bs[2][FBK * FBN];
+  int sr = int(sgid) / FSGC, sc = int(sgid) % FSGC;   // 2x4 SIMD-group grid
+  int r0 = sr * (FNR * 8), c0 = sc * (FNC * 8);
+  simdgroup_float8x8 acc[FNR][FNC];
+  for (int i = 0; i < FNR; ++i)
+    for (int j = 0; j < FNC; ++j) acc[i][j] = make_filled_simdgroup_matrix<float, 8, 8>(0.0f);
+
+  device const float4 *A4 = (device const float4 *)A;
+  device const float4 *B4 = (device const float4 *)B;
+  // Vectorized float4 staging of the K-slab at k0 (256 threads, 512 float4 of A
+  // + 512 of B). Aligned envelope => no bounds checks needed.
+  auto stage = [&](int bf, int k0) {
+    for (int e = int(tid); e < FBM * FBK / 4; e += 256) {
+      int r = e / (FBK / 4), kq = e % (FBK / 4);
+      ((threadgroup float4 *)As[bf])[e] = A4[((brow + r) * K + k0 + kq * 4) / 4];
+    }
+    for (int e = int(tid); e < FBK * FBN / 4; e += 256) {
+      int kk = e / (FBN / 4), cq = e % (FBN / 4);
+      ((threadgroup float4 *)Bs[bf])[e] = B4[((k0 + kk) * N + bcol + cq * 4) / 4];
+    }
+  };
+
+  int bf = 0;
+  stage(0, 0);
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+  for (int k0 = 0; k0 < K; k0 += FBK) {
+    int nextk = k0 + FBK;
+    if (nextk < K) stage(bf ^ 1, nextk);
+    for (int kk = 0; kk < FBK; kk += 8) {
+      simdgroup_float8x8 a[FNR], b[FNC];
+      for (int i = 0; i < FNR; ++i)
+        simdgroup_load(a[i], As[bf] + (r0 + i * 8) * FBK + kk, FBK);
+      for (int j = 0; j < FNC; ++j)
+        simdgroup_load(b[j], Bs[bf] + kk * FBN + (c0 + j * 8), FBN);
+      for (int i = 0; i < FNR; ++i)
+        for (int j = 0; j < FNC; ++j)
+          simdgroup_multiply_accumulate(acc[i][j], a[i], b[j], acc[i][j]);
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    bf ^= 1;
+  }
+  for (int i = 0; i < FNR; ++i)
+    for (int j = 0; j < FNC; ++j)
+      simdgroup_store(acc[i][j], C + (brow + r0 + i * 8) * N + (bcol + c0 + j * 8), N);
 }
 )MSL";
 
@@ -8771,7 +8913,12 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float *A,
     if (@available(macOS 26.0, iOS 26.0, *)) {
       id<MTLDevice> dev = ctx.device;
       NSError *err = nil;
-      id<MTLComputePipelineState> pso = compile_mtl4_pipeline(ctx, kMTL4MatmulMSL, @"mtl4_matmul_sg");
+      // Pick the register-blocked vectorized fast kernel (64x64 tile, ~2.8x the
+      // general kernel) when the shape is aligned; otherwise the general
+      // bounds-checked 32x32 kernel covers any M%8/N%8 shape and any K.
+      const bool fast = (M % 64 == 0 && N % 64 == 0 && K % 16 == 0);
+      id<MTLComputePipelineState> pso = compile_mtl4_pipeline(
+          ctx, kMTL4MatmulMSL, fast ? @"mtl4_matmul_sg_fast" : @"mtl4_matmul_sg");
       if (!pso) return 0;
 
       MTLResourceOptions ro = MTLResourceStorageModeShared;
@@ -8804,9 +8951,13 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float *A,
       id<MTL4ComputeCommandEncoder> enc = [cb computeCommandEncoder];
       [enc setComputePipelineState:pso];
       [enc setArgumentTable:at];
-      // one 32-lane SIMD group per 8x8 output tile
-      [enc dispatchThreadgroups:MTLSizeMake(N / 8, M / 8, 1)
-          threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+      // fast: 64x64 tile / 8 SIMD groups (256 threads). general: 32x32 / 128.
+      if (fast)
+        [enc dispatchThreadgroups:MTLSizeMake(N / 64, M / 64, 1)
+            threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+      else
+        [enc dispatchThreadgroups:MTLSizeMake((N + 31) / 32, (M + 31) / 32, 1)
+            threadsPerThreadgroup:MTLSizeMake(128, 1, 1)];
       [enc endEncoding];
       [cb endCommandBuffer];
 

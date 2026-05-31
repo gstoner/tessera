@@ -4122,10 +4122,15 @@ def apple_gpu_mtl4_matmul_sg(A: Any, B: Any, np: Any):
 
 
 # ── M4 — capability-gated routing of real ops onto the Metal 4 lane ───────────
-# OFF by default: the MTL4 cooperative-matrix kernel is *correct* but its naive
-# 8x8 tiling is ~2–3x slower than the tuned MPS matmul, so routing only pays off
-# once a faster MTL4 kernel (better tiling / MSL 4.0 `tensor` cooperative ops)
-# lands. The mechanism is here so flipping it on is a one-liner then.
+# OFF by default: the MTL4 cooperative-matrix kernel is *correct* but still
+# slower than the tuned MPS matmul end-to-end. M5 added a register-blocked,
+# vectorized 64x64 fast kernel (~2.8x the old 8x8-per-threadgroup kernel,
+# ~80% of MPS in pure GPU-kernel time, tying MPS around N=1024), but MTL4's
+# per-call dispatch + buffer-copy overhead keeps the end-to-end path at/above
+# MPS. The MSL 4.0 `tensor` cooperative op (MPP matmul2d) has no f32 path under
+# execution_simdgroups (fp16/bf16 only) so it is not the f32 answer. The
+# mechanism is here so flipping it on is a one-liner if a future kernel clears
+# MPS. See docs/apple_gpu_metal4_adoption.md (M5).
 _MTL4_ROUTING_ENABLED = os.environ.get("TESSERA_APPLE_GPU_MTL4_ROUTE", "0") in ("1", "true", "True")
 _MTL4_CAPS_CACHE: dict | None = None
 

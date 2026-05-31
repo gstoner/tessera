@@ -48,7 +48,19 @@ green, zero regressions.
   is attached to the right tile compute ops. No behavioral regression in existing
   tile lowering tests.
 
-### 2. C++ `LowerScheduleToTargetPass`: implement minimally or stop claiming it
+### 2. C++ `LowerScheduleToTargetPass`: implement minimally or stop claiming it — ✅ DONE (2026-05-31, honest downgrade)
+**Landed (downgrade path):** the pass was pseudocode, **never registered** in
+`tessera-opt`/any pipeline, and redundant with the *tested* Python
+Schedule→Tile→Target spine. Rather than ship an untested, unused C++
+reimplementation (itself an overstated-claim gap), the pass body now **fails
+loudly** (`emitError` + `signalPassFailure`) instead of silently succeeding as a
+no-op, so it can never masquerade as a real lowering; it also carries an honest
+`getArgument`/`getDescription`. Added a `compiler_spec_gap_matrix.md` row
+classifying it **`stubbed`** with the real path (Python spine) named. C++ idioms
+match existing passes (`VerifyTesseraIR` `m.emitError`, `AutodiffPass`
+`signalPassFailure`); not compile-tested here (no MLIR build in the Python env).
+207 IR/spine tests green; no Python dependency on the pass.
+
 - **Target (preferred):** a minimal *real* pass — map `schedule.warp`/pipeline/
   policy to async regions + barriers (`persistent` → 1 CTA/SM), even if narrow.
 - **Fallback (honest):** if a real pass is out of scope this pass, mark it

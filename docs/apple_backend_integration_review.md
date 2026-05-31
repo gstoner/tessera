@@ -190,6 +190,35 @@ op is a future swap-in for the im2col lane's matmul core once Apple documents (o
 we crack) its tiling; the im2col+matmul2d lane delivers correct arbitrary-size
 conv today.
 
+## ThunderMittens (Metal port of ThunderKittens) — reviewed; key technique does NOT transfer
+
+Reviewed HazyResearch's [ThunderMittens](https://github.com/HazyResearch/ThunderMittens)
+(MSL port of ThunderKittens) and the [blog](https://hazyresearch.stanford.edu/blog/2024-11-28-tk-mlx)
+for matmul/attention speedups. Its `kernels/matmul_custom/matmul_custom.metal`
+GEMM (11 lines, "~9% faster than MLX" on M2 Pro) uses **no threadgroup/shared
+staging** — it loads global→register directly, register-blocks with 8×8 base
+tiles (`metal::simdgroup_float8x8`), full-unrolls K, and skips double-buffering;
+the blog's thesis is *"shared memory isn't as crucial… keep ALUs active by loading
+HBM→registers, almost never leveraging shared memory for reuse."*
+
+**Tested on this Mac (GPU-timestamped f32, direct global→register, register-blocked
+32×32 and 64×64): it is SLOWER, not faster** — ~3.5 / 4.3 TFLOP/s vs the M5
+threadgroup-**staged** kernel's ~6.6 and MPS's ~8.0. The technique is M2-Pro-tuned
+(~200 GB/s, ~6.5 TFLOP/s f32 peak); on this newer/higher-bandwidth Apple GPU,
+staging a K-slab once into fast on-chip memory and reusing it across all
+simdgroups beats re-reading from device per simdgroup. So M5's staging instinct is
+correct here — **do not adopt the no-shared-memory approach.** (TM also benchmarks
+against MLX, which is weaker than MPS; "9% faster than MLX" ≠ faster than MPS.)
+
+**What does transfer (and we'd already arrived at):** occupancy-first design,
+≤8 `simdgroup_float8x8` accumulators/thread to avoid register spill, padding (not
+swizzling) for bank conflicts, and 8×8 (not 16×16) base tiles. **What TM predates:**
+the MSL 4.0 MetalPerformancePrimitives `matmul2d` cooperative op (M6) — TM uses raw
+`simdgroup_multiply_accumulate`; our `matmul2d` path *beats* MPS for fp16, so for
+half precision the cooperative op is the better lever than TM's hand-rolled
+simdgroup GEMM. TM's clean tile DSL (`rt`/`st`/`gl` types, warp/group ops) is a
+nice model for a future Tile-IR→MSL lowering, but not a perf win.
+
 ## Verification against the Metal 4 SDK headers (2026 review)
 
 The API claims in this doc and in `apple_gpu_metal4_adoption.md` were

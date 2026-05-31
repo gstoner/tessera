@@ -30,7 +30,8 @@ forced.
 | `MTL4CommandQueue` + allocator/encoder model | Lower-CPU-overhead, explicitly-managed command submission for high-frequency dispatch | The resident decode / R2 batching fight exactly this overhead |
 | `MTLTensor` (`newTensorWithDescriptor:`) | First-class typed multi-dim resource — `Float32`/`Float16`/**`BFloat16`**/`Int8`… | Replaces `DeviceTensor`'s hand-rolled `MTLBuffer` + Python-side shape; native dtype incl. bf16 |
 | MSL 4.0 `tensor` type + cooperative (SIMD-group) tensor ops | Hand-written kernels that target the matrix/tensor units directly | The real perf frontier — fused attention/matmul with fusion control MPSGraph can't give |
-| `MTL4Archive` / `MTL4BinaryFunction` | Precompiled pipeline archives — faster kernel load | The MSL kernel cache |
+| MetalPerformancePrimitives cooperative ops — `mpp::tensor_ops::matmul2d` **and `convolution2d`** | Apple's matrix-unit GEMM **and conv**, both with a `cooperative_tensor` destination for in-register bias/activation epilogues | matmul2d → M6/M7/M8 (used); **`convolution2d` is the open rung** — conv2d/conv3d still run on MPSGraph (see integration review P8) |
+| `MTL4Archive` / `MTL4BinaryFunction` | Precompiled pipeline archives — faster kernel load | The MSL kernel cache (P4, opt-in) |
 
 ## Coexistence strategy
 

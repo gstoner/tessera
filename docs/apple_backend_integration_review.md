@@ -76,7 +76,12 @@ be reused immediately after committing."
   the M8 session `run()`. **Measured:** repeated small epilogue (64×256×256) went
   0.61 ms → **0.28 ms** (~2.2×) on top of P1. The per-call `MTLResidencySet` is
   still created fresh (commit + `requestResidency` are unavoidable kernel calls);
-  reusing the set object is a minor remaining nicety.
+  reusing the set object is a minor remaining nicety. **Header-check note:**
+  `MTL4CommandBuffer` exposes `useResidencySet:` / `useResidencySets:count:` —
+  per-command-buffer residency that is the more granular intended path than our
+  queue-level `addResidencySet:`/`removeResidencySet:` churn (and sidesteps the
+  queue's 32-residency-set ceiling). `[cb useResidencySet:res]` with one reused,
+  repopulated set is the clean form of the residual above.
 
 ### P3 — `MTLSharedEvent` created per dispatch *(done)*
 
@@ -144,6 +149,53 @@ does not use. This is **correct for now** — hand-written cooperative kernels g
 the fusion control MPSGraph/CoreML cannot — but worth revisiting if Tessera ever
 wants to run whole compiled subgraphs on the ML encoder.
 
+### P8 — `mpp::tensor_ops::convolution2d` unused (the second cooperative ML op) *(open)*
+
+A 2026 header re-check found Metal 4 ships **two** cooperative tensor ops in
+`MetalPerformancePrimitives`, not one: `MPPTensorOpsMatMul2d.h` (used — M6/M7/M8)
+**and `MPPTensorOpsConvolution2d.h` (unused)**. The latter is a first-class
+matrix-unit convolution — `convolution2d_descriptor` (NHWC activations, HWIO
+weights, strides/dilations/groups, `relaxed_precision`), full-threadgroup scope,
+and the **same `cooperative_tensor` destination** so the M7 bias+activation
+epilogue applies verbatim (the header explicitly points at `MPPTensorOpsMatMul2d.h`
+"for bias add and applying activation before writing out the result").
+
+Tessera's `@jit(target="apple_gpu")` conv2d/conv3d currently route through
+**MPSGraph** (`_apple_gpu_dispatch_conv2d`, already NHWC source / HWIO weights —
+the exact layout `convolution2d` wants). So conv is the direct analogue of the
+pre-M6 matmul situation: well-tuned vendor path today, no native cooperative
+tensor-op path. **Recommendation:** add an MPP `convolution2d` lane for f16/bf16
+mirroring the matmul2d work (buffer-backed `MTLTensor` args via the argument
+table, float `cooperative_tensor` accumulator, fused `conv → bias → relu` — the
+single most common CNN block — in one dispatch). This is the largest remaining
+*core-ML-capability* gap; everything else is matmul-family or polish.
+
+## Verification against the Metal 4 SDK headers (2026 review)
+
+The API claims in this doc and in `apple_gpu_metal4_adoption.md` were
+cross-checked against the Tahoe (macOS 26.5) SDK headers. **Confirmed correct:**
+- The MTL4 command-model usage — `MTL4Compiler
+  newComputePipelineStateWithDescriptor:compilerTaskOptions:error:`, argument-table
+  binding (`setResource:atBufferIndex:` with `tensor.gpuResourceID`,
+  `setAddress:atIndex:`), buffer-backed `MTLTensor`
+  (`newTensorWithDescriptor:offset:error:`), `MTLSharedEvent` sync.
+- The MPP `matmul2d` cooperative pattern — `tensor_handle` `MTLTensor` operands
+  (not in-kernel `tensor_inline`), float `cooperative_tensor` accumulator,
+  `is_valid_element`/`get_capacity`/`get_multidimensional_index`/`store`; and that
+  **f32 has no `execution_simdgroups` path** (matrix units are fp16/bf16).
+- P4 archive flow — `MTL4PipelineDataSetSerializerConfigurationCaptureBinaries`,
+  `serializeAsArchiveAndFlushToURL:`, `newArchiveWithURL:`,
+  `MTL4CompilerTaskOptions.lookupArchives`.
+- The "MPSGraph runs only on the classic `MTLCommandQueue`, never an MTL4 queue"
+  claim — there are **zero** `MTL4` references in the MPSGraph framework headers,
+  so the additive-lane premise holds.
+
+**Gaps the header re-check surfaced:** P8 (`convolution2d` cooperative op unused —
+material), and the residency refinement (`MTL4CommandBuffer useResidencySet:`,
+noted in P2). The cooperative-tensor `reduce_rows`/`reduce_columns` ops (in the
+matmul2d header) are also unused — a future in-register softmax/attention-reduction
+fusion opportunity.
+
 ## Status
 
 - **Done:** P1 (buffer pool on matmul2d + session + spec_accept), P2 + P3
@@ -151,12 +203,17 @@ wants to run whole compiled subgraphs on the ML encoder.
   P4 (opt-in `MTL4Archive` pipeline persistence), P5 (default bf16 → native MTL4,
   **11.8–14.7×** the legacy fallback), P6 (compile-time `linear+bias+act` →
   `matmul2d` epilogue auto-fusion under `@jit`).
-- **Remaining (minor):** P1 tail (pool the M2 scan + M3/M5 simdgroup matmul) and
-  reusing the per-call residency-set object.
+- **Remaining:** **P8 — route conv2d/conv3d through the MPP `convolution2d`
+  cooperative op** (the one unused core-ML capability; f16/bf16, reuses the M7
+  epilogue). Plus minor polish: P1 tail (pool the M2 scan + M3/M5 simdgroup
+  matmul), the `useResidencySet:` residency refinement (P2), and the unused
+  cooperative-tensor reductions.
 
-Net: the whole review is essentially closed. The kernels are correct and
-competitive (fp16 matmul beats MPS, bf16 beats the conversion fallback ~10–15×,
-the epilogue fuses for free, the session amortizes decode), the per-call overhead
-that kept the lane off is removed (P1–P3), bf16 is routed onto MTL4 by default
-(P5), `linear+bias+act` auto-fuses (P6), and pipelines can persist across process
-starts (P4). What's left is small cleanup, not a correctness or throughput gap.
+Net: every API claim in both docs was header-verified and is correct. On
+*capabilities*, the matmul family is fully exploited (fp16 beats MPS, bf16 beats
+the conversion fallback ~10–15×, fused epilogue, resident-weight session, default
+bf16 routing, pipeline archives). The one genuine core-ML capability still on the
+table is the **second cooperative tensor op, `convolution2d`** (P8) — conv is
+still on MPSGraph. The `MTL4MachineLearningCommandEncoder` (compiled-model
+inference) is deliberately not used, which is the right call for a compiler that
+emits its own fused kernels.

@@ -149,26 +149,36 @@ does not use. This is **correct for now** — hand-written cooperative kernels g
 the fusion control MPSGraph/CoreML cannot — but worth revisiting if Tessera ever
 wants to run whole compiled subgraphs on the ML encoder.
 
-### P8 — `mpp::tensor_ops::convolution2d` unused (the second cooperative ML op) *(open)*
+### P8 — conv on the matrix units *(done, opt-in; native conv op cracked single-tile)*
 
-A 2026 header re-check found Metal 4 ships **two** cooperative tensor ops in
-`MetalPerformancePrimitives`, not one: `MPPTensorOpsMatMul2d.h` (used — M6/M7/M8)
-**and `MPPTensorOpsConvolution2d.h` (unused)**. The latter is a first-class
-matrix-unit convolution — `convolution2d_descriptor` (NHWC activations, HWIO
-weights, strides/dilations/groups, `relaxed_precision`), full-threadgroup scope,
-and the **same `cooperative_tensor` destination** so the M7 bias+activation
-epilogue applies verbatim (the header explicitly points at `MPPTensorOpsMatMul2d.h`
-"for bias add and applying activation before writing out the result").
+**Shipped:** an f16/bf16 conv lane on the GPU matrix units via **im2col + the M7
+`matmul2d` epilogue** — a KxK conv equals `im2col(activation) @ weights_reshaped`,
+and conv's per-output-channel bias is exactly the epilogue's per-column bias, so
+`conv → bias → activation` collapses to one fused matmul2d dispatch (fp32-
+accumulated, any size, stride/padding/dilation, groups=1). `runtime.apple_gpu_conv2d(...)`
++ wired into `_apple_gpu_dispatch_conv2d`. Correct to ≤3e-2 vs a dtype-matched
+reference across f16/bf16 × {none,relu,gelu,silu} × stride/pad/dilation × 1×1
+(`tests/unit/test_apple_gpu_metal4.py::test_p8_conv2d_matmul2d_lane`).
 
-Tessera's `@jit(target="apple_gpu")` conv2d/conv3d currently route through
-**MPSGraph** (`_apple_gpu_dispatch_conv2d`, already NHWC source / HWIO weights —
-the exact layout `convolution2d` wants). So conv is the direct analogue of the
-pre-M6 matmul situation: well-tuned vendor path today, no native cooperative
-tensor-op path. **Recommendation:** add an MPP `convolution2d` lane for f16/bf16
-mirroring the matmul2d work (buffer-backed `MTLTensor` args via the argument
-table, float `cooperative_tensor` accumulator, fused `conv → bias → relu` — the
-single most common CNN block — in one dispatch). This is the largest remaining
-*core-ML-capability* gap; everything else is matmul-family or polish.
+**Opt-in, OFF by default** (`TESSERA_APPLE_GPU_MTL4_CONV=1` /
+`set_apple_gpu_mtl4_conv_routing`). Unlike P5 matmul, conv's legacy bf16 path
+already runs the well-tuned MPSGraph *f32* conv + a host cast (fast), so the
+lane's *host* im2col gather currently makes it ~1.5–2× slower. The matmul is on
+the matrix units; the win needs a **GPU im2col** so the gather stays on-device
+(the perf follow-up — then it flips on like P5).
+
+**Native `mpp::tensor_ops::convolution2d` — investigated, conventions cracked,
+multi-tile blocked.** The cooperative conv op compiles and is **bit-correct
+single-tile** (VALID 3×3 ≤2e-7). Reverse-engineered conventions: NHWC activation
+/ HWIO weights / NHWO dest tensor extents (innermost-first), the op does a
+**SAME/centered window** so `set_offsets((K-1)/2,(K-1)/2)` yields VALID conv,
+float `cooperative_tensor` destination + epilogue (same as matmul2d), full-
+threadgroup scope, **compile-time descriptor dims**. The blocker is **multi-tile
+grid-tiling**: both slice-based (matmul2d-style) and offset-based tiling produce
+wrong results, and there is no usage example in the headers. So the native conv
+op is a future swap-in for the im2col lane's matmul core once Apple documents (or
+we crack) its tiling; the im2col+matmul2d lane delivers correct arbitrary-size
+conv today.
 
 ## Verification against the Metal 4 SDK headers (2026 review)
 
@@ -203,17 +213,19 @@ fusion opportunity.
   P4 (opt-in `MTL4Archive` pipeline persistence), P5 (default bf16 → native MTL4,
   **11.8–14.7×** the legacy fallback), P6 (compile-time `linear+bias+act` →
   `matmul2d` epilogue auto-fusion under `@jit`).
-- **Remaining:** **P8 — route conv2d/conv3d through the MPP `convolution2d`
-  cooperative op** (the one unused core-ML capability; f16/bf16, reuses the M7
-  epilogue). Plus minor polish: P1 tail (pool the M2 scan + M3/M5 simdgroup
-  matmul), the `useResidencySet:` residency refinement (P2), and the unused
-  cooperative-tensor reductions.
+- **Done:** **P8 — f16/bf16 conv on the matrix units** via im2col + the M7
+  matmul2d epilogue (correct, any size, fused bias/act; opt-in pending a GPU
+  im2col). Native `convolution2d` cooperative op cracked single-tile.
+- **Remaining:** P8 perf — **GPU im2col** so the gather stays on-device (then the
+  conv lane flips on like P5); the native `convolution2d` multi-tile tiling
+  (undocumented). Plus minor polish: P1 tail (pool the M2 scan + M3/M5 simdgroup
+  matmul), the `useResidencySet:` residency refinement (P2), unused cooperative
+  reductions.
 
-Net: every API claim in both docs was header-verified and is correct. On
-*capabilities*, the matmul family is fully exploited (fp16 beats MPS, bf16 beats
-the conversion fallback ~10–15×, fused epilogue, resident-weight session, default
-bf16 routing, pipeline archives). The one genuine core-ML capability still on the
-table is the **second cooperative tensor op, `convolution2d`** (P8) — conv is
-still on MPSGraph. The `MTL4MachineLearningCommandEncoder` (compiled-model
-inference) is deliberately not used, which is the right call for a compiler that
-emits its own fused kernels.
+Net: every API claim in both docs was header-verified and is correct. All of
+Metal 4's core ML compute capabilities are now exercised: the matmul family is
+fully exploited (fp16 beats MPS, bf16 beats the conversion fallback ~10–15×,
+fused epilogue, resident-weight session, default bf16 routing, pipeline archives),
+and conv runs on the matrix units (P8, correct + fused, opt-in until GPU im2col).
+The `MTL4MachineLearningCommandEncoder` (compiled-model inference) is deliberately
+not used — the right call for a compiler that emits its own fused kernels.

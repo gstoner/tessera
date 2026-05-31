@@ -580,3 +580,103 @@ def test_mtl4_scan_falls_back_cleanly():
     np.testing.assert_allclose(ys.astype(np.float64),
                                _numpy_scan(Wh, Wx, xseq, init),
                                rtol=1e-4, atol=1e-5)
+
+
+# ── P8 — conv2d on the matrix units via im2col + the matmul2d epilogue ─────────
+def _conv_ref(X, W, bias, act, sH, sW, pH, pW, dH, dW, cast, np):
+    """Dtype-matched reference: cast inputs to the lane dtype, accumulate in f64."""
+    col, OH, OW = R._im2col_nhwc(X.astype(cast).astype(np.float32),
+                                 W.shape[0], W.shape[1], sH, sW, pH, pW, dH, dW, np)
+    Y = (col.astype(np.float64) @ W.astype(cast).astype(np.float64).reshape(-1, W.shape[3]))
+    Y = Y.reshape(X.shape[0], OH, OW, W.shape[3])
+    if bias is not None:
+        Y = Y + bias[None, None, None, :].astype(np.float64)
+    if act == "relu":
+        return np.maximum(0.0, Y)
+    if act == "gelu":
+        t = 0.7978845608028654 * (Y + 0.044715 * Y ** 3)
+        return 0.5 * Y * (1.0 + np.tanh(t))
+    if act == "silu":
+        return Y / (1.0 + np.exp(-Y))
+    return Y
+
+
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+@pytest.mark.parametrize(
+    "act,K,st,pad,dil",
+    [("none", 3, 1, 0, 1), ("gelu", 3, 1, 1, 1), ("relu", 3, 2, 1, 1),
+     ("silu", 3, 1, 1, 2), ("gelu", 1, 1, 0, 1)],
+)
+def test_p8_conv2d_matmul2d_lane(dtype, act, K, st, pad, dil):
+    """P8: KxK conv = im2col + the fused matmul2d epilogue on the GPU matrix units.
+    Conv's per-output-channel bias maps to the epilogue's per-column bias, so
+    conv→bias→activation is one fused dispatch. Covers f16/bf16 × activations ×
+    stride/padding/dilation × 1×1, fp32-accumulated so it matches a dtype-matched
+    reference closely."""
+    if dtype == "bf16":
+        ml = pytest.importorskip("ml_dtypes")
+        cast = ml.bfloat16
+    else:
+        cast = np.float16
+    rng = np.random.default_rng(hash((dtype, act, K, st, pad, dil)) % 10000)
+    Ci, Co = 16, 32
+    X = (rng.standard_normal((1, 9, 9, Ci)) * 0.3).astype(np.float32)
+    W = (rng.standard_normal((K, K, Ci, Co)) * 0.1).astype(np.float32)
+    b = (rng.standard_normal(Co) * 0.2).astype(np.float32)
+    Y, ran = R.apple_gpu_conv2d(X, W, np, bias=b, act=act, stride=st,
+                                padding=pad, dilation=dil, dtype=dtype)
+    ref = _conv_ref(X, W, b, act, st, st, pad, pad, dil, dil, cast, np)
+    assert Y.shape == ref.shape
+    den = np.maximum(1e-2, np.abs(ref))
+    assert float(np.max(np.abs(Y.astype(np.float64) - ref) / den)) < 3e-2
+    if R.apple_gpu_metal4_caps()["available"]:
+        assert ran
+
+
+def test_p8_conv_routing_is_opt_in_and_correct():
+    """The conv lane is OPT-IN (off by default — host im2col makes it slower than
+    MPSGraph today). When enabled, bf16 conv on the apple_gpu dispatch routes to
+    the matmul2d lane; either way the dispatch stays correct."""
+    ml = pytest.importorskip("ml_dtypes")
+    bf16 = ml.bfloat16
+    rng = np.random.default_rng(5)
+    X = (rng.standard_normal((1, 8, 8, 16)) * 0.3).astype(bf16)
+    W = (rng.standard_normal((3, 3, 16, 32)) * 0.1).astype(bf16)
+    b = (rng.standard_normal(32) * 0.2).astype(bf16)
+    ref = _conv_ref(np.asarray(X, np.float32), np.asarray(W, np.float32),
+                    np.asarray(b, np.float32), "none", 1, 1, 0, 0, 1, 1, bf16, np)
+    den = np.maximum(1e-2, np.abs(ref))
+    assert not R.apple_gpu_mtl4_conv_routing_enabled()  # off by default
+    prev = R.apple_gpu_mtl4_conv_routing_enabled()
+    try:
+        for flag in (False, True):
+            R.set_apple_gpu_mtl4_conv_routing(flag)
+            Y = R._apple_gpu_dispatch_conv2d([X, W, b],
+                                             {"stride": 1, "padding": 0, "dilation": 1}, np)
+            if Y is None:
+                continue  # off Metal 4 / no runtime → caller numpy-falls-back
+            assert Y.dtype == bf16
+            assert float(np.max(np.abs(np.asarray(Y, np.float64) - ref) / den)) < 3e-2
+    finally:
+        R.set_apple_gpu_mtl4_conv_routing(prev)
+
+
+def test_p8_im2col_matches_explicit_gather():
+    # Lock the vectorized im2col against an explicit-loop gather (stride+dilation).
+    rng = np.random.default_rng(9)
+    X = (rng.standard_normal((2, 7, 7, 3)) * 1.0).astype(np.float32)
+    kH = kW = 3
+    sH, sW, pH, pW, dH, dW = 2, 2, 1, 1, 1, 1
+    col, OH, OW = R._im2col_nhwc(X, kH, kW, sH, sW, pH, pW, dH, dW, np)
+    Xp = np.pad(X, ((0, 0), (pH, pH), (pW, pW), (0, 0)))
+    N, _, _, Cin = X.shape
+    exp = np.empty((N * OH * OW, kH * kW * Cin), np.float32)
+    i = 0
+    for n in range(N):
+        for oh in range(OH):
+            for ow in range(OW):
+                patch = Xp[n, oh * sH:oh * sH + dH * (kH - 1) + 1:dH,
+                              ow * sW:ow * sW + dW * (kW - 1) + 1:dW, :]
+                exp[i] = patch.reshape(-1)
+                i += 1
+    np.testing.assert_array_equal(col, exp)

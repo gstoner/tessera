@@ -2818,6 +2818,66 @@ def _apple_gpu_conv2d_f16() -> Any:
     return sym
 
 
+# P8 — conv2d on the Metal 4 matrix units via im2col + the matmul2d epilogue.
+# A KxK conv equals im2col(activation) @ weights_reshaped, and conv's per-output-
+# channel bias is exactly the epilogue's per-column bias — so a `conv → bias →
+# activation` block collapses to one fused matmul2d dispatch on the cooperative
+# tensor units (f16/bf16). This is the robust arbitrary-size conv lane; the native
+# MPP `convolution2d` cooperative op is verified single-tile but its multi-tile
+# grid convention is undocumented (see docs/apple_backend_integration_review.md P8).
+# OPT-IN, OFF by default: unlike P5 matmul (where MPS had no bf16 GEMM), conv's
+# legacy bf16 path already runs the well-tuned MPSGraph *f32* conv + a host cast
+# (fast), so this lane's *host* im2col gather currently makes it ~1.5-2x slower.
+# The matmul runs on the matrix units (f16/bf16, fused bias+act); the win needs a
+# GPU im2col to keep the gather on-device (the perf follow-up). Toggle with
+# TESSERA_APPLE_GPU_MTL4_CONV=1 / set_apple_gpu_mtl4_conv_routing(True).
+_MTL4_CONV_ROUTE = os.environ.get(
+    "TESSERA_APPLE_GPU_MTL4_CONV", "0") in ("1", "true", "True")
+
+
+def set_apple_gpu_mtl4_conv_routing(enabled: bool) -> None:
+    global _MTL4_CONV_ROUTE
+    _MTL4_CONV_ROUTE = bool(enabled)
+
+
+def apple_gpu_mtl4_conv_routing_enabled() -> bool:
+    return _MTL4_CONV_ROUTE
+
+
+def _im2col_nhwc(X: Any, kH: int, kW: int, sH: int, sW: int,
+                 pH: int, pW: int, dH: int, dW: int, np: Any):
+    """Vectorized NHWC im2col → (col[N*OH*OW, kH*kW*Cin], OH, OW). Zero-pads by
+    (pH, pW); supports stride and dilation. Patch channel order is (kH, kW, Cin)
+    to match a weights reshape of HWIO → [kH*kW*Cin, Cout]."""
+    N, H, W, Cin = X.shape
+    if pH or pW:
+        X = np.pad(X, ((0, 0), (pH, pH), (pW, pW), (0, 0)))
+    spanH, spanW = dH * (kH - 1) + 1, dW * (kW - 1) + 1
+    win = np.lib.stride_tricks.sliding_window_view(X, (spanH, spanW), axis=(1, 2))
+    # win: [N, OHf, OWf, Cin, spanH, spanW] -> stride on output, dilation on taps.
+    win = win[:, ::sH, ::sW, :, ::dH, ::dW]               # [N,OH,OW,Cin,kH,kW]
+    N, OH, OW, Cin, kh, kw = win.shape
+    col = np.transpose(win, (0, 1, 2, 4, 5, 3)).reshape(N * OH * OW, kh * kw * Cin)
+    return np.ascontiguousarray(col), OH, OW
+
+
+def apple_gpu_conv2d(X: Any, W: Any, np: Any, *, bias: Any = None, act: str = "none",
+                     stride=1, padding=0, dilation=1, dtype: str = "f16"):
+    """P8 — 2-D convolution as im2col + the fused ``matmul2d`` epilogue on the GPU
+    matrix units. ``X`` is NHWC, ``W`` is HWIO ``[kH,kW,Cin,Cout]``, ``bias`` is
+    ``[Cout]``, ``act`` in {none,relu,gelu,silu}. groups=1 only. Returns
+    ``(Y[N,OH,OW,Cout], ran_on_mtl4)``; numpy fallback when Metal 4 is
+    unavailable. See docs/apple_backend_integration_review.md (P8)."""
+    def _pair(v):
+        return (int(v[0]), int(v[1])) if isinstance(v, (tuple, list)) else (int(v), int(v))
+    sH, sW = _pair(stride); pH, pW = _pair(padding); dH, dW = _pair(dilation)
+    kH, kW, Cin, Cout = (int(s) for s in W.shape)
+    col, OH, OW = _im2col_nhwc(np.asarray(X, np.float32), kH, kW, sH, sW, pH, pW, dH, dW, np)
+    Wr = np.asarray(W, np.float32).reshape(kH * kW * Cin, Cout)
+    Y, ran = apple_gpu_mtl4_matmul2d_epilogue(col, Wr, np, bias=bias, act=act, dtype=dtype)
+    return Y.reshape(int(X.shape[0]), OH, OW, Cout), ran
+
+
 def _apple_gpu_dispatch_conv2d(operands: list[Any], kwargs: dict, np: Any) -> Any:
     """Tier-3 2-D convolution via MPSGraph (NHWC source, HWIO weights).
 
@@ -2853,6 +2913,17 @@ def _apple_gpu_dispatch_conv2d(operands: list[Any], kwargs: dict, np: Any) -> An
         return None
     out_dtype = X.dtype
     bf16 = _bfloat16_dtype()
+    # P8 (opt-in): route f16/bf16 conv to the matmul2d epilogue lane (im2col +
+    # matrix-unit matmul, fused bias). groups==1 only; falls through to the
+    # native/round-trip path when off / ineligible / Metal 4 unavailable.
+    if (_MTL4_CONV_ROUTE and groups == 1
+            and (out_dtype == np.float16 or (bf16 is not None and out_dtype == bf16))):
+        lane_dtype = "bf16" if out_dtype == bf16 else "f16"
+        Y, ran = apple_gpu_conv2d(X, W, np, bias=bias, act="none",
+                                  stride=(sH, sW), padding=(pH, pW),
+                                  dilation=(dH, dW), dtype=lane_dtype)
+        if ran:
+            return Y.astype(out_dtype)
     iattrs = [ctypes.c_int32(v) for v in
               (N, H, Wd, Cin, Cout, kH, kW, sH, sW, pH, pW, dH, dW, groups)]
 

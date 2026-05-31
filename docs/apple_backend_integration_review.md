@@ -88,15 +88,21 @@ resource advanced with `signaledValue + 1`.
   (`mtl4_event_val`) in `mtl4_encode_and_wait`. Correct under the `mtl4_dispatch_mu`
   serialization (no out-of-order signals). Folded into the P2 helper.
 
-### P4 — no MTL4 binary archive (pipelines recompiled each process)
+### P4 — MTL4 binary archive (pipeline persistence) *(done, opt-in)*
 
-MTL4 pipelines are cached in-process but recompiled on every fresh process start
-(~ms each, growing with the kernel count: M2…M8 + the 4 `matmul2d` variants).
-`MTL4Archive` / `MTL4BinaryFunction` persist compiled pipelines to disk.
+MTL4 pipelines were recompiled on every fresh process start (~ms each).
 
-- **Recommendation:** serialize the MTL4 pipeline set to an `MTL4Archive` keyed
-  on (device, OS, source hash); load it at `deviceContext()` init. Meaningful for
-  CLI / short-lived processes and for first-token latency.
+- **Done:** `tessera_apple_gpu_mtl4_archive_enable(path)` loads a prior archive
+  (`newArchiveWithURL:`) as a lookup archive (`MTL4CompilerTaskOptions.lookupArchives`,
+  so matching pipelines skip the MSL recompile) and attaches a `CaptureBinaries`
+  `MTL4PipelineDataSetSerializer` to the compiler; `..._archive_flush()` writes the
+  captured set (`serializeAsArchiveAndFlushToURL:`). Python:
+  `runtime.apple_gpu_mtl4_archive_enable(path)` / `apple_gpu_mtl4_archive_flush()`.
+  **Opt-in** (off by default — no effect on the default path) because capture only
+  covers pipelines built *after* enable, so it must be called at init before the
+  first MTL4 op. Verified by a fresh-process round-trip test (process 1 writes a
+  ~50 KB archive; process 2 loads it and stays correct). Degrades cleanly off
+  Metal 4 (returns False).
 
 ### P5 — bf16 matmul routes to the native tensor-op by default *(done)*
 
@@ -114,15 +120,20 @@ to fp32 on the host because **MPS has no native bf16 GEMM**.
   routing flip onto the MTL4 lane. (f32 remains opt-in: the MPS f32 GEMM is
   well-tuned and the hand kernel only reaches ~80% of it.)
 
-### P6 — fused `linear+bias+activation` not recognized at compile time
+### P6 — compile-time `linear+bias+activation` fusion *(done)*
 
-The fused epilogue kernel + session exist, but a user writing
-`gelu(linear(x, W, b))` under `@jit(target="apple_gpu")` in f16/bf16 still lowers
-through the per-op MPSGraph path unless the epilogue API is called explicitly.
-
-- **Recommendation:** extend the existing `matmul→gelu` / `matmul→rmsnorm` Graph
-  IR chain recognizer (`runtime.py` + `driver.py`) with a bias operand and an
-  f16/bf16 gate so the chain collapses to one `matmul2d_epilogue` dispatch.
+- **Done:** `driver._apple_gpu_chain_kind` recognizes `matmul/gemm → add(bias)
+  [→ gelu|relu|silu]` structurally (the trace leaves operand dtypes as `?`, so the
+  dtype decision moves to runtime), and `runtime._execute_apple_gpu_mps_metadata`
+  dispatches it via `_apple_gpu_dispatch_matmul_bias_act`: **f16/bf16 with a
+  per-column [N] bias → one MPP `matmul2d` epilogue dispatch** (bias + act fused
+  in-register, fp32-accumulated — so the result is *more* accurate than the per-op
+  f16 chain); otherwise the matmul stays on MPS (GPU) with host bias+act. So
+  `gelu(linear(x, W, b))` under `@jit(target="apple_gpu")` now auto-fuses, and even
+  f32 / residual-add cases get the matmul on-GPU (a win over the all-numpy eager
+  path these multi-op chains hit before). Tested by
+  `test_p6_linear_bias_act_fuses_to_epilogue` (f16/bf16 × none/gelu/relu/silu) +
+  `test_p6_residual_add_falls_back_correctly`.
 
 ### P7 — `MTLTensorUsageMachineLearning` path unused
 
@@ -137,15 +148,15 @@ wants to run whole compiled subgraphs on the ML encoder.
 
 - **Done:** P1 (buffer pool on matmul2d + session + spec_accept), P2 + P3
   (reuse allocator / command buffer / argument table / shared event, serialized),
-  P5 (default bf16 → native MTL4, **11.8–14.7×** the legacy fallback).
-- **Remaining:** P6 (compile-time `linear+bias+act` Graph IR chain recognition so
-  the fusion auto-applies under `@jit`), P4 (`MTL4Archive` for process-start
-  pipeline latency), P1 tail (pool the M2 scan + M3/M5 simdgroup matmul), and the
-  minor P2 nicety of reusing the per-call residency-set object.
+  P4 (opt-in `MTL4Archive` pipeline persistence), P5 (default bf16 → native MTL4,
+  **11.8–14.7×** the legacy fallback), P6 (compile-time `linear+bias+act` →
+  `matmul2d` epilogue auto-fusion under `@jit`).
+- **Remaining (minor):** P1 tail (pool the M2 scan + M3/M5 simdgroup matmul) and
+  reusing the per-call residency-set object.
 
-Net: the kernels are correct and competitive (fp16 matmul beats MPS, bf16 beats
-the conversion fallback ~10–15×, the epilogue fuses for free, the session
-amortizes decode); the per-call host-side overhead that kept the lane off is now
-largely removed (P1–P3), and bf16 is the first dtype routed onto MTL4 by default
-(P5). The remaining work (P4/P6) is feature/latency polish, not a correctness or
-throughput gap.
+Net: the whole review is essentially closed. The kernels are correct and
+competitive (fp16 matmul beats MPS, bf16 beats the conversion fallback ~10–15×,
+the epilogue fuses for free, the session amortizes decode), the per-call overhead
+that kept the lane off is removed (P1–P3), bf16 is routed onto MTL4 by default
+(P5), `linear+bias+act` auto-fuses (P6), and pipelines can persist across process
+starts (P4). What's left is small cleanup, not a correctness or throughput gap.

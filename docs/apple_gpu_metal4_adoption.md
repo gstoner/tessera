@@ -249,8 +249,13 @@ routes `@jit(target="apple_gpu")` **bf16 matmul to the native `matmul2d` tensor-
 by default** (`_mtl4_route_matmul2d_bf16`, toggle `TESSERA_APPLE_GPU_MTL4_BF16`),
 measured **11.8–14.7× faster** than the legacy fp32-conversion fallback — the
 first dtype routed onto the MTL4 lane by default. (f32 stays opt-in; MPS's f32
-GEMM is well-tuned.) Remaining: P6 (compile-time `linear+bias+act` chain
-recognition) and P4 (`MTL4Archive`).
+GEMM is well-tuned.) **P6**: `gelu(linear(x,W,b))` under `@jit(target="apple_gpu")`
+now auto-fuses — the driver recognizes `matmul→add(bias)→{gelu,relu,silu}` and the
+runtime dispatches f16/bf16 to one `matmul2d` epilogue (f32 / residual-add keep
+the matmul on MPS). **P4**: opt-in `MTL4Archive` pipeline persistence
+(`apple_gpu_mtl4_archive_enable(path)` / `_flush()`) so pipelines survive process
+restarts. The integration review is essentially closed; only minor cleanup
+remains (pool the M2 scan + M3/M5 matmul, reuse the residency-set object).
 
 ## Integration review
 

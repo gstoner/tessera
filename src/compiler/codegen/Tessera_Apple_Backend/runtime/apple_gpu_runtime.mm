@@ -83,6 +83,17 @@ struct MetalDeviceContext {
   uint64_t  mtl4_event_val;   // monotonic signal counter
   std::mutex mtl4_dispatch_mu;
 
+  // P4 — MTL4Archive pipeline persistence (opt-in). When enabled, the MTL4
+  // compiler is created with a CaptureBinaries serializer so every pipeline it
+  // builds is captured; a previously-flushed archive is loaded as a lookup
+  // archive so matching pipelines skip the MSL recompile (~ms each) on process
+  // start. Off by default — no effect on the default path. See
+  // docs/apple_backend_integration_review.md (P4).
+  id          mtl4_serializer;       // id<MTL4PipelineDataSetSerializer>
+  id          mtl4_lookup_archive;   // id<MTL4Archive> (nil if none/incompatible)
+  std::string mtl4_archive_path;
+  bool        mtl4_archive_enabled;
+
   // 2026-05-17 — Metal buffer pool.  Each dispatch helper used to
   // call ``[device newBufferWithBytes:...]`` and let the buffer
   // deallocate at the end of the @autoreleasepool.  Profiling
@@ -698,8 +709,15 @@ id<MTLComputePipelineState> compile_mtl4_pipeline(MetalDeviceContext &ctx,
     compiler = (id<MTL4Compiler>)ctx.mtl4_compiler;
   }
   if (!compiler) return nil;
+  // P4 — pass any loaded archive as a lookup archive so a matching pipeline is
+  // pulled from the binary archive instead of recompiled from MSL source.
+  MTL4CompilerTaskOptions *topts = nil;
+  if (ctx.mtl4_lookup_archive) {
+    topts = [[MTL4CompilerTaskOptions alloc] init];
+    topts.lookupArchives = @[(id<MTL4Archive>)ctx.mtl4_lookup_archive];
+  }
   id<MTLComputePipelineState> pso =
-      [compiler newComputePipelineStateWithDescriptor:pd compilerTaskOptions:nil error:&err];
+      [compiler newComputePipelineStateWithDescriptor:pd compilerTaskOptions:topts error:&err];
   if (!pso) return nil;
   std::lock_guard<std::mutex> lock(ctx.mtl4_mu);
   auto it = ctx.mtl4_pipeline_cache.find(key);
@@ -714,6 +732,56 @@ id<MTL4CommandQueue> mtl4_shared_queue(MetalDeviceContext &ctx) {
   std::lock_guard<std::mutex> lock(ctx.mtl4_mu);
   if (!ctx.mtl4_queue) ctx.mtl4_queue = [ctx.device newMTL4CommandQueue];
   return (id<MTL4CommandQueue>)ctx.mtl4_queue;
+}
+
+// P4 — enable MTL4Archive pipeline persistence. Loads an existing archive at
+// `path` as a lookup archive (matching pipelines skip the MSL recompile) and
+// (re)creates the MTL4 compiler with a CaptureBinaries serializer so subsequent
+// pipeline builds are captured for a later flush. Opt-in; returns 1 if enabled.
+extern "C" int32_t tessera_apple_gpu_mtl4_archive_enable(const char *path) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    std::lock_guard<std::mutex> lock(ctx.mtl4_mu);
+    ctx.mtl4_archive_path = path ? std::string(path) : std::string();
+    // Load a prior archive if present (nil on absent / incompatible — the
+    // compiler then just recompiles + recaptures, so this is safe either way).
+    ctx.mtl4_lookup_archive = nil;
+    if (!ctx.mtl4_archive_path.empty()) {
+      NSURL *url = [NSURL fileURLWithPath:@(ctx.mtl4_archive_path.c_str())];
+      NSError *e = nil;
+      ctx.mtl4_lookup_archive = [ctx.device newArchiveWithURL:url error:&e];
+    }
+    // CaptureBinaries serializer attached to a fresh compiler. Recreating the
+    // compiler invalidates nothing — already-built pipelines stay cached.
+    MTL4PipelineDataSetSerializerDescriptor *sd = [[MTL4PipelineDataSetSerializerDescriptor alloc] init];
+    sd.configuration = MTL4PipelineDataSetSerializerConfigurationCaptureBinaries;
+    ctx.mtl4_serializer = [ctx.device newPipelineDataSetSerializerWithDescriptor:sd];
+    MTL4CompilerDescriptor *cd = [[MTL4CompilerDescriptor alloc] init];
+    cd.pipelineDataSetSerializer = (id<MTL4PipelineDataSetSerializer>)ctx.mtl4_serializer;
+    NSError *e2 = nil;
+    ctx.mtl4_compiler = [ctx.device newCompilerWithDescriptor:cd error:&e2];
+    ctx.mtl4_archive_enabled = (ctx.mtl4_compiler != nil);
+    return ctx.mtl4_archive_enabled ? 1 : 0;
+  }
+  return 0;
+}
+
+// P4 — flush the captured pipeline set to the enabled archive path. Returns 1 on
+// success. Call after the kernels of interest have been built (e.g. after warmup).
+extern "C" int32_t tessera_apple_gpu_mtl4_archive_flush(void) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    std::lock_guard<std::mutex> lock(ctx.mtl4_mu);
+    if (!ctx.mtl4_serializer || ctx.mtl4_archive_path.empty()) return 0;
+    NSURL *url = [NSURL fileURLWithPath:@(ctx.mtl4_archive_path.c_str())];
+    NSError *e = nil;
+    BOOL ok = [(id<MTL4PipelineDataSetSerializer>)ctx.mtl4_serializer
+        serializeAsArchiveAndFlushToURL:url error:&e];
+    return ok ? 1 : 0;
+  }
+  return 0;
 }
 
 // P2/P3 — lazily create the reusable per-dispatch MTL4 objects. Call with

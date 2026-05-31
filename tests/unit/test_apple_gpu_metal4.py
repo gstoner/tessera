@@ -346,6 +346,142 @@ def test_mtl4_bf16_is_default_routed_and_correct():
         R.set_apple_gpu_mtl4_bf16_default(prev)
 
 
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+@pytest.mark.parametrize("act", ["none", "gelu", "relu", "silu"])
+def test_p6_linear_bias_act_fuses_to_epilogue(dtype, act):
+    """P6: a `linear + bias (+ activation)` block on @jit(target="apple_gpu") in
+    f16/bf16 lowers to one matmul2d epilogue dispatch. The compile-time chain
+    detector recognizes matmul->add->act, and the runtime dispatches to the fused
+    kernel (fp32-accumulated, so it matches the reference closely)."""
+    if dtype == "bf16":
+        ml = pytest.importorskip("ml_dtypes")
+        cast, tol = ml.bfloat16, 6e-2
+    else:
+        cast, tol = np.float16, 3e-2
+    import tessera as ts
+    from tessera.compiler import driver
+
+    # Literal ts.ops.<act> calls (the jit tracer inspects source, so a closure
+    # indirection over the activation doesn't resolve).
+    if act == "none":
+        @ts.jit(target="apple_gpu")
+        def f(x, W, b):
+            return ts.ops.add(ts.ops.matmul(x, W), b)
+    elif act == "gelu":
+        @ts.jit(target="apple_gpu")
+        def f(x, W, b):
+            return ts.ops.gelu(ts.ops.add(ts.ops.matmul(x, W), b))
+    elif act == "relu":
+        @ts.jit(target="apple_gpu")
+        def f(x, W, b):
+            return ts.ops.relu(ts.ops.add(ts.ops.matmul(x, W), b))
+    else:
+        @ts.jit(target="apple_gpu")
+        def f(x, W, b):
+            return ts.ops.silu(ts.ops.add(ts.ops.matmul(x, W), b))
+
+    # compile-time chain recognition
+    expected_kind = "matmul_bias" if act == "none" else f"matmul_bias_{act}"
+    assert driver._apple_gpu_chain_kind(f.cpu_plan) == expected_kind
+
+    rng = np.random.default_rng(hash((dtype, act)) % 1000)
+    M, N, K = 64, 96, 128
+    x = (rng.standard_normal((M, K)) * 0.2).astype(cast)
+    W = (rng.standard_normal((K, N)) * 0.1).astype(cast)
+    b = (rng.standard_normal(N) * 0.3).astype(cast)
+    Y = np.asarray(f(x, W, b))
+    assert Y.dtype == cast  # fused result drops in at the chain's dtype
+    ref = x.astype(np.float64) @ W.astype(np.float64) + b[None, :].astype(np.float64)
+    ref = _epi_ref(x.astype(np.float64) @ W.astype(np.float64), b.astype(np.float64), act, np) \
+        if act != "none" else ref
+    den = np.maximum(1e-2, np.abs(ref))
+    assert float(np.max(np.abs(Y.astype(np.float64) - ref) / den)) < tol
+
+
+def test_p6_residual_add_falls_back_correctly():
+    """A matmul -> add with a 2-D (residual) operand is recognized as matmul_bias
+    but is NOT a per-column bias, so the dispatcher falls back to MPS matmul + add
+    (still correct), rather than mis-applying the epilogue's per-column bias."""
+    import tessera as ts
+
+    @ts.jit(target="apple_gpu")
+    def g(x, W, r):
+        return ts.ops.add(ts.ops.matmul(x, W), r)
+
+    rng = np.random.default_rng(2)
+    x = (rng.standard_normal((32, 48)) * 0.2).astype(np.float16)
+    W = (rng.standard_normal((48, 64)) * 0.1).astype(np.float16)
+    r = (rng.standard_normal((32, 64)) * 0.1).astype(np.float16)
+    Y = np.asarray(g(x, W, r))
+    ref = x.astype(np.float64) @ W.astype(np.float64) + r.astype(np.float64)
+    den = np.maximum(1e-2, np.abs(ref))
+    assert float(np.max(np.abs(Y.astype(np.float64) - ref) / den)) < 3e-2
+
+
+def test_p4_mtl4_archive_api_contract(tmp_path):
+    """P4 API contract (in-process): enable/flush don't crash, degrade cleanly off
+    Metal 4, and results stay correct with the archive enabled. (Capture only
+    happens for pipelines built *after* enable; since the shared matmul2d pipeline
+    may already be cached by earlier tests, the cross-process capture+reload win
+    is asserted in test_p4_mtl4_archive_roundtrip_fresh_process.)"""
+    archive = str(tmp_path / "contract.mtl4archive")
+    enabled = R.apple_gpu_mtl4_archive_enable(archive)
+    if not R.apple_gpu_metal4_caps()["available"]:
+        assert not enabled
+        assert R.apple_gpu_mtl4_archive_flush() is False
+        return
+    assert enabled
+    A = (np.random.default_rng(0).standard_normal((64, 96)) * 0.1).astype(np.float16)
+    B = (np.random.default_rng(1).standard_normal((96, 128)) * 0.1).astype(np.float16)
+    C, ran = R.apple_gpu_mtl4_matmul2d_f16(A, B, np)
+    ref = A.astype(np.float64) @ B.astype(np.float64)
+    assert ran and float(np.max(np.abs(C - ref) / np.maximum(1e-2, np.abs(ref)))) < 3e-2
+    assert isinstance(R.apple_gpu_mtl4_archive_flush(), bool)
+
+
+def test_p4_mtl4_archive_roundtrip_fresh_process(tmp_path):
+    """P4 in a fresh process (the real contract): enable BEFORE any MTL4 op so the
+    pipeline is built through the capturing compiler, flush writes a non-empty
+    binary archive, and a second process loads it as a lookup archive and still
+    produces correct results."""
+    import subprocess
+    import sys
+    archive = str(tmp_path / "fresh.mtl4archive")
+    root = str(__import__("pathlib").Path(__file__).resolve().parents[2])
+    prog = (
+        "import sys; sys.path.insert(0, %r)\n" % (root + "/python") +
+        "import numpy as np\n"
+        "from tessera import runtime as R\n"
+        "if not R.apple_gpu_metal4_caps()['available']:\n"
+        "    print('SKIP'); sys.exit(0)\n"
+        "load = %r\n" % archive +
+        "import os\n"
+        "had = os.path.exists(load)\n"
+        "assert R.apple_gpu_mtl4_archive_enable(load)\n"
+        "A = (np.random.default_rng(0).standard_normal((64,128))*0.1).astype(np.float16)\n"
+        "B = (np.random.default_rng(1).standard_normal((128,96))*0.1).astype(np.float16)\n"
+        "C, ran = R.apple_gpu_mtl4_matmul2d_f16(A, B, np)\n"
+        "ref = A.astype(np.float64) @ B.astype(np.float64)\n"
+        "ok = ran and float(np.max(np.abs(C-ref)/np.maximum(1e-2,np.abs(ref)))) < 3e-2\n"
+        "assert R.apple_gpu_mtl4_archive_flush()\n"
+        "print('USED_ARCHIVE' if had else 'WROTE_ARCHIVE', 'OK' if ok else 'BAD')\n"
+    )
+    if not R.apple_gpu_metal4_caps()["available"]:
+        pytest.skip("Metal 4 unavailable")
+    # Process 1: build + capture + flush -> writes the archive.
+    r1 = subprocess.run([sys.executable, "-c", prog], capture_output=True, text=True)
+    assert r1.returncode == 0, r1.stderr
+    if "SKIP" in r1.stdout:
+        pytest.skip("Metal 4 unavailable in subprocess")
+    import os
+    assert os.path.exists(archive) and os.path.getsize(archive) > 0, r1.stdout
+    assert "OK" in r1.stdout and "WROTE_ARCHIVE" in r1.stdout
+    # Process 2: load the archive as a lookup -> still correct.
+    r2 = subprocess.run([sys.executable, "-c", prog], capture_output=True, text=True)
+    assert r2.returncode == 0, r2.stderr
+    assert "OK" in r2.stdout and "USED_ARCHIVE" in r2.stdout
+
+
 def test_mtl4_matmul2d_f16_falls_back_cleanly():
     # Off Tahoe / non-Darwin the contract still holds via the numpy fp16 ref.
     rng = np.random.default_rng(11)

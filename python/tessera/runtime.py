@@ -2032,6 +2032,24 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             raise ValueError(f"artifact did not produce output {output_name!r}")
         return values[output_name]
 
+    # P6 — linear + bias (+ activation) fused via the MPP matmul2d epilogue.
+    # matmul -> add(bias) [-> gelu|relu|silu]. bias is the add's 2nd operand.
+    bias_act = _apple_gpu_metadata_matmul_bias_act(ops)
+    if bias_act is not None:
+        m, addop = ops[0], ops[1]
+        ab = [_as_numpy(values[name]) for name in m.get("operands", [])]
+        add_operands = [str(n) for n in addop.get("operands", [])]
+        if len(add_operands) < 2:
+            raise ValueError("matmul_bias fusion: add op missing bias operand")
+        bias = _as_numpy(values[add_operands[1].lstrip("%")])
+        result_name = ops[-1].get("result")
+        if not result_name:
+            raise ValueError("matmul_bias fusion: missing result name")
+        values[str(result_name)] = _apple_gpu_dispatch_matmul_bias_act(ab, bias, bias_act, np)
+        if output_name not in values:
+            raise ValueError(f"artifact did not produce output {output_name!r}")
+        return values[output_name]
+
     for op in ops:
         op_name = str(op.get("op_name", ""))
         result = op.get("result")
@@ -2232,6 +2250,68 @@ def _apple_gpu_metadata_is_matmul_postlude_chain(
     if op0.startswith("%"):
         op0 = op0[1:]
     return op0 == str(first.get("result", ""))
+
+
+def _apple_gpu_metadata_matmul_bias_act(ops: list[dict]):
+    """P6 — recognize a linear+bias(+activation) chain from metadata:
+    matmul/gemm -> add(bias) [-> gelu|relu|silu]. Returns the activation name
+    ("none"/"relu"/"gelu"/"silu") if matched, else None. Mirrors driver.py's
+    compile-time `_apple_gpu_chain_kind` matmul_bias* cases."""
+
+    def _op0(op) -> str:
+        operands = [str(n) for n in op.get("operands") or []]
+        return operands[0].lstrip("%") if operands else ""
+
+    if len(ops) not in (2, 3):
+        return None
+    m, addop = ops[0], ops[1]
+    if str(m.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
+        return None
+    if str(addop.get("op_name", "")) != "tessera.add":
+        return None
+    if _op0(addop) != str(m.get("result", "")):
+        return None
+    if len(ops) == 2:
+        return "none"
+    act = ops[2]
+    act_map = {"tessera.gelu": "gelu", "tessera.relu": "relu", "tessera.silu": "silu"}
+    act_name = act_map.get(str(act.get("op_name", "")))
+    if act_name is None or _op0(act) != str(addop.get("result", "")):
+        return None
+    return act_name
+
+
+def _apple_gpu_dispatch_matmul_bias_act(operands: list[Any], bias: Any,
+                                        act: str, np: Any) -> Any:
+    """P6 — fused ``act(A @ B + bias)`` via the MPP matmul2d epilogue when A/B are
+    f16/bf16 and bias is a genuine per-output-column [N] vector; otherwise a
+    correct numpy fallback (any bias shape / dtype / no Metal 4). The output is
+    cast back to the input dtype so the fused result drops in for the per-op
+    chain (with strictly better fp32-accumulated numerics)."""
+    a = np.asarray(operands[0])
+    b = np.asarray(operands[1])
+    bias = np.asarray(bias)
+    in_dtype = a.dtype
+    bf16 = _bfloat16_dtype()
+    if in_dtype == np.float16:
+        dt = "f16"
+    elif bf16 is not None and in_dtype == bf16:
+        dt = "bf16"
+    else:
+        dt = None
+    is_col_bias = bias.ndim == 1 and a.ndim == 2 and b.ndim == 2 and bias.shape[0] == b.shape[1]
+    if dt is not None and is_col_bias and a.shape[1] == b.shape[0]:
+        C, ran = apple_gpu_mtl4_matmul2d_epilogue(a, b, np, bias=bias, act=act, dtype=dt)
+        if ran:
+            return C.astype(in_dtype)
+    # Fallback for f32 / non-column-bias / no Metal 4: keep the matmul (the O(MNK)
+    # part) on the GPU via the per-dtype MPS path, then bias + act on the host
+    # (broadcast add handles 1-D or 2-D bias). Correct for any dtype/shape, and a
+    # win over the all-numpy eager path multi-op chains otherwise hit.
+    y = np.asarray(_apple_gpu_dispatch_matmul("tessera.matmul", [a, b], np))
+    y = y.astype(np.float32) + bias.astype(np.float32)
+    y = _mtl4_epilogue_act_numpy(y, _MTL4_EPILOGUE_ACT[act], np)
+    return y.astype(in_dtype)
 
 
 def _apple_gpu_metadata_is_matmul_softmax_chain(ops: list[dict]) -> bool:
@@ -4381,6 +4461,34 @@ class AppleGPUMLPSession:
             pass
 
 
+def apple_gpu_mtl4_archive_enable(path: str) -> bool:
+    """P4 — enable MTL4Archive pipeline persistence (opt-in). Loads an archive at
+    ``path`` (if present) so matching MTL4 pipelines skip the MSL recompile on
+    process start, and captures subsequently-built pipelines for a later
+    :func:`apple_gpu_mtl4_archive_flush`. No effect on the default path; returns
+    True if enabled (Metal 4 available). See docs/apple_backend_integration_review.md
+    (P4)."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mtl4_archive_enable", None)
+    if sym is None:
+        return False
+    sym.argtypes = [ctypes.c_char_p]
+    sym.restype = ctypes.c_int32
+    return bool(sym(str(path).encode("utf-8")))
+
+
+def apple_gpu_mtl4_archive_flush() -> bool:
+    """P4 — flush captured MTL4 pipelines to the enabled archive path. Call after
+    warming up the kernels of interest. Returns True on success."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mtl4_archive_flush", None)
+    if sym is None:
+        return False
+    sym.argtypes = []
+    sym.restype = ctypes.c_int32
+    return bool(sym())
+
+
 def _apple_gpu_mtl4_mlp_session_create_sym() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_mtl4_mlp_session_create", None)
@@ -6157,6 +6265,9 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_mtl4_mlp_session_create")
                 getattr(lib, "tessera_apple_gpu_mtl4_mlp_session_run")
                 getattr(lib, "tessera_apple_gpu_mtl4_mlp_session_destroy")
+                # Metal 4 P4 — MTL4Archive pipeline persistence.
+                getattr(lib, "tessera_apple_gpu_mtl4_archive_enable")
+                getattr(lib, "tessera_apple_gpu_mtl4_archive_flush")
                 # Phase-G Rung 3 — dynamic speculative accept as one MSL kernel.
                 getattr(lib, "tessera_apple_gpu_msl_spec_accept")
                 _apple_gpu_runtime = lib

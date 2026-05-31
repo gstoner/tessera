@@ -571,6 +571,31 @@ def _apple_gpu_chain_kind(cpu_plan: CPUPlan | None) -> str | None:
         ):
             return "matmul_softmax_matmul"
 
+    # P6 (Metal 4 epilogue fusion): linear + bias + activation. Decomposed by
+    # nn.functional.linear as gemm -> add(bias); an MLP block adds an activation:
+    # gemm -> add(bias) -> {gelu | relu | silu}. Recognized STRUCTURALLY (the trace
+    # leaves operand element types as `?`, so dtype is only known at call time).
+    # The runtime dispatcher routes f16/bf16 to the MPP matmul2d epilogue (bias +
+    # act fused in-register) and otherwise runs the matmul on MPS + bias/act —
+    # either way correct, and a strict win over the all-numpy eager path these
+    # multi-op chains hit today.
+    _MM = {"tessera.matmul", "tessera.gemm"}
+    _ACT = {"tessera.gelu": "matmul_bias_gelu", "tessera.relu": "matmul_bias_relu",
+            "tessera.silu": "matmul_bias_silu"}
+    if len(ops) == 3:
+        m, addop, act = ops[0], ops[1], ops[2]
+        if (m.op_name in _MM and addop.op_name == "tessera.add"
+                and m.result and addop.result
+                and _operand_matches(addop, m.result)
+                and _operand_matches(act, addop.result)
+                and act.op_name in _ACT):
+            return _ACT[act.op_name]
+    if len(ops) == 2:
+        m, addop = ops[0], ops[1]
+        if (m.op_name in _MM and addop.op_name == "tessera.add"
+                and m.result and _operand_matches(addop, m.result)):
+            return "matmul_bias"
+
     # Phase 8.4.3 + 8.4.7: 2-op fusions. matmul -> {softmax | gelu | rmsnorm}.
     if len(ops) == 2:
         first, second = ops[0], ops[1]
@@ -630,6 +655,13 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
             symbol = "tessera_apple_gpu_matmul_rmsnorm_f32"
             framework = "Metal"
             abi = "MSLComputePipelineState"
+        elif chain in {"matmul_bias", "matmul_bias_gelu", "matmul_bias_relu",
+                       "matmul_bias_silu"}:
+            # P6 — linear+bias(+act) fused via the MPP matmul2d epilogue (f16/bf16).
+            dtype_suffix = _apple_gpu_matmul_dtype_suffix(cpu_plan)
+            symbol = f"tessera_apple_gpu_mtl4_matmul2d_epilogue_{dtype_suffix}"
+            framework = "MetalPerformancePrimitives"
+            abi = "MTL4MatMul2dCooperative"
         else:
             only_op = cpu_plan.ops[0].op_name
             if only_op in _APPLE_GPU_MPS_OPS:

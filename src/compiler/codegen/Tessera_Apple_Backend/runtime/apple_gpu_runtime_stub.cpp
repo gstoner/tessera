@@ -1379,6 +1379,9 @@ extern "C" int32_t tessera_apple_gpu_mtl4_mlp_session_run(void*, const uint16_t*
   return 0;
 }
 extern "C" void tessera_apple_gpu_mtl4_mlp_session_destroy(void*) {}
+// Metal 4 P4 — MTL4Archive pipeline persistence; no Metal 4 off Darwin.
+extern "C" int32_t tessera_apple_gpu_mtl4_archive_enable(const char*) { return 0; }
+extern "C" int32_t tessera_apple_gpu_mtl4_archive_flush(void) { return 0; }
 // Phase-G Rung 3 — dynamic speculative accept+select, non-Apple reference
 // (same logic the MSL kernel runs, so it's correct everywhere).
 extern "C" int32_t tessera_apple_gpu_msl_spec_accept(const int32_t* draft,

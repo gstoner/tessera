@@ -322,6 +322,15 @@ extern "C" int64_t ts_dev_nbytes(TsDeviceTensor *t) {
   return t ? t->nbytes : 0;
 }
 
+// Interop escape hatch: the underlying `id<MTLBuffer>` as an opaque `void*`
+// (`__bridge`, no ownership transfer — Tessera owns the buffer's lifetime). Lets
+// external Metal/MPS code operate on a resident DeviceTensor GPU-side; pair with
+// tessera_apple_gpu_device_handle() / _command_queue_handle(). Callers must not
+// release it and must serialize their own work against Tessera's queue.
+extern "C" void *ts_dev_mtl_buffer(TsDeviceTensor *t) {
+  return t ? (__bridge void *)t->buf : nullptr;
+}
+
 extern "C" void ts_dev_upload(TsDeviceTensor *t, const void *src, int64_t n) {
   if (t && src && n > 0 && n <= t->nbytes) std::memcpy([t->buf contents], src, (size_t)n);
 }
@@ -342,6 +351,24 @@ extern "C" void ts_dev_free(TsDeviceTensor *t) {
 // host-memory reference path).
 extern "C" int32_t ts_dev_is_metal(void) {
   return deviceContext().ok ? 1 : 0;
+}
+
+// Interop escape hatch (cf. Mojo's metal_device(ctx)): the raw `id<MTLDevice>` /
+// `id<MTLCommandQueue>` that Tessera's runtime uses, as opaque `void*`
+// (`__bridge`, no ownership transfer — the process-wide singleton keeps them
+// alive, so the pointers are valid for process lifetime). For advanced interop:
+// build custom Metal/MPS work against the *same* device/queue so it composes with
+// Tessera's resident buffers (ts_dev_mtl_buffer). nullptr if Metal is
+// unavailable. Callers must not release these and should serialize work they
+// enqueue on the shared queue.
+extern "C" void *tessera_apple_gpu_device_handle(void) {
+  MetalDeviceContext &ctx = deviceContext();
+  return ctx.ok ? (__bridge void *)ctx.device : nullptr;
+}
+
+extern "C" void *tessera_apple_gpu_command_queue_handle(void) {
+  MetalDeviceContext &ctx = deviceContext();
+  return ctx.ok ? (__bridge void *)ctx.queue : nullptr;
 }
 
 // Reference fallback. Used when MTLCreateSystemDefaultDevice() returns nil

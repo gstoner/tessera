@@ -140,6 +140,9 @@ f64). Tests: `tests/unit/test_apple_gpu_linalg.py` (60).
 | `tessera_apple_gpu_runtime_has_metal` | Returns 1 on Darwin with Metal device available, 0 otherwise |
 | `tessera_apple_gpu_runtime_msl_cache_size` | Returns count of cached `MTLComputePipelineState` instances (used by tests to verify cache hits) |
 | `tessera_apple_gpu_simd_caps` | SIMD-feature bitmask of the active GPU (reduction/shuffle/shuffle-and-fill/simdgroup-barrier); `0xF` on M-series. Python `apple_gpu_simd_caps()` |
+| `tessera_apple_gpu_device_handle` | Interop escape hatch — raw `id<MTLDevice>` as `void*` (the same device Tessera uses; `MTLCreateSystemDefaultDevice`). Python `apple_gpu_device_handle()` → int pointer. Tessera owns the lifetime |
+| `tessera_apple_gpu_command_queue_handle` | Raw `id<MTLCommandQueue>` as `void*`. Python `apple_gpu_command_queue_handle()`. Serialize externally-enqueued work against Tessera's use |
+| `ts_dev_mtl_buffer` | A `DeviceTensor`'s underlying `id<MTLBuffer>` as `void*` (`DeviceTensor.mtl_buffer()`) — lets external Metal/MPS operate on resident tensors GPU-side; pairs with the device handle |
 
 ## GPU-native RNG lane (opt-in)
 

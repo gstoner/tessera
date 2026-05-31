@@ -4655,6 +4655,34 @@ def apple_gpu_simd_caps() -> dict:
     }
 
 
+def _apple_gpu_raw_handle(symname: str) -> int:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, symname, None)
+    if sym is None:
+        return 0
+    sym.argtypes = []
+    sym.restype = ctypes.c_void_p
+    p = sym()
+    return int(p) if p else 0
+
+
+def apple_gpu_device_handle() -> int:
+    """Interop escape hatch (cf. Mojo's ``metal_device(ctx)``): the raw
+    ``id<MTLDevice>`` Tessera's runtime uses, as an integer pointer (0 off Metal).
+    For advanced interop — build custom Metal/MPS work against the *same* device so
+    it composes with Tessera's resident buffers (see ``DeviceTensor.mtl_buffer``).
+    Tessera owns the lifetime; do not release it. Bridge into metal-cpp / PyObjC
+    via the pointer value."""
+    return _apple_gpu_raw_handle("tessera_apple_gpu_device_handle")
+
+
+def apple_gpu_command_queue_handle() -> int:
+    """The raw ``id<MTLCommandQueue>`` Tessera dispatches on, as an integer pointer
+    (0 off Metal). Serialize any work you enqueue on it against Tessera's own use.
+    See :func:`apple_gpu_device_handle`."""
+    return _apple_gpu_raw_handle("tessera_apple_gpu_command_queue_handle")
+
+
 def apple_gpu_metal4_tensor_roundtrip(arr: Any, np: Any) -> Any:
     """Round-trip ``arr`` (f32/f16/bf16) through a native Metal 4 ``MTLTensor``
     of the same dtype and return it — proving the typed resource stores +
@@ -6266,6 +6294,8 @@ def _apple_gpu_devtensor_api() -> Any:
         runtime.ts_dev_download.argtypes = [vp, vp, i64]; runtime.ts_dev_download.restype = None
         runtime.ts_dev_free.argtypes = [vp]; runtime.ts_dev_free.restype = None
         runtime.ts_dev_is_metal.argtypes = []; runtime.ts_dev_is_metal.restype = i32
+        if getattr(runtime, "ts_dev_mtl_buffer", None) is not None:
+            runtime.ts_dev_mtl_buffer.argtypes = [vp]; runtime.ts_dev_mtl_buffer.restype = vp
         _DEVTENSOR_API_CONFIGURED = True
     return runtime
 
@@ -6390,6 +6420,20 @@ class DeviceTensor:
     def handle(self) -> Any:
         """The raw `void*` handle (for handle-taking kernels in R1)."""
         return self._handle
+
+    def mtl_buffer(self) -> int:
+        """Interop escape hatch: the underlying ``id<MTLBuffer>`` as an integer
+        pointer (0 if unavailable / non-Metal). Combined with
+        :func:`apple_gpu_device_handle`, lets external Metal/MPS code operate on
+        this resident tensor GPU-side. Tessera owns the buffer's lifetime — do not
+        release it; valid only while this handle is alive."""
+        if self._freed or not self._handle:
+            return 0
+        sym = getattr(self._rt, "ts_dev_mtl_buffer", None)
+        if sym is None:
+            return 0
+        p = sym(self._handle)
+        return int(p) if p else 0
 
     def free(self) -> None:
         if not self._freed and self._owns and self._handle:

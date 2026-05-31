@@ -244,6 +244,74 @@ def test_mtl4_matmul2d_epilogue_rejects_bad_act():
                                            np.ones((8, 8), np.float16), np, act="elu")
 
 
+def _mlp_ref(X, W, bias, act, np):
+    y = X.astype(np.float64) @ W.astype(np.float64)
+    if bias is not None:
+        y = y + bias[None, :].astype(np.float64)
+    t = 0.7978845608028654 * (y + 0.044715 * y ** 3)
+    return {"none": y, "relu": np.maximum(0.0, y), "gelu": 0.5 * y * (1.0 + np.tanh(t)),
+            "silu": y / (1.0 + np.exp(-y))}[act]
+
+
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+def test_mtl4_mlp_session_resident_weights_matches_reference(dtype):
+    """M8: a resident-weight MLP-block session (Linear + bias + GELU) — the weight
+    is uploaded once and reused across run() steps. Each step is the fused
+    matmul2d epilogue; results must match the composed reference across the kind
+    of varying-M decode steps the session is built for."""
+    if dtype == "bf16":
+        ml = pytest.importorskip("ml_dtypes")
+        cast, tol = ml.bfloat16, 6e-2
+    else:
+        cast, tol = np.float16, 3e-2
+    K, N = 256, 512
+    rng = np.random.default_rng(0)
+    W = (rng.standard_normal((K, N)) * 0.05).astype(cast)
+    bias = (rng.standard_normal(N) * 0.1).astype(np.float32)
+    sess = R.AppleGPUMLPSession(W, np, bias=bias, act="gelu", dtype=dtype)
+    try:
+        if R.apple_gpu_metal4_caps()["available"]:
+            assert sess.ran_on_gpu
+        for M in (1, 8, 64, 100):  # decode-step shapes, incl. partial tile
+            X = (rng.standard_normal((M, K)) * 0.1).astype(cast)
+            Y = sess.run(X)
+            assert Y.shape == (M, N) and Y.dtype == np.float32
+            ref = _mlp_ref(X, W, bias, "gelu", np)
+            den = np.maximum(1e-2, np.abs(ref))
+            assert float(np.max(np.abs(Y.astype(np.float64) - ref) / den)) < tol
+    finally:
+        sess.close()
+
+
+def test_mtl4_mlp_session_matches_oneshot_epilogue():
+    # The session and the one-shot fused epilogue compute the same thing.
+    rng = np.random.default_rng(7)
+    K, N = 128, 256
+    W = (rng.standard_normal((K, N)) * 0.05).astype(np.float16)
+    bias = (rng.standard_normal(N) * 0.1).astype(np.float32)
+    X = (rng.standard_normal((32, K)) * 0.1).astype(np.float16)
+    with R.AppleGPUMLPSession(W, np, bias=bias, act="silu", dtype="f16") as sess:
+        Y_sess = sess.run(X)
+    Y_one, _ = R.apple_gpu_mtl4_matmul2d_epilogue(X, W, np, bias=bias, act="silu", dtype="f16")
+    np.testing.assert_allclose(Y_sess, Y_one, rtol=1e-3, atol=1e-3)
+
+
+def test_mtl4_mlp_session_run_after_close_uses_fallback():
+    # close() releases resident weights; further run() still returns correct
+    # values via the numpy fallback (no crash, no stale handle use).
+    rng = np.random.default_rng(3)
+    K, N = 64, 128
+    W = (rng.standard_normal((K, N)) * 0.1).astype(np.float16)
+    sess = R.AppleGPUMLPSession(W, np, act="relu", dtype="f16")
+    sess.close()
+    assert not sess.ran_on_gpu
+    X = (rng.standard_normal((8, K)) * 0.1).astype(np.float16)
+    Y = sess.run(X)
+    ref = _mlp_ref(X, W, None, "relu", np)
+    den = np.maximum(1e-2, np.abs(ref))
+    assert float(np.max(np.abs(Y.astype(np.float64) - ref) / den)) < 3e-2
+
+
 def test_mtl4_matmul2d_f16_falls_back_cleanly():
     # Off Tahoe / non-Darwin the contract still holds via the numpy fp16 ref.
     rng = np.random.default_rng(11)

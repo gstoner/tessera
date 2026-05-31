@@ -9082,9 +9082,13 @@ static int32_t mtl4_matmul2d_dispatch(NSString *entry, MTLTensorDataType dt,
       if (!pso) return 0;
 
       MTLResourceOptions ro = MTLResourceStorageModeShared;
-      id<MTLBuffer> bA = [dev newBufferWithBytes:A length:(size_t)M * K * 2 options:ro];
-      id<MTLBuffer> bB = [dev newBufferWithBytes:B length:(size_t)K * N * 2 options:ro];
-      id<MTLBuffer> bC = [dev newBufferWithLength:(size_t)M * N * 4 options:ro];
+      // Recycle the (large) A/B/C buffers through the shared pool — this path
+      // syncs before returning, so the buffers are free to recycle on scope exit
+      // (RAII guards). Avoids ~50-100us/alloc x3 of churn on repeated same-size
+      // calls. Buffers > 4MB bypass the pool and allocate fresh (see the pool).
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bA, ctx, A, (size_t)M * K * 2);
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bB, ctx, B, (size_t)K * N * 2);
+      TS_METAL_BUF_ACQUIRE(bC, ctx, (size_t)M * N * 4);
       if (!bA || !bB || !bC) return 0;
       id<MTLTensor> tA = make_buffer_tensor(dev, bA, K, M, dt);
       id<MTLTensor> tB = make_buffer_tensor(dev, bB, N, K, dt);
@@ -9184,6 +9188,135 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_epilogue_bf16(
 }
 
 //===----------------------------------------------------------------------===//
+// Metal 4 M8 — fused MLP-block session with RESIDENT weights. A decode-style
+// session: the weight `W` (+ bias) is uploaded ONCE and kept resident, and the
+// pipeline / residency set / command queue are reused across runs. Each run only
+// uploads the (small) activation `X` and dispatches one fused epilogue matmul:
+//   Y[M,N](f32) = act(X[M,K](f16/bf16) @ W[K,N] + bias).
+// This amortizes exactly the per-call MTL4 overhead that keeps routing OFF at
+// decode (small-M) sizes — re-uploading W (which dominates when W >> X) and
+// re-committing residency every call. The handle is an opaque C++ struct holding
+// ARC-managed Metal objects. See docs/apple_gpu_metal4_adoption.md (M8).
+//===----------------------------------------------------------------------===//
+struct TesseraMlpSession {
+  id pso;      // id<MTLComputePipelineState>
+  id bW;       // id<MTLBuffer>        resident weights (K x N, f16/bf16)
+  id tW;       // id<MTLTensor>        N x K view of bW
+  id bBias;    // id<MTLBuffer>        bias (f32) or 1-elem dummy
+  id bParams;  // id<MTLBuffer>        {has_bias, act}
+  id resW;     // id<MTLResidencySet>  persistent (W, bias, params)
+  int K, N, dt;
+};
+
+// dtype: 0 = f16, 1 = bf16. bias may be null. Returns an opaque handle or null.
+extern "C" void *tessera_apple_gpu_mtl4_mlp_session_create(const uint16_t *W,
+    const float *bias, int32_t act, int32_t K, int32_t N, int32_t bf16) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !W || K <= 0 || N <= 0) return nullptr;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    id<MTLDevice> dev = ctx.device;
+    NSError *err = nil;
+    NSString *entry = bf16 ? @"mtl4_matmul2d_epilogue_bf16" : @"mtl4_matmul2d_epilogue_f16";
+    MTLTensorDataType dt = bf16 ? MTLTensorDataTypeBFloat16 : MTLTensorDataTypeFloat16;
+    id<MTLComputePipelineState> pso = compile_mtl4_pipeline(ctx, kMTL4Matmul2dMSL, entry);
+    if (!pso) return nullptr;
+    MTLResourceOptions ro = MTLResourceStorageModeShared;
+    id<MTLBuffer> bW = [dev newBufferWithBytes:W length:(size_t)K * N * 2 options:ro];
+    id<MTLTensor> tW = make_buffer_tensor(dev, bW, N, K, dt);   // B operand: (N, K)
+    int has_bias = bias ? 1 : 0;
+    float zero = 0.0f;
+    id<MTLBuffer> bBias = bias ? [dev newBufferWithBytes:bias length:(size_t)N * 4 options:ro]
+                               : [dev newBufferWithBytes:&zero length:4 options:ro];
+    int params[2] = {has_bias, act};
+    id<MTLBuffer> bParams = [dev newBufferWithBytes:params length:sizeof(params) options:ro];
+    if (!bW || !tW || !bBias || !bParams) return nullptr;
+    id<MTLResidencySet> resW = [dev newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
+    if (!resW) return nullptr;
+    [resW addAllocation:bW]; [resW addAllocation:bBias]; [resW addAllocation:bParams];
+    [resW commit];
+    [resW requestResidency];
+    id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
+    if (!queue) return nullptr;
+    [queue addResidencySet:resW];
+    TesseraMlpSession *s = new TesseraMlpSession();
+    s->pso = pso; s->bW = bW; s->tW = tW; s->bBias = bBias; s->bParams = bParams;
+    s->resW = resW; s->K = K; s->N = N; s->dt = (int)dt;
+    return (void *)s;
+  }
+  return nullptr;
+}
+
+// One decode step: Y = act(X @ W + bias). X is M x K (f16/bf16), Y is M x N (f32).
+extern "C" int32_t tessera_apple_gpu_mtl4_mlp_session_run(void *handle,
+    const uint16_t *X, float *Y, int32_t M) {
+  if (!handle || !X || !Y || M <= 0) return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    TesseraMlpSession *s = (TesseraMlpSession *)handle;
+    id<MTLDevice> dev = ctx.device;
+    NSError *err = nil;
+    int K = s->K, N = s->N;
+    MTLResourceOptions ro = MTLResourceStorageModeShared;
+    id<MTLBuffer> bX = [dev newBufferWithBytes:X length:(size_t)M * K * 2 options:ro];
+    id<MTLBuffer> bY = [dev newBufferWithLength:(size_t)M * N * 4 options:ro];
+    id<MTLTensor> tX = make_buffer_tensor(dev, bX, K, M, (MTLTensorDataType)s->dt);
+    id<MTLTensor> tY = make_buffer_tensor(dev, bY, N, M, MTLTensorDataTypeFloat32);
+    if (!bX || !bY || !tX || !tY) return 0;
+    id<MTLResidencySet> resStep = [dev newResidencySetWithDescriptor:[[MTLResidencySetDescriptor alloc] init] error:&err];
+    if (!resStep) return 0;
+    [resStep addAllocation:bX]; [resStep addAllocation:bY];
+    [resStep commit];
+    [resStep requestResidency];
+    MTL4ArgumentTableDescriptor *atd = [[MTL4ArgumentTableDescriptor alloc] init];
+    atd.maxBufferBindCount = 5;
+    id<MTL4ArgumentTable> at = [dev newArgumentTableWithDescriptor:atd error:&err];
+    if (!at) return 0;
+    [at setResource:tX.gpuResourceID atBufferIndex:0];
+    [at setResource:((id<MTLTensor>)s->tW).gpuResourceID atBufferIndex:1];
+    [at setResource:tY.gpuResourceID atBufferIndex:2];
+    [at setAddress:((id<MTLBuffer>)s->bBias).gpuAddress atIndex:3];
+    [at setAddress:((id<MTLBuffer>)s->bParams).gpuAddress atIndex:4];
+    id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
+    id<MTL4CommandAllocator> alloc = [dev newCommandAllocator];
+    id<MTL4CommandBuffer> cb = [dev newCommandBuffer];
+    if (!queue || !alloc || !cb) return 0;
+    [queue addResidencySet:resStep];
+    [cb beginCommandBufferWithAllocator:alloc];
+    id<MTL4ComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:(id<MTLComputePipelineState>)s->pso];
+    [enc setArgumentTable:at];
+    [enc dispatchThreadgroups:MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1)
+        threadsPerThreadgroup:MTLSizeMake(128, 1, 1)];
+    [enc endEncoding];
+    [cb endCommandBuffer];
+    const id<MTL4CommandBuffer> cbs[1] = {cb};
+    [queue commit:cbs count:1];
+    id<MTLSharedEvent> ev = [dev newSharedEvent];
+    [queue signalEvent:ev value:1];
+    bool done = [ev waitUntilSignaledValue:1 timeoutMS:10000];
+    [queue removeResidencySet:resStep];
+    if (!done) return 0;
+    std::memcpy(Y, [bY contents], (size_t)M * N * 4);
+    return 1;
+  }
+  return 0;
+}
+
+extern "C" void tessera_apple_gpu_mtl4_mlp_session_destroy(void *handle) {
+  if (!handle) return;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    TesseraMlpSession *s = (TesseraMlpSession *)handle;
+    MetalDeviceContext &ctx = deviceContext();
+    if (ctx.ok && s->resW) {
+      id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
+      if (queue) [queue removeResidencySet:(id<MTLResidencySet>)s->resW];
+    }
+    delete s;   // ARC releases the id members
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // Phase-G Rung 3 via MSL — the DYNAMIC speculative-verify control flow as one
 // MSL kernel, the part MPSGraph's static-shape graph cannot express. Given a
 // fixed-capacity set of candidate paths (no trie, no heap), the kernel:
@@ -9237,10 +9370,10 @@ kernel void spec_accept(device const int *draft  [[buffer(0)]],
   @autoreleasepool {
     id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, kSpecAcceptMSL, @"spec_accept");
     if (!pso) return 0;
-    MTLResourceOptions ro = MTLResourceStorageModeShared;
-    id<MTLBuffer> bD = [ctx.device newBufferWithBytes:draft_paths length:(size_t)P * depth * 4 options:ro];
-    id<MTLBuffer> bT = [ctx.device newBufferWithBytes:target_greedy length:(size_t)P * (depth + 1) * 4 options:ro];
-    id<MTLBuffer> bO = [ctx.device newBufferWithLength:(size_t)(3 + depth) * 4 options:ro];
+    // Pooled (synced before the memcpy below, so safe to recycle on scope exit).
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bD, ctx, draft_paths, (size_t)P * depth * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bT, ctx, target_greedy, (size_t)P * (depth + 1) * 4);
+    TS_METAL_BUF_ACQUIRE(bO, ctx, (size_t)(3 + depth) * 4);
     if (!bD || !bT || !bO) return 0;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];

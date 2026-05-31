@@ -1368,6 +1368,17 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_epilogue_bf16(const uint16_t*
                                                                 int32_t) {
   return 0;
 }
+// Metal 4 M8 — resident-weight MLP session; no Metal 4 off Darwin.
+extern "C" void *tessera_apple_gpu_mtl4_mlp_session_create(const uint16_t*, const float*,
+                                                           int32_t, int32_t, int32_t,
+                                                           int32_t) {
+  return nullptr;
+}
+extern "C" int32_t tessera_apple_gpu_mtl4_mlp_session_run(void*, const uint16_t*, float*,
+                                                          int32_t) {
+  return 0;
+}
+extern "C" void tessera_apple_gpu_mtl4_mlp_session_destroy(void*) {}
 // Phase-G Rung 3 — dynamic speculative accept+select, non-Apple reference
 // (same logic the MSL kernel runs, so it's correct everywhere).
 extern "C" int32_t tessera_apple_gpu_msl_spec_accept(const int32_t* draft,

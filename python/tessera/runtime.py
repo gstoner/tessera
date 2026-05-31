@@ -4279,6 +4279,135 @@ def _mtl4_epilogue_act_numpy(x: Any, act_code: int, np: Any) -> Any:
     return x
 
 
+class AppleGPUMLPSession:
+    """M8 — a resident-weight fused MLP-block session for the Metal 4 lane.
+
+    The weight ``W`` (+ optional bias) is uploaded to the GPU **once** and kept
+    resident; the pipeline, residency set, and command queue are reused across
+    :meth:`run` calls. Each step only uploads the (small) activation ``X`` and
+    dispatches one fused ``matmul2d`` epilogue — ``Y = act(X @ W + bias)``. This
+    amortizes the per-call MTL4 overhead (re-uploading ``W``, re-committing
+    residency) that otherwise makes the lane slower than MPS at decode (small-M)
+    sizes. ``act`` ∈ {none, relu, gelu, silu}; ``dtype`` ∈ {f16, bf16}. Falls
+    back to a numpy reference when Metal 4 is unavailable. Use as a context
+    manager or call :meth:`close` to release the resident weights. See
+    docs/apple_gpu_metal4_adoption.md (M8)."""
+
+    def __init__(self, W: Any, np: Any, *, bias: Any = None, act: str = "none",
+                 dtype: str = "f16"):
+        if act not in _MTL4_EPILOGUE_ACT:
+            raise ValueError(f"act must be one of {sorted(_MTL4_EPILOGUE_ACT)}; got {act!r}")
+        self._np = np
+        self._act_code = _MTL4_EPILOGUE_ACT[act]
+        self._handle = None
+        if dtype == "bf16":
+            self._in_dtype = _bfloat16_dtype()
+            if self._in_dtype is None:
+                raise RuntimeError("bf16 session requires the optional ml_dtypes package")
+            bf16_flag = 1
+        elif dtype == "f16":
+            self._in_dtype = np.float16
+            bf16_flag = 0
+        else:
+            raise ValueError(f"dtype must be 'f16' or 'bf16'; got {dtype!r}")
+        W = np.ascontiguousarray(W, self._in_dtype)
+        self._K, self._N = int(W.shape[0]), int(W.shape[1])
+        self._bias = None
+        if bias is not None:
+            self._bias = np.ascontiguousarray(bias, np.float32).reshape(-1)
+            if self._bias.shape[0] != self._N:
+                raise ValueError(f"bias length must be N={self._N}; got {self._bias.shape[0]}")
+        # Keep host copies so the numpy fallback (and repr) stays correct.
+        self._W = W
+        create = _apple_gpu_mtl4_mlp_session_create_sym()
+        if create is not None:
+            u16 = ctypes.POINTER(ctypes.c_uint16)
+            fp = ctypes.POINTER(ctypes.c_float)
+            bias_ptr = self._bias.ctypes.data_as(fp) if self._bias is not None else None
+            h = create(W.view(np.uint16).ctypes.data_as(u16), bias_ptr,
+                       ctypes.c_int32(self._act_code), ctypes.c_int32(self._K),
+                       ctypes.c_int32(self._N), ctypes.c_int32(bf16_flag))
+            self._handle = h if h else None
+
+    @property
+    def ran_on_gpu(self) -> bool:
+        return self._handle is not None
+
+    def run(self, X: Any) -> Any:
+        """``Y[M,N] (f32) = act(X[M,K] @ W + bias)`` for this step's ``X``."""
+        np = self._np
+        X = np.ascontiguousarray(X, self._in_dtype)
+        M = int(X.shape[0])
+        if int(X.shape[1]) != self._K:
+            raise ValueError(f"X has K={X.shape[1]}; session expects K={self._K}")
+        if self._handle is not None:
+            run = _apple_gpu_mtl4_mlp_session_run_sym()
+            if run is not None:
+                Y = np.empty((M, self._N), np.float32)
+                u16 = ctypes.POINTER(ctypes.c_uint16)
+                fp = ctypes.POINTER(ctypes.c_float)
+                rc = run(self._handle, X.view(np.uint16).ctypes.data_as(u16),
+                         Y.ctypes.data_as(fp), ctypes.c_int32(M))
+                if rc == 1:
+                    return Y
+        # numpy fallback
+        Y = (X.astype(np.float32) @ self._W.astype(np.float32)).astype(np.float32)
+        if self._bias is not None:
+            Y = Y + self._bias[None, :]
+        return _mtl4_epilogue_act_numpy(Y, self._act_code, np)
+
+    def close(self) -> None:
+        if self._handle is not None:
+            destroy = _apple_gpu_mtl4_mlp_session_destroy_sym()
+            if destroy is not None:
+                destroy(self._handle)
+            self._handle = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
+
+def _apple_gpu_mtl4_mlp_session_create_sym() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mtl4_mlp_session_create", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_float),
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = ctypes.c_void_p
+    return sym
+
+
+def _apple_gpu_mtl4_mlp_session_run_sym() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mtl4_mlp_session_run", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16),
+                    ctypes.POINTER(ctypes.c_float), ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def _apple_gpu_mtl4_mlp_session_destroy_sym() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mtl4_mlp_session_destroy", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.c_void_p]
+    sym.restype = None
+    return sym
+
+
 # ── M4 — capability-gated routing of real ops onto the Metal 4 lane ───────────
 # OFF by default: the MTL4 cooperative-matrix kernel is *correct* but still
 # slower than the tuned MPS matmul end-to-end. M5 added a register-blocked,
@@ -5983,6 +6112,10 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_mtl4_matmul2d_bf16")
                 getattr(lib, "tessera_apple_gpu_mtl4_matmul2d_epilogue_f16")
                 getattr(lib, "tessera_apple_gpu_mtl4_matmul2d_epilogue_bf16")
+                # Metal 4 M8 — resident-weight fused MLP-block session.
+                getattr(lib, "tessera_apple_gpu_mtl4_mlp_session_create")
+                getattr(lib, "tessera_apple_gpu_mtl4_mlp_session_run")
+                getattr(lib, "tessera_apple_gpu_mtl4_mlp_session_destroy")
                 # Phase-G Rung 3 — dynamic speculative accept as one MSL kernel.
                 getattr(lib, "tessera_apple_gpu_msl_spec_accept")
                 _apple_gpu_runtime = lib

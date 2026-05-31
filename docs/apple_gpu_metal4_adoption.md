@@ -1,6 +1,6 @@
 # Metal 4 adoption — design + ladder
 
-> Status: **M0 + M1 + M2 + M3 + M4 + M5 + M6 + M7 landed.** This machine runs macOS 26.5 (Tahoe) with
+> Status: **M0 + M1 + M2 + M3 + M4 + M5 + M6 + M7 + M8 landed.** This machine runs macOS 26.5 (Tahoe) with
 > SDK 26.5, so the full Metal 4 surface is available:
 > `MTL4CommandQueue/Buffer/Allocator/Encoder`, `MTLTensor`, MSL 4.0
 > (`MTLLanguageVersion4_0`) — all `API_AVAILABLE(macos(26.0))`. M2 lands the
@@ -213,6 +213,42 @@ forced.
   stays OFF by default (same per-call-overhead reasoning as M6); the fused kernel
   is the natural thing to route a `linear → bias → activation` block onto once the
   lane is amortized, since it collapses three ops into one dispatch.
+- **M8 — resident-weight MLP-block session (landed; amortizes the overhead that
+  kept routing off).** A `linear → bias → activation` block is *already* a single
+  `matmul2d` epilogue dispatch (M7) — `Y = act(X @ W + b)`. M8 makes that practical
+  for **decode** (repeated small-M steps with persistent weights) by keeping `W`,
+  bias, params, pipeline, residency set, and command queue **resident/reused
+  across calls**; each `run(X)` only uploads the small activation and dispatches.
+  C ABI `tessera_apple_gpu_mtl4_mlp_session_{create,run,destroy}` (opaque handle =
+  ARC-managed C++ struct); Python `runtime.AppleGPUMLPSession(W, np, bias=, act=,
+  dtype=)` with `.run(X)`, context-manager + `close()`, and a numpy fallback when
+  Metal 4 is unavailable. **Measured (M-series, Tahoe, f16, K=N=4096):** per-step
+  latency **session vs per-call epilogue = 3.3–3.6× faster** (M=1/8/64) — precisely
+  because the per-call path re-uploads the 32 MB weight and re-commits residency
+  every step while the session does neither. This is the lever that lets the lane
+  beat MPS at decode sizes (where per-call MTL4 overhead, not kernel throughput,
+  was the gap). Tested by `test_mtl4_mlp_session_resident_weights_matches_reference`
+  / `_matches_oneshot_epilogue` / `_run_after_close_uses_fallback`.
+
+  **nn.functional status.** The fused `linear+bias+activation` *kernel* and the
+  resident-weight *session* are the building blocks; the remaining follow-up is
+  **compile-time Graph IR chain recognition** so a user writing
+  `gelu(linear(x, W, b))` under `@jit(target="apple_gpu")` in f16/bf16 auto-lowers
+  to one `matmul2d_epilogue` dispatch (today it composes through the per-op MPSGraph
+  path unless the epilogue API / session is called explicitly). That recognizer
+  mirrors the existing `matmul→gelu` / `matmul→rmsnorm` chain detection in
+  `runtime.py` + `driver.py`, extended with a bias operand and the f16/bf16 gate.
+
+## Integration review
+
+A Metal-4-grounded audit of how the whole Apple GPU backend uses the device
+(singletons, buffer pool, graph/pipeline caches, the per-call MTL4 overhead, and
+the unused `MTLArchive`/ML-encoder surfaces) lives in
+[apple_backend_integration_review.md](apple_backend_integration_review.md). Headline:
+the kernels are competitive; the remaining gap to "most optimal" is per-call
+host-side overhead amortization (P1 buffer-pool — partially done; P2/P3 reuse the
+command allocator/buffer/argument-table/shared-event), which the M8 session
+already validated as worth ~3.3× at decode sizes.
 
 ## Trade-offs + risks
 

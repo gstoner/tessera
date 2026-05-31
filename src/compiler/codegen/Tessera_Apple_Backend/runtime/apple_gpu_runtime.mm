@@ -620,15 +620,19 @@ bool dispatch_mps_random_f32(MetalDeviceContext &ctx, float *out, int64_t n,
                              uint64_t seed, bool normal, float a, float b) {
   if (!ctx.ok || !out || n <= 0) return false;
   @autoreleasepool {
-    NSUInteger cols = (NSUInteger)n;
-    NSUInteger rowBytes = ((cols * 4 + 15) / 16) * 16;  // 16-byte aligned
-    TS_METAL_BUF_ACQUIRE(bOut, ctx, (size_t)rowBytes);
+    NSUInteger len = (NSUInteger)n;
+    // MPSMatrixRandomPhilox is Philox-4x32 — it generates 4 values per counter
+    // step and asserts the result count is a multiple of 4. Over-allocate to the
+    // next multiple of 4, generate, and copy back only the requested `len`.
+    NSUInteger gen = (len + 3u) & ~(NSUInteger)3u;
+    size_t bytes = (size_t)gen * 4;
+    TS_METAL_BUF_ACQUIRE(bOut, ctx, bytes);
     if (!bOut) return false;
-    MPSMatrixDescriptor *d =
-        [MPSMatrixDescriptor matrixDescriptorWithRows:1 columns:cols
-                                             rowBytes:rowBytes
-                                             dataType:MPSDataTypeFloat32];
-    MPSMatrix *m = [[MPSMatrix alloc] initWithBuffer:bOut descriptor:d];
+    // A flat MPSVector is the idiomatic destination for a 1-D random fill — no
+    // 2-D rowBytes alignment to reason about (vs the matrix encode path).
+    MPSVectorDescriptor *vd =
+        [MPSVectorDescriptor vectorDescriptorWithLength:gen dataType:MPSDataTypeFloat32];
+    MPSVector *v = [[MPSVector alloc] initWithBuffer:bOut descriptor:vd];
     MPSMatrixRandomDistributionDescriptor *dist =
         normal ? [MPSMatrixRandomDistributionDescriptor
                      normalDistributionDescriptorWithMean:a standardDeviation:b]
@@ -639,13 +643,13 @@ bool dispatch_mps_random_f32(MetalDeviceContext &ctx, float *out, int64_t n,
                                   destinationDataType:MPSDataTypeFloat32
                                                  seed:(NSUInteger)seed
                                distributionDescriptor:dist];
-    if (!m || !dist || !rng) return false;
+    if (!v || !dist || !rng) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
-    [rng encodeToCommandBuffer:cb destinationMatrix:m];
+    [rng encodeToCommandBuffer:cb destinationVector:v];
     [cb commit];
     [cb waitUntilCompleted];
     if (cb.status != MTLCommandBufferStatusCompleted) return false;
-    std::memcpy(out, [bOut contents], (size_t)cols * 4);
+    std::memcpy(out, [bOut contents], (size_t)len * 4);  // only the requested n
     return true;
   }
 }

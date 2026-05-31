@@ -347,6 +347,16 @@ Decision #18). Use it for large on-device random fills where generating on the C
 and uploading would dominate. Validated by distribution (range/mean/std) + seed
 determinism; guarded by `tests/unit/test_apple_gpu_rng.py`.
 
+Implementation notes: the fill encodes into a flat **`MPSVector`**
+(`encode:destinationVector:`) — the idiomatic 1-D path, no 2-D `rowBytes`
+alignment to reason about. `MPSMatrixRandomPhilox` is **Philox-4x32** (generates 4
+values per counter step) and asserts the element count is a multiple of 4, so the
+runtime over-allocates to the next multiple of 4 and copies back the requested `n`
+— odd lengths are handled (regression-locked). `batchStart`/`batchSize` on
+`MPSMatrixRandom` are *batch-indexing* (which sub-arrays of a batched destination
+to fill), not a Philox counter-offset for stream continuation, so they add nothing
+to the single flat-fill surface and are intentionally unused.
+
 ## MPS device-caps / PackedFloat3 / MPSMatrixRandom — assessment (2026)
 
 Quick verdicts on three further MPS surfaces, checked against the Tahoe SDK:

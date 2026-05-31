@@ -57,3 +57,15 @@ def test_scalar_and_tuple_shapes():
 def test_not_wired_into_tessera_rng():
     # The GPU RNG is deliberately NOT the tessera.rng stream — kept as a doc note.
     pass
+
+
+@pytest.mark.parametrize("n", [1, 2, 3, 7, 13, 999, 4093])
+def test_non_multiple_of_four_lengths(n):
+    # Philox-4x32 generates 4 values per step (MPS asserts a multiple of 4); the
+    # runtime over-allocates to the next multiple of 4 and copies back n. This
+    # locks that odd lengths don't crash and stay in-range + deterministic.
+    a, _ = R.apple_gpu_random_uniform(n, np, seed=5, low=-1.0, high=2.0)
+    assert a.shape == (n,)
+    assert a.min() >= -1.0 and a.max() < 2.0 + 1e-3
+    b, _ = R.apple_gpu_random_uniform(n, np, seed=5, low=-1.0, high=2.0)
+    np.testing.assert_array_equal(a, b)

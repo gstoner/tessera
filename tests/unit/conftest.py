@@ -257,13 +257,17 @@ def coll_bench():
 
 # ---------------------------------------------------------------------------
 # Apple GPU is a macOS-only backend (Metal / MPSGraph). Its runtime-EXECUTION
-# tests build + run the Metal runtime and assert numeric results that need a
-# real Metal device — they cannot pass on the Linux CI runner (no Metal; the
-# non-Apple stub deliberately returns degenerate values for some half-precision
-# ops). So, like the `lit` / `sanitizer` validate lanes are opt-in, these tests
-# SKIP on non-Darwin instead of failing. Platform-agnostic Apple tests
-# (target-IR text, backend manifest, pass-order, buffer-pool source scan,
-# claim-lint) are intentionally NOT listed and keep running on Linux.
+# tests assert numeric results from the **real** Metal fused / MTL4 cooperative /
+# MPSGraph kernels, which need an actual Metal device — they can't pass on the
+# Linux CI runner. So, like the `lit` / `sanitizer` validate lanes, these tests
+# SKIP on non-Darwin instead of failing. (The non-Apple stub now COMPUTES f32
+# references for the half-precision bmm / bsmm / conv2d / conv3d ops — see
+# test_apple_gpu_stub_compute.py, which compile-locks that on every platform — so
+# stub degeneracy is no longer the reason; a few attention/swiglu stubs still
+# punt to zero where the Python layer upcasts/falls back.) Platform-agnostic
+# Apple tests (target-IR text, backend manifest, pass-order, buffer-pool source
+# scan, claim-lint, the stub-compute test) are intentionally NOT listed and keep
+# running on Linux.
 # ---------------------------------------------------------------------------
 _APPLE_GPU_EXECUTION_TESTS = frozenset({
     "test_apple_backend_roadmap.py",

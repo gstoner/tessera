@@ -205,10 +205,22 @@ inline uint16_t float_to_half_stub(float v) {
   return uint16_t(sign | (uint32_t(exp) << 10) | (frac >> 13));
 }
 
-// Forward-declare the bf16 bit helpers (defined later in the GQA section) so the
-// MLA decode stubs above them can convert bf16 at the boundary.
-static inline float gqa_bf16_to_f32_stub(uint16_t b);
-static inline uint16_t gqa_f32_to_bf16_stub(float v);
+// bf16 bit helpers, defined up front (used by the MLA-decode + GQA stubs below).
+// Defined here rather than forward-declared + defined later: a `static inline`
+// forward-declaration split from its definition makes Clang flag intervening
+// calls as ambiguous (and would break a Clang Linux build).
+static inline float gqa_bf16_to_f32_stub(uint16_t b) {
+  uint32_t f = static_cast<uint32_t>(b) << 16;
+  float o;
+  std::memcpy(&o, &f, sizeof(o));
+  return o;
+}
+static inline uint16_t gqa_f32_to_bf16_stub(float v) {
+  uint32_t f;
+  std::memcpy(&f, &v, sizeof(f));
+  uint32_t lsb = (f >> 16) & 1u;
+  return static_cast<uint16_t>((f + 0x7FFFu + lsb) >> 16);
+}
 
 inline float bfloat16_to_float_stub(uint16_t b) {
   uint32_t f = static_cast<uint32_t>(b) << 16;
@@ -2048,21 +2060,26 @@ extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f32(const float* A, const float*
     }
   }
 }
-extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f16(const uint16_t*, const uint16_t*,
-                                                    const uint16_t*, uint16_t* O,
-                                                    int32_t batch, int32_t M, int32_t,
-                                                    int32_t P, int32_t, float) {
-  std::memset(O, 0, static_cast<std::size_t>(batch) * M * P * 2);
+extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f16(const uint16_t* A, const uint16_t* B,
+                                                    const uint16_t* C, uint16_t* O,
+                                                    int32_t batch, int32_t M, int32_t N,
+                                                    int32_t P, int32_t K, float scale) {
+  // Non-Apple reference: f16 -> f32 -> fused bsmm -> f16 (compute, not zero-fill).
+  std::size_t aN = static_cast<std::size_t>(batch) * M * K;
+  std::size_t bN = static_cast<std::size_t>(batch) * K * N;
+  std::size_t cN = static_cast<std::size_t>(batch) * N * P;
+  std::size_t oN = static_cast<std::size_t>(batch) * M * P;
+  std::vector<float> Af(aN), Bf(bN), Cf(cN), Of(oN);
+  for (std::size_t i = 0; i < aN; ++i) Af[i] = half_to_float_stub(A[i]);
+  for (std::size_t i = 0; i < bN; ++i) Bf[i] = half_to_float_stub(B[i]);
+  for (std::size_t i = 0; i < cN; ++i) Cf[i] = half_to_float_stub(C[i]);
+  tessera_apple_gpu_mpsgraph_bsmm_f32(Af.data(), Bf.data(), Cf.data(), Of.data(),
+                                      batch, M, N, P, K, scale);
+  for (std::size_t i = 0; i < oN; ++i) O[i] = float_to_half_stub(Of[i]);
 }
 
 // ---- flash_attn GQA f16/bf16 non-Apple reference (2026-05-30) --------------
-static inline float gqa_bf16_to_f32_stub(uint16_t b) {
-  uint32_t f = static_cast<uint32_t>(b) << 16; float o; std::memcpy(&o, &f, sizeof(o)); return o;
-}
-static inline uint16_t gqa_f32_to_bf16_stub(float v) {
-  uint32_t f; std::memcpy(&f, &v, sizeof(f)); uint32_t lsb = (f >> 16) & 1u;
-  return static_cast<uint16_t>((f + 0x7FFFu + lsb) >> 16);
-}
+// (gqa_bf16_to_f32_stub / gqa_f32_to_bf16_stub are defined up top.)
 extern "C" void tessera_apple_gpu_flash_attn_gqa_f16(const uint16_t*, const uint16_t*,
                                                      const uint16_t*, uint16_t* O,
                                                      int32_t B, int32_t, int32_t,
@@ -2233,15 +2250,31 @@ extern "C" void tessera_apple_gpu_conv3d_f32(
                             sD, sH, sW, pD, pH, pW, dD, dH, dW, groups);
 }
 extern "C" void tessera_apple_gpu_conv3d_f16(
-    const uint16_t*, const uint16_t*, const uint16_t*, uint16_t* O, int32_t N,
-    int32_t iD, int32_t iH, int32_t iW, int32_t, int32_t Cout, int32_t kD,
+    const uint16_t* X, const uint16_t* Wt, const uint16_t* bias, uint16_t* O, int32_t N,
+    int32_t iD, int32_t iH, int32_t iW, int32_t Cin, int32_t Cout, int32_t kD,
     int32_t kH, int32_t kW, int32_t sD, int32_t sH, int32_t sW, int32_t pD,
-    int32_t pH, int32_t pW, int32_t dD, int32_t dH, int32_t dW, int32_t) {
+    int32_t pH, int32_t pW, int32_t dD, int32_t dH, int32_t dW, int32_t groups) {
   int32_t oD = conv2d_out_dim_stub(iD, kD, sD, pD, dD);
   int32_t oH = conv2d_out_dim_stub(iH, kH, sH, pH, dH);
   int32_t oW = conv2d_out_dim_stub(iW, kW, sW, pW, dW);
-  if (oD > 0 && oH > 0 && oW > 0)
-    std::memset(O, 0, static_cast<std::size_t>(N) * oD * oH * oW * Cout * 2);
+  if (oD <= 0 || oH <= 0 || oW <= 0 || groups <= 0) return;
+  // Non-Apple reference: f16 -> f32 -> conv3d -> f16 (compute, not zero-fill).
+  std::size_t xN = static_cast<std::size_t>(N) * iD * iH * iW * Cin;
+  std::size_t wN = static_cast<std::size_t>(kD) * kH * kW * (Cin / groups) * Cout;
+  std::size_t oN = static_cast<std::size_t>(N) * oD * oH * oW * Cout;
+  std::vector<float> Xf(xN), Wf(wN), Of(oN), Bf;
+  for (std::size_t i = 0; i < xN; ++i) Xf[i] = half_to_float_stub(X[i]);
+  for (std::size_t i = 0; i < wN; ++i) Wf[i] = half_to_float_stub(Wt[i]);
+  const float* bptr = nullptr;
+  if (bias) {
+    Bf.resize(Cout);
+    for (int32_t i = 0; i < Cout; ++i) Bf[i] = half_to_float_stub(bias[i]);
+    bptr = Bf.data();
+  }
+  reference_conv3d_f32_stub(Xf.data(), Wf.data(), bptr, Of.data(), N, iD, iH, iW,
+                            Cin, Cout, kD, kH, kW, sD, sH, sW, pD, pH, pW, dD, dH,
+                            dW, groups);
+  for (std::size_t i = 0; i < oN; ++i) O[i] = float_to_half_stub(Of[i]);
 }
 
 #endif // !__APPLE__

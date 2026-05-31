@@ -211,10 +211,14 @@ def test_mtl4_matmul2d_epilogue_fuses_bias_and_activation(dtype, act):
     if dtype == "bf16":
         ml = pytest.importorskip("ml_dtypes")
         cast = ml.bfloat16
-        tol = 6e-2
     else:
         cast = np.float16
-        tol = 3e-2
+    # Numerical contract: the kernel accumulates in fp32 and the **output is f32**,
+    # and the reference uses the *same* low-precision A/B values (input
+    # quantization cancels), so the only error is fp32 accumulation over K vs the
+    # f64 reference — ~1e-5 in practice. 2e-3 is a real correctness bound (~200×
+    # the observed error), not the old 3e-2/6e-2 that masked everything.
+    tol = 2e-3
     M, N, K = 128, 96, 64
     rng = np.random.default_rng(_seed(dtype, act))
     A = (rng.standard_normal((M, K)) * 0.25).astype(cast)
@@ -272,11 +276,15 @@ def test_mtl4_mlp_session_resident_weights_matches_reference(dtype):
     is uploaded once and reused across run() steps. Each step is the fused
     matmul2d epilogue; results must match the composed reference across the kind
     of varying-M decode steps the session is built for."""
+    # f32 output + f64 reference over the *same* low-precision W/X (input
+    # quantization cancels), so the residual is fp32 accumulation vs f64 (~1e-5);
+    # 2e-3 is a real correctness bound (~100×), not the old 3e-2/6e-2.
     if dtype == "bf16":
         ml = pytest.importorskip("ml_dtypes")
-        cast, tol = ml.bfloat16, 6e-2
+        cast = ml.bfloat16
     else:
-        cast, tol = np.float16, 3e-2
+        cast = np.float16
+    tol = 2e-3
     K, N = 256, 512
     rng = np.random.default_rng(0)
     W = (rng.standard_normal((K, N)) * 0.05).astype(cast)
@@ -316,11 +324,14 @@ def test_mtl4_mlp_session_run_dev_matches_run(dtype):
     views into the matrix-unit lane. It must produce the same values as the
     host-pointer run() and the composed reference, across decode-step shapes, and
     Y must come back as a live DeviceTensor."""
+    # f32 output + f64 reference over the same low-precision inputs -> ~1e-5
+    # fp32-accum residual; 2e-3 real bound (see resident_weights test).
     if dtype == "bf16":
         ml = pytest.importorskip("ml_dtypes")
-        cast, tol = ml.bfloat16, 6e-2
+        cast = ml.bfloat16
     else:
-        cast, tol = np.float16, 3e-2
+        cast = np.float16
+    tol = 2e-3
     DeviceTensor = R.DeviceTensor
     K, N = 256, 512
     rng = np.random.default_rng(11)
@@ -446,11 +457,16 @@ def test_p6_linear_bias_act_fuses_to_epilogue(dtype, act):
     f16/bf16 lowers to one matmul2d epilogue dispatch. The compile-time chain
     detector recognizes matmul->add->act, and the runtime dispatches to the fused
     kernel (fp32-accumulated, so it matches the reference closely)."""
+    # P6's output is **quantized to the chain dtype** and the reference is
+    # quantized the same way (below), so the residual is a few output-dtype ULPs
+    # (fp32-vs-f64 compute landing on adjacent quantized values). bf16 ULP ≈ 3.9e-3
+    # → ~4 ULP bound (1.5e-2); f16 ULP ≈ 4.9e-4 → ~6 ULP (3e-3). Far tighter than
+    # the old 3e-2/6e-2.
     if dtype == "bf16":
         ml = pytest.importorskip("ml_dtypes")
-        cast, tol = ml.bfloat16, 6e-2
+        cast, tol = ml.bfloat16, 1.5e-2
     else:
-        cast, tol = np.float16, 3e-2
+        cast, tol = np.float16, 3e-3
     import tessera as ts
     from tessera.compiler import driver
 

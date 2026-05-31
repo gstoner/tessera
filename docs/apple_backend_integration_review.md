@@ -329,18 +329,29 @@ orthogonal (a sweep with no rotation = converged), then σₖ = ‖col‖, U = n
 columns, V = accumulated rotations. The m-dim dot products (α,β,γ) reduce through a
 threadgroup tree; the sweep+pair loops run inside the kernel. The Python wrapper
 sorts σ descending, builds `Vh = Vᵀ`, and **verifies `‖U·Σ·Vh − A‖`** before
-trusting the iterative result — falling back to numpy on failure, or for
-`full_matrices=True` / `m < n` / f64. f16/bf16 compute in f32. Validated vs numpy:
+trusting the iterative result — falling back to numpy on failure or for
+`full_matrices=True` / f64. f16/bf16 compute in f32. Validated vs numpy:
 reconstruction + U/V orthonormality ~1e-6, σ-match ~1e-6, and exact on
-rank-deficient (tail σ = 0) and clustered/repeated σ. **Honest perf note: one
-threadgroup per matrix is correctness/capability-first, not a throughput win** —
-it's the GPU SVD *capability*, not a fast SVD.
+rank-deficient (tail σ = 0) and clustered/repeated σ.
 
-**Remaining follow-ups.** Native **batched** (one dispatch for the whole batch)
-if MPS ever exposes a batch stride for decomposition; a **parallel
-(Brent–Luk tournament) Jacobi** if SVD throughput ever matters; `m < n` /
-`full_matrices` on-GPU. Honest perf note: the batched per-matrix loop is
-correctness/capability-first —
+**Batched + wide + Brent–Luk (landed).**
+- **Batched (`…,m,n`)** runs **one threadgroup per matrix in a single grid
+  dispatch** (`threadgroup_position_in_grid` indexes the slice) — whole-GPU
+  utilization, measured **~30–95× a per-matrix dispatch loop** (the win grows with
+  batch). Multi-leading-dim batches (e.g. `[2,3,20,5]`) flatten to one batch axis.
+- **Wide (`m < n`)** runs `SVD(Aᵀ)` (tall → the kernel handles it) with U/V
+  swapped — pure Python, no kernel change. Reduced dims preserved.
+- **Brent–Luk parallel tournament** is now the **default** for `N ≤ 256`: the N/2
+  disjoint column pairs of each round rotate concurrently — one per SIMD-group,
+  each reducing its pair via `simd_sum` (no threadgroup scratch, no intra-round
+  barrier; barrier only between rounds). **Measured 1.9–3.8× the sequential cyclic
+  kernel** and numerically identical; the sequential batched kernel remains the
+  `N > 256` fallback. (Contrast the SIMD-reduction rowop attempt, which regressed
+  and was reverted — this one wins, so it ships.)
+
+**Remaining follow-ups.** Native **batched** decomposition/solve (Cholesky/LU) if
+MPS ever exposes a batch stride; on-GPU `full_matrices`. Honest perf note: the
+*Cholesky/LU/tri-solve* batched per-matrix loop is correctness/capability-first —
 each slice is a full GPU encode+commit+wait, so for many small matrices it is
 **not** a speed win over numpy's batched LAPACK; the value is keeping the work
 on-GPU when it's part of a larger resident pipeline.

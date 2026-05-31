@@ -967,24 +967,33 @@ namespace {
 constexpr int kSvdThreads = 128;
 
 bool dispatch_svd_jacobi_f32(MetalDeviceContext &ctx, const float *A, float *U,
-                             float *S, float *V, int32_t M, int32_t N) {
-  if (!ctx.ok || !A || !U || !S || !V || M <= 0 || N <= 0 || M < N) return false;
+                             float *S, float *V, int32_t batch, int32_t M, int32_t N) {
+  if (!ctx.ok || !A || !U || !S || !V || batch <= 0 || M <= 0 || N <= 0 || M < N)
+    return false;
+  // Grid-batched: one threadgroup per matrix (grid = batch), each indexing into
+  // its slice of W/V/S via threadgroup_position_in_grid. batch == 1 is the
+  // single-matrix case; batch > 1 keeps the whole GPU busy across the batch.
   static NSString *const kSvdSource = @R"MSL(
 #include <metal_stdlib>
 using namespace metal;
 #define TS_SVD_THREADS 128
 
 kernel void svd_jacobi_f32(
-    device float* W        [[buffer(0)]],   // M x N, in = A, out = U·Σ (col-scaled)
-    device float* V        [[buffer(1)]],   // N x N, out = right vectors (columns)
-    device float* S        [[buffer(2)]],   // N,     out = singular values (unsorted)
+    device float* W        [[buffer(0)]],   // [batch] M x N, in = A, out = U·Σ
+    device float* V        [[buffer(1)]],   // [batch] N x N, out = right vectors
+    device float* S        [[buffer(2)]],   // [batch] N,     out = singular values
     constant int& M        [[buffer(3)]],
     constant int& N        [[buffer(4)]],
     constant int& maxSweeps[[buffer(5)]],
-    uint lid [[thread_position_in_threadgroup]])
+    uint lid [[thread_position_in_threadgroup]],
+    uint bid [[threadgroup_position_in_grid]])
 {
     const int T = TS_SVD_THREADS;
     int li = (int)lid;
+    // This threadgroup's matrix slice.
+    device float* Wb = W + (size_t)bid * (size_t)M * (size_t)N;
+    device float* Vb = V + (size_t)bid * (size_t)N * (size_t)N;
+    device float* Sb = S + (size_t)bid * (size_t)N;
     threadgroup float sa[TS_SVD_THREADS];
     threadgroup float sb[TS_SVD_THREADS];
     threadgroup float sg[TS_SVD_THREADS];
@@ -994,7 +1003,7 @@ kernel void svd_jacobi_f32(
 
     // V = I
     for (int idx = li; idx < N * N; idx += T)
-        V[idx] = ((idx / N) == (idx % N)) ? 1.0f : 0.0f;
+        Vb[idx] = ((idx / N) == (idx % N)) ? 1.0f : 0.0f;
     threadgroup_barrier(mem_flags::mem_device | mem_flags::mem_threadgroup);
 
     for (int sweep = 0; sweep < maxSweeps; ++sweep) {
@@ -1005,7 +1014,7 @@ kernel void svd_jacobi_f32(
                 // α=Σ Wp², β=Σ Wq², γ=Σ Wp·Wq  (one pass over the M rows).
                 float pa = 0.0f, pb = 0.0f, pg = 0.0f;
                 for (int i = li; i < M; i += T) {
-                    float wp = W[i * N + p], wq = W[i * N + q];
+                    float wp = Wb[i * N + p], wq = Wb[i * N + q];
                     pa += wp * wp; pb += wq * wq; pg += wp * wq;
                 }
                 sa[li] = pa; sb[li] = pb; sg[li] = pg;
@@ -1033,14 +1042,14 @@ kernel void svd_jacobi_f32(
                 if (info[0]) {
                     float c = crot[0], s = crot[1];
                     for (int i = li; i < M; i += T) {
-                        float wp = W[i * N + p], wq = W[i * N + q];
-                        W[i * N + p] = c * wp - s * wq;
-                        W[i * N + q] = s * wp + c * wq;
+                        float wp = Wb[i * N + p], wq = Wb[i * N + q];
+                        Wb[i * N + p] = c * wp - s * wq;
+                        Wb[i * N + q] = s * wp + c * wq;
                     }
                     for (int i = li; i < N; i += T) {
-                        float vp = V[i * N + p], vq = V[i * N + q];
-                        V[i * N + p] = c * vp - s * vq;
-                        V[i * N + q] = s * vp + c * vq;
+                        float vp = Vb[i * N + p], vq = Vb[i * N + q];
+                        Vb[i * N + p] = c * vp - s * vq;
+                        Vb[i * N + q] = s * vp + c * vq;
                     }
                     threadgroup_barrier(mem_flags::mem_device | mem_flags::mem_threadgroup);
                 }
@@ -1053,7 +1062,7 @@ kernel void svd_jacobi_f32(
     // σ_k = ‖W[:,k]‖ ; U[:,k] = W[:,k]/σ_k.
     for (int k = 0; k < N; ++k) {
         float ps = 0.0f;
-        for (int i = li; i < M; i += T) { float w = W[i * N + k]; ps += w * w; }
+        for (int i = li; i < M; i += T) { float w = Wb[i * N + k]; ps += w * w; }
         sa[li] = ps;
         threadgroup_barrier(mem_flags::mem_threadgroup);
         for (int s = T / 2; s > 0; s >>= 1) {
@@ -1061,9 +1070,9 @@ kernel void svd_jacobi_f32(
             threadgroup_barrier(mem_flags::mem_threadgroup);
         }
         float sigma = sqrt(sa[0]);
-        if (li == 0) S[k] = sigma;
+        if (li == 0) Sb[k] = sigma;
         float inv = sigma > 1e-30f ? 1.0f / sigma : 0.0f;
-        for (int i = li; i < M; i += T) W[i * N + k] *= inv;
+        for (int i = li; i < M; i += T) Wb[i * N + k] *= inv;
         threadgroup_barrier(mem_flags::mem_threadgroup);
     }
 }
@@ -1071,7 +1080,9 @@ kernel void svd_jacobi_f32(
   @autoreleasepool {
     id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, kSvdSource, @"svd_jacobi_f32");
     if (!pso) return false;
-    size_t wB = (size_t)M * N * 4, vB = (size_t)N * N * 4, sB = (size_t)N * 4;
+    size_t wB = (size_t)batch * M * N * 4;
+    size_t vB = (size_t)batch * N * N * 4;
+    size_t sB = (size_t)batch * N * 4;
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bW, ctx, A, wB);
     TS_METAL_BUF_ACQUIRE(bV, ctx, vB);
     TS_METAL_BUF_ACQUIRE(bS, ctx, sB);
@@ -1086,7 +1097,7 @@ kernel void svd_jacobi_f32(
     [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
     [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
     [enc setBytes:&maxSweeps length:sizeof(int32_t) atIndex:5];
-    [enc dispatchThreadgroups:MTLSizeMake(1, 1, 1)
+    [enc dispatchThreadgroups:MTLSizeMake((NSUInteger)batch, 1, 1)
         threadsPerThreadgroup:MTLSizeMake(kSvdThreads, 1, 1)];
     [enc endEncoding];
     [cb commit];
@@ -1105,7 +1116,177 @@ kernel void svd_jacobi_f32(
 // sorts σ descending + verifies reconstruction.
 extern "C" int32_t tessera_apple_gpu_svd_f32(const float *A, float *U, float *S,
                                              float *V, int32_t M, int32_t N) {
-  return dispatch_svd_jacobi_f32(deviceContext(), A, U, S, V, M, N) ? 1 : 0;
+  return dispatch_svd_jacobi_f32(deviceContext(), A, U, S, V, 1, M, N) ? 1 : 0;
+}
+
+// Batched one-sided Jacobi SVD: `batch` stacked M×N matrices (row-major,
+// contiguous), one threadgroup per matrix. Same per-matrix contract as above.
+extern "C" int32_t tessera_apple_gpu_svd_batched_f32(const float *A, float *U,
+                                                     float *S, float *V,
+                                                     int32_t batch, int32_t M,
+                                                     int32_t N) {
+  return dispatch_svd_jacobi_f32(deviceContext(), A, U, S, V, batch, M, N) ? 1 : 0;
+}
+
+//===----------------------------------------------------------------------===//
+// Brent–Luk parallel Jacobi SVD (experimental). Same one-sided Jacobi, but with
+// the round-robin "tournament" ordering: each sweep is N-1 rounds, and the N/2
+// column pairs in a round are *disjoint*, so they're rotated concurrently — one
+// per SIMD-group (each SIMD-group reduces its pair's M-row dots via simd_sum, no
+// threadgroup scratch, no intra-round barrier; barrier only between rounds). The
+// aim is ~nsg× the sequential cyclic kernel for large N. Kept separate so it can
+// be A/B-benchmarked and dropped if it doesn't win. N ≤ 256 (perm in tg memory).
+//===----------------------------------------------------------------------===//
+namespace {
+constexpr int kSvdBlMaxN = 256;
+
+bool dispatch_svd_jacobi_bl_f32(MetalDeviceContext &ctx, const float *A, float *U,
+                                float *S, float *V, int32_t batch, int32_t M,
+                                int32_t N) {
+  if (!ctx.ok || !A || !U || !S || !V || batch <= 0 || M <= 0 || N <= 0 ||
+      M < N || N > kSvdBlMaxN)
+    return false;
+  static NSString *const kSvdBlSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+#define TS_SVDBL_THREADS 128
+#define TS_SVDBL_MAXN 256
+
+kernel void svd_jacobi_bl_f32(
+    device float* W        [[buffer(0)]],
+    device float* V        [[buffer(1)]],
+    device float* S        [[buffer(2)]],
+    constant int& M        [[buffer(3)]],
+    constant int& N        [[buffer(4)]],
+    constant int& maxSweeps[[buffer(5)]],
+    uint lid  [[thread_position_in_threadgroup]],
+    uint bid  [[threadgroup_position_in_grid]],
+    uint lane [[thread_index_in_simdgroup]],
+    uint sgid [[simdgroup_index_in_threadgroup]],
+    uint nsg  [[simdgroups_per_threadgroup]])
+{
+    const int T = TS_SVDBL_THREADS;
+    int li = (int)lid;
+    device float* Wb = W + (size_t)bid * (size_t)M * (size_t)N;
+    device float* Vb = V + (size_t)bid * (size_t)N * (size_t)N;
+    device float* Sb = S + (size_t)bid * (size_t)N;
+    threadgroup int   perm[TS_SVDBL_MAXN];
+    threadgroup atomic_int nrot;
+    threadgroup float sa[TS_SVDBL_THREADS];   // reused for the σ finalization
+    const float eps = 1e-7f;
+    int Np = (N % 2 == 0) ? N : N + 1;        // pad to even for the tournament
+    int npairs = Np / 2;                      // 'half' is a reserved MSL type
+
+    for (int idx = li; idx < N * N; idx += T)
+        Vb[idx] = ((idx / N) == (idx % N)) ? 1.0f : 0.0f;
+    for (int i = li; i < Np; i += T) perm[i] = i;
+    threadgroup_barrier(mem_flags::mem_device | mem_flags::mem_threadgroup);
+
+    for (int sweep = 0; sweep < maxSweeps; ++sweep) {
+        if (li == 0) atomic_store_explicit(&nrot, 0, memory_order_relaxed);
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (int round = 0; round < Np - 1; ++round) {
+            // SIMD-group sg processes the disjoint pairs i = sg, sg+nsg, ...
+            for (int i = (int)sgid; i < npairs; i += (int)nsg) {
+                int p = perm[i], q = perm[Np - 1 - i];
+                if (p > q) { int tmp = p; p = q; q = tmp; }
+                if (q < N) {   // skip the dummy padded column (odd N)
+                    float pa = 0.0f, pb = 0.0f, pg = 0.0f;
+                    for (int r = (int)lane; r < M; r += 32) {
+                        float wp = Wb[r * N + p], wq = Wb[r * N + q];
+                        pa += wp * wp; pb += wq * wq; pg += wp * wq;
+                    }
+                    float alpha = simd_sum(pa), beta = simd_sum(pb), gamma = simd_sum(pg);
+                    if (fabs(gamma) > eps * sqrt(max(alpha * beta, 0.0f))) {
+                        float zeta = (beta - alpha) / (2.0f * gamma);
+                        float t = (zeta >= 0.0f ? 1.0f : -1.0f) /
+                                  (fabs(zeta) + sqrt(1.0f + zeta * zeta));
+                        if (zeta == 0.0f) t = 1.0f;
+                        float c = 1.0f / sqrt(1.0f + t * t), s = c * t;
+                        for (int r = (int)lane; r < M; r += 32) {
+                            float wp = Wb[r * N + p], wq = Wb[r * N + q];
+                            Wb[r * N + p] = c * wp - s * wq;
+                            Wb[r * N + q] = s * wp + c * wq;
+                        }
+                        for (int r = (int)lane; r < N; r += 32) {
+                            float vp = Vb[r * N + p], vq = Vb[r * N + q];
+                            Vb[r * N + p] = c * vp - s * vq;
+                            Vb[r * N + q] = s * vp + c * vq;
+                        }
+                        if (lane == 0)
+                            atomic_fetch_add_explicit(&nrot, 1, memory_order_relaxed);
+                    }
+                }
+            }
+            threadgroup_barrier(mem_flags::mem_device | mem_flags::mem_threadgroup);
+            // circle method: fix perm[0], cyclically rotate perm[1..Np-1] by one.
+            if (li == 0 && Np > 2) {
+                int tmp = perm[Np - 1];
+                for (int i = Np - 1; i > 1; --i) perm[i] = perm[i - 1];
+                perm[1] = tmp;
+            }
+            threadgroup_barrier(mem_flags::mem_threadgroup);
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        if (atomic_load_explicit(&nrot, memory_order_relaxed) == 0) break;
+    }
+
+    // σ_k = ‖W[:,k]‖ ; U[:,k] = W[:,k]/σ_k  (all T threads, threadgroup reduce).
+    for (int k = 0; k < N; ++k) {
+        float ps = 0.0f;
+        for (int i = li; i < M; i += T) { float w = Wb[i * N + k]; ps += w * w; }
+        sa[li] = ps;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (int s = T / 2; s > 0; s >>= 1) {
+            if (li < s) sa[li] += sa[li + s];
+            threadgroup_barrier(mem_flags::mem_threadgroup);
+        }
+        float sigma = sqrt(sa[0]);
+        if (li == 0) Sb[k] = sigma;
+        float inv = sigma > 1e-30f ? 1.0f / sigma : 0.0f;
+        for (int i = li; i < M; i += T) Wb[i * N + k] *= inv;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+}
+)MSL";
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, kSvdBlSource, @"svd_jacobi_bl_f32");
+    if (!pso) return false;
+    size_t wB = (size_t)batch * M * N * 4, vB = (size_t)batch * N * N * 4,
+           sB = (size_t)batch * N * 4;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bW, ctx, A, wB);
+    TS_METAL_BUF_ACQUIRE(bV, ctx, vB);
+    TS_METAL_BUF_ACQUIRE(bS, ctx, sB);
+    if (!bW || !bV || !bS) return false;
+    int maxSweeps = 60;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bW offset:0 atIndex:0];
+    [enc setBuffer:bV offset:0 atIndex:1];
+    [enc setBuffer:bS offset:0 atIndex:2];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&maxSweeps length:sizeof(int32_t) atIndex:5];
+    [enc dispatchThreadgroups:MTLSizeMake((NSUInteger)batch, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(128, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    std::memcpy(U, [bW contents], wB);
+    std::memcpy(V, [bV contents], vB);
+    std::memcpy(S, [bS contents], sB);
+    return true;
+  }
+}
+}  // namespace
+
+extern "C" int32_t tessera_apple_gpu_svd_bl_batched_f32(const float *A, float *U,
+                                                        float *S, float *V,
+                                                        int32_t batch, int32_t M,
+                                                        int32_t N) {
+  return dispatch_svd_jacobi_bl_f32(deviceContext(), A, U, S, V, batch, M, N) ? 1 : 0;
 }
 
 // Metal 4 lane — cached MTL4 compute pipeline (MSL 4.0 source compiled via the

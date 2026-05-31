@@ -336,12 +336,38 @@ def test_svd_f16_dtype_preserved():
                 A.astype(np.float32)) < 5e-3
 
 
-def test_svd_wide_matrix_falls_back():
-    # m < n is outside the GPU path (m >= n only) -> numpy, still correct.
-    A = np.random.default_rng(3).standard_normal((4, 10)).astype(np.float32)
+@pytest.mark.parametrize("m,n", [(4, 10), (5, 5), (16, 64), (3, 20)])
+def test_svd_wide_matrix_on_gpu(m, n):
+    # m < n now runs on the GPU via SVD(Aᵀ) with U/V swapped (reduced dims).
+    A = np.random.default_rng(m * 5 + n).standard_normal((m, n)).astype(np.float32)
     U, S, Vh, ran = R.apple_gpu_svd(A, np)
-    assert ran is False
-    assert _rel((U * S) @ Vh, A) < TOL
+    k = min(m, n)
+    assert U.shape == (m, k) and S.shape == (k,) and Vh.shape == (k, n)
+    assert _rel((U * S) @ Vh, A) < 1e-4
+    assert float(np.abs(U.T @ U - np.eye(k)).max()) < 1e-3
+    assert float(np.abs(Vh @ Vh.T - np.eye(k)).max()) < 1e-3
+    s_np = np.linalg.svd(A.astype(np.float64), compute_uv=False)
+    assert float(np.abs(np.sort(S)[::-1] - s_np).max() / s_np.max()) < 1e-3
+    if _on_metal():
+        assert ran is True
+
+
+@pytest.mark.parametrize("shape", [(8, 32, 16), (16, 12, 12), (8, 4, 12), (2, 3, 20, 5)])
+def test_svd_batched(shape):
+    # Batched (…, m, n) runs one threadgroup per matrix in a single grid dispatch.
+    A = np.random.default_rng(sum(shape)).standard_normal(shape).astype(np.float32)
+    m, n = shape[-2], shape[-1]
+    k = min(m, n)
+    U, S, Vh, ran = R.apple_gpu_svd(A, np)
+    assert U.shape == shape[:-2] + (m, k)
+    assert S.shape == shape[:-2] + (k,)
+    assert Vh.shape == shape[:-2] + (k, n)
+    recon = (U * S[..., None, :]) @ Vh
+    assert _rel(recon, A) < 1e-4
+    s_np = np.linalg.svd(A.astype(np.float64), compute_uv=False)
+    assert _rel(np.sort(S, axis=-1)[..., ::-1], s_np) < 1e-3
+    if _on_metal():
+        assert ran is True
 
 
 def test_svd_full_matrices_falls_back():
@@ -349,3 +375,15 @@ def test_svd_full_matrices_falls_back():
     U, S, Vh, ran = R.apple_gpu_svd(A, np, full_matrices=True)
     assert ran is False
     assert U.shape == (8, 8) and Vh.shape == (5, 5)
+
+
+def test_svd_large_n_uses_sequential_fallback():
+    # N > 256 exceeds the Brent–Luk perm cap -> the sequential batched kernel
+    # handles it (still GPU, still correct).
+    A = np.random.default_rng(7).standard_normal((300, 300)).astype(np.float32)
+    U, S, Vh, ran = R.apple_gpu_svd(A, np)
+    assert _rel((U * S) @ Vh, A) < 1e-4
+    s_np = np.linalg.svd(A.astype(np.float64), compute_uv=False)
+    assert float(np.abs(np.sort(S)[::-1] - s_np).max() / s_np.max()) < 1e-3
+    if _on_metal():
+        assert ran is True

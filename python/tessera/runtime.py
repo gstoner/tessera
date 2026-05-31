@@ -3183,34 +3183,62 @@ def apple_gpu_svd(A: Any, np: Any, *, full_matrices: bool = False) -> Any:
     orthogonality, then σ = column norms, U = normalized columns, V = accumulated
     rotations. f16/bf16 compute in f32 and cast back.
 
-    The GPU path covers ``full_matrices=False`` with ``m ≥ n``; the result is
-    **verified** (``‖U·Σ·Vh − A‖``) and, on failure — or for ``full_matrices=True``,
-    ``m < n``, or f64 — it **falls back to numpy**. Returns
+    The GPU path covers ``full_matrices=False`` for **any 2-D or batched (`…,m,n`)**
+    shape — tall (``m≥n``) runs directly; **wide (``m<n``) runs on ``Aᵀ`` with U/V
+    swapped**; **batched runs one threadgroup per matrix in a single grid dispatch**
+    (whole-GPU utilization, ~30–95× a per-matrix loop). The result is **verified**
+    (``‖U·Σ·Vh − A‖`` per matrix); on failure — or for ``full_matrices=True`` or
+    f64 — it **falls back to numpy**. f16/bf16 compute in f32. Returns
     ``(U, S, Vh, ran_on_gpu)``. Validate by reconstruction / orthonormality, not
     elementwise (SVD is unique only up to signs of paired singular vectors)."""
     out_dt, gpu_ok, fb_dt = _linalg_dtype_policy(A, np)
     A2 = np.ascontiguousarray(A, np.float32)
-    if gpu_ok and not full_matrices and A2.ndim == 2 and A2.shape[0] >= A2.shape[1] >= 1:
+    if gpu_ok and not full_matrices and A2.ndim >= 2:
+        m, n = int(A2.shape[-2]), int(A2.shape[-1])
+        transpose = m < n                       # run SVD(Aᵀ) for wide A, swap U/V
+        Aw = np.ascontiguousarray(np.swapaxes(A2, -1, -2)) if transpose else A2
+        r, c = int(Aw.shape[-2]), int(Aw.shape[-1])   # r >= c
+        lead = Aw.shape[:-2]
+        Bn = 1
+        for d in lead:
+            Bn *= int(d)
+        # Brent–Luk (parallel tournament) is ~2–4× the sequential cyclic kernel
+        # and caps at N ≤ 256 (perm in threadgroup memory); larger falls back to
+        # the sequential batched kernel. Both share the same ABI + verify path.
+        symname = ("tessera_apple_gpu_svd_bl_batched_f32" if c <= 256
+                   else "tessera_apple_gpu_svd_batched_f32")
         sym = _apple_gpu_linalg_sym(
-            "tessera_apple_gpu_svd_f32",
-            [ctypes.POINTER(ctypes.c_float)] * 4 + [ctypes.c_int32, ctypes.c_int32])
-        if sym is not None:
-            m, n = int(A2.shape[0]), int(A2.shape[1])
+            symname, [ctypes.POINTER(ctypes.c_float)] * 4 + [ctypes.c_int32] * 3)
+        if sym is not None and c >= 1:
             fp = ctypes.POINTER(ctypes.c_float)
-            U = np.empty((m, n), np.float32)
-            S = np.empty(n, np.float32)
-            V = np.empty((n, n), np.float32)   # right vectors as columns
-            rc = sym(A2.ctypes.data_as(fp), U.ctypes.data_as(fp),
-                     S.ctypes.data_as(fp), V.ctypes.data_as(fp),
-                     ctypes.c_int32(m), ctypes.c_int32(n))
+            flat = np.ascontiguousarray(Aw.reshape(Bn, r, c))
+            Uf = np.empty((Bn, r, c), np.float32)
+            Sf = np.empty((Bn, c), np.float32)
+            Vf = np.empty((Bn, c, c), np.float32)     # right vectors as columns
+            rc = sym(flat.ctypes.data_as(fp), Uf.ctypes.data_as(fp),
+                     Sf.ctypes.data_as(fp), Vf.ctypes.data_as(fp),
+                     ctypes.c_int32(Bn), ctypes.c_int32(r), ctypes.c_int32(c))
             if rc == 1:
-                order = np.argsort(-S)               # descending (numpy convention)
-                U, S, V = U[:, order], S[order], V[:, order]
-                # Verify reconstruction before trusting the iterative result.
-                recon = float(np.abs((U * S) @ V.T - A2).max() / (np.abs(A2).max() + 1e-30))
-                if recon < 1e-3:
-                    return (U.astype(out_dt), S.astype(out_dt),
-                            np.ascontiguousarray(V.T).astype(out_dt), True)
+                order = np.argsort(-Sf, axis=-1)       # per-matrix descending
+                Ss = np.take_along_axis(Sf, order, axis=-1)
+                Us = np.take_along_axis(Uf, order[:, None, :], axis=-1)
+                Vs = np.take_along_axis(Vf, order[:, None, :], axis=-1)
+                # Verify reconstruction of what the kernel factored (the `flat`
+                # stack), per matrix, before trusting the iterative result.
+                recon = (Us * Ss[:, None, :]) @ np.swapaxes(Vs, -1, -2)
+                denom = np.abs(flat).reshape(Bn, -1).max(axis=-1) + 1e-30
+                err = float((np.abs(recon - flat).reshape(Bn, -1).max(axis=-1) / denom).max())
+                if err < 1e-3:
+                    if transpose:        # A = Vs·Σ·Usᵀ  (swap of the Aᵀ SVD)
+                        U_b, S_b, Vh_b = Vs, Ss, np.swapaxes(Us, -1, -2)
+                    else:
+                        U_b, S_b, Vh_b = Us, Ss, np.swapaxes(Vs, -1, -2)
+                    U_o = U_b.reshape(lead + U_b.shape[1:])     # squeezes batch for rank-2
+                    S_o = S_b.reshape(lead + S_b.shape[1:])
+                    Vh_o = Vh_b.reshape(lead + Vh_b.shape[1:])
+                    return (np.ascontiguousarray(U_o).astype(out_dt),
+                            np.ascontiguousarray(S_o).astype(out_dt),
+                            np.ascontiguousarray(Vh_o).astype(out_dt), True)
     U, S, Vh = np.linalg.svd(np.asarray(A, fb_dt), full_matrices=full_matrices)
     return U.astype(out_dt), S.astype(out_dt), Vh.astype(out_dt), False
 

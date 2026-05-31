@@ -126,10 +126,12 @@ ops `tessera.cholesky` + `tessera.tri_solve` (via `_APPLE_GPU_LINALG_OPS` in
 cast back; **f64** routes to numpy (full precision). **`apple_gpu_qr`** —
 Cholesky-QR (`G=AᵀA`, `R=chol(G)ᵀ`, `Q=A·R⁻¹`) reusing the GPU chol+tri-solve, with
 a `‖QᵀQ−I‖` verify → numpy-Householder fallback. **`apple_gpu_svd`** — custom
-one-sided **Jacobi MSL kernel** (`tessera_apple_gpu_svd_f32`; one threadgroup,
-column-pair rotations to convergence), host sort + `‖UΣVh−A‖` verify → numpy
-fallback (m<n / full_matrices / f64). Tests:
-`tests/unit/test_apple_gpu_linalg.py` (51).
+one-sided **Jacobi MSL kernels**: `tessera_apple_gpu_svd_bl_batched_f32`
+(**Brent–Luk parallel tournament**, default for N≤256, ~2–4× the cyclic kernel) /
+`tessera_apple_gpu_svd_batched_f32` (sequential, N>256) / `_svd_f32` (rank-2).
+**Batched** = one threadgroup per matrix in one grid dispatch (~30–95× a loop);
+**wide m<n** via `SVD(Aᵀ)`; host sort + `‖UΣVh−A‖` verify → numpy (full_matrices /
+f64). Tests: `tests/unit/test_apple_gpu_linalg.py` (60).
 
 ## Capability + diagnostic symbols
 

@@ -118,6 +118,12 @@ extern "C" int32_t tessera_apple_gpu_tri_solve_f32(const float*, const float*,
 // One-sided Jacobi SVD — no Metal off Darwin; return 0 so Python uses numpy.
 extern "C" int32_t tessera_apple_gpu_svd_f32(const float*, float*, float*, float*,
                                              int32_t, int32_t) { return 0; }
+extern "C" int32_t tessera_apple_gpu_svd_batched_f32(const float*, float*, float*,
+                                                     float*, int32_t, int32_t,
+                                                     int32_t) { return 0; }
+extern "C" int32_t tessera_apple_gpu_svd_bl_batched_f32(const float*, float*, float*,
+                                                        float*, int32_t, int32_t,
+                                                        int32_t) { return 0; }
 
 namespace {
 

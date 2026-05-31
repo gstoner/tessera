@@ -10,6 +10,7 @@ numpy fallback; ``ran_on_gpu`` is asserted True only when a Metal device exists.
 import numpy as np
 import pytest
 
+import tessera as ts
 import tessera.runtime as R
 
 TOL = 2e-4  # f32 factorization/solve vs an f64 numpy reference
@@ -125,19 +126,95 @@ def test_tri_solve_vector_rhs():
     assert _rel(x, np.linalg.solve(np.tril(A).astype(np.float64), b.astype(np.float64))) < TOL
 
 
-# ── Batched inputs fall back to numpy (still correct) ─────────────────────────
-def test_batched_cholesky_falls_back_correct():
+# ── Batched inputs (ndim>2) — per-matrix GPU loop, else numpy ─────────────────
+def test_batched_cholesky():
     A = np.stack([_spd(5, k) for k in range(3)])  # [3, 5, 5]
     L, ran = R.apple_gpu_cholesky(A, np)
     assert L.shape == (3, 5, 5)
-    assert ran is False  # rank-3: numpy fallback
     assert _rel(L, np.linalg.cholesky(A.astype(np.float64))) < TOL
+    if _on_metal():
+        assert ran is True
 
 
-def test_batched_solve_falls_back_correct():
+def test_batched_solve_matrix_rhs():
     A = np.stack([_wellcond(6, k) for k in range(4)])  # [4, 6, 6]
     B = np.random.default_rng(0).standard_normal((4, 6, 2)).astype(np.float32)
     X, ran = R.apple_gpu_solve(A, B, np)
     assert X.shape == (4, 6, 2)
-    assert ran is False
-    assert _rel(X, np.linalg.solve(A.astype(np.float64), B.astype(np.float64))) < TOL
+    ref = np.stack([np.linalg.solve(A[k].astype(np.float64), B[k].astype(np.float64))
+                    for k in range(4)])
+    assert _rel(X, ref) < TOL
+    if _on_metal():
+        assert ran is True
+
+
+def test_batched_solve_vector_rhs():
+    A = np.stack([_wellcond(6, k) for k in range(4)])      # [4, 6, 6]
+    b = np.random.default_rng(1).standard_normal((4, 6)).astype(np.float32)  # [4, 6]
+    x, ran = R.apple_gpu_solve(A, b, np)
+    assert x.shape == (4, 6)
+    ref = np.stack([np.linalg.solve(A[k].astype(np.float64), b[k].astype(np.float64))
+                    for k in range(4)])
+    assert _rel(x, ref) < TOL
+    if _on_metal():
+        assert ran is True
+
+
+def test_batched_cholesky_solve():
+    A = np.stack([_spd(7, k) for k in range(5)])           # [5, 7, 7] SPD
+    B = np.random.default_rng(2).standard_normal((5, 7, 3)).astype(np.float32)
+    X, ran = R.apple_gpu_cholesky_solve(A, B, np)
+    assert X.shape == (5, 7, 3)
+    ref = np.stack([np.linalg.solve(A[k].astype(np.float64), B[k].astype(np.float64))
+                    for k in range(5)])
+    assert _rel(X, ref) < TOL
+    if _on_metal():
+        assert ran is True
+
+
+def test_batched_tri_solve():
+    rng = np.random.default_rng(6)
+    A = np.stack([np.tril(rng.standard_normal((8, 8)).astype(np.float32))
+                  + 8 * np.eye(8, dtype=np.float32) for _ in range(3)])  # [3, 8, 8]
+    B = rng.standard_normal((3, 8, 2)).astype(np.float32)
+    X, ran = R.apple_gpu_tri_solve(A, B, np, lower=True)
+    ref = np.stack([np.linalg.solve(np.tril(A[k]).astype(np.float64),
+                                    B[k].astype(np.float64)) for k in range(3)])
+    assert _rel(X, ref) < TOL
+    if _on_metal():
+        assert ran is True
+
+
+# ── @jit(target="apple_gpu") dispatch — reachable from model code ─────────────
+@ts.jit(target="apple_gpu")
+def _jit_cholesky(A):
+    return ts.ops.cholesky(A)
+
+
+@ts.jit(target="apple_gpu")
+def _jit_tri_solve(A, b):
+    return ts.ops.tri_solve(A, b, lower=True)
+
+
+def test_jit_linalg_runtime_executable():
+    """The linalg ops are admitted to the apple_gpu runtime envelope (single-op
+    metal_runtime on Darwin, metal_artifact otherwise)."""
+    _jit_cholesky(_spd(6, 0))
+    _jit_tri_solve(np.tril(_wellcond(6, 1)), np.zeros((6, 2), np.float32))
+    for fn in (_jit_cholesky, _jit_tri_solve):
+        meta = fn.runtime_artifact().metadata
+        assert meta["execution_mode"] in ("metal_runtime", "metal_artifact")
+
+
+def test_jit_cholesky_matches_numpy():
+    A = _spd(8, 4)
+    L = np.asarray(_jit_cholesky(A))
+    assert _rel(L, np.linalg.cholesky(A.astype(np.float64))) < TOL
+    assert _rel(L @ L.T, A) < TOL
+
+
+def test_jit_tri_solve_matches_numpy():
+    A = np.tril(_wellcond(8, 5)).astype(np.float32)
+    b = np.random.default_rng(5).standard_normal((8, 3)).astype(np.float32)
+    X = np.asarray(_jit_tri_solve(A, b))
+    assert _rel(X, np.linalg.solve(np.tril(A).astype(np.float64), b.astype(np.float64))) < TOL

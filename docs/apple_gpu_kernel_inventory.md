@@ -117,7 +117,13 @@ only — batched / non-f32 fall back to numpy.
 | `tessera_apple_gpu_tri_solve_f32` | `tessera.tri_solve` | MPSMatrixSolveTriangular | rank-2 f32; `lower`/`trans`/`unit` flags |
 
 Python: `runtime.apple_gpu_{cholesky, solve, cholesky_solve, tri_solve}(...)` →
-`(result, ran_on_gpu)`. Tests: `tests/unit/test_apple_gpu_linalg.py` (24).
+`(result, ran_on_gpu)`. **Batched (`ndim>2`) f32** loops the rank-2 kernel
+per matrix (MPS decomp/solve are single-matrix per encode — no native batch).
+**`@jit(target="apple_gpu")` dispatch** is wired for the two registered Graph IR
+ops `tessera.cholesky` + `tessera.tri_solve` (via `_APPLE_GPU_LINALG_OPS` in
+`driver.py` + `runtime.py::_apple_gpu_dispatch_linalg`), so they report
+`execution_mode="metal_runtime"` on Darwin. Tests:
+`tests/unit/test_apple_gpu_linalg.py` (33).
 
 ## Capability + diagnostic symbols
 

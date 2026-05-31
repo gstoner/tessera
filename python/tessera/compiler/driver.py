@@ -431,9 +431,16 @@ _APPLE_GPU_REDUCTION_OPS: frozenset[str] = frozenset({
 # (NHWC/HWIO); conv3d via im2col + a GPU MPSGraph batched matmul (NDHWC/DHWIO).
 _APPLE_GPU_CONV_OPS: frozenset[str] = frozenset({"tessera.conv2d", "tessera.conv3d"})
 
+# 2026 — GPU linear-algebra lane (MPSMatrix decomposition/solve — the one
+# capability MPSGraph lacks). Only the registered Graph IR ops are wired here:
+# `tessera.cholesky` (factor) and `tessera.tri_solve` (triangular solve). Dense
+# f32; batched/non-f32 fall back to numpy inside the dispatcher.
+_APPLE_GPU_LINALG_OPS: frozenset[str] = frozenset({"tessera.cholesky", "tessera.tri_solve"})
+
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
+    | _APPLE_GPU_LINALG_OPS
 )
 
 

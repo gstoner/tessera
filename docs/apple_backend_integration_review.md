@@ -292,14 +292,59 @@ returning `(result, ran_on_gpu)`.
   RAII buffer pool (`TS_METAL_BUF_ACQUIRE*`) like every other dispatcher. Guarded
   by `tests/unit/test_apple_gpu_linalg.py` (24 tests).
 
-**Scope / follow-ups.** Rank-2 f32 only this lane; **batched (`ndim>2`) and
-non-f32 inputs fall back to numpy** (still correct) — batched GPU (one dispatch
-per matrix, or MPSMatrix's batch stride) and f16 are the natural next steps. The
-lane is currently reached via the direct `runtime.apple_gpu_*` functions (the
-same way `apple_gpu_conv2d` started); wiring it into the eager
-`tessera.ops.{cholesky,…}` / the `@jit(target="apple_gpu")` dispatch so model
-code picks it up automatically is a follow-up. QR/SVD have no MPS kernel — they'd
-need a custom MSL or a different route.
+**Batched + `@jit` wiring (landed).** **Batched (`ndim>2`) f32 now runs on the
+GPU** — the Python wrappers loop the rank-2 kernel per matrix (MPS
+decomposition/solve are single-matrix per encode — there is no native batch
+API), pairing batched RHS slices for the solves; matrix and stacked-vector RHS
+both supported, numpy fallback if any slice doesn't run. **`@jit(target="apple_gpu")`
+dispatch is wired** for the two registered Graph IR ops — `tessera.cholesky` and
+`tessera.tri_solve` (honoring the `lower` attribute) — via `_APPLE_GPU_LINALG_OPS`
+in both `driver.py` (envelope/gate) and `runtime.py` (`_apple_gpu_dispatch_linalg`),
+so `ts.ops.cholesky(A)` / `ts.ops.tri_solve(A, b)` in a jitted apple_gpu function
+report `execution_mode="metal_runtime"` on Darwin and compute on the GPU
+(verified bit-correct vs numpy). The full-solve functions (`apple_gpu_solve`,
+`apple_gpu_cholesky_solve`) remain direct `runtime.*` utilities — there is no
+`tessera.solve` Graph IR op to route through `@jit`.
+
+**Remaining follow-ups.** **f16** (MPS decomposition is f32-only — would need a
+different route); native **batched** (one dispatch for the whole batch) if MPS
+ever exposes a batch stride for decomposition; **QR/SVD** have no MPS kernel at
+all (custom MSL or a different route). Honest perf note: the batched per-matrix
+loop is correctness/capability-first — each slice is a full GPU
+encode+commit+wait, so for many small matrices it is **not** a speed win over
+numpy's batched LAPACK; the value is keeping the work on-GPU when it's part of a
+larger resident pipeline.
+
+## MPS device-caps / PackedFloat3 / MPSMatrixRandom — assessment (2026)
+
+Quick verdicts on three further MPS surfaces, checked against the Tahoe SDK:
+
+- **`MPSDeviceSupportsSimdReduction` / `SimdShuffle` / `SimdShuffleAndFill` /
+  `SimdgroupBarrier`** — these capability flags are **Swift-only `MPSDeviceCaps`
+  values** (not in the public C/Obj-C headers we compile against) and, more to the
+  point, are **unconditionally true on every Apple GPU that runs MSL 4.0 / Metal
+  4** (M-series, A11+). Querying them in the backend buys nothing — there's no
+  target in our envelope that lacks them. The *intrinsics themselves*
+  (`simd_sum`/`simd_max`/`simd_shuffle`) **are** a real lever: a SIMD-group row
+  reduction skips the threadgroup-memory round-trip our softmax/rmsnorm/layernorm
+  MSL kernels currently use. So the optimization worth pursuing is using the simd
+  reduction intrinsics in those rowop kernels — **not** wiring the cap queries.
+- **`MPSPackedFloat3`** — a 12-byte packed 3-vector for **ray-tracing / geometry
+  acceleration structures** (`MPSRayIntersector` et al.). It is **not a tensor-math
+  type** and has no role in a DL/HPC compiler; using it "for math ops" would be a
+  category error. Skip.
+- **`MPSMatrixRandomPhilox` / `MPSMatrixRandomMTGP32`** — **genuinely relevant** to
+  the S4 RNG lane (`tessera.rng` is Philox-backed), and a real GPU capability
+  (fill an MPSMatrix/MPSVector with uniform/normal on-device). **But** MPS's
+  Philox-4x32 stream will **not** be bit-identical to Tessera's CPU Philox
+  reference — different counter/key layout — so it **cannot transparently
+  accelerate the existing deterministic samplers** without breaking the
+  CPU/GPU-equality + `check_determinism` contracts (Decisions #18). It's viable
+  only as a **separate GPU-native RNG path** whose determinism is defined by the
+  MPS generator's own seed. Worth it for large on-device `randn`/`rand` fills
+  where the host→device copy of CPU-generated noise dominates; lower priority than
+  the linalg/decode work, and gated on a clear "GPU-RNG stream ≠ CPU-RNG stream"
+  contract decision.
 
 ## Verification against the Metal 4 SDK headers (2026 review)
 

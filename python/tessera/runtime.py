@@ -1906,9 +1906,13 @@ _APPLE_GPU_REDUCTION_OPS = frozenset(_APPLE_GPU_REDUCE_OPS)
 # 2026-05-30 — Tier-3 convolutions: conv2d via the MPSGraph convolution2D node
 # (NHWC/HWIO); conv3d via im2col + a GPU MPSGraph batched matmul (NDHWC/DHWIO).
 _APPLE_GPU_CONV_OPS = frozenset({"tessera.conv2d", "tessera.conv3d"})
+# GPU linear-algebra lane (MPSMatrix) — only the registered Graph IR ops:
+# tessera.cholesky (1 operand) + tessera.tri_solve (2 operands, `lower` kwarg).
+_APPLE_GPU_LINALG_OPS = frozenset({"tessera.cholesky", "tessera.tri_solve"})
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
+    | _APPLE_GPU_LINALG_OPS
 )
 
 
@@ -2139,6 +2143,13 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             )
         elif op_name == "tessera.conv3d":
             values[str(result)] = _apple_gpu_dispatch_conv3d(
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name in _APPLE_GPU_LINALG_OPS:
+            values[str(result)] = _apple_gpu_dispatch_linalg(
+                op_name,
                 [_as_numpy(values[name]) for name in operand_names],
                 kwargs,
                 np,
@@ -2930,10 +2941,11 @@ def apple_gpu_conv2d(X: Any, W: Any, np: Any, *, bias: Any = None, act: str = "n
 # ── GPU linear-algebra lane — Cholesky / LU / triangular solve via MPSMatrix ──
 # The one capability MPSGraph cannot provide (it has no matrix-decomposition
 # ops), so these dense f32 factorizations/solves are the only GPU path for
-# tessera.ops.{cholesky, solve, cholesky_solve, tri_solve}. Rank-2 f32 runs on
-# the GPU; batched (ndim>2), non-f32, or off-Metal inputs fall back to the numpy
-# reference. Each returns (result, ran_on_gpu). See
-# docs/apple_backend_integration_review.md (GPU linalg lane).
+# tessera.ops.{cholesky, solve, cholesky_solve, tri_solve}. Rank-2 f32 runs as a
+# single GPU dispatch; batched (ndim>2) f32 loops the rank-2 kernel per matrix
+# (MPS decomposition/solve are single-matrix per encode — no native batch);
+# non-f32 / off-Metal inputs fall back to the numpy reference. Each returns
+# (result, ran_on_gpu). See docs/apple_backend_integration_review.md (linalg).
 
 def _apple_gpu_linalg_sym(name: str, argtypes: list) -> Any:
     runtime = _load_apple_gpu_runtime()
@@ -2945,58 +2957,122 @@ def _apple_gpu_linalg_sym(name: str, argtypes: list) -> Any:
     return sym
 
 
+def _apple_gpu_chol_2d(A2d: Any, np: Any) -> Any:
+    """GPU lower-Cholesky of one 2-D f32 matrix; None if it didn't run."""
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym = _apple_gpu_linalg_sym("tessera_apple_gpu_cholesky_f32", [fp, fp, ctypes.c_int32])
+    if sym is None:
+        return None
+    n = int(A2d.shape[0])
+    L = np.empty((n, n), np.float32)
+    rc = sym(np.ascontiguousarray(A2d, np.float32).ctypes.data_as(fp),
+             L.ctypes.data_as(fp), ctypes.c_int32(n))
+    return L if rc == 0 else None
+
+
+def _apple_gpu_solve_2d(A2d: Any, B2d: Any, np: Any, symname: str) -> Any:
+    """GPU full solve ``A·X = B`` for one 2-D matrix; None if it didn't run."""
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym = _apple_gpu_linalg_sym(symname, [fp, fp, fp, ctypes.c_int32, ctypes.c_int32])
+    if sym is None:
+        return None
+    n, nrhs = int(A2d.shape[0]), int(B2d.shape[1])
+    X = np.empty((n, nrhs), np.float32)
+    rc = sym(np.ascontiguousarray(A2d, np.float32).ctypes.data_as(fp),
+             np.ascontiguousarray(B2d, np.float32).ctypes.data_as(fp),
+             X.ctypes.data_as(fp), ctypes.c_int32(n), ctypes.c_int32(nrhs))
+    return X if rc == 0 else None
+
+
+def _apple_gpu_tri_2d(A2d: Any, B2d: Any, np: Any, lower: bool, trans: bool,
+                      unit: bool) -> Any:
+    """GPU triangular solve for one 2-D matrix; None if it didn't run."""
+    fp = ctypes.POINTER(ctypes.c_float)
+    i32 = ctypes.c_int32
+    sym = _apple_gpu_linalg_sym("tessera_apple_gpu_tri_solve_f32", [fp, fp, fp] + [i32] * 5)
+    if sym is None:
+        return None
+    n, nrhs = int(A2d.shape[0]), int(B2d.shape[1])
+    X = np.empty((n, nrhs), np.float32)
+    rc = sym(np.ascontiguousarray(A2d, np.float32).ctypes.data_as(fp),
+             np.ascontiguousarray(B2d, np.float32).ctypes.data_as(fp),
+             X.ctypes.data_as(fp), i32(n), i32(nrhs),
+             i32(1 if lower else 0), i32(1 if trans else 0), i32(1 if unit else 0))
+    return X if rc == 0 else None
+
+
+def _apple_gpu_batched_linalg(A2: Any, B2: Any, core: Any, out_tail_cols: int,
+                              np: Any) -> Any:
+    """Loop a rank-2 GPU linalg ``core(A2d, B2d_or_None) -> ndarray|None`` over the
+    leading batch dims of ``A2`` (``B2`` shares them). Returns the stacked result
+    reshaped to ``A2.shape[:-2] + (n, out_tail_cols)``, or None if any slice
+    didn't run on the GPU (caller numpy-falls-back the whole batch)."""
+    n = int(A2.shape[-1])
+    Af = A2.reshape(-1, n, n)
+    Bf = None if B2 is None else B2.reshape(Af.shape[0], n, int(B2.shape[-1]))
+    outs = []
+    for k in range(Af.shape[0]):
+        r = core(Af[k], None if Bf is None else Bf[k])
+        if r is None:
+            return None
+        outs.append(r)
+    return np.stack(outs).reshape(A2.shape[:-2] + (n, out_tail_cols)).astype(np.float32)
+
+
 def apple_gpu_cholesky(A: Any, np: Any) -> Any:
     """Lower Cholesky factor ``L`` of an SPD matrix ``A`` (``A = L·Lᵀ``), matching
-    ``numpy.linalg.cholesky``. f32 rank-2 on the GPU; else numpy. Returns
-    ``(L float32, ran_on_gpu)``. Raises ``numpy.linalg.LinAlgError`` (via the
-    fallback) if ``A`` is not positive-definite."""
+    ``numpy.linalg.cholesky``. f32 on the GPU (rank-2 = one dispatch; batched =
+    per-matrix loop); else numpy. Returns ``(L float32, ran_on_gpu)``. Raises
+    ``numpy.linalg.LinAlgError`` (via the fallback) if ``A`` is not PD."""
     A2 = np.ascontiguousarray(A, np.float32)
-    fp = ctypes.POINTER(ctypes.c_float)
-    if A2.ndim == 2 and A2.shape[0] == A2.shape[1]:
-        sym = _apple_gpu_linalg_sym(
-            "tessera_apple_gpu_cholesky_f32", [fp, fp, ctypes.c_int32])
-        if sym is not None:
-            n = int(A2.shape[0])
-            L = np.empty((n, n), np.float32)
-            rc = sym(A2.ctypes.data_as(fp), L.ctypes.data_as(fp), ctypes.c_int32(n))
-            if rc == 0:
+    if A2.ndim >= 2 and A2.shape[-1] == A2.shape[-2]:
+        core = lambda a, _b: _apple_gpu_chol_2d(a, np)
+        if A2.ndim == 2:
+            L = core(A2, None)
+            if L is not None:
                 return L, True
+        else:
+            out = _apple_gpu_batched_linalg(A2, None, core, int(A2.shape[-1]), np)
+            if out is not None:
+                return out, True
     return np.linalg.cholesky(A2).astype(np.float32), False
 
 
 def _apple_gpu_solve_impl(A: Any, B: Any, np: Any, symname: str) -> Any:
     """Shared body for the Cholesky/LU full-solve wrappers (``A·X = B``)."""
     A2 = np.ascontiguousarray(A, np.float32)
-    B1 = np.asarray(B, np.float32)
-    vec = B1.ndim == 1
-    B2 = np.ascontiguousarray(B1.reshape(B1.shape[0], 1) if vec else B1)
-    fp = ctypes.POINTER(ctypes.c_float)
+    B1 = np.ascontiguousarray(np.asarray(B, np.float32))
+    vec = B1.ndim == A2.ndim - 1           # stacked-vector RHS (numpy convention)
+    B2 = B1[..., None] if vec else B1
+    core = lambda a, b: _apple_gpu_solve_2d(a, b, np, symname)
     if (A2.ndim == 2 and A2.shape[0] == A2.shape[1]
             and B2.ndim == 2 and B2.shape[0] == A2.shape[0]):
-        sym = _apple_gpu_linalg_sym(
-            symname, [fp, fp, fp, ctypes.c_int32, ctypes.c_int32])
-        if sym is not None:
-            n, nrhs = int(A2.shape[0]), int(B2.shape[1])
-            X = np.empty((n, nrhs), np.float32)
-            rc = sym(A2.ctypes.data_as(fp), B2.ctypes.data_as(fp),
-                     X.ctypes.data_as(fp), ctypes.c_int32(n), ctypes.c_int32(nrhs))
-            if rc == 0:
-                return (X[:, 0] if vec else X), True
+        X = core(A2, B2)
+        if X is not None:
+            return (X[..., 0] if vec else X), True
+    elif (A2.ndim >= 3 and A2.shape[-1] == A2.shape[-2]
+          and B2.ndim == A2.ndim and B2.shape[:-1] == A2.shape[:-1]):
+        out = _apple_gpu_batched_linalg(A2, B2, core, int(B2.shape[-1]), np)
+        if out is not None:
+            return (out[..., 0] if vec else out), True
+    # B2 (always […, n, nrhs]) keeps np.linalg.solve well-defined for batched
+    # vector RHS across numpy 1.x/2.x; squeeze the trailing axis back off.
     X = np.linalg.solve(A2, B2).astype(np.float32)
-    return (X[:, 0] if vec else X), False
+    return (X[..., 0] if vec else X), False
 
 
 def apple_gpu_solve(A: Any, B: Any, np: Any) -> Any:
     """General linear solve ``A·X = B`` via LU with partial pivoting, matching
-    ``numpy.linalg.solve``. f32 rank-2 on the GPU; else numpy. ``B`` may be a
-    vector ``[n]`` or matrix ``[n, nrhs]``. Returns ``(X float32, ran_on_gpu)``."""
+    ``numpy.linalg.solve``. f32 on the GPU (rank-2 + batched); else numpy. ``B``
+    may be a vector ``[…, n]`` or matrix ``[…, n, nrhs]``. Returns
+    ``(X float32, ran_on_gpu)``."""
     return _apple_gpu_solve_impl(A, B, np, "tessera_apple_gpu_solve_lu_f32")
 
 
 def apple_gpu_cholesky_solve(A: Any, B: Any, np: Any) -> Any:
     """SPD linear solve ``A·X = B`` via Cholesky factorization (faster + more
-    stable than LU for symmetric-positive-definite ``A``). f32 rank-2 on the GPU;
-    else numpy. Returns ``(X float32, ran_on_gpu)``."""
+    stable than LU for symmetric-positive-definite ``A``). f32 on the GPU (rank-2
+    + batched); else numpy. Returns ``(X float32, ran_on_gpu)``."""
     return _apple_gpu_solve_impl(A, B, np, "tessera_apple_gpu_solve_cholesky_f32")
 
 
@@ -3005,34 +3081,51 @@ def apple_gpu_tri_solve(A: Any, B: Any, np: Any, *, lower: bool = True,
     """Triangular solve ``op(tri(A))·X = B``. ``tri(A)`` is the lower (``lower``)
     or upper triangle of ``A``; ``op`` is transpose when ``trans``; the diagonal
     is unit when ``unit``. Only the relevant triangle is read (matching
-    ``np.tril``/``np.triu`` + ``np.linalg.solve``). f32 rank-2 on the GPU; else
-    numpy. ``B`` may be ``[n]`` or ``[n, nrhs]``. Returns ``(X, ran_on_gpu)``."""
+    ``np.tril``/``np.triu`` + ``np.linalg.solve``). f32 on the GPU (rank-2 +
+    batched); else numpy. ``B`` may be ``[…, n]`` or ``[…, n, nrhs]``. Returns
+    ``(X, ran_on_gpu)``."""
     A2 = np.ascontiguousarray(A, np.float32)
-    B1 = np.asarray(B, np.float32)
-    vec = B1.ndim == 1
-    B2 = np.ascontiguousarray(B1.reshape(B1.shape[0], 1) if vec else B1)
-    fp = ctypes.POINTER(ctypes.c_float)
-    i32 = ctypes.c_int32
+    B1 = np.ascontiguousarray(np.asarray(B, np.float32))
+    vec = B1.ndim == A2.ndim - 1
+    B2 = B1[..., None] if vec else B1
+    core = lambda a, b: _apple_gpu_tri_2d(a, b, np, lower, trans, unit)
     if (A2.ndim == 2 and A2.shape[0] == A2.shape[1]
             and B2.ndim == 2 and B2.shape[0] == A2.shape[0]):
-        sym = _apple_gpu_linalg_sym(
-            "tessera_apple_gpu_tri_solve_f32", [fp, fp, fp] + [i32] * 5)
-        if sym is not None:
-            n, nrhs = int(A2.shape[0]), int(B2.shape[1])
-            X = np.empty((n, nrhs), np.float32)
-            rc = sym(A2.ctypes.data_as(fp), B2.ctypes.data_as(fp), X.ctypes.data_as(fp),
-                     i32(n), i32(nrhs), i32(1 if lower else 0),
-                     i32(1 if trans else 0), i32(1 if unit else 0))
-            if rc == 0:
-                return (X[:, 0] if vec else X), True
+        X = core(A2, B2)
+        if X is not None:
+            return (X[..., 0] if vec else X), True
+    elif (A2.ndim >= 3 and A2.shape[-1] == A2.shape[-2]
+          and B2.ndim == A2.ndim and B2.shape[:-1] == A2.shape[:-1]):
+        out = _apple_gpu_batched_linalg(A2, B2, core, int(B2.shape[-1]), np)
+        if out is not None:
+            return (out[..., 0] if vec else out), True
     tri = np.tril(A2) if lower else np.triu(A2)
     if unit:
         tri = tri.copy()
-        np.fill_diagonal(tri, 1.0)
+        idx = np.arange(int(A2.shape[-1]))
+        tri[..., idx, idx] = 1.0
     if trans:
-        tri = tri.T
+        tri = np.swapaxes(tri, -1, -2)
     X = np.linalg.solve(tri, B2).astype(np.float32)
-    return (X[:, 0] if vec else X), False
+    return (X[..., 0] if vec else X), False
+
+
+def _apple_gpu_dispatch_linalg(op_name: str, operands: list[Any], kwargs: dict,
+                               np: Any) -> Any:
+    """Route a Graph IR linalg op to the MPSMatrix GPU lane (numpy fallback
+    inside the wrappers). Only the registered ops are handled: ``tessera.cholesky``
+    (factor) and ``tessera.tri_solve`` (triangular solve, honoring the ``lower``
+    attribute). Returns the result array (the executor stores values, not the
+    ``(result, ran)`` tuple the public wrappers return)."""
+    if op_name == "tessera.cholesky":
+        return apple_gpu_cholesky(np.asarray(operands[0]), np)[0]
+    if op_name == "tessera.tri_solve":
+        lower = kwargs.get("lower", True)
+        if isinstance(lower, str):
+            lower = lower.strip().lower() not in ("0", "false", "no")
+        return apple_gpu_tri_solve(np.asarray(operands[0]), np.asarray(operands[1]),
+                                   np, lower=bool(lower))[0]
+    raise ValueError(f"_apple_gpu_dispatch_linalg: unsupported op {op_name!r}")
 
 
 def _apple_gpu_dispatch_conv2d(operands: list[Any], kwargs: dict, np: Any) -> Any:

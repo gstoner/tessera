@@ -102,3 +102,56 @@ Source: Apple's `RunningAMachineLearningModelOnTheGPUTimeline` sample (915 LOC O
 * `docs/apple_gpu_overview.md` — the architectural story.
 * `docs/apple_gpu_tier2_tier3_plan.md` — packaged kernels roadmap (where patterns 1, 2, 3 land).
 * `src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm` — where patterns 4, 5 (follow-on), 6 land.
+
+---
+
+## Lessons learned — Apple Metal 4 doc-deep review (2026-05-31 round 2)
+
+A wider review using Apple's developer documentation (Metal Feature Set
+Tables, MTLTensor / MTLTensorDescriptor.strides, MTL4ArgumentTable,
+MTL4MachineLearningPipelineState reflection / intermediatesHeapSize,
+MTL4Compiler / MTL4Archive, dispatchNetwork(intermediatesHeap:)) surfaced
+10 architectural patterns the sample alone didn't expose. Mapping each
+to Tessera's current state:
+
+| # | Pattern | Doc anchor | Status | Next action |
+|---|---------|-----------|--------|-------------|
+| 1 | **Capability-first lowering** — record presence of mtl4 / tensor / ml_encoding / argument_table / archive / command_allocator on the artifact, not just `target=apple_gpu` | Metal Feature Set Tables (family mapping + feature rows) | Probe exists (`mtl4_caps()` at L9640) but not surfaced in `compile_result` / `RuntimeArtifact` | Action 1 — small, do now |
+| 2 | **Tensor-aware IR contracts** — record rank/dims/dtype/strides/offset/usage/resource-id per binding | MTLTensor + gpuResourceID docs | Not in tree | Action 2 — medium, soon |
+| 3 | **Stride/layout rules first-class** — innermost-first, second-stride 64-byte-aligned for ML usage, 128-byte for sub-byte dtypes | MTLTensorDescriptor.strides | ✅ Landed (Pattern 6, this round) | — |
+| 4 | **Reflection as ABI verification** — diff compiler-expected bindings against reflected pipeline bindings before executable=true | MTL4MachineLearningPipelineState.reflection.bindings | Not in tree | Defer — gated on packaged-kernel adoption |
+| 5 | **Argument tables as compiler artifact** — emit ArgumentLayout (name/index/kind/dtype/rank/residency) beside backend IR | "Understanding the Metal 4 core API" | Runtime has `mtl4_argtable` but not as a compile-time artifact | Defer — gated on packaged-kernel adoption |
+| 6 | **ML passes on the GPU timeline** — keep prefill/decode/attn/MLP/projection on one command buffer; avoid CPU turnarounds | MTL4MachineLearningCommandEncoder | Partially: M8 resident MLP keeps weights on-GPU; full decode chain not yet | Defer — separate workstream |
+| 7 | **Pipeline intermediates from metadata** — read `intermediatesHeapSize` from compiled pipeline | dispatchNetwork(intermediatesHeap:) | Not in tree | Defer — gated on packaged-kernel adoption |
+| 8 | **Compiler/AOT cache path** — surface cache key / archive lookup / hit-miss / fallback reason on artifact | MTL4Compiler, MTL4Archive, MTL4CompilerTaskOptions.lookupArchives | Partially: MTL4Archive plumbed (P4 in MetalDeviceContext), telemetry not exposed | Action 6 — small, do now |
+| 9 | **Command allocator discipline** — session-cache MTL4CommandAllocator, especially for decode loops | "Understanding the Metal 4 core API" | ✅ Landed (Pattern 5 audit, this round) | — |
+| 10 | **Feature-limit-guided tiling** — drive threadgroup size / shared memory / argument-table capacity / matmul gates from Apple's published limits, not CUDA-shaped assumptions | Metal Feature Set Tables (implementation limits) | Scattered: SVD / conv2d / buffer pool all reference limits ad-hoc; no centralized table | Action 7 — plan (its own sprint) |
+
+### Recommended actions (filtered)
+
+* **Now**: Action 1 (`AppleMetal4Capabilities` artifact metadata) + Action
+  6 (archive/cache telemetry). Both flow into `CompileResult.to_dict()`
+  and the conformance dashboard; both are small.
+* **Soon**: Action 2 (`AppleTensorBindingSpec`) — its own focused PR.
+  Even if only the MSL-source path populates it sparsely today, the
+  data-model lands now so packaged kernels don't need a migration.
+* **Defer to packaged-kernel sprint**: Actions 4 + 5 — both require
+  `MTL4MachineLearningPipelineState` adoption.
+* **Plan as its own sprint**: Action 7 — touches every Apple tile
+  decision; needs a designed `AppleFeatureLimits` table that all
+  call sites consult.
+
+### Anti-patterns this round also clarifies
+
+* **Don't conflate `target=apple_gpu` with capability presence.** A
+  developer Mac with macOS 26 has MTL4 + tensors + argument tables; an
+  older host has MPS only. The artifact must carry the per-feature
+  answer, not the family label.
+* **Don't compute strides ad-hoc** — Apple's documented rule (innermost
+  = 1, second stride 64-byte-aligned for ML usage, 128-byte for
+  sub-byte dtypes) is non-obvious. Centralize in one helper. (Pattern 3
+  ✅; the helper currently honors the innermost-1 rule but does NOT
+  yet enforce the 64-byte / 128-byte alignment — flag for the sub-byte
+  / ML-usage work.)
+* **Don't size scratch heaps by hand.** Future packaged-kernel paths
+  must read `intermediatesHeapSize` from the compiled pipeline.

@@ -282,13 +282,30 @@ def _test_text_index() -> dict[str, str]:
 
 
 def _numerical_check_present(op: str, target: str) -> bool:
-    """Best-effort heuristic for "is there a test that exercises this
-    (op, target) cell numerically": a file in ``tests/unit/`` whose name +
-    body both mention a target keyword AND an op keyword. False positives are
-    possible (a file that imports two unrelated tokens); the right long-term
-    fix is to populate ``BackendKernelEntry.execute_compare_fixture`` and let
-    the manifest drive this column — surfaced as a follow-up.
+    """Resolve the ``numerical_check`` column for ``(op, target)``.
+
+    **Audit follow-up A.3 (2026-05-31) — manifest-first.** The first-class
+    answer is now ``BackendKernelEntry.execute_compare_fixture``: backends
+    that declare a numerical-correctness test for this (op, target) pair
+    will surface it via ``backend_manifest.manifest_for(op)``. The
+    conformance matrix consults that field directly — no scanning, no
+    heuristic — and verifies the declared file actually exists on disk.
+
+    For cells the manifest doesn't yet cover, fall back to the original
+    filename + content scan so cells with circumstantial coverage don't
+    regress to ``missing`` overnight. The fallback path is the dashboard's
+    legacy heuristic — over time the fixture map will subsume it.
     """
+    # Step 1 — manifest-declared fixture for (op, target). Symmetric with
+    # the nvidia/rocm/metalium aggregation that lives in
+    # ``_manifest_for_target``: any per-arch row whose target maps to the
+    # dashboard target counts.
+    repo = Path(__file__).resolve().parents[3]
+    for entry in _manifest_for_target(op, target):
+        fixture = entry.execute_compare_fixture
+        if fixture and (repo / fixture).is_file():
+            return True
+    # Step 2 — legacy heuristic for cells not yet covered by the manifest.
     target_keys = _TARGET_KEYWORDS.get(target, (target,))
     op_keys: tuple[str, ...] = (op,)
     if "_" in op:

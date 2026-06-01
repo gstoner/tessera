@@ -27,19 +27,11 @@ Audit response to [docs/audit/compiler_layer_gap_remediation.md](compiler_layer_
 | Overall (weakest column wins) | Count |
 |---|---:|
 | ✅ `complete` | 5 |
-| ⚙️ `partial` | 13 |
+| ⚙️ `partial` | 14 |
 | ⚠️ `artifact_only` | 0 |
 | 📋 `planned` | 0 |
-| ❌ `missing` | 24 |
+| ❌ `missing` | 23 |
 | **total cells** | **42** |
-
-## Surfaced upstream gaps
-
-These cells are `missing` because the upstream truth source is incomplete, not because the path doesn't exist. Each row is an actionable follow-up: fix the upstream entry and the matrix regenerates cleanly.
-
-| Op | Target | Upstream source | Fix |
-|----|--------|-----------------|-----|
-| `matmul_relu` | `apple_gpu` | `backend_manifest entry for 'relu'` | add an `apple_gpu` `BackendKernelEntry` for 'relu' in `backend_manifest.py` (runtime envelope already dispatches it) |
 
 ## `matmul`
 
@@ -62,7 +54,7 @@ _composes from primitives; no fused single-kernel today_
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
 | `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | ✅ | — | composes from per-op kernels (no fusion pass on this target) |
 | `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | ✅ | — | composes from per-op kernels (no fusion pass on this target) |
-| `apple_gpu` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ | — | composes from per-op kernels (no fusion pass on this target) |
+| `apple_gpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | ✅ | — | composes from per-op kernels (no fusion pass on this target) |
 | `nvidia` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | `toolchain` — nvcc not on PATH (CUDA Toolkit 13.2.1 not installed) | composes from per-op kernels (no fusion pass on this target) |
 | `rocm` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | `toolchain` — hipcc not on PATH (ROCm 7.2.3 not installed) | composes from per-op kernels (no fusion pass on this target) |
 | `metalium` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | `link` — artifact_only — IR emits but no linked-kernel path today | composes from per-op kernels (no fusion pass on this target) |
@@ -99,7 +91,7 @@ _fused MSL kernel on apple_gpu (single-kernel scores); compose elsewhere_
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
 | `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | `numerical` — no capabilities op-entry for 'conv2d' on 'cpu' |  |
 | `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | `numerical` — no capabilities op-entry for 'conv2d' on 'apple_cpu' |  |
-| `apple_gpu` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | `codegen` — no backend_manifest entry for 'conv2d' on 'apple_gpu' |  |
+| `apple_gpu` | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | `numerical` — no capabilities op-entry for 'conv2d' on 'apple_gpu' |  |
 | `nvidia` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | `codegen` — no backend_manifest entry for 'conv2d' on 'nvidia' |  |
 | `rocm` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | `codegen` — no backend_manifest entry for 'conv2d' on 'rocm' |  |
 | `metalium` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | `codegen` — no backend_manifest entry for 'conv2d' on 'metalium' |  |
@@ -121,7 +113,7 @@ _fused MSL kernel on apple_gpu (single-kernel scores); compose elsewhere_
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
 | `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | `numerical` — no capabilities op-entry for 'kv_cache_read' on 'cpu' |  |
 | `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | `numerical` — no capabilities op-entry for 'kv_cache_read' on 'apple_cpu' |  |
-| `apple_gpu` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | `codegen` — no backend_manifest entry for 'kv_cache_read' on 'apple_gpu' |  |
+| `apple_gpu` | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | `numerical` — no capabilities op-entry for 'kv_cache_read' on 'apple_gpu' |  |
 | `nvidia` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | `codegen` — no backend_manifest entry for 'kv_cache_read' on 'nvidia' |  |
 | `rocm` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | `codegen` — no backend_manifest entry for 'kv_cache_read' on 'rocm' |  |
 | `metalium` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | `codegen` — no backend_manifest entry for 'kv_cache_read' on 'metalium' |  |

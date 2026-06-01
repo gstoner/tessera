@@ -83,6 +83,17 @@ class JitDiagnosticCode(str, Enum):
     #: handle yet.
     EAGER_FALLBACK_UNSUPPORTED_BODY = "JIT_EAGER_FALLBACK_UNSUPPORTED_BODY"
 
+    #: Info-level: the function body contains structured control flow
+    #: markers (``tessera.scf.if.*`` / ``tessera.scf.for.*`` /
+    #: ``tessera.scf.while.*``) that D.1/D.2/D.3 lowered correctly.
+    #: No backend currently emits executable code for scf at the
+    #: TileIR level, so execution falls back to eager Python — which is
+    #: numerically correct, just not optimized. Distinguished from
+    #: ``EAGER_FALLBACK_UNSUPPORTED_OP`` so dashboards can show this as
+    #: an *expected* eager path rather than a generic "we don't know
+    #: this op" miss. Audit follow-up A.2 (2026-05-31).
+    EAGER_FALLBACK_CONTROL_FLOW = "JIT_EAGER_FALLBACK_CONTROL_FLOW"
+
     #: Info-level: the JIT successfully compiled through Graph IR →
     #: Schedule IR → Tile IR → CPU Target IR and dispatched on the
     #: CPU path.

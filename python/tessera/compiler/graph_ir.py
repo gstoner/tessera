@@ -872,15 +872,57 @@ class _OpExtractor(ast.NodeVisitor):
         self._counter = 0
         self._arg_names = set(arg_names)
         self._value_types: Dict[str, IRType] = {f"%{name}": typ for name, typ in (arg_types or {}).items()}
+        # SSA-renaming for reassigned locals (audit-fix 2026-05-31).
+        # The Graph IR verifier rejects ``%c = ... %c = ...``; Python's
+        # ``c = ...; c = ...`` (and the desugared ``c += b``) used to
+        # produce exactly that pattern. We now mint versioned SSA names
+        # (``c`` → ``c__1`` → ``c__2`` ...) on each reassignment and
+        # track the *current* SSA name in ``_name_alias`` so subsequent
+        # reads of ``c`` resolve to the latest version. Function args
+        # seed ``_taken_ssa_names`` so reassigning an arg name (``a = a +
+        # 1`` for arg ``a``) immediately versions.
+        self._taken_ssa_names: set[str] = set(arg_names)
+        self._name_alias: Dict[str, str] = {name: name for name in arg_names}
 
     def _fresh(self) -> str:
         name = f"v{self._counter}"
         self._counter += 1
         return name
 
+    def _reserve_ssa_for_assign(self, user_name: str) -> str:
+        """Reserve (but do not yet expose) a unique SSA name for an
+        upcoming assignment to ``user_name``.
+
+        Critical ordering: ``c = c + 1`` must see the OLD ``c`` when
+        evaluating ``c + 1`` and only adopt the new SSA name *after*
+        the op emits. So this function reserves the new SSA name in
+        ``_taken_ssa_names`` (to avoid collisions) but does NOT update
+        ``_name_alias`` — the caller in ``visit_Assign`` updates the
+        alias on emission success.
+
+        First assignment to a never-bound name returns the name itself.
+        Reassignment mints ``user_name__1``, ``user_name__2``, ....
+        """
+        if user_name not in self._taken_ssa_names:
+            self._taken_ssa_names.add(user_name)
+            return user_name
+        n = 1
+        while f"{user_name}__{n}" in self._taken_ssa_names:
+            n += 1
+        ssa = f"{user_name}__{n}"
+        self._taken_ssa_names.add(ssa)
+        return ssa
+
+    def _resolve_ssa_name(self, user_name: str) -> str:
+        """Look up the current SSA name for ``user_name``. Returns the
+        user name itself if no alias has been recorded (so unbound names
+        still produce ``%<name>``, which downstream sees as a symbolic
+        free-variable reference)."""
+        return self._name_alias.get(user_name, user_name)
+
     def _resolve_name(self, node: ast.expr) -> Optional[str]:
         if isinstance(node, ast.Name):
-            return node.id
+            return self._resolve_ssa_name(node.id)
         if isinstance(node, ast.Attribute):
             parent = self._resolve_name(node.value)
             return f"{parent}.{node.attr}" if parent else node.attr
@@ -892,7 +934,29 @@ class _OpExtractor(ast.NodeVisitor):
             return
         tgt = node.targets[0]
         if isinstance(tgt, ast.Name):
-            if self._emit_expr(node.value, result_name=tgt.id) is not None:
+            # SSA-renaming (audit-fix 2026-05-31): reserve a unique SSA
+            # name for this assignment BEFORE evaluating the RHS, but
+            # only adopt it as the current alias *after* the RHS emits.
+            # ``c = c + 1`` must see the OLD ``c`` while evaluating the
+            # right-hand side; only afterward does ``c`` resolve to the
+            # new SSA.
+            ssa_name = self._reserve_ssa_for_assign(tgt.id)
+            if self._emit_expr(node.value, result_name=ssa_name) is not None:
+                # Adopt the new SSA name as the current alias.
+                self._name_alias[tgt.id] = ssa_name
+                return
+            # ``_emit_expr`` returned None — release the reserved name
+            # so a later assignment can reuse it.
+            self._taken_ssa_names.discard(ssa_name)
+            # Alias-by-rhs-name shortcut: ``c = a`` (no op needed —
+            # ``c`` becomes an alias for the current SSA of ``a``).
+            if isinstance(node.value, ast.Name):
+                rhs_ssa = self._resolve_ssa_name(node.value.id)
+                self._name_alias[tgt.id] = rhs_ssa
+                # ``c`` is now an alias for ``a``'s current SSA name.
+                # Don't bind ``c`` itself as a separate SSA (it'd
+                # collide with itself on a future reassignment); the
+                # alias map suffices for reads.
                 return
         elif isinstance(tgt, ast.Subscript):
             value = self._emit_expr(node.value)
@@ -1276,7 +1340,7 @@ class _OpExtractor(ast.NodeVisitor):
             self.ops.append(op)
             return f"%{op.result}"
         if isinstance(node, ast.Name):
-            return f"%{node.id}"
+            return f"%{self._resolve_ssa_name(node.id)}"
         if isinstance(node, ast.Attribute) and node.attr == "T":
             value = self._emit_expr(node.value)
             if value is None:

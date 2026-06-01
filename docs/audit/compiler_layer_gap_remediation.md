@@ -171,6 +171,62 @@ fallback semantics by returning `(output, override_kind)`). The inline CPU
 branch in `runtime.launch()` is deleted; every executable row in the matrix is
 now reached through exactly one dispatch site.
 
+### 12. Post-audit follow-ups — ✅ DONE (2026-05-31)
+Four follow-ups surfaced by A's dashboard and D's downstream eager-path
+diagnostic, plus one more correctness bug surfaced by an external code
+review of D.4.
+
+* **P1 (D.4 follow-up) — SSA rebinding fix.** D.4's aug-assign tests
+  inspected ``fn.body`` via ``GraphIRBuilder`` directly; they never
+  exercised ``@tessera.jit`` decoration through ``to_mlir()``, which
+  runs the SSA verifier. The verifier rejected ``%c = ...`` ``%c =
+  ...`` so ``@tessera.jit`` silently failed for any function with a
+  reassigned local. **Fix**: ``_reserve_ssa_for_assign`` mints
+  versioned SSA names (``c`` → ``c__1`` → ``c__2``) on reassignment;
+  ``_name_alias`` tracks the current binding; the alias only updates
+  *after* the RHS emits so ``c = c + b`` correctly reads the old
+  ``%c`` while emitting ``%c__1 = tessera.add(%c, %b)``. Function
+  args seed ``_taken_ssa_names`` so reassigning an arg name immediately
+  versions. 9 new tests in ``test_ssa_rebinding_through_jit.py`` go
+  through ``@tessera.jit`` end-to-end (the path the audit cared
+  about).
+
+* **Follow-up A.1 — Apple-GPU manifest gaps closed.** A's dashboard
+  surfaced three (op, target) cells with runtime envelope coverage
+  but no ``BackendKernelEntry``: ``relu`` (MPSGraph), ``conv2d``
+  (native multi-tile MPP), ``kv_cache_read`` (MPS). One ``dict``
+  entry each in ``_APPLE_GPU_KERNELS``. Dashboard's "Surfaced upstream
+  gaps" section is now empty — A's regression guard locks that.
+
+* **Follow-up A.2 — distinct scf eager-fallback diagnostic.** D's
+  ``tessera.scf.if.*`` markers reach the CPU planner, which used to
+  report them via the generic ``JIT_EAGER_FALLBACK_UNSUPPORTED_OP``
+  warning (along with the entire ~250-op "supported ops" list).
+  **Fix**: dedicated ``JIT_EAGER_FALLBACK_CONTROL_FLOW`` info code —
+  ``explain_cpu_plan`` checks for ``tessera.scf.*`` markers BEFORE
+  the generic unsupported check and emits a specific message naming
+  the scf op + count of others in the body. Severity downgraded from
+  ``warning`` to ``info`` since eager Python correctness is fine; only
+  optimization is missing. Registered in
+  ``diagnostic_codes.py`` with summary + fix_hint; locked by
+  ``test_diagnostic_code_registry.py``. The function still executes
+  numerically correctly via eager Python (locked by a numpy-comparison
+  test). Actual backend lowering of scf to executable code is a
+  separate, larger surface deferred for now.
+
+* **Follow-up A.3 — numerical_check column via
+  ``BackendKernelEntry.execute_compare_fixture``.** The conformance
+  matrix's ``_numerical_check_present`` used to scan
+  ``tests/unit/*.py`` for filename+content keyword matches — brittle.
+  **Fix**: new ``_NUMERICAL_FIXTURES`` map in ``backend_manifest.py``
+  declares per-(op, target) test files; ``manifest_for(op)``
+  post-processes entries to attach ``execute_compare_fixture`` from
+  the map; conformance matrix consults that field FIRST and falls
+  back to the legacy heuristic only for cells the map doesn't cover.
+  10 fixture paths declared for cpu / apple_cpu / apple_gpu (matmul,
+  softmax, flash_attn, conv2d, rmsnorm, gelu, rope, relu, softmax_safe).
+  Drift gate: every declared path must resolve to a real file on disk.
+
 ### 11. Audit follow-up bug fixes — ✅ DONE (2026-05-31)
 Three bugs surfaced by an external code-review pass over A / B / D and
 verified empirically before fixing:

@@ -69,7 +69,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `mod` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `mul` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `pow` | elementwise | public | public | registered | complete | partial | reference | ready | none |
-| `relu` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `relu` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `rsqrt` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `sigmoid` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `silu` | elementwise | public | public | registered | complete | partial | reference | ready | none |
@@ -263,8 +263,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `selective_ssm` | state_space | public | public | registered | complete | partial | reference | ready | none |
 | `kv_cache_append` | state_update | public | public | registered | complete | partial | reference | ready | none |
 | `kv_cache_prune` | state_update | public | public | registered | complete | partial | reference | ready | none |
-| `kv_cache_read` | state_update | public | public | registered | complete | partial | reference | ready | none |
-| `conv2d` | stencil | public | public | registered | complete | partial | reference | ready | none |
+| `kv_cache_read` | state_update | public | public | registered | complete | partial | fused | ready | none |
+| `conv2d` | stencil | public | public | registered | complete | partial | fused | ready | none |
 | `conv3d` | stencil | public | public | registered | complete | partial | reference | ready | none |
 | `check_cauchy_riemann` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
 | `complex_abs` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
@@ -295,7 +295,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | collective | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | comparison | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | contraction | 1 | PPGCpRN· |
-| elementwise | 34 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| elementwise | 34 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | energy_based_models | 9 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnnFFFB PPnCFFFB PPnnFFFB |
 | functional_optimizer_step | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | fused_epilogue | 1 | PPGCpRN· |
@@ -326,8 +326,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | spectral | 9 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | stable_reduction | 7 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· |
 | state_space | 1 | PPGCpRN· |
-| state_update | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
-| stencil | 2 | PPGCpRN· PPGCpRN· |
+| state_update | 3 | PPGCpRN· PPGCpRN· PPGCpFN· |
+| stencil | 2 | PPGCpFN· PPGCpRN· |
 | visual_complex | 20 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· |
 
 ## Canonical end-to-end programs (M1 / M1.5)

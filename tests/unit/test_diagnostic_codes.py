@@ -43,6 +43,9 @@ class TestJitDiagnosticCode:
             "EAGER_FALLBACK_UNSUPPORTED_BODY": (
                 "JIT_EAGER_FALLBACK_UNSUPPORTED_BODY"
             ),
+            "EAGER_FALLBACK_CONTROL_FLOW": (
+                "JIT_EAGER_FALLBACK_CONTROL_FLOW"
+            ),
             "COMPILED_CPU": "JIT_COMPILED_CPU",
             "TARGET_IR_ARTIFACT_ONLY": "JIT_TARGET_IR_ARTIFACT_ONLY",
         }

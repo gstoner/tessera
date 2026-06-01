@@ -216,6 +216,24 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
     fn = module.functions[0]
     if not fn.body:
         return JitDiagnostic("warning", _Code.EAGER_FALLBACK_EMPTY.value, "no Graph IR function body was emitted")
+    # A.2 (2026-05-31) — structured control flow markers (scf.if /
+    # scf.for / scf.while) are lowered correctly by D.1/D.2/D.3 but no
+    # backend currently emits executable code for them. Eager Python
+    # runs the function correctly; the dashboard distinguishes this
+    # *expected* fallback from a generic "unknown op" miss via the
+    # dedicated diagnostic code.
+    scf_ops = [op for op in fn.body
+               if _canonical_op_name(op.op_name).startswith("tessera.scf.")]
+    if scf_ops:
+        seen = scf_ops[0].op_name
+        return JitDiagnostic(
+            "info",
+            _Code.EAGER_FALLBACK_CONTROL_FLOW.value,
+            (f"function contains structured control flow ({seen!r} and "
+             f"{len(scf_ops) - 1} other scf op(s)); CPU backend doesn't "
+             f"yet lower scf — falling back to eager Python (numerically "
+             f"correct, unoptimized)"),
+        )
     unsupported = [op for op in fn.body if _canonical_op_name(op.op_name) not in SUPPORTED_CPU_OPS]
     if unsupported:
         names = ", ".join(sorted(SUPPORTED_CPU_OPS))

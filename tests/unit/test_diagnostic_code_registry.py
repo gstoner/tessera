@@ -348,6 +348,10 @@ _LOCKED_SENTINEL_CODES = (
     "JIT_EAGER_FALLBACK_UNSUPPORTED_OP",
     "JIT_EAGER_FALLBACK_ARITY",
     "JIT_EAGER_FALLBACK_UNSUPPORTED_BODY",
+    # A.2 (2026-05-31): scf.* structured control flow gets its own
+    # info-level code (distinct from the generic unknown-op miss) so
+    # dashboards can surface it as an expected eager path.
+    "JIT_EAGER_FALLBACK_CONTROL_FLOW",
     "JIT_COMPILED_CPU",
     "JIT_TARGET_IR_ARTIFACT_ONLY",
     "TS_ERR_INVALID_ARG",

@@ -415,6 +415,31 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         status="implemented",
     ),
     DiagnosticCode(
+        # A.2 (2026-05-31) — distinct code for scf.* eager fallback so
+        # the dashboard can show structured control flow as an expected
+        # eager path rather than a generic unknown-op miss.
+        code="JIT_EAGER_FALLBACK_CONTROL_FLOW",
+        pass_origin="tessera.compiler.JitDiagnosticCode",
+        severity="warning",
+        summary=(
+            "JIT fell back to eager-Python because the function "
+            "contains structured control flow (`tessera.scf.*` "
+            "markers) that no backend currently lowers to executable "
+            "code. The function runs correctly through Python; only "
+            "the compiled fast path is missing."
+        ),
+        fix_hint=(
+            "Eager Python is numerically correct and safe. To get the "
+            "fast path, implement a backend pass that lowers "
+            "`tessera.scf.if`/`scf.for`/`scf.while` (see "
+            "`docs/audit/compiler_layer_gap_remediation.md` §10)."
+        ),
+        spec=None,
+        sprint="audit-followup-A.2",
+        language="python",
+        status="implemented",
+    ),
+    DiagnosticCode(
         code="JIT_SOURCE_PROVIDED",
         pass_origin="tessera.compiler.JitDiagnosticCode",
         severity="warning",

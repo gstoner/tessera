@@ -393,7 +393,95 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "Online-softmax MSL kernel; head_dim ≤ 256 (Phase 8.4.1)",
     },
+    # Audit follow-up (2026-05-31): these three ops are dispatched by the
+    # Apple GPU runtime envelope (driver._APPLE_GPU_{MPS,MSL,MPSGRAPH}_OPS
+    # and the conv2d native multi-tile spike), but had no manifest entry —
+    # surfaced as a gap by the op×target conformance matrix.
+    "relu": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": _APPLE_GPU_FUSED,
+        "notes": "MPSGraph relu node (apple_gpu_runtime.mm MPSGraph lane)",
+    },
+    "conv2d": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (
+            "Native multi-tile MSL convolution2d via MPP cooperative op "
+            "(landed 2026-05-29; f32 only in v1)"
+        ),
+    },
+    "kv_cache_read": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": _APPLE_GPU_FUSED,
+        "notes": (
+            "KVCacheHandle.read() dispatches to the Apple GPU MPS path "
+            "for fp32/fp16/bf16 cache pages"
+        ),
+    },
 }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Audit follow-up A.3 (2026-05-31) — Per-(op, target) test fixtures that
+# exercise the numerical-correctness path end-to-end. Replaces the
+# conformance matrix's filename/content heuristic with first-class
+# manifest data.
+#
+# Each value is a repo-relative path to a Python test file that ships an
+# assertion comparing the kernel's output to numpy / a reference at a
+# tolerance the test declares. The conformance matrix consults this map
+# via ``manifest_for(op)`` → ``BackendKernelEntry.execute_compare_fixture``.
+#
+# Strict rules for additions:
+#   - The file MUST exist in tests/unit/ at the moment of addition (the
+#     ``_validate_numerical_fixtures`` walker would otherwise complain).
+#   - The file MUST contain a numpy-comparison-style assertion for THIS
+#     op on THIS target — not just "imports both names".
+#   - Prefer a small, focused fixture over a 1000-line model test, so a
+#     downstream consumer reading the dashboard finds the proof quickly.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
+    # cpu
+    ("matmul", "cpu"): "tests/unit/test_end_to_end_matmul_cpu_path.py",
+    # apple_cpu
+    ("matmul", "apple_cpu"): "tests/unit/test_apple_backend_roadmap.py",
+    # apple_gpu — landed runtime paths
+    ("matmul", "apple_gpu"): "tests/unit/test_apple_gpu_buffer_pool.py",
+    ("softmax", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
+    ("softmax_safe", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
+    ("flash_attn", "apple_gpu"): "tests/unit/test_apple_gpu_fused_attention.py",
+    ("conv2d", "apple_gpu"): "tests/unit/test_apple_gpu_conv2d.py",
+    ("rmsnorm", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
+    ("gelu", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
+    ("rope", "apple_gpu"): "tests/unit/test_apple_gpu_buffer_pool.py",
+    ("relu", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
+}
+
+
+def _attach_numerical_fixtures(
+    op_name: str, entries: "list[BackendKernelEntry]",
+) -> "list[BackendKernelEntry]":
+    """Post-process a manifest's entries to attach the audit-recorded
+    ``execute_compare_fixture`` for any (op, target) pair the
+    ``_NUMERICAL_FIXTURES`` map knows about. The field is honored
+    additively — entries that already declare a fixture (via a
+    constructor argument upstream) are left untouched."""
+    out: "list[BackendKernelEntry]" = []
+    for e in entries:
+        if e.execute_compare_fixture is not None:
+            out.append(e)
+            continue
+        fixture = _NUMERICAL_FIXTURES.get((op_name, e.target))
+        if fixture is None:
+            out.append(e)
+            continue
+        # BackendKernelEntry is a frozen dataclass; rebuild with the
+        # fixture field set. We use ``replace`` from dataclasses to be
+        # explicit about field-by-field copy.
+        from dataclasses import replace as _replace
+        out.append(_replace(e, execute_compare_fixture=fixture))
+    return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1653,6 +1741,12 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 feature_flags=("numpy", "reference_execution"),
                 notes="numpy reference path",
             ))
+
+    # Audit follow-up A.3 (2026-05-31) — attach known
+    # ``execute_compare_fixture`` paths to entries that ship a real
+    # numerical-correctness test. Replaces the conformance matrix's
+    # filename/content heuristic with first-class manifest data.
+    entries = _attach_numerical_fixtures(op_name, entries)
 
     return entries
 

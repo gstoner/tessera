@@ -46,6 +46,7 @@ _ts_enc_begin = None
 _ts_enc_commit_wait = None
 _bmm_enc = None
 _layer_norm_enc = None
+_flash_attn_enc = None
 _session_commit_count = None
 _ts_dev_alloc = None
 _ts_dev_upload = None
@@ -59,7 +60,7 @@ def _bind_session_symbols() -> bool:
     every symbol resolved (runtime loadable + symbols available)."""
     global _SYMBOLS_BOUND
     global _ts_enc_begin, _ts_enc_commit_wait, _bmm_enc, _layer_norm_enc
-    global _session_commit_count
+    global _flash_attn_enc, _session_commit_count
     global _ts_dev_alloc, _ts_dev_upload, _ts_dev_download, _ts_dev_free
     global _ts_dev_nbytes
     if _SYMBOLS_BOUND:
@@ -82,6 +83,13 @@ def _bind_session_symbols() -> bool:
          ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32,
          ctypes.c_int32, ctypes.c_float),
         ctypes.c_int32)
+    _flash_attn_enc = bind_symbol(
+        "tessera_apple_gpu_flash_attn_dev_f32_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_float, ctypes.c_int32),
+        ctypes.c_int32)
     _session_commit_count = bind_symbol(
         "tessera_apple_gpu_session_commit_count", (), ctypes.c_int64)
     _ts_dev_alloc = bind_symbol(
@@ -98,8 +106,8 @@ def _bind_session_symbols() -> bool:
         "ts_dev_nbytes", (ctypes.c_void_p,), ctypes.c_int64)
     return all(s is not None for s in (
         _ts_enc_begin, _ts_enc_commit_wait, _bmm_enc, _layer_norm_enc,
-        _session_commit_count, _ts_dev_alloc, _ts_dev_upload,
-        _ts_dev_download, _ts_dev_free, _ts_dev_nbytes))
+        _flash_attn_enc, _session_commit_count, _ts_dev_alloc,
+        _ts_dev_upload, _ts_dev_download, _ts_dev_free, _ts_dev_nbytes))
 
 
 def session_available() -> bool:
@@ -249,12 +257,44 @@ def layer_norm_enc(session: int, X: DeviceTensor, gamma: DeviceTensor,
     return out
 
 
+def flash_attn_enc(session: int, Q: DeviceTensor, K: DeviceTensor,
+                   V: DeviceTensor, *, B: int, Sq: int, Sk: int, D: int,
+                   scale: Optional[float] = None,
+                   causal: bool = False) -> DeviceTensor:
+    """Encode a flash-attention forward into ``session``'s command
+    buffer. Q/K/V are device-resident ``(B, S*, D)`` f32 tensors;
+    output ``(B, Sq, D)`` is allocated fresh.
+
+    ``scale`` defaults to ``1/sqrt(D)`` (the standard attention scale).
+    Set ``causal=True`` for a lower-triangular mask (decoder
+    self-attention)."""
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    if scale is None:
+        scale = 1.0 / (float(D) ** 0.5)
+    out = device_empty(B * Sq * D * 4)
+    rc = _flash_attn_enc(ctypes.c_void_p(session),
+                         ctypes.c_void_p(Q.handle),
+                         ctypes.c_void_p(K.handle),
+                         ctypes.c_void_p(V.handle),
+                         ctypes.c_void_p(out.handle),
+                         ctypes.c_int32(B), ctypes.c_int32(Sq),
+                         ctypes.c_int32(Sk), ctypes.c_int32(D),
+                         ctypes.c_float(scale),
+                         ctypes.c_int32(1 if causal else 0))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"flash_attn_enc returned {rc}")
+    return out
+
+
 __all__ = [
     "DeviceTensor",
     "batched_session",
     "bmm_enc",
     "device_empty",
     "device_tensor",
+    "flash_attn_enc",
     "layer_norm_enc",
     "session_available",
     "session_commit_count",

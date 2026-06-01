@@ -118,6 +118,41 @@ extern "C" int32_t tessera_apple_gpu_row_major_strides(const int64_t *dims_in,
   return rank;
 }
 
+// Pattern 3 follow-on (2026-06-01) — Apple stride-alignment rules.
+// Pure math, no Metal calls; stub matches the Darwin runtime so the
+// test contract holds on every host. See ``apple_gpu_runtime.mm`` for
+// the rule documentation.
+extern "C" int32_t tessera_apple_gpu_row_major_strides_aligned(
+    const int64_t *dims_in, int32_t rank, int32_t element_bits,
+    int32_t ml_usage, int64_t *strides_out) {
+  if (!dims_in || !strides_out || rank <= 0 || rank > 8) return 0;
+  if (element_bits <= 0 || element_bits > 64) return 0;
+  int32_t alignment_bits = 0;
+  if (element_bits < 8)       alignment_bits = 1024;  // 128 bytes (sub-byte)
+  else if (ml_usage != 0)     alignment_bits = 512;   // 64 bytes (ML usage)
+  int64_t elem_align = 1;
+  if (alignment_bits > 0) {
+    if (alignment_bits % element_bits != 0) return 0;
+    elem_align = alignment_bits / element_bits;
+    if (elem_align < 1) elem_align = 1;
+  }
+  strides_out[0] = 1;
+  if (rank == 1) return rank;
+  int64_t natural = dims_in[0];
+  int64_t aligned = natural;
+  if (elem_align > 1) {
+    int64_t rem = natural % elem_align;
+    if (rem != 0) aligned = natural + (elem_align - rem);
+  }
+  strides_out[1] = aligned;
+  int64_t acc = aligned;
+  for (int32_t i = 2; i < rank; ++i) {
+    acc *= dims_in[i - 1];
+    strides_out[i] = acc;
+  }
+  return rank;
+}
+
 extern "C" void tessera_apple_gpu_mps_matmul_f32(const float* A,
                                                  const float* B, float* C,
                                                  int32_t M, int32_t N,
@@ -1918,6 +1953,25 @@ extern "C" int32_t tessera_apple_gpu_layer_norm_dev_f32_enc(
           ((row[c] - mean) * inv) * gb[c] + bb[c]);
     }
   }
+  return 1;
+}
+
+// Stage-2 single-cb scaffold (2026-06-01) — flash_attn encoded
+// dispatch, off-Darwin reference. Runs the existing host reference
+// into O->data immediately (no command buffer to defer).
+extern "C" int32_t tessera_apple_gpu_flash_attn_dev_f32_enc(
+    TsEncodeSession* s,
+    TsDeviceTensor* Q, TsDeviceTensor* K,
+    TsDeviceTensor* V, TsDeviceTensor* O,
+    int32_t B, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal) {
+  if (!s || !Q || !K || !V || !O) return 0;
+  reference_flash_attn_f32(
+      reinterpret_cast<const float*>(Q->data),
+      reinterpret_cast<const float*>(K->data),
+      reinterpret_cast<const float*>(V->data),
+      reinterpret_cast<float*>(O->data),
+      B, Sq, Sk, D, scale, causal);
   return 1;
 }
 

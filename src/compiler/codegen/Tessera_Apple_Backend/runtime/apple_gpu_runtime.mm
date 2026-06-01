@@ -670,6 +670,89 @@ extern "C" int32_t tessera_apple_gpu_row_major_strides(const int64_t *dims_in,
   return rank;
 }
 
+// Aligned variant — enforces Apple's MTLTensorDescriptor.strides rules
+// for ML-usage / sub-byte dtypes (skills.md row #3 follow-on, 2026-06-01).
+//
+// Apple's documented rules (developer.apple.com MTLTensorDescriptor.strides):
+//
+//   * ``strides[0]`` must equal 1 (innermost dim is contiguous).
+//   * For ML usage with byte+ dtypes, the second stride * element_bytes
+//     must be aligned to 64 bytes.
+//   * For sub-byte dtypes (< 8 bits per element, e.g. int4), the second
+//     stride * element_bytes must be aligned to 128 bytes — this rule
+//     applies regardless of usage flag.
+//   * Subsequent strides are cumulative products of (aligned stride[1],
+//     dims[1], dims[2], ...).
+//
+// Returns the rank on success, 0 on invalid input (dims/strides null,
+// rank out of [1, 8], element_bits not in (0, 64], unrepresentable
+// alignment).
+//
+// ``element_bits`` is the dtype size in BITS (e.g. 32 for fp32, 16 for
+// fp16/bf16, 8 for int8, 4 for sub-byte int4). ``ml_usage`` is 1 if the
+// caller intends ``MTLTensorUsageMachineLearning`` and 0 otherwise.
+//
+// Example: rank=2, dims=[13, 7], element_bits=32, ml_usage=1.
+//   * natural stride[1] = 13 (innermost dim count).
+//   * 64-byte alignment for fp32 = 16 elements.
+//   * aligned stride[1] = round_up(13, 16) = 16.
+//   * strides_out = [1, 16].
+extern "C" int32_t tessera_apple_gpu_row_major_strides_aligned(
+    const int64_t *dims_in, int32_t rank, int32_t element_bits,
+    int32_t ml_usage, int64_t *strides_out) {
+  if (!dims_in || !strides_out || rank <= 0 || rank > 8) return 0;
+  if (element_bits <= 0 || element_bits > 64) return 0;
+
+  // Determine the byte-alignment rule for the second stride.
+  // Sub-byte dtypes (< 8 bits / element) ALWAYS use 128-byte alignment;
+  // ML usage with byte+ dtypes uses 64-byte alignment; generic usage
+  // with byte+ dtypes has no alignment requirement.
+  int32_t alignment_bits = 0;
+  if (element_bits < 8) {
+    alignment_bits = 1024;          // 128 bytes
+  } else if (ml_usage != 0) {
+    alignment_bits = 512;           // 64 bytes
+  }
+
+  // Convert byte alignment to element alignment. For power-of-2 element
+  // sizes (the only case Apple supports) this is exact division.
+  int64_t elem_align = 1;
+  if (alignment_bits > 0) {
+    if (alignment_bits % element_bits != 0) {
+      // Non-power-of-2 element size that doesn't divide the byte rule
+      // evenly. Apple's tensor surface doesn't expose such dtypes; treat
+      // as caller error.
+      return 0;
+    }
+    elem_align = alignment_bits / element_bits;
+    if (elem_align < 1) elem_align = 1;
+  }
+
+  // Apple's rule #1 — innermost stride is always 1.
+  strides_out[0] = 1;
+  if (rank == 1) return rank;
+
+  // Apple's rule #2 — second stride is aligned. Innermost dim count
+  // (dims_in[0]) is the natural element stride for dim-1; round UP to
+  // satisfy the byte-alignment rule.
+  int64_t natural = dims_in[0];
+  int64_t aligned = natural;
+  if (elem_align > 1) {
+    int64_t rem = natural % elem_align;
+    if (rem != 0) aligned = natural + (elem_align - rem);
+  }
+  strides_out[1] = aligned;
+
+  // Apple's rule #3 — subsequent strides are cumulative products of the
+  // ALIGNED stride[1] and the intermediate dims.
+  int64_t acc = aligned;
+  for (int32_t i = 2; i < rank; ++i) {
+    acc *= dims_in[i - 1];
+    strides_out[i] = acc;
+  }
+  return rank;
+}
+
 extern "C" void tessera_apple_gpu_mps_matmul_f32(const float* A,
                                                  const float* B, float* C,
                                                  int32_t M, int32_t N,
@@ -2386,20 +2469,50 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_dtype_raw_for_tag(
 //      fill-then-read roundtrip.
 //===----------------------------------------------------------------------===//
 
-// PK3 — helper: row-major-ish strides for a 1..N-D tensor descriptor.
-// Returns YES on success (also fills ``stride_elems`` innermost-first
+// PK3 — helper: row-major strides for a 1..N-D tensor descriptor.
+// Returns YES on success (also fills ``stride_elems_out`` innermost-first
 // per Apple's MTLTensorDescriptor.strides rule: ``strides[0] == 1``).
+//
+// Stride-alignment update (2026-06-01, skills.md Pattern 3 follow-on):
+// when ``element_bits > 0`` and ``ml_usage != 0``, enforces Apple's
+// 64-byte alignment rule on the second stride (128-byte for sub-byte
+// dtypes). Pre-existing callers that pass 0/0 get the legacy
+// cumulative-product behavior — keeping the lift backward-compatible.
 API_AVAILABLE(macos(26.0), ios(26.0))
 static BOOL _mlpkg_row_major_strides(MTLTensorExtents *dims,
-                                     NSInteger *stride_elems_out) {
+                                     NSInteger *stride_elems_out,
+                                     int32_t element_bits,
+                                     BOOL ml_usage) {
   if (!dims) return NO;
   NSInteger rank = (NSInteger)dims.rank;
+  if (rank <= 0 || rank > 8) return NO;
+  // Materialize dims into a temporary int64 buffer; reject any
+  // dynamic (-1) or zero extent (the C ABI can't size them).
+  int64_t dims_buf[8];
+  for (NSInteger i = 0; i < rank; ++i) {
+    NSInteger d = [dims extentAtDimensionIndex:i];
+    if (d <= 0) return NO;
+    dims_buf[i] = (int64_t)d;
+  }
+  // Route through the aligned C ABI helper when we have enough info
+  // to apply the alignment rule; else fall back to the legacy
+  // cumulative-product path.
+  if (element_bits > 0) {
+    int64_t strides_buf[8];
+    int32_t rc = tessera_apple_gpu_row_major_strides_aligned(
+        dims_buf, (int32_t)rank, element_bits, ml_usage ? 1 : 0,
+        strides_buf);
+    if (rc != (int32_t)rank) return NO;
+    for (NSInteger i = 0; i < rank; ++i) {
+      stride_elems_out[i] = (NSInteger)strides_buf[i];
+    }
+    return YES;
+  }
+  // Legacy: cumulative products, no alignment.
   NSInteger acc = 1;
   for (NSInteger i = 0; i < rank; ++i) {
     stride_elems_out[i] = acc;
-    NSInteger d = [dims extentAtDimensionIndex:i];
-    if (d <= 0) return NO;  // dynamic dim (-1) or zero: can't size
-    acc *= d;
+    acc *= (NSInteger)dims_buf[i];
   }
   return YES;
 }
@@ -2541,7 +2654,11 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_fill_input(
       MTLTensorExtents *origin = [[MTLTensorExtents alloc]
           initWithRank:dims.rank values:zeros];
       NSInteger strd[MTL_TENSOR_MAX_RANK] = {0};
-      if (!_mlpkg_row_major_strides(dims, strd)) return 0;
+      // Host-source strides — describe the DENSE host buffer layout,
+      // NOT the tensor's internal aligned layout. Pass element_bits=0
+      // / ml_usage=NO to route through the legacy cumulative-product
+      // path. Tensor-descriptor strides are a separate concern.
+      if (!_mlpkg_row_major_strides(dims, strd, 0, NO)) return 0;
       MTLTensorExtents *strides = [[MTLTensorExtents alloc]
           initWithRank:dims.rank values:strd];
       [t replaceSliceOrigin:origin sliceDimensions:dims
@@ -2581,7 +2698,11 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_read_output(
       MTLTensorExtents *origin = [[MTLTensorExtents alloc]
           initWithRank:dims.rank values:zeros];
       NSInteger strd[MTL_TENSOR_MAX_RANK] = {0};
-      if (!_mlpkg_row_major_strides(dims, strd)) return 0;
+      // Host-source strides — describe the DENSE host buffer layout,
+      // NOT the tensor's internal aligned layout. Pass element_bits=0
+      // / ml_usage=NO to route through the legacy cumulative-product
+      // path. Tensor-descriptor strides are a separate concern.
+      if (!_mlpkg_row_major_strides(dims, strd, 0, NO)) return 0;
       MTLTensorExtents *strides = [[MTLTensorExtents alloc]
           initWithRank:dims.rank values:strd];
       [t getBytes:dst_bytes strides:strides
@@ -3113,11 +3234,13 @@ extern "C" int32_t tessera_apple_gpu_runtime_msl_cache_size(void) {
 
 namespace {
 
-bool dispatch_flash_attn_msl(MetalDeviceContext &ctx, const float* Q,
-                             const float* K, const float* V, float* O,
-                             int32_t B, int32_t Sq, int32_t Sk, int32_t D,
-                             float scale, int32_t causal) {
-  static NSString *const kFlashAttnSource = @R"MSL(
+// MSL source for the f32 flash-attention kernel. Lifted to namespace
+// scope so both the original ``dispatch_flash_attn_msl`` and the
+// encode-session variant ``encode_flash_attn_msl_dev`` (added 2026-06-01
+// for the single-cb decoder block demo) share one source-of-truth.
+// ``compile_msl_kernel`` caches by ``(source SHA256, entry)`` so the
+// PSO is built once regardless of which dispatcher first triggers it.
+static NSString *const kFlashAttnF32Source = @R"MSL(
 #include <metal_stdlib>
 using namespace metal;
 
@@ -3189,9 +3312,13 @@ kernel void flash_attn_f32(
 }
 )MSL";
 
+bool dispatch_flash_attn_msl(MetalDeviceContext &ctx, const float* Q,
+                             const float* K, const float* V, float* O,
+                             int32_t B, int32_t Sq, int32_t Sk, int32_t D,
+                             float scale, int32_t causal) {
   @autoreleasepool {
     id<MTLComputePipelineState> pso =
-        compile_msl_kernel(ctx, kFlashAttnSource, @"flash_attn_f32");
+        compile_msl_kernel(ctx, kFlashAttnF32Source, @"flash_attn_f32");
     if (!pso) return false;
 
     NSUInteger qBytes = sizeof(float) * static_cast<NSUInteger>(B) *
@@ -3238,6 +3365,60 @@ kernel void flash_attn_f32(
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
+}
+
+// Encode flash_attn into a session-shared MPSCommandBuffer (no commit /
+// wait / memcpy). Single-cb decoder block scaffold — pairs with
+// ``mpsg_encode_bmm_dev`` and ``mpsg_encode_layer_norm_dev`` so an
+// attention block (norm → qkv_proj → flash_attn → out_proj → norm) can
+// execute on ONE command buffer. Inputs / outputs are device-resident
+// ``MTLBuffer`` (the caller's ``TsDeviceTensor::buf``).
+//
+// MSL kernel + compute-encoder pattern is identical to
+// ``dispatch_flash_attn_msl``; the only difference is that the encoder
+// is built on the caller's shared cb and the encode helper returns
+// without committing. Metal's automatic hazard tracking orders later
+// reads of ``bufO`` after this encode pass, so a downstream op (e.g.
+// the out-projection bmm) appended into the same cb sees the right
+// data without an explicit barrier.
+static bool encode_flash_attn_msl_dev(MetalDeviceContext &ctx,
+                                      MPSCommandBuffer *cb,
+                                      id<MTLBuffer> bufQ,
+                                      id<MTLBuffer> bufK,
+                                      id<MTLBuffer> bufV,
+                                      id<MTLBuffer> bufO,
+                                      int32_t B, int32_t Sq, int32_t Sk,
+                                      int32_t D, float scale,
+                                      int32_t causal) {
+  if (B <= 0 || Sq <= 0 || Sk <= 0 || D <= 0) return true;
+  if (!cb || !bufQ || !bufK || !bufV || !bufO) return false;
+  id<MTLComputePipelineState> pso =
+      compile_msl_kernel(ctx, kFlashAttnF32Source, @"flash_attn_f32");
+  if (!pso) return false;
+  id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+  if (!enc) return false;
+  [enc setComputePipelineState:pso];
+  [enc setBuffer:bufQ offset:0 atIndex:0];
+  [enc setBuffer:bufK offset:0 atIndex:1];
+  [enc setBuffer:bufV offset:0 atIndex:2];
+  [enc setBuffer:bufO offset:0 atIndex:3];
+  [enc setBytes:&B  length:sizeof(int32_t) atIndex:4];
+  [enc setBytes:&Sq length:sizeof(int32_t) atIndex:5];
+  [enc setBytes:&Sk length:sizeof(int32_t) atIndex:6];
+  [enc setBytes:&D  length:sizeof(int32_t) atIndex:7];
+  [enc setBytes:&scale  length:sizeof(float)   atIndex:8];
+  [enc setBytes:&causal length:sizeof(int32_t) atIndex:9];
+  MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(Sq),
+                             static_cast<NSUInteger>(B), 1);
+  NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(Sq), 32);
+  NSUInteger tg_y = std::min<NSUInteger>(static_cast<NSUInteger>(B),
+                                         pso.maxTotalThreadsPerThreadgroup /
+                                             std::max<NSUInteger>(tg_x, 1));
+  if (tg_y == 0) tg_y = 1;
+  MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
+  [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+  [enc endEncoding];
+  return true;
 }
 
 inline void reference_flash_attn_f32(const float* Q, const float* K,
@@ -12390,6 +12571,25 @@ extern "C" int32_t tessera_apple_gpu_layer_norm_dev_f32_enc(
   return mpsg_encode_layer_norm_dev(s->cb, X->buf, gamma->buf, beta->buf,
                                     Y->buf, rows, cols, eps,
                                     MPSDataTypeFloat32)
+             ? 1
+             : 0;
+}
+
+// Stage-2 single-cb decoder block (2026-06-01) — encoded device-resident
+// flash_attn. Pairs with ``tessera_apple_gpu_bmm_dev_f32_enc`` +
+// ``tessera_apple_gpu_layer_norm_dev_f32_enc`` so an entire
+// transformer attention block — ``layer_norm → qkv_bmm → flash_attn →
+// out_bmm → layer_norm`` — encodes into ONE command buffer.
+extern "C" int32_t tessera_apple_gpu_flash_attn_dev_f32_enc(
+    TsEncodeSession *s,
+    TsDeviceTensor *Q, TsDeviceTensor *K,
+    TsDeviceTensor *V, TsDeviceTensor *O,
+    int32_t B, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !Q || !K || !V || !O) return 0;
+  return encode_flash_attn_msl_dev(ctx, s->cb, Q->buf, K->buf, V->buf,
+                                    O->buf, B, Sq, Sk, D, scale, causal)
              ? 1
              : 0;
 }

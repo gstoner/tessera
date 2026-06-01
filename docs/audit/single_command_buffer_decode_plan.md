@@ -113,20 +113,53 @@ registry consistency, planner correctness (incl. dtype-boundary +
 non-eligible-op break), and executor numerical correctness +
 single-cb invariant per segment.
 
-**Phase 2.1 (open) — `compiler/jit.py` hookup.** The mechanical
-final step: in the apple_gpu `@jit` execution path, build an
-`OpRecord` trace from the function's emitted-op sequence and call
-`run_trace`. The substrate above is dtype/registry-aware so the
-hookup is small. Implementation surface:
+**Phase 2.1a (landed 2026-06-01) — `@auto_batch` decorator +
+`apple_gpu_ops` user surface.** Bridges the substrate to a true
+"no decorator-per-session" experience for end users.
 
-* `compiler/jit.py::JitFn._execute_apple_gpu_*` paths need to capture
-  the op trace as `apple_gpu_chain.OpRecord` instances.
-* The trace builder lives at the runtime metadata layer
-  (`runtime.py::_execute_apple_gpu_metadata`); each op call appends
-  to the trace, and the final `commit_wait` triggers `run_trace`.
-* Non-encode-eligible ops route through the existing eager
-  dispatch (the substrate's `_exec_single_segment` is a sentinel —
-  the JIT replaces it with its eager fallback at integration time).
+Pieces:
+
+* `python/tessera/apple_gpu_ops.py` — user-facing op surface
+  (`rmsnorm`, `bmm`, `rope`, `softmax`, `silu`, `gelu`, `flash_attn`,
+  `layer_norm`) with dual-mode dispatch via a `contextvars`
+  `_TRACE_CTX`. Eager mode → one-shot session + run + download.
+  Trace mode → append `OpRecord` + return `TraceRef`.
+* `TraceRef` substrate addition to `apple_gpu_chain.py` — handle to
+  the output of a prior op in the same trace; executor resolves at
+  run time. Supports forward refs only (`op_index >= 0`).
+* `@apple_gpu_ops.auto_batch` decorator — captures the trace inside
+  the wrapped function via `_trace_scope`, calls `run_trace`, then
+  walks the function's return value (TraceRef / tuple / dict /
+  list / plain) to resolve TraceRefs to DeviceTensors.
+* Nested `@auto_batch` flattens into the outer trace (one cb total).
+* Top-level import: `tessera.apple_gpu_ops.auto_batch` reachable
+  from the standard `import tessera` path.
+
+12 tests in `tests/unit/test_apple_gpu_auto_batch.py` pin:
+dual-mode dispatch consistency, single-cb invariant for chains,
+full Llama attention block on 1 cb, exception propagation, nested
+flattening, TraceRef resolution.
+
+**Phase 2.1b (open) — `tessera.ops.*` interception.** The remaining
+work to fold auto-batching into the canonical Tessera op surface
+(so users don't have to switch from `tessera.ops.rmsnorm` →
+`tessera.apple_gpu_ops.rmsnorm`). Requires either: (a) a
+context-aware shim layer that routes `tessera.ops.*` to
+`apple_gpu_ops.*` when an `auto_batch` trace is active, or (b)
+adding `@jit(target='apple_gpu', auto_batch=True)` as a kwarg that
+wraps the user function via `@auto_batch` and exposes
+`apple_gpu_ops` as `tessera.ops` inside the wrapped scope.
+
+Implementation surface:
+
+* `compiler/jit.py::jit` — add `auto_batch: bool = False` kwarg.
+* When `target='apple_gpu' and auto_batch=True`, wrap the JitFn's
+  `__call__` with `apple_gpu_ops.auto_batch`. Existing users who
+  call `tessera.ops.*` get auto-routing through a `_TRACE_CTX`-aware
+  proxy in `tessera.ops` (small dispatch layer).
+* Non-encode-eligible `tessera.ops.*` calls inside the trace fall
+  back to eager dispatch (they segment the trace correctly via
+  the chain planner's `kind="single"` path).
 
 **Phase 3 (open)** — `pre-decode warmup`: upload weights to device
 once and reuse across decode steps (the M8 resident MLP path

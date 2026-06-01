@@ -147,14 +147,41 @@ def encode_spec(op_name: str, dtype: str) -> EncodeOpSpec:
 # OpRecord — minimal trace primitive.
 # ---------------------------------------------------------------------
 
+@dataclass(frozen=True)
+class TraceRef:
+    """A reference to the output of an earlier op in the same trace.
+
+    Phase 2.1 (2026-06-01) — when ``auto_batch`` (or future
+    ``@jit(target="apple_gpu", auto_batch=True)``) captures a function's
+    op trace, each op's output becomes a ``TraceRef`` that downstream
+    ops can consume as input. The executor resolves these to the
+    actual :class:`DeviceTensor` at run time.
+
+    ``op_index`` indexes into the captured trace (0 = first op).
+    Negative values can't be used — refs are strictly forward
+    (later ops consume earlier ops' outputs).
+    """
+    op_index: int
+
+    def __post_init__(self) -> None:
+        if self.op_index < 0:
+            raise ValueError(
+                f"TraceRef.op_index must be non-negative, got "
+                f"{self.op_index}")
+
+
 @dataclass
 class OpRecord:
-    """One op in a function trace. Carriers may be either
-    :class:`DeviceTensor` (already device-resident — typical for
-    weights pre-uploaded via ResidentWeights) or :class:`np.ndarray`
-    (host buffer — uploaded lazily by the executor).
+    """One op in a function trace. Inputs may be:
 
-    Each op produces ONE output tensor (returned as ``output`` after
+    * :class:`np.ndarray` — host buffer, uploaded lazily by the
+      executor before the encoding pass.
+    * :class:`DeviceTensor` — already device-resident (e.g., a
+      pre-uploaded weight via ``ResidentWeights``); passed through.
+    * :class:`TraceRef` — handle to the output of an earlier op in
+      the same trace; resolved by the executor at run time.
+
+    Each op produces ONE output tensor (stored as ``output`` after
     execution). ``shape_kwargs`` carry the non-tensor args (rows /
     cols / batch / etc).
     """
@@ -260,13 +287,18 @@ def execute_chain(segments: list[ChainSegment]
 
 def _exec_encode_segment(seg: ChainSegment,
                          results: list[Optional[DeviceTensor]]) -> None:
-    """Run one encode segment — single batched_session()."""
+    """Run one encode segment — single batched_session().
+
+    Resolves ``TraceRef`` inputs by looking up the producing op's
+    output in ``results`` (which we populate as we go, in trace
+    order). Cross-segment refs (TraceRef pointing at an op in an
+    earlier segment) work too — ``results`` is the full trace's
+    output list.
+    """
     locally_uploaded: list[DeviceTensor] = []
     with batched_session() as s:
         for op in seg.ops:
             spec = encode_spec(op.op_name, op.dtype)
-            # Materialize each input. DeviceTensors pass through;
-            # ndarrays uploaded lazily and freed on segment exit.
             tensor_inputs: list[DeviceTensor] = []
             for inp in op.inputs:
                 if isinstance(inp, np.ndarray):
@@ -275,10 +307,26 @@ def _exec_encode_segment(seg: ChainSegment,
                     tensor_inputs.append(t)
                 elif isinstance(inp, DeviceTensor):
                     tensor_inputs.append(inp)
+                elif isinstance(inp, TraceRef):
+                    # Resolve to the producing op's output.
+                    if inp.op_index >= len(results):
+                        raise IndexError(
+                            f"op {op.op_name}: TraceRef(op_index="
+                            f"{inp.op_index}) references a future op "
+                            f"(only {len(results)} ops executed so far)")
+                    resolved = results[inp.op_index]
+                    if resolved is None:
+                        raise RuntimeError(
+                            f"op {op.op_name}: TraceRef(op_index="
+                            f"{inp.op_index}) resolved to None — the "
+                            f"producing op did not yield an output "
+                            f"(non-eligible op in chain?)")
+                    tensor_inputs.append(resolved)
                 else:
                     raise TypeError(
-                        f"op {op.op_name}: input must be ndarray or "
-                        f"DeviceTensor, got {type(inp).__name__}")
+                        f"op {op.op_name}: input must be ndarray, "
+                        f"DeviceTensor, or TraceRef, got "
+                        f"{type(inp).__name__}")
             out = spec.encode_fn(s, *tensor_inputs, **op.shape_kwargs)
             op.output = out
             results.append(out)
@@ -321,6 +369,7 @@ __all__ = [
     "ENCODE_OP_REGISTRY",
     "EncodeOpSpec",
     "OpRecord",
+    "TraceRef",
     "encode_spec",
     "execute_chain",
     "is_encode_eligible",

@@ -43,6 +43,11 @@ from . import fault
 from . import elastic
 from . import checkpoint
 from . import server
+# Apple-GPU encode-session surface (single-cb decode chain — see
+# docs/audit/single_command_buffer_decode_plan.md). Importing
+# unconditionally; the module degrades gracefully off-Darwin (the
+# session_available() check returns False).
+from . import apple_gpu_ops  # noqa: F401
 from .core import Tensor, Module
 from .shape import (
     Dim,

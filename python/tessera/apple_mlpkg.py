@@ -449,6 +449,61 @@ def extract_argument_layout(pipeline: "Pipeline") -> ArgumentLayout:
     )
 
 
+def packaged_ml_available() -> bool:
+    """PK audit-fix P1 (2026-05-31) — Is Metal 4 packaged ML actually
+    executable on this host?
+
+    The dylib can BUILD on macOS < 26 (clang accepts ``@available``
+    guarded code) but `MTL4MachineLearningPipelineDescriptor` and
+    friends only become callable on macOS 26+. Tests that gated on
+    just ``apple_gpu_runtime() is not None`` proceeded into the
+    compile path on older macOS and got
+    ``compile_mlpackage() → None`` with
+    ``last_error_kind() == ERROR_OS_UNAVAILABLE``, which surfaces as
+    a test failure rather than a clean skip.
+
+    This helper does the right capability check: consults the
+    runtime's MTL4 capability probe and reports True iff every
+    required MTL4 capability is available. Use this in test skip
+    guards instead of ``apple_gpu_runtime() is None``::
+
+        if not packaged_ml_available():
+            pytest.skip("Metal 4 packaged ML not available on this host")
+
+    Returns False on non-Darwin / macOS < 26 / runtime that can't
+    create an MTL4 compiler.
+    """
+    handle = apple_gpu_runtime()
+    if handle is None:
+        return False
+    probe = bind_symbol(
+        "tessera_apple_gpu_metal4_probe",
+        (ctypes.POINTER(ctypes.c_int32),),
+        restype=ctypes.c_int32,
+    )
+    if probe is None:
+        return False
+    caps_out = ctypes.c_int32(0)
+    # The probe returns 1 iff ALL MTL4 capability bits are set
+    # (queue + allocator + compiler + tensor + MSL 4.0). That's
+    # exactly the surface packaged-ML needs.
+    return bool(probe(ctypes.byref(caps_out)))
+
+
+def packaged_ml_skip_reason() -> Optional[str]:
+    """Return a human-readable reason packaged ML isn't available, or
+    ``None`` when it is. Useful for pytest.skip messages so the
+    failing surface is named, not just "skipped"."""
+    handle = apple_gpu_runtime()
+    if handle is None:
+        return "Apple GPU runtime dylib not buildable on this host"
+    if not packaged_ml_available():
+        return ("Metal 4 packaged ML not available — host SDK builds the "
+                "dylib but MTL4 capabilities probe returns false (likely "
+                "macOS < 26)")
+    return None
+
+
 def last_error_kind() -> int:
     """Return the most recent compile error code (and clear it).
 
@@ -802,5 +857,7 @@ __all__ = [
     "compile_mlpackage",
     "extract_argument_layout",
     "last_error_kind",
+    "packaged_ml_available",
+    "packaged_ml_skip_reason",
     "validate_bindings",
 ]

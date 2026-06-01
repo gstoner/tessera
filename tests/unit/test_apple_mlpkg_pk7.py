@@ -30,6 +30,8 @@ import pytest
 
 from tessera._apple_gpu_dispatch import apple_gpu_runtime
 from tessera.apple_mlpkg import (
+    packaged_ml_available,
+    packaged_ml_skip_reason,
     ArgumentLayout,
     ArgumentLayoutEntry,
     ExpectedBinding,
@@ -55,8 +57,8 @@ def _find_mtlpackage() -> Path | None:
 
 
 def _open_matmul_pipe_or_skip() -> Pipeline:
-    if apple_gpu_runtime() is None:
-        pytest.skip("Apple GPU runtime not buildable on this host")
+    if not packaged_ml_available():
+        pytest.skip(packaged_ml_skip_reason() or "packaged ML unavailable")
     pkg = _find_mtlpackage()
     if pkg is None:
         pytest.skip(f"no .mtlpackage fixture in {_FIXTURES_DIR}")

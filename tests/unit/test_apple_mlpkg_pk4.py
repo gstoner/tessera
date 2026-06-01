@@ -41,6 +41,8 @@ import pytest
 
 from tessera._apple_gpu_dispatch import apple_gpu_runtime, bind_symbol
 from tessera.apple_mlpkg import (
+    packaged_ml_available,
+    packaged_ml_skip_reason,
     Pipeline,
     compile_mlpackage,
     last_error_kind,
@@ -94,8 +96,8 @@ def _open_prepared_pipe_or_skip(M: int = 4, N: int = 4, K: int = 4) -> Pipeline:
     inputs so we must pass concrete dims (PK1.5). Default 4x4
     (Apple's sample demo size); pass custom M/N/K to test non-square
     matrices."""
-    if apple_gpu_runtime() is None:
-        pytest.skip("Apple GPU runtime not buildable on this host")
+    if not packaged_ml_available():
+        pytest.skip(packaged_ml_skip_reason() or "packaged ML unavailable")
     pkg = _find_mtlpackage()
     if pkg is None:
         pytest.skip(

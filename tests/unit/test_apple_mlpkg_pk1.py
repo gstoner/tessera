@@ -32,6 +32,8 @@ from tessera.apple_mlpkg import (
     Pipeline,
     compile_mlpackage,
     last_error_kind,
+    packaged_ml_available,
+    packaged_ml_skip_reason,
 )
 from tessera._apple_gpu_dispatch import apple_gpu_runtime
 
@@ -79,9 +81,11 @@ def test_all_pk1_symbols_resolve():
 def test_compile_returns_none_for_nonexistent_path():
     """A path that doesn't resolve to a Metal package must NOT raise —
     it must return None with the precise ``LIBRARY_LOAD_FAILED`` enum.
-    Critical for callers that probe whether a package is available."""
-    if apple_gpu_runtime() is None:
-        pytest.skip("Apple GPU runtime not buildable on this host")
+    Critical for callers that probe whether a package is available.
+    Skip when packaged ML isn't available — on macOS<26 the runtime
+    returns ``ERROR_OS_UNAVAILABLE`` regardless of path (P1 fix)."""
+    if not packaged_ml_available():
+        pytest.skip(packaged_ml_skip_reason() or "packaged ML unavailable")
     result = compile_mlpackage("/nonexistent/path/no.mtlpackage")
     assert result is None
     assert last_error_kind() == ERROR_LIBRARY_LOAD_FAILED
@@ -91,8 +95,8 @@ def test_last_error_kind_clears_after_read():
     """The error code is one-shot — reading it returns the code AND
     resets to NONE. Catches a regression where stale errors persist
     across calls."""
-    if apple_gpu_runtime() is None:
-        pytest.skip("Apple GPU runtime not buildable on this host")
+    if not packaged_ml_available():
+        pytest.skip(packaged_ml_skip_reason() or "packaged ML unavailable")
     compile_mlpackage("/nonexistent/path/no.mtlpackage")
     # First read: the error
     err = last_error_kind()
@@ -163,8 +167,8 @@ def test_compile_loads_real_metal_package():
     ``matrix-multiplication.mtlpackage`` has dynamic-shape inputs,
     so we pass concrete dims via PK1.5's ``input_dimensions=`` (Apple
     sample picks 4x4 for the demo)."""
-    if apple_gpu_runtime() is None:
-        pytest.skip("Apple GPU runtime not buildable on this host")
+    if not packaged_ml_available():
+        pytest.skip(packaged_ml_skip_reason() or "packaged ML unavailable")
     pkg = _find_mtlpackage()
     if pkg is None:
         pytest.skip(
@@ -199,8 +203,8 @@ def test_destroyed_pipeline_reports_destroyed_state():
     """After explicit destroy(), is_compiled flips to False and repr()
     reflects the state. Catches a regression where the Python side
     caches the compiled state."""
-    if apple_gpu_runtime() is None:
-        pytest.skip("Apple GPU runtime not buildable on this host")
+    if not packaged_ml_available():
+        pytest.skip(packaged_ml_skip_reason() or "packaged ML unavailable")
     pkg = _find_mtlpackage()
     if pkg is None:
         pytest.skip("no .mtlpackage fixture; see "

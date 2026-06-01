@@ -164,6 +164,18 @@ struct MetalDeviceContext {
   uint64_t  mtl4_event_val;   // monotonic signal counter
   std::mutex mtl4_dispatch_mu;
 
+  // PK audit P2 (2026-05-31) — packaged-ML dispatch
+  // (``tessera_apple_gpu_mlpkg_dispatch``) intentionally does NOT acquire
+  // ``mtl4_dispatch_mu`` because it creates its own per-call allocator +
+  // command buffer (the "outlier" pattern documented above). To avoid
+  // racing the canonical lane's monotonic counter / shared event, the
+  // packaged lane gets its OWN shared event + counter, guarded by its
+  // own mutex. Sharing the queue is fine — the queue itself serializes
+  // submission. The audit found this concurrency bug; see PK1 status notes.
+  id         mlpkg_event;     // id<MTLSharedEvent> — packaged-ML lane only
+  uint64_t   mlpkg_event_val; // monotonic signal counter for packaged ML
+  std::mutex mlpkg_event_mu;  // guards mlpkg_event lazy-init + counter bump
+
   // P4 — MTL4Archive pipeline persistence (opt-in). When enabled, the MTL4
   // compiler is created with a CaptureBinaries serializer so every pipeline it
   // builds is captured; a previously-flushed archive is loaded as a lookup
@@ -2692,14 +2704,32 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_dispatch(void *handle,
       // doesn't conform to the type's strict requirements).
       const id<MTL4CommandBuffer> cbs[1] = {cb};
       [queue commit:cbs count:1];
-      // Lazily acquire the cached MTL4 shared event.
-      id<MTLSharedEvent> ev = (id<MTLSharedEvent>)ctx.mtl4_event;
-      if (!ev) {
-        ev = [dev newSharedEvent];
-        ctx.mtl4_event = ev;
+      // PK audit P2 (2026-05-31) — packaged ML has its OWN shared event +
+      // monotonic counter, guarded by its OWN mutex. The canonical MTL4
+      // dispatcher (``mtl4_matmul2d_dispatch`` and friends) takes
+      // ``mtl4_dispatch_mu`` and touches ``ctx.mtl4_event`` /
+      // ``mtl4_event_val``; this packaged-ML lane runs concurrently against
+      // it (the "outlier" pattern — fresh per-call allocator + command
+      // buffer, no ``mtl4_dispatch_mu``). Sharing the event counter across
+      // the two lanes was a race: an interleaved ``++mtl4_event_val`` could
+      // hand us a value the canonical lane was already waiting on, or vice
+      // versa, causing a spurious wait timeout (or worse, a wait that
+      // returns before the GPU completes the right command buffer). Lane
+      // isolation keeps the queue shared (the queue itself serializes
+      // submission, so we don't lose ordering) while giving each lane its
+      // own scoreboard.
+      id<MTLSharedEvent> ev;
+      uint64_t signal_val;
+      {
+        std::lock_guard<std::mutex> lock(ctx.mlpkg_event_mu);
+        ev = (id<MTLSharedEvent>)ctx.mlpkg_event;
+        if (!ev) {
+          ev = [dev newSharedEvent];
+          ctx.mlpkg_event = ev;
+        }
+        if (!ev) return 0;
+        signal_val = ++ctx.mlpkg_event_val;
       }
-      if (!ev) return 0;
-      uint64_t signal_val = ++ctx.mtl4_event_val;
       [queue signalEvent:ev value:signal_val];
       bool done = [ev waitUntilSignaledValue:signal_val
                                     timeoutMS:timeout_ms];

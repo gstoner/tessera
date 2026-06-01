@@ -35,6 +35,8 @@ import pytest
 
 from tessera._apple_gpu_dispatch import apple_gpu_runtime, bind_symbol
 from tessera.apple_mlpkg import (
+    packaged_ml_available,
+    packaged_ml_skip_reason,
     Pipeline,
     TensorBinding,
     compile_mlpackage,
@@ -76,9 +78,11 @@ def test_dtype_probe_returns_distinct_raws_for_known_dtypes():
     Apple's ``MTLTensorDataType`` raw enum value for each named tag.
     On this host they should all be non-negative AND distinct from
     each other — a collision would mean the SDK collapsed two
-    canonical dtypes onto one enum value (which would be a bug)."""
-    if apple_gpu_runtime() is None:
-        pytest.skip("Apple GPU runtime not buildable on this host")
+    canonical dtypes onto one enum value (which would be a bug).
+    Skip when MTL4 packaged ML isn't available — the probe is
+    ``@available(macOS 26.0)`` and returns -1 on older OSes."""
+    if not packaged_ml_available():
+        pytest.skip(packaged_ml_skip_reason() or "packaged ML unavailable")
     probe = bind_symbol(
         "tessera_apple_gpu_mlpkg_dtype_raw_for_tag",
         (ctypes.c_int32,), restype=ctypes.c_int32)
@@ -100,8 +104,8 @@ def test_dtype_probe_returns_distinct_raws_for_known_dtypes():
 # ---- Dtype name decoding -----------------------------------------------
 
 def test_dtype_name_for_known_raws_returns_canonical_names():
-    if apple_gpu_runtime() is None:
-        pytest.skip("Apple GPU runtime not buildable on this host")
+    if not packaged_ml_available():
+        pytest.skip(packaged_ml_skip_reason() or "packaged ML unavailable")
     probe = bind_symbol(
         "tessera_apple_gpu_mlpkg_dtype_raw_for_tag",
         (ctypes.c_int32,), restype=ctypes.c_int32)
@@ -138,8 +142,8 @@ def test_reflection_extraction_from_real_mlpackage():
     package has three bindings: ``inputA`` / ``inputB`` / ``output``,
     each 2D float32. Any compiled Metal package will have at least
     one binding (otherwise the kernel can't take or produce data)."""
-    if apple_gpu_runtime() is None:
-        pytest.skip("Apple GPU runtime not buildable on this host")
+    if not packaged_ml_available():
+        pytest.skip(packaged_ml_skip_reason() or "packaged ML unavailable")
     pkg = _find_mtlpackage()
     if pkg is None:
         pytest.skip(
@@ -175,8 +179,8 @@ def test_reflection_bindings_are_stable_across_calls():
     """Calling ``bindings()`` twice on the same pipeline returns the
     same shape. Catches a regression where the underlying reflection
     array gets re-allocated and the indices shift."""
-    if apple_gpu_runtime() is None:
-        pytest.skip("Apple GPU runtime not buildable on this host")
+    if not packaged_ml_available():
+        pytest.skip(packaged_ml_skip_reason() or "packaged ML unavailable")
     pkg = _find_mtlpackage()
     if pkg is None:
         pytest.skip("no .mtlpackage fixture available")

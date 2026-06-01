@@ -155,6 +155,11 @@ _APPLE_GPU_FRAMEWORK_HINTS: dict[str, str] = {
 _DRIVER_DISPATCH_OPS: frozenset[str] = frozenset({
     "matmul", "softmax", "softmax_safe", "gelu",
     "rope", "flash_attn", "rmsnorm",
+    # Followup A.1 (2026-05-31) — manifest entries landed for these
+    # three; they dispatch via the driver (MPSGraph unary opcode /
+    # native multitile MPP / MPS matmul) so the drift gate routes
+    # them as ``driver`` not ``manifest``.
+    "relu", "conv2d", "kv_cache_read",
 })
 
 
@@ -252,6 +257,13 @@ _APPLE_GPU_KERNELS_SYMBOL_MAP: dict[str, str] = {
     "rope":         "tessera_apple_gpu_rope_f32",
     "flash_attn":   "tessera_apple_gpu_flash_attn_f32",
     "rmsnorm":      "tessera_apple_gpu_rmsnorm_f32",
+    # Followup A.1 (2026-05-31) — these three ops gained manifest
+    # entries to close the runtime-envelope-vs-manifest gap; the
+    # drift gate ``test_every_apple_gpu_msl_kernel_has_dispatch_symbol``
+    # requires a parallel entry here naming the dispatch symbol.
+    "relu":         "tessera_apple_gpu_mpsgraph_unary_f32",  # opcode-dispatched
+    "conv2d":       "tessera_apple_gpu_conv2d_native_multitile",
+    "kv_cache_read": "tessera_apple_gpu_mps_matmul_{f32,f16,bf16}",  # cache pages dispatch via MPS
 }
 
 

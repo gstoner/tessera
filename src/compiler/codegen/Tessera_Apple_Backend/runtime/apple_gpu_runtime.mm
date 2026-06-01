@@ -1850,6 +1850,42 @@ extern "C" int32_t tessera_apple_gpu_mtl4_archive_enable(const char *path) {
   return 0;
 }
 
+// Apple-sample Action 6 (2026-05-31) — Archive / AOT-cache telemetry
+// probe. Reports the current state of the MTL4Archive cache so an
+// artifact can surface "archive_enabled=true, lookup hit, path=..."
+// instead of the binary "Metal is available" answer the old probe
+// returned. ``archive_path_out`` is filled up to ``archive_path_len``
+// bytes (always NUL-terminated when ``archive_path_len > 0``); the
+// remaining flags are set when the corresponding output pointer is
+// non-null. Returns 1 when the runtime is initialized + the snapshot
+// fields are valid, 0 when the runtime isn't ready.
+extern "C" int32_t tessera_apple_gpu_mtl4_archive_state(
+    int32_t *archive_enabled_out,
+    int32_t *has_lookup_archive_out,
+    char *archive_path_out,
+    int32_t archive_path_len) {
+  // Zero outputs defensively so a 0 return reads cleanly to callers
+  // that didn't check the rc.
+  if (archive_enabled_out) *archive_enabled_out = 0;
+  if (has_lookup_archive_out) *has_lookup_archive_out = 0;
+  if (archive_path_out && archive_path_len > 0) archive_path_out[0] = '\0';
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  std::lock_guard<std::mutex> lock(ctx.mtl4_mu);
+  if (archive_enabled_out)
+    *archive_enabled_out = ctx.mtl4_archive_enabled ? 1 : 0;
+  if (has_lookup_archive_out)
+    *has_lookup_archive_out = ctx.mtl4_lookup_archive ? 1 : 0;
+  if (archive_path_out && archive_path_len > 0) {
+    size_t cap = (size_t)archive_path_len - 1;  // leave room for NUL
+    size_t n = ctx.mtl4_archive_path.size();
+    if (n > cap) n = cap;
+    if (n > 0) std::memcpy(archive_path_out, ctx.mtl4_archive_path.data(), n);
+    archive_path_out[n] = '\0';
+  }
+  return 1;
+}
+
 // P4 — flush the captured pipeline set to the enabled archive path. Returns 1 on
 // success. Call after the kernels of interest have been built (e.g. after warmup).
 extern "C" int32_t tessera_apple_gpu_mtl4_archive_flush(void) {

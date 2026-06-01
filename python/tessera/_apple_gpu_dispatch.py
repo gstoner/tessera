@@ -230,6 +230,121 @@ def bind_symbol(
         return fn
 
 
+# Apple-sample Actions 1 + 6 (2026-05-31) — Capability snapshot helpers
+# that decode the runtime's caps bitmask + archive state into a
+# structured dict. Exposed so ``CompileResult.to_dict()`` (and any
+# dashboard / telemetry consumer) can report "what's *really* lit up on
+# this host" instead of just ``target=apple_gpu``.
+#
+# Capability bits match the ``tessera_apple_gpu_metal4_probe`` doc
+# comment in apple_gpu_runtime.mm:
+#   1  MTL4CommandQueue
+#   2  MTL4CommandAllocator
+#   4  MTL4Compiler
+#   8  MTLTensor
+#  16  MSL 4.0 library compile
+
+_APPLE_GPU_CAP_BITS: tuple[tuple[int, str], ...] = (
+    (1, "mtl4_command_queue"),
+    (2, "mtl4_command_allocator"),
+    (4, "mtl4_compiler"),
+    (8, "mtl_tensor"),
+    (16, "msl_4_0"),
+)
+
+
+def apple_gpu_capabilities_snapshot() -> dict[str, object]:
+    """Return a structured snapshot of Apple GPU capabilities + archive
+    cache state.
+
+    Always returns a dict (never ``None``); the dict carries enough
+    keys to be useful even when the runtime isn't available — the
+    caller doesn't need to handle a missing snapshot specially.
+
+    Keys:
+
+    * ``runtime_available`` (bool) — the runtime dylib loaded.
+    * ``capabilities`` (dict[str, bool]) — per-feature flags decoded
+      from the C ABI capability bitmask. Always present when
+      ``runtime_available``. Empty dict otherwise.
+    * ``capabilities_raw`` (int) — the bitmask as returned by the C
+      probe; useful for telemetry that doesn't want to enumerate the
+      decoded keys.
+    * ``mtl4_full`` (bool) — every cap bit is set (i.e. the FULL MTL4
+      stack is usable; matches the rc=1 case of the C probe).
+    * ``archive`` (dict) — MTL4Archive cache state:
+       ``available`` (bool) — the archive-state probe returned
+       success;  ``enabled`` (bool) — archive capture is enabled
+       (compiler has a CaptureBinaries serializer attached);
+       ``has_lookup`` (bool) — a prior archive was loaded as a lookup
+       archive on the current compiler; ``path`` (str) — the archive
+       file path (empty when unset).
+
+    The return shape is stable — adding new bits only adds keys,
+    never renames or removes.
+    """
+    snapshot: dict[str, object] = {
+        "runtime_available": False,
+        "capabilities": {},
+        "capabilities_raw": 0,
+        "mtl4_full": False,
+        "archive": {
+            "available": False,
+            "enabled": False,
+            "has_lookup": False,
+            "path": "",
+        },
+    }
+    handle = apple_gpu_runtime()
+    if handle is None:
+        return snapshot
+    snapshot["runtime_available"] = True
+
+    # Capability bitmask.
+    probe = bind_symbol(
+        "tessera_apple_gpu_metal4_probe",
+        (ctypes.POINTER(ctypes.c_int32),),
+        restype=ctypes.c_int32,
+    )
+    caps_raw = 0
+    full = False
+    if probe is not None:
+        caps_out = ctypes.c_int32(0)
+        full = bool(probe(ctypes.byref(caps_out)))
+        caps_raw = int(caps_out.value)
+    decoded = {name: bool(caps_raw & bit) for bit, name in _APPLE_GPU_CAP_BITS}
+    snapshot["capabilities"] = decoded
+    snapshot["capabilities_raw"] = caps_raw
+    snapshot["mtl4_full"] = full
+
+    # Archive state.
+    archive_probe = bind_symbol(
+        "tessera_apple_gpu_mtl4_archive_state",
+        (ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int32),
+         ctypes.c_char_p,
+         ctypes.c_int32),
+        restype=ctypes.c_int32,
+    )
+    if archive_probe is not None:
+        enabled = ctypes.c_int32(0)
+        has_lookup = ctypes.c_int32(0)
+        path_buf = ctypes.create_string_buffer(1024)
+        rc = archive_probe(
+            ctypes.byref(enabled),
+            ctypes.byref(has_lookup),
+            path_buf,
+            ctypes.c_int32(1024),
+        )
+        snapshot["archive"] = {
+            "available": bool(rc),
+            "enabled": bool(enabled.value),
+            "has_lookup": bool(has_lookup.value),
+            "path": path_buf.value.decode("utf-8", errors="replace"),
+        }
+    return snapshot
+
+
 # Convenience: test helpers and benchmark code occasionally need to
 # clear the cache (e.g., to force a recompile after editing the source).
 # This is intentionally NOT exported in ``__all__`` — it's an escape

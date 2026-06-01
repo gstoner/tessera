@@ -1481,6 +1481,17 @@ extern "C" void tessera_apple_gpu_mtl4_mlp_session_destroy(void*) {}
 // Metal 4 P4 — MTL4Archive pipeline persistence; no Metal 4 off Darwin.
 extern "C" int32_t tessera_apple_gpu_mtl4_archive_enable(const char*) { return 0; }
 extern "C" int32_t tessera_apple_gpu_mtl4_archive_flush(void) { return 0; }
+// Apple-sample Action 6 — archive state probe. Off-Darwin: zero outputs
+// and report 0 ("runtime not ready"). The Python side reads the rc and
+// treats 0 as "no archive telemetry available".
+extern "C" int32_t tessera_apple_gpu_mtl4_archive_state(
+    int32_t *archive_enabled_out, int32_t *has_lookup_archive_out,
+    char *archive_path_out, int32_t archive_path_len) {
+  if (archive_enabled_out) *archive_enabled_out = 0;
+  if (has_lookup_archive_out) *has_lookup_archive_out = 0;
+  if (archive_path_out && archive_path_len > 0) archive_path_out[0] = '\0';
+  return 0;
+}
 // P8 — GPU im2col conv. Non-Apple reference: f16/bf16 -> f32 conv (Wr is the
 // HWIO weights reshaped to [kH*kW*Cin, Cout], byte-identical, so the existing
 // HWIO f32 reference applies), + bias + activation, -> f32 Y. The f32 conv

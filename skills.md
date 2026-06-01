@@ -155,3 +155,66 @@ to Tessera's current state:
   / ML-usage work.)
 * **Don't size scratch heaps by hand.** Future packaged-kernel paths
   must read `intermediatesHeapSize` from the compiled pipeline.
+
+---
+
+## Graphify scope in this repo — empirical (2026-05-31)
+
+Graphify ships grammars for 19 languages (Python, JavaScript, TypeScript,
+Ruby, PHP, Lua, PowerShell, Go, Rust, C, C++, Zig, Swift, Objective-C,
+Java, Kotlin, Scala, C#, Elixir). The set is documented in graphify's
+own README / install output.
+
+**Critical distinction:** the grammar set is the *upper bound* on what
+graphify CAN parse. The actual contents of ``graphify-out/graph.json``
+are what graphify queries traverse. Always verify the latter before
+assuming the former.
+
+### What Tessera's graph actually indexes today
+
+Empirically confirmed by ``graphify query`` probes against the current
+index:
+
+| Surface | In graph? | Notes |
+|---------|-----------|-------|
+| Python (`python/tessera/`) | ✅ Yes | Full coverage — primary use case |
+| C++ (`*.cpp` in `src/compiler/`, `tools/`, etc.) | ✅ Yes | Indexed; symbols like `ErrorReporter.cpp::PyLoc` surface |
+| C++ headers (`*.h` in `src/`) | ⚠️ Mixed | Some headers indexed; coverage spotty |
+| Objective-C++ (`*.mm`) | ❌ **Not in graph** | `apple_gpu_runtime.mm` (13K LOC, the entire Apple GPU runtime) does NOT appear in any graphify query result. Use direct `rg` / Read. |
+| MLIR TableGen (`*.td`) | ❌ Not in graph | Grammar not supported |
+| MLIR / lit fixtures (`*.mlir`) | ❌ Not in graph | Grammar not supported |
+| CMake (`CMakeLists.txt`) | ❌ Not in graph | Grammar not supported |
+| Markdown (`*.md` in `docs/`) | ⚠️ Partial | Some headings/sections appear as nodes; not a code-symbol graph |
+
+### Implications for tool choice
+
+* **Python / `.cpp`** — graphify FIRST. `codegraph_context "how does X
+  work"` returns a scoped subgraph in one call; vastly cheaper than
+  ripgrep + Read across thousands of files.
+* **`.mm` (Apple GPU runtime)** — direct `rg` / Read. The runtime is a
+  single 13K-line file; grep is the right tool. Don't waste a graphify
+  call expecting `MetalDeviceContext` to surface — it won't.
+* **`.td` (ODS)** — direct Read with line-number anchors from
+  `src/compiler/ir/TesseraOps.td`.
+* **MLIR `.mlir` lit fixtures** — direct Read; the file count is small
+  and the contents are short.
+* **CMake** — direct Read.
+
+### Verification recipe (copy-paste, ~5s)
+
+Before assuming graphify covers a file, probe:
+
+    graphify query "<symbol or topic likely in that file>"
+
+If results all point to other files / no hit for the target file, the
+file isn't in the graph. Switch to `rg` for that surface.
+
+### Lesson learned (2026-05-31)
+
+I previously assumed `.mm` was out of graphify's scope (correctly, as it
+turns out — but for the wrong reason). When corrected that Objective-C
+is on graphify's grammar list, I conceded the wrong concession.
+**Empirical answer**: the graph in *this* repo doesn't include `.mm`
+regardless of grammar availability. The lesson is to verify against
+the actual graph, not the grammar list. ``graphify query`` is the
+fastest check.

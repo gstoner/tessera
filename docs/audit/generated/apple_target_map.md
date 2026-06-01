@@ -54,19 +54,22 @@ and ``docs/apple_backend_integration_review.md`` (review):
 
 | Family | Rows | apple_gpu fused | apple_cpu accelerate_native |
 |---|---:|---:|---:|
-| tensor | 8 | 7 | 2 |
+| tensor | 11 | 10 | 2 |
 | ga | 17 | 17 | 0 |
 | ebm | 11 | 11 | 0 |
 | m7 | 4 | 4 | 0 |
 
-## tensor (8)
+## tensor (11)
 
 | Op | apple_cpu status | cpu framework | cpu dtypes | cpu symbol | execution_kind | apple_gpu status | gpu framework | gpu dtypes | gpu symbol | gpu_dispatch | proof |
 |---|---|---|---|---|---|---|---|---|---|---|---|
+| conv2d | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32 | tessera_apple_gpu_conv2d_native_multitile | driver | tests/unit/test_apple_*.py |
 | flash_attn | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_flash_attn_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 | gelu | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_gelu_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 | gemm | fused | Accelerate (cblas_sgemm) + BNNS (fp16/bf16) | fp32,fp16,bf16 | tessera_apple_cpu_gemm_{f32,f16,bf16} | accelerate_native | absent | - | - | - | absent | tests/unit/test_apple_backend_roadmap.py |
+| kv_cache_read | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32,fp16,bf16 | tessera_apple_gpu_mps_matmul_{f32,f16,bf16} | driver | tests/unit/test_apple_*.py |
 | matmul | fused | Accelerate (cblas_sgemm) + BNNS (fp16/bf16) | fp32,fp16,bf16 | tessera_apple_cpu_gemm_{f32,f16,bf16} | accelerate_native | fused | MetalPerformanceShaders | fp32,fp16,bf16 | tessera_apple_gpu_mps_matmul_{f32,f16,bf16} | driver | tests/unit/test_apple_backend_roadmap.py |
+| relu | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32,fp16,bf16 | tessera_apple_gpu_mpsgraph_unary_f32 | driver | tests/unit/test_apple_*.py |
 | rmsnorm | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_rmsnorm_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 | rope | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_rope_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 | softmax | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_softmax_f32 | driver | tests/unit/test_apple_backend_roadmap.py |

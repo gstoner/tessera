@@ -183,8 +183,17 @@ class CompileResult:
 
     def to_dict(self) -> dict[str, Any]:
         """Round-trippable summary — useful for telemetry, dashboards,
-        compile-report integration, and tests that want a stable surface."""
-        return {
+        compile-report integration, and tests that want a stable surface.
+
+        For Apple targets, also includes ``apple_gpu_capabilities``
+        (per-feature flag dict) and ``apple_gpu_archive`` (MTL4Archive
+        cache state) — the Apple-sample Actions 1 + 6 surface. The
+        snapshot is a best-effort read; on hosts where the runtime
+        isn't available, the keys are present but mostly empty
+        (``runtime_available=False``), so consumers don't need to
+        special-case the missing case.
+        """
+        out: dict[str, Any] = {
             "target": self.target,
             "primary_op": self.primary_op,
             "compiler_path": self.compiler_path,
@@ -203,6 +212,30 @@ class CompileResult:
             ],
             "artifact_hashes": self.bundle.artifact_hashes,
         }
+        # Apple-sample Actions 1 + 6 — capability + archive telemetry on
+        # Apple targets. The compile result is the natural carrier: a
+        # dashboard or test that wants "what's lit up on this host"
+        # reads it from one place. Lazy-imported so the canonical
+        # compile module stays a pure aggregator over its declared
+        # truth sources.
+        if self.target in ("apple_gpu", "apple_cpu"):
+            try:
+                from tessera._apple_gpu_dispatch import (
+                    apple_gpu_capabilities_snapshot,
+                )
+                snap = apple_gpu_capabilities_snapshot()
+                out["apple_gpu_capabilities"] = snap.get("capabilities", {})
+                out["apple_gpu_capabilities_raw"] = snap.get(
+                    "capabilities_raw", 0)
+                out["apple_gpu_mtl4_full"] = snap.get("mtl4_full", False)
+                out["apple_gpu_archive"] = snap.get("archive", {})
+                out["apple_gpu_runtime_available"] = snap.get(
+                    "runtime_available", False)
+            except Exception:
+                # Defensive — capability telemetry must never break
+                # ``to_dict``. Leave the keys absent on import failure.
+                pass
+        return out
 
 
 # --- Primary-op extraction -----------------------------------------------

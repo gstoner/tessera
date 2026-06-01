@@ -171,6 +171,37 @@ fallback semantics by returning `(output, override_kind)`). The inline CPU
 branch in `runtime.launch()` is deleted; every executable row in the matrix is
 now reached through exactly one dispatch site.
 
+### 7. Op×Target conformance matrix — ✅ DONE (2026-05-31)
+**Audit recommendation A** (out of A/B/C/D).
+
+- New module `python/tessera/compiler/conformance_matrix.py` cross-references
+  the four existing truth sources (`primitive_coverage` 12-axis contracts,
+  `backend_manifest` per-target kernel status, `execution_matrix` runtime
+  executors, and the Apple-GPU runtime envelope sets) into a per-(op, target)
+  view of the **seven-step proof ladder**: `graph_emitted → schedule_legal →
+  tile_legal → target_legal → backend_compile → runtime_execute →
+  numerical_check`.
+- Dashboard at `docs/audit/op_target_conformance.md` covers 7 ops × 6 targets
+  = 42 cells: `{matmul, matmul_relu, softmax, matmul_softmax, conv2d,
+  flash_attn, kv_cache_read}` × `{cpu, apple_cpu, apple_gpu, nvidia, rocm,
+  metalium}`.
+- Pure aggregator — guarded by `test_matrix_is_pure_aggregator` so it can't
+  grow private knowledge that shadows the upstream sources. Drift-gated by
+  `test_dashboard_in_sync_with_generator`. Eight structural tests total in
+  `tests/unit/test_op_target_conformance.py`.
+- CLI: `python -m tessera.cli.conformance_matrix --render | --check`.
+- **Surfaced 3 real upstream gaps on the first run** (rendered in their own
+  dashboard section): `relu`/`conv2d`/`kv_cache_read` on `apple_gpu` are in
+  the runtime envelope but missing from `backend_manifest`. Each is a real
+  one-line `BackendKernelEntry` addition, kicked back to the manifest as a
+  follow-up rather than silently fixed inside the matrix.
+- Initial signal: **5 complete / 12 partial / 25 missing**. Honest baseline
+  — the dashboard explicitly distinguishes "Graph IR knows about it"
+  (`graph_emitted ✅`) from "the runtime can launch a numerically-validated
+  kernel today" (overall `complete`). This replaces the audit's
+  "architecture-implied vs. executable" framing problem with a single
+  drift-gated table.
+
 #### 6.2 Public `tsrGetArtifactBytes` / `tsrGetArtifactTarget` ABI — ✅ DONE (2026-05-31)
 Audit residual: the G6 test inspected the opaque artifact payload via a
 private layout-mirror struct that had to be kept in sync with the C++ side by

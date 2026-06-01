@@ -195,12 +195,12 @@ def test_runtime_source_includes_pattern_4_helper():
     assert "commit_and_wait_with_timeout" in src, (
         "Pattern-4 timeout-event wrapper missing from runtime source")
     # And the helper is callable across the entire file (not just one
-    # local block) — there should be at least 6 call sites total
-    # (1 inside the helper itself for the fallback case + 5 batch-1
+    # local block) — there should be at least 12 call sites total
+    # (1 inside the helper itself + 5 batch-1 migrations + 6 batch-2
     # migrations).
     call_sites = src.count("commit_and_wait_with_timeout(")
-    assert call_sites >= 6, (
-        f"expected ≥6 call sites for commit_and_wait_with_timeout, "
+    assert call_sites >= 12, (
+        f"expected ≥12 call sites for commit_and_wait_with_timeout, "
         f"found {call_sites} — migration may have regressed")
 
 
@@ -210,11 +210,19 @@ def test_migrated_dispatchers_no_longer_call_waituntilcompleted():
     in any of these functions will fire this test."""
     src = _RUNTIME_SRC.read_text()
     targets = [
+        # Batch 1 (2026-05-31)
         "tessera_apple_gpu_cholesky_f32",
         "tessera_apple_gpu_solve_cholesky_f32",
         "tessera_apple_gpu_solve_lu_f32",
         "tessera_apple_gpu_tri_solve_f32",
         "dispatch_mps_random_f32",
+        # Batch 2 (2026-06-01)
+        "dispatch_mps_gemm_f16",
+        "dispatch_svd_jacobi_f32",
+        "dispatch_svd_jacobi_bl_f32",
+        "dispatch_cholesky_batched_f32",
+        "dispatch_tri_solve_batched_f32",
+        "dispatch_dev_cast",
     ]
     for fn_name in targets:
         # Locate the function's opening brace, then walk balanced

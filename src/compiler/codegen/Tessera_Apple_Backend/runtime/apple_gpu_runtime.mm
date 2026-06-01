@@ -1058,10 +1058,10 @@ bool dispatch_mps_gemm_f16(MetalDeviceContext &ctx, const uint16_t* A,
                        leftMatrix:matA
                       rightMatrix:matB
                      resultMatrix:matC];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 2 (2026-06-01) — 30 s timeout via Pattern-4
+    // wrapper so a hung f16 GEMM doesn't deadlock the test runner.
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "mps_gemm_f16")) return false;
     std::memcpy(C, [bufC contents], byteCountC);
     return true;
   }
@@ -1341,9 +1341,11 @@ kernel void svd_jacobi_f32(
     [enc dispatchThreadgroups:MTLSizeMake((NSUInteger)batch, 1, 1)
         threadsPerThreadgroup:MTLSizeMake(kSvdThreads, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 2 (2026-06-01) — SVD can take seconds on large
+    // matrices; use a 60 s timeout (vs 30 s default) to cover real
+    // batch-of-large-SVDs without false hang reports.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "svd_jacobi_f32")) return false;
     std::memcpy(U, [bW contents], wB);
     std::memcpy(V, [bV contents], vB);
     std::memcpy(S, [bS contents], sB);
@@ -1512,9 +1514,10 @@ kernel void svd_jacobi_bl_f32(
     [enc dispatchThreadgroups:MTLSizeMake((NSUInteger)batch, 1, 1)
         threadsPerThreadgroup:MTLSizeMake(128, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 2 (2026-06-01) — Brent–Luk parallel Jacobi SVD;
+    // same 60 s timeout as the serial variant.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "svd_jacobi_bl_f32")) return false;
     std::memcpy(U, [bW contents], wB);
     std::memcpy(V, [bV contents], vB);
     std::memcpy(S, [bS contents], sB);
@@ -1617,9 +1620,10 @@ kernel void cholesky_batched_f32(
     [enc dispatchThreadgroups:MTLSizeMake((NSUInteger)batch, 1, 1)
         threadsPerThreadgroup:MTLSizeMake(kBatchLinalgThreads, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 2 (2026-06-01) — batched Cholesky over a grid
+    // of threadgroups. 30 s timeout.
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "cholesky_batched_f32")) return false;
     std::memcpy(L, [bL contents], mB);
     std::memcpy(status, [bSt contents], sB);
     return true;
@@ -1701,9 +1705,9 @@ kernel void tri_solve_batched_f32(
     [enc dispatchThreadgroups:MTLSizeMake((NSUInteger)batch, 1, 1)
         threadsPerThreadgroup:MTLSizeMake(kBatchLinalgThreads, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 2 (2026-06-01) — batched triangular solve.
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "tri_solve_batched_f32")) return false;
     std::memcpy(X, [bX contents], rB);
     return true;
   }
@@ -1785,9 +1789,9 @@ kernel void dev_cast_bf16_to_f32(device const ushort* in [[buffer(0)]],
     [enc dispatchThreads:MTLSizeMake((NSUInteger)n, 1, 1)
         threadsPerThreadgroup:MTLSizeMake(std::min<NSUInteger>(256, (NSUInteger)n), 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    return cb.status == MTLCommandBufferStatusCompleted;
+    // Migration batch 2 (2026-06-01) — device-side cast (f32 ↔ f16
+    // resident MLP chain helper).
+    return commit_and_wait_with_timeout(ctx, cb, 30000, "dev_cast");
   }
 }
 }  // namespace

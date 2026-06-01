@@ -2974,9 +2974,11 @@ static bool mtl4_encode_and_wait(MetalDeviceContext &ctx, id<MTL4CommandQueue> q
   return [ev waitUntilSignaledValue:v timeoutMS:10000];
 }
 
-bool dispatch_rope_msl(MetalDeviceContext &ctx, const float* X,
-                       const float* Theta, float* Out, int32_t M, int32_t K) {
-  static NSString *const kRopeSource = @R"MSL(
+// MSL source for f32 RoPE — lifted to namespace scope so both the
+// original dispatch_rope_msl and the new encode-session variant
+// encode_rope_msl_dev (added 2026-06-01 for stage-2 single-cb decoder
+// chain) share one source-of-truth.
+static NSString *const kRopeF32Source = @R"MSL(
 #include <metal_stdlib>
 using namespace metal;
 
@@ -3002,9 +3004,11 @@ kernel void rope_f32(
 }
 )MSL";
 
+bool dispatch_rope_msl(MetalDeviceContext &ctx, const float* X,
+                       const float* Theta, float* Out, int32_t M, int32_t K) {
   @autoreleasepool {
     id<MTLComputePipelineState> pso =
-        compile_msl_kernel(ctx, kRopeSource, @"rope_f32");
+        compile_msl_kernel(ctx, kRopeF32Source, @"rope_f32");
     if (!pso) return false;
 
     NSUInteger byteCount = sizeof(float) * static_cast<NSUInteger>(M) *
@@ -3038,6 +3042,41 @@ kernel void rope_f32(
     std::memcpy(Out, [bufO contents], byteCount);
     return true;
   }
+}
+
+// Stage-2 single-cb (2026-06-01) — encode RoPE into a session-shared
+// MPSCommandBuffer. Mirrors encode_flash_attn_msl_dev. Buffer arg
+// ordering must match the f32 kernel above: x@0 / theta@1 / out@2.
+static bool encode_rope_msl_dev(MetalDeviceContext &ctx,
+                                MPSCommandBuffer *cb,
+                                id<MTLBuffer> bufX, id<MTLBuffer> bufT,
+                                id<MTLBuffer> bufO,
+                                int32_t M, int32_t K) {
+  if (M <= 0 || K <= 0) return true;
+  if (!cb || !bufX || !bufT || !bufO) return false;
+  id<MTLComputePipelineState> pso =
+      compile_msl_kernel(ctx, kRopeF32Source, @"rope_f32");
+  if (!pso) return false;
+  id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+  if (!enc) return false;
+  [enc setComputePipelineState:pso];
+  [enc setBuffer:bufX offset:0 atIndex:0];
+  [enc setBuffer:bufT offset:0 atIndex:1];
+  [enc setBuffer:bufO offset:0 atIndex:2];
+  [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+  [enc setBytes:&K length:sizeof(int32_t) atIndex:4];
+  NSUInteger half_k = static_cast<NSUInteger>(K / 2);
+  MTLSize grid = MTLSizeMake(half_k, static_cast<NSUInteger>(M), 1);
+  NSUInteger tg_x = std::min<NSUInteger>(half_k, 32);
+  NSUInteger tg_y = std::min<NSUInteger>(
+      static_cast<NSUInteger>(M),
+      pso.maxTotalThreadsPerThreadgroup /
+          std::max<NSUInteger>(tg_x, 1));
+  if (tg_y == 0) tg_y = 1;
+  [enc dispatchThreads:grid
+         threadsPerThreadgroup:MTLSizeMake(tg_x, tg_y, 1)];
+  [enc endEncoding];
+  return true;
 }
 
 inline void reference_rope_f32(const float* X, const float* Theta, float* Out,
@@ -12393,50 +12432,66 @@ static bool mpsg_run_bmm_dev(MetalDeviceContext &ctx, id<MTLBuffer> bufA,
   }
 }
 
-// Single-command-buffer decode chain scaffold (2026-06-01) — encode a
-// device-resident layer_norm into a shared command buffer alongside other
-// encoded ops (bmm, future rope/flash_attn/etc). Layer-norm in particular is
-// what makes the decoder layer "norm + matmul + norm" chain encodable end-to-
-// end on one cb. The helper mirrors ``mpsg_encode_bmm_dev``: take a shared
-// ``MPSCommandBuffer``, append the layer_norm graph node, return without
-// committing. Caller (``ts_enc_commit_wait``) commits + waits once.
-// See ``docs/audit/single_command_buffer_decode_plan.md``.
-static bool mpsg_encode_layer_norm_dev(MPSCommandBuffer *cb,
-                                       id<MTLBuffer> bufX,
-                                       id<MTLBuffer> bufG,
-                                       id<MTLBuffer> bufB,
-                                       id<MTLBuffer> bufY,
-                                       int32_t rows, int32_t cols,
-                                       float eps, MPSDataType ioType) {
+// Single-command-buffer decode chain scaffold (2026-06-01) — generic
+// encode helper for row-wise ops (layer_norm / rmsnorm / softmax /
+// log_softmax). Appends to a shared MPSCommandBuffer; no commit/sync.
+// ``kind`` matches ``mpsg_rowop_graph``: 0=layer_norm, 1=rmsnorm,
+// 2=softmax, 3=log_softmax. ``bufG`` / ``bufB`` may be nil for
+// kinds that don't take gamma / beta (softmax / log_softmax have
+// neither; rmsnorm has gamma only). See
+// ``docs/audit/single_command_buffer_decode_plan.md``.
+static bool mpsg_encode_rowop_dev(MPSCommandBuffer *cb, int32_t kind,
+                                  id<MTLBuffer> bufX,
+                                  id<MTLBuffer> bufG,
+                                  id<MTLBuffer> bufB,
+                                  id<MTLBuffer> bufY,
+                                  int32_t rows, int32_t cols,
+                                  float eps, MPSDataType ioType) {
   if (rows <= 0 || cols <= 0) return true;
-  if (!cb || !bufX || !bufG || !bufB || !bufY) return false;
+  if (!cb || !bufX || !bufY) return false;
   NSArray<NSNumber *> *xs = @[ @(rows), @(cols) ];
   NSArray<NSNumber *> *gs = @[ @(cols) ];
+  bool hasGamma = (bufG != nil);
+  bool hasBeta = (bufB != nil);
   NSArray *phs;
   MPSGraphTensor *y;
-  // kind=0 → layer_norm; gamma + beta present.
-  MPSGraph *g = mpsg_rowop_graph(0, rows, cols, eps,
-                                 /*hasGamma=*/true, /*hasBeta=*/true,
-                                 ioType, &phs, &y);
+  MPSGraph *g = mpsg_rowop_graph(kind, rows, cols, eps, hasGamma,
+                                 hasBeta, ioType, &phs, &y);
   if (!y) return false;
   MPSGraphTensorData *xd = [[MPSGraphTensorData alloc]
                             initWithMTLBuffer:bufX shape:xs dataType:ioType];
-  MPSGraphTensorData *gd = [[MPSGraphTensorData alloc]
-                            initWithMTLBuffer:bufG shape:gs dataType:ioType];
-  MPSGraphTensorData *bd = [[MPSGraphTensorData alloc]
-                            initWithMTLBuffer:bufB shape:gs dataType:ioType];
   MPSGraphTensorData *od = [[MPSGraphTensorData alloc]
                             initWithMTLBuffer:bufY shape:xs dataType:ioType];
   NSMutableDictionary *feeds = [NSMutableDictionary dictionary];
   feeds[phs[0]] = xd;
-  if (phs.count >= 2) feeds[phs[1]] = gd;
-  if (phs.count >= 3) feeds[phs[2]] = bd;
+  if (hasGamma && phs.count >= 2) {
+    feeds[phs[1]] = [[MPSGraphTensorData alloc]
+                     initWithMTLBuffer:bufG shape:gs dataType:ioType];
+  }
+  if (hasBeta && phs.count >= 3) {
+    feeds[phs[2]] = [[MPSGraphTensorData alloc]
+                     initWithMTLBuffer:bufB shape:gs dataType:ioType];
+  }
   [g encodeToCommandBuffer:cb
                      feeds:feeds
               targetOperations:nil
           resultsDictionary:@{y : od}
         executionDescriptor:nil];
   return true;
+}
+
+// Layer-norm encode wrapper (kind=0, gamma + beta present). Kept as a
+// thin alias for backward compat with the scaffold caller.
+static inline bool mpsg_encode_layer_norm_dev(MPSCommandBuffer *cb,
+                                              id<MTLBuffer> bufX,
+                                              id<MTLBuffer> bufG,
+                                              id<MTLBuffer> bufB,
+                                              id<MTLBuffer> bufY,
+                                              int32_t rows, int32_t cols,
+                                              float eps,
+                                              MPSDataType ioType) {
+  return mpsg_encode_rowop_dev(cb, /*kind=*/0, bufX, bufG, bufB, bufY,
+                                rows, cols, eps, ioType);
 }
 
 // R2 — encode a bmm into a shared command buffer (no commit/sync here). Metal's
@@ -12575,6 +12630,35 @@ extern "C" int32_t tessera_apple_gpu_layer_norm_dev_f32_enc(
              : 0;
 }
 
+// Stage-2 single-cb (2026-06-01) — encoded rmsnorm (kind=1, gamma
+// only). Llama-style transformers use rmsnorm in place of layer_norm.
+extern "C" int32_t tessera_apple_gpu_rmsnorm_dev_f32_enc(
+    TsEncodeSession *s,
+    TsDeviceTensor *X, TsDeviceTensor *gamma,
+    TsDeviceTensor *Y, int32_t rows, int32_t cols, float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !gamma || !Y) return 0;
+  return mpsg_encode_rowop_dev(s->cb, /*kind=*/1, X->buf, gamma->buf,
+                                /*bufB=*/nil, Y->buf, rows, cols, eps,
+                                MPSDataTypeFloat32) ? 1 : 0;
+}
+
+// Stage-2 (2026-06-01) — encoded softmax (kind=2, no gamma / beta).
+// Free-standing softmax (separate from the flash_attn fusion) for
+// cases like classifier heads, attention scoring outside flash_attn.
+extern "C" int32_t tessera_apple_gpu_softmax_dev_f32_enc(
+    TsEncodeSession *s,
+    TsDeviceTensor *X, TsDeviceTensor *Y,
+    int32_t rows, int32_t cols) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !Y) return 0;
+  return mpsg_encode_rowop_dev(s->cb, /*kind=*/2, X->buf, /*bufG=*/nil,
+                                /*bufB=*/nil, Y->buf, rows, cols,
+                                /*eps=*/0.0f, MPSDataTypeFloat32)
+             ? 1
+             : 0;
+}
+
 // Stage-2 single-cb decoder block (2026-06-01) — encoded device-resident
 // flash_attn. Pairs with ``tessera_apple_gpu_bmm_dev_f32_enc`` +
 // ``tessera_apple_gpu_layer_norm_dev_f32_enc`` so an entire
@@ -12592,6 +12676,19 @@ extern "C" int32_t tessera_apple_gpu_flash_attn_dev_f32_enc(
                                     O->buf, B, Sq, Sk, D, scale, causal)
              ? 1
              : 0;
+}
+
+// Stage-2 (2026-06-01) — encoded RoPE. Sits between layer_norm/rmsnorm
+// and the QKV projections in a typical decoder layer. Composes onto
+// the same session as the other encoded ops.
+extern "C" int32_t tessera_apple_gpu_rope_dev_f32_enc(
+    TsEncodeSession *s,
+    TsDeviceTensor *X, TsDeviceTensor *Theta, TsDeviceTensor *Y,
+    int32_t M, int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !Theta || !Y) return 0;
+  return encode_rope_msl_dev(ctx, s->cb, X->buf, Theta->buf, Y->buf,
+                              M, K) ? 1 : 0;
 }
 
 // Probe symbol (single-command-buffer scaffold) — number of command buffers

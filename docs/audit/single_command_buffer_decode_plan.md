@@ -88,21 +88,60 @@ Estimated work: ~6 ops × ~50 LOC each = ~300 LOC across 1-3 PRs.
 
 ### Stage 3 — Python ergonomics + jit integration
 
-* Extend `@jit(target="apple_gpu")` to detect "decode step" execution
-  — i.e., a sequence of Apple GPU ops where outputs of each feed
-  inputs of the next.
-* When detected, route the entire step through `batched_session()`
-  automatically.
-* Add a `pre-decode warmup` pass that uploads weights to device once
-  and reuses across decode steps (the M8 resident MLP path
-  established this; needs generalization).
+**Phase 1 (landed 2026-06-01)** — `@decode_chain` decorator. Wraps a
+function whose first arg is the session handle; opens + commits the
+session automatically. Caller still writes explicit `_enc(s, ...)`
+calls but doesn't manage the session lifecycle. 90% of the ergonomic
+win for ~30 LOC. Lives in `python/tessera/apple_gpu_batched.py`.
 
-### Stage 4 — full decoder benchmark
+**Phase 2 (open)** — true `@jit(target="apple_gpu")` auto-detection.
+The compiler/runtime would walk the function body, identify maximal
+straight-line subgraphs of encode-session-aware ops, and rewrite them
+to use `batched_session()` transparently. Implementation surface:
 
-* Land a full 7-op decoder layer benchmark using only encode-session
-  paths. Compare against the current per-op-cb baseline on M-series
-  hardware. Expected win: 1.5-3× on small batch / short sequence
-  configs where commit overhead dominates.
+* `compiler/jit.py::_execute_apple_gpu_*` paths need to track which
+  ops are encode-session-compatible (driven by a registry —
+  `_APPLE_GPU_ENCODE_SESSION_OPS`).
+* The metadata layer (`runtime.py::_execute_apple_gpu_metadata`)
+  needs to materialize device-resident tensors between ops instead of
+  download/upload roundtrips.
+* A new `BatchedExecutionPlan` IR node represents "encode N ops into
+  one session" — the lowering pass identifies adjacent encode-
+  compatible ops and groups them.
+
+Estimated work: ~4-8 hours of careful changes spanning jit.py +
+runtime.py + the apple_gpu dispatch wiring. Stage-2 ops are now in
+place so the encode-session ABI surface that the JIT would route
+through is complete.
+
+**Phase 3 (open)** — `pre-decode warmup`: upload weights to device
+once and reuse across decode steps (the M8 resident MLP path
+established this; needs generalization).
+
+### Stage 4 — full decoder benchmark — LANDED (2026-06-01)
+
+Benchmark at ``benchmarks/apple_gpu/benchmark_decoder_layer_one_cb.py``
+compares a Llama-style 8-op attention block on N command buffers
+versus 1. Measured speedups on M-series hardware (30 reps,
+median latency):
+
+| Shape (BxSxD) | per-op (8 cb) | one cb | speedup |
+|---------------|---------------|--------|---------|
+| 1x8x16        | 2.49 ms       | 0.76 ms | **3.29×** |
+| 1x32x64       | 4.82 ms       | 2.41 ms | **2.00×** |
+| 1x64x128      | 8.63 ms       | 4.53 ms | **1.90×** |
+
+Pattern: smaller shapes benefit more from single-cb because the
+per-op command-buffer overhead dominates the actual GPU compute.
+At 1x8x16 the 7 saved cb commits are worth ~1.7 ms; the actual
+attention math takes ~0.7 ms either way. As shapes grow, compute
+dominates and the per-cb overhead becomes a smaller fraction —
+but the 2× win at 1x64x128 is still very significant for the
+typical decode-step latency budget.
+
+Above 64×128 we'd expect the speedup to keep tapering toward 1.0×
+as compute fully dominates; this is the expected behavior and not
+a regression of the architecture.
 
 ## Test architecture
 

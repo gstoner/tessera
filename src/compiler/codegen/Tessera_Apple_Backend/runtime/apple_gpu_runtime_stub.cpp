@@ -1975,6 +1975,74 @@ extern "C" int32_t tessera_apple_gpu_flash_attn_dev_f32_enc(
   return 1;
 }
 
+// Stage-2 (2026-06-01) — rmsnorm encoded, off-Darwin reference.
+extern "C" int32_t tessera_apple_gpu_rmsnorm_dev_f32_enc(
+    TsEncodeSession* s, TsDeviceTensor* X, TsDeviceTensor* gamma,
+    TsDeviceTensor* Y, int32_t rows, int32_t cols, float eps) {
+  if (!s || !X || !gamma || !Y) return 0;
+  const float* xb = reinterpret_cast<const float*>(X->data);
+  const float* gb = reinterpret_cast<const float*>(gamma->data);
+  float* yb = reinterpret_cast<float*>(Y->data);
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* row = xb + static_cast<std::size_t>(r) * cols;
+    float* o = yb + static_cast<std::size_t>(r) * cols;
+    double v = 0.0;
+    for (int32_t c = 0; c < cols; ++c) v += static_cast<double>(row[c]) * row[c];
+    v /= cols;
+    double inv = 1.0 / std::sqrt(v + eps);
+    for (int32_t c = 0; c < cols; ++c)
+      o[c] = static_cast<float>(row[c] * inv * gb[c]);
+  }
+  return 1;
+}
+
+// Stage-2 (2026-06-01) — softmax encoded, off-Darwin reference.
+extern "C" int32_t tessera_apple_gpu_softmax_dev_f32_enc(
+    TsEncodeSession* s, TsDeviceTensor* X, TsDeviceTensor* Y,
+    int32_t rows, int32_t cols) {
+  if (!s || !X || !Y) return 0;
+  const float* xb = reinterpret_cast<const float*>(X->data);
+  float* yb = reinterpret_cast<float*>(Y->data);
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* row = xb + static_cast<std::size_t>(r) * cols;
+    float* o = yb + static_cast<std::size_t>(r) * cols;
+    float mx = row[0];
+    for (int32_t c = 1; c < cols; ++c) if (row[c] > mx) mx = row[c];
+    double s_total = 0.0;
+    for (int32_t c = 0; c < cols; ++c) {
+      o[c] = static_cast<float>(std::exp(row[c] - mx));
+      s_total += o[c];
+    }
+    float inv = static_cast<float>(1.0 / s_total);
+    for (int32_t c = 0; c < cols; ++c) o[c] *= inv;
+  }
+  return 1;
+}
+
+// Stage-2 (2026-06-01) — RoPE encoded, off-Darwin reference (mirrors
+// the MSL kernel above: pair-wise rotation by theta).
+extern "C" int32_t tessera_apple_gpu_rope_dev_f32_enc(
+    TsEncodeSession* s, TsDeviceTensor* X, TsDeviceTensor* Theta,
+    TsDeviceTensor* Y, int32_t M, int32_t K) {
+  if (!s || !X || !Theta || !Y) return 0;
+  const float* xb = reinterpret_cast<const float*>(X->data);
+  const float* tb = reinterpret_cast<const float*>(Theta->data);
+  float* yb = reinterpret_cast<float*>(Y->data);
+  for (int32_t m = 0; m < M; ++m) {
+    for (int32_t pair = 0; pair < K / 2; ++pair) {
+      int idx_e = m * K + pair * 2;
+      int idx_o = idx_e + 1;
+      float xe = xb[idx_e];
+      float xo = xb[idx_o];
+      float c = std::cos(tb[idx_e]);
+      float ss = std::sin(tb[idx_e]);
+      yb[idx_e] = xe * c - xo * ss;
+      yb[idx_o] = xe * ss + xo * c;
+    }
+  }
+  return 1;
+}
+
 extern "C" int64_t tessera_apple_gpu_session_commit_count(void) {
   // Off-Darwin: no real command queue; static counter incremented by
   // ``ts_enc_commit_wait`` in the stub (simple file-static — single-threaded

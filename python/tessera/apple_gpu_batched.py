@@ -46,6 +46,10 @@ _ts_enc_begin = None
 _ts_enc_commit_wait = None
 _bmm_enc = None
 _layer_norm_enc = None
+_rmsnorm_enc = None
+_softmax_enc = None
+_rope_enc = None
+_unary_enc = None
 _flash_attn_enc = None
 _session_commit_count = None
 _ts_dev_alloc = None
@@ -60,6 +64,7 @@ def _bind_session_symbols() -> bool:
     every symbol resolved (runtime loadable + symbols available)."""
     global _SYMBOLS_BOUND
     global _ts_enc_begin, _ts_enc_commit_wait, _bmm_enc, _layer_norm_enc
+    global _rmsnorm_enc, _softmax_enc, _rope_enc, _unary_enc
     global _flash_attn_enc, _session_commit_count
     global _ts_dev_alloc, _ts_dev_upload, _ts_dev_download, _ts_dev_free
     global _ts_dev_nbytes
@@ -82,6 +87,27 @@ def _bind_session_symbols() -> bool:
         (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
          ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32,
          ctypes.c_int32, ctypes.c_float),
+        ctypes.c_int32)
+    _rmsnorm_enc = bind_symbol(
+        "tessera_apple_gpu_rmsnorm_dev_f32_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_float),
+        ctypes.c_int32)
+    _softmax_enc = bind_symbol(
+        "tessera_apple_gpu_softmax_dev_f32_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_int32, ctypes.c_int32),
+        ctypes.c_int32)
+    _rope_enc = bind_symbol(
+        "tessera_apple_gpu_rope_dev_f32_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32),
+        ctypes.c_int32)
+    _unary_enc = bind_symbol(
+        "tessera_apple_gpu_unary_dev_f32_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_int64, ctypes.c_int32),
         ctypes.c_int32)
     _flash_attn_enc = bind_symbol(
         "tessera_apple_gpu_flash_attn_dev_f32_enc",
@@ -106,6 +132,7 @@ def _bind_session_symbols() -> bool:
         "ts_dev_nbytes", (ctypes.c_void_p,), ctypes.c_int64)
     return all(s is not None for s in (
         _ts_enc_begin, _ts_enc_commit_wait, _bmm_enc, _layer_norm_enc,
+        _rmsnorm_enc, _softmax_enc, _rope_enc, _unary_enc,
         _flash_attn_enc, _session_commit_count, _ts_dev_alloc,
         _ts_dev_upload, _ts_dev_download, _ts_dev_free, _ts_dev_nbytes))
 
@@ -288,14 +315,159 @@ def flash_attn_enc(session: int, Q: DeviceTensor, K: DeviceTensor,
     return out
 
 
+def rmsnorm_enc(session: int, X: DeviceTensor, gamma: DeviceTensor,
+                *, rows: int, cols: int, eps: float = 1e-5) -> DeviceTensor:
+    """Encode an rmsnorm into ``session``'s command buffer. Operates
+    on (rows, cols) f32 with per-column gamma (no beta). Llama-style
+    transformers use rmsnorm instead of layer_norm."""
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    out = device_empty(rows * cols * 4)
+    rc = _rmsnorm_enc(ctypes.c_void_p(session),
+                      ctypes.c_void_p(X.handle),
+                      ctypes.c_void_p(gamma.handle),
+                      ctypes.c_void_p(out.handle),
+                      ctypes.c_int32(rows), ctypes.c_int32(cols),
+                      ctypes.c_float(eps))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"rmsnorm_enc returned {rc}")
+    return out
+
+
+def softmax_enc(session: int, X: DeviceTensor, *,
+                rows: int, cols: int) -> DeviceTensor:
+    """Encode a (free-standing) softmax into ``session``'s command
+    buffer. (B*H*Sq, Sk) row-major. Used for classifier heads or
+    attention scoring outside the flash_attn fusion."""
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    out = device_empty(rows * cols * 4)
+    rc = _softmax_enc(ctypes.c_void_p(session),
+                       ctypes.c_void_p(X.handle),
+                       ctypes.c_void_p(out.handle),
+                       ctypes.c_int32(rows), ctypes.c_int32(cols))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"softmax_enc returned {rc}")
+    return out
+
+
+def rope_enc(session: int, X: DeviceTensor, Theta: DeviceTensor,
+             *, M: int, K: int) -> DeviceTensor:
+    """Encode a rotary position-embedding apply into ``session``'s
+    command buffer. ``X`` is (M, K) f32 (typically flattened
+    (B, S, H*D) head-major); ``Theta`` is the same shape with
+    per-element phase angle."""
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    out = device_empty(M * K * 4)
+    rc = _rope_enc(ctypes.c_void_p(session),
+                   ctypes.c_void_p(X.handle),
+                   ctypes.c_void_p(Theta.handle),
+                   ctypes.c_void_p(out.handle),
+                   ctypes.c_int32(M), ctypes.c_int32(K))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"rope_enc returned {rc}")
+    return out
+
+
+# ---------------------------------------------------------------------
+# Auto-session decorator — phase 1 of jit auto-detection.
+#
+# True JIT-level auto-detection (rewriting @jit(target='apple_gpu')
+# bodies to spot encode-session-compatible chains and route them
+# through batched_session() transparently) is a separate architectural
+# change to ``compiler/jit.py``'s metadata-execution path; tracked as
+# stage-3 of the single-cb roadmap (see
+# ``docs/audit/single_command_buffer_decode_plan.md``).
+#
+# In the meantime, this decorator gives callers 90% of the ergonomic
+# win without touching the JIT: write a function that takes ``s`` as
+# its first arg, decorate, and the session lifecycle (open + commit +
+# wait) is handled for you.
+#
+#     @decode_chain
+#     def llama_attention(s, x_dev, gamma_dev, w_q, w_k, w_v, w_o,
+#                          theta_dev, *, B, S, D):
+#         n = rmsnorm_enc(s, x_dev, gamma_dev, rows=B*S, cols=D, eps=1e-5)
+#         q = bmm_enc(s, n, w_q, batch=1, M=B*S, N=D, K=D)
+#         k = bmm_enc(s, n, w_k, batch=1, M=B*S, N=D, K=D)
+#         v = bmm_enc(s, n, w_v, batch=1, M=B*S, N=D, K=D)
+#         q_r = rope_enc(s, q, theta_dev, M=B*S, K=D)
+#         k_r = rope_enc(s, k, theta_dev, M=B*S, K=D)
+#         a = flash_attn_enc(s, q_r, k_r, v, B=B, Sq=S, Sk=S, D=D)
+#         return bmm_enc(s, a, w_o, batch=1, M=B*S, N=D, K=D)
+#
+#     # No explicit `with batched_session():` needed.
+#     out_dev = llama_attention(x_dev, gamma_dev, w_q, w_k, w_v, w_o,
+#                                theta_dev, B=1, S=8, D=16)
+#     # ONE command buffer committed; return value is the output
+#     # DeviceTensor, ready to download.
+
+def decode_chain(fn):
+    """Decorator — wrap a function whose first positional arg is the
+    encode-session handle. The decorator opens a fresh session, calls
+    ``fn(session, *args, **kwargs)``, then commits + waits. Inner ops
+    encode into the same command buffer; one cb submission per call.
+
+    The wrapped function should call only encode-session helpers
+    (``bmm_enc`` / ``layer_norm_enc`` / ``rmsnorm_enc`` / etc.) on the
+    session arg. Mixing in non-encode dispatch (which would commit a
+    SEPARATE cb under the hood) defeats the single-cb invariant.
+    """
+    import functools
+
+    @functools.wraps(fn)
+    def wrapped(*args, **kwargs):
+        with batched_session() as s:
+            return fn(s, *args, **kwargs)
+    return wrapped
+
+
+def _unary_enc_call(session: int, X: DeviceTensor, op_code: int,
+                    n: int) -> DeviceTensor:
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    out = device_empty(n * 4)
+    rc = _unary_enc(ctypes.c_void_p(session),
+                    ctypes.c_void_p(X.handle),
+                    ctypes.c_void_p(out.handle),
+                    ctypes.c_int64(n), ctypes.c_int32(op_code))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"unary_enc(op={op_code}) returned {rc}")
+    return out
+
+
+def silu_enc(session: int, X: DeviceTensor, *, n: int) -> DeviceTensor:
+    """Encode SiLU (x * sigmoid(x)) into ``session``'s command buffer.
+    Routes through the existing unary encode helper with op-code 4."""
+    return _unary_enc_call(session, X, op_code=4, n=n)
+
+
+def gelu_enc(session: int, X: DeviceTensor, *, n: int) -> DeviceTensor:
+    """Encode GELU (Gaussian Error Linear Unit) into ``session``'s
+    command buffer. Routes through the existing unary encode helper
+    with op-code 5 (the tanh approximation)."""
+    return _unary_enc_call(session, X, op_code=5, n=n)
+
+
 __all__ = [
     "DeviceTensor",
     "batched_session",
     "bmm_enc",
+    "decode_chain",
     "device_empty",
     "device_tensor",
     "flash_attn_enc",
+    "gelu_enc",
     "layer_norm_enc",
+    "rmsnorm_enc",
+    "rope_enc",
     "session_available",
     "session_commit_count",
+    "silu_enc",
+    "softmax_enc",
 ]

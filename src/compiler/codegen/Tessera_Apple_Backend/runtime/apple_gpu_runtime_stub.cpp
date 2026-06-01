@@ -1489,6 +1489,38 @@ extern "C" void *tessera_apple_gpu_mlpkg_compile(const char *, const char *) {
 extern "C" void tessera_apple_gpu_mlpkg_destroy(void *) {}
 extern "C" int32_t tessera_apple_gpu_mlpkg_is_compiled(void *) { return 0; }
 extern "C" int32_t tessera_apple_gpu_mlpkg_last_error_kind(void) { return -1; }
+// PK2 — Reflection-extraction stubs. No pipeline → no bindings; the
+// count probe returns -1 and the info probe returns 0 with zeroed
+// outputs (matching the runtime's "invalid handle" semantics).
+extern "C" int32_t tessera_apple_gpu_mlpkg_binding_count(void *) { return -1; }
+extern "C" int32_t tessera_apple_gpu_mlpkg_binding_info(
+    void *, int32_t, char *name_out, int32_t name_len,
+    int32_t *buffer_index_out, int32_t *rank_out,
+    int64_t *, int32_t, int32_t *dtype_raw_out) {
+  if (name_out && name_len > 0) name_out[0] = '\0';
+  if (buffer_index_out) *buffer_index_out = 0;
+  if (rank_out) *rank_out = 0;
+  if (dtype_raw_out) *dtype_raw_out = 0;
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_mlpkg_dtype_raw_for_tag(int32_t) {
+  return -1;
+}
+// PK3 — tensor + argument-table stubs. Off Darwin / pre-macOS-26 these
+// all report failure cleanly so callers can detect "feature absent"
+// without crashing.
+extern "C" int32_t tessera_apple_gpu_mlpkg_prepare_tensors(void *) { return 0; }
+extern "C" int32_t tessera_apple_gpu_mlpkg_fill_input(
+    void *, const char *, const void *, int64_t) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_mlpkg_read_output(
+    void *, const char *, void *, int64_t) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_mlpkg_argument_table_ready(void *) {
+  return 0;
+}
 // Apple-sample Action 6 — archive state probe. Off-Darwin: zero outputs
 // and report 0 ("runtime not ready"). The Python side reads the rc and
 // treats 0 as "no archive telemetry available".

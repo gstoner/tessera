@@ -61,6 +61,12 @@ API_AVAILABLE(macos(26.0), ios(26.0))
 @property (nonatomic, strong) id<MTL4MachineLearningPipelineState> pipelineState;
 @property (nonatomic, copy) NSString *functionName;
 @property (nonatomic, copy) NSString *packagePath;
+// PK3 — per-binding tensor inventory + argument table populated by
+// `tessera_apple_gpu_mlpkg_prepare_tensors`. ``tensorsByName`` keys
+// match what reflection returns; ``argumentTable`` carries the bound
+// resources at each binding's kernel-side index.
+@property (nonatomic, strong) NSMutableDictionary<NSString *, id<MTLTensor>> *tensorsByName;
+@property (nonatomic, strong) id<MTL4ArgumentTable> argumentTable;
 @end
 
 @implementation TesseraMlpkgPipeline
@@ -2051,6 +2057,405 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_last_error_kind(void) {
   int32_t v = g_mlpkg_last_error_kind;
   g_mlpkg_last_error_kind = 0;
   return v;
+}
+
+//===----------------------------------------------------------------------===//
+// PK2 — Reflection extraction. Mirrors Apple's sample at
+// `MLMatrixMultiplier+TensorSetup.m:extractTensorBindingsFromPipelineState`.
+// Walks `pipelineState.reflection.bindings`, filters for
+// `MTLBindingTypeTensor`, and exposes per-binding metadata (name +
+// buffer index + rank + dimensions + tensor data type) via a probe
+// pair: `binding_count` returns how many tensor bindings exist;
+// `binding_info` fills caller-provided buffers for one binding by
+// zero-based index.
+//
+// Tensor-binding indexing convention: ``binding_index`` is the
+// position in the filtered tensor-binding sequence (NOT the buffer
+// slot the kernel reads from). The kernel-side slot is returned in
+// ``buffer_index_out`` and is what gets used in
+// `MTL4ArgumentTable setResource:atBufferIndex:` (Apple-sample
+// Pattern 2). Apple's sample sorts bindings by name; we don't sort
+// here — Python can sort if it wants. Order stability across calls
+// is guaranteed by the underlying reflection.
+//===----------------------------------------------------------------------===//
+
+// PK2 helper — walk `pipelineState.reflection.bindings`, filter
+// tensor bindings into a separate NSArray. Returns nil if reflection
+// is missing (which would indicate the pipeline was compiled without
+// `MTL4ShaderReflectionBindingInfo` — a bug in
+// `tessera_apple_gpu_mlpkg_compile`).
+API_AVAILABLE(macos(26.0), ios(26.0))
+static NSArray<id<MTLTensorBinding>> *_mlpkg_tensor_bindings(
+    TesseraMlpkgPipeline *box) {
+  if (!box || !box.pipelineState) return nil;
+  // ``pipelineState.reflection`` / ``.bindings`` types vary across
+  // SDK headers. Cast through ``NSObject *`` so KVC (``valueForKey:``)
+  // resolves dynamically — works as long as the property exists at
+  // runtime (it does, per Apple's sample
+  // ``MLMatrixMultiplier+TensorSetup.m:20``). Header visibility is
+  // a build-time concern only.
+  NSObject *psoObj = (NSObject *)box.pipelineState;
+  id refl = [psoObj valueForKey:@"reflection"];
+  if (!refl) return nil;
+  NSArray *all = [(NSObject *)refl valueForKey:@"bindings"];
+  if (![all isKindOfClass:[NSArray class]]) return nil;
+  NSMutableArray<id<MTLTensorBinding>> *out = [NSMutableArray new];
+  for (id<MTLBinding> b in all) {
+    if (b.type != MTLBindingTypeTensor) continue;
+    [out addObject:(id<MTLTensorBinding>)b];
+  }
+  return out;
+}
+
+// PK2 — How many tensor bindings does this pipeline declare? Returns
+// -1 if the handle is invalid / reflection is missing; otherwise the
+// non-negative count.
+extern "C" int32_t tessera_apple_gpu_mlpkg_binding_count(void *handle) {
+  if (!handle) return -1;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    @autoreleasepool {
+      TesseraMlpkgPipeline *box = (__bridge TesseraMlpkgPipeline *)handle;
+      NSArray<id<MTLTensorBinding>> *bindings = _mlpkg_tensor_bindings(box);
+      if (!bindings) return -1;
+      return (int32_t)bindings.count;
+    }
+  }
+  return -1;
+}
+
+// PK2 — Per-binding metadata for the binding at filtered index
+// ``binding_index`` (0-based, 0 <= idx < binding_count).
+//
+// Caller provides:
+//   ``name_out`` / ``name_len``     — NUL-terminated UTF-8 name buffer
+//   ``buffer_index_out``            — kernel-side argument-table index
+//   ``rank_out``                    — number of dimensions
+//   ``dims_out`` / ``dims_cap``     — extents array, innermost-first
+//   ``dtype_raw_out``               — MTLTensorDataType raw enum int
+//
+// Returns 1 on success, 0 if the handle is invalid / index out of
+// range / reflection missing. Outputs are zeroed defensively on 0.
+extern "C" int32_t tessera_apple_gpu_mlpkg_binding_info(
+    void *handle, int32_t binding_index,
+    char *name_out, int32_t name_len,
+    int32_t *buffer_index_out,
+    int32_t *rank_out,
+    int64_t *dims_out, int32_t dims_cap,
+    int32_t *dtype_raw_out) {
+  // Zero outputs defensively so a 0 return reads cleanly.
+  if (name_out && name_len > 0) name_out[0] = '\0';
+  if (buffer_index_out) *buffer_index_out = 0;
+  if (rank_out) *rank_out = 0;
+  if (dtype_raw_out) *dtype_raw_out = 0;
+  if (!handle || binding_index < 0) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    @autoreleasepool {
+      TesseraMlpkgPipeline *box = (__bridge TesseraMlpkgPipeline *)handle;
+      NSArray<id<MTLTensorBinding>> *bindings = _mlpkg_tensor_bindings(box);
+      if (!bindings || binding_index >= (int32_t)bindings.count) return 0;
+      id<MTLTensorBinding> b = bindings[(NSUInteger)binding_index];
+      // Name.
+      if (name_out && name_len > 0) {
+        const char *src = [[b name] UTF8String];
+        size_t src_len = src ? strlen(src) : 0;
+        size_t cap = (size_t)name_len - 1;
+        size_t n = (src_len > cap) ? cap : src_len;
+        if (n > 0) memcpy(name_out, src, n);
+        name_out[n] = '\0';
+      }
+      // Index — the kernel-side argument-table slot.
+      if (buffer_index_out) *buffer_index_out = (int32_t)b.index;
+      // Rank + dimensions.
+      MTLTensorExtents *dims = b.dimensions;
+      NSUInteger rank = dims ? dims.rank : 0;
+      if (rank_out) *rank_out = (int32_t)rank;
+      if (dims_out && dims_cap > 0 && dims) {
+        NSUInteger fill = (rank < (NSUInteger)dims_cap)
+                              ? rank : (NSUInteger)dims_cap;
+        for (NSUInteger i = 0; i < fill; ++i) {
+          dims_out[i] = (int64_t)[dims extentAtDimensionIndex:i];
+        }
+      }
+      // Tensor data type — the raw MTLTensorDataType enum value.
+      // Python decodes the well-known ones (Float32 / Float16 /
+      // BFloat16 / ...). Unknown raws round-trip as-is.
+      if (dtype_raw_out) *dtype_raw_out = (int32_t)b.tensorDataType;
+      return 1;
+    }
+  }
+  return 0;
+}
+
+// PK2 — Probe of well-known MTLTensorDataType raw values so the
+// Python side has authoritative answers without re-declaring Apple's
+// enum. Caller passes an integer code (we use ASCII tags for
+// readability — 'F'=32 means Float32, 'F'=16 means Float16, etc.)
+// and gets back the runtime's view of the corresponding raw enum
+// value. Returns -1 for unknown probe tags.
+//
+// This avoids hard-coding magic numbers on the Python side that could
+// drift if Apple changes the enum (which they sometimes do across
+// SDK releases).
+extern "C" int32_t tessera_apple_gpu_mlpkg_dtype_raw_for_tag(
+    int32_t tag) {
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    switch (tag) {
+      case 32:  return (int32_t)MTLTensorDataTypeFloat32;
+      case 16:  return (int32_t)MTLTensorDataTypeFloat16;
+      case 22:  return (int32_t)MTLTensorDataTypeBFloat16;
+      case 8:   return (int32_t)MTLTensorDataTypeInt8;
+      case 80:  return (int32_t)MTLTensorDataTypeUInt8;
+      case 808: return (int32_t)MTLTensorDataTypeInt16;
+      case 800: return (int32_t)MTLTensorDataTypeUInt16;
+      case 132: return (int32_t)MTLTensorDataTypeInt32;
+      case 232: return (int32_t)MTLTensorDataTypeUInt32;
+    }
+  }
+  return -1;
+}
+
+//===----------------------------------------------------------------------===//
+// PK3 — Tensor creation + MTL4ArgumentTable binding from reflection.
+// Mirrors Apple's sample at ``MLMatrixMultiplier.m::configureWithMatrix1:``
+// (the lines that create tensors from each binding's dimensions and
+// then ``setResource:atBufferIndex:`` them on the argument table).
+//
+//  prepare_tensors(handle)
+//      For each tensor binding the reflection knows about, create a
+//      device-backed ``MTLTensor`` matching the binding's reflected
+//      shape + dtype (skips bindings with dynamic dims). Build an
+//      ``MTL4ArgumentTable`` sized to the highest binding index + 1.
+//      Bind each tensor's ``gpuResourceID`` at the binding's
+//      kernel-side index. Idempotent — second call is a no-op when
+//      tensors are already populated.
+//
+//  fill_input(handle, name, src_bytes, byte_count)
+//      Copy ``byte_count`` host bytes into the tensor named ``name``
+//      via ``replaceSliceOrigin:sliceDimensions:withBytes:strides:``.
+//      The strides are derived from the tensor's reflected shape
+//      using the row-major helper (Pattern 6).
+//
+//  read_output(handle, name, dst_bytes, byte_count)
+//      Read tensor data back to host via
+//      ``getBytes:strides:fromSliceOrigin:sliceDimensions:``. PK4 uses
+//      this to extract outputs after dispatch; PK3 tests use it for a
+//      fill-then-read roundtrip.
+//===----------------------------------------------------------------------===//
+
+// PK3 — helper: row-major-ish strides for a 1..N-D tensor descriptor.
+// Returns YES on success (also fills ``stride_elems`` innermost-first
+// per Apple's MTLTensorDescriptor.strides rule: ``strides[0] == 1``).
+API_AVAILABLE(macos(26.0), ios(26.0))
+static BOOL _mlpkg_row_major_strides(MTLTensorExtents *dims,
+                                     NSInteger *stride_elems_out) {
+  if (!dims) return NO;
+  NSInteger rank = (NSInteger)dims.rank;
+  NSInteger acc = 1;
+  for (NSInteger i = 0; i < rank; ++i) {
+    stride_elems_out[i] = acc;
+    NSInteger d = [dims extentAtDimensionIndex:i];
+    if (d <= 0) return NO;  // dynamic dim (-1) or zero: can't size
+    acc *= d;
+  }
+  return YES;
+}
+
+// PK3 — element byte size for a runtime ``MTLTensorDataType`` enum
+// value. Mirrors Apple's MTLTensorDataType taxonomy. Returns 0 for
+// unknown types (caller must handle).
+API_AVAILABLE(macos(26.0), ios(26.0))
+static size_t _mlpkg_dtype_byte_size(MTLTensorDataType dt) {
+  if (dt == MTLTensorDataTypeFloat32) return 4;
+  if (dt == MTLTensorDataTypeFloat16) return 2;
+  if (dt == MTLTensorDataTypeBFloat16) return 2;
+  if (dt == MTLTensorDataTypeInt8) return 1;
+  if (dt == MTLTensorDataTypeUInt8) return 1;
+  if (dt == MTLTensorDataTypeInt16) return 2;
+  if (dt == MTLTensorDataTypeUInt16) return 2;
+  if (dt == MTLTensorDataTypeInt32) return 4;
+  if (dt == MTLTensorDataTypeUInt32) return 4;
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_mlpkg_prepare_tensors(void *handle) {
+  if (!handle) return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    @autoreleasepool {
+      TesseraMlpkgPipeline *box = (__bridge TesseraMlpkgPipeline *)handle;
+      if (!box.pipelineState) return 0;
+      // Idempotent: if tensors are already prepared, fall through.
+      if (box.tensorsByName.count > 0 && box.argumentTable) return 1;
+      NSArray<id<MTLTensorBinding>> *bindings = _mlpkg_tensor_bindings(box);
+      if (!bindings || bindings.count == 0) return 0;
+
+      // Step 1 — compute max binding index + 1 so the argument table
+      // is sized to fit every binding.
+      NSUInteger maxIdx = 0;
+      for (id<MTLTensorBinding> b in bindings) {
+        if (b.index > maxIdx) maxIdx = b.index;
+      }
+      MTL4ArgumentTableDescriptor *atd =
+          [[MTL4ArgumentTableDescriptor alloc] init];
+      atd.maxBufferBindCount = maxIdx + 1;
+      atd.initializeBindings = YES;
+      NSError *err = nil;
+      id<MTL4ArgumentTable> at =
+          [ctx.device newArgumentTableWithDescriptor:atd error:&err];
+      if (!at) {
+        fprintf(stderr, "[tessera_apple_gpu_mlpkg] argument table create "
+                "failed: %s\n",
+                err ? [[err localizedDescription] UTF8String] : "<nil>");
+        return 0;
+      }
+
+      // Step 2 — create + bind per-binding tensors.
+      NSMutableDictionary<NSString *, id<MTLTensor>> *tensors =
+          [NSMutableDictionary new];
+      MTLTensorDescriptor *td = [[MTLTensorDescriptor alloc] init];
+      td.usage = MTLTensorUsageMachineLearning;
+      td.storageMode = MTLStorageModeShared;
+      for (id<MTLTensorBinding> b in bindings) {
+        MTLTensorExtents *dims = b.dimensions;
+        if (!dims || dims.rank == 0) {
+          fprintf(stderr, "[tessera_apple_gpu_mlpkg] binding '%s' has no "
+                  "dimensions; can't create tensor\n",
+                  [[b name] UTF8String]);
+          return 0;
+        }
+        // Static-shape check: any -1 sentinel means dynamic, which PK3
+        // doesn't support (PK4+ would).
+        for (NSUInteger i = 0; i < dims.rank; ++i) {
+          if ([dims extentAtDimensionIndex:i] < 0) {
+            fprintf(stderr, "[tessera_apple_gpu_mlpkg] binding '%s' has "
+                    "dynamic dim %lu — PK3 only handles static shapes\n",
+                    [[b name] UTF8String], (unsigned long)i);
+            return 0;
+          }
+        }
+        td.dimensions = dims;
+        td.dataType = b.tensorDataType;
+        NSError *terr = nil;
+        id<MTLTensor> t = [ctx.device newTensorWithDescriptor:td error:&terr];
+        if (!t) {
+          fprintf(stderr, "[tessera_apple_gpu_mlpkg] tensor create failed "
+                  "for binding '%s': %s\n",
+                  [[b name] UTF8String],
+                  terr ? [[terr localizedDescription] UTF8String] : "<nil>");
+          return 0;
+        }
+        tensors[b.name] = t;
+        // Apple-sample Pattern 2 — bind by reflected index, not by
+        // hand-counted position.
+        [at setResource:t.gpuResourceID atBufferIndex:b.index];
+      }
+      box.tensorsByName = tensors;
+      box.argumentTable = at;
+      return 1;
+    }
+  }
+  return 0;
+}
+
+// Look up a prepared tensor by name. Returns nil on miss.
+API_AVAILABLE(macos(26.0), ios(26.0))
+static id<MTLTensor> _mlpkg_tensor_by_name(TesseraMlpkgPipeline *box,
+                                            const char *name) {
+  if (!box || !name) return nil;
+  NSString *key = @(name);
+  return box.tensorsByName[key];
+}
+
+// PK3 — fill an input tensor with host bytes. Returns 1 on success.
+extern "C" int32_t tessera_apple_gpu_mlpkg_fill_input(
+    void *handle, const char *name,
+    const void *src_bytes, int64_t byte_count) {
+  if (!handle || !name || !src_bytes || byte_count <= 0) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    @autoreleasepool {
+      TesseraMlpkgPipeline *box = (__bridge TesseraMlpkgPipeline *)handle;
+      id<MTLTensor> t = _mlpkg_tensor_by_name(box, name);
+      if (!t) return 0;
+      MTLTensorExtents *dims = t.dimensions;
+      if (!dims || dims.rank == 0) return 0;
+      // Verify byte_count matches element_count * element_size to
+      // catch shape mismatches before the GPU side does.
+      size_t elem = _mlpkg_dtype_byte_size(t.dataType);
+      if (elem == 0) return 0;
+      NSInteger total = 1;
+      for (NSUInteger i = 0; i < dims.rank; ++i)
+        total *= [dims extentAtDimensionIndex:i];
+      if ((int64_t)((size_t)total * elem) != byte_count) {
+        fprintf(stderr, "[tessera_apple_gpu_mlpkg] fill_input '%s': "
+                "byte_count %lld != expected %zu (total=%ld * elem=%zu)\n",
+                name, (long long)byte_count,
+                (size_t)total * elem, (long)total, elem);
+        return 0;
+      }
+      NSInteger zeros[MTL_TENSOR_MAX_RANK] = {0};
+      MTLTensorExtents *origin = [[MTLTensorExtents alloc]
+          initWithRank:dims.rank values:zeros];
+      NSInteger strd[MTL_TENSOR_MAX_RANK] = {0};
+      if (!_mlpkg_row_major_strides(dims, strd)) return 0;
+      MTLTensorExtents *strides = [[MTLTensorExtents alloc]
+          initWithRank:dims.rank values:strd];
+      [t replaceSliceOrigin:origin sliceDimensions:dims
+                  withBytes:src_bytes strides:strides];
+      return 1;
+    }
+  }
+  return 0;
+}
+
+// PK3 — read an output tensor back to host. Returns 1 on success.
+// Used by PK4 to extract dispatch outputs; PK3 tests use it for a
+// fill-then-read round-trip without actually dispatching.
+extern "C" int32_t tessera_apple_gpu_mlpkg_read_output(
+    void *handle, const char *name,
+    void *dst_bytes, int64_t byte_count) {
+  if (!handle || !name || !dst_bytes || byte_count <= 0) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    @autoreleasepool {
+      TesseraMlpkgPipeline *box = (__bridge TesseraMlpkgPipeline *)handle;
+      id<MTLTensor> t = _mlpkg_tensor_by_name(box, name);
+      if (!t) return 0;
+      MTLTensorExtents *dims = t.dimensions;
+      if (!dims || dims.rank == 0) return 0;
+      size_t elem = _mlpkg_dtype_byte_size(t.dataType);
+      if (elem == 0) return 0;
+      NSInteger total = 1;
+      for (NSUInteger i = 0; i < dims.rank; ++i)
+        total *= [dims extentAtDimensionIndex:i];
+      if ((int64_t)((size_t)total * elem) != byte_count) {
+        fprintf(stderr, "[tessera_apple_gpu_mlpkg] read_output '%s': "
+                "byte_count %lld != expected %zu\n",
+                name, (long long)byte_count, (size_t)total * elem);
+        return 0;
+      }
+      NSInteger zeros[MTL_TENSOR_MAX_RANK] = {0};
+      MTLTensorExtents *origin = [[MTLTensorExtents alloc]
+          initWithRank:dims.rank values:zeros];
+      NSInteger strd[MTL_TENSOR_MAX_RANK] = {0};
+      if (!_mlpkg_row_major_strides(dims, strd)) return 0;
+      MTLTensorExtents *strides = [[MTLTensorExtents alloc]
+          initWithRank:dims.rank values:strd];
+      [t getBytes:dst_bytes strides:strides
+          fromSliceOrigin:origin sliceDimensions:dims];
+      return 1;
+    }
+  }
+  return 0;
+}
+
+// PK3 — has the argument table been built? Test helper.
+extern "C" int32_t tessera_apple_gpu_mlpkg_argument_table_ready(void *handle) {
+  if (!handle) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    TesseraMlpkgPipeline *box = (__bridge TesseraMlpkgPipeline *)handle;
+    return box.argumentTable != nil ? 1 : 0;
+  }
+  return 0;
 }
 
 // P4 — flush the captured pipeline set to the enabled archive path. Returns 1 on

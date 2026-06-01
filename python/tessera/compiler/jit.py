@@ -31,6 +31,7 @@ from .graph_ir import GraphIRBuilder, GraphIRModule
 from .gpu_target import GPUTargetProfile, ISA  # noqa: F401 — re-exported for callers
 from .attn_lower import FlashAttnLoweringConfig, SM90_DEFAULT  # noqa: F401
 from .driver import CompileArtifactBundle, compile_graph_module
+from .canonical_compile import CompileResult, compile_result_from_bundle
 from .matmul_pipeline import JitDiagnostic, CPUPlan, normalize_target_kind
 from .fallback import FallbackReason, TesseraNativeRequiredError
 
@@ -294,6 +295,7 @@ class JitFn:
         attn_config: Optional[FlashAttnLoweringConfig] = None,
         cpu_plan: Optional[CPUPlan] = None,
         compile_bundle: Optional[CompileArtifactBundle] = None,
+        compile_result: Optional[CompileResult] = None,
         cpu_tile: Tuple[int, int, int] = (128, 128, 64),
         source_origin: str = "inspect",
         lowering_diagnostics: Optional[List[JitDiagnostic]] = None,
@@ -309,6 +311,11 @@ class JitFn:
         self.attn_config = attn_config
         self.cpu_plan = cpu_plan
         self.compile_bundle = compile_bundle
+        # C.3 — canonical answer (typed artifacts + named gates + executable
+        # | reason) from the same compile that produced ``compile_bundle``.
+        # ``compile_result.bundle is compile_bundle`` post-retrofit; the new
+        # field is the one-typed-surface every consumer should reach for.
+        self.compile_result = compile_result
         self.cpu_tile = tuple(int(v) for v in cpu_tile)
         self.source_origin = source_origin
         self.lowering_diagnostics = tuple(lowering_diagnostics or [])
@@ -1144,6 +1151,11 @@ def jit(
                 )
             cpu_plan = compile_bundle.cpu_plan
             diagnostics = list(compile_bundle.diagnostics)
+            # C.3 — synthesize the canonical answer from the bundle we just
+            # built. No second compile; this only runs the gate evaluator
+            # over the bundle's request.target + the module's primary op.
+            compile_result = compile_result_from_bundle(
+                compile_bundle, module=module)
         except Exception as exc:
             raise TesseraJitError(
                 f"Graph IR emission failed for {fn.__name__!r}: {exc}"
@@ -1161,6 +1173,7 @@ def jit(
             attn_config=resolved_attn,
             cpu_plan=cpu_plan,
             compile_bundle=compile_bundle,
+            compile_result=compile_result,
             cpu_tile=(int(cpu_tile[0]), int(cpu_tile[1]), int(cpu_tile[2])),
             source_origin=source_origin,
             lowering_diagnostics=diagnostics,

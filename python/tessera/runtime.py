@@ -1115,11 +1115,28 @@ def _first_failing_gate_for_metadata(metadata: dict, target: str):
     ``.detail``) or ``None`` if every gate passes / the gate module can't be
     consulted.
 
-    Pulls the first op from the artifact's lowering plan (``metadata["ops"]``)
-    so the diagnostic names a concrete op like ``matmul`` instead of just
-    "this target is unsupported." Falls back to target-level evaluation
-    when no op metadata is present.
+    **C.2 — canonical short-circuit.** If the artifact carries the canonical
+    answer stamped by :meth:`CompileResult.to_runtime_artifact`
+    (``metadata["canonical_first_failing_gate"]``), trust it: the upstream
+    canonical_compile already evaluated every gate, so re-running them here
+    would duplicate truth and risk drift. Otherwise (legacy artifacts +
+    direct ``runtime.compile`` containerization), fall back to evaluating
+    the gates at launch time using ``metadata["ops"]`` as the op signal.
     """
+    # C.2 — trust the canonical answer if it's already on the artifact.
+    if "canonical_first_failing_gate" in metadata:
+        gate_name = metadata.get("canonical_first_failing_gate")
+        if gate_name is None:
+            return None
+        try:
+            from .compiler.pipeline_gates import GateResult, STATUS_FAIL
+        except Exception:
+            return None
+        return GateResult(
+            gate=str(gate_name),
+            status=STATUS_FAIL,
+            detail=str(metadata.get("canonical_first_failing_gate_detail", "")),
+        )
     try:  # noqa: SIM105 — import here so runtime startup stays cheap
         from .compiler.pipeline_gates import first_failing_gate as _ffg
     except Exception:

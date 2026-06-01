@@ -127,6 +127,60 @@ class CompileResult:
                 return r.status
         return "unknown"
 
+    def to_runtime_artifact(self):
+        """Project the canonical answer into a :class:`RuntimeArtifact`.
+
+        The runtime ABI consumes ``RuntimeArtifact``s, not ``CompileResult``s
+        (legacy ergonomic). This method stamps the canonical answer
+        (``executable`` / ``reason`` / ``first_failing_gate`` / gates) into
+        ``RuntimeArtifact.metadata`` so :func:`tessera.runtime.launch` can
+        **trust** the upstream answer instead of re-running the gate
+        evaluator at launch time.
+
+        The artifact is fully self-describing — every consumer who needs
+        the seven-gate truth can read it from the artifact without
+        re-importing the compiler. Audit recommendation C.2 in
+        ``docs/audit/compiler_layer_gap_remediation.md``.
+        """
+        # Import here to keep the compiler→runtime dependency one-way at
+        # import time (canonical_compile is pulled by jit.py very early).
+        from tessera.runtime import RuntimeArtifact
+
+        meta: dict[str, Any] = dict(self.bundle.to_metadata())
+        meta.update({
+            # Audit-named answer (C.1 → C.2). Two channels: a top-level
+            # boolean + reason string, and a structured first-failing-gate
+            # mirror that the runtime can short-circuit on.
+            "canonical_executable": self.executable,
+            "canonical_reason": self.reason,
+            "canonical_first_failing_gate": (
+                self.first_failing_gate.gate
+                if self.first_failing_gate else None
+            ),
+            "canonical_first_failing_gate_detail": (
+                self.first_failing_gate.detail
+                if self.first_failing_gate else ""
+            ),
+            "canonical_gates": [
+                {"gate": r.gate, "status": r.status, "detail": r.detail}
+                for r in self.gate_results
+            ],
+            "canonical_primary_op": self.primary_op,
+            # The bundle's executable claim — preserved so callers that
+            # need to compare bundle-side vs canonical-side decisions can.
+            "bundle_executable": self.bundle.executable,
+            # Canonical answer is authoritative for `executable`.
+            "executable": self.executable,
+        })
+        return RuntimeArtifact(
+            graph_ir=self.graph_ir,
+            schedule_ir=self.schedule_ir,
+            tile_ir=self.tile_ir,
+            target_ir=self.target_ir,
+            metadata=meta,
+            abi_signature=f"tessera.canonical.v1.{self.target}",
+        )
+
     def to_dict(self) -> dict[str, Any]:
         """Round-trippable summary — useful for telemetry, dashboards,
         compile-report integration, and tests that want a stable surface."""
@@ -175,6 +229,75 @@ def _extract_primary_op(module: GraphIRModule) -> Optional[str]:
     return op_name or None
 
 
+# --- Synthesizers --------------------------------------------------------
+
+def _result_from_bundle(
+    bundle: CompileArtifactBundle,
+    primary_op: Optional[str],
+) -> CompileResult:
+    """Shared "bundle + gates → CompileResult" reconciliation. Both
+    :func:`canonical_compile` (which runs the ladder first) and
+    :func:`compile_result_from_bundle` (for callers like ``@jit`` who
+    already have a bundle in hand) flow through here, so the
+    executable/reason synthesis lives in exactly one place."""
+    target = bundle.request.target
+    gate_results = _pg.evaluate(target, primary_op)
+    first_fail = _pg.first_failing_gate(target, primary_op)
+
+    if bundle.executable and first_fail is None:
+        executable = True
+        reason = ""
+    elif first_fail is not None:
+        executable = False
+        reason = (
+            f"first failing gate `{first_fail.gate}` — {first_fail.detail}."
+            f" (see docs/audit/op_target_conformance.md)"
+        )
+    else:
+        executable = False
+        reason = (
+            f"bundle reports non-executable artifact: "
+            f"runtime_status={bundle.runtime_status} "
+            f"execution_kind={bundle.execution_kind}"
+        )
+
+    return CompileResult(
+        bundle=bundle,
+        gate_results=gate_results,
+        first_failing_gate=first_fail,
+        executable=executable,
+        reason=reason,
+        primary_op=primary_op,
+        target=target,
+    )
+
+
+def compile_result_from_bundle(
+    bundle: CompileArtifactBundle,
+    *,
+    module: Optional[GraphIRModule] = None,
+    primary_op: Optional[str] = None,
+) -> CompileResult:
+    """Build a :class:`CompileResult` from an already-computed
+    :class:`CompileArtifactBundle`.
+
+    Use case (C.3): ``@tessera.jit`` calls ``compile_graph_module`` directly
+    today and rewraps the bundle to inject pre-compile diagnostics. Calling
+    :func:`canonical_compile` from ``@jit`` would re-run the whole ladder.
+    Instead, ``@jit`` finishes its bundle construction and then synthesizes
+    the canonical answer from it via this helper — same C.1 truth, no
+    duplicated compile work.
+
+    ``primary_op`` may be passed explicitly; otherwise it's extracted from
+    ``module``. If neither is provided, the gate evaluation runs
+    target-level only (which is still useful — toolchain / hardware_smoke
+    don't need an op name).
+    """
+    if primary_op is None and module is not None:
+        primary_op = _extract_primary_op(module)
+    return _result_from_bundle(bundle, primary_op)
+
+
 # --- Canonical compile() -------------------------------------------------
 
 def canonical_compile(
@@ -213,41 +336,11 @@ def canonical_compile(
         options=options or {},
         enable_tool_validation=enable_tool_validation,
     )
-    primary_op = _extract_primary_op(module)
-    gate_results = _pg.evaluate(target, primary_op)
-    first_fail = _pg.first_failing_gate(target, primary_op)
-
-    if bundle.executable and first_fail is None:
-        executable = True
-        reason = ""
-    elif first_fail is not None:
-        executable = False
-        reason = (
-            f"first failing gate `{first_fail.gate}` — {first_fail.detail}."
-            f" (see docs/audit/op_target_conformance.md)"
-        )
-    else:
-        # Gates all pass but bundle says non-executable — preserve the
-        # bundle's own diagnostic instead of fabricating a gate.
-        executable = False
-        reason = (
-            f"bundle reports non-executable artifact: "
-            f"runtime_status={bundle.runtime_status} "
-            f"execution_kind={bundle.execution_kind}"
-        )
-
-    return CompileResult(
-        bundle=bundle,
-        gate_results=gate_results,
-        first_failing_gate=first_fail,
-        executable=executable,
-        reason=reason,
-        primary_op=primary_op,
-        target=bundle.request.target,
-    )
+    return _result_from_bundle(bundle, _extract_primary_op(module))
 
 
 __all__ = [
     "CompileResult",
     "canonical_compile",
+    "compile_result_from_bundle",
 ]

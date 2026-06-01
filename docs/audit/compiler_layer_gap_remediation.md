@@ -217,18 +217,61 @@ now reached through exactly one dispatch site.
   import allowlist, primary-op extraction (with ``tessera.`` prefix
   stripping), and a "one surface carries the whole answer" guard.
 
-**Status: additive, no regressions.** ``canonical_compile`` is the new
-contract; existing callers of ``driver.compile_graph_module``,
-``runtime.compile``, ``matmul_pipeline.build_cpu_plan``, and
-``execution_matrix.executor_for_metadata`` keep working unchanged. The
-follow-up sub-tasks (C.2 retrofitting ``runtime.launch`` to consume
-``CompileResult``; C.3 retrofitting ``@jit``; C.4 deprecating
-``runtime.compile`` containerization) are sequenced separately so each
-is a small, reviewable change.
+**C.2 — runtime.launch() trusts CompileResult — ✅ DONE (2026-05-31).**
 
-184 affected tests green after C.1 (12 new canonical tests + the
-existing pipeline_gates / conformance_matrix / runtime ABI / driver /
-capabilities sweeps).
+- Added ``CompileResult.to_runtime_artifact()`` — projects the canonical
+  answer (executable / reason / first_failing_gate / gates / IR text)
+  into a ``RuntimeArtifact`` via a stable set of ``canonical_*``
+  metadata keys, plus ``abi_signature = "tessera.canonical.v1.<target>"``
+  so downstream consumers can detect canonical provenance.
+- Taught ``runtime._first_failing_gate_for_metadata`` to **trust** the
+  canonical answer when present: if ``canonical_first_failing_gate`` is
+  in metadata, it builds a ``GateResult`` from the stamped fields and
+  returns without calling ``pipeline_gates.first_failing_gate``. Same
+  truth, zero re-derivation. Legacy artifacts (no ``canonical_*`` keys)
+  still flow through the B.2 derive path unchanged.
+- 9 tests in ``tests/unit/test_canonical_to_runtime.py``: round-trip
+  shape guards, IR round-trip, abi_signature, runtime trust path for
+  nvidia / rocm / metalium, legacy fall-through, and a "no first failing
+  gate when every gate passes" guard.
+
+**C.3 — @jit carries the canonical CompileResult — ✅ DONE (2026-05-31).**
+
+- ``@tessera.jit`` now synthesizes a ``CompileResult`` from the bundle
+  it already built (no second compile — uses
+  ``compile_result_from_bundle``, which runs only the gate evaluator
+  over the existing ladder output).
+- ``JitFn`` gained ``compile_result: Optional[CompileResult]``; legacy
+  fields (``compile_bundle`` / ``cpu_plan`` / ``execution_kind``) are
+  unchanged. ``jit_fn.compile_result.bundle is jit_fn.compile_bundle``
+  by construction — one bundle, two views.
+- **The audit-named gate is now resolved at *decoration* time.**
+  ``@jit(target="nvidia_sm90")`` on a host without CUDA returns a
+  ``JitFn`` whose ``compile_result.first_failing_gate.gate ==
+  "toolchain"`` — the user can inspect the diagnostic before any call.
+- 7 tests in ``tests/unit/test_jit_canonical_compile.py``: presence,
+  bundle-identity, target match, seven-gate carry, decoration-time
+  diagnostic for nvidia, legacy fields preserved, ``to_dict`` round
+  trip on ``JitFn``.
+
+**Status: C complete.** ``canonical_compile`` is the canonical contract;
+``runtime.launch`` consumes it; ``@tessera.jit`` produces it. The five
+today-owners (``driver`` / ``matmul_pipeline`` / ``backend_manifest`` /
+``execution_matrix`` / runtime dispatch) keep their truth, but every
+consumer reaches them through one place.
+
+**Helpful side effect surfaced by C.3:** previously a function like
+``def f(a, b): return a @ b`` decorated with ``@jit`` would silently fall
+back to eager Python with no explanation. Now ``f.compile_result.reason``
+carries ``"bundle reports non-executable artifact: runtime_status=unsupported
+execution_kind=fallback_eager"`` — the user sees *why* the fast path
+didn't apply. (Adding a fusion-pass or Graph IR lowering for the
+``MatMult`` AST node will flip this to executable; the diagnostic now
+points at the right place to fix.)
+
+**855 affected tests pass across every jit/compile/canonical/runtime
+test in the repo** (4 skipped, 0 failures) — proves C.1+C.2+C.3 are
+fully additive.
 
 ### 8. Named pipeline capability gates — 🟡 B.1 DONE (2026-05-31)
 **Audit recommendation B** (started after A). The goal: replace

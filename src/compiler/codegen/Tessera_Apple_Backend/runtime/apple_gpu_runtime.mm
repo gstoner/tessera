@@ -753,6 +753,38 @@ extern "C" int32_t tessera_apple_gpu_row_major_strides_aligned(
   return rank;
 }
 
+// Phase 2 stride-alignment integration (2026-06-01) — companion
+// helper that returns the BYTE size an MTLBuffer needs to hold a
+// tensor with aligned strides, for the same (dims, element_bits,
+// ml_usage) inputs as ``tessera_apple_gpu_row_major_strides_aligned``.
+//
+// Use case: future Tessera-authored packaged kernels (or any path
+// that sets ``MTLTensorDescriptor.strides`` explicitly to honor
+// Apple's alignment rules) MUST allocate buffers sized for the
+// aligned strides, not the dense element count. Mis-sizing causes
+// out-of-bounds reads on rows past the first.
+//
+// Formula: ``total_bits = strides_aligned[rank-1] * dims[rank-1] *
+// element_bits``, then ceil to bytes.
+//
+// Returns the byte count on success, 0 on invalid input. Dense
+// (un-aligned) buffer size is ``prod(dims) * element_bits / 8``.
+extern "C" int64_t tessera_apple_gpu_aligned_buffer_nbytes(
+    const int64_t *dims_in, int32_t rank, int32_t element_bits,
+    int32_t ml_usage) {
+  if (!dims_in || rank <= 0 || rank > 8) return 0;
+  if (element_bits <= 0 || element_bits > 64) return 0;
+  int64_t strides[8];
+  int32_t rc = tessera_apple_gpu_row_major_strides_aligned(
+      dims_in, rank, element_bits, ml_usage, strides);
+  if (rc != rank) return 0;
+  // Total elements counting padding = stride[rank-1] * dims[rank-1].
+  int64_t total_elems = strides[rank - 1] * dims_in[rank - 1];
+  // ceil(total_elems * element_bits / 8).
+  int64_t total_bits = total_elems * element_bits;
+  return (total_bits + 7) / 8;
+}
+
 extern "C" void tessera_apple_gpu_mps_matmul_f32(const float* A,
                                                  const float* B, float* C,
                                                  int32_t M, int32_t N,

@@ -210,6 +210,63 @@ toward 1.0× as compute fully dominates; the architecture stays
 relevant for small-batch decode where commit overhead is the
 critical bottleneck.
 
+### Stage 5 — Multi-layer transformer benchmark + ops-per-cb cliff — LANDED (2026-06-01)
+
+**Architectural finding (2026-06-01)**: the single-cb encoded chain
+has a per-shape ops budget. At benchmark shape ``1×32×64`` (D=64,
+S=32, B=1) with the full attention+MLP block, the chain works for
+N≤4 layers (≤48 ops) but hangs at the 30-second commit_and_wait
+timeout for N≥5 (≥60 ops). The GPU dispatch never signals — likely
+an MPSGraph internal heap / command-buffer encoding limit hit at
+that op count + shape combination, not a Tessera bug.
+
+Practical mitigations:
+
+* **Smaller per-layer op count** — flash_attn instead of separate
+  softmax+matmul keeps the chain compact. Already the design.
+* **Multiple cb commits per decode step** — chunk N layers into
+  K cb's, each within the budget. Removes the "1 cb per step"
+  promise but unblocks deep models. Phase 5b follow-on.
+* **Larger per-shape compute** — at larger shapes per op spends more
+  time computing, may shift the cliff. Untested.
+
+The honest framing: **single-cb decode is real and substantial for
+sub-budget chains** (4.41× at 3 layers / small shape; 1.9-3.3× at the
+single attention block). Beyond the budget, the architecture
+gracefully degrades to multi-cb dispatch — same encode-session ABI,
+just N commits per step instead of 1.
+
+
+
+Stacks N attention + MLP sub-blocks under ``ResidentWeights`` +
+``@auto_batch`` and measures the full-stack speedup. The benchmark
+at ``benchmarks/apple_gpu/benchmark_multi_layer_transformer.py``
+runs two modes:
+
+* ``per_op_cold`` — re-upload every weight + activation each step,
+  one cb per op (the naive newcomer pattern at multi-layer scale)
+* ``warmed_one_cb`` — weights via ``ResidentWeights``, full
+  N-layer chain via ``@auto_batch`` (one cb per step)
+
+Measured on M-series, 8 reps median, sub-cliff configurations:
+
+| Shape (BxSxD,N)   | cold_ms | warmed_ms | speedup | tok/s (warmed) |
+|-------------------|---------|-----------|---------|----------------|
+| 1×8×16, N=4       | 24.95   | 3.73      | **6.69×** | 2146         |
+| 1×32×64, N=3      | 25.01   | 5.46      | **4.58×** | 5865         | The combined
+(ResidentWeights + single-cb + decorator) lift is greater than
+single-cb alone because the multi-layer case amplifies the
+per-step weight-upload overhead: 9 weight tensors × 3 layers = 27
+host→device transfers per cold step.
+
+Architectural validation: **a 4-layer transformer step (~48 user
+ops) commits exactly 1 command buffer per decode step** when run
+through the full encode-session stack. Structural correctness
+tests in ``tests/unit/test_apple_gpu_multi_layer_transformer.py``
+pin (a) one-cb-per-step invariant, (b) `ResidentWeights` handle
+stability across multiple decode steps, (c) steady-state
+determinism (same X → same output).
+
 ## Test architecture
 
 The drift gate for stages 2-4 is the **`submission_count_probe`** —

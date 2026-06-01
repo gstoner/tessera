@@ -2318,6 +2318,21 @@ static inline uint16_t _f32_to_bf16(float f) {
   return (uint16_t)(bits >> 16);
 }
 
+// Phase 2 stride-alignment (2026-06-01) — companion byte-count helper.
+extern "C" int64_t tessera_apple_gpu_aligned_buffer_nbytes(
+    const int64_t* dims_in, int32_t rank, int32_t element_bits,
+    int32_t ml_usage) {
+  if (!dims_in || rank <= 0 || rank > 8) return 0;
+  if (element_bits <= 0 || element_bits > 64) return 0;
+  int64_t strides[8];
+  int32_t rc = tessera_apple_gpu_row_major_strides_aligned(
+      dims_in, rank, element_bits, ml_usage, strides);
+  if (rc != rank) return 0;
+  int64_t total_elems = strides[rank - 1] * dims_in[rank - 1];
+  int64_t total_bits = total_elems * element_bits;
+  return (total_bits + 7) / 8;
+}
+
 extern "C" int32_t tessera_apple_gpu_mpsgraph_bf16_supported(void) {
   // Off-Darwin: no MPSGraph to probe; report the stub's own
   // bf16 capability (the fp32-conversion math is host code).

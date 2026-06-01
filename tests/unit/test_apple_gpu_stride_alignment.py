@@ -280,6 +280,108 @@ def test_legacy_helper_still_produces_dense_strides():
     assert strides == [1, 13, 91]  # cumulative: 1, 13, 13*7=91
 
 
+# ---- Project-2 (2026-06-01) — aligned-buffer-nbytes companion ---------
+
+def _bind_nbytes():
+    if apple_gpu_runtime() is None:
+        return None
+    return bind_symbol(
+        "tessera_apple_gpu_aligned_buffer_nbytes",
+        (ctypes.POINTER(ctypes.c_int64), ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32),
+        ctypes.c_int64)
+
+
+def _call_nbytes(fn, dims, element_bits, ml_usage):
+    rank = len(dims)
+    dims_buf = (ctypes.c_int64 * rank)(*dims)
+    return int(fn(dims_buf, ctypes.c_int32(rank),
+                  ctypes.c_int32(element_bits),
+                  ctypes.c_int32(1 if ml_usage else 0)))
+
+
+def test_aligned_buffer_nbytes_dense_path_matches_natural_size():
+    """When ml_usage=False and dtype is byte+, no alignment kicks in
+    → nbytes equals dense ``prod(dims) * elem_bytes``."""
+    fn = _bind_nbytes()
+    if fn is None:
+        pytest.skip("nbytes helper not available")
+    # fp32, rank=3, dims=[13, 7, 5], generic usage.
+    # Dense: 13 * 7 * 5 * 4 = 1820 bytes.
+    nb = _call_nbytes(fn, [13, 7, 5], 32, False)
+    assert nb == 13 * 7 * 5 * 4
+
+
+def test_aligned_buffer_nbytes_includes_padding_for_ml_usage():
+    """ML usage with fp32 + odd innermost dim → stride[1] rounds up
+    to 16 elements, so nbytes counts the PADDED rows."""
+    fn = _bind_nbytes()
+    if fn is None:
+        pytest.skip("nbytes helper not available")
+    # fp32, rank=2, dims=[13, 7], ml_usage=True.
+    # Aligned stride[1] = 16 (round up 13 → next multiple of 16).
+    # total_elems = stride[rank-1] * dims[rank-1] = 16 * 7 = 112.
+    # Wait that's wrong — let me reconsider. strides for rank-2 are
+    # [1, 16]. total_elems = strides[1] * dims[1] = 16 * 7 = 112.
+    # 112 * 4 bytes = 448 bytes (vs dense 13*7*4 = 364 bytes).
+    nb = _call_nbytes(fn, [13, 7], 32, True)
+    assert nb == 16 * 7 * 4
+
+
+def test_aligned_buffer_nbytes_sub_byte_rounds_to_byte():
+    """int4 (4 bits) — stride alignment is 256 elements; nbytes
+    rounds up to whole bytes."""
+    fn = _bind_nbytes()
+    if fn is None:
+        pytest.skip("nbytes helper not available")
+    # int4, rank=2, dims=[13, 7], ml_usage (irrelevant; sub-byte
+    # rule fires regardless): stride[1] = 256.
+    # total_elems = 256 * 7 = 1792. bits = 1792 * 4 = 7168. bytes = 896.
+    nb = _call_nbytes(fn, [13, 7], 4, False)
+    assert nb == 896
+
+
+def test_aligned_buffer_nbytes_invalid_inputs_return_zero():
+    fn = _bind_nbytes()
+    if fn is None:
+        pytest.skip("nbytes helper not available")
+    # rank=0.
+    dims_buf = (ctypes.c_int64 * 0)()
+    nb = fn(dims_buf, ctypes.c_int32(0), ctypes.c_int32(32),
+            ctypes.c_int32(0))
+    assert int(nb) == 0
+    # element_bits=0.
+    dims_buf = (ctypes.c_int64 * 2)(*[7, 3])
+    nb = fn(dims_buf, ctypes.c_int32(2), ctypes.c_int32(0),
+            ctypes.c_int32(0))
+    assert int(nb) == 0
+
+
+def test_aligned_buffer_nbytes_consistent_with_strides_helper():
+    """The byte-count companion must be exactly consistent with the
+    strides helper: nbytes == strides[rank-1] * dims[rank-1] *
+    element_bits / 8 (ceil)."""
+    fn_strides = _bind_aligned()
+    fn_nbytes = _bind_nbytes()
+    if fn_strides is None or fn_nbytes is None:
+        pytest.skip("helpers not available")
+    for dims, bits, ml in [
+        ([13, 7], 32, True),
+        ([1, 100], 16, True),
+        ([13, 7, 5], 32, True),
+        ([13, 5], 4, False),  # sub-byte
+        ([7, 5, 3, 2], 16, True),
+    ]:
+        rc, strides = _call_aligned(fn_strides, dims, bits, ml)
+        assert rc == len(dims)
+        # Expected nbytes (Python ceil).
+        total_elems = strides[-1] * dims[-1]
+        total_bits = total_elems * bits
+        expected = (total_bits + 7) // 8
+        nb = _call_nbytes(fn_nbytes, dims, bits, ml)
+        assert nb == expected, (dims, bits, ml, strides, expected, nb)
+
+
 # ---- End-to-end check: byte alignment of the second stride -------------
 
 def test_second_stride_byte_size_meets_alignment_rule():

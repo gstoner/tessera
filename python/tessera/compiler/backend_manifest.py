@@ -482,13 +482,43 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     },
     "rmsnorm": {
         "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": "Available as part of matmul→rmsnorm fusion (Phase 8.4.7)",
+        "dtypes": _APPLE_GPU_FUSED,
+        "notes": (
+            "MSL rmsnorm + Phase 8.4.7 matmul→rmsnorm fusion. Phase 3b "
+            "(2026-06-01) adds f16/bf16 via MPSGraph rowop encode-session"
+        ),
     },
     "flash_attn": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "Online-softmax MSL kernel; head_dim ≤ 256 (Phase 8.4.1)",
+    },
+    # Phase 2.1c + 3b (2026-06-01) — encode-session ops with full dtype
+    # coverage. layer_norm/silu/bmm landed as part of the single-cb
+    # decode-chain work; all 8 encode-eligible ops cover {f32, f16, bf16}.
+    "layer_norm": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": _APPLE_GPU_FUSED,
+        "notes": (
+            "MPSGraph rowop encode-session (encode_rowop_dev kind=0). "
+            "Available in {f32, f16, bf16} via Project-3 + Phase 3b."
+        ),
+    },
+    "silu": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": _APPLE_GPU_FUSED,
+        "notes": (
+            "MPSGraph unary node op=4 (silu = x * sigmoid(x)). "
+            "Encode-session reachable in {f32, f16, bf16}."
+        ),
+    },
+    "bmm": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": _APPLE_GPU_FUSED,
+        "notes": (
+            "MPSGraph batched matmul (encode_bmm_dev). Honors batch > 1 "
+            "and b_broadcast for K/V reuse across heads in attention."
+        ),
     },
     # Audit follow-up (2026-05-31): these three ops are dispatched by the
     # Apple GPU runtime envelope (driver._APPLE_GPU_{MPS,MSL,MPSGRAPH}_OPS
@@ -553,6 +583,15 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("gelu", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("rope", "apple_gpu"): "tests/unit/test_apple_gpu_buffer_pool.py",
     ("relu", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
+    # Phase 2.1c + 3b (2026-06-01) — encode-session ops, multi-dtype.
+    # Each fixture compares the encode-session output to a numpy
+    # reference at the dtype-appropriate tolerance.
+    ("layer_norm", "apple_gpu"):
+        "tests/unit/test_apple_gpu_f16_encode_session.py",
+    ("silu", "apple_gpu"):
+        "tests/unit/test_apple_gpu_full_decoder_layer.py",
+    ("bmm", "apple_gpu"):
+        "tests/unit/test_apple_gpu_f16_encode_session.py",
 }
 
 

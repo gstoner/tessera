@@ -229,11 +229,22 @@ def _wrap_gelu(original_fn: Callable) -> Callable:
 
 def _wrap_flash_attn(original_fn: Optional[Callable]) -> Callable:
     @functools.wraps(original_fn or (lambda *a, **k: None))
-    def flash_attn(Q, K, V, *, B: Optional[int] = None,
-                    Sq: Optional[int] = None, Sk: Optional[int] = None,
+    def flash_attn(Q, K, V, *,
+                    # apple_gpu_ops-shaped kwargs (trace mode):
+                    B: Optional[int] = None,
+                    Sq: Optional[int] = None,
+                    Sk: Optional[int] = None,
                     D: Optional[int] = None,
+                    dtype: str = "f32",
+                    # Shared kwargs (forwarded to both paths):
                     scale: Optional[float] = None,
-                    causal: bool = False, dtype: str = "f32"):
+                    causal: bool = False,
+                    # original tessera.ops.flash_attn kwargs (eager only):
+                    cache: Any = None,
+                    dropout_p: float = 0.0,
+                    params: Any = None,
+                    deterministic: Any = None,
+                    seed: Optional[int] = None):
         if _active_trace() is not None:
             if (B is None or Sq is None or Sk is None or D is None):
                 # Infer from Q/K shapes (B, S, D).
@@ -248,15 +259,28 @@ def _wrap_flash_attn(original_fn: Optional[Callable]) -> Callable:
             if B is None or Sq is None or Sk is None or D is None:
                 raise ValueError(
                     "flash_attn under @auto_batch needs B + Sq + Sk + D")
+            # Trace path doesn't honor cache/dropout/params/etc. — those
+            # are training-time features; warn if the caller supplied
+            # something non-default that the trace path can't deliver.
+            if dropout_p > 0.0:
+                raise ValueError(
+                    "flash_attn under @auto_batch with dropout_p>0 is "
+                    "not supported (the encode-session flash_attn kernel "
+                    "is dropout-free forward only). Run eagerly or pass "
+                    "dropout_p=0.0.")
             return _agpu.flash_attn(Q, K, V,
                                      B=B, Sq=Sq, Sk=Sk, D=D,
                                      scale=scale, causal=causal,
                                      dtype=dtype)
-        if original_fn is not None:
-            return original_fn(Q, K, V)
-        raise NotImplementedError(
-            "tessera.ops.flash_attn has no eager numpy reference; only "
-            "apple_gpu_ops trace path is supported")
+        # Eager path — forward to the existing numpy reference with
+        # all of its kwargs.
+        if original_fn is None:
+            raise NotImplementedError(
+                "tessera.ops.flash_attn eager reference unavailable")
+        return original_fn(Q, K, V, scale=scale, causal=causal,
+                            cache=cache, dropout_p=dropout_p,
+                            params=params, deterministic=deterministic,
+                            seed=seed)
     return flash_attn
 
 

@@ -142,13 +142,15 @@ def test_context_manager_destroys_on_exit():
     assert pipe._handle == 0
 
 
-def test_dispatch_raises_until_pk4():
-    """PK1 deliberately exposes only the load/compile path. Calling
-    ``dispatch()`` must raise ``NotImplementedError`` with a message
-    that names which sprint step lands the real implementation —
-    avoiding silent partial-implementation traps."""
+def test_dispatch_on_destroyed_handle_raises():
+    """PK4 wired the real dispatch path (this test was once asserting
+    ``NotImplementedError`` pre-PK4). Now ``dispatch()`` on a
+    destroyed Pipeline must raise the SAME lifecycle error as the
+    other PK3+ methods — ``RuntimeError("...already destroyed")`` —
+    not silently fail. Catches a regression where the destroyed-handle
+    guard is missed in the new dispatch path."""
     pipe = Pipeline(handle=0, package_path="<test>", function_name="main")
-    with pytest.raises(NotImplementedError, match="PK4"):
+    with pytest.raises(RuntimeError, match="already destroyed"):
         pipe.dispatch()
 
 

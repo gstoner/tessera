@@ -56,6 +56,15 @@ _REFERENCE_STATUS = "reference"
 _ARTIFACT_STATUS = "artifact_only"
 _COMPILEABLE_STATUS = "compileable"   # Sprint G/H follow-up: passes ptxas/hipcc
 _PLANNED_STATUS = "planned"
+# PK5 (2026-05-31) — Apple Metal `.mtlpackage` packaged kernel. The
+# kernel ships as a pre-compiled Metal package (output of Core ML
+# Tools / Xcode); Tessera loads it at runtime via PK1's
+# `tessera_apple_gpu_mlpkg_compile`, reflects + dispatches per PK2-PK4.
+# Distinct from `fused` (in-tree MSL source) and `artifact_only` (IR
+# emits but no runtime). When status is "packaged" the entry MUST
+# carry a non-empty ``packaged_pipeline_path`` field naming the
+# `.mtlpackage` directory.
+_PACKAGED_STATUS = "packaged"
 
 # Arch-3 (2026-05-22) — top rung of the readiness ladder.  An entry
 # only qualifies for ``hardware_verified`` when it carries BOTH a
@@ -75,6 +84,7 @@ _VALID_STATUSES = frozenset({
     _COMPILEABLE_STATUS,
     _PLANNED_STATUS,
     _HARDWARE_VERIFIED_STATUS,
+    _PACKAGED_STATUS,
 })
 
 
@@ -204,6 +214,14 @@ class BackendKernelEntry:
     ``benchmarks/...`` tree that records latency / MFU for this
     kernel.  ``None`` until benchmarked.  Recommended for
     ``hardware_verified`` entries but not strictly required."""
+    packaged_pipeline_path: Optional_str = None
+    """PK5 (2026-05-31) — Apple Metal ``.mtlpackage`` path for entries
+    with ``status == "packaged"``. Repo-relative or absolute path to
+    the directory the runtime loads via ``[device newLibraryWithURL:]``.
+    REQUIRED when ``status == "packaged"`` (validated in
+    ``__post_init__``); ignored otherwise. The full lifecycle (load
+    → compile → reflect → prepare → dispatch) lives in
+    ``tessera.apple_mlpkg`` and uses this path as the input."""
 
     def __post_init__(self) -> None:
         from ..dtype import canonicalize_dtype
@@ -285,6 +303,25 @@ class BackendKernelEntry:
                     f"{self.runtime_symbol!r}"
                 )
 
+        # PK5 (2026-05-31) — packaged-kernel contract. Status
+        # ``packaged`` means "this kernel ships as an `.mtlpackage`
+        # the runtime loads via `tessera.apple_mlpkg.compile_mlpackage`."
+        # The path is mandatory — without it the manifest entry is a
+        # promise without a deliverable, and the dashboard would mark
+        # it executable without anything to execute.
+        if self.status == _PACKAGED_STATUS:
+            if not self.packaged_pipeline_path:
+                raise ValueError(
+                    f"status='packaged' requires packaged_pipeline_path "
+                    f"to name a `.mtlpackage` directory; got "
+                    f"target={self.target!r}, "
+                    f"packaged_pipeline_path={self.packaged_pipeline_path!r}"
+                )
+            # The path may be repo-relative or absolute; both work.
+            # Filesystem-existence checks live in a separate drift
+            # gate (audit follow-up) — we don't validate here so a
+            # registry entry can land before the artifact lands.
+
     def as_dict(self) -> dict[str, object]:
         out: dict[str, object] = {
             "target": self.target,
@@ -321,6 +358,9 @@ class BackendKernelEntry:
             out["execute_compare_fixture"] = self.execute_compare_fixture
         if self.benchmark_json is not None:
             out["benchmark_json"] = self.benchmark_json
+        # PK5 (2026-05-31) — packaged-kernel path.
+        if self.packaged_pipeline_path is not None:
+            out["packaged_pipeline_path"] = self.packaged_pipeline_path
         return out
 
     @property

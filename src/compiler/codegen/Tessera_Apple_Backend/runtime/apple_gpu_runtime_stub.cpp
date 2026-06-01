@@ -1521,6 +1521,13 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_read_output(
 extern "C" int32_t tessera_apple_gpu_mlpkg_argument_table_ready(void *) {
   return 0;
 }
+// PK4 — dispatch + heap-size stubs.
+extern "C" int32_t tessera_apple_gpu_mlpkg_dispatch(void *, uint64_t) {
+  return 0;
+}
+extern "C" int64_t tessera_apple_gpu_mlpkg_intermediates_heap_size(void *) {
+  return -1;
+}
 // Apple-sample Action 6 — archive state probe. Off-Darwin: zero outputs
 // and report 0 ("runtime not ready"). The Python side reads the rc and
 // treats 0 as "no archive telemetry available".

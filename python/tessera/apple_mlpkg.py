@@ -353,12 +353,49 @@ class Pipeline:
             return None
         return bytes(buf)
 
-    def dispatch(self, *args, **kwargs):
-        """Reserved for PK4. Raises until end-to-end dispatch lands."""
-        raise NotImplementedError(
-            "dispatch() lands in PK4 of the packaged-kernel sprint; PK2 "
-            "+ PK3 expose bindings() + prepare/fill/read but execution "
-            "is still PK4 work")
+    def dispatch(self, timeout_ms: int = 30_000) -> bool:
+        """PK4 — Run the compiled ML pipeline end-to-end on the GPU.
+
+        Pre-condition: ``prepare_tensors()`` must have succeeded and
+        ``fill_input()`` must have populated every input tensor with
+        the data you want to run on. Post-condition (on True return):
+        every output tensor holds the dispatch result — read via
+        ``read_output(name, byte_count)``.
+
+        ``timeout_ms`` bounds the GPU wait. Returns ``False`` on
+        timeout (kernel hang / driver crash / OS unavailable). Mirrors
+        Apple's sample at
+        ``MLMatrixMultiplier.m::encodeAndRunModelInference`` and uses
+        the audit-recommended ``intermediatesHeap`` sized from
+        ``pipelineState.intermediatesHeapSize`` (Action 7 / Pattern 7).
+        """
+        if not self._handle:
+            raise RuntimeError("Pipeline already destroyed")
+        fn = bind_symbol(
+            "tessera_apple_gpu_mlpkg_dispatch",
+            (ctypes.c_void_p, ctypes.c_uint64),
+            restype=ctypes.c_int32)
+        if fn is None:
+            return False
+        return bool(fn(ctypes.c_void_p(self._handle),
+                       ctypes.c_uint64(timeout_ms)))
+
+    def intermediates_heap_size(self) -> int:
+        """PK4 — Cached intermediates-heap size in bytes (allocated
+        lazily on first dispatch from ``pipelineState.intermediatesHeapSize``).
+
+        Returns ``-1`` if no dispatch has happened yet OR the runtime
+        isn't available. Used by tests + telemetry to confirm
+        audit Action 7 (pattern 7) is honored — the heap size comes
+        from the pipeline state, not a magic number."""
+        if not self._handle:
+            return -1
+        fn = bind_symbol(
+            "tessera_apple_gpu_mlpkg_intermediates_heap_size",
+            (ctypes.c_void_p,), restype=ctypes.c_int64)
+        if fn is None:
+            return -1
+        return int(fn(ctypes.c_void_p(self._handle)))
 
     def destroy(self) -> None:
         if self._handle:

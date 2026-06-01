@@ -67,6 +67,11 @@ API_AVAILABLE(macos(26.0), ios(26.0))
 // resources at each binding's kernel-side index.
 @property (nonatomic, strong) NSMutableDictionary<NSString *, id<MTLTensor>> *tensorsByName;
 @property (nonatomic, strong) id<MTL4ArgumentTable> argumentTable;
+// PK4 — intermediates heap allocated lazily on first dispatch (size
+// comes from ``pipelineState.intermediatesHeapSize``). Cached because
+// the heap-size is pipeline-state-derived — every dispatch on this
+// pipeline needs the same size. Audit Action 7 / Apple-sample Pattern 7.
+@property (nonatomic, strong) id<MTLHeap> intermediatesHeap;
 @end
 
 @implementation TesseraMlpkgPipeline
@@ -2456,6 +2461,150 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_argument_table_ready(void *handle) {
     return box.argumentTable != nil ? 1 : 0;
   }
   return 0;
+}
+
+//===----------------------------------------------------------------------===//
+// PK4 — End-to-end ML pass dispatch via
+// ``MTL4MachineLearningCommandEncoder``. Mirrors Apple's sample at
+// ``MLMatrixMultiplier.m:encodeAndRunModelInference`` (lines 224-256):
+//
+//   1. Allocate an MTLHeap for intermediates (size from
+//      ``pipelineState.intermediatesHeapSize`` — Apple-sample Pattern 7
+//      / audit Action 7). Cached on the pipeline box so subsequent
+//      dispatches reuse it.
+//   2. Per dispatch: fresh allocator + command buffer.
+//   3. ``[cb beginCommandBufferWithAllocator:]`` → ``machineLearningCommandEncoder``
+//   4. ``setArgumentTable:`` + ``setPipelineState:`` + ``dispatchNetworkWithIntermediatesHeap:``
+//   5. ``endEncoding`` → ``endCommandBuffer`` → ``[queue commit:&cb count:1]``
+//   6. Signal-and-wait via the cached ``ctx.mtl4_event`` (Apple-sample
+//      Pattern 4) with the caller-provided timeout. A timed-out
+//      dispatch returns ``0`` — caller can re-read input data + retry
+//      OR escalate as a kernel hang.
+//
+// Returns 1 on successful dispatch (GPU completed within the
+// timeout), 0 on any failure (handle invalid, tensors not prepared,
+// allocator / encoder / heap create failures, timeout, command
+// buffer error).
+//===----------------------------------------------------------------------===//
+
+extern "C" int32_t tessera_apple_gpu_mlpkg_dispatch(void *handle,
+                                                    uint64_t timeout_ms) {
+  if (!handle) return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    @autoreleasepool {
+      TesseraMlpkgPipeline *box = (__bridge TesseraMlpkgPipeline *)handle;
+      if (!box.pipelineState) return 0;
+      if (!box.argumentTable) {
+        fprintf(stderr, "[tessera_apple_gpu_mlpkg] dispatch: argument "
+                "table not prepared — call prepare_tensors() first\n");
+        return 0;
+      }
+      id<MTLDevice> dev = ctx.device;
+      // Lazily allocate the intermediates heap. Size comes from the
+      // pipeline state (Pattern 7) — no hand-tuning. A zero size is
+      // legal (some pipelines need no intermediates); the heap is
+      // still allocated as a 1-byte placement heap so the encoder API
+      // is satisfied.
+      if (!box.intermediatesHeap) {
+        // ``intermediatesHeapSize`` lives on the pipeline-reflection
+        // protocol whose header signature varies across SDKs; KVC
+        // dispatch sidesteps that the same way PK2's reflection probe
+        // does (see ``_mlpkg_tensor_bindings``).
+        NSObject *psoObj = (NSObject *)box.pipelineState;
+        NSNumber *hsNum = [psoObj valueForKey:@"intermediatesHeapSize"];
+        NSUInteger heapSize = hsNum ? [hsNum unsignedIntegerValue] : 0;
+        if (heapSize == 0) heapSize = 1;
+        MTLHeapDescriptor *hd = [[MTLHeapDescriptor alloc] init];
+        hd.type = MTLHeapTypePlacement;
+        hd.size = heapSize;
+        hd.storageMode = MTLStorageModeShared;
+        box.intermediatesHeap = [dev newHeapWithDescriptor:hd];
+        if (!box.intermediatesHeap) {
+          fprintf(stderr, "[tessera_apple_gpu_mlpkg] heap create failed "
+                  "for size=%lu\n", (unsigned long)heapSize);
+          return 0;
+        }
+      }
+      // Per-dispatch allocator + command buffer (mirrors the existing
+      // MTL4 outlier dispatchers — they intentionally don't take
+      // ``mtl4_dispatch_mu`` and so create fresh objects per call).
+      id<MTL4CommandAllocator> allocator = [dev newCommandAllocator];
+      id<MTL4CommandBuffer> cb = [dev newCommandBuffer];
+      if (!allocator || !cb) return 0;
+      id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
+      if (!queue) return 0;
+      // Encode + commit.
+      [cb beginCommandBufferWithAllocator:allocator];
+      // ``machineLearningCommandEncoder`` lives on a sub-protocol of
+      // MTL4CommandBuffer whose header signature varies across SDKs;
+      // dynamic dispatch via NSObject*'s performSelector keeps the
+      // build stable across SDK shifts. The encoder type itself is
+      // also SDK-dependent — we treat it as bare ``id`` and rely on
+      // KVC / performSelector for method calls.
+      NSObject *cbObj = (NSObject *)cb;
+      id encoder = [cbObj performSelector:@selector(machineLearningCommandEncoder)];
+      if (!encoder) {
+        fprintf(stderr, "[tessera_apple_gpu_mlpkg] dispatch: ML encoder "
+                "unavailable (host SDK may not expose it)\n");
+        return 0;
+      }
+      // ``setArgumentTable:`` + ``setPipelineState:`` are MTL4 standard
+      // methods on the compute / ML encoders.
+      [encoder performSelector:@selector(setArgumentTable:)
+                    withObject:box.argumentTable];
+      [encoder performSelector:@selector(setPipelineState:)
+                    withObject:box.pipelineState];
+      [encoder performSelector:@selector(dispatchNetworkWithIntermediatesHeap:)
+                    withObject:box.intermediatesHeap];
+      [encoder performSelector:@selector(endEncoding)];
+      [cb endCommandBuffer];
+      // Commit + signal + wait with timeout (Apple-sample Pattern 4).
+      // ``commit:`` expects ``const id<MTL4CommandBuffer> _Nonnull[_Nonnull]``;
+      // declare the array with the matching protocol-qualified type so
+      // the SDK header accepts it (the `MTL4CommandBuffer*` form
+      // doesn't conform to the type's strict requirements).
+      const id<MTL4CommandBuffer> cbs[1] = {cb};
+      [queue commit:cbs count:1];
+      // Lazily acquire the cached MTL4 shared event.
+      id<MTLSharedEvent> ev = (id<MTLSharedEvent>)ctx.mtl4_event;
+      if (!ev) {
+        ev = [dev newSharedEvent];
+        ctx.mtl4_event = ev;
+      }
+      if (!ev) return 0;
+      uint64_t signal_val = ++ctx.mtl4_event_val;
+      [queue signalEvent:ev value:signal_val];
+      bool done = [ev waitUntilSignaledValue:signal_val
+                                    timeoutMS:timeout_ms];
+      if (!done) {
+        fprintf(stderr, "[tessera_apple_gpu_mlpkg] dispatch: GPU did not "
+                "signal within %llu ms (signaledValue=%llu wanted=%llu)\n",
+                (unsigned long long)timeout_ms,
+                (unsigned long long)ev.signaledValue,
+                (unsigned long long)signal_val);
+        return 0;
+      }
+      return 1;
+    }
+  }
+  return 0;
+}
+
+// PK4 — query the cached intermediates heap size (after a successful
+// dispatch). Returns the heap's allocated size in bytes, or -1 if no
+// dispatch has happened yet / the runtime isn't available. Used by
+// tests + telemetry to confirm Pattern 7 is honored (size comes
+// from the pipeline, not a magic number).
+extern "C" int64_t tessera_apple_gpu_mlpkg_intermediates_heap_size(void *handle) {
+  if (!handle) return -1;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    TesseraMlpkgPipeline *box = (__bridge TesseraMlpkgPipeline *)handle;
+    if (!box.intermediatesHeap) return -1;
+    return (int64_t)box.intermediatesHeap.size;
+  }
+  return -1;
 }
 
 // P4 — flush the captured pipeline set to the enabled archive path. Returns 1 on

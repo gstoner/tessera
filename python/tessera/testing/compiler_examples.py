@@ -32,8 +32,9 @@ def _load_s8_compilers():
     from examples.conformance.s8_tiny_models.models import (
         compile_attention_slice,
         compile_mlp_slice,
+        compile_qwen3_moe_slice,
     )
-    return compile_mlp_slice, compile_attention_slice
+    return compile_mlp_slice, compile_attention_slice, compile_qwen3_moe_slice
 
 
 COMPILER_STAGES = (
@@ -101,7 +102,7 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
     on ``sys.path``.  Cached by ``__getattr__`` below; this function
     runs exactly once per process.
     """
-    s8_compile_mlp_slice, s8_compile_attention_slice = _load_s8_compilers()
+    s8_compile_mlp_slice, s8_compile_attention_slice, s8_compile_qwen3_moe_slice = _load_s8_compilers()
     return (
     CompilerExample(
         "mlp_matmul_relu",
@@ -171,6 +172,23 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
         runtime_args=(
             np.arange(6, dtype=np.float32).reshape(2, 3) / 10.0,
             np.ones((3, 3), dtype=np.float32) * 0.25,
+        ),
+    ),
+    CompilerExample(
+        "s8_current_gen_qwen3_moe_compile_slice",
+        s8_compile_qwen3_moe_slice,
+        # MoE lowers through the compiler artifact path today, but the
+        # reference launcher cannot yet materialize the symbolic route operand
+        # for runtime execution. Keep this example as an honest artifact-only
+        # current-gen conformance rung until that launcher gap closes.
+        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
+        runtime_args=(
+            np.linspace(-0.2, 0.4, 9, dtype=np.float32).reshape(3, 3),
+            np.ones((3, 5), dtype=np.float32) * 0.10,
+            np.ones((3, 5), dtype=np.float32) * 0.20,
+            np.ones((5, 3), dtype=np.float32) * 0.15,
+            np.stack([np.eye(3, dtype=np.float32), np.ones((3, 3), dtype=np.float32) * 0.25], axis=0),
+            np.array([0, 0, 1], dtype=np.int64),
         ),
     ),
     )

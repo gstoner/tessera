@@ -20,6 +20,8 @@ EXPECTED_MODEL_IDS = {
     "tiny_griffin_megalodon",
     "tiny_jepa",
     "tiny_titans_atlas_memory",
+    "tiny_qwen3_moe_decoder",
+    "tiny_deepseek_v3_mla_moe_decode",
 }
 
 
@@ -136,12 +138,62 @@ def test_s8_cross_cutting_state_rng_data_quant_sharding_checkpoint_and_aot(tmp_p
     assert ts.data.tokenizer_bpe(vocab).encode("tiny model") == [1, 2]
 
 
+def test_s8_current_gen_reasoning_corner_cases_are_explicit():
+    by_id = {spec.model_id: spec for spec in manifest()}
+    qwen = by_id["tiny_qwen3_moe_decoder"]
+    deepseek = by_id["tiny_deepseek_v3_mla_moe_decode"]
+
+    q_params = qwen.init()
+    q_batch = qwen.sample_batch()
+    tied = ts.ops.moe(
+        np.eye(3, dtype=np.float64),
+        q_params["experts"],
+        scores=q_batch["router_scores"],
+    )
+    routed = ts.ops.moe(
+        np.eye(3, dtype=np.float64),
+        q_params["experts"],
+        route=q_batch["route"],
+    )
+    np.testing.assert_allclose(tied, routed)
+    assert np.bincount(q_batch["route"], minlength=q_params["experts"].shape[0]).tolist() == [3, 0, 0, 0]
+    assert np.all(np.isfinite(qwen.forward(q_params, q_batch)))
+
+    dispatched = ts.ops.moe_dispatch(q_batch["router_scores"], q_batch["route"])
+    combined = ts.ops.moe_combine(np.stack([dispatched, dispatched]), q_batch["route"], reduce="mean")
+    np.testing.assert_allclose(combined, dispatched)
+
+    d_params = deepseek.init()
+    d_batch = deepseek.sample_batch()
+    y = deepseek.forward(d_params, d_batch)
+    assert y.shape == deepseek.expected_output_shape
+    assert np.all(np.isfinite(y))
+    assert np.isfinite(deepseek.loss(d_params, d_batch))
+
+    for name in [
+        "gqa_attention",
+        "mla_decode_fused",
+        "deepseek_sparse_attention",
+        "moe",
+        "moe_dispatch",
+        "moe_combine",
+        "silu_mul",
+        "rmsnorm_safe",
+        "cross_entropy_loss",
+    ]:
+        entry = coverage_for(name)
+        assert entry.status in {"partial", "complete"}
+        assert entry.contract_status["tests"] == "complete"
+    assert callable(ts.nn.swiglu)
+
+
 def test_s8_compiler_artifacts_for_foundation_targets():
     representative = {
         "tiny_diffusion_dit",
         "tiny_xlstm_recurrent",
         "tiny_linformer_cosformer",
         "tiny_titans_atlas_memory",
+        "tiny_qwen3_moe_decoder",
     }
     for spec in manifest():
         if spec.model_id not in representative:

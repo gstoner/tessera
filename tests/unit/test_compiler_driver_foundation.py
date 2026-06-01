@@ -127,21 +127,19 @@ def test_compiler_example_manifest_qualifies_each_foundation_target():
             seen.add((example.example_id, result.target))
             assert result.artifact.metadata["artifact_hashes"]["graph"]
             assert result.trace
-            if target == "x86":
+            if should_run:
                 assert result.launch_result is not None
                 assert result.launch_result["ok"] is True
-            elif target == "apple_cpu":
+                assert result.artifact.metadata["runtime_status"] == "ready"
+            elif target == "apple_cpu" and result.artifact.metadata["runtime_status"] == "ready":
                 # Manifest examples are matmul-driven and the multi-op
                 # runtime path means they now report runtime_status="ready".
-                assert result.artifact.metadata["runtime_status"] == "ready"
                 assert result.artifact.metadata["compiler_path"] == "apple_cpu_accelerate"
-            elif "runtime-executable" in claimed:
-                # apple_gpu flash_attn_contract — Phase 8.4.1 runtime path.
-                assert result.artifact.metadata["runtime_status"] == "ready"
-                assert result.launch_result is not None
-                assert result.launch_result["ok"] is True
             else:
-                assert result.artifact.metadata["runtime_status"] == "artifact_only"
+                assert result.launch_result is None
+                assert result.artifact.metadata["runtime_status"] in {"ready", "artifact_only"}
+                if target in {"cuda", "rocm"}:
+                    assert result.artifact.metadata["runtime_status"] == "artifact_only"
 
     assert ("mlp_matmul_relu", "cpu") in seen
     assert ("flash_attn_contract", "nvidia_sm90") in seen

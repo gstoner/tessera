@@ -244,6 +244,116 @@ def loss_titans_atlas_memory(params: ArrayTree, batch: ArrayTree):
     return _mse_to_target(forward_titans_atlas_memory(params, batch), batch["target"])
 
 
+def init_qwen3_moe_decoder() -> ArrayTree:
+    params = _linear_params(3, 3, 91)
+    rng = _rng(92)
+    params.update({
+        "norm": np.array([1.0, 0.9, 1.1], dtype=np.float64),
+        "w_gate": rng.normal(0.0, 0.12, size=(3, 5)).astype(np.float64),
+        "w_up": rng.normal(0.0, 0.12, size=(3, 5)).astype(np.float64),
+        "w_down": rng.normal(0.0, 0.12, size=(5, 3)).astype(np.float64),
+        "experts": rng.normal(0.0, 0.10, size=(4, 3, 3)).astype(np.float64),
+    })
+    return params
+
+
+def batch_qwen3_moe_decoder(batch_size: int = 1) -> ArrayTree:
+    b = max(1, int(batch_size))
+    base = np.linspace(-0.45, 0.55, b * 2 * 3 * 3, dtype=np.float64).reshape(b, 2, 3, 3)
+    kv = base[:, :1] * np.array([1.0, -0.5, 0.25], dtype=np.float64)
+    # Router rows intentionally include ties, empty/underused experts, and
+    # saturated expert 0. The public reference MoE is top-1, so these rows are
+    # the deterministic corner-case witness for routing behavior.
+    router_scores = np.array(
+        [
+            [1.0, 1.0, 0.2, -0.1],
+            [3.0, -1.0, -1.0, -1.0],
+            [3.0, -2.0, -2.0, -2.0],
+        ],
+        dtype=np.float64,
+    )
+    routes = np.array([0, 0, 0], dtype=np.int64)
+    return {
+        "q": base,
+        "k": kv,
+        "v": kv + 0.125,
+        "router_scores": router_scores,
+        "route": routes,
+        "target": np.zeros((1, 3), dtype=np.float64),
+    }
+
+
+def forward_qwen3_moe_decoder(params: ArrayTree, batch: ArrayTree) -> np.ndarray:
+    attn = ts.nn.gqa_attention(batch["q"], batch["k"], batch["v"], num_query_heads=2, num_kv_heads=1, causal=True)
+    token_features = ts.ops.mean(attn, axis=(0, 1))
+    normed = ts.nn.rms_norm(token_features, params["norm"])
+    mlp = ts.nn.swiglu(normed, params["w_gate"], params["w_up"], params["w_down"])
+    moe_out = ts.ops.moe(mlp, params["experts"], scores=batch["router_scores"])
+    return _project(ts.ops.mean(moe_out, axis=0), params)
+
+
+def loss_qwen3_moe_decoder(params: ArrayTree, batch: ArrayTree):
+    return _mse_to_target(forward_qwen3_moe_decoder(params, batch), batch["target"])
+
+
+def init_deepseek_v3_mla_moe_decode() -> ArrayTree:
+    params = _linear_params(3, 3, 101)
+    rng = _rng(102)
+    params.update({
+        "w_dkv": rng.normal(0.0, 0.13, size=(3, 3)).astype(np.float64),
+        "w_uk": rng.normal(0.0, 0.13, size=(3, 3)).astype(np.float64),
+        "w_uv": rng.normal(0.0, 0.13, size=(3, 3)).astype(np.float64),
+        "experts": rng.normal(0.0, 0.09, size=(3, 3, 3)).astype(np.float64),
+    })
+    return params
+
+
+def batch_deepseek_v3_mla_moe_decode(batch_size: int = 1) -> ArrayTree:
+    b = max(1, int(batch_size))
+    x = np.linspace(-0.35, 0.65, b * 4 * 3, dtype=np.float64).reshape(b, 4, 3)
+    q = np.linspace(0.15, 0.75, b * 4 * 3, dtype=np.float64).reshape(b, 4, 3)
+    sparse = x.reshape(b, 1, 4, 3)
+    gate_logits = np.zeros((b, 1, 4, 3), dtype=np.float64)
+    route = np.resize(np.array([0, 1, 1, 2], dtype=np.int64), b * 4)
+    return {
+        "x": x,
+        "q": q,
+        "sparse_q": sparse,
+        "sparse_k": sparse + 0.05,
+        "sparse_v": sparse - 0.05,
+        "gate_logits": gate_logits,
+        "route": route,
+        "theta": np.linspace(0.0, 0.3, b * 4 * 2, dtype=np.float64).reshape(b, 4, 2),
+        "target": np.zeros((1, 3), dtype=np.float64),
+    }
+
+
+def forward_deepseek_v3_mla_moe_decode(params: ArrayTree, batch: ArrayTree) -> np.ndarray:
+    rope_part, no_rope_part = ts.ops.rope_split(batch["q"], rope_dim=2)
+    q_rope = ts.ops.rope(rope_part, batch["theta"])
+    q = ts.ops.rope_merge(q_rope, no_rope_part)
+    mla = ts.ops.mla_decode_fused(batch["x"], params["w_dkv"], params["w_uk"], params["w_uv"], q, causal=True)
+    sparse = ts.ops.deepseek_sparse_attention(
+        batch["sparse_q"],
+        batch["sparse_k"],
+        batch["sparse_v"],
+        gate_logits=batch["gate_logits"],
+        window_size=2,
+        block_size=2,
+        top_k=1,
+        causal=True,
+    )
+    combined = ts.ops.add(mla, sparse.reshape(mla.shape))
+    moe_out = ts.ops.moe(combined, params["experts"], route=batch["route"])
+    return _project(ts.ops.mean(moe_out, axis=1), params)
+
+
+def loss_deepseek_v3_mla_moe_decode(params: ArrayTree, batch: ArrayTree):
+    logits = forward_deepseek_v3_mla_moe_decode(params, batch)
+    ce = ts.losses.cross_entropy_loss(logits, np.array([1], dtype=np.int64))
+    return ts.ops.add(ce, _mse_to_target(logits, batch["target"]))
+
+
 def compile_mlp_slice(A, B):
     return ts.ops.relu(ts.ops.matmul(A, B))
 
@@ -257,10 +367,39 @@ def compile_recurrent_slice(A, B):
     return ts.ops.add(h, A)
 
 
+def compile_qwen3_moe_slice(X, W_gate, W_up, W_down, Experts, Route):
+    return ts.ops.moe(X, Experts, route=Route)
+
+
+def compile_deepseek_mla_slice(X, W_dkv, W_uk, W_uv, Q):
+    return ts.ops.mla_decode_fused(X, W_dkv, W_uk, W_uv, Q, causal=True)
+
+
 def _compile_inputs(m: int = 2, k: int = 3, n: int = 2) -> tuple[np.ndarray, ...]:
     return (
         np.arange(m * k, dtype=np.float32).reshape(m, k) / 10.0,
         np.ones((k, n), dtype=np.float32) * 0.25,
+    )
+
+
+def _qwen3_compile_inputs() -> tuple[np.ndarray, ...]:
+    return (
+        np.linspace(-0.2, 0.4, 9, dtype=np.float32).reshape(3, 3),
+        np.ones((3, 5), dtype=np.float32) * 0.10,
+        np.ones((3, 5), dtype=np.float32) * 0.20,
+        np.ones((5, 3), dtype=np.float32) * 0.15,
+        np.stack([np.eye(3, dtype=np.float32), np.ones((3, 3), dtype=np.float32) * 0.25], axis=0),
+        np.array([0, 0, 1], dtype=np.int64),
+    )
+
+
+def _deepseek_compile_inputs() -> tuple[np.ndarray, ...]:
+    return (
+        np.linspace(-0.2, 0.3, 12, dtype=np.float32).reshape(1, 4, 3),
+        np.eye(3, dtype=np.float32),
+        np.eye(3, dtype=np.float32),
+        np.eye(3, dtype=np.float32),
+        np.linspace(0.1, 0.4, 12, dtype=np.float32).reshape(1, 4, 3),
     )
 
 
@@ -369,6 +508,32 @@ def manifest() -> tuple[TinyModelSpec, ...]:
             (1, 2),
             {"w": (2, 2), "b": (2,), "keys": (2, 2), "values": (2, 2)},
             compile_attention_slice,
+        ),
+        TinyModelSpec(
+            "tiny_qwen3_moe_decoder",
+            "Qwen3-style MoE decoder",
+            init_qwen3_moe_decoder,
+            forward_qwen3_moe_decoder,
+            loss_qwen3_moe_decoder,
+            batch_qwen3_moe_decoder,
+            ("S2", "S5", "S6", "S7", "S8", "S9", "S10", "S11", "S12", "S14", "S15"),
+            _qwen3_compile_inputs(),
+            (1, 3),
+            {"w": (3, 3), "b": (3,), "norm": (3,), "w_gate": (3, 5), "w_up": (3, 5), "w_down": (5, 3), "experts": (4, 3, 3)},
+            compile_qwen3_moe_slice,
+        ),
+        TinyModelSpec(
+            "tiny_deepseek_v3_mla_moe_decode",
+            "DeepSeek-V3-style MLA/MoE decode",
+            init_deepseek_v3_mla_moe_decode,
+            forward_deepseek_v3_mla_moe_decode,
+            loss_deepseek_v3_mla_moe_decode,
+            batch_deepseek_v3_mla_moe_decode,
+            ("S2", "S5", "S6", "S7", "S8", "S9", "S10", "S11", "S12", "S14", "S15"),
+            _deepseek_compile_inputs(),
+            (1, 3),
+            {"w": (3, 3), "b": (3,), "w_dkv": (3, 3), "w_uk": (3, 3), "w_uv": (3, 3), "experts": (3, 3, 3)},
+            compile_deepseek_mla_slice,
         ),
     )
 

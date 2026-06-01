@@ -1072,6 +1072,20 @@ def load_artifact(path_or_bytes: str | bytes | os.PathLike[str] | RuntimeArtifac
     raise TypeError(f"unsupported artifact input: {type(path_or_bytes)!r}")
 
 
+# G6 — executor functions, keyed by ExecutionRow.executor_id from the matrix.
+# launch() consults the matrix to pick the executor; adding a new backend
+# executor is now (1) add the function here, (2) add it to KNOWN_EXECUTORS in
+# execution_matrix.py, (3) add the matrix row. No new branch in launch().
+def _executor_table():
+    # Lazily resolved: these symbols are defined later in this file.
+    return {
+        "apple_cpu_accelerate": _execute_apple_cpu_accelerate_artifact,
+        "apple_gpu_mps":        _execute_apple_gpu_mps_artifact,
+        # CPU executors are reached via the matrix lookup for cpu/native_cpu +
+        # cpu/jit_cpu_numpy; they live in the existing in-line CPU path below.
+    }
+
+
 def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, Any]:
     """Launch executable CPU artifacts or return a structured non-success result."""
     global _last_profile
@@ -1080,113 +1094,53 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
     metadata = artifact.metadata or {}
     target = str(metadata.get("target", "cpu"))
     cap = backend_capabilities(target)
-    if (
-        target == "apple_cpu"
-        and metadata.get("executable") is True
-        and metadata.get("compiler_path") == "apple_cpu_accelerate"
-    ):
+    # G6 — matrix-driven dispatch for non-CPU executors. The matrix lookup
+    # returns an ExecutionRow naming the executor_id; the table below resolves
+    # it to a Python function. There are NO hard-coded `target == "apple_gpu"`
+    # branches here anymore; everything flows through the matrix.
+    row = _exec_row_for_metadata(metadata)
+    if (row is not None and row.executable and row.executor_id is not None
+            and metadata.get("executable") is True
+            and row.executor_id in _executor_table()):
+        executor = _executor_table()[row.executor_id]
+        arch = row.target
+        kid = str(metadata.get("kernel_id", row.executor_id))
+        meta_ok = {"compiler_path": row.compiler_path,
+                   "execution_kind": row.execution_kind,
+                   "execution_mode": row.execution_mode}
         try:
-            output = _execute_apple_cpu_accelerate_artifact(artifact, args)
+            output = executor(artifact, args)
         except Exception as exc:
             _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
             telemetry = make_event(
-                "runtime.launch",
-                source="runtime",
-                op="artifact_launch",
-                arch="apple_cpu",
-                kernel_id=str(metadata.get("kernel_id", "apple_cpu_accelerate")),
-                graph_hash=artifact.artifact_hash,
+                "runtime.launch", source="runtime", op="artifact_launch",
+                arch=arch, kernel_id=kid, graph_hash=artifact.artifact_hash,
                 status="invalid_artifact",
-                metadata={"compiler_path": "apple_cpu_accelerate", "execution_kind": "native_cpu", "reason": str(exc)},
+                metadata={"compiler_path": row.compiler_path,
+                          "execution_kind": row.execution_kind,
+                          "reason": str(exc)},
             )
             return {
-                "ok": False,
-                "runtime_status": "invalid_artifact",
-                "compiler_path": "apple_cpu_accelerate",
-                "execution_kind": "native_cpu",
+                "ok": False, "runtime_status": "invalid_artifact",
+                "compiler_path": row.compiler_path,
+                "execution_kind": row.execution_kind,
                 "artifact_hash": artifact.artifact_hash,
-                "reason": str(exc),
-                "telemetry": telemetry,
+                "reason": str(exc), "telemetry": telemetry,
             }
         elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000.0
         _last_profile = RuntimeProfile(cpu_wall_ms=elapsed_ms, launch_overhead_ms=elapsed_ms)
         telemetry = make_event(
-            "runtime.launch",
-            source="runtime",
-            op="artifact_launch",
-            arch="apple_cpu",
-            kernel_id=str(metadata.get("kernel_id", "apple_cpu_accelerate")),
-            graph_hash=artifact.artifact_hash,
-            latency_ms=elapsed_ms,
-            status="ok",
-            metadata={"compiler_path": "apple_cpu_accelerate", "execution_mode": "cpu_accelerate", "execution_kind": "native_cpu"},
+            "runtime.launch", source="runtime", op="artifact_launch",
+            arch=arch, kernel_id=kid, graph_hash=artifact.artifact_hash,
+            latency_ms=elapsed_ms, status="ok", metadata=meta_ok,
         )
         return {
-            "ok": True,
-            "runtime_status": "success",
-            "compiler_path": "apple_cpu_accelerate",
-            "execution_kind": "native_cpu",
-            "artifact_hash": artifact.artifact_hash,
-            "output": output,
+            "ok": True, "runtime_status": "success",
+            "compiler_path": row.compiler_path,
+            "execution_kind": row.execution_kind,
+            "artifact_hash": artifact.artifact_hash, "output": output,
             "telemetry": telemetry,
-            "profile": {
-                "cpu_wall_ms": elapsed_ms,
-                "launch_overhead_ms": elapsed_ms,
-            },
-        }
-    if (
-        target == "apple_gpu"
-        and metadata.get("executable") is True
-        and metadata.get("compiler_path") == "apple_gpu_mps"
-    ):
-        try:
-            output = _execute_apple_gpu_mps_artifact(artifact, args)
-        except Exception as exc:
-            _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
-            telemetry = make_event(
-                "runtime.launch",
-                source="runtime",
-                op="artifact_launch",
-                arch="apple_gpu",
-                kernel_id=str(metadata.get("kernel_id", "apple_gpu_mps")),
-                graph_hash=artifact.artifact_hash,
-                status="invalid_artifact",
-                metadata={"compiler_path": "apple_gpu_mps", "execution_kind": "native_gpu", "reason": str(exc)},
-            )
-            return {
-                "ok": False,
-                "runtime_status": "invalid_artifact",
-                "compiler_path": "apple_gpu_mps",
-                "execution_kind": "native_gpu",
-                "artifact_hash": artifact.artifact_hash,
-                "reason": str(exc),
-                "telemetry": telemetry,
-            }
-        elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000.0
-        _last_profile = RuntimeProfile(cpu_wall_ms=elapsed_ms, launch_overhead_ms=elapsed_ms)
-        telemetry = make_event(
-            "runtime.launch",
-            source="runtime",
-            op="artifact_launch",
-            arch="apple_gpu",
-            kernel_id=str(metadata.get("kernel_id", "apple_gpu_mps")),
-            graph_hash=artifact.artifact_hash,
-            latency_ms=elapsed_ms,
-            status="ok",
-            metadata={"compiler_path": "apple_gpu_mps", "execution_mode": "metal_runtime", "execution_kind": "native_gpu"},
-        )
-        return {
-            "ok": True,
-            "runtime_status": "success",
-            "compiler_path": "apple_gpu_mps",
-            "execution_kind": "native_gpu",
-            "artifact_hash": artifact.artifact_hash,
-            "output": output,
-            "telemetry": telemetry,
-            "profile": {
-                "cpu_wall_ms": elapsed_ms,
-                "launch_overhead_ms": elapsed_ms,
-            },
+            "profile": {"cpu_wall_ms": elapsed_ms, "launch_overhead_ms": elapsed_ms},
         }
     if target != "cpu":
         # G4 — consult the single-source execution matrix instead of hard-coding

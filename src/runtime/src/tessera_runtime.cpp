@@ -19,33 +19,59 @@ struct tsrStream_t { tsr::Stream* impl; tsrDevice_t* dev; };
 struct tsrEvent_t  { tsr::Event*  impl; tsrDevice_t* dev; };
 struct tsrBuffer_t { tsr::Buffer* impl; tsrDevice_t* dev; };
 
-// G5 — Artifact / Kernel lifecycle for the CPU backend.
+// G5/G6 — Artifact / Kernel lifecycle.
 //
-// An artifact carries a name->host-fn map and a serializable payload. The
-// payload is the canonical text form ("TSRART1\n<n>\n<name>\t<fn_ptr_hex>\n..."),
-// so it round-trips through tsrCompileArtifact -> tsrLoadArtifact bit-exactly.
-// Host functions are registered process-wide via tsrRegisterHostKernel(name, fn);
-// tsrCompileArtifact takes the *names* to bundle (passed in `module_ir` as a
-// comma-separated list of registered names — the natural minimal "compile" for
-// pre-registered CPU host kernels). A full MLIR-to-host-fn JIT is a separate
-// gap; this lane is honest about being the lifecycle layer over host kernels.
+// G5 added CPU end-to-end (compile -> load -> getkernel -> launch via the host
+// kernel ABI). G6 adds **target tagging**: an artifact carries (target,
+// compiler_path, execution_kind) and a kernel handle is a tagged union over
+// {CPU host fn, GPU artifact (no native ABI bridge yet)}. tsrLaunchKernel
+// routes by kind and returns precise UNIMPLEMENTED for non-bridged backends —
+// so a CPU passing test cannot mask a GPU gap. The payload format gained a v2:
+//
+//   v1 (legacy, CPU-only): "TSRART1\n<n>\n<name>\t<fn_ptr_hex>\n..."
+//   v2 (G6, target-tagged): "TSRART2\ntarget\t<t>\ncompiler_path\t<c>\n"
+//                           "execution_kind\t<e>\n<n>\n<name>\t<fn_ptr_hex>\n..."
+//
+// Both round-trip cleanly through tsrCompileArtifact -> tsrLoadArtifact; v1 is
+// still accepted on load (treated as target=cpu) so older artifacts keep working.
 struct tsrArtifact_t {
-  std::string payload;                                // canonical text form
-  std::unordered_map<std::string, tsrHostKernelFn> kernels;   // name -> fn
+  std::string payload;                                  // canonical text form
+  std::string target;          // e.g. "cpu" / "apple_gpu" — set by Compile
+  std::string compiler_path;   // e.g. "native_cpu" / "apple_gpu_mps"
+  std::string execution_kind;  // "native_cpu" / "native_gpu" / "artifact_only"
+  std::unordered_map<std::string, tsrHostKernelFn> kernels;   // populated when target=cpu
 };
-struct tsrKernel_t { std::string name; tsrHostKernelFn fn; tsrArtifact_t* artifact; };
+
+// G6 — tagged-union kernel handle.
+enum class tsrKernelKind {
+  kHostCpu,         // CPU host kernel (G5 path) — fn is the callable.
+  kGpuUnbridged,    // GPU artifact with no native ABI launch bridge yet.
+};
+struct tsrKernel_t {
+  std::string name;
+  tsrKernelKind kind;
+  tsrHostKernelFn fn;             // valid iff kind == kHostCpu
+  tsrArtifact_t* artifact;        // back-pointer (does not own)
+};
 
 namespace {
 // Process-wide registry of host kernels available for artifact bundling.
 std::mutex g_host_kernel_mu;
 std::unordered_map<std::string, tsrHostKernelFn> g_host_kernels;
 
-constexpr const char *kArtifactMagic = "TSRART1";
+constexpr const char *kArtifactMagicV1 = "TSRART1";
+constexpr const char *kArtifactMagicV2 = "TSRART2";
 
 std::string serializeArtifact(
+    const std::string& target, const std::string& compiler_path,
+    const std::string& execution_kind,
     const std::unordered_map<std::string, tsrHostKernelFn>& kernels) {
   std::ostringstream out;
-  out << kArtifactMagic << '\n' << kernels.size() << '\n';
+  out << kArtifactMagicV2 << '\n';
+  out << "target\t" << target << '\n';
+  out << "compiler_path\t" << compiler_path << '\n';
+  out << "execution_kind\t" << execution_kind << '\n';
+  out << kernels.size() << '\n';
   // Deterministic order: sort names. Critical for bit-exact round-trip.
   std::vector<std::string> names;
   names.reserve(kernels.size());
@@ -57,14 +83,31 @@ std::string serializeArtifact(
   return out.str();
 }
 
-bool parseArtifact(const std::string& payload,
-                   std::unordered_map<std::string, tsrHostKernelFn>& out) {
+// Parse v1 (CPU-only legacy) or v2 (target-tagged). On v1, target defaults to
+// "cpu" / "native_cpu" / "native_cpu" so the artifact behaves as before.
+bool parseArtifact(const std::string& payload, tsrArtifact_t& out) {
   std::istringstream in(payload);
   std::string magic; std::getline(in, magic);
-  if (magic != kArtifactMagic) return false;
+  if (magic == kArtifactMagicV1) {
+    out.target = "cpu"; out.compiler_path = "native_cpu"; out.execution_kind = "native_cpu";
+  } else if (magic == kArtifactMagicV2) {
+    // Read 3 key/tab/value header lines.
+    auto read_kv = [&](const char *key, std::string &dst) -> bool {
+      std::string line; if (!std::getline(in, line)) return false;
+      auto tab = line.find('\t');
+      if (tab == std::string::npos) return false;
+      if (line.substr(0, tab) != key) return false;
+      dst = line.substr(tab + 1); return true;
+    };
+    if (!read_kv("target", out.target)) return false;
+    if (!read_kv("compiler_path", out.compiler_path)) return false;
+    if (!read_kv("execution_kind", out.execution_kind)) return false;
+  } else {
+    return false;
+  }
   std::size_t n = 0; { std::string nstr; std::getline(in, nstr);
     try { n = std::stoull(nstr); } catch (...) { return false; } }
-  out.reserve(n);
+  out.kernels.reserve(n);
   for (std::size_t i = 0; i < n; ++i) {
     std::string line; std::getline(in, line);
     auto tab = line.find('\t');
@@ -72,7 +115,7 @@ bool parseArtifact(const std::string& payload,
     std::string name = line.substr(0, tab);
     std::uintptr_t addr = 0;
     try { addr = std::stoull(line.substr(tab + 1)); } catch (...) { return false; }
-    out[std::move(name)] = reinterpret_cast<tsrHostKernelFn>(addr);
+    out.kernels[std::move(name)] = reinterpret_cast<tsrHostKernelFn>(addr);
   }
   return true;
 }
@@ -416,21 +459,37 @@ TsrStatus tsrUnmap(tsrBuffer b) {
 }
 
 // ---- Generated artifact ABI skeleton ----
-// G5 — Artifact lifecycle for the CPU host-kernel ABI.
+// G5/G6 — Artifact lifecycle.
 //
-// `module_ir` is interpreted as a comma-separated list of names previously
-// registered via tsrRegisterHostKernel. The bundled artifact captures those
-// (name -> fn) entries and serializes a canonical text payload for round-trip
-// through tsrLoadArtifact. Non-CPU codegen JIT remains a separate gap (we
-// honestly return UNIMPLEMENTED for any name that isn't in the host registry).
-// `options` is reserved for future flags (e.g. dtype/target); for the CPU lane
-// the registry plus the request names are sufficient.
+// CPU lane (G5): `module_ir` is a comma-separated list of names previously
+// registered via tsrRegisterHostKernel; the artifact bundles their function
+// pointers, and tsrLaunchKernel routes them through tsrLaunchHostTileKernel.
+//
+// GPU lane (G6): `options->target` selects a non-CPU target (e.g. "apple_gpu").
+// The artifact is created with the right target tag but, because no native
+// (C-ABI-level) GPU launch bridge exists yet, getkernel returns a `kGpuUnbridged`
+// handle and tsrLaunchKernel returns TSR_STATUS_UNIMPLEMENTED with a precise
+// reason. This makes the C ABI honest about non-CPU lanes — a CPU passing test
+// cannot mask the GPU gap; the GPU artifact contract is testable end-to-end
+// (compile -> load -> getkernel -> honest unimplemented launch).
 TsrStatus tsrCompileArtifact(const char* module_ir,
                              const tsrCompileOptions* options,
                              tsrArtifact* out) {
-  (void)options;
   if (!module_ir || !out) { SetLastError("module_ir/out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
   std::unique_ptr<tsrArtifact_t> a(new tsrArtifact_t);
+  // G6 — read the target tag from options. Default "cpu" preserves the G5 path.
+  a->target = (options && options->target) ? std::string(options->target) : "cpu";
+  if (a->target == "cpu") {
+    a->compiler_path = "native_cpu";
+    a->execution_kind = "native_cpu";
+  } else {
+    // Non-CPU: still build the artifact (it serializes/round-trips), but the
+    // payload's "kernels" are *placeholders* (name -> null fn) recording WHICH
+    // kernels the artifact would launch. The native GPU launch bridge is
+    // separate work; until then tsrLaunchKernel reports UNIMPLEMENTED.
+    a->compiler_path = a->target + "_artifact";
+    a->execution_kind = "artifact_only";
+  }
   std::string spec(module_ir);
   // Split on commas; trim whitespace. Empty spec -> empty artifact (valid).
   std::lock_guard<std::mutex> lk(g_host_kernel_mu);
@@ -438,26 +497,32 @@ TsrStatus tsrCompileArtifact(const char* module_ir,
   while (i <= spec.size()) {
     std::size_t j = spec.find(',', i);
     if (j == std::string::npos) j = spec.size();
-    // trim
     std::size_t a0 = i, b0 = j;
     while (a0 < b0 && std::isspace((unsigned char)spec[a0])) ++a0;
     while (b0 > a0 && std::isspace((unsigned char)spec[b0 - 1])) --b0;
     if (a0 < b0) {
       std::string name = spec.substr(a0, b0 - a0);
-      auto it = g_host_kernels.find(name);
-      if (it == g_host_kernels.end()) {
-        std::string msg = "tsrCompileArtifact: kernel '" + name +
-            "' is not registered (call tsrRegisterHostKernel first; non-CPU "
-            "codegen JIT is a separate gap)";
-        SetLastError(msg.c_str());
-        return TSR_STATUS_UNIMPLEMENTED;
+      if (a->target == "cpu") {
+        auto it = g_host_kernels.find(name);
+        if (it == g_host_kernels.end()) {
+          std::string msg = "tsrCompileArtifact: kernel '" + name +
+              "' is not registered (call tsrRegisterHostKernel first; non-CPU "
+              "codegen JIT is a separate gap)";
+          SetLastError(msg.c_str());
+          return TSR_STATUS_UNIMPLEMENTED;
+        }
+        a->kernels[name] = it->second;
+      } else {
+        // GPU artifact: record the kernel name with a null fn-pointer
+        // placeholder. getkernel still succeeds; launch returns UNIMPLEMENTED.
+        a->kernels[name] = nullptr;
       }
-      a->kernels[name] = it->second;
     }
     if (j == spec.size()) break;
     i = j + 1;
   }
-  a->payload = serializeArtifact(a->kernels);
+  a->payload = serializeArtifact(a->target, a->compiler_path,
+                                 a->execution_kind, a->kernels);
   *out = a.release();
   return TSR_STATUS_SUCCESS;
 }
@@ -466,9 +531,9 @@ TsrStatus tsrLoadArtifact(const void* bytes, size_t bytes_len, tsrArtifact* out)
   if (!bytes || !out) { SetLastError("bytes/out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
   std::unique_ptr<tsrArtifact_t> a(new tsrArtifact_t);
   a->payload.assign(static_cast<const char*>(bytes), bytes_len);
-  if (!parseArtifact(a->payload, a->kernels)) {
+  if (!parseArtifact(a->payload, *a)) {
     SetLastError("tsrLoadArtifact: payload is not a valid Tessera artifact "
-                 "(expected TSRART1 magic + name/fn table)");
+                 "(expected TSRART1/TSRART2 magic + target + name/fn table)");
     return TSR_STATUS_INVALID_ARGUMENT;
   }
   *out = a.release();
@@ -483,24 +548,57 @@ TsrStatus tsrDestroyArtifact(tsrArtifact artifact) {
 TsrStatus tsrGetKernel(tsrArtifact artifact, const char* name, tsrKernel* out) {
   if (!artifact || !name || !out) { SetLastError("artifact/name/out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
   auto it = artifact->kernels.find(name);
-  if (it == artifact->kernels.end() || !it->second) {
-    std::string msg = "tsrGetKernel: artifact does not contain kernel '";
-    msg += name; msg += "'";
+  if (it == artifact->kernels.end()) {
+    std::string msg = "tsrGetKernel: artifact (target=" + artifact->target +
+                      ") does not contain kernel '" + name + "'";
     SetLastError(msg.c_str());
     return TSR_STATUS_NOT_FOUND;
   }
-  std::unique_ptr<tsrKernel_t> k(new tsrKernel_t{name, it->second, artifact});
+  std::unique_ptr<tsrKernel_t> k(new tsrKernel_t);
+  k->name = name;
+  k->artifact = artifact;
+  if (artifact->target == "cpu") {
+    if (!it->second) {
+      // CPU artifact with a null fn-pointer is corrupt (shouldn't happen via
+      // the public API but defensive guard).
+      SetLastError("tsrGetKernel: CPU artifact has a null kernel function");
+      return TSR_STATUS_INVALID_ARGUMENT;
+    }
+    k->kind = tsrKernelKind::kHostCpu;
+    k->fn = it->second;
+  } else {
+    k->kind = tsrKernelKind::kGpuUnbridged;
+    k->fn = nullptr;
+  }
   *out = k.release();
   return TSR_STATUS_SUCCESS;
 }
 
-// G5 — Launch a kernel obtained via tsrGetKernel. The `args` convention for the
-// CPU host-kernel ABI: args[0] = const tsrLaunchParams* (non-null);
-// args[1] = void* user_payload (may be null). nargs must be >= 1.
-// The kernel itself is a tsrHostKernelFn that the CPU backend's
-// launchHostKernel already knows how to execute.
+TsrStatus tsrDestroyKernel(tsrKernel kernel) {
+  delete kernel;
+  return TSR_STATUS_SUCCESS;
+}
+
+// G5/G6 — Launch a kernel obtained via tsrGetKernel. Dispatch by kernel kind:
+//   kHostCpu      : route through tsrLaunchHostTileKernel.
+//                   args[0] = const tsrLaunchParams* (required);
+//                   args[1] = void* user_payload (optional); nargs >= 1.
+//   kGpuUnbridged : honest TSR_STATUS_UNIMPLEMENTED with a precise reason.
+//                   The Python runtime still executes Apple GPU artifacts via
+//                   its own dispatcher; until a native ABI-level launch bridge
+//                   exists, the C ABI must not silently succeed here.
 TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel, void** args, size_t nargs) {
-  if (!s || !kernel || !kernel->fn) { SetLastError("s/kernel==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  if (!s || !kernel) { SetLastError("s/kernel==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  if (kernel->kind == tsrKernelKind::kGpuUnbridged) {
+    std::string msg = "tsrLaunchKernel: no native C-ABI launch bridge for ";
+    msg += "target='" + kernel->artifact->target +
+           "' kernel='" + kernel->name + "'. The Python runtime executes this "
+           "artifact via execution_matrix dispatch; the C ABI launch bridge is "
+           "a separate gap.";
+    SetLastError(msg.c_str());
+    return TSR_STATUS_UNIMPLEMENTED;
+  }
+  if (!kernel->fn) { SetLastError("tsrLaunchKernel: kernel.fn==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
   if (!args || nargs < 1) {
     SetLastError("tsrLaunchKernel(host): args[0] must be a tsrLaunchParams* "
                  "(args[1] optional user payload)");

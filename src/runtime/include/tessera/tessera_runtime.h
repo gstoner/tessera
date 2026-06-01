@@ -73,6 +73,11 @@ TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel, void** args, size_t nar
 // that references this kernel.
 TsrStatus tsrRegisterHostKernel(const char* name, tsrHostKernelFn fn);
 
+// G6 — destroy a kernel handle obtained via tsrGetKernel. Pairs with
+// tsrDestroyArtifact: kernels are owned by the caller, the artifact is the
+// backing store. Safe to call with NULL.
+TsrStatus tsrDestroyKernel(tsrKernel kernel);
+
 // Host portable tile kernel launch with shared memory/barrier support.
 // The user_ctx passed to kernel is a (tsrKernelCtx*).
 TsrStatus tsrLaunchHostTileKernel(tsrStream s,

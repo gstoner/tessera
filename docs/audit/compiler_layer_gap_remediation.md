@@ -123,6 +123,44 @@ tests green, zero regressions.
   `runtime.launch()` and `capabilities.py` both read the matrix; the Apple
   executable envelopes are represented as data, not special-cased code.
 
+### 6. GPU artifact lifecycle + target-gated C ABI launch + matrix-as-dispatcher — ✅ DONE (2026-05-31)
+**Landed in response to the audit's "what we can mark as real progress" review.**
+
+- **Matrix-as-dispatcher (P1a)**: `runtime.launch()` no longer hard-codes
+  `target == "apple_gpu" and compiler_path == "apple_gpu_mps"`. Both Apple-CPU
+  and Apple-GPU branches collapsed into a single matrix-driven dispatch that
+  consults `execution_matrix.executor_for_metadata(...)`, resolves
+  `ExecutionRow.executor_id` against a `_executor_table()`, and runs through one
+  unified try/telemetry/result block. Adding a new backend executor is now
+  (1) the function + (2) `KNOWN_EXECUTORS` + (3) a matrix row — no fourth
+  hard-coded branch.
+- **C ABI target tagging (P1b, P2c)**: `tsrArtifact_t` gained `target` /
+  `compiler_path` / `execution_kind` fields; payload format bumped to **`TSRART2`**
+  (target-tagged) with `TSRART1` still accepted on load for backward compat.
+  `tsrKernel_t` became a tagged union (`tsrKernelKind::{kHostCpu, kGpuUnbridged}`).
+  New `tsrDestroyKernel` for symmetric ownership.
+- **Honest GPU launch (P2b, P2e)**: `tsrLaunchKernel` dispatches by `kind`.
+  CPU host kernels still route through `tsrLaunchHostTileKernel` (G5).
+  GPU kernels return **`TSR_STATUS_UNIMPLEMENTED`** with the precise reason
+  `"no native C-ABI launch bridge for target='apple_gpu' kernel='…'. The
+  Python runtime executes this artifact via execution_matrix dispatch; the C
+  ABI launch bridge is a separate gap."` — silent success is impossible.
+- **Crossover test (P2d)**: new `test_runtime_artifact_abi_g6.py` (4 tests)
+  compiles a C harness against `libtessera_runtime.a` and proves the full GPU
+  lifecycle: compile (with `options->target="apple_gpu"`) → payload-is-`TSRART2`
+  → `tsrLoadArtifact` round-trip preserves the target → `tsrGetKernel` succeeds
+  → `tsrLaunchKernel` returns `UNIMPLEMENTED` with the precise reason → v1
+  legacy payloads still load. Plus source-level guards on the artifact struct
+  fields and tagged-union shape so a regression to G5's CPU-only shape fails
+  the test without needing a built runtime.
+- **P2a (envelope drift) honest downgrade**: the C++ Apple-GPU envelope list in
+  `TileToApple.cpp` is still hand-maintained-with-drift-test (the matmul2d
+  pattern). True single-source via codegen/`.td` is a separate item; the drift
+  guard in `test_apple_gpu_tile_pass_status_matches_envelope.py` is the
+  enforced contract today.
+
+1003 affected tests green; ABI dashboard regenerated (+1 symbol: `tsrDestroyKernel`).
+
 ### 5. C ABI artifact compile / load / get-kernel / launch — ✅ DONE (2026-05-31, CPU end-to-end)
 **Landed:** the four `tsr*Artifact` lifecycle functions that returned
 `TSR_STATUS_UNIMPLEMENTED` now wire end-to-end for the CPU backend, on top of

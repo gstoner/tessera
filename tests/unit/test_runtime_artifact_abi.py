@@ -93,8 +93,13 @@ static void k(void* uc, uint32_t, uint32_t, uint32_t) {
   (void)uc; __sync_fetch_and_add(&g_called, 1);
 }
 // Internal layout mirror — the impl-side struct in tessera_runtime.cpp matches.
+// G6 added target/compiler_path/execution_kind before the kernels map; layout
+// must match exactly (3 std::string fields then the unordered_map).
 struct artifact_layout {
   std::string payload;
+  std::string target;
+  std::string compiler_path;
+  std::string execution_kind;
   std::unordered_map<std::string, tsrHostKernelFn> kernels;
 };
 int main() {
@@ -103,7 +108,8 @@ int main() {
   tsrArtifact a = nullptr; tsrCompileOptions opts{};
   if (tsrCompileArtifact("k", &opts, &a) != TSR_STATUS_SUCCESS) return 31;
   std::string bytes = reinterpret_cast<artifact_layout*>(a)->payload;
-  if (bytes.find("TSRART1") != 0) return 32;
+  // G6 — payload format is TSRART2 (target-tagged); TSRART1 still parses on load.
+  if (bytes.find("TSRART2") != 0) return 32;
   tsrDestroyArtifact(a);
   // Reload from raw bytes.
   tsrArtifact b = nullptr;
@@ -159,17 +165,29 @@ def test_artifact_serialize_load_round_trip(tmp_path):
 
 
 def test_artifact_lifecycle_is_no_longer_unimplemented():
-    """Source-level guard: the four artifact-lifecycle functions must NOT be
-    bodies of `return TSR_STATUS_UNIMPLEMENTED`. This is the docs-claim gate G5
-    explicitly closes — adding a regression that empties one of them out fails
-    here without needing a built runtime."""
+    """Source-level guard: the four artifact-lifecycle functions must contain a
+    real success path — not just `return TSR_STATUS_UNIMPLEMENTED` as the
+    unconditional return. G5 closed the CPU lane; G6 added a target-tagged GPU
+    lane that LEGITIMATELY returns UNIMPLEMENTED for `kGpuUnbridged` (a precise
+    "no native ABI launch bridge for this target" diagnostic, not a stub). The
+    guard catches a regression where the body collapses back to a single
+    unconditional UNIMPLEMENTED return — without needing a built runtime."""
     src = (REPO_ROOT / "src" / "runtime" / "src" / "tessera_runtime.cpp").read_text()
     for fn in ("tsrCompileArtifact", "tsrLoadArtifact", "tsrGetKernel", "tsrLaunchKernel"):
-        # Find the function body and ensure it isn't a one-liner that returns UNIMPLEMENTED.
         i = src.find(f" {fn}(")
         assert i != -1, f"{fn} not found in tessera_runtime.cpp"
         body_start = src.find("{", i)
         body_end = src.find("\n}", body_start)
         body = src[body_start:body_end]
-        assert "TSR_STATUS_UNIMPLEMENTED" not in body or "registered" in body, (
-            f"{fn} body still appears to return UNIMPLEMENTED unconditionally — G5 regressed?")
+        # The function must have a real working route: either an explicit
+        # TSR_STATUS_SUCCESS return, or a delegation to another function that
+        # itself returns a status (e.g. tsrLaunchKernel -> tsrLaunchHostTileKernel).
+        # A bare `return TSR_STATUS_UNIMPLEMENTED;` as the only return is a stub.
+        non_stub = (
+            "TSR_STATUS_SUCCESS" in body
+            or "return tsrLaunch" in body              # delegates to a real launcher
+            or "return parseArtifact" in body          # ditto for parsers
+        )
+        assert non_stub, (
+            f"{fn} body looks like a stub (no success path / no real delegate) — "
+            "G5/G6 regressed?")

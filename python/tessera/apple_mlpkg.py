@@ -970,6 +970,27 @@ class Pipeline:
             return False
         return bool(fn(ctypes.c_void_p(self._handle)))
 
+    def set_aligned_strides(self, enabled: bool) -> bool:
+        """Phase 2 stride-alignment wire-up (2026-06-01) — opt in to
+        Apple's stride-alignment rules at the ``MTLTensorDescriptor``
+        level. When enabled, ``prepare_tensors`` sets ``td.strides``
+        explicitly via the aligned helper (64-byte for ML-usage
+        byte+ dtypes, 128-byte for sub-byte dtypes); Metal allocates
+        storage accordingly. Default off (Metal's implicit strides).
+
+        Must be called BEFORE ``prepare_tensors`` to take effect.
+        Returns True on success, False if the runtime is unavailable.
+        """
+        if not self._handle:
+            raise RuntimeError("Pipeline already destroyed")
+        fn = bind_symbol(
+            "tessera_apple_gpu_mlpkg_set_aligned_strides",
+            (ctypes.c_void_p, ctypes.c_int32), restype=ctypes.c_int32)
+        if fn is None:
+            return False
+        return bool(fn(ctypes.c_void_p(self._handle),
+                       ctypes.c_int32(1 if enabled else 0)))
+
     def argument_table_ready(self) -> bool:
         """PK3 — Has ``prepare_tensors()`` succeeded? Diagnostic
         helper; tests use it to verify the argument table was actually

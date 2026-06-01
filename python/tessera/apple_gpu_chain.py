@@ -230,7 +230,25 @@ class ChainSegment:
     ops: list[OpRecord]
 
 
-def plan_chain(trace: list[OpRecord]) -> list[ChainSegment]:
+# Phase 5b (2026-06-01) — empirically-measured cap on MPSGraph
+# encode calls per command buffer before the GPU dispatch hangs at
+# the 30-second commit_and_wait timeout. The cliff sits around 30-40
+# encodeToCommandBuffer calls per cb on this Mac (M-series, macOS
+# 26). 30 leaves comfortable margin; mostly relevant for multi-layer
+# transformer decode where 12+ ops/layer can easily exceed the
+# per-cb limit at N≥3 layers.
+#
+# Callers can override via ``plan_chain(..., max_ops_per_cb=N)``.
+# A future Tessera release may adjust this if Apple's MPSGraph
+# raises the limit; the constant is the single source of truth.
+DEFAULT_OPS_PER_CB: int = 30
+
+
+def plan_chain(
+    trace: list[OpRecord],
+    *,
+    max_ops_per_cb: int = DEFAULT_OPS_PER_CB,
+) -> list[ChainSegment]:
     """Group a trace into chain segments.
 
     Rules:
@@ -238,28 +256,42 @@ def plan_chain(trace: list[OpRecord]) -> list[ChainSegment]:
       True are merged into one ``ChainSegment(kind="encode")``.
     * Non-eligible ops become a ``ChainSegment(kind="single")`` of
       length 1.
-    * A chain breaks ONLY on dtype heterogeneity (f32 ↔ f16 mid-
-      chain forces a session boundary, because the encode helpers are
-      typed). Same-dtype eligible runs of any length stay in one
-      session.
+    * A chain breaks on (a) dtype heterogeneity, (b) a non-eligible
+      op, or (c) reaching ``max_ops_per_cb`` ops in the current
+      encode segment (the multi-cb chunking — protects against the
+      MPSGraph per-cb-encode cliff).
+
+    Cross-segment data flow works transparently: a ``TraceRef`` in
+    segment K+1 that references an output from segment K is
+    resolved by the executor using the persistent ``results`` list
+    (which spans all segments).
     """
+    if max_ops_per_cb <= 0:
+        raise ValueError(
+            f"max_ops_per_cb must be >= 1, got {max_ops_per_cb}")
+
     segments: list[ChainSegment] = []
     current: Optional[ChainSegment] = None
     current_dtype: Optional[str] = None
     for op in trace:
         eligible = is_encode_eligible(op.op_name, op.dtype)
         if eligible:
-            # Start or continue an encode segment, but only if dtype
-            # matches the segment's running dtype (mixed dtypes need
-            # separate sessions).
-            if (current is not None and current.kind == "encode"
-                    and current_dtype == op.dtype):
-                current.ops.append(op)
-            else:
+            # Start a new encode segment if (a) no current segment,
+            # (b) current segment is not encode, (c) dtype mismatch,
+            # or (d) current segment has reached the per-cb budget.
+            should_split = (
+                current is None
+                or current.kind != "encode"
+                or current_dtype != op.dtype
+                or len(current.ops) >= max_ops_per_cb
+            )
+            if should_split:
                 if current is not None:
                     segments.append(current)
                 current = ChainSegment(kind="encode", ops=[op])
                 current_dtype = op.dtype
+            else:
+                current.ops.append(op)
         else:
             if current is not None:
                 segments.append(current)
@@ -382,14 +414,21 @@ def _exec_single_segment(seg: ChainSegment,
 # Convenience: end-to-end plan + execute.
 # ---------------------------------------------------------------------
 
-def run_trace(trace: list[OpRecord]) -> list[Optional[DeviceTensor]]:
+def run_trace(
+    trace: list[OpRecord],
+    *,
+    max_ops_per_cb: int = DEFAULT_OPS_PER_CB,
+) -> list[Optional[DeviceTensor]]:
     """Plan + execute in one call. Returns the per-op outputs in
-    trace order (same order as the input list)."""
-    return execute_chain(plan_chain(trace))
+    trace order (same order as the input list). The ``max_ops_per_cb``
+    arg caps the number of encode-eligible ops per command buffer;
+    chains longer than that split into K cb's transparently."""
+    return execute_chain(plan_chain(trace, max_ops_per_cb=max_ops_per_cb))
 
 
 __all__ = [
     "ChainSegment",
+    "DEFAULT_OPS_PER_CB",
     "ENCODE_OP_REGISTRY",
     "EncodeOpSpec",
     "OpRecord",

@@ -29,7 +29,11 @@ from tessera.apple_gpu_resident import ResidentWeights
 import tessera.apple_gpu_ops as agpu
 
 
-def test_four_layer_transformer_commits_one_cb_per_step():
+def test_four_layer_transformer_commits_correctly_chunked():
+    """4-layer attention+MLP chain = 48 user ops. With Phase-5b
+    chunking (DEFAULT_OPS_PER_CB=30), the chain splits into 2 cbs
+    (30 + 18 ops). Previously this test asserted 1 cb; the
+    chunking landing in Phase 5b makes 2 the new correct answer."""
     if not session_available():
         pytest.skip("encode-session unavailable")
     B, S, D = 1, 16, 32
@@ -103,10 +107,10 @@ def test_four_layer_transformer_commits_one_cb_per_step():
         before = session_commit_count()
         out = step(x_dev)
         after = session_commit_count()
-        # ONE command buffer for N=4 layers × 12 ops = 48 user ops.
-        assert (after - before) == 1, (
-            f"4-layer transformer step expected 1 cb commit, got "
-            f"delta={after - before}")
+        # 48 ops at default budget 30 → ceil(48/30) = 2 cbs.
+        assert (after - before) == 2, (
+            f"4-layer transformer (48 ops, budget 30) should commit "
+            f"2 cbs, got delta={after - before}")
         arr = out.download(np.float32, (1, B * S, D))
         out.free()
         assert arr.shape == (1, B * S, D)

@@ -72,6 +72,14 @@ API_AVAILABLE(macos(26.0), ios(26.0))
 // the heap-size is pipeline-state-derived — every dispatch on this
 // pipeline needs the same size. Audit Action 7 / Apple-sample Pattern 7.
 @property (nonatomic, strong) id<MTLHeap> intermediatesHeap;
+// Phase 2 stride-alignment wire-up (2026-06-01) — opt-in flag.
+// When true, ``tessera_apple_gpu_mlpkg_prepare_tensors`` computes
+// strides via the aligned helper (64-byte for byte+ ML-usage; 128-
+// byte for sub-byte dtypes) and sets ``MTLTensorDescriptor.strides``
+// explicitly. When false (default) Metal computes strides
+// implicitly from ``td.dimensions`` (the existing behavior).
+// Toggled via ``tessera_apple_gpu_mlpkg_set_aligned_strides``.
+@property (nonatomic, assign) BOOL useAlignedStrides;
 @end
 
 @implementation TesseraMlpkgPipeline
@@ -2566,6 +2574,22 @@ static size_t _mlpkg_dtype_byte_size(MTLTensorDataType dt) {
   return 0;
 }
 
+// Phase 2 stride-alignment wire-up (2026-06-01) — opt-in setter
+// for ``MTLTensorDescriptor.strides`` to use the aligned helper.
+// Default off (Metal's implicit strides — pre-Phase-2 behavior).
+// Must be called BEFORE ``prepare_tensors`` to take effect.
+// Returns 1 on success; 0 if the handle is null / runtime down.
+extern "C" int32_t tessera_apple_gpu_mlpkg_set_aligned_strides(
+    void *handle, int32_t flag) {
+  if (!handle) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    TesseraMlpkgPipeline *box = (__bridge TesseraMlpkgPipeline *)handle;
+    box.useAlignedStrides = (flag != 0);
+    return 1;
+  }
+  return 0;
+}
+
 extern "C" int32_t tessera_apple_gpu_mlpkg_prepare_tensors(void *handle) {
   if (!handle) return 0;
   MetalDeviceContext &ctx = deviceContext();
@@ -2625,6 +2649,51 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_prepare_tensors(void *handle) {
         }
         td.dimensions = dims;
         td.dataType = b.tensorDataType;
+        // Phase 2 stride-alignment wire-up (2026-06-01) — opt-in.
+        // When the pipeline's ``useAlignedStrides`` flag is set, set
+        // ``td.strides`` explicitly from the aligned helper so Apple's
+        // 64-byte / 128-byte alignment rules are honored at the
+        // descriptor level (Metal allocates storage accordingly).
+        // Default (flag off): leave ``td.strides`` unset; Metal uses
+        // its default implicit strides — the pre-Phase-2 behavior.
+        if (box.useAlignedStrides) {
+          size_t elem_bytes = _mlpkg_dtype_byte_size(b.tensorDataType);
+          if (elem_bytes == 0) {
+            fprintf(stderr, "[tessera_apple_gpu_mlpkg] aligned-strides "
+                    "requested but unknown dtype for binding '%s'\n",
+                    [[b name] UTF8String]);
+            return 0;
+          }
+          NSInteger rank = (NSInteger)dims.rank;
+          if (rank > 8) {
+            fprintf(stderr, "[tessera_apple_gpu_mlpkg] aligned-strides "
+                    "needs rank<=8; got %ld for binding '%s'\n",
+                    (long)rank, [[b name] UTF8String]);
+            return 0;
+          }
+          int64_t dims_buf[8] = {0};
+          for (NSInteger i = 0; i < rank; ++i) {
+            dims_buf[i] = (int64_t)[dims extentAtDimensionIndex:i];
+          }
+          int64_t strides_buf[8] = {0};
+          int32_t rc = tessera_apple_gpu_row_major_strides_aligned(
+              dims_buf, (int32_t)rank, (int32_t)(elem_bytes * 8),
+              /*ml_usage=*/1, strides_buf);
+          if (rc != (int32_t)rank) {
+            fprintf(stderr, "[tessera_apple_gpu_mlpkg] aligned-strides "
+                    "computation failed for binding '%s' (rc=%d)\n",
+                    [[b name] UTF8String], (int)rc);
+            return 0;
+          }
+          NSInteger strides_ns[8];
+          for (NSInteger i = 0; i < rank; ++i) {
+            strides_ns[i] = (NSInteger)strides_buf[i];
+          }
+          MTLTensorExtents *strides_ext =
+              [[MTLTensorExtents alloc] initWithRank:rank
+                                              values:strides_ns];
+          td.strides = strides_ext;
+        }
         NSError *terr = nil;
         id<MTLTensor> t = [ctx.device newTensorWithDescriptor:td error:&terr];
         if (!t) {

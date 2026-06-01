@@ -2318,6 +2318,15 @@ static inline uint16_t _f32_to_bf16(float f) {
   return (uint16_t)(bits >> 16);
 }
 
+// Phase 2 stride-alignment wire-up (2026-06-01) — opt-in setter
+// stub. Off-Darwin packaged ML isn't reachable, so this is a no-op
+// success.
+extern "C" int32_t tessera_apple_gpu_mlpkg_set_aligned_strides(
+    void* handle, int32_t flag) {
+  (void)handle; (void)flag;
+  return 1;
+}
+
 // Phase 2 stride-alignment (2026-06-01) — companion byte-count helper.
 extern "C" int64_t tessera_apple_gpu_aligned_buffer_nbytes(
     const int64_t* dims_in, int32_t rank, int32_t element_bits,

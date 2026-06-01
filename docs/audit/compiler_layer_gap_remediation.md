@@ -207,13 +207,32 @@ runtime emits, not a single inscrutable kind label.
   cpu / apple_cpu / apple_gpu, known-bad first-failing-gate for nvidia /
   rocm / metalium, no-silent-fails, unknown-target/op handled).
 
-**Open (B.2): runtime integration.** When
-``@jit(target="nvidia")`` is called on a host without CUDA, the runtime
-should refuse with ``"unsupported: first failing gate = toolchain (nvcc
-not on PATH)"`` rather than falling through to whatever the matrix
-dispatcher decides. The gate evaluator is already factored to make this
-a small wiring change; cleanly testing it requires extending the
-runtime's error-path coverage and is sequenced separately.
+**B.2 — runtime.launch() integration — ✅ DONE (2026-05-31).** Both
+unsupported paths in ``runtime.launch()`` (the non-CPU branch and the
+CPU fall-through) now call
+``pipeline_gates.first_failing_gate(target, op_name)`` and:
+
+- Lead the ``reason`` string with the audit-named gate:
+  ``"unsupported: first failing gate `toolchain` — nvcc not on PATH
+  (CUDA Toolkit 13.2.1 not installed). (see
+  docs/audit/op_target_conformance.md)"``.
+- Carry top-level structured keys ``first_failing_gate`` and
+  ``first_failing_gate_detail`` on the response dict (machine-readable;
+  callers don't have to parse the reason string).
+- Mirror the same keys into ``telemetry.metadata`` so downstream
+  consumers of the runtime telemetry stream see the named gate.
+- Resolve sub-target names (``nvidia_sm90`` / ``rocm_gfx942`` / etc.)
+  to the family-level gate via ``pipeline_gates._normalize_target`` so
+  per-arch artifacts get the same diagnostic as their family aggregate
+  in the dashboard.
+
+The unsupported ``runtime_status`` enum (``unimplemented`` /
+``missing_backend`` / ``unsupported``) stays unchanged — adding the
+gate name is an *additional* honest channel, not a replacement.
+Locked by ``tests/unit/test_runtime_launch_first_failing_gate.py``
+(7 tests: 3 named cases for nvidia / rocm / metalium, 1 structured-key
+shape guard, 1 status-stays-honest guard, 1 cross-link guard, 1 op-name
+extraction guard).
 
 ### 7. Op×Target conformance matrix — ✅ DONE (2026-05-31)
 **Audit recommendation A** (out of A/B/C/D).

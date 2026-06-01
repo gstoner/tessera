@@ -1109,6 +1109,35 @@ def _executor_table():
     }
 
 
+def _first_failing_gate_for_metadata(metadata: dict, target: str):
+    """B.2 — resolve the audit-named "first failing gate" for an unsupported
+    (target, op) combination. Returns a ``GateResult`` (with ``.gate`` and
+    ``.detail``) or ``None`` if every gate passes / the gate module can't be
+    consulted.
+
+    Pulls the first op from the artifact's lowering plan (``metadata["ops"]``)
+    so the diagnostic names a concrete op like ``matmul`` instead of just
+    "this target is unsupported." Falls back to target-level evaluation
+    when no op metadata is present.
+    """
+    try:  # noqa: SIM105 — import here so runtime startup stays cheap
+        from .compiler.pipeline_gates import first_failing_gate as _ffg
+    except Exception:
+        return None
+    op_name: str | None = None
+    ops = metadata.get("ops")
+    if isinstance(ops, list) and ops:
+        head = ops[0]
+        if isinstance(head, dict):
+            raw = head.get("op_name") or head.get("name")
+            if isinstance(raw, str) and raw:
+                op_name = raw.removeprefix("tessera.")
+    try:
+        return _ffg(target, op_name)
+    except Exception:
+        return None
+
+
 def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, Any]:
     """Launch executable CPU artifacts or return a structured non-success result."""
     global _last_profile
@@ -1183,9 +1212,23 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
         # the matrix — they handle their compiler_path before reaching here.
         _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
         unim_status = "unimplemented" if cap.available else "missing_backend"
-        unim_reason = (f"{target} generated artifact execution is not wired to "
-                       f"the runtime ABI yet (see "
-                       f"docs/audit/generated/runtime_execution_matrix.md)")
+        # B.2 — surface the audit-named first failing gate, not just a generic
+        # "unwired" message. Caller gets a structured `first_failing_gate` key
+        # for machine-readable use; `reason` leads with the named gate.
+        gate = _first_failing_gate_for_metadata(metadata, target)
+        if gate is not None:
+            unim_reason = (
+                f"unsupported: first failing gate `{gate.gate}` — "
+                f"{gate.detail}. (see docs/audit/op_target_conformance.md)"
+            )
+            gate_name: str | None = gate.gate
+            gate_detail = gate.detail
+        else:
+            unim_reason = (f"{target} generated artifact execution is not wired "
+                           f"to the runtime ABI yet (see "
+                           f"docs/audit/generated/runtime_execution_matrix.md)")
+            gate_name = None
+            gate_detail = ""
         telemetry = make_event(
             "runtime.launch",
             source="runtime",
@@ -1198,6 +1241,8 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
                 "compiler_path": str(metadata.get("compiler_path", "artifact_only")),
                 "execution_kind": str(metadata.get("execution_kind", "artifact_only")),
                 "reason": unim_reason,
+                "first_failing_gate": gate_name,
+                "first_failing_gate_detail": gate_detail,
             },
         )
         return {
@@ -1207,6 +1252,8 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
             "execution_kind": str(metadata.get("execution_kind", "artifact_only")),
             "artifact_hash": artifact.artifact_hash,
             "reason": unim_reason,
+            "first_failing_gate": gate_name,
+            "first_failing_gate_detail": gate_detail,
             "telemetry": telemetry,
         }
     # G6.1 — the inline CPU branches (native_cpu / jit_cpu_numpy) used to live
@@ -1217,7 +1264,21 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
     # dispatcher reports execution_kind='reference_cpu' on the fallback path.
 
     _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
-    reason = str(metadata.get("reason", "Generated artifact is not executable by the runtime"))
+    # B.2 — augment CPU fall-through with the audit-named first failing gate.
+    # Most artifacts that reach here are CPU artifacts whose ops aren't in the
+    # native_cpu / jit_cpu_numpy capability set; the gate names which axis.
+    gate = _first_failing_gate_for_metadata(metadata, "cpu")
+    upstream_reason = str(metadata.get(
+        "reason", "Generated artifact is not executable by the runtime"))
+    if gate is not None:
+        reason = (f"unsupported: first failing gate `{gate.gate}` — "
+                  f"{gate.detail}. ({upstream_reason})")
+        gate_name: str | None = gate.gate
+        gate_detail = gate.detail
+    else:
+        reason = upstream_reason
+        gate_name = None
+        gate_detail = ""
     telemetry = make_event(
         "runtime.launch",
         source="runtime",
@@ -1230,6 +1291,8 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
             "compiler_path": str(metadata.get("compiler_path", "artifact_only")),
             "execution_kind": str(metadata.get("execution_kind", "artifact_only")),
             "reason": reason,
+            "first_failing_gate": gate_name,
+            "first_failing_gate_detail": gate_detail,
         },
     )
     return {
@@ -1239,6 +1302,8 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
         "execution_kind": str(metadata.get("execution_kind", "artifact_only")),
         "artifact_hash": artifact.artifact_hash,
         "reason": reason,
+        "first_failing_gate": gate_name,
+        "first_failing_gate_detail": gate_detail,
         "telemetry": telemetry,
     }
 

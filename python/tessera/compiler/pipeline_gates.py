@@ -96,8 +96,19 @@ class GateResult:
 # --- Helpers --------------------------------------------------------------
 
 def _normalize_target(target: str) -> str:
-    """``nvidia`` is aggregated across sm80/90/100/120 for dashboard
-    purposes; the truth sources key per-SM."""
+    """Collapse per-SM / per-arch sub-target names to the dashboard family
+    used by toolchain / hardware-smoke evaluation.
+
+    The capabilities registry keys per-SM (``nvidia_sm80``..``nvidia_sm120``,
+    ``rocm_gfx940``..``rocm_gfx1100``), but the toolchain probe is
+    family-level (one nvcc serves every NVIDIA SM, one hipcc serves every
+    ROCm arch). The dashboard targets are the families; the runtime can
+    legitimately pass either form, so normalize here.
+    """
+    if target.startswith("nvidia_"):
+        return "nvidia"
+    if target.startswith("rocm_"):
+        return "rocm"
     return target
 
 
@@ -316,9 +327,23 @@ def evaluate(target: str, op_name: Optional[str] = None) -> tuple[GateResult, ..
     gate's status, even after the first failure (so e.g. NVIDIA shows
     ``codegen=pass / toolchain=fail / runtime_abi=fail`` instead of just
     ``toolchain=fail / rest=not_evaluated``).
+
+    Sub-target names like ``nvidia_sm90`` / ``rocm_gfx942`` are normalized to
+    their family (``nvidia`` / ``rocm``) so callers can pass either form.
     """
-    target = _normalize_target(target)
-    return tuple(_EVALUATORS[g](target, op_name) for g in GATE_ORDER)
+    norm = _normalize_target(target)
+    # Codegen / link / numerical inspect the per-arch manifest entries; pass
+    # the *original* target to those so e.g. ``nvidia_sm90`` matches one
+    # specific manifest row instead of the aggregated family.
+    return tuple(
+        _EVALUATORS[g](norm if g in _FAMILY_LEVEL_GATES else target, op_name)
+        for g in GATE_ORDER
+    )
+
+
+_FAMILY_LEVEL_GATES = frozenset({
+    GATE_TOOLCHAIN, GATE_HARDWARE_SMOKE, GATE_LEGALITY,
+})
 
 
 def first_failing_gate(

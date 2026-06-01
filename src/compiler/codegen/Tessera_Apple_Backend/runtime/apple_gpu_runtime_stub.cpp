@@ -94,6 +94,30 @@ inline void reference_rope_f32(const float* X, const float* Theta, float* Out,
 
 extern "C" int32_t tessera_apple_gpu_runtime_has_metal(void) { return 0; }
 
+// Apple-sample Pattern 4 probe — stub returns -1 ("runtime not
+// available"). Tests that exercise the GPU timeout machinery skip when
+// this is the answer.
+extern "C" int32_t tessera_apple_gpu_commit_and_wait_timeout_probe(
+    uint64_t /*timeout_ms*/) {
+  return -1;
+}
+
+// Apple-sample pattern 6 — row-major strides probe. The math is pure
+// (no Metal calls), so the stub computes the same answer as the real
+// runtime. Lets the unit test verify the contract on every host —
+// Darwin + Apple silicon OR Linux/Intel — without conditional skipping.
+extern "C" int32_t tessera_apple_gpu_row_major_strides(const int64_t *dims_in,
+                                                      int32_t rank,
+                                                      int64_t *strides_out) {
+  if (!dims_in || !strides_out || rank <= 0 || rank > 8) return 0;
+  int64_t stride = 1;
+  for (int32_t i = 0; i < rank; ++i) {
+    strides_out[i] = stride;
+    stride *= dims_in[i];
+  }
+  return rank;
+}
+
 extern "C" void tessera_apple_gpu_mps_matmul_f32(const float* A,
                                                  const float* B, float* C,
                                                  int32_t M, int32_t N,

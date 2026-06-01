@@ -65,6 +65,18 @@ struct MetalDeviceContext {
   bool                ok;
   int32_t             simd_caps = 0;  // TsSimdCaps bitmask (0 until device init)
 
+  // Apple-sample Pattern 4 (2026-05-31) — Shared-event timeout for the
+  // legacy MPS / MPSGraph queue. The MTL4 lane already has ``mtl4_event``
+  // below; this is its sibling on the legacy ``queue`` so the
+  // ``commit_and_wait_with_timeout`` helper can sign a per-dispatch value
+  // and bail out with a precise diagnostic instead of hanging forever.
+  // Lazy-init on first use; ``legacy_event_val`` is monotonic across
+  // dispatches (the shared event's signaled value only grows). Mirrors
+  // Apple's sample at ``MLMatrixMultiplier.m:87, 241-255``.
+  id        legacy_event;       // id<MTLSharedEvent>
+  uint64_t  legacy_event_val = 0;
+  std::mutex legacy_event_mu;
+
   // Phase 8.4 — MSL kernel cache. Keyed by (msl_source + entry_point) so
   // multiple kernels in the same source unit (uncommon but legal) cache
   // independently. Compiled lazily; the cache outlives any single command
@@ -77,6 +89,24 @@ struct MetalDeviceContext {
   // created lazily under @available(macOS 26.0) and reused across calls, so the
   // ~ms MSL+pipeline compile cost is paid once instead of per dispatch. The
   // pipeline state type is the shared id<MTLComputePipelineState>.
+  //
+  // **Apple-sample Pattern 5 audit (2026-05-31).** Mirrors Apple's sample
+  // ``RunningAMachineLearningModelOnTheGPUTimeline`` (MLMatrixMultiplier.m:62-103,
+  // 137-220) — device / queue / compiler / allocator / shared-event /
+  // command-buffer / argument-table / heap are created ONCE in ``init`` and
+  // reused across encode→commit cycles. Tessera's canonical dispatch path
+  // (``mtl4_matmul2d_dispatch`` at ~L10220) honors this end-to-end under
+  // ``mtl4_dispatch_mu``: ``mtl4_compiler`` (init at L1644-46, archive path
+  // L1700-01), ``mtl4_allocator`` (L1730), ``mtl4_event``, and the reusable
+  // ``mtl4_cmdbuf`` / ``mtl4_argtable`` / ``mtl4_residency`` are all
+  // session-singletons by design. Two outlier MTL4 dispatchers (around L9798
+  // and L10050) intentionally create per-call allocators + command buffers
+  // because they don't take ``mtl4_dispatch_mu`` — they operate on their own
+  // lane and don't want to serialize against the canonical path. The MTL4
+  // capability probe at L9640+ creates fresh objects on purpose so the
+  // probe answer doesn't depend on cache state. None of these are bugs;
+  // they are documented design choices. See ``skills.md`` →
+  // "Lessons learned — external Apple Metal 4 ML sample" Pattern 5.
   std::unordered_map<std::string, id<MTLComputePipelineState>> mtl4_pipeline_cache;
   std::mutex                                                   mtl4_mu;
   id                                                           mtl4_queue;     // id<MTL4CommandQueue>
@@ -389,6 +419,86 @@ inline void reference_gemm_f32(const float* A, const float* B, float* C,
   }
 }
 
+// Apple-sample Pattern 4 (2026-05-31) — Shared-event timeout wrapper for
+// the legacy MPS / MPSGraph queue. Mirrors Apple's sample
+// (``MLMatrixMultiplier.m:241-255``):
+//
+//     [commandQueue signalEvent:sharedEvent value:N]
+//     bool done = [sharedEvent waitUntilSignaledValue:N timeoutMS:T]
+//
+// On the legacy queue we encode the signal into the command buffer
+// itself (the queue-side ``signalEvent:value:`` API is MTL4-only); the
+// effect is the same — the event ticks AFTER the GPU finishes the
+// preceding work. Returns ``true`` if the GPU completed within the
+// timeout, ``false`` if the timeout fired (kernel hung / driver crash /
+// device disappeared). Caller MUST check the return; on ``false`` the
+// command buffer may still be in flight — do not touch its outputs.
+//
+// ``op_name`` is logged on timeout so test diagnostics name which
+// dispatcher hung instead of a generic "GPU stalled".
+API_AVAILABLE(macos(10.14), ios(12.0))
+static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
+                                         id<MTLCommandBuffer> cb,
+                                         uint64_t timeout_ms,
+                                         const char *op_name) {
+  if (!cb) return false;
+  // Lazy-init the shared event under the dedicated lock.
+  id<MTLSharedEvent> ev;
+  uint64_t signal_val;
+  {
+    std::lock_guard<std::mutex> lock(ctx.legacy_event_mu);
+    if (!ctx.legacy_event) {
+      ctx.legacy_event = [ctx.device newSharedEvent];
+      if (!ctx.legacy_event) {
+        // Event creation failed — fall back to the pre-Pattern-4
+        // ``waitUntilCompleted`` path so the caller doesn't crash.
+        // No timeout protection, but at least correct.
+        [cb commit];
+        [cb waitUntilCompleted];
+        return cb.status == MTLCommandBufferStatusCompleted;
+      }
+    }
+    ev = (id<MTLSharedEvent>)ctx.legacy_event;
+    signal_val = ++ctx.legacy_event_val;
+  }
+  // Encode the signal into the command buffer; the event ticks AFTER the
+  // GPU finishes everything queued before it on this cb.
+  [cb encodeSignalEvent:ev value:signal_val];
+  [cb commit];
+  bool done = [ev waitUntilSignaledValue:signal_val
+                                timeoutMS:timeout_ms];
+  if (!done) {
+    fprintf(stderr,
+            "[tessera_apple_gpu] %s: GPU dispatch did not signal within "
+            "%llu ms (signaledValue=%llu wanted=%llu cb.status=%ld "
+            "cb.error=%s)\n",
+            op_name ? op_name : "<unknown>",
+            (unsigned long long)timeout_ms,
+            (unsigned long long)ev.signaledValue,
+            (unsigned long long)signal_val,
+            (long)cb.status,
+            cb.error ? [[cb.error localizedDescription] UTF8String]
+                     : "<nil>");
+    return false;
+  }
+  // ``encodeSignalEvent`` is encoded AFTER all preceding work in the cb,
+  // so a signaled event means the GPU has finished everything in the
+  // command buffer. ``cb.status`` updates asynchronously on a separate
+  // thread and frequently still reads as ``Scheduled (3)`` for a tiny
+  // window after the event ticks — gating on ``status == Completed``
+  // here loses the race. Treat the event signal as authoritative; only
+  // a non-nil ``cb.error`` indicates real failure.
+  if (cb.error != nil) {
+    fprintf(stderr,
+            "[tessera_apple_gpu] %s: GPU dispatch signaled but reported "
+            "an error: %s\n",
+            op_name ? op_name : "<unknown>",
+            [[cb.error localizedDescription] UTF8String]);
+    return false;
+  }
+  return true;
+}
+
 bool dispatch_mps_gemm_f32(MetalDeviceContext &ctx, const float* A,
                            const float* B, float* C, int32_t M, int32_t N,
                            int32_t K) {
@@ -444,10 +554,14 @@ bool dispatch_mps_gemm_f32(MetalDeviceContext &ctx, const float* A,
                        leftMatrix:matA
                       rightMatrix:matB
                      resultMatrix:matC];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Pattern 4 — bound the wait so a kernel hang surfaces as a timed
+    // failure with a named op instead of an infinite stall. 30 seconds
+    // is generous for an MPS GEMM at any size we'd legitimately call
+    // (M*N*K up to ~1e10 finishes in <1s on M-series; the bound is for
+    // genuine GPU stalls / driver kills, not for slow but valid runs).
+    bool ok = commit_and_wait_with_timeout(ctx, cb, /*timeout_ms=*/30000,
+                                            "mps_gemm_f32");
+    if (!ok) return false;
 
     std::memcpy(C, [bufC contents], byteCountC);
     return true;
@@ -458,6 +572,58 @@ bool dispatch_mps_gemm_f32(MetalDeviceContext &ctx, const float* A,
 
 extern "C" int32_t tessera_apple_gpu_runtime_has_metal(void) {
   return deviceContext().ok ? 1 : 0;
+}
+
+// Apple-sample pattern 6 — expose the innermost-first row-major stride
+// contract so a unit test can verify it without bringing up a MTLDevice.
+// The math here is byte-identical to ``apple_row_major_strides`` in the
+// anonymous namespace (which the namespace-scoped ``make_buffer_tensor*``
+// helpers use); duplicating four lines avoids the extra plumbing of
+// pulling the helper out of the anonymous namespace just for this probe.
+// Tests pin the layout: ``strides[0] == 1`` and ``strides[i+1] ==
+// strides[i] * dims[i]``.
+// Apple-sample Pattern 4 probe — exercise ``commit_and_wait_with_timeout``
+// from a Python test by submitting a tiny no-op MPS dispatch (just memset a
+// host-shared buffer to 0) and asserting it completes within ``timeout_ms``.
+// Returns:
+//    1 — completed in time
+//    0 — timed out
+//   -1 — runtime not initialized / Metal not available
+//   -2 — buffer alloc / command buffer creation failed
+// The "no-op" workload is a single ``MTLBlitCommandEncoder fillBuffer:``
+// which is the cheapest GPU dispatch we can encode; if ANY GPU work
+// completes, this test passes. A timeout therefore means the timeout
+// machinery itself is broken (or the GPU is on fire), not that the kernel
+// was too slow.
+extern "C" int32_t tessera_apple_gpu_commit_and_wait_timeout_probe(
+    uint64_t timeout_ms) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !ctx.device || !ctx.queue) return -1;
+  @autoreleasepool {
+    id<MTLBuffer> buf = [ctx.device newBufferWithLength:64
+                                                  options:MTLResourceStorageModeShared];
+    if (!buf) return -2;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    if (!cb) return -2;
+    id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
+    [blit fillBuffer:buf range:NSMakeRange(0, 64) value:0];
+    [blit endEncoding];
+    bool ok = commit_and_wait_with_timeout(ctx, cb, timeout_ms,
+                                            "timeout_probe");
+    return ok ? 1 : 0;
+  }
+}
+
+extern "C" int32_t tessera_apple_gpu_row_major_strides(const int64_t *dims_in,
+                                                      int32_t rank,
+                                                      int64_t *strides_out) {
+  if (!dims_in || !strides_out || rank <= 0 || rank > 8) return 0;
+  int64_t stride = 1;
+  for (int32_t i = 0; i < rank; ++i) {
+    strides_out[i] = stride;
+    stride *= dims_in[i];
+  }
+  return rank;
 }
 
 extern "C" void tessera_apple_gpu_mps_matmul_f32(const float* A,
@@ -10134,13 +10300,31 @@ TS_MM2D_EPI(mtl4_matmul2d_epilogue_f16,  half)
 TS_MM2D_EPI(mtl4_matmul2d_epilogue_bf16, bfloat)
 )MSL";
 
+// Apple-sample pattern 6 (2026-05-31) — Row-major strides for a tensor whose
+// extents are stored innermost-first. ``MTLTensorDescriptor`` requires
+// ``strides[0] == 1``; each subsequent stride is the cumulative product of
+// preceding extents. Mirrors Apple's ``Matrix+TensorUtilities.m::
+// tensorStridesForDimensions:`` (sample at lines 61-70). Centralizing the
+// contract here avoids the per-call inline math that historically caused
+// stride-order bugs (the conv2d native multi-tile spike had to debug
+// innermost-first the hard way). Always pure / inline / no allocation.
+static inline void apple_row_major_strides(const NSInteger *dims, int rank,
+                                           NSInteger *strides_out) {
+  NSInteger stride = 1;
+  for (int i = 0; i < rank; ++i) {
+    strides_out[i] = stride;
+    stride *= dims[i];
+  }
+}
+
 // Buffer-backed MTLTensor: extents innermost-first (cols, rows); packed
 // row-major strides (1, inner); usage=Compute. Returns nil on failure.
 API_AVAILABLE(macos(26.0), ios(26.0))
 static id<MTLTensor> make_buffer_tensor(id<MTLDevice> dev, id<MTLBuffer> buf,
                                         int inner, int outer, MTLTensorDataType dt) {
   MTLTensorDescriptor *td = [[MTLTensorDescriptor alloc] init];
-  NSInteger dims[2] = {inner, outer}, strd[2] = {1, inner};
+  NSInteger dims[2] = {inner, outer}, strd[2];
+  apple_row_major_strides(dims, 2, strd);
   td.dimensions = [[MTLTensorExtents alloc] initWithRank:2 values:dims];
   td.strides = [[MTLTensorExtents alloc] initWithRank:2 values:strd];
   td.dataType = dt;
@@ -10275,7 +10459,8 @@ static id<MTLTensor> make_buffer_tensor_4d(id<MTLDevice> dev, id<MTLBuffer> buf,
   // **innermost-first** (d0 = innermost). Callers must pass dims in that
   // order: for MPP NHWC activations that's {Cin, srcW, srcH, B}.
   NSInteger dims[4] = {d0, d1, d2, d3};
-  NSInteger strd[4] = {1, d0, d0 * d1, d0 * d1 * d2};
+  NSInteger strd[4];
+  apple_row_major_strides(dims, 4, strd);  // {1, d0, d0*d1, d0*d1*d2}
   MTLTensorDescriptor *td = [[MTLTensorDescriptor alloc] init];
   td.dimensions = [[MTLTensorExtents alloc] initWithRank:4 values:dims];
   td.strides = [[MTLTensorExtents alloc] initWithRank:4 values:strd];

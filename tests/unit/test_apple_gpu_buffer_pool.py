@@ -71,9 +71,14 @@ def test_no_raw_newbuffer_in_dispatchers(runtime_src: str) -> None:
     # inside ts_dev_alloc — the R0 persistent device-tensor allocator, whose
     # buffer is long-lived and freed explicitly via ts_dev_free, so the
     # "leak on early return" rationale doesn't apply.
+    # Apple-sample Pattern 4 (2026-05-31) also allows the tiny 64-byte
+    # diagnostic buffer in ``tessera_apple_gpu_commit_and_wait_timeout_probe``
+    # — the probe is testing infrastructure, not a workload; using the
+    # buffer pool for a 64-byte one-shot would obscure rather than help.
     allowed = [
         _fn_range(r"static\s+id<MTLBuffer>\s+metal_buffer_acquire\s*\("),
         _fn_range(r"TsDeviceTensor\s*\*\s*ts_dev_alloc\s*\("),
+        _fn_range(r"tessera_apple_gpu_commit_and_wait_timeout_probe\s*\("),
     ]
     offending = [
         m for m in raw

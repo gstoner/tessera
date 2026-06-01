@@ -94,25 +94,39 @@ session automatically. Caller still writes explicit `_enc(s, ...)`
 calls but doesn't manage the session lifecycle. 90% of the ergonomic
 win for ~30 LOC. Lives in `python/tessera/apple_gpu_batched.py`.
 
-**Phase 2 (open)** — true `@jit(target="apple_gpu")` auto-detection.
-The compiler/runtime would walk the function body, identify maximal
-straight-line subgraphs of encode-session-aware ops, and rewrite them
-to use `batched_session()` transparently. Implementation surface:
+**Phase 2 substrate (landed 2026-06-01)** —
+`python/tessera/apple_gpu_chain.py` ships the three pieces
+`compiler/jit.py` will consume:
 
-* `compiler/jit.py::_execute_apple_gpu_*` paths need to track which
-  ops are encode-session-compatible (driven by a registry —
-  `_APPLE_GPU_ENCODE_SESSION_OPS`).
-* The metadata layer (`runtime.py::_execute_apple_gpu_metadata`)
-  needs to materialize device-resident tensors between ops instead of
-  download/upload roundtrips.
-* A new `BatchedExecutionPlan` IR node represents "encode N ops into
-  one session" — the lowering pass identifies adjacent encode-
-  compatible ops and groups them.
+1. `ENCODE_OP_REGISTRY` — canonical `(op_name, dtype) → EncodeOpSpec`
+   metadata for every encode-session-aware op (16 entries: 8 ops ×
+   2 dtypes f32/f16).
+2. `plan_chain(trace)` — walks an `OpRecord` list and groups
+   consecutive encode-eligible same-dtype ops into `ChainSegment`s;
+   non-eligible ops form singleton segments.
+3. `execute_chain(segments)` / `run_trace(trace)` — opens a session
+   per encode segment, dispatches each op through its encode helper,
+   commits + waits.
 
-Estimated work: ~4-8 hours of careful changes spanning jit.py +
-runtime.py + the apple_gpu dispatch wiring. Stage-2 ops are now in
-place so the encode-session ABI surface that the JIT would route
-through is complete.
+15 tests in `tests/unit/test_apple_gpu_chain_planner.py` pin
+registry consistency, planner correctness (incl. dtype-boundary +
+non-eligible-op break), and executor numerical correctness +
+single-cb invariant per segment.
+
+**Phase 2.1 (open) — `compiler/jit.py` hookup.** The mechanical
+final step: in the apple_gpu `@jit` execution path, build an
+`OpRecord` trace from the function's emitted-op sequence and call
+`run_trace`. The substrate above is dtype/registry-aware so the
+hookup is small. Implementation surface:
+
+* `compiler/jit.py::JitFn._execute_apple_gpu_*` paths need to capture
+  the op trace as `apple_gpu_chain.OpRecord` instances.
+* The trace builder lives at the runtime metadata layer
+  (`runtime.py::_execute_apple_gpu_metadata`); each op call appends
+  to the trace, and the final `commit_wait` triggers `run_trace`.
+* Non-encode-eligible ops route through the existing eager
+  dispatch (the substrate's `_exec_single_segment` is a sentinel —
+  the JIT replaces it with its eager fallback at integration time).
 
 **Phase 3 (open)** — `pre-decode warmup`: upload weights to device
 once and reuse across decode steps (the M8 resident MLP path

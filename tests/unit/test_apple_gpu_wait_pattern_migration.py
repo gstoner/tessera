@@ -280,8 +280,11 @@ def test_migrated_dispatchers_no_longer_call_waituntilcompleted():
     ]
     for fn_name in targets:
         # Locate the function's opening brace, then walk balanced
-        # braces to its match. That gives us the exact body.
-        m = re.search(rf"\b{re.escape(fn_name)}\b\s*\(", src)
+        # braces to its match. That gives us the exact body. The
+        # ``\(`` is tight (no \s* before) so comments that mention
+        # the identifier followed by a space-then-paren (e.g., "see
+        # foo (legacy path)") don't match.
+        m = re.search(rf"\b{re.escape(fn_name)}\b\(", src)
         assert m is not None, f"could not locate {fn_name!r} in runtime source"
         # Find the next "{" after the signature.
         body_open = src.find("{", m.end())

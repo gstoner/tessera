@@ -44,6 +44,7 @@ from ._apple_gpu_dispatch import apple_gpu_runtime, bind_symbol
 _SYMBOLS_BOUND = False
 _ts_enc_begin = None
 _ts_enc_commit_wait = None
+# f32 encode-session ABIs
 _bmm_enc = None
 _layer_norm_enc = None
 _rmsnorm_enc = None
@@ -51,6 +52,14 @@ _softmax_enc = None
 _rope_enc = None
 _unary_enc = None
 _flash_attn_enc = None
+# Project-3 f16 encode-session ABIs (2026-06-01)
+_bmm_enc_f16 = None
+_layer_norm_enc_f16 = None
+_rmsnorm_enc_f16 = None
+_softmax_enc_f16 = None
+_rope_enc_f16 = None
+_unary_enc_f16 = None
+_flash_attn_enc_f16 = None
 _session_commit_count = None
 _ts_dev_alloc = None
 _ts_dev_upload = None
@@ -66,6 +75,9 @@ def _bind_session_symbols() -> bool:
     global _ts_enc_begin, _ts_enc_commit_wait, _bmm_enc, _layer_norm_enc
     global _rmsnorm_enc, _softmax_enc, _rope_enc, _unary_enc
     global _flash_attn_enc, _session_commit_count
+    global _bmm_enc_f16, _layer_norm_enc_f16, _rmsnorm_enc_f16
+    global _softmax_enc_f16, _rope_enc_f16, _unary_enc_f16
+    global _flash_attn_enc_f16
     global _ts_dev_alloc, _ts_dev_upload, _ts_dev_download, _ts_dev_free
     global _ts_dev_nbytes
     if _SYMBOLS_BOUND:
@@ -116,6 +128,49 @@ def _bind_session_symbols() -> bool:
          ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
          ctypes.c_float, ctypes.c_int32),
         ctypes.c_int32)
+    # Project-3 f16 encode-session ABIs (2026-06-01) — same signatures
+    # as the f32 variants, just the dtype-bearing buffers carry
+    # uint16_t (ml_dtypes.float16) bit patterns.
+    _bmm_enc_f16 = bind_symbol(
+        "tessera_apple_gpu_bmm_dev_f16_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32),
+        ctypes.c_int32)
+    _layer_norm_enc_f16 = bind_symbol(
+        "tessera_apple_gpu_layer_norm_dev_f16_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_float),
+        ctypes.c_int32)
+    _rmsnorm_enc_f16 = bind_symbol(
+        "tessera_apple_gpu_rmsnorm_dev_f16_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_float),
+        ctypes.c_int32)
+    _softmax_enc_f16 = bind_symbol(
+        "tessera_apple_gpu_softmax_dev_f16_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_int32, ctypes.c_int32),
+        ctypes.c_int32)
+    _rope_enc_f16 = bind_symbol(
+        "tessera_apple_gpu_rope_dev_f16_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32),
+        ctypes.c_int32)
+    _unary_enc_f16 = bind_symbol(
+        "tessera_apple_gpu_unary_dev_f16_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_int64, ctypes.c_int32),
+        ctypes.c_int32)
+    _flash_attn_enc_f16 = bind_symbol(
+        "tessera_apple_gpu_flash_attn_dev_f16_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_float, ctypes.c_int32),
+        ctypes.c_int32)
     _session_commit_count = bind_symbol(
         "tessera_apple_gpu_session_commit_count", (), ctypes.c_int64)
     _ts_dev_alloc = bind_symbol(
@@ -133,7 +188,11 @@ def _bind_session_symbols() -> bool:
     return all(s is not None for s in (
         _ts_enc_begin, _ts_enc_commit_wait, _bmm_enc, _layer_norm_enc,
         _rmsnorm_enc, _softmax_enc, _rope_enc, _unary_enc,
-        _flash_attn_enc, _session_commit_count, _ts_dev_alloc,
+        _flash_attn_enc,
+        _bmm_enc_f16, _layer_norm_enc_f16, _rmsnorm_enc_f16,
+        _softmax_enc_f16, _rope_enc_f16, _unary_enc_f16,
+        _flash_attn_enc_f16,
+        _session_commit_count, _ts_dev_alloc,
         _ts_dev_upload, _ts_dev_download, _ts_dev_free, _ts_dev_nbytes))
 
 
@@ -454,20 +513,181 @@ def gelu_enc(session: int, X: DeviceTensor, *, n: int) -> DeviceTensor:
     return _unary_enc_call(session, X, op_code=5, n=n)
 
 
+# ---------------------------------------------------------------------
+# Project-3 f16 encode-session Python wrappers (2026-06-01).
+#
+# Each f32 wrapper above has a sibling ``_f16`` variant here. They
+# share the same shape semantics — only the underlying ABI symbol +
+# byte size per element differ. The DeviceTensor's byte count tracks
+# fp16 = 2 bytes per element automatically.
+
+def bmm_enc_f16(session: int, A: DeviceTensor, B: DeviceTensor,
+                *, batch: int, M: int, N: int, K: int,
+                b_broadcast: bool = False) -> DeviceTensor:
+    """f16 variant of :func:`bmm_enc`."""
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    out = device_empty(batch * M * N * 2)  # fp16 = 2 bytes/elem
+    rc = _bmm_enc_f16(ctypes.c_void_p(session),
+                      ctypes.c_void_p(A.handle),
+                      ctypes.c_void_p(B.handle),
+                      ctypes.c_void_p(out.handle),
+                      ctypes.c_int32(batch), ctypes.c_int32(M),
+                      ctypes.c_int32(N), ctypes.c_int32(K),
+                      ctypes.c_int32(1 if b_broadcast else 0))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"bmm_enc_f16 returned {rc}")
+    return out
+
+
+def layer_norm_enc_f16(session: int, X: DeviceTensor,
+                       gamma: DeviceTensor, beta: DeviceTensor,
+                       *, rows: int, cols: int,
+                       eps: float = 1e-5) -> DeviceTensor:
+    """f16 variant of :func:`layer_norm_enc`."""
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    out = device_empty(rows * cols * 2)
+    rc = _layer_norm_enc_f16(ctypes.c_void_p(session),
+                             ctypes.c_void_p(X.handle),
+                             ctypes.c_void_p(gamma.handle),
+                             ctypes.c_void_p(beta.handle),
+                             ctypes.c_void_p(out.handle),
+                             ctypes.c_int32(rows), ctypes.c_int32(cols),
+                             ctypes.c_float(eps))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"layer_norm_enc_f16 returned {rc}")
+    return out
+
+
+def rmsnorm_enc_f16(session: int, X: DeviceTensor, gamma: DeviceTensor,
+                    *, rows: int, cols: int,
+                    eps: float = 1e-5) -> DeviceTensor:
+    """f16 variant of :func:`rmsnorm_enc`."""
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    out = device_empty(rows * cols * 2)
+    rc = _rmsnorm_enc_f16(ctypes.c_void_p(session),
+                          ctypes.c_void_p(X.handle),
+                          ctypes.c_void_p(gamma.handle),
+                          ctypes.c_void_p(out.handle),
+                          ctypes.c_int32(rows), ctypes.c_int32(cols),
+                          ctypes.c_float(eps))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"rmsnorm_enc_f16 returned {rc}")
+    return out
+
+
+def softmax_enc_f16(session: int, X: DeviceTensor, *,
+                    rows: int, cols: int) -> DeviceTensor:
+    """f16 variant of :func:`softmax_enc`."""
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    out = device_empty(rows * cols * 2)
+    rc = _softmax_enc_f16(ctypes.c_void_p(session),
+                          ctypes.c_void_p(X.handle),
+                          ctypes.c_void_p(out.handle),
+                          ctypes.c_int32(rows), ctypes.c_int32(cols))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"softmax_enc_f16 returned {rc}")
+    return out
+
+
+def rope_enc_f16(session: int, X: DeviceTensor, Theta: DeviceTensor,
+                 *, M: int, K: int) -> DeviceTensor:
+    """f16 variant of :func:`rope_enc`."""
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    out = device_empty(M * K * 2)
+    rc = _rope_enc_f16(ctypes.c_void_p(session),
+                       ctypes.c_void_p(X.handle),
+                       ctypes.c_void_p(Theta.handle),
+                       ctypes.c_void_p(out.handle),
+                       ctypes.c_int32(M), ctypes.c_int32(K))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"rope_enc_f16 returned {rc}")
+    return out
+
+
+def flash_attn_enc_f16(session: int, Q: DeviceTensor, K: DeviceTensor,
+                       V: DeviceTensor, *, B: int, Sq: int, Sk: int,
+                       D: int, scale: Optional[float] = None,
+                       causal: bool = False) -> DeviceTensor:
+    """f16 variant of :func:`flash_attn_enc`."""
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    if scale is None:
+        scale = 1.0 / (float(D) ** 0.5)
+    out = device_empty(B * Sq * D * 2)
+    rc = _flash_attn_enc_f16(ctypes.c_void_p(session),
+                             ctypes.c_void_p(Q.handle),
+                             ctypes.c_void_p(K.handle),
+                             ctypes.c_void_p(V.handle),
+                             ctypes.c_void_p(out.handle),
+                             ctypes.c_int32(B), ctypes.c_int32(Sq),
+                             ctypes.c_int32(Sk), ctypes.c_int32(D),
+                             ctypes.c_float(scale),
+                             ctypes.c_int32(1 if causal else 0))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"flash_attn_enc_f16 returned {rc}")
+    return out
+
+
+def _unary_enc_call_f16(session: int, X: DeviceTensor, op_code: int,
+                        n: int) -> DeviceTensor:
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    out = device_empty(n * 2)
+    rc = _unary_enc_f16(ctypes.c_void_p(session),
+                        ctypes.c_void_p(X.handle),
+                        ctypes.c_void_p(out.handle),
+                        ctypes.c_int64(n), ctypes.c_int32(op_code))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"unary_enc_f16(op={op_code}) returned {rc}")
+    return out
+
+
+def silu_enc_f16(session: int, X: DeviceTensor, *,
+                 n: int) -> DeviceTensor:
+    """f16 variant of :func:`silu_enc` (op-code 4)."""
+    return _unary_enc_call_f16(session, X, op_code=4, n=n)
+
+
+def gelu_enc_f16(session: int, X: DeviceTensor, *,
+                 n: int) -> DeviceTensor:
+    """f16 variant of :func:`gelu_enc` (op-code 5)."""
+    return _unary_enc_call_f16(session, X, op_code=5, n=n)
+
+
 __all__ = [
     "DeviceTensor",
     "batched_session",
     "bmm_enc",
+    "bmm_enc_f16",
     "decode_chain",
     "device_empty",
     "device_tensor",
     "flash_attn_enc",
+    "flash_attn_enc_f16",
     "gelu_enc",
+    "gelu_enc_f16",
     "layer_norm_enc",
+    "layer_norm_enc_f16",
     "rmsnorm_enc",
+    "rmsnorm_enc_f16",
     "rope_enc",
+    "rope_enc_f16",
     "session_available",
     "session_commit_count",
     "silu_enc",
+    "silu_enc_f16",
     "softmax_enc",
+    "softmax_enc_f16",
 ]

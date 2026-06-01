@@ -2043,6 +2043,261 @@ extern "C" int32_t tessera_apple_gpu_rope_dev_f32_enc(
   return 1;
 }
 
+// Project-3 f16 encode-session stubs (2026-06-01).
+// Off-Darwin reference: treat fp16 inputs as numpy ml_dtypes.float16
+// 16-bit bit patterns, upcast to fp32 for the math, write back as fp16
+// bit patterns. Keeps stub-side dtype handling deterministic across
+// non-Apple CI without needing a real fp16 implementation.
+
+static inline float _f16_to_f32(uint16_t h) {
+  uint32_t s = (h & 0x8000u) << 16;
+  uint32_t e = (h & 0x7C00u) >> 10;
+  uint32_t m = (h & 0x03FFu);
+  uint32_t r;
+  if (e == 0) {
+    if (m == 0) r = s;
+    else {
+      e = 1;
+      while ((m & 0x0400u) == 0) { m <<= 1; --e; }
+      m &= 0x03FFu;
+      r = s | ((e + 112u) << 23) | (m << 13);
+    }
+  } else if (e == 31) {
+    r = s | 0x7F800000u | (m << 13);
+  } else {
+    r = s | ((e + 112u) << 23) | (m << 13);
+  }
+  float out;
+  std::memcpy(&out, &r, 4);
+  return out;
+}
+
+static inline uint16_t _f32_to_f16(float f) {
+  uint32_t bits;
+  std::memcpy(&bits, &f, 4);
+  uint32_t s = (bits >> 16) & 0x8000u;
+  int32_t e = (int32_t)((bits >> 23) & 0xFFu) - 127 + 15;
+  uint32_t m = bits & 0x007FFFFFu;
+  if (e >= 31) {
+    return (uint16_t)(s | 0x7C00u | (m ? 0x0200u : 0));
+  } else if (e <= 0) {
+    if (e < -10) return (uint16_t)s;
+    m |= 0x00800000u;
+    uint32_t shift = (uint32_t)(14 - e);
+    return (uint16_t)(s | (m >> shift));
+  }
+  return (uint16_t)(s | ((uint32_t)e << 10) | (m >> 13));
+}
+
+extern "C" int32_t tessera_apple_gpu_bmm_dev_f16_enc(
+    TsEncodeSession* s, TsDeviceTensor* A, TsDeviceTensor* B,
+    TsDeviceTensor* O, int32_t batch, int32_t M, int32_t N, int32_t K,
+    int32_t b_broadcast) {
+  if (!s || !A || !B || !O) return 0;
+  const uint16_t* Ah = reinterpret_cast<const uint16_t*>(A->data);
+  const uint16_t* Bh = reinterpret_cast<const uint16_t*>(B->data);
+  uint16_t* Oh = reinterpret_cast<uint16_t*>(O->data);
+  for (int32_t b = 0; b < batch; ++b) {
+    for (int32_t i = 0; i < M; ++i) {
+      for (int32_t j = 0; j < N; ++j) {
+        float acc = 0.0f;
+        for (int32_t kk = 0; kk < K; ++kk) {
+          int32_t b_idx = b_broadcast ? 0 : b;
+          acc += _f16_to_f32(Ah[((std::size_t)b * M + i) * K + kk]) *
+                 _f16_to_f32(Bh[((std::size_t)b_idx * K + kk) * N + j]);
+        }
+        Oh[((std::size_t)b * M + i) * N + j] = _f32_to_f16(acc);
+      }
+    }
+  }
+  return 1;
+}
+
+extern "C" int32_t tessera_apple_gpu_layer_norm_dev_f16_enc(
+    TsEncodeSession* s, TsDeviceTensor* X, TsDeviceTensor* gamma,
+    TsDeviceTensor* beta, TsDeviceTensor* Y,
+    int32_t rows, int32_t cols, float eps) {
+  if (!s || !X || !gamma || !beta || !Y) return 0;
+  const uint16_t* xh = reinterpret_cast<const uint16_t*>(X->data);
+  const uint16_t* gh = reinterpret_cast<const uint16_t*>(gamma->data);
+  const uint16_t* bh = reinterpret_cast<const uint16_t*>(beta->data);
+  uint16_t* yh = reinterpret_cast<uint16_t*>(Y->data);
+  for (int32_t r = 0; r < rows; ++r) {
+    double mean = 0.0;
+    for (int32_t c = 0; c < cols; ++c)
+      mean += _f16_to_f32(xh[(std::size_t)r * cols + c]);
+    mean /= cols;
+    double var = 0.0;
+    for (int32_t c = 0; c < cols; ++c) {
+      double d = _f16_to_f32(xh[(std::size_t)r * cols + c]) - mean;
+      var += d * d;
+    }
+    var /= cols;
+    double inv = 1.0 / std::sqrt(var + eps);
+    for (int32_t c = 0; c < cols; ++c) {
+      double n = (_f16_to_f32(xh[(std::size_t)r * cols + c]) - mean) * inv;
+      yh[(std::size_t)r * cols + c] = _f32_to_f16(
+          (float)(n * _f16_to_f32(gh[c]) + _f16_to_f32(bh[c])));
+    }
+  }
+  return 1;
+}
+
+extern "C" int32_t tessera_apple_gpu_rmsnorm_dev_f16_enc(
+    TsEncodeSession* s, TsDeviceTensor* X, TsDeviceTensor* gamma,
+    TsDeviceTensor* Y, int32_t rows, int32_t cols, float eps) {
+  if (!s || !X || !gamma || !Y) return 0;
+  const uint16_t* xh = reinterpret_cast<const uint16_t*>(X->data);
+  const uint16_t* gh = reinterpret_cast<const uint16_t*>(gamma->data);
+  uint16_t* yh = reinterpret_cast<uint16_t*>(Y->data);
+  for (int32_t r = 0; r < rows; ++r) {
+    double v = 0.0;
+    for (int32_t c = 0; c < cols; ++c) {
+      double x = _f16_to_f32(xh[(std::size_t)r * cols + c]);
+      v += x * x;
+    }
+    v /= cols;
+    double inv = 1.0 / std::sqrt(v + eps);
+    for (int32_t c = 0; c < cols; ++c) {
+      double x = _f16_to_f32(xh[(std::size_t)r * cols + c]);
+      yh[(std::size_t)r * cols + c] = _f32_to_f16(
+          (float)(x * inv * _f16_to_f32(gh[c])));
+    }
+  }
+  return 1;
+}
+
+extern "C" int32_t tessera_apple_gpu_softmax_dev_f16_enc(
+    TsEncodeSession* s, TsDeviceTensor* X, TsDeviceTensor* Y,
+    int32_t rows, int32_t cols) {
+  if (!s || !X || !Y) return 0;
+  const uint16_t* xh = reinterpret_cast<const uint16_t*>(X->data);
+  uint16_t* yh = reinterpret_cast<uint16_t*>(Y->data);
+  for (int32_t r = 0; r < rows; ++r) {
+    float mx = _f16_to_f32(xh[(std::size_t)r * cols + 0]);
+    for (int32_t c = 1; c < cols; ++c) {
+      float v = _f16_to_f32(xh[(std::size_t)r * cols + c]);
+      if (v > mx) mx = v;
+    }
+    double sum = 0.0;
+    for (int32_t c = 0; c < cols; ++c) {
+      float v = _f16_to_f32(xh[(std::size_t)r * cols + c]);
+      double e = std::exp(v - mx);
+      yh[(std::size_t)r * cols + c] = _f32_to_f16((float)e);
+      sum += e;
+    }
+    float inv = (float)(1.0 / sum);
+    for (int32_t c = 0; c < cols; ++c) {
+      float e = _f16_to_f32(yh[(std::size_t)r * cols + c]);
+      yh[(std::size_t)r * cols + c] = _f32_to_f16(e * inv);
+    }
+  }
+  return 1;
+}
+
+extern "C" int32_t tessera_apple_gpu_rope_dev_f16_enc(
+    TsEncodeSession* s, TsDeviceTensor* X, TsDeviceTensor* Theta,
+    TsDeviceTensor* Y, int32_t M, int32_t K) {
+  if (!s || !X || !Theta || !Y) return 0;
+  const uint16_t* xh = reinterpret_cast<const uint16_t*>(X->data);
+  const uint16_t* th = reinterpret_cast<const uint16_t*>(Theta->data);
+  uint16_t* yh = reinterpret_cast<uint16_t*>(Y->data);
+  for (int32_t m = 0; m < M; ++m) {
+    for (int32_t pair = 0; pair < K / 2; ++pair) {
+      int idx_e = m * K + pair * 2;
+      int idx_o = idx_e + 1;
+      float xe = _f16_to_f32(xh[idx_e]);
+      float xo = _f16_to_f32(xh[idx_o]);
+      float c = std::cos(_f16_to_f32(th[idx_e]));
+      float ss = std::sin(_f16_to_f32(th[idx_e]));
+      yh[idx_e] = _f32_to_f16(xe * c - xo * ss);
+      yh[idx_o] = _f32_to_f16(xe * ss + xo * c);
+    }
+  }
+  return 1;
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_dev_f16_enc(
+    TsEncodeSession* s, TsDeviceTensor* Q, TsDeviceTensor* K,
+    TsDeviceTensor* V, TsDeviceTensor* O,
+    int32_t B, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal) {
+  if (!s || !Q || !K || !V || !O) return 0;
+  const uint16_t* Qh = reinterpret_cast<const uint16_t*>(Q->data);
+  const uint16_t* Kh = reinterpret_cast<const uint16_t*>(K->data);
+  const uint16_t* Vh = reinterpret_cast<const uint16_t*>(V->data);
+  uint16_t* Oh = reinterpret_cast<uint16_t*>(O->data);
+  for (int32_t b = 0; b < B; ++b) {
+    for (int32_t q = 0; q < Sq; ++q) {
+      // Online softmax for this row.
+      float m = -INFINITY;
+      float l = 0.0f;
+      std::vector<float> o(D, 0.0f);
+      for (int32_t k = 0; k < Sk; ++k) {
+        if (causal && k > q) break;
+        float score = 0.0f;
+        for (int32_t d = 0; d < D; ++d) {
+          score += _f16_to_f32(Qh[((std::size_t)b * Sq + q) * D + d]) *
+                   _f16_to_f32(Kh[((std::size_t)b * Sk + k) * D + d]);
+        }
+        score *= scale;
+        float new_m = std::max(m, score);
+        float exp_old = std::exp(m - new_m);
+        float exp_score = std::exp(score - new_m);
+        for (int32_t d = 0; d < D; ++d) {
+          o[d] = o[d] * exp_old +
+                 _f16_to_f32(Vh[((std::size_t)b * Sk + k) * D + d]) *
+                     exp_score;
+        }
+        l = l * exp_old + exp_score;
+        m = new_m;
+      }
+      if (l == 0.0f) {
+        for (int32_t d = 0; d < D; ++d)
+          Oh[((std::size_t)b * Sq + q) * D + d] = _f32_to_f16(0.0f);
+      } else {
+        float inv_l = 1.0f / l;
+        for (int32_t d = 0; d < D; ++d)
+          Oh[((std::size_t)b * Sq + q) * D + d] = _f32_to_f16(o[d] * inv_l);
+      }
+    }
+  }
+  return 1;
+}
+
+extern "C" int32_t tessera_apple_gpu_unary_dev_f16_enc(
+    TsEncodeSession* s, TsDeviceTensor* X, TsDeviceTensor* O,
+    int64_t n, int32_t op) {
+  if (!s || !X || !O) return 0;
+  const uint16_t* xh = reinterpret_cast<const uint16_t*>(X->data);
+  uint16_t* oh = reinterpret_cast<uint16_t*>(O->data);
+  for (int64_t i = 0; i < n; ++i) {
+    float v = _f16_to_f32(xh[i]);
+    float r;
+    switch (op) {
+      case 0: r = v > 0 ? v : 0.0f; break;
+      case 1: r = 1.0f / (1.0f + std::exp(-v)); break;
+      case 2: r = std::tanh(v); break;
+      case 3: r = std::log1p(std::exp(v)); break;
+      case 4: r = v / (1.0f + std::exp(-v)); break;  // silu
+      case 5: {  // gelu tanh approx
+        float c = std::sqrt(2.0f / (float)M_PI);
+        r = 0.5f * v * (1.0f + std::tanh(c * (v + 0.044715f * v * v * v)));
+        break;
+      }
+      case 6: r = std::exp(v); break;
+      case 7: r = std::log(v); break;
+      case 8: r = std::sqrt(v); break;
+      case 9: r = 1.0f / std::sqrt(v); break;
+      case 10: r = -v; break;
+      case 11: r = std::fabs(v); break;
+      default: r = v; break;
+    }
+    oh[i] = _f32_to_f16(r);
+  }
+  return 1;
+}
+
 extern "C" int64_t tessera_apple_gpu_session_commit_count(void) {
   // Off-Darwin: no real command queue; static counter incremented by
   // ``ts_enc_commit_wait`` in the stub (simple file-static — single-threaded

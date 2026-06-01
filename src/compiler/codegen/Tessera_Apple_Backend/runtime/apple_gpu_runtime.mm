@@ -3116,10 +3116,12 @@ extern "C" void tessera_apple_gpu_rope_f32(const float* X, const float* Theta,
 
 namespace {
 
-bool dispatch_rope_msl_f16(MetalDeviceContext &ctx, const uint16_t* X,
-                           const uint16_t* Theta, uint16_t* Out,
-                           int32_t M, int32_t K) {
-  static NSString *const kRopeSourceF16 = @R"MSL(
+// MSL source for f16 RoPE — lifted to namespace scope so both the
+// original dispatch_rope_msl_f16 AND the new encode-session variant
+// encode_rope_msl_f16_dev (added 2026-06-01 for Project-3 f16
+// encode-session ABI) share one source-of-truth. compile_msl_kernel
+// caches by source SHA256 so duplication has zero runtime cost.
+static NSString *const kRopeF16Source = @R"MSL(
 #include <metal_stdlib>
 using namespace metal;
 
@@ -3145,9 +3147,13 @@ kernel void rope_f16(
 }
 )MSL";
 
+bool dispatch_rope_msl_f16(MetalDeviceContext &ctx, const uint16_t* X,
+                           const uint16_t* Theta, uint16_t* Out,
+                           int32_t M, int32_t K) {
+
   @autoreleasepool {
     id<MTLComputePipelineState> pso =
-        compile_msl_kernel(ctx, kRopeSourceF16, @"rope_f16");
+        compile_msl_kernel(ctx, kRopeF16Source, @"rope_f16");
     if (!pso) return false;
 
     NSUInteger byteCount = sizeof(uint16_t) * static_cast<NSUInteger>(M) *
@@ -3182,6 +3188,41 @@ kernel void rope_f16(
     std::memcpy(Out, [bufO contents], byteCount);
     return true;
   }
+}
+
+// Project-3 f16 (2026-06-01) — encode RoPE f16 into a session-shared
+// MPSCommandBuffer. Mirrors encode_rope_msl_dev but uses the f16
+// kernel.
+static bool encode_rope_msl_f16_dev(MetalDeviceContext &ctx,
+                                    MPSCommandBuffer *cb,
+                                    id<MTLBuffer> bufX, id<MTLBuffer> bufT,
+                                    id<MTLBuffer> bufO,
+                                    int32_t M, int32_t K) {
+  if (M <= 0 || K <= 0) return true;
+  if (!cb || !bufX || !bufT || !bufO) return false;
+  id<MTLComputePipelineState> pso =
+      compile_msl_kernel(ctx, kRopeF16Source, @"rope_f16");
+  if (!pso) return false;
+  id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+  if (!enc) return false;
+  [enc setComputePipelineState:pso];
+  [enc setBuffer:bufX offset:0 atIndex:0];
+  [enc setBuffer:bufT offset:0 atIndex:1];
+  [enc setBuffer:bufO offset:0 atIndex:2];
+  [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+  [enc setBytes:&K length:sizeof(int32_t) atIndex:4];
+  NSUInteger half_k = static_cast<NSUInteger>(K / 2);
+  MTLSize grid = MTLSizeMake(half_k, static_cast<NSUInteger>(M), 1);
+  NSUInteger tg_x = std::min<NSUInteger>(half_k, 32);
+  NSUInteger tg_y = std::min<NSUInteger>(
+      static_cast<NSUInteger>(M),
+      pso.maxTotalThreadsPerThreadgroup /
+          std::max<NSUInteger>(tg_x, 1));
+  if (tg_y == 0) tg_y = 1;
+  [enc dispatchThreads:grid
+         threadsPerThreadgroup:MTLSizeMake(tg_x, tg_y, 1)];
+  [enc endEncoding];
+  return true;
 }
 
 inline void reference_rope_f16_via_fp32(const uint16_t* X, const uint16_t* Theta,
@@ -3543,12 +3584,11 @@ extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
 
 namespace {
 
-bool dispatch_flash_attn_msl_f16(MetalDeviceContext &ctx, const uint16_t* Q,
-                                 const uint16_t* K, const uint16_t* V,
-                                 uint16_t* O, int32_t B, int32_t Sq,
-                                 int32_t Sk, int32_t D, float scale,
-                                 int32_t causal) {
-  static NSString *const kFlashAttnSourceF16 = @R"MSL(
+// MSL source for f16 flash-attention — lifted to namespace scope for
+// Project-3 f16 encode-session reuse (2026-06-01). Both the legacy
+// own-cb dispatcher and the encode-session helper read this string;
+// compile_msl_kernel dedupes via source SHA256.
+static NSString *const kFlashAttnF16Source = @R"MSL(
 #include <metal_stdlib>
 using namespace metal;
 
@@ -3611,9 +3651,14 @@ kernel void flash_attn_f16(
 }
 )MSL";
 
+bool dispatch_flash_attn_msl_f16(MetalDeviceContext &ctx, const uint16_t* Q,
+                                 const uint16_t* K, const uint16_t* V,
+                                 uint16_t* O, int32_t B, int32_t Sq,
+                                 int32_t Sk, int32_t D, float scale,
+                                 int32_t causal) {
   @autoreleasepool {
     id<MTLComputePipelineState> pso =
-        compile_msl_kernel(ctx, kFlashAttnSourceF16, @"flash_attn_f16");
+        compile_msl_kernel(ctx, kFlashAttnF16Source, @"flash_attn_f16");
     if (!pso) return false;
 
     NSUInteger qBytes = sizeof(uint16_t) * static_cast<NSUInteger>(B) *
@@ -3658,6 +3703,50 @@ kernel void flash_attn_f16(
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
+}
+
+// Project-3 f16 (2026-06-01) — encode f16 flash_attn into a shared
+// MPSCommandBuffer. Mirrors encode_flash_attn_msl_dev (f32) using the
+// f16 MSL kernel above.
+static bool encode_flash_attn_msl_f16_dev(MetalDeviceContext &ctx,
+                                          MPSCommandBuffer *cb,
+                                          id<MTLBuffer> bufQ,
+                                          id<MTLBuffer> bufK,
+                                          id<MTLBuffer> bufV,
+                                          id<MTLBuffer> bufO,
+                                          int32_t B, int32_t Sq, int32_t Sk,
+                                          int32_t D, float scale,
+                                          int32_t causal) {
+  if (B <= 0 || Sq <= 0 || Sk <= 0 || D <= 0) return true;
+  if (!cb || !bufQ || !bufK || !bufV || !bufO) return false;
+  id<MTLComputePipelineState> pso =
+      compile_msl_kernel(ctx, kFlashAttnF16Source, @"flash_attn_f16");
+  if (!pso) return false;
+  id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+  if (!enc) return false;
+  [enc setComputePipelineState:pso];
+  [enc setBuffer:bufQ offset:0 atIndex:0];
+  [enc setBuffer:bufK offset:0 atIndex:1];
+  [enc setBuffer:bufV offset:0 atIndex:2];
+  [enc setBuffer:bufO offset:0 atIndex:3];
+  [enc setBytes:&B  length:sizeof(int32_t) atIndex:4];
+  [enc setBytes:&Sq length:sizeof(int32_t) atIndex:5];
+  [enc setBytes:&Sk length:sizeof(int32_t) atIndex:6];
+  [enc setBytes:&D  length:sizeof(int32_t) atIndex:7];
+  [enc setBytes:&scale  length:sizeof(float)   atIndex:8];
+  [enc setBytes:&causal length:sizeof(int32_t) atIndex:9];
+  MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(Sq),
+                             static_cast<NSUInteger>(B), 1);
+  NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(Sq), 32);
+  NSUInteger tg_y = std::min<NSUInteger>(
+      static_cast<NSUInteger>(B),
+      pso.maxTotalThreadsPerThreadgroup /
+          std::max<NSUInteger>(tg_x, 1));
+  if (tg_y == 0) tg_y = 1;
+  [enc dispatchThreads:grid
+         threadsPerThreadgroup:MTLSizeMake(tg_x, tg_y, 1)];
+  [enc endEncoding];
+  return true;
 }
 
 inline void reference_flash_attn_f16_via_fp32(const uint16_t* Q,
@@ -12678,6 +12767,78 @@ extern "C" int32_t tessera_apple_gpu_flash_attn_dev_f32_enc(
              : 0;
 }
 
+// Project-3 f16 encode-session ABI (2026-06-01) — same shape as the
+// f32 variants above, just with ``MPSDataTypeFloat16`` passed to the
+// MPSGraph-encode helpers. Caller-side ``uint16_t`` half buffers
+// (Tessera uses ``ml_dtypes.float16`` via numpy at the Python edge).
+// Real-LLM decode usually runs in fp16, so these complete the encode
+// envelope for production-shape workloads.
+
+extern "C" int32_t tessera_apple_gpu_bmm_dev_f16_enc(
+    TsEncodeSession *s, TsDeviceTensor *A, TsDeviceTensor *B,
+    TsDeviceTensor *O, int32_t batch, int32_t M, int32_t N, int32_t K,
+    int32_t b_broadcast) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !A || !B || !O) return 0;
+  return mpsg_encode_bmm_dev(s->cb, A->buf, B->buf, O->buf, batch, M, N, K,
+                              b_broadcast != 0, MPSDataTypeFloat16)
+             ? 1
+             : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_layer_norm_dev_f16_enc(
+    TsEncodeSession *s, TsDeviceTensor *X, TsDeviceTensor *gamma,
+    TsDeviceTensor *beta, TsDeviceTensor *Y,
+    int32_t rows, int32_t cols, float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !gamma || !beta || !Y) return 0;
+  return mpsg_encode_rowop_dev(s->cb, /*kind=*/0, X->buf, gamma->buf,
+                                beta->buf, Y->buf, rows, cols, eps,
+                                MPSDataTypeFloat16) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_rmsnorm_dev_f16_enc(
+    TsEncodeSession *s, TsDeviceTensor *X, TsDeviceTensor *gamma,
+    TsDeviceTensor *Y, int32_t rows, int32_t cols, float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !gamma || !Y) return 0;
+  return mpsg_encode_rowop_dev(s->cb, /*kind=*/1, X->buf, gamma->buf,
+                                /*bufB=*/nil, Y->buf, rows, cols, eps,
+                                MPSDataTypeFloat16) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_softmax_dev_f16_enc(
+    TsEncodeSession *s, TsDeviceTensor *X, TsDeviceTensor *Y,
+    int32_t rows, int32_t cols) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !Y) return 0;
+  return mpsg_encode_rowop_dev(s->cb, /*kind=*/2, X->buf, /*bufG=*/nil,
+                                /*bufB=*/nil, Y->buf, rows, cols, 0.0f,
+                                MPSDataTypeFloat16) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_rope_dev_f16_enc(
+    TsEncodeSession *s, TsDeviceTensor *X, TsDeviceTensor *Theta,
+    TsDeviceTensor *Y, int32_t M, int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !Theta || !Y) return 0;
+  return encode_rope_msl_f16_dev(ctx, s->cb, X->buf, Theta->buf, Y->buf,
+                                  M, K) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_dev_f16_enc(
+    TsEncodeSession *s, TsDeviceTensor *Q, TsDeviceTensor *K,
+    TsDeviceTensor *V, TsDeviceTensor *O,
+    int32_t B, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !Q || !K || !V || !O) return 0;
+  return encode_flash_attn_msl_f16_dev(ctx, s->cb, Q->buf, K->buf, V->buf,
+                                        O->buf, B, Sq, Sk, D, scale, causal)
+             ? 1
+             : 0;
+}
+
 // Stage-2 (2026-06-01) — encoded RoPE. Sits between layer_norm/rmsnorm
 // and the QKV projections in a typical decoder layer. Composes onto
 // the same session as the other encoded ops.
@@ -12792,6 +12953,21 @@ extern "C" int32_t tessera_apple_gpu_unary_dev_f32_enc(TsEncodeSession *s,
   if (!ctx.ok || !s || !X || !O) return 0;
   return mpsg_encode_unary_dev(s->cb, X->buf, O->buf, n, (int)op,
                                MPSDataTypeFloat32)
+             ? 1
+             : 0;
+}
+
+// Project-3 f16 (2026-06-01) — unary encoded f16. Routes through the
+// same MPSGraph unary node with MPSDataTypeFloat16 to satisfy LLM
+// activation paths (silu / gelu / sigmoid / ...) in fp16.
+extern "C" int32_t tessera_apple_gpu_unary_dev_f16_enc(TsEncodeSession *s,
+                                                       TsDeviceTensor *X,
+                                                       TsDeviceTensor *O,
+                                                       int64_t n, int32_t op) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !O) return 0;
+  return mpsg_encode_unary_dev(s->cb, X->buf, O->buf, n, (int)op,
+                                MPSDataTypeFloat16)
              ? 1
              : 0;
 }

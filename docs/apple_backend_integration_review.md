@@ -186,18 +186,50 @@ The path to beating MPSGraph is the native MPP `convolution2d` cooperative op (n
 col materialization — multi-tile tiling undocumented) or a direct conv, not
 materialized im2col. Toggle `TESSERA_APPLE_GPU_MTL4_CONV=1`.
 
-**Native `mpp::tensor_ops::convolution2d` — investigated, conventions cracked,
-multi-tile blocked.** The cooperative conv op compiles and is **bit-correct
-single-tile** (VALID 3×3 ≤2e-7). Reverse-engineered conventions: NHWC activation
-/ HWIO weights / NHWO dest tensor extents (innermost-first), the op does a
-**SAME/centered window** so `set_offsets((K-1)/2,(K-1)/2)` yields VALID conv,
-float `cooperative_tensor` destination + epilogue (same as matmul2d), full-
-threadgroup scope, **compile-time descriptor dims**. The blocker is **multi-tile
-grid-tiling**: both slice-based (matmul2d-style) and offset-based tiling produce
-wrong results, and there is no usage example in the headers. So the native conv
-op is a future swap-in for the im2col lane's matmul core once Apple documents (or
-we crack) its tiling; the im2col+matmul2d lane delivers correct arbitrary-size
-conv today.
+**Native `mpp::tensor_ops::convolution2d` — multi-tile CRACKED (2026-05-31).**
+The previously-blocked multi-tile spike now works end-to-end via
+**grid-of-threadgroups + per-tile slice on both source and destination**:
+`tessera_apple_gpu_spike_conv2d_{single,multi}_tile_f16` in
+`apple_gpu_runtime.mm`. Bit-correct vs numpy (rel ≤ 3e-7) at (8×8) / (16×16) /
+(24×16) / (32×32). The key insight (not in the headers): the cooperative op
+expects bound tensors whose **dimensions match the descriptor's source/dest**,
+so you `X.slice(...)` + `Y.slice(...)` per-threadgroup with innermost-first
+offsets (matching the matmul2d pattern); `set_offsets((K-1)/2)` only handles
+the SAME→VALID halo, **not** the per-tile shift. Two additional findings the
+spike surfaced:
+- `MTLTensorDescriptor` requires **innermost-first dims with `strides[0]==1`**;
+  the first try with numpy NHWC outermost-first order failed with
+  `"Tensor Descriptor Validation: Stride (256) at index 0 should be 1"`. Fixed
+  in `make_buffer_tensor_4d`.
+- The conv2d header comment says "full threadgroup" scope but only
+  `execution_thread` and `execution_simdgroups<N>` compile; `<4>` (128 threads)
+  works (same as matmul2d).
+
+**A/B vs MPSGraph fused conv (Cin=Cout=4, K=3, f16 in / f32 out, Apple M*):**
+| dst H×W | native µs | MPSGraph µs | speedup |
+|---------|-----------|-------------|---------|
+|   8×8   | 361       | 406         | 1.12×   |
+|  16×16  | 347       | 409         | 1.18×   |
+|  32×32  | 355       | 460         | 1.30×   |
+|  64×64  | 357       | 506         | 1.42×   |
+| 128×128 | 377       | 774         | 2.05×   |
+| 256×256 | 507       | 1183        | 2.33×   |
+
+The native path wins at every shape and the gap widens with size (memory traffic
+matters — no col materialization). **But before declaring a default-on lane**,
+the spike's scope is narrow: hardcoded `Cin=Cout=4`, `K=3`, stride=1, no
+dilation/groups, aligned-only tile (dstH/dstW multiples of 8), f16 only. Also
+the MPSGraph baseline writes f16 output while the native path writes f32 — the
+2× memory-traffic difference *favors* MPSGraph in this bench (so the native win
+is conservatively understated, or the comparison is mixed-precision-skewed
+depending on viewpoint). The honest disposition:
+- **Land** the two spike entry points (`spike_conv2d_{single,multi}_tile_f16`)
+  as opt-in C ABI symbols so the proof is preserved + regression-locked.
+- **Don't flip** routing — productionizing this lane needs Cin/Cout templating
+  (the descriptor's channel count is `constexpr`), non-aligned tile boundary
+  handling, K/stride/dilation/groups generalization, and bf16 + f16-output
+  epilogue parity with MPSGraph. Those are tracked as follow-ups; the existing
+  im2col+matmul2d lane continues to deliver correct arbitrary-size conv today.
 
 ## ThunderMittens (Metal port of ThunderKittens) — reviewed; key technique does NOT transfer
 

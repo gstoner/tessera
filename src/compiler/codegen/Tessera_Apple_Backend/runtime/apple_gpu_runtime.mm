@@ -10257,6 +10257,206 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_bf16(const uint16_t *A,
                                 A, B, C, M, N, K, /*fused=*/false, nullptr, 0);
 }
 
+//===----------------------------------------------------------------------===//
+// Spike: native MPP convolution2d cooperative op — single-tile baseline.
+// VALID 3x3 conv via set_offsets((K-1)/2). One threadgroup, 4 SIMD groups (128
+// threads). NHWC activation / HWIO weights / NHWO destination (the only
+// layouts the op supports today). The descriptor's destination_dimensions IS
+// the per-tile output region — compile-time. dst_H/dst_W are TILE sizes here.
+// Step 1 goal: re-confirm bit-correctness vs numpy at this SDK level before
+// stepping up to grid-of-threadgroups multi-tile (step 2).
+//===----------------------------------------------------------------------===//
+API_AVAILABLE(macos(26.0), ios(26.0))
+static id<MTLTensor> make_buffer_tensor_4d(id<MTLDevice> dev, id<MTLBuffer> buf,
+                                           NSInteger d0, NSInteger d1,
+                                           NSInteger d2, NSInteger d3,
+                                           MTLTensorDataType dt) {
+  // MTLTensorDescriptor requires `strides[0] == 1` — extents are stored
+  // **innermost-first** (d0 = innermost). Callers must pass dims in that
+  // order: for MPP NHWC activations that's {Cin, srcW, srcH, B}.
+  NSInteger dims[4] = {d0, d1, d2, d3};
+  NSInteger strd[4] = {1, d0, d0 * d1, d0 * d1 * d2};
+  MTLTensorDescriptor *td = [[MTLTensorDescriptor alloc] init];
+  td.dimensions = [[MTLTensorExtents alloc] initWithRank:4 values:dims];
+  td.strides = [[MTLTensorExtents alloc] initWithRank:4 values:strd];
+  td.dataType = dt;
+  td.usage = MTLTensorUsageCompute;
+  NSError *e = nil;
+  return [buf newTensorWithDescriptor:td offset:0 error:&e];
+}
+
+static NSString *kMTL4Conv2dSingleTileMSL = @R"MSL(
+#include <metal_stdlib>
+#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>
+using namespace metal;
+using namespace mpp::tensor_ops;
+
+// VALID 3x3 conv via set_offsets((K-1)/2). Compile-time shape: 8x8 destination
+// tile, Cin=4, Cout=4, B=1, source = 10x10 (8 + 2 halo). f16 activations +
+// weights, f32 destination. One threadgroup = 4 simdgroups = 128 threads.
+kernel void conv2d_single_tile_f16(
+    tensor<device half,  dextents<int32_t,4>> X [[buffer(0)]],
+    tensor<device half,  dextents<int32_t,4>> W [[buffer(1)]],
+    tensor<device float, dextents<int32_t,4>> Y [[buffer(2)]])
+{
+  // MPP descriptor order: (out_channels, dst_W, dst_H, batch),
+  //                      (in_channels,  src_W, src_H, batch).
+  constexpr auto desc = convolution2d_descriptor(
+      int4(4, 8, 8, 1),
+      int4(4, 10, 10, 1),
+      int2(3, 3));
+  convolution2d<desc, execution_simdgroups<4>> op;
+  op.set_offsets(int2(1, 1));   // SAME-centered -> VALID for K=3
+  auto cT = op.get_destination_cooperative_tensor<decltype(X), decltype(W), float>();
+  op.run(X, W, cT);
+  cT.store(Y);
+}
+)MSL";
+
+// Spike step 2 — grid-of-threadgroups multi-tile conv. Same compile-time
+// descriptor (tile = 8x8 output, Cin=Cout=4, k=3) but launched as a 2-D grid
+// over output tiles. Each TG slices its input window via set_offsets and its
+// destination via tensor.slice — the pattern that unlocked batched SVD/Cholesky.
+// Only aligned output sizes (dstH, dstW multiples of 8) — the honest scope of
+// the spike; non-aligned tiling is a follow-up if this lane proves itself.
+static NSString *kMTL4Conv2dMultiTileMSL = @R"MSL(
+#include <metal_stdlib>
+#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>
+using namespace metal;
+using namespace mpp::tensor_ops;
+
+constant int TH = 8;   // output tile rows  (compile-time)
+constant int TW = 8;   // output tile cols
+constant int Kp = 3;   // kernel side
+
+kernel void conv2d_multi_tile_f16(
+    tensor<device half,  dextents<int32_t,4>> X [[buffer(0)]],
+    tensor<device half,  dextents<int32_t,4>> W [[buffer(1)]],
+    tensor<device float, dextents<int32_t,4>> Y [[buffer(2)]],
+    uint2 tg [[threadgroup_position_in_grid]])
+{
+  // Per-tile descriptor: source = (TH + Kp - 1) x (TW + Kp - 1) halo, dest = TH x TW.
+  constexpr auto desc = convolution2d_descriptor(
+      int4(4, TW, TH, 1),
+      int4(4, TW + Kp - 1, TH + Kp - 1, 1),
+      int2(Kp, Kp));
+  convolution2d<desc, execution_simdgroups<4>> op;
+  op.set_offsets(int2((Kp - 1) / 2, (Kp - 1) / 2));  // SAME-centered -> VALID
+  // The cooperative op expects bound tensors whose dimensions match the
+  // descriptor's source/dest. Slice both X and Y per-tile (innermost-first
+  // offsets: channel=0, W=tile_col*TW, H=tile_row*TH, batch=0).
+  auto mX = X.slice(0, (int)tg.x * TW, (int)tg.y * TH, 0);
+  auto mY = Y.slice(0, (int)tg.x * TW, (int)tg.y * TH, 0);
+  auto cT = op.get_destination_cooperative_tensor<decltype(mX), decltype(W), float>();
+  op.run(mX, W, cT);
+  cT.store(mY);
+}
+)MSL";
+
+// Spike harness — multi-tile NHWC, Cin=Cout=4, k=3, VALID. dstH, dstW must be
+// multiples of 8 (the compile-time tile). Returns 1 on success.
+extern "C" int32_t tessera_apple_gpu_spike_conv2d_multi_tile_f16(
+    const uint16_t *X, const uint16_t *W, float *Y,
+    int32_t dstH, int32_t dstW) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !X || !W || !Y) return 0;
+  const int TH = 8, TW = 8, kH = 3, kW = 3, Cin = 4, Cout = 4, B = 1;
+  if (dstH <= 0 || dstW <= 0 || dstH % TH != 0 || dstW % TW != 0) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    id<MTLDevice> dev = ctx.device;
+    id<MTLComputePipelineState> pso = compile_mtl4_pipeline(
+        ctx, kMTL4Conv2dMultiTileMSL, @"conv2d_multi_tile_f16");
+    if (!pso) return 0;
+    const int srcH = dstH + (kH - 1), srcW = dstW + (kW - 1);
+    @autoreleasepool {
+      size_t xB = (size_t)B * srcH * srcW * Cin * 2;
+      size_t wB = (size_t)kH * kW * Cin * Cout * 2;
+      size_t yB = (size_t)B * dstH * dstW * Cout * 4;
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bX, ctx, X, xB);
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bW, ctx, W, wB);
+      TS_METAL_BUF_ACQUIRE(bY, ctx, yB);
+      if (!bX || !bW || !bY) return 0;
+      // Innermost-first dims: X(Cin,srcW,srcH,B), W(Cout,Cin,kW,kH), Y(Cout,dstW,dstH,B).
+      id<MTLTensor> tX = make_buffer_tensor_4d(dev, bX, Cin, srcW, srcH, B,    MTLTensorDataTypeFloat16);
+      id<MTLTensor> tW = make_buffer_tensor_4d(dev, bW, Cout, Cin, kW, kH,     MTLTensorDataTypeFloat16);
+      id<MTLTensor> tY = make_buffer_tensor_4d(dev, bY, Cout, dstW, dstH, B,   MTLTensorDataTypeFloat32);
+      if (!tX || !tW || !tY) return 0;
+      id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
+      if (!queue) return 0;
+      bool done = false;
+      {
+        std::lock_guard<std::mutex> lock(ctx.mtl4_dispatch_mu);
+        id<MTLBuffer> rbufs[3] = {bX, bW, bY};
+        id<MTLResidencySet> res = mtl4_set_residency(ctx, rbufs, 3);
+        if (!res) return 0;
+        MTLSize grid = MTLSizeMake((NSUInteger)(dstW / TW), (NSUInteger)(dstH / TH), 1);
+        done = mtl4_encode_and_wait(ctx, queue, pso, ^(id<MTL4ArgumentTable> at) {
+          [at setResource:tX.gpuResourceID atBufferIndex:0];
+          [at setResource:tW.gpuResourceID atBufferIndex:1];
+          [at setResource:tY.gpuResourceID atBufferIndex:2];
+        }, grid, MTLSizeMake(128, 1, 1), res);
+      }
+      if (!done) return 0;
+      std::memcpy(Y, [bY contents], yB);
+      return 1;
+    }
+  }
+  return 0;
+}
+
+// Spike harness — single-tile NHWC 8x8, Cin=Cout=4, k=3, VALID. Returns 1 on
+// success, 0 if Metal unavailable or anything fails along the way.
+extern "C" int32_t tessera_apple_gpu_spike_conv2d_single_tile_f16(
+    const uint16_t *X, const uint16_t *W, float *Y) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !X || !W || !Y) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    id<MTLDevice> dev = ctx.device;
+    id<MTLComputePipelineState> pso = compile_mtl4_pipeline(
+        ctx, kMTL4Conv2dSingleTileMSL, @"conv2d_single_tile_f16");
+    if (!pso) return 0;
+    const int B = 1, Cin = 4, Cout = 4, kH = 3, kW = 3, dstH = 8, dstW = 8;
+    const int srcH = dstH + (kH - 1), srcW = dstW + (kW - 1);
+    @autoreleasepool {
+      MTLResourceOptions ro = MTLResourceStorageModeShared;
+      size_t xB = (size_t)B * srcH * srcW * Cin * 2;
+      size_t wB = (size_t)kH * kW * Cin * Cout * 2;
+      size_t yB = (size_t)B * dstH * dstW * Cout * 4;
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bX, ctx, X, xB);
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bW, ctx, W, wB);
+      TS_METAL_BUF_ACQUIRE(bY, ctx, yB);
+      if (!bX || !bW || !bY) return 0;
+      // MPP NHWC/HWIO/NHWO with innermost-first MTLTensor dims:
+      //   activation X: innermost=Cin, then srcW, srcH, batch
+      //   weights   W: innermost=Cout, then Cin,  kW,   kH    (HWIO storage)
+      //   dest      Y: innermost=Cout, then dstW, dstH, batch
+      id<MTLTensor> tX = make_buffer_tensor_4d(dev, bX, Cin, srcW, srcH, B,    MTLTensorDataTypeFloat16);
+      id<MTLTensor> tW = make_buffer_tensor_4d(dev, bW, Cout, Cin, kW, kH,     MTLTensorDataTypeFloat16);
+      id<MTLTensor> tY = make_buffer_tensor_4d(dev, bY, Cout, dstW, dstH, B,   MTLTensorDataTypeFloat32);
+      if (!tX || !tW || !tY) return 0;
+      id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
+      if (!queue) return 0;
+      bool done = false;
+      {
+        std::lock_guard<std::mutex> lock(ctx.mtl4_dispatch_mu);
+        id<MTLBuffer> rbufs[3] = {bX, bW, bY};
+        id<MTLResidencySet> res = mtl4_set_residency(ctx, rbufs, 3);
+        if (!res) return 0;
+        // Single threadgroup = 4 SIMD groups = 128 threads (matches the kernel).
+        done = mtl4_encode_and_wait(ctx, queue, pso, ^(id<MTL4ArgumentTable> at) {
+          [at setResource:tX.gpuResourceID atBufferIndex:0];
+          [at setResource:tW.gpuResourceID atBufferIndex:1];
+          [at setResource:tY.gpuResourceID atBufferIndex:2];
+        }, MTLSizeMake(1, 1, 1), MTLSizeMake(128, 1, 1), res);
+      }
+      if (!done) return 0;
+      std::memcpy(Y, [bY contents], yB);
+      return 1;
+    }
+  }
+  return 0;
+}
+
 // Fused: C = act(A(f16) @ B(f16) + bias). bias may be null; act 0..3.
 extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_epilogue_f16(
     const uint16_t *A, const uint16_t *B, float *C, const float *bias,

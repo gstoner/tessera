@@ -2462,6 +2462,80 @@ extern "C" int32_t tessera_apple_gpu_unary_dev_bf16_enc(
   return 1;
 }
 
+// Phase 3b (2026-06-01) — bf16 MSL via on-GPU cast, off-Darwin
+// reference. The Darwin runtime composes bf16→fp32 cast + fp32 MSL
+// kernel + fp32→bf16 cast on the GPU. Off-Darwin we just do the
+// equivalent math on the host: read bf16, compute in fp32, write bf16.
+
+extern "C" int32_t tessera_apple_gpu_rope_dev_bf16_enc(
+    TsEncodeSession* s, TsDeviceTensor* X, TsDeviceTensor* Theta,
+    TsDeviceTensor* Y, int32_t M, int32_t K) {
+  if (!s || !X || !Theta || !Y) return 0;
+  const uint16_t* xh = reinterpret_cast<const uint16_t*>(X->data);
+  const uint16_t* th = reinterpret_cast<const uint16_t*>(Theta->data);
+  uint16_t* yh = reinterpret_cast<uint16_t*>(Y->data);
+  for (int32_t m = 0; m < M; ++m) {
+    for (int32_t pair = 0; pair < K / 2; ++pair) {
+      int idx_e = m * K + pair * 2;
+      int idx_o = idx_e + 1;
+      float xe = _bf16_to_f32(xh[idx_e]);
+      float xo = _bf16_to_f32(xh[idx_o]);
+      float c = std::cos(_bf16_to_f32(th[idx_e]));
+      float ss = std::sin(_bf16_to_f32(th[idx_e]));
+      yh[idx_e] = _f32_to_bf16(xe * c - xo * ss);
+      yh[idx_o] = _f32_to_bf16(xe * ss + xo * c);
+    }
+  }
+  return 1;
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_dev_bf16_enc(
+    TsEncodeSession* s, TsDeviceTensor* Q, TsDeviceTensor* K,
+    TsDeviceTensor* V, TsDeviceTensor* O,
+    int32_t B, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal) {
+  if (!s || !Q || !K || !V || !O) return 0;
+  const uint16_t* Qh = reinterpret_cast<const uint16_t*>(Q->data);
+  const uint16_t* Kh = reinterpret_cast<const uint16_t*>(K->data);
+  const uint16_t* Vh = reinterpret_cast<const uint16_t*>(V->data);
+  uint16_t* Oh = reinterpret_cast<uint16_t*>(O->data);
+  for (int32_t b = 0; b < B; ++b) {
+    for (int32_t q = 0; q < Sq; ++q) {
+      float m = -INFINITY;
+      float l = 0.0f;
+      std::vector<float> o(D, 0.0f);
+      for (int32_t k = 0; k < Sk; ++k) {
+        if (causal && k > q) break;
+        float score = 0.0f;
+        for (int32_t d = 0; d < D; ++d) {
+          score += _bf16_to_f32(Qh[((std::size_t)b * Sq + q) * D + d]) *
+                   _bf16_to_f32(Kh[((std::size_t)b * Sk + k) * D + d]);
+        }
+        score *= scale;
+        float new_m = std::max(m, score);
+        float exp_old = std::exp(m - new_m);
+        float exp_score = std::exp(score - new_m);
+        for (int32_t d = 0; d < D; ++d) {
+          o[d] = o[d] * exp_old +
+                 _bf16_to_f32(Vh[((std::size_t)b * Sk + k) * D + d]) *
+                     exp_score;
+        }
+        l = l * exp_old + exp_score;
+        m = new_m;
+      }
+      if (l == 0.0f) {
+        for (int32_t d = 0; d < D; ++d)
+          Oh[((std::size_t)b * Sq + q) * D + d] = _f32_to_bf16(0.0f);
+      } else {
+        float inv_l = 1.0f / l;
+        for (int32_t d = 0; d < D; ++d)
+          Oh[((std::size_t)b * Sq + q) * D + d] = _f32_to_bf16(o[d] * inv_l);
+      }
+    }
+  }
+  return 1;
+}
+
 extern "C" int64_t tessera_apple_gpu_session_commit_count(void) {
   // Off-Darwin: no real command queue; static counter incremented by
   // ``ts_enc_commit_wait`` in the stub (simple file-static — single-threaded

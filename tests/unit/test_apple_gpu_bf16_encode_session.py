@@ -332,18 +332,17 @@ def test_mixed_dtype_trace_uses_separate_sessions():
 
 # ---- Registry coverage check ------------------------------------------
 
-def test_bf16_registry_covers_mpsgraph_ops_only():
-    """The bf16 registry intentionally LACKS rope and flash_attn —
-    those need the Phase-3b on-GPU conversion path. Document via test
-    so the lack is honest (not silently allowing a NotImplementedError
-    later)."""
+def test_bf16_registry_covers_full_op_envelope():
+    """After Phase 3b (2026-06-01), bf16 covers the full 8-op
+    envelope — rope and flash_attn route through on-GPU bf16↔fp32
+    cast. The dtype matrix is now complete: 8 ops × 3 dtypes = 24
+    entries."""
     from tessera.apple_gpu_chain import ENCODE_OP_REGISTRY
     bf16_ops = {name for (name, dtype) in ENCODE_OP_REGISTRY
                 if dtype == "bf16"}
     assert bf16_ops == {"bmm", "layer_norm", "rmsnorm", "softmax",
-                        "silu", "gelu"}, bf16_ops
-    # Sanity: the f32 and f16 registries DO have rope + flash_attn.
-    f16_ops = {name for (name, dtype) in ENCODE_OP_REGISTRY
-               if dtype == "f16"}
-    assert "rope" in f16_ops
-    assert "flash_attn" in f16_ops
+                        "silu", "gelu", "rope", "flash_attn"}, bf16_ops
+    # Sanity: 8 ops in EVERY dtype.
+    for dtype in ("f32", "f16", "bf16"):
+        ops = {name for (name, d) in ENCODE_OP_REGISTRY if d == dtype}
+        assert len(ops) == 8, (dtype, ops)

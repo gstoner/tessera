@@ -68,6 +68,9 @@ _layer_norm_enc_bf16 = None
 _rmsnorm_enc_bf16 = None
 _softmax_enc_bf16 = None
 _unary_enc_bf16 = None
+# Phase 3b (2026-06-01) — MSL-kernel bf16 via on-GPU cast.
+_rope_enc_bf16 = None
+_flash_attn_enc_bf16 = None
 _mpsgraph_bf16_supported = None
 _session_commit_count = None
 _ts_dev_alloc = None
@@ -89,6 +92,7 @@ def _bind_session_symbols() -> bool:
     global _flash_attn_enc_f16
     global _bmm_enc_bf16, _layer_norm_enc_bf16, _rmsnorm_enc_bf16
     global _softmax_enc_bf16, _unary_enc_bf16
+    global _rope_enc_bf16, _flash_attn_enc_bf16
     global _mpsgraph_bf16_supported
     global _ts_dev_alloc, _ts_dev_upload, _ts_dev_download, _ts_dev_free
     global _ts_dev_nbytes
@@ -211,6 +215,19 @@ def _bind_session_symbols() -> bool:
         "tessera_apple_gpu_unary_dev_bf16_enc",
         (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
          ctypes.c_int64, ctypes.c_int32),
+        ctypes.c_int32)
+    # Phase 3b (2026-06-01) — MSL bf16 via on-GPU cast.
+    _rope_enc_bf16 = bind_symbol(
+        "tessera_apple_gpu_rope_dev_bf16_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32),
+        ctypes.c_int32)
+    _flash_attn_enc_bf16 = bind_symbol(
+        "tessera_apple_gpu_flash_attn_dev_bf16_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_float, ctypes.c_int32),
         ctypes.c_int32)
     _mpsgraph_bf16_supported = bind_symbol(
         "tessera_apple_gpu_mpsgraph_bf16_supported", (),
@@ -849,6 +866,55 @@ def gelu_enc_bf16(session: int, X: DeviceTensor, *,
     return _unary_enc_call_bf16(session, X, op_code=5, n=n)
 
 
+def rope_enc_bf16(session: int, X: DeviceTensor, Theta: DeviceTensor,
+                  *, M: int, K: int) -> DeviceTensor:
+    """bf16 RoPE via on-GPU cast (Phase 3b). The runtime brackets
+    the existing f32 MSL kernel with bf16→fp32 → kernel → fp32→bf16
+    cast nodes, all in the same command buffer."""
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    if _rope_enc_bf16 is None:
+        raise RuntimeError("rope_enc_bf16 symbol not bound")
+    out = device_empty(M * K * 2)
+    rc = _rope_enc_bf16(ctypes.c_void_p(session),
+                        ctypes.c_void_p(X.handle),
+                        ctypes.c_void_p(Theta.handle),
+                        ctypes.c_void_p(out.handle),
+                        ctypes.c_int32(M), ctypes.c_int32(K))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"rope_enc_bf16 returned {rc}")
+    return out
+
+
+def flash_attn_enc_bf16(session: int, Q: DeviceTensor, K: DeviceTensor,
+                        V: DeviceTensor, *, B: int, Sq: int, Sk: int,
+                        D: int, scale: Optional[float] = None,
+                        causal: bool = False) -> DeviceTensor:
+    """bf16 flash_attn via on-GPU cast (Phase 3b). Same recipe as
+    rope_enc_bf16: f32 MSL kernel sandwiched between cast nodes."""
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    if _flash_attn_enc_bf16 is None:
+        raise RuntimeError("flash_attn_enc_bf16 symbol not bound")
+    if scale is None:
+        scale = 1.0 / (float(D) ** 0.5)
+    out = device_empty(B * Sq * D * 2)
+    rc = _flash_attn_enc_bf16(ctypes.c_void_p(session),
+                              ctypes.c_void_p(Q.handle),
+                              ctypes.c_void_p(K.handle),
+                              ctypes.c_void_p(V.handle),
+                              ctypes.c_void_p(out.handle),
+                              ctypes.c_int32(B), ctypes.c_int32(Sq),
+                              ctypes.c_int32(Sk), ctypes.c_int32(D),
+                              ctypes.c_float(scale),
+                              ctypes.c_int32(1 if causal else 0))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"flash_attn_enc_bf16 returned {rc}")
+    return out
+
+
 __all__ = [
     "DeviceTensor",
     "batched_session",
@@ -860,6 +926,7 @@ __all__ = [
     "device_empty",
     "device_tensor",
     "flash_attn_enc",
+    "flash_attn_enc_bf16",
     "flash_attn_enc_f16",
     "gelu_enc",
     "gelu_enc_bf16",
@@ -871,6 +938,7 @@ __all__ = [
     "rmsnorm_enc_bf16",
     "rmsnorm_enc_f16",
     "rope_enc",
+    "rope_enc_bf16",
     "rope_enc_f16",
     "session_available",
     "session_commit_count",

@@ -79,6 +79,17 @@ def test_no_raw_newbuffer_in_dispatchers(runtime_src: str) -> None:
         _fn_range(r"static\s+id<MTLBuffer>\s+metal_buffer_acquire\s*\("),
         _fn_range(r"TsDeviceTensor\s*\*\s*ts_dev_alloc\s*\("),
         _fn_range(r"tessera_apple_gpu_commit_and_wait_timeout_probe\s*\("),
+        # Phase 3b (2026-06-01) — bf16 MSL encode helpers allocate
+        # fp32 scratch buffers for the on-GPU bf16→fp32→bf16 cast
+        # chain. The encoded MPSGraph cast nodes + MSL kernel retain
+        # these via the cb until commit; using the buffer pool would
+        # risk aliasing because the pool would consider the buffer
+        # "free" the moment the function returns, but the GPU is
+        # still reading from it inside the deferred encoded chain.
+        # Direct allocation gives the cb-retained lifetime that the
+        # encode-session semantics need.
+        _fn_range(r"tessera_apple_gpu_rope_dev_bf16_enc\s*\("),
+        _fn_range(r"tessera_apple_gpu_flash_attn_dev_bf16_enc\s*\("),
     ]
     offending = [
         m for m in raw

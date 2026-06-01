@@ -12889,6 +12889,107 @@ extern "C" int32_t tessera_apple_gpu_flash_attn_dev_f16_enc(
              : 0;
 }
 
+// Phase 3b (2026-06-01) — forward decl for the MPSGraph cast helper
+// defined later in this file. The bf16 MSL-kernel encode helpers
+// below (rope_bf16, flash_attn_bf16) reference it; the helper itself
+// lives alongside the other mpsg_encode_*_dev helpers further down.
+namespace {
+static bool mpsg_encode_cast_dev(MPSCommandBuffer *cb,
+                                 id<MTLBuffer> bufIn,
+                                 id<MTLBuffer> bufOut,
+                                 int64_t n,
+                                 MPSDataType srcType,
+                                 MPSDataType dstType);
+}  // namespace
+
+// Phase 3b (2026-06-01) — bf16 RoPE via on-GPU bf16→fp32→bf16 cast.
+// The MSL kernel itself is the existing f32 rope; we sandwich it
+// between two cast nodes encoded into the same cb so the whole
+// thing runs in one session with no host roundtrip.
+extern "C" int32_t tessera_apple_gpu_rope_dev_bf16_enc(
+    TsEncodeSession *s,
+    TsDeviceTensor *X, TsDeviceTensor *Theta, TsDeviceTensor *Y,
+    int32_t M, int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !Theta || !Y) return 0;
+  if (M <= 0 || K <= 0) return 1;
+  int64_t n = (int64_t)M * (int64_t)K;
+  // Allocate fp32 scratch device buffers for X, Theta, and the
+  // rope output. The session's command buffer retains the
+  // MTLBuffers until commit so these are safe to release as soon
+  // as the caller returns (the encoded chain holds the references).
+  id<MTLBuffer> bufXf =
+      [ctx.device newBufferWithLength:(NSUInteger)(n * 4)
+                              options:MTLResourceStorageModeShared];
+  id<MTLBuffer> bufTf =
+      [ctx.device newBufferWithLength:(NSUInteger)(n * 4)
+                              options:MTLResourceStorageModeShared];
+  id<MTLBuffer> bufYf =
+      [ctx.device newBufferWithLength:(NSUInteger)(n * 4)
+                              options:MTLResourceStorageModeShared];
+  if (!bufXf || !bufTf || !bufYf) return 0;
+  // bf16 → fp32 casts (encoded into the shared cb).
+  if (!mpsg_encode_cast_dev(s->cb, X->buf, bufXf, n,
+                             MPSDataTypeBFloat16, MPSDataTypeFloat32))
+    return 0;
+  if (!mpsg_encode_cast_dev(s->cb, Theta->buf, bufTf, n,
+                             MPSDataTypeBFloat16, MPSDataTypeFloat32))
+    return 0;
+  // fp32 RoPE MSL kernel.
+  if (!encode_rope_msl_dev(ctx, s->cb, bufXf, bufTf, bufYf, M, K))
+    return 0;
+  // fp32 → bf16 cast for the output.
+  if (!mpsg_encode_cast_dev(s->cb, bufYf, Y->buf, n,
+                             MPSDataTypeFloat32, MPSDataTypeBFloat16))
+    return 0;
+  return 1;
+}
+
+// Phase 3b (2026-06-01) — bf16 flash_attn via on-GPU
+// bf16→fp32→bf16 cast. Same pattern as rope_bf16 above: bracket the
+// existing fp32 MSL flash_attn kernel with two cast nodes.
+extern "C" int32_t tessera_apple_gpu_flash_attn_dev_bf16_enc(
+    TsEncodeSession *s,
+    TsDeviceTensor *Q, TsDeviceTensor *K, TsDeviceTensor *V,
+    TsDeviceTensor *O,
+    int32_t B, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !Q || !K || !V || !O) return 0;
+  if (B <= 0 || Sq <= 0 || Sk <= 0 || D <= 0) return 1;
+  int64_t qN = (int64_t)B * Sq * D;
+  int64_t kvN = (int64_t)B * Sk * D;
+  id<MTLBuffer> bufQf =
+      [ctx.device newBufferWithLength:(NSUInteger)(qN * 4)
+                              options:MTLResourceStorageModeShared];
+  id<MTLBuffer> bufKf =
+      [ctx.device newBufferWithLength:(NSUInteger)(kvN * 4)
+                              options:MTLResourceStorageModeShared];
+  id<MTLBuffer> bufVf =
+      [ctx.device newBufferWithLength:(NSUInteger)(kvN * 4)
+                              options:MTLResourceStorageModeShared];
+  id<MTLBuffer> bufOf =
+      [ctx.device newBufferWithLength:(NSUInteger)(qN * 4)
+                              options:MTLResourceStorageModeShared];
+  if (!bufQf || !bufKf || !bufVf || !bufOf) return 0;
+  if (!mpsg_encode_cast_dev(s->cb, Q->buf, bufQf, qN,
+                             MPSDataTypeBFloat16, MPSDataTypeFloat32))
+    return 0;
+  if (!mpsg_encode_cast_dev(s->cb, K->buf, bufKf, kvN,
+                             MPSDataTypeBFloat16, MPSDataTypeFloat32))
+    return 0;
+  if (!mpsg_encode_cast_dev(s->cb, V->buf, bufVf, kvN,
+                             MPSDataTypeBFloat16, MPSDataTypeFloat32))
+    return 0;
+  if (!encode_flash_attn_msl_dev(ctx, s->cb, bufQf, bufKf, bufVf, bufOf,
+                                  B, Sq, Sk, D, scale, causal))
+    return 0;
+  if (!mpsg_encode_cast_dev(s->cb, bufOf, O->buf, qN,
+                             MPSDataTypeFloat32, MPSDataTypeBFloat16))
+    return 0;
+  return 1;
+}
+
 // Stage-2 (2026-06-01) — encoded RoPE. Sits between layer_norm/rmsnorm
 // and the QKV projections in a typical decoder layer. Composes onto
 // the same session as the other encoded ops.
@@ -12927,6 +13028,64 @@ extern "C" int64_t tessera_apple_gpu_session_commit_count(void) {
 // elementwise ops are layout-agnostic. unary op: 0 relu, 4 silu (see
 // mpsg_unary_node); binary op: 0 add, 2 mul (see mpsg_binary_node).
 //===----------------------------------------------------------------------===//
+namespace {
+
+// Phase 3b (2026-06-01) — encode an in-cb dtype cast via MPSGraph's
+// cast operation. Used by the bf16 MSL-kernel encode helpers
+// (encode_rope_msl_bf16_dev, encode_flash_attn_msl_bf16_dev) which
+// need bf16→fp32 conversion before the fp32 MSL kernel and
+// fp32→bf16 conversion after. ``n`` is the element count.
+//
+// The cast is encoded into the SHARED command buffer (no commit /
+// wait) so a chain like:
+//   bf16_in_buf → cast → fp32_tmp → MSL_kernel → fp32_out → cast → bf16_out_buf
+// runs end-to-end on ONE cb. Metal's automatic hazard tracking
+// orders the cast → kernel → cast sequence correctly.
+static bool mpsg_encode_cast_dev(MPSCommandBuffer *cb,
+                                 id<MTLBuffer> bufIn,
+                                 id<MTLBuffer> bufOut,
+                                 int64_t n,
+                                 MPSDataType srcType,
+                                 MPSDataType dstType) {
+  if (n <= 0) return true;
+  if (!cb || !bufIn || !bufOut) return false;
+  NSArray<NSNumber *> *shape = @[ @(n) ];
+  NSString *key = [NSString stringWithFormat:@"cast:%d:%d:%lld",
+                                             (int)srcType, (int)dstType,
+                                             (long long)n];
+  NSArray *entry = mpsg_cache_get(key);
+  MPSGraph *g;
+  MPSGraphTensor *ph;
+  MPSGraphTensor *y;
+  if (entry) {
+    g = entry[0];
+    ph = ((NSArray *)entry[1])[0];
+    y = entry[2];
+  } else {
+    g = [MPSGraph new];
+    ph = [g placeholderWithShape:shape dataType:srcType name:nil];
+    y = [g castTensor:ph toType:dstType name:@"cast"];
+    if (!y) return false;
+    mpsg_cache_put(key, @[ g, @[ ph ], y ]);
+  }
+  MPSGraphTensorData *xd =
+      [[MPSGraphTensorData alloc] initWithMTLBuffer:bufIn
+                                              shape:shape
+                                           dataType:srcType];
+  MPSGraphTensorData *od =
+      [[MPSGraphTensorData alloc] initWithMTLBuffer:bufOut
+                                              shape:shape
+                                           dataType:dstType];
+  [g encodeToCommandBuffer:cb feeds:@{ph : xd}
+              targetOperations:nil
+          resultsDictionary:@{y : od}
+        executionDescriptor:nil];
+  return true;
+}
+}  // namespace cast
+
+// Reopen the unary/binary namespace block — the existing
+// implementations follow below.
 namespace {
 static bool mpsg_encode_unary_dev(MPSCommandBuffer *cb, id<MTLBuffer> bufX,
                                   id<MTLBuffer> bufO, int64_t n, int op,

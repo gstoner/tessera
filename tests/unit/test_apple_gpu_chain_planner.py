@@ -66,12 +66,12 @@ def test_registry_entries_are_unique():
 def test_is_encode_eligible():
     assert is_encode_eligible("bmm", "f32")
     assert is_encode_eligible("rmsnorm", "f16")
-    assert is_encode_eligible("bmm", "bf16")  # added in Project-3 (2026-06-01)
+    assert is_encode_eligible("bmm", "bf16")  # Project-3 (2026-06-01)
+    # Phase 3b (2026-06-01) — rope + flash_attn bf16 now eligible
+    # via on-GPU bf16↔fp32 cast.
+    assert is_encode_eligible("rope", "bf16")
+    assert is_encode_eligible("flash_attn", "bf16")
     assert not is_encode_eligible("conv2d", "f32")  # not in registry
-    # rope + flash_attn bf16 are intentionally missing — MSL custom
-    # kernel paths need on-GPU bf16↔fp32 conversion (Phase-3b).
-    assert not is_encode_eligible("rope", "bf16")
-    assert not is_encode_eligible("flash_attn", "bf16")
 
 
 def test_encode_spec_returns_spec_or_raises():

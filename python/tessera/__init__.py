@@ -3690,6 +3690,15 @@ def _make_ops_namespace() -> types.SimpleNamespace:
 
 ops = _make_ops_namespace()
 
+# Phase 2.1c (2026-06-01) — wrap the 8 encode-eligible ops with the
+# apple_gpu trace-capture interceptor. Backward-compatible: when no
+# @auto_batch trace is active, the wrappers call straight through to
+# the existing numpy reference. Inside @auto_batch, calls with the
+# encode-required kwargs (gamma, rows, cols, …) route to
+# apple_gpu_ops.* automatically.
+from . import apple_gpu_ops_interception as _agpu_intercept
+_agpu_intercept.install_apple_gpu_interception(ops)
+
 # Common op aliases kept at the top level for older advanced examples. The
 # canonical compiler-visible spelling remains ``tessera.ops.<name>``.
 arange = ops.arange

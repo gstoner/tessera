@@ -57,7 +57,10 @@ def test_module_is_pure_aggregator():
         "tessera.compiler.capabilities",
         # stdlib + typing
         "__future__", "dataclasses", "pathlib", "typing",
-        "shutil", "sys",
+        # ``platform`` is the audit-fix-required arm64 probe (2026-05-31);
+        # ``shutil`` powers ``shutil.which`` toolchain probes; ``sys`` is
+        # for ``sys.platform``.
+        "platform", "shutil", "sys",
     )
     for mod in resolved:
         assert any(mod.startswith(p) for p in allowed_prefixes), (

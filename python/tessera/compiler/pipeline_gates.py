@@ -37,6 +37,7 @@ Two consumers in mind:
 
 from __future__ import annotations
 
+import platform
 import shutil
 import sys
 from dataclasses import dataclass
@@ -113,17 +114,37 @@ def _normalize_target(target: str) -> str:
 
 
 def _manifest_entries(op: str, target: str) -> list[_bm.BackendKernelEntry]:
+    """Resolve the manifest rows that describe how ``target`` compiles ``op``.
+
+    Audit fix (2026-05-31, P2): the manifest keys per-target are
+    inconsistent — NVIDIA emits per-SM rows (``nvidia_sm80``..``sm120``)
+    while ROCm emits a single family row (``rocm`` / ``rocm_blockfp``),
+    and Metalium emits ``metalium`` + ``metalium_blockfp``. The previous
+    implementation only mapped family→per-SM for NVIDIA, so passing a
+    per-arch ROCm target like ``rocm_gfx942`` matched zero rows and the
+    codegen gate spuriously failed. We now map symmetrically: ROCm
+    sub-arch targets inherit the family manifest row, and the NVIDIA
+    sub-arch case keeps exact per-SM matching.
+    """
     if not op:
         return []
     entries = _bm.manifest_for(op)
     out: list[_bm.BackendKernelEntry] = []
     for e in entries:
-        if target == "nvidia" and e.target.startswith("nvidia_"):
+        t = e.target
+        if target == "nvidia" and t.startswith("nvidia_"):
             out.append(e)
-        elif target == "metalium" and e.target in ("metalium",
-                                                   "metalium_blockfp"):
+        elif target.startswith("nvidia_") and t == target:
             out.append(e)
-        elif e.target == target:
+        elif target == "rocm" and (t == "rocm" or t.startswith("rocm_")):
+            out.append(e)
+        elif target.startswith("rocm_") and t in ("rocm", target):
+            # per-arch target inherits the rocm family manifest row, since
+            # the manifest keys ROCm by family today.
+            out.append(e)
+        elif target == "metalium" and t in ("metalium", "metalium_blockfp"):
+            out.append(e)
+        elif t == target:
             out.append(e)
     return out
 
@@ -136,7 +157,16 @@ def _execution_row(target: str) -> Optional[_em.ExecutionRow]:
 
 
 def _platform_is_darwin_arm64() -> bool:
-    return sys.platform == "darwin"
+    """True iff this is Apple Silicon (Darwin + arm64).
+
+    Audit fix (2026-05-31): the helper used to return ``sys.platform ==
+    "darwin"`` only, which is *also* true on Intel Macs. An Intel Mac would
+    have falsely passed the apple_cpu / apple_gpu ``hardware_smoke`` gate
+    even though it can't run Metal MPS or AMX. ``platform.machine()``
+    returns ``"arm64"`` on Apple Silicon and ``"x86_64"`` on Intel; that's
+    the actual check the gate is supposed to perform.
+    """
+    return sys.platform == "darwin" and platform.machine() == "arm64"
 
 
 # --- Per-gate evaluators (each returns a single GateResult) --------------

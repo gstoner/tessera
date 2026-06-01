@@ -171,6 +171,48 @@ fallback semantics by returning `(output, override_kind)`). The inline CPU
 branch in `runtime.launch()` is deleted; every executable row in the matrix is
 now reached through exactly one dispatch site.
 
+### 11. Audit follow-up bug fixes — ✅ DONE (2026-05-31)
+Three bugs surfaced by an external code-review pass over A / B / D and
+verified empirically before fixing:
+
+* **P1 — AugAssign Sub/Div silently dropped the op.** ``visit_AugAssign``
+  accepted ``ast.Sub`` and ``ast.Div`` as part of D.4, but
+  ``_try_map_binop`` only knew ``ast.Add`` and ``ast.Mult``. ``c -= b``
+  therefore produced the ``PY_FRONTEND_AUGASSIGN_DESUGARED`` info note,
+  ``_emit_expr`` returned ``None`` on the resulting ``Sub`` BinOp, and
+  **no op was emitted** — silently dropped. **Fix**: added real
+  ``tessera.sub`` / ``tessera.div`` lowering symmetric with add/mul, and
+  widened the ``_emit_expr`` BinOp accept-set. Both AugAssign forms AND
+  plain ``a - b`` / ``a / b`` BinOps now lower to real ops.
+* **P2 — pipeline_gates rocm_gfx* per-arch targets had no manifest
+  match.** ``_manifest_entries`` mapped family→per-SM for NVIDIA but had
+  no inverse rule for ROCm (which emits ``target="rocm"`` in the
+  manifest, not per-arch). A per-arch target like ``rocm_gfx942``
+  matched zero manifest rows and the codegen gate spuriously failed
+  *before* the intended ``toolchain`` (no hipcc) gate. **Fix**: added
+  the symmetric per-arch ROCm rule — ``rocm_gfx*`` inherits the
+  ``rocm`` family manifest row. Now ``first_failing_gate("rocm_gfx942",
+  "matmul")`` correctly returns ``toolchain`` with the "no hipcc"
+  detail, matching the family-target answer.
+* **P2 — _platform_is_darwin_arm64 only checked Darwin, not arm64.**
+  The helper name promised arm64 but the body was
+  ``sys.platform == "darwin"``. On an Intel Mac this would have falsely
+  passed the apple_cpu / apple_gpu ``hardware_smoke`` gate. **Fix**:
+  also check ``platform.machine() == "arm64"``. The
+  ``test_apple_gpu_hardware_smoke_fails_on_intel_mac`` regression guard
+  patches the helper's environment to simulate the Intel Mac path and
+  confirms the gate now reports ``fail``.
+
+15 new tests in
+``tests/unit/test_audit_fixes_d5_b_platform_b_rocm.py`` (3 AugAssign
+guards covering sub/div/plain BinOps, 7 ROCm guards covering all five
+per-arch targets + the family target + NVIDIA preservation, 5 platform
+guards covering Intel Mac / arm64 Mac / Linux / the downstream
+``hardware_smoke`` gate). **1003 affected tests pass** across the wide
+sweep (jit / canonical / compile / graph_ir / control_flow / dynamic /
+runtime / pipeline / conformance / execution_matrix / audit_fixes), 4
+skipped, 0 failures, 0 regressions.
+
 ### 10. Dynamic control flow lowering — ✅ D.1 + D.2 + D.3 DONE (2026-05-31)
 **Audit recommendation D.** The graph_ir frontend (line 922 pre-D) emitted a
 blanket ``PY_FRONTEND_UNSUPPORTED`` warning for every dynamic ``if`` /

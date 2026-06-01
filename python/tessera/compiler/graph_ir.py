@@ -1264,7 +1264,8 @@ class _OpExtractor(ast.NodeVisitor):
                 self._value_types[f"%{op.result}"] = _ir_type
             self.ops.append(op)
             return f"%{op.result}"
-        if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Mult)):
+        if isinstance(node, ast.BinOp) and isinstance(
+                node.op, (ast.Add, ast.Mult, ast.Sub, ast.Div)):
             op = self._try_map_binop(node)
             if op is None:
                 return None
@@ -1294,7 +1295,20 @@ class _OpExtractor(ast.NodeVisitor):
         return None
 
     def _try_map_binop(self, node: ast.BinOp) -> Optional[IROp]:
-        op_name = "tessera.add" if isinstance(node.op, ast.Add) else "tessera.mul"
+        # D.5 fix (2026-05-31): visit_AugAssign accepts Sub/Div, but pre-fix
+        # this mapper only knew Add/Mult. Result: `c -= b` desugared to
+        # `c = c - b`, _emit_expr returned None on the Sub BinOp, and the
+        # subtract was silently dropped. Now lowered symmetrically.
+        if isinstance(node.op, ast.Add):
+            op_name = "tessera.add"
+        elif isinstance(node.op, ast.Mult):
+            op_name = "tessera.mul"
+        elif isinstance(node.op, ast.Sub):
+            op_name = "tessera.sub"
+        elif isinstance(node.op, ast.Div):
+            op_name = "tessera.div"
+        else:
+            return None
         operands: list[str] = []
         operand_types: list[str] = []
         kwargs: dict[str, Any] = {}

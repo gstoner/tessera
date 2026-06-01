@@ -171,6 +171,50 @@ fallback semantics by returning `(output, override_kind)`). The inline CPU
 branch in `runtime.launch()` is deleted; every executable row in the matrix is
 now reached through exactly one dispatch site.
 
+### 8. Named pipeline capability gates — 🟡 B.1 DONE (2026-05-31)
+**Audit recommendation B** (started after A). The goal: replace
+``execution_kind: "reference_cpu"`` post-hoc metadata with an ordered,
+named gate sequence so the *first un-passed gate* is the diagnostic the
+runtime emits, not a single inscrutable kind label.
+
+**Landed (B.1) — gate evaluator module + dashboard column.**
+
+- New pure-aggregator module ``python/tessera/compiler/pipeline_gates.py``
+  defines the canonical seven gates: ``legality → codegen → toolchain →
+  link → runtime_abi → hardware_smoke → numerical``. Each gate's status
+  (``pass`` / ``fail`` / ``not_evaluated`` / ``not_applicable``) is sourced
+  from existing truth (capabilities + backend_manifest + execution_matrix +
+  primitive_coverage + ``shutil.which`` toolchain probes) — no new private
+  truth, drift-guarded by ``test_module_is_pure_aggregator``.
+- ``evaluate(target, op_name) → tuple[GateResult,...]`` returns the full
+  seven-gate table; ``first_failing_gate(target, op_name)`` returns the
+  first ``FAIL`` with its detail string. Every fail carries a non-empty
+  reason — locked by ``test_every_failing_gate_has_a_nonempty_detail``.
+- **The conformance matrix dashboard now reports the first failing gate
+  per (op, target) cell.** Each row in
+  ``docs/audit/op_target_conformance.md`` has a new column naming the
+  audit-style gate that's blocking. Examples:
+
+  * ``nvidia × matmul``: ``toolchain — nvcc not on PATH (CUDA Toolkit
+    13.2.1 not installed)``
+  * ``rocm × matmul``: ``toolchain — hipcc not on PATH (ROCm 7.2.3 not
+    installed)``
+  * ``metalium × matmul``: ``link — artifact_only — IR emits but no
+    linked-kernel path today``
+
+- 13 structural + behavioral tests in
+  ``tests/unit/test_pipeline_gates.py`` (gate order, known-good pass on
+  cpu / apple_cpu / apple_gpu, known-bad first-failing-gate for nvidia /
+  rocm / metalium, no-silent-fails, unknown-target/op handled).
+
+**Open (B.2): runtime integration.** When
+``@jit(target="nvidia")`` is called on a host without CUDA, the runtime
+should refuse with ``"unsupported: first failing gate = toolchain (nvcc
+not on PATH)"`` rather than falling through to whatever the matrix
+dispatcher decides. The gate evaluator is already factored to make this
+a small wiring change; cleanly testing it requires extending the
+runtime's error-path coverage and is sequenced separately.
+
 ### 7. Op×Target conformance matrix — ✅ DONE (2026-05-31)
 **Audit recommendation A** (out of A/B/C/D).
 

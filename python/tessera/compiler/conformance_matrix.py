@@ -37,10 +37,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 
 from tessera.compiler import backend_manifest as _bm
 from tessera.compiler import execution_matrix as _em
+from tessera.compiler import pipeline_gates as _pg
 from tessera.compiler import primitive_coverage as _pc
 
 
@@ -171,6 +172,12 @@ class ProofCell:
     backend_compile: str
     runtime_execute: str
     numerical_check: str
+    #: First failing gate from ``pipeline_gates.first_failing_gate``, or
+    #: ``None`` if every gate passes / is non-blocking. The presence of a
+    #: ``first_failing_gate`` is the *audit-named reason* the cell is not
+    #: complete; the seven proof columns are the post-hoc breakdown.
+    first_failing_gate: Optional[str] = None
+    first_failing_gate_detail: str = ""
     notes: tuple[str, ...] = ()
 
     @property
@@ -378,6 +385,18 @@ def _proof_cell(op: ConformanceOp, target: str) -> ProofCell:
     else:
         numerical_check = PROOF_MISSING
 
+    # Cross-reference the named pipeline gate (audit recommendation B). The
+    # gate is evaluated per primary component op — for fused/compose chains
+    # we report the gate of the first component, which is what the runtime
+    # would actually hit first.
+    gate_result = _pg.first_failing_gate(target, components[0])
+    if gate_result is not None:
+        first_failing_gate = gate_result.gate
+        first_failing_gate_detail = gate_result.detail
+    else:
+        first_failing_gate = None
+        first_failing_gate_detail = ""
+
     return ProofCell(
         op=op.name,
         target=target,
@@ -388,6 +407,8 @@ def _proof_cell(op: ConformanceOp, target: str) -> ProofCell:
         backend_compile=backend_compile,
         runtime_execute=runtime_execute,
         numerical_check=numerical_check,
+        first_failing_gate=first_failing_gate,
+        first_failing_gate_detail=first_failing_gate_detail,
         notes=tuple(notes),
     )
 
@@ -658,15 +679,22 @@ def render_markdown() -> str:
             lines.append("")
         header = ("| target | overall | graph | schedule | tile |"
                   " target_legal | backend_compile | runtime | numerical |"
-                  " notes |")
+                  " first failing gate (B) | notes |")
         sep = ("|--------|---------|-------|----------|------|"
                "--------------|-----------------|---------|-----------|"
-               "-------|")
+               "------------------------|-------|")
         lines.append(header)
         lines.append(sep)
         for cell in by_op[op.name]:
             sym = lambda s: _STATUS_SYMBOL[s]  # noqa: E731
             note = "; ".join(cell.notes) if cell.notes else ""
+            if cell.first_failing_gate is None:
+                gate_cell = "—"
+            else:
+                detail = cell.first_failing_gate_detail
+                if len(detail) > 60:
+                    detail = detail[:57] + "…"
+                gate_cell = f"`{cell.first_failing_gate}` — {detail}"
             lines.append(
                 f"| `{cell.target}` |"
                 f" {sym(cell.overall)} |"
@@ -677,6 +705,7 @@ def render_markdown() -> str:
                 f" {sym(cell.backend_compile)} |"
                 f" {sym(cell.runtime_execute)} |"
                 f" {sym(cell.numerical_check)} |"
+                f" {gate_cell} |"
                 f" {note} |"
             )
         lines.append("")

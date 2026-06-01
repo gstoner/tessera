@@ -82,6 +82,11 @@ def test_matrix_is_pure_aggregator():
         "tessera.compiler.backend_manifest",
         "tessera.compiler.execution_matrix",
         "tessera.compiler.driver",
+        # Audit recommendation B — named pipeline capability gates.
+        # The conformance matrix consumes the gate evaluator to surface the
+        # *first failing gate* per cell, but the gates module is itself a
+        # pure aggregator (its own allowlist test enforces that).
+        "tessera.compiler.pipeline_gates",
         # stdlib + typing
         "__future__",
         "dataclasses",

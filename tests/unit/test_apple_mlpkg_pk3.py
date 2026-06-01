@@ -46,7 +46,7 @@ from tessera.apple_mlpkg import (
 )
 
 
-_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "apple_gpu"
+_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "apple_gpu"
 
 
 def _find_mtlpackage() -> Path | None:
@@ -108,7 +108,8 @@ def _open_pipe_or_skip() -> Pipeline:
         pytest.skip(
             f"No .mtlpackage fixture in {_FIXTURES_DIR} — drop one in to "
             f"exercise PK3 tensor + argument-table path")
-    pipe = compile_mlpackage(pkg, function_name="main")
+    pipe = compile_mlpackage(pkg, function_name="main",
+                              input_dimensions={0: (4, 4), 1: (4, 4)})
     if pipe is None:
         pytest.fail(f"compile_mlpackage failed; last_error_kind="
                     f"{last_error_kind()}")

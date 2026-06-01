@@ -1486,6 +1486,11 @@ extern "C" int32_t tessera_apple_gpu_mtl4_archive_flush(void) { return 0; }
 extern "C" void *tessera_apple_gpu_mlpkg_compile(const char *, const char *) {
   return nullptr;
 }
+extern "C" void *tessera_apple_gpu_mlpkg_compile_with_dims(
+    const char *, const char *, int32_t, const int32_t *,
+    const int32_t *, const int64_t *) {
+  return nullptr;
+}
 extern "C" void tessera_apple_gpu_mlpkg_destroy(void *) {}
 extern "C" int32_t tessera_apple_gpu_mlpkg_is_compiled(void *) { return 0; }
 extern "C" int32_t tessera_apple_gpu_mlpkg_last_error_kind(void) { return -1; }

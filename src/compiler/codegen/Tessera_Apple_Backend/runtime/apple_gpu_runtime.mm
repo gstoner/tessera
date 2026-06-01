@@ -1947,6 +1947,131 @@ extern "C" int32_t tessera_apple_gpu_mtl4_archive_state(
 // -2 = path / library load failed; -3 = pipeline compile failed).
 static int32_t g_mlpkg_last_error_kind = 0;
 
+// PK1.5 (2026-05-31) — Compile with optional input dimensions. Apple's
+// sample matmul .mtlpackage (and many production Core ML packages) ship
+// with dynamic input shapes; the caller must call
+// ``setInputDimensions:atBufferIndex:`` on the descriptor BEFORE
+// compile or pipeline build fails with "Unsupported Ops or shapes for
+// MLEncoder". Mirrors Apple's sample at
+// ``MLMatrixMultiplier+PipelineCompilation.m:78-89``.
+//
+// ``n_inputs`` is the number of (buffer_index, dims) pairs the caller
+// is specifying. ``buffer_indices`` is the kernel-side index from
+// reflection (the same value PK2's binding_info returns in
+// ``buffer_index_out``). ``ranks`` is the per-input dimension count;
+// ``dims_flat`` is the concatenated extents (sum of ranks), each
+// innermost-first.
+//
+// When ``n_inputs == 0`` this is identical to
+// ``tessera_apple_gpu_mlpkg_compile`` — static-shape packages need no
+// per-call dims.
+extern "C" void *tessera_apple_gpu_mlpkg_compile_with_dims(
+    const char *path,
+    const char *function_name,
+    int32_t n_inputs,
+    const int32_t *buffer_indices,
+    const int32_t *ranks,
+    const int64_t *dims_flat) {
+  g_mlpkg_last_error_kind = 0;
+  if (!path || !function_name) {
+    g_mlpkg_last_error_kind = -2;
+    return NULL;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) {
+    g_mlpkg_last_error_kind = -1;
+    return NULL;
+  }
+  if (n_inputs > 0 && (!buffer_indices || !ranks || !dims_flat)) {
+    g_mlpkg_last_error_kind = -2;
+    return NULL;
+  }
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    @autoreleasepool {
+      NSURL *url = [NSURL fileURLWithPath:@(path)];
+      NSError *err = nil;
+      id<MTLLibrary> library = [ctx.device newLibraryWithURL:url error:&err];
+      if (!library) {
+        fprintf(stderr, "[tessera_apple_gpu_mlpkg] library load failed for "
+                "'%s': %s\n", path,
+                err ? [[err localizedDescription] UTF8String] : "<nil>");
+        g_mlpkg_last_error_kind = -2;
+        return NULL;
+      }
+      MTL4LibraryFunctionDescriptor *fnDesc =
+          [[MTL4LibraryFunctionDescriptor alloc] init];
+      fnDesc.name = @(function_name);
+      fnDesc.library = library;
+      MTL4MachineLearningPipelineDescriptor *pipeDesc =
+          [[MTL4MachineLearningPipelineDescriptor alloc] init];
+      pipeDesc.machineLearningFunctionDescriptor = fnDesc;
+      MTL4PipelineOptions *opts = [[MTL4PipelineOptions alloc] init];
+      opts.shaderReflection = MTL4ShaderReflectionBindingInfo;
+      pipeDesc.options = opts;
+      // PK1.5 — apply per-input dimensions to the descriptor BEFORE
+      // compile. Walks the caller-provided (buffer_index, rank, dims)
+      // tuples and pushes each through setInputDimensions:atBufferIndex:.
+      int64_t flat_off = 0;
+      for (int32_t i = 0; i < n_inputs; ++i) {
+        int32_t r = ranks[i];
+        if (r <= 0 || r > 16) {
+          fprintf(stderr, "[tessera_apple_gpu_mlpkg] bad input rank %d for "
+                  "buffer_index %d\n", r, buffer_indices[i]);
+          g_mlpkg_last_error_kind = -2;
+          return NULL;
+        }
+        NSInteger dvals[16];
+        for (int32_t k = 0; k < r; ++k) {
+          dvals[k] = (NSInteger)dims_flat[flat_off + k];
+        }
+        flat_off += r;
+        MTLTensorExtents *extents =
+            [[MTLTensorExtents alloc] initWithRank:(NSUInteger)r
+                                            values:dvals];
+        [pipeDesc setInputDimensions:extents
+                       atBufferIndex:(NSUInteger)buffer_indices[i]];
+      }
+      id<MTL4Compiler> compiler;
+      {
+        std::lock_guard<std::mutex> lock(ctx.mtl4_mu);
+        if (!ctx.mtl4_compiler) {
+          ctx.mtl4_compiler = [ctx.device
+              newCompilerWithDescriptor:[[MTL4CompilerDescriptor alloc] init]
+                                  error:&err];
+        }
+        compiler = (id<MTL4Compiler>)ctx.mtl4_compiler;
+      }
+      if (!compiler) {
+        fprintf(stderr, "[tessera_apple_gpu_mlpkg] MTL4Compiler "
+                "unavailable: %s\n",
+                err ? [[err localizedDescription] UTF8String] : "<nil>");
+        g_mlpkg_last_error_kind = -3;
+        return NULL;
+      }
+      NSError *cerr = nil;
+      id<MTL4MachineLearningPipelineState> pso =
+          [compiler newMachineLearningPipelineStateWithDescriptor:pipeDesc
+                                                            error:&cerr];
+      if (!pso) {
+        fprintf(stderr, "[tessera_apple_gpu_mlpkg] pipeline compile failed "
+                "for '%s' function '%s' (n_inputs=%d): %s\n",
+                path, function_name, n_inputs,
+                cerr ? [[cerr localizedDescription] UTF8String] : "<nil>");
+        g_mlpkg_last_error_kind = -3;
+        return NULL;
+      }
+      TesseraMlpkgPipeline *box = [[TesseraMlpkgPipeline alloc] init];
+      box.library = library;
+      box.pipelineState = pso;
+      box.functionName = @(function_name);
+      box.packagePath = @(path);
+      return (void *)CFBridgingRetain(box);
+    }
+  }
+  g_mlpkg_last_error_kind = -1;
+  return NULL;
+}
+
 extern "C" void *tessera_apple_gpu_mlpkg_compile(const char *path,
                                                 const char *function_name) {
   g_mlpkg_last_error_kind = 0;

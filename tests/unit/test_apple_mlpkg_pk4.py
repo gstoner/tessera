@@ -47,7 +47,7 @@ from tessera.apple_mlpkg import (
 )
 
 
-_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "apple_gpu"
+_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "apple_gpu"
 
 
 def _find_mtlpackage() -> Path | None:
@@ -88,7 +88,12 @@ def test_intermediates_heap_size_on_destroyed_returns_minus_one():
 
 # ---- Real-artifact path ------------------------------------------------
 
-def _open_prepared_pipe_or_skip() -> Pipeline:
+def _open_prepared_pipe_or_skip(M: int = 4, N: int = 4, K: int = 4) -> Pipeline:
+    """Compile + prepare a Pipeline backed by the bundled Apple
+    matrix-multiplication package. Apple's package has dynamic-shape
+    inputs so we must pass concrete dims (PK1.5). Default 4x4
+    (Apple's sample demo size); pass custom M/N/K to test non-square
+    matrices."""
     if apple_gpu_runtime() is None:
         pytest.skip("Apple GPU runtime not buildable on this host")
     pkg = _find_mtlpackage()
@@ -96,7 +101,11 @@ def _open_prepared_pipe_or_skip() -> Pipeline:
         pytest.skip(
             f"No .mtlpackage fixture in {_FIXTURES_DIR} — drop one in to "
             f"exercise PK4 dispatch")
-    pipe = compile_mlpackage(pkg, function_name="main")
+    # The bundled package's binding layout (discovered via PK2 probe):
+    # buffer 0 = inputA = (K, M); buffer 1 = inputB = (N, K).
+    pipe = compile_mlpackage(
+        pkg, function_name="main",
+        input_dimensions={0: (K, M), 1: (N, K)})
     if pipe is None:
         pytest.fail(f"compile_mlpackage failed; last_error_kind="
                     f"{last_error_kind()}")
@@ -194,26 +203,25 @@ def test_dispatch_produces_correct_matrix_multiply():
         K, N = K_a, N_b
 
         rng = np.random.default_rng(0xC0FFEE)
-        # Numpy convention: A has shape (M, K), B has shape (K, N).
-        # Apple's package stores them transposed innermost-first, so
-        # what numpy sees as A[m, k] is the package's inputA[k, m].
+        # Apple's MTLTensorExtents store dims innermost-first. A 2D
+        # numpy array of shape (M, K) in C-order has its bytes laid
+        # out as M*K float32s with K-strided rows — which is exactly
+        # what a Metal tensor with dims=(K, M) expects. So we pass
+        # numpy bytes DIRECTLY (no transpose).
         A_np = rng.standard_normal((M, K), dtype=np.float32)
         B_np = rng.standard_normal((K, N), dtype=np.float32)
-        # Pack into the package's expected layout (innermost first).
-        A_packed = A_np.T.copy(order="C")  # shape (K, M), contiguous
-        B_packed = B_np.T.copy(order="C")  # shape (N, K), contiguous
-        assert pipe.fill_input("inputA", A_packed.tobytes()) is True
-        assert pipe.fill_input("inputB", B_packed.tobytes()) is True
+        assert pipe.fill_input("inputA", A_np.tobytes()) is True
+        assert pipe.fill_input("inputB", B_np.tobytes()) is True
 
         assert pipe.dispatch(timeout_ms=30_000) is True, (
             f"dispatch failed; last_error_kind={last_error_kind()}")
 
-        # Read back the output. Expected packed shape: (N, M).
-        byte_count = N * M * 4  # fp32
+        # Read back the output. Tensor dims=(N, M) corresponds to
+        # numpy shape (M, N) in C-order — same byte layout.
+        byte_count = M * N * 4  # fp32
         raw = pipe.read_output("output", byte_count)
         assert raw is not None
-        out_packed = np.frombuffer(raw, dtype=np.float32).reshape(N, M)
-        out_np = out_packed.T  # back to (M, N) for comparison
+        out_np = np.frombuffer(raw, dtype=np.float32).reshape(M, N)
 
         # Compare against the CPU reference.
         expected = A_np @ B_np

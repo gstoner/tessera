@@ -428,6 +428,7 @@ def compile_mlpackage(
     path: str | Path,
     *,
     function_name: str = "main",
+    input_dimensions: Optional[dict[int, tuple[int, ...]]] = None,
 ) -> Optional[Pipeline]:
     """Load ``path`` as a Metal package, compile the named function as
     a ``MTL4MachineLearningPipelineState`` with reflection enabled,
@@ -437,19 +438,58 @@ def compile_mlpackage(
     failed, pipeline compile failed). Call :func:`last_error_kind` to
     distinguish the cause.
 
+    ``input_dimensions`` (PK1.5, 2026-05-31) is an optional
+    ``dict[buffer_index → dims]`` mapping. When the Metal package has
+    dynamic-shape inputs (e.g., Apple's sample matrix-multiplication
+    package), the descriptor needs concrete shapes via
+    ``setInputDimensions:atBufferIndex:`` BEFORE compile. Without
+    them the pipeline build fails with "Unsupported Ops or shapes for
+    MLEncoder". The buffer_index keys come from
+    ``Pipeline.bindings()[name].buffer_index`` — but you'd typically
+    have a separate library-reflection pass to discover them; for
+    Apple's sample matmul package the convention is well known
+    (bindings ``inputA``/``inputB`` at sequential indices, dims
+    innermost-first).
+
     The Apple runtime is JIT-built on first use; on non-Darwin hosts
     this function returns ``None`` with
     ``last_error_kind() == ERROR_OS_UNAVAILABLE``.
     """
     if apple_gpu_runtime() is None:
         return None
-    fn = _bind_compile()
+    path_str = str(path)
+    # Without input_dimensions, use the simpler PK1 entry point.
+    if not input_dimensions:
+        fn = _bind_compile()
+        if fn is None:
+            return None
+        handle = fn(path_str.encode("utf-8"), function_name.encode("utf-8"))
+        if not handle:
+            return None
+        return Pipeline(handle, package_path=path_str,
+                        function_name=function_name)
+    # With input_dimensions: pack into the C ABI's flat-array form.
+    fn = bind_symbol(
+        "tessera_apple_gpu_mlpkg_compile_with_dims",
+        (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int32,
+         ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int64)),
+        restype=ctypes.c_void_p,
+    )
     if fn is None:
         return None
-    path_str = str(path)
-    handle = fn(path_str.encode("utf-8"), function_name.encode("utf-8"))
-    # ctypes ``c_void_p`` represents a NULL return as ``None`` OR ``0``
-    # depending on platform — normalize.
+    n = len(input_dimensions)
+    buf_idx_arr = (ctypes.c_int32 * n)(*input_dimensions.keys())
+    ranks_arr = (ctypes.c_int32 * n)(
+        *(len(d) for d in input_dimensions.values()))
+    flat: list[int] = []
+    for dims in input_dimensions.values():
+        flat.extend(dims)
+    dims_arr = (ctypes.c_int64 * len(flat))(*flat)
+    handle = fn(
+        path_str.encode("utf-8"), function_name.encode("utf-8"),
+        ctypes.c_int32(n), buf_idx_arr, ranks_arr, dims_arr)
     if not handle:
         return None
     return Pipeline(handle, package_path=path_str,

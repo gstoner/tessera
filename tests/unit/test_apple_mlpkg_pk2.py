@@ -44,7 +44,7 @@ from tessera.apple_mlpkg import (
 )
 
 
-_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "apple_gpu"
+_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "apple_gpu"
 
 
 def _find_mtlpackage() -> Path | None:
@@ -146,7 +146,8 @@ def test_reflection_extraction_from_real_mlpackage():
             f"No .mtlpackage fixture in {_FIXTURES_DIR} — drop one in to "
             f"exercise PK2's reflection path. Apple's sample "
             f"`matrix-multiplication.mtlpackage` is known-good.")
-    pipe = compile_mlpackage(pkg, function_name="main")
+    pipe = compile_mlpackage(pkg, function_name="main",
+                              input_dimensions={0: (4, 4), 1: (4, 4)})
     if pipe is None:
         pytest.fail(f"compile_mlpackage failed; last_error_kind="
                     f"{last_error_kind()}")
@@ -179,7 +180,8 @@ def test_reflection_bindings_are_stable_across_calls():
     pkg = _find_mtlpackage()
     if pkg is None:
         pytest.skip("no .mtlpackage fixture available")
-    pipe = compile_mlpackage(pkg, function_name="main")
+    pipe = compile_mlpackage(pkg, function_name="main",
+                              input_dimensions={0: (4, 4), 1: (4, 4)})
     if pipe is None:
         pytest.skip(f"compile failed; last_error_kind={last_error_kind()}")
     try:

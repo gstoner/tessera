@@ -36,7 +36,7 @@ from tessera.apple_mlpkg import (
 from tessera._apple_gpu_dispatch import apple_gpu_runtime
 
 
-_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "apple_gpu"
+_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "apple_gpu"
 
 
 def _find_mtlpackage() -> Path | None:
@@ -159,10 +159,10 @@ def test_dispatch_on_destroyed_handle_raises():
 def test_compile_loads_real_metal_package():
     """When a ``.mtlpackage`` fixture is present under
     ``tests/fixtures/apple_gpu/``, compile must succeed and
-    ``is_compiled`` must return True. Drop in
-    ``matrix-multiplication.mtlpackage`` from Apple's
-    ``RunningAMachineLearningModelOnTheGPUTimeline`` sample (or any
-    other compiled Metal package) to exercise this path."""
+    ``is_compiled`` must return True. The bundled Apple
+    ``matrix-multiplication.mtlpackage`` has dynamic-shape inputs,
+    so we pass concrete dims via PK1.5's ``input_dimensions=`` (Apple
+    sample picks 4x4 for the demo)."""
     if apple_gpu_runtime() is None:
         pytest.skip("Apple GPU runtime not buildable on this host")
     pkg = _find_mtlpackage()
@@ -171,7 +171,11 @@ def test_compile_loads_real_metal_package():
             f"No .mtlpackage fixture in {_FIXTURES_DIR} — drop one in to "
             f"exercise the real-artifact path. Apple's sample "
             f"`matrix-multiplication.mtlpackage` is a known-good source.")
-    pipe = compile_mlpackage(pkg, function_name="main")
+    # Bundled package: inputA at buffer 0 = (K, M); inputB at buffer 1 = (N, K).
+    M = N = K = 4
+    pipe = compile_mlpackage(
+        pkg, function_name="main",
+        input_dimensions={0: (K, M), 1: (N, K)})
     if pipe is None:
         err = last_error_kind()
         pytest.fail(
@@ -201,7 +205,10 @@ def test_destroyed_pipeline_reports_destroyed_state():
     if pkg is None:
         pytest.skip("no .mtlpackage fixture; see "
                     "test_compile_loads_real_metal_package")
-    pipe = compile_mlpackage(pkg, function_name="main")
+    M = N = K = 4
+    pipe = compile_mlpackage(
+        pkg, function_name="main",
+        input_dimensions={0: (K, M), 1: (N, K)})
     if pipe is None:
         pytest.skip(f"compile_mlpackage failed; last_error_kind="
                     f"{last_error_kind()}")

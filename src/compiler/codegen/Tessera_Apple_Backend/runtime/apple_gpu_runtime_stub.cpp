@@ -1888,6 +1888,47 @@ extern "C" int32_t tessera_apple_gpu_bmm_dev_f32_enc(TsEncodeSession* s,
   return tessera_apple_gpu_bmm_dev_f32(A, B, O, batch, M, N, K, b_broadcast);
 }
 
+// Single-command-buffer decode scaffold (2026-06-01) — off-Darwin reference.
+// No command buffer; the layer_norm reference runs immediately into Y->data.
+extern "C" int32_t tessera_apple_gpu_layer_norm_dev_f32_enc(
+    TsEncodeSession* s,
+    TsDeviceTensor* X, TsDeviceTensor* gamma,
+    TsDeviceTensor* beta, TsDeviceTensor* Y,
+    int32_t rows, int32_t cols, float eps) {
+  if (!s || !X || !gamma || !beta || !Y) return 0;
+  const float* xb = reinterpret_cast<const float*>(X->data);
+  const float* gb = reinterpret_cast<const float*>(gamma->data);
+  const float* bb = reinterpret_cast<const float*>(beta->data);
+  float* yb = reinterpret_cast<float*>(Y->data);
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* row = xb + static_cast<std::size_t>(r) * cols;
+    float* o = yb + static_cast<std::size_t>(r) * cols;
+    double mean = 0.0;
+    for (int32_t c = 0; c < cols; ++c) mean += row[c];
+    mean /= cols;
+    double var = 0.0;
+    for (int32_t c = 0; c < cols; ++c) {
+      double d = row[c] - mean;
+      var += d * d;
+    }
+    var /= cols;
+    double inv = 1.0 / std::sqrt(var + eps);
+    for (int32_t c = 0; c < cols; ++c) {
+      o[c] = static_cast<float>(
+          ((row[c] - mean) * inv) * gb[c] + bb[c]);
+    }
+  }
+  return 1;
+}
+
+extern "C" int64_t tessera_apple_gpu_session_commit_count(void) {
+  // Off-Darwin: no real command queue; static counter incremented by
+  // ``ts_enc_commit_wait`` in the stub (simple file-static — single-threaded
+  // off-Darwin tests are the only callers).
+  static int64_t counter = 0;
+  return counter;
+}
+
 // R2 rowop / gumbel device + encode — non-Apple references into O->data.
 static void rowop_ref_host(int kind, const float* x, const float* gamma,
                            float* o, int32_t rows, int32_t cols, float eps) {

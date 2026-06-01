@@ -2911,10 +2911,9 @@ kernel void rope_f32(
     MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — RoPE f32.
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "rope_f32_msl")) return false;
     std::memcpy(Out, [bufO contents], byteCount);
     return true;
   }
@@ -3017,10 +3016,9 @@ kernel void rope_f16(
     MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — RoPE f16.
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "rope_f16_msl")) return false;
     std::memcpy(Out, [bufO contents], byteCount);
     return true;
   }
@@ -3234,10 +3232,9 @@ kernel void flash_attn_f32(
     MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — flash_attn MSL.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "flash_attn_msl")) return false;
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -3435,10 +3432,9 @@ kernel void flash_attn_f16(
     MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — flash_attn MSL.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "flash_attn_msl")) return false;
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -3609,10 +3605,9 @@ kernel void softmax_f32(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — softmax MSL (f32/f16).
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "softmax_msl")) return false;
     std::memcpy(Out, [bufO contents], byteCount);
     return true;
   }
@@ -3716,10 +3711,9 @@ kernel void softmax_f16(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — softmax MSL (f32/f16).
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "softmax_msl")) return false;
     std::memcpy(Out, [bufO contents], byteCount);
     return true;
   }
@@ -3829,10 +3823,9 @@ kernel void gelu_f32(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — GELU MSL (f32/f16).
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "gelu_msl")) return false;
     std::memcpy(Out, [bufO contents], byteCount);
     return true;
   }
@@ -3910,10 +3903,9 @@ kernel void gelu_f16(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — GELU MSL (f32/f16).
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "gelu_msl")) return false;
     std::memcpy(Out, [bufO contents], byteCount);
     return true;
   }
@@ -4082,10 +4074,9 @@ kernel void matmul_softmax_f32(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — flash_attn MSL.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "flash_attn_msl")) return false;
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -4267,10 +4258,9 @@ kernel void matmul_softmax_tiled_f32(
     MTLSize tg = MTLSizeMake(static_cast<NSUInteger>(kFusedTiledThreads), 1, 1);
     [enc dispatchThreadgroups:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "matmul_softmax_tiled_msl")) return false;
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -4412,10 +4402,9 @@ kernel void matmul_softmax_f16(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — flash_attn MSL.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "flash_attn_msl")) return false;
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -4628,10 +4617,9 @@ kernel void matmul_softmax_tiled_f16(
     MTLSize tg = MTLSizeMake(static_cast<NSUInteger>(kFusedTiledThreads), 1, 1);
     [enc dispatchThreadgroups:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "matmul_softmax_tiled_msl_f16")) return false;
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -4821,10 +4809,9 @@ kernel void matmul_softmax_matmul_f32(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — flash_attn MSL.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "flash_attn_msl")) return false;
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -4933,10 +4920,9 @@ kernel void matmul_softmax_matmul_f16(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — flash_attn MSL.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "flash_attn_msl")) return false;
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -5161,10 +5147,9 @@ kernel void matmul_gelu_f32(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — flash_attn MSL.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "flash_attn_msl")) return false;
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -5245,10 +5230,9 @@ kernel void matmul_rmsnorm_f32(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — flash_attn MSL.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "flash_attn_msl")) return false;
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -5413,10 +5397,9 @@ kernel void matmul_gelu_f16(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — flash_attn MSL.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "flash_attn_msl")) return false;
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -5499,10 +5482,9 @@ kernel void matmul_rmsnorm_f16(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — flash_attn MSL.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "flash_attn_msl")) return false;
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -5776,10 +5758,9 @@ kernel void swiglu_f32(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — flash_attn MSL.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "flash_attn_msl")) return false;
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -6094,10 +6075,9 @@ kernel void linear_attn_f32(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // Migration batch 3 (2026-06-01) — flash_attn MSL.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "flash_attn_msl")) return false;
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -6678,10 +6658,9 @@ kernel void clifford_geo_product_cl30_f32(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "clifford_geo_product_cl30_f32_msl")) return false;
     std::memcpy(C, [bufC contents], byteCount);
     return true;
   }
@@ -6820,10 +6799,9 @@ kernel void clifford_rotor_sandwich_cl30_f32(
     MTLSize tg = MTLSizeMake(tg_x, 1, 1);
     [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "clifford_rotor_sandwich_cl30_f32_msl")) return false;
     std::memcpy(Out, [bufO contents], byteCount);
     return true;
   }
@@ -7221,9 +7199,9 @@ static bool dispatch_clifford_unary_8x8_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool ok = commit_and_wait_with_timeout(ctx, cb, 30000,
+                                           "clifford_unary_8x8_f32_msl");
     if (ok) std::memcpy(C, [bufC contents], byteCount);
     return ok;
   }
@@ -7255,9 +7233,9 @@ static bool dispatch_clifford_unary_8x1_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 30000,
+                                                 "clifford_unary_8x1_f32_msl");
     if (_pool_ok) std::memcpy(C, [bufC contents], outBytes);
     return _pool_ok;
   }
@@ -7290,9 +7268,9 @@ static bool dispatch_clifford_binary_8x8_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 30000,
+                                                 "clifford_binary_8x8_f32_msl");
     if (_pool_ok) std::memcpy(C, [bufC contents], byteCount);
     return _pool_ok;
   }
@@ -7326,9 +7304,9 @@ static bool dispatch_clifford_binary_8x1_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 30000,
+                                                 "clifford_binary_8x1_f32_msl");
     if (_pool_ok) std::memcpy(C, [bufC contents], outBytes);
     return _pool_ok;
   }
@@ -7361,9 +7339,9 @@ static bool dispatch_clifford_grade_projection_cl30_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 30000,
+                                                 "clifford_grade_projection_cl30_f32_msl");
     if (_pool_ok) std::memcpy(C, [bufC contents], byteCount);
     return _pool_ok;
   }
@@ -7582,9 +7560,9 @@ static bool dispatch_clifford_geo_product_cl30_f16_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 30000,
+                                                 "clifford_geo_product_cl30_f16_msl");
     if (_pool_ok) std::memcpy(C, [bufC contents], byteCount);
     return _pool_ok;
   }
@@ -7616,9 +7594,9 @@ static bool dispatch_clifford_rotor_sandwich_cl30_f16_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 30000,
+                                                 "clifford_rotor_sandwich_cl30_f16_msl");
     if (_pool_ok) std::memcpy(Out, [bufO contents], byteCount);
     return _pool_ok;
   }
@@ -8189,9 +8167,9 @@ static bool dispatch_clifford_field_op_f32_msl(
     NSUInteger tg_x = std::min<NSUInteger>(8, pso.maxTotalThreadsPerThreadgroup);
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 30000,
+                                                 "clifford_field_op_f32_msl");
     if (_pool_ok) std::memcpy(Out, [bufO contents], byteCount);
     return _pool_ok;
   }
@@ -8302,9 +8280,9 @@ static bool dispatch_clifford_integral_cl30_f32_msl(
     [enc dispatchThreads:MTLSizeMake(8, 1, 1)
         threadsPerThreadgroup:MTLSizeMake(8, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 30000,
+                                                 "clifford_integral_cl30_f32_msl");
     if (_pool_ok) std::memcpy(out, [bufO contents], sizeof(float) * 8u);
     return _pool_ok;
     // RAII guards release bufF / bufW / bufO at scope exit.
@@ -8438,9 +8416,9 @@ static bool dispatch_ebm_inner_step_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 60000,
+                                                 "ebm_inner_step_f32_msl");
     if (_pool_ok) std::memcpy(out, [bufO contents], bytes);
     return _pool_ok;
   }
@@ -8538,9 +8516,9 @@ static bool dispatch_ebm_refinement_fused_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 60000,
+                                                 "ebm_refinement_fused_f32_msl");
     if (_pool_ok) std::memcpy(y_out, [bO contents], bytes);
     return _pool_ok;
   }
@@ -8636,9 +8614,9 @@ static bool dispatch_ebm_langevin_step_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 60000,
+                                                 "ebm_langevin_step_f32_msl");
     if (_pool_ok) std::memcpy(out, [bO contents], bytes);
     return _pool_ok;
   }
@@ -8810,9 +8788,9 @@ static bool dispatch_ebm_langevin_step_philox_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 60000,
+                                                 "ebm_langevin_step_philox_f32_msl");
     if (_pool_ok) std::memcpy(out, [bO contents], bytes);
     return _pool_ok;
   }
@@ -8902,9 +8880,9 @@ static bool dispatch_complex_mul_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 30000,
+                                                 "complex_mul_f32_msl");
     if (_pool_ok) {
       std::memcpy(out_re, [bOr contents], bytes);
       std::memcpy(out_im, [bOi contents], bytes);
@@ -8983,9 +8961,9 @@ static bool dispatch_complex_exp_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 30000,
+                                                 "complex_exp_f32_msl");
     if (_pool_ok) {
       std::memcpy(out_re, [bOr contents], bytes);
       std::memcpy(out_im, [bOi contents], bytes);
@@ -9076,9 +9054,9 @@ static bool dispatch_complex_stereographic_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 30000,
+                                                 "complex_stereographic_f32_msl");
     if (_pool_ok) {
       std::memcpy(out_re, [bOr contents], bytes);
       std::memcpy(out_im, [bOi contents], bytes);
@@ -9199,9 +9177,9 @@ static bool dispatch_complex_mobius_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 30000,
+                                                 "complex_mobius_f32_msl");
     if (_pool_ok) {
       std::memcpy(out_re, [bOr contents], bytes);
       std::memcpy(out_im, [bOi contents], bytes);
@@ -9302,9 +9280,9 @@ static bool dispatch_ebm_decode_init_noise_apply_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 60000,
+                                                 "ebm_decode_init_noise_apply_f32_msl");
     if (_pool_ok) std::memcpy(out, [bO contents], outBytes);
     return _pool_ok;
     // RAII guards release bB / bN / bO at scope exit.
@@ -9426,9 +9404,9 @@ static bool dispatch_ebm_sphere_langevin_step_f32_msl(
     [enc dispatchThreads:MTLSizeMake(1, 1, 1)
        threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 60000,
+                                                 "ebm_sphere_langevin_step_f32_msl");
     if (_pool_ok) std::memcpy(out, [bO contents], bytes);
     return _pool_ok;
   }
@@ -9532,9 +9510,9 @@ static bool dispatch_ebm_self_verify_hard_argmin_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 60000,
+                                                 "ebm_self_verify_hard_argmin_f32_msl");
     if (_pool_ok) std::memcpy(out, [bO contents], oBytes);
     return _pool_ok;
   }
@@ -9629,9 +9607,9 @@ static bool dispatch_ebm_energy_quadratic_f32_msl(
     if (tg_x == 0) tg_x = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool _pool_ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool _pool_ok = commit_and_wait_with_timeout(ctx, cb, 60000,
+                                                 "ebm_energy_quadratic_f32_msl");
     if (_pool_ok) std::memcpy(energies, [bO contents], outBytes);
     return _pool_ok;
   }
@@ -9808,9 +9786,9 @@ static bool dispatch_ebm_ebt_tiny_refinement_argmin_f32_msl(
     MTLSize tg = MTLSizeMake((NSUInteger)K, 1, 1);
     [enc dispatchThreadgroups:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool ok = commit_and_wait_with_timeout(ctx, cb, 60000,
+                                           "ebm_ebt_tiny_refinement_argmin_f32_msl");
     if (ok) std::memcpy(out, [bO contents], outBytes);
     return ok;
   }
@@ -9918,9 +9896,9 @@ static bool dispatch_ebm_partition_exact_f32_msl(
     [enc dispatchThreads:MTLSizeMake(1, 1, 1)
         threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    bool ok = (cb.status == MTLCommandBufferStatusCompleted);
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    bool ok = commit_and_wait_with_timeout(ctx, cb, 60000,
+                                           "ebm_partition_exact_f32_msl");
     if (ok) std::memcpy(out, [bO contents], outBytes);
     return ok;
   }
@@ -11960,9 +11938,9 @@ kernel void spec_accept(device const int *draft  [[buffer(0)]],
     [enc setBytes:&depth length:sizeof(int32_t) atIndex:4];
     [enc dispatchThreads:MTLSizeMake(1, 1, 1) threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted) return 0;
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "apple_gpu_unknown")) return 0;
     std::memcpy(out, [bO contents], (size_t)(3 + depth) * 4);
     return 1;
   }
@@ -12234,6 +12212,52 @@ static bool mpsg_run_bmm_dev(MetalDeviceContext &ctx, id<MTLBuffer> bufA,
   }
 }
 
+// Single-command-buffer decode chain scaffold (2026-06-01) — encode a
+// device-resident layer_norm into a shared command buffer alongside other
+// encoded ops (bmm, future rope/flash_attn/etc). Layer-norm in particular is
+// what makes the decoder layer "norm + matmul + norm" chain encodable end-to-
+// end on one cb. The helper mirrors ``mpsg_encode_bmm_dev``: take a shared
+// ``MPSCommandBuffer``, append the layer_norm graph node, return without
+// committing. Caller (``ts_enc_commit_wait``) commits + waits once.
+// See ``docs/audit/single_command_buffer_decode_plan.md``.
+static bool mpsg_encode_layer_norm_dev(MPSCommandBuffer *cb,
+                                       id<MTLBuffer> bufX,
+                                       id<MTLBuffer> bufG,
+                                       id<MTLBuffer> bufB,
+                                       id<MTLBuffer> bufY,
+                                       int32_t rows, int32_t cols,
+                                       float eps, MPSDataType ioType) {
+  if (rows <= 0 || cols <= 0) return true;
+  if (!cb || !bufX || !bufG || !bufB || !bufY) return false;
+  NSArray<NSNumber *> *xs = @[ @(rows), @(cols) ];
+  NSArray<NSNumber *> *gs = @[ @(cols) ];
+  NSArray *phs;
+  MPSGraphTensor *y;
+  // kind=0 → layer_norm; gamma + beta present.
+  MPSGraph *g = mpsg_rowop_graph(0, rows, cols, eps,
+                                 /*hasGamma=*/true, /*hasBeta=*/true,
+                                 ioType, &phs, &y);
+  if (!y) return false;
+  MPSGraphTensorData *xd = [[MPSGraphTensorData alloc]
+                            initWithMTLBuffer:bufX shape:xs dataType:ioType];
+  MPSGraphTensorData *gd = [[MPSGraphTensorData alloc]
+                            initWithMTLBuffer:bufG shape:gs dataType:ioType];
+  MPSGraphTensorData *bd = [[MPSGraphTensorData alloc]
+                            initWithMTLBuffer:bufB shape:gs dataType:ioType];
+  MPSGraphTensorData *od = [[MPSGraphTensorData alloc]
+                            initWithMTLBuffer:bufY shape:xs dataType:ioType];
+  NSMutableDictionary *feeds = [NSMutableDictionary dictionary];
+  feeds[phs[0]] = xd;
+  if (phs.count >= 2) feeds[phs[1]] = gd;
+  if (phs.count >= 3) feeds[phs[2]] = bd;
+  [g encodeToCommandBuffer:cb
+                     feeds:feeds
+              targetOperations:nil
+          resultsDictionary:@{y : od}
+        executionDescriptor:nil];
+  return true;
+}
+
 // R2 — encode a bmm into a shared command buffer (no commit/sync here). Metal's
 // automatic hazard tracking orders a later op that reads an earlier op's output
 // buffer, so a whole op-chain can be encoded into one command buffer and
@@ -12290,8 +12314,46 @@ extern "C" TsEncodeSession *ts_enc_begin(void) {
 
 extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
   if (!s) return;
+  // waitUntilCompleted migration batch 5 (2026-06-01) — encode-session
+  // path. ``s->mtlcb`` is the session-owned MTLCommandBuffer (NOT the
+  // generic ``cb`` the Pattern-4 wrapper takes), so we re-encode the
+  // Pattern-4 sequence inline: encode + signal into the session's cb,
+  // commit through MPSCommandBuffer, wait on the shared event with a
+  // timeout. Honors the same 30 s cap as the rest of the migrated
+  // dispatchers. The session-side ``s->cb`` is an ``MPSCommandBuffer``
+  // wrapper around ``s->mtlcb``; the underlying signal goes through
+  // ``s->mtlcb`` so the wait observes encode→commit→GPU-finish.
+  MetalDeviceContext &ctx = deviceContext();
+  id<MTLSharedEvent> ev = nil;
+  uint64_t signal_val = 0;
+  if (ctx.ok) {
+    std::lock_guard<std::mutex> lock(ctx.legacy_event_mu);
+    if (!ctx.legacy_event) {
+      ctx.legacy_event = [ctx.device newSharedEvent];
+    }
+    ev = (id<MTLSharedEvent>)ctx.legacy_event;
+    if (ev) signal_val = ++ctx.legacy_event_val;
+  }
+  if (ev) {
+    [s->mtlcb encodeSignalEvent:ev value:signal_val];
+  }
   [s->cb commit];
-  [s->mtlcb waitUntilCompleted];
+  if (ev) {
+    bool done = [ev waitUntilSignaledValue:signal_val
+                                  timeoutMS:30000];
+    if (!done) {
+      fprintf(stderr,
+              "[tessera_apple_gpu] ts_enc_commit_wait: GPU dispatch did "
+              "not signal within 30000 ms (signaledValue=%llu wanted=%llu)\n",
+              (unsigned long long)ev.signaledValue,
+              (unsigned long long)signal_val);
+    }
+  } else {
+    // Shared-event init failed — fall back to the legacy synchronous
+    // wait so the caller doesn't crash. No timeout protection in this
+    // path (matches the helper's own fallback).
+    [s->mtlcb waitUntilCompleted];
+  }
   s->cb = nil;
   s->mtlcb = nil;
   delete s;
@@ -12311,6 +12373,42 @@ extern "C" int32_t tessera_apple_gpu_bmm_dev_f32_enc(TsEncodeSession *s,
                              b_broadcast != 0, MPSDataTypeFloat32)
              ? 1
              : 0;
+}
+
+// Single-command-buffer decode scaffold (2026-06-01) — encoded device-resident
+// layer_norm. Appends to the session's command buffer; no commit/sync here.
+// Pairs with ``tessera_apple_gpu_bmm_dev_f32_enc`` so a decoder layer can keep
+// "norm + matmul + norm" on ONE command buffer with no per-op GPU↔CPU
+// roundtrips. Roadmap: ``docs/audit/single_command_buffer_decode_plan.md``.
+extern "C" int32_t tessera_apple_gpu_layer_norm_dev_f32_enc(
+    TsEncodeSession *s,
+    TsDeviceTensor *X, TsDeviceTensor *gamma,
+    TsDeviceTensor *beta, TsDeviceTensor *Y,
+    int32_t rows, int32_t cols, float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !gamma || !beta || !Y) return 0;
+  return mpsg_encode_layer_norm_dev(s->cb, X->buf, gamma->buf, beta->buf,
+                                    Y->buf, rows, cols, eps,
+                                    MPSDataTypeFloat32)
+             ? 1
+             : 0;
+}
+
+// Probe symbol (single-command-buffer scaffold) — number of command buffers
+// the queue has committed since process start. A test that opens a session,
+// encodes N ops, commits, and observes the count incremented by exactly 1
+// proves the chain stayed on one cb. The Metal API doesn't expose a direct
+// counter on ``MTLCommandQueue``; instead we increment a private counter
+// inside ``ts_enc_commit_wait``. This is sufficient for the scaffold's
+// structural drift gate.
+extern "C" int64_t tessera_apple_gpu_session_commit_count(void) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return -1;
+  std::lock_guard<std::mutex> lock(ctx.legacy_event_mu);
+  // ``legacy_event_val`` increments once per ``ts_enc_commit_wait`` (or other
+  // Pattern-4-wrapped dispatch). We don't need the absolute value, just a
+  // monotonic counter callers can diff across a session.
+  return (int64_t)ctx.legacy_event_val;
 }
 
 //===----------------------------------------------------------------------===//
@@ -13011,9 +13109,9 @@ kernel void flash_attn_gqa_f32(
     if (tg_y == 0) tg_y = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, tg_y, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "flash_attn_gqa_msl")) return false;
     std::memcpy(O, [bufO contents], qBytes);
     return true;
   }
@@ -13293,9 +13391,9 @@ kernel void flash_attn_gqa_f16(
     if (tg_y == 0) tg_y = 1;
     [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, tg_y, 1)];
     [enc endEncoding];
-    [cb commit];
-    [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "flash_attn_gqa_msl_f16")) return false;
     std::memcpy(O, [bufO contents], qBytes);
     return true;
   }

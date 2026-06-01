@@ -187,6 +187,36 @@ def test_tri_solve_still_correct_after_migration():
 
 # ---- Source-level drift gate (the migrated sites stay migrated) --------
 
+def test_only_documented_waituntilcompleted_sites_remain():
+    """After batches 1-5, only two ``waitUntilCompleted`` invocations
+    should remain in the runtime, both intentional:
+
+    * The fallback path INSIDE ``commit_and_wait_with_timeout`` itself
+      (around the helper's lazy event init). Recursing into the
+      wrapper there would deadlock; the legacy path is the correct
+      fallback.
+    * The fallback INSIDE ``ts_enc_commit_wait`` for the case where
+      shared-event init failed (the encode-session path also keeps a
+      legacy synchronous wait as a no-crash fallback, mirroring the
+      helper's own).
+
+    Any OTHER site is a regression. This test fires loud."""
+    src = _RUNTIME_SRC.read_text()
+    import re
+    cb_calls = [m for m in re.finditer(
+        r"\[cb waitUntilCompleted\]", src)]
+    session_calls = [m for m in re.finditer(
+        r"\[s->mtlcb waitUntilCompleted\]", src)]
+    # Exactly 1 each — both fallbacks inside Pattern-4 paths.
+    assert len(cb_calls) == 1, (
+        f"expected exactly 1 [cb waitUntilCompleted] (the wrapper's "
+        f"own fallback), found {len(cb_calls)}")
+    assert len(session_calls) == 1, (
+        f"expected exactly 1 [s->mtlcb waitUntilCompleted] (the "
+        f"ts_enc_commit_wait fallback for shared-event init failure), "
+        f"found {len(session_calls)}")
+
+
 def test_runtime_source_includes_pattern_4_helper():
     """Sanity check: the wrapper the migration depends on is still
     defined in the source. If a future refactor renames or removes
@@ -195,12 +225,12 @@ def test_runtime_source_includes_pattern_4_helper():
     assert "commit_and_wait_with_timeout" in src, (
         "Pattern-4 timeout-event wrapper missing from runtime source")
     # And the helper is callable across the entire file (not just one
-    # local block) — there should be at least 12 call sites total
-    # (1 inside the helper itself + 5 batch-1 migrations + 6 batch-2
-    # migrations).
+    # local block) — there should be at least 50 call sites total
+    # (1 inside the helper itself + 5 batch-1 + 6 batch-2 + 8 batch-3
+    # + 30 batch-4 migrations).
     call_sites = src.count("commit_and_wait_with_timeout(")
-    assert call_sites >= 12, (
-        f"expected ≥12 call sites for commit_and_wait_with_timeout, "
+    assert call_sites >= 50, (
+        f"expected ≥50 call sites for commit_and_wait_with_timeout, "
         f"found {call_sites} — migration may have regressed")
 
 
@@ -223,6 +253,30 @@ def test_migrated_dispatchers_no_longer_call_waituntilcompleted():
         "dispatch_cholesky_batched_f32",
         "dispatch_tri_solve_batched_f32",
         "dispatch_dev_cast",
+        # Batch 3 (2026-06-01) — MSL custom kernels for attention primitives
+        "dispatch_rope_msl",
+        "dispatch_rope_msl_f16",
+        "dispatch_flash_attn_msl",
+        "dispatch_flash_attn_msl_f16",
+        "dispatch_softmax_msl",
+        "dispatch_softmax_msl_f16",
+        "dispatch_gelu_msl",
+        "dispatch_gelu_msl_f16",
+        # Batch 4 (bulk-migrated via
+        # tools/scripts/migrate_wait_until_completed.py) — spot-check the
+        # dispatch_* helpers that hold the migrated call sites. Other
+        # batch-4 dispatchers (EBM / complex / layer_norm / flash_attn_gqa
+        # / matmul_softmax variants) inline the encode-and-wait logic
+        # directly in the extern "C" entry; the global "only two
+        # exceptions remain" gate (test_only_documented_waituntilcompleted_sites_remain)
+        # already covers them.
+        "dispatch_matmul_softmax_tiled_msl",
+        "dispatch_clifford_geo_product_cl30_f32_msl",
+        "dispatch_clifford_unary_8x8_f32_msl",
+        "dispatch_clifford_unary_8x1_f32_msl",
+        "dispatch_clifford_binary_8x8_f32_msl",
+        "dispatch_clifford_binary_8x1_f32_msl",
+        "dispatch_clifford_grade_projection_cl30_f32_msl",
     ]
     for fn_name in targets:
         # Locate the function's opening brace, then walk balanced

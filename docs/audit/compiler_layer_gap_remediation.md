@@ -171,6 +171,65 @@ fallback semantics by returning `(output, override_kind)`). The inline CPU
 branch in `runtime.launch()` is deleted; every executable row in the matrix is
 now reached through exactly one dispatch site.
 
+### 9. Canonical compiler driver — 🟡 C.1 DONE (2026-05-31)
+**Audit recommendation C** (started after B). The goal:
+
+    Make one canonical compiler driver own the whole ladder: Graph module
+    in, typed artifacts plus execution capability out. Right now driver.py,
+    matmul_pipeline.py, backend manifests, target maps, and runtime
+    dispatch each hold part of the truth.
+
+**Landed (C.1) — canonical wrapper + tests + cross-target demo.**
+
+- New pure-aggregator module
+  ``python/tessera/compiler/canonical_compile.py`` exposes
+  ``canonical_compile(module, *, target) → CompileResult`` — the audit's
+  ``compile(module, target) → (typed_artifacts, capability_set,
+  executable | reason)`` contract.
+- ``CompileResult`` is a frozen dataclass with:
+  * Typed artifact accessors ``graph_ir`` / ``schedule_ir`` /
+    ``tile_ir`` / ``target_ir`` mirroring the bundle text.
+  * ``gate_results`` — full seven-gate table from
+    ``pipeline_gates.evaluate``.
+  * ``first_failing_gate`` — the audit-named gate (or None).
+  * ``executable`` — AND of bundle.executable and "no gate fails."
+  * ``reason`` — empty when executable; leads with the audit-named gate
+    diagnostic otherwise (``"first failing gate `<name>` — <detail>"``).
+  * ``to_dict()`` — stable surface for downstream telemetry / dashboards.
+- Pure aggregator: only imports from ``driver``, ``graph_ir``, and
+  ``pipeline_gates`` (the upstream truth sources). Locked by
+  ``test_module_is_pure_aggregator``.
+- **Cross-target demo** (one ``canonical_compile`` call per target):
+
+  | target          | executable | first failing gate | detail |
+  |-----------------|------------|---------------------|--------|
+  | `cpu`           | ✅ True    | —                   | (all gates pass) |
+  | `apple_cpu`     | ✅ True    | —                   | (all gates pass) |
+  | `apple_gpu`     | ✅ True    | —                   | (all gates pass) |
+  | `nvidia_sm90`   | ❌ False   | `toolchain`         | nvcc not on PATH |
+  | `rocm`          | ❌ False   | `toolchain`         | hipcc not on PATH |
+  | `metalium`      | ❌ False   | `link`              | artifact_only |
+
+- 12 structural + behavioral tests in
+  ``tests/unit/test_canonical_compile.py``: typed-artifact round-trip,
+  gate-result agreement with the direct evaluator, executable/reason
+  agreement on known-good and known-failing cases, pure-aggregator
+  import allowlist, primary-op extraction (with ``tessera.`` prefix
+  stripping), and a "one surface carries the whole answer" guard.
+
+**Status: additive, no regressions.** ``canonical_compile`` is the new
+contract; existing callers of ``driver.compile_graph_module``,
+``runtime.compile``, ``matmul_pipeline.build_cpu_plan``, and
+``execution_matrix.executor_for_metadata`` keep working unchanged. The
+follow-up sub-tasks (C.2 retrofitting ``runtime.launch`` to consume
+``CompileResult``; C.3 retrofitting ``@jit``; C.4 deprecating
+``runtime.compile`` containerization) are sequenced separately so each
+is a small, reviewable change.
+
+184 affected tests green after C.1 (12 new canonical tests + the
+existing pipeline_gates / conformance_matrix / runtime ABI / driver /
+capabilities sweeps).
+
 ### 8. Named pipeline capability gates — 🟡 B.1 DONE (2026-05-31)
 **Audit recommendation B** (started after A). The goal: replace
 ``execution_kind: "reference_cpu"`` post-hoc metadata with an ordered,

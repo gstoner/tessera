@@ -2695,7 +2695,52 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_prepare_tensors(void *handle) {
           td.strides = strides_ext;
         }
         NSError *terr = nil;
-        id<MTLTensor> t = [ctx.device newTensorWithDescriptor:td error:&terr];
+        id<MTLTensor> t = nil;
+        if (box.useAlignedStrides) {
+          // Phase 1 (2026-06-01) — buffer-backed tensor allocation.
+          // ``newTensorWithDescriptor:`` rejects explicit strides
+          // (Apple's API requires nil strides on that path). The
+          // buffer-backed variant accepts them — caller allocates an
+          // MTLBuffer sized for the aligned strides, the tensor is
+          // a view into that buffer.
+          //
+          // Aligned byte count comes from the matching helper. We
+          // re-compute dims+element_bits here to call the helper;
+          // a small duplicate of the loop above is cheaper than
+          // restructuring the control flow.
+          size_t elem_bytes = _mlpkg_dtype_byte_size(b.tensorDataType);
+          NSInteger rank = (NSInteger)dims.rank;
+          int64_t dims_buf[8] = {0};
+          for (NSInteger i = 0; i < rank; ++i) {
+            dims_buf[i] = (int64_t)[dims extentAtDimensionIndex:i];
+          }
+          int64_t aligned_nbytes =
+              tessera_apple_gpu_aligned_buffer_nbytes(
+                  dims_buf, (int32_t)rank,
+                  (int32_t)(elem_bytes * 8), /*ml_usage=*/1);
+          if (aligned_nbytes <= 0) {
+            fprintf(stderr, "[tessera_apple_gpu_mlpkg] aligned buffer "
+                    "size calc failed for binding '%s'\n",
+                    [[b name] UTF8String]);
+            return 0;
+          }
+          id<MTLBuffer> buf =
+              [ctx.device newBufferWithLength:(NSUInteger)aligned_nbytes
+                                      options:MTLResourceStorageModeShared];
+          if (!buf) {
+            fprintf(stderr, "[tessera_apple_gpu_mlpkg] aligned buffer "
+                    "alloc failed for binding '%s' (%lld bytes)\n",
+                    [[b name] UTF8String],
+                    (long long)aligned_nbytes);
+            return 0;
+          }
+          t = [buf newTensorWithDescriptor:td
+                                    offset:0
+                                     error:&terr];
+        } else {
+          // Default path — Apple manages storage via descriptor only.
+          t = [ctx.device newTensorWithDescriptor:td error:&terr];
+        }
         if (!t) {
           fprintf(stderr, "[tessera_apple_gpu_mlpkg] tensor create failed "
                   "for binding '%s': %s\n",

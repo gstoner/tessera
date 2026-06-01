@@ -109,26 +109,20 @@ def test_default_strides_path_unchanged():
 
 # ---- Opt-in: aligned strides path -------------------------------------
 
-def test_aligned_strides_via_newTensorWithDescriptor_is_rejected_by_apple():
-    """Apple's MTL4 API ``[MTLDevice newTensorWithDescriptor:error:]``
-    requires ``descriptor.strides`` to be NIL — the device manages
-    storage internally based on dimensions alone. When we set
-    explicit strides via the aligned helper, Apple returns:
+def test_aligned_strides_via_buffer_backed_tensor_succeeds():
+    """Project 1 (2026-06-01) — PK3 now uses the buffer-backed tensor
+    creation path (``[MTLBuffer newTensorWithDescriptor:offset:error:]``)
+    when ``useAlignedStrides`` is enabled. That API accepts explicit
+    strides; the buffer is sized via ``aligned_buffer_nbytes`` to
+    cover the padded layout.
 
-      "Tensor Descriptor Validation
-       Strides should be nil when using [MTLDevice
-       newTensorWithDescriptor:error:]"
+    The 4×4 fp32 inputs: natural stride[1]=4, aligned stride[1]=16
+    (64-byte alignment). Allocated buffer is 16 * 4 * 4 = 256 bytes
+    (vs dense 64 bytes), but the math result is identical because
+    the kernel reads only the valid 4×4 slice via the tensor strides.
 
-    This test pins the contract as a known limitation: the
-    aligned-strides helper is a real, correct piece of
-    infrastructure but the PK3 path's tensor-creation API doesn't
-    accept it. To use aligned strides at the descriptor level,
-    callers would need a buffer-backed tensor creation path
-    (``newTensorWithBuffer:offset:descriptor:``) where strides ARE
-    meaningful — a separate follow-on.
-
-    Until then, the opt-in setter exists, the wire-up correctness
-    is proven, and the failure mode is well-documented + named."""
+    Pins the wire-up end-to-end: setter → buffer-backed alloc →
+    dispatch → correct output."""
     if not packaged_ml_available():
         pytest.skip(packaged_ml_skip_reason() or "packaged ML unavailable")
     pkg = _find_mtlpackage()
@@ -140,10 +134,18 @@ def test_aligned_strides_via_newTensorWithDescriptor_is_rejected_by_apple():
         pytest.fail(f"compile failed; last_error_kind={last_error_kind()}")
     try:
         assert pipe.set_aligned_strides(True) is True
-        # prepare_tensors returns False because newTensorWithDescriptor
-        # rejects the explicit-strides descriptor. Honest contract
-        # documentation.
-        assert pipe.prepare_tensors() is False
+        assert pipe.prepare_tensors() is True
+
+        rng = np.random.default_rng(0xA1167)
+        A_np = rng.standard_normal((4, 4), dtype=np.float32)
+        B_np = rng.standard_normal((4, 4), dtype=np.float32)
+        assert pipe.fill_input("inputA", A_np.tobytes())
+        assert pipe.fill_input("inputB", B_np.tobytes())
+        assert pipe.dispatch(timeout_ms=30_000)
+        raw = pipe.read_output("output", 4 * 4 * 4)
+        out = np.frombuffer(raw, dtype=np.float32).reshape(4, 4)
+        np.testing.assert_allclose(out, A_np @ B_np,
+                                    rtol=1e-3, atol=1e-3)
     finally:
         pipe.destroy()
 

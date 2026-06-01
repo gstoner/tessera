@@ -70,12 +70,14 @@ def _time(fn, reps: int) -> tuple[float, float]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    # Defaults stay under the per-cb ops cliff documented in
-    # docs/audit/single_command_buffer_decode_plan.md (Stage 5):
-    # at 1x32x64 the full attention+MLP chain hangs for N≥5 layers
-    # (>=60 ops in one cb). N=3-4 is the safe budget.
+    # Defaults exercise the chunking path (Phase 5b, 2026-06-01).
+    # The chain planner splits at DEFAULT_OPS_PER_CB=30, so N=6 at
+    # 12 ops/layer = 72 ops → 3 cbs; N=12 = 144 ops → 5 cbs.
+    # Steady-state numbers across these N values characterize the
+    # tokens/sec / speedup envelope for real multi-layer decode.
     parser.add_argument("--shapes", nargs="+",
-                        default=["1x8x16,4", "1x32x64,3"])
+                        default=["1x8x16,6", "1x32x64,6",
+                                 "1x32x64,12"])
     parser.add_argument("--reps", type=int, default=20)
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args(argv)

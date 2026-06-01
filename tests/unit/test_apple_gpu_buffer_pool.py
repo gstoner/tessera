@@ -90,6 +90,14 @@ def test_no_raw_newbuffer_in_dispatchers(runtime_src: str) -> None:
         # encode-session semantics need.
         _fn_range(r"tessera_apple_gpu_rope_dev_bf16_enc\s*\("),
         _fn_range(r"tessera_apple_gpu_flash_attn_dev_bf16_enc\s*\("),
+        # Project 1 (2026-06-01) — buffer-backed tensor allocation
+        # for aligned-strides PK3 path. The buffer is sized via the
+        # aligned-nbytes helper and OWNED BY the MTLTensor created
+        # via ``[MTLBuffer newTensorWithDescriptor:offset:error:]``;
+        # the tensor retains it for its lifetime (no manual release
+        # needed, no buffer-pool aliasing risk). Direct allocation
+        # is correct here.
+        _fn_range(r"tessera_apple_gpu_mlpkg_prepare_tensors\s*\("),
     ]
     offending = [
         m for m in raw

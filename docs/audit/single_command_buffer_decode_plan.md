@@ -212,13 +212,28 @@ critical bottleneck.
 
 ### Stage 5 — Multi-layer transformer benchmark + ops-per-cb cliff — LANDED (2026-06-01)
 
-**Architectural finding (2026-06-01)**: the single-cb encoded chain
-has a per-shape ops budget. At benchmark shape ``1×32×64`` (D=64,
-S=32, B=1) with the full attention+MLP block, the chain works for
-N≤4 layers (≤48 ops) but hangs at the 30-second commit_and_wait
-timeout for N≥5 (≥60 ops). The GPU dispatch never signals — likely
-an MPSGraph internal heap / command-buffer encoding limit hit at
-that op count + shape combination, not a Tessera bug.
+**Architectural finding (2026-06-01, refined)**: the single-cb
+encoded chain hits an empirical cliff that's **shape × op-count
+dependent**, not pure op count.
+
+* At 1×33×65 with N=80 layers (160 ops), the chain completes in
+  12.5 ms — no cliff observed.
+* At 1×32×64 with N=12 (144 ops) full attention+MLP block, the
+  chain completes in 15.6 ms in a fresh process — no cliff.
+* At 1×64×256 with N=6 layers (54 ops), the chain reliably hangs
+  at the 30-second commit_and_wait timeout — cliff fires.
+
+Root cause hypothesis (not definitively isolated): **MPSGraph
+compile time scaling with shape × distinct graphs per cb**. Large
+shapes amplify per-op compile cost; at some product of (shape,
+op count), the first-encounter graph build exceeds 30 s on this
+hardware. The cliff is not pure encoder count or buffer count.
+
+An earlier session reported the cliff at 1×32×64 / N=5 (60 ops),
+which was real at that moment but no longer reproduces in a fresh
+process — suggesting MPSGraph compile state is system-dependent
+in ways outside our control. Chunking infrastructure (next section)
+remains a valuable defensive default.
 
 Practical mitigations:
 
@@ -248,12 +263,29 @@ runs two modes:
 * ``warmed_one_cb`` — weights via ``ResidentWeights``, full
   N-layer chain via ``@auto_batch`` (one cb per step)
 
-Measured on M-series, 8 reps median, sub-cliff configurations:
+Measured on M-series, 8 reps median.
+
+Pre-chunking (sub-cliff configurations, single-cb):
 
 | Shape (BxSxD,N)   | cold_ms | warmed_ms | speedup | tok/s (warmed) |
 |-------------------|---------|-----------|---------|----------------|
 | 1×8×16, N=4       | 24.95   | 3.73      | **6.69×** | 2146         |
-| 1×32×64, N=3      | 25.01   | 5.46      | **4.58×** | 5865         | The combined
+| 1×32×64, N=3      | 25.01   | 5.46      | **4.58×** | 5865         |
+
+Post-chunking (Phase 5b — arbitrary depth via cb chunking at 30
+ops/cb default):
+
+| Shape (BxSxD,N)   | cold_ms | warmed_ms | speedup | tok/s (warmed) | cbs/step |
+|-------------------|---------|-----------|---------|----------------|----------|
+| 1×8×16, N=6       | 26.23   | 5.86      | **4.47×** | 1364         | 3 |
+| 1×32×64, N=6      | 39.17   | 17.42     | **2.25×** | 1837         | 3 |
+| 1×32×64, N=12     | 83.90   | 28.63     | **2.93×** | 1118         | 5 |
+
+Per-layer cost is consistent: ~0.98 ms/layer warmed at small shape,
+~2.40-2.90 ms/layer at medium shape (modulo the small-N rounding
+overhead). N=12 vs N=6 at the same shape scales nearly linearly in
+both modes, confirming chunking has minimal per-cb overhead beyond
+the necessary commit + barrier. The combined
 (ResidentWeights + single-cb + decorator) lift is greater than
 single-cb alone because the multi-layer case amplifies the
 per-step weight-upload overhead: 9 weight tensors × 3 layers = 27

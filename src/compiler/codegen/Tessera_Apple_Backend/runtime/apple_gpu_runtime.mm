@@ -45,6 +45,27 @@
 #include <unordered_map>
 #include <vector>
 
+// PK1 (packaged-kernel sprint) — Objective-C class declarations must
+// appear at GLOBAL scope (clang refuses ``@interface`` inside any
+// namespace or extern "C" block). Placed at file top so the @interface
+// is unambiguously visible to every extern "C" function below.
+//
+// ``TesseraMlpkgPipeline`` owns a loaded ``MTLLibrary`` and the
+// ``MTL4MachineLearningPipelineState`` built from it. The C ABI
+// (further down — ``tessera_apple_gpu_mlpkg_compile``) wraps this
+// class behind ``CFBridgingRetain`` so Python ctypes can hold an
+// opaque ``void*`` handle.
+API_AVAILABLE(macos(26.0), ios(26.0))
+@interface TesseraMlpkgPipeline : NSObject
+@property (nonatomic, strong) id<MTLLibrary> library;
+@property (nonatomic, strong) id<MTL4MachineLearningPipelineState> pipelineState;
+@property (nonatomic, copy) NSString *functionName;
+@property (nonatomic, copy) NSString *packagePath;
+@end
+
+@implementation TesseraMlpkgPipeline
+@end
+
 namespace {
 
 // SIMD-feature capability bits returned by tessera_apple_gpu_simd_caps() and
@@ -1884,6 +1905,152 @@ extern "C" int32_t tessera_apple_gpu_mtl4_archive_state(
     archive_path_out[n] = '\0';
   }
   return 1;
+}
+
+//===----------------------------------------------------------------------===//
+// PK1 — Packaged ML pipeline foundation. Loads an `.mtlpackage`
+// (Apple's compiled Metal package format, the output of Core ML
+// Tools / Xcode) via `[device newLibraryWithURL:]`, then builds a
+// `MTL4MachineLearningPipelineState` with shader reflection enabled
+// (`MTL4ShaderReflectionBindingInfo`). The pipeline + library are
+// owned by an opaque handle the caller releases via
+// `tessera_apple_gpu_mlpkg_destroy`. NO execution yet — PK1 is the
+// load+compile foundation; PK2 adds binding extraction, PK3 adds
+// tensor creation + argument table, PK4 adds dispatch.
+//
+// Mirrors Apple's sample (`MLMatrixMultiplier+PipelineCompilation.m`).
+// Static-shape models compile without per-input dimensions; dynamic
+// models will need PK3's `setInputDimensions:atBufferIndex:` plumbing.
+//===----------------------------------------------------------------------===//
+
+// (``TesseraMlpkgPipeline`` ``@interface`` lives at the top of the file —
+// Objective-C declarations require global scope.)
+
+// PK1 — Load + compile a packaged ML pipeline. Returns an opaque
+// handle that the caller releases via
+// `tessera_apple_gpu_mlpkg_destroy`. Returns NULL on any failure
+// (path missing, library load failure, reflection unavailable,
+// pipeline compile failure, OS too old). Caller can probe whether the
+// failure was OS-related vs config-related via
+// `tessera_apple_gpu_mlpkg_last_error_kind` (-1 = OS not available;
+// -2 = path / library load failed; -3 = pipeline compile failed).
+static int32_t g_mlpkg_last_error_kind = 0;
+
+extern "C" void *tessera_apple_gpu_mlpkg_compile(const char *path,
+                                                const char *function_name) {
+  g_mlpkg_last_error_kind = 0;
+  if (!path || !function_name) {
+    g_mlpkg_last_error_kind = -2;
+    return NULL;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) {
+    g_mlpkg_last_error_kind = -1;
+    return NULL;
+  }
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    @autoreleasepool {
+      NSURL *url = [NSURL fileURLWithPath:@(path)];
+      NSError *err = nil;
+      id<MTLLibrary> library = [ctx.device newLibraryWithURL:url error:&err];
+      if (!library) {
+        fprintf(stderr, "[tessera_apple_gpu_mlpkg] library load failed for "
+                "'%s': %s\n", path,
+                err ? [[err localizedDescription] UTF8String] : "<nil>");
+        g_mlpkg_last_error_kind = -2;
+        return NULL;
+      }
+      MTL4LibraryFunctionDescriptor *fnDesc =
+          [[MTL4LibraryFunctionDescriptor alloc] init];
+      fnDesc.name = @(function_name);
+      fnDesc.library = library;
+      MTL4MachineLearningPipelineDescriptor *pipeDesc =
+          [[MTL4MachineLearningPipelineDescriptor alloc] init];
+      pipeDesc.machineLearningFunctionDescriptor = fnDesc;
+      // Apple-sample reflection-driven setup (skills.md Pattern 1) —
+      // enable binding-info reflection so PK2 can walk
+      // `pipelineState.reflection.bindings` and surface a structured
+      // ABI to Python. Without this, reflection is nil on the result.
+      MTL4PipelineOptions *opts = [[MTL4PipelineOptions alloc] init];
+      opts.shaderReflection = MTL4ShaderReflectionBindingInfo;
+      pipeDesc.options = opts;
+      // Compile through the cached MTL4 compiler so we don't pay the
+      // ~ms compiler-creation cost per call (Pattern 5).
+      id<MTL4Compiler> compiler;
+      {
+        std::lock_guard<std::mutex> lock(ctx.mtl4_mu);
+        if (!ctx.mtl4_compiler) {
+          ctx.mtl4_compiler = [ctx.device
+              newCompilerWithDescriptor:[[MTL4CompilerDescriptor alloc] init]
+                                  error:&err];
+        }
+        compiler = (id<MTL4Compiler>)ctx.mtl4_compiler;
+      }
+      if (!compiler) {
+        fprintf(stderr, "[tessera_apple_gpu_mlpkg] MTL4Compiler "
+                "unavailable: %s\n",
+                err ? [[err localizedDescription] UTF8String] : "<nil>");
+        g_mlpkg_last_error_kind = -3;
+        return NULL;
+      }
+      NSError *cerr = nil;
+      id<MTL4MachineLearningPipelineState> pso =
+          [compiler newMachineLearningPipelineStateWithDescriptor:pipeDesc
+                                                            error:&cerr];
+      if (!pso) {
+        fprintf(stderr, "[tessera_apple_gpu_mlpkg] pipeline compile failed "
+                "for '%s' function '%s': %s\n", path, function_name,
+                cerr ? [[cerr localizedDescription] UTF8String] : "<nil>");
+        g_mlpkg_last_error_kind = -3;
+        return NULL;
+      }
+      TesseraMlpkgPipeline *box = [[TesseraMlpkgPipeline alloc] init];
+      box.library = library;
+      box.pipelineState = pso;
+      box.functionName = @(function_name);
+      box.packagePath = @(path);
+      // Move ownership to a raw void* handle. CFBridgingRetain hands
+      // ARC's strong reference to the C ABI; destroy calls
+      // CFBridgingRelease to take it back.
+      return (void *)CFBridgingRetain(box);
+    }
+  }
+  g_mlpkg_last_error_kind = -1;
+  return NULL;
+}
+
+// Safe to call with NULL.
+extern "C" void tessera_apple_gpu_mlpkg_destroy(void *handle) {
+  if (!handle) return;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    // Reclaim ARC ownership and let the autorelease pool tear down
+    // the library + pipeline state on next drain.
+    @autoreleasepool {
+      TesseraMlpkgPipeline *box =
+          (__bridge_transfer TesseraMlpkgPipeline *)handle;
+      (void)box;
+    }
+  }
+}
+
+// Test/diagnostic helper: is the handle a real compiled pipeline?
+// Returns 1 iff `handle != NULL` AND it carries a non-nil pipeline
+// state. Catches lifecycle bugs (e.g., post-destroy reuse).
+extern "C" int32_t tessera_apple_gpu_mlpkg_is_compiled(void *handle) {
+  if (!handle) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    TesseraMlpkgPipeline *box = (__bridge TesseraMlpkgPipeline *)handle;
+    return box.pipelineState != nil ? 1 : 0;
+  }
+  return 0;
+}
+
+// Last failure code from `tessera_apple_gpu_mlpkg_compile`. Reading
+// clears it. Returns 0 if no error since the last compile call.
+extern "C" int32_t tessera_apple_gpu_mlpkg_last_error_kind(void) {
+  int32_t v = g_mlpkg_last_error_kind;
+  g_mlpkg_last_error_kind = 0;
+  return v;
 }
 
 // P4 — flush the captured pipeline set to the enabled archive path. Returns 1 on

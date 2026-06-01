@@ -1481,6 +1481,14 @@ extern "C" void tessera_apple_gpu_mtl4_mlp_session_destroy(void*) {}
 // Metal 4 P4 — MTL4Archive pipeline persistence; no Metal 4 off Darwin.
 extern "C" int32_t tessera_apple_gpu_mtl4_archive_enable(const char*) { return 0; }
 extern "C" int32_t tessera_apple_gpu_mtl4_archive_flush(void) { return 0; }
+// PK1 — Packaged ML pipeline stubs. Off Darwin / pre-macOS-26 there's
+// no MTL4 lane; all probes report "not available" with error_kind=-1.
+extern "C" void *tessera_apple_gpu_mlpkg_compile(const char *, const char *) {
+  return nullptr;
+}
+extern "C" void tessera_apple_gpu_mlpkg_destroy(void *) {}
+extern "C" int32_t tessera_apple_gpu_mlpkg_is_compiled(void *) { return 0; }
+extern "C" int32_t tessera_apple_gpu_mlpkg_last_error_kind(void) { return -1; }
 // Apple-sample Action 6 — archive state probe. Off-Darwin: zero outputs
 // and report 0 ("runtime not ready"). The Python side reads the rc and
 // treats 0 as "no archive telemetry available".

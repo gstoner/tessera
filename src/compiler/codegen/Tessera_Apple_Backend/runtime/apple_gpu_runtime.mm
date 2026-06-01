@@ -728,9 +728,11 @@ extern "C" int32_t tessera_apple_gpu_cholesky_f32(const float *A, float *L, int3
         initWithDevice:ctx.device lower:YES order:(NSUInteger)n];
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     [chol encodeToCommandBuffer:cb sourceMatrix:mA resultMatrix:mR status:bS];
-    [cb commit];
-    [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted) return -1;
+    // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper
+    // adds 30 s timeout protection so a hung Cholesky doesn't deadlock
+    // the entire test process.
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "cholesky_f32")) return -1;
     if (ts_decomp_status(bS) != MPSMatrixDecompositionStatusSuccess) return 2;
     const float *R = (const float *)[bR contents];
     for (int i = 0; i < n; ++i)
@@ -766,9 +768,8 @@ extern "C" int32_t tessera_apple_gpu_solve_cholesky_f32(const float *A, const fl
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     [chol encodeToCommandBuffer:cb sourceMatrix:mA resultMatrix:mL status:bS];
     [solve encodeToCommandBuffer:cb sourceMatrix:mL rightHandSideMatrix:mB solutionMatrix:mX];
-    [cb commit];
-    [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted) return -1;
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "solve_cholesky_f32")) return -1;
     if (ts_decomp_status(bS) != MPSMatrixDecompositionStatusSuccess) return 2;
     std::memcpy(X, [bX contents], rB);
     return 0;
@@ -805,9 +806,8 @@ extern "C" int32_t tessera_apple_gpu_solve_lu_f32(const float *A, const float *B
     [lu encodeToCommandBuffer:cb sourceMatrix:mA resultMatrix:mLU pivotIndices:mP status:bS];
     [solve encodeToCommandBuffer:cb sourceMatrix:mLU rightHandSideMatrix:mB
                    pivotIndices:mP solutionMatrix:mX];
-    [cb commit];
-    [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted) return -1;
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "solve_lu_f32")) return -1;
     if (ts_decomp_status(bS) != MPSMatrixDecompositionStatusSuccess) return 2;
     std::memcpy(X, [bX contents], rB);
     return 0;
@@ -840,9 +840,8 @@ extern "C" int32_t tessera_apple_gpu_tri_solve_f32(const float *A, const float *
                  order:(NSUInteger)n numberOfRightHandSides:(NSUInteger)nrhs alpha:1.0];
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     [solve encodeToCommandBuffer:cb sourceMatrix:mA rightHandSideMatrix:mB solutionMatrix:mX];
-    [cb commit];
-    [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted) return -1;
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "tri_solve_f32")) return -1;
     std::memcpy(X, [bX contents], rB);
     return 0;
   }
@@ -889,9 +888,8 @@ bool dispatch_mps_random_f32(MetalDeviceContext &ctx, float *out, int64_t n,
     if (!v || !dist || !rng) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     [rng encodeToCommandBuffer:cb destinationVector:v];
-    [cb commit];
-    [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted) return false;
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "mps_random_f32")) return false;
     std::memcpy(out, [bOut contents], (size_t)len * 4);  // only the requested n
     return true;
   }

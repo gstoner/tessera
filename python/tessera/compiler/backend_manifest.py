@@ -222,6 +222,17 @@ class BackendKernelEntry:
     ``__post_init__``); ignored otherwise. The full lifecycle (load
     → compile → reflect → prepare → dispatch) lives in
     ``tessera.apple_mlpkg`` and uses this path as the input."""
+    apple_binding_spec: Optional[object] = None
+    """Audit Action 2 (2026-06-01) — compiler-emitted
+    ``AppleKernelBindingSpec`` for entries with ``status == "packaged"``.
+    Type erased to ``object`` to avoid an import cycle
+    (``apple_mlpkg`` imports nothing from this module today, but the
+    transitive graph could shift; ``object`` keeps that lane
+    bidirectional). Validated structurally in ``__post_init__``: when
+    set, must be an instance of ``AppleKernelBindingSpec`` AND its
+    ``function_name`` / ``package_path`` must be consistent with the
+    enclosing manifest entry. Only meaningful for ``status="packaged"``;
+    rejected (with a precise diagnostic) otherwise."""
 
     def __post_init__(self) -> None:
         from ..dtype import canonicalize_dtype
@@ -322,6 +333,43 @@ class BackendKernelEntry:
             # gate (audit follow-up) — we don't validate here so a
             # registry entry can land before the artifact lands.
 
+        # Audit Action 2 (2026-06-01) — AppleKernelBindingSpec
+        # consistency check. The spec is the compiler's declarative
+        # binding contract; if attached it must agree with the
+        # manifest's other packaged-kernel fields (function_name
+        # comes from the spec; package_path must match the manifest's
+        # packaged_pipeline_path). Late-import keeps the dependency
+        # one-way (manifest → apple_mlpkg, not the reverse).
+        if self.apple_binding_spec is not None:
+            # Import here so a non-Apple manifest module doesn't pay
+            # the cost / can't trigger a cycle.
+            from ..apple_mlpkg import AppleKernelBindingSpec
+            spec = self.apple_binding_spec
+            if not isinstance(spec, AppleKernelBindingSpec):
+                raise TypeError(
+                    f"apple_binding_spec must be an AppleKernelBindingSpec, "
+                    f"got {type(spec).__name__}"
+                )
+            if self.status != _PACKAGED_STATUS:
+                raise ValueError(
+                    f"apple_binding_spec is only valid when "
+                    f"status='packaged', got status={self.status!r}"
+                )
+            # The spec's package_path must match the manifest's
+            # packaged_pipeline_path — they're the same artifact viewed
+            # from two angles, and disagreement would silently route
+            # the runtime to a different package than the compiler
+            # contract declared.
+            if (self.packaged_pipeline_path is not None
+                    and spec.package_path
+                    and spec.package_path != self.packaged_pipeline_path):
+                raise ValueError(
+                    f"apple_binding_spec.package_path "
+                    f"({spec.package_path!r}) does not match "
+                    f"packaged_pipeline_path "
+                    f"({self.packaged_pipeline_path!r})"
+                )
+
     def as_dict(self) -> dict[str, object]:
         out: dict[str, object] = {
             "target": self.target,
@@ -361,6 +409,15 @@ class BackendKernelEntry:
         # PK5 (2026-05-31) — packaged-kernel path.
         if self.packaged_pipeline_path is not None:
             out["packaged_pipeline_path"] = self.packaged_pipeline_path
+        # Audit Action 2 (2026-06-01) — render the compiler-emitted
+        # binding spec into JSON-friendly form when present. The
+        # dashboard / drift tooling can then diff manifest entries
+        # without importing the apple_mlpkg dataclasses.
+        if self.apple_binding_spec is not None:
+            # Forward to the spec's own ``to_dict`` (already
+            # JSON-friendly: lists, None for wildcards, no tuples).
+            out["apple_binding_spec"] = (
+                self.apple_binding_spec.to_dict())  # type: ignore[union-attr]
         return out
 
     @property

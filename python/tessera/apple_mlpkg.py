@@ -449,6 +449,336 @@ def extract_argument_layout(pipeline: "Pipeline") -> ArgumentLayout:
     )
 
 
+# ---- Audit Action 2: AppleTensorBindingSpec (compiler-emitted) ---------
+#
+# Distinction vs PK7's ``ArgumentLayoutEntry`` / ``ArgumentLayout``:
+#
+# * ``ArgumentLayout*`` is RUNTIME-EXTRACTED from a compiled pipeline's
+#   reflection — "what Apple's pipeline actually exposed."
+# * ``AppleTensorBindingSpec`` / ``AppleKernelBindingSpec`` is
+#   COMPILER-EMITTED — "what the Tessera compiler EXPECTS each binding
+#   to look like, declared in advance."
+#
+# Both shapes round-trip through one another and through
+# ``ExpectedBinding`` (PK6 validation):
+#
+#   compiler          spec.to_expected_bindings()        ┐
+#   spec ─────────────────────────────────────────────► ExpectedBinding ─► validate_bindings()
+#         spec.to_argument_layout(path, fn) │
+#                                           ▼
+#                                  ArgumentLayout (runtime form)
+#
+#   runtime extract ─ AppleKernelBindingSpec.from_argument_layout(layout)
+#                                           ▼
+#                                  AppleKernelBindingSpec (compiler form)
+#
+# Wildcard support: ``dims`` accepts ``None`` per axis to mean "any
+# value matches." When ``to_expected_bindings()`` sees a wildcard, it
+# drops the ``dims`` constraint entirely (PK6 then skips the check) —
+# the compiler still pins ``buffer_index`` / ``dtype`` / ``rank``.
+# Useful for dynamic-shape kernels where the host calls
+# ``setInputDimensions:`` post-load.
+
+@dataclass(frozen=True)
+class AppleTensorBindingSpec:
+    """Compiler-side declarative spec for ONE tensor binding of an
+    Apple packaged kernel. The compiler emits this BEFORE the runtime
+    ever loads the ``.mtlpackage``; the runtime extract
+    (``ArgumentLayoutEntry``) is then diff-checked against it.
+
+    Fields:
+
+    * ``name`` — binding name (case-sensitive, must match the
+      package's reflection).
+    * ``buffer_index`` — kernel-side argument-table index. Pinned by
+      the compiler — drift here is the audit's headline concern (a
+      package that re-orders bindings between builds silently
+      misroutes data).
+    * ``kind`` — resource kind. ``"tensor"`` today (the only kind
+      Apple's reflection surfaces); future packages might expose
+      ``"buffer"`` / ``"texture"``.
+    * ``dtype`` — canonical Tessera dtype name (``"fp32"`` / ``"fp16"``
+      / ...).
+    * ``rank`` — number of dimensions.
+    * ``dims`` — per-axis extent. ``None`` per axis = wildcard "any
+      value" (used for dynamic-shape kernels). Apple's MTLTensorExtents
+      convention is innermost-first; this spec follows the same.
+    * ``direction`` — ``"input"`` / ``"output"`` / ``"unknown"``.
+      Apple's reflection doesn't mark direction, so the compiler
+      should set this explicitly when known.
+    * ``residency`` — placeholder for future per-binding residency
+      hints. ``"shared"`` today (unified memory on Apple Silicon);
+      future packages might declare ``"private"`` / ``"managed"``.
+    """
+    name: str
+    buffer_index: int
+    kind: str
+    dtype: str
+    rank: int
+    dims: tuple[Optional[int], ...]
+    direction: str
+    residency: str = "shared"
+
+    def __post_init__(self) -> None:
+        # Structural invariants — keep the compiler honest at
+        # construction time so a corrupted spec can't propagate
+        # silently to a runtime drift gate.
+        if self.rank != len(self.dims):
+            raise ValueError(
+                f"AppleTensorBindingSpec {self.name!r}: rank={self.rank} "
+                f"but len(dims)={len(self.dims)} — must match")
+        if self.buffer_index < 0:
+            raise ValueError(
+                f"AppleTensorBindingSpec {self.name!r}: buffer_index="
+                f"{self.buffer_index} must be non-negative")
+        if self.kind not in ("tensor", "buffer", "texture"):
+            raise ValueError(
+                f"AppleTensorBindingSpec {self.name!r}: kind={self.kind!r} "
+                f"not in {{'tensor', 'buffer', 'texture'}}")
+        if self.direction not in ("input", "output", "unknown"):
+            raise ValueError(
+                f"AppleTensorBindingSpec {self.name!r}: direction="
+                f"{self.direction!r} not in {{'input', 'output', 'unknown'}}")
+        for i, d in enumerate(self.dims):
+            if d is not None and d <= 0:
+                raise ValueError(
+                    f"AppleTensorBindingSpec {self.name!r}: dims[{i}]={d} "
+                    f"must be positive or None (wildcard)")
+
+    @property
+    def has_wildcard_dims(self) -> bool:
+        """True if at least one axis is a wildcard. Wildcard specs
+        won't pin the ``dims`` field in ``to_expected_bindings`` —
+        the runtime drift gate falls back to checking ``rank``."""
+        return any(d is None for d in self.dims)
+
+    def concrete_dims(self) -> Optional[tuple[int, ...]]:
+        """The dims as a concrete tuple iff no axis is a wildcard;
+        else ``None``. Useful for round-tripping into PK7's
+        ``ArgumentLayoutEntry`` (which doesn't carry wildcards)."""
+        if self.has_wildcard_dims:
+            return None
+        return tuple(int(d) for d in self.dims)  # type: ignore[arg-type]
+
+    def to_expected_binding(self) -> ExpectedBinding:
+        """Convert to a PK6 ``ExpectedBinding`` for runtime validation.
+        Wildcard dims become "skip the check" — the rest of the spec
+        is still strictly pinned (buffer_index / dtype / rank)."""
+        return ExpectedBinding(
+            name=self.name,
+            rank=self.rank,
+            dtype=self.dtype,
+            buffer_index=self.buffer_index,
+            dims=self.concrete_dims(),  # None ↔ skip
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "buffer_index": self.buffer_index,
+            "kind": self.kind,
+            "dtype": self.dtype,
+            "rank": self.rank,
+            # ``None`` survives JSON as ``null``; consumers can detect
+            # wildcards by checking for ``null`` entries.
+            "dims": list(self.dims),
+            "direction": self.direction,
+            "residency": self.residency,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, object]) -> "AppleTensorBindingSpec":
+        dims_raw = d["dims"]
+        if not isinstance(dims_raw, (list, tuple)):
+            raise ValueError(f"dims must be list/tuple, got {type(dims_raw)}")
+        dims = tuple((None if x is None else int(x)) for x in dims_raw)
+        return cls(
+            name=str(d["name"]),
+            buffer_index=int(d["buffer_index"]),
+            kind=str(d.get("kind", "tensor")),
+            dtype=str(d["dtype"]),
+            rank=int(d["rank"]),
+            dims=dims,
+            direction=str(d.get("direction", "unknown")),
+            residency=str(d.get("residency", "shared")),
+        )
+
+    @classmethod
+    def from_argument_layout_entry(
+        cls, entry: ArgumentLayoutEntry
+    ) -> "AppleTensorBindingSpec":
+        """Derive a spec from a runtime-extracted ``ArgumentLayoutEntry``.
+        The result has fully-concrete dims (no wildcards) since the
+        runtime extract reports actual shapes."""
+        return cls(
+            name=entry.name,
+            buffer_index=entry.buffer_index,
+            kind=entry.kind,
+            dtype=entry.dtype,
+            rank=entry.rank,
+            dims=tuple(entry.dims),
+            direction=entry.direction,
+            residency=entry.residency,
+        )
+
+    def to_argument_layout_entry(self) -> ArgumentLayoutEntry:
+        """Convert to a PK7 ``ArgumentLayoutEntry``. Raises if the
+        spec has wildcard dims — the runtime form requires concrete
+        extents."""
+        concrete = self.concrete_dims()
+        if concrete is None:
+            raise ValueError(
+                f"AppleTensorBindingSpec {self.name!r}: cannot convert to "
+                f"ArgumentLayoutEntry while ``dims`` has wildcards "
+                f"({self.dims!r}) — supply concrete dims first.")
+        return ArgumentLayoutEntry(
+            name=self.name,
+            buffer_index=self.buffer_index,
+            kind=self.kind,
+            dtype=self.dtype,
+            rank=self.rank,
+            dims=concrete,
+            direction=self.direction,
+            residency=self.residency,
+        )
+
+
+@dataclass(frozen=True)
+class AppleKernelBindingSpec:
+    """The full compiler-emitted binding contract for ONE Apple
+    packaged kernel. Audit Action 2: "emit an Apple tensor-binding
+    spec at the IR layer that runtime drift gates validate against."
+
+    Compose with ``BackendKernelEntry(status='packaged', ...)`` so the
+    manifest carries the binding contract beside the package path. The
+    runtime can then:
+
+    1. Load the package via ``compile_mlpackage()``.
+    2. Extract the runtime layout via ``extract_argument_layout()``.
+    3. Diff via ``validate_bindings(pipe, spec.to_expected_bindings())``.
+    4. Either proceed (clean diff) or fail loud (named gate).
+
+    Fields:
+
+    * ``function_name`` — the entry-point function the compiler
+      compiled against. Must match the runtime's ``compile_mlpackage``
+      ``function_name`` argument.
+    * ``package_path`` — repository-relative or absolute path to the
+      ``.mtlpackage``. Stored for traceability; the runtime resolves
+      it via ``BackendKernelEntry.packaged_pipeline_path``.
+    * ``entries`` — one ``AppleTensorBindingSpec`` per declared
+      binding. Sorted by ``buffer_index`` at construction.
+    """
+    function_name: str
+    package_path: str
+    entries: tuple[AppleTensorBindingSpec, ...]
+
+    def __post_init__(self) -> None:
+        # Stable order = deterministic round-trip / diff.
+        sorted_entries = tuple(
+            sorted(self.entries, key=lambda e: e.buffer_index))
+        if sorted_entries != self.entries:
+            object.__setattr__(self, "entries", sorted_entries)
+        # Catch buffer_index collisions early — two bindings can't
+        # share an argument-table slot.
+        seen: dict[int, str] = {}
+        for e in self.entries:
+            if e.buffer_index in seen:
+                raise ValueError(
+                    f"AppleKernelBindingSpec {self.function_name!r}: "
+                    f"buffer_index {e.buffer_index} reused by both "
+                    f"{seen[e.buffer_index]!r} and {e.name!r}")
+            seen[e.buffer_index] = e.name
+        names_seen: set[str] = set()
+        for e in self.entries:
+            if e.name in names_seen:
+                raise ValueError(
+                    f"AppleKernelBindingSpec {self.function_name!r}: "
+                    f"binding name {e.name!r} duplicated")
+            names_seen.add(e.name)
+
+    def by_name(self) -> dict[str, AppleTensorBindingSpec]:
+        return {e.name: e for e in self.entries}
+
+    def inputs(self) -> tuple[AppleTensorBindingSpec, ...]:
+        return tuple(e for e in self.entries if e.direction == "input")
+
+    def outputs(self) -> tuple[AppleTensorBindingSpec, ...]:
+        return tuple(e for e in self.entries if e.direction == "output")
+
+    @property
+    def has_wildcard_dims(self) -> bool:
+        return any(e.has_wildcard_dims for e in self.entries)
+
+    def to_expected_bindings(self) -> tuple[ExpectedBinding, ...]:
+        """One PK6 ``ExpectedBinding`` per entry. Feed straight into
+        ``validate_bindings(pipe, spec.to_expected_bindings())`` to
+        diff a runtime load against the compiler contract."""
+        return tuple(e.to_expected_binding() for e in self.entries)
+
+    def to_argument_layout(self) -> "ArgumentLayout":
+        """Convert to a PK7 ``ArgumentLayout``. Raises if any entry
+        has wildcard dims — the runtime form requires concrete shapes.
+        For wildcard specs, only ``to_expected_bindings()`` is
+        meaningful (the runtime extract supplies the concrete dims)."""
+        return ArgumentLayout(
+            pipeline_path=self.package_path,
+            function_name=self.function_name,
+            entries=tuple(e.to_argument_layout_entry() for e in self.entries),
+        )
+
+    @classmethod
+    def from_argument_layout(
+        cls, layout: "ArgumentLayout"
+    ) -> "AppleKernelBindingSpec":
+        """Derive a compiler-side spec from a runtime extract. Useful
+        for: (a) bootstrapping a manifest entry from a known-good
+        package, (b) golden-file tests that snapshot the runtime
+        layout into a compiler-side artifact."""
+        return cls(
+            function_name=layout.function_name,
+            package_path=layout.pipeline_path,
+            entries=tuple(
+                AppleTensorBindingSpec.from_argument_layout_entry(e)
+                for e in layout.entries),
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "function_name": self.function_name,
+            "package_path": self.package_path,
+            "entries": [e.to_dict() for e in self.entries],
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, object]) -> "AppleKernelBindingSpec":
+        entries_raw = d["entries"]
+        if not isinstance(entries_raw, (list, tuple)):
+            raise ValueError(
+                f"entries must be list/tuple, got {type(entries_raw)}")
+        entries = tuple(
+            AppleTensorBindingSpec.from_dict(e)  # type: ignore[arg-type]
+            for e in entries_raw)
+        return cls(
+            function_name=str(d["function_name"]),
+            package_path=str(d["package_path"]),
+            entries=entries,
+        )
+
+    def validate_against(
+        self, pipeline: "Pipeline", *, strict_extra: bool = False
+    ) -> BindingValidation:
+        """Convenience: diff this compiler spec against a live runtime
+        pipeline's reflection. Equivalent to::
+
+            validate_bindings(pipeline, self.to_expected_bindings(),
+                              strict_extra=strict_extra)
+        """
+        return validate_bindings(
+            pipeline, self.to_expected_bindings(),
+            strict_extra=strict_extra)
+
+
 def packaged_ml_available() -> bool:
     """PK audit-fix P1 (2026-05-31) — Is Metal 4 packaged ML actually
     executable on this host?
@@ -854,6 +1184,8 @@ __all__ = [
     "BindingValidation",
     "ArgumentLayoutEntry",
     "ArgumentLayout",
+    "AppleTensorBindingSpec",
+    "AppleKernelBindingSpec",
     "compile_mlpackage",
     "extract_argument_layout",
     "last_error_kind",

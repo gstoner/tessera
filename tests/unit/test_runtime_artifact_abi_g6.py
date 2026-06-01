@@ -48,9 +48,12 @@ pytestmark = pytest.mark.skipif(
 
 
 _GPU_LIFECYCLE_HARNESS = r"""
-// G6 — Apple GPU artifact lifecycle on the C ABI. The launch step must return
-// TSR_STATUS_UNIMPLEMENTED (no native ABI launch bridge yet), not silently
-// succeed. Exit code 0 = OK; any other code names the failing step.
+// G6 + G6.2 — Apple GPU artifact lifecycle on the C ABI. Uses ONLY the public
+// API: no layout-mirror peeking at the opaque tsrArtifact_t. tsrGetArtifactBytes
+// returns the canonical payload; tsrGetArtifactTarget returns the target tag.
+// The launch step must return TSR_STATUS_UNIMPLEMENTED (no native ABI launch
+// bridge yet), not silently succeed. Exit code 0 = OK; any non-zero code
+// names the failing step.
 #include "tessera/tessera_runtime.h"
 #include <cstdio>
 #include <cstring>
@@ -65,20 +68,14 @@ int main() {
   opts.options_json = nullptr;
   tsrArtifact a = nullptr;
   if (tsrCompileArtifact("flash_attn,matmul,softmax", &opts, &a) != TSR_STATUS_SUCCESS) return 12;
-  // 2) Payload must be v2 (TSRART2) and contain the target tag.
-  //    We can't read a->payload through the opaque pointer publicly, so use
-  //    a layout mirror to confirm. Must match tessera_runtime.cpp struct.
-  struct artifact_layout {
-    std::string payload;
-    std::string target;
-    std::string compiler_path;
-    std::string execution_kind;
-  };
-  auto* layout = reinterpret_cast<artifact_layout*>(a);
-  if (layout->payload.find("TSRART2") != 0) return 13;
-  if (layout->target != "apple_gpu") return 14;
-  if (layout->compiler_path.find("apple_gpu") == std::string::npos) return 15;
-  if (layout->execution_kind != "artifact_only") return 16;
+  // 2) Public ABI inspection — payload is v2 (TSRART2) + target/compiler_path/
+  //    execution_kind are queryable WITHOUT poking at the opaque struct.
+  const void *bytes_ptr = nullptr; size_t bytes_len = 0;
+  if (tsrGetArtifactBytes(a, &bytes_ptr, &bytes_len) != TSR_STATUS_SUCCESS) return 13;
+  if (bytes_len < 7 || std::memcmp(bytes_ptr, "TSRART2", 7) != 0) return 14;
+  const char *target = nullptr;
+  if (tsrGetArtifactTarget(a, &target) != TSR_STATUS_SUCCESS) return 15;
+  if (std::string(target) != "apple_gpu") return 16;
   // 3) tsrGetKernel succeeds for a registered name in the artifact.
   tsrKernel k = nullptr;
   if (tsrGetKernel(a, "flash_attn", &k) != TSR_STATUS_SUCCESS) return 17;
@@ -92,17 +89,15 @@ int main() {
     fprintf(stderr, "expected UNIMPLEMENTED, got %d\n", (int)st);
     return 20;
   }
-  // 5) Round-trip: serialize bytes, destroy, load, get kernel — still GPU,
-  //    still UNIMPLEMENTED to launch (the target/compiler_path/execution_kind
-  //    travel with the bytes).
-  std::string bytes = layout->payload;
+  // 5) Round-trip: copy the bytes (the ABI returns a non-owning view), destroy,
+  //    load, get kernel — still GPU, still UNIMPLEMENTED to launch.
+  std::string bytes(static_cast<const char*>(bytes_ptr), bytes_len);
   tsrDestroyKernel(k);
   tsrDestroyArtifact(a);
   tsrArtifact b = nullptr;
   if (tsrLoadArtifact(bytes.data(), bytes.size(), &b) != TSR_STATUS_SUCCESS) return 21;
-  auto* layout2 = reinterpret_cast<artifact_layout*>(b);
-  if (layout2->target != "apple_gpu") return 22;
-  if (layout2->execution_kind != "artifact_only") return 23;
+  const char *t2 = nullptr;
+  if (tsrGetArtifactTarget(b, &t2) != TSR_STATUS_SUCCESS || std::string(t2) != "apple_gpu") return 22;
   tsrKernel kb = nullptr;
   if (tsrGetKernel(b, "matmul", &kb) != TSR_STATUS_SUCCESS) return 24;
   if (tsrLaunchKernel(s, kb, args, 2) != TSR_STATUS_UNIMPLEMENTED) return 25;
@@ -110,7 +105,8 @@ int main() {
   const char *v1 = "TSRART1\n0\n";
   tsrArtifact c = nullptr;
   if (tsrLoadArtifact(v1, strlen(v1), &c) != TSR_STATUS_SUCCESS) return 26;
-  if (reinterpret_cast<artifact_layout*>(c)->target != "cpu") return 27;
+  const char *t3 = nullptr;
+  if (tsrGetArtifactTarget(c, &t3) != TSR_STATUS_SUCCESS || std::string(t3) != "cpu") return 27;
   // Cleanup.
   tsrDestroyKernel(kb);
   tsrDestroyArtifact(c);

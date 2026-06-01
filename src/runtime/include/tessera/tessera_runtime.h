@@ -78,6 +78,17 @@ TsrStatus tsrRegisterHostKernel(const char* name, tsrHostKernelFn fn);
 // backing store. Safe to call with NULL.
 TsrStatus tsrDestroyKernel(tsrKernel kernel);
 
+// G6.2 — read-only view into the artifact's canonical serialized payload (the
+// same bytes tsrLoadArtifact accepts). `*out_bytes` is owned by the artifact
+// and valid until tsrDestroyArtifact; do not free it. Lets a caller persist /
+// inspect / fingerprint an artifact through the public ABI without poking at
+// the opaque struct's internals.
+TsrStatus tsrGetArtifactBytes(tsrArtifact artifact, const void** out_bytes, size_t* out_len);
+
+// G6.2 — read-only target tag for an artifact (e.g. "cpu" / "apple_gpu").
+// `*out` is owned by the artifact; valid until tsrDestroyArtifact.
+TsrStatus tsrGetArtifactTarget(tsrArtifact artifact, const char** out);
+
 // Host portable tile kernel launch with shared memory/barrier support.
 // The user_ctx passed to kernel is a (tsrKernelCtx*).
 TsrStatus tsrLaunchHostTileKernel(tsrStream s,

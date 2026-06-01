@@ -1076,13 +1076,36 @@ def load_artifact(path_or_bytes: str | bytes | os.PathLike[str] | RuntimeArtifac
 # launch() consults the matrix to pick the executor; adding a new backend
 # executor is now (1) add the function here, (2) add it to KNOWN_EXECUTORS in
 # execution_matrix.py, (3) add the matrix row. No new branch in launch().
+#
+# Executors return either:
+#   - the raw output (matrix row's execution_kind is reported as-is), or
+#   - a (output, override_execution_kind) tuple — for executors with an internal
+#     fallback chain (e.g. native_cpu -> reference_cpu) that need to report a
+#     different execution_kind on success than the row's default.
+def _execute_cpu_native_or_jit(artifact, args):
+    """G6.1 — CPU executor that preserves the native_cpu -> reference_cpu
+    fallback chain from the prior inline path. Tries the AMX/native CPU
+    artifact first; if it raises, falls back to the JIT numpy reference path
+    and reports execution_kind='reference_cpu' on success. Returns
+    (output, execution_kind) so launch() can override the matrix row's
+    default execution_kind on the fallback path."""
+    try:
+        return _execute_native_cpu_artifact(artifact, args), "native_cpu"
+    except Exception:
+        # Re-raise the JIT error if THAT fails too — preserves the existing
+        # "invalid_artifact" reporting (the native exc is dropped because the
+        # JIT path is the canonical CPU fallback and its error is more
+        # informative than the AMX one).
+        return _execute_jit_cpu_artifact(artifact, args), "reference_cpu"
+
+
 def _executor_table():
     # Lazily resolved: these symbols are defined later in this file.
     return {
         "apple_cpu_accelerate": _execute_apple_cpu_accelerate_artifact,
         "apple_gpu_mps":        _execute_apple_gpu_mps_artifact,
-        # CPU executors are reached via the matrix lookup for cpu/native_cpu +
-        # cpu/jit_cpu_numpy; they live in the existing in-line CPU path below.
+        "native_cpu":           _execute_cpu_native_or_jit,
+        "jit_cpu_numpy":        _execute_jit_cpu_artifact,
     }
 
 
@@ -1094,10 +1117,11 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
     metadata = artifact.metadata or {}
     target = str(metadata.get("target", "cpu"))
     cap = backend_capabilities(target)
-    # G6 — matrix-driven dispatch for non-CPU executors. The matrix lookup
-    # returns an ExecutionRow naming the executor_id; the table below resolves
-    # it to a Python function. There are NO hard-coded `target == "apple_gpu"`
-    # branches here anymore; everything flows through the matrix.
+    # G6 + G6.1 — matrix-driven dispatch for **every** executable row (Apple
+    # CPU/GPU + the CPU native_cpu/jit_cpu_numpy rows). The matrix lookup
+    # returns an ExecutionRow naming the executor_id; _executor_table() resolves
+    # it to a Python function. Adding a new backend executor is now (function +
+    # KNOWN_EXECUTORS + matrix row) — no new branch in launch().
     row = _exec_row_for_metadata(metadata)
     if (row is not None and row.executable and row.executor_id is not None
             and metadata.get("executable") is True
@@ -1105,9 +1129,6 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
         executor = _executor_table()[row.executor_id]
         arch = row.target
         kid = str(metadata.get("kernel_id", row.executor_id))
-        meta_ok = {"compiler_path": row.compiler_path,
-                   "execution_kind": row.execution_kind,
-                   "execution_mode": row.execution_mode}
         try:
             output = executor(artifact, args)
         except Exception as exc:
@@ -1127,8 +1148,18 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
                 "artifact_hash": artifact.artifact_hash,
                 "reason": str(exc), "telemetry": telemetry,
             }
+        # G6.1 — executors with an internal fallback chain (e.g. CPU
+        # native_cpu -> reference_cpu) may return (output, override_kind) to
+        # report a different execution_kind on the fallback path. Plain output
+        # uses the matrix row's default execution_kind.
+        exec_kind = row.execution_kind
+        if isinstance(output, tuple) and len(output) == 2 and isinstance(output[1], str):
+            output, exec_kind = output
         elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000.0
         _last_profile = RuntimeProfile(cpu_wall_ms=elapsed_ms, launch_overhead_ms=elapsed_ms)
+        meta_ok = {"compiler_path": row.compiler_path,
+                   "execution_kind": exec_kind,
+                   "execution_mode": row.execution_mode}
         telemetry = make_event(
             "runtime.launch", source="runtime", op="artifact_launch",
             arch=arch, kernel_id=kid, graph_hash=artifact.artifact_hash,
@@ -1137,7 +1168,7 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
         return {
             "ok": True, "runtime_status": "success",
             "compiler_path": row.compiler_path,
-            "execution_kind": row.execution_kind,
+            "execution_kind": exec_kind,
             "artifact_hash": artifact.artifact_hash, "output": output,
             "telemetry": telemetry,
             "profile": {"cpu_wall_ms": elapsed_ms, "launch_overhead_ms": elapsed_ms},
@@ -1178,142 +1209,12 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
             "reason": unim_reason,
             "telemetry": telemetry,
         }
-    if metadata.get("executable") is True and metadata.get("execution_kind") == "native_cpu":
-        try:
-            output = _execute_native_cpu_artifact(artifact, args)
-        except Exception as exc:
-            try:
-                output = _execute_jit_cpu_artifact(artifact, args)
-            except Exception:
-                output = None
-            if output is not None:
-                elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000.0
-                _last_profile = RuntimeProfile(cpu_wall_ms=elapsed_ms, launch_overhead_ms=elapsed_ms)
-                telemetry = make_event(
-                    "runtime.launch",
-                    source="runtime",
-                    op="artifact_launch",
-                    arch="cpu",
-                    kernel_id=str(metadata.get("kernel_id", "jit_cpu_numpy")),
-                    graph_hash=artifact.artifact_hash,
-                    latency_ms=elapsed_ms,
-                    status="ok",
-                    metadata={
-                        "compiler_path": str(metadata.get("compiler_path", "jit_cpu_numpy")),
-                        "execution_kind": "reference_cpu",
-                        "native_fallback_reason": str(exc),
-                    },
-                )
-                return {
-                    "ok": True,
-                    "runtime_status": "success",
-                    "compiler_path": str(metadata.get("compiler_path", "jit_cpu_numpy")),
-                    "execution_kind": "reference_cpu",
-                    "artifact_hash": artifact.artifact_hash,
-                    "output": output,
-                    "telemetry": telemetry,
-                    "profile": {
-                        "cpu_wall_ms": elapsed_ms,
-                        "launch_overhead_ms": elapsed_ms,
-                    },
-                }
-            _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
-            telemetry = make_event(
-                "runtime.launch",
-                source="runtime",
-                op="artifact_launch",
-                arch="cpu",
-                kernel_id=str(metadata.get("kernel_id", "native_cpu_gemm")),
-                graph_hash=artifact.artifact_hash,
-                status="invalid_artifact",
-                metadata={"compiler_path": str(metadata.get("compiler_path", "jit_cpu_numpy")), "execution_kind": "native_cpu", "reason": str(exc)},
-            )
-            return {
-                "ok": False,
-                "runtime_status": "invalid_artifact",
-                "compiler_path": str(metadata.get("compiler_path", "jit_cpu_numpy")),
-                "execution_kind": "native_cpu",
-                "artifact_hash": artifact.artifact_hash,
-                "reason": str(exc),
-                "telemetry": telemetry,
-            }
-        elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000.0
-        _last_profile = RuntimeProfile(cpu_wall_ms=elapsed_ms, launch_overhead_ms=elapsed_ms)
-        telemetry = make_event(
-            "runtime.launch",
-            source="runtime",
-            op="artifact_launch",
-            arch="cpu",
-            kernel_id=str(metadata.get("kernel_id", "native_cpu_gemm")),
-            graph_hash=artifact.artifact_hash,
-            latency_ms=elapsed_ms,
-            status="ok",
-            metadata={"compiler_path": str(metadata.get("compiler_path", "jit_cpu_numpy")), "execution_kind": "native_cpu"},
-        )
-        return {
-            "ok": True,
-            "runtime_status": "success",
-            "compiler_path": str(metadata.get("compiler_path", "jit_cpu_numpy")),
-            "execution_kind": "native_cpu",
-            "artifact_hash": artifact.artifact_hash,
-            "output": output,
-            "telemetry": telemetry,
-            "profile": {
-                "cpu_wall_ms": elapsed_ms,
-                "launch_overhead_ms": elapsed_ms,
-            },
-        }
-
-    if metadata.get("executable") is True and metadata.get("compiler_path") == "jit_cpu_numpy":
-        try:
-            output = _execute_jit_cpu_artifact(artifact, args)
-        except Exception as exc:
-            _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
-            telemetry = make_event(
-                "runtime.launch",
-                source="runtime",
-                op="artifact_launch",
-                arch="cpu",
-                kernel_id=str(metadata.get("kernel_id", "jit_cpu_numpy")),
-                graph_hash=artifact.artifact_hash,
-                status="invalid_artifact",
-                metadata={"compiler_path": "jit_cpu_numpy", "execution_kind": "reference_cpu", "reason": str(exc)},
-            )
-            return {
-                "ok": False,
-                "runtime_status": "invalid_artifact",
-                "compiler_path": "jit_cpu_numpy",
-                "execution_kind": "reference_cpu",
-                "artifact_hash": artifact.artifact_hash,
-                "reason": str(exc),
-                "telemetry": telemetry,
-            }
-        elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000.0
-        _last_profile = RuntimeProfile(cpu_wall_ms=elapsed_ms, launch_overhead_ms=elapsed_ms)
-        telemetry = make_event(
-            "runtime.launch",
-            source="runtime",
-            op="artifact_launch",
-            arch="cpu",
-            kernel_id=str(metadata.get("kernel_id", "jit_cpu_numpy")),
-            graph_hash=artifact.artifact_hash,
-            latency_ms=elapsed_ms,
-            status="ok",
-            metadata={"compiler_path": "jit_cpu_numpy", "execution_kind": "reference_cpu"},
-        )
-        return {
-            "ok": True,
-            "runtime_status": "success",
-            "compiler_path": "jit_cpu_numpy",
-            "execution_kind": "reference_cpu",
-            "artifact_hash": artifact.artifact_hash,
-            "output": output,
-            "telemetry": telemetry,
-            "profile": {
-                "cpu_wall_ms": elapsed_ms,
-                "launch_overhead_ms": elapsed_ms,
-            },
-        }
+    # G6.1 — the inline CPU branches (native_cpu / jit_cpu_numpy) used to live
+    # here; they are now routed through the matrix dispatcher above via the
+    # `native_cpu` and `jit_cpu_numpy` executor_ids in _executor_table(). The
+    # native_cpu -> reference_cpu fallback chain is preserved inside
+    # _execute_cpu_native_or_jit, which returns (output, override_kind) so the
+    # dispatcher reports execution_kind='reference_cpu' on the fallback path.
 
     _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
     reason = str(metadata.get("reason", "Generated artifact is not executable by the runtime"))

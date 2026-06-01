@@ -579,6 +579,29 @@ TsrStatus tsrDestroyKernel(tsrKernel kernel) {
   return TSR_STATUS_SUCCESS;
 }
 
+// G6.2 — public read-only view of the canonical payload. Returns the same
+// bytes tsrLoadArtifact accepts; the pointer is owned by the artifact.
+TsrStatus tsrGetArtifactBytes(tsrArtifact artifact, const void** out_bytes,
+                              size_t* out_len) {
+  if (!artifact || !out_bytes || !out_len) {
+    SetLastError("artifact/out_bytes/out_len==NULL");
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
+  *out_bytes = artifact->payload.data();
+  *out_len = artifact->payload.size();
+  return TSR_STATUS_SUCCESS;
+}
+
+// G6.2 — public read-only target tag.
+TsrStatus tsrGetArtifactTarget(tsrArtifact artifact, const char** out) {
+  if (!artifact || !out) {
+    SetLastError("artifact/out==NULL");
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
+  *out = artifact->target.c_str();
+  return TSR_STATUS_SUCCESS;
+}
+
 // G5/G6 — Launch a kernel obtained via tsrGetKernel. Dispatch by kernel kind:
 //   kHostCpu      : route through tsrLaunchHostTileKernel.
 //                   args[0] = const tsrLaunchParams* (required);

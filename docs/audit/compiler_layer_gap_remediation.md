@@ -161,6 +161,27 @@ tests green, zero regressions.
 
 1003 affected tests green; ABI dashboard regenerated (+1 symbol: `tsrDestroyKernel`).
 
+#### 6.1 Matrix-as-dispatcher: CPU rows now route through `_executor_table()` — ✅ DONE (2026-05-31)
+Audit residual: G6 left CPU rows (`native_cpu`, `jit_cpu_numpy`) on the older
+inline path, so the "matrix is the dispatcher" invariant held only for Apple
+CPU/GPU. Closed by adding `apple_cpu_accelerate`, `apple_gpu_mps`,
+`native_cpu`, **and** `jit_cpu_numpy` to `_executor_table()` (the last via
+`_execute_cpu_native_or_jit`, which preserves the `native_cpu → reference_cpu`
+fallback semantics by returning `(output, override_kind)`). The inline CPU
+branch in `runtime.launch()` is deleted; every executable row in the matrix is
+now reached through exactly one dispatch site.
+
+#### 6.2 Public `tsrGetArtifactBytes` / `tsrGetArtifactTarget` ABI — ✅ DONE (2026-05-31)
+Audit residual: the G6 test inspected the opaque artifact payload via a
+private layout-mirror struct that had to be kept in sync with the C++ side by
+hand. Closed by adding two read-only view functions to the public header
+(`tessera_runtime.h`): `tsrGetArtifactBytes(artifact, &bytes, &len)` returns
+the canonical serialized payload (the same bytes `tsrLoadArtifact` accepts),
+and `tsrGetArtifactTarget(artifact, &target)` returns the target tag. Both
+the G5 round-trip harness and the G6 GPU-lifecycle harness were rewritten to
+use the public API — no test now pokes at `tsrArtifact_t`'s internals. The
+runtime ABI dashboard accepts both new symbols (drift gate clean).
+
 ### 5. C ABI artifact compile / load / get-kernel / launch — ✅ DONE (2026-05-31, CPU end-to-end)
 **Landed:** the four `tsr*Artifact` lifecycle functions that returned
 `TSR_STATUS_UNIMPLEMENTED` now wire end-to-end for the CPU backend, on top of

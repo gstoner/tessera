@@ -87,27 +87,19 @@ _ROUNDTRIP_HARNESS = r"""
 #include "tessera/tessera_runtime.h"
 #include <cstdio>
 #include <string>
-#include <unordered_map>
 static int g_called = 0;
 static void k(void* uc, uint32_t, uint32_t, uint32_t) {
   (void)uc; __sync_fetch_and_add(&g_called, 1);
 }
-// Internal layout mirror — the impl-side struct in tessera_runtime.cpp matches.
-// G6 added target/compiler_path/execution_kind before the kernels map; layout
-// must match exactly (3 std::string fields then the unordered_map).
-struct artifact_layout {
-  std::string payload;
-  std::string target;
-  std::string compiler_path;
-  std::string execution_kind;
-  std::unordered_map<std::string, tsrHostKernelFn> kernels;
-};
+// G6.2 — read the canonical payload via the public ABI (no layout-mirror peek).
 int main() {
   tsrInit();
   tsrRegisterHostKernel("k", (tsrHostKernelFn)k);
   tsrArtifact a = nullptr; tsrCompileOptions opts{};
   if (tsrCompileArtifact("k", &opts, &a) != TSR_STATUS_SUCCESS) return 31;
-  std::string bytes = reinterpret_cast<artifact_layout*>(a)->payload;
+  const void *bptr = nullptr; size_t blen = 0;
+  if (tsrGetArtifactBytes(a, &bptr, &blen) != TSR_STATUS_SUCCESS) return 32;
+  std::string bytes(static_cast<const char*>(bptr), blen);
   // G6 — payload format is TSRART2 (target-tagged); TSRART1 still parses on load.
   if (bytes.find("TSRART2") != 0) return 32;
   tsrDestroyArtifact(a);

@@ -42,7 +42,7 @@ from __future__ import annotations
 import ctypes
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
 from tessera._apple_gpu_dispatch import apple_gpu_runtime, bind_symbol
 
@@ -130,6 +130,148 @@ def _dtype_name_for_raw(raw: int) -> str:
     return _dtype_name_by_raw.get(raw, f"raw={raw}")
 
 
+# ---- PK6: reflection validation gate (audit Action 4) -------------------
+
+@dataclass(frozen=True)
+class ExpectedBinding:
+    """Compiler-side expectation for a tensor binding — what
+    Tessera's manifest entry / compile contract promises the
+    ``.mtlpackage`` will expose. ``validate_bindings`` diffs these
+    against the live reflection from the loaded pipeline.
+
+    Fields:
+
+    * ``name`` — the binding name (case-sensitive, matches Metal package).
+    * ``rank`` — required dim count (``None`` to skip the rank check).
+    * ``dtype`` — required Tessera dtype name (``"fp32"`` / ``"fp16"``
+      / etc.; ``None`` to skip the dtype check).
+    * ``buffer_index`` — required kernel-side argument-table index
+      (``None`` to skip the index check). When set, this is the
+      strongest contract — a package that re-orders bindings between
+      builds will fail validation here.
+    * ``dims`` — required exact dimensions (``None`` to skip). Useful
+      only for fully-static packages; dynamic-shape packages where
+      ``setInputDimensions:`` was called expose post-compile dims.
+    """
+    name: str
+    rank: Optional[int] = None
+    dtype: Optional[str] = None
+    buffer_index: Optional[int] = None
+    dims: Optional[tuple[int, ...]] = None
+
+
+@dataclass(frozen=True)
+class BindingMismatch:
+    """A binding that's present in BOTH expected and actual but has a
+    diverging attribute. Carries enough detail to point a developer
+    at the exact field that drifted."""
+    name: str
+    field: str   # "rank" / "dtype" / "buffer_index" / "dims"
+    expected: object
+    actual: object
+
+
+@dataclass(frozen=True)
+class BindingValidation:
+    """Result of ``validate_bindings``. Audit Action 4's "named gate":
+    when ``ok`` is False, ``first_failure_reason`` names the specific
+    mismatch class (``missing`` / ``extra`` / ``mismatched``) and the
+    listed entries give the precise per-binding diff.
+
+    A "soft validation" mode (the default) treats EXTRA bindings as a
+    warning rather than a hard failure — a package may legitimately
+    expose more bindings than the compiler cares about. Pass
+    ``strict_extra=True`` to ``validate_bindings`` to fail on extras
+    too (recommended for production / drift gates).
+    """
+    ok: bool
+    missing: tuple[str, ...]
+    extra: tuple[str, ...]
+    mismatched: tuple[BindingMismatch, ...]
+    strict_extra: bool
+
+    @property
+    def first_failure_reason(self) -> Optional[str]:
+        """The audit-Action-4 named gate. ``None`` when ``ok`` is True."""
+        if self.missing:
+            return f"missing bindings: {', '.join(self.missing)}"
+        if self.mismatched:
+            m = self.mismatched[0]
+            return (f"binding {m.name!r} {m.field} mismatch: "
+                    f"expected={m.expected!r} actual={m.actual!r}")
+        if self.strict_extra and self.extra:
+            return f"unexpected bindings: {', '.join(self.extra)}"
+        return None
+
+
+def validate_bindings(
+    pipeline: "Pipeline",
+    expected: Iterable[ExpectedBinding],
+    *,
+    strict_extra: bool = False,
+) -> BindingValidation:
+    """PK6 — Compare a compiled pipeline's actual reflection against
+    a list of compiler-side ``ExpectedBinding`` declarations.
+
+    The diff splits into three buckets:
+
+    * ``missing`` — names in ``expected`` not present in the actual
+      reflection. ALWAYS a hard failure (the compiler promised a
+      binding the package doesn't have — kernels would crash at
+      dispatch).
+    * ``extra`` — names in the actual reflection that aren't in
+      ``expected``. By default treated as a warning (``ok`` stays
+      True if this is the only finding); pass ``strict_extra=True``
+      to make it a hard failure (drift-gate mode).
+    * ``mismatched`` — names present in both but with diverging
+      ``rank`` / ``dtype`` / ``buffer_index`` / ``dims``. ALWAYS a
+      hard failure. The ``BindingMismatch`` records exactly which
+      field diverged + the expected/actual values.
+
+    Mirrors the audit's "Action 4 — reflection as ABI verification"
+    framing: when Tessera loads or generates an Apple ML package, it
+    verifies compiler-expected bindings against reflected bindings
+    BEFORE marking the artifact executable.
+    """
+    actual = pipeline.bindings()
+    expected_list = list(expected)
+    expected_by_name = {e.name: e for e in expected_list}
+
+    missing = tuple(sorted(set(expected_by_name) - set(actual)))
+    extra = tuple(sorted(set(actual) - set(expected_by_name)))
+    mismatches: list[BindingMismatch] = []
+    for name, exp in expected_by_name.items():
+        if name not in actual:
+            continue
+        act = actual[name]
+        if exp.rank is not None and exp.rank != act.rank:
+            mismatches.append(BindingMismatch(
+                name=name, field="rank", expected=exp.rank,
+                actual=act.rank))
+        if exp.dtype is not None and exp.dtype != act.dtype:
+            mismatches.append(BindingMismatch(
+                name=name, field="dtype", expected=exp.dtype,
+                actual=act.dtype))
+        if exp.buffer_index is not None and exp.buffer_index != act.buffer_index:
+            mismatches.append(BindingMismatch(
+                name=name, field="buffer_index",
+                expected=exp.buffer_index, actual=act.buffer_index))
+        if exp.dims is not None and tuple(exp.dims) != act.dims:
+            mismatches.append(BindingMismatch(
+                name=name, field="dims",
+                expected=tuple(exp.dims), actual=act.dims))
+
+    # ``ok`` is False on any hard failure (missing OR mismatched), plus
+    # extras when strict_extra is True.
+    ok = (not missing) and (not mismatches)
+    if strict_extra and extra:
+        ok = False
+    return BindingValidation(
+        ok=ok, missing=missing, extra=extra,
+        mismatched=tuple(mismatches), strict_extra=strict_extra,
+    )
+
+
 @dataclass(frozen=True)
 class TensorBinding:
     """One reflection-extracted tensor binding from a packaged ML
@@ -156,6 +298,155 @@ class TensorBinding:
     dims: tuple[int, ...]
     dtype: str
     dtype_raw: int
+
+
+# ---- PK7: ArgumentLayout artifact (audit Action 5) ---------------------
+
+@dataclass(frozen=True)
+class ArgumentLayoutEntry:
+    """One row of the compile-time argument-layout contract for a
+    packaged kernel. Mirrors Apple's ``MTL4ArgumentTable`` binding +
+    enough metadata for downstream verification.
+
+    Fields:
+
+    * ``name`` — binding name from reflection.
+    * ``buffer_index`` — kernel-side argument-table index.
+    * ``kind`` — resource kind. Today always ``"tensor"`` (the only
+      ``MTLBindingType`` PK1-PK6 surfaced); future PR could add
+      ``"buffer"`` / ``"texture"`` once the runtime gains them.
+    * ``dtype`` — canonical Tessera dtype name (``"fp32"`` /
+      ``"fp16"`` / ...). Maps to ``MTLTensorDataType`` via the PK2
+      decoder.
+    * ``rank`` — number of dimensions.
+    * ``dims`` — extents innermost-first (Apple's MTLTensorExtents
+      convention; PK6's ``ExpectedBinding.dims`` uses the same form).
+    * ``direction`` — ``"input"`` / ``"output"`` / ``"unknown"``,
+      best-effort from the binding name prefix. Apple's reflection
+      doesn't directly mark direction; the ``"input"`` / ``"output"``
+      naming convention is widely used so we infer from it. Callers
+      who need authoritative direction should override post-extract.
+    * ``residency`` — placeholder for future per-binding residency
+      hints. ``"shared"`` today (unified memory on Apple Silicon);
+      future packages might declare ``"private"`` / ``"managed"``.
+    """
+    name: str
+    buffer_index: int
+    kind: str
+    dtype: str
+    rank: int
+    dims: tuple[int, ...]
+    direction: str
+    residency: str
+
+
+@dataclass(frozen=True)
+class ArgumentLayout:
+    """The full compile-time argument-layout contract for a packaged
+    kernel. Audit Action 5: "emit an Apple ArgumentLayout artifact
+    beside backend IR — binding name, index, resource kind,
+    tensor/buffer type, dtype, rank, residency requirement."
+
+    Carries enough metadata for:
+
+    * **PK6 validation** — convert via :meth:`to_expected_bindings`
+      and feed straight into ``validate_bindings``.
+    * **Audit dashboard surface** — :meth:`to_dict` returns a
+      JSON-friendly representation.
+    * **Compiler-side artifact** — Tessera's manifest can attach an
+      ``ArgumentLayout`` to a packaged-kernel ``BackendKernelEntry``
+      as the binding contract the compiler emits.
+    """
+    pipeline_path: str
+    function_name: str
+    entries: tuple[ArgumentLayoutEntry, ...]
+
+    def by_name(self) -> dict[str, ArgumentLayoutEntry]:
+        return {e.name: e for e in self.entries}
+
+    def inputs(self) -> tuple[ArgumentLayoutEntry, ...]:
+        return tuple(e for e in self.entries if e.direction == "input")
+
+    def outputs(self) -> tuple[ArgumentLayoutEntry, ...]:
+        return tuple(e for e in self.entries if e.direction == "output")
+
+    def to_expected_bindings(self) -> tuple["ExpectedBinding", ...]:
+        """Derive a strict PK6 ``ExpectedBinding`` list from this
+        layout — checks every field against the actual reflection.
+        Pipe through ``validate_bindings`` to drift-check a runtime
+        load against the compiler-emitted layout."""
+        return tuple(
+            ExpectedBinding(
+                name=e.name, rank=e.rank, dtype=e.dtype,
+                buffer_index=e.buffer_index, dims=e.dims,
+            )
+            for e in self.entries
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "pipeline_path": self.pipeline_path,
+            "function_name": self.function_name,
+            "entries": [
+                {
+                    "name": e.name,
+                    "buffer_index": e.buffer_index,
+                    "kind": e.kind,
+                    "dtype": e.dtype,
+                    "rank": e.rank,
+                    "dims": list(e.dims),
+                    "direction": e.direction,
+                    "residency": e.residency,
+                }
+                for e in self.entries
+            ],
+        }
+
+
+def _infer_direction(name: str) -> str:
+    """Best-effort direction inference from binding name. Apple's
+    sample uses ``"input"`` / ``"output"`` prefixes; many Core ML
+    packages follow the same convention. Returns ``"unknown"`` for
+    anything else (caller can override post-extract)."""
+    lower = name.lower()
+    if "output" in lower:
+        return "output"
+    if "input" in lower:
+        return "input"
+    return "unknown"
+
+
+def extract_argument_layout(pipeline: "Pipeline") -> ArgumentLayout:
+    """PK7 — Build an ``ArgumentLayout`` from a compiled pipeline's
+    reflection. The layout becomes the compiler-side artifact the
+    audit asked for (Action 5).
+
+    Pipeline must be compiled (``is_compiled`` True). Raises
+    ``RuntimeError`` on a destroyed handle (same lifecycle contract
+    as ``bindings()``).
+    """
+    bindings = pipeline.bindings()
+    entries = tuple(
+        ArgumentLayoutEntry(
+            name=b.name,
+            buffer_index=b.buffer_index,
+            kind="tensor",       # only kind today
+            dtype=b.dtype,
+            rank=b.rank,
+            dims=b.dims,
+            direction=_infer_direction(b.name),
+            residency="shared",  # Apple Silicon default
+        )
+        # Sort by buffer_index for stable round-trip (reflection order
+        # IS stable per PK2 tests, but sorting makes the artifact
+        # easier to diff in dashboards).
+        for b in sorted(bindings.values(), key=lambda x: x.buffer_index)
+    )
+    return ArgumentLayout(
+        pipeline_path=pipeline.package_path,
+        function_name=pipeline.function_name,
+        entries=entries,
+    )
 
 
 def last_error_kind() -> int:
@@ -503,6 +794,13 @@ __all__ = [
     "ERROR_PIPELINE_COMPILE_FAILED",
     "Pipeline",
     "TensorBinding",
+    "ExpectedBinding",
+    "BindingMismatch",
+    "BindingValidation",
+    "ArgumentLayoutEntry",
+    "ArgumentLayout",
     "compile_mlpackage",
+    "extract_argument_layout",
     "last_error_kind",
+    "validate_bindings",
 ]

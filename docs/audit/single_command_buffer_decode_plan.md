@@ -168,27 +168,47 @@ established this; needs generalization).
 ### Stage 4 — full decoder benchmark — LANDED (2026-06-01)
 
 Benchmark at ``benchmarks/apple_gpu/benchmark_decoder_layer_one_cb.py``
-compares a Llama-style 8-op attention block on N command buffers
-versus 1. Measured speedups on M-series hardware (30 reps,
-median latency):
+compares a Llama-style 8-op attention block in **four modes**:
 
-| Shape (BxSxD) | per-op (8 cb) | one cb | speedup |
-|---------------|---------------|--------|---------|
-| 1x8x16        | 2.49 ms       | 0.76 ms | **3.29×** |
-| 1x32x64       | 4.82 ms       | 2.41 ms | **2.00×** |
-| 1x64x128      | 8.63 ms       | 4.53 ms | **1.90×** |
+* ``per_op_cold`` — upload everything (weights + activation) each
+  iter, one cb per op (the naive newcomer pattern)
+* ``per_op_baseline`` — weights device-resident (pre-uploaded), one
+  cb per op
+* ``one_cb`` — weights device-resident, all 8 ops in one cb (the
+  encode-session architectural win)
+* ``warmed_one_cb`` — weights via ``ResidentWeights`` + chain via
+  ``@auto_batch`` (the full-stack ergonomic mode — same perf as
+  ``one_cb`` plus the natural Python code shape)
 
-Pattern: smaller shapes benefit more from single-cb because the
-per-op command-buffer overhead dominates the actual GPU compute.
-At 1x8x16 the 7 saved cb commits are worth ~1.7 ms; the actual
-attention math takes ~0.7 ms either way. As shapes grow, compute
-dominates and the per-cb overhead becomes a smaller fraction —
-but the 2× win at 1x64x128 is still very significant for the
-typical decode-step latency budget.
+Measured on M-series hardware (30 reps, median latency):
 
-Above 64×128 we'd expect the speedup to keep tapering toward 1.0×
-as compute fully dominates; this is the expected behavior and not
-a regression of the architecture.
+| Shape (BxSxD) | cold ms | per_op ms | one_cb ms | warmed ms | resident-weight win | single-cb win | full stack |
+|---------------|---------|-----------|-----------|-----------|---------------------|----------------|-------------|
+| 1x8x16        | 2.59    | 2.50      | 0.77      | 0.80      | 1.04×               | 3.27×          | **3.24×**   |
+| 1x32x64       | 5.11    | 5.31      | 1.98      | 2.23      | 0.96×               | 2.69×          | **2.29×**   |
+| 1x64x128      | 8.60    | 9.36      | 4.86      | 4.95      | 0.92×               | 1.93×          | **1.74×**   |
+
+Pattern:
+
+* **Single-cb dominates the win** at every shape (1.9-3.3×). The
+  per-op command-buffer commit overhead is the main thing the
+  encode-session architecture eliminates.
+* **ResidentWeights wins are in the noise at these sizes** —
+  weights here are D×D (256 to 16384 fp32 floats). At benchmark
+  scale, per-call upload of these tiny tensors costs <0.1 ms.
+  ResidentWeights matters when weights are large — a real LLM with
+  D=4096 has 16M-float (64 MB) per-projection weights, where
+  per-iter upload would cost milliseconds and dominate the
+  speedup story.
+* **warmed_one_cb ≈ one_cb** at these sizes — same kernels, same
+  device-resident state, just different ergonomic shape (decorator
+  vs. explicit session). Tracking the architectural promise: no
+  perf cost for the cleaner API.
+
+Above 64×128 we'd expect the single-cb speedup to keep tapering
+toward 1.0× as compute fully dominates; the architecture stays
+relevant for small-batch decode where commit overhead is the
+critical bottleneck.
 
 ## Test architecture
 

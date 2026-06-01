@@ -44,21 +44,27 @@ from .apple_gpu_batched import (
     DeviceTensor,
     batched_session,
     bmm_enc,
+    bmm_enc_bf16,
     bmm_enc_f16,
     device_tensor,
     flash_attn_enc,
     flash_attn_enc_f16,
     gelu_enc,
+    gelu_enc_bf16,
     gelu_enc_f16,
     layer_norm_enc,
+    layer_norm_enc_bf16,
     layer_norm_enc_f16,
     rmsnorm_enc,
+    rmsnorm_enc_bf16,
     rmsnorm_enc_f16,
     rope_enc,
     rope_enc_f16,
     silu_enc,
+    silu_enc_bf16,
     silu_enc_f16,
     softmax_enc,
+    softmax_enc_bf16,
     softmax_enc_f16,
 )
 
@@ -120,6 +126,18 @@ _REGISTRY_ENTRIES: tuple[EncodeOpSpec, ...] = (
     EncodeOpSpec("gelu", "f16", gelu_enc_f16, input_tensor_args=(0,)),
     EncodeOpSpec("flash_attn", "f16", flash_attn_enc_f16,
                   input_tensor_args=(0, 1, 2)),
+    # bf16 ops — Project-3 (2026-06-01). MPSGraph-routed only;
+    # rope/flash_attn bf16 (MSL kernel paths) are the Phase-3b
+    # follow-on and intentionally absent from the registry today.
+    EncodeOpSpec("bmm", "bf16", bmm_enc_bf16, input_tensor_args=(0, 1)),
+    EncodeOpSpec("layer_norm", "bf16", layer_norm_enc_bf16,
+                  input_tensor_args=(0, 1, 2)),
+    EncodeOpSpec("rmsnorm", "bf16", rmsnorm_enc_bf16,
+                  input_tensor_args=(0, 1)),
+    EncodeOpSpec("softmax", "bf16", softmax_enc_bf16,
+                  input_tensor_args=(0,)),
+    EncodeOpSpec("silu", "bf16", silu_enc_bf16, input_tensor_args=(0,)),
+    EncodeOpSpec("gelu", "bf16", gelu_enc_bf16, input_tensor_args=(0,)),
 )
 
 

@@ -2298,6 +2298,170 @@ extern "C" int32_t tessera_apple_gpu_unary_dev_f16_enc(
   return 1;
 }
 
+// Project-3 bf16 encode-session stubs (2026-06-01) — off-Darwin
+// reference. bf16 is the high 16 bits of a fp32 IEEE-754 bit pattern;
+// decode by zero-extending, encode by truncating with round-to-nearest.
+
+static inline float _bf16_to_f32(uint16_t b) {
+  uint32_t bits = ((uint32_t)b) << 16;
+  float out;
+  std::memcpy(&out, &bits, 4);
+  return out;
+}
+
+static inline uint16_t _f32_to_bf16(float f) {
+  uint32_t bits;
+  std::memcpy(&bits, &f, 4);
+  // Round-to-nearest-even.
+  uint32_t rounding_bias = 0x00007FFFu + ((bits >> 16) & 1u);
+  bits += rounding_bias;
+  return (uint16_t)(bits >> 16);
+}
+
+extern "C" int32_t tessera_apple_gpu_mpsgraph_bf16_supported(void) {
+  // Off-Darwin: no MPSGraph to probe; report the stub's own
+  // bf16 capability (the fp32-conversion math is host code).
+  return 1;
+}
+
+extern "C" int32_t tessera_apple_gpu_bmm_dev_bf16_enc(
+    TsEncodeSession* s, TsDeviceTensor* A, TsDeviceTensor* B,
+    TsDeviceTensor* O, int32_t batch, int32_t M, int32_t N, int32_t K,
+    int32_t b_broadcast) {
+  if (!s || !A || !B || !O) return 0;
+  const uint16_t* Ah = reinterpret_cast<const uint16_t*>(A->data);
+  const uint16_t* Bh = reinterpret_cast<const uint16_t*>(B->data);
+  uint16_t* Oh = reinterpret_cast<uint16_t*>(O->data);
+  for (int32_t b = 0; b < batch; ++b) {
+    for (int32_t i = 0; i < M; ++i) {
+      for (int32_t j = 0; j < N; ++j) {
+        float acc = 0.0f;
+        for (int32_t kk = 0; kk < K; ++kk) {
+          int32_t b_idx = b_broadcast ? 0 : b;
+          acc += _bf16_to_f32(Ah[((std::size_t)b * M + i) * K + kk]) *
+                 _bf16_to_f32(Bh[((std::size_t)b_idx * K + kk) * N + j]);
+        }
+        Oh[((std::size_t)b * M + i) * N + j] = _f32_to_bf16(acc);
+      }
+    }
+  }
+  return 1;
+}
+
+extern "C" int32_t tessera_apple_gpu_layer_norm_dev_bf16_enc(
+    TsEncodeSession* s, TsDeviceTensor* X, TsDeviceTensor* gamma,
+    TsDeviceTensor* beta, TsDeviceTensor* Y,
+    int32_t rows, int32_t cols, float eps) {
+  if (!s || !X || !gamma || !beta || !Y) return 0;
+  const uint16_t* xh = reinterpret_cast<const uint16_t*>(X->data);
+  const uint16_t* gh = reinterpret_cast<const uint16_t*>(gamma->data);
+  const uint16_t* bh = reinterpret_cast<const uint16_t*>(beta->data);
+  uint16_t* yh = reinterpret_cast<uint16_t*>(Y->data);
+  for (int32_t r = 0; r < rows; ++r) {
+    double mean = 0.0;
+    for (int32_t c = 0; c < cols; ++c)
+      mean += _bf16_to_f32(xh[(std::size_t)r * cols + c]);
+    mean /= cols;
+    double var = 0.0;
+    for (int32_t c = 0; c < cols; ++c) {
+      double d = _bf16_to_f32(xh[(std::size_t)r * cols + c]) - mean;
+      var += d * d;
+    }
+    var /= cols;
+    double inv = 1.0 / std::sqrt(var + eps);
+    for (int32_t c = 0; c < cols; ++c) {
+      double n = (_bf16_to_f32(xh[(std::size_t)r * cols + c]) - mean) * inv;
+      yh[(std::size_t)r * cols + c] = _f32_to_bf16(
+          (float)(n * _bf16_to_f32(gh[c]) + _bf16_to_f32(bh[c])));
+    }
+  }
+  return 1;
+}
+
+extern "C" int32_t tessera_apple_gpu_rmsnorm_dev_bf16_enc(
+    TsEncodeSession* s, TsDeviceTensor* X, TsDeviceTensor* gamma,
+    TsDeviceTensor* Y, int32_t rows, int32_t cols, float eps) {
+  if (!s || !X || !gamma || !Y) return 0;
+  const uint16_t* xh = reinterpret_cast<const uint16_t*>(X->data);
+  const uint16_t* gh = reinterpret_cast<const uint16_t*>(gamma->data);
+  uint16_t* yh = reinterpret_cast<uint16_t*>(Y->data);
+  for (int32_t r = 0; r < rows; ++r) {
+    double v = 0.0;
+    for (int32_t c = 0; c < cols; ++c) {
+      double x = _bf16_to_f32(xh[(std::size_t)r * cols + c]);
+      v += x * x;
+    }
+    v /= cols;
+    double inv = 1.0 / std::sqrt(v + eps);
+    for (int32_t c = 0; c < cols; ++c) {
+      double x = _bf16_to_f32(xh[(std::size_t)r * cols + c]);
+      yh[(std::size_t)r * cols + c] = _f32_to_bf16(
+          (float)(x * inv * _bf16_to_f32(gh[c])));
+    }
+  }
+  return 1;
+}
+
+extern "C" int32_t tessera_apple_gpu_softmax_dev_bf16_enc(
+    TsEncodeSession* s, TsDeviceTensor* X, TsDeviceTensor* Y,
+    int32_t rows, int32_t cols) {
+  if (!s || !X || !Y) return 0;
+  const uint16_t* xh = reinterpret_cast<const uint16_t*>(X->data);
+  uint16_t* yh = reinterpret_cast<uint16_t*>(Y->data);
+  for (int32_t r = 0; r < rows; ++r) {
+    float mx = _bf16_to_f32(xh[(std::size_t)r * cols + 0]);
+    for (int32_t c = 1; c < cols; ++c) {
+      float v = _bf16_to_f32(xh[(std::size_t)r * cols + c]);
+      if (v > mx) mx = v;
+    }
+    double sum = 0.0;
+    std::vector<float> tmp(cols);
+    for (int32_t c = 0; c < cols; ++c) {
+      float v = _bf16_to_f32(xh[(std::size_t)r * cols + c]);
+      tmp[c] = (float)std::exp(v - mx);
+      sum += tmp[c];
+    }
+    float inv = (float)(1.0 / sum);
+    for (int32_t c = 0; c < cols; ++c) {
+      yh[(std::size_t)r * cols + c] = _f32_to_bf16(tmp[c] * inv);
+    }
+  }
+  return 1;
+}
+
+extern "C" int32_t tessera_apple_gpu_unary_dev_bf16_enc(
+    TsEncodeSession* s, TsDeviceTensor* X, TsDeviceTensor* O,
+    int64_t n, int32_t op) {
+  if (!s || !X || !O) return 0;
+  const uint16_t* xh = reinterpret_cast<const uint16_t*>(X->data);
+  uint16_t* oh = reinterpret_cast<uint16_t*>(O->data);
+  for (int64_t i = 0; i < n; ++i) {
+    float v = _bf16_to_f32(xh[i]);
+    float r;
+    switch (op) {
+      case 0: r = v > 0 ? v : 0.0f; break;
+      case 1: r = 1.0f / (1.0f + std::exp(-v)); break;
+      case 2: r = std::tanh(v); break;
+      case 3: r = std::log1p(std::exp(v)); break;
+      case 4: r = v / (1.0f + std::exp(-v)); break;
+      case 5: {
+        float c = std::sqrt(2.0f / (float)M_PI);
+        r = 0.5f * v * (1.0f + std::tanh(c * (v + 0.044715f * v * v * v)));
+        break;
+      }
+      case 6: r = std::exp(v); break;
+      case 7: r = std::log(v); break;
+      case 8: r = std::sqrt(v); break;
+      case 9: r = 1.0f / std::sqrt(v); break;
+      case 10: r = -v; break;
+      case 11: r = std::fabs(v); break;
+      default: r = v; break;
+    }
+    oh[i] = _f32_to_bf16(r);
+  }
+  return 1;
+}
+
 extern "C" int64_t tessera_apple_gpu_session_commit_count(void) {
   // Off-Darwin: no real command queue; static counter incremented by
   // ``ts_enc_commit_wait`` in the stub (simple file-static — single-threaded

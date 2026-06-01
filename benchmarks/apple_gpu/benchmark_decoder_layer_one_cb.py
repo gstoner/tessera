@@ -116,6 +116,52 @@ def main(argv: list[str] | None = None) -> int:
         theta_dev = device_tensor(Theta)
 
         try:
+            def per_op_cold():
+                # The naive newcomer pattern: upload EVERY tensor
+                # (weights AND activation) on each iteration. Then
+                # run the chain with one cb per op. Real-world LLM
+                # decode that doesn't know about resident weights
+                # OR single-cb would look like this. Free everything
+                # at end of iter.
+                _x = device_tensor(X)
+                _g = device_tensor(gamma)
+                _wq = device_tensor(Wq.reshape(1, D, D))
+                _wk = device_tensor(Wk.reshape(1, D, D))
+                _wv = device_tensor(Wv.reshape(1, D, D))
+                _wo = device_tensor(Wo.reshape(1, D, D))
+                _theta = device_tensor(Theta)
+                try:
+                    with batched_session() as s:
+                        n = rmsnorm_enc(s, _x, _g,
+                                         rows=B * S, cols=D, eps=eps)
+                    with batched_session() as s:
+                        q = bmm_enc(s, n, _wq,
+                                     batch=1, M=B * S, N=D, K=D)
+                    with batched_session() as s:
+                        k = bmm_enc(s, n, _wk,
+                                     batch=1, M=B * S, N=D, K=D)
+                    with batched_session() as s:
+                        v = bmm_enc(s, n, _wv,
+                                     batch=1, M=B * S, N=D, K=D)
+                    with batched_session() as s:
+                        q_r = rope_enc(s, q, _theta, M=B * S, K=D)
+                    with batched_session() as s:
+                        k_r = rope_enc(s, k, _theta, M=B * S, K=D)
+                    with batched_session() as s:
+                        a = flash_attn_enc(s, q_r, k_r, v,
+                                            B=B, Sq=S, Sk=S, D=D,
+                                            scale=scale)
+                    with batched_session() as s:
+                        final = bmm_enc(s, a, _wo,
+                                         batch=1, M=B * S, N=D, K=D)
+                    result = final.download(np.float32, (1, B * S, D))
+                    for t in (n, q, k, v, q_r, k_r, a, final):
+                        t.free()
+                    return result
+                finally:
+                    for d in (_x, _g, _wq, _wk, _wv, _wo, _theta):
+                        d.free()
+
             def per_op():
                 # 8 separate sessions (one cb each). Same ops, same
                 # device-resident weights — the only difference is
@@ -172,8 +218,59 @@ def main(argv: list[str] | None = None) -> int:
                     t.free()
                 return result
 
-            for mode, fn in (("per_op_baseline", per_op),
-                             ("one_cb", batched)):
+            # Steady-state mode (Project-3, 2026-06-01) — uses
+            # ResidentWeights to upload weights ONCE before the timed
+            # loop AND @auto_batch for natural-looking code. This is
+            # what a real LLM decode loop looks like in practice.
+            from tessera.apple_gpu_resident import ResidentWeights
+            import tessera.apple_gpu_ops as agpu
+
+            warm_cache = ResidentWeights()
+            warm_cache.weight("gamma", gamma)
+            warm_cache.weight("Wq", Wq.reshape(1, D, D))
+            warm_cache.weight("Wk", Wk.reshape(1, D, D))
+            warm_cache.weight("Wv", Wv.reshape(1, D, D))
+            warm_cache.weight("Wo", Wo.reshape(1, D, D))
+            warm_cache.weight("Theta", Theta)
+
+            @agpu.auto_batch
+            def warmed_attention(x_act):
+                """Same chain as `batched`, but using the tessera
+                apple_gpu_ops surface (auto_batch decorator) AND with
+                weights already device-resident via ResidentWeights.
+                Per-step cost is: 1 activation upload + 8 ops in
+                1 cb + 1 download."""
+                n = agpu.rmsnorm(x_act, warm_cache["gamma"],
+                                  rows=B * S, cols=D, eps=eps)
+                q = agpu.bmm(n, warm_cache["Wq"],
+                              batch=1, M=B * S, N=D, K=D)
+                k = agpu.bmm(n, warm_cache["Wk"],
+                              batch=1, M=B * S, N=D, K=D)
+                v = agpu.bmm(n, warm_cache["Wv"],
+                              batch=1, M=B * S, N=D, K=D)
+                q_r = agpu.rope(q, warm_cache["Theta"],
+                                 M=B * S, K=D)
+                k_r = agpu.rope(k, warm_cache["Theta"],
+                                 M=B * S, K=D)
+                a = agpu.flash_attn(q_r, k_r, v,
+                                     B=B, Sq=S, Sk=S, D=D,
+                                     scale=scale)
+                return agpu.bmm(a, warm_cache["Wo"],
+                                 batch=1, M=B * S, N=D, K=D)
+
+            def warmed_one_cb():
+                # Re-upload only the activation each iteration.
+                x_dev_warm = warm_cache.activation("x", X)
+                out = warmed_attention(x_dev_warm)
+                # Force download.
+                result = out.download(np.float32, (1, B * S, D))
+                out.free()
+                return result
+
+            for mode, fn in (("per_op_cold", per_op_cold),
+                             ("per_op_baseline", per_op),
+                             ("one_cb", batched),
+                             ("warmed_one_cb", warmed_one_cb)):
                 ms, stdev_ms = _time(fn, args.reps)
                 rows.append({
                     "backend": "apple_gpu",
@@ -182,7 +279,15 @@ def main(argv: list[str] | None = None) -> int:
                     "dtype": "f32",
                     "mode": mode,
                     "chain_len": 8,
-                    "syncs": 8 if mode == "per_op_baseline" else 1,
+                    "syncs": (8 if mode in ("per_op_baseline",
+                                             "per_op_cold") else 1),
+                    # warmed_one_cb uploads weights ONCE before the
+                    # timed loop; per-iter cost is just the activation
+                    # upload + chain + result download. per_op_cold
+                    # re-uploads weights every iteration (the naive
+                    # newcomer pattern).
+                    "warmed": mode == "warmed_one_cb",
+                    "cold_uploads": mode == "per_op_cold",
                     "reps": args.reps,
                     "latency_ms": ms,
                     "stdev_ms": stdev_ms,
@@ -192,26 +297,50 @@ def main(argv: list[str] | None = None) -> int:
                     "tessera_version": version,
                 })
 
-            # Compute speedup row for the dashboard.
-            per_op_ms = next(r["latency_ms"] for r in rows
-                             if r["shape"] == spec
-                             and r["mode"] == "per_op_baseline")
-            one_cb_ms = next(r["latency_ms"] for r in rows
-                             if r["shape"] == spec
-                             and r["mode"] == "one_cb")
-            speedup = per_op_ms / one_cb_ms if one_cb_ms > 0 else 0.0
+            # Compute speedup rows for the dashboard.
+            def _mode_ms(name):
+                return next(r["latency_ms"] for r in rows
+                            if r["shape"] == spec and r["mode"] == name)
+
+            cold_ms = _mode_ms("per_op_cold")
+            per_op_ms = _mode_ms("per_op_baseline")
+            one_cb_ms = _mode_ms("one_cb")
+            warmed_ms = _mode_ms("warmed_one_cb")
+
+            # Speedup story (each step strictly larger numerator):
+            #   cold → per_op_baseline = ResidentWeights win
+            #         (eliminates per-iter weight upload)
+            #   per_op_baseline → one_cb = single-cb win
+            #         (eliminates per-op cb commit overhead)
+            #   per_op_baseline → warmed_one_cb = combined win
+            #         (and equals one_cb when weights are device-
+            #          resident — pure architectural framing)
+            #   cold → warmed_one_cb = total stack win
+            #         (the headline number for real LLM inference)
             rows.append({
                 "backend": "apple_gpu",
                 "op": "llama_attention_block_speedup",
                 "shape": spec,
                 "dtype": "f32",
                 "mode": "speedup",
-                "speedup_x": speedup,
+                "speedup_x_resident_weights": (
+                    cold_ms / per_op_ms if per_op_ms > 0 else 0.0),
+                "speedup_x_one_cb_vs_per_op": (
+                    per_op_ms / one_cb_ms if one_cb_ms > 0 else 0.0),
+                "speedup_x_one_cb_vs_cold": (
+                    cold_ms / one_cb_ms if one_cb_ms > 0 else 0.0),
+                "speedup_x_warmed_vs_cold": (
+                    cold_ms / warmed_ms if warmed_ms > 0 else 0.0),
+                "speedup_x_warmed_vs_per_op": (
+                    per_op_ms / warmed_ms if warmed_ms > 0 else 0.0),
+                "cold_ms": cold_ms,
                 "per_op_ms": per_op_ms,
                 "one_cb_ms": one_cb_ms,
+                "warmed_one_cb_ms": warmed_ms,
                 "device": "apple_silicon_metal",
                 "tessera_version": version,
             })
+            warm_cache.free()
         finally:
             for d in (x_dev, g_dev, wq_dev, wk_dev, wv_dev, wo_dev,
                       theta_dev):

@@ -955,6 +955,7 @@ def jit(
     source: Optional[str] = None,
     source_path: Optional[str] = None,
     native_required: bool = False,
+    auto_batch: bool = False,
 ) -> Any:
     """
     Tessera JIT decorator — drives the compiler pipeline.
@@ -1162,7 +1163,7 @@ def jit(
             ) from exc
 
         # ── Step 7: wrap and return ──────────────────────────────────────────
-        return JitFn(
+        jitfn = JitFn(
             fn=fn,
             graph_ir=module,
             inferred_effect=inferred_effect,
@@ -1179,6 +1180,33 @@ def jit(
             lowering_diagnostics=diagnostics,
             native_required=native_required,
         )
+
+        # Phase 2.1b (2026-06-01) — auto_batch=True opt-in. When set,
+        # wrap the user fn with apple_gpu_ops.auto_batch so any
+        # apple_gpu_ops.* calls inside the function body are
+        # trace-captured and executed as one cb per encode segment.
+        # Only meaningful when target="apple_gpu"; on other targets
+        # the wrap is a no-op (the trace context var stays inactive
+        # for tessera.ops.* / numpy paths).
+        #
+        # Architectural framing: auto_batch is opt-in because it
+        # bypasses the JIT lowering pipeline (Graph IR → Tile IR → ...)
+        # for the user-fn body — the user must use apple_gpu_ops.*
+        # inside. Phase 2.1c (open) would intercept tessera.ops.*
+        # automatically by routing through a context-aware shim
+        # layer; signature mismatches between tessera.ops (shape-
+        # inferred) and apple_gpu_ops (explicit rows/cols) make that
+        # a per-op adapter problem.
+        if auto_batch:
+            if target_kind != "apple_gpu":
+                raise TesseraJitError(
+                    f"@jit(auto_batch=True) currently only supports "
+                    f"target='apple_gpu'; got target={target!r} "
+                    f"(normalized={target_kind!r}).")
+            from .. import apple_gpu_ops as _agpu
+            jitfn._fn = _agpu.auto_batch(jitfn._fn)
+
+        return jitfn
 
     # Support both @jit and @jit(...) usage
     if fn is not None:

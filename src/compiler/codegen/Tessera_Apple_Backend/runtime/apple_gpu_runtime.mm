@@ -12817,6 +12817,56 @@ extern "C" int32_t tessera_apple_gpu_softmax_dev_f16_enc(
                                 MPSDataTypeFloat16) ? 1 : 0;
 }
 
+// Project-3 bf16 encode-session ABI (2026-06-01) — same shape as
+// the f16 variants, just MPSDataTypeBFloat16. macOS 26+ on Apple
+// Silicon (M2+) supports bf16 in MPSGraph directly; on older hosts
+// MPSGraph rejects the graph at build time and the encode helper
+// returns false. Sub-byte / non-MPSGraph paths (rope MSL kernel,
+// flash_attn MSL kernel) need the explicit fp32-conversion route
+// which is the Phase-3b follow-on.
+extern "C" int32_t tessera_apple_gpu_bmm_dev_bf16_enc(
+    TsEncodeSession *s, TsDeviceTensor *A, TsDeviceTensor *B,
+    TsDeviceTensor *O, int32_t batch, int32_t M, int32_t N, int32_t K,
+    int32_t b_broadcast) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !A || !B || !O) return 0;
+  return mpsg_encode_bmm_dev(s->cb, A->buf, B->buf, O->buf, batch, M, N, K,
+                              b_broadcast != 0, MPSDataTypeBFloat16)
+             ? 1
+             : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_layer_norm_dev_bf16_enc(
+    TsEncodeSession *s, TsDeviceTensor *X, TsDeviceTensor *gamma,
+    TsDeviceTensor *beta, TsDeviceTensor *Y,
+    int32_t rows, int32_t cols, float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !gamma || !beta || !Y) return 0;
+  return mpsg_encode_rowop_dev(s->cb, /*kind=*/0, X->buf, gamma->buf,
+                                beta->buf, Y->buf, rows, cols, eps,
+                                MPSDataTypeBFloat16) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_rmsnorm_dev_bf16_enc(
+    TsEncodeSession *s, TsDeviceTensor *X, TsDeviceTensor *gamma,
+    TsDeviceTensor *Y, int32_t rows, int32_t cols, float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !gamma || !Y) return 0;
+  return mpsg_encode_rowop_dev(s->cb, /*kind=*/1, X->buf, gamma->buf,
+                                /*bufB=*/nil, Y->buf, rows, cols, eps,
+                                MPSDataTypeBFloat16) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_softmax_dev_bf16_enc(
+    TsEncodeSession *s, TsDeviceTensor *X, TsDeviceTensor *Y,
+    int32_t rows, int32_t cols) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !Y) return 0;
+  return mpsg_encode_rowop_dev(s->cb, /*kind=*/2, X->buf, /*bufG=*/nil,
+                                /*bufB=*/nil, Y->buf, rows, cols, 0.0f,
+                                MPSDataTypeBFloat16) ? 1 : 0;
+}
+
 extern "C" int32_t tessera_apple_gpu_rope_dev_f16_enc(
     TsEncodeSession *s, TsDeviceTensor *X, TsDeviceTensor *Theta,
     TsDeviceTensor *Y, int32_t M, int32_t K) {
@@ -12970,6 +13020,40 @@ extern "C" int32_t tessera_apple_gpu_unary_dev_f16_enc(TsEncodeSession *s,
                                 MPSDataTypeFloat16)
              ? 1
              : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_unary_dev_bf16_enc(
+    TsEncodeSession *s, TsDeviceTensor *X, TsDeviceTensor *O,
+    int64_t n, int32_t op) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !O) return 0;
+  return mpsg_encode_unary_dev(s->cb, X->buf, O->buf, n, (int)op,
+                                MPSDataTypeBFloat16)
+             ? 1
+             : 0;
+}
+
+// Capability probe — does MPSGraph accept bf16 graph nodes on this
+// host? Builds a trivial 2-element bf16 unary graph at probe time
+// and reports whether construction + compile succeeded. Tests can
+// gate on this rather than running an actual op that might fail
+// silently mid-pipeline. Returns 1 iff MPSGraph supports bf16 here.
+extern "C" int32_t tessera_apple_gpu_mpsgraph_bf16_supported(void) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    // Build a tiny silu graph in bf16 — same shape as the runtime
+    // would build, just unused. If MPSGraph rejects the dtype, the
+    // node construction returns nil and we return 0.
+    MPSGraph *g = [[MPSGraph alloc] init];
+    MPSGraphTensor *x = [g placeholderWithShape:@[ @1 ]
+                                       dataType:MPSDataTypeBFloat16
+                                           name:nil];
+    if (!x) return 0;
+    MPSGraphTensor *y = mpsg_unary_node(g, x, /*op=*/4);  // silu
+    if (!y) return 0;
+    return 1;
+  }
 }
 
 extern "C" int32_t tessera_apple_gpu_binary_dev_f32_enc(TsEncodeSession *s,

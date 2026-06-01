@@ -309,6 +309,14 @@ class TestGraphIRBuilder:
         assert str(args["C"].ir_type) == "tensor<16x8xf32>"
 
     def test_unsupported_python_construct_has_source_span_diagnostic(self):
+        """Updated for D.1 (2026-05-31). Pre-D.1 a dynamic ``if`` with a
+        non-emittable Compare test produced a blanket
+        ``PY_FRONTEND_UNSUPPORTED`` warning. D.1 lowers the if/else
+        structurally to ``tessera.scf.if.*`` markers (with the source text
+        recorded as ``condition_text``) and demotes the diagnostic to an
+        *info* note that names the specific axis that wasn't yet emitted
+        as SSA (``PY_FRONTEND_DYNAMIC_IF_UNLOWERED_CONDITION``). The
+        source-span requirement is unchanged."""
         @tessera.jit
         def bad_control(x):
             if x.sum() > 0:
@@ -316,9 +324,14 @@ class TestGraphIRBuilder:
             return x
 
         explanation = bad_control.explain_lowering()
-        assert "PY_FRONTEND_UNSUPPORTED" in explanation
-        assert "if/else control flow" in explanation
+        # D.1 new contract: dynamic if/else lowers structurally + emits a
+        # named info note pointing at the specific unlowered axis.
+        assert "PY_FRONTEND_DYNAMIC_IF_UNLOWERED_CONDITION" in explanation
+        assert "if/else lowered structurally" in explanation
+        # Source span is still tracked.
         assert " at " in explanation
+        # Regression guard: the pre-D.1 blanket warning must not return.
+        assert "PY_FRONTEND_UNSUPPORTED" not in explanation
 
     def test_graph_ir_verifier_and_object_construction_boundary(self):
         module = GraphIRModule(functions=[

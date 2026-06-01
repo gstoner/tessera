@@ -171,6 +171,78 @@ fallback semantics by returning `(output, override_kind)`). The inline CPU
 branch in `runtime.launch()` is deleted; every executable row in the matrix is
 now reached through exactly one dispatch site.
 
+### 10. Dynamic control flow lowering — ✅ D.1 + D.2 + D.3 DONE (2026-05-31)
+**Audit recommendation D.** The graph_ir frontend (line 922 pre-D) emitted a
+blanket ``PY_FRONTEND_UNSUPPORTED`` warning for every dynamic ``if`` /
+dynamic ``for`` / ``while`` / aug-assign and produced **no IR markers
+at all**. The audit's framing: "That is a big gap for real model code
+unless tracing/AOT capture becomes the canonical frontend."
+
+D closes the gap by lowering all four to the same ``tessera.scf.*``
+marker shape the static path already uses — downstream consumers see a
+structural boundary regardless of whether the specific test / iterable
+/ condition expression is yet emittable as SSA.
+
+**Three-tier lowering contract.** Each dynamic construct goes through:
+
+1. **Static path** (unchanged) — ``ast.literal_eval`` resolves the test
+   to a bool or ``range(N)`` resolves to a constant. The markers carry
+   the resolved value as an attribute (``condition=True``,
+   ``trip_count=3``). No diagnostic.
+2. **Dynamic + lowerable** — ``_emit_expr`` produces an SSA value for
+   the test / trip-count. The marker carries it as an *operand* with
+   ``kind="dynamic"`` and emits an info note
+   (``PY_FRONTEND_DYNAMIC_IF_LOWERED`` / ``..._FOR_LOWERED`` /
+   ``PY_FRONTEND_WHILE_LOWERED``).
+3. **Dynamic + not yet emittable** (e.g. ``ast.Compare``, attr-call
+   chains the frontend doesn't yet lower) — the marker still emits with
+   the Python source recorded as ``condition_text=`` /
+   ``iter_text=``, plus a more specific info note
+   (``PY_FRONTEND_DYNAMIC_IF_UNLOWERED_CONDITION`` /
+   ``..._FOR_UNLOWERED_ITERABLE`` /
+   ``PY_FRONTEND_WHILE_UNLOWERED_CONDITION``). The downstream consumer
+   sees the structural shape and a precise hint about what's missing.
+
+**Aug-assign bonus (D.4).** ``x += y`` (and ``-= *= /=`` with a plain
+``Name`` target) now desugars to ``x = x op y`` and goes through the
+normal Assign + BinOp path, with an info note
+``PY_FRONTEND_AUGASSIGN_DESUGARED``. Subscript targets like
+``a[i] += b`` stay honestly unsupported (one short note in the same
+test file).
+
+**Source-text fidelity.** ``_safe_unparse(node)`` records up to 120
+chars of the original Python expression on the marker, so an IR dump
+shows what the user wrote even when the AST node isn't yet lowered. A
+human reading IR sees ``condition_text = "x.sum() > 0"`` instead of an
+opaque structural boundary.
+
+**Regression guards.** Two specific guards lock the D contract:
+* ``test_pre_d1_unsupported_warning_no_longer_fires_for_dynamic_if`` —
+  the literal pre-D.1 warning string must not appear for any dynamic
+  ``if`` / ``for`` / ``while`` body.
+* ``test_unsupported_python_construct_has_source_span_diagnostic`` in
+  the legacy ``test_graph_ir.py`` was updated to assert the *new*
+  contract (``PY_FRONTEND_DYNAMIC_IF_UNLOWERED_CONDITION`` info note +
+  structural ``tessera.scf.if.*`` markers + source span preserved).
+
+**Honest scope.** D closes the *frontend lowering* gap. The downstream
+CPU compiler refuses to plan a body containing ``tessera.scf.if.begin``
+("op is not supported by the CPU compiler path") and falls back to
+eager Python — that's correct B.2 behavior, surfaced by a precise
+``JIT_EAGER_FALLBACK_UNSUPPORTED_OP`` diagnostic. Making
+``tessera.scf.if`` *executable* through a backend (e.g. via a real
+``scf.if`` lowering pass) is a separate, larger surface tracked
+separately. D's contribution is: the frontend no longer pretends a
+construct doesn't exist, and the downstream layer gets a structural
+shape it can implement against when ready.
+
+11 D-focused tests in ``tests/unit/test_dynamic_control_flow_lowering.py``
+plus the updated ``test_control_flow_lowering.py`` /
+``test_graph_ir.py`` lock the contract. **988 affected tests pass**
+across jit / canonical / compile / graph_ir / control_flow / dynamic /
+runtime / pipeline / conformance / execution_matrix
+(4 skipped, 0 failures, 0 regressions).
+
 ### 9. Canonical compiler driver — 🟡 C.1 DONE (2026-05-31)
 **Audit recommendation C** (started after B). The goal:
 

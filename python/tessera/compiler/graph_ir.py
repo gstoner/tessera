@@ -917,35 +917,246 @@ class _OpExtractor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_If(self, node: ast.If) -> None:
+        """Lower Python `if/else` to `tessera.scf.if.*` markers.
+
+        Three cases:
+
+        1. **Static condition** — ``ast.literal_eval`` resolves the test
+           to a bool. The markers carry ``condition=True/False``.
+        2. **Dynamic condition, lowerable** — ``_emit_expr`` produces an
+           SSA value for the test expression. The markers carry that
+           value as a single operand AND ``kind="dynamic"``.
+        3. **Dynamic condition, not lowerable** (the audit gap before
+           D.1) — the test is a comparison / boolean op the frontend
+           doesn't yet emit. We still record the if/else structurally
+           with ``condition_text="..."`` carrying the unparsed Python
+           source. Diagnostic is demoted from "unsupported warning" to
+           an informational note naming the unlowered axis. Downstream
+           consumers always see the structural shape; the specific
+           lowering quality is then visible per-op.
+        """
         condition = self._static_condition(node.test)
-        if condition is None:
-            self._unsupported(node, "Python if/else control flow is not lowered by the Graph IR frontend")
+        if condition is not None:
+            # Case 1 — static.
+            self.ops.append(self._marker(
+                "tessera.scf.if.begin", node, condition=condition))
+            for stmt in node.body:
+                self.visit(stmt)
+            if node.orelse:
+                self.ops.append(self._marker(
+                    "tessera.scf.else", node, condition=condition))
+                for stmt in node.orelse:
+                    self.visit(stmt)
+            self.ops.append(self._marker(
+                "tessera.scf.if.end", node, condition=condition))
             return
-        self.ops.append(self._marker("tessera.scf.if.begin", node, condition=condition))
+        # Cases 2 / 3 — dynamic.
+        cond_value = self._emit_expr(node.test)
+        if cond_value is not None:
+            # Case 2 — dynamic, SSA-bound.
+            self._note(
+                node, "Python if/else lowered with dynamic SSA condition",
+                code="PY_FRONTEND_DYNAMIC_IF_LOWERED")
+            self.ops.append(IROp(
+                result=None,
+                op_name="tessera.scf.if.begin",
+                operands=[cond_value],
+                operand_types=[str(self._value_types.get(
+                    cond_value, TENSOR_OPAQUE))],
+                kwargs={"kind": "dynamic"},
+                source_span=_span_from_ast(node),
+            ))
+            for stmt in node.body:
+                self.visit(stmt)
+            if node.orelse:
+                self.ops.append(IROp(
+                    result=None,
+                    op_name="tessera.scf.else",
+                    operands=[cond_value],
+                    operand_types=[str(self._value_types.get(
+                        cond_value, TENSOR_OPAQUE))],
+                    kwargs={"kind": "dynamic"},
+                    source_span=_span_from_ast(node),
+                ))
+                for stmt in node.orelse:
+                    self.visit(stmt)
+            self.ops.append(IROp(
+                result=None,
+                op_name="tessera.scf.if.end",
+                operands=[cond_value],
+                operand_types=[str(self._value_types.get(
+                    cond_value, TENSOR_OPAQUE))],
+                kwargs={"kind": "dynamic"},
+                source_span=_span_from_ast(node),
+            ))
+            return
+        # Case 3 — dynamic, condition expression not (yet) lowerable.
+        cond_text = _safe_unparse(node.test)
+        self._note(
+            node, ("Python if/else lowered structurally but the condition "
+                   "expression isn't (yet) emitted as SSA"),
+            code="PY_FRONTEND_DYNAMIC_IF_UNLOWERED_CONDITION")
+        self.ops.append(self._marker(
+            "tessera.scf.if.begin", node,
+            kind="dynamic", condition_text=cond_text))
         for stmt in node.body:
             self.visit(stmt)
         if node.orelse:
-            self.ops.append(self._marker("tessera.scf.else", node, condition=condition))
+            self.ops.append(self._marker(
+                "tessera.scf.else", node,
+                kind="dynamic", condition_text=cond_text))
             for stmt in node.orelse:
                 self.visit(stmt)
-        self.ops.append(self._marker("tessera.scf.if.end", node, condition=condition))
+        self.ops.append(self._marker(
+            "tessera.scf.if.end", node,
+            kind="dynamic", condition_text=cond_text))
 
     def visit_For(self, node: ast.For) -> None:
+        """Lower Python `for` to `tessera.scf.for.*` markers.
+
+        Like ``visit_If``: static trip count (``range(N)``) keeps the
+        ``trip_count=N`` attribute; a lowerable runtime trip count emits
+        it as an SSA operand; an unlowerable iterable records its source
+        text so the downstream sees the structural for-loop boundary.
+        """
         range_trip_count = self._static_range_trip_count(node.iter)
-        if range_trip_count is None:
-            self._unsupported(node, "Python for-loops are not lowered by the Graph IR frontend")
-            return
         induction = node.target.id if isinstance(node.target, ast.Name) else "_"
-        self.ops.append(self._marker("tessera.scf.for.begin", node, induction=induction, trip_count=range_trip_count))
+        if range_trip_count is not None:
+            # Static trip count.
+            self.ops.append(self._marker(
+                "tessera.scf.for.begin", node,
+                induction=induction, trip_count=range_trip_count))
+            for stmt in node.body:
+                self.visit(stmt)
+            self.ops.append(self._marker(
+                "tessera.scf.for.end", node,
+                induction=induction, trip_count=range_trip_count))
+            return
+        # Dynamic — try to emit the iterable's count as SSA.
+        trip_value = self._dynamic_range_trip_value(node.iter)
+        if trip_value is not None:
+            self._note(
+                node, "Python for-loop lowered with dynamic SSA trip count",
+                code="PY_FRONTEND_DYNAMIC_FOR_LOWERED")
+            self.ops.append(IROp(
+                result=None,
+                op_name="tessera.scf.for.begin",
+                operands=[trip_value],
+                operand_types=[str(self._value_types.get(
+                    trip_value, TENSOR_OPAQUE))],
+                kwargs={"kind": "dynamic", "induction": induction},
+                source_span=_span_from_ast(node),
+            ))
+            for stmt in node.body:
+                self.visit(stmt)
+            self.ops.append(IROp(
+                result=None,
+                op_name="tessera.scf.for.end",
+                operands=[trip_value],
+                operand_types=[str(self._value_types.get(
+                    trip_value, TENSOR_OPAQUE))],
+                kwargs={"kind": "dynamic", "induction": induction},
+                source_span=_span_from_ast(node),
+            ))
+            return
+        # Iterable not (yet) lowerable — record structurally with source text.
+        iter_text = _safe_unparse(node.iter)
+        self._note(
+            node, ("Python for-loop lowered structurally but the iterable "
+                   "expression isn't (yet) emitted as SSA"),
+            code="PY_FRONTEND_DYNAMIC_FOR_UNLOWERED_ITERABLE")
+        self.ops.append(self._marker(
+            "tessera.scf.for.begin", node,
+            kind="dynamic", induction=induction, iter_text=iter_text))
         for stmt in node.body:
             self.visit(stmt)
-        self.ops.append(self._marker("tessera.scf.for.end", node, induction=induction, trip_count=range_trip_count))
+        self.ops.append(self._marker(
+            "tessera.scf.for.end", node,
+            kind="dynamic", induction=induction, iter_text=iter_text))
 
     def visit_While(self, node: ast.While) -> None:
-        self._unsupported(node, "Python while-loops are not lowered by the Graph IR frontend")
+        """Lower Python `while` to `tessera.scf.while.*` markers.
+
+        While loops always have a dynamic condition (no static form
+        makes sense — a literal True/False is either an infinite loop
+        or dead code). The shape is symmetric with dynamic ``if``.
+        """
+        cond_value = self._emit_expr(node.test)
+        if cond_value is not None:
+            self._note(
+                node, "Python while-loop lowered with dynamic SSA condition",
+                code="PY_FRONTEND_WHILE_LOWERED")
+            self.ops.append(IROp(
+                result=None,
+                op_name="tessera.scf.while.begin",
+                operands=[cond_value],
+                operand_types=[str(self._value_types.get(
+                    cond_value, TENSOR_OPAQUE))],
+                kwargs={"kind": "dynamic"},
+                source_span=_span_from_ast(node),
+            ))
+            for stmt in node.body:
+                self.visit(stmt)
+            self.ops.append(IROp(
+                result=None,
+                op_name="tessera.scf.while.end",
+                operands=[cond_value],
+                operand_types=[str(self._value_types.get(
+                    cond_value, TENSOR_OPAQUE))],
+                kwargs={"kind": "dynamic"},
+                source_span=_span_from_ast(node),
+            ))
+            return
+        cond_text = _safe_unparse(node.test)
+        self._note(
+            node, ("Python while-loop lowered structurally but the condition "
+                   "expression isn't (yet) emitted as SSA"),
+            code="PY_FRONTEND_WHILE_UNLOWERED_CONDITION")
+        self.ops.append(self._marker(
+            "tessera.scf.while.begin", node,
+            kind="dynamic", condition_text=cond_text))
+        for stmt in node.body:
+            self.visit(stmt)
+        self.ops.append(self._marker(
+            "tessera.scf.while.end", node,
+            kind="dynamic", condition_text=cond_text))
 
     def visit_AugAssign(self, node: ast.AugAssign) -> None:
-        self._unsupported(node, "augmented assignment is not lowered by the Graph IR frontend")
+        """Lower ``x += y`` (and friends) by desugaring to ``x = x op y``.
+
+        Only desugars when the target is a plain ``Name`` and the op is
+        one of ``+ * - /`` (the four BinOps the frontend knows). The
+        rewritten Assign is visited through the normal ``visit_Assign``
+        path, so the resulting IR matches what the user would have
+        written explicitly.
+        """
+        if not isinstance(node.target, ast.Name):
+            self._unsupported(
+                node,
+                "augmented assignment with non-Name target is not lowered")
+            return
+        if not isinstance(node.op, (ast.Add, ast.Mult, ast.Sub, ast.Div)):
+            self._unsupported(
+                node,
+                f"augmented assignment with {type(node.op).__name__} is not "
+                "lowered")
+            return
+        desugared = ast.Assign(
+            targets=[ast.Name(id=node.target.id, ctx=ast.Store())],
+            value=ast.BinOp(
+                left=ast.Name(id=node.target.id, ctx=ast.Load()),
+                op=node.op,
+                right=node.value,
+            ),
+        )
+        ast.copy_location(desugared, node)
+        ast.copy_location(desugared.targets[0], node.target)
+        ast.copy_location(desugared.value, node)
+        self._note(
+            node, f"augmented assignment desugared to `{node.target.id} = "
+                  f"{node.target.id} {type(node.op).__name__.lower()} ...`",
+            code="PY_FRONTEND_AUGASSIGN_DESUGARED")
+        self.visit_Assign(desugared)
 
     def _unsupported(self, node: ast.AST, message: str) -> None:
         self.diagnostics.append(GraphIRDiagnostic(
@@ -954,6 +1165,33 @@ class _OpExtractor(ast.NodeVisitor):
             span=_span_from_ast(node),
             code="PY_FRONTEND_UNSUPPORTED",
         ))
+
+    def _note(self, node: ast.AST, message: str, *, code: str) -> None:
+        """D.1 — informational diagnostic for dynamic-control-flow lowering
+        decisions. Distinct from ``_unsupported`` (which is a warning that
+        the construct wasn't lowered at all). A ``note`` records *how* a
+        dynamic construct was lowered so a reader knows what to expect
+        from downstream passes."""
+        self.diagnostics.append(GraphIRDiagnostic(
+            "info",
+            message,
+            span=_span_from_ast(node),
+            code=code,
+        ))
+
+    def _dynamic_range_trip_value(self, node: ast.expr) -> Optional[str]:
+        """When ``for i in range(...)`` has a runtime argument, try to
+        lower the trip-count expression to an SSA value. v1 supports a
+        single-arg ``range(n)`` with an SSA-emittable ``n``.
+        """
+        if not isinstance(node, ast.Call):
+            return None
+        name = self._resolve_name(node.func)
+        if name != "range":
+            return None
+        if len(node.args) != 1 or node.keywords:
+            return None  # range(start, stop, step) — TODO
+        return self._emit_expr(node.args[0])
 
     def _marker(self, op_name: str, node: ast.AST, **kwargs: Any) -> IROp:
         return IROp(
@@ -1127,6 +1365,22 @@ class _OpExtractor(ast.NodeVisitor):
             source_span=_span_from_ast(call),
             inferred_type=result_type,
         )
+
+
+def _safe_unparse(node: ast.AST) -> str:
+    """``ast.unparse`` for D.1 / D.2 / D.3 — record an unlowered
+    dynamic-control-flow expression as the original Python source text
+    so downstream consumers (and humans reading IR dumps) know what the
+    construct was about, even if the expression itself isn't yet
+    emitted as SSA. Truncated to a sensible length; defensive against
+    ``unparse`` raising on edge AST nodes."""
+    try:
+        text = ast.unparse(node)
+    except Exception:
+        text = "<unparseable>"
+    if len(text) > 120:
+        text = text[:117] + "..."
+    return text
 
 
 def _span_from_ast(node: ast.AST) -> SourceSpan:

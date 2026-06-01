@@ -52,20 +52,25 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
     SurfaceEntry(
         directory="research/sandbox_compilers",
         entry_point="research/sandbox_compilers/tilec/driver.py",
-        status="broken",
-        reason=(
-            "``tilec/driver.py`` carries a SyntaxError at line 35: "
-            "the ``cpu`` branch body and the subsequent ``elif`` "
-            "are over-indented relative to the outer ``if`` chain. "
-            "``from .backends import codegen_cpu`` is at column 12 "
-            "instead of 8.  Until the indentation is fixed, the "
-            "whole module fails at import time."
+        status="compile_only",
+        command=(
+            "PYTHONPATH=research/sandbox_compilers python3 -m tilec.driver "
+            "research/sandbox_compilers/examples/matmul.tss "
+            "--backend c --out /tmp/tilec_smoke --dump-ir"
         ),
         notes=(
             "Frontend-to-backend compiler experiment for "
-            "TileScript-style DSLs.  Once the syntax error is fixed, "
-            "this is likely a ``compile_only`` row (the driver emits "
-            "C / CPU / Tessera-MLIR artifacts but doesn't run them)."
+            "TileScript-style DSLs.  Indentation crash in "
+            "``tilec/driver.py`` was fixed 2026-05-31 and the stale "
+            "argparse ``choices`` list was extended to include the "
+            "``rocm`` / ``nvidia`` branches that already existed in "
+            "the body.  The smoke command parses "
+            "``examples/matmul.tss``, prints the textual IR, and "
+            "emits a C backend artifact (``mm.c`` + ``Makefile``) "
+            "into the output directory.  ``compile_only`` because "
+            "the driver emits source artifacts rather than executing "
+            "them; building / running the generated C is a separate "
+            "step."
         ),
     ),
 )

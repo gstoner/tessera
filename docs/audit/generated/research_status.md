@@ -29,9 +29,9 @@ Per-project STATUS.md files (when present) explain the path forward.
 |--------|------:|
 | ``runnable`` | 1 |
 | ``runnable_optional`` | 0 |
-| ``compile_only`` | 0 |
+| ``compile_only`` | 1 |
 | ``scaffold`` | 0 |
-| ``broken`` | 1 |
+| ``broken`` | 0 |
 | ``archived`` | 0 |
 | **total** | **2** |
 
@@ -40,5 +40,5 @@ Per-project STATUS.md files (when present) explain the path forward.
 | Directory | Status | Entry point | Command / Reason |
 |-----------|--------|-------------|------------------|
 | ``research/pddl_instruct`` | ``runnable`` | ``research/pddl_instruct/tools/validator/validator.py`` | ``PYTHONPATH=python python research/pddl_instruct/tools/validator/validator.py --trace research/pddl_instruct/examples/traces/flash_trace.jsonl --out /tmp/tessera_pddl_validator_smoke.json`` |
-| ``research/sandbox_compilers`` | ``broken`` | ``research/sandbox_compilers/tilec/driver.py`` | ``tilec/driver.py`` carries a SyntaxError at line 35: the ``cpu`` branch body and the subsequent ``elif`` are over-indented relative to the outer ``if`` chain. ``from .backends import codegen_cpu`` is at column 12 instead of 8.  Until the indentation is fixed, the whole module fails at import time. |
+| ``research/sandbox_compilers`` | ``compile_only`` | ``research/sandbox_compilers/tilec/driver.py`` | ``PYTHONPATH=research/sandbox_compilers python3 -m tilec.driver research/sandbox_compilers/examples/matmul.tss --backend c --out /tmp/tilec_smoke --dump-ir`` |
 

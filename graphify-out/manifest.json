@@ -10235,8 +10235,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/phase_ghi_hardware_frontier.md": {
-    "mtime": 1779496873.459407,
-    "ast_hash": "03b75699b30d1a35dafbf29b7b8c9b5f",
+    "mtime": 1780318765.9645915,
+    "ast_hash": "a55692ad6eafa7e11b3c616da47f301f",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/ga_scope_lock.md": {
@@ -11165,8 +11165,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/cli/conformance_matrix.py": {
-    "mtime": 1780283354.5357065,
-    "ast_hash": "415dd025278f8731e51e919f7152088e",
+    "mtime": 1780318747.036029,
+    "ast_hash": "1f1315b500c52f6655f81c525419ce75",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/pipeline_gates.py": {
@@ -11272,6 +11272,16 @@
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/runtime_execution_matrix.md": {
     "mtime": 1780264476.4304767,
     "ast_hash": "66a2e944d376df48021a97e4757f9630",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_subscript_rebinding_verifier_safety.py": {
+    "mtime": 1780318483.441978,
+    "ast_hash": "20ac178bc4dd88ff217b835aadd1fa7f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_verify_fixtures_cli.py": {
+    "mtime": 1780318611.2396379,
+    "ast_hash": "a64b50f690a93dc37d30352a2cc66b40",
     "semantic_hash": ""
   }
 }

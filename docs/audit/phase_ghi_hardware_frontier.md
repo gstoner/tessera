@@ -1,6 +1,7 @@
 # Phase G/H/I Hardware-Gated Frontier
 
-**Last updated:** 2026-05-22 (Sprint M — MLA E2E + V3b/V3c verifier closure)
+**Last updated:** 2026-06-01 (Metal 4 re-verification — registry unchanged,
+Apple-side closure frontier refreshed)
 
 This document is the **single, honest answer** to the question "what
 exactly is hardware-blocked vs. still hardware-free in the Tessera
@@ -13,7 +14,8 @@ It synthesizes:
   contract axes).
 - The per-target audit docs (`nvidia_execution_audit.md`,
   `nvidia_rocm_execute_and_compare_plan.md`,
-  `apple_ga_ebm_native_execution_gap.md`).
+  `apple_ga_ebm_native_execution_gap.md`,
+  `apple_gpu_metal4_adoption.md`).
 - The kernel inventory docs (`nvidia_cuda13_kernel_inventory.md`,
   `rocm_mfma_kernel_inventory.md`, `metalium_kernel_inventory.md`,
   `apple_gpu_kernel_inventory.md`).
@@ -43,8 +45,8 @@ By construction, this means:
 
 - **Apple GPU proofs alone are not sufficient** to flip
   `backend_kernel` to `complete`. The registry tracks a primitive,
-  not a (primitive, target) pair — so even after Phase 8.4.7 fully
-  closes apple_gpu for the canonical-tensor ops, the NVIDIA and
+  not a (primitive, target) pair — so even after Phase 8.4.8 and
+  the Metal 4 ladder close more apple_gpu lanes, the NVIDIA and
   ROCm slots for those same ops remain `planned` until real
   hardware proof lands.
 - **CPU/x86 reference paths are not sufficient either.** They
@@ -57,7 +59,7 @@ hardware lane Tessera advertises actually runs.
 
 ---
 
-## 2. Current registry truth (2026-05-22)
+## 2. Current registry truth (re-verified 2026-06-01)
 
 ```
 total entries: 432
@@ -76,9 +78,19 @@ lowering_rule        complete: 382  not_applicable: 50
 tests                complete: 432  (no remaining gaps)
 ```
 
-**The single dominant gap is `backend_kernel`** — zero entries are
-`complete`, all 432 carry either `partial` (273 — at least one
-target ships a kernel) or `planned` (159 — no target kernel yet).
+This still matches the live registry as of 2026-06-01
+(`PYTHONPATH=python python3 -m tessera.compiler.audit support_table --check`
+passes). **The single dominant gap is still `backend_kernel`** —
+zero entries are `complete`, all 432 carry either `partial` (273 —
+at least one target ships a kernel) or `planned` (159 — no target
+kernel yet).
+
+Metal 4 support on Apple hardware **does not change the global
+registry counts by itself** because the registry-level
+`backend_kernel = complete` axis is target-aggregate: NVIDIA,
+ROCm, and Metalium proof are still required where those targets are
+declared. Metal 4 does, however, change the Apple-side closure list
+below.
 
 ---
 
@@ -86,8 +98,8 @@ target ships a kernel) or `planned` (159 — no target kernel yet).
 
 ### 3a. Hardware-required (not closeable from Apple Silicon)
 
-These all require an actual NVIDIA H100 / A100 / ROCm MI300 /
-Tenstorrent Metalium device to flip:
+These still require an actual NVIDIA H100 / A100 / ROCm MI300 /
+Tenstorrent Metalium device to flip at the registry-global level:
 
 | Slot | Blocker | Reference proof plan |
 |------|---------|--------|
@@ -96,6 +108,12 @@ Tenstorrent Metalium device to flip:
 | 30 `sharding_rule = partial` entries | Phase G mesh integration: real NCCL/RCCL multi-rank execution with output comparison to the mock-mesh oracle | `nvidia_execution_audit.md` §3.3 |
 | Long-tail `transpose_rule = partial` (40) and `batching_rule = partial` (36) | Same as sharding: needs real per-target verification beyond the closed-form rule | per-axis bucket audits in `primitive_coverage_state.md` |
 | `masking_effect_rule = planned` (37) | These are mostly stateful KV/memory ops where the effect rule needs runtime-witness verification, only meaningful on the device that actually mutates state | KV/memory op set in `kv_cache_coverage_matrix.md` |
+
+Apple Silicon with Metal 4 can close **Apple-side proof gaps** and
+move individual Apple lanes from "architecture-implied" to
+"runtime-validated", but it cannot close the registry-global
+`backend_kernel = complete` status for primitives that still
+advertise NVIDIA / ROCm / Metalium lanes.
 
 ### 3b. Still hardware-free (could be closed from this machine)
 
@@ -114,6 +132,33 @@ The **historically dominant hardware-free axes** (`math_semantics`,
 already at zero partial/planned — those were closed by the
 multi-axis category-based hardening pass on 2026-05-10 and the
 final-stage closure pass on the same day.
+
+### 3c. Apple-hardware closable now with Metal 4
+
+These are closeable on Apple hardware running the Metal 4 stack
+(macOS 26+, SDK 26.x, MSL 4.0, `MTLTensor`). They are **Apple-lane
+closures**, not global Phase G/H/I closures:
+
+| Slot | What Metal 4 changes | Current verified state |
+|------|----------------------|------------------------|
+| bf16 `matmul` on apple_gpu | Native MPP `matmul2d` over `MTLTensor` replaces the legacy host fp32-conversion fallback | Landed in `apple_gpu_metal4_adoption.md` M6/P5 and routed by default, but should be tracked as Apple-lane proof only |
+| f16 `matmul` on apple_gpu | MPP `matmul2d` beats MPS at kernel level, but per-call overhead can erase the win | Landed and validated; routing remains opt-in/off by default |
+| `linear + bias + {gelu,relu,silu}` f16/bf16 | One cooperative `matmul2d` epilogue dispatch can replace matmul + separate epilogue kernels | Landed as P6, but current verification shows tolerance failures in `test_p6_linear_bias_act_fuses_to_epilogue`; keep as "needs numerical-envelope fix" before calling closed |
+| Resident-weight MLP decode session | Amortizes MTL4 command / residency / weight upload overhead for repeated decode steps | Landed as M8, but current verification shows `DeviceTensor.from_numpy(...)` returning `None` in `run_dev` tests on this checkout; close after capability/skip behavior and resident-device path are fixed |
+| Conv2d f16/bf16 on matrix units | Opt-in im2col + `matmul2d` epilogue path exists | Not a default closure; materialized im2col is still slower than MPSGraph fused conv and GPU-im2col / native multi-tile conv remain follow-ups |
+| Apple target map | Should reflect new backend manifest entries and driver dispatch symbols | Currently stale: `python -m tessera.cli.apple_target_map --check` fails; `conv2d`, `kv_cache_read`, and `relu` need dashboard symbol / dispatch reconciliation |
+
+The practical close-now sequence on Apple hardware is therefore:
+
+1. Fix the Apple target map drift (`conv2d`, `kv_cache_read`,
+   `relu` dispatch symbols and generated dashboard).
+2. Fix or relax-with-evidence the P6 f16/bf16 epilogue numerical
+   envelope.
+3. Fix the resident `DeviceTensor` availability / skip gate used by
+   M8 `run_dev` tests.
+4. Re-run `tests/unit/test_apple_gpu_metal4.py`,
+   `tests/unit/test_apple_target_map.py`, and the support-table
+   check before changing any Apple-lane status claims.
 
 ---
 
@@ -177,12 +222,24 @@ Still hardware-required:
 - TT-Metalium runtime execution of any I-1 fixture against a real
   Tenstorrent device, plus Tenstorrent's blockfp lane.
 
-### Apple GPU (operational from this Mac)
+### Apple GPU (operational from this Mac; Metal 4 lane added)
 
-Phases 8.3 → 8.4.7 are landed and tested on this machine. This is
-the **only target where backend execution is closed on this
-machine.** Sprint M (2026-05-22) added the first model-shaped E2E
-proof: `tests/unit/test_apple_gpu_mla_e2e.py` runs an MLA-flavored
+Phases 8.3 → 8.4.8 and the Metal 4 ladder (M0–M8 + P-series)
+have now landed in the repo. This remains the **only target where
+backend execution can be directly exercised on this Apple Silicon
+machine**, but it is no longer just the classic MPS / MSL /
+MPSGraph lane.
+
+Apple's Metal 4 API surface is relevant because it adds the MTL4
+command model, `MTLTensor`, MSL 4.0 tensor/cooperative operations,
+and `MTL4MachineLearningCommandEncoder`. In Tessera, this is
+implemented as a **parallel lane**, not a drop-in replacement for
+MPSGraph: public MPSGraph still uses classic `MTLCommandQueue` /
+`MTLCommandBuffer`, so Metal 4 kernels coexist with MPSGraph
+fallbacks.
+
+Classic Apple GPU proof still includes Sprint M's model-shaped E2E
+test: `tests/unit/test_apple_gpu_mla_e2e.py` runs an MLA-flavored
 single-layer multi-head attention decoder (3 projections + per-head
 fused matmul→softmax→matmul + output projection) and validates
 output against a numpy reference at fp32 rtol=1e-4 across three
@@ -205,12 +262,17 @@ This proof exercises:
 What's still left for Apple GPU before its slot reaches the
 formal `complete` definition:
 
-- MLA-specific kernels (decoupled-rope split, compressed-KV
-  decode, head absorption) — Phase 8.4.8.
-- bf16 fused-attention numerical envelope (this E2E proof is
-  fp32 only; the per-kernel f16/bf16 envelope is locked in
-  `test_apple_backend_roadmap.py` but the *composed* MLA at f16/
-  bf16 is a follow-up).
+- The Apple target map is stale relative to the backend manifest:
+  `conv2d`, `kv_cache_read`, and `relu` are now in
+  `_APPLE_GPU_KERNELS` but lack dashboard dispatch-symbol rows.
+- Metal 4 P6 `linear+bias+act` f16/bf16 currently fails the
+  committed tolerance in `tests/unit/test_apple_gpu_metal4.py`.
+- Metal 4 M8 resident-device `run_dev` tests currently fail because
+  `DeviceTensor.from_numpy(...)` returns `None` in this checkout.
+- Conv2d on Metal 4 matrix units is opt-in and not a default win;
+  GPU im2col / native multi-tile conv remain follow-ups.
+- The composed MLA bf16/f16 story still needs end-to-end proof
+  equivalent to the fp32 Sprint M test.
 - Phase G/H closure of the NVIDIA/ROCm equivalents (which is the
   Phase-G/H gate per §1 above).
 
@@ -218,16 +280,20 @@ formal `complete` definition:
 
 ## 5. What "close Phase G/H/I from this machine" means in practice
 
-Given the registry's per-target requirement, **Phase G/H/I cannot
-be marked `complete` from this machine.** The closest closure
-this machine can produce is what Sprint M just shipped:
+Given the registry's per-target requirement, **Phase G/H/I still
+cannot be marked `complete` from this machine.** What this machine
+can produce is Apple-lane closure evidence:
 
-1. The single-pass MLA-style E2E proof on apple_gpu
+1. The existing single-pass MLA-style E2E proof on apple_gpu
    (`test_apple_gpu_mla_e2e.py`).
-2. This frontier audit doc, which makes the hardware boundary
-   explicit and gives the next person a concrete punch list.
-3. The V3b + V3c verifier closures (separate sprint — already
-   landed).
+2. Metal 4 MPP `matmul2d` proof for bf16/f16 matmul and fused
+   f16/bf16 epilogues once the current Metal 4 test failures are
+   fixed.
+3. Resident-weight decode proof once `run_dev` resident
+   `DeviceTensor` creation is reliable or correctly skipped.
+4. The Apple target-map dashboard regenerated and drift-clean.
+5. This frontier audit doc, which separates Apple-lane closure
+   from global backend-kernel completion.
 
 Anything beyond this — flipping `backend_kernel` from `partial`
 to `complete` for any entry — requires real NVIDIA/ROCm/Metalium
@@ -248,5 +314,8 @@ running them is the missing step.
 - `docs/rocm_mfma_kernel_inventory.md` — ROCm MFMA surface
 - `docs/metalium_kernel_inventory.md` — Tenstorrent surface
 - `docs/apple_gpu_kernel_inventory.md` — every Apple GPU C ABI symbol
+- `docs/apple_gpu_metal4_adoption.md` — Metal 4 M0–M8 + P-series ladder
+- `docs/audit/generated/apple_target_map.md` — Apple per-op target map
 - `tests/unit/test_apple_gpu_mla_e2e.py` — first MLA E2E proof (Sprint M)
+- `tests/unit/test_apple_gpu_metal4.py` — Metal 4 lane proof tests
 - `python/tessera/compiler/primitive_coverage.py` — the source of truth

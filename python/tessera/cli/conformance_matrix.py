@@ -7,23 +7,119 @@ Usage::
 
     python -m tessera.cli.conformance_matrix --check
         # fail with a diff if the on-disk dashboard is stale
+
+    python -m tessera.cli.conformance_matrix --verify-fixtures
+        # invoke pytest on every (op, target) fixture declared in the
+        # manifest's _NUMERICAL_FIXTURES map; exit non-zero on any
+        # failure. Replaces the dashboard's "numerical_check is ✅"
+        # claim with actual proof.
 """
 
 from __future__ import annotations
 
 import argparse
 import difflib
+import subprocess
 import sys
+import time
+from dataclasses import dataclass
 from pathlib import Path
 
+from tessera.compiler import backend_manifest as bm
 from tessera.compiler import conformance_matrix as cm
 
 
-_DASHBOARD = Path(__file__).resolve().parents[3] / "docs" / "audit" / "op_target_conformance.md"
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_DASHBOARD = _REPO_ROOT / "docs" / "audit" / "op_target_conformance.md"
 
 
 def _render() -> str:
     return cm.render_markdown()
+
+
+@dataclass(frozen=True)
+class FixtureResult:
+    op: str
+    target: str
+    fixture: str
+    ok: bool
+    elapsed_s: float
+    short_message: str  # last non-empty line of stdout, truncated
+
+
+def _verify_fixtures(*, pytest_args: tuple[str, ...] = ()) -> int:
+    """Invoke pytest on every declared ``execute_compare_fixture``,
+    print a per-cell pass/fail summary, and exit non-zero on any
+    failure. The dashboard's ``numerical_check`` column reports ``✅``
+    only when the manifest declares a fixture; this verifier turns
+    that declaration into actual proof.
+
+    Files are de-duplicated — a single test file may cover multiple
+    (op, target) pairs; we run it once and report the same result
+    against every pair that points at it.
+    """
+    fixtures: dict[str, list[tuple[str, str]]] = {}
+    for (op, target), rel in bm._NUMERICAL_FIXTURES.items():
+        fixtures.setdefault(rel, []).append((op, target))
+
+    print(f"[verify-fixtures] {len(bm._NUMERICAL_FIXTURES)} declared "
+          f"(op, target) pair(s) across {len(fixtures)} file(s)")
+    print()
+
+    results: list[FixtureResult] = []
+    for rel, pairs in sorted(fixtures.items()):
+        path = _REPO_ROOT / rel
+        if not path.is_file():
+            print(f"[verify-fixtures] FAIL {rel}  fixture file missing  "
+                  f"covers: {', '.join(f'{op}/{t}' for op, t in pairs)}")
+            for (op, target) in pairs:
+                results.append(FixtureResult(
+                    op=op, target=target, fixture=rel, ok=False,
+                    elapsed_s=0.0,
+                    short_message=f"fixture file missing: {rel}",
+                ))
+            continue
+
+        cmd = [sys.executable, "-m", "pytest", str(path), "-q",
+               "--no-header", *pytest_args]
+        env_repo = str(_REPO_ROOT / "python")
+        start = time.perf_counter()
+        try:
+            proc = subprocess.run(
+                cmd, cwd=str(_REPO_ROOT),
+                env={**__import__("os").environ, "PYTHONPATH": env_repo},
+                capture_output=True, text=True, timeout=300,
+            )
+            elapsed = time.perf_counter() - start
+            ok = proc.returncode == 0
+            # Extract the last non-empty stdout line as a short message.
+            lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+            short = lines[-1] if lines else (
+                proc.stderr.splitlines()[-1] if proc.stderr.splitlines()
+                else "(no output)")
+        except subprocess.TimeoutExpired:
+            elapsed = time.perf_counter() - start
+            ok = False
+            short = "pytest timed out after 300s"
+
+        sym = "PASS" if ok else "FAIL"
+        print(f"[verify-fixtures] {sym:4} {rel}  ({elapsed:.1f}s)  "
+              f"covers: {', '.join(f'{op}/{t}' for op, t in pairs)}")
+        if not ok:
+            print(f"               └─ {short[:200]}")
+        for (op, target) in pairs:
+            results.append(FixtureResult(
+                op=op, target=target, fixture=rel, ok=ok,
+                elapsed_s=elapsed, short_message=short[:200],
+            ))
+
+    n_pass = sum(1 for r in results if r.ok)
+    n_fail = sum(1 for r in results if not r.ok)
+    print()
+    print(f"[verify-fixtures] summary: "
+          f"{n_pass}/{len(results)} (op, target) pair(s) PASS, "
+          f"{n_fail} FAIL")
+    return 0 if n_fail == 0 else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -33,9 +129,17 @@ def main(argv: list[str] | None = None) -> int:
                    help="Regenerate the dashboard.")
     g.add_argument("--check", action="store_true",
                    help="Verify the on-disk dashboard is in sync.")
+    g.add_argument("--verify-fixtures", action="store_true",
+                   help="Run pytest on every declared execute_compare_fixture; "
+                        "exit non-zero on any failure.")
     ap.add_argument("--out", type=Path, default=_DASHBOARD,
                     help=f"Dashboard path (default: {_DASHBOARD}).")
+    ap.add_argument("--pytest-arg", action="append", default=[],
+                    help="Extra arg to pass to pytest (repeatable).")
     args = ap.parse_args(argv)
+
+    if args.verify_fixtures:
+        return _verify_fixtures(pytest_args=tuple(args.pytest_arg))
 
     rendered = _render()
     if args.render:

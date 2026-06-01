@@ -171,6 +171,64 @@ fallback semantics by returning `(output, override_kind)`). The inline CPU
 branch in `runtime.launch()` is deleted; every executable row in the matrix is
 now reached through exactly one dispatch site.
 
+### 13. Post-audit follow-ups (round 2) — ✅ DONE (2026-05-31)
+Three follow-ups from the "open items I'd flagged at the end of D" list.
+
+* **Followup 3 — SSA rebinding for subscript assignments.** Verified
+  empirically: the audit's prediction that ``a[i] = ...`` rebinding
+  would trip the verifier doesn't hold. ``tessera.copy`` emits
+  ``result=None`` so the ``GRAPH_IR_DUP_VALUE`` check (which only fires
+  on op results, not operands) never triggers for copy. Two ``a[:] =
+  ...`` writes are two copies referencing ``%a`` — both reference an
+  already-defined SSA, neither produces a new one. ``@tessera.jit``
+  decorates clean for all four patterns (single write, repeated
+  write, scalar-then-subscript rebind, subscript-followed-by-read).
+  Documented as a verifier-safety regression guard in
+  ``test_subscript_rebinding_verifier_safety.py`` (5 tests). The
+  *value-semantics gap* (reads of ``a`` after a subscript write
+  resolve to the pre-write SSA, not the post-write content) is
+  separate and would need a new yield-shaped op or a paired
+  ``identity`` capture — out of scope here.
+
+* **Followup 2 — ``--verify-fixtures`` CLI mode.** A.3 declared
+  per-(op, target) ``execute_compare_fixture`` paths; followup 2
+  turns those declarations into actual proof. New CLI command
+  ``python -m tessera.cli.conformance_matrix --verify-fixtures``
+  iterates over every entry in ``backend_manifest._NUMERICAL_FIXTURES``,
+  invokes pytest on each unique file (de-duplicating across (op,
+  target) pairs that share a fixture), and reports per-pair
+  pass/fail. Exit code is non-zero on any failure. Tested with 7
+  guards in ``test_verify_fixtures_cli.py``: argparse exclusivity,
+  pass/fail exit codes, single-invocation-per-file de-duplication,
+  total-pair-count summary, per-fixture pair attribution. Today's
+  baseline: **11/11 (op, target) pairs PASS** across cpu / apple_cpu /
+  apple_gpu (matmul / softmax / flash_attn / conv2d / rmsnorm / gelu
+  / rope / relu / softmax_safe).
+
+* **Followup 1 — real backend ``scf.if`` lowering.** A.2 only renamed
+  the diagnostic; followup 1 ships the smallest **real** backend
+  pass. ``CPUPlan.execute`` now walks ``tessera.scf.if.{begin,else,end}``
+  with bracket-matching depth tracking, evaluates the condition
+  (SSA-operand via ``values[cond_name]`` or static literal via
+  ``op.kwargs["condition"]``), and dispatches **only the live
+  branch**. The dead branch's ops are NOT executed — locked by a
+  test that puts an op with an unbound operand in the dead branch and
+  verifies execution succeeds. ``build_cpu_plan`` accepts
+  scf-bracketed bodies when the conditions are SSA-bound or static;
+  text-only conditions (D's "case 3") and ``scf.for``/``scf.while``
+  still fall back to eager Python with the existing
+  ``EAGER_FALLBACK_CONTROL_FLOW`` info note. The eager-fallback
+  message was sharpened to name *which* unhandled scf form
+  triggered it. 14 tests in ``test_cpu_plan_scf_if_dispatch.py``
+  cover bracket matcher (basic / no-else / nested / unbalanced),
+  branch dispatch (then-only / else-only / static / no-else +
+  falsy), planner classification (SSA / text / for / while), and
+  ``explain_cpu_plan``'s diagnostic differentiation. **Out of scope
+  for v1**: branch-dependent outputs (``y_then`` in one branch,
+  ``y_else`` in the other, ``return y``) which need phi/yield
+  semantics; nested ``scf.*`` inside the chosen branch (executor
+  raises a precise diagnostic and caller falls back).
+
 ### 12. Post-audit follow-ups — ✅ DONE (2026-05-31)
 Four follow-ups surfaced by A's dashboard and D's downstream eager-path
 diagnostic, plus one more correctness bug surfaced by an external code

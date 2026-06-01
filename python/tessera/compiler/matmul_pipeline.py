@@ -114,20 +114,82 @@ class CPUPlan:
         return tuple(names)
 
     def execute(self, args: Sequence[Any], kwargs: Mapping[str, Any], arg_names: Sequence[str]) -> Any:
+        """Walk ops with scf-bracket awareness.
+
+        Followup 1 (audit 2026-05-31): when the body contains
+        ``tessera.scf.if.begin / .else / .end`` markers with an
+        SSA-operand condition, execute the appropriate branch only —
+        skipping the dead branch entirely. Previously every op was
+        executed unconditionally; programs that reached this method
+        with scf markers in their body were either rejected upstream
+        (``build_cpu_plan`` returned ``None``) or executed both
+        branches and corrupted SSA bindings. Now scf.if is a real
+        first-class control structure in the CPU plan executor.
+        """
         values = {name: value for name, value in zip(arg_names, args)}
         values.update(kwargs)
-        for op in self.ops:
-            operand_names = tuple(_operand_name(operand) for operand in op.operands)
-            missing = [name for name in operand_names if name not in values]
-            if missing:
-                raise ValueError(f"CPU plan requires operand(s): {', '.join(missing)}")
-            operands = [_as_value(values[name]) for name in operand_names]
-            if op.result is None:
-                raise ValueError(f"CPU plan cannot execute void op {op.op_name!r}")
-            values[op.result] = _execute_op(op.op_name, operands, op.kwargs)
+        i = 0
+        n = len(self.ops)
+        while i < n:
+            op = self.ops[i]
+            if op.op_name == "tessera.scf.if.begin":
+                # Find matching .else / .end by depth tracking. Body
+                # ranges are [begin+1, else_idx) and [else_idx+1, end_idx).
+                else_idx, end_idx = _find_scf_if_brackets(self.ops, i)
+                # Resolve the condition value. The dynamic-SSA case has
+                # the condition as operand[0]; the static-attr case is
+                # handled later (kwargs["condition"] = True/False).
+                if op.operands:
+                    cond_name = _operand_name(op.operands[0])
+                    if cond_name not in values:
+                        raise ValueError(
+                            f"scf.if condition operand {cond_name!r} "
+                            f"not bound; CPU plan can't dispatch")
+                    cond = bool(_as_value(values[cond_name]))
+                else:
+                    cond = bool(op.kwargs.get("condition", True))
+                # Pick the active branch range and execute it inline.
+                if cond:
+                    branch_lo, branch_hi = i + 1, else_idx if else_idx is not None else end_idx
+                else:
+                    branch_lo, branch_hi = (
+                        (else_idx + 1, end_idx) if else_idx is not None
+                        else (end_idx, end_idx)  # empty else
+                    )
+                for j in range(branch_lo, branch_hi):
+                    sub = self.ops[j]
+                    if sub.op_name.startswith("tessera.scf."):
+                        # Nested control flow not supported in v1 of
+                        # the CF-aware executor. Fall through honestly.
+                        raise ValueError(
+                            "nested scf.* is not yet handled by the CPU "
+                            "plan executor; fall back to eager")
+                    self._execute_one(sub, values)
+                i = end_idx + 1
+                continue
+            if op.op_name in ("tessera.scf.if.end", "tessera.scf.else"):
+                # Shouldn't reach here if bracket-matching is correct
+                # (the begin handler skips past .end), but defensive.
+                i += 1
+                continue
+            self._execute_one(op, values)
+            i += 1
         if self.output_name not in values:
             raise ValueError(f"CPU plan did not produce output {self.output_name!r}")
         return values[self.output_name]
+
+    def _execute_one(self, op: IROp, values: dict[str, Any]) -> None:
+        """Dispatch a single non-control-flow op."""
+        operand_names = tuple(_operand_name(operand) for operand in op.operands)
+        missing = [name for name in operand_names if name not in values]
+        if missing:
+            raise ValueError(
+                f"CPU plan requires operand(s): {', '.join(missing)}")
+        operands = [_as_value(values[name]) for name in operand_names]
+        if op.result is None:
+            raise ValueError(
+                f"CPU plan cannot execute void op {op.op_name!r}")
+        values[op.result] = _execute_op(op.op_name, operands, op.kwargs)
 
     def artifacts(self) -> tuple[LoweringArtifact, ...]:
         return (
@@ -151,6 +213,59 @@ def build_matmul_cpu_plan(
     return build_cpu_plan(module, tile=tile)
 
 
+# Followup 1 (audit 2026-05-31) — scf.if.* markers are now first-class
+# control flow in the CPU executor, not generic unknown ops. Listed
+# here separately from SUPPORTED_CPU_OPS so the planner can accept
+# bodies that mix scf markers with supported leaf ops.
+_SUPPORTED_CONTROL_FLOW_OPS = frozenset({
+    "tessera.scf.if.begin",
+    "tessera.scf.else",
+    "tessera.scf.if.end",
+})
+
+
+def _scf_body_is_plannable(body: "Sequence[IROp]") -> bool:
+    """Followup 1 — True iff every scf op in ``body`` is one the CPU
+    plan executor handles: only ``scf.if.{begin,else,end}``, and each
+    ``scf.if.begin`` either carries an SSA operand condition or a
+    static literal in ``kwargs["condition"]``. ``scf.for.*`` /
+    ``scf.while.*`` need a loop-shaped executor — separate scope."""
+    for op in body:
+        name = _canonical_op_name(op.op_name)
+        if not name.startswith("tessera.scf."):
+            continue
+        if name not in _SUPPORTED_CONTROL_FLOW_OPS:
+            return False  # scf.for / scf.while etc.
+        if name == "tessera.scf.if.begin":
+            if not op.operands and "condition" not in op.kwargs:
+                return False  # text-only condition can't be evaluated
+    return True
+
+
+def _find_scf_if_brackets(
+    ops: "Sequence[IROp]", begin_idx: int,
+) -> tuple[Optional[int], int]:
+    """For an op at ``begin_idx`` of kind ``tessera.scf.if.begin``,
+    return ``(else_idx, end_idx)`` — the matching ``scf.else`` (or
+    ``None`` if absent) and the matching ``scf.if.end`` index. Uses
+    depth tracking so nested scf.if blocks don't confuse the matcher.
+    """
+    depth = 1
+    else_idx: Optional[int] = None
+    for j in range(begin_idx + 1, len(ops)):
+        name = ops[j].op_name
+        if name == "tessera.scf.if.begin":
+            depth += 1
+        elif name == "tessera.scf.if.end":
+            depth -= 1
+            if depth == 0:
+                return else_idx, j
+        elif name == "tessera.scf.else" and depth == 1:
+            else_idx = j
+    raise ValueError(
+        f"unbalanced scf.if at index {begin_idx} (no matching scf.if.end)")
+
+
 def build_cpu_plan(
     module: GraphIRModule,
     *,
@@ -167,14 +282,34 @@ def build_cpu_plan(
     if not fn.body:
         return None
     for op in fn.body:
-        if _canonical_op_name(op.op_name) not in SUPPORTED_CPU_OPS or not _valid_arity(op):
+        name = _canonical_op_name(op.op_name)
+        # Followup 1 — scf.if markers are accepted by the planner when
+        # the condition is an SSA operand (or a static literal); the
+        # CF-aware executor dispatches the right branch at runtime.
+        # scf.for / scf.while remain eager-only for now — they need a
+        # loop-shaped executor that's a separate, larger surface.
+        if name in _SUPPORTED_CONTROL_FLOW_OPS:
+            if name == "tessera.scf.if.begin":
+                # Only operand-condition or static-attr scf.if is
+                # plannable. Text-only conditions (D's "case 3", no
+                # operand, kwargs["condition_text"] only) need eager
+                # Python to evaluate the source — skip the plan.
+                if not op.operands and "condition" not in op.kwargs:
+                    return None
+            continue
+        if name not in SUPPORTED_CPU_OPS or not _valid_arity(op):
             return None
         operand_names = tuple(_operand_name(operand) for operand in op.operands)
-        if any(not name or name == "?" for name in operand_names):
+        if any(not n or n == "?" for n in operand_names):
             return None
         if op.result is None:
             return None
-    output_name = fn.body[-1].result
+    # Output: the result of the last non-marker op.
+    output_name = None
+    for op in reversed(fn.body):
+        if op.result is not None:
+            output_name = op.result
+            break
     if output_name is None:
         return None
 
@@ -217,23 +352,29 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
     if not fn.body:
         return JitDiagnostic("warning", _Code.EAGER_FALLBACK_EMPTY.value, "no Graph IR function body was emitted")
     # A.2 (2026-05-31) — structured control flow markers (scf.if /
-    # scf.for / scf.while) are lowered correctly by D.1/D.2/D.3 but no
-    # backend currently emits executable code for them. Eager Python
-    # runs the function correctly; the dashboard distinguishes this
-    # *expected* fallback from a generic "unknown op" miss via the
-    # dedicated diagnostic code.
+    # scf.for / scf.while) are lowered correctly by D.1/D.2/D.3.
+    # Followup 1 (2026-05-31) — scf.if with an SSA-operand or static
+    # condition is now executable through the CPU plan's branch-aware
+    # executor. If the body contains an scf.if that the planner CAN'T
+    # handle (text-only condition, or nested scf, or scf.for/while),
+    # the eager-fallback diagnostic still fires. Otherwise: no
+    # diagnostic — the function compiles through the real plan.
     scf_ops = [op for op in fn.body
                if _canonical_op_name(op.op_name).startswith("tessera.scf.")]
     if scf_ops:
-        seen = scf_ops[0].op_name
-        return JitDiagnostic(
-            "info",
-            _Code.EAGER_FALLBACK_CONTROL_FLOW.value,
-            (f"function contains structured control flow ({seen!r} and "
-             f"{len(scf_ops) - 1} other scf op(s)); CPU backend doesn't "
-             f"yet lower scf — falling back to eager Python (numerically "
-             f"correct, unoptimized)"),
-        )
+        plannable = _scf_body_is_plannable(fn.body)
+        if not plannable:
+            seen = scf_ops[0].op_name
+            return JitDiagnostic(
+                "info",
+                _Code.EAGER_FALLBACK_CONTROL_FLOW.value,
+                (f"function contains structured control flow ({seen!r} and "
+                 f"{len(scf_ops) - 1} other scf op(s)); CPU plan executor "
+                 f"handles scf.if with SSA / static conditions but this "
+                 f"body has scf.for / scf.while or a text-only condition — "
+                 f"falling back to eager Python (numerically correct, "
+                 f"unoptimized)"),
+            )
     unsupported = [op for op in fn.body if _canonical_op_name(op.op_name) not in SUPPORTED_CPU_OPS]
     if unsupported:
         names = ", ".join(sorted(SUPPORTED_CPU_OPS))

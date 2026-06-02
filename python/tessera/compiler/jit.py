@@ -259,6 +259,11 @@ def _resolve_source_text(
 # JitFn — the decorated function wrapper
 # ─────────────────────────────────────────────────────────────────────────────
 
+# PK8e sentinel — distinguishes "couldn't route this call through the authored
+# package" (fall back to the normal path) from a legitimate ``None`` result.
+_PKG_FALLBACK: Any = object()
+
+
 class JitFn:
     """
     A @jit-decorated Tessera function.
@@ -301,6 +306,7 @@ class JitFn:
         lowering_diagnostics: Optional[List[JitDiagnostic]] = None,
         native_required: bool = False,
         recognized_package: Optional[Any] = None,
+        dispatch_via_package: bool = False,
     ) -> None:
         self._fn = fn
         self.graph_ir = graph_ir
@@ -327,6 +333,13 @@ class JitFn:
         # concrete example-arg shapes. Populated only for target="apple_gpu".
         self.recognized_package = recognized_package
         self._emitted_package_path: Optional[str] = None
+        # PK8e (2026-06-02) — opt-in: route ``__call__`` through the authored
+        # `.mtlpackage` instead of the live MPS/MSL envelope. Per-shape caches
+        # keyed by (plan.name, plan.dims): authored package paths + loaded
+        # (prepared) Pipelines, so repeated same-shape calls reuse both.
+        self.dispatch_via_package = bool(dispatch_via_package)
+        self._package_path_cache: Dict[Any, str] = {}
+        self._package_pipeline_cache: Dict[Any, Any] = {}
         # Last fallback reason (None on a native run).  Inspectable by
         # callers + by CompileReport.fallback_reason emission.
         self.last_fallback_reason: Optional[FallbackReason] = None
@@ -439,6 +452,81 @@ class JitFn:
             return path
         return None
 
+    # PK8e — execute a call through the authored package (per-shape cache).
+    def _ordered_inputs(
+        self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
+    ) -> Optional[List[Any]]:
+        """The positional input tensors in arg order (resolving kwargs by
+        name). ``None`` if a declared arg is missing."""
+        if not kwargs:
+            return list(args)
+        names = list(self.arg_names)
+        out: List[Any] = []
+        for i, nm in enumerate(names):
+            if i < len(args):
+                out.append(args[i])
+            elif nm in kwargs:
+                out.append(kwargs[nm])
+            else:
+                return None
+        return out
+
+    def _call_via_package(self, args: Tuple[Any, ...],
+                          kwargs: Dict[str, Any]) -> Any:
+        """Dispatch this call through the authored `.mtlpackage`. Returns the
+        output array, or the ``_PKG_FALLBACK`` sentinel when the call can't be
+        routed (non-fp32 / unrecognized shape / runtime unavailable) so the
+        caller drops back to the normal MPS/MSL path. Authored packages +
+        loaded pipelines are cached per (op, shape)."""
+        import numpy as np
+
+        rec = self.recognized_package
+        if rec is None:
+            return _PKG_FALLBACK
+        inputs = self._ordered_inputs(args, kwargs)
+        if not inputs:
+            return _PKG_FALLBACK
+        arrs: List[Any] = []
+        for v in inputs:
+            a = np.asarray(v)
+            if a.dtype != np.float32:
+                return _PKG_FALLBACK
+            arrs.append(np.ascontiguousarray(a))
+        shapes = [tuple(int(d) for d in a.shape) for a in arrs]
+
+        from .apple_package_author import plan_from_shapes
+        plan = plan_from_shapes(rec, shapes)
+        if plan is None or plan.output_shape is None:
+            return _PKG_FALLBACK
+        key = (plan.name, plan.dims)
+
+        from .. import apple_mlpkg as _mp
+        pipe = self._package_pipeline_cache.get(key)
+        if pipe is None:
+            path = self._package_path_cache.get(key)
+            if path is None:
+                path = self._author_plan(plan, None)
+                if path is None:
+                    return _PKG_FALLBACK
+                self._package_path_cache[key] = path
+            fn_name = _mp.first_function_name(path) or "main"
+            pipe = _mp.compile_mlpackage(path, function_name=fn_name)
+            if pipe is None or not pipe.prepare_tensors():
+                return _PKG_FALLBACK
+            self._package_pipeline_cache[key] = pipe
+
+        for i, a in enumerate(arrs):
+            if not pipe.fill_input_at(i, a.tobytes()):
+                return _PKG_FALLBACK
+        if not pipe.dispatch(timeout_ms=30_000):
+            return _PKG_FALLBACK
+        out_shape = plan.output_shape
+        nbytes = int(np.prod(out_shape)) * 4
+        raw = pipe.read_output_at(len(arrs), nbytes)
+        if raw is None:
+            return _PKG_FALLBACK
+        return np.frombuffer(raw, dtype=np.float32).reshape(out_shape)
+
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """
         Execute through the narrow CPU lowering path when available; otherwise
@@ -465,6 +553,19 @@ class JitFn:
                 and self.compile_bundle.executable
             ):
                 return self._apple_cpu_fast_call(args, kwargs)
+            # PK8e — opt-in: execute through the authored `.mtlpackage`. Tried
+            # before the live MPS/MSL path; a fallback sentinel means the call
+            # couldn't be routed (non-fp32 / unrecognized shape / runtime
+            # down), so we drop through to the normal apple_gpu lane.
+            if (
+                self.dispatch_via_package
+                and self.recognized_package is not None
+                and self.cpu_plan is not None
+                and self.cpu_plan.target_kind == "apple_gpu"
+            ):
+                result = self._call_via_package(args, kwargs)
+                if result is not _PKG_FALLBACK:
+                    return result
             if (
                 self.cpu_plan is not None
                 and self.cpu_plan.target_kind == "apple_gpu"
@@ -1066,6 +1167,7 @@ def jit(
     auto_batch: bool = False,
     max_ops_per_cb: Optional[int] = None,
     emit_package: "bool | str" = False,
+    dispatch_via_package: bool = False,
 ) -> Any:
     """
     Tessera JIT decorator — drives the compiler pipeline.
@@ -1306,6 +1408,7 @@ def jit(
             lowering_diagnostics=diagnostics,
             native_required=native_required,
             recognized_package=recognized_package,
+            dispatch_via_package=bool(dispatch_via_package),
         )
 
         # P1 canonical one-command-buffer route (2026-06-01) — the
@@ -1363,6 +1466,15 @@ def jit(
                 jitfn.emit_package(out)
             except Exception:
                 pass
+
+        # PK8e — ``dispatch_via_package=True`` routes execution through the
+        # authored package (per-shape cache). apple_gpu-only, like the flags
+        # above.
+        if dispatch_via_package and target_kind != "apple_gpu":
+            raise TesseraJitError(
+                "@jit(dispatch_via_package=True) is only meaningful with "
+                f"target='apple_gpu'; got target={target!r} "
+                f"(normalized={target_kind!r}).")
 
         return jitfn
 

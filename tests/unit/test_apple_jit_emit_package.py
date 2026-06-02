@@ -46,6 +46,17 @@ def _mm_cpu(A: Tensor[8, 6], B: Tensor[6, 5]) -> Tensor[8, 5]:
     return tessera.ops.matmul(A, B)
 
 
+# PK8e — dispatch_via_package: execution routes through the authored package.
+@tessera.jit(target="apple_gpu", dispatch_via_package=True)
+def _mm_pkg(A: Tensor[8, 6], B: Tensor[6, 5]) -> Tensor[8, 5]:
+    return tessera.ops.matmul(A, B)
+
+
+@tessera.jit(target="apple_gpu", dispatch_via_package=True)
+def _attn_pkg(A: Tensor[4, 6], B: Tensor[6, 5]) -> Tensor[4, 5]:
+    return tessera.ops.softmax(tessera.ops.matmul(A, B))
+
+
 # ── recognition wired into compile (pure, no GPU) ────────────────────────
 
 
@@ -235,3 +246,76 @@ def test_jit_emit_package_flag_symbolic_is_silent_noop():
         return tessera.ops.matmul(A, B)
 
     assert _sym._emitted_package_path is None
+
+
+# ── PK8e — dispatch through the authored package (per-shape cache) ────────
+
+
+def test_dispatch_via_package_flag_set_and_caches_empty_before_call():
+    """The flag is recorded; caches start empty (pure, no GPU)."""
+    assert _mm_pkg.dispatch_via_package is True
+    assert _mm_pkg._package_path_cache == {}
+    assert _mm_pkg._package_pipeline_cache == {}
+
+
+def test_dispatch_via_package_rejects_non_apple_gpu():
+    from tessera.compiler.jit import TesseraJitError
+    with pytest.raises(TesseraJitError):
+        @tessera.jit(target="apple_cpu", dispatch_via_package=True)
+        def _bad(A: Tensor[8, 6], B: Tensor[6, 5]) -> Tensor[8, 5]:
+            return tessera.ops.matmul(A, B)
+
+
+def test_dispatch_via_package_matmul_matches_numpy():
+    """Calling the jitted fn executes *through the authored package* and
+    matches numpy — the package is now the execution path."""
+    _require_packaged_ml()
+    rng = np.random.default_rng(70)
+    a = rng.standard_normal((8, 6)).astype(np.float32)
+    b = rng.standard_normal((6, 5)).astype(np.float32)
+    out = _mm_pkg(a, b)
+    assert np.allclose(out, a @ b, rtol=1e-4, atol=2e-4)
+    # A package + a prepared pipeline were cached for this shape.
+    assert ("matmul", (8, 6, 5)) in _mm_pkg._package_path_cache
+    assert ("matmul", (8, 6, 5)) in _mm_pkg._package_pipeline_cache
+
+
+def test_dispatch_via_package_caches_per_shape():
+    """Same shape reuses the cache; a new shape adds one entry."""
+    _require_packaged_ml()
+    rng = np.random.default_rng(71)
+    a = rng.standard_normal((8, 6)).astype(np.float32)
+    b = rng.standard_normal((6, 5)).astype(np.float32)
+    _mm_pkg(a, b)
+    _mm_pkg(a, b)  # repeat — must not author again
+    n_after_same = len(_mm_pkg._package_path_cache)
+    a2 = rng.standard_normal((4, 4)).astype(np.float32)
+    b2 = rng.standard_normal((4, 4)).astype(np.float32)
+    out = _mm_pkg(a2, b2)
+    assert np.allclose(out, a2 @ b2, rtol=1e-4, atol=2e-4)
+    assert len(_mm_pkg._package_path_cache) == n_after_same + 1
+
+
+def test_dispatch_via_package_chain_matches_numpy():
+    _require_packaged_ml()
+    rng = np.random.default_rng(72)
+    a = rng.standard_normal((4, 6)).astype(np.float32)
+    b = rng.standard_normal((6, 5)).astype(np.float32)
+    out = _attn_pkg(a, b)
+    ab = a @ b
+    e = np.exp(ab - ab.max(axis=1, keepdims=True))
+    assert np.allclose(out, e / e.sum(axis=1, keepdims=True),
+                       rtol=1e-4, atol=2e-4)
+
+
+def test_dispatch_via_package_falls_back_for_non_fp32():
+    """A non-fp32 call can't be packaged (fp32-only authoring) — it falls
+    back to the normal path and authors NO package for that shape."""
+    _require_packaged_ml()
+    a = np.ones((8, 6), dtype=np.float64)
+    b = np.ones((6, 5), dtype=np.float64)
+    before = len(_mm_pkg._package_path_cache)
+    out = _mm_pkg(a, b)  # falls through to the live MPS path
+    assert np.allclose(out, a @ b, rtol=1e-4, atol=1e-3)
+    # No fp64 package was authored — proves the fallback routed away.
+    assert len(_mm_pkg._package_path_cache) == before

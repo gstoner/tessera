@@ -74,6 +74,18 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
   installName) → `newDynamicLibrary:` → `serializeToURL:` →
   `newDynamicLibraryWithURL:` (reload). Round-trips a `[[visible]]`-function
   library to disk + back. Locked by `tests/unit/test_apple_dylib.py` (5 tests).
+- **Package is a real execution path (PK8e, 2026-06-02):**
+  `@jit(target="apple_gpu", dispatch_via_package=True)` now *executes through*
+  the authored `.mtlpackage` — `__call__` routes to `_call_via_package`, which
+  authors-on-first-use + caches an authored package path *and* a prepared
+  PK1-PK7 pipeline per `(op, shape)`, fills inputs positionally, dispatches,
+  and reshapes to `AuthorPlan.output_shape`. Repeated same-shape calls reuse
+  both caches; a new shape adds one entry; non-fp32 / unrecognized calls fall
+  back to the live MPS/MSL path (sentinel-guarded, authoring nothing). Verified
+  numpy-equivalent for matmul + matmul→softmax across shapes. apple_gpu-only
+  (raises otherwise). Locked by `tests/unit/test_apple_jit_emit_package.py`
+  (21 tests). The package is no longer just an AOT side artifact — it is a
+  selectable execution lane.
 - **Committed production packages + manifest rows (PK8c, 2026-06-02):** two
   Tessera-authored `.mtlpackage` fixtures committed under
   `tests/fixtures/apple_gpu/tessera_authored_*` (matmul 8×8×8, fused
@@ -225,11 +237,13 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
    `emit_package(example_args=...)` (PK8a wiring)**. ~~(c) MSL-source
    dynamic-library AOT chain~~ **done — `apple_dylib` serialize/reload (Lane c)**.
    ~~automatic emit during compile~~ **done — `@jit(emit_package=True)` +
-   static-annotation shape specialization (PK8d)**. **Remaining (open):** only
-   a runtime that *dispatches* an authored package as the live execution path
-   (today the package is emitted/cached as an AOT artifact; `@jit.__call__`
-   still runs the MPS/MSL envelope) — a deliberate separation, since swapping
-   execution to the package needs a per-shape package cache + dispatch routing.
+   static-annotation shape specialization (PK8d)**. ~~dispatch an authored
+   package as the live execution path~~ **done — `dispatch_via_package=True`
+   routes `__call__` through a per-shape package + pipeline cache (PK8e)**.
+   The full author → recognize → wire → auto-emit → execute arc is closed;
+   the package is a selectable execution lane, not just an AOT artifact.
+   **Remaining (genuinely optional):** a benchmark comparing the package lane
+   vs. the live MPS/MSL lane to decide when each wins (perf, not correctness).
 6. Attach benchmark metadata for Apple hot paths such as matmul, matmul
    epilogues, conv2d, decode chain, and packaged kernels.
 

@@ -112,6 +112,25 @@ class AuthorPlan:
             "weighted": self.weighted, "eps": self.eps,
         }
 
+    @property
+    def output_shape(self) -> Optional[tuple[int, ...]]:
+        """The 2-D output shape the dispatched kernel produces, derived from
+        ``dims``. Drives ``read_output_at`` byte-count + reshape when a jitted
+        call dispatches through the authored package. ``None`` if unknown."""
+        d = self.dims
+        if self.kind == "matmul" and len(d) == 3:
+            return (d[0], d[2])            # (M, N) = A[M,K] @ B[K,N]
+        if self.kind == "op" and len(d) == 2:
+            return (d[0], d[1])            # elementwise / rowop: same shape
+        if self.kind == "chain":
+            if self.name == "matmul_softmax" and len(d) == 3:
+                return (d[0], d[2])        # (M, N)
+            if self.name == "matmul_softmax_matmul" and len(d) == 4:
+                return (d[0], d[3])        # (M, P)
+            if self.name == "rmsnorm_matmul" and len(d) == 3:
+                return (d[0], d[2])        # (M, N)
+        return None
+
 
 def _bare(op_name: str) -> str:
     """Strip the ``tessera.`` dialect prefix from an op name."""

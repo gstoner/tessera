@@ -293,9 +293,21 @@ def _resolve_return(value: Any,
     return value
 
 
-def auto_batch(fn: Callable[..., Any]) -> Callable[..., Any]:
+def auto_batch(
+    fn: Optional[Callable[..., Any]] = None,
+    *,
+    max_ops_per_cb: Optional[int] = None,
+) -> Callable[..., Any]:
     """Decorator — capture every Apple-GPU op call inside ``fn`` into
     a single trace, then batch-execute it through ``run_trace``.
+
+    Usable bare or parametrized (Glass-jaw #9, 2026-06-01)::
+
+        @auto_batch                       # production budget = DEFAULT_OPS_PER_CB
+        def step(x, w): ...
+
+        @auto_batch(max_ops_per_cb=8)     # production budget = 8 per cb
+        def step(x, w): ...
 
     Inside the wrapped function the user writes natural-looking code::
 
@@ -313,55 +325,78 @@ def auto_batch(fn: Callable[..., Any]) -> Callable[..., Any]:
 
     Behind the scenes, each ``apple_gpu_ops.*`` call returns a
     :class:`TraceRef`; the decorator runs the trace through
-    ``run_trace`` (one cb per encode-segment) and replaces the
-    TraceRef in the return value with the actual DeviceTensor.
+    ``run_trace`` (one cb per encode-segment, capped at
+    ``max_ops_per_cb``) and replaces the TraceRef in the return value
+    with the actual DeviceTensor.
 
     Same code, called without the decorator, runs the same ops
     eagerly (one cb per op).
     """
-    @functools.wraps(fn)
-    def wrapped(*args, **kwargs):
-        if _active_trace() is not None:
-            # Nested @auto_batch — flatten into the outer trace.
-            return fn(*args, **kwargs)
-        with _trace_scope() as trace:
-            ret = fn(*args, **kwargs)
-        # Trace captured. Execute it.
-        executed = run_trace(trace)
-        return _resolve_return(ret, executed)
+    prod_budget = max_ops_per_cb
 
-    def warmup(*args, **kwargs) -> int:
-        """Phase 5c (2026-06-01) — warm the MPSGraph cache by running
-        the wrapped function ONCE with per-op cbs (``max_ops_per_cb=1``).
-        Each op's MPSGraph compile cost amortizes across many small
-        command buffers, avoiding the shape × op-count cliff that
-        catches the first big-chain encode.
+    def decorate(target: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(target)
+        def wrapped(*args, **kwargs):
+            if _active_trace() is not None:
+                # Nested @auto_batch — flatten into the outer trace.
+                return target(*args, **kwargs)
+            with _trace_scope() as trace:
+                ret = target(*args, **kwargs)
+            # Trace captured. Execute it at the configured budget
+            # (None → run_trace's DEFAULT_OPS_PER_CB).
+            if prod_budget is None:
+                executed = run_trace(trace)
+            else:
+                executed = run_trace(trace, max_ops_per_cb=prod_budget)
+            return _resolve_return(ret, executed)
 
-        After ``warmup(*args, **kwargs)``, the regular call
-        ``wrapped(*args, **kwargs)`` at the default budget hits the
-        warm MPSGraph cache and runs fast even at shape × N combos
-        that would otherwise hang.
+        def warmup(*args, **kwargs) -> int:
+            """Phase 5c (2026-06-01) — warm the MPSGraph cache by
+            running the wrapped function ONCE. Each op's MPSGraph
+            compile cost amortizes across the warm-up cbs, avoiding
+            the shape × op-count cliff that catches the first
+            big-chain encode.
 
-        Returns the number of ops actually executed during warmup.
-        The output DeviceTensors are freed immediately — the warmup
-        is for cache-warming only.
+            Chunking budget precedence (Glass-jaw #7, 2026-06-01):
+              1. explicit ``warmup(..., max_ops_per_cb=W)`` keyword,
+              2. else the decorator's ``@auto_batch(max_ops_per_cb=N)``
+                 (so warm-up exercises the exact chunking production
+                 will hit),
+              3. else ``1`` (per-op cbs — the cliff-safe default for
+                 the bare ``@auto_batch`` form).
 
-        Caller-visible side-effects: any ``ResidentWeights.activation``
-        slot used inside the function gets uploaded; weights stay
-        resident (which is the point).
-        """
-        if _active_trace() is not None:
-            # Already inside a trace — warmup is a no-op for the
-            # outer trace's perspective. Run the inner function in
-            # the existing trace.
-            fn(*args, **kwargs)
-            return 0
-        with _trace_scope() as trace:
-            fn(*args, **kwargs)
-        return precompile_chain(trace)
+            ``max_ops_per_cb`` is popped from kwargs before the wrapped
+            function is called; no Apple GPU op takes a kwarg by that
+            name, so there's no collision.
 
-    wrapped.warmup = warmup  # type: ignore[attr-defined]
-    return wrapped
+            Returns the number of ops actually executed during warmup.
+            The output DeviceTensors are freed immediately — the warmup
+            is for cache-warming only.
+
+            Caller-visible side-effects: any ``ResidentWeights.activation``
+            slot used inside the function gets uploaded; weights stay
+            resident (which is the point).
+            """
+            warm_budget = kwargs.pop("max_ops_per_cb", None)
+            if warm_budget is None:
+                warm_budget = prod_budget if prod_budget is not None else 1
+            if _active_trace() is not None:
+                # Already inside a trace — warmup is a no-op for the
+                # outer trace's perspective. Run the inner function in
+                # the existing trace.
+                target(*args, **kwargs)
+                return 0
+            with _trace_scope() as trace:
+                target(*args, **kwargs)
+            return precompile_chain(trace, max_ops_per_cb=warm_budget)
+
+        wrapped.warmup = warmup  # type: ignore[attr-defined]
+        return wrapped
+
+    # Support both @auto_batch and @auto_batch(max_ops_per_cb=N).
+    if fn is not None:
+        return decorate(fn)
+    return decorate
 
 
 __all__ = [

@@ -78,16 +78,26 @@ def test_bf16_msl_symbols_resolve(symbol):
 
 def test_bf16_msl_ops_are_encode_eligible():
     """Phase 3b promotes rope + flash_attn bf16 from
-    not_eligible → registered."""
+    not_eligible → registered.
+
+    Glass-jaw #11 (2026-06-01): assert registry-derived structural
+    invariants instead of a hardcoded op-set literal (which broke on
+    every registry addition). The stable core ops must be bf16-eligible
+    and the f16/bf16 lanes must stay symmetric — a new op added to all
+    dtypes won't break this; an asymmetric addition will."""
     assert is_encode_eligible("rope", "bf16")
     assert is_encode_eligible("flash_attn", "bf16")
-    # Sanity: Sprint A (2026-06-01) added conv2d to the bf16 lane, so
-    # the matrix is now 9 ops × 3 dtypes = 27 entries
-    # (9 f32 + 9 f16 + 9 bf16). The registry is the truth.
+    core = {"bmm", "layer_norm", "rmsnorm", "softmax",
+            "rope", "silu", "gelu", "flash_attn"}
     bf16_ops = {name for (name, dtype) in ENCODE_OP_REGISTRY
                 if dtype == "bf16"}
-    assert bf16_ops == {"bmm", "layer_norm", "rmsnorm", "softmax",
-                        "rope", "silu", "gelu", "flash_attn", "conv2d"}
+    f16_ops = {name for (name, dtype) in ENCODE_OP_REGISTRY
+               if dtype == "f16"}
+    assert core <= bf16_ops, core - bf16_ops
+    # f16 and bf16 MSL/MPSGraph lanes are symmetric.
+    assert bf16_ops == f16_ops, (
+        f"f16/bf16 lanes diverged: only-f16={f16_ops - bf16_ops}, "
+        f"only-bf16={bf16_ops - f16_ops}")
 
 
 # ---- Numerical correctness — RoPE -------------------------------------

@@ -433,23 +433,33 @@ def _exec_single_segment(seg: ChainSegment,
 # Convenience: end-to-end plan + execute.
 # ---------------------------------------------------------------------
 
-def precompile_chain(trace: list[OpRecord]) -> int:
+def precompile_chain(
+    trace: list[OpRecord],
+    *,
+    max_ops_per_cb: int = 1,
+) -> int:
     """Phase 5c (2026-06-01) — warm the MPSGraph cache for every
-    (op, dtype, shape) in the trace by running it once with
-    ``max_ops_per_cb=1``. Per-op cbs commit individually so the
-    first-encounter MPSGraph compile cost amortizes across many
-    small command buffers instead of stacking up in one big cb
-    (which is where the shape × op-count cliff hits).
+    (op, dtype, shape) in the trace by running it once.
 
-    After precompile, subsequent production runs at the default
-    ``DEFAULT_OPS_PER_CB`` budget hit the warm MPSGraph cache and
-    run fast.
+    ``max_ops_per_cb`` defaults to ``1`` (Glass-jaw #7, 2026-06-01:
+    now tunable) so per-op cbs commit individually and the
+    first-encounter MPSGraph compile cost amortizes across many small
+    command buffers instead of stacking up in one big cb (which is
+    where the shape × op-count cliff hits). Pass the SAME budget you
+    will use in production (e.g. ``DEFAULT_OPS_PER_CB``) when you want
+    the warm-up to exercise the exact chunking shape the production
+    run will hit — warming at ``1`` still populates the per-(op, dtype,
+    shape) MPSGraph cache, but the cb-segmentation cost is only
+    amortized for the budget you actually warm at.
+
+    After precompile, subsequent production runs hit the warm MPSGraph
+    cache and run fast.
 
     Returns the number of ops actually executed (= length of
     encode-eligible subset of the trace). Resulting DeviceTensors
     are freed immediately — caller doesn't need them.
     """
-    results = execute_chain(plan_chain(trace, max_ops_per_cb=1))
+    results = execute_chain(plan_chain(trace, max_ops_per_cb=max_ops_per_cb))
     # Free the warmup outputs — caller doesn't want them.
     freed = 0
     for r in results:

@@ -1,0 +1,30 @@
+# Glass-jaw #12 (2026-06-01) — pre-commit drift gate for generated docs.
+#
+# A manifest / registry edit that changes the audit dashboards must be
+# committed together with the regenerated docs. This hook runs the
+# same `--check` gates the CI audit lane runs (via
+# scripts/check_generated_docs.sh), so drift is caught before commit
+# rather than in CI.
+#
+# Install once:  pre-commit install
+# Run manually:  pre-commit run --all-files
+#
+# The hook is `language: system` (uses the repo's Homebrew python3 +
+# the script's own PYTHONPATH bootstrap) so it needs no isolated
+# virtualenv. It runs once per commit (not per-file) since the
+# generated docs depend on the whole registry, not individual files.
+repos:
+  - repo: local
+    hooks:
+      - id: generated-doc-drift
+        name: generated-doc drift (audit dashboards)
+        entry: scripts/check_generated_docs.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        # Only the audit/registry sources can drift the dashboards;
+        # scope the trigger so unrelated commits don't pay the cost.
+        files: >-
+          (^python/tessera/compiler/(backend_manifest|primitive_coverage|conformance_matrix|apple_target_map|op_catalog)\.py$|
+           ^python/tessera/apple_gpu_chain\.py$|
+           ^docs/audit/(generated/|op_target_conformance\.md))

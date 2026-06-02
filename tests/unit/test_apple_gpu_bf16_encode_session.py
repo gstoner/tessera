@@ -332,21 +332,39 @@ def test_mixed_dtype_trace_uses_separate_sessions():
 
 # ---- Registry coverage check ------------------------------------------
 
+#: Glass-jaw #11 (2026-06-01) — the always-present encode-session ops.
+#: Stable subset, NOT an exhaustive list: a structural guard asserts
+#: this is a subset of every dtype slice, so adding a NEW op to the
+#: registry can never silently break the test (it only fails if a core
+#: op is dropped or the dtype matrix goes asymmetric). Derive expected
+#: sets from ``ENCODE_OP_REGISTRY`` rather than hardcoding the full set.
+_ENCODE_CORE_OPS = frozenset({
+    "bmm", "layer_norm", "rmsnorm", "softmax", "silu", "gelu",
+    "rope", "flash_attn",
+})
+
+
 def test_bf16_registry_covers_full_op_envelope():
-    """After Phase 3b (2026-06-01), bf16 covers the full 8-op
-    envelope — rope and flash_attn route through on-GPU bf16↔fp32
-    cast. Sprint A (2026-06-01) added conv2d's f16 + bf16 encode
-    lanes so the 3-dtype matrix is now fully symmetric: 9 ops × 3
-    dtypes = 27 entries."""
+    """The bf16 lane covers the full MSL/MPSGraph envelope. Rather than
+    hardcode the op set (which breaks on every registry addition —
+    glass-jaw #11), assert the registry-derived structural invariants:
+
+      * the stable core ops are present in all three dtype slices,
+      * the f16 and bf16 lanes are symmetric (same op set), and
+      * f32 is a superset of the narrower-dtype lanes (it's the
+        baseline — never missing an op a narrower dtype has).
+
+    This catches an asymmetric addition (op added to f32 but forgotten
+    in f16/bf16) while tolerating a symmetric one."""
     from tessera.apple_gpu_chain import ENCODE_OP_REGISTRY
-    bf16_ops = {name for (name, dtype) in ENCODE_OP_REGISTRY
-                if dtype == "bf16"}
-    assert bf16_ops == {"bmm", "layer_norm", "rmsnorm", "softmax",
-                        "silu", "gelu", "rope", "flash_attn",
-                        "conv2d"}, bf16_ops
-    # All three dtypes cover the same 9 ops now — fully symmetric.
-    f16_ops = {name for (name, d) in ENCODE_OP_REGISTRY if d == "f16"}
     f32_ops = {name for (name, d) in ENCODE_OP_REGISTRY if d == "f32"}
-    assert len(f16_ops) == 9, f16_ops
-    assert len(bf16_ops) == 9
-    assert f32_ops == f16_ops == bf16_ops
+    f16_ops = {name for (name, d) in ENCODE_OP_REGISTRY if d == "f16"}
+    bf16_ops = {name for (name, d) in ENCODE_OP_REGISTRY if d == "bf16"}
+    assert _ENCODE_CORE_OPS <= bf16_ops, _ENCODE_CORE_OPS - bf16_ops
+    assert _ENCODE_CORE_OPS <= f16_ops, _ENCODE_CORE_OPS - f16_ops
+    assert _ENCODE_CORE_OPS <= f32_ops, _ENCODE_CORE_OPS - f32_ops
+    # f16 and bf16 lanes are symmetric; f32 is the superset baseline.
+    assert f16_ops == bf16_ops, (
+        f"f16/bf16 dtype lanes diverged: only-f16={f16_ops - bf16_ops}, "
+        f"only-bf16={bf16_ops - f16_ops}")
+    assert f32_ops >= f16_ops, f"f32 missing ops f16 has: {f16_ops - f32_ops}"

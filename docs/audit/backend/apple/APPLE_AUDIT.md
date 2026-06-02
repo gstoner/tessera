@@ -52,19 +52,76 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
   auto_batch body still pays Graph-IR-emission overhead it never uses, and
   must keep shape kwargs as literals/args (a general `@jit` AST-lowering
   constraint, not auto_batch-specific).
-- **Production packaged kernels are empty — blocked on a package-authoring
-  pipeline.** PK1-PK7 prove the full load → reflect → validate → dispatch
-  lifecycle against Apple's licensed **sample** `matrix-multiplication.mtlpackage`
-  (the only real `.mtlpackage` in the repo), but there are **0** live
-  `status="packaged"` manifest rows. The structural blocker: `apple_mlpkg`
-  only *consumes* packages — there is no authoring/serialization path, so a
-  *production* (Tessera-authored) packaged kernel needs Apple's CoreML / metal
-  package-compiler toolchain to emit committed `.mtlpackage` artifacts, which
-  this repo/host does not have. Declaring production rows without real
-  artifacts would be scaffolding, not coverage. **Unblock requires either** a
-  package-authoring step (Tessera op → `.mtlpackage`) **or** shipping real
-  pre-compiled production packages. Until then this stays honestly open —
-  the lifecycle is proven, the production artifacts are not.
+- **Production packaged kernels are empty — but the authoring path is
+  on-host and NOT blocked (corrected 2026-06-02, third revision).** PK1-PK7
+  prove the full load → reflect → validate → dispatch lifecycle against
+  Apple's licensed **sample** `matrix-multiplication.mtlpackage`, but there
+  are **0** live `status="packaged"` manifest rows. **Two earlier "blocked /
+  no authoring path" claims were both wrong — reached from memory without
+  consulting the SDK (exactly the Decision #27 anti-pattern, three
+  recurrences now).** The verified reality:
+  - **`metal-package-builder` ships on this host** at
+    `/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/metal-package-builder`
+    — `metal-package-builder [-ml] -o out.mtlpackage <coremlpackage>` authors
+    a `.mtlpackage` from a CoreML package.
+  - **The sample `.mtlpackage` is just** `manifest.json`
+    (`"pkgtype":"MLLibrary"`, `"content":{"mpspkgname":"library.mpsgraphpackage"}`)
+    **wrapping a serialized MPSGraph** —
+    `library.mpsgraphpackage/{model_0.mpsgraph, reflection.fb, manifest.plist}`.
+  - **MPSGraph serializes to exactly that package format on this host:**
+    `MPSGraphExecutable serializeToMPSGraphPackageAtURL:descriptor:`
+    (`MPSGraphExecutable.h:205`, Swift `serialize(package:descriptor:)`,
+    macOS 14+), with `initWithMPSGraphPackageAtURL:` /
+    `initWithCoreMLPackageAtURL:` to reload.
+
+  **This aligns with Tessera's *existing* MPSGraph lane.** The Tessera-native
+  authoring chain needs no coremltools and no DXIL: (1) build the `MPSGraph`
+  Tessera already builds in `apple_gpu_runtime.mm` for its MPSGraph-lane ops;
+  (2) compile → `MPSGraphExecutable`; (3) `serializeToMPSGraphPackageAtURL:`;
+  (4) wrap into a `.mtlpackage` — either via `metal-package-builder -ml`, or
+  by writing the trivial 11-line `manifest.json` + dropping the
+  `.mpsgraphpackage` dir beside it; (5) PK1-PK7 already load/reflect/dispatch
+  it (and the package's `reflection.fb` is what PK6's reflection-validation
+  gate checks). **So Lane 3 is achievable end-to-end on this Mac.** The
+  remaining work is real engineering (wire the serialize call into the
+  MPSGraph runtime, emit the package, add a numerical-compare fixture, declare
+  the `status="packaged"` row) — not a toolchain block. Tracked as the
+  next-work item below.
+
+  **Parallel AOT lane (also verified, also not blocked) — runtime dynamic
+  library for the MSL-source kernels:** (1) `MTLDevice
+  newLibraryWithSource:options:error:` (`MTLDevice.h:786`); (2) `MTL4Compiler
+  newDynamicLibrary:error:` (`MTL4Compiler.h:117`, Swift
+  `makeDynamicLibrary(library:)`); (3) `MTLDynamicLibrary serializeToURL:error:`
+  (`MTLDynamicLibrary.h:77`); (4) reload via `newDynamicLibraryWithURL:`
+  (`MTL4Compiler.h:126`). (`MTLBinaryArchive.serialize(to:)` +
+  `MTL4Compiler.pipelineDataSetSerializer` / `lookupArchives` give a parallel
+  pipeline-state cache route.)
+
+  **Three distinct compiled-artifact lanes (grounded 2026-06-02 in SDK
+  headers + the Metal Shader Converter doc):**
+  - **Lane 1 — runtime dynamic library (usable today):** the
+    `newLibraryWithSource:` → `newDynamicLibrary:` → `serializeToURL:` →
+    `newDynamicLibraryWithURL:` chain above. Tessera already emits MSL, so
+    this is the directly-actionable AOT/precompiled-kernel path; no external
+    toolchain.
+  - **Lane 2 — Metal Shader Converter (OUT OF SCOPE — decided
+    2026-06-02):** `libmetalirconverter` / `metal-shaderconverter` convert
+    **DXIL** (DirectX LLVM-IR bytecode) → `.metallib` (`IRObjectCreateFromDXIL`
+    → `IRCompilerAllocCompileAndLink` → `IRObjectGetMetalLibBinary`), and
+    `metal-tt` finalizes → `.gpubin`. This is Apple's **DirectX-port** path
+    (root signatures, top-level Argument Buffers, graphics/RT stages). **We do
+    not need DXIL support** — Tessera emits MSL and Lane 1 covers AOT, so this
+    lane is deliberately not pursued. (Toolchain is also not installed on this
+    host: `/opt/metal-shaderconverter` absent. Download from
+    developer.apple.com/metal only if this decision is ever reversed.)
+  - **Lane 3 — `.mtlpackage` ML package (ACHIEVABLE on this host; rides the
+    MPSGraph lane):** PK1–PK7 already consume/dispatch. Authoring is on-host:
+    `MPSGraphExecutable serializeToMPSGraphPackageAtURL:` → wrap into
+    `.mtlpackage` (trivial `manifest.json` + dir, or `metal-package-builder
+    -ml`). Built from the same MPSGraph Tessera already constructs for its
+    MPSGraph-lane ops. Remaining work is engineering, not a toolchain block —
+    see next-work item 5.
 - **Target IR does too much.** Apple source strings, fusion recognition, and
   runtime dispatch decisions need a descriptor-backed backend registry.
 - **Performance gates are uneven.** Benchmarks exist, but manifest-attached
@@ -88,8 +145,20 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
    `max_ops_per_cb` chunking threaded through the decorator. Follow-on
    (optional): make auto_batch bypass unused Graph-IR emission; consider
    auto-detection so the route is on by default for recognized decode loops.
-5. Add production packaged kernels with reflection validation and numerical
-   compare fixtures.
+5. **Author production packaged kernels from the MPSGraph lane (achievable
+   on this host — see corrected analysis above).** Concrete steps: (1) in
+   `apple_gpu_runtime.mm`, compile the MPSGraph Tessera already builds for an
+   MPSGraph-lane op into an `MPSGraphExecutable`; (2) call
+   `serializeToMPSGraphPackageAtURL:descriptor:` (`MPSGraphExecutable.h:205`);
+   (3) wrap into a `.mtlpackage` (write the 11-line `manifest.json` +
+   `.mpsgraphpackage` dir, or shell out to `metal-package-builder -ml`);
+   (4) feed it through PK1-PK7 (load → reflect → validate → dispatch); (5) add
+   a numerical-compare fixture vs the live MPSGraph path and declare the
+   `status="packaged"` `BackendKernelEntry` row. **Parallel lane (b):** the
+   MSL-source runtime dynamic-library AOT chain (`newLibraryWithSource:` →
+   `newDynamicLibrary:` → `serializeToURL:` → `newDynamicLibraryWithURL:`,
+   plus `MTLBinaryArchive`/`pipelineDataSetSerializer`/`lookupArchives`).
+   Neither lane is toolchain-blocked.
 6. Attach benchmark metadata for Apple hot paths such as matmul, matmul
    epilogues, conv2d, decode chain, and packaged kernels.
 

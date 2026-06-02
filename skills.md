@@ -114,6 +114,52 @@ synthesize — never trust the prose over the generated dashboards.
 
 ---
 
+## Metal / Apple GPU — how to get authoritative API facts (READ FIRST)
+
+When you touch the Apple GPU backend (`apple_gpu_runtime.mm`, Tile→Apple
+lowering, MTL4 / MPSGraph / MSL kernels, packaged kernels), **ground every
+API claim in a real source before concluding a thing is possible or
+"blocked."** The 2026-06-02 `.mtlpackage` miss came from declaring an API
+path nonexistent without checking — don't repeat it.
+
+**Authoritative sources, in order of reliability on this machine:**
+
+1. **On-machine SDK headers — the ground truth for the installed SDK.**
+   `xcrun --show-sdk-path` → `…/System/Library/Frameworks/Metal.framework/Headers/`
+   (also `MetalPerformanceShaders`, `MetalPerformanceShadersGraph`,
+   `MetalPerformancePrimitives`). These are the exact interfaces the runtime
+   links against. To answer "does API X exist / what's its signature":
+   `grep -nE "<symbol>" "$(xcrun --show-sdk-path)/System/Library/Frameworks/Metal.framework/Headers/"*.h`.
+   Example facts established this way: `MTL4Compiler` has
+   `newDynamicLibraryWithURL:` and `pipelineDataSetSerializer` (pipeline-data
+   serialization), `MTL4MachineLearningPipelineDescriptor` takes a
+   `machineLearningFunctionDescriptor`, `MTLBinaryArchive`/`MTLDynamicLibrary`
+   expose `serialize(to:)`.
+2. **User-provided doc dumps** (e.g. a `…/Downloads/MTLLibrary docs`
+   markdown). When the user hands you a doc export, Read it — it's a curated
+   slice of the live docs.
+3. **The `apple-metal-docs-urls` memory file** — canonical
+   developer.apple.com URLs (Metal root + machine-learning-passes). Use these
+   to know *what* to look up; see the WebFetch caveat below for *how*.
+
+**WebFetch caveat — developer.apple.com is a JS-rendered SPA.** A plain
+`WebFetch(https://developer.apple.com/documentation/metal/…)` returns only
+the page *title*, not the API body (verified 2026-06-02). So WebFetch alone
+is NOT a reliable Metal-doc source. Prefer the SDK headers (1) and user doc
+dumps (2). If you need the rendered doc body, ask the user for a dump or use
+a browser tool that executes JS — don't conclude "no such API" from an empty
+WebFetch.
+
+**Anti-pattern that caused a real miss:** declaring a Metal capability
+"blocked / no path exists" from absence of evidence. Absence in *one* source
+≠ absence in the SDK. Check the headers before writing a blocker into an
+audit doc. Distinguish carefully: shader-library + pipeline-data
+serialization (runtime APIs that **do** exist) vs. authoring a `.mtlpackage`
+ML package on disk (an *offline* Apple toolchain step — coremlcompiler /
+package tooling — with no runtime ABI).
+
+---
+
 ## Lessons learned — external Apple Metal 4 ML sample (2026-05-31)
 
 Source: Apple's `RunningAMachineLearningModelOnTheGPUTimeline` sample (915 LOC Objective-C, `MTL4MachineLearningCommandEncoder` end-to-end). Six patterns extracted, all confirmed against the actual code at `/Users/gregorystoner/downloads/RunningAMachineLearningModelOnTheGPUTimeline`.

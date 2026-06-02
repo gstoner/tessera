@@ -1,7 +1,7 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-05-22
+last_updated: 2026-06-01
 ---
 
 # Tessera Target IR Specification
@@ -43,7 +43,7 @@ runtime ABI. Use `RUNTIME_ABI_SPEC.md` for the C ABI contract.
 |---------|-------------------------|------------------------|-------|
 | x86 AMX / AVX-512 | ✅ `tessera.x86.*` | ✅ Phase 2 | Only fully wired exec path today |
 | Apple CPU | ✅ `tessera_apple.cpu.*` | ✅ Phase 8.2 (Accelerate cblas + BNNS f16/bf16) | bf16 GEMM via BNNS |
-| Apple GPU | ✅ `tessera_apple.gpu.*` | ✅ Phase 8.3 → 8.4.7 (MPS + 26 custom MSL kernels, 4 fused chains) | RAII-hardened Metal buffer pool |
+| Apple GPU | ✅ `tessera_apple.gpu.*` plus packaged-kernel binding contracts | ✅ MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and PK1–PK7 packaged `.mtlpackage` lifecycle on capable Darwin hosts | Metal buffer pool, Metal 4 capability gates, `AppleTensorBindingSpec` / `AppleKernelBindingSpec` reflection validation |
 | NVIDIA SM_80+ | ✅ `tessera_nvidia.*` ODS + WGMMA placeholders | 🟡 IR artifact; gated on Phase G hardware | Sprint G-1 pins CUDA 13.2 U1 |
 | NVIDIA RubinCPX | ✅ `tessera.target.cpx` dialect + 4 passes | 🟡 separate `tessera-cpx-opt` driver | Phase 7+ |
 | ROCm gfx90a / 940 / 942 / 950 / 1100 | ✅ `tessera_rocm.*` ODS + MFMA table | 🟡 artifact only; gated on Phase H | Sprint H-1 pins ROCm 7.2.3 |
@@ -97,6 +97,13 @@ The active Python compiler has verifier-backed object models for Schedule IR,
 Tile IR, and CPU/NVIDIA/Apple/ROCm Target IR in `python/tessera/compiler/`.
 The x86 native AMX/AVX-512 C ABI path remains documented separately in
 `docs/architecture/tessera_target_ir_usage_guide.md`.
+
+Apple packaged ML artifacts sit adjacent to Target IR rather than replacing it:
+`BackendKernelEntry(status="packaged")` points at a `.mtlpackage`, while
+`AppleKernelBindingSpec` / `AppleTensorBindingSpec` record the compiler-side
+tensor ABI contract. Runtime reflection via `tessera.apple_mlpkg` extracts an
+`ArgumentLayout` and validates buffer indices, dtype, rank, and shape before a
+packaged artifact is treated as executable.
 
 Developer debug markers such as `tile.debug_artifact` and `tile.debug_barrier`
 are metadata-only Tile IR aids. Target IR lowering elides them; correlation is
@@ -745,7 +752,7 @@ module @flash_attn_sm90 attributes {tessera.version = "1.0", tessera.target_sm =
 | NCCL/RCCL native collectives | 4 | planned / scaffolded mock support |
 | TPU StableHLO/Shardy artifacts | 4 | implemented / lit-testable; PJRT execute remains scaffolded |
 | ROCm MFMA artifact path | 6 | implemented / lit-testable / scaffolded runtime |
-| Apple CPU/GPU artifact path | 8 | implemented / lit-testable / artifact-only |
+| Apple CPU/GPU artifact and packaged-kernel paths | 8 + Metal 4 + PK1-PK7 | implemented / lit-testable / hardware-runtime where capability-gated |
 
 ## 9. Backend Status Appendix
 
@@ -753,11 +760,11 @@ Target IR status is reported separately from native runtime status:
 
 | Backend | Semantic compiler behavior | Target artifact generation | Mock/runtime fallback | Native hardware runtime |
 |---------|----------------------------|----------------------------|-----------------------|-------------------------|
-| CPU/x86 | `tessera.cpu.*` matmul, elementwise, attention, and state contracts | implemented / lit-testable | NumPy-backed CPU execution for supported ops | AMX/AVX-512 runtime path is reference/scaffolded |
+| CPU/x86 | `tessera.cpu.*` matmul, elementwise, attention, and state contracts | implemented / lit-testable | NumPy-backed CPU execution for supported ops | AMX/AVX-512 hardware-runtime path for supported kernels |
 | NVIDIA | FA-4, queue, WGMMA/TMA contracts | lit-testable | Python/JIT artifact inspection | planned unless backend-specific hardware tests are run |
 | ROCm | MFMA/async-copy contracts | implemented / lit-testable | artifact-only | scaffolded; HIP loader/runtime paths require build flags and devices |
 | TPU | TPU profile, StableHLO/Shardy export | implemented / lit-testable | artifact-only | PJRT execute is scaffolded |
-| Apple | CPU/GPU target contracts | implemented / lit-testable | artifact-only; Apple CPU may execute through supported CPU fallback paths | planned unless backend-specific runtime tests are added |
+| Apple | CPU/GPU target contracts, Metal 4 lanes, and packaged `.mtlpackage` ABI contracts | implemented / lit-testable | artifact inspection plus CPU fallback where applicable | hardware-runtime on capable Darwin hosts through Accelerate/BNNS, MPS/MPSGraph/custom MSL, Metal 4, and packaged-kernel validation |
 | Metalium | DMA/load/store/matmul dialect shape | scaffolded / lit-testable | artifact-only | hardware execution planned; matmul lowers to artifact op when generated Metalium ops are enabled |
 | Cerebras | TTarget/Cerebras pass shape | stubbed / scaffolded | tool stubs | planned |
 | Rubin CPX | CPX-specific ODS and target-contract tests | scaffolded / lit-testable | artifact-only | planned |

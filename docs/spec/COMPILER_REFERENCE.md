@@ -1,7 +1,7 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-05-06
+last_updated: 2026-06-01
 ---
 
 # Tessera Compiler Reference
@@ -51,8 +51,8 @@ Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, TPU, Apple, ...)
 | `tessera-lower-to-x86` | `src/transforms/lib/Passes.cpp`, `src/transforms/lib/TileToX86Pass.cpp` | `tests/tessera-ir/phase2/`, `tests/unit/test_lowering_chain.py` | implemented |
 | `tessera-lower-to-gpu` | `src/transforms/lib/TileIRLoweringPass.cpp`, `src/compiler/tile_opt_fa4/`, `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` | `tests/tessera-ir/phase3/`, GPU target unit tests | implemented / lit-testable |
 | `tessera-lower-to-rocm` | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_ROCM_Backend/`, `python/tessera/compiler/matmul_pipeline.py` | ROCm backend tests and target-contract tests | implemented / lit-testable / artifact-only |
-| `tessera-lower-to-apple_cpu` | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_Apple_Backend/` | `tests/unit/test_target_ir.py`, `tests/tessera-ir/phase8/apple_cpu_lowering.mlir` | implemented / lit-testable / artifact-only |
-| `tessera-lower-to-apple_gpu` | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_Apple_Backend/` | `tests/unit/test_target_ir.py`, `tests/tessera-ir/phase8/apple_gpu_lowering.mlir` | implemented / lit-testable / artifact-only |
+| `tessera-lower-to-apple_cpu` / `tessera-lower-to-apple_cpu-runtime` | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_Apple_Backend/` | `tests/unit/test_target_ir.py`, `tests/tessera-ir/phase8/apple_cpu_lowering.mlir`, Apple CPU runtime tests | implemented / lit-testable / hardware-runtime via Accelerate + BNNS |
+| `tessera-lower-to-apple_gpu` / `tessera-lower-to-apple_gpu-runtime` | `python/tessera/compiler/target_ir.py`, `python/tessera/apple_mlpkg.py`, `python/tessera/compiler/apple_packaged_manifest.py`, `src/compiler/codegen/Tessera_Apple_Backend/` | `tests/unit/test_target_ir.py`, `tests/tessera-ir/phase8/apple_gpu_lowering.mlir`, Apple GPU runtime and packaged-ML tests | implemented / lit-testable / hardware-runtime on capable Darwin hosts |
 | Metalium target artifacts | `src/compiler/codegen/Tessera_Metalium_Backend/`, `python/tessera/compiler/matmul_pipeline.py` | Metalium backend tests and target-contract tests | scaffolded / lit-testable |
 | TPU StableHLO/Shardy target artifacts | `src/compiler/codegen/Tessera_TPU_Backend/`, `python/tessera/compiler/tpu_target.py` | `tests/unit/test_tpu_lowering.py`, `tests/tessera-ir/phase4/` | implemented / lit-testable |
 | Solver and resilience pipelines | `src/solvers/` | `tests/unit/test_*solver*.py`, `tests/tessera-ir/phase5/` | implemented / lit-testable |
@@ -63,6 +63,13 @@ Python lowering path uses object-backed Graph IR, Schedule IR, Tile IR, and
 CPU/NVIDIA/Apple/ROCm Target IR layers with verifier checks before emitting inspectable
 MLIR-like artifacts. Non-CPU native execution should only be called
 hardware-runtime when the backend-specific docs and tests say so.
+
+Apple packaged kernels are a separate Apple GPU execution surface: the compiler
+records `BackendKernelEntry(status="packaged")` plus an
+`AppleKernelBindingSpec` made of `AppleTensorBindingSpec` rows, then the runtime
+loads the `.mtlpackage`, extracts reflection, and validates the ABI before
+dispatch. The fixture-backed manifest proves the lifecycle; production packaged
+kernels are tracked separately in `apple_packaged_manifest.py`.
 
 ---
 
@@ -123,8 +130,8 @@ aliases handled by `python/tessera/compiler/matmul_pipeline.py`.
 | `GPUTargetProfile(ISA.SM_100)` | `nvidia_sm100` | artifact target |
 | `"rocm"`, `"amd"`, `"hip"` | `rocm` | implemented / lit-testable / artifact-only |
 | `"metalium"`, `"tt_metalium"`, `"tt"` | `metalium` | scaffolded / artifact-only |
-| `"apple_cpu"`, `"macos_cpu"`, `"m_series_cpu"` | `apple_cpu` | implemented / lit-testable / artifact-only |
-| `"apple_gpu"` | `apple_gpu` | implemented / lit-testable / artifact-only |
+| `"apple_cpu"`, `"macos_cpu"`, `"m_series_cpu"` | `apple_cpu` | implemented / lit-testable / hardware-runtime via Accelerate + BNNS where available |
+| `"apple_gpu"` | `apple_gpu` | implemented / lit-testable / hardware-runtime on capable Darwin hosts; packaged `.mtlpackage` execution is capability-gated |
 
 ---
 

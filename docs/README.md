@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Documentation authority tree
-last_updated: 2026-05-18
+last_updated: 2026-06-01
 ---
 
 # Tessera Documentation Map
@@ -125,13 +125,15 @@ Use these labels consistently in active docs:
 |------|--------|-----------------|
 | Python frontend, textual DSL frontend, constraints, effects, Graph IR | implemented | `docs/CANONICAL_API.md`, `docs/spec/PYTHON_API_SPEC.md`, `python/tessera/` |
 | Object-backed Schedule IR, Tile IR, and CPU/NVIDIA/Apple/ROCm Target IR artifact lowering | implemented / lit-testable | `python/tessera/compiler/schedule_ir.py`, `tile_ir.py`, `target_ir.py`, `tests/unit/test_*_ir.py` |
-| x86/CPU lowering path and CPU execution artifacts | implemented / mock-runtime | `docs/spec/COMPILER_REFERENCE.md`, `python/tessera/compiler/matmul_pipeline.py`, `src/transforms/` |
+| x86 AMX / AVX512 lowering and execution | implemented / hardware-runtime | `docs/spec/COMPILER_REFERENCE.md`, `python/tessera/compiler/matmul_pipeline.py`, `src/transforms/`, `src/compiler/codegen/tessera_x86_backend/` |
 | NVIDIA SM90+ WGMMA/TMA, Blackwell TCGEN05/TMEM, and FA-4 target artifacts | implemented / lit-testable | `docs/spec/COMPILER_REFERENCE.md`, `src/compiler/tile_opt_fa4/`, `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` |
 | Distributed collectives and planner foundation | implemented / scaffolded | `src/collectives/`, `python/tessera/testing/mock_collective.py`, `tests/unit/test_nccl_adapter.py` |
 | TPU target profile and StableHLO/Shardy artifacts | implemented / lit-testable | `python/tessera/compiler/tpu_target.py`, `src/compiler/codegen/Tessera_TPU_Backend/`, `tests/tessera-ir/phase4/` |
 | Solver, RNG, sparse, linalg, and resilience passes | implemented / lit-testable | `src/solvers/`, `tests/unit/test_*solver*.py`, `tests/tessera-ir/phase5/` |
 | Clifford / geometric algebra surface | implemented / lit-testable / hardware-runtime for 17/17 registered Apple GPU fused GA kernels, benchmarked by `benchmark_ga_ebm.py --ci` | `docs/spec/CLIFFORD_SPEC.md`, `docs/spec/GA_EBM_EXECUTION_STATUS.md`, `python/tessera/ga/`, `python/tessera/autodiff/geometric/`, `src/solvers/clifford/` |
 | Energy-based model surface | implemented / lit-testable / hardware-runtime for **9/9 native Apple GPU EBM rows** (incl. `ebm_partition_exact` via stable-logsumexp MSL kernel, 2026-05-17) | `docs/spec/EBM_SPEC.md`, `docs/spec/GA_EBM_EXECUTION_STATUS.md`, `docs/status/ga_ebm_milestone.md`, `python/tessera/ebm/`, `src/solvers/ebm/`, `benchmarks/apple_gpu/benchmark_ga_ebm.py` |
-| Runtime C ABI and Python wrapper | mock-runtime / hardware-runtime where C backend is built | `docs/spec/RUNTIME_ABI_SPEC.md`, `python/tessera/runtime.py`, `src/runtime/` |
-| ROCm and Apple artifact backends | implemented / lit-testable / artifact-only unless a backend doc says hardware-runtime | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_ROCM_Backend/`, `src/compiler/codegen/Tessera_Apple_Backend/`, target-contract tests |
+| Runtime C ABI and Python wrapper | mock-runtime / hardware-runtime where C backend is built and device-present | `docs/spec/RUNTIME_ABI_SPEC.md`, `python/tessera/runtime.py`, `src/runtime/` |
+| Apple CPU backend | implemented / lit-testable / hardware-runtime via Accelerate + BNNS | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_Apple_Backend/`, `python/tessera/runtime.py`, Apple target-contract tests |
+| Apple GPU backend | implemented / lit-testable / hardware-runtime on Darwin via MPS, MPSGraph, custom MSL, Metal 4 lanes, and packaged `.mtlpackage` ABI validation | `python/tessera/compiler/target_ir.py`, `python/tessera/apple_mlpkg.py`, `python/tessera/compiler/apple_packaged_manifest.py`, `src/compiler/codegen/Tessera_Apple_Backend/`, Apple target-contract tests |
+| ROCm backend | implemented / lit-testable / artifact-only until Phase H hardware execution | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_ROCM_Backend/`, ROCm target-contract tests |
 | Metalium, Cerebras, Rubin CPX backends | scaffolded / lit-testable unless a backend doc says hardware-runtime | `src/compiler/codegen/`, `tests/tessera-ir/phase8/`, backend-specific tests |

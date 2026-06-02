@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Runtime C ABI
-last_updated: 2026-05-22
+last_updated: 2026-06-01
 ---
 
 # Tessera Runtime ABI Specification
@@ -10,7 +10,7 @@ last_updated: 2026-05-22
 > **Canonical reference.** This document is grounded in the actual header files under
 > `src/runtime/include/tessera/`. It is the only normative runtime ABI reference.
 >
-> **Current-state note (2026-05-22):** The C ABI is implemented and exercised
+> **Current-state note (2026-06-01):** The C ABI is implemented and exercised
 > by runtime-ABI smoke tests, sanitizer lanes, and the Python runtime wrapper.
 > CPU execution is covered by the current smoke suite; CUDA/HIP behavior remains
 > target- and hardware-gated. Do not infer production readiness from ABI
@@ -23,7 +23,7 @@ last_updated: 2026-05-22
 
 ---
 
-## Documentation refresh (2026-05-22)
+## Documentation refresh (2026-06-01)
 
 The 2026-05-06 audit asked this spec to cross-link the debugging guide
 and to clarify that replay manifests are **not** part of the C ABI.
@@ -36,21 +36,29 @@ Resolution:
   `docs/guides/Tessera_Debugging_Tools_Guide.md`. The C ABI is
   unaffected by replay manifest presence.
 - **Apple CPU + Apple GPU runtime symbols** are exported through the
-  same C ABI:
+  same C ABI. The generated ABI dashboard
+  (`docs/audit/generated/runtime_abi.md`) is the drift-gated count source
+  and currently reports 218 `extern "C" tessera_*` symbol entries, 207
+  unique Apple symbols, and 84 Apple GPU kernel families:
   - `apple_cpu_runtime.cpp` exports `tessera_apple_cpu_gemm_{f32,f16,bf16}`
     plus `tessera_apple_cpu_gemm_f32_batched` (rank-3) — wired in
     Phase 8.2.
-  - `apple_gpu_runtime` (Objective-C++ shim) exports **26 C ABI
-    symbols** across 9 kernel concepts × {f32, f16, bf16}, including
-    4 fused chains (matmul→softmax, matmul→gelu, matmul→rmsnorm,
-    matmul→softmax→matmul). Inventory:
-    `docs/apple_gpu_kernel_inventory.md`.
+  - `apple_gpu_runtime` (Objective-C++ shim) exports the Apple GPU
+    hardware-runtime surface: MPS/MPSGraph lanes, custom MSL kernels,
+    GA/EBM/M7 fused kernels, Metal 4 matmul2d / epilogue / session /
+    archive / conv lanes, and packaged `.mtlpackage` lifecycle symbols.
+    Inventory: `docs/apple_gpu_kernel_inventory.md` and
+    `docs/audit/generated/runtime_abi.md`.
 - **Backend-kernel manifest** — `python/tessera/compiler/backend_manifest.py`
   synthesizes per-target × per-dtype kernel coverage from
   `capabilities.TARGET_CAPABILITIES` and is **observational metadata**
-  on the registry — not a runtime ABI requirement. Five statuses today:
-  `fused` / `compileable` / `reference` / `artifact_only` / `planned`.
-  Locked by `tests/unit/test_backend_kernel_manifest.py` (33 tests).
+  on the registry — not a runtime ABI requirement. Valid statuses today:
+  `fused` / `compileable` / `reference` / `artifact_only` / `planned` /
+  `hardware_verified` / `packaged`. Packaged entries require
+  `packaged_pipeline_path`; Apple packaged entries may also carry an
+  `AppleKernelBindingSpec` built from `AppleTensorBindingSpec` rows for
+  runtime reflection validation. Locked by backend-manifest and packaged
+  ML tests under `tests/unit/`.
 - **Collective adapter version pin** — `src/collectives/include/.../AdapterVersionPin.h`
   enforces NCCL ≥ 2.22 / RCCL ≥ 2.22 at C++ compile time via `#error`
   directives. The 8-symbol surface (`ncclAllReduce`, `ReduceScatter`,

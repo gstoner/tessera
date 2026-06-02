@@ -2,7 +2,7 @@
 status: Informative
 classification: Informative
 authority: Entry-point orientation; defers all API and spec claims to docs/CANONICAL_API.md and docs/spec/
-last_updated: 2026-04-30
+last_updated: 2026-06-01
 ---
 
 # Getting Started with Tessera
@@ -18,8 +18,9 @@ in five minutes.
 - Python 3.10+
 - pip
 
-GPU execution requires CUDA 12+ (NVIDIA SM_90 / Hopper or newer for full
-feature support). All examples here run on CPU so no GPU is needed to start.
+GPU artifact validation is pinned to CUDA 13.2 Update 1 for NVIDIA and ROCm
+7.2.3 for AMD. Native GPU execution is hardware-gated by target; all examples
+here run on CPU so no accelerator is needed to start.
 
 ---
 
@@ -140,11 +141,11 @@ def flash_attn_fwd(Q, K, V):
 ## Run the Tests
 
 ```bash
-# All phases
-pytest tests/ -v
+# Daily edit-loop sanity check (skips slow benchmark contracts)
+pytest tests/unit/ -m "not slow" -q
 
-# Phase 1 only (Python frontend — no GPU needed)
-pytest tests/unit/ -v
+# Full unit suite, including heavier benchmark contracts
+pytest tests/unit/ -q
 
 # Type check
 mypy python/tessera/

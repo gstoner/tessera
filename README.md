@@ -95,7 +95,7 @@ Current high-level status (as of May 31, 2026):
 | Object-backed Graph / Schedule / Tile IR + per-target Target IR artifacts | implemented / lit-testable |
 | **x86 AMX BF16 + AVX512 lowering and execution** (Phase 2) | **implemented / hardware-runtime** |
 | **Apple Silicon CPU** via Accelerate (cblas_sgemm rank-2/rank-3 + BNNS f16/bf16) (Phase 8.2) | **implemented / hardware-runtime** |
-| **Apple Silicon GPU** via MPS, MPSGraph, custom MSL, and additive Metal 4 lanes — 159 Apple runtime C ABI symbols, 82 Apple GPU kernel families, GA/EBM/M7 fused kernels, MTL4 `matmul2d` bf16 default routing, MTL4 epilogue/session/archive paths, and batched linalg MSL kernels | **implemented / hardware-runtime (Darwin); non-Darwin stubs are CI fallbacks, not hardware proof** |
+| **Apple Silicon GPU** via MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and packaged `.mtlpackage` loading — 207 Apple runtime C ABI symbols, 84 Apple GPU kernel families, GA/EBM/M7 fused kernels, MTL4 `matmul2d` bf16 default routing, MTL4 epilogue/session/archive paths, batched linalg MSL kernels, and PK1–PK7 packaged-kernel ABI validation | **implemented / hardware-runtime (Darwin); non-Darwin stubs are CI fallbacks, not hardware proof** |
 | NVIDIA SM_90+ FA-4, WGMMA/TMA, Blackwell TCGEN05/TMEM target artifacts; **CUDA 13.2 Update 1 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase G) |
 | ROCm MFMA gfx90a / gfx94x / gfx950 / gfx1100; **ROCm 7.2.3 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase H) |
 | TPU target profile and StableHLO / Shardy artifacts | implemented / lit-testable |
@@ -120,10 +120,10 @@ over phase prose when they disagree. As of the May 31, 2026 source review:
 | Surface | Health |
 |---------|--------|
 | Source and static checks | `mypy` ratchet is clean (`errors=0`), and the docs/runtime ABI/surface/Apple-target audit slice passes (`82 passed, 1 skipped`). |
-| Runtime ABI inventory | Drift-gated and current: `docs/audit/generated/runtime_abi.md` reports 170 `tessera_*` C ABI symbols, 159 Apple symbols, and 82 Apple GPU kernel families. |
+| Runtime ABI inventory | Drift-gated and current: `docs/audit/generated/runtime_abi.md` reports 218 `extern "C" tessera_*` C ABI symbol entries, 207 unique Apple symbols, and 84 Apple GPU kernel families. |
 | Apple backend | The source has moved beyond the older Phase 8.4.7 overview: MPS/MPSGraph remain the default lanes, while Metal 4 is additive for bf16/f16 `matmul2d`, fused epilogues, resident MLP sessions, pipeline archives, opt-in conv2d, and control-flow experiments. See `docs/apple_gpu_metal4_adoption.md`, `docs/apple_backend_integration_review.md`, and `docs/apple_gpu_kernel_inventory.md`. |
 | Known Apple test gaps | The local Apple slice still exposes unstable or platform-sensitive paths: non-Darwin f16 `bmm` and `conv2d` stubs return zeros, Metal 4 `DeviceTensor` session tests assume unavailable resident tensors, and bf16 P6 epilogue tests need the numerical contract/tolerance tightened. Treat these as active blockers before claiming green Apple CI. |
-| Documentation | The freshness dashboard is healthy (63 docs catalogued, 59 dated within 30 days, 4 undated), but semantic freshness is uneven. Generated dashboards and `docs/README.md` are more reliable than older narrative pages such as `docs/apple_gpu_overview.md` until those are updated for Metal 4 and batched linalg. |
+| Documentation | The freshness dashboard is healthy but date-sensitive (63 docs catalogued; current manifest summary: 30 dated within 30 days, 59 within 90 days, 4 undated). Semantic freshness is uneven. Generated dashboards and `docs/README.md` are more reliable than older narrative pages such as `docs/apple_gpu_overview.md` until those are updated for Metal 4, packaged kernels, and batched linalg. |
 
 ---
 

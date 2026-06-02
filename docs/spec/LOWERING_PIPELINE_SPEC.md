@@ -1,7 +1,7 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-05-22
+last_updated: 2026-06-01
 ---
 
 # Tessera Lowering Pipeline Specification
@@ -32,7 +32,7 @@ current set registered in `tools/tessera-opt/tessera-opt.cpp` is:
 | `tessera-lower-to-apple_cpu` | Apple Silicon CPU (artifact) | 8.1 | ✅ lit-testable |
 | `tessera-lower-to-apple_cpu-runtime` | Apple Silicon CPU (Accelerate cblas_sgemm + BNNS f16/bf16) | 8.2 | ✅ executable runtime |
 | `tessera-lower-to-apple_gpu` | Apple Silicon GPU (artifact) | 8.1 | ✅ lit-testable |
-| `tessera-lower-to-apple_gpu-runtime` | Apple Silicon GPU (MPS + 26 custom MSL kernels) | 8.3 → 8.4.7 | ✅ executable runtime |
+| `tessera-lower-to-apple_gpu-runtime` | Apple Silicon GPU (MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and packaged-kernel ABI validation) | 8.3 → Metal 4 + PK1–PK7 | ✅ executable runtime on capable Darwin hosts |
 | `tessera-cpx-pipeline` / `tessera-cpx-context-pipeline` | NV Rubin CPX | — | ✅ separate `tessera-cpx-opt` driver |
 | `tessera-nvidia-pipeline-{sm90,sm100,sm120}` | NVIDIA target-specific composition | 3+ | 🟡 G-5 named alias (Sprint G/H/I batch 3) |
 | `tessera-spectral-pipeline` | Spectral solver end-to-end | 5 | ✅ via `ts-spectral-opt` |
@@ -41,6 +41,26 @@ current set registered in `tools/tessera-opt/tessera-opt.cpp` is:
 The §1 table below lists only the original x86 / GPU canonical pair to
 keep that section focused on Phase 2–3 contract; the full inventory
 above is the current truth.
+
+### Apple packaged-kernel path
+
+The packaged-kernel sprint (PK1–PK7) adds a runtime/compiler-adjacent path
+beside source-generated Target IR:
+
+```text
+BackendKernelEntry(status="packaged", packaged_pipeline_path=...)
+  + AppleKernelBindingSpec(entries=AppleTensorBindingSpec(...))
+  -> tessera.apple_mlpkg.compile_mlpackage(...)
+  -> reflection extraction / validate_bindings(...)
+  -> ArgumentLayout / packaged dispatch
+```
+
+This is not a new MLIR pass pipeline. It is a packaged Apple ML artifact
+execution path with compiler-emitted tensor-binding contracts and runtime
+reflection validation. Production packaged kernels live in
+`python/tessera/compiler/apple_packaged_manifest.py`; the checked-in Apple
+matrix-multiplication package is a fixture proving the lifecycle, not a
+Tessera-authored production kernel.
 
 ### Python driver lowering paths
 
@@ -109,9 +129,9 @@ GraphIRModule
 This path constructs IR objects directly, runs verifier checks before textual
 artifact emission, and records graph/schedule/tile/target hashes in compile
 bundle metadata. It currently supports CPU/x86, NVIDIA, Apple CPU/GPU, and ROCm
-artifact paths. Native execution is available only for the supported CPU and
-Apple CPU runtime paths; other targets are inspectable artifacts unless their
-backend-specific runtime declares hardware support.
+artifact paths. Native execution is available for supported x86/CPU and Apple
+CPU/GPU runtime paths; NVIDIA and ROCm remain inspectable artifacts unless their
+backend-specific hardware gates pass.
 
 Debug switches:
 
@@ -131,7 +151,7 @@ Pipeline status is split by behavior type:
 
 | Pipeline | Semantic compiler behavior | Target artifact generation | Mock/runtime fallback | Native hardware runtime |
 |----------|----------------------------|----------------------------|-----------------------|-------------------------|
-| `tessera-lower-to-x86` | implemented / lit-testable | x86/CPU call artifacts | CPU mock-runtime path | CPU runtime tests cover supported paths |
+| `tessera-lower-to-x86` | implemented / lit-testable | x86/CPU call artifacts | NumPy-backed CPU fallback for supported ops | AMX/AVX-512 hardware-runtime tests cover supported paths |
 | `tessera-lower-to-gpu` | implemented / lit-testable | NVIDIA target artifacts | artifact inspection | planned unless backend-specific hardware tests are run |
 
 ### 2.1 `tessera-lower-to-x86`

@@ -975,13 +975,13 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime_stub.cpp": {
-    "mtime": 1780324068.0943606,
-    "ast_hash": "094281ac63a8625cf887d0e7629a0462",
+    "mtime": 1780350498.6555557,
+    "ast_hash": "eb686863483f2e3b0b174048cf3b85e9",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm": {
-    "mtime": 1780324192.514658,
-    "ast_hash": "45943cd3a627c7925a096b9ecec5e9d0",
+    "mtime": 1780363737.8611696,
+    "ast_hash": "ce44c126209f8250aee74e94f473327d",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Passes.cpp": {
@@ -1050,8 +1050,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/TileToApple.cpp": {
-    "mtime": 1780252156.6308918,
-    "ast_hash": "c830241d89a51c371ebbadcbbe06bd09",
+    "mtime": 1780363901.9724877,
+    "ast_hash": "66b3a1d5baf34fae4e280060537cb8bd",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/NativeSparseAttnFusionToAppleGPU.cpp": {
@@ -2335,8 +2335,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/__init__.py": {
-    "mtime": 1779400862.649357,
-    "ast_hash": "bb468d3efc8b5c120c49642a7573ab86",
+    "mtime": 1780346968.8845599,
+    "ast_hash": "8fdb2033c00be7f24e68b77c607a6166",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/flow.py": {
@@ -2355,8 +2355,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/runtime.py": {
-    "mtime": 1780285122.4075904,
-    "ast_hash": "2340962b458da15e4c3a122ac1c50d11",
+    "mtime": 1780366937.88953,
+    "ast_hash": "7e89c0c5e6ff027e944219edc3179e3f",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/energy.py": {
@@ -2875,8 +2875,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/jit.py": {
-    "mtime": 1780285306.1334417,
-    "ast_hash": "16b4b08e4a9cc85f4ff261e231d3a1ac",
+    "mtime": 1780345157.1062412,
+    "ast_hash": "902614475a9f84e1aec8fd8f986a84d1",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/distributed_planner.py": {
@@ -2950,8 +2950,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/backend_manifest.py": {
-    "mtime": 1780287994.8921936,
-    "ast_hash": "6f79d7bad856980f630bb8ef3321e35c",
+    "mtime": 1780366937.887824,
+    "ast_hash": "530397dc609188f34631f36ed4a80d3e",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/numeric_policy_pass.py": {
@@ -3095,8 +3095,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/apple_target_map.py": {
-    "mtime": 1780324375.7810807,
-    "ast_hash": "92742b11e1270b6cbf704fcbb7758e54",
+    "mtime": 1780367078.4482484,
+    "ast_hash": "15811418e320e058d8e52263dfda01aa",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/tpu_target.py": {
@@ -5880,8 +5880,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_backend_kernel_manifest.py": {
-    "mtime": 1778512608.7769923,
-    "ast_hash": "f70c2db6a41d6e2495886c6cf017b8f9",
+    "mtime": 1780362067.8676627,
+    "ast_hash": "c337b272e339d1d8e29196a120d3c104",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_ga_multivector.py": {
@@ -6210,8 +6210,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_gpu_target_maps.py": {
-    "mtime": 1779309427.1034145,
-    "ast_hash": "de2e54c69a705ee1d61cbc48f20606e6",
+    "mtime": 1780366937.8903534,
+    "ast_hash": "10cce4d721ac385b46569a11dba78df0",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_ebm_partition.py": {
@@ -6535,8 +6535,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_buffer_pool.py": {
-    "mtime": 1780321098.3494987,
-    "ast_hash": "dcac2990fbc54090f417ba23bd69067d",
+    "mtime": 1780357983.460571,
+    "ast_hash": "3ae88a018e203c5faa7993e79ce77e44",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_m7_audit_visibility.py": {
@@ -6920,8 +6920,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_backend_capability_extension.py": {
-    "mtime": 1779503742.2167473,
-    "ast_hash": "9da0b3f3f4dfca2af2f77dab71c57629",
+    "mtime": 1780367129.3333426,
+    "ast_hash": "b34b12fcaba762c7d66219b5d07b5fa5",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_pass_order_matrix.py": {
@@ -7335,7 +7335,7 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/.codex/hooks.json": {
-    "mtime": 1779456110.1402378,
+    "mtime": 1780325649.8117385,
     "ast_hash": "79bf4dcf067241ce9ac6fa25ad0b1b18",
     "semantic_hash": ""
   },
@@ -8595,13 +8595,13 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/README.md": {
-    "mtime": 1780253215.9496071,
-    "ast_hash": "cc6b51151c745b0afbc0b025a10a50d7",
+    "mtime": 1780371760.1463103,
+    "ast_hash": "58df0c41419c8d32a5038182e8ebf60b",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/skills.md": {
-    "mtime": 1780321652.0643115,
-    "ast_hash": "cab1baa0a5ddbcc86370abd655c8d6ee",
+    "mtime": 1780329363.6200829,
+    "ast_hash": "33e0f91593fd3e704e5b922649275146",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/CONTRIBUTING.md": {
@@ -9825,8 +9825,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/README.md": {
-    "mtime": 1779657372.6545436,
-    "ast_hash": "c18481e5bf00487ee30d951e4f7cc01c",
+    "mtime": 1780366937.8900826,
+    "ast_hash": "cca42913c99d3088f6127ee4a67f3d97",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/MEMORY_AND_PERFORMANCE.md": {
@@ -9975,13 +9975,13 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/README.md": {
-    "mtime": 1779400862.540164,
-    "ast_hash": "c778476bb4c5088e611a6b092905feb8",
+    "mtime": 1780371960.7898297,
+    "ast_hash": "830c4b22d4bf9f982dbc327063e93cf4",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/GETTING_STARTED.md": {
-    "mtime": 1779400862.5394545,
-    "ast_hash": "6b0db6ce30f53d475c020acb17ec1894",
+    "mtime": 1780371960.7902513,
+    "ast_hash": "f8894a3d885e941a1b006ec544c9f3c2",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/apple_gpu_kernel_inventory.md": {
@@ -10075,8 +10075,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/TARGET_IR_SPEC.md": {
-    "mtime": 1779479744.036994,
-    "ast_hash": "f14945d4942c3d8d4c70aca775b3313e",
+    "mtime": 1780371960.790847,
+    "ast_hash": "8f1b28effd3cf345f82e04c40a7e2992",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/CLIFFORD_SPEC.md": {
@@ -10105,8 +10105,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/RUNTIME_ABI_SPEC.md": {
-    "mtime": 1779479768.131631,
-    "ast_hash": "6a66c1362777e320826a54196fb8fd62",
+    "mtime": 1780371960.7911243,
+    "ast_hash": "6509bfd2a459f1738a71b5b19ca432b7",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/CITL_ROCM_TRACE_PROFILER_SPEC.md": {
@@ -10115,13 +10115,13 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/COMPILER_REFERENCE.md": {
-    "mtime": 1780253216.1160147,
-    "ast_hash": "4f2a3d42b2366ebe54ed513c39cea802",
+    "mtime": 1780371960.791413,
+    "ast_hash": "dc337e309028a23f0cae85adc2819263",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/LOWERING_PIPELINE_SPEC.md": {
-    "mtime": 1779479693.6619182,
-    "ast_hash": "2bf2d10c41965ea6e720b5a52834de3c",
+    "mtime": 1780371960.790571,
+    "ast_hash": "d66ffbad3ead5fab0f072bfffe5d76a3",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/LANGUAGE_AND_IR_SPEC.md": {
@@ -10360,8 +10360,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/support_table.md": {
-    "mtime": 1780288538.043472,
-    "ast_hash": "7d123b75f0e6160d8e9c65ebac62ceb4",
+    "mtime": 1780366937.8847365,
+    "ast_hash": "32be695dee26a899796093241519180f",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/test_coverage_classification.md": {
@@ -10370,8 +10370,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/apple_target_map.md": {
-    "mtime": 1780324397.5181062,
-    "ast_hash": "4af772795ffa15311ce89e6d5bd03bdc",
+    "mtime": 1780367094.764736,
+    "ast_hash": "abe3c274163376b39d9b7330dd00f485",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/research_status.md": {
@@ -10380,8 +10380,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/docs_freshness.md": {
-    "mtime": 1779642850.4762232,
-    "ast_hash": "8bcb22a54fa40ce824000e04b1b92bd8",
+    "mtime": 1780371965.7948945,
+    "ast_hash": "1f293c18b41e16ffcf12094b772e9292",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/rocm_target_map.md": {
@@ -10405,13 +10405,13 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/runtime_abi.md": {
-    "mtime": 1780282193.813158,
-    "ast_hash": "3d38f3311b159e5386ed194720e729aa",
+    "mtime": 1780366937.8845062,
+    "ast_hash": "636f4461ba9783d645d9d24fb586ca39",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/e2e_op_coverage.md": {
-    "mtime": 1779400862.555773,
-    "ast_hash": "0e5327f2248d84c7744821b0ca987838",
+    "mtime": 1780366937.8842793,
+    "ast_hash": "3889f89574fdda825cc9dc6042591492",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/examples_status.md": {
@@ -11155,8 +11155,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_tile_pass_status_matches_envelope.py": {
-    "mtime": 1780252239.4151983,
-    "ast_hash": "9186fae7b859888c9f90a3ec1024007e",
+    "mtime": 1780363978.5741465,
+    "ast_hash": "99c9970f76d07acbbd025bcb0dfd3c0d",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/compiler_layer_gap_remediation.md": {
@@ -11165,28 +11165,28 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/cli/conformance_matrix.py": {
-    "mtime": 1780318747.036029,
-    "ast_hash": "1f1315b500c52f6655f81c525419ce75",
+    "mtime": 1780366937.8871005,
+    "ast_hash": "90ec976cf7d94cf518f57860ca2be71a",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/pipeline_gates.py": {
-    "mtime": 1780286745.1481714,
-    "ast_hash": "cf32a5d7722f6cd43e97c862da482cce",
+    "mtime": 1780366937.888633,
+    "ast_hash": "698f28620bf584d5b95e016460b1da15",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/canonical_compile.py": {
-    "mtime": 1780324127.350993,
-    "ast_hash": "569c4f9e4bee48676322d3741a9d8fb2",
+    "mtime": 1780366937.8881907,
+    "ast_hash": "8bd9fb7c3cf98980a7a0cfef5077cc8c",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/execution_matrix.py": {
-    "mtime": 1780264468.5283532,
-    "ast_hash": "a9883691d88b45e20768bda952b46197",
+    "mtime": 1780366937.8884099,
+    "ast_hash": "1ad0418068bef537a9b69bc701912bbe",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/conformance_matrix.py": {
-    "mtime": 1780288009.005668,
-    "ast_hash": "b4d801e8577fe0c87e5e217e35eaa331",
+    "mtime": 1780362067.8650756,
+    "ast_hash": "2b160c63fdf39579fe127e30df80c551",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_canonical_compile.py": {
@@ -11265,7 +11265,7 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/op_target_conformance.md": {
-    "mtime": 1780288022.125527,
+    "mtime": 1780361305.0494049,
     "ast_hash": "4c05cbd540883541a5b62b7470a64f5a",
     "semantic_hash": ""
   },
@@ -11302,6 +11302,276 @@
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_cpu_plan_scf_if_dispatch.py": {
     "mtime": 1780319160.5092816,
     "ast_hash": "d3164c794286f8ad61f4fb0701b9a0c8",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/benchmarks/apple_gpu/benchmark_decoder_layer_one_cb.py": {
+    "mtime": 1780344973.891415,
+    "ast_hash": "3b5c770a2388cd2d90de307b4afd10cb",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/benchmarks/apple_gpu/benchmark_multi_layer_transformer.py": {
+    "mtime": 1780357815.0811744,
+    "ast_hash": "1e40b3127d6fdaffe058559235bcad80",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/python/tessera/apple_gpu_batched.py": {
+    "mtime": 1780366937.8850443,
+    "ast_hash": "1f1dd7732b9ef4c98792fb7cd4449c20",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/python/tessera/apple_gpu_chain.py": {
+    "mtime": 1780370202.8098552,
+    "ast_hash": "87312973a2203665b3b17b29d19875bc",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/python/tessera/apple_gpu_ops.py": {
+    "mtime": 1780370265.0273402,
+    "ast_hash": "60a35b229f748b8c7816262797a18472",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/python/tessera/apple_gpu_ops_interception.py": {
+    "mtime": 1780366937.8862436,
+    "ast_hash": "4ee68e365d839f15fadcf626dcdf3114",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/python/tessera/apple_gpu_resident.py": {
+    "mtime": 1780366937.886478,
+    "ast_hash": "1636d1f43fbd41a5ef9bbd3f4cac6428",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/python/tessera/apple_mlpkg.py": {
+    "mtime": 1780366937.8867483,
+    "ast_hash": "f64f6dd42ee35561377b9a3ce3f929b2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/apple_packaged_manifest.py": {
+    "mtime": 1780366937.8873804,
+    "ast_hash": "c5d78daee0a4c3fe3e61499c1e68e179",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/apple_target.py": {
+    "mtime": 1780335894.8979974,
+    "ast_hash": "ac1b572ca9a8713d5d54750950631578",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/scripts/check_generated_docs.sh": {
+    "mtime": 1780370535.5094855,
+    "ast_hash": "59d71d33777a464a101fc41a5905af67",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/fixtures/apple_gpu/matrix-multiplication.mtlpackage/manifest.json": {
+    "mtime": 1780333198.066239,
+    "ast_hash": "1344eab025b1c15230c472e8da0de70b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_feature_limits.py": {
+    "mtime": 1780335958.1532557,
+    "ast_hash": "9fa70a79198c9230c3ea714f73884701",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_attention_block_one_cb.py": {
+    "mtime": 1780339394.6564343,
+    "ast_hash": "6da90c02ce2376aaa7a92dbd963732ee",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_auto_batch.py": {
+    "mtime": 1780344239.4727783,
+    "ast_hash": "cd2600b70e056b09842dfe6cf53980c5",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_bf16_encode_session.py": {
+    "mtime": 1780370384.448346,
+    "ast_hash": "a5f36c03d2d2969f39a095b7872d3a0d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_bf16_msl_kernels.py": {
+    "mtime": 1780370400.4467592,
+    "ast_hash": "58f80028467b4fae4231219698d4d38c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_chain_planner.py": {
+    "mtime": 1780367759.3525784,
+    "ast_hash": "af32ed804a98c6ecde767277a570c50b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_conv2d_encode_session.py": {
+    "mtime": 1780363627.3557835,
+    "ast_hash": "d40253bb0ed31fb0bcc89a4f05813ffd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_conv2d_f16_bf16_encode.py": {
+    "mtime": 1780363593.9816506,
+    "ast_hash": "ce5f583c85e0079142d14fc3de6dcc60",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_decode_chain_decorator.py": {
+    "mtime": 1780340280.407945,
+    "ast_hash": "141c1c4e78cc926115a47ae9b1f1c65c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_f16_encode_session.py": {
+    "mtime": 1780343441.4364367,
+    "ast_hash": "2bc0f572778542e19d24bf7deffee7ce",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_full_decoder_layer.py": {
+    "mtime": 1780340155.4897473,
+    "ast_hash": "a69a9859e3bcd139911cf0bf7dd0ab48",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_hardware_verified_promotion.py": {
+    "mtime": 1780361313.1506522,
+    "ast_hash": "71d78ca741ce9c7330aa01f0815321f0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_max_ops_per_cb_knob.py": {
+    "mtime": 1780370307.4673755,
+    "ast_hash": "512267068e03e47c2e09416a66dbac72",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_mpsgraph_cache_lru.py": {
+    "mtime": 1780363806.2028897,
+    "ast_hash": "b749ef0f6258753c5c7ea7dc3117a4fd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_multi_cb_chunking.py": {
+    "mtime": 1780350363.5183935,
+    "ast_hash": "a8290d9b81c3e9a40b4ca87ca9569424",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_multi_layer_transformer.py": {
+    "mtime": 1780350659.8877282,
+    "ast_hash": "0c49aab837139ff8053fc0f675e6c8d3",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_ops_interception.py": {
+    "mtime": 1780347033.5344846,
+    "ast_hash": "76c70e347ba163a0e015eb09d9cf7a3d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_pk3_aligned_strides.py": {
+    "mtime": 1780357937.0738852,
+    "ast_hash": "6d4275c596a410552ad3f6c898d266ff",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_precompile_warmup.py": {
+    "mtime": 1780358786.0464075,
+    "ast_hash": "28e02dbe522ef7c1862ffdc77f03de3a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_resident_weights.py": {
+    "mtime": 1780343555.99679,
+    "ast_hash": "7066dafaacc62e0cfb9f976fdd9166b3",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_single_command_buffer.py": {
+    "mtime": 1780338612.3472688,
+    "ast_hash": "2f371e565157d34a01f34386714ae048",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_stride_alignment.py": {
+    "mtime": 1780347971.5957234,
+    "ast_hash": "56f3ba295b68d8f3053b7176d4e1740f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_wait_pattern_migration.py": {
+    "mtime": 1780343802.4252748,
+    "ast_hash": "68075f584f00b477e553b92c1f2d9580",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_mlpkg_concurrency.py": {
+    "mtime": 1780335340.7190971,
+    "ast_hash": "5dbeeb742988728751ee9dbe1cfc40dc",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_mlpkg_pk1.py": {
+    "mtime": 1780334701.4651244,
+    "ast_hash": "2f61d753a7f22244895a400d0f9084b9",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_mlpkg_pk2.py": {
+    "mtime": 1780334748.462757,
+    "ast_hash": "a3cbd84adef33bd29bbb7afb0a573765",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_mlpkg_pk3.py": {
+    "mtime": 1780334754.0061293,
+    "ast_hash": "f642a7fe3cc352f11eeba430bf7d52e4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_mlpkg_pk4.py": {
+    "mtime": 1780334884.33587,
+    "ast_hash": "5fe2aaa737d3aa28ac6ab96608a50ebf",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_mlpkg_pk5.py": {
+    "mtime": 1780331832.391759,
+    "ast_hash": "d2af5d6049c4639eb7baaf45710be52f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_mlpkg_pk6.py": {
+    "mtime": 1780334888.2247841,
+    "ast_hash": "0dfcbc550cb50d5d636f96a782515df4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_mlpkg_pk7.py": {
+    "mtime": 1780334892.7168357,
+    "ast_hash": "51e0e24b0cc730bf0177a9580832359c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_packaged_manifest.py": {
+    "mtime": 1780336638.0553818,
+    "ast_hash": "132956b836db6d9a7ebd943f42fa1071",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_tensor_binding_spec.py": {
+    "mtime": 1780335768.2078156,
+    "ast_hash": "ec80914aef0ea64362e1465ad07c64f4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_generated_doc_drift_hook.py": {
+    "mtime": 1780370606.8719678,
+    "ast_hash": "90d4c881423dd4dbbae2543adf913568",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_jit_auto_batch_kwarg.py": {
+    "mtime": 1780345224.7058804,
+    "ast_hash": "4ea6164b59f10c837ee169f39d1796a6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_tessera_ops_flash_attn_eager.py": {
+    "mtime": 1780347711.3928711,
+    "ast_hash": "b8f02249dd770c5dcc2338953364b556",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tools/scripts/migrate_wait_until_completed.py": {
+    "mtime": 1780337984.9391174,
+    "ast_hash": "5109e368126b2413339db4b2650bb979",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/.pre-commit-config.yaml": {
+    "mtime": 1780370587.1353347,
+    "ast_hash": "4d37257cc1591d42bb4b0cf8d3689954",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/docs/audit/2026_06_01_apple_gpu_chain_audit.md": {
+    "mtime": 1780366937.884007,
+    "ast_hash": "b9b73a89854dfa89046061186b5dae96",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/docs/audit/single_command_buffer_decode_plan.md": {
+    "mtime": 1780357847.4691443,
+    "ast_hash": "cc9b2961c2d83f068c67cef4f7263567",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/fixtures/apple_gpu/APPLE_SAMPLE_LICENSE.txt": {
+    "mtime": 1780333198.0728195,
+    "ast_hash": "b77b53ae02d7b413fffba33d45c63ea2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/fixtures/apple_gpu/README.md": {
+    "mtime": 1780333217.9731135,
+    "ast_hash": "6124456343ace8f356876907298f323c",
     "semantic_hash": ""
   }
 }

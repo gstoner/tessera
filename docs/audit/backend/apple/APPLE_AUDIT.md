@@ -44,11 +44,21 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
   numpy at fp32 tol. Tests in `test_apple_mlpkg_pk8.py`.
 - **Graph IR → package hook (PK8a, 2026-06-02):**
   `compiler/apple_package_author.py` *recognizes* an MPSGraph-lane region in a
-  real `GraphIRModule` (single op / matmul / fused chain, fp32 static 2-D) and
-  authors the matching package — the mechanism `@jit(target="apple_gpu")` would
-  call to emit an AOT packaged kernel. `recognize()` is pure/device-free;
-  `author_package_from_graph_ir()` authors + (in tests) dispatches. Locked by
-  `tests/unit/test_apple_package_author.py` (12 tests).
+  real `GraphIRModule` (single op / matmul / fused chain) and authors the
+  matching package. Two layers: `recognize()` (static-IR dims → `AuthorPlan`)
+  and the shape-free `recognize_op()` (op/chain identity from op-names only —
+  the live `@jit` IR carries no static dims) + `plan_from_shapes()`. Pure/
+  device-free. Locked by `tests/unit/test_apple_package_author.py` (12 tests).
+- **`@jit` → package emission wired into the compile path (PK8a wiring,
+  2026-06-02):** `@jit(target="apple_gpu")` now runs the shape-free recognizer
+  during compile and exposes `JitFn.recognized_package` (the `RecognizedOp`,
+  or `None`). `JitFn.emit_package(out_path=None, example_args=...)` derives
+  concrete fp32 shapes from the example tensors (the realistic AOT path,
+  mirroring `aot.export(fn, *examples)`) and authors a real `.mtlpackage` that
+  loads + dispatches through PK1-PK7 numpy-correct. Recognition is device-free
+  (runs on any host); only `emit_package` touches the GPU, and only when
+  called — no surprise authoring on decoration. Locked by
+  `tests/unit/test_apple_jit_emit_package.py` (9 tests).
 - **Committed production packages + manifest rows (PK8c, 2026-06-02):** two
   Tessera-authored `.mtlpackage` fixtures committed under
   `tests/fixtures/apple_gpu/tessera_authored_*` (matmul 8×8×8, fused
@@ -195,12 +205,14 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
    ~~graph→package compiler hook~~ **done — `apple_package_author.recognize` /
    `author_package_from_graph_ir` (PK8a)**. (b) ~~commit a real `.mtlpackage`
    + `status="packaged"` row~~ **done — 2 Tessera-authored fixtures +
-   `PACKAGED_PRODUCTION_KERNELS` rows (PK8c)**. **Remaining (open):** wire the
-   recognizer into the actual `@jit(target="apple_gpu")` compile path so a
-   recognized region auto-emits a package (today it's a callable hook, not yet
-   invoked by the compiler); and (c) the parallel MSL-source dynamic-library
-   AOT chain (`newLibraryWithSource:` → `newDynamicLibrary:` →
-   `serializeToURL:` → `newDynamicLibraryWithURL:`).
+   `PACKAGED_PRODUCTION_KERNELS` rows (PK8c)**. ~~wire the recognizer into the
+   actual `@jit` compile path~~ **done — `JitFn.recognized_package` +
+   `emit_package(example_args=...)` (PK8a wiring)**. **Remaining (open):**
+   (c) the parallel MSL-source dynamic-library AOT chain (`newLibraryWithSource:`
+   → `newDynamicLibrary:` → `serializeToURL:` → `newDynamicLibraryWithURL:`);
+   and an *automatic* emit during compile (today `emit_package` is explicit /
+   needs example shapes — a compile-time shape-specialization pass would let it
+   fire without a manual call).
 6. Attach benchmark metadata for Apple hot paths such as matmul, matmul
    epilogues, conv2d, decode chain, and packaged kernels.
 

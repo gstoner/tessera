@@ -300,6 +300,7 @@ class JitFn:
         source_origin: str = "inspect",
         lowering_diagnostics: Optional[List[JitDiagnostic]] = None,
         native_required: bool = False,
+        recognized_package: Optional[Any] = None,
     ) -> None:
         self._fn = fn
         self.graph_ir = graph_ir
@@ -320,6 +321,12 @@ class JitFn:
         self.source_origin = source_origin
         self.lowering_diagnostics = tuple(lowering_diagnostics or [])
         self.native_required = bool(native_required)
+        # PK8a (2026-06-02) — shape-free RecognizedOp when this module's
+        # compute region is an authorable Apple-GPU packaged kernel, else
+        # None. ``emit_package`` turns it into a real `.mtlpackage` given
+        # concrete example-arg shapes. Populated only for target="apple_gpu".
+        self.recognized_package = recognized_package
+        self._emitted_package_path: Optional[str] = None
         # Last fallback reason (None on a native run).  Inspectable by
         # callers + by CompileReport.fallback_reason emission.
         self.last_fallback_reason: Optional[FallbackReason] = None
@@ -330,6 +337,81 @@ class JitFn:
         # SHA-256 over the artifact JSON inside `RuntimeArtifact.artifact_hash`.
         self._cached_artifact: Optional["RuntimeArtifact"] = None
         functools.update_wrapper(self, fn)
+
+    # PK8a (2026-06-02) — Graph IR → `.mtlpackage` AOT emission.
+    def emit_package(
+        self,
+        out_path: Optional[Any] = None,
+        *,
+        example_args: Optional[Any] = None,
+    ) -> Optional[str]:
+        """Author a production ``.mtlpackage`` for this jitted Apple-GPU
+        region and return its path (``None`` if not authorable / authoring
+        failed).
+
+        Authorable when ``self.recognized_package`` is set — i.e. the
+        compiled region is a matmul, a single MPSGraph-lane op, or a fused
+        chain (see :mod:`tessera.compiler.apple_package_author`). The
+        packaged kernel needs concrete fp32 shapes:
+
+        * pass ``example_args`` (the tensors you'd call the fn with) — shapes
+          are read from their ``.shape`` (this is the realistic AOT path,
+          mirroring ``aot.export(fn, *examples)``); or
+        * omit them to fall back to static shapes baked into the Graph IR
+          (rare — most ``@jit`` IR carries symbolic ``?`` dims).
+
+        ``out_path`` defaults to a temp-cache path keyed by fn name + op +
+        shape. The authored package loads + dispatches through PK1-PK7 and is
+        positionally bound (``fill_input_at`` / ``read_output_at``).
+        """
+        rec = self.recognized_package
+        if rec is None:
+            return None
+
+        if example_args is None:
+            # Static-IR fallback — only fires when dims are literal in the IR.
+            from .apple_package_author import recognize
+            static_plan = recognize(self.graph_ir)
+            if static_plan is None:
+                return None
+            return self._author_plan(static_plan, out_path)
+
+        # Derive concrete shapes (+ fp32 check) from the example tensors.
+        shapes: List[Tuple[int, ...]] = []
+        for a in example_args:
+            sh = getattr(a, "shape", None)
+            if sh is None:
+                return None
+            dt = getattr(a, "dtype", None)
+            if dt is not None and "float32" not in str(dt) \
+                    and "f32" not in str(dt):
+                return None  # authoring is fp32-only
+            shapes.append(tuple(int(d) for d in sh))
+
+        from .apple_package_author import plan_from_shapes
+        plan = plan_from_shapes(rec, shapes)
+        if plan is None:
+            return None
+        return self._author_plan(plan, out_path)
+
+    def _author_plan(self, plan: Any, out_path: Optional[Any]) -> Optional[str]:
+        """Resolve a target path (temp cache when ``out_path`` is None) and
+        author ``plan`` there. Returns the path on success, else ``None``."""
+        if out_path is not None:
+            path = str(out_path)
+        else:
+            import os
+            import tempfile
+            name = getattr(self._fn, "__name__", "fn")
+            dims = "x".join(str(d) for d in plan.dims)
+            cache = os.path.join(tempfile.gettempdir(),
+                                 "tessera_apple_packages")
+            os.makedirs(cache, exist_ok=True)
+            path = os.path.join(cache, f"{name}_{plan.name}_{dims}.mtlpackage")
+        if plan.author(path):
+            self._emitted_package_path = path
+            return path
+        return None
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """
@@ -1163,6 +1245,22 @@ def jit(
                 f"Graph IR emission failed for {fn.__name__!r}: {exc}"
             ) from exc
 
+        # PK8a wiring (2026-06-02) — recognize whether this module's compute
+        # region is an authorable Apple-GPU packaged kernel (matmul / a single
+        # MPSGraph-lane op / a fused chain). Pure + device-free: it keys off
+        # the op-name sequence only, so it fires even though the live Graph IR
+        # carries no static shapes. The shape-free RecognizedOp is paired with
+        # concrete example-arg shapes at ``JitFn.emit_package`` time to author
+        # the actual `.mtlpackage`. Recognition is recorded on the artifact
+        # regardless of host (no GPU touched here).
+        recognized_package = None
+        if target_kind == "apple_gpu":
+            try:
+                from .apple_package_author import recognize_op
+                recognized_package = recognize_op(module)
+            except Exception:
+                recognized_package = None
+
         # ── Step 7: wrap and return ──────────────────────────────────────────
         jitfn = JitFn(
             fn=fn,
@@ -1180,6 +1278,7 @@ def jit(
             source_origin=source_origin,
             lowering_diagnostics=diagnostics,
             native_required=native_required,
+            recognized_package=recognized_package,
         )
 
         # P1 canonical one-command-buffer route (2026-06-01) — the

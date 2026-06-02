@@ -48,6 +48,33 @@ _TENSOR_RE = re.compile(r"tensor<([^>]*)>")
 
 
 @dataclass(frozen=True)
+class RecognizedOp:
+    """A *shape-free* recognition of an authorable region — the op/chain
+    identity without concrete dims. This is what fires on a live ``@jit``
+    module, whose Graph IR carries op names but not static shapes
+    (``tensor<?x?x?>``). Pair it with concrete input shapes (from example
+    args) via :func:`plan_from_shapes` to get a dims-bearing
+    :class:`AuthorPlan`.
+
+    ``kind`` is ``"matmul"`` / ``"op"`` / ``"chain"``; ``name`` the op or
+    chain name; ``arity`` the number of tensor inputs the region consumes;
+    ``weighted`` flags norm gamma/beta; ``eps`` the norm epsilon.
+    """
+
+    kind: str
+    name: str
+    arity: int
+    weighted: bool = False
+    eps: float = 1e-5
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": self.kind, "name": self.name, "arity": self.arity,
+            "weighted": self.weighted, "eps": self.eps,
+        }
+
+
+@dataclass(frozen=True)
 class AuthorPlan:
     """A recognized authoring action. ``kind`` is ``"matmul"`` / ``"op"`` /
     ``"chain"``; ``name`` is the op or chain name; ``dims`` is the shape
@@ -78,6 +105,12 @@ class AuthorPlan:
                 out_path, self.name, list(self.dims), eps=self.eps,
             )
         return False
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": self.kind, "name": self.name, "dims": list(self.dims),
+            "weighted": self.weighted, "eps": self.eps,
+        }
 
 
 def _bare(op_name: str) -> str:
@@ -159,6 +192,82 @@ def recognize(module: GraphIRModule) -> Optional[AuthorPlan]:
     return None
 
 
+def recognize_op(module: GraphIRModule) -> Optional[RecognizedOp]:
+    """Shape-free recognition — identify the authorable op/chain from the
+    module's op-name sequence WITHOUT requiring static dims.
+
+    This is the recognizer that fires on a live ``@jit`` module (whose IR
+    carries op names but ``tensor<?x?x?>`` shapes). Combine the result with
+    concrete input shapes via :func:`plan_from_shapes` to author. Returns
+    ``None`` for anything not in the authoring vocabulary. Pure / device-free.
+    """
+    if not module.functions or len(module.functions) != 1:
+        return None
+    fn = module.functions[0]
+    ops = _compute_ops(fn)
+    if not ops:
+        return None
+    seq = tuple(_bare(op.op_name) for op in ops)
+    n_inputs = len(fn.args)
+
+    if seq in _CHAIN_BY_SEQUENCE:
+        return RecognizedOp(kind="chain", name=_CHAIN_BY_SEQUENCE[seq],
+                            arity=n_inputs, eps=_norm_eps(ops))
+    if len(ops) == 1:
+        bare = seq[0]
+        if bare == "matmul":
+            return RecognizedOp(kind="matmul", name="matmul", arity=2)
+        if bare in _SINGLE_OPS:
+            weighted = bare in _NORM_OPS and n_inputs >= 2
+            return RecognizedOp(kind="op", name=bare, arity=n_inputs,
+                                weighted=weighted, eps=_norm_eps(ops))
+    return None
+
+
+def plan_from_shapes(
+    rec: RecognizedOp, input_shapes: list[tuple[int, ...]]
+) -> Optional[AuthorPlan]:
+    """Build a dims-bearing :class:`AuthorPlan` from a shape-free
+    :class:`RecognizedOp` + the concrete input shapes (e.g. from example
+    args at ``emit_package`` time). Returns ``None`` if the shapes don't fit
+    the op's contract (wrong rank / mismatched contraction dim)."""
+    s = [tuple(int(d) for d in sh) for sh in input_shapes]
+    if rec.kind == "matmul":
+        if len(s) < 2 or len(s[0]) != 2 or len(s[1]) != 2:
+            return None
+        a, b = s[0], s[1]
+        if a[1] != b[0]:
+            return None
+        return AuthorPlan(kind="matmul", name="matmul", dims=(a[0], a[1], b[1]))
+    if rec.kind == "op":
+        if not s or len(s[0]) != 2:
+            return None
+        return AuthorPlan(kind="op", name=rec.name, dims=s[0],
+                          weighted=rec.weighted, eps=rec.eps)
+    if rec.kind == "chain":
+        if rec.name == "matmul_softmax":
+            if len(s) < 2 or len(s[0]) != 2 or len(s[1]) != 2 \
+                    or s[0][1] != s[1][0]:
+                return None
+            return AuthorPlan(kind="chain", name=rec.name,
+                              dims=(s[0][0], s[0][1], s[1][1]), eps=rec.eps)
+        if rec.name == "matmul_softmax_matmul":
+            if len(s) < 3 or any(len(x) != 2 for x in s[:3]) \
+                    or s[0][1] != s[1][0] or s[1][1] != s[2][0]:
+                return None
+            return AuthorPlan(kind="chain", name=rec.name,
+                              dims=(s[0][0], s[0][1], s[1][1], s[2][1]),
+                              eps=rec.eps)
+        if rec.name == "rmsnorm_matmul":
+            # inputs: x[M,K], gamma[K], W[K,N]
+            if len(s) < 3 or len(s[0]) != 2 or len(s[2]) != 2 \
+                    or s[0][1] != s[2][0]:
+                return None
+            return AuthorPlan(kind="chain", name=rec.name,
+                              dims=(s[0][0], s[0][1], s[2][1]), eps=rec.eps)
+    return None
+
+
 def _norm_eps(ops) -> float:
     """Pull an ``eps`` kwarg/attr off a norm op if present, else default."""
     for op in ops:
@@ -212,6 +321,9 @@ def author_package_from_graph_ir(
 
 __all__ = [
     "AuthorPlan",
+    "RecognizedOp",
     "recognize",
+    "recognize_op",
+    "plan_from_shapes",
     "author_package_from_graph_ir",
 ]

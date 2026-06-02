@@ -86,6 +86,14 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
   (raises otherwise). Locked by `tests/unit/test_apple_jit_emit_package.py`
   (21 tests). The package is no longer just an AOT side artifact — it is a
   selectable execution lane.
+- **Package-lane perf benchmark (PK8f, 2026-06-02):**
+  `benchmarks/apple_gpu/benchmark_package_lane.py` times the package lane vs the
+  live MPS/MSL lane for the same jitted fn (steady-state, fp32, + a one-time
+  `cold_author_ms`). Measured rule: **single matmul → live** (package +1.3–2.8×
+  overhead); **fused `matmul→softmax` → package**, up to ~**14×** faster at
+  256×256×256. Sample at `sample_package_lane_report.json`; findings table in
+  the benchmarks README. This is the decision data behind the `dispatch_via_package`
+  flag.
 - **Committed production packages + manifest rows (PK8c, 2026-06-02):** two
   Tessera-authored `.mtlpackage` fixtures committed under
   `tests/fixtures/apple_gpu/tessera_authored_*` (matmul 8×8×8, fused
@@ -242,8 +250,18 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
    routes `__call__` through a per-shape package + pipeline cache (PK8e)**.
    The full author → recognize → wire → auto-emit → execute arc is closed;
    the package is a selectable execution lane, not just an AOT artifact.
-   **Remaining (genuinely optional):** a benchmark comparing the package lane
-   vs. the live MPS/MSL lane to decide when each wins (perf, not correctness).
+   ~~a benchmark comparing the package lane vs the live MPS/MSL lane~~
+   **done — `benchmarks/apple_gpu/benchmark_package_lane.py` (PK8f)**. Verdict:
+   **single matmul → live wins** (MPS optimal; package adds 1.3–2.8× ML-encoder
+   overhead); **fused chains like `matmul→softmax` → package wins**, ≈**14×
+   faster at 256×256×256** (MPSGraph fuses the whole graph; the live MSL
+   softmax over a materialized score matrix scales poorly). Cold authoring
+   ~11 ms/shape, amortized by the per-shape pipeline cache. The arc is fully
+   closed — correctness *and* a measured lane-selection rule. **Next genuine
+   step (open):** turn that measured rule into an *automatic* heuristic so
+   `dispatch_via_package` becomes a smart default — route fused chains
+   (`kind=="chain"`) through the package, keep single matmul on the live lane —
+   instead of a blanket per-fn opt-in.
 6. Attach benchmark metadata for Apple hot paths such as matmul, matmul
    epilogues, conv2d, decode chain, and packaged kernels.
 

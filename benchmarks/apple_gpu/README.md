@@ -5,9 +5,40 @@ Benchmark drivers live here:
 | Driver | Coverage |
 |---|---|
 | [`benchmark_fusion.py`](benchmark_fusion.py) | Phase 8.4.x MSL fusion sweep — `matmul → softmax`, SwiGLU MLP block. Fused-vs-sequential pairing. |
+| [`benchmark_package_lane.py`](benchmark_package_lane.py) | **PK8e** — `package` lane (`@jit(dispatch_via_package=True)`, MTL4 ML-encoder dispatch of a Tessera-authored `.mtlpackage`) vs `live` lane (MPS/MSL envelope), same jitted fn. Steady-state row pair + `cold_author_ms`. See "Package-lane findings" below. |
 | [`benchmark_encode_session.py`](benchmark_encode_session.py) | R2 command-buffer batching — a dependent bmm chain per-op (one sync/op) vs. batched into one command buffer. |
 | [`benchmark_gumiho.py`](benchmark_gumiho.py) | Gumiho speculative decoding — algorithmic tokens-per-target-pass + resident vs per-op serial draft wall-clock. |
 | [`benchmark_ga_ebm.py`](benchmark_ga_ebm.py) | GA + EBM end-to-end stack walk **plus workload mode**. 17 GA primitives + **9 native EBM primitives** (including `ebm_partition_exact`) + Python-reference comparison rows + **4 workload rows** (GA feature pipeline + EBT-tiny refinement, each in apple_gpu + python_ref variants), plus opt-in `--ebt-sweep`. |
+
+## Package-lane findings (PK8e, 2026-06-02)
+
+`benchmark_package_lane.py` answers "when does the authored-`.mtlpackage`
+execution lane beat the live MPS/MSL lane?" — steady-state (warm), fp32,
+50 reps, Apple Silicon / macOS 26. Ratio = package ÷ live latency (lower =
+package wins):
+
+| op | shape | live ms | package ms | package/live |
+|---|---|--:|--:|--:|
+| matmul | 64×64×64 | 0.27 | 0.38 | 1.43 |
+| matmul | 256×256×256 | 0.33 | 0.93 | 2.81 |
+| matmul_softmax | 8×16×32 | 0.58 | 0.36 | 0.62 |
+| matmul_softmax | 64×64×64 | 1.05 | 0.38 | 0.36 |
+| matmul_softmax | 256×256×256 | 12.76 | 0.93 | **0.07** |
+
+**Decision guidance:**
+- **Single matmul → use the `live` lane.** MPS GEMM is already optimal; the
+  MTL4 ML-encoder adds ~1.3–2.8× per-dispatch overhead with no fusion to win
+  it back.
+- **Fused multi-op chains (e.g. `matmul → softmax`) → use the `package`
+  lane**, increasingly so with size: the MPSGraph package fuses + optimizes
+  the whole graph, while the live MSL softmax over a materialized score matrix
+  scales poorly (≈**14× faster** at 256×256×256).
+- **Cold cost:** authoring + compile + prepare is a one-time ~11 ms per shape
+  (`cold_author_ms`), amortized across repeated same-shape calls via the
+  per-shape pipeline cache. Worth it for hot, fixed-shape inner loops; not for
+  one-shot calls.
+
+(Sample: [`sample_package_lane_report.json`](sample_package_lane_report.json).)
 
 ## Gumiho speculative-decoding benchmark
 

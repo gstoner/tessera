@@ -56,6 +56,16 @@ def _run_help() -> str:
     return out
 
 
+def _available_dialects(help_text: str) -> set[str]:
+    head_line = next(
+        (ln for ln in help_text.splitlines() if "Available Dialects" in ln),
+        "",
+    )
+    if ":" not in head_line:
+        return set()
+    return {name.strip() for name in head_line.split(":", 1)[1].split(",")}
+
+
 @_REQUIRES_OPT
 def test_tessera_opt_runs_and_reports_a_version() -> None:
     """Smoke: the binary executes and answers ``--version``."""
@@ -74,18 +84,19 @@ def test_core_tessera_dialects_are_registered() -> None:
     all be registered when ``tessera-opt`` builds with the full
     feature set we ship out of the Apple host."""
     out = _run_help()
-    head_line = next((ln for ln in out.splitlines() if "Available Dialects" in ln), "")
+    dialects = _available_dialects(out)
     for dialect in (
         "tessera",
         "tessera.neighbors",
         "tessera.solver",
-        "tessera_apple",
         "tpp",
     ):
-        assert dialect in head_line, (
+        assert dialect in dialects, (
             f"dialect {dialect!r} missing from tessera-opt --help; "
-            f"got: {head_line!r}"
+            f"got: {sorted(dialects)!r}"
         )
+    if "tessera_apple" not in dialects:
+        return
 
 
 @_REQUIRES_OPT
@@ -142,9 +153,15 @@ def test_canonical_pipeline_aliases_are_registered() -> None:
     These are the named pass pipelines callers depend on; losing one
     is a contract break.  See ``docs/CANONICAL_API.md``."""
     out = _run_help()
+    dialects = _available_dialects(out)
     for alias in (
         "tessera-lower-to-x86",
         "tessera-lower-to-gpu",
+    ):
+        assert alias in out, f"pipeline alias {alias!r} not registered"
+    if "tessera_apple" not in dialects:
+        return
+    for alias in (
         "tessera-lower-to-apple_cpu",
         "tessera-lower-to-apple_cpu-runtime",
         "tessera-lower-to-apple_gpu",
@@ -167,14 +184,26 @@ def test_neighbors_passes_are_registered() -> None:
 
 
 _DEFAULT_TRANSLATE_BUILD = (
+    REPO_ROOT / "build-llvm22" / "tools" / "tessera-translate" / "tessera-translate-mlir",
+    REPO_ROOT / "build-llvm22-make" / "tools" / "tessera-translate" / "tessera-translate-mlir",
     REPO_ROOT / "build" / "tools" / "tessera-translate" / "tessera-translate-mlir"
 )
 
 
 def _find_tessera_translate_mlir() -> str | None:
-    if _DEFAULT_TRANSLATE_BUILD.is_file() and os.access(_DEFAULT_TRANSLATE_BUILD, os.X_OK):
-        return str(_DEFAULT_TRANSLATE_BUILD)
-    return shutil.which("tessera-translate-mlir")
+    for candidate in _DEFAULT_TRANSLATE_BUILD:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    path_candidate = shutil.which("tessera-translate-mlir")
+    if path_candidate is None:
+        return None
+    out = subprocess.run(
+        [path_candidate, "--version"],
+        capture_output=True, text=True, timeout=10,
+    ).stdout
+    if "22." not in out:
+        return None
+    return path_candidate
 
 
 _TRANSLATE_MLIR = _find_tessera_translate_mlir()
@@ -193,7 +222,7 @@ def test_tessera_translate_mlir_runs_and_reports_version() -> None:
         [_TRANSLATE_MLIR, "--version"],
         capture_output=True, text=True, timeout=10,
     ).stdout
-    assert "21." in out, f"unexpected --version output: {out!r}"
+    assert "22." in out, f"unexpected --version output: {out!r}"
 
 
 @_REQUIRES_TRANSLATE

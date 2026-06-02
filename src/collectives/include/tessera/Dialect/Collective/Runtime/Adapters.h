@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <functional>
+#include <cstring>
 #include <cstddef>
 #include <cstdint>
 #include <string>

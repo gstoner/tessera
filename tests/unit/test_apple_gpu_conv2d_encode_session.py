@@ -33,7 +33,7 @@ import ctypes
 import numpy as np
 import pytest
 
-from tessera._apple_gpu_dispatch import bind_symbol
+from tessera._apple_gpu_dispatch import apple_gpu_skip_reason, bind_symbol
 from tessera.apple_gpu_batched import (
     DeviceTensor,
     batched_session,
@@ -59,6 +59,10 @@ def test_conv2d_dev_f32_enc_symbol_resolves():
         "tessera_apple_gpu_conv2d_dev_f32_enc",
         (ctypes.c_void_p,) * 5 + (ctypes.c_int32,) * 14,
         ctypes.c_int32)
+    if fn is None and not session_available():
+        pytest.skip(
+            "encode-session unavailable: "
+            f"{apple_gpu_skip_reason() or 'required symbols unavailable'}")
     assert fn is not None, (
         "tessera_apple_gpu_conv2d_dev_f32_enc not exported by the "
         "runtime — rebuild TesseraAppleRuntime")

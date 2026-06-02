@@ -492,6 +492,8 @@ def test_p6_linear_bias_act_fuses_to_epilogue(dtype, act):
     # compile-time chain recognition
     expected_kind = "matmul_bias" if act == "none" else f"matmul_bias_{act}"
     assert driver._apple_gpu_chain_kind(f.cpu_plan) == expected_kind
+    if not R.apple_gpu_metal4_caps()["available"]:
+        pytest.skip("Metal 4 unavailable; epilogue numerical contract is hardware-gated")
 
     rng = np.random.default_rng(_seed(dtype, act))
     M, N, K = 64, 96, 128

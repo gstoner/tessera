@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import platform
 import sys
 import time
 from datetime import datetime
@@ -206,6 +207,27 @@ def main() -> int:
     args = ap.parse_args()
 
     if args.ci:
+        if platform.system() != "Darwin":
+            payload = {
+                "schema": "tessera.benchmark.v1",
+                "lane": "apple_cpu_execution_kind",
+                "target": "apple_cpu",
+                "verdict": "skipped_apple_cpu",
+                "reason": (
+                    "apple_cpu Accelerate/BNNS performance gate requires "
+                    "a Darwin host"
+                ),
+                "rows": [],
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+            }
+            out_text = json.dumps(payload, indent=2)
+            if args.output:
+                Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+                Path(args.output).write_text(out_text + "\n", encoding="utf-8")
+                print(f"wrote {args.output} (verdict={payload['verdict']})")
+            else:
+                sys.stdout.write(out_text + "\n")
+            return 0
         # N=256 amortizes Tessera's per-call JIT-bridge overhead
         # (at N=128 the matmul itself is ~10us so per-call overhead
         # dominates; at N=256 the matmul is ~80us and the ratio is

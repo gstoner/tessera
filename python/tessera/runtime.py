@@ -2353,6 +2353,15 @@ def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
             a = np.ascontiguousarray(a, dtype=np.float16)
         if not b.flags.c_contiguous:
             b = np.ascontiguousarray(b, dtype=np.float16)
+        # P7 (2026-06-01): route the fp16 GEMV decode step (M==1) to the
+        # native MPP matmul2d tensor-op — measured 3.2-3.4x faster than
+        # MPS, which has a slow fp16 M==1 path. Strictly size-gated: at
+        # M>=2 / square sizes MPS wins, so only M==1 flips by default.
+        # See docs/apple_gpu_metal4_adoption.md (P7) + benchmarks/apple_gpu/
+        # benchmark_mtl4_matmul_routing.py for the measurement.
+        routed = _mtl4_route_matmul2d_f16(a, b, np)
+        if routed is not None:
+            return routed
         out = np.zeros((a.shape[0], b.shape[1]), dtype=np.float16)
         gemm_f16 = _apple_gpu_mps_matmul_f16()
         if gemm_f16 is not None:
@@ -5281,6 +5290,56 @@ def _mtl4_route_matmul2d_bf16(a: Any, b: Any, np: Any) -> Any:
         return None
     C, ran = apple_gpu_mtl4_matmul2d_bf16(a, b, np)  # f32 output
     return C.astype(bf16) if ran else None
+
+
+# P7 (2026-06-01) — fp16 matmul routing onto the MTL4 tensor-op.
+#
+# Unlike bf16 (where MTL4 beats the MPS *fallback* across the board), fp16
+# has a well-tuned MPS GEMM — MTL4 only clears it in ONE regime: the M==1
+# GEMV decode step, where MPS's fp16 path is slow and MTL4 wins a robust
+# 3.2-3.4x (measured, 3 trials, tight variance — see
+# benchmarks/apple_gpu/benchmark_mtl4_matmul_routing.py). At M>=2 and on
+# square shapes MPS wins (0.7-0.9x), so the default is strictly size-gated
+# to M==1; everything else stays on MPS. ``TESSERA_APPLE_GPU_MTL4_F16``:
+#   unset / "1" / "auto" → route M==1 only (the measured win)   [default]
+#   "all"                → route every fp16 2-D matmul (benchmarking)
+#   "0" / "false"        → never route fp16 (force MPS)
+_MTL4_F16_MODE = os.environ.get("TESSERA_APPLE_GPU_MTL4_F16", "auto").lower()
+
+
+def set_apple_gpu_mtl4_f16_mode(mode: str) -> None:
+    """Set the fp16 MTL4 routing mode: 'auto' (M==1 only), 'all', or 'off'."""
+    global _MTL4_F16_MODE
+    _MTL4_F16_MODE = str(mode).lower()
+
+
+def apple_gpu_mtl4_f16_mode() -> str:
+    return _MTL4_F16_MODE
+
+
+def _mtl4_route_matmul2d_f16(a: Any, b: Any, np: Any) -> Any:
+    """fp16 matmul → native MPP ``matmul2d``, size-gated. Returns an fp16
+    result (f32 accumulator cast back to fp16 to preserve the contract) when
+    the gate fires, else ``None`` to fall back to MPS.
+
+    Default mode ``auto`` routes ONLY the M==1 GEMV decode step (the one
+    regime where MTL4 clears MPS, ~3.3x); ``all`` routes every fp16 2-D
+    matmul (for benchmarking — regresses square shapes); ``off`` disables."""
+    mode = _MTL4_F16_MODE
+    if mode in ("0", "false", "off", "none"):
+        return None
+    if a.dtype != np.float16 or b.dtype != np.float16:
+        return None
+    if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
+        return None
+    # Size gate: default ('auto'/'1') only routes the M==1 decode GEMV.
+    if mode not in ("all",) and a.shape[0] != 1:
+        return None
+    caps = _mtl4_caps_cached()
+    if not (caps.get("command_queue") and caps.get("compiler")):
+        return None
+    C, ran = apple_gpu_mtl4_matmul2d_f16(a, b, np)  # f32 output
+    return C.astype(np.float16) if ran else None
 
 
 def apple_gpu_msl_spec_accept(draft_paths: Any, target_greedy: Any, np: Any):

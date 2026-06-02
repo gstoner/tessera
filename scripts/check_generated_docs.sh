@@ -33,6 +33,7 @@ CHECKS=(
   "e2e_op_coverage|-m tessera.cli.e2e_coverage --check"
   "apple_target_map|-m tessera.cli.apple_target_map --check"
   "support_table|-m tessera.compiler.audit support_table --check"
+  "s_series_status|-m tessera.compiler.s_series_status --check"
 )
 
 rc=0

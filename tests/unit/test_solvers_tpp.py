@@ -65,18 +65,60 @@ def test_type_and_attr_names() -> None:
     assert tpp.TPP_ATTR_NAMES == ("tpp.units", "tpp.bc")
 
 
-def test_status_reports_cxx_present_python_driver_not_wired() -> None:
-    """Honest reporting: dialect + passes + alias + lit fixtures wired,
-    Python embedded-dispatch driver still pending."""
+def test_status_reports_cxx_present_and_embedded_driver_state() -> None:
+    """Dialect + passes + alias + lit fixtures always wired. Glass-jaw
+    #2 (2026-06-01): ``python_driver_wired`` now tracks whether the
+    embedded ``tessera_tpp_capi`` ctypes lib is loadable — True in a
+    full build, False in a Python-only checkout. Either way it must
+    agree with ``embedded_driver_available()``."""
     s = tpp.status()
     assert s.dialect_present is True
     assert s.passes_present is True
     assert s.pipeline_alias_present is True
     assert s.lit_fixtures_runnable is True
-    # Honest: ``solve()`` still subprocess-calls ``tessera-opt``
-    # instead of dispatching via embedded MLIR Python bindings.
-    assert s.python_driver_wired is False
-    assert "tessera-opt" in s.notes
+    assert s.python_driver_wired == tpp.embedded_driver_available()
+    if s.python_driver_wired:
+        assert "in-process" in s.notes.lower()
+    else:
+        assert "not built" in s.notes.lower() or "ninja" in s.notes
+
+
+# ── Embedded-MLIR driver (Glass-jaw #2) ───────────────────────────────
+
+def test_solve_raises_without_embedded_lib_or_runs_in_process() -> None:
+    """``solve()`` either runs in-process (lib built) or raises a clear
+    build hint (lib absent) — never silently subprocesses."""
+    if not tpp.embedded_driver_available():
+        import pytest
+        with pytest.raises(RuntimeError, match="embedded driver unavailable"):
+            tpp.solve("module {}\n")
+        pytest.skip("tessera_tpp_capi not built in this checkout")
+    # Lib present — the canonical pipeline over an empty module returns
+    # a module, in-process (no subprocess).
+    out = tpp.solve("module {}\n")
+    assert "module" in out
+
+
+def test_solve_runs_tpp_space_time_pipeline_in_process() -> None:
+    import pytest
+    if not tpp.embedded_driver_available():
+        pytest.skip("tessera_tpp_capi not built in this checkout")
+    # Default pipeline == tpp-space-time alias.
+    out_default = tpp.solve("module {}\n")
+    out_explicit = tpp.solve(
+        "module {}\n",
+        pipeline=f"builtin.module({tpp.TPP_PIPELINE_ALIAS})")
+    assert "module" in out_default and "module" in out_explicit
+
+
+def test_solve_surfaces_pipeline_errors() -> None:
+    import pytest
+    if not tpp.embedded_driver_available():
+        pytest.skip("tessera_tpp_capi not built in this checkout")
+    # A bogus pipeline name must surface a RuntimeError, not crash.
+    with pytest.raises(RuntimeError):
+        tpp.solve("module {}\n",
+                  pipeline="builtin.module(this-pass-does-not-exist)")
 
 
 def test_pipeline_command_shape() -> None:

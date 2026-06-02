@@ -258,6 +258,33 @@ the matmul on MPS). **P4**: opt-in `MTL4Archive` pipeline persistence
 restarts. The integration review is essentially closed; only minor cleanup
 remains (pool the M2 scan + M3/M5 matmul, reuse the residency-set object).
 
+**P7 — fp16 matmul default routing, size-gated to M==1 (landed; honest
+flip).** Unlike bf16 (P5, where MTL4 beats the MPS *fallback* everywhere),
+fp16 has a well-tuned MPS GEMM. A re-runnable end-to-end benchmark
+(`benchmarks/apple_gpu/benchmark_mtl4_matmul_routing.py`) measured the
+native MPP `matmul2d` fp16 tensor-op vs MPS across decode + square shapes
+(M-series, macOS 26.5, best-of-20):
+
+| shape | MPS | MTL4 | MTL4/MPS |
+|---|---:|---:|---:|
+| **M=1 K=N=4096 (decode GEMV)** | 13.9 ms | 4.3 ms | **3.26×** |
+| M=8 K=N=4096 | 4.8 | 5.3 | 0.90× |
+| M=64 K=N=4096 | 5.1 | 4.8 | 1.07× |
+| 512² | 0.39 | 0.51 | 0.76× |
+| 1024² | 1.32 | 1.63 | 0.81× |
+| 2048² | 7.0 | 11.3 | 0.62× |
+
+MPS wins everywhere **except the M==1 GEMV decode step**, where its fp16
+path is slow and MTL4 wins a robust 3.2–3.4× (3 trials, tight variance).
+Per the lane's own bar ("a kernel must actually clear MPS before the
+default flips"), `_mtl4_route_matmul2d_f16` flips **only M==1** by default
+(`TESSERA_APPLE_GPU_MTL4_F16`: `auto`=M==1 only [default], `all`=route every
+fp16 matmul for benchmarking, `0`=force MPS). Routing every fp16 matmul
+would *regress* square shapes 0.6–0.8×, so the blanket flip is deliberately
+not taken — the honest outcome is the narrow win, not an across-the-board
+claim. Guard: `tests/unit/test_apple_gpu_mtl4_f16_routing.py` (gate logic +
+M==1 numerics).
+
 ## Integration review
 
 A Metal-4-grounded audit of how the whole Apple GPU backend uses the device

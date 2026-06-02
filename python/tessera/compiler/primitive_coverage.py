@@ -954,8 +954,19 @@ _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
     "grad_transform":      "complete",   # per-parameter
     # — Trickier: state interactions / routing / control flow —
     "collective":          "partial",    # batching over a collective is mesh-aware
-    "functional_optimizer_step": "partial",
-    "optimizer":           "partial",
+    # S-series #3 (2026-06-01): promoted to complete. A functional
+    # optimizer step `(params, grads[, state]) -> (new_params[, state])`
+    # batches over a leading vmap axis by co-batching the optimizer
+    # state tree with the parameters: the per-element math (sgd /
+    # momentum / nesterov / adam / adamw / lion) applies to the trailing
+    # (original) axes, and the reduction/matrix variants (lamb's
+    # per-layer trust-ratio norm, muon's Newton–Schulz orthogonalization)
+    # reduce over the trailing axes too — vmap prepends the batch axis
+    # in both cases. Proven in tests/unit/test_optimizer_batching_vmap.py:
+    # elementwise optimizers satisfy vmap(row)==whole-batch; lamb/muon
+    # satisfy vmap(row)==per-row loop (the per-model answer).
+    "functional_optimizer_step": "complete",
+    "optimizer":           "complete",
     "moe":                 "partial",
     "moe_transport":       "partial",
     "state_update":        "partial",    # kv_cache write per batch

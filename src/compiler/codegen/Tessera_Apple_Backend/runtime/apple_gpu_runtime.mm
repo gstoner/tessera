@@ -11213,6 +11213,86 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_author_chain(
   return -1;
 }
 
+// Lane (c) — MSL-source → serialized `.metallib` dynamic-library AOT chain.
+//
+// The parallel AOT lane to MPSGraph packages: instead of an MPSGraph ML
+// package, this serializes Tessera's *MSL-source* custom kernels (rope,
+// flash_attn, gelu, ...) into a reloadable dynamic library, so a host can
+// author once and reload with zero recompilation. Grounded in the SDK
+// headers (Decision #27): compile with `MTLLibraryType.dynamic` + an
+// `installName`, wrap in an `MTLDynamicLibrary`, serialize to disk, reload.
+//
+//   newLibraryWithSource:options:  (libraryType=Dynamic, installName set)
+//     → newDynamicLibrary:         (MTLDevice.h:1228)
+//     → serializeToURL:            (MTLDynamicLibrary.h:77)
+//     → newDynamicLibraryWithURL:  (MTLDevice.h:1238)  [reload]
+//
+// Returns 1 / <=0: -1 OS/device unavailable, -2 bad args, -3 source compile
+// failed, -4 dynamic-library create failed, -5 serialize failed.
+extern "C" int32_t tessera_apple_gpu_dylib_serialize(
+    const char *msl_source, const char *install_name,
+    const char *out_path) {
+  if (!msl_source || !install_name || !out_path) return -2;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return -1;
+  if (@available(macOS 11.0, iOS 14.0, *)) {
+    @autoreleasepool {
+      MTLCompileOptions *opts = [[MTLCompileOptions alloc] init];
+      opts.libraryType = MTLLibraryTypeDynamic;
+      opts.installName = @(install_name);
+      NSError *err = nil;
+      id<MTLLibrary> lib = [ctx.device newLibraryWithSource:@(msl_source)
+                                                    options:opts
+                                                      error:&err];
+      if (!lib) {
+        fprintf(stderr, "[tessera_apple_gpu_dylib] source compile failed: %s\n",
+                err ? [[err localizedDescription] UTF8String] : "<nil>");
+        return -3;
+      }
+      id<MTLDynamicLibrary> dylib = [ctx.device newDynamicLibrary:lib
+                                                            error:&err];
+      if (!dylib) {
+        fprintf(stderr, "[tessera_apple_gpu_dylib] dynamic-library create "
+                "failed: %s\n",
+                err ? [[err localizedDescription] UTF8String] : "<nil>");
+        return -4;
+      }
+      NSURL *url = [NSURL fileURLWithPath:@(out_path)];
+      if (![dylib serializeToURL:url error:&err]) {
+        fprintf(stderr, "[tessera_apple_gpu_dylib] serialize failed: %s\n",
+                err ? [[err localizedDescription] UTF8String] : "<nil>");
+        return -5;
+      }
+      return 1;
+    }
+  }
+  return -1;
+}
+
+// Lane (c) — reload a serialized `.metallib` dynamic library. Returns 1 if it
+// loads (with a non-empty install name), 0 otherwise. Proves the round-trip.
+extern "C" int32_t tessera_apple_gpu_dylib_load(const char *path) {
+  if (!path) return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  if (@available(macOS 11.0, iOS 14.0, *)) {
+    @autoreleasepool {
+      NSURL *url = [NSURL fileURLWithPath:@(path)];
+      NSError *err = nil;
+      id<MTLDynamicLibrary> dylib = [ctx.device newDynamicLibraryWithURL:url
+                                                                  error:&err];
+      if (!dylib) {
+        fprintf(stderr, "[tessera_apple_gpu_dylib] reload failed for '%s': "
+                "%s\n", path,
+                err ? [[err localizedDescription] UTF8String] : "<nil>");
+        return 0;
+      }
+      return (dylib.installName && dylib.installName.length > 0) ? 1 : 0;
+    }
+  }
+  return 0;
+}
+
 // Number of distinct (shape-class, opcode, dtype, shape) MPSGraphs cached.
 // Used by tests to verify graph reuse across repeated dispatches.
 extern "C" int32_t tessera_apple_gpu_mpsgraph_cache_size(void) {

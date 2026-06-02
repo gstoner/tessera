@@ -369,7 +369,18 @@ class JitFn:
             return None
 
         if example_args is None:
-            # Static-IR fallback — only fires when dims are literal in the IR.
+            # Compile-time shape specialization: when the function's arg
+            # annotations are static integers (``Tensor[8, 6]`` → arg
+            # ``dim_names`` are all-numeric), derive shapes from them and
+            # author with no example tensors. This is what lets
+            # ``@jit(target="apple_gpu", emit_package=True)`` fire at compile.
+            static_shapes = self._static_input_shapes()
+            if static_shapes is not None:
+                from .apple_package_author import plan_from_shapes
+                plan = plan_from_shapes(rec, static_shapes)
+                if plan is not None:
+                    return self._author_plan(plan, out_path)
+            # Last resort — dims baked into the IR operand types (rare).
             from .apple_package_author import recognize
             static_plan = recognize(self.graph_ir)
             if static_plan is None:
@@ -393,6 +404,21 @@ class JitFn:
         if plan is None:
             return None
         return self._author_plan(plan, out_path)
+
+    def _static_input_shapes(self) -> Optional[List[Tuple[int, ...]]]:
+        """Concrete input shapes from the function's arg annotations, when
+        they are all static integers (``Tensor[8, 6]`` → ``dim_names`` are
+        all-numeric). Returns ``None`` if any arg is symbolic (``"M"``) — the
+        common case — so the caller knows it can't author without examples."""
+        if not self.graph_ir.functions:
+            return None
+        shapes: List[Tuple[int, ...]] = []
+        for arg in self.graph_ir.functions[0].args:
+            dim_names = getattr(arg, "dim_names", None)
+            if not dim_names or not all(str(d).isdigit() for d in dim_names):
+                return None
+            shapes.append(tuple(int(d) for d in dim_names))
+        return shapes or None
 
     def _author_plan(self, plan: Any, out_path: Optional[Any]) -> Optional[str]:
         """Resolve a target path (temp cache when ``out_path`` is None) and
@@ -1039,6 +1065,7 @@ def jit(
     native_required: bool = False,
     auto_batch: bool = False,
     max_ops_per_cb: Optional[int] = None,
+    emit_package: "bool | str" = False,
 ) -> Any:
     """
     Tessera JIT decorator — drives the compiler pipeline.
@@ -1316,6 +1343,26 @@ def jit(
             from .. import apple_gpu_ops as _agpu
             jitfn._fn = _agpu.auto_batch(
                 jitfn._fn, max_ops_per_cb=max_ops_per_cb)
+
+        # PK8d (2026-06-02) — compile-time auto-emit. When the caller opts in
+        # with ``emit_package=True`` (or a path) AND the region is recognized
+        # AND the arg annotations are static integers, author the
+        # `.mtlpackage` now — no manual ``emit_package(example_args=...)``
+        # call. Misuse guard mirrors ``max_ops_per_cb``. Failure to author
+        # (symbolic shapes / runtime unavailable) is silent: the attribute is
+        # simply None — auto-emit is a best-effort AOT convenience, never a
+        # hard compile error.
+        if emit_package:
+            if target_kind != "apple_gpu":
+                raise TesseraJitError(
+                    "@jit(emit_package=...) is only meaningful with "
+                    f"target='apple_gpu'; got target={target!r} "
+                    f"(normalized={target_kind!r}).")
+            out = emit_package if isinstance(emit_package, str) else None
+            try:
+                jitfn.emit_package(out)
+            except Exception:
+                pass
 
         return jitfn
 

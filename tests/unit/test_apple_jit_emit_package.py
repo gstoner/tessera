@@ -73,10 +73,29 @@ def test_jit_non_apple_gpu_target_has_no_recognized_package():
     assert _mm_cpu.recognized_package is None
 
 
-def test_emit_package_without_examples_or_static_dims_returns_none():
-    """Symbolic-shape IR (the common case) can't be authored without concrete
-    example shapes — emit returns None rather than guessing."""
-    assert _mm.emit_package() is None
+def test_emit_package_without_examples_symbolic_returns_none():
+    """A symbolic-shape function can't be authored without concrete example
+    shapes — emit returns None rather than guessing. (Defined inside the test
+    so the symbolic Tensor types are bound to local names — the string dim
+    labels aren't seen as forward refs by the linter.)"""
+    MK = Tensor["M", "K"]
+    KN = Tensor["K", "N"]
+    MN = Tensor["M", "N"]
+
+    @tessera.jit(target="apple_gpu")
+    def _sym(A: MK, B: KN) -> MN:
+        return tessera.ops.matmul(A, B)
+
+    assert _sym.recognized_package is not None  # op recognized
+    assert _sym._static_input_shapes() is None  # but no concrete shapes
+    assert _sym.emit_package() is None  # so no authoring without examples
+
+
+def test_static_input_shapes_from_integer_annotations():
+    """Integer annotations (``Tensor[8, 6]``) yield concrete shapes via arg
+    dim_names — the source for compile-time auto-emit. Pure / no GPU."""
+    assert _mm._static_input_shapes() == [(8, 6), (6, 5)]
+    assert _silu._static_input_shapes() == [(4, 8)]
 
 
 # ── emit + dispatch from @jit (gated on packaged ML) ─────────────────────
@@ -147,3 +166,72 @@ def test_jit_emit_rejects_non_fp32_examples(tmp_path):
     a = np.ones((8, 6), dtype=np.float64)
     b = np.ones((6, 5), dtype=np.float64)
     assert _mm.emit_package(tmp_path / "x.mtlpackage", example_args=[a, b]) is None
+
+
+def test_emit_package_from_static_annotations_no_examples(tmp_path):
+    """PK8d — a statically-annotated fn authors with NO example args, deriving
+    shapes from the integer annotations (Tensor[8,6])."""
+    _require_packaged_ml()
+    pkg = _mm.emit_package(tmp_path / "auto.mtlpackage")
+    assert pkg is not None
+    rng = np.random.default_rng(60)
+    a = rng.standard_normal((8, 6)).astype(np.float32)
+    b = rng.standard_normal((6, 5)).astype(np.float32)
+    out = _dispatch(pkg, [a, b], (8, 5))
+    assert np.allclose(out, a @ b, rtol=1e-4, atol=2e-4)
+
+
+# ── compile-time auto-emit (@jit(emit_package=...)) ──────────────────────
+
+
+def test_jit_emit_package_flag_auto_emits_at_compile():
+    """PK8d — ``@jit(target="apple_gpu", emit_package=True)`` authors the
+    package at decoration when annotations are static; no manual call."""
+    _require_packaged_ml()
+
+    @tessera.jit(target="apple_gpu", emit_package=True)
+    def _auto(A: Tensor[8, 6], B: Tensor[6, 5]) -> Tensor[8, 5]:
+        return tessera.ops.matmul(A, B)
+
+    assert _auto._emitted_package_path is not None
+    rng = np.random.default_rng(61)
+    a = rng.standard_normal((8, 6)).astype(np.float32)
+    b = rng.standard_normal((6, 5)).astype(np.float32)
+    out = _dispatch(_auto._emitted_package_path, [a, b], (8, 5))
+    assert np.allclose(out, a @ b, rtol=1e-4, atol=2e-4)
+
+
+def test_jit_emit_package_flag_to_explicit_path(tmp_path):
+    """``emit_package="<path>"`` authors to that path at compile."""
+    _require_packaged_ml()
+    target = tmp_path / "explicit.mtlpackage"
+
+    @tessera.jit(target="apple_gpu", emit_package=str(target))
+    def _autop(A: Tensor[4, 6], B: Tensor[6, 5]) -> Tensor[4, 5]:
+        return tessera.ops.softmax(tessera.ops.matmul(A, B))
+
+    assert _autop._emitted_package_path == str(target)
+    assert target.is_dir()
+
+
+def test_jit_emit_package_flag_rejects_non_apple_gpu():
+    """The flag is apple_gpu-only — a CPU target raises at decoration."""
+    from tessera.compiler.jit import TesseraJitError
+    with pytest.raises(TesseraJitError):
+        @tessera.jit(target="apple_cpu", emit_package=True)
+        def _bad(A: Tensor[8, 6], B: Tensor[6, 5]) -> Tensor[8, 5]:
+            return tessera.ops.matmul(A, B)
+
+
+def test_jit_emit_package_flag_symbolic_is_silent_noop():
+    """emit_package=True on a symbolic fn doesn't error — it just leaves the
+    emitted path None (best-effort AOT convenience). Pure / no GPU."""
+    MK = Tensor["M", "K"]
+    KN = Tensor["K", "N"]
+    MN = Tensor["M", "N"]
+
+    @tessera.jit(target="apple_gpu", emit_package=True)
+    def _sym(A: MK, B: KN) -> MN:
+        return tessera.ops.matmul(A, B)
+
+    assert _sym._emitted_package_path is None

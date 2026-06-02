@@ -58,7 +58,22 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
   loads + dispatches through PK1-PK7 numpy-correct. Recognition is device-free
   (runs on any host); only `emit_package` touches the GPU, and only when
   called — no surprise authoring on decoration. Locked by
-  `tests/unit/test_apple_jit_emit_package.py` (9 tests).
+  `tests/unit/test_apple_jit_emit_package.py` (15 tests).
+- **Compile-time auto-emit (PK8d, 2026-06-02):** `@jit(target="apple_gpu",
+  emit_package=True | "<path>")` authors the package *at decoration* — no
+  manual call — when the arg annotations are static integers (`Tensor[8, 6]` →
+  `dim_names` all-numeric, read by `JitFn._static_input_shapes()`). Opt-in;
+  symbolic-shape fns are a silent no-op (best-effort AOT, never a compile
+  error); apple_gpu-only (raises otherwise). `emit_package()` (no examples)
+  also uses this static-annotation path.
+- **MSL-source dynamic-library AOT (Lane c, 2026-06-02):** the parallel AOT
+  lane to MPSGraph packages — serialize Tessera's *MSL-source* custom kernels
+  into a reloadable `.metallib` dynamic library. `apple_dylib.serialize_msl_dylib`
+  / `load_dylib` over C ABI `tessera_apple_gpu_dylib_serialize` / `_load`,
+  grounded in the SDK headers: `newLibraryWithSource:` (libraryType=Dynamic +
+  installName) → `newDynamicLibrary:` → `serializeToURL:` →
+  `newDynamicLibraryWithURL:` (reload). Round-trips a `[[visible]]`-function
+  library to disk + back. Locked by `tests/unit/test_apple_dylib.py` (5 tests).
 - **Committed production packages + manifest rows (PK8c, 2026-06-02):** two
   Tessera-authored `.mtlpackage` fixtures committed under
   `tests/fixtures/apple_gpu/tessera_authored_*` (matmul 8×8×8, fused
@@ -207,12 +222,14 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
    + `status="packaged"` row~~ **done — 2 Tessera-authored fixtures +
    `PACKAGED_PRODUCTION_KERNELS` rows (PK8c)**. ~~wire the recognizer into the
    actual `@jit` compile path~~ **done — `JitFn.recognized_package` +
-   `emit_package(example_args=...)` (PK8a wiring)**. **Remaining (open):**
-   (c) the parallel MSL-source dynamic-library AOT chain (`newLibraryWithSource:`
-   → `newDynamicLibrary:` → `serializeToURL:` → `newDynamicLibraryWithURL:`);
-   and an *automatic* emit during compile (today `emit_package` is explicit /
-   needs example shapes — a compile-time shape-specialization pass would let it
-   fire without a manual call).
+   `emit_package(example_args=...)` (PK8a wiring)**. ~~(c) MSL-source
+   dynamic-library AOT chain~~ **done — `apple_dylib` serialize/reload (Lane c)**.
+   ~~automatic emit during compile~~ **done — `@jit(emit_package=True)` +
+   static-annotation shape specialization (PK8d)**. **Remaining (open):** only
+   a runtime that *dispatches* an authored package as the live execution path
+   (today the package is emitted/cached as an AOT artifact; `@jit.__call__`
+   still runs the MPS/MSL envelope) — a deliberate separation, since swapping
+   execution to the package needs a per-shape package cache + dispatch routing.
 6. Attach benchmark metadata for Apple hot paths such as matmul, matmul
    epilogues, conv2d, decode chain, and packaged kernels.
 

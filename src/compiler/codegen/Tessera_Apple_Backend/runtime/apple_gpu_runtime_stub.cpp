@@ -1546,6 +1546,11 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_author_chain(const char *,
                                                         int32_t, float) {
   return -1;
 }
+extern "C" int32_t tessera_apple_gpu_dylib_serialize(const char *, const char *,
+                                                     const char *) {
+  return -1;
+}
+extern "C" int32_t tessera_apple_gpu_dylib_load(const char *) { return 0; }
 extern "C" int32_t tessera_apple_gpu_mlpkg_first_function_name(const char *,
                                                                char *,
                                                                int32_t) {

@@ -467,14 +467,21 @@ def _proof_status_from_target_legal(statuses: list[str]) -> str:
 
 
 def _proof_status_from_backend_compile(statuses: list[str]) -> str:
-    """fused/reference/compileable count as real compile paths; artifact_only
-    is the audit's 'IR emits but no link/launch' state."""
+    """fused/reference/compileable/hardware_verified/packaged count as real
+    compile paths; artifact_only is the audit's 'IR emits but no link/launch'
+    state.
+
+    Project 3 (2026-06-01): ``hardware_verified`` is the top rung
+    (fused + numerical-proof fixture), and ``packaged`` is the PK5
+    ``.mtlpackage`` lane — both ship executable kernels and so count
+    as ``complete`` in this column."""
     if any(s == "missing" for s in statuses):
         return PROOF_MISSING
     if any(s == "planned" for s in statuses):
         return PROOF_PLANNED
     # All entries report a non-planned status. The weakest one wins.
-    if all(s in ("fused", "reference", "compileable") for s in statuses):
+    if all(s in ("fused", "reference", "compileable",
+                  "hardware_verified", "packaged") for s in statuses):
         return PROOF_COMPLETE
     if any(s == "artifact_only" for s in statuses):
         return PROOF_ARTIFACT_ONLY

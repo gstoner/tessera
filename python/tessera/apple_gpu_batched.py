@@ -78,6 +78,8 @@ _ts_dev_upload = None
 _ts_dev_download = None
 _ts_dev_free = None
 _ts_dev_nbytes = None
+# Project 5 (2026-06-01) — conv2d encode-session ABI.
+_conv2d_enc = None
 
 
 def _bind_session_symbols() -> bool:
@@ -87,6 +89,7 @@ def _bind_session_symbols() -> bool:
     global _ts_enc_begin, _ts_enc_commit_wait, _bmm_enc, _layer_norm_enc
     global _rmsnorm_enc, _softmax_enc, _rope_enc, _unary_enc
     global _flash_attn_enc, _session_commit_count
+    global _conv2d_enc
     global _bmm_enc_f16, _layer_norm_enc_f16, _rmsnorm_enc_f16
     global _softmax_enc_f16, _rope_enc_f16, _unary_enc_f16
     global _flash_attn_enc_f16
@@ -246,6 +249,20 @@ def _bind_session_symbols() -> bool:
         "ts_dev_free", (ctypes.c_void_p,), None)
     _ts_dev_nbytes = bind_symbol(
         "ts_dev_nbytes", (ctypes.c_void_p,), ctypes.c_int64)
+    # Project 5 (2026-06-01) — conv2d encode-session. Signature:
+    # (TsEncodeSession*, X*, W*, bias*, O*, N, H, W, Cin, Cout, kH,
+    # kW, strideH, strideW, padH, padW, dilationH, dilationW, groups)
+    # → int32. bias may be NULL (pass 0 / None).
+    _conv2d_enc = bind_symbol(
+        "tessera_apple_gpu_conv2d_dev_f32_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32),
+        ctypes.c_int32)
     return all(s is not None for s in (
         _ts_enc_begin, _ts_enc_commit_wait, _bmm_enc, _layer_norm_enc,
         _rmsnorm_enc, _softmax_enc, _rope_enc, _unary_enc,
@@ -254,7 +271,8 @@ def _bind_session_symbols() -> bool:
         _softmax_enc_f16, _rope_enc_f16, _unary_enc_f16,
         _flash_attn_enc_f16,
         _session_commit_count, _ts_dev_alloc,
-        _ts_dev_upload, _ts_dev_download, _ts_dev_free, _ts_dev_nbytes))
+        _ts_dev_upload, _ts_dev_download, _ts_dev_free, _ts_dev_nbytes,
+        _conv2d_enc))
 
 
 def session_available() -> bool:
@@ -584,6 +602,89 @@ def gelu_enc(session: int, X: DeviceTensor, *, n: int) -> DeviceTensor:
     command buffer. Routes through the existing unary encode helper
     with op-code 5 (the tanh approximation)."""
     return _unary_enc_call(session, X, op_code=5, n=n)
+
+
+def _conv2d_out_dim(in_dim: int, k: int, stride: int, pad: int,
+                     dilation: int) -> int:
+    """Mirror the runtime's ``conv2d_out_dim`` so Python can size the
+    output DeviceTensor correctly before the encode call."""
+    eff = dilation * (k - 1) + 1
+    if in_dim + 2 * pad < eff:
+        return 0
+    return (in_dim + 2 * pad - eff) // stride + 1
+
+
+def conv2d_enc(session: int, X: DeviceTensor, Wt: DeviceTensor,
+                bias: DeviceTensor | None, *,
+                N: int, H: int, W: int, Cin: int, Cout: int,
+                kH: int, kW: int, strideH: int = 1, strideW: int = 1,
+                padH: int = 0, padW: int = 0,
+                dilationH: int = 1, dilationW: int = 1,
+                groups: int = 1) -> DeviceTensor:
+    """Project 5 (2026-06-01) — encode an NHWC f32 conv2d into
+    ``session``'s command buffer. Mirrors the runtime's
+    ``tessera_apple_gpu_conv2d_dev_f32_enc`` ABI; the dispatch is an
+    MPSGraph ``convolution2DWithSourceTensor:`` node appended to the
+    cb, so any encode-session chain can include conv2d ops on the
+    same command buffer as norm / matmul / softmax / flash_attn.
+
+    Shapes (all NHWC / HWIO row-major, f32):
+
+    * ``X`` — ``(N, H, W, Cin)``, ``N*H*W*Cin*4`` bytes
+    * ``Wt`` — ``(kH, kW, Cin/groups, Cout)``, ``kH*kW*(Cin/groups)*Cout*4`` bytes
+    * ``bias`` — ``(Cout,)``, ``Cout*4`` bytes, or ``None`` for no bias
+    * output — ``(N, outH, outW, Cout)`` where
+      ``outH = conv2d_out_dim(H, kH, strideH, padH, dilationH)`` etc.
+
+    Returns the freshly allocated output DeviceTensor.
+    """
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    if groups <= 0 or Cin % groups or Cout % groups:
+        raise ValueError(
+            f"conv2d_enc: groups={groups} must evenly divide "
+            f"Cin={Cin} and Cout={Cout}")
+    outH = _conv2d_out_dim(H, kH, strideH, padH, dilationH)
+    outW = _conv2d_out_dim(W, kW, strideW, padW, dilationW)
+    out = device_empty(N * outH * outW * Cout * 4)  # f32 = 4 bytes/elem
+    bias_handle = ctypes.c_void_p(bias.handle) if bias is not None \
+        else ctypes.c_void_p(0)
+    rc = _conv2d_enc(ctypes.c_void_p(session),
+                      ctypes.c_void_p(X.handle),
+                      ctypes.c_void_p(Wt.handle),
+                      bias_handle,
+                      ctypes.c_void_p(out.handle),
+                      ctypes.c_int32(N), ctypes.c_int32(H),
+                      ctypes.c_int32(W), ctypes.c_int32(Cin),
+                      ctypes.c_int32(Cout), ctypes.c_int32(kH),
+                      ctypes.c_int32(kW), ctypes.c_int32(strideH),
+                      ctypes.c_int32(strideW), ctypes.c_int32(padH),
+                      ctypes.c_int32(padW), ctypes.c_int32(dilationH),
+                      ctypes.c_int32(dilationW), ctypes.c_int32(groups))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"conv2d_enc returned {rc}")
+    return out
+
+
+def conv2d_enc_no_bias(session: int, X: DeviceTensor, Wt: DeviceTensor,
+                        *, N: int, H: int, W: int, Cin: int, Cout: int,
+                        kH: int, kW: int, strideH: int = 1, strideW: int = 1,
+                        padH: int = 0, padW: int = 0,
+                        dilationH: int = 1, dilationW: int = 1,
+                        groups: int = 1) -> DeviceTensor:
+    """Registry-friendly conv2d wrapper — same as :func:`conv2d_enc`
+    with bias hard-wired to ``None``. The encode-registry tracks
+    DeviceTensor args by positional index; an optional ``bias``
+    parameter would break that contract. Callers that want bias
+    invoke :func:`conv2d_enc` directly (outside the registered
+    chain-planning surface)."""
+    return conv2d_enc(session, X, Wt, None,
+                       N=N, H=H, W=W, Cin=Cin, Cout=Cout, kH=kH, kW=kW,
+                       strideH=strideH, strideW=strideW,
+                       padH=padH, padW=padW,
+                       dilationH=dilationH, dilationW=dilationW,
+                       groups=groups)
 
 
 # ---------------------------------------------------------------------

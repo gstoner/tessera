@@ -46,6 +46,7 @@ from .apple_gpu_batched import (
     bmm_enc,
     bmm_enc_bf16,
     bmm_enc_f16,
+    conv2d_enc_no_bias,
     device_tensor,
     flash_attn_enc,
     flash_attn_enc_bf16,
@@ -115,6 +116,12 @@ _REGISTRY_ENTRIES: tuple[EncodeOpSpec, ...] = (
     EncodeOpSpec("gelu", "f32", gelu_enc, input_tensor_args=(0,)),
     EncodeOpSpec("flash_attn", "f32", flash_attn_enc,
                   input_tensor_args=(0, 1, 2)),
+    # Project 5 (2026-06-01) — conv2d encode-session integration.
+    # Registry surface omits the optional bias parameter so the
+    # ``input_tensor_args`` positional contract holds. Callers that
+    # need bias use :func:`apple_gpu_batched.conv2d_enc` directly.
+    EncodeOpSpec("conv2d", "f32", conv2d_enc_no_bias,
+                  input_tensor_args=(0, 1)),
     # f16 ops
     EncodeOpSpec("bmm", "f16", bmm_enc_f16, input_tensor_args=(0, 1)),
     EncodeOpSpec("layer_norm", "f16", layer_norm_enc_f16,
@@ -414,6 +421,32 @@ def _exec_single_segment(seg: ChainSegment,
 # Convenience: end-to-end plan + execute.
 # ---------------------------------------------------------------------
 
+def precompile_chain(trace: list[OpRecord]) -> int:
+    """Phase 5c (2026-06-01) — warm the MPSGraph cache for every
+    (op, dtype, shape) in the trace by running it once with
+    ``max_ops_per_cb=1``. Per-op cbs commit individually so the
+    first-encounter MPSGraph compile cost amortizes across many
+    small command buffers instead of stacking up in one big cb
+    (which is where the shape × op-count cliff hits).
+
+    After precompile, subsequent production runs at the default
+    ``DEFAULT_OPS_PER_CB`` budget hit the warm MPSGraph cache and
+    run fast.
+
+    Returns the number of ops actually executed (= length of
+    encode-eligible subset of the trace). Resulting DeviceTensors
+    are freed immediately — caller doesn't need them.
+    """
+    results = execute_chain(plan_chain(trace, max_ops_per_cb=1))
+    # Free the warmup outputs — caller doesn't want them.
+    freed = 0
+    for r in results:
+        if r is not None:
+            r.free()
+            freed += 1
+    return freed
+
+
 def run_trace(
     trace: list[OpRecord],
     *,
@@ -437,5 +470,6 @@ __all__ = [
     "execute_chain",
     "is_encode_eligible",
     "plan_chain",
+    "precompile_chain",
     "run_trace",
 ]

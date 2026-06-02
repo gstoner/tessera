@@ -460,65 +460,96 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "MPSMatrixMultiplication + bf16 conversion path",
     },
+    # Project 3 (2026-06-01) — 8 encode-eligible ops promoted to
+    # ``hardware_verified``. Each carries:
+    #   * runtime_symbol = the per-op encode-session C ABI symbol
+    #     (the actual dispatch entry point, not the legacy MPS one)
+    #   * shape_envelope = free-form documentation of the validated
+    #     shape range
+    # ``execute_compare_fixture`` is attached at construction time
+    # from ``_NUMERICAL_FIXTURES`` BEFORE the BackendKernelEntry
+    # validator runs (see ``manifest_for`` Apple GPU branch).
     "softmax": {
-        "status": _FUSED_KERNEL_STATUS,
+        "status": _HARDWARE_VERIFIED_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "Custom MSL softmax kernel (Phase 8.4.2)",
+        "runtime_symbol": "tessera_apple_gpu_softmax_dev_f32_enc",
+        "shape_envelope": "rows*cols, no per-row limit (MPSGraph rowop)",
     },
     "softmax_safe": {
-        "status": _FUSED_KERNEL_STATUS,
+        "status": _HARDWARE_VERIFIED_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "Aliases softmax MSL kernel",
+        "runtime_symbol": "tessera_apple_gpu_softmax_dev_f32_enc",
+        "shape_envelope": "rows*cols, no per-row limit (MPSGraph rowop)",
     },
     "gelu": {
-        "status": _FUSED_KERNEL_STATUS,
+        "status": _HARDWARE_VERIFIED_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
-        "notes": "Custom MSL gelu (Phase 8.4.2)",
+        "notes": (
+            "Custom MSL gelu (Phase 8.4.2); the encode-session path "
+            "dispatches via the unary opcode router (op_code=5, "
+            "tanh approximation)."
+        ),
+        "runtime_symbol": "tessera_apple_gpu_unary_dev_f32_enc",
+        "shape_envelope": "n elements, no limit (elementwise unary)",
     },
     "rope": {
-        "status": _FUSED_KERNEL_STATUS,
+        "status": _HARDWARE_VERIFIED_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "Custom MSL rope (Phase 8.4.0)",
+        "runtime_symbol": "tessera_apple_gpu_rope_dev_f32_enc",
+        "shape_envelope": "M*K, K must be even (rope dim-pair structure)",
     },
     "rmsnorm": {
-        "status": _FUSED_KERNEL_STATUS,
+        "status": _HARDWARE_VERIFIED_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": (
             "MSL rmsnorm + Phase 8.4.7 matmul→rmsnorm fusion. Phase 3b "
             "(2026-06-01) adds f16/bf16 via MPSGraph rowop encode-session"
         ),
+        "runtime_symbol": "tessera_apple_gpu_rmsnorm_dev_f32_enc",
+        "shape_envelope": "rows*cols, no per-row limit (MPSGraph rowop)",
     },
     "flash_attn": {
-        "status": _FUSED_KERNEL_STATUS,
+        "status": _HARDWARE_VERIFIED_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "Online-softmax MSL kernel; head_dim ≤ 256 (Phase 8.4.1)",
+        "runtime_symbol": "tessera_apple_gpu_flash_attn_dev_f32_enc",
+        "shape_envelope": "head_dim <= 256 (MSL stack array, Phase 8.4.1)",
     },
     # Phase 2.1c + 3b (2026-06-01) — encode-session ops with full dtype
     # coverage. layer_norm/silu/bmm landed as part of the single-cb
     # decode-chain work; all 8 encode-eligible ops cover {f32, f16, bf16}.
     "layer_norm": {
-        "status": _FUSED_KERNEL_STATUS,
+        "status": _HARDWARE_VERIFIED_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": (
             "MPSGraph rowop encode-session (encode_rowop_dev kind=0). "
             "Available in {f32, f16, bf16} via Project-3 + Phase 3b."
         ),
+        "runtime_symbol": "tessera_apple_gpu_layer_norm_dev_f32_enc",
+        "shape_envelope": "rows*cols, no per-row limit (MPSGraph rowop)",
     },
     "silu": {
-        "status": _FUSED_KERNEL_STATUS,
+        "status": _HARDWARE_VERIFIED_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": (
             "MPSGraph unary node op=4 (silu = x * sigmoid(x)). "
             "Encode-session reachable in {f32, f16, bf16}."
         ),
+        "runtime_symbol": "tessera_apple_gpu_unary_dev_f32_enc",
+        "shape_envelope": "n elements, no limit (elementwise unary)",
     },
     "bmm": {
-        "status": _FUSED_KERNEL_STATUS,
+        "status": _HARDWARE_VERIFIED_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": (
             "MPSGraph batched matmul (encode_bmm_dev). Honors batch > 1 "
             "and b_broadcast for K/V reuse across heads in attention."
         ),
+        "runtime_symbol": "tessera_apple_gpu_bmm_dev_f32_enc",
+        "shape_envelope": "batch*M*N*K (MPSGraph batched matmul)",
     },
     # Audit follow-up (2026-05-31): these three ops are dispatched by the
     # Apple GPU runtime envelope (driver._APPLE_GPU_{MPS,MSL,MPSGRAPH}_OPS
@@ -530,11 +561,19 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "notes": "MPSGraph relu node (apple_gpu_runtime.mm MPSGraph lane)",
     },
     "conv2d": {
-        "status": _FUSED_KERNEL_STATUS,
+        "status": _HARDWARE_VERIFIED_STATUS,
         "dtypes": ("fp32",),
         "notes": (
             "Native multi-tile MSL convolution2d via MPP cooperative op "
-            "(landed 2026-05-29; f32 only in v1)"
+            "(landed 2026-05-29; f32 only in v1). Project 5 (2026-06-01) "
+            "added the encode-session lane via "
+            "`tessera_apple_gpu_conv2d_dev_f32_enc` so conv2d shares a "
+            "command buffer with the rest of an @auto_batch chain."
+        ),
+        "runtime_symbol": "tessera_apple_gpu_conv2d_dev_f32_enc",
+        "shape_envelope": (
+            "NHWC source + HWIO weights; bias optional; honors stride/"
+            "pad/dilation/groups (depthwise covered)"
         ),
     },
     "kv_cache_read": {
@@ -1722,12 +1761,28 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # Apple GPU (shipped MSL kernels)
     apple_gpu = _APPLE_GPU_KERNELS.get(op_name)
     if apple_gpu is not None:
+        # Project 3 (2026-06-01) — when an op is promoted to
+        # ``hardware_verified``, both ``runtime_symbol`` and
+        # ``execute_compare_fixture`` are required at construction.
+        # Pull both from the source-of-truth tables BEFORE building
+        # the entry so the validator sees a complete contract.
+        _ag_status = str(apple_gpu["status"])
+        _ag_runtime_symbol: Optional_str = apple_gpu.get(
+            "runtime_symbol")  # type: ignore[assignment]
+        _ag_shape_envelope: Optional_str = apple_gpu.get(
+            "shape_envelope")  # type: ignore[assignment]
+        _ag_fixture: Optional_str = (
+            _NUMERICAL_FIXTURES.get((op_name, "apple_gpu"))
+            if _ag_status == _HARDWARE_VERIFIED_STATUS else None)
         entries.append(BackendKernelEntry(
             target="apple_gpu",
-            status=str(apple_gpu["status"]),
+            status=_ag_status,
             dtypes=tuple(apple_gpu["dtypes"]),
             feature_flags=("metal", "mps", "msl"),
             notes=str(apple_gpu.get("notes", "")),
+            runtime_symbol=_ag_runtime_symbol,
+            shape_envelope=_ag_shape_envelope,
+            execute_compare_fixture=_ag_fixture,
         ))
     else:
         cap = _capability_status("apple_gpu", op_name)

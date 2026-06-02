@@ -14421,6 +14421,115 @@ static bool mpsg_run_conv2d(MetalDeviceContext &ctx, const void *X,
   }
 }
 
+// Project 5 (2026-06-01) — device-resident encode-session conv2d. Mirrors
+// ``mpsg_run_conv2d`` but takes already-device-resident ``MTLBuffer``s
+// and uses ``encodeToCommandBuffer:`` so the dispatch appends to the
+// session's command buffer instead of running its own command queue.
+// The MPSGraph cache is shared with ``mpsg_run_conv2d`` (same key
+// schema) so a kernel built for the run path is reused for encode and
+// vice versa.
+//
+// Bias is optional — pass ``bufBias == nil`` for the no-bias path.
+// Returns ``true`` on a clean encode; ``false`` if the cb / inputs
+// are invalid.
+static bool mpsg_encode_conv2d_dev(MPSCommandBuffer *cb,
+                                    id<MTLBuffer> bufX, id<MTLBuffer> bufW,
+                                    id<MTLBuffer> bufBias, id<MTLBuffer> bufO,
+                                    int32_t N, int32_t H, int32_t W,
+                                    int32_t Cin, int32_t Cout,
+                                    int32_t kH, int32_t kW,
+                                    int32_t strideH, int32_t strideW,
+                                    int32_t padH, int32_t padW,
+                                    int32_t dilationH, int32_t dilationW,
+                                    int32_t groups, MPSDataType ioType) {
+  if (!cb || !bufX || !bufW || !bufO) return false;
+  int32_t outH = conv2d_out_dim(H, kH, strideH, padH, dilationH);
+  int32_t outW = conv2d_out_dim(W, kW, strideW, padW, dilationW);
+  if (N <= 0 || outH <= 0 || outW <= 0 || Cout <= 0 || groups <= 0) return true;
+  if (Cin % groups != 0 || Cout % groups != 0) return false;
+  bool hasBias = (bufBias != nil);
+  @autoreleasepool {
+    NSArray<NSNumber *> *xShape = @[ @(N), @(H), @(W), @(Cin) ];
+    NSArray<NSNumber *> *wShape = @[ @(kH), @(kW), @(Cin / groups), @(Cout) ];
+    NSArray<NSNumber *> *bShape = @[ @(Cout) ];
+    NSArray<NSNumber *> *oShape = @[ @(N), @(outH), @(outW), @(Cout) ];
+    NSString *key = [NSString
+        stringWithFormat:@"conv2d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d",
+                         (int)ioType, N, H, W, Cin, Cout, kH, kW, strideH,
+                         strideW, padH, padW, dilationH, dilationW, groups,
+                         hasBias ? 1 : 0];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *px, *pw, *pb = nil, *y;
+    if (entry) {
+      g = entry[0];
+      NSArray *phs = (NSArray *)entry[1];
+      px = phs[0];
+      pw = phs[1];
+      pb = (hasBias && phs.count > 2) ? phs[2] : nil;
+      y = entry[2];
+    } else {
+      g = [MPSGraph new];
+      px = [g placeholderWithShape:xShape dataType:ioType name:nil];
+      pw = [g placeholderWithShape:wShape dataType:ioType name:nil];
+      MPSGraphConvolution2DOpDescriptor *desc =
+          [MPSGraphConvolution2DOpDescriptor
+              descriptorWithStrideInX:strideW
+                            strideInY:strideH
+                      dilationRateInX:dilationW
+                      dilationRateInY:dilationH
+                               groups:groups
+                          paddingLeft:padW
+                         paddingRight:padW
+                           paddingTop:padH
+                        paddingBottom:padH
+                         paddingStyle:MPSGraphPaddingStyleExplicit
+                           dataLayout:MPSGraphTensorNamedDataLayoutNHWC
+                        weightsLayout:MPSGraphTensorNamedDataLayoutHWIO];
+      MPSGraphTensor *conv =
+          [g convolution2DWithSourceTensor:mpsg_up(g, px, ioType)
+                             weightsTensor:mpsg_up(g, pw, ioType)
+                                descriptor:desc
+                                      name:nil];
+      if (hasBias) {
+        pb = [g placeholderWithShape:bShape dataType:ioType name:nil];
+        conv = [g additionWithPrimaryTensor:conv
+                            secondaryTensor:mpsg_up(g, pb, ioType)
+                                       name:nil];
+      }
+      y = mpsg_down(g, conv, ioType);
+      NSArray *phs = hasBias ? @[ px, pw, pb ] : @[ px, pw ];
+      mpsg_cache_put(key, @[ g, phs, y ]);
+    }
+    MPSGraphTensorData *xd =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX
+                                                shape:xShape
+                                             dataType:ioType];
+    MPSGraphTensorData *wd =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufW
+                                                shape:wShape
+                                             dataType:ioType];
+    MPSGraphTensorData *od =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufO
+                                                shape:oShape
+                                             dataType:ioType];
+    NSMutableDictionary *feeds = [@{px : xd, pw : wd} mutableCopy];
+    if (hasBias && pb) {
+      MPSGraphTensorData *bd =
+          [[MPSGraphTensorData alloc] initWithMTLBuffer:bufBias
+                                                  shape:bShape
+                                               dataType:ioType];
+      feeds[pb] = bd;
+    }
+    [g encodeToCommandBuffer:cb
+                       feeds:feeds
+              targetOperations:nil
+          resultsDictionary:@{y : od}
+        executionDescriptor:nil];
+    return true;
+  }
+}
+
 static void reference_conv2d_f32(const float *X, const float *Wt,
                                  const float *bias, float *O, int32_t N,
                                  int32_t H, int32_t W, int32_t Cin, int32_t Cout,
@@ -14501,6 +14610,37 @@ extern "C" void tessera_apple_gpu_conv2d_f16(
   int32_t outW = conv2d_out_dim(W, kW, strideW, padW, dilationW);
   if (outH > 0 && outW > 0)
     std::memset(O, 0, (size_t)N * outH * outW * Cout * 2);
+}
+
+// Project 5 (2026-06-01) — device-resident encode-session conv2d C ABI.
+// Mirrors the layer_norm / bmm / softmax / flash_attn encode wrappers
+// above so a model with conv2d can keep the conv on the SAME command
+// buffer as the rest of a chain (no per-op GPU↔CPU sync). NHWC source
+// + HWIO weights; optional bias (pass NULL TsDeviceTensor*). Honors
+// padding / stride / dilation / groups so depthwise + grouped conv
+// land on this path too. The output buffer must be sized for
+// ``N * conv2d_out_h * conv2d_out_w * Cout * 4`` bytes (fp32).
+//
+// Returns ``1`` on a clean encode; ``0`` if the runtime / inputs are
+// invalid. The session retains the underlying tensors until commit,
+// so the caller can immediately enqueue the next op.
+extern "C" int32_t tessera_apple_gpu_conv2d_dev_f32_enc(
+    TsEncodeSession *s, TsDeviceTensor *X, TsDeviceTensor *Wt,
+    TsDeviceTensor *bias, TsDeviceTensor *O,
+    int32_t N, int32_t H, int32_t W, int32_t Cin, int32_t Cout,
+    int32_t kH, int32_t kW, int32_t strideH, int32_t strideW,
+    int32_t padH, int32_t padW, int32_t dilationH, int32_t dilationW,
+    int32_t groups) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !Wt || !O) return 0;
+  // ``bias`` is optional — nil-tensor means no bias term.
+  id<MTLBuffer> bufBias = bias ? bias->buf : nil;
+  return mpsg_encode_conv2d_dev(s->cb, X->buf, Wt->buf, bufBias, O->buf,
+                                 N, H, W, Cin, Cout, kH, kW, strideH,
+                                 strideW, padH, padW, dilationH, dilationW,
+                                 groups, MPSDataTypeFloat32)
+             ? 1
+             : 0;
 }
 
 //===----------------------------------------------------------------------===//

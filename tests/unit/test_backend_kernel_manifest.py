@@ -141,12 +141,43 @@ class TestMatmulManifest:
 
 class TestAppleGPUMSLKernels:
     """The Apple GPU MSL kernel inventory ships fused kernels for a
-    specific list; sprint E records every one."""
+    specific list; sprint E records every one.
 
-    @pytest.mark.parametrize("name", [
-        "matmul", "softmax", "softmax_safe", "gelu", "rope",
-        "flash_attn", "rmsnorm",
-    ])
+    Project 3 (2026-06-01) — the 8 encode-eligible ops were promoted
+    from ``fused`` to ``hardware_verified`` once each carried a real
+    runtime entry symbol AND a checked-in execute-and-compare fixture
+    (the contract enforced by ``BackendKernelEntry.__post_init__``).
+    ``matmul`` stays ``fused`` because its runtime path is MPS not an
+    encode-session kernel, and its numerical fixture still lives in
+    the buffer-pool test which is broader than a focused matmul
+    comparison."""
+
+    # Project 3 — 8 encode-eligible ops at hardware_verified.
+    # Project 5 (2026-06-01) added conv2d.
+    HARDWARE_VERIFIED_OPS = (
+        "softmax", "softmax_safe", "gelu", "rope", "flash_attn",
+        "rmsnorm", "layer_norm", "silu", "bmm", "conv2d",
+    )
+    # Remaining fused-but-not-yet-hw-verified.
+    FUSED_OPS = ("matmul",)
+
+    @pytest.mark.parametrize("name", HARDWARE_VERIFIED_OPS)
+    def test_apple_gpu_kernel_is_hardware_verified(self, name):
+        entries = {e.target: e for e in manifest_for(name)}
+        assert "apple_gpu" in entries, f"{name} missing from apple_gpu manifest"
+        ag = entries["apple_gpu"]
+        assert ag.status == "hardware_verified", (
+            f"{name}: expected 'hardware_verified', got {ag.status!r}")
+        # The hardware_verified contract requires both symbol +
+        # fixture. The constructor would have raised otherwise — these
+        # assertions are belt-and-suspenders so a future refactor
+        # can't silently regress the surface.
+        assert ag.runtime_symbol, (
+            f"{name}: hardware_verified entry missing runtime_symbol")
+        assert ag.execute_compare_fixture, (
+            f"{name}: hardware_verified entry missing fixture")
+
+    @pytest.mark.parametrize("name", FUSED_OPS)
     def test_apple_gpu_kernel_is_fused(self, name):
         entries = {e.target: e for e in manifest_for(name)}
         assert "apple_gpu" in entries, f"{name} missing from apple_gpu manifest"
@@ -157,7 +188,8 @@ class TestFlashAttnManifest:
     def test_apple_gpu_supports_three_dtypes(self):
         entries = {e.target: e for e in manifest_for("flash_attn")}
         ag = entries["apple_gpu"]
-        assert ag.status == "fused"
+        # Project 3 promotion — flash_attn is hardware_verified now.
+        assert ag.status == "hardware_verified"
         assert set(ag.dtypes) >= {"fp32", "fp16", "bf16"}
 
     def test_no_x86_fused_attention(self):

@@ -50,6 +50,7 @@ from .apple_gpu_batched import (
 from .apple_gpu_chain import (
     OpRecord,
     TraceRef,
+    precompile_chain,
     run_trace,
 )
 
@@ -229,6 +230,27 @@ def flash_attn(Q: OpInput, K: OpInput, V: OpInput, *,
                             scale=scale, causal=causal))
 
 
+def conv2d(X: OpInput, Wt: OpInput, *,
+            N: int, H: int, W: int, Cin: int, Cout: int,
+            kH: int, kW: int, strideH: int = 1, strideW: int = 1,
+            padH: int = 0, padW: int = 0,
+            dilationH: int = 1, dilationW: int = 1,
+            groups: int = 1,
+            dtype: str = "f32") -> Union[DeviceTensor, TraceRef]:
+    """Project 5 (2026-06-01) — NHWC conv2d on the encode-session
+    chain. Source layout NHWC, weights HWIO, output NHWC. The
+    no-bias variant is exposed here so the trace can route through
+    :data:`ENCODE_OP_REGISTRY` (which tracks positional DeviceTensor
+    args); bias-bearing conv2d goes through
+    :func:`apple_gpu_batched.conv2d_enc` directly."""
+    return _dispatch("conv2d", dtype, [X, Wt],
+                      dict(N=N, H=H, W=W, Cin=Cin, Cout=Cout,
+                            kH=kH, kW=kW, strideH=strideH,
+                            strideW=strideW, padH=padH, padW=padW,
+                            dilationH=dilationH, dilationW=dilationW,
+                            groups=groups))
+
+
 # ---------------------------------------------------------------------
 # @auto_batch decorator — capture the trace, execute it through
 # run_trace, and return the (resolved) final DeviceTensor.
@@ -308,12 +330,45 @@ def auto_batch(fn: Callable[..., Any]) -> Callable[..., Any]:
         # Trace captured. Execute it.
         executed = run_trace(trace)
         return _resolve_return(ret, executed)
+
+    def warmup(*args, **kwargs) -> int:
+        """Phase 5c (2026-06-01) — warm the MPSGraph cache by running
+        the wrapped function ONCE with per-op cbs (``max_ops_per_cb=1``).
+        Each op's MPSGraph compile cost amortizes across many small
+        command buffers, avoiding the shape × op-count cliff that
+        catches the first big-chain encode.
+
+        After ``warmup(*args, **kwargs)``, the regular call
+        ``wrapped(*args, **kwargs)`` at the default budget hits the
+        warm MPSGraph cache and runs fast even at shape × N combos
+        that would otherwise hang.
+
+        Returns the number of ops actually executed during warmup.
+        The output DeviceTensors are freed immediately — the warmup
+        is for cache-warming only.
+
+        Caller-visible side-effects: any ``ResidentWeights.activation``
+        slot used inside the function gets uploaded; weights stay
+        resident (which is the point).
+        """
+        if _active_trace() is not None:
+            # Already inside a trace — warmup is a no-op for the
+            # outer trace's perspective. Run the inner function in
+            # the existing trace.
+            fn(*args, **kwargs)
+            return 0
+        with _trace_scope() as trace:
+            fn(*args, **kwargs)
+        return precompile_chain(trace)
+
+    wrapped.warmup = warmup  # type: ignore[attr-defined]
     return wrapped
 
 
 __all__ = [
     "auto_batch",
     "bmm",
+    "conv2d",
     "flash_attn",
     "gelu",
     "layer_norm",

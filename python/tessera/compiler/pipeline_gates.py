@@ -254,7 +254,14 @@ def _eval_link(target: str, op_name: Optional[str]) -> GateResult:
         return GateResult(GATE_LINK, STATUS_FAIL,
                           "no manifest entry to link")
     statuses = {e.status for e in entries}
-    if statuses & {"fused", "reference", "compileable"}:
+    # ``hardware_verified`` (Project 3, 2026-06-01) is the TOP rung of
+    # the readiness ladder — strictly stronger than ``fused`` (it adds
+    # a checked-in numerical-comparison proof). ``packaged`` (PK5) is
+    # a parallel path: an ``.mtlpackage`` artifact loaded via
+    # ``apple_mlpkg.compile_mlpackage`` ships an executable kernel.
+    # All four count as linkable.
+    if statuses & {"fused", "reference", "compileable",
+                   "hardware_verified", "packaged"}:
         return GateResult(GATE_LINK, STATUS_PASS)
     if "artifact_only" in statuses:
         return GateResult(GATE_LINK, STATUS_FAIL,

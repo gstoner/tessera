@@ -335,14 +335,17 @@ def test_mixed_dtype_trace_uses_separate_sessions():
 def test_bf16_registry_covers_full_op_envelope():
     """After Phase 3b (2026-06-01), bf16 covers the full 8-op
     envelope — rope and flash_attn route through on-GPU bf16↔fp32
-    cast. The dtype matrix is now complete: 8 ops × 3 dtypes = 24
-    entries."""
+    cast. Project 5 (2026-06-01) added conv2d (f32 only — bf16/f16
+    conv2d encode lanes deliberately deferred), so the asymmetric
+    matrix is: 8 ops × {f16, bf16} + 9 ops × {f32} = 25 entries."""
     from tessera.apple_gpu_chain import ENCODE_OP_REGISTRY
     bf16_ops = {name for (name, dtype) in ENCODE_OP_REGISTRY
                 if dtype == "bf16"}
     assert bf16_ops == {"bmm", "layer_norm", "rmsnorm", "softmax",
                         "silu", "gelu", "rope", "flash_attn"}, bf16_ops
-    # Sanity: 8 ops in EVERY dtype.
-    for dtype in ("f32", "f16", "bf16"):
-        ops = {name for (name, d) in ENCODE_OP_REGISTRY if d == dtype}
-        assert len(ops) == 8, (dtype, ops)
+    # f16 and bf16 cover 8 ops; f32 covers 9 (conv2d added by Project 5).
+    f16_ops = {name for (name, d) in ENCODE_OP_REGISTRY if d == "f16"}
+    f32_ops = {name for (name, d) in ENCODE_OP_REGISTRY if d == "f32"}
+    assert len(f16_ops) == 8, f16_ops
+    assert len(bf16_ops) == 8
+    assert f32_ops == bf16_ops | {"conv2d"}, f32_ops

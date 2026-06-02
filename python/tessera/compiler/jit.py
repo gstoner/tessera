@@ -306,7 +306,7 @@ class JitFn:
         lowering_diagnostics: Optional[List[JitDiagnostic]] = None,
         native_required: bool = False,
         recognized_package: Optional[Any] = None,
-        dispatch_via_package: bool = False,
+        dispatch_via_package: "bool | str" = False,
     ) -> None:
         self._fn = fn
         self.graph_ir = graph_ir
@@ -333,11 +333,16 @@ class JitFn:
         # concrete example-arg shapes. Populated only for target="apple_gpu".
         self.recognized_package = recognized_package
         self._emitted_package_path: Optional[str] = None
-        # PK8e (2026-06-02) — opt-in: route ``__call__`` through the authored
-        # `.mtlpackage` instead of the live MPS/MSL envelope. Per-shape caches
-        # keyed by (plan.name, plan.dims): authored package paths + loaded
-        # (prepared) Pipelines, so repeated same-shape calls reuse both.
-        self.dispatch_via_package = bool(dispatch_via_package)
+        # PK8e (2026-06-02) — route ``__call__`` through the authored
+        # `.mtlpackage` instead of the live MPS/MSL envelope. Value:
+        #   False  — never (default; live lane).
+        #   True   — always, for any recognized region.
+        #   "auto" — PK8g heuristic: only fused chains (``kind=="chain"``),
+        #            which the benchmark shows win on the package lane; single
+        #            matmul / unary ops stay on the faster live lane.
+        # Per-shape caches keyed by (plan.name, plan.dims): authored package
+        # paths + prepared Pipelines, so repeated same-shape calls reuse both.
+        self.dispatch_via_package = dispatch_via_package
         self._package_path_cache: Dict[Any, str] = {}
         self._package_pipeline_cache: Dict[Any, Any] = {}
         # Last fallback reason (None on a native run).  Inspectable by
@@ -482,6 +487,13 @@ class JitFn:
 
         rec = self.recognized_package
         if rec is None:
+            return _PKG_FALLBACK
+        # PK8g auto-heuristic — only fused chains win on the package lane
+        # (benchmark: matmul→softmax up to ~14× faster at 256³; single matmul
+        # is 1.3–2.8× slower). In "auto" mode, route only chains through the
+        # package; everything else falls back to the live lane.
+        if self.dispatch_via_package == "auto" and \
+                getattr(rec, "kind", None) != "chain":
             return _PKG_FALLBACK
         inputs = self._ordered_inputs(args, kwargs)
         if not inputs:
@@ -1167,7 +1179,7 @@ def jit(
     auto_batch: bool = False,
     max_ops_per_cb: Optional[int] = None,
     emit_package: "bool | str" = False,
-    dispatch_via_package: bool = False,
+    dispatch_via_package: "bool | str" = False,
 ) -> Any:
     """
     Tessera JIT decorator — drives the compiler pipeline.
@@ -1408,7 +1420,7 @@ def jit(
             lowering_diagnostics=diagnostics,
             native_required=native_required,
             recognized_package=recognized_package,
-            dispatch_via_package=bool(dispatch_via_package),
+            dispatch_via_package=dispatch_via_package,
         )
 
         # P1 canonical one-command-buffer route (2026-06-01) — the

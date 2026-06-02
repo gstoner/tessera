@@ -6982,6 +6982,28 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
     global _apple_gpu_runtime
     if _apple_gpu_runtime is not None:
         return _apple_gpu_runtime
+
+    # Single-loader unification (2026-06-02): delegate to
+    # ``_apple_gpu_dispatch`` so the ctypes / ``bind_symbol`` lane (apple_mlpkg,
+    # apple_dylib, encode session) and this MPS/MSL execution lane share ONE
+    # loaded runtime image. Previously each compiled + dlopen'd its own dylib
+    # (versioned vs. unversioned) into the same cache dir, so a process that
+    # used both lanes loaded the runtime twice — every ObjC class
+    # (``TesseraMlpkgPipeline``, …) was defined twice, emitting a
+    # duplicate-class warning. ``_apple_gpu_dispatch`` now owns the
+    # env-var + CMake-build preference and the from-source build, returning a
+    # single cached handle.
+    from ._apple_gpu_dispatch import (
+        apple_gpu_runtime as _shared_apple_gpu_runtime,
+        apple_gpu_skip_reason as _shared_skip_reason,
+    )
+    handle = _shared_apple_gpu_runtime()
+    if handle is not None:
+        _apple_gpu_runtime = handle
+        return _apple_gpu_runtime
+    # The shared loader couldn't provide a runtime (non-Darwin without the
+    # stub-built path, missing compiler, etc.). Fall through to the legacy
+    # candidate scan below so the original diagnostics/behavior are preserved.
     candidates = []
     env = os.environ.get("TESSERA_APPLE_GPU_RUNTIME_LIB")
     if env:
@@ -6991,6 +7013,7 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
         root / "build/src/compiler/codegen/Tessera_Apple_Backend/libTesseraAppleRuntime.dylib",
         root / "build/src/compiler/codegen/Tessera_Apple_Backend/libTesseraAppleRuntime.so",
     ])
+    _ = _shared_skip_reason  # diagnostic available if needed
     for candidate in candidates:
         if candidate.exists():
             try:

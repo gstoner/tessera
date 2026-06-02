@@ -57,6 +57,17 @@ def _attn_pkg(A: Tensor[4, 6], B: Tensor[6, 5]) -> Tensor[4, 5]:
     return tessera.ops.softmax(tessera.ops.matmul(A, B))
 
 
+# PK8g — "auto": route only fused chains through the package, single ops live.
+@tessera.jit(target="apple_gpu", dispatch_via_package="auto")
+def _mm_auto(A: Tensor[8, 6], B: Tensor[6, 5]) -> Tensor[8, 5]:
+    return tessera.ops.matmul(A, B)
+
+
+@tessera.jit(target="apple_gpu", dispatch_via_package="auto")
+def _attn_auto(A: Tensor[4, 6], B: Tensor[6, 5]) -> Tensor[4, 5]:
+    return tessera.ops.softmax(tessera.ops.matmul(A, B))
+
+
 # ── recognition wired into compile (pure, no GPU) ────────────────────────
 
 
@@ -319,3 +330,40 @@ def test_dispatch_via_package_falls_back_for_non_fp32():
     assert np.allclose(out, a @ b, rtol=1e-4, atol=1e-3)
     # No fp64 package was authored — proves the fallback routed away.
     assert len(_mm_pkg._package_path_cache) == before
+
+
+# ── PK8g — "auto" heuristic: chains → package, single ops → live ─────────
+
+
+def test_auto_flag_value_recorded():
+    """``dispatch_via_package="auto"`` is preserved (not coerced to bool).
+    Pure / no GPU."""
+    assert _mm_auto.dispatch_via_package == "auto"
+    assert _attn_auto.dispatch_via_package == "auto"
+
+
+def test_auto_routes_single_matmul_to_live_lane():
+    """In auto mode a single matmul stays on the live lane — no package is
+    authored (benchmark: package is 1.3–2.8× slower for plain GEMM)."""
+    _require_packaged_ml()
+    rng = np.random.default_rng(80)
+    a = rng.standard_normal((8, 6)).astype(np.float32)
+    b = rng.standard_normal((6, 5)).astype(np.float32)
+    out = _mm_auto(a, b)
+    assert np.allclose(out, a @ b, rtol=1e-4, atol=2e-4)
+    assert _mm_auto._package_path_cache == {}  # never authored
+
+
+def test_auto_routes_fused_chain_to_package_lane():
+    """In auto mode a fused chain DOES route through the package (benchmark:
+    up to ~14× faster) — a package is authored + cached."""
+    _require_packaged_ml()
+    rng = np.random.default_rng(81)
+    a = rng.standard_normal((4, 6)).astype(np.float32)
+    b = rng.standard_normal((6, 5)).astype(np.float32)
+    out = _attn_auto(a, b)
+    ab = a @ b
+    e = np.exp(ab - ab.max(axis=1, keepdims=True))
+    assert np.allclose(out, e / e.sum(axis=1, keepdims=True),
+                       rtol=1e-4, atol=2e-4)
+    assert ("matmul_softmax", (4, 6, 5)) in _attn_auto._package_path_cache

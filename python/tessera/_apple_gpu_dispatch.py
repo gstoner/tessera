@@ -84,6 +84,42 @@ def _find_runtime_source() -> Optional[Path]:
     return None
 
 
+# Newest C ABI symbol — used as the staleness sentinel when accepting a
+# prebuilt library (env-pointed or CMake-built). If a candidate lacks it,
+# it predates the current source and we fall through to a fresh build.
+_SENTINEL_SYMBOL = "tessera_apple_gpu_dylib_serialize"
+
+
+def _prebuilt_candidate() -> Optional[ctypes.CDLL]:
+    """Return a loaded handle for a prebuilt Apple GPU runtime, if one is
+    available and current: ``$TESSERA_APPLE_GPU_RUNTIME_LIB`` first, then a
+    CMake-built ``libTesseraAppleRuntime.{dylib,so}`` under ``build/``.
+
+    Centralizing this here (rather than in ``runtime.py``) means there is a
+    SINGLE loaded image of the runtime process-wide — both the ctypes /
+    ``bind_symbol`` lane and ``runtime.py``'s MPS execution lane share it, so
+    the ObjC classes (e.g. ``TesseraMlpkgPipeline``) are never defined twice
+    (which previously emitted a duplicate-class warning when both lanes ran)."""
+    candidates = []
+    env = os.environ.get("TESSERA_APPLE_GPU_RUNTIME_LIB")
+    if env:
+        candidates.append(Path(env))
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    backend = repo_root / "build/src/compiler/codegen/Tessera_Apple_Backend"
+    candidates.append(backend / "libTesseraAppleRuntime.dylib")
+    candidates.append(backend / "libTesseraAppleRuntime.so")
+    for cand in candidates:
+        if not cand.exists():
+            continue
+        try:
+            lib = ctypes.CDLL(str(cand))
+            getattr(lib, _SENTINEL_SYMBOL)  # staleness gate
+        except (OSError, AttributeError):
+            continue
+        return lib
+    return None
+
+
 def _compile_runtime() -> tuple[Optional[ctypes.CDLL], Optional[Path],
                                  Optional[str]]:
     """Compile ``apple_gpu_runtime.mm`` to a dylib + ctypes-load.
@@ -93,6 +129,13 @@ def _compile_runtime() -> tuple[Optional[ctypes.CDLL], Optional[Path],
     None; otherwise ``handle`` is None and ``skip_reason`` is a short
     diagnostic string.
     """
+    # Prefer a prebuilt library (env-pointed or CMake-built) so the whole
+    # process shares ONE loaded runtime image. Only when none is current do we
+    # compile from source below.
+    prebuilt = _prebuilt_candidate()
+    if prebuilt is not None:
+        return prebuilt, None, None
+
     if not _is_darwin():
         return None, None, f"non-darwin host (sys.platform={sys.platform!r})"
     cxx = shutil.which("clang++") or shutil.which("c++")

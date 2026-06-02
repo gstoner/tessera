@@ -94,6 +94,17 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
   256×256×256. Sample at `sample_package_lane_report.json`; findings table in
   the benchmarks README. This is the decision data behind the `dispatch_via_package`
   flag.
+- **Single runtime loader + auto-route (PK8g, 2026-06-02):** (1) **Duplicate-
+  dylib fix** — `_apple_gpu_dispatch` is now the single Apple-GPU runtime
+  loader (env-var → CMake build → from-source, with a newest-symbol staleness
+  gate); `runtime._load_apple_gpu_runtime` delegates to it. Previously the
+  ctypes/`bind_symbol` lane and the MPS lane each compiled + `dlopen`'d their
+  own dylib (versioned vs unversioned) into the same cache dir, so a process
+  using both defined every ObjC class twice (the `TesseraMlpkgPipeline`
+  duplicate-class warning). Now one image is shared. (2) **Auto-route** —
+  `dispatch_via_package="auto"` applies the benchmark verdict automatically:
+  fused chains → package lane, single matmul/unary → live lane. Locked by
+  `tests/unit/test_apple_jit_emit_package.py` (24 tests).
 - **Committed production packages + manifest rows (PK8c, 2026-06-02):** two
   Tessera-authored `.mtlpackage` fixtures committed under
   `tests/fixtures/apple_gpu/tessera_authored_*` (matmul 8×8×8, fused
@@ -256,12 +267,12 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
    overhead); **fused chains like `matmul→softmax` → package wins**, ≈**14×
    faster at 256×256×256** (MPSGraph fuses the whole graph; the live MSL
    softmax over a materialized score matrix scales poorly). Cold authoring
-   ~11 ms/shape, amortized by the per-shape pipeline cache. The arc is fully
-   closed — correctness *and* a measured lane-selection rule. **Next genuine
-   step (open):** turn that measured rule into an *automatic* heuristic so
-   `dispatch_via_package` becomes a smart default — route fused chains
-   (`kind=="chain"`) through the package, keep single matmul on the live lane —
-   instead of a blanket per-fn opt-in.
+   ~11 ms/shape, amortized by the per-shape pipeline cache. ~~turn that rule
+   into an automatic heuristic~~ **done — `dispatch_via_package="auto"` (PK8g)
+   routes only fused chains (`kind=="chain"`) through the package and keeps
+   single matmul / unary ops on the live lane, exactly the measured-optimal
+   split.** The author → recognize → wire → auto-emit → execute → benchmark →
+   auto-route arc is fully closed.
 6. Attach benchmark metadata for Apple hot paths such as matmul, matmul
    epilogues, conv2d, decode chain, and packaged kernels.
 

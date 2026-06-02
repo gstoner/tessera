@@ -66,6 +66,13 @@ API_AVAILABLE(macos(26.0), ios(26.0))
 // match what reflection returns; ``argumentTable`` carries the bound
 // resources at each binding's kernel-side index.
 @property (nonatomic, strong) NSMutableDictionary<NSString *, id<MTLTensor>> *tensorsByName;
+// PK8 — parallel index-keyed inventory. MPSGraph-authored packages (vs
+// CoreML-origin ones like Apple's sample) expose *unnamed* bindings, so
+// ``tensorsByName`` collapses on the empty-string key; the argument table
+// is still correct (resources bound by ``b.index``). This map preserves
+// per-binding-index access so ``fill_input_at`` / ``read_output_at`` can
+// address positionally-bound packages.
+@property (nonatomic, strong) NSMutableDictionary<NSNumber *, id<MTLTensor>> *tensorsByIndex;
 @property (nonatomic, strong) id<MTL4ArgumentTable> argumentTable;
 // PK4 — intermediates heap allocated lazily on first dispatch (size
 // comes from ``pipelineState.intermediatesHeapSize``). Cached because
@@ -2292,6 +2299,132 @@ extern "C" void *tessera_apple_gpu_mlpkg_compile(const char *path,
   return NULL;
 }
 
+// PK8 — author a *production* `.mtlpackage` from the MPSGraph lane.
+//
+// This is the inverse of the PK1 load path: instead of consuming a package
+// Apple's tooling produced, Tessera builds an MPSGraph (the same primitive it
+// already constructs for its MPSGraph-lane ops), compiles it to an
+// `MPSGraphExecutable`, and serializes that to a `.mpsgraphpackage` via
+// `serializeToMPSGraphPackageAtURL:` (MPSGraphExecutable.h:205, macOS 14+).
+// It then writes the trivial `manifest.json` MLLibrary wrapper so the result
+// is a `.mtlpackage` directory that `tessera_apple_gpu_mlpkg_compile` (PK1)
+// loads via `[device newLibraryWithURL:]`.
+//
+// First kernel: a plain matmul  C[M,N] = A[M,K] @ B[K,N]  (fp32) — it mirrors
+// the bundled Apple sample's shape/binding pattern, so the authored package
+// flows through the *existing* PK1-PK7 lifecycle unchanged and can be
+// numerically compared against the live MPSGraph matmul path.
+//
+// Returns 1 on success; <=0 error codes:
+//   -1 = OS / device unavailable      -2 = bad args
+//   -3 = graph compile failed         -4 = manifest write failed
+//   -5 = serialized package not found on disk after write
+extern "C" int32_t tessera_apple_gpu_mlpkg_author_matmul(
+    const char *out_package_path, int32_t M, int32_t K, int32_t N) {
+  if (!out_package_path || M <= 0 || K <= 0 || N <= 0) return -2;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return -1;
+  if (@available(macOS 14.0, iOS 17.0, *)) {
+    @autoreleasepool {
+      MPSDataType dt = MPSDataTypeFloat32;
+      NSArray<NSNumber *> *aShape = @[ @(M), @(K) ];
+      NSArray<NSNumber *> *bShape = @[ @(K), @(N) ];
+      MPSGraph *g = [MPSGraph new];
+      MPSGraphTensor *pa = [g placeholderWithShape:aShape dataType:dt
+                                              name:@"inputA"];
+      MPSGraphTensor *pb = [g placeholderWithShape:bShape dataType:dt
+                                              name:@"inputB"];
+      MPSGraphTensor *y =
+          [g matrixMultiplicationWithPrimaryTensor:pa
+                                   secondaryTensor:pb
+                                              name:@"output"];
+
+      // Compile the graph to a serializable executable. device:nil compiles
+      // for the default device; feeds carry the concrete input shaped-types.
+      MPSGraphShapedType *ta =
+          [[MPSGraphShapedType alloc] initWithShape:aShape dataType:dt];
+      MPSGraphShapedType *tb =
+          [[MPSGraphShapedType alloc] initWithShape:bShape dataType:dt];
+      MPSGraphExecutable *exe =
+          [g compileWithDevice:nil
+                         feeds:@{pa : ta, pb : tb}
+                 targetTensors:@[ y ]
+              targetOperations:nil
+         compilationDescriptor:nil];
+      if (!exe) return -3;
+
+      NSString *outDir = @(out_package_path);
+      NSFileManager *fm = [NSFileManager defaultManager];
+      // Start clean so re-authoring is deterministic (serialize won't append).
+      [fm removeItemAtPath:outDir error:nil];
+      [fm createDirectoryAtPath:outDir
+          withIntermediateDirectories:YES
+                           attributes:nil
+                                error:nil];
+
+      NSString *mpsPkgName = @"library.mpsgraphpackage";
+      NSString *mpsPkgPath = [outDir stringByAppendingPathComponent:mpsPkgName];
+      NSURL *mpsURL = [NSURL fileURLWithPath:mpsPkgPath];
+      MPSGraphExecutableSerializationDescriptor *sdesc =
+          [[MPSGraphExecutableSerializationDescriptor alloc] init];
+      sdesc.append = NO;
+      [exe serializeToMPSGraphPackageAtURL:mpsURL descriptor:sdesc];
+      if (![fm fileExistsAtPath:mpsPkgPath]) return -5;
+
+      // Wrap with the MLLibrary manifest — byte-for-byte the shape of the
+      // Apple sample's manifest.json (pkgtype + inner package name).
+      NSString *manifest = [NSString
+          stringWithFormat:@"{\n  \"mtlpackage\" : {\n    \"version\" : {\n"
+                            "      \"major\" : 1,\n      \"minor\" : 0,\n"
+                            "      \"patch\" : 0\n    },\n"
+                            "    \"pkgtype\" : \"MLLibrary\",\n"
+                            "    \"content\" : {\n"
+                            "      \"mpspkgname\" : \"%@\"\n    }\n  }\n}\n",
+                           mpsPkgName];
+      NSString *manifestPath =
+          [outDir stringByAppendingPathComponent:@"manifest.json"];
+      NSError *werr = nil;
+      if (![manifest writeToFile:manifestPath
+                      atomically:YES
+                        encoding:NSUTF8StringEncoding
+                           error:&werr]) {
+        fprintf(stderr, "[tessera_apple_gpu_mlpkg] manifest write failed: %s\n",
+                werr ? [[werr localizedDescription] UTF8String] : "<nil>");
+        return -4;
+      }
+      return 1;
+    }
+  }
+  return -1;
+}
+
+// PK8 helper — discover the entry-point function name an authored (or any)
+// `.mtlpackage` exposes. MPSGraph names the serialized function itself, so we
+// can't assume "main"; this loads the library and returns its first function
+// name. Returns 1 on success (name copied into `name_out`), 0 otherwise.
+extern "C" int32_t tessera_apple_gpu_mlpkg_first_function_name(
+    const char *package_path, char *name_out, int32_t name_len) {
+  if (!package_path || !name_out || name_len <= 0) return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    @autoreleasepool {
+      NSURL *url = [NSURL fileURLWithPath:@(package_path)];
+      NSError *err = nil;
+      id<MTLLibrary> library = [ctx.device newLibraryWithURL:url error:&err];
+      if (!library) return 0;
+      NSArray<NSString *> *names = library.functionNames;
+      if (!names || names.count == 0) return 0;
+      const char *first = [names.firstObject UTF8String];
+      if (!first) return 0;
+      strncpy(name_out, first, (size_t)name_len - 1);
+      name_out[name_len - 1] = '\0';
+      return 1;
+    }
+  }
+  return 0;
+}
+
 // Safe to call with NULL.
 extern "C" void tessera_apple_gpu_mlpkg_destroy(void *handle) {
   if (!handle) return;
@@ -2626,6 +2759,11 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_prepare_tensors(void *handle) {
       // Step 2 — create + bind per-binding tensors.
       NSMutableDictionary<NSString *, id<MTLTensor>> *tensors =
           [NSMutableDictionary new];
+      // PK8 — index-keyed parallel map for positionally-bound (unnamed)
+      // packages. Always populated; name-keyed map stays for CoreML-origin
+      // packages that carry real binding names.
+      NSMutableDictionary<NSNumber *, id<MTLTensor>> *tensorsByIdx =
+          [NSMutableDictionary new];
       MTLTensorDescriptor *td = [[MTLTensorDescriptor alloc] init];
       td.usage = MTLTensorUsageMachineLearning;
       td.storageMode = MTLStorageModeShared;
@@ -2749,11 +2887,13 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_prepare_tensors(void *handle) {
           return 0;
         }
         tensors[b.name] = t;
+        tensorsByIdx[@(b.index)] = t;
         // Apple-sample Pattern 2 — bind by reflected index, not by
         // hand-counted position.
         [at setResource:t.gpuResourceID atBufferIndex:b.index];
       }
       box.tensorsByName = tensors;
+      box.tensorsByIndex = tensorsByIdx;
       box.argumentTable = at;
       return 1;
     }
@@ -2768,6 +2908,59 @@ static id<MTLTensor> _mlpkg_tensor_by_name(TesseraMlpkgPipeline *box,
   if (!box || !name) return nil;
   NSString *key = @(name);
   return box.tensorsByName[key];
+}
+
+// PK8 — look up a prepared tensor by kernel-side binding index. The
+// addressing mode for positionally-bound (unnamed) packages. Returns nil
+// on miss.
+API_AVAILABLE(macos(26.0), ios(26.0))
+static id<MTLTensor> _mlpkg_tensor_by_index(TesseraMlpkgPipeline *box,
+                                            int32_t index) {
+  if (!box) return nil;
+  return box.tensorsByIndex[@(index)];
+}
+
+// PK8 — copy host bytes into / out of a prepared tensor's dense buffer.
+// Shared body for the index-addressable fill/read. ``writing`` selects
+// direction. Returns 1 on success.
+API_AVAILABLE(macos(26.0), ios(26.0))
+static int32_t _mlpkg_copy_tensor_at(void *handle, int32_t index,
+                                     void *host_bytes, int64_t byte_count,
+                                     bool writing) {
+  if (!handle || !host_bytes || byte_count <= 0) return 0;
+  @autoreleasepool {
+    TesseraMlpkgPipeline *box = (__bridge TesseraMlpkgPipeline *)handle;
+    id<MTLTensor> t = _mlpkg_tensor_by_index(box, index);
+    if (!t) return 0;
+    MTLTensorExtents *dims = t.dimensions;
+    if (!dims || dims.rank == 0) return 0;
+    size_t elem = _mlpkg_dtype_byte_size(t.dataType);
+    if (elem == 0) return 0;
+    NSInteger total = 1;
+    for (NSUInteger i = 0; i < dims.rank; ++i)
+      total *= [dims extentAtDimensionIndex:i];
+    if ((int64_t)((size_t)total * elem) != byte_count) {
+      fprintf(stderr, "[tessera_apple_gpu_mlpkg] %s_at idx=%d: byte_count "
+              "%lld != expected %zu\n", writing ? "fill_input" : "read_output",
+              index, (long long)byte_count, (size_t)total * elem);
+      return 0;
+    }
+    NSInteger zeros[MTL_TENSOR_MAX_RANK] = {0};
+    MTLTensorExtents *origin =
+        [[MTLTensorExtents alloc] initWithRank:dims.rank values:zeros];
+    NSInteger strd[MTL_TENSOR_MAX_RANK] = {0};
+    if (!_mlpkg_row_major_strides(dims, strd, 0, NO)) return 0;
+    MTLTensorExtents *strides =
+        [[MTLTensorExtents alloc] initWithRank:dims.rank values:strd];
+    if (writing) {
+      [t replaceSliceOrigin:origin sliceDimensions:dims
+                  withBytes:host_bytes strides:strides];
+    } else {
+      [t getBytes:host_bytes strides:strides
+          fromSliceOrigin:origin sliceDimensions:dims];
+    }
+    return 1;
+  }
 }
 
 // PK3 — fill an input tensor with host bytes. Returns 1 on success.
@@ -2855,6 +3048,28 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_read_output(
           fromSliceOrigin:origin sliceDimensions:dims];
       return 1;
     }
+  }
+  return 0;
+}
+
+// PK8 — fill an input tensor addressed by kernel-side binding index.
+// For positionally-bound packages (MPSGraph-authored, unnamed bindings).
+// Returns 1 on success.
+extern "C" int32_t tessera_apple_gpu_mlpkg_fill_input_at(
+    void *handle, int32_t index, const void *src_bytes, int64_t byte_count) {
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    return _mlpkg_copy_tensor_at(handle, index, (void *)src_bytes, byte_count,
+                                 /*writing=*/true);
+  }
+  return 0;
+}
+
+// PK8 — read an output tensor addressed by kernel-side binding index.
+extern "C" int32_t tessera_apple_gpu_mlpkg_read_output_at(
+    void *handle, int32_t index, void *dst_bytes, int64_t byte_count) {
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    return _mlpkg_copy_tensor_at(handle, index, dst_bytes, byte_count,
+                                 /*writing=*/false);
   }
   return 0;
 }

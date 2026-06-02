@@ -1056,6 +1056,46 @@ class Pipeline:
             return None
         return bytes(buf)
 
+    def fill_input_at(self, index: int, data: bytes) -> bool:
+        """PK8 — Copy ``data`` into the input tensor at kernel-side binding
+        ``index``. The positional addressing mode for packages whose
+        bindings carry no names — MPSGraph-authored packages (vs the
+        CoreML-origin Apple sample) expose *unnamed* bindings, so
+        :meth:`fill_input` by name can't disambiguate them. Indices come
+        from the per-binding ``buffer_index`` reflection."""
+        if not self._handle:
+            raise RuntimeError("Pipeline already destroyed")
+        fn = bind_symbol(
+            "tessera_apple_gpu_mlpkg_fill_input_at",
+            (ctypes.c_void_p, ctypes.c_int32, ctypes.c_void_p,
+             ctypes.c_int64),
+            restype=ctypes.c_int32)
+        if fn is None:
+            return False
+        buf = ctypes.c_char_p(bytes(data))
+        return bool(fn(ctypes.c_void_p(self._handle), ctypes.c_int32(index),
+                       buf, ctypes.c_int64(len(data))))
+
+    def read_output_at(self, index: int, byte_count: int) -> Optional[bytes]:
+        """PK8 — Read the tensor at kernel-side binding ``index`` back to
+        host. Positional counterpart to :meth:`read_output` for unnamed
+        (MPSGraph-authored) packages."""
+        if not self._handle:
+            raise RuntimeError("Pipeline already destroyed")
+        fn = bind_symbol(
+            "tessera_apple_gpu_mlpkg_read_output_at",
+            (ctypes.c_void_p, ctypes.c_int32, ctypes.c_void_p,
+             ctypes.c_int64),
+            restype=ctypes.c_int32)
+        if fn is None:
+            return None
+        buf = (ctypes.c_char * byte_count)()
+        rc = fn(ctypes.c_void_p(self._handle), ctypes.c_int32(index),
+                buf, ctypes.c_int64(byte_count))
+        if not rc:
+            return None
+        return bytes(buf)
+
     def dispatch(self, timeout_ms: int = 30_000) -> bool:
         """PK4 — Run the compiled ML pipeline end-to-end on the GPU.
 
@@ -1199,6 +1239,66 @@ def compile_mlpackage(
                     function_name=function_name)
 
 
+# ---- PK8: author a production .mtlpackage from the MPSGraph lane --------
+
+
+def first_function_name(path: str | Path) -> Optional[str]:
+    """Return the entry-point function name an ``.mtlpackage`` exposes.
+
+    MPSGraph names the serialized function itself, so a Tessera-authored
+    package's entry point is not necessarily ``"main"``. This loads the
+    package's ``MTLLibrary`` and returns its first function name, so
+    callers can feed it to :func:`compile_mlpackage`. Returns ``None``
+    when the runtime is unavailable or the package exposes no functions.
+    """
+    if apple_gpu_runtime() is None:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_mlpkg_first_function_name",
+        (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int32),
+        restype=ctypes.c_int32,
+    )
+    if fn is None:
+        return None
+    buf = ctypes.create_string_buffer(256)
+    ok = int(fn(str(path).encode("utf-8"), buf, ctypes.c_int32(256)))
+    if ok != 1:
+        return None
+    return buf.value.decode("utf-8") or None
+
+
+def author_matmul_package(
+    out_path: str | Path, m: int, k: int, n: int
+) -> bool:
+    """Author a production ``.mtlpackage`` for ``C[m,n] = A[m,k] @ B[k,n]``
+    (fp32) from Tessera's MPSGraph lane.
+
+    Builds an ``MPSGraph`` matmul, compiles it to an ``MPSGraphExecutable``,
+    serializes that to ``<out_path>/library.mpsgraphpackage`` via
+    ``serializeToMPSGraphPackageAtURL:``, and writes the ``manifest.json``
+    MLLibrary wrapper — producing a ``.mtlpackage`` directory that
+    :func:`compile_mlpackage` (PK1) can load and the PK1-PK7 lifecycle can
+    dispatch. No coremltools, no DXIL: this rides the same MPSGraph
+    primitive the runtime already builds for its MPSGraph-lane ops.
+
+    Returns ``True`` on success. Returns ``False`` when the Apple runtime
+    is unavailable (non-Darwin / pre-macOS-14) or any authoring step fails;
+    no exception is raised so callers can skip cleanly.
+    """
+    if apple_gpu_runtime() is None:
+        return False
+    fn = bind_symbol(
+        "tessera_apple_gpu_mlpkg_author_matmul",
+        (ctypes.c_char_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32),
+        restype=ctypes.c_int32,
+    )
+    if fn is None:
+        return False
+    rc = int(fn(str(out_path).encode("utf-8"),
+                ctypes.c_int32(m), ctypes.c_int32(k), ctypes.c_int32(n)))
+    return rc == 1
+
+
 __all__ = [
     "ERROR_NONE",
     "ERROR_OS_UNAVAILABLE",
@@ -1214,6 +1314,8 @@ __all__ = [
     "AppleTensorBindingSpec",
     "AppleKernelBindingSpec",
     "compile_mlpackage",
+    "author_matmul_package",
+    "first_function_name",
     "extract_argument_layout",
     "last_error_kind",
     "packaged_ml_available",

@@ -18,6 +18,18 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
 - **Conv2d encode-session lanes:** f32/f16/bf16 wrapper lanes exist.
 - **Packaged-kernel lifecycle:** PK1-PK7 are proven against a real Apple sample
   package, including reflection, validation, argument layout, and dispatch.
+- **Packaged-kernel *authoring* (PK8, 2026-06-02):** Tessera authors its own
+  production `.mtlpackage` from the MPSGraph lane — build MPSGraph matmul →
+  compile to `MPSGraphExecutable` → `serializeToMPSGraphPackageAtURL:` → wrap
+  the `manifest.json` MLLibrary layout. The authored package flows through the
+  *existing* PK1-PK7 lifecycle and the GPU output is **bitwise-exact** vs numpy
+  `A @ B` (max abs err 0.0 at 4×4×4; passes at fp32 tol across 3 shapes). No
+  coremltools, no DXIL. MPSGraph packages expose positionally-indexed *unnamed*
+  bindings, so PK8 adds `fill_input_at`/`read_output_at` index addressing
+  (`tensorsByIndex`). C ABI: `tessera_apple_gpu_mlpkg_author_matmul`,
+  `_first_function_name`, `_fill_input_at`, `_read_output_at`. Python:
+  `apple_mlpkg.author_matmul_package` / `first_function_name`. Locked by
+  `tests/unit/test_apple_mlpkg_pk8.py` (7 tests).
 - **GA/EBM Apple specialization:** fused Apple kernels and benchmarks exist for
   important GA/EBM paths.
 
@@ -145,20 +157,19 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
    `max_ops_per_cb` chunking threaded through the decorator. Follow-on
    (optional): make auto_batch bypass unused Graph-IR emission; consider
    auto-detection so the route is on by default for recognized decode loops.
-5. **Author production packaged kernels from the MPSGraph lane (achievable
-   on this host — see corrected analysis above).** Concrete steps: (1) in
-   `apple_gpu_runtime.mm`, compile the MPSGraph Tessera already builds for an
-   MPSGraph-lane op into an `MPSGraphExecutable`; (2) call
-   `serializeToMPSGraphPackageAtURL:descriptor:` (`MPSGraphExecutable.h:205`);
-   (3) wrap into a `.mtlpackage` (write the 11-line `manifest.json` +
-   `.mpsgraphpackage` dir, or shell out to `metal-package-builder -ml`);
-   (4) feed it through PK1-PK7 (load → reflect → validate → dispatch); (5) add
-   a numerical-compare fixture vs the live MPSGraph path and declare the
-   `status="packaged"` `BackendKernelEntry` row. **Parallel lane (b):** the
-   MSL-source runtime dynamic-library AOT chain (`newLibraryWithSource:` →
-   `newDynamicLibrary:` → `serializeToURL:` → `newDynamicLibraryWithURL:`,
-   plus `MTLBinaryArchive`/`pipelineDataSetSerializer`/`lookupArchives`).
-   Neither lane is toolchain-blocked.
+5. ~~Author production packaged kernels from the MPSGraph lane.~~ **Landed
+   2026-06-02 (PK8)** — `author_matmul_package` builds → compiles →
+   `serializeToMPSGraphPackageAtURL:` → wraps `manifest.json`, and the
+   authored package dispatches through PK1-PK7 bitwise-exact vs numpy.
+   See the "Finished" entry above; `tests/unit/test_apple_mlpkg_pk8.py`.
+   **Follow-ons (optional, not blocked):** (a) generalize beyond matmul to
+   the rmsnorm/softmax/layer_norm MPSGraph-lane ops + a graph→package
+   compiler hook; (b) decide whether to commit a real `.mtlpackage` artifact
+   and declare a `status="packaged"` `BackendKernelEntry` row (a repo-policy
+   choice about committing a device/OS-specific binary — the *capability* is
+   proven, the committed-artifact row is the only open piece); (c) the
+   parallel MSL-source dynamic-library AOT chain (`newLibraryWithSource:` →
+   `newDynamicLibrary:` → `serializeToURL:` → `newDynamicLibraryWithURL:`).
 6. Attach benchmark metadata for Apple hot paths such as matmul, matmul
    epilogues, conv2d, decode chain, and packaged kernels.
 

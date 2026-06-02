@@ -1529,6 +1529,26 @@ extern "C" void *tessera_apple_gpu_mlpkg_compile_with_dims(
 extern "C" void tessera_apple_gpu_mlpkg_destroy(void *) {}
 extern "C" int32_t tessera_apple_gpu_mlpkg_is_compiled(void *) { return 0; }
 extern "C" int32_t tessera_apple_gpu_mlpkg_last_error_kind(void) { return -1; }
+// PK8 — package authoring needs a real Metal device + MPSGraph; unavailable
+// off-Darwin. Return the "OS unavailable" code so callers skip cleanly.
+extern "C" int32_t tessera_apple_gpu_mlpkg_author_matmul(const char *, int32_t,
+                                                         int32_t, int32_t) {
+  return -1;
+}
+extern "C" int32_t tessera_apple_gpu_mlpkg_first_function_name(const char *,
+                                                               char *,
+                                                               int32_t) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_mlpkg_fill_input_at(void *, int32_t,
+                                                         const void *,
+                                                         int64_t) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_mlpkg_read_output_at(void *, int32_t,
+                                                          void *, int64_t) {
+  return 0;
+}
 // PK2 — Reflection-extraction stubs. No pipeline → no bindings; the
 // count probe returns -1 and the info probe returns 0 with zeroed
 // outputs (matching the runtime's "invalid handle" semantics).

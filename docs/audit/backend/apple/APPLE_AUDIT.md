@@ -52,8 +52,19 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
   auto_batch body still pays Graph-IR-emission overhead it never uses, and
   must keep shape kwargs as literals/args (a general `@jit` AST-lowering
   constraint, not auto_batch-specific).
-- **Production packaged kernels are empty.** Fixture proof is not the same as
-  production packaged backend coverage.
+- **Production packaged kernels are empty — blocked on a package-authoring
+  pipeline.** PK1-PK7 prove the full load → reflect → validate → dispatch
+  lifecycle against Apple's licensed **sample** `matrix-multiplication.mtlpackage`
+  (the only real `.mtlpackage` in the repo), but there are **0** live
+  `status="packaged"` manifest rows. The structural blocker: `apple_mlpkg`
+  only *consumes* packages — there is no authoring/serialization path, so a
+  *production* (Tessera-authored) packaged kernel needs Apple's CoreML / metal
+  package-compiler toolchain to emit committed `.mtlpackage` artifacts, which
+  this repo/host does not have. Declaring production rows without real
+  artifacts would be scaffolding, not coverage. **Unblock requires either** a
+  package-authoring step (Tessera op → `.mtlpackage`) **or** shipping real
+  pre-compiled production packages. Until then this stays honestly open —
+  the lifecycle is proven, the production artifacts are not.
 - **Target IR does too much.** Apple source strings, fusion recognition, and
   runtime dispatch decisions need a descriptor-backed backend registry.
 - **Performance gates are uneven.** Benchmarks exist, but manifest-attached

@@ -87,6 +87,23 @@ class CompileResult:
     reason: str
     primary_op: Optional[str]
     target: str
+    # P1 (2026-06-02) — multi-op program identity. ``component_ops`` is the
+    # distinct op vocabulary of the whole program (not just ``primary_op``).
+    # ``component_blockers`` lists ``(op, first_failing_gate)`` for every
+    # component op that does NOT pass its gates on this target, so the
+    # whole-program answer is gated component-by-component rather than
+    # trusting the primary op to stand in. ``program_executable`` is the
+    # bundle-executable AND "no component blockers" — the honest answer for
+    # a real multi-op program (single-op programs collapse to ``executable``).
+    component_ops: tuple[str, ...] = ()
+    component_blockers: tuple[tuple[str, str], ...] = ()
+    program_executable: bool = False
+
+    @property
+    def is_single_op(self) -> bool:
+        """True when the program is a single distinct op (component-op
+        gating is then identical to the primary-op answer)."""
+        return len(self.component_ops) <= 1
 
     @property
     def graph_ir(self) -> str:
@@ -166,6 +183,16 @@ class CompileResult:
                 for r in self.gate_results
             ],
             "canonical_primary_op": self.primary_op,
+            # P1 (2026-06-02) — multi-op program identity. The full op
+            # vocabulary + the whole-program (all-components) gate answer +
+            # per-component blockers, so a runtime/dashboard consumer sees
+            # the program, not just its first op.
+            "canonical_component_ops": list(self.component_ops),
+            "canonical_program_executable": self.program_executable,
+            "canonical_component_blockers": [
+                {"op": op, "gate": gate}
+                for (op, gate) in self.component_blockers
+            ],
             # The bundle's executable claim — preserved so callers that
             # need to compare bundle-side vs canonical-side decisions can.
             "bundle_executable": self.bundle.executable,
@@ -196,6 +223,12 @@ class CompileResult:
         out: dict[str, Any] = {
             "target": self.target,
             "primary_op": self.primary_op,
+            "component_ops": list(self.component_ops),
+            "program_executable": self.program_executable,
+            "component_blockers": [
+                {"op": op, "gate": gate}
+                for (op, gate) in self.component_blockers
+            ],
             "compiler_path": self.compiler_path,
             "executable": self.executable,
             "reason": self.reason,
@@ -262,17 +295,49 @@ def _extract_primary_op(module: GraphIRModule) -> Optional[str]:
     return op_name or None
 
 
+def _extract_component_ops(module: GraphIRModule) -> tuple[str, ...]:
+    """The distinct op vocabulary of the whole program (P1, 2026-06-02).
+
+    ``_extract_primary_op`` returns only the first op — fine for picking
+    a representative for the op-specific gates, but it makes the canonical
+    answer single-op-oriented (COMPILER_AUDIT: "program identity is too
+    single-op-oriented"). This walks **every** op across **every**
+    function and returns the distinct names in first-seen order, prefix-
+    stripped, so callers can gate a whole multi-op program component-by-
+    component rather than trusting the first op to stand in for all.
+
+    Returns ``()`` for an empty module. A single-op program yields a
+    1-tuple equal to ``(primary_op,)``, so existing single-op behavior is
+    unchanged.
+    """
+    seen: dict[str, None] = {}
+    for fn in module.functions:
+        for node in fn.body:
+            name = node.op_name or ""
+            if name.startswith("tessera."):
+                name = name[len("tessera."):]
+            if name:
+                seen.setdefault(name, None)
+    return tuple(seen)
+
+
 # --- Synthesizers --------------------------------------------------------
 
 def _result_from_bundle(
     bundle: CompileArtifactBundle,
     primary_op: Optional[str],
+    component_ops: Optional[tuple[str, ...]] = None,
 ) -> CompileResult:
     """Shared "bundle + gates → CompileResult" reconciliation. Both
     :func:`canonical_compile` (which runs the ladder first) and
     :func:`compile_result_from_bundle` (for callers like ``@jit`` who
     already have a bundle in hand) flow through here, so the
-    executable/reason synthesis lives in exactly one place."""
+    executable/reason synthesis lives in exactly one place.
+
+    ``component_ops`` (P1, 2026-06-02) is the whole-program op vocabulary;
+    when ``None`` it collapses to ``(primary_op,)`` so single-op callers
+    behave exactly as before. The whole-program answer
+    (``program_executable``) is gated component-by-component."""
     target = bundle.request.target
     gate_results = _pg.evaluate(target, primary_op)
     first_fail = _pg.first_failing_gate(target, primary_op)
@@ -294,6 +359,21 @@ def _result_from_bundle(
             f"execution_kind={bundle.execution_kind}"
         )
 
+    # P1 — component-level gating. Gate every distinct op in the program
+    # separately so a multi-op program's answer isn't carried by its first
+    # op alone. A component "blocks" when its op-specific gates fail.
+    comps = component_ops
+    if comps is None:
+        comps = (primary_op,) if primary_op else ()
+    blockers: list[tuple[str, str]] = []
+    for op in comps:
+        if not op:
+            continue
+        cfail = _pg.first_failing_gate(target, op)
+        if cfail is not None:
+            blockers.append((op, cfail.gate))
+    program_executable = bool(bundle.executable) and not blockers
+
     return CompileResult(
         bundle=bundle,
         gate_results=gate_results,
@@ -302,6 +382,9 @@ def _result_from_bundle(
         reason=reason,
         primary_op=primary_op,
         target=target,
+        component_ops=tuple(comps),
+        component_blockers=tuple(blockers),
+        program_executable=program_executable,
     )
 
 
@@ -328,7 +411,9 @@ def compile_result_from_bundle(
     """
     if primary_op is None and module is not None:
         primary_op = _extract_primary_op(module)
-    return _result_from_bundle(bundle, primary_op)
+    component_ops = (
+        _extract_component_ops(module) if module is not None else None)
+    return _result_from_bundle(bundle, primary_op, component_ops)
 
 
 # --- Canonical compile() -------------------------------------------------
@@ -369,7 +454,8 @@ def canonical_compile(
         options=options or {},
         enable_tool_validation=enable_tool_validation,
     )
-    return _result_from_bundle(bundle, _extract_primary_op(module))
+    return _result_from_bundle(
+        bundle, _extract_primary_op(module), _extract_component_ops(module))
 
 
 __all__ = [

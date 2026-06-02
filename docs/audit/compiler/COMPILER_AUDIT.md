@@ -29,9 +29,14 @@ multiple root audit documents and compiler archive files.
 
 ## Still Open
 
-- **Program identity is too single-op-oriented.** Canonical metadata still needs
-  component-op vectors, graph outputs, effects, shape envelopes, and fusion
-  groups for real programs.
+- **Program identity — component-op vectors + gating landed (2026-06-02);
+  richer metadata still open.** `CompileResult` now carries ``component_ops``
+  (the whole-program distinct op vocabulary), ``program_executable`` (gated
+  component-by-component, not just the primary op), and ``component_blockers``
+  ((op, failing-gate) pairs), surfaced in ``to_dict`` / ``to_runtime_artifact``.
+  Locked by `tests/unit/test_canonical_component_ops.py`. Still open: graph
+  outputs, ``effects``, ``shape_envelope``, and ``fusion_groups`` in the
+  canonical metadata.
 - **Fusion intent is too late.** Target IR and runtime still rediscover patterns
   that should be represented by Schedule/Tile/Target metadata.
 - **Layout and binding contracts are uneven.** Graph/Schedule/Tile/Target IR
@@ -44,8 +49,12 @@ multiple root audit documents and compiler archive files.
 ## Next Work
 
 1. Add `component_ops`, `fusion_groups`, `shape_envelope`, `effects`, and
-   `layout_contracts` to canonical compile metadata.
-2. Gate whole programs and component ops separately.
+   `layout_contracts` to canonical compile metadata. **`component_ops` landed
+   2026-06-02**; `fusion_groups` / `shape_envelope` / `effects` /
+   `layout_contracts` remain.
+2. ~~Gate whole programs and component ops separately.~~ **Landed 2026-06-02**
+   — `program_executable` + `component_blockers` gate the whole program
+   component-by-component alongside the primary-op `executable` answer.
 3. Make Target IR emit backend descriptors rather than embedding/rediscovering
    large Apple-specific fusion/runtime decisions.
 4. Require fixture-backed numerical proof before conformance cells become

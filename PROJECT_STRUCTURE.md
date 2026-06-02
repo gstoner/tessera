@@ -269,7 +269,13 @@ reference.
 | `archive/docs/pre_canonical/model` | `docs/Tessera_Deep_Learning_Programming_Model.md` | Pre-canonical model guide archived (old API examples) |
 | `docs/architecture/`         | `src/compiler/tessera_target_ir_doc3b.md`        | Architecture doc migrated out of src/ |
 | `docs/tutorials/Flash_Attention_in_Tessera.md` | `docs/tutorials/Flash Attention_in_Tessera.md` | Space in filename removed |
-| `docs/audit/generated/`      | new                                              | Auto-regenerated dashboards (test coverage, classification, runtime ABI, TSOL coverage, docs freshness, effect lattice, apple target map, support table, e2e op coverage, benchmarks/research/tools/tests/examples status, primitive coverage) |
+| `docs/audit/`                | reorganized                                     | Canonical audit index plus themed audit areas; root historical filenames are redirect stubs where needed |
+| `docs/audit/compiler/`       | new                                             | Compiler architecture, IR handoff, lowering, correctness, and spec-gap audit authority |
+| `docs/audit/backend/`        | new                                             | Shared backend/runtime audit authority with platform-specialized Apple, NVIDIA, and ROCm subfolders |
+| `docs/audit/coverage/`       | new                                             | Primitive/op coverage, partial-op uplift, KV-cache, examples, and coverage-dashboard authority |
+| `docs/audit/domain/`         | new                                             | GA/EBM, attention, CorrDiff/SciML, sharding, and autodiff historical/domain audit material |
+| `docs/audit/roadmap/`        | new                                             | Execution roadmap, deferred items, and sprint/crosscut planning material |
+| `docs/audit/generated/`      | new                                             | Auto-regenerated dashboards (test coverage, classification, runtime ABI, TSOL coverage, docs freshness, effect lattice, apple target map, support table, e2e op coverage, benchmarks/research/tools/tests/examples status, primitive coverage) |
 | `docs/guides/`               | new (Phases A–F)                                 | 11 user-facing how-to guides (~3,400 LOC) |
 | `docs/programming_guide/`    | new (Phases A–G)                                 | 11-chapter user manual (Ch.1–11 + Appendix NVL72) |
 | `docs/reference/`            | new                                              | tessera_tensor_attributes.md (normative dtype/attribute reference), migration guide, tessera-api-reference |

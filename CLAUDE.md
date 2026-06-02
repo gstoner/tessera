@@ -764,13 +764,16 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | API reference | `docs/api/API_Reference_Index.md`, `docs/reference/tessera-api-reference.md`, `docs/reference/tessera_tensor_attributes.md` (canonical tensor attributes + dtype names), `docs/reference/tessera_migration_guide_part{1,2}.md` |
 | Getting started + glossary | `docs/GETTING_STARTED.md`, `docs/GLOSSARY.md` |
 | Architecture overviews | `docs/architecture/` (system_overview.md, tessera_target_ir_usage_guide.md, Tessera_Kernel_Compilation_Stages_Overview.md), `docs/operations/Tessera_Standard_Operations.md` |
-| Spec gap audits | `docs/audit/compiler_spec_gap_audit.md`, `compiler_spec_gap_matrix.md` |
-| **Advanced examples capability gap** (per-example status + 10-theme tracking plan) | `docs/audit/advanced_examples_capability_gap.md` |
-| **Development execution roadmap** (Phases A–I + S-series S0–S15 standalone compiler track, per-task acceptance criteria, dependencies) | `docs/audit/execution_roadmap.md` |
+| Audit index + authority map | `docs/audit/README.md` |
+| Compiler audit authority | `docs/audit/compiler/README.md` |
+| Backend audit authority | `docs/audit/backend/README.md`, with platform-specific `backend/apple/`, `backend/nvidia/`, and `backend/rocm/` |
+| Coverage audit authority | `docs/audit/coverage/README.md` |
+| Domain roadmap/audit authority | `docs/audit/domain/README.md` |
+| Development roadmap authority | `docs/audit/roadmap/README.md` |
 | **Standalone primitive coverage dashboard** (S1 audit — generated 12-axis contract dashboard; sentinel snapshot + drift guard) | `docs/audit/standalone_primitive_coverage.md` |
-| **Standalone primitive coverage historical narrative** (per-sprint shipped surface + contract-axis hardening context; numeric counts are superseded by generated docs) | `docs/audit/primitive_coverage_state.md` |
+| **Standalone primitive coverage historical narrative** (per-sprint shipped surface + contract-axis hardening context; numeric counts are superseded by generated docs) | `docs/audit/coverage/archive/primitive_coverage_state.md` |
 | **Standalone primitive coverage registry** (the source of truth that renders the dashboard) | `python/tessera/compiler/primitive_coverage.py` |
-| **NVIDIA execution audit** (Phase G1 — per-component status + 8-task punch list to first H100 BF16 GEMM) | `docs/audit/nvidia_execution_audit.md` |
+| **NVIDIA execution audit source** (Phase G1 — per-component status + 8-task punch list to first H100 BF16 GEMM) | `docs/audit/backend/nvidia/archive/nvidia_execution_audit.md` |
 | Examples (most are README/stub scaffolds) | `examples/` — `getting_started/basic_tensor_ops.py` (canonical `@tessera.jit`), `compiler/`, `advanced/` (10+ subdirs: gumiho, long_context_attention, kv_cache_serving, MoE, MLA, Nemotron, Jet_Nemotron, Fast_dLLM, RLVR), `optimization/`, `integration/`. |
 | Style guide | `tessera_style_guide.md` |
 | Claude Code skill map | `skills.md` |

@@ -1299,6 +1299,64 @@ def author_matmul_package(
     return rc == 1
 
 
+# Ops the generalized authoring path supports, grouped by binding arity.
+# (Kept in Python so callers/tests can introspect without the runtime.)
+AUTHOR_OP_UNARY = (
+    "relu", "sigmoid", "tanh", "softplus", "silu", "gelu",
+    "exp", "log", "sqrt", "rsqrt", "neg", "abs",
+)
+AUTHOR_OP_ROWOP = ("softmax", "log_softmax", "rmsnorm", "layer_norm")
+AUTHOR_OP_BINARY = ("add", "sub", "mul", "div", "max", "min", "silu_mul")
+AUTHOR_OPS = AUTHOR_OP_UNARY + AUTHOR_OP_ROWOP + AUTHOR_OP_BINARY
+
+
+def author_op_package(
+    out_path: str | Path,
+    op: str,
+    rows: int,
+    cols: int,
+    *,
+    eps: float = 1e-5,
+    weighted: bool = False,
+) -> bool:
+    """Author a production ``.mtlpackage`` for an MPSGraph-lane op over a
+    ``[rows, cols]`` fp32 input — the generalized PK8 path.
+
+    ``op`` is one of :data:`AUTHOR_OPS`:
+
+    * **unary** (1 input): ``relu`` ``sigmoid`` ``tanh`` ``softplus``
+      ``silu`` ``gelu`` ``exp`` ``log`` ``sqrt`` ``rsqrt`` ``neg`` ``abs``
+    * **rowop** (1 input, over the last axis): ``softmax`` ``log_softmax``
+    * **norm** (1 input + optional ``gamma``/``beta`` when ``weighted``):
+      ``rmsnorm`` (gamma), ``layer_norm`` (gamma + beta)
+    * **binary** (2 inputs): ``add`` ``sub`` ``mul`` ``div`` ``max`` ``min``
+      ``silu_mul``
+
+    The authored graph reuses the *same* builders the runtime dispatches at
+    execution time, so the packaged kernel is numerically identical to the
+    live MPSGraph path. ``eps`` applies to the norms; ``weighted`` adds the
+    gamma/beta inputs. Bindings are positional (use ``fill_input_at`` /
+    ``read_output_at``): inputs first, output last.
+
+    Returns ``True`` on success; ``False`` when the runtime is unavailable
+    or ``op`` is not recognized.
+    """
+    if apple_gpu_runtime() is None:
+        return False
+    fn = bind_symbol(
+        "tessera_apple_gpu_mlpkg_author_op",
+        (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_float, ctypes.c_int32),
+        restype=ctypes.c_int32,
+    )
+    if fn is None:
+        return False
+    rc = int(fn(str(out_path).encode("utf-8"), op.encode("utf-8"),
+                ctypes.c_int32(rows), ctypes.c_int32(cols),
+                ctypes.c_float(eps), ctypes.c_int32(1 if weighted else 0)))
+    return rc == 1
+
+
 __all__ = [
     "ERROR_NONE",
     "ERROR_OS_UNAVAILABLE",
@@ -1315,6 +1373,11 @@ __all__ = [
     "AppleKernelBindingSpec",
     "compile_mlpackage",
     "author_matmul_package",
+    "author_op_package",
+    "AUTHOR_OPS",
+    "AUTHOR_OP_UNARY",
+    "AUTHOR_OP_ROWOP",
+    "AUTHOR_OP_BINARY",
     "first_function_name",
     "extract_argument_layout",
     "last_error_kind",

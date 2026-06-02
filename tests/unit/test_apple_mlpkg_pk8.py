@@ -37,13 +37,63 @@ import numpy as np
 import pytest
 
 from tessera.apple_mlpkg import (
+    AUTHOR_OP_BINARY,
+    AUTHOR_OP_ROWOP,
+    AUTHOR_OP_UNARY,
+    AUTHOR_OPS,
     author_matmul_package,
+    author_op_package,
     compile_mlpackage,
     first_function_name,
     last_error_kind,
     packaged_ml_available,
     packaged_ml_skip_reason,
 )
+
+
+def _sigmoid(x):
+    return 1.0 / (1.0 + np.exp(-x))
+
+
+def _silu(x):
+    return x * _sigmoid(x)
+
+
+def _gelu(x):
+    return 0.5 * x * (1.0 + np.tanh(0.7978845608028654 * (x + 0.044715 * x**3)))
+
+
+def _softmax(x):
+    e = np.exp(x - x.max(axis=1, keepdims=True))
+    return e / e.sum(axis=1, keepdims=True)
+
+
+def _run_authored_op(op, rows, cols, inputs, *, weighted=False, eps=1e-5):
+    """Author ``op`` → load → prepare → fill (positional) → dispatch → read.
+    Returns the GPU output as an (rows, cols) fp32 array."""
+    import os
+    import tempfile
+
+    d = tempfile.mkdtemp(prefix="pk8op_")
+    pkg = os.path.join(d, f"{op}.mtlpackage")
+    assert author_op_package(pkg, op, rows, cols, eps=eps, weighted=weighted), (
+        f"author_op_package({op}) failed"
+    )
+    fn = first_function_name(pkg) or "main"
+    pipe = compile_mlpackage(pkg, function_name=fn)
+    assert pipe is not None, f"PK1 load failed for {op} err={last_error_kind()}"
+    try:
+        assert pipe.prepare_tensors(), f"prepare failed for {op}"
+        for i, arr in enumerate(inputs):
+            assert pipe.fill_input_at(i, arr.astype(np.float32).tobytes()), (
+                f"fill input {i} failed for {op}"
+            )
+        assert pipe.dispatch(timeout_ms=30_000), f"dispatch failed for {op}"
+        raw = pipe.read_output_at(len(inputs), rows * cols * 4)
+        assert raw is not None, f"read failed for {op}"
+        return np.frombuffer(raw, dtype=np.float32).reshape(rows, cols)
+    finally:
+        pipe.destroy()
 
 
 def _require_packaged_ml() -> None:
@@ -133,6 +183,103 @@ def test_pk8_authored_matmul_dispatches_and_matches_numpy(mkn):
             )
         finally:
             pipe.destroy()
+
+
+# ── generalized authoring: unary / rowop / norm / binary families ────────
+
+
+def test_pk8_author_ops_vocabulary_is_grouped():
+    """The op vocabulary is partitioned into the three binding-arity
+    families with no overlap."""
+    assert set(AUTHOR_OPS) == set(AUTHOR_OP_UNARY) | set(AUTHOR_OP_ROWOP) | set(
+        AUTHOR_OP_BINARY
+    )
+    assert not (set(AUTHOR_OP_UNARY) & set(AUTHOR_OP_BINARY))
+    assert not (set(AUTHOR_OP_UNARY) & set(AUTHOR_OP_ROWOP))
+
+
+@pytest.mark.parametrize(
+    "op,ref",
+    [
+        ("relu", lambda x: np.maximum(x, 0.0)),
+        ("sigmoid", _sigmoid),
+        ("tanh", np.tanh),
+        ("silu", _silu),
+        ("gelu", _gelu),
+        ("exp", np.exp),
+        ("abs", np.abs),
+        ("neg", lambda x: -x),
+    ],
+)
+def test_pk8_author_unary_matches_numpy(op, ref):
+    """Each unary activation authors a package whose dispatch matches the
+    numpy reference — proving the authored kernel == the runtime's
+    MPSGraph-lane builder."""
+    _require_packaged_ml()
+    rng = np.random.default_rng(11)
+    x = rng.standard_normal((4, 8)).astype(np.float32)
+    out = _run_authored_op(op, 4, 8, [x])
+    assert np.allclose(out, ref(x).astype(np.float32), rtol=1e-4, atol=2e-4), (
+        f"{op}: max abs err {np.max(np.abs(out - ref(x))):.3e}"
+    )
+
+
+def test_pk8_author_softmax_matches_numpy():
+    _require_packaged_ml()
+    rng = np.random.default_rng(12)
+    x = rng.standard_normal((6, 5)).astype(np.float32)
+    out = _run_authored_op("softmax", 6, 5, [x])
+    assert np.allclose(out, _softmax(x), rtol=1e-4, atol=2e-4)
+
+
+def test_pk8_author_rmsnorm_weighted_matches_numpy():
+    """rmsnorm authors with a gamma input (positional binding 1)."""
+    _require_packaged_ml()
+    rng = np.random.default_rng(13)
+    rows, cols, eps = 4, 8, 1e-5
+    x = rng.standard_normal((rows, cols)).astype(np.float32)
+    g = rng.standard_normal((cols,)).astype(np.float32)
+    out = _run_authored_op("rmsnorm", rows, cols, [x, g], weighted=True, eps=eps)
+    ref = x / np.sqrt((x**2).mean(axis=1, keepdims=True) + eps) * g
+    assert np.allclose(out, ref, rtol=1e-4, atol=2e-4)
+
+
+def test_pk8_author_layer_norm_weighted_matches_numpy():
+    """layer_norm authors with gamma + beta inputs (bindings 1 and 2)."""
+    _require_packaged_ml()
+    rng = np.random.default_rng(14)
+    rows, cols, eps = 4, 8, 1e-5
+    x = rng.standard_normal((rows, cols)).astype(np.float32)
+    g = rng.standard_normal((cols,)).astype(np.float32)
+    b = rng.standard_normal((cols,)).astype(np.float32)
+    out = _run_authored_op(
+        "layer_norm", rows, cols, [x, g, b], weighted=True, eps=eps
+    )
+    mean = x.mean(axis=1, keepdims=True)
+    var = x.var(axis=1, keepdims=True)
+    ref = (x - mean) / np.sqrt(var + eps) * g + b
+    assert np.allclose(out, ref, rtol=1e-4, atol=2e-4)
+
+
+def test_pk8_author_silu_mul_binary_matches_numpy():
+    """silu_mul = a * silu(b) — a 2-input package (bindings 0 and 1)."""
+    _require_packaged_ml()
+    rng = np.random.default_rng(15)
+    a = rng.standard_normal((4, 8)).astype(np.float32)
+    b = rng.standard_normal((4, 8)).astype(np.float32)
+    out = _run_authored_op("silu_mul", 4, 8, [a, b])
+    assert np.allclose(out, a * _silu(b), rtol=1e-4, atol=2e-4)
+
+
+def test_pk8_author_op_rejects_unknown_op():
+    """An unrecognized op name fails cleanly (no crash, returns False)."""
+    _require_packaged_ml()
+    import os
+    import tempfile
+
+    d = tempfile.mkdtemp(prefix="pk8bad_")
+    pkg = os.path.join(d, "bad.mtlpackage")
+    assert author_op_package(pkg, "not_a_real_op", 4, 4) is False
 
 
 def test_pk8_reauthor_is_deterministic_overwrite():

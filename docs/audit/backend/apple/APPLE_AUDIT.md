@@ -19,17 +19,24 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
 - **Packaged-kernel lifecycle:** PK1-PK7 are proven against a real Apple sample
   package, including reflection, validation, argument layout, and dispatch.
 - **Packaged-kernel *authoring* (PK8, 2026-06-02):** Tessera authors its own
-  production `.mtlpackage` from the MPSGraph lane — build MPSGraph matmul →
+  production `.mtlpackage` from the MPSGraph lane — build MPSGraph →
   compile to `MPSGraphExecutable` → `serializeToMPSGraphPackageAtURL:` → wrap
   the `manifest.json` MLLibrary layout. The authored package flows through the
-  *existing* PK1-PK7 lifecycle and the GPU output is **bitwise-exact** vs numpy
-  `A @ B` (max abs err 0.0 at 4×4×4; passes at fp32 tol across 3 shapes). No
+  *existing* PK1-PK7 lifecycle, GPU output **bitwise-exact** vs numpy. No
   coremltools, no DXIL. MPSGraph packages expose positionally-indexed *unnamed*
   bindings, so PK8 adds `fill_input_at`/`read_output_at` index addressing
-  (`tensorsByIndex`). C ABI: `tessera_apple_gpu_mlpkg_author_matmul`,
-  `_first_function_name`, `_fill_input_at`, `_read_output_at`. Python:
-  `apple_mlpkg.author_matmul_package` / `first_function_name`. Locked by
-  `tests/unit/test_apple_mlpkg_pk8.py` (7 tests).
+  (`tensorsByIndex`). **Generalized beyond matmul (2026-06-02):** a single
+  `author_op` path covers the whole MPSGraph-lane op vocabulary by reusing the
+  *runtime's own* graph builders (`mpsg_unary_node` / `mpsg_binary_node` /
+  `mpsg_rowop_graph`) — so packaged kernels are numerically identical to the
+  live path: **unary** (relu/sigmoid/tanh/softplus/silu/gelu/exp/log/sqrt/
+  rsqrt/neg/abs), **rowop** (softmax/log_softmax), **norms** (rmsnorm +gamma,
+  layer_norm +gamma+beta), **binary** (add/sub/mul/div/max/min/silu_mul). All
+  match numpy at fp32 tol (~1e-7). C ABI: `tessera_apple_gpu_mlpkg_author_matmul`,
+  `_author_op`, `_first_function_name`, `_fill_input_at`, `_read_output_at`.
+  Python: `apple_mlpkg.author_matmul_package` / `author_op_package` (+ `AUTHOR_OPS`
+  vocabulary) / `first_function_name`. Locked by
+  `tests/unit/test_apple_mlpkg_pk8.py` (21 tests).
 - **GA/EBM Apple specialization:** fused Apple kernels and benchmarks exist for
   important GA/EBM paths.
 
@@ -162,9 +169,11 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
    `serializeToMPSGraphPackageAtURL:` → wraps `manifest.json`, and the
    authored package dispatches through PK1-PK7 bitwise-exact vs numpy.
    See the "Finished" entry above; `tests/unit/test_apple_mlpkg_pk8.py`.
-   **Follow-ons (optional, not blocked):** (a) generalize beyond matmul to
-   the rmsnorm/softmax/layer_norm MPSGraph-lane ops + a graph→package
-   compiler hook; (b) decide whether to commit a real `.mtlpackage` artifact
+   **Follow-ons (optional, not blocked):** (a) ~~generalize beyond matmul to
+   the rmsnorm/softmax/layer_norm MPSGraph-lane ops~~ **done 2026-06-02 —
+   `author_op` covers unary/rowop/norm/binary families**; a graph→package
+   compiler hook (drive authoring from Graph IR rather than an op-name string)
+   remains; (b) decide whether to commit a real `.mtlpackage` artifact
    and declare a `status="packaged"` `BackendKernelEntry` row (a repo-policy
    choice about committing a device/OS-specific binary — the *capability* is
    proven, the committed-artifact row is the only open piece); (c) the

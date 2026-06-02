@@ -2319,6 +2319,66 @@ extern "C" void *tessera_apple_gpu_mlpkg_compile(const char *path,
 //   -1 = OS / device unavailable      -2 = bad args
 //   -3 = graph compile failed         -4 = manifest write failed
 //   -5 = serialized package not found on disk after write
+// PK8 — compile a built graph to an MPSGraphExecutable, serialize it to
+// ``<out>/library.mpsgraphpackage`` (MPSGraphExecutable.h:205), and write the
+// MLLibrary ``manifest.json`` wrapper so the result is a loadable
+// ``.mtlpackage``. Shared by every ``author_*`` entry point. ``feeds`` maps
+// each placeholder to its ``MPSGraphShapedType``. Returns 1 / <=0 error code
+// (-3 compile, -4 manifest write, -5 serialized package missing).
+API_AVAILABLE(macos(14.0), ios(17.0))
+static int32_t _mlpkg_compile_and_write(MPSGraph *g, NSDictionary *feeds,
+                                        MPSGraphTensor *y,
+                                        const char *out_package_path) {
+  if (!g || !feeds || !y || !out_package_path) return -2;
+  MPSGraphExecutable *exe = [g compileWithDevice:nil
+                                           feeds:feeds
+                                   targetTensors:@[ y ]
+                                targetOperations:nil
+                           compilationDescriptor:nil];
+  if (!exe) return -3;
+
+  NSString *outDir = @(out_package_path);
+  NSFileManager *fm = [NSFileManager defaultManager];
+  // Start clean so re-authoring is deterministic (serialize won't append).
+  [fm removeItemAtPath:outDir error:nil];
+  [fm createDirectoryAtPath:outDir
+      withIntermediateDirectories:YES
+                       attributes:nil
+                            error:nil];
+
+  NSString *mpsPkgName = @"library.mpsgraphpackage";
+  NSString *mpsPkgPath = [outDir stringByAppendingPathComponent:mpsPkgName];
+  NSURL *mpsURL = [NSURL fileURLWithPath:mpsPkgPath];
+  MPSGraphExecutableSerializationDescriptor *sdesc =
+      [[MPSGraphExecutableSerializationDescriptor alloc] init];
+  sdesc.append = NO;
+  [exe serializeToMPSGraphPackageAtURL:mpsURL descriptor:sdesc];
+  if (![fm fileExistsAtPath:mpsPkgPath]) return -5;
+
+  // Wrap with the MLLibrary manifest — byte-for-byte the shape of the Apple
+  // sample's manifest.json (pkgtype + inner package name).
+  NSString *manifest = [NSString
+      stringWithFormat:@"{\n  \"mtlpackage\" : {\n    \"version\" : {\n"
+                        "      \"major\" : 1,\n      \"minor\" : 0,\n"
+                        "      \"patch\" : 0\n    },\n"
+                        "    \"pkgtype\" : \"MLLibrary\",\n"
+                        "    \"content\" : {\n"
+                        "      \"mpspkgname\" : \"%@\"\n    }\n  }\n}\n",
+                       mpsPkgName];
+  NSString *manifestPath =
+      [outDir stringByAppendingPathComponent:@"manifest.json"];
+  NSError *werr = nil;
+  if (![manifest writeToFile:manifestPath
+                  atomically:YES
+                    encoding:NSUTF8StringEncoding
+                       error:&werr]) {
+    fprintf(stderr, "[tessera_apple_gpu_mlpkg] manifest write failed: %s\n",
+            werr ? [[werr localizedDescription] UTF8String] : "<nil>");
+    return -4;
+  }
+  return 1;
+}
+
 extern "C" int32_t tessera_apple_gpu_mlpkg_author_matmul(
     const char *out_package_path, int32_t M, int32_t K, int32_t N) {
   if (!out_package_path || M <= 0 || K <= 0 || N <= 0) return -2;
@@ -2338,61 +2398,12 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_author_matmul(
           [g matrixMultiplicationWithPrimaryTensor:pa
                                    secondaryTensor:pb
                                               name:@"output"];
-
-      // Compile the graph to a serializable executable. device:nil compiles
-      // for the default device; feeds carry the concrete input shaped-types.
       MPSGraphShapedType *ta =
           [[MPSGraphShapedType alloc] initWithShape:aShape dataType:dt];
       MPSGraphShapedType *tb =
           [[MPSGraphShapedType alloc] initWithShape:bShape dataType:dt];
-      MPSGraphExecutable *exe =
-          [g compileWithDevice:nil
-                         feeds:@{pa : ta, pb : tb}
-                 targetTensors:@[ y ]
-              targetOperations:nil
-         compilationDescriptor:nil];
-      if (!exe) return -3;
-
-      NSString *outDir = @(out_package_path);
-      NSFileManager *fm = [NSFileManager defaultManager];
-      // Start clean so re-authoring is deterministic (serialize won't append).
-      [fm removeItemAtPath:outDir error:nil];
-      [fm createDirectoryAtPath:outDir
-          withIntermediateDirectories:YES
-                           attributes:nil
-                                error:nil];
-
-      NSString *mpsPkgName = @"library.mpsgraphpackage";
-      NSString *mpsPkgPath = [outDir stringByAppendingPathComponent:mpsPkgName];
-      NSURL *mpsURL = [NSURL fileURLWithPath:mpsPkgPath];
-      MPSGraphExecutableSerializationDescriptor *sdesc =
-          [[MPSGraphExecutableSerializationDescriptor alloc] init];
-      sdesc.append = NO;
-      [exe serializeToMPSGraphPackageAtURL:mpsURL descriptor:sdesc];
-      if (![fm fileExistsAtPath:mpsPkgPath]) return -5;
-
-      // Wrap with the MLLibrary manifest — byte-for-byte the shape of the
-      // Apple sample's manifest.json (pkgtype + inner package name).
-      NSString *manifest = [NSString
-          stringWithFormat:@"{\n  \"mtlpackage\" : {\n    \"version\" : {\n"
-                            "      \"major\" : 1,\n      \"minor\" : 0,\n"
-                            "      \"patch\" : 0\n    },\n"
-                            "    \"pkgtype\" : \"MLLibrary\",\n"
-                            "    \"content\" : {\n"
-                            "      \"mpspkgname\" : \"%@\"\n    }\n  }\n}\n",
-                           mpsPkgName];
-      NSString *manifestPath =
-          [outDir stringByAppendingPathComponent:@"manifest.json"];
-      NSError *werr = nil;
-      if (![manifest writeToFile:manifestPath
-                      atomically:YES
-                        encoding:NSUTF8StringEncoding
-                           error:&werr]) {
-        fprintf(stderr, "[tessera_apple_gpu_mlpkg] manifest write failed: %s\n",
-                werr ? [[werr localizedDescription] UTF8String] : "<nil>");
-        return -4;
-      }
-      return 1;
+      return _mlpkg_compile_and_write(g, @{pa : ta, pb : tb}, y,
+                                      out_package_path);
     }
   }
   return -1;
@@ -10985,6 +10996,116 @@ static bool mpsg_run_rowop(MetalDeviceContext &ctx, int kind, const void *x,
 }
 
 }  // namespace
+
+// PK8 (generalized) — map an op name to a builder family. Placed after the
+// anonymous namespace so it can reference the file-local graph builders
+// (``mpsg_unary_node`` / ``mpsg_binary_node`` / ``mpsg_rowop_graph``), which
+// have internal linkage but are visible to the rest of this translation unit.
+// Returns >=0 op-code for the family, or -1 if ``op`` isn't in that family.
+namespace {
+int _author_unary_code(const char *op) {
+  if (!op) return -1;
+  static const char *kNames[] = {"relu",  "sigmoid", "tanh", "softplus",
+                                 "silu",  "gelu",    "exp",  "log",
+                                 "sqrt",  "rsqrt",   "neg",  "abs"};
+  for (int i = 0; i < 12; ++i)
+    if (std::strcmp(op, kNames[i]) == 0) return i;
+  return -1;
+}
+int _author_binary_code(const char *op) {
+  if (!op) return -1;
+  // Same ordering as ``mpsg_binary_node``: add/sub/mul/div/max/min/silu_mul.
+  static const char *kNames[] = {"add", "sub",   "mul",     "div",
+                                 "max", "min",   "silu_mul"};
+  for (int i = 0; i < 7; ++i)
+    if (std::strcmp(op, kNames[i]) == 0) return i;
+  return -1;
+}
+int _author_rowop_kind(const char *op) {
+  if (!op) return -1;
+  // Same kinds as ``mpsg_rowop_graph``: 0 layer_norm, 1 rmsnorm,
+  // 2 softmax, 3 log_softmax.
+  if (std::strcmp(op, "layer_norm") == 0) return 0;
+  if (std::strcmp(op, "rmsnorm") == 0) return 1;
+  if (std::strcmp(op, "softmax") == 0) return 2;
+  if (std::strcmp(op, "log_softmax") == 0) return 3;
+  return -1;
+}
+}  // namespace
+
+// PK8 (generalized) — author a production `.mtlpackage` for any of the
+// MPSGraph-lane ops over a ``[rows, cols]`` fp32 input, reusing the *same*
+// graph builders the runtime dispatches at execution time (so the packaged
+// kernel is numerically identical to the live path):
+//
+//   unary   (1 input):  relu sigmoid tanh softplus silu gelu exp log
+//                       sqrt rsqrt neg abs
+//   rowop   (1 input):  softmax log_softmax
+//   norms   (1 input + optional gamma[/beta] when ``weighted``):
+//                       rmsnorm (gamma) / layer_norm (gamma+beta)
+//   binary  (2 inputs): add sub mul div max min silu_mul
+//
+// Bindings are positional (MPSGraph emits unnamed bindings): inputs at
+// 0.. , output last. ``eps`` applies to the norms; ``weighted`` (0/1) adds
+// the gamma/beta inputs for the norms. Returns 1 / <=0 error (see
+// ``_mlpkg_compile_and_write`` + -2 bad-args / -6 unknown-op).
+extern "C" int32_t tessera_apple_gpu_mlpkg_author_op(
+    const char *out_package_path, const char *op, int32_t rows, int32_t cols,
+    float eps, int32_t weighted) {
+  if (!out_package_path || !op || rows <= 0 || cols <= 0) return -2;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return -1;
+  if (@available(macOS 14.0, iOS 17.0, *)) {
+    @autoreleasepool {
+      MPSDataType dt = MPSDataTypeFloat32;
+      NSArray<NSNumber *> *xs = @[ @(rows), @(cols) ];
+      NSArray<NSNumber *> *gs = @[ @(cols) ];
+      MPSGraphShapedType *xt =
+          [[MPSGraphShapedType alloc] initWithShape:xs dataType:dt];
+      MPSGraphShapedType *gt =
+          [[MPSGraphShapedType alloc] initWithShape:gs dataType:dt];
+
+      int unary = _author_unary_code(op);
+      int binary = _author_binary_code(op);
+      int rowkind = _author_rowop_kind(op);
+
+      if (unary >= 0) {
+        MPSGraph *g = [MPSGraph new];
+        MPSGraphTensor *px = [g placeholderWithShape:xs dataType:dt name:nil];
+        MPSGraphTensor *y = mpsg_unary_node(g, px, unary);
+        if (!y) return -6;
+        return _mlpkg_compile_and_write(g, @{px : xt}, y, out_package_path);
+      }
+      if (binary >= 0) {
+        MPSGraph *g = [MPSGraph new];
+        MPSGraphTensor *pa = [g placeholderWithShape:xs dataType:dt name:nil];
+        MPSGraphTensor *pb = [g placeholderWithShape:xs dataType:dt name:nil];
+        MPSGraphTensor *y = mpsg_binary_node(g, pa, pb, binary);
+        if (!y) return -6;
+        return _mlpkg_compile_and_write(g, @{pa : xt, pb : xt}, y,
+                                        out_package_path);
+      }
+      if (rowkind >= 0) {
+        bool isNorm = (rowkind == 0 || rowkind == 1);
+        bool hasGamma = isNorm && (weighted != 0);
+        bool hasBeta = (rowkind == 0) && (weighted != 0);  // layer_norm only
+        NSArray *phs = nil;
+        MPSGraphTensor *y = nil;
+        // Reuse the exact runtime rowop graph (build + placeholders).
+        MPSGraph *g = mpsg_rowop_graph(rowkind, rows, cols, eps, hasGamma,
+                                       hasBeta, dt, &phs, &y);
+        if (!g || !y || phs.count == 0) return -6;
+        NSMutableDictionary *feeds = [NSMutableDictionary dictionary];
+        feeds[phs[0]] = xt;             // x  [rows, cols]
+        if (phs.count >= 2) feeds[phs[1]] = gt;  // gamma [cols]
+        if (phs.count >= 3) feeds[phs[2]] = gt;  // beta  [cols]
+        return _mlpkg_compile_and_write(g, feeds, y, out_package_path);
+      }
+      return -6;  // unknown op
+    }
+  }
+  return -1;
+}
 
 // Number of distinct (shape-class, opcode, dtype, shape) MPSGraphs cached.
 // Used by tests to verify graph reuse across repeated dispatches.

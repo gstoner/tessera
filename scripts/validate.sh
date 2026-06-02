@@ -72,18 +72,10 @@ fi
 echo "==> Python unit tests"
 "$PYTHON" -m pytest tests/unit -q -m "not slow"
 
-# M0 / M0.5: regenerate the support table and fail if it drifts from
-# the checked-in copy.  Catches changes to op_catalog / primitive
-# coverage / backend_manifest / capabilities that didn't update the
-# audit artifact.
-echo "==> Generated support-table drift check"
-"$PYTHON" -m tessera.compiler.audit support_table --check
-
-# Apple plan phase A (2026-05-20): per-op apple_cpu vs apple_gpu map.
-# Drifts if capabilities.py / backend_manifest.py / driver.py change
-# without regenerating ``docs/audit/generated/apple_target_map.md``.
-echo "==> Apple target map drift check"
-"$PYTHON" -m tessera.cli.apple_target_map --check
+# Generated audit dashboards: one script owns the drift list so local
+# validation, CI, and pre-commit do not diverge.
+echo "==> Generated audit-doc drift checks"
+PYTHON="$PYTHON" bash scripts/check_generated_docs.sh
 
 # Apple follow-up #3 (2026-05-20): NVIDIA + ROCm dashboards mirror
 # the Apple target map (artifact_only / planned today; auto-promotes

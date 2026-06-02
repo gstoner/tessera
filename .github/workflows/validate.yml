@@ -130,10 +130,10 @@ jobs:
           # shellcheck disable=SC2086
           python -m pip install $TESSERA_CI_PY_DEPS
 
-      - name: support_table drift check
+      - name: Generated audit-doc drift checks
         env:
           PYTHONPATH: python
-        run: python -m tessera.compiler.audit support_table --check
+        run: bash scripts/check_generated_docs.sh
 
       - name: Public-doc claim_lint
         env:

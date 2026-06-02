@@ -171,6 +171,6 @@ In priority order (descending):
 - Runtime: [`src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm`](../../src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm)
 - Benchmark: [`benchmarks/apple_gpu/benchmark_ga_ebm.py`](../../benchmarks/apple_gpu/benchmark_ga_ebm.py)
 - Benchmark README: [`benchmarks/apple_gpu/README.md`](../../benchmarks/apple_gpu/README.md)
-- Roadmap (full history): [`docs/audit/domain/DOMAIN_AUDIT.md`](../audit/ga_ebm_roadmap.md)
-- Earlier gap audit: [`docs/audit/backend/apple/APPLE_AUDIT.md`](../audit/apple_ga_ebm_native_execution_gap.md)
+- Roadmap (full history): [`docs/audit/domain/DOMAIN_AUDIT.md`](../audit/domain/DOMAIN_AUDIT.md)
+- Earlier gap audit: [`docs/audit/backend/apple/APPLE_AUDIT.md`](../audit/backend/apple/APPLE_AUDIT.md)
 - CI test: [`tests/unit/test_benchmark_ga_ebm.py`](../../tests/unit/test_benchmark_ga_ebm.py)

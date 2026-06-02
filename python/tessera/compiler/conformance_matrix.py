@@ -613,7 +613,7 @@ def render_markdown() -> str:
     lines.append("")
     lines.append(
         "Audit response to"
-        " [docs/audit/compiler/COMPILER_AUDIT.md](compiler_layer_gap_remediation.md)"
+        " [docs/audit/compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md)"
         " recommendation **A**: the gap between *architecture-implied"
         " capability* and *executable capability* is now"
         " drift-gated rather than implicit."

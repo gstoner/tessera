@@ -8465,8 +8465,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/scripts/validate.sh": {
-    "mtime": 1779309723.0166755,
-    "ast_hash": "ba52b037f3f16b3adc406e9d5f550c04",
+    "mtime": 1780408807.4268894,
+    "ast_hash": "188b94645e51ab014354627b855d9ef9",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/scripts/check_versions.py": {
@@ -9955,8 +9955,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/porting_advanced_examples.md": {
-    "mtime": 1780406390.5392745,
-    "ast_hash": "ea4a3b25556462f5a4062d96a261963a",
+    "mtime": 1780408894.4093504,
+    "ast_hash": "a458c3cd3f10e9c1aac94682b4eea7c8",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/apple_deep_learning_datatypes.md": {
@@ -10005,8 +10005,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/CANONICAL_API.md": {
-    "mtime": 1780406359.079296,
-    "ast_hash": "5e9b1ef41fc5e4cd3d9fd4169381c4c8",
+    "mtime": 1780408894.241265,
+    "ast_hash": "d135fca71f4948fe6713cf403cb7e0be",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/context/ontology.yaml": {
@@ -10080,8 +10080,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/CLIFFORD_SPEC.md": {
-    "mtime": 1780406385.1798966,
-    "ast_hash": "7b2aa0c3a39f1db51b3fd2190cf4b315",
+    "mtime": 1780408893.7370465,
+    "ast_hash": "9731bec1ceb282c0ab32291e75ce302b",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/GA_EBM_EXECUTION_STATUS.md": {
@@ -10090,8 +10090,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/EBM_SPEC.md": {
-    "mtime": 1780406385.179442,
-    "ast_hash": "1d32d97e38a42b0d3984a4c22f6b3ca1",
+    "mtime": 1780408893.9045794,
+    "ast_hash": "e870aeec01ace10d2beed613cdfbc1b9",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/SHAPE_SYSTEM.md": {
@@ -10130,8 +10130,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/status/ga_ebm_milestone.md": {
-    "mtime": 1780406385.1784647,
-    "ast_hash": "4ca8d01de2f0647ef3f1ca4deb734c66",
+    "mtime": 1780408894.5755732,
+    "ast_hash": "fd4825c1c2cf28f2c216b0c8bf11d211",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/status/visual_complex.md": {
@@ -10520,8 +10520,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/reference/tessera_tensor_attributes.md": {
-    "mtime": 1780406385.176737,
-    "ast_hash": "7488c5ea24c2b28e83bf639a58156924",
+    "mtime": 1780408894.0708811,
+    "ast_hash": "eaf696fb1032a0817b0e508e9ba85353",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/reference/tessera-api-reference.md": {
@@ -11000,8 +11000,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/.github/workflows/validate.yml": {
-    "mtime": 1780252633.6469598,
-    "ast_hash": "d50658c123cdfc00bc04cfa2716bcd7d",
+    "mtime": 1780408807.598923,
+    "ast_hash": "3644e0cffab54b090f64332bec3ea0a4",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/examples/advanced/gumiho/README.md": {
@@ -11060,8 +11060,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/conformance_matrix.py": {
-    "mtime": 1780406366.3985283,
-    "ast_hash": "c3c0d9a1fad7f92127e8dac5a9511d5d",
+    "mtime": 1780408893.5702682,
+    "ast_hash": "900f6f926552b8c88ddcd67cf0ed7272",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_canonical_compile.py": {
@@ -11140,8 +11140,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/op_target_conformance.md": {
-    "mtime": 1780406366.4056067,
-    "ast_hash": "40c91b3a9be8d7bd078d74199c0e5224",
+    "mtime": 1780408902.7543054,
+    "ast_hash": "870d609ae39389e9cef4c09edde7d33d",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/runtime_execution_matrix.md": {
@@ -11460,8 +11460,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/README.md": {
-    "mtime": 1780406366.4059198,
-    "ast_hash": "1220872e02db2b05b0399105c6a2b033",
+    "mtime": 1780408516.0004487,
+    "ast_hash": "491f07b6654646d8f2d8c4e225a3b3f8",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/backend/README.md": {
@@ -11520,8 +11520,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/compiler/README.md": {
-    "mtime": 1780406366.4040082,
-    "ast_hash": "39c3f264b6404aafcac195f5fa3360d9",
+    "mtime": 1780408544.694766,
+    "ast_hash": "7fbf8bddfb3443c2c5328d5c77a6d390",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/compiler/archive/compiler_apple_backend_end_to_end_audit_2026_06_02.md": {

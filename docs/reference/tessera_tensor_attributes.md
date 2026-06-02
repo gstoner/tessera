@@ -28,7 +28,7 @@ specs. This document defines the public vocabulary those specs should use.
 
 ## Multivector — A Parallel Tensor Kind (GA0 Scope Lock)
 
-Per Q2 of [`docs/audit/domain/DOMAIN_AUDIT.md`](../audit/ga_scope_lock.md),
+Per Q2 of [`docs/audit/domain/DOMAIN_AUDIT.md`](../audit/domain/DOMAIN_AUDIT.md),
 the Geometric Algebra surface introduces a **sibling tensor kind**
 called `Multivector` rather than adding `grade` and `algebra` as a
 seventh and eighth canonical tensor attribute.  This keeps the six

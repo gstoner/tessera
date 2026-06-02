@@ -15,8 +15,7 @@ IR mapping, lowering, backend status, and out-of-scope items for v1.
 The implementation is deliberately Tessera-native: Clifford signatures and
 grades are compiler-visible concepts, not conventions encoded in plain tensor
 dimensions. The active roadmap and scope-lock records are
-[`docs/audit/domain/DOMAIN_AUDIT.md`](../audit/ga_ebm_roadmap.md) and
-[`docs/audit/domain/DOMAIN_AUDIT.md`](../audit/ga_scope_lock.md).
+[`docs/audit/domain/DOMAIN_AUDIT.md`](../audit/domain/DOMAIN_AUDIT.md).
 
 ## 1. Concept
 

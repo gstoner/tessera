@@ -20,7 +20,7 @@ namespace is the home for all of them.
 
 Provenance: adapted from the archived `Tessera_EBT_Package_v1` design
 ([EBT_in_Tessera.md](../../archive/examples/advanced/EBT/Tessera_EBT_Package_v1/docs/EBT_in_Tessera.md)),
-with the EBM0 revisions documented in [`docs/audit/domain/DOMAIN_AUDIT.md`](../audit/ebm_scope_lock.md):
+with the EBM0 revisions documented in [`docs/audit/domain/DOMAIN_AUDIT.md`](../audit/domain/DOMAIN_AUDIT.md):
 functional state, explicit `RNGKey`, broader namespace, MLP energy head.
 
 ## 1. Concept

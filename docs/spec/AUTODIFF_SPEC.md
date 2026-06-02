@@ -34,7 +34,7 @@ last_updated: 2026-05-09
 | Higher-order derivatives (HVP, jacrev, jacfwd) | **✅ Phase F7 landed** — `tessera.autodiff.{grad, hvp, jacrev, jacfwd, elementwise_grad}`. |
 | `jax.vmap`-style batched transforms | **✅ Phase F6 landed** — `tessera.autodiff.vmap` + `tessera.control.{vmap, pmap}`. |
 | Backward through `flash_attn`, attention family | **✅ Phase F3 landed** — `custom_rule`-registered VJP+JVP; reasoning-model variants (`deepseek_sparse_attention`, `lightning_attention`, `kimi_delta_attention`, etc.) also shipped. |
-| Backward through spectral, MoE, selective_ssm, sparse, linalg | **Mixed** — `fft`/`ifft`/`rfft`/`irfft`/`moe`/`selective_ssm` shipped (Phase F3); long-tail (`stft`/`istft`/`dct`/`spectral_*`, `spmm_*`/`sddmm`/`bsmm`, `cholesky`/`qr`/`svd`/`tri_solve`) tracked at `docs/audit/primitive_coverage_state.md`. |
+| Backward through spectral, MoE, selective_ssm, sparse, linalg | **Mixed** — `fft`/`ifft`/`rfft`/`irfft`/`moe`/`selective_ssm` shipped (Phase F3); long-tail (`stft`/`istft`/`dct`/`spectral_*`, `spmm_*`/`sddmm`/`bsmm`, `cholesky`/`qr`/`svd`/`tri_solve`) tracked at `docs/audit/coverage/COVERAGE_AUDIT.md`. |
 | Custom CUDA / Metal adjoint kernels | **Pending Phase G/H/I** — autodiff contract is numpy-reference complete; hardware kernels arrive with each backend. |
 | Custom-primitive registration API | **✅ Sprint S13 landed** — `tessera.custom.custom_vjp`/`custom_jvp`/`custom_batching`/`custom_lowering`. |
 
@@ -106,7 +106,7 @@ The spec ships a registry-driven coverage model rather than a static table.
 Per-primitive contract status is the single source of truth at
 `python/tessera/compiler/primitive_coverage.py`, rendered as a dashboard
 at `docs/audit/standalone_primitive_coverage.md`, and audited at
-`docs/audit/primitive_coverage_state.md`.
+`docs/audit/coverage/COVERAGE_AUDIT.md`.
 
 **Current numbers (2026-05-10):**
 
@@ -336,7 +336,7 @@ Out of scope for the F4 first cut:
 
 - Programming Guide Ch.7 (Autodiff) — describes the *full* Phase 5 epic.
   This spec implements the v1 first slice + F4 ODS scaffolding.
-- `docs/audit/advanced_examples_capability_gap.md` — Theme 2.
+- `docs/audit/coverage/COVERAGE_AUDIT.md` — Theme 2.
 - `python/tessera/nn/module.py` — `Module.zero_grad()` and `Parameter.grad`
   are in place from Tier 1.
 - `python/tessera/autodiff/mixed_precision.py` — Phase F1 autocast + GradScaler.

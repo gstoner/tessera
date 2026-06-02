@@ -1,7 +1,7 @@
 """EBM1 acceptance: energy primitive surface (Euclidean baseline).
 
 Sprint: EBM1.
-Roadmap: docs/audit/ga_ebm_roadmap.md
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md
 Spec: docs/spec/EBM_SPEC.md § 2
 
 Covers the EBM1 acceptance criteria:

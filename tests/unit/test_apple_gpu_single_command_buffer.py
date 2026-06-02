@@ -3,7 +3,7 @@
 The audit's deferred Action 6 (table row #6) asks for "prefill /
 decode / attn / MLP / projection on one command buffer." This test
 file pins the **scaffold stage** of the roadmap (see
-``docs/audit/single_command_buffer_decode_plan.md``): a 2-op chain
+``docs/audit/backend/apple/APPLE_AUDIT.md``): a 2-op chain
 (``layer_norm + bmm``) runs in ONE session, produces the right
 numerical answer, and submits exactly ONE command buffer.
 

@@ -44,7 +44,7 @@ from . import elastic
 from . import checkpoint
 from . import server
 # Apple-GPU encode-session surface (single-cb decode chain — see
-# docs/audit/single_command_buffer_decode_plan.md). Importing
+# docs/audit/backend/apple/APPLE_AUDIT.md). Importing
 # unconditionally; the module degrades gracefully off-Darwin (the
 # session_available() check returns False).
 from . import apple_gpu_ops  # noqa: F401
@@ -850,7 +850,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         run the same kernel; the split keeps each op as a single-tensor
         return so the autograd tape can record them.
 
-        See ``docs/audit/attention_variants_plan.md`` Variant 2.
+        See ``docs/audit/domain/DOMAIN_AUDIT.md`` Variant 2.
         """
         O, _ = _linear_attn_impl(
             Q, K, V, feature_map=feature_map, state=state,

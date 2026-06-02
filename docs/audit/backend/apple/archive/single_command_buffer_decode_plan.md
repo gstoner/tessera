@@ -324,4 +324,4 @@ proof the chain stays on one cb.
     — adds `tessera_apple_gpu_layer_norm_dev_f32_enc`
   * `python/tessera/apple_gpu_batched.py` — new module
   * `tests/unit/test_apple_gpu_single_command_buffer.py` — new
-  * `docs/audit/single_command_buffer_decode_plan.md` — this doc
+  * `docs/audit/backend/apple/APPLE_AUDIT.md` — this doc

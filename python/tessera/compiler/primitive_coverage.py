@@ -2732,7 +2732,7 @@ _PLANNED_ENTRIES: tuple[PrimitiveCoverage, ...] = (
     _planned("tokenizer_sentencepiece_compat", "tokenizer", ("all",), references=("sentencepiece",),
              notes="Reads SentencePiece protobufs but the tokenizer runs in Tessera."),
     # ── EBM2: iterative Markov-chain samplers (extends rng) ──────────────
-    # See docs/audit/ga_ebm_roadmap.md § EBM2. These extend the keyed
+    # See docs/audit/domain/DOMAIN_AUDIT.md § EBM2. These extend the keyed
     # point-sampler surface from S4 with chain-based samplers that
     # produce sequences from energy-defined target distributions.
     _planned("rng_langevin_sample", "rng", ("EBT", "RBM", "score_matching", "diffusion"),
@@ -2748,7 +2748,7 @@ _PLANNED_ENTRIES: tuple[PrimitiveCoverage, ...] = (
              references=("Geman & Geman 1984",),
              notes="EBM2: coordinate-wise Gibbs; user-supplied conditional sampler."),
     # ── EBM1: Energy-Based Model primitive surface (Euclidean baseline) ──
-    # See docs/spec/EBM_SPEC.md and docs/audit/ga_ebm_roadmap.md § EBM1.
+    # See docs/spec/EBM_SPEC.md and docs/audit/domain/DOMAIN_AUDIT.md § EBM1.
     # All five primitives are Tessera-native — no PyTorch/JAX wrappers
     # per Decision #23. References list reading-only inspiration.
     # 2026-05-18: all five plus `ebm_partition_exact` ship fused MSL
@@ -2826,7 +2826,7 @@ _PLANNED_ENTRIES: tuple[PrimitiveCoverage, ...] = (
              references=("Brubaker et al. 2012",),
              notes="EBM7: sphere Langevin chain (chain wrapper)."),
     # ── GA4: Clifford geometric-algebra primitive surface ────────────────
-    # See docs/audit/ga_ebm_roadmap.md § GA4. Each primitive corresponds
+    # See docs/audit/domain/DOMAIN_AUDIT.md § GA4. Each primitive corresponds
     # 1:1 to a tessera.clifford Graph IR op landing in GA7. The math /
     # shape / dtype rules are uniformly "complete" (the algebra defines
     # them precisely); other contract axes (batching/sharding/backend

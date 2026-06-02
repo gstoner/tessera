@@ -1,7 +1,7 @@
 """Stage-2 single-cb decoder chain — FULL decoder layer on one cb.
 
 Stage 2 (2026-06-01) closes the single-cb decode-chain roadmap from
-``docs/audit/single_command_buffer_decode_plan.md``. With rmsnorm /
+``docs/audit/backend/apple/APPLE_AUDIT.md``. With rmsnorm /
 softmax / silu / gelu / rope encode-session variants now alongside
 layer_norm + bmm + flash_attn, a complete Llama-style decoder layer:
 

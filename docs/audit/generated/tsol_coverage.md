@@ -116,4 +116,4 @@ _None today — every TSOL canonical op has a registry entry, a VJP (or N/A), an
 
 ## Backend kernel honest baseline
 
-Per the registry's gating rule (`primitive_coverage.py` line 351-352), `backend_kernel = complete` requires every declared target to ship a real hardware kernel with numerical proof.  Today **zero** TSOL entries can claim `complete` because NVIDIA / ROCm / Tenstorrent Metalium proofs aren't available on this Mac.  See `docs/audit/phase_ghi_hardware_frontier.md` for the full hardware-gated punch list.
+Per the registry's gating rule (`primitive_coverage.py` line 351-352), `backend_kernel = complete` requires every declared target to ship a real hardware kernel with numerical proof.  Today **zero** TSOL entries can claim `complete` because NVIDIA / ROCm / Tenstorrent Metalium proofs aren't available on this Mac.  See `docs/audit/backend/BACKEND_AUDIT.md` for the full hardware-gated punch list.

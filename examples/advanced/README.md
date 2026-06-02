@@ -7,7 +7,7 @@ not yet expose, or build Graph IR directly to bypass missing Pythonic layers.
 
 This README tells you exactly what works today and what each blocked example is
 waiting on. The full per-theme tracking plan lives at
-[`docs/audit/advanced_examples_capability_gap.md`](../../docs/audit/advanced_examples_capability_gap.md).
+[`docs/audit/coverage/COVERAGE_AUDIT.md`](../../docs/audit/coverage/COVERAGE_AUDIT.md).
 
 If you're new to Tessera, **start with [`examples/getting_started/basic_tensor_ops.py`](../getting_started/basic_tensor_ops.py)** — it uses only the canonical surface (see [`docs/CANONICAL_API.md`](../../docs/CANONICAL_API.md)) and runs on CPU.
 
@@ -64,7 +64,7 @@ Until the corresponding backlog items land, calling phantom names raises `NotImp
 >>> import tessera
 >>> tessera.nn.Module()
 NotImplementedError: tessera.nn.Module is on the Tier 1 backlog — see
-docs/audit/advanced_examples_capability_gap.md. Until it lands, compose ops
+docs/audit/coverage/COVERAGE_AUDIT.md. Until it lands, compose ops
 via @tessera.jit and pass weights in explicitly.
 ```
 
@@ -91,7 +91,7 @@ y = F.rms_norm(x, weight=W)
 ```
 
 See [`docs/CANONICAL_API.md`](../../docs/CANONICAL_API.md) for the full surface
-that exists today, and the [capability-gap audit](../../docs/audit/advanced_examples_capability_gap.md)
+that exists today, and the [capability-gap audit](../../docs/audit/coverage/COVERAGE_AUDIT.md)
 for the prioritized backlog that will unblock the scaffolds above.
 
 ---

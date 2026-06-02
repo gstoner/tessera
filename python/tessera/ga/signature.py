@@ -6,7 +6,7 @@ the configuration root for everything downstream in the GA-series:
 GA2 grade-aware types, GA3 multivectors, GA4 primitive_coverage entries,
 GA7 the `tessera.clifford` dialect, GA8/GA9 lowering and backends.
 
-V1 allow-list (per docs/audit/ga_scope_lock.md):
+V1 allow-list (per docs/audit/domain/DOMAIN_AUDIT.md):
 
     Cl(3, 0, 0) — 3D Euclidean. 8 basis elements.
     Cl(1, 3, 0) — Minkowski spacetime. 16 basis elements.
@@ -39,7 +39,7 @@ from functools import cache
 from typing import Tuple
 
 
-# v1 allow-list per Q1 in docs/audit/ga_scope_lock.md.
+# v1 allow-list per Q1 in docs/audit/domain/DOMAIN_AUDIT.md.
 V1_ALLOWED_SIGNATURES: frozenset[Tuple[int, int, int]] = frozenset(
     {
         (3, 0, 0),  # 3D Euclidean
@@ -200,7 +200,7 @@ class Cl:
     Construction validates against the v1 allow-list (Cl(3,0) and Cl(1,3)
     only); other signatures raise `TesseraAlgebraError`. The validation
     can be lifted without touching downstream code; see
-    ``docs/audit/ga_scope_lock.md`` § Q1 extension path.
+    ``docs/audit/domain/DOMAIN_AUDIT.md`` § Q1 extension path.
     """
 
     p: int
@@ -220,7 +220,7 @@ class Cl:
             raise TesseraAlgebraError(
                 f"Cl{self.signature} is not in the v1 allow-list. "
                 f"v1 supports {sorted(V1_ALLOWED_SIGNATURES)} only. "
-                f"See docs/audit/ga_scope_lock.md § Q1."
+                f"See docs/audit/domain/DOMAIN_AUDIT.md § Q1."
             )
 
     @property

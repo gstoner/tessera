@@ -54,7 +54,7 @@ Architecture, programming guide, reference, and tutorial documents are explanato
 Architecture readers should start with `docs/architecture/README.md`.
 
 Compiler planning readers should use
-`docs/audit/compiler_improvement_milestone_plan_2026_05_18.md` for the current
+`docs/audit/compiler/COMPILER_AUDIT.md` for the current
 source-base review, next compiler milestones, and the Visual Complex Analysis
 assessment. Older audit files remain useful historical context.
 

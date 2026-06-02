@@ -13,7 +13,7 @@
 // its body was an empty no-op that silently *succeeded* — i.e. it could be wired
 // into a pipeline and appear to "lower scheduling" while doing nothing. That is
 // exactly the overstated-claim gap the compiler-layer remediation plan targets
-// (docs/audit/compiler_layer_gap_remediation.md, item G2). Rather than ship a
+// (docs/audit/compiler/COMPILER_AUDIT.md, item G2). Rather than ship a
 // redundant, untested, unregistered C++ reimplementation of the Python spine,
 // the pass now FAILS LOUDLY if it is ever invoked, so it can never masquerade as
 // a successful lowering.

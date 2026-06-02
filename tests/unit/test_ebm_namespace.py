@@ -1,8 +1,8 @@
 """EBM0 acceptance: `from tessera import ebm` resolves and exposes __version__.
 
 Sprint: EBM0 (scope lock + archived EBT revival).
-Roadmap: docs/audit/ga_ebm_roadmap.md
-Scope lock: docs/audit/ebm_scope_lock.md
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md
+Scope lock: docs/audit/domain/DOMAIN_AUDIT.md
 Spec: docs/spec/EBM_SPEC.md
 """
 

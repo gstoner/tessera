@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Guide
-authority: Tier 4 deliverable from `docs/audit/advanced_examples_capability_gap.md`
+authority: Tier 4 deliverable from `docs/audit/coverage/COVERAGE_AUDIT.md`
 last_updated: 2026-05-09
 ---
 
@@ -303,9 +303,9 @@ while not done:
 ## Deferred-items plan landings (2026-05-09)
 
 The following surfaces, previously tracked as "Deliberately out of
-scope" in `docs/audit/advanced_examples_capability_gap.md`, are now
+scope" in `docs/audit/coverage/COVERAGE_AUDIT.md`, are now
 real and exercise-able from `examples/advanced/`. See
-`docs/audit/deferred_items_plan.md` for design rationale.
+`docs/audit/roadmap/ROADMAP_AUDIT.md` for design rationale.
 
 ### `tessera.distributions.*`
 
@@ -366,8 +366,8 @@ JAX — it works as written.
 ## Cross-references
 
 - [`docs/CANONICAL_API.md`](CANONICAL_API.md) — current public surface
-- [`docs/audit/advanced_examples_capability_gap.md`](audit/advanced_examples_capability_gap.md) — what's already shipped vs. what's still open, per theme
-- [`docs/audit/execution_roadmap.md`](audit/execution_roadmap.md) — sequenced execution plan; Phase G is the long pole
+- [`docs/audit/coverage/COVERAGE_AUDIT.md`](audit/advanced_examples_capability_gap.md) — what's already shipped vs. what's still open, per theme
+- [`docs/audit/roadmap/ROADMAP_AUDIT.md`](audit/execution_roadmap.md) — sequenced execution plan; Phase G is the long pole
 - [`docs/spec/AUTODIFF_SPEC.md`](spec/AUTODIFF_SPEC.md) — reverse-mode autodiff design
 - [`docs/spec/PYTHON_API_SPEC.md`](spec/PYTHON_API_SPEC.md) — full op-by-op spec (the row table this guide pulls from)
 - [`examples/advanced/README.md`](../examples/advanced/README.md) — honest per-example status

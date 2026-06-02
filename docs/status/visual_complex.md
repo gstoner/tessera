@@ -83,7 +83,7 @@ PYTHONPATH=.:python python benchmarks/visual_complex_core/core.py \
 * **No claim of NVIDIA or ROCm execution.**  Backend rows reserve
   planned slots only — paired with Phase G / H hardware enablement
   per
-  [`docs/audit/nvidia_rocm_execute_and_compare_plan.md`](../audit/nvidia_rocm_execute_and_compare_plan.md).
+  [`docs/audit/backend/BACKEND_AUDIT.md`](../audit/backend/BACKEND_AUDIT.md).
 
 ## Where to look in the code
 

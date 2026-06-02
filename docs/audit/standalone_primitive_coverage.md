@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Audit Dashboard
-authority: Companion dashboard for `docs/audit/execution_roadmap.md` S1
+authority: Companion dashboard for `docs/audit/roadmap/ROADMAP_AUDIT.md` S1
 last_updated: 2026-05-18 (status language refreshed)
 ---
 
@@ -16,7 +16,7 @@ The source of truth for this dashboard is
 source of truth for currently accepted operators; this dashboard can include
 planned primitives without falsely marking them as supported.
 
-For historical audit narrative, see `docs/audit/primitive_coverage_state.md`.
+For historical audit narrative, see `docs/audit/coverage/COVERAGE_AUDIT.md`.
 For current cross-layer support state, use
 `docs/audit/generated/support_table.md` and the registry source.
 

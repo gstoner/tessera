@@ -393,7 +393,7 @@ def poisson(
 # EBM2 — iterative Markov-chain samplers
 # ---------------------------------------------------------------------------
 #
-# These are the four primitives sequenced in `docs/audit/ga_ebm_roadmap.md`
+# These are the four primitives sequenced in `docs/audit/domain/DOMAIN_AUDIT.md`
 # § EBM2. They share the same RNG-key threading discipline as the keyed
 # point samplers above: take a key, internally split as needed, return
 # the consumed key for downstream functional composition.

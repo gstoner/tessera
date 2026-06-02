@@ -1,7 +1,7 @@
 """Tessera geometric-algebra namespace (Clifford algebras).
 
 This module is the entry point for the GA-series primitive surface
-sequenced in `docs/audit/ga_ebm_roadmap.md`. GA0 (scope lock) ships the
+sequenced in `docs/audit/domain/DOMAIN_AUDIT.md`. GA0 (scope lock) ships the
 namespace; GA1 onwards populates it with the algebra signature object,
 multivector type, grade-aware constraints, and the Clifford primitive
 library.
@@ -11,8 +11,8 @@ Scope-locked at GA0:
     - Multivector is a sibling tensor kind, not a 7th tensor attribute.
     - Backend order: x86 -> Apple CPU -> Apple GPU -> NVIDIA after Phase G.
 
-See `docs/audit/ga_scope_lock.md` for the locked decisions and
-`docs/audit/ga_ebm_roadmap.md` for the full sprint sequence.
+See `docs/audit/domain/DOMAIN_AUDIT.md` for the locked decisions and
+`docs/audit/domain/DOMAIN_AUDIT.md` for the full sprint sequence.
 """
 
 from tessera.ga.calculus import (

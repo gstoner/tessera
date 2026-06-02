@@ -18,8 +18,8 @@ existing `_collect_chain` harness from `tessera.rng`. Euclidean
 Langevin is still served by `tessera.rng.langevin_sample` (no manifold
 machinery needed).
 
-See `docs/audit/ebm_scope_lock.md` § Q5 for the locked manifold set
-and `docs/audit/ga_ebm_roadmap.md` § EBM7 for context.
+See `docs/audit/domain/DOMAIN_AUDIT.md` § Q5 for the locked manifold set
+and `docs/audit/domain/DOMAIN_AUDIT.md` § EBM7 for context.
 """
 
 from __future__ import annotations

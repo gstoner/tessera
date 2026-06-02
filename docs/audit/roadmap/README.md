@@ -5,6 +5,8 @@ deferred items, sprint planning, and crosscut prioritization.
 
 ## Current Truth
 
+- Start with [ROADMAP_AUDIT.md](ROADMAP_AUDIT.md) for the consolidated roadmap
+  audit: current priority queue plus historical sprint/deferred-item provenance.
 - Roadmap docs are planning context, not generated status truth.
 - Current status should be checked through the relevant canonical theme doc and
   generated dashboards before using older roadmap claims.

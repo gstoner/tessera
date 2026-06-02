@@ -412,4 +412,4 @@ Remaining build-system work:
   component in a full monorepo build when LLVM/MLIR are available.
 - Expand CI beyond the CPU spine once CUDA/HIP/NCCL execution paths are real and
   deterministic enough for automated validation (Phase G/H/I — see
-  `docs/audit/phase_ghi_hardware_frontier.md`).
+  `docs/audit/backend/BACKEND_AUDIT.md`).

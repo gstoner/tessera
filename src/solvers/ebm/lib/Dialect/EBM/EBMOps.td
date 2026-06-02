@@ -17,7 +17,7 @@
 // Plus partition-function ops from EBM3:
 //   ebm.partition_z (with `method = "exact" | "monte_carlo" | "annealed"`)
 //
-// See `docs/audit/ga_ebm_roadmap.md` § EBM5.
+// See `docs/audit/domain/DOMAIN_AUDIT.md` § EBM5.
 //===----------------------------------------------------------------------===//
 
 include "mlir/IR/OpBase.td"

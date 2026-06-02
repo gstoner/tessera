@@ -38,7 +38,7 @@ gate need plan + code; the backend gate is acknowledged.
 ### #15a — Tensor attributes interaction
 
 GA introduces `grade` and `algebra` as per-tensor concepts.  Q2 of
-`docs/audit/ga_scope_lock.md` decided **Multivector is a sibling
+`docs/audit/domain/DOMAIN_AUDIT.md` decided **Multivector is a sibling
 tensor kind, not a 7th attribute** — but the canonical reference
 [`docs/reference/tessera_tensor_attributes.md`](../reference/tessera_tensor_attributes.md)
 still describes only the six canonical attributes
@@ -66,7 +66,7 @@ for `category="geometric_algebra"` or `category="ebm"`.
 explicit settings for both categories, sweeping their primitives
 forward axis-by-axis exactly the way the long-tail categories were
 closed earlier in 2026-05-10.  Refresh
-[`docs/audit/primitive_coverage_state.md`](primitive_coverage_state.md)
+[`docs/audit/coverage/COVERAGE_AUDIT.md`](primitive_coverage_state.md)
 with the post-sweep counts.
 
 ### Backend kernel gate (acknowledgement)

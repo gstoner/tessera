@@ -14,7 +14,7 @@ last_updated: 2026-05-17
 > next targets.  This document is kept as a record of how the
 > milestone was reached; it is no longer updated as features ship.
 >
-> The roadmap [`docs/audit/ga_ebm_roadmap.md`](ga_ebm_roadmap.md)
+> The roadmap [`docs/audit/domain/DOMAIN_AUDIT.md`](ga_ebm_roadmap.md)
 > is also still maintained as the sprint sequence.
 
 # Apple GA + EBM Native Execution Gap

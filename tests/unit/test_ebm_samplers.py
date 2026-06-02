@@ -1,7 +1,7 @@
 """EBM2 acceptance: iterative Markov-chain samplers in tessera.rng.
 
 Sprint: EBM2 (Langevin + MALA + HMC + Gibbs).
-Roadmap: docs/audit/ga_ebm_roadmap.md § EBM2
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md § EBM2
 
 Covers:
   - 4 samplers registered in primitive_coverage.py under category="rng".

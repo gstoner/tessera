@@ -82,7 +82,7 @@ and spectral (LegalizeSpectral → SpectralMXP → TransposePlan → Autotune
 `tests/tessera-ir/` lit fixtures and Layer-6 execute-and-compare lanes
 (`tests/unit/test_halo_execution_lane.py`,
 `tests/unit/test_spectral_solver_passes.py`). They are documented
-end-to-end in `docs/audit/compiler_correctness_testing_audit.md`.
+end-to-end in `docs/audit/compiler/COMPILER_AUDIT.md`.
 
 ---
 

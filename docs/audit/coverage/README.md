@@ -6,6 +6,8 @@ test/support dashboards.
 
 ## Current Truth
 
+- Start with [COVERAGE_AUDIT.md](COVERAGE_AUDIT.md) for the consolidated
+  coverage audit: finished uplift, remaining proof axes, and archived evidence.
 - `primitive_coverage.py` is the registry truth for compiler primitive
   contracts.
 - Generated status should be read from:

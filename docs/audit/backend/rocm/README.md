@@ -5,6 +5,9 @@ gfx target maps, MFMA proof work, and execute-and-compare planning.
 
 ## Current Truth
 
+- Start with [ROCM_AUDIT.md](ROCM_AUDIT.md) for the consolidated ROCm audit:
+  what exists today, what is hardware-gated, and what must land before
+  execution claims can be promoted.
 - ROCm status is hardware-gated for real execute-and-compare proof.
 - Generated ROCm status should be read from:
   - [../../generated/rocm_target_map.md](../../generated/rocm_target_map.md)

@@ -313,7 +313,7 @@ after the sweep:
 | `backend_kernel` | planned | planned |
 
 `vjp` + `jvp` remain `planned` (closure scheduled for GA6 — see
-`docs/audit/sprint_plan_task4_and_crosscuts.md`).
+`docs/audit/roadmap/ROADMAP_AUDIT.md`).
 `masking_effect_rule` closes when the effect lattice is wired into
 the GA/EBM annotation passes.  `backend_kernel` closes with Phase G
 / H / I per Decision #1.

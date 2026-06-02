@@ -54,7 +54,7 @@ runtime ABI. Use `RUNTIME_ABI_SPEC.md` for the C ABI contract.
 Architecture Decision #21 (CLAUDE.md): when a backend cannot lower an
 op, it must emit a **stable diagnostic** naming the op and target —
 never silently no-op. Per-target KV-cache coverage matrix is in
-`docs/audit/kv_cache_coverage_matrix.md`.
+`docs/audit/coverage/COVERAGE_AUDIT.md`.
 
 ### Sprint G/H/I batch 3 hardware-free pre-work (2026-05-11)
 

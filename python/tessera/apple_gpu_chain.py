@@ -1,6 +1,6 @@
 """JIT Phase 2 substrate — encode-session chain registry + planner + executor.
 
-The single-cb decode plan (``docs/audit/single_command_buffer_decode_plan.md``)
+The single-cb decode plan (``docs/audit/backend/apple/APPLE_AUDIT.md``)
 maps Stage 3 onto two phases:
 
 * **Phase 1 (landed)** — ``@decode_chain`` decorator. User calls the

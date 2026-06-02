@@ -10,7 +10,7 @@ All VJPs use the **direct Cayley-table-adjoint formula** under the
 Frobenius inner product on coefficient vectors. This formulation works
 for Cl(p, 0) signatures cleanly; on Cl(p, q) with q > 0 the user must
 interpret cotangents via the Frobenius product (not the Hestenes
-``<x, reverse(y)>`` form). See ``docs/audit/ga_scope_lock.md`` § Q3.
+``<x, reverse(y)>`` form). See ``docs/audit/domain/DOMAIN_AUDIT.md`` § Q3.
 """
 
 from __future__ import annotations

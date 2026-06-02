@@ -1,8 +1,8 @@
 """GA1 acceptance: Clifford algebra signature object.
 
 Sprint: GA1 (algebra signature as a first-class object).
-Roadmap: docs/audit/ga_ebm_roadmap.md
-Scope lock: docs/audit/ga_scope_lock.md
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md
+Scope lock: docs/audit/domain/DOMAIN_AUDIT.md
 
 Covers the GA1 acceptance criteria:
   - Cl(3,0).dim == 8, Cl(1,3).dim == 16

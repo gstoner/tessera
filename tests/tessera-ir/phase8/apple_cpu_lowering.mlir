@@ -8,7 +8,7 @@
 //   - flash_attn        -> tessera_apple.cpu.vector_op (CPU has no Metal kernel)
 //   - kv_cache.*        -> tessera_apple.cpu.kv_cache_cpu (real artifact;
 //                          previously a "unsupported" diagnostic — see
-//                          docs/audit/kv_cache_coverage_matrix.md, 2026-05-10)
+//                          docs/audit/coverage/COVERAGE_AUDIT.md, 2026-05-10)
 
 module {
   // CHECK-LABEL: module

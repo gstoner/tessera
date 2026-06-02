@@ -1,7 +1,7 @@
 """GA4 acceptance: GA primitives registered in primitive_coverage.
 
 Sprint: GA4 (registry bookkeeping).
-Roadmap: docs/audit/ga_ebm_roadmap.md § GA4
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md § GA4
 
 Each shipped GA op gets an entry in `primitive_coverage.py` under
 `category="geometric_algebra"`. This lets the existing

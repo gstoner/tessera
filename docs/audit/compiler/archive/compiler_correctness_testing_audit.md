@@ -73,7 +73,7 @@ dependencies as named diagnostics rather than silent crashes.
 | **Halo / Neighbors** (Phase 7) | stencil-lower → bc-lower → halo-mesh-integration → halo-transport-lower | `stencil.bc`→`stencil.bc.modes`; bc.modes→materialize; halo.exchange→transport-triple | ✅ **Gap-3 lands** — `test_neighbors_pass_order_matrix.py` |
 | **Spectral solver** | LegalizeSpectral → SpectralMXP → TransposePlan → Autotune → LowerToTargetIR → DistributedFFT | annotation-driven planning passes; each consumes the previous's attrs | ✅ **Gap-3 lands** — `test_spectral_pass_order_matrix.py` |
 | **x86 lowering (Phase 2)** | DistributionLowering → EffectAnnotation → Tiling → TileToX86 | EffectAnnotation must precede CollectiveInsertion (Architecture Decision in CLAUDE.md) | ⚠️ — happy-path lit covered in `phase2/full_pipeline.mlir`; reorder matrix planned |
-| **NVIDIA SM_90** | EffectAnnotation → Canonicalize → SwigluFusion → MLA/NSA/Hybrid/Lightning/Delta fusion → DistributionLowering → TileIRLowering → WarpSpec → AsyncCopy → WGMMA → TMA → NVFlashAttnEmitter | 13 passes; many implicit fusion-order deps | ⏳ — explicit plan: `docs/audit/nvidia_rocm_execute_and_compare_plan.md`; paired with Phase G hardware enablement |
+| **NVIDIA SM_90** | EffectAnnotation → Canonicalize → SwigluFusion → MLA/NSA/Hybrid/Lightning/Delta fusion → DistributionLowering → TileIRLowering → WarpSpec → AsyncCopy → WGMMA → TMA → NVFlashAttnEmitter | 13 passes; many implicit fusion-order deps | ⏳ — explicit plan: `docs/audit/backend/BACKEND_AUDIT.md`; paired with Phase G hardware enablement |
 | **Apple GPU runtime** | 14 lowerings: NSA / MLA / SwiGLU / matmul→softmax→matmul fusions → matmul→softmax / gelu / rmsnorm fusions → per-op (matmul mps, rope, flash_attn, linear-attn, attn_local_window_2d, softmax, gelu) | "longest fusion first" — a per-op pass running before its fusion stealing the op is the canonical failure | ✅ **shipped 2026-05-21** — `test_apple_gpu_pass_order_matrix.py` (18 tests; 11 dependency pairs locked) |
 | **TPP space-time** | 7 passes via `tpp-space-time` | space-time decomposition order | ⏳ — happy-path covered; reorder matrix planned |
 | **NV Rubin CPX** | 4 CPX passes | CPX-specific | ⏳ — separate driver `tessera-cpx-opt`; reorder matrix planned |
@@ -139,7 +139,7 @@ explicitly tagged as waiting on Gap 1 / native kernel ship.
    three Phase 7 workstreams compose in one IR flow.
 7. ⏳ **Backlog (gated on Phase G):** NVIDIA SM_90 pass-order matrix
    + runtime ABI lock + H100 execute-and-compare lane.  Full plan:
-   `docs/audit/nvidia_rocm_execute_and_compare_plan.md`.
+   `docs/audit/backend/BACKEND_AUDIT.md`.
 8. ⏳ **Backlog (gated on Phase H):** ROCm CDNA/RDNA pass-order matrix
    + per-arch runtime ABI lock + MI300X/MI325X execute-and-compare
    lane.  Same plan doc.
@@ -165,4 +165,4 @@ explicitly tagged as waiting on Gap 1 / native kernel ship.
 Total shipped 2026-05-20/21: ~22 engineering hours.  Total backlog
 through NVIDIA + ROCm hardware enablement: ~17-22 engineering days,
 gated on hardware access per the deferral in
-`docs/audit/nvidia_rocm_execute_and_compare_plan.md`.
+`docs/audit/backend/BACKEND_AUDIT.md`.

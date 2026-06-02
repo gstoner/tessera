@@ -1,7 +1,7 @@
 """GA2 acceptance: grade-aware type annotations + constraint predicates.
 
 Sprint: GA2 (grade-aware ConstraintSolver types).
-Roadmap: docs/audit/ga_ebm_roadmap.md § GA2
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md § GA2
 
 Covers the GA2 acceptance criteria:
   - Annotation surface: Rotor[Cl(3,0)] / DiffForm[Cl(3,0), k=2] /

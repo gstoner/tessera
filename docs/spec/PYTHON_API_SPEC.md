@@ -13,7 +13,7 @@ last_updated: 2026-05-22
 
 ## Documentation refresh (2026-05-22)
 
-The 2026-05-06 spec gap audit (`docs/audit/compiler_spec_gap_audit.md`)
+The 2026-05-06 spec gap audit (`docs/audit/compiler/COMPILER_AUDIT.md`)
 flagged the developer-tool surface as ahead of the prose in this spec.
 Resolution as of 2026-05-22:
 

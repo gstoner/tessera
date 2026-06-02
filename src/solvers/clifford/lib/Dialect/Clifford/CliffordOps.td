@@ -29,7 +29,7 @@
 //   clifford.vec_deriv       ↔ vec_deriv   (GA5)
 //   clifford.integral        ↔ integral    (GA5)
 //
-// See `docs/audit/ga_ebm_roadmap.md` § GA7.
+// See `docs/audit/domain/DOMAIN_AUDIT.md` § GA7.
 //===----------------------------------------------------------------------===//
 
 include "mlir/IR/OpBase.td"
@@ -47,7 +47,7 @@ def Clifford_Dialect : Dialect {
   let description = [{
     Operations operate on multivector values typed as opaque `AnyType` and
     carry their `Cl(p, q, r)` signature as an op-level attribute. The v1
-    allow-list per `docs/audit/ga_scope_lock.md` § Q1 is Cl(3,0) and
+    allow-list per `docs/audit/domain/DOMAIN_AUDIT.md` § Q1 is Cl(3,0) and
     Cl(1,3); the dialect parses any non-negative (p, q, r) but downstream
     passes restrict to the allowed signatures via the annotation pass.
   }];

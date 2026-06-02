@@ -56,7 +56,7 @@ Each library-layer benchmark ships:
     canonical Architecture-Decision-#12 JSON schema.
 
 The audit doc
-(`docs/audit/compiler_correctness_testing_audit.md`) tracks the
+(`docs/audit/compiler/COMPILER_AUDIT.md`) tracks the
 six-layer compiler-correctness coverage for each category.
 
 ## Refactor Direction

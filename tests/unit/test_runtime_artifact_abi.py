@@ -16,7 +16,7 @@ Two harnesses:
 
 Skips cleanly when the static archive or a C++ compiler isn't available
 (off-Darwin / fresh checkout / Linux without the MLIR build). See
-docs/audit/compiler_layer_gap_remediation.md (G5).
+docs/audit/compiler/COMPILER_AUDIT.md (G5).
 """
 
 from __future__ import annotations

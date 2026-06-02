@@ -304,12 +304,12 @@ running them is the missing step.
 
 ## 6. References
 
-- `docs/audit/nvidia_execution_audit.md` — Phase G punch list (8 tasks)
-- `docs/audit/nvidia_rocm_execute_and_compare_plan.md` — Phase G/H execute-and-compare matrix
+- `docs/audit/backend/nvidia/NVIDIA_AUDIT.md` — Phase G punch list (8 tasks)
+- `docs/audit/backend/BACKEND_AUDIT.md` — Phase G/H execute-and-compare matrix
 - `docs/audit/standalone_primitive_coverage.md` — generated 12-axis dashboard
-- `docs/audit/primitive_coverage_state.md` — historical narrative
-- `docs/audit/sharding_partial_audit.md` — sharding-rule partial bucket A/B/C
-- `docs/audit/kv_cache_coverage_matrix.md` — KV cache per-target coverage
+- `docs/audit/coverage/COVERAGE_AUDIT.md` — historical narrative
+- `docs/audit/domain/DOMAIN_AUDIT.md` — sharding-rule partial bucket A/B/C
+- `docs/audit/coverage/COVERAGE_AUDIT.md` — KV cache per-target coverage
 - `docs/nvidia_cuda13_kernel_inventory.md` — NVIDIA fused kernel surface
 - `docs/rocm_mfma_kernel_inventory.md` — ROCm MFMA surface
 - `docs/metalium_kernel_inventory.md` — Tenstorrent surface

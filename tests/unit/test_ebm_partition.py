@@ -1,7 +1,7 @@
 """EBM3 acceptance: partition function estimators.
 
 Sprint: EBM3.
-Roadmap: docs/audit/ga_ebm_roadmap.md § EBM3
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md § EBM3
 
 Covers the EBM3 acceptance criteria:
   - 3 partition-function primitives registered in primitive_coverage.

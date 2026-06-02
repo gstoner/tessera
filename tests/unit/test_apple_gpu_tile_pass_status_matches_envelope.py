@@ -45,7 +45,7 @@ def _runtime_envelope() -> set[str]:
     # _APPLE_GPU_PROJECTION_OPS, _APPLE_GPU_REDUCTION_OPS, and
     # _APPLE_GPU_LINALG_OPS are deliberately NOT walked yet — those
     # families still need their own C++ ``kRuntimeOps`` entries (Task
-    # follow-up; see docs/audit/2026_06_01_apple_gpu_chain_audit.md
+    # follow-up; see docs/audit/backend/apple/APPLE_AUDIT.md
     # glass-jaw #10).
     return (set(driver._APPLE_GPU_MPS_OPS) | set(driver._APPLE_GPU_MSL_OPS)
             | set(driver._APPLE_GPU_MPSGRAPH_OPS)

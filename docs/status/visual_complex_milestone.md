@@ -15,7 +15,7 @@
 > and the backend manifest reserves ``status="planned"`` slots across
 > apple_gpu / nvidia_sm80..120 / rocm with the target kernel dtype
 > matrix (fp32 + fp16 + bf16) so Phase G / H / M7 follow-up have a
-> stable hand-off point.  See ``docs/audit/partial_ops_uplift_plan.md``.
+> stable hand-off point.  See ``docs/audit/coverage/COVERAGE_AUDIT.md``.
 >
 > **Dtype reading rule.** A ``planned`` row's dtype tuple is the
 > **target kernel dtype matrix** — what the unbuilt native kernel

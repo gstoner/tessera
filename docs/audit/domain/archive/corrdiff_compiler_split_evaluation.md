@@ -246,7 +246,7 @@ DDP/FSDP are defined and correct; they call mock collectives. The moment you nee
 NVIDIA hardware, every distributed operation stalls because there is no GPU kernel launch
 path in `runtime.py` for NVIDIA targets.
 
-**Phase G critical path** (from `docs/audit/nvidia_execution_audit.md`):
+**Phase G critical path** (from `docs/audit/backend/nvidia/NVIDIA_AUDIT.md`):
 1. Python GPU dispatcher in `jit.py` (`_execute_nvidia_gpu_artifact`) — 2–3 days
 2. `nvidia_sm90` branch in `runtime.py` — 2–3 days
 3. Real NCCL wiring (post-G1–G5) — 1–2 weeks
@@ -597,8 +597,8 @@ once the ISA is confirmed.
 ---
 
 *See also:*
-- `docs/audit/execution_roadmap.md` — Phase G punch list and acceptance criteria
-- `docs/audit/nvidia_execution_audit.md` — Phase G1–G8 per-task breakdown
+- `docs/audit/roadmap/ROADMAP_AUDIT.md` — Phase G punch list and acceptance criteria
+- `docs/audit/backend/nvidia/NVIDIA_AUDIT.md` — Phase G1–G8 per-task breakdown
 - `python/tessera/compiler/rocm_target.py` — AMDArch enum + MFMA variants
 - `src/backend/hip_backend.cpp` — HIP memory/stream APIs; kernel launch gap
 - `scripts/generate_mfma_table.py` — MFMA table codegen

@@ -63,9 +63,9 @@ for local validation.
 The GA + EBM direction is coherent and unusually well documented. The core
 decision records are in:
 
-- [`docs/audit/ga_ebm_roadmap.md`](ga_ebm_roadmap.md)
-- [`docs/audit/ga_scope_lock.md`](ga_scope_lock.md)
-- [`docs/audit/ebm_scope_lock.md`](ebm_scope_lock.md)
+- [`docs/audit/domain/DOMAIN_AUDIT.md`](ga_ebm_roadmap.md)
+- [`docs/audit/domain/DOMAIN_AUDIT.md`](ga_scope_lock.md)
+- [`docs/audit/domain/DOMAIN_AUDIT.md`](ebm_scope_lock.md)
 - [`docs/spec/EBM_SPEC.md`](../spec/EBM_SPEC.md)
 
 The roadmap records GA0 through GA11 and EBM0 through EBM8 as landed. That is

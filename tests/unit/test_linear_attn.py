@@ -8,7 +8,7 @@ Covers:
   * `linear_attn_state` companion op
   * VJP numerical-Jacobian agreement (causal + non-causal + decay paths)
 
-See ``docs/audit/attention_variants_plan.md`` Variant 2 for the design.
+See ``docs/audit/domain/DOMAIN_AUDIT.md`` Variant 2 for the design.
 """
 
 from __future__ import annotations

@@ -67,7 +67,7 @@ S0 (standalone gap lock) ─► S1 (primitive contracts) ─► S2 (tensor algeb
   mock_collective.
 - 🚧 **G is the highest-leverage remaining phase.** Without NVIDIA execution, the
   autotuner, FA-4 verification, GPU-only tier, and GPU CI are all dark. G1
-  audit is done; G2–G7 sequenced in `docs/audit/nvidia_execution_audit.md`.
+  audit is done; G2–G7 sequenced in `docs/audit/backend/nvidia/NVIDIA_AUDIT.md`.
 
 Estimated remaining runway for the legacy A-I execution track: **4–8 weeks of
 focused work on Phase G** (4–6 days to first H100 BF16 GEMM per the G1 audit;
@@ -121,7 +121,7 @@ for the standalone compiler goal.
   JIT-only compiler does not ship.
 
 **Acceptance:**
-- `docs/audit/execution_roadmap.md` contains S0-S15 milestone sprints
+- `docs/audit/roadmap/ROADMAP_AUDIT.md` contains S0-S15 milestone sprints
   (S0-S8 plus S9 numerics/quant, S10 optimizers, S11 losses, S12
   checkpointing, S13 custom-op API, S14 cache + AOT, S15 data pipeline).
 - The S-series explicitly states that Tessera remains runtime-independent from
@@ -809,7 +809,7 @@ the `xfail` mark is removed.
 **Scope:** XS (doc-only, ~80 LOC).
 
 **Files (new):**
-- `docs/audit/kv_cache_coverage_matrix.md`
+- `docs/audit/coverage/COVERAGE_AUDIT.md`
 
 **Files (modify):**
 - `CLAUDE.md` Architecture Decision #21 — link to the matrix
@@ -1251,7 +1251,7 @@ from "easy" tokens routing to lower depths.
 The single highest-leverage block. Until this lands, the autotuner is dark,
 FA-4 is unverified, the GPU-only tier is theoretical, and GPU CI is impossible.
 
-### [G1] Audit current state — what's actually missing? ✅ (delivered at `docs/audit/nvidia_execution_audit.md`)
+### [G1] Audit current state — what's actually missing? ✅ (delivered at `docs/audit/backend/nvidia/NVIDIA_AUDIT.md`)
 
 Per-component audit + 8-task punch list (G1-1 through G1-8). Critical path
 to first H100 BF16 GEMM 128×128×128: **4–6 days** of focused work, of which
@@ -1336,7 +1336,7 @@ API support.
 
 ## Cross-references
 
-- `docs/audit/advanced_examples_capability_gap.md` — per-example status tied
+- `docs/audit/coverage/COVERAGE_AUDIT.md` — per-example status tied
   to these phases (Theme 3 = Phase D, Theme 4 = Phase E, etc.)
 - `docs/spec/AUTODIFF_SPEC.md` — Tier 2 v1 spec; Phase F lands the follow-ups
 - `docs/CANONICAL_API.md` — public surface; update as each task lands
@@ -1369,7 +1369,7 @@ API support.
 
 **Done:** A, B, C, D (forward + D3 VJP), E, F (F1–F7 + F3-moe + Phase F-MoR), H, I.
 
-**Remaining frontier:** **Phase G (NVIDIA execution)** — the only long pole. G1 audit is complete (`docs/audit/nvidia_execution_audit.md`); G2–G7 are open. Per the audit: 4–6 days of focused work to first H100 BF16 GEMM, of which only G1-5/G1-6/G1-8 need real H100 hardware.
+**Remaining frontier:** **Phase G (NVIDIA execution)** — the only long pole. G1 audit is complete (`docs/audit/backend/nvidia/NVIDIA_AUDIT.md`); G2–G7 are open. Per the audit: 4–6 days of focused work to first H100 BF16 GEMM, of which only G1-5/G1-6/G1-8 need real H100 hardware.
 
 **Sequenced next steps for G:**
 1. **G2** — finish wiring `cuda_backend.cpp` per the audit (CUDA-only-no-H100 dev box is sufficient).

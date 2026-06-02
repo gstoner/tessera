@@ -1,7 +1,7 @@
 """EBM8 — Tiny-model conformance suite for the energy-based-model stack.
 
 Sprint: EBM8.
-Roadmap: docs/audit/ga_ebm_roadmap.md § EBM8
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md § EBM8
 
 Three demos prove the EBM stack end-to-end on tiny synthetic data:
 

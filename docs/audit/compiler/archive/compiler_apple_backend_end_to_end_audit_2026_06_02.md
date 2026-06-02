@@ -22,7 +22,7 @@ current repo state across:
 - `python/tessera/apple_gpu_chain.py`
 - `python/tessera/apple_mlpkg.py`
 - `docs/audit/op_target_conformance.md`
-- `docs/audit/single_command_buffer_decode_plan.md`
+- `docs/audit/backend/apple/APPLE_AUDIT.md`
 
 ## Executive Verdict
 

@@ -1,7 +1,7 @@
 """M0 / M0.5 — compiler audit drift gate + taxonomy contract.
 
 These tests lock the eight-axis support taxonomy decided in
-``docs/audit/compiler_improvement_milestone_plan_2026_05_18.md`` and
+``docs/audit/compiler/COMPILER_AUDIT.md`` and
 guarantee that the generated support table at
 ``docs/audit/generated/support_table.md`` stays in sync with the four
 source modules:

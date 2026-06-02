@@ -432,7 +432,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
             "Eager Python is numerically correct and safe. To get the "
             "fast path, implement a backend pass that lowers "
             "`tessera.scf.if`/`scf.for`/`scf.while` (see "
-            "`docs/audit/compiler_layer_gap_remediation.md` §10)."
+            "`docs/audit/compiler/COMPILER_AUDIT.md` §10)."
         ),
         spec=None,
         sprint="audit-followup-A.2",

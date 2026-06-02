@@ -1,6 +1,6 @@
 //===- AdjointCollectiveInsertionPass.cpp - F5 adjoint collectives -*-C++-*===//
 //
-// Phase F5 of docs/audit/execution_roadmap.md. Runs **after** the
+// Phase F5 of docs/audit/roadmap/ROADMAP_AUDIT.md. Runs **after** the
 // `AutodiffPass` (Phase F4) on a `func.func` carrying both
 // `tessera.autodiff = "reverse"` and `tessera.weight_sharding = ...`
 // attributes. Inserts the appropriate distributed-gradient collective on

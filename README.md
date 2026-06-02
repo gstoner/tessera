@@ -25,7 +25,7 @@ Metalium, Cerebras, Rubin CPX, and x86 AMX/AVX512. Backend maturity varies by
 target: x86 AMX and Apple Silicon (CPU + GPU) execute natively today; NVIDIA
 and ROCm have toolchain-pinned Target IR + lit fixtures with native execution
 gated on real hardware (Phase G/H — see
-[`docs/audit/phase_ghi_hardware_frontier.md`](docs/audit/phase_ghi_hardware_frontier.md));
+[`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md));
 other paths are artifact-only or lit-testable. See
 [`docs/README.md`](docs/README.md) for the status labels used across docs.
 
@@ -199,7 +199,7 @@ Key documents:
 | [`docs/spec/EBM_SPEC.md`](docs/spec/EBM_SPEC.md) | Energy primitive contract, inner-loop schedule, training losses, and EBM IR mapping |
 | [`docs/spec/GA_EBM_EXECUTION_STATUS.md`](docs/spec/GA_EBM_EXECUTION_STATUS.md) | Layered status for Python reference, MLIR/lit, manifests, and native execution |
 | [`docs/status/ga_ebm_milestone.md`](docs/status/ga_ebm_milestone.md) | Canonical GA/EBM native milestone status, health check, non-claims, and next targets |
-| [`docs/audit/ga_ebm_roadmap.md`](docs/audit/ga_ebm_roadmap.md) | Sprint roadmap and acceptance history for the GA + EBM tracks |
+| [`docs/audit/domain/DOMAIN_AUDIT.md`](docs/audit/domain/DOMAIN_AUDIT.md) | Sprint roadmap and acceptance history for the GA + EBM tracks |
 
 Native execution status is layer-specific:
 
@@ -263,8 +263,8 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 | [`docs/spec/TARGET_IR_SPEC.md`](docs/spec/TARGET_IR_SPEC.md) | Schedule, Tile, and Target IR dialect details |
 | [`docs/spec/RUNTIME_ABI_SPEC.md`](docs/spec/RUNTIME_ABI_SPEC.md) | Runtime C ABI |
 | [`docs/reference/tessera_tensor_attributes.md`](docs/reference/tessera_tensor_attributes.md) | Normative tensor attributes + dtype names (six attributes, canonical/alias/planned-gated dtype sets, promotion rules) |
-| [`docs/audit/execution_roadmap.md`](docs/audit/execution_roadmap.md) | Phases A–I + S-series S0–S15 standalone compiler track with per-task acceptance criteria |
-| [`docs/audit/phase_ghi_hardware_frontier.md`](docs/audit/phase_ghi_hardware_frontier.md) | Hardware-gated frontier — what's blocked on real NVIDIA / ROCm / Metalium |
+| [`docs/audit/roadmap/ROADMAP_AUDIT.md`](docs/audit/roadmap/ROADMAP_AUDIT.md) | Phases A–I + S-series S0–S15 standalone compiler track with per-task acceptance criteria |
+| [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md) | Hardware-gated frontier — what's blocked on real NVIDIA / ROCm / Metalium |
 | [`docs/architecture/README.md`](docs/architecture/README.md) | Architecture guide index |
 | [`docs/guides/Tessera_Developer_Frontend_End_To_End.md`](docs/guides/Tessera_Developer_Frontend_End_To_End.md) | First executable frontend path and IR inspection |
 | [`docs/apple_gpu_overview.md`](docs/apple_gpu_overview.md) | Apple GPU architecture story; useful background, but not fully current for Metal 4 |

@@ -1,7 +1,7 @@
 """GA5 acceptance: differential-form calculus + manifold integration.
 
 Sprint: GA5.
-Roadmap: docs/audit/ga_ebm_roadmap.md § GA5
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md § GA5
 
 Covers the GA5 acceptance criteria:
   - HodgeStar pointwise op: `⋆⋆ω` scales by ±1 per signature parity.

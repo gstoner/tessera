@@ -1,6 +1,6 @@
 //===- AutodiffPass.cpp - Reverse-mode autodiff at Graph IR ----*- C++ -*-===//
 //
-// Phase F4 of docs/audit/execution_roadmap.md. Consumes the
+// Phase F4 of docs/audit/roadmap/ROADMAP_AUDIT.md. Consumes the
 // `Tessera_AdjointInterface` op trait (see
 // `src/compiler/ir/include/Tessera/AdjointInterface.td`) to emit backward
 // computation for any ``func.func`` annotated with the
@@ -87,7 +87,7 @@ public:
 
   llvm::StringRef getDescription() const final {
     return "Reverse-mode autodiff via the Tessera AdjointInterface op trait. "
-           "Phase F4 of docs/audit/execution_roadmap.md.";
+           "Phase F4 of docs/audit/roadmap/ROADMAP_AUDIT.md.";
   }
 
   void getDependentDialects(mlir::DialectRegistry &registry) const override {

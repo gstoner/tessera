@@ -1,8 +1,8 @@
 """GA6 acceptance: parallel multivector autodiff registry.
 
 Sprint: GA6.
-Roadmap: docs/audit/ga_ebm_roadmap.md § GA6
-Scope lock: docs/audit/ga_scope_lock.md § Q3
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md § GA6
+Scope lock: docs/audit/domain/DOMAIN_AUDIT.md § Q3
 
 Covers:
   - 17 GA ops registered in _VJPS_GEO and _JVPS_GEO (12 GA3 + 5 GA5

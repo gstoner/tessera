@@ -7,7 +7,7 @@ will steal pieces of an op chain that should have been fused into a
 single MSL kernel dispatch.
 
 The contract surface is documented in
-``docs/audit/compiler_correctness_testing_audit.md`` § "Coverage matrix —
+``docs/audit/compiler/COMPILER_AUDIT.md`` § "Coverage matrix —
 pass-order matrices".  This file pins:
 
   1. The exact canonical order in ``Passes.cpp``.

@@ -1,7 +1,7 @@
 """User-facing Apple GPU op surface with dual-mode dispatch.
 
 Phase 2.1 of the single-cb decode plan
-(``docs/audit/single_command_buffer_decode_plan.md``) — the missing
+(``docs/audit/backend/apple/APPLE_AUDIT.md``) — the missing
 piece between the chain substrate (registry + planner + executor)
 and a true JIT-level auto-batching experience.
 

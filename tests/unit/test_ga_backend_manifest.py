@@ -1,7 +1,7 @@
 """GA9 — Clifford backend kernel manifest.
 
 Sprint: GA9.
-Roadmap: docs/audit/ga_ebm_roadmap.md § GA9
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md § GA9
 
 Covers the GA9 v1 Python acceptance:
   - All 17 GA primitives have backend manifest entries under the

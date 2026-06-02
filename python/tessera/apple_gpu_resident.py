@@ -1,7 +1,7 @@
 """Pre-decode warmup — ResidentWeights cache.
 
 Project-3 follow-on (2026-06-01) to the single-cb decoder roadmap.
-Phase 3 in ``docs/audit/single_command_buffer_decode_plan.md``: upload
+Phase 3 in ``docs/audit/backend/apple/APPLE_AUDIT.md``: upload
 LLM weights to device once and reuse across decode steps instead of
 re-uploading every iteration.
 

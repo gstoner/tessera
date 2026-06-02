@@ -13,7 +13,7 @@ from tessera.compiler.primitive_coverage import (
 
 
 ROOT = Path(__file__).resolve().parents[2]
-ROADMAP = ROOT / "docs" / "audit" / "execution_roadmap.md"
+ROADMAP = ROOT / "docs" / "audit" / "roadmap" / "ROADMAP_AUDIT.md"
 DASHBOARD = ROOT / "docs" / "audit" / "standalone_primitive_coverage.md"
 
 

@@ -2,7 +2,7 @@
 
 Property-based fuzz covering the four crash-prone string parsers
 identified in
-``docs/audit/compiler_correctness_testing_audit.md`` § "Coverage
+``docs/audit/compiler/COMPILER_AUDIT.md`` § "Coverage
 matrix — string parsers":
 
 1. ``parseBcString`` — BC ABI parser in BoundaryConditionLowerPass.cpp.

@@ -1,7 +1,7 @@
 """GA3 acceptance (part 2): multivector operations.
 
 Sprint: GA3.
-Roadmap: docs/audit/ga_ebm_roadmap.md § GA3
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md § GA3
 
 Covers the GA3 acceptance criteria:
   - geometric_product agrees with hand-computed Cayley table for Cl(3,0)

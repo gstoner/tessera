@@ -55,7 +55,7 @@ Schedule→Tile→Target spine. Rather than ship an untested, unused C++
 reimplementation (itself an overstated-claim gap), the pass body now **fails
 loudly** (`emitError` + `signalPassFailure`) instead of silently succeeding as a
 no-op, so it can never masquerade as a real lowering; it also carries an honest
-`getArgument`/`getDescription`. Added a `compiler_spec_gap_matrix.md` row
+`getArgument`/`getDescription`. Added a `docs/audit/compiler/COMPILER_AUDIT.md` row
 classifying it **`stubbed`** with the real path (Python spine) named. C++ idioms
 match existing passes (`VerifyTesseraIR` `m.emitError`, `AutodiffPass`
 `signalPassFailure`); not compile-tested here (no MLIR build in the Python env).

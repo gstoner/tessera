@@ -15,7 +15,7 @@ Phase 2.1c (open): full ``tessera.ops.*`` interception. The kwarg
 landed here just composes the JitFn with the apple_gpu_ops trace
 decorator; users still need to call ``tessera.apple_gpu_ops.*``
 inside the function body. Documented in
-``docs/audit/single_command_buffer_decode_plan.md``.
+``docs/audit/backend/apple/APPLE_AUDIT.md``.
 """
 
 from __future__ import annotations

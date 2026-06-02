@@ -555,7 +555,7 @@ class Module:
         that callers manage explicitly).
 
         Device migration (``to("cuda")``) is not yet supported — see Phase H of
-        ``docs/audit/execution_roadmap.md``. ``dtype`` must be a Tessera dtype
+        ``docs/audit/roadmap/ROADMAP_AUDIT.md``. ``dtype`` must be a Tessera dtype
         string (``"fp16"`` / ``"bf16"`` / ``"fp32"`` / ``"fp64"``); numpy
         dtype strings like ``"float32"`` are accepted and normalized.
         """

@@ -189,7 +189,7 @@ with `__version__ = "0.0.0-ga0"`. Acceptance test at
 [`tests/unit/test_ga_namespace.py`](../../tests/unit/test_ga_namespace.py).
 
 **Files (new):**
-- `docs/audit/ga_scope_lock.md` — captures Q1/Q2/Q4 answers; documents Q3 deferral.
+- `docs/audit/domain/DOMAIN_AUDIT.md` — captures Q1/Q2/Q4 answers; documents Q3 deferral.
 - `python/tessera/ga/__init__.py` — empty namespace; placeholder so imports
   resolve from GA1 onwards.
 - `tests/unit/test_ga_namespace.py` — namespace import + version + package-path tests.
@@ -972,7 +972,7 @@ Acceptance test at [`tests/unit/test_ebm_namespace.py`](../../tests/unit/test_eb
 
 **Files (new):**
 - `docs/spec/EBM_SPEC.md` — normative spec (8 sections + 2 appendices).
-- `docs/audit/ebm_scope_lock.md` — Q6 answer, Q5 deferral, archive disposition.
+- `docs/audit/domain/DOMAIN_AUDIT.md` — Q6 answer, Q5 deferral, archive disposition.
 - `python/tessera/ebm/__init__.py` — namespace stub.
 - `tests/unit/test_ebm_namespace.py` — namespace + spec-provenance tests.
 

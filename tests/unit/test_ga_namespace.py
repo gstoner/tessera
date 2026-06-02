@@ -1,8 +1,8 @@
 """GA0 acceptance: `from tessera import ga` resolves and exposes __version__.
 
 Sprint: GA0 (scope lock + namespace).
-Roadmap: docs/audit/ga_ebm_roadmap.md
-Scope lock: docs/audit/ga_scope_lock.md
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md
+Scope lock: docs/audit/domain/DOMAIN_AUDIT.md
 """
 
 from __future__ import annotations

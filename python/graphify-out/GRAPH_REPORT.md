@@ -835,7 +835,7 @@ Nodes (14): gelu(), linear(), mlp_head(), polynomial(), quadratic(), ``tessera.e
 
 ### Community 99 - "Community 99"
 Cohesion: 0.12
-Nodes (11): _check_module(), FSDP, DDP / FSDP wrappers — Phase I of `docs/audit/execution_roadmap.md`.  Wraps a `te, Fully-Sharded Data-Parallel wrapper.      Each rank stores 1/world_size of every, Initial shard — drop everything but rank-local 1/world_size of         each para, All-gather each parameter to its full size for the duration of         the forwa, Drop the all-gathered full parameter back to the rank-local shard.         Inver, Reduce-scatter each Parameter's `.grad` into the local shard         (mean reduc (+3 more)
+Nodes (11): _check_module(), FSDP, DDP / FSDP wrappers — Phase I of `docs/audit/roadmap/ROADMAP_AUDIT.md`.  Wraps a `te, Fully-Sharded Data-Parallel wrapper.      Each rank stores 1/world_size of every, Initial shard — drop everything but rank-local 1/world_size of         each para, All-gather each parameter to its full size for the duration of         the forwa, Drop the all-gathered full parameter back to the rank-local shard.         Inver, Reduce-scatter each Parameter's `.grad` into the local shard         (mean reduc (+3 more)
 
 ### Community 100 - "Community 100"
 Cohesion: 0.12

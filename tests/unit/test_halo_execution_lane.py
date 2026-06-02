@@ -25,7 +25,7 @@ the same harness extends to:
   * Execute on hardware.
   * Compare to this same oracle.
 
-Architecture: ``docs/audit/compiler_correctness_testing_audit.md`` §
+Architecture: ``docs/audit/compiler/COMPILER_AUDIT.md`` §
 "Coverage matrix — semantic / oracle".
 """
 from __future__ import annotations

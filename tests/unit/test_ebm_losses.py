@@ -1,7 +1,7 @@
 """EBM4 acceptance: contrastive divergence + score matching losses.
 
 Sprint: EBM4.
-Roadmap: docs/audit/ga_ebm_roadmap.md § EBM4
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md § EBM4
 
 Covers the EBM4 acceptance criteria:
   - 4 new losses registered in primitive_coverage under category="loss".

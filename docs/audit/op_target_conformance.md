@@ -9,7 +9,7 @@ This dashboard reports, per (op, target), where the op is on the seven-step proo
 
 The matrix is a **pure aggregator** over `primitive_coverage` (12-axis contracts), `backend_manifest` (per-target kernel status), `execution_matrix` (runtime executors), and the Apple-GPU runtime envelope sets. No proof column has its own private truth source — change the upstream status and the matrix regenerates.
 
-Audit response to [docs/audit/compiler_layer_gap_remediation.md](compiler_layer_gap_remediation.md) recommendation **A**: the gap between *architecture-implied capability* and *executable capability* is now drift-gated rather than implicit.
+Audit response to [docs/audit/compiler/COMPILER_AUDIT.md](compiler_layer_gap_remediation.md) recommendation **A**: the gap between *architecture-implied capability* and *executable capability* is now drift-gated rather than implicit.
 
 ## Status legend
 

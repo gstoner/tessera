@@ -6,7 +6,7 @@ non-CPU branches); `capabilities.py` shares its `TARGET_CAPABILITIES`
 vocabulary; the dashboard at `docs/audit/generated/runtime_execution_matrix.md`
 renders it. This test fails if any of those four agree on a different answer —
 the "single source of truth" invariant the compiler-layer remediation plan calls
-out (G4, `docs/audit/compiler_layer_gap_remediation.md`).
+out (G4, `docs/audit/compiler/COMPILER_AUDIT.md`).
 """
 
 from __future__ import annotations
@@ -127,7 +127,7 @@ def test_runtime_launch_imports_the_matrix():
     assert "from .compiler.execution_matrix" in src, (
         "runtime.py must import execution_matrix (the single source of truth "
         "for runtime.launch's executor dispatch); see G4 in "
-        "docs/audit/compiler_layer_gap_remediation.md")
+        "docs/audit/compiler/COMPILER_AUDIT.md")
 
 
 def test_runtime_launch_unimplemented_branch_cites_the_matrix():

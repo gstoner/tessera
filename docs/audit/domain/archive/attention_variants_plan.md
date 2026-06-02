@@ -475,9 +475,9 @@ visibly improves coverage.
 
 ## Cross-references
 
-- `docs/audit/execution_roadmap.md` — Phase G is the long pole for
+- `docs/audit/roadmap/ROADMAP_AUDIT.md` — Phase G is the long pole for
   all native GPU kernel paths
-- `docs/audit/advanced_examples_capability_gap.md` — Theme 5 (MLA
+- `docs/audit/coverage/COVERAGE_AUDIT.md` — Theme 5 (MLA
   primitives) is shipped; this plan extends it with the absorb-K
   fusion piece
 - `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td` —

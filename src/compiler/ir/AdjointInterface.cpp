@@ -1,6 +1,6 @@
 //===- AdjointInterface.cpp - buildAdjoint impls per op --------*- C++ -*-===//
 //
-// Phase F4 of docs/audit/execution_roadmap.md. The generated header
+// Phase F4 of docs/audit/roadmap/ROADMAP_AUDIT.md. The generated header
 // `Tessera/AdjointInterface.cpp.inc` (from `AdjointInterface.td` via
 // `TesseraAdjointInterfaceTableGen`) provides the interface plumbing; this
 // file implements `buildAdjoint` for each op that opts in via

@@ -1,7 +1,7 @@
 ---
 status: Audit
 classification: NVIDIA execution punch-list
-authority: Phase G1 of `docs/audit/execution_roadmap.md`
+authority: Phase G1 of `docs/audit/roadmap/ROADMAP_AUDIT.md`
 last_updated: 2026-05-09
 ---
 
@@ -80,8 +80,8 @@ These are deliberately deferred to later G-phase / cross-phase tickets:
 
 ## Cross-references
 
-- `docs/audit/execution_roadmap.md` Phase G — the umbrella tracking item
-- `docs/audit/kv_cache_coverage_matrix.md` — KV-cache will follow the same
+- `docs/audit/roadmap/ROADMAP_AUDIT.md` Phase G — the umbrella tracking item
+- `docs/audit/coverage/COVERAGE_AUDIT.md` — KV-cache will follow the same
   pattern once GEMM lands
 - `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` — backend tree
 - `src/runtime/src/backend/cuda_backend.cpp` — runtime ABI gap

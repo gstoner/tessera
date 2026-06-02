@@ -202,7 +202,7 @@ def seq2seq_loss(logits, targets, mask=None, reduction: str = "mean"):
 #
 # All four are pre-computed-tensor APIs: the user supplies the necessary
 # quantities (energies, scores) and `reduction` controls the per-sample
-# reduction. See `docs/audit/ga_ebm_roadmap.md` § EBM4.
+# reduction. See `docs/audit/domain/DOMAIN_AUDIT.md` § EBM4.
 # ---------------------------------------------------------------------------
 
 def contrastive_divergence_loss(energy_pos, energy_neg, reduction: str = "mean"):

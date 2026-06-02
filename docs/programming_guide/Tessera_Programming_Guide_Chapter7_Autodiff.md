@@ -18,7 +18,7 @@ derivatives.
 
 This chapter is the user-facing tutorial; for the authoritative
 implementation contract see `docs/spec/AUTODIFF_SPEC.md`, and for per-primitive
-contract status see `docs/audit/primitive_coverage_state.md`.
+contract status see `docs/audit/coverage/COVERAGE_AUDIT.md`.
 
 ## 7.1 Tape-Based Reverse Mode
 
@@ -188,7 +188,7 @@ Per-primitive VJP/JVP status is tracked in
 
 The remaining gaps (`vjp = planned` 53; `jvp = planned` 96) are niche
 primitives in the spectral / sparse / linalg / quant-variant tail; see
-`docs/audit/primitive_coverage_state.md` for the per-category breakdown.
+`docs/audit/coverage/COVERAGE_AUDIT.md` for the per-category breakdown.
 
 ## 7.10 Common Patterns
 

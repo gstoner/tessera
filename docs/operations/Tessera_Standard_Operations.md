@@ -84,7 +84,7 @@ The per-op catalog below uses six axes from `primitive_coverage.py`
   Phase G mesh verification.
 - **0 / 47** claim `complete` `backend_kernel` — by registry design
   this requires real NVIDIA / ROCm / Metalium hardware proof
-  (see [Phase G/H/I frontier audit](../audit/phase_ghi_hardware_frontier.md)).
+  (see [backend audit](../audit/backend/BACKEND_AUDIT.md)).
   The `◐ partial` status documents which targets have shipping
   kernels today (Apple GPU + x86 paths are real; the rest are
   artifact-only).
@@ -225,7 +225,7 @@ pure < random < movement < state < collective < memory < io < top
 Collectives run today on the thread-based `MockRankGroup` for tests
 and on `NCCLAdapter` / `RCCLAdapter` for production paths (the
 adapters are wired but require real GPU hardware for execution
-proof — see [Phase G/H/I frontier audit](../audit/phase_ghi_hardware_frontier.md)).
+proof — see [backend audit](../audit/backend/BACKEND_AUDIT.md)).
 
 ### Layout And Packing
 

@@ -98,5 +98,5 @@
 ## Closure trajectory
 
 * `lowering_rule` is closed project-wide today (0 open across all categories) — the multi-axis category-based hardening pass from Sprint A1+ landed this.
-* `backend_kernel` is the **universal Phase G/H/I gate** — every category has open entries here by design.  Promotions happen alongside hardware enablement per `docs/audit/nvidia_rocm_execute_and_compare_plan.md`.
+* `backend_kernel` is the **universal Phase G/H/I gate** — every category has open entries here by design.  Promotions happen alongside hardware enablement per `docs/audit/backend/BACKEND_AUDIT.md`.
 * `batching_rule` / `transpose_rule` / `sharding_rule` are the closable axes today.  A category-by-category promotion sprint should focus on the rows above with `priority ≤ 50`.

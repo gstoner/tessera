@@ -7,7 +7,7 @@ last_updated: 2026-05-09
 
 # Deferred Items Plan
 
-`docs/audit/advanced_examples_capability_gap.md` ends with six items
+`docs/audit/coverage/COVERAGE_AUDIT.md` ends with six items
 listed as "Deliberately out of scope" or "Phase G long pole". This
 document sequences them into executable phases so we can pick them up
 without another design conversation when demand surfaces.
@@ -611,9 +611,9 @@ kernel adds surface without unblocking anyone.
 
 ## Cross-references
 
-- `docs/audit/advanced_examples_capability_gap.md` — the "deferred"
+- `docs/audit/coverage/COVERAGE_AUDIT.md` — the "deferred"
   scoreboard this doc operationalizes
-- `docs/audit/execution_roadmap.md` — overall phasing; Phase G is the
+- `docs/audit/roadmap/ROADMAP_AUDIT.md` — overall phasing; Phase G is the
   long pole gating items 2c, 6c
 - `docs/spec/AUTODIFF_SPEC.md` §F6, §F7 — original deferral rationale
 - `docs/porting_advanced_examples.md` — phantom-API → today's-API

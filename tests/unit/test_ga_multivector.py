@@ -1,7 +1,7 @@
 """GA3 acceptance (part 1): Multivector value class + annotation surface.
 
 Sprint: GA3 (multivector Python reference) + GA2 (annotation surface).
-Roadmap: docs/audit/ga_ebm_roadmap.md
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md
 
 Covers:
   - Multivector construction: rank-1 coefficient array, optional grade

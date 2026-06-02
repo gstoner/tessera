@@ -40,7 +40,7 @@ testing:
 
 | Lane | Coverage | Reference |
 |---|---|---|
-| NVIDIA pass-order matrix (12 passes) | source-structural ✅ planned-for-future-this-doc; existing `phase3/cuda13/*.mlir` lit fixtures verify per-pass IR shape | `docs/audit/compiler_correctness_testing_audit.md` |
+| NVIDIA pass-order matrix (12 passes) | source-structural ✅ planned-for-future-this-doc; existing `phase3/cuda13/*.mlir` lit fixtures verify per-pass IR shape | `docs/audit/compiler/COMPILER_AUDIT.md` |
 | NVIDIA toolchain pins | ✅ shipped (CUDA 13.2 U1, PTX 8.6, NCCL 2.22) | `cmake/TesseraToolchainPins.cmake`, `gpu_target.py` |
 | NVIDIA kernel inventory | ✅ shipped | `docs/nvidia_cuda13_kernel_inventory.md` |
 | NVIDIA lit fixtures | ✅ 10 fixtures across SM_80→SM_120 | `tests/tessera-ir/phase3/cuda13/` |
@@ -180,16 +180,16 @@ after hardware lights up.
 2. Bundle pre-G structural tests (NVIDIA pass-order matrix + ABI lock)
    into the same PR as the first NVIDIA execute-and-compare kernel.
    Mirror for ROCm.
-3. Update `docs/audit/compiler_correctness_testing_audit.md` to flip
+3. Update `docs/audit/compiler/COMPILER_AUDIT.md` to flip
    the NVIDIA/ROCm rows from ⏳ to ✅ as each lands.
 4. Mark this plan document as **superseded** when all six items above
    are shipped.
 
 ## Related docs
 
-- `docs/audit/compiler_correctness_testing_audit.md` — coverage matrix
+- `docs/audit/compiler/COMPILER_AUDIT.md` — coverage matrix
   this defers from.
-- `docs/audit/execution_roadmap.md` — Phase G/H roadmap.
+- `docs/audit/roadmap/ROADMAP_AUDIT.md` — Phase G/H roadmap.
 - `docs/nvidia_cuda13_kernel_inventory.md` — what NVIDIA kernels need
   oracle coverage.
 - `docs/rocm_mfma_kernel_inventory.md` — same for ROCm.

@@ -5,7 +5,7 @@ wraps a function whose first positional arg is the encode-session
 handle, opens a fresh session before the call, and commits + waits
 on exit. Phase 2 (true JIT-level auto-detection inside
 ``compiler/jit.py``) is documented in
-``docs/audit/single_command_buffer_decode_plan.md``.
+``docs/audit/backend/apple/APPLE_AUDIT.md``.
 
 These tests pin the decorator's contract:
 

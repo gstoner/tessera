@@ -110,7 +110,7 @@ def test_sprint_v1_op_has_hasverifier(op_def_marker) -> None:
     assert "let hasVerifier = 1;" in window, (
         f"{op_def} is missing `let hasVerifier = 1;` — Sprint V1 "
         f"closure regressed.  Open SHAPE_SYSTEM.md §11 and "
-        f"docs/audit/compiler_spec_gap_audit.md."
+        f"docs/audit/compiler/COMPILER_AUDIT.md."
     )
 
 

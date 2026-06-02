@@ -6,6 +6,9 @@ correctness testing, and spec drift.
 
 ## Current Truth
 
+- Start with [COMPILER_AUDIT.md](COMPILER_AUDIT.md) for the consolidated
+  compiler audit: what shipped, what remains open, and which archived docs were
+  absorbed.
 - The compiler now has a recognizable proof spine: canonical compile, IR
   bundle, named gates, backend manifest rows, and runtime artifact metadata.
 - The main open architectural issue is handoff discipline: multi-op component

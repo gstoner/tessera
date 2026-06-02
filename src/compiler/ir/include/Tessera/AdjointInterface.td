@@ -1,6 +1,6 @@
 //===- AdjointInterface.td - Tessera autodiff interface --------*- tablegen -*-===//
 //
-// Phase F4 of docs/audit/execution_roadmap.md. ODS for the AdjointInterface
+// Phase F4 of docs/audit/roadmap/ROADMAP_AUDIT.md. ODS for the AdjointInterface
 // op trait. Each differentiable Graph IR op declares an `adjoint` method
 // that materializes its backward computation as Graph IR ops; the
 // AutodiffPass walks the IR and inserts adjoint ops via interface dispatch.

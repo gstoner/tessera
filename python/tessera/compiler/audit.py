@@ -2,7 +2,7 @@
 
 This module is the single renderer for the **eight-axis compiler
 support taxonomy** decided in
-``docs/audit/compiler_improvement_milestone_plan_2026_05_18.md``.
+``docs/audit/compiler/COMPILER_AUDIT.md``.
 
 It does **not** invent a new schema.  It walks the four pre-existing
 sources and surfaces them through one consistent table:

@@ -398,7 +398,7 @@ def render_dashboard() -> str:
         "hardware kernel with numerical proof.  Today **zero** TSOL "
         "entries can claim `complete` because NVIDIA / ROCm / "
         "Tenstorrent Metalium proofs aren't available on this Mac.  "
-        "See `docs/audit/phase_ghi_hardware_frontier.md` for the "
+        "See `docs/audit/backend/BACKEND_AUDIT.md` for the "
         "full hardware-gated punch list."
     )
     lines.append("")

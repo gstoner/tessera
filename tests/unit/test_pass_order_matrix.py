@@ -2,7 +2,7 @@
 
 Locks the *implicit* dependencies between pipeline passes as named
 contracts.  Two pipelines exercised today, per
-``docs/audit/compiler_correctness_testing_audit.md``:
+``docs/audit/compiler/COMPILER_AUDIT.md``:
 
 * **Halo / Neighbors** (4 passes, runtime matrix via tessera-opt):
     stencil-lower → bc-lower → halo-mesh-integration → halo-transport-lower

@@ -126,7 +126,7 @@ def test_no_tsol_op_claims_backend_kernel_complete() -> None:
         f"Unexpected backend_kernel = complete claim on TSOL surface: "
         f"got {complete} entries claiming hardware-verified status "
         f"without registered execute_compare fixtures.  See "
-        f"docs/audit/phase_ghi_hardware_frontier.md."
+        f"docs/audit/backend/BACKEND_AUDIT.md."
     )
 
 
@@ -191,8 +191,8 @@ def test_dashboard_pins_canonical_phrases() -> None:
         "## Backend kernel honest baseline",
         # Spec back-reference.
         "Tessera_Standard_Operations.md",
-        # Cross-link to the hardware frontier audit.
-        "phase_ghi_hardware_frontier.md",
+        # Cross-link to the current backend audit.
+        "BACKEND_AUDIT.md",
     ):
         assert phrase in text, (
             f"TSOL dashboard missing canonical phrase {phrase!r}"

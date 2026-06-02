@@ -1,7 +1,7 @@
 """Op×target conformance matrix — pure aggregator over existing truth sources.
 
 Audit response (recommendation **A** in
-``docs/audit/compiler_layer_gap_remediation.md``): expose a per-(op, target)
+``docs/audit/compiler/COMPILER_AUDIT.md``): expose a per-(op, target)
 view of where each op is on the **seven-step proof ladder**:
 
     graph_emitted → schedule_legal → tile_legal → target_legal
@@ -613,7 +613,7 @@ def render_markdown() -> str:
     lines.append("")
     lines.append(
         "Audit response to"
-        " [docs/audit/compiler_layer_gap_remediation.md](compiler_layer_gap_remediation.md)"
+        " [docs/audit/compiler/COMPILER_AUDIT.md](compiler_layer_gap_remediation.md)"
         " recommendation **A**: the gap between *architecture-implied"
         " capability* and *executable capability* is now"
         " drift-gated rather than implicit."

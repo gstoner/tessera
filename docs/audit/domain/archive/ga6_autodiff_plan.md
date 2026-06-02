@@ -8,7 +8,7 @@ last_updated: 2026-05-17
 # GA6 — Clifford autodiff planning + budget
 
 > Companion to
-> [`docs/audit/sprint_plan_task4_and_crosscuts.md`](sprint_plan_task4_and_crosscuts.md).
+> [`docs/audit/roadmap/ROADMAP_AUDIT.md`](sprint_plan_task4_and_crosscuts.md).
 > GA6 is the **highest-risk sprint** on the GA roadmap.  This doc
 > captures (a) why, (b) what infrastructure is in place to mitigate,
 > (c) what we plan to ship when GA6 is scheduled.
@@ -60,7 +60,7 @@ finite-difference verification will catch as an off-by-one.
 
 The harness lands in this sprint (Decision: budget 2× headline,
 front-load `check_grad`).  Per the sprint plan
-[`docs/audit/sprint_plan_task4_and_crosscuts.md`](sprint_plan_task4_and_crosscuts.md):
+[`docs/audit/roadmap/ROADMAP_AUDIT.md`](sprint_plan_task4_and_crosscuts.md):
 
 - [`python/tessera/ga/check_grad.py`](../../python/tessera/ga/check_grad.py)
   ships `multivector_check_grad` + `multivector_check_grad_scalar`.
@@ -126,5 +126,5 @@ only** — no VJPs:
 - [`docs/spec/AUTODIFF_SPEC.md`](../spec/AUTODIFF_SPEC.md) — the
   tensor-side autodiff spec the GA VJPs need to remain consistent
   with.
-- [`docs/audit/sprint_plan_task4_and_crosscuts.md`](sprint_plan_task4_and_crosscuts.md) —
+- [`docs/audit/roadmap/ROADMAP_AUDIT.md`](sprint_plan_task4_and_crosscuts.md) —
   this sprint's full work plan.

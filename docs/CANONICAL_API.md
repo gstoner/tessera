@@ -660,7 +660,7 @@ k_now, v_now = ts.ops.kv_cache_read(cache, 0, cache.current_seq)
 
 `page_size` is recorded but not yet used to physically page — Phase E adds
 real paging + block quantization. User code written today doesn't need to
-change when that lands. See [`docs/audit/kv_cache_coverage_matrix.md`](audit/kv_cache_coverage_matrix.md)
+change when that lands. See [`docs/audit/coverage/COVERAGE_AUDIT.md`](audit/kv_cache_coverage_matrix.md)
 for per-backend lowering status.
 
 ---

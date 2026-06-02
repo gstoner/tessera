@@ -6,6 +6,8 @@ and Apple performance proof.
 
 ## Current Truth
 
+- Start with [APPLE_AUDIT.md](APPLE_AUDIT.md) for the consolidated Apple audit:
+  what shipped, what remains open, and which archived docs were absorbed.
 - Apple is a platform-specialized backend, not just a shared-backend footnote.
 - The Apple path spans compiler lowering, Python runtime dispatch, C ABI
   symbols, Metal 4 lanes, encode-session batching, and packaged `.mtlpackage`

@@ -80,7 +80,7 @@ def _language_spec_dtype_terms() -> set[str]:
 
 
 def _hardware_matrix_dtype_terms() -> set[str]:
-    text = (ROOT / "docs/audit/hardware_dtype_support_matrix.md").read_text()
+    text = (ROOT / "docs/audit/backend/BACKEND_AUDIT.md").read_text()
     code_terms = set(re.findall(r"`([^`]+)`", text))
     terms: set[str] = set()
     for item in code_terms:

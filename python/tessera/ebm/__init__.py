@@ -1,7 +1,7 @@
 """Tessera energy-based models namespace.
 
 This module is the entry point for the EBM-series primitive surface
-sequenced in `docs/audit/ga_ebm_roadmap.md`. EBM0 (scope lock) ships
+sequenced in `docs/audit/domain/DOMAIN_AUDIT.md`. EBM0 (scope lock) ships
 the namespace and adapts the archived EBT design into
 `docs/spec/EBM_SPEC.md`; EBM1 onwards populates the namespace with the
 energy primitive surface, samplers, partition function, and losses.
@@ -14,9 +14,9 @@ Scope-locked at EBM0:
     - Broader namespace `tessera.ebm` (covers RBMs, EBTs, score-matching
       diffusion, geometric-Langevin demo) instead of narrow `tessera.ebt`.
 
-See `docs/audit/ebm_scope_lock.md` for the locked decisions,
+See `docs/audit/domain/DOMAIN_AUDIT.md` for the locked decisions,
 `docs/spec/EBM_SPEC.md` for the normative specification, and
-`docs/audit/ga_ebm_roadmap.md` for the full sprint sequence.
+`docs/audit/domain/DOMAIN_AUDIT.md` for the full sprint sequence.
 """
 
 from tessera.ebm.energy import (

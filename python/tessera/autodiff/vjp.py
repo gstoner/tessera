@@ -2391,7 +2391,7 @@ def vjp_denoising_score_matching_loss(
 # ─────────────────────────────────────────────────────────────────────────────
 # Autodiff-coverage hardening pass — S11 classification + distribution +
 # contrastive + sequence losses, S7 layer/pooling. Per the
-# "Recommended Next Work" in `docs/audit/primitive_coverage_state.md`.
+# "Recommended Next Work" in `docs/audit/coverage/COVERAGE_AUDIT.md`.
 #
 # Each VJP here is paired with a JVP in `autodiff/jvp.py` and verified
 # numerically in `tests/unit/test_autodiff_loss_layer_coverage.py`.
@@ -3529,7 +3529,7 @@ def vjp_cummin(dout, x, *, axis=-1, **_):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Long-tail VJP closure (2026-05-10). Closes the planned VJP entries
-# flagged in `docs/audit/primitive_coverage_state.md`. Organized by family.
+# flagged in `docs/audit/coverage/COVERAGE_AUDIT.md`. Organized by family.
 #
 # All implementations are pure-numpy reference; backend-specific kernels
 # arrive with each Phase G/H/I integration.

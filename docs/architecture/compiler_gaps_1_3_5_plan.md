@@ -281,5 +281,5 @@ shipped alongside Gap 2.
 - `tests/tessera-ir/phase7/` — every existing lit fixture for the
   Neighbors dialect.
 - `docs/spec/COMPILER_REFERENCE.md` — broader compiler design context.
-- `docs/audit/execution_roadmap.md` — Phase A–I roadmap; Gaps 1/3/5
+- `docs/audit/roadmap/ROADMAP_AUDIT.md` — Phase A–I roadmap; Gaps 1/3/5
   sit in Phase G–H territory once they land.

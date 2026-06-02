@@ -32,7 +32,7 @@ using namespace mlir;
 namespace tessera {
 namespace {
 
-// v1 allow-list per docs/audit/ga_scope_lock.md § Q1.
+// v1 allow-list per docs/audit/domain/DOMAIN_AUDIT.md § Q1.
 static bool isAllowListedSignature(int64_t p, int64_t q, int64_t r) {
   if (p == 3 && q == 0 && r == 0) return true;  // 3D Euclidean
   if (p == 1 && q == 3 && r == 0) return true;  // Minkowski spacetime

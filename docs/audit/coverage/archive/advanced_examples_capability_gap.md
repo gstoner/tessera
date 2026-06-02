@@ -293,7 +293,7 @@ are infrastructural (Phase G GPU execution) or out-of-scope deliberately.
 
 ### Deferred-items plan landings (2026-05-09) + remaining
 
-Items 1–5 from [`docs/audit/deferred_items_plan.md`](deferred_items_plan.md)
+Items 1–5 from [`docs/audit/roadmap/ROADMAP_AUDIT.md`](deferred_items_plan.md)
 all landed in a single sprint:
 
 - ✅ Item 1 — `tessera.distributions.{Normal, Beta, kl_divergence}` (17 tests).
@@ -328,7 +328,7 @@ phantom-API copy-paste hazard. Both shipped:
 
 ## Cross-references
 
-- **`docs/audit/execution_roadmap.md`** — sequenced execution plan. Theme 1
+- **`docs/audit/roadmap/ROADMAP_AUDIT.md`** — sequenced execution plan. Theme 1
   follow-ups → Phase A4/B1/C; Theme 3 → Phase D; Theme 4 → Phase E; Theme 2
   follow-ups → Phase F. Pick tasks from there.
 - CANONICAL_API.md — the actual surface today

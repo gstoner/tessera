@@ -12761,7 +12761,7 @@ static bool mpsg_run_bmm_dev(MetalDeviceContext &ctx, id<MTLBuffer> bufA,
 // 2=softmax, 3=log_softmax. ``bufG`` / ``bufB`` may be nil for
 // kinds that don't take gamma / beta (softmax / log_softmax have
 // neither; rmsnorm has gamma only). See
-// ``docs/audit/single_command_buffer_decode_plan.md``.
+// ``docs/audit/backend/apple/APPLE_AUDIT.md``.
 static bool mpsg_encode_rowop_dev(MPSCommandBuffer *cb, int32_t kind,
                                   id<MTLBuffer> bufX,
                                   id<MTLBuffer> bufG,
@@ -12937,7 +12937,7 @@ extern "C" int32_t tessera_apple_gpu_bmm_dev_f32_enc(TsEncodeSession *s,
 // layer_norm. Appends to the session's command buffer; no commit/sync here.
 // Pairs with ``tessera_apple_gpu_bmm_dev_f32_enc`` so a decoder layer can keep
 // "norm + matmul + norm" on ONE command buffer with no per-op GPU↔CPU
-// roundtrips. Roadmap: ``docs/audit/single_command_buffer_decode_plan.md``.
+// roundtrips. Roadmap: ``docs/audit/backend/apple/APPLE_AUDIT.md``.
 extern "C" int32_t tessera_apple_gpu_layer_norm_dev_f32_enc(
     TsEncodeSession *s,
     TsDeviceTensor *X, TsDeviceTensor *gamma,

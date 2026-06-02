@@ -6,6 +6,9 @@ backend rules.
 
 ## Current Truth
 
+- Start with [BACKEND_AUDIT.md](BACKEND_AUDIT.md) for the consolidated
+  cross-target backend audit: what is executable, what is artifact-only, and
+  which proof gates remain.
 - Runtime execution truth is generated from the execution matrix:
   [../generated/runtime_execution_matrix.md](../generated/runtime_execution_matrix.md).
 - C ABI surface truth is generated from the runtime ABI audit:
@@ -17,9 +20,9 @@ backend rules.
 
 ## Platform Folders
 
-- [apple/README.md](apple/README.md)
-- [nvidia/README.md](nvidia/README.md)
-- [rocm/README.md](rocm/README.md)
+- Apple: [apple/APPLE_AUDIT.md](apple/APPLE_AUDIT.md)
+- NVIDIA: [nvidia/NVIDIA_AUDIT.md](nvidia/NVIDIA_AUDIT.md)
+- ROCm: [rocm/ROCM_AUDIT.md](rocm/ROCM_AUDIT.md)
 
 ## Open Items
 

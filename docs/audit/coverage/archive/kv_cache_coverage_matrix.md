@@ -13,7 +13,7 @@ This matrix documents whether each backend handles `kv_cache_*` ops, FA-4
 with cache, and the supporting tile-level `tile.kv_cache` op.
 
 If a cell turns out to be ❌ (silent drop) below, that is a Decision #21
-violation and gets a follow-up entry in `docs/audit/execution_roadmap.md`.
+violation and gets a follow-up entry in `docs/audit/roadmap/ROADMAP_AUDIT.md`.
 
 ## Legend
 
@@ -100,6 +100,6 @@ violation and gets a follow-up entry in `docs/audit/execution_roadmap.md`.
 ## Cross-references
 
 - CLAUDE.md Architecture Decision #21
-- `docs/audit/execution_roadmap.md` — Phases E, G
+- `docs/audit/roadmap/ROADMAP_AUDIT.md` — Phases E, G
 - `examples/advanced/kv_cache_serving/` — exercises the Python reference path
 - `docs/CANONICAL_API.md` — `tessera.ops.kv_cache_append` / `kv_cache_prune`

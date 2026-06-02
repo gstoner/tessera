@@ -1,8 +1,8 @@
 """EBM7 acceptance: manifold-aware Langevin integrators.
 
 Sprint: EBM7 (the GA + EBM merge point).
-Roadmap: docs/audit/ga_ebm_roadmap.md § EBM7
-Scope lock: docs/audit/ebm_scope_lock.md § Q5
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md § EBM7
+Scope lock: docs/audit/domain/DOMAIN_AUDIT.md § Q5
 
 Covers the EBM7 acceptance criteria:
   - Bivector Langevin starting from a random rotor stays even-grade

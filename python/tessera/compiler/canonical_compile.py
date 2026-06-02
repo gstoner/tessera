@@ -140,7 +140,7 @@ class CompileResult:
         The artifact is fully self-describing — every consumer who needs
         the seven-gate truth can read it from the artifact without
         re-importing the compiler. Audit recommendation C.2 in
-        ``docs/audit/compiler_layer_gap_remediation.md``.
+        ``docs/audit/compiler/COMPILER_AUDIT.md``.
         """
         # Import here to keep the compiler→runtime dependency one-way at
         # import time (canonical_compile is pulled by jit.py very early).

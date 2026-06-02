@@ -6,6 +6,9 @@ requirements.
 
 ## Current Truth
 
+- Start with [DOMAIN_AUDIT.md](DOMAIN_AUDIT.md) for the consolidated domain
+  audit: GA/EBM, attention, CorrDiff/SciML, sharding, autodiff, and archived
+  source material.
 - Domain roadmaps are implementation context, not generated status truth.
 - GA/EBM, attention, CorrDiff, and sharding docs remain useful as historical
   design sources, but current primitive/support status should be checked through

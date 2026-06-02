@@ -110,7 +110,7 @@ from . import utils
 # the real class and remove its entry below.
 # ─────────────────────────────────────────────────────────────────────────────
 
-_AUDIT = "docs/audit/advanced_examples_capability_gap.md"
+_AUDIT = "docs/audit/coverage/COVERAGE_AUDIT.md"
 
 
 def _phantom(name: str, hint: str) -> type:

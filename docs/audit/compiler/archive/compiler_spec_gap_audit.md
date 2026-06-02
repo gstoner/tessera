@@ -11,7 +11,7 @@ spec set in `docs/spec/`. It excludes `archive/src/`, `archive/docs/`,
 `research/`, and legacy example snapshots unless an active spec explicitly
 points at them.
 
-The companion matrix is `docs/audit/compiler_spec_gap_matrix.md`.
+The companion matrix is `docs/audit/compiler/COMPILER_AUDIT.md`.
 
 ## 2026-05-22 Closure note
 
@@ -344,7 +344,7 @@ fixtures: V3b interprocedural + V3c scf propagation.
 
 **Phase G/H/I hardware-gated frontier (Sprint M, 2026-05-22)**:
 
-A new dedicated audit doc `docs/audit/phase_ghi_hardware_frontier.md`
+A new dedicated audit doc `docs/audit/backend/BACKEND_AUDIT.md`
 captures the honest answer to "what's hardware-blocked vs. still
 hardware-free?"  Highlights:
 

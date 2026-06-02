@@ -1,4 +1,4 @@
-"""DDP / FSDP wrappers — Phase I of `docs/audit/execution_roadmap.md`.
+"""DDP / FSDP wrappers — Phase I of `docs/audit/roadmap/ROADMAP_AUDIT.md`.
 
 Wraps a `tessera.nn.Module` and applies distributed-gradient collectives on
 each backward pass. The forward pass is unchanged; backward inserts

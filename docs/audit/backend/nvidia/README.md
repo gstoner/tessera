@@ -5,6 +5,9 @@ execution, SM target maps, CUDA toolchain proof, and execute-and-compare work.
 
 ## Current Truth
 
+- Start with [NVIDIA_AUDIT.md](NVIDIA_AUDIT.md) for the consolidated NVIDIA
+  audit: what exists today, what is hardware-gated, and what must land before
+  execution claims can be promoted.
 - NVIDIA status is hardware-gated for real execute-and-compare proof.
 - Generated NVIDIA status should be read from:
   - [../../generated/nvidia_sm90_target_map.md](../../generated/nvidia_sm90_target_map.md)

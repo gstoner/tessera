@@ -2,7 +2,7 @@
 
 Audit Action 6 / Pattern table row #6 (2026-06-01) — scaffold for
 "keep prefill / decode / attn / MLP / projection on one command
-buffer." See ``docs/audit/single_command_buffer_decode_plan.md``.
+buffer." See ``docs/audit/backend/apple/APPLE_AUDIT.md``.
 
 Today's encode-session-aware ops:
 
@@ -564,7 +564,7 @@ def rope_enc(session: int, X: DeviceTensor, Theta: DeviceTensor,
 # through batched_session() transparently) is a separate architectural
 # change to ``compiler/jit.py``'s metadata-execution path; tracked as
 # stage-3 of the single-cb roadmap (see
-# ``docs/audit/single_command_buffer_decode_plan.md``).
+# ``docs/audit/backend/apple/APPLE_AUDIT.md``).
 #
 # In the meantime, this decorator gives callers 90% of the ergonomic
 # win without touching the JIT: write a function that takes ``s`` as

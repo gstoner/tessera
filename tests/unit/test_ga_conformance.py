@@ -1,7 +1,7 @@
 """GA10 — Tiny-model conformance suite for the geometric-algebra stack.
 
 Sprint: GA10.
-Roadmap: docs/audit/ga_ebm_roadmap.md § GA10
+Roadmap: docs/audit/domain/DOMAIN_AUDIT.md § GA10
 
 Three demos prove the GA stack end-to-end on tiny synthetic data:
 

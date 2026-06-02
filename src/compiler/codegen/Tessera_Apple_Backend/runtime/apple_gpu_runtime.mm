@@ -10473,21 +10473,88 @@ static inline MPSGraphTensor *mpsg_down(MPSGraph *g, MPSGraphTensor *t,
 // MPSGraphTensorData (the actual buffers) change per call. Value is
 // @[graph, @[placeholders...], outputTensor]; the static dictionary keeps the
 // graph/placeholders/output alive past each call's @autoreleasepool drain.
+//
+// Task B (2026-06-01) — LRU cache eviction. Long-running training loops
+// (a 5,000-step run with 10 distinct shapes per step is 50,000 graphs)
+// would otherwise accumulate compiled graphs indefinitely until the
+// process exhausts memory. The cache now tracks MRU order via an
+// NSMutableOrderedSet keyed alongside the lookup dictionary; on insert
+// past the capacity, the LRU entry is evicted. Capacity is set from the
+// ``TESSERA_MPSGRAPH_CACHE_CAPACITY`` env var (default 1024 — comfortably
+// above any single-process working set we've seen). Evictions counter
+// is exposed via ``tessera_apple_gpu_mpsgraph_cache_evictions()`` for
+// thrashing observability.
 static NSMutableDictionary<NSString *, NSArray *> *mpsg_graph_cache() {
   static NSMutableDictionary *cache = nil;
   static std::once_flag once;
   std::call_once(once, [] { cache = [[NSMutableDictionary alloc] init]; });
   return cache;
 }
+// MRU-first key list: index 0 = most recently used; tail = candidate
+// for eviction. Mutated under ``g_mpsg_graph_mu`` together with the
+// lookup dictionary so the two stay consistent.
+static NSMutableOrderedSet<NSString *> *mpsg_lru_order() {
+  static NSMutableOrderedSet *order = nil;
+  static std::once_flag once;
+  std::call_once(once, [] { order = [[NSMutableOrderedSet alloc] init]; });
+  return order;
+}
 static std::mutex g_mpsg_graph_mu;
+static std::atomic<int64_t> g_mpsg_evictions{0};
+
+// Cached at first read so the env-var lookup doesn't hit ``getenv``
+// on every cache touch. ``TESSERA_MPSGRAPH_CACHE_CAPACITY=0`` disables
+// the LRU (unbounded — restores the pre-Task-B behavior).
+static size_t mpsg_cache_capacity() {
+  static size_t cap = 0;
+  static std::once_flag once;
+  std::call_once(once, [] {
+    const char *raw = getenv("TESSERA_MPSGRAPH_CACHE_CAPACITY");
+    if (raw && *raw) {
+      char *end = nullptr;
+      long v = strtol(raw, &end, 10);
+      if (end && *end == '\0' && v >= 0) {
+        cap = (size_t)v;
+        return;
+      }
+    }
+    cap = 1024;  // default
+  });
+  return cap;
+}
 
 static NSArray *mpsg_cache_get(NSString *key) {
   std::lock_guard<std::mutex> lock(g_mpsg_graph_mu);
-  return mpsg_graph_cache()[key];
+  NSArray *entry = mpsg_graph_cache()[key];
+  if (entry) {
+    // Move key to MRU front so future evictions skip it.
+    NSMutableOrderedSet<NSString *> *order = mpsg_lru_order();
+    [order removeObject:key];
+    [order insertObject:key atIndex:0];
+  }
+  return entry;
 }
 static void mpsg_cache_put(NSString *key, NSArray *entry) {
   std::lock_guard<std::mutex> lock(g_mpsg_graph_mu);
-  mpsg_graph_cache()[key] = entry;
+  NSMutableDictionary<NSString *, NSArray *> *cache = mpsg_graph_cache();
+  NSMutableOrderedSet<NSString *> *order = mpsg_lru_order();
+  bool replacing = (cache[key] != nil);
+  cache[key] = entry;
+  if (replacing) {
+    [order removeObject:key];
+  }
+  [order insertObject:key atIndex:0];
+  // Evict until under capacity. ``capacity == 0`` means unbounded.
+  size_t cap = mpsg_cache_capacity();
+  if (cap > 0) {
+    while ([order count] > cap) {
+      NSString *victim = [order lastObject];
+      if (!victim) break;
+      [cache removeObjectForKey:victim];
+      [order removeObjectAtIndex:[order count] - 1];
+      g_mpsg_evictions.fetch_add(1, std::memory_order_relaxed);
+    }
+  }
 }
 
 static bool mpsg_run_unary(MetalDeviceContext &ctx, int op, const void *x,
@@ -10709,6 +10776,26 @@ static bool mpsg_run_rowop(MetalDeviceContext &ctx, int kind, const void *x,
 extern "C" int32_t tessera_apple_gpu_mpsgraph_cache_size(void) {
   std::lock_guard<std::mutex> lock(g_mpsg_graph_mu);
   return (int32_t)[mpsg_graph_cache() count];
+}
+
+// Task B (2026-06-01) — LRU eviction introspection.
+//
+// ``cache_evictions()`` returns the monotonically-increasing count of
+// LRU evictions since process start. A test that puts (capacity+1)
+// distinct entries and observes ``evictions == 1`` proves the LRU
+// fired. A long training loop observing the counter climbing means the
+// working set exceeds capacity and the cache is thrashing — bump
+// ``TESSERA_MPSGRAPH_CACHE_CAPACITY`` or restructure the workload.
+extern "C" int64_t tessera_apple_gpu_mpsgraph_cache_evictions(void) {
+  return g_mpsg_evictions.load(std::memory_order_relaxed);
+}
+
+// ``cache_capacity()`` returns the active LRU capacity (resolved once
+// from ``TESSERA_MPSGRAPH_CACHE_CAPACITY`` env var; default 1024).
+// Returns 0 when the env-var sets unbounded mode. Useful for diagnostic
+// assertions ("am I running with the capacity I think?").
+extern "C" int64_t tessera_apple_gpu_mpsgraph_cache_capacity(void) {
+  return (int64_t)mpsg_cache_capacity();
 }
 
 // ---- C ABI: unary -----------------------------------------------------------
@@ -14639,6 +14726,54 @@ extern "C" int32_t tessera_apple_gpu_conv2d_dev_f32_enc(
                                  N, H, W, Cin, Cout, kH, kW, strideH,
                                  strideW, padH, padW, dilationH, dilationW,
                                  groups, MPSDataTypeFloat32)
+             ? 1
+             : 0;
+}
+
+// Sprint A (2026-06-01) — f16 encode-session conv2d C ABI. Same
+// shape contract as the f32 variant; the output buffer must be sized
+// for ``N * outH * outW * Cout * 2`` bytes (fp16 = 2 bytes/elem).
+// The MPSGraph path handles f16 natively (no on-GPU cast) by passing
+// ``MPSDataTypeFloat16`` through ``mpsg_up``/``mpsg_down`` (both are
+// no-ops when ioType == MPSDataTypeFloat16 is requested; actually
+// they cast to fp32 internally for the conv op, then back down).
+extern "C" int32_t tessera_apple_gpu_conv2d_dev_f16_enc(
+    TsEncodeSession *s, TsDeviceTensor *X, TsDeviceTensor *Wt,
+    TsDeviceTensor *bias, TsDeviceTensor *O,
+    int32_t N, int32_t H, int32_t W, int32_t Cin, int32_t Cout,
+    int32_t kH, int32_t kW, int32_t strideH, int32_t strideW,
+    int32_t padH, int32_t padW, int32_t dilationH, int32_t dilationW,
+    int32_t groups) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !Wt || !O) return 0;
+  id<MTLBuffer> bufBias = bias ? bias->buf : nil;
+  return mpsg_encode_conv2d_dev(s->cb, X->buf, Wt->buf, bufBias, O->buf,
+                                 N, H, W, Cin, Cout, kH, kW, strideH,
+                                 strideW, padH, padW, dilationH, dilationW,
+                                 groups, MPSDataTypeFloat16)
+             ? 1
+             : 0;
+}
+
+// Sprint A (2026-06-01) — bf16 encode-session conv2d C ABI. macOS
+// 26+ on M2+ supports bf16 in MPSGraph directly; on older hosts the
+// graph build rejects bf16 and the encode helper returns 0. The
+// output buffer must be sized for ``N * outH * outW * Cout * 2``
+// bytes (bf16 = 2 bytes/elem; same byte count as f16).
+extern "C" int32_t tessera_apple_gpu_conv2d_dev_bf16_enc(
+    TsEncodeSession *s, TsDeviceTensor *X, TsDeviceTensor *Wt,
+    TsDeviceTensor *bias, TsDeviceTensor *O,
+    int32_t N, int32_t H, int32_t W, int32_t Cin, int32_t Cout,
+    int32_t kH, int32_t kW, int32_t strideH, int32_t strideW,
+    int32_t padH, int32_t padW, int32_t dilationH, int32_t dilationW,
+    int32_t groups) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !X || !Wt || !O) return 0;
+  id<MTLBuffer> bufBias = bias ? bias->buf : nil;
+  return mpsg_encode_conv2d_dev(s->cb, X->buf, Wt->buf, bufBias, O->buf,
+                                 N, H, W, Cin, Cout, kH, kW, strideH,
+                                 strideW, padH, padW, dilationH, dilationW,
+                                 groups, MPSDataTypeBFloat16)
              ? 1
              : 0;
 }

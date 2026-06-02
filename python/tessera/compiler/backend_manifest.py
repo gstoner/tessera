@@ -562,18 +562,18 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     },
     "conv2d": {
         "status": _HARDWARE_VERIFIED_STATUS,
-        "dtypes": ("fp32",),
+        "dtypes": _APPLE_GPU_FUSED,  # Sprint A (2026-06-01): full {f32,f16,bf16}.
         "notes": (
             "Native multi-tile MSL convolution2d via MPP cooperative op "
-            "(landed 2026-05-29; f32 only in v1). Project 5 (2026-06-01) "
-            "added the encode-session lane via "
-            "`tessera_apple_gpu_conv2d_dev_f32_enc` so conv2d shares a "
-            "command buffer with the rest of an @auto_batch chain."
+            "(landed 2026-05-29). Project 5 (2026-06-01) added the "
+            "encode-session lane via `tessera_apple_gpu_conv2d_dev_f32_enc`. "
+            "Sprint A (2026-06-01) extended the encode lane to the full "
+            "3-dtype matrix via `_dev_f16_enc` + `_dev_bf16_enc` siblings."
         ),
         "runtime_symbol": "tessera_apple_gpu_conv2d_dev_f32_enc",
         "shape_envelope": (
             "NHWC source + HWIO weights; bias optional; honors stride/"
-            "pad/dilation/groups (depthwise covered)"
+            "pad/dilation/groups (depthwise covered); {f32, f16, bf16}"
         ),
     },
     "kv_cache_read": {

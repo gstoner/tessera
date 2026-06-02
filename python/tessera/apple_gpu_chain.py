@@ -47,6 +47,8 @@ from .apple_gpu_batched import (
     bmm_enc_bf16,
     bmm_enc_f16,
     conv2d_enc_no_bias,
+    conv2d_enc_no_bias_bf16,
+    conv2d_enc_no_bias_f16,
     device_tensor,
     flash_attn_enc,
     flash_attn_enc_bf16,
@@ -151,6 +153,13 @@ _REGISTRY_ENTRIES: tuple[EncodeOpSpec, ...] = (
                   input_tensor_args=(0, 1)),
     EncodeOpSpec("flash_attn", "bf16", flash_attn_enc_bf16,
                   input_tensor_args=(0, 1, 2)),
+    # Sprint A (2026-06-01) — conv2d f16/bf16 encode lanes complete
+    # the 3-dtype matrix; conv2d is no longer the only encode-eligible
+    # op without bf16/f16 coverage.
+    EncodeOpSpec("conv2d", "f16", conv2d_enc_no_bias_f16,
+                  input_tensor_args=(0, 1)),
+    EncodeOpSpec("conv2d", "bf16", conv2d_enc_no_bias_bf16,
+                  input_tensor_args=(0, 1)),
 )
 
 

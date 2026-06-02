@@ -18,8 +18,12 @@ module {
   "tile.mock"() {source = "tessera.rope", result = "Qrot", ordinal = 2 : i64} : () -> ()
   "tile.mock"() {source = "tessera.flash_attn", result = "O", ordinal = 3 : i64} : () -> ()
   "tile.mock"() {source = "tessera.kv_cache.append", result = "Cache", ordinal = 4 : i64} : () -> ()
+  // Task C (2026-06-01) — conv2d encode-session lane (Project 5 + Sprint A).
+  // Must lower to a metal_kernel + dispatch with status=metal_runtime, just
+  // like the matmul/softmax/rope/flash_attn quartet above.
+  "tile.mock"() {source = "tessera.conv2d", result = "Y", ordinal = 5 : i64} : () -> ()
   // A generic elementwise op is NOT in the runtime envelope -> artifact_only.
-  "tile.mock"() {source = "tessera.add", result = "S", ordinal = 5 : i64} : () -> ()
+  "tile.mock"() {source = "tessera.add", result = "S", ordinal = 6 : i64} : () -> ()
 }
 
 // G3: status mirrors the Python runtime envelope (driver._APPLE_GPU_{MPS,MSL}_OPS):
@@ -61,6 +65,16 @@ module {
 // CHECK-SAME: framework = "Metal"
 // CHECK-SAME: kind = "tessera.kv_cache.append"
 // CHECK-SAME: source = "tessera.kv_cache.append"
+
+// Task C (2026-06-01) — conv2d must reach metal_runtime status (Project 5
+// shipped the encode-session lane; Sprint A added f16/bf16). Without this
+// fixture entry, a future regression of TileToApple.cpp's kRuntimeOps that
+// drops conv2d would silently demote it to artifact_only and the only
+// catch would be the Python drift test.
+// CHECK:      tessera_apple.gpu.metal_kernel
+// CHECK-SAME: source = "tessera.conv2d"
+// CHECK-SAME: status = "metal_runtime"
+// CHECK-NEXT: tessera_apple.gpu.dispatch
 
 // CHECK:      tessera_apple.gpu.metal_kernel
 // CHECK-SAME: kernel = "elementwise_contract"

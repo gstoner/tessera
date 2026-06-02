@@ -78,8 +78,11 @@ _ts_dev_upload = None
 _ts_dev_download = None
 _ts_dev_free = None
 _ts_dev_nbytes = None
-# Project 5 (2026-06-01) — conv2d encode-session ABI.
+# Project 5 (2026-06-01) — conv2d encode-session ABI (f32).
+# Sprint A (2026-06-01) — f16 / bf16 sibling lanes.
 _conv2d_enc = None
+_conv2d_enc_f16 = None
+_conv2d_enc_bf16 = None
 
 
 def _bind_session_symbols() -> bool:
@@ -89,7 +92,7 @@ def _bind_session_symbols() -> bool:
     global _ts_enc_begin, _ts_enc_commit_wait, _bmm_enc, _layer_norm_enc
     global _rmsnorm_enc, _softmax_enc, _rope_enc, _unary_enc
     global _flash_attn_enc, _session_commit_count
-    global _conv2d_enc
+    global _conv2d_enc, _conv2d_enc_f16, _conv2d_enc_bf16
     global _bmm_enc_f16, _layer_norm_enc_f16, _rmsnorm_enc_f16
     global _softmax_enc_f16, _rope_enc_f16, _unary_enc_f16
     global _flash_attn_enc_f16
@@ -263,6 +266,29 @@ def _bind_session_symbols() -> bool:
          ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
          ctypes.c_int32, ctypes.c_int32),
         ctypes.c_int32)
+    # Sprint A (2026-06-01) — f16 / bf16 conv2d encode-session lanes.
+    # Same shape as the f32 binding; only the underlying ABI symbol +
+    # element-byte-count downstream differ.
+    _conv2d_enc_f16 = bind_symbol(
+        "tessera_apple_gpu_conv2d_dev_f16_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32),
+        ctypes.c_int32)
+    _conv2d_enc_bf16 = bind_symbol(
+        "tessera_apple_gpu_conv2d_dev_bf16_enc",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_void_p, ctypes.c_void_p,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32),
+        ctypes.c_int32)
     return all(s is not None for s in (
         _ts_enc_begin, _ts_enc_commit_wait, _bmm_enc, _layer_norm_enc,
         _rmsnorm_enc, _softmax_enc, _rope_enc, _unary_enc,
@@ -272,7 +298,7 @@ def _bind_session_symbols() -> bool:
         _flash_attn_enc_f16,
         _session_commit_count, _ts_dev_alloc,
         _ts_dev_upload, _ts_dev_download, _ts_dev_free, _ts_dev_nbytes,
-        _conv2d_enc))
+        _conv2d_enc, _conv2d_enc_f16, _conv2d_enc_bf16))
 
 
 def session_available() -> bool:
@@ -614,6 +640,53 @@ def _conv2d_out_dim(in_dim: int, k: int, stride: int, pad: int,
     return (in_dim + 2 * pad - eff) // stride + 1
 
 
+def _conv2d_enc_dispatch(session: int, X: DeviceTensor, Wt: DeviceTensor,
+                          bias: DeviceTensor | None, *,
+                          dtype: str,
+                          N: int, H: int, W: int, Cin: int, Cout: int,
+                          kH: int, kW: int,
+                          strideH: int, strideW: int,
+                          padH: int, padW: int,
+                          dilationH: int, dilationW: int,
+                          groups: int) -> DeviceTensor:
+    """Sprint A (2026-06-01) — internal dispatcher routing the conv2d
+    encode call to the right C ABI symbol by ``dtype``. Public callers
+    use :func:`conv2d_enc` (f32), :func:`conv2d_enc_f16`, or
+    :func:`conv2d_enc_bf16`."""
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    if groups <= 0 or Cin % groups or Cout % groups:
+        raise ValueError(
+            f"conv2d_enc: groups={groups} must evenly divide "
+            f"Cin={Cin} and Cout={Cout}")
+    outH = _conv2d_out_dim(H, kH, strideH, padH, dilationH)
+    outW = _conv2d_out_dim(W, kW, strideW, padW, dilationW)
+    elem_bytes = {"f32": 4, "f16": 2, "bf16": 2}[dtype]
+    fn = {"f32": _conv2d_enc, "f16": _conv2d_enc_f16,
+           "bf16": _conv2d_enc_bf16}[dtype]
+    out = device_empty(N * outH * outW * Cout * elem_bytes)
+    bias_handle = ctypes.c_void_p(bias.handle) if bias is not None \
+        else ctypes.c_void_p(0)
+    rc = fn(ctypes.c_void_p(session),
+             ctypes.c_void_p(X.handle),
+             ctypes.c_void_p(Wt.handle),
+             bias_handle,
+             ctypes.c_void_p(out.handle),
+             ctypes.c_int32(N), ctypes.c_int32(H),
+             ctypes.c_int32(W), ctypes.c_int32(Cin),
+             ctypes.c_int32(Cout), ctypes.c_int32(kH),
+             ctypes.c_int32(kW), ctypes.c_int32(strideH),
+             ctypes.c_int32(strideW), ctypes.c_int32(padH),
+             ctypes.c_int32(padW), ctypes.c_int32(dilationH),
+             ctypes.c_int32(dilationW), ctypes.c_int32(groups))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(
+            f"conv2d_enc({dtype!r}) returned {rc} — likely the runtime "
+            f"rejected the graph (bf16 requires macOS 26+ on M2+)")
+    return out
+
+
 def conv2d_enc(session: int, X: DeviceTensor, Wt: DeviceTensor,
                 bias: DeviceTensor | None, *,
                 N: int, H: int, W: int, Cin: int, Cout: int,
@@ -638,33 +711,53 @@ def conv2d_enc(session: int, X: DeviceTensor, Wt: DeviceTensor,
 
     Returns the freshly allocated output DeviceTensor.
     """
-    if not _bind_session_symbols():
-        raise RuntimeError("Apple GPU encode-session runtime unavailable")
-    if groups <= 0 or Cin % groups or Cout % groups:
-        raise ValueError(
-            f"conv2d_enc: groups={groups} must evenly divide "
-            f"Cin={Cin} and Cout={Cout}")
-    outH = _conv2d_out_dim(H, kH, strideH, padH, dilationH)
-    outW = _conv2d_out_dim(W, kW, strideW, padW, dilationW)
-    out = device_empty(N * outH * outW * Cout * 4)  # f32 = 4 bytes/elem
-    bias_handle = ctypes.c_void_p(bias.handle) if bias is not None \
-        else ctypes.c_void_p(0)
-    rc = _conv2d_enc(ctypes.c_void_p(session),
-                      ctypes.c_void_p(X.handle),
-                      ctypes.c_void_p(Wt.handle),
-                      bias_handle,
-                      ctypes.c_void_p(out.handle),
-                      ctypes.c_int32(N), ctypes.c_int32(H),
-                      ctypes.c_int32(W), ctypes.c_int32(Cin),
-                      ctypes.c_int32(Cout), ctypes.c_int32(kH),
-                      ctypes.c_int32(kW), ctypes.c_int32(strideH),
-                      ctypes.c_int32(strideW), ctypes.c_int32(padH),
-                      ctypes.c_int32(padW), ctypes.c_int32(dilationH),
-                      ctypes.c_int32(dilationW), ctypes.c_int32(groups))
-    if int(rc) != 1:
-        out.free()
-        raise RuntimeError(f"conv2d_enc returned {rc}")
-    return out
+    return _conv2d_enc_dispatch(session, X, Wt, bias, dtype="f32",
+                                 N=N, H=H, W=W, Cin=Cin, Cout=Cout,
+                                 kH=kH, kW=kW,
+                                 strideH=strideH, strideW=strideW,
+                                 padH=padH, padW=padW,
+                                 dilationH=dilationH, dilationW=dilationW,
+                                 groups=groups)
+
+
+def conv2d_enc_f16(session: int, X: DeviceTensor, Wt: DeviceTensor,
+                    bias: DeviceTensor | None, *,
+                    N: int, H: int, W: int, Cin: int, Cout: int,
+                    kH: int, kW: int, strideH: int = 1, strideW: int = 1,
+                    padH: int = 0, padW: int = 0,
+                    dilationH: int = 1, dilationW: int = 1,
+                    groups: int = 1) -> DeviceTensor:
+    """Sprint A (2026-06-01) — f16 sibling of :func:`conv2d_enc`. The
+    output buffer is sized for fp16 (2 bytes/elem) and the dispatch
+    routes through ``tessera_apple_gpu_conv2d_dev_f16_enc``. Shape
+    semantics are identical."""
+    return _conv2d_enc_dispatch(session, X, Wt, bias, dtype="f16",
+                                 N=N, H=H, W=W, Cin=Cin, Cout=Cout,
+                                 kH=kH, kW=kW,
+                                 strideH=strideH, strideW=strideW,
+                                 padH=padH, padW=padW,
+                                 dilationH=dilationH, dilationW=dilationW,
+                                 groups=groups)
+
+
+def conv2d_enc_bf16(session: int, X: DeviceTensor, Wt: DeviceTensor,
+                     bias: DeviceTensor | None, *,
+                     N: int, H: int, W: int, Cin: int, Cout: int,
+                     kH: int, kW: int, strideH: int = 1, strideW: int = 1,
+                     padH: int = 0, padW: int = 0,
+                     dilationH: int = 1, dilationW: int = 1,
+                     groups: int = 1) -> DeviceTensor:
+    """Sprint A (2026-06-01) — bf16 sibling of :func:`conv2d_enc`.
+    Routes through ``tessera_apple_gpu_conv2d_dev_bf16_enc``. macOS
+    26+ on M2+ supports bf16 in MPSGraph; on older hosts the C ABI
+    returns 0 and this wrapper raises with a precise diagnostic."""
+    return _conv2d_enc_dispatch(session, X, Wt, bias, dtype="bf16",
+                                 N=N, H=H, W=W, Cin=Cin, Cout=Cout,
+                                 kH=kH, kW=kW,
+                                 strideH=strideH, strideW=strideW,
+                                 padH=padH, padW=padW,
+                                 dilationH=dilationH, dilationW=dilationW,
+                                 groups=groups)
 
 
 def conv2d_enc_no_bias(session: int, X: DeviceTensor, Wt: DeviceTensor,
@@ -685,6 +778,40 @@ def conv2d_enc_no_bias(session: int, X: DeviceTensor, Wt: DeviceTensor,
                        padH=padH, padW=padW,
                        dilationH=dilationH, dilationW=dilationW,
                        groups=groups)
+
+
+def conv2d_enc_no_bias_f16(session: int, X: DeviceTensor, Wt: DeviceTensor,
+                            *, N: int, H: int, W: int, Cin: int, Cout: int,
+                            kH: int, kW: int,
+                            strideH: int = 1, strideW: int = 1,
+                            padH: int = 0, padW: int = 0,
+                            dilationH: int = 1, dilationW: int = 1,
+                            groups: int = 1) -> DeviceTensor:
+    """Registry-friendly f16 conv2d wrapper (no bias)."""
+    return conv2d_enc_f16(session, X, Wt, None,
+                           N=N, H=H, W=W, Cin=Cin, Cout=Cout,
+                           kH=kH, kW=kW,
+                           strideH=strideH, strideW=strideW,
+                           padH=padH, padW=padW,
+                           dilationH=dilationH, dilationW=dilationW,
+                           groups=groups)
+
+
+def conv2d_enc_no_bias_bf16(session: int, X: DeviceTensor, Wt: DeviceTensor,
+                             *, N: int, H: int, W: int, Cin: int, Cout: int,
+                             kH: int, kW: int,
+                             strideH: int = 1, strideW: int = 1,
+                             padH: int = 0, padW: int = 0,
+                             dilationH: int = 1, dilationW: int = 1,
+                             groups: int = 1) -> DeviceTensor:
+    """Registry-friendly bf16 conv2d wrapper (no bias)."""
+    return conv2d_enc_bf16(session, X, Wt, None,
+                            N=N, H=H, W=W, Cin=Cin, Cout=Cout,
+                            kH=kH, kW=kW,
+                            strideH=strideH, strideW=strideW,
+                            padH=padH, padW=padW,
+                            dilationH=dilationH, dilationW=dilationW,
+                            groups=groups)
 
 
 # ---------------------------------------------------------------------

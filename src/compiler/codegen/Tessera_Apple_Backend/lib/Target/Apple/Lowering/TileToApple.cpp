@@ -117,7 +117,14 @@ bool isAppleGpuRuntimeOp(llvm::StringRef n) {
       "tessera.log", "tessera.log_softmax", "tessera.neg", "tessera.negative",
       "tessera.relu", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.rsqrt",
       "tessera.sigmoid", "tessera.sigmoid_safe", "tessera.silu",
-      "tessera.silu_mul", "tessera.softplus", "tessera.sqrt", "tessera.tanh"};
+      "tessera.silu_mul", "tessera.softplus", "tessera.sqrt", "tessera.tanh",
+      // Task C (2026-06-01) — conv2d / conv3d. Project 5 wired the
+      // encode-session lane for conv2d (`tessera_apple_gpu_conv2d_dev_f32_enc`);
+      // Sprint A extended it to {f16, bf16}. conv3d uses an im2col + GPU
+      // batched matmul decomposition. Both belong on the metal_runtime
+      // rung — without them, the C++ pass silently demoted conv to
+      // artifact_only even though the runtime executes it.
+      "tessera.conv2d", "tessera.conv3d"};
   for (const auto &r : kRuntimeOps)
     if (n == r)
       return true;

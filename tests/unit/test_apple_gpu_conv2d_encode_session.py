@@ -73,12 +73,12 @@ def test_conv2d_is_encode_eligible_f32():
     assert spec.encode_fn is conv2d_enc_no_bias
 
 
-def test_conv2d_is_not_encode_eligible_for_dtypes_we_havent_shipped():
-    # f16 / bf16 conv2d encode lanes are deliberately not registered
-    # in Project 5 (the C ABI lands f32 first; f16/bf16 follow as a
-    # separate sprint). The registry must honestly reflect that.
-    assert not is_encode_eligible("conv2d", "f16")
-    assert not is_encode_eligible("conv2d", "bf16")
+def test_conv2d_is_encode_eligible_for_f16_and_bf16():
+    """Sprint A (2026-06-01) — the f16 and bf16 conv2d encode lanes
+    landed (one sprint after Project 5's f32 lane). The 3-dtype
+    matrix is now complete for conv2d."""
+    assert is_encode_eligible("conv2d", "f16")
+    assert is_encode_eligible("conv2d", "bf16")
 
 
 # ---- Numerical correctness vs the legacy host path --------------------

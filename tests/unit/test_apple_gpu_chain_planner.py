@@ -71,7 +71,9 @@ def test_is_encode_eligible():
     # via on-GPU bf16↔fp32 cast.
     assert is_encode_eligible("rope", "bf16")
     assert is_encode_eligible("flash_attn", "bf16")
-    assert not is_encode_eligible("conv2d", "f32")  # not in registry
+    # Sprint A (2026-06-01) made conv2d encode-eligible; use a
+    # genuinely-unregistered op as the non-eligible sentinel instead.
+    assert not is_encode_eligible("layer_norm_3d", "f32")  # not in registry
 
 
 def test_encode_spec_returns_spec_or_raises():
@@ -118,13 +120,13 @@ def test_planner_breaks_on_non_eligible_op():
     eligible ops form their own encode segments."""
     trace = [
         OpRecord("rmsnorm", "f32"),
-        OpRecord("conv2d", "f32"),    # not in registry
+        OpRecord("layer_norm_3d", "f32"),    # not in registry
         OpRecord("silu", "f32"),
     ]
     segs = plan_chain(trace)
     assert len(segs) == 3
     assert segs[0].kind == "encode" and len(segs[0].ops) == 1
-    assert segs[1].kind == "single" and segs[1].ops[0].op_name == "conv2d"
+    assert segs[1].kind == "single" and segs[1].ops[0].op_name == "layer_norm_3d"
     assert segs[2].kind == "encode" and len(segs[2].ops) == 1
 
 
@@ -139,7 +141,8 @@ def test_planner_handles_single_eligible_op():
 
 
 def test_planner_handles_all_non_eligible():
-    trace = [OpRecord("conv2d", "f32"), OpRecord("layer_norm_3d", "f32")]
+    trace = [OpRecord("instance_norm_3d", "f32"),
+             OpRecord("layer_norm_3d", "f32")]
     segs = plan_chain(trace)
     assert len(segs) == 2
     assert all(s.kind == "single" for s in segs)
@@ -291,7 +294,7 @@ def test_executor_marks_non_eligible_op_output_none():
     """Non-eligible ops in the substrate path produce ``None`` —
     the JIT integration will plug in eager dispatch here."""
     trace = [
-        OpRecord("conv2d", "f32",
+        OpRecord("layer_norm_3d", "f32",
                   inputs=[],
                   shape_kwargs=dict(N=1, H=4, W=4, C=8)),
     ]

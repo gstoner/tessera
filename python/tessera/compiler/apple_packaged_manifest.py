@@ -38,7 +38,6 @@ When Tessera-authored packaged kernels land, the recipe is:
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -207,11 +206,11 @@ def validate_packaged_entry(
     # don't get to drive setInputDimensions and rely on the package's
     # defaults.
     input_dims: dict[int, tuple[int, ...]] = {}
-    for e in spec.entries:
-        if e.direction == "input":
-            cd = e.concrete_dims()
+    for ent in spec.entries:
+        if ent.direction == "input":
+            cd = ent.concrete_dims()
             if cd is not None:
-                input_dims[e.buffer_index] = cd
+                input_dims[ent.buffer_index] = cd
     pipe = compile_mlpackage(
         path, function_name=spec.function_name,
         input_dimensions=input_dims or None)

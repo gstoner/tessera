@@ -71,8 +71,13 @@ def test_apple_and_gpu_dashboards_share_status_vocabulary() -> None:
         {r.status for r in gpu_target_map.all_nvidia_rows("nvidia_sm90")}
         | {r.status for r in gpu_target_map.all_rocm_rows("rocm")}
     )
+    # ``hardware_verified`` is the top rung of the readiness ladder
+    # (Project 3, 2026-06-01) — fused + a checked-in numerical-proof
+    # fixture. It surfaces on the Apple dashboard for the promoted
+    # encode-session ops (softmax/rmsnorm/.../conv2d).
     allowed = {"fused", "compileable", "executable", "artifact_only",
-               "reference", "planned", "absent", "unknown", "ready"}
+               "reference", "planned", "absent", "unknown", "ready",
+               "hardware_verified"}
     assert apple_statuses <= allowed, (
         f"Apple dashboard uses unknown status(es): "
         f"{apple_statuses - allowed!r}"

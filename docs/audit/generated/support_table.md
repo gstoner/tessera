@@ -20,7 +20,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `attn_sliding_window` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `attn_top_k_blocks` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `deepseek_sparse_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `flash_attn` | attention | public | public | registered | complete | partial | fused | ready | none |
+| `flash_attn` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `gated_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `gated_deltanet` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `gqa_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
@@ -62,7 +62,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `exp` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `expm1` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `floor_div` | elementwise | public | public | registered | complete | partial | reference | ready | none |
-| `gelu` | elementwise | public | public | registered | complete | partial | fused | ready | none |
+| `gelu` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `lgamma` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `log` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `log1p` | elementwise | public | public | registered | complete | partial | reference | ready | none |
@@ -190,7 +190,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `moe_combine` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
 | `moe_dispatch` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
 | `layer_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
-| `rmsnorm` | normalization | public | public | registered | complete | partial | fused | ready | none |
+| `rmsnorm` | normalization | public | public | registered | complete | partial | reference | ready | none |
 | `rmsnorm_safe` | normalization | public | public | registered | complete | partial | reference | ready | none |
 | `abs` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
 | `absolute` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
@@ -235,7 +235,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `grpo_policy_loss` | rl_loss | public | public | registered | complete | partial | reference | ready | none |
 | `normalize_group_advantages` | rl_loss | public | public | registered | complete | partial | reference | ready | none |
 | `ppo_policy_loss` | rl_loss | public | public | registered | complete | partial | reference | ready | none |
-| `rope` | rotary_embedding | public | public | registered | complete | partial | fused | ready | none |
+| `rope` | rotary_embedding | public | public | registered | complete | partial | reference | ready | none |
 | `segment_reduce` | segment_reduce | public | public | registered | complete | partial | reference | ready | none |
 | `argsort` | sort | public | public | registered | complete | partial | reference | ready | none |
 | `sort` | sort | public | public | registered | complete | partial | reference | ready | none |
@@ -257,14 +257,14 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `logsumexp` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
 | `reduce` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
 | `sigmoid_safe` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
-| `softmax` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
-| `softmax_safe` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
+| `softmax` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
+| `softmax_safe` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
 | `sum` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
 | `selective_ssm` | state_space | public | public | registered | complete | partial | reference | ready | none |
 | `kv_cache_append` | state_update | public | public | registered | complete | partial | reference | ready | none |
 | `kv_cache_prune` | state_update | public | public | registered | complete | partial | reference | ready | none |
 | `kv_cache_read` | state_update | public | public | registered | complete | partial | fused | ready | none |
-| `conv2d` | stencil | public | public | registered | complete | partial | fused | ready | none |
+| `conv2d` | stencil | public | public | registered | complete | partial | reference | ready | none |
 | `conv3d` | stencil | public | public | registered | complete | partial | reference | ready | none |
 | `check_cauchy_riemann` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
 | `complex_abs` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
@@ -291,11 +291,11 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 
 | Family | Count | Glyphs (one column per op, axes packed L→R) |
 |--------|------:|------|
-| attention | 21 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| attention | 21 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | collective | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | comparison | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | contraction | 1 | PPGCpRN· |
-| elementwise | 34 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| elementwise | 34 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | energy_based_models | 9 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnnFFFB PPnCFFFB PPnnFFFB |
 | functional_optimizer_step | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | fused_epilogue | 1 | PPGCpRN· |
@@ -310,7 +310,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | model_layer | 1 | PPGCpRN· |
 | moe | 1 | PPGCpRN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |
-| normalization | 3 | PPGCpRN· PPGCpFN· PPGCpRN· |
+| normalization | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
 | numeric_helper | 15 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | position_encoding | 2 | PPGCpRN· PPGCpRN· |
 | projection | 1 | PPGCpRN· |
@@ -319,15 +319,15 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | random_source | 2 | PPGCpRN· PPGCpRN· |
 | reduction | 10 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | rl_loss | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| rotary_embedding | 1 | PPGCpFN· |
+| rotary_embedding | 1 | PPGCpRN· |
 | segment_reduce | 1 | PPGCpRN· |
 | sort | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
 | sparse | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | spectral | 9 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| stable_reduction | 7 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· |
+| stable_reduction | 7 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | state_space | 1 | PPGCpRN· |
 | state_update | 3 | PPGCpRN· PPGCpRN· PPGCpFN· |
-| stencil | 2 | PPGCpFN· PPGCpRN· |
+| stencil | 2 | PPGCpRN· PPGCpRN· |
 | visual_complex | 20 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· |
 
 ## Canonical end-to-end programs (M1 / M1.5)

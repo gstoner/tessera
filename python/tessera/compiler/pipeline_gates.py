@@ -213,7 +213,7 @@ def _eval_codegen(target: str, op_name: Optional[str]) -> GateResult:
                           f"no backend_manifest entry for {op_name!r} on {target!r}")
     if all(e.status == "planned" for e in entries):
         return GateResult(GATE_CODEGEN, STATUS_FAIL,
-                          f"all manifest entries are planned")
+                          "all manifest entries are planned")
     return GateResult(GATE_CODEGEN, STATUS_PASS)
 
 

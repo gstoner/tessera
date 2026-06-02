@@ -109,8 +109,8 @@ Current high-level status (as of May 31, 2026):
 | Cerebras WSE-3, Tenstorrent Metalium, Rubin CPX backend trees | scaffolded / lit-testable |
 | **Audit-as-data infrastructure** — 5 manifest families + 17 op-level audit dashboards drift-gated by `tests/unit/` | implemented |
 
-The 5,750-test fast unit suite passes under `-m "not slow"` in ~4 minutes;
-the full Python suite collects ~6,530 tests including heavy benchmark contracts.
+The ~6,850-test fast unit suite passes under `-m "not slow"` in ~4 minutes;
+the full Python suite collects ~7,630 tests including heavy benchmark contracts.
 
 ### Current Source and Documentation Health
 

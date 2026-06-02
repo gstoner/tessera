@@ -165,8 +165,8 @@ def main(argv: list[str] | None = None) -> int:
         fromfile=str(args.out) + " (on disk)",
         tofile=str(args.out) + " (regenerated)",
     ))
-    print(f"[conformance_matrix] OUT OF SYNC — regen via:"
-          f" python -m tessera.cli.conformance_matrix --render",
+    print("[conformance_matrix] OUT OF SYNC — regen via:"
+          " python -m tessera.cli.conformance_matrix --render",
           file=sys.stderr)
     print(diff, file=sys.stderr)
     return 1

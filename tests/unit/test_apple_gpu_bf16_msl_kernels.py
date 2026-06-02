@@ -81,12 +81,13 @@ def test_bf16_msl_ops_are_encode_eligible():
     not_eligible → registered."""
     assert is_encode_eligible("rope", "bf16")
     assert is_encode_eligible("flash_attn", "bf16")
-    # Sanity: dtype matrix is now 8 ops × 3 dtypes = 24 entries
-    # (8 f32 + 8 f16 + 8 bf16). The registry is the truth.
+    # Sanity: Sprint A (2026-06-01) added conv2d to the bf16 lane, so
+    # the matrix is now 9 ops × 3 dtypes = 27 entries
+    # (9 f32 + 9 f16 + 9 bf16). The registry is the truth.
     bf16_ops = {name for (name, dtype) in ENCODE_OP_REGISTRY
                 if dtype == "bf16"}
     assert bf16_ops == {"bmm", "layer_norm", "rmsnorm", "softmax",
-                        "rope", "silu", "gelu", "flash_attn"}
+                        "rope", "silu", "gelu", "flash_attn", "conv2d"}
 
 
 # ---- Numerical correctness — RoPE -------------------------------------

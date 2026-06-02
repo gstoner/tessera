@@ -45,7 +45,6 @@ import numpy as np
 from .apple_gpu_batched import (
     DeviceTensor,
     device_tensor,
-    session_available,
 )
 from .apple_gpu_chain import (
     OpRecord,

@@ -7,6 +7,19 @@ for 8 encode ops, conv2d encode-session integration). Honest look at
 what we just shipped, what new glass-jaws appeared, and what's worth
 doing next.
 
+> **Update (2026-06-01, later):** Recommended next-directions A + B + C
+> all landed (f16/bf16 conv2d encode lanes → conv2d is no longer the
+> dtype outlier; MPSGraph LRU cache eviction with
+> `TESSERA_MPSGRAPH_CACHE_CAPACITY` knob → glass-jaw #4 closed; conv2d
+> lit fixture + drift-gate coverage → glass-jaw #10 closed for the
+> conv family). Separately, the **7 pre-existing sweep failures** (the
+> "Pre-existing failures" section below) were all cleared: the real
+> rope-interception `IndexError` (glass-jaw-adjacent — wrong theta
+> indexing + lost batch broadcast), 17 ruff errors, 43 mypy-ratchet
+> errors (back to baseline 0), the stale runtime-ABI dashboard
+> (172 → live), and the stale README fast-suite count (5,750 → ~6,850).
+> The branch now sweeps clean modulo any genuinely-new failures.
+
 ---
 
 ## What just shipped (2026-06-01)

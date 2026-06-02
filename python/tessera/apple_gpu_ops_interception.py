@@ -59,8 +59,8 @@ def _infer_rows_cols(x: Any) -> tuple[Optional[int], Optional[int]]:
 
 # ---- Per-op intercepting wrappers --------------------------------------
 
-def _wrap_rmsnorm(original_fn: Callable) -> Callable:
-    @functools.wraps(original_fn)
+def _wrap_rmsnorm(original_fn: Optional[Callable]) -> Callable:
+    @functools.wraps(original_fn or (lambda *a, **k: None))
     def rmsnorm(x, gamma=None, *, eps: float = 1e-5,
                 rows: Optional[int] = None, cols: Optional[int] = None,
                 dtype: str = "f32"):
@@ -87,8 +87,8 @@ def _wrap_rmsnorm(original_fn: Callable) -> Callable:
     return rmsnorm
 
 
-def _wrap_layer_norm(original_fn: Callable) -> Callable:
-    @functools.wraps(original_fn)
+def _wrap_layer_norm(original_fn: Optional[Callable]) -> Callable:
+    @functools.wraps(original_fn or (lambda *a, **k: None))
     def layer_norm(x, gamma=None, beta=None, *, eps: float = 1e-5,
                    rows: Optional[int] = None,
                    cols: Optional[int] = None,
@@ -119,8 +119,8 @@ def _wrap_layer_norm(original_fn: Callable) -> Callable:
     return layer_norm
 
 
-def _wrap_softmax(original_fn: Callable) -> Callable:
-    @functools.wraps(original_fn)
+def _wrap_softmax(original_fn: Optional[Callable]) -> Callable:
+    @functools.wraps(original_fn or (lambda *a, **k: None))
     def softmax(x, *, axis: int = -1, rows: Optional[int] = None,
                 cols: Optional[int] = None, dtype: str = "f32"):
         if _active_trace() is not None and axis in (-1, len(_ndarray_shape(x) or ()) - 1):
@@ -131,12 +131,16 @@ def _wrap_softmax(original_fn: Callable) -> Callable:
                 cols = cols if cols is not None else c
             if rows is not None and cols is not None:
                 return _agpu.softmax(x, rows=rows, cols=cols, dtype=dtype)
+        if original_fn is None:
+            raise RuntimeError(
+                "tessera.ops.softmax has no original implementation to "
+                "fall back to outside @auto_batch")
         return original_fn(x, axis=axis)
     return softmax
 
 
-def _wrap_bmm(original_fn: Callable) -> Callable:
-    @functools.wraps(original_fn)
+def _wrap_bmm(original_fn: Optional[Callable]) -> Callable:
+    @functools.wraps(original_fn or (lambda *a, **k: None))
     def bmm(A, B, *, batch: Optional[int] = None,
             M: Optional[int] = None, N: Optional[int] = None,
             K: Optional[int] = None, b_broadcast: bool = False,
@@ -148,6 +152,10 @@ def _wrap_bmm(original_fn: Callable) -> Callable:
                               batch=batch, M=M, N=N, K=K,
                               b_broadcast=b_broadcast, dtype=dtype)
         # Eager fallback — original_fn handles (A, B[, epilogue]).
+        if original_fn is None:
+            raise RuntimeError(
+                "tessera.ops.bmm has no original (matmul/gemm) "
+                "implementation to fall back to outside @auto_batch")
         return original_fn(A, B)
     return bmm
 
@@ -167,30 +175,35 @@ def _wrap_rope(original_fn: Optional[Callable]) -> Callable:
             if M is None or K is None:
                 raise ValueError("rope under @auto_batch needs M + K")
             return _agpu.rope(X, Theta, M=M, K=K, dtype=dtype)
-        # Eager fallback — apply the same pair-wise rotation in numpy.
-        # The original tessera.ops doesn't ship rope today; provide a
-        # reference here.
+        # Eager fallback — interleaved-pair RoPE. Even/odd adjacent
+        # elements along the last axis form rotation pairs; this matches
+        # ``autodiff.vjp.vjp_rope`` (xe=x[...,0::2], xo=x[...,1::2]) so the
+        # forward stays the exact adjoint of the registered gradient.
+        #
+        # Theta may be supplied either at full head_dim width (angles in
+        # the even slots, the convention nn.RotaryEmbedding emits) or at
+        # half width (one angle per pair) — and it broadcasts over any
+        # leading/batch dims, so a ``[seq, head_dim]`` theta lines up with
+        # a ``[batch, seq, head_dim]`` x. The previous flat-index loop
+        # assumed theta carried one entry per x element and overflowed
+        # whenever theta lacked the batch axis (the size-32-vs-index-62
+        # IndexError).
         if hasattr(X, "_data"):
             X = X._data
         if hasattr(Theta, "_data"):
             Theta = Theta._data
-        X_flat = X.reshape(-1)
-        T_flat = Theta.reshape(-1)
-        n = X_flat.size
-        if K is None:
-            shape = X.shape
-            K = int(shape[-1])
-        if M is None:
-            M = n // K
-        out = np.empty_like(X_flat)
-        for m in range(M):
-            for pair in range(K // 2):
-                ie = m * K + pair * 2
-                io = ie + 1
-                c, s = np.cos(T_flat[ie]), np.sin(T_flat[ie])
-                out[ie] = X_flat[ie] * c - X_flat[io] * s
-                out[io] = X_flat[ie] * s + X_flat[io] * c
-        return out.reshape(X.shape)
+        X = np.asarray(X)
+        Theta = np.asarray(Theta)
+        d = X.shape[-1]
+        theta_pair = Theta[..., 0::2] if Theta.shape[-1] == d else Theta
+        cos = np.cos(theta_pair)
+        sin = np.sin(theta_pair)
+        xe = X[..., 0::2]
+        xo = X[..., 1::2]
+        out = np.empty_like(X, dtype=np.result_type(X, theta_pair))
+        out[..., 0::2] = xe * cos - xo * sin
+        out[..., 1::2] = xe * sin + xo * cos
+        return out
     return rope
 
 
@@ -212,8 +225,8 @@ def _wrap_silu(original_fn: Optional[Callable]) -> Callable:
     return silu
 
 
-def _wrap_gelu(original_fn: Callable) -> Callable:
-    @functools.wraps(original_fn)
+def _wrap_gelu(original_fn: Optional[Callable]) -> Callable:
+    @functools.wraps(original_fn or (lambda *a, **k: None))
     def gelu(x, *, n: Optional[int] = None, dtype: str = "f32"):
         if _active_trace() is not None:
             if n is None:
@@ -223,6 +236,10 @@ def _wrap_gelu(original_fn: Callable) -> Callable:
             if n is None:
                 raise ValueError("gelu under @auto_batch needs n")
             return _agpu.gelu(x, n=n, dtype=dtype)
+        if original_fn is None:
+            raise RuntimeError(
+                "tessera.ops.gelu has no original implementation to "
+                "fall back to outside @auto_batch")
         return original_fn(x)
     return gelu
 

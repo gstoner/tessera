@@ -416,8 +416,10 @@ class BackendKernelEntry:
         if self.apple_binding_spec is not None:
             # Forward to the spec's own ``to_dict`` (already
             # JSON-friendly: lists, None for wildcards, no tuples).
-            out["apple_binding_spec"] = (
-                self.apple_binding_spec.to_dict())  # type: ignore[union-attr]
+            # The field is typed ``Optional[object]`` to avoid an import
+            # cycle, so route through ``Any`` for the duck-typed call.
+            spec: Any = self.apple_binding_spec
+            out["apple_binding_spec"] = spec.to_dict()
         return out
 
     @property
@@ -1767,10 +1769,8 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
         # Pull both from the source-of-truth tables BEFORE building
         # the entry so the validator sees a complete contract.
         _ag_status = str(apple_gpu["status"])
-        _ag_runtime_symbol: Optional_str = apple_gpu.get(
-            "runtime_symbol")  # type: ignore[assignment]
-        _ag_shape_envelope: Optional_str = apple_gpu.get(
-            "shape_envelope")  # type: ignore[assignment]
+        _ag_runtime_symbol: Optional_str = apple_gpu.get("runtime_symbol")
+        _ag_shape_envelope: Optional_str = apple_gpu.get("shape_envelope")
         _ag_fixture: Optional_str = (
             _NUMERICAL_FIXTURES.get((op_name, "apple_gpu"))
             if _ag_status == _HARDWARE_VERIFIED_STATUS else None)

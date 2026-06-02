@@ -46,7 +46,6 @@ that's ~7 host→device round-trips removed per decode step.
 
 from __future__ import annotations
 
-from typing import Iterator, Optional
 
 import numpy as np
 

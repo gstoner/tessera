@@ -34,7 +34,7 @@ from __future__ import annotations
 import ctypes
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator, Optional
+from typing import Any, Iterator, Optional
 
 import numpy as np
 
@@ -42,47 +42,54 @@ from ._apple_gpu_dispatch import apple_gpu_runtime, bind_symbol
 
 
 _SYMBOLS_BOUND = False
-_ts_enc_begin = None
-_ts_enc_commit_wait = None
+# All ``_*_enc`` / ``_ts_*`` handles below are lazily-bound ctypes
+# function pointers (resolved in ``_bind_session_symbols``). They start
+# as ``None`` and are populated on first use; every call site guards on
+# ``_bind_session_symbols()`` returning True before invoking them. They
+# are typed ``Any`` (not ``Optional[Callable]``) because mypy can't
+# narrow a module global through the bind helper — ``Any`` is the
+# idiomatic type for a dynamically-resolved C function handle.
+_ts_enc_begin: Any = None
+_ts_enc_commit_wait: Any = None
 # f32 encode-session ABIs
-_bmm_enc = None
-_layer_norm_enc = None
-_rmsnorm_enc = None
-_softmax_enc = None
-_rope_enc = None
-_unary_enc = None
-_flash_attn_enc = None
+_bmm_enc: Any = None
+_layer_norm_enc: Any = None
+_rmsnorm_enc: Any = None
+_softmax_enc: Any = None
+_rope_enc: Any = None
+_unary_enc: Any = None
+_flash_attn_enc: Any = None
 # Project-3 f16 encode-session ABIs (2026-06-01)
-_bmm_enc_f16 = None
-_layer_norm_enc_f16 = None
-_rmsnorm_enc_f16 = None
-_softmax_enc_f16 = None
-_rope_enc_f16 = None
-_unary_enc_f16 = None
-_flash_attn_enc_f16 = None
+_bmm_enc_f16: Any = None
+_layer_norm_enc_f16: Any = None
+_rmsnorm_enc_f16: Any = None
+_softmax_enc_f16: Any = None
+_rope_enc_f16: Any = None
+_unary_enc_f16: Any = None
+_flash_attn_enc_f16: Any = None
 # Project-3 bf16 encode-session ABIs (2026-06-01) — MPSGraph-routed
 # ops only. MSL custom kernels (rope, flash_attn) need the on-GPU
 # fp32-conversion path which is the Phase-3b follow-on.
-_bmm_enc_bf16 = None
-_layer_norm_enc_bf16 = None
-_rmsnorm_enc_bf16 = None
-_softmax_enc_bf16 = None
-_unary_enc_bf16 = None
+_bmm_enc_bf16: Any = None
+_layer_norm_enc_bf16: Any = None
+_rmsnorm_enc_bf16: Any = None
+_softmax_enc_bf16: Any = None
+_unary_enc_bf16: Any = None
 # Phase 3b (2026-06-01) — MSL-kernel bf16 via on-GPU cast.
-_rope_enc_bf16 = None
-_flash_attn_enc_bf16 = None
-_mpsgraph_bf16_supported = None
-_session_commit_count = None
-_ts_dev_alloc = None
-_ts_dev_upload = None
-_ts_dev_download = None
-_ts_dev_free = None
-_ts_dev_nbytes = None
+_rope_enc_bf16: Any = None
+_flash_attn_enc_bf16: Any = None
+_mpsgraph_bf16_supported: Any = None
+_session_commit_count: Any = None
+_ts_dev_alloc: Any = None
+_ts_dev_upload: Any = None
+_ts_dev_download: Any = None
+_ts_dev_free: Any = None
+_ts_dev_nbytes: Any = None
 # Project 5 (2026-06-01) — conv2d encode-session ABI (f32).
 # Sprint A (2026-06-01) — f16 / bf16 sibling lanes.
-_conv2d_enc = None
-_conv2d_enc_f16 = None
-_conv2d_enc_bf16 = None
+_conv2d_enc: Any = None
+_conv2d_enc_f16: Any = None
+_conv2d_enc_bf16: Any = None
 
 
 def _bind_session_symbols() -> bool:

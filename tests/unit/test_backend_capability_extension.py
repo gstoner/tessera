@@ -9,10 +9,12 @@ Pins the new schema fields + hardware_verified contract:
     execute_compare_fixture (validator catches under-evidenced claims).
   * primitive_is_complete() computes registry's backend_kernel="complete"
     from the full target row set.
-  * No entry today claims hardware_verified — flipping the first one
-    requires real GPU hardware proof.  This is the honest baseline; a
-    Phase G / H / I sprint lighting up the first NVIDIA / ROCm /
-    Metalium proof updates this expectation.
+  * Only the Apple GPU encode-session ops claim hardware_verified
+    (Project 3 / Sprint A, 2026-06-01) — each runs a real Metal /
+    MPSGraph kernel on this Mac's GPU with a checked-in numerical
+    fixture. Discrete NVIDIA / ROCm / Metalium accelerators still may
+    not claim it (that hardware is unavailable here); a Phase G/H/I
+    sprint lighting up the first such proof updates that expectation.
 """
 
 from __future__ import annotations
@@ -169,15 +171,31 @@ def test_primitive_is_complete_rejects_fused_only() -> None:
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_no_entry_claims_hardware_verified_today() -> None:
-    """As of 2026-05-22 zero backend manifest entries claim
-    hardware_verified — by registry design this requires real
-    GPU hardware proof that isn't available on this Mac.  The Phase
-    G / H / I frontier audit doc tracks the gap honestly.
+# Project 3 / Sprint A (2026-06-01) — the Apple GPU encode-session ops
+# that are legitimately ``hardware_verified``: each runs a real Metal /
+# MPSGraph kernel on this Mac's GPU AND ships a checked-in
+# ``execute_compare_fixture`` that numerically validates it against
+# numpy. Apple Silicon GPU IS real hardware (unlike the discrete
+# NVIDIA / ROCm / Metalium accelerators, which are genuinely
+# unavailable here), so these claims are honest. This is the
+# "first proof landed → update the test" event the original guard's
+# docstring anticipated.
+_APPLE_GPU_HARDWARE_VERIFIED_OPS = frozenset({
+    "softmax", "softmax_safe", "gelu", "rope", "flash_attn",
+    "rmsnorm", "layer_norm", "silu", "bmm", "conv2d",
+})
 
-    When the first NVIDIA / ROCm / Metalium proof lands (and an
-    execute_compare_fixture gets checked in), update this test to
-    expect that one entry."""
+
+def test_only_apple_gpu_claims_hardware_verified_today() -> None:
+    """Every ``hardware_verified`` manifest entry must be one of the
+    Apple GPU encode-session ops with a real Metal kernel + checked-in
+    numerical fixture (Project 3 / Sprint A, 2026-06-01).
+
+    Discrete-accelerator targets (NVIDIA / ROCm / Metalium) still may
+    NOT claim hardware_verified — that hardware isn't available on this
+    Mac, so any such claim would be under-evidenced. The Phase G/H/I
+    frontier audit tracks that gap. When real NVIDIA/ROCm/Metalium
+    proof lands, extend this test to allow that target too."""
     by_op = all_manifests()
     hw_verified: list[tuple[str, BackendKernelEntry]] = [
         (op, entry)
@@ -185,12 +203,37 @@ def test_no_entry_claims_hardware_verified_today() -> None:
         for entry in entries
         if entry.status == "hardware_verified"
     ]
-    assert len(hw_verified) == 0, (
-        "Unexpected hardware_verified claim — every such claim requires "
-        "a checked-in execute_compare_fixture demonstrating numerical "
-        "correctness on real hardware.  Found: "
+    # Every hardware_verified entry must be on the apple_gpu target,
+    # be one of the expected ops, and carry both evidence fields (the
+    # __post_init__ validator already enforces the latter, but we
+    # re-assert here so the guard documents the full contract).
+    offenders = [
+        (op, e) for op, e in hw_verified
+        if e.target != "apple_gpu"
+        or op not in _APPLE_GPU_HARDWARE_VERIFIED_OPS
+        or not e.runtime_symbol
+        or not e.execute_compare_fixture
+    ]
+    assert not offenders, (
+        "Unexpected hardware_verified claim — only Apple GPU encode-"
+        "session ops with a real Metal kernel + checked-in "
+        "execute_compare_fixture may claim it today (NVIDIA/ROCm/"
+        "Metalium hardware is unavailable on this Mac). Offenders: "
         + ", ".join(
             f"{op}/{e.target} via {e.runtime_symbol}"
-            for op, e in hw_verified
+            for op, e in offenders
         )
     )
+    # And the Apple GPU promotion must be complete — every expected op
+    # that ``all_manifests()`` actually surfaces must be
+    # hardware_verified (catches an accidental partial revert). Ops not
+    # in ``OP_SPECS`` (e.g. ``bmm``, an Apple-GPU-only encode op) don't
+    # appear in ``all_manifests()``; they're covered by the dedicated
+    # ``test_apple_gpu_hardware_verified_promotion`` lock instead.
+    apple_hw_ops = {
+        op for op, e in hw_verified if e.target == "apple_gpu"}
+    coverable = _APPLE_GPU_HARDWARE_VERIFIED_OPS & set(by_op)
+    missing = coverable - apple_hw_ops
+    assert not missing, (
+        f"Expected Apple GPU hardware_verified ops missing from the "
+        f"manifest: {sorted(missing)}")

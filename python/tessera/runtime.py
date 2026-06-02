@@ -39,7 +39,7 @@ from typing import Any, List, Mapping, Optional
 
 from .telemetry import TELEMETRY_SCHEMA_VERSION, make_event, telemetry_report
 from .compiler.capabilities import get_target_capability, normalize_target, runtime_status as compiler_runtime_status
-from .compiler.execution_matrix import executor_for_metadata as _exec_row_for_metadata, lookup as _exec_row_lookup
+from .compiler.execution_matrix import executor_for_metadata as _exec_row_for_metadata
 
 
 # ---------------------------------------------------------------------------
@@ -1290,7 +1290,7 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
     if gate is not None:
         reason = (f"unsupported: first failing gate `{gate.gate}` — "
                   f"{gate.detail}. ({upstream_reason})")
-        gate_name: str | None = gate.gate
+        gate_name = gate.gate
         gate_detail = gate.detail
     else:
         reason = upstream_reason
@@ -3072,19 +3072,19 @@ def _apple_gpu_solve_impl(A: Any, B: Any, np: Any, symname: str) -> Any:
             and B2.ndim == 2 and B2.shape[0] == A2.shape[0]):
         X = core(A2, B2)
         if X is not None:
-            return ((X[..., 0] if vec else X)).astype(out_dt), True
+            return (X[..., 0] if vec else X).astype(out_dt), True
     elif gpu_ok and (A2.ndim >= 3 and A2.shape[-1] == A2.shape[-2]
           and B2.ndim == A2.ndim and B2.shape[:-1] == A2.shape[:-1]):
         out = _apple_gpu_batched_linalg(A2, B2, core, int(B2.shape[-1]), np)
         if out is not None:
-            return ((out[..., 0] if vec else out)).astype(out_dt), True
+            return (out[..., 0] if vec else out).astype(out_dt), True
     # B2 (always […, n, nrhs]) keeps np.linalg.solve well-defined for batched
     # vector RHS across numpy 1.x/2.x; squeeze the trailing axis back off.
     Af = np.asarray(A, fb_dt)
     Bf = np.asarray(B, fb_dt)
     Bf = Bf[..., None] if vec else Bf
     X = np.linalg.solve(Af, Bf)
-    return ((X[..., 0] if vec else X)).astype(out_dt), False
+    return (X[..., 0] if vec else X).astype(out_dt), False
 
 
 def apple_gpu_solve(A: Any, B: Any, np: Any) -> Any:
@@ -3116,7 +3116,7 @@ def apple_gpu_cholesky_solve(A: Any, B: Any, np: Any) -> Any:
                      _apple_gpu_tri_solve_batched_msl(L, Y, np, lower=True,
                                                       trans=True, unit=False))
                 if X is not None:
-                    return ((X[..., 0] if vec else X)).astype(out_dt), True
+                    return (X[..., 0] if vec else X).astype(out_dt), True
     return _apple_gpu_solve_impl(A, B, np, "tessera_apple_gpu_solve_cholesky_f32")
 
 
@@ -3139,13 +3139,13 @@ def apple_gpu_tri_solve(A: Any, B: Any, np: Any, *, lower: bool = True,
             and B2.ndim == 2 and B2.shape[0] == A2.shape[0]):
         X = core(A2, B2)
         if X is not None:
-            return ((X[..., 0] if vec else X)).astype(out_dt), True
+            return (X[..., 0] if vec else X).astype(out_dt), True
     elif gpu_ok and (A2.ndim >= 3 and A2.shape[-1] == A2.shape[-2]
           and B2.ndim == A2.ndim and B2.shape[:-1] == A2.shape[:-1]):
         out = _apple_gpu_tri_solve_batched_msl(A2, B2, np, lower=lower, trans=trans,
                                                unit=unit)        # grid MSL kernel
         if out is not None:
-            return ((out[..., 0] if vec else out)).astype(out_dt), True
+            return (out[..., 0] if vec else out).astype(out_dt), True
     Af = np.asarray(A, fb_dt)
     Bf = np.asarray(B, fb_dt)
     Bf = Bf[..., None] if vec else Bf
@@ -3157,7 +3157,7 @@ def apple_gpu_tri_solve(A: Any, B: Any, np: Any, *, lower: bool = True,
     if trans:
         tri = np.swapaxes(tri, -1, -2)
     X = np.linalg.solve(tri, Bf)
-    return ((X[..., 0] if vec else X)).astype(out_dt), False
+    return (X[..., 0] if vec else X).astype(out_dt), False
 
 
 def apple_gpu_qr(A: Any, np: Any) -> Any:
@@ -6512,6 +6512,7 @@ class DeviceTensor:
         # host fallback — cast through numpy on the shared storage
         if out is None:
             out = DeviceTensor.empty(self.shape, dst_dt)
+        assert out is not None  # empty() always returns a tensor here
         out.numpy()[...] = self.numpy().astype(dst_dt)
         return out
 

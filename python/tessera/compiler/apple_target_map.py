@@ -160,6 +160,9 @@ _DRIVER_DISPATCH_OPS: frozenset[str] = frozenset({
     # native multitile MPP / MPS matmul) so the drift gate routes
     # them as ``driver`` not ``manifest``.
     "relu", "conv2d", "kv_cache_read",
+    # Project 2.1c / 3 (2026-06-01) — encode-session ops dispatch via
+    # the driver's encode lane (MPSGraph bmm / rowop / unary opcode).
+    "bmm", "layer_norm", "silu",
 })
 
 
@@ -262,8 +265,15 @@ _APPLE_GPU_KERNELS_SYMBOL_MAP: dict[str, str] = {
     # drift gate ``test_every_apple_gpu_msl_kernel_has_dispatch_symbol``
     # requires a parallel entry here naming the dispatch symbol.
     "relu":         "tessera_apple_gpu_mpsgraph_unary_f32",  # opcode-dispatched
-    "conv2d":       "tessera_apple_gpu_conv2d_native_multitile",
+    "conv2d":       "tessera_apple_gpu_conv2d_dev_{f32,f16,bf16}_enc",
     "kv_cache_read": "tessera_apple_gpu_mps_matmul_{f32,f16,bf16}",  # cache pages dispatch via MPS
+    # Project 2.1c / 3 (2026-06-01) — encode-session ops that gained
+    # manifest entries (and hardware_verified promotion). They dispatch
+    # through the driver's encode-session lane; name the per-op encode
+    # C ABI symbol the driver routes to.
+    "bmm":          "tessera_apple_gpu_bmm_dev_{f32,f16,bf16}_enc",
+    "layer_norm":   "tessera_apple_gpu_layer_norm_dev_{f32,f16,bf16}_enc",
+    "silu":         "tessera_apple_gpu_unary_dev_{f32,f16,bf16}_enc",  # opcode 4
 }
 
 

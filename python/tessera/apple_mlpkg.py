@@ -42,7 +42,7 @@ from __future__ import annotations
 import ctypes
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 from tessera._apple_gpu_dispatch import apple_gpu_runtime, bind_symbol
 
@@ -592,12 +592,18 @@ class AppleTensorBindingSpec:
         if not isinstance(dims_raw, (list, tuple)):
             raise ValueError(f"dims must be list/tuple, got {type(dims_raw)}")
         dims = tuple((None if x is None else int(x)) for x in dims_raw)
+        # ``d`` is ``dict[str, object]`` (a parsed-JSON record); the
+        # numeric fields are int-able at runtime but ``int(object)``
+        # fails mypy's overload check. Route them through an ``Any``
+        # alias — the same effect isinstance-narrowing gives the
+        # ``dims`` elements above.
+        da: Any = d
         return cls(
             name=str(d["name"]),
-            buffer_index=int(d["buffer_index"]),
+            buffer_index=int(da["buffer_index"]),
             kind=str(d.get("kind", "tensor")),
             dtype=str(d["dtype"]),
-            rank=int(d["rank"]),
+            rank=int(da["rank"]),
             dims=dims,
             direction=str(d.get("direction", "unknown")),
             residency=str(d.get("residency", "shared")),
@@ -757,7 +763,7 @@ class AppleKernelBindingSpec:
             raise ValueError(
                 f"entries must be list/tuple, got {type(entries_raw)}")
         entries = tuple(
-            AppleTensorBindingSpec.from_dict(e)  # type: ignore[arg-type]
+            AppleTensorBindingSpec.from_dict(e)
             for e in entries_raw)
         return cls(
             function_name=str(d["function_name"]),

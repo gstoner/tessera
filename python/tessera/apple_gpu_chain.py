@@ -307,6 +307,9 @@ def plan_chain(
                 current = ChainSegment(kind="encode", ops=[op])
                 current_dtype = op.dtype
             else:
+                # ``should_split`` is True whenever ``current is None``;
+                # reaching this branch means current is a live segment.
+                assert current is not None
                 current.ops.append(op)
         else:
             if current is not None:

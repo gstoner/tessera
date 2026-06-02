@@ -20,7 +20,7 @@ humans; a drift test fails if anything diverges.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Mapping, Optional
 
 from .capabilities import TARGET_CAPABILITIES, normalize_target

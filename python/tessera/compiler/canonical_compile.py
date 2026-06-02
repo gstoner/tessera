@@ -46,7 +46,7 @@ Drift-guarded by ``tests/unit/test_canonical_compile.py``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
 from tessera.compiler import pipeline_gates as _pg

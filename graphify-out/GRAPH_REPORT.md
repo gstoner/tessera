@@ -1,16 +1,16 @@
 # Graph Report - tessera  (2026-06-01)
 
 ## Corpus Check
-- 2120 files · ~1,641,723 words
+- 2125 files · ~1,647,277 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 33308 nodes · 59001 edges · 2616 communities (1855 shown, 761 thin omitted)
-- Extraction: 90% EXTRACTED · 10% INFERRED · 0% AMBIGUOUS · INFERRED: 5794 edges (avg confidence: 0.67)
+- 33520 nodes · 59285 edges · 2546 communities (1837 shown, 709 thin omitted)
+- Extraction: 90% EXTRACTED · 10% INFERRED · 0% AMBIGUOUS · INFERRED: 5797 edges (avg confidence: 0.67)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `0b6fe8b3`
+- Built from commit: `9471afdb`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -312,13 +312,6 @@
 - [[_COMMUNITY_Community 294|Community 294]]
 - [[_COMMUNITY_Community 295|Community 295]]
 - [[_COMMUNITY_Community 296|Community 296]]
-- [[_COMMUNITY_Community 297|Community 297]]
-- [[_COMMUNITY_Community 298|Community 298]]
-- [[_COMMUNITY_Community 299|Community 299]]
-- [[_COMMUNITY_Community 300|Community 300]]
-- [[_COMMUNITY_Community 301|Community 301]]
-- [[_COMMUNITY_Community 302|Community 302]]
-- [[_COMMUNITY_Community 303|Community 303]]
 - [[_COMMUNITY_Community 304|Community 304]]
 - [[_COMMUNITY_Community 305|Community 305]]
 - [[_COMMUNITY_Community 306|Community 306]]
@@ -332,7 +325,6 @@
 - [[_COMMUNITY_Community 314|Community 314]]
 - [[_COMMUNITY_Community 315|Community 315]]
 - [[_COMMUNITY_Community 316|Community 316]]
-- [[_COMMUNITY_Community 317|Community 317]]
 - [[_COMMUNITY_Community 318|Community 318]]
 - [[_COMMUNITY_Community 319|Community 319]]
 - [[_COMMUNITY_Community 323|Community 323]]
@@ -403,7 +395,6 @@
 - [[_COMMUNITY_Community 463|Community 463]]
 - [[_COMMUNITY_Community 464|Community 464]]
 - [[_COMMUNITY_Community 465|Community 465]]
-- [[_COMMUNITY_Community 466|Community 466]]
 - [[_COMMUNITY_Community 467|Community 467]]
 - [[_COMMUNITY_Community 468|Community 468]]
 - [[_COMMUNITY_Community 469|Community 469]]
@@ -539,12 +530,10 @@
 - [[_COMMUNITY_Community 609|Community 609]]
 - [[_COMMUNITY_Community 610|Community 610]]
 - [[_COMMUNITY_Community 611|Community 611]]
-- [[_COMMUNITY_Community 612|Community 612]]
 - [[_COMMUNITY_Community 613|Community 613]]
 - [[_COMMUNITY_Community 614|Community 614]]
 - [[_COMMUNITY_Community 615|Community 615]]
 - [[_COMMUNITY_Community 617|Community 617]]
-- [[_COMMUNITY_Community 618|Community 618]]
 - [[_COMMUNITY_Community 619|Community 619]]
 - [[_COMMUNITY_Community 620|Community 620]]
 - [[_COMMUNITY_Community 621|Community 621]]
@@ -573,7 +562,6 @@
 - [[_COMMUNITY_Community 646|Community 646]]
 - [[_COMMUNITY_Community 647|Community 647]]
 - [[_COMMUNITY_Community 649|Community 649]]
-- [[_COMMUNITY_Community 650|Community 650]]
 - [[_COMMUNITY_Community 651|Community 651]]
 - [[_COMMUNITY_Community 652|Community 652]]
 - [[_COMMUNITY_Community 653|Community 653]]
@@ -642,7 +630,6 @@
 - [[_COMMUNITY_Community 723|Community 723]]
 - [[_COMMUNITY_Community 724|Community 724]]
 - [[_COMMUNITY_Community 726|Community 726]]
-- [[_COMMUNITY_Community 727|Community 727]]
 - [[_COMMUNITY_Community 728|Community 728]]
 - [[_COMMUNITY_Community 729|Community 729]]
 - [[_COMMUNITY_Community 730|Community 730]]
@@ -696,8 +683,6 @@
 - [[_COMMUNITY_Community 785|Community 785]]
 - [[_COMMUNITY_Community 786|Community 786]]
 - [[_COMMUNITY_Community 787|Community 787]]
-- [[_COMMUNITY_Community 788|Community 788]]
-- [[_COMMUNITY_Community 789|Community 789]]
 - [[_COMMUNITY_Community 790|Community 790]]
 - [[_COMMUNITY_Community 791|Community 791]]
 - [[_COMMUNITY_Community 792|Community 792]]
@@ -726,7 +711,6 @@
 - [[_COMMUNITY_Community 816|Community 816]]
 - [[_COMMUNITY_Community 817|Community 817]]
 - [[_COMMUNITY_Community 818|Community 818]]
-- [[_COMMUNITY_Community 821|Community 821]]
 - [[_COMMUNITY_Community 822|Community 822]]
 - [[_COMMUNITY_Community 823|Community 823]]
 - [[_COMMUNITY_Community 824|Community 824]]
@@ -862,7 +846,6 @@
 - [[_COMMUNITY_Community 958|Community 958]]
 - [[_COMMUNITY_Community 959|Community 959]]
 - [[_COMMUNITY_Community 960|Community 960]]
-- [[_COMMUNITY_Community 962|Community 962]]
 - [[_COMMUNITY_Community 963|Community 963]]
 - [[_COMMUNITY_Community 964|Community 964]]
 - [[_COMMUNITY_Community 965|Community 965]]
@@ -885,7 +868,6 @@
 - [[_COMMUNITY_Community 986|Community 986]]
 - [[_COMMUNITY_Community 987|Community 987]]
 - [[_COMMUNITY_Community 988|Community 988]]
-- [[_COMMUNITY_Community 989|Community 989]]
 - [[_COMMUNITY_Community 990|Community 990]]
 - [[_COMMUNITY_Community 991|Community 991]]
 - [[_COMMUNITY_Community 992|Community 992]]
@@ -961,7 +943,6 @@
 - [[_COMMUNITY_Community 1064|Community 1064]]
 - [[_COMMUNITY_Community 1065|Community 1065]]
 - [[_COMMUNITY_Community 1066|Community 1066]]
-- [[_COMMUNITY_Community 1067|Community 1067]]
 - [[_COMMUNITY_Community 1068|Community 1068]]
 - [[_COMMUNITY_Community 1069|Community 1069]]
 - [[_COMMUNITY_Community 1070|Community 1070]]
@@ -991,7 +972,6 @@
 - [[_COMMUNITY_Community 1094|Community 1094]]
 - [[_COMMUNITY_Community 1095|Community 1095]]
 - [[_COMMUNITY_Community 1096|Community 1096]]
-- [[_COMMUNITY_Community 1097|Community 1097]]
 - [[_COMMUNITY_Community 1098|Community 1098]]
 - [[_COMMUNITY_Community 1099|Community 1099]]
 - [[_COMMUNITY_Community 1100|Community 1100]]
@@ -1045,7 +1025,6 @@
 - [[_COMMUNITY_Community 1165|Community 1165]]
 - [[_COMMUNITY_Community 1166|Community 1166]]
 - [[_COMMUNITY_Community 1167|Community 1167]]
-- [[_COMMUNITY_Community 1168|Community 1168]]
 - [[_COMMUNITY_Community 1169|Community 1169]]
 - [[_COMMUNITY_Community 1170|Community 1170]]
 - [[_COMMUNITY_Community 1171|Community 1171]]
@@ -1065,8 +1044,6 @@
 - [[_COMMUNITY_Community 1187|Community 1187]]
 - [[_COMMUNITY_Community 1188|Community 1188]]
 - [[_COMMUNITY_Community 1189|Community 1189]]
-- [[_COMMUNITY_Community 1190|Community 1190]]
-- [[_COMMUNITY_Community 1191|Community 1191]]
 - [[_COMMUNITY_Community 1192|Community 1192]]
 - [[_COMMUNITY_Community 1193|Community 1193]]
 - [[_COMMUNITY_Community 1194|Community 1194]]
@@ -1137,7 +1114,6 @@
 - [[_COMMUNITY_Community 1265|Community 1265]]
 - [[_COMMUNITY_Community 1266|Community 1266]]
 - [[_COMMUNITY_Community 1267|Community 1267]]
-- [[_COMMUNITY_Community 1268|Community 1268]]
 - [[_COMMUNITY_Community 1269|Community 1269]]
 - [[_COMMUNITY_Community 1270|Community 1270]]
 - [[_COMMUNITY_Community 1271|Community 1271]]
@@ -1172,9 +1148,7 @@
 - [[_COMMUNITY_Community 1300|Community 1300]]
 - [[_COMMUNITY_Community 1301|Community 1301]]
 - [[_COMMUNITY_Community 1302|Community 1302]]
-- [[_COMMUNITY_Community 1303|Community 1303]]
 - [[_COMMUNITY_Community 1305|Community 1305]]
-- [[_COMMUNITY_Community 1306|Community 1306]]
 - [[_COMMUNITY_Community 1307|Community 1307]]
 - [[_COMMUNITY_Community 1308|Community 1308]]
 - [[_COMMUNITY_Community 1309|Community 1309]]
@@ -1186,7 +1160,6 @@
 - [[_COMMUNITY_Community 1317|Community 1317]]
 - [[_COMMUNITY_Community 1318|Community 1318]]
 - [[_COMMUNITY_Community 1319|Community 1319]]
-- [[_COMMUNITY_Community 1320|Community 1320]]
 - [[_COMMUNITY_Community 1321|Community 1321]]
 - [[_COMMUNITY_Community 1322|Community 1322]]
 - [[_COMMUNITY_Community 1323|Community 1323]]
@@ -1196,9 +1169,6 @@
 - [[_COMMUNITY_Community 1327|Community 1327]]
 - [[_COMMUNITY_Community 1328|Community 1328]]
 - [[_COMMUNITY_Community 1329|Community 1329]]
-- [[_COMMUNITY_Community 1330|Community 1330]]
-- [[_COMMUNITY_Community 1331|Community 1331]]
-- [[_COMMUNITY_Community 1332|Community 1332]]
 - [[_COMMUNITY_Community 1333|Community 1333]]
 - [[_COMMUNITY_Community 1334|Community 1334]]
 - [[_COMMUNITY_Community 1335|Community 1335]]
@@ -1211,7 +1181,6 @@
 - [[_COMMUNITY_Community 1342|Community 1342]]
 - [[_COMMUNITY_Community 1343|Community 1343]]
 - [[_COMMUNITY_Community 1344|Community 1344]]
-- [[_COMMUNITY_Community 1345|Community 1345]]
 - [[_COMMUNITY_Community 1346|Community 1346]]
 - [[_COMMUNITY_Community 1347|Community 1347]]
 - [[_COMMUNITY_Community 1348|Community 1348]]
@@ -1245,7 +1214,6 @@
 - [[_COMMUNITY_Community 1376|Community 1376]]
 - [[_COMMUNITY_Community 1377|Community 1377]]
 - [[_COMMUNITY_Community 1378|Community 1378]]
-- [[_COMMUNITY_Community 1379|Community 1379]]
 - [[_COMMUNITY_Community 1380|Community 1380]]
 - [[_COMMUNITY_Community 1381|Community 1381]]
 - [[_COMMUNITY_Community 1382|Community 1382]]
@@ -1267,7 +1235,6 @@
 - [[_COMMUNITY_Community 1398|Community 1398]]
 - [[_COMMUNITY_Community 1399|Community 1399]]
 - [[_COMMUNITY_Community 1400|Community 1400]]
-- [[_COMMUNITY_Community 1401|Community 1401]]
 - [[_COMMUNITY_Community 1402|Community 1402]]
 - [[_COMMUNITY_Community 1403|Community 1403]]
 - [[_COMMUNITY_Community 1404|Community 1404]]
@@ -1281,10 +1248,7 @@
 - [[_COMMUNITY_Community 1412|Community 1412]]
 - [[_COMMUNITY_Community 1413|Community 1413]]
 - [[_COMMUNITY_Community 1414|Community 1414]]
-- [[_COMMUNITY_Community 1415|Community 1415]]
 - [[_COMMUNITY_Community 1416|Community 1416]]
-- [[_COMMUNITY_Community 1417|Community 1417]]
-- [[_COMMUNITY_Community 1418|Community 1418]]
 - [[_COMMUNITY_Community 1419|Community 1419]]
 - [[_COMMUNITY_Community 1420|Community 1420]]
 - [[_COMMUNITY_Community 1421|Community 1421]]
@@ -1301,11 +1265,8 @@
 - [[_COMMUNITY_Community 1432|Community 1432]]
 - [[_COMMUNITY_Community 1433|Community 1433]]
 - [[_COMMUNITY_Community 1434|Community 1434]]
-- [[_COMMUNITY_Community 1435|Community 1435]]
-- [[_COMMUNITY_Community 1436|Community 1436]]
 - [[_COMMUNITY_Community 1437|Community 1437]]
 - [[_COMMUNITY_Community 1438|Community 1438]]
-- [[_COMMUNITY_Community 1439|Community 1439]]
 - [[_COMMUNITY_Community 1440|Community 1440]]
 - [[_COMMUNITY_Community 1441|Community 1441]]
 - [[_COMMUNITY_Community 1442|Community 1442]]
@@ -1316,13 +1277,11 @@
 - [[_COMMUNITY_Community 1447|Community 1447]]
 - [[_COMMUNITY_Community 1448|Community 1448]]
 - [[_COMMUNITY_Community 1449|Community 1449]]
-- [[_COMMUNITY_Community 1450|Community 1450]]
 - [[_COMMUNITY_Community 1451|Community 1451]]
 - [[_COMMUNITY_Community 1452|Community 1452]]
 - [[_COMMUNITY_Community 1453|Community 1453]]
 - [[_COMMUNITY_Community 1454|Community 1454]]
 - [[_COMMUNITY_Community 1455|Community 1455]]
-- [[_COMMUNITY_Community 1456|Community 1456]]
 - [[_COMMUNITY_Community 1457|Community 1457]]
 - [[_COMMUNITY_Community 1458|Community 1458]]
 - [[_COMMUNITY_Community 1459|Community 1459]]
@@ -1398,20 +1357,15 @@
 - [[_COMMUNITY_Community 1529|Community 1529]]
 - [[_COMMUNITY_Community 1530|Community 1530]]
 - [[_COMMUNITY_Community 1531|Community 1531]]
-- [[_COMMUNITY_Community 1532|Community 1532]]
 - [[_COMMUNITY_Community 1533|Community 1533]]
-- [[_COMMUNITY_Community 1534|Community 1534]]
 - [[_COMMUNITY_Community 1535|Community 1535]]
 - [[_COMMUNITY_Community 1536|Community 1536]]
-- [[_COMMUNITY_Community 1537|Community 1537]]
 - [[_COMMUNITY_Community 1538|Community 1538]]
 - [[_COMMUNITY_Community 1539|Community 1539]]
 - [[_COMMUNITY_Community 1540|Community 1540]]
 - [[_COMMUNITY_Community 1541|Community 1541]]
-- [[_COMMUNITY_Community 1542|Community 1542]]
 - [[_COMMUNITY_Community 1543|Community 1543]]
 - [[_COMMUNITY_Community 1544|Community 1544]]
-- [[_COMMUNITY_Community 1545|Community 1545]]
 - [[_COMMUNITY_Community 1546|Community 1546]]
 - [[_COMMUNITY_Community 1547|Community 1547]]
 - [[_COMMUNITY_Community 1548|Community 1548]]
@@ -1419,7 +1373,6 @@
 - [[_COMMUNITY_Community 1550|Community 1550]]
 - [[_COMMUNITY_Community 1551|Community 1551]]
 - [[_COMMUNITY_Community 1552|Community 1552]]
-- [[_COMMUNITY_Community 1553|Community 1553]]
 - [[_COMMUNITY_Community 1554|Community 1554]]
 - [[_COMMUNITY_Community 1555|Community 1555]]
 - [[_COMMUNITY_Community 1556|Community 1556]]
@@ -1427,7 +1380,6 @@
 - [[_COMMUNITY_Community 1558|Community 1558]]
 - [[_COMMUNITY_Community 1559|Community 1559]]
 - [[_COMMUNITY_Community 1560|Community 1560]]
-- [[_COMMUNITY_Community 1561|Community 1561]]
 - [[_COMMUNITY_Community 1562|Community 1562]]
 - [[_COMMUNITY_Community 1563|Community 1563]]
 - [[_COMMUNITY_Community 1564|Community 1564]]
@@ -1440,15 +1392,12 @@
 - [[_COMMUNITY_Community 1571|Community 1571]]
 - [[_COMMUNITY_Community 1572|Community 1572]]
 - [[_COMMUNITY_Community 1573|Community 1573]]
-- [[_COMMUNITY_Community 1574|Community 1574]]
 - [[_COMMUNITY_Community 1575|Community 1575]]
 - [[_COMMUNITY_Community 1576|Community 1576]]
 - [[_COMMUNITY_Community 1577|Community 1577]]
-- [[_COMMUNITY_Community 1578|Community 1578]]
 - [[_COMMUNITY_Community 1579|Community 1579]]
 - [[_COMMUNITY_Community 1580|Community 1580]]
 - [[_COMMUNITY_Community 1581|Community 1581]]
-- [[_COMMUNITY_Community 1582|Community 1582]]
 - [[_COMMUNITY_Community 1583|Community 1583]]
 - [[_COMMUNITY_Community 1584|Community 1584]]
 - [[_COMMUNITY_Community 1585|Community 1585]]
@@ -1476,7 +1425,6 @@
 - [[_COMMUNITY_Community 1607|Community 1607]]
 - [[_COMMUNITY_Community 1608|Community 1608]]
 - [[_COMMUNITY_Community 1609|Community 1609]]
-- [[_COMMUNITY_Community 1610|Community 1610]]
 - [[_COMMUNITY_Community 1611|Community 1611]]
 - [[_COMMUNITY_Community 1612|Community 1612]]
 - [[_COMMUNITY_Community 1613|Community 1613]]
@@ -1499,13 +1447,10 @@
 - [[_COMMUNITY_Community 1630|Community 1630]]
 - [[_COMMUNITY_Community 1631|Community 1631]]
 - [[_COMMUNITY_Community 1632|Community 1632]]
-- [[_COMMUNITY_Community 1633|Community 1633]]
-- [[_COMMUNITY_Community 1634|Community 1634]]
 - [[_COMMUNITY_Community 1635|Community 1635]]
 - [[_COMMUNITY_Community 1636|Community 1636]]
 - [[_COMMUNITY_Community 1637|Community 1637]]
 - [[_COMMUNITY_Community 1638|Community 1638]]
-- [[_COMMUNITY_Community 1639|Community 1639]]
 - [[_COMMUNITY_Community 1640|Community 1640]]
 - [[_COMMUNITY_Community 1641|Community 1641]]
 - [[_COMMUNITY_Community 1642|Community 1642]]
@@ -1519,11 +1464,9 @@
 - [[_COMMUNITY_Community 1650|Community 1650]]
 - [[_COMMUNITY_Community 1651|Community 1651]]
 - [[_COMMUNITY_Community 1652|Community 1652]]
-- [[_COMMUNITY_Community 1653|Community 1653]]
 - [[_COMMUNITY_Community 1654|Community 1654]]
 - [[_COMMUNITY_Community 1655|Community 1655]]
 - [[_COMMUNITY_Community 1656|Community 1656]]
-- [[_COMMUNITY_Community 1657|Community 1657]]
 - [[_COMMUNITY_Community 1658|Community 1658]]
 - [[_COMMUNITY_Community 1659|Community 1659]]
 - [[_COMMUNITY_Community 1660|Community 1660]]
@@ -1544,7 +1487,6 @@
 - [[_COMMUNITY_Community 1675|Community 1675]]
 - [[_COMMUNITY_Community 1676|Community 1676]]
 - [[_COMMUNITY_Community 1677|Community 1677]]
-- [[_COMMUNITY_Community 1678|Community 1678]]
 - [[_COMMUNITY_Community 1679|Community 1679]]
 - [[_COMMUNITY_Community 1680|Community 1680]]
 - [[_COMMUNITY_Community 1681|Community 1681]]
@@ -1657,10 +1599,7 @@
 - [[_COMMUNITY_Community 1788|Community 1788]]
 - [[_COMMUNITY_Community 1789|Community 1789]]
 - [[_COMMUNITY_Community 1790|Community 1790]]
-- [[_COMMUNITY_Community 1791|Community 1791]]
-- [[_COMMUNITY_Community 1792|Community 1792]]
 - [[_COMMUNITY_Community 1793|Community 1793]]
-- [[_COMMUNITY_Community 1794|Community 1794]]
 - [[_COMMUNITY_Community 1795|Community 1795]]
 - [[_COMMUNITY_Community 1796|Community 1796]]
 - [[_COMMUNITY_Community 1797|Community 1797]]
@@ -1715,7 +1654,6 @@
 - [[_COMMUNITY_Community 1846|Community 1846]]
 - [[_COMMUNITY_Community 1847|Community 1847]]
 - [[_COMMUNITY_Community 1848|Community 1848]]
-- [[_COMMUNITY_Community 1849|Community 1849]]
 - [[_COMMUNITY_Community 1850|Community 1850]]
 - [[_COMMUNITY_Community 1851|Community 1851]]
 - [[_COMMUNITY_Community 1852|Community 1852]]
@@ -1725,8 +1663,6 @@
 - [[_COMMUNITY_Community 1856|Community 1856]]
 - [[_COMMUNITY_Community 1857|Community 1857]]
 - [[_COMMUNITY_Community 1858|Community 1858]]
-- [[_COMMUNITY_Community 1859|Community 1859]]
-- [[_COMMUNITY_Community 1860|Community 1860]]
 - [[_COMMUNITY_Community 1861|Community 1861]]
 - [[_COMMUNITY_Community 1862|Community 1862]]
 - [[_COMMUNITY_Community 1863|Community 1863]]
@@ -1739,7 +1675,6 @@
 - [[_COMMUNITY_Community 1870|Community 1870]]
 - [[_COMMUNITY_Community 1871|Community 1871]]
 - [[_COMMUNITY_Community 1872|Community 1872]]
-- [[_COMMUNITY_Community 1873|Community 1873]]
 - [[_COMMUNITY_Community 1874|Community 1874]]
 - [[_COMMUNITY_Community 1875|Community 1875]]
 - [[_COMMUNITY_Community 1876|Community 1876]]
@@ -1757,7 +1692,6 @@
 - [[_COMMUNITY_Community 1888|Community 1888]]
 - [[_COMMUNITY_Community 1889|Community 1889]]
 - [[_COMMUNITY_Community 1890|Community 1890]]
-- [[_COMMUNITY_Community 1891|Community 1891]]
 - [[_COMMUNITY_Community 1892|Community 1892]]
 - [[_COMMUNITY_Community 1893|Community 1893]]
 - [[_COMMUNITY_Community 1894|Community 1894]]
@@ -1826,7 +1760,6 @@
 - [[_COMMUNITY_Community 1967|Community 1967]]
 - [[_COMMUNITY_Community 1969|Community 1969]]
 - [[_COMMUNITY_Community 1970|Community 1970]]
-- [[_COMMUNITY_Community 1971|Community 1971]]
 - [[_COMMUNITY_Community 1972|Community 1972]]
 - [[_COMMUNITY_Community 1973|Community 1973]]
 - [[_COMMUNITY_Community 1979|Community 1979]]
@@ -1937,7 +1870,6 @@
 - [[_COMMUNITY_Community 2117|Community 2117]]
 - [[_COMMUNITY_Community 2118|Community 2118]]
 - [[_COMMUNITY_Community 2119|Community 2119]]
-- [[_COMMUNITY_Community 2121|Community 2121]]
 - [[_COMMUNITY_Community 2125|Community 2125]]
 - [[_COMMUNITY_Community 2129|Community 2129]]
 - [[_COMMUNITY_Community 2130|Community 2130]]
@@ -1945,7 +1877,6 @@
 - [[_COMMUNITY_Community 2138|Community 2138]]
 - [[_COMMUNITY_Community 2139|Community 2139]]
 - [[_COMMUNITY_Community 2140|Community 2140]]
-- [[_COMMUNITY_Community 2141|Community 2141]]
 - [[_COMMUNITY_Community 2143|Community 2143]]
 - [[_COMMUNITY_Community 2153|Community 2153]]
 - [[_COMMUNITY_Community 2159|Community 2159]]
@@ -2116,7 +2047,6 @@
 - [[_COMMUNITY_Community 2469|Community 2469]]
 - [[_COMMUNITY_Community 2470|Community 2470]]
 - [[_COMMUNITY_Community 2471|Community 2471]]
-- [[_COMMUNITY_Community 2478|Community 2478]]
 - [[_COMMUNITY_Community 2479|Community 2479]]
 - [[_COMMUNITY_Community 2481|Community 2481]]
 - [[_COMMUNITY_Community 2482|Community 2482]]
@@ -2352,7 +2282,7 @@
 
 ## God Nodes (most connected - your core abstractions)
 1. `Pass` - 209 edges
-2. `Any` - 202 edges
+2. `Any` - 203 edges
 3. `Cl` - 161 edges
 4. `GraphIRModule` - 151 edges
 5. `GraphIRFunction` - 138 edges
@@ -2360,19 +2290,19 @@
 7. `IROp` - 116 edges
 8. `GPUTargetProfile` - 110 edges
 9. `Multivector` - 101 edges
-10. `_load_apple_gpu_runtime()` - 93 edges
+10. `_load_apple_gpu_runtime()` - 94 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Path` --uses--> `Pipeline`  [INFERRED]
+  tests/unit/test_apple_gpu_pk3_aligned_strides.py → python/tessera/apple_mlpkg.py
+- `Path` --uses--> `Pipeline`  [INFERRED]
+  tests/unit/test_apple_mlpkg_pk1.py → python/tessera/apple_mlpkg.py
+- `Path` --uses--> `Pipeline`  [INFERRED]
   tests/unit/test_apple_mlpkg_pk3.py → python/tessera/apple_mlpkg.py
+- `int` --uses--> `Pipeline`  [INFERRED]
+  tests/unit/test_apple_mlpkg_pk4.py → python/tessera/apple_mlpkg.py
 - `Path` --uses--> `Pipeline`  [INFERRED]
   tests/unit/test_apple_mlpkg_pk4.py → python/tessera/apple_mlpkg.py
-- `generate_batch()` --calls--> `Tokenizer`  [INFERRED]
-  archive/examples/advanced/consolidated_rl_sources/MultiLayer_GRPO_Minimal_Sample/mgrpo/sampling.py → python/tessera/data.py
-- `MultiCropTransform` --uses--> `Dataset`  [INFERRED]
-  archive/examples/advanced/dinov3/dinov3_tessera_port/models/dinov3_tessera/augment.py → python/tessera/data.py
-- `FakeMultiCropDataset` --uses--> `Dataset`  [INFERRED]
-  archive/examples/advanced/dinov3/dinov3_tessera_port/models/dinov3_tessera/augment.py → python/tessera/data.py
 
 ## Import Cycles
 - 1-file cycle: `python/tessera/__init__.py -> python/tessera/__init__.py`
@@ -2385,8 +2315,8 @@
 - 2-file cycle: `python/tessera/autodiff/__init__.py -> python/tessera/autodiff/vjp.py -> python/tessera/autodiff/__init__.py`
 - 2-file cycle: `python/tessera/autodiff/__init__.py -> python/tessera/autodiff/jvp.py -> python/tessera/autodiff/__init__.py`
 - 2-file cycle: `python/tessera/compiler/__init__.py -> python/tessera/compiler/support.py -> python/tessera/compiler/__init__.py`
-- 3-file cycle: `python/tessera/__init__.py -> python/tessera/cache/__init__.py -> python/tessera/cache/resident_decode.py -> python/tessera/__init__.py`
 - 3-file cycle: `python/tessera/__init__.py -> python/tessera/cache/__init__.py -> python/tessera/cache/resident_kv.py -> python/tessera/__init__.py`
+- 3-file cycle: `python/tessera/__init__.py -> python/tessera/cache/__init__.py -> python/tessera/cache/resident_decode.py -> python/tessera/__init__.py`
 - 3-file cycle: `python/tessera/autodiff/__init__.py -> python/tessera/autodiff/tape.py -> python/tessera/autodiff/vjp.py -> python/tessera/autodiff/__init__.py`
 - 3-file cycle: `python/tessera/autodiff/__init__.py -> python/tessera/autodiff/transforms.py -> python/tessera/autodiff/jvp.py -> python/tessera/autodiff/__init__.py`
 - 4-file cycle: `python/tessera/__init__.py -> python/tessera/cache/__init__.py -> python/tessera/cache/memory_state.py -> python/tessera/sharding.py -> python/tessera/__init__.py`
@@ -2396,7 +2326,7 @@
 - 5-file cycle: `python/tessera/autodiff/__init__.py -> python/tessera/autodiff/transforms.py -> python/tessera/autodiff/grad.py -> python/tessera/autodiff/tape.py -> python/tessera/autodiff/vjp.py -> python/tessera/autodiff/__init__.py`
 - 5-file cycle: `python/tessera/autodiff/__init__.py -> python/tessera/autodiff/transforms.py -> python/tessera/autodiff/jvp.py -> python/tessera/autodiff/tape.py -> python/tessera/autodiff/vjp.py -> python/tessera/autodiff/__init__.py`
 
-## Communities (2616 total, 761 thin omitted)
+## Communities (2546 total, 709 thin omitted)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.04
@@ -2407,8 +2337,8 @@ Cohesion: 0.04
 Nodes (44): 1.1 Predictability, 1.2 Progressive Disclosure of Complexity, 1.3 Composition over Configuration, 2.1 Functions and Kernels, 2.2 Shapes and Dimensions, 2.3 Variables, 3.1 Standard Order, 3.2 Enforcement (+36 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.04
-Nodes (81): main(), _parse_shape(), Single-command-buffer decoder-layer benchmark — audit Action 6 closeout.  Measur, _time(), main(), _parse_shape(), Multi-layer transformer mini-benchmark — full-stack validation.  Stacks N attent, Parse a ``BxSxD,N`` shape spec into (B, S, D, num_layers). (+73 more)
+Cohesion: 0.03
+Nodes (86): main(), _parse_shape(), Single-command-buffer decoder-layer benchmark — audit Action 6 closeout.  Measur, _time(), main(), _parse_shape(), Multi-layer transformer mini-benchmark — full-stack validation.  Stacks N attent, Parse a ``BxSxD,N`` shape spec into (B, S, D, num_layers). (+78 more)
 
 ### Community 4 - "Community 4"
 Cohesion: 0.09
@@ -2423,8 +2353,8 @@ Cohesion: 0.05
 Nodes (37): Advanced Features Development, Benchmark Results Summary, Best Practices and Recommendations, Business Value Proposition, code:block1 (┌───────────────────────────────────────────────────────────), code:python (# Write once in Tessera DSL), code:cpp (// Generated runtime achieves optimal performance), code:tessera (// Recommended structure for complex kernels) (+29 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.09
-Nodes (51): ndarray, batched_session(), device_tensor(), Allocate a device-resident tensor and upload ``arr`` into it., Open an encode-session and yield the opaque session handle     (as ``int``). The, ndarray, float, ndarray (+43 more)
+Cohesion: 0.05
+Nodes (86): ndarray, batched_session(), bf16_session_available(), device_tensor(), Project-3 (2026-06-01) — True iff MPSGraph accepts bf16 graph     nodes on this, Allocate a device-resident tensor and upload ``arr`` into it., Open an encode-session and yield the opaque session handle     (as ``int``). The, ndarray (+78 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.06
@@ -2435,8 +2365,8 @@ Cohesion: 0.06
 Nodes (31): Advanced Kernel Launcher, Advanced Memory Manager, code:block1 (┌─────────────────────────────────────────────────┐), code:cpp (class DistributedLaunchCoordinator {), code:cpp (class ErrorHandler {), code:cpp (class TesseraRuntime {), code:cpp (class CUDADevice {), code:cpp (class KernelLauncher {) (+23 more)
 
 ### Community 12 - "Community 12"
-Cohesion: 0.07
-Nodes (30): jvp_binary_cross_entropy_loss(), jvp_contrastive_divergence_loss(), jvp_contrastive_loss(), jvp_cosine_embedding_loss(), jvp_ddpm_noise_pred_loss(), jvp_denoising_score_matching_loss(), jvp_focal_loss(), jvp_huber_loss() (+22 more)
+Cohesion: 0.08
+Nodes (27): jvp_binary_cross_entropy_loss(), jvp_contrastive_divergence_loss(), jvp_contrastive_loss(), jvp_cosine_embedding_loss(), jvp_denoising_score_matching_loss(), jvp_focal_loss(), jvp_huber_loss(), jvp_implicit_score_matching_loss() (+19 more)
 
 ### Community 13 - "Community 13"
 Cohesion: 0.23
@@ -2451,8 +2381,8 @@ Cohesion: 0.12
 Nodes (16): _ASTLowerer, ASTLoweringError, IROpCall, IRProgram, lower_function(), LoweringConfig, Shared AST → constrained-IR lowering core — M6 Step 1 deliverable.  The ``@cliff, Frontend-specific configuration for :func:`lower_function`.      Attributes (+8 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.10
-Nodes (32): CDLL, bool, CDLL, object, Path, str, apple_gpu_available(), apple_gpu_capabilities_snapshot() (+24 more)
+Cohesion: 0.11
+Nodes (29): CDLL, bool, CDLL, Path, str, apple_gpu_available(), apple_gpu_runtime(), apple_gpu_runtime_handle() (+21 more)
 
 ### Community 17 - "Community 17"
 Cohesion: 0.12
@@ -2460,11 +2390,11 @@ Nodes (23): _layer_norm_local_moments(), Sprint #20c (2026-05-22) — sharding m
 
 ### Community 18 - "Community 18"
 Cohesion: 0.04
-Nodes (67): Any, bool, DeviceTensor, int, str, ChainSegment, encode_spec(), _exec_encode_segment() (+59 more)
+Nodes (74): Any, bool, DeviceTensor, int, str, ChainSegment, encode_spec(), _exec_encode_segment() (+66 more)
 
 ### Community 19 - "Community 19"
-Cohesion: 0.04
-Nodes (86): Populated ``BackendKernelEntry(status="packaged")`` rows.  PK5 follow-on (2026-0, int, Path, _bind_compile(), _bind_destroy(), _bind_is_compiled(), _bind_last_error_kind(), compile_mlpackage() (+78 more)
+Cohesion: 0.08
+Nodes (43): Path, compile_mlpackage(), last_error_kind(), packaged_ml_available(), packaged_ml_skip_reason(), Load ``path`` as a Metal package, compile the named function as     a ``MTL4Mach, PK audit-fix P1 (2026-05-31) — Is Metal 4 packaged ML actually     executable on, Return a human-readable reason packaged ML isn't available, or     ``None`` when (+35 more)
 
 ### Community 20 - "Community 20"
 Cohesion: 0.11
@@ -2472,15 +2402,15 @@ Nodes (4): ConstWithWarmup, CosineLR, LRSchedulerBase, Autocast
 
 ### Community 21 - "Community 21"
 Cohesion: 0.05
-Nodes (28): _apple_gpu_devtensor_api(), DeviceTensor, from_numpy(), is_metal(), Configure + return the device-tensor C ABI (R0). None when unavailable., An opaque, GPU-resident tensor (R0).      Wraps one shared (unified-memory) Meta, Zero-copy numpy view over the shared storage (no download). Valid         only w, A standalone host copy that outlives the handle. (+20 more)
+Nodes (31): _apple_gpu_devtensor_api(), DeviceTensor, from_numpy(), is_metal(), Configure + return the device-tensor C ABI (R0). None when unavailable., An opaque, GPU-resident tensor (R0).      Wraps one shared (unified-memory) Meta, A standalone host copy that outlives the handle., A **non-owning** view of the same device buffer with a new shape         (same e (+23 more)
 
 ### Community 22 - "Community 22"
 Cohesion: 0.10
 Nodes (19): Architecture, Audit-as-Data, Build & Test, code:python (import tessera), code:text (Python API + textual DSL frontend), code:bash (# Python development install), code:bash (# Convenience build wrapper; defaults to CPU-only unless CUD), code:bash (# Validate CUDA 13.2 U1 PTX patterns against installed nvcc) (+11 more)
 
 ### Community 23 - "Community 23"
-Cohesion: 0.10
-Nodes (32): all_rows(), ExecutionRow, executor_for_metadata(), lookup(), G4 — single-source runtime execution matrix.  Before this module, three places e, The exact matrix lookup. Returns None when (target, compiler_path) isn't a     r, The interpretation `launch()` uses: read `target` + `compiler_path` from     an, Stable order: by (target, compiler_path) — what the dashboard renders. (+24 more)
+Cohesion: 0.20
+Nodes (19): all_rows(), ExecutionRow, executor_for_metadata(), lookup(), G4 — single-source runtime execution matrix.  Before this module, three places e, The exact matrix lookup. Returns None when (target, compiler_path) isn't a     r, The interpretation `launch()` uses: read `target` + `compiler_path` from     an, Stable order: by (target, compiler_path) — what the dashboard renders. (+11 more)
 
 ### Community 24 - "Community 24"
 Cohesion: 0.12
@@ -2491,8 +2421,8 @@ Cohesion: 0.12
 Nodes (17): _conv_via_op(), jvp_adaptive_pool(), jvp_conv2d(), jvp_conv3d(), jvp_conv_transpose(), jvp_depthwise_conv1d(), jvp_fused_epilogue(), jvp_lamb() (+9 more)
 
 ### Community 26 - "Community 26"
-Cohesion: 0.27
-Nodes (13): buildFullPipeline(), buildNeighborsPipeline(), buildPMLegalizePipeline(), buildPMVerifyPipeline(), registerTesseraAllPasses(), registerTesseraAllPipelines(), registerTesseraDialects(), buildTesseraTPUBackendPipeline() (+5 more)
+Cohesion: 0.06
+Nodes (37): buildFullPipeline(), buildNeighborsPipeline(), buildPMLegalizePipeline(), buildPMVerifyPipeline(), registerTesseraAllPasses(), registerTesseraAllPipelines(), registerTesseraDialects(), buildTesseraTPUBackendPipeline() (+29 more)
 
 ### Community 28 - "Community 28"
 Cohesion: 0.18
@@ -2519,8 +2449,8 @@ Cohesion: 0.17
 Nodes (14): int, _bind_timeout_probe(), _probe(), Apple-sample Pattern 4 — shared-event timeout wrapper for the legacy MPS / MPSGr, Drift guard — the ``commit_and_wait_with_timeout`` helper's     docstring names, A 64-byte fill must complete well under 1 second on any working     Apple-Silico, Pattern 4's signal counter ``legacy_event_val`` is monotonic — every     call in, A 0 ms timeout is a degenerate but well-defined input. The probe     must return (+6 more)
 
 ### Community 34 - "Community 34"
-Cohesion: 0.07
-Nodes (17): index_launch(), Fan a kernel out across all partitions of a distributed tensor on `axis`.      U, index_launch fans a kernel over shard lists sequentially., DistributedArray passed directly is auto-split via .parts(axis)., TestIndexLaunch, emitted(), Phase 2 Python-layer tests for the lowering chain.  These tests verify that:   1, @jit-emitted IR for a matmul should not carry random effect. (+9 more)
+Cohesion: 0.05
+Nodes (44): FrontendDiagnosticCode, Textual-DSL frontend (``tessera.compiler.frontend.parser``).      Stable codes f, Textual-DSL frontend (``tessera.compiler.frontend.parser``).      Stable codes f, _build_diagnostics(), build_explain(), _build_kernels(), _build_next_actions(), fallback_reason() (+36 more)
 
 ### Community 35 - "Community 35"
 Cohesion: 0.32
@@ -2547,8 +2477,8 @@ Cohesion: 0.29
 Nodes (12): _numeric_grad(), _numeric_jvp(), test_graph_ir_recognizes_promoted_wrapper_names(), test_kv_cache_mutations_are_not_differentiable_contracts(), test_mla_projection_vjps_are_matmul_shaped(), test_normal_lowering_pipelines_run_attention_fusions_before_backend_lowering(), test_quantization_ste_and_scale_component_is_nondifferentiable(), test_rl_api_losses_and_jvp_vjp_registry() (+4 more)
 
 ### Community 41 - "Community 41"
-Cohesion: 0.23
-Nodes (6): CanonicalizePass, createCanonicalizePass(), InlineDecodeInit, NormalizeSelfVerify, registerCanonicalizePipeline(), tessera()
+Cohesion: 0.08
+Nodes (17): _apple_gpu_enc_api(), DeviceProps, _MockBackend, _MockHandle, Opaque handle returned by mock operations., Opaque handle returned by mock operations., Pure-Python mock of the Tessera runtime C ABI.     All operations succeed silent, Pure-Python mock of the Tessera runtime C ABI.     All operations succeed silent (+9 more)
 
 ### Community 43 - "Community 43"
 Cohesion: 0.12
@@ -2579,24 +2509,24 @@ Cohesion: 0.24
 Nodes (6): createLowerPowerToTargetPass(), createLowerPowerToTilePass(), LowerPowerToTarget, LowerPowerToTile, registerPowerPasses(), tessera()
 
 ### Community 50 - "Community 50"
-Cohesion: 0.17
-Nodes (25): canonical_graph_op_name(), Return the ODS-backed canonical Graph IR op name., _base_attrs(), _flash_attention_pipeline(), _format_attr_dict(), _format_attr_value(), _lower_graph_ops(), lower_graph_to_schedule_ir() (+17 more)
+Cohesion: 0.11
+Nodes (33): GraphIRDiagnostic, GraphIRVerificationError, canonical_graph_op_name(), normalize_op_name(), OpSpec, Canonical Tessera frontend operator catalog.  This module is intentionally depen, Return the public Tessera op name from a bare or qualified call name., Return the ODS-backed canonical Graph IR op name. (+25 more)
 
 ### Community 51 - "Community 51"
 Cohesion: 0.13
 Nodes (14): Build the pass plugin & run tests, code:cmake (mlir_tablegen(TesseraMetaliumOps.h.inc -gen-op-decls ...)), code:block2 (include/Tessera/Target/Metalium/), code:bash (# Configure with MLIR and lit enabled), code:bash (# Run the lowering via mlir-opt with the pass plugin), code:bash (# If not found automatically, set LLVM_EXTERNAL_LIT to your ), code:bash (cmake -B build -S . \), code:bash (build/tessera-metalium-opt -pass-pipeline="tessera-metalium") (+6 more)
 
 ### Community 52 - "Community 52"
-Cohesion: 0.08
-Nodes (38): _apple_gpu_chain_kind(), _apple_gpu_matmul_dtype_suffix(), artifact_hashes(), _backend_artifact_for(), _capability_reason(), compile_graph_module(), CompileRequest, CompileTraceEvent (+30 more)
+Cohesion: 0.10
+Nodes (29): str, assert_canonical_dtype(), bits(), canonical(), dtype_aliases(), from_(), is_canonical(), is_canonical_dtype() (+21 more)
 
 ### Community 53 - "Community 53"
-Cohesion: 0.24
-Nodes (5): createLowerKVTransportPass(), LowerKVTransportPass, getOrInsert(), LowerKVExport, LowerKVImport
+Cohesion: 0.12
+Nodes (17): _OpExtractor, Lower Python `for` to `tessera.scf.for.*` markers.          Like ``visit_If``: s, Lower Python `while` to `tessera.scf.while.*` markers.          While loops alwa, Lower ``x += y`` (and friends) by desugaring to ``x = x op y``.          Only de, D.1 — informational diagnostic for dynamic-control-flow lowering         decisio, When ``for i in range(...)`` has a runtime argument, try to         lower the tr, Walk the function AST and extract recognized tessera op calls., ``ast.unparse`` for D.1 / D.2 / D.3 — record an unlowered     dynamic-control-fl (+9 more)
 
 ### Community 54 - "Community 54"
-Cohesion: 0.10
-Nodes (37): lower_tile_to_target_ir(), TargetFunction, TargetIRModule, lower_schedule_to_tile_ir(), TileFunction, TileIRModule, Drift gate for the optional-IR-metadata contract (Phase A).  Per ``docs/architec, Return field names whose default is :data:`dataclasses.MISSING`     (i.e., must (+29 more)
+Cohesion: 0.18
+Nodes (11): Drift gate for the optional-IR-metadata contract (Phase A).  Per ``docs/architec, Return field names whose default is :data:`dataclasses.MISSING`     (i.e., must, Asserts the optional-metadata invariant for every IR class.      Per the contrac, Confirm the Phase A optional fields actually exist + have the     documented def, Smoke test the three-line contract: producers fill, consumers     read.  No requ, _required_fields(), test_allowlisted_fields_still_required(), test_no_required_field_outside_allowlist() (+3 more)
 
 ### Community 55 - "Community 55"
 Cohesion: 0.14
@@ -2615,28 +2545,28 @@ Cohesion: 0.24
 Nodes (4): createFuseVideoIngestPass(), FuseVideoIngestPass, FuseVideoIngest, isOp()
 
 ### Community 61 - "Community 61"
-Cohesion: 0.05
-Nodes (48): Monotonic counter of session commits since process start. A     test that opens, session_commit_count(), @auto_batch decorator — JIT Phase 2.1 trace-capture proof.  The headline contrac, The headline proof: a complete Llama-style attention block —     rmsnorm → 3 qkv, In trace mode, each op returns a TraceRef (not a     DeviceTensor)., Function returning multiple TraceRefs in a tuple — each gets     resolved to its, If the wrapped function raises, the decorator must surface     the original exce, Calling an @auto_batch'd function from inside another     @auto_batch'd function (+40 more)
+Cohesion: 0.06
+Nodes (43): Monotonic counter of session commits since process start. A     test that opens, session_commit_count(), _np_flash_attn(), _np_layer_norm(), Single-command-buffer attention block — Stage 2 of audit Action 6.  The scaffold, Causal masking propagates through the encoded variant., The headline Stage-2 proof: a complete transformer attention     block — layer_n, Same block, but with a causal mask on the attention. Verifies     the causal fla (+35 more)
 
 ### Community 62 - "Community 62"
 Cohesion: 0.25
 Nodes (4): createSwigluFusionPass(), FuseSwiGLUChain, isOp(), SwigluFusion
 
 ### Community 63 - "Community 63"
-Cohesion: 0.25
-Nodes (4): broadcastBiasToNHWC(), LowerConv2DBiasGELUPattern, LowerConv2DPattern, TesseraConvEpilogueToStableHLOPass
+Cohesion: 0.06
+Nodes (34): float, _apple_gpu_gumbel_argmax_f32(), _apple_gpu_gumbel_sample(), _apple_gpu_random(), apple_gpu_random_normal(), _apple_gpu_random_sym(), apple_gpu_random_uniform(), _apply_topk_topp_mask() (+26 more)
 
 ### Community 66 - "Community 66"
-Cohesion: 0.24
-Nodes (4): createLowerTesseraToStableHLOPass(), LowerAddPattern, LowerMatmulPattern, LowerTesseraToStableHLOPass
+Cohesion: 0.08
+Nodes (12): Combined tests for Issues 1, 2, and 4 (2026-05-20).    * **Issue 1** — cross-lan, The version constant must equal the latest entry in         the history table., matmul has a known fused Apple GPU kernel + cpu reference         path; should n, test_constrained_to_other_is_forbidden(), test_general_to_constrained_is_legal(), test_same_lane_is_always_legal(), TestClassifierBehavior, TestCLI (+4 more)
 
 ### Community 67 - "Community 67"
 Cohesion: 0.16
 Nodes (42): _jit_cholesky(), _jit_tri_solve(), _on_metal(), GPU linear-algebra lane — Cholesky / LU / triangular solve via MPSMatrix.  This, The linalg ops are admitted to the apple_gpu runtime envelope (single-op     met, _rel(), _spd(), test_batched_cholesky() (+34 more)
 
 ### Community 68 - "Community 68"
-Cohesion: 0.06
-Nodes (21): bool, bytes, object, str, Pipeline, PK3 — Has ``prepare_tensors()`` succeeded? Diagnostic         helper; tests use, PK3 — Copy ``data`` into the input tensor named ``name``         (``Pattern 1 /, PK3 — Read tensor ``name``'s contents back to host. Returns         ``None`` on (+13 more)
+Cohesion: 0.07
+Nodes (19): bool, bytes, int, object, str, Pipeline, PK3 — Has ``prepare_tensors()`` succeeded? Diagnostic         helper; tests use, PK3 — Copy ``data`` into the input tensor named ``name``         (``Pattern 1 / (+11 more)
 
 ### Community 69 - "Community 69"
 Cohesion: 0.24
@@ -2644,7 +2574,7 @@ Nodes (3): FakeMultiCropDataset, MultiCropTransform, Synthetic data for smoke te
 
 ### Community 70 - "Community 70"
 Cohesion: 0.08
-Nodes (38): all_packaged_entries(), lookup_packaged_test_fixture(), Look up a populated test-fixture-backed packaged entry by name.     Returns ``No, Return every populated packaged entry, fixtures + production     together. Usefu, Resolve a manifest entry's ``packaged_pipeline_path`` to an     absolute filesys, Drift gate — verify an entry's packaged-kernel claims hold up:      1. The artif, Return the Tessera repo root (3 levels up from this module:     python/tessera/c, repo_root() (+30 more)
+Nodes (39): all_packaged_entries(), lookup_packaged_test_fixture(), Populated ``BackendKernelEntry(status="packaged")`` rows.  PK5 follow-on (2026-0, Look up a populated test-fixture-backed packaged entry by name.     Returns ``No, Return every populated packaged entry, fixtures + production     together. Usefu, Resolve a manifest entry's ``packaged_pipeline_path`` to an     absolute filesys, Drift gate — verify an entry's packaged-kernel claims hold up:      1. The artif, Return the Tessera repo root (3 levels up from this module:     python/tessera/c (+31 more)
 
 ### Community 71 - "Community 71"
 Cohesion: 0.24
@@ -2667,20 +2597,20 @@ Cohesion: 0.10
 Nodes (38): _bind_aligned(), _bind_legacy(), _bind_nbytes(), _call_aligned(), _call_legacy(), _call_nbytes(), Apple stride-alignment enforcement — skills.md Pattern 3 follow-on.  Apple's MTL, fp32 = 32 bits. 64 bytes = 16 fp32s. The second stride must     be a multiple of (+30 more)
 
 ### Community 76 - "Community 76"
-Cohesion: 0.10
-Nodes (39): bf16_session_available(), Project-3 (2026-06-01) — True iff MPSGraph accepts bf16 graph     nodes on this, ndarray, ndarray, _from_bf16(), Project-3 bf16 encode-session ABIs — closes the dtype matrix.  bf16 is the third, The encode-session ops we have in bf16 today: rmsnorm + bmm.     Run them in one, Planner segments by dtype: a mixed f32+bf16 trace produces 2     chain segments (+31 more)
+Cohesion: 0.11
+Nodes (8): FlashAttnLoweringConfig, has_dropout(), tessera.compiler.attn_lower — FlashAttention lowering configuration.  Phase 3: h, Controls how tessera.flash_attn is lowered to FA-4 Tile IR.      Attributes:, Return inline attr dict for the tessera.flash_attn op., TesseraAttnConfigError, Phase 3 — AsyncCopyLoweringPass and AttnLoweringConfig tests.  Verifies:   - Fla, TestFlashAttnLoweringConfig
 
 ### Community 77 - "Community 77"
-Cohesion: 0.13
-Nodes (29): Uniform[low, high) samples., uniform(), Tests for `tessera.rng` (S-series sprint S4).  S4 acceptance criteria (from exec, test_bernoulli_rejects_invalid_p(), test_bernoulli_returns_bool_dtype_by_default(), test_categorical_returns_indices_in_range(), test_clone_yields_equivalent_stream(), test_determinism_under_fold_in_resume() (+21 more)
+Cohesion: 0.08
+Nodes (21): all_manifests(), audit_backend_dtypes(), manifest_summary(), Return the manifest for every op in ``OP_SPECS`` plus every     `clifford_*` GA9, Roll up the manifest by (target, status) — useful for CLAUDE.md     headline rep, Walk the manifest, classify every dtype mention into canonical /     alias / pla, Return the manifest for every op in ``OP_SPECS`` plus every     `clifford_*` GA9, Roll up the manifest by (target, status) — useful for CLAUDE.md     headline rep (+13 more)
 
 ### Community 78 - "Community 78"
 Cohesion: 0.10
 Nodes (33): ArgumentLayout, ArgumentLayoutEntry, extract_argument_layout(), _infer_direction(), One row of the compile-time argument-layout contract for a     packaged kernel., The full compile-time argument-layout contract for a packaged     kernel. Audit, Derive a strict PK6 ``ExpectedBinding`` list from this         layout — checks e, Best-effort direction inference from binding name. Apple's     sample uses ``"in (+25 more)
 
 ### Community 79 - "Community 79"
-Cohesion: 0.10
-Nodes (36): _apple_gpu_dtype_from_op(), _apple_gpu_kernel_contract(), _apple_gpu_kernel_msl_for_dtype(), _apple_gpu_module_fusion_kind(), _apple_gpu_module_is_mps_runtime(), _base_attrs(), _cpu_target_op_name(), _diagnostic_level() (+28 more)
+Cohesion: 0.09
+Nodes (43): _apple_gpu_dtype_from_op(), _apple_gpu_kernel_contract(), _apple_gpu_kernel_msl_for_dtype(), _apple_gpu_module_fusion_kind(), _apple_gpu_module_is_mps_runtime(), _base_attrs(), _cpu_target_op_name(), _diagnostic_level() (+35 more)
 
 ### Community 80 - "Community 80"
 Cohesion: 0.20
@@ -2691,12 +2621,12 @@ Cohesion: 0.49
 Nodes (8): Non-Darwin Apple-GPU runtime *stub* must COMPUTE, not zero-fill.  The stub (`app, _rel(), stub_lib(), test_stub_bmm_f16_computes(), test_stub_bsmm_f16_computes(), test_stub_conv2d_f16_computes(), test_stub_conv3d_f16_computes(), _u16()
 
 ### Community 82 - "Community 82"
-Cohesion: 0.09
-Nodes (13): MockRank, Split each rank's tensor and exchange shards with every other rank.          Arg, Wait until all ranks reach this barrier., All-reduce: all ranks contribute, all get the result., All-gather: collect shard from each rank, concatenate., All-to-all: split each rank's tensor, exchange, then concatenate., Return-and-increment the per-rank generation counter for         ``kind``. Becau, Thread-safe deposit of a tensor into the shared buffer slot. (+5 more)
+Cohesion: 0.11
+Nodes (18): bounds(), dim(), Euclidean, Manifold, n(), n_points(), radius(), GA5 — Manifolds for integration.  A Manifold provides two things:     1. ``sampl (+10 more)
 
 ### Community 83 - "Community 83"
-Cohesion: 0.12
-Nodes (16): ChaosEvent, HealthSnapshot, Versioned production baseline for performance and accuracy drift., Minimal production replay metadata for deterministic incident debugging., Health metrics captured from a production training/inference step., Description of an injected failure and expected recovery behavior., RegressionBaseline, ReplayManifest (+8 more)
+Cohesion: 0.36
+Nodes (8): Phase 6 — production reliability, stress, chaos, node/rack-scale QA contracts., test_chaos_event_validates_recovery_contract(), test_docs_map_and_qa_guide_link_production_reliability_guide(), test_health_snapshot_requires_and_bounds_metrics(), test_production_reliability_guide_exists_and_covers_required_behaviors(), test_regression_baseline_accepts_within_thresholds(), test_regression_baseline_rejects_drift(), test_replay_manifest_requires_reproducibility_fields()
 
 ### Community 84 - "Community 84"
 Cohesion: 0.17
@@ -2707,24 +2637,24 @@ Cohesion: 0.17
 Nodes (11): code:bash (cmake -S . -B build-nvidia \), code:bash (cmake -S . -B build-nvidia-cuda \), code:bash (mkdir -p build && cd build), code:bash (./bench_gpu > ../bench/reports/gpu_results.csv), code:block5 (kernel,dtype,path,M,N,K,ms,tflops), Components, GPU Micro-Bench & HTML Report, LLVM/MLIR 21 Artifact Build (+3 more)
 
 ### Community 86 - "Community 86"
-Cohesion: 0.28
-Nodes (3): createPartitionLongContextPass(), PartitionLongContextPass, InsertKVBridgeForPrefill
+Cohesion: 0.07
+Nodes (26): Apple Backend Performance Audit, Bottom Line, Compiler and Apple Backend End-to-End Audit, Compiler Driver to Gates, Current End-to-End Shape, Executive Verdict, Gates to Manifest, Graph IR (+18 more)
 
 ### Community 87 - "Community 87"
-Cohesion: 0.24
-Nodes (4): createLowerTesseraToStableHLOPass(), LowerAddPattern, LowerMatmulPattern, LowerTesseraToStableHLOPass
+Cohesion: 0.08
+Nodes (9): HaloExchangeOp, HaloRegionOp, HaloType, name, NeighborsDialect, TopologyType, name, TypeBase<HaloType, Type, TypeStorage> (+1 more)
 
 ### Community 88 - "Community 88"
-Cohesion: 0.06
-Nodes (41): bind_symbol(), Bind a runtime symbol with ``argtypes`` + ``restype`` and cache     the result., PK4 — Cached intermediates-heap size in bytes (allocated         lazily on first, int, str, bool, test_bf16_symbols_resolve(), test_f16_encode_symbols_resolve() (+33 more)
+Cohesion: 0.05
+Nodes (48): bind_symbol(), Bind a runtime symbol with ``argtypes`` + ``restype`` and cache     the result., _bind_compile(), _bind_destroy(), _bind_is_compiled(), _bind_last_error_kind(), _dtype_name_for_raw(), Apple ``.mtlpackage`` packaged-kernel loader (PK1 of the packaged-kernel sprint) (+40 more)
 
 ### Community 89 - "Community 89"
 Cohesion: 0.18
 Nodes (10): Build & Test, code:bash (mkdir -p build && cd build), code:block2 (Basic runtime test passed.), code:c (static void kernel(void* user_ctx, const tsrTileCoord* tile,), CUDA/HIP, Error Model, Host Portable Kernels, Profiling (+2 more)
 
 ### Community 90 - "Community 90"
-Cohesion: 0.13
-Nodes (20): ScheduleIRVerificationError, _copy_attrs(), _diagnostic_level(), _elementwise_op(), _elementwise_resource_estimate(), _format_attr_dict(), _format_attr_value(), _lower_pipeline_region() (+12 more)
+Cohesion: 0.10
+Nodes (38): ScheduleIRVerificationError, _copy_attrs(), _diagnostic_level(), _elementwise_op(), _elementwise_resource_estimate(), _format_attr_dict(), _format_attr_value(), _lower_pipeline_region() (+30 more)
 
 ### Community 91 - "Community 91"
 Cohesion: 0.18
@@ -2732,7 +2662,7 @@ Nodes (10): code:cpp (class DebugInfoGenerator {), Correctness Verification, Deb
 
 ### Community 92 - "Community 92"
 Cohesion: 0.10
-Nodes (14): Slice 1 (2026-05-22) — M6 EBM gradient integration on ``EnergyCompiledCallable``, Multi-op chain: norm_sq + relu + inner + reduce_sum., The whole point of the refinement loop — the energy of         the iterate goes, ``refine`` must build the gradient program exactly once         and reuse it acr, Same y0 + same params + same T + same eta ⇒ identical         trajectory.  This, Status dashboards and autotuners need to serialise the         report; lock that, The whole point of Slice 1: a user writes     ``@energy_jit`` and never touches, Building the gradient program is deferred until first         access — so a deco (+6 more)
+Nodes (18): energy_jit(), Decorator: lower a restricted energy function to     :class:`EnergyIRProgram` at, test_energy_jit_metadata_is_json_serializable(), test_energy_jit_text_format_is_energy_prefix(), Slice 1 (2026-05-22) — M6 EBM gradient integration on ``EnergyCompiledCallable``, Multi-op chain: norm_sq + relu + inner + reduce_sum., The whole point of the refinement loop — the energy of         the iterate goes, ``refine`` must build the gradient program exactly once         and reuse it acr (+10 more)
 
 ### Community 93 - "Community 93"
 Cohesion: 0.36
@@ -2744,11 +2674,11 @@ Nodes (32): BindingMismatch, BindingValidation, ExpectedBinding, Compiler-side e
 
 ### Community 95 - "Community 95"
 Cohesion: 0.02
-Nodes (148): bool, _apple_gpu_bmm_dev_f32(), _apple_gpu_bmm_device(), apple_gpu_cf_scan(), apple_gpu_cf_serial_draft(), _apple_gpu_cf_serial_draft_f32(), _apple_gpu_chol_2d(), apple_gpu_cholesky() (+140 more)
+Nodes (118): _apple_gpu_bmm_dev_f32(), _apple_gpu_bmm_device(), apple_gpu_cf_scan(), apple_gpu_cf_serial_draft(), _apple_gpu_chol_2d(), _apple_gpu_cholesky_batched_msl(), _apple_gpu_dispatch_mpsgraph_softmax(), _apple_gpu_dispatch_silu_mul() (+110 more)
 
 ### Community 97 - "Community 97"
-Cohesion: 0.18
-Nodes (11): _apple_gpu_mla_absorb_decode(), _apple_gpu_mla_absorb_decode_f32(), _apple_gpu_mla_absorb_decode_half(), apple_gpu_solve(), General linear solve ``A·X = B`` via LU with partial pivoting, matching     ``nu, MLA decode with **weight absorption** + decoupled RoPE — the real MLA     bandwi, General linear solve ``A·X = B`` via LU with partial pivoting, matching     ``nu, f16 / bf16 absorb symbol: 6 uint16 tensor inputs + uint16 output, with     f32 c (+3 more)
+Cohesion: 0.05
+Nodes (45): _apple_gpu_batched_linalg(), apple_gpu_cholesky(), apple_gpu_cholesky_solve(), _apple_gpu_dispatch_linalg(), _apple_gpu_mla_absorb_decode(), _apple_gpu_mla_absorb_decode_f32(), _apple_gpu_mla_absorb_decode_half(), apple_gpu_qr() (+37 more)
 
 ### Community 98 - "Community 98"
 Cohesion: 0.36
@@ -2759,20 +2689,20 @@ Cohesion: 0.36
 Nodes (4): axisLength(), createLegalizeSpectralPass(), LegalizeSpectralPass, pickRadixSequence()
 
 ### Community 101 - "Community 101"
-Cohesion: 0.09
-Nodes (29): KV-cache handle abstraction (Phase B2).  Today the storage is a single contiguou, MLABlockPagedCache, MLABlockPagedCacheError, num_free_blocks(), num_sequences(), num_used_blocks(), Multi-sequence block-paged MLA cache — vLLM-style paged attention (2026-05-30)., Physical block ids backing ``seq_id`` (copy). (+21 more)
+Cohesion: 0.15
+Nodes (20): num_free_blocks(), num_sequences(), num_used_blocks(), Multi-sequence block-paged MLA cache — vLLM-style paged attention (2026-05-30)., _SeqState, utilization(), absorb_decode_batch(), absorb_decode_one() (+12 more)
 
 ### Community 102 - "Community 102"
 Cohesion: 0.15
 Nodes (25): assert_memory_model_ok(), errors(), _function_is_deterministic(), _location(), MemoryModelDiagnostic, MemoryModelVerificationError, MemoryModelVerificationResult, _MemoryStateTracker (+17 more)
 
 ### Community 103 - "Community 103"
-Cohesion: 0.19
-Nodes (20): _artifact_row(), main(), parse_sizes(), pick_backend(), Phase A1 (2026-05-20) — exercise ``tessera.ops.<op>`` reference path.      Route, _tessera_runtime_row(), timeit(), _as_numpy() (+12 more)
+Cohesion: 0.14
+Nodes (14): _as_array(), _as_tuple(), batch_shape(), Beta, _digamma(), Distribution, _gammaln(), kl_divergence() (+6 more)
 
 ### Community 104 - "Community 104"
-Cohesion: 0.28
-Nodes (3): createLowerTesseraAttentionToStableHLOPass(), LowerFlashAttentionPattern, TesseraAttentionToStableHLOPass
+Cohesion: 0.11
+Nodes (25): object, apple_gpu_capabilities_snapshot(), Return a structured snapshot of Apple GPU capabilities + archive     cache state, Apple-sample Actions 1 + 6 — capability + archive telemetry on ``CompileResult.t, ``apple_cpu`` also gets the snapshot — same physical device, same     capability, A NVIDIA / CPU compile result has no Apple-capability keys —     otherwise dashb, The snapshot on the compile result equals the snapshot taken     directly via th, A fresh process has no archive enabled — capture this baseline     so a future c (+17 more)
 
 ### Community 106 - "Community 106"
 Cohesion: 0.36
@@ -2780,7 +2710,7 @@ Nodes (4): chooseTile(), createSpectralTransposePlanPass(), TransposePlanPass, v
 
 ### Community 107 - "Community 107"
 Cohesion: 0.02
-Nodes (151): CliffordCompiledArtifact, CliffordCompiledCallable, CliffordIROpCall, CliffordIRProgram, CliffordJitError, CliffordOpPlanEntry, _execute_ir(), _hash_plan() (+143 more)
+Nodes (120): CliffordCompiledArtifact, CliffordCompiledCallable, CliffordIROpCall, CliffordIRProgram, CliffordJitError, CliffordOpPlanEntry, _execute_ir(), _hash_plan() (+112 more)
 
 ### Community 108 - "Community 108"
 Cohesion: 0.11
@@ -2791,28 +2721,28 @@ Cohesion: 0.22
 Nodes (8): Autotuning, code:mlir (tessera.schedule @fa4_pipeline {), code:mlir (tessera.numerics.softmax "poly3", 2.0e-3), code:mlir (%acc = "tessera.tile.mma.tcgen05"(%q_tmem, %k_tmem -> %acc_t), IR Snippet, Life of a Tile in Tessera (FA‑4 Edition), Numerics policy, TMEM & MMA
 
 ### Community 110 - "Community 110"
-Cohesion: 0.11
-Nodes (32): canonical_compile(), Run the full Tessera compile ladder and return a typed result.      Composes:, Run the full Tessera compile ladder and return a typed result.      Composes:, Apple-sample Actions 1 + 6 — capability + archive telemetry on ``CompileResult.t, ``apple_cpu`` also gets the snapshot — same physical device, same     capability, A NVIDIA / CPU compile result has no Apple-capability keys —     otherwise dashb, The snapshot on the compile result equals the snapshot taken     directly via th, ``canonical_compile.py``'s pure-aggregator drift gate     (test_canonical_compil (+24 more)
+Cohesion: 0.19
+Nodes (21): canonical_compile(), Run the full Tessera compile ladder and return a typed result.      Composes:, Run the full Tessera compile ladder and return a typed result.      Composes:, C.2 — runtime.launch() trusts CompileResult instead of re-deriving.  After C.1 w, C.2 contract: when the artifact carries the canonical answer, the     runtime's, A RuntimeArtifact constructed without canonical_compile (i.e. via     direct ``R, Adding the canonical answer must not silently flip ok=True or rewrite     the ru, When the canonical answer says every gate passes, the trust path     must surfac (+13 more)
 
 ### Community 111 - "Community 111"
-Cohesion: 0.04
-Nodes (63): apple_arch_defaults(), apple_arch_string(), apple_feature_set(), apple_feature_status(), AppleGPUArch, AppleGPUTargetProfile, AppleRuntimeLimits, _ArchDefaults (+55 more)
+Cohesion: 0.09
+Nodes (20): Audit Action 10 — AppleFeatureLimits / AppleGPUTargetProfile.  Per-arch capabili, fp64 is structurally absent on Apple GPUs as of M5; ops that     require fp64 mu, Default arch is APPLE10 (M4) — the first generation where     Metal 4 + packaged, Asking for packaged ML on a pre-M4 arch silently force-disables     rather than, Apple GPU SIMD width is 32, by spec, across every generation     we support., Apple GPU backend's compile target is MSL 4.0 / macOS 26., test_capability_predicates_track_feature_matrix(), test_dtype_set_bfloat_gating() (+12 more)
 
 ### Community 112 - "Community 112"
 Cohesion: 0.36
 Nodes (3): createEBMCanonicalizePass(), EBMCanonicalizePass, isEBMOp()
 
 ### Community 113 - "Community 113"
-Cohesion: 0.36
-Nodes (3): createEBMFuseEnergyGradPass(), EBMFuseEnergyGradPass, isStepOp()
+Cohesion: 0.02
+Nodes (48): tessera(), tessera(), registerTesseraTPUPasses(), createLowerTileToPTXPass(), LowerTileToPTXPass, createLowerScheduleToTargetPass(), LowerScheduleToTargetPass, AsyncPrefetch (+40 more)
 
 ### Community 114 - "Community 114"
 Cohesion: 0.36
 Nodes (3): createLowerSpectralToTargetIRPass(), LowerToTargetIRPass, stageSymbolFor()
 
 ### Community 115 - "Community 115"
-Cohesion: 0.05
-Nodes (48): all_manifests(), _attach_numerical_fixtures(), audit_backend_dtypes(), _capability_status(), clifford_manifest_for(), complex_manifest_for(), ebm_manifest_for(), is_hardware_verified() (+40 more)
+Cohesion: 0.10
+Nodes (27): _attach_numerical_fixtures(), _capability_status(), clifford_manifest_for(), complex_manifest_for(), ebm_manifest_for(), is_hardware_verified(), _public_to_graph_name(), Sprint E — Backend kernel manifest (2026-05-11).  Synthesizes the per-op × per-t (+19 more)
 
 ### Community 116 - "Community 116"
 Cohesion: 0.22
@@ -2834,21 +2764,29 @@ Nodes (8): Build, code:bash (cmake -S . -B build -G Ninja -DMLIR_DIR=<path-to-ml
 Cohesion: 0.11
 Nodes (43): _apple_gpu_envelope_ops(), _best_status(), build_matrix(), ConformanceOp, _coverage_for(), _execution_matrix_targets(), _manifest_for_target(), _numerical_check_present() (+35 more)
 
+### Community 121 - "Community 121"
+Cohesion: 0.09
+Nodes (24): CDLL, Path, _apple_cpu_dispatch_matmul(), _apple_cpu_gemm_bf16(), _apple_cpu_gemm_f16(), _apple_cpu_gemm_f32(), _apple_cpu_gemm_f32_batched(), _build_apple_cpu_runtime_shared() (+16 more)
+
 ### Community 122 - "Community 122"
 Cohesion: 0.15
 Nodes (20): Path, Pipeline, _find_mtlpackage(), _open_pipe_or_skip(), PK3 — Tensor creation + MTL4ArgumentTable binding from reflection.  Third step o, The runtime validates byte_count vs tensor's expected size.     Passing the wron, Fill an input tensor with a known byte pattern, read it back —     the bytes mus, ``fill_input`` / ``read_output`` with a name that doesn't     appear in the bind (+12 more)
 
 ### Community 123 - "Community 123"
-Cohesion: 0.43
-Nodes (6): test_compile_request_normalizes_x86_and_selects_pipeline(), test_compile_trace_event_serializes_json_and_chrome_trace(), test_compiler_example_manifest_qualifies_each_foundation_target(), test_debug_env_vars_dump_compiler_artifacts(), test_jit_routes_artifacts_and_trace_through_compile_bundle(), test_non_cpu_target_artifacts_are_traceable_and_non_executable()
+Cohesion: 0.14
+Nodes (11): KV-cache handle abstraction (Phase B2).  Today the storage is a single contiguou, MLABlockPagedCache, MLABlockPagedCacheError, Physical block ids backing ``seq_id`` (copy)., Return all of a sequence's blocks to the free pool., Append ``n_new`` tokens' latent + shared rope key to ``seq_id``,         allocat, Materialize a sequence's logical window from its (possibly         non-contiguou, Decode one query for ``seq_id`` against its cached window.         Returns ``[nu (+3 more)
 
 ### Community 124 - "Community 124"
 Cohesion: 0.43
 Nodes (6): Phase 6 - Language/IR, memory model, and layout/movement spec contracts., test_docs_map_links_new_specs_and_guide(), test_language_ir_spec_covers_grammar_ir_layers_rubin_dtypes_and_mbarriers(), test_layout_movement_guide_covers_layouts_movement_and_schedule_artifacts(), test_memory_model_spec_covers_scopes_happens_before_and_mbarriers(), test_rubin_dtype_names_are_accepted_by_compiler_surfaces()
 
 ### Community 125 - "Community 125"
-Cohesion: 0.10
-Nodes (20): apple_gpu_metal4_caps(), apple_gpu_mtl4_matmul2d_bf16(), _mtl4_caps_cached(), _mtl4_route_matmul2d_bf16(), _mtl4_route_matmul_f32(), Live Metal 4 capability probe (M0). Actually creates the Metal 4 objects     on-, ``C[f32] = A[bf16] @ B[bf16]`` via the MSL 4.0 cooperative ``tensor`` op     (Me, Probe Metal 4 capabilities once (the probe creates GPU objects, so it is     not (+12 more)
+Cohesion: 0.08
+Nodes (25): apple_gpu_metal4_caps(), _mtl4_caps_cached(), _mtl4_route_matmul2d_bf16(), _mtl4_route_matmul2d_f16(), _mtl4_route_matmul_f32(), Live Metal 4 capability probe (M0). Actually creates the Metal 4 objects     on-, Probe Metal 4 capabilities once (the probe creates GPU objects, so it is     not, Enable/disable routing eligible ops (today: rank-2 f32 matmul with     8-multipl (+17 more)
+
+### Community 126 - "Community 126"
+Cohesion: 0.14
+Nodes (10): AsyncCopyLoweringPass, smVersion, createAsyncCopyLoweringPass(), emitCpAsyncFallback(), emitTMACopyAsync(), emitTMADescriptor(), LowerAsyncCopyTMA, smVersion (+2 more)
 
 ### Community 127 - "Community 127"
 Cohesion: 0.10
@@ -2856,7 +2794,7 @@ Nodes (20): _ebm_bivector_langevin_apple_gpu_path(), _ebm_decode_init_apple_gpu_
 
 ### Community 128 - "Community 128"
 Cohesion: 0.02
-Nodes (162): _apple_gpu_bmm_f16(), _apple_gpu_bmm_f32(), _apple_gpu_bsmm_f16(), _apple_gpu_bsmm_f32(), _apple_gpu_conv2d_f16(), _apple_gpu_conv2d_f32(), _apple_gpu_conv3d_f16(), _apple_gpu_conv3d_f32() (+154 more)
+Nodes (188): _apple_gpu_bmm_f16(), _apple_gpu_bmm_f32(), _apple_gpu_bsmm_f16(), _apple_gpu_bsmm_f32(), _apple_gpu_conv2d_f16(), _apple_gpu_conv2d_f32(), _apple_gpu_conv3d_f16(), _apple_gpu_conv3d_f32() (+180 more)
 
 ### Community 129 - "Community 129"
 Cohesion: 0.20
@@ -2864,11 +2802,11 @@ Nodes (19): Any, int, _active_trace(), _infer_rows_cols(), install_apple_gpu_int
 
 ### Community 130 - "Community 130"
 Cohesion: 0.03
-Nodes (88): Module, _ActivationModule, _as_array(), BatchNorm1d, CastedEmbedding, CastedLinear, Conv1d, Conv2d (+80 more)
+Nodes (90): createLowerTileToPTXPass(), LowerTileToPTXPass, Module, _ActivationModule, _as_array(), BatchNorm1d, CastedEmbedding, CastedLinear (+82 more)
 
 ### Community 131 - "Community 131"
 Cohesion: 0.03
-Nodes (75): GraphIRFunction, Source location for frontend diagnostics., A single `func.func @name(...)` block in the Graph IR.      Built by GraphIRBuil, SourceSpan, assert_clifford_ops_only(), assert_complex_jit_holomorphic(), Lane-aware pass: every op in a ``clifford_jit`` function must     be a ``cliffor, Run every lane-aware pass against ``fn`` and collect     diagnostics.      The p (+67 more)
+Nodes (82): GraphIRFunction, IROp, Source location for frontend diagnostics., A single emitted op in the Graph IR function body.      Optional metadata fields, A single `func.func @name(...)` block in the Graph IR.      Built by GraphIRBuil, SourceSpan, assert_clifford_ops_only(), assert_complex_jit_holomorphic() (+74 more)
 
 ### Community 132 - "Community 132"
 Cohesion: 0.25
@@ -2878,6 +2816,10 @@ Nodes (7): code:block1 (#include "tessera/sr/Passes.h"), code:block2 (# add_subd
 Cohesion: 0.25
 Nodes (7): Build (CMake, LLVM/MLIR + StableHLO available), code:bash (cmake -S . -B build -DTESSERA_ENABLE_TPU=ON -DMLIR_DIR=<path), code:bash (PJRT_DEVICE=TPU ./build/bin/pjrt_runner --list-devices), Current Backend Surface, Layout, Tessera TPU Backend (OpenXLA), TPU Runtime test
 
+### Community 134 - "Community 134"
+Cohesion: 0.15
+Nodes (18): int, Path, Pipeline, _find_mtlpackage(), _open_prepared_pipe_or_skip(), PK4 — end-to-end ML pass dispatch via ``MTL4MachineLearningCommandEncoder``.  Fo, Verify Pattern 7: the heap is allocated LAZILY from     pipelineState.intermedia, End-to-end: prepare tensors → fill inputs with valid data →     dispatch → succe (+10 more)
+
 ### Community 135 - "Community 135"
 Cohesion: 0.10
 Nodes (17): PK5 — compiler integration for packaged ML kernels.  Fifth step of the packaged-, The field is suppressed when None — keeps the JSON compact     (the pattern from, A packaged entry can also carry ``execute_compare_fixture`` and     ``benchmark_, The field doesn't constrain target — packaged kernels are     currently Apple-sp, The new status value must be accepted by the enum check —     otherwise construc, Adding a new status must not break the existing ones. Regression     guard again, ``status='packaged'`` without ``packaged_pipeline_path`` must     raise a precis, Other status values must NOT require the field — only     ``packaged`` does. Reg (+9 more)
@@ -2886,13 +2828,17 @@ Nodes (17): PK5 — compiler integration for packaged ML kernels.  Fifth step of
 Cohesion: 0.11
 Nodes (19): _np_flash_attn(), tessera.ops.flash_attn — eager numpy reference + interception forwarding contrac, dropout_p must be in [0, 1)., When the wrapper routes to apple_gpu_ops under @auto_batch,     it passes scale, The encode-session flash_attn kernel is dropout-free. The     wrapper raises if, dropout_p=0 (the default) is allowed inside @auto_batch — the     wrapper just i, The HEADLINE consistency check: tessera.ops.flash_attn eager     output ≈ tesser, Calling without ``scale=`` uses 1/sqrt(D) (matches the runtime     apple_gpu_ops (+11 more)
 
+### Community 142 - "Community 142"
+Cohesion: 0.12
+Nodes (17): int, str, Task B (2026-06-01) — MPSGraph cache LRU eviction.  The cache backing the MPSGra, Setting the env var to a small value should be reflected in     the live capacit, ``TESSERA_MPSGRAPH_CACHE_CAPACITY=0`` disables eviction     entirely (restores p, With a small capacity, putting (capacity+overshoot) distinct     rmsnorm shapes, Touch one entry repeatedly while inserting many cold entries.     The hot entry, The default capacity is intentionally generous — well above     typical single-p (+9 more)
+
 ### Community 143 - "Community 143"
 Cohesion: 0.13
 Nodes (29): _as(), M6 Step 3 (start) — closed-form VJP table for the energy whitelist.  The :mod:`t, ``E = ‖y‖₂``  ⇒  ``∂E/∂y = y / ‖y‖``.  Subgradient is 0 at the     origin to kee, ``E = ‖y‖₂²``  ⇒  ``∂E/∂y = 2 y``., Approximate-GELU VJP (tanh form), matching the reference     impl + the MSL kern, ``softplus(x) = log(1 + exp(x))`` ⇒ ``∂/∂x = sigmoid(x)``., ``out = y @ W + b``.     ``∂out/∂y = out_grad @ W^T``,     ``∂out/∂W = y^T @ out, ``mlp_head(y) = linear(relu(linear(y, W1, b1)), W2, b2)``.      The VJP composes (+21 more)
 
 ### Community 144 - "Community 144"
 Cohesion: 0.02
-Nodes (44): createLowerPowerToTargetPass(), createLowerPowerToTilePass(), LowerPowerToTarget, LowerPowerToTile, registerPowerPasses(), tessera(), createLowerScheduleToTargetPass(), LowerScheduleToTargetPass (+36 more)
+Nodes (46): createLowerPowerToTargetPass(), createLowerPowerToTilePass(), LowerPowerToTarget, LowerPowerToTile, registerPowerPasses(), tessera(), createLowerPowerToTargetPass(), createLowerPowerToTilePass() (+38 more)
 
 ### Community 145 - "Community 145"
 Cohesion: 0.15
@@ -2900,15 +2846,19 @@ Nodes (28): make_gradient_program(), Build a gradient program from either an :cl
 
 ### Community 146 - "Community 146"
 Cohesion: 0.08
-Nodes (52): Any, bool, str, SimpleNamespace, bf16, _DtypeAnnotation, f16, f32 (+44 more)
+Nodes (54): Any, bool, str, SimpleNamespace, CustomPrimitive, bf16, _DtypeAnnotation, f16 (+46 more)
 
 ### Community 147 - "Community 147"
 Cohesion: 0.04
-Nodes (95): LegalGEMMCandidateGenerator, Generate target-legal GEMM tuning candidates., CapabilityResult, normalize_target(), supports_op(), TargetCapability, allowed_nestings(), CrossLaneViolation (+87 more)
+Nodes (100): LegalGEMMCandidateGenerator, Generate target-legal GEMM tuning candidates., _apple_gpu_fused_caps(), canonical_op(), CapabilityResult, executable(), get_target_capability(), normalize_target() (+92 more)
 
 ### Community 148 - "Community 148"
-Cohesion: 0.11
-Nodes (14): CerebrasCanonicalize, createCerebrasCanonicalizePass(), MemcpyNoOpFold2, RouteDedup2, CopyLowering, createLowerTTargetToCerebrasPass(), LoadStoreFuse, LowerTTargetToCerebras (+6 more)
+Cohesion: 0.03
+Nodes (43): createLowerKVTransportPass(), LowerKVTransportPass, createPartitionLongContextPass(), PartitionLongContextPass, createLowerTesseraToStableHLOPass(), LowerAddPattern, LowerMatmulPattern, LowerTesseraToStableHLOPass (+35 more)
+
+### Community 150 - "Community 150"
+Cohesion: 0.26
+Nodes (14): _asarray(), calibration_observer(), dequantize_int4(), dequantize_int8(), fake_quantize(), grad_scaler_step(), quantize_int4(), quantize_int8() (+6 more)
 
 ### Community 151 - "Community 151"
 Cohesion: 0.33
@@ -2930,25 +2880,29 @@ Nodes (22): _apple_gpu_available(), _ga_rows(), The fused GA+EBM workload must e
 Cohesion: 0.30
 Nodes (10): _ir_text(), _make_inputs(), _numpy_reference(), Canonical program: ``decode_init → T × inner_step → self_verify``.  The EBM vert, Execute the canonical EBM pipeline and emit a CompileReport., Deterministic ``(x, candidates, grad, energies)`` tuple., Numpy baseline: T inner_step iterations, then argmin reduction., M6 Step 3 variant — every refinement step recomputes ``∇E(y)``     via :func:`te (+2 more)
 
+### Community 156 - "Community 156"
+Cohesion: 0.18
+Nodes (15): coverage_entries(), Arch-2 (2026-05-22) — MLIR verifier coverage drift gate.  Pins:   * Known sprint, Lock floor values so a regression in the `real` bucket fails     fast.  These nu, Two TD files defining ops with the same C++ class name would     cause linker co, The checked-in markdown must match what the registry would     render right now., The generated dashboard's summary text uses canonical phrases     that downstrea, A sprint deliverable's verifier status must remain `real`., ``absent`` means ``hasVerifier = 1;`` was declared in TD but no     matching ``O (+7 more)
+
 ### Community 157 - "Community 157"
 Cohesion: 0.02
-Nodes (111): _annotation_to_ir_type(), construct_mlir_module(), _diagnostic_level(), _dtype_to_ir_type(), _error_code_for_ir_diagnostic(), _format_attr_value(), from_attrs(), GraphIRBuilder (+103 more)
+Nodes (105): _annotation_to_ir_type(), construct_mlir_module(), _diagnostic_level(), _dtype_to_ir_type(), _error_code_for_ir_diagnostic(), _format_attr_value(), from_attrs(), GraphIRBuilder (+97 more)
 
 ### Community 158 - "Community 158"
-Cohesion: 0.50
-Nodes (4): _apple_gpu_metadata_is_matmul_softmax_chain(), Phase 8.4.3 — check whether the metadata ops form a 2-op     matmul -> softmax f, Phase 8.4.3 — check whether the metadata ops form a 2-op     matmul -> softmax f, Phase 8.4.3 — check whether the metadata ops form a 2-op     matmul -> softmax f
+Cohesion: 0.04
+Nodes (45): bool, apple_gpu_matmul2d_dev(), _apple_gpu_metadata_is_matmul_postlude_chain(), _apple_gpu_metadata_is_matmul_softmax_chain(), _apple_gpu_metadata_is_matmul_softmax_matmul_chain(), _apple_gpu_metadata_is_swiglu_chain(), apple_gpu_mtl4_archive_enable(), apple_gpu_mtl4_archive_flush() (+37 more)
 
 ### Community 159 - "Community 159"
 Cohesion: 0.48
 Nodes (5): Focused coverage for autodiff and Graph IR gap hardening., test_focused_python_reference_primitives_have_graph_ir_lowering_entries(), test_graph_ir_builder_lowers_promoted_s7_s10_s11_calls(), test_s10_sgd_and_s7_linear_general_have_transform_rules(), test_s11_loss_vjp_and_jvp_rules_are_registered_and_analytical()
 
 ### Community 160 - "Community 160"
-Cohesion: 0.10
-Nodes (17): createTileIRLoweringPass(), emitAsyncCopy(), emitAttnOp(), emitWaitAsync(), LowerFlashAttnToTileIR, smVersion, tileKV, tileQ (+9 more)
+Cohesion: 0.21
+Nodes (4): AppleGPUTargetProfile, Describes the Apple GPU target for a ``@jit(target=...)`` function.      Default, bool, int
 
 ### Community 162 - "Community 162"
-Cohesion: 0.03
-Nodes (43): Block, Cyclic, Block (contiguous) partition over mesh axes.      Partitions the first N dimensi, Cyclic (round-robin) partition over a mesh axis.      Distributes elements cycli, A rectangular (dense) domain with fixed shape.      This is the most common doma, Rect, IndexLauncher, KernelFn (+35 more)
+Cohesion: 0.02
+Nodes (50): Block, Cyclic, Block (contiguous) partition over mesh axes.      Partitions the first N dimensi, Cyclic (round-robin) partition over a mesh axis.      Distributes elements cycli, No partition — tensor is replicated across all ranks.      Used for bias terms,, A rectangular (dense) domain with fixed shape.      This is the most common doma, Rect, Replicated (+42 more)
 
 ### Community 163 - "Community 163"
 Cohesion: 0.33
@@ -2963,20 +2917,20 @@ Cohesion: 0.07
 Nodes (35): broadcast_to_axis(), collective_permute(), _fnv1a_64(), get_memory_bucket_fn(), MemoryMode, MemoryShardSpec, named_sharding(), partition_spec() (+27 more)
 
 ### Community 166 - "Community 166"
-Cohesion: 0.47
-Nodes (3): getCanonicalizationPatterns(), RangeEntropyCanonicalize, verify()
+Cohesion: 0.32
+Nodes (3): BenchmarkSuite, Write the full suite to *path* as pretty-printed JSON., Container for results from all three benchmark families.      Attributes     ---
 
 ### Community 167 - "Community 167"
 Cohesion: 0.19
 Nodes (13): str, Project 3 (2026-06-01) — lock the hardware_verified promotion.  The 8 encode-eli, If a future change accidentally promotes more (or fewer) ops,     surface it her, The conformance matrix backend_compile column must accept     hardware_verified, The pipeline_gates link gate must accept hardware_verified as     linkable — oth, runtime_src(), test_apple_gpu_entry_is_hardware_verified(), test_conformance_matrix_treats_hardware_verified_as_complete() (+5 more)
 
 ### Community 168 - "Community 168"
-Cohesion: 0.07
-Nodes (61): Cl, A Clifford algebra signature ``Cl(p, q, r)``.      ``p`` = number of generators, All ``2**n`` basis blades, in ascending bitmask order., All basis blades with the given grade., GA3 acceptance (part 1): Multivector value class + annotation surface.  Sprint:, `*` is scalar-only; use geometric_product for Multivector × Multivector., test_active_grades_walks_nonzero_components(), test_addition_unifies_grade_sets() (+53 more)
+Cohesion: 0.08
+Nodes (59): Cl, A Clifford algebra signature ``Cl(p, q, r)``.      ``p`` = number of generators, GA3 acceptance (part 1): Multivector value class + annotation surface.  Sprint:, `*` is scalar-only; use geometric_product for Multivector × Multivector., test_active_grades_walks_nonzero_components(), test_addition_unifies_grade_sets(), test_algebra_mismatch_raises_on_addition(), test_annotation_rejects_invalid_grades() (+51 more)
 
 ### Community 169 - "Community 169"
-Cohesion: 0.10
-Nodes (58): JitDiagnosticCode, Frontend / lowering diagnostic codes.      Stability contract: the ``.value`` st, _as_value(), build_cpu_plan(), build_matmul_cpu_plan(), _canonical_op_name(), _conv2d_nhwc(), _dct_reference() (+50 more)
+Cohesion: 0.04
+Nodes (106): JitDiagnosticCode, Frontend / lowering diagnostic codes.      Stability contract: the ``.value`` st, _apple_gpu_chain_kind(), _apple_gpu_matmul_dtype_suffix(), artifact_hashes(), _backend_artifact_for(), _capability_reason(), compile_graph_module() (+98 more)
 
 ### Community 170 - "Community 170"
 Cohesion: 0.33
@@ -2987,8 +2941,8 @@ Cohesion: 0.40
 Nodes (4): code:c++ (bool tessera_x86_amx_supported();     // hardware support bi), GEMM tile shapes, Runtime feature detection, x86 Backend Overview
 
 ### Community 173 - "Community 173"
-Cohesion: 0.04
-Nodes (39): DiagnosticLevel, diagnostics(), ErrorReporter, errors(), diagnostics.py — Tessera error reporting and diagnostics (Phase 6)  Provides str, A Python / MLIR source location attached to a diagnostic.      ``file``, ``line`, Base class for all structured Tessera compiler errors.      Parameters     -----, Raised when tensor shapes are incompatible.      Carries ``expected_shape`` and (+31 more)
+Cohesion: 0.05
+Nodes (36): check_determinism(), DeterminismCheckResult, Result of running a bitwise/tolerance determinism check., Verify repeated executions produce the same result., DiagnosticLevel, diagnostics(), errors(), diagnostics.py — Tessera error reporting and diagnostics (Phase 6)  Provides str (+28 more)
 
 ### Community 174 - "Community 174"
 Cohesion: 0.40
@@ -3019,36 +2973,44 @@ Cohesion: 0.33
 Nodes (6): Automated Codebase Analysis, code:python (import tessera as ts), code:python (class MigrationReadinessAssessment:), Migration Readiness Assessment, Migration Readiness Checklist, Pre-Migration Assessment
 
 ### Community 181 - "Community 181"
-Cohesion: 0.11
-Nodes (18): Phase 2.1c — tessera.ops.* interception under @auto_batch.  Closes the namespace, Same code via tessera.ops.* vs. via apple_gpu_ops.* — outputs     must be numeri, When user calls tessera.ops.rmsnorm without explicit rows/cols,     the wrapper, The user writes a complete attention block using ONLY     ``tessera.ops.*`` — no, If the user calls tessera.ops.rmsnorm with a DeviceTensor (no     .shape) and no, The existing tessera.ops.rmsnorm(x, eps) call shape is     unchanged outside @au, Outside @auto_batch, supplying gamma multiplies the     normalized output., tessera.ops.softmax outside @auto_batch behaves as before. (+10 more)
+Cohesion: 0.30
+Nodes (12): _np(), Apple GPU — device-resident block-paged KV cache (on-GPU gather).  `tessera.cach, The on-GPU gathered window (a resident DeviceTensor) feeds a     device-resident, Interleaving two sequences gives each non-contiguous blocks; the on-GPU     gath, _require(), test_concurrent_sequences(), test_free_and_reuse_blocks(), test_gather_matches_appended_tokens() (+4 more)
+
+### Community 182 - "Community 182"
+Cohesion: 0.18
+Nodes (10): apple_arch_string(), apple_feature_set(), Set of all features marked ``ready`` for this arch., Return the set of feature names with status ``"ready"`` on     ``arch``. Useful, Return the canonical Apple arch identifier     (``"apple10"`` etc.) — used by bu, str, Pick one canonical arch as the schema and verify every other     arch declares t, test_apple_arch_string_returns_apple_n() (+2 more)
+
+### Community 183 - "Community 183"
+Cohesion: 0.23
+Nodes (5): createLowerMLADecodeFusionToAppleGPUPass(), ensureExternalDecl(), extractPtr(), LowerMLADecodeFusionToAppleGPU, LowerMLADecodeFusionToAppleGPUPass
 
 ### Community 184 - "Community 184"
 Cohesion: 0.40
 Nodes (3): Conclusion, Table of Contents, Tessera Performance Tuning Guide - Advanced Optimization Techniques
 
 ### Community 185 - "Community 185"
-Cohesion: 0.04
-Nodes (87): algebra(), _apply_left_basis_product(), codiff(), dtype(), ext_deriv(), from_callable(), hodge_star(), hodge_star_field() (+79 more)
+Cohesion: 0.05
+Nodes (68): algebra(), _apply_left_basis_product(), codiff(), dtype(), ext_deriv(), from_callable(), hodge_star(), hodge_star_field() (+60 more)
 
 ### Community 186 - "Community 186"
 Cohesion: 0.05
-Nodes (89): Multivector, Numpy-backed multivector value + type-annotation surface.      Coefficient layou, Return a writable copy of the coefficient array., Project to the grade-k component (delegates to ``ops.grade_projection``)., Return True if coefficient arrays match within tolerance., _coerce_grade_set(), conjugate(), exp_mv() (+81 more)
+Nodes (88): Extract the multivector at the given grid index., Multivector, Numpy-backed multivector value + type-annotation surface.      Coefficient layou, Return a writable copy of the coefficient array., Project to the grade-k component (delegates to ``ops.grade_projection``)., Return True if coefficient arrays match within tolerance., _coerce_grade_set(), conjugate() (+80 more)
 
 ### Community 187 - "Community 187"
 Cohesion: 0.15
 Nodes (12): Current state (post-bmm), Files, Non-goals, Plan, Single-command-buffer decode chain — audit Action 6 / Pattern table row #6, Stage 1 — scaffold (this PR), Stage 2 — per-op encode-session variants (follow-on PRs), Stage 3 — Python ergonomics + jit integration (+4 more)
 
 ### Community 188 - "Community 188"
-Cohesion: 0.10
-Nodes (11): Bind ``name`` in the **innermost** scope.  Overwrites any         existing bindi, Inside-out scope walk.  Returns ``None`` when ``name`` is         not defined in, Push a fresh scope layer., Pop the innermost scope.  Raises :class:`IndexError` if the         caller tries, Every name visible from the current scope (inside-out)., Bindings in the innermost scope only — used by passes that         want to know, Current scope-stack depth (1 = function-level only)., Walk every entry in every scope.  Order: outermost → innermost. (+3 more)
+Cohesion: 0.22
+Nodes (12): int, _batch(), S-series #3 (2026-06-01) — optimizer-step batching rule.  Closes the ``batching_, Muon orthogonalizes each 2-D matrix param (Newton–Schulz/SVD);     per-model sem, The proof above is what flips these categories complete. Pin the     registry so, Wrap a (params, grads) -> (new_params[, state]) optimizer into a     function re, LAMB's trust ratio is a norm over the whole param — per-model     semantics requ, _row_new_params() (+4 more)
 
 ### Community 189 - "Community 189"
 Cohesion: 0.12
-Nodes (17): Register or override the JVP rule for ``name`` (matches the     ``register_vjp``, register_jvp(), Register or override the VJP for an op., register_vjp(), custom_batching(), custom_call(), custom_jvp(), custom_primitive() (+9 more)
+Nodes (16): Register or override the JVP rule for ``name`` (matches the     ``register_vjp``, register_jvp(), Register or override the VJP for an op., register_vjp(), custom_batching(), custom_call(), custom_jvp(), custom_primitive() (+8 more)
 
 ### Community 190 - "Community 190"
-Cohesion: 0.21
-Nodes (14): _apple_gpu_fused_caps(), canonical_op(), executable(), OpCapability, _ops(), Shared compiler capability registry for targets, ops, and runtime status., Build per-op ``OpCapability(runtime_status='fused')`` entries from     ``_APPLE_, target_aliases() (+6 more)
+Cohesion: 0.24
+Nodes (6): createLowerPowerToTargetPass(), createLowerPowerToTilePass(), LowerPowerToTarget, LowerPowerToTile, registerPowerPasses(), tessera()
 
 ### Community 191 - "Community 191"
 Cohesion: 0.23
@@ -3067,8 +3029,8 @@ Cohesion: 0.40
 Nodes (5): Compilation Phases, Phase 1: Analysis and Planning, Phase 2: Instruction Selection, Phase 3: Code Emission, Phase 4: Binary Generation
 
 ### Community 195 - "Community 195"
-Cohesion: 0.19
-Nodes (8): bool, DeviceTensor, ndarray, str, Upload ``arr`` to device under ``name`` if not already         present. Returns, Replace an existing weight binding with new host bytes.         Frees the old de, Return the cached weight tensor for ``name``. Raises         :class:`KeyError` i, Upload ``arr`` into the activation buffer for ``name``.         On first call, a
+Cohesion: 0.17
+Nodes (12): apple_feature_status(), Return the per-arch status for ``feature``. Raises ``KeyError``     if the featu, Every Apple GPU since M1 supports the Metal 3 surface., simdgroup_async_copy is the Apple equivalent of NVIDIA's     cp.async — availabl, Typos should be loud., test_bfloat_starts_at_m2(), test_dynamic_caching_starts_at_m3(), test_metal3_always_ready() (+4 more)
 
 ### Community 196 - "Community 196"
 Cohesion: 0.40
@@ -3079,12 +3041,12 @@ Cohesion: 0.40
 Nodes (5): After: Tessera Distributed Computing, Before: CUDA Multi-GPU with NCCL, code:python (# Tessera multi-GPU (automatic setup)), code:cuda (// CUDA multi-GPU setup), Multi-GPU CUDA Migration
 
 ### Community 199 - "Community 199"
-Cohesion: 0.14
-Nodes (9): BertEmbeddings, BertPooler, Construct the embeddings from word, position and token_type embeddings., Pool the model by taking the hidden state of the first token., Feed-forward network with various activation functions.     Supports SwiGLU, GEL, Get activation function by name., Universal transformer block supporting various architectures., TesseraMLP (+1 more)
+Cohesion: 0.20
+Nodes (8): bool, _mtl4_available(), P7 (2026-06-01) — fp16 matmul MTL4 routing (size-gated to M==1).  The fp16 GEMV, In 'auto', M>=2 must NOT route (returns None → MPS); only M==1     is eligible., all' mode routes every fp16 2-D matmul (the benchmarking knob);     numerically, test_f16_all_mode_routes_square(), test_f16_auto_mode_gates_to_m_equals_one(), test_f16_m1_route_matches_reference()
 
 ### Community 200 - "Community 200"
-Cohesion: 0.03
-Nodes (43): IntEnum, _apple_gpu_enc_api(), DeviceKind, DeviceProps, MemcpyKind, _MockBackend, _MockHandle, Opaque handle returned by mock operations. (+35 more)
+Cohesion: 0.05
+Nodes (27): IntEnum, DeviceKind, MemcpyKind, _dev(), test_runtime_abi.py — TesseraRuntime mock-mode ABI tests (Phase 6)  All tests ru, Destroy a freshly created stream (mock always succeeds)., Destroy a freshly created event (mock always succeeds)., Return device 0 handle. (+19 more)
 
 ### Community 201 - "Community 201"
 Cohesion: 0.40
@@ -3114,29 +3076,47 @@ Nodes (3): main(), _probe(), _try_load()
 Cohesion: 0.24
 Nodes (10): Regression: ``tessera.require()`` is a true no-op outside an explicit decoration, Calling ``require()`` outside any ``collect_constraints`` scope     must not mut, Nesting works — each scope receives only its own     ``require()`` calls., The context manager raises if the stack was popped out of     order — catches th, A scope opened on one thread does NOT capture ``require()``     calls from anoth, test_nested_scopes_collect_into_innermost(), test_require_inside_scope_collects_into_that_scope(), test_require_outside_scope_is_a_no_op() (+2 more)
 
+### Community 208 - "Community 208"
+Cohesion: 0.17
+Nodes (7): Exhaustive coverage of unusual M × N × K shapes that stress tiling,     alignmen, FP8 bytes_accessed should be half of FP16 for same shape., FP32 bytes should be 2× FP16 for same shape., FLOPs = 2·M·N·K for all edge dims., MFU must not exceed 1.0 even for very large GEMMs., The ridge point satisfies  FLOPs/bytes = peak_tflops/peak_bw.         A GEMM sli, TestGEMMCornerCases
+
 ### Community 209 - "Community 209"
-Cohesion: 0.22
-Nodes (16): _compile_runtime_dylib_if_needed(), _conv_ref(), _make_inputs(), _on_darwin(), Conv2d native-multi-tile spike — regression lock for the cracked MPP path.  The, Single threadgroup, 8×8 dest, VALID 3×3 — was the spike's baseline., Grid-of-threadgroups multi-tile, aligned (dstH,dstW multiples of 8).      The pr, The spike scope is aligned tiles only — unaligned must fail cleanly,     not sil (+8 more)
+Cohesion: 0.24
+Nodes (9): apple_arch_defaults(), AppleGPUArch, _ArchDefaults, tessera.compiler.apple_target — Apple GPU feature-limits target profile.  Audit, Raised when an AppleGPUTargetProfile has invalid settings., Apple GPU architecture family identifiers. Integer values     follow Apple's int, Return the static per-arch limits floor. The runtime probe can     report higher, TesseraAppleGPUTargetError (+1 more)
+
+### Community 210 - "Community 210"
+Cohesion: 0.20
+Nodes (10): _numeric_attention_family_vjp(), vjp_deepseek_sparse_attention(), vjp_gated_attention(), vjp_gated_deltanet(), vjp_hybrid_attention(), vjp_kimi_delta_attention(), vjp_lightning_attention(), vjp_modified_delta_attention() (+2 more)
+
+### Community 211 - "Community 211"
+Cohesion: 0.36
+Nodes (6): OptionalDependencyError, Optional LOTUS adapter for the DeepScholar-Bench concept.  The active, dependenc, Raised when the LOTUS adapter is used without research extras., Minimal adapter boundary for future LOTUS work.      The previous version import, _require_optional_stack(), TesseraLotusDeepScholar
+
+### Community 212 - "Community 212"
+Cohesion: 0.27
+Nodes (4): accumulateCotangent(), AutodiffPass, createAutodiffPass(), PassWrapper<
+                         AutodiffPass,
+                         mlir::OperationPass<mlir::func::FuncOp>>
 
 ### Community 213 - "Community 213"
-Cohesion: 0.09
+Cohesion: 0.10
 Nodes (15): TesseraAttention, native_flash_attention_paged(), Paged variant: q is (B, Tq, H, Dh). kv_pages is iterable of (k_page, v_page),, native_flash_attention(), First Tessera-native attention kernel (PyTorch-based implementation).     - Uses, _repeat_kv(), apply_rope(), precompute_rope_cache() (+7 more)
 
+### Community 214 - "Community 214"
+Cohesion: 0.24
+Nodes (3): CliffordRotorSandwichFoldPass, createCliffordRotorSandwichFoldPass(), RotorSandwichFoldPattern
+
 ### Community 215 - "Community 215"
-Cohesion: 0.16
-Nodes (9): is_full(), LatentKVCacheHandle, num_pages(), Multi-Latent Attention paged KV cache (Theme 5).  DeepSeek's MLA caches the *com, Append a ``(n_new, latent_dim)`` chunk of compressed latents.          Behavior, Drop the oldest ``n`` tokens, shifting the remainder to the front., Read a slice of compressed latents as a ``(end - start, latent_dim)``         ar, Opaque paged latent-KV cache.      Stores a ``[max_seq, latent_dim]`` compressed (+1 more)
+Cohesion: 0.08
+Nodes (15): is_full(), LatentKVCacheHandle, num_pages(), Multi-Latent Attention paged KV cache (Theme 5).  DeepSeek's MLA caches the *com, Append a ``(n_new, latent_dim)`` chunk of compressed latents.          Behavior, Drop the oldest ``n`` tokens, shifting the remainder to the front., Read a slice of compressed latents as a ``(end - start, latent_dim)``         ar, Opaque paged latent-KV cache.      Stores a ``[max_seq, latent_dim]`` compressed (+7 more)
 
 ### Community 216 - "Community 216"
-Cohesion: 0.09
-Nodes (9): GemmaConfig, SwiGLU, RMSNorm, TesseraGemmaForCausalLM, apply_rope(), precompute_rope_cache(), main(), DecoderBlock (+1 more)
+Cohesion: 0.10
+Nodes (7): GemmaConfig, SwiGLU, RMSNorm, TesseraGemmaForCausalLM, main(), DecoderBlock, _maybe_build_rope()
 
-### Community 222 - "Community 222"
-Cohesion: 0.50
-Nodes (4): _cumextrema_jvp(), jvp_cummax(), jvp_cummin(), Shared forward-mode for cummax/cummin.      For each output position i, the tang
-
-### Community 223 - "Community 223"
-Cohesion: 0.50
-Nodes (4): jvp_dynamic_slice(), jvp_dynamic_update_slice(), jvp_slice(), _make_slice()
+### Community 217 - "Community 217"
+Cohesion: 0.25
+Nodes (8): AppleRuntimeLimits, probe_apple_runtime_limits(), Live host limits queried from ``MTLDevice``. The static     ``_APPLE_ARCH_DEFAUL, Query the live ``MetalDeviceContext`` for host-specific limits.     Returns ``No, The probe should never raise. It either returns a fully-populated     ``AppleRun, Cross-check: the new probe should agree with the existing     ``packaged_ml_avai, test_runtime_probe_packaged_ml_agrees_with_existing_helper(), test_runtime_probe_returns_limits_or_none()
 
 ### Community 224 - "Community 224"
 Cohesion: 0.50
@@ -3175,8 +3155,8 @@ Cohesion: 0.50
 Nodes (4): 4.1 `tessera.domain.Rect`, 4. Domain API, code:python (tessera.domain.Rect(dims: tuple[int, ...]) -> Rect), code:python (D = tessera.domain.Rect((4, 128, 256)))
 
 ### Community 235 - "Community 235"
-Cohesion: 0.16
-Nodes (16): _as_table(), memory_evict(), memory_read(), memory_write(), Reference learned-memory primitives for standalone model research.  These functi, Append key/value rows and optionally evict oldest rows to `max_entries`., Evict explicit indices, or keep the newest `keep_last`/`max_entries` rows., Return the per-arg vmap-axis tuple for ``op_name``, or ``None`` if     no overri (+8 more)
+Cohesion: 0.14
+Nodes (17): Top-k weighted read.  Returns ``(values, indices, weights, scores)``.          M, _as_table(), memory_evict(), memory_read(), memory_write(), Reference learned-memory primitives for standalone model research.  These functi, Append key/value rows and optionally evict oldest rows to `max_entries`., Evict explicit indices, or keep the newest `keep_last`/`max_entries` rows. (+9 more)
 
 ### Community 236 - "Community 236"
 Cohesion: 0.22
@@ -3191,16 +3171,12 @@ Cohesion: 0.50
 Nodes (4): 2.1 Overview, 2.2 Component Specifications, 2. System Architecture, code:block1 (┌───────────────────────────────────────────────────────────)
 
 ### Community 239 - "Community 239"
-Cohesion: 0.04
-Nodes (43): _cache_key(), cache_stats(), _capacity_from_env(), clear_graph_ir_cache(), lookup(), G4 (2026-05-19) — process-local memoization of Graph IR builds.  The `@tessera.j, Probe the cache.  Returns a fresh deep copy of the cached     module on hit, ``N, Stash a fresh module in the cache.  No-op when ``source_text``     is empty (mat (+35 more)
+Cohesion: 0.08
+Nodes (25): _cache_key(), cache_stats(), _capacity_from_env(), clear_graph_ir_cache(), lookup(), G4 (2026-05-19) — process-local memoization of Graph IR builds.  The `@tessera.j, Probe the cache.  Returns a fresh deep copy of the cached     module on hit, ``N, Stash a fresh module in the cache.  No-op when ``source_text``     is empty (mat (+17 more)
 
 ### Community 240 - "Community 240"
-Cohesion: 0.08
-Nodes (62): autocast(), Mixed-precision support — Phase F1 of the execution roadmap.  Two pieces:  * :fu, Enter a mixed-precision region.      Inside the ``with`` block, op input arrays, scale(), associative_scan(), axis_index(), axis_name(), axis_size() (+54 more)
-
-### Community 241 - "Community 241"
-Cohesion: 0.28
-Nodes (3): main(), lex(), Tok
+Cohesion: 0.09
+Nodes (44): associative_scan(), axis_index(), axis_name(), axis_size(), AxisFrame, cond(), _find_axis(), fori_loop() (+36 more)
 
 ### Community 242 - "Community 242"
 Cohesion: 0.16
@@ -3230,13 +3206,9 @@ Nodes (19): Tests for the named pipeline capability gates (audit recommendation 
 Cohesion: 0.16
 Nodes (7): ContinuousDiffusionLLM, Run the model and project continuous output to vocabulary logits.          Usefu, Forward diffusion: corrupt x_0 embeddings to x_t.          Args:             x_0, Convert model prediction to x_0 estimate (regardless of pred type)., Compute the diffusion training loss.          Samples a random timestep, corrupt, Continuous (Gaussian) Diffusion Language Model.      Diffusion operates in the t, Args:             x_t:       (B, T, H) noisy embedding sequence at timestep t.
 
-### Community 256 - "Community 256"
-Cohesion: 0.67
-Nodes (3): jvp_conv1d(), _conv1d_forward_fp64(), NCL grouped Conv1d reference that preserves fp64 for adjoint tests.
-
 ### Community 257 - "Community 257"
-Cohesion: 0.67
-Nodes (3): jvp_rmsnorm(), jvp_rmsnorm_safe(), y = x / sqrt(mean(x²) + eps).  Closed-form JVP.
+Cohesion: 0.33
+Nodes (6): dbar(), dz(), _eval_complex(), Wirtinger ``∂f/∂z̄`` evaluated at ``z₀``.      ``∂f/∂z̄ = (1/2)((u_x − v_y) + i(, Coerce ``f(z)``'s result to a python complex regardless of     whether ``f`` ret, Wirtinger ``∂f/∂z`` evaluated at ``z₀``.      Computed via central differences o
 
 ### Community 258 - "Community 258"
 Cohesion: 0.67
@@ -3252,15 +3224,19 @@ Nodes (3): Future Extensions, Planned Features, Research Directions
 
 ### Community 261 - "Community 261"
 Cohesion: 0.04
-Nodes (52): DistributedArray, from_domain(), ndim(), _normalize_dtype(), numel(), DistributedArray — a tensor with an attached ShardSpec.  In Phase 1, physical st, Return per-rank slices along the given mesh axis.          In Phase 1 (CPU, sing, Attach mesh size information so parts() can compute correct splits.         Call (+44 more)
+Nodes (51): DistributedArray, from_domain(), ndim(), _normalize_dtype(), numel(), DistributedArray — a tensor with an attached ShardSpec.  In Phase 1, physical st, Return per-rank slices along the given mesh axis.          In Phase 1 (CPU, sing, Attach mesh size information so parts() can compute correct splits.         Call (+43 more)
 
 ### Community 262 - "Community 262"
 Cohesion: 0.43
 Nodes (5): _np_mla_decode_reference(), MLA-1 + MLA-2 — DeepSeek MLA decode fusion (Schedule IR + Apple GPU runtime).  F, Hand-walked reference matching the fused op's contract., test_apple_gpu_mla_decode_runtime_shim_exposes_symbol(), TestMLADecodeFusedForward
 
+### Community 263 - "Community 263"
+Cohesion: 0.33
+Nodes (4): Tests every weight-matrix GEMM for each Gemma 4 variant across a range     of se, Gemma4-4B Q projection is (seq, 4096, 2560) — validate exact dims., Gemma4-27B FFN-down is (seq, 5632, 22528) — high arithmetic intensity., TestGemma4GEMM
+
 ### Community 264 - "Community 264"
-Cohesion: 0.05
-Nodes (14): DialectRegistry, tessera(), tessera(), main(), main(), tessera(), main(), main() (+6 more)
+Cohesion: 0.04
+Nodes (35): DialectRegistry, tessera(), verifyElementwise(), verifyFlashAttn(), verifyGraphOp(), verifyMatmul(), verifyOptimizerShard(), tessera() (+27 more)
 
 ### Community 265 - "Community 265"
 Cohesion: 0.67
@@ -3275,12 +3251,8 @@ Cohesion: 0.67
 Nodes (3): minimum, type, limit_shared_memory_bytes
 
 ### Community 268 - "Community 268"
-Cohesion: 0.21
-Nodes (13): _np_flash_attn(), _np_layer_norm(), Single-command-buffer attention block — Stage 2 of audit Action 6.  The scaffold, Causal masking propagates through the encoded variant., The headline Stage-2 proof: a complete transformer attention     block — layer_n, Same block, but with a causal mask on the attention. Verifies     the causal fla, Reference flash-attention forward (math-equivalent, not the     online-softmax f, One-shot encoded flash_attn produces correct output. (+5 more)
-
-### Community 269 - "Community 269"
-Cohesion: 0.38
-Nodes (4): D.1 contract change: dynamic if/else is no longer rejected with a     blanket ``, test_dynamic_if_lowers_structurally_with_named_diagnostic(), test_static_if_emits_structured_control_markers(), test_static_range_loop_emits_structured_control_markers()
+Cohesion: 0.50
+Nodes (4): _bench(), main(), MTL4 vs MPS fp16/bf16 matmul routing benchmark (P7, 2026-06-01).  Measures end-t, int
 
 ### Community 270 - "Community 270"
 Cohesion: 0.40
@@ -3295,8 +3267,16 @@ Cohesion: 0.23
 Nodes (5): createLowerMatmulToAppleGPUPass(), ensureExternalDecl(), extractPtr(), LowerMatmulToAppleGPU, LowerMatmulToAppleGPUPass
 
 ### Community 274 - "Community 274"
-Cohesion: 0.80
-Nodes (3): emit(), _emit_naive_hip(), _write_bridge_script()
+Cohesion: 0.40
+Nodes (5): _apple_gpu_mtl4_matmul_sg_f32(), Metal 4 M3 cooperative-matrix matmul symbol. None when unavailable., Metal 4 M3 cooperative-matrix matmul symbol. None when unavailable., Metal 4 M3 cooperative-matrix matmul symbol. None when unavailable., Metal 4 M3 cooperative-matrix matmul symbol. None when unavailable.
+
+### Community 276 - "Community 276"
+Cohesion: 0.50
+Nodes (4): _cumextrema_grad(), Shared backward for cummax/cummin.      `comparator(a, b) -> bool` decides which, vjp_cummax(), vjp_cummin()
+
+### Community 278 - "Community 278"
+Cohesion: 0.67
+Nodes (3): required, type, effects
 
 ### Community 316 - "Community 316"
 Cohesion: 0.24
@@ -3307,40 +3287,40 @@ Cohesion: 0.24
 Nodes (6): createLowerPowerToTargetPass(), createLowerPowerToTilePass(), LowerPowerToTarget, LowerPowerToTile, registerPowerPasses(), tessera()
 
 ### Community 395 - "Community 395"
-Cohesion: 0.04
-Nodes (111): jvp_abs(), jvp_adafactor(), jvp_adam(), jvp_adamw(), jvp_add(), jvp_alibi(), jvp_all_gather(), jvp_all_reduce() (+103 more)
+Cohesion: 0.02
+Nodes (176): _cumextrema_jvp(), jvp_abs(), jvp_adafactor(), jvp_adam(), jvp_adamw(), jvp_add(), jvp_alibi(), jvp_all_gather() (+168 more)
 
 ### Community 396 - "Community 396"
 Cohesion: 0.02
-Nodes (157): Call, CompileArtifactBundle, compile_result_from_bundle(), CompileResult, _extract_primary_op(), Canonical compiler driver — audit recommendation **C** (C.1: the wrapper).  The, Return the status string for one named gate, or ``"unknown"``., Project the canonical answer into a :class:`RuntimeArtifact`.          The runti (+149 more)
+Nodes (163): Call, CompileArtifactBundle, compile_result_from_bundle(), CompileResult, _extract_primary_op(), Canonical compiler driver — audit recommendation **C** (C.1: the wrapper).  The, Return the status string for one named gate, or ``"unknown"``., Project the canonical answer into a :class:`RuntimeArtifact`.          The runti (+155 more)
 
 ### Community 397 - "Community 397"
-Cohesion: 0.05
-Nodes (82): Canonical textual Tessera Graph DSL frontend., Assign, _assignment_result_name(), Binary, Call, ConstDecl, Control, Expr (+74 more)
+Cohesion: 0.07
+Nodes (62): get_op_spec(), Canonical textual Tessera Graph DSL frontend., Assign, _assignment_result_name(), Binary, Call, ConstDecl, Control (+54 more)
 
 ### Community 398 - "Community 398"
 Cohesion: 0.07
-Nodes (55): elementwise_grad(), grad(), hvp(), _normalize_argnums(), Higher-order autodiff convenience surface (deferred-items plan, Item 4).  Provid, Hessian-vector product: ``H @ v`` where ``H = ∇² fn(primals)``.      Computed vi, Return a function that computes the elementwise derivative of ``fn``.      Assum, Tape-aware reduce-sum so an inner op in ``fn`` actually reaches     the gradient (+47 more)
+Nodes (59): elementwise_grad(), grad(), hvp(), _normalize_argnums(), Higher-order autodiff convenience surface (deferred-items plan, Item 4).  Provid, Hessian-vector product: ``H @ v`` where ``H = ∇² fn(primals)``.      Computed vi, Return a function that computes the elementwise derivative of ``fn``.      Assum, Tape-aware reduce-sum so an inner op in ``fn`` actually reaches     the gradient (+51 more)
 
 ### Community 399 - "Community 399"
 Cohesion: 0.08
 Nodes (43): CI-stable harness for ``benchmarks/apple_gpu/benchmark_ga_ebm.py``.  Drives the, The default report (no `include_ebt_sweep`) emits zero sweep rows     and a null, When both backends emit rows for a shape, the summary entry     must include a `, Two consecutive calls return the same `CDLL` handle (no recompile)., `tessera.ga.inner` on a batched Cl(3,0) Multivector returns the     same result, `ebm.ebt_tiny(...)` returns the same `(B, D)` best-candidate     matrix as the e, Sign-flip unaries: reverse / grade_involution / conjugate all     route through, Binary 8×8→8 ops all route through     `_try_apple_gpu_binary_8x8_cl30_f32`. (+35 more)
 
 ### Community 400 - "Community 400"
-Cohesion: 0.16
-Nodes (22): BertConfig, evaluate(), from_pretrained(), generate(), GPT2Config, HuggingFaceTrainer, LlamaConfig, main() (+14 more)
+Cohesion: 0.04
+Nodes (63): apply_rotary_pos_emb(), BertConfig, BertEmbeddings, BertForSequenceClassification, BertModel, BertPooler, evaluate(), _flash_attention() (+55 more)
 
 ### Community 401 - "Community 401"
-Cohesion: 0.17
-Nodes (8): assert_canonical_dtypes(), audit_canonical_dtypes(), Walk the live registry, classify every stored dtype string.      Returns a dict, Assert the registry contains no unknown or unannounced gated dtypes.      Rules, TestRegistryDtypeAudit, All numeric_policy entries should construct with canonical         spellings (th, The walker reports `numeric_policy.storage` / `accum` as the         metadata ke, TestRegistryDtypeAuditPicksUpNumericPolicy
+Cohesion: 0.19
+Nodes (9): assert_canonical_dtypes(), audit_canonical_dtypes(), Walk the live registry, classify every stored dtype string.      Returns a dict, Walk the live registry, classify every stored dtype string.      Returns a dict, Assert the registry contains no unknown or unannounced gated dtypes.      Rules, Assert the registry contains no unknown or unannounced gated dtypes.      Rules, All numeric_policy entries should construct with canonical         spellings (th, The walker reports `numeric_policy.storage` / `accum` as the         metadata ke (+1 more)
 
 ### Community 402 - "Community 402"
 Cohesion: 0.05
-Nodes (20): _gemm_telemetry(), GEMMConfig, benchmark_gemm.py — GEMM benchmark sweep (Phase 6)  Sweeps M/N/K problem sizes a, Analytic roofline model latency (ms)., Time a single configuration using the roofline model as proxy., Run the benchmark for each (M, N, K) in ``sizes``.          Returns a list of GE, Benchmark a single (M, N, K) configuration., Single GEMM problem configuration. (+12 more)
+Nodes (23): _gemm_telemetry(), GEMMBenchmark, GEMMConfig, GEMMResult, benchmark_gemm.py — GEMM benchmark sweep (Phase 6)  Sweeps M/N/K problem sizes a, Analytic roofline model latency (ms)., Time a single configuration using the roofline model as proxy., Run the benchmark for each (M, N, K) in ``sizes``.          Returns a list of GE (+15 more)
 
 ### Community 403 - "Community 403"
-Cohesion: 0.08
-Nodes (51): bernoulli(), beta(), categorical(), _collect_chain(), dirichlet(), from_seed(), from_state(), gamma() (+43 more)
+Cohesion: 0.06
+Nodes (75): bernoulli(), beta(), categorical(), _collect_chain(), dirichlet(), from_seed(), from_state(), gamma() (+67 more)
 
 ### Community 404 - "Community 404"
 Cohesion: 0.04
@@ -3348,7 +3328,7 @@ Nodes (30): Register a constraint. Returns self for chaining., Buffer, data(), d
 
 ### Community 405 - "Community 405"
 Cohesion: 0.08
-Nodes (19): _dict_to_shard_spec(), is_full(), keys(), MemoryStateHandle, metadata(), Sprint D — Persistent memory-state handle for Titans/Atlas-style banks.  Today t, Top-k weighted read.  Returns ``(values, indices, weights, scores)``.          M, Append new entries to the bank.  Triggers eviction when full.          Returns t (+11 more)
+Nodes (18): _dict_to_shard_spec(), is_full(), keys(), MemoryStateHandle, metadata(), Sprint D — Persistent memory-state handle for Titans/Atlas-style banks.  Today t, Append new entries to the bank.  Triggers eviction when full.          Returns t, Evict ``n`` entries using the handle's configured policy. (+10 more)
 
 ### Community 406 - "Community 406"
 Cohesion: 0.05
@@ -3364,35 +3344,35 @@ Nodes (76): Run the memory-model verifier over a :class:`TileIRModule` or     a 
 
 ### Community 409 - "Community 409"
 Cohesion: 0.04
-Nodes (54): str, assert_canonical_dtype(), bits(), canonical(), canonicalize_dtype(), Dtype, from_(), is_canonical() (+46 more)
+Nodes (28): canonicalize_dtype(), Dtype, Normalize a dtype string to its canonical spelling.      Examples     --------, Compute the promotion result of one or more dtypes.      Parameters     --------, Str-compatible typed wrapper around a canonical dtype name.      Created via:, Operator-style promotion: ``Dtype('fp16') | Dtype('bf16')`` →         ``Dtype('f, result_type(), Sprint A0 — canonical-dtype enforcement guard tests.  Locks the public contract (+20 more)
 
 ### Community 410 - "Community 410"
 Cohesion: 0.03
-Nodes (38): AdjointCollectiveInsertionPass, dpAxis, tpAxis, createAdjointCollectiveInsertionPass(), createDeltaAttnChunkingPass(), createHybridAttnExpandPass(), createLightningAttnFusionPass(), DeltaAttnChunkingPass (+30 more)
+Nodes (40): AdjointCollectiveInsertionPass, dpAxis, tpAxis, createAdjointCollectiveInsertionPass(), createDeltaAttnChunkingPass(), createHybridAttnExpandPass(), createLightningAttnFusionPass(), DeltaAttnChunkingPass (+32 more)
 
 ### Community 411 - "Community 411"
-Cohesion: 0.06
-Nodes (52): benchmark_diffusion_llm(), cosine_beta_schedule(), DiffusionLLM, DiffusionLLMTrainer, DiffusionLLMWithRetrieval, DiffusionLoss, extract(), forward() (+44 more)
+Cohesion: 0.08
+Nodes (38): benchmark_diffusion_llm(), cosine_beta_schedule(), DiffusionLLM, DiffusionLLMTrainer, DiffusionLLMWithRetrieval, DiffusionLoss, extract(), forward() (+30 more)
 
 ### Community 412 - "Community 412"
 Cohesion: 0.06
-Nodes (52): _artifact_summary(), _as_numpy(), check_determinism(), check_grad(), debug_artifact(), debug_barrier(), _debug_environment(), debug_trace() (+44 more)
+Nodes (44): _artifact_summary(), _as_numpy(), check_grad(), debug_artifact(), debug_barrier(), _debug_environment(), debug_trace(), debug_value() (+36 more)
 
 ### Community 413 - "Community 413"
 Cohesion: 0.03
-Nodes (35): AsyncCopyLoweringPass, smVersion, createAsyncCopyLoweringPass(), emitCpAsyncFallback(), emitTMACopyAsync(), emitTMADescriptor(), LowerAsyncCopyTMA, smVersion (+27 more)
+Nodes (40): Canon, createCanonicalizeTesseraIRPass(), DropoutZeroSimplify, FuseConvRelu, FuseMatmulBiasGELU, isOp(), TransposeIntoMatmul, createTileIRLoweringPass() (+32 more)
 
 ### Community 414 - "Community 414"
-Cohesion: 0.09
-Nodes (63): Compatibility shim for the shared benchmark compiler contract., ArtifactLevels, BenchmarkOperator, BenchmarkRow, CompilerPath, Correctness, ExecutionKind, Profile (+55 more)
+Cohesion: 0.06
+Nodes (83): Compatibility shim for the shared benchmark compiler contract., ArtifactLevels, BenchmarkOperator, BenchmarkRow, CompilerPath, Correctness, ExecutionKind, Profile (+75 more)
 
 ### Community 415 - "Community 415"
 Cohesion: 0.03
-Nodes (35): FlashAttnLoweringConfig, has_dropout(), tessera.compiler.attn_lower — FlashAttention lowering configuration.  Phase 3: h, Controls how tessera.flash_attn is lowered to FA-4 Tile IR.      Attributes:, Return inline attr dict for the tessera.flash_attn op., TesseraAttnConfigError, GPUTargetProfile, Raised when a GPUTargetProfile has invalid or unsupported settings. (+27 more)
+Nodes (45): GPUTargetProfile, Raised when a GPUTargetProfile has invalid or unsupported settings., Describes the GPU target for a @jit-decorated function.      Attributes:, Return True when dtype is listed for Tensor Core lowering., Return a tessera.target MLIR attribute string for IR emission., TesseraTargetError, Phase 3 — end-to-end flash_attn Graph IR lowering tests.  These tests verify:, The anchoring test from CLAUDE.md §Phase 3 — must pass for Phase 3 done. (+37 more)
 
 ### Community 416 - "Community 416"
-Cohesion: 0.03
-Nodes (63): main(), _parse(), apple_gpu R2 command-buffer batching benchmark.  Compares a dependent chain of N, _time(), float, _apple_gpu_random(), apple_gpu_random_normal(), _apple_gpu_random_sym() (+55 more)
+Cohesion: 0.05
+Nodes (45): main(), _parse(), apple_gpu R2 command-buffer batching benchmark.  Compares a dependent chain of N, _time(), AppleGPUEncodeSession, R2 — command-buffer batching. Encode a chain of device-resident ops into     **o, Encode an elementwise ReLU (layout-agnostic, valid after commit)., Encode an elementwise SiLU = ``x * sigmoid(x)``. (+37 more)
 
 ### Community 417 - "Community 417"
 Cohesion: 0.06
@@ -3400,11 +3380,11 @@ Nodes (12): ms(), tests/test_schedules.py  Tests for noise/masking schedules and
 
 ### Community 418 - "Community 418"
 Cohesion: 0.04
-Nodes (66): cf_rms(), la_feature_map(), reference_linear_attn_f32_stub(), reference_swiglu_f32_stub(), rowop_ref_host(), tessera_apple_gpu_aligned_buffer_nbytes(), tessera_apple_gpu_cf_scan_f32(), tessera_apple_gpu_cf_serial_draft_f32() (+58 more)
+Nodes (70): cf_rms(), la_feature_map(), reference_linear_attn_f32_stub(), reference_swiglu_f32_stub(), rowop_ref_host(), tessera_apple_gpu_aligned_buffer_nbytes(), tessera_apple_gpu_bmm_dev_f32(), tessera_apple_gpu_bmm_dev_f32_enc() (+62 more)
 
 ### Community 419 - "Community 419"
-Cohesion: 0.12
-Nodes (7): Audit-D-3 (2026-05-22) — second pass of direct coverage for ops still in the ``n, TestMemoryDeep, TestMoEDeep, TestNumericsDeep, TestOptimizersDeep, TestRLDeep, TestSparseDeep
+Cohesion: 0.02
+Nodes (20): Audit-D-3 (2026-05-22) — second pass of direct coverage for ops still in the ``n, TestAdvancedAttentionDeep, TestCollectivesDeep, TestLayoutTransformsDeep, TestLinalgDeep, TestLowPrecisionDequantize, TestMemoryDeep, TestModelLayerDeep (+12 more)
 
 ### Community 421 - "Community 421"
 Cohesion: 0.08
@@ -3412,7 +3392,7 @@ Nodes (55): check_grad_geo(), check_jvp_geo(), _flatten_output_to_scalar(), _num
 
 ### Community 422 - "Community 422"
 Cohesion: 0.06
-Nodes (34): BidirectionalAttention, tessera_diffusion_llm/kernels/attention.py  Bidirectional multi-head attention f, Expand KV heads to match Q heads for GQA., Full (non-causal) multi-head attention with GQA support.      Shapes throughout:, Args:             x:         (B, T, hidden_size)             attn_mask: Optional, _repeat_kv(), DiffusionMLP, tessera_diffusion_llm/kernels/mlp.py  Gated MLP (SwiGLU / GeGLU) for diffusion t (+26 more)
+Nodes (31): BidirectionalAttention, tessera_diffusion_llm/kernels/attention.py  Bidirectional multi-head attention f, Expand KV heads to match Q heads for GQA., Full (non-causal) multi-head attention with GQA support.      Shapes throughout:, Args:             x:         (B, T, hidden_size)             attn_mask: Optional, _repeat_kv(), DiffusionMLP, tessera_diffusion_llm/kernels/mlp.py  Gated MLP (SwiGLU / GeGLU) for diffusion t (+23 more)
 
 ### Community 423 - "Community 423"
 Cohesion: 0.09
@@ -3448,11 +3428,11 @@ Nodes (4): Tests for Phase E (KV-cache quantization, rolling window) and Phase F
 
 ### Community 432 - "Community 432"
 Cohesion: 0.08
-Nodes (20): bubble_fraction(), Phase, PipelinePlan, tessera.compiler.pipeline_planner — 1F1B pipeline schedule builder.  Implements, Total clock cycles for the complete schedule (all ranks, all micro-batches)., Generate the full 1F1B schedule as a flat list of ScheduleStep objects., Standard 1F1B (non-interleaved) schedule., Interleaved 1F1B (Megatron-LM virtual pipeline stages).          Each rank holds (+12 more)
+Nodes (19): bubble_fraction(), Phase, PipelinePlan, tessera.compiler.pipeline_planner — 1F1B pipeline schedule builder.  Implements, Total clock cycles for the complete schedule (all ranks, all micro-batches)., Generate the full 1F1B schedule as a flat list of ScheduleStep objects., Standard 1F1B (non-interleaved) schedule., Interleaved 1F1B (Megatron-LM virtual pipeline stages).          Each rank holds (+11 more)
 
 ### Community 433 - "Community 433"
 Cohesion: 0.05
-Nodes (44): BackendKernelEntry, primitive_is_complete(), Arch-3 (2026-05-22) — compute the registry-level     ``backend_kernel = "complet, Arch-3 (2026-05-22) — convenience predicate for status checks., Arch-3 (2026-05-22) — compute the registry-level     ``backend_kernel = "complet, One row of the per-op × per-target × per-dtype matrix.      All dtype strings ar, One row of the per-op × per-target × per-dtype matrix.      All dtype strings ar, bool (+36 more)
+Nodes (40): BackendKernelEntry, primitive_is_complete(), Arch-3 (2026-05-22) — compute the registry-level     ``backend_kernel = "complet, Arch-3 (2026-05-22) — convenience predicate for status checks., Arch-3 (2026-05-22) — compute the registry-level     ``backend_kernel = "complet, One row of the per-op × per-target × per-dtype matrix.      All dtype strings ar, One row of the per-op × per-target × per-dtype matrix.      All dtype strings ar, bool (+32 more)
 
 ### Community 434 - "Community 434"
 Cohesion: 0.06
@@ -3472,11 +3452,11 @@ Nodes (25): CorrDiffBenchmark, CorrDiffResult, default_sweep(), main(), One swee
 
 ### Community 439 - "Community 439"
 Cohesion: 0.08
-Nodes (32): _find_tessera_opt(), Visual-complex-core benchmark tests.  Cross-lane (GA × EBM) library benchmark —, The single most-valuable test in this file: the GA × EBM         composition mus, The Cl(3, 0) bivector grade lives at coefficient indices         3 (e12), 5 (e13, The cross-lane contract: GA and EBM ops MUST share the same     function scope s, test_ir_fixture_co_locates_ga_and_ebm_in_one_function(), test_ir_fixture_names_both_lanes(), test_ir_fixture_roundtrips_through_tessera_opt() (+24 more)
+Nodes (34): Deterministic rotor source.  Samples a bivector axis + angle from     a fixed RN, RotorSampler, _find_tessera_opt(), Visual-complex-core benchmark tests.  Cross-lane (GA × EBM) library benchmark —, The single most-valuable test in this file: the GA × EBM         composition mus, The Cl(3, 0) bivector grade lives at coefficient indices         3 (e12), 5 (e13, The cross-lane contract: GA and EBM ops MUST share the same     function scope s, test_ir_fixture_co_locates_ga_and_ebm_in_one_function() (+26 more)
 
 ### Community 440 - "Community 440"
-Cohesion: 0.07
-Nodes (52): _apply_category_overrides(), _apply_effect_overrides(), _apply_per_name_overrides(), _attn_policy(), _contracts(), coverage_summary(), _existing_contracts(), _existing_coverage() (+44 more)
+Cohesion: 0.06
+Nodes (70): _apply_category_overrides(), _apply_effect_overrides(), _apply_per_name_overrides(), _attn_policy(), _contracts(), coverage_summary(), _existing_contracts(), _existing_coverage() (+62 more)
 
 ### Community 441 - "Community 441"
 Cohesion: 0.07
@@ -3484,23 +3464,23 @@ Nodes (49): _params_to_prevertices(), _polygon_interior_angles(), ``tessera.conf
 
 ### Community 442 - "Community 442"
 Cohesion: 0.09
-Nodes (29): algebra(), CliffordCoreBenchmark, CliffordCoreConfig, CliffordCoreModel, CliffordCoreResult, default_sweep(), main(), make_input() (+21 more)
+Nodes (27): algebra(), CliffordCoreBenchmark, CliffordCoreConfig, CliffordCoreModel, CliffordCoreResult, default_sweep(), main(), make_input() (+19 more)
 
 ### Community 443 - "Community 443"
-Cohesion: 0.14
-Nodes (26): _all_op_names(), collect_op_test_coverage(), coverage_summary(), is_thinly_tested(), _ops_namespace_patterns(), Audit-D (2026-05-22) — Test coverage by op family.  The primitive coverage regis, Return ``(refs, negative_refs, dtypes_seen, files_touched)``.      ``negative_re, Count references in tests/tessera-ir/**/*.mlir. (+18 more)
+Cohesion: 0.10
+Nodes (39): classify_op(), classify_thinly_tested(), needs_direct_test_ops(), OpClassification, Audit-D follow-up (2026-05-22) — classification layer on top of the test-coverag, Classify a single op.      Priority order:       1. Explicit per-name override, Classify every op with ≤1 reference., Return the actionable bucket — these are the ops that need     real direct numer (+31 more)
 
 ### Community 444 - "Community 444"
 Cohesion: 0.08
 Nodes (50): 1. Profile first, optimize second, 2. Differential debugging, 2. Monitor numerical health, 2. Use appropriate precision, 3. Fuse operations when possible, 3. Use appropriate accumulation precision, 4. Overlap computation and communication, Add custom optimization passes (+42 more)
 
 ### Community 445 - "Community 445"
-Cohesion: 0.16
+Cohesion: 0.15
 Nodes (20): TesseraGemmaForCausalLM, _build_rope(), generate(), tessera_gemma/model_tessera.py — Tessera-Gemma decoder-only model.  Supports Gem, Tessera port of the Gemma decoder-only language model.      Usage::          cfg, Args:             input_ids:   (B, T) integer token ids.             kv_caches:, greedy_decode(), greedy_decode_cached() (+12 more)
 
 ### Community 446 - "Community 446"
-Cohesion: 0.09
-Nodes (31): annealing_schedule(), chain_key(), default_sweep(), energy_grid_oracle(), EnergyCoreBenchmark, EnergyCoreConfig, EnergyCoreModel, EnergyCoreResult (+23 more)
+Cohesion: 0.08
+Nodes (36): annealing_schedule(), chain_key(), default_sweep(), energy_grid_oracle(), EnergyCoreBenchmark, EnergyCoreConfig, EnergyCoreModel, EnergyCoreResult (+28 more)
 
 ### Community 447 - "Community 447"
 Cohesion: 0.08
@@ -3511,24 +3491,24 @@ Cohesion: 0.08
 Nodes (29): acceptance_probabilities(), advance_kv(), batch_verify(), DraftTree, expand_tree(), num_nodes(), num_paths(), Speculative decoding scheduler primitives (Theme 6).  Speculative decoding pairs (+21 more)
 
 ### Community 449 - "Community 449"
-Cohesion: 0.08
-Nodes (18): MockCollectiveError, MockRankGroup, tessera.testing.mock_collective — thread-based fake multi-rank group.  Provides, A simulated multi-rank group for testing distributed Tessera programs.      Crea, Run fn on each rank in a separate thread and collect results.          Args:, Reduce-scatter: all-reduce then slice rank's portion., Raised when a mock collective operation fails (e.g., shape mismatch)., _reduce() (+10 more)
+Cohesion: 0.05
+Nodes (31): MockCollectiveError, MockRank, MockRankGroup, tessera.testing.mock_collective — thread-based fake multi-rank group.  Provides, Split each rank's tensor and exchange shards with every other rank.          Arg, Wait until all ranks reach this barrier., A simulated multi-rank group for testing distributed Tessera programs.      Crea, Run fn on each rank in a separate thread and collect results.          Args: (+23 more)
 
 ### Community 450 - "Community 450"
 Cohesion: 0.08
 Nodes (18): Parser, Recursive descent parser for Tessera language, Parse tokens into AST, Parse function definition, Parse function parameters, Parse single parameter, Parse type annotation, Parse tensor type annotation: tensor[shape, dtype] (+10 more)
 
 ### Community 451 - "Community 451"
-Cohesion: 0.11
-Nodes (28): energy_jit(), Decorator: lower a restricted energy function to     :class:`EnergyIRProgram` at, M6 Step 1 + Step 2 tests — shared AST→IR core + energy_jit.  Step 1 locks the co, Smoke: the existing `@clifford_jit` lowering path produces the     same IR shape, A small MLP energy head should lower through the whitelist., ``np.dot(y, y)`` is rejected — the receiver isn't ``energy``., ``energy.softmax(x)`` isn't in the whitelist., v1 keeps execution semantics identical to the original Python     function — cod (+20 more)
+Cohesion: 0.12
+Nodes (24): M6 Step 1 + Step 2 tests — shared AST→IR core + energy_jit.  Step 1 locks the co, Smoke: the existing `@clifford_jit` lowering path produces the     same IR shape, A small MLP energy head should lower through the whitelist., ``np.dot(y, y)`` is rejected — the receiver isn't ``energy``., ``energy.softmax(x)`` isn't in the whitelist., v1 keeps execution semantics identical to the original Python     function — cod, Adding a new op to the whitelist is a deliberate decision., The config is the only thing that differs per-frontend. (+16 more)
 
 ### Community 453 - "Community 453"
 Cohesion: 0.08
 Nodes (39): GA9 — Clifford backend kernel manifest.  Sprint: GA9. Roadmap: docs/audit/ga_ebm, All 17 GA ops with shipped MSL kernels carry status=fused on Apple GPU., NVIDIA / ROCm gated on Phase G/H., geo_product + rotor_sandwich carry all 3 dtypes (fp32 native +     fp16 native M, The 9 pointwise GA3/GA5 ops added in the GA10 follow-on are     fp32-only on App, The Python GA ops accept fp32 + fp64 — manifest mirrors that., The clifford_ prefix dispatch must not break tensor-op manifests., GA9 v1 doesn't use any planned/gated dtype family (mxfp / bfp / etc.). (+31 more)
 
 ### Community 454 - "Community 454"
-Cohesion: 0.29
-Nodes (10): _collect_tsr_symbols_from_cpp(), _collect_tsr_symbols_from_header(), _public_header_surface(), Regression: every C runtime symbol that the implementation exposes must also be, The C ABI is split across ``tessera_runtime.h`` plus the     sibling ``tsr_*.h``, Pull every ``tsr*`` symbol defined in an ``extern "C"`` block.      A defining o, Pull every ``tsr*`` symbol declared in the header., Spot-check the specific symbol the audit flagged. (+2 more)
+Cohesion: 0.12
+Nodes (21): _collect_tsr_symbols_from_cpp(), _collect_tsr_symbols_from_header(), _public_header_surface(), Regression: every C runtime symbol that the implementation exposes must also be, The C ABI is split across ``tessera_runtime.h`` plus the     sibling ``tsr_*.h``, Pull every ``tsr*`` symbol defined in an ``extern "C"`` block.      A defining o, Pull every ``tsr*`` symbol declared in the header., Spot-check the specific symbol the audit flagged. (+13 more)
 
 ### Community 455 - "Community 455"
 Cohesion: 0.25
@@ -3539,8 +3519,8 @@ Cohesion: 0.08
 Nodes (47): _as_array(), decode_init(), ebt_tiny(), ebt_tiny_dispatched_on_gpu(), ebt_tiny_last_route(), _EbtTinyLastRoute, energy(), energy_quadratic() (+39 more)
 
 ### Community 458 - "Community 458"
-Cohesion: 0.08
-Nodes (11): TesseraAttention, PagedKVCache, Append tokens to cache. k,v shapes: (B, T, Hkv, Dh), Minimal paged KV cache for (B, T, Hkv, Dh).     Stores a list of pages with leng, native_flash_attention_paged(), Paged variant: q is (B, Tq, H, Dh). kv_pages is iterable of (k_page, v_page),, native_flash_attention(), First Tessera-native attention kernel (PyTorch-based implementation).     - Uses (+3 more)
+Cohesion: 0.07
+Nodes (13): TesseraAttention, PagedKVCache, Append tokens to cache. k,v shapes: (B, T, Hkv, Dh), Minimal paged KV cache for (B, T, Hkv, Dh).     Stores a list of pages with leng, native_flash_attention_paged(), Paged variant: q is (B, Tq, H, Dh). kv_pages is iterable of (k_page, v_page),, native_flash_attention(), First Tessera-native attention kernel (PyTorch-based implementation).     - Uses (+5 more)
 
 ### Community 459 - "Community 459"
 Cohesion: 0.06
@@ -3570,17 +3550,13 @@ Nodes (47): 0. Goals and Non-Goals, 10. Authoritative References, 1.1 What the f
 Cohesion: 0.15
 Nodes (35): make_backend(), ``kind`` in {"numpy", "apple_gpu", "apple_cpu"}., GumihoConfig, head_dim(), Gumiho draft-model geometry.  Tiny by design — the point of this example is the, tiny_config(), total_draft_tokens(), DecodeMetrics (+27 more)
 
-### Community 466 - "Community 466"
-Cohesion: 0.22
-Nodes (9): buildPMV11LegalizePipeline(), buildPMV11VerifyPipeline(), createGraphToSchedulePass(), createPMV11VerifierPass(), createScheduleToTilePass(), GraphToSchedulePass, registerPMPipelinesV11(), registerPMV11Passes() (+1 more)
-
 ### Community 467 - "Community 467"
 Cohesion: 0.09
 Nodes (21): fa_impl(), register_flash_attention(), conv_impl(), register_conv2d(), ew_impl(), register_elementwise(), benchmark_bridge_script(), emit_json() (+13 more)
 
 ### Community 468 - "Community 468"
-Cohesion: 0.08
-Nodes (26): _GatheredWindow, num_free_blocks(), num_used_blocks(), Device-resident latent KV cache — R4.  The final phase of the GPU-resident archi, Raised on block-pool exhaustion or invalid sequence operations., Device-resident, multi-sequence block-paged latent KV cache (vLLM-style,     on-, Append tokens to ``seq_id``, allocating blocks on demand and writing         the, Return a resident DeviceTensor window [length, dim] (or numpy when         not r (+18 more)
+Cohesion: 0.10
+Nodes (14): _GatheredWindow, num_free_blocks(), num_used_blocks(), Device-resident latent KV cache — R4.  The final phase of the GPU-resident archi, Raised on block-pool exhaustion or invalid sequence operations., Device-resident, multi-sequence block-paged latent KV cache (vLLM-style,     on-, Append tokens to ``seq_id``, allocating blocks on demand and writing         the, Return a resident DeviceTensor window [length, dim] (or numpy when         not r (+6 more)
 
 ### Community 469 - "Community 469"
 Cohesion: 0.06
@@ -3611,8 +3587,8 @@ Cohesion: 0.36
 Nodes (4): AutotunePass, createSpectralAutotunePass(), fnv1a64(), toFlatString()
 
 ### Community 479 - "Community 479"
-Cohesion: 0.05
-Nodes (60): Any, int, str, _apple_gpu_batched_linalg(), apple_gpu_conv2d(), _apple_gpu_mla_decode_sym(), _apple_gpu_mtl4_conv2d_sym(), _apple_gpu_rowop_numpy() (+52 more)
+Cohesion: 0.08
+Nodes (45): Any, int, _apple_gpu_rowop_numpy(), _as_numpy(), _bind_launch_args(), _elapsed_ms(), _execute_apple_cpu_accelerate_artifact(), _execute_apple_cpu_accelerate_metadata() (+37 more)
 
 ### Community 480 - "Community 480"
 Cohesion: 0.04
@@ -3624,15 +3600,15 @@ Nodes (45): Apple M-Series Backend (Phase 8.1 — Lit-testable), Architecture De
 
 ### Community 482 - "Community 482"
 Cohesion: 0.08
-Nodes (17): Describes the ROCm/AMD target for a ``@jit(target=...)`` function.      Attribut, ROCmTargetProfile, Sprint G-1 + H-1 + I-1/I-2/I-3 — Target toolchain pins.  Locks the per-target ha, capabilities.py entries pinned to CUDA 13.2 U1., test_cuda_13_2_marker_present(), test_fixture_exists(), test_fixture_has_metalium_dialect_ops(), test_fixture_uses_bf16() (+9 more)
+Nodes (20): AMDArch, AMD GPU architecture identifiers under ROCm 7.2.3.      Values encode ``int(gfx_, Describes the ROCm/AMD target for a ``@jit(target=...)`` function.      Attribut, ROCmTargetProfile, Sprint G-1 + H-1 + I-1/I-2/I-3 — Target toolchain pins.  Locks the per-target ha, capabilities.py entries pinned to CUDA 13.2 U1., Sprint G/H follow-ups will promote NVIDIA/ROCm artifact_only     entries to `com, test_cuda_13_2_marker_present() (+12 more)
 
 ### Community 483 - "Community 483"
 Cohesion: 0.04
 Nodes (43): 1. Overview, 2. Tessera Dialect Registration, 3.1 `EpilogueKind` Enum Attribute, 3.2 `tessera.effect` Function Attribute, 3.3 `tessera.shard` Argument Attribute, 3. Attributes, 4.1 `tessera.matmul`, 4.2 `tessera.conv2d_nhwc` (+35 more)
 
 ### Community 484 - "Community 484"
-Cohesion: 0.16
-Nodes (17): _as_numpy(), assert_close_to_reference(), assert_finite(), PerformanceExpectation, tessera.testing.qa — shared QA and reliability assertions.  These helpers implem, Convert common tensor-like values to a NumPy array., Assert that an output matches a golden reference within tolerance., Assert that a tensor-like value contains no NaN or Inf values. (+9 more)
+Cohesion: 0.09
+Nodes (33): compile_and_maybe_launch(), CompilerHarnessResult, Compiler test harness helpers for executable artifact workflows., Compile a function, capture its runtime artifact, and optionally launch it., __getattr__(), tessera.testing — test utilities for Tessera Phase 1.  Exports:     MockRankGrou, _as_numpy(), assert_close_to_reference() (+25 more)
 
 ### Community 485 - "Community 485"
 Cohesion: 0.07
@@ -3687,8 +3663,8 @@ Cohesion: 0.05
 Nodes (41): Async launch (returns immediately), Choose tile dimensions, code:c (#include "tessera/tessera_runtime.h"), code:c (tsrDeviceProps props;), code:c (tsrStream stream;), code:c (tsrLaunchHostTileKernelSync(dev, &params, kernel_fn, &payloa), code:c (tsrEvent ev_start, ev_stop;), code:c (tsrRecordEvent(sync_event, stream_a);   // mark a point in A) (+33 more)
 
 ### Community 498 - "Community 498"
-Cohesion: 0.05
-Nodes (61): GEMMBenchmark, GEMMResult, Model FLOP utilisation (0–1)., Result of one GEMM benchmark run., GEMM benchmark sweeping M/N/K configurations.      Parameters     ----------, TestGEMMBenchmarkInit, _assert_result_sane(), bench() (+53 more)
+Cohesion: 0.07
+Nodes (46): _assert_result_sane(), bench(), bench_fp8(), LayerGEMM, ModelSpec, test_gemm_model_shapes.py — GEMM coverage for real model weight shapes.  Three t, Assert that a single GEMMResult is self-consistent., Tests every weight-matrix GEMM for LLaMA 3.2 1B and 3B across both     decode an (+38 more)
 
 ### Community 499 - "Community 499"
 Cohesion: 0.04
@@ -3747,8 +3723,8 @@ Cohesion: 0.05
 Nodes (38): 1. Background: Multi-Tier JIT and Meta-Tracing, 2.1 Proposed Tessera Multi-Tier Architecture, 2.2 Meta-Tracing Integration Points, 2. Integration Architecture Analysis, 3.1 Tier 1: Tessera Interpreter, 3.2 Tier 2: Enhanced Standard Pipeline, 3.3 Tier 3: Trace-Specialized Kernel Generation, 3. Technical Implementation Strategy (+30 more)
 
 ### Community 515 - "Community 515"
-Cohesion: 0.14
-Nodes (18): accept(), AMDGCNInstruction, Instruction, emit, opcode, operands, predicate, lower() (+10 more)
+Cohesion: 0.11
+Nodes (22): accept(), AMDGCNInstruction, Instruction, emit, opcode, operands, predicate, lower() (+14 more)
 
 ### Community 516 - "Community 516"
 Cohesion: 0.05
@@ -3756,7 +3732,7 @@ Nodes (38): 2.10 Architecture-Specific Adaptations, 2.11 Precision-Aware Domain 
 
 ### Community 517 - "Community 517"
 Cohesion: 0.10
-Nodes (20): _collective_telemetry(), CollectiveBenchmark, CollectiveConfig, CollectiveOp, CollectiveResult, benchmark_collective.py — Collective communication benchmark (Phase 6)  Models a, Bus utilization fraction (0–1)., Configuration for one collective benchmark run. (+12 more)
+Nodes (28): FlashAttnBenchmark, Flash-attention benchmark sweeping B/H/S/D configurations.      Parameters     -, _collective_telemetry(), CollectiveBenchmark, CollectiveConfig, CollectiveOp, CollectiveResult, benchmark_collective.py — Collective communication benchmark (Phase 6)  Models a (+20 more)
 
 ### Community 518 - "Community 518"
 Cohesion: 0.10
@@ -3787,8 +3763,8 @@ Cohesion: 0.08
 Nodes (10): choose_mfma(), MFMADescriptor, test_mfma_full_coverage.py — ROCm MFMA table completeness (Phase 6)  Verifies th, FP8 MFMA blocks accumulate in larger K chunks (≥16)., gfx120x uses wave32 — only 16x16 tiles., Mimics the C++ chooseMFMAIntrinsic logic:       1. Filter by target and input dt, TestChooseMFMAFallback, TestGFX120xCoverage (+2 more)
 
 ### Community 525 - "Community 525"
-Cohesion: 0.05
-Nodes (15): tessera(), tessera(), Dialect, registerDialect(), SRDialect, AtlasDialect, nvidia::TesseraNVIDIADialect::initialize(), initialize() (+7 more)
+Cohesion: 0.04
+Nodes (16): tessera(), tessera(), Dialect, registerDialect(), SRDialect, AtlasDialect, nvidia::TesseraNVIDIADialect::initialize(), initialize() (+8 more)
 
 ### Community 526 - "Community 526"
 Cohesion: 0.09
@@ -3823,8 +3799,8 @@ Cohesion: 0.12
 Nodes (32): CanonicalProgram, planned_programs(), program_for(), Tessera canonical-program drivers — M1 / M1.5 deliverable.  A canonical program, Lookup helper — raises KeyError on unknown id., One row of the canonical-program registry.      ``program_id``    — stable ident, _run_conv2d_norm_activation(), _run_decode_init_inner_loop_self_verify() (+24 more)
 
 ### Community 536 - "Community 536"
-Cohesion: 0.09
-Nodes (36): AbiSymbol, apple_gpu_kernel_families(), _classify_symbol(), collect_runtime_abi(), core_runtime_headers_present(), Audit-C (2026-05-22) — Runtime C ABI surface audit.  Catalogues the C ABI symbol, One C ABI symbol Tessera exports., Strip the `tessera_<backend>_` prefix + dtype suffix to get     the canonical op (+28 more)
+Cohesion: 0.10
+Nodes (35): AbiSymbol, apple_gpu_kernel_families(), _classify_symbol(), collect_runtime_abi(), core_runtime_headers_present(), Audit-C (2026-05-22) — Runtime C ABI surface audit.  Catalogues the C ABI symbol, One C ABI symbol Tessera exports., Strip the `tessera_<backend>_` prefix + dtype suffix to get     the canonical op (+27 more)
 
 ### Community 537 - "Community 537"
 Cohesion: 0.05
@@ -3835,8 +3811,8 @@ Cohesion: 0.11
 Nodes (36): _apply_migrations(), async_config(), AsyncCheckpointConfig, _CallableCheckpointModule, CheckpointError, CheckpointManifest, CheckpointState, enable_async() (+28 more)
 
 ### Community 539 - "Community 539"
-Cohesion: 0.14
-Nodes (29): main(), Perfetto-like JSON with compute + comm events.     Compute events: {type:'comput, Heuristic parser for Nsight Compute 'Kernel Profile' CSV export.     Looks for b, read_kernels_csv(), read_nsight_compute_csv(), read_perfetto_trace(), achieved_GBps(), achieved_GFLOPs() (+21 more)
+Cohesion: 0.13
+Nodes (30): main(), Perfetto-like JSON with compute + comm events.     Compute events: {type:'comput, Heuristic parser for Nsight Compute 'Kernel Profile' CSV export.     Looks for b, read_kernels_csv(), read_nsight_compute_csv(), read_perfetto_trace(), achieved_GBps(), achieved_GFLOPs() (+22 more)
 
 ### Community 540 - "Community 540"
 Cohesion: 0.12
@@ -3855,16 +3831,16 @@ Cohesion: 0.10
 Nodes (22): apply_lora(), apply_lora_regex(), apply_qlora_sim(), _ensure_lora_linear(), freeze_by_regex(), in_features(), load_lora_state_dict(), lora_state_dict() (+14 more)
 
 ### Community 544 - "Community 544"
-Cohesion: 0.06
-Nodes (7): PowerDialect, PowerDialect, PowerDialect, PowerDialect, PowerDialect, PowerDialect, mlir::Dialect
+Cohesion: 0.05
+Nodes (9): PowerDialect, PowerDialect, PowerDialect, PowerDialect, PowerDialect, PowerDialect, PowerDialect, PowerDialect (+1 more)
 
 ### Community 545 - "Community 545"
-Cohesion: 0.14
-Nodes (31): CompileReport, emit_compile_report(), JSON-friendly nested dict.  Routes flatten to plain dicts so         the envelop, Stable 16-char sha256 prefix over the report's         non-timing-dependent cont, Push a :class:`CompileReport` to the active sink, if any.      Called by every f, One frontend→codegen path inspectable in one format.      The dataclass is JSON-, compile_session(), Open a :class:`CompileSession` scope.      Inside the scope, every CompileReport (+23 more)
+Cohesion: 0.07
+Nodes (45): capture_compile_reports(), CompileReport, emit_compile_report(), JSON-friendly nested dict.  Routes flatten to plain dicts so         the envelop, Stable 16-char sha256 prefix over the report's         non-timing-dependent cont, Open a scope in which every frontend's ``__call__`` appends     its :class:`Comp, Push a :class:`CompileReport` to the active sink, if any.      Called by every f, One frontend→codegen path inspectable in one format.      The dataclass is JSON- (+37 more)
 
 ### Community 546 - "Community 546"
 Cohesion: 0.11
-Nodes (38): all_primitive_coverages(), primitives_for_model_family(), Sprint C2 plan called for ~40 promoted ops; the table currently         covers ≥, Every op with a registered VJP must show vjp=complete in the registry., S2 must register reductions, tensor algebra, indexing, and scalar math., S0 puts the data pipeline in scope — registry must reflect S15 surface., Unimplemented data extensions still should not pretend to be supported., S0 must explicitly declare the contested boundaries as in-scope. (+30 more)
+Nodes (37): all_primitive_coverages(), Sprint C2 plan called for ~40 promoted ops; the table currently         covers ≥, Every op with a registered VJP must show vjp=complete in the registry., S2 must register reductions, tensor algebra, indexing, and scalar math., S0 puts the data pipeline in scope — registry must reflect S15 surface., Unimplemented data extensions still should not pretend to be supported., S0 must explicitly declare the contested boundaries as in-scope., test_existing_coverage_consults_autodiff_vjp_registry() (+29 more)
 
 ### Community 548 - "Community 548"
 Cohesion: 0.05
@@ -3939,8 +3915,8 @@ Cohesion: 0.09
 Nodes (20): _bpe(), FlashAttnBuilder, FlashAttnGraph, lse_shape(), LSESaveNode, OnlineSoftmaxNode, attn_dialect.py — Python bindings for the Tessera Attention (Attn) dialect.  Pro, Approximate FLOPs for QK^T. (+12 more)
 
 ### Community 566 - "Community 566"
-Cohesion: 0.11
-Nodes (32): classification_summary(), classify_op(), classify_thinly_tested(), needs_direct_test_ops(), OpClassification, Audit-D follow-up (2026-05-22) — classification layer on top of the test-coverag, Classify a single op.      Priority order:       1. Explicit per-name override, Classify every op with ≤1 reference. (+24 more)
+Cohesion: 0.16
+Nodes (19): classification_summary(), Count thinly-tested ops per bucket., Audit-D-2 (2026-05-22) — drift gate for the thin-op classification.  The audit a, At Audit-D-2 landing, 4 Langevin samplers are hardware-gated.     Cap at 12 — Ph, The largest legitimate slice of the thin-op set is     family-covered (losses, R, Structural ops (state-tree, transforms, schedules, AOT,     custom-primitive esc, As of Audit-D-3, every flagship primitive (qr, svd, pooling,     norms, …) has d, Dashboard structure — consumers and docs link into these sections. (+11 more)
 
 ### Community 567 - "Community 567"
 Cohesion: 0.07
@@ -3995,9 +3971,9 @@ Cohesion: 0.09
 Nodes (33): GA6 — Reverse-mode VJPs for multivector operations.  Each VJP function ``vjp_<op, Compute (grad_a, grad_b) for c = bilinear(a, b) using the direct     Cayley-tabl, c = a · b (Clifford product). Direct table contraction., c = a ∧ b — same as geometric product but with the disjoint-index gate., c = a ⌋ b — grade-difference filter ``grade(k) == grade(j) - grade(i)``     (and, L = <a, b>_F (Frobenius) on Cl(p, 0); ``dout`` is a scalar.      For Cl(p, 0) si, L = <a, a>_F. ∂L/∂a = 2 · dout · a., L = |a| = sqrt(<a, a>). ∂L/∂a = (dout / |a|) · a. (+25 more)
 
 ### Community 581 - "Community 581"
-Cohesion: 0.03
-Nodes (25): AttrBase<DeltaArrayAttr, Attribute,
-                                                    DeltaArrayStorage>, AttributeStorage, CreateTopologyOp, DeltaArrayAttr, name, DeltaArrayStorage, values, HaloExchangeOp (+17 more)
+Cohesion: 0.05
+Nodes (15): AttrBase<DeltaArrayAttr, Attribute,
+                                                    DeltaArrayStorage>, AttributeStorage, CreateTopologyOp, DeltaArrayAttr, name, DeltaArrayStorage, values, HaloPackOp (+7 more)
 
 ### Community 582 - "Community 582"
 Cohesion: 0.10
@@ -4111,10 +4087,6 @@ Nodes (28): 1. Delta Connection Module, 1. Gradient Checkpointing for Delta Path
 Cohesion: 0.18
 Nodes (15): Drift gate + structural guards for the op×target conformance matrix.  The dashbo, Overall = weakest non-NA column. Spot-check a few cells., Sanity: at least one ``complete`` cell (so the matrix isn't always     pessimist, matmul_softmax on apple_gpu should be recognized as a real fused     single-kern, matmul_relu on every target should be marked as a compose, never a     fuse — no, The on-disk dashboard must match the freshly-rendered output., The module must not import from arbitrary parts of the codebase —     it can onl, test_apple_gpu_fused_chain_is_marked_fused() (+7 more)
 
-### Community 612 - "Community 612"
-Cohesion: 0.17
-Nodes (9): _flash_attention(), forward(), Universal attention module supporting multiple attention variants.     Automatic, Repeat key/value heads for grouped query attention., Standard attention implementation., Apply Multi-Latent Attention compression., Prepare causal attention mask., repeat_kv() (+1 more)
-
 ### Community 613 - "Community 613"
 Cohesion: 0.06
 Nodes (29): code:python (import tessera as ts), code:python (@ts.jit(bindings={"K": 128})), code:python (from tessera.compiler.gpu_target import GPUTargetProfile, IS), code:python (print(flash_fwd.graph_ir.to_mlir())), code:python (from tessera.compiler.clifford_jit import lower_function_to_), code:python (@ts.jit), code:python (ex = matmul_step.explain()), code:python (from tessera.compiler import FallbackReason, TesseraNativeRe) (+21 more)
@@ -4126,10 +4098,6 @@ Nodes (28): 1. Design Goals, 2. Lexical Conventions, 3. Core Types (BNF), 4. Att
 ### Community 617 - "Community 617"
 Cohesion: 0.07
 Nodes (28): 1. Design Goals, 2. Lexical Conventions, 3. Core Types (BNF), 4. Attributes (BNF), 5.1 Field/Boundary, 5.2 Differential & Stencil, 5.3 Multigrid & Smoothing, 5.4 Temporal (+20 more)
-
-### Community 618 - "Community 618"
-Cohesion: 0.24
-Nodes (6): createLowerPowerToTargetPass(), createLowerPowerToTilePass(), LowerPowerToTarget, LowerPowerToTile, registerPowerPasses(), tessera()
 
 ### Community 619 - "Community 619"
 Cohesion: 0.24
@@ -4196,8 +4164,8 @@ Cohesion: 0.07
 Nodes (28): 10.1 Shared Memory Visibility, 10.2 Device-Wide Publication, 10.3 Mbarrier-Gated TMA Consumption, 10.4 Deterministic Mesh Reduction, 10.5 Scoped Atomics, 10. Examples, 11. Compiler Enforcement, 12. Backend Mapping (+20 more)
 
 ### Community 636 - "Community 636"
-Cohesion: 0.14
-Nodes (27): compile_attention_slice(), compile_mlp_slice(), compile_qwen3_moe_slice(), compile_and_maybe_launch(), CompilerHarnessResult, _assert_claimed_stages(), attention_like_path(), _build_manifest() (+19 more)
+Cohesion: 0.19
+Nodes (21): compile_attention_slice(), compile_mlp_slice(), compile_qwen3_moe_slice(), _assert_claimed_stages(), attention_like_path(), _build_manifest(), _common_artifact_stages(), CompilerExample (+13 more)
 
 ### Community 637 - "Community 637"
 Cohesion: 0.11
@@ -4242,10 +4210,6 @@ Nodes (12): Lexer, Tokenizer for Tessera language, Tokenize the entire source, G
 ### Community 649 - "Community 649"
 Cohesion: 0.11
 Nodes (7): CollectiveCheckpointConfig, Configuration for activation checkpointing.      Parameters     ----------     i, Serialise to a tessera MLIR attribute string., Phase 5 — test_insert_recompute.py  Tests for CollectiveCheckpointConfig and Che, Test CollectiveCheckpointConfig.checkpoint_layers()., TestCheckpointLayers, TestCollectiveCheckpointConfig
-
-### Community 650 - "Community 650"
-Cohesion: 0.18
-Nodes (7): GPT2ForCausalLM, GPT2Model, Base class for all Tessera transformer models.     Handles initialization, loadi, Save model in Hugging Face format., GPT-2 model implementation compatible with Hugging Face., GPT-2 model for causal language modeling., TesseraPreTrainedModel
 
 ### Community 651 - "Community 651"
 Cohesion: 0.12
@@ -4340,16 +4304,16 @@ Cohesion: 0.13
 Nodes (18): chooseDmaDirection(), CopyOp, createLowerTileToMetaliumPass(), extract2DShapeAndStrides(), GemmOp, getElementByteWidth(), getMemSpaceName(), LowerKVCacheToMetalium (+10 more)
 
 ### Community 677 - "Community 677"
-Cohesion: 0.07
-Nodes (44): analytic(), check_cauchy_riemann(), complex_abs(), complex_arg(), conformal_jacobian(), cross_ratio(), dbar(), dtype() (+36 more)
+Cohesion: 0.08
+Nodes (38): analytic(), check_cauchy_riemann(), complex_abs(), complex_arg(), conformal_jacobian(), cross_ratio(), dtype(), from_numpy() (+30 more)
 
 ### Community 678 - "Community 678"
 Cohesion: 0.10
 Nodes (23): _backend_status(), current_session(), measure(), measure_backend(), ProfileEvent, ProfileSession, Runtime profiling helpers for Tessera.  This module provides a small public prof, One profiled operation or region. (+15 more)
 
 ### Community 680 - "Community 680"
-Cohesion: 0.09
-Nodes (11): _IdentityPlusOne, Phase F-MoR — Mixture of Recursions primitives + nn.MixtureOfRecursions.  Forwar, Trivial layer: returns input + 1. Used in tests to verify the     recursion loop, With layer = identity + 1 and depth d for token i, output         for that token, Construct w so that the argmax is deterministic per token —         depth column, The bool mask is True iff the token's target depth >= step., TestMixtureOfRecursionsModule, TestMorPartition (+3 more)
+Cohesion: 0.10
+Nodes (10): _IdentityPlusOne, Phase F-MoR — Mixture of Recursions primitives + nn.MixtureOfRecursions.  Forwar, Trivial layer: returns input + 1. Used in tests to verify the     recursion loop, With layer = identity + 1 and depth d for token i, output         for that token, Construct w so that the argmax is deterministic per token —         depth column, The bool mask is True iff the token's target depth >= step., TestMixtureOfRecursionsModule, TestMorPartition (+2 more)
 
 ### Community 681 - "Community 681"
 Cohesion: 0.06
@@ -4432,8 +4396,8 @@ Cohesion: 0.10
 Nodes (6): Tests for env-var-driven IR dumping (Phase A1).  Covers:   * `tessera.debug_env., TestDiffCommand, TestDumpArtifact, TestDumpDir, TestJitIntegration, TestParseDebugIR
 
 ### Community 704 - "Community 704"
-Cohesion: 0.14
-Nodes (23): _lorentz_boost_along_axis_3d(), _make_rotation_dataset(), _pointcloud_invariant_feature(), GA10 — Tiny-model conformance suite for the geometric-algebra stack.  Sprint: GA, For ``v ⊥ axis`` the inter-vector angle DOES equal the rotation     angle. Verif, Compute a rotation-invariant scalar from a 3D point cloud.      The feature is `, Headline GA-L4 claim: rotating the input point cloud by an     arbitrary 3D rota, Same claim, verified via Tessera's own rotor_sandwich (rather     than an extern (+15 more)
+Cohesion: 0.13
+Nodes (25): _lorentz_boost_along_axis_3d(), _make_rotation_dataset(), _pointcloud_invariant_feature(), GA10 — Tiny-model conformance suite for the geometric-algebra stack.  Sprint: GA, For ``v ⊥ axis`` the inter-vector angle DOES equal the rotation     angle. Verif, Compute a rotation-invariant scalar from a 3D point cloud.      The feature is `, Headline GA-L4 claim: rotating the input point cloud by an     arbitrary 3D rota, Same claim, verified via Tessera's own rotor_sandwich (rather     than an extern (+17 more)
 
 ### Community 705 - "Community 705"
 Cohesion: 0.08
@@ -4476,8 +4440,8 @@ Cohesion: 0.16
 Nodes (16): GumihoWeights, _logsumexp_rows(), PrefixSharedVerifier, PrefixSharingSummary, PrefixVerifyResult, Paged-KV prefix sharing for the Gumiho tree verification.  The naive verifier re, Verify a draft ``bundle`` (from ``draft.build_draft``) against the         cache, Full causal forward over the context; return last-position logits. (+8 more)
 
 ### Community 715 - "Community 715"
-Cohesion: 0.18
-Nodes (18): Basis, _basis_list(), _basis_name(), _blade_product(), dim(), grades(), n(), _name_to_mask() (+10 more)
+Cohesion: 0.14
+Nodes (20): Basis, _basis_list(), _basis_name(), _blade_product(), dim(), grades(), n(), _name_to_mask() (+12 more)
 
 ### Community 716 - "Community 716"
 Cohesion: 0.23
@@ -4500,16 +4464,12 @@ Cohesion: 0.14
 Nodes (24): _dispatch_ref(), ops_registry(), Representative reference-op execution matrix (Test-tree review phase P2-9, 2026-, Spectral family: ``tessera.ops.fft`` matches numpy.fft.fft., M7 family: ``tessera.ops.complex_mul`` matches numpy complex     multiplication, Indexing family: ``tessera.ops.gather`` matches numpy take., RNG family: ``tessera.ops.rng_normal`` is deterministic given a     seed.  We do, Non-differentiable family: ``tessera.ops.floor`` matches numpy. (+16 more)
 
 ### Community 724 - "Community 724"
-Cohesion: 0.15
-Nodes (11): emit(), _emit_naive_cuda(), _write_bridge_script(), emit(), _emit_func_text(), emit(), emit(), ast_to_ir() (+3 more)
+Cohesion: 0.12
+Nodes (14): emit(), _emit_naive_cuda(), _write_bridge_script(), emit(), _emit_naive_hip(), _write_bridge_script(), emit(), _emit_func_text() (+6 more)
 
 ### Community 726 - "Community 726"
 Cohesion: 0.09
 Nodes (12): BayesianAutotuner, Approximate shared-memory footprint (bytes, BF16)., Bayesian autotuner using Optuna TPE + Hyperband pruning.      Falls back to a de, Analytical roofline model with tile- and stage-efficiency factors.          Opti, Search for the best TuningConfig.          Uses Optuna TPE + Hyperband pruning w, Deterministic grid search fallback., Serialise the best config to a tessera MLIR attribute string., Return a reproducible schedule artifact for deployment bundles. (+4 more)
-
-### Community 727 - "Community 727"
-Cohesion: 0.32
-Nodes (10): _hardware_matrix_dtype_terms(), _language_spec_dtype_terms(), Every OP_SPECS entry must carry an explicit dtype_layout_rule value     in the c, test_canonical_doc_tracks_current_and_planned_dtype_surface(), test_canonical_dtype_names_round_trip_graph_ir_metadata(), test_dtype_aliases_normalize_through_graph_ir(), test_every_catalog_op_has_explicit_dtype_layout_contract_status(), test_spec_and_hardware_audit_include_supported_or_planned_dtype_names() (+2 more)
 
 ### Community 728 - "Community 728"
 Cohesion: 0.13
@@ -4541,7 +4501,7 @@ Nodes (24): tessera_x86_amx_gemm_bf16(), amx_block_s8s8_s32(), tessera_x86_amx_g
 
 ### Community 735 - "Community 735"
 Cohesion: 0.01
-Nodes (88): main(), main(), tessera(), tessera(), registerTesseraTPUPasses(), verifySoftmax(), verifyLseSave(), verifySoftmax() (+80 more)
+Nodes (111): main(), main(), verifySoftmax(), verifyLseSave(), verifySoftmax(), getMemRefShape(), opbench_device_init(), seed_from_args() (+103 more)
 
 ### Community 736 - "Community 736"
 Cohesion: 0.08
@@ -4584,8 +4544,8 @@ Cohesion: 0.09
 Nodes (8): CreateHipBackend(), HipBackend, HipBuffer, HipEvent, hip_event, HipStream, hip_stream, set_hip_error()
 
 ### Community 748 - "Community 748"
-Cohesion: 0.13
-Nodes (17): _attn_telemetry(), AttnConfig, AttnResult, FlashAttnBenchmark, benchmark_attention.py — Flash attention benchmark sweep (Phase 6)  Sweeps (batc, Single flash-attention problem configuration., FLOPs for QK^T + softmax + AV (approximate, causal halves QK^T)., Flash-attention benchmark sweeping B/H/S/D configurations.      Parameters     - (+9 more)
+Cohesion: 0.18
+Nodes (8): _attn_telemetry(), AttnConfig, AttnResult, benchmark_attention.py — Flash attention benchmark sweep (Phase 6)  Sweeps (batc, Single flash-attention problem configuration., FLOPs for QK^T + softmax + AV (approximate, causal halves QK^T)., report(), to_json()
 
 ### Community 749 - "Community 749"
 Cohesion: 0.12
@@ -4596,8 +4556,8 @@ Cohesion: 0.12
 Nodes (14): Grid, x, y, z, TiledOperation, allocations, block_dim, grid_dim (+6 more)
 
 ### Community 752 - "Community 752"
-Cohesion: 0.26
-Nodes (13): _decorate(), Audit follow-up A.2 — distinct ``JIT_EAGER_FALLBACK_CONTROL_FLOW`` diagnostic fo, Use a simple ``for x in xs: y = x`` body — the SSA verifier     rejects ``total, The whole point of A.2 — scf functions still execute via eager     Python, just, The canonical compile result must agree that a control-flow     function isn't o, The function lowers to scf.if.* via D.1; the CPU planner now     reports an info, The diagnostic message must name the scf op (e.g.     ``'tessera.scf.if.begin'``, test_compile_result_reports_function_runs_via_eager() (+5 more)
+Cohesion: 0.22
+Nodes (15): _decorate(), Audit follow-up A.2 — distinct ``JIT_EAGER_FALLBACK_CONTROL_FLOW`` diagnostic fo, Use a simple ``for x in xs: y = x`` body — the SSA verifier     rejects ``total, The whole point of A.2 — scf functions still execute via eager     Python, just, A function with an actually-unknown op must still get the     ``UNSUPPORTED_OP``, The canonical compile result must agree that a control-flow     function isn't o, The function lowers to scf.if.* via D.1; the CPU planner now     reports an info, The diagnostic message must name the scf op (e.g.     ``'tessera.scf.if.begin'`` (+7 more)
 
 ### Community 753 - "Community 753"
 Cohesion: 0.14
@@ -4656,8 +4616,8 @@ Cohesion: 0.09
 Nodes (21): Advanced Examples — Compiler Capability Gap Audit, Closed (sized in original audit, now real), Cross-cutting capability themes, Cross-references, Deferred-items plan landings (2026-05-09) + remaining, Historical: original "first commits" recommendation, Per-example status, Phantom APIs referenced (must error or be implemented) (+13 more)
 
 ### Community 772 - "Community 772"
-Cohesion: 0.07
-Nodes (30): _ir_text(), _make_inputs(), _numpy_reference(), Canonical program: ``kv_cache append → prune → read``.  The KV-cache decode stat, Deterministic ``(K_in, V_in)`` tuple — `new_tokens` exceeds     `prune_to`, so t, The append→prune→read pipeline in pure numpy., run(), active_sink_is_capturing() (+22 more)
+Cohesion: 0.11
+Nodes (23): _ir_text(), _make_inputs(), _numpy_reference(), Canonical program: ``rotor_sandwich → ebt_tiny`` — GA + EBM composite.  The comp, Deterministic ``(rotor, points, grad)`` inputs.      ``points.shape == (B * K, D, Pure-numpy version of the chain: rotor_sandwich → take first     D coords → fuse, run(), _make_inputs() (+15 more)
 
 ### Community 773 - "Community 773"
 Cohesion: 0.15
@@ -4712,20 +4672,12 @@ Cohesion: 0.12
 Nodes (11): Symbol table for semantic analysis, Look up a symbol in this table or parent tables, Create and enter a new nested scope, Type checking and inference for Tessera programs, Type check entire program, Type check function definition, Type check a statement, Infer type of an expression (+3 more)
 
 ### Community 786 - "Community 786"
-Cohesion: 0.50
-Nodes (6): buildTesseraCerebrasBackendPipeline(), createBankAwareVectorizePass(), createLowerTileToCerebrasPass(), registerCerebrasLoweringPasses(), registerTesseraCerebrasBackendDialects(), registerTesseraCerebrasBackendPasses()
+Cohesion: 0.25
+Nodes (9): createCerebrasCSLEmitPass(), CSLEmit, emitRegionBodyToCSL(), buildTesseraCerebrasBackendPipeline(), createBankAwareVectorizePass(), createLowerTileToCerebrasPass(), registerCerebrasLoweringPasses(), registerTesseraCerebrasBackendDialects() (+1 more)
 
 ### Community 787 - "Community 787"
-Cohesion: 0.16
-Nodes (24): AMDArch, dtype_set(), hipcc_arch(), lds_capacity_bytes(), mfma_shapes(), tessera.compiler.rocm_target — ROCm 7.2.3 target profile.  Mirrors the structure, AMD GPU architecture identifiers under ROCm 7.2.3.      Values encode ``int(gfx_, Raised when an ROCmTargetProfile has invalid or unsupported settings. (+16 more)
-
-### Community 788 - "Community 788"
-Cohesion: 0.25
-Nodes (4): createNativeSparseAttnFusionPass(), FuseNSABranches, isOp(), NativeSparseAttnFusion
-
-### Community 789 - "Community 789"
-Cohesion: 0.13
-Nodes (16): addErrorReporterPass(), collectMismatches(), ErrorReporterPass, errorLimit, warnShape, findPythonLoc(), PyLoc, col (+8 more)
+Cohesion: 0.18
+Nodes (22): dtype_set(), hipcc_arch(), lds_capacity_bytes(), mfma_shapes(), tessera.compiler.rocm_target — ROCm 7.2.3 target profile.  Mirrors the structure, Raised when an ROCmTargetProfile has invalid or unsupported settings., Return ROCm 7.2.3 status for a per-arch feature., rocm_arch_string() (+14 more)
 
 ### Community 790 - "Community 790"
 Cohesion: 0.09
@@ -4752,7 +4704,7 @@ Cohesion: 0.22
 Nodes (18): _build_decoder_blocks(), _np_llama_decoder_layer(), _np_rmsnorm(), _np_silu(), Apple GPU Llama-style decoder layer end-to-end proof (2026-05-29).  This is the, The jitted single-op / recognized-fusion building blocks., Compose the jitted blocks into one decoder-layer forward.      Residual adds + h, Full pre-norm Llama decoder layer (RMSNorm + attention + SwiGLU)     composed fr (+10 more)
 
 ### Community 796 - "Community 796"
-Cohesion: 0.11
+Cohesion: 0.12
 Nodes (7): LSTM, Multi-step LSTM. Wraps :class:`LSTMCell` and unrolls over time.      ``forward(x, Tests for Phase H2 — LSTM (state-propagation primitive + Module).  Coverage:   *, TestLSTMCellModule, TestLSTMCellOp, TestLSTMModule, TestNoMorePhantoms
 
 ### Community 797 - "Community 797"
@@ -4835,10 +4787,6 @@ Nodes (13): Coerce a :class:`ComplexScalar` or a python ``complex`` /     real t
 Cohesion: 0.23
 Nodes (19): _exists_case_sensitive(), _git_tracked(), _inline_path_exists(), is_archive_path(), is_planning_doc(), is_text_file(), iter_files(), lint_file() (+11 more)
 
-### Community 821 - "Community 821"
-Cohesion: 0.42
-Nodes (7): _ir_text(), _make_inputs(), _numpy_reference(), Canonical program: ``rotor_sandwich → ebt_tiny`` — GA + EBM composite.  The comp, Deterministic ``(rotor, points, grad)`` inputs.      ``points.shape == (B * K, D, Pure-numpy version of the chain: rotor_sandwich → take first     D coords → fuse, run()
-
 ### Community 822 - "Community 822"
 Cohesion: 0.15
 Nodes (19): _extract_apple_gpu_runtime_passes(), Apple GPU pipeline pass-order matrix.  The ``tessera-lower-to-apple_gpu-runtime`, The full sequence must byte-match APPLE_GPU_CANONICAL_ORDER., Each (longer_or_fused, shorter_or_per_op) pair must appear with     longer_pass, The "longest fusion first" macro-contract: every fusion pass     must appear bef, The architectural invariant must be documented in source so a     future reader, Sub-2's attn_local_window_2d lowering belongs with the per-op     attention fami, A safety check: if any documented dependency pair appears in     reverse order i (+11 more)
@@ -4860,8 +4808,8 @@ Cohesion: 0.16
 Nodes (19): Hyperbolic geometry primitives — Poincaré disk + upper half-plane.  Coverage:, For two points on the same vertical line in H⁺, the     hyperbolic distance has, ``cayley_from_disk(cayley_to_disk(z)) == z``., The Cayley transform preserves hyperbolic distance —     distance in H⁺ equals d, As ``|z| → 1``, the hyperbolic distance from 0 → ∞., A Blaschke disk-automorphism ``z ↦ (z − a)/(1 − ā·z)``     preserves the Poincar, test_blaschke_automorphism_is_an_isometry(), test_cayley_is_an_isometry() (+11 more)
 
 ### Community 827 - "Community 827"
-Cohesion: 0.20
-Nodes (21): _pool(), Multi-sequence block-paged MLA cache — vLLM-style paged attention (2026-05-30)., Three concurrent sequences of different lengths decode in one batch; each     mu, Token-by-token decode of two concurrent sequences tracks two independent     sin, Same-length sequences are dispatched together (B>1); the batched result     must, Mixed lengths form multiple groups; every sequence still matches its own     sin, The batched helper equals stacking single-sequence decodes., Interleaving appends across two sequences gives each a non-contiguous     set of (+13 more)
+Cohesion: 0.22
+Nodes (19): _pool(), Multi-sequence block-paged MLA cache — vLLM-style paged attention (2026-05-30)., Three concurrent sequences of different lengths decode in one batch; each     mu, Token-by-token decode of two concurrent sequences tracks two independent     sin, Same-length sequences are dispatched together (B>1); the batched result     must, Mixed lengths form multiple groups; every sequence still matches its own     sin, Interleaving appends across two sequences gives each a non-contiguous     set of, _ref_decoder() (+11 more)
 
 ### Community 828 - "Community 828"
 Cohesion: 0.18
@@ -4960,8 +4908,8 @@ Cohesion: 0.12
 Nodes (18): _numeric_vjp_arg(), Gap 4 (2026-05-20): VJP for 2D local-window attention.      Per-(Hq, Wq) window, Central-difference VJP for small reference-only primitives., Central-difference VJP over numeric leaves in a nested state tree., _rl_numeric_vjp(), _tree_numeric_vjp(), vjp_adafactor(), vjp_attn_local_window_2d() (+10 more)
 
 ### Community 856 - "Community 856"
-Cohesion: 0.10
-Nodes (31): collect_verifier_coverage(), coverage_summary(), _extract_op_block(), _looks_like_op_template(), Arch-2 (2026-05-22) — MLIR verifier coverage dashboard.  This module is the Pyth, One op's verifier status snapshot.      Fields     ------     op_class         T, Return the text of a `def OpName : ... { ... }` block.      We approximate the b, Return a list of ``(op_class, has_verifier_declared)`` for every     ODS op in t (+23 more)
+Cohesion: 0.22
+Nodes (16): collect_verifier_coverage(), coverage_summary(), _extract_op_block(), _looks_like_op_template(), Arch-2 (2026-05-22) — MLIR verifier coverage dashboard.  This module is the Pyth, One op's verifier status snapshot.      Fields     ------     op_class         T, Return the text of a `def OpName : ... { ... }` block.      We approximate the b, Return a list of ``(op_class, has_verifier_declared)`` for every     ODS op in t (+8 more)
 
 ### Community 858 - "Community 858"
 Cohesion: 0.12
@@ -4996,12 +4944,12 @@ Cohesion: 0.11
 Nodes (25): _as_pair(), complex_conjugate(), complex_div(), complex_exp(), complex_log(), complex_mul(), complex_pow(), complex_sqrt() (+17 more)
 
 ### Community 866 - "Community 866"
-Cohesion: 0.13
-Nodes (23): _apple_gpu_dispatch_gelu_gpu(), _apple_gpu_dispatch_unary(), _apple_gpu_mpsgraph_unary_f16(), _apple_gpu_mpsgraph_unary_f32(), _apple_gpu_unary_numpy(), Host reference matching apple_gpu_runtime.mm mpsg_unary_node., Elementwise unary via the MPSGraph lane. Shape-agnostic (flattened).     f32 + f, gelu(x) via the MPSGraph unary lane (op 5). Used as the matmul_gelu     epilogue (+15 more)
+Cohesion: 0.11
+Nodes (26): _apple_gpu_dispatch_gelu_gpu(), _apple_gpu_dispatch_unary(), _apple_gpu_mpsgraph_unary_f16(), _apple_gpu_mpsgraph_unary_f32(), _apple_gpu_unary_numpy(), Host reference matching apple_gpu_runtime.mm mpsg_unary_node., Elementwise unary via the MPSGraph lane. Shape-agnostic (flattened).     f32 + f, gelu(x) via the MPSGraph unary lane (op 5). Used as the matmul_gelu     epilogue (+18 more)
 
 ### Community 867 - "Community 867"
-Cohesion: 0.11
-Nodes (23): get_target_capability(), runtime_status(), PathLike, bytes, available_backends(), backend_capabilities(), BackendCapability, from_json() (+15 more)
+Cohesion: 0.05
+Nodes (47): PathLike, bytes, str, _apple_gpu_mla_decode_rope(), _apple_gpu_mla_decode_rope_f32(), _apple_gpu_mla_decode_rope_half(), _apple_gpu_mla_decode_sym(), apple_gpu_mtl4_f16_mode() (+39 more)
 
 ### Community 868 - "Community 868"
 Cohesion: 0.12
@@ -5048,7 +4996,7 @@ Cohesion: 0.06
 Nodes (53): __call__(), climate_simulation(), compute_training_loss(), convert_haiku_checkpoint(), convert_training_script(), encode_state(), ensemble_forecast(), example_climate_projection() (+45 more)
 
 ### Community 879 - "Community 879"
-Cohesion: 0.11
+Cohesion: 0.12
 Nodes (9): kan_bspline_eval_ref(), createTilingPass(), idx(), TileMatmul, tileM_, tileN_, TilingPassImpl, tileMOpt (+1 more)
 
 ### Community 880 - "Community 880"
@@ -5072,8 +5020,8 @@ Cohesion: 0.24
 Nodes (13): _numeric_grad(), _numeric_jvp(), Conv1d VJP/JVP coverage — S7 layer hardening.  Tests the (V/J)VPs across the ful, Verifies the bare loop math against an analytic computation., Bias tangent flows through the additive constant directly., The fp64 helper is the analytic ground truth — fp32 forward     should match it, test_conv1d_fp64_helper_matches_nn_functional_within_fp32_tolerance(), test_conv1d_jvp_matches_finite_difference() (+5 more)
 
 ### Community 885 - "Community 885"
-Cohesion: 0.36
-Nodes (8): Phase 6 - Error handling and diagnostics guide contract., test_compiler_ir_diagnostics_bridge_to_stable_error_codes_and_where(), test_debug_determinism_failures_surface_stable_nondeterminism_code(), test_docs_map_and_related_guides_link_error_handling_guide(), test_error_handling_guide_exists_and_covers_required_axes(), test_fatal_diagnostics_count_as_errors_and_info_does_not(), test_raise_if_errors_preserves_structured_context(), test_structured_diagnostic_fields_render_code_where_and_hints()
+Cohesion: 0.07
+Nodes (17): ErrorReporter, Collects diagnostics from the compiler/runtime and surfaces them as     structur, Return the SourceLocation of the caller ``depth`` frames up., Record a diagnostic.  Returns the created TesseraDiagnostic., Record a fatal diagnostic., Verify ``actual`` matches ``expected``.          Returns True if shapes match; r, Raise ``TesseraShapeError`` with the first error if any., Raise ``TesseraTargetError`` with the first error if any. (+9 more)
 
 ### Community 886 - "Community 886"
 Cohesion: 0.25
@@ -5140,8 +5088,8 @@ Cohesion: 0.12
 Nodes (15): Authoritative References, C++ x86 Lowering, Capability Status, code:block1 (Python API  (@tessera.jit, @tessera.kernel, Region[...], tes), code:block2 (python/tessera/), Component Map, Four-Layer IR Stack, Key Design Decisions (Locked) (+7 more)
 
 ### Community 908 - "Community 908"
-Cohesion: 0.13
-Nodes (9): emit(), emit(), main(), ast_to_ir(), dump_text(), IRFunction, IRModule, lex() (+1 more)
+Cohesion: 0.16
+Nodes (7): emit(), emit(), main(), ast_to_ir(), dump_text(), IRFunction, IRModule
 
 ### Community 909 - "Community 909"
 Cohesion: 0.22
@@ -5220,8 +5168,8 @@ Cohesion: 0.12
 Nodes (15): Build flag, C++ impl — `TesseraTiling.cpp`, code:tablegen (DeclareOpInterfaceMethods<TilingInterface, [), code:cpp (SmallVector<utils::IteratorType> getLoopIteratorTypes();), code:bash (# 1. ODS regen + library build:), Conv2DNHWCOp stride/pad-aware tiling, Deferred work (v3), Driver-observable sentinels (+7 more)
 
 ### Community 928 - "Community 928"
-Cohesion: 0.07
-Nodes (29): apple_gpu_skip_reason(), Return the diagnostic string for why the runtime is unavailable,     or ``None``, Project 5 (2026-06-01) — conv2d encode-session integration.  Conv2d now joins th, conv2d + silu + conv2d on one chain → one cb commit., conv2d + silu + conv2d on one chain → one cb commit., The high-level surface — ``agpu.conv2d`` inside an     ``@auto_batch`` function, The high-level surface — ``agpu.conv2d`` inside an     ``@auto_batch`` function, The bias-bearing surface is :func:`conv2d_enc` directly (not     routed through (+21 more)
+Cohesion: 0.11
+Nodes (17): Project 5 (2026-06-01) — conv2d encode-session integration.  Conv2d now joins th, conv2d + silu + conv2d on one chain → one cb commit., conv2d + silu + conv2d on one chain → one cb commit., The high-level surface — ``agpu.conv2d`` inside an     ``@auto_batch`` function, The high-level surface — ``agpu.conv2d`` inside an     ``@auto_batch`` function, The bias-bearing surface is :func:`conv2d_enc` directly (not     routed through, The bias-bearing surface is :func:`conv2d_enc` directly (not     routed through, ``groups`` must evenly divide ``Cin`` and ``Cout``. The Python     wrapper catch (+9 more)
 
 ### Community 929 - "Community 929"
 Cohesion: 0.36
@@ -5304,7 +5252,7 @@ Cohesion: 0.13
 Nodes (11): _family_for(), Bucket ops into a small set of families for table grouping., Build the 8-axis row for a single op name., support_row_for(), Regression guards for the M7 (Visual Complex Analysis) audit visibility fixes., E3 (2026-05-20): the M7 long-tail ops have no fused MSL         kernel today, bu, Every name in ``_M7_INVENTORY`` must resolve to a real         callable in one o, Every aliased name must exist in         ``backend_manifest._COMPLEX_APPLE_GPU_F (+3 more)
 
 ### Community 949 - "Community 949"
-Cohesion: 0.33
+Cohesion: 0.30
 Nodes (4): CheckpointIRAnnotator, Annotates a list of layer names with ``tessera_sr.checkpoint`` markers     accor, Integration: use annotator with the config attached by the decorator., TestAnnotatorViaDecorator
 
 ### Community 950 - "Community 950"
@@ -5350,10 +5298,6 @@ Nodes (13): Dialect, Dtypes & tensor cores, Inference semantics (Retention), Low
 ### Community 960 - "Community 960"
 Cohesion: 0.31
 Nodes (13): S8 tiny-model conformance manifest.  These examples are intentionally small enou, manifest(), surfaces_covered(), TinyModelSpec, _assert_loss_grad(), _assert_tree_shapes(), S8 real tiny-model conformance across the S2-S15 standalone surface., test_s8_compiler_artifacts_for_foundation_targets() (+5 more)
-
-### Community 962 - "Community 962"
-Cohesion: 0.22
-Nodes (11): buildSdyMesh(), buildSdySharding(), collectMeshAxes(), inferRank(), ParsedShard, axes, dims, kind (+3 more)
 
 ### Community 963 - "Community 963"
 Cohesion: 0.25
@@ -5412,8 +5356,8 @@ Cohesion: 0.13
 Nodes (7): _make_module(), Phase I — DDP / FSDP wrapper tests.  Uses `tessera.testing.mock_collective.MockR, Type-check users can write `isinstance(wrapper, FSDP)` and         catch ZeRO3 t, Forward is unchanged from FSDP — ZeRO3 is a stage-3-flagging         wrapper, no, End-to-end: ZeRO3 + a 4-rank MockRankGroup. Same correctness         contract as, TestDDP, TestZeRO3
 
 ### Community 981 - "Community 981"
-Cohesion: 0.24
-Nodes (6): createLowerPowerToTargetPass(), createLowerPowerToTilePass(), LowerPowerToTarget, LowerPowerToTile, registerPowerPasses(), tessera()
+Cohesion: 0.13
+Nodes (8): createLowerPowerToTargetPass(), createLowerPowerToTilePass(), LowerPowerToTarget, LowerPowerToTile, registerPowerPasses(), tessera(), createLowerTPPToTargetIRPass(), LowerTPPToTargetIR
 
 ### Community 982 - "Community 982"
 Cohesion: 0.14
@@ -5434,10 +5378,6 @@ Nodes (13): Archived Pre-Canonical Volumes, Canonical References (start here), C
 ### Community 988 - "Community 988"
 Cohesion: 0.13
 Nodes (13): 1. Optional Metadata Contract + Drift Gate, 2. `to_graph_ir_view()` Contract, 3. Normalization Pipeline Ordering, 4. Optimization Stays Locked Until Triggered, 5. Per-Phase Entry / Exit / Drift Criteria, code:python (NORMALIZATION_PIPELINE: tuple[Callable[[GraphIRFunction], No), Decision, Five Load-Bearing Refinements (+5 more)
-
-### Community 989 - "Community 989"
-Cohesion: 0.22
-Nodes (9): _apple_gpu_mla_decode_rope(), _apple_gpu_mla_decode_rope_f32(), _apple_gpu_mla_decode_rope_half(), f16 / bf16 decoupled-RoPE symbol: 5 uint16 tensor inputs + 4 f32 cos/sin     + u, MLA decode with decoupled RoPE (explicit per-head K).      DeepSeek-style MLA: e, f16 / bf16 decoupled-RoPE symbol: 5 uint16 tensor inputs + 4 f32 cos/sin     + u, MLA decode with decoupled RoPE (explicit per-head K).      DeepSeek-style MLA: e, f16 / bf16 decoupled-RoPE symbol: 5 uint16 tensor inputs + 4 f32 cos/sin     + u (+1 more)
 
 ### Community 990 - "Community 990"
 Cohesion: 0.13
@@ -5524,8 +5464,8 @@ Cohesion: 0.24
 Nodes (10): append_csv(), append_csv_header(), load(), pick_or_run(), PowerAutotuner(), run_sweep(), save(), write_txt() (+2 more)
 
 ### Community 1011 - "Community 1011"
-Cohesion: 0.09
-Nodes (18): FlowMatchingLLM, generate(), tessera_diffusion_llm/models/flow_match.py  Flow Matching Language Model (Rectif, Linear interpolation: x_t = (1-t)·x_0 + t·x_1.          Args:             x_0: (, Conditional flow matching objective.          Samples t ~ Uniform(0, 1), interpo, Rectified-Flow language model operating in embedding space.      The model learn, Predict velocity field v_θ(x_t, t).          Args:             x_t:       (B, T,, generate() (+10 more)
+Cohesion: 0.08
+Nodes (21): FlowMatchingLLM, generate(), tessera_diffusion_llm/models/flow_match.py  Flow Matching Language Model (Rectif, Linear interpolation: x_t = (1-t)·x_0 + t·x_1.          Args:             x_0: (, Conditional flow matching objective.          Samples t ~ Uniform(0, 1), interpo, Rectified-Flow language model operating in embedding space.      The model learn, Predict velocity field v_θ(x_t, t).          Args:             x_t:       (B, T,, generate() (+13 more)
 
 ### Community 1013 - "Community 1013"
 Cohesion: 0.14
@@ -5580,16 +5520,16 @@ Cohesion: 0.20
 Nodes (13): flow_lines — streamline tracing for complex velocity fields.  Coverage:    - Con, ``f(z) = 1 + i`` — every seed moves on a 45° diagonal., ``f(z) = i·z`` rotates each point around the origin —     the magnitude of the t, ``f(z) = z`` — outgoing rays; magnitude grows monotonically., ``f(z) = z`` blows up exponentially; escape_radius=2 cuts     early., Each trajectory's first sample is its (x, y) seed., test_constant_flow_is_horizontal_lines(), test_escape_radius_truncates_trajectory() (+5 more)
 
 ### Community 1027 - "Community 1027"
-Cohesion: 0.14
-Nodes (20): MLAPagedDecoder, Single-sequence MLA decoder over a paged latent + rope cache.      Parameters, Latent + rope bytes per token (shared across heads) — the footprint         that, Append ``n_new`` tokens' compressed latent + shared rope key.          c_kv ``[n, Drop the oldest ``n`` tokens from both caches (rolling window)., Decode a single query against the full cached window.          q_nope ``[num_hea, _full_window_ref(), MLA paged-cache decoder — production-serving wiring (2026-05-30).  `tessera.cach (+12 more)
+Cohesion: 0.33
+Nodes (14): _full_window_ref(), MLA paged-cache decoder — production-serving wiring (2026-05-30).  `tessera.cach, After eviction the remaining keys keep their ABSOLUTE RoPE positions, so     the, From-scratch reference: rebuild explicit per-head K/V from the latent and     ru, _rope(), _setup(), test_paged_cache_footprint(), test_paged_decode_matches_full_window_each_step() (+6 more)
 
 ### Community 1028 - "Community 1028"
 Cohesion: 0.28
 Nodes (13): _bridge_row(), Operator-bench contract tests (Tessera_Operator_Benchmarks bridge).  Marked `slo, Phase A2 (2026-05-20): lock in the ``compile_only`` → ``runnable``     promotion, test_operator_artifact_samples_cover_every_registered_operator(), test_operator_bridge_artifact_mode_validates_full_spine_bundles(), test_operator_bridge_maps_every_registered_operator_to_runtime_artifacts(), test_operator_bridge_native_runtime_milestone_is_explicitly_pending(), test_operator_bridge_reports_structured_invalid_cases() (+5 more)
 
 ### Community 1029 - "Community 1029"
-Cohesion: 0.20
-Nodes (13): TPP solver Python-side wiring tests.  Locks the Python frontmatter for the TPP s, If we rename ``tpp-space-time`` the C++ ODS and lit fixtures     have to change, Adding/removing a TPP pass is a deliberate decision., Every Python-declared pass must have a corresponding C++ file     under ``src/so, Honest reporting: dialect + passes + alias + lit fixtures wired,     Python embe, The four lit fixtures referenced in the README must exist., test_cxx_pass_files_match_python_surface(), test_lit_fixtures_present_on_disk() (+5 more)
+Cohesion: 0.13
+Nodes (17): TPP solver Python-side wiring tests.  Locks the Python frontmatter for the TPP s, The four lit fixtures referenced in the README must exist., If we rename ``tpp-space-time`` the C++ ODS and lit fixtures     have to change, Adding/removing a TPP pass is a deliberate decision., Every Python-declared pass must have a corresponding C++ file     under ``src/so, Dialect + passes + alias + lit fixtures always wired. Glass-jaw     #2 (2026-06-, ``solve()`` either runs in-process (lib built) or raises a clear     build hint, The four lit fixtures referenced in the README must exist. (+9 more)
 
 ### Community 1030 - "Community 1030"
 Cohesion: 0.28
@@ -5684,8 +5624,8 @@ Cohesion: 0.23
 Nodes (6): createLowerLinearAttnToAppleGPUPass(), ensureExternalDecl(), extractPtr(), featureMapToInt(), LowerLinearAttnToAppleGPU, LowerLinearAttnToAppleGPUPass
 
 ### Community 1054 - "Community 1054"
-Cohesion: 0.11
-Nodes (11): createLowerMLADecodeFusionToAppleGPUPass(), ensureExternalDecl(), extractPtr(), LowerMLADecodeFusionToAppleGPU, LowerMLADecodeFusionToAppleGPUPass, createLowerRowOpToAppleGPUPass(), ensureExternalDecl(), extractPtr() (+3 more)
+Cohesion: 0.23
+Nodes (6): createLowerRowOpToAppleGPUPass(), ensureExternalDecl(), extractPtr(), LowerRowOpToAppleGPU, LowerRowOpToAppleGPUPass, rowKind()
 
 ### Community 1055 - "Community 1055"
 Cohesion: 0.22
@@ -5700,7 +5640,7 @@ Cohesion: 0.15
 Nodes (13): 6.1 Precision Management, 6.2 Numerical Stability, 6.3 Deterministic Computation, 7.1 Basic Autodiff, 7.2 Custom Gradients, 7.3 Advanced Autodiff Patterns, Chapter 6: Numerical Computing, code:python (# Mixed precision context managers) (+5 more)
 
 ### Community 1058 - "Community 1058"
-Cohesion: 0.15
+Cohesion: 0.18
 Nodes (10): InferOptions, mode, preset, PDDLInferPlanPass, PlanValidatePass, ValidateOptions, presetsPath, pythonValidator (+2 more)
 
 ### Community 1059 - "Community 1059"
@@ -5726,10 +5666,6 @@ Nodes (16): 3.1 `tessera.attn.lse.save`, 3.2 `tessera.attn.lse.load`, 3.3 `tesse
 ### Community 1064 - "Community 1064"
 Cohesion: 0.15
 Nodes (13): 3.1 `tile.alloc_shared`, 3.2 `tile.async_copy`, 3.3 `tile.wait_async`, 3.4 `tile.mma`, 3.5 `tile.reduce`, 3.6 `tile.barrier`, 3. Core `tile.*` Operations, code:mlir (%smem = tile.alloc_shared : memref<128x64xf16, 1> {swizzle =) (+5 more)
-
-### Community 1067 - "Community 1067"
-Cohesion: 0.17
-Nodes (9): PipelineConfig, doubleBuffer, order, overlap, reuse, stages, PipelineOverlapPass, readConfig() (+1 more)
 
 ### Community 1068 - "Community 1068"
 Cohesion: 0.29
@@ -5896,7 +5832,7 @@ Cohesion: 0.15
 Nodes (11): code:bash (cmake -S . -B build-nvidia \), code:bash (cmake -S . -B build-nvidia-cuda \), code:bash (mkdir -p build && cd build), code:bash (./bench_gpu > ../bench/reports/gpu_results.csv), code:block5 (kernel,dtype,path,M,N,K,ms,tflops), Components, GPU Micro-Bench & HTML Report, LLVM/MLIR 21 Artifact Build (+3 more)
 
 ### Community 1133 - "Community 1133"
-Cohesion: 0.24
+Cohesion: 0.26
 Nodes (5): findEnclosingMeshRegion(), HaloMeshIntegrationPass, meshPolicyOpt, reconcileBCMesh(), registerHaloMeshIntegrationPass()
 
 ### Community 1135 - "Community 1135"
@@ -5912,8 +5848,8 @@ Cohesion: 0.36
 Nodes (11): Apple GPU R1 — device-resident bmm (op-to-op residency).  `runtime._apple_gpu_bm, C = bmm(A, B); D = bmm(C, E). The intermediate C is consumed by the     second b, A 3-deep chain; only the final output is read back to host., _ref_bmm(), _require(), test_chain_keeps_intermediate_resident(), test_device_bmm_broadcast_B(), test_device_bmm_matches_numpy() (+3 more)
 
 ### Community 1139 - "Community 1139"
-Cohesion: 0.29
-Nodes (14): Run all benchmark families and return a :class:`BenchmarkSuite`.      Parameters, run_all_benchmarks(), _env(), Focused guards for the benchmark-surface repair work., test_apple_fusion_smoke_writes_output_or_skip_reason(), test_benchmark_manifest_promotes_deepscholar_and_adds_fusion_row(), test_benchmark_rows_have_execution_runtime_and_compiler_fields(), test_deepscholar_lotus_adapter_imports_without_research_extras() (+6 more)
+Cohesion: 0.34
+Nodes (12): _env(), Focused guards for the benchmark-surface repair work., test_apple_fusion_smoke_writes_output_or_skip_reason(), test_benchmark_manifest_promotes_deepscholar_and_adds_fusion_row(), test_benchmark_rows_have_execution_runtime_and_compiler_fields(), test_deepscholar_lotus_adapter_imports_without_research_extras(), test_deepscholar_smoke_writes_current_api_json(), test_operator_benchmark_coverage_dashboard_is_current() (+4 more)
 
 ### Community 1140 - "Community 1140"
 Cohesion: 0.28
@@ -6023,10 +5959,6 @@ Nodes (10): Build & Test, code:bash (mkdir -p build && cd build), code:block2 (B
 Cohesion: 0.17
 Nodes (10): Backend Manifest, code:bash (.venv/bin/python benchmarks/apple_gpu/benchmark_ga_ebm.py --), code:bash (.venv/bin/python -m pytest \), GA + EBM Execution Status, Layer Notes, MLIR / Lit, Native Execution, Python Reference (+2 more)
 
-### Community 1168 - "Community 1168"
-Cohesion: 0.52
-Nodes (10): registerTPPDialect(), registerTPPPasses(), registerTPPPipelines(), tessera_tpp_createAsyncPrefetchPass(), tessera_tpp_createDistributeHaloPass(), tessera_tpp_createFuseStencilTimePass(), tessera_tpp_createHaloInferPass(), tessera_tpp_createLegalizeSpaceTimePass() (+2 more)
-
 ### Community 1169 - "Community 1169"
 Cohesion: 0.18
 Nodes (11): Cluster-Aware Barrier Conversion, code:cpp (class TileIROperationConverter {), code:cpp (void convertMMAOperation(tile::MmaOp op, const TileIRFunctio), code:cpp (void convertAsyncCopyOperation(tile::CpAsyncOp op, const Til), code:cpp (void convertBarrierOperation(tile::BarrierOp op, const TileI), code:cpp (class DistributedSharedMemoryManager {), Core Operation Converter, Distributed Shared Memory Management (+3 more)
@@ -6102,10 +6034,6 @@ Nodes (9): name, passes, provenance, author, license, smoke, exe, env (+1 more)
 ### Community 1189 - "Community 1189"
 Cohesion: 0.24
 Nodes (6): RMSNorm, tessera_gemma/kernels/rmsnorm_tessera.py  RMSNorm for Gemma — used both as a pre, Root-Mean-Square Layer Norm, no mean subtraction.      Gemma uses this with lear, x: (..., dim)  — arbitrary batch / sequence prefix dimensions.         Returns t, Factory that creates an RMSNorm tagged for Tessera-compiler lowering., tessera_rmsnorm()
-
-### Community 1190 - "Community 1190"
-Cohesion: 0.67
-Nodes (5): verifyElementwise(), verifyFlashAttn(), verifyGraphOp(), verifyMatmul(), verifyOptimizerShard()
 
 ### Community 1192 - "Community 1192"
 Cohesion: 0.18
@@ -6337,7 +6265,7 @@ Nodes (9): _have_lit(), _have_tessera_opt(), Regression: lit ``TESSERA_OPT`` / `
 
 ### Community 1256 - "Community 1256"
 Cohesion: 0.25
-Nodes (7): MLIR Verifier Sprint V1+V2+V3 (2026-05-22) — structural guard.  The verifier spr, The per-SM head_dim ceiling table must be in TesseraOps.cpp., test_sprint_lit_fixtures_present(), test_sprint_v2_layout_pass_file_exists(), test_sprint_v3_per_sm_head_dim_table_present(), test_sprint_v3b_lit_fixture_shape(), test_sprint_v8_queue_diagnostic_codes_present()
+Nodes (7): MLIR Verifier Sprint V1+V2+V3 (2026-05-22) — structural guard.  The verifier spr, Each of the 3 Sprint V1 ops must declare `let hasVerifier = 1;`     in TesseraOp, test_sprint_lit_fixtures_present(), test_sprint_v1_op_has_hasverifier(), test_sprint_v2_layout_pass_file_exists(), test_sprint_v3b_lit_fixture_shape(), test_sprint_v8_queue_diagnostic_codes_present()
 
 ### Community 1257 - "Community 1257"
 Cohesion: 0.25
@@ -6379,10 +6307,6 @@ Nodes (8): Best Practices, code:block1 (Development → AOT Compilation → Pack
 Cohesion: 0.40
 Nodes (5): Advanced Optimization Patterns, code:python (class CustomOptimizationPass(ts.optimization.Pass):), code:python (class RuntimeAdaptiveOptimizer:), Custom Optimization Passes, Dynamic Optimization at Runtime
 
-### Community 1268 - "Community 1268"
-Cohesion: 0.23
-Nodes (5): createLowerSoftmaxToAppleGPUPass(), ensureExternalDecl(), extractPtr(), LowerSoftmaxToAppleGPU, LowerSoftmaxToAppleGPUPass
-
 ### Community 1269 - "Community 1269"
 Cohesion: 0.40
 Nodes (6): energy_head_bilinear(), grad_y_autodiff(), inner_step(), main(), Timer, t0
@@ -6408,8 +6332,8 @@ Cohesion: 0.44
 Nodes (8): Add, Assign, Function, MatMul, Module, Op, Return, Stmt
 
 ### Community 1275 - "Community 1275"
-Cohesion: 0.30
-Nodes (4): lex(), Tok, Parser, SyntaxError
+Cohesion: 0.17
+Nodes (9): lex(), Tok, Parser, lex(), Tok, NamedTuple, lex(), Tok (+1 more)
 
 ### Community 1276 - "Community 1276"
 Cohesion: 0.44
@@ -6433,7 +6357,7 @@ Nodes (8): code:block1 (x  : (B, H, W, C_in)), code:block2 (PYTHONPATH=.:python 
 
 ### Community 1282 - "Community 1282"
 Cohesion: 0.04
-Nodes (56): OptionalDependencyError, Optional LOTUS adapter for the DeepScholar-Bench concept.  The active, dependenc, Raised when the LOTUS adapter is used without research extras., Minimal adapter boundary for future LOTUS work.      The previous version import, _require_optional_stack(), TesseraLotusDeepScholar, CDLL, Path (+48 more)
+Nodes (47): RuntimeError, apple_gpu_conv2d(), _apple_gpu_dispatch_matmul_bias_act(), _apple_gpu_mtl4_conv2d_sym(), apple_gpu_mtl4_matmul2d_epilogue(), _apple_gpu_mtl4_mlp_session_destroy_sym(), _apple_gpu_mtl4_mlp_session_run_dev_sym(), _apple_gpu_mtl4_mlp_session_run_sym() (+39 more)
 
 ### Community 1283 - "Community 1283"
 Cohesion: 0.53
@@ -6515,14 +6439,6 @@ Nodes (8): Adding a new required lane, Branch protection — required CI checks,
 Cohesion: 0.40
 Nodes (6): Inputs for the rotor-conditioned EBT workload., Python-reference rotor-conditioned EBT workload.      Pipeline (per K candidate), Apple-GPU rotor-conditioned EBT workload through public APIs.      Calls ``ga.ex, _workload_rotor_conditioned_ebt_inputs(), _workload_rotor_ebt_apple_gpu_path(), _workload_rotor_ebt_python_path()
 
-### Community 1303 - "Community 1303"
-Cohesion: 0.29
-Nodes (5): BertForSequenceClassification, BertModel, BERT model implementation compatible with Hugging Face., Prepare attention mask for attention layers., BERT model for sequence classification tasks.
-
-### Community 1306 - "Community 1306"
-Cohesion: 0.40
-Nodes (3): createLowerKANToTesseraPass(), LowerKANPass, PassWrapper<LowerKANPass, mlir::OperationPass<mlir::ModuleOp>>
-
 ### Community 1308 - "Community 1308"
 Cohesion: 0.22
 Nodes (9): 3.1 Distributed Training Engine, 3.2 Data Loading and Processing, 5.1 Automatic Performance Tuning, code:python (@tessera.data_pipeline), code:python (@tessera.performance_optimizer), code:python (@tessera.distributed_trainer), Migration Strategy: "Tessera Core", Phase 3: Training Infrastructure Migration (3 months) (+1 more)
@@ -6562,10 +6478,6 @@ Nodes (9): Beginner, Everything included, Familiar concepts:, Intermediate, Lear
 ### Community 1319 - "Community 1319"
 Cohesion: 0.22
 Nodes (9): 3.6 Distributed Tensors and Sharding, Accessing per-rank shards, code:python (# .parts(axis) returns a list of per-rank DistributedArray s), code:mlir (# ShardSpec(partition=(1,), mesh_axes=("tp",))), code:python (import tessera), code:python (# Contiguous block partition — most common), Distribution strategies, ShardSpec in IR (+1 more)
-
-### Community 1320 - "Community 1320"
-Cohesion: 0.47
-Nodes (3): createLowerTileToPTXPass(), LowerTileToPTXPass, emitTcgen05InlineAsm()
 
 ### Community 1321 - "Community 1321"
 Cohesion: 0.44
@@ -6644,12 +6556,8 @@ Cohesion: 0.22
 Nodes (9): 8.1 Phase 1: Foundation (Weeks 1-4), 8.2 Phase 2: Optimization Engine (Weeks 5-8), 8.3 Phase 3: Advanced Specialization (Weeks 9-12), 8.4 Phase 4: Evaluation and Documentation (Weeks 13-16), 8. Implementation Phases, code:cpp (// Week 1: Core infrastructure), code:cpp (// Week 5: Advanced pattern analysis), code:cpp (// Week 9: Complete specialization engine) (+1 more)
 
 ### Community 1344 - "Community 1344"
-Cohesion: 0.29
-Nodes (7): apple_gpu_command_queue_handle(), apple_gpu_device_handle(), _apple_gpu_raw_handle(), Interop escape hatch (cf. Mojo's ``metal_device(ctx)``): the raw     ``id<MTLDev, The raw ``id<MTLCommandQueue>`` Tessera dispatches on, as an integer pointer, Interop escape hatch (cf. Mojo's ``metal_device(ctx)``): the raw     ``id<MTLDev, The raw ``id<MTLCommandQueue>`` Tessera dispatches on, as an integer pointer
-
-### Community 1345 - "Community 1345"
-Cohesion: 0.80
-Nodes (3): registerMetaliumPasses(), registerTesseraMetaliumBackendDialects(), registerTesseraMetaliumBackendPasses()
+Cohesion: 0.22
+Nodes (9): apple_gpu_command_queue_handle(), apple_gpu_device_handle(), _apple_gpu_raw_handle(), Interop escape hatch (cf. Mojo's ``metal_device(ctx)``): the raw     ``id<MTLDev, Interop escape hatch (cf. Mojo's ``metal_device(ctx)``): the raw     ``id<MTLDev, The raw ``id<MTLCommandQueue>`` Tessera dispatches on, as an integer pointer, The raw ``id<MTLCommandQueue>`` Tessera dispatches on, as an integer pointer, Interop escape hatch (cf. Mojo's ``metal_device(ctx)``): the raw     ``id<MTLDev (+1 more)
 
 ### Community 1347 - "Community 1347"
 Cohesion: 0.40
@@ -6779,10 +6687,6 @@ Nodes (7): all_entries(), audit_filesystem(), entries_by_status(), find_by_direc
 Cohesion: 0.25
 Nodes (4): Return a mapping *layer_name → bool* (True = checkpoint marker present)., Return IR attribute strings for layers that receive checkpoint markers., Return the subset of layers that sit *between* two checkpoint markers —, Return the subset of ``layer_names`` that get checkpoint markers.          - NON
 
-### Community 1379 - "Community 1379"
-Cohesion: 0.24
-Nodes (6): createLowerPowerToTargetPass(), createLowerPowerToTilePass(), LowerPowerToTarget, LowerPowerToTile, registerPowerPasses(), tessera()
-
 ### Community 1380 - "Community 1380"
 Cohesion: 0.39
 Nodes (7): all_entries(), audit_filesystem(), entries_by_status(), find_by_directory(), Machine-readable manifest of every active ``research/`` project.  Research lives, render_markdown(), status_counts()
@@ -6869,11 +6773,11 @@ Nodes (8): 3.9 Deterministic Execution and Memory Ordering, code:python (@tesser
 
 ### Community 1404 - "Community 1404"
 Cohesion: 0.03
-Nodes (71): _cumextrema_grad(), _flash_attn_reference(), _numeric_attention_family_vjp(), Adjoint of real FFT — pads ``dout`` back to full length then `n*ifft`., Shared backward for cummax/cummin.      `comparator(a, b) -> bool` decides which, Decorator: registers `_VJPS[name] = fn`., `all_reduce-sum` is self-dual (each rank receives the full dout).     `op="max"`, `all_gather`'s transpose is `reduce_scatter`-sum along the same axis.     In the (+63 more)
+Nodes (67): _attention_vjp(), _digamma_positive(), _flash_attn_reference(), _memory_unwrap(), Adjoint of one LSTM step (Phase H2).      Forward (recomputed for backward):, y = x @ W + (x @ A) @ B * (alpha / rank).      Gradients flow into x, W, A, B (b, JS(p||q) = ½(KL(p||m) + KL(q||m)) with m = ½(p+q).      The cross-terms cancel c, Reverse-mode through Titans/Atlas memory_read.      `dout` is the gradient w.r.t (+59 more)
 
 ### Community 1405 - "Community 1405"
-Cohesion: 0.33
-Nodes (7): pipeline_command(), ``tessera.solvers.tpp`` — Python-side surface for the Tensor Parallel Primitives, Construct the ``tessera-opt`` command line for the canonical     TPP pipeline al, One-shot snapshot of TPP's current build/wiring state., Report what's wired and what isn't.      The C++ side ships and is registered in, status(), TPPStatus
+Cohesion: 0.12
+Nodes (22): bool, CDLL, Path, str, _candidate_lib_paths(), embedded_driver_available(), _load_capi(), pipeline_command() (+14 more)
 
 ### Community 1406 - "Community 1406"
 Cohesion: 0.53
@@ -6885,7 +6789,7 @@ Nodes (7): code:block1 (#include "tessera/sr/Passes.h"), code:block2 (# add_subd
 
 ### Community 1408 - "Community 1408"
 Cohesion: 0.20
-Nodes (11): items, type, items, type, properties, required, type, type (+3 more)
+Nodes (11): items, type, items, type, properties, type, add, del (+3 more)
 
 ### Community 1409 - "Community 1409"
 Cohesion: 0.25
@@ -7034,10 +6938,6 @@ Nodes (7): Final registry totals (post-Sprint-A), Rule classifications, Sprint A
 ### Community 1455 - "Community 1455"
 Cohesion: 0.29
 Nodes (7): G-1 — NVIDIA CUDA 13.2 Update 1 capability matrix, H-1 — ROCm 7.2.3 capability matrix, I-1 + I-2 + I-3 — Tenstorrent Metalium expansion, Phase G/H/I hardware-free batch 1 — Toolchain pins + Metalium expansion (2026-05-11), Test surface, Test totals after this batch, What's next on the hardware-free runway
-
-### Community 1456 - "Community 1456"
-Cohesion: 0.50
-Nodes (4): _apple_gpu_cf_scan_f32(), Phase-G Rung 0 control-flow scan symbol (MPSGraph forLoop). None when     unavai, Phase-G Rung 0 control-flow scan symbol (MPSGraph forLoop). None when     unavai, Phase-G Rung 0 control-flow scan symbol (MPSGraph forLoop). None when     unavai
 
 ### Community 1457 - "Community 1457"
 Cohesion: 0.43
@@ -7335,14 +7235,6 @@ Nodes (6): Build, code:bash (mkdir -p build && cd build), Integration, New in th
 Cohesion: 0.25
 Nodes (6): Build, code:bash (mkdir -p build && cd build), Integration, New in this drop, Notes, Tessera x86 Backend (AVX-512 + AMX)
 
-### Community 1532 - "Community 1532"
-Cohesion: 0.67
-Nodes (3): y = a @ b (across leading batch dims)., vjp_batched_gemm(), vjp_factorized_matmul()
-
-### Community 1534 - "Community 1534"
-Cohesion: 0.33
-Nodes (4): LlamaForCausalLM, LlamaModel, Llama model for causal language modeling., Llama model implementation with RoPE and modern optimizations.
-
 ### Community 1535 - "Community 1535"
 Cohesion: 0.29
 Nodes (7): code:block12, code:block13, code:block14, Complete Lowering Pipeline, Set compilation flags for optimal performance, Table of Contents, Target Platform Registry and Interfaces
@@ -7370,10 +7262,6 @@ Nodes (6): _run_generator(), test_committed_context_outputs_match_fresh_generati
 ### Community 1544 - "Community 1544"
 Cohesion: 0.43
 Nodes (6): Regression coverage for the reworked examples/advanced/kv_cache_serving demo.  T, serving_mod(), test_eviction_reclaims_and_reuses_pages(), test_prefix_sharing_saves_blocks(), test_real_footprint_is_reported(), test_serving_demo_validates()
-
-### Community 1545 - "Community 1545"
-Cohesion: 0.40
-Nodes (4): ThreadBlock, x, y, z
 
 ### Community 1546 - "Community 1546"
 Cohesion: 0.39
@@ -7455,10 +7343,6 @@ Nodes (5): Build, code:bash (cmake -S . -B build -G Ninja -DMLIR_DIR=<path-to-ml
 Cohesion: 0.80
 Nodes (3): main(), _match(), _read()
 
-### Community 1574 - "Community 1574"
-Cohesion: 0.50
-Nodes (4): apply_rotary_pos_emb(), Apply rotary position embeddings to query and key tensors., Rotate half the hidden dims of the input., rotate_half()
-
 ### Community 1575 - "Community 1575"
 Cohesion: 0.29
 Nodes (5): code:block1 (.), code:bash (mkdir -p build && cd build), Layout, Quick build (example), Tessera Scaling & Resilience Extensions (v1)
@@ -7478,10 +7362,6 @@ Nodes (5): Archive disposition (operational), EBM-series Scope Lock — Energy-B
 ### Community 1581 - "Community 1581"
 Cohesion: 0.33
 Nodes (6): Combined registry impact, Sprint B — Graph IR lowering metadata closure, Sprint C — long-tail math/shape/dtype hardening, Sprints C + B — long-tail math/shape/dtype + Graph IR lowering metadata closure (2026-05-11), Test surface adjustments, What's left
-
-### Community 1582 - "Community 1582"
-Cohesion: 0.50
-Nodes (3): NSObject, NSString, TesseraMlpkgPipeline
 
 ### Community 1583 - "Community 1583"
 Cohesion: 0.29
@@ -7583,17 +7463,13 @@ Nodes (6): tsrArtifact_t, compiler_path, execution_kind, kernels, payload, targe
 Cohesion: 0.29
 Nodes (5): code:bash (python3 -m venv .venv && source .venv/bin/activate), code:bash (python3 -m examples.advanced.Tessera_Empirical_Software_Agen), Quick start, Tessera Empirical Software Agent (v0.1), What’s included vs stubbed
 
-### Community 1610 - "Community 1610"
-Cohesion: 0.50
-Nodes (4): tessera_apple_gpu_bmm_dev_f32(), tessera_apple_gpu_bmm_dev_f32_enc(), tessera_apple_gpu_bmm_f16(), tessera_apple_gpu_bmm_f32()
-
 ### Community 1611 - "Community 1611"
 Cohesion: 0.50
 Nodes (4): conformal_energy_on_sphere(), Stereographic projection from the north pole of S² to ℂ.      Parameters     ---, Stereographic-lifted quadratic energy on S².      Both inputs are 3-vectors on t, stereographic()
 
 ### Community 1612 - "Community 1612"
-Cohesion: 0.50
-Nodes (4): _apple_gpu_mtl4_scan_f32(), Metal 4 M2 MSL-loop scan symbol. None when unavailable., Metal 4 M2 MSL-loop scan symbol. None when unavailable., Metal 4 M2 MSL-loop scan symbol. None when unavailable.
+Cohesion: 0.40
+Nodes (5): _apple_gpu_mtl4_scan_f32(), Metal 4 M2 MSL-loop scan symbol. None when unavailable., Metal 4 M2 MSL-loop scan symbol. None when unavailable., Metal 4 M2 MSL-loop scan symbol. None when unavailable., Metal 4 M2 MSL-loop scan symbol. None when unavailable.
 
 ### Community 1613 - "Community 1613"
 Cohesion: 0.33
@@ -7674,14 +7550,6 @@ Nodes (5): GPU Backend Overview, Integration, Kernels, NVIDIA Tile IR (experimen
 ### Community 1632 - "Community 1632"
 Cohesion: 0.33
 Nodes (5): CPX Pass Pipelines, -tessera-fuse-video-ingest, -tessera-lower-kv-transport, -tessera-partition-longcontext, -tessera-vectorize-nvfp4
-
-### Community 1633 - "Community 1633"
-Cohesion: 0.67
-Nodes (3): _memory_unwrap(), Reverse-mode through Titans/Atlas memory_read.      `dout` is the gradient w.r.t, vjp_memory_read()
-
-### Community 1634 - "Community 1634"
-Cohesion: 0.67
-Nodes (3): reason, items, type
 
 ### Community 1635 - "Community 1635"
 Cohesion: 0.33
@@ -7791,10 +7659,6 @@ Nodes (4): Build (standalone), code:bash (cmake -S . -B build && cmake --build b
 Cohesion: 0.33
 Nodes (4): Build flags & deps, CLI, code:block1 (python -m tilec.driver examples/matmul.tss --backend cpu --i), CPU Backend (Testing-Friendly)
 
-### Community 1678 - "Community 1678"
-Cohesion: 0.47
-Nodes (3): createLowerTileToPTXPass(), LowerTileToPTXPass, insertTcgen05Asm()
-
 ### Community 1679 - "Community 1679"
 Cohesion: 0.53
 Nodes (4): verifyPipe(), verifyPolicy(), verifyWarp(), checkRoleUniqueness()
@@ -7820,8 +7684,8 @@ Cohesion: 0.40
 Nodes (5): Final close-out plan state, Sprint D — Memory architecture extension, Sprint E — Backend kernel manifest, Sprints D + E — Memory architecture + Backend kernel manifest (2026-05-11), What remains (post-close-out)
 
 ### Community 1685 - "Community 1685"
-Cohesion: 0.13
-Nodes (19): Return the emitted Graph IR as MLIR text.          .. note:: ``fn.explain().ir.g, Return the emitted Graph IR as MLIR text.          .. note:: ``fn.explain().ir.g, Synthesize a :class:`CompileReport` from this JitFn's         current state., Synthesize a :class:`CompileReport` from this JitFn's         current state., cpu_plan(), _CpuPlan, _fn(), _native_call() (+11 more)
+Cohesion: 0.19
+Nodes (15): cpu_plan(), _CpuPlan, _fn(), _native_call(), Regression: ``@tessera.jit(native_required=True)`` surfaces native-CPU launch fa, The public ``@tessera.jit(native_required=True)`` parameter     actually reaches, A recorded ``last_fallback_reason`` must appear in the     emitted CompileReport, Minimal stand-in that mirrors ``JitFn`` enough to exercise     ``_native_cpu_fas (+7 more)
 
 ### Community 1686 - "Community 1686"
 Cohesion: 0.11
@@ -8204,8 +8068,8 @@ Cohesion: 0.70
 Nodes (3): main(), run_tessera_facade(), worker()
 
 ### Community 1801 - "Community 1801"
-Cohesion: 0.17
-Nodes (12): collect(), try_cmd(), which(), ``@decode_chain`` decorator — phase 1 of jit auto-detection.  Stage-3 phase-1 of, The full Llama attention block via @decode_chain — verifies     the decorator is, Each @decode_chain opens a fresh session. Nesting doesn't     flatten — explicit, If the wrapped function raises, the session still commits     (Python's ``with``, test_decorated_llama_attention_block_matches_explicit_form() (+4 more)
+Cohesion: 0.04
+Nodes (51): collect(), try_cmd(), which(), chain(), @auto_batch decorator — JIT Phase 2.1 trace-capture proof.  The headline contrac, The headline proof: a complete Llama-style attention block —     rmsnorm → 3 qkv, Same function, same inputs — eager (called directly) and     auto-batched (decor, In trace mode, each op returns a TraceRef (not a     DeviceTensor). (+43 more)
 
 ### Community 1802 - "Community 1802"
 Cohesion: 0.40
@@ -8501,7 +8365,7 @@ Nodes (9): _conv_ref(), Dtype-matched reference: cast inputs to the lane dtype, 
 
 ### Community 1927 - "Community 1927"
 Cohesion: 0.03
-Nodes (75): _attention_vjp(), _digamma_positive(), Built-in VJPs for the v1 autodiff op set.  Each VJP has signature `(dout, *forwa, Adjoint of depthwise 1-D conv.      Forward: ``out[..., t] = sum_k x_full[..., t, Sum-across-ranks VJP. Each rank receives the full upstream gradient., h_new = activation(x @ W_ih + h @ W_hh + bias)., Reference VJP: split cotangent into fwd+bwd, sum per-time-step., DCT-II (orthonormal) — transpose is the matching DCT-III (IDCT). (+67 more)
+Nodes (65): Built-in VJPs for the v1 autodiff op set.  Each VJP has signature `(dout, *forwa, `reduce_scatter`'s transpose is `all_gather`. Broadcast `dout` back., h_new = activation(x @ W_ih + h @ W_hh + bias)., GRU cell with gate order z, r, n., y = A_sparse @ B. dL/dB = A.T @ dout. dL/dA is sparse; reference     returns Non, Block-sparse matmul; reference treats block layout as opaque., y_i = ∏_{k≤i} x_k.  ∂y_j/∂x_i = y_j / x_i for i ≤ j (else 0).      => dx_i = (Σ_, Dequant: forward is x ≈ scale * (x_q - zero_point).  Treat scale +     zero_poin (+57 more)
 
 ### Community 1928 - "Community 1928"
 Cohesion: 0.67
@@ -8568,8 +8432,8 @@ Cohesion: 0.67
 Nodes (3): _np_swiglu_reference(), End-to-end f32: a 4-op `gemm/gemm/silu_mul/gemm` chain inside a     `@jit(target, test_apple_gpu_swiglu_chain_dispatches_to_fused_runtime_symbol()
 
 ### Community 2125 - "Community 2125"
-Cohesion: 0.25
-Nodes (8): apple_gpu_cf_while_generate(), _apple_gpu_cf_while_generate_f32(), Phase-G Rung 2 predicate-driven while-generate symbol. None when absent., Greedy generation ``token = argmax((hidden = tanh(hidden @ W)) @ lm)``     loope, Phase-G Rung 2 predicate-driven while-generate symbol. None when absent., Greedy generation ``token = argmax((hidden = tanh(hidden @ W)) @ lm)``     loope, Phase-G Rung 2 predicate-driven while-generate symbol. None when absent., Greedy generation ``token = argmax((hidden = tanh(hidden @ W)) @ lm)``     loope
+Cohesion: 0.11
+Nodes (18): _apple_gpu_cf_scan_f32(), _apple_gpu_cf_serial_draft_f32(), apple_gpu_cf_while_generate(), _apple_gpu_cf_while_generate_f32(), Phase-G Rung 0 control-flow scan symbol (MPSGraph forLoop). None when     unavai, Phase-G Rung 1 serial-draft forLoop symbol. None when unavailable., Phase-G Rung 2 predicate-driven while-generate symbol. None when absent., Greedy generation ``token = argmax((hidden = tanh(hidden @ W)) @ lm)``     loope (+10 more)
 
 ### Community 2129 - "Community 2129"
 Cohesion: 0.29
@@ -8590,10 +8454,6 @@ Nodes (5): IRGraph, Find and fuse operator patterns, Graph-based intermediate re
 ### Community 2139 - "Community 2139"
 Cohesion: 0.33
 Nodes (3): TensorCore, mode, warp_size
-
-### Community 2141 - "Community 2141"
-Cohesion: 0.32
-Nodes (3): createEmpiricalSearchPass(), EmpiricalSearchPass, tessera()
 
 ### Community 2259 - "Community 2259"
 Cohesion: 0.48
@@ -8692,24 +8552,24 @@ Cohesion: 0.67
 Nodes (3): code:cpp (class CUDATileIRRuntime {), Integration with Tessera Runtime, Runtime Hook Integration
 
 ## Knowledge Gaps
-- **4915 isolated node(s):** `PreToolUse`, `PreToolUse`, `K`, `T`, `use_jvp` (+4910 more)
+- **4942 isolated node(s):** `PreToolUse`, `PreToolUse`, `K`, `T`, `use_jvp` (+4937 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **761 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **709 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Pass` connect `Community 735` to `Community 525`, `Community 26`, `Community 1052`, `Community 1053`, `Community 1054`, `Community 32`, `Community 41`, `Community 44`, `Community 49`, `Community 53`, `Community 1591`, `Community 58`, `Community 62`, `Community 63`, `Community 66`, `Community 71`, `Community 73`, `Community 1100`, `Community 1102`, `Community 1103`, `Community 1104`, `Community 1105`, `Community 1106`, `Community 591`, `Community 86`, `Community 87`, `Community 1110`, `Community 2141`, `Community 2143`, `Community 98`, `Community 99`, `Community 104`, `Community 1641`, `Community 618`, `Community 619`, `Community 106`, `Community 112`, `Community 113`, `Community 114`, `Community 118`, `Community 1148`, `Community 126`, `Community 134`, `Community 139`, `Community 141`, `Community 1678`, `Community 142`, `Community 144`, `Community 1168`, `Community 657`, `Community 658`, `Community 148`, `Community 149`, `Community 150`, `Community 668`, `Community 156`, `Community 160`, `Community 1191`, `Community 1193`, `Community 1196`, `Community 1726`, `Community 191`, `Community 1224`, `Community 1225`, `Community 1226`, `Community 1230`, `Community 1231`, `Community 1232`, `Community 1249`, `Community 756`, `Community 1268`, `Community 263`, `Community 264`, `Community 271`, `Community 272`, `Community 786`, `Community 788`, `Community 789`, `Community 1306`, `Community 798`, `Community 1320`, `Community 1331`, `Community 1334`, `Community 316`, `Community 318`, `Community 1345`, `Community 838`, `Community 1878`, `Community 1379`, `Community 1384`, `Community 1385`, `Community 880`, `Community 890`, `Community 898`, `Community 1420`, `Community 407`, `Community 920`, `Community 410`, `Community 922`, `Community 1436`, `Community 413`, `Community 1440`, `Community 1450`, `Community 957`, `Community 962`, `Community 970`, `Community 1485`, `Community 981`, `Community 477`, `Community 502`, `Community 1015`, `Community 1016`, `Community 1530`, `Community 509`?**
-  _High betweenness centrality (0.055) - this node is a cross-community bridge._
-- **Why does `string` connect `Community 735` to `Community 1536`, `Community 1283`, `Community 515`, `Community 1415`, `Community 1418`, `Community 1038`, `Community 1807`, `Community 1040`, `Community 1041`, `Community 532`, `Community 789`, `Community 917`, `Community 793`, `Community 666`, `Community 1435`, `Community 805`, `Community 1582`, `Community 1209`, `Community 831`, `Community 575`, `Community 962`, `Community 965`, `Community 1481`, `Community 588`, `Community 974`, `Community 1746`, `Community 1372`, `Community 991`, `Community 1376`, `Community 747`, `Community 1646`, `Community 1648`, `Community 1777`, `Community 1010`, `Community 1395`, `Community 1269`, `Community 1151`?**
-  _High betweenness centrality (0.032) - this node is a cross-community bridge._
-- **Why does `Multivector` connect `Community 186` to `Community 439`, `Community 580`, `Community 421`, `Community 37`, `Community 901`, `Community 168`, `Community 777`, `Community 840`, `Community 715`, `Community 620`, `Community 237`, `Community 48`, `Community 404`, `Community 663`, `Community 185`, `Community 442`, `Community 447`?**
-  _High betweenness centrality (0.022) - this node is a cross-community bridge._
+- **Why does `Pass` connect `Community 113` to `Community 525`, `Community 26`, `Community 1052`, `Community 1053`, `Community 1054`, `Community 32`, `Community 1058`, `Community 44`, `Community 49`, `Community 1591`, `Community 58`, `Community 62`, `Community 71`, `Community 73`, `Community 1100`, `Community 1102`, `Community 1103`, `Community 1104`, `Community 1105`, `Community 1106`, `Community 591`, `Community 1110`, `Community 2143`, `Community 98`, `Community 99`, `Community 1641`, `Community 106`, `Community 619`, `Community 1133`, `Community 112`, `Community 114`, `Community 118`, `Community 1148`, `Community 126`, `Community 130`, `Community 139`, `Community 141`, `Community 144`, `Community 657`, `Community 658`, `Community 148`, `Community 149`, `Community 668`, `Community 1193`, `Community 1196`, `Community 183`, `Community 1726`, `Community 190`, `Community 191`, `Community 1224`, `Community 1225`, `Community 1226`, `Community 1230`, `Community 1231`, `Community 1232`, `Community 212`, `Community 214`, `Community 218`, `Community 222`, `Community 223`, `Community 735`, `Community 1249`, `Community 241`, `Community 756`, `Community 264`, `Community 271`, `Community 272`, `Community 786`, `Community 798`, `Community 1334`, `Community 316`, `Community 318`, `Community 838`, `Community 1878`, `Community 1384`, `Community 1385`, `Community 879`, `Community 880`, `Community 890`, `Community 898`, `Community 1420`, `Community 407`, `Community 920`, `Community 410`, `Community 922`, `Community 413`, `Community 1440`, `Community 957`, `Community 970`, `Community 1485`, `Community 981`, `Community 477`, `Community 502`, `Community 1015`, `Community 1016`, `Community 1530`, `Community 509`?**
+  _High betweenness centrality (0.047) - this node is a cross-community bridge._
+- **Why does `string` connect `Community 735` to `Community 1536`, `Community 1283`, `Community 515`, `Community 1038`, `Community 1807`, `Community 1040`, `Community 1041`, `Community 786`, `Community 144`, `Community 532`, `Community 917`, `Community 793`, `Community 26`, `Community 666`, `Community 1058`, `Community 805`, `Community 1209`, `Community 831`, `Community 575`, `Community 965`, `Community 1481`, `Community 588`, `Community 974`, `Community 1746`, `Community 1372`, `Community 991`, `Community 1376`, `Community 747`, `Community 1646`, `Community 1648`, `Community 1777`, `Community 1010`, `Community 1395`, `Community 1269`, `Community 1151`?**
+  _High betweenness centrality (0.038) - this node is a cross-community bridge._
+- **Why does `result_type()` connect `Community 409` to `Community 52`, `Community 454`?**
+  _High betweenness centrality (0.020) - this node is a cross-community bridge._
 - **Are the 152 inferred relationships involving `Cl` (e.g. with `_point_cloud_feature()` and `rotation_invariant_point_cloud_demo()`) actually correct?**
   _`Cl` has 152 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 122 inferred relationships involving `GraphIRModule` (e.g. with `Call` and `CompileArtifactBundle`) actually correct?**
   _`GraphIRModule` has 122 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `PreToolUse`, `PreToolUse`, `Complete Blackwell B200 optimization stack for matrix multiplication` to the rest of the system?**
-  _9595 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _9747 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.043478260869565216 - nodes in this community are weakly interconnected._

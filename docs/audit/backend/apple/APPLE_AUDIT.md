@@ -23,10 +23,25 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
 
 ## Still Open
 
-- **Binding specs are not universal.** Packaged kernels have binding validation;
-  ordinary Apple kernels still rely too much on convention and symbol shape.
-- **Feature limits are underused.** Apple feature/limit data exists but does not
-  dominate Schedule/Tile/Target choices yet.
+- **Binding specs / descriptors — unified surface landed (2026-06-02);
+  runtime still pattern-driven.** `compiler/apple_kernel_descriptor.py`
+  synthesizes a declarative `AppleKernelDescriptor` (family / status / dtypes /
+  runtime_symbol / shape_envelope / encode-eligibility / packaged binding spec)
+  for **every** Apple GPU kernel family — mps, msl, mpsgraph, conv, reduction,
+  projection, linalg, encode_session, packaged — from the manifest + driver
+  envelope + encode registry (no duplicated truth). Locked by
+  `tests/unit/test_apple_kernel_descriptor.py`. Residual: Target IR / runtime
+  dispatch don't *consume* the descriptor yet (they still pattern-match); the
+  packaged reflection-level binding spec remains packaged-only by nature
+  (other families expose no buffer-index reflection).
+- **Feature limits — first wire-up landed (2026-06-02); broader use open.**
+  The threadgroup-tiled matmul→softmax N ceiling is now derived from the
+  per-arch threadgroup-memory budget
+  (`apple_target.apple_threadgroup_tiled_softmax_n_cap`) instead of a magic
+  `8192`, consulted by the runtime dispatcher and self-scaling on a
+  higher-memory SKU. Locked by `tests/unit/test_apple_feature_limit_lowering.py`.
+  Residual: other selection decisions (bf16 gating, head_dim ceilings,
+  threadgroup sizing) still use ad-hoc constants rather than the feature table.
 - **One-CB path — canonical route landed (2026-06-02); residual polish.**
   `@jit(target="apple_gpu", auto_batch=True)` now runs a decode body written
   with the canonical `tessera.ops.*` surface on one command buffer per encode
@@ -46,11 +61,16 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
 
 ## Next Work
 
-1. Promote `AppleTensorBindingSpec` / `AppleKernelBindingSpec` to all Apple
-   kernel families.
-2. Add Apple kernel descriptors for MPSGraph, MSL, Metal 4, packaged, and
-   encode-session paths.
-3. Wire Apple feature limits into schedule/tile/kernel selection.
+1. ~~Promote binding specs / descriptors to all Apple kernel families.~~
+   **Landed 2026-06-02** — `AppleKernelDescriptor` unifies the dispatch
+   contract across every family. Follow-on: have runtime dispatch *consume*
+   the descriptor instead of pattern-matching op names.
+2. ~~Add Apple kernel descriptors for MPSGraph, MSL, Metal 4, packaged, and
+   encode-session paths.~~ **Landed 2026-06-02** (same descriptor surface).
+3. ~~Wire Apple feature limits into schedule/tile/kernel selection.~~
+   **First wire-up landed 2026-06-02** (tiled matmul→softmax N cap derived
+   from threadgroup-memory budget). Follow-on: drive bf16 gating / head_dim
+   ceilings / threadgroup sizing from the same feature table.
 4. ~~Finish `@jit(target="apple_gpu", auto_batch=True)` canonical
    one-command-buffer route.~~ **Landed 2026-06-02** — canonical
    `tessera.ops.*` decode through `@jit` runs on one cb, with

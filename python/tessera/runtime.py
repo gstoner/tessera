@@ -5584,6 +5584,30 @@ def _apple_gpu_dispatch_rowop(op_name: str, operands: list[Any], kwargs: dict,
     return out.reshape(shape).astype(out_dtype)
 
 
+_TILED_SOFTMAX_N_CAP: Optional[int] = None
+
+
+def _apple_threadgroup_tiled_softmax_n_cap() -> int:
+    """P1 (2026-06-02) — feature-limit-derived N cap for the tiled
+    matmul→softmax kernel, cached. Consults the live threadgroup-memory
+    budget (``probe_apple_runtime_limits``) via the apple_target helper;
+    falls back to the static per-arch floor (32 KB ⇒ 8192 fp32 scores)
+    off Metal / on probe failure."""
+    global _TILED_SOFTMAX_N_CAP
+    if _TILED_SOFTMAX_N_CAP is None:
+        from .compiler.apple_target import (
+            apple_threadgroup_tiled_softmax_n_cap,
+            probe_apple_runtime_limits,
+        )
+        try:
+            limits = probe_apple_runtime_limits()
+        except Exception:
+            limits = None
+        _TILED_SOFTMAX_N_CAP = apple_threadgroup_tiled_softmax_n_cap(
+            runtime_limits=limits)
+    return _TILED_SOFTMAX_N_CAP
+
+
 def _apple_gpu_dispatch_silu_mul(operands: list[Any], np: Any) -> Any:
     """silu_mul(a, b) = silu(a) * b, via the MPSGraph binary lane. The runtime
     opcode 6 computes a' * silu(b'), so we pass (a'=b, b'=a) to get silu(a)*b.
@@ -5653,17 +5677,24 @@ def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
     b = np.asarray(operands[1])
 
     # Phase 8.4.6 + native-half tiled — N upper bound depends on dtype. f32
-    # has the threadgroup-tiled variant (capped at 8192); f16/bf16 now also
-    # have native tiled fused kernels (per-thread for N<=256, threadgroup-
-    # tiled up to 8192), so the single-kernel envelope matches f32 when the
-    # tiled symbol is present. Older builds without it stay at 256.
+    # has the threadgroup-tiled variant; f16/bf16 now also have native tiled
+    # fused kernels (per-thread for N<=256, threadgroup-tiled above), so the
+    # single-kernel envelope matches f32 when the tiled symbol is present.
+    # Older builds without it stay at 256.
+    #
+    # P1 (2026-06-02) — the tiled cap is feature-limit-derived, not a magic
+    # constant: the kernel holds one row of N fp32 scores in threadgroup
+    # memory, so N_max = threadgroup_memory_budget // 4. On every current
+    # Apple arch that is 32 KB // 4 = 8192 (preserving the old constant),
+    # and it auto-scales on a higher-memory SKU.
+    tiled_n_cap = _apple_threadgroup_tiled_softmax_n_cap()
     bf16_dtype = _bfloat16_dtype()
     if a.dtype == np.float32:
-        n_max = 8192
+        n_max = tiled_n_cap
     elif a.dtype == np.float16:
-        n_max = 8192 if _apple_gpu_matmul_softmax_tiled_f16() is not None else 256
+        n_max = tiled_n_cap if _apple_gpu_matmul_softmax_tiled_f16() is not None else 256
     elif bf16_dtype is not None and a.dtype == bf16_dtype:
-        n_max = 8192 if _apple_gpu_matmul_softmax_tiled_bf16() is not None else 256
+        n_max = tiled_n_cap if _apple_gpu_matmul_softmax_tiled_bf16() is not None else 256
     else:
         n_max = 256
 

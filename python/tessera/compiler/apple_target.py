@@ -371,6 +371,36 @@ def apple_arch_defaults(arch: AppleGPUArch) -> _ArchDefaults:
     return _APPLE_ARCH_DEFAULTS[arch]
 
 
+def apple_threadgroup_tiled_softmax_n_cap(
+    arch: AppleGPUArch = AppleGPUArch.APPLE10,
+    *,
+    runtime_limits: "Optional[AppleRuntimeLimits]" = None,
+    elem_bytes: int = 4,
+) -> int:
+    """Feature-limit-derived N ceiling for the threadgroup-tiled
+    matmul→softmax kernel (P1, 2026-06-02).
+
+    The tiled kernel holds one row of N scores in threadgroup memory and
+    accumulates in fp32, so the largest N it can serve is
+    ``threadgroup_memory_budget // bytes_per_score``. On every current
+    Apple arch the static floor is 32 KB ⇒ 8192 fp32 scores — which is
+    exactly the constant the runtime used to hardcode. Deriving it from
+    the arch limit makes the cap self-documenting and self-scaling: a
+    higher-memory SKU (reported by ``runtime_limits``) automatically
+    raises it, and the portable static floor is never undercut.
+
+    ``runtime_limits`` (from ``probe_apple_runtime_limits``) is consulted
+    only when it reports a budget *above* the static floor — opt-in
+    tuning that never drops below the portable artifact's assumption.
+    """
+    floor = _APPLE_ARCH_DEFAULTS[arch].threadgroup_memory_bytes
+    budget = floor
+    if (runtime_limits is not None
+            and runtime_limits.max_threadgroup_memory_bytes > floor):
+        budget = runtime_limits.max_threadgroup_memory_bytes
+    return budget // max(1, int(elem_bytes))
+
+
 # ---- Runtime probe ------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -464,5 +494,6 @@ __all__ = [
     "apple_arch_string",
     "apple_feature_set",
     "apple_feature_status",
+    "apple_threadgroup_tiled_softmax_n_cap",
     "probe_apple_runtime_limits",
 ]

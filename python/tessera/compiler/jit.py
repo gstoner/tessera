@@ -956,6 +956,7 @@ def jit(
     source_path: Optional[str] = None,
     native_required: bool = False,
     auto_batch: bool = False,
+    max_ops_per_cb: Optional[int] = None,
 ) -> Any:
     """
     Tessera JIT decorator — drives the compiler pipeline.
@@ -1181,22 +1182,32 @@ def jit(
             native_required=native_required,
         )
 
-        # Phase 2.1b (2026-06-01) — auto_batch=True opt-in. When set,
-        # wrap the user fn with apple_gpu_ops.auto_batch so any
-        # apple_gpu_ops.* calls inside the function body are
-        # trace-captured and executed as one cb per encode segment.
-        # Only meaningful when target="apple_gpu"; on other targets
-        # the wrap is a no-op (the trace context var stays inactive
-        # for tessera.ops.* / numpy paths).
+        # P1 canonical one-command-buffer route (2026-06-01) — the
+        # `auto_batch=True` opt-in wraps the user fn with
+        # `apple_gpu_ops.auto_batch`, so every op call inside the body
+        # is trace-captured and executed as one cb per encode segment.
         #
-        # Architectural framing: auto_batch is opt-in because it
-        # bypasses the JIT lowering pipeline (Graph IR → Tile IR → ...)
-        # for the user-fn body — the user must use apple_gpu_ops.*
-        # inside. Phase 2.1c (open) would intercept tessera.ops.*
-        # automatically by routing through a context-aware shim
-        # layer; signature mismatches between tessera.ops (shape-
-        # inferred) and apple_gpu_ops (explicit rows/cols) make that
-        # a per-op adapter problem.
+        # Both op surfaces route through it: `apple_gpu_ops.*` directly,
+        # and `tessera.ops.*` via the interception shim installed
+        # globally at import (tessera/__init__.py → apple_gpu_ops_
+        # interception.install_apple_gpu_interception). The shim's
+        # wrappers check the active trace and forward to apple_gpu_ops
+        # when one is live, so a user writing the canonical
+        # `tessera.ops.rmsnorm(...)` / `silu(...)` inside a
+        # `@jit(target="apple_gpu", auto_batch=True)` decode loop runs
+        # the whole chain on one command buffer (Phase 2.1c — landed;
+        # no longer the open per-op-adapter problem the old note feared).
+        #
+        # `max_ops_per_cb` is the chunking budget (Glass-jaw #7): it
+        # caps encode-eligible ops per command buffer so a very deep
+        # decode chain splits into K cbs transparently instead of
+        # hitting the MPSGraph shape × op-count cliff. None = the
+        # substrate default (DEFAULT_OPS_PER_CB).
+        if max_ops_per_cb is not None and not auto_batch:
+            raise TesseraJitError(
+                "@jit(max_ops_per_cb=...) is only meaningful with "
+                "auto_batch=True (the one-command-buffer route); "
+                f"got auto_batch=False for {getattr(fn, '__name__', '<fn>')!r}.")
         if auto_batch:
             if target_kind != "apple_gpu":
                 raise TesseraJitError(
@@ -1204,7 +1215,8 @@ def jit(
                     f"target='apple_gpu'; got target={target!r} "
                     f"(normalized={target_kind!r}).")
             from .. import apple_gpu_ops as _agpu
-            jitfn._fn = _agpu.auto_batch(jitfn._fn)
+            jitfn._fn = _agpu.auto_batch(
+                jitfn._fn, max_ops_per_cb=max_ops_per_cb)
 
         return jitfn
 

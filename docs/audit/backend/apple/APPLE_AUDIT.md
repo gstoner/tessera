@@ -27,8 +27,16 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
   ordinary Apple kernels still rely too much on convention and symbol shape.
 - **Feature limits are underused.** Apple feature/limit data exists but does not
   dominate Schedule/Tile/Target choices yet.
-- **One-CB path is not canonical enough.** The substrate exists, but canonical
-  `tessera.ops` / `@jit(target="apple_gpu")` must route through it.
+- **One-CB path — canonical route landed (2026-06-02); residual polish.**
+  `@jit(target="apple_gpu", auto_batch=True)` now runs a decode body written
+  with the canonical `tessera.ops.*` surface on one command buffer per encode
+  segment (the global interception shim forwards to the encode session under
+  an active trace), and `max_ops_per_cb` threads the chunking budget through
+  the decorator. Locked by `tests/unit/test_apple_gpu_jit_auto_batch_canonical.py`.
+  Residual: it is **opt-in** (`auto_batch=True`), not auto-detected; and an
+  auto_batch body still pays Graph-IR-emission overhead it never uses, and
+  must keep shape kwargs as literals/args (a general `@jit` AST-lowering
+  constraint, not auto_batch-specific).
 - **Production packaged kernels are empty.** Fixture proof is not the same as
   production packaged backend coverage.
 - **Target IR does too much.** Apple source strings, fusion recognition, and
@@ -43,8 +51,12 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
 2. Add Apple kernel descriptors for MPSGraph, MSL, Metal 4, packaged, and
    encode-session paths.
 3. Wire Apple feature limits into schedule/tile/kernel selection.
-4. Finish `@jit(target="apple_gpu", auto_batch=True)` or equivalent canonical
-   one-command-buffer route.
+4. ~~Finish `@jit(target="apple_gpu", auto_batch=True)` canonical
+   one-command-buffer route.~~ **Landed 2026-06-02** — canonical
+   `tessera.ops.*` decode through `@jit` runs on one cb, with
+   `max_ops_per_cb` chunking threaded through the decorator. Follow-on
+   (optional): make auto_batch bypass unused Graph-IR emission; consider
+   auto-detection so the route is on by default for recognized decode loops.
 5. Add production packaged kernels with reflection validation and numerical
    compare fixtures.
 6. Attach benchmark metadata for Apple hot paths such as matmul, matmul

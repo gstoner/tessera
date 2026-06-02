@@ -734,7 +734,7 @@ with tessera.autodiff.tape() as t:
     t.backward(y, cotangent=dy)
 ```
 
-### Phase F4 — Graph IR autodiff (ODS + pass body + per-op `buildAdjoint` impls landed; lit XFAIL flips on first MLIR 21 build)
+### Phase F4 — Graph IR autodiff (ODS + pass body + per-op `buildAdjoint` impls landed; lit verified on MLIR 22)
 
 `Tessera_AdjointInterface` ODS at `src/compiler/ir/include/Tessera/AdjointInterface.td` with tablegen target `TesseraAdjointInterfaceTableGen`. Per-op `buildAdjoint` C++ impls in `src/compiler/ir/AdjointInterface.cpp` for `MatmulOp`, `LayerNormOp`, `SoftmaxOp`, and pointwise activations (GELU/ReLU/Sigmoid/Sin) — pointwise ops route via the Python registry through the new `tessera.custom_adjoint_call` placeholder op. The full reverse-walk body is in `src/transforms/lib/AutodiffPass.cpp` and registered as `--tessera-autodiff` (also packaged as the `tessera-autodiff-pipeline` together with F5).
 
@@ -791,4 +791,4 @@ The Python tape (above) remains the production path until the MLIR build runs `c
 | `tessera.autodiff.rematerialize / mixed_precision / Graph-IR adjoints / distributed adjoint collectives` | 🔲 planned | Phase 5 follow-ups |
 | NCCL/RCCL collectives | partial | scaffolded / mock-runtime tests |
 | TPU target profile and artifacts | ✅ | implemented / lit-testable |
-| Runtime C ABI Python wrapper | ✅ | mock-runtime; hardware-runtime when C backend is built |
+| Runtime C ABI Python wrapper | ✅ | CPU reference/mock path; native CPU C ABI when built; Apple CPU/GPU runtime-backed via Accelerate / MPS / MPSGraph / MSL |

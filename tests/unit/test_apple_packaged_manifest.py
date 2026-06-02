@@ -226,26 +226,35 @@ def test_every_populated_entry_passes_validation():
         + "\n".join(failures))
 
 
-# ---- Production-kernel population guardrail ---------------------------
+# ---- Production-kernel population (PK8c, 2026-06-02) ------------------
 
-def test_production_kernels_tuple_is_empty_today():
-    """Honest-coverage check. Today Tessera doesn't ship its own
-    ``.mtlpackage``; the only checked-in artifact is Apple's sample
-    fixture. When the first Tessera-authored production kernel lands,
-    THIS TEST WILL BREAK — the breaking is intentional. The fix is:
+def test_production_kernels_are_tessera_authored_and_valid():
+    """PK8c — Tessera now ships its own ``.mtlpackage`` files, authored
+    from the MPSGraph lane (``scripts/author_apple_packages.py``). Each
+    production entry must:
 
-    1. Wire the new entry into ``primitive_coverage.py`` so the
-       backend-coverage dashboard reflects it.
-    2. Bump the lower bound below.
+    * be flagged ``tessera_authored`` (so dashboards can distinguish
+      Tessera-owned kernels from Apple's bundled sample fixture);
+    * pass the path/structure drift gate (``validate_packaged_entry``);
+    * carry ``apple_binding_spec=None`` — MPSGraph-serialized packages
+      expose positional, unnamed bindings, so the name-based binding spec
+      doesn't apply (PK8).
 
-    This guardrail keeps the dashboard honest: a populated production
-    kernel that didn't make it into the primitive registry is a
-    silent dashboard lie."""
-    assert len(PACKAGED_PRODUCTION_KERNELS) == 0, (
-        f"PACKAGED_PRODUCTION_KERNELS grew to "
-        f"{len(PACKAGED_PRODUCTION_KERNELS)} entries — also wire each "
-        f"new entry into primitive_coverage.py's backend_kernel_manifest "
-        f"for its op, then update this guardrail")
+    These rows are intentionally kept OUT of ``primitive_coverage.py``'s
+    backend-coverage registry: they are real artifacts but the standalone
+    primitive dashboard counts compiler-complete *op* coverage, which is a
+    separate claim from "an authored package exists". Keeping them in the
+    manifest (not the registry) is the honest split."""
+    assert len(PACKAGED_PRODUCTION_KERNELS) >= 2
+    for entry in PACKAGED_PRODUCTION_KERNELS:
+        assert entry.status == "packaged"
+        assert "tessera_authored" in entry.feature_flags, (
+            f"production kernel must be flagged tessera_authored: {entry!r}")
+        assert entry.apple_binding_spec is None, (
+            "MPSGraph packages are positionally bound — name-based "
+            "apple_binding_spec must be None")
+        ok, reason = validate_packaged_entry(entry)
+        assert ok, f"production entry failed drift gate: {reason}"
 
 
 def test_repo_root_resolves_to_a_real_directory():

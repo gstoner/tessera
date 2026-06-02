@@ -37,10 +37,12 @@ import numpy as np
 import pytest
 
 from tessera.apple_mlpkg import (
+    AUTHOR_CHAINS,
     AUTHOR_OP_BINARY,
     AUTHOR_OP_ROWOP,
     AUTHOR_OP_UNARY,
     AUTHOR_OPS,
+    author_chain_package,
     author_matmul_package,
     author_op_package,
     compile_mlpackage,
@@ -280,6 +282,95 @@ def test_pk8_author_op_rejects_unknown_op():
     d = tempfile.mkdtemp(prefix="pk8bad_")
     pkg = os.path.join(d, "bad.mtlpackage")
     assert author_op_package(pkg, "not_a_real_op", 4, 4) is False
+
+
+# ── fused multi-op chains (PK8b) ─────────────────────────────────────────
+
+
+def _run_authored_chain(chain, dims, inputs, out_shape, *, eps=1e-5):
+    import os
+    import tempfile
+
+    d = tempfile.mkdtemp(prefix="pk8chain_")
+    pkg = os.path.join(d, f"{chain}.mtlpackage")
+    assert author_chain_package(pkg, chain, dims, eps=eps), (
+        f"author_chain_package({chain}) failed"
+    )
+    fn = first_function_name(pkg) or "main"
+    pipe = compile_mlpackage(pkg, function_name=fn)
+    assert pipe is not None, f"PK1 load failed for {chain} err={last_error_kind()}"
+    try:
+        assert pipe.prepare_tensors(), f"prepare failed for {chain}"
+        for i, arr in enumerate(inputs):
+            assert pipe.fill_input_at(i, arr.astype(np.float32).tobytes())
+        assert pipe.dispatch(timeout_ms=30_000), f"dispatch failed for {chain}"
+        r, c = out_shape
+        raw = pipe.read_output_at(len(inputs), r * c * 4)
+        assert raw is not None
+        return np.frombuffer(raw, dtype=np.float32).reshape(r, c)
+    finally:
+        pipe.destroy()
+
+
+def test_pk8b_chain_matmul_softmax_matches_numpy():
+    """Fused softmax(A@B) — two ops, one package, one dispatch."""
+    _require_packaged_ml()
+    rng = np.random.default_rng(20)
+    M, K, N = 4, 6, 5
+    a = rng.standard_normal((M, K)).astype(np.float32)
+    b = rng.standard_normal((K, N)).astype(np.float32)
+    out = _run_authored_chain("matmul_softmax", [M, K, N], [a, b], (M, N))
+    assert np.allclose(out, _softmax(a @ b), rtol=1e-4, atol=2e-4)
+
+
+def test_pk8b_chain_attention_block_matches_numpy():
+    """Fused softmax(A@B)@C — the 3-op attention block in one package."""
+    _require_packaged_ml()
+    rng = np.random.default_rng(21)
+    M, K, N, P = 4, 6, 5, 3
+    a = rng.standard_normal((M, K)).astype(np.float32)
+    b = rng.standard_normal((K, N)).astype(np.float32)
+    c = rng.standard_normal((N, P)).astype(np.float32)
+    out = _run_authored_chain(
+        "matmul_softmax_matmul", [M, K, N, P], [a, b, c], (M, P)
+    )
+    assert np.allclose(out, _softmax(a @ b) @ c, rtol=1e-4, atol=2e-4)
+
+
+def test_pk8b_chain_rmsnorm_matmul_matches_numpy():
+    """Fused (rmsnorm(x)*gamma) @ W — a norm+projection block."""
+    _require_packaged_ml()
+    rng = np.random.default_rng(22)
+    M, K, N, eps = 4, 6, 5, 1e-5
+    x = rng.standard_normal((M, K)).astype(np.float32)
+    g = rng.standard_normal((K,)).astype(np.float32)
+    w = rng.standard_normal((K, N)).astype(np.float32)
+    out = _run_authored_chain(
+        "rmsnorm_matmul", [M, K, N], [x, g, w], (M, N), eps=eps
+    )
+    rms = x / np.sqrt((x**2).mean(axis=1, keepdims=True) + eps)
+    assert np.allclose(out, (rms * g) @ w, rtol=1e-4, atol=2e-4)
+
+
+def test_pk8b_chain_rejects_unknown_and_bad_arity():
+    _require_packaged_ml()
+    import os
+    import tempfile
+
+    d = tempfile.mkdtemp(prefix="pk8bad_")
+    assert author_chain_package(
+        os.path.join(d, "x.mtlpackage"), "not_a_chain", [4, 4, 4]
+    ) is False
+    # matmul_softmax needs exactly 3 dims.
+    assert author_chain_package(
+        os.path.join(d, "y.mtlpackage"), "matmul_softmax", [4, 4]
+    ) is False
+
+
+def test_pk8b_chains_vocabulary():
+    assert "matmul_softmax" in AUTHOR_CHAINS
+    assert "matmul_softmax_matmul" in AUTHOR_CHAINS
+    assert "rmsnorm_matmul" in AUTHOR_CHAINS
 
 
 def test_pk8_reauthor_is_deterministic_overwrite():

@@ -36,7 +36,28 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
   `_author_op`, `_first_function_name`, `_fill_input_at`, `_read_output_at`.
   Python: `apple_mlpkg.author_matmul_package` / `author_op_package` (+ `AUTHOR_OPS`
   vocabulary) / `first_function_name`. Locked by
-  `tests/unit/test_apple_mlpkg_pk8.py` (21 tests).
+  `tests/unit/test_apple_mlpkg_pk8.py` (26 tests).
+- **Fused multi-op packages (PK8b, 2026-06-02):** `author_chain_package`
+  composes a whole chain into one serialized MPSGraph executable (one GPU
+  dispatch): `matmul_softmax`, `matmul_softmax_matmul` (attention block),
+  `rmsnorm_matmul`. C ABI `tessera_apple_gpu_mlpkg_author_chain`; all match
+  numpy at fp32 tol. Tests in `test_apple_mlpkg_pk8.py`.
+- **Graph IR → package hook (PK8a, 2026-06-02):**
+  `compiler/apple_package_author.py` *recognizes* an MPSGraph-lane region in a
+  real `GraphIRModule` (single op / matmul / fused chain, fp32 static 2-D) and
+  authors the matching package — the mechanism `@jit(target="apple_gpu")` would
+  call to emit an AOT packaged kernel. `recognize()` is pure/device-free;
+  `author_package_from_graph_ir()` authors + (in tests) dispatches. Locked by
+  `tests/unit/test_apple_package_author.py` (12 tests).
+- **Committed production packages + manifest rows (PK8c, 2026-06-02):** two
+  Tessera-authored `.mtlpackage` fixtures committed under
+  `tests/fixtures/apple_gpu/tessera_authored_*` (matmul 8×8×8, fused
+  matmul→softmax 4×6×5; 16K each), regenerable via
+  `scripts/author_apple_packages.py`. `PACKAGED_PRODUCTION_KERNELS` now has 2
+  rows (`apple_binding_spec=None` — MPSGraph packages are positionally bound).
+  Committed artifacts load + dispatch + match numpy; load failure on an older
+  macOS is treated as a portability skip. Locked by
+  `tests/unit/test_apple_mlpkg_pk8c.py` + `test_apple_packaged_manifest.py`.
 - **GA/EBM Apple specialization:** fused Apple kernels and benchmarks exist for
   important GA/EBM paths.
 
@@ -169,16 +190,17 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
    `serializeToMPSGraphPackageAtURL:` → wraps `manifest.json`, and the
    authored package dispatches through PK1-PK7 bitwise-exact vs numpy.
    See the "Finished" entry above; `tests/unit/test_apple_mlpkg_pk8.py`.
-   **Follow-ons (optional, not blocked):** (a) ~~generalize beyond matmul to
-   the rmsnorm/softmax/layer_norm MPSGraph-lane ops~~ **done 2026-06-02 —
-   `author_op` covers unary/rowop/norm/binary families**; a graph→package
-   compiler hook (drive authoring from Graph IR rather than an op-name string)
-   remains; (b) decide whether to commit a real `.mtlpackage` artifact
-   and declare a `status="packaged"` `BackendKernelEntry` row (a repo-policy
-   choice about committing a device/OS-specific binary — the *capability* is
-   proven, the committed-artifact row is the only open piece); (c) the
-   parallel MSL-source dynamic-library AOT chain (`newLibraryWithSource:` →
-   `newDynamicLibrary:` → `serializeToURL:` → `newDynamicLibraryWithURL:`).
+   **Follow-ons:** (a) ~~generalize beyond matmul~~ **done — `author_op`
+   (unary/rowop/norm/binary) + `author_chain` (fused chains, PK8b)**;
+   ~~graph→package compiler hook~~ **done — `apple_package_author.recognize` /
+   `author_package_from_graph_ir` (PK8a)**. (b) ~~commit a real `.mtlpackage`
+   + `status="packaged"` row~~ **done — 2 Tessera-authored fixtures +
+   `PACKAGED_PRODUCTION_KERNELS` rows (PK8c)**. **Remaining (open):** wire the
+   recognizer into the actual `@jit(target="apple_gpu")` compile path so a
+   recognized region auto-emits a package (today it's a callable hook, not yet
+   invoked by the compiler); and (c) the parallel MSL-source dynamic-library
+   AOT chain (`newLibraryWithSource:` → `newDynamicLibrary:` →
+   `serializeToURL:` → `newDynamicLibraryWithURL:`).
 6. Attach benchmark metadata for Apple hot paths such as matmul, matmul
    epilogues, conv2d, decode chain, and packaged kernels.
 

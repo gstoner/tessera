@@ -1357,6 +1357,53 @@ def author_op_package(
     return rc == 1
 
 
+# Fused chains the multi-op authoring path supports. Each maps to a
+# dims-vector contract (see ``author_chain_package``).
+AUTHOR_CHAINS = ("matmul_softmax", "matmul_softmax_matmul", "rmsnorm_matmul")
+
+
+def author_chain_package(
+    out_path: str | Path,
+    chain: str,
+    dims: "tuple[int, ...] | list[int]",
+    *,
+    eps: float = 1e-5,
+) -> bool:
+    """Author a *fused multi-op* ``.mtlpackage`` — a whole chain composed into
+    one serialized MPSGraph executable (one GPU dispatch). The packaged
+    equivalent of the runtime's fused MSL kernels.
+
+    ``chain`` is one of :data:`AUTHOR_CHAINS`; ``dims`` is the per-chain shape
+    vector:
+
+    * ``matmul_softmax`` — ``[M, K, N]``: ``A[M,K], B[K,N] → softmax(A@B)[M,N]``
+    * ``matmul_softmax_matmul`` — ``[M, K, N, P]``:
+      ``A, B, C → (softmax(A@B) @ C)[M,P]`` (the attention block)
+    * ``rmsnorm_matmul`` — ``[M, K, N]``:
+      ``x[M,K], gamma[K], W[K,N] → (rmsnorm(x)*gamma) @ W [M,N]``
+
+    Bindings are positional (inputs in the order above, output last); use
+    ``fill_input_at`` / ``read_output_at``. Returns ``True`` on success;
+    ``False`` when the runtime is unavailable, ``chain`` is unknown, or
+    ``dims`` has the wrong arity.
+    """
+    if apple_gpu_runtime() is None:
+        return False
+    fn = bind_symbol(
+        "tessera_apple_gpu_mlpkg_author_chain",
+        (ctypes.c_char_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_int32),
+         ctypes.c_int32, ctypes.c_float),
+        restype=ctypes.c_int32,
+    )
+    if fn is None:
+        return False
+    n = len(dims)
+    arr = (ctypes.c_int32 * n)(*dims)
+    rc = int(fn(str(out_path).encode("utf-8"), chain.encode("utf-8"),
+                arr, ctypes.c_int32(n), ctypes.c_float(eps)))
+    return rc == 1
+
+
 __all__ = [
     "ERROR_NONE",
     "ERROR_OS_UNAVAILABLE",
@@ -1374,6 +1421,8 @@ __all__ = [
     "compile_mlpackage",
     "author_matmul_package",
     "author_op_package",
+    "author_chain_package",
+    "AUTHOR_CHAINS",
     "AUTHOR_OPS",
     "AUTHOR_OP_UNARY",
     "AUTHOR_OP_ROWOP",

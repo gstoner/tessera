@@ -11107,6 +11107,112 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_author_op(
   return -1;
 }
 
+// PK8b — author a *fused multi-op* `.mtlpackage` by composing MPSGraph nodes
+// into a single serialized executable. MPSGraph fuses the chain across the ML
+// pipeline, so the whole chain runs as one dispatch — the packaged equivalent
+// of the runtime's fused MSL kernels. fp32. Positional bindings (inputs in
+// declaration order, output last). ``dims`` carries the per-chain shape
+// vector; ``eps`` applies to norm chains. Supported chains:
+//
+//   "matmul_softmax"        dims=[M,K,N]    A[M,K],B[K,N] -> softmax(A@B)[M,N]
+//   "matmul_softmax_matmul" dims=[M,K,N,P]  A,B,C -> (softmax(A@B)@C)[M,P]
+//   "rmsnorm_matmul"        dims=[M,K,N]    x[M,K],gamma[K],W[K,N]
+//                                            -> (rmsnorm(x)*gamma) @ W  [M,N]
+//
+// Returns 1 / <=0 error (-2 bad-args, -6 unknown chain, plus
+// _mlpkg_compile_and_write codes).
+extern "C" int32_t tessera_apple_gpu_mlpkg_author_chain(
+    const char *out_package_path, const char *chain, const int32_t *dims,
+    int32_t ndims, float eps) {
+  if (!out_package_path || !chain || !dims || ndims <= 0) return -2;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return -1;
+  if (@available(macOS 14.0, iOS 17.0, *)) {
+    @autoreleasepool {
+      MPSDataType dt = MPSDataTypeFloat32;
+      NSArray<NSNumber *> *axis1 = @[ @1 ];
+      MPSGraph *g = [MPSGraph new];
+
+      if (std::strcmp(chain, "matmul_softmax") == 0) {
+        if (ndims != 3) return -2;
+        int M = dims[0], K = dims[1], N = dims[2];
+        if (M <= 0 || K <= 0 || N <= 0) return -2;
+        NSArray *as = @[ @(M), @(K) ], *bs = @[ @(K), @(N) ];
+        MPSGraphTensor *pa = [g placeholderWithShape:as dataType:dt name:nil];
+        MPSGraphTensor *pb = [g placeholderWithShape:bs dataType:dt name:nil];
+        MPSGraphTensor *ab =
+            [g matrixMultiplicationWithPrimaryTensor:pa secondaryTensor:pb
+                                                name:nil];
+        MPSGraphTensor *y = [g softMaxWithTensor:ab axis:1 name:nil];
+        NSDictionary *feeds = @{
+          pa : [[MPSGraphShapedType alloc] initWithShape:as dataType:dt],
+          pb : [[MPSGraphShapedType alloc] initWithShape:bs dataType:dt],
+        };
+        return _mlpkg_compile_and_write(g, feeds, y, out_package_path);
+      }
+
+      if (std::strcmp(chain, "matmul_softmax_matmul") == 0) {
+        if (ndims != 4) return -2;
+        int M = dims[0], K = dims[1], N = dims[2], P = dims[3];
+        if (M <= 0 || K <= 0 || N <= 0 || P <= 0) return -2;
+        NSArray *as = @[ @(M), @(K) ], *bs = @[ @(K), @(N) ],
+                *cs = @[ @(N), @(P) ];
+        MPSGraphTensor *pa = [g placeholderWithShape:as dataType:dt name:nil];
+        MPSGraphTensor *pb = [g placeholderWithShape:bs dataType:dt name:nil];
+        MPSGraphTensor *pc = [g placeholderWithShape:cs dataType:dt name:nil];
+        MPSGraphTensor *ab =
+            [g matrixMultiplicationWithPrimaryTensor:pa secondaryTensor:pb
+                                                name:nil];
+        MPSGraphTensor *sm = [g softMaxWithTensor:ab axis:1 name:nil];
+        MPSGraphTensor *y =
+            [g matrixMultiplicationWithPrimaryTensor:sm secondaryTensor:pc
+                                                name:nil];
+        NSDictionary *feeds = @{
+          pa : [[MPSGraphShapedType alloc] initWithShape:as dataType:dt],
+          pb : [[MPSGraphShapedType alloc] initWithShape:bs dataType:dt],
+          pc : [[MPSGraphShapedType alloc] initWithShape:cs dataType:dt],
+        };
+        return _mlpkg_compile_and_write(g, feeds, y, out_package_path);
+      }
+
+      if (std::strcmp(chain, "rmsnorm_matmul") == 0) {
+        if (ndims != 3) return -2;
+        int M = dims[0], K = dims[1], N = dims[2];
+        if (M <= 0 || K <= 0 || N <= 0) return -2;
+        NSArray *xsh = @[ @(M), @(K) ], *gsh = @[ @(K) ], *wsh = @[ @(K), @(N) ];
+        MPSGraphTensor *px = [g placeholderWithShape:xsh dataType:dt name:nil];
+        MPSGraphTensor *pg = [g placeholderWithShape:gsh dataType:dt name:nil];
+        MPSGraphTensor *pw = [g placeholderWithShape:wsh dataType:dt name:nil];
+        // rmsnorm(x) = x / sqrt(mean(x^2, axis=-1) + eps)
+        MPSGraphTensor *sq =
+            [g multiplicationWithPrimaryTensor:px secondaryTensor:px name:nil];
+        MPSGraphTensor *ms = [g meanOfTensor:sq axes:axis1 name:nil];
+        MPSGraphTensor *epsc =
+            [g constantWithScalar:(double)eps dataType:dt];
+        MPSGraphTensor *me =
+            [g additionWithPrimaryTensor:ms secondaryTensor:epsc name:nil];
+        MPSGraphTensor *denom = [g squareRootWithTensor:me name:nil];
+        MPSGraphTensor *norm =
+            [g divisionWithPrimaryTensor:px secondaryTensor:denom name:nil];
+        MPSGraphTensor *xn =
+            [g multiplicationWithPrimaryTensor:norm secondaryTensor:pg name:nil];
+        MPSGraphTensor *y =
+            [g matrixMultiplicationWithPrimaryTensor:xn secondaryTensor:pw
+                                                name:nil];
+        NSDictionary *feeds = @{
+          px : [[MPSGraphShapedType alloc] initWithShape:xsh dataType:dt],
+          pg : [[MPSGraphShapedType alloc] initWithShape:gsh dataType:dt],
+          pw : [[MPSGraphShapedType alloc] initWithShape:wsh dataType:dt],
+        };
+        return _mlpkg_compile_and_write(g, feeds, y, out_package_path);
+      }
+
+      return -6;  // unknown chain
+    }
+  }
+  return -1;
+}
+
 // Number of distinct (shape-class, opcode, dtype, shape) MPSGraphs cached.
 // Used by tests to verify graph reuse across repeated dispatches.
 extern "C" int32_t tessera_apple_gpu_mpsgraph_cache_size(void) {

@@ -1540,6 +1540,12 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_author_op(const char *, const char *,
                                                      int32_t) {
   return -1;
 }
+extern "C" int32_t tessera_apple_gpu_mlpkg_author_chain(const char *,
+                                                        const char *,
+                                                        const int32_t *,
+                                                        int32_t, float) {
+  return -1;
+}
 extern "C" int32_t tessera_apple_gpu_mlpkg_first_function_name(const char *,
                                                                char *,
                                                                int32_t) {

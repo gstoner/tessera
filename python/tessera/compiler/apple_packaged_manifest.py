@@ -116,11 +116,78 @@ PACKAGED_TEST_FIXTURES: dict[str, BackendKernelEntry] = {
 }
 
 
-#: Populated PRODUCTION packaged-kernel entries. Empty today — Tessera
-#: doesn't yet ship its own ``.mtlpackage`` files. When the first one
-#: lands, append to this list rather than ``PACKAGED_TEST_FIXTURES`` so
-#: dashboards count it correctly.
-PACKAGED_PRODUCTION_KERNELS: tuple[BackendKernelEntry, ...] = ()
+# ---------------------------------------------------------------------
+# Tessera-authored PRODUCTION packaged kernels (PK8c, 2026-06-02).
+#
+# These are authored by Tessera itself from the MPSGraph lane (PK8 —
+# ``apple_mlpkg.author_matmul_package`` / ``author_chain_package``),
+# serialized via ``MPSGraphExecutable serializeToMPSGraphPackageAtURL:``,
+# and committed under tests/fixtures/apple_gpu/. Regenerate with
+# ``python3 scripts/author_apple_packages.py``.
+#
+# Binding-spec note: MPSGraph-serialized packages expose *positional,
+# unnamed* bindings (``MPSGraphTensor`` has no name property — see PK8).
+# The name-based ``AppleKernelBindingSpec`` therefore does NOT apply; these
+# rows set ``apple_binding_spec=None`` and rely on positional addressing
+# (``fill_input_at`` / ``read_output_at``). ``validate_packaged_entry``
+# still gates path existence + .mtlpackage structure; numerical dispatch is
+# proven in ``tests/unit/test_apple_mlpkg_pk8c.py``.
+#
+# Portability caveat: a serialized MPSGraph package targets the current
+# platform's latest deployment version and may not load on an *older*
+# macOS; the validating test treats a load failure as a skip, not a
+# hard failure.
+# ---------------------------------------------------------------------
+
+_TESSERA_MATMUL_REL = (
+    "tests/fixtures/apple_gpu/tessera_authored_matmul_8x8x8.mtlpackage")
+_TESSERA_MATMUL_SOFTMAX_REL = (
+    "tests/fixtures/apple_gpu/"
+    "tessera_authored_matmul_softmax_4x6x5.mtlpackage")
+
+
+_TESSERA_MATMUL_ENTRY = BackendKernelEntry(
+    target="apple_gpu",
+    status="packaged",
+    dtypes=("fp32",),
+    feature_flags=("tessera_authored", "mpsgraph_lane"),
+    notes=(
+        "Tessera-authored matmul 8x8x8 .mtlpackage — built from the "
+        "MPSGraph lane via apple_mlpkg.author_matmul_package, serialized "
+        "with MPSGraphExecutable serializeToMPSGraphPackageAtURL:. "
+        "Positional (unnamed) bindings: inputs at 0/1, output at 2. "
+        "Regenerate via scripts/author_apple_packages.py. Numerically "
+        "validated vs numpy in test_apple_mlpkg_pk8c.py."
+    ),
+    packaged_pipeline_path=_TESSERA_MATMUL_REL,
+    apple_binding_spec=None,  # MPSGraph packages are positionally bound
+)
+
+_TESSERA_MATMUL_SOFTMAX_ENTRY = BackendKernelEntry(
+    target="apple_gpu",
+    status="packaged",
+    dtypes=("fp32",),
+    feature_flags=("tessera_authored", "mpsgraph_lane", "fused_chain"),
+    notes=(
+        "Tessera-authored fused softmax(A@B) .mtlpackage (4x6x5) — built "
+        "from the MPSGraph lane via apple_mlpkg.author_chain_package "
+        "('matmul_softmax'). One serialized executable = one GPU dispatch "
+        "for the whole chain. Positional bindings: A=0, B=1, output=2. "
+        "Regenerate via scripts/author_apple_packages.py."
+    ),
+    packaged_pipeline_path=_TESSERA_MATMUL_SOFTMAX_REL,
+    apple_binding_spec=None,
+)
+
+
+#: Populated PRODUCTION packaged-kernel entries — Tessera-authored
+#: ``.mtlpackage`` files (PK8c). Distinct from ``PACKAGED_TEST_FIXTURES``
+#: (Apple's bundled sample) so dashboards count Tessera-owned kernels
+#: correctly.
+PACKAGED_PRODUCTION_KERNELS: tuple[BackendKernelEntry, ...] = (
+    _TESSERA_MATMUL_ENTRY,
+    _TESSERA_MATMUL_SOFTMAX_ENTRY,
+)
 
 
 def lookup_packaged_test_fixture(name: str) -> Optional[BackendKernelEntry]:

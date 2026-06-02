@@ -278,6 +278,13 @@ The **x86 AMX/AVX512 backend** is the broadest fully wired execution path. Apple
 
 25. **Registry `partial` ≠ compiler-complete.** `primitive_coverage.py` is a layered audit surface: Python reference, public frontend, Graph IR, sharding/transpose/batching, backend manifest, runtime, and benchmark proof are separate claims. A row can be useful and still remain `partial` because one or more compiler axes are intentionally unfinished. The generated support table and primitive-coverage dashboards are the current status truth; do not copy their numeric snapshots into prose unless a drift gate owns the copy. When a sprint claims it "shipped", read the relevant generated rows to see what is actually proven and what is still `planned`, `partial`, `reference`, `artifact_only`, or hardware-gated.
 
+26. **The audit folder is the canonical "what's done / what's open" surface — follow its flow.** `docs/audit/` is organized around one **root audit** + **theme audits** + **generated dashboards** + **theme-local archives** (reorganized 2026-06-02). When auditing, assessing status, or picking next work, follow this flow in order:
+    1. **Start at `docs/audit/MASTER_AUDIT.md`** — the all-up snapshot (finished work, still-open work per area, and the P0/P1/P2 priority queue). It is the single entry point; do not reconstruct status by grepping scattered docs.
+    2. **Drill into the theme audit** for focused status: `compiler/COMPILER_AUDIT.md`, `backend/BACKEND_AUDIT.md` (+ `backend/{apple,nvidia,rocm}/*_AUDIT.md`), `coverage/COVERAGE_AUDIT.md`, `domain/DOMAIN_AUDIT.md`, `roadmap/ROADMAP_AUDIT.md`.
+    3. **Treat `docs/audit/generated/` dashboards as count/status truth** (script/test-owned, drift-gated — `runtime_abi.md`, `runtime_execution_matrix.md`, `e2e_op_coverage.md`, `s_series_status.md`, `support_table.md`, `test_coverage_classification.md`, plus root `op_target_conformance.md` / `standalone_primitive_coverage.md`). **Never hand-edit generated docs**; regenerate via their CLI + the `scripts/check_generated_docs.sh` drift gate (pre-commit hook, Glass-jaw #12).
+    4. **Treat `*/archive/` as provenance only** — original narrative/acceptance criteria behind a consolidated item, NOT the current status surface.
+    When you finish a unit of audit-relevant work, update the **theme audit** (and `MASTER_AUDIT.md` if the all-up picture or priority queue shifts); let the generated dashboards carry the numbers. Root-level hand-written redirect stubs are not used.
+
 ---
 
 ## Key Design Contracts
@@ -764,12 +771,14 @@ python benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | API reference | `docs/api/API_Reference_Index.md`, `docs/reference/tessera-api-reference.md`, `docs/reference/tessera_tensor_attributes.md` (canonical tensor attributes + dtype names), `docs/reference/tessera_migration_guide_part{1,2}.md` |
 | Getting started + glossary | `docs/GETTING_STARTED.md`, `docs/GLOSSARY.md` |
 | Architecture overviews | `docs/architecture/` (system_overview.md, tessera_target_ir_usage_guide.md, Tessera_Kernel_Compilation_Stages_Overview.md), `docs/operations/Tessera_Standard_Operations.md` |
-| Audit index + authority map | `docs/audit/README.md` |
-| Compiler audit authority | `docs/audit/compiler/README.md` |
-| Backend audit authority | `docs/audit/backend/README.md`, with platform-specific `backend/apple/`, `backend/nvidia/`, and `backend/rocm/` |
-| Coverage audit authority | `docs/audit/coverage/README.md` |
-| Domain roadmap/audit authority | `docs/audit/domain/README.md` |
-| Development roadmap authority | `docs/audit/roadmap/README.md` |
+| **Audit — START HERE (all-up status + open-work priority queue)** | **`docs/audit/MASTER_AUDIT.md`** — the root audit. Read it first for finished/open work and the P0/P1/P2 queue. See Decision #26 for the audit flow. |
+| Audit folder map + authority rules | `docs/audit/README.md` |
+| Compiler audit (theme) | `docs/audit/compiler/COMPILER_AUDIT.md` |
+| Shared-backend audit (theme) | `docs/audit/backend/BACKEND_AUDIT.md`, platform-specific `backend/apple/APPLE_AUDIT.md`, `backend/nvidia/NVIDIA_AUDIT.md`, `backend/rocm/ROCM_AUDIT.md` |
+| Coverage audit (theme) | `docs/audit/coverage/COVERAGE_AUDIT.md` |
+| Domain audit (theme — GA/EBM, attention, CorrDiff, sharding, autodiff) | `docs/audit/domain/DOMAIN_AUDIT.md` |
+| Roadmap audit (theme — execution roadmap, deferred items, sprint history) | `docs/audit/roadmap/ROADMAP_AUDIT.md` |
+| Generated dashboards (count/status truth — script/test-owned, do NOT hand-edit) | `docs/audit/generated/` |
 | **Standalone primitive coverage dashboard** (S1 audit — generated 12-axis contract dashboard; sentinel snapshot + drift guard) | `docs/audit/standalone_primitive_coverage.md` |
 | **Standalone primitive coverage historical narrative** (per-sprint shipped surface + contract-axis hardening context; numeric counts are superseded by generated docs) | `docs/audit/coverage/archive/primitive_coverage_state.md` |
 | **Standalone primitive coverage registry** (the source of truth that renders the dashboard) | `python/tessera/compiler/primitive_coverage.py` |

@@ -5,6 +5,44 @@ Invoke a skill with `/skill-name` or via the Skill tool.
 
 ---
 
+## Audit Flow (start here for "what's done / what's open" work)
+
+The `docs/audit/` folder is the canonical status surface (reorganized
+2026-06-02: one root audit + theme audits + generated dashboards +
+theme-local archives). See **CLAUDE.md Architecture Decision #26** for
+the normative rule. When asked to audit, assess status, review open
+efforts, or pick next work, follow this order — do **not** reconstruct
+status by grepping scattered docs:
+
+1. **`docs/audit/MASTER_AUDIT.md`** — all-up snapshot: finished work,
+   still-open work per area, and the **P0/P1/P2 priority queue**.
+   This is the single entry point.
+2. **Theme audit** for focused status:
+   - `compiler/COMPILER_AUDIT.md` — IR handoffs, lowering, spec gaps
+   - `backend/BACKEND_AUDIT.md` — cross-target runtime/ABI/proof rules
+   - `backend/apple/APPLE_AUDIT.md` — Apple CPU/GPU, Metal 4, packaged kernels
+   - `backend/nvidia/NVIDIA_AUDIT.md`, `backend/rocm/ROCM_AUDIT.md` — hardware frontier
+   - `coverage/COVERAGE_AUDIT.md` — primitive/op/KV-cache/examples coverage
+   - `domain/DOMAIN_AUDIT.md` — GA/EBM, attention, CorrDiff, sharding, autodiff
+   - `roadmap/ROADMAP_AUDIT.md` — execution roadmap, deferred items, sprint history
+3. **`docs/audit/generated/`** = count/status truth (script/test-owned,
+   drift-gated). **Never hand-edit.** Regenerate via each doc's CLI and
+   the `scripts/check_generated_docs.sh` gate (pre-commit hook). Key
+   dashboards: `runtime_abi.md`, `runtime_execution_matrix.md`,
+   `e2e_op_coverage.md`, `s_series_status.md`, `support_table.md`,
+   `test_coverage_classification.md`; plus root `op_target_conformance.md`
+   and `standalone_primitive_coverage.md`.
+4. **`*/archive/`** = provenance only (original narrative/acceptance
+   criteria), not the current status surface.
+
+**When finishing audit-relevant work:** update the **theme audit** (and
+`MASTER_AUDIT.md` if the all-up picture or priority queue shifts); let
+generated dashboards carry the numbers. For a broad multi-track review,
+fan out one read per theme audit, cross-check against the live tree, then
+synthesize — never trust the prose over the generated dashboards.
+
+---
+
 ## Engineering Skills
 
 | Task | Skill | When to use |
@@ -16,7 +54,7 @@ Invoke a skill with `/skill-name` or via the Skill tool.
 | Design the test plan for a new phase | `engineering:testing-strategy` | Planning Phase 7 test suite, extending lit tests, coverage gaps |
 | Write pass reference docs, specs, ADRs | `engineering:documentation` | Pass reference markdown, IR specs in `docs/spec/`, API docs |
 | Pre-ship checklist before tagging a phase | `engineering:deploy-checklist` | Before declaring a phase complete — tests green, lit tests pass, validate.sh clean |
-| Audit stubs and incomplete pass bodies | `engineering:tech-debt` | Spectral/FFT passes, TPP solver wiring, Cerebras/Metalium scaffold gaps |
+| Audit stubs and incomplete pass bodies | `engineering:tech-debt` | Cross-check the audit flow first (`docs/audit/MASTER_AUDIT.md` → theme audit → generated dashboards) so "open" work is grounded in the canonical surface, not guessed |
 | Structured incident response for CI breakage | `engineering:incident-response` | When validate.sh CI spine breaks across multiple tests |
 | Daily standup summary from recent commits | `engineering:standup` | Summarize what changed in the compiler or test suite |
 
@@ -64,7 +102,7 @@ Invoke a skill with `/skill-name` or via the Skill tool.
 /engineering:testing-strategy — test plan for a new phase or component
 /engineering:documentation    — pass reference, spec, or API doc
 /engineering:deploy-checklist — pre-phase-completion gate
-/engineering:tech-debt        — stub and scaffold audit
+/engineering:tech-debt        — stub and scaffold audit (read docs/audit/MASTER_AUDIT.md first)
 /product-management:write-spec         — phase spec or feature design doc
 /product-management:sprint-planning    — phase task breakdown
 /product-management:brainstorm         — open design questions

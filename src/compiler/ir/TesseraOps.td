@@ -197,6 +197,68 @@ def Tessera_CholeskyOp : Op<
   let hasVerifier = 1;
 }
 
+// L-series linalg family (2026-06-02): the next 5 linalg members, each carried
+// through the full Graph→Schedule→Tile→Target Apple spine via the table-driven
+// TileLinalg pattern + kLinalgSpecs.  Kept minimal at the Graph-IR layer
+// ([Pure] + a shape verifier).  Multi-operand (tri_solve / cholesky_solve) and
+// multi-result (lu / qr / svd) ops build out the foundation for those shapes.
+
+// Triangular solve: solve op(A) X = B for X, A lower/upper triangular.
+def Tessera_TriSolveOp : Op<Tessera_Dialect, "tri_solve", [Pure]> {
+  let summary = "Triangular solve op(A) X = B (A triangular, NxN; B/X NxK)";
+  let arguments = (ins TensorType:$a, TensorType:$b,
+                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy,
+                        DefaultValuedAttr<BoolAttr, "true">:$lower,
+                        DefaultValuedAttr<BoolAttr, "false">:$trans,
+                        DefaultValuedAttr<BoolAttr, "false">:$unit_diag);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// SPD solve: solve A X = B for X via the Cholesky factorization of SPD A.
+def Tessera_CholeskySolveOp : Op<Tessera_Dialect, "cholesky_solve", [Pure]> {
+  let summary = "SPD solve A X = B via Cholesky (A SPD NxN; B/X NxK)";
+  let arguments = (ins TensorType:$a, TensorType:$b,
+                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy,
+                        DefaultValuedAttr<BoolAttr, "true">:$lower);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// LU factorization with partial pivoting: A = P L U (packed LU + pivots).
+def Tessera_LUOp : Op<Tessera_Dialect, "lu", [Pure]> {
+  let summary = "LU factorization with partial pivoting (A NxN → packed LU + pivots)";
+  let arguments = (ins TensorType:$a,
+                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
+  let results = (outs TensorType:$lu, TensorType:$pivots);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// QR factorization (reduced): A = Q R, Q (MxN) orthonormal cols, R (NxN) upper.
+def Tessera_QROp : Op<Tessera_Dialect, "qr", [Pure]> {
+  let summary = "QR factorization (A MxN → Q MxN, R NxN), reduced";
+  let arguments = (ins TensorType:$a,
+                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy,
+                        DefaultValuedAttr<BoolAttr, "false">:$full_matrices);
+  let results = (outs TensorType:$q, TensorType:$r);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// Singular value decomposition: A = U diag(S) Vᵀ.
+def Tessera_SVDOp : Op<Tessera_Dialect, "svd", [Pure]> {
+  let summary = "Singular value decomposition (A MxN → U, S, V)";
+  let arguments = (ins TensorType:$a,
+                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy,
+                        DefaultValuedAttr<BoolAttr, "false">:$full_matrices);
+  let results = (outs TensorType:$u, TensorType:$s, TensorType:$v);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 def Tessera_Conv2DNHWCOp : Op<
   Tessera_Dialect, "conv2d_nhwc",
   [Pure,

@@ -187,32 +187,46 @@ private:
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Rewrite pattern: TileCholesky  (L-series linalg pilot, 2026-06-02)
+// Rewrite pattern: TileLinalg  (L-series linalg family, 2026-06-02)
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// Cholesky is a sequential blocked factorization, not an embarrassingly-
-// parallel loop nest like matmul, so the pilot does not tile it into scf.for.
-// Instead it lowers 1:1 to an opaque Tile-IR op `tile.cholesky`, giving the
-// Tile layer an explicit, distinct representation that the Tile→Apple pass
-// (L4) consumes.  Carrying `lower` / `numeric_policy` attributes forward keeps
-// the contract intact.  Matching `tessera.cholesky` → `tile.cholesky` (a
-// different op name) means the greedy driver applies it exactly once.
-struct TileCholesky : public RewritePattern {
-  TileCholesky(MLIRContext *ctx)
-      : RewritePattern("tessera.cholesky", /*benefit=*/1, ctx) {}
+// The linalg primitives (cholesky / tri_solve / cholesky_solve / lu / qr / svd)
+// are sequential blocked factorizations and solves, not embarrassingly-parallel
+// loop nests like matmul, so the pilot does not tile them into scf.for.  Each
+// lowers 1:1 to an opaque Tile-IR op `tile.<suffix>` (e.g. tessera.tri_solve →
+// tile.tri_solve), giving the Tile layer an explicit, distinct representation
+// that the Tile→Apple pass consumes.  This single pattern is the table-driven
+// generalization of the original cholesky one-off: it copies all operands and
+// all result types verbatim, so it handles multi-operand (tri_solve,
+// *_solve: A,B→X) and multi-result (lu, qr, svd: A→U,S,V) ops uniformly.
+// All attributes are carried forward and the Graph-IR op spelling is preserved
+// as `source` so the Tile→Apple pass (which matches by `source`) recognizes the
+// opaque tile op.  Matching `tessera.<op>` → `tile.<op>` (a different name)
+// means the greedy driver applies it exactly once.
+//
+// The op set IS the table; adding a linalg op is a one-line edit here plus a
+// matching spec in TileToApple.cpp's kLinalgSpecs and a runtime symbol.
+static constexpr llvm::StringLiteral kLinalgGraphOps[] = {
+    "tessera.cholesky",      "tessera.tri_solve", "tessera.cholesky_solve",
+    "tessera.lu",            "tessera.qr",        "tessera.svd"};
+
+struct TileLinalg : public RewritePattern {
+  TileLinalg(MLIRContext *ctx, llvm::StringRef opName)
+      : RewritePattern(opName, /*benefit=*/1, ctx) {}
 
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
-    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
-      return failure();
-    OperationState st(op->getLoc(), "tile.cholesky");
-    st.addOperands(op->getOperand(0));
-    st.addTypes(op->getResult(0).getType());
+    llvm::StringRef graphName = op->getName().getStringRef();
+    llvm::StringRef suffix = graphName;
+    suffix.consume_front("tessera.");
+    std::string tileName = ("tile." + suffix).str();
+
+    OperationState st(op->getLoc(), tileName);
+    st.addOperands(op->getOperands());
+    st.addTypes(op->getResultTypes());
     for (auto &na : op->getAttrs())
       st.addAttribute(na.getName(), na.getValue());
-    // Preserve the Graph-IR op spelling as `source` so the Tile→Apple pass
-    // (which matches by `source`) recognizes this opaque tile op.
-    st.addAttribute("source", rewriter.getStringAttr("tessera.cholesky"));
+    st.addAttribute("source", rewriter.getStringAttr(graphName));
     Operation *tiled = rewriter.create(st);
     rewriter.replaceOp(op, tiled->getResults());
     return success();
@@ -237,8 +251,9 @@ struct TilingPassImpl
 
   StringRef getArgument()    const override { return "tessera-tiling"; }
   StringRef getDescription() const override {
-    return "Tile tessera.matmul into scf.for M×N loop nests; lower "
-           "tessera.cholesky to the opaque tile.cholesky Tile-IR op";
+    return "Tile tessera.matmul into scf.for M×N loop nests; lower the linalg "
+           "family (cholesky/tri_solve/cholesky_solve/lu/qr/svd) to opaque "
+           "tile.<op> Tile-IR ops";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
@@ -251,7 +266,8 @@ struct TilingPassImpl
     patterns.add<TileMatmul>(&getContext(),
                              static_cast<int64_t>(tileMOpt),
                              static_cast<int64_t>(tileNOpt));
-    patterns.add<TileCholesky>(&getContext());
+    for (llvm::StringRef opName : kLinalgGraphOps)
+      patterns.add<TileLinalg>(&getContext(), opName);
     if (failed(applyPatternsAndFoldGreedily(getOperation(),
                                            std::move(patterns))))
       signalPassFailure();

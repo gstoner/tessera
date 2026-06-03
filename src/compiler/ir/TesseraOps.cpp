@@ -54,6 +54,105 @@ LogicalResult CholeskyOp::verify() {
   return success();
 }
 
+// L-series linalg family verifiers (2026-06-02). Pilot-level: rank + the core
+// shape relations, all dynamic-dim-aware (skip checks on dynamic dims).
+namespace {
+// Helper: static dim equality (treats dynamic as "matches anything").
+bool dimsAgree(int64_t a, int64_t b) {
+  return mlir::ShapedType::isDynamic(a) || mlir::ShapedType::isDynamic(b) ||
+         a == b;
+}
+} // namespace
+
+LogicalResult TriSolveOp::verify() {
+  auto a = dyn_cast<RankedTensorType>(getA().getType());
+  auto b = dyn_cast<RankedTensorType>(getB().getType());
+  auto x = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!a || !b || !x)
+    return success();
+  if (a.getRank() != 2 || b.getRank() != 2 || x.getRank() != 2)
+    return emitOpError("expects rank-2 A, B, and result tensors");
+  if (!dimsAgree(a.getDimSize(0), a.getDimSize(1)))
+    return emitOpError("A must be square");
+  if (!dimsAgree(a.getDimSize(0), b.getDimSize(0)))
+    return emitOpError("A rows must match B rows (op(A) X = B)");
+  if (!dimsAgree(b.getDimSize(0), x.getDimSize(0)) ||
+      !dimsAgree(b.getDimSize(1), x.getDimSize(1)))
+    return emitOpError("result must have the same shape as B");
+  return success();
+}
+
+LogicalResult CholeskySolveOp::verify() {
+  auto a = dyn_cast<RankedTensorType>(getA().getType());
+  auto b = dyn_cast<RankedTensorType>(getB().getType());
+  auto x = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!a || !b || !x)
+    return success();
+  if (a.getRank() != 2 || b.getRank() != 2 || x.getRank() != 2)
+    return emitOpError("expects rank-2 A, B, and result tensors");
+  if (!dimsAgree(a.getDimSize(0), a.getDimSize(1)))
+    return emitOpError("A must be square (SPD)");
+  if (!dimsAgree(a.getDimSize(0), b.getDimSize(0)))
+    return emitOpError("A rows must match B rows (A X = B)");
+  if (!dimsAgree(b.getDimSize(0), x.getDimSize(0)) ||
+      !dimsAgree(b.getDimSize(1), x.getDimSize(1)))
+    return emitOpError("result must have the same shape as B");
+  return success();
+}
+
+LogicalResult LUOp::verify() {
+  auto a = dyn_cast<RankedTensorType>(getA().getType());
+  auto lu = dyn_cast<RankedTensorType>(getLu().getType());
+  auto piv = dyn_cast<RankedTensorType>(getPivots().getType());
+  if (!a || !lu || !piv)
+    return success();
+  if (a.getRank() != 2 || lu.getRank() != 2)
+    return emitOpError("expects rank-2 A and packed-LU tensors");
+  if (!dimsAgree(a.getDimSize(0), a.getDimSize(1)))
+    return emitOpError("A must be square");
+  if (!dimsAgree(a.getDimSize(0), lu.getDimSize(0)) ||
+      !dimsAgree(a.getDimSize(1), lu.getDimSize(1)))
+    return emitOpError("packed LU must have the same shape as A");
+  if (piv.getRank() != 1)
+    return emitOpError("pivots must be a rank-1 tensor");
+  if (!dimsAgree(a.getDimSize(0), piv.getDimSize(0)))
+    return emitOpError("pivots length must equal the matrix order");
+  return success();
+}
+
+LogicalResult QROp::verify() {
+  auto a = dyn_cast<RankedTensorType>(getA().getType());
+  auto q = dyn_cast<RankedTensorType>(getQ().getType());
+  auto r = dyn_cast<RankedTensorType>(getR().getType());
+  if (!a || !q || !r)
+    return success();
+  if (a.getRank() != 2 || q.getRank() != 2 || r.getRank() != 2)
+    return emitOpError("expects rank-2 A, Q, and R tensors");
+  // Reduced QR (M>=N): Q is MxN, R is NxN. Q rows match A rows; R is square
+  // with order = A columns; Q columns match R rows.
+  if (!dimsAgree(a.getDimSize(0), q.getDimSize(0)))
+    return emitOpError("Q rows must match A rows");
+  if (!dimsAgree(q.getDimSize(1), r.getDimSize(0)))
+    return emitOpError("Q columns must match R rows");
+  return success();
+}
+
+LogicalResult SVDOp::verify() {
+  auto a = dyn_cast<RankedTensorType>(getA().getType());
+  auto u = dyn_cast<RankedTensorType>(getU().getType());
+  auto s = dyn_cast<RankedTensorType>(getS().getType());
+  auto v = dyn_cast<RankedTensorType>(getV().getType());
+  if (!a || !u || !s || !v)
+    return success();
+  if (a.getRank() != 2 || u.getRank() != 2 || v.getRank() != 2)
+    return emitOpError("expects rank-2 A, U, and V tensors");
+  if (s.getRank() != 1)
+    return emitOpError("singular values S must be a rank-1 tensor");
+  if (!dimsAgree(a.getDimSize(0), u.getDimSize(0)))
+    return emitOpError("U rows must match A rows");
+  return success();
+}
+
 LogicalResult Conv2DNHWCOp::verify() {
   auto inputType = dyn_cast<RankedTensorType>(getInput().getType());
   auto filterType = dyn_cast<RankedTensorType>(getFilter().getType());

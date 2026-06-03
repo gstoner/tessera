@@ -84,6 +84,27 @@ namespace {
   return 0;
 }
 
+// L-series linalg family (2026-06-02): row↔column-major transpose helpers.
+// Tessera buffers are row-major; Accelerate's LAPACK Fortran interface is
+// column-major.  These copy a matrix between the two layouts so each LAPACK
+// call receives the true matrix in column-major and writes results back to
+// row-major.  Correctness-first (an explicit transpose copy); the reference
+// LAPACK path is not the perf-critical lane.
+[[maybe_unused]] inline void rowmaj_to_colmaj(const float* src, float* dst,
+                                              int32_t rows, int32_t cols) {
+  for (int32_t i = 0; i < rows; ++i)
+    for (int32_t j = 0; j < cols; ++j)
+      dst[static_cast<std::size_t>(j) * rows + i] =
+          src[static_cast<std::size_t>(i) * cols + j];
+}
+[[maybe_unused]] inline void colmaj_to_rowmaj(const float* src, float* dst,
+                                              int32_t rows, int32_t cols) {
+  for (int32_t i = 0; i < rows; ++i)
+    for (int32_t j = 0; j < cols; ++j)
+      dst[static_cast<std::size_t>(i) * cols + j] =
+          src[static_cast<std::size_t>(j) * rows + i];
+}
+
 } // namespace
 
 extern "C" void tessera_apple_cpu_gemm_f32(const float* A, const float* B,
@@ -457,6 +478,151 @@ extern "C" void tessera_apple_cpu_gemm_bf16(const uint16_t* A, const uint16_t* B
   if (bnns_gemm_bf16(A, B, C, M, N, K)) return;
 #endif
   cblas_bf16_via_fp32(A, B, C, M, N, K);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// L-series linalg family — Apple CPU LAPACK runtime symbols (2026-06-02)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// All use Accelerate's column-major Fortran LAPACK; Tessera buffers are
+// row-major, so each transposes in/out.  Return 0 on success, LAPACK `info`
+// (>0) on numerical failure, -1 when the Accelerate path is unavailable
+// (portable non-Apple fallback — these are exercised numerically on Darwin).
+
+// Triangular solve op(A) X = B.  ABI: A(NxN), B(NxK) in, X(NxK) out.
+extern "C" int32_t tessera_apple_cpu_tri_solve_f32(
+    const float* A, const float* B, float* X, int32_t N, int32_t K,
+    int32_t lower, int32_t trans, int32_t unit_diag) {
+  if (N <= 0 || K <= 0) return 0;
+#if TESSERA_APPLE_CPU_HAVE_ACCELERATE
+  std::vector<float> cA(static_cast<std::size_t>(N) * N);
+  std::vector<float> cB(static_cast<std::size_t>(N) * K);
+  rowmaj_to_colmaj(A, cA.data(), N, N);
+  rowmaj_to_colmaj(B, cB.data(), N, K);
+  char uplo = lower ? 'L' : 'U';
+  char tr = trans ? 'T' : 'N';
+  char dg = unit_diag ? 'U' : 'N';
+  __LAPACK_int n = N, nrhs = K, lda = N, ldb = N, info = 0;
+  strtrs_(&uplo, &tr, &dg, &n, &nrhs, cA.data(), &lda, cB.data(), &ldb, &info);
+  if (info != 0) return static_cast<int32_t>(info);
+  colmaj_to_rowmaj(cB.data(), X, N, K);
+  return 0;
+#else
+  (void)A; (void)B; (void)X; (void)lower; (void)trans; (void)unit_diag;
+  return -1;
+#endif
+}
+
+// SPD solve A X = B via Cholesky.  ABI: A(NxN SPD), B(NxK) in, X(NxK) out.
+extern "C" int32_t tessera_apple_cpu_cholesky_solve_f32(
+    const float* A, const float* B, float* X, int32_t N, int32_t K,
+    int32_t lower) {
+  if (N <= 0 || K <= 0) return 0;
+#if TESSERA_APPLE_CPU_HAVE_ACCELERATE
+  std::vector<float> cA(static_cast<std::size_t>(N) * N);
+  std::vector<float> cB(static_cast<std::size_t>(N) * K);
+  rowmaj_to_colmaj(A, cA.data(), N, N);
+  rowmaj_to_colmaj(B, cB.data(), N, K);
+  char uplo = lower ? 'L' : 'U';
+  __LAPACK_int n = N, nrhs = K, lda = N, ldb = N, info = 0;
+  spotrf_(&uplo, &n, cA.data(), &lda, &info);
+  if (info != 0) return static_cast<int32_t>(info);
+  spotrs_(&uplo, &n, &nrhs, cA.data(), &lda, cB.data(), &ldb, &info);
+  if (info != 0) return static_cast<int32_t>(info);
+  colmaj_to_rowmaj(cB.data(), X, N, K);
+  return 0;
+#else
+  (void)A; (void)B; (void)X; (void)lower;
+  return -1;
+#endif
+}
+
+// LU with partial pivoting.  ABI: A(NxN) in; LU(NxN, row-major packed) +
+// pivots(N, 1-based LAPACK ipiv) out.
+extern "C" int32_t tessera_apple_cpu_lu_f32(const float* A, float* LU,
+                                            int32_t* pivots, int32_t N) {
+  if (N <= 0) return 0;
+#if TESSERA_APPLE_CPU_HAVE_ACCELERATE
+  std::vector<float> cA(static_cast<std::size_t>(N) * N);
+  rowmaj_to_colmaj(A, cA.data(), N, N);
+  std::vector<__LAPACK_int> ipiv(N);
+  __LAPACK_int m = N, n = N, lda = N, info = 0;
+  sgetrf_(&m, &n, cA.data(), &lda, ipiv.data(), &info);
+  colmaj_to_rowmaj(cA.data(), LU, N, N);
+  for (int32_t i = 0; i < N; ++i) pivots[i] = static_cast<int32_t>(ipiv[i]);
+  return static_cast<int32_t>(info); // >0: U(i,i)==0 (singular)
+#else
+  (void)A; (void)LU; (void)pivots;
+  return -1;
+#endif
+}
+
+// Reduced QR (assumes M >= N).  ABI: A(MxN) in; Q(MxN orthonormal cols),
+// R(NxN upper) out.
+extern "C" int32_t tessera_apple_cpu_qr_f32(const float* A, float* Q, float* R,
+                                            int32_t M, int32_t N) {
+  if (M <= 0 || N <= 0) return 0;
+  if (M < N) return -2; // pilot: wide QR (M<N) not supported yet
+#if TESSERA_APPLE_CPU_HAVE_ACCELERATE
+  std::vector<float> cA(static_cast<std::size_t>(M) * N);
+  rowmaj_to_colmaj(A, cA.data(), M, N);
+  std::vector<float> tau(N);
+  __LAPACK_int m = M, n = N, lda = M, info = 0, lwork = -1;
+  float wq = 0.0f;
+  sgeqrf_(&m, &n, cA.data(), &lda, tau.data(), &wq, &lwork, &info);
+  lwork = static_cast<__LAPACK_int>(wq);
+  std::vector<float> work(lwork > 0 ? lwork : 1);
+  sgeqrf_(&m, &n, cA.data(), &lda, tau.data(), work.data(), &lwork, &info);
+  if (info != 0) return static_cast<int32_t>(info);
+  // R (NxN) row-major from the upper triangle of the col-major factor.
+  for (int32_t i = 0; i < N; ++i)
+    for (int32_t j = 0; j < N; ++j)
+      R[static_cast<std::size_t>(i) * N + j] =
+          (j >= i) ? cA[static_cast<std::size_t>(j) * M + i] : 0.0f;
+  // Form Q (M x N) from the reflectors (k = N).
+  __LAPACK_int k = N, lwork2 = -1;
+  float wq2 = 0.0f;
+  sorgqr_(&m, &n, &k, cA.data(), &lda, tau.data(), &wq2, &lwork2, &info);
+  lwork2 = static_cast<__LAPACK_int>(wq2);
+  std::vector<float> work2(lwork2 > 0 ? lwork2 : 1);
+  sorgqr_(&m, &n, &k, cA.data(), &lda, tau.data(), work2.data(), &lwork2, &info);
+  if (info != 0) return static_cast<int32_t>(info);
+  colmaj_to_rowmaj(cA.data(), Q, M, N); // Q: M x N
+  return 0;
+#else
+  (void)A; (void)Q; (void)R;
+  return -1;
+#endif
+}
+
+// Reduced SVD (A = U diag(S) V).  ABI: A(MxN) in; U(M x K), S(K), V(K x N) out,
+// K = min(M, N).  V is Vᵀ in row-major so the reconstruction is U·diag(S)·V.
+extern "C" int32_t tessera_apple_cpu_svd_f32(const float* A, float* U, float* S,
+                                             float* V, int32_t M, int32_t N) {
+  if (M <= 0 || N <= 0) return 0;
+#if TESSERA_APPLE_CPU_HAVE_ACCELERATE
+  int32_t Kc = M < N ? M : N;
+  std::vector<float> cA(static_cast<std::size_t>(M) * N);
+  rowmaj_to_colmaj(A, cA.data(), M, N);
+  std::vector<float> cU(static_cast<std::size_t>(M) * Kc);
+  std::vector<float> cVT(static_cast<std::size_t>(Kc) * N);
+  char ju = 'S', jv = 'S';
+  __LAPACK_int m = M, n = N, lda = M, ldu = M, ldvt = Kc, info = 0, lwork = -1;
+  float wq = 0.0f;
+  sgesvd_(&ju, &jv, &m, &n, cA.data(), &lda, S, cU.data(), &ldu, cVT.data(),
+          &ldvt, &wq, &lwork, &info);
+  lwork = static_cast<__LAPACK_int>(wq);
+  std::vector<float> work(lwork > 0 ? lwork : 1);
+  sgesvd_(&ju, &jv, &m, &n, cA.data(), &lda, S, cU.data(), &ldu, cVT.data(),
+          &ldvt, work.data(), &lwork, &info);
+  if (info != 0) return static_cast<int32_t>(info);
+  colmaj_to_rowmaj(cU.data(), U, M, Kc);   // U: M x Kc
+  colmaj_to_rowmaj(cVT.data(), V, Kc, N);  // V = Vᵀ: Kc x N
+  return 0;
+#else
+  (void)A; (void)U; (void)S; (void)V;
+  return -1;
+#endif
 }
 
 #if defined(__clang__)

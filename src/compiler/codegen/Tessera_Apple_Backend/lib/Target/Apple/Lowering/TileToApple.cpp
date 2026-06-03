@@ -93,10 +93,50 @@ bool isFlashAttn(llvm::StringRef name) { return name == "tessera.flash_attn"; }
 
 bool isRoPE(llvm::StringRef name) { return name == "tessera.rope"; }
 
-// L-series linalg pilot (2026-06-02): Cholesky factorization.  The Tile layer
-// emits `tile.cholesky` (carrying source = "tessera.cholesky"); match either.
-bool isCholesky(llvm::StringRef name) {
-  return name == "tessera.cholesky" || name == "tile.cholesky";
+// L-series linalg family (2026-06-02) — table-driven Tile→Apple lowering.
+//
+// Each linalg op carries the Tile-layer name `tile.<suffix>` plus
+// `source = "tessera.<suffix>"` (set by TilingPass).  This single spec table is
+// the source of truth that drives both the CPU branch (Accelerate LAPACK) and
+// the GPU branch (custom MSL).  Adding a linalg op = one row here + one entry in
+// TilingPass.cpp's kLinalgGraphOps + the runtime symbol.
+//
+//   cpuSymbol  — Apple CPU C ABI entry (Accelerate LAPACK); always present.
+//   gpuSymbol  — Apple GPU MSL C ABI entry, or "" when no GPU kernel exists yet
+//                (the op then lowers GPU-side as an inspection artifact).
+struct LinalgSpec {
+  llvm::StringLiteral graphName; // "tessera.cholesky"
+  llvm::StringLiteral cpuAbi;    // "lapack_spotrf"
+  llvm::StringLiteral cpuSymbol; // "tessera_apple_cpu_cholesky_f32"
+  llvm::StringLiteral gpuSymbol; // "tessera_apple_gpu_cholesky_f32" or ""
+};
+
+constexpr LinalgSpec kLinalgSpecs[] = {
+    {"tessera.cholesky", "lapack_spotrf", "tessera_apple_cpu_cholesky_f32",
+     "tessera_apple_gpu_cholesky_f32"},
+    {"tessera.tri_solve", "lapack_strtrs", "tessera_apple_cpu_tri_solve_f32",
+     "tessera_apple_gpu_tri_solve_f32"},
+    {"tessera.cholesky_solve", "lapack_spotrs",
+     "tessera_apple_cpu_cholesky_solve_f32",
+     "tessera_apple_gpu_solve_cholesky_f32"},
+    {"tessera.lu", "lapack_sgetrf", "tessera_apple_cpu_lu_f32", ""},
+    {"tessera.qr", "lapack_sgeqrf", "tessera_apple_cpu_qr_f32", ""},
+    {"tessera.svd", "lapack_sgesvd", "tessera_apple_cpu_svd_f32",
+     "tessera_apple_gpu_svd_f32"},
+};
+
+// Resolve the spec by either the Tile-IR name (tile.<suffix>) or the canonical
+// Graph-IR `source` spelling (tessera.<suffix>).
+const LinalgSpec *linalgSpecFor(llvm::StringRef name) {
+  for (const LinalgSpec &s : kLinalgSpecs) {
+    if (name == s.graphName)
+      return &s;
+    llvm::StringRef suffix = s.graphName;
+    suffix.consume_front("tessera.");
+    if (name == ("tile." + suffix).str())
+      return &s;
+  }
+  return nullptr;
 }
 
 bool isKVCache(llvm::StringRef name) {
@@ -131,11 +171,13 @@ bool isAppleGpuRuntimeOp(llvm::StringRef n) {
       // rung — without them, the C++ pass silently demoted conv to
       // artifact_only even though the runtime executes it.
       "tessera.conv2d", "tessera.conv3d",
-      // L-series linalg pilot (2026-06-02) — cholesky executes on the GPU via
-      // the real MSL kernel `tessera_apple_gpu_cholesky_f32`
-      // (driver._APPLE_GPU_LINALG_OPS).  Closes APPLE_AUDIT glass-jaw #10 for
-      // cholesky; tri_solve is the remaining LINALG member (same template).
-      "tessera.cholesky"};
+      // L-series linalg family (2026-06-02) — cholesky + tri_solve execute on
+      // the GPU via real MSL kernels (driver._APPLE_GPU_LINALG_OPS).  The other
+      // family members (cholesky_solve/lu/qr/svd) lower GPU-side as inspection
+      // artifacts for now (their CPU LAPACK path is real + tested); their GPU
+      // runtime wiring is a follow-on, at which point each joins this list, the
+      // driver envelope, and the drift gate together.
+      "tessera.cholesky", "tessera.tri_solve"};
   for (const auto &r : kRuntimeOps)
     if (n == r)
       return true;
@@ -288,21 +330,25 @@ struct LowerTileToAppleCPUPass
         extra.emplace_back(builder.getStringAttr("kind"),
                            builder.getStringAttr(kind));
         buildAppleOp(builder, op, kCPUKVCacheOp, ordinal, extra);
-      } else if (isCholesky(name) || isCholesky(src)) {
-        // L-series linalg pilot — Apple CPU Cholesky via Accelerate's LAPACK
-        // (spotrf).  Reuses the registered generic `tessera_apple.cpu.vector_op`
-        // (the dialect rejects unregistered ops); the `abi` + `symbol` attrs
-        // carry the linalg identity.  The seam-closure executor (L6) reads
-        // `symbol` straight off this op to pick the C ABI entry.
+      } else if (const LinalgSpec *sp =
+                     linalgSpecFor(name) ? linalgSpecFor(name)
+                                         : linalgSpecFor(src)) {
+        // L-series linalg family — Apple CPU via Accelerate's LAPACK.  Reuses
+        // the registered generic `tessera_apple.cpu.vector_op` (the dialect
+        // rejects unregistered ops); the `abi` + `symbol` attrs carry the linalg
+        // identity.  The seam-closure executor reads `symbol` straight off this
+        // op to pick the C ABI entry.  Table-driven via kLinalgSpecs.
+        llvm::StringRef opKind = sp->graphName;
+        opKind.consume_front("tessera.");
         llvm::SmallVector<NamedAttribute, 4> extra;
         extra.emplace_back(builder.getStringAttr("framework"),
                            builder.getStringAttr("Accelerate"));
         extra.emplace_back(builder.getStringAttr("abi"),
-                           builder.getStringAttr("lapack_spotrf"));
+                           builder.getStringAttr(sp->cpuAbi));
         extra.emplace_back(builder.getStringAttr("op_kind"),
-                           builder.getStringAttr("cholesky"));
+                           builder.getStringAttr(opKind));
         extra.emplace_back(builder.getStringAttr("symbol"),
-                           builder.getStringAttr("tessera_apple_cpu_cholesky_f32"));
+                           builder.getStringAttr(sp->cpuSymbol));
         buildAppleOp(builder, op, kCPUVectorOp, ordinal, extra);
       } else if (isMatmul(name) || isMatmul(src)) {
         llvm::SmallVector<NamedAttribute, 2> extra;
@@ -416,20 +462,27 @@ struct LowerTileToAppleGPUPass
                            builder.getStringAttr("scores_lse"));
         buildAppleOp(builder, op, kGPUMetalKernel, ordinal, extra);
         emittedKernel = true;
-      } else if (isCholesky(name) || isCholesky(src)) {
-        // L-series linalg pilot — Apple GPU Cholesky via the custom MSL kernel
-        // `tessera_apple_gpu_cholesky_f32`.  `status` mirrors the Python
-        // envelope (isAppleGpuRuntimeOp ⇒ metal_runtime); `symbol` is the C ABI
-        // entry the seam-closure executor (L6) reads directly off this op.
+      } else if (const LinalgSpec *sp =
+                     linalgSpecFor(name) ? linalgSpecFor(name)
+                                         : linalgSpecFor(src)) {
+        // L-series linalg family — Apple GPU via custom MSL kernels.  `status`
+        // mirrors the Python envelope (isAppleGpuRuntimeOp ⇒ metal_runtime).
+        // `symbol` is the C ABI entry the seam-closure executor reads directly
+        // off this op; it is only emitted when a real GPU kernel exists (ops
+        // without one — lu/qr — lower as inspection artifacts, status
+        // artifact_only, no symbol).  Table-driven via kLinalgSpecs.
+        llvm::StringRef opKind = sp->graphName;
+        opKind.consume_front("tessera.");
         llvm::SmallVector<NamedAttribute, 7> extra;
         extra.emplace_back(builder.getStringAttr("kernel"),
-                           builder.getStringAttr("cholesky_contract"));
+                           builder.getStringAttr((opKind + "_contract").str()));
         extra.emplace_back(builder.getStringAttr("framework"),
                            builder.getStringAttr("Metal"));
         extra.emplace_back(builder.getStringAttr("status"),
                            builder.getStringAttr(execStatus));
-        extra.emplace_back(builder.getStringAttr("symbol"),
-                           builder.getStringAttr("tessera_apple_gpu_cholesky_f32"));
+        if (!sp->gpuSymbol.empty())
+          extra.emplace_back(builder.getStringAttr("symbol"),
+                             builder.getStringAttr(sp->gpuSymbol));
         extra.emplace_back(builder.getStringAttr("grid"),
                            builder.getStringAttr("single_threadgroup"));
         extra.emplace_back(builder.getStringAttr("threadgroup"),

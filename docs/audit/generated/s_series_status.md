@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 4 | 428 |
-| `transpose_rule` | 0 | 432 |
-| `sharding_rule` | 30 | 402 |
-| `lowering_rule` | 0 | 432 |
-| `backend_kernel` | 432 | 0 |
+| `batching_rule` | 4 | 430 |
+| `transpose_rule` | 0 | 434 |
+| `sharding_rule` | 32 | 402 |
+| `lowering_rule` | 0 | 434 |
+| `backend_kernel` | 434 | 0 |
 
 ## Per-category breakdown
 
@@ -52,8 +52,8 @@
 | other | `fused_epilogue` | 1 | — | — | — | — | 1 |
 | other | `indexing` | 9 | — | — | — | — | 9 |
 | other | `layout_transform` | 14 | — | — | — | — | 14 |
-| other | `linalg_decomposition` | 3 | — | — | 3 | — | 3 |
-| other | `linalg_solver` | 1 | — | — | 1 | — | 1 |
+| other | `linalg_decomposition` | 4 | — | — | 4 | — | 4 |
+| other | `linalg_solver` | 2 | — | — | 2 | — | 2 |
 | other | `logical` | 8 | — | — | — | — | 8 |
 | other | `loop_nest` | 7 | — | — | 1 | — | 7 |
 | other | `model_layer` | 4 | — | — | — | — | 4 |
@@ -93,7 +93,7 @@
 | S11 | 30 | 0 | 0 | 0 | 30 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
 | M6 | 12 | 0 | 0 | 4 | 12 |
-| other | 245 | 4 | 0 | 19 | 245 |
+| other | 247 | 4 | 0 | 21 | 247 |
 
 ## Closure trajectory
 

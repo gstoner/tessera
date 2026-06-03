@@ -157,8 +157,10 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `unsqueeze` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `view` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `cholesky` | linalg_decomposition | public | public | registered | complete | partial | reference | ready | none |
+| `lu` | linalg_decomposition | public | public | registered | complete | partial | reference | ready | none |
 | `qr` | linalg_decomposition | public | public | registered | complete | partial | reference | ready | none |
 | `svd` | linalg_decomposition | public | public | registered | complete | partial | reference | ready | none |
+| `cholesky_solve` | linalg_solver | public | public | registered | complete | partial | reference | ready | none |
 | `tri_solve` | linalg_solver | public | public | registered | complete | partial | reference | ready | none |
 | `bitwise_and` | logical | public | public | registered | complete | partial | reference | ready | none |
 | `bitwise_not` | logical | public | public | registered | complete | partial | reference | ready | none |
@@ -302,8 +304,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | geometric_algebra | 17 | PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB |
 | indexing | 11 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | layout_transform | 31 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| linalg_decomposition | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
-| linalg_solver | 1 | PPGCpRN· |
+| linalg_decomposition | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| linalg_solver | 2 | PPGCpRN· PPGCpRN· |
 | logical | 8 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | loop_nest | 7 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· |
 | loss | 10 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |

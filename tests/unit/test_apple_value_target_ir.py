@@ -579,3 +579,175 @@ def test_value_mode_output_has_no_husk_or_tile_leftover():
     for bad in ("ub.poison", "tensor.empty", "tile.svd", "tile.qr",
                 "tile.lu", "tile.cholesky"):
         assert bad not in ir, f"forbidden '{bad}' survived in value-mode front-door IR"
+
+
+# ── Sprint 4: resolver hardening + honest coverage boundaries ───────────────
+#
+# Sprint 4 fixes the Sprint 3 portability blocker: the value front door must
+# find the in-repo build/tools/tessera-opt/tessera-opt without TESSERA_OPT or
+# PATH (the old parents[2] fallback pointed at python/build/, which never
+# exists). It also pins the coverage boundary: CPU linalg value calls execute;
+# GPU value calls and non-linalg value calls stay gated / artifact-mode.
+
+_REPO_BUILT_OPT = REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"
+
+
+def test_repo_root_walk_finds_source_root():
+    """_tessera_repo_root walks up to the dir containing python/tessera AND
+    src/compiler — not the python/ dir the old parents[2] assumption hit."""
+    from tessera.compiler import driver
+    root = driver._tessera_repo_root()
+    assert root is not None
+    assert (root / "python" / "tessera").is_dir()
+    assert (root / "src" / "compiler").is_dir()
+    assert root == REPO_ROOT
+
+
+@pytest.mark.skipif(not _REPO_BUILT_OPT.is_file(),
+                    reason="repo-built tessera-opt is absent")
+def test_resolver_finds_repo_built_opt_without_env_or_path(monkeypatch, tmp_path):
+    """With TESSERA_OPT cleared and PATH scrubbed of tessera-opt, the resolver
+    still finds the in-repo build (the Sprint 3 portability fix)."""
+    from tessera.compiler import driver
+    monkeypatch.delenv("TESSERA_OPT", raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path))  # no tessera-opt on this PATH
+    assert shutil.which("tessera-opt") is None  # precondition: PATH is scrubbed
+    resolved = driver._resolve_tessera_opt()
+    assert resolved is not None
+    assert Path(resolved) == _REPO_BUILT_OPT
+
+
+def test_resolver_precedence_env_first(monkeypatch):
+    """TESSERA_OPT takes precedence over PATH and the in-repo build."""
+    from tessera.compiler import driver
+    monkeypatch.setenv("TESSERA_OPT", "/custom/tessera-opt")
+    assert driver._resolve_tessera_opt() == "/custom/tessera-opt"
+
+
+@pytest.mark.skipif(not _REPO_BUILT_OPT.is_file(),
+                    reason="repo-built tessera-opt is absent")
+def test_front_door_value_mode_works_without_environment(monkeypatch, tmp_path):
+    """canonical_compile value mode succeeds with no TESSERA_OPT and a scrubbed
+    PATH — proving the front door relies on the resolver, not the environment."""
+    from tessera.compiler.canonical_compile import canonical_compile
+    monkeypatch.delenv("TESSERA_OPT", raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    m = _build_module("tessera.cholesky", "c",
+                      [("tensor<3x3xf32>", (3, 3))],
+                      [("tensor<3x3xf32>", (3, 3))], ["%c"])
+    art = canonical_compile(m, target="apple_cpu",
+                            options={"apple_target_ir_mode": "value"}).to_runtime_artifact()
+    assert art.metadata["compiler_path"] == "apple_value_target_ir"
+    assert art.metadata["apple_target_ir_kind"] == "value_target_ir"
+    assert art.metadata.get("apple_value_target_ir_error") is None
+
+
+def test_value_mode_failure_records_named_error(monkeypatch):
+    """When the -full lowering can't run (bad tessera-opt), the front door keeps
+    the artifact IR but records apple_value_target_ir_error — never silent."""
+    from tessera.compiler.canonical_compile import canonical_compile
+    monkeypatch.setenv("TESSERA_OPT", "/nonexistent/tessera-opt-xyz")
+    m = _build_module("tessera.cholesky", "c",
+                      [("tensor<3x3xf32>", (3, 3))],
+                      [("tensor<3x3xf32>", (3, 3))], ["%c"])
+    art = canonical_compile(m, target="apple_cpu",
+                            options={"apple_target_ir_mode": "value"}).to_runtime_artifact()
+    assert art.metadata.get("compiler_path") != "apple_value_target_ir"
+    assert art.metadata["apple_target_ir_kind"] == "target_ir_artifact"
+    err = art.metadata.get("apple_value_target_ir_error")
+    assert err and "tessera-opt" in err
+
+
+# GPU linalg value mode: classified but gated (no execution, no fallback output).
+@pytest.mark.parametrize("op,result,args,rtype,returns,kwargs", [
+    ("tessera.cholesky", "c", [("tensor<8x8xf32>", (8, 8))],
+     "tensor<8x8xf32>", ["%c"], None),
+    ("tessera.tri_solve", "x",
+     [("tensor<4x4xf32>", (4, 4)), ("tensor<4x2xf32>", (4, 2))],
+     "tensor<4x2xf32>", ["%x"], {"lower": True, "trans": False, "unit_diag": False}),
+])
+def test_gpu_value_mode_linalg_is_classified_and_gated(op, result, args, rtype, returns, kwargs):
+    """apple_gpu cholesky / tri_solve lower to gpu.kernel_call and route to the
+    non-executable apple_gpu/apple_value_target_ir matrix row — structured
+    non-success, never fallback output."""
+    from tessera.runtime import launch
+    m = _build_module(op, result, args, [(rtype, ())], returns, kwargs=kwargs)
+    art = _front_door_gpu(m)
+    assert art.metadata["apple_target_ir_kind"] == "value_target_ir"
+    calls = art.metadata.get("apple_value_calls") or []
+    assert calls and calls[0]["op"] == "tessera_apple.gpu.kernel_call"
+    # The GPU value row is non-executable: launch must not fabricate output.
+    assert art.metadata.get("executable") is not True
+    res = launch(art, None)
+    assert res["ok"] is False
+    assert "output" not in res
+
+
+def _front_door_gpu(module):
+    from tessera.compiler.canonical_compile import canonical_compile
+    return canonical_compile(module, target="apple_gpu",
+                             options={"apple_target_ir_mode": "value"}).to_runtime_artifact()
+
+
+# Non-linalg coverage probes — prove current artifact/gated behavior; do NOT
+# advertise these as value-executable. Each must satisfy:
+#   (a) default mode keeps its prior path (never apple_value_target_ir), and
+#   (b) value mode does not become value-executable — either no value-call
+#       routing, or a recorded apple_value_target_ir_error (named diagnostic).
+_NON_LINALG_PROBES = [
+    ("tessera.matmul", "o",
+     [("a", "tensor<4x4xf32>", (4, 4)), ("b", "tensor<4x4xf32>", (4, 4))],
+     "tensor<4x4xf32>"),
+    ("tessera.softmax", "o", [("a", "tensor<4x4xf32>", (4, 4))], "tensor<4x4xf32>"),
+    ("tessera.gelu", "o", [("a", "tensor<4x4xf32>", (4, 4))], "tensor<4x4xf32>"),
+    ("tessera.conv2d", "o",
+     [("a", "tensor<1x8x8x3xf32>", (1, 8, 8, 3)),
+      ("b", "tensor<3x3x3x4xf32>", (3, 3, 3, 4))], "tensor<1x6x6x4xf32>"),
+]
+
+
+def _build_non_linalg(op_name, result, arg_specs, rtype):
+    from tessera.compiler.graph_ir import (
+        GraphIRFunction, GraphIRModule, IRArg, IROp, IRType,
+    )
+    args = [IRArg(n, IRType(t, tuple(str(x) for x in shp), "fp32"))
+            for (n, t, shp) in arg_specs]
+    op = IROp(result=result, op_name=op_name,
+              operands=[f"%{n}" for (n, _, _) in arg_specs],
+              operand_types=[t for (_, t, _) in arg_specs],
+              result_type=rtype)
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="f", args=args, result_types=[IRType(rtype, (), "fp32")],
+        body=[op], return_values=[f"%{result}"])])
+
+
+@pytest.mark.parametrize("target", ["apple_cpu", "apple_gpu"])
+@pytest.mark.parametrize("op,result,arg_specs,rtype", _NON_LINALG_PROBES)
+def test_non_linalg_default_mode_never_value_path(target, op, result, arg_specs, rtype):
+    """Default (artifact) compile of matmul/softmax/gelu/conv2d never routes to
+    the value lane — Sprint 4 does not add value execution for these."""
+    from tessera.compiler.canonical_compile import canonical_compile
+    m = _build_non_linalg(op, result, arg_specs, rtype)
+    meta = canonical_compile(m, target=target).to_runtime_artifact().metadata
+    assert meta.get("compiler_path") != "apple_value_target_ir"
+    assert meta.get("apple_target_ir_kind") != "value_target_ir"
+
+
+@pytest.mark.parametrize("target", ["apple_cpu", "apple_gpu"])
+@pytest.mark.parametrize("op,result,arg_specs,rtype", _NON_LINALG_PROBES)
+def test_non_linalg_value_mode_not_value_executable(target, op, result, arg_specs, rtype):
+    """Value mode for non-linalg ops is honestly bounded: it never produces an
+    executable value call. Either no value routing (compiler_path unchanged) or
+    a recorded apple_value_target_ir_error — but never a value cpu.call that the
+    runtime would dispatch."""
+    from tessera.compiler.canonical_compile import canonical_compile
+    m = _build_non_linalg(op, result, arg_specs, rtype)
+    meta = canonical_compile(m, target=target,
+                             options={"apple_target_ir_mode": "value"}).to_runtime_artifact().metadata
+    # Never routes through the value executor.
+    assert meta.get("compiler_path") != "apple_value_target_ir"
+    # No executable cpu.call value op was emitted for a non-linalg op.
+    calls = meta.get("apple_value_calls") or []
+    assert not any(c.get("op") == "tessera_apple.cpu.call"
+                   and c.get("status") == "executable" for c in calls), \
+        f"{op} on {target} unexpectedly produced an executable CPU value call"

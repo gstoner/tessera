@@ -2,7 +2,7 @@
 status: Normative
 classification: Backend contract
 audience: backend authors (Apple proven; NVIDIA / ROCm inherit)
-last_updated: 2026-06-03 (Apple Value Target IR sprint)
+last_updated: 2026-06-03 (Apple Value Target IR sprint 4 — resolver hardening + coverage boundary)
 ---
 
 # Value Target IR Contract
@@ -80,23 +80,44 @@ pipelines pass `valueMode=true`); a backend may instead use distinct passes.
   matching top-level `}` while skipping braces inside quoted strings — so an
   `argument_layout` whose value is a JSON object survives intact).
 
-### What "runtime dispatches" means today (Sprint 2)
+### What "runtime dispatches" means today (Sprints 2–4)
 
-This is a **narrow, honest** executable path, not a blanket claim:
+This is a **narrow, honest** executable path, not a blanket claim. The boundary
+is **CPU linalg = executable; GPU value calls and non-linalg value calls =
+classified + gated**.
 
-- **Apple CPU `cholesky` value-call is executable now.** The matrix row
-  `(apple_cpu, apple_value_target_ir)` resolves to the
+- **The full Apple CPU linalg family is executable now (Sprint 3).** The matrix
+  row `(apple_cpu, apple_value_target_ir)` resolves to the
   `_execute_apple_value_target_ir_artifact` executor, which reads
-  `metadata["apple_value_calls"]`, requires a single
-  `tessera_apple.cpu.call` with `status == "executable"` and a symbol on the
-  CPU allowlist (`tessera_apple_cpu_cholesky_f32`), and invokes that C ABI entry
-  via ctypes (numpy alloc, f32-contiguous, shape-validated). `runtime.launch`
-  returns the real factor — the executed result is produced by the `symbol`
-  named *in the IR*, not by a parallel op-name matcher.
+  `metadata["apple_value_calls"]`, requires a single `tessera_apple.cpu.call`
+  with `status == "executable"` and a symbol on the CPU allowlist, and invokes
+  that C ABI entry via ctypes (numpy alloc, f32-contiguous, shape-validated).
+  The allowlist is all six LAPACK-backed symbols:
+  `tessera_apple_cpu_{cholesky,tri_solve,cholesky_solve,lu,qr,svd}_f32`.
+  Single-result ops return one ndarray; multi-result ops return a tuple in SSA
+  order (`lu→(LU,pivots)`, `qr→(Q,R)`, `svd→(U,S,V)`). The linalg semantic attrs
+  `lower`/`trans`/`unit_diag`/`full_matrices` ride the value op and parameterize
+  the ABI. The executed result is produced by the `symbol` named *in the IR*,
+  not by a parallel op-name matcher.
+- **The front door is environment-free (Sprint 4).** `apple_target_ir_mode =
+  "value"` runs the `-full` pipeline via `driver._resolve_tessera_opt()`, whose
+  precedence is `TESSERA_OPT` → `PATH` → the in-repo
+  `build/tools/tessera-opt/tessera-opt` (located by a repo-root parent walk that
+  finds `python/tessera` + `src/compiler`). A source checkout needs no env
+  setup. When the `-full` lowering can't run or fails, the front door keeps the
+  artifact IR and records `apple_value_target_ir_error` — the failure is
+  observable, never silent.
 - **Everything else is classified + gated, never silently dispatched:**
   - The `(apple_gpu, apple_value_target_ir)` row is **non-executable** — GPU
-    value-call execution waits on a GPU value-call ABI adapter; `launch`
-    returns a structured non-success.
+    `cholesky`/`tri_solve` lower to `gpu.kernel_call` and are classified as the
+    value lane, but `launch` returns a structured non-success (no fabricated
+    output). GPU value-call execution waits on a GPU value-call ABI adapter.
+  - **Non-linalg value calls are not value-executable.** `matmul`, `softmax`,
+    `gelu`, `conv2d` keep their default artifact/runtime path; requesting value
+    mode for them never yields an executable `cpu.call` — the `-full` pipeline
+    either declines (no value op) or fails with a recorded
+    `apple_value_target_ir_error`. They are **not advertised as
+    value-executable** in this sprint.
   - Multi-op programs, multi-symbol CPU value calls beyond the allowlist, GPU
     `kernel_call`, and `package_call` raise `invalid_artifact` (named
     follow-ons), so the runtime reports a clear reason instead of falling back.

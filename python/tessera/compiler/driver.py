@@ -151,6 +151,11 @@ class CompileArtifactBundle:
     trace_events: tuple[CompileTraceEvent, ...] = ()
     tool_invocations: tuple[ToolInvocation, ...] = ()
     cpu_plan: CPUPlan | None = None
+    # Sprint 4 (S4): when value mode was requested but the `-full` lowering
+    # failed, the reason is recorded here and surfaced as
+    # `apple_value_target_ir_error` — the front door keeps the artifact IR but
+    # the failure is observable, not silent.
+    value_mode_error: str | None = None
 
     def artifact(self, level: str) -> LoweringArtifact | None:
         if level == "graph":
@@ -198,7 +203,11 @@ class CompileArtifactBundle:
         }
         if self.cpu_plan is not None:
             profiling["selected_schedule"] = self.cpu_plan.selected_schedule
+        extra: dict[str, Any] = {}
+        if self.value_mode_error is not None:
+            extra["apple_value_target_ir_error"] = self.value_mode_error
         return {
+            **extra,
             "target": self.request.target,
             "function_name": self.request.function_name,
             "source_origin": self.request.source_origin,
@@ -297,9 +306,10 @@ def compile_graph_module(
     # `-full` pipeline and use the emitted value Target IR as the target
     # artifact (so to_runtime_artifact routes to apple_value_target_ir). Default
     # (artifact) behavior is untouched — no opt-in, no change.
+    value_mode_error: str | None = None
     if str((options or {}).get("apple_target_ir_mode", "")) == "value" \
             and target_kind in ("apple_cpu", "apple_gpu"):
-        value_ir = lower_apple_value_target_ir(graph_text, target_kind)
+        value_ir, value_mode_error = _lower_apple_value_target_ir(graph_text, target_kind)
         if value_ir:
             target_artifact = LoweringArtifact("target", value_ir)
             # CPU value calls are executable now; the GPU value row stays gated
@@ -309,6 +319,9 @@ def compile_graph_module(
                 runtime_status = "ready"
                 execution_kind = "native_cpu"
                 execution_mode = "cpu_accelerate"
+        # Sprint 4 (S4): a failure (value_mode_error set) is recorded on the
+        # bundle and surfaced as apple_value_target_ir_error — the artifact IR
+        # is preserved but the failure is observable, never silent.
 
     bundle = CompileArtifactBundle(
         request=request,
@@ -325,6 +338,7 @@ def compile_graph_module(
         trace_events=tuple(trace_events),
         tool_invocations=tuple(tool_invocations),
         cpu_plan=cpu_plan,
+        value_mode_error=value_mode_error,
     )
     _maybe_dump_debug_artifacts(bundle)
     return bundle
@@ -938,32 +952,52 @@ def _find_tessera_opt() -> str | None:
     return None
 
 
-def _resolve_tessera_opt() -> str | None:
-    """Find tessera-opt: env / PATH (via _find_tessera_opt), else the standard
-    in-repo build location (so the value front door works without PATH setup)."""
-    found = _find_tessera_opt()
-    if found:
-        return found
-    built = (Path(__file__).resolve().parents[2]
-             / "build" / "tools" / "tessera-opt" / "tessera-opt")
-    if built.is_file() and os.access(built, os.X_OK):
-        return str(built)
+def _tessera_repo_root() -> Path | None:
+    """Locate the Tessera repo root by walking up from this file until a
+    directory containing both ``python/tessera`` and ``src/compiler`` is found.
+
+    This is robust to where ``driver.py`` lives in the package tree (the old
+    ``parents[2]`` assumption pointed at ``python/`` rather than the repo root,
+    so the in-repo fallback never resolved). Returns None if no such ancestor
+    exists (e.g. an installed wheel with no source tree alongside it)."""
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if (parent / "python" / "tessera").is_dir() and (parent / "src" / "compiler").is_dir():
+            return parent
     return None
 
 
-def lower_apple_value_target_ir(graph_text: str, target_kind: str) -> str | None:
-    """Apple Value Target IR sprint 3 — front-door value mode.
+def _resolve_tessera_opt() -> str | None:
+    """Find tessera-opt with precedence: TESSERA_OPT env, then PATH (both via
+    _find_tessera_opt), then the in-repo build at
+    ``<repo>/build/tools/tessera-opt/tessera-opt`` — so the value front door
+    works without any environment setup when run from a source checkout."""
+    found = _find_tessera_opt()
+    if found:
+        return found
+    repo = _tessera_repo_root()
+    if repo is not None:
+        built = repo / "build" / "tools" / "tessera-opt" / "tessera-opt"
+        if built.is_file() and os.access(built, os.X_OK):
+            return str(built)
+    return None
 
-    Run the value-preserving ``tessera-lower-to-apple_{cpu,gpu}-full`` pipeline
-    on the Graph IR and return the emitted value Target IR (the
-    tessera_apple.{cpu.call,gpu.kernel_call} ops). Returns None when tessera-opt
-    is unavailable or the lowering fails — the caller then keeps the artifact
-    target IR (default behavior never drifts)."""
+
+def _lower_apple_value_target_ir(
+    graph_text: str, target_kind: str
+) -> tuple[str | None, str | None]:
+    """Run the value-preserving ``tessera-lower-to-apple_{cpu,gpu}-full``
+    pipeline; return ``(value_ir, error_reason)``.
+
+    On success ``error_reason`` is None. On any failure ``value_ir`` is None and
+    ``error_reason`` is a short, named explanation (so the front door can record
+    ``apple_value_target_ir_error`` rather than silently degrading to artifact
+    metadata). Sprint 4 (S4): the failure path is observable, not silent."""
     if target_kind not in ("apple_cpu", "apple_gpu"):
-        return None
+        return None, f"value mode is only defined for apple_cpu/apple_gpu, not {target_kind!r}"
     tool = _resolve_tessera_opt()
     if not tool:
-        return None
+        return None, "tessera-opt not found (set TESSERA_OPT, add to PATH, or build build/tools/tessera-opt)"
     pipeline = f"tessera-lower-to-{target_kind}-full"
     # The Python Graph-IR emitter prints `tessera.op(%operands)` (paren form),
     # but the registered ops' custom assembly is `tessera.op %operands` (no
@@ -977,11 +1011,28 @@ def lower_apple_value_target_ir(graph_text: str, target_kind: str) -> str | None
         proc = subprocess.run(
             [tool, f"-{pipeline}", "--allow-unregistered-dialect", "-"],
             input=parse_text, capture_output=True, text=True, timeout=60)
-    except Exception:
-        return None
-    if proc.returncode != 0 or not proc.stdout.strip():
-        return None
-    return proc.stdout
+    except Exception as exc:  # noqa: BLE001 — surface the reason, don't swallow
+        return None, f"tessera-opt invocation failed: {exc}"
+    if proc.returncode != 0:
+        detail = (proc.stderr or "").strip().splitlines()
+        tail = detail[-1] if detail else f"returncode {proc.returncode}"
+        return None, f"{pipeline} failed: {tail}"
+    if not proc.stdout.strip():
+        return None, f"{pipeline} produced empty output"
+    return proc.stdout, None
+
+
+def lower_apple_value_target_ir(graph_text: str, target_kind: str) -> str | None:
+    """Apple Value Target IR sprint 3 — front-door value mode.
+
+    Run the value-preserving ``tessera-lower-to-apple_{cpu,gpu}-full`` pipeline
+    on the Graph IR and return the emitted value Target IR (the
+    tessera_apple.{cpu.call,gpu.kernel_call} ops). Returns None when tessera-opt
+    is unavailable or the lowering fails — the caller then keeps the artifact
+    target IR (default behavior never drifts). Use
+    :func:`_lower_apple_value_target_ir` when the failure reason is needed."""
+    ir, _reason = _lower_apple_value_target_ir(graph_text, target_kind)
+    return ir
 
 
 def _maybe_dump_debug_artifacts(bundle: CompileArtifactBundle) -> None:

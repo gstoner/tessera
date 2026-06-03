@@ -199,6 +199,24 @@ class CompileResult:
             # Canonical answer is authoritative for `executable`.
             "executable": self.executable,
         })
+        # Apple Value Target IR (RV-P1, 2026-06-03) — the front door now
+        # *consumes* the classifier/extractor instead of leaving them to docs.
+        # The runtime artifact records whether the lowered Apple Target IR is
+        # the value lane (value-producing call ops) or the artifact lane, and —
+        # for the value lane — the dispatch tuples (op_kind/symbol/status) the
+        # runtime reads to invoke the named C ABI entry.
+        if self.target in ("apple_cpu", "apple_gpu"):
+            try:
+                from tessera.compiler import driver as _drv
+
+                _ir = self.target_ir or ""
+                _kind = _drv.classify_apple_target_ir(_ir)
+                meta["apple_target_ir_kind"] = _kind
+                if _kind == "value_target_ir":
+                    meta["apple_value_calls"] = _drv.extract_apple_value_calls(_ir)
+            except Exception:
+                # Classification is metadata-only; never block artifact creation.
+                pass
         return RuntimeArtifact(
             graph_ir=self.graph_ir,
             schedule_ir=self.schedule_ir,

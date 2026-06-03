@@ -36,10 +36,22 @@ _GRAPH = {
     "tri_solve": 'func.func @f(%a: tensor<4x4xf32>, %b: tensor<4x2xf32>) -> tensor<4x2xf32> {\n'
                  '  %0 = tessera.tri_solve %a, %b : (tensor<4x4xf32>, tensor<4x2xf32>) -> tensor<4x2xf32>\n'
                  '  return %0 : tensor<4x2xf32>\n}',
+    "cholesky_solve": 'func.func @f(%a: tensor<4x4xf32>, %b: tensor<4x2xf32>) -> tensor<4x2xf32> {\n'
+                      '  %0 = tessera.cholesky_solve %a, %b : (tensor<4x4xf32>, tensor<4x2xf32>) -> tensor<4x2xf32>\n'
+                      '  return %0 : tensor<4x2xf32>\n}',
+    "lu": 'func.func @f(%a: tensor<4x4xf32>) -> (tensor<4x4xf32>, tensor<4xi32>) {\n'
+          '  %lu, %p = tessera.lu %a : (tensor<4x4xf32>) -> (tensor<4x4xf32>, tensor<4xi32>)\n'
+          '  return %lu, %p : tensor<4x4xf32>, tensor<4xi32>\n}',
+    "qr": 'func.func @f(%a: tensor<6x4xf32>) -> (tensor<6x4xf32>, tensor<4x4xf32>) {\n'
+          '  %q, %r = tessera.qr %a : (tensor<6x4xf32>) -> (tensor<6x4xf32>, tensor<4x4xf32>)\n'
+          '  return %q, %r : tensor<6x4xf32>, tensor<4x4xf32>\n}',
     "svd": 'func.func @f(%a: tensor<6x4xf32>) -> (tensor<6x4xf32>, tensor<4xf32>, tensor<4x4xf32>) {\n'
            '  %u, %s, %v = tessera.svd %a : (tensor<6x4xf32>) -> (tensor<6x4xf32>, tensor<4xf32>, tensor<4x4xf32>)\n'
            '  return %u, %s, %v : tensor<6x4xf32>, tensor<4xf32>, tensor<4x4xf32>\n}',
 }
+
+# Every CPU-converted linalg op (LF1–LF5 + cholesky pilot) lowers via cpu.call.
+_CPU_LINALG_OPS = ("cholesky", "tri_solve", "cholesky_solve", "lu", "qr", "svd")
 
 
 def _run(pipeline: str, body: str) -> subprocess.CompletedProcess:
@@ -48,15 +60,21 @@ def _run(pipeline: str, body: str) -> subprocess.CompletedProcess:
         input=body, capture_output=True, text=True, timeout=60)
 
 
-_FORBIDDEN = ("ub.poison", "tensor.empty", "tile.cholesky", "tile.tri_solve",
-              "tile.svd", "= tessera.")
+# The value-mode module must contain none of: the poison/empty husks, any
+# surviving tile.<linalg> op, or any leftover Graph-IR tessera.* op.
+_FORBIDDEN = (
+    "ub.poison", "tensor.empty",
+    "tile.cholesky", "tile.tri_solve", "tile.cholesky_solve",
+    "tile.lu", "tile.qr", "tile.svd",
+    "= tessera.",
+)
 
 
 def test_cpu_full_is_value_preserving():
     """All 6 CPU linalg ops lower to value cpu.call with no husk / no tile leftover."""
-    for op in ("cholesky", "tri_solve", "svd"):
+    for op in _CPU_LINALG_OPS:
         p = _run("tessera-lower-to-apple_cpu-full", _GRAPH[op])
-        assert p.returncode == 0, p.stderr
+        assert p.returncode == 0, f"{op}: {p.stderr}"
         assert "tessera_apple.cpu.call" in p.stdout, op
         for bad in _FORBIDDEN:
             assert bad not in p.stdout, f"{op}: forbidden '{bad}' in value-mode output"
@@ -80,6 +98,50 @@ def test_gpu_full_nonexecutable_linalg_fails_with_named_diagnostic():
     assert p.returncode != 0
     assert "no executable GPU dispatch" in p.stderr
     assert "tessera.svd" in p.stderr
+
+
+def test_front_door_records_value_target_ir_in_runtime_metadata():
+    """RV-P1: the front door (CompileResult.to_runtime_artifact) actually
+    *consumes* the classifier/extractor — the runtime artifact metadata records
+    apple_target_ir_kind and, for the value lane, the dispatch tuples."""
+    import dataclasses
+
+    from tessera.compiler.canonical_compile import canonical_compile
+    from tessera.compiler.driver import LoweringArtifact
+    from tessera.compiler.graph_ir import (
+        GraphIRFunction, GraphIRModule, IRArg, IROp, IRType,
+    )
+
+    t = IRType("tensor<8x8xf32>", ("8", "8"), "fp32")
+    fn = GraphIRFunction(
+        name="f", args=[IRArg("a", t)], result_types=[t],
+        body=[IROp(result="c", op_name="tessera.cholesky", operands=["%a"],
+                   operand_types=["tensor<8x8xf32>"], result_type="tensor<8x8xf32>")],
+        return_values=["%c"],
+    )
+    res = canonical_compile(GraphIRModule(functions=[fn]), target="apple_cpu")
+
+    # The key is always recorded for Apple targets (consumption proof).
+    base_meta = res.to_runtime_artifact().metadata
+    assert "apple_target_ir_kind" in base_meta
+
+    # Inject value-IR as the target IR and confirm the front door classifies it
+    # as the value lane and extracts the dispatch tuple the runtime reads.
+    value_ir = (
+        "module {\n  func.func @f(%a: tensor<8x8xf32>) -> tensor<8x8xf32> {\n"
+        '    %0 = tessera_apple.cpu.call %a {op_kind = "cholesky", '
+        'symbol = "tessera_apple_cpu_cholesky_f32", abi = "lapack_spotrf", '
+        'status = "executable", framework = "Accelerate"} '
+        ": (tensor<8x8xf32>) -> tensor<8x8xf32>\n"
+        "    return %0 : tensor<8x8xf32>\n  }\n}\n"
+    )
+    value_bundle = dataclasses.replace(
+        res.bundle, target_ir=LoweringArtifact("target", value_ir))
+    value_res = dataclasses.replace(res, bundle=value_bundle)
+    meta = value_res.to_runtime_artifact().metadata
+    assert meta["apple_target_ir_kind"] == "value_target_ir"
+    assert meta["apple_value_calls"][0]["symbol"] == "tessera_apple_cpu_cholesky_f32"
+    assert meta["apple_value_calls"][0]["status"] == "executable"
 
 
 def test_front_door_classifies_value_vs_artifact_and_extracts_dispatch():
@@ -109,6 +171,33 @@ def test_front_door_classifies_value_vs_artifact_and_extracts_dispatch():
     assert pa.returncode == 0, pa.stderr
     assert driver.classify_apple_target_ir(pa.stdout) == "target_ir_artifact"
     assert driver.extract_apple_value_calls(pa.stdout) == []
+
+
+def test_extractor_survives_line_wrapped_attr_dicts():
+    """RV-P3: the extractor anchors to the op mnemonic and spans (DOTALL) to its
+    first {...}, so a value op whose attr dict is pretty-printed across multiple
+    lines is still parsed correctly."""
+    from tessera.compiler import driver
+
+    wrapped = (
+        "module {\n"
+        "  func.func @f(%a: tensor<8x8xf32>) -> tensor<8x8xf32> {\n"
+        "    %0 = tessera_apple.cpu.call %a {\n"
+        '        op_kind = "cholesky",\n'
+        '        symbol = "tessera_apple_cpu_cholesky_f32",\n'
+        '        abi = "lapack_spotrf",\n'
+        '        status = "executable",\n'
+        '        framework = "Accelerate"\n'
+        "    } : (tensor<8x8xf32>) -> tensor<8x8xf32>\n"
+        "    return %0 : tensor<8x8xf32>\n"
+        "  }\n}\n"
+    )
+    calls = driver.extract_apple_value_calls(wrapped)
+    assert len(calls) == 1
+    c = calls[0]
+    assert c["op_kind"] == "cholesky"
+    assert c["symbol"] == "tessera_apple_cpu_cholesky_f32"
+    assert driver.apple_value_call_is_executable(c)
 
 
 def test_artifact_pipeline_still_emits_metadata_ops():

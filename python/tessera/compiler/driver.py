@@ -464,9 +464,14 @@ _APPLE_ARTIFACT_OPS: tuple[str, ...] = (
     "tessera_apple.gpu.metal_kernel",
 )
 
+# Anchor to the value-op mnemonic, then non-greedily span to its first `{...}`
+# attribute dict.  DOTALL lets this survive MLIR pretty-printing that wraps the
+# op across lines (review RV-P3); value-op attr dicts contain only string attrs,
+# so `[^}]*` never has to cross a nested brace.
 _APPLE_VALUE_CALL_RE = re.compile(
-    r"(tessera_apple\.(?:cpu\.call|gpu\.kernel_call|gpu\.package_call))\b[^\n]*?"
-    r'\{([^}]*)\}'
+    r"(tessera_apple\.(?:cpu\.call|gpu\.kernel_call|gpu\.package_call))\b.*?"
+    r"\{([^}]*)\}",
+    re.DOTALL,
 )
 _APPLE_ATTR_RE = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
 

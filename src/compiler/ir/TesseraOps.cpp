@@ -169,6 +169,14 @@ LogicalResult SVDOp::verify() {
     return emitOpError("U rows must match A rows");
   if (!dimsAgree(vCols, aCols))
     return emitOpError("V columns must match A columns");
+  // The number of singular values is min(M, N) in BOTH reduced and full SVD
+  // (review RV-P2a): checkable whenever M and N are static.
+  if (!ShapedType::isDynamic(aRows) && !ShapedType::isDynamic(aCols) &&
+      !ShapedType::isDynamic(sLen)) {
+    int64_t k = std::min(aRows, aCols);
+    if (sLen != k)
+      return emitOpError("number of singular values S must equal min(M, N)");
+  }
   if (!getFullMatrices()) {
     // Reduced SVD: U is M×K, S is K, V is K×N with K = min(M, N).  The inner
     // dimensions must agree (U cols = |S| = V rows); A = U·diag(S)·V then

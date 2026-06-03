@@ -34,14 +34,31 @@ sys.path.insert(0, str(REPO / "python"))
 # the committed binary is stable and the numerical compare is cheap.
 #   name -> (kind, spec)
 #     kind "matmul": spec = (M, K, N)
+#     kind "op":     spec = (op_name, rows, cols, kwargs_dict)
 #     kind "chain":  spec = (chain_name, dims_tuple)
 FIXTURES = {
+    # matmul + single fused chain (original two).
     "tessera_authored_matmul_8x8x8": ("matmul", (8, 8, 8)),
     "tessera_authored_matmul_softmax_4x6x5": (
         "chain", ("matmul_softmax", (4, 6, 5))),
+    # Single MPSGraph-lane ops — one representative per family.
+    "tessera_authored_silu_8x16": ("op", ("silu", 8, 16, {})),
+    "tessera_authored_softmax_8x16": ("op", ("softmax", 8, 16, {})),
+    "tessera_authored_rmsnorm_8x16": (
+        "op", ("rmsnorm", 8, 16, {"weighted": True})),
+    # The remaining fused chains.
+    "tessera_authored_matmul_softmax_matmul_4x6x5x3": (
+        "chain", ("matmul_softmax_matmul", (4, 6, 5, 3))),
+    "tessera_authored_rmsnorm_matmul_4x6x5": (
+        "chain", ("rmsnorm_matmul", (4, 6, 5))),
 }
 
-FIXTURE_DIR = REPO / "tests" / "fixtures" / "apple_gpu"
+# Production fixtures live in a ``production/`` subdir, kept out of the
+# top-level fixtures dir that the PK1-PK7 lifecycle tests ``iterdir``-scan
+# (so adding packages here never changes which package those tests compile,
+# nor crosses the per-process MTL4-ML-compile ceiling). See
+# apple_packaged_manifest.py.
+FIXTURE_DIR = REPO / "tests" / "fixtures" / "apple_gpu" / "production"
 
 
 def _author_one(name, kind, spec, out_dir):
@@ -51,6 +68,9 @@ def _author_one(name, kind, spec, out_dir):
     if kind == "matmul":
         m, k, n = spec
         ok = mp.author_matmul_package(str(pkg), m, k, n)
+    elif kind == "op":
+        op, rows, cols, kwargs = spec
+        ok = mp.author_op_package(str(pkg), op, rows, cols, **kwargs)
     elif kind == "chain":
         chain, dims = spec
         ok = mp.author_chain_package(str(pkg), chain, list(dims))

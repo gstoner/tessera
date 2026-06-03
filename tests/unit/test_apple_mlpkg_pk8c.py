@@ -116,3 +116,85 @@ def test_committed_matmul_softmax_chain_dispatches_and_matches_numpy():
         assert np.allclose(out, ref, rtol=1e-4, atol=2e-4)
     finally:
         pipe.destroy()
+
+
+# ── expanded coverage: one representative per authorable family ──────────
+#
+# Each spec: (fixture substr, build_inputs(rng) -> list[np.ndarray],
+#             ref(inputs) -> np.ndarray, output_shape). Inputs are filled
+# positionally (fill_input_at), output read from the last binding index.
+
+
+def _silu(x):
+    return x * (1.0 / (1.0 + np.exp(-x)))
+
+
+def _softmax(x):
+    e = np.exp(x - x.max(axis=1, keepdims=True))
+    return e / e.sum(axis=1, keepdims=True)
+
+
+_EXPANDED_SPECS = [
+    (
+        "tessera_authored_silu_8x16",
+        lambda r: [r.standard_normal((8, 16)).astype(np.float32)],
+        lambda a: _silu(a[0]),
+        (8, 16),
+    ),
+    (
+        "tessera_authored_softmax_8x16",
+        lambda r: [r.standard_normal((8, 16)).astype(np.float32)],
+        lambda a: _softmax(a[0]),
+        (8, 16),
+    ),
+    (
+        "tessera_authored_rmsnorm_8x16",
+        lambda r: [r.standard_normal((8, 16)).astype(np.float32),
+                   r.standard_normal((16,)).astype(np.float32)],
+        lambda a: a[0] / np.sqrt((a[0] ** 2).mean(axis=1, keepdims=True)
+                                 + 1e-5) * a[1],
+        (8, 16),
+    ),
+    (
+        "tessera_authored_matmul_softmax_matmul_4x6x5x3",
+        lambda r: [r.standard_normal((4, 6)).astype(np.float32),
+                   r.standard_normal((6, 5)).astype(np.float32),
+                   r.standard_normal((5, 3)).astype(np.float32)],
+        lambda a: _softmax(a[0] @ a[1]) @ a[2],
+        (4, 3),
+    ),
+    (
+        "tessera_authored_rmsnorm_matmul_4x6x5",
+        lambda r: [r.standard_normal((4, 6)).astype(np.float32),
+                   r.standard_normal((6,)).astype(np.float32),
+                   r.standard_normal((6, 5)).astype(np.float32)],
+        lambda a: (a[0] / np.sqrt((a[0] ** 2).mean(axis=1, keepdims=True)
+                                  + 1e-5) * a[1]) @ a[2],
+        (4, 5),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "substr,build_inputs,ref_fn,out_shape", _EXPANDED_SPECS,
+    ids=[s[0].replace("tessera_authored_", "") for s in _EXPANDED_SPECS])
+def test_committed_expanded_fixture_dispatches_and_matches_numpy(
+        substr, build_inputs, ref_fn, out_shape):
+    """Each Tessera-authored production fixture (silu / softmax / rmsnorm /
+    attention block / rmsnorm→matmul) loads + dispatches + matches numpy."""
+    _require_packaged_ml()
+    entry = _entry(substr)
+    pipe = _load_or_skip(entry)
+    try:
+        assert pipe.prepare_tensors()
+        rng = np.random.default_rng(hash(substr) & 0xFFFF)
+        inputs = build_inputs(rng)
+        for i, arr in enumerate(inputs):
+            assert pipe.fill_input_at(i, np.ascontiguousarray(arr).tobytes())
+        assert pipe.dispatch(timeout_ms=30_000)
+        nbytes = int(np.prod(out_shape)) * 4
+        raw = pipe.read_output_at(len(inputs), nbytes)
+        out = np.frombuffer(raw, dtype=np.float32).reshape(out_shape)
+        assert np.allclose(out, ref_fn(inputs), rtol=1e-4, atol=2e-4)
+    finally:
+        pipe.destroy()

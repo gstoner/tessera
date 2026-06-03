@@ -139,10 +139,17 @@ PACKAGED_TEST_FIXTURES: dict[str, BackendKernelEntry] = {
 # hard failure.
 # ---------------------------------------------------------------------
 
+# Production fixtures live in a ``production/`` subdir so the PK1-PK7
+# lifecycle tests (which ``iterdir``-scan the top-level fixtures dir and
+# compile whatever ``.mtlpackage`` files they find) only ever pick up Apple's
+# bundled sample — adding Tessera-authored packages here must not change which
+# package those tests exercise, nor push the per-process MTL4-ML-compile count
+# past the Metal abort ceiling.
 _TESSERA_MATMUL_REL = (
-    "tests/fixtures/apple_gpu/tessera_authored_matmul_8x8x8.mtlpackage")
+    "tests/fixtures/apple_gpu/production/"
+    "tessera_authored_matmul_8x8x8.mtlpackage")
 _TESSERA_MATMUL_SOFTMAX_REL = (
-    "tests/fixtures/apple_gpu/"
+    "tests/fixtures/apple_gpu/production/"
     "tessera_authored_matmul_softmax_4x6x5.mtlpackage")
 
 
@@ -180,13 +187,71 @@ _TESSERA_MATMUL_SOFTMAX_ENTRY = BackendKernelEntry(
 )
 
 
+# Expanded coverage (2026-06-02) — one representative per authorable family
+# beyond matmul/matmul_softmax: a unary op (silu), a row op (softmax), a
+# weighted norm (rmsnorm), and the remaining two fused chains. All
+# Tessera-authored from the MPSGraph lane, positionally bound, regenerable via
+# scripts/author_apple_packages.py, numerically validated in
+# test_apple_mlpkg_pk8c.py.
+def _authored_row(rel: str, notes: str,
+                  *flags: str) -> BackendKernelEntry:
+    return BackendKernelEntry(
+        target="apple_gpu",
+        status="packaged",
+        dtypes=("fp32",),
+        feature_flags=("tessera_authored", "mpsgraph_lane", *flags),
+        notes=notes,
+        packaged_pipeline_path=rel,
+        apple_binding_spec=None,  # MPSGraph packages are positionally bound
+    )
+
+
+_FIX = "tests/fixtures/apple_gpu/production/"
+
+_TESSERA_SILU_ENTRY = _authored_row(
+    _FIX + "tessera_authored_silu_8x16.mtlpackage",
+    "Tessera-authored silu(x) .mtlpackage (8x16) — unary MPSGraph-lane op. "
+    "Positional binding: input 0, output 1.")
+
+_TESSERA_SOFTMAX_ENTRY = _authored_row(
+    _FIX + "tessera_authored_softmax_8x16.mtlpackage",
+    "Tessera-authored softmax(x) .mtlpackage (8x16) — row op over the last "
+    "axis. Positional binding: input 0, output 1.")
+
+_TESSERA_RMSNORM_ENTRY = _authored_row(
+    _FIX + "tessera_authored_rmsnorm_8x16.mtlpackage",
+    "Tessera-authored weighted rmsnorm(x)*gamma .mtlpackage (8x16) — norm "
+    "MPSGraph-lane op with a gamma input. Positional bindings: x=0, gamma=1, "
+    "output=2.",
+    "weighted_norm")
+
+_TESSERA_ATTN_BLOCK_ENTRY = _authored_row(
+    _FIX + "tessera_authored_matmul_softmax_matmul_4x6x5x3.mtlpackage",
+    "Tessera-authored fused softmax(A@B)@C .mtlpackage (4x6x5x3) — the 3-op "
+    "attention block as one serialized executable. Positional bindings: "
+    "A=0, B=1, C=2, output=3.",
+    "fused_chain")
+
+_TESSERA_RMSNORM_MATMUL_ENTRY = _authored_row(
+    _FIX + "tessera_authored_rmsnorm_matmul_4x6x5.mtlpackage",
+    "Tessera-authored fused (rmsnorm(x)*gamma)@W .mtlpackage (4x6x5) — a "
+    "norm+projection block in one dispatch. Positional bindings: x=0, "
+    "gamma=1, W=2, output=3.",
+    "fused_chain")
+
+
 #: Populated PRODUCTION packaged-kernel entries — Tessera-authored
-#: ``.mtlpackage`` files (PK8c). Distinct from ``PACKAGED_TEST_FIXTURES``
-#: (Apple's bundled sample) so dashboards count Tessera-owned kernels
-#: correctly.
+#: ``.mtlpackage`` files (PK8c + 2026-06-02 expansion). Distinct from
+#: ``PACKAGED_TEST_FIXTURES`` (Apple's bundled sample) so dashboards count
+#: Tessera-owned kernels correctly. One representative per authorable family.
 PACKAGED_PRODUCTION_KERNELS: tuple[BackendKernelEntry, ...] = (
     _TESSERA_MATMUL_ENTRY,
     _TESSERA_MATMUL_SOFTMAX_ENTRY,
+    _TESSERA_SILU_ENTRY,
+    _TESSERA_SOFTMAX_ENTRY,
+    _TESSERA_RMSNORM_ENTRY,
+    _TESSERA_ATTN_BLOCK_ENTRY,
+    _TESSERA_RMSNORM_MATMUL_ENTRY,
 )
 
 

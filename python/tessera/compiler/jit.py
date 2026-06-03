@@ -264,6 +264,35 @@ def _resolve_source_text(
 _PKG_FALLBACK: Any = object()
 
 
+def _resolve_dispatch_via_package(value: "bool | str | None",
+                                  target_kind: Optional[str]) -> "bool | str":
+    """PK8h — resolve the package-dispatch policy.
+
+    **Deliberate-call note (2026-06-02):** we evaluated making ``"auto"`` the
+    *unconditional* default for apple_gpu and rejected it. Under suite-volume
+    (hundreds of jitted chains each authoring MTL4 ML pipelines / intermediate
+    heaps, co-loaded with the per-test runtime dylibs) the always-on package
+    lane drives the Metal runtime to ``SIGABRT``. So auto-routing stays
+    **opt-in**, exposed two ways without destabilizing the default path:
+
+    * per-fn — ``@jit(..., dispatch_via_package="auto" | True)``;
+    * globally — ``TESSERA_APPLE_GPU_PACKAGE_AUTOROUTE=1`` (``on``/``true``/
+      ``yes``) flips the default to ``"auto"`` for recognized apple_gpu fns.
+
+    Default (``value is None``) → ``False`` (live lane), unless the env switch
+    is on. An explicit ``True`` / ``"auto"`` / path / ``False`` always wins.
+    Non-apple_gpu targets never route (no package lane exists)."""
+    if value is not None:
+        return value  # explicit per-fn choice always wins
+    if target_kind != "apple_gpu":
+        return False
+    import os
+    env = os.environ.get("TESSERA_APPLE_GPU_PACKAGE_AUTOROUTE", "").lower()
+    if env in ("1", "on", "true", "yes"):
+        return "auto"
+    return False
+
+
 class JitFn:
     """
     A @jit-decorated Tessera function.
@@ -1179,7 +1208,7 @@ def jit(
     auto_batch: bool = False,
     max_ops_per_cb: Optional[int] = None,
     emit_package: "bool | str" = False,
-    dispatch_via_package: "bool | str" = False,
+    dispatch_via_package: "bool | str | None" = None,
 ) -> Any:
     """
     Tessera JIT decorator — drives the compiler pipeline.
@@ -1420,7 +1449,8 @@ def jit(
             lowering_diagnostics=diagnostics,
             native_required=native_required,
             recognized_package=recognized_package,
-            dispatch_via_package=dispatch_via_package,
+            dispatch_via_package=_resolve_dispatch_via_package(
+                dispatch_via_package, target_kind),
         )
 
         # P1 canonical one-command-buffer route (2026-06-01) — the

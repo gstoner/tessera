@@ -335,6 +335,35 @@ def test_dispatch_via_package_falls_back_for_non_fp32():
 # ── PK8g — "auto" heuristic: chains → package, single ops → live ─────────
 
 
+def test_resolve_policy_default_is_opt_in_not_auto(monkeypatch):
+    """PK8h deliberate decision — auto is NOT the unconditional default
+    (it SIGABRTs the suite under MTL4-ML-compile volume). Default (None) on
+    apple_gpu resolves to False; the env switch opts into auto globally.
+    Pure / no GPU."""
+    from tessera.compiler.jit import _resolve_dispatch_via_package as _r
+    monkeypatch.delenv("TESSERA_APPLE_GPU_PACKAGE_AUTOROUTE", raising=False)
+    assert _r(None, "apple_gpu") is False           # default = live lane
+    assert _r(None, "apple_cpu") is False            # non-apple never routes
+    assert _r(True, "apple_gpu") is True             # explicit wins
+    assert _r("auto", "apple_gpu") == "auto"
+    assert _r(False, "apple_gpu") is False
+    # Global opt-in via env.
+    monkeypatch.setenv("TESSERA_APPLE_GPU_PACKAGE_AUTOROUTE", "1")
+    assert _r(None, "apple_gpu") == "auto"
+    monkeypatch.setenv("TESSERA_APPLE_GPU_PACKAGE_AUTOROUTE", "off")
+    assert _r(None, "apple_gpu") is False
+    # Explicit per-fn choice still overrides the env switch.
+    monkeypatch.setenv("TESSERA_APPLE_GPU_PACKAGE_AUTOROUTE", "1")
+    assert _r(False, "apple_gpu") is False
+
+
+def test_default_apple_gpu_jit_is_opt_in_live():
+    """A plain ``@jit(target="apple_gpu")`` (no flag) keeps the live lane —
+    the default is unchanged. Pure / no GPU."""
+    assert _mm.dispatch_via_package is False
+    assert _attn_scores.dispatch_via_package is False
+
+
 def test_auto_flag_value_recorded():
     """``dispatch_via_package="auto"`` is preserved (not coerced to bool).
     Pure / no GPU."""

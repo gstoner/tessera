@@ -245,7 +245,7 @@ def test_production_kernels_are_tessera_authored_and_valid():
     primitive dashboard counts compiler-complete *op* coverage, which is a
     separate claim from "an authored package exists". Keeping them in the
     manifest (not the registry) is the honest split."""
-    assert len(PACKAGED_PRODUCTION_KERNELS) >= 2
+    assert len(PACKAGED_PRODUCTION_KERNELS) >= 7  # matmul + chains + ops
     for entry in PACKAGED_PRODUCTION_KERNELS:
         assert entry.status == "packaged"
         assert "tessera_authored" in entry.feature_flags, (

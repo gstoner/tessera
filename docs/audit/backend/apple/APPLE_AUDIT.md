@@ -94,6 +94,27 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
   256×256×256. Sample at `sample_package_lane_report.json`; findings table in
   the benchmarks README. This is the decision data behind the `dispatch_via_package`
   flag.
+- **Production packaged-kernel coverage expanded (2026-06-02):** the
+  Tessera-authored fixture set grew from 2 to **7 — one representative per
+  authorable family**: matmul, silu (unary), softmax (rowop), rmsnorm
+  (weighted norm), and the chains matmul_softmax / matmul_softmax_matmul /
+  rmsnorm_matmul. Each is committed, drift-gated, and numerically dispatch-
+  validated vs numpy (`test_apple_mlpkg_pk8c.py`). **Crucial placement fix:**
+  the production fixtures live in `tests/fixtures/apple_gpu/production/`, NOT
+  the top-level fixtures dir — the PK1-PK7 lifecycle tests `iterdir`-scan the
+  top level and compile whatever `.mtlpackage` they find, and piling more
+  packages there drove the per-process MTL4-ML-compile count past a Metal
+  abort ceiling (`newMachineLearningPipelineState` → `MTLReportFailure` →
+  `abort()`, a hard SIGABRT). Isolating them keeps the lifecycle tests on the
+  Apple sample only.
+- **Auto-route default — evaluated and deliberately NOT flipped (PK8h,
+  2026-06-02):** making `dispatch_via_package="auto"` the unconditional
+  default for apple_gpu was tested and **rejected** — under suite volume
+  (hundreds of jitted chains each authoring an ML pipeline) it SIGABRTs the
+  Metal runtime. Auto-routing stays opt-in, exposed two safe ways: per-fn
+  (`@jit(..., dispatch_via_package="auto")`) and globally via
+  `TESSERA_APPLE_GPU_PACKAGE_AUTOROUTE=1`. `_resolve_dispatch_via_package`
+  centralizes the policy; locked by `test_apple_jit_emit_package.py`.
 - **Single runtime loader + auto-route (PK8g, 2026-06-02):** (1) **Duplicate-
   dylib fix** — `_apple_gpu_dispatch` is now the single Apple-GPU runtime
   loader (env-var → CMake build → from-source, with a newest-symbol staleness

@@ -1447,7 +1447,13 @@ def _execute_jit_cpu_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
     return values[output_name]
 
 
-_APPLE_CPU_ACCELERATE_OPS = frozenset({"tessera.matmul", "tessera.gemm"})
+# Ops the apple_cpu *artifact* (metadata) path dispatches through Accelerate's
+# cblas_sgemm family. _apple_cpu_dispatch_matmul selects rank-2 vs rank-3
+# (batched) by operand shape, so tessera.batched_gemm shares the same entry —
+# Sprint 6 added it so the default artifact path routes batched matmul through
+# the real (batched) GEMM instead of the numpy reference fall-through.
+_APPLE_CPU_ACCELERATE_OPS = frozenset(
+    {"tessera.matmul", "tessera.gemm", "tessera.batched_gemm"})
 
 
 def _execute_apple_cpu_accelerate_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -1876,6 +1882,68 @@ def _dispatch_matmul(inputs, call, np):
     return c
 
 
+def _as_2d(x, np, dtype, *, name: str):
+    a = np.ascontiguousarray(np.asarray(x, dtype=dtype))
+    if a.ndim != 2:
+        raise ValueError(f"{name} must be a 2-D matrix, got shape {tuple(a.shape)}")
+    return a
+
+
+def _dispatch_matmul_f16(inputs, call, np):
+    """Sprint 7: rank-2 f16 matmul via the Apple BNNS GEMM C ABI
+    (`tessera_apple_cpu_gemm_f16`, uint16/half ABI, void). Inputs are coerced to
+    contiguous f16; the f16 result is returned as an f16 array (tests compare
+    through an fp32 view). Fails with a named error if the symbol is absent —
+    never a silent fp32 substitution."""
+    _u16 = ctypes.POINTER(ctypes.c_uint16)
+    a = _as_2d(inputs[0], np, np.float16, name="matmul(f16) A")
+    b = _as_2d(inputs[1], np, np.float16, name="matmul(f16) B")
+    m, ka = int(a.shape[0]), int(a.shape[1])
+    kb, n = int(b.shape[0]), int(b.shape[1])
+    if ka != kb:
+        raise ValueError(f"matmul contraction mismatch: (M,K)={a.shape} @ (K,N)={b.shape}")
+    fn = _apple_cpu_gemm_f16()
+    if fn is None:
+        raise ValueError(
+            "apple_cpu runtime lacks tessera_apple_cpu_gemm_f16 — rebuild "
+            "TesseraAppleRuntime (the prebuilt dylib predates the f16 GEMM symbol)")
+    c = np.empty((m, n), dtype=np.float16)
+    fn(a.ctypes.data_as(_u16), b.ctypes.data_as(_u16), c.ctypes.data_as(_u16),
+       m, n, ka)
+    return c
+
+
+def _dispatch_matmul_bf16(inputs, call, np):
+    """Sprint 7: rank-2 bf16 matmul via the Apple BNNS GEMM C ABI
+    (`tessera_apple_cpu_gemm_bf16`). The Python boundary uses
+    ml_dtypes.bfloat16 (a 2-byte numpy dtype, byte-compatible with the C ABI's
+    uint16 bf16 layout). If ml_dtypes is unavailable, fail with a named
+    unsupported-dependency error — never silently fall back to fp32."""
+    _u16 = ctypes.POINTER(ctypes.c_uint16)
+    bf16 = _bfloat16_dtype()
+    if bf16 is None:
+        raise ValueError(
+            "bf16 value matmul requires the optional `ml_dtypes` dependency "
+            "(pip install ml_dtypes) — it is unavailable, and falling back to "
+            "fp32 would silently change the dtype contract")
+    a = _as_2d(inputs[0], np, bf16, name="matmul(bf16) A")
+    b = _as_2d(inputs[1], np, bf16, name="matmul(bf16) B")
+    m, ka = int(a.shape[0]), int(a.shape[1])
+    kb, n = int(b.shape[0]), int(b.shape[1])
+    if ka != kb:
+        raise ValueError(f"matmul contraction mismatch: (M,K)={a.shape} @ (K,N)={b.shape}")
+    fn = _apple_cpu_gemm_bf16()
+    if fn is None:
+        raise ValueError(
+            "apple_cpu runtime lacks tessera_apple_cpu_gemm_bf16 — rebuild "
+            "TesseraAppleRuntime (the prebuilt dylib predates the bf16 GEMM symbol)")
+    c = np.empty((m, n), dtype=bf16)
+    fn(a.view(np.uint16).ctypes.data_as(_u16),
+       b.view(np.uint16).ctypes.data_as(_u16),
+       c.view(np.uint16).ctypes.data_as(_u16), m, n, ka)
+    return c
+
+
 def _as_f32_3d(x, np, *, name: str = "input"):
     a = np.ascontiguousarray(np.asarray(x, dtype=np.float32))
     if a.ndim != 3:
@@ -1928,6 +1996,9 @@ _APPLE_VALUE_CPU_DISPATCH: dict[str, tuple] = {
     "tessera_apple_cpu_gemm_f32":           (_dispatch_matmul, 2),
     # Sprint 6: fp32 rank-3 batched matmul (op_kind "batched_gemm").
     "tessera_apple_cpu_gemm_f32_batched":   (_dispatch_batched_matmul, 2),
+    # Sprint 7: rank-2 f16 / bf16 matmul via BNNS (op_kind "matmul").
+    "tessera_apple_cpu_gemm_f16":           (_dispatch_matmul_f16, 2),
+    "tessera_apple_cpu_gemm_bf16":          (_dispatch_matmul_bf16, 2),
 }
 _APPLE_VALUE_CPU_SYMBOLS: frozenset[str] = frozenset(_APPLE_VALUE_CPU_DISPATCH)
 

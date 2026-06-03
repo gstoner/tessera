@@ -274,7 +274,19 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="cpu",
         runtime_backend="numpy",
         default_runtime_status="ready",
-        supported_ops=_ops("ready", _CPU_OPS, reason="CPU reference/runtime path is available"),
+        supported_ops={
+            **_ops("ready", _CPU_OPS, reason="CPU reference/runtime path is available"),
+            # Sprint 7 (2026-06-03): the numpy reference matmul executes f16/bf16
+            # as well as f32, so the per-op dtype tuple is widened to match. The
+            # target-agnostic Graph IR verifier consults the `cpu` capability
+            # (it has no real-target context); the authoritative per-target gate
+            # runs later in pipeline_gates. (batched_gemm stays fp32 — no batched
+            # f16/bf16 yet.)
+            canonical_op("tessera.matmul"): OpCapability(
+                canonical_op("tessera.matmul"), "ready",
+                dtypes=("fp32", "f32", "fp16", "bf16"),
+                reason="CPU reference matmul executes f32/f16/bf16"),
+        },
         supported_dtypes=("fp32", "f32", "fp16", "bf16"),
         features=("reference_execution", "host_runtime"),
     ),
@@ -475,7 +487,19 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="apple",
         runtime_backend="accelerate",
         default_runtime_status="ready",
-        supported_ops=_ops("ready", _CPU_OPS, reason="Apple CPU uses Accelerate where available and reference fallback otherwise"),
+        supported_ops={
+            **_ops("ready", _CPU_OPS, reason="Apple CPU uses Accelerate where available and reference fallback otherwise"),
+            # Sprint 7 (2026-06-03): rank-2 matmul executes in the value lane for
+            # f32 (cblas_sgemm) + f16/bf16 (BNNS). The per-op dtype tuple is
+            # widened so f16/bf16 rank-2 matmul reaches the value lane instead of
+            # being rejected by the frontend capability gate. Rank-2 / no-transpose
+            # / no-dynamic is enforced downstream in TilingPass; batched_gemm stays
+            # fp32-only (no batched f16/bf16 yet).
+            canonical_op("tessera.matmul"): OpCapability(
+                canonical_op("tessera.matmul"), "ready",
+                dtypes=("fp32", "f32", "fp16", "bf16"),
+                reason="Apple CPU rank-2 matmul: f32 via cblas_sgemm, f16/bf16 via BNNS"),
+        },
         supported_dtypes=("fp32", "f32", "bf16", "fp16"),
         features=("accelerate", "reference_fallback"),
     ),

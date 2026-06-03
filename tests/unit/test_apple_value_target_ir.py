@@ -876,27 +876,75 @@ def test_gpu_value_matmul_is_gated_no_output():
     assert "output" not in res
 
 
-@pytest.mark.parametrize("mlir_dtype,dtype", [("f16", "fp16"), ("bf16", "bf16")])
-def test_non_fp32_matmul_value_mode_is_gated(mlir_dtype, dtype):
-    """f16/bf16 matmul is outside the Sprint 5 envelope and is gated with a
-    *named* unsupported reason — never a silent f32 fallback. The gate can fire
-    at either layer: the Graph IR target-capability verifier (which rejects
-    non-fp32 matmul on CPU outright) or, if it ever reaches lowering, a recorded
-    apple_value_target_ir_error. Both are honest; neither is value-executable."""
+# ── Sprint 7: rank-2 f16 / bf16 matmul is executable on the CPU value lane ───
+
+@pytest.mark.parametrize("mlir_dtype,dtype,symbol", [
+    ("f16", "fp16", "tessera_apple_cpu_gemm_f16"),
+    ("bf16", "bf16", "tessera_apple_cpu_gemm_bf16"),
+])
+def test_non_fp32_matmul_value_mode_lowers_to_dtype_symbol(mlir_dtype, dtype, symbol):
+    """Sprint 7: f16/bf16 rank-2 matmul reaches the value lane and lowers to its
+    dtype-specific GEMM symbol (replaces the Sprint 5 'non-fp32 is gated' test)."""
     from tessera.compiler.canonical_compile import canonical_compile
-    from tessera.compiler.graph_ir import GraphIRVerificationError
     m = _matmul_module(4, 8, 16, dtype=dtype, mlir_dtype=mlir_dtype)
+    art = canonical_compile(m, target="apple_cpu",
+                            options={"apple_target_ir_mode": "value"}).to_runtime_artifact()
+    assert art.metadata["compiler_path"] == "apple_value_target_ir"
+    assert symbol in (art.target_ir or "")
+    calls = art.metadata.get("apple_value_calls") or []
+    assert calls and calls[0]["symbol"] == symbol and calls[0]["op_kind"] == "matmul"
+
+
+@pytest.mark.skipif(sys.platform != "darwin",
+                    reason="Apple BNNS f16/bf16 GEMM is Darwin-only")
+def test_f16_matmul_executes_vs_fp32_oracle():
+    import numpy as np
+    from tessera.runtime import launch
+    rng = np.random.default_rng(0)
+    a = rng.standard_normal((4, 8)).astype(np.float16)
+    b = rng.standard_normal((8, 16)).astype(np.float16)
+    r = launch(_front_door(_matmul_module(4, 8, 16, dtype="fp16", mlir_dtype="f16")),
+               [a, b])
+    assert r["ok"], r
+    assert r["output"].dtype == np.float16  # honest f16 output dtype
+    ref = a.astype(np.float32) @ b.astype(np.float32)
+    np.testing.assert_allclose(r["output"].astype(np.float32), ref, rtol=3e-2, atol=3e-2)
+
+
+@pytest.mark.skipif(sys.platform != "darwin",
+                    reason="Apple BNNS f16/bf16 GEMM is Darwin-only")
+def test_bf16_matmul_executes_or_skips_cleanly():
+    """bf16 matmul executes when ml_dtypes is available; if not, launch fails
+    with a *named* unsupported-dependency error — never a silent fp32 fallback."""
+    import numpy as np
+    import pytest as _pytest
+    from tessera.runtime import launch
     try:
-        meta = canonical_compile(m, target="apple_cpu",
-                                 options={"apple_target_ir_mode": "value"}).to_runtime_artifact().metadata
-    except GraphIRVerificationError as exc:
-        # Earliest honest gate: the target-capability verifier names the dtype.
-        assert dtype in str(exc) or "not supported" in str(exc)
-        return
-    # If it compiled at all, it must NOT be value-executable.
-    assert meta.get("compiler_path") != "apple_value_target_ir"
-    err = meta.get("apple_value_target_ir_error")
-    assert err and ("matmul" in err or "envelope" in err), err
+        import ml_dtypes  # noqa: F401
+    except Exception:
+        _pytest.skip("ml_dtypes unavailable")
+    bf16 = ml_dtypes.bfloat16
+    rng = np.random.default_rng(1)
+    a = rng.standard_normal((4, 8)).astype(bf16)
+    b = rng.standard_normal((8, 16)).astype(bf16)
+    r = launch(_front_door(_matmul_module(4, 8, 16, dtype="bf16", mlir_dtype="bf16")),
+               [a, b])
+    assert r["ok"], r
+    assert r["output"].dtype == bf16  # honest bf16 output dtype
+    ref = a.astype(np.float32) @ b.astype(np.float32)
+    np.testing.assert_allclose(r["output"].astype(np.float32), ref, rtol=5e-2, atol=5e-2)
+
+
+def test_gpu_non_fp32_matmul_value_mode_is_gated():
+    """apple_gpu f16/bf16 value matmul stays non-executable (no GPU value
+    executor adapter yet) — never a fabricated CPU dispatch."""
+    for dt, mlir in (("fp16", "f16"), ("bf16", "bf16")):
+        art = _front_door_gpu(_matmul_module(4, 8, 16, dtype=dt, mlir_dtype=mlir))
+        calls = art.metadata.get("apple_value_calls") or []
+        assert not any(c.get("op") == "tessera_apple.cpu.call"
+                       and c.get("status") == "executable" for c in calls), (dt, mlir)
+        assert art.metadata.get("compiler_path") != "apple_value_target_ir" \
+            or art.metadata.get("executable") is not True
 
 
 # NOTE: static rank-3 batched matmul is no longer gated — Sprint 6 promoted it
@@ -1154,3 +1202,136 @@ def test_gpu_value_batched_is_gated_no_output():
     res = launch(art, None)
     assert res["ok"] is False
     assert "output" not in res
+
+
+# ── Sprint 6 P2 review fix: Python AST front door for batched_gemm ──────────
+
+def test_graphir_builder_infers_batched_gemm_result_rank3():
+    """The GraphIRBuilder lowers `tessera.ops.batched_gemm(A, B)` to a
+    tessera.batched_gemm op and infers a rank-3 result (B×M×N) — not the
+    dynamic / first-operand fallback. This is the front-door fix: an annotated
+    Python function no longer emits a dynamic result that fails value lowering."""
+    import tessera
+    from tessera.compiler.graph_ir import GraphIRBuilder
+
+    def bmm_fn(A: "tensor<2x4x8xf32>", B: "tensor<2x8x16xf32>",
+               C: "tensor<2x4x16xf32>"):
+        C[:] = tessera.ops.batched_gemm(A, B)
+
+    fn_ir = GraphIRBuilder().lower(bmm_fn)
+    ops = [op for op in fn_ir.body if op.op_name == "tessera.batched_gemm"]
+    assert ops, f"no batched_gemm op emitted; got {[o.op_name for o in fn_ir.body]}"
+    # Result type is rank-3 with the contracted N from B (not rank-4, not dynamic).
+    rt = ops[0].result_type
+    assert "x?x" not in rt and rt.count("x") == 3, rt  # 2x4x16xf32 → 3 'x'
+    assert rt.endswith("xf32>")
+
+
+def test_infer_result_type_batched_gemm_unit():
+    """Direct unit on the inference helper: rank-3 B×M×K @ B×K×N → B×M×N."""
+    from tessera.compiler.graph_ir import IRType, _infer_result_type
+    rt = _infer_result_type("tessera.batched_gemm", [
+        IRType("tensor<2x4x8xf32>", ("2", "4", "8"), "fp32"),
+        IRType("tensor<2x8x16xf32>", ("2", "8", "16"), "fp32"),
+    ])
+    assert rt.shape == ("2", "4", "16")
+    assert rt.dtype == "fp32"
+
+
+def test_default_artifact_batched_routes_to_real_gemm():
+    """P1: the default (artifact) apple_cpu compile of a batched matmul routes
+    to a real GEMM artifact (`accelerate_gemm`, batched abi) — NOT the generic
+    cpu.vector_op fallback. (Mirrors the C++ TileToApple artifact path.)"""
+    from tessera.compiler.canonical_compile import canonical_compile
+    art = canonical_compile(_batched_module(2, 4, 8, 16),
+                            target="apple_cpu").to_runtime_artifact()
+    tir = art.target_ir or ""
+    assert "tessera_apple.cpu.accelerate_gemm" in tir
+    assert "cblas_sgemm_batched_loop" in tir
+    assert "cpu.vector_op" not in tir
+
+
+def test_batched_gemm_in_runtime_accelerate_op_set():
+    """P1 (runtime side): the artifact dispatcher's Accelerate op set includes
+    batched_gemm, so the JIT artifact path routes it through Accelerate's batched
+    cblas_sgemm (shape-selected rank-3) rather than the numpy reference
+    fall-through. (Numerical launch is exercised via the value lane in
+    TestSprint6BatchedMatmul; the bare-artifact numerical launch needs JIT-only
+    arg_names/ops metadata — a pre-existing limitation shared with rank-2
+    matmul, not batched-specific.)"""
+    from tessera.runtime import _APPLE_CPU_ACCELERATE_OPS
+    assert "tessera.batched_gemm" in _APPLE_CPU_ACCELERATE_OPS
+
+
+# ── Sprint 7: value-envelope coverage table ─────────────────────────────────
+#
+# A compact, single-source lock on "what the Apple CPU value lane executes vs
+# gates today". Executable = the runtime value-dispatch allowlist; gated cases
+# are proven non-executable by the dedicated tests referenced in each comment.
+
+def test_value_envelope_executable_allowlist_exact():
+    """The CPU value-dispatch allowlist is exactly the Sprint 2–7 executable
+    surface: 6 linalg + f32 rank-2 matmul + f32 rank-3 batched + f16/bf16 rank-2
+    matmul. Adding/removing an executable symbol must update this lock."""
+    from tessera.runtime import _APPLE_VALUE_CPU_SYMBOLS
+    assert _APPLE_VALUE_CPU_SYMBOLS == frozenset({
+        # Sprint 3 — CPU linalg family
+        "tessera_apple_cpu_cholesky_f32",
+        "tessera_apple_cpu_tri_solve_f32",
+        "tessera_apple_cpu_cholesky_solve_f32",
+        "tessera_apple_cpu_lu_f32",
+        "tessera_apple_cpu_qr_f32",
+        "tessera_apple_cpu_svd_f32",
+        # Sprint 5 — fp32 rank-2 matmul
+        "tessera_apple_cpu_gemm_f32",
+        # Sprint 6 — fp32 rank-3 batched matmul
+        "tessera_apple_cpu_gemm_f32_batched",
+        # Sprint 7 — f16 / bf16 rank-2 matmul
+        "tessera_apple_cpu_gemm_f16",
+        "tessera_apple_cpu_gemm_bf16",
+    })
+
+
+@pytest.mark.parametrize("name,lower_body,expect", [
+    # executable rank-2 matmul, all three dtypes
+    ("matmul_f32", 'tensor<4x8xf32>', "tessera_apple_cpu_gemm_f32"),
+    ("matmul_f16", 'tensor<4x8xf16>', "tessera_apple_cpu_gemm_f16"),
+    ("matmul_bf16", 'tensor<4x8xbf16>', "tessera_apple_cpu_gemm_bf16"),
+])
+def test_value_envelope_matmul_dtype_routing(name, lower_body, expect):
+    """rank-2 matmul routes to the dtype-specific GEMM symbol (f32/f16/bf16)."""
+    dt = lower_body.split("x")[-1].rstrip(">")
+    body = (f'func.func @f(%a: tensor<4x8x{dt}>, %b: tensor<8x16x{dt}>) '
+            f'-> tensor<4x16x{dt}> {{\n'
+            f'  %0 = tessera.matmul %a, %b : '
+            f'(tensor<4x8x{dt}>, tensor<8x16x{dt}>) -> tensor<4x16x{dt}>\n'
+            f'  return %0 : tensor<4x16x{dt}>\n}}')
+    p = _run("tessera-lower-to-apple_cpu-full", body)
+    assert p.returncode == 0, p.stderr
+    assert f'symbol = "{expect}"' in p.stdout
+
+
+@pytest.mark.parametrize("desc,body", [
+    # f16 batched matmul — batched f16/bf16 is NOT in the envelope (no
+    # tile.batched_gemm value path for non-f32) → named diagnostic.
+    ("f16_batched",
+     'func.func @f(%a: tensor<2x4x8xf16>, %b: tensor<2x8x16xf16>) -> tensor<2x4x16xf16> {\n'
+     '  %0 = tessera.batched_gemm %a, %b : (tensor<2x4x8xf16>, tensor<2x8x16xf16>) -> tensor<2x4x16xf16>\n'
+     '  return %0 : tensor<2x4x16xf16>\n}'),
+    # transposed f16 matmul — transpose gated regardless of dtype.
+    ("f16_transposed",
+     'func.func @f(%a: tensor<8x4xf16>, %b: tensor<8x16xf16>) -> tensor<4x16xf16> {\n'
+     '  %0 = tessera.matmul %a, %b {transposeA = true} : (tensor<8x4xf16>, tensor<8x16xf16>) -> tensor<4x16xf16>\n'
+     '  return %0 : tensor<4x16xf16>\n}'),
+    # dynamic f16 matmul — dynamic gated regardless of dtype.
+    ("f16_dynamic",
+     'func.func @f(%a: tensor<?x8xf16>, %b: tensor<8x16xf16>) -> tensor<?x16xf16> {\n'
+     '  %0 = tessera.matmul %a, %b : (tensor<?x8xf16>, tensor<8x16xf16>) -> tensor<?x16xf16>\n'
+     '  return %0 : tensor<?x16xf16>\n}'),
+])
+def test_value_envelope_gated_cases(desc, body):
+    """Out-of-envelope f16/bf16 cases (batched / transpose / dynamic) are gated
+    with a named diagnostic — never an executable value call."""
+    p = _run("tessera-lower-to-apple_cpu-full", body)
+    assert p.returncode != 0, f"{desc}: expected gating, got success"
+    assert "tessera_apple.cpu.call" not in p.stdout, desc

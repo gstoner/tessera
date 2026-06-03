@@ -266,8 +266,15 @@ struct TileMatmulValue : public RewritePattern {
     if (!lhsTy.hasStaticShape() || !rhsTy.hasStaticShape() ||
         !resTy.hasStaticShape())
       return failure();
-    if (!lhsTy.getElementType().isF32() || !rhsTy.getElementType().isF32() ||
-        !resTy.getElementType().isF32())
+    // Sprint 7: rank-2 value matmul executes for f32 (cblas_sgemm) + f16/bf16
+    // (BNNS). Require a single shared float element type across lhs/rhs/result;
+    // mixed-precision and integer matmul stay out of the value envelope.
+    Type elemTy = resTy.getElementType();
+    auto isValueMatmulElem = [](Type t) {
+      return t.isF32() || t.isF16() || t.isBF16();
+    };
+    if (!isValueMatmulElem(elemTy) ||
+        lhsTy.getElementType() != elemTy || rhsTy.getElementType() != elemTy)
       return failure();
     // Transpose is gated: the value ABI / runtime dispatch only honors the
     // physical (M,K)@(K,N) layout (cblas CblasNoTrans). A transposeA/transposeB

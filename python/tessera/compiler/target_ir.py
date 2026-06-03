@@ -1281,6 +1281,16 @@ def _lower_apple_cpu_op(op: TileOp) -> list[TargetOp]:
         })]
     if op.op_name == "tile.mma":
         return [TargetOp("tessera_apple.cpu.accelerate_gemm", {**base, "framework": "Accelerate", "abi": "cblas_sgemm", "dtype": "f32"})]
+    # Sprint 6: batched matmul artifact lane — route to the real (batched) GEMM
+    # artifact, not the generic vector_op fallback. Matches the C++ TileToApple
+    # artifact path (abi="cblas_sgemm_batched_loop").
+    if source == "tessera.batched_gemm" or op.op_name == "tile.batched_gemm":
+        return [TargetOp("tessera_apple.cpu.accelerate_gemm", {
+            **base, "framework": "Accelerate",
+            "abi": "cblas_sgemm_batched_loop", "dtype": "f32"})]
+    if source in {"tessera.matmul", "tessera.gemm"}:
+        return [TargetOp("tessera_apple.cpu.accelerate_gemm", {
+            **base, "framework": "Accelerate", "abi": "cblas_sgemm", "dtype": "f32"})]
     if source == "tessera.moe":
         return [TargetOp("tessera_apple.cpu.moe_solver", {
             **base,

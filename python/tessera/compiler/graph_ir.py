@@ -1501,6 +1501,14 @@ def _infer_result_type(op_name: str, operand_types: List[IRType]) -> IRType:
         if lhs.rank == 2 and rhs.rank == 2:
             return tensor_ir_type((lhs.shape[0], rhs.shape[1]), dtype, layout=lhs.layout)
         return tensor_ir_type(("*",), dtype, layout=lhs.layout)
+    if op_name == "tessera.batched_gemm" and len(operand_types) >= 2:
+        # Rank-3 C[b] = A[b] @ B[b]: result is B×M×N from A's (B,M) + B's N.
+        lhs, rhs = operand_types[0], operand_types[1]
+        dtype = lhs.dtype or rhs.dtype
+        if lhs.rank == 3 and rhs.rank == 3:
+            return tensor_ir_type((lhs.shape[0], lhs.shape[1], rhs.shape[2]),
+                                  dtype, layout=lhs.layout)
+        return tensor_ir_type(("*",), dtype, layout=lhs.layout)
     if op_name in {"tessera.transpose"} and operand_types[0].rank is not None:
         first = operand_types[0]
         return tensor_ir_type(tuple(reversed(first.shape)), first.dtype, layout=first.layout)
@@ -1673,6 +1681,23 @@ class GraphIRBuilder:
 def _annotation_to_ir_type(ann: Any) -> IRType:
     if ann is inspect.Parameter.empty:
         return TENSOR_OPAQUE
+    # String annotation that is itself an MLIR tensor type
+    # (e.g. "tensor<2x4x8xf32>") — parse it so the AST front door produces
+    # statically-shaped args. Without this, an annotated Python function lowers
+    # to opaque args and shape inference (matmul/batched_gemm) falls back to a
+    # dynamic result, which then fails the static-shape value lane.
+    if isinstance(ann, str):
+        # `from __future__ import annotations` (PEP 563) stringifies a
+        # string-literal annotation to include its surrounding quotes
+        # (`'"tensor<...>"'`); a non-future module yields the bare string. Strip
+        # one layer of matching quotes so both forms parse.
+        text = ann.strip()
+        if len(text) >= 2 and text[0] in "\"'" and text[-1] == text[0]:
+            text = text[1:-1].strip()
+        if text.startswith("tensor<"):
+            parsed = _parse_mlir_tensor_type(text)
+            if parsed is not None:
+                return parsed
     dims = getattr(ann, "__dims__", None)
     dtype = getattr(ann, "dtype", None)
     shape = getattr(ann, "shape", None)

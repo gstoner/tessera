@@ -402,9 +402,25 @@ struct LowerTileToAppleCPUPass
         // matmul vs gemm; both use the one tessera_apple_cpu_gemm_f32 symbol.
         if (name == "tile.matmul" || name == "tile.gemm") {
           bool isGemm = name == "tile.gemm" || src == "tessera.gemm";
+          // Sprint 7: pick the dtype-specific GEMM symbol from the result
+          // element type. f32 → cblas_sgemm; f16/bf16 → BNNS. TilingPass's
+          // TileMatmulValue guarantees a single shared float element type, so
+          // reading the result type is sufficient.
+          llvm::StringRef symbol = "tessera_apple_cpu_gemm_f32";
+          llvm::StringRef abi = "cblas_sgemm";
+          if (auto rt = llvm::dyn_cast<RankedTensorType>(
+                  op->getResult(0).getType())) {
+            Type et = rt.getElementType();
+            if (et.isF16()) {
+              symbol = "tessera_apple_cpu_gemm_f16";
+              abi = "bnns_matmul_f16";
+            } else if (et.isBF16()) {
+              symbol = "tessera_apple_cpu_gemm_bf16";
+              abi = "bnns_matmul_bf16";
+            }
+          }
           emitAppleValueCall(builder, op, "tessera_apple.cpu.call",
-                             isGemm ? "gemm" : "matmul",
-                             "tessera_apple_cpu_gemm_f32", "cblas_sgemm",
+                             isGemm ? "gemm" : "matmul", symbol, abi,
                              "executable", "Accelerate");
           ++ordinal;
           continue;

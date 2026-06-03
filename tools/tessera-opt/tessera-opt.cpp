@@ -10,6 +10,8 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Pass/PassManager.h"
+#include "mlir/Pass/PassRegistry.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
@@ -68,6 +70,40 @@ void registerShapeInferencePass();
 void registerErrorReporterPass();
 } // namespace diagnostics
 } // namespace tessera
+
+#if defined(TESSERA_HAVE_APPLE_BACKEND) && defined(TESSERA_HAVE_CORE_TESSERA_IR)
+namespace {
+// L-series linalg pilot (2026-06-02) — the full Graph→Schedule→Tile→Target
+// Apple spine in a single alias.  Chains the SSA dataflow passes
+// (effect-annotation → distribution-lowering → tiling) with the Apple Target-IR
+// artifact projection (tile-to-apple_{cpu,gpu}).  Unlike the artifact-only
+// `tessera-lower-to-apple_{cpu,gpu}` (which assume Tile-IR input) and the
+// op-direct `-runtime` pipelines, this drives the whole stack from Graph IR.
+// Registered here (not in the Apple backend library) because it spans Transforms
+// passes that the backend library does not link.
+mlir::PassPipelineRegistration<> gAppleCPUFullPipeline(
+    "tessera-lower-to-apple_cpu-full",
+    "Full Graph->Schedule->Tile->Target Apple CPU spine (effect-annotation -> "
+    "distribution-lowering -> tiling -> tile-to-apple_cpu)",
+    [](mlir::OpPassManager &pm) {
+      pm.addPass(tessera::createEffectAnnotationPass());
+      pm.addPass(tessera::createDistributionLoweringPass());
+      pm.addPass(tessera::createTilingPass());
+      pm.addPass(tessera::apple::createLowerTileToAppleCPUPass());
+    });
+
+mlir::PassPipelineRegistration<> gAppleGPUFullPipeline(
+    "tessera-lower-to-apple_gpu-full",
+    "Full Graph->Schedule->Tile->Target Apple GPU spine (effect-annotation -> "
+    "distribution-lowering -> tiling -> tile-to-apple_gpu)",
+    [](mlir::OpPassManager &pm) {
+      pm.addPass(tessera::createEffectAnnotationPass());
+      pm.addPass(tessera::createDistributionLoweringPass());
+      pm.addPass(tessera::createTilingPass());
+      pm.addPass(tessera::apple::createLowerTileToAppleGPUPass());
+    });
+} // namespace
+#endif
 
 int main(int argc, char **argv) {
 #if (defined(TESSERA_HAVE_ROCM_BACKEND) || defined(TESSERA_HAVE_NVIDIA_BACKEND)) && !defined(TESSERA_HAVE_CORE_TESSERA_IR)

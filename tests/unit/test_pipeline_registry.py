@@ -38,6 +38,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # owns its `tessera-lower-to-{rocm,metalium,apple_cpu,apple_gpu}` etc.
 _PASS_REGISTRATION_FILES = (
     REPO_ROOT / "src/transforms/lib/Passes.cpp",
+    # L-series linalg pilot: the cross-library `-full` Apple spine aliases are
+    # registered in the opt driver (they span Transforms + Apple-backend passes
+    # that no single backend library links).
+    REPO_ROOT / "tools/tessera-opt/tessera-opt.cpp",
     REPO_ROOT / "src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Passes.cpp",
     REPO_ROOT / "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
     REPO_ROOT / "src/compiler/codegen/Tessera_Metalium_Backend/lib/Target/Metalium/Passes.cpp",

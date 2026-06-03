@@ -97,6 +97,25 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
         status="lit_verified",
         sprint="Phase 8.1",
     ),
+    # L-series linalg pilot (2026-06-02): full Graph→Schedule→Tile→Target Apple
+    # CPU spine in one alias. Drives the whole stack from Graph IR (unlike the
+    # artifact-only / op-direct aliases). cholesky is the carrier op + template
+    # for the other linalg ops (tri_solve, svd).
+    PipelineSpec(
+        name="tessera-lower-to-apple_cpu-full",
+        passes=(
+            "tessera-effect-annotation",
+            "tessera-distribution-lowering",
+            "tessera-tiling",
+            "tile-to-apple_cpu",
+        ),
+        required_dialects=("tessera", "tessera_apple", "func", "scf", "arith"),
+        targets=("apple_cpu",),
+        lit_fixtures=("tests/tessera-ir/phase8/apple_cholesky_full_spine.mlir",),
+        phase="lowering",
+        status="lit_verified",
+        sprint="L-series",
+    ),
     PipelineSpec(
         name="tessera-lower-to-apple_cpu-runtime",
         passes=(
@@ -124,6 +143,23 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
         phase="lowering",
         status="lit_verified",
         sprint="Phase 8.1",
+    ),
+    # L-series linalg pilot (2026-06-02): full Graph→Schedule→Tile→Target Apple
+    # GPU spine in one alias (parallel to apple_cpu-full).
+    PipelineSpec(
+        name="tessera-lower-to-apple_gpu-full",
+        passes=(
+            "tessera-effect-annotation",
+            "tessera-distribution-lowering",
+            "tessera-tiling",
+            "tile-to-apple_gpu",
+        ),
+        required_dialects=("tessera", "tessera_apple", "func", "scf", "arith"),
+        targets=("apple_gpu",),
+        lit_fixtures=("tests/tessera-ir/phase8/apple_cholesky_full_spine.mlir",),
+        phase="lowering",
+        status="lit_verified",
+        sprint="L-series",
     ),
     PipelineSpec(
         name="tessera-lower-to-apple_gpu-runtime",

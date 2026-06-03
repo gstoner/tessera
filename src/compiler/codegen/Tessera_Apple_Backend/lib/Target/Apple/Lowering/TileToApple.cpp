@@ -211,6 +211,37 @@ llvm::SmallVector<Operation *> collectLowerableOps(ModuleOp module) {
   return ops;
 }
 
+// Erase a lowered tile op without leaving dangling SSA uses.
+//
+// The artifact projection emits *value-less* tessera_apple.* ops, so historically
+// the original tile op had no results/uses and a bare `op->erase()` was safe.
+// Real SSA Tile IR (e.g. the C++ TilingPass output, `tile.cholesky : (T) -> T`)
+// does carry a used result; erasing it blindly leaves `func.return` pointing at
+// freed IR — a verifier crash.  This rebinds each used result to a same-typed
+// operand when one exists (cholesky's result type matches its input), keeping
+// the module valid.  The executable semantics live in the emitted artifact's
+// `symbol` (consumed by the runtime per L6), not in this dataflow husk.  If no
+// type-compatible replacement exists (e.g. matmul, where result ≠ operand
+// shapes), the op is left in place rather than erased — never crash.
+// L-series linalg pilot (2026-06-02).
+bool safeEraseLowered(Operation *op) {
+  for (Value res : op->getResults()) {
+    if (res.use_empty())
+      continue;
+    Value repl;
+    for (Value operand : op->getOperands())
+      if (operand.getType() == res.getType()) {
+        repl = operand;
+        break;
+      }
+    if (!repl)
+      return false; // cannot safely erase; leave the op in place
+    res.replaceAllUsesWith(repl);
+  }
+  op->erase();
+  return true;
+}
+
 //===----------------------------------------------------------------------===//
 // CPU pass
 //===----------------------------------------------------------------------===//
@@ -304,7 +335,7 @@ struct LowerTileToAppleCPUPass
                            builder.getStringAttr("vecLib"));
         buildAppleOp(builder, op, kCPUVectorOp, ordinal, extra);
       }
-      op->erase();
+      safeEraseLowered(op);
       ++ordinal;
     }
   }
@@ -490,7 +521,7 @@ struct LowerTileToAppleGPUPass
         builder.create(dispatchState);
       }
 
-      op->erase();
+      safeEraseLowered(op);
       ++ordinal;
     }
   }

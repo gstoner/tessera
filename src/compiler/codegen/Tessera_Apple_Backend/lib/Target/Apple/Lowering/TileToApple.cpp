@@ -86,6 +86,15 @@ bool isMatmul(llvm::StringRef name) {
   return name == "tessera.matmul" || name == "tessera.gemm";
 }
 
+// Sprint 6: batched matmul. Kept distinct from isMatmul so the value-mode
+// dispatch can route the vetted tile.batched_gemm to the batched C ABI while a
+// *raw* tessera.batched_gemm (out-of-envelope: dynamic / non-f32) that survived
+// tiling is still collected here and gated by the value-mode diagnostic instead
+// of silently leaking through as an unlowered Graph-IR op.
+bool isBatchedMatmul(llvm::StringRef name) {
+  return name == "tessera.batched_gemm";
+}
+
 bool isReduction(llvm::StringRef name) {
   return name == "tessera.softmax" || name == "tessera.softmax_safe";
 }
@@ -193,8 +202,8 @@ bool isLowerable(Operation *op) {
   llvm::StringRef name = op->getName().getStringRef();
   if (name.starts_with("tessera_apple."))
     return false; // already lowered
-  if (isMatmul(name) || isReduction(name) || isFlashAttn(name) || isRoPE(name) ||
-      isKVCache(name))
+  if (isMatmul(name) || isBatchedMatmul(name) || isReduction(name) ||
+      isFlashAttn(name) || isRoPE(name) || isKVCache(name))
     return true;
   if (name.starts_with("tessera.tile.") || name.starts_with("tile."))
     return op->hasAttr("source");
@@ -400,10 +409,23 @@ struct LowerTileToAppleCPUPass
           ++ordinal;
           continue;
         }
+        // Sprint 6: static rank-3 f32 batched matmul → Accelerate batched GEMM
+        // value call. Only the vetted tile op (emitted by TilingPass's
+        // TileBatchedMatmulValue for the strict static rank-3 f32 envelope)
+        // reaches here; a raw tessera.batched_gemm that survives the tiling
+        // pass (out of envelope) falls through to the named diagnostic.
+        if (name == "tile.batched_gemm") {
+          emitAppleValueCall(builder, op, "tessera_apple.cpu.call",
+                             "batched_gemm", "tessera_apple_cpu_gemm_f32_batched",
+                             "cblas_sgemm_batched_loop", "executable",
+                             "Accelerate");
+          ++ordinal;
+          continue;
+        }
         op->emitError("apple_cpu value lowering: no value-producing CPU "
                       "target op for '")
-            << src << "' (Sprint 5 envelope: linalg family + static rank-2 "
-                      "f32 matmul/gemm)";
+            << src << "' (executable envelope: linalg family + static rank-2 "
+                      "f32 matmul + static rank-3 f32 batched_gemm)";
         signalPassFailure();
         return;
       }
@@ -443,12 +465,16 @@ struct LowerTileToAppleCPUPass
         extra.emplace_back(builder.getStringAttr("symbol"),
                            builder.getStringAttr(sp->cpuSymbol));
         buildAppleOp(builder, op, kCPUVectorOp, ordinal, extra);
-      } else if (isMatmul(name) || isMatmul(src)) {
+      } else if (isMatmul(name) || isMatmul(src) || isBatchedMatmul(name) ||
+                 isBatchedMatmul(src)) {
         llvm::SmallVector<NamedAttribute, 2> extra;
         extra.emplace_back(builder.getStringAttr("framework"),
                            builder.getStringAttr("Accelerate"));
         extra.emplace_back(builder.getStringAttr("abi"),
-                           builder.getStringAttr("cblas_sgemm"));
+                           builder.getStringAttr(
+                               isBatchedMatmul(name) || isBatchedMatmul(src)
+                                   ? "cblas_sgemm_batched_loop"
+                                   : "cblas_sgemm"));
         buildAppleOp(builder, op, kCPUAccelerateGemm, ordinal, extra);
       } else if (isReduction(name) || isReduction(src)) {
         llvm::SmallVector<NamedAttribute, 2> extra;

@@ -1876,6 +1876,45 @@ def _dispatch_matmul(inputs, call, np):
     return c
 
 
+def _as_f32_3d(x, np, *, name: str = "input"):
+    a = np.ascontiguousarray(np.asarray(x, dtype=np.float32))
+    if a.ndim != 3:
+        raise ValueError(f"{name} must be a 3-D batched matrix, got shape {tuple(a.shape)}")
+    return a
+
+
+def _dispatch_batched_matmul(inputs, call, np):
+    """Sprint 6: dense rank-3 batched matmul C[b]=A[b]@B[b] via the Accelerate
+    batched GEMM C ABI (`tessera_apple_cpu_gemm_f32_batched`, void, beta=0).
+
+    Strict envelope (the compiler only routes static rank-3 f32 here, and this
+    re-checks at runtime): exactly 2 operands, both rank-3, matching batch and
+    K, no broadcasting. dtype is **coerced** to contiguous fp32 at the boundary
+    (`_as_f32_3d`) — the dtype gate is upstream. Strides are the tight per-batch
+    element counts (M*K / K*N / M*N)."""
+    a = _as_f32_3d(inputs[0], np, name="batched_gemm A")
+    b = _as_f32_3d(inputs[1], np, name="batched_gemm B")
+    batch, m, ka = int(a.shape[0]), int(a.shape[1]), int(a.shape[2])
+    bb, kb, n = int(b.shape[0]), int(b.shape[1]), int(b.shape[2])
+    if batch != bb:
+        raise ValueError(
+            f"batched_gemm batch mismatch: A batch={batch}, B batch={bb} "
+            f"(no broadcasting)")
+    if ka != kb:
+        raise ValueError(
+            f"batched_gemm contraction mismatch: A K={ka}, B K={kb}")
+    c = np.empty((batch, m, n), dtype=np.float32)  # ABI writes every slice (beta=0)
+    fn = _apple_cpu_linalg_fn(
+        "tessera_apple_cpu_gemm_f32_batched",
+        [_F32P, _F32P, _F32P, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32],
+        restype=None)
+    fn(a.ctypes.data_as(_F32P), b.ctypes.data_as(_F32P), c.ctypes.data_as(_F32P),
+       batch, m, n, ka,
+       m * ka, ka * n, m * n)  # strideA, strideB, strideC (elements per batch)
+    return c
+
+
 # symbol -> (handler, expected operand count). The allowlist is its key set.
 _APPLE_VALUE_CPU_DISPATCH: dict[str, tuple] = {
     "tessera_apple_cpu_cholesky_f32":       (_dispatch_cholesky, 1),
@@ -1887,6 +1926,8 @@ _APPLE_VALUE_CPU_DISPATCH: dict[str, tuple] = {
     # Sprint 5: first non-linalg executable value op — fp32 rank-2 matmul/gemm.
     # Both op_kinds ("matmul"/"gemm") emit this one symbol in the IR.
     "tessera_apple_cpu_gemm_f32":           (_dispatch_matmul, 2),
+    # Sprint 6: fp32 rank-3 batched matmul (op_kind "batched_gemm").
+    "tessera_apple_cpu_gemm_f32_batched":   (_dispatch_batched_matmul, 2),
 }
 _APPLE_VALUE_CPU_SYMBOLS: frozenset[str] = frozenset(_APPLE_VALUE_CPU_DISPATCH)
 

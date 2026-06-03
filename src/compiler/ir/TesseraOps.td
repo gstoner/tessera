@@ -178,6 +178,24 @@ def Tessera_MatmulOp : Op<
   let hasVerifier = 1;
 }
 
+// Apple Value Target IR sprint 6 (2026-06-03): batched matrix multiply.
+// Rank-3 C[b] = A[b] @ B[b] over a shared leading batch dim. Kept minimal at
+// the Graph-IR layer ([Pure] + a shape verifier); the value lane lowers the
+// static rank-3 f32 envelope to the Accelerate batched GEMM C ABI. No
+// broadcasting and no transpose attrs in this sprint (both are gated).
+def Tessera_BatchedGemmOp : Op<
+  Tessera_Dialect, "batched_gemm",
+  [Pure]
+> {
+  let summary = "Batched matrix multiply (C[b] = A[b] @ B[b])";
+  let arguments = (ins TensorType:$lhs, TensorType:$rhs,
+                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
+  let results = (outs TensorType:$result);
+
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 // L-series linalg pilot (2026-06-02): Cholesky is the carrier op for vetting
 // the full Graph → Schedule → Tile → Target spine on the Apple CPU + GPU
 // backends.  Kept deliberately minimal at the Graph-IR layer ([Pure] + a

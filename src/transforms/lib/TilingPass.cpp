@@ -269,6 +269,16 @@ struct TileMatmulValue : public RewritePattern {
     if (!lhsTy.getElementType().isF32() || !rhsTy.getElementType().isF32() ||
         !resTy.getElementType().isF32())
       return failure();
+    // Transpose is gated: the value ABI / runtime dispatch only honors the
+    // physical (M,K)@(K,N) layout (cblas CblasNoTrans). A transposeA/transposeB
+    // matmul must NOT become an executable value call that silently computes
+    // the non-transposed product. Leave it untouched → gated downstream with a
+    // named diagnostic until the value ABI carries transpose attrs and the
+    // runtime honors them.
+    if (auto a = op->getAttrOfType<BoolAttr>("transposeA"); a && a.getValue())
+      return failure();
+    if (auto b = op->getAttrOfType<BoolAttr>("transposeB"); b && b.getValue())
+      return failure();
     // K-consistency AND result shape (M,N). The result check is essential: a
     // malformed (4x8)@(8x16)->(5x5) passes rank+static+f32+K but must NOT
     // become an executable value call producing a wrong-shaped output. The
@@ -278,6 +288,63 @@ struct TileMatmulValue : public RewritePattern {
       return failure();
     if (resTy.getDimSize(0) != lhsTy.getDimSize(0) ||
         resTy.getDimSize(1) != rhsTy.getDimSize(1))
+      return failure();
+
+    llvm::StringRef graphName = op->getName().getStringRef();
+    llvm::StringRef suffix = graphName;
+    suffix.consume_front("tessera.");
+    std::string tileName = ("tile." + suffix).str();
+    OperationState st(op->getLoc(), tileName);
+    st.addOperands(op->getOperands());
+    st.addTypes(op->getResultTypes());
+    for (auto &na : op->getAttrs())
+      st.addAttribute(na.getName(), na.getValue());
+    st.addAttribute("source", rewriter.getStringAttr(graphName));
+    Operation *tiled = rewriter.create(st);
+    rewriter.replaceOp(op, tiled->getResults());
+    return success();
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rewrite pattern: TileBatchedMatmulValue (Apple Value Target IR sprint 6)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Value path only: preserve a static rank-3 f32 `tessera.batched_gemm` as a
+// single `tile.batched_gemm` for the Accelerate batched-GEMM value call. Strict
+// envelope — static rank-3, f32, batch + K + M + N consistent. No broadcasting,
+// no transpose, no rank-2/rank-4. Out-of-envelope ops are left untouched and
+// gated downstream (the registered BatchedGemmOp verifier rejects most of them
+// before we even get here; this is the defense-in-depth gate at the tile seam).
+struct TileBatchedMatmulValue : public RewritePattern {
+  TileBatchedMatmulValue(MLIRContext *ctx, llvm::StringRef opName)
+      : RewritePattern(opName, /*benefit=*/2, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() < 2 || op->getNumResults() != 1)
+      return failure();
+    auto lhsTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto rhsTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto resTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!lhsTy || !rhsTy || !resTy)
+      return failure();
+    if (lhsTy.getRank() != 3 || rhsTy.getRank() != 3 || resTy.getRank() != 3)
+      return failure();
+    if (!lhsTy.hasStaticShape() || !rhsTy.hasStaticShape() ||
+        !resTy.hasStaticShape())
+      return failure();
+    if (!lhsTy.getElementType().isF32() || !rhsTy.getElementType().isF32() ||
+        !resTy.getElementType().isF32())
+      return failure();
+    // batch, K, M, N consistency — no broadcasting (batch must match exactly).
+    if (lhsTy.getDimSize(0) != rhsTy.getDimSize(0) ||
+        lhsTy.getDimSize(0) != resTy.getDimSize(0))
+      return failure();
+    if (lhsTy.getDimSize(2) != rhsTy.getDimSize(1))
+      return failure();
+    if (resTy.getDimSize(1) != lhsTy.getDimSize(1) ||
+        resTy.getDimSize(2) != rhsTy.getDimSize(2))
       return failure();
 
     llvm::StringRef graphName = op->getName().getStringRef();
@@ -348,6 +415,8 @@ struct TilingPassImpl
       // "gemm" if a `tile.gemm` ever arrives, but the executable Graph IR
       // spelling is `tessera.matmul`.
       patterns.add<TileMatmulValue>(&getContext(), "tessera.matmul");
+      // Sprint 6: static rank-3 f32 batched matmul → tile.batched_gemm.
+      patterns.add<TileBatchedMatmulValue>(&getContext(), "tessera.batched_gemm");
     } else {
       patterns.add<TileMatmul>(&getContext(),
                                static_cast<int64_t>(tileMOpt),

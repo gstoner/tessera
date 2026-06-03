@@ -47,6 +47,39 @@ LogicalResult MatmulOp::verify() {
   return success();
 }
 
+LogicalResult BatchedGemmOp::verify() {
+  // Apple Value Target IR sprint 6: rank-3 C[b] = A[b] @ B[b].
+  //   A: B×M×K, B: B×K×N, result B×M×N. Batch and K must agree. No
+  //   broadcasting and no transpose in this sprint — both are gated by the
+  //   strict rank-3 contract (rank-4+ and rank-2 are rejected here).
+  auto lhsType = dyn_cast<RankedTensorType>(getLhs().getType());
+  auto rhsType = dyn_cast<RankedTensorType>(getRhs().getType());
+  auto resultType = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!lhsType || !rhsType || !resultType)
+    return success();
+  if (lhsType.getRank() != 3 || rhsType.getRank() != 3 ||
+      resultType.getRank() != 3)
+    return emitOpError("expects rank-3 lhs, rhs, and result tensors "
+                       "(no broadcasting; rank-2 / rank-4+ are gated)");
+
+  auto agree = [](int64_t a, int64_t b) {
+    return ShapedType::isDynamic(a) || ShapedType::isDynamic(b) || a == b;
+  };
+  int64_t bl = lhsType.getDimSize(0), br = rhsType.getDimSize(0),
+          bo = resultType.getDimSize(0);
+  if (!agree(bl, br) || !agree(bl, bo))
+    return emitOpError("batch dimensions must match across lhs, rhs, result");
+  // No broadcasting: a batch of 1 against a larger batch is rejected by the
+  // equality check above (1 != B is a mismatch unless both are 1).
+  if (!agree(lhsType.getDimSize(2), rhsType.getDimSize(1)))
+    return emitOpError("contracting dimensions must match (lhs K vs rhs K)");
+  if (!agree(resultType.getDimSize(1), lhsType.getDimSize(1)))
+    return emitOpError("result M must equal lhs M");
+  if (!agree(resultType.getDimSize(2), rhsType.getDimSize(2)))
+    return emitOpError("result N must equal rhs N");
+  return success();
+}
+
 LogicalResult CholeskyOp::verify() {
   auto aType = dyn_cast<RankedTensorType>(getA().getType());
   auto resultType = dyn_cast<RankedTensorType>(getResult().getType());

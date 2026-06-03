@@ -899,29 +899,9 @@ def test_non_fp32_matmul_value_mode_is_gated(mlir_dtype, dtype):
     assert err and ("matmul" in err or "envelope" in err), err
 
 
-def test_batched_matmul_value_mode_is_gated():
-    """Batched (rank-3) matmul is outside the envelope — value mode is gated
-    with a recorded reason, never an executable f32 gemm call."""
-    from tessera.compiler.canonical_compile import canonical_compile
-    from tessera.compiler.graph_ir import (
-        GraphIRFunction, GraphIRModule, IRArg, IROp, IRType,
-    )
-    ta = IRType("tensor<2x4x8xf32>", ("2", "4", "8"), "fp32")
-    tb = IRType("tensor<2x8x16xf32>", ("2", "8", "16"), "fp32")
-    tc = IRType("tensor<2x4x16xf32>", ("2", "4", "16"), "fp32")
-    m = GraphIRModule(functions=[GraphIRFunction(
-        name="f", args=[IRArg("a", ta), IRArg("b", tb)], result_types=[tc],
-        body=[IROp(result="c", op_name="tessera.batched_gemm",
-                   operands=["%a", "%b"],
-                   operand_types=[ta.mlir_str, tb.mlir_str],
-                   result_type=tc.mlir_str)],
-        return_values=["%c"])])
-    meta = canonical_compile(m, target="apple_cpu",
-                             options={"apple_target_ir_mode": "value"}).to_runtime_artifact().metadata
-    assert meta.get("compiler_path") != "apple_value_target_ir"
-    calls = meta.get("apple_value_calls") or []
-    assert not any(c.get("op") == "tessera_apple.cpu.call"
-                   and c.get("status") == "executable" for c in calls)
+# NOTE: static rank-3 batched matmul is no longer gated — Sprint 6 promoted it
+# to an executable value call (see TestSprint6BatchedMatmul). Out-of-envelope
+# batched cases (broadcast / rank-4 / dynamic / non-f32) remain gated below.
 
 
 # ── Sprint 5 review fixes (P1/P2) ───────────────────────────────────────────
@@ -962,3 +942,215 @@ def test_matmul_value_executor_requires_exact_operand_count():
     assert res["ok"] is False
     assert res["runtime_status"] == "invalid_artifact"
     assert "exactly 2" in res["reason"] or "input" in res["reason"]
+
+
+# ── Sprint 5 nuance lock: transposed rank-2 matmul is gated ─────────────────
+
+def test_transposed_matmul_value_mode_is_gated():
+    """A transposed rank-2 matmul has a consistent result shape and passes the
+    MatmulOp verifier, but the value ABI / runtime only honor the physical
+    (M,K)@(K,N) layout. It must be gated (named diagnostic), never lowered to an
+    executable value call that silently computes the non-transposed product —
+    until the value ABI carries transpose attrs and the runtime honors them."""
+    # transposeA: lhs is (K,M)=(8,4), rhs (K,N)=(8,16) → result (M,N)=(4,16).
+    for attr in ("transposeA = true", "transposeB = true"):
+        body = (f'func.func @f(%a: tensor<8x4xf32>, %b: tensor<8x16xf32>) '
+                f'-> tensor<4x16xf32> {{\n'
+                f'  %0 = tessera.matmul %a, %b {{{attr}}} : '
+                f'(tensor<8x4xf32>, tensor<8x16xf32>) -> tensor<4x16xf32>\n'
+                f'  return %0 : tensor<4x16xf32>\n}}'
+                if attr == "transposeA = true" else
+                f'func.func @f(%a: tensor<4x8xf32>, %b: tensor<16x8xf32>) '
+                f'-> tensor<4x16xf32> {{\n'
+                f'  %0 = tessera.matmul %a, %b {{{attr}}} : '
+                f'(tensor<4x8xf32>, tensor<16x8xf32>) -> tensor<4x16xf32>\n'
+                f'  return %0 : tensor<4x16xf32>\n}}')
+        p = _run("tessera-lower-to-apple_cpu-full", body)
+        assert p.returncode != 0, f"{attr}: expected gating, got success"
+        assert "tessera_apple.cpu.call" not in p.stdout, attr
+        assert "no value-producing CPU target op" in p.stderr, attr
+
+
+# ── Sprint 6: CPU fp32 rank-3 batched matmul value lane ─────────────────────
+
+def _batched_module(B, M, K, N, dtype="f32", mlir_dtype="f32"):
+    from tessera.compiler.graph_ir import (
+        GraphIRFunction, GraphIRModule, IRArg, IROp, IRType,
+    )
+    ta = IRType(f"tensor<{B}x{M}x{K}x{mlir_dtype}>", (str(B), str(M), str(K)), dtype)
+    tb = IRType(f"tensor<{B}x{K}x{N}x{mlir_dtype}>", (str(B), str(K), str(N)), dtype)
+    tc = IRType(f"tensor<{B}x{M}x{N}x{mlir_dtype}>", (str(B), str(M), str(N)), dtype)
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="f", args=[IRArg("a", ta), IRArg("b", tb)], result_types=[tc],
+        body=[IROp(result="c", op_name="tessera.batched_gemm",
+                   operands=["%a", "%b"],
+                   operand_types=[ta.mlir_str, tb.mlir_str],
+                   result_type=tc.mlir_str)],
+        return_values=["%c"])])
+
+
+def test_cpu_full_batched_lowers_to_batched_gemm_value_call():
+    """Static rank-3 f32 batched matmul lowers to a tessera_apple.cpu.call with
+    tessera_apple_cpu_gemm_f32_batched — no husk, no scf.for, no tile leftover."""
+    body = ('func.func @f(%a: tensor<2x4x8xf32>, %b: tensor<2x8x16xf32>) '
+            '-> tensor<2x4x16xf32> {\n'
+            '  %0 = tessera.batched_gemm %a, %b : '
+            '(tensor<2x4x8xf32>, tensor<2x8x16xf32>) -> tensor<2x4x16xf32>\n'
+            '  return %0 : tensor<2x4x16xf32>\n}')
+    p = _run("tessera-lower-to-apple_cpu-full", body)
+    assert p.returncode == 0, p.stderr
+    assert "tessera_apple.cpu.call" in p.stdout
+    assert 'symbol = "tessera_apple_cpu_gemm_f32_batched"' in p.stdout
+    assert 'op_kind = "batched_gemm"' in p.stdout
+    for bad in ("ub.poison", "tensor.empty", "scf.for", "tile.batched_gemm"):
+        assert bad not in p.stdout, f"forbidden '{bad}' in batched value output"
+
+
+def test_batched_symbol_on_runtime_allowlist():
+    from tessera.compiler import driver
+    from tessera.runtime import _APPLE_VALUE_CPU_SYMBOLS
+    body = ('func.func @f(%a: tensor<2x4x8xf32>, %b: tensor<2x8x16xf32>) '
+            '-> tensor<2x4x16xf32> {\n'
+            '  %0 = tessera.batched_gemm %a, %b : '
+            '(tensor<2x4x8xf32>, tensor<2x8x16xf32>) -> tensor<2x4x16xf32>\n'
+            '  return %0 : tensor<2x4x16xf32>\n}')
+    p = _run("tessera-lower-to-apple_cpu-full", body)
+    assert p.returncode == 0, p.stderr
+    calls = driver.extract_apple_value_calls(p.stdout)
+    assert calls and calls[0]["symbol"] == "tessera_apple_cpu_gemm_f32_batched"
+    assert calls[0]["symbol"] in _APPLE_VALUE_CPU_SYMBOLS
+
+
+def test_front_door_batched_routes_value_without_injection():
+    art = _front_door(_batched_module(2, 4, 8, 16))
+    assert art.metadata["compiler_path"] == "apple_value_target_ir"
+    assert art.metadata["apple_target_ir_kind"] == "value_target_ir"
+    assert "tessera_apple_cpu_gemm_f32_batched" in (art.target_ir or "")
+
+
+def test_front_door_default_batched_stays_artifact():
+    from tessera.compiler.canonical_compile import canonical_compile
+    meta = canonical_compile(_batched_module(2, 4, 8, 16),
+                             target="apple_cpu").to_runtime_artifact().metadata
+    assert meta.get("compiler_path") != "apple_value_target_ir"
+
+
+@pytest.mark.skipif(sys.platform != "darwin",
+                    reason="Accelerate batched cblas_sgemm is Darwin-only")
+class TestSprint6BatchedMatmul:
+    def test_batched_matches_numpy(self):
+        import numpy as np
+        from tessera.runtime import launch
+        for (B, M, K, N), seed in (((2, 4, 8, 16), 0), ((1, 7, 3, 5), 1),
+                                   ((5, 1, 9, 2), 2)):
+            a = np.random.default_rng(seed).standard_normal((B, M, K)).astype(np.float32)
+            b = np.random.default_rng(seed + 99).standard_normal((B, K, N)).astype(np.float32)
+            r = launch(_front_door(_batched_module(B, M, K, N)), [a, b])
+            assert r["ok"], r
+            assert r["compiler_path"] == "apple_value_target_ir"
+            assert r["output"].shape == (B, M, N)
+            np.testing.assert_allclose(r["output"], a @ b, rtol=1e-4, atol=1e-4)
+
+    def test_batched_exact_operand_count(self):
+        import numpy as np
+        from tessera.runtime import RuntimeArtifact, launch
+        art = RuntimeArtifact(metadata={
+            "target": "apple_cpu", "compiler_path": "apple_value_target_ir",
+            "executable": True,
+            "apple_value_calls": [{
+                "op": "tessera_apple.cpu.call", "op_kind": "batched_gemm",
+                "symbol": "tessera_apple_cpu_gemm_f32_batched", "status": "executable",
+            }]})
+        a = np.ones((2, 4, 8), np.float32)
+        b = np.ones((2, 8, 16), np.float32)
+        res = launch(art, [a, b, np.ones((1,), np.float32)])  # one too many
+        assert res["ok"] is False
+        assert res["runtime_status"] == "invalid_artifact"
+
+
+# Out-of-envelope batched cases stay gated (glass jaws).
+def test_broadcast_batched_is_gated():
+    """Broadcast (batch 1 vs B) is rejected by the verifier — no implicit
+    expansion, never an executable value call."""
+    body = ('func.func @f(%a: tensor<1x4x8xf32>, %b: tensor<2x8x16xf32>) '
+            '-> tensor<2x4x16xf32> {\n'
+            '  %0 = tessera.batched_gemm %a, %b : '
+            '(tensor<1x4x8xf32>, tensor<2x8x16xf32>) -> tensor<2x4x16xf32>\n'
+            '  return %0 : tensor<2x4x16xf32>\n}')
+    p = _run("tessera-lower-to-apple_cpu-full", body)
+    assert p.returncode != 0
+    assert "tessera_apple.cpu.call" not in p.stdout
+    assert "batch dimensions must match" in p.stderr
+
+
+def test_batched_result_shape_mismatch_is_gated():
+    body = ('func.func @f(%a: tensor<2x4x8xf32>, %b: tensor<2x8x16xf32>) '
+            '-> tensor<2x5x5xf32> {\n'
+            '  %0 = tessera.batched_gemm %a, %b : '
+            '(tensor<2x4x8xf32>, tensor<2x8x16xf32>) -> tensor<2x5x5xf32>\n'
+            '  return %0 : tensor<2x5x5xf32>\n}')
+    p = _run("tessera-lower-to-apple_cpu-full", body)
+    assert p.returncode != 0
+    assert "tessera_apple.cpu.call" not in p.stdout
+    assert "result M" in p.stderr or "result N" in p.stderr
+
+
+def test_rank4_batched_is_gated():
+    """Rank-4 'batched_gemm' is rejected — the rank-3 contract is strict."""
+    body = ('func.func @f(%a: tensor<2x3x4x8xf32>, %b: tensor<2x3x8x16xf32>) '
+            '-> tensor<2x3x4x16xf32> {\n'
+            '  %0 = tessera.batched_gemm %a, %b : '
+            '(tensor<2x3x4x8xf32>, tensor<2x3x8x16xf32>) -> tensor<2x3x4x16xf32>\n'
+            '  return %0 : tensor<2x3x4x16xf32>\n}')
+    p = _run("tessera-lower-to-apple_cpu-full", body)
+    assert p.returncode != 0
+    assert "tessera_apple.cpu.call" not in p.stdout
+    assert "rank-3" in p.stderr
+
+
+def test_dynamic_batched_is_gated():
+    """Dynamic batch/M/N/K passes the verifier (dynamic dims agree) but the
+    value tiling pattern requires static shapes — it is left as a raw op and
+    gated with a named diagnostic, never an executable value call."""
+    body = ('func.func @f(%a: tensor<?x4x8xf32>, %b: tensor<?x8x16xf32>) '
+            '-> tensor<?x4x16xf32> {\n'
+            '  %0 = tessera.batched_gemm %a, %b : '
+            '(tensor<?x4x8xf32>, tensor<?x8x16xf32>) -> tensor<?x4x16xf32>\n'
+            '  return %0 : tensor<?x4x16xf32>\n}')
+    p = _run("tessera-lower-to-apple_cpu-full", body)
+    assert p.returncode != 0
+    assert "tessera_apple.cpu.call" not in p.stdout
+    assert "no value-producing CPU target op" in p.stderr
+
+
+def test_non_f32_batched_is_gated():
+    """f16 batched matmul: gated. Either the Graph IR target-capability verifier
+    rejects it, or it reaches the value lowering as a raw op and is gated — never
+    an executable f32 batched call."""
+    from tessera.compiler.canonical_compile import canonical_compile
+    from tessera.compiler.graph_ir import GraphIRVerificationError
+    m = _batched_module(2, 4, 8, 16, dtype="fp16", mlir_dtype="f16")
+    try:
+        meta = canonical_compile(m, target="apple_cpu",
+                                 options={"apple_target_ir_mode": "value"}).to_runtime_artifact().metadata
+    except GraphIRVerificationError:
+        return  # earliest honest gate
+    assert meta.get("compiler_path") != "apple_value_target_ir"
+    calls = meta.get("apple_value_calls") or []
+    assert not any(c.get("op") == "tessera_apple.cpu.call"
+                   and c.get("status") == "executable" for c in calls)
+
+
+def test_gpu_value_batched_is_gated_no_output():
+    """apple_gpu value batched matmul never becomes value-executable; launch
+    returns a structured non-success with no fabricated output."""
+    from tessera.runtime import launch
+    art = _front_door_gpu(_batched_module(2, 4, 8, 16))
+    assert art.metadata.get("compiler_path") != "apple_value_target_ir" \
+        or art.metadata.get("executable") is not True
+    calls = art.metadata.get("apple_value_calls") or []
+    assert not any(c.get("op") == "tessera_apple.cpu.call"
+                   and c.get("status") == "executable" for c in calls)
+    res = launch(art, None)
+    assert res["ok"] is False
+    assert "output" not in res

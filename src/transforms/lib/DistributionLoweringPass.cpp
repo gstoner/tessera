@@ -33,6 +33,8 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Casting.h"
@@ -146,29 +148,71 @@ struct DistributionLowering
         toMove.push_back(&op);
       }
 
-      // ── 3. Create schedule.mesh.region (empty body) before the return ─────
+      // ── 3. Compute escaping values ────────────────────────────────────────
+      // Results of moved ops that are used *outside* the set of moved ops must
+      // be yielded out of the region and re-bound, otherwise the func.return
+      // (and any other external user) would reference a value defined inside
+      // the region — a dominance violation.  This is the fix that lets the
+      // Schedule layer produce verifier-clean IR (previously XFAIL).
+      llvm::SmallPtrSet<Operation *, 8> movedSet(toMove.begin(), toMove.end());
+      llvm::SetVector<Value> escaping;
+      for (auto *op : toMove)
+        for (Value res : op->getResults())
+          for (OpOperand &use : res.getUses())
+            if (!movedSet.contains(use.getOwner())) {
+              escaping.insert(res);
+              break;
+            }
+      SmallVector<Value> yielded(escaping.begin(), escaping.end());
+      SmallVector<Type> resultTypes;
+      resultTypes.reserve(yielded.size());
+      for (Value v : yielded) resultTypes.push_back(v.getType());
+
+      // ── 4. Create schedule.mesh.region (with result types) before return ──
       b.setInsertionPoint(ret);
+      Operation *regionOp = nullptr;
       Block *regionBlock = nullptr;
       {
         OperationState st(loc, "schedule.mesh.region");
         // Use the first axis as the logical mesh identifier.
         st.addAttribute("mesh", FlatSymbolRefAttr::get(ctx, axes[0]));
         st.addAttribute("axis", b.getStringAttr(axes[0]));
+        st.addTypes(resultTypes);
         Region *rgn = st.addRegion();
         regionBlock = new Block();
         rgn->push_back(regionBlock);
-        b.create(st);
+        regionOp = b.create(st);
       }
 
-      // ── 4. Move collected ops into the region body ────────────────────────
+      // ── 5. Move collected ops into the region body ────────────────────────
       for (auto *op : toMove)
         op->moveBefore(regionBlock, regionBlock->end());
 
-      // ── 5. Terminate the region body with schedule.yield ──────────────────
+      // ── 6. Terminate the region body with schedule.yield <escaping...> ────
       {
         OpBuilder rb(regionBlock, regionBlock->end());
         OperationState ySt(loc, "schedule.yield");
+        ySt.addOperands(yielded);
         rb.create(ySt);
+      }
+
+      // ── 7. Re-bind external uses to the region's results ──────────────────
+      // Replace uses of each escaping value that live *outside* the region
+      // (e.g. func.return) with the corresponding region result.  Uses inside
+      // the region — including the schedule.yield we just created — are left
+      // untouched.
+      Region &meshRegion = regionOp->getRegion(0);
+      auto useIsInsideRegion = [&](Operation *user) {
+        for (Region *r = user->getParentRegion(); r; r = r->getParentRegion())
+          if (r == &meshRegion) return true;
+        return false;
+      };
+      for (auto pair : llvm::enumerate(yielded)) {
+        Value oldV = pair.value();
+        Value newV = regionOp->getResult(pair.index());
+        oldV.replaceUsesWithIf(newV, [&](OpOperand &use) {
+          return !useIsInsideRegion(use.getOwner());
+        });
       }
 
       // ── 6. Strip tessera.shard attrs from function arguments ──────────────

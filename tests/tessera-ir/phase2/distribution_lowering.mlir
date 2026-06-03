@@ -1,6 +1,8 @@
-// XFAIL: *
-// RUN: tessera-opt --tessera-distribution-lowering='mesh-axes=dp mesh-sizes=4' %s | FileCheck %s --check-prefix=OPT
-// RUN: tessera-opt --tessera-distribution-lowering='mesh-axes=dp,tp mesh-sizes=4,4' %s | FileCheck %s --check-prefix=MULTI
+// L-series L2 (2026-06-02): un-XFAIL'd — DistributionLoweringPass now outlines
+// computation into schedule.mesh.region with proper result yielding + return
+// re-binding (previously a dominance violation; see the pass's section 3/6/7).
+// RUN: tessera-opt --tessera-distribution-lowering='mesh-axes=dp mesh-sizes=4' --allow-unregistered-dialect %s | FileCheck %s --check-prefix=OPT
+// RUN: tessera-opt --tessera-distribution-lowering='mesh-axes=dp,tp mesh-sizes=4,4' --allow-unregistered-dialect %s | FileCheck %s --check-prefix=MULTI
 // RUN: tessera-opt %s | FileCheck %s --check-prefix=NOOP
 
 // ── Test 1 (OPT): single-axis distribution, shard attr stripped ────────────
@@ -9,11 +11,11 @@
 // OPT:       schedule.mesh.define
 // OPT-SAME:  axis_names
 // OPT-SAME:  "dp"
-// OPT:       schedule.mesh.region
-// OPT-SAME:  axis = "dp"
-// OPT:       tessera.matmul
-// OPT:       schedule.yield
-// OPT:       return
+// OPT:       %[[R:.*]] = "schedule.mesh.region"
+// OPT:         tessera.matmul
+// OPT:         schedule.yield
+// OPT:       axis = "dp"
+// OPT:       return %[[R]]
 
 // ── Test 2 (MULTI): two-axis distribution ──────────────────────────────────
 // MULTI-LABEL: func.func @gemm_step

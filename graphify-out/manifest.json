@@ -500,8 +500,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/TilingPass.cpp": {
-    "mtime": 1780527451.46251,
-    "ast_hash": "5312c75fa44145548dcb3872382533de",
+    "mtime": 1780529763.387299,
+    "ast_hash": "a2e38f12198a4e026bd9ce29d680e410",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/AutodiffPass.cpp": {
@@ -1805,8 +1805,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/CMakeLists.txt": {
-    "mtime": 1778364661.987531,
-    "ast_hash": "c53434dfa3514ca4dcbcc3d68f3a3384",
+    "mtime": 1780529684.8763754,
+    "ast_hash": "d4049e4f06919a7efd75616d9300f88b",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/TilingInterface_NOTES.md": {
@@ -3070,8 +3070,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/driver.py": {
-    "mtime": 1780505179.4454446,
-    "ast_hash": "9201e33722e5a674c69bccba088a27bb",
+    "mtime": 1780529884.5622141,
+    "ast_hash": "e7806b47b17d3bd40bbcdebc65fb1550",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/normalization.py": {
@@ -3335,8 +3335,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tools/tessera-opt/tessera-opt.cpp": {
-    "mtime": 1780527458.9203527,
-    "ast_hash": "b3fec6acd9b313bc852b944bf50e30b9",
+    "mtime": 1780529830.1689544,
+    "ast_hash": "a3a134bcc791030ac3ba37a4782bd31b",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tools/roofline_tools/tools/__init__.py": {
@@ -11775,8 +11775,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_value_target_ir.py": {
-    "mtime": 1780528801.3302717,
-    "ast_hash": "52267a44e7b78db122981ed6bab28d84",
+    "mtime": 1780530033.2030663,
+    "ast_hash": "94ec1a765b5e170dab4308bdea7d7b6a",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_batching_rule_closure.py": {
@@ -11790,8 +11790,23 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/VALUE_TARGET_IR_CONTRACT.md": {
-    "mtime": 1780528089.7958689,
-    "ast_hash": "d62d739755cc803d5fc8c137e3c27d4c",
+    "mtime": 1780530361.3610291,
+    "ast_hash": "a1a23ae17b552bfe7b0859a24d29f6c2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/TileDialect.cpp": {
+    "mtime": 1780530224.8758616,
+    "ast_hash": "452229ba63e57b1c51296da33088a27b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/TileOps.cpp": {
+    "mtime": 1780529655.8966184,
+    "ast_hash": "2b209640415329291a36d668cfe10462",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/include/Tessera/Dialect/Tile/TileDialect.h": {
+    "mtime": 1780529621.97023,
+    "ast_hash": "7d0f1e65f835919691d98d93648723ae",
     "semantic_hash": ""
   }
 }

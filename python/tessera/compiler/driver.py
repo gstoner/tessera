@@ -1008,8 +1008,13 @@ def _lower_apple_value_target_ir(
         r"(\btessera\.[A-Za-z0-9_]+)\(([^()]*)\)(\s*\{|\s*:)",
         r"\1 \2\3", graph_text)
     try:
+        # Sprint 9: the Apple value lane runs against the *registered* Tile IR
+        # dialect — no `--allow-unregistered-dialect`. If a tile.* op were
+        # unregistered, tessera-opt would now fail loudly (the guard test
+        # `test_apple_value_lowering_uses_no_unregistered_dialect_flag` enforces
+        # this is never reintroduced).
         proc = subprocess.run(
-            [tool, f"-{pipeline}", "--allow-unregistered-dialect", "-"],
+            [tool, f"-{pipeline}", "-"],
             input=parse_text, capture_output=True, text=True, timeout=60)
     except Exception as exc:  # noqa: BLE001 — surface the reason, don't swallow
         return None, f"tessera-opt invocation failed: {exc}"

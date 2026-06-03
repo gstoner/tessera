@@ -2,7 +2,7 @@
 // through the table-driven full Graph→Schedule→Tile→Target Apple spine to a
 // tessera_apple.cpu.call (value op) naming the Accelerate LAPACK C ABI symbol.
 //
-// RUN: tessera-opt -tessera-lower-to-apple_cpu-full --allow-unregistered-dialect %s \
+// RUN: tessera-opt -tessera-lower-to-apple_cpu-full %s \
 // RUN:   | FileCheck %s
 
 // CHECK-LABEL: func.func @tri_solve

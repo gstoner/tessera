@@ -30,15 +30,29 @@ mlir_tablegen(TesseraOpsTypes.cpp.inc -gen-typedef-defs -typedefs-dialect=tesser
 add_public_tablegen_target(TesseraIRTableGen)
 add_mlir_doc(TesseraOps TesseraIR Dialects/ -gen-dialect-doc)
 
+# Sprint 9 — Tile IR dialect (value-lane lowering spine). Generated headers land
+# under ${BINARY}/Tessera/Dialect/Tile/ so consumers resolve
+# "Tessera/Dialect/Tile/TileOps.h.inc" against the TesseraIR include dirs.
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Tessera/Dialect/Tile)
+set(LLVM_TARGET_DEFINITIONS include/Tessera/Dialect/Tile/TileOps.td)
+mlir_tablegen(Tessera/Dialect/Tile/TileOps.h.inc -gen-op-decls)
+mlir_tablegen(Tessera/Dialect/Tile/TileOps.cpp.inc -gen-op-defs)
+mlir_tablegen(Tessera/Dialect/Tile/TileOpsDialect.h.inc -gen-dialect-decls -dialect=tile)
+mlir_tablegen(Tessera/Dialect/Tile/TileOpsDialect.cpp.inc -gen-dialect-defs -dialect=tile)
+add_public_tablegen_target(TesseraTileIRTableGen)
+
 add_mlir_dialect_library(TesseraIR
   TesseraDialect.cpp
   TesseraOps.cpp
   TesseraTiling.cpp
   AdjointInterface.cpp
+  TileDialect.cpp
+  TileOps.cpp
 
   DEPENDS
     TesseraIRTableGen
     TesseraAdjointInterfaceTableGen
+    TesseraTileIRTableGen
 
   LINK_LIBS PUBLIC
     MLIRIR

@@ -57,7 +57,7 @@ _CPU_LINALG_OPS = ("cholesky", "tri_solve", "cholesky_solve", "lu", "qr", "svd")
 
 def _run(pipeline: str, body: str) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [_OPT, f"-{pipeline}", "--allow-unregistered-dialect", "-"],
+        [_OPT, f"-{pipeline}", "-"],
         input=body, capture_output=True, text=True, timeout=60)
 
 
@@ -1588,3 +1588,71 @@ def test_off_allowlist_symbol_is_not_marked_executable():
         "    return %0 : tensor<3x3xf32>\n  }\n}\n")
     meta = _inject_value_ir("apple_cpu", bogus)
     assert meta.get("executable") is not True
+
+
+# ── Sprint 9: registered Tile IR — no --allow-unregistered-dialect ───────────
+
+def test_apple_value_lowering_uses_no_unregistered_dialect_flag():
+    """Guard (Sprint 9): the Apple value lane runs against the *registered* Tile
+    IR dialect — it must never pass `--allow-unregistered-dialect`. Fails if the
+    flag is reintroduced in the driver, this test's `_run`, or the value-pipeline
+    lit fixtures."""
+    import pathlib
+    from tessera.compiler import driver
+    # (1) Driver's value-lowering subprocess must not use the flag.
+    src = pathlib.Path(driver.__file__).read_text()
+    # Isolate the `_lower_apple_value_target_ir` body.
+    start = src.index("def _lower_apple_value_target_ir")
+    end = src.index("\ndef ", start + 1)
+    body = src[start:end]
+    assert "subprocess.run" in body
+    # Match the quoted CLI *argument* form (not a backtick-quoted comment).
+    assert '"--allow-unregistered-dialect"' not in body, (
+        "the Apple value lane must run against the registered Tile dialect")
+    # (2) This module's `_run` (used by every lit-style value test) must not use it.
+    this = pathlib.Path(__file__).read_text()
+    run_start = this.index("def _run(")
+    run_end = this.index("\n\n", run_start)
+    assert '"--allow-unregistered-dialect"' not in this[run_start:run_end]
+    # (3) The value-pipeline (`-full`) lit fixtures must not use it.
+    fixtures = (REPO_ROOT / "tests" / "tessera-ir" / "phase8")
+    for mlir in fixtures.glob("apple_*value*.mlir"):
+        text = mlir.read_text()
+        for line in text.splitlines():
+            if "RUN:" in line and "-full" in line:
+                assert "--allow-unregistered-dialect" not in line, (
+                    f"{mlir.name} value RUN line still uses the flag")
+
+
+def test_value_pipeline_runs_without_unregistered_flag_positive():
+    """Positive proof: the value `-full` pipeline lowers a matmul to a cpu.call
+    with NO --allow-unregistered-dialect — i.e. tile.matmul is a *registered*
+    op. (If the Tile dialect weren't registered, tessera-opt would error here.)"""
+    body = ('func.func @f(%a: tensor<4x8xf32>, %b: tensor<8x16xf32>) '
+            '-> tensor<4x16xf32> {\n'
+            '  %0 = tessera.matmul %a, %b : '
+            '(tensor<4x8xf32>, tensor<8x16xf32>) -> tensor<4x16xf32>\n'
+            '  return %0 : tensor<4x16xf32>\n}')
+    import subprocess
+    proc = subprocess.run([_OPT, "-tessera-lower-to-apple_cpu-full", "-"],
+                          input=body, capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, proc.stderr
+    assert "tessera_apple.cpu.call" in proc.stdout
+    assert "tile.matmul" not in proc.stdout  # consumed, not leaked
+
+
+def test_registered_tile_matmul_verifier_rejects_bad_shape():
+    """The registered tile.matmul carries a real verifier: a shape-inconsistent
+    tile.matmul (fed directly, no --allow-unregistered-dialect) is rejected."""
+    import subprocess
+    # tile.matmul with a wrong result row dim — verifier must fire.
+    body = ('func.func @f(%a: tensor<4x8xf32>, %b: tensor<8x16xf32>) '
+            '-> tensor<5x16xf32> {\n'
+            '  %0 = tile.matmul %a, %b : '
+            '(tensor<4x8xf32>, tensor<8x16xf32>) -> tensor<5x16xf32>\n'
+            '  return %0 : tensor<5x16xf32>\n}')
+    # Plain `tessera-opt -` parses + verifies; no --allow-unregistered-dialect.
+    proc = subprocess.run([_OPT, "-"],
+                          input=body, capture_output=True, text=True, timeout=60)
+    assert proc.returncode != 0
+    assert "result row dimension must equal lhs M" in proc.stderr

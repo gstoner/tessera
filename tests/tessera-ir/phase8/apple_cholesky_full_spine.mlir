@@ -14,9 +14,9 @@
 // executes, and leave NO ub.poison / tensor.empty / surviving tile.* in the
 // module.  (Numerically proven by test_apple_cholesky_seam_closure.py.)
 //
-// RUN: tessera-opt -tessera-lower-to-apple_cpu-full --allow-unregistered-dialect %s \
+// RUN: tessera-opt -tessera-lower-to-apple_cpu-full %s \
 // RUN:   | FileCheck %s --check-prefix=CPU
-// RUN: tessera-opt -tessera-lower-to-apple_gpu-full --allow-unregistered-dialect %s \
+// RUN: tessera-opt -tessera-lower-to-apple_gpu-full %s \
 // RUN:   | FileCheck %s --check-prefix=GPU
 
 // CPU-LABEL: func.func @chol_e2e

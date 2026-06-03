@@ -17,6 +17,7 @@
 
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
 #include "Tessera/IR/Dialects.h"
+#include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Transforms/Passes.h"
 #endif
 
@@ -202,6 +203,9 @@ int main(int argc, char **argv) {
 
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
   tessera::registerTesseraDialects(registry);
+  // Sprint 9 — Tile IR dialect (value-lane lowering spine). Registering it lets
+  // the Apple `-full` pipelines run without --allow-unregistered-dialect.
+  tessera::tile::registerTileDialect(registry);
 #endif
 
 #ifdef TESSERA_HAVE_FA4_ATTN

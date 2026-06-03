@@ -2,7 +2,7 @@
 status: Normative
 classification: Backend contract
 audience: backend authors (Apple proven; NVIDIA / ROCm inherit)
-last_updated: 2026-06-03 (Apple Value Target IR sprint 8 — Apple GPU value execution: rank-3 batched matmul f32/f16/bf16)
+last_updated: 2026-06-03 (Apple Value Target IR sprint 9 — registered Tile IR dialect; value lane runs with no --allow-unregistered-dialect)
 ---
 
 # Value Target IR Contract
@@ -54,6 +54,21 @@ Each backend defines value ops with:
 
 The attribute-only artifact ops (`cpu.vector_op`, `gpu.metal_kernel`,
 `gpu.dispatch`, …) remain unchanged for dashboards / compatibility.
+
+## Tile IR is a registered dialect (Sprint 9)
+
+The value-mode tiling pass emits **registered** Tile IR ops in the `tile`
+dialect (`tile.matmul`, `tile.gemm`, `tile.batched_gemm` with rank/shape
+verifiers; `tile.cholesky`/`tri_solve`/`cholesky_solve`/`lu`/`qr`/`svd`). The
+Apple value `-full` pipelines therefore run with **no
+`--allow-unregistered-dialect`** — the Graph -> Schedule -> Tile -> Apple
+Target handoff is verified end to end, not held together by relaxed MLIR
+verification. A guard test
+(`test_apple_value_lowering_uses_no_unregistered_dialect_flag`) fails if the
+flag is reintroduced in the driver, the lit value fixtures, or the test
+runner. The dialect `allowUnknownOperations` so the *artifact* lane's
+remaining transient tile ops (`tile.mma`/`async_copy`/`kv_cache`/debug) stay
+opaque until their own ODS lands — a documented follow-on, not a hidden gap.
 
 ## Pipeline intent
 

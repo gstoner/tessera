@@ -29,6 +29,7 @@
 //   --tile-n  N-dimension tile size (default 16)
 
 #include "Tessera/Transforms/Passes.h"
+#include "Tessera/Dialect/Tile/TileDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -411,7 +412,11 @@ struct TilingPassImpl
 
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<arith::ArithDialect, scf::SCFDialect,
-                    tensor::TensorDialect>();
+                    tensor::TensorDialect,
+                    // Sprint 9: the value/linalg tiling patterns create
+                    // registered tile.* ops — load the Tile dialect so they are
+                    // verified, not unregistered (no --allow-unregistered-dialect).
+                    ::tessera::tile::TesseraTileDialect>();
   }
 
   void runOnOperation() override {

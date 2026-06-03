@@ -17,14 +17,14 @@
 // SPINE-LABEL: func.func @chol_step
 // SPINE:       schedule.mesh.define
 // SPINE:       %[[R:.*]] = "schedule.mesh.region"
-// SPINE:         "tile.cholesky"
+// SPINE:         tile.cholesky
 // SPINE-SAME:    lower = true
 // SPINE-SAME:    source = "tessera.cholesky"
 // SPINE:         schedule.yield
 // SPINE:       return %[[R]]
 
 // BARE-LABEL:  func.func @chol_step
-// BARE:        "tile.cholesky"
+// BARE:        tile.cholesky
 // BARE-SAME:   lower = true
 // BARE-SAME:   source = "tessera.cholesky"
 // The Graph-IR op spelling (`= tessera.cholesky %arg`) must be gone — only the

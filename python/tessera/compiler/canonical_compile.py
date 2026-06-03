@@ -222,6 +222,18 @@ class CompileResult:
                         meta["apple_previous_compiler_path"] = meta.get(
                             "compiler_path", "")
                         meta["compiler_path"] = "apple_value_target_ir"
+                        # Sprint 3 (S3-4): the value lane's executability is
+                        # decided by the value-call status + the runtime
+                        # allowlist (proven by the value executor), not the
+                        # generic op-on-target gate. Mark the artifact launchable
+                        # when an executable cpu.call is present; the
+                        # (apple_gpu, apple_value_target_ir) matrix row stays
+                        # non-executable, so GPU value calls remain gated even
+                        # with this flag set.
+                        if any(c.get("op") == "tessera_apple.cpu.call"
+                               and c.get("status") == "executable"
+                               for c in _calls):
+                            meta["executable"] = True
             except Exception:
                 # Classification is metadata-only; never block artifact creation.
                 pass

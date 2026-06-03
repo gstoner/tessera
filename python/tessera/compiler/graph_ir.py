@@ -412,14 +412,27 @@ class IROp:
     for ops projected from a ``@complex_jit`` view, ``{"ga_only"}``
     for Clifford views.  Empty when no invariants are claimed."""
 
+    @property
+    def result_names(self) -> List[str]:
+        """SSA result names for this op (without the ``%`` sigil).
+
+        Single-result ops carry one name in ``result``; multi-result ops
+        (``qr`` → ``Q``/``R``, ``svd`` → ``U``/``S``/``V``, ``lu`` →
+        ``LU``/``pivots``) carry a comma-separated list (e.g. ``"q,r"``).
+        """
+        if self.result is None:
+            return []
+        return [n.strip() for n in self.result.split(",") if n.strip()]
+
     def to_mlir(self, indent: str = "  ") -> str:
         ops_str = ", ".join(self.operands)
         types_in = ", ".join(self.operand_types)
-        if self.result is not None and self.result_type:
-            lhs = f"%{self.result} = "
+        names = self.result_names
+        if names and self.result_type:
+            lhs = ", ".join(f"%{n}" for n in names) + " = "
             type_str = f" : ({types_in}) -> {self.result_type}"
-        elif self.result is not None:
-            lhs = f"%{self.result} = "
+        elif names:
+            lhs = ", ".join(f"%{n}" for n in names) + " = "
             type_str = ""
         else:
             lhs = ""
@@ -626,18 +639,25 @@ class GraphIRVerifier:
         for op in fn.body:
             if op.op_name.startswith("tessera.scf."):
                 self._verify_control_marker(op, control_stack, diagnostics)
-            if op.result is not None:
-                result_name = f"%{op.result}"
-                if result_name in defined or result_name in results:
-                    diagnostics.append(GraphIRDiagnostic(
-                        "error",
-                        f"duplicate SSA result {result_name}",
-                        span=op.source_span,
-                        code="GRAPH_IR_DUP_VALUE",
-                    ))
-                results.add(result_name)
+            op_result_names = op.result_names
+            if op_result_names:
+                # Multi-result ops (lu/qr/svd) carry several SSA names; each is
+                # a distinct definition for SSA-use checking. The aggregate
+                # result_type drives type inference only for the single-result
+                # case — per-result types are validated downstream.
                 parsed_type = op.inferred_type or _parse_mlir_tensor_type(op.result_type or "")
-                value_types[result_name] = parsed_type
+                for name in op_result_names:
+                    result_name = f"%{name}"
+                    if result_name in defined or result_name in results:
+                        diagnostics.append(GraphIRDiagnostic(
+                            "error",
+                            f"duplicate SSA result {result_name}",
+                            span=op.source_span,
+                            code="GRAPH_IR_DUP_VALUE",
+                        ))
+                    results.add(result_name)
+                    if len(op_result_names) == 1:
+                        value_types[result_name] = parsed_type
             if len(op.operands) != len(op.operand_types):
                 diagnostics.append(GraphIRDiagnostic(
                     "error",

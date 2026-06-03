@@ -216,7 +216,14 @@ def AppleCPU_CallOp : TesseraApple_Op<"cpu.call", [Pure]> {
                        OptionalAttr<StrAttr>:$status,
                        OptionalAttr<StrAttr>:$dtype,
                        OptionalAttr<StrAttr>:$framework,
-                       OptionalAttr<StrAttr>:$argument_layout);
+                       OptionalAttr<StrAttr>:$argument_layout,
+                       // Linalg semantic attrs (Value Target IR sprint 3) —
+                       // copied from the Graph/Tile source so runtime dispatch
+                       // never silently assumes a default.
+                       OptionalAttr<BoolAttr>:$lower,
+                       OptionalAttr<BoolAttr>:$trans,
+                       OptionalAttr<BoolAttr>:$unit_diag,
+                       OptionalAttr<BoolAttr>:$full_matrices);
   let results = (outs Variadic<AnyType>:$results);
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
@@ -232,7 +239,14 @@ def AppleGPU_KernelCallOp : TesseraApple_Op<"gpu.kernel_call", [Pure]> {
                        OptionalAttr<StrAttr>:$status,
                        OptionalAttr<StrAttr>:$dtype,
                        OptionalAttr<StrAttr>:$framework,
-                       OptionalAttr<StrAttr>:$argument_layout);
+                       OptionalAttr<StrAttr>:$argument_layout,
+                       // Linalg semantic attrs (Value Target IR sprint 3) —
+                       // copied from the Graph/Tile source so runtime dispatch
+                       // never silently assumes a default.
+                       OptionalAttr<BoolAttr>:$lower,
+                       OptionalAttr<BoolAttr>:$trans,
+                       OptionalAttr<BoolAttr>:$unit_diag,
+                       OptionalAttr<BoolAttr>:$full_matrices);
   let results = (outs Variadic<AnyType>:$results);
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
@@ -248,7 +262,14 @@ def AppleGPU_PackageCallOp : TesseraApple_Op<"gpu.package_call", [Pure]> {
                        OptionalAttr<StrAttr>:$status,
                        OptionalAttr<StrAttr>:$dtype,
                        OptionalAttr<StrAttr>:$framework,
-                       OptionalAttr<StrAttr>:$argument_layout);
+                       OptionalAttr<StrAttr>:$argument_layout,
+                       // Linalg semantic attrs (Value Target IR sprint 3) —
+                       // copied from the Graph/Tile source so runtime dispatch
+                       // never silently assumes a default.
+                       OptionalAttr<BoolAttr>:$lower,
+                       OptionalAttr<BoolAttr>:$trans,
+                       OptionalAttr<BoolAttr>:$unit_diag,
+                       OptionalAttr<BoolAttr>:$full_matrices);
   let results = (outs Variadic<AnyType>:$results);
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";

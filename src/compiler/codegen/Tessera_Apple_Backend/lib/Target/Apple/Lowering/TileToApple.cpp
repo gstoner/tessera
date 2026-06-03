@@ -313,6 +313,14 @@ void emitAppleValueCall(OpBuilder &b, Operation *op,
   st.addAttribute("abi", b.getStringAttr(abi));
   st.addAttribute("status", b.getStringAttr(status));
   st.addAttribute("framework", b.getStringAttr(framework));
+  // Sprint 3: preserve linalg semantic attrs from the source op so runtime
+  // dispatch never silently assumes a default (lower/trans/unit_diag for
+  // solves; full_matrices for qr/svd).  Copied verbatim when present.
+  for (llvm::StringRef name :
+       {"lower", "trans", "unit_diag", "full_matrices"}) {
+    if (Attribute a = op->getAttr(name))
+      st.addAttribute(name, a);
+  }
   b.setInsertionPoint(op);
   Operation *call = b.create(st);
   op->replaceAllUsesWith(call);

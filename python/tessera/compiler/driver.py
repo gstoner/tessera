@@ -292,6 +292,24 @@ def compile_graph_module(
         execution_mode = "metal_runtime"
     execution_kind = _execution_kind_for(target_kind, cpu_plan, executable=executable)
 
+    # Apple Value Target IR sprint 3 — explicit value-mode front door. When the
+    # caller asks for value mode on an Apple target, run the value-preserving
+    # `-full` pipeline and use the emitted value Target IR as the target
+    # artifact (so to_runtime_artifact routes to apple_value_target_ir). Default
+    # (artifact) behavior is untouched — no opt-in, no change.
+    if str((options or {}).get("apple_target_ir_mode", "")) == "value" \
+            and target_kind in ("apple_cpu", "apple_gpu"):
+        value_ir = lower_apple_value_target_ir(graph_text, target_kind)
+        if value_ir:
+            target_artifact = LoweringArtifact("target", value_ir)
+            # CPU value calls are executable now; the GPU value row stays gated
+            # in the execution matrix regardless, so this flag is safe there.
+            if target_kind == "apple_cpu":
+                executable = True
+                runtime_status = "ready"
+                execution_kind = "native_cpu"
+                execution_mode = "cpu_accelerate"
+
     bundle = CompileArtifactBundle(
         request=request,
         graph=graph,
@@ -469,6 +487,10 @@ _APPLE_ARTIFACT_OPS: tuple[str, ...] = (
 # value containing JSON-like braces (e.g. argument_layout = "{\"buffers\":[…]}")
 # round-trips intact.
 _APPLE_ATTR_RE = re.compile(r'(\w+)\s*=\s*"((?:\\.|[^"\\])*)"')
+# Bool attrs print unquoted (`lower = true`).  Sprint 3: the linalg semantic
+# attrs (lower/trans/unit_diag/full_matrices) ride the value op as BoolAttrs, so
+# the extractor must surface them — runtime dispatch must not assume defaults.
+_APPLE_BOOL_ATTR_RE = re.compile(r"(\w+)\s*=\s*(true|false)\b")
 
 
 def _scan_value_call_attr_dicts(ir_text: str) -> list[tuple[str, str]]:
@@ -531,7 +553,7 @@ def classify_apple_target_ir(ir_text: str) -> str:
     return "none"
 
 
-def extract_apple_value_calls(ir_text: str) -> list[dict[str, str]]:
+def extract_apple_value_calls(ir_text: str) -> list[dict[str, object]]:
     """Read the dispatch tuple off every value-producing Apple target op.
 
     The runtime dispatcher consumes this: for cpu.call it invokes the named
@@ -539,9 +561,14 @@ def extract_apple_value_calls(ir_text: str) -> list[dict[str, str]]:
     reports native_gpu execution only when ``status == "executable"``. Returns
     one dict per value op with at least {op, op_kind, symbol, status}.
     """
-    calls: list[dict[str, str]] = []
+    calls: list[dict[str, object]] = []
     for op_name, attr_blob in _scan_value_call_attr_dicts(ir_text):
-        attrs = {k: v for k, v in _APPLE_ATTR_RE.findall(attr_blob)}
+        attrs: dict[str, object] = {
+            k: v for k, v in _APPLE_ATTR_RE.findall(attr_blob)
+        }
+        # Bool attrs (unquoted) — don't clobber a same-named string attr.
+        for k, v in _APPLE_BOOL_ATTR_RE.findall(attr_blob):
+            attrs.setdefault(k, v == "true")
         attrs["op"] = op_name
         attrs.setdefault("status", "")
         calls.append(attrs)
@@ -909,6 +936,52 @@ def _find_tessera_opt() -> str | None:
     if found:
         return found
     return None
+
+
+def _resolve_tessera_opt() -> str | None:
+    """Find tessera-opt: env / PATH (via _find_tessera_opt), else the standard
+    in-repo build location (so the value front door works without PATH setup)."""
+    found = _find_tessera_opt()
+    if found:
+        return found
+    built = (Path(__file__).resolve().parents[2]
+             / "build" / "tools" / "tessera-opt" / "tessera-opt")
+    if built.is_file() and os.access(built, os.X_OK):
+        return str(built)
+    return None
+
+
+def lower_apple_value_target_ir(graph_text: str, target_kind: str) -> str | None:
+    """Apple Value Target IR sprint 3 — front-door value mode.
+
+    Run the value-preserving ``tessera-lower-to-apple_{cpu,gpu}-full`` pipeline
+    on the Graph IR and return the emitted value Target IR (the
+    tessera_apple.{cpu.call,gpu.kernel_call} ops). Returns None when tessera-opt
+    is unavailable or the lowering fails — the caller then keeps the artifact
+    target IR (default behavior never drifts)."""
+    if target_kind not in ("apple_cpu", "apple_gpu"):
+        return None
+    tool = _resolve_tessera_opt()
+    if not tool:
+        return None
+    pipeline = f"tessera-lower-to-{target_kind}-full"
+    # The Python Graph-IR emitter prints `tessera.op(%operands)` (paren form),
+    # but the registered ops' custom assembly is `tessera.op %operands` (no
+    # parens). Normalize operand parens to the custom format the parser expects
+    # — only on `tessera.*` invocations followed by an attr dict or the `:` type
+    # signature (so functional-type parens are left intact).
+    parse_text = re.sub(
+        r"(\btessera\.[A-Za-z0-9_]+)\(([^()]*)\)(\s*\{|\s*:)",
+        r"\1 \2\3", graph_text)
+    try:
+        proc = subprocess.run(
+            [tool, f"-{pipeline}", "--allow-unregistered-dialect", "-"],
+            input=parse_text, capture_output=True, text=True, timeout=60)
+    except Exception:
+        return None
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None
+    return proc.stdout
 
 
 def _maybe_dump_debug_artifacts(bundle: CompileArtifactBundle) -> None:

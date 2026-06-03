@@ -178,6 +178,25 @@ def Tessera_MatmulOp : Op<
   let hasVerifier = 1;
 }
 
+// L-series linalg pilot (2026-06-02): Cholesky is the carrier op for vetting
+// the full Graph → Schedule → Tile → Target spine on the Apple CPU + GPU
+// backends.  Kept deliberately minimal at the Graph-IR layer ([Pure] + a
+// shape verifier); TilingInterface / AdjointInterface are added by the steps
+// (L3 / autodiff) that actually need them.
+def Tessera_CholeskyOp : Op<
+  Tessera_Dialect, "cholesky",
+  [Pure]
+> {
+  let summary = "Cholesky factorization (A = L Lᵀ for SPD A; returns L)";
+  let arguments = (ins TensorType:$a,
+                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy,
+                        DefaultValuedAttr<BoolAttr, "true">:$lower);
+  let results = (outs TensorType:$result);
+
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 def Tessera_Conv2DNHWCOp : Op<
   Tessera_Dialect, "conv2d_nhwc",
   [Pure,

@@ -32,6 +32,28 @@ LogicalResult MatmulOp::verify() {
   return success();
 }
 
+LogicalResult CholeskyOp::verify() {
+  auto aType = dyn_cast<RankedTensorType>(getA().getType());
+  auto resultType = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!aType || !resultType)
+    return success();
+  // L-series pilot: rank-2 square SPD input; result matches input shape.
+  // (Batched rank-3 is a follow-on once the rank-2 spine is proven.)
+  if (aType.getRank() != 2 || resultType.getRank() != 2)
+    return emitOpError("expects rank-2 input and result tensors");
+  int64_t m = aType.getDimSize(0);
+  int64_t n = aType.getDimSize(1);
+  if (!ShapedType::isDynamic(m) && !ShapedType::isDynamic(n) && m != n)
+    return emitOpError("input matrix must be square");
+  int64_t rm = resultType.getDimSize(0);
+  int64_t rn = resultType.getDimSize(1);
+  if (!ShapedType::isDynamic(m) && !ShapedType::isDynamic(rm) && m != rm)
+    return emitOpError("result must have the same shape as the input");
+  if (!ShapedType::isDynamic(n) && !ShapedType::isDynamic(rn) && n != rn)
+    return emitOpError("result must have the same shape as the input");
+  return success();
+}
+
 LogicalResult Conv2DNHWCOp::verify() {
   auto inputType = dyn_cast<RankedTensorType>(getInput().getType());
   auto filterType = dyn_cast<RankedTensorType>(getFilter().getType());

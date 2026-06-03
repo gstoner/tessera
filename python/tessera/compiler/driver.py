@@ -464,16 +464,59 @@ _APPLE_ARTIFACT_OPS: tuple[str, ...] = (
     "tessera_apple.gpu.metal_kernel",
 )
 
-# Anchor to the value-op mnemonic, then non-greedily span to its first `{...}`
-# attribute dict.  DOTALL lets this survive MLIR pretty-printing that wraps the
-# op across lines (review RV-P3); value-op attr dicts contain only string attrs,
-# so `[^}]*` never has to cross a nested brace.
-_APPLE_VALUE_CALL_RE = re.compile(
-    r"(tessera_apple\.(?:cpu\.call|gpu\.kernel_call|gpu\.package_call))\b.*?"
-    r"\{([^}]*)\}",
-    re.DOTALL,
-)
-_APPLE_ATTR_RE = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
+# String attr `key = "value"` pairs inside an already-isolated attr dict.
+# `(?:\\.|[^"\\])*` matches a quoted body with escaped quotes/backslashes, so a
+# value containing JSON-like braces (e.g. argument_layout = "{\"buffers\":[…]}")
+# round-trips intact.
+_APPLE_ATTR_RE = re.compile(r'(\w+)\s*=\s*"((?:\\.|[^"\\])*)"')
+
+
+def _scan_value_call_attr_dicts(ir_text: str) -> list[tuple[str, str]]:
+    """Brace-safe scanner (Sprint 2, S2-1): for every value-op mnemonic, walk
+    forward to its attribute dict and return ``(op_name, attr_dict_body)``.
+
+    Replaces the old regex (which matched only same-line / no-nested-brace attr
+    dicts).  Walks to the matching top-level ``}`` while *skipping braces inside
+    quoted strings* (respecting ``\\`` escapes), so an ``argument_layout`` whose
+    value is itself a JSON object with braces does not terminate the dict early.
+    """
+    found: list[tuple[int, str, str]] = []  # (position, op, attr_body)
+    n = len(ir_text)
+    for op in _APPLE_VALUE_OPS:
+        start = 0
+        while True:
+            hit = ir_text.find(op, start)
+            if hit < 0:
+                break
+            start = hit + len(op)
+            i = ir_text.find("{", start)  # the op's attr dict opens here
+            if i < 0:
+                break
+            # Walk to the matching close brace, honoring quoted strings + escapes.
+            depth, j, in_str, esc = 0, i, False, False
+            body_start = i + 1
+            while j < n:
+                ch = ir_text[j]
+                if in_str:
+                    if esc:
+                        esc = False
+                    elif ch == "\\":
+                        esc = True
+                    elif ch == '"':
+                        in_str = False
+                elif ch == '"':
+                    in_str = True
+                elif ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        found.append((hit, op, ir_text[body_start:j]))
+                        break
+                j += 1
+            start = j + 1
+    found.sort(key=lambda t: t[0])  # source order, not grouped by op-type
+    return [(op, body) for _, op, body in found]
 
 
 def classify_apple_target_ir(ir_text: str) -> str:
@@ -497,7 +540,7 @@ def extract_apple_value_calls(ir_text: str) -> list[dict[str, str]]:
     one dict per value op with at least {op, op_kind, symbol, status}.
     """
     calls: list[dict[str, str]] = []
-    for op_name, attr_blob in _APPLE_VALUE_CALL_RE.findall(ir_text):
+    for op_name, attr_blob in _scan_value_call_attr_dicts(ir_text):
         attrs = {k: v for k, v in _APPLE_ATTR_RE.findall(attr_blob)}
         attrs["op"] = op_name
         attrs.setdefault("status", "")

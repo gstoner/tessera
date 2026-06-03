@@ -1104,6 +1104,7 @@ def _executor_table():
     return {
         "apple_cpu_accelerate": _execute_apple_cpu_accelerate_artifact,
         "apple_gpu_mps":        _execute_apple_gpu_mps_artifact,
+        "apple_value_target_ir": _execute_apple_value_target_ir_artifact,
         "native_cpu":           _execute_cpu_native_or_jit,
         "jit_cpu_numpy":        _execute_jit_cpu_artifact,
     }
@@ -1690,6 +1691,103 @@ def _apple_cpu_gemm_f32() -> Any:
     ]
     gemm.restype = None
     return gemm
+
+
+# ── Apple Value Target IR sprint 2 — CPU value-call execution ───────────────
+# The narrow, executable runtime path for the value lane: dispatch the C ABI
+# `symbol` named in a tessera_apple.cpu.call value op (read from
+# metadata["apple_value_calls"]), not a parallel op-name matcher.  CPU cholesky
+# is executable now; everything else is a named, gated follow-on.
+_APPLE_VALUE_CPU_SYMBOLS: frozenset[str] = frozenset({
+    "tessera_apple_cpu_cholesky_f32",
+})
+
+
+def _apple_cpu_cholesky_f32() -> Any:
+    """Resolve the Accelerate-LAPACK Cholesky C ABI entry (spotrf-backed)."""
+    runtime = _load_apple_cpu_runtime()
+    fn = getattr(runtime, "tessera_apple_cpu_cholesky_f32", None)
+    if fn is None:
+        raise ValueError(
+            "apple_cpu runtime lacks tessera_apple_cpu_cholesky_f32 — rebuild "
+            "TesseraAppleRuntime (the prebuilt dylib predates the linalg lane)")
+    fn.argtypes = [
+        ctypes.POINTER(ctypes.c_float),  # A (NxN, row-major, SPD)
+        ctypes.POINTER(ctypes.c_float),  # L (NxN, row-major, lower out)
+        ctypes.c_int32,                   # N
+    ]
+    fn.restype = ctypes.c_int32
+    return fn
+
+
+def _execute_apple_value_target_ir_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Execute an Apple value-target-IR artifact by dispatching the C ABI symbol
+    named in metadata["apple_value_calls"].
+
+    Sprint 2 scope: exactly one single-result tessera_apple.cpu.call with
+    status == "executable" and a symbol on the CPU allowlist. Multi-op /
+    multi-result / GPU kernel_call / package_call are explicit, named
+    follow-ons and raise (so launch() reports invalid_artifact rather than
+    silently falling back to a parallel matcher)."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    calls = list(metadata.get("apple_value_calls") or [])
+    if not calls:
+        raise ValueError("apple_value_target_ir artifact carries no apple_value_calls")
+    if len(calls) != 1:
+        raise ValueError(
+            f"apple_value_target_ir: only single value-call programs are "
+            f"executable so far (got {len(calls)}); multi-op is a named follow-on")
+    call = calls[0]
+    op = str(call.get("op", ""))
+    if op != "tessera_apple.cpu.call":
+        raise ValueError(
+            f"apple_value_target_ir: only tessera_apple.cpu.call is executable; "
+            f"'{op}' (GPU kernel_call / package_call are gated follow-ons)")
+    if call.get("status") != "executable":
+        raise ValueError(
+            f"apple_value_target_ir: value call status is "
+            f"{call.get('status')!r}, not 'executable'")
+    symbol = str(call.get("symbol", ""))
+    if symbol not in _APPLE_VALUE_CPU_SYMBOLS:
+        raise ValueError(
+            f"apple_value_target_ir: symbol {symbol!r} is not in the executable "
+            f"CPU allowlist {sorted(_APPLE_VALUE_CPU_SYMBOLS)} "
+            f"(op_kind={call.get('op_kind')!r})")
+
+    # The single input tensor: from bound arg names if present, else positional.
+    arg_names = list(metadata.get("arg_names") or [])
+    if arg_names:
+        bound = _bind_launch_args(args, arg_names)
+        inputs = [bound[name] for name in arg_names if name in bound]
+    elif isinstance(args, (list, tuple)):
+        inputs = list(args)
+    else:
+        inputs = [args]
+    if not inputs:
+        raise ValueError("apple_value_target_ir: cholesky value-call needs one input")
+
+    if symbol == "tessera_apple_cpu_cholesky_f32":
+        a = np.ascontiguousarray(np.asarray(inputs[0], dtype=np.float32))
+        if a.ndim != 2 or a.shape[0] != a.shape[1]:
+            raise ValueError(
+                f"cholesky value-call expects a square 2-D matrix, got shape "
+                f"{tuple(a.shape)}")
+        n = int(a.shape[0])
+        out = np.zeros((n, n), dtype=np.float32)
+        info = _apple_cpu_cholesky_f32()(
+            a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            n,
+        )
+        if info != 0:
+            raise ValueError(
+                f"tessera_apple_cpu_cholesky_f32 returned info={info} "
+                f"(matrix not positive definite?)")
+        return out
+    # Allowlist guards this; defensive.
+    raise ValueError(f"apple_value_target_ir: no CPU dispatch for symbol {symbol!r}")
 
 
 def _apple_cpu_gemm_f32_batched() -> Any:

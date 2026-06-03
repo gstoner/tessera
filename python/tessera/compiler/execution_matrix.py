@@ -60,6 +60,9 @@ class ExecutionRow:
 KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "apple_cpu_accelerate": "Apple Silicon CPU via the Accelerate cblas_sgemm shim",
     "apple_gpu_mps":        "Apple Silicon GPU via MPS / MSL / MPSGraph (per envelope)",
+    "apple_value_target_ir": "Apple CPU value-call dispatch — invokes the C ABI "
+                             "symbol named in a tessera_apple.cpu.call value op "
+                             "(Value Target IR sprint; CPU cholesky executable)",
     "native_cpu":           "x86 AMX / native CPU runtime via the C runtime ABI",
     "jit_cpu_numpy":        "JIT CPU fallback via the numpy reference path",
     # Note: pure-numpy `reference_cpu` is reached only as an internal *fallback*
@@ -89,6 +92,25 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         executor_id="apple_gpu_mps", runtime_status="success",
         reason="Apple GPU artifact runs through MPS / MSL / MPSGraph per the runtime envelope.",
         execution_mode="metal_runtime"),
+    # --- Apple Value Target IR (sprint 2) — CPU value-call execution ---
+    # The value-preserving `-full` lane lowers to tessera_apple.cpu.call value
+    # ops; this row executes them by invoking the C ABI `symbol` named in the IR
+    # (read from metadata["apple_value_calls"]). CPU cholesky is executable now.
+    ("apple_cpu", "apple_value_target_ir"): ExecutionRow(
+        target="apple_cpu", compiler_path="apple_value_target_ir",
+        execution_kind="native_cpu", executable=True,
+        executor_id="apple_value_target_ir", runtime_status="success",
+        reason="Apple CPU value-call (tessera_apple.cpu.call) dispatches to the "
+               "named Accelerate/LAPACK C ABI symbol.",
+        execution_mode="cpu_accelerate"),
+    # GPU value-call execution is GATED until a GPU value-call ABI adapter lands
+    # — classified + recorded, never silently dispatched (non-executable row).
+    ("apple_gpu", "apple_value_target_ir"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_value_target_ir",
+        execution_kind="value_target_ir", executable=False,
+        executor_id=None, runtime_status="unimplemented",
+        reason="Apple GPU value-call execution is gated until a GPU value-call "
+               "ABI adapter lands; the IR is classified + recorded, not dispatched."),
     # --- x86 / native CPU (AMX path) ---
     ("cpu", "native_cpu"): ExecutionRow(
         target="cpu", compiler_path="native_cpu",

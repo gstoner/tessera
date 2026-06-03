@@ -71,12 +71,35 @@ pipelines pass `valueMode=true`); a backend may instead use distinct passes.
 
 - `canonical_compile` / JIT tag the lowered module:
   `driver.classify_apple_target_ir(ir) → "value_target_ir" | "target_ir_artifact"`.
-- The runtime dispatcher reads the dispatch tuple straight off each value op
-  (`driver.extract_apple_value_calls(ir)`): for a CPU call it invokes the named
-  Accelerate/LAPACK `symbol`; for a GPU call it reports native execution only
-  when `driver.apple_value_call_is_executable(call)` (status `"executable"` +
-  a symbol). This is the **seam-closure** contract — the executed result is
-  produced by the `symbol` named *in the IR*, not by a parallel matcher.
+  `CompileResult.to_runtime_artifact()` records `apple_target_ir_kind`, the
+  extracted `apple_value_calls`, and — for the value lane — sets
+  `compiler_path = "apple_value_target_ir"` (preserving the prior path as
+  `apple_previous_compiler_path`).
+- `driver.extract_apple_value_calls(ir)` reads the dispatch tuple off each value
+  op with a **brace-safe scanner** (anchors on the mnemonic, walks to the
+  matching top-level `}` while skipping braces inside quoted strings — so an
+  `argument_layout` whose value is a JSON object survives intact).
+
+### What "runtime dispatches" means today (Sprint 2)
+
+This is a **narrow, honest** executable path, not a blanket claim:
+
+- **Apple CPU `cholesky` value-call is executable now.** The matrix row
+  `(apple_cpu, apple_value_target_ir)` resolves to the
+  `_execute_apple_value_target_ir_artifact` executor, which reads
+  `metadata["apple_value_calls"]`, requires a single
+  `tessera_apple.cpu.call` with `status == "executable"` and a symbol on the
+  CPU allowlist (`tessera_apple_cpu_cholesky_f32`), and invokes that C ABI entry
+  via ctypes (numpy alloc, f32-contiguous, shape-validated). `runtime.launch`
+  returns the real factor — the executed result is produced by the `symbol`
+  named *in the IR*, not by a parallel op-name matcher.
+- **Everything else is classified + gated, never silently dispatched:**
+  - The `(apple_gpu, apple_value_target_ir)` row is **non-executable** — GPU
+    value-call execution waits on a GPU value-call ABI adapter; `launch`
+    returns a structured non-success.
+  - Multi-op programs, multi-symbol CPU value calls beyond the allowlist, GPU
+    `kernel_call`, and `package_call` raise `invalid_artifact` (named
+    follow-ons), so the runtime reports a clear reason instead of falling back.
 
 ## NVIDIA / ROCm follow-on (not in this sprint)
 
@@ -92,3 +115,23 @@ Inherit the shape:
 
 Execution conversion for NVIDIA/ROCm is gated on real hardware; the value
 Target IR *shape* is backend-neutral and ready to copy today.
+
+### Backend inheritance order (normative)
+
+Each new backend adopts the lane in exactly this order — no step skips ahead of
+the one before it:
+
+1. **Value Target IR first** — define the value ops (operands/results +
+   `{op_kind, symbol, status, …}`) and a value-mode `-full` lowering that
+   `replaceOp`s the Tile op and fails loudly on unsupported ops. Pure IR; no
+   hardware needed. (Apple: done.)
+2. **Executor adapter second** — add a matrix row + an executor that reads the
+   value-call tuple and invokes the backend C ABI symbol, with an explicit
+   allowlist and `invalid_artifact` for everything outside it. (Apple CPU
+   cholesky: done; Apple GPU: pending its adapter.)
+3. **Hardware proof third** — numeric conformance on real silicon flips the
+   row/symbol from gated to executable. Until then the op stays classified +
+   gated, never silently dispatched.
+
+The rule keeps every backend honest: an op is only ever advertised as
+executable once a real adapter *and* (where applicable) hardware proof exist.

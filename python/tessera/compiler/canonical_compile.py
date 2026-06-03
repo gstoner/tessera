@@ -213,7 +213,15 @@ class CompileResult:
                 _kind = _drv.classify_apple_target_ir(_ir)
                 meta["apple_target_ir_kind"] = _kind
                 if _kind == "value_target_ir":
-                    meta["apple_value_calls"] = _drv.extract_apple_value_calls(_ir)
+                    _calls = _drv.extract_apple_value_calls(_ir)
+                    meta["apple_value_calls"] = _calls
+                    # Sprint 2 (S2-3): route the value lane through the
+                    # apple_value_target_ir executor. Preserve the prior path so
+                    # consumers can see what it would have been in artifact mode.
+                    if _calls:
+                        meta["apple_previous_compiler_path"] = meta.get(
+                            "compiler_path", "")
+                        meta["compiler_path"] = "apple_value_target_ir"
             except Exception:
                 # Classification is metadata-only; never block artifact creation.
                 pass

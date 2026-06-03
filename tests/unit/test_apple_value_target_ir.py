@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -198,6 +199,132 @@ def test_extractor_survives_line_wrapped_attr_dicts():
     assert c["op_kind"] == "cholesky"
     assert c["symbol"] == "tessera_apple_cpu_cholesky_f32"
     assert driver.apple_value_call_is_executable(c)
+
+
+def test_extractor_survives_json_braces_in_argument_layout():
+    """RV-P3/S2-1: an argument_layout value that is itself a JSON object (with
+    nested braces inside the quoted string) does not terminate the attr dict."""
+    from tessera.compiler import driver
+
+    ir = (
+        '%0 = tessera_apple.gpu.package_call %a {op_kind = "svd", '
+        'symbol = "tessera_apple_gpu_svd_f32", status = "executable", '
+        'argument_layout = "{\\"buffers\\":[{\\"idx\\":0}],\\"grid\\":{\\"x\\":1}}"} '
+        ": (tensor<6x4xf32>) -> tensor<6x4xf32>"
+    )
+    calls = driver.extract_apple_value_calls(ir)
+    assert len(calls) == 1
+    c = calls[0]
+    assert c["op_kind"] == "svd" and c["symbol"] == "tessera_apple_gpu_svd_f32"
+    assert c["argument_layout"].startswith("{") and "buffers" in c["argument_layout"]
+
+
+# ── Sprint 2: metadata → execution closure ──────────────────────────────────
+
+def _value_cpu_cholesky_artifact():
+    """A RuntimeArtifact whose metadata carries an executable CPU cholesky
+    value call (the shape canonical_compile produces for the value lane)."""
+    from tessera.runtime import RuntimeArtifact
+    return RuntimeArtifact(
+        target_ir=(
+            '%0 = tessera_apple.cpu.call %a {op_kind = "cholesky", '
+            'symbol = "tessera_apple_cpu_cholesky_f32", abi = "lapack_spotrf", '
+            'status = "executable", framework = "Accelerate"} '
+            ": (tensor<3x3xf32>) -> tensor<3x3xf32>"),
+        metadata={
+            "target": "apple_cpu",
+            "compiler_path": "apple_value_target_ir",
+            "executable": True,
+            "apple_target_ir_kind": "value_target_ir",
+            "apple_value_calls": [{
+                "op": "tessera_apple.cpu.call", "op_kind": "cholesky",
+                "symbol": "tessera_apple_cpu_cholesky_f32", "status": "executable",
+            }],
+            "arg_names": ["a"],
+        },
+    )
+
+
+def test_value_artifact_routes_through_apple_value_target_ir():
+    """The (apple_cpu, apple_value_target_ir) pair resolves to the executable
+    value-call row (not the accelerate-gemm row)."""
+    from tessera.compiler import execution_matrix as EM
+    art = _value_cpu_cholesky_artifact()
+    row = EM.executor_for_metadata(art.metadata)
+    assert row is not None and row.executable
+    assert row.executor_id == "apple_value_target_ir"
+    assert row.execution_kind == "native_cpu"
+
+
+@pytest.mark.skipif(sys.platform != "darwin",
+                    reason="Accelerate-LAPACK cholesky is Darwin-only")
+def test_launch_executes_cholesky_by_ir_named_symbol():
+    """End-to-end: runtime.launch dispatches the symbol named in
+    apple_value_calls and returns the correct Cholesky factor."""
+    import numpy as np
+    from tessera.runtime import launch
+
+    rng = np.random.default_rng(0)
+    m = rng.standard_normal((3, 3)).astype(np.float32)
+    a = (m @ m.T + 3 * np.eye(3, dtype=np.float32)).astype(np.float32)
+    res = launch(_value_cpu_cholesky_artifact(), a)
+    assert res["ok"] is True, res
+    assert res["runtime_status"] == "success"
+    assert res["compiler_path"] == "apple_value_target_ir"
+    np.testing.assert_allclose(res["output"], np.linalg.cholesky(a),
+                               rtol=1e-4, atol=1e-4)
+
+
+def test_gpu_value_call_is_gated_not_executed():
+    """An apple_gpu value-target artifact is classified but NOT dispatched —
+    launch returns a structured non-success, never a silent fallback."""
+    from tessera.runtime import RuntimeArtifact, launch
+    art = RuntimeArtifact(metadata={
+        "target": "apple_gpu",
+        "compiler_path": "apple_value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.gpu.kernel_call", "op_kind": "cholesky",
+            "symbol": "tessera_apple_gpu_cholesky_f32", "status": "executable",
+        }],
+    })
+    res = launch(art, None)
+    assert res["ok"] is False
+    assert "output" not in res
+
+
+def test_package_call_is_not_executable_cpu_dispatch():
+    """A package_call (or any non-cpu.call) routed to the CPU value executor is
+    a named follow-on → invalid_artifact, not a wrong dispatch."""
+    from tessera.runtime import RuntimeArtifact, launch
+    art = RuntimeArtifact(metadata={
+        "target": "apple_cpu",
+        "compiler_path": "apple_value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.gpu.package_call", "op_kind": "svd",
+            "symbol": "tessera_apple_gpu_svd_f32", "status": "executable",
+        }],
+        "arg_names": ["a"],
+    })
+    res = launch(art, None)
+    assert res["ok"] is False
+    assert res["runtime_status"] == "invalid_artifact"
+    assert "package_call" in res["reason"] or "cpu.call" in res["reason"]
+
+
+def test_cpu_full_spine_symbol_matches_runtime_allowlist():
+    """The symbol the CPU full-spine lowering writes into the IR is exactly the
+    one the runtime value executor will dispatch (IR ↔ runtime agreement)."""
+    from tessera.compiler import driver
+    from tessera.runtime import _APPLE_VALUE_CPU_SYMBOLS
+    body = ('func.func @f(%a: tensor<8x8xf32>) -> tensor<8x8xf32> {\n'
+            '  %0 = tessera.cholesky %a : (tensor<8x8xf32>) -> tensor<8x8xf32>\n'
+            '  return %0 : tensor<8x8xf32>\n}')
+    p = _run("tessera-lower-to-apple_cpu-full", body)
+    assert p.returncode == 0, p.stderr
+    calls = driver.extract_apple_value_calls(p.stdout)
+    assert calls and calls[0]["symbol"] in _APPLE_VALUE_CPU_SYMBOLS
 
 
 def test_artifact_pipeline_still_emits_metadata_ops():

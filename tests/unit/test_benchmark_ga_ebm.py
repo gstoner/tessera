@@ -77,6 +77,10 @@ ALL_NATIVE_EBM_MANIFEST_KEYS = (
     | {"ebm_ebt_tiny"}
     # M6 Step 4 (2026-05-18): on-device Philox variant of langevin_step.
     | {"ebm_langevin_step_philox"}
+    # S-series #3 (2026-06-02): manifold Langevin steps now ship real fused
+    # Apple GPU kernels (sphere: dedicated MSL; bivector: reuses the affine
+    # ebm_langevin_step kernel on grade-2 coeffs).
+    | {"ebm_sphere_langevin_step", "ebm_bivector_langevin_step"}
 )
 
 # EBM ops that still have no native dispatch.  Empty after the 9/9

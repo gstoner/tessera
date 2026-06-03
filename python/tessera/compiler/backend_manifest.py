@@ -1200,6 +1200,37 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
             "from tessera.rng (deterministic Philox)."
         ),
     },
+    # Manifold Langevin steps (geo_sampling) — real Apple GPU kernels,
+    # 2026-06-02. ``sphere`` has a dedicated tangent-projected MSL kernel;
+    # ``bivector`` reuses the affine ``ebm_langevin_step`` kernel on the
+    # grade-2 coefficient vector (the grade projection is the identity on an
+    # already-bivector state, so the on-device update is exactly the affine
+    # step). Both flip planned→partial: real native kernel + numpy reference
+    # in tessera.ebm.geo_sampling; contract axes (transpose/sharding) stay
+    # partial pending Phase G mesh work.
+    "ebm_sphere_langevin_step": {
+        "symbol": "tessera_apple_gpu_ebm_sphere_langevin_step_f32",
+        "dtypes": ("fp32",),
+        "abi": ("(x:f32*, grad:f32*, noise:f32*, eta:f32, noise_scale:f32, "
+                "out:f32*, d:i32)"),
+        "notes": (
+            "One Langevin step on S^{d-1} — tangent-project the affine "
+            "y - eta*grad + noise_scale*noise update, then renormalize to "
+            "the sphere. Caller pre-generates noise from tessera.rng."
+        ),
+    },
+    "ebm_bivector_langevin_step": {
+        "symbol": "tessera_apple_gpu_ebm_langevin_step_f32",
+        "dtypes": ("fp32",),
+        "abi": ("(y:f32*, grad:f32*, noise:f32*, eta:f32, noise_scale:f32, "
+                "out:f32*, n:i32)"),
+        "notes": (
+            "One Langevin step on the grade-2 (bivector) subspace of "
+            "Cl(p,0) — the on-device update reuses the affine "
+            "ebm_langevin_step kernel on the bivector coefficient vector "
+            "(grade projection is identity on an already-bivector state)."
+        ),
+    },
     # M6 Step 4 (2026-05-18): on-device Philox-4x32-10 variant of
     # langevin_step.  Generates standard-normal noise inside the MSL
     # kernel from a (key, counter) tuple, eliminating the host noise
@@ -1343,9 +1374,22 @@ _EBM_PRIMITIVES: tuple[str, ...] = (
     "ebm_partition_exact",
     "ebm_partition_monte_carlo",
     "ebm_partition_ais",
-    # EBM7 — manifold-aware integrators.
+    # EBM7 — manifold-aware integrators. Both the legacy no-suffix labels
+    # and the canonical registry/runtime ``_step`` names (2026-06-02: the
+    # ``_step`` ops are the ones the primitive registry + Apple GPU runtime
+    # symbols actually use, so they must be in the manifest set to flip
+    # planned→partial).
     "ebm_bivector_langevin",
     "ebm_sphere_langevin",
+    "ebm_bivector_langevin_step",
+    "ebm_sphere_langevin_step",
+    # The chain wrappers (sample = loop of step) — reference-backed
+    # (real numpy chain in tessera.ebm.geo_sampling, GPU per-step), so they
+    # carry a reference manifest slot and resolve partial. No *dedicated*
+    # fused chain kernel yet (that would be a future on-device-loop kernel
+    # like ebm_refinement), so apple_gpu stays planned for these two.
+    "ebm_bivector_langevin_sample",
+    "ebm_sphere_langevin_sample",
     # EBT-tiny fused-pipeline optimization (2026-05-17).
     "ebm_ebt_tiny",
     # M6 Step 4 (2026-05-18) — on-device Philox RNG variant of

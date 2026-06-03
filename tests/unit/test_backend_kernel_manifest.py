@@ -318,3 +318,42 @@ class TestRegistryManifestAttached:
         m = all_manifests()
         for name in ("tree_flatten", "vjp", "vmap", "shard_map"):
             assert name not in m, f"{name} unexpectedly has a backend manifest"
+
+
+# 2026-06-02 — manifold Langevin step ops flipped planned→partial with a real
+# fused Apple GPU kernel (sphere: dedicated MSL; bivector: reuses the affine
+# ebm_langevin_step kernel on grade-2 coeffs). Lock the flip so a name
+# regression in _EBM_PRIMITIVES / _EBM_APPLE_GPU_FUSED is caught.
+def test_manifold_langevin_steps_are_partial_with_fused_apple_gpu():
+    from tessera.compiler import primitive_coverage as _pc
+    covs = _pc.all_primitive_coverages()
+    for name in ("ebm_sphere_langevin_step", "ebm_bivector_langevin_step"):
+        c = covs[name]
+        assert c.contract_status.get("backend_kernel") == "partial", (
+            f"{name} should be partial (real apple_gpu kernel), got "
+            f"{c.contract_status.get('backend_kernel')}")
+        man = c.metadata.get("backend_kernel_manifest")
+        assert isinstance(man, list)
+        slots = {s.get("target"): s.get("status")
+                 for s in man if isinstance(s, dict)}
+        assert slots.get("apple_gpu") == "fused", (
+            f"{name} apple_gpu slot should be fused, got {slots.get('apple_gpu')}")
+        # Universal Phase-G gate intact: nvidia/rocm stay planned.
+        assert slots.get("nvidia_sm90") == "planned"
+
+
+def test_manifold_langevin_samples_are_partial_via_reference():
+    """The chain wrappers (sample = loop of step) are reference-backed
+    (real numpy chain in tessera.ebm.geo_sampling), so they resolve partial
+    with a CPU reference slot — apple_gpu stays planned (no dedicated fused
+    chain kernel yet)."""
+    from tessera.compiler import primitive_coverage as _pc
+    covs = _pc.all_primitive_coverages()
+    for name in ("ebm_sphere_langevin_sample", "ebm_bivector_langevin_sample"):
+        c = covs[name]
+        assert c.contract_status.get("backend_kernel") == "partial"
+        slots = {s.get("target"): s.get("status")
+                 for s in c.metadata.get("backend_kernel_manifest", [])
+                 if isinstance(s, dict)}
+        assert slots.get("apple_cpu") == "reference"
+        assert slots.get("apple_gpu") == "planned"  # no dedicated chain kernel

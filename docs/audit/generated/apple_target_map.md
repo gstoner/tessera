@@ -56,7 +56,7 @@ and ``docs/apple_backend_integration_review.md`` (review):
 |---|---:|---:|---:|
 | tensor | 14 | 3 | 2 |
 | ga | 17 | 17 | 0 |
-| ebm | 11 | 11 | 0 |
+| ebm | 13 | 13 | 0 |
 | m7 | 4 | 4 | 0 |
 
 ## tensor (14)
@@ -100,11 +100,12 @@ and ``docs/apple_backend_integration_review.md`` (review):
 | clifford_vec_deriv | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_clifford_vec_deriv_cl30_{fp32} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | clifford_wedge | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_clifford_wedge_cl30_{fp32} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 
-## ebm (11)
+## ebm (13)
 
 | Op | apple_cpu status | cpu framework | cpu dtypes | cpu symbol | execution_kind | apple_gpu status | gpu framework | gpu dtypes | gpu symbol | gpu_dispatch | proof |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | ebm_bivector_langevin | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_langevin_step_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
+| ebm_bivector_langevin_step | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_langevin_step_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | ebm_decode_init | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_decode_init_noise_apply_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | ebm_ebt_tiny | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_ebt_tiny_refinement_argmin_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | ebm_energy | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_energy_quadratic_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
@@ -115,6 +116,7 @@ and ``docs/apple_backend_integration_review.md`` (review):
 | ebm_refinement | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_refinement_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | ebm_self_verify | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_self_verify_hard_argmin_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | ebm_sphere_langevin | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_sphere_langevin_step_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
+| ebm_sphere_langevin_step | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_sphere_langevin_step_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 
 ## m7 (4)
 

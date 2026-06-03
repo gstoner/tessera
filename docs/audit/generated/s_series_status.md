@@ -14,7 +14,7 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 27 | 405 |
+| `batching_rule` | 4 | 428 |
 | `transpose_rule` | 40 | 392 |
 | `sharding_rule` | 30 | 402 |
 | `lowering_rule` | 0 | 432 |
@@ -43,7 +43,7 @@
 | S15 | `data` | 11 | — | — | — | — | 11 |
 | S15 | `tokenizer` | 5 | — | — | — | — | 5 |
 | other | `aot` | 6 | — | — | — | — | 6 |
-| other | `collective` | 10 | 10 | — | — | — | 10 |
+| other | `collective` | 10 | — | — | — | — | 10 |
 | other | `conformance` | 4 | — | — | — | — | 4 |
 | other | `contraction` | 1 | — | — | — | — | 1 |
 | other | `elementwise` | 48 | — | — | — | — | 48 |
@@ -52,8 +52,8 @@
 | other | `fused_epilogue` | 1 | — | — | — | — | 1 |
 | other | `indexing` | 9 | — | — | — | — | 9 |
 | other | `layout_transform` | 14 | — | — | — | — | 14 |
-| other | `linalg_decomposition` | 3 | 3 | 3 | 3 | — | 3 |
-| other | `linalg_solver` | 1 | 1 | 1 | 1 | — | 1 |
+| other | `linalg_decomposition` | 3 | — | 3 | 3 | — | 3 |
+| other | `linalg_solver` | 1 | — | 1 | 1 | — | 1 |
 | other | `logical` | 8 | — | — | — | — | 8 |
 | other | `loop_nest` | 7 | — | — | 1 | — | 7 |
 | other | `model_layer` | 4 | — | — | — | — | 4 |
@@ -66,17 +66,17 @@
 | other | `quantize` | 8 | — | — | — | — | 8 |
 | other | `random_mask` | 1 | — | — | — | — | 1 |
 | other | `random_source` | 2 | — | — | — | — | 2 |
-| other | `recurrent` | 3 | 3 | 3 | — | — | 3 |
+| other | `recurrent` | 3 | — | 3 | — | — | 3 |
 | other | `rng` | 18 | — | — | — | — | 18 |
 | other | `rotary_embedding` | 1 | — | — | — | — | 1 |
-| other | `segment_reduce` | 1 | 1 | 1 | — | — | 1 |
+| other | `segment_reduce` | 1 | — | 1 | — | — | 1 |
 | other | `serialization` | 6 | — | — | — | — | 6 |
 | other | `sharding` | 3 | — | — | — | — | 3 |
 | other | `sort` | 3 | — | — | — | — | 3 |
-| other | `sparse` | 4 | 4 | 4 | 1 | — | 4 |
+| other | `sparse` | 4 | — | 4 | 1 | — | 4 |
 | other | `spectral` | 9 | — | — | 9 | — | 9 |
 | other | `stable_reduction` | 9 | — | — | — | — | 9 |
-| other | `state_space` | 1 | 1 | — | 1 | — | 1 |
+| other | `state_space` | 1 | — | — | 1 | — | 1 |
 | other | `state_tree` | 10 | — | — | — | — | 10 |
 | other | `state_update` | 4 | 1 | — | — | — | 4 |
 | other | `stencil` | 8 | — | — | — | — | 8 |
@@ -93,7 +93,7 @@
 | S11 | 30 | 0 | 0 | 0 | 30 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
 | M6 | 12 | 0 | 12 | 4 | 12 |
-| other | 245 | 27 | 25 | 19 | 245 |
+| other | 245 | 4 | 25 | 19 | 245 |
 
 ## Closure trajectory
 

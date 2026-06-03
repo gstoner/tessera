@@ -19,14 +19,17 @@ truth for counts; theme audit documents carry the reasoning and work plan.
 | Coverage | Partial-op uplift is closed; direct-test debt is not ordinary missing tests. | Backend-kernel axis is still open across all S-series primitives; batching/transpose/sharding have smaller long-tail gaps. |
 | Domain tracks | GA/EBM, attention, CorrDiff/SciML, sharding, and autodiff plans have been reduced to clearer scope locks and implementation history. | Domain claims must stay tied to generated coverage and backend proof, not old roadmap prose. |
 
-Generated-dashboard facts to anchor this snapshot:
+Generated dashboards are the **count authority** — this page links them and
+never copies their numbers (a copied count silently goes stale; per Decision
+#25/#26 the generated docs under `generated/` are the source of truth, drift-
+gated by `scripts/check_generated_docs.sh`). For live figures, read:
 
-- `generated/runtime_abi.md`: 218 total C ABI symbols, 207 Apple symbols, 84 Apple GPU families.
-- `generated/runtime_execution_matrix.md`: executable rows exist for Apple CPU, Apple GPU, native CPU, and JIT CPU numpy.
-- `op_target_conformance.md`: 5 complete, 14 partial, 23 missing cells.
-- `generated/e2e_op_coverage.md`: 34 native-complete ops, 237 runnable-reference ops, 0 partial, 0 planned.
-- `generated/s_series_status.md`: 0 open lowering rules, 432 open backend-kernel axes.
-- `generated/test_coverage_classification.md`: 0 actionable direct-test-debt ops, 4 hardware-gated ops.
+- [`generated/runtime_abi.md`](generated/runtime_abi.md) — C ABI symbol totals + Apple symbol/family counts.
+- [`generated/runtime_execution_matrix.md`](generated/runtime_execution_matrix.md) — executable rows per target (Apple CPU/GPU, native CPU, JIT CPU numpy).
+- [`op_target_conformance.md`](op_target_conformance.md) — complete/partial/missing op×target cells.
+- [`generated/e2e_op_coverage.md`](generated/e2e_op_coverage.md) — native-complete / runnable-reference split (no partial/planned tail).
+- [`generated/s_series_status.md`](generated/s_series_status.md) — per-axis open/complete (lowering closed; backend-kernel universally open).
+- [`generated/test_coverage_classification.md`](generated/test_coverage_classification.md) — direct-test-debt classification (actionable / hardware-gated).
 
 ## Finished Work
 
@@ -120,10 +123,10 @@ Primary detail:
 
 Finished:
 
-- Partial-op uplift closed the old 47-partial bucket.
-- Current E2E dashboard reports 0 partial and 0 planned rows.
-- `lowering_rule` is closed across all 432 S-series primitive entries.
-- Direct-test classification reports 0 actionable direct-test-debt ops.
+- Partial-op uplift closed the legacy partial bucket; the E2E dashboard now
+  shows no partial/planned rows ([`generated/e2e_op_coverage.md`](generated/e2e_op_coverage.md)).
+- `lowering_rule` is closed project-wide (0 open) ([`generated/s_series_status.md`](generated/s_series_status.md)).
+- No actionable direct-test-debt (`needs_direct_test = 0`) ([`generated/test_coverage_classification.md`](generated/test_coverage_classification.md)).
 - KV-cache has named diagnostics and explicit target coverage history.
 - Advanced examples mostly shifted from missing Python APIs to backend/hardware proof.
 

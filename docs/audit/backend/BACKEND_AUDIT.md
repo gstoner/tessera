@@ -24,8 +24,9 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
 - **ROCm runtime execution:** no execution-matrix rows yet.
 - **Metalium runtime execution:** still shared-backend frontier material, not a
   platform-specific execution lane.
-- **Universal backend-kernel axis:** generated S-series status still reports all
-  432 primitive entries open on backend-kernel proof.
+- **Universal backend-kernel axis:** every S-series primitive entry is still
+  open on backend-kernel proof (universal Phase-G/H/I gate) — live count in
+  [`../generated/s_series_status.md`](../generated/s_series_status.md).
 - **Numerical proof discipline:** backend rows need explicit compare fixtures or
   hardware/package validation before promotion.
 

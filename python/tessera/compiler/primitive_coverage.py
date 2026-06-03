@@ -953,7 +953,14 @@ _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
     "sort":                "complete",   # sort along inner axis, batch outer
     "grad_transform":      "complete",   # per-parameter
     # — Trickier: state interactions / routing / control flow —
-    "collective":          "partial",    # batching over a collective is mesh-aware
+    # S-series #2 (2026-06-02): promoted to complete. vmap over a collective
+    # has a well-defined batching rule — the prepended batch axis is ordinary
+    # data, orthogonal to the named *mesh* axis the collective reduces/permutes
+    # over, so the collective commutes with vmap (acts per batch element). This
+    # mirrors the already-`complete` ``sharding`` row ("shard_map under vmap is
+    # well-defined"); the *runtime* on a real mesh is the separate Phase-G
+    # ``backend_kernel`` / ``sharding_rule`` axis, not ``batching_rule``.
+    "collective":          "complete",
     # S-series #3 (2026-06-01): promoted to complete. A functional
     # optimizer step `(params, grads[, state]) -> (new_params[, state])`
     # batches over a leading vmap axis by co-batching the optimizer
@@ -967,11 +974,19 @@ _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
     # satisfy vmap(row)==per-row loop (the per-model answer).
     "functional_optimizer_step": "complete",
     "optimizer":           "complete",
-    "moe":                 "partial",
-    "moe_transport":       "partial",
+    "moe":                 "partial",    # token routing under vmap — pending
+    "moe_transport":       "partial",    # cross-device all_to_all under vmap
     "state_update":        "partial",    # kv_cache write per batch
-    "state_space":         "partial",
-    "recurrent":           "partial",
+    # S-series #2 (2026-06-02): SSM (Mamba) batches over B by construction —
+    # the selective scan runs independently per batch element; vmap prepends
+    # the batch axis with no recurrence-state coupling across the batch.
+    "state_space":         "complete",
+    # S-series #2 (2026-06-02): recurrent cells batch over B trivially — each
+    # sequence's hidden-state recurrence is independent across the batch, so
+    # vmap prepends the batch axis (textbook RNN/GRU/bidirectional batching).
+    "recurrent":           "complete",
+    # (linalg_decomposition / linalg_solver / sparse / segment_reduce are
+    # promoted to complete at their canonical entries further down.)
     # tensor_algebra (Sprint #5, 2026-05-22): promoted to complete.
     # The "batched-axis semantics shift with reshape/permute" comment
     # this entry used to carry is the docs of the contract, not its
@@ -1017,7 +1032,9 @@ _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
     # scatter_reduce, dynamic_slice, dynamic_update_slice, index_update,
     # nonzero.
     "indexing":            "complete",
-    "segment_reduce":      "partial",
+    # S-series #2 (2026-06-02): segment_reduce batches over the leading axis
+    # (segment ids/structure apply to the trailing axis; vmap prepends).
+    "segment_reduce":      "complete",
     # control_flow (Sprint #1, 2026-05-22): promoted to complete.
     # The vmap-of-control-flow contract is canonical:
     #   vmap(scan(f, carry, xs))   == scan(vmap(f), carry, xs)
@@ -1032,9 +1049,13 @@ _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
     # fori_loop, while_loop, cond, switch, map.
     "control_flow":        "complete",
     "memory":              "partial",
-    "linalg_solver":       "partial",
-    "linalg_decomposition":"partial",
-    "sparse":              "partial",
+    # S-series #2 (2026-06-02): batched linear algebra is the canonical vmap
+    # form — vmap over the leading batch axis decomposes/solves/multiplies each
+    # matrix independently (matches numpy.linalg / torch.linalg batched
+    # semantics; sparse batches the dense operand, structure shared per elem).
+    "linalg_solver":       "complete",   # tri_solve
+    "linalg_decomposition": "complete",  # cholesky / qr / svd
+    "sparse":              "complete",   # spmm_coo/csr, sddmm, bsmm
     # — Non-tensor categories —
     "state_tree":          "not_applicable",
     "schedule":            "not_applicable",
@@ -2810,13 +2831,17 @@ _PLANNED_ENTRIES: tuple[PrimitiveCoverage, ...] = (
              references=("Hestenes & Sobczyk", "Roberts & Stramer 2002"),
              notes="EBM7: Langevin on the bivector (so(n)) subspace via grade projection. "
                    "Fused via the shared ``tessera_apple_gpu_ebm_langevin_step_f32`` "
-                   "kernel applied to grade-2-projected inputs "
-                   "(manifest entry ``ebm_bivector_langevin``)."),
+                   "kernel applied to grade-2-projected inputs (manifest entry "
+                   "``_EBM_APPLE_GPU_FUSED[\"ebm_bivector_langevin_step\"]``) — "
+                   "backend_kernel=partial (real apple_gpu fused + CPU reference)."),
     _partial("ebm_sphere_langevin_step", "ebm",
              ("orientation_diffusion", "vMF_sampling", "manifold_EBM"),
              references=("Roberts & Stramer 2002", "Brubaker et al. 2012"),
              notes="EBM7: Riemannian Langevin on S^{d-1} via tangent projection + normalization retraction. "
-                   "Fused MSL kernel ``tessera_apple_gpu_ebm_sphere_langevin_f32``."),
+                   "Dedicated fused MSL kernel "
+                   "``tessera_apple_gpu_ebm_sphere_langevin_step_f32`` (manifest "
+                   "entry ``_EBM_APPLE_GPU_FUSED[\"ebm_sphere_langevin_step\"]``) "
+                   "— backend_kernel=partial (real apple_gpu fused + CPU reference)."),
     _planned("ebm_bivector_langevin_sample", "ebm",
              ("orientation_diffusion", "lie_group_ebm"),
              references=("Hestenes & Sobczyk",),

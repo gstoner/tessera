@@ -374,6 +374,62 @@ def test_apple_cpu_runtime_shim_gemm_f32_correctness(tmp_path):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# L-series linalg pilot (L5): Apple CPU Cholesky via Accelerate LAPACK spotrf.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_apple_cpu_runtime_cholesky_f32_correctness(tmp_path):
+    """tessera_apple_cpu_cholesky_f32 must produce the lower factor L (A = L Lᵀ)
+    matching numpy.linalg.cholesky, and signal non-SPD inputs via info > 0."""
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        pytest.skip("C++ compiler is not available")
+
+    source = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_cpu_runtime.cpp"
+    lib = tmp_path / ("libtessera_apple_cpu_runtime.dylib" if sys.platform == "darwin" else "libtessera_apple_cpu_runtime.so")
+    cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(lib)]
+    if sys.platform == "darwin":
+        cmd.extend(["-framework", "Accelerate"])
+    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    runtime = ctypes.CDLL(str(lib))
+    chol = runtime.tessera_apple_cpu_cholesky_f32
+    chol.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int32,
+    ]
+    chol.restype = ctypes.c_int32
+
+    rng = np.random.default_rng(0)
+    for n in (1, 2, 3, 8, 16):
+        # Build a well-conditioned SPD matrix A = M Mᵀ + n·I.
+        m = rng.standard_normal((n, n)).astype(np.float32)
+        a = (m @ m.T + n * np.eye(n, dtype=np.float32)).astype(np.float32)
+        out = np.zeros((n, n), dtype=np.float32)
+        info = chol(
+            a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            n,
+        )
+        assert info == 0, f"unexpected non-SPD info={info} for n={n}"
+        # Lower-triangular, and reconstructs A.
+        assert np.allclose(np.triu(out, 1), 0.0), "strict upper triangle not zeroed"
+        np.testing.assert_allclose(out @ out.T, a, rtol=1e-4, atol=1e-4)
+        np.testing.assert_allclose(out, np.linalg.cholesky(a), rtol=1e-4, atol=1e-4)
+
+    # Non-SPD input must return info > 0 (mirrors numpy.linalg.LinAlgError).
+    bad = np.array([[1.0, 2.0], [2.0, 1.0]], dtype=np.float32)  # eigvals 3, -1
+    out = np.zeros((2, 2), dtype=np.float32)
+    info = chol(
+        bad.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        2,
+    )
+    assert info > 0, "non-SPD matrix should return info > 0"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Item #3 (P1): batched matmul (rank-3) via Accelerate.
 # ─────────────────────────────────────────────────────────────────────────────
 

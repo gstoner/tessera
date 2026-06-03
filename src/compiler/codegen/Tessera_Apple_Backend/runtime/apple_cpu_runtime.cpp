@@ -20,6 +20,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -55,6 +56,32 @@ namespace {
       }
     }
   }
+}
+
+// Portable row-major lower Cholesky (Cholesky–Banachiewicz). Used on non-Apple
+// builds and as a sanity reference. `L` enters holding the symmetric SPD input
+// A and exits with the lower-triangular factor (A = L Lᵀ) in its lower triangle;
+// the strict upper triangle is left as-is (the caller zeroes it). Returns 0 on
+// success, 1 if the matrix is not positive definite.
+[[maybe_unused]] inline int32_t reference_cholesky_f32(float* L, int32_t N) {
+  for (int32_t j = 0; j < N; ++j) {
+    float diag = L[static_cast<std::size_t>(j) * N + j];
+    for (int32_t k = 0; k < j; ++k) {
+      float ljk = L[static_cast<std::size_t>(j) * N + k];
+      diag -= ljk * ljk;
+    }
+    if (!(diag > 0.0f)) return 1; // not positive definite (or NaN)
+    float ljj = std::sqrt(diag);
+    L[static_cast<std::size_t>(j) * N + j] = ljj;
+    for (int32_t i = j + 1; i < N; ++i) {
+      float s = L[static_cast<std::size_t>(i) * N + j];
+      for (int32_t k = 0; k < j; ++k)
+        s -= L[static_cast<std::size_t>(i) * N + k] *
+             L[static_cast<std::size_t>(j) * N + k];
+      L[static_cast<std::size_t>(i) * N + j] = s / ljj;
+    }
+  }
+  return 0;
 }
 
 } // namespace
@@ -106,6 +133,52 @@ extern "C" void tessera_apple_cpu_gemm_f32_batched(
     reference_gemm_f32(Ab, Bb, Cb, M, N, K);
 #endif
   }
+}
+
+// L-series linalg pilot (2026-06-02) — Apple CPU Cholesky factorization.
+//
+// ABI (matches TileToApple.cpp's tessera_apple.cpu.vector_op symbol
+// "tessera_apple_cpu_cholesky_f32"):
+//
+//   int32_t tessera_apple_cpu_cholesky_f32(
+//       const float* A,   // i64 raw pointer (row-major N*N, symmetric SPD)
+//       float*       L,    // i64 raw pointer (row-major N*N, lower factor out)
+//       int32_t N)         // matrix order
+//
+// Returns 0 on success; >0 if the leading minor of that order is not positive
+// definite (LAPACK `info`), mirroring numpy.linalg.LinAlgError. Produces the
+// lower-triangular L with A = L Lᵀ (numpy.linalg.cholesky convention); the
+// strict upper triangle of L is zeroed.
+//
+// LAPACK is column-major. A row-major symmetric buffer reinterpreted as
+// column-major is the same matrix (A = Aᵀ), and LAPACK UPLO='U' on that
+// column-major view writes the factor into the column-major upper triangle —
+// which is exactly the row-major *lower* triangle. Reading that result back
+// row-major yields the lower L we want, with no explicit transpose.
+extern "C" int32_t tessera_apple_cpu_cholesky_f32(const float* A, float* L,
+                                                  int32_t N) {
+  if (N <= 0) return 0;
+  const std::size_t nn =
+      static_cast<std::size_t>(N) * static_cast<std::size_t>(N);
+  if (L != A) std::memcpy(L, A, sizeof(float) * nn);
+
+#if TESSERA_APPLE_CPU_HAVE_ACCELERATE
+  char uplo = 'U'; // col-major 'U' ≡ row-major lower factor
+  __LAPACK_int n = static_cast<__LAPACK_int>(N);
+  __LAPACK_int lda = n;
+  __LAPACK_int info = 0;
+  spotrf_(&uplo, &n, L, &lda, &info);
+  if (info != 0) return static_cast<int32_t>(info);
+#else
+  int32_t info = reference_cholesky_f32(L, N);
+  if (info != 0) return info;
+#endif
+
+  // Zero the strict upper triangle (row-major) so L matches numpy's lower L.
+  for (int32_t i = 0; i < N; ++i)
+    for (int32_t j = i + 1; j < N; ++j)
+      L[static_cast<std::size_t>(i) * N + j] = 0.0f;
+  return 0;
 }
 
 // Capability probe: returns 1 when Accelerate is the active backend, 0 when

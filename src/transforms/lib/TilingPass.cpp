@@ -269,7 +269,15 @@ struct TileMatmulValue : public RewritePattern {
     if (!lhsTy.getElementType().isF32() || !rhsTy.getElementType().isF32() ||
         !resTy.getElementType().isF32())
       return failure();
+    // K-consistency AND result shape (M,N). The result check is essential: a
+    // malformed (4x8)@(8x16)->(5x5) passes rank+static+f32+K but must NOT
+    // become an executable value call producing a wrong-shaped output. The
+    // registered MatmulOp verifier also enforces this; we re-check so the value
+    // tile op is never created for a shape-inconsistent matmul.
     if (lhsTy.getDimSize(1) != rhsTy.getDimSize(0))
+      return failure();
+    if (resTy.getDimSize(0) != lhsTy.getDimSize(0) ||
+        resTy.getDimSize(1) != rhsTy.getDimSize(1))
       return failure();
 
     llvm::StringRef graphName = op->getName().getStringRef();
@@ -327,13 +335,19 @@ struct TilingPassImpl
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     if (valueMode) {
-      // Value path (apple_cpu `-full`): preserve static rank-2 f32 matmul/gemm
-      // as a single tile op for the Accelerate GEMM value call; do NOT tile to
+      // Value path (apple_cpu `-full`): preserve static rank-2 f32 matmul as a
+      // single tile op for the Accelerate GEMM value call; do NOT tile to
       // scf.for (that would dissolve the dense contraction the value lane wants
       // to hand to one cblas_sgemm). Out-of-envelope matmuls are left untouched
       // and gated downstream.
+      //
+      // NOTE: only `tessera.matmul` is registered in the Graph IR dialect today.
+      // `tessera.gemm` is a vocabulary alias, not a distinct registered op — a
+      // pattern keyed on it would be dead (and tessera-opt rejects the unknown
+      // op at parse time). The Tile→Apple value lowering still emits op_kind
+      // "gemm" if a `tile.gemm` ever arrives, but the executable Graph IR
+      // spelling is `tessera.matmul`.
       patterns.add<TileMatmulValue>(&getContext(), "tessera.matmul");
-      patterns.add<TileMatmulValue>(&getContext(), "tessera.gemm");
     } else {
       patterns.add<TileMatmul>(&getContext(),
                                static_cast<int64_t>(tileMOpt),

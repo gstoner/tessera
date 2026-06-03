@@ -1704,12 +1704,22 @@ _F32P = ctypes.POINTER(ctypes.c_float)
 _I32P = ctypes.POINTER(ctypes.c_int32)
 
 
+# Resolved+configured ctypes entries, keyed by symbol. Each Apple-CPU value
+# symbol has a fixed (argtypes, restype), so the bound function object is reused
+# across dispatches instead of re-resolving the dylib export and re-assigning
+# argtypes/restype on every call.
+_APPLE_CPU_FN_CACHE: dict[str, Any] = {}
+
+
 def _apple_cpu_linalg_fn(symbol: str, argtypes: list, restype: Any = ctypes.c_int32) -> Any:
-    """Resolve an Accelerate C ABI entry by symbol name.
+    """Resolve an Accelerate C ABI entry by symbol name (cached by symbol).
 
     `restype` defaults to int32 (the LAPACK `info` convention shared by the
     linalg family); the GEMM symbol returns void, so callers pass restype=None.
     """
+    cached = _APPLE_CPU_FN_CACHE.get(symbol)
+    if cached is not None:
+        return cached
     runtime = _load_apple_cpu_runtime()
     fn = getattr(runtime, symbol, None)
     if fn is None:
@@ -1718,6 +1728,7 @@ def _apple_cpu_linalg_fn(symbol: str, argtypes: list, restype: Any = ctypes.c_in
             f"(the prebuilt dylib predates the linalg lane)")
     fn.argtypes = argtypes
     fn.restype = restype
+    _APPLE_CPU_FN_CACHE[symbol] = fn
     return fn
 
 
@@ -1838,10 +1849,14 @@ def _dispatch_svd(inputs, call, np):
 
 
 def _dispatch_matmul(inputs, call, np):
-    """Sprint 5: dense fp32 rank-2 (M,K)@(K,N)->(M,N) via Accelerate cblas_sgemm
-    (`tessera_apple_cpu_gemm_f32`, which returns void). Validates contiguous
-    f32 rank-2 operands and K-consistency before dispatch — the compiler only
-    routes the static rank-2 f32 envelope here, and this re-checks at runtime."""
+    """Sprint 5: dense rank-2 (M,K)@(K,N)->(M,N) via Accelerate cblas_sgemm
+    (`tessera_apple_cpu_gemm_f32`, which returns void).
+
+    dtype: the compiler gates dtype upstream — only the static rank-2 *f32*
+    envelope is ever routed here (the Graph IR target-capability verifier
+    rejects f16/bf16 matmul on CPU). At this boundary `_as_f32_2d` **coerces**
+    inputs to contiguous fp32; it does not reject a non-f32 input. Shape is
+    validated: rank-2 (via `_as_f32_2d`) and K-consistency here."""
     a = _as_f32_2d(inputs[0], np, name="matmul A")
     b = _as_f32_2d(inputs[1], np, name="matmul B")
     m, ka = int(a.shape[0]), int(a.shape[1])
@@ -1849,7 +1864,9 @@ def _dispatch_matmul(inputs, call, np):
     if ka != kb:
         raise ValueError(
             f"matmul contraction mismatch: (M,K)={a.shape} @ (K,N)={b.shape}")
-    c = np.zeros((m, n), dtype=np.float32)
+    # GEMM writes C = A@B with beta=0, so the output is fully overwritten — no
+    # need to pre-zero. np.empty avoids the wasted memset.
+    c = np.empty((m, n), dtype=np.float32)
     fn = _apple_cpu_linalg_fn(
         "tessera_apple_cpu_gemm_f32",
         [_F32P, _F32P, _F32P, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32],
@@ -1922,10 +1939,13 @@ def _execute_apple_value_target_ir_artifact(artifact: RuntimeArtifact, args: Any
         inputs = list(args)
     else:
         inputs = [args]
-    if len(inputs) < want_operands:
+    # Exact operand count — the value executor contract is one value call with a
+    # precise arity. Accepting extra operands would let a malformed/aliased call
+    # silently ignore inputs; reject rather than dispatch a partial read.
+    if len(inputs) != want_operands:
         raise ValueError(
             f"apple_value_target_ir: {call.get('op_kind')} value-call needs "
-            f"{want_operands} input(s), got {len(inputs)}")
+            f"exactly {want_operands} input(s), got {len(inputs)}")
 
     return handler(inputs, call, np)
 

@@ -29,6 +29,21 @@ LogicalResult MatmulOp::verify() {
   if (!ShapedType::isDynamic(lhsK) && !ShapedType::isDynamic(rhsK) &&
       lhsK != rhsK)
     return emitOpError("contracting dimensions must match");
+
+  // Result shape must be (M, N): M from lhs's non-contracting dim, N from rhs's
+  // non-contracting dim (honoring transposeA/transposeB). Without this, a
+  // malformed (4x8)@(8x16)->(5x5) would pass rank+K and could be lowered to an
+  // executable value call that silently produces a wrong-shaped output.
+  int64_t m = getTransposeA() ? lhsType.getDimSize(1) : lhsType.getDimSize(0);
+  int64_t n = getTransposeB() ? rhsType.getDimSize(0) : rhsType.getDimSize(1);
+  int64_t rm = resultType.getDimSize(0);
+  int64_t rn = resultType.getDimSize(1);
+  if (!ShapedType::isDynamic(m) && !ShapedType::isDynamic(rm) && m != rm)
+    return emitOpError("result row dimension must equal lhs M (")
+           << m << " vs " << rm << ")";
+  if (!ShapedType::isDynamic(n) && !ShapedType::isDynamic(rn) && n != rn)
+    return emitOpError("result column dimension must equal rhs N (")
+           << n << " vs " << rn << ")";
   return success();
 }
 

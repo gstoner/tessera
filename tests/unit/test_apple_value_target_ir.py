@@ -922,3 +922,43 @@ def test_batched_matmul_value_mode_is_gated():
     calls = meta.get("apple_value_calls") or []
     assert not any(c.get("op") == "tessera_apple.cpu.call"
                    and c.get("status") == "executable" for c in calls)
+
+
+# ── Sprint 5 review fixes (P1/P2) ───────────────────────────────────────────
+
+def test_matmul_result_shape_mismatch_is_rejected():
+    """P1: a malformed (4x8)@(8x16)->(5x5) passes rank+static+f32+K but must NOT
+    become an executable value call. The MatmulOp verifier rejects it with a
+    named result-dimension diagnostic before any value lowering."""
+    body = ('func.func @f(%a: tensor<4x8xf32>, %b: tensor<8x16xf32>) '
+            '-> tensor<5x5xf32> {\n'
+            '  %0 = tessera.matmul %a, %b : '
+            '(tensor<4x8xf32>, tensor<8x16xf32>) -> tensor<5x5xf32>\n'
+            '  return %0 : tensor<5x5xf32>\n}')
+    p = _run("tessera-lower-to-apple_cpu-full", body)
+    assert p.returncode != 0
+    assert "tessera_apple.cpu.call" not in p.stdout
+    assert "result row dimension" in p.stderr or "result column dimension" in p.stderr
+
+
+def test_matmul_value_executor_requires_exact_operand_count():
+    """P2: the CPU value executor requires an exact operand count — an extra
+    operand is rejected (invalid_artifact), never silently ignored."""
+    from tessera.runtime import RuntimeArtifact, launch
+    import numpy as np
+    art = RuntimeArtifact(metadata={
+        "target": "apple_cpu",
+        "compiler_path": "apple_value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.cpu.call", "op_kind": "matmul",
+            "symbol": "tessera_apple_cpu_gemm_f32", "status": "executable",
+        }],
+    })
+    a = np.ones((4, 8), np.float32)
+    b = np.ones((8, 16), np.float32)
+    extra = np.ones((1, 1), np.float32)
+    res = launch(art, [a, b, extra])  # one operand too many
+    assert res["ok"] is False
+    assert res["runtime_status"] == "invalid_artifact"
+    assert "exactly 2" in res["reason"] or "input" in res["reason"]

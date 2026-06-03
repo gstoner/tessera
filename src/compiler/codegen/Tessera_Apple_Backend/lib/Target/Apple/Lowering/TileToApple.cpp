@@ -34,7 +34,7 @@
 #include "Tessera/Target/Apple/Passes.h"
 #include "Tessera/Target/Apple/TesseraAppleDialect.h"
 
-#include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
@@ -268,32 +268,26 @@ llvm::SmallVector<Operation *> collectLowerableOps(ModuleOp module) {
 // result == input**, and it could not handle multi-result ops (lu/qr/svd),
 // which it left orphaned in the module (review glass-jaws R1 + R2, 2026-06-03).
 //
-// The honest, uniform husk is `tensor.empty` — an explicitly *uninitialized*
-// value of the result's type: "a tensor of this shape exists here; its contents
-// are produced out-of-band by the runtime symbol, not by visible IR."  This
-// consumes every linalg tile op (single- and multi-result) with no orphans and
-// no misleading data dependence.
+// The honest, uniform husk is `ub.poison` — an explicitly *poisoned* (undefined)
+// value of the result's type: "this SSA value is intentionally not produced by
+// visible IR; its contents come from the runtime `symbol`."  Unlike
+// `tensor.empty` it carries no "allocated tensor" implication and no data
+// dependence, and unlike an operand rebind it works for any result type
+// (static or dynamic, ranked or not) and any arity — so this is fully
+// transactional: one poison per used result, replace, erase.
 //
 // NOTE (follow-on): a *semantics-preserving* hand-off would require the
 // tessera_apple target ops to carry real operands + results in ODS (a
 // dialect-wide change) so the lowering can `replaceOp` with produced values.
 // Until then this is an artifact projection; the seam-closure tests prove the
 // named symbol computes the correct result.
-//
-// Falls back to leaving the op in place (returns false, never crashes) only if
-// a result is not a static-shaped ranked tensor.
 bool safeEraseLowered(Operation *op, OpBuilder &builder) {
   for (Value res : op->getResults()) {
     if (res.use_empty())
       continue;
-    auto rt = llvm::dyn_cast<RankedTensorType>(res.getType());
-    if (!rt || !rt.hasStaticShape())
-      return false; // cannot synthesize a placeholder; leave the op in place
     builder.setInsertionPoint(op);
-    Value placeholder = tensor::EmptyOp::create(builder, op->getLoc(),
-                                                rt.getShape(),
-                                                rt.getElementType());
-    res.replaceAllUsesWith(placeholder);
+    Value poison = ub::PoisonOp::create(builder, op->getLoc(), res.getType());
+    res.replaceAllUsesWith(poison);
   }
   op->erase();
   return true;
@@ -315,7 +309,7 @@ struct LowerTileToAppleCPUPass
            "(Accelerate / vecLib / BNNS artifacts)";
   }
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<TesseraAppleDialect, mlir::tensor::TensorDialect>();
+    registry.insert<TesseraAppleDialect, mlir::ub::UBDialect>();
   }
 
   void runOnOperation() override {
@@ -418,7 +412,7 @@ struct LowerTileToAppleGPUPass
            "(Metal / MPS artifacts)";
   }
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<TesseraAppleDialect, mlir::tensor::TensorDialect>();
+    registry.insert<TesseraAppleDialect, mlir::ub::UBDialect>();
   }
 
   void runOnOperation() override {

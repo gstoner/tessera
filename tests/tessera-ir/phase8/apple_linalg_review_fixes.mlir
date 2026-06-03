@@ -2,7 +2,7 @@
 //
 // R1: every linalg tile op is consumed — no orphan tile.<op> remains after
 //     lowering, including multi-result ops (svd: 1-in → 3-out).
-// R2: the dataflow husk is `tensor.empty` (an explicitly uninitialized value),
+// R2: the dataflow husk is `ub.poison` (an explicitly undefined value),
 //     NOT a rebind to an input operand — so the IR never falsely implies
 //     result == input.  (Execution is via the runtime `symbol`; the lowered
 //     module is an inspection artifact.)
@@ -16,11 +16,11 @@
 // RUN: tessera-opt -tessera-lower-to-apple_gpu-full --allow-unregistered-dialect %s \
 // RUN:   | FileCheck %s --check-prefix=GPU
 
-// Apple-CPU lowering: husk is tensor.empty, no orphan tile ops.
+// Apple-CPU lowering: husk is ub.poison, no orphan tile ops.
 // CPU-LABEL: func.func @svd_multi_result
 // CPU: tessera_apple.cpu.vector_op
 // CPU-SAME: symbol = "tessera_apple_cpu_svd_f32"
-// CPU: tensor.empty
+// CPU: ub.poison
 // CPU-NOT: tile.svd
 // CPU-NOT: tessera.svd
 

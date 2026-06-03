@@ -78,6 +78,7 @@ target_link_libraries(TesseraApple
     MLIRBufferizationDialect
     MLIRFuncDialect
     MLIRMemRefDialect
+    MLIRUBDialect
     MLIRTransforms
 )
 

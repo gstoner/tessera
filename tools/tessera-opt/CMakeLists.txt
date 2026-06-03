@@ -15,6 +15,7 @@ target_link_libraries(tessera-opt PRIVATE
   MLIRMemRefDialect
   MLIRSCFDialect
   MLIRTensorDialect
+  MLIRUBDialect
   MLIROptLib
 )
 

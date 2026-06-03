@@ -187,6 +187,39 @@ private:
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Rewrite pattern: TileCholesky  (L-series linalg pilot, 2026-06-02)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Cholesky is a sequential blocked factorization, not an embarrassingly-
+// parallel loop nest like matmul, so the pilot does not tile it into scf.for.
+// Instead it lowers 1:1 to an opaque Tile-IR op `tile.cholesky`, giving the
+// Tile layer an explicit, distinct representation that the Tile→Apple pass
+// (L4) consumes.  Carrying `lower` / `numeric_policy` attributes forward keeps
+// the contract intact.  Matching `tessera.cholesky` → `tile.cholesky` (a
+// different op name) means the greedy driver applies it exactly once.
+struct TileCholesky : public RewritePattern {
+  TileCholesky(MLIRContext *ctx)
+      : RewritePattern("tessera.cholesky", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return failure();
+    OperationState st(op->getLoc(), "tile.cholesky");
+    st.addOperands(op->getOperand(0));
+    st.addTypes(op->getResult(0).getType());
+    for (auto &na : op->getAttrs())
+      st.addAttribute(na.getName(), na.getValue());
+    // Preserve the Graph-IR op spelling as `source` so the Tile→Apple pass
+    // (which matches by `source`) recognizes this opaque tile op.
+    st.addAttribute("source", rewriter.getStringAttr("tessera.cholesky"));
+    Operation *tiled = rewriter.create(st);
+    rewriter.replaceOp(op, tiled->getResults());
+    return success();
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Pass
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -204,7 +237,8 @@ struct TilingPassImpl
 
   StringRef getArgument()    const override { return "tessera-tiling"; }
   StringRef getDescription() const override {
-    return "Tile tessera.matmul into scf.for M×N loop nests";
+    return "Tile tessera.matmul into scf.for M×N loop nests; lower "
+           "tessera.cholesky to the opaque tile.cholesky Tile-IR op";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
@@ -217,6 +251,7 @@ struct TilingPassImpl
     patterns.add<TileMatmul>(&getContext(),
                              static_cast<int64_t>(tileMOpt),
                              static_cast<int64_t>(tileNOpt));
+    patterns.add<TileCholesky>(&getContext());
     if (failed(applyPatternsAndFoldGreedily(getOperation(),
                                            std::move(patterns))))
       signalPassFailure();

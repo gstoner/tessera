@@ -93,6 +93,12 @@ bool isFlashAttn(llvm::StringRef name) { return name == "tessera.flash_attn"; }
 
 bool isRoPE(llvm::StringRef name) { return name == "tessera.rope"; }
 
+// L-series linalg pilot (2026-06-02): Cholesky factorization.  The Tile layer
+// emits `tile.cholesky` (carrying source = "tessera.cholesky"); match either.
+bool isCholesky(llvm::StringRef name) {
+  return name == "tessera.cholesky" || name == "tile.cholesky";
+}
+
 bool isKVCache(llvm::StringRef name) {
   return name.starts_with("tessera.kv_cache.");
 }
@@ -124,7 +130,12 @@ bool isAppleGpuRuntimeOp(llvm::StringRef n) {
       // batched matmul decomposition. Both belong on the metal_runtime
       // rung — without them, the C++ pass silently demoted conv to
       // artifact_only even though the runtime executes it.
-      "tessera.conv2d", "tessera.conv3d"};
+      "tessera.conv2d", "tessera.conv3d",
+      // L-series linalg pilot (2026-06-02) — cholesky executes on the GPU via
+      // the real MSL kernel `tessera_apple_gpu_cholesky_f32`
+      // (driver._APPLE_GPU_LINALG_OPS).  Closes APPLE_AUDIT glass-jaw #10 for
+      // cholesky; tri_solve is the remaining LINALG member (same template).
+      "tessera.cholesky"};
   for (const auto &r : kRuntimeOps)
     if (n == r)
       return true;
@@ -246,6 +257,22 @@ struct LowerTileToAppleCPUPass
         extra.emplace_back(builder.getStringAttr("kind"),
                            builder.getStringAttr(kind));
         buildAppleOp(builder, op, kCPUKVCacheOp, ordinal, extra);
+      } else if (isCholesky(name) || isCholesky(src)) {
+        // L-series linalg pilot — Apple CPU Cholesky via Accelerate's LAPACK
+        // (spotrf).  Reuses the registered generic `tessera_apple.cpu.vector_op`
+        // (the dialect rejects unregistered ops); the `abi` + `symbol` attrs
+        // carry the linalg identity.  The seam-closure executor (L6) reads
+        // `symbol` straight off this op to pick the C ABI entry.
+        llvm::SmallVector<NamedAttribute, 4> extra;
+        extra.emplace_back(builder.getStringAttr("framework"),
+                           builder.getStringAttr("Accelerate"));
+        extra.emplace_back(builder.getStringAttr("abi"),
+                           builder.getStringAttr("lapack_spotrf"));
+        extra.emplace_back(builder.getStringAttr("op_kind"),
+                           builder.getStringAttr("cholesky"));
+        extra.emplace_back(builder.getStringAttr("symbol"),
+                           builder.getStringAttr("tessera_apple_cpu_cholesky_f32"));
+        buildAppleOp(builder, op, kCPUVectorOp, ordinal, extra);
       } else if (isMatmul(name) || isMatmul(src)) {
         llvm::SmallVector<NamedAttribute, 2> extra;
         extra.emplace_back(builder.getStringAttr("framework"),
@@ -356,6 +383,28 @@ struct LowerTileToAppleGPUPass
                            builder.getStringAttr("64x1x1"));
         extra.emplace_back(builder.getStringAttr("temporary_memory"),
                            builder.getStringAttr("scores_lse"));
+        buildAppleOp(builder, op, kGPUMetalKernel, ordinal, extra);
+        emittedKernel = true;
+      } else if (isCholesky(name) || isCholesky(src)) {
+        // L-series linalg pilot — Apple GPU Cholesky via the custom MSL kernel
+        // `tessera_apple_gpu_cholesky_f32`.  `status` mirrors the Python
+        // envelope (isAppleGpuRuntimeOp ⇒ metal_runtime); `symbol` is the C ABI
+        // entry the seam-closure executor (L6) reads directly off this op.
+        llvm::SmallVector<NamedAttribute, 7> extra;
+        extra.emplace_back(builder.getStringAttr("kernel"),
+                           builder.getStringAttr("cholesky_contract"));
+        extra.emplace_back(builder.getStringAttr("framework"),
+                           builder.getStringAttr("Metal"));
+        extra.emplace_back(builder.getStringAttr("status"),
+                           builder.getStringAttr(execStatus));
+        extra.emplace_back(builder.getStringAttr("symbol"),
+                           builder.getStringAttr("tessera_apple_gpu_cholesky_f32"));
+        extra.emplace_back(builder.getStringAttr("grid"),
+                           builder.getStringAttr("single_threadgroup"));
+        extra.emplace_back(builder.getStringAttr("threadgroup"),
+                           builder.getStringAttr("32x1x1"));
+        extra.emplace_back(builder.getStringAttr("temporary_memory"),
+                           builder.getStringAttr("panel"));
         buildAppleOp(builder, op, kGPUMetalKernel, ordinal, extra);
         emittedKernel = true;
       } else if (isMatmul(name) || isMatmul(src)) {

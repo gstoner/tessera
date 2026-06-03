@@ -42,14 +42,15 @@ def _runtime_envelope() -> set[str]:
     # Task C (2026-06-01) — added _APPLE_GPU_CONV_OPS so conv2d / conv3d
     # are part of the drift gate. The C++ ``kRuntimeOps`` list in
     # ``TileToApple.cpp`` now includes conv2d + conv3d to match.
-    # _APPLE_GPU_PROJECTION_OPS, _APPLE_GPU_REDUCTION_OPS, and
-    # _APPLE_GPU_LINALG_OPS are deliberately NOT walked yet — those
-    # families still need their own C++ ``kRuntimeOps`` entries (Task
-    # follow-up; see docs/audit/backend/apple/APPLE_AUDIT.md
-    # glass-jaw #10).
+    # L-series linalg pilot (2026-06-02) — `tessera.cholesky` is now wired
+    # through the C++ Tile→Apple GPU pass (isAppleGpuRuntimeOp), so it joins
+    # the drift gate.  `tessera.tri_solve` is the remaining LINALG member
+    # (same template, follow-on).  _APPLE_GPU_PROJECTION_OPS and
+    # _APPLE_GPU_REDUCTION_OPS still need their own C++ entries (glass-jaw #10).
     return (set(driver._APPLE_GPU_MPS_OPS) | set(driver._APPLE_GPU_MSL_OPS)
             | set(driver._APPLE_GPU_MPSGRAPH_OPS)
-            | set(driver._APPLE_GPU_CONV_OPS))
+            | set(driver._APPLE_GPU_CONV_OPS)
+            | {"tessera.cholesky"})
 
 
 def _lower_and_parse(sources: list[str]) -> dict[str, str]:

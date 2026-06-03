@@ -128,11 +128,22 @@ LogicalResult QROp::verify() {
     return success();
   if (a.getRank() != 2 || q.getRank() != 2 || r.getRank() != 2)
     return emitOpError("expects rank-2 A, Q, and R tensors");
-  // Reduced QR (M>=N): Q is MxN, R is NxN. Q rows match A rows; R is square
-  // with order = A columns; Q columns match R rows.
-  if (!dimsAgree(a.getDimSize(0), q.getDimSize(0)))
+  // Reduced QR (A is M×N, M≥N): Q is M×N with orthonormal columns, R is N×N
+  // upper-triangular.  Enforce the full shape contract: Q rows = A rows; R is
+  // square; R order = A columns; Q columns = R rows = A columns (review R4).
+  int64_t aRows = a.getDimSize(0), aCols = a.getDimSize(1);
+  int64_t qRows = q.getDimSize(0), qCols = q.getDimSize(1);
+  int64_t rRows = r.getDimSize(0), rCols = r.getDimSize(1);
+  if (!dimsAgree(aRows, qRows))
     return emitOpError("Q rows must match A rows");
-  if (!dimsAgree(q.getDimSize(1), r.getDimSize(0)))
+  if (!dimsAgree(rRows, rCols))
+    return emitOpError("R must be square");
+  if (!dimsAgree(rCols, aCols))
+    return emitOpError("R order must equal the number of columns of A");
+  if (!dimsAgree(qCols, aCols))
+    return emitOpError("Q columns must equal the number of columns of A "
+                       "(reduced QR)");
+  if (!dimsAgree(qCols, rRows))
     return emitOpError("Q columns must match R rows");
   return success();
 }
@@ -148,8 +159,27 @@ LogicalResult SVDOp::verify() {
     return emitOpError("expects rank-2 A, U, and V tensors");
   if (s.getRank() != 1)
     return emitOpError("singular values S must be a rank-1 tensor");
-  if (!dimsAgree(a.getDimSize(0), u.getDimSize(0)))
+  // A = U diag(S) V.  U rows = A rows and V columns = A columns always hold
+  // (review R4).
+  int64_t aRows = a.getDimSize(0), aCols = a.getDimSize(1);
+  int64_t uCols = u.getDimSize(1);
+  int64_t vRows = v.getDimSize(0), vCols = v.getDimSize(1);
+  int64_t sLen = s.getDimSize(0);
+  if (!dimsAgree(aRows, u.getDimSize(0)))
     return emitOpError("U rows must match A rows");
+  if (!dimsAgree(vCols, aCols))
+    return emitOpError("V columns must match A columns");
+  if (!getFullMatrices()) {
+    // Reduced SVD: U is M×K, S is K, V is K×N with K = min(M, N).  The inner
+    // dimensions must agree (U cols = |S| = V rows); A = U·diag(S)·V then
+    // type-checks as (M×K)(K×K)(K×N).
+    if (!dimsAgree(uCols, sLen))
+      return emitOpError("U columns must equal the number of singular values "
+                         "(reduced SVD)");
+    if (!dimsAgree(vRows, sLen))
+      return emitOpError("V rows must equal the number of singular values "
+                         "(reduced SVD)");
+  }
   return success();
 }
 

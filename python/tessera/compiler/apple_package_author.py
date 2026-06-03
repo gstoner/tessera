@@ -206,6 +206,16 @@ def recognize(module: GraphIRModule) -> Optional[AuthorPlan]:
                 return None
             # norms: a gamma (and beta) operand beyond the input => weighted.
             weighted = bare in _NORM_OPS and len(op.operand_types) >= 2
+            # Review glass-jaw R5 (2026-06-03): a weighted norm binds gamma
+            # (and, for layer_norm, beta) over the feature axis K = x[:, K].
+            # Validate each extra operand is a rank-1 vector of length K so a
+            # mismatched gamma/beta shape is rejected, not silently packaged.
+            if weighted:
+                feat = x[1]
+                for ot in op.operand_types[1:]:
+                    g = _parse_dims(ot)
+                    if g is None or len(g) != 1 or g[0] != feat:
+                        return None
             return AuthorPlan(kind="op", name=bare, dims=x,
                               weighted=weighted, eps=_norm_eps(ops))
     return None
@@ -261,6 +271,18 @@ def plan_from_shapes(
     if rec.kind == "op":
         if not s or len(s[0]) != 2:
             return None
+        # Review glass-jaw R5 (2026-06-03): a weighted norm binds learnable
+        # gamma (and, for layer_norm, beta) over the feature axis K = x[:, K].
+        # Validate each extra input is a rank-1 vector of length K so a
+        # mismatched gamma/beta shape is rejected at plan time, not silently
+        # packaged into a kernel whose argument table won't bind.
+        if rec.weighted:
+            if len(s) < 2:
+                return None
+            feat = s[0][1]
+            for extra in s[1:]:
+                if len(extra) != 1 or extra[0] != feat:
+                    return None
         return AuthorPlan(kind="op", name=rec.name, dims=s[0],
                           weighted=rec.weighted, eps=rec.eps)
     if rec.kind == "chain":
@@ -281,6 +303,13 @@ def plan_from_shapes(
             # inputs: x[M,K], gamma[K], W[K,N]
             if len(s) < 3 or len(s[0]) != 2 or len(s[2]) != 2 \
                     or s[0][1] != s[2][0]:
+                return None
+            # Review glass-jaw R5 (2026-06-03): the fused rmsnorm→matmul binds a
+            # learnable gamma over the contraction axis K = x[:, K] = W[K, :].
+            # The earlier check validated x @ W but not gamma[K]; a wrong gamma
+            # shape would package a kernel whose norm argument won't bind.
+            feat = s[0][1]
+            if len(s[1]) != 1 or s[1][0] != feat:  # gamma[K]
                 return None
             return AuthorPlan(kind="chain", name=rec.name,
                               dims=(s[0][0], s[0][1], s[2][1]), eps=rec.eps)
@@ -316,9 +345,17 @@ def _chain_dims(chain: str, ops) -> Optional[tuple[int, ...]]:
     if chain == "rmsnorm_matmul":
         x = _parse_dims(ops[0].operand_types[0])
         w = _parse_dims(ops[1].operand_types[1])
-        if x and w and len(x) == 2 and len(w) == 2 and x[1] == w[0]:
-            return (x[0], x[1], w[1])
-        return None
+        if not (x and w and len(x) == 2 and len(w) == 2 and x[1] == w[0]):
+            return None
+        # Review glass-jaw R5 (2026-06-03): the fused norm binds a learnable
+        # gamma over the contraction axis K = x[:, K]. Validate gamma[K] (the
+        # norm op's 2nd operand) — previously only x @ W was checked, so a wrong
+        # gamma shape would package a kernel whose norm argument won't bind.
+        if len(ops[0].operand_types) >= 2:
+            g = _parse_dims(ops[0].operand_types[1])
+            if g is None or len(g) != 1 or g[0] != x[1]:
+                return None
+        return (x[0], x[1], w[1])
     return None
 
 

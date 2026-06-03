@@ -144,6 +144,35 @@ def test_recognize_rmsnorm_matmul_chain():
                               dims=(4, 6, 5))
 
 
+def test_rmsnorm_matmul_rejects_mismatched_gamma():
+    # Review glass-jaw R5: gamma must be [K] with K = x[:, K] = W[K, :].
+    # Here x is 4x6 (K=6) and W is 6x5, but gamma is [5] — must be rejected,
+    # not silently packaged with an unbindable norm argument.
+    m = _module(
+        [IRArg("x", _t(4, 6)), IRArg("g", _t1(5)), IRArg("w", _t(6, 5))],
+        [
+            IROp(result="n", op_name="tessera.rmsnorm", operands=["%x", "%g"],
+                 operand_types=[_t(4, 6).mlir_str, _t1(5).mlir_str],
+                 result_type=_t(4, 6).mlir_str),
+            _matmul("y", _t(4, 6), _t(6, 5), _t(4, 5), ops=("%n", "%w")),
+        ],
+        ["%y"],
+    )
+    assert recognize(m) is None
+
+
+def test_weighted_rmsnorm_rejects_mismatched_gamma():
+    # Standalone weighted rmsnorm: x is 4x8 (K=8); gamma [5] must be rejected.
+    m = _module(
+        [IRArg("x", _t(4, 8)), IRArg("g", _t1(5))],
+        [IROp(result="y", op_name="tessera.rmsnorm", operands=["%x", "%g"],
+              operand_types=[_t(4, 8).mlir_str, _t1(5).mlir_str],
+              result_type=_t(4, 8).mlir_str)],
+        ["%y"],
+    )
+    assert recognize(m) is None
+
+
 def test_recognize_rejects_dynamic_shapes():
     dyn = IRType("tensor<?x8xf32>", ("?", "8"), "fp32")
     m = _module(

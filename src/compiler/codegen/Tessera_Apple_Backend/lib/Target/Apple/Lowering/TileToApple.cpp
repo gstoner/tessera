@@ -34,6 +34,7 @@
 #include "Tessera/Target/Apple/Passes.h"
 #include "Tessera/Target/Apple/TesseraAppleDialect.h"
 
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
@@ -255,30 +256,44 @@ llvm::SmallVector<Operation *> collectLowerableOps(ModuleOp module) {
 
 // Erase a lowered tile op without leaving dangling SSA uses.
 //
-// The artifact projection emits *value-less* tessera_apple.* ops, so historically
-// the original tile op had no results/uses and a bare `op->erase()` was safe.
-// Real SSA Tile IR (e.g. the C++ TilingPass output, `tile.cholesky : (T) -> T`)
-// does carry a used result; erasing it blindly leaves `func.return` pointing at
-// freed IR — a verifier crash.  This rebinds each used result to a same-typed
-// operand when one exists (cholesky's result type matches its input), keeping
-// the module valid.  The executable semantics live in the emitted artifact's
-// `symbol` (consumed by the runtime per L6), not in this dataflow husk.  If no
-// type-compatible replacement exists (e.g. matmul, where result ≠ operand
-// shapes), the op is left in place rather than erased — never crash.
-// L-series linalg pilot (2026-06-02).
-bool safeEraseLowered(Operation *op) {
+// The tessera_apple.* ops this pass emits are *value-less inspection artifacts*
+// (ODS: attribute-only, no results) — execution happens through the runtime
+// `symbol` recorded on the artifact (the seam-closure contract), NOT through
+// the lowered module's dataflow.  The lowered module is therefore a dataflow
+// "husk".  But it must still be VALID IR with the original tile op erased, so
+// every used result of the tile op needs a stand-in value.
+//
+// Earlier this rebound a single result to a same-typed *operand* (e.g.
+// tri_solve's X → its B input).  That kept the IR valid but **falsely implied
+// result == input**, and it could not handle multi-result ops (lu/qr/svd),
+// which it left orphaned in the module (review glass-jaws R1 + R2, 2026-06-03).
+//
+// The honest, uniform husk is `tensor.empty` — an explicitly *uninitialized*
+// value of the result's type: "a tensor of this shape exists here; its contents
+// are produced out-of-band by the runtime symbol, not by visible IR."  This
+// consumes every linalg tile op (single- and multi-result) with no orphans and
+// no misleading data dependence.
+//
+// NOTE (follow-on): a *semantics-preserving* hand-off would require the
+// tessera_apple target ops to carry real operands + results in ODS (a
+// dialect-wide change) so the lowering can `replaceOp` with produced values.
+// Until then this is an artifact projection; the seam-closure tests prove the
+// named symbol computes the correct result.
+//
+// Falls back to leaving the op in place (returns false, never crashes) only if
+// a result is not a static-shaped ranked tensor.
+bool safeEraseLowered(Operation *op, OpBuilder &builder) {
   for (Value res : op->getResults()) {
     if (res.use_empty())
       continue;
-    Value repl;
-    for (Value operand : op->getOperands())
-      if (operand.getType() == res.getType()) {
-        repl = operand;
-        break;
-      }
-    if (!repl)
-      return false; // cannot safely erase; leave the op in place
-    res.replaceAllUsesWith(repl);
+    auto rt = llvm::dyn_cast<RankedTensorType>(res.getType());
+    if (!rt || !rt.hasStaticShape())
+      return false; // cannot synthesize a placeholder; leave the op in place
+    builder.setInsertionPoint(op);
+    Value placeholder = tensor::EmptyOp::create(builder, op->getLoc(),
+                                                rt.getShape(),
+                                                rt.getElementType());
+    res.replaceAllUsesWith(placeholder);
   }
   op->erase();
   return true;
@@ -300,7 +315,7 @@ struct LowerTileToAppleCPUPass
            "(Accelerate / vecLib / BNNS artifacts)";
   }
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<TesseraAppleDialect>();
+    registry.insert<TesseraAppleDialect, mlir::tensor::TensorDialect>();
   }
 
   void runOnOperation() override {
@@ -381,7 +396,7 @@ struct LowerTileToAppleCPUPass
                            builder.getStringAttr("vecLib"));
         buildAppleOp(builder, op, kCPUVectorOp, ordinal, extra);
       }
-      safeEraseLowered(op);
+      safeEraseLowered(op, builder);
       ++ordinal;
     }
   }
@@ -403,7 +418,7 @@ struct LowerTileToAppleGPUPass
            "(Metal / MPS artifacts)";
   }
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<TesseraAppleDialect>();
+    registry.insert<TesseraAppleDialect, mlir::tensor::TensorDialect>();
   }
 
   void runOnOperation() override {
@@ -468,11 +483,17 @@ struct LowerTileToAppleGPUPass
         // L-series linalg family — Apple GPU via custom MSL kernels.  `status`
         // mirrors the Python envelope (isAppleGpuRuntimeOp ⇒ metal_runtime).
         // `symbol` is the C ABI entry the seam-closure executor reads directly
-        // off this op; it is only emitted when a real GPU kernel exists (ops
-        // without one — lu/qr — lower as inspection artifacts, status
-        // artifact_only, no symbol).  Table-driven via kLinalgSpecs.
+        // off this op.  Review glass-jaw R3 (2026-06-03): emit `symbol` ONLY
+        // when this op actually executes on the GPU (status == metal_runtime).
+        // A table `gpuSymbol` is necessary but not sufficient — cholesky_solve
+        // and svd have GPU kernels in the .mm runtime but are not yet in the
+        // dispatch envelope (isAppleGpuRuntimeOp / driver._APPLE_GPU_LINALG_OPS
+        // / runtime.py), so they lower as artifact_only and must NOT advertise a
+        // GPU symbol (that would imply a dispatch path that doesn't exist).
+        // They join the runtime set — symbol + envelope + drift — together.
         llvm::StringRef opKind = sp->graphName;
         opKind.consume_front("tessera.");
+        const bool gpuRuntime = (execStatus == "metal_runtime");
         llvm::SmallVector<NamedAttribute, 7> extra;
         extra.emplace_back(builder.getStringAttr("kernel"),
                            builder.getStringAttr((opKind + "_contract").str()));
@@ -480,7 +501,7 @@ struct LowerTileToAppleGPUPass
                            builder.getStringAttr("Metal"));
         extra.emplace_back(builder.getStringAttr("status"),
                            builder.getStringAttr(execStatus));
-        if (!sp->gpuSymbol.empty())
+        if (gpuRuntime && !sp->gpuSymbol.empty())
           extra.emplace_back(builder.getStringAttr("symbol"),
                              builder.getStringAttr(sp->gpuSymbol));
         extra.emplace_back(builder.getStringAttr("grid"),
@@ -574,7 +595,7 @@ struct LowerTileToAppleGPUPass
         builder.create(dispatchState);
       }
 
-      safeEraseLowered(op);
+      safeEraseLowered(op, builder);
       ++ordinal;
     }
   }

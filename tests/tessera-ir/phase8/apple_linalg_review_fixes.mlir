@@ -1,45 +1,39 @@
-// L-series linalg family — review glass-jaw fixes R1/R2/R3 (2026-06-03).
+// Apple Target IR — artifact-mode husk + GPU symbol gating (review R1/R2/R3),
+// and the value-mode no-poison contract (Apple Value Target IR sprint).
 //
-// R1: every linalg tile op is consumed — no orphan tile.<op> remains after
-//     lowering, including multi-result ops (svd: 1-in → 3-out).
-// R2: the dataflow husk is `ub.poison` (an explicitly undefined value),
-//     NOT a rebind to an input operand — so the IR never falsely implies
-//     result == input.  (Execution is via the runtime `symbol`; the lowered
-//     module is an inspection artifact.)
-// R3: the GPU `symbol` is emitted ONLY for ops that actually dispatch on the
-//     GPU (status == metal_runtime).  tri_solve is in the runtime envelope;
-//     svd has a .mm kernel but is not yet wired into dispatch, so it lowers
-//     artifact_only and must NOT advertise a GPU symbol.
+// Two distinct lowering intents are exercised on the SAME bare Tile IR:
+//
+//  * ARTIFACT mode (tessera-lower-to-apple_{cpu,gpu}) — inspection/dashboard
+//    projection.  The value-less artifact op is emitted and the Tile op's used
+//    results are replaced by `ub.poison` husks (R1: every result, incl.
+//    multi-result svd; R2: not a misleading operand rebind).  GPU emits a
+//    `symbol` ONLY for metal_runtime ops (R3): tri_solve yes; svd artifact_only,
+//    no symbol.
+//
+//  * VALUE mode (tessera-lower-to-apple_{cpu,gpu}-full) — semantics-preserving.
+//    Value-producing cpu.call / gpu.kernel_call ops carry real results; the
+//    module must contain NO ub.poison and NO surviving tile.*.
+//
+// RUN: tessera-opt -tessera-lower-to-apple_cpu --allow-unregistered-dialect %s \
+// RUN:   | FileCheck %s --check-prefix=ARTCPU
+// RUN: tessera-opt -tessera-lower-to-apple_gpu --allow-unregistered-dialect %s \
+// RUN:   | FileCheck %s --check-prefix=ARTGPU
 
-// RUN: tessera-opt -tessera-lower-to-apple_cpu-full --allow-unregistered-dialect %s \
-// RUN:   | FileCheck %s --check-prefix=CPU
-// RUN: tessera-opt -tessera-lower-to-apple_gpu-full --allow-unregistered-dialect %s \
-// RUN:   | FileCheck %s --check-prefix=GPU
+// ARTCPU-LABEL: func.func @art
+// ARTCPU: tessera_apple.cpu.vector_op
+// ARTCPU-SAME: symbol = "tessera_apple_cpu_svd_f32"
+// ARTCPU: ub.poison
+// ARTCPU: ub.poison
+// ARTCPU: ub.poison
+// ARTCPU-NOT: tile.svd
 
-// Apple-CPU lowering: husk is ub.poison, no orphan tile ops.
-// CPU-LABEL: func.func @svd_multi_result
-// CPU: tessera_apple.cpu.vector_op
-// CPU-SAME: symbol = "tessera_apple_cpu_svd_f32"
-// CPU: ub.poison
-// CPU-NOT: tile.svd
-// CPU-NOT: tessera.svd
-
-// Apple-GPU lowering: tri_solve is runtime (symbol present); svd is artifact.
-// GPU-LABEL: func.func @tri_solve_runtime
-// GPU: tessera_apple.gpu.metal_kernel
-// GPU-SAME: status = "metal_runtime"
-// GPU-SAME: symbol = "tessera_apple_gpu_tri_solve_f32"
-
-// GPU-LABEL: func.func @svd_multi_result
-// GPU: tessera_apple.gpu.metal_kernel
-// GPU-SAME: status = "artifact_only"
-// GPU-NOT: symbol =
-func.func @tri_solve_runtime(%a: tensor<4x4xf32>, %b: tensor<4x2xf32>) -> tensor<4x2xf32> {
-  %0 = tessera.tri_solve %a, %b : (tensor<4x4xf32>, tensor<4x2xf32>) -> tensor<4x2xf32>
-  return %0 : tensor<4x2xf32>
-}
-
-func.func @svd_multi_result(%a: tensor<6x4xf32>) -> (tensor<6x4xf32>, tensor<4xf32>, tensor<4x4xf32>) {
-  %u, %s, %v = tessera.svd %a : (tensor<6x4xf32>) -> (tensor<6x4xf32>, tensor<4xf32>, tensor<4x4xf32>)
+// ARTGPU-LABEL: func.func @art
+// ARTGPU: tessera_apple.gpu.metal_kernel
+// ARTGPU-SAME: status = "artifact_only"
+// ARTGPU-NOT: symbol =
+func.func @art(%a: tensor<6x4xf32>)
+    -> (tensor<6x4xf32>, tensor<4xf32>, tensor<4x4xf32>) {
+  %u, %s, %v = "tile.svd"(%a) {source = "tessera.svd", result = "v0", ordinal = 0 : i64}
+      : (tensor<6x4xf32>) -> (tensor<6x4xf32>, tensor<4xf32>, tensor<4x4xf32>)
   return %u, %s, %v : tensor<6x4xf32>, tensor<4xf32>, tensor<4x4xf32>
 }

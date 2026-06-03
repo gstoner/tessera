@@ -179,6 +179,15 @@ LogicalResult SVDOp::verify() {
     if (!dimsAgree(vRows, sLen))
       return emitOpError("V rows must equal the number of singular values "
                          "(reduced SVD)");
+  } else {
+    // Full SVD: U is the M×M left-orthogonal basis and V is the N×N
+    // right-orthogonal basis (both square); S still has min(M, N) values but
+    // that requires both dims static to check, so enforce the squareness
+    // contract that always holds (review R4 follow-on, AV0).
+    if (!dimsAgree(uCols, aRows))
+      return emitOpError("U must be square (M×M) for full_matrices SVD");
+    if (!dimsAgree(vRows, aCols))
+      return emitOpError("V must be square (N×N) for full_matrices SVD");
   }
   return success();
 }

@@ -194,4 +194,64 @@ def AppleGPU_KVCacheGPUOp : TesseraApple_Op<"gpu.kv_cache_gpu"> {
   let assemblyFormat = "attr-dict";
 }
 
+//===----------------------------------------------------------------------===//
+// Value-producing Target IR ops (Apple Value Target IR sprint, 2026-06-03)
+//
+// Unlike the attribute-only artifact ops above (which are inspection/dashboard
+// metadata), these carry the real SSA tensor operands and results, so the
+// value-preserving `-full` pipelines can `replaceOp` the Tile op with a target
+// op that actually produces its values.  Each names the C ABI `symbol` the
+// runtime dispatches to (the seam-closure contract).  `status` is "executable"
+// when a runtime dispatcher exists, else "artifact" (a value op may still be
+// emitted for ops whose values must flow even if execution is pending).
+//===----------------------------------------------------------------------===//
+
+// Apple CPU value call — dispatches to an Accelerate/LAPACK/BNNS C ABI symbol.
+def AppleCPU_CallOp : TesseraApple_Op<"cpu.call", [Pure]> {
+  let summary = "Value-producing Apple CPU runtime call (Accelerate/LAPACK)";
+  let arguments = (ins Variadic<AnyType>:$operands,
+                       StrAttr:$op_kind,
+                       StrAttr:$symbol,
+                       OptionalAttr<StrAttr>:$abi,
+                       OptionalAttr<StrAttr>:$status,
+                       OptionalAttr<StrAttr>:$dtype,
+                       OptionalAttr<StrAttr>:$framework,
+                       OptionalAttr<StrAttr>:$argument_layout);
+  let results = (outs Variadic<AnyType>:$results);
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+}
+
+// Apple GPU value call — dispatches to a custom MSL kernel C ABI symbol.
+def AppleGPU_KernelCallOp : TesseraApple_Op<"gpu.kernel_call", [Pure]> {
+  let summary = "Value-producing Apple GPU MSL kernel call";
+  let arguments = (ins Variadic<AnyType>:$operands,
+                       StrAttr:$op_kind,
+                       StrAttr:$symbol,
+                       OptionalAttr<StrAttr>:$abi,
+                       OptionalAttr<StrAttr>:$status,
+                       OptionalAttr<StrAttr>:$dtype,
+                       OptionalAttr<StrAttr>:$framework,
+                       OptionalAttr<StrAttr>:$argument_layout);
+  let results = (outs Variadic<AnyType>:$results);
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+}
+
+// Apple GPU value call — dispatches through an authored .mtlpackage (PK8 lane).
+def AppleGPU_PackageCallOp : TesseraApple_Op<"gpu.package_call", [Pure]> {
+  let summary = "Value-producing Apple GPU packaged (.mtlpackage) call";
+  let arguments = (ins Variadic<AnyType>:$operands,
+                       StrAttr:$op_kind,
+                       StrAttr:$symbol,
+                       OptionalAttr<StrAttr>:$abi,
+                       OptionalAttr<StrAttr>:$status,
+                       OptionalAttr<StrAttr>:$dtype,
+                       OptionalAttr<StrAttr>:$framework,
+                       OptionalAttr<StrAttr>:$argument_layout);
+  let results = (outs Variadic<AnyType>:$results);
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+}
+
 #endif // TESSERA_TARGET_APPLE_OPS

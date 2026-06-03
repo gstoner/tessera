@@ -90,18 +90,22 @@ mlir::PassPipelineRegistration<> gAppleCPUFullPipeline(
       pm.addPass(tessera::createEffectAnnotationPass());
       pm.addPass(tessera::createDistributionLoweringPass());
       pm.addPass(tessera::createTilingPass());
-      pm.addPass(tessera::apple::createLowerTileToAppleCPUPass());
+      // Apple Value Target IR sprint: the `-full` pipeline is value-preserving
+      // — it emits value-producing tessera_apple.cpu.call ops (no artifact
+      // metadata / ub.poison husk) and fails with a named diagnostic if an op
+      // has no value lowering.
+      pm.addPass(tessera::apple::createLowerTileToAppleCPUPass(/*valueMode=*/true));
     });
 
 mlir::PassPipelineRegistration<> gAppleGPUFullPipeline(
     "tessera-lower-to-apple_gpu-full",
     "Full Graph->Schedule->Tile->Target Apple GPU spine (effect-annotation -> "
-    "distribution-lowering -> tiling -> tile-to-apple_gpu)",
+    "distribution-lowering -> tiling -> tile-to-apple_gpu, value-preserving)",
     [](mlir::OpPassManager &pm) {
       pm.addPass(tessera::createEffectAnnotationPass());
       pm.addPass(tessera::createDistributionLoweringPass());
       pm.addPass(tessera::createTilingPass());
-      pm.addPass(tessera::apple::createLowerTileToAppleGPUPass());
+      pm.addPass(tessera::apple::createLowerTileToAppleGPUPass(/*valueMode=*/true));
     });
 } // namespace
 #endif

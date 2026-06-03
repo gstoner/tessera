@@ -293,6 +293,32 @@ bool safeEraseLowered(Operation *op, OpBuilder &builder) {
   return true;
 }
 
+// Emit a *value-producing* Apple target op (Apple Value Target IR sprint,
+// 2026-06-03) and replace the Tile op directly with it.  Unlike the artifact
+// projection, the value op carries the Tile op's real SSA operands and result
+// types, so `op->replaceAllUsesWith(call)` is a genuine semantics-preserving
+// hand-off (multi-result included).  `valueOpName` is one of
+// tessera_apple.cpu.call / gpu.kernel_call / gpu.package_call; `symbol` is the
+// C ABI entry the runtime dispatches to; `status` is "executable" when a
+// runtime dispatcher exists.
+void emitAppleValueCall(OpBuilder &b, Operation *op,
+                        llvm::StringRef valueOpName, llvm::StringRef opKind,
+                        llvm::StringRef symbol, llvm::StringRef abi,
+                        llvm::StringRef status, llvm::StringRef framework) {
+  OperationState st(op->getLoc(), valueOpName);
+  st.addOperands(op->getOperands());
+  st.addTypes(op->getResultTypes());
+  st.addAttribute("op_kind", b.getStringAttr(opKind));
+  st.addAttribute("symbol", b.getStringAttr(symbol));
+  st.addAttribute("abi", b.getStringAttr(abi));
+  st.addAttribute("status", b.getStringAttr(status));
+  st.addAttribute("framework", b.getStringAttr(framework));
+  b.setInsertionPoint(op);
+  Operation *call = b.create(st);
+  op->replaceAllUsesWith(call);
+  op->erase();
+}
+
 //===----------------------------------------------------------------------===//
 // CPU pass
 //===----------------------------------------------------------------------===//
@@ -300,6 +326,16 @@ bool safeEraseLowered(Operation *op, OpBuilder &builder) {
 struct LowerTileToAppleCPUPass
     : public PassWrapper<LowerTileToAppleCPUPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerTileToAppleCPUPass)
+
+  LowerTileToAppleCPUPass() = default;
+  explicit LowerTileToAppleCPUPass(bool valueMode) : valueMode(valueMode) {}
+  LowerTileToAppleCPUPass(const LowerTileToAppleCPUPass &other)
+      : PassWrapper(other), valueMode(other.valueMode) {}
+
+  // Apple Value Target IR sprint: artifact mode (default) emits metadata ops +
+  // ub.poison husks; value mode emits value-producing tessera_apple.cpu.call
+  // ops and replaces the Tile op directly (used by the `-full` pipeline).
+  bool valueMode = false;
 
   llvm::StringRef getArgument() const final {
     return "tile-to-apple_cpu";
@@ -323,6 +359,28 @@ struct LowerTileToAppleCPUPass
           op->getAttrOfType<StringAttr>("source")
               ? op->getAttrOfType<StringAttr>("source").getValue()
               : name;
+
+      // Apple Value Target IR sprint: the `-full` pipeline lowers to
+      // value-producing target ops (semantics-preserving SSA hand-off).
+      if (valueMode) {
+        const LinalgSpec *sp = linalgSpecFor(name);
+        if (!sp)
+          sp = linalgSpecFor(src);
+        if (!sp) {
+          op->emitError("apple_cpu value lowering: no value-producing CPU "
+                        "target op for '")
+              << src << "' (only the linalg family is value-converted so far)";
+          signalPassFailure();
+          return;
+        }
+        llvm::StringRef opKind = sp->graphName;
+        opKind.consume_front("tessera.");
+        emitAppleValueCall(builder, op, "tessera_apple.cpu.call", opKind,
+                           sp->cpuSymbol, sp->cpuAbi, "executable",
+                           "Accelerate");
+        ++ordinal;
+        continue;
+      }
 
       if (isKVCache(name) || isKVCache(src)) {
         // kv_cache_coverage_matrix.md (2026-05-10) — replace the
@@ -404,6 +462,13 @@ struct LowerTileToAppleGPUPass
     : public PassWrapper<LowerTileToAppleGPUPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerTileToAppleGPUPass)
 
+  LowerTileToAppleGPUPass() = default;
+  explicit LowerTileToAppleGPUPass(bool valueMode) : valueMode(valueMode) {}
+  LowerTileToAppleGPUPass(const LowerTileToAppleGPUPass &other)
+      : PassWrapper(other), valueMode(other.valueMode) {}
+
+  bool valueMode = false;
+
   llvm::StringRef getArgument() const final {
     return "tile-to-apple_gpu";
   }
@@ -426,6 +491,38 @@ struct LowerTileToAppleGPUPass
           op->getAttrOfType<StringAttr>("source")
               ? op->getAttrOfType<StringAttr>("source").getValue()
               : name;
+
+      // Apple Value Target IR sprint: the `-full` pipeline lowers to
+      // value-producing target ops.  Only ops with executable GPU dispatch
+      // (the runtime envelope) become gpu.kernel_call; everything else fails
+      // with a named diagnostic (the full pipeline is value-only and must not
+      // silently degrade to an artifact).
+      if (valueMode) {
+        const LinalgSpec *sp = linalgSpecFor(name);
+        if (!sp)
+          sp = linalgSpecFor(src);
+        if (!sp) {
+          op->emitError("apple_gpu value lowering: no value-producing GPU "
+                        "target op for '")
+              << src << "'";
+          signalPassFailure();
+          return;
+        }
+        if (sp->gpuSymbol.empty() || !isAppleGpuRuntimeOp(sp->graphName)) {
+          op->emitError("apple_gpu value lowering: '")
+              << sp->graphName
+              << "' has no executable GPU dispatch yet (artifact-only); use "
+                 "the artifact pipeline (tessera-lower-to-apple_gpu) instead";
+          signalPassFailure();
+          return;
+        }
+        llvm::StringRef opKind = sp->graphName;
+        opKind.consume_front("tessera.");
+        emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call", opKind,
+                           sp->gpuSymbol, "msl", "executable", "Metal");
+        ++ordinal;
+        continue;
+      }
 
       // G3 — execution status MUST mirror the Python runtime envelope
       // (driver._APPLE_GPU_{MPS,MSL}_OPS), the single source of truth: matmul /
@@ -601,12 +698,12 @@ struct LowerTileToAppleGPUPass
 // Factory functions (declared in Passes.h)
 //===----------------------------------------------------------------------===//
 
-std::unique_ptr<Pass> createLowerTileToAppleCPUPass() {
-  return std::make_unique<LowerTileToAppleCPUPass>();
+std::unique_ptr<Pass> createLowerTileToAppleCPUPass(bool valueMode) {
+  return std::make_unique<LowerTileToAppleCPUPass>(valueMode);
 }
 
-std::unique_ptr<Pass> createLowerTileToAppleGPUPass() {
-  return std::make_unique<LowerTileToAppleGPUPass>();
+std::unique_ptr<Pass> createLowerTileToAppleGPUPass(bool valueMode) {
+  return std::make_unique<LowerTileToAppleGPUPass>(valueMode);
 }
 
 } // namespace apple

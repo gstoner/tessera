@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -442,6 +443,66 @@ _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS
 )
+
+
+# ── Apple Value Target IR (sprint, 2026-06-03) ──────────────────────────────
+# The value-preserving `-full` pipelines emit value-producing target ops that
+# carry real SSA operands + results; the artifact pipelines emit attribute-only
+# metadata ops.  These helpers let the front door (canonical_compile / JIT) tag
+# the lowered module as `value_target_ir` vs `target_ir_artifact`, and let the
+# runtime dispatcher read the dispatch tuple straight off each value op (the
+# seam-closure contract: the IR names the C ABI `symbol` that executes it).
+_APPLE_VALUE_OPS: tuple[str, ...] = (
+    "tessera_apple.cpu.call",
+    "tessera_apple.gpu.kernel_call",
+    "tessera_apple.gpu.package_call",
+)
+_APPLE_ARTIFACT_OPS: tuple[str, ...] = (
+    "tessera_apple.cpu.vector_op",
+    "tessera_apple.cpu.accelerate_gemm",
+    "tessera_apple.cpu.vector_reduce",
+    "tessera_apple.gpu.metal_kernel",
+)
+
+_APPLE_VALUE_CALL_RE = re.compile(
+    r"(tessera_apple\.(?:cpu\.call|gpu\.kernel_call|gpu\.package_call))\b[^\n]*?"
+    r'\{([^}]*)\}'
+)
+_APPLE_ATTR_RE = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
+
+
+def classify_apple_target_ir(ir_text: str) -> str:
+    """Classify a lowered Apple module as 'value_target_ir' (contains
+    value-producing call ops — the `-full` semantics-preserving lane),
+    'target_ir_artifact' (attribute-only metadata ops — the inspection lane),
+    or 'none'. Value classification wins if both appear."""
+    if any(op in ir_text for op in _APPLE_VALUE_OPS):
+        return "value_target_ir"
+    if any(op in ir_text for op in _APPLE_ARTIFACT_OPS):
+        return "target_ir_artifact"
+    return "none"
+
+
+def extract_apple_value_calls(ir_text: str) -> list[dict[str, str]]:
+    """Read the dispatch tuple off every value-producing Apple target op.
+
+    The runtime dispatcher consumes this: for cpu.call it invokes the named
+    Accelerate/LAPACK C ABI `symbol`; for gpu.kernel_call / gpu.package_call it
+    reports native_gpu execution only when ``status == "executable"``. Returns
+    one dict per value op with at least {op, op_kind, symbol, status}.
+    """
+    calls: list[dict[str, str]] = []
+    for op_name, attr_blob in _APPLE_VALUE_CALL_RE.findall(ir_text):
+        attrs = {k: v for k, v in _APPLE_ATTR_RE.findall(attr_blob)}
+        attrs["op"] = op_name
+        attrs.setdefault("status", "")
+        calls.append(attrs)
+    return calls
+
+
+def apple_value_call_is_executable(call: dict[str, str]) -> bool:
+    """A value call dispatches natively only when its status says so."""
+    return call.get("status") == "executable" and bool(call.get("symbol"))
 
 
 def is_apple_gpu_mps_op(op_name: str) -> bool:

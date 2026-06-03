@@ -17,11 +17,15 @@ class Pass;
 namespace tessera {
 namespace apple {
 
-/// Tile IR → Apple CPU Target IR (Accelerate / vecLib / BNNS artifacts).
-std::unique_ptr<::mlir::Pass> createLowerTileToAppleCPUPass();
+/// Tile IR → Apple CPU Target IR. `valueMode = false` (default) emits the
+/// attribute-only artifact/inspection ops; `valueMode = true` emits
+/// value-producing `tessera_apple.cpu.call` ops (the `-full` pipeline).
+std::unique_ptr<::mlir::Pass> createLowerTileToAppleCPUPass(bool valueMode = false);
 
-/// Tile IR → Apple GPU Target IR (Metal / MPS artifacts).
-std::unique_ptr<::mlir::Pass> createLowerTileToAppleGPUPass();
+/// Tile IR → Apple GPU Target IR. `valueMode = true` emits value-producing
+/// `tessera_apple.gpu.kernel_call` ops for executable ops (and a named
+/// diagnostic otherwise); default emits artifact ops.
+std::unique_ptr<::mlir::Pass> createLowerTileToAppleGPUPass(bool valueMode = false);
 
 /// tessera.matmul (rank-2, f32) → func.call into the Apple CPU runtime
 /// shim. Phase 8.2 — the executable counterpart to the artifact-only

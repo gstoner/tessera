@@ -1704,8 +1704,12 @@ _F32P = ctypes.POINTER(ctypes.c_float)
 _I32P = ctypes.POINTER(ctypes.c_int32)
 
 
-def _apple_cpu_linalg_fn(symbol: str, argtypes: list) -> Any:
-    """Resolve an Accelerate-LAPACK linalg C ABI entry by symbol name."""
+def _apple_cpu_linalg_fn(symbol: str, argtypes: list, restype: Any = ctypes.c_int32) -> Any:
+    """Resolve an Accelerate C ABI entry by symbol name.
+
+    `restype` defaults to int32 (the LAPACK `info` convention shared by the
+    linalg family); the GEMM symbol returns void, so callers pass restype=None.
+    """
     runtime = _load_apple_cpu_runtime()
     fn = getattr(runtime, symbol, None)
     if fn is None:
@@ -1713,7 +1717,7 @@ def _apple_cpu_linalg_fn(symbol: str, argtypes: list) -> Any:
             f"apple_cpu runtime lacks {symbol} — rebuild TesseraAppleRuntime "
             f"(the prebuilt dylib predates the linalg lane)")
     fn.argtypes = argtypes
-    fn.restype = ctypes.c_int32
+    fn.restype = restype
     return fn
 
 
@@ -1833,6 +1837,28 @@ def _dispatch_svd(inputs, call, np):
     return (u, s, v)  # SSA order: (U, S, V)
 
 
+def _dispatch_matmul(inputs, call, np):
+    """Sprint 5: dense fp32 rank-2 (M,K)@(K,N)->(M,N) via Accelerate cblas_sgemm
+    (`tessera_apple_cpu_gemm_f32`, which returns void). Validates contiguous
+    f32 rank-2 operands and K-consistency before dispatch — the compiler only
+    routes the static rank-2 f32 envelope here, and this re-checks at runtime."""
+    a = _as_f32_2d(inputs[0], np, name="matmul A")
+    b = _as_f32_2d(inputs[1], np, name="matmul B")
+    m, ka = int(a.shape[0]), int(a.shape[1])
+    kb, n = int(b.shape[0]), int(b.shape[1])
+    if ka != kb:
+        raise ValueError(
+            f"matmul contraction mismatch: (M,K)={a.shape} @ (K,N)={b.shape}")
+    c = np.zeros((m, n), dtype=np.float32)
+    fn = _apple_cpu_linalg_fn(
+        "tessera_apple_cpu_gemm_f32",
+        [_F32P, _F32P, _F32P, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32],
+        restype=None)
+    fn(a.ctypes.data_as(_F32P), b.ctypes.data_as(_F32P),
+       c.ctypes.data_as(_F32P), m, n, ka)
+    return c
+
+
 # symbol -> (handler, expected operand count). The allowlist is its key set.
 _APPLE_VALUE_CPU_DISPATCH: dict[str, tuple] = {
     "tessera_apple_cpu_cholesky_f32":       (_dispatch_cholesky, 1),
@@ -1841,6 +1867,9 @@ _APPLE_VALUE_CPU_DISPATCH: dict[str, tuple] = {
     "tessera_apple_cpu_lu_f32":             (_dispatch_lu, 1),
     "tessera_apple_cpu_qr_f32":             (_dispatch_qr, 1),
     "tessera_apple_cpu_svd_f32":            (_dispatch_svd, 1),
+    # Sprint 5: first non-linalg executable value op — fp32 rank-2 matmul/gemm.
+    # Both op_kinds ("matmul"/"gemm") emit this one symbol in the IR.
+    "tessera_apple_cpu_gemm_f32":           (_dispatch_matmul, 2),
 }
 _APPLE_VALUE_CPU_SYMBOLS: frozenset[str] = frozenset(_APPLE_VALUE_CPU_DISPATCH)
 

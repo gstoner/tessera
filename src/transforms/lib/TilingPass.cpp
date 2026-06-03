@@ -234,6 +234,61 @@ struct TileLinalg : public RewritePattern {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Rewrite pattern: TileMatmulValue  (Apple Value Target IR sprint 5, 2026-06-03)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The artifact/default path tiles matmul into scf.for loop nests (TileMatmul).
+// The *value* path needs the dense contraction to survive as a single Tile-IR
+// op so the Tile→Apple value-mode lowering can hand it to a single
+// `tessera_apple.cpu.call` GEMM (Accelerate). This pattern lowers
+// `tessera.matmul`/`tessera.gemm` 1:1 to `tile.matmul`/`tile.gemm`, but **only**
+// for the executable envelope: static rank-2, f32, K-consistent. Anything else
+// (dynamic, batched/rank≠2, non-f32) is left untouched — it then reaches the
+// value lowering with no value op and is honestly gated with a named
+// diagnostic, never silently tiled or fabricated. Enabled only when the pass
+// runs in valueMode (the apple_cpu `-full` pipeline).
+struct TileMatmulValue : public RewritePattern {
+  TileMatmulValue(MLIRContext *ctx, llvm::StringRef opName)
+      : RewritePattern(opName, /*benefit=*/2, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() < 2 || op->getNumResults() != 1)
+      return failure();
+    auto lhsTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto rhsTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto resTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!lhsTy || !rhsTy || !resTy)
+      return failure();
+    // Executable envelope: static rank-2, f32, K-consistent.
+    if (lhsTy.getRank() != 2 || rhsTy.getRank() != 2 || resTy.getRank() != 2)
+      return failure();
+    if (!lhsTy.hasStaticShape() || !rhsTy.hasStaticShape() ||
+        !resTy.hasStaticShape())
+      return failure();
+    if (!lhsTy.getElementType().isF32() || !rhsTy.getElementType().isF32() ||
+        !resTy.getElementType().isF32())
+      return failure();
+    if (lhsTy.getDimSize(1) != rhsTy.getDimSize(0))
+      return failure();
+
+    llvm::StringRef graphName = op->getName().getStringRef();
+    llvm::StringRef suffix = graphName;
+    suffix.consume_front("tessera.");
+    std::string tileName = ("tile." + suffix).str();
+    OperationState st(op->getLoc(), tileName);
+    st.addOperands(op->getOperands());
+    st.addTypes(op->getResultTypes());
+    for (auto &na : op->getAttrs())
+      st.addAttribute(na.getName(), na.getValue());
+    st.addAttribute("source", rewriter.getStringAttr(graphName));
+    Operation *tiled = rewriter.create(st);
+    rewriter.replaceOp(op, tiled->getResults());
+    return success();
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Pass
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -242,7 +297,15 @@ struct TilingPassImpl
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TilingPassImpl)
 
   TilingPassImpl() = default;
-  TilingPassImpl(const TilingPassImpl &other) : PassWrapper(other) {}
+  explicit TilingPassImpl(bool valueMode) : valueMode(valueMode) {}
+  TilingPassImpl(const TilingPassImpl &other)
+      : PassWrapper(other), valueMode(other.valueMode) {}
+
+  // Apple Value Target IR sprint 5: in value mode, preserve static rank-2 f32
+  // matmul/gemm as a single tile op (TileMatmulValue) for the Accelerate GEMM
+  // value call, instead of tiling to scf.for. Default (artifact) tiling is
+  // unchanged. Set by the apple_cpu `-full` pipeline only.
+  bool valueMode = false;
 
   Option<int> tileMOpt{*this, "tile-m",
                        llvm::cl::desc("M-dimension tile size"), llvm::cl::init(16)};
@@ -263,9 +326,19 @@ struct TilingPassImpl
 
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
-    patterns.add<TileMatmul>(&getContext(),
-                             static_cast<int64_t>(tileMOpt),
-                             static_cast<int64_t>(tileNOpt));
+    if (valueMode) {
+      // Value path (apple_cpu `-full`): preserve static rank-2 f32 matmul/gemm
+      // as a single tile op for the Accelerate GEMM value call; do NOT tile to
+      // scf.for (that would dissolve the dense contraction the value lane wants
+      // to hand to one cblas_sgemm). Out-of-envelope matmuls are left untouched
+      // and gated downstream.
+      patterns.add<TileMatmulValue>(&getContext(), "tessera.matmul");
+      patterns.add<TileMatmulValue>(&getContext(), "tessera.gemm");
+    } else {
+      patterns.add<TileMatmul>(&getContext(),
+                               static_cast<int64_t>(tileMOpt),
+                               static_cast<int64_t>(tileNOpt));
+    }
     for (llvm::StringRef opName : kLinalgGraphOps)
       patterns.add<TileLinalg>(&getContext(), opName);
     if (failed(applyPatternsAndFoldGreedily(getOperation(),
@@ -279,5 +352,8 @@ struct TilingPassImpl
 namespace tessera {
 std::unique_ptr<Pass> createTilingPass() {
   return std::make_unique<TilingPassImpl>();
+}
+std::unique_ptr<Pass> createTilingPass(bool valueMode) {
+  return std::make_unique<TilingPassImpl>(valueMode);
 }
 } // namespace tessera

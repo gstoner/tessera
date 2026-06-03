@@ -374,20 +374,38 @@ struct LowerTileToAppleCPUPass
         const LinalgSpec *sp = linalgSpecFor(name);
         if (!sp)
           sp = linalgSpecFor(src);
-        if (!sp) {
-          op->emitError("apple_cpu value lowering: no value-producing CPU "
-                        "target op for '")
-              << src << "' (only the linalg family is value-converted so far)";
-          signalPassFailure();
-          return;
+        if (sp) {
+          llvm::StringRef opKind = sp->graphName;
+          opKind.consume_front("tessera.");
+          emitAppleValueCall(builder, op, "tessera_apple.cpu.call", opKind,
+                             sp->cpuSymbol, sp->cpuAbi, "executable",
+                             "Accelerate");
+          ++ordinal;
+          continue;
         }
-        llvm::StringRef opKind = sp->graphName;
-        opKind.consume_front("tessera.");
-        emitAppleValueCall(builder, op, "tessera_apple.cpu.call", opKind,
-                           sp->cpuSymbol, sp->cpuAbi, "executable",
-                           "Accelerate");
-        ++ordinal;
-        continue;
+        // Sprint 5: dense fp32 rank-2 matmul/gemm executes as a single
+        // Accelerate GEMM value call. ONLY the vetted tile op (tile.matmul /
+        // tile.gemm, emitted by TilingPass's TileMatmulValue for the static
+        // rank-2 f32 envelope) is executable here. A raw `tessera.matmul` that
+        // reaches this pass was *rejected* by that envelope (e.g. f16/bf16, or
+        // dynamic shape) — it must fall through to the named diagnostic and be
+        // gated, never silently dispatched as f32. op_kind distinguishes
+        // matmul vs gemm; both use the one tessera_apple_cpu_gemm_f32 symbol.
+        if (name == "tile.matmul" || name == "tile.gemm") {
+          bool isGemm = name == "tile.gemm" || src == "tessera.gemm";
+          emitAppleValueCall(builder, op, "tessera_apple.cpu.call",
+                             isGemm ? "gemm" : "matmul",
+                             "tessera_apple_cpu_gemm_f32", "cblas_sgemm",
+                             "executable", "Accelerate");
+          ++ordinal;
+          continue;
+        }
+        op->emitError("apple_cpu value lowering: no value-producing CPU "
+                      "target op for '")
+            << src << "' (Sprint 5 envelope: linalg family + static rank-2 "
+                      "f32 matmul/gemm)";
+        signalPassFailure();
+        return;
       }
 
       if (isKVCache(name) || isKVCache(src)) {

@@ -39,6 +39,10 @@ std::unique_ptr<mlir::Pass> createEffectAnnotationPass();
 //   --tile-m  tile size along M dimension (default 16)
 //   --tile-n  tile size along N dimension (default 16)
 std::unique_ptr<mlir::Pass> createTilingPass();
+// Apple Value Target IR sprint 5: value-mode tiling preserves static rank-2 f32
+// matmul/gemm as a single tile op (for the Accelerate GEMM value call) instead
+// of tiling to scf.for. Used by the apple_cpu `-full` value pipeline only.
+std::unique_ptr<mlir::Pass> createTilingPass(bool valueMode);
 
 // TileToX86Pass — replaces tiled tessera.matmul ops (static bf16 operands)
 // with calls to the tessera_x86_backend C functions via func.call with raw

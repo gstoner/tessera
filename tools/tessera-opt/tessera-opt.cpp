@@ -89,7 +89,9 @@ mlir::PassPipelineRegistration<> gAppleCPUFullPipeline(
     [](mlir::OpPassManager &pm) {
       pm.addPass(tessera::createEffectAnnotationPass());
       pm.addPass(tessera::createDistributionLoweringPass());
-      pm.addPass(tessera::createTilingPass());
+      // Sprint 5: value-mode tiling preserves static rank-2 f32 matmul/gemm as a
+      // single tile op for the Accelerate GEMM value call (CPU `-full` only).
+      pm.addPass(tessera::createTilingPass(/*valueMode=*/true));
       // Apple Value Target IR sprint: the `-full` pipeline is value-preserving
       // — it emits value-producing tessera_apple.cpu.call ops (no artifact
       // metadata / ub.poison husk) and fails with a named diagnostic if an op

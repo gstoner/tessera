@@ -2,7 +2,7 @@
 status: Normative
 classification: Backend contract
 audience: backend authors (Apple proven; NVIDIA / ROCm inherit)
-last_updated: 2026-06-03 (Apple Value Target IR sprint 4 — resolver hardening + coverage boundary)
+last_updated: 2026-06-03 (Apple Value Target IR sprint 5 — first non-linalg value op: CPU fp32 rank-2 matmul/gemm)
 ---
 
 # Value Target IR Contract
@@ -80,11 +80,11 @@ pipelines pass `valueMode=true`); a backend may instead use distinct passes.
   matching top-level `}` while skipping braces inside quoted strings — so an
   `argument_layout` whose value is a JSON object survives intact).
 
-### What "runtime dispatches" means today (Sprints 2–4)
+### What "runtime dispatches" means today (Sprints 2–5)
 
 This is a **narrow, honest** executable path, not a blanket claim. The boundary
-is **CPU linalg = executable; GPU value calls and non-linalg value calls =
-classified + gated**.
+is **CPU linalg + CPU fp32 rank-2 matmul/gemm = executable; GPU value calls and
+all other non-linalg value calls = classified + gated**.
 
 - **The full Apple CPU linalg family is executable now (Sprint 3).** The matrix
   row `(apple_cpu, apple_value_target_ir)` resolves to the
@@ -99,6 +99,19 @@ classified + gated**.
   `lower`/`trans`/`unit_diag`/`full_matrices` ride the value op and parameterize
   the ABI. The executed result is produced by the `symbol` named *in the IR*,
   not by a parallel op-name matcher.
+- **CPU fp32 rank-2 matmul/gemm is the first non-linalg executable value op
+  (Sprint 5).** `tessera.matmul`/`tessera.gemm` in the **static rank-2, f32**
+  envelope lower — via the value-mode `TilingPass` (which preserves the dense
+  contraction as a single `tile.matmul`/`tile.gemm` instead of tiling it into
+  `scf.for`) — to a `tessera_apple.cpu.call` carrying the single symbol
+  `tessera_apple_cpu_gemm_f32` (`status="executable"`, `op_kind` distinguishes
+  matmul vs gemm). The runtime validates `(M,K)@(K,N)→(M,N)` contiguous f32
+  inputs and dispatches Accelerate `cblas_sgemm`. **Out of envelope is gated,
+  never silently dispatched:** f16/bf16 matmul is rejected by the Graph IR
+  target-capability verifier; dynamic/non-rank-2 matmul reaches the value
+  lowering as a raw `tessera.matmul` (not the vetted tile op) and fails with a
+  named diagnostic; batched matmul (`tessera.batched_gemm`) is not in the
+  envelope.
 - **The front door is environment-free (Sprint 4).** `apple_target_ir_mode =
   "value"` runs the `-full` pipeline via `driver._resolve_tessera_opt()`, whose
   precedence is `TESSERA_OPT` → `PATH` → the in-repo
@@ -112,12 +125,14 @@ classified + gated**.
     `cholesky`/`tri_solve` lower to `gpu.kernel_call` and are classified as the
     value lane, but `launch` returns a structured non-success (no fabricated
     output). GPU value-call execution waits on a GPU value-call ABI adapter.
-  - **Non-linalg value calls are not value-executable.** `matmul`, `softmax`,
-    `gelu`, `conv2d` keep their default artifact/runtime path; requesting value
-    mode for them never yields an executable `cpu.call` — the `-full` pipeline
-    either declines (no value op) or fails with a recorded
-    `apple_value_target_ir_error`. They are **not advertised as
-    value-executable** in this sprint.
+  - **Other non-linalg value calls are not value-executable.** `softmax`,
+    `gelu`, `conv2d`, batched matmul, and non-fp32 matmul keep their default
+    artifact/runtime path; requesting value mode for them never yields an
+    executable `cpu.call` — the `-full` pipeline either declines (no value op)
+    or fails with a recorded `apple_value_target_ir_error` (or, for non-fp32
+    matmul, the Graph IR verifier rejects it earlier). They are **not advertised
+    as value-executable** in this sprint. (Sprint 5 promoted only fp32 rank-2
+    matmul/gemm out of this set.)
   - Multi-op programs, multi-symbol CPU value calls beyond the allowlist, GPU
     `kernel_call`, and `package_call` raise `invalid_artifact` (named
     follow-ons), so the runtime reports a clear reason instead of falling back.

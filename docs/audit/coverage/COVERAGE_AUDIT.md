@@ -44,15 +44,20 @@ material.
   Phase-G/H/I gate (each entry needs *all* declared targets to ship real
   kernels; gated on NVIDIA/ROCm/Metalium hardware). Live open/complete counts:
   [`generated/s_series_status.md`](../generated/s_series_status.md).
-- **Long-tail transform axes** — partially closed (2026-06-02).
+- **Long-tail transform axes** — `batching_rule` and `transpose_rule` are now
+  closed; `sharding_rule` is the remaining increment (2026-06-02).
   `batching_rule` closed for the textbook-batchable families (collective /
   recurrent / state_space / linalg decomposition+solver / sparse /
-  segment_reduce) — the remaining open entries are the genuinely mesh-aware
-  ones (moe / moe_transport / kv-cache state). `transpose_rule` and
-  `sharding_rule` are the remaining increments (transpose closes mostly via
-  `not_applicable` for non-linear families + `complete` for the linear ones;
-  sharding is largely Phase-G-mesh-pending). Live open counts + per-category
-  breakdown: [`generated/s_series_status.md`](../generated/s_series_status.md).
+  segment_reduce) — only the genuinely mesh-aware ones (moe / moe_transport /
+  kv-cache state) stay partial. `transpose_rule` closed to **zero open** on the
+  linear-vs-nonlinear principle: linear maps (sparse spmm/sddmm/bsmm,
+  moe_transport gather/scatter adjoints, segment_reduce, tri_solve, avg_pool)
+  are `complete`; nonlinear families (optimizers, recurrent cells, linalg
+  decomposition, ebm energy/sampling, moe routing, max/min/adaptive pool) are
+  `not_applicable` (their backward is the registered VJP, not a linear
+  transpose). `sharding_rule` remains largely Phase-G-mesh-pending. Live open
+  counts + per-category breakdown:
+  [`generated/s_series_status.md`](../generated/s_series_status.md).
 - **Hardware-gated tests** remain for a small set of EBM/manifold Langevin ops
   — see the `hardware_gated` row in
   [`generated/test_coverage_classification.md`](../generated/test_coverage_classification.md).

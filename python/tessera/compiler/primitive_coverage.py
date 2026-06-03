@@ -1126,9 +1126,20 @@ _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
     # two families use the same STE convention.
     "quantize":            "complete",
     "quantization":        "complete",
-    "moe":                 "partial",
-    "moe_transport":       "partial",
-    "recurrent":           "partial",
+    # moe (transpose, 2026-06-02): top-level MoE routing is nonlinear
+    # (top-k gating + softmax weighting) — a linear-transpose rule applies
+    # only to linear maps, so the backward is the registered VJP, not a
+    # transpose dual.  N/A.
+    "moe":                 "not_applicable",
+    # moe_transport (transpose, 2026-06-02): dispatch (scatter tokens to
+    # experts) and combine (gather them back) are *linear* gather/scatter
+    # maps and are exact transposes of each other — dispatch^T = combine,
+    # combine^T = dispatch.  The adjoint is well-defined.  complete.
+    "moe_transport":       "complete",
+    # recurrent (transpose, 2026-06-02): GRU/RNN/bidirectional cells are
+    # nonlinear (sigmoid/tanh gates) — no linear-transpose rule; the
+    # backward is the registered VJP (BPTT).  N/A.
+    "recurrent":           "not_applicable",
     # stencil (Sprint #4, 2026-05-22): promoted to complete.
     # transpose-conv (a.k.a. "deconv" / "fractional-stride conv") is
     # the documented linear-transpose dual of a stencil; the shape
@@ -1136,7 +1147,13 @@ _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
     # stencil primitive (depthwise_conv1d/2d, neighbors stencil.apply,
     # halo.exchange) has a documented transpose-conv counterpart.
     "stencil":             "complete",
-    "pooling":             "partial",    # max-pool transpose = unpool-with-indices
+    # pooling (transpose, 2026-06-02): max/min/adaptive pool are nonlinear
+    # (they select an argmax/argmin element), so the category default is
+    # N/A — their backward is the registered VJP (unpool-with-indices),
+    # not a linear transpose.  avg_pool is genuinely linear and is
+    # overridden to `complete` per-name in `_apply_per_name_overrides`
+    # (avg_pool^T = uniform upsample / window-size).
+    "pooling":             "not_applicable",
     # tensor_algebra (Sprint #1, 2026-05-22): promoted to complete.
     # Reshape, permute, broadcast, cat, stack, etc. are all linear in
     # their input; the transpose dual is mechanical (reshape^T =
@@ -1158,7 +1175,10 @@ _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
     # produces integer indices ⇒ not differentiable, but the registry
     # classifies it as such elsewhere.  9 entries.
     "indexing":            "complete",
-    "segment_reduce":      "partial",
+    # segment_reduce (transpose, 2026-06-02): a sum-segmented gather is
+    # linear in its data input; its transpose is the segment-broadcast
+    # (scatter the cotangent back to each segment member).  complete.
+    "segment_reduce":      "complete",
     # control_flow (Sprint #5, 2026-05-22): promoted to complete.
     # The transpose-of-scan / transpose-of-while-loop / transpose-of-
     # cond contracts are documented in tessera.autodiff and match the
@@ -1174,11 +1194,25 @@ _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
     # clip_grad_norm^T applies the same scale factor backward).
     # 7 entries.
     "grad_transform":      "complete",
-    "linalg_solver":       "partial",
-    "linalg_decomposition":"partial",
-    "sparse":              "partial",
-    "functional_optimizer_step": "partial",
-    "optimizer":           "partial",
+    # linalg_solver (transpose, 2026-06-02): tri_solve(A, b) is linear in
+    # the RHS b; its transpose wrt b is a triangular solve against A^T
+    # (the canonical adjoint of a linear solve).  complete.
+    "linalg_solver":       "complete",
+    # linalg_decomposition (transpose, 2026-06-02): cholesky/qr/svd are
+    # nonlinear matrix factorizations — no linear-transpose rule; the
+    # backward is the registered (structured) VJP.  N/A.
+    "linalg_decomposition":"not_applicable",
+    # sparse (transpose, 2026-06-02): spmm_coo/spmm_csr/bsmm are linear in
+    # their dense operand (transpose = spmm against the transposed sparse
+    # operand); sddmm is bilinear ⇒ linear in each dense operand
+    # separately, so the per-operand transpose is well-defined.  complete.
+    "sparse":              "complete",
+    # functional_optimizer_step / optimizer (transpose, 2026-06-02): an
+    # optimizer update (adam/adamw/sgd/momentum/lion/adafactor/lamb/muon/
+    # nesterov) is a nonlinear stateful map over (params, grads, slots) —
+    # no linear-transpose rule; backward is the registered VJP.  N/A.
+    "functional_optimizer_step": "not_applicable",
+    "optimizer":           "not_applicable",
     # — Not applicable: non-differentiable / state-effect / integer-only —
     "comparison":          "not_applicable",  # boolean output
     "logical":             "not_applicable",
@@ -1199,8 +1233,7 @@ _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
     # — GA + EBM (Decision #25, 2026-05-17): Clifford ops are linear
     #   in their multivector operands ⇒ transpose-rule is well-defined
     #   per the algebra's reverse anti-automorphism (see GA6 planning
-    #   doc).  EBM primitives are mostly affine in y / grad ⇒ trivially
-    #   transposable, except for argmin self_verify (non-linear).
+    #   doc).  EBM primitives are nonlinear energy-based maps (see below).
     #
     # geometric_algebra (Sprint #8, 2026-05-22): promoted to complete.
     # Every Clifford-product op (geometric_product, wedge, inner,
@@ -1210,8 +1243,14 @@ _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
     # the algebra's reverse anti-automorphism: ``(a*b)~ = b~ * a~``.
     # 17 GA primitives covered.
     "geometric_algebra":   "complete",
-    "ebm":                 "partial",   # argmin/argmax break linearity
-                                         # for self_verify; others linear
+    # ebm (transpose, 2026-06-02): EBM primitives are nonlinear
+    # energy-based maps — the energy field, the logsumexp partition
+    # (ais/exact/monte_carlo), the argmin self_verify, and the
+    # manifold-constrained Langevin samplers/steps all differentiate
+    # through the (nonlinear) energy gradient.  A linear-transpose rule
+    # applies only to linear maps; the EBM backward is the registered
+    # VJP, so transpose is N/A.
+    "ebm":                 "not_applicable",
 
     # — M7 Visual Complex Analysis (E3, 2026-05-20): Wirtinger
     #   derivatives give a complete VJP/JVP closure for holomorphic
@@ -1922,6 +1961,15 @@ def _apply_per_name_overrides(contract: dict[str, str], name: str) -> None:
             contract["vjp"] = "not_applicable"
         if contract.get("jvp") == "planned":
             contract["jvp"] = "not_applicable"
+    # avg_pool (transpose, 2026-06-02): the `pooling` category default is
+    # `not_applicable` because max/min/adaptive pool are nonlinear, but
+    # avg_pool is genuinely linear in its input — its transpose is a
+    # uniform upsample divided by the window size.  Override to complete.
+    if name == "avg_pool" and contract.get("transpose_rule") in {
+        "partial",
+        "not_applicable",
+    }:
+        contract["transpose_rule"] = "complete"
 
 
 def _apply_effect_overrides(

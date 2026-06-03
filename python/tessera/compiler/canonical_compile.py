@@ -222,27 +222,41 @@ class CompileResult:
                         meta["apple_previous_compiler_path"] = meta.get(
                             "compiler_path", "")
                         meta["compiler_path"] = "apple_value_target_ir"
-                        # Sprint 3 (S3-4): the value lane's executability is
-                        # decided by the value-call status + the runtime
-                        # allowlist (proven by the value executor), not the
-                        # generic op-on-target gate. Mark the artifact launchable
-                        # when an executable CPU cpu.call is present.
-                        if any(c.get("op") == "tessera_apple.cpu.call"
-                               and c.get("status") == "executable"
-                               for c in _calls):
-                            meta["executable"] = True
-                        # Sprint 8: the GPU value lane executes a narrow set —
-                        # an executable tessera_apple.gpu.kernel_call with
-                        # op_kind "batched_gemm" (the (apple_gpu,
-                        # apple_value_target_ir) matrix row dispatches it). Other
-                        # GPU value calls (other op_kinds, package_call) stay
-                        # gated.
-                        if self.target == "apple_gpu" and any(
-                                c.get("op") == "tessera_apple.gpu.kernel_call"
-                                and c.get("status") == "executable"
-                                and c.get("op_kind") == "batched_gemm"
-                                for c in _calls):
-                            meta["executable"] = True
+                        # Sprint 8 review (P2): EXACT executability. The value
+                        # executors accept exactly ONE supported value call, so
+                        # `executable` must be True only when the *whole* value
+                        # program is that single supported call — never "any
+                        # call is executable", which would overclaim a multi-op
+                        # program the executor then rejects as invalid_artifact.
+                        # Supported = (target lane) × (op shape) × (status) ×
+                        # (symbol on the runtime allowlist).
+                        try:
+                            from tessera import runtime as _rt
+                            _cpu_syms = _rt._APPLE_VALUE_CPU_SYMBOLS
+                            _gpu_syms = _rt._APPLE_VALUE_GPU_SYMBOLS
+                        except Exception:
+                            _cpu_syms = frozenset()
+                            _gpu_syms = frozenset()
+                        _exec_ok = False
+                        if len(_calls) == 1:
+                            _c0 = _calls[0]
+                            _sym = _c0.get("symbol")
+                            _ok = _c0.get("status") == "executable"
+                            if (self.target == "apple_cpu" and _ok
+                                    and _c0.get("op") == "tessera_apple.cpu.call"
+                                    and _sym in _cpu_syms):
+                                _exec_ok = True
+                            elif (self.target == "apple_gpu" and _ok
+                                    and _c0.get("op") == "tessera_apple.gpu.kernel_call"
+                                    and _c0.get("op_kind") == "batched_gemm"
+                                    and _sym in _gpu_syms):
+                                _exec_ok = True
+                        # The value lane OWNS the executable decision for this
+                        # artifact (override the bundle/canonical answer): a
+                        # value artifact is launchable iff its single value call
+                        # is on the runtime allowlist. Multi-op, off-allowlist,
+                        # and non-batched GPU calls are decisively NOT executable.
+                        meta["executable"] = _exec_ok
             except Exception:
                 # Classification is metadata-only; never block artifact creation.
                 pass

@@ -275,9 +275,13 @@ def test_launch_executes_cholesky_by_ir_named_symbol():
                                rtol=1e-4, atol=1e-4)
 
 
-def test_gpu_value_call_is_gated_not_executed():
-    """An apple_gpu value-target artifact is classified but NOT dispatched —
-    launch returns a structured non-success, never a silent fallback."""
+def test_gpu_non_batched_value_call_is_gated_not_executed():
+    """A *non-batched* apple_gpu value call (here a GPU cholesky kernel_call) is
+    classified but NOT dispatched — launch returns a structured non-success,
+    never a silent fallback. NOTE: Sprint 8 made GPU rank-3 *batched_gemm*
+    kernel_calls executable (see TestSprint8 / test_gpu_batched_value_*); the GPU
+    value executor only accepts op_kind == "batched_gemm", so every other GPU
+    kernel_call op_kind (cholesky/tri_solve/…) stays gated."""
     from tessera.runtime import RuntimeArtifact, launch
     art = RuntimeArtifact(metadata={
         "target": "apple_gpu",
@@ -1516,3 +1520,71 @@ def test_gpu_value_repeated_launch_no_unbounded_growth():
     if size_fn is not None:
         # Same shape/dtype repeated → cache holds a bounded number of graphs.
         assert size_fn() < 64
+
+
+# ── Sprint 8 review (P2): exact executability for value artifacts ────────────
+
+def _inject_value_ir(target, value_ir):
+    """Compile a trivial module for `target`, then replace its target IR with
+    `value_ir` and return the resulting runtime metadata (exercises the front
+    door's value-call classifier + exactness logic)."""
+    import dataclasses
+    from tessera.compiler.canonical_compile import canonical_compile
+    from tessera.compiler.driver import LoweringArtifact
+    from tessera.compiler.graph_ir import (
+        GraphIRFunction, GraphIRModule, IRArg, IROp, IRType,
+    )
+    t = IRType("tensor<3x3xf32>", ("3", "3"), "fp32")
+    fn = GraphIRFunction(
+        name="f", args=[IRArg("a", t)], result_types=[t],
+        body=[IROp(result="c", op_name="tessera.cholesky", operands=["%a"],
+                   operand_types=["tensor<3x3xf32>"], result_type="tensor<3x3xf32>")],
+        return_values=["%c"])
+    res = canonical_compile(GraphIRModule(functions=[fn]), target=target)
+    bundle = dataclasses.replace(res.bundle, target_ir=LoweringArtifact("target", value_ir))
+    return dataclasses.replace(res, bundle=bundle).to_runtime_artifact().metadata
+
+
+def test_multi_op_cpu_value_program_is_not_marked_executable():
+    """A 2-call CPU value program is NOT executable=True — the executor accepts
+    exactly one call, so marking it executable would overclaim (it would then
+    fail as invalid_artifact at launch). Exact classifier, P2."""
+    two = (
+        "module {\n  func.func @f(%a: tensor<3x3xf32>) -> tensor<3x3xf32> {\n"
+        '    %0 = tessera_apple.cpu.call %a {op_kind = "cholesky", '
+        'symbol = "tessera_apple_cpu_cholesky_f32", status = "executable"} '
+        ": (tensor<3x3xf32>) -> tensor<3x3xf32>\n"
+        '    %1 = tessera_apple.cpu.call %0 {op_kind = "cholesky", '
+        'symbol = "tessera_apple_cpu_cholesky_f32", status = "executable"} '
+        ": (tensor<3x3xf32>) -> tensor<3x3xf32>\n"
+        "    return %1 : tensor<3x3xf32>\n  }\n}\n")
+    meta = _inject_value_ir("apple_cpu", two)
+    assert meta["apple_target_ir_kind"] == "value_target_ir"
+    assert len(meta.get("apple_value_calls") or []) == 2
+    assert meta.get("executable") is not True  # not overclaimed
+
+
+def test_single_supported_cpu_value_program_is_executable():
+    """Sanity: the single-call supported case stays executable=True (the exact
+    classifier must not regress the real path)."""
+    one = (
+        "module {\n  func.func @f(%a: tensor<3x3xf32>) -> tensor<3x3xf32> {\n"
+        '    %0 = tessera_apple.cpu.call %a {op_kind = "cholesky", '
+        'symbol = "tessera_apple_cpu_cholesky_f32", status = "executable"} '
+        ": (tensor<3x3xf32>) -> tensor<3x3xf32>\n"
+        "    return %0 : tensor<3x3xf32>\n  }\n}\n")
+    meta = _inject_value_ir("apple_cpu", one)
+    assert meta["executable"] is True
+
+
+def test_off_allowlist_symbol_is_not_marked_executable():
+    """A single value call naming an unknown symbol is NOT executable=True even
+    with status 'executable' — executability requires the runtime allowlist."""
+    bogus = (
+        "module {\n  func.func @f(%a: tensor<3x3xf32>) -> tensor<3x3xf32> {\n"
+        '    %0 = tessera_apple.cpu.call %a {op_kind = "mystery", '
+        'symbol = "tessera_apple_cpu_not_a_real_symbol", status = "executable"} '
+        ": (tensor<3x3xf32>) -> tensor<3x3xf32>\n"
+        "    return %0 : tensor<3x3xf32>\n  }\n}\n")
+    meta = _inject_value_ir("apple_cpu", bogus)
+    assert meta.get("executable") is not True

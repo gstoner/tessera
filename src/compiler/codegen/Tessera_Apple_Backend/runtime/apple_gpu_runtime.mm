@@ -14086,8 +14086,18 @@ extern "C" void tessera_apple_gpu_bmm_f16(const uint16_t *A, const uint16_t *B,
   if (ctx.ok && mpsg_run_bmm(ctx, A, B, O, batch, M, N, K, b_broadcast != 0,
                              MPSDataTypeFloat16, 2))
     return;
-  // No host-side half GEMM here; runtime.py upcasts to f32 on the fallback.
-  std::memset(O, 0, (size_t)batch * M * N * 2);
+  // Sprint 8 fix (P1): if the MPSGraph f16 path is unavailable, compute a real
+  // host-side fallback (f16 -> f32 -> bmm -> f16) instead of zero-filling. The
+  // f16 bmm symbol is advertised executable on the value lane, so it must never
+  // return zeros: an executable symbol always produces the real product.
+  std::size_t aN = (std::size_t)batch * M * K;
+  std::size_t bN = (std::size_t)(b_broadcast ? 1 : batch) * K * N;
+  std::size_t oN = (std::size_t)batch * M * N;
+  std::vector<float> Af(aN), Bf(bN), Of(oN);
+  for (std::size_t i = 0; i < aN; ++i) Af[i] = half_to_float_gpu(A[i]);
+  for (std::size_t i = 0; i < bN; ++i) Bf[i] = half_to_float_gpu(B[i]);
+  reference_bmm_f32(Af.data(), Bf.data(), Of.data(), batch, M, N, K, b_broadcast);
+  for (std::size_t i = 0; i < oN; ++i) O[i] = float_to_half_gpu(Of[i]);
 }
 
 // Sprint 8: bf16 batched matmul. bf16 is not a native MPS matrix dtype, so the

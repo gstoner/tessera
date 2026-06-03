@@ -110,6 +110,22 @@ def test_bmm_symbols_exported():
     assert R._apple_gpu_bmm_bf16() is not None
 
 
+def test_bmm_f16_symbol_computes_not_zero_fill():
+    """Sprint 8 review (P1): the f16 bmm symbol is advertised executable on the
+    value lane, so it must ALWAYS compute the real product — never zero-fill on
+    the MPSGraph-unavailable fallback (the prior memset(0) bug). Drive the value
+    dispatch and check nonzero + fp32 oracle."""
+    rng = np.random.RandomState(5)
+    a = rng.randn(2, 4, 8).astype(np.float16)
+    b = rng.randn(2, 8, 16).astype(np.float16)
+    out = R._dispatch_gpu_batched_matmul(
+        [a, b], {"symbol": "tessera_apple_gpu_bmm_f16"}, np)
+    assert out.dtype == np.float16
+    assert np.any(out.astype(np.float32) != 0.0)  # not zero-filled
+    ref = a.astype(np.float32) @ b.astype(np.float32)
+    np.testing.assert_allclose(out.astype(np.float32), ref, rtol=5e-2, atol=5e-2)
+
+
 @pytest.mark.skipif(R._bfloat16_dtype() is None, reason="ml_dtypes unavailable")
 def test_bmm_bf16_symbol_computes_not_zero_fill():
     """Sprint 8: the bf16 bmm symbol must actually compute (upcast→f32→round),

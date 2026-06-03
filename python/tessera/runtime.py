@@ -1105,6 +1105,7 @@ def _executor_table():
         "apple_cpu_accelerate": _execute_apple_cpu_accelerate_artifact,
         "apple_gpu_mps":        _execute_apple_gpu_mps_artifact,
         "apple_value_target_ir": _execute_apple_value_target_ir_artifact,
+        "apple_gpu_value_target_ir": _execute_apple_value_target_ir_gpu_artifact,
         "native_cpu":           _execute_cpu_native_or_jit,
         "jit_cpu_numpy":        _execute_jit_cpu_artifact,
     }
@@ -2805,6 +2806,144 @@ def _apple_gpu_bmm_f16() -> Any:
     ]
     sym.restype = None
     return sym
+
+
+def _apple_gpu_bmm_bf16() -> Any:
+    """Sprint 8: bf16 batched matmul GPU symbol. Honest bf16 ABI (uint16
+    pointers); the runtime shim upcasts to f32 internally. May be absent on an
+    older runtime build."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_bmm_bf16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+# Apple GPU value-lane batched-matmul dispatch (Sprint 8). symbol -> (resolver,
+# numpy-dtype-kind). The key set is the GPU value allowlist.
+_APPLE_VALUE_GPU_DISPATCH: dict[str, tuple] = {
+    "tessera_apple_gpu_bmm_f32": (_apple_gpu_bmm_f32, "f32"),
+    "tessera_apple_gpu_bmm_f16": (_apple_gpu_bmm_f16, "f16"),
+    "tessera_apple_gpu_bmm_bf16": (_apple_gpu_bmm_bf16, "bf16"),
+}
+_APPLE_VALUE_GPU_SYMBOLS: frozenset[str] = frozenset(_APPLE_VALUE_GPU_DISPATCH)
+
+
+def _dispatch_gpu_batched_matmul(inputs, call, np):
+    """Sprint 8: strict rank-3 batched matmul on the Apple GPU value lane.
+
+    Validates exactly two rank-3 operands with matching batch + K (no
+    broadcasting), dispatches the symbol named in the value call, and preserves
+    the dtype-specific output (f32/f16/bf16). f16/bf16 use uint16 views at the
+    ctypes boundary; bf16 requires `ml_dtypes` (named error if missing, never a
+    silent fp32 substitution)."""
+    symbol = str(call.get("symbol", ""))
+    entry = _APPLE_VALUE_GPU_DISPATCH.get(symbol)
+    if entry is None:
+        raise ValueError(
+            f"apple_value_target_ir(gpu): symbol {symbol!r} is not in the GPU "
+            f"value allowlist {sorted(_APPLE_VALUE_GPU_SYMBOLS)}")
+    resolver, kind = entry
+    if kind == "f32":
+        npdt, half = np.float32, False
+    elif kind == "f16":
+        npdt, half = np.float16, True
+    else:  # bf16
+        npdt = _bfloat16_dtype()
+        if npdt is None:
+            raise ValueError(
+                "bf16 GPU value matmul requires the optional `ml_dtypes` "
+                "dependency (pip install ml_dtypes) — falling back to fp32 would "
+                "silently change the dtype contract")
+        half = True
+
+    a = np.ascontiguousarray(np.asarray(inputs[0], dtype=npdt))
+    b = np.ascontiguousarray(np.asarray(inputs[1], dtype=npdt))
+    if a.ndim != 3 or b.ndim != 3:
+        raise ValueError(
+            f"batched_gemm(gpu) requires rank-3 operands, got {a.ndim}-D / {b.ndim}-D")
+    batch, m, ka = int(a.shape[0]), int(a.shape[1]), int(a.shape[2])
+    bb, kb, n = int(b.shape[0]), int(b.shape[1]), int(b.shape[2])
+    if batch != bb:
+        raise ValueError(
+            f"batched_gemm(gpu) batch mismatch: A batch={batch}, B batch={bb} "
+            f"(no broadcasting on the value lane)")
+    if ka != kb:
+        raise ValueError(f"batched_gemm(gpu) contraction mismatch: A K={ka}, B K={kb}")
+    sym = resolver()
+    if sym is None:
+        raise ValueError(
+            f"apple_gpu runtime lacks {symbol} — rebuild TesseraAppleRuntime "
+            f"(the prebuilt dylib predates this GPU bmm symbol)")
+    out = np.empty((batch, m, n), dtype=npdt)
+    dims = (ctypes.c_int32(batch), ctypes.c_int32(m), ctypes.c_int32(n),
+            ctypes.c_int32(ka), ctypes.c_int32(0))  # b_broadcast=0 (exact batch)
+    if half:
+        def _u16(arr):
+            return arr.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+        sym(_u16(a), _u16(b), _u16(out), *dims)
+    else:
+        def _fp(arr):
+            return arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        sym(_fp(a), _fp(b), _fp(out), *dims)
+    return out
+
+
+def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", args: Any) -> Any:
+    """Execute an Apple GPU value-target-IR artifact (Sprint 8).
+
+    Scope: exactly one `tessera_apple.gpu.kernel_call` with
+    `op_kind == "batched_gemm"`, `status == "executable"`, and a symbol on the
+    GPU value allowlist (`tessera_apple_gpu_bmm_{f32,f16,bf16}`). Rejects
+    `cpu.call`, `package_call`, multi-op programs, unknown symbols, extra
+    operands, and non-executable statuses — so launch reports `invalid_artifact`
+    rather than silently mis-dispatching."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    calls = list(metadata.get("apple_value_calls") or [])
+    if not calls:
+        raise ValueError("apple_value_target_ir(gpu) artifact carries no apple_value_calls")
+    if len(calls) != 1:
+        raise ValueError(
+            f"apple_value_target_ir(gpu): only single value-call programs are "
+            f"executable (got {len(calls)}); multi-op is a named follow-on")
+    call = calls[0]
+    op = str(call.get("op", ""))
+    if op != "tessera_apple.gpu.kernel_call":
+        raise ValueError(
+            f"apple_value_target_ir(gpu): only tessera_apple.gpu.kernel_call is "
+            f"executable; '{op}' (cpu.call / package_call are gated)")
+    if call.get("status") != "executable":
+        raise ValueError(
+            f"apple_value_target_ir(gpu): value call status is "
+            f"{call.get('status')!r}, not 'executable'")
+    if str(call.get("op_kind")) != "batched_gemm":
+        raise ValueError(
+            f"apple_value_target_ir(gpu): only batched_gemm executes on the GPU "
+            f"value lane today (got op_kind={call.get('op_kind')!r})")
+
+    arg_names = list(metadata.get("arg_names") or [])
+    if arg_names:
+        bound = _bind_launch_args(args, arg_names)
+        inputs = [bound[name] for name in arg_names if name in bound]
+    elif isinstance(args, (list, tuple)):
+        inputs = list(args)
+    else:
+        inputs = [args]
+    if len(inputs) != 2:
+        raise ValueError(
+            f"apple_value_target_ir(gpu): batched_gemm value-call needs exactly "
+            f"2 input(s), got {len(inputs)}")
+    return _dispatch_gpu_batched_matmul(inputs, call, np)
 
 
 def _apple_gpu_dispatch_bmm(a: Any, b: Any, np: Any) -> Any:

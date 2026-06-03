@@ -1928,6 +1928,21 @@ extern "C" void tessera_apple_gpu_bmm_f16(const uint16_t* A, const uint16_t* B,
   tessera_apple_gpu_bmm_f32(Af.data(), Bf.data(), Of.data(), batch, M, N, K, b_broadcast);
   for (std::size_t i = 0; i < oN; ++i) O[i] = float_to_half_stub(Of[i]);
 }
+// Sprint 8: bf16 batched matmul non-Apple reference. Honest bf16 ABI — upcasts
+// to f32, computes the bmm, and rounds back to bf16 (NOT zero-fill, NOT an f32
+// alias). runtime.py trusts the symbol on every platform.
+extern "C" void tessera_apple_gpu_bmm_bf16(const uint16_t* A, const uint16_t* B,
+                                           uint16_t* O, int32_t batch, int32_t M,
+                                           int32_t N, int32_t K, int32_t b_broadcast) {
+  std::size_t aN = static_cast<std::size_t>(batch) * M * K;
+  std::size_t bN = static_cast<std::size_t>(b_broadcast ? 1 : batch) * K * N;
+  std::size_t oN = static_cast<std::size_t>(batch) * M * N;
+  std::vector<float> Af(aN), Bf(bN), Of(oN);
+  for (std::size_t i = 0; i < aN; ++i) Af[i] = bfloat16_to_float_stub(A[i]);
+  for (std::size_t i = 0; i < bN; ++i) Bf[i] = bfloat16_to_float_stub(B[i]);
+  tessera_apple_gpu_bmm_f32(Af.data(), Bf.data(), Of.data(), batch, M, N, K, b_broadcast);
+  for (std::size_t i = 0; i < oN; ++i) O[i] = float_to_bfloat16_stub(Of[i]);
+}
 // R1 device-resident bmm — non-Apple reference. The handles are host-memory
 // backed, so this is the same bmm into O->data.
 extern "C" int32_t tessera_apple_gpu_bmm_dev_f32(TsDeviceTensor* A,

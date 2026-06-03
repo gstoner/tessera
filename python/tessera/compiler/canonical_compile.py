@@ -226,13 +226,22 @@ class CompileResult:
                         # decided by the value-call status + the runtime
                         # allowlist (proven by the value executor), not the
                         # generic op-on-target gate. Mark the artifact launchable
-                        # when an executable cpu.call is present; the
-                        # (apple_gpu, apple_value_target_ir) matrix row stays
-                        # non-executable, so GPU value calls remain gated even
-                        # with this flag set.
+                        # when an executable CPU cpu.call is present.
                         if any(c.get("op") == "tessera_apple.cpu.call"
                                and c.get("status") == "executable"
                                for c in _calls):
+                            meta["executable"] = True
+                        # Sprint 8: the GPU value lane executes a narrow set —
+                        # an executable tessera_apple.gpu.kernel_call with
+                        # op_kind "batched_gemm" (the (apple_gpu,
+                        # apple_value_target_ir) matrix row dispatches it). Other
+                        # GPU value calls (other op_kinds, package_call) stay
+                        # gated.
+                        if self.target == "apple_gpu" and any(
+                                c.get("op") == "tessera_apple.gpu.kernel_call"
+                                and c.get("status") == "executable"
+                                and c.get("op_kind") == "batched_gemm"
+                                for c in _calls):
                             meta["executable"] = True
             except Exception:
                 # Classification is metadata-only; never block artifact creation.

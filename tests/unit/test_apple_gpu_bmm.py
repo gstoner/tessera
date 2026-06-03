@@ -103,8 +103,29 @@ def test_bmm_symbols_exported():
     rt = R._load_apple_gpu_runtime()
     assert hasattr(rt, "tessera_apple_gpu_bmm_f32")
     assert hasattr(rt, "tessera_apple_gpu_bmm_f16")
+    # Sprint 8: bf16 bmm symbol (honest bf16 ABI, uint16 boundary).
+    assert hasattr(rt, "tessera_apple_gpu_bmm_bf16")
     assert R._apple_gpu_bmm_f32() is not None
     assert R._apple_gpu_bmm_f16() is not None
+    assert R._apple_gpu_bmm_bf16() is not None
+
+
+@pytest.mark.skipif(R._bfloat16_dtype() is None, reason="ml_dtypes unavailable")
+def test_bmm_bf16_symbol_computes_not_zero_fill():
+    """Sprint 8: the bf16 bmm symbol must actually compute (upcast→f32→round),
+    not zero-fill. Drive the C ABI directly via the value dispatch and check
+    against the fp32 oracle."""
+    import ctypes
+    bf16 = R._bfloat16_dtype()
+    rng = np.random.RandomState(3)
+    a = rng.randn(2, 4, 8).astype(bf16)
+    b = rng.randn(2, 8, 16).astype(bf16)
+    out = R._dispatch_gpu_batched_matmul(
+        [a, b], {"symbol": "tessera_apple_gpu_bmm_bf16"}, np)
+    assert out.dtype == bf16
+    assert np.any(out.astype(np.float32) != 0.0)  # not zero-filled
+    ref = a.astype(np.float32) @ b.astype(np.float32)
+    np.testing.assert_allclose(out.astype(np.float32), ref, rtol=5e-2, atol=5e-2)
 
 
 # ── on-device dispatch gate via @jit ────────────────────────────────────────

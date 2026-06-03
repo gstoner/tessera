@@ -286,6 +286,16 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
                 canonical_op("tessera.matmul"), "ready",
                 dtypes=("fp32", "f32", "fp16", "bf16"),
                 reason="CPU reference matmul executes f32/f16/bf16"),
+            # Sprint 8 (2026-06-03): batched_gemm dtype tuple widened so f16/bf16
+            # rank-3 batched matmul passes the target-agnostic Graph IR verifier
+            # (which consults the `cpu` capability). The CPU value lane still
+            # gates non-f32 batched in TileToApple; the GPU value lane executes
+            # f16/bf16 batched via the bmm symbols.
+            canonical_op("tessera.batched_gemm"): OpCapability(
+                canonical_op("tessera.batched_gemm"), "ready",
+                dtypes=("fp32", "f32", "fp16", "bf16"),
+                reason="CPU reference batched matmul executes f32/f16/bf16; "
+                       "CPU value lane is fp32-only, GPU value lane f32/f16/bf16"),
         },
         supported_dtypes=("fp32", "f32", "fp16", "bf16"),
         features=("reference_execution", "host_runtime"),

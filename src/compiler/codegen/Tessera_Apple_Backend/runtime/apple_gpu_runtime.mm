@@ -14090,6 +14090,25 @@ extern "C" void tessera_apple_gpu_bmm_f16(const uint16_t *A, const uint16_t *B,
   std::memset(O, 0, (size_t)batch * M * N * 2);
 }
 
+// Sprint 8: bf16 batched matmul. bf16 is not a native MPS matrix dtype, so the
+// boundary keeps the bf16 ABI (uint16) but upcasts to f32, runs the f32 MPSGraph
+// bmm, and rounds back to bf16 — an honest bf16 ABI symbol (NOT an alias of the
+// f32 symbol). This mirrors the bf16 GEMM conversion path elsewhere in the shim.
+extern "C" void tessera_apple_gpu_bmm_bf16(const uint16_t *A, const uint16_t *B,
+                                           uint16_t *O, int32_t batch, int32_t M,
+                                           int32_t N, int32_t K,
+                                           int32_t b_broadcast) {
+  std::size_t aN = (std::size_t)batch * M * K;
+  std::size_t bN = (std::size_t)(b_broadcast ? 1 : batch) * K * N;
+  std::size_t oN = (std::size_t)batch * M * N;
+  std::vector<float> Af(aN), Bf(bN), Of(oN);
+  for (std::size_t i = 0; i < aN; ++i) Af[i] = bfloat16_to_float_gpu(A[i]);
+  for (std::size_t i = 0; i < bN; ++i) Bf[i] = bfloat16_to_float_gpu(B[i]);
+  tessera_apple_gpu_bmm_f32(Af.data(), Bf.data(), Of.data(), batch, M, N, K,
+                            b_broadcast);
+  for (std::size_t i = 0; i < oN; ++i) O[i] = float_to_bfloat16_gpu(Of[i]);
+}
+
 //===----------------------------------------------------------------------===//
 // Tier-3 MPSGraph reduction lane (2026-05-29)
 //

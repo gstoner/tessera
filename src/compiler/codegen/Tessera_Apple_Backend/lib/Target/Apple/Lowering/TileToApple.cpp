@@ -425,18 +425,26 @@ struct LowerTileToAppleCPUPass
           ++ordinal;
           continue;
         }
-        // Sprint 6: static rank-3 f32 batched matmul → Accelerate batched GEMM
-        // value call. Only the vetted tile op (emitted by TilingPass's
-        // TileBatchedMatmulValue for the strict static rank-3 f32 envelope)
-        // reaches here; a raw tessera.batched_gemm that survives the tiling
-        // pass (out of envelope) falls through to the named diagnostic.
+        // Sprint 6: static rank-3 *f32* batched matmul → Accelerate batched GEMM
+        // value call. CPU batched is fp32-only (no batched f16/bf16 on CPU yet —
+        // Sprint 8 wired batched f16/bf16 on the GPU lane only). TileMatmulValue
+        // may now produce an f16/bf16 tile.batched_gemm (shared with the GPU
+        // pipeline), so gate non-f32 here → it falls to the named diagnostic.
         if (name == "tile.batched_gemm") {
-          emitAppleValueCall(builder, op, "tessera_apple.cpu.call",
-                             "batched_gemm", "tessera_apple_cpu_gemm_f32_batched",
-                             "cblas_sgemm_batched_loop", "executable",
-                             "Accelerate");
-          ++ordinal;
-          continue;
+          bool isF32Batched = true;
+          if (auto rt = llvm::dyn_cast<RankedTensorType>(
+                  op->getResult(0).getType()))
+            isF32Batched = rt.getElementType().isF32();
+          if (isF32Batched) {
+            emitAppleValueCall(builder, op, "tessera_apple.cpu.call",
+                               "batched_gemm",
+                               "tessera_apple_cpu_gemm_f32_batched",
+                               "cblas_sgemm_batched_loop", "executable",
+                               "Accelerate");
+            ++ordinal;
+            continue;
+          }
+          // non-f32 batched on CPU → gated (fall through to diagnostic).
         }
         op->emitError("apple_cpu value lowering: no value-producing CPU "
                       "target op for '")
@@ -569,27 +577,47 @@ struct LowerTileToAppleGPUPass
         const LinalgSpec *sp = linalgSpecFor(name);
         if (!sp)
           sp = linalgSpecFor(src);
-        if (!sp) {
-          op->emitError("apple_gpu value lowering: no value-producing GPU "
-                        "target op for '")
-              << src << "'";
-          signalPassFailure();
-          return;
+        if (sp) {
+          if (sp->gpuSymbol.empty() || !isAppleGpuRuntimeOp(sp->graphName)) {
+            op->emitError("apple_gpu value lowering: '")
+                << sp->graphName
+                << "' has no executable GPU dispatch yet (artifact-only); use "
+                   "the artifact pipeline (tessera-lower-to-apple_gpu) instead";
+            signalPassFailure();
+            return;
+          }
+          llvm::StringRef opKind = sp->graphName;
+          opKind.consume_front("tessera.");
+          emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call",
+                             opKind, sp->gpuSymbol, "msl", "executable", "Metal");
+          ++ordinal;
+          continue;
         }
-        if (sp->gpuSymbol.empty() || !isAppleGpuRuntimeOp(sp->graphName)) {
-          op->emitError("apple_gpu value lowering: '")
-              << sp->graphName
-              << "' has no executable GPU dispatch yet (artifact-only); use "
-                 "the artifact pipeline (tessera-lower-to-apple_gpu) instead";
-          signalPassFailure();
-          return;
+        // Sprint 8: static rank-3 batched matmul executes on the GPU value lane
+        // for f32/f16/bf16 via the MPSGraph-backed bmm symbols. Only the vetted
+        // tile op (TileBatchedMatmulValue, strict static rank-3 envelope)
+        // reaches here; the dtype-specific symbol is read from the result type.
+        if (name == "tile.batched_gemm") {
+          llvm::StringRef symbol = "tessera_apple_gpu_bmm_f32";
+          if (auto rt = llvm::dyn_cast<RankedTensorType>(
+                  op->getResult(0).getType())) {
+            Type et = rt.getElementType();
+            if (et.isF16())
+              symbol = "tessera_apple_gpu_bmm_f16";
+            else if (et.isBF16())
+              symbol = "tessera_apple_gpu_bmm_bf16";
+          }
+          emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call",
+                             "batched_gemm", symbol, "mps", "executable",
+                             "Metal");
+          ++ordinal;
+          continue;
         }
-        llvm::StringRef opKind = sp->graphName;
-        opKind.consume_front("tessera.");
-        emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call", opKind,
-                           sp->gpuSymbol, "msl", "executable", "Metal");
-        ++ordinal;
-        continue;
+        op->emitError("apple_gpu value lowering: no value-producing GPU "
+                      "target op for '")
+            << src << "'";
+        signalPassFailure();
+        return;
       }
 
       // G3 — execution status MUST mirror the Python runtime envelope

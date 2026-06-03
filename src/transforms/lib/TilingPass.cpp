@@ -341,8 +341,16 @@ struct TileBatchedMatmulValue : public RewritePattern {
     if (!lhsTy.hasStaticShape() || !rhsTy.hasStaticShape() ||
         !resTy.hasStaticShape())
       return failure();
-    if (!lhsTy.getElementType().isF32() || !rhsTy.getElementType().isF32() ||
-        !resTy.getElementType().isF32())
+    // Sprint 8: batched value matmul covers f32 (CPU) + f16/bf16 (GPU). Require
+    // a single shared float element type; the CPU vs GPU TileToApple value
+    // blocks decide which dtypes are executable on each backend (CPU gates
+    // non-f32 batched; GPU accepts f32/f16/bf16).
+    Type belemTy = resTy.getElementType();
+    auto isBatchedElem = [](Type t) {
+      return t.isF32() || t.isF16() || t.isBF16();
+    };
+    if (!isBatchedElem(belemTy) ||
+        lhsTy.getElementType() != belemTy || rhsTy.getElementType() != belemTy)
       return failure();
     // batch, K, M, N consistency — no broadcasting (batch must match exactly).
     if (lhsTy.getDimSize(0) != rhsTy.getDimSize(0) ||

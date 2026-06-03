@@ -2,7 +2,7 @@
 status: Normative
 classification: Backend contract
 audience: backend authors (Apple proven; NVIDIA / ROCm inherit)
-last_updated: 2026-06-03 (Apple Value Target IR sprint 7 — CPU rank-2 f16/bf16 matmul value lane)
+last_updated: 2026-06-03 (Apple Value Target IR sprint 8 — Apple GPU value execution: rank-3 batched matmul f32/f16/bf16)
 ---
 
 # Value Target IR Contract
@@ -80,17 +80,19 @@ pipelines pass `valueMode=true`); a backend may instead use distinct passes.
   matching top-level `}` while skipping braces inside quoted strings — so an
   `argument_layout` whose value is a JSON object survives intact).
 
-### What "runtime dispatches" means today (Sprints 2–7)
+### What "runtime dispatches" means today (Sprints 2–8)
 
 This is a **narrow, honest** executable path, not a blanket claim. The boundary
 is **CPU linalg + CPU rank-2 matmul (f32/f16/bf16) + CPU fp32 rank-3 batched
-matmul = executable; GPU value calls and all other non-linalg value calls =
-classified + gated**.
+matmul + Apple GPU rank-3 batched matmul (f32/f16/bf16) = executable; all other
+GPU value calls and non-linalg value calls = classified + gated**.
 
-The executable value-dispatch allowlist (locked by
-`test_value_envelope_executable_allowlist_exact`) is exactly: the six CPU linalg
-symbols, `tessera_apple_cpu_gemm_f32` (rank-2 matmul), `…_gemm_f32_batched`
-(rank-3 batched), and `…_gemm_f16` / `…_gemm_bf16` (Sprint 7 rank-2 matmul).
+Two executor allowlists, one per backend lane:
+- **CPU** (`test_value_envelope_executable_allowlist_exact`): the six CPU linalg
+  symbols, `tessera_apple_cpu_gemm_f32` (rank-2 matmul), `…_gemm_f32_batched`
+  (rank-3 batched), and `…_gemm_f16` / `…_gemm_bf16` (rank-2 matmul).
+- **GPU** (`test_gpu_value_executor_allowlist_exact`):
+  `tessera_apple_gpu_bmm_{f32,f16,bf16}` (rank-3 batched matmul, Sprint 8).
 
 - **The full Apple CPU linalg family is executable now (Sprint 3).** The matrix
   row `(apple_cpu, apple_value_target_ir)` resolves to the
@@ -168,20 +170,38 @@ symbols, `tessera_apple_cpu_gemm_f32` (rank-2 matmul), `…_gemm_f32_batched`
   setup. When the `-full` lowering can't run or fails, the front door keeps the
   artifact IR and records `apple_value_target_ir_error` — the failure is
   observable, never silent.
+- **Apple GPU rank-3 batched matmul is executable (Sprint 8).** The
+  `(apple_gpu, apple_value_target_ir)` row is now **executable** for one narrow,
+  honest lane: static rank-3 `tessera.batched_gemm` (f32/f16/bf16). The GPU
+  `-full` pipeline runs value-mode tiling, `TileBatchedMatmulValue` preserves the
+  strict static rank-3 envelope as a single `tile.batched_gemm`, and `TileToApple`
+  lowers it to a `tessera_apple.gpu.kernel_call` carrying the dtype-specific
+  symbol `tessera_apple_gpu_bmm_{f32,f16,bf16}` (MPSGraph bmm; `bf16` keeps an
+  honest bf16 ABI — uint16 boundary, internal f32 upcast — *not* an f32 alias).
+  The dedicated `apple_gpu_value_target_ir` executor accepts **exactly one**
+  `gpu.kernel_call` with `op_kind=="batched_gemm"`, `status=="executable"`, a
+  symbol on the GPU allowlist, and exactly two rank-3 operands with matching
+  batch + K (no broadcasting); everything else (`cpu.call`, `package_call`,
+  multi-op, off-allowlist, extra operands, non-executable status) is
+  `invalid_artifact`. Broadcast/rank-4 batched are verifier-rejected;
+  dynamic/non-shared-dtype reach the lowering as a raw op and fail with a named
+  diagnostic.
 - **Everything else is classified + gated, never silently dispatched:**
-  - The `(apple_gpu, apple_value_target_ir)` row is **non-executable** — GPU
-    `cholesky`/`tri_solve` lower to `gpu.kernel_call` and are classified as the
-    value lane, but `launch` returns a structured non-success (no fabricated
-    output). GPU value-call execution waits on a GPU value-call ABI adapter.
+  - Other GPU `gpu.kernel_call`s (`cholesky`/`tri_solve` linalg, rank-2 matmul)
+    and `gpu.package_call` are **non-executable** on the value lane — classified
+    + recorded, `launch` returns a structured non-success. GPU value execution
+    beyond batched matmul waits on a broader GPU value-call adapter.
   - **Other non-linalg value calls are not value-executable.** `softmax`,
-    `gelu`, `conv2d`, **batched f16/bf16 matmul**, transposed rank-2 matmul,
-    and dynamic/rank-4 matmul keep their default artifact/runtime path;
+    `gelu`, `conv2d`, transposed rank-2 matmul, **CPU** batched f16/bf16, and
+    dynamic/rank-4 matmul keep their default artifact/runtime path;
     requesting value mode for them never yields an executable `cpu.call` — the
     `-full` pipeline either declines (no value op) or fails with a recorded
     `apple_value_target_ir_error`. They are **not advertised as value-executable**.
-    (Sprint 5 promoted fp32 rank-2 `tessera.matmul`; Sprint 6 added fp32 rank-3
-    `tessera.batched_gemm`; Sprint 7 added f16/bf16 rank-2 `tessera.matmul` —
-    each only in its strict static envelope.) Transposed rank-2 matmul
+    (Sprint 5 promoted fp32 rank-2 `tessera.matmul`; Sprint 6 added CPU fp32
+    rank-3 `tessera.batched_gemm`; Sprint 7 added f16/bf16 rank-2
+    `tessera.matmul`; Sprint 8 added the Apple GPU rank-3 batched-matmul lane
+    (f32/f16/bf16) — each only in its strict static envelope.) Transposed rank-2
+    matmul
     (`transposeA`/`transposeB`) stays gated until the value ABI carries transpose
     attrs and the runtime honors them — it is *not* silently computed as the
     non-transposed product.

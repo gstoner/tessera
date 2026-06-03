@@ -106,7 +106,10 @@ mlir::PassPipelineRegistration<> gAppleGPUFullPipeline(
     [](mlir::OpPassManager &pm) {
       pm.addPass(tessera::createEffectAnnotationPass());
       pm.addPass(tessera::createDistributionLoweringPass());
-      pm.addPass(tessera::createTilingPass());
+      // Sprint 8: value-mode tiling preserves static rank-3 f32/f16/bf16
+      // batched matmul as a single tile.batched_gemm for the GPU bmm value call
+      // (rank-2 matmul → tile.matmul stays gated in the GPU value block).
+      pm.addPass(tessera::createTilingPass(/*valueMode=*/true));
       pm.addPass(tessera::apple::createLowerTileToAppleGPUPass(/*valueMode=*/true));
     });
 } // namespace

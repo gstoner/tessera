@@ -1189,19 +1189,21 @@ def test_non_f32_batched_is_gated():
                    and c.get("status") == "executable" for c in calls)
 
 
-def test_gpu_value_batched_is_gated_no_output():
-    """apple_gpu value batched matmul never becomes value-executable; launch
-    returns a structured non-success with no fabricated output."""
-    from tessera.runtime import launch
+# NOTE (Sprint 8): apple_gpu f32 rank-3 batched matmul is now EXECUTABLE on the
+# GPU value lane (see TestSprint8/test_gpu_batched_value_* above). It is NOT a
+# cpu.call — it routes to tessera_apple.gpu.kernel_call dispatched by the
+# apple_gpu_value_target_ir executor. The "gated" assertion below now only holds
+# for the *CPU* lane (GPU batched no longer hits a CPU value call).
+def test_gpu_value_batched_is_not_a_cpu_value_call():
+    """apple_gpu batched matmul never produces an executable CPU cpu.call — it
+    is a GPU kernel_call (Sprint 8). Guards against accidental CPU mis-dispatch."""
     art = _front_door_gpu(_batched_module(2, 4, 8, 16))
-    assert art.metadata.get("compiler_path") != "apple_value_target_ir" \
-        or art.metadata.get("executable") is not True
     calls = art.metadata.get("apple_value_calls") or []
     assert not any(c.get("op") == "tessera_apple.cpu.call"
                    and c.get("status") == "executable" for c in calls)
-    res = launch(art, None)
-    assert res["ok"] is False
-    assert "output" not in res
+    # It IS an executable GPU kernel_call batched_gemm.
+    assert any(c.get("op") == "tessera_apple.gpu.kernel_call"
+               and c.get("op_kind") == "batched_gemm" for c in calls)
 
 
 # ── Sprint 6 P2 review fix: Python AST front door for batched_gemm ──────────
@@ -1335,3 +1337,182 @@ def test_value_envelope_gated_cases(desc, body):
     p = _run("tessera-lower-to-apple_cpu-full", body)
     assert p.returncode != 0, f"{desc}: expected gating, got success"
     assert "tessera_apple.cpu.call" not in p.stdout, desc
+
+
+# ── Sprint 8: Apple GPU value lane — rank-3 batched matmul (f32/f16/bf16) ────
+
+def _batched_module_dt(B, M, K, N, dtype, mlir_dtype):
+    from tessera.compiler.graph_ir import (
+        GraphIRFunction, GraphIRModule, IRArg, IROp, IRType,
+    )
+    ta = IRType(f"tensor<{B}x{M}x{K}x{mlir_dtype}>", (str(B), str(M), str(K)), dtype)
+    tb = IRType(f"tensor<{B}x{K}x{N}x{mlir_dtype}>", (str(B), str(K), str(N)), dtype)
+    tc = IRType(f"tensor<{B}x{M}x{N}x{mlir_dtype}>", (str(B), str(M), str(N)), dtype)
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="f", args=[IRArg("a", ta), IRArg("b", tb)], result_types=[tc],
+        body=[IROp(result="c", op_name="tessera.batched_gemm",
+                   operands=["%a", "%b"],
+                   operand_types=[ta.mlir_str, tb.mlir_str],
+                   result_type=tc.mlir_str)],
+        return_values=["%c"])])
+
+
+@pytest.mark.parametrize("dtype,mlir,symbol", [
+    ("fp32", "f32", "tessera_apple_gpu_bmm_f32"),
+    ("fp16", "f16", "tessera_apple_gpu_bmm_f16"),
+    ("bf16", "bf16", "tessera_apple_gpu_bmm_bf16"),
+])
+def test_gpu_batched_value_routes_to_apple_value_target_ir(dtype, mlir, symbol):
+    """Sprint 8: apple_gpu value-mode rank-3 batched matmul routes to the value
+    lane with the dtype-specific bmm symbol and is marked executable."""
+    art = _front_door_gpu(_batched_module_dt(2, 4, 8, 16, dtype, mlir))
+    assert art.metadata["compiler_path"] == "apple_value_target_ir"
+    assert art.metadata["apple_target_ir_kind"] == "value_target_ir"
+    assert art.metadata["executable"] is True
+    calls = art.metadata.get("apple_value_calls") or []
+    assert calls and calls[0]["op"] == "tessera_apple.gpu.kernel_call"
+    assert calls[0]["op_kind"] == "batched_gemm"
+    assert calls[0]["symbol"] == symbol
+
+
+def test_gpu_value_executor_allowlist_exact():
+    from tessera.runtime import _APPLE_VALUE_GPU_SYMBOLS
+    assert _APPLE_VALUE_GPU_SYMBOLS == frozenset({
+        "tessera_apple_gpu_bmm_f32",
+        "tessera_apple_gpu_bmm_f16",
+        "tessera_apple_gpu_bmm_bf16",
+    })
+
+
+@pytest.mark.skipif(sys.platform != "darwin",
+                    reason="Apple GPU MPSGraph bmm is Darwin-only")
+@pytest.mark.parametrize("dtype,mlir", [("fp32", "f32"), ("fp16", "f16"), ("bf16", "bf16")])
+def test_gpu_batched_value_launch_vs_numpy(dtype, mlir):
+    import numpy as np
+    from tessera.runtime import launch
+    npdt = {"fp32": np.float32, "fp16": np.float16}.get(dtype)
+    if npdt is None:
+        import pytest as _p
+        try:
+            import ml_dtypes
+        except Exception:
+            _p.skip("ml_dtypes unavailable")
+        npdt = ml_dtypes.bfloat16
+    rng = np.random.default_rng(0)
+    a = rng.standard_normal((2, 4, 8)).astype(npdt)
+    b = rng.standard_normal((2, 8, 16)).astype(npdt)
+    r = launch(_front_door_gpu(_batched_module_dt(2, 4, 8, 16, dtype, mlir)), [a, b])
+    assert r["ok"], r
+    assert r["compiler_path"] == "apple_value_target_ir"
+    assert r["output"].shape == (2, 4, 16)
+    assert r["output"].dtype == npdt  # honest dtype
+    ref = a.astype(np.float32) @ b.astype(np.float32)
+    np.testing.assert_allclose(r["output"].astype(np.float32), ref, rtol=5e-2, atol=5e-2)
+
+
+def test_gpu_batched_broadcast_is_gated():
+    """Broadcast batch (1 vs B) is rejected by the BatchedGemmOp verifier — no
+    implicit expansion on the value lane."""
+    from tessera.compiler.canonical_compile import canonical_compile
+    from tessera.compiler.graph_ir import (
+        GraphIRFunction, GraphIRModule, IRArg, IROp, IRType, GraphIRVerificationError,
+    )
+    ta = IRType("tensor<1x4x8xf16>", ("1", "4", "8"), "fp16")
+    tb = IRType("tensor<2x8x16xf16>", ("2", "8", "16"), "fp16")
+    tc = IRType("tensor<2x4x16xf16>", ("2", "4", "16"), "fp16")
+    m = GraphIRModule(functions=[GraphIRFunction(
+        name="f", args=[IRArg("a", ta), IRArg("b", tb)], result_types=[tc],
+        body=[IROp(result="c", op_name="tessera.batched_gemm", operands=["%a", "%b"],
+                   operand_types=[ta.mlir_str, tb.mlir_str], result_type=tc.mlir_str)],
+        return_values=["%c"])])
+    try:
+        meta = canonical_compile(m, target="apple_gpu",
+                                 options={"apple_target_ir_mode": "value"}).to_runtime_artifact().metadata
+    except GraphIRVerificationError:
+        return  # verifier rejected broadcast — honest gate
+    assert meta.get("compiler_path") != "apple_value_target_ir" or meta.get("executable") is not True
+
+
+def test_gpu_batched_dynamic_is_gated():
+    """Dynamic batch passes the verifier but the value tiling requires static
+    shapes → gated with a named diagnostic (no executable value call)."""
+    body = ('func.func @f(%a: tensor<?x4x8xf16>, %b: tensor<?x8x16xf16>) '
+            '-> tensor<?x4x16xf16> {\n'
+            '  %0 = tessera.batched_gemm %a, %b : '
+            '(tensor<?x4x8xf16>, tensor<?x8x16xf16>) -> tensor<?x4x16xf16>\n'
+            '  return %0 : tensor<?x4x16xf16>\n}')
+    p = _run("tessera-lower-to-apple_gpu-full", body)
+    assert p.returncode != 0
+    assert "tessera_apple.gpu.kernel_call" not in p.stdout
+
+
+def test_gpu_batched_rank4_is_gated():
+    body = ('func.func @f(%a: tensor<2x3x4x8xf16>, %b: tensor<2x3x8x16xf16>) '
+            '-> tensor<2x3x4x16xf16> {\n'
+            '  %0 = tessera.batched_gemm %a, %b : '
+            '(tensor<2x3x4x8xf16>, tensor<2x3x8x16xf16>) -> tensor<2x3x4x16xf16>\n'
+            '  return %0 : tensor<2x3x4x16xf16>\n}')
+    p = _run("tessera-lower-to-apple_gpu-full", body)
+    assert p.returncode != 0
+    assert "tessera_apple.gpu.kernel_call" not in p.stdout
+
+
+def test_gpu_value_package_call_is_blocked():
+    """gpu.package_call is not executable on the GPU value lane — invalid_artifact."""
+    from tessera.runtime import RuntimeArtifact, launch
+    art = RuntimeArtifact(metadata={
+        "target": "apple_gpu", "compiler_path": "apple_value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.gpu.package_call", "op_kind": "batched_gemm",
+            "symbol": "tessera_apple_gpu_bmm_f32", "status": "executable"}]})
+    res = launch(art, None)
+    assert res["ok"] is False
+    assert res["runtime_status"] == "invalid_artifact"
+
+
+def test_gpu_value_multi_op_is_blocked():
+    """Multi-op GPU value programs return a structured non-success."""
+    from tessera.runtime import RuntimeArtifact, launch
+    one = {"op": "tessera_apple.gpu.kernel_call", "op_kind": "batched_gemm",
+           "symbol": "tessera_apple_gpu_bmm_f32", "status": "executable"}
+    art = RuntimeArtifact(metadata={
+        "target": "apple_gpu", "compiler_path": "apple_value_target_ir",
+        "executable": True, "apple_value_calls": [one, dict(one)]})
+    res = launch(art, None)
+    assert res["ok"] is False
+    assert res["runtime_status"] == "invalid_artifact"
+
+
+def test_gpu_value_extra_operand_is_rejected():
+    from tessera.runtime import RuntimeArtifact, launch
+    import numpy as np
+    art = RuntimeArtifact(metadata={
+        "target": "apple_gpu", "compiler_path": "apple_value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.gpu.kernel_call", "op_kind": "batched_gemm",
+            "symbol": "tessera_apple_gpu_bmm_f32", "status": "executable"}]})
+    a = np.ones((2, 4, 8), np.float32); b = np.ones((2, 8, 16), np.float32)
+    res = launch(art, [a, b, np.ones((1,), np.float32)])
+    assert res["ok"] is False
+    assert res["runtime_status"] == "invalid_artifact"
+
+
+@pytest.mark.skipif(sys.platform != "darwin",
+                    reason="Apple GPU MPSGraph bmm is Darwin-only")
+def test_gpu_value_repeated_launch_no_unbounded_growth():
+    """Leak/concurrency guard: repeated GPU value batched launches do not grow
+    the MPSGraph cache without bound (it is LRU-capped)."""
+    import numpy as np
+    from tessera import runtime as _R
+    from tessera.runtime import launch
+    art = _front_door_gpu(_batched_module_dt(2, 4, 8, 16, "fp16", "f16"))
+    a = np.ones((2, 4, 8), np.float16); b = np.ones((2, 8, 16), np.float16)
+    size_fn = getattr(_R, "_apple_gpu_mpsgraph_cache_size", None)
+    for _ in range(40):
+        r = launch(art, [a, b])
+        assert r["ok"]
+    if size_fn is not None:
+        # Same shape/dtype repeated → cache holds a bounded number of graphs.
+        assert size_fn() < 64

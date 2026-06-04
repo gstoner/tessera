@@ -202,8 +202,9 @@ std::unique_ptr<mlir::Pass> createNativeSparseAttnFusionPass();
 //
 // These target-agnostic passes establish stable pipeline positions for
 // Lightning Attention fusion, chunked Delta/Kimi scan lowering, and named
-// hybrid-policy expansion. v1 implementations are conservative no-ops that
-// preserve IR while making the passes discoverable and pipeline-testable.
+// hybrid-policy expansion. Current implementations are conservative
+// compiler-visibility passes: they preserve SSA/dataflow and attach stable
+// reasoning-family metadata, without claiming backend execution.
 std::unique_ptr<mlir::Pass> createLightningAttnFusionPass();
 std::unique_ptr<mlir::Pass> createDeltaAttnChunkingPass();
 std::unique_ptr<mlir::Pass> createHybridAttnExpandPass();

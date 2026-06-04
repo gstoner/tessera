@@ -45,7 +45,7 @@ int main(int argc, char** argv){
   if (const char* s = std::getenv("EBT_D")) D = std::atoi(s);
   if (const char* s = std::getenv("EBT_DEVICE")) device = s;
 
-  std::vector<float> W(D*D,0.f), h(D,0.01f);
+  std::vector<float> W((std::size_t)D*D,0.f), h(D,0.01f);
   for (int i=0;i<D;i++) W[i*D+i] = 1.0f + 0.001f*i;
   std::vector<float> y(D,0.5f), g(D,0.f);
 

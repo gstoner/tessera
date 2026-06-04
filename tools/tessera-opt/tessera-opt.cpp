@@ -267,6 +267,10 @@ int main(int argc, char **argv) {
   tessera::apple::registerTesseraAppleBackendPipelines();
 #endif
 
+#if defined(TESSERA_HAVE_APPLE_BACKEND) && defined(TESSERA_HAVE_CORE_TESSERA_IR)
+  ::mlir::registerPass([]() { return createVerifyAppleValueTileIRPass(); });
+#endif
+
 #ifdef TESSERA_HAVE_ROCM_BACKEND
   mlir::tessera_rocm::registerTesseraROCMBackendPasses();
 #endif

@@ -158,3 +158,7 @@ def test_attention_family_passes_are_declared_and_pipeline_wired():
     ]:
         assert factory in passes_h
         assert factory in passes_cpp
+    assert "tessera.reasoning.compiler_visible" in pass_impl
+    assert "tessera.reasoning.family" in pass_impl
+    assert "tessera.reasoning.variant" in pass_impl
+    assert "void runOnOperation() override {}" not in pass_impl

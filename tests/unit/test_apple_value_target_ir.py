@@ -1678,6 +1678,27 @@ def test_value_pipeline_rejects_opaque_tile_ops_even_without_unregistered_flag()
     assert "unregistered op 'tile.fake_value_op'" in proc.stderr
 
 
+def test_apple_value_tile_verifier_is_standalone_pass():
+    """Stage 12: the value Tile verifier must be directly testable, not only
+    reachable as an implementation detail inside the Apple -full pipelines."""
+    import subprocess
+
+    help_proc = subprocess.run([_OPT, "--help"], capture_output=True, text=True,
+                               timeout=30)
+    assert help_proc.returncode == 0
+    assert "tessera-verify-apple-value-tile-ir" in help_proc.stdout
+
+    body = ('func.func @f(%a: tensor<4x4xf32>) -> tensor<4x4xf32> {\n'
+            '  %0 = "tile.fake_value_op"(%a) : '
+            '(tensor<4x4xf32>) -> tensor<4x4xf32>\n'
+            '  return %0 : tensor<4x4xf32>\n}')
+    proc = subprocess.run([_OPT, "-tessera-verify-apple-value-tile-ir", "-"],
+                          input=body, capture_output=True, text=True,
+                          timeout=60)
+    assert proc.returncode != 0
+    assert "unregistered op 'tile.fake_value_op'" in proc.stderr
+
+
 def test_native_sparse_value_call_attrs_extract_as_ints_and_bool():
     from tessera.compiler.driver import extract_apple_value_calls
     ir = '''

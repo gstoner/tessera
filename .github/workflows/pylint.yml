@@ -2,6 +2,10 @@ name: Pylint
 
 on: [push]
 
+# Least-privilege default token: this job only reads the repo to lint it.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest

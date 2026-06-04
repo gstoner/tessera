@@ -1293,7 +1293,7 @@ extern "C" void tessera_apple_gpu_mla_absorb_decode_f32(
           double acc = 0;
           for (int32_t j = 0; j < Skv; ++j) {
             double cv = 0;
-            for (int32_t l = 0; l < Dl; ++l) cv += ckvb[j * Dl + l] * wuvb[l * dv + d];
+            for (int32_t l = 0; l < Dl; ++l) cv += ckvb[(std::size_t)j * Dl + l] * wuvb[(std::size_t)l * dv + d];
             acc += (score[j] / den) * cv;
           }
           o[d] = (float)acc;
@@ -3052,7 +3052,7 @@ static void reference_conv3d_f32_stub(
                   int32_t iw = ow * sW + kw * dW - pW;
                   if (iw < 0 || iw >= iW) continue;
                   for (int32_t ic = 0; ic < cinG; ++ic) {
-                    double xv = X[((((std::size_t)n * iD + id) * iH + ih) * iW + iw) * Cin + grp * cinG + ic];
+                    double xv = X[((((std::size_t)n * iD + id) * iH + ih) * iW + iw) * Cin + (std::size_t)grp * cinG + ic];
                     double wv = Wt[((((std::size_t)kd * kH + kh) * kW + kw) * cinG + ic) * Cout + oc];
                     acc += xv * wv;
                   }

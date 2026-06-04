@@ -9,12 +9,29 @@
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/Transforms/Passes.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Operation.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/StringRef.h"
 
 using namespace mlir;
 
 namespace {
+
+void markReasoningVisible(Operation *op, OpBuilder &builder, StringRef family,
+                          StringRef variant) {
+  op->setAttr("tessera.reasoning.compiler_visible",
+              builder.getBoolAttr(true));
+  op->setAttr("tessera.reasoning.family", builder.getStringAttr(family));
+  op->setAttr("tessera.reasoning.variant", builder.getStringAttr(variant));
+}
+
+StringRef hybridVariant(Operation *op) {
+  if (auto pattern = op->getAttrOfType<StringAttr>("pattern"))
+    return pattern.getValue();
+  return "hybrid_attention";
+}
 
 class LightningAttnFusionPass
     : public PassWrapper<LightningAttnFusionPass, OperationPass<ModuleOp>> {
@@ -25,7 +42,14 @@ public:
   StringRef getDescription() const override {
     return "Prepare/fuse tessera.lightning_attention for tiled backend lowering";
   }
-  void runOnOperation() override {}
+  void runOnOperation() override {
+    OpBuilder builder(getOperation().getContext());
+    getOperation().walk([&](Operation *op) {
+      StringRef name = op->getName().getStringRef();
+      if (name == "tessera.lightning_attention")
+        markReasoningVisible(op, builder, "lightning", "lightning_attention");
+    });
+  }
 };
 
 class DeltaAttnChunkingPass
@@ -37,7 +61,18 @@ public:
   StringRef getDescription() const override {
     return "Lower Gated DeltaNet/Kimi Delta attention into chunked scan form";
   }
-  void runOnOperation() override {}
+  void runOnOperation() override {
+    OpBuilder builder(getOperation().getContext());
+    getOperation().walk([&](Operation *op) {
+      StringRef name = op->getName().getStringRef();
+      if (name == "tessera.gated_deltanet")
+        markReasoningVisible(op, builder, "delta", "gated_deltanet");
+      else if (name == "tessera.kimi_delta_attention")
+        markReasoningVisible(op, builder, "delta", "kimi_delta_attention");
+      else if (name == "tessera.modified_delta_attention")
+        markReasoningVisible(op, builder, "delta", "modified_delta_attention");
+    });
+  }
 };
 
 class HybridAttnExpandPass
@@ -49,7 +84,14 @@ public:
   StringRef getDescription() const override {
     return "Expand named Ling/Kimi hybrid attention policies into primitive attention ops";
   }
-  void runOnOperation() override {}
+  void runOnOperation() override {
+    OpBuilder builder(getOperation().getContext());
+    getOperation().walk([&](Operation *op) {
+      if (op->getName().getStringRef() != "tessera.hybrid_attention")
+        return;
+      markReasoningVisible(op, builder, "hybrid", hybridVariant(op));
+    });
+  }
 };
 
 } // namespace

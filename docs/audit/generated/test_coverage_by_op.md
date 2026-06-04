@@ -6,41 +6,41 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Headline
 
-- **432** ops in `primitive_coverage` registry.
-- **1389** total Python-test references, **387** total lit-fixture references.
+- **434** ops in `primitive_coverage` registry.
+- **1647** total Python-test references, **469** total lit-fixture references.
 - **121** ops have **zero** references in either test surface.
-- **240** ops have ≤1 reference ("thinly tested").
-- **25** ops have ≥10 references ("well tested").
-- **46** ops have at least one associated `pytest.raises` negative test.
+- **229** ops have ≤1 reference ("thinly tested").
+- **32** ops have ≥10 references ("well tested").
+- **47** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  166 |  136 |  302 |   9 | `bf16`, `f16`, `f32`, `fp16` … |
-| `flash_attn` |   57 |   42 |   99 |   2 | `bf16`, `f32`, `fp16`, `fp32` … |
-| `softmax` |   46 |   35 |   81 |   2 | `fp16`, `fp32`, `fp4_e2m1`, `fp6_e2m3` … |
+| `matmul` |  205 |  141 |  346 |  10 | `bf16`, `f16`, `f32`, `fp16` … |
+| `flash_attn` |   74 |   44 |  118 |   3 | `bf16`, `f32`, `fp16`, `fp32` … |
+| `softmax` |   61 |   35 |   96 |   3 | `bf16`, `f16`, `f32`, `fp16` … |
+| `relu` |   73 |    3 |   76 |   5 | `bf16`, `f16`, `f32`, `fp32` |
 | `gemm` |   69 |    2 |   71 |   6 | `bf16`, `f16`, `f32`, `fp16` … |
-| `reduce` |   64 |    0 |   64 |   6 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
+| `reduce` |   66 |    0 |   66 |   6 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
+| `mul` |   57 |    0 |   57 |   6 | `fp16`, `fp32`, `fp4_e2m1`, `fp6_e2m3` … |
 | `attn_local_window_2d` |   31 |   25 |   56 |   1 | `fp32` |
-| `mul` |   53 |    0 |   53 |   6 | `fp16`, `fp32`, `fp4_e2m1`, `fp6_e2m3` … |
-| `add` |   36 |    0 |   36 |   4 | `fp32` |
+| `add` |   44 |    2 |   46 |   4 | `bf16`, `f16`, `f32`, `fp32` |
+| `cholesky` |   14 |   30 |   44 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
+| `rmsnorm` |   32 |    4 |   36 |   1 | `bf16`, `fp32` |
 | `linear_attn` |   24 |    8 |   32 |   1 |  |
-| `relu` |   29 |    2 |   31 |   4 | `f32`, `fp32` |
+| `gelu` |   20 |   10 |   30 |   1 | `bf16`, `f16`, `f32`, `fp16` … |
 | `cast` |    4 |   22 |   26 |   0 | `fp32` |
-| `gelu` |   16 |   10 |   26 |   1 | `fp32` |
+| `rope` |   16 |   10 |   26 |   0 |  |
 | `transpose` |   12 |   13 |   25 |   0 | `fp32` |
-| `rope` |   14 |   10 |   24 |   0 |  |
 | `selective_ssm` |   24 |    0 |   24 |   1 |  |
+| `layer_norm` |   16 |    7 |   23 |   2 | `bf16`, `f16`, `f32`, `fp16` … |
+| `silu` |   21 |    2 |   23 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `dropout` |   17 |    5 |   22 |   3 | `f32`, `fp32`, `fp64` |
-| `layer_norm` |   14 |    5 |   19 |   2 | `bf16`, `f16`, `f32`, `fp16` … |
-| `latent_kv_compress` |    4 |    9 |   13 |   0 | `fp16`, `fp32` |
-| `load_state` |   13 |    0 |   13 |   2 |  |
-| `silu_mul` |    5 |    8 |   13 |   0 | `fp32` |
 
 ## Thinly-tested ops (≤1 reference)
 
-These **240** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **229** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -48,12 +48,8 @@ These **240** ops have at most one test reference across the whole test surface.
 | `absolute` |    1 |    0 |    1 |
 | `acos` |    1 |    0 |    1 |
 | `alibi` |    1 |    0 |    1 |
-| `amax` |    1 |    0 |    1 |
-| `amin` |    1 |    0 |    1 |
 | `aot_export` |    0 |    0 |    0 |
 | `aot_load` |    0 |    0 |    0 |
-| `argmax` |    1 |    0 |    1 |
-| `argmin` |    1 |    0 |    1 |
 | `asin` |    1 |    0 |    1 |
 | `associative_scan` |    0 |    0 |    0 |
 | `atan` |    1 |    0 |    1 |
@@ -104,5 +100,9 @@ These **240** ops have at most one test reference across the whole test surface.
 | `cos` |    1 |    0 |    1 |
 | `cosh` |    1 |    0 |    1 |
 | `cosine_warmup_lr` |    1 |    0 |    1 |
+| `cross_entropy_loss` |    1 |    0 |    1 |
+| `cross_ratio` |    0 |    0 |    0 |
+| `cummax` |    1 |    0 |    1 |
+| `cummin` |    1 |    0 |    1 |
 
-_(180 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(169 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_

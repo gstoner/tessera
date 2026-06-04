@@ -271,6 +271,24 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             A = A._data
         return np.linalg.svd(A, full_matrices=False)
 
+    def cholesky_solve(L, b):
+        # L is the lower Cholesky factor of an SPD matrix; solve (L Lᵀ) x = b.
+        if hasattr(L, "_data"):
+            L = L._data
+        if hasattr(b, "_data"):
+            b = b._data
+        L = np.asarray(L)
+        y = np.linalg.solve(np.tril(L), b)
+        return np.linalg.solve(np.swapaxes(np.tril(L), -1, -2), y)
+
+    def lu(A):
+        # LAPACK getrf-style factorization: returns (packed_lu, pivots).
+        if hasattr(A, "_data"):
+            A = A._data
+        from scipy.linalg import lu_factor
+        lu_packed, piv = lu_factor(np.asarray(A))
+        return lu_packed, piv
+
     def layer_norm(x, eps: float = 1e-5):
         if hasattr(x, "_data"):
             x = x._data
@@ -3160,6 +3178,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "factorized_matmul": factorized_matmul,
         "tri_solve": tri_solve,
         "cholesky": cholesky,
+        "cholesky_solve": cholesky_solve,
+        "lu": lu,
         "qr": qr,
         "svd": svd,
         "conv2d": conv2d,
@@ -3447,6 +3467,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         factorized_matmul=factorized_matmul,
         tri_solve=tri_solve,
         cholesky=cholesky,
+        cholesky_solve=cholesky_solve,
+        lu=lu,
         qr=qr,
         svd=svd,
         layer_norm=layer_norm,

@@ -2,7 +2,8 @@
 status: Normative
 classification: Backend contract
 audience: backend authors (Apple proven; NVIDIA / ROCm inherit)
-last_updated: 2026-06-03 (Sprint 11 — Apple value Tile verifier hardened the -full handoff; native sparse attention added as a strict Apple GPU value envelope when the real Metal executor is active)
+last_updated: 2026-06-03
+note: Sprint 11 — Apple value Tile verifier hardened the -full handoff; native sparse attention added as a strict Apple GPU value envelope when the real Metal executor is active.
 ---
 
 # Value Target IR Contract

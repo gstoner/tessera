@@ -282,8 +282,14 @@ jobs:
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DTESSERA_BUILD_EXAMPLES=ON \
+            -DTESSERA_BUILD_APPLE_BACKEND=ON \
             -DMLIR_DIR=/usr/lib/llvm-22/lib/cmake/mlir \
             -DLLVM_DIR=/usr/lib/llvm-22/lib/cmake/llvm
+          # The Apple Target-IR dialect + lowering passes are portable MLIR
+          # (only the Metal runtime .mm is Darwin-gated; Linux builds the
+          # portable C++ stub), so tessera-opt registers the
+          # tessera-lower-to-apple_* pipelines and the phase8 Apple lit
+          # fixtures run instead of failing on an unregistered pipeline.
           cmake --build build --target tessera-opt tessera-translate-mlir
 
       - name: Run MLIR tool proof tests

@@ -2827,6 +2827,12 @@ def _apple_gpu_bmm_bf16() -> Any:
     return sym
 
 
+def _running_on_darwin() -> bool:
+    # Wrapped in a function so mypy does not statically narrow `sys.platform`
+    # on a Linux checker and flag the Darwin-only body below as unreachable.
+    return sys.platform == "darwin"
+
+
 def _apple_gpu_native_sparse_attn_f32() -> Any:
     """Sprint 11: bind the real Apple GPU Native Sparse Attention symbol.
 
@@ -2834,7 +2840,7 @@ def _apple_gpu_native_sparse_attn_f32() -> Any:
     execution requires Darwin + an active shared Apple GPU runtime, not symbol
     presence alone.
     """
-    if sys.platform != "darwin":
+    if not _running_on_darwin():
         return None
     try:
         from ._apple_gpu_dispatch import apple_gpu_skip_reason

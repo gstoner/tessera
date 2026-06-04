@@ -1342,6 +1342,8 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `factorized_matmul(A, B, rank)` | `(array, array) → array` | `pure` | Low-rank SVD reference over `A @ B` |
 | `tri_solve(A, b, lower=True)` | `(array, array) → array` | `pure` | Triangular `np.linalg.solve` reference |
 | `cholesky(A)` | `(array) → array` | `pure` | `np.linalg.cholesky` reference |
+| `cholesky_solve(L, b)` | `(array, array) → array` | `pure` | Solve `(L Lᵀ) x = b` from the Cholesky factor (LAPACK `potrs` analogue) |
+| `lu(A)` | `(array) → tuple` | `pure` | LAPACK `getrf`-style `(packed_lu, pivots)` via `scipy.linalg.lu_factor` |
 | `qr(A)` | `(array) → tuple` | `pure` | `np.linalg.qr` reference |
 | `svd(A)` | `(array) → tuple` | `pure` | `np.linalg.svd(..., full_matrices=False)` reference |
 | `layer_norm(x, eps=1e-5)` | `(array) → array` | `pure` | NumPy layer norm |

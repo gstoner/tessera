@@ -6,11 +6,11 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real`         |   19 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real`         |   26 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` |    9 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent`       |    0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier`  |   80 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total**      |  108 | |
+| **Total**      |  115 | |
 
 ## Per-dialect details
 
@@ -35,8 +35,11 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 | `AttnLocalWindow2DOp` | `real` |
 | `AttnSlidingWindowOp` | `no_verifier` |
 | `AttnTopKBlocksOp` | `no_verifier` |
+| `BatchedGemmOp` | `real` |
 | `CachePageLookupOp` | `no_verifier` |
 | `CastOp` | `real` |
+| `CholeskyOp` | `real` |
+| `CholeskySolveOp` | `real` |
 | `Conv2DNHWCOp` | `real` |
 | `CustomAdjointCallOp` | `no_verifier` |
 | `DCTOp` | `no_verifier` |
@@ -58,6 +61,7 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 | `KVCacheCreateOp` | `trivial_stub` |
 | `KVCachePruneOp` | `no_verifier` |
 | `KimiDeltaAttentionOp` | `no_verifier` |
+| `LUOp` | `real` |
 | `LatentKVCompressOp` | `no_verifier` |
 | `LatentKVExpandKOp` | `no_verifier` |
 | `LatentKVExpandVOp` | `no_verifier` |
@@ -92,6 +96,7 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 | `NeighborsStencilDefineOp` | `no_verifier` |
 | `NeighborsTopologyCreateOp` | `no_verifier` |
 | `PowerAttnOp` | `no_verifier` |
+| `QROp` | `real` |
 | `QuantizeFP4Op` | `no_verifier` |
 | `QuantizeFP8Op` | `no_verifier` |
 | `RFFTOp` | `no_verifier` |
@@ -105,6 +110,7 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 | `RopeMergeOp` | `no_verifier` |
 | `RopeOp` | `real` |
 | `RopeSplitOp` | `no_verifier` |
+| `SVDOp` | `real` |
 | `SigmoidOp` | `no_verifier` |
 | `SiluMulOp` | `no_verifier` |
 | `SiluOp` | `no_verifier` |
@@ -116,6 +122,7 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 | `SwigluFusedOp` | `no_verifier` |
 | `TanhOp` | `no_verifier` |
 | `TransposeOp` | `real` |
+| `TriSolveOp` | `real` |
 
 ### `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td`
 

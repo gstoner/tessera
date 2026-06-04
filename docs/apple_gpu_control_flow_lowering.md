@@ -8,6 +8,14 @@
 > is the on-Apple slice of the Phase-G "single-kernel `@jit` of a control-flow
 > loop" frontier.
 
+> **Native Metal validation note:** run hardware proof tests outside sandboxed
+> command environments and in a fresh Python process with a fresh runtime dylib.
+> In particular, Codex sandboxed exec can hide `MTLCreateSystemDefaultDevice()`
+> even on Metal-capable Apple Silicon, causing false negatives such as
+> `DeviceTensor.is_metal() == False` and skipped Metal stress tests. Use
+> `TESSERA_APPLE_GPU_RUNTIME_LIB` or the freshly built/temp
+> `libTesseraAppleRuntime.dylib` when validating native Metal behavior.
+
 ## The problem
 
 `tessera.control.{scan, fori_loop, while_loop, cond}` are **Python-reference
@@ -102,6 +110,9 @@ research-grade and out of scope here. What *is* tractable and worth doing is the
   `V` is unbounded; the hidden carry lives in a `[256]` thread-local array,
   matching the documented `d ≤ 256` control-flow envelope (`d > 256` falls back
   to the host numpy loop).
+  Native confirmation of this rung requires Metal access in the current process;
+  a sandboxed command runner may report no default Metal device even on a Metal
+  4-capable M1/M2/M3/M4 host.
 - **Rung 3 — dynamic frontier, via MSL (first slice landed).** Out of scope for
   the MPSGraph route, but the MSL route reaches it (see the mapping below).
   `tessera_apple_gpu_msl_spec_accept` runs the **dynamic speculative-verify

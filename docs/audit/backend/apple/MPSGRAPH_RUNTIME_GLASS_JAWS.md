@@ -10,6 +10,7 @@ Stages 13-15 audit note for Apple GPU value execution. This is a current-truth g
 - The C ABI returns `1` only when the MPSGraph path runs. The non-Darwin stub returns `0`, so symbol presence alone is not an executable GPU claim.
 - Python dispatch checks exact arity from value-call metadata, fp32 coercion at the ABI boundary, matching shapes, `reduction="mean"`, positive `clip_epsilon`, and side-term flags/coefficients.
 - A fresh dylib in a fresh Python process is required after adding these symbols. `_apple_gpu_ppo_policy_loss_available()` / `_apple_gpu_ppo_policy_loss_ex_available()` must pass their tiny numerical probes before benchmark/runtime metadata may claim `apple_gpu_value_target_ir`.
+- Native Metal/MPSGraph proof tests must run with Metal access in the current process. Codex sandboxed exec can hide `MTLCreateSystemDefaultDevice()` even on Metal 4-capable Apple Silicon, producing false negatives such as `DeviceTensor.is_metal() == False`, `ts_dev_is_metal == 0`, or skipped Metal stress tests. Run decisive Apple GPU validation outside the sandbox / escalated, with `TESSERA_APPLE_GPU_RUNTIME_LIB` or a freshly built/temp `libTesseraAppleRuntime.dylib` loaded in a fresh Python process.
 - GRPO/CISPO are compiler-decomposed references only; they have no Apple GPU value executor.
 
 ## Glass Jaws To Keep Guarded

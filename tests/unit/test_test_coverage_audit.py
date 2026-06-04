@@ -35,7 +35,11 @@ from tessera.compiler.test_coverage_audit import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DASHBOARD = REPO_ROOT / "docs" / "audit" / "generated" / "test_coverage_by_op.md"
+# The per-op coverage table + classification triage were merged
+# (2026-06-04) into one generated doc managed by the generated-doc
+# registry; the by-op section is rendered first, so these content
+# assertions still hold against the merged doc.
+DASHBOARD = REPO_ROOT / "docs" / "audit" / "generated" / "test_coverage.md"
 
 
 # ─────────────────────────────────────────────────────────────────────────

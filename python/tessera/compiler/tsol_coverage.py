@@ -235,6 +235,37 @@ def coverage_summary() -> dict[str, dict[str, int]]:
 # ─────────────────────────────────────────────────────────────────────────
 
 
+#: Stable CSV column order for the TSOL coverage dashboard — append-only.
+TSOL_CSV_COLUMNS: tuple[str, ...] = (
+    "name", "category", "has_registry_entry", "math_semantics", "shape_rule",
+    "dtype_layout_rule", "vjp", "jvp", "sharding_rule", "backend_kernel",
+    "lowering_rule", "notes",
+)
+
+
+def render_csv() -> str:
+    """Render the canonical machine-readable TSOL coverage table.
+
+    One row per op, sorted by ``(category, name)``.  Drift-gated
+    artifact; the Markdown is the human companion.
+    """
+    import csv as _csv
+    import io as _io
+
+    rows = sorted(collect_tsol_coverage(), key=lambda r: (r.category, r.name))
+    buf = _io.StringIO()
+    writer = _csv.writer(buf, lineterminator="\n")
+    writer.writerow(TSOL_CSV_COLUMNS)
+    for r in rows:
+        writer.writerow([
+            r.name, r.category, "1" if r.has_registry_entry else "0",
+            r.math_semantics, r.shape_rule, r.dtype_layout_rule,
+            r.vjp, r.jvp, r.sharding_rule, r.backend_kernel,
+            r.lowering_rule, r.notes,
+        ])
+    return buf.getvalue()
+
+
 def render_dashboard() -> str:
     """Render the TSOL coverage dashboard as Markdown text."""
     rows = collect_tsol_coverage()

@@ -182,6 +182,37 @@ def determinism_aware_ops() -> tuple[str, ...]:
 # ─────────────────────────────────────────────────────────────────────────
 
 
+#: Stable CSV column order for the effect-lattice audit — append-only.
+EFFECT_AUDIT_CSV_COLUMNS: tuple[str, ...] = (
+    "name", "declared_effect", "expected_effect", "matches_anchor",
+    "has_numeric_policy", "determinism_aware",
+)
+
+
+def render_csv() -> str:
+    """Render the canonical machine-readable effect-lattice audit table.
+
+    One row per op, sorted by name.  Drift-gated artifact; the Markdown
+    is the human companion.
+    """
+    import csv as _csv
+    import io as _io
+
+    rows = sorted(collect_effect_audit(), key=lambda r: r.name)
+    buf = _io.StringIO()
+    writer = _csv.writer(buf, lineterminator="\n")
+    writer.writerow(EFFECT_AUDIT_CSV_COLUMNS)
+    for r in rows:
+        writer.writerow([
+            r.name, r.declared_effect,
+            r.expected_effect if r.expected_effect is not None else "",
+            "1" if r.matches_anchor else "0",
+            "1" if r.has_numeric_policy else "0",
+            "1" if r.determinism_aware else "0",
+        ])
+    return buf.getvalue()
+
+
 def render_dashboard() -> str:
     rows = collect_effect_audit()
     distribution = effect_distribution()

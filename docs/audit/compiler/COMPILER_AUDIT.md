@@ -92,21 +92,29 @@ multiple root audit documents and compiler archive files.
    complete.
 5. Update specs to point at dashboards and this audit instead of old root audit
    documents.
-6. **Unify generated-doc regeneration + drift into one contract.**
-   *Keystone landed 2026-06-04:* `tessera.compiler.generated_docs` is the single
-   registry consumed by both `check_generated_docs.sh` and `release_gate.py`, with
-   a fleet-wide `--write`/`--check` and an orphan-guard test. 6 dashboards are
-   CSV-canonical. **Remaining:**
-   - CSV-canonical for the rest of the data-shaped docs:
-     `test_coverage_classification`, `tsol_coverage`, `effect_lattice_audit`,
-     `apple_target_map`, `nvidia_sm90_target_map`, `rocm_target_map`.
-   - **Aggressive content consolidation (24 → ~13):** collapse the 3 target maps
-     into one multi-target doc; the 5 surface-status docs into one repo-surface
-     doc; merge `test_coverage_by_op` + `test_coverage_classification`; fold
-     `operator_benchmarks_coverage` into benchmarks; fold the `e2e_op_coverage`
-     and `s_series_status` rollups into their primaries (`support_table` /
-     `standalone_primitive_coverage`). Each is now a localized registry +
-     generator edit.
+6. **Unify generated-doc regeneration + drift into one contract — landed
+   2026-06-04.** `tessera.compiler.generated_docs` is the single registry
+   consumed by both `check_generated_docs.sh` and `release_gate.py` (the latter's
+   per-doc drift gates folded into one fleet-wide `generated_docs_drift`), with a
+   fleet `--write`/`--check`, an orphan-guard test
+   (`tests/unit/test_generated_docs_registry.py`), and a `--list` view.
+   - **9 dashboards CSV-canonical:** `runtime_abi`, `verifier_coverage`,
+     `support_table`, `op_target_conformance`, `runtime_execution_matrix`,
+     `tsol_coverage`, `effect_lattice_audit`, plus the merged `test_coverage` and
+     consolidated `surface_status`.
+   - **Content consolidation done (genuinely-duplicative docs):** the 5
+     surface-status docs + `operator_benchmarks_coverage` → one `surface_status`
+     (6→1); `test_coverage_by_op` + `test_coverage_classification` → one
+     `test_coverage` (2→1). Registry count 24 → 15.
+   - **Deliberately not consolidated (reassessed):** the 3 target maps stay
+     per-platform — they are *not* duplicative (per-target capability matrices),
+     have heterogeneous schemas, and are cross-referenced by 8 per-platform audit
+     docs (`backend/{apple,nvidia,rocm}/`); collapsing them would fight the
+     per-platform audit structure for a 3→1 saving. The `e2e_op_coverage` /
+     `s_series_status` rollups likewise stay standalone — they are distinct
+     MASTER_AUDIT truth views, and the registry already removed the duplication
+     that mattered (one regen/drift contract). Folding them is available if
+     desired but is low-value churn now.
 
 ## Source Material Consolidated
 

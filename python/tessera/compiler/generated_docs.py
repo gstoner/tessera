@@ -130,19 +130,46 @@ def _r_gpu_target_map(target: str) -> Callable[[], str]:
     return _render
 
 
-def _r_test_coverage_by_op() -> str:
-    from . import test_coverage_audit
-    return test_coverage_audit.render_dashboard()
+def _r_test_coverage_md() -> str:
+    """Merged test-coverage doc: the per-op coverage table + the
+    thinly-tested classification triage (formerly two docs)."""
+    from . import coverage_classification, test_coverage_audit
+    by_op = test_coverage_audit.render_dashboard().rstrip()
+    classification = coverage_classification.render_classification_dashboard()
+    # Demote the classification doc's leading H1 so headings stay nested
+    # under one document.
+    cls_lines = classification.splitlines()
+    if cls_lines and cls_lines[0].startswith("# "):
+        cls_lines[0] = "## " + cls_lines[0][2:]
+    return by_op + "\n\n---\n\n" + "\n".join(cls_lines).rstrip() + "\n"
 
 
-def _r_test_coverage_by_op_csv() -> str:
-    from . import test_coverage_audit
-    return test_coverage_audit.render_csv()
+def _r_test_coverage_csv() -> str:
+    """Merged machine-readable test-coverage table: per-op reference
+    counts + the classification bucket/reason in one CSV."""
+    import csv as _csv
+    import io as _io
 
+    from . import coverage_classification, test_coverage_audit
 
-def _r_test_coverage_classification() -> str:
-    from . import coverage_classification
-    return coverage_classification.render_classification_dashboard()
+    cols = (
+        "op", "python_refs", "lit_refs", "negative_refs", "total_refs",
+        "is_thinly_tested", "dtype_variants", "bucket", "reason",
+    )
+    rows = sorted(
+        test_coverage_audit.collect_op_test_coverage(), key=lambda r: r.op_name
+    )
+    buf = _io.StringIO()
+    writer = _csv.writer(buf, lineterminator="\n")
+    writer.writerow(cols)
+    for r in rows:
+        cls = coverage_classification.classify_op(r.op_name, r)
+        writer.writerow([
+            r.op_name, r.python_refs, r.lit_refs, r.negative_refs,
+            r.total_refs, "1" if r.is_thinly_tested else "0",
+            " ".join(r.dtype_variants), cls.bucket, cls.reason,
+        ])
+    return buf.getvalue()
 
 
 def _r_tsol() -> str:
@@ -150,9 +177,19 @@ def _r_tsol() -> str:
     return tsol_coverage.render_dashboard()
 
 
+def _r_tsol_csv() -> str:
+    from . import tsol_coverage
+    return tsol_coverage.render_csv()
+
+
 def _r_effect_lattice() -> str:
     from . import effect_audit
     return effect_audit.render_dashboard()
+
+
+def _r_effect_lattice_csv() -> str:
+    from . import effect_audit
+    return effect_audit.render_csv()
 
 
 def _r_docs_freshness() -> str:
@@ -160,17 +197,87 @@ def _r_docs_freshness() -> str:
     return docs_manifest.render_dashboard()
 
 
-def _r_operator_benchmarks() -> str:
-    from . import operator_benchmarks_coverage
-    return operator_benchmarks_coverage.render_markdown()
+#: The five SurfaceEntry-based surfaces, in display order.
+_SURFACES: tuple[str, ...] = ("examples", "benchmarks", "research", "tools", "tests")
 
 
-def _r_surface(surface: str) -> Callable[[], str]:
-    def _render() -> str:
-        import importlib
-        mod = importlib.import_module(f"tessera.compiler.{surface}_manifest")
-        return mod.render_markdown()
-    return _render
+def _surface_modules() -> dict[str, object]:
+    import importlib
+    return {
+        s: importlib.import_module(f"tessera.compiler.{s}_manifest")
+        for s in _SURFACES
+    }
+
+
+def _r_surface_status_csv() -> str:
+    """Combined machine-readable repo-surface status — one row per
+    manifest entry across all five surfaces, with a ``surface`` column."""
+    import csv as _csv
+    import io as _io
+
+    cols = (
+        "surface", "directory", "entry_point", "status", "command",
+        "extras_required", "reason", "notes",
+    )
+    mods = _surface_modules()
+    buf = _io.StringIO()
+    writer = _csv.writer(buf, lineterminator="\n")
+    writer.writerow(cols)
+    for surface in _SURFACES:
+        entries = sorted(mods[surface].all_entries(), key=lambda e: e.directory)
+        for e in entries:
+            writer.writerow([
+                surface, e.directory, e.entry_point, e.status,
+                e.command or "", " ".join(e.extras_required), e.reason, e.notes,
+            ])
+    return buf.getvalue()
+
+
+def _r_surface_status_md() -> str:
+    """Combined human-readable repo-surface status, consolidating the
+    five former ``*_status.md`` docs + operator-benchmark coverage."""
+    mods = _surface_modules()
+    lines: list[str] = [
+        "# Repo Surface Status (generated)",
+        "",
+        "Consolidated status of the repo's audited surfaces — examples / "
+        "benchmarks / research / tools / tests (formerly five separate "
+        "`*_status.md` docs) plus operator-benchmark coverage. The canonical "
+        "machine-readable artifact is `surface_status.csv` in this directory. "
+        "Regenerate via `scripts/check_generated_docs.sh --write`.",
+        "",
+        "## Aggregate",
+        "",
+        "| Surface | Entries | Status breakdown |",
+        "|---|--:|---|",
+    ]
+    for surface in _SURFACES:
+        entries = mods[surface].all_entries()
+        counts = mods[surface].status_counts()
+        breakdown = ", ".join(f"{k}={v}" for k, v in sorted(counts.items()) if v)
+        lines.append(f"| {surface} | {len(entries)} | {breakdown or '—'} |")
+    lines.append("")
+    for surface in _SURFACES:
+        entries = sorted(mods[surface].all_entries(), key=lambda e: e.directory)
+        lines.append(f"## {surface}")
+        lines.append("")
+        lines.append("| Directory | Status | Entry point | Reason |")
+        lines.append("|---|---|---|---|")
+        for e in entries:
+            reason = e.reason.replace("|", "\\|") if e.reason else ""
+            lines.append(
+                f"| `{e.directory}` | {e.status} | `{e.entry_point}` | {reason} |"
+            )
+        lines.append("")
+    # Operator-benchmark coverage folded in as an appendix section.
+    from . import operator_benchmarks_coverage as _obc
+    obc_md = _obc.render_markdown()
+    # Demote the appendix's leading H1 to an H2 so headings stay nested.
+    obc_lines = obc_md.splitlines()
+    if obc_lines and obc_lines[0].startswith("# "):
+        obc_lines[0] = "## Operator benchmark coverage"
+    lines.extend(obc_lines)
+    return "\n".join(lines).rstrip() + "\n"
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -266,52 +373,33 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         "rocm_target_map", "target_map", _GEN / "rocm_target_map.md",
         _r_gpu_target_map("rocm"),
     ),
-    # ── Test coverage ──
+    # ── Test coverage (per-op counts + classification triage, merged) ──
     GeneratedDoc(
-        "test_coverage_by_op", "test_coverage", _GEN / "test_coverage_by_op.md",
-        _r_test_coverage_by_op,
-        csv_path=_GEN / "test_coverage_by_op.csv",
-        render_csv=_r_test_coverage_by_op_csv,
-    ),
-    GeneratedDoc(
-        "test_coverage_classification", "test_coverage",
-        _GEN / "test_coverage_classification.md", _r_test_coverage_classification,
+        "test_coverage", "test_coverage", _GEN / "test_coverage.md",
+        _r_test_coverage_md,
+        csv_path=_GEN / "test_coverage.csv", render_csv=_r_test_coverage_csv,
     ),
     # ── Specialized ──
     GeneratedDoc(
         "tsol_coverage", "specialized", _GEN / "tsol_coverage.md", _r_tsol,
+        csv_path=_GEN / "tsol_coverage.csv", render_csv=_r_tsol_csv,
     ),
     GeneratedDoc(
         "effect_lattice_audit", "specialized", _GEN / "effect_lattice_audit.md",
         _r_effect_lattice,
+        csv_path=_GEN / "effect_lattice_audit.csv", render_csv=_r_effect_lattice_csv,
     ),
     GeneratedDoc(
         # Date-stamped → regenerated but not byte-gated.
         "docs_freshness", "specialized", _GEN / "docs_freshness.md",
         _r_docs_freshness, gated=False,
     ),
-    # ── Surface status (examples / benchmarks / research / tools / tests) ──
+    # ── Repo surface status (examples / benchmarks / research / tools /
+    #    tests + operator-benchmark coverage), consolidated into one doc ──
     GeneratedDoc(
-        "benchmarks_status", "surface", _GEN / "benchmarks_status.md",
-        _r_surface("benchmarks"),
-    ),
-    GeneratedDoc(
-        "examples_status", "surface", _GEN / "examples_status.md",
-        _r_surface("examples"),
-    ),
-    GeneratedDoc(
-        "research_status", "surface", _GEN / "research_status.md",
-        _r_surface("research"),
-    ),
-    GeneratedDoc(
-        "tools_status", "surface", _GEN / "tools_status.md", _r_surface("tools"),
-    ),
-    GeneratedDoc(
-        "tests_status", "surface", _GEN / "tests_status.md", _r_surface("tests"),
-    ),
-    GeneratedDoc(
-        "operator_benchmarks_coverage", "surface",
-        _GEN / "operator_benchmarks_coverage.md", _r_operator_benchmarks,
+        "surface_status", "surface", _GEN / "surface_status.md",
+        _r_surface_status_md,
+        csv_path=_GEN / "surface_status.csv", render_csv=_r_surface_status_csv,
     ),
 )
 

@@ -84,81 +84,25 @@ class TestPerSurfaceManifests:
 
 
 class TestGeneratedDashboardDriftGate:
-    """Lock each generated ``<surface>_status.md`` against the manifest."""
+    """The five per-surface ``*_status.md`` docs + operator-benchmark
+    coverage were consolidated (2026-06-04) into one ``surface_status``
+    dashboard managed by the generated-doc registry.  Drift is gated
+    there (CSV-canonical); here we only assert the consolidated doc is
+    in sync, so the per-manifest render stays exercised end-to-end."""
 
-    @pytest.mark.parametrize(
-        "surface,doc_name",
-        [
-            ("examples", "examples_status.md"),
-            ("benchmarks", "benchmarks_status.md"),
-            ("research", "research_status.md"),
-            ("tools", "tools_status.md"),
-            ("tests", "tests_status.md"),
-        ],
-    )
-    def test_generated_doc_matches_render(
-        self, surface: str, doc_name: str
-    ) -> None:
-        doc_path = GENERATED_DIR / doc_name
-        mod = _manifest(surface)
-        if not doc_path.exists():
-            pytest.fail(
-                f"missing {doc_path.relative_to(REPO_ROOT)} — "
-                f"regenerate via "
-                f"`python -m tessera.cli.surface_audit "
-                f"--surface={surface} --render`"
-            )
-        on_disk = doc_path.read_text(encoding="utf-8")
-        rendered = mod.render_markdown()
-        if on_disk != rendered:
-            from difflib import unified_diff
-            diff = "\n".join(
-                list(
-                    unified_diff(
-                        on_disk.splitlines()[:80],
-                        rendered.splitlines()[:80],
-                        lineterm="",
-                        fromfile="on_disk",
-                        tofile="render_markdown()",
-                    )
-                )[:40]
-            )
-            pytest.fail(
-                f"{doc_name} is out of date with "
-                f"tessera.compiler.{surface}_manifest.  Regenerate "
-                f"via `python -m tessera.cli.surface_audit "
-                f"--surface={surface} --render`.\n\ndiff (truncated):\n"
-                f"{diff}"
-            )
+    def test_surface_status_in_sync(self) -> None:
+        from tessera.compiler import generated_docs as gd
 
-    def test_operator_benchmark_coverage_doc_matches_render(self) -> None:
-        from tessera.compiler.operator_benchmarks_coverage import render_markdown
+        msg = gd.check(gd.get("surface_status"))
+        assert msg is None, msg
 
-        doc_path = GENERATED_DIR / "operator_benchmarks_coverage.md"
-        if not doc_path.exists():
-            pytest.fail(
-                f"missing {doc_path.relative_to(REPO_ROOT)} — regenerate via "
-                "`python -m tessera.cli.operator_benchmarks_coverage`"
-            )
-        on_disk = doc_path.read_text(encoding="utf-8")
-        rendered = render_markdown()
-        if on_disk != rendered:
-            from difflib import unified_diff
-            diff = "\n".join(
-                list(
-                    unified_diff(
-                        on_disk.splitlines()[:80],
-                        rendered.splitlines()[:80],
-                        lineterm="",
-                        fromfile="on_disk",
-                        tofile="render_markdown()",
-                    )
-                )[:40]
-            )
-            pytest.fail(
-                "operator_benchmarks_coverage.md is out of date. "
-                "Regenerate via `python -m tessera.cli.operator_benchmarks_coverage`."
-                f"\n\ndiff (truncated):\n{diff}"
+    def test_surface_status_covers_every_surface(self) -> None:
+        from tessera.compiler import generated_docs as gd
+
+        csv = gd.get("surface_status").render_csv()
+        for surface in SURFACES:
+            assert f"\n{surface}," in csv, (
+                f"surface {surface!r} has no rows in surface_status.csv"
             )
 
 

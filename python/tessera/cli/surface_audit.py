@@ -223,14 +223,16 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
 
 def _cmd_render(args: argparse.Namespace) -> int:
-    surface = args.surface
-    mod = _manifest_module(surface)
-    out_path = (
-        Path(args.output) if args.output else _generated_doc_path(surface)
-    )
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(mod.render_markdown(), encoding="utf-8")
-    print(f"wrote {out_path}")
+    # The per-surface ``*_status.md`` docs were consolidated (2026-06-04)
+    # into the single ``surface_status`` dashboard owned by the
+    # generated-doc registry. ``--render`` now regenerates that one
+    # consolidated doc (CSV + Markdown) so it cannot recreate orphan
+    # per-surface files. ``--surface`` still selects which manifest the
+    # ``--check`` smoke gate runs.
+    from tessera.compiler import generated_docs as gd
+
+    for p in gd.write(gd.get("surface_status")):
+        print(f"wrote {p}")
     return 0
 
 

@@ -215,13 +215,11 @@ Native execution status is layer-specific:
 
 Status truth for many areas of the repo is rendered from machine-readable
 registries, not prose. The 5 **surface manifests** under
-`python/tessera/compiler/`:
+`python/tessera/compiler/` (`examples_manifest.py`, `benchmarks_manifest.py`,
+`research_manifest.py`, `tools_manifest.py`, `tests_manifest.py`) are
+consolidated into one generated dashboard:
 
-- `examples_manifest.py` → [`docs/audit/generated/examples_status.md`](docs/audit/generated/examples_status.md)
-- `benchmarks_manifest.py` → [`docs/audit/generated/benchmarks_status.md`](docs/audit/generated/benchmarks_status.md)
-- `research_manifest.py` → [`docs/audit/generated/research_status.md`](docs/audit/generated/research_status.md)
-- `tools_manifest.py` → [`docs/audit/generated/tools_status.md`](docs/audit/generated/tools_status.md)
-- `tests_manifest.py` → [`docs/audit/generated/tests_status.md`](docs/audit/generated/tests_status.md)
+- [`docs/audit/generated/surface_status.md`](docs/audit/generated/surface_status.md) (human) + [`surface_status.csv`](docs/audit/generated/surface_status.csv) (canonical, machine-readable) — examples / benchmarks / research / tools / tests + operator-benchmark coverage.
 
 Plus 13 op-level / compiler-level audit registries covering primitive
 coverage (`primitive_coverage.py` — 432 entries × 12 contract axes), backend

@@ -11,7 +11,7 @@ truth for counts; theme audit documents carry the reasoning and work plan.
 
 | Area | Current state | Still open |
 |---|---|---|
-| Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist; `runtime_abi`/`verifier_coverage` are now CSV-canonical with a `--write` sprint regen mode. | Multi-op metadata, fusion groups, layout/effect contracts, and fixture-driven proof need to be first-class; generated-doc regen/drift is still fragmented across two scripts + piecemeal unit gates (only 2 of ~24 dashboards are CSV-canonical). |
+| Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist; a single generated-doc registry (`tessera.compiler.generated_docs`) now drives both the CI gate and one `--write` sprint regen, 9 dashboards are CSV-canonical, and the surface (6→1) + test-coverage (2→1) dashboards were consolidated. | Multi-op metadata, fusion groups, layout/effect contracts, and fixture-driven proof need to be first-class; remaining dashboard consolidation (target maps, e2e/s_series rollups) is optional cleanup. |
 | Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated. | NVIDIA, ROCm, and Metalium have no executable runtime rows yet. |
 | Apple backend | Apple CPU/GPU are runtime-backed; Metal 4, MPSGraph, encode-session, and packaged-kernel lifecycle work exist. | Apple binding specs, feature-limit-guided lowering, production packaged kernels, and canonical one-command-buffer JIT path remain. |
 | NVIDIA | CUDA/NVIDIA plans and target maps exist; artifacts/toolchain path is represented. | Real hardware execute-and-compare and runtime launch bridge remain. |
@@ -29,7 +29,7 @@ gated by `scripts/check_generated_docs.sh`). For live figures, read:
 - [`op_target_conformance.md`](op_target_conformance.md) — complete/partial/missing op×target cells.
 - [`generated/e2e_op_coverage.md`](generated/e2e_op_coverage.md) — native-complete / runnable-reference split (no partial/planned tail).
 - [`generated/s_series_status.md`](generated/s_series_status.md) — per-axis open/complete (lowering closed; backend-kernel universally open).
-- [`generated/test_coverage_classification.md`](generated/test_coverage_classification.md) — direct-test-debt classification (actionable / hardware-gated).
+- [`generated/test_coverage.md`](generated/test_coverage.md) — direct-test-debt classification (actionable / hardware-gated).
 
 ## Finished Work
 
@@ -55,7 +55,7 @@ Still needs work:
 - Carry fusion groups, layout contracts, shape envelopes, effects, and backend strategy through the compiler artifact.
 - Stop rediscovering fusion/program identity separately in Target IR and runtime dispatch.
 - Tie complete compiler claims to direct compare fixtures or hardware/package validation.
-- Unify generated-doc regeneration + drift gating: one registry consumed by both the CI gate and a single `--write`, fold in `release_gate.py`'s drift checks, standardize the generator CLI, and extend the CSV-canonical pattern to the remaining data-shaped dashboards.
+- Generated-doc registry landed (`tessera.compiler.generated_docs`): one source of truth consumed by both `check_generated_docs.sh` and `release_gate.py`, a fleet-wide `--write`/`--check`, an orphan-guard test, and 9 CSV-canonical dashboards. Remaining: optional further consolidation (target maps 3→1, fold e2e/s_series rollups into their primaries).
 
 Primary detail: [compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md).
 
@@ -128,7 +128,7 @@ Finished:
 - Partial-op uplift closed the legacy partial bucket; the E2E dashboard now
   shows no partial/planned rows ([`generated/e2e_op_coverage.md`](generated/e2e_op_coverage.md)).
 - `lowering_rule` is closed project-wide (0 open) ([`generated/s_series_status.md`](generated/s_series_status.md)).
-- No actionable direct-test-debt (`needs_direct_test = 0`) ([`generated/test_coverage_classification.md`](generated/test_coverage_classification.md)).
+- No actionable direct-test-debt (`needs_direct_test = 0`) ([`generated/test_coverage.md`](generated/test_coverage.md)).
 - KV-cache has named diagnostics and explicit target coverage history.
 - Advanced examples mostly shifted from missing Python APIs to backend/hardware proof.
 

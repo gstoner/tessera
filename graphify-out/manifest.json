@@ -3070,8 +3070,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/driver.py": {
-    "mtime": 1780545845.1168149,
-    "ast_hash": "dbc67f35c59217ec2518c0e52ce4087b",
+    "mtime": 1780574590.294779,
+    "ast_hash": "48cda173fc9a0c61e62a975939b342f3",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/normalization.py": {
@@ -11050,8 +11050,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/canonical_compile.py": {
-    "mtime": 1780547798.8652706,
-    "ast_hash": "0d1c5bed6df6295e9f736d7dc0b1d20e",
+    "mtime": 1780574624.6016195,
+    "ast_hash": "7e1e2f607e5aadd356764ac07e77d6ed",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/execution_matrix.py": {
@@ -11775,8 +11775,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_value_target_ir.py": {
-    "mtime": 1780547909.3147647,
-    "ast_hash": "692385ddf159d529f693e797c2afadbe",
+    "mtime": 1780574693.1871328,
+    "ast_hash": "46066acb90a0a3d6aecbc645315b03f2",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_batching_rule_closure.py": {

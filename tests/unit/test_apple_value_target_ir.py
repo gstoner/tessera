@@ -295,6 +295,10 @@ def test_extractor_survives_line_wrapped_attr_dicts():
     assert c["symbol"] == "tessera_apple_cpu_cholesky_f32"
     assert driver.apple_value_call_is_executable(c)
 
+    spoofed = dict(c)
+    spoofed["symbol"] = "tessera_apple_cpu_reference_cholesky_f32"
+    assert not driver.apple_value_call_is_executable(spoofed)
+
 
 def test_extractor_survives_json_braces_in_argument_layout():
     """RV-P3/S2-1: an argument_layout value that is itself a JSON object (with
@@ -1475,8 +1479,9 @@ def test_gpu_batched_value_routes_to_apple_value_target_ir(dtype, mlir, symbol):
 
 
 def test_gpu_value_executor_allowlist_exact():
+    from tessera.compiler import driver
     from tessera.runtime import _APPLE_VALUE_GPU_SYMBOLS
-    assert _APPLE_VALUE_GPU_SYMBOLS == frozenset({
+    expected = frozenset({
         "tessera_apple_gpu_bmm_f32",
         "tessera_apple_gpu_bmm_f16",
         "tessera_apple_gpu_bmm_bf16",
@@ -1486,6 +1491,8 @@ def test_gpu_value_executor_allowlist_exact():
         "tessera_apple_gpu_ebm_energy_quadratic_value_f32",
         "tessera_apple_gpu_ebm_langevin_step_value_f32",
     })
+    assert _APPLE_VALUE_GPU_SYMBOLS == expected
+    assert set(driver._APPLE_VALUE_GPU_SYMBOL_PROBES) == expected
 
 
 def test_gpu_ebm_value_metadata_needs_active_runtime_probe(monkeypatch):
@@ -1509,6 +1516,33 @@ func.func @f(%x: tensor<2x3xf32>, %y: tensor<2x3xf32>) -> tensor<2xf32> {
     assert meta["apple_target_ir_kind"] == "value_target_ir"
     assert meta["apple_value_calls"][0]["op_kind"] == "ebm_energy_quadratic"
     assert meta.get("executable") is not True
+
+
+def test_gpu_ebm_value_call_executable_is_per_symbol_and_probe(monkeypatch):
+    """Stage 16D: executable is a per-symbol runtime envelope claim. The
+    status-returning EBM value ABI can become executable when its numerical
+    probe passes; the legacy void EBM ABI cannot borrow that claim."""
+    from tessera import runtime
+    from tessera.compiler import driver
+
+    monkeypatch.setattr(
+        runtime, "_apple_gpu_ebm_energy_quadratic_value_available",
+        lambda: True)
+    p = _run("tessera-lower-to-apple_gpu-full", _GRAPH["ebm_energy_quadratic"])
+    assert p.returncode == 0, p.stderr
+    call = driver.extract_apple_value_calls(p.stdout)[0]
+    assert call["op"] == "tessera_apple.gpu.kernel_call"
+    assert call["op_kind"] == "ebm_energy_quadratic"
+    assert call["symbol"] == "tessera_apple_gpu_ebm_energy_quadratic_value_f32"
+    assert driver.apple_value_call_is_executable(call)
+
+    legacy = dict(call)
+    legacy["symbol"] = "tessera_apple_gpu_ebm_energy_quadratic_f32"
+    assert not driver.apple_value_call_is_executable(legacy)
+
+    off_allowlist = dict(call)
+    off_allowlist["symbol"] = "tessera_apple_gpu_ebm_energy_quadratic_reference_cpu_f32"
+    assert not driver.apple_value_call_is_executable(off_allowlist)
 
 
 def test_gpu_ebm_value_non_darwin_stub_is_not_executable():

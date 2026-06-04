@@ -510,6 +510,36 @@ _APPLE_FLOAT_ATTR_RE = re.compile(
     r"(\w+)\s*=\s*(-?(?:\d+\.\d*|\d*\.\d+)(?:[eE][+-]?\d+)?)\s*:\s*f(?:32|64)\b"
 )
 
+_APPLE_VALUE_CPU_EXECUTABLE_SYMBOLS: frozenset[str] = frozenset({
+    "tessera_apple_cpu_cholesky_f32",
+    "tessera_apple_cpu_tri_solve_f32",
+    "tessera_apple_cpu_cholesky_solve_f32",
+    "tessera_apple_cpu_lu_f32",
+    "tessera_apple_cpu_qr_f32",
+    "tessera_apple_cpu_svd_f32",
+    "tessera_apple_cpu_gemm_f32",
+    "tessera_apple_cpu_gemm_f32_batched",
+    "tessera_apple_cpu_gemm_f16",
+    "tessera_apple_cpu_gemm_bf16",
+})
+
+# Stage 16D: Apple GPU value executable truth is per C ABI symbol, not per op
+# family. Symbols with status-returning/probed runtime helpers use those probes;
+# legacy value symbols that predate probe helpers still require the runtime
+# resolver to bind and are tracked as follow-ons for numerical-probe parity.
+_APPLE_VALUE_GPU_SYMBOL_PROBES: Mapping[str, str] = {
+    "tessera_apple_gpu_bmm_f32": "_apple_gpu_bmm_f32",
+    "tessera_apple_gpu_bmm_f16": "_apple_gpu_bmm_f16",
+    "tessera_apple_gpu_bmm_bf16": "_apple_gpu_bmm_bf16",
+    "tessera_apple_gpu_native_sparse_attn_f32": "_apple_gpu_native_sparse_attn_f32",
+    "tessera_apple_gpu_ppo_policy_loss_f32": "_apple_gpu_ppo_policy_loss_available",
+    "tessera_apple_gpu_ppo_policy_loss_ex_f32": "_apple_gpu_ppo_policy_loss_ex_available",
+    "tessera_apple_gpu_ebm_energy_quadratic_value_f32":
+        "_apple_gpu_ebm_energy_quadratic_value_available",
+    "tessera_apple_gpu_ebm_langevin_step_value_f32":
+        "_apple_gpu_ebm_langevin_step_value_available",
+}
+
 
 def _scan_value_call_attr_dicts(ir_text: str) -> list[tuple[str, str]]:
     """Brace-safe scanner (Sprint 2, S2-1): for every value-op mnemonic, walk
@@ -597,9 +627,38 @@ def extract_apple_value_calls(ir_text: str) -> list[dict[str, object]]:
     return calls
 
 
-def apple_value_call_is_executable(call: dict[str, str]) -> bool:
-    """A value call dispatches natively only when its status says so."""
-    return call.get("status") == "executable" and bool(call.get("symbol"))
+def _gpu_value_symbol_available(symbol: str) -> bool:
+    probe_name = _APPLE_VALUE_GPU_SYMBOL_PROBES.get(symbol)
+    if probe_name is None:
+        return False
+    try:
+        from tessera import runtime as _rt
+
+        probe = getattr(_rt, probe_name, None)
+        if probe is None:
+            return False
+        return bool(probe())
+    except Exception:
+        return False
+
+
+def apple_value_call_is_executable(call: Mapping[str, object]) -> bool:
+    """Return true only for per-symbol allowlisted Apple value calls.
+
+    ``status="executable"`` is necessary but not sufficient: the call must use
+    the expected value-op mnemonic and a C ABI symbol on the exact CPU/GPU
+    allowlist. GPU symbols also need their runtime resolver/probe to succeed, so
+    a stub or stale dylib cannot become executable by metadata alone.
+    """
+    if call.get("status") != "executable":
+        return False
+    symbol = str(call.get("symbol") or "")
+    op = str(call.get("op") or "")
+    if op == "tessera_apple.cpu.call":
+        return symbol in _APPLE_VALUE_CPU_EXECUTABLE_SYMBOLS
+    if op == "tessera_apple.gpu.kernel_call":
+        return _gpu_value_symbol_available(symbol)
+    return False
 
 
 def is_apple_gpu_mps_op(op_name: str) -> bool:

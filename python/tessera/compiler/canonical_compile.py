@@ -222,54 +222,15 @@ class CompileResult:
                         meta["apple_previous_compiler_path"] = meta.get(
                             "compiler_path", "")
                         meta["compiler_path"] = "apple_value_target_ir"
-                        # Sprint 8 review (P2): EXACT executability. The value
-                        # executors accept exactly ONE supported value call, so
-                        # `executable` must be True only when the *whole* value
-                        # program is that single supported call — never "any
-                        # call is executable", which would overclaim a multi-op
-                        # program the executor then rejects as invalid_artifact.
-                        # Supported = (target lane) × (op shape) × (status) ×
-                        # (symbol on the runtime allowlist).
-                        try:
-                            from tessera import runtime as _rt
-                            _cpu_syms = _rt._APPLE_VALUE_CPU_SYMBOLS
-                            _gpu_syms = _rt._APPLE_VALUE_GPU_SYMBOLS
-                        except Exception:
-                            _cpu_syms = frozenset()
-                            _gpu_syms = frozenset()
-                        _exec_ok = False
-                        if len(_calls) == 1:
-                            _c0 = _calls[0]
-                            _sym = _c0.get("symbol")
-                            _ok = _c0.get("status") == "executable"
-                            if (self.target == "apple_cpu" and _ok
-                                    and _c0.get("op") == "tessera_apple.cpu.call"
-                                    and _sym in _cpu_syms):
-                                _exec_ok = True
-                            elif (self.target == "apple_gpu" and _ok
-                                  and _c0.get("op") == "tessera_apple.gpu.kernel_call"
-                                  and _sym in _gpu_syms):
-                                _op_kind = _c0.get("op_kind")
-                                if _op_kind == "batched_gemm":
-                                    _exec_ok = True
-                                elif _op_kind == "native_sparse_attn_fused":
-                                    _exec_ok = (
-                                        _rt._apple_gpu_native_sparse_attn_f32()
-                                        is not None)
-                                elif _op_kind == "ppo_policy_loss":
-                                    if (_sym ==
-                                            "tessera_apple_gpu_ppo_policy_loss_ex_f32"):
-                                        _exec_ok = (
-                                            _rt._apple_gpu_ppo_policy_loss_ex_available())
-                                    else:
-                                        _exec_ok = (
-                                            _rt._apple_gpu_ppo_policy_loss_available())
-                                elif _op_kind == "ebm_energy_quadratic":
-                                    _exec_ok = (
-                                        _rt._apple_gpu_ebm_energy_quadratic_value_available())
-                                elif _op_kind == "ebm_langevin_step":
-                                    _exec_ok = (
-                                        _rt._apple_gpu_ebm_langevin_step_value_available())
+                        # Sprint 8 review (P2) + Stage 16D: EXACT executable
+                        # truth. The value executors accept exactly one
+                        # supported value call, and support is per C ABI symbol
+                        # (plus runtime/probe availability for GPU symbols),
+                        # not per op family.
+                        _exec_ok = (
+                            len(_calls) == 1
+                            and _drv.apple_value_call_is_executable(_calls[0])
+                        )
                         # The value lane OWNS the executable decision for this
                         # artifact (override the bundle/canonical answer): a
                         # value artifact is launchable iff its single value call

@@ -83,12 +83,34 @@ namespace {
 // op-direct `-runtime` pipelines, this drives the whole stack from Graph IR.
 // Registered here (not in the Apple backend library) because it spans Transforms
 // passes that the backend library does not link.
+//
+// Sprint 10 (2026-06-03) — Apple reasoning-model attention-family prologue.
+// Run the Graph IR attention-family *recognizer* passes (SwiGLU / MLA / DeepSeek
+// NSA / Ling-Kimi hybrid / Lightning / DeltaNet-Kimi) BEFORE distribution and
+// tiling, exactly as `buildCUDA13Pipeline` does for NVIDIA. This makes reasoning
+// models compiler-visible on the Apple spine: MLA / NSA fuse into their fused
+// ops, and Lightning / Delta / Hybrid run their (currently IR-preserving) pass
+// slots so a later backend rewrite has a stable position to attach to. The stage
+// is IR-preserving for inputs it does not recognize — it never blocks the linalg
+// value lane that the rest of the `-full` pipeline drives.
+auto addAppleReasoningAttentionPrologue = [](mlir::OpPassManager &pm) {
+  pm.addPass(tessera::createSwigluFusionPass());
+  pm.addPass(tessera::createMLAFusionPass());
+  pm.addPass(tessera::createNativeSparseAttnFusionPass());
+  pm.addPass(tessera::createHybridAttnExpandPass());
+  pm.addPass(tessera::createLightningAttnFusionPass());
+  pm.addPass(tessera::createDeltaAttnChunkingPass());
+};
+
 mlir::PassPipelineRegistration<> gAppleCPUFullPipeline(
     "tessera-lower-to-apple_cpu-full",
     "Full Graph->Schedule->Tile->Target Apple CPU spine (effect-annotation -> "
-    "distribution-lowering -> tiling -> tile-to-apple_cpu)",
+    "distribution-lowering -> tiling -> tile-to-apple_cpu). Sprint 10: runs the "
+    "reasoning-model attention-family prologue before distribution/tiling.",
     [](mlir::OpPassManager &pm) {
       pm.addPass(tessera::createEffectAnnotationPass());
+      // Sprint 10: reasoning-model attention-family stage (compiler-visible).
+      addAppleReasoningAttentionPrologue(pm);
       pm.addPass(tessera::createDistributionLoweringPass());
       // Sprint 5: value-mode tiling preserves static rank-2 f32 matmul/gemm as a
       // single tile op for the Accelerate GEMM value call (CPU `-full` only).
@@ -103,9 +125,13 @@ mlir::PassPipelineRegistration<> gAppleCPUFullPipeline(
 mlir::PassPipelineRegistration<> gAppleGPUFullPipeline(
     "tessera-lower-to-apple_gpu-full",
     "Full Graph->Schedule->Tile->Target Apple GPU spine (effect-annotation -> "
-    "distribution-lowering -> tiling -> tile-to-apple_gpu, value-preserving)",
+    "distribution-lowering -> tiling -> tile-to-apple_gpu, value-preserving). "
+    "Sprint 10: runs the reasoning-model attention-family prologue before "
+    "distribution/tiling.",
     [](mlir::OpPassManager &pm) {
       pm.addPass(tessera::createEffectAnnotationPass());
+      // Sprint 10: reasoning-model attention-family stage (compiler-visible).
+      addAppleReasoningAttentionPrologue(pm);
       pm.addPass(tessera::createDistributionLoweringPass());
       // Sprint 8: value-mode tiling preserves static rank-3 f32/f16/bf16
       // batched matmul as a single tile.batched_gemm for the GPU bmm value call

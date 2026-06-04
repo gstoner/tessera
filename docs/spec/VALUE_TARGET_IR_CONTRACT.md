@@ -2,7 +2,7 @@
 status: Normative
 classification: Backend contract
 audience: backend authors (Apple proven; NVIDIA / ROCm inherit)
-last_updated: 2026-06-03 (Apple Value Target IR sprint 9 — registered Tile IR dialect; value lane runs with no --allow-unregistered-dialect)
+last_updated: 2026-06-03 (Sprint 10 — Apple reasoning-model attention prologue in the -full pipelines: compiler-visible MLA/NSA/Lightning/Delta/hybrid before distribution/tiling, honestly gated; one strict executable MLA-style envelope + benchmark)
 ---
 
 # Value Target IR Contract
@@ -69,6 +69,31 @@ flag is reintroduced in the driver, the lit value fixtures, or the test
 runner. The dialect `allowUnknownOperations` so the *artifact* lane's
 remaining transient tile ops (`tile.mma`/`async_copy`/`kv_cache`/debug) stay
 opaque until their own ODS lands — a documented follow-on, not a hidden gap.
+
+## Reasoning-model attention prologue (Sprint 10)
+
+The Apple value `-full` pipelines (`tessera-lower-to-apple_{cpu,gpu}-full`) run
+the Graph IR attention-family **recognizer** passes — SwiGLU / MLA /
+DeepSeek NSA / Ling-Kimi hybrid / Lightning / DeltaNet-Kimi — **before**
+distribution and tiling, exactly like the NVIDIA `tessera-nvidia-pipeline`.
+This makes reasoning models *compiler-visible* on the Apple spine: the
+DeepSeek MLA decode chain (`latent_kv_compress -> expand_k/v -> flash_attn`)
+fuses into `tessera.mla_decode_fused`, and the Lightning / Delta / hybrid pass
+slots run in a stable position for a future backend rewrite.
+
+**Honesty:** compiler-visible is **not** executable. The fused reasoning ops
+have no Apple value lowering yet, so they pass through the value lane as
+Graph IR ops — there is no `tessera_apple.gpu.kernel_call`, no MSL/MPS symbol,
+and no `ub.poison` husk. The runtime envelope
+(`driver._APPLE_GPU_RUNTIME_OPS`) does **not** contain them, so they are never
+claimed executable. The one strict executable reasoning envelope is the
+MLA-style block built from executable primitives
+(`matmul -> softmax -> matmul` + MPS projections), proven numerically by
+`tests/unit/test_apple_gpu_mla_e2e.py`. Lit: `apple_reasoning_attention_prologue.mlir`.
+Benchmark + honesty guards: `benchmarks/apple_gpu/benchmark_reasoning_attention.py`
++ `tests/unit/test_apple_gpu_reasoning_benchmark.py` (reports route / target /
+executor / correctness / timing as separate fields; never fabricates a number
+for an op it did not run).
 
 ## Pipeline intent
 

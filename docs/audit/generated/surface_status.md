@@ -92,10 +92,7 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 | `tests/unit` | runnable | `tests/unit` |  |
 | `tests/unit/_slow_subset` | compile_only | `tests/unit (slow-marked tests)` |  |
 
-<!-- AUTO-GENERATED — DO NOT EDIT BY HAND. -->
-<!-- Regenerate via: python -m tessera.cli.operator_benchmarks_coverage -->
-
-# Operator Benchmark Coverage
+## Operator Benchmark Coverage
 
 This dashboard maps the current support-table families to the seven active ``Tessera_Operator_Benchmarks`` groups. It also records families that intentionally live in a different benchmark harness.
 

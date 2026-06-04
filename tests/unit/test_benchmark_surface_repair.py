@@ -202,10 +202,18 @@ def test_operator_benchmark_coverage_dashboard_is_current() -> None:
         "softmax_layernorm",
         "transpose_gather",
     }.issubset(groups)
-    doc = ROOT / "docs/audit/generated/operator_benchmarks_coverage.md"
-    if not doc.exists():
-        pytest.fail("missing operator benchmark coverage dashboard")
-    assert doc.read_text(encoding="utf-8") == render_markdown()
+    # operator-benchmark coverage was folded (2026-06-04) into the
+    # registry-managed consolidated ``surface_status`` dashboard; verify
+    # its rendered content is faithfully included there.
+    from tessera.compiler import generated_docs as gd
+
+    surface_md = gd.get("surface_status").render_md()
+    assert "## Operator Benchmark Coverage" in surface_md
+    # The operator-benchmark table rows must survive the fold verbatim.
+    obc_table = [
+        ln for ln in render_markdown().splitlines() if ln.startswith("| ")
+    ]
+    assert obc_table and all(row in surface_md for row in obc_table)
 
 
 def test_apple_fusion_smoke_writes_output_or_skip_reason(tmp_path: Path) -> None:

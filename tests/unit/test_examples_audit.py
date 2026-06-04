@@ -29,13 +29,10 @@ from tessera.compiler.examples_manifest import (
     all_entries,
     audit_filesystem,
     entries_by_status,
-    render_markdown,
-    status_counts,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-GENERATED_DOC = REPO_ROOT / "docs" / "audit" / "generated" / "examples_status.md"
 
 
 class TestManifestShape:
@@ -123,55 +120,29 @@ class TestManifestFilesystem:
 
 
 class TestGeneratedDashboardDriftGate:
-    """Lock ``docs/audit/generated/examples_status.md`` against the manifest.
+    """The per-surface ``examples_status.md`` doc was consolidated
+    (2026-06-04) into the registry-managed ``surface_status`` dashboard.
 
-    Same pattern as ``test_standalone_compiler_roadmap``'s drift gate —
-    the doc is regenerated from code, and CI fails if the
-    checked-in copy diverges from the renderer.
+    Drift is gated centrally by the generated-doc registry; here we only
+    confirm the examples surface is represented in the consolidated doc.
     """
 
-    def test_generated_doc_matches_render(self) -> None:
-        if not GENERATED_DOC.exists():
-            pytest.fail(
-                f"missing {GENERATED_DOC.relative_to(REPO_ROOT)} — "
-                "regenerate via "
-                "`python -m tessera.cli.examples_audit --render`"
-            )
-        on_disk = GENERATED_DOC.read_text(encoding="utf-8")
-        rendered = render_markdown()
-        if on_disk != rendered:
-            # Show a tight diff hint for the failure message.
-            from difflib import unified_diff
-            diff = "\n".join(
-                list(
-                    unified_diff(
-                        on_disk.splitlines()[:80],
-                        rendered.splitlines()[:80],
-                        lineterm="",
-                        fromfile="on_disk",
-                        tofile="render_markdown()",
-                    )
-                )[:40]
-            )
-            pytest.fail(
-                "examples_status.md is out of date with the manifest.\n"
-                "Regenerate via "
-                "`python -m tessera.cli.examples_audit --render`.\n\n"
-                f"diff (truncated):\n{diff}"
-            )
+    def test_surface_status_in_sync(self) -> None:
+        from tessera.compiler import generated_docs as gd
 
-    def test_dashboard_lists_every_entry(self) -> None:
-        text = GENERATED_DOC.read_text(encoding="utf-8")
+        assert gd.check(gd.get("surface_status")) is None
+
+    def test_surface_status_lists_every_examples_entry(self) -> None:
+        from tessera.compiler import generated_docs as gd
+
+        csv = gd.get("surface_status").render_csv()
         for entry in all_entries():
-            assert f"``{entry.directory}``" in text, entry.directory
+            assert entry.directory in csv, entry.directory
 
-    def test_status_counts_appear_in_doc(self) -> None:
-        text = GENERATED_DOC.read_text(encoding="utf-8")
-        counts = status_counts()
-        for status in ALLOWED_STATUSES:
-            assert (
-                f"``{status}`` | {counts[status]} |" in text
-            ), f"missing count row for {status}"
+    def test_surface_status_covers_examples(self) -> None:
+        from tessera.compiler import generated_docs as gd
+
+        assert "\nexamples," in gd.get("surface_status").render_csv()
 
 
 class TestCLIs:

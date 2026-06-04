@@ -39,9 +39,12 @@ from tessera.compiler.coverage_classification import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# The classification dashboard was merged (2026-06-04) into the
+# registry-managed ``test_coverage.md`` (the classification section is
+# rendered after the by-op section); these phrase/exists checks hold
+# against the merged doc.
 DASHBOARD = (
-    REPO_ROOT / "docs" / "audit" / "generated"
-    / "test_coverage_classification.md"
+    REPO_ROOT / "docs" / "audit" / "generated" / "test_coverage.md"
 )
 
 

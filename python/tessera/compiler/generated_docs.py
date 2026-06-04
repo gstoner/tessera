@@ -40,7 +40,7 @@ import argparse
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional, Sequence
+from typing import Any, Callable, Optional, Sequence
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _GEN = _REPO_ROOT / "docs" / "audit" / "generated"
@@ -201,7 +201,7 @@ def _r_docs_freshness() -> str:
 _SURFACES: tuple[str, ...] = ("examples", "benchmarks", "research", "tools", "tests")
 
 
-def _surface_modules() -> dict[str, object]:
+def _surface_modules() -> dict[str, Any]:
     import importlib
     return {
         s: importlib.import_module(f"tessera.compiler.{s}_manifest")
@@ -271,11 +271,16 @@ def _r_surface_status_md() -> str:
         lines.append("")
     # Operator-benchmark coverage folded in as an appendix section.
     from . import operator_benchmarks_coverage as _obc
-    obc_md = _obc.render_markdown()
+    obc_lines = _obc.render_markdown().splitlines()
+    # Drop the appendix's AUTO-GENERATED banner (HTML comments + blanks)
+    # so only its content lands in the combined doc.
+    while obc_lines and (
+        obc_lines[0].lstrip().startswith("<!--") or not obc_lines[0].strip()
+    ):
+        obc_lines.pop(0)
     # Demote the appendix's leading H1 to an H2 so headings stay nested.
-    obc_lines = obc_md.splitlines()
     if obc_lines and obc_lines[0].startswith("# "):
-        obc_lines[0] = "## Operator benchmark coverage"
+        obc_lines[0] = "## " + obc_lines[0][2:]
     lines.extend(obc_lines)
     return "\n".join(lines).rstrip() + "\n"
 

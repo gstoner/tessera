@@ -1,9 +1,20 @@
-"""Opt-in diagnostic harness for the Apple GPU control-flow bulk-run segfault.
+"""Regression guard for the Apple GPU control-flow bulk-run segfault.
 
-This file is intentionally skipped by default. Enable it with
-``TESSERA_RUN_APPLE_GPU_CF_STRESS=1`` when investigating the pre-existing
-MPSGraph bulk ordering issue where ``test_apple_gpu_control_flow.py`` passes in
-isolation but can segfault in a larger Apple slice.
+``tessera_apple_gpu_cf_while_generate_f32`` used to be lowered onto an MPSGraph
+``-whileWithInitialInputs:before:after:`` loop. That route ran fine in
+isolation but crashed (SIGSEGV) inside MPSGraph's own ``GPU::WhileOpHandler``
+constructor during lazy graph specialization once enough MPSGraph executables
+had churned through the process — so ``test_apple_gpu_control_flow.py`` passed
+alone yet segfaulted the interpreter in a larger Apple slice / the full unit
+sweep. The fix (2026-06-04) moves the bounded generate loop to a single
+hand-written MSL kernel with a native ``while`` loop, avoiding the fragile
+MPSGraph while-op handler entirely.
+
+This test reproduces the original interaction — interleaving bulk ``bmm``
+MPSGraph dispatches with ``cf_while_generate`` — so a regression back onto the
+MPSGraph ``while`` route (or any other bulk-ordering crash) trips here instead
+of taking down the whole suite. Override the iteration count with
+``TESSERA_APPLE_GPU_CF_STRESS_ITERS`` when investigating.
 """
 
 from __future__ import annotations
@@ -17,15 +28,12 @@ import pytest
 from tessera import runtime as R
 
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("TESSERA_RUN_APPLE_GPU_CF_STRESS") != "1",
-    reason="set TESSERA_RUN_APPLE_GPU_CF_STRESS=1 to run Apple CF stress harness",
-)
-
-
 @pytest.mark.skipif(sys.platform != "darwin", reason="MPSGraph stress is Darwin-only")
+@pytest.mark.skipif(
+    not R.DeviceTensor.is_metal(), reason="needs a real Metal device"
+)
 def test_cf_while_generate_after_bulk_bmm_dispatches():
-    iterations = int(os.environ.get("TESSERA_APPLE_GPU_CF_STRESS_ITERS", "20"))
+    iterations = int(os.environ.get("TESSERA_APPLE_GPU_CF_STRESS_ITERS", "25"))
     rng = np.random.default_rng(20260612)
 
     for i in range(iterations):

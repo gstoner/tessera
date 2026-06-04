@@ -11947,14 +11947,28 @@ extern "C" int32_t tessera_apple_gpu_cf_serial_draft_f32(
 
 //===----------------------------------------------------------------------===//
 // Phase-G Rung 2 — predicate-driven control flow: a bounded greedy-generation
-// loop lowered into ONE MPSGraph -whileWithInitialInputs:before:after:. Unlike
-// the fixed-trip forLoop (Rungs 0/1), the trip count is **data-dependent**: the
-// loop runs until it emits the EOS token or hits `max_steps`. Body per step:
+// loop expressed as ONE hand-written MSL kernel with a NATIVE while-loop. The
+// trip count is **data-dependent**: the loop runs until it emits the EOS token
+// or hits `max_steps`. Body per step:
 //   hidden = tanh(hidden @ W);  token = argmax(hidden @ lm);  out[step] = token
-// before-block predicate: (step < max_steps) AND (last_token != eos).
+// predicate: (step < max_steps) AND (last_token != eos).
 // `n_out` returns the number of tokens generated (eos inclusive). This is the
 // variable-trip control-flow primitive; the decode body is intentionally small
-// (the dynamic verify/accept of a real speculative step stay host-side). See
+// (the dynamic verify/accept of a real speculative step stay host-side).
+//
+// **2026-06-04 — moved off MPSGraph `-whileWithInitialInputs:before:after:`.**
+// The MPSGraph `while` route crashed (SIGSEGV) inside MPSGraph's own
+// `GPU::WhileOpHandler` constructor during lazy graph specialization — it ran
+// in isolation but faulted once enough MPSGraph executables had churned through
+// the process (reproduced by `test_apple_gpu_control_flow_stress.py`, which
+// interleaves bmm + while-generate). The data-dependent loop is bounded and the
+// per-step work is tiny (d ≤ 256), so the whole sequential generation now runs
+// in one thread of a classic MSL compute kernel — the same robust single-thread
+// pattern as `cf_scan_msl` (MTL4 scan) and the Rung-3 `spec_accept` kernel,
+// dispatched through the stable `commit_and_wait_with_timeout` path. argmax
+// streams over the vocabulary (no V-sized stack array; V is unbounded). The
+// hidden state lives in a `[256]` thread-local array, matching the
+// documented d ≤ 256 control-flow envelope. See
 // docs/apple_gpu_control_flow_lowering.md.
 //===----------------------------------------------------------------------===//
 extern "C" int32_t tessera_apple_gpu_cf_while_generate_f32(
@@ -11964,64 +11978,82 @@ extern "C" int32_t tessera_apple_gpu_cf_while_generate_f32(
   MetalDeviceContext &ctx = deviceContext();
   if (!ctx.ok || d <= 0 || V <= 0 || max_steps <= 0) return 0;
   if (!W || !lm || !h_init || !tokens_out || !n_out) return 0;
+  if (d > 256) return 0;  // thread-local carry envelope; caller falls back.
+  static NSString *const kWhileGenerateMSL = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+// W : [d, d]  lm : [d, V]  h_init : [d]
+// tokens_out : [max_steps]   n_out : [1]
+// Greedy generation: hidden = tanh(hidden @ W); token = argmax(hidden @ lm).
+// Native while-loop with a data-dependent trip count; single thread.
+kernel void cf_while_generate(device const float *W      [[buffer(0)]],
+                              device const float *lm     [[buffer(1)]],
+                              device const float *h_init [[buffer(2)]],
+                              device int         *toks    [[buffer(3)]],
+                              device int         *n_out   [[buffer(4)]],
+                              constant int       &start   [[buffer(5)]],
+                              constant int       &eos     [[buffer(6)]],
+                              constant int       &maxs    [[buffer(7)]],
+                              constant int       &d       [[buffer(8)]],
+                              constant int       &V       [[buffer(9)]],
+                              uint tid [[thread_position_in_grid]]) {
+  if (tid != 0) return;                  // single thread runs the dynamic loop
+  for (int s = 0; s < maxs; ++s) toks[s] = 0;
+  float h[256], hp[256];
+  for (int j = 0; j < d; ++j) h[j] = h_init[j];
+  int last = start, step = 0;
+  while (step < maxs && last != eos) {   // <-- native data-dependent control flow
+    for (int j = 0; j < d; ++j) {        // hp = tanh(h @ W)
+      float acc = 0.0f;
+      for (int k = 0; k < d; ++k) acc += h[k] * W[k * d + j];
+      hp[j] = tanh(acc);
+    }
+    int best = 0;                        // last = argmax(hp @ lm), first-max wins
+    float bestv = -INFINITY;
+    for (int v = 0; v < V; ++v) {
+      float acc = 0.0f;
+      for (int k = 0; k < d; ++k) acc += hp[k] * lm[k * V + v];
+      if (acc > bestv) { bestv = acc; best = v; }
+    }
+    last = best;
+    toks[step] = last;
+    for (int j = 0; j < d; ++j) h[j] = hp[j];
+    ++step;
+  }
+  n_out[0] = step;
+}
+)MSL";
   @autoreleasepool {
-    MPSDataType F = MPSDataTypeFloat32, I = MPSDataTypeInt32;
-    MPSGraph *g = [MPSGraph new];
-    MPSGraphTensor *pW = [g placeholderWithShape:@[ @(d), @(d) ] dataType:F name:nil];
-    MPSGraphTensor *pLm = [g placeholderWithShape:@[ @(d), @(V) ] dataType:F name:nil];
-    MPSGraphTensor *pH0 = [g placeholderWithShape:@[ @1, @(d) ] dataType:F name:nil];
-    MPSGraphTensor *tok0 = [g constantWithScalar:start_token shape:@[ @1 ] dataType:I];
-    MPSGraphTensor *step0 = [g constantWithScalar:0 shape:@[ @1 ] dataType:I];
-    MPSGraphTensor *out0 = [g constantWithScalar:0 shape:@[ @(max_steps) ] dataType:I];
-    MPSGraphTensor *maxT = [g constantWithScalar:max_steps shape:@[ @1 ] dataType:I];
-    MPSGraphTensor *eosT = [g constantWithScalar:eos_token shape:@[ @1 ] dataType:I];
-    MPSGraphTensor *oneT = [g constantWithScalar:1 shape:@[ @1 ] dataType:I];
-
-    NSArray<MPSGraphTensor *> *results = [g
-        whileWithInitialInputs:@[ pH0, tok0, step0, out0 ]
-        before:^MPSGraphTensor *(
-            NSArray<MPSGraphTensor *> *inputs,
-            NSMutableArray<MPSGraphTensor *> *bodyResults) {
-          [bodyResults addObjectsFromArray:inputs];  // forward carry to `after`
-          MPSGraphTensor *lastTok = inputs[1];
-          MPSGraphTensor *step = inputs[2];
-          MPSGraphTensor *lt = [g lessThanWithPrimaryTensor:step secondaryTensor:maxT name:nil];
-          MPSGraphTensor *ne = [g notEqualWithPrimaryTensor:lastTok secondaryTensor:eosT name:nil];
-          MPSGraphTensor *cond = [g logicalANDWithPrimaryTensor:lt secondaryTensor:ne name:nil];
-          return [g reshapeTensor:cond withShape:@[ @1 ] name:nil];
-        }
-        after:^NSArray<MPSGraphTensor *> *(NSArray<MPSGraphTensor *> *args) {
-          MPSGraphTensor *h = args[0];     // [1, d]
-          MPSGraphTensor *step = args[2];  // [1] int
-          MPSGraphTensor *out = args[3];   // [max] int
-          MPSGraphTensor *hp = [g tanhWithTensor:[g matrixMultiplicationWithPrimaryTensor:h secondaryTensor:pW name:nil] name:nil];
-          MPSGraphTensor *logits = [g matrixMultiplicationWithPrimaryTensor:hp secondaryTensor:pLm name:nil];  // [1,V]
-          MPSGraphTensor *am = [g reductionArgMaximumWithTensor:logits axis:1 name:nil];  // [1,1] int
-          MPSGraphTensor *tok = [g reshapeTensor:[g castTensor:am toType:MPSDataTypeInt32 name:nil] withShape:@[ @1 ] name:nil];
-          MPSGraphTensor *outp = [g scatterWithDataTensor:out updatesTensor:tok indicesTensor:step axis:0 mode:MPSGraphScatterModeSet name:nil];
-          MPSGraphTensor *stepp = [g additionWithPrimaryTensor:step secondaryTensor:oneT name:nil];
-          return @[ hp, tok, stepp, outp ];
-        }
-        name:nil];
-    MPSGraphTensor *stepT = results[2];  // [1] int — count generated
-    MPSGraphTensor *outT = results[3];   // [max] int
-
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kWhileGenerateMSL, @"cf_while_generate");
+    if (!pso) return 0;
+    // Pooled buffers — synced (commit_and_wait) before the memcpy below, so
+    // they are safe to recycle on scope exit.
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bW, ctx, W, (size_t)d * d * 4);
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bLm, ctx, lm, (size_t)d * V * 4);
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bH0, ctx, h_init, (size_t)d * 4);
-    if (!bW || !bLm || !bH0) return 0;
-    MPSGraphTensorData *dW = [[MPSGraphTensorData alloc] initWithMTLBuffer:bW shape:@[ @(d), @(d) ] dataType:F];
-    MPSGraphTensorData *dLm = [[MPSGraphTensorData alloc] initWithMTLBuffer:bLm shape:@[ @(d), @(V) ] dataType:F];
-    MPSGraphTensorData *dH0 = [[MPSGraphTensorData alloc] initWithMTLBuffer:bH0 shape:@[ @1, @(d) ] dataType:F];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{pW : dW, pLm : dLm, pH0 : dH0}
-                                    targetTensors:@[ stepT, outT ]
-                                 targetOperations:nil];
-    MPSGraphTensorData *sod = res[stepT];
-    MPSGraphTensorData *ood = res[outT];
-    if (!sod || !ood) return 0;
-    [[sod mpsndarray] readBytes:n_out strideBytes:nil];
-    [[ood mpsndarray] readBytes:tokens_out strideBytes:nil];
+    TS_METAL_BUF_ACQUIRE(bTok, ctx, (size_t)max_steps * 4);
+    TS_METAL_BUF_ACQUIRE(bN, ctx, sizeof(int32_t));
+    if (!bW || !bLm || !bH0 || !bTok || !bN) return 0;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bW offset:0 atIndex:0];
+    [enc setBuffer:bLm offset:0 atIndex:1];
+    [enc setBuffer:bH0 offset:0 atIndex:2];
+    [enc setBuffer:bTok offset:0 atIndex:3];
+    [enc setBuffer:bN offset:0 atIndex:4];
+    [enc setBytes:&start_token length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&eos_token length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&max_steps length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&d length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&V length:sizeof(int32_t) atIndex:9];
+    [enc dispatchThreads:MTLSizeMake(1, 1, 1) threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "apple_gpu_cf_while_generate")) return 0;
+    std::memcpy(n_out, [bN contents], sizeof(int32_t));
+    std::memcpy(tokens_out, [bTok contents], (size_t)max_steps * 4);
     return 1;
   }
 }

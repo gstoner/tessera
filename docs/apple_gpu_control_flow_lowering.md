@@ -80,16 +80,28 @@ research-grade and out of scope here. What *is* tractable and worth doing is the
   dispatches), validated token-for-token against the host `SerialHead`
   (hidden err ~6e-7). Exposed as `gumiho.validate_serial_forloop` /
   `serial_draft_forloop`; `demo.py --mode forloop`.
-- **Rung 2 — predicate-driven `while` generation (landed).** A
-  `whileWithInitialInputs:before:after:` greedy-generation loop with a
-  **data-dependent** trip count: `token = argmax((hidden = tanh(hidden @ W)) @
-  lm)` looped until the EOS token or `max_steps`. The `before` block returns the
-  scalar predicate `(step < max) AND (last_token != eos)`; the `after` block
-  runs the body and scatters each token into a fixed-capacity `[max_steps]`
-  buffer. `tessera_apple_gpu_cf_while_generate_f32` returns the tokens + the
-  actual count. This is the variable-trip control-flow primitive — distinct from
-  the fixed-trip `forLoop`. The body is intentionally small (the dynamic
+- **Rung 2 — predicate-driven `while` generation (landed; MSL since 2026-06-04).**
+  A greedy-generation loop with a **data-dependent** trip count:
+  `token = argmax((hidden = tanh(hidden @ W)) @ lm)` looped until the EOS token
+  or `max_steps`. The predicate is `(step < max) AND (last_token != eos)`.
+  `tessera_apple_gpu_cf_while_generate_f32` returns the tokens + the actual
+  count. This is the variable-trip control-flow primitive — distinct from the
+  fixed-trip `forLoop`. The body is intentionally small (the dynamic
   verify/accept of a real speculative step stay host-side).
+  **Originally an MPSGraph `whileWithInitialInputs:before:after:`, it was moved
+  to a single hand-written MSL kernel with a native `while` loop (the same
+  single-thread pattern as the Rung-0 `cf_scan_msl` and Rung-3 `spec_accept`
+  kernels).** The MPSGraph `while` route crashed (SIGSEGV) inside MPSGraph's own
+  `GPU::WhileOpHandler` constructor during lazy graph specialization — it ran in
+  isolation but faulted once enough MPSGraph executables had churned through the
+  process (reproduced by `tests/unit/test_apple_gpu_control_flow_stress.py`,
+  which interleaves `bmm` + while-generate dispatches). Because the loop is
+  bounded and the per-step work is tiny (`d ≤ 256`), the whole sequential
+  generation now runs in one MSL thread, dispatched through the stable
+  `commit_and_wait_with_timeout` path. argmax streams over the vocabulary, so
+  `V` is unbounded; the hidden carry lives in a `[256]` thread-local array,
+  matching the documented `d ≤ 256` control-flow envelope (`d > 256` falls back
+  to the host numpy loop).
 - **Rung 3 — dynamic frontier, via MSL (first slice landed).** Out of scope for
   the MPSGraph route, but the MSL route reaches it (see the mapping below).
   `tessera_apple_gpu_msl_spec_accept` runs the **dynamic speculative-verify

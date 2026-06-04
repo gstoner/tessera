@@ -1,4 +1,6 @@
 #pragma once
+#include <cstdint>   // uint64_t — explicit so GCC/libstdc++ (CI) doesn't
+                      // rely on the transitive include macOS Clang/libc++ provides
 #include <string>
 #include <functional>
 #include <unordered_map>

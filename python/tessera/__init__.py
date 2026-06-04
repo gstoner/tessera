@@ -3451,6 +3451,17 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "conformal_energy_on_sphere": _ts_complex.conformal_energy_on_sphere,
     }
     references.update(m7_references)
+    # ``ebm_energy_quadratic`` / ``ebm_langevin_step`` were added to
+    # ``OP_SPECS`` (Graph IR ODS + verifiers, 2026) but their numpy
+    # references were never wired into the ops registry, leaving them in
+    # the catalog yet absent from ``tessera.ops.registry.list()`` and
+    # ``PYTHON_API_SPEC.md``.  Register the real EBM reference impls so
+    # the OP_SPECS ⊆ registry invariant holds.
+    from tessera import ebm as _ts_ebm  # noqa: E402
+    references.update({
+        "ebm_energy_quadratic": _ts_ebm.energy_quadratic,
+        "ebm_langevin_step": _ts_ebm.langevin_step,
+    })
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
         _register_lowering(op_name, lambda *args, _op=op_name, **kwargs: {"op": _op, "status": "artifact_only"}, backend="graph_ir")

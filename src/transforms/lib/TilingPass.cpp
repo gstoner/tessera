@@ -34,6 +34,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Matchers.h"
@@ -49,7 +50,16 @@ namespace {
 
 // Helper: create an arith.constant of index type.
 static Value idx(OpBuilder &b, Location loc, int64_t v) {
-  return b.create<arith::ConstantIndexOp>(loc, v);
+  return arith::ConstantIndexOp::create(b, loc, v);
+}
+
+static bool hasOperandSegment(Operation *op, unsigned index) {
+  auto segments = op->getAttrOfType<DenseI32ArrayAttr>("operand_segment_sizes");
+  if (!segments)
+    segments = op->getAttrOfType<DenseI32ArrayAttr>("operandSegmentSizes");
+  if (!segments || index >= segments.asArrayRef().size())
+    return false;
+  return segments.asArrayRef()[index] != 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -107,7 +117,7 @@ struct TileMatmul : public RewritePattern {
 
     // Accumulator init: zero-filled tensor<MxNxelemTy>
     Value initTensor =
-        rewriter.create<tensor::EmptyOp>(loc, ArrayRef<int64_t>{M, N}, elemTy);
+        tensor::EmptyOp::create(rewriter, loc, ArrayRef<int64_t>{M, N}, elemTy);
 
     Value zero = idx(rewriter, loc, 0);
     Value one  = idx(rewriter, loc, 1);
@@ -118,7 +128,8 @@ struct TileMatmul : public RewritePattern {
     Value Kval = idx(rewriter, loc, K);
 
     // Outer loop over M tiles.
-    auto outerFor = rewriter.create<scf::ForOp>(
+    auto outerFor = scf::ForOp::create(
+        rewriter,
         loc, zero, Mval, tmVal, ValueRange{initTensor});
     {
       OpBuilder::InsertionGuard g(rewriter);
@@ -127,7 +138,8 @@ struct TileMatmul : public RewritePattern {
       Value acc0 = outerFor.getRegionIterArg(0);
 
       // Inner loop over N tiles.
-      auto innerFor = rewriter.create<scf::ForOp>(
+      auto innerFor = scf::ForOp::create(
+          rewriter,
           loc, zero, Nval, tnVal, ValueRange{acc0});
       {
         OpBuilder::InsertionGuard g2(rewriter);
@@ -138,7 +150,8 @@ struct TileMatmul : public RewritePattern {
         // Extract A tile: A[i:i+tm, 0:K]
         auto aTileType =
             RankedTensorType::get({tm, K}, lhsTy.getElementType());
-        Value aSlice = rewriter.create<tensor::ExtractSliceOp>(
+        Value aSlice = tensor::ExtractSliceOp::create(
+            rewriter,
             loc, aTileType, lhs,
             ValueRange{i, zero},          // offsets
             ValueRange{tmVal, Kval},       // sizes
@@ -147,7 +160,8 @@ struct TileMatmul : public RewritePattern {
         // Extract B tile: B[0:K, j:j+tn]
         auto bTileType =
             RankedTensorType::get({K, tn}, rhsTy.getElementType());
-        Value bSlice = rewriter.create<tensor::ExtractSliceOp>(
+        Value bSlice = tensor::ExtractSliceOp::create(
+            rewriter,
             loc, bTileType, rhs,
             ValueRange{zero, j},
             ValueRange{Kval, tnVal},
@@ -165,17 +179,18 @@ struct TileMatmul : public RewritePattern {
         Value cTile = innerMM->getResult(0);
 
         // Insert tile result back into accumulator.
-        Value acc2 = rewriter.create<tensor::InsertSliceOp>(
+        Value acc2 = tensor::InsertSliceOp::create(
+            rewriter,
             loc, cTile, acc1,
             ValueRange{i, j},             // offsets
             ValueRange{tmVal, tnVal},      // sizes
             ValueRange{one, one});         // strides
 
-        rewriter.create<scf::YieldOp>(loc, ValueRange{acc2});
+        scf::YieldOp::create(rewriter, loc, ValueRange{acc2});
       }
 
       // Outer yield with inner result.
-      rewriter.create<scf::YieldOp>(loc, innerFor.getResults());
+      scf::YieldOp::create(rewriter, loc, innerFor.getResults());
     }
 
     rewriter.replaceOp(op, outerFor.getResults());
@@ -393,7 +408,8 @@ struct TilePPOPolicyLossValue : public RewritePattern {
 
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
-    if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+    if (op->getNumOperands() < 3 || op->getNumOperands() > 6 ||
+        op->getNumResults() != 1)
       return failure();
     auto nextTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
     auto oldTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
@@ -417,6 +433,12 @@ struct TilePPOPolicyLossValue : public RewritePattern {
     };
     if (!sameShape(nextTy, oldTy) || !sameShape(nextTy, advTy))
       return failure();
+    for (Value side : op->getOperands().drop_front(3)) {
+      auto sideTy = llvm::dyn_cast<RankedTensorType>(side.getType());
+      if (!sideTy || !sideTy.hasStaticShape() ||
+          !sideTy.getElementType().isF32() || !sameShape(nextTy, sideTy))
+        return failure();
+    }
     if (resTy.getRank() != 0)
       return failure();
     if (auto r = op->getAttrOfType<StringAttr>("reduction");
@@ -426,7 +448,10 @@ struct TilePPOPolicyLossValue : public RewritePattern {
         c && c.getValueAsDouble() <= 0.0)
       return failure();
     if (auto k = op->getAttrOfType<FloatAttr>("kl_coef");
-        k && k.getValueAsDouble() != 0.0)
+        k && k.getValueAsDouble() < 0.0)
+      return failure();
+    if (auto e = op->getAttrOfType<FloatAttr>("entropy_coef");
+        e && e.getValueAsDouble() < 0.0)
       return failure();
 
     OperationState st(op->getLoc(), "tile.ppo_policy_loss");
@@ -434,6 +459,12 @@ struct TilePPOPolicyLossValue : public RewritePattern {
     st.addTypes(op->getResultTypes());
     for (auto &na : op->getAttrs())
       st.addAttribute(na.getName(), na.getValue());
+    st.addAttribute("has_mask",
+                    rewriter.getBoolAttr(hasOperandSegment(op, 3)));
+    st.addAttribute("has_ref_kl",
+                    rewriter.getBoolAttr(hasOperandSegment(op, 4)));
+    st.addAttribute("has_entropy",
+                    rewriter.getBoolAttr(hasOperandSegment(op, 5)));
     st.addAttribute("source",
                     rewriter.getStringAttr("tessera.rl.ppo_policy_loss"));
     Operation *tiled = rewriter.create(st);
@@ -510,8 +541,7 @@ struct TilingPassImpl
     }
     for (llvm::StringRef opName : kLinalgGraphOps)
       patterns.add<TileLinalg>(&getContext(), opName);
-    if (failed(applyPatternsAndFoldGreedily(getOperation(),
-                                           std::move(patterns))))
+    if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
       signalPassFailure();
   }
 };

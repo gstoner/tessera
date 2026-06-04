@@ -1933,6 +1933,31 @@ extern "C" int32_t tessera_apple_gpu_ppo_policy_loss_f32(
   return 0;
 }
 
+extern "C" int32_t tessera_apple_gpu_ppo_policy_loss_ex_f32(
+    const float* logp_new, const float* logp_old, const float* advantages,
+    const float* mask, const float* ref_logp, const float* entropy,
+    float* out, int32_t n, float clip_epsilon, float kl_coef,
+    float entropy_coef, int32_t has_mask, int32_t has_ref_kl,
+    int32_t has_entropy) {
+  (void)logp_new;
+  (void)logp_old;
+  (void)advantages;
+  (void)mask;
+  (void)ref_logp;
+  (void)entropy;
+  (void)out;
+  (void)n;
+  (void)clip_epsilon;
+  (void)kl_coef;
+  (void)entropy_coef;
+  (void)has_mask;
+  (void)has_ref_kl;
+  (void)has_entropy;
+  // Stage 14 honesty rule: optional PPO variants stay non-executable in the
+  // portable stub; Python must report a structured gate, never CPU fallback.
+  return 0;
+}
+
 extern "C" void tessera_apple_gpu_bmm_f16(const uint16_t* A, const uint16_t* B,
                                           uint16_t* O, int32_t batch, int32_t M,
                                           int32_t N, int32_t K, int32_t b_broadcast) {

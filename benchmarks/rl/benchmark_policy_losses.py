@@ -1,11 +1,12 @@
 """Reference/compiler/GPU PPO-GRPO-CISPO policy-loss benchmark scaffold.
 
-Stage 13 keeps execution claims split by proof level:
+Stages 14/15 keep execution claims split by proof level:
 
 * python_reference — existing tessera.rl numpy implementations.
-* compiler_decomposed_reference — PPO's compiler-visible primitive formula.
-* apple_gpu_value_target_ir — PPO only, and only when the Apple GPU MPSGraph
-  value executor is available and numerically agrees with the reference.
+* compiler_decomposed_reference — PPO variants plus GRPO/CISPO formulas
+  reproduced without calling the public reference functions.
+* apple_gpu_value_target_ir — PPO variants only, and only when the Apple GPU
+  MPSGraph value executor is available and numerically agrees with reference.
 """
 
 from __future__ import annotations
@@ -82,13 +83,77 @@ def _losses(inputs: dict[str, np.ndarray]) -> dict[str, float]:
     }
 
 
-def _ppo_strict_loss(inputs: dict[str, np.ndarray], clip_epsilon: float = 0.2) -> float:
+PPO_VARIANTS: tuple[dict[str, Any], ...] = (
+    {"name": "ppo_policy_loss", "suffix": "strict"},
+    {"name": "ppo_policy_loss_masked", "suffix": "masked", "has_mask": True},
+    {"name": "ppo_policy_loss_ref_kl", "suffix": "ref_kl", "has_ref_kl": True,
+     "kl_coef": 0.01},
+    {"name": "ppo_policy_loss_entropy", "suffix": "entropy", "has_entropy": True,
+     "entropy_coef": 0.02},
+    {"name": "ppo_policy_loss_full", "suffix": "full", "has_mask": True,
+     "has_ref_kl": True, "has_entropy": True, "kl_coef": 0.01,
+     "entropy_coef": 0.02},
+)
+
+
+def _ppo_decomposed_loss(
+    inputs: dict[str, np.ndarray], *, clip_epsilon: float = 0.2,
+    has_mask: bool = False, has_ref_kl: bool = False,
+    has_entropy: bool = False, kl_coef: float = 0.0,
+    entropy_coef: float = 0.0,
+) -> float:
     logp_new = inputs["logp_new"].astype(np.float32)
     logp_old = inputs["logp_old"].astype(np.float32)
     advantages = inputs["advantages"].astype(np.float32)
     ratio = np.exp(logp_new - logp_old)
     clipped = np.clip(ratio, 1.0 - clip_epsilon, 1.0 + clip_epsilon)
-    return float(-np.mean(np.minimum(ratio * advantages, clipped * advantages)))
+    loss = -np.minimum(ratio * advantages, clipped * advantages)
+    if has_ref_kl:
+        ref_logp = inputs["ref_logp"].astype(np.float32)
+        delta = ref_logp - logp_new
+        loss = loss + float(kl_coef) * (np.exp(delta) - delta - 1.0)
+    if has_entropy:
+        entropy = inputs["entropy"].astype(np.float32)
+        loss = loss - float(entropy_coef) * entropy
+    if has_mask:
+        mask = inputs["mask"].astype(np.float32)
+        return float(np.sum(loss * mask) / max(float(np.sum(mask)), 1.0))
+    return float(np.mean(loss))
+
+
+def _normalize_group_advantages_decomposed(
+    rewards: np.ndarray, mask: np.ndarray, group_axis: int = 1,
+) -> np.ndarray:
+    rewards = rewards.astype(np.float32)
+    mask = mask.astype(np.float32)
+    denom = np.maximum(np.sum(mask, axis=group_axis, keepdims=True), 1.0)
+    mean = np.sum(rewards * mask, axis=group_axis, keepdims=True) / denom
+    var = np.sum(((rewards - mean) ** 2) * mask,
+                 axis=group_axis, keepdims=True) / denom
+    return (rewards - mean) / np.sqrt(var + 1.0e-5)
+
+
+def _grpo_decomposed_loss(inputs: dict[str, np.ndarray]) -> float:
+    adv = _normalize_group_advantages_decomposed(
+        inputs["rewards"], inputs["mask"], group_axis=1)
+    tmp = dict(inputs)
+    tmp["advantages"] = adv
+    return _ppo_decomposed_loss(
+        tmp, has_mask=True, has_ref_kl=True, kl_coef=0.01)
+
+
+def _cispo_decomposed_loss(inputs: dict[str, np.ndarray]) -> float:
+    logp_new = inputs["logp_new"].astype(np.float32)
+    logp_old = inputs["logp_old"].astype(np.float32)
+    adv = _normalize_group_advantages_decomposed(
+        inputs["rewards"], inputs["mask"], group_axis=1)
+    ratio = np.exp(logp_new - logp_old)
+    loss = -(np.minimum(ratio, 5.0) * adv * logp_new)
+    ref_logp = inputs["ref_logp"].astype(np.float32)
+    delta = ref_logp - logp_new
+    loss = loss + 0.01 * (np.exp(delta) - delta - 1.0)
+    mask = inputs["mask"].astype(np.float32)
+    return float(np.sum(loss * mask) / max(float(np.sum(mask)), 1.0))
 
 
 def _apple_gpu_ppo_row(
@@ -97,10 +162,25 @@ def _apple_gpu_ppo_row(
     seed: int,
     reference: float,
     reps: int,
+    variant: dict[str, Any],
 ) -> dict[str, Any]:
-    available = tessera_runtime._apple_gpu_ppo_policy_loss_available()
+    strict = not any(variant.get(k, False)
+                     for k in ("has_mask", "has_ref_kl", "has_entropy"))
+    symbol = ("tessera_apple_gpu_ppo_policy_loss_f32" if strict
+              else "tessera_apple_gpu_ppo_policy_loss_ex_f32")
+    available = (
+        tessera_runtime._apple_gpu_ppo_policy_loss_available()
+        if strict else tessera_runtime._apple_gpu_ppo_policy_loss_ex_available()
+    )
+    arg_names = ["logp_new", "logp_old", "advantages"]
+    if variant.get("has_mask", False):
+        arg_names.append("mask")
+    if variant.get("has_ref_kl", False):
+        arg_names.append("ref_logp")
+    if variant.get("has_entropy", False):
+        arg_names.append("entropy")
     base: dict[str, Any] = {
-        "name": "ppo_policy_loss",
+        "name": variant["name"],
         "variant_kind": "apple_gpu_value_target_ir",
         "target": "apple_gpu",
         "executor": "apple_gpu_value_target_ir" if available else None,
@@ -111,7 +191,7 @@ def _apple_gpu_ppo_row(
         "correctness": None,
         "timing_ms": None,
         "runtime_status": "unavailable",
-        "skip_reason": None if available else "apple_gpu_ppo_policy_loss_f32 unavailable",
+        "skip_reason": None if available else f"{symbol} unavailable",
     }
     if not available:
         return base
@@ -120,23 +200,26 @@ def _apple_gpu_ppo_row(
             "target": "apple_gpu",
             "compiler_path": "apple_value_target_ir",
             "executable": True,
-            "arg_names": ["logp_new", "logp_old", "advantages"],
+            "arg_names": arg_names,
             "apple_value_calls": [{
                 "op": "tessera_apple.gpu.kernel_call",
                 "op_kind": "ppo_policy_loss",
-                "symbol": "tessera_apple_gpu_ppo_policy_loss_f32",
+                "symbol": symbol,
                 "status": "executable",
                 "clip_epsilon": 0.2,
+                "kl_coef": float(variant.get("kl_coef", 0.0)),
+                "entropy_coef": float(variant.get("entropy_coef", 0.0)),
+                "has_mask": bool(variant.get("has_mask", False)),
+                "has_ref_kl": bool(variant.get("has_ref_kl", False)),
+                "has_entropy": bool(variant.get("has_entropy", False)),
                 "reduction": "mean",
             }],
         },
-        abi_signature="tessera.rl.stage13.ppo.apple_gpu",
+        abi_signature=f"tessera.rl.stage14.{variant['suffix']}.apple_gpu",
     )
 
     args = {
-        "logp_new": inputs["logp_new"].astype(np.float32),
-        "logp_old": inputs["logp_old"].astype(np.float32),
-        "advantages": inputs["advantages"].astype(np.float32),
+        name: inputs[name].astype(np.float32) for name in arg_names
     }
 
     def _run():
@@ -174,6 +257,7 @@ def build_report(
     rows: list[dict[str, Any]] = []
     for shape in shapes:
         inputs = _make_inputs(shape, seed)
+        inputs["entropy"] = np.abs(inputs["logp_new"]).astype(np.float64) * 0.1
         losses = _losses(inputs)
         for name, loss in losses.items():
             rows.append({
@@ -189,42 +273,53 @@ def build_report(
                 "timing_ms": _time_loss(lambda n=name: _losses(inputs)[n], reps),
                 "skip_reason": None,
             })
-        ppo_simple = _ppo_strict_loss(inputs)
-        rows.append({
-            "name": "ppo_policy_loss",
-            "variant_kind": "compiler_decomposed_reference",
-            "target": "reference_cpu",
-            "executor": "compiler_decomposed_reference",
-            "compiler_path": "tessera-rl-loss-decompose",
-            "shape": f"B{shape[0]}_G{shape[1]}_T{shape[2]}",
-            "seed": seed,
-            "loss": ppo_simple,
-            "correctness": 0.0,
-            "timing_ms": _time_loss(lambda: _ppo_strict_loss(inputs), reps),
-            "runtime_status": "reference",
-            "skip_reason": None,
-        })
-        for name in ("grpo_policy_loss", "cispo_policy_loss"):
+        for variant in PPO_VARIANTS:
+            kwargs = {k: variant[k] for k in (
+                "has_mask", "has_ref_kl", "has_entropy", "kl_coef",
+                "entropy_coef") if k in variant}
+            ppo_loss = _ppo_decomposed_loss(inputs, **kwargs)
             rows.append({
-                "name": name,
-                "variant_kind": "compiler_visible_non_executable",
+                "name": variant["name"],
+                "variant_kind": "compiler_decomposed_reference",
                 "target": "reference_cpu",
-                "executor": None,
+                "executor": "compiler_decomposed_reference",
                 "compiler_path": "tessera-rl-loss-decompose",
                 "shape": f"B{shape[0]}_G{shape[1]}_T{shape[2]}",
                 "seed": seed,
-                "loss": None,
-                "correctness": None,
-                "timing_ms": None,
-                "runtime_status": "compiler_visible_non_executable",
-                "skip_reason": (
-                    "Stage 13 records compiler visibility only; no GRPO/CISPO "
-                    "runtime executor is claimed"),
+                "loss": ppo_loss,
+                "correctness": 0.0,
+                "timing_ms": _time_loss(
+                    lambda kw=kwargs: _ppo_decomposed_loss(inputs, **kw), reps),
+                "runtime_status": "reference",
+                "skip_reason": None,
             })
-        rows.append(_apple_gpu_ppo_row(inputs, shape, seed, ppo_simple, reps))
+            rows.append(_apple_gpu_ppo_row(
+                inputs, shape, seed, ppo_loss, reps, variant))
+        grpo_loss = _grpo_decomposed_loss(inputs)
+        cispo_loss = _cispo_decomposed_loss(inputs)
+        for name, loss, reference in (
+            ("grpo_policy_loss", grpo_loss, losses["grpo_policy_loss"]),
+            ("cispo_policy_loss", cispo_loss, losses["cispo_policy_loss"]),
+        ):
+            rows.append({
+                "name": name,
+                "variant_kind": "compiler_decomposed_reference",
+                "target": "reference_cpu",
+                "executor": "compiler_decomposed_reference",
+                "compiler_path": "tessera-rl-loss-decompose",
+                "shape": f"B{shape[0]}_G{shape[1]}_T{shape[2]}",
+                "seed": seed,
+                "loss": loss,
+                "correctness": abs(loss - reference),
+                "timing_ms": _time_loss(lambda n=name: (
+                    _grpo_decomposed_loss(inputs) if n == "grpo_policy_loss"
+                    else _cispo_decomposed_loss(inputs)), reps),
+                "runtime_status": "reference",
+                "skip_reason": None,
+            })
     return {
         "benchmark": "rl_policy_losses",
-        "sprint": "S13",
+        "sprint": "S14_S15",
         "rows": rows,
     }
 

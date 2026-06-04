@@ -441,6 +441,20 @@ class IROp:
         if self.attrs:
             attr_parts.append(self.attrs)
         attr_parts.extend(f"{k} = {_format_attr_value(v)}" for k, v in self.kwargs.items())
+        if (
+            self.op_name == "tessera.rl.ppo_policy_loss"
+            and "operandSegmentSizes" not in (self.attrs or "")
+            and "operand_segment_sizes" not in (self.attrs or "")
+            and "operandSegmentSizes" not in self.kwargs
+            and "operand_segment_sizes" not in self.kwargs
+        ):
+            side_count = max(0, min(3, len(self.operands) - 3))
+            segments = [1, 1, 1] + [1 if i < side_count else 0 for i in range(3)]
+            attr_parts.append(
+                "operandSegmentSizes = array<i32: "
+                + ", ".join(str(v) for v in segments)
+                + ">"
+            )
         attr_str = f" {{{', '.join(attr_parts)}}}" if attr_parts else ""
         return f"{indent}{lhs}{self.op_name}({ops_str}){attr_str}{type_str}"
 

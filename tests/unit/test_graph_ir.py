@@ -28,6 +28,12 @@ from tessera.compiler.graph_ir import (
 from tessera.distributed.region import Region
 
 
+read = "read"
+write = "write"
+M = "M"
+K = "K"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # IRType / IRArg / IROp unit tests
 # ─────────────────────────────────────────────────────────────────────────────
@@ -90,6 +96,34 @@ class TestIROp:
         op = IROp(result="r", op_name="tessera.gemm", operands=[], operand_types=[])
         mlir = op.to_mlir(indent="    ")
         assert mlir.startswith("    ")
+
+    def test_ppo_policy_loss_auto_operand_segments(self):
+        op = IROp(
+            result="loss",
+            op_name="tessera.rl.ppo_policy_loss",
+            operands=["%new", "%old", "%adv", "%mask", "%ref", "%entropy"],
+            operand_types=["tensor<2x3xf32>"] * 6,
+            result_type="tensor<f32>",
+            attrs='clip_epsilon = 2.000000e-01 : f64, reduction = "mean"',
+        )
+        mlir = op.to_mlir()
+        assert "operandSegmentSizes = array<i32: 1, 1, 1, 1, 1, 1>" in mlir
+
+    def test_ppo_policy_loss_explicit_sparse_operand_segments(self):
+        op = IROp(
+            result="loss",
+            op_name="tessera.rl.ppo_policy_loss",
+            operands=["%new", "%old", "%adv", "%ref"],
+            operand_types=["tensor<2x3xf32>"] * 4,
+            result_type="tensor<f32>",
+            attrs=(
+                "operandSegmentSizes = array<i32: 1, 1, 1, 0, 1, 0>, "
+                "kl_coef = 1.000000e-02 : f64, reduction = \"mean\""
+            ),
+        )
+        mlir = op.to_mlir()
+        assert "operandSegmentSizes = array<i32: 1, 1, 1, 0, 1, 0>" in mlir
+        assert "array<i32: 1, 1, 1, 1, 0, 0>" not in mlir
 
 
 # ─────────────────────────────────────────────────────────────────────────────

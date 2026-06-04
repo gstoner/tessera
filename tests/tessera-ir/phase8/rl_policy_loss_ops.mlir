@@ -1,5 +1,5 @@
-// Stage 13 — registered RL policy-loss Graph IR ops plus the compiler-visible
-// decomposition pass.
+// Stage 13-15 — registered RL policy-loss Graph IR ops plus the
+// compiler-visible decomposition pass.
 //
 // RUN: %tessera_strict_opt %s -tessera-rl-loss-decompose | FileCheck %s
 
@@ -8,14 +8,31 @@
 func.func @ppo(%n: tensor<2x3x5xf32>, %o: tensor<2x3x5xf32>,
                %a: tensor<2x3x5xf32>) -> tensor<f32> {
   %0 = tessera.rl.ppo_policy_loss %n, %o, %a
-      {clip_epsilon = 2.000000e-01 : f64, reduction = "mean"}
+      {operandSegmentSizes = array<i32: 1, 1, 1, 0, 0, 0>,
+       clip_epsilon = 2.000000e-01 : f64, reduction = "mean"}
       : (tensor<2x3x5xf32>, tensor<2x3x5xf32>, tensor<2x3x5xf32>)
         -> tensor<f32>
   return %0 : tensor<f32>
 }
 
+// CHECK-LABEL: func.func @ppo_full
+// CHECK: tessera.rl.ppo_policy_loss {{.*}}tessera.rl.compiler_decomposed_reference = true{{.*}}tessera.rl.compiler_visible = true{{.*}}tessera.rl.variant = "ppo"
+func.func @ppo_full(%n: tensor<2x3x5xf32>, %o: tensor<2x3x5xf32>,
+                    %a: tensor<2x3x5xf32>, %m: tensor<2x3x5xf32>,
+                    %r: tensor<2x3x5xf32>, %e: tensor<2x3x5xf32>)
+    -> tensor<f32> {
+  %0 = tessera.rl.ppo_policy_loss %n, %o, %a, %m, %r, %e
+      {operandSegmentSizes = array<i32: 1, 1, 1, 1, 1, 1>,
+       clip_epsilon = 2.000000e-01 : f64, kl_coef = 1.000000e-02 : f64,
+       entropy_coef = 2.000000e-02 : f64, reduction = "mean"}
+      : (tensor<2x3x5xf32>, tensor<2x3x5xf32>, tensor<2x3x5xf32>,
+         tensor<2x3x5xf32>, tensor<2x3x5xf32>, tensor<2x3x5xf32>)
+        -> tensor<f32>
+  return %0 : tensor<f32>
+}
+
 // CHECK-LABEL: func.func @grpo
-// CHECK: tessera.rl.grpo_policy_loss {{.*}}tessera.rl.compiler_visible = true{{.*}}tessera.rl.decomposition_status = "compiler_visible_non_executable"{{.*}}tessera.rl.variant = "grpo"
+// CHECK: tessera.rl.grpo_policy_loss {{.*}}tessera.rl.compiler_decomposed_reference = true{{.*}}tessera.rl.compiler_visible = true{{.*}}tessera.rl.decomposition_status = "compiler_decomposed_reference"{{.*}}tessera.rl.executor_status = "non_executable_reference"{{.*}}tessera.rl.variant = "grpo"
 func.func @grpo(%n: tensor<2x3x5xf32>, %o: tensor<2x3x5xf32>,
                 %r: tensor<2x3x5xf32>) -> tensor<f32> {
   %0 = tessera.rl.grpo_policy_loss %n, %o, %r
@@ -26,7 +43,7 @@ func.func @grpo(%n: tensor<2x3x5xf32>, %o: tensor<2x3x5xf32>,
 }
 
 // CHECK-LABEL: func.func @cispo
-// CHECK: tessera.rl.cispo_policy_loss {{.*}}tessera.rl.compiler_visible = true{{.*}}tessera.rl.decomposition_status = "compiler_visible_non_executable"{{.*}}tessera.rl.variant = "cispo"
+// CHECK: tessera.rl.cispo_policy_loss {{.*}}tessera.rl.compiler_decomposed_reference = true{{.*}}tessera.rl.compiler_visible = true{{.*}}tessera.rl.decomposition_status = "compiler_decomposed_reference"{{.*}}tessera.rl.executor_status = "non_executable_reference"{{.*}}tessera.rl.variant = "cispo"
 func.func @cispo(%n: tensor<2x3x5xf32>, %o: tensor<2x3x5xf32>,
                  %r: tensor<2x3x5xf32>) -> tensor<f32> {
   %0 = tessera.rl.cispo_policy_loss %n, %o, %r

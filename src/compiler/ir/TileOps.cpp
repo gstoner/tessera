@@ -90,8 +90,8 @@ LogicalResult BatchedGemmOp::verify() {
 LogicalResult PPOPolicyLossOp::verify() {
   auto inputs = getInputs();
   auto outputs = getOutputs();
-  if (inputs.size() != 3 || outputs.size() != 1)
-    return emitOpError("expects exactly 3 inputs and 1 result");
+  if (inputs.size() < 3 || inputs.size() > 6 || outputs.size() != 1)
+    return emitOpError("expects 3 to 6 inputs and 1 result");
   auto next = dyn_cast<RankedTensorType>(inputs[0].getType());
   auto old = dyn_cast<RankedTensorType>(inputs[1].getType());
   auto adv = dyn_cast<RankedTensorType>(inputs[2].getType());
@@ -114,6 +114,16 @@ LogicalResult PPOPolicyLossOp::verify() {
   };
   if (!sameShape(next, old) || !sameShape(next, adv))
     return emitOpError("input shapes must match exactly");
+  for (auto input : inputs.drop_front(3)) {
+    auto side = dyn_cast<RankedTensorType>(input.getType());
+    if (!side)
+      continue;
+    if (!side.hasStaticShape() || !side.getElementType().isF32() ||
+        !sameShape(next, side))
+      return emitOpError(
+          "optional mask/ref_logp/entropy inputs must be static fp32 tensors "
+          "with the same shape as logp_new");
+  }
   if (res.getRank() != 0)
     return emitOpError("mean-reduction result must be rank-0 tensor");
   if (auto r = getOperation()->getAttrOfType<StringAttr>("reduction");
@@ -123,8 +133,11 @@ LogicalResult PPOPolicyLossOp::verify() {
       c && c.getValueAsDouble() <= 0.0)
     return emitOpError("clip_epsilon must be positive");
   if (auto k = getOperation()->getAttrOfType<FloatAttr>("kl_coef");
-      k && k.getValueAsDouble() != 0.0)
-    return emitOpError("kl_coef must be absent or 0.0 for Tile PPO value mode");
+      k && k.getValueAsDouble() < 0.0)
+    return emitOpError("kl_coef must be non-negative for Tile PPO value mode");
+  if (auto e = getOperation()->getAttrOfType<FloatAttr>("entropy_coef");
+      e && e.getValueAsDouble() < 0.0)
+    return emitOpError("entropy_coef must be non-negative for Tile PPO value mode");
   return success();
 }
 

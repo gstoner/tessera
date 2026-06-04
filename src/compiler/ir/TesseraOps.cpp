@@ -170,10 +170,32 @@ LogicalResult RLPPOPolicyLossOp::verify() {
       failed(verifySameRankedShape(getOperation(), next, adv,
                                    "ppo_policy_loss advantage")))
     return failure();
+  auto verifyOptional = [&](Value v, StringRef label) -> LogicalResult {
+    if (!v)
+      return success();
+    auto ty = dyn_cast<RankedTensorType>(v.getType());
+    if (!ty)
+      return success();
+    if (ty.getElementType() != next.getElementType())
+      return emitOpError() << label << " dtype must match log-prob dtype";
+    std::string context = "ppo_policy_loss ";
+    context += label.str();
+    return verifySameRankedShape(getOperation(), next, ty, context);
+  };
+  if (failed(verifyOptional(getMask(), "mask")) ||
+      failed(verifyOptional(getRefLogp(), "ref_logp")) ||
+      failed(verifyOptional(getEntropy(), "entropy")))
+    return failure();
   if (f64AttrOr(getOperation(), "clip_epsilon", 0.2) <= 0.0)
     return emitOpError("clip_epsilon must be positive");
   if (f64AttrOr(getOperation(), "kl_coef", 0.0) < 0.0)
     return emitOpError("kl_coef must be non-negative");
+  if (f64AttrOr(getOperation(), "entropy_coef", 0.0) < 0.0)
+    return emitOpError("entropy_coef must be non-negative");
+  if (f64AttrOr(getOperation(), "kl_coef", 0.0) != 0.0 && !getRefLogp())
+    return emitOpError("kl_coef requires ref_logp operand");
+  if (f64AttrOr(getOperation(), "entropy_coef", 0.0) != 0.0 && !getEntropy())
+    return emitOpError("entropy_coef requires entropy operand");
   return verifyReductionResult(getOperation(), next, result,
                                reductionOrMean(getOperation()));
 }

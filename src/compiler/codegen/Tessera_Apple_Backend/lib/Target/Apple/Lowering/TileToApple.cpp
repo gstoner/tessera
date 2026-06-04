@@ -36,6 +36,7 @@
 
 #include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Operation.h"
@@ -108,6 +109,35 @@ bool isNativeSparseAttnFused(llvm::StringRef name) {
 bool isPPOPolicyLoss(llvm::StringRef name) {
   return name == "tessera.rl.ppo_policy_loss" ||
          name == "tile.ppo_policy_loss";
+}
+
+bool boolAttr(Operation *op, llvm::StringRef name) {
+  if (auto attr = op->getAttrOfType<BoolAttr>(name))
+    return attr.getValue();
+  return false;
+}
+
+bool operandSegmentPresent(Operation *op, unsigned index) {
+  auto segments = op->getAttrOfType<DenseI32ArrayAttr>("operand_segment_sizes");
+  if (!segments)
+    segments = op->getAttrOfType<DenseI32ArrayAttr>("operandSegmentSizes");
+  if (!segments || index >= segments.asArrayRef().size())
+    return false;
+  return segments.asArrayRef()[index] != 0;
+}
+
+struct PPOOperandFlags {
+  bool hasMask = false;
+  bool hasRefKL = false;
+  bool hasEntropy = false;
+};
+
+PPOOperandFlags ppoOperandFlags(Operation *op) {
+  PPOOperandFlags flags;
+  flags.hasMask = boolAttr(op, "has_mask") || operandSegmentPresent(op, 3);
+  flags.hasRefKL = boolAttr(op, "has_ref_kl") || operandSegmentPresent(op, 4);
+  flags.hasEntropy = boolAttr(op, "has_entropy") || operandSegmentPresent(op, 5);
+  return flags;
 }
 
 // L-series linalg family (2026-06-02) — table-driven Tile→Apple lowering.
@@ -272,7 +302,8 @@ bool verifyNativeSparseValueEnvelope(Operation *op) {
 }
 
 bool verifyPPOPolicyLossValueEnvelope(Operation *op) {
-  if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+  if (op->getNumOperands() < 3 || op->getNumOperands() > 6 ||
+      op->getNumResults() != 1)
     return false;
   auto nextTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
   auto oldTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
@@ -289,6 +320,13 @@ bool verifyPPOPolicyLossValueEnvelope(Operation *op) {
   if (nextTy.getShape() != oldTy.getShape() ||
       nextTy.getShape() != advTy.getShape())
     return false;
+  for (Value side : op->getOperands().drop_front(3)) {
+    auto sideTy = llvm::dyn_cast<RankedTensorType>(side.getType());
+    if (!sideTy || !sideTy.hasStaticShape() ||
+        !sideTy.getElementType().isF32() ||
+        sideTy.getShape() != nextTy.getShape())
+      return false;
+  }
   if (outTy.getRank() != 0)
     return false;
   if (auto reduction = op->getAttrOfType<StringAttr>("reduction");
@@ -298,7 +336,22 @@ bool verifyPPOPolicyLossValueEnvelope(Operation *op) {
       clip && clip.getValueAsDouble() <= 0.0)
     return false;
   if (auto kl = op->getAttrOfType<FloatAttr>("kl_coef");
-      kl && kl.getValueAsDouble() != 0.0)
+      kl && kl.getValueAsDouble() < 0.0)
+    return false;
+  if (auto entropy = op->getAttrOfType<FloatAttr>("entropy_coef");
+      entropy && entropy.getValueAsDouble() < 0.0)
+    return false;
+  PPOOperandFlags flags = ppoOperandFlags(op);
+  int64_t expectedOperands = 3 + (flags.hasMask ? 1 : 0) +
+                             (flags.hasRefKL ? 1 : 0) +
+                             (flags.hasEntropy ? 1 : 0);
+  if (expectedOperands != op->getNumOperands())
+    return false;
+  if (auto kl = op->getAttrOfType<FloatAttr>("kl_coef");
+      kl && kl.getValueAsDouble() != 0.0 && !flags.hasRefKL)
+    return false;
+  if (auto entropy = op->getAttrOfType<FloatAttr>("entropy_coef");
+      entropy && entropy.getValueAsDouble() != 0.0 && !flags.hasEntropy)
     return false;
   return true;
 }
@@ -403,6 +456,7 @@ void emitAppleValueCall(OpBuilder &b, Operation *op,
   for (llvm::StringRef name :
        {"lower", "trans", "unit_diag", "full_matrices", "window_size",
         "block_size", "top_k", "causal", "clip_epsilon", "kl_coef",
+        "entropy_coef", "has_mask", "has_ref_kl", "has_entropy",
         "reduction"}) {
     if (Attribute a = op->getAttr(name))
       st.addAttribute(name, a);
@@ -693,17 +747,23 @@ struct LowerTileToAppleGPUPass
         if (isPPOPolicyLoss(name) || isPPOPolicyLoss(src)) {
           if (!verifyPPOPolicyLossValueEnvelope(op)) {
             op->emitError("apple_gpu value lowering: ppo_policy_loss requires "
-                          "exactly 3 static fp32 operands with identical "
-                          "shapes, rank-0 fp32 result, reduction=\"mean\", "
-                          "positive clip_epsilon, and no KL side term");
+                          "3 to 6 static fp32 operands with identical shapes, "
+                          "rank-0 fp32 result, reduction=\"mean\", positive "
+                          "clip_epsilon, valid optional mask/ref_logp/entropy "
+                          "flags, and non-negative side-term coefficients");
             signalPassFailure();
             return;
           }
+          PPOOperandFlags flags = ppoOperandFlags(op);
+          bool extended = flags.hasMask || flags.hasRefKL || flags.hasEntropy;
           emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call",
                              "ppo_policy_loss",
-                             "tessera_apple_gpu_ppo_policy_loss_f32",
-                             "mpsgraph_ppo_policy_loss_f32", "executable",
-                             "MPSGraph");
+                             extended
+                                 ? "tessera_apple_gpu_ppo_policy_loss_ex_f32"
+                                 : "tessera_apple_gpu_ppo_policy_loss_f32",
+                             extended ? "mpsgraph_ppo_policy_loss_ex_f32"
+                                      : "mpsgraph_ppo_policy_loss_f32",
+                             "executable", "MPSGraph");
           ++ordinal;
           continue;
         }

@@ -1,10 +1,9 @@
 //===- RLLossDecomposePass.cpp - RL policy-loss visibility -----*- C++ -*-===//
 //
-// Stage 13: make PPO/GRPO/CISPO policy losses visible to the compiler. PPO's
-// supported envelope is recorded as a primitive formula so downstream reports
-// can distinguish "compiler-decomposed reference" from Python-only reference.
-// GRPO/CISPO are deliberately metadata-only here; they remain non-executable
-// until a real decomposition/runtime proof lands.
+// Stages 13-15: make PPO/GRPO/CISPO policy losses visible to the compiler.
+// PPO's supported envelope is recorded as a primitive formula; GRPO/CISPO are
+// now recorded as decomposed reference formulas (normalize/group advantages +
+// policy-loss formula) while remaining non-hardware-executable.
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,7 +20,8 @@ using namespace mlir;
 namespace {
 
 bool isSupportedPPOEnvelope(Operation *op) {
-  if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+  if (op->getNumOperands() < 3 || op->getNumOperands() > 6 ||
+      op->getNumResults() != 1)
     return false;
   auto nextTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
   auto oldTy = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
@@ -45,11 +45,20 @@ bool isSupportedPPOEnvelope(Operation *op) {
   };
   if (!agreeShape(nextTy, oldTy) || !agreeShape(nextTy, advTy))
     return false;
+  for (Value side : op->getOperands().drop_front(3)) {
+    auto sideTy = dyn_cast<RankedTensorType>(side.getType());
+    if (!sideTy || sideTy.getElementType() != nextTy.getElementType() ||
+        sideTy.getRank() != nextTy.getRank() || !agreeShape(nextTy, sideTy))
+      return false;
+  }
   if (auto reduction = op->getAttrOfType<StringAttr>("reduction");
       reduction && reduction.getValue() != "mean")
     return false;
   if (auto kl = op->getAttrOfType<FloatAttr>("kl_coef");
-      kl && kl.getValueAsDouble() != 0.0)
+      kl && kl.getValueAsDouble() < 0.0)
+    return false;
+  if (auto entropy = op->getAttrOfType<FloatAttr>("entropy_coef");
+      entropy && entropy.getValueAsDouble() < 0.0)
     return false;
   return resTy.getRank() == 0;
 }
@@ -98,14 +107,18 @@ public:
         op->setAttr("tessera.rl.family", b.getStringAttr("policy_loss"));
         op->setAttr("tessera.rl.variant",
                     b.getStringAttr(grpo ? "grpo" : "cispo"));
+        op->setAttr("tessera.rl.compiler_decomposed_reference",
+                    b.getBoolAttr(true));
         op->setAttr("tessera.rl.decomposition_status",
-                    b.getStringAttr("compiler_visible_non_executable"));
-        op->setAttr("tessera.rl.decomposition_reason",
+                    b.getStringAttr("compiler_decomposed_reference"));
+        op->setAttr("tessera.rl.decomposition",
                     b.getStringAttr(
-                        grpo ? "GRPO group-normalization semantics are "
-                               "compiler-visible only in Stage 13"
-                             : "CISPO clipping semantics are compiler-visible "
-                               "only in Stage 13"));
+                        grpo ? "normalize_group_advantages(rewards) -> "
+                               "ppo_policy_loss(logp_new, logp_old, adv)"
+                             : "normalize_group_advantages(rewards) -> "
+                               "-min(exp(delta), epsilon_high)*adv*logp_new"));
+        op->setAttr("tessera.rl.executor_status",
+                    b.getStringAttr("non_executable_reference"));
       }
     });
   }
@@ -118,4 +131,3 @@ std::unique_ptr<Pass> createRLLossDecomposePass() {
   return std::make_unique<RLLossDecomposePass>();
 }
 } // namespace tessera
-

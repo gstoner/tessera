@@ -34,7 +34,7 @@ nvidia_sm80, nvidia_sm90, nvidia_sm100, nvidia_sm120, rocm, rocm_gfx90a, rocm_gf
 |-------------|--------------|
 | `apple_cpu_accelerate` | Apple Silicon CPU via the Accelerate cblas_sgemm shim |
 | `apple_gpu_mps` | Apple Silicon GPU via MPS / MSL / MPSGraph (per envelope) |
-| `apple_gpu_value_target_ir` | Apple GPU value-call dispatch — invokes the C ABI symbol named in a tessera_apple.gpu.kernel_call value op (rank-3 batched matmul f32/f16/bf16; native sparse attention when the Metal executor is active) |
+| `apple_gpu_value_target_ir` | Apple GPU value-call dispatch — invokes the C ABI symbol named in a tessera_apple.gpu.kernel_call value op (rank-3 batched matmul f32/f16/bf16; native sparse attention and PPO policy-loss variants when their Metal/MPSGraph executor probes are active) |
 | `apple_value_target_ir` | Apple CPU value-call dispatch — invokes the C ABI symbol named in a tessera_apple.cpu.call value op (Value Target IR sprint; CPU cholesky executable) |
 | `jit_cpu_numpy` | JIT CPU fallback via the numpy reference path |
 | `native_cpu` | x86 AMX / native CPU runtime via the C runtime ABI |

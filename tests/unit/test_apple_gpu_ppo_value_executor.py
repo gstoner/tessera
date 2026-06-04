@@ -42,23 +42,39 @@ def _metal_runtime_active() -> tuple[bool, str]:
     return True, f"loaded dylib: {path or 'prebuilt/env runtime'}"
 
 
-def _ppo_artifact(executable: bool = True) -> runtime.RuntimeArtifact:
+def _ppo_artifact(executable: bool = True, *, extended: bool = False,
+                  has_mask: bool = False, has_ref_kl: bool = False,
+                  has_entropy: bool = False) -> runtime.RuntimeArtifact:
+    arg_names = ["logp_new", "logp_old", "advantages"]
+    if has_mask:
+        arg_names.append("mask")
+    if has_ref_kl:
+        arg_names.append("ref_logp")
+    if has_entropy:
+        arg_names.append("entropy")
     return runtime.RuntimeArtifact(
         metadata={
             "target": "apple_gpu",
             "compiler_path": "apple_value_target_ir",
             "executable": executable,
-            "arg_names": ["logp_new", "logp_old", "advantages"],
+            "arg_names": arg_names,
             "apple_value_calls": [{
                 "op": "tessera_apple.gpu.kernel_call",
                 "op_kind": "ppo_policy_loss",
-                "symbol": "tessera_apple_gpu_ppo_policy_loss_f32",
+                "symbol": (
+                    "tessera_apple_gpu_ppo_policy_loss_ex_f32" if extended
+                    else "tessera_apple_gpu_ppo_policy_loss_f32"),
                 "status": "executable",
                 "clip_epsilon": 0.2,
+                "kl_coef": 0.03 if has_ref_kl else 0.0,
+                "entropy_coef": 0.02 if has_entropy else 0.0,
+                "has_mask": has_mask,
+                "has_ref_kl": has_ref_kl,
+                "has_entropy": has_entropy,
                 "reduction": "mean",
             }],
         },
-        abi_signature="tessera.rl.stage13.ppo.apple_gpu",
+        abi_signature="tessera.rl.stage14.ppo.apple_gpu",
     )
 
 
@@ -78,11 +94,30 @@ def test_ppo_value_symbol_is_mpsgraph_backed_not_host_reference():
     assert "for (" not in body
 
 
+def test_extended_ppo_value_symbol_is_mpsgraph_backed_not_host_reference():
+    source = APPLE_MM.read_text(encoding="utf-8")
+    match = re.search(
+        r"static bool mpsg_run_ppo_policy_loss_ex_f32[\s\S]*?"
+        r"extern \"C\" int32_t tessera_apple_gpu_ppo_policy_loss_f32",
+        source,
+    )
+    assert match, "extended PPO MPSGraph helper missing"
+    body = match.group(0)
+    assert "MPSGraph" in body
+    assert "runWithMTLCommandQueue" in body
+    assert "reductionSumWithTensor" in body
+    assert "meanOfTensor" in body
+    assert "std::exp" not in body
+    assert "for (" not in body
+
+
 def test_ppo_stub_reports_non_executable_not_host_reference():
     stub = APPLE_STUB.read_text(encoding="utf-8")
     assert "tessera_apple_gpu_ppo_policy_loss_f32" in stub
+    assert "tessera_apple_gpu_ppo_policy_loss_ex_f32" in stub
     assert "return 0;" in stub
     assert "Stage 13 honesty rule" in stub
+    assert "Stage 14 honesty rule" in stub
 
 
 def test_ppo_value_launch_matches_reference_when_available():
@@ -120,6 +155,57 @@ def test_ppo_value_launch_matches_reference_when_available():
     )
     assert result["ok"] is True
     assert result["compiler_path"] == "apple_value_target_ir"
+    assert np.allclose(np.asarray(result["output"]), expected, rtol=1e-4, atol=1e-5)
+
+
+def test_extended_ppo_value_launch_matches_reference_when_available():
+    rng = np.random.default_rng(14)
+    logp_old = rng.normal(-1.0, 0.2, size=(2, 3, 5)).astype(np.float32)
+    logp_new = (logp_old + rng.normal(0.0, 0.04, size=(2, 3, 5))).astype(np.float32)
+    advantages = rng.normal(0.0, 1.0, size=(2, 3, 5)).astype(np.float32)
+    mask = (rng.random(size=(2, 3, 5)) > 0.25).astype(np.float32)
+    ref_logp = (logp_old + rng.normal(0.0, 0.03, size=(2, 3, 5))).astype(np.float32)
+    entropy = np.abs(logp_new).astype(np.float32) * 0.1
+    args = {
+        "logp_new": logp_new,
+        "logp_old": logp_old,
+        "advantages": advantages,
+        "mask": mask,
+        "ref_logp": ref_logp,
+        "entropy": entropy,
+    }
+    available = runtime._apple_gpu_ppo_policy_loss_ex_available()
+    active, detail = _metal_runtime_active()
+    if active and not available:
+        pytest.fail(
+            "Active Apple GPU runtime did not pass the extended PPO MPSGraph "
+            "value probe. Rebuild/refresh the shared dylib and run in a fresh "
+            "Python process; expected "
+            "_apple_gpu_ppo_policy_loss_ex_available() == True. "
+            f"{detail}")
+    artifact = _ppo_artifact(
+        executable=available, extended=True, has_mask=True, has_ref_kl=True,
+        has_entropy=True)
+    result = runtime.launch(artifact, args)
+    if not available:
+        assert result["ok"] is False
+        assert result["runtime_status"] in {
+            "unsupported", "invalid_artifact", "unimplemented",
+        }
+        return
+    expected = rl.ppo_policy_loss(
+        logp_new,
+        logp_old,
+        advantages,
+        clip_epsilon=0.2,
+        mask=mask,
+        ref_logp=ref_logp,
+        kl_coef=0.03,
+        entropy=entropy,
+        entropy_coef=0.02,
+        reduction="mean",
+    )
+    assert result["ok"] is True
     assert np.allclose(np.asarray(result["output"]), expected, rtol=1e-4, atol=1e-5)
 
 

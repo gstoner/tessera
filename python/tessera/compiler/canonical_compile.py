@@ -257,8 +257,13 @@ class CompileResult:
                                         _rt._apple_gpu_native_sparse_attn_f32()
                                         is not None)
                                 elif _op_kind == "ppo_policy_loss":
-                                    _exec_ok = (
-                                        _rt._apple_gpu_ppo_policy_loss_available())
+                                    if (_sym ==
+                                            "tessera_apple_gpu_ppo_policy_loss_ex_f32"):
+                                        _exec_ok = (
+                                            _rt._apple_gpu_ppo_policy_loss_ex_available())
+                                    else:
+                                        _exec_ok = (
+                                            _rt._apple_gpu_ppo_policy_loss_available())
                         # The value lane OWNS the executable decision for this
                         # artifact (override the bundle/canonical answer): a
                         # value artifact is launchable iff its single value call

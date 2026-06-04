@@ -50,8 +50,11 @@ _GRAPH = {
            '  %u, %s, %v = tessera.svd %a : (tensor<6x4xf32>) -> (tensor<6x4xf32>, tensor<4xf32>, tensor<4x4xf32>)\n'
            '  return %u, %s, %v : tensor<6x4xf32>, tensor<4xf32>, tensor<4x4xf32>\n}',
     "ppo_policy_loss": 'func.func @f(%n: tensor<2x3x5xf32>, %o: tensor<2x3x5xf32>, %a: tensor<2x3x5xf32>) -> tensor<f32> {\n'
-                       '  %0 = tessera.rl.ppo_policy_loss %n, %o, %a {clip_epsilon = 2.000000e-01 : f64, reduction = "mean"} : (tensor<2x3x5xf32>, tensor<2x3x5xf32>, tensor<2x3x5xf32>) -> tensor<f32>\n'
+                       '  %0 = tessera.rl.ppo_policy_loss %n, %o, %a {operandSegmentSizes = array<i32: 1, 1, 1, 0, 0, 0>, clip_epsilon = 2.000000e-01 : f64, reduction = "mean"} : (tensor<2x3x5xf32>, tensor<2x3x5xf32>, tensor<2x3x5xf32>) -> tensor<f32>\n'
                        '  return %0 : tensor<f32>\n}',
+    "ppo_policy_loss_full": 'func.func @f(%n: tensor<2x3x5xf32>, %o: tensor<2x3x5xf32>, %a: tensor<2x3x5xf32>, %m: tensor<2x3x5xf32>, %r: tensor<2x3x5xf32>, %e: tensor<2x3x5xf32>) -> tensor<f32> {\n'
+                            '  %0 = tessera.rl.ppo_policy_loss %n, %o, %a, %m, %r, %e {operandSegmentSizes = array<i32: 1, 1, 1, 1, 1, 1>, clip_epsilon = 2.000000e-01 : f64, kl_coef = 1.000000e-02 : f64, entropy_coef = 2.000000e-02 : f64, reduction = "mean"} : (tensor<2x3x5xf32>, tensor<2x3x5xf32>, tensor<2x3x5xf32>, tensor<2x3x5xf32>, tensor<2x3x5xf32>, tensor<2x3x5xf32>) -> tensor<f32>\n'
+                            '  return %0 : tensor<f32>\n}',
 }
 
 # Every CPU-converted linalg op (LF1–LF5 + cholesky pilot) lowers via cpu.call.
@@ -126,6 +129,32 @@ def test_gpu_full_ppo_policy_loss_emits_value_symbol():
     assert c["framework"] == "MPSGraph"
     assert c["reduction"] == "mean"
     assert "clip_epsilon" in c
+
+
+def test_gpu_full_ppo_policy_loss_optional_operands_emit_extended_value_symbol():
+    p = _run("tessera-lower-to-apple_gpu-full", _GRAPH["ppo_policy_loss_full"])
+    assert p.returncode == 0, p.stderr
+    assert "tessera_apple.gpu.kernel_call" in p.stdout
+    assert 'op_kind = "ppo_policy_loss"' in p.stdout
+    assert 'symbol = "tessera_apple_gpu_ppo_policy_loss_ex_f32"' in p.stdout
+    assert 'abi = "mpsgraph_ppo_policy_loss_ex_f32"' in p.stdout
+    assert "tile.ppo_policy_loss" not in p.stdout
+
+    from tessera.compiler import driver
+
+    calls = driver.extract_apple_value_calls(p.stdout)
+    assert len(calls) == 1
+    c = calls[0]
+    assert c["op"] == "tessera_apple.gpu.kernel_call"
+    assert c["op_kind"] == "ppo_policy_loss"
+    assert c["symbol"] == "tessera_apple_gpu_ppo_policy_loss_ex_f32"
+    assert c["abi"] == "mpsgraph_ppo_policy_loss_ex_f32"
+    assert c["status"] == "executable"
+    assert c["has_mask"] is True
+    assert c["has_ref_kl"] is True
+    assert c["has_entropy"] is True
+    assert c["kl_coef"] == pytest.approx(0.01)
+    assert c["entropy_coef"] == pytest.approx(0.02)
 
 
 def test_front_door_records_value_target_ir_in_runtime_metadata():
@@ -1414,6 +1443,7 @@ def test_gpu_value_executor_allowlist_exact():
         "tessera_apple_gpu_bmm_bf16",
         "tessera_apple_gpu_native_sparse_attn_f32",
         "tessera_apple_gpu_ppo_policy_loss_f32",
+        "tessera_apple_gpu_ppo_policy_loss_ex_f32",
     })
 
 

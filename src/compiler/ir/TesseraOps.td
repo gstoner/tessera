@@ -216,13 +216,17 @@ def Tessera_RLNormalizeGroupAdvantagesOp : Op<
 
 def Tessera_RLPPOPolicyLossOp : Op<
   Tessera_Dialect, "rl.ppo_policy_loss",
-  [Pure]
+  [Pure, AttrSizedOperandSegments]
 > {
   let summary = "PPO clipped policy loss";
   let arguments = (ins TensorType:$logp_new, TensorType:$logp_old,
                         TensorType:$advantages,
+                        Optional<TensorType>:$mask,
+                        Optional<TensorType>:$ref_logp,
+                        Optional<TensorType>:$entropy,
                         OptionalAttr<F64Attr>:$clip_epsilon,
                         OptionalAttr<F64Attr>:$kl_coef,
+                        OptionalAttr<F64Attr>:$entropy_coef,
                         OptionalAttr<StrAttr>:$reduction);
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";

@@ -6,11 +6,11 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real`         |   26 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real`         |   30 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` |    9 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent`       |    0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier`  |   80 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total**      |  115 | |
+| **Total**      |  119 | |
 
 ## Per-dialect details
 
@@ -100,6 +100,10 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 | `QuantizeFP4Op` | `no_verifier` |
 | `QuantizeFP8Op` | `no_verifier` |
 | `RFFTOp` | `no_verifier` |
+| `RLCISPOPolicyLossOp` | `real` |
+| `RLGRPOPolicyLossOp` | `real` |
+| `RLNormalizeGroupAdvantagesOp` | `real` |
+| `RLPPOPolicyLossOp` | `real` |
 | `RMSNormSafeOp` | `no_verifier` |
 | `ReduceScatterOp` | `no_verifier` |
 | `ReluOp` | `no_verifier` |

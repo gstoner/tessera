@@ -66,7 +66,8 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "apple_gpu_value_target_ir": "Apple GPU value-call dispatch — invokes the C "
                              "ABI symbol named in a tessera_apple.gpu.kernel_call "
                              "value op (rank-3 batched matmul f32/f16/bf16; "
-                             "native sparse attention when the Metal executor is active)",
+                             "native sparse attention and PPO policy-loss variants "
+                             "when their Metal/MPSGraph executor probes are active)",
     "native_cpu":           "x86 AMX / native CPU runtime via the C runtime ABI",
     "jit_cpu_numpy":        "JIT CPU fallback via the numpy reference path",
     # Note: pure-numpy `reference_cpu` is reached only as an internal *fallback*

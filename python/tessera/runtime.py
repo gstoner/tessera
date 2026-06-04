@@ -2890,7 +2890,58 @@ def _apple_gpu_ppo_policy_loss_f32() -> Any:
     return sym
 
 
+def _apple_gpu_ppo_policy_loss_ex_f32() -> Any:
+    """Stage 14: bind the Apple GPU PPO symbol with optional side tensors.
+
+    This is a superset ABI for masked PPO, reference-KL PPO, and entropy PPO.
+    The strict Stage 13 symbol stays available for the 3-operand compiler
+    envelope; this symbol is used by benchmark/runtime artifacts that explicitly
+    carry the optional tensor flags.
+    """
+    if not _running_on_darwin():
+        return None
+    try:
+        from ._apple_gpu_dispatch import apple_gpu_skip_reason
+        if apple_gpu_skip_reason() is not None:
+            return None
+    except Exception:
+        return None
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_ppo_policy_loss_ex_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [
+        fp, fp, fp, fp, fp, fp, fp,
+        ctypes.c_int32, ctypes.c_float, ctypes.c_float, ctypes.c_float,
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
 _APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE: bool | None = None
+_APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE: bool | None = None
+
+
+def _ppo_policy_loss_np(
+    np, logp_new, logp_old, advantages, *, clip_epsilon: float = 0.2,
+    mask=None, ref_logp=None, kl_coef: float = 0.0, entropy=None,
+    entropy_coef: float = 0.0,
+) -> float:
+    ratio = np.exp(logp_new - logp_old)
+    clipped = np.clip(ratio, 1.0 - clip_epsilon, 1.0 + clip_epsilon)
+    loss = -np.minimum(ratio * advantages, clipped * advantages)
+    if ref_logp is not None and kl_coef != 0.0:
+        delta = ref_logp - logp_new
+        loss = loss + kl_coef * (np.exp(delta) - delta - 1.0)
+    if entropy is not None and entropy_coef != 0.0:
+        loss = loss - entropy_coef * entropy
+    if mask is not None:
+        masked = loss * mask
+        denom = max(float(np.sum(mask)), 1.0)
+        return float(np.sum(masked) / denom)
+    return float(np.mean(loss))
 
 
 def _apple_gpu_ppo_policy_loss_available() -> bool:
@@ -2920,6 +2971,54 @@ def _apple_gpu_ppo_policy_loss_available() -> bool:
     return _APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE
 
 
+def _apple_gpu_ppo_policy_loss_ex_available() -> bool:
+    """True iff the extended PPO ABI passes strict/mask/KL/entropy probes."""
+    global _APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE
+    if _APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE is not None:
+        return _APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE
+    sym = _apple_gpu_ppo_policy_loss_ex_f32()
+    if sym is None:
+        _APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE = False
+        return False
+    try:
+        import numpy as _np
+        logp_old = _np.asarray([-0.2, -0.1, -0.4], dtype=_np.float32)
+        logp_new = _np.asarray([-0.15, -0.18, -0.35], dtype=_np.float32)
+        adv = _np.asarray([1.2, -0.7, 0.3], dtype=_np.float32)
+        mask = _np.asarray([1.0, 0.0, 1.0], dtype=_np.float32)
+        ref = _np.asarray([-0.21, -0.11, -0.42], dtype=_np.float32)
+        ent = _np.asarray([0.4, 0.3, 0.2], dtype=_np.float32)
+        out = _np.empty((), dtype=_np.float32)
+        fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        null = ctypes.POINTER(ctypes.c_float)()
+        probes: list[
+            tuple[Any, Any, Any, float, float, int, int, int, Mapping[str, Any]]
+        ] = [
+            (null, null, null, 0.0, 0.0, 0, 0, 0, {}),
+            (fp(mask), null, null, 0.0, 0.0, 1, 0, 0, {"mask": mask}),
+            (null, fp(ref), null, 0.03, 0.0, 0, 1, 0,
+             {"ref_logp": ref, "kl_coef": 0.03}),
+            (fp(mask), fp(ref), fp(ent), 0.02, 0.01, 1, 1, 1,
+             {"mask": mask, "ref_logp": ref, "kl_coef": 0.02,
+              "entropy": ent, "entropy_coef": 0.01}),
+        ]
+        ok = True
+        for mask_p, ref_p, ent_p, kl, ent_coef, has_mask, has_ref, has_ent, kw in probes:
+            rc = int(sym(fp(logp_new), fp(logp_old), fp(adv), mask_p, ref_p,
+                         ent_p, fp(out), ctypes.c_int32(int(logp_new.size)),
+                         ctypes.c_float(0.2), ctypes.c_float(kl),
+                         ctypes.c_float(ent_coef), ctypes.c_int32(has_mask),
+                         ctypes.c_int32(has_ref), ctypes.c_int32(has_ent)))
+            expected = _ppo_policy_loss_np(
+                _np, logp_new, logp_old, adv, clip_epsilon=0.2, **kw)
+            ok = ok and rc == 1 and bool(_np.isfinite(out)) and (
+                abs(float(out) - expected) < 2.0e-5)
+        _APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE = ok
+    except Exception:
+        _APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE = False
+    return _APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE
+
+
 # Apple GPU value-lane batched-matmul dispatch (Sprint 8). symbol -> (resolver,
 # numpy-dtype-kind). The key set is the GPU value allowlist.
 _APPLE_VALUE_GPU_DISPATCH: dict[str, tuple] = {
@@ -2930,6 +3029,8 @@ _APPLE_VALUE_GPU_DISPATCH: dict[str, tuple] = {
         _apple_gpu_native_sparse_attn_f32, "native_sparse_attn_f32"),
     "tessera_apple_gpu_ppo_policy_loss_f32": (
         _apple_gpu_ppo_policy_loss_f32, "ppo_policy_loss_f32"),
+    "tessera_apple_gpu_ppo_policy_loss_ex_f32": (
+        _apple_gpu_ppo_policy_loss_ex_f32, "ppo_policy_loss_ex_f32"),
 }
 _APPLE_VALUE_GPU_SYMBOLS: frozenset[str] = frozenset(_APPLE_VALUE_GPU_DISPATCH)
 
@@ -3055,24 +3156,43 @@ def _dispatch_gpu_native_sparse_attn(inputs, call, np):
 
 
 def _dispatch_gpu_ppo_policy_loss(inputs, call, np):
-    """Strict fp32 PPO mean policy-loss dispatch for Apple GPU value IR."""
+    """fp32 PPO mean policy-loss dispatch for Apple GPU value IR.
+
+    The strict Stage 13 symbol takes exactly three tensors. Stage 14's extended
+    symbol may add mask, ref_logp, and entropy tensors when the value-call attrs
+    explicitly request them. Both symbols are MPSGraph-probed before success is
+    reported.
+    """
     symbol = str(call.get("symbol", ""))
     entry = _APPLE_VALUE_GPU_DISPATCH.get(symbol)
-    if entry is None or entry[1] != "ppo_policy_loss_f32":
+    if entry is None or entry[1] not in {
+        "ppo_policy_loss_f32", "ppo_policy_loss_ex_f32",
+    }:
         raise ValueError(
             f"apple_value_target_ir(gpu): symbol {symbol!r} is not the PPO "
             "policy-loss value symbol")
-    if len(inputs) != 3:
+    kind = entry[1]
+    has_mask = bool(call.get("has_mask", False))
+    has_ref_kl = bool(call.get("has_ref_kl", False))
+    has_entropy = bool(call.get("has_entropy", False))
+    want = 3 + int(has_mask) + int(has_ref_kl) + int(has_entropy)
+    if len(inputs) != want:
         raise ValueError(
             f"apple_value_target_ir(gpu): ppo_policy_loss value-call needs "
-            f"exactly 3 input(s), got {len(inputs)}")
+            f"exactly {want} input(s), got {len(inputs)}")
     if str(call.get("reduction", "mean")) != "mean":
         raise ValueError("ppo_policy_loss(gpu) only supports reduction='mean'")
     clip = float(call.get("clip_epsilon", 0.2))
     if clip <= 0.0:
         raise ValueError("ppo_policy_loss(gpu) requires positive clip_epsilon")
-    if float(call.get("kl_coef", 0.0)) != 0.0:
-        raise ValueError("ppo_policy_loss(gpu) does not support KL side terms")
+    kl_coef = float(call.get("kl_coef", 0.0))
+    entropy_coef = float(call.get("entropy_coef", 0.0))
+    if kind == "ppo_policy_loss_f32" and (has_mask or has_ref_kl or has_entropy):
+        raise ValueError(
+            "ppo_policy_loss(gpu) side tensors require "
+            "tessera_apple_gpu_ppo_policy_loss_ex_f32")
+    if kind == "ppo_policy_loss_f32" and kl_coef != 0.0:
+        raise ValueError("ppo_policy_loss(gpu) strict symbol does not support KL side terms")
     logp_new = np.ascontiguousarray(np.asarray(inputs[0], dtype=np.float32))
     logp_old = np.ascontiguousarray(np.asarray(inputs[1], dtype=np.float32))
     adv = np.ascontiguousarray(np.asarray(inputs[2], dtype=np.float32))
@@ -3082,15 +3202,49 @@ def _dispatch_gpu_ppo_policy_loss(inputs, call, np):
             f"{logp_old.shape} / {adv.shape}")
     if logp_new.size <= 0:
         raise ValueError("ppo_policy_loss(gpu) requires a non-empty tensor")
-    sym = _apple_gpu_ppo_policy_loss_f32()
-    if sym is None or not _apple_gpu_ppo_policy_loss_available():
-        raise ValueError(
-            "apple_gpu runtime lacks an active, numerically proven "
-            "tessera_apple_gpu_ppo_policy_loss_f32 executor")
     out = np.empty((), dtype=np.float32)
     fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    rc = int(sym(fp(logp_new), fp(logp_old), fp(adv), fp(out),
-                 ctypes.c_int32(int(logp_new.size)), ctypes.c_float(clip)))
+    if kind == "ppo_policy_loss_f32":
+        sym = _apple_gpu_ppo_policy_loss_f32()
+        if sym is None or not _apple_gpu_ppo_policy_loss_available():
+            raise ValueError(
+                "apple_gpu runtime lacks an active, numerically proven "
+                "tessera_apple_gpu_ppo_policy_loss_f32 executor")
+        rc = int(sym(fp(logp_new), fp(logp_old), fp(adv), fp(out),
+                     ctypes.c_int32(int(logp_new.size)), ctypes.c_float(clip)))
+    else:
+        sym = _apple_gpu_ppo_policy_loss_ex_f32()
+        if sym is None or not _apple_gpu_ppo_policy_loss_ex_available():
+            raise ValueError(
+                "apple_gpu runtime lacks an active, numerically proven "
+                "tessera_apple_gpu_ppo_policy_loss_ex_f32 executor")
+        idx = 3
+        mask = ref_logp = entropy = None
+        if has_mask:
+            mask = np.ascontiguousarray(np.asarray(inputs[idx], dtype=np.float32))
+            idx += 1
+        if has_ref_kl:
+            ref_logp = np.ascontiguousarray(np.asarray(inputs[idx], dtype=np.float32))
+            idx += 1
+        if has_entropy:
+            entropy = np.ascontiguousarray(np.asarray(inputs[idx], dtype=np.float32))
+        for label, arr in (("mask", mask), ("ref_logp", ref_logp),
+                           ("entropy", entropy)):
+            if arr is not None and arr.shape != logp_new.shape:
+                raise ValueError(
+                    f"ppo_policy_loss(gpu) {label} shape {arr.shape} must "
+                    f"match logp shape {logp_new.shape}")
+        null = ctypes.POINTER(ctypes.c_float)()
+        rc = int(sym(
+            fp(logp_new), fp(logp_old), fp(adv),
+            fp(mask) if mask is not None else null,
+            fp(ref_logp) if ref_logp is not None else null,
+            fp(entropy) if entropy is not None else null,
+            fp(out), ctypes.c_int32(int(logp_new.size)),
+            ctypes.c_float(clip), ctypes.c_float(kl_coef),
+            ctypes.c_float(entropy_coef), ctypes.c_int32(1 if has_mask else 0),
+            ctypes.c_int32(1 if has_ref_kl else 0),
+            ctypes.c_int32(1 if has_entropy else 0)))
     if rc != 1:
         raise ValueError(
             "apple_gpu PPO policy-loss value executor is not active "
@@ -7800,11 +7954,11 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 # Attention. Host-reference path today; fully fused MSL
                 # kernel is a follow-up.
                 getattr(lib, "tessera_apple_gpu_native_sparse_attn_f32")
-                # Stage 13 — PPO policy loss value executor. This is the
+                # Stage 14 — PPO policy loss value executor. This is the
                 # freshest dylib staleness sentinel for Apple GPU runtime
                 # execution; a prebuilt runtime lacking it must be rejected so
                 # `_apple_gpu_dispatch` can compile a fresh source dylib.
-                getattr(lib, "tessera_apple_gpu_ppo_policy_loss_f32")
+                getattr(lib, "tessera_apple_gpu_ppo_policy_loss_ex_f32")
                 # R2 (cont.) — encoded flat elementwise unary/binary, so the
                 # command-buffer session can express full transformer/MLP blocks.
                 getattr(lib, "tessera_apple_gpu_unary_dev_f32_enc")

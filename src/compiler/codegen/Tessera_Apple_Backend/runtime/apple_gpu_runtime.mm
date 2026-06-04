@@ -13547,6 +13547,189 @@ static bool mpsg_run_ppo_policy_loss_f32(MetalDeviceContext &ctx,
   }
 }
 
+static bool mpsg_run_ppo_policy_loss_ex_f32(
+    MetalDeviceContext &ctx, const float *logp_new, const float *logp_old,
+    const float *advantages, const float *mask, const float *ref_logp,
+    const float *entropy, float *out, int32_t n, float clip_epsilon,
+    float kl_coef, float entropy_coef, int32_t has_mask, int32_t has_ref_kl,
+    int32_t has_entropy) {
+  if (n <= 0 || clip_epsilon <= 0.0f)
+    return false;
+  if ((has_mask && !mask) || (has_ref_kl && !ref_logp) ||
+      (has_entropy && !entropy))
+    return false;
+  @autoreleasepool {
+    size_t bytes = (size_t)n * sizeof(float);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufNew, ctx, logp_new, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufOld, ctx, logp_old, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufAdv, ctx, advantages, bytes);
+    MetalBufferGuard gMask(ctx, has_mask ? metal_buffer_acquire_with_bytes(ctx, mask, bytes) : nil, bytes);
+    id<MTLBuffer> bufMask = gMask.buf;
+    MetalBufferGuard gRef(ctx, has_ref_kl ? metal_buffer_acquire_with_bytes(ctx, ref_logp, bytes) : nil, bytes);
+    id<MTLBuffer> bufRef = gRef.buf;
+    MetalBufferGuard gEntropy(ctx, has_entropy ? metal_buffer_acquire_with_bytes(ctx, entropy, bytes) : nil, bytes);
+    id<MTLBuffer> bufEntropy = gEntropy.buf;
+    if (!bufNew || !bufOld || !bufAdv || (has_mask && !bufMask) ||
+        (has_ref_kl && !bufRef) || (has_entropy && !bufEntropy))
+      return false;
+
+    NSArray<NSNumber *> *shape = @[ @(n) ];
+    NSArray<NSNumber *> *axis0 = @[ @0 ];
+    NSString *key = [NSString stringWithFormat:@"rlppoex:f32:%d:%a:%a:%a:%d:%d:%d",
+                                               n, (double)clip_epsilon,
+                                               (double)kl_coef,
+                                               (double)entropy_coef,
+                                               has_mask, has_ref_kl,
+                                               has_entropy];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *pNew;
+    MPSGraphTensor *pOld;
+    MPSGraphTensor *pAdv;
+    MPSGraphTensor *pMask = nil;
+    MPSGraphTensor *pRef = nil;
+    MPSGraphTensor *pEntropy = nil;
+    MPSGraphTensor *lossMean;
+    if (entry) {
+      g = entry[0];
+      NSArray *phs = (NSArray *)entry[1];
+      pNew = phs[0];
+      pOld = phs[1];
+      pAdv = phs[2];
+      NSUInteger idx = 3;
+      if (has_mask)
+        pMask = phs[idx++];
+      if (has_ref_kl)
+        pRef = phs[idx++];
+      if (has_entropy)
+        pEntropy = phs[idx++];
+      lossMean = entry[2];
+    } else {
+      g = [MPSGraph new];
+      pNew = [g placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+      pOld = [g placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+      pAdv = [g placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+      NSMutableArray *phs = [NSMutableArray arrayWithObjects:pNew, pOld, pAdv, nil];
+      if (has_mask) {
+        pMask = [g placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+        [phs addObject:pMask];
+      }
+      if (has_ref_kl) {
+        pRef = [g placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+        [phs addObject:pRef];
+      }
+      if (has_entropy) {
+        pEntropy = [g placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+        [phs addObject:pEntropy];
+      }
+      MPSGraphTensor *delta =
+          [g subtractionWithPrimaryTensor:pNew secondaryTensor:pOld name:nil];
+      MPSGraphTensor *ratio = [g exponentWithTensor:delta name:nil];
+      MPSGraphTensor *lo =
+          [g constantWithScalar:(double)(1.0f - clip_epsilon)
+                       dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *hi =
+          [g constantWithScalar:(double)(1.0f + clip_epsilon)
+                       dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *clampedLo =
+          [g maximumWithPrimaryTensor:ratio secondaryTensor:lo name:nil];
+      MPSGraphTensor *clipped =
+          [g minimumWithPrimaryTensor:clampedLo secondaryTensor:hi name:nil];
+      MPSGraphTensor *s1 =
+          [g multiplicationWithPrimaryTensor:ratio secondaryTensor:pAdv name:nil];
+      MPSGraphTensor *s2 =
+          [g multiplicationWithPrimaryTensor:clipped secondaryTensor:pAdv name:nil];
+      MPSGraphTensor *minS =
+          [g minimumWithPrimaryTensor:s1 secondaryTensor:s2 name:nil];
+      MPSGraphTensor *loss = [g negativeWithTensor:minS name:nil];
+      if (has_ref_kl) {
+        MPSGraphTensor *refDelta =
+            [g subtractionWithPrimaryTensor:pRef secondaryTensor:pNew name:nil];
+        MPSGraphTensor *expDelta = [g exponentWithTensor:refDelta name:nil];
+        MPSGraphTensor *one =
+            [g constantWithScalar:1.0 dataType:MPSDataTypeFloat32];
+        MPSGraphTensor *klBase =
+            [g subtractionWithPrimaryTensor:expDelta secondaryTensor:refDelta name:nil];
+        MPSGraphTensor *kl =
+            [g subtractionWithPrimaryTensor:klBase secondaryTensor:one name:nil];
+        MPSGraphTensor *coef =
+            [g constantWithScalar:(double)kl_coef dataType:MPSDataTypeFloat32];
+        MPSGraphTensor *scaled =
+            [g multiplicationWithPrimaryTensor:kl secondaryTensor:coef name:nil];
+        loss = [g additionWithPrimaryTensor:loss secondaryTensor:scaled name:nil];
+      }
+      if (has_entropy) {
+        MPSGraphTensor *coef =
+            [g constantWithScalar:(double)entropy_coef dataType:MPSDataTypeFloat32];
+        MPSGraphTensor *scaled =
+            [g multiplicationWithPrimaryTensor:pEntropy secondaryTensor:coef name:nil];
+        loss = [g subtractionWithPrimaryTensor:loss secondaryTensor:scaled name:nil];
+      }
+      if (has_mask) {
+        MPSGraphTensor *masked =
+            [g multiplicationWithPrimaryTensor:loss secondaryTensor:pMask name:nil];
+        MPSGraphTensor *sumLoss =
+            [g reductionSumWithTensor:masked axes:axis0 name:nil];
+        MPSGraphTensor *sumMask =
+            [g reductionSumWithTensor:pMask axes:axis0 name:nil];
+        MPSGraphTensor *one =
+            [g constantWithScalar:1.0 dataType:MPSDataTypeFloat32];
+        MPSGraphTensor *denom =
+            [g maximumWithPrimaryTensor:sumMask secondaryTensor:one name:nil];
+        lossMean =
+            [g divisionWithPrimaryTensor:sumLoss secondaryTensor:denom name:nil];
+      } else {
+        lossMean = [g meanOfTensor:loss axes:axis0 name:nil];
+      }
+      mpsg_cache_put(key, @[ g, phs, lossMean ]);
+    }
+
+    MPSGraphTensorData *newD =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufNew
+                                               shape:shape
+                                            dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *oldD =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufOld
+                                               shape:shape
+                                            dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *advD =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufAdv
+                                               shape:shape
+                                            dataType:MPSDataTypeFloat32];
+    NSMutableDictionary *feeds = [NSMutableDictionary dictionary];
+    feeds[pNew] = newD;
+    feeds[pOld] = oldD;
+    feeds[pAdv] = advD;
+    if (has_mask) {
+      feeds[pMask] =
+          [[MPSGraphTensorData alloc] initWithMTLBuffer:bufMask
+                                                 shape:shape
+                                              dataType:MPSDataTypeFloat32];
+    }
+    if (has_ref_kl) {
+      feeds[pRef] =
+          [[MPSGraphTensorData alloc] initWithMTLBuffer:bufRef
+                                                 shape:shape
+                                              dataType:MPSDataTypeFloat32];
+    }
+    if (has_entropy) {
+      feeds[pEntropy] =
+          [[MPSGraphTensorData alloc] initWithMTLBuffer:bufEntropy
+                                                 shape:shape
+                                              dataType:MPSDataTypeFloat32];
+    }
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:feeds
+                                    targetTensors:@[ lossMean ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[lossMean];
+    if (!od)
+      return false;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
 // R1 — device-resident bmm: inputs + output are existing shared MTLBuffers
 // (from DeviceTensor handles), so there is NO host upload and NO readback. The
 // MPSGraph result is written straight into the output buffer via
@@ -14424,6 +14607,23 @@ extern "C" int32_t tessera_apple_gpu_ppo_policy_loss_f32(
     return 0;
   return mpsg_run_ppo_policy_loss_f32(ctx, logp_new, logp_old, advantages,
                                       out, n, clip_epsilon)
+             ? 1
+             : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_ppo_policy_loss_ex_f32(
+    const float *logp_new, const float *logp_old, const float *advantages,
+    const float *mask, const float *ref_logp, const float *entropy,
+    float *out, int32_t n, float clip_epsilon, float kl_coef,
+    float entropy_coef, int32_t has_mask, int32_t has_ref_kl,
+    int32_t has_entropy) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !logp_new || !logp_old || !advantages || !out)
+    return 0;
+  return mpsg_run_ppo_policy_loss_ex_f32(
+             ctx, logp_new, logp_old, advantages, mask, ref_logp, entropy, out,
+             n, clip_epsilon, kl_coef, entropy_coef, has_mask, has_ref_kl,
+             has_entropy)
              ? 1
              : 0;
 }

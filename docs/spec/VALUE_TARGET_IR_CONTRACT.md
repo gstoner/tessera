@@ -158,7 +158,9 @@ Two executor allowlists, one per backend lane:
 - **GPU** (`test_gpu_value_executor_allowlist_exact`):
   `tessera_apple_gpu_bmm_{f32,f16,bf16}` (rank-3 batched matmul, Sprint 8)
   plus `tessera_apple_gpu_native_sparse_attn_f32` (native sparse attention,
-  Sprint 11; active only when the real Metal executor is available).
+  Sprint 11; active only when the real Metal executor is available) and
+  `tessera_apple_gpu_ppo_policy_loss_{f32,ex_f32}` (PPO policy loss, Stages
+  13-14; active only when their MPSGraph numerical probes pass).
 
 - **The full Apple CPU linalg family is executable now (Sprint 3).** The matrix
   row `(apple_cpu, apple_value_target_ir)` resolves to the
@@ -265,6 +267,26 @@ Two executor allowlists, one per backend lane:
   `executor="apple_gpu_value_target_ir"`, correctness, and timing only when
   that runtime probe succeeds; otherwise they report `executor=None`,
   `correctness=None`, and `timing_ms=None` with a named skip reason.
+- **Apple GPU PPO policy loss is executable in narrow fp32 envelopes (Stages
+  13-14).** `tessera.rl.ppo_policy_loss` now carries MLIR
+  `AttrSizedOperandSegments`: the required operands are
+  `logp_new, logp_old, advantages`, and optional tensor operands are
+  `mask`, `ref_logp`, and `entropy`. The strict 3-operand envelope emits
+  `tessera_apple_gpu_ppo_policy_loss_f32`; any optional side tensor emits the
+  extended `tessera_apple_gpu_ppo_policy_loss_ex_f32` value call with
+  `has_mask` / `has_ref_kl` / `has_entropy` metadata plus `kl_coef` /
+  `entropy_coef`. Both symbols are MPSGraph-backed and return a success bit;
+  the non-Darwin stub returns `0`. Python reports `apple_gpu_value_target_ir`
+  success only after an active tiny numerical probe passes in the current fresh
+  dylib/fresh Python process.
+- **GRPO/CISPO are compiler-decomposed reference, not Apple GPU executable
+  (Stage 15).** `-tessera-rl-loss-decompose` marks GRPO and CISPO as
+  compiler-visible and records a decomposed reference formula
+  (`normalize_group_advantages(...)` followed by the policy-loss formula).
+  Benchmark rows compare that decomposition against the public Python reference.
+  They do not emit `tessera_apple.gpu.kernel_call`, and benchmark rows must not
+  use `executor="apple_gpu_value_target_ir"` for GRPO/CISPO until a real value
+  executor and numerical proof exist.
 - **Everything else is classified + gated, never silently dispatched:**
   - Other GPU `gpu.kernel_call`s (`cholesky`/`tri_solve` linalg, rank-2 matmul)
     and `gpu.package_call` are **non-executable** on the value lane — classified

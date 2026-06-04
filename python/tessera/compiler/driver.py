@@ -506,6 +506,9 @@ _APPLE_ATTR_RE = re.compile(r'(\w+)\s*=\s*"((?:\\.|[^"\\])*)"')
 # the extractor must surface them — runtime dispatch must not assume defaults.
 _APPLE_BOOL_ATTR_RE = re.compile(r"(\w+)\s*=\s*(true|false)\b")
 _APPLE_INT_ATTR_RE = re.compile(r"(\w+)\s*=\s*(-?\d+)\b")
+_APPLE_FLOAT_ATTR_RE = re.compile(
+    r"(\w+)\s*=\s*(-?(?:\d+\.\d*|\d*\.\d+)(?:[eE][+-]?\d+)?)\s*:\s*f(?:32|64)\b"
+)
 
 
 def _scan_value_call_attr_dicts(ir_text: str) -> list[tuple[str, str]]:
@@ -584,6 +587,8 @@ def extract_apple_value_calls(ir_text: str) -> list[dict[str, object]]:
         # Bool attrs (unquoted) — don't clobber a same-named string attr.
         for k, v in _APPLE_BOOL_ATTR_RE.findall(attr_blob):
             attrs.setdefault(k, v == "true")
+        for k, v in _APPLE_FLOAT_ATTR_RE.findall(attr_blob):
+            attrs.setdefault(k, float(v))
         for k, v in _APPLE_INT_ATTR_RE.findall(attr_blob):
             attrs.setdefault(k, int(v))
         attrs["op"] = op_name

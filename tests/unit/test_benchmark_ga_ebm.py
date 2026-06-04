@@ -110,6 +110,8 @@ REQUIRED_ROW_FIELDS = {
     "p10_ms", "p50_ms", "p90_ms", "min_ms", "max_ms",
     "max_abs_err", "tolerance", "ok",
     "device", "tessera_version",
+    "variant_kind", "compiler_path", "executor", "runtime_status",
+    "execution_kind",
 }
 
 REQUIRED_ENVELOPE_FIELDS = {
@@ -202,8 +204,68 @@ def test_ebm_value_target_row_distinguishes_executor() -> None:
     assert row["mode"] == "value_target_ir"
     assert row["executor"] == "apple_gpu_value_target_ir"
     assert row["runtime_status"] == "success"
+    assert row["execution_kind"] == "native_gpu"
+    assert row["variant_kind"] == "apple_gpu_value_target_ir"
+    assert row["compiler_path"] == "apple_value_target_ir"
     assert row["symbol"] == (
         "tessera_apple_gpu_ebm_energy_quadratic_value_f32")
+
+
+def test_value_target_executor_claim_requires_numerical_success() -> None:
+    """Stage 16F: value rows cannot hard-code native_gpu/success/executor.
+
+    A value dispatch whose numerical comparison fails may still be represented
+    as a row, but it must not carry the executable claim triple.
+    """
+    row = bench.run_ebm_apple_value_path(
+        "ebm_energy", "B=2,D=3/value_ir", lambda: None, 1.0,
+        "tessera_apple_gpu_ebm_energy_quadratic_value_f32",
+        tolerance=1.0e-6, reps=1, device="test-device",
+        version="test-version")
+    assert row["variant_kind"] == "apple_gpu_value_target_ir"
+    assert row["ok"] is False
+    assert row["executor"] is None
+    assert row["runtime_status"] == "numerical_mismatch"
+    assert row["execution_kind"] == "unknown"
+
+
+def test_compiler_visible_reference_row_never_claims_gpu_executor() -> None:
+    row = bench.run_compiler_visible_reference_path(
+        "ebm", "ebm_energy", "B=2,D=3/value_ir", lambda: None, 0.0,
+        "tessera_apple_gpu_ebm_energy_quadratic_value_f32",
+        tolerance=1.0e-6, reps=1, device="test-device",
+        version="test-version")
+    assert row["variant_kind"] == "compiler_visible_reference"
+    assert row["compiler_path"] == "apple_value_target_ir"
+    assert row["executor"] == "python_reference"
+    assert row["runtime_status"] == "reference"
+    assert row["execution_kind"] == "reference_cpu"
+
+
+def test_stage16f_value_claims_are_row_kind_scoped(report: dict) -> None:
+    allowed_native_triple = {
+        "executor": "apple_gpu_value_target_ir",
+        "runtime_status": "success",
+        "execution_kind": "native_gpu",
+    }
+    assert any(r["variant_kind"] == "compiler_visible_reference"
+               for r in report["runs"])
+    for row in report["runs"]:
+        carries_value_executor = row.get("executor") == allowed_native_triple["executor"]
+        carries_native_success = (
+            row.get("runtime_status") == allowed_native_triple["runtime_status"]
+            and row.get("execution_kind") == allowed_native_triple["execution_kind"]
+        )
+        if carries_value_executor or carries_native_success:
+            assert row["variant_kind"] == "apple_gpu_value_target_ir", row
+            assert row["backend"] == "apple_gpu_value_target_ir", row
+            assert row["compiler_path"] == "apple_value_target_ir", row
+            assert row["ok"] is True, row
+            assert row["max_abs_err"] <= row["tolerance"], row
+        elif row["variant_kind"] == "compiler_visible_reference":
+            assert row["executor"] == "python_reference"
+            assert row["runtime_status"] == "reference"
+            assert row["execution_kind"] == "reference_cpu"
 
 
 def test_timing_percentiles_consistent_for_every_row(report: dict) -> None:

@@ -56,8 +56,8 @@ Proof-of-dispatch coverage:
   - In every case: a silent numpy fallback degrades the row's
     ``backend`` to ``python_ref`` and its ``ok`` field to ``False``.
 
-Output schema (matches ``benchmarks/benchmark_gemm.py`` for
-roofline-tool compatibility):
+Output schema keeps the historical ``backend`` / ``mode`` columns for
+roofline-tool compatibility and adds the Stage 16F execution-claim contract:
 
     {"backend": "apple_gpu" | "python_ref",
      "op": "<clifford_op>" | "<ebm_op>",
@@ -70,7 +70,18 @@ roofline-tool compatibility):
      "max_abs_err": <float>,
      "ok": <bool>,
      "device": "<host>",
-     "tessera_version": "..."}
+     "tessera_version": "...",
+     "variant_kind": "python_reference" | "compiler_visible_reference"
+                     | "apple_gpu_value_target_ir" | ...,
+     "compiler_path": "apple_value_target_ir" | "manifest" | null,
+     "executor": "python_reference" | "apple_gpu_value_target_ir" | ...,
+     "runtime_status": "reference" | "success" | ...,
+     "execution_kind": "reference_cpu" | "native_gpu" | ...}
+
+Only ``variant_kind="apple_gpu_value_target_ir"`` may carry the trio
+``executor="apple_gpu_value_target_ir"``, ``runtime_status="success"``, and
+``execution_kind="native_gpu"``, and only after the value-runtime probe and
+row-local numerical comparison have both passed.
 
 Skips cleanly on non-Darwin or when the runtime can't be compiled.
 """
@@ -614,6 +625,25 @@ def timing_stats(samples_ms: list[float]) -> dict[str, float]:
     }
 
 
+def _stage16f_fields(
+    variant_kind: str, *, compiler_path: str | None, executor: str | None,
+    runtime_status: str, execution_kind: str,
+) -> dict[str, Any]:
+    """Common row contract for GA/EBM benchmark honesty gates.
+
+    Stage 16F mirrors the RL benchmark discipline.  The historical
+    `backend`/`mode` columns remain for compatibility, while these fields are
+    the row-level authority for execution claims.
+    """
+    return {
+        "variant_kind": variant_kind,
+        "compiler_path": compiler_path,
+        "executor": executor,
+        "runtime_status": runtime_status,
+        "execution_kind": execution_kind,
+    }
+
+
 def run_ga_primitive(row: dict[str, Any], reps: int,
                      device: str, version: str) -> dict[str, Any]:
     out = row["dispatch"]()
@@ -641,6 +671,11 @@ def run_ga_primitive(row: dict[str, Any], reps: int,
         "symbol": row["symbol"],
         "device": device,
         "tessera_version": version,
+        **_stage16f_fields(
+            "legacy_manifest_native", compiler_path="manifest",
+            executor="apple_gpu_manifest" if ok else None,
+            runtime_status="success" if ok else "numerical_mismatch",
+            execution_kind="legacy_native_gpu" if ok else "unknown"),
     }
 
 
@@ -655,7 +690,7 @@ def run_ga_primitive(row: dict[str, Any], reps: int,
 # backend column are computed uniformly across rows.
 # ---------------------------------------------------------------------------
 
-def _ebm_energy_path() -> tuple[Callable[[], None], float]:
+def _ebm_energy_path() -> tuple[Callable[[], Any], float]:
     rng = np.random.RandomState(1000)
     x = rng.randn(8, 4).astype(np.float32)
     y = rng.randn(8, 4).astype(np.float32)
@@ -669,7 +704,7 @@ def _ebm_energy_path() -> tuple[Callable[[], None], float]:
     return (lambda: ebm.energy(model_fn, x, y)), err
 
 
-def _ebm_inner_step_python_path() -> tuple[Callable[[], None], float]:
+def _ebm_inner_step_python_path() -> tuple[Callable[[], Any], float]:
     """Python reference inner-step (kept for backward-compat).
 
     Superseded by ``_ebm_inner_step_apple_gpu_path`` when the runtime
@@ -971,7 +1006,7 @@ def _ebm_partition_exact_apple_gpu_path(
 
 
 # Python-reference Langevin (kept for the non-Apple skip path).
-def _ebm_langevin_step_path() -> tuple[Callable[[], None], float]:
+def _ebm_langevin_step_path() -> tuple[Callable[[], Any], float]:
     rng = np.random.RandomState(1002)
     y = rng.randn(16, 4).astype(np.float32)
     key = RNGKey.from_seed(1002)
@@ -986,7 +1021,7 @@ def _ebm_langevin_step_path() -> tuple[Callable[[], None], float]:
                                        grad_fn=grad_fn)), err
 
 
-def _ebm_self_verify_path() -> tuple[Callable[[], None], float]:
+def _ebm_self_verify_path() -> tuple[Callable[[], Any], float]:
     rng = np.random.RandomState(1003)
     B, K, D = 4, 8, 16
     energies = rng.randn(B, K).astype(np.float32)
@@ -997,11 +1032,11 @@ def _ebm_self_verify_path() -> tuple[Callable[[], None], float]:
     return (lambda: ebm.self_verify(energies, candidates)), err
 
 
-def _ebm_decode_init_path() -> tuple[Callable[[], None], float]:
+def _ebm_decode_init_path() -> tuple[Callable[[], Any], float]:
     key = RNGKey.from_seed(1004)
     x = np.zeros((4, 12), dtype=np.float32)
-    kwargs = dict(K=6, init_strategy="noise", rng_key=key,
-                  shape=(12,), dtype="fp32")
+    kwargs: dict[str, Any] = dict(K=6, init_strategy="noise", rng_key=key,
+                                  shape=(12,), dtype="fp32")
     out = ebm.decode_init(x, **kwargs)
     out2 = ebm.decode_init(x, **kwargs)
     err = float(np.abs(out - out2).max())
@@ -1009,7 +1044,7 @@ def _ebm_decode_init_path() -> tuple[Callable[[], None], float]:
     return (lambda: ebm.decode_init(x, **kwargs)), err
 
 
-def _ebm_partition_exact_path() -> tuple[Callable[[], None], float]:
+def _ebm_partition_exact_path() -> tuple[Callable[[], Any], float]:
     states = np.array(np.meshgrid(*[[-1.0, 1.0]] * 4,
                                     indexing="ij")).reshape(4, -1).T
     states = states.astype(np.float32)
@@ -1024,7 +1059,7 @@ def _ebm_partition_exact_path() -> tuple[Callable[[], None], float]:
     return (lambda: ebm.partition_function_exact(energy_fn, state_list)), err
 
 
-def _ebm_bivector_langevin_path() -> tuple[Callable[[], None], float]:
+def _ebm_bivector_langevin_path() -> tuple[Callable[[], Any], float]:
     key = RNGKey.from_seed(1005)
     coeffs0 = np.zeros(8, dtype=np.float32)
     coeffs0[3] = 0.5
@@ -1050,7 +1085,7 @@ def _ebm_bivector_langevin_path() -> tuple[Callable[[], None], float]:
                                                  grad_fn=grad_fn)), err
 
 
-def _ebm_sphere_langevin_path() -> tuple[Callable[[], None], float]:
+def _ebm_sphere_langevin_path() -> tuple[Callable[[], Any], float]:
     key = RNGKey.from_seed(1006)
     x = np.array([1.0, 0.0, 0.0], dtype=np.float32)
 
@@ -1506,6 +1541,12 @@ def run_workload_apple_gpu(name: str, shape: str,
         "symbols": list(symbols),
         "device": device,
         "tessera_version": version,
+        **_stage16f_fields(
+            "legacy_manifest_native" if ok else "python_reference",
+            compiler_path="manifest" if ok else None,
+            executor="apple_gpu_manifest" if ok else None,
+            runtime_status="success" if ok else "reference_fallback",
+            execution_kind="legacy_native_gpu" if ok else "reference_cpu"),
     }
 
 
@@ -1529,6 +1570,10 @@ def run_workload_python(name: str, shape: str,
         "ok": err <= tolerance,
         "device": device,
         "tessera_version": version,
+        **_stage16f_fields(
+            "python_reference", compiler_path=None,
+            executor="python_reference", runtime_status="reference",
+            execution_kind="reference_cpu"),
     }
 
 
@@ -1566,6 +1611,10 @@ def run_ebm_python_path(name: str, shape: str, builder: Callable,
         "x86_status": _manifest_status_for(name, "x86"),
         "device": device,
         "tessera_version": version,
+        **_stage16f_fields(
+            "python_reference", compiler_path=None,
+            executor="python_reference", runtime_status="reference",
+            execution_kind="reference_cpu"),
     }
 
 
@@ -1621,24 +1670,31 @@ def run_ebm_apple_gpu_path(name: str, shape: str,
         "dispatched_on_gpu": dispatched_on_gpu,
         "device": device,
         "tessera_version": version,
+        **_stage16f_fields(
+            "legacy_manifest_native", compiler_path="manifest",
+            executor="apple_gpu_manifest" if ok else None,
+            runtime_status="success" if ok else "unverified_dispatch",
+            execution_kind="legacy_native_gpu" if ok else "unknown"),
     }
 
 
 def run_ebm_apple_value_path(name: str, shape: str,
                              dispatch: Callable, err: float, symbol: str,
                              tolerance: float, reps: int,
-                             device: str, version: str) -> dict[str, Any]:
-    """Time an Apple GPU Value Target IR EBM row.
+                             device: str, version: str, *,
+                             namespace: str = "ebm") -> dict[str, Any]:
+    """Time an Apple GPU Value Target IR GA/EBM row.
 
     These rows are deliberately distinct from the legacy `backend="apple_gpu"`
-    EBM rows. They execute through the value runtime adapter and are emitted only
+    rows. They execute through the value runtime adapter and are emitted only
     when the value-specific status-returning C ABI probe has already passed.
     """
     samples_ms = collect_samples(dispatch, reps)
     timing = timing_stats(samples_ms)
+    ok = err <= tolerance
     return {
         "backend": "apple_gpu_value_target_ir",
-        "namespace": "ebm",
+        "namespace": namespace,
         "op": name,
         "shape": shape,
         "dtype": "f32",
@@ -1649,11 +1705,48 @@ def run_ebm_apple_value_path(name: str, shape: str,
         **timing,
         "max_abs_err": err,
         "tolerance": tolerance,
+        "ok": ok,
+        "apple_gpu_status": _manifest_status_for(name, "apple_gpu"),
+        "symbol": symbol,
+        "device": device,
+        "tessera_version": version,
+        **_stage16f_fields(
+            "apple_gpu_value_target_ir", compiler_path="apple_value_target_ir",
+            executor="apple_gpu_value_target_ir" if ok else None,
+            runtime_status="success" if ok else "numerical_mismatch",
+            execution_kind="native_gpu" if ok else "unknown"),
+    }
+
+
+def run_compiler_visible_reference_path(
+    namespace: str, name: str, shape: str, dispatch: Callable, err: float,
+    symbol: str, tolerance: float, reps: int, device: str, version: str,
+) -> dict[str, Any]:
+    """Time a compiler-visible reference row for a GA/EBM value envelope."""
+    samples_ms = collect_samples(dispatch, reps)
+    timing = timing_stats(samples_ms)
+    return {
+        "backend": "compiler_visible_reference",
+        "namespace": namespace,
+        "op": name,
+        "shape": shape,
+        "dtype": "f32",
+        "mode": "compiler_visible_reference",
+        "reps": reps,
+        **timing,
+        "max_abs_err": err,
+        "tolerance": tolerance,
         "ok": err <= tolerance,
         "apple_gpu_status": _manifest_status_for(name, "apple_gpu"),
         "symbol": symbol,
         "device": device,
         "tessera_version": version,
+        **_stage16f_fields(
+            "compiler_visible_reference",
+            compiler_path="apple_value_target_ir",
+            executor="python_reference",
+            runtime_status="reference",
+            execution_kind="reference_cpu"),
     }
 
 
@@ -1732,11 +1825,224 @@ def _ebm_langevin_value_target_ir_path() -> (
     return dispatch, err, symbol
 
 
-_EBM_VALUE_TARGET_BUILDERS = [
-    ("ebm_energy", "B=8,D=4/quadratic/value_ir",
+def _ebm_refinement_value_target_ir_path() -> (
+    tuple[Callable[[], np.ndarray], float, str] | None
+):
+    if not tessera_runtime._apple_gpu_ebm_refinement_value_available():
+        return None
+    B, D = 8, 6
+    rng = np.random.RandomState(2090)
+    y0 = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    grad = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    eta = 0.02
+    steps = 8
+    expected = (y0 - steps * eta * grad).astype(np.float32)
+    symbol = "tessera_apple_gpu_ebm_refinement_value_f32"
+    artifact = tessera_runtime.RuntimeArtifact(metadata={
+        "target": "apple_gpu",
+        "compiler_path": "apple_value_target_ir",
+        "apple_target_ir_kind": "value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.gpu.kernel_call",
+            "op_kind": "ebm_refinement",
+            "symbol": symbol,
+            "status": "executable",
+            "eta": eta,
+            "steps": steps,
+        }],
+    })
+
+    def dispatch() -> np.ndarray:
+        res = tessera_runtime.launch(artifact, [y0, grad])
+        if not res.get("ok"):
+            raise RuntimeError(res.get("reason", "EBM value dispatch failed"))
+        return np.asarray(res["output"], dtype=np.float32)
+
+    out = dispatch()
+    err = float(np.abs(out - expected).max())
+    return dispatch, err, symbol
+
+
+def _ebm_partition_value_target_ir_path() -> (
+    tuple[Callable[[], np.ndarray], float, str] | None
+):
+    if not tessera_runtime._apple_gpu_ebm_partition_exact_value_available():
+        return None
+    rng = np.random.RandomState(2100)
+    energies = np.ascontiguousarray(rng.randn(64).astype(np.float32) * 2.0)
+    temperature = 1.0
+    scaled = -energies.astype(np.float64) / temperature
+    expected = float(np.exp(np.max(scaled)) *
+                     np.sum(np.exp(scaled - np.max(scaled))))
+    symbol = "tessera_apple_gpu_ebm_partition_exact_value_f32"
+    artifact = tessera_runtime.RuntimeArtifact(metadata={
+        "target": "apple_gpu",
+        "compiler_path": "apple_value_target_ir",
+        "apple_target_ir_kind": "value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.gpu.kernel_call",
+            "op_kind": "ebm_partition_exact",
+            "symbol": symbol,
+            "status": "executable",
+            "temperature": temperature,
+            "reduction": "logsumexp",
+        }],
+    })
+
+    def dispatch() -> np.ndarray:
+        res = tessera_runtime.launch(artifact, [energies])
+        if not res.get("ok"):
+            raise RuntimeError(res.get("reason", "EBM value dispatch failed"))
+        return np.asarray(res["output"], dtype=np.float32)
+
+    out = dispatch()
+    err = float(abs(float(out) - expected) / max(1.0, abs(expected)))
+    return dispatch, err, symbol
+
+
+def _clifford_geo_value_target_ir_path() -> (
+    tuple[Callable[[], np.ndarray], float, str] | None
+):
+    if not tessera_runtime._apple_gpu_clifford_geo_product_cl30_value_available():
+        return None
+    A = _seeded_pointwise(300)
+    B = _seeded_pointwise(301)
+    A_c = np.ascontiguousarray(A)
+    B_c = np.ascontiguousarray(B)
+    expected = _py_ref_binary_8x8("clifford_geometric_product", A, B)
+    symbol = "tessera_apple_gpu_clifford_geo_product_cl30_value_f32"
+    artifact = tessera_runtime.RuntimeArtifact(metadata={
+        "target": "apple_gpu",
+        "compiler_path": "apple_value_target_ir",
+        "apple_target_ir_kind": "value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.gpu.kernel_call",
+            "op_kind": "clifford_geometric_product",
+            "symbol": symbol,
+            "status": "executable",
+            "p": 3,
+            "q": 0,
+        }],
+    })
+
+    def dispatch() -> np.ndarray:
+        res = tessera_runtime.launch(artifact, [A_c, B_c])
+        if not res.get("ok"):
+            raise RuntimeError(res.get("reason", "GA value dispatch failed"))
+        return np.asarray(res["output"], dtype=np.float32)
+
+    out = dispatch()
+    err = float(np.abs(out - expected).max())
+    return dispatch, err, symbol
+
+
+def _compiler_visible_ebm_energy_reference_path() -> (
+    tuple[Callable[[], np.ndarray], float, str]
+):
+    B, D = 8, 4
+    rng = np.random.RandomState(2070)
+    x = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    y = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    expected = (0.5 * np.sum((x - y) ** 2, axis=1)).astype(np.float32)
+
+    def dispatch() -> np.ndarray:
+        return (0.5 * np.sum((x - y) ** 2, axis=1)).astype(np.float32)
+
+    err = float(np.abs(dispatch() - expected).max())
+    return dispatch, err, "tessera_apple_gpu_ebm_energy_quadratic_value_f32"
+
+
+def _compiler_visible_ebm_langevin_reference_path() -> (
+    tuple[Callable[[], np.ndarray], float, str]
+):
+    B, D = 16, 4
+    rng = np.random.RandomState(2080)
+    y = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    grad = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    noise = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    eta = 0.05
+    noise_scale = 0.125
+    expected = (y - eta * grad + noise_scale * noise).astype(np.float32)
+
+    def dispatch() -> np.ndarray:
+        return (y - eta * grad + noise_scale * noise).astype(np.float32)
+
+    err = float(np.abs(dispatch() - expected).max())
+    return dispatch, err, "tessera_apple_gpu_ebm_langevin_step_value_f32"
+
+
+def _compiler_visible_ebm_refinement_reference_path() -> (
+    tuple[Callable[[], np.ndarray], float, str]
+):
+    B, D = 8, 6
+    rng = np.random.RandomState(2090)
+    y0 = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    grad = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    eta = 0.02
+    steps = 8
+    expected = (y0 - steps * eta * grad).astype(np.float32)
+
+    def dispatch() -> np.ndarray:
+        return (y0 - steps * eta * grad).astype(np.float32)
+
+    err = float(np.abs(dispatch() - expected).max())
+    return dispatch, err, "tessera_apple_gpu_ebm_refinement_value_f32"
+
+
+def _compiler_visible_ebm_partition_reference_path() -> (
+    tuple[Callable[[], np.ndarray], float, str]
+):
+    rng = np.random.RandomState(2100)
+    energies = np.ascontiguousarray(rng.randn(64).astype(np.float32) * 2.0)
+    temperature = 1.0
+    scaled = -energies.astype(np.float64) / temperature
+    expected = float(np.exp(np.max(scaled)) *
+                     np.sum(np.exp(scaled - np.max(scaled))))
+
+    def dispatch() -> np.ndarray:
+        scaled_f = -energies.astype(np.float64) / temperature
+        return np.asarray(
+            np.exp(np.max(scaled_f)) *
+            np.sum(np.exp(scaled_f - np.max(scaled_f))),
+            dtype=np.float32)
+
+    err = float(abs(float(dispatch()) - expected) / max(1.0, abs(expected)))
+    return dispatch, err, "tessera_apple_gpu_ebm_partition_exact_value_f32"
+
+
+def _compiler_visible_clifford_geo_reference_path() -> (
+    tuple[Callable[[], np.ndarray], float, str]
+):
+    A = _seeded_pointwise(300)
+    B = _seeded_pointwise(301)
+    expected = _py_ref_binary_8x8("clifford_geometric_product", A, B)
+
+    def dispatch() -> np.ndarray:
+        return _py_ref_binary_8x8("clifford_geometric_product", A, B)
+
+    err = float(np.abs(dispatch() - expected).max())
+    return dispatch, err, "tessera_apple_gpu_clifford_geo_product_cl30_value_f32"
+
+
+_VALUE_TARGET_BUILDERS = [
+    ("ebm", "ebm_energy", "B=8,D=4/quadratic/value_ir",
+     _compiler_visible_ebm_energy_reference_path,
      _ebm_energy_value_target_ir_path, 1e-6),
-    ("ebm_langevin_step", "B=16,D=4/T=1/value_ir",
+    ("ebm", "ebm_langevin_step", "B=16,D=4/T=1/value_ir",
+     _compiler_visible_ebm_langevin_reference_path,
      _ebm_langevin_value_target_ir_path, 1e-6),
+    ("ebm", "ebm_refinement", "B=8,D=6/T=8/value_ir",
+     _compiler_visible_ebm_refinement_reference_path,
+     _ebm_refinement_value_target_ir_path, 1e-6),
+    ("ebm", "ebm_partition_exact", "N=64/value_ir",
+     _compiler_visible_ebm_partition_reference_path,
+     _ebm_partition_value_target_ir_path, 1e-5),
+    ("ga", "clifford_geometric_product", f"{_BATCH}x8,{_BATCH}x8/value_ir",
+     _compiler_visible_clifford_geo_reference_path,
+     _clifford_geo_value_target_ir_path, 1e-4),
 ]
 
 
@@ -1860,6 +2166,12 @@ def run_jit_bridge_path(name: str, shape: str, builder: Callable,
         "routes": route_records,
         "device": device,
         "tessera_version": version,
+        **_stage16f_fields(
+            "legacy_manifest_native" if err <= tolerance else "python_reference",
+            compiler_path="jit_bridge",
+            executor="apple_gpu_manifest" if err <= tolerance else None,
+            runtime_status="success" if err <= tolerance else "numerical_mismatch",
+            execution_kind="legacy_native_gpu" if err <= tolerance else "unknown"),
     }
 
 
@@ -1943,16 +2255,24 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
                     device=device, version=version,
                 ))
                 native_ebm_ops.add(op_name)
-            for op_name, shape_desc, builder, tol in _EBM_VALUE_TARGET_BUILDERS:
-                built = builder()
+            for (namespace, op_name, shape_desc, ref_builder,
+                 value_builder, tol) in _VALUE_TARGET_BUILDERS:
+                built = value_builder()
                 if built is None:
                     continue
                 dispatch, err, sym = built
                 rows.append(run_ebm_apple_value_path(
                     op_name, shape_desc, dispatch, err, sym,
                     tolerance=tol, reps=reps,
-                    device=device, version=version,
+                    device=device, version=version, namespace=namespace,
                 ))
+
+        for namespace, op_name, shape_desc, ref_builder, _, tol in _VALUE_TARGET_BUILDERS:
+            dispatch, err, sym = ref_builder()
+            rows.append(run_compiler_visible_reference_path(
+                namespace, op_name, shape_desc, dispatch, err, sym,
+                tolerance=tol, reps=reps, device=device, version=version,
+            ))
 
         # Python-reference EBM paths — emitted on every host so the
         # report keeps comprehensive coverage even on non-Darwin AND so
@@ -2078,10 +2398,15 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
                 "error": str(exc),
                 "device": device,
                 "tessera_version": version,
+                **_stage16f_fields(
+                    "legacy_manifest_native", compiler_path="clifford_jit",
+                    executor=None, runtime_status="compile_failed",
+                    execution_kind="unknown"),
             })
         else:
             samples_ms = collect_samples(vs_dispatch, reps)
             timing = timing_stats(samples_ms)
+            ok = vs_err <= 5e-5
             rows.append({
                 "backend": "apple_gpu",
                 "namespace": "vertical_slice",
@@ -2093,15 +2418,21 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
                 **timing,
                 "max_abs_err": vs_err,
                 "tolerance": 5e-5,
-                "ok": vs_err <= 5e-5,
+                "ok": ok,
                 "plan_hash": vs_plan_hash,
                 "compiled_artifact": vs_metadata,
                 "device": device,
                 "tessera_version": version,
+                **_stage16f_fields(
+                    "legacy_manifest_native", compiler_path="clifford_jit",
+                    executor="apple_gpu_manifest" if ok else None,
+                    runtime_status="success" if ok else "numerical_mismatch",
+                    execution_kind="legacy_native_gpu" if ok else "unknown"),
             })
 
     ga_count = sum(1 for r in rows if r["op"].startswith("clifford_")
-                                       and r.get("namespace") == "ga")
+                                       and r.get("namespace") == "ga"
+                                       and r.get("backend") == "apple_gpu")
     ebm_count = sum(1 for r in rows if r["op"].startswith("ebm_")
                                         and r.get("namespace") == "ebm")
     workload_count = sum(1 for r in rows if r.get("namespace") == "workload")

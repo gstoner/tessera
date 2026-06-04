@@ -1,6 +1,6 @@
 # Tessera Audit Master
 
-**Last updated:** 2026-06-02
+**Last updated:** 2026-06-04
 
 This is the root audit document. It consolidates the current state, finished
 work, and remaining work across the compiler, runtime/backend, platform
@@ -11,7 +11,7 @@ truth for counts; theme audit documents carry the reasoning and work plan.
 
 | Area | Current state | Still open |
 |---|---|---|
-| Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist. | Multi-op metadata, fusion groups, layout/effect contracts, and fixture-driven proof need to be first-class. |
+| Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist; `runtime_abi`/`verifier_coverage` are now CSV-canonical with a `--write` sprint regen mode. | Multi-op metadata, fusion groups, layout/effect contracts, and fixture-driven proof need to be first-class; generated-doc regen/drift is still fragmented across two scripts + piecemeal unit gates (only 2 of ~24 dashboards are CSV-canonical). |
 | Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated. | NVIDIA, ROCm, and Metalium have no executable runtime rows yet. |
 | Apple backend | Apple CPU/GPU are runtime-backed; Metal 4, MPSGraph, encode-session, and packaged-kernel lifecycle work exist. | Apple binding specs, feature-limit-guided lowering, production packaged kernels, and canonical one-command-buffer JIT path remain. |
 | NVIDIA | CUDA/NVIDIA plans and target maps exist; artifacts/toolchain path is represented. | Real hardware execute-and-compare and runtime launch bridge remain. |
@@ -47,6 +47,7 @@ Finished:
 - Dynamic control-flow lowering has explicit diagnostics and fallback behavior.
 - Frontend lowering bugs found by audit are fixed, including AugAssign sub/div and ROCm/platform gate issues.
 - Compiler correctness tests include pass-order matrices and oracle lanes for several high-risk paths.
+- `runtime_abi` and `verifier_coverage` dashboards are CSV-canonical (machine-readable, byte-diffable) with a non-byte-gated Markdown companion, wired into `check_generated_docs.sh --write` for one-command sprint regeneration.
 
 Still needs work:
 
@@ -54,6 +55,7 @@ Still needs work:
 - Carry fusion groups, layout contracts, shape envelopes, effects, and backend strategy through the compiler artifact.
 - Stop rediscovering fusion/program identity separately in Target IR and runtime dispatch.
 - Tie complete compiler claims to direct compare fixtures or hardware/package validation.
+- Unify generated-doc regeneration + drift gating: one registry consumed by both the CI gate and a single `--write`, fold in `release_gate.py`'s drift checks, standardize the generator CLI, and extend the CSV-canonical pattern to the remaining data-shaped dashboards.
 
 Primary detail: [compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md).
 
@@ -177,6 +179,7 @@ Primary detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
 - Remaining batching/transpose/sharding long-tail closure.
 - Domain roadmap hygiene and stale-claim cleanup.
 - Benchmark/performance gates tied to backend manifest rows.
+- Unify generated-doc regeneration + drift into one registry/`--write` contract (fold in `release_gate.py`, standardize generator CLIs, extend CSV-canonical to data-shaped dashboards). Detail: [compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md) Next Work #6.
 
 ## Where To Go Next
 

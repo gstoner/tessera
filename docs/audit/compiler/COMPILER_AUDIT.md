@@ -26,6 +26,16 @@ multiple root audit documents and compiler archive files.
 - **Compiler correctness tests:** pass-order and oracle fixtures cover string
   parsing, MLIR pass order, halo execution, CorrDiff IR visibility, spectral,
   linear attention, and Apple runtime pipeline order.
+- **CSV-canonical generated dashboards + sprint regen (2026-06-04).**
+  `runtime_abi` and `verifier_coverage` now emit a machine-readable CSV
+  (`docs/audit/generated/*.csv`, stable-sorted, byte-diffable) as the
+  drift-gated artifact, with the human Markdown demoted to a non-byte-gated
+  companion. Both are wired into `scripts/check_generated_docs.sh`, which gained
+  a `--write` mode so `scripts/check_generated_docs.sh --write` regenerates
+  every registered doc at sprint end. This retired the byte-exact-markdown
+  drift gates that had been reddening CI (`runtime_abi.md` was stale 234 vs 241
+  symbols). The four Apple CPU+GPU state docs were also consolidated into the
+  single reference `docs/apple_backend.md`.
 
 ## Still Open
 
@@ -45,6 +55,18 @@ multiple root audit documents and compiler archive files.
   an explicit compare fixture, `hardware_verified` row, or packaged validation.
 - **Compiler specs can still drift.** Generated dashboards must remain the
   source of counts; prose docs should link, not duplicate snapshots.
+- **Generated-doc regeneration + drift gating is fragmented (2026-06-04).**
+  There are ~24 generated artifacts under `docs/audit/generated/` (+ the root
+  `op_target_conformance.md` / `standalone_primitive_coverage.md`), but drift is
+  enforced across *two parallel entry points* — `scripts/check_generated_docs.sh`
+  (7 docs, pre-commit + CI) and `scripts/release_gate.py` (6 docs, overlapping)
+  — plus ~6 separate unit tests, using a mix of byte-exact-markdown compare (the
+  brittle pattern that just reddened CI), semantic cross-check, and in a couple
+  of cases no regeneration gate at all. Only 2 of the dashboards have a
+  machine-readable CSV canonical; there is no single "regenerate every generated
+  doc" command (the new `--write` covers only the 7 registered ones); and the
+  generator CLIs use inconsistent write/check flags (`--render` / `--write` /
+  default-write / `--surface=` / `--target=`, with `--out` / `--output`).
 
 ## Next Work
 
@@ -61,6 +83,17 @@ multiple root audit documents and compiler archive files.
    complete.
 5. Update specs to point at dashboards and this audit instead of old root audit
    documents.
+6. **Unify generated-doc regeneration + drift into one contract.** Define a
+   single registry of `(doc, generator, check-cmd, write-cmd)` consumed by both
+   the CI gate and one `--write` regenerator so finishing a sprint regenerates
+   *every* generated doc in one command; fold `release_gate.py`'s drift checks
+   into the same registry (retire the second parallel entry point); standardize
+   the generator CLI on `--check` / `--write` / `--out`; and extend the
+   CSV-canonical + non-byte-gated-Markdown pattern to the remaining data-shaped
+   dashboards (`support_table`, `runtime_execution_matrix`, `e2e_op_coverage`,
+   `test_coverage_by_op`, `op_target_conformance`, `s_series_status`,
+   `standalone_primitive_coverage`, `tsol_coverage`) so machine consumers and
+   CI both diff a stable CSV instead of whitespace-fragile Markdown.
 
 ## Source Material Consolidated
 

@@ -3,6 +3,7 @@
 #include "common/timer.h"
 #include <vector>
 #include <stdexcept>
+#include <algorithm>   // std::max — explicit for GCC/libstdc++
 
 static OpResult tg_impl(const OpArgs& a){
   int B = std::max(1,a.M);

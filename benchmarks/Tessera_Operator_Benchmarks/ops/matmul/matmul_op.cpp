@@ -4,6 +4,7 @@
 #include "common/timer.h"
 #include <vector>
 #include <cmath>
+#include <stdexcept>   // std::runtime_error — explicit for GCC/libstdc++
 
 static OpResult matmul_impl(const OpArgs& a){
   int M=a.M, N=a.N, K=a.K;

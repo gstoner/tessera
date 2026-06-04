@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>   // uint32_t / uint64_t — explicit for GCC/libstdc++
 #include <string>
 #include <vector>
 #include <random>

@@ -4,6 +4,9 @@
 #include <vector>
 #include <stdexcept>
 #include <numeric>
+#include <cstdint>     // int64_t
+#include <cmath>       // std::abs
+#include <algorithm>   // std::max — explicit for GCC/libstdc++
 
 static OpResult reduce_impl(const OpArgs& a){
   // Reduce over M*N*K flattened

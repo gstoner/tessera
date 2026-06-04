@@ -14,8 +14,7 @@ test/support dashboards.
   - [../standalone_primitive_coverage.md](../standalone_primitive_coverage.md)
   - [../generated/support_table.md](../generated/support_table.md)
   - [../generated/e2e_op_coverage.md](../generated/e2e_op_coverage.md)
-  - [../generated/test_coverage_by_op.md](../generated/test_coverage_by_op.md)
-  - [../generated/test_coverage_classification.md](../generated/test_coverage_classification.md)
+  - [../generated/test_coverage.md](../generated/test_coverage.md)
 
 ## Open Items
 

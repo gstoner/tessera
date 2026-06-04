@@ -21,7 +21,7 @@ material.
 - **`lowering_rule` is closed project-wide** (0 open across all S-series
   categories) — see [`generated/s_series_status.md`](../generated/s_series_status.md).
 - **No actionable direct-test-debt** (`needs_direct_test = 0`) — see
-  [`generated/test_coverage_classification.md`](../generated/test_coverage_classification.md)
+  [`generated/test_coverage.md`](../generated/test_coverage.md)
   for the full classification (covered-by-family / structural-only /
   hardware-gated breakdown).
 - Advanced examples largely moved from missing APIs to backend/hardware proof.
@@ -35,7 +35,7 @@ material.
   [`generated/s_series_status.md`](../generated/s_series_status.md) /
   [`generated/apple_target_map.md`](../generated/apple_target_map.md). (Their
   *distributed-mesh* axis stays Phase-G-gated — see the `hardware_gated` row in
-  [`generated/test_coverage_classification.md`](../generated/test_coverage_classification.md);
+  [`generated/test_coverage.md`](../generated/test_coverage.md);
   single-device kernel ≠ multi-GPU mesh.)
 
 ## Still Open
@@ -60,7 +60,7 @@ material.
   [`generated/s_series_status.md`](../generated/s_series_status.md).
 - **Hardware-gated tests** remain for a small set of EBM/manifold Langevin ops
   — see the `hardware_gated` row in
-  [`generated/test_coverage_classification.md`](../generated/test_coverage_classification.md).
+  [`generated/test_coverage.md`](../generated/test_coverage.md).
 
 ## Next Work
 

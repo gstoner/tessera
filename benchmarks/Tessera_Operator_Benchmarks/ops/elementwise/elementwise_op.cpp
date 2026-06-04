@@ -3,6 +3,8 @@
 #include "common/timer.h"
 #include <vector>
 #include <cmath>
+#include <cstdint>     // int64_t
+#include <algorithm>   // std::max — explicit for GCC/libstdc++
 
 static OpResult ew_impl(const OpArgs& a){
   int64_t N = (int64_t)std::max(1,a.M) * std::max(1,a.N) * std::max(1,a.K);

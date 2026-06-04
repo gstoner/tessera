@@ -1,4 +1,6 @@
 #pragma once
+#include <cstdint>   // uint64_t (fill_uniform seed) — explicit for GCC/libstdc++
+#include <cstddef>   // size_t
 #include <vector>
 #include <random>
 #include <algorithm>

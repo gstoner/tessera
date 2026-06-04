@@ -117,7 +117,7 @@ REQUIRED_ROW_FIELDS = {
 REQUIRED_ENVELOPE_FIELDS = {
     "runs", "ga_primitives_count", "ebm_paths_count",
     "ebm_native_apple_gpu_count", "native_ebm_ops", "workload_count",
-    "ebt_sweep_count", "ebt_sweep_summary",
+    "composite_count", "ebt_sweep_count", "ebt_sweep_summary",
     "jit_bridge_count",
     "compile_time_ms", "skipped_apple_gpu",
     "device", "tessera_version", "reps",
@@ -165,6 +165,10 @@ def _workload_native_rows(report):
 def _workload_python_rows(report):
     return _rows(report, lambda r: r["namespace"] == "workload"
                                  and r["backend"] == "python_ref")
+
+
+def _composite_rows(report):
+    return _rows(report, lambda r: r["namespace"] == "composite")
 
 
 def _apple_gpu_available(report: dict) -> bool:
@@ -266,6 +270,94 @@ def test_stage16f_value_claims_are_row_kind_scoped(report: dict) -> None:
             assert row["executor"] == "python_reference"
             assert row["runtime_status"] == "reference"
             assert row["execution_kind"] == "reference_cpu"
+
+
+def test_stage17_composite_rows_present_and_honest(report: dict) -> None:
+    rows = _composite_rows(report)
+    assert report["composite_count"] == len(rows) == 3
+    ops = {row["op"] for row in rows}
+    assert ops == {
+        "composite_ebt_tiny_refinement",
+        "composite_manifold_ebm",
+        "composite_ga_feature_pipeline",
+    }
+    for row in rows:
+        assert row["backend"] == "compiler_visible_reference"
+        assert row["variant_kind"] == "compiler_visible_reference"
+        assert row["compiler_path"] == "apple_value_target_ir"
+        assert row["executor"] == "python_reference"
+        assert row["runtime_status"] == "reference"
+        assert row["execution_kind"] == "reference_cpu"
+        assert row["composite_status"] == "multi_call_value_ir_gated"
+        assert row["multi_call_executor"] is None
+        assert row["ok"] is True
+        assert row["value_call_count"] == len(row["value_calls"])
+        assert row["value_call_count"] >= 2
+        assert row["symbols"] == [call["symbol"] for call in row["value_calls"]]
+
+
+def test_stage17_composites_do_not_claim_value_executor(report: dict) -> None:
+    for row in _composite_rows(report):
+        assert row["executor"] != "apple_gpu_value_target_ir"
+        assert row["runtime_status"] != "success"
+        assert row["execution_kind"] != "native_gpu"
+        assert not any(
+            status == "executable_multi_call"
+            for status in row["component_value_status"].values()
+        )
+
+
+def test_stage17_ebt_tiny_composite_contract(report: dict) -> None:
+    rows = [r for r in _composite_rows(report)
+            if r["op"] == "composite_ebt_tiny_refinement"]
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["component_ops"] == [
+        "ebm_decode_init",
+        "ebm_refinement",
+        "ebm_energy_quadratic",
+        "ebm_self_verify",
+    ]
+    assert row["component_value_status"]["ebm_refinement"] == (
+        "executable_single_call")
+    assert row["component_value_status"]["ebm_energy_quadratic"] == (
+        "executable_single_call")
+    assert row["component_value_status"]["ebm_decode_init"] == (
+        "compiler_visible_gated")
+    assert row["component_value_status"]["ebm_self_verify"] == (
+        "compiler_visible_gated")
+    assert row["max_abs_err"] <= row["tolerance"]
+    assert len(row["contract_metrics"]["winner_indices"]) == 3
+
+
+def test_stage17_manifold_composite_contract(report: dict) -> None:
+    row = [r for r in _composite_rows(report)
+           if r["op"] == "composite_manifold_ebm"][0]
+    assert row["component_ops"] == [
+        "ebm_sphere_langevin_step",
+        "ebm_bivector_langevin_step",
+    ]
+    metrics = row["contract_metrics"]
+    assert metrics["sphere_norm_error"] <= row["tolerance"]
+    assert metrics["bivector_grade_leakage"] <= row["tolerance"]
+
+
+def test_stage17_ga_feature_composite_contract(report: dict) -> None:
+    row = [r for r in _composite_rows(report)
+           if r["op"] == "composite_ga_feature_pipeline"][0]
+    assert row["component_ops"] == [
+        "clifford_geometric_product",
+        "clifford_grade_projection",
+        "clifford_rotor_sandwich",
+    ]
+    assert row["component_value_status"]["clifford_geometric_product"] == (
+        "executable_single_call")
+    assert row["component_value_status"]["clifford_grade_projection"] == (
+        "compiler_visible_gated")
+    assert row["component_value_status"]["clifford_rotor_sandwich"] == (
+        "compiler_visible_gated")
+    assert row["contract_metrics"]["projected_non_even_max"] <= row["tolerance"]
+    assert row["contract_metrics"]["batch"] == bench._BATCH
 
 
 def test_timing_percentiles_consistent_for_every_row(report: dict) -> None:

@@ -2047,6 +2047,320 @@ _VALUE_TARGET_BUILDERS = [
 
 
 # ---------------------------------------------------------------------------
+# Stage 17 composite proof lanes.
+#
+# These rows intentionally do not claim Apple GPU value execution.  They
+# prove that multi-op GA/EBM math contracts can be represented as ordered
+# value-call plans and validated against a reference.  The current value
+# runtime still accepts exactly one gpu.kernel_call, so composite rows stay
+# compiler-visible/reference until a real multi-call or fused executor lands.
+# ---------------------------------------------------------------------------
+
+_STAGE17_COMPOSITE_STATUS = "multi_call_value_ir_gated"
+
+
+def _value_call_record(
+    op_kind: str, symbol: str, status: str,
+) -> dict[str, str]:
+    return {
+        "op": "tessera_apple.gpu.kernel_call",
+        "op_kind": op_kind,
+        "symbol": symbol,
+        "status": status,
+    }
+
+
+def _cl30_geometric_product_coeffs(
+    a: np.ndarray, b: np.ndarray,
+) -> np.ndarray:
+    """Pure NumPy Cl(3,0) product for Stage 17 reference rows."""
+    table = _CL30.product_table()
+    leading = np.broadcast_shapes(a.shape[:-1], b.shape[:-1])
+    a_b = np.broadcast_to(a, (*leading, 8)).astype(np.float32, copy=False)
+    b_b = np.broadcast_to(b, (*leading, 8)).astype(np.float32, copy=False)
+    out = np.zeros((*leading, 8), dtype=np.float32)
+    for i in range(8):
+        ai = a_b[..., i]
+        if not np.any(ai):
+            continue
+        for j in range(8):
+            result_mask, sign = table[i][j]
+            if sign == 0:
+                continue
+            term = ai * b_b[..., j]
+            if sign > 0:
+                out[..., result_mask] = out[..., result_mask] + term
+            else:
+                out[..., result_mask] = out[..., result_mask] - term
+    return out
+
+
+def _cl30_grade_project_coeffs(
+    coeffs: np.ndarray, grades: set[int],
+) -> np.ndarray:
+    out = coeffs.astype(np.float32, copy=True)
+    for blade in _CL30.blades():
+        if blade.grade not in grades:
+            out[..., blade.mask] = 0.0
+    return out
+
+
+def _cl30_reverse_coeffs(coeffs: np.ndarray) -> np.ndarray:
+    out = coeffs.astype(np.float32, copy=True)
+    for blade in _CL30.blades():
+        sign = -1.0 if (blade.grade * (blade.grade - 1) // 2) % 2 else 1.0
+        out[..., blade.mask] *= np.float32(sign)
+    return out
+
+
+def _cl30_rotor_sandwich_coeffs(
+    rotor: np.ndarray, x: np.ndarray,
+) -> np.ndarray:
+    return _cl30_geometric_product_coeffs(
+        _cl30_geometric_product_coeffs(rotor, x),
+        _cl30_reverse_coeffs(rotor),
+    )
+
+
+def _compiler_composite_ebt_tiny_path() -> tuple[
+    Callable[[], np.ndarray], float, str, dict[str, Any]
+]:
+    B, K, D, steps = 3, 4, 5, 3
+    eta = np.float32(0.07)
+    rng = np.random.RandomState(4100)
+    y0 = rng.randn(B, K, D).astype(np.float32)
+    target = rng.randn(B, D).astype(np.float32)
+    target_k = np.broadcast_to(target[:, None, :], (B, K, D)).astype(np.float32)
+    grad = (y0 - target_k).astype(np.float32)
+
+    def dispatch() -> np.ndarray:
+        refined = (y0 - np.float32(steps) * eta * grad).astype(np.float32)
+        energies = (0.5 * np.sum((refined - target_k) ** 2, axis=2)).astype(
+            np.float32)
+        winner = energies.argmin(axis=1)
+        return refined[np.arange(B), winner]
+
+    refined = (y0 - np.float32(steps) * eta * grad).astype(np.float32)
+    energies = (0.5 * np.sum((refined - target_k) ** 2, axis=2)).astype(
+        np.float32)
+    expected = refined[np.arange(B), energies.argmin(axis=1)]
+    err = float(np.abs(dispatch() - expected).max())
+    details = {
+        "component_ops": [
+            "ebm_decode_init",
+            "ebm_refinement",
+            "ebm_energy_quadratic",
+            "ebm_self_verify",
+        ],
+        "component_value_status": {
+            "ebm_decode_init": "compiler_visible_gated",
+            "ebm_refinement": "executable_single_call",
+            "ebm_energy_quadratic": "executable_single_call",
+            "ebm_self_verify": "compiler_visible_gated",
+        },
+        "value_calls": [
+            _value_call_record(
+                "ebm_decode_init",
+                "tessera_apple_gpu_ebm_decode_init_noise_apply_f32",
+                "compiler_visible"),
+            _value_call_record(
+                "ebm_refinement",
+                "tessera_apple_gpu_ebm_refinement_value_f32",
+                "executable"),
+            _value_call_record(
+                "ebm_energy_quadratic",
+                "tessera_apple_gpu_ebm_energy_quadratic_value_f32",
+                "executable"),
+            _value_call_record(
+                "ebm_self_verify",
+                "tessera_apple_gpu_ebm_self_verify_hard_argmin_f32",
+                "compiler_visible"),
+        ],
+        "math_contract": (
+            "decode_init candidates, fixed-gradient refinement, quadratic "
+            "energy over refined candidates, then hard argmin self_verify"),
+        "contract_metrics": {
+            "winner_indices": energies.argmin(axis=1).astype(int).tolist(),
+            "min_energy_max": float(energies.min(axis=1).max()),
+        },
+    }
+    return dispatch, err, "multi_call:ebt_tiny_refinement", details
+
+
+def _compiler_composite_manifold_ebm_path() -> tuple[
+    Callable[[], np.ndarray], float, str, dict[str, Any]
+]:
+    rng = np.random.RandomState(4200)
+    x = rng.randn(3).astype(np.float32)
+    x = (x / np.linalg.norm(x)).astype(np.float32)
+    sphere_grad = rng.randn(3).astype(np.float32)
+    sphere_eta = np.float32(0.01)
+    coeffs = np.zeros(8, dtype=np.float32)
+    coeffs[[3, 5, 6]] = rng.randn(3).astype(np.float32) * 0.25
+    biv_grad = rng.randn(8).astype(np.float32)
+    biv_eta = np.float32(0.02)
+
+    def _sphere_step() -> np.ndarray:
+        grad_tan = sphere_grad - np.float32(np.dot(sphere_grad, x)) * x
+        y = x - sphere_eta * grad_tan
+        return (y / np.linalg.norm(y)).astype(np.float32)
+
+    def _bivector_step() -> np.ndarray:
+        grad_proj = np.zeros_like(biv_grad)
+        grad_proj[[3, 5, 6]] = biv_grad[[3, 5, 6]]
+        state_proj = np.zeros_like(coeffs)
+        state_proj[[3, 5, 6]] = coeffs[[3, 5, 6]]
+        return (state_proj - biv_eta * grad_proj).astype(np.float32)
+
+    def dispatch() -> np.ndarray:
+        return np.concatenate([_sphere_step(), _bivector_step()])
+
+    out = dispatch()
+    sphere_out = out[:3]
+    biv_out = out[3:]
+    norm_err = abs(float(np.linalg.norm(sphere_out)) - 1.0)
+    leakage = float(np.abs(biv_out[[0, 1, 2, 4, 7]]).max())
+    err = max(norm_err, leakage)
+    details = {
+        "component_ops": [
+            "ebm_sphere_langevin_step",
+            "ebm_bivector_langevin_step",
+        ],
+        "component_value_status": {
+            "ebm_sphere_langevin_step": "compiler_visible_gated",
+            "ebm_bivector_langevin_step": "compiler_visible_gated",
+        },
+        "value_calls": [
+            _value_call_record(
+                "ebm_sphere_langevin_step",
+                "tessera_apple_gpu_ebm_sphere_langevin_step_f32",
+                "compiler_visible"),
+            _value_call_record(
+                "ebm_bivector_langevin_step",
+                "tessera_apple_gpu_ebm_bivector_langevin_step_f32",
+                "compiler_visible"),
+        ],
+        "math_contract": (
+            "sphere step must retract to unit norm; bivector step must "
+            "preserve the grade-2 subspace"),
+        "contract_metrics": {
+            "sphere_norm_error": norm_err,
+            "bivector_grade_leakage": leakage,
+        },
+    }
+    return dispatch, err, "multi_call:manifold_ebm", details
+
+
+def _compiler_composite_ga_feature_path() -> tuple[
+    Callable[[], np.ndarray], float, str, dict[str, Any]
+]:
+    A = _seeded_pointwise(4300)
+    B = _seeded_pointwise(4301)
+    rotors = _seeded_rotor(4302)
+
+    def dispatch() -> np.ndarray:
+        product = _cl30_geometric_product_coeffs(A, B)
+        projected = _cl30_grade_project_coeffs(product, {0, 2})
+        return _cl30_rotor_sandwich_coeffs(rotors, projected)
+
+    product = _cl30_geometric_product_coeffs(A, B)
+    projected = _cl30_grade_project_coeffs(product, {0, 2})
+    expected = _cl30_rotor_sandwich_coeffs(rotors, projected)
+    err = float(np.abs(dispatch() - expected).max())
+    details = {
+        "component_ops": [
+            "clifford_geometric_product",
+            "clifford_grade_projection",
+            "clifford_rotor_sandwich",
+        ],
+        "component_value_status": {
+            "clifford_geometric_product": "executable_single_call",
+            "clifford_grade_projection": "compiler_visible_gated",
+            "clifford_rotor_sandwich": "compiler_visible_gated",
+        },
+        "value_calls": [
+            _value_call_record(
+                "clifford_geometric_product",
+                "tessera_apple_gpu_clifford_geo_product_cl30_value_f32",
+                "executable"),
+            _value_call_record(
+                "clifford_grade_projection",
+                "tessera_apple_gpu_clifford_grade_projection_cl30_f32",
+                "compiler_visible"),
+            _value_call_record(
+                "clifford_rotor_sandwich",
+                "tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32",
+                "compiler_visible"),
+        ],
+        "math_contract": (
+            "geometric product feeds grade projection, then a rotor "
+            "sandwich preserves blade-last Cl(3,0) coefficient layout"),
+        "contract_metrics": {
+            "projected_non_even_max": float(
+                np.abs(projected[:, [1, 2, 4, 7]]).max()),
+            "batch": int(A.shape[0]),
+        },
+    }
+    return dispatch, err, "multi_call:ga_feature_pipeline", details
+
+
+_COMPOSITE_BUILDERS = [
+    ("composite_ebt_tiny_refinement",
+     "B=3,K=4,D=5/decode_refine_energy_verify",
+     _compiler_composite_ebt_tiny_path, 1e-6),
+    ("composite_manifold_ebm",
+     "sphere(S^2)+bivector(Cl(3,0))",
+     _compiler_composite_manifold_ebm_path, 1e-5),
+    ("composite_ga_feature_pipeline",
+     f"{_BATCH}x8/geo_grade_rotor",
+     _compiler_composite_ga_feature_path, 1e-5),
+]
+
+
+def run_composite_compiler_visible_reference_path(
+    name: str, shape: str, dispatch: Callable, err: float, symbol: str,
+    tolerance: float, reps: int, device: str, version: str,
+    details: dict[str, Any],
+) -> dict[str, Any]:
+    samples_ms = collect_samples(dispatch, reps)
+    timing = timing_stats(samples_ms)
+    value_calls = list(details["value_calls"])
+    symbols = [call["symbol"] for call in value_calls]
+    return {
+        "backend": "compiler_visible_reference",
+        "namespace": "composite",
+        "op": name,
+        "shape": shape,
+        "dtype": "f32",
+        "mode": "composite_compiler_visible_reference",
+        "reps": reps,
+        **timing,
+        "max_abs_err": err,
+        "tolerance": tolerance,
+        "ok": err <= tolerance,
+        "apple_gpu_status": "composite_multi_call_gated",
+        "symbol": symbol,
+        "symbols": symbols,
+        "device": device,
+        "tessera_version": version,
+        "component_ops": list(details["component_ops"]),
+        "component_value_status": dict(details["component_value_status"]),
+        "value_calls": value_calls,
+        "value_call_count": len(value_calls),
+        "composite_status": _STAGE17_COMPOSITE_STATUS,
+        "multi_call_executor": None,
+        "math_contract": details["math_contract"],
+        "contract_metrics": dict(details["contract_metrics"]),
+        **_stage16f_fields(
+            "compiler_visible_reference",
+            compiler_path="apple_value_target_ir",
+            executor="python_reference",
+            runtime_status="reference",
+            execution_kind="reference_cpu"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # JIT-bridge benchmark — exercises the full Python → JIT-context →
 # manifest-resolve → shared-loader-dispatch → result path with the
 # bridge's trace recording on.  The bridge contract is:
@@ -2207,6 +2521,7 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
                refinement_T: int = 8,
                include_primitives: bool = True,
                include_workloads: bool = True,
+               include_composites: bool = True,
                include_ebt_sweep: bool = False,
                include_jit_bridge: bool = True,
                include_vertical_slice: bool = True,
@@ -2227,6 +2542,10 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
         rotor_sandwich → norm) + EBT-tiny refinement loop (decode_init
         → T × inner_step → self_verify), each in apple_gpu + python_ref
         variants so speedup is a single subtraction.
+      - ``include_composites``: Stage 17 compiler-visible multi-call
+        GA/EBM proof rows. These validate chained math contracts and
+        value-call metadata, but remain reference-executed until the
+        Apple value runtime grows a multi-call or fused executor.
     """
     if tmp_dir is None:
         import tempfile
@@ -2330,6 +2649,15 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
             "rotor_conditioned_ebt", shape, dispatch, err,
             tolerance=5e-5, reps=reps, device=device, version=version,
         ))
+
+    if include_composites:
+        for op_name, shape_desc, builder, tol in _COMPOSITE_BUILDERS:
+            dispatch, err, sym, details = builder()
+            rows.append(run_composite_compiler_visible_reference_path(
+                op_name, shape_desc, dispatch, err, sym,
+                tolerance=tol, reps=reps, device=device, version=version,
+                details=details,
+            ))
 
     # EBT-tiny break-even sweep — apples-to-apples timings across a
     # ladder of (B, K, D, T) points so consumers can locate where the
@@ -2441,6 +2769,8 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
                             and r["backend"] == "apple_gpu"
                             and r.get("namespace") == "ebm")
     sweep_count = sum(1 for r in rows if r["op"] == "ebt_tiny_sweep")
+    composite_count = sum(1 for r in rows
+                          if r.get("namespace") == "composite")
     jit_bridge_count = sum(1 for r in rows
                             if r.get("namespace") == "jit_bridge")
     vertical_slice_count = sum(1 for r in rows
@@ -2452,6 +2782,7 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
         "ebm_native_apple_gpu_count": ebm_native_count,
         "native_ebm_ops": sorted(native_ebm_ops),
         "workload_count": workload_count,
+        "composite_count": composite_count,
         "ebt_sweep_count": sweep_count,
         "ebt_sweep_summary": (_ebt_sweep_break_even_summary(rows)
                                if sweep_count else None),
@@ -2540,6 +2871,9 @@ def main(argv: list[str] | None = None) -> int:
                               "apple_gpu + python_ref rows for each "
                               "(B, K, D, T) point in _DEFAULT_EBT_SWEEP and "
                               "summarizes break-even in the envelope."))
+    parser.add_argument("--no-composites", action="store_true",
+                        help=("Skip Stage 17 composite proof rows "
+                              "(compiler-visible multi-call GA/EBM chains)."))
     parser.add_argument("--no-jit-bridge", action="store_true",
                         help=("Skip the JIT-bridge rows (Python → "
                               "jit_context → manifest → shared loader → "
@@ -2561,6 +2895,7 @@ def main(argv: list[str] | None = None) -> int:
     report = run_report(reps=reps, refinement_T=args.refinement_T,
                         include_primitives=include_primitives,
                         include_workloads=include_workloads,
+                        include_composites=not args.no_composites,
                         include_ebt_sweep=args.ebt_sweep,
                         include_jit_bridge=not args.no_jit_bridge,
                         include_vertical_slice=not args.no_vertical_slice)

@@ -171,6 +171,30 @@ Two executor allowlists, one per backend lane:
   numerical probe passes). Legacy void GA/EBM symbols that can fall back to a
   host reference are **not** value-executable symbols.
 
+### Composite GA/EBM programs (Stage 17)
+
+Stage 17 adds **compiler-visible composite proof rows**, not a new blanket
+runtime executor. The benchmark/report surface now records ordered multi-call
+value plans and validates the chained math contracts for:
+
+- `decode_init -> refinement -> energy_quadratic -> self_verify` (EBT tiny
+  refinement).
+- `sphere_langevin_step` + `bivector_langevin_step` with explicit
+  normalization / grade-projection checks.
+- `clifford_geometric_product -> clifford_grade_projection ->
+  clifford_rotor_sandwich` for a GA feature pipeline.
+
+These rows use `variant_kind="compiler_visible_reference"`,
+`compiler_path="apple_value_target_ir"`, `executor="python_reference"`, and
+`composite_status="multi_call_value_ir_gated"`. They carry the intended
+`tessera_apple.gpu.kernel_call` sequence as metadata, but the current
+`apple_gpu_value_target_ir` runtime still accepts exactly one GPU value call.
+Therefore a Stage 17 composite row may prove *math-contract preservation across
+the planned IR handoff*, but it must not claim `runtime_status="success"`,
+`execution_kind="native_gpu"`, or `executor="apple_gpu_value_target_ir"` until
+a real multi-call command-buffer executor or fused kernel is implemented and
+numerically proven.
+
 - **The full Apple CPU linalg family is executable now (Sprint 3).** The matrix
   row `(apple_cpu, apple_value_target_ir)` resolves to the
   `_execute_apple_value_target_ir_artifact` executor, which reads

@@ -5985,8 +5985,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_benchmark_ga_ebm.py": {
-    "mtime": 1780576713.3075528,
-    "ast_hash": "3e3a508964f2854d8a2d73aaf9a7d891",
+    "mtime": 1780577744.9658136,
+    "ast_hash": "5f209a9a6d93cea28461a602b2dab3e5",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_projections.py": {
@@ -8100,8 +8100,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/apple_gpu/benchmark_ga_ebm.py": {
-    "mtime": 1780576863.7584462,
-    "ast_hash": "d0abf991cf01a0e4bff6c5f6bc5e3fbc",
+    "mtime": 1780577667.9676723,
+    "ast_hash": "c44a534f4033af07ea7eb2cab47e1d23",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/apple_gpu/sample_ga_ebm_report.json": {
@@ -11790,8 +11790,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/VALUE_TARGET_IR_CONTRACT.md": {
-    "mtime": 1780576078.0825095,
-    "ast_hash": "ccf74d6590a9676de04ccde4eabc81e1",
+    "mtime": 1780577711.9078166,
+    "ast_hash": "09f62071b5958dd9fb98187a00e3329b",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/TileDialect.cpp": {

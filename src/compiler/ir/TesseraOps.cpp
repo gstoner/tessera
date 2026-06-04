@@ -140,6 +140,214 @@ double f64AttrOr(Operation *op, StringRef name, double fallback) {
     return attr.getValueAsDouble();
   return fallback;
 }
+
+int64_t i64AttrOr(Operation *op, StringRef name, int64_t fallback) {
+  if (auto attr = op->getAttrOfType<IntegerAttr>(name))
+    return attr.getInt();
+  return fallback;
+}
+
+bool optionalTensorPresent(Value value) { return static_cast<bool>(value); }
+
+LogicalResult verifyPositiveAttr(Operation *op, StringRef name) {
+  if (f64AttrOr(op, name, 0.0) <= 0.0)
+    return op->emitOpError() << name << " must be positive";
+  return success();
+}
+
+LogicalResult verifyNonNegativeOptionalAttr(Operation *op, StringRef name) {
+  if (op->hasAttr(name) && f64AttrOr(op, name, 0.0) < 0.0)
+    return op->emitOpError() << name << " must be non-negative";
+  return success();
+}
+
+LogicalResult verifyFloatSameDtype(Operation *op,
+                                   ArrayRef<RankedTensorType> tensors,
+                                   StringRef label) {
+  RankedTensorType first;
+  for (RankedTensorType ty : tensors) {
+    if (!ty)
+      continue;
+    if (!first)
+      first = ty;
+    if (!isFloatTensor(ty))
+      return op->emitOpError() << label << " expects floating tensors";
+    if (ty.getElementType() != first.getElementType())
+      return op->emitOpError() << label << " dtypes must match";
+  }
+  return success();
+}
+
+LogicalResult verifyOptionalTensorShape(Operation *op, Value maybe,
+                                        RankedTensorType reference,
+                                        StringRef label) {
+  if (!maybe)
+    return success();
+  auto ty = dyn_cast<RankedTensorType>(maybe.getType());
+  if (!ty)
+    return success();
+  if (ty.getElementType() != reference.getElementType())
+    return op->emitOpError() << label << " dtype must match state dtype";
+  return verifySameRankedShape(op, reference, ty, label);
+}
+
+LogicalResult verifyTemperatureNoiseCoupling(Operation *op, bool hasNoise,
+                                             bool hasRNGState = false) {
+  double temperature = f64AttrOr(op, "temperature", 0.0);
+  if (temperature < 0.0)
+    return op->emitOpError("temperature must be non-negative");
+  if (temperature > 0.0 && !hasNoise && !hasRNGState)
+    return op->emitOpError(
+        "temperature > 0 requires a noise operand or RNG state");
+  return success();
+}
+
+LogicalResult verifyEBMAffineStep(Operation *op, RankedTensorType state,
+                                  RankedTensorType grad, Value noise,
+                                  RankedTensorType result,
+                                  StringRef label) {
+  if (!state || !grad || !result)
+    return success();
+  if (failed(verifyFloatSameDtype(op, {state, grad, result}, label)))
+    return failure();
+  if (failed(verifySameRankedShape(op, state, grad, label)) ||
+      failed(verifySameRankedShape(op, state, result, label)) ||
+      failed(verifyOptionalTensorShape(op, noise, state, label)))
+    return failure();
+  if (failed(verifyPositiveAttr(op, "eta")) ||
+      failed(verifyNonNegativeOptionalAttr(op, "noise_scale")))
+    return failure();
+  if (failed(verifyTemperatureNoiseCoupling(op, optionalTensorPresent(noise))))
+    return failure();
+  if (f64AttrOr(op, "noise_scale", 0.0) > 0.0 && !noise)
+    return op->emitOpError("noise_scale > 0 requires a noise operand");
+  return success();
+}
+
+LogicalResult verifyAllowedStringAttr(Operation *op, StringRef name,
+                                      ArrayRef<StringRef> allowed,
+                                      StringRef fallback = "") {
+  StringRef value = fallback;
+  if (auto attr = op->getAttrOfType<StringAttr>(name))
+    value = attr.getValue();
+  if (value.empty())
+    return success();
+  for (StringRef a : allowed)
+    if (value == a)
+      return success();
+  return op->emitOpError() << name << " has unsupported value '" << value
+                           << "'";
+}
+
+int64_t bladeCountFor(int64_t p, int64_t q) {
+  int64_t n = p + q;
+  if (n < 0 || n > 30)
+    return -1;
+  return int64_t{1} << n;
+}
+
+LogicalResult verifyCliffordMetadata(Operation *op, int64_t p, int64_t q) {
+  if (p < 0 || q < 0)
+    return op->emitOpError("Clifford signature p/q must be non-negative");
+  if (bladeCountFor(p, q) <= 0)
+    return op->emitOpError("Clifford algebra rank p+q is too large");
+
+  auto readI64Array = [](Attribute attr, SmallVectorImpl<int64_t> &out) {
+    if (auto dense = dyn_cast_or_null<DenseI64ArrayAttr>(attr)) {
+      out.append(dense.asArrayRef().begin(), dense.asArrayRef().end());
+      return true;
+    }
+    if (auto array = dyn_cast_or_null<ArrayAttr>(attr)) {
+      for (Attribute element : array) {
+        auto intAttr = dyn_cast<IntegerAttr>(element);
+        if (!intAttr)
+          return false;
+        out.push_back(intAttr.getInt());
+      }
+      return true;
+    }
+    return false;
+  };
+
+  if (Attribute sigAttr = op->getAttr("signature")) {
+    SmallVector<int64_t> signature;
+    if (!readI64Array(sigAttr, signature))
+      return op->emitOpError("signature must be an i64 array");
+    if (static_cast<int64_t>(signature.size()) != p + q)
+      return op->emitOpError("signature length must equal p+q");
+    for (int64_t v : signature)
+      if (v != -1 && v != 1)
+        return op->emitOpError("signature entries must be +1 or -1");
+  }
+  return verifyAllowedStringAttr(
+      op, "coefficient_layout",
+      {StringRef("blade_last"), StringRef("coeff_last"),
+       StringRef("blade_major")},
+      StringRef("blade_last"));
+}
+
+LogicalResult verifyCliffordTensor(Operation *op, RankedTensorType ty,
+                                   int64_t p, int64_t q, StringRef label) {
+  if (!ty)
+    return success();
+  if (!isFloatTensor(ty))
+    return op->emitOpError() << label << " must be a floating tensor";
+  if (ty.getRank() < 1)
+    return op->emitOpError() << label << " must include a coefficient axis";
+  int64_t blades = bladeCountFor(p, q);
+  int64_t coeffs = ty.getDimSize(ty.getRank() - 1);
+  if (!ShapedType::isDynamic(coeffs) && blades > 0 && coeffs != blades)
+    return op->emitOpError()
+           << label << " coefficient axis must equal 2^(p+q)";
+  return success();
+}
+
+LogicalResult verifyCliffordSameShapeAndDtype(Operation *op,
+                                             ArrayRef<RankedTensorType> tensors,
+                                             StringRef label) {
+  RankedTensorType first;
+  for (RankedTensorType ty : tensors) {
+    if (!ty)
+      continue;
+    if (!first) {
+      first = ty;
+      continue;
+    }
+    if (ty.getElementType() != first.getElementType())
+      return op->emitOpError() << label << " dtypes must match";
+    if (failed(verifySameRankedShape(op, first, ty, label)))
+      return failure();
+  }
+  return success();
+}
+
+LogicalResult verifyGradeMask(Operation *op, int64_t p, int64_t q,
+                              StringRef attrName) {
+  Attribute maskAttr = op->getAttr(attrName);
+  if (!maskAttr)
+    return success();
+  SmallVector<int64_t> mask;
+  if (auto dense = dyn_cast<DenseI64ArrayAttr>(maskAttr)) {
+    mask.append(dense.asArrayRef().begin(), dense.asArrayRef().end());
+  } else if (auto array = dyn_cast<ArrayAttr>(maskAttr)) {
+    for (Attribute element : array) {
+      auto intAttr = dyn_cast<IntegerAttr>(element);
+      if (!intAttr)
+        return op->emitOpError() << attrName << " must be an i64 array";
+      mask.push_back(intAttr.getInt());
+    }
+  } else {
+    return op->emitOpError() << attrName << " must be an i64 array";
+  }
+  if (mask.empty())
+    return op->emitOpError() << attrName << " must not be empty";
+  int64_t maxGrade = p + q;
+  for (int64_t grade : mask)
+    if (grade < 0 || grade > maxGrade)
+      return op->emitOpError()
+             << attrName << " entries must be in [0, p+q]";
+  return success();
+}
 } // namespace
 
 LogicalResult RLNormalizeGroupAdvantagesOp::verify() {
@@ -266,9 +474,9 @@ LogicalResult EBMEnergyQuadraticOp::verify() {
   auto energies = dyn_cast<RankedTensorType>(getEnergies().getType());
   if (!x || !y || !energies)
     return success();
-  if (!isFloatTensor(x) || x.getElementType() != y.getElementType() ||
-      x.getElementType() != energies.getElementType())
-    return emitOpError("expects floating x/y/energies with matching dtype");
+  if (failed(verifyFloatSameDtype(getOperation(), {x, y, energies},
+                                  "ebm.energy_quadratic")))
+    return failure();
   if (x.getRank() != 2 || y.getRank() != 2)
     return emitOpError("expects rank-2 x and y tensors");
   if (energies.getRank() != 1)
@@ -284,25 +492,324 @@ LogicalResult EBMEnergyQuadraticOp::verify() {
 LogicalResult EBMLangevinStepOp::verify() {
   auto y = dyn_cast<RankedTensorType>(getY().getType());
   auto grad = dyn_cast<RankedTensorType>(getGrad().getType());
-  auto noise = dyn_cast<RankedTensorType>(getNoise().getType());
   auto result = dyn_cast<RankedTensorType>(getResult().getType());
-  if (!y || !grad || !noise || !result)
+  return verifyEBMAffineStep(getOperation(), y, grad, getNoise(), result,
+                             "ebm.langevin_step");
+}
+
+LogicalResult EBMInnerStepOp::verify() {
+  auto y = dyn_cast<RankedTensorType>(getY().getType());
+  auto grad = dyn_cast<RankedTensorType>(getGrad().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  return verifyEBMAffineStep(getOperation(), y, grad, getNoise(), result,
+                             "ebm.inner_step");
+}
+
+LogicalResult EBMRefinementOp::verify() {
+  auto y = dyn_cast<RankedTensorType>(getY().getType());
+  auto grad = dyn_cast<RankedTensorType>(getGrad().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (i64AttrOr(getOperation(), "steps", 0) <= 0)
+    return emitOpError("steps must be positive");
+  return verifyEBMAffineStep(getOperation(), y, grad, getNoise(), result,
+                             "ebm.refinement");
+}
+
+LogicalResult EBMLangevinStepPhiloxOp::verify() {
+  auto y = dyn_cast<RankedTensorType>(getY().getType());
+  auto grad = dyn_cast<RankedTensorType>(getGrad().getType());
+  auto seed = dyn_cast<RankedTensorType>(getSeed().getType());
+  auto counter = dyn_cast<RankedTensorType>(getCounter().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!y || !grad || !result)
     return success();
-  if (!isFloatTensor(y) || y.getElementType() != grad.getElementType() ||
-      y.getElementType() != noise.getElementType() ||
-      y.getElementType() != result.getElementType())
-    return emitOpError("expects floating y/grad/noise/result with matching dtype");
-  if (failed(verifySameRankedShape(getOperation(), y, grad,
-                                   "ebm.langevin_step grad")) ||
-      failed(verifySameRankedShape(getOperation(), y, noise,
-                                   "ebm.langevin_step noise")) ||
+  if (failed(verifyFloatSameDtype(getOperation(), {y, grad, result},
+                                  "ebm.langevin_step_philox")) ||
+      failed(verifySameRankedShape(getOperation(), y, grad,
+                                   "ebm.langevin_step_philox grad")) ||
       failed(verifySameRankedShape(getOperation(), y, result,
-                                   "ebm.langevin_step result")))
+                                   "ebm.langevin_step_philox result")) ||
+      failed(verifyPositiveAttr(getOperation(), "eta")) ||
+      failed(verifyPositiveAttr(getOperation(), "temperature")) ||
+      failed(verifyNonNegativeOptionalAttr(getOperation(), "noise_scale")))
     return failure();
-  if (f64AttrOr(getOperation(), "eta", 0.0) <= 0.0)
-    return emitOpError("eta must be positive");
-  if (f64AttrOr(getOperation(), "noise_scale", 0.0) < 0.0)
-    return emitOpError("noise_scale must be non-negative");
+  if (!seed || !counter)
+    return success();
+  if (!seed.getElementType().isInteger(64) || !counter.getElementType().isInteger(64))
+    return emitOpError("Philox seed/counter tensors must be i64");
+  if (seed.getRank() != 1 || counter.getRank() != 1)
+    return emitOpError("Philox seed/counter tensors must be rank-1");
+  if (!dimsAgree(seed.getDimSize(0), 1))
+    return emitOpError("Philox seed tensor must have length 1");
+  if (!dimsAgree(counter.getDimSize(0), 4))
+    return emitOpError("Philox counter tensor must have length 4");
+  return success();
+}
+
+LogicalResult EBMDecodeInitOp::verify() {
+  auto x = dyn_cast<RankedTensorType>(getX().getType());
+  auto candidates = dyn_cast<RankedTensorType>(getCandidates().getType());
+  if (!x || !candidates)
+    return success();
+  if (failed(verifyFloatSameDtype(getOperation(), {x, candidates},
+                                  "ebm.decode_init")))
+    return failure();
+  if (candidates.getRank() != x.getRank() + 1)
+    return emitOpError("candidates rank must be input rank + 1");
+  if (!dimsAgree(candidates.getDimSize(0), x.getDimSize(0)))
+    return emitOpError("candidate batch dimension must match input batch");
+  for (int64_t i = 1, e = x.getRank(); i < e; ++i)
+    if (!dimsAgree(candidates.getDimSize(i + 1), x.getDimSize(i)))
+      return emitOpError("candidate trailing dimensions must match input");
+  int64_t k = i64AttrOr(getOperation(), "steps", 0);
+  if (k <= 0)
+    return emitOpError("steps must be positive");
+  if (!dimsAgree(candidates.getDimSize(1), k))
+    return emitOpError("candidate axis must equal steps");
+  if (failed(verifyAllowedStringAttr(getOperation(), "strategy",
+                                     {StringRef("noise"), StringRef("copy"),
+                                      StringRef("base_model")})))
+    return failure();
+  StringRef strategy = getOperation()->getAttrOfType<StringAttr>("strategy")
+                           .getValue();
+  if (strategy == "noise" && !getNoise() && !getOperation()->hasAttr("seed"))
+    return emitOpError("strategy=\"noise\" requires noise operand or seed attr");
+  if (strategy == "base_model" && !getBase())
+    return emitOpError("strategy=\"base_model\" requires base operand");
+  if (failed(verifyOptionalTensorShape(getOperation(), getBase(), x,
+                                       "ebm.decode_init base")) ||
+      failed(verifyOptionalTensorShape(getOperation(), getNoise(), candidates,
+                                       "ebm.decode_init noise")))
+    return failure();
+  return success();
+}
+
+LogicalResult EBMSelfVerifyOp::verify() {
+  auto energies = dyn_cast<RankedTensorType>(getEnergies().getType());
+  auto candidates = dyn_cast<RankedTensorType>(getCandidates().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!energies || !candidates || !result)
+    return success();
+  if (failed(verifyFloatSameDtype(getOperation(), {energies, candidates, result},
+                                  "ebm.self_verify")))
+    return failure();
+  if (energies.getRank() != 2)
+    return emitOpError("energies must be rank-2 [B,K]");
+  if (candidates.getRank() < 2)
+    return emitOpError("candidates must include batch and candidate axes");
+  if (!dimsAgree(energies.getDimSize(0), candidates.getDimSize(0)) ||
+      !dimsAgree(energies.getDimSize(1), candidates.getDimSize(1)))
+    return emitOpError("energies and candidates B/K axes must match");
+  if (result.getRank() != candidates.getRank() - 1)
+    return emitOpError("result rank must be candidates rank - 1");
+  if (!dimsAgree(result.getDimSize(0), candidates.getDimSize(0)))
+    return emitOpError("result batch dimension must match candidates");
+  for (int64_t i = 2, e = candidates.getRank(); i < e; ++i)
+    if (!dimsAgree(result.getDimSize(i - 1), candidates.getDimSize(i)))
+      return emitOpError("result trailing dimensions must match candidate values");
+  if (failed(verifyAllowedStringAttr(getOperation(), "reduction",
+                                     {StringRef("hard_argmin"),
+                                      StringRef("softmin")},
+                                     StringRef("hard_argmin"))))
+    return failure();
+  double temperature = f64AttrOr(getOperation(), "temperature", 0.0);
+  if (temperature < 0.0)
+    return emitOpError("temperature must be non-negative");
+  if (auto r = getOperation()->getAttrOfType<StringAttr>("reduction");
+      r && r.getValue() == "softmin" && temperature <= 0.0)
+    return emitOpError("reduction=\"softmin\" requires temperature > 0");
+  return success();
+}
+
+LogicalResult EBMPartitionExactOp::verify() {
+  auto energies = dyn_cast<RankedTensorType>(getEnergies().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!energies || !result)
+    return success();
+  if (failed(verifyFloatSameDtype(getOperation(), {energies, result},
+                                  "ebm.partition_exact")))
+    return failure();
+  if (result.getRank() != 0 && result.getRank() != energies.getRank() - 1)
+    return emitOpError(
+        "result must be scalar or reduce exactly one candidate axis");
+  if (result.getRank() == energies.getRank() - 1)
+    for (int64_t i = 0, e = result.getRank(); i < e; ++i)
+      if (!dimsAgree(result.getDimSize(i), energies.getDimSize(i)))
+        return emitOpError(
+            "partition result dimensions must match non-candidate axes");
+  if (f64AttrOr(getOperation(), "temperature", 1.0) <= 0.0)
+    return emitOpError("temperature must be positive");
+  return verifyAllowedStringAttr(getOperation(), "reduction",
+                                 {StringRef("logsumexp"), StringRef("sum"),
+                                  StringRef("mean")},
+                                 StringRef("logsumexp"));
+}
+
+LogicalResult EBMBivectorLangevinStepOp::verify() {
+  auto state = dyn_cast<RankedTensorType>(getState().getType());
+  auto grad = dyn_cast<RankedTensorType>(getGrad().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (i64AttrOr(getOperation(), "grade", 2) != 2)
+    return emitOpError("bivector Langevin requires grade = 2");
+  if (failed(verifyAllowedStringAttr(getOperation(), "manifold",
+                                     {StringRef("bivector"),
+                                      StringRef("so_n")},
+                                     StringRef("bivector"))) ||
+      failed(verifyAllowedStringAttr(getOperation(), "projection",
+                                     {StringRef("grade"),
+                                      StringRef("bivector")},
+                                     StringRef("grade"))) ||
+      failed(verifyAllowedStringAttr(getOperation(), "metric",
+                                     {StringRef("euclidean"),
+                                      StringRef("killing")},
+                                     StringRef("euclidean"))))
+    return failure();
+  return verifyEBMAffineStep(getOperation(), state, grad, getNoise(), result,
+                             "ebm.bivector_langevin_step");
+}
+
+LogicalResult EBMSphereLangevinStepOp::verify() {
+  auto state = dyn_cast<RankedTensorType>(getState().getType());
+  auto grad = dyn_cast<RankedTensorType>(getGrad().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (getOperation()->hasAttr("normalized_state") &&
+      !getOperation()->getAttrOfType<BoolAttr>("normalized_state").getValue())
+    return emitOpError("sphere Langevin requires normalized_state = true");
+  if (failed(verifyAllowedStringAttr(getOperation(), "manifold",
+                                     {StringRef("sphere"),
+                                      StringRef("unit_sphere")},
+                                     StringRef("sphere"))) ||
+      failed(verifyAllowedStringAttr(getOperation(), "projection",
+                                     {StringRef("tangent"),
+                                      StringRef("normalize_retract")},
+                                     StringRef("tangent"))) ||
+      failed(verifyAllowedStringAttr(getOperation(), "metric",
+                                     {StringRef("riemannian"),
+                                      StringRef("euclidean")},
+                                     StringRef("riemannian"))))
+    return failure();
+  return verifyEBMAffineStep(getOperation(), state, grad, getNoise(), result,
+                             "ebm.sphere_langevin_step");
+}
+
+LogicalResult CliffordGeometricProductOp::verify() {
+  int64_t p = getP(), q = getQ();
+  auto lhs = dyn_cast<RankedTensorType>(getLhs().getType());
+  auto rhs = dyn_cast<RankedTensorType>(getRhs().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (failed(verifyCliffordMetadata(getOperation(), p, q)) ||
+      failed(verifyCliffordTensor(getOperation(), lhs, p, q, "lhs")) ||
+      failed(verifyCliffordTensor(getOperation(), rhs, p, q, "rhs")) ||
+      failed(verifyCliffordTensor(getOperation(), result, p, q, "result")) ||
+      failed(verifyCliffordSameShapeAndDtype(getOperation(),
+                                             {lhs, rhs, result},
+                                             "clifford.geometric_product")))
+    return failure();
+  return success();
+}
+
+LogicalResult CliffordOuterProductOp::verify() {
+  int64_t p = getP(), q = getQ();
+  auto lhs = dyn_cast<RankedTensorType>(getLhs().getType());
+  auto rhs = dyn_cast<RankedTensorType>(getRhs().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (failed(verifyCliffordMetadata(getOperation(), p, q)) ||
+      failed(verifyCliffordTensor(getOperation(), lhs, p, q, "lhs")) ||
+      failed(verifyCliffordTensor(getOperation(), rhs, p, q, "rhs")) ||
+      failed(verifyCliffordTensor(getOperation(), result, p, q, "result")) ||
+      failed(verifyCliffordSameShapeAndDtype(getOperation(),
+                                             {lhs, rhs, result},
+                                             "clifford.outer_product")))
+    return failure();
+  return success();
+}
+
+LogicalResult CliffordInnerProductOp::verify() {
+  int64_t p = getP(), q = getQ();
+  auto lhs = dyn_cast<RankedTensorType>(getLhs().getType());
+  auto rhs = dyn_cast<RankedTensorType>(getRhs().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (failed(verifyCliffordMetadata(getOperation(), p, q)) ||
+      failed(verifyCliffordTensor(getOperation(), lhs, p, q, "lhs")) ||
+      failed(verifyCliffordTensor(getOperation(), rhs, p, q, "rhs")) ||
+      failed(verifyCliffordTensor(getOperation(), result, p, q, "result")) ||
+      failed(verifyCliffordSameShapeAndDtype(getOperation(),
+                                             {lhs, rhs, result},
+                                             "clifford.inner_product")))
+    return failure();
+  return success();
+}
+
+LogicalResult CliffordReverseOp::verify() {
+  int64_t p = getP(), q = getQ();
+  auto input = dyn_cast<RankedTensorType>(getInput().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (failed(verifyCliffordMetadata(getOperation(), p, q)) ||
+      failed(verifyCliffordTensor(getOperation(), input, p, q, "input")) ||
+      failed(verifyCliffordTensor(getOperation(), result, p, q, "result")) ||
+      failed(verifyCliffordSameShapeAndDtype(getOperation(),
+                                             {input, result},
+                                             "clifford.reverse")))
+    return failure();
+  return success();
+}
+
+LogicalResult CliffordGradeProjectOp::verify() {
+  int64_t p = getP(), q = getQ();
+  auto input = dyn_cast<RankedTensorType>(getInput().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (failed(verifyCliffordMetadata(getOperation(), p, q)) ||
+      failed(verifyGradeMask(getOperation(), p, q, "grade_mask")) ||
+      failed(verifyCliffordTensor(getOperation(), input, p, q, "input")) ||
+      failed(verifyCliffordTensor(getOperation(), result, p, q, "result")) ||
+      failed(verifyCliffordSameShapeAndDtype(getOperation(),
+                                             {input, result},
+                                             "clifford.grade_project")))
+    return failure();
+  return success();
+}
+
+LogicalResult CliffordNormOp::verify() {
+  int64_t p = getP(), q = getQ();
+  auto input = dyn_cast<RankedTensorType>(getInput().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (failed(verifyCliffordMetadata(getOperation(), p, q)) ||
+      failed(verifyCliffordTensor(getOperation(), input, p, q, "input")))
+    return failure();
+  if (!input || !result)
+    return success();
+  if (!isFloatTensor(result) || result.getElementType() != input.getElementType())
+    return emitOpError("result must be a floating tensor with input dtype");
+  if (result.getRank() == input.getRank()) {
+    if (failed(verifyCliffordTensor(getOperation(), result, p, q, "result")) ||
+        failed(verifySameRankedShape(getOperation(), input, result,
+                                     "clifford.norm")))
+      return failure();
+    return success();
+  }
+  if (result.getRank() != input.getRank() - 1)
+    return emitOpError(
+        "result must either preserve coefficients or drop the coefficient axis");
+  for (int64_t i = 0, e = result.getRank(); i < e; ++i)
+    if (!dimsAgree(result.getDimSize(i), input.getDimSize(i)))
+      return emitOpError("norm result batch dimensions must match input");
+  return success();
+}
+
+LogicalResult CliffordRotorSandwichOp::verify() {
+  int64_t p = getP(), q = getQ();
+  auto rotor = dyn_cast<RankedTensorType>(getRotor().getType());
+  auto value = dyn_cast<RankedTensorType>(getValue().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (failed(verifyCliffordMetadata(getOperation(), p, q)) ||
+      failed(verifyGradeMask(getOperation(), p, q, "grade_mask")) ||
+      failed(verifyCliffordTensor(getOperation(), rotor, p, q, "rotor")) ||
+      failed(verifyCliffordTensor(getOperation(), value, p, q, "value")) ||
+      failed(verifyCliffordTensor(getOperation(), result, p, q, "result")) ||
+      failed(verifyCliffordSameShapeAndDtype(getOperation(),
+                                             {rotor, value, result},
+                                             "clifford.rotor_sandwich")))
+    return failure();
   return success();
 }
 
@@ -521,7 +1028,8 @@ LogicalResult FlashAttnOp::verify() {
   if (parent) {
     if (auto attr = dyn_cast<StringAttr>(parent->getAttr("tessera.target_sm"))) {
       int64_t limit = maxHeadDimForTargetSm(attr.getValue());
-      if (limit > 0 && getHeadDim() > limit)
+      uint64_t headDim = getHeadDim();
+      if (limit > 0 && headDim > static_cast<uint64_t>(limit))
         return emitOpError("head_dim=")
                << getHeadDim() << " exceeds the SM "
                << attr.getValue()

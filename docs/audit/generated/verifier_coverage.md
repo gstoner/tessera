@@ -6,11 +6,11 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real`         |   32 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real`         |   47 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` |    9 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent`       |    0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier`  |   80 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total**      |  121 | |
+| **Total**      |  136 | |
 
 ## Per-dialect details
 
@@ -40,6 +40,13 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 | `CastOp` | `real` |
 | `CholeskyOp` | `real` |
 | `CholeskySolveOp` | `real` |
+| `CliffordGeometricProductOp` | `real` |
+| `CliffordGradeProjectOp` | `real` |
+| `CliffordInnerProductOp` | `real` |
+| `CliffordNormOp` | `real` |
+| `CliffordOuterProductOp` | `real` |
+| `CliffordReverseOp` | `real` |
+| `CliffordRotorSandwichOp` | `real` |
 | `Conv2DNHWCOp` | `real` |
 | `CustomAdjointCallOp` | `no_verifier` |
 | `DCTOp` | `no_verifier` |
@@ -47,8 +54,16 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 | `DequantizeFP4Op` | `no_verifier` |
 | `DequantizeFP8Op` | `no_verifier` |
 | `DropoutOp` | `real` |
+| `EBMBivectorLangevinStepOp` | `real` |
+| `EBMDecodeInitOp` | `real` |
 | `EBMEnergyQuadraticOp` | `real` |
+| `EBMInnerStepOp` | `real` |
 | `EBMLangevinStepOp` | `real` |
+| `EBMLangevinStepPhiloxOp` | `real` |
+| `EBMPartitionExactOp` | `real` |
+| `EBMRefinementOp` | `real` |
+| `EBMSelfVerifyOp` | `real` |
+| `EBMSphereLangevinStepOp` | `real` |
 | `FFTOp` | `no_verifier` |
 | `FlashAttnOp` | `real` |
 | `FusedEpilogueOp` | `real` |

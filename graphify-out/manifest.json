@@ -660,8 +660,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/TesseraOps.cpp": {
-    "mtime": 1780547575.6115868,
-    "ast_hash": "dff5424d8da9adfb1c49fff1f64a6cf6",
+    "mtime": 1780573369.2514148,
+    "ast_hash": "54b25dceda604d9966ed781d634cbc1a",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/AdjointInterface.cpp": {
@@ -10300,8 +10300,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/verifier_coverage.md": {
-    "mtime": 1780548330.238693,
-    "ast_hash": "1e6829bd55afdfd0609fd8b403012afb",
+    "mtime": 1780573197.8880389,
+    "ast_hash": "688c48f6e74991817add41392835978a",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/tools_status.md": {

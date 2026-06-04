@@ -286,9 +286,209 @@ def Tessera_EBMLangevinStepOp : Op<
   [Pure]
 > {
   let summary = "One affine EBM Langevin step y - eta*grad + noise_scale*noise";
-  let arguments = (ins TensorType:$y, TensorType:$grad, TensorType:$noise,
+  let arguments = (ins TensorType:$y, TensorType:$grad,
+                        Optional<TensorType>:$noise,
+                        F64Attr:$eta,
+                        OptionalAttr<F64Attr>:$temperature,
+                        OptionalAttr<F64Attr>:$noise_scale);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_EBMInnerStepOp : Op<
+  Tessera_Dialect, "ebm.inner_step",
+  [Pure]
+> {
+  let summary = "EBM inner step y - eta*grad with optional injected noise";
+  let arguments = (ins TensorType:$y, TensorType:$grad,
+                        Optional<TensorType>:$noise,
                         F64Attr:$eta,
                         OptionalAttr<F64Attr>:$noise_scale);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_EBMRefinementOp : Op<
+  Tessera_Dialect, "ebm.refinement",
+  [Pure]
+> {
+  let summary = "T-step EBM refinement loop with optional noise controls";
+  let arguments = (ins TensorType:$y, TensorType:$grad,
+                        Optional<TensorType>:$noise,
+                        F64Attr:$eta,
+                        I64Attr:$steps,
+                        OptionalAttr<F64Attr>:$temperature,
+                        OptionalAttr<F64Attr>:$noise_scale);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_EBMLangevinStepPhiloxOp : Op<
+  Tessera_Dialect, "ebm.langevin_step_philox",
+  [Pure]
+> {
+  let summary = "EBM Langevin step with Philox RNG state";
+  let arguments = (ins TensorType:$y, TensorType:$grad,
+                        TensorType:$seed, TensorType:$counter,
+                        F64Attr:$eta,
+                        F64Attr:$temperature,
+                        OptionalAttr<F64Attr>:$noise_scale);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_EBMDecodeInitOp : Op<
+  Tessera_Dialect, "ebm.decode_init",
+  [Pure, AttrSizedOperandSegments]
+> {
+  let summary = "Initialize K EBM candidate trajectories";
+  let arguments = (ins TensorType:$x,
+                        Optional<TensorType>:$base,
+                        Optional<TensorType>:$noise,
+                        I64Attr:$steps,
+                        StrAttr:$strategy,
+                        OptionalAttr<I64Attr>:$seed);
+  let results = (outs TensorType:$candidates);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_EBMSelfVerifyOp : Op<
+  Tessera_Dialect, "ebm.self_verify",
+  [Pure]
+> {
+  let summary = "Select or reduce EBM candidates from per-candidate energies";
+  let arguments = (ins TensorType:$energies, TensorType:$candidates,
+                        OptionalAttr<StrAttr>:$reduction,
+                        OptionalAttr<F64Attr>:$temperature);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_EBMPartitionExactOp : Op<
+  Tessera_Dialect, "ebm.partition_exact",
+  [Pure]
+> {
+  let summary = "Exact EBM partition function / logsumexp over energies";
+  let arguments = (ins TensorType:$energies,
+                        OptionalAttr<F64Attr>:$temperature,
+                        OptionalAttr<StrAttr>:$reduction);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_EBMBivectorLangevinStepOp : Op<
+  Tessera_Dialect, "ebm.bivector_langevin_step",
+  [Pure]
+> {
+  let summary = "Langevin step constrained to a bivector grade subspace";
+  let arguments = (ins TensorType:$state, TensorType:$grad,
+                        Optional<TensorType>:$noise,
+                        F64Attr:$eta,
+                        OptionalAttr<F64Attr>:$temperature,
+                        OptionalAttr<F64Attr>:$noise_scale,
+                        OptionalAttr<I64Attr>:$grade,
+                        OptionalAttr<StrAttr>:$projection,
+                        OptionalAttr<StrAttr>:$manifold,
+                        OptionalAttr<StrAttr>:$metric);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_EBMSphereLangevinStepOp : Op<
+  Tessera_Dialect, "ebm.sphere_langevin_step",
+  [Pure]
+> {
+  let summary = "Riemannian Langevin step on a unit sphere";
+  let arguments = (ins TensorType:$state, TensorType:$grad,
+                        Optional<TensorType>:$noise,
+                        F64Attr:$eta,
+                        OptionalAttr<F64Attr>:$temperature,
+                        OptionalAttr<F64Attr>:$noise_scale,
+                        OptionalAttr<StrAttr>:$projection,
+                        OptionalAttr<StrAttr>:$manifold,
+                        OptionalAttr<StrAttr>:$metric,
+                        OptionalAttr<BoolAttr>:$normalized_state);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// GA / Clifford Graph IR hardening. These ops pin algebra metadata at the
+// canonical Graph IR layer; backend execution still goes through the existing
+// GA manifest/JIT bridge until a value handoff is explicitly promoted.
+class Tessera_CliffordBinaryOp<string mnemonic, string summaryText>
+    : Op<Tessera_Dialect, mnemonic, [Pure]> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$lhs, TensorType:$rhs,
+                        I64Attr:$p, I64Attr:$q,
+                        OptionalAttr<StrAttr>:$coefficient_layout,
+                        OptionalAttr<I64ArrayAttr>:$signature);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+class Tessera_CliffordUnaryOp<string mnemonic, string summaryText>
+    : Op<Tessera_Dialect, mnemonic, [Pure]> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$input,
+                        I64Attr:$p, I64Attr:$q,
+                        OptionalAttr<StrAttr>:$coefficient_layout,
+                        OptionalAttr<I64ArrayAttr>:$signature);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_CliffordGeometricProductOp
+    : Tessera_CliffordBinaryOp<"clifford.geometric_product",
+                               "Clifford geometric product">;
+def Tessera_CliffordOuterProductOp
+    : Tessera_CliffordBinaryOp<"clifford.outer_product",
+                               "Clifford outer/wedge product">;
+def Tessera_CliffordInnerProductOp
+    : Tessera_CliffordBinaryOp<"clifford.inner_product",
+                               "Clifford inner product">;
+def Tessera_CliffordReverseOp
+    : Tessera_CliffordUnaryOp<"clifford.reverse",
+                              "Clifford reverse involution">;
+def Tessera_CliffordNormOp
+    : Tessera_CliffordUnaryOp<"clifford.norm",
+                              "Clifford multivector norm">;
+
+def Tessera_CliffordGradeProjectOp : Op<
+  Tessera_Dialect, "clifford.grade_project",
+  [Pure]
+> {
+  let summary = "Project Clifford coefficients to an allowed grade mask";
+  let arguments = (ins TensorType:$input,
+                        I64Attr:$p, I64Attr:$q,
+                        I64ArrayAttr:$grade_mask,
+                        OptionalAttr<StrAttr>:$coefficient_layout,
+                        OptionalAttr<I64ArrayAttr>:$signature);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_CliffordRotorSandwichOp : Op<
+  Tessera_Dialect, "clifford.rotor_sandwich",
+  [Pure]
+> {
+  let summary = "Apply rotor sandwich R x reverse(R) to a multivector";
+  let arguments = (ins TensorType:$rotor, TensorType:$value,
+                        I64Attr:$p, I64Attr:$q,
+                        OptionalAttr<StrAttr>:$coefficient_layout,
+                        OptionalAttr<I64ArrayAttr>:$signature,
+                        OptionalAttr<I64ArrayAttr>:$grade_mask);
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;

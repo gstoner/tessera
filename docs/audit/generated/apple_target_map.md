@@ -38,7 +38,7 @@ The ``framework`` column reflects each op's **default** apple_gpu lane
 ``matmul2d`` on the GPU matrix units and is *not* shown per-row here
 (it lives in ``runtime.py``'s router, not ``capabilities``/``manifest``/
 ``driver``). Summary — see ``docs/apple_gpu_metal4_adoption.md`` (ladder)
-and ``docs/apple_backend_integration_review.md`` (review):
+and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 
 * **matmul** — bf16 routes to ``tessera_apple_gpu_mtl4_matmul2d_bf16`` by
   **default** (M6/P5; beats the fp32-conversion fallback ~10–15×); fp16

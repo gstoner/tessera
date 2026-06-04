@@ -1,16 +1,16 @@
 # MLIR Verifier Coverage Dashboard
 
-Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by hand — run `python -m tessera.compiler.audit verifier_coverage --write` to refresh.  Drift is gated by `tests/unit/test_verifier_coverage.py`.
+Human-readable view. The canonical machine-readable artifact is `verifier_coverage.csv` in this directory — that CSV is what the drift gate compares. Don't edit either by hand; run `python -m tessera.compiler.audit verifier_coverage --write` (or `scripts/check_generated_docs.sh --write`) to refresh both. Drift is gated by `tests/unit/test_verifier_coverage.py`.
 
 ## Summary
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real`         |   47 | `hasVerifier = 1;` + substantive `verify()` body. |
-| `trivial_stub` |    9 | `hasVerifier = 1;` + trivial `return success();` stub. |
-| `absent`       |    0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
-| `no_verifier`  |   80 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total**      |  136 | |
+| `real` | 47 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `trivial_stub` | 9 | `hasVerifier = 1;` + trivial `return success();` stub. |
+| `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
+| `no_verifier` | 80 | No verifier declared.  TD constraints suffice — fine for many ops. |
+| **Total** | 136 | |
 
 ## Per-dialect details
 

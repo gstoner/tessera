@@ -23,13 +23,33 @@ The drift gate is the inverse — when an op leaves the ``real``
 bucket (e.g., someone deletes a ``verify()`` body), structural tests
 catch it before it ships.
 
-The dashboard is generated into
-``docs/audit/verifier_coverage.md`` and gated against drift by
-``tests/unit/test_verifier_coverage.py``.
+Two artifacts are emitted, both under ``docs/audit/generated/``:
+
+  * ``verifier_coverage.csv`` — the **canonical, machine-readable**
+    surface and the only thing the drift gate compares.  One row per
+    op, stable column order, stable sort, no alignment padding.  This
+    is what CI checks because a CSV diff is trivial and whitespace
+    never drifts.
+  * ``verifier_coverage.md`` — a **human-readable** summary rendered
+    from the same data.  It is regenerated alongside the CSV but is
+    *not* byte-compared by the drift gate (only its presence and a
+    couple of canonical heading phrases are checked), so cosmetic
+    formatting never reds CI on its own.
+
+Regenerate both via::
+
+    python -m tessera.compiler.audit verifier_coverage --write
+
+and the same command with ``--check`` is the drift gate (it compares
+the CSV).  Both are wired into ``scripts/check_generated_docs.sh`` so
+``scripts/check_generated_docs.sh --write`` refreshes them at the end
+of a sprint.
 """
 
 from __future__ import annotations
 
+import csv
+import io
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,6 +57,21 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SRC_ROOT = _REPO_ROOT / "src"
+
+#: Canonical output locations.  The CSV is the drift-gated artifact;
+#: the MD is the human-readable companion (not byte-gated).
+CSV_PATH = _REPO_ROOT / "docs" / "audit" / "generated" / "verifier_coverage.csv"
+MD_PATH = _REPO_ROOT / "docs" / "audit" / "generated" / "verifier_coverage.md"
+
+#: Stable CSV column order.  Append-only — never reorder or rename, as
+#: downstream tooling parses by header name.
+CSV_COLUMNS: tuple[str, ...] = (
+    "td_file",
+    "op_class",
+    "has_verifier_declared",
+    "verify_impl_present",
+    "impl_status",
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -298,12 +333,37 @@ def coverage_summary() -> dict[str, int]:
     return out
 
 
-def render_dashboard() -> str:
-    """Render the coverage dashboard as Markdown text.
+def render_csv() -> str:
+    """Render the canonical, drift-gated CSV.
 
-    Format
-    ------
-    Header + summary counts + a per-op table grouped by TD file.
+    One row per op, sorted by ``(td_file, op_class)`` so the output is
+    byte-stable across runs and platforms.  This is the artifact CI
+    compares — a CSV diff is trivial and there is no alignment padding
+    to drift.
+    """
+    entries = collect_verifier_coverage()
+    rows = sorted(entries, key=lambda e: (e.td_file.as_posix(), e.op_class))
+    buf = io.StringIO()
+    # Force '\n' line endings so the file is identical on every platform.
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(CSV_COLUMNS)
+    for e in rows:
+        writer.writerow([
+            e.td_file.as_posix(),
+            e.op_class,
+            "1" if e.has_verifier_declared else "0",
+            "1" if e.verify_impl_present else "0",
+            e.impl_status,
+        ])
+    return buf.getvalue()
+
+
+def render_dashboard() -> str:
+    """Render the human-readable Markdown summary.
+
+    This view is regenerated alongside the CSV but is **not** byte-gated
+    — the drift gate compares :func:`render_csv` instead.  The headings
+    here are pinned by the test so downstream docs can link to them.
     """
     entries = collect_verifier_coverage()
     summary = coverage_summary()
@@ -311,11 +371,12 @@ def render_dashboard() -> str:
     lines.append("# MLIR Verifier Coverage Dashboard")
     lines.append("")
     lines.append(
-        "Generated from `python/tessera/compiler/verifier_coverage.py`.  "
-        "Don't edit by hand — run "
+        "Human-readable view. The canonical machine-readable artifact is "
+        "`verifier_coverage.csv` in this directory — that CSV is what the "
+        "drift gate compares. Don't edit either by hand; run "
         "`python -m tessera.compiler.audit verifier_coverage --write` "
-        "to refresh.  Drift is gated by "
-        "`tests/unit/test_verifier_coverage.py`."
+        "(or `scripts/check_generated_docs.sh --write`) to refresh both. "
+        "Drift is gated by `tests/unit/test_verifier_coverage.py`."
     )
     lines.append("")
     lines.append("## Summary")
@@ -323,22 +384,22 @@ def render_dashboard() -> str:
     lines.append("| Status | Count | Meaning |")
     lines.append("|--------|-------|---------|")
     lines.append(
-        f"| `real`         | {summary['real']:>4} | "
+        f"| `real` | {summary['real']} | "
         f"`hasVerifier = 1;` + substantive `verify()` body. |"
     )
     lines.append(
-        f"| `trivial_stub` | {summary['trivial_stub']:>4} | "
+        f"| `trivial_stub` | {summary['trivial_stub']} | "
         f"`hasVerifier = 1;` + trivial `return success();` stub. |"
     )
     lines.append(
-        f"| `absent`       | {summary['absent']:>4} | "
+        f"| `absent` | {summary['absent']} | "
         f"`hasVerifier = 1;` but no `verify()` body (build error risk). |"
     )
     lines.append(
-        f"| `no_verifier`  | {summary['no_verifier']:>4} | "
+        f"| `no_verifier` | {summary['no_verifier']} | "
         f"No verifier declared.  TD constraints suffice — fine for many ops. |"
     )
-    lines.append(f"| **Total**      | {summary['total']:>4} | |")
+    lines.append(f"| **Total** | {summary['total']} | |")
     lines.append("")
 
     # Group entries by TD file for readability.
@@ -359,9 +420,28 @@ def render_dashboard() -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def write_dashboard(csv_path: Path | None = None) -> tuple[Path, Path]:
+    """Write both the canonical CSV and the human Markdown summary.
+
+    Returns ``(csv_path, md_path)``.  The Markdown path is derived from
+    the CSV path by swapping the suffix, so callers only override one.
+    """
+    target_csv = csv_path or CSV_PATH
+    target_md = target_csv.with_suffix(".md")
+    target_csv.parent.mkdir(parents=True, exist_ok=True)
+    target_csv.write_text(render_csv())
+    target_md.write_text(render_dashboard())
+    return target_csv, target_md
+
+
 __all__ = [
     "VerifierEntry",
+    "CSV_PATH",
+    "MD_PATH",
+    "CSV_COLUMNS",
     "collect_verifier_coverage",
     "coverage_summary",
+    "render_csv",
     "render_dashboard",
+    "write_dashboard",
 ]

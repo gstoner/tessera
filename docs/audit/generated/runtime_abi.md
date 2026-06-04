@@ -1,12 +1,12 @@
 # Runtime C ABI Surface Audit
 
-Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by hand — regenerate via `python -c "from tessera.compiler.runtime_abi_audit import render_dashboard; open('docs/audit/generated/runtime_abi.md', 'w').write(render_dashboard())"`.  Drift gated by `tests/unit/test_runtime_abi_audit.py`.
+Human-readable view. The canonical machine-readable artifact is `runtime_abi.csv` in this directory — that CSV is what the drift gate compares. Don't edit either by hand; run `python -m tessera.compiler.audit runtime_abi --write` (or `scripts/check_generated_docs.sh --write`) to refresh both. Drift gated by `tests/unit/test_runtime_abi_audit.py`.
 
 ## Headline
 
-- **234** unique `extern "C" tessera_*` C ABI symbols across all backends.
+- **241** unique `extern "C" tessera_*` C ABI symbols across all backends.
 - **6 / 6** core runtime headers present.
-- **84** Apple GPU kernel families with per-dtype variants.
+- **91** Apple GPU kernel families with per-dtype variants.
 
 ## Core runtime headers
 
@@ -23,7 +23,7 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 
 | Backend | Unique tessera_* symbols |
 |---------|-------------------------:|
-| `apple` | 223 |
+| `apple` | 230 |
 | `nvidia` | 3 |
 | `x86` | 8 |
 
@@ -42,6 +42,7 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 | `clifford_exp_cl30` | `f32` |
 | `clifford_ext_deriv_cl30` | `f32` |
 | `clifford_geo_product_cl30` | `bf16`, `f16`, `f32` |
+| `clifford_geo_product_cl30_value` | `f32` |
 | `clifford_grade_projection_cl30` | `f32` |
 | `clifford_inner_cl30` | `f32` |
 | `clifford_integral_cl30` | `f32` |
@@ -61,11 +62,15 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 | `ebm_decode_init_noise_apply` | `f32` |
 | `ebm_ebt_tiny_refinement_argmin` | `f32` |
 | `ebm_energy_quadratic` | `f32` |
+| `ebm_energy_quadratic_value` | `f32` |
 | `ebm_inner_step` | `f32` |
 | `ebm_langevin_step` | `f32` |
 | `ebm_langevin_step_philox` | `f32` |
+| `ebm_langevin_step_value` | `f32` |
 | `ebm_partition_exact` | `f32` |
+| `ebm_partition_exact_value` | `f32` |
 | `ebm_refinement` | `f32` |
+| `ebm_refinement_value` | `f32` |
 | `ebm_self_verify_hard_argmin` | `f32` |
 | `ebm_sphere_langevin_step` | `f32` |
 | `flash_attn` | `bf16`, `f16`, `f32` |
@@ -99,6 +104,8 @@ Generated from `python/tessera/compiler/runtime_abi_audit.py`.  Don't edit by ha
 | `mtl4_matmul_sg` | `f32` |
 | `mtl4_scan` | `f32` |
 | `native_sparse_attn` | `f32` |
+| `ppo_policy_loss` | `f32` |
+| `ppo_policy_loss_ex` | `f32` |
 | `random_normal` | `f32` |
 | `random_uniform` | `f32` |
 | `rmsnorm_gpu` | `f16`, `f32` |

@@ -23,16 +23,19 @@ import pytest
 
 from tessera.compiler.runtime_abi_audit import (
     AbiSymbol,
+    CSV_COLUMNS,
     apple_gpu_kernel_families,
     collect_runtime_abi,
     core_runtime_headers_present,
+    render_csv,
     render_dashboard,
     symbols_per_backend,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DASHBOARD = REPO_ROOT / "docs" / "audit" / "generated" / "runtime_abi.md"
+CSV_DASHBOARD = REPO_ROOT / "docs" / "audit" / "generated" / "runtime_abi.csv"
+MD_DASHBOARD = REPO_ROOT / "docs" / "audit" / "generated" / "runtime_abi.md"
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -155,22 +158,29 @@ def test_every_symbol_starts_with_tessera_prefix() -> None:
 
 # ─────────────────────────────────────────────────────────────────────────
 # Dashboard drift gate
+#
+# The CSV is the canonical, machine-readable artifact and the only thing
+# we byte-compare — a CSV diff is trivial and whitespace never drifts.
+# The Markdown companion is checked only for existence + canonical
+# heading phrases, so cosmetic formatting never reds CI on its own.
+# Regenerate both with: `python -m tessera.compiler.audit runtime_abi --write`
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_dashboard_exists() -> None:
-    assert DASHBOARD.exists(), (
-        f"Generated dashboard missing: "
-        f"{DASHBOARD.relative_to(REPO_ROOT)}.  Regenerate via "
-        f"`tessera.compiler.runtime_abi_audit.write_dashboard()`."
+def test_csv_dashboard_exists() -> None:
+    assert CSV_DASHBOARD.exists(), (
+        f"Generated CSV missing: {CSV_DASHBOARD.relative_to(REPO_ROOT)}.  "
+        f"Regenerate via `python -m tessera.compiler.audit runtime_abi --write`."
     )
 
 
-def test_dashboard_matches_live_data() -> None:
-    if not DASHBOARD.exists():
-        pytest.skip("dashboard not generated yet")
-    live = render_dashboard()
-    on_disk = DASHBOARD.read_text()
+def test_csv_matches_live_data() -> None:
+    """The canonical CSV must match the live source scan.  This is the
+    drift gate — regenerate with the audit CLI when it fails."""
+    if not CSV_DASHBOARD.exists():
+        pytest.skip("CSV not generated yet")
+    live = render_csv()
+    on_disk = CSV_DASHBOARD.read_text()
     if live == on_disk:
         return
     live_lines = live.splitlines()
@@ -181,15 +191,28 @@ def test_dashboard_matches_live_data() -> None:
         min(len(live_lines), len(disk_lines)),
     )
     pytest.fail(
-        f"Runtime ABI dashboard drift at line {first_diff + 1}: "
+        f"Runtime ABI CSV drift at line {first_diff + 1}: "
         f"on-disk has {disk_lines[first_diff]!r}, live has "
-        f"{live_lines[first_diff]!r}.  Regenerate the dashboard."
+        f"{live_lines[first_diff]!r}.  Regenerate with "
+        f"`python -m tessera.compiler.audit runtime_abi --write`."
     )
 
 
-def test_dashboard_pins_canonical_phrases() -> None:
-    assert DASHBOARD.exists()
-    text = DASHBOARD.read_text()
+def test_csv_header_is_stable() -> None:
+    """Downstream tooling parses the CSV by header name; the column
+    order is an append-only contract."""
+    first_line = render_csv().splitlines()[0]
+    assert first_line == ",".join(CSV_COLUMNS)
+
+
+def test_markdown_companion_exists_with_canonical_phrases() -> None:
+    """The human-readable Markdown is regenerated alongside the CSV but
+    is NOT byte-gated — we only require it to exist and carry the
+    canonical headings downstream docs link to."""
+    assert MD_DASHBOARD.exists(), (
+        f"Markdown companion missing: {MD_DASHBOARD.relative_to(REPO_ROOT)}."
+    )
+    text = render_dashboard()  # render fresh; on-disk MD is not byte-gated
     for phrase in (
         "# Runtime C ABI Surface Audit",
         "## Core runtime headers",

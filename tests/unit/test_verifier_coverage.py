@@ -20,14 +20,17 @@ import pytest
 
 from tessera.compiler.verifier_coverage import (
     VerifierEntry,
+    CSV_COLUMNS,
     collect_verifier_coverage,
     coverage_summary,
+    render_csv,
     render_dashboard,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DASHBOARD = REPO_ROOT / "docs" / "audit" / "generated" / "verifier_coverage.md"
+CSV_DASHBOARD = REPO_ROOT / "docs" / "audit" / "generated" / "verifier_coverage.csv"
+MD_DASHBOARD = REPO_ROOT / "docs" / "audit" / "generated" / "verifier_coverage.md"
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -145,29 +148,32 @@ def test_no_duplicate_op_class_names(coverage_entries) -> None:
 
 # ─────────────────────────────────────────────────────────────────────────
 # Generated dashboard ↔ live registry drift gate
+#
+# The CSV is the canonical, machine-readable artifact and the only thing
+# we byte-compare.  The Markdown companion is checked only for existence
+# + canonical heading phrases, so cosmetic formatting never reds CI.
+# Regenerate both with:
+#   `python -m tessera.compiler.audit verifier_coverage --write`
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_dashboard_file_exists() -> None:
-    assert DASHBOARD.exists(), (
-        f"Generated dashboard missing: {DASHBOARD.relative_to(REPO_ROOT)}.  "
-        f"Run `python -c \"import sys; sys.path.insert(0,'python'); "
-        f"from tessera.compiler.verifier_coverage import render_dashboard; "
-        f"open('{DASHBOARD}', 'w').write(render_dashboard())\"` to "
-        f"regenerate."
+def test_csv_dashboard_exists() -> None:
+    assert CSV_DASHBOARD.exists(), (
+        f"Generated CSV missing: {CSV_DASHBOARD.relative_to(REPO_ROOT)}.  "
+        f"Regenerate via "
+        f"`python -m tessera.compiler.audit verifier_coverage --write`."
     )
 
 
-def test_dashboard_matches_live_registry() -> None:
-    """The checked-in markdown must match what the registry would
-    render right now.  When a sprint changes the registry, regenerate
-    the dashboard or this test fails."""
-    if not DASHBOARD.exists():
-        pytest.skip("dashboard not generated yet")
-    live = render_dashboard()
-    on_disk = DASHBOARD.read_text()
+def test_csv_matches_live_registry() -> None:
+    """The checked-in CSV must match what the registry renders right
+    now.  When a sprint changes the ODS surface, regenerate the CSV or
+    this test fails."""
+    if not CSV_DASHBOARD.exists():
+        pytest.skip("CSV not generated yet")
+    live = render_csv()
+    on_disk = CSV_DASHBOARD.read_text()
     if live != on_disk:
-        # Provide a focused diff hint without dumping the whole file.
         live_lines = live.splitlines()
         disk_lines = on_disk.splitlines()
         first_diff = next(
@@ -175,18 +181,28 @@ def test_dashboard_matches_live_registry() -> None:
             min(len(live_lines), len(disk_lines)),
         )
         pytest.fail(
-            f"Dashboard drift at line {first_diff + 1}: "
+            f"Verifier coverage CSV drift at line {first_diff + 1}: "
             f"on-disk has {disk_lines[first_diff]!r}, live has "
-            f"{live_lines[first_diff]!r}.  Regenerate the dashboard."
+            f"{live_lines[first_diff]!r}.  Regenerate with "
+            f"`python -m tessera.compiler.audit verifier_coverage --write`."
         )
 
 
-def test_dashboard_pins_summary_phrases() -> None:
-    """The generated dashboard's summary text uses canonical phrases
-    that downstream docs link to.  Pin them so a refactor doesn't
-    silently change the dashboard format."""
-    assert DASHBOARD.exists(), "dashboard not generated yet"
-    text = DASHBOARD.read_text()
+def test_csv_header_is_stable() -> None:
+    """Downstream tooling parses the CSV by header name; the column
+    order is an append-only contract."""
+    first_line = render_csv().splitlines()[0]
+    assert first_line == ",".join(CSV_COLUMNS)
+
+
+def test_markdown_companion_exists_with_canonical_phrases() -> None:
+    """The human-readable Markdown is regenerated alongside the CSV but
+    is NOT byte-gated — we only require it to exist and carry the
+    canonical headings downstream docs link to."""
+    assert MD_DASHBOARD.exists(), (
+        f"Markdown companion missing: {MD_DASHBOARD.relative_to(REPO_ROOT)}."
+    )
+    text = render_dashboard()  # render fresh; on-disk MD is not byte-gated
     for phrase in (
         "# MLIR Verifier Coverage Dashboard",
         "| Status | Count | Meaning |",

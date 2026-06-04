@@ -121,9 +121,9 @@ over phase prose when they disagree. As of the May 31, 2026 source review:
 |---------|--------|
 | Source and static checks | `mypy` ratchet is clean (`errors=0`), and the docs/runtime ABI/surface/Apple-target audit slice passes (`82 passed, 1 skipped`). |
 | Runtime ABI inventory | Drift-gated and current: `docs/audit/generated/runtime_abi.md` reports 218 `extern "C" tessera_*` C ABI symbol entries, 207 unique Apple symbols, and 84 Apple GPU kernel families. |
-| Apple backend | The source has moved beyond the older Phase 8.4.7 overview: MPS/MPSGraph remain the default lanes, while Metal 4 is additive for bf16/f16 `matmul2d`, fused epilogues, resident MLP sessions, pipeline archives, opt-in conv2d, and control-flow experiments. See `docs/apple_gpu_metal4_adoption.md`, `docs/apple_backend_integration_review.md`, and `docs/apple_gpu_kernel_inventory.md`. |
+| Apple backend | The source has moved beyond the older Phase 8.4.7 overview: MPS/MPSGraph remain the default lanes, while Metal 4 is additive for bf16/f16 `matmul2d`, fused epilogues, resident MLP sessions, pipeline archives, opt-in conv2d, and control-flow experiments. See `docs/apple_backend.md` (canonical CPU+GPU reference) and `docs/apple_gpu_metal4_adoption.md` (forward-looking ladder). |
 | Known Apple test gaps | The local Apple slice still exposes unstable or platform-sensitive paths: non-Darwin f16 `bmm` and `conv2d` stubs return zeros, Metal 4 `DeviceTensor` session tests assume unavailable resident tensors, and bf16 P6 epilogue tests need the numerical contract/tolerance tightened. Treat these as active blockers before claiming green Apple CI. |
-| Documentation | The freshness dashboard is healthy but date-sensitive (63 docs catalogued; current manifest summary: 30 dated within 30 days, 59 within 90 days, 4 undated). Semantic freshness is uneven. Generated dashboards and `docs/README.md` are more reliable than older narrative pages such as `docs/apple_gpu_overview.md` until those are updated for Metal 4, packaged kernels, and batched linalg. |
+| Documentation | The freshness dashboard is healthy but date-sensitive (63 docs catalogued; current manifest summary: 30 dated within 30 days, 59 within 90 days, 4 undated). Semantic freshness is uneven. Generated dashboards and `docs/README.md` are the most reliable surfaces; the consolidated `docs/apple_backend.md` is now the canonical Apple CPU+GPU reference. |
 
 ---
 
@@ -267,10 +267,8 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 | [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md) | Hardware-gated frontier — what's blocked on real NVIDIA / ROCm / Metalium |
 | [`docs/architecture/README.md`](docs/architecture/README.md) | Architecture guide index |
 | [`docs/guides/Tessera_Developer_Frontend_End_To_End.md`](docs/guides/Tessera_Developer_Frontend_End_To_End.md) | First executable frontend path and IR inspection |
-| [`docs/apple_gpu_overview.md`](docs/apple_gpu_overview.md) | Apple GPU architecture story; useful background, but not fully current for Metal 4 |
-| [`docs/apple_gpu_metal4_adoption.md`](docs/apple_gpu_metal4_adoption.md) | Current Metal 4 ladder and coexistence model |
-| [`docs/apple_backend_integration_review.md`](docs/apple_backend_integration_review.md) | Apple backend health review, optimization gaps, and Metal 4 grounding |
-| [`docs/apple_gpu_kernel_inventory.md`](docs/apple_gpu_kernel_inventory.md) | Current Apple GPU C ABI/kernel inventory |
+| [`docs/apple_backend.md`](docs/apple_backend.md) | **Canonical Apple CPU + GPU reference** — architecture, kernel inventory, datatypes, and Metal 4 implementation state (consolidates the former overview / kernel-inventory / datatypes / integration-review docs) |
+| [`docs/apple_gpu_metal4_adoption.md`](docs/apple_gpu_metal4_adoption.md) | Current Metal 4 ladder and coexistence model (forward-looking plan) |
 
 ---
 

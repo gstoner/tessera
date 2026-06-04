@@ -27,6 +27,25 @@ The dashboard at ``docs/audit/generated/runtime_abi.md`` surfaces:
   * Honest gap call-outs (e.g., NVIDIA / ROCm headers exist but
     runtime symbols are gated on real hardware).
 
+Two artifacts are emitted, both under ``docs/audit/generated/``:
+
+  * ``runtime_abi.csv`` — the **canonical, machine-readable** symbol
+    surface and the only thing the drift gate compares.  One row per
+    ``(backend, symbol, file)``, stable column order, stable sort.  CI
+    compares this because a CSV diff is trivial and the symbol surface
+    is exactly what drifts every sprint.
+  * ``runtime_abi.md`` — a **human-readable** summary (headline, header
+    presence, per-backend counts, Apple-GPU family × dtype matrix,
+    toolchain version pins) rendered from the same scan.  Regenerated
+    alongside the CSV but *not* byte-compared by the drift gate.
+
+Regenerate both via::
+
+    python -m tessera.compiler.audit runtime_abi --write
+
+and ``--check`` is the drift gate (it compares the CSV).  Both are
+wired into ``scripts/check_generated_docs.sh``.
+
 Drift gates at ``tests/unit/test_runtime_abi_audit.py``:
 
   * Core runtime headers exist at the expected paths.
@@ -34,10 +53,13 @@ Drift gates at ``tests/unit/test_runtime_abi_audit.py``:
     (26 symbols across 9 kernel families × dtypes).
   * Symbol naming follows the canonical
     `tessera_<backend>_<op>_<dtype>` pattern.
+  * The checked-in CSV matches the live scan.
 """
 
 from __future__ import annotations
 
+import csv
+import io
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,6 +67,20 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SRC_ROOT = _REPO_ROOT / "src"
+
+#: Canonical output locations.  The CSV is the drift-gated artifact;
+#: the MD is the human-readable companion (not byte-gated).
+CSV_PATH = _REPO_ROOT / "docs" / "audit" / "generated" / "runtime_abi.csv"
+MD_PATH = _REPO_ROOT / "docs" / "audit" / "generated" / "runtime_abi.md"
+
+#: Stable CSV column order.  Append-only — never reorder or rename.
+CSV_COLUMNS: tuple[str, ...] = (
+    "backend",
+    "symbol",
+    "op_family",
+    "dtype",
+    "path",
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -314,6 +350,31 @@ def _version_pin_consistency() -> dict[str, dict[str, str | None]]:
 # ─────────────────────────────────────────────────────────────────────────
 
 
+def render_csv() -> str:
+    """Render the canonical, drift-gated per-symbol CSV.
+
+    One row per ``(backend, symbol, path)``, sorted so the output is
+    byte-stable across runs and platforms.  This is the artifact CI
+    compares — every aggregate in the Markdown companion (per-backend
+    counts, the Apple-GPU family matrix, …) derives from these rows, so
+    the CSV is the single source the drift gate needs to watch.
+    """
+    abi = collect_runtime_abi()
+    rows = sorted(abi, key=lambda s: (s.backend, s.name, s.path))
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(CSV_COLUMNS)
+    for s in rows:
+        writer.writerow([
+            s.backend,
+            s.name,
+            s.op_family,
+            s.dtype or "",
+            s.path,
+        ])
+    return buf.getvalue()
+
+
 def render_dashboard() -> str:
     abi = collect_runtime_abi()
     per_backend = symbols_per_backend()
@@ -325,12 +386,11 @@ def render_dashboard() -> str:
     lines.append("# Runtime C ABI Surface Audit")
     lines.append("")
     lines.append(
-        "Generated from `python/tessera/compiler/runtime_abi_audit.py`. "
-        " Don't edit by hand — regenerate via "
-        "`python -c \"from tessera.compiler.runtime_abi_audit import "
-        "render_dashboard; "
-        "open('docs/audit/generated/runtime_abi.md', 'w')"
-        ".write(render_dashboard())\"`.  "
+        "Human-readable view. The canonical machine-readable artifact is "
+        "`runtime_abi.csv` in this directory — that CSV is what the drift "
+        "gate compares. Don't edit either by hand; run "
+        "`python -m tessera.compiler.audit runtime_abi --write` "
+        "(or `scripts/check_generated_docs.sh --write`) to refresh both. "
         "Drift gated by `tests/unit/test_runtime_abi_audit.py`."
     )
     lines.append("")
@@ -420,22 +480,39 @@ def render_dashboard() -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def write_dashboard(path: Path | None = None) -> Path:
-    target = path or (
-        _REPO_ROOT / "docs" / "audit" / "generated" / "runtime_abi.md"
-    )
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(render_dashboard())
-    return target
+def write_dashboard(csv_path: Path | None = None) -> tuple[Path, Path]:
+    """Write both the canonical CSV and the human Markdown summary.
+
+    Returns ``(csv_path, md_path)``.  The Markdown path is derived from
+    the CSV path by swapping the suffix.
+
+    A legacy single-``.md`` ``path=`` call still works: if the caller
+    passes a path ending in ``.md`` we treat it as the Markdown target
+    and place the CSV beside it.
+    """
+    if csv_path is not None and csv_path.suffix == ".md":
+        target_md = csv_path
+        target_csv = csv_path.with_suffix(".csv")
+    else:
+        target_csv = csv_path or CSV_PATH
+        target_md = target_csv.with_suffix(".md")
+    target_csv.parent.mkdir(parents=True, exist_ok=True)
+    target_csv.write_text(render_csv())
+    target_md.write_text(render_dashboard())
+    return target_csv, target_md
 
 
 __all__ = [
     "AbiSymbol",
+    "CSV_PATH",
+    "MD_PATH",
+    "CSV_COLUMNS",
     "collect_runtime_abi",
     "symbols_per_backend",
     "unique_symbols_per_backend",
     "core_runtime_headers_present",
     "apple_gpu_kernel_families",
+    "render_csv",
     "render_dashboard",
     "write_dashboard",
 ]

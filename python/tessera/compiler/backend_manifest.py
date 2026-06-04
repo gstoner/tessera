@@ -1,7 +1,8 @@
 """Sprint E — Backend kernel manifest (2026-05-11).
 
 Synthesizes the per-op × per-target × per-dtype backend kernel matrix
-from ``capabilities.TARGET_CAPABILITIES`` + ``apple_gpu_kernel_inventory``
+from ``capabilities.TARGET_CAPABILITIES`` + the Apple GPU kernel inventory
+(``docs/apple_backend.md``)
 + explicit registrations.  Lets the primitive coverage registry promote
 the ``backend_kernel`` axis from a binary partial/planned status to a
 per-target tracking with explicit kernel availability per dtype.
@@ -449,7 +450,7 @@ def primitive_is_complete(entries: tuple["BackendKernelEntry", ...]) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Apple GPU shipped MSL kernels — per `docs/apple_gpu_kernel_inventory.md`
+# Apple GPU shipped MSL kernels — per `docs/apple_backend.md` (GPU kernel inventory)
 # (Phase 8.3 → 8.4.7).  Each entry below corresponds to one ABI symbol
 # (or fusion).  Status="fused" when the MSL kernel is a fused chain;
 # "reference" when the kernel is a single-op MPS dispatch.

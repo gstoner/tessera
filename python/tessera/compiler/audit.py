@@ -730,35 +730,77 @@ def _cmd_support_table(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_verifier_coverage(args: argparse.Namespace) -> int:
-    from .verifier_coverage import render_dashboard
+def _run_csv_dashboard_command(
+    args: argparse.Namespace,
+    *,
+    name: str,
+    render_csv,
+    write_dashboard,
+    default_csv: Path,
+) -> int:
+    """Shared driver for CSV-canonical dashboards (verifier_coverage,
+    runtime_abi).
 
-    text = render_dashboard()
+    ``--check`` compares the **CSV** (the machine-readable artifact) to
+    the regenerated output — a whitespace-stable diff that never reds
+    CI for cosmetic Markdown changes.  ``--write`` (the default) writes
+    both the CSV and its human Markdown companion.
+    """
+    csv_target: Path = args.out or default_csv
+    if csv_target.suffix == ".md":  # be forgiving about a stale .md path
+        csv_target = csv_target.with_suffix(".csv")
+    live_csv = render_csv()
+
     if args.check:
-        if not args.out.exists():
+        if not csv_target.exists():
             print(
-                f"audit: --check requested but {args.out} does not exist",
+                f"audit: --check requested but {csv_target} does not exist\n"
+                f"       regenerate with: python -m tessera.compiler.audit "
+                f"{name} --write",
                 file=sys.stderr,
             )
             return 2
-        on_disk = args.out.read_text()
-        if on_disk != text:
+        if csv_target.read_text() != live_csv:
             print(
-                f"audit: drift detected in {args.out}\n"
+                f"audit: drift detected in {csv_target}\n"
                 f"       regenerate with: python -m tessera.compiler.audit "
-                f"verifier_coverage --write --out {args.out}",
+                f"{name} --write",
                 file=sys.stderr,
             )
             return 1
-        print(f"audit: {args.out} matches generated output")
+        print(f"audit: {csv_target} matches generated output")
         return 0
-    if args.out == Path("-"):
-        sys.stdout.write(text)
-    else:
-        args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(text)
-        print(f"audit: wrote {args.out}", file=sys.stderr)
+
+    if csv_target == Path("-"):
+        sys.stdout.write(live_csv)
+        return 0
+    written = write_dashboard(csv_target)
+    print(f"audit: wrote {written[0]} + {written[1]}", file=sys.stderr)
     return 0
+
+
+def _cmd_verifier_coverage(args: argparse.Namespace) -> int:
+    from . import verifier_coverage as vc
+
+    return _run_csv_dashboard_command(
+        args,
+        name="verifier_coverage",
+        render_csv=vc.render_csv,
+        write_dashboard=vc.write_dashboard,
+        default_csv=vc.CSV_PATH,
+    )
+
+
+def _cmd_runtime_abi(args: argparse.Namespace) -> int:
+    from . import runtime_abi_audit as ra
+
+    return _run_csv_dashboard_command(
+        args,
+        name="runtime_abi",
+        render_csv=ra.render_csv,
+        write_dashboard=ra.write_dashboard,
+        default_csv=ra.CSV_PATH,
+    )
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -790,23 +832,41 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     p_vc = sub.add_parser(
         "verifier_coverage",
-        help="generate the MLIR verifier coverage dashboard",
+        help="generate the MLIR verifier coverage dashboard (CSV + MD)",
     )
     p_vc.add_argument(
-        "--out", type=Path,
-        default=Path("docs/audit/generated/verifier_coverage.md"),
-        help="output path (default: docs/audit/generated/verifier_coverage.md; "
-             "use `-` for stdout)",
+        "--out", type=Path, default=None,
+        help="CSV output path (default: docs/audit/generated/verifier_coverage.csv; "
+             "the .md companion is written beside it; use `-` for CSV on stdout)",
     )
     p_vc.add_argument(
         "--write", action="store_true",
-        help="write the generated dashboard to --out (default behavior unless --check)",
+        help="write CSV + MD (default behavior unless --check)",
     )
     p_vc.add_argument(
         "--check", action="store_true",
-        help="exit non-zero if the on-disk file differs from the regenerated output",
+        help="exit non-zero if the on-disk CSV differs from the regenerated output",
     )
     p_vc.set_defaults(func=_cmd_verifier_coverage)
+
+    p_ra = sub.add_parser(
+        "runtime_abi",
+        help="generate the runtime C ABI surface audit (CSV + MD)",
+    )
+    p_ra.add_argument(
+        "--out", type=Path, default=None,
+        help="CSV output path (default: docs/audit/generated/runtime_abi.csv; "
+             "the .md companion is written beside it; use `-` for CSV on stdout)",
+    )
+    p_ra.add_argument(
+        "--write", action="store_true",
+        help="write CSV + MD (default behavior unless --check)",
+    )
+    p_ra.add_argument(
+        "--check", action="store_true",
+        help="exit non-zero if the on-disk CSV differs from the regenerated output",
+    )
+    p_ra.set_defaults(func=_cmd_runtime_abi)
 
     args = parser.parse_args(argv)
     return args.func(args)

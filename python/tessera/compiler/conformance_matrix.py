@@ -110,7 +110,7 @@ class ConformanceOp:
 
 # The seven ops the audit called out, with realistic fusion expectations:
 #   * matmul_softmax has a real fused MSL kernel on apple_gpu (see
-#     docs/apple_gpu_overview.md). On other targets it is compose-only.
+#     docs/apple_backend.md). On other targets it is compose-only.
 #   * matmul_relu is compose-only on every target today — there is no
 #     matmul→relu fusion pass in any backend. Surfacing this distinction is
 #     the point of the matrix.

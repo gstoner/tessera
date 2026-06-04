@@ -1293,7 +1293,7 @@ extern "C" void tessera_apple_gpu_mla_absorb_decode_f32(
           double acc = 0;
           for (int32_t j = 0; j < Skv; ++j) {
             double cv = 0;
-            for (int32_t l = 0; l < Dl; ++l) cv += ckvb[(std::size_t)j * Dl + l] * wuvb[(std::size_t)l * dv + d];
+            for (int32_t l = 0; l < Dl; ++l) cv += (double)ckvb[(std::size_t)j * Dl + l] * wuvb[(std::size_t)l * dv + d];
             acc += (score[j] / den) * cv;
           }
           o[d] = (float)acc;

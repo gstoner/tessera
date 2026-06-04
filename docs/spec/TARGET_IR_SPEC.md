@@ -130,6 +130,33 @@ Named pipelines:
 - `tessera-lower-to-hopper`
 - `tessera-lower-to-blackwell`
 
+### 1.2 Backend-Neutral Value Target IR Contract
+
+Apple's value lane is the reference proof, but the contract is backend-neutral:
+
+```text
+Graph IR op
+  -> registered Tile op
+  -> value Target IR call
+  -> backend executor adapter
+  -> numerical proof
+```
+
+The value Target IR call has the same required attrs on every backend:
+`op_kind`, `symbol`, `status`, `abi`, `dtype`, and `framework`. Backend
+dialects use backend-specific mnemonics:
+
+| Backend | Value call op | Executor ownership |
+| --- | --- | --- |
+| Apple GPU | `tessera_apple.gpu.kernel_call` | Metal / MPSGraph / package executor adapters |
+| NVIDIA | `tessera_nvidia.kernel_call` | CUDA/NVRTC/CUBIN executor adapter, not Apple runtime |
+| ROCm | `tessera_rocm.kernel_call` | HIP/ROCDL executor adapter, not Apple runtime |
+
+NVIDIA/ROCm may keep existing artifact ops (`wgmma`, `mfma`, async-copy,
+descriptor, diagnostic) while their value lane is being built. A value call is
+not executable until a backend adapter consumes the shared tuple and a numerical
+proof on that backend flips `status` to `"executable"`.
+
 ---
 
 ## 2. Schedule Dialect

@@ -10075,8 +10075,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/TARGET_IR_SPEC.md": {
-    "mtime": 1780406359.0857618,
-    "ast_hash": "e596e935317a02752cad0bfe1ca9a9fc",
+    "mtime": 1780578664.676654,
+    "ast_hash": "836b20a1dfe19182eef78c65eea97cda",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/CLIFFORD_SPEC.md": {
@@ -11790,8 +11790,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/VALUE_TARGET_IR_CONTRACT.md": {
-    "mtime": 1780577711.9078166,
-    "ast_hash": "09f62071b5958dd9fb98187a00e3329b",
+    "mtime": 1780578653.776101,
+    "ast_hash": "e72642c820ec2da04ce96022199ec79e",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/TileDialect.cpp": {
@@ -11852,6 +11852,16 @@
   "/Users/gregorystoner/dev_project/tessera/docs/audit/backend/apple/MPSGRAPH_RUNTIME_GLASS_JAWS.md": {
     "mtime": 1780544819.9121146,
     "ast_hash": "4b84c449c1bf33228b43d6259880c0c9",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/value_target_contract.py": {
+    "mtime": 1780578593.2412207,
+    "ast_hash": "94df3b0d4f19b00c488294573da5df23",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_value_target_contract.py": {
+    "mtime": 1780578675.5750558,
+    "ast_hash": "7ab4fd6cfc87a507ea6b6013f14e575f",
     "semantic_hash": ""
   }
 }

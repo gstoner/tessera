@@ -2920,8 +2920,60 @@ def _apple_gpu_ppo_policy_loss_ex_f32() -> Any:
     return sym
 
 
+def _apple_gpu_ebm_energy_quadratic_value_f32() -> Any:
+    """Bind the Apple GPU EBM quadratic-energy value symbol.
+
+    This status-returning symbol is separate from the legacy void EBM ABI:
+    it returns 1 only when the Metal dispatch path ran, and 0 for
+    stub/unavailable paths. That prevents CPU-reference fallback from being
+    labeled Apple GPU value execution.
+    """
+    if not _running_on_darwin():
+        return None
+    try:
+        from ._apple_gpu_dispatch import apple_gpu_skip_reason
+        if apple_gpu_skip_reason() is not None:
+            return None
+    except Exception:
+        return None
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_ebm_energy_quadratic_value_f32",
+                  None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [fp, fp, fp, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def _apple_gpu_ebm_langevin_step_value_f32() -> Any:
+    """Bind the Apple GPU EBM Langevin-step value symbol."""
+    if not _running_on_darwin():
+        return None
+    try:
+        from ._apple_gpu_dispatch import apple_gpu_skip_reason
+        if apple_gpu_skip_reason() is not None:
+            return None
+    except Exception:
+        return None
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_ebm_langevin_step_value_f32",
+                  None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [
+        fp, fp, fp, ctypes.c_float, ctypes.c_float, fp, ctypes.c_int32,
+    ]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
 _APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE: bool | None = None
 _APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE: bool | None = None
+_APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE: bool | None = None
+_APPLE_GPU_EBM_LANGEVIN_STEP_AVAILABLE: bool | None = None
 
 
 def _ppo_policy_loss_np(
@@ -3019,6 +3071,67 @@ def _apple_gpu_ppo_policy_loss_ex_available() -> bool:
     return _APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE
 
 
+def _apple_gpu_ebm_energy_quadratic_value_available() -> bool:
+    """True iff the EBM energy value ABI runs a tiny Metal numerical probe."""
+    global _APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE
+    if _APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE is not None:
+        return _APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE
+    sym = _apple_gpu_ebm_energy_quadratic_value_f32()
+    if sym is None:
+        _APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE = False
+        return False
+    try:
+        import numpy as _np
+        x = _np.asarray([[1.0, 2.0, -1.0], [0.5, 0.25, -0.75]],
+                        dtype=_np.float32)
+        y = _np.asarray([[0.0, 1.0, 1.0], [0.25, -0.25, -0.25]],
+                        dtype=_np.float32)
+        out = _np.empty((2,), dtype=_np.float32)
+        fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        rc = int(sym(fp(x), fp(y), fp(out), ctypes.c_int32(2),
+                     ctypes.c_int32(3)))
+        expected = 0.5 * _np.sum((x - y) * (x - y), axis=1)
+        _APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE = (
+            rc == 1 and bool(_np.all(_np.isfinite(out))) and
+            bool(_np.allclose(out, expected, rtol=1.0e-5, atol=1.0e-6)))
+    except Exception:
+        _APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE = False
+    return _APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE
+
+
+def _apple_gpu_ebm_langevin_step_value_available() -> bool:
+    """True iff the EBM Langevin value ABI runs a tiny Metal numerical probe."""
+    global _APPLE_GPU_EBM_LANGEVIN_STEP_AVAILABLE
+    if _APPLE_GPU_EBM_LANGEVIN_STEP_AVAILABLE is not None:
+        return _APPLE_GPU_EBM_LANGEVIN_STEP_AVAILABLE
+    sym = _apple_gpu_ebm_langevin_step_value_f32()
+    if sym is None:
+        _APPLE_GPU_EBM_LANGEVIN_STEP_AVAILABLE = False
+        return False
+    try:
+        import numpy as _np
+        y = _np.asarray([[0.5, -1.0, 2.0], [1.25, 0.0, -0.5]],
+                       dtype=_np.float32)
+        grad = _np.asarray([[0.25, -0.5, 1.0], [0.5, -0.25, 0.75]],
+                          dtype=_np.float32)
+        noise = _np.asarray([[0.1, 0.2, -0.3], [0.4, -0.5, 0.6]],
+                           dtype=_np.float32)
+        eta = 0.125
+        noise_scale = 0.25
+        out = _np.empty_like(y)
+        fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        rc = int(sym(fp(y), fp(grad), fp(noise), ctypes.c_float(eta),
+                     ctypes.c_float(noise_scale), fp(out),
+                     ctypes.c_int32(int(y.size))))
+        expected = y - eta * grad + noise_scale * noise
+        _APPLE_GPU_EBM_LANGEVIN_STEP_AVAILABLE = (
+            rc == 1 and bool(_np.all(_np.isfinite(out))) and
+            bool(_np.allclose(out, expected, rtol=1.0e-5, atol=1.0e-6)))
+    except Exception:
+        _APPLE_GPU_EBM_LANGEVIN_STEP_AVAILABLE = False
+    return _APPLE_GPU_EBM_LANGEVIN_STEP_AVAILABLE
+
+
 # Apple GPU value-lane batched-matmul dispatch (Sprint 8). symbol -> (resolver,
 # numpy-dtype-kind). The key set is the GPU value allowlist.
 _APPLE_VALUE_GPU_DISPATCH: dict[str, tuple] = {
@@ -3031,6 +3144,12 @@ _APPLE_VALUE_GPU_DISPATCH: dict[str, tuple] = {
         _apple_gpu_ppo_policy_loss_f32, "ppo_policy_loss_f32"),
     "tessera_apple_gpu_ppo_policy_loss_ex_f32": (
         _apple_gpu_ppo_policy_loss_ex_f32, "ppo_policy_loss_ex_f32"),
+    "tessera_apple_gpu_ebm_energy_quadratic_value_f32": (
+        _apple_gpu_ebm_energy_quadratic_value_f32,
+        "ebm_energy_quadratic_value_f32"),
+    "tessera_apple_gpu_ebm_langevin_step_value_f32": (
+        _apple_gpu_ebm_langevin_step_value_f32,
+        "ebm_langevin_step_value_f32"),
 }
 _APPLE_VALUE_GPU_SYMBOLS: frozenset[str] = frozenset(_APPLE_VALUE_GPU_DISPATCH)
 
@@ -3252,6 +3371,88 @@ def _dispatch_gpu_ppo_policy_loss(inputs, call, np):
     return out
 
 
+def _dispatch_gpu_ebm_energy_quadratic(inputs, call, np):
+    """Strict fp32 rank-2 quadratic EBM energy on the Apple GPU value lane."""
+    symbol = str(call.get("symbol", ""))
+    entry = _APPLE_VALUE_GPU_DISPATCH.get(symbol)
+    if entry is None or entry[1] != "ebm_energy_quadratic_value_f32":
+        raise ValueError(
+            f"apple_value_target_ir(gpu): symbol {symbol!r} is not the EBM "
+            "energy value symbol")
+    if len(inputs) != 2:
+        raise ValueError(
+            f"apple_value_target_ir(gpu): ebm_energy_quadratic value-call needs "
+            f"exactly 2 input(s), got {len(inputs)}")
+    x = np.ascontiguousarray(np.asarray(inputs[0], dtype=np.float32))
+    y = np.ascontiguousarray(np.asarray(inputs[1], dtype=np.float32))
+    if x.ndim != 2 or y.ndim != 2:
+        raise ValueError("ebm_energy_quadratic(gpu) requires rank-2 x/y tensors")
+    if x.shape != y.shape:
+        raise ValueError(
+            f"ebm_energy_quadratic(gpu) shape mismatch: {x.shape} / {y.shape}")
+    if x.size <= 0:
+        raise ValueError("ebm_energy_quadratic(gpu) requires a non-empty tensor")
+    sym = _apple_gpu_ebm_energy_quadratic_value_f32()
+    if sym is None or not _apple_gpu_ebm_energy_quadratic_value_available():
+        raise ValueError(
+            "apple_gpu runtime lacks an active, numerically proven "
+            "tessera_apple_gpu_ebm_energy_quadratic_value_f32 executor")
+    batch, dim = int(x.shape[0]), int(x.shape[1])
+    out = np.empty((batch,), dtype=np.float32)
+    fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    rc = int(sym(fp(x), fp(y), fp(out), ctypes.c_int32(batch),
+                 ctypes.c_int32(dim)))
+    if rc != 1:
+        raise ValueError(
+            "apple_gpu EBM energy value executor is not active "
+            "(stub/unavailable Metal path returned non-success)")
+    return out
+
+
+def _dispatch_gpu_ebm_langevin_step(inputs, call, np):
+    """Strict fp32 affine Langevin step on the Apple GPU value lane."""
+    symbol = str(call.get("symbol", ""))
+    entry = _APPLE_VALUE_GPU_DISPATCH.get(symbol)
+    if entry is None or entry[1] != "ebm_langevin_step_value_f32":
+        raise ValueError(
+            f"apple_value_target_ir(gpu): symbol {symbol!r} is not the EBM "
+            "Langevin value symbol")
+    if len(inputs) != 3:
+        raise ValueError(
+            f"apple_value_target_ir(gpu): ebm_langevin_step value-call needs "
+            f"exactly 3 input(s), got {len(inputs)}")
+    y = np.ascontiguousarray(np.asarray(inputs[0], dtype=np.float32))
+    grad = np.ascontiguousarray(np.asarray(inputs[1], dtype=np.float32))
+    noise = np.ascontiguousarray(np.asarray(inputs[2], dtype=np.float32))
+    if y.shape != grad.shape or y.shape != noise.shape:
+        raise ValueError(
+            f"ebm_langevin_step(gpu) shape mismatch: {y.shape} / "
+            f"{grad.shape} / {noise.shape}")
+    if y.size <= 0:
+        raise ValueError("ebm_langevin_step(gpu) requires a non-empty tensor")
+    eta = float(call.get("eta", 0.0))
+    noise_scale = float(call.get("noise_scale", 0.0))
+    if eta <= 0.0:
+        raise ValueError("ebm_langevin_step(gpu) requires positive eta")
+    if noise_scale < 0.0:
+        raise ValueError("ebm_langevin_step(gpu) requires non-negative noise_scale")
+    sym = _apple_gpu_ebm_langevin_step_value_f32()
+    if sym is None or not _apple_gpu_ebm_langevin_step_value_available():
+        raise ValueError(
+            "apple_gpu runtime lacks an active, numerically proven "
+            "tessera_apple_gpu_ebm_langevin_step_value_f32 executor")
+    out = np.empty_like(y, dtype=np.float32)
+    fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    rc = int(sym(fp(y), fp(grad), fp(noise), ctypes.c_float(eta),
+                 ctypes.c_float(noise_scale), fp(out),
+                 ctypes.c_int32(int(y.size))))
+    if rc != 1:
+        raise ValueError(
+            "apple_gpu EBM Langevin value executor is not active "
+            "(stub/unavailable Metal path returned non-success)")
+    return out
+
+
 def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", args: Any) -> Any:
     """Execute an Apple GPU value-target-IR artifact.
 
@@ -3259,7 +3460,8 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
     an op kind and symbol on the GPU value allowlist. Sprint 8 shipped
     rank-3 `batched_gemm`; Sprint 11 adds static fp32 rank-4
     `native_sparse_attn_fused`; Stage 13 adds strict fp32 mean PPO policy
-    loss. Rejects
+    loss; the EBM value lane adds strict fp32 quadratic energy and one-step
+    Langevin. Rejects
     `cpu.call`, `package_call`, multi-op programs, unknown symbols, extra
     operands, and non-executable statuses — so launch reports `invalid_artifact`
     rather than silently mis-dispatching."""
@@ -3285,11 +3487,13 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
             f"{call.get('status')!r}, not 'executable'")
     op_kind = str(call.get("op_kind"))
     if op_kind not in {"batched_gemm", "native_sparse_attn_fused",
-                       "ppo_policy_loss"}:
+                       "ppo_policy_loss", "ebm_energy_quadratic",
+                       "ebm_langevin_step"}:
         raise ValueError(
             f"apple_value_target_ir(gpu): only batched_gemm, "
-            f"native_sparse_attn_fused, and ppo_policy_loss execute on the GPU "
-            f"value lane today (got op_kind={call.get('op_kind')!r})")
+            f"native_sparse_attn_fused, ppo_policy_loss, and EBM value kernels "
+            f"execute on the GPU value lane today "
+            f"(got op_kind={call.get('op_kind')!r})")
 
     arg_names = list(metadata.get("arg_names") or [])
     if arg_names:
@@ -3311,6 +3515,10 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
         return _dispatch_gpu_batched_matmul(inputs, call, np)
     if op_kind == "ppo_policy_loss":
         return _dispatch_gpu_ppo_policy_loss(inputs, call, np)
+    if op_kind == "ebm_energy_quadratic":
+        return _dispatch_gpu_ebm_energy_quadratic(inputs, call, np)
+    if op_kind == "ebm_langevin_step":
+        return _dispatch_gpu_ebm_langevin_step(inputs, call, np)
     return _dispatch_gpu_native_sparse_attn(inputs, call, np)
 
 

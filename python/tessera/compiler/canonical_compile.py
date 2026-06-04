@@ -264,6 +264,12 @@ class CompileResult:
                                     else:
                                         _exec_ok = (
                                             _rt._apple_gpu_ppo_policy_loss_available())
+                                elif _op_kind == "ebm_energy_quadratic":
+                                    _exec_ok = (
+                                        _rt._apple_gpu_ebm_energy_quadratic_value_available())
+                                elif _op_kind == "ebm_langevin_step":
+                                    _exec_ok = (
+                                        _rt._apple_gpu_ebm_langevin_step_value_available())
                         # The value lane OWNS the executable decision for this
                         # artifact (override the bundle/canonical answer): a
                         # value artifact is launchable iff its single value call

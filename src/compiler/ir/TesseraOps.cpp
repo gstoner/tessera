@@ -123,6 +123,12 @@ LogicalResult verifySameRankedShape(Operation *op, RankedTensorType a,
   return success();
 }
 
+// Helper: static dim equality (treats dynamic as "matches anything").
+bool dimsAgree(int64_t a, int64_t b) {
+  return mlir::ShapedType::isDynamic(a) || mlir::ShapedType::isDynamic(b) ||
+         a == b;
+}
+
 StringRef reductionOrMean(Operation *op) {
   if (auto attr = op->getAttrOfType<StringAttr>("reduction"))
     return attr.getValue();
@@ -254,6 +260,52 @@ LogicalResult RLCISPOPolicyLossOp::verify() {
                                reductionOrMean(getOperation()));
 }
 
+LogicalResult EBMEnergyQuadraticOp::verify() {
+  auto x = dyn_cast<RankedTensorType>(getX().getType());
+  auto y = dyn_cast<RankedTensorType>(getY().getType());
+  auto energies = dyn_cast<RankedTensorType>(getEnergies().getType());
+  if (!x || !y || !energies)
+    return success();
+  if (!isFloatTensor(x) || x.getElementType() != y.getElementType() ||
+      x.getElementType() != energies.getElementType())
+    return emitOpError("expects floating x/y/energies with matching dtype");
+  if (x.getRank() != 2 || y.getRank() != 2)
+    return emitOpError("expects rank-2 x and y tensors");
+  if (energies.getRank() != 1)
+    return emitOpError("energies result must be rank-1");
+  if (failed(verifySameRankedShape(getOperation(), x, y,
+                                   "ebm.energy_quadratic x/y")))
+    return failure();
+  if (!dimsAgree(x.getDimSize(0), energies.getDimSize(0)))
+    return emitOpError("energies length must equal batch dimension");
+  return success();
+}
+
+LogicalResult EBMLangevinStepOp::verify() {
+  auto y = dyn_cast<RankedTensorType>(getY().getType());
+  auto grad = dyn_cast<RankedTensorType>(getGrad().getType());
+  auto noise = dyn_cast<RankedTensorType>(getNoise().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!y || !grad || !noise || !result)
+    return success();
+  if (!isFloatTensor(y) || y.getElementType() != grad.getElementType() ||
+      y.getElementType() != noise.getElementType() ||
+      y.getElementType() != result.getElementType())
+    return emitOpError("expects floating y/grad/noise/result with matching dtype");
+  if (failed(verifySameRankedShape(getOperation(), y, grad,
+                                   "ebm.langevin_step grad")) ||
+      failed(verifySameRankedShape(getOperation(), y, noise,
+                                   "ebm.langevin_step noise")) ||
+      failed(verifySameRankedShape(getOperation(), y, result,
+                                   "ebm.langevin_step result")))
+    return failure();
+  if (f64AttrOr(getOperation(), "eta", 0.0) <= 0.0)
+    return emitOpError("eta must be positive");
+  if (f64AttrOr(getOperation(), "noise_scale", 0.0) < 0.0)
+    return emitOpError("noise_scale must be non-negative");
+  return success();
+}
+
 LogicalResult CholeskyOp::verify() {
   auto aType = dyn_cast<RankedTensorType>(getA().getType());
   auto resultType = dyn_cast<RankedTensorType>(getResult().getType());
@@ -278,13 +330,6 @@ LogicalResult CholeskyOp::verify() {
 
 // L-series linalg family verifiers (2026-06-02). Pilot-level: rank + the core
 // shape relations, all dynamic-dim-aware (skip checks on dynamic dims).
-namespace {
-// Helper: static dim equality (treats dynamic as "matches anything").
-bool dimsAgree(int64_t a, int64_t b) {
-  return mlir::ShapedType::isDynamic(a) || mlir::ShapedType::isDynamic(b) ||
-         a == b;
-}
-} // namespace
 
 LogicalResult TriSolveOp::verify() {
   auto a = dyn_cast<RankedTensorType>(getA().getType());

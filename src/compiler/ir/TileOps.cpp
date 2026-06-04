@@ -24,6 +24,17 @@ bool boolAttr(Operation *op, llvm::StringRef name) {
   return false;
 }
 
+bool sameStaticShape(RankedTensorType a, RankedTensorType b) {
+  if (a.getRank() != b.getRank())
+    return false;
+  if (!a.hasStaticShape() || !b.hasStaticShape())
+    return false;
+  for (int64_t i = 0, e = a.getRank(); i < e; ++i)
+    if (a.getDimSize(i) != b.getDimSize(i))
+      return false;
+  return true;
+}
+
 // Shared rank-2 matmul contract (honors transposeA/transposeB discardable
 // attrs). lhs/rhs/result must be rank-2; K, M, N consistent.
 LogicalResult verifyRank2Matmul(Operation *op, ValueRange inputs,
@@ -104,22 +115,14 @@ LogicalResult PPOPolicyLossOp::verify() {
   if (!next.getElementType().isF32() || !old.getElementType().isF32() ||
       !adv.getElementType().isF32() || !res.getElementType().isF32())
     return emitOpError("expects fp32 operands and fp32 result");
-  auto sameShape = [](RankedTensorType a, RankedTensorType b) {
-    if (a.getRank() != b.getRank())
-      return false;
-    for (int64_t i = 0, e = a.getRank(); i < e; ++i)
-      if (a.getDimSize(i) != b.getDimSize(i))
-        return false;
-    return true;
-  };
-  if (!sameShape(next, old) || !sameShape(next, adv))
+  if (!sameStaticShape(next, old) || !sameStaticShape(next, adv))
     return emitOpError("input shapes must match exactly");
   for (auto input : inputs.drop_front(3)) {
     auto side = dyn_cast<RankedTensorType>(input.getType());
     if (!side)
       continue;
     if (!side.hasStaticShape() || !side.getElementType().isF32() ||
-        !sameShape(next, side))
+        !sameStaticShape(next, side))
       return emitOpError(
           "optional mask/ref_logp/entropy inputs must be static fp32 tensors "
           "with the same shape as logp_new");
@@ -138,6 +141,62 @@ LogicalResult PPOPolicyLossOp::verify() {
   if (auto e = getOperation()->getAttrOfType<FloatAttr>("entropy_coef");
       e && e.getValueAsDouble() < 0.0)
     return emitOpError("entropy_coef must be non-negative for Tile PPO value mode");
+  return success();
+}
+
+LogicalResult EBMEnergyQuadraticOp::verify() {
+  auto inputs = getInputs();
+  auto outputs = getOutputs();
+  if (inputs.size() != 2 || outputs.size() != 1)
+    return emitOpError("expects exactly 2 inputs and 1 result");
+  auto x = dyn_cast<RankedTensorType>(inputs[0].getType());
+  auto y = dyn_cast<RankedTensorType>(inputs[1].getType());
+  auto energies = dyn_cast<RankedTensorType>(outputs[0].getType());
+  if (!x || !y || !energies)
+    return success();
+  if (!x.hasStaticShape() || !y.hasStaticShape() ||
+      !energies.hasStaticShape())
+    return emitOpError("expects static fp32 rank-2 inputs and rank-1 result");
+  if (!x.getElementType().isF32() || !y.getElementType().isF32() ||
+      !energies.getElementType().isF32())
+    return emitOpError("expects fp32 inputs and fp32 result");
+  if (x.getRank() != 2 || y.getRank() != 2)
+    return emitOpError("expects rank-2 x and y tensors");
+  if (energies.getRank() != 1)
+    return emitOpError("energies result must be rank-1");
+  if (!sameStaticShape(x, y))
+    return emitOpError("x and y shapes must match exactly");
+  if (energies.getDimSize(0) != x.getDimSize(0))
+    return emitOpError("energies length must equal batch dimension");
+  return success();
+}
+
+LogicalResult EBMLangevinStepOp::verify() {
+  auto inputs = getInputs();
+  auto outputs = getOutputs();
+  if (inputs.size() != 3 || outputs.size() != 1)
+    return emitOpError("expects exactly 3 inputs and 1 result");
+  auto y = dyn_cast<RankedTensorType>(inputs[0].getType());
+  auto grad = dyn_cast<RankedTensorType>(inputs[1].getType());
+  auto noise = dyn_cast<RankedTensorType>(inputs[2].getType());
+  auto out = dyn_cast<RankedTensorType>(outputs[0].getType());
+  if (!y || !grad || !noise || !out)
+    return success();
+  if (!y.hasStaticShape() || !grad.hasStaticShape() ||
+      !noise.hasStaticShape() || !out.hasStaticShape())
+    return emitOpError("expects static fp32 operands and result");
+  if (!y.getElementType().isF32() || !grad.getElementType().isF32() ||
+      !noise.getElementType().isF32() || !out.getElementType().isF32())
+    return emitOpError("expects fp32 operands and fp32 result");
+  if (!sameStaticShape(y, grad) || !sameStaticShape(y, noise) ||
+      !sameStaticShape(y, out))
+    return emitOpError("y/grad/noise/result shapes must match exactly");
+  if (auto eta = getOperation()->getAttrOfType<FloatAttr>("eta");
+      !eta || eta.getValueAsDouble() <= 0.0)
+    return emitOpError("eta must be present and positive");
+  if (auto scale = getOperation()->getAttrOfType<FloatAttr>("noise_scale");
+      scale && scale.getValueAsDouble() < 0.0)
+    return emitOpError("noise_scale must be non-negative");
   return success();
 }
 

@@ -67,6 +67,7 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "ABI symbol named in a tessera_apple.gpu.kernel_call "
                              "value op (rank-3 batched matmul f32/f16/bf16; "
                              "native sparse attention and PPO policy-loss variants "
+                             "plus EBM quadratic energy/Langevin value kernels "
                              "when their Metal/MPSGraph executor probes are active)",
     "native_cpu":           "x86 AMX / native CPU runtime via the C runtime ABI",
     "jit_cpu_numpy":        "JIT CPU fallback via the numpy reference path",
@@ -109,16 +110,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "named Accelerate/LAPACK C ABI symbol.",
         execution_mode="cpu_accelerate"),
     # Apple GPU value-call execution for narrow, explicitly allowlisted lanes:
-    # rank-3 batched matmul (Sprint 8) and native sparse attention (Sprint 11).
-    # The executor rejects cpu.call, package_call, multi-op programs, inactive
+    # rank-3 batched matmul (Sprint 8), native sparse attention (Sprint 11),
+    # PPO policy loss (Stages 13/14), and the first EBM value kernels. The
+    # executor rejects cpu.call, package_call, multi-op programs, inactive
     # stubs, and off-allowlist symbols.
     ("apple_gpu", "apple_value_target_ir"): ExecutionRow(
         target="apple_gpu", compiler_path="apple_value_target_ir",
         execution_kind="native_gpu", executable=True,
         executor_id="apple_gpu_value_target_ir", runtime_status="success",
         reason="Apple GPU value-call (tessera_apple.gpu.kernel_call) dispatches "
-               "named C ABI symbols for strict rank-3 batched matmul and native "
-               "sparse attention envelopes.",
+               "named C ABI symbols for strict rank-3 batched matmul, native "
+               "sparse attention, PPO policy-loss, and EBM value envelopes.",
         execution_mode="metal_runtime"),
     # --- x86 / native CPU (AMX path) ---
     ("cpu", "native_cpu"): ExecutionRow(

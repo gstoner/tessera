@@ -187,6 +187,25 @@ def test_every_row_has_required_schema_fields(report: dict) -> None:
         assert not missing, f"row {row['op']} missing: {missing}"
 
 
+def test_ebm_value_target_row_distinguishes_executor() -> None:
+    def dispatch():
+        return None
+
+    row = bench.run_ebm_apple_value_path(
+        "ebm_energy", "B=2,D=3/value_ir", dispatch, 0.0,
+        "tessera_apple_gpu_ebm_energy_quadratic_value_f32",
+        tolerance=1.0e-6, reps=1, device="test-device",
+        version="test-version")
+    missing = REQUIRED_ROW_FIELDS - row.keys()
+    assert not missing
+    assert row["backend"] == "apple_gpu_value_target_ir"
+    assert row["mode"] == "value_target_ir"
+    assert row["executor"] == "apple_gpu_value_target_ir"
+    assert row["runtime_status"] == "success"
+    assert row["symbol"] == (
+        "tessera_apple_gpu_ebm_energy_quadratic_value_f32")
+
+
 def test_timing_percentiles_consistent_for_every_row(report: dict) -> None:
     for row in report["runs"]:
         p10, p50, p90 = row["p10_ms"], row["p50_ms"], row["p90_ms"]

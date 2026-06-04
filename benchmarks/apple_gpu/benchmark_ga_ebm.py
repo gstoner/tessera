@@ -104,6 +104,7 @@ if str(_PY_SRC) not in sys.path:
 
 import tessera.ga as ga  # noqa: E402
 import tessera.ebm as ebm  # noqa: E402
+from tessera import runtime as tessera_runtime  # noqa: E402
 from tessera.compiler import backend_manifest as bm  # noqa: E402
 from tessera.rng import RNGKey  # noqa: E402
 
@@ -1623,6 +1624,122 @@ def run_ebm_apple_gpu_path(name: str, shape: str,
     }
 
 
+def run_ebm_apple_value_path(name: str, shape: str,
+                             dispatch: Callable, err: float, symbol: str,
+                             tolerance: float, reps: int,
+                             device: str, version: str) -> dict[str, Any]:
+    """Time an Apple GPU Value Target IR EBM row.
+
+    These rows are deliberately distinct from the legacy `backend="apple_gpu"`
+    EBM rows. They execute through the value runtime adapter and are emitted only
+    when the value-specific status-returning C ABI probe has already passed.
+    """
+    samples_ms = collect_samples(dispatch, reps)
+    timing = timing_stats(samples_ms)
+    return {
+        "backend": "apple_gpu_value_target_ir",
+        "namespace": "ebm",
+        "op": name,
+        "shape": shape,
+        "dtype": "f32",
+        "mode": "value_target_ir",
+        "executor": "apple_gpu_value_target_ir",
+        "runtime_status": "success",
+        "reps": reps,
+        **timing,
+        "max_abs_err": err,
+        "tolerance": tolerance,
+        "ok": err <= tolerance,
+        "apple_gpu_status": _manifest_status_for(name, "apple_gpu"),
+        "symbol": symbol,
+        "device": device,
+        "tessera_version": version,
+    }
+
+
+def _ebm_energy_value_target_ir_path() -> (
+    tuple[Callable[[], np.ndarray], float, str] | None
+):
+    if not tessera_runtime._apple_gpu_ebm_energy_quadratic_value_available():
+        return None
+    B, D = 8, 4
+    rng = np.random.RandomState(2070)
+    x = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    y = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    expected = (0.5 * np.sum((x - y) ** 2, axis=1)).astype(np.float32)
+    symbol = "tessera_apple_gpu_ebm_energy_quadratic_value_f32"
+    artifact = tessera_runtime.RuntimeArtifact(metadata={
+        "target": "apple_gpu",
+        "compiler_path": "apple_value_target_ir",
+        "apple_target_ir_kind": "value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.gpu.kernel_call",
+            "op_kind": "ebm_energy_quadratic",
+            "symbol": symbol,
+            "status": "executable",
+        }],
+    })
+
+    def dispatch() -> np.ndarray:
+        res = tessera_runtime.launch(artifact, [x, y])
+        if not res.get("ok"):
+            raise RuntimeError(res.get("reason", "EBM value dispatch failed"))
+        return np.asarray(res["output"], dtype=np.float32)
+
+    out = dispatch()
+    err = float(np.abs(out - expected).max())
+    return dispatch, err, symbol
+
+
+def _ebm_langevin_value_target_ir_path() -> (
+    tuple[Callable[[], np.ndarray], float, str] | None
+):
+    if not tessera_runtime._apple_gpu_ebm_langevin_step_value_available():
+        return None
+    B, D = 16, 4
+    rng = np.random.RandomState(2080)
+    y = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    grad = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    noise = np.ascontiguousarray(rng.randn(B, D).astype(np.float32))
+    eta = 0.05
+    noise_scale = 0.125
+    expected = (y - eta * grad + noise_scale * noise).astype(np.float32)
+    symbol = "tessera_apple_gpu_ebm_langevin_step_value_f32"
+    artifact = tessera_runtime.RuntimeArtifact(metadata={
+        "target": "apple_gpu",
+        "compiler_path": "apple_value_target_ir",
+        "apple_target_ir_kind": "value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.gpu.kernel_call",
+            "op_kind": "ebm_langevin_step",
+            "symbol": symbol,
+            "status": "executable",
+            "eta": eta,
+            "noise_scale": noise_scale,
+        }],
+    })
+
+    def dispatch() -> np.ndarray:
+        res = tessera_runtime.launch(artifact, [y, grad, noise])
+        if not res.get("ok"):
+            raise RuntimeError(res.get("reason", "EBM value dispatch failed"))
+        return np.asarray(res["output"], dtype=np.float32)
+
+    out = dispatch()
+    err = float(np.abs(out - expected).max())
+    return dispatch, err, symbol
+
+
+_EBM_VALUE_TARGET_BUILDERS = [
+    ("ebm_energy", "B=8,D=4/quadratic/value_ir",
+     _ebm_energy_value_target_ir_path, 1e-6),
+    ("ebm_langevin_step", "B=16,D=4/T=1/value_ir",
+     _ebm_langevin_value_target_ir_path, 1e-6),
+]
+
+
 # ---------------------------------------------------------------------------
 # JIT-bridge benchmark — exercises the full Python → JIT-context →
 # manifest-resolve → shared-loader-dispatch → result path with the
@@ -1826,6 +1943,16 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
                     device=device, version=version,
                 ))
                 native_ebm_ops.add(op_name)
+            for op_name, shape_desc, builder, tol in _EBM_VALUE_TARGET_BUILDERS:
+                built = builder()
+                if built is None:
+                    continue
+                dispatch, err, sym = built
+                rows.append(run_ebm_apple_value_path(
+                    op_name, shape_desc, dispatch, err, sym,
+                    tolerance=tol, reps=reps,
+                    device=device, version=version,
+                ))
 
         # Python-reference EBM paths — emitted on every host so the
         # report keeps comprehensive coverage even on non-Darwin AND so

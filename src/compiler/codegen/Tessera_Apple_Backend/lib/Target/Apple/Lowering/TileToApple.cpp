@@ -111,6 +111,16 @@ bool isPPOPolicyLoss(llvm::StringRef name) {
          name == "tile.ppo_policy_loss";
 }
 
+bool isEBMEnergyQuadratic(llvm::StringRef name) {
+  return name == "tessera.ebm.energy_quadratic" ||
+         name == "tile.ebm_energy_quadratic";
+}
+
+bool isEBMLangevinStep(llvm::StringRef name) {
+  return name == "tessera.ebm.langevin_step" ||
+         name == "tile.ebm_langevin_step";
+}
+
 bool boolAttr(Operation *op, llvm::StringRef name) {
   if (auto attr = op->getAttrOfType<BoolAttr>(name))
     return attr.getValue();
@@ -243,7 +253,8 @@ bool isLowerable(Operation *op) {
     return false; // already lowered
   if (isMatmul(name) || isBatchedMatmul(name) || isReduction(name) ||
       isFlashAttn(name) || isRoPE(name) || isKVCache(name) ||
-      isNativeSparseAttnFused(name) || isPPOPolicyLoss(name))
+      isNativeSparseAttnFused(name) || isPPOPolicyLoss(name) ||
+      isEBMEnergyQuadratic(name) || isEBMLangevinStep(name))
     return true;
   if (name.starts_with("tessera.tile.") || name.starts_with("tile."))
     return op->hasAttr("source");
@@ -356,6 +367,52 @@ bool verifyPPOPolicyLossValueEnvelope(Operation *op) {
   return true;
 }
 
+bool verifyEBMEnergyQuadraticValueEnvelope(Operation *op) {
+  if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+    return false;
+  auto xTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  auto yTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+  auto eTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  if (!xTy || !yTy || !eTy)
+    return false;
+  if (!xTy.hasStaticShape() || !yTy.hasStaticShape() || !eTy.hasStaticShape())
+    return false;
+  if (!xTy.getElementType().isF32() || !yTy.getElementType().isF32() ||
+      !eTy.getElementType().isF32())
+    return false;
+  if (xTy.getRank() != 2 || yTy.getRank() != 2 || eTy.getRank() != 1)
+    return false;
+  return xTy.getShape() == yTy.getShape() &&
+         eTy.getDimSize(0) == xTy.getDimSize(0);
+}
+
+bool verifyEBMLangevinStepValueEnvelope(Operation *op) {
+  if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+    return false;
+  auto yTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  auto gTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+  auto nTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+  auto oTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  if (!yTy || !gTy || !nTy || !oTy)
+    return false;
+  if (!yTy.hasStaticShape() || !gTy.hasStaticShape() ||
+      !nTy.hasStaticShape() || !oTy.hasStaticShape())
+    return false;
+  if (!yTy.getElementType().isF32() || !gTy.getElementType().isF32() ||
+      !nTy.getElementType().isF32() || !oTy.getElementType().isF32())
+    return false;
+  if (yTy.getShape() != gTy.getShape() || yTy.getShape() != nTy.getShape() ||
+      yTy.getShape() != oTy.getShape())
+    return false;
+  auto eta = op->getAttrOfType<FloatAttr>("eta");
+  if (!eta || eta.getValueAsDouble() <= 0.0)
+    return false;
+  if (auto scale = op->getAttrOfType<FloatAttr>("noise_scale");
+      scale && scale.getValueAsDouble() < 0.0)
+    return false;
+  return true;
+}
+
 std::string resolveResult(Operation *op, int64_t ordinal) {
   if (auto r = op->getAttrOfType<StringAttr>("result"))
     return r.getValue().str();
@@ -457,7 +514,7 @@ void emitAppleValueCall(OpBuilder &b, Operation *op,
        {"lower", "trans", "unit_diag", "full_matrices", "window_size",
         "block_size", "top_k", "causal", "clip_epsilon", "kl_coef",
         "entropy_coef", "has_mask", "has_ref_kl", "has_entropy",
-        "reduction"}) {
+        "reduction", "eta", "noise_scale"}) {
     if (Attribute a = op->getAttr(name))
       st.addAttribute(name, a);
   }
@@ -764,6 +821,39 @@ struct LowerTileToAppleGPUPass
                              extended ? "mpsgraph_ppo_policy_loss_ex_f32"
                                       : "mpsgraph_ppo_policy_loss_f32",
                              "executable", "MPSGraph");
+          ++ordinal;
+          continue;
+        }
+        if (isEBMEnergyQuadratic(name) || isEBMEnergyQuadratic(src)) {
+          if (!verifyEBMEnergyQuadraticValueEnvelope(op)) {
+            op->emitError("apple_gpu value lowering: ebm.energy_quadratic "
+                          "requires static fp32 rank-2 x/y with matching "
+                          "shape and rank-1 fp32 energies[B]");
+            signalPassFailure();
+            return;
+          }
+          emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call",
+                             "ebm_energy_quadratic",
+                             "tessera_apple_gpu_ebm_energy_quadratic_value_f32",
+                             "msl_ebm_energy_quadratic_value_f32",
+                             "executable", "Metal");
+          ++ordinal;
+          continue;
+        }
+        if (isEBMLangevinStep(name) || isEBMLangevinStep(src)) {
+          if (!verifyEBMLangevinStepValueEnvelope(op)) {
+            op->emitError("apple_gpu value lowering: ebm.langevin_step "
+                          "requires static fp32 y/grad/noise/result with "
+                          "matching shapes, positive eta, and non-negative "
+                          "noise_scale");
+            signalPassFailure();
+            return;
+          }
+          emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call",
+                             "ebm_langevin_step",
+                             "tessera_apple_gpu_ebm_langevin_step_value_f32",
+                             "msl_ebm_langevin_step_value_f32", "executable",
+                             "Metal");
           ++ordinal;
           continue;
         }

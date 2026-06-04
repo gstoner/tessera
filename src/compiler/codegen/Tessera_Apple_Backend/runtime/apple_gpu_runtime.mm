@@ -9563,6 +9563,16 @@ extern "C" void tessera_apple_gpu_ebm_langevin_step_f32(
   reference_ebm_langevin_step_f32(y, grad, noise, eta, noise_scale, out, n);
 }
 
+extern "C" int32_t tessera_apple_gpu_ebm_langevin_step_value_f32(
+    const float* y, const float* grad, const float* noise,
+    float eta, float noise_scale, float* out, int32_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_ebm_langevin_step_f32_msl(
+          ctx, y, grad, noise, eta, noise_scale, out, n))
+    return 1;
+  return 0;
+}
+
 // ===========================================================================
 // EBM langevin_step + on-device Philox-4x32-10 (M6 Step 4 runtime emission).
 //
@@ -10554,6 +10564,16 @@ extern "C" void tessera_apple_gpu_ebm_energy_quadratic_f32(
   if (ctx.ok && dispatch_ebm_energy_quadratic_f32_msl(
           ctx, x, y, energies, B, D)) return;
   reference_ebm_energy_quadratic_f32(x, y, energies, B, D);
+}
+
+extern "C" int32_t tessera_apple_gpu_ebm_energy_quadratic_value_f32(
+    const float* x, const float* y, float* energies,
+    int32_t B, int32_t D) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_ebm_energy_quadratic_f32_msl(
+          ctx, x, y, energies, B, D))
+    return 1;
+  return 0;
 }
 
 // ===========================================================================

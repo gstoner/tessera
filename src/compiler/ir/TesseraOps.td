@@ -265,6 +265,35 @@ def Tessera_RLCISPOPolicyLossOp : Op<
   let hasVerifier = 1;
 }
 
+// EBM value-lane pilot — generic Graph IR spelling for the tensor-shaped EBM
+// kernels that can traverse Graph -> Tile -> Apple Value Target IR. These are
+// deliberately separate from the older `tessera_ebm` solver dialect: the solver
+// dialect remains the domain-specific inspection/annotation surface, while
+// these ops participate in the canonical value handoff.
+def Tessera_EBMEnergyQuadraticOp : Op<
+  Tessera_Dialect, "ebm.energy_quadratic",
+  [Pure]
+> {
+  let summary = "Quadratic EBM energy E_b = 0.5 * ||x_b - y_b||^2";
+  let arguments = (ins TensorType:$x, TensorType:$y);
+  let results = (outs TensorType:$energies);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_EBMLangevinStepOp : Op<
+  Tessera_Dialect, "ebm.langevin_step",
+  [Pure]
+> {
+  let summary = "One affine EBM Langevin step y - eta*grad + noise_scale*noise";
+  let arguments = (ins TensorType:$y, TensorType:$grad, TensorType:$noise,
+                        F64Attr:$eta,
+                        OptionalAttr<F64Attr>:$noise_scale);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 // L-series linalg pilot (2026-06-02): Cholesky is the carrier op for vetting
 // the full Graph → Schedule → Tile → Target spine on the Apple CPU + GPU
 // backends.  Kept deliberately minimal at the Graph-IR layer ([Pure] + a

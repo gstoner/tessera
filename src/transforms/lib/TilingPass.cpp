@@ -474,6 +474,94 @@ struct TilePPOPolicyLossValue : public RewritePattern {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Rewrite patterns: EBM value kernels
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Preserve the first EBM executable envelopes as registered Tile ops for the
+// Apple GPU value lane. The runtime symbols report success only when the real
+// Metal dispatch path ran; CPU/reference fallback never receives a GPU label.
+struct TileEBMEnergyQuadraticValue : public RewritePattern {
+  TileEBMEnergyQuadraticValue(MLIRContext *ctx)
+      : RewritePattern("tessera.ebm.energy_quadratic", /*benefit=*/2, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return failure();
+    auto xTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto yTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto eTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!xTy || !yTy || !eTy)
+      return failure();
+    if (!xTy.hasStaticShape() || !yTy.hasStaticShape() ||
+        !eTy.hasStaticShape())
+      return failure();
+    if (!xTy.getElementType().isF32() || !yTy.getElementType().isF32() ||
+        !eTy.getElementType().isF32())
+      return failure();
+    if (xTy.getRank() != 2 || yTy.getRank() != 2 || eTy.getRank() != 1)
+      return failure();
+    if (xTy.getShape() != yTy.getShape() ||
+        eTy.getDimSize(0) != xTy.getDimSize(0))
+      return failure();
+
+    OperationState st(op->getLoc(), "tile.ebm_energy_quadratic");
+    st.addOperands(op->getOperands());
+    st.addTypes(op->getResultTypes());
+    for (auto &na : op->getAttrs())
+      st.addAttribute(na.getName(), na.getValue());
+    st.addAttribute("source",
+                    rewriter.getStringAttr("tessera.ebm.energy_quadratic"));
+    Operation *tiled = rewriter.create(st);
+    rewriter.replaceOp(op, tiled->getResults());
+    return success();
+  }
+};
+
+struct TileEBMLangevinStepValue : public RewritePattern {
+  TileEBMLangevinStepValue(MLIRContext *ctx)
+      : RewritePattern("tessera.ebm.langevin_step", /*benefit=*/2, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+      return failure();
+    auto yTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto gTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto nTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+    auto oTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!yTy || !gTy || !nTy || !oTy)
+      return failure();
+    if (!yTy.hasStaticShape() || !gTy.hasStaticShape() ||
+        !nTy.hasStaticShape() || !oTy.hasStaticShape())
+      return failure();
+    if (!yTy.getElementType().isF32() || !gTy.getElementType().isF32() ||
+        !nTy.getElementType().isF32() || !oTy.getElementType().isF32())
+      return failure();
+    if (yTy.getShape() != gTy.getShape() || yTy.getShape() != nTy.getShape() ||
+        yTy.getShape() != oTy.getShape())
+      return failure();
+    auto eta = op->getAttrOfType<FloatAttr>("eta");
+    if (!eta || eta.getValueAsDouble() <= 0.0)
+      return failure();
+    if (auto scale = op->getAttrOfType<FloatAttr>("noise_scale");
+        scale && scale.getValueAsDouble() < 0.0)
+      return failure();
+
+    OperationState st(op->getLoc(), "tile.ebm_langevin_step");
+    st.addOperands(op->getOperands());
+    st.addTypes(op->getResultTypes());
+    for (auto &na : op->getAttrs())
+      st.addAttribute(na.getName(), na.getValue());
+    st.addAttribute("source",
+                    rewriter.getStringAttr("tessera.ebm.langevin_step"));
+    Operation *tiled = rewriter.create(st);
+    rewriter.replaceOp(op, tiled->getResults());
+    return success();
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Pass
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -534,6 +622,9 @@ struct TilingPassImpl
       // Stage 13: static fp32 PPO mean loss → tile.ppo_policy_loss for the
       // Apple GPU value lane. CPU TileToApple gates it explicitly.
       patterns.add<TilePPOPolicyLossValue>(&getContext());
+      // EBM value lane: strict static fp32 tensor-shaped kernels.
+      patterns.add<TileEBMEnergyQuadraticValue, TileEBMLangevinStepValue>(
+          &getContext());
     } else {
       patterns.add<TileMatmul>(&getContext(),
                                static_cast<int64_t>(tileMOpt),

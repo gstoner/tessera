@@ -135,7 +135,8 @@ public:
         op->emitError("apple value Tile IR op '")
             << name
             << "' is outside the value allowlist (linalg family, "
-               "rank-2 matmul/gemm, rank-3 batched_gemm, PPO policy loss)";
+               "rank-2 matmul/gemm, rank-3 batched_gemm, PPO policy loss, "
+               "EBM value kernels)";
         failed = true;
       }
     });
@@ -147,6 +148,8 @@ private:
   static bool isAllowedValueTileOp(llvm::StringRef name) {
     return name == "tile.matmul" || name == "tile.gemm" ||
            name == "tile.batched_gemm" || name == "tile.ppo_policy_loss" ||
+           name == "tile.ebm_energy_quadratic" ||
+           name == "tile.ebm_langevin_step" ||
            name == "tile.cholesky" ||
            name == "tile.tri_solve" || name == "tile.cholesky_solve" ||
            name == "tile.lu" || name == "tile.qr" || name == "tile.svd";

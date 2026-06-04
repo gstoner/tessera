@@ -1523,6 +1523,13 @@ def _infer_result_type(op_name: str, operand_types: List[IRType]) -> IRType:
             return tensor_ir_type((lhs.shape[0], lhs.shape[1], rhs.shape[2]),
                                   dtype, layout=lhs.layout)
         return tensor_ir_type(("*",), dtype, layout=lhs.layout)
+    if op_name == "tessera.ebm.energy_quadratic" and operand_types:
+        x = operand_types[0]
+        if x.rank == 2:
+            return tensor_ir_type((x.shape[0],), x.dtype, layout=x.layout)
+        return tensor_ir_type(("*",), x.dtype, layout=x.layout)
+    if op_name == "tessera.ebm.langevin_step" and operand_types:
+        return operand_types[0]
     if op_name in {"tessera.transpose"} and operand_types[0].rank is not None:
         first = operand_types[0]
         return tensor_ir_type(tuple(reversed(first.shape)), first.dtype, layout=first.layout)

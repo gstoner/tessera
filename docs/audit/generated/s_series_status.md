@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 4 | 430 |
-| `transpose_rule` | 0 | 434 |
-| `sharding_rule` | 32 | 402 |
-| `lowering_rule` | 0 | 434 |
-| `backend_kernel` | 434 | 0 |
+| `batching_rule` | 4 | 431 |
+| `transpose_rule` | 0 | 435 |
+| `sharding_rule` | 33 | 402 |
+| `lowering_rule` | 0 | 435 |
+| `backend_kernel` | 435 | 0 |
 
 ## Per-category breakdown
 
@@ -39,7 +39,7 @@
 | S10 | `grad_transform` | 7 | — | — | — | — | 7 |
 | S11 | `loss` | 26 | — | — | — | — | 26 |
 | S11 | `rl_loss` | 4 | — | — | — | — | 4 |
-| M6 | `ebm` | 12 | — | — | 4 | — | 12 |
+| M6 | `ebm` | 13 | — | — | 5 | — | 13 |
 | S15 | `data` | 11 | — | — | — | — | 11 |
 | S15 | `tokenizer` | 5 | — | — | — | — | 5 |
 | other | `aot` | 6 | — | — | — | — | 6 |
@@ -92,7 +92,7 @@
 | S10 | 18 | 0 | 0 | 0 | 18 |
 | S11 | 30 | 0 | 0 | 0 | 30 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
-| M6 | 12 | 0 | 0 | 4 | 12 |
+| M6 | 13 | 0 | 0 | 5 | 13 |
 | other | 247 | 4 | 0 | 21 | 247 |
 
 ## Closure trajectory

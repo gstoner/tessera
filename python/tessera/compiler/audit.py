@@ -730,6 +730,37 @@ def _cmd_support_table(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_verifier_coverage(args: argparse.Namespace) -> int:
+    from .verifier_coverage import render_dashboard
+
+    text = render_dashboard()
+    if args.check:
+        if not args.out.exists():
+            print(
+                f"audit: --check requested but {args.out} does not exist",
+                file=sys.stderr,
+            )
+            return 2
+        on_disk = args.out.read_text()
+        if on_disk != text:
+            print(
+                f"audit: drift detected in {args.out}\n"
+                f"       regenerate with: python -m tessera.compiler.audit "
+                f"verifier_coverage --write --out {args.out}",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"audit: {args.out} matches generated output")
+        return 0
+    if args.out == Path("-"):
+        sys.stdout.write(text)
+    else:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(text)
+        print(f"audit: wrote {args.out}", file=sys.stderr)
+    return 0
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m tessera.compiler.audit",
@@ -756,6 +787,26 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="scan public docs for unsupported native-execution claims",
     )
     p_cl.set_defaults(func=_cmd_claim_lint)
+
+    p_vc = sub.add_parser(
+        "verifier_coverage",
+        help="generate the MLIR verifier coverage dashboard",
+    )
+    p_vc.add_argument(
+        "--out", type=Path,
+        default=Path("docs/audit/generated/verifier_coverage.md"),
+        help="output path (default: docs/audit/generated/verifier_coverage.md; "
+             "use `-` for stdout)",
+    )
+    p_vc.add_argument(
+        "--write", action="store_true",
+        help="write the generated dashboard to --out (default behavior unless --check)",
+    )
+    p_vc.add_argument(
+        "--check", action="store_true",
+        help="exit non-zero if the on-disk file differs from the regenerated output",
+    )
+    p_vc.set_defaults(func=_cmd_verifier_coverage)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -27,9 +27,9 @@ each row into a single E2E tier.
 | ``complete`` | 34 |
 | ``runnable_reference`` | 239 |
 | ``artifact_only`` | 0 |
-| ``partial`` | 0 |
+| ``partial`` | 1 |
 | ``planned`` | 0 |
-| **total** | **273** |
+| **total** | **274** |
 
 ## complete (34)
 
@@ -40,7 +40,7 @@ each row into a single E2E tier.
 | ``ebm_decode_init`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``ebm_energy`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``ebm_inner_step`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
-| ``ebm_langevin_step`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``ebm_langevin_step`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``ebm_partition_exact`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``ebm_refinement`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``ebm_self_verify`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
@@ -313,6 +313,12 @@ each row into a single E2E tier.
 | ``is_concyclic`` | visual_complex | public | public | registered | partial | reference | ready | none |
 | ``laplacian_2d`` | visual_complex | public | public | registered | partial | reference | ready | none |
 | ``mobius_from_three_points`` | visual_complex | public | public | registered | partial | reference | ready | none |
+
+## partial (1)
+
+| Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
+|---|---|---|---|---|---|---|---|---|
+| ``ebm_energy_quadratic`` | energy_based_models | public | public | registered | partial | planned | ready | none |
 
 ## How to extend
 

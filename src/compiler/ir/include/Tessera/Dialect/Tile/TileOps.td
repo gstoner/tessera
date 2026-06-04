@@ -70,6 +70,24 @@ def Tile_PPOPolicyLossOp : Tile_Op<"ppo_policy_loss", [Pure]> {
   let hasVerifier = 1;
 }
 
+// EBM value lane — strict fp32/static tensor-shaped kernels with real Metal
+// dispatch probes before runtime success is claimed.
+def Tile_EBMEnergyQuadraticOp : Tile_Op<"ebm_energy_quadratic", [Pure]> {
+  let summary = "Quadratic EBM energy (Apple GPU value lane)";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $outputs)";
+  let hasVerifier = 1;
+}
+
+def Tile_EBMLangevinStepOp : Tile_Op<"ebm_langevin_step", [Pure]> {
+  let summary = "One affine EBM Langevin step (Apple GPU value lane)";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $outputs)";
+  let hasVerifier = 1;
+}
+
 // L-series linalg family — sequential factorizations/solves that lower 1:1 from
 // the Graph IR op (already shape-verified there). Kept permissive at the Tile
 // layer (operand/result counts + shapes already validated upstream).

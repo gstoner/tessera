@@ -6,11 +6,11 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real`         |   30 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real`         |   32 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` |    9 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent`       |    0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier`  |   80 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total**      |  119 | |
+| **Total**      |  121 | |
 
 ## Per-dialect details
 
@@ -47,6 +47,8 @@ Generated from `python/tessera/compiler/verifier_coverage.py`.  Don't edit by ha
 | `DequantizeFP4Op` | `no_verifier` |
 | `DequantizeFP8Op` | `no_verifier` |
 | `DropoutOp` | `real` |
+| `EBMEnergyQuadraticOp` | `real` |
+| `EBMLangevinStepOp` | `real` |
 | `FFTOp` | `no_verifier` |
 | `FlashAttnOp` | `real` |
 | `FusedEpilogueOp` | `real` |

@@ -55,6 +55,12 @@ _GRAPH = {
     "ppo_policy_loss_full": 'func.func @f(%n: tensor<2x3x5xf32>, %o: tensor<2x3x5xf32>, %a: tensor<2x3x5xf32>, %m: tensor<2x3x5xf32>, %r: tensor<2x3x5xf32>, %e: tensor<2x3x5xf32>) -> tensor<f32> {\n'
                             '  %0 = tessera.rl.ppo_policy_loss %n, %o, %a, %m, %r, %e {operandSegmentSizes = array<i32: 1, 1, 1, 1, 1, 1>, clip_epsilon = 2.000000e-01 : f64, kl_coef = 1.000000e-02 : f64, entropy_coef = 2.000000e-02 : f64, reduction = "mean"} : (tensor<2x3x5xf32>, tensor<2x3x5xf32>, tensor<2x3x5xf32>, tensor<2x3x5xf32>, tensor<2x3x5xf32>, tensor<2x3x5xf32>) -> tensor<f32>\n'
                             '  return %0 : tensor<f32>\n}',
+    "ebm_energy_quadratic": 'func.func @f(%x: tensor<2x3xf32>, %y: tensor<2x3xf32>) -> tensor<2xf32> {\n'
+                            '  %0 = tessera.ebm.energy_quadratic %x, %y : (tensor<2x3xf32>, tensor<2x3xf32>) -> tensor<2xf32>\n'
+                            '  return %0 : tensor<2xf32>\n}',
+    "ebm_langevin_step": 'func.func @f(%y: tensor<2x3xf32>, %g: tensor<2x3xf32>, %n: tensor<2x3xf32>) -> tensor<2x3xf32> {\n'
+                         '  %0 = tessera.ebm.langevin_step %y, %g, %n {eta = 1.250000e-01 : f64, noise_scale = 2.500000e-01 : f64} : (tensor<2x3xf32>, tensor<2x3xf32>, tensor<2x3xf32>) -> tensor<2x3xf32>\n'
+                         '  return %0 : tensor<2x3xf32>\n}',
 }
 
 # Every CPU-converted linalg op (LF1–LF5 + cholesky pilot) lowers via cpu.call.
@@ -155,6 +161,39 @@ def test_gpu_full_ppo_policy_loss_optional_operands_emit_extended_value_symbol()
     assert c["has_entropy"] is True
     assert c["kl_coef"] == pytest.approx(0.01)
     assert c["entropy_coef"] == pytest.approx(0.02)
+
+
+@pytest.mark.parametrize("name,op_kind,symbol,abi", [
+    ("ebm_energy_quadratic", "ebm_energy_quadratic",
+     "tessera_apple_gpu_ebm_energy_quadratic_value_f32",
+     "msl_ebm_energy_quadratic_value_f32"),
+    ("ebm_langevin_step", "ebm_langevin_step",
+     "tessera_apple_gpu_ebm_langevin_step_value_f32",
+     "msl_ebm_langevin_step_value_f32"),
+])
+def test_gpu_full_ebm_value_kernels_emit_value_symbols(name, op_kind, symbol, abi):
+    p = _run("tessera-lower-to-apple_gpu-full", _GRAPH[name])
+    assert p.returncode == 0, p.stderr
+    assert "tessera_apple.gpu.kernel_call" in p.stdout
+    assert f'op_kind = "{op_kind}"' in p.stdout
+    assert f'symbol = "{symbol}"' in p.stdout
+    assert f'abi = "{abi}"' in p.stdout
+    assert 'framework = "Metal"' in p.stdout
+    assert f"tile.{op_kind}" not in p.stdout
+
+    from tessera.compiler import driver
+
+    calls = driver.extract_apple_value_calls(p.stdout)
+    assert len(calls) == 1
+    c = calls[0]
+    assert c["op"] == "tessera_apple.gpu.kernel_call"
+    assert c["op_kind"] == op_kind
+    assert c["symbol"] == symbol
+    assert c["abi"] == abi
+    assert c["status"] == "executable"
+    if op_kind == "ebm_langevin_step":
+        assert c["eta"] == pytest.approx(0.125)
+        assert c["noise_scale"] == pytest.approx(0.25)
 
 
 def test_front_door_records_value_target_ir_in_runtime_metadata():
@@ -1444,7 +1483,92 @@ def test_gpu_value_executor_allowlist_exact():
         "tessera_apple_gpu_native_sparse_attn_f32",
         "tessera_apple_gpu_ppo_policy_loss_f32",
         "tessera_apple_gpu_ppo_policy_loss_ex_f32",
+        "tessera_apple_gpu_ebm_energy_quadratic_value_f32",
+        "tessera_apple_gpu_ebm_langevin_step_value_f32",
     })
+
+
+def test_gpu_ebm_value_metadata_needs_active_runtime_probe(monkeypatch):
+    """A value-call symbol on the allowlist is not enough to mark EBM GPU
+    execution; the corresponding tiny Metal numerical probe must pass."""
+    from tessera import runtime
+
+    monkeypatch.setattr(
+        runtime, "_apple_gpu_ebm_energy_quadratic_value_available",
+        lambda: False)
+    ir = '''
+func.func @f(%x: tensor<2x3xf32>, %y: tensor<2x3xf32>) -> tensor<2xf32> {
+  %0 = tessera_apple.gpu.kernel_call %x, %y {
+    op_kind = "ebm_energy_quadratic",
+    symbol = "tessera_apple_gpu_ebm_energy_quadratic_value_f32",
+    status = "executable"
+  } : (tensor<2x3xf32>, tensor<2x3xf32>) -> tensor<2xf32>
+  return %0 : tensor<2xf32>
+}'''
+    meta = _inject_value_ir("apple_gpu", ir)
+    assert meta["apple_target_ir_kind"] == "value_target_ir"
+    assert meta["apple_value_calls"][0]["op_kind"] == "ebm_energy_quadratic"
+    assert meta.get("executable") is not True
+
+
+def test_gpu_ebm_value_non_darwin_stub_is_not_executable():
+    """Non-Darwin value symbols return non-success; launch must not fabricate a
+    CPU result while claiming Apple GPU value execution."""
+    import numpy as np
+    import pytest
+    import sys
+    from tessera import runtime
+
+    if sys.platform == "darwin":
+        pytest.skip("Darwin may have a real Metal EBM value executor")
+    artifact = runtime.RuntimeArtifact(metadata={
+        "target": "apple_gpu",
+        "compiler_path": "apple_value_target_ir",
+        "apple_target_ir_kind": "value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.gpu.kernel_call",
+            "op_kind": "ebm_langevin_step",
+            "symbol": "tessera_apple_gpu_ebm_langevin_step_value_f32",
+            "status": "executable",
+            "eta": 0.125,
+            "noise_scale": 0.25,
+        }],
+    })
+    y = np.zeros((2, 3), dtype=np.float32)
+    res = runtime.launch(artifact, [y, y, y])
+    assert res["ok"] is False
+    assert res["runtime_status"] == "invalid_artifact"
+
+
+@pytest.mark.skipif(sys.platform != "darwin",
+                    reason="Apple GPU EBM value kernels are Darwin-only")
+def test_gpu_ebm_one_step_langevin_value_launch_vs_numpy():
+    import numpy as np
+    import pytest
+    from tessera import runtime
+    from tessera.runtime import launch
+
+    if not runtime._apple_gpu_ebm_langevin_step_value_available():
+        pytest.skip("fresh Metal EBM Langevin value dylib/probe unavailable")
+    m = _build_module(
+        "tessera.ebm.langevin_step", "o",
+        [("tensor<2x3xf32>", (2, 3)), ("tensor<2x3xf32>", (2, 3)),
+         ("tensor<2x3xf32>", (2, 3))],
+        [("tensor<2x3xf32>", (2, 3))], ["%o"],
+        kwargs={"eta": 0.125, "noise_scale": 0.25})
+    art = _front_door_gpu(m)
+    assert art.metadata["compiler_path"] == "apple_value_target_ir"
+    assert art.metadata["executable"] is True
+    rng = np.random.default_rng(13)
+    y = rng.standard_normal((2, 3)).astype(np.float32)
+    grad = rng.standard_normal((2, 3)).astype(np.float32)
+    noise = rng.standard_normal((2, 3)).astype(np.float32)
+    res = launch(art, [y, grad, noise])
+    assert res["ok"], res
+    np.testing.assert_allclose(
+        res["output"], y - 0.125 * grad + 0.25 * noise,
+        rtol=1.0e-5, atol=1.0e-6)
 
 
 @pytest.mark.skipif(sys.platform != "darwin",

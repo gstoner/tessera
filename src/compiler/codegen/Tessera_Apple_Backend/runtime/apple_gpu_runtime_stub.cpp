@@ -56,6 +56,14 @@ extern "C" int32_t tessera_apple_gpu_random_uniform_f32(float*, int64_t, uint64_
                                                         float, float) { return 0; }
 extern "C" int32_t tessera_apple_gpu_random_normal_f32(float*, int64_t, uint64_t,
                                                        float, float) { return 0; }
+// Value Target IR EBM kernels — off Darwin there is no Metal executor. Return
+// 0 so Python gates the value artifact instead of claiming GPU execution.
+extern "C" int32_t tessera_apple_gpu_ebm_energy_quadratic_value_f32(
+    const float*, const float*, float*, int32_t, int32_t) { return 0; }
+extern "C" int32_t tessera_apple_gpu_ebm_langevin_step_value_f32(
+    const float*, const float*, const float*, float, float, float*, int32_t) {
+  return 0;
+}
 
 namespace {
 

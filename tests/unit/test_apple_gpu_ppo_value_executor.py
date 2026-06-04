@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import re
 import sys
 from pathlib import Path
@@ -19,6 +20,26 @@ APPLE_STUB = (
     REPO_ROOT
     / "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime_stub.cpp"
 )
+
+
+def _metal_runtime_active() -> tuple[bool, str]:
+    if sys.platform != "darwin":
+        return False, f"non-darwin host ({sys.platform})"
+    try:
+        from tessera._apple_gpu_dispatch import apple_gpu_runtime_handle
+        handle, path, reason = apple_gpu_runtime_handle()
+    except Exception as exc:
+        return False, f"apple gpu runtime load failed: {exc}"
+    if handle is None:
+        return False, reason or "apple gpu runtime unavailable"
+    cache_size = getattr(handle, "tessera_apple_gpu_runtime_msl_cache_size", None)
+    if cache_size is None:
+        return False, f"loaded runtime lacks Metal cache probe: {path}"
+    cache_size.argtypes = []
+    cache_size.restype = ctypes.c_int32
+    if int(cache_size()) < 0:
+        return False, f"Metal device/runtime inactive for loaded dylib: {path}"
+    return True, f"loaded dylib: {path or 'prebuilt/env runtime'}"
 
 
 def _ppo_artifact(executable: bool = True) -> runtime.RuntimeArtifact:
@@ -75,13 +96,20 @@ def test_ppo_value_launch_matches_reference_when_available():
         "advantages": advantages,
     }
     available = runtime._apple_gpu_ppo_policy_loss_available()
+    active, detail = _metal_runtime_active()
+    if active and not available:
+        pytest.fail(
+            "Active Apple GPU runtime did not pass the PPO MPSGraph value "
+            "probe. Rebuild/refresh the shared dylib and run in a fresh Python "
+            "process; expected _apple_gpu_ppo_policy_loss_available() == True. "
+            f"{detail}")
     result = runtime.launch(_ppo_artifact(executable=available), args)
     if not available:
         assert result["ok"] is False
         assert result["runtime_status"] in {
             "unsupported", "invalid_artifact", "unimplemented",
         }
-        assert "apple" in result.get("reason", "").lower() or sys.platform != "darwin"
+        assert "apple" in result.get("reason", "").lower() or not active
         return
     expected = rl.ppo_policy_loss(
         logp_new,

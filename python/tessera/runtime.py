@@ -7800,6 +7800,11 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 # Attention. Host-reference path today; fully fused MSL
                 # kernel is a follow-up.
                 getattr(lib, "tessera_apple_gpu_native_sparse_attn_f32")
+                # Stage 13 — PPO policy loss value executor. This is the
+                # freshest dylib staleness sentinel for Apple GPU runtime
+                # execution; a prebuilt runtime lacking it must be rejected so
+                # `_apple_gpu_dispatch` can compile a fresh source dylib.
+                getattr(lib, "tessera_apple_gpu_ppo_policy_loss_f32")
                 # R2 (cont.) — encoded flat elementwise unary/binary, so the
                 # command-buffer session can express full transformer/MLP blocks.
                 getattr(lib, "tessera_apple_gpu_unary_dev_f32_enc")

@@ -2310,8 +2310,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/_apple_gpu_dispatch.py": {
-    "mtime": 1780430676.138488,
-    "ast_hash": "ae56ba1b10ce5284b4705ab926489469",
+    "mtime": 1780543685.2229273,
+    "ast_hash": "2f99ec6ff4390b9feac3b34cd31df986",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/control.py": {
@@ -2355,8 +2355,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/runtime.py": {
-    "mtime": 1780542504.5831847,
-    "ast_hash": "33c3b4f222399b6bf0254897139df98d",
+    "mtime": 1780543693.7917783,
+    "ast_hash": "6be136b26c594ab5d9feb0d5b4e7cd83",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/energy.py": {
@@ -11845,8 +11845,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_ppo_value_executor.py": {
-    "mtime": 1780542557.059663,
-    "ast_hash": "214df2eef389632338a1e629e5eb0c44",
+    "mtime": 1780543719.45477,
+    "ast_hash": "20c258e518d5cea284572b3b2b30e7dd",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/backend/apple/MPSGRAPH_RUNTIME_GLASS_JAWS.md": {

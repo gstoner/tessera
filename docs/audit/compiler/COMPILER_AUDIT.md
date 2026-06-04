@@ -55,18 +55,27 @@ multiple root audit documents and compiler archive files.
   an explicit compare fixture, `hardware_verified` row, or packaged validation.
 - **Compiler specs can still drift.** Generated dashboards must remain the
   source of counts; prose docs should link, not duplicate snapshots.
-- **Generated-doc regeneration + drift gating is fragmented (2026-06-04).**
-  There are ~24 generated artifacts under `docs/audit/generated/` (+ the root
-  `op_target_conformance.md` / `standalone_primitive_coverage.md`), but drift is
-  enforced across *two parallel entry points* — `scripts/check_generated_docs.sh`
-  (7 docs, pre-commit + CI) and `scripts/release_gate.py` (6 docs, overlapping)
-  — plus ~6 separate unit tests, using a mix of byte-exact-markdown compare (the
-  brittle pattern that just reddened CI), semantic cross-check, and in a couple
-  of cases no regeneration gate at all. Only 2 of the dashboards have a
-  machine-readable CSV canonical; there is no single "regenerate every generated
-  doc" command (the new `--write` covers only the 7 registered ones); and the
-  generator CLIs use inconsistent write/check flags (`--render` / `--write` /
-  default-write / `--surface=` / `--target=`, with `--out` / `--output`).
+- **Generated-doc regeneration + drift gating — registry landed (2026-06-04),
+  family-collapse consolidation still open.** The fragmentation finding (two
+  parallel gate scripts + piecemeal unit gates + inconsistent generator CLIs)
+  has been mostly addressed: `python/tessera/compiler/generated_docs.py` is now
+  the single registry of all 21 fully-generated dashboards; `check_generated_docs.sh`
+  and `release_gate.py` both delegate to it (the second entry point's per-doc
+  drift gates were folded into one fleet-wide `generated_docs_drift`); a unified
+  `--write` regenerates the whole fleet; and the fleet drift test
+  `tests/unit/test_generated_docs_registry.py` includes an orphan guard so a new
+  dashboard must register. The registry immediately caught 3 silently-stale
+  dashboards (`test_coverage_by_op`, `test_coverage_classification`,
+  `effect_lattice_audit`). **6 dashboards are now CSV-canonical** (`runtime_abi`,
+  `verifier_coverage`, `support_table`, `op_target_conformance`,
+  `runtime_execution_matrix`, `test_coverage_by_op`). *Still open:* CSV-canonical
+  for the remaining data-shaped docs (`test_coverage_classification`,
+  `tsol_coverage`, `effect_lattice_audit`, `apple_target_map`, the two
+  `*_target_map`s), and the **aggressive content consolidation** (collapse the 3
+  target maps → 1 multi-target doc; the 5 surface-status docs → 1; merge the
+  test-coverage pair; fold `operator_benchmarks_coverage` into benchmarks; fold
+  the `e2e_op_coverage` + `s_series_status` rollups into their primaries) — each
+  is now a localized registry edit + generator change.
 
 ## Next Work
 
@@ -83,17 +92,21 @@ multiple root audit documents and compiler archive files.
    complete.
 5. Update specs to point at dashboards and this audit instead of old root audit
    documents.
-6. **Unify generated-doc regeneration + drift into one contract.** Define a
-   single registry of `(doc, generator, check-cmd, write-cmd)` consumed by both
-   the CI gate and one `--write` regenerator so finishing a sprint regenerates
-   *every* generated doc in one command; fold `release_gate.py`'s drift checks
-   into the same registry (retire the second parallel entry point); standardize
-   the generator CLI on `--check` / `--write` / `--out`; and extend the
-   CSV-canonical + non-byte-gated-Markdown pattern to the remaining data-shaped
-   dashboards (`support_table`, `runtime_execution_matrix`, `e2e_op_coverage`,
-   `test_coverage_by_op`, `op_target_conformance`, `s_series_status`,
-   `standalone_primitive_coverage`, `tsol_coverage`) so machine consumers and
-   CI both diff a stable CSV instead of whitespace-fragile Markdown.
+6. **Unify generated-doc regeneration + drift into one contract.**
+   *Keystone landed 2026-06-04:* `tessera.compiler.generated_docs` is the single
+   registry consumed by both `check_generated_docs.sh` and `release_gate.py`, with
+   a fleet-wide `--write`/`--check` and an orphan-guard test. 6 dashboards are
+   CSV-canonical. **Remaining:**
+   - CSV-canonical for the rest of the data-shaped docs:
+     `test_coverage_classification`, `tsol_coverage`, `effect_lattice_audit`,
+     `apple_target_map`, `nvidia_sm90_target_map`, `rocm_target_map`.
+   - **Aggressive content consolidation (24 → ~13):** collapse the 3 target maps
+     into one multi-target doc; the 5 surface-status docs into one repo-surface
+     doc; merge `test_coverage_by_op` + `test_coverage_classification`; fold
+     `operator_benchmarks_coverage` into benchmarks; fold the `e2e_op_coverage`
+     and `s_series_status` rollups into their primaries (`support_table` /
+     `standalone_primitive_coverage`). Each is now a localized registry +
+     generator edit.
 
 ## Source Material Consolidated
 

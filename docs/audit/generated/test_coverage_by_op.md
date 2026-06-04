@@ -6,11 +6,11 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Headline
 
-- **434** ops in `primitive_coverage` registry.
-- **1647** total Python-test references, **469** total lit-fixture references.
-- **121** ops have **zero** references in either test surface.
-- **229** ops have ≤1 reference ("thinly tested").
-- **32** ops have ≥10 references ("well tested").
+- **435** ops in `primitive_coverage` registry.
+- **1653** total Python-test references, **485** total lit-fixture references.
+- **122** ops have **zero** references in either test surface.
+- **230** ops have ≤1 reference ("thinly tested").
+- **33** ops have ≥10 references ("well tested").
 - **47** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **229** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **230** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -105,4 +105,4 @@ These **229** ops have at most one test reference across the whole test surface.
 | `cummax` |    1 |    0 |    1 |
 | `cummin` |    1 |    0 |    1 |
 
-_(169 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(170 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_

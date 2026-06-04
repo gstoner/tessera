@@ -63,39 +63,37 @@ class Gate:
 
 
 _STRUCTURE_GATES: tuple[Gate, ...] = (
+    # Single fleet-wide generated-doc drift gate. The registry in
+    # `tessera.compiler.generated_docs` is the one source of truth for
+    # which docs are generated and which artifact (CSV when present,
+    # else Markdown) is byte-compared — so this one gate subsumes the
+    # former per-doc support_table / e2e_coverage / *_target_map drift
+    # gates and automatically covers any new dashboard.
     Gate(
-        name="support_table_drift",
-        cmd=(PYTHON, "-m", "tessera.compiler.audit", "support_table", "--check"),
-        description="Generated support_table.md must match the registry.",
-    ),
-    Gate(
-        name="e2e_coverage_drift",
-        cmd=(PYTHON, "-m", "tessera.cli.e2e_coverage", "--check"),
-        description="Generated e2e_op_coverage.md must match the registry.",
+        name="generated_docs_drift",
+        cmd=(PYTHON, "-m", "tessera.compiler.generated_docs", "--check"),
+        description=(
+            "Every generated audit dashboard must match its registry "
+            "render (drift-gated on the canonical CSV/Markdown artifact)."
+        ),
     ),
     # Test-tree review P2-11 (2026-05-20): every release must
-    # confirm the test-tree manifest is current.  Catches the case
-    # where a new subtree lands without status classification.
+    # confirm the test-tree manifest's runnable rows still smoke-pass
+    # (this is a *smoke* gate — it executes rows, not just doc drift).
     Gate(
-        name="tests_manifest_drift",
+        name="tests_manifest_smoke",
         cmd=(PYTHON, "-m", "tessera.cli.surface_audit",
              "--surface=tests", "--check"),
         description=(
-            "Generated tests_status.md must match the manifest + "
-            "every runnable / compile_only row's smoke must pass."
+            "Every runnable / compile_only row in the tests manifest "
+            "must smoke-pass."
         ),
     ),
 )
 
 _APPLE_GPU_GATES: tuple[Gate, ...] = (
-    Gate(
-        name="apple_target_map_drift",
-        cmd=(PYTHON, "-m", "tessera.cli.apple_target_map", "--check"),
-        description=(
-            "Generated apple_target_map.md must match capabilities + "
-            "backend_manifest + driver."
-        ),
-    ),
+    # apple_target_map drift is covered by the fleet-wide
+    # ``generated_docs_drift`` structure gate above.
     Gate(
         name="canonicals_native_dispatch",
         cmd=(
@@ -156,34 +154,13 @@ _APPLE_GPU_GATES: tuple[Gate, ...] = (
 )
 
 
-# Apple follow-up #3 (2026-05-20): NVIDIA and ROCm get
-# target-map drift gates today.  The full hardware-proof lanes
-# (canonical native dispatch, per-target benchmarks,
-# hardware-marked tests) land alongside Phase G / Phase H bring-up
-# and append to ``_NVIDIA_STRUCTURE_GATES`` / ``_ROCM_STRUCTURE_GATES``
-# the same way ``_APPLE_GPU_GATES`` does.
-_NVIDIA_STRUCTURE_GATES: tuple[Gate, ...] = (
-    Gate(
-        name="nvidia_target_map_drift",
-        cmd=(PYTHON, "-m", "tessera.cli.gpu_target_map",
-             "--target=nvidia_sm90", "--check"),
-        description=(
-            "Generated nvidia_sm90_target_map.md must match "
-            "``capabilities[nvidia_sm90]`` + ``backend_manifest``."
-        ),
-    ),
-)
-_ROCM_STRUCTURE_GATES: tuple[Gate, ...] = (
-    Gate(
-        name="rocm_target_map_drift",
-        cmd=(PYTHON, "-m", "tessera.cli.gpu_target_map",
-             "--target=rocm", "--check"),
-        description=(
-            "Generated rocm_target_map.md must match "
-            "``capabilities[rocm]`` + ``backend_manifest``."
-        ),
-    ),
-)
+# Apple follow-up #3 (2026-05-20): NVIDIA and ROCm target-map drift is
+# now covered by the fleet-wide ``generated_docs_drift`` structure gate.
+# The full hardware-proof lanes (canonical native dispatch, per-target
+# benchmarks, hardware-marked tests) land alongside Phase G / Phase H
+# bring-up and append here the same way ``_APPLE_GPU_GATES`` does.
+_NVIDIA_STRUCTURE_GATES: tuple[Gate, ...] = ()
+_ROCM_STRUCTURE_GATES: tuple[Gate, ...] = ()
 
 
 _GATE_MATRIX: dict[str, tuple[Gate, ...]] = {

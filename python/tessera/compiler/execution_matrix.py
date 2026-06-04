@@ -179,6 +179,34 @@ def unimplemented_targets() -> tuple[str, ...]:
     return _UNIMPLEMENTED_TARGETS
 
 
+#: Stable CSV column order for the execution matrix — append-only.
+EXECUTION_MATRIX_CSV_COLUMNS: tuple[str, ...] = (
+    "target", "compiler_path", "execution_kind", "executable",
+    "executor_id", "runtime_status", "execution_mode", "reason",
+)
+
+
+def render_csv() -> str:
+    """Render the canonical machine-readable execution matrix.
+
+    One row per (target, compiler_path) in `all_rows()` order.  This is
+    the drift-gated artifact; the Markdown is the human companion.
+    """
+    import csv as _csv
+    import io as _io
+
+    buf = _io.StringIO()
+    writer = _csv.writer(buf, lineterminator="\n")
+    writer.writerow(EXECUTION_MATRIX_CSV_COLUMNS)
+    for r in all_rows():
+        writer.writerow([
+            r.target, r.compiler_path, r.execution_kind,
+            "1" if r.executable else "0",
+            r.executor_id or "", r.runtime_status, r.execution_mode, r.reason,
+        ])
+    return buf.getvalue()
+
+
 def render_dashboard() -> str:
     """Render the matrix as a Markdown table for `docs/audit/generated/runtime_execution_matrix.md`.
     Pure function so the drift test can compare bytes."""

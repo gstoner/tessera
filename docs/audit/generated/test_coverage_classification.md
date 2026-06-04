@@ -6,12 +6,12 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**240** ops have ≤1 direct test reference.  They break down as:
+**230** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
-| `covered_by_family`      |   96 | Tested via a parent op or family wrapper |
-| `structural_only`        |  140 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `covered_by_family`      |   95 | Tested via a parent op or family wrapper |
+| `structural_only`        |  131 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
 | `deprecated_or_internal` |    0 | Not public test debt |
@@ -34,7 +34,7 @@ These **4** ops need real device hardware (Phase G/H/I).  They cannot be tested 
 | `ebm_sphere_langevin_sample` | manifold Langevin needs real GPU mesh (Phase G) |
 | `ebm_sphere_langevin_step` | manifold Langevin needs real GPU mesh (Phase G) |
 
-## `covered_by_family` — 96 ops
+## `covered_by_family` — 95 ops
 
 Tested through a parent op or family wrapper.  Sample (first 30):
 
@@ -71,9 +71,9 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `complex_sqrt` | category default for 'elementwise' |
 | `conformal_jacobian` | exercised by complex/conformal lane tests |
 
-_(66 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
+_(65 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
-## `structural_only` — 140 ops
+## `structural_only` — 131 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
@@ -81,12 +81,8 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 |----|--------|
 | `abs` | unclassified — defaults to structural_only |
 | `absolute` | unclassified — defaults to structural_only |
-| `amax` | unclassified — defaults to structural_only |
-| `amin` | unclassified — defaults to structural_only |
 | `aot_export` | category default for 'aot' |
 | `aot_load` | category default for 'aot' |
-| `argmax` | unclassified — defaults to structural_only |
-| `argmin` | unclassified — defaults to structural_only |
 | `associative_scan` | category default for 'control_flow' |
 | `autocast` | category default for 'transform' |
 | `axis_index` | category default for 'transform' |
@@ -108,6 +104,10 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `cosine_warmup_lr` | category default for 'schedule' |
 | `cummax` | unclassified — defaults to structural_only |
 | `cummin` | unclassified — defaults to structural_only |
-| `cumprod` | unclassified — defaults to structural_only |
+| `custom_batching` | category default for 'extension' |
+| `custom_call` | category default for 'extension' |
+| `custom_jvp` | category default for 'extension' |
+| `custom_lowering` | category default for 'extension' |
+| `custom_primitive` | category default for 'extension' |
 
-_(110 additional structural ops omitted.)_
+_(101 additional structural ops omitted.)_

@@ -479,6 +479,35 @@ def top_tested_ops(n: int = 20) -> tuple[OpTestCoverage, ...]:
 # ─────────────────────────────────────────────────────────────────────────
 
 
+#: Stable CSV column order for the test-coverage-by-op dashboard.
+TEST_COVERAGE_CSV_COLUMNS: tuple[str, ...] = (
+    "op", "python_refs", "lit_refs", "negative_refs", "total_refs",
+    "is_thinly_tested", "dtype_variants",
+)
+
+
+def render_csv() -> str:
+    """Render the canonical machine-readable test-coverage-by-op table.
+
+    One row per op, sorted by op name.  Drift-gated artifact; the
+    Markdown is the human companion.
+    """
+    import csv as _csv
+    import io as _io
+
+    rows = sorted(collect_op_test_coverage(), key=lambda r: r.op_name)
+    buf = _io.StringIO()
+    writer = _csv.writer(buf, lineterminator="\n")
+    writer.writerow(TEST_COVERAGE_CSV_COLUMNS)
+    for r in rows:
+        writer.writerow([
+            r.op_name, r.python_refs, r.lit_refs, r.negative_refs,
+            r.total_refs, "1" if r.is_thinly_tested else "0",
+            " ".join(r.dtype_variants),
+        ])
+    return buf.getvalue()
+
+
 def render_dashboard() -> str:
     """Render the test-coverage-by-op dashboard as Markdown."""
     rows = collect_op_test_coverage()

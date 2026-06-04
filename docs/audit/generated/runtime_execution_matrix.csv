@@ -1,0 +1,7 @@
+target,compiler_path,execution_kind,executable,executor_id,runtime_status,execution_mode,reason
+apple_cpu,apple_cpu_accelerate,native_cpu,1,apple_cpu_accelerate,success,cpu_accelerate,Apple CPU artifact runs through Accelerate cblas_sgemm + multi-op chain.
+apple_cpu,apple_value_target_ir,native_cpu,1,apple_value_target_ir,success,cpu_accelerate,Apple CPU value-call (tessera_apple.cpu.call) dispatches to the named Accelerate/LAPACK C ABI symbol.
+apple_gpu,apple_gpu_mps,native_gpu,1,apple_gpu_mps,success,metal_runtime,Apple GPU artifact runs through MPS / MSL / MPSGraph per the runtime envelope.
+apple_gpu,apple_value_target_ir,native_gpu,1,apple_gpu_value_target_ir,success,metal_runtime,"Apple GPU value-call (tessera_apple.gpu.kernel_call) dispatches named C ABI symbols for strict rank-3 batched matmul, native sparse attention, PPO policy-loss, and EBM value envelopes."
+cpu,jit_cpu_numpy,reference_cpu,1,jit_cpu_numpy,success,,CPU JIT artifact runs through the numpy reference path.
+cpu,native_cpu,native_cpu,1,native_cpu,success,,CPU artifact runs through the x86 AMX / native CPU runtime.

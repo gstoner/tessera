@@ -502,6 +502,33 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 """
 
 
+#: Stable CSV column order for the support table — append-only contract.
+SUPPORT_TABLE_CSV_COLUMNS: tuple[str, ...] = ("op", "family") + LAYER_AXES
+
+
+def render_csv(rows: Iterable[OpSupportRow] | None = None) -> str:
+    """Render the canonical machine-readable support table.
+
+    One row per op: ``op, family, <8 axis statuses>``, sorted by
+    ``(family, op)`` so the output is byte-stable.  This is the
+    drift-gated artifact; the Markdown is the human companion.
+    """
+    import csv as _csv
+    import io as _io
+
+    rows = list(rows) if rows is not None else all_support_rows()
+    rows.sort(key=lambda r: (r.family, r.op_name))
+    buf = _io.StringIO()
+    writer = _csv.writer(buf, lineterminator="\n")
+    writer.writerow(SUPPORT_TABLE_CSV_COLUMNS)
+    for row in rows:
+        writer.writerow(
+            [row.op_name, row.family]
+            + [row.cells[a].status for a in LAYER_AXES]
+        )
+    return buf.getvalue()
+
+
 def render_markdown(rows: Iterable[OpSupportRow] | None = None) -> str:
     """Render the support table as a deterministic Markdown document.
 
@@ -884,6 +911,8 @@ __all__ = [
     "ClaimViolation",
     "all_support_rows",
     "render_markdown",
+    "render_csv",
+    "SUPPORT_TABLE_CSV_COLUMNS",
     "run_claim_lint",
     "support_row_for",
     "main",

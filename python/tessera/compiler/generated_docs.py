@@ -1,0 +1,460 @@
+"""Single source of truth for every generated audit dashboard.
+
+Before this module the regeneration + drift-gate logic for the generated
+docs under ``docs/audit/`` was scattered across **two** shell/Python
+entry points (``scripts/check_generated_docs.sh`` and
+``scripts/release_gate.py``) plus a dozen per-generator unit tests, each
+with its own CLI flag convention (``--render`` / ``--write`` /
+default-write / ``--surface=`` / ``--target=``).  That fragmentation is
+exactly what let ``runtime_abi.md`` silently drift and red CI.
+
+This module replaces all of that with one registry.  Each
+:class:`GeneratedDoc` declares:
+
+  * where the doc lives on disk (Markdown, and optionally a canonical
+    CSV companion),
+  * the **side-effect-free** render callables that produce its text,
+  * whether it is drift-gated, and which artifact is the canonical
+    (byte-compared) one.
+
+**Canonical-artifact rule:** when a doc has a CSV companion, the CSV is
+the canonical machine-readable artifact and the *only* thing the drift
+gate byte-compares; the Markdown is regenerated beside it but not
+byte-gated (cosmetic Markdown churn never reds CI).  Markdown-only docs
+are byte-gated on the Markdown until they grow a CSV.
+
+One CLI drives the fleet::
+
+    python -m tessera.compiler.generated_docs --list
+    python -m tessera.compiler.generated_docs --check [name ...]   # CI / pre-commit gate
+    python -m tessera.compiler.generated_docs --write [name ...]   # sprint regen
+
+``scripts/check_generated_docs.sh`` and ``scripts/release_gate.py`` both
+delegate here, so adding/retiring a dashboard means editing this one
+registry.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Optional, Sequence
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_GEN = _REPO_ROOT / "docs" / "audit" / "generated"
+_AUDIT = _REPO_ROOT / "docs" / "audit"
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Lazy render adapters.
+#
+# Each adapter imports its generator inside the call so importing this
+# registry stays cheap (``--list`` / ``--check name`` shouldn't drag in
+# the 190 KB primitive_coverage module unless that doc is touched) and so
+# we never create import cycles with ``audit.py`` (which imports several
+# of these generators itself).
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _r_support_table() -> str:
+    from . import audit
+    return audit.render_markdown()
+
+
+def _r_support_table_csv() -> str:
+    from . import audit
+    return audit.render_csv()
+
+
+def _r_conformance() -> str:
+    from . import conformance_matrix
+    return conformance_matrix.render_markdown()
+
+
+def _r_conformance_csv() -> str:
+    from . import conformance_matrix
+    return conformance_matrix.render_csv()
+
+
+def _r_e2e() -> str:
+    from . import e2e_coverage
+    return e2e_coverage.render_markdown()
+
+
+def _r_s_series() -> str:
+    from . import s_series_status
+    return s_series_status.render_markdown()
+
+
+def _r_runtime_abi_md() -> str:
+    from . import runtime_abi_audit
+    return runtime_abi_audit.render_dashboard()
+
+
+def _r_runtime_abi_csv() -> str:
+    from . import runtime_abi_audit
+    return runtime_abi_audit.render_csv()
+
+
+def _r_exec_matrix() -> str:
+    from . import execution_matrix
+    return execution_matrix.render_dashboard()
+
+
+def _r_exec_matrix_csv() -> str:
+    from . import execution_matrix
+    return execution_matrix.render_csv()
+
+
+def _r_verifier_md() -> str:
+    from . import verifier_coverage
+    return verifier_coverage.render_dashboard()
+
+
+def _r_verifier_csv() -> str:
+    from . import verifier_coverage
+    return verifier_coverage.render_csv()
+
+
+def _r_apple_target_map() -> str:
+    from . import apple_target_map
+    return apple_target_map.render_markdown()
+
+
+def _r_gpu_target_map(target: str) -> Callable[[], str]:
+    def _render() -> str:
+        from . import gpu_target_map
+        return gpu_target_map.render_markdown(target)
+    return _render
+
+
+def _r_test_coverage_by_op() -> str:
+    from . import test_coverage_audit
+    return test_coverage_audit.render_dashboard()
+
+
+def _r_test_coverage_by_op_csv() -> str:
+    from . import test_coverage_audit
+    return test_coverage_audit.render_csv()
+
+
+def _r_test_coverage_classification() -> str:
+    from . import coverage_classification
+    return coverage_classification.render_classification_dashboard()
+
+
+def _r_tsol() -> str:
+    from . import tsol_coverage
+    return tsol_coverage.render_dashboard()
+
+
+def _r_effect_lattice() -> str:
+    from . import effect_audit
+    return effect_audit.render_dashboard()
+
+
+def _r_docs_freshness() -> str:
+    from . import docs_manifest
+    return docs_manifest.render_dashboard()
+
+
+def _r_operator_benchmarks() -> str:
+    from . import operator_benchmarks_coverage
+    return operator_benchmarks_coverage.render_markdown()
+
+
+def _r_surface(surface: str) -> Callable[[], str]:
+    def _render() -> str:
+        import importlib
+        mod = importlib.import_module(f"tessera.compiler.{surface}_manifest")
+        return mod.render_markdown()
+    return _render
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Data model
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class GeneratedDoc:
+    """One generated audit dashboard.
+
+    Fields
+    ------
+    name
+        Registry key + CLI selector (the stem of the on-disk file).
+    group
+        Coarse grouping for ``--list`` readability.
+    md_path
+        Human-readable Markdown output path.
+    render_md
+        Side-effect-free callable returning the full Markdown text.
+    csv_path / render_csv
+        Optional canonical machine-readable CSV.  When present, the CSV
+        is the byte-gated artifact and the Markdown is a non-gated
+        companion.
+    gated
+        False for inherently non-deterministic docs (e.g. date-stamped
+        freshness) — they are regenerated by ``--write`` but skipped by
+        ``--check``.
+    """
+
+    name: str
+    group: str
+    md_path: Path
+    render_md: Callable[[], str]
+    csv_path: Optional[Path] = None
+    render_csv: Optional[Callable[[], str]] = None
+    gated: bool = True
+
+    @property
+    def canonical_path(self) -> Path:
+        """The artifact the drift gate byte-compares."""
+        return self.csv_path if self.csv_path is not None else self.md_path
+
+    def render_canonical(self) -> str:
+        if self.render_csv is not None:
+            return self.render_csv()
+        return self.render_md()
+
+
+REGISTRY: tuple[GeneratedDoc, ...] = (
+    # ── Op / primitive coverage ──
+    GeneratedDoc(
+        "support_table", "op_coverage", _GEN / "support_table.md", _r_support_table,
+        csv_path=_GEN / "support_table.csv", render_csv=_r_support_table_csv,
+    ),
+    GeneratedDoc(
+        "op_target_conformance", "op_coverage",
+        _AUDIT / "op_target_conformance.md", _r_conformance,
+        csv_path=_AUDIT / "op_target_conformance.csv", render_csv=_r_conformance_csv,
+    ),
+    GeneratedDoc(
+        "e2e_op_coverage", "op_coverage", _GEN / "e2e_op_coverage.md", _r_e2e,
+    ),
+    GeneratedDoc(
+        "s_series_status", "op_coverage", _GEN / "s_series_status.md", _r_s_series,
+    ),
+    # ── Runtime / ABI ──
+    GeneratedDoc(
+        "runtime_abi", "runtime", _GEN / "runtime_abi.md", _r_runtime_abi_md,
+        csv_path=_GEN / "runtime_abi.csv", render_csv=_r_runtime_abi_csv,
+    ),
+    GeneratedDoc(
+        "runtime_execution_matrix", "runtime",
+        _GEN / "runtime_execution_matrix.md", _r_exec_matrix,
+        csv_path=_GEN / "runtime_execution_matrix.csv", render_csv=_r_exec_matrix_csv,
+    ),
+    # ── Verifier ──
+    GeneratedDoc(
+        "verifier_coverage", "verifier", _GEN / "verifier_coverage.md", _r_verifier_md,
+        csv_path=_GEN / "verifier_coverage.csv", render_csv=_r_verifier_csv,
+    ),
+    # ── Target maps ──
+    GeneratedDoc(
+        "apple_target_map", "target_map", _GEN / "apple_target_map.md",
+        _r_apple_target_map,
+    ),
+    GeneratedDoc(
+        "nvidia_sm90_target_map", "target_map", _GEN / "nvidia_sm90_target_map.md",
+        _r_gpu_target_map("nvidia_sm90"),
+    ),
+    GeneratedDoc(
+        "rocm_target_map", "target_map", _GEN / "rocm_target_map.md",
+        _r_gpu_target_map("rocm"),
+    ),
+    # ── Test coverage ──
+    GeneratedDoc(
+        "test_coverage_by_op", "test_coverage", _GEN / "test_coverage_by_op.md",
+        _r_test_coverage_by_op,
+        csv_path=_GEN / "test_coverage_by_op.csv",
+        render_csv=_r_test_coverage_by_op_csv,
+    ),
+    GeneratedDoc(
+        "test_coverage_classification", "test_coverage",
+        _GEN / "test_coverage_classification.md", _r_test_coverage_classification,
+    ),
+    # ── Specialized ──
+    GeneratedDoc(
+        "tsol_coverage", "specialized", _GEN / "tsol_coverage.md", _r_tsol,
+    ),
+    GeneratedDoc(
+        "effect_lattice_audit", "specialized", _GEN / "effect_lattice_audit.md",
+        _r_effect_lattice,
+    ),
+    GeneratedDoc(
+        # Date-stamped → regenerated but not byte-gated.
+        "docs_freshness", "specialized", _GEN / "docs_freshness.md",
+        _r_docs_freshness, gated=False,
+    ),
+    # ── Surface status (examples / benchmarks / research / tools / tests) ──
+    GeneratedDoc(
+        "benchmarks_status", "surface", _GEN / "benchmarks_status.md",
+        _r_surface("benchmarks"),
+    ),
+    GeneratedDoc(
+        "examples_status", "surface", _GEN / "examples_status.md",
+        _r_surface("examples"),
+    ),
+    GeneratedDoc(
+        "research_status", "surface", _GEN / "research_status.md",
+        _r_surface("research"),
+    ),
+    GeneratedDoc(
+        "tools_status", "surface", _GEN / "tools_status.md", _r_surface("tools"),
+    ),
+    GeneratedDoc(
+        "tests_status", "surface", _GEN / "tests_status.md", _r_surface("tests"),
+    ),
+    GeneratedDoc(
+        "operator_benchmarks_coverage", "surface",
+        _GEN / "operator_benchmarks_coverage.md", _r_operator_benchmarks,
+    ),
+)
+
+
+_BY_NAME = {d.name: d for d in REGISTRY}
+
+
+def get(name: str) -> GeneratedDoc:
+    try:
+        return _BY_NAME[name]
+    except KeyError:
+        raise KeyError(
+            f"unknown generated doc {name!r}; known: {sorted(_BY_NAME)}"
+        ) from None
+
+
+def _select(names: Sequence[str]) -> tuple[GeneratedDoc, ...]:
+    if not names:
+        return REGISTRY
+    return tuple(get(n) for n in names)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Operations
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def write(doc: GeneratedDoc) -> list[Path]:
+    """(Re)generate ``doc`` on disk.  Writes the CSV (if any) and the
+    Markdown.  Returns the paths written."""
+    written: list[Path] = []
+    doc.md_path.parent.mkdir(parents=True, exist_ok=True)
+    if doc.csv_path is not None and doc.render_csv is not None:
+        doc.csv_path.parent.mkdir(parents=True, exist_ok=True)
+        doc.csv_path.write_text(doc.render_csv())
+        written.append(doc.csv_path)
+    doc.md_path.write_text(doc.render_md())
+    written.append(doc.md_path)
+    return written
+
+
+def check(doc: GeneratedDoc) -> Optional[str]:
+    """Return ``None`` if ``doc`` is in sync, else a human-readable drift
+    message.  Non-gated docs always return ``None``."""
+    if not doc.gated:
+        return None
+    target = doc.canonical_path
+    if not target.exists():
+        return (
+            f"{doc.name}: {target.relative_to(_REPO_ROOT)} does not exist — "
+            f"run `python -m tessera.compiler.generated_docs --write {doc.name}`"
+        )
+    live = doc.render_canonical()
+    on_disk = target.read_text()
+    if live == on_disk:
+        return None
+    live_lines, disk_lines = live.splitlines(), on_disk.splitlines()
+    idx = next(
+        (i for i, (a, b) in enumerate(zip(live_lines, disk_lines)) if a != b),
+        min(len(live_lines), len(disk_lines)),
+    )
+    near = disk_lines[idx] if idx < len(disk_lines) else "<EOF>"
+    return (
+        f"{doc.name}: drift in {target.relative_to(_REPO_ROOT)} at line {idx + 1} "
+        f"(on-disk: {near!r}) — regenerate with "
+        f"`python -m tessera.compiler.generated_docs --write {doc.name}`"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# CLI
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _cmd_list() -> int:
+    width = max(len(d.name) for d in REGISTRY)
+    group = None
+    for d in sorted(REGISTRY, key=lambda x: (x.group, x.name)):
+        if d.group != group:
+            group = d.group
+            print(f"\n[{group}]")
+        fmt = "csv+md" if d.csv_path else "md"
+        gate = "" if d.gated else "  (not gated)"
+        print(f"  {d.name:<{width}}  {fmt:<6}{gate}")
+    print(f"\n{len(REGISTRY)} generated docs.")
+    return 0
+
+
+def _cmd_write(names: Sequence[str]) -> int:
+    for d in _select(names):
+        paths = write(d)
+        rel = ", ".join(str(p.relative_to(_REPO_ROOT)) for p in paths)
+        print(f"wrote {d.name}: {rel}", file=sys.stderr)
+    return 0
+
+
+def _cmd_check(names: Sequence[str]) -> int:
+    failures = [msg for d in _select(names) if (msg := check(d))]
+    if not failures:
+        print(f"ok: {len(_select(names))} generated doc(s) in sync")
+        return 0
+    for msg in failures:
+        print(f"DRIFT: {msg}", file=sys.stderr)
+    print(
+        "\nRegenerate everything with "
+        "`scripts/check_generated_docs.sh --write` "
+        "(or `python -m tessera.compiler.generated_docs --write`) and "
+        "commit the source + regenerated docs.",
+        file=sys.stderr,
+    )
+    return 1
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    p = argparse.ArgumentParser(
+        prog="python -m tessera.compiler.generated_docs",
+        description="Unified registry, drift gate, and regenerator for "
+                    "every generated audit dashboard.",
+    )
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--list", action="store_true", help="list registered docs")
+    g.add_argument("--check", action="store_true",
+                   help="drift gate: fail if any selected doc is stale")
+    g.add_argument("--write", action="store_true",
+                   help="regenerate selected docs (default: all)")
+    p.add_argument("names", nargs="*", help="doc name(s); default = all")
+    args = p.parse_args(argv)
+    if args.list:
+        return _cmd_list()
+    if args.write:
+        return _cmd_write(args.names)
+    return _cmd_check(args.names)
+
+
+if __name__ == "__main__":  # pragma: no cover
+    sys.exit(main())
+
+
+__all__ = [
+    "GeneratedDoc",
+    "REGISTRY",
+    "get",
+    "write",
+    "check",
+    "main",
+]

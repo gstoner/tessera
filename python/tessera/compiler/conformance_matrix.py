@@ -582,6 +582,38 @@ def status_summary() -> dict[str, int]:
     return counts
 
 
+#: Stable CSV column order for the conformance matrix — append-only.
+CONFORMANCE_CSV_COLUMNS: tuple[str, ...] = (
+    "op", "target", "overall",
+    "graph_emitted", "schedule_legal", "tile_legal", "target_legal",
+    "backend_compile", "runtime_execute", "numerical_check",
+    "first_failing_gate",
+)
+
+
+def render_csv() -> str:
+    """Render the canonical machine-readable conformance matrix.
+
+    One row per (op, target), sorted by ``(op, target)``.  This is the
+    drift-gated artifact; the Markdown is the human companion.
+    """
+    import csv as _csv
+    import io as _io
+
+    cells = sorted(build_matrix(), key=lambda c: (c.op, c.target))
+    buf = _io.StringIO()
+    writer = _csv.writer(buf, lineterminator="\n")
+    writer.writerow(CONFORMANCE_CSV_COLUMNS)
+    for c in cells:
+        writer.writerow([
+            c.op, c.target, c.overall,
+            c.graph_emitted, c.schedule_legal, c.tile_legal, c.target_legal,
+            c.backend_compile, c.runtime_execute, c.numerical_check,
+            c.first_failing_gate or "",
+        ])
+    return buf.getvalue()
+
+
 def render_markdown() -> str:
     cells = build_matrix()
     by_op: dict[str, list[ProofCell]] = {}

@@ -4,7 +4,7 @@
 // tessera_apple.cpu.call carrying tessera_apple_cpu_gemm_f32 — the first
 // non-linalg executable value op.
 //
-// RUN: tessera-opt %s -tessera-lower-to-apple_cpu-full | FileCheck %s
+// RUN: %tessera_strict_opt %s -tessera-lower-to-apple_cpu-full | FileCheck %s
 
 // CHECK-LABEL: func.func @matmul_value
 // CHECK: tessera_apple.cpu.call

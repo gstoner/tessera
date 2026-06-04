@@ -2,7 +2,7 @@
 status: Normative
 classification: Backend contract
 audience: backend authors (Apple proven; NVIDIA / ROCm inherit)
-last_updated: 2026-06-03 (Sprint 10 — Apple reasoning-model attention prologue in the -full pipelines: compiler-visible MLA/NSA/Lightning/Delta/hybrid before distribution/tiling, honestly gated; one strict executable MLA-style envelope + benchmark)
+last_updated: 2026-06-03 (Sprint 11 — Apple value Tile verifier hardened the -full handoff; native sparse attention added as a strict Apple GPU value envelope when the real Metal executor is active)
 ---
 
 # Value Target IR Contract
@@ -55,20 +55,29 @@ Each backend defines value ops with:
 The attribute-only artifact ops (`cpu.vector_op`, `gpu.metal_kernel`,
 `gpu.dispatch`, …) remain unchanged for dashboards / compatibility.
 
-## Tile IR is a registered dialect (Sprint 9)
+## Tile IR is strict in Apple value pipelines (Sprints 9 + 11)
 
 The value-mode tiling pass emits **registered** Tile IR ops in the `tile`
 dialect (`tile.matmul`, `tile.gemm`, `tile.batched_gemm` with rank/shape
 verifiers; `tile.cholesky`/`tri_solve`/`cholesky_solve`/`lu`/`qr`/`svd`). The
 Apple value `-full` pipelines therefore run with **no
-`--allow-unregistered-dialect`** — the Graph -> Schedule -> Tile -> Apple
-Target handoff is verified end to end, not held together by relaxed MLIR
-verification. A guard test
+`--allow-unregistered-dialect`**. That is **necessary but not sufficient**:
+Sprint 11 adds an Apple-value-only Tile verifier immediately after value-mode
+tiling and before `TileToApple`. It fails if any `tile.*` op is unregistered,
+and it fails if a registered Tile op is outside the value allowlist:
+the linalg family, rank-2 `tile.matmul`/`tile.gemm`, and rank-3
+`tile.batched_gemm`. A guard test injects an opaque `tile.fake_value_op` into
+the value lane and proves the verifier rejects it, so the handoff is no longer
+dependent on parser behavior alone. The artifact/runtime pipelines are
+unchanged for now.
+
+A guard test
 (`test_apple_value_lowering_uses_no_unregistered_dialect_flag`) fails if the
 flag is reintroduced in the driver, the lit value fixtures, or the test
-runner. The dialect `allowUnknownOperations` so the *artifact* lane's
-remaining transient tile ops (`tile.mma`/`async_copy`/`kv_cache`/debug) stay
-opaque until their own ODS lands — a documented follow-on, not a hidden gap.
+runner. The `tile` dialect still allows unknown operations so the *artifact*
+lane's remaining transient tile ops (`tile.mma`/`async_copy`/`kv_cache`/debug)
+stay opaque until their own ODS lands — a documented follow-on, not a hidden
+gap for the value handoff.
 
 ## Reasoning-model attention prologue (Sprint 10)
 
@@ -81,16 +90,28 @@ DeepSeek MLA decode chain (`latent_kv_compress -> expand_k/v -> flash_attn`)
 fuses into `tessera.mla_decode_fused`, and the Lightning / Delta / hybrid pass
 slots run in a stable position for a future backend rewrite.
 
-**Honesty:** compiler-visible is **not** executable. The fused reasoning ops
-have no Apple value lowering yet, so they pass through the value lane as
-Graph IR ops — there is no `tessera_apple.gpu.kernel_call`, no MSL/MPS symbol,
-and no `ub.poison` husk. The runtime envelope
-(`driver._APPLE_GPU_RUNTIME_OPS`) does **not** contain them, so they are never
-claimed executable. The one strict executable reasoning envelope is the
-MLA-style block built from executable primitives
-(`matmul -> softmax -> matmul` + MPS projections), proven numerically by
-`tests/unit/test_apple_gpu_mla_e2e.py`. Lit: `apple_reasoning_attention_prologue.mlir`.
-Benchmark + honesty guards: `benchmarks/apple_gpu/benchmark_reasoning_attention.py`
+**Honesty:** compiler-visible is **not** executable. MLA decode, Lightning,
+Delta/Kimi, and hybrid ops have no Apple value lowering yet, so they pass
+through the value lane as Graph IR ops — there is no
+`tessera_apple.gpu.kernel_call`, no MSL/MPS symbol, and no `ub.poison` husk.
+The runtime envelope (`driver._APPLE_GPU_RUNTIME_OPS`) does **not** contain
+them, so they are never claimed executable.
+
+Sprint 11 promotes exactly one new reasoning envelope:
+`tessera.native_sparse_attn_fused` lowers to
+`tessera_apple.gpu.kernel_call` with symbol
+`tessera_apple_gpu_native_sparse_attn_f32` only for static fp32 rank-4 Q/K/V/O,
+rank-4 gate logits shaped `[B,H,S,S/block_size]`, positive
+`window_size`/`block_size`/`top_k`, `S % block_size == 0`, and
+`top_k <= S/block_size`. Runtime execution is additionally gated on the real
+Darwin/Metal value executor being active; the non-Darwin stub exports the
+symbol but zero-fills, so it is rejected for value execution.
+
+The other strict executable reasoning envelope remains the MLA-style block
+built from executable primitives (`matmul -> softmax -> matmul` + MPS
+projections), proven numerically by `tests/unit/test_apple_gpu_mla_e2e.py`.
+Lit: `apple_reasoning_attention_prologue.mlir`. Benchmark + honesty guards:
+`benchmarks/apple_gpu/benchmark_reasoning_attention.py`
 + `tests/unit/test_apple_gpu_reasoning_benchmark.py` (reports route / target /
 executor / correctness / timing as separate fields; never fabricates a number
 for an op it did not run).
@@ -120,19 +141,23 @@ pipelines pass `valueMode=true`); a backend may instead use distinct passes.
   matching top-level `}` while skipping braces inside quoted strings — so an
   `argument_layout` whose value is a JSON object survives intact).
 
-### What "runtime dispatches" means today (Sprints 2–8)
+### What "runtime dispatches" means today (Sprints 2–11)
 
 This is a **narrow, honest** executable path, not a blanket claim. The boundary
 is **CPU linalg + CPU rank-2 matmul (f32/f16/bf16) + CPU fp32 rank-3 batched
-matmul + Apple GPU rank-3 batched matmul (f32/f16/bf16) = executable; all other
-GPU value calls and non-linalg value calls = classified + gated**.
+matmul + Apple GPU rank-3 batched matmul (f32/f16/bf16) + Apple GPU native
+sparse attention (strict fp32 rank-4 envelope, real Metal executor only) =
+executable; all other GPU value calls and non-linalg value calls = classified +
+gated**.
 
 Two executor allowlists, one per backend lane:
 - **CPU** (`test_value_envelope_executable_allowlist_exact`): the six CPU linalg
   symbols, `tessera_apple_cpu_gemm_f32` (rank-2 matmul), `…_gemm_f32_batched`
   (rank-3 batched), and `…_gemm_f16` / `…_gemm_bf16` (rank-2 matmul).
 - **GPU** (`test_gpu_value_executor_allowlist_exact`):
-  `tessera_apple_gpu_bmm_{f32,f16,bf16}` (rank-3 batched matmul, Sprint 8).
+  `tessera_apple_gpu_bmm_{f32,f16,bf16}` (rank-3 batched matmul, Sprint 8)
+  plus `tessera_apple_gpu_native_sparse_attn_f32` (native sparse attention,
+  Sprint 11; active only when the real Metal executor is available).
 
 - **The full Apple CPU linalg family is executable now (Sprint 3).** The matrix
   row `(apple_cpu, apple_value_target_ir)` resolves to the
@@ -226,11 +251,25 @@ Two executor allowlists, one per backend lane:
   `invalid_artifact`. Broadcast/rank-4 batched are verifier-rejected;
   dynamic/non-shared-dtype reach the lowering as a raw op and fail with a named
   diagnostic.
+- **Apple GPU native sparse attention is executable in one strict envelope
+  (Sprint 11).** The Graph-level `tessera.native_sparse_attn_fused` op lowers
+  to a `tessera_apple.gpu.kernel_call` with symbol
+  `tessera_apple_gpu_native_sparse_attn_f32` only for static rank-4 fp32
+  Q/K/V/O tensors with identical shape, rank-4 fp32 gate logits
+  `[B,H,S,S/block_size]`, and fixed positive `window_size`, `block_size`, and
+  `top_k` attrs satisfying `S % block_size == 0` and
+  `top_k <= S/block_size`. The runtime executor validates the same envelope,
+  reads the symbol from `metadata["apple_value_calls"]`, and refuses the
+  non-Darwin zero-fill stub. Benchmark rows report
+  `executor="apple_gpu_value_target_ir"`, correctness, and timing only when
+  that runtime probe succeeds; otherwise they report `executor=None`,
+  `correctness=None`, and `timing_ms=None` with a named skip reason.
 - **Everything else is classified + gated, never silently dispatched:**
   - Other GPU `gpu.kernel_call`s (`cholesky`/`tri_solve` linalg, rank-2 matmul)
     and `gpu.package_call` are **non-executable** on the value lane — classified
     + recorded, `launch` returns a structured non-success. GPU value execution
-    beyond batched matmul waits on a broader GPU value-call adapter.
+    beyond batched matmul and native sparse attention waits on a broader GPU
+    value-call adapter.
   - **Other non-linalg value calls are not value-executable.** `softmax`,
     `gelu`, `conv2d`, transposed rank-2 matmul, **CPU** batched f16/bf16, and
     dynamic/rank-4 matmul keep their default artifact/runtime path;

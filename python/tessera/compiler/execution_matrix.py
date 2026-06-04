@@ -65,7 +65,8 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "(Value Target IR sprint; CPU cholesky executable)",
     "apple_gpu_value_target_ir": "Apple GPU value-call dispatch — invokes the C "
                              "ABI symbol named in a tessera_apple.gpu.kernel_call "
-                             "value op (Sprint 8; rank-3 batched matmul f32/f16/bf16)",
+                             "value op (rank-3 batched matmul f32/f16/bf16; "
+                             "native sparse attention when the Metal executor is active)",
     "native_cpu":           "x86 AMX / native CPU runtime via the C runtime ABI",
     "jit_cpu_numpy":        "JIT CPU fallback via the numpy reference path",
     # Note: pure-numpy `reference_cpu` is reached only as an internal *fallback*
@@ -106,16 +107,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         reason="Apple CPU value-call (tessera_apple.cpu.call) dispatches to the "
                "named Accelerate/LAPACK C ABI symbol.",
         execution_mode="cpu_accelerate"),
-    # Sprint 8 — Apple GPU value-call execution for the narrow batched-matmul
-    # lane (tessera_apple.gpu.kernel_call with op_kind "batched_gemm", symbols
-    # tessera_apple_gpu_bmm_{f32,f16,bf16}). The executor rejects cpu.call,
-    # package_call, multi-op programs, and off-allowlist symbols.
+    # Apple GPU value-call execution for narrow, explicitly allowlisted lanes:
+    # rank-3 batched matmul (Sprint 8) and native sparse attention (Sprint 11).
+    # The executor rejects cpu.call, package_call, multi-op programs, inactive
+    # stubs, and off-allowlist symbols.
     ("apple_gpu", "apple_value_target_ir"): ExecutionRow(
         target="apple_gpu", compiler_path="apple_value_target_ir",
         execution_kind="native_gpu", executable=True,
         executor_id="apple_gpu_value_target_ir", runtime_status="success",
         reason="Apple GPU value-call (tessera_apple.gpu.kernel_call) dispatches "
-               "the named MPSGraph bmm C ABI symbol for rank-3 batched matmul.",
+               "named C ABI symbols for strict rank-3 batched matmul and native "
+               "sparse attention envelopes.",
         execution_mode="metal_runtime"),
     # --- x86 / native CPU (AMX path) ---
     ("cpu", "native_cpu"): ExecutionRow(

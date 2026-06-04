@@ -79,6 +79,7 @@ _FILECHECK = _resolve("FILECHECK", "", "FileCheck")
 config.substitutions.append(
     ('tessera-opt', f'"{_TESSERA_OPT}" -allow-unregistered-dialect')
 )
+config.substitutions.append(('%tessera_strict_opt', f'"{_TESSERA_OPT}"'))
 config.substitutions.append(('FileCheck', f'"{_FILECHECK}"'))
 
 # Probe tessera-opt for optional backends so per-target fixtures can

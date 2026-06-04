@@ -247,15 +247,21 @@ class CompileResult:
                                     and _sym in _cpu_syms):
                                 _exec_ok = True
                             elif (self.target == "apple_gpu" and _ok
-                                    and _c0.get("op") == "tessera_apple.gpu.kernel_call"
-                                    and _c0.get("op_kind") == "batched_gemm"
-                                    and _sym in _gpu_syms):
-                                _exec_ok = True
+                                  and _c0.get("op") == "tessera_apple.gpu.kernel_call"
+                                  and _sym in _gpu_syms):
+                                _op_kind = _c0.get("op_kind")
+                                if _op_kind == "batched_gemm":
+                                    _exec_ok = True
+                                elif _op_kind == "native_sparse_attn_fused":
+                                    _exec_ok = (
+                                        _rt._apple_gpu_native_sparse_attn_f32()
+                                        is not None)
                         # The value lane OWNS the executable decision for this
                         # artifact (override the bundle/canonical answer): a
                         # value artifact is launchable iff its single value call
-                        # is on the runtime allowlist. Multi-op, off-allowlist,
-                        # and non-batched GPU calls are decisively NOT executable.
+                        # is on the runtime allowlist and any op-specific
+                        # runtime probe succeeds. Multi-op, off-allowlist, and
+                        # unsupported GPU calls are decisively NOT executable.
                         meta["executable"] = _exec_ok
             except Exception:
                 # Classification is metadata-only; never block artifact creation.

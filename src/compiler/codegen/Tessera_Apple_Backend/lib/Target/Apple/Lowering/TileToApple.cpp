@@ -70,8 +70,6 @@ constexpr llvm::StringLiteral kGPUMetalKernel =
     "tessera_apple.gpu.metal_kernel";
 constexpr llvm::StringLiteral kGPUDispatch = "tessera_apple.gpu.dispatch";
 
-constexpr llvm::StringLiteral kDiagnostic = "tessera_apple.diagnostic";
-
 // kv_cache_coverage_matrix.md — Apple CPU + GPU KV-cache lowering targets.
 // `kv_cache.{create,append,prune,read}` map to a single tessera_apple.*
 // op carrying the original Graph IR op as a `kind` attribute. The Python
@@ -102,6 +100,10 @@ bool isReduction(llvm::StringRef name) {
 bool isFlashAttn(llvm::StringRef name) { return name == "tessera.flash_attn"; }
 
 bool isRoPE(llvm::StringRef name) { return name == "tessera.rope"; }
+
+bool isNativeSparseAttnFused(llvm::StringRef name) {
+  return name == "tessera.native_sparse_attn_fused";
+}
 
 // L-series linalg family (2026-06-02) — table-driven Tile→Apple lowering.
 //
@@ -191,6 +193,8 @@ bool isAppleGpuRuntimeOp(llvm::StringRef n) {
   for (const auto &r : kRuntimeOps)
     if (n == r)
       return true;
+  if (isNativeSparseAttnFused(n))
+    return true;
   return false;
 }
 
@@ -203,7 +207,8 @@ bool isLowerable(Operation *op) {
   if (name.starts_with("tessera_apple."))
     return false; // already lowered
   if (isMatmul(name) || isBatchedMatmul(name) || isReduction(name) ||
-      isFlashAttn(name) || isRoPE(name) || isKVCache(name))
+      isFlashAttn(name) || isRoPE(name) || isKVCache(name) ||
+      isNativeSparseAttnFused(name))
     return true;
   if (name.starts_with("tessera.tile.") || name.starts_with("tile."))
     return op->hasAttr("source");
@@ -216,6 +221,49 @@ std::string canonicalSource(Operation *op) {
   if (auto src = op->getAttrOfType<StringAttr>("source"))
     return src.getValue().str();
   return op->getName().getStringRef().str();
+}
+
+bool isStaticRank4F32Tensor(Type ty) {
+  auto rt = llvm::dyn_cast<RankedTensorType>(ty);
+  return rt && rt.getRank() == 4 && rt.hasStaticShape() &&
+         rt.getElementType().isF32();
+}
+
+bool verifyNativeSparseValueEnvelope(Operation *op) {
+  if (op->getNumOperands() != 4 || op->getNumResults() != 1)
+    return false;
+  auto qTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  auto kTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+  auto vTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+  auto gateTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(3).getType());
+  auto outTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  if (!qTy || !kTy || !vTy || !gateTy || !outTy)
+    return false;
+  if (!isStaticRank4F32Tensor(qTy) || !isStaticRank4F32Tensor(kTy) ||
+      !isStaticRank4F32Tensor(vTy) || !isStaticRank4F32Tensor(gateTy) ||
+      !isStaticRank4F32Tensor(outTy))
+    return false;
+  if (qTy.getShape() != kTy.getShape() || qTy.getShape() != vTy.getShape() ||
+      qTy.getShape() != outTy.getShape())
+    return false;
+  auto blockAttr = op->getAttrOfType<IntegerAttr>("block_size");
+  auto windowAttr = op->getAttrOfType<IntegerAttr>("window_size");
+  auto topKAttr = op->getAttrOfType<IntegerAttr>("top_k");
+  if (!blockAttr || !windowAttr || !topKAttr)
+    return false;
+  int64_t block = blockAttr.getInt();
+  int64_t window = windowAttr.getInt();
+  int64_t topK = topKAttr.getInt();
+  int64_t seq = qTy.getDimSize(2);
+  if (block <= 0 || window <= 0 || topK <= 0 || seq % block != 0)
+    return false;
+  int64_t numBlocks = seq / block;
+  if (topK > numBlocks)
+    return false;
+  return gateTy.getDimSize(0) == qTy.getDimSize(0) &&
+         gateTy.getDimSize(1) == qTy.getDimSize(1) &&
+         gateTy.getDimSize(2) == qTy.getDimSize(2) &&
+         gateTy.getDimSize(3) == numBlocks;
 }
 
 std::string resolveResult(Operation *op, int64_t ordinal) {
@@ -240,16 +288,6 @@ Operation *buildAppleOp(OpBuilder &b, Operation *op, llvm::StringRef opName,
     state.addAttribute(na.getName(), na.getValue());
   b.setInsertionPoint(op);
   return b.create(state);
-}
-
-// Build a tessera_apple.diagnostic op with severity / reason for unsupported
-// ops on a given target.
-Operation *buildDiagnostic(OpBuilder &b, Operation *op, int64_t ordinal,
-                           llvm::StringRef severity, llvm::StringRef reason) {
-  llvm::SmallVector<NamedAttribute, 2> extra;
-  extra.emplace_back(b.getStringAttr("severity"), b.getStringAttr(severity));
-  extra.emplace_back(b.getStringAttr("reason"), b.getStringAttr(reason));
-  return buildAppleOp(b, op, kDiagnostic, ordinal, extra);
 }
 
 // Walk all "lowerable" ops in the module. Collected up front so that op
@@ -326,7 +364,8 @@ void emitAppleValueCall(OpBuilder &b, Operation *op,
   // dispatch never silently assumes a default (lower/trans/unit_diag for
   // solves; full_matrices for qr/svd).  Copied verbatim when present.
   for (llvm::StringRef name :
-       {"lower", "trans", "unit_diag", "full_matrices"}) {
+       {"lower", "trans", "unit_diag", "full_matrices", "window_size",
+        "block_size", "top_k", "causal"}) {
     if (Attribute a = op->getAttr(name))
       st.addAttribute(name, a);
   }
@@ -609,6 +648,24 @@ struct LowerTileToAppleGPUPass
           }
           emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call",
                              "batched_gemm", symbol, "mps", "executable",
+                             "Metal");
+          ++ordinal;
+          continue;
+        }
+        if (isNativeSparseAttnFused(name) || isNativeSparseAttnFused(src)) {
+          if (!verifyNativeSparseValueEnvelope(op)) {
+            op->emitError("apple_gpu value lowering: native_sparse_attn_fused "
+                          "requires static rank-4 fp32 Q/K/V/O, static rank-4 "
+                          "fp32 gate logits [B,H,S,S/block_size], positive "
+                          "window_size/block_size/top_k, S divisible by "
+                          "block_size, and top_k <= S/block_size");
+            signalPassFailure();
+            return;
+          }
+          emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call",
+                             "native_sparse_attn_fused",
+                             "tessera_apple_gpu_native_sparse_attn_f32",
+                             "msl_native_sparse_attn_f32", "executable",
                              "Metal");
           ++ordinal;
           continue;

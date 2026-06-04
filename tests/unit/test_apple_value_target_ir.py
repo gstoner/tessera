@@ -1220,8 +1220,8 @@ def test_graphir_builder_infers_batched_gemm_result_rank3():
     import tessera
     from tessera.compiler.graph_ir import GraphIRBuilder
 
-    def bmm_fn(A: "tensor<2x4x8xf32>", B: "tensor<2x8x16xf32>",
-               C: "tensor<2x4x16xf32>"):
+    def bmm_fn(A: "tensor<2x4x8xf32>", B: "tensor<2x8x16xf32>",  # noqa: F722
+               C: "tensor<2x4x16xf32>"):  # noqa: F722
         C[:] = tessera.ops.batched_gemm(A, B)
 
     fn_ir = GraphIRBuilder().lower(bmm_fn)
@@ -1385,6 +1385,7 @@ def test_gpu_value_executor_allowlist_exact():
         "tessera_apple_gpu_bmm_f32",
         "tessera_apple_gpu_bmm_f16",
         "tessera_apple_gpu_bmm_bf16",
+        "tessera_apple_gpu_native_sparse_attn_f32",
     })
 
 
@@ -1620,6 +1621,9 @@ def test_apple_value_lowering_uses_no_unregistered_dialect_flag():
         text = mlir.read_text()
         for line in text.splitlines():
             if "RUN:" in line and "-full" in line:
+                assert "%tessera_strict_opt" in line, (
+                    f"{mlir.name} value RUN line must use the strict "
+                    "tessera-opt substitution")
                 assert "--allow-unregistered-dialect" not in line, (
                     f"{mlir.name} value RUN line still uses the flag")
 
@@ -1656,3 +1660,109 @@ def test_registered_tile_matmul_verifier_rejects_bad_shape():
                           input=body, capture_output=True, text=True, timeout=60)
     assert proc.returncode != 0
     assert "result row dimension must equal lhs M" in proc.stderr
+
+
+def test_value_pipeline_rejects_opaque_tile_ops_even_without_unregistered_flag():
+    """Sprint 11: no `--allow-unregistered-dialect` is necessary but not
+    sufficient because TileDialect still permits unknown artifact-lane ops. The
+    Apple value pipeline must reject opaque tile.* ops explicitly."""
+    import subprocess
+    body = ('func.func @f(%a: tensor<4x4xf32>) -> tensor<4x4xf32> {\n'
+            '  %0 = "tile.fake_value_op"(%a) : '
+            '(tensor<4x4xf32>) -> tensor<4x4xf32>\n'
+            '  return %0 : tensor<4x4xf32>\n}')
+    proc = subprocess.run([_OPT, "-tessera-lower-to-apple_gpu-full", "-"],
+                          input=body, capture_output=True, text=True,
+                          timeout=60)
+    assert proc.returncode != 0
+    assert "unregistered op 'tile.fake_value_op'" in proc.stderr
+
+
+def test_native_sparse_value_call_attrs_extract_as_ints_and_bool():
+    from tessera.compiler.driver import extract_apple_value_calls
+    ir = '''
+func.func @f(%q: tensor<1x2x8x4xf32>, %k: tensor<1x2x8x4xf32>,
+             %v: tensor<1x2x8x4xf32>, %g: tensor<1x2x8x2xf32>)
+    -> tensor<1x2x8x4xf32> {
+  %0 = tessera_apple.gpu.kernel_call %q, %k, %v, %g {
+    op_kind = "native_sparse_attn_fused",
+    symbol = "tessera_apple_gpu_native_sparse_attn_f32",
+    status = "executable",
+    window_size = 4,
+    block_size = 4,
+    top_k = 1,
+    causal = true
+  } : (tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>,
+       tensor<1x2x8x2xf32>) -> tensor<1x2x8x4xf32>
+  return %0 : tensor<1x2x8x4xf32>
+}'''
+    call = extract_apple_value_calls(ir)[0]
+    assert call["op_kind"] == "native_sparse_attn_fused"
+    assert call["window_size"] == 4
+    assert call["block_size"] == 4
+    assert call["top_k"] == 1
+    assert call["causal"] is True
+
+
+def test_native_sparse_value_metadata_needs_active_runtime_probe(monkeypatch):
+    """A native-sparse value call on the symbol allowlist is not enough to mark
+    the artifact executable; the real Metal executor probe must also succeed."""
+    from tessera import runtime
+
+    monkeypatch.setattr(runtime, "_apple_gpu_native_sparse_attn_f32",
+                        lambda: None)
+    ir = '''
+func.func @f(%q: tensor<1x2x8x4xf32>, %k: tensor<1x2x8x4xf32>,
+             %v: tensor<1x2x8x4xf32>, %g: tensor<1x2x8x2xf32>)
+    -> tensor<1x2x8x4xf32> {
+  %0 = tessera_apple.gpu.kernel_call %q, %k, %v, %g {
+    op_kind = "native_sparse_attn_fused",
+    symbol = "tessera_apple_gpu_native_sparse_attn_f32",
+    status = "executable",
+    window_size = 4,
+    block_size = 4,
+    top_k = 1,
+    causal = true
+  } : (tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>,
+       tensor<1x2x8x2xf32>) -> tensor<1x2x8x4xf32>
+  return %0 : tensor<1x2x8x4xf32>
+}'''
+    meta = _inject_value_ir("apple_gpu", ir)
+    assert meta["apple_target_ir_kind"] == "value_target_ir"
+    assert meta["apple_value_calls"][0]["symbol"] == (
+        "tessera_apple_gpu_native_sparse_attn_f32")
+    assert meta.get("executable") is not True
+
+
+def test_gpu_value_native_sparse_non_darwin_stub_is_not_executable():
+    """The non-Darwin C++ stub exports the native-sparse symbol but zero-fills;
+    the value executor must reject it instead of fabricating success."""
+    import sys
+    import numpy as np
+    import pytest
+    from tessera import runtime
+
+    if sys.platform == "darwin":
+        pytest.skip("Darwin may have a real Metal native-sparse executor")
+    artifact = runtime.RuntimeArtifact(metadata={
+        "target": "apple_gpu",
+        "compiler_path": "apple_value_target_ir",
+        "apple_target_ir_kind": "value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.gpu.kernel_call",
+            "op_kind": "native_sparse_attn_fused",
+            "symbol": "tessera_apple_gpu_native_sparse_attn_f32",
+            "status": "executable",
+            "window_size": 4,
+            "block_size": 4,
+            "top_k": 1,
+            "causal": True,
+        }],
+    })
+    q = np.zeros((1, 2, 8, 4), dtype=np.float32)
+    gate = np.zeros((1, 2, 8, 2), dtype=np.float32)
+    res = runtime.launch(artifact, [q, q, q, gate])
+    assert res["ok"] is False
+    assert res["runtime_status"] == "invalid_artifact"
+    assert "non-Darwin stub is not executable" in res["reason"]

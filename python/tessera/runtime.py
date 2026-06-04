@@ -2827,12 +2827,39 @@ def _apple_gpu_bmm_bf16() -> Any:
     return sym
 
 
+def _apple_gpu_native_sparse_attn_f32() -> Any:
+    """Sprint 11: bind the real Apple GPU Native Sparse Attention symbol.
+
+    The non-Darwin stub exports the same symbol but zero-fills, so value
+    execution requires Darwin + an active shared Apple GPU runtime, not symbol
+    presence alone.
+    """
+    if sys.platform != "darwin":
+        return None
+    try:
+        from ._apple_gpu_dispatch import apple_gpu_skip_reason
+        if apple_gpu_skip_reason() is not None:
+            return None
+    except Exception:
+        return None
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_native_sparse_attn_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [fp, fp, fp, fp, fp] + [ctypes.c_int32] * 8
+    sym.restype = None
+    return sym
+
+
 # Apple GPU value-lane batched-matmul dispatch (Sprint 8). symbol -> (resolver,
 # numpy-dtype-kind). The key set is the GPU value allowlist.
 _APPLE_VALUE_GPU_DISPATCH: dict[str, tuple] = {
     "tessera_apple_gpu_bmm_f32": (_apple_gpu_bmm_f32, "f32"),
     "tessera_apple_gpu_bmm_f16": (_apple_gpu_bmm_f16, "f16"),
     "tessera_apple_gpu_bmm_bf16": (_apple_gpu_bmm_bf16, "bf16"),
+    "tessera_apple_gpu_native_sparse_attn_f32": (
+        _apple_gpu_native_sparse_attn_f32, "native_sparse_attn_f32"),
 }
 _APPLE_VALUE_GPU_SYMBOLS: frozenset[str] = frozenset(_APPLE_VALUE_GPU_DISPATCH)
 
@@ -2897,12 +2924,73 @@ def _dispatch_gpu_batched_matmul(inputs, call, np):
     return out
 
 
+def _dispatch_gpu_native_sparse_attn(inputs, call, np):
+    """Strict fp32 rank-4 DeepSeek NSA dispatch for Apple GPU value IR."""
+    symbol = str(call.get("symbol", ""))
+    entry = _APPLE_VALUE_GPU_DISPATCH.get(symbol)
+    if entry is None or entry[1] != "native_sparse_attn_f32":
+        raise ValueError(
+            f"apple_value_target_ir(gpu): symbol {symbol!r} is not the native "
+            "sparse-attention value symbol")
+    if len(inputs) != 4:
+        raise ValueError(
+            f"apple_value_target_ir(gpu): native_sparse_attn_fused value-call "
+            f"needs exactly 4 input(s), got {len(inputs)}")
+    q = np.ascontiguousarray(np.asarray(inputs[0], dtype=np.float32))
+    k = np.ascontiguousarray(np.asarray(inputs[1], dtype=np.float32))
+    v = np.ascontiguousarray(np.asarray(inputs[2], dtype=np.float32))
+    gate = np.ascontiguousarray(np.asarray(inputs[3], dtype=np.float32))
+    if q.ndim != 4 or k.ndim != 4 or v.ndim != 4 or gate.ndim != 4:
+        raise ValueError(
+            "native_sparse_attn_fused(gpu) requires rank-4 Q/K/V/gate tensors")
+    if q.shape != k.shape or q.shape != v.shape:
+        raise ValueError(
+            f"native_sparse_attn_fused(gpu) Q/K/V shape mismatch: "
+            f"{q.shape} / {k.shape} / {v.shape}")
+    try:
+        window = int(call["window_size"])
+        block = int(call["block_size"])
+        top_k = int(call["top_k"])
+    except Exception as exc:
+        raise ValueError(
+            "native_sparse_attn_fused(gpu) requires window_size/block_size/"
+            "top_k integer attrs") from exc
+    causal = bool(call.get("causal", True))
+    B, H, S, D = (int(x) for x in q.shape)
+    if block <= 0 or window <= 0 or top_k <= 0 or S % block != 0:
+        raise ValueError(
+            "native_sparse_attn_fused(gpu) requires positive window/block/top_k "
+            "and S divisible by block_size")
+    num_blocks = S // block
+    if top_k > num_blocks:
+        raise ValueError(
+            f"native_sparse_attn_fused(gpu) top_k={top_k} exceeds "
+            f"S/block_size={num_blocks}")
+    if gate.shape != (B, H, S, num_blocks):
+        raise ValueError(
+            f"native_sparse_attn_fused(gpu) gate shape {gate.shape} must be "
+            f"({B}, {H}, {S}, {num_blocks})")
+    sym = _apple_gpu_native_sparse_attn_f32()
+    if sym is None:
+        raise ValueError(
+            "apple_gpu runtime lacks an active Metal native sparse-attention "
+            "executor; the non-Darwin stub is not executable for value IR")
+    out = np.empty_like(q, dtype=np.float32)
+    fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    sym(fp(q), fp(k), fp(v), fp(gate), fp(out),
+        ctypes.c_int32(B), ctypes.c_int32(H), ctypes.c_int32(S),
+        ctypes.c_int32(D), ctypes.c_int32(window), ctypes.c_int32(block),
+        ctypes.c_int32(top_k), ctypes.c_int32(1 if causal else 0))
+    return out
+
+
 def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", args: Any) -> Any:
-    """Execute an Apple GPU value-target-IR artifact (Sprint 8).
+    """Execute an Apple GPU value-target-IR artifact.
 
     Scope: exactly one `tessera_apple.gpu.kernel_call` with
-    `op_kind == "batched_gemm"`, `status == "executable"`, and a symbol on the
-    GPU value allowlist (`tessera_apple_gpu_bmm_{f32,f16,bf16}`). Rejects
+    an op kind and symbol on the GPU value allowlist. Sprint 8 shipped
+    rank-3 `batched_gemm`; Sprint 11 adds static fp32 rank-4
+    `native_sparse_attn_fused`. Rejects
     `cpu.call`, `package_call`, multi-op programs, unknown symbols, extra
     operands, and non-executable statuses — so launch reports `invalid_artifact`
     rather than silently mis-dispatching."""
@@ -2926,9 +3014,11 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
         raise ValueError(
             f"apple_value_target_ir(gpu): value call status is "
             f"{call.get('status')!r}, not 'executable'")
-    if str(call.get("op_kind")) != "batched_gemm":
+    op_kind = str(call.get("op_kind"))
+    if op_kind not in {"batched_gemm", "native_sparse_attn_fused"}:
         raise ValueError(
-            f"apple_value_target_ir(gpu): only batched_gemm executes on the GPU "
+            f"apple_value_target_ir(gpu): only batched_gemm and "
+            f"native_sparse_attn_fused execute on the GPU "
             f"value lane today (got op_kind={call.get('op_kind')!r})")
 
     arg_names = list(metadata.get("arg_names") or [])
@@ -2939,11 +3029,13 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
         inputs = list(args)
     else:
         inputs = [args]
-    if len(inputs) != 2:
-        raise ValueError(
-            f"apple_value_target_ir(gpu): batched_gemm value-call needs exactly "
-            f"2 input(s), got {len(inputs)}")
-    return _dispatch_gpu_batched_matmul(inputs, call, np)
+    if op_kind == "batched_gemm":
+        if len(inputs) != 2:
+            raise ValueError(
+                f"apple_value_target_ir(gpu): batched_gemm value-call needs "
+                f"exactly 2 input(s), got {len(inputs)}")
+        return _dispatch_gpu_batched_matmul(inputs, call, np)
+    return _dispatch_gpu_native_sparse_attn(inputs, call, np)
 
 
 def _apple_gpu_dispatch_bmm(a: Any, b: Any, np: Any) -> Any:

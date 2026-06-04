@@ -19,11 +19,16 @@ HONESTY CONTRACT (Decisions #21 / #25, VALUE_TARGET_IR_CONTRACT.md):
     inner block fuses into the `matmul_softmax_matmul_f32` MSL kernel
     (Phase 8.4.5) and the projections dispatch through MPS — both real runtime
     kernels. Its correctness + timing are measured against a numpy reference.
-  * Every other reasoning variant (DeepSeek MLA-decode-fused, DeepSeek NSA,
-    Lightning, Gated DeltaNet, Kimi-Delta, hybrid) is COMPILER-VISIBLE ONLY:
-    the Sprint 10 reasoning prologue recognizes/positions it in Graph IR, but
-    there is no Apple runtime kernel yet, so executor=None, correctness=None,
-    timing_ms=None. We never fabricate a number for an op we did not run.
+  * Sprint 11 promotes exactly one additional Apple Value Target IR envelope:
+    `tessera.native_sparse_attn_fused` with static fp32 rank-4 Q/K/V plus
+    score/gate tensor. It only executes when the real Darwin/Metal runtime can
+    bind `tessera_apple_gpu_native_sparse_attn_f32`; the non-Darwin stub exports
+    the symbol but zero-fills, so symbol presence alone is not executable.
+  * Every other reasoning variant (DeepSeek MLA-decode-fused, Lightning, Gated
+    DeltaNet, Kimi-Delta, hybrid) is COMPILER-VISIBLE ONLY: the Sprint 10
+    reasoning prologue recognizes/positions it in Graph IR, but there is no
+    Apple runtime kernel yet, so executor=None, correctness=None, timing_ms=None.
+    We never fabricate a number for an op we did not run.
   * The executable/non-executable split is GROUNDED in the runtime envelope
     (`tessera.compiler.driver._APPLE_GPU_RUNTIME_OPS`) — not hard-coded here —
     so this example can never drift into over-claiming.
@@ -52,6 +57,7 @@ import numpy as np
 
 import tessera as ts
 from tessera.compiler import driver as _driver
+from tessera import runtime as _runtime
 
 
 # ── The one strict executable envelope + the compiler-visible-only variants ──
@@ -71,10 +77,6 @@ EXECUTABLE_ENVELOPE = {
 COMPILER_VISIBLE_ONLY = [
     {"name": "mla_decode_fused", "graph_op": "tessera.mla_decode_fused",
      "description": "DeepSeek MLA decode chain fused by -tessera-mla-fusion"},
-    {"name": "deepseek_native_sparse_attn",
-     "graph_op": "tessera.native_sparse_attn_fused",
-     "description": "DeepSeek NSA 3-branch fused by "
-                    "-tessera-native-sparse-attn-fusion"},
     {"name": "lightning_attention", "graph_op": "tessera.lightning_attention",
      "description": "MiniMax-M1 Lightning linear attention"},
     {"name": "gated_deltanet", "graph_op": "tessera.gated_deltanet",
@@ -102,6 +104,16 @@ def _executor_for(graph_op: str) -> str | None:
 
 def _is_executable(graph_op: str) -> bool:
     return graph_op in getattr(_driver, "_APPLE_GPU_RUNTIME_OPS", frozenset())
+
+
+def _native_sparse_value_available() -> bool:
+    symbol = "tessera_apple_gpu_native_sparse_attn_f32"
+    if symbol not in getattr(_runtime, "_APPLE_VALUE_GPU_SYMBOLS", frozenset()):
+        return False
+    try:
+        return _runtime._apple_gpu_native_sparse_attn_f32() is not None
+    except Exception:
+        return False
 
 
 # ── numpy reference for the executable MLA-style block ──────────────────────
@@ -219,6 +231,90 @@ def _measure_executable_envelope(shapes, reps):
     return rows
 
 
+def _native_sparse_scores(Q, K, *, block_size: int):
+    B, H, S, D = Q.shape
+    Kc = K.reshape(B, H, S // block_size, block_size, D).mean(axis=-2)
+    return np.matmul(Q, np.swapaxes(Kc, -1, -2)).astype(np.float32)
+
+
+def _native_sparse_artifact(window_size: int, block_size: int, top_k: int):
+    call = {
+        "op": "tessera_apple.gpu.kernel_call",
+        "op_kind": "native_sparse_attn_fused",
+        "symbol": "tessera_apple_gpu_native_sparse_attn_f32",
+        "status": "executable",
+        "window_size": int(window_size),
+        "block_size": int(block_size),
+        "top_k": int(top_k),
+        "causal": True,
+    }
+    return _runtime.RuntimeArtifact(metadata={
+        "target": "apple_gpu",
+        "compiler_path": "apple_value_target_ir",
+        "apple_target_ir_kind": "value_target_ir",
+        "apple_value_calls": [call],
+        "executable": True,
+    })
+
+
+def _measure_native_sparse_envelope(shapes, reps):
+    """Sprint 11: strict native-sparse value envelope."""
+    rows = []
+    active = _native_sparse_value_available()
+    for (T, D, H) in shapes:
+        # Treat D as model dim and split into heads.
+        if D % H != 0:
+            continue
+        Dh = D // H
+        window_size, block_size, top_k = 4, 4, 1
+        row: dict[str, Any] = {
+            "name": "deepseek_native_sparse_attn",
+            "variant_kind": "executable_envelope",
+            "shape": f"B1_H{H}_S{T}_D{Dh}",
+            "route": "Apple Value Target IR native_sparse_attn_fused f32",
+            "target": "apple_gpu",
+            "executor": "apple_gpu_value_target_ir" if active else None,
+            "executable": active,
+            "correctness_max_rel_err": None,
+            "timing_ms": None,
+            "skip_reason": None,
+        }
+        if not active:
+            row["skip_reason"] = (
+                "not executed — native sparse value runtime unavailable "
+                "(requires Darwin/Metal; non-Darwin stub zero-fills)")
+            rows.append(row)
+            continue
+
+        rng = np.random.RandomState(2026_06_11 + T)
+        f = lambda *s: (rng.randn(*s) * 0.1).astype(np.float32)
+        Q, K, V = f(1, H, T, Dh), f(1, H, T, Dh), f(1, H, T, Dh)
+        scores = _native_sparse_scores(Q, K, block_size=block_size)
+        artifact = _native_sparse_artifact(window_size, block_size, top_k)
+        res = _runtime.launch(artifact, [Q, K, V, scores])
+        if not res.get("ok"):
+            row["executable"] = False
+            row["executor"] = None
+            row["skip_reason"] = str(res.get("reason") or res.get("runtime_status"))
+            rows.append(row)
+            continue
+        got = np.asarray(res["output"], dtype=np.float32)
+        ref = ts.ops.deepseek_sparse_attention(
+            Q, K, V, None, window_size=window_size, block_size=block_size,
+            top_k=top_k, causal=True).astype(np.float32)
+        denom = float(np.abs(ref).max()) + 1e-9
+        row["correctness_max_rel_err"] = float(np.abs(got - ref).max() / denom)
+
+        times = []
+        for _ in range(max(1, reps)):
+            t0 = time.perf_counter()
+            _runtime.launch(artifact, [Q, K, V, scores])
+            times.append((time.perf_counter() - t0) * 1e3)
+        row["timing_ms"] = float(statistics.median(times))
+        rows.append(row)
+    return rows
+
+
 def _compiler_visible_rows():
     """One row per compiler-visible-only reasoning variant. These are NOT
     executed — executor/correctness/timing are all None by construction."""
@@ -243,10 +339,12 @@ def _compiler_visible_rows():
 
 
 def build_report(shapes, reps) -> dict[str, Any]:
-    rows = _measure_executable_envelope(shapes, reps) + _compiler_visible_rows()
+    rows = (_measure_executable_envelope(shapes, reps)
+            + _measure_native_sparse_envelope(shapes, reps)
+            + _compiler_visible_rows())
     return {
         "benchmark": "apple_gpu_reasoning_attention",
-        "sprint": "S10",
+        "sprint": "S11",
         "tessera_version": getattr(ts, "__version__", "unknown"),
         "metal_active": _metal_active(),
         "rows": rows,

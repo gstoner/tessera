@@ -2,7 +2,7 @@
 // value lane, lowering to the dtype-specific Accelerate/BNNS GEMM symbol. Each
 // stays a single tile.matmul -> tessera_apple.cpu.call (no scf.for, no husk).
 //
-// RUN: tessera-opt %s -tessera-lower-to-apple_cpu-full | FileCheck %s
+// RUN: %tessera_strict_opt %s -tessera-lower-to-apple_cpu-full | FileCheck %s
 
 // CHECK-LABEL: func.func @matmul_f16
 // CHECK: tessera_apple.cpu.call

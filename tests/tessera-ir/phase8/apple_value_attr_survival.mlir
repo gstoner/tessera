@@ -6,7 +6,7 @@
 // must copy these optional attrs from the source op onto the value call. This
 // pins that survival via the real value-mode pipeline.
 //
-// RUN: tessera-opt %s -tessera-lower-to-apple_cpu-full | FileCheck %s
+// RUN: %tessera_strict_opt %s -tessera-lower-to-apple_cpu-full | FileCheck %s
 
 // tri_solve carries lower/trans/unit_diag; they must reach the value call.
 // CHECK-LABEL: func.func @tri_solve_attrs

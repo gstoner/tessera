@@ -16,7 +16,7 @@ Single source of truth for what `runtime.launch()` does with each `(target, comp
 | `apple_cpu` | `apple_cpu_accelerate` | `apple_cpu_accelerate` | `native_cpu` | `cpu_accelerate` | Apple CPU artifact runs through Accelerate cblas_sgemm + multi-op chain. |
 | `apple_cpu` | `apple_value_target_ir` | `apple_value_target_ir` | `native_cpu` | `cpu_accelerate` | Apple CPU value-call (tessera_apple.cpu.call) dispatches to the named Accelerate/LAPACK C ABI symbol. |
 | `apple_gpu` | `apple_gpu_mps` | `apple_gpu_mps` | `native_gpu` | `metal_runtime` | Apple GPU artifact runs through MPS / MSL / MPSGraph per the runtime envelope. |
-| `apple_gpu` | `apple_value_target_ir` | `apple_gpu_value_target_ir` | `native_gpu` | `metal_runtime` | Apple GPU value-call (tessera_apple.gpu.kernel_call) dispatches the named MPSGraph bmm C ABI symbol for rank-3 batched matmul. |
+| `apple_gpu` | `apple_value_target_ir` | `apple_gpu_value_target_ir` | `native_gpu` | `metal_runtime` | Apple GPU value-call (tessera_apple.gpu.kernel_call) dispatches named C ABI symbols for strict rank-3 batched matmul and native sparse attention envelopes. |
 | `cpu` | `jit_cpu_numpy` | `jit_cpu_numpy` | `reference_cpu` | - | CPU JIT artifact runs through the numpy reference path. |
 | `cpu` | `native_cpu` | `native_cpu` | `native_cpu` | - | CPU artifact runs through the x86 AMX / native CPU runtime. |
 
@@ -34,7 +34,7 @@ nvidia_sm80, nvidia_sm90, nvidia_sm100, nvidia_sm120, rocm, rocm_gfx90a, rocm_gf
 |-------------|--------------|
 | `apple_cpu_accelerate` | Apple Silicon CPU via the Accelerate cblas_sgemm shim |
 | `apple_gpu_mps` | Apple Silicon GPU via MPS / MSL / MPSGraph (per envelope) |
-| `apple_gpu_value_target_ir` | Apple GPU value-call dispatch — invokes the C ABI symbol named in a tessera_apple.gpu.kernel_call value op (Sprint 8; rank-3 batched matmul f32/f16/bf16) |
+| `apple_gpu_value_target_ir` | Apple GPU value-call dispatch — invokes the C ABI symbol named in a tessera_apple.gpu.kernel_call value op (rank-3 batched matmul f32/f16/bf16; native sparse attention when the Metal executor is active) |
 | `apple_value_target_ir` | Apple CPU value-call dispatch — invokes the C ABI symbol named in a tessera_apple.cpu.call value op (Value Target IR sprint; CPU cholesky executable) |
 | `jit_cpu_numpy` | JIT CPU fallback via the numpy reference path |
 | `native_cpu` | x86 AMX / native CPU runtime via the C runtime ABI |

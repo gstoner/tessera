@@ -14,6 +14,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
+#include "llvm/ADT/StringRef.h"
 
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
 #include "Tessera/IR/Dialects.h"
@@ -102,6 +103,58 @@ auto addAppleReasoningAttentionPrologue = [](mlir::OpPassManager &pm) {
   pm.addPass(tessera::createDeltaAttnChunkingPass());
 };
 
+class VerifyAppleValueTileIRPass
+    : public mlir::PassWrapper<VerifyAppleValueTileIRPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+public:
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(VerifyAppleValueTileIRPass)
+
+  llvm::StringRef getArgument() const override {
+    return "tessera-verify-apple-value-tile-ir";
+  }
+
+  llvm::StringRef getDescription() const override {
+    return "Verify that Apple value pipelines contain only registered, "
+           "allowlisted Tile IR ops before Tile->Apple lowering";
+  }
+
+  void runOnOperation() override {
+    bool failed = false;
+    getOperation().walk([&](mlir::Operation *op) {
+      llvm::StringRef name = op->getName().getStringRef();
+      if (!name.starts_with("tile."))
+        return;
+      if (!op->getName().getRegisteredInfo()) {
+        op->emitError("apple value Tile IR contains unregistered op '")
+            << name << "'; value pipelines must not rely on opaque tile.* ops";
+        failed = true;
+        return;
+      }
+      if (!isAllowedValueTileOp(name)) {
+        op->emitError("apple value Tile IR op '")
+            << name
+            << "' is outside the value allowlist (linalg family, "
+               "rank-2 matmul/gemm, rank-3 batched_gemm)";
+        failed = true;
+      }
+    });
+    if (failed)
+      signalPassFailure();
+  }
+
+private:
+  static bool isAllowedValueTileOp(llvm::StringRef name) {
+    return name == "tile.matmul" || name == "tile.gemm" ||
+           name == "tile.batched_gemm" || name == "tile.cholesky" ||
+           name == "tile.tri_solve" || name == "tile.cholesky_solve" ||
+           name == "tile.lu" || name == "tile.qr" || name == "tile.svd";
+  }
+};
+
+std::unique_ptr<mlir::Pass> createVerifyAppleValueTileIRPass() {
+  return std::make_unique<VerifyAppleValueTileIRPass>();
+}
+
 mlir::PassPipelineRegistration<> gAppleCPUFullPipeline(
     "tessera-lower-to-apple_cpu-full",
     "Full Graph->Schedule->Tile->Target Apple CPU spine (effect-annotation -> "
@@ -115,6 +168,10 @@ mlir::PassPipelineRegistration<> gAppleCPUFullPipeline(
       // Sprint 5: value-mode tiling preserves static rank-2 f32 matmul/gemm as a
       // single tile op for the Accelerate GEMM value call (CPU `-full` only).
       pm.addPass(tessera::createTilingPass(/*valueMode=*/true));
+      // Sprint 11: `--allow-unregistered-dialect` was necessary but not
+      // sufficient. The Tile dialect still permits unknown ops for legacy
+      // artifact lanes, so the value spine gets its own hard gate here.
+      pm.addPass(createVerifyAppleValueTileIRPass());
       // Apple Value Target IR sprint: the `-full` pipeline is value-preserving
       // — it emits value-producing tessera_apple.cpu.call ops (no artifact
       // metadata / ub.poison husk) and fails with a named diagnostic if an op
@@ -137,6 +194,9 @@ mlir::PassPipelineRegistration<> gAppleGPUFullPipeline(
       // batched matmul as a single tile.batched_gemm for the GPU bmm value call
       // (rank-2 matmul → tile.matmul stays gated in the GPU value block).
       pm.addPass(tessera::createTilingPass(/*valueMode=*/true));
+      // Sprint 11: reject opaque tile.* ops in the value spine before any
+      // backend-specific handoff can treat them as valid compiler IR.
+      pm.addPass(createVerifyAppleValueTileIRPass());
       pm.addPass(tessera::apple::createLowerTileToAppleGPUPass(/*valueMode=*/true));
     });
 } // namespace

@@ -1,4 +1,4 @@
-"""Sprint 10 — honesty guards for the apple_gpu reasoning-attention benchmark.
+"""Sprint 11 — honesty guards for the apple_gpu reasoning-attention benchmark.
 
 The benchmark example (`benchmarks/apple_gpu/benchmark_reasoning_attention.py`)
 reports route / target / executor / correctness / timing as SEPARATE fields and
@@ -6,10 +6,11 @@ promotes exactly one strict executable envelope. These tests lock the honesty
 contract so the example can never drift into over-claiming:
 
   * Every row carries all five separate fields (no conflation).
-  * The executable/non-executable split is grounded in the driver runtime
-    envelope, not hard-coded — `mla_decode_fused` / `lightning_attention` / etc.
-    are compiler-visible only (executor None, executable False), while the
-    MLA-style block's `tessera.matmul` primitive is executable.
+  * The executable/non-executable split is grounded in runtime envelopes, not
+    hard-coded — `mla_decode_fused` / `lightning_attention` / etc. are
+    compiler-visible only (executor None, executable False), while the MLA-style
+    block's `tessera.matmul` primitive and the native-sparse value lane are
+    executable only when their runtime probes say so.
   * Compiler-visible-only rows NEVER carry a correctness number or a timing —
     we don't fabricate numbers for ops we didn't run.
   * When Metal is active (Darwin), the executable envelope actually ran:
@@ -73,6 +74,15 @@ def test_executable_split_is_grounded_in_driver_envelope(bench):
         assert bench._executor_for(op) is None
 
 
+def test_native_sparse_claim_is_grounded_in_value_runtime_probe(bench):
+    from tessera import runtime
+
+    symbol = "tessera_apple_gpu_native_sparse_attn_f32"
+    assert symbol in runtime._APPLE_VALUE_GPU_SYMBOLS
+    assert bench._native_sparse_value_available() == (
+        runtime._apple_gpu_native_sparse_attn_f32() is not None)
+
+
 def test_compiler_visible_rows_never_fabricate_numbers(report):
     cv = [r for r in report["rows"]
           if r["variant_kind"] == "compiler_visible_only"]
@@ -89,9 +99,23 @@ def test_executable_envelope_rows_classification(report):
     ex = [r for r in report["rows"]
           if r["variant_kind"] == "executable_envelope"]
     assert ex, "expected executable-envelope rows"
-    for r in ex:
+    mla = [r for r in ex if r["name"] == "mla_style_attention"]
+    assert mla, "expected MLA-style executable-envelope rows"
+    for r in mla:
         assert r["executable"] is True
         assert r["executor"] == "apple_gpu_mps"
+
+    nsa = [r for r in ex if r["name"] == "deepseek_native_sparse_attn"]
+    assert nsa, "expected native-sparse executable-envelope rows"
+    for r in nsa:
+        if r["executable"]:
+            assert r["executor"] == "apple_gpu_value_target_ir"
+            assert r["skip_reason"] is None
+        else:
+            assert r["executor"] is None
+            assert r["correctness_max_rel_err"] is None
+            assert r["timing_ms"] is None
+            assert r["skip_reason"]
 
 
 @pytest.mark.skipif(sys.platform != "darwin",

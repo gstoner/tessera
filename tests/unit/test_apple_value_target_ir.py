@@ -61,6 +61,15 @@ _GRAPH = {
     "ebm_langevin_step": 'func.func @f(%y: tensor<2x3xf32>, %g: tensor<2x3xf32>, %n: tensor<2x3xf32>) -> tensor<2x3xf32> {\n'
                          '  %0 = tessera.ebm.langevin_step %y, %g, %n {eta = 1.250000e-01 : f64, noise_scale = 2.500000e-01 : f64} : (tensor<2x3xf32>, tensor<2x3xf32>, tensor<2x3xf32>) -> tensor<2x3xf32>\n'
                          '  return %0 : tensor<2x3xf32>\n}',
+    "ebm_refinement": 'func.func @f(%y: tensor<2x3xf32>, %g: tensor<2x3xf32>) -> tensor<2x3xf32> {\n'
+                      '  %0 = tessera.ebm.refinement %y, %g {eta = 1.250000e-01 : f64, steps = 4 : i64} : (tensor<2x3xf32>, tensor<2x3xf32>) -> tensor<2x3xf32>\n'
+                      '  return %0 : tensor<2x3xf32>\n}',
+    "ebm_partition_exact": 'func.func @f(%e: tensor<2x3xf32>) -> tensor<f32> {\n'
+                           '  %0 = tessera.ebm.partition_exact %e {temperature = 7.500000e-01 : f64, reduction = "logsumexp"} : (tensor<2x3xf32>) -> tensor<f32>\n'
+                           '  return %0 : tensor<f32>\n}',
+    "clifford_geometric_product": 'func.func @f(%a: tensor<2x8xf32>, %b: tensor<2x8xf32>) -> tensor<2x8xf32> {\n'
+                                  '  %0 = tessera.clifford.geometric_product %a, %b {p = 3 : i64, q = 0 : i64} : (tensor<2x8xf32>, tensor<2x8xf32>) -> tensor<2x8xf32>\n'
+                                  '  return %0 : tensor<2x8xf32>\n}',
 }
 
 # Every CPU-converted linalg op (LF1–LF5 + cholesky pilot) lowers via cpu.call.
@@ -170,8 +179,17 @@ def test_gpu_full_ppo_policy_loss_optional_operands_emit_extended_value_symbol()
     ("ebm_langevin_step", "ebm_langevin_step",
      "tessera_apple_gpu_ebm_langevin_step_value_f32",
      "msl_ebm_langevin_step_value_f32"),
+    ("ebm_refinement", "ebm_refinement",
+     "tessera_apple_gpu_ebm_refinement_value_f32",
+     "msl_ebm_refinement_value_f32"),
+    ("ebm_partition_exact", "ebm_partition_exact",
+     "tessera_apple_gpu_ebm_partition_exact_value_f32",
+     "msl_ebm_partition_exact_value_f32"),
+    ("clifford_geometric_product", "clifford_geometric_product",
+     "tessera_apple_gpu_clifford_geo_product_cl30_value_f32",
+     "msl_clifford_geo_product_cl30_value_f32"),
 ])
-def test_gpu_full_ebm_value_kernels_emit_value_symbols(name, op_kind, symbol, abi):
+def test_gpu_full_ebm_ga_value_kernels_emit_value_symbols(name, op_kind, symbol, abi):
     p = _run("tessera-lower-to-apple_gpu-full", _GRAPH[name])
     assert p.returncode == 0, p.stderr
     assert "tessera_apple.gpu.kernel_call" in p.stdout
@@ -194,6 +212,15 @@ def test_gpu_full_ebm_value_kernels_emit_value_symbols(name, op_kind, symbol, ab
     if op_kind == "ebm_langevin_step":
         assert c["eta"] == pytest.approx(0.125)
         assert c["noise_scale"] == pytest.approx(0.25)
+    if op_kind == "ebm_refinement":
+        assert c["eta"] == pytest.approx(0.125)
+        assert c["steps"] == 4
+    if op_kind == "ebm_partition_exact":
+        assert c["temperature"] == pytest.approx(0.75)
+        assert c["reduction"] == "logsumexp"
+    if op_kind == "clifford_geometric_product":
+        assert c["p"] == 3
+        assert c["q"] == 0
 
 
 def test_front_door_records_value_target_ir_in_runtime_metadata():
@@ -1490,6 +1517,9 @@ def test_gpu_value_executor_allowlist_exact():
         "tessera_apple_gpu_ppo_policy_loss_ex_f32",
         "tessera_apple_gpu_ebm_energy_quadratic_value_f32",
         "tessera_apple_gpu_ebm_langevin_step_value_f32",
+        "tessera_apple_gpu_ebm_refinement_value_f32",
+        "tessera_apple_gpu_ebm_partition_exact_value_f32",
+        "tessera_apple_gpu_clifford_geo_product_cl30_value_f32",
     })
     assert _APPLE_VALUE_GPU_SYMBOLS == expected
     assert set(driver._APPLE_VALUE_GPU_SYMBOL_PROBES) == expected
@@ -1573,6 +1603,155 @@ def test_gpu_ebm_value_non_darwin_stub_is_not_executable():
     res = runtime.launch(artifact, [y, y, y])
     assert res["ok"] is False
     assert res["runtime_status"] == "invalid_artifact"
+
+
+def test_gpu_ebm_refinement_value_dispatch_validates_and_matches_reference(monkeypatch):
+    import numpy as np
+    from tessera import runtime
+
+    def _ival(x):
+        return int(x.value if hasattr(x, "value") else x)
+
+    def _fval(x):
+        return float(x.value if hasattr(x, "value") else x)
+
+    def fake_refinement(y_p, grad_p, eta, steps, out_p, n):
+        size = _ival(n)
+        y = np.ctypeslib.as_array(y_p, shape=(size,))
+        grad = np.ctypeslib.as_array(grad_p, shape=(size,))
+        out = np.ctypeslib.as_array(out_p, shape=(size,))
+        out[:] = y - _ival(steps) * _fval(eta) * grad
+        return 1
+
+    monkeypatch.setattr(runtime, "_apple_gpu_ebm_refinement_value_f32",
+                        lambda: fake_refinement)
+    monkeypatch.setattr(runtime, "_apple_gpu_ebm_refinement_value_available",
+                        lambda: True)
+    artifact = runtime.RuntimeArtifact(metadata={
+        "target": "apple_gpu",
+        "compiler_path": "apple_value_target_ir",
+        "apple_target_ir_kind": "value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.gpu.kernel_call",
+            "op_kind": "ebm_refinement",
+            "symbol": "tessera_apple_gpu_ebm_refinement_value_f32",
+            "status": "executable",
+            "eta": 0.125,
+            "steps": 4,
+        }],
+    })
+    y0 = np.asarray([[0.5, -1.0, 2.0], [1.25, 0.0, -0.5]], dtype=np.float32)
+    grad = np.asarray([[0.25, -0.5, 1.0], [0.5, -0.25, 0.75]], dtype=np.float32)
+    res = runtime.launch(artifact, [y0, grad])
+    assert res["ok"], res
+    np.testing.assert_allclose(res["output"], y0 - 4 * 0.125 * grad)
+
+    bad = runtime.launch(artifact, [y0, grad, grad])
+    assert bad["ok"] is False
+    assert bad["runtime_status"] == "invalid_artifact"
+
+
+def test_gpu_ebm_partition_exact_value_dispatch_validates_and_matches_reference(monkeypatch):
+    import numpy as np
+    from tessera import runtime
+
+    def _ival(x):
+        return int(x.value if hasattr(x, "value") else x)
+
+    def _fval(x):
+        return float(x.value if hasattr(x, "value") else x)
+
+    def fake_partition(e_p, n, temperature, out_p):
+        size = _ival(n)
+        temp = _fval(temperature)
+        e = np.ctypeslib.as_array(e_p, shape=(size,))
+        out = np.ctypeslib.as_array(out_p, shape=(1,))
+        scaled = -e / temp
+        out[0] = np.exp(np.max(scaled)) * np.sum(np.exp(scaled - np.max(scaled)))
+        return 1
+
+    monkeypatch.setattr(runtime, "_apple_gpu_ebm_partition_exact_value_f32",
+                        lambda: fake_partition)
+    monkeypatch.setattr(runtime, "_apple_gpu_ebm_partition_exact_value_available",
+                        lambda: True)
+    artifact = runtime.RuntimeArtifact(metadata={
+        "target": "apple_gpu",
+        "compiler_path": "apple_value_target_ir",
+        "apple_target_ir_kind": "value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.gpu.kernel_call",
+            "op_kind": "ebm_partition_exact",
+            "symbol": "tessera_apple_gpu_ebm_partition_exact_value_f32",
+            "status": "executable",
+            "temperature": 0.75,
+            "reduction": "logsumexp",
+        }],
+    })
+    energies = np.asarray([[0.2, -0.3, 1.0], [0.1, 0.4, -0.2]], dtype=np.float32)
+    res = runtime.launch(artifact, [energies])
+    assert res["ok"], res
+    scaled = -energies.reshape(-1) / 0.75
+    expected = np.exp(np.max(scaled)) * np.sum(np.exp(scaled - np.max(scaled)))
+    np.testing.assert_allclose(res["output"], np.asarray(expected, dtype=np.float32))
+
+    artifact.metadata["apple_value_calls"][0]["reduction"] = "sum"
+    bad = runtime.launch(artifact, [energies])
+    assert bad["ok"] is False
+    assert bad["runtime_status"] == "invalid_artifact"
+
+
+def test_gpu_clifford_geometric_product_value_dispatch_matches_reference(monkeypatch):
+    import numpy as np
+    from tessera import runtime
+
+    def _ival(x):
+        return int(x.value if hasattr(x, "value") else x)
+
+    def fake_geo(a_p, b_p, out_p, batch):
+        rows = _ival(batch)
+        a = np.ctypeslib.as_array(a_p, shape=(rows, 8))
+        b = np.ctypeslib.as_array(b_p, shape=(rows, 8))
+        out = np.ctypeslib.as_array(out_p, shape=(rows, 8))
+        out[:] = runtime._clifford_geo_product_cl30_np(np, a, b)
+        return 1
+
+    monkeypatch.setattr(runtime, "_apple_gpu_clifford_geo_product_cl30_value_f32",
+                        lambda: fake_geo)
+    monkeypatch.setattr(runtime,
+                        "_apple_gpu_clifford_geo_product_cl30_value_available",
+                        lambda: True)
+    artifact = runtime.RuntimeArtifact(metadata={
+        "target": "apple_gpu",
+        "compiler_path": "apple_value_target_ir",
+        "apple_target_ir_kind": "value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.gpu.kernel_call",
+            "op_kind": "clifford_geometric_product",
+            "symbol": "tessera_apple_gpu_clifford_geo_product_cl30_value_f32",
+            "status": "executable",
+            "p": 3,
+            "q": 0,
+        }],
+    })
+    a = np.asarray([[1.0, 0.2, -0.4, 0.5, 0.1, -0.3, 0.7, -0.2],
+                    [0.3, -0.6, 0.8, -0.1, 0.4, 0.2, -0.5, 0.9]],
+                   dtype=np.float32)
+    b = np.asarray([[0.5, -0.1, 0.6, 0.2, -0.7, 0.3, 0.4, -0.8],
+                    [-0.2, 0.9, -0.3, 0.7, 0.1, -0.4, 0.6, 0.5]],
+                   dtype=np.float32)
+    res = runtime.launch(artifact, [a, b])
+    assert res["ok"], res
+    np.testing.assert_allclose(
+        res["output"], runtime._clifford_geo_product_cl30_np(np, a, b),
+        rtol=1.0e-5, atol=1.0e-6)
+
+    artifact.metadata["apple_value_calls"][0]["q"] = 1
+    bad = runtime.launch(artifact, [a, b])
+    assert bad["ok"] is False
+    assert bad["runtime_status"] == "invalid_artifact"
 
 
 @pytest.mark.skipif(sys.platform != "darwin",

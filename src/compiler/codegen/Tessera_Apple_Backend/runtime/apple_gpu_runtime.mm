@@ -7608,6 +7608,15 @@ extern "C" void tessera_apple_gpu_clifford_geo_product_cl30_f32(
   reference_clifford_geo_product_cl30_f32(A, B, C, batch);
 }
 
+extern "C" int32_t tessera_apple_gpu_clifford_geo_product_cl30_value_f32(
+    const float* A, const float* B, float* C, int32_t batch)
+{
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_geo_product_cl30_f32_msl(ctx, A, B, C, batch))
+    return 1;
+  return 0;
+}
+
 //===---------------------------------------------------------------------===//
 // clifford_rotor_sandwich_cl30_f32 — R · v · R† fused.
 //
@@ -9478,6 +9487,18 @@ extern "C" void tessera_apple_gpu_ebm_refinement_f32(
   std::memcpy(y_out, tmp.data(), sizeof(float) * (size_t)n);
 }
 
+extern "C" int32_t tessera_apple_gpu_ebm_refinement_value_f32(
+    const float* y0, const float* grad, float eta, int32_t T,
+    float* y_out, int32_t n) {
+  if (T <= 0)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_ebm_refinement_fused_f32_msl(
+          ctx, y0, grad, eta, T, y_out, n))
+    return 1;
+  return 0;
+}
+
 // ===========================================================================
 // EBM langevin_step  —  out[i] = y[i] - eta * grad[i] + noise_scale * noise[i]
 //
@@ -10862,6 +10883,17 @@ extern "C" void tessera_apple_gpu_ebm_partition_exact_f32(
   if (ctx.ok && dispatch_ebm_partition_exact_f32_msl(
           ctx, energies, n, temperature, out)) return;
   reference_ebm_partition_exact_f32(energies, n, temperature, out);
+}
+
+extern "C" int32_t tessera_apple_gpu_ebm_partition_exact_value_f32(
+    const float* energies, int32_t n, float temperature, float* out) {
+  if (n <= 0 || temperature <= 0.0f)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_ebm_partition_exact_f32_msl(
+          ctx, energies, n, temperature, out))
+    return 1;
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//

@@ -27,6 +27,27 @@ func.func @ebm_langevin_preserved(%y: tensor<2x3xf32>,
   return %0 : tensor<2x3xf32>
 }
 
+// CHECK-LABEL: func.func @ebm_refinement_preserved
+// CHECK: tile.ebm_refinement
+// CHECK-SAME: source = "tessera.ebm.refinement"
+func.func @ebm_refinement_preserved(%y: tensor<2x3xf32>,
+                                    %g: tensor<2x3xf32>) -> tensor<2x3xf32> {
+  %0 = tessera.ebm.refinement %y, %g
+    {eta = 1.250000e-01 : f64, steps = 4 : i64}
+    : (tensor<2x3xf32>, tensor<2x3xf32>) -> tensor<2x3xf32>
+  return %0 : tensor<2x3xf32>
+}
+
+// CHECK-LABEL: func.func @ebm_partition_exact_preserved
+// CHECK: tile.ebm_partition_exact
+// CHECK-SAME: source = "tessera.ebm.partition_exact"
+func.func @ebm_partition_exact_preserved(%e: tensor<2x3xf32>) -> tensor<f32> {
+  %0 = tessera.ebm.partition_exact %e
+    {temperature = 7.500000e-01 : f64, reduction = "logsumexp"}
+    : (tensor<2x3xf32>) -> tensor<f32>
+  return %0 : tensor<f32>
+}
+
 // CHECK-LABEL: func.func @ebm_langevin_no_noise_not_preserved
 // CHECK: tessera.ebm.langevin_step
 // CHECK-NOT: tile.ebm_langevin_step

@@ -88,10 +88,25 @@ def Tile_EBMLangevinStepOp : Tile_Op<"ebm_langevin_step", [Pure]> {
   let hasVerifier = 1;
 }
 
+def Tile_EBMRefinementOp : Tile_Op<"ebm_refinement", [Pure]> {
+  let summary = "T-step affine EBM refinement (Apple GPU value lane)";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $outputs)";
+  let hasVerifier = 1;
+}
+
+def Tile_EBMPartitionExactOp : Tile_Op<"ebm_partition_exact", [Pure]> {
+  let summary = "Exact EBM partition/logsumexp scalar (Apple GPU value lane)";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $outputs)";
+  let hasVerifier = 1;
+}
+
 // GA / Clifford value Tile seam. These are registered Tile IR carriers only:
-// Apple value execution is still gated in TileToApple until a dedicated GA value
-// executor is promoted. The strict p=3,q=0 fp32 envelope mirrors the existing
-// cl30 Apple runtime symbols without advertising a value executor here.
+// only clifford_geometric_product is promoted to an Apple GPU value executor in
+// Stage 16E; the other carriers remain compiler-visible and gated in TileToApple.
 class Tile_CliffordBinaryOp<string mnemonic, string summaryText>
     : Tile_Op<mnemonic, [Pure]> {
   let summary = summaryText;

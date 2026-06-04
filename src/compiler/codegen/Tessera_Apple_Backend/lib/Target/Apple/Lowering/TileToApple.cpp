@@ -121,6 +121,21 @@ bool isEBMLangevinStep(llvm::StringRef name) {
          name == "tile.ebm_langevin_step";
 }
 
+bool isEBMRefinement(llvm::StringRef name) {
+  return name == "tessera.ebm.refinement" ||
+         name == "tile.ebm_refinement";
+}
+
+bool isEBMPartitionExact(llvm::StringRef name) {
+  return name == "tessera.ebm.partition_exact" ||
+         name == "tile.ebm_partition_exact";
+}
+
+bool isCliffordGeometricProduct(llvm::StringRef name) {
+  return name == "tessera.clifford.geometric_product" ||
+         name == "tile.clifford_geometric_product";
+}
+
 bool isCliffordValueSeamOp(llvm::StringRef name) {
   return name == "tessera.clifford.geometric_product" ||
          name == "tessera.clifford.outer_product" ||
@@ -272,6 +287,7 @@ bool isLowerable(Operation *op) {
       isFlashAttn(name) || isRoPE(name) || isKVCache(name) ||
       isNativeSparseAttnFused(name) || isPPOPolicyLoss(name) ||
       isEBMEnergyQuadratic(name) || isEBMLangevinStep(name) ||
+      isEBMRefinement(name) || isEBMPartitionExact(name) ||
       isCliffordValueSeamOp(name))
     return true;
   if (name.starts_with("tessera.tile.") || name.starts_with("tile."))
@@ -431,6 +447,78 @@ bool verifyEBMLangevinStepValueEnvelope(Operation *op) {
   return true;
 }
 
+bool verifyEBMRefinementValueEnvelope(Operation *op) {
+  if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+    return false;
+  auto yTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  auto gTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+  auto oTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  if (!yTy || !gTy || !oTy)
+    return false;
+  if (!yTy.hasStaticShape() || !gTy.hasStaticShape() || !oTy.hasStaticShape())
+    return false;
+  if (!yTy.getElementType().isF32() || !gTy.getElementType().isF32() ||
+      !oTy.getElementType().isF32())
+    return false;
+  if (yTy.getShape() != gTy.getShape() || yTy.getShape() != oTy.getShape())
+    return false;
+  auto eta = op->getAttrOfType<FloatAttr>("eta");
+  auto steps = op->getAttrOfType<IntegerAttr>("steps");
+  return eta && eta.getValueAsDouble() > 0.0 && steps && steps.getInt() > 0 &&
+         !op->hasAttr("temperature") && !op->hasAttr("noise_scale");
+}
+
+bool verifyEBMPartitionExactValueEnvelope(Operation *op) {
+  if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+    return false;
+  auto eTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  auto oTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  if (!eTy || !oTy)
+    return false;
+  if (!eTy.hasStaticShape() || !oTy.hasStaticShape())
+    return false;
+  if (!eTy.getElementType().isF32() || !oTy.getElementType().isF32())
+    return false;
+  if (oTy.getRank() != 0)
+    return false;
+  if (auto temperature = op->getAttrOfType<FloatAttr>("temperature");
+      temperature && temperature.getValueAsDouble() <= 0.0)
+    return false;
+  if (auto reduction = op->getAttrOfType<StringAttr>("reduction");
+      reduction && reduction.getValue() != "logsumexp")
+    return false;
+  return true;
+}
+
+bool verifyCliffordGeometricProductValueEnvelope(Operation *op) {
+  if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+    return false;
+  auto lhsTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  auto rhsTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+  auto resTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  if (!lhsTy || !rhsTy || !resTy)
+    return false;
+  if (!lhsTy.hasStaticShape() || !rhsTy.hasStaticShape() ||
+      !resTy.hasStaticShape())
+    return false;
+  if (!lhsTy.getElementType().isF32() || !rhsTy.getElementType().isF32() ||
+      !resTy.getElementType().isF32())
+    return false;
+  if (lhsTy.getRank() < 1 || rhsTy.getRank() != lhsTy.getRank() ||
+      resTy.getRank() != lhsTy.getRank())
+    return false;
+  if (lhsTy.getDimSize(lhsTy.getRank() - 1) != 8 ||
+      rhsTy.getDimSize(rhsTy.getRank() - 1) != 8 ||
+      resTy.getDimSize(resTy.getRank() - 1) != 8)
+    return false;
+  if (lhsTy.getShape() != rhsTy.getShape() ||
+      lhsTy.getShape() != resTy.getShape())
+    return false;
+  auto p = op->getAttrOfType<IntegerAttr>("p");
+  auto q = op->getAttrOfType<IntegerAttr>("q");
+  return p && q && p.getInt() == 3 && q.getInt() == 0;
+}
+
 std::string resolveResult(Operation *op, int64_t ordinal) {
   if (auto r = op->getAttrOfType<StringAttr>("result"))
     return r.getValue().str();
@@ -532,7 +620,9 @@ void emitAppleValueCall(OpBuilder &b, Operation *op,
        {"lower", "trans", "unit_diag", "full_matrices", "window_size",
         "block_size", "top_k", "causal", "clip_epsilon", "kl_coef",
         "entropy_coef", "has_mask", "has_ref_kl", "has_entropy",
-        "reduction", "eta", "temperature", "noise_scale", "has_noise"}) {
+        "reduction", "eta", "temperature", "noise_scale", "has_noise",
+        "steps", "p", "q", "coefficient_layout", "has_signature",
+        "has_grade_mask"}) {
     if (Attribute a = op->getAttr(name))
       st.addAttribute(name, a);
   }
@@ -872,6 +962,57 @@ struct LowerTileToAppleGPUPass
                              "tessera_apple_gpu_ebm_langevin_step_value_f32",
                              "msl_ebm_langevin_step_value_f32", "executable",
                              "Metal");
+          ++ordinal;
+          continue;
+        }
+        if (isEBMRefinement(name) || isEBMRefinement(src)) {
+          if (!verifyEBMRefinementValueEnvelope(op)) {
+            op->emitError("apple_gpu value lowering: ebm.refinement requires "
+                          "static fp32 y/grad/result with matching shapes, "
+                          "positive eta, positive steps, and no "
+                          "temperature/noise_scale side semantics");
+            signalPassFailure();
+            return;
+          }
+          emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call",
+                             "ebm_refinement",
+                             "tessera_apple_gpu_ebm_refinement_value_f32",
+                             "msl_ebm_refinement_value_f32", "executable",
+                             "Metal");
+          ++ordinal;
+          continue;
+        }
+        if (isEBMPartitionExact(name) || isEBMPartitionExact(src)) {
+          if (!verifyEBMPartitionExactValueEnvelope(op)) {
+            op->emitError("apple_gpu value lowering: ebm.partition_exact "
+                          "requires static fp32 energies, scalar fp32 result, "
+                          "positive temperature, and reduction=\"logsumexp\"");
+            signalPassFailure();
+            return;
+          }
+          emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call",
+                             "ebm_partition_exact",
+                             "tessera_apple_gpu_ebm_partition_exact_value_f32",
+                             "msl_ebm_partition_exact_value_f32",
+                             "executable", "Metal");
+          ++ordinal;
+          continue;
+        }
+        if ((isCliffordGeometricProduct(name) ||
+             isCliffordGeometricProduct(src))) {
+          if (!verifyCliffordGeometricProductValueEnvelope(op)) {
+            op->emitError("apple_gpu value lowering: "
+                          "clifford.geometric_product requires static fp32 "
+                          "cl30 tensors with matching shapes, p=3, q=0, and "
+                          "last dimension 8");
+            signalPassFailure();
+            return;
+          }
+          emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call",
+                             "clifford_geometric_product",
+                             "tessera_apple_gpu_clifford_geo_product_cl30_value_f32",
+                             "msl_clifford_geo_product_cl30_value_f32",
+                             "executable", "Metal");
           ++ordinal;
           continue;
         }

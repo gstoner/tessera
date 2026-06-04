@@ -538,6 +538,12 @@ _APPLE_VALUE_GPU_SYMBOL_PROBES: Mapping[str, str] = {
         "_apple_gpu_ebm_energy_quadratic_value_available",
     "tessera_apple_gpu_ebm_langevin_step_value_f32":
         "_apple_gpu_ebm_langevin_step_value_available",
+    "tessera_apple_gpu_ebm_refinement_value_f32":
+        "_apple_gpu_ebm_refinement_value_available",
+    "tessera_apple_gpu_ebm_partition_exact_value_f32":
+        "_apple_gpu_ebm_partition_exact_value_available",
+    "tessera_apple_gpu_clifford_geo_product_cl30_value_f32":
+        "_apple_gpu_clifford_geo_product_cl30_value_available",
 }
 
 

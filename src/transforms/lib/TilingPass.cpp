@@ -609,6 +609,75 @@ struct TileEBMLangevinStepValue : public RewritePattern {
   }
 };
 
+struct TileEBMRefinementValue : public RewritePattern {
+  TileEBMRefinementValue(MLIRContext *ctx)
+      : RewritePattern("tessera.ebm.refinement", /*benefit=*/2, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    // Stage 16E executable envelope: deterministic refinement only.
+    // The Metal symbol computes y - steps*eta*grad and has no noise or
+    // temperature semantics, so noisy/temperature-controlled variants remain
+    // gated until a matching runtime ABI exists.
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return failure();
+    if (op->hasAttr("temperature") || op->hasAttr("noise_scale"))
+      return failure();
+    auto yTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto gTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto oTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!yTy || !gTy || !oTy)
+      return failure();
+    if (!yTy.hasStaticShape() || !gTy.hasStaticShape() || !oTy.hasStaticShape())
+      return failure();
+    if (!yTy.getElementType().isF32() || !gTy.getElementType().isF32() ||
+        !oTy.getElementType().isF32())
+      return failure();
+    if (!sameStaticShape(yTy, gTy) || !sameStaticShape(yTy, oTy))
+      return failure();
+    auto eta = op->getAttrOfType<FloatAttr>("eta");
+    auto steps = op->getAttrOfType<IntegerAttr>("steps");
+    if (!eta || eta.getValueAsDouble() <= 0.0 || !steps ||
+        steps.getInt() <= 0)
+      return failure();
+
+    createPreservedTileOp(rewriter, op, "tile.ebm_refinement",
+                          "tessera.ebm.refinement");
+    return success();
+  }
+};
+
+struct TileEBMPartitionExactValue : public RewritePattern {
+  TileEBMPartitionExactValue(MLIRContext *ctx)
+      : RewritePattern("tessera.ebm.partition_exact", /*benefit=*/2, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return failure();
+    auto eTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto oTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!eTy || !oTy)
+      return failure();
+    if (!eTy.hasStaticShape() || !oTy.hasStaticShape())
+      return failure();
+    if (!eTy.getElementType().isF32() || !oTy.getElementType().isF32())
+      return failure();
+    if (oTy.getRank() != 0)
+      return failure();
+    if (auto temperature = op->getAttrOfType<FloatAttr>("temperature");
+        temperature && temperature.getValueAsDouble() <= 0.0)
+      return failure();
+    if (auto reduction = op->getAttrOfType<StringAttr>("reduction");
+        reduction && reduction.getValue() != "logsumexp")
+      return failure();
+
+    createPreservedTileOp(rewriter, op, "tile.ebm_partition_exact",
+                          "tessera.ebm.partition_exact");
+    return success();
+  }
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Rewrite patterns: GA / Clifford value seam (Stage 16C)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -762,7 +831,8 @@ struct TilingPassImpl
       // Apple GPU value lane. CPU TileToApple gates it explicitly.
       patterns.add<TilePPOPolicyLossValue>(&getContext());
       // EBM value lane: strict static fp32 tensor-shaped kernels.
-      patterns.add<TileEBMEnergyQuadraticValue, TileEBMLangevinStepValue>(
+      patterns.add<TileEBMEnergyQuadraticValue, TileEBMLangevinStepValue,
+                   TileEBMRefinementValue, TileEBMPartitionExactValue>(
           &getContext());
       // Stage 16C: strict cl30 fp32 GA ops cross Graph→Tile as registered Tile
       // IR carriers. They remain target-gated in TileToApple until a GA value

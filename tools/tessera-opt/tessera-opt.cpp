@@ -150,6 +150,8 @@ private:
            name == "tile.batched_gemm" || name == "tile.ppo_policy_loss" ||
            name == "tile.ebm_energy_quadratic" ||
            name == "tile.ebm_langevin_step" ||
+           name == "tile.ebm_refinement" ||
+           name == "tile.ebm_partition_exact" ||
            name == "tile.clifford_geometric_product" ||
            name == "tile.clifford_outer_product" ||
            name == "tile.clifford_inner_product" ||

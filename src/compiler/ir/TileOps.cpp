@@ -348,6 +348,56 @@ LogicalResult EBMLangevinStepOp::verify() {
   return success();
 }
 
+LogicalResult EBMRefinementOp::verify() {
+  auto inputs = getInputs();
+  auto outputs = getOutputs();
+  if (inputs.size() != 2 || outputs.size() != 1)
+    return emitOpError("expects exactly 2 inputs and 1 result");
+  auto y = dyn_cast<RankedTensorType>(inputs[0].getType());
+  auto grad = dyn_cast<RankedTensorType>(inputs[1].getType());
+  auto out = dyn_cast<RankedTensorType>(outputs[0].getType());
+  if (!y || !grad || !out)
+    return success();
+  if (!y.hasStaticShape() || !grad.hasStaticShape() || !out.hasStaticShape())
+    return emitOpError("expects static fp32 operands and result");
+  if (!y.getElementType().isF32() || !grad.getElementType().isF32() ||
+      !out.getElementType().isF32())
+    return emitOpError("expects fp32 operands and fp32 result");
+  if (!sameStaticShape(y, grad) || !sameStaticShape(y, out))
+    return emitOpError("y/grad/result shapes must match exactly");
+  if (auto eta = getOperation()->getAttrOfType<FloatAttr>("eta");
+      !eta || eta.getValueAsDouble() <= 0.0)
+    return emitOpError("eta must be present and positive");
+  if (auto steps = getOperation()->getAttrOfType<IntegerAttr>("steps");
+      !steps || steps.getInt() <= 0)
+    return emitOpError("steps must be present and positive");
+  return success();
+}
+
+LogicalResult EBMPartitionExactOp::verify() {
+  auto inputs = getInputs();
+  auto outputs = getOutputs();
+  if (inputs.size() != 1 || outputs.size() != 1)
+    return emitOpError("expects exactly 1 input and 1 result");
+  auto energies = dyn_cast<RankedTensorType>(inputs[0].getType());
+  auto out = dyn_cast<RankedTensorType>(outputs[0].getType());
+  if (!energies || !out)
+    return success();
+  if (!energies.hasStaticShape() || !out.hasStaticShape())
+    return emitOpError("expects static fp32 energies and scalar result");
+  if (!energies.getElementType().isF32() || !out.getElementType().isF32())
+    return emitOpError("expects fp32 energies and fp32 result");
+  if (out.getRank() != 0)
+    return emitOpError("partition result must be scalar for value execution");
+  if (auto temperature = getOperation()->getAttrOfType<FloatAttr>("temperature");
+      temperature && temperature.getValueAsDouble() <= 0.0)
+    return emitOpError("temperature must be positive");
+  if (auto reduction = getOperation()->getAttrOfType<StringAttr>("reduction");
+      reduction && reduction.getValue() != "logsumexp")
+    return emitOpError("only reduction=\"logsumexp\" is executable");
+  return success();
+}
+
 LogicalResult CliffordGeometricProductOp::verify() {
   return verifyCliffordBinary(getOperation(), getInputs(), getOutputs(),
                               "clifford_geometric_product");

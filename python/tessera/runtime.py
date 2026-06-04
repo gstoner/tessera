@@ -2970,10 +2970,76 @@ def _apple_gpu_ebm_langevin_step_value_f32() -> Any:
     return sym
 
 
+def _apple_gpu_ebm_refinement_value_f32() -> Any:
+    """Bind the Apple GPU deterministic EBM refinement value symbol."""
+    if not _running_on_darwin():
+        return None
+    try:
+        from ._apple_gpu_dispatch import apple_gpu_skip_reason
+        if apple_gpu_skip_reason() is not None:
+            return None
+    except Exception:
+        return None
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_ebm_refinement_value_f32",
+                  None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [fp, fp, ctypes.c_float, ctypes.c_int32, fp, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def _apple_gpu_ebm_partition_exact_value_f32() -> Any:
+    """Bind the Apple GPU scalar EBM partition value symbol."""
+    if not _running_on_darwin():
+        return None
+    try:
+        from ._apple_gpu_dispatch import apple_gpu_skip_reason
+        if apple_gpu_skip_reason() is not None:
+            return None
+    except Exception:
+        return None
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_ebm_partition_exact_value_f32",
+                  None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [fp, ctypes.c_int32, ctypes.c_float, fp]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def _apple_gpu_clifford_geo_product_cl30_value_f32() -> Any:
+    """Bind the Apple GPU cl30 Clifford geometric-product value symbol."""
+    if not _running_on_darwin():
+        return None
+    try:
+        from ._apple_gpu_dispatch import apple_gpu_skip_reason
+        if apple_gpu_skip_reason() is not None:
+            return None
+    except Exception:
+        return None
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(
+        runtime, "tessera_apple_gpu_clifford_geo_product_cl30_value_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [fp, fp, fp, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
 _APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE: bool | None = None
 _APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE: bool | None = None
 _APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE: bool | None = None
 _APPLE_GPU_EBM_LANGEVIN_STEP_AVAILABLE: bool | None = None
+_APPLE_GPU_EBM_REFINEMENT_AVAILABLE: bool | None = None
+_APPLE_GPU_EBM_PARTITION_EXACT_AVAILABLE: bool | None = None
+_APPLE_GPU_CLIFFORD_GEO_PRODUCT_AVAILABLE: bool | None = None
 
 
 def _ppo_policy_loss_np(
@@ -3132,6 +3198,132 @@ def _apple_gpu_ebm_langevin_step_value_available() -> bool:
     return _APPLE_GPU_EBM_LANGEVIN_STEP_AVAILABLE
 
 
+def _clifford_geo_product_cl30_np(np, a, b):
+    """Reference cl(3,0) geometric product for blade-last 8-coeff tensors."""
+    c = np.empty_like(a, dtype=np.float32)
+    c[..., 0] = (a[..., 0] * b[..., 0] + a[..., 1] * b[..., 1] +
+                 a[..., 2] * b[..., 2] + a[..., 3] * b[..., 3] -
+                 a[..., 4] * b[..., 4] - a[..., 5] * b[..., 5] -
+                 a[..., 6] * b[..., 6] - a[..., 7] * b[..., 7])
+    c[..., 1] = (a[..., 0] * b[..., 1] + a[..., 1] * b[..., 0] -
+                 a[..., 2] * b[..., 4] + a[..., 3] * b[..., 6] +
+                 a[..., 4] * b[..., 2] - a[..., 5] * b[..., 7] -
+                 a[..., 6] * b[..., 3] - a[..., 7] * b[..., 5])
+    c[..., 2] = (a[..., 0] * b[..., 2] + a[..., 1] * b[..., 4] +
+                 a[..., 2] * b[..., 0] - a[..., 3] * b[..., 5] -
+                 a[..., 4] * b[..., 1] + a[..., 5] * b[..., 3] -
+                 a[..., 6] * b[..., 7] - a[..., 7] * b[..., 6])
+    c[..., 3] = (a[..., 0] * b[..., 3] - a[..., 1] * b[..., 6] +
+                 a[..., 2] * b[..., 5] + a[..., 3] * b[..., 0] -
+                 a[..., 4] * b[..., 7] - a[..., 5] * b[..., 2] +
+                 a[..., 6] * b[..., 1] - a[..., 7] * b[..., 4])
+    c[..., 4] = (a[..., 0] * b[..., 4] + a[..., 1] * b[..., 2] -
+                 a[..., 2] * b[..., 1] + a[..., 3] * b[..., 7] +
+                 a[..., 4] * b[..., 0] - a[..., 5] * b[..., 6] +
+                 a[..., 6] * b[..., 5] + a[..., 7] * b[..., 3])
+    c[..., 5] = (a[..., 0] * b[..., 5] + a[..., 1] * b[..., 7] +
+                 a[..., 2] * b[..., 3] - a[..., 3] * b[..., 2] +
+                 a[..., 4] * b[..., 6] + a[..., 5] * b[..., 0] -
+                 a[..., 6] * b[..., 4] + a[..., 7] * b[..., 1])
+    c[..., 6] = (a[..., 0] * b[..., 6] - a[..., 1] * b[..., 3] +
+                 a[..., 2] * b[..., 7] + a[..., 3] * b[..., 1] -
+                 a[..., 4] * b[..., 5] + a[..., 5] * b[..., 4] +
+                 a[..., 6] * b[..., 0] + a[..., 7] * b[..., 2])
+    c[..., 7] = (a[..., 0] * b[..., 7] + a[..., 1] * b[..., 5] +
+                 a[..., 2] * b[..., 6] + a[..., 3] * b[..., 4] +
+                 a[..., 4] * b[..., 3] + a[..., 5] * b[..., 1] +
+                 a[..., 6] * b[..., 2] + a[..., 7] * b[..., 0])
+    return c
+
+
+def _apple_gpu_ebm_refinement_value_available() -> bool:
+    """True iff deterministic EBM refinement runs a tiny Metal probe."""
+    global _APPLE_GPU_EBM_REFINEMENT_AVAILABLE
+    if _APPLE_GPU_EBM_REFINEMENT_AVAILABLE is not None:
+        return _APPLE_GPU_EBM_REFINEMENT_AVAILABLE
+    sym = _apple_gpu_ebm_refinement_value_f32()
+    if sym is None:
+        _APPLE_GPU_EBM_REFINEMENT_AVAILABLE = False
+        return False
+    try:
+        import numpy as _np
+        y0 = _np.asarray([[0.5, -1.0, 2.0], [1.25, 0.0, -0.5]],
+                        dtype=_np.float32)
+        grad = _np.asarray([[0.25, -0.5, 1.0], [0.5, -0.25, 0.75]],
+                          dtype=_np.float32)
+        eta = 0.125
+        steps = 4
+        out = _np.empty_like(y0)
+        fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        rc = int(sym(fp(y0), fp(grad), ctypes.c_float(eta),
+                     ctypes.c_int32(steps), fp(out),
+                     ctypes.c_int32(int(y0.size))))
+        expected = y0 - steps * eta * grad
+        _APPLE_GPU_EBM_REFINEMENT_AVAILABLE = (
+            rc == 1 and bool(_np.all(_np.isfinite(out))) and
+            bool(_np.allclose(out, expected, rtol=1.0e-5, atol=1.0e-6)))
+    except Exception:
+        _APPLE_GPU_EBM_REFINEMENT_AVAILABLE = False
+    return _APPLE_GPU_EBM_REFINEMENT_AVAILABLE
+
+
+def _apple_gpu_ebm_partition_exact_value_available() -> bool:
+    """True iff scalar EBM partition exact runs a tiny Metal probe."""
+    global _APPLE_GPU_EBM_PARTITION_EXACT_AVAILABLE
+    if _APPLE_GPU_EBM_PARTITION_EXACT_AVAILABLE is not None:
+        return _APPLE_GPU_EBM_PARTITION_EXACT_AVAILABLE
+    sym = _apple_gpu_ebm_partition_exact_value_f32()
+    if sym is None:
+        _APPLE_GPU_EBM_PARTITION_EXACT_AVAILABLE = False
+        return False
+    try:
+        import numpy as _np
+        energies = _np.asarray([0.2, -0.3, 1.0], dtype=_np.float32)
+        temperature = 0.75
+        out = _np.empty((), dtype=_np.float32)
+        fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        rc = int(sym(fp(energies), ctypes.c_int32(int(energies.size)),
+                     ctypes.c_float(temperature), fp(out)))
+        scaled = -energies / temperature
+        expected = float(_np.exp(_np.max(scaled)) *
+                         _np.sum(_np.exp(scaled - _np.max(scaled))))
+        _APPLE_GPU_EBM_PARTITION_EXACT_AVAILABLE = (
+            rc == 1 and bool(_np.isfinite(out)) and
+            abs(float(out) - expected) < 1.0e-5)
+    except Exception:
+        _APPLE_GPU_EBM_PARTITION_EXACT_AVAILABLE = False
+    return _APPLE_GPU_EBM_PARTITION_EXACT_AVAILABLE
+
+
+def _apple_gpu_clifford_geo_product_cl30_value_available() -> bool:
+    """True iff cl30 Clifford geometric product runs a tiny Metal probe."""
+    global _APPLE_GPU_CLIFFORD_GEO_PRODUCT_AVAILABLE
+    if _APPLE_GPU_CLIFFORD_GEO_PRODUCT_AVAILABLE is not None:
+        return _APPLE_GPU_CLIFFORD_GEO_PRODUCT_AVAILABLE
+    sym = _apple_gpu_clifford_geo_product_cl30_value_f32()
+    if sym is None:
+        _APPLE_GPU_CLIFFORD_GEO_PRODUCT_AVAILABLE = False
+        return False
+    try:
+        import numpy as _np
+        a = _np.asarray([[1.0, 0.2, -0.4, 0.5, 0.1, -0.3, 0.7, -0.2],
+                         [0.3, -0.6, 0.8, -0.1, 0.4, 0.2, -0.5, 0.9]],
+                        dtype=_np.float32)
+        b = _np.asarray([[0.5, -0.1, 0.6, 0.2, -0.7, 0.3, 0.4, -0.8],
+                         [-0.2, 0.9, -0.3, 0.7, 0.1, -0.4, 0.6, 0.5]],
+                        dtype=_np.float32)
+        out = _np.empty_like(a)
+        fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        rc = int(sym(fp(a), fp(b), fp(out), ctypes.c_int32(2)))
+        expected = _clifford_geo_product_cl30_np(_np, a, b)
+        _APPLE_GPU_CLIFFORD_GEO_PRODUCT_AVAILABLE = (
+            rc == 1 and bool(_np.all(_np.isfinite(out))) and
+            bool(_np.allclose(out, expected, rtol=1.0e-5, atol=1.0e-6)))
+    except Exception:
+        _APPLE_GPU_CLIFFORD_GEO_PRODUCT_AVAILABLE = False
+    return _APPLE_GPU_CLIFFORD_GEO_PRODUCT_AVAILABLE
+
+
 # Apple GPU value-lane batched-matmul dispatch (Sprint 8). symbol -> (resolver,
 # numpy-dtype-kind). The key set is the GPU value allowlist.
 _APPLE_VALUE_GPU_DISPATCH: dict[str, tuple] = {
@@ -3150,6 +3342,15 @@ _APPLE_VALUE_GPU_DISPATCH: dict[str, tuple] = {
     "tessera_apple_gpu_ebm_langevin_step_value_f32": (
         _apple_gpu_ebm_langevin_step_value_f32,
         "ebm_langevin_step_value_f32"),
+    "tessera_apple_gpu_ebm_refinement_value_f32": (
+        _apple_gpu_ebm_refinement_value_f32,
+        "ebm_refinement_value_f32"),
+    "tessera_apple_gpu_ebm_partition_exact_value_f32": (
+        _apple_gpu_ebm_partition_exact_value_f32,
+        "ebm_partition_exact_value_f32"),
+    "tessera_apple_gpu_clifford_geo_product_cl30_value_f32": (
+        _apple_gpu_clifford_geo_product_cl30_value_f32,
+        "clifford_geo_product_cl30_value_f32"),
 }
 _APPLE_VALUE_GPU_SYMBOLS: frozenset[str] = frozenset(_APPLE_VALUE_GPU_DISPATCH)
 
@@ -3453,6 +3654,133 @@ def _dispatch_gpu_ebm_langevin_step(inputs, call, np):
     return out
 
 
+def _dispatch_gpu_ebm_refinement(inputs, call, np):
+    """Strict fp32 deterministic T-step EBM refinement on the GPU value lane."""
+    symbol = str(call.get("symbol", ""))
+    entry = _APPLE_VALUE_GPU_DISPATCH.get(symbol)
+    if entry is None or entry[1] != "ebm_refinement_value_f32":
+        raise ValueError(
+            f"apple_value_target_ir(gpu): symbol {symbol!r} is not the EBM "
+            "refinement value symbol")
+    if len(inputs) != 2:
+        raise ValueError(
+            f"apple_value_target_ir(gpu): ebm_refinement value-call needs "
+            f"exactly 2 input(s), got {len(inputs)}")
+    y0 = np.ascontiguousarray(np.asarray(inputs[0], dtype=np.float32))
+    grad = np.ascontiguousarray(np.asarray(inputs[1], dtype=np.float32))
+    if y0.shape != grad.shape:
+        raise ValueError(
+            f"ebm_refinement(gpu) shape mismatch: {y0.shape} / {grad.shape}")
+    if y0.size <= 0:
+        raise ValueError("ebm_refinement(gpu) requires a non-empty tensor")
+    eta = float(call.get("eta", 0.0))
+    steps = int(call.get("steps", 0))
+    if eta <= 0.0:
+        raise ValueError("ebm_refinement(gpu) requires positive eta")
+    if steps <= 0:
+        raise ValueError("ebm_refinement(gpu) requires positive steps")
+    if "temperature" in call or "noise_scale" in call:
+        raise ValueError(
+            "ebm_refinement(gpu) value executor is deterministic; "
+            "temperature/noise_scale variants are gated")
+    sym = _apple_gpu_ebm_refinement_value_f32()
+    if sym is None or not _apple_gpu_ebm_refinement_value_available():
+        raise ValueError(
+            "apple_gpu runtime lacks an active, numerically proven "
+            "tessera_apple_gpu_ebm_refinement_value_f32 executor")
+    out = np.empty_like(y0, dtype=np.float32)
+    fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    rc = int(sym(fp(y0), fp(grad), ctypes.c_float(eta),
+                 ctypes.c_int32(steps), fp(out), ctypes.c_int32(int(y0.size))))
+    if rc != 1:
+        raise ValueError(
+            "apple_gpu EBM refinement value executor is not active "
+            "(stub/unavailable Metal path returned non-success)")
+    return out
+
+
+def _dispatch_gpu_ebm_partition_exact(inputs, call, np):
+    """Strict fp32 scalar exact EBM partition on the GPU value lane."""
+    symbol = str(call.get("symbol", ""))
+    entry = _APPLE_VALUE_GPU_DISPATCH.get(symbol)
+    if entry is None or entry[1] != "ebm_partition_exact_value_f32":
+        raise ValueError(
+            f"apple_value_target_ir(gpu): symbol {symbol!r} is not the EBM "
+            "partition-exact value symbol")
+    if len(inputs) != 1:
+        raise ValueError(
+            f"apple_value_target_ir(gpu): ebm_partition_exact value-call needs "
+            f"exactly 1 input(s), got {len(inputs)}")
+    energies = np.ascontiguousarray(np.asarray(inputs[0], dtype=np.float32))
+    if energies.size <= 0:
+        raise ValueError("ebm_partition_exact(gpu) requires non-empty energies")
+    temperature = float(call.get("temperature", 1.0))
+    reduction = str(call.get("reduction", "logsumexp"))
+    if temperature <= 0.0:
+        raise ValueError("ebm_partition_exact(gpu) requires positive temperature")
+    if reduction != "logsumexp":
+        raise ValueError(
+            "ebm_partition_exact(gpu) value executor only supports "
+            "reduction='logsumexp'")
+    sym = _apple_gpu_ebm_partition_exact_value_f32()
+    if sym is None or not _apple_gpu_ebm_partition_exact_value_available():
+        raise ValueError(
+            "apple_gpu runtime lacks an active, numerically proven "
+            "tessera_apple_gpu_ebm_partition_exact_value_f32 executor")
+    out = np.empty((), dtype=np.float32)
+    fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    rc = int(sym(fp(energies), ctypes.c_int32(int(energies.size)),
+                 ctypes.c_float(temperature), fp(out)))
+    if rc != 1:
+        raise ValueError(
+            "apple_gpu EBM partition-exact value executor is not active "
+            "(stub/unavailable Metal path returned non-success)")
+    return out
+
+
+def _dispatch_gpu_clifford_geometric_product(inputs, call, np):
+    """Strict fp32 cl(3,0) Clifford geometric product on the GPU value lane."""
+    symbol = str(call.get("symbol", ""))
+    entry = _APPLE_VALUE_GPU_DISPATCH.get(symbol)
+    if entry is None or entry[1] != "clifford_geo_product_cl30_value_f32":
+        raise ValueError(
+            f"apple_value_target_ir(gpu): symbol {symbol!r} is not the "
+            "Clifford cl30 geometric-product value symbol")
+    if len(inputs) != 2:
+        raise ValueError(
+            f"apple_value_target_ir(gpu): clifford_geometric_product value-call "
+            f"needs exactly 2 input(s), got {len(inputs)}")
+    a = np.ascontiguousarray(np.asarray(inputs[0], dtype=np.float32))
+    b = np.ascontiguousarray(np.asarray(inputs[1], dtype=np.float32))
+    if a.shape != b.shape:
+        raise ValueError(
+            f"clifford_geometric_product(gpu) shape mismatch: {a.shape} / {b.shape}")
+    if a.ndim < 1 or a.shape[-1] != 8:
+        raise ValueError(
+            "clifford_geometric_product(gpu) requires blade-last cl30 tensors "
+            "with last dimension 8")
+    if a.size <= 0:
+        raise ValueError(
+            "clifford_geometric_product(gpu) requires a non-empty tensor")
+    if int(call.get("p", 3)) != 3 or int(call.get("q", 0)) != 0:
+        raise ValueError(
+            "clifford_geometric_product(gpu) value executor only supports p=3,q=0")
+    batch = int(a.size // 8)
+    sym = _apple_gpu_clifford_geo_product_cl30_value_f32()
+    if sym is None or not _apple_gpu_clifford_geo_product_cl30_value_available():
+        raise ValueError(
+            "apple_gpu runtime lacks an active, numerically proven "
+            "tessera_apple_gpu_clifford_geo_product_cl30_value_f32 executor")
+    out = np.empty_like(a, dtype=np.float32)
+    fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    rc = int(sym(fp(a), fp(b), fp(out), ctypes.c_int32(batch)))
+    if rc != 1:
+        raise ValueError(
+            "apple_gpu Clifford geometric-product value executor is not active "
+            "(stub/unavailable Metal path returned non-success)")
+    return out
+
+
 def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", args: Any) -> Any:
     """Execute an Apple GPU value-target-IR artifact.
 
@@ -3460,8 +3788,9 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
     an op kind and symbol on the GPU value allowlist. Sprint 8 shipped
     rank-3 `batched_gemm`; Sprint 11 adds static fp32 rank-4
     `native_sparse_attn_fused`; Stage 13 adds strict fp32 mean PPO policy
-    loss; the EBM value lane adds strict fp32 quadratic energy and one-step
-    Langevin. Rejects
+    loss; the EBM value lane adds strict fp32 quadratic energy, one-step
+    Langevin, deterministic refinement, scalar partition exact, and one cl30
+    Clifford geometric-product executor. Rejects
     `cpu.call`, `package_call`, multi-op programs, unknown symbols, extra
     operands, and non-executable statuses — so launch reports `invalid_artifact`
     rather than silently mis-dispatching."""
@@ -3488,11 +3817,13 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
     op_kind = str(call.get("op_kind"))
     if op_kind not in {"batched_gemm", "native_sparse_attn_fused",
                        "ppo_policy_loss", "ebm_energy_quadratic",
-                       "ebm_langevin_step"}:
+                       "ebm_langevin_step", "ebm_refinement",
+                       "ebm_partition_exact", "clifford_geometric_product"}:
         raise ValueError(
             f"apple_value_target_ir(gpu): only batched_gemm, "
-            f"native_sparse_attn_fused, ppo_policy_loss, and EBM value kernels "
-            f"execute on the GPU value lane today "
+            f"native_sparse_attn_fused, ppo_policy_loss, EBM value kernels, "
+            f"and cl30 clifford_geometric_product execute on the GPU value "
+            f"lane today "
             f"(got op_kind={call.get('op_kind')!r})")
 
     arg_names = list(metadata.get("arg_names") or [])
@@ -3519,6 +3850,12 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
         return _dispatch_gpu_ebm_energy_quadratic(inputs, call, np)
     if op_kind == "ebm_langevin_step":
         return _dispatch_gpu_ebm_langevin_step(inputs, call, np)
+    if op_kind == "ebm_refinement":
+        return _dispatch_gpu_ebm_refinement(inputs, call, np)
+    if op_kind == "ebm_partition_exact":
+        return _dispatch_gpu_ebm_partition_exact(inputs, call, np)
+    if op_kind == "clifford_geometric_product":
+        return _dispatch_gpu_clifford_geometric_product(inputs, call, np)
     return _dispatch_gpu_native_sparse_attn(inputs, call, np)
 
 

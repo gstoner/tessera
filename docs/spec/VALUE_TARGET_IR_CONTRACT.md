@@ -2,8 +2,8 @@
 status: Normative
 classification: Backend contract
 audience: backend authors (Apple proven; NVIDIA / ROCm inherit)
-last_updated: 2026-06-03
-note: Sprint 11 — Apple value Tile verifier hardened the -full handoff; native sparse attention added as a strict Apple GPU value envelope when the real Metal executor is active.
+last_updated: 2026-06-04
+note: Stage 16E — Apple GPU value runtime closure now includes narrow probed EBM value symbols and one cl30 Clifford geometric-product value symbol.
 ---
 
 # Value Target IR Contract
@@ -66,11 +66,14 @@ Apple value `-full` pipelines therefore run with **no
 Sprint 11 adds an Apple-value-only Tile verifier immediately after value-mode
 tiling and before `TileToApple`. It fails if any `tile.*` op is unregistered,
 and it fails if a registered Tile op is outside the value allowlist:
-the linalg family, rank-2 `tile.matmul`/`tile.gemm`, and rank-3
-`tile.batched_gemm`. A guard test injects an opaque `tile.fake_value_op` into
+the linalg family, rank-2 `tile.matmul`/`tile.gemm`, rank-3
+`tile.batched_gemm`, PPO, narrow EBM value kernels, and registered Clifford
+value-seam carriers. A guard test injects an opaque `tile.fake_value_op` into
 the value lane and proves the verifier rejects it, so the handoff is no longer
 dependent on parser behavior alone. The artifact/runtime pipelines are
-unchanged for now.
+unchanged for now. Only Clifford `geometric_product` is currently promoted from
+GA value seam to executable Apple GPU value call; the other Clifford carriers
+remain compiler-visible and gated.
 
 A guard test
 (`test_apple_value_lowering_uses_no_unregistered_dialect_flag`) fails if the
@@ -147,9 +150,10 @@ pipelines pass `valueMode=true`); a backend may instead use distinct passes.
 This is a **narrow, honest** executable path, not a blanket claim. The boundary
 is **CPU linalg + CPU rank-2 matmul (f32/f16/bf16) + CPU fp32 rank-3 batched
 matmul + Apple GPU rank-3 batched matmul (f32/f16/bf16) + Apple GPU native
-sparse attention (strict fp32 rank-4 envelope, real Metal executor only) =
-executable; all other GPU value calls and non-linalg value calls = classified +
-gated**.
+sparse attention (strict fp32 rank-4 envelope, real Metal executor only) +
+Apple GPU PPO policy loss + narrow Apple GPU EBM value kernels + cl30 Clifford
+geometric product = executable; all other GPU value calls and non-linalg value
+calls = classified + gated**.
 
 Two executor allowlists, one per backend lane:
 - **CPU** (`test_value_envelope_executable_allowlist_exact`): the six CPU linalg
@@ -160,7 +164,12 @@ Two executor allowlists, one per backend lane:
   plus `tessera_apple_gpu_native_sparse_attn_f32` (native sparse attention,
   Sprint 11; active only when the real Metal executor is available) and
   `tessera_apple_gpu_ppo_policy_loss_{f32,ex_f32}` (PPO policy loss, Stages
-  13-14; active only when their MPSGraph numerical probes pass).
+  13-14; active only when their MPSGraph numerical probes pass),
+  `tessera_apple_gpu_ebm_{energy_quadratic,langevin_step,refinement,partition_exact}_value_f32`,
+  and `tessera_apple_gpu_clifford_geo_product_cl30_value_f32` (Stage 16E;
+  active only when the status-returning Metal wrapper binds and the tiny
+  numerical probe passes). Legacy void GA/EBM symbols that can fall back to a
+  host reference are **not** value-executable symbols.
 
 - **The full Apple CPU linalg family is executable now (Sprint 3).** The matrix
   row `(apple_cpu, apple_value_target_ir)` resolves to the

@@ -64,6 +64,12 @@ extern "C" int32_t tessera_apple_gpu_ebm_langevin_step_value_f32(
     const float*, const float*, const float*, float, float, float*, int32_t) {
   return 0;
 }
+extern "C" int32_t tessera_apple_gpu_ebm_refinement_value_f32(
+    const float*, const float*, float, int32_t, float*, int32_t) { return 0; }
+extern "C" int32_t tessera_apple_gpu_ebm_partition_exact_value_f32(
+    const float*, int32_t, float, float*) { return 0; }
+extern "C" int32_t tessera_apple_gpu_clifford_geo_product_cl30_value_f32(
+    const float*, const float*, float*, int32_t) { return 0; }
 
 namespace {
 

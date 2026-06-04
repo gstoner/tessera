@@ -8315,8 +8315,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/Tessera_Operator_Benchmarks/harness/op_utils.h": {
-    "mtime": 1757115428.0,
-    "ast_hash": "570257bda9a998af0374a79c8d3459f8",
+    "mtime": 1780597194.4085748,
+    "ast_hash": "1062f948bff3e6850795ef3a7794fced",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/Tessera_Operator_Benchmarks/harness/op_registry.cpp": {
@@ -8340,8 +8340,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/Tessera_Operator_Benchmarks/common/device_utils.h": {
-    "mtime": 1757115428.0,
-    "ast_hash": "3cf971acb7141377b15a1723d719eeeb",
+    "mtime": 1780597204.7053938,
+    "ast_hash": "f0cd53e93e47d27161fef4f6579fb5d4",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/Tessera_Operator_Benchmarks/scripts/opbench_bridge.py": {
@@ -8375,8 +8375,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/Tessera_Operator_Benchmarks/ops/transpose_gather/transpose_gather_op.cpp": {
-    "mtime": 1757115428.0,
-    "ast_hash": "a16b28acb8531bd2c20af6d1adabc3de",
+    "mtime": 1780597264.5213866,
+    "ast_hash": "983cc4ddd727629495416d2181c75a66",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/Tessera_Operator_Benchmarks/ops/transpose_gather/transpose_gather_op.h": {
@@ -8400,8 +8400,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/Tessera_Operator_Benchmarks/ops/reduce/reduce_op.cpp": {
-    "mtime": 1757115428.0,
-    "ast_hash": "453b1699c6a27e45905066fb60fd0f1f",
+    "mtime": 1780597242.727618,
+    "ast_hash": "821bca2b86aedd00d3e28b9cb5f972f9",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/Tessera_Operator_Benchmarks/ops/elementwise/elementwise_op.h": {
@@ -8410,8 +8410,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/Tessera_Operator_Benchmarks/ops/elementwise/elementwise_op.cpp": {
-    "mtime": 1757115428.0,
-    "ast_hash": "01308405d9808554124cef11714f34a6",
+    "mtime": 1780597255.2588646,
+    "ast_hash": "97d1309017ca6ff4ed4f171824084805",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/Tessera_Operator_Benchmarks/ops/softmax_layernorm/softmax_layernorm_op.cpp": {
@@ -8425,8 +8425,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/Tessera_Operator_Benchmarks/ops/matmul/matmul_op.cpp": {
-    "mtime": 1757115428.0,
-    "ast_hash": "17257473321d06515efd22053c1fe4c1",
+    "mtime": 1780597348.7559066,
+    "ast_hash": "a0d4ceefd7984a81e0cc3e77b9e85ed2",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/Tessera_Operator_Benchmarks/ops/matmul/matmul_op.h": {
@@ -11010,8 +11010,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/canonical_compile.py": {
-    "mtime": 1780574624.6016195,
-    "ast_hash": "7e1e2f607e5aadd356764ac07e77d6ed",
+    "mtime": 1780608898.9205456,
+    "ast_hash": "42087c5e27c0a8be159b9538c245b196",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/execution_matrix.py": {
@@ -11745,8 +11745,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_canonical_component_ops.py": {
-    "mtime": 1780413160.7548165,
-    "ast_hash": "675621e52bc8a97b36950679a8c000e6",
+    "mtime": 1780608926.4685252,
+    "ast_hash": "9ed98b41214ea83ca9f990c2ee24ccd8",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/VALUE_TARGET_IR_CONTRACT.md": {

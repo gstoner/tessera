@@ -46,7 +46,7 @@ Drift-guarded by ``tests/unit/test_canonical_compile.py``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 
 from tessera.compiler import pipeline_gates as _pg
@@ -55,6 +55,7 @@ from tessera.compiler.driver import (
     compile_graph_module as _compile_graph_module,
 )
 from tessera.compiler.graph_ir import GraphIRModule
+from tessera.compiler.op_catalog import get_op_spec, normalize_op_name
 
 
 # --- CompileResult --------------------------------------------------------
@@ -98,6 +99,13 @@ class CompileResult:
     component_ops: tuple[str, ...] = ()
     component_blockers: tuple[tuple[str, str], ...] = ()
     program_executable: bool = False
+    # Sprint A (2026-06-04) — component-aware metadata contract. These are
+    # conservative Graph IR summaries today; later compiler passes can replace
+    # the derivation without changing the RuntimeArtifact metadata keys.
+    fusion_groups: tuple[dict[str, Any], ...] = ()
+    shape_envelope: dict[str, Any] = field(default_factory=dict)
+    effects: dict[str, Any] = field(default_factory=dict)
+    layout_contracts: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_single_op(self) -> bool:
@@ -193,6 +201,10 @@ class CompileResult:
                 {"op": op, "gate": gate}
                 for (op, gate) in self.component_blockers
             ],
+            "canonical_fusion_groups": list(self.fusion_groups),
+            "canonical_shape_envelope": self.shape_envelope,
+            "canonical_effects": self.effects,
+            "canonical_layout_contracts": self.layout_contracts,
             # The bundle's executable claim — preserved so callers that
             # need to compare bundle-side vs canonical-side decisions can.
             "bundle_executable": self.bundle.executable,
@@ -271,6 +283,10 @@ class CompileResult:
                 {"op": op, "gate": gate}
                 for (op, gate) in self.component_blockers
             ],
+            "fusion_groups": list(self.fusion_groups),
+            "shape_envelope": self.shape_envelope,
+            "effects": self.effects,
+            "layout_contracts": self.layout_contracts,
             "compiler_path": self.compiler_path,
             "executable": self.executable,
             "reason": self.reason,
@@ -363,12 +379,263 @@ def _extract_component_ops(module: GraphIRModule) -> tuple[str, ...]:
     return tuple(seen)
 
 
+# --- Sprint A metadata derivation ----------------------------------------
+
+_EFFECT_ORDER: tuple[str, ...] = (
+    "pure", "random", "movement", "state", "collective", "memory", "io", "top",
+)
+_EFFECT_RANK = {name: i for i, name in enumerate(_EFFECT_ORDER)}
+
+
+def _strip_percent(name: str) -> str:
+    return name[1:] if name.startswith("%") else name
+
+
+def _canonical_op_name(op_name: str) -> str:
+    try:
+        return normalize_op_name(op_name)
+    except Exception:
+        if op_name.startswith("tessera."):
+            return op_name[len("tessera."):]
+        return op_name
+
+
+def _join_effect(a: str, b: str) -> str:
+    return a if _EFFECT_RANK.get(a, 0) >= _EFFECT_RANK.get(b, 0) else b
+
+
+def _dtype_from_mlir(dtype: str | None) -> str | None:
+    if dtype is None:
+        return None
+    return {
+        "f64": "fp64",
+        "f32": "fp32",
+        "f16": "fp16",
+        "i1": "bool",
+        "i8": "int8",
+        "i16": "int16",
+        "i32": "int32",
+        "i64": "int64",
+    }.get(dtype, dtype)
+
+
+def _type_metadata(ir_type: Any, *, layout: str | None = None) -> dict[str, Any]:
+    """Return a JSON-safe summary of an IR type or MLIR type string."""
+    if hasattr(ir_type, "mlir_str"):
+        shape = list(getattr(ir_type, "shape", ()) or ())
+        dtype = getattr(ir_type, "dtype", None)
+        resolved_layout = layout or getattr(ir_type, "layout", None)
+        return {
+            "type": str(ir_type),
+            "shape": shape,
+            "rank": None if "*" in shape else len(shape),
+            "dtype": dtype,
+            "layout": resolved_layout,
+        }
+
+    text = str(ir_type or "")
+    meta: dict[str, Any] = {
+        "type": text,
+        "shape": [],
+        "rank": None,
+        "dtype": None,
+        "layout": layout,
+    }
+    if text.startswith("tensor<") and text.endswith(">"):
+        body = text[len("tensor<"):-1]
+        parts = body.split("x")
+        if len(parts) >= 2:
+            dtype = parts[-1]
+            dims = parts[:-1]
+            if dims == ["*"]:
+                shape: list[str] = ["*"]
+            else:
+                shape = dims
+            meta.update({
+                "shape": shape,
+                "rank": None if "*" in shape else len(shape),
+                "dtype": _dtype_from_mlir(dtype),
+            })
+    return meta
+
+
+def _op_effect(op_name: str, kwargs: Mapping[str, Any]) -> str:
+    explicit = kwargs.get("effect")
+    if isinstance(explicit, str) and explicit in _EFFECT_RANK:
+        return explicit
+    spec = get_op_spec(op_name)
+    if spec is not None:
+        return spec.effect
+    return "pure"
+
+
+def _lowering_family(op_name: str) -> str:
+    spec = get_op_spec(op_name)
+    return spec.lowering if spec is not None else "unknown"
+
+
+def _derive_shape_envelope(module: GraphIRModule) -> dict[str, Any]:
+    functions: list[dict[str, Any]] = []
+    for fn in module.functions:
+        values: list[dict[str, Any]] = []
+        value_types: dict[str, dict[str, Any]] = {
+            arg.name: _type_metadata(arg.ir_type, layout=arg.layout)
+            for arg in fn.args
+        }
+        for op in fn.body:
+            result_meta = _type_metadata(op.inferred_type or op.result_type)
+            for name in op.result_names:
+                value_types[name] = result_meta
+                values.append({
+                    "name": name,
+                    "producer": _canonical_op_name(op.op_name),
+                    **result_meta,
+                })
+        functions.append({
+            "name": fn.name,
+            "args": [
+                {"name": arg.name, **_type_metadata(arg.ir_type, layout=arg.layout)}
+                for arg in fn.args
+            ],
+            "results": [
+                {"index": i, **_type_metadata(result_type)}
+                for i, result_type in enumerate(fn.result_types)
+            ],
+            "values": values,
+            "returns": [
+                {
+                    "name": _strip_percent(value),
+                    **value_types.get(_strip_percent(value), _type_metadata("")),
+                }
+                for value in fn.return_values
+            ],
+        })
+    return {"schema": "tessera.compile.shape_envelope.v1", "functions": functions}
+
+
+def _derive_effects(module: GraphIRModule) -> dict[str, Any]:
+    functions: list[dict[str, Any]] = []
+    module_effect = "pure"
+    for fn in module.functions:
+        fn_effect = "pure"
+        arg_effects = [
+            {"name": arg.name, "effect": arg.effect}
+            for arg in fn.args if arg.effect
+        ]
+        for arg in arg_effects:
+            fn_effect = _join_effect(fn_effect, str(arg["effect"]))
+        op_effects: list[dict[str, str]] = []
+        for op in fn.body:
+            effect = _op_effect(op.op_name, op.kwargs)
+            op_effects.append({
+                "op": _canonical_op_name(op.op_name),
+                "effect": effect,
+            })
+            fn_effect = _join_effect(fn_effect, effect)
+        module_effect = _join_effect(module_effect, fn_effect)
+        functions.append({
+            "name": fn.name,
+            "summary": fn_effect,
+            "args": arg_effects,
+            "ops": op_effects,
+        })
+    return {
+        "schema": "tessera.compile.effects.v1",
+        "summary": module_effect,
+        "functions": functions,
+    }
+
+
+def _derive_layout_contracts(module: GraphIRModule) -> dict[str, Any]:
+    functions: list[dict[str, Any]] = []
+    for fn in module.functions:
+        value_layouts: dict[str, str | None] = {}
+        args: list[dict[str, Any]] = []
+        for arg in fn.args:
+            layout = arg.layout or arg.ir_type.layout
+            value_layouts[arg.name] = layout
+            args.append({"name": arg.name, "layout": layout})
+
+        ops: list[dict[str, Any]] = []
+        for op in fn.body:
+            operand_layouts = [
+                value_layouts.get(_strip_percent(operand))
+                for operand in op.operands
+            ]
+            result_layout = None
+            if op.inferred_type is not None:
+                result_layout = op.inferred_type.layout
+            if result_layout is None and isinstance(op.kwargs.get("layout"), str):
+                result_layout = str(op.kwargs["layout"])
+            for name in op.result_names:
+                value_layouts[name] = result_layout
+            ops.append({
+                "op": _canonical_op_name(op.op_name),
+                "operands": operand_layouts,
+                "result": result_layout,
+            })
+
+        functions.append({"name": fn.name, "args": args, "ops": ops})
+    return {
+        "schema": "tessera.compile.layout_contracts.v1",
+        "functions": functions,
+    }
+
+
+def _derive_fusion_groups(module: GraphIRModule) -> tuple[dict[str, Any], ...]:
+    """Conservative producer-consumer fusion candidates.
+
+    This is metadata, not a scheduling claim: adjacent pure ops in the same
+    lowering family that pass an SSA value directly are marked as candidates.
+    """
+    groups: list[dict[str, Any]] = []
+    for fn in module.functions:
+        producer_by_value: dict[str, tuple[int, Any]] = {}
+        for i, op in enumerate(fn.body):
+            effect = _op_effect(op.op_name, op.kwargs)
+            family = _lowering_family(op.op_name)
+            for operand in op.operands:
+                produced = producer_by_value.get(_strip_percent(operand))
+                if produced is None:
+                    continue
+                j, prev = produced
+                if j != i - 1:
+                    continue
+                prev_effect = _op_effect(prev.op_name, prev.kwargs)
+                prev_family = _lowering_family(prev.op_name)
+                if effect == prev_effect == "pure" and family == prev_family:
+                    groups.append({
+                        "function": fn.name,
+                        "kind": "producer_consumer",
+                        "status": "candidate",
+                        "ops": [
+                            {"index": j, "op": _canonical_op_name(prev.op_name)},
+                            {"index": i, "op": _canonical_op_name(op.op_name)},
+                        ],
+                        "via": _strip_percent(operand),
+                        "lowering": family,
+                    })
+            for result_name in op.result_names:
+                producer_by_value[result_name] = (i, op)
+    return tuple(groups)
+
+
+def _derive_compile_metadata(module: GraphIRModule) -> dict[str, Any]:
+    return {
+        "fusion_groups": _derive_fusion_groups(module),
+        "shape_envelope": _derive_shape_envelope(module),
+        "effects": _derive_effects(module),
+        "layout_contracts": _derive_layout_contracts(module),
+    }
+
+
 # --- Synthesizers --------------------------------------------------------
 
 def _result_from_bundle(
     bundle: CompileArtifactBundle,
     primary_op: Optional[str],
     component_ops: Optional[tuple[str, ...]] = None,
+    compile_metadata: Optional[Mapping[str, Any]] = None,
 ) -> CompileResult:
     """Shared "bundle + gates → CompileResult" reconciliation. Both
     :func:`canonical_compile` (which runs the ladder first) and
@@ -415,6 +682,7 @@ def _result_from_bundle(
         if cfail is not None:
             blockers.append((op, cfail.gate))
     program_executable = bool(bundle.executable) and not blockers
+    metadata = dict(compile_metadata or {})
 
     return CompileResult(
         bundle=bundle,
@@ -427,6 +695,10 @@ def _result_from_bundle(
         component_ops=tuple(comps),
         component_blockers=tuple(blockers),
         program_executable=program_executable,
+        fusion_groups=tuple(metadata.get("fusion_groups", ())),
+        shape_envelope=dict(metadata.get("shape_envelope", {})),
+        effects=dict(metadata.get("effects", {})),
+        layout_contracts=dict(metadata.get("layout_contracts", {})),
     )
 
 
@@ -455,7 +727,9 @@ def compile_result_from_bundle(
         primary_op = _extract_primary_op(module)
     component_ops = (
         _extract_component_ops(module) if module is not None else None)
-    return _result_from_bundle(bundle, primary_op, component_ops)
+    compile_metadata = _derive_compile_metadata(module) if module is not None else None
+    return _result_from_bundle(
+        bundle, primary_op, component_ops, compile_metadata)
 
 
 # --- Canonical compile() -------------------------------------------------
@@ -497,7 +771,11 @@ def canonical_compile(
         enable_tool_validation=enable_tool_validation,
     )
     return _result_from_bundle(
-        bundle, _extract_primary_op(module), _extract_component_ops(module))
+        bundle,
+        _extract_primary_op(module),
+        _extract_component_ops(module),
+        _derive_compile_metadata(module),
+    )
 
 
 __all__ = [

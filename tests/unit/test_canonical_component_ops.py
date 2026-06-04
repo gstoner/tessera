@@ -80,6 +80,51 @@ def _repeat_op_module() -> GraphIRModule:
     return GraphIRModule(functions=[fn])
 
 
+def _metadata_module() -> GraphIRModule:
+    """relu -> sigmoid gives a conservative pure elementwise fusion candidate."""
+    t = IRType("tensor<2x4xf32>", ("2", "4"), "fp32", layout="row_major")
+    fn = GraphIRFunction(
+        name="metadata_prog",
+        args=[IRArg("x", t, effect="read", layout="row_major")],
+        result_types=[t],
+        body=[
+            IROp(result="r", op_name="tessera.relu", operands=["%x"],
+                 operand_types=["tensor<2x4xf32>"],
+                 result_type="tensor<2x4xf32>"),
+            IROp(result="s", op_name="tessera.sigmoid", operands=["%r"],
+                 operand_types=["tensor<2x4xf32>"],
+                 result_type="tensor<2x4xf32>"),
+        ],
+        return_values=["%s"],
+    )
+    return GraphIRModule(functions=[fn])
+
+
+def _stateful_metadata_module() -> GraphIRModule:
+    t = IRType("tensor<2x4xf32>", ("2", "4"), "fp32")
+    fn = GraphIRFunction(
+        name="stateful_prog",
+        args=[
+            IRArg("q", t),
+            IRArg("k", t),
+            IRArg("v", t),
+        ],
+        result_types=[t],
+        body=[
+            IROp(result="o", op_name="tessera.flash_attn",
+                 operands=["%q", "%k", "%v"],
+                 operand_types=[
+                     "tensor<2x4xf32>",
+                     "tensor<2x4xf32>",
+                     "tensor<2x4xf32>",
+                 ],
+                 result_type="tensor<2x4xf32>"),
+        ],
+        return_values=["%o"],
+    )
+    return GraphIRModule(functions=[fn])
+
+
 # ── component_ops vector ──────────────────────────────────────────────
 
 def test_single_op_program_collapses_to_primary():
@@ -141,6 +186,60 @@ def test_runtime_artifact_metadata_carries_component_fields():
     assert meta["canonical_component_ops"] == ["matmul", "relu"]
     assert "canonical_program_executable" in meta
     assert isinstance(meta["canonical_component_blockers"], list)
+
+
+# ── Sprint A metadata surfaces ──────────────────────────────────────────
+
+def test_to_dict_carries_sprint_a_metadata_surfaces():
+    r = cn.canonical_compile(_metadata_module(), target="cpu")
+    d = r.to_dict()
+
+    assert d["shape_envelope"]["schema"] == "tessera.compile.shape_envelope.v1"
+    fn_shape = d["shape_envelope"]["functions"][0]
+    assert fn_shape["args"][0]["shape"] == ["2", "4"]
+    assert fn_shape["args"][0]["dtype"] == "fp32"
+    assert fn_shape["returns"][0]["name"] == "s"
+
+    assert d["effects"]["schema"] == "tessera.compile.effects.v1"
+    assert d["effects"]["summary"] == "pure"
+    assert d["effects"]["functions"][0]["args"] == [
+        {"name": "x", "effect": "read"}
+    ]
+
+    assert d["layout_contracts"]["schema"] == "tessera.compile.layout_contracts.v1"
+    assert d["layout_contracts"]["functions"][0]["args"] == [
+        {"name": "x", "layout": "row_major"}
+    ]
+
+    assert d["fusion_groups"] == [{
+        "function": "metadata_prog",
+        "kind": "producer_consumer",
+        "status": "candidate",
+        "ops": [
+            {"index": 0, "op": "relu"},
+            {"index": 1, "op": "sigmoid"},
+        ],
+        "via": "r",
+        "lowering": "elementwise",
+    }]
+
+
+def test_runtime_artifact_metadata_carries_sprint_a_metadata_surfaces():
+    r = cn.canonical_compile(_metadata_module(), target="cpu")
+    meta = r.to_runtime_artifact().metadata
+
+    assert meta["canonical_shape_envelope"] == r.shape_envelope
+    assert meta["canonical_effects"] == r.effects
+    assert meta["canonical_layout_contracts"] == r.layout_contracts
+    assert meta["canonical_fusion_groups"] == list(r.fusion_groups)
+
+
+def test_effect_summary_uses_op_catalog_effects():
+    r = cn.canonical_compile(_stateful_metadata_module(), target="cpu")
+    assert r.effects["summary"] == "state"
+    assert r.effects["functions"][0]["ops"] == [
+        {"op": "flash_attn", "effect": "state"}
+    ]
 
 
 def test_compile_result_from_bundle_without_module_is_single_op_safe():

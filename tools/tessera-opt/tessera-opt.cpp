@@ -136,7 +136,7 @@ public:
             << name
             << "' is outside the value allowlist (linalg family, "
                "rank-2 matmul/gemm, rank-3 batched_gemm, PPO policy loss, "
-               "EBM value kernels)";
+               "EBM value kernels, GA/Clifford value seam)";
         failed = true;
       }
     });
@@ -150,6 +150,13 @@ private:
            name == "tile.batched_gemm" || name == "tile.ppo_policy_loss" ||
            name == "tile.ebm_energy_quadratic" ||
            name == "tile.ebm_langevin_step" ||
+           name == "tile.clifford_geometric_product" ||
+           name == "tile.clifford_outer_product" ||
+           name == "tile.clifford_inner_product" ||
+           name == "tile.clifford_reverse" ||
+           name == "tile.clifford_grade_project" ||
+           name == "tile.clifford_norm" ||
+           name == "tile.clifford_rotor_sandwich" ||
            name == "tile.cholesky" ||
            name == "tile.tri_solve" || name == "tile.cholesky_solve" ||
            name == "tile.lu" || name == "tile.qr" || name == "tile.svd";

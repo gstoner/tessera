@@ -62,6 +62,63 @@ static bool hasOperandSegment(Operation *op, unsigned index) {
   return segments.asArrayRef()[index] != 0;
 }
 
+static bool hasOptionalOperand(Operation *op, unsigned index) {
+  return index < op->getNumOperands() &&
+         (hasOperandSegment(op, index) || op->getNumOperands() > index);
+}
+
+static bool sameStaticShape(RankedTensorType a, RankedTensorType b) {
+  if (a.getRank() != b.getRank() || !a.hasStaticShape() || !b.hasStaticShape())
+    return false;
+  for (int64_t i = 0, e = a.getRank(); i < e; ++i)
+    if (a.getDimSize(i) != b.getDimSize(i))
+      return false;
+  return true;
+}
+
+static int64_t i64AttrOr(Operation *op, llvm::StringRef name,
+                         int64_t fallback) {
+  if (auto attr = op->getAttrOfType<IntegerAttr>(name))
+    return attr.getInt();
+  return fallback;
+}
+
+static bool isStaticF32Tensor(Type type, RankedTensorType &out) {
+  out = llvm::dyn_cast<RankedTensorType>(type);
+  return out && out.hasStaticShape() && out.getElementType().isF32();
+}
+
+static bool isStrictCl30Tensor(RankedTensorType ty) {
+  return ty && ty.hasStaticShape() && ty.getElementType().isF32() &&
+         ty.getRank() >= 1 && ty.getDimSize(ty.getRank() - 1) == 8;
+}
+
+static bool isStrictCl30Op(Operation *op) {
+  return i64AttrOr(op, "p", -1) == 3 && i64AttrOr(op, "q", -1) == 0;
+}
+
+static void copyAttrs(Operation *op, OperationState &st) {
+  for (auto &na : op->getAttrs())
+    st.addAttribute(na.getName(), na.getValue());
+}
+
+static Operation *createPreservedTileOp(PatternRewriter &rewriter,
+                                        Operation *op,
+                                        llvm::StringRef tileName,
+                                        llvm::StringRef source,
+                                        ArrayRef<NamedAttribute> extra = {}) {
+  OperationState st(op->getLoc(), tileName);
+  st.addOperands(op->getOperands());
+  st.addTypes(op->getResultTypes());
+  copyAttrs(op, st);
+  st.addAttribute("source", rewriter.getStringAttr(source));
+  for (auto &na : extra)
+    st.addAttribute(na.getName(), na.getValue());
+  Operation *tiled = rewriter.create(st);
+  rewriter.replaceOp(op, tiled->getResults());
+  return tiled;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Rewrite pattern: TileMatmul
 // ─────────────────────────────────────────────────────────────────────────────
@@ -505,15 +562,8 @@ struct TileEBMEnergyQuadraticValue : public RewritePattern {
         eTy.getDimSize(0) != xTy.getDimSize(0))
       return failure();
 
-    OperationState st(op->getLoc(), "tile.ebm_energy_quadratic");
-    st.addOperands(op->getOperands());
-    st.addTypes(op->getResultTypes());
-    for (auto &na : op->getAttrs())
-      st.addAttribute(na.getName(), na.getValue());
-    st.addAttribute("source",
-                    rewriter.getStringAttr("tessera.ebm.energy_quadratic"));
-    Operation *tiled = rewriter.create(st);
-    rewriter.replaceOp(op, tiled->getResults());
+    createPreservedTileOp(rewriter, op, "tile.ebm_energy_quadratic",
+                          "tessera.ebm.energy_quadratic");
     return success();
   }
 };
@@ -525,6 +575,8 @@ struct TileEBMLangevinStepValue : public RewritePattern {
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
     if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+      return failure();
+    if (!hasOptionalOperand(op, 2))
       return failure();
     auto yTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
     auto gTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
@@ -548,17 +600,98 @@ struct TileEBMLangevinStepValue : public RewritePattern {
         scale && scale.getValueAsDouble() < 0.0)
       return failure();
 
-    OperationState st(op->getLoc(), "tile.ebm_langevin_step");
-    st.addOperands(op->getOperands());
-    st.addTypes(op->getResultTypes());
-    for (auto &na : op->getAttrs())
-      st.addAttribute(na.getName(), na.getValue());
-    st.addAttribute("source",
-                    rewriter.getStringAttr("tessera.ebm.langevin_step"));
-    Operation *tiled = rewriter.create(st);
-    rewriter.replaceOp(op, tiled->getResults());
+    SmallVector<NamedAttribute, 1> extra;
+    extra.emplace_back(rewriter.getStringAttr("has_noise"),
+                       rewriter.getBoolAttr(true));
+    createPreservedTileOp(rewriter, op, "tile.ebm_langevin_step",
+                          "tessera.ebm.langevin_step", extra);
     return success();
   }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rewrite patterns: GA / Clifford value seam (Stage 16C)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Preserve strict cl30 fp32 Clifford ops as registered Tile IR carriers. This is
+// not an Apple execution claim: TileToApple still emits a named value-lowering
+// diagnostic until a GA value executor is promoted. The point of this stage is
+// that in-envelope GA ops cross Graph→Tile as typed, registered IR instead of an
+// opaque tile.* husk.
+struct TileCliffordBinaryValue : public RewritePattern {
+  TileCliffordBinaryValue(MLIRContext *ctx, llvm::StringRef opName,
+                          llvm::StringRef tileName)
+      : RewritePattern(opName, /*benefit=*/2, ctx), tileName(tileName) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return failure();
+    if (!isStrictCl30Op(op))
+      return failure();
+    RankedTensorType lhsTy, rhsTy, resTy;
+    if (!isStaticF32Tensor(op->getOperand(0).getType(), lhsTy) ||
+        !isStaticF32Tensor(op->getOperand(1).getType(), rhsTy) ||
+        !isStaticF32Tensor(op->getResult(0).getType(), resTy))
+      return failure();
+    if (!isStrictCl30Tensor(lhsTy) || !isStrictCl30Tensor(rhsTy) ||
+        !isStrictCl30Tensor(resTy))
+      return failure();
+    if (!sameStaticShape(lhsTy, rhsTy) || !sameStaticShape(lhsTy, resTy))
+      return failure();
+
+    llvm::StringRef source = op->getName().getStringRef();
+    SmallVector<NamedAttribute, 2> extra;
+    extra.emplace_back(rewriter.getStringAttr("has_signature"),
+                       rewriter.getBoolAttr(op->hasAttr("signature")));
+    extra.emplace_back(rewriter.getStringAttr("has_grade_mask"),
+                       rewriter.getBoolAttr(op->hasAttr("grade_mask")));
+    createPreservedTileOp(rewriter, op, tileName, source, extra);
+    return success();
+  }
+
+  llvm::StringRef tileName;
+};
+
+struct TileCliffordUnaryValue : public RewritePattern {
+  TileCliffordUnaryValue(MLIRContext *ctx, llvm::StringRef opName,
+                         llvm::StringRef tileName, bool allowNormDrop = false)
+      : RewritePattern(opName, /*benefit=*/2, ctx), tileName(tileName),
+        allowNormDrop(allowNormDrop) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return failure();
+    if (!isStrictCl30Op(op))
+      return failure();
+    RankedTensorType inputTy, resTy;
+    if (!isStaticF32Tensor(op->getOperand(0).getType(), inputTy) ||
+        !isStaticF32Tensor(op->getResult(0).getType(), resTy))
+      return failure();
+    if (!isStrictCl30Tensor(inputTy))
+      return failure();
+    if (allowNormDrop && resTy.getRank() == inputTy.getRank() - 1) {
+      for (int64_t i = 0, e = resTy.getRank(); i < e; ++i)
+        if (resTy.getDimSize(i) != inputTy.getDimSize(i))
+          return failure();
+    } else {
+      if (!isStrictCl30Tensor(resTy) || !sameStaticShape(inputTy, resTy))
+        return failure();
+    }
+
+    llvm::StringRef source = op->getName().getStringRef();
+    SmallVector<NamedAttribute, 2> extra;
+    extra.emplace_back(rewriter.getStringAttr("has_signature"),
+                       rewriter.getBoolAttr(op->hasAttr("signature")));
+    extra.emplace_back(rewriter.getStringAttr("has_grade_mask"),
+                       rewriter.getBoolAttr(op->hasAttr("grade_mask")));
+    createPreservedTileOp(rewriter, op, tileName, source, extra);
+    return success();
+  }
+
+  llvm::StringRef tileName;
+  bool allowNormDrop;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -584,6 +717,11 @@ struct TilingPassImpl
                        llvm::cl::desc("M-dimension tile size"), llvm::cl::init(16)};
   Option<int> tileNOpt{*this, "tile-n",
                        llvm::cl::desc("N-dimension tile size"), llvm::cl::init(16)};
+  Option<bool> valueModeOpt{
+      *this, "value-mode",
+      llvm::cl::desc("Preserve strict value-executable envelopes as registered "
+                     "Tile IR instead of expanding to artifact tiling"),
+      llvm::cl::init(false)};
 
   StringRef getArgument()    const override { return "tessera-tiling"; }
   StringRef getDescription() const override {
@@ -603,7 +741,8 @@ struct TilingPassImpl
 
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
-    if (valueMode) {
+    const bool effectiveValueMode = valueMode || valueModeOpt;
+    if (effectiveValueMode) {
       // Value path (apple_cpu `-full`): preserve static rank-2 f32 matmul as a
       // single tile op for the Accelerate GEMM value call; do NOT tile to
       // scf.for (that would dissolve the dense contraction the value lane wants
@@ -625,6 +764,29 @@ struct TilingPassImpl
       // EBM value lane: strict static fp32 tensor-shaped kernels.
       patterns.add<TileEBMEnergyQuadraticValue, TileEBMLangevinStepValue>(
           &getContext());
+      // Stage 16C: strict cl30 fp32 GA ops cross Graph→Tile as registered Tile
+      // IR carriers. They remain target-gated in TileToApple until a GA value
+      // executor is promoted.
+      patterns.add<TileCliffordBinaryValue>(
+          &getContext(), "tessera.clifford.geometric_product",
+          "tile.clifford_geometric_product");
+      patterns.add<TileCliffordBinaryValue>(
+          &getContext(), "tessera.clifford.outer_product",
+          "tile.clifford_outer_product");
+      patterns.add<TileCliffordBinaryValue>(
+          &getContext(), "tessera.clifford.inner_product",
+          "tile.clifford_inner_product");
+      patterns.add<TileCliffordUnaryValue>(
+          &getContext(), "tessera.clifford.reverse", "tile.clifford_reverse");
+      patterns.add<TileCliffordUnaryValue>(
+          &getContext(), "tessera.clifford.grade_project",
+          "tile.clifford_grade_project");
+      patterns.add<TileCliffordUnaryValue>(
+          &getContext(), "tessera.clifford.norm", "tile.clifford_norm",
+          /*allowNormDrop=*/true);
+      patterns.add<TileCliffordBinaryValue>(
+          &getContext(), "tessera.clifford.rotor_sandwich",
+          "tile.clifford_rotor_sandwich");
     } else {
       patterns.add<TileMatmul>(&getContext(),
                                static_cast<int64_t>(tileMOpt),

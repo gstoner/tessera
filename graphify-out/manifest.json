@@ -500,8 +500,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/TilingPass.cpp": {
-    "mtime": 1780547643.7242749,
-    "ast_hash": "64b21028e648f0cb0df9c67abaaa7611",
+    "mtime": 1780573956.9829443,
+    "ast_hash": "9e9618fd935ff2e3cc10f7a6b29ca916",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/AutodiffPass.cpp": {
@@ -1050,8 +1050,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/TileToApple.cpp": {
-    "mtime": 1780547687.4439352,
-    "ast_hash": "d9e613f43e20860d75f68961d9067f19",
+    "mtime": 1780573971.5484598,
+    "ast_hash": "594b06403ac6928c88c3017fb53516bb",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/NativeSparseAttnFusionToAppleGPU.cpp": {
@@ -3335,8 +3335,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tools/tessera-opt/tessera-opt.cpp": {
-    "mtime": 1780547651.7874298,
-    "ast_hash": "7e4d33c39a0cf4b5d8313aebe29e462a",
+    "mtime": 1780573982.203753,
+    "ast_hash": "bca194282a3141ec7c2e507d2e659769",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tools/roofline_tools/tools/__init__.py": {
@@ -10300,7 +10300,7 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/verifier_coverage.md": {
-    "mtime": 1780573197.8880389,
+    "mtime": 1780574083.117737,
     "ast_hash": "688c48f6e74991817add41392835978a",
     "semantic_hash": ""
   },
@@ -11800,8 +11800,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/TileOps.cpp": {
-    "mtime": 1780547614.8781848,
-    "ast_hash": "cdf28bb1ac98e4aaada1decb1488101f",
+    "mtime": 1780573888.5057058,
+    "ast_hash": "23724181892055f0ffa37c8c00f58843",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/include/Tessera/Dialect/Tile/TileDialect.h": {

@@ -9,7 +9,9 @@
 
 #include "Tessera/Dialect/Tile/TileDialect.h"
 
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "llvm/ADT/SmallVector.h"
 
 using namespace mlir;
 
@@ -33,6 +35,150 @@ bool sameStaticShape(RankedTensorType a, RankedTensorType b) {
     if (a.getDimSize(i) != b.getDimSize(i))
       return false;
   return true;
+}
+
+LogicalResult requireBoolAttr(Operation *op, llvm::StringRef name,
+                              bool expected) {
+  if (boolAttr(op, name) != expected)
+    return op->emitOpError()
+           << name << " must be " << (expected ? "true" : "false");
+  return success();
+}
+
+int64_t i64AttrOr(Operation *op, llvm::StringRef name, int64_t fallback) {
+  if (auto attr = op->getAttrOfType<IntegerAttr>(name))
+    return attr.getInt();
+  return fallback;
+}
+
+int64_t bladeCountFor(int64_t p, int64_t q) {
+  int64_t n = p + q;
+  if (n < 0 || n > 30)
+    return -1;
+  return int64_t{1} << n;
+}
+
+bool isStaticF32RankedTensor(Type ty, RankedTensorType &out) {
+  out = dyn_cast<RankedTensorType>(ty);
+  return out && out.hasStaticShape() && out.getElementType().isF32();
+}
+
+LogicalResult verifyCliffordAttrs(Operation *op) {
+  int64_t p = i64AttrOr(op, "p", -1);
+  int64_t q = i64AttrOr(op, "q", -1);
+  if (p != 3 || q != 0)
+    return op->emitOpError("Clifford Tile value seam currently requires p=3, q=0");
+  if (bladeCountFor(p, q) != 8)
+    return op->emitOpError("Clifford Tile value seam expects cl30 coefficient axis");
+
+  if (Attribute sigAttr = op->getAttr("signature")) {
+    SmallVector<int64_t> signature;
+    if (auto dense = dyn_cast<DenseI64ArrayAttr>(sigAttr)) {
+      signature.append(dense.asArrayRef().begin(), dense.asArrayRef().end());
+    } else if (auto array = dyn_cast<ArrayAttr>(sigAttr)) {
+      for (Attribute element : array) {
+        auto intAttr = dyn_cast<IntegerAttr>(element);
+        if (!intAttr)
+          return op->emitOpError("signature must be an i64 array");
+        signature.push_back(intAttr.getInt());
+      }
+    } else {
+      return op->emitOpError("signature must be an i64 array");
+    }
+    if (signature.size() != 3)
+      return op->emitOpError("signature length must equal p+q");
+    for (int64_t v : signature)
+      if (v != 1 && v != -1)
+        return op->emitOpError("signature entries must be +1 or -1");
+  }
+  return success();
+}
+
+LogicalResult verifyCliffordTensor(Operation *op, RankedTensorType ty,
+                                   llvm::StringRef label) {
+  if (!ty)
+    return success();
+  if (ty.getRank() < 1)
+    return op->emitOpError() << label << " must include a coefficient axis";
+  if (ty.getDimSize(ty.getRank() - 1) != 8)
+    return op->emitOpError()
+           << label << " coefficient axis must equal 8 for cl30";
+  return success();
+}
+
+LogicalResult verifyGradeMask(Operation *op) {
+  Attribute maskAttr = op->getAttr("grade_mask");
+  if (!maskAttr)
+    return success();
+  SmallVector<int64_t> mask;
+  if (auto dense = dyn_cast<DenseI64ArrayAttr>(maskAttr)) {
+    mask.append(dense.asArrayRef().begin(), dense.asArrayRef().end());
+  } else if (auto array = dyn_cast<ArrayAttr>(maskAttr)) {
+    for (Attribute element : array) {
+      auto intAttr = dyn_cast<IntegerAttr>(element);
+      if (!intAttr)
+        return op->emitOpError("grade_mask must be an i64 array");
+      mask.push_back(intAttr.getInt());
+    }
+  } else {
+    return op->emitOpError("grade_mask must be an i64 array");
+  }
+  if (mask.empty())
+    return op->emitOpError("grade_mask must not be empty");
+  for (int64_t grade : mask)
+    if (grade < 0 || grade > 3)
+      return op->emitOpError("grade_mask entries must be in [0, p+q]");
+  return success();
+}
+
+LogicalResult verifyCliffordBinary(Operation *op, ValueRange inputs,
+                                   ValueRange outputs,
+                                   llvm::StringRef label) {
+  if (inputs.size() != 2 || outputs.size() != 1)
+    return op->emitOpError("expects exactly 2 inputs and 1 result");
+  if (failed(verifyCliffordAttrs(op)) || failed(verifyGradeMask(op)))
+    return failure();
+  RankedTensorType lhs, rhs, res;
+  if (!isStaticF32RankedTensor(inputs[0].getType(), lhs) ||
+      !isStaticF32RankedTensor(inputs[1].getType(), rhs) ||
+      !isStaticF32RankedTensor(outputs[0].getType(), res))
+    return op->emitOpError()
+           << label << " expects static fp32 tensors and result";
+  if (failed(verifyCliffordTensor(op, lhs, "lhs")) ||
+      failed(verifyCliffordTensor(op, rhs, "rhs")) ||
+      failed(verifyCliffordTensor(op, res, "result")))
+    return failure();
+  if (!sameStaticShape(lhs, rhs) || !sameStaticShape(lhs, res))
+    return op->emitOpError() << label << " shapes must match exactly";
+  return success();
+}
+
+LogicalResult verifyCliffordUnary(Operation *op, ValueRange inputs,
+                                  ValueRange outputs,
+                                  llvm::StringRef label,
+                                  bool allowNormDrop = false) {
+  if (inputs.size() != 1 || outputs.size() != 1)
+    return op->emitOpError("expects exactly 1 input and 1 result");
+  if (failed(verifyCliffordAttrs(op)) || failed(verifyGradeMask(op)))
+    return failure();
+  RankedTensorType input, res;
+  if (!isStaticF32RankedTensor(inputs[0].getType(), input) ||
+      !isStaticF32RankedTensor(outputs[0].getType(), res))
+    return op->emitOpError()
+           << label << " expects static fp32 tensors and result";
+  if (failed(verifyCliffordTensor(op, input, "input")))
+    return failure();
+  if (allowNormDrop && res.getRank() == input.getRank() - 1) {
+    for (int64_t i = 0, e = res.getRank(); i < e; ++i)
+      if (res.getDimSize(i) != input.getDimSize(i))
+        return op->emitOpError("norm result batch dimensions must match input");
+    return success();
+  }
+  if (failed(verifyCliffordTensor(op, res, "result")))
+    return failure();
+  if (!sameStaticShape(input, res))
+    return op->emitOpError() << label << " shapes must match exactly";
+  return success();
 }
 
 // Shared rank-2 matmul contract (honors transposeA/transposeB discardable
@@ -176,6 +322,8 @@ LogicalResult EBMLangevinStepOp::verify() {
   auto outputs = getOutputs();
   if (inputs.size() != 3 || outputs.size() != 1)
     return emitOpError("expects exactly 3 inputs and 1 result");
+  if (failed(requireBoolAttr(getOperation(), "has_noise", true)))
+    return failure();
   auto y = dyn_cast<RankedTensorType>(inputs[0].getType());
   auto grad = dyn_cast<RankedTensorType>(inputs[1].getType());
   auto noise = dyn_cast<RankedTensorType>(inputs[2].getType());
@@ -198,6 +346,41 @@ LogicalResult EBMLangevinStepOp::verify() {
       scale && scale.getValueAsDouble() < 0.0)
     return emitOpError("noise_scale must be non-negative");
   return success();
+}
+
+LogicalResult CliffordGeometricProductOp::verify() {
+  return verifyCliffordBinary(getOperation(), getInputs(), getOutputs(),
+                              "clifford_geometric_product");
+}
+
+LogicalResult CliffordOuterProductOp::verify() {
+  return verifyCliffordBinary(getOperation(), getInputs(), getOutputs(),
+                              "clifford_outer_product");
+}
+
+LogicalResult CliffordInnerProductOp::verify() {
+  return verifyCliffordBinary(getOperation(), getInputs(), getOutputs(),
+                              "clifford_inner_product");
+}
+
+LogicalResult CliffordReverseOp::verify() {
+  return verifyCliffordUnary(getOperation(), getInputs(), getOutputs(),
+                             "clifford_reverse");
+}
+
+LogicalResult CliffordGradeProjectOp::verify() {
+  return verifyCliffordUnary(getOperation(), getInputs(), getOutputs(),
+                             "clifford_grade_project");
+}
+
+LogicalResult CliffordNormOp::verify() {
+  return verifyCliffordUnary(getOperation(), getInputs(), getOutputs(),
+                             "clifford_norm", /*allowNormDrop=*/true);
+}
+
+LogicalResult CliffordRotorSandwichOp::verify() {
+  return verifyCliffordBinary(getOperation(), getInputs(), getOutputs(),
+                              "clifford_rotor_sandwich");
 }
 
 } // namespace tile

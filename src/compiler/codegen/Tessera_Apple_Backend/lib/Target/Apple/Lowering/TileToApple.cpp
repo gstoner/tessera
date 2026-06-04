@@ -121,6 +121,23 @@ bool isEBMLangevinStep(llvm::StringRef name) {
          name == "tile.ebm_langevin_step";
 }
 
+bool isCliffordValueSeamOp(llvm::StringRef name) {
+  return name == "tessera.clifford.geometric_product" ||
+         name == "tessera.clifford.outer_product" ||
+         name == "tessera.clifford.inner_product" ||
+         name == "tessera.clifford.reverse" ||
+         name == "tessera.clifford.grade_project" ||
+         name == "tessera.clifford.norm" ||
+         name == "tessera.clifford.rotor_sandwich" ||
+         name == "tile.clifford_geometric_product" ||
+         name == "tile.clifford_outer_product" ||
+         name == "tile.clifford_inner_product" ||
+         name == "tile.clifford_reverse" ||
+         name == "tile.clifford_grade_project" ||
+         name == "tile.clifford_norm" ||
+         name == "tile.clifford_rotor_sandwich";
+}
+
 bool boolAttr(Operation *op, llvm::StringRef name) {
   if (auto attr = op->getAttrOfType<BoolAttr>(name))
     return attr.getValue();
@@ -254,7 +271,8 @@ bool isLowerable(Operation *op) {
   if (isMatmul(name) || isBatchedMatmul(name) || isReduction(name) ||
       isFlashAttn(name) || isRoPE(name) || isKVCache(name) ||
       isNativeSparseAttnFused(name) || isPPOPolicyLoss(name) ||
-      isEBMEnergyQuadratic(name) || isEBMLangevinStep(name))
+      isEBMEnergyQuadratic(name) || isEBMLangevinStep(name) ||
+      isCliffordValueSeamOp(name))
     return true;
   if (name.starts_with("tessera.tile.") || name.starts_with("tile."))
     return op->hasAttr("source");
@@ -514,7 +532,7 @@ void emitAppleValueCall(OpBuilder &b, Operation *op,
        {"lower", "trans", "unit_diag", "full_matrices", "window_size",
         "block_size", "top_k", "causal", "clip_epsilon", "kl_coef",
         "entropy_coef", "has_mask", "has_ref_kl", "has_entropy",
-        "reduction", "eta", "noise_scale"}) {
+        "reduction", "eta", "temperature", "noise_scale", "has_noise"}) {
     if (Attribute a = op->getAttr(name))
       st.addAttribute(name, a);
   }

@@ -88,6 +88,50 @@ def Tile_EBMLangevinStepOp : Tile_Op<"ebm_langevin_step", [Pure]> {
   let hasVerifier = 1;
 }
 
+// GA / Clifford value Tile seam. These are registered Tile IR carriers only:
+// Apple value execution is still gated in TileToApple until a dedicated GA value
+// executor is promoted. The strict p=3,q=0 fp32 envelope mirrors the existing
+// cl30 Apple runtime symbols without advertising a value executor here.
+class Tile_CliffordBinaryOp<string mnemonic, string summaryText>
+    : Tile_Op<mnemonic, [Pure]> {
+  let summary = summaryText;
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $outputs)";
+  let hasVerifier = 1;
+}
+
+class Tile_CliffordUnaryOp<string mnemonic, string summaryText>
+    : Tile_Op<mnemonic, [Pure]> {
+  let summary = summaryText;
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $outputs)";
+  let hasVerifier = 1;
+}
+
+def Tile_CliffordGeometricProductOp
+    : Tile_CliffordBinaryOp<"clifford_geometric_product",
+                            "Clifford geometric product (Tile value seam)">;
+def Tile_CliffordOuterProductOp
+    : Tile_CliffordBinaryOp<"clifford_outer_product",
+                            "Clifford outer/wedge product (Tile value seam)">;
+def Tile_CliffordInnerProductOp
+    : Tile_CliffordBinaryOp<"clifford_inner_product",
+                            "Clifford inner product (Tile value seam)">;
+def Tile_CliffordReverseOp
+    : Tile_CliffordUnaryOp<"clifford_reverse",
+                           "Clifford reverse involution (Tile value seam)">;
+def Tile_CliffordNormOp
+    : Tile_CliffordUnaryOp<"clifford_norm",
+                           "Clifford norm (Tile value seam)">;
+def Tile_CliffordGradeProjectOp
+    : Tile_CliffordUnaryOp<"clifford_grade_project",
+                           "Clifford grade projection (Tile value seam)">;
+def Tile_CliffordRotorSandwichOp
+    : Tile_CliffordBinaryOp<"clifford_rotor_sandwich",
+                            "Clifford rotor sandwich (Tile value seam)">;
+
 // L-series linalg family — sequential factorizations/solves that lower 1:1 from
 // the Graph IR op (already shape-verified there). Kept permissive at the Tile
 // layer (operand/result counts + shapes already validated upstream).

@@ -36,6 +36,7 @@
 #import <MetalPerformanceShadersGraph/MetalPerformanceShadersGraph.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -7069,20 +7070,22 @@ extern "C" void tessera_apple_gpu_mla_decode_bf16(
 //===---------------------------------------------------------------------===//
 // attention_variants_plan, NSA-5 — DeepSeek Native Sparse Attention.
 //
-// Host reference combining the three branches:
+// GPU-first implementation for the strict Sprint 11 value envelope:
 //   1. Sliding-window dense local attention.
 //   2. Per-block-summary attention (mean compression by default).
 //   3. Top-k block-selected dense attention.
-// Gated per query via the `gate_logits` operand (sigmoid → 3-way mix
-// using the first 3 channels per block-score logit; this matches the
-// `nn.NativeSparseAttention` Module's gate convention).
 //
-// A fully fused MSL kernel (all three branches + gating in one
-// dispatch with simdgroup top-k reduction) is a follow-up. The host
-// reference here just composes the existing per-branch math.
+// The fused MSL kernel intentionally starts correctness-first: one GPU thread
+// computes one output scalar and recomputes row softmax denominators for that
+// scalar. That is not the final throughput shape, but it is real Metal work and
+// keeps the GPU claim honest. The host implementation below is fallback only.
 //===---------------------------------------------------------------------===//
 
-extern "C" void tessera_apple_gpu_native_sparse_attn_f32(
+namespace {
+
+static std::atomic<int32_t> gNativeSparseAttnLastPath{0};
+
+static void reference_native_sparse_attn_f32(
     const float* Q, const float* K, const float* V,
     const float* gate_logits, float* O,
     int32_t B, int32_t H, int32_t S, int32_t D,
@@ -7234,6 +7237,254 @@ extern "C" void tessera_apple_gpu_native_sparse_attn_f32(
       }
     }
   }
+}
+
+static bool dispatch_native_sparse_attn_msl(
+    MetalDeviceContext &ctx, const float* Q, const float* K, const float* V,
+    const float* gate_logits, float* O, int32_t B, int32_t H, int32_t S,
+    int32_t D, int32_t window_size, int32_t block_size, int32_t top_k,
+    int32_t causal) {
+  if (B <= 0 || H <= 0 || S <= 0 || D <= 0 || window_size <= 0 ||
+      block_size <= 0 || top_k <= 0 || (S % block_size) != 0)
+    return false;
+  int32_t num_blocks = S / block_size;
+  if (top_k > num_blocks)
+    return false;
+
+  static NSString *const kNativeSparseSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+static inline float nsa_dot_q_k(
+    device const float* Q, device const float* K,
+    int b, int h, int q, int j, int H, int S, int D)
+{
+    int q_off = (((b * H + h) * S + q) * D);
+    int k_off = (((b * H + h) * S + j) * D);
+    float s = 0.0f;
+    for (int dd = 0; dd < D; ++dd) {
+        s += Q[q_off + dd] * K[k_off + dd];
+    }
+    return s;
+}
+
+static inline float nsa_dot_q_kc(
+    device const float* Q, device const float* K,
+    int b, int h, int q, int blk, int H, int S, int D, int block_size)
+{
+    int q_off = (((b * H + h) * S + q) * D);
+    float s = 0.0f;
+    for (int dd = 0; dd < D; ++dd) {
+        float mean_k = 0.0f;
+        for (int t = 0; t < block_size; ++t) {
+            int j = blk * block_size + t;
+            int k_off = (((b * H + h) * S + j) * D);
+            mean_k += K[k_off + dd];
+        }
+        s += Q[q_off + dd] * (mean_k / float(block_size));
+    }
+    return s;
+}
+
+static inline float nsa_gate(
+    device const float* gate, int b, int h, int q, int blk,
+    int H, int S, int num_blocks, int causal, int q_blk)
+{
+    float gv = gate[(((b * H + h) * S + q) * num_blocks) + blk];
+    if (causal != 0 && blk > q_blk) {
+        return -INFINITY;
+    }
+    return gv;
+}
+
+kernel void native_sparse_attn_f32(
+    device const float* Q    [[buffer(0)]],
+    device const float* K    [[buffer(1)]],
+    device const float* V    [[buffer(2)]],
+    device const float* gate [[buffer(3)]],
+    device float*       O    [[buffer(4)]],
+    constant int& B          [[buffer(5)]],
+    constant int& H          [[buffer(6)]],
+    constant int& S          [[buffer(7)]],
+    constant int& D          [[buffer(8)]],
+    constant int& window_sz  [[buffer(9)]],
+    constant int& block_sz   [[buffer(10)]],
+    constant int& top_k      [[buffer(11)]],
+    constant int& causal     [[buffer(12)]],
+    uint gid [[thread_position_in_grid]])
+{
+    uint total = uint(B * H * S * D);
+    if (gid >= total) return;
+
+    int d = int(gid % uint(D));
+    int q = int((gid / uint(D)) % uint(S));
+    int h = int((gid / uint(D * S)) % uint(H));
+    int b = int(gid / uint(D * S * H));
+    int num_blocks = S / block_sz;
+    int q_blk = q / block_sz;
+    float scale = rsqrt(float(D));
+    int out_off = (((b * H + h) * S + q) * D) + d;
+
+    // Branch 1: sliding window attention.
+    int lo = (causal != 0) ? max(0, q - window_sz + 1)
+                           : max(0, q - window_sz / 2);
+    int hi = (causal != 0) ? q : min(S - 1, q + window_sz / 2);
+    float maxv = -INFINITY;
+    for (int j = lo; j <= hi; ++j) {
+        maxv = max(maxv, nsa_dot_q_k(Q, K, b, h, q, j, H, S, D) * scale);
+    }
+    float denom = 0.0f;
+    float w_branch = 0.0f;
+    for (int j = lo; j <= hi; ++j) {
+        float e = exp(nsa_dot_q_k(Q, K, b, h, q, j, H, S, D) * scale - maxv);
+        denom += e;
+        w_branch += e * V[(((b * H + h) * S + j) * D) + d];
+    }
+    if (denom != 0.0f) w_branch /= denom;
+
+    // Branch 2: compressed block attention.
+    maxv = -INFINITY;
+    for (int blk = 0; blk < num_blocks; ++blk) {
+        maxv = max(maxv, nsa_dot_q_kc(Q, K, b, h, q, blk, H, S, D, block_sz) * scale);
+    }
+    denom = 0.0f;
+    float c_branch = 0.0f;
+    for (int blk = 0; blk < num_blocks; ++blk) {
+        float e = exp(nsa_dot_q_kc(Q, K, b, h, q, blk, H, S, D, block_sz) * scale - maxv);
+        float mean_v = 0.0f;
+        for (int t = 0; t < block_sz; ++t) {
+            int j = blk * block_sz + t;
+            mean_v += V[(((b * H + h) * S + j) * D) + d];
+        }
+        mean_v /= float(block_sz);
+        denom += e;
+        c_branch += e * mean_v;
+    }
+    if (denom != 0.0f) c_branch /= denom;
+
+    // Branch 3: top-k block-selected attention. Rank blocks by gate score,
+    // then softmax over all tokens belonging to the selected blocks.
+    maxv = -INFINITY;
+    bool any_selected = false;
+    for (int blk = 0; blk < num_blocks; ++blk) {
+        float gv = nsa_gate(gate, b, h, q, blk, H, S, num_blocks, causal, q_blk);
+        int rank = 0;
+        for (int other = 0; other < num_blocks; ++other) {
+            float ov = nsa_gate(gate, b, h, q, other, H, S, num_blocks, causal, q_blk);
+            if (ov > gv || (ov == gv && other < blk)) {
+                rank += 1;
+            }
+        }
+        if (rank < top_k) {
+            any_selected = true;
+            for (int t = 0; t < block_sz; ++t) {
+                int j = blk * block_sz + t;
+                maxv = max(maxv, nsa_dot_q_k(Q, K, b, h, q, j, H, S, D) * scale);
+            }
+        }
+    }
+    denom = 0.0f;
+    float s_branch = 0.0f;
+    if (any_selected) {
+        for (int blk = 0; blk < num_blocks; ++blk) {
+            float gv = nsa_gate(gate, b, h, q, blk, H, S, num_blocks, causal, q_blk);
+            int rank = 0;
+            for (int other = 0; other < num_blocks; ++other) {
+                float ov = nsa_gate(gate, b, h, q, other, H, S, num_blocks, causal, q_blk);
+                if (ov > gv || (ov == gv && other < blk)) {
+                    rank += 1;
+                }
+            }
+            if (rank < top_k) {
+                for (int t = 0; t < block_sz; ++t) {
+                    int j = blk * block_sz + t;
+                    float e = exp(nsa_dot_q_k(Q, K, b, h, q, j, H, S, D) * scale - maxv);
+                    denom += e;
+                    s_branch += e * V[(((b * H + h) * S + j) * D) + d];
+                }
+            }
+        }
+        if (denom != 0.0f) s_branch /= denom;
+    }
+
+    O[out_off] = (w_branch + c_branch + s_branch) / 3.0f;
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kNativeSparseSource, @"native_sparse_attn_f32");
+    if (!pso) return false;
+
+    const NSUInteger qBytes = sizeof(float) * static_cast<NSUInteger>(B) *
+                              static_cast<NSUInteger>(H) *
+                              static_cast<NSUInteger>(S) *
+                              static_cast<NSUInteger>(D);
+    const NSUInteger gateBytes = sizeof(float) *
+                                 static_cast<NSUInteger>(B) *
+                                 static_cast<NSUInteger>(H) *
+                                 static_cast<NSUInteger>(S) *
+                                 static_cast<NSUInteger>(num_blocks);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufG, ctx, gate_logits, gateBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, qBytes);
+    if (!bufQ || !bufK || !bufV || !bufG || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufG offset:0 atIndex:3];
+    [enc setBuffer:bufO offset:0 atIndex:4];
+    [enc setBytes:&B length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&H length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&S length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&D length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&window_size length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&block_size length:sizeof(int32_t) atIndex:10];
+    [enc setBytes:&top_k length:sizeof(int32_t) atIndex:11];
+    [enc setBytes:&causal length:sizeof(int32_t) atIndex:12];
+
+    NSUInteger total = static_cast<NSUInteger>(B) * H * S * D;
+    MTLSize grid = MTLSizeMake(total, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(total, pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "native_sparse_attn_msl"))
+      return false;
+    std::memcpy(O, [bufO contents], qBytes);
+    return true;
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_native_sparse_attn_f32(
+    const float* Q, const float* K, const float* V,
+    const float* gate_logits, float* O,
+    int32_t B, int32_t H, int32_t S, int32_t D,
+    int32_t window_size, int32_t block_size, int32_t top_k,
+    int32_t causal) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_native_sparse_attn_msl(
+                    ctx, Q, K, V, gate_logits, O, B, H, S, D, window_size,
+                    block_size, top_k, causal)) {
+    gNativeSparseAttnLastPath.store(1, std::memory_order_relaxed);
+    return;
+  }
+  reference_native_sparse_attn_f32(Q, K, V, gate_logits, O, B, H, S, D,
+                                   window_size, block_size, top_k, causal);
+  gNativeSparseAttnLastPath.store(2, std::memory_order_relaxed);
+}
+
+extern "C" int32_t tessera_apple_gpu_native_sparse_attn_last_path(void) {
+  return gNativeSparseAttnLastPath.load(std::memory_order_relaxed);
 }
 
 //===---------------------------------------------------------------------===//

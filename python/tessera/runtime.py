@@ -2843,6 +2843,13 @@ def _apple_gpu_native_sparse_attn_f32() -> Any:
     except Exception:
         return None
     runtime = _load_apple_gpu_runtime()
+    cache_size = getattr(runtime, "tessera_apple_gpu_runtime_msl_cache_size", None)
+    if cache_size is None:
+        return None
+    cache_size.argtypes = []
+    cache_size.restype = ctypes.c_int32
+    if int(cache_size()) < 0:
+        return None
     sym = getattr(runtime, "tessera_apple_gpu_native_sparse_attn_f32", None)
     if sym is None:
         return None

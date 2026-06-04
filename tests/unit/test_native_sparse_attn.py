@@ -24,6 +24,33 @@ import tessera as ts
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _compile_apple_gpu_runtime(tmp_path):
+    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
+    if cxx is None:
+        pytest.skip("C++ compiler is not available")
+
+    backend = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
+    if sys.platform == "darwin":
+        source = backend / "apple_gpu_runtime.mm"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.dylib"
+        cmd = [
+            cxx, "-std=c++17", "-shared", "-fPIC", "-fobjc-arc",
+            "-x", "objective-c++", str(source), "-o", str(lib),
+            "-framework", "Foundation",
+            "-framework", "Metal",
+            "-framework", "MetalPerformanceShaders",
+            "-framework", "MetalPerformanceShadersGraph",
+        ]
+    else:
+        source = backend / "apple_gpu_runtime_stub.cpp"
+        lib = tmp_path / "libtessera_apple_gpu_runtime.so"
+        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(lib)]
+    subprocess.run(
+        cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    return ctypes.CDLL(str(lib))
+
+
 def _make_qkv(B=1, H=2, S=16, D=4, seed=0):
     np.random.seed(seed)
     Q = np.random.randn(B, H, S, D).astype(np.float32) * 0.5
@@ -176,29 +203,70 @@ class TestNativeSparseAttentionModule:
 
 
 def test_apple_gpu_native_sparse_attn_runtime_shim_exposes_symbol(tmp_path):
-    cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
-    if cxx is None:
-        pytest.skip("C++ compiler is not available")
-
-    backend = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
     if sys.platform == "darwin":
-        source = backend / "apple_gpu_runtime.mm"
-        lib = tmp_path / "libtessera_apple_gpu_runtime.dylib"
-        cmd = [
-            cxx, "-std=c++17", "-shared", "-fPIC", "-fobjc-arc",
-            "-x", "objective-c++", str(source), "-o", str(lib),
-            "-framework", "Foundation",
-            "-framework", "Metal",
-            "-framework", "MetalPerformanceShaders",
-            "-framework", "MetalPerformanceShadersGraph",
-        ]
+        from tessera._apple_gpu_dispatch import apple_gpu_runtime
+        runtime = apple_gpu_runtime()
+        if runtime is None:
+            pytest.skip("Apple GPU runtime unavailable")
     else:
-        source = backend / "apple_gpu_runtime_stub.cpp"
-        lib = tmp_path / "libtessera_apple_gpu_runtime.so"
-        cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(lib)]
-    subprocess.run(
-        cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-    )
-    runtime = ctypes.CDLL(str(lib))
+        runtime = _compile_apple_gpu_runtime(tmp_path)
     sym = getattr(runtime, "tessera_apple_gpu_native_sparse_attn_f32", None)
     assert sym is not None, "missing C ABI symbol: tessera_apple_gpu_native_sparse_attn_f32"
+
+
+@pytest.mark.skipif(sys.platform != "darwin",
+                    reason="native sparse MSL proof requires Darwin/Metal")
+def test_apple_gpu_native_sparse_attn_runtime_msl_numerics():
+    """Call the C ABI symbol and prove the real MSL path ran.
+
+    Symbol resolution alone is not a GPU proof: the non-Darwin stub exports the
+    symbol too. This test requires an active Metal runtime, checks the MSL
+    pipeline cache grows, then verifies numerical output against the public
+    numpy reference.
+    """
+    from tessera._apple_gpu_dispatch import apple_gpu_skip_reason
+
+    reason = apple_gpu_skip_reason()
+    if reason is not None:
+        pytest.skip(reason)
+
+    from tessera._apple_gpu_dispatch import apple_gpu_runtime
+
+    runtime = apple_gpu_runtime()
+    assert runtime is not None
+    cache_size = runtime.tessera_apple_gpu_runtime_msl_cache_size
+    cache_size.argtypes = []
+    cache_size.restype = ctypes.c_int32
+    before = cache_size()
+    if before < 0:
+        pytest.skip("Metal device context is not active")
+
+    sym = runtime.tessera_apple_gpu_native_sparse_attn_f32
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [fp, fp, fp, fp, fp] + [ctypes.c_int32] * 8
+    sym.restype = None
+    last_path = runtime.tessera_apple_gpu_native_sparse_attn_last_path
+    last_path.argtypes = []
+    last_path.restype = ctypes.c_int32
+
+    Q, K, V = _make_qkv(B=1, H=2, S=8, D=4, seed=11)
+    window_size, block_size, top_k = 4, 4, 1
+    K_c, _V_c = ts.ops.compress_blocks(K, V, block_size=block_size)
+    scores = np.matmul(Q, np.swapaxes(K_c, -1, -2)).astype(np.float32)
+    out = np.empty_like(Q, dtype=np.float32)
+    q = np.ascontiguousarray(Q, dtype=np.float32)
+    k = np.ascontiguousarray(K, dtype=np.float32)
+    v = np.ascontiguousarray(V, dtype=np.float32)
+    g = np.ascontiguousarray(scores, dtype=np.float32)
+    sym(q.ctypes.data_as(fp), k.ctypes.data_as(fp), v.ctypes.data_as(fp),
+        g.ctypes.data_as(fp), out.ctypes.data_as(fp),
+        ctypes.c_int32(1), ctypes.c_int32(2), ctypes.c_int32(8),
+        ctypes.c_int32(4), ctypes.c_int32(window_size),
+        ctypes.c_int32(block_size), ctypes.c_int32(top_k), ctypes.c_int32(1))
+
+    assert last_path() == 1, "native sparse should execute through Metal"
+    assert cache_size() >= before, "MSL cache size should remain valid"
+    ref = ts.ops.deepseek_sparse_attention(
+        Q, K, V, None, window_size=window_size, block_size=block_size,
+        top_k=top_k, causal=True)
+    np.testing.assert_allclose(out, ref, rtol=2e-4, atol=2e-4)

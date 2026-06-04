@@ -1369,6 +1369,10 @@ extern "C" void tessera_apple_gpu_native_sparse_attn_f32(
   std::memset(O, 0, sizeof(float) * static_cast<std::size_t>(B) * H * S * D);
 }
 
+extern "C" int32_t tessera_apple_gpu_native_sparse_attn_last_path(void) {
+  return 0;
+}
+
 // ---- MPSGraph lane (non-Apple reference fallbacks, 2026-05-29) -------------
 // Mirror the C ABI of the MPSGraph-backed Tier-1 / long-tail lane so the
 // symbol surface is identical across platforms. Op codes match the .mm.

@@ -975,13 +975,13 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime_stub.cpp": {
-    "mtime": 1780527587.8966637,
-    "ast_hash": "c0d893184a48f67a1ff8a1108f6907a7",
+    "mtime": 1780535159.276334,
+    "ast_hash": "8c2d89c2a7a1f8464344ea66a97a14c1",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm": {
-    "mtime": 1780528631.777448,
-    "ast_hash": "95311417be5db6b0273f09e18c85dd09",
+    "mtime": 1780535147.5040064,
+    "ast_hash": "3a62470d9470df7da4b5aca37203fc02",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Passes.cpp": {
@@ -2355,8 +2355,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/runtime.py": {
-    "mtime": 1780533484.8158844,
-    "ast_hash": "eb025afae0d39173a748708417375525",
+    "mtime": 1780535230.9663672,
+    "ast_hash": "4e8109ae0228899344f0e5d4bede18a8",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/energy.py": {
@@ -6175,8 +6175,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_native_sparse_attn.py": {
-    "mtime": 1780067821.6658795,
-    "ast_hash": "bfaf0411245f0ba5b5ef0158e2d597da",
+    "mtime": 1780535219.7762244,
+    "ast_hash": "04905c7c0518fa642b98373ff78ecd9b",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_target_ir.py": {
@@ -10285,8 +10285,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/runtime_abi.md": {
-    "mtime": 1780528028.112904,
-    "ast_hash": "b92d67d3901740538677ded180dedf8d",
+    "mtime": 1780535326.8512,
+    "ast_hash": "a55516f6ee56b22d0a26e257a0f426fb",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/e2e_op_coverage.md": {

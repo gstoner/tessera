@@ -2865,6 +2865,61 @@ def _apple_gpu_native_sparse_attn_f32() -> Any:
     return sym
 
 
+def _apple_gpu_ppo_policy_loss_f32() -> Any:
+    """Stage 13: bind the Apple GPU PPO policy-loss value symbol.
+
+    The non-Darwin stub intentionally returns 0 from the C ABI. The resolver
+    returns the symbol when present; dispatch checks the return code so stubs or
+    unavailable MPSGraph paths never become successful GPU execution.
+    """
+    if not _running_on_darwin():
+        return None
+    try:
+        from ._apple_gpu_dispatch import apple_gpu_skip_reason
+        if apple_gpu_skip_reason() is not None:
+            return None
+    except Exception:
+        return None
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_ppo_policy_loss_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [fp, fp, fp, fp, ctypes.c_int32, ctypes.c_float]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+_APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE: bool | None = None
+
+
+def _apple_gpu_ppo_policy_loss_available() -> bool:
+    """True iff the PPO value C ABI runs a tiny MPSGraph numerical probe."""
+    global _APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE
+    if _APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE is not None:
+        return _APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE
+    sym = _apple_gpu_ppo_policy_loss_f32()
+    if sym is None:
+        _APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE = False
+        return False
+    try:
+        import numpy as _np
+        a = _np.asarray([0.1], dtype=_np.float32)
+        b = _np.asarray([0.0], dtype=_np.float32)
+        adv = _np.asarray([1.0], dtype=_np.float32)
+        out = _np.empty((), dtype=_np.float32)
+        fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        rc = int(sym(fp(a), fp(b), fp(adv), fp(out),
+                     ctypes.c_int32(1), ctypes.c_float(0.2)))
+        expected = -min(float(_np.exp(0.1)), 1.2)
+        _APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE = (
+            rc == 1 and bool(_np.isfinite(out)) and
+            abs(float(out) - expected) < 1.0e-5)
+    except Exception:
+        _APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE = False
+    return _APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE
+
+
 # Apple GPU value-lane batched-matmul dispatch (Sprint 8). symbol -> (resolver,
 # numpy-dtype-kind). The key set is the GPU value allowlist.
 _APPLE_VALUE_GPU_DISPATCH: dict[str, tuple] = {
@@ -2873,6 +2928,8 @@ _APPLE_VALUE_GPU_DISPATCH: dict[str, tuple] = {
     "tessera_apple_gpu_bmm_bf16": (_apple_gpu_bmm_bf16, "bf16"),
     "tessera_apple_gpu_native_sparse_attn_f32": (
         _apple_gpu_native_sparse_attn_f32, "native_sparse_attn_f32"),
+    "tessera_apple_gpu_ppo_policy_loss_f32": (
+        _apple_gpu_ppo_policy_loss_f32, "ppo_policy_loss_f32"),
 }
 _APPLE_VALUE_GPU_SYMBOLS: frozenset[str] = frozenset(_APPLE_VALUE_GPU_DISPATCH)
 
@@ -2997,13 +3054,58 @@ def _dispatch_gpu_native_sparse_attn(inputs, call, np):
     return out
 
 
+def _dispatch_gpu_ppo_policy_loss(inputs, call, np):
+    """Strict fp32 PPO mean policy-loss dispatch for Apple GPU value IR."""
+    symbol = str(call.get("symbol", ""))
+    entry = _APPLE_VALUE_GPU_DISPATCH.get(symbol)
+    if entry is None or entry[1] != "ppo_policy_loss_f32":
+        raise ValueError(
+            f"apple_value_target_ir(gpu): symbol {symbol!r} is not the PPO "
+            "policy-loss value symbol")
+    if len(inputs) != 3:
+        raise ValueError(
+            f"apple_value_target_ir(gpu): ppo_policy_loss value-call needs "
+            f"exactly 3 input(s), got {len(inputs)}")
+    if str(call.get("reduction", "mean")) != "mean":
+        raise ValueError("ppo_policy_loss(gpu) only supports reduction='mean'")
+    clip = float(call.get("clip_epsilon", 0.2))
+    if clip <= 0.0:
+        raise ValueError("ppo_policy_loss(gpu) requires positive clip_epsilon")
+    if float(call.get("kl_coef", 0.0)) != 0.0:
+        raise ValueError("ppo_policy_loss(gpu) does not support KL side terms")
+    logp_new = np.ascontiguousarray(np.asarray(inputs[0], dtype=np.float32))
+    logp_old = np.ascontiguousarray(np.asarray(inputs[1], dtype=np.float32))
+    adv = np.ascontiguousarray(np.asarray(inputs[2], dtype=np.float32))
+    if logp_new.shape != logp_old.shape or logp_new.shape != adv.shape:
+        raise ValueError(
+            f"ppo_policy_loss(gpu) shape mismatch: {logp_new.shape} / "
+            f"{logp_old.shape} / {adv.shape}")
+    if logp_new.size <= 0:
+        raise ValueError("ppo_policy_loss(gpu) requires a non-empty tensor")
+    sym = _apple_gpu_ppo_policy_loss_f32()
+    if sym is None or not _apple_gpu_ppo_policy_loss_available():
+        raise ValueError(
+            "apple_gpu runtime lacks an active, numerically proven "
+            "tessera_apple_gpu_ppo_policy_loss_f32 executor")
+    out = np.empty((), dtype=np.float32)
+    fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    rc = int(sym(fp(logp_new), fp(logp_old), fp(adv), fp(out),
+                 ctypes.c_int32(int(logp_new.size)), ctypes.c_float(clip)))
+    if rc != 1:
+        raise ValueError(
+            "apple_gpu PPO policy-loss value executor is not active "
+            "(stub/unavailable MPSGraph path returned non-success)")
+    return out
+
+
 def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", args: Any) -> Any:
     """Execute an Apple GPU value-target-IR artifact.
 
     Scope: exactly one `tessera_apple.gpu.kernel_call` with
     an op kind and symbol on the GPU value allowlist. Sprint 8 shipped
     rank-3 `batched_gemm`; Sprint 11 adds static fp32 rank-4
-    `native_sparse_attn_fused`. Rejects
+    `native_sparse_attn_fused`; Stage 13 adds strict fp32 mean PPO policy
+    loss. Rejects
     `cpu.call`, `package_call`, multi-op programs, unknown symbols, extra
     operands, and non-executable statuses — so launch reports `invalid_artifact`
     rather than silently mis-dispatching."""
@@ -3028,14 +3130,19 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
             f"apple_value_target_ir(gpu): value call status is "
             f"{call.get('status')!r}, not 'executable'")
     op_kind = str(call.get("op_kind"))
-    if op_kind not in {"batched_gemm", "native_sparse_attn_fused"}:
+    if op_kind not in {"batched_gemm", "native_sparse_attn_fused",
+                       "ppo_policy_loss"}:
         raise ValueError(
-            f"apple_value_target_ir(gpu): only batched_gemm and "
-            f"native_sparse_attn_fused execute on the GPU "
+            f"apple_value_target_ir(gpu): only batched_gemm, "
+            f"native_sparse_attn_fused, and ppo_policy_loss execute on the GPU "
             f"value lane today (got op_kind={call.get('op_kind')!r})")
 
     arg_names = list(metadata.get("arg_names") or [])
     if arg_names:
+        if isinstance(args, (list, tuple)) and len(args) != len(arg_names):
+            raise ValueError(
+                f"apple_value_target_ir(gpu): value-call needs exactly "
+                f"{len(arg_names)} named input(s), got {len(args)}")
         bound = _bind_launch_args(args, arg_names)
         inputs = [bound[name] for name in arg_names if name in bound]
     elif isinstance(args, (list, tuple)):
@@ -3048,6 +3155,8 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
                 f"apple_value_target_ir(gpu): batched_gemm value-call needs "
                 f"exactly 2 input(s), got {len(inputs)}")
         return _dispatch_gpu_batched_matmul(inputs, call, np)
+    if op_kind == "ppo_policy_loss":
+        return _dispatch_gpu_ppo_policy_loss(inputs, call, np)
     return _dispatch_gpu_native_sparse_attn(inputs, call, np)
 
 

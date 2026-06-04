@@ -13460,6 +13460,93 @@ static bool mpsg_run_bmm(MetalDeviceContext &ctx, const void *a, const void *b,
   }
 }
 
+static bool mpsg_run_ppo_policy_loss_f32(MetalDeviceContext &ctx,
+                                         const float *logp_new,
+                                         const float *logp_old,
+                                         const float *advantages,
+                                         float *out,
+                                         int32_t n,
+                                         float clip_epsilon) {
+  if (n <= 0 || clip_epsilon <= 0.0f)
+    return false;
+  @autoreleasepool {
+    size_t bytes = (size_t)n * sizeof(float);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufNew, ctx, logp_new, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufOld, ctx, logp_old, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufAdv, ctx, advantages, bytes);
+    if (!bufNew || !bufOld || !bufAdv)
+      return false;
+
+    NSArray<NSNumber *> *shape = @[ @(n) ];
+    NSArray<NSNumber *> *axis0 = @[ @0 ];
+    NSString *key = [NSString stringWithFormat:@"rlppo:f32:%d:%a", n,
+                                               (double)clip_epsilon];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *pNew;
+    MPSGraphTensor *pOld;
+    MPSGraphTensor *pAdv;
+    MPSGraphTensor *lossMean;
+    if (entry) {
+      g = entry[0];
+      pNew = ((NSArray *)entry[1])[0];
+      pOld = ((NSArray *)entry[1])[1];
+      pAdv = ((NSArray *)entry[1])[2];
+      lossMean = entry[2];
+    } else {
+      g = [MPSGraph new];
+      pNew = [g placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+      pOld = [g placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+      pAdv = [g placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+      MPSGraphTensor *delta =
+          [g subtractionWithPrimaryTensor:pNew secondaryTensor:pOld name:nil];
+      MPSGraphTensor *ratio = [g exponentWithTensor:delta name:nil];
+      MPSGraphTensor *lo =
+          [g constantWithScalar:(double)(1.0f - clip_epsilon)
+                       dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *hi =
+          [g constantWithScalar:(double)(1.0f + clip_epsilon)
+                       dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *clampedLo =
+          [g maximumWithPrimaryTensor:ratio secondaryTensor:lo name:nil];
+      MPSGraphTensor *clipped =
+          [g minimumWithPrimaryTensor:clampedLo secondaryTensor:hi name:nil];
+      MPSGraphTensor *s1 =
+          [g multiplicationWithPrimaryTensor:ratio secondaryTensor:pAdv name:nil];
+      MPSGraphTensor *s2 =
+          [g multiplicationWithPrimaryTensor:clipped secondaryTensor:pAdv name:nil];
+      MPSGraphTensor *minS =
+          [g minimumWithPrimaryTensor:s1 secondaryTensor:s2 name:nil];
+      MPSGraphTensor *loss = [g negativeWithTensor:minS name:nil];
+      lossMean = [g meanOfTensor:loss axes:axis0 name:nil];
+      mpsg_cache_put(key, @[ g, @[ pNew, pOld, pAdv ], lossMean ]);
+    }
+
+    MPSGraphTensorData *newD =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufNew
+                                               shape:shape
+                                            dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *oldD =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufOld
+                                               shape:shape
+                                            dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *advD =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufAdv
+                                               shape:shape
+                                            dataType:MPSDataTypeFloat32];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{pNew : newD, pOld : oldD,
+                                                    pAdv : advD}
+                                    targetTensors:@[ lossMean ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[lossMean];
+    if (!od)
+      return false;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
 // R1 — device-resident bmm: inputs + output are existing shared MTLBuffers
 // (from DeviceTensor handles), so there is NO host upload and NO readback. The
 // MPSGraph result is written straight into the output buffer via
@@ -14327,6 +14414,18 @@ extern "C" void tessera_apple_gpu_bmm_f32(const float *A, const float *B,
                              MPSDataTypeFloat32, 4))
     return;
   reference_bmm_f32(A, B, O, batch, M, N, K, b_broadcast);
+}
+
+extern "C" int32_t tessera_apple_gpu_ppo_policy_loss_f32(
+    const float *logp_new, const float *logp_old, const float *advantages,
+    float *out, int32_t n, float clip_epsilon) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !logp_new || !logp_old || !advantages || !out)
+    return 0;
+  return mpsg_run_ppo_policy_loss_f32(ctx, logp_new, logp_old, advantages,
+                                      out, n, clip_epsilon)
+             ? 1
+             : 0;
 }
 
 extern "C" void tessera_apple_gpu_bmm_f16(const uint16_t *A, const uint16_t *B,

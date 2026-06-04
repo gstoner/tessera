@@ -40,6 +40,9 @@ add_library(TesseraPasses
   # attention-family plan — Lightning / Delta / hybrid pass slots.
   AttentionFamilyPasses.cpp
 
+  # Stage 13 — RL policy-loss compiler visibility / decomposition markers.
+  RLLossDecomposePass.cpp
+
   # Sprint V2 (2026-05-22) — layout legality skeleton (SHAPE_SYSTEM §11.2 closure).
   LayoutLegalityPass.cpp
 

@@ -1918,6 +1918,21 @@ extern "C" void tessera_apple_gpu_bmm_f32(const float* A, const float* B,
       }
   }
 }
+
+extern "C" int32_t tessera_apple_gpu_ppo_policy_loss_f32(
+    const float* logp_new, const float* logp_old, const float* advantages,
+    float* out, int32_t n, float clip_epsilon) {
+  (void)logp_new;
+  (void)logp_old;
+  (void)advantages;
+  (void)out;
+  (void)n;
+  (void)clip_epsilon;
+  // Stage 13 honesty rule: the non-Darwin stub must not masquerade as an Apple
+  // GPU executor. Return 0 so Python reports a structured non-success.
+  return 0;
+}
+
 extern "C" void tessera_apple_gpu_bmm_f16(const uint16_t* A, const uint16_t* B,
                                           uint16_t* O, int32_t batch, int32_t M,
                                           int32_t N, int32_t K, int32_t b_broadcast) {

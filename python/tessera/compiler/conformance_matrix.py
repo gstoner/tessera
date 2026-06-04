@@ -516,11 +516,18 @@ def _proof_status_from_runtime(target: str, components: tuple[str, ...]) -> str:
 
 def build_matrix() -> list[ProofCell]:
     """Generate the full matrix as a flat list of proof cells, ordered by
-    (op, target) per ``CONFORMANCE_OPS`` × ``CONFORMANCE_TARGETS``."""
+    (op, target) per ``CONFORMANCE_OPS`` × ``CONFORMANCE_TARGETS``.
+
+    Built under ``deterministic_host_for_dashboard`` so the committed dashboard
+    is byte-identical whether regenerated on a Mac or the Linux CI runner — the
+    apple ``hardware_smoke`` gate otherwise flips between ``—`` and
+    ``Apple silicon required`` depending on the host.
+    """
     out: list[ProofCell] = []
-    for op in CONFORMANCE_OPS:
-        for tgt in CONFORMANCE_TARGETS:
-            out.append(_proof_cell(op, tgt))
+    with _pg.deterministic_host_for_dashboard():
+        for op in CONFORMANCE_OPS:
+            for tgt in CONFORMANCE_TARGETS:
+                out.append(_proof_cell(op, tgt))
     return out
 
 

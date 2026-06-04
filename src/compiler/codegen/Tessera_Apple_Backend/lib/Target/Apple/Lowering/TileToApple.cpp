@@ -105,6 +105,11 @@ bool isNativeSparseAttnFused(llvm::StringRef name) {
   return name == "tessera.native_sparse_attn_fused";
 }
 
+bool isPPOPolicyLoss(llvm::StringRef name) {
+  return name == "tessera.rl.ppo_policy_loss" ||
+         name == "tile.ppo_policy_loss";
+}
+
 // L-series linalg family (2026-06-02) — table-driven Tile→Apple lowering.
 //
 // Each linalg op carries the Tile-layer name `tile.<suffix>` plus
@@ -208,7 +213,7 @@ bool isLowerable(Operation *op) {
     return false; // already lowered
   if (isMatmul(name) || isBatchedMatmul(name) || isReduction(name) ||
       isFlashAttn(name) || isRoPE(name) || isKVCache(name) ||
-      isNativeSparseAttnFused(name))
+      isNativeSparseAttnFused(name) || isPPOPolicyLoss(name))
     return true;
   if (name.starts_with("tessera.tile.") || name.starts_with("tile."))
     return op->hasAttr("source");
@@ -264,6 +269,38 @@ bool verifyNativeSparseValueEnvelope(Operation *op) {
          gateTy.getDimSize(1) == qTy.getDimSize(1) &&
          gateTy.getDimSize(2) == qTy.getDimSize(2) &&
          gateTy.getDimSize(3) == numBlocks;
+}
+
+bool verifyPPOPolicyLossValueEnvelope(Operation *op) {
+  if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+    return false;
+  auto nextTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  auto oldTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+  auto advTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+  auto outTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  if (!nextTy || !oldTy || !advTy || !outTy)
+    return false;
+  if (!nextTy.hasStaticShape() || !oldTy.hasStaticShape() ||
+      !advTy.hasStaticShape() || !outTy.hasStaticShape())
+    return false;
+  if (!nextTy.getElementType().isF32() || !oldTy.getElementType().isF32() ||
+      !advTy.getElementType().isF32() || !outTy.getElementType().isF32())
+    return false;
+  if (nextTy.getShape() != oldTy.getShape() ||
+      nextTy.getShape() != advTy.getShape())
+    return false;
+  if (outTy.getRank() != 0)
+    return false;
+  if (auto reduction = op->getAttrOfType<StringAttr>("reduction");
+      reduction && reduction.getValue() != "mean")
+    return false;
+  if (auto clip = op->getAttrOfType<FloatAttr>("clip_epsilon");
+      clip && clip.getValueAsDouble() <= 0.0)
+    return false;
+  if (auto kl = op->getAttrOfType<FloatAttr>("kl_coef");
+      kl && kl.getValueAsDouble() != 0.0)
+    return false;
+  return true;
 }
 
 std::string resolveResult(Operation *op, int64_t ordinal) {
@@ -365,7 +402,8 @@ void emitAppleValueCall(OpBuilder &b, Operation *op,
   // solves; full_matrices for qr/svd).  Copied verbatim when present.
   for (llvm::StringRef name :
        {"lower", "trans", "unit_diag", "full_matrices", "window_size",
-        "block_size", "top_k", "causal"}) {
+        "block_size", "top_k", "causal", "clip_epsilon", "kl_coef",
+        "reduction"}) {
     if (Attribute a = op->getAttr(name))
       st.addAttribute(name, a);
   }
@@ -649,6 +687,23 @@ struct LowerTileToAppleGPUPass
           emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call",
                              "batched_gemm", symbol, "mps", "executable",
                              "Metal");
+          ++ordinal;
+          continue;
+        }
+        if (isPPOPolicyLoss(name) || isPPOPolicyLoss(src)) {
+          if (!verifyPPOPolicyLossValueEnvelope(op)) {
+            op->emitError("apple_gpu value lowering: ppo_policy_loss requires "
+                          "exactly 3 static fp32 operands with identical "
+                          "shapes, rank-0 fp32 result, reduction=\"mean\", "
+                          "positive clip_epsilon, and no KL side term");
+            signalPassFailure();
+            return;
+          }
+          emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call",
+                             "ppo_policy_loss",
+                             "tessera_apple_gpu_ppo_policy_loss_f32",
+                             "mpsgraph_ppo_policy_loss_f32", "executable",
+                             "MPSGraph");
           ++ordinal;
           continue;
         }

@@ -99,6 +99,9 @@ void registerTesseraPasses() {
   ::mlir::registerPass([]() { return createLightningAttnFusionPass(); });
   ::mlir::registerPass([]() { return createDeltaAttnChunkingPass(); });
 
+  // ── Stage 13 — RL policy-loss compiler visibility/decomposition ─────────
+  ::mlir::registerPass([]() { return createRLLossDecomposePass(); });
+
   // ── Sprint V2 (2026-05-22) — Layout legality skeleton ─────────────────
   // Closes the "no LayoutLegalityPass" gap in SHAPE_SYSTEM.md §11.2.
   // First rule: tessera.cast with `tessera.layout` attribute outside

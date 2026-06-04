@@ -1,8 +1,11 @@
-"""Reference PPO / GRPO / CISPO policy-loss benchmark scaffold.
+"""Reference/compiler/GPU PPO-GRPO-CISPO policy-loss benchmark scaffold.
 
-Stage 12 keeps RL post-training losses honest: these rows measure the existing
-Python/numpy reference implementations only. They do not claim a compiler path,
-Apple executor, GPU executor, or independent correctness oracle.
+Stage 13 keeps execution claims split by proof level:
+
+* python_reference — existing tessera.rl numpy implementations.
+* compiler_decomposed_reference — PPO's compiler-visible primitive formula.
+* apple_gpu_value_target_ir — PPO only, and only when the Apple GPU MPSGraph
+  value executor is available and numerically agrees with the reference.
 """
 
 from __future__ import annotations
@@ -15,6 +18,7 @@ from typing import Any, Iterable
 
 import numpy as np
 
+from tessera import runtime as tessera_runtime
 from tessera import rl
 
 
@@ -78,6 +82,80 @@ def _losses(inputs: dict[str, np.ndarray]) -> dict[str, float]:
     }
 
 
+def _ppo_strict_loss(inputs: dict[str, np.ndarray], clip_epsilon: float = 0.2) -> float:
+    logp_new = inputs["logp_new"].astype(np.float32)
+    logp_old = inputs["logp_old"].astype(np.float32)
+    advantages = inputs["advantages"].astype(np.float32)
+    ratio = np.exp(logp_new - logp_old)
+    clipped = np.clip(ratio, 1.0 - clip_epsilon, 1.0 + clip_epsilon)
+    return float(-np.mean(np.minimum(ratio * advantages, clipped * advantages)))
+
+
+def _apple_gpu_ppo_row(
+    inputs: dict[str, np.ndarray],
+    shape: tuple[int, int, int],
+    seed: int,
+    reference: float,
+    reps: int,
+) -> dict[str, Any]:
+    available = tessera_runtime._apple_gpu_ppo_policy_loss_available()
+    base: dict[str, Any] = {
+        "name": "ppo_policy_loss",
+        "variant_kind": "apple_gpu_value_target_ir",
+        "target": "apple_gpu",
+        "executor": "apple_gpu_value_target_ir" if available else None,
+        "compiler_path": "apple_value_target_ir",
+        "shape": f"B{shape[0]}_G{shape[1]}_T{shape[2]}",
+        "seed": seed,
+        "loss": None,
+        "correctness": None,
+        "timing_ms": None,
+        "runtime_status": "unavailable",
+        "skip_reason": None if available else "apple_gpu_ppo_policy_loss_f32 unavailable",
+    }
+    if not available:
+        return base
+    artifact = tessera_runtime.RuntimeArtifact(
+        metadata={
+            "target": "apple_gpu",
+            "compiler_path": "apple_value_target_ir",
+            "executable": True,
+            "arg_names": ["logp_new", "logp_old", "advantages"],
+            "apple_value_calls": [{
+                "op": "tessera_apple.gpu.kernel_call",
+                "op_kind": "ppo_policy_loss",
+                "symbol": "tessera_apple_gpu_ppo_policy_loss_f32",
+                "status": "executable",
+                "clip_epsilon": 0.2,
+                "reduction": "mean",
+            }],
+        },
+        abi_signature="tessera.rl.stage13.ppo.apple_gpu",
+    )
+
+    args = {
+        "logp_new": inputs["logp_new"].astype(np.float32),
+        "logp_old": inputs["logp_old"].astype(np.float32),
+        "advantages": inputs["advantages"].astype(np.float32),
+    }
+
+    def _run():
+        return tessera_runtime.launch(artifact, args)
+
+    first = _run()
+    base["runtime_status"] = first.get("runtime_status")
+    if not first.get("ok"):
+        base["skip_reason"] = str(first.get("reason", "runtime launch failed"))
+        base["executor"] = None
+        return base
+    loss = float(np.asarray(first["output"], dtype=np.float32))
+    base["loss"] = loss
+    base["correctness"] = abs(loss - reference)
+    base["timing_ms"] = _time_loss(_run, reps)
+    base["skip_reason"] = None
+    return base
+
+
 def _time_loss(fn, reps: int) -> float:
     times = []
     for _ in range(max(1, reps)):
@@ -111,9 +189,42 @@ def build_report(
                 "timing_ms": _time_loss(lambda n=name: _losses(inputs)[n], reps),
                 "skip_reason": None,
             })
+        ppo_simple = _ppo_strict_loss(inputs)
+        rows.append({
+            "name": "ppo_policy_loss",
+            "variant_kind": "compiler_decomposed_reference",
+            "target": "reference_cpu",
+            "executor": "compiler_decomposed_reference",
+            "compiler_path": "tessera-rl-loss-decompose",
+            "shape": f"B{shape[0]}_G{shape[1]}_T{shape[2]}",
+            "seed": seed,
+            "loss": ppo_simple,
+            "correctness": 0.0,
+            "timing_ms": _time_loss(lambda: _ppo_strict_loss(inputs), reps),
+            "runtime_status": "reference",
+            "skip_reason": None,
+        })
+        for name in ("grpo_policy_loss", "cispo_policy_loss"):
+            rows.append({
+                "name": name,
+                "variant_kind": "compiler_visible_non_executable",
+                "target": "reference_cpu",
+                "executor": None,
+                "compiler_path": "tessera-rl-loss-decompose",
+                "shape": f"B{shape[0]}_G{shape[1]}_T{shape[2]}",
+                "seed": seed,
+                "loss": None,
+                "correctness": None,
+                "timing_ms": None,
+                "runtime_status": "compiler_visible_non_executable",
+                "skip_reason": (
+                    "Stage 13 records compiler visibility only; no GRPO/CISPO "
+                    "runtime executor is claimed"),
+            })
+        rows.append(_apple_gpu_ppo_row(inputs, shape, seed, ppo_simple, reps))
     return {
         "benchmark": "rl_policy_losses",
-        "sprint": "S12",
+        "sprint": "S13",
         "rows": rows,
     }
 

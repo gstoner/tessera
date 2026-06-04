@@ -209,6 +209,12 @@ std::unique_ptr<mlir::Pass> createLightningAttnFusionPass();
 std::unique_ptr<mlir::Pass> createDeltaAttnChunkingPass();
 std::unique_ptr<mlir::Pass> createHybridAttnExpandPass();
 
+// Stage 13 — RL policy-loss compiler visibility / decomposition pass.
+// PPO receives a stable primitive-form decomposition marker when it is inside
+// the supported compiler envelope. GRPO/CISPO are marked compiler-visible but
+// remain non-executable until they decompose or gain a runtime proof.
+std::unique_ptr<mlir::Pass> createRLLossDecomposePass();
+
 // ── Sprint V2 (2026-05-22) — LayoutLegalityPass skeleton ─────────────────
 //
 // Closes the "no LayoutLegalityPass" item in SHAPE_SYSTEM.md §11.2.

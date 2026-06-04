@@ -156,6 +156,38 @@ def _execution_row(target: str) -> Optional[_em.ExecutionRow]:
     return None
 
 
+# When True, the hardware_smoke gate ignores the live host and renders the
+# canonical "Apple silicon required" result for apple targets.  This keeps the
+# *committed* op×target conformance dashboard byte-identical regardless of where
+# it is generated (a Mac dev vs the Linux CI runner).  The live runtime / launch
+# path never enables this — only the dashboard renderer does.
+_DASHBOARD_DETERMINISTIC = False
+
+
+class deterministic_host_for_dashboard:
+    """Render gates as if on a generic (non-Apple-silicon) host.
+
+    Used by ``conformance_matrix.build_matrix`` so the dashboard is
+    reproducible across machines; without it the apple_cpu / apple_gpu
+    ``hardware_smoke`` cell flips between ``—`` (on Apple silicon) and
+    ``Apple silicon required`` (elsewhere), making the doc drift in CI.
+
+    Implemented as a plain context-manager class (no ``contextlib``) so
+    ``pipeline_gates`` keeps its minimal, pure-aggregator import set.
+    """
+
+    def __enter__(self):
+        global _DASHBOARD_DETERMINISTIC
+        self._prev = _DASHBOARD_DETERMINISTIC
+        _DASHBOARD_DETERMINISTIC = True
+        return self
+
+    def __exit__(self, *exc):
+        global _DASHBOARD_DETERMINISTIC
+        _DASHBOARD_DETERMINISTIC = self._prev
+        return False
+
+
 def _platform_is_darwin_arm64() -> bool:
     """True iff this is Apple Silicon (Darwin + arm64).
 
@@ -294,7 +326,7 @@ def _eval_hardware_smoke(target: str, op_name: Optional[str]) -> GateResult:
     if target == "cpu":
         return GateResult(GATE_HARDWARE_SMOKE, STATUS_PASS, "host CPU present")
     if target in ("apple_cpu", "apple_gpu"):
-        if _platform_is_darwin_arm64():
+        if not _DASHBOARD_DETERMINISTIC and _platform_is_darwin_arm64():
             return GateResult(GATE_HARDWARE_SMOKE, STATUS_PASS,
                               "Darwin / Apple silicon host")
         return GateResult(GATE_HARDWARE_SMOKE, STATUS_FAIL,

@@ -80,6 +80,158 @@ LogicalResult BatchedGemmOp::verify() {
   return success();
 }
 
+namespace {
+bool isFloatTensor(RankedTensorType ty) {
+  Type elem = ty.getElementType();
+  return elem.isF32() || elem.isF16() || elem.isBF16() ||
+         isa<FloatType>(elem);
+}
+
+LogicalResult verifyReductionResult(Operation *op, RankedTensorType input,
+                                    RankedTensorType result,
+                                    StringRef reduction) {
+  auto agree = [](int64_t a, int64_t b) {
+    return ShapedType::isDynamic(a) || ShapedType::isDynamic(b) || a == b;
+  };
+  if (reduction == "none") {
+    if (input.getRank() != result.getRank())
+      return op->emitOpError("reduction=\"none\" result must match input rank");
+    for (int64_t i = 0, e = input.getRank(); i < e; ++i)
+      if (!agree(input.getDimSize(i), result.getDimSize(i)))
+        return op->emitOpError("reduction=\"none\" result shape must match inputs");
+    return success();
+  }
+  if (reduction == "mean" || reduction == "sum") {
+    if (result.getRank() != 0)
+      return op->emitOpError("mean/sum reduction result must be rank-0 tensor");
+    return success();
+  }
+  return op->emitOpError("reduction must be one of \"none\", \"mean\", \"sum\"");
+}
+
+LogicalResult verifySameRankedShape(Operation *op, RankedTensorType a,
+                                    RankedTensorType b,
+                                    StringRef label) {
+  auto agree = [](int64_t x, int64_t y) {
+    return ShapedType::isDynamic(x) || ShapedType::isDynamic(y) || x == y;
+  };
+  if (a.getRank() != b.getRank())
+    return op->emitOpError() << label << " ranks must match";
+  for (int64_t i = 0, e = a.getRank(); i < e; ++i)
+    if (!agree(a.getDimSize(i), b.getDimSize(i)))
+      return op->emitOpError() << label << " shapes must match";
+  return success();
+}
+
+StringRef reductionOrMean(Operation *op) {
+  if (auto attr = op->getAttrOfType<StringAttr>("reduction"))
+    return attr.getValue();
+  return "mean";
+}
+
+double f64AttrOr(Operation *op, StringRef name, double fallback) {
+  if (auto attr = op->getAttrOfType<FloatAttr>(name))
+    return attr.getValueAsDouble();
+  return fallback;
+}
+} // namespace
+
+LogicalResult RLNormalizeGroupAdvantagesOp::verify() {
+  auto rewards = dyn_cast<RankedTensorType>(getRewards().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!rewards || !result)
+    return success();
+  if (!isFloatTensor(rewards) || rewards.getElementType() != result.getElementType())
+    return emitOpError("expects floating rewards/result with matching dtype");
+  if (failed(verifySameRankedShape(getOperation(), rewards, result,
+                                   "normalize_group_advantages")))
+    return failure();
+  int64_t axis = getGroupAxis();
+  if (axis < 0 || axis >= rewards.getRank())
+    return emitOpError("group_axis must be within the rewards rank");
+  if (f64AttrOr(getOperation(), "eps", 1.0e-8) <= 0.0)
+    return emitOpError("eps must be positive");
+  return success();
+}
+
+LogicalResult RLPPOPolicyLossOp::verify() {
+  auto next = dyn_cast<RankedTensorType>(getLogpNew().getType());
+  auto old = dyn_cast<RankedTensorType>(getLogpOld().getType());
+  auto adv = dyn_cast<RankedTensorType>(getAdvantages().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!next || !old || !adv || !result)
+    return success();
+  if (!isFloatTensor(next) || next.getElementType() != old.getElementType() ||
+      next.getElementType() != adv.getElementType() ||
+      next.getElementType() != result.getElementType())
+    return emitOpError("expects floating operands/result with matching dtype");
+  if (failed(verifySameRankedShape(getOperation(), next, old,
+                                   "ppo_policy_loss log-prob")) ||
+      failed(verifySameRankedShape(getOperation(), next, adv,
+                                   "ppo_policy_loss advantage")))
+    return failure();
+  if (f64AttrOr(getOperation(), "clip_epsilon", 0.2) <= 0.0)
+    return emitOpError("clip_epsilon must be positive");
+  if (f64AttrOr(getOperation(), "kl_coef", 0.0) < 0.0)
+    return emitOpError("kl_coef must be non-negative");
+  return verifyReductionResult(getOperation(), next, result,
+                               reductionOrMean(getOperation()));
+}
+
+LogicalResult RLGRPOPolicyLossOp::verify() {
+  auto next = dyn_cast<RankedTensorType>(getLogpNew().getType());
+  auto old = dyn_cast<RankedTensorType>(getLogpOld().getType());
+  auto rewards = dyn_cast<RankedTensorType>(getRewards().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!next || !old || !rewards || !result)
+    return success();
+  if (!isFloatTensor(next) || next.getElementType() != old.getElementType() ||
+      next.getElementType() != rewards.getElementType() ||
+      next.getElementType() != result.getElementType())
+    return emitOpError("expects floating operands/result with matching dtype");
+  if (failed(verifySameRankedShape(getOperation(), next, old,
+                                   "grpo_policy_loss log-prob")) ||
+      failed(verifySameRankedShape(getOperation(), next, rewards,
+                                   "grpo_policy_loss rewards")))
+    return failure();
+  int64_t axis = getGroupAxis();
+  if (axis < 0 || axis >= next.getRank())
+    return emitOpError("group_axis must be within the operand rank");
+  if (f64AttrOr(getOperation(), "clip_epsilon", 0.2) <= 0.0)
+    return emitOpError("clip_epsilon must be positive");
+  if (f64AttrOr(getOperation(), "kl_coef", 0.0) < 0.0)
+    return emitOpError("kl_coef must be non-negative");
+  return verifyReductionResult(getOperation(), next, result,
+                               reductionOrMean(getOperation()));
+}
+
+LogicalResult RLCISPOPolicyLossOp::verify() {
+  auto next = dyn_cast<RankedTensorType>(getLogpNew().getType());
+  auto old = dyn_cast<RankedTensorType>(getLogpOld().getType());
+  auto rewards = dyn_cast<RankedTensorType>(getRewards().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!next || !old || !rewards || !result)
+    return success();
+  if (!isFloatTensor(next) || next.getElementType() != old.getElementType() ||
+      next.getElementType() != rewards.getElementType() ||
+      next.getElementType() != result.getElementType())
+    return emitOpError("expects floating operands/result with matching dtype");
+  if (failed(verifySameRankedShape(getOperation(), next, old,
+                                   "cispo_policy_loss log-prob")) ||
+      failed(verifySameRankedShape(getOperation(), next, rewards,
+                                   "cispo_policy_loss rewards")))
+    return failure();
+  int64_t axis = getGroupAxis();
+  if (axis < 0 || axis >= next.getRank())
+    return emitOpError("group_axis must be within the operand rank");
+  if (f64AttrOr(getOperation(), "epsilon_high", 5.0) <= 0.0)
+    return emitOpError("epsilon_high must be positive");
+  if (f64AttrOr(getOperation(), "kl_coef", 0.0) < 0.0)
+    return emitOpError("kl_coef must be non-negative");
+  return verifyReductionResult(getOperation(), next, result,
+                               reductionOrMean(getOperation()));
+}
+
 LogicalResult CholeskyOp::verify() {
   auto aType = dyn_cast<RankedTensorType>(getA().getType());
   auto resultType = dyn_cast<RankedTensorType>(getResult().getType());

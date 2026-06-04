@@ -87,5 +87,46 @@ LogicalResult BatchedGemmOp::verify() {
   return success();
 }
 
+LogicalResult PPOPolicyLossOp::verify() {
+  auto inputs = getInputs();
+  auto outputs = getOutputs();
+  if (inputs.size() != 3 || outputs.size() != 1)
+    return emitOpError("expects exactly 3 inputs and 1 result");
+  auto next = dyn_cast<RankedTensorType>(inputs[0].getType());
+  auto old = dyn_cast<RankedTensorType>(inputs[1].getType());
+  auto adv = dyn_cast<RankedTensorType>(inputs[2].getType());
+  auto res = dyn_cast<RankedTensorType>(outputs[0].getType());
+  if (!next || !old || !adv || !res)
+    return success();
+  if (!next.hasStaticShape() || !old.hasStaticShape() ||
+      !adv.hasStaticShape() || !res.hasStaticShape())
+    return emitOpError("expects static fp32 operands and rank-0 fp32 result");
+  if (!next.getElementType().isF32() || !old.getElementType().isF32() ||
+      !adv.getElementType().isF32() || !res.getElementType().isF32())
+    return emitOpError("expects fp32 operands and fp32 result");
+  auto sameShape = [](RankedTensorType a, RankedTensorType b) {
+    if (a.getRank() != b.getRank())
+      return false;
+    for (int64_t i = 0, e = a.getRank(); i < e; ++i)
+      if (a.getDimSize(i) != b.getDimSize(i))
+        return false;
+    return true;
+  };
+  if (!sameShape(next, old) || !sameShape(next, adv))
+    return emitOpError("input shapes must match exactly");
+  if (res.getRank() != 0)
+    return emitOpError("mean-reduction result must be rank-0 tensor");
+  if (auto r = getOperation()->getAttrOfType<StringAttr>("reduction");
+      r && r.getValue() != "mean")
+    return emitOpError("only reduction=\"mean\" is executable in Tile PPO");
+  if (auto c = getOperation()->getAttrOfType<FloatAttr>("clip_epsilon");
+      c && c.getValueAsDouble() <= 0.0)
+    return emitOpError("clip_epsilon must be positive");
+  if (auto k = getOperation()->getAttrOfType<FloatAttr>("kl_coef");
+      k && k.getValueAsDouble() != 0.0)
+    return emitOpError("kl_coef must be absent or 0.0 for Tile PPO value mode");
+  return success();
+}
+
 } // namespace tile
 } // namespace tessera

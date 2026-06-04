@@ -196,6 +196,71 @@ def Tessera_BatchedGemmOp : Op<
   let hasVerifier = 1;
 }
 
+// Stage 13 — RL post-training loss Graph IR surface. These ops make PPO/GRPO/
+// CISPO compiler-visible at the Graph layer. Only PPO's strict fp32 mean
+// envelope is promoted to Apple GPU value execution in this stage; GRPO/CISPO
+// remain compiler-visible / non-executable until they either decompose cleanly
+// or gain their own runtime proof.
+def Tessera_RLNormalizeGroupAdvantagesOp : Op<
+  Tessera_Dialect, "rl.normalize_group_advantages",
+  [Pure]
+> {
+  let summary = "Normalize rewards/advantages across a group axis";
+  let arguments = (ins TensorType:$rewards,
+                        I64Attr:$group_axis,
+                        OptionalAttr<F64Attr>:$eps);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_RLPPOPolicyLossOp : Op<
+  Tessera_Dialect, "rl.ppo_policy_loss",
+  [Pure]
+> {
+  let summary = "PPO clipped policy loss";
+  let arguments = (ins TensorType:$logp_new, TensorType:$logp_old,
+                        TensorType:$advantages,
+                        OptionalAttr<F64Attr>:$clip_epsilon,
+                        OptionalAttr<F64Attr>:$kl_coef,
+                        OptionalAttr<StrAttr>:$reduction);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_RLGRPOPolicyLossOp : Op<
+  Tessera_Dialect, "rl.grpo_policy_loss",
+  [Pure]
+> {
+  let summary = "GRPO policy loss";
+  let arguments = (ins TensorType:$logp_new, TensorType:$logp_old,
+                        TensorType:$rewards,
+                        I64Attr:$group_axis,
+                        OptionalAttr<F64Attr>:$clip_epsilon,
+                        OptionalAttr<F64Attr>:$kl_coef,
+                        OptionalAttr<StrAttr>:$reduction);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_RLCISPOPolicyLossOp : Op<
+  Tessera_Dialect, "rl.cispo_policy_loss",
+  [Pure]
+> {
+  let summary = "CISPO policy loss";
+  let arguments = (ins TensorType:$logp_new, TensorType:$logp_old,
+                        TensorType:$rewards,
+                        I64Attr:$group_axis,
+                        OptionalAttr<F64Attr>:$epsilon_high,
+                        OptionalAttr<F64Attr>:$kl_coef,
+                        OptionalAttr<StrAttr>:$reduction);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 // L-series linalg pilot (2026-06-02): Cholesky is the carrier op for vetting
 // the full Graph → Schedule → Tile → Target spine on the Apple CPU + GPU
 // backends.  Kept deliberately minimal at the Graph-IR layer ([Pure] + a

@@ -59,6 +59,17 @@ def Tile_BatchedGemmOp : Tile_Op<"batched_gemm", [Pure]> {
   let hasVerifier = 1;
 }
 
+// Stage 13 — PPO policy loss value envelope. This tile op is produced only for
+// static contiguous fp32 PPO mean-reduction shapes and consumed only by the
+// Apple GPU value lane.
+def Tile_PPOPolicyLossOp : Tile_Op<"ppo_policy_loss", [Pure]> {
+  let summary = "PPO clipped policy loss (Apple GPU value lane)";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $outputs)";
+  let hasVerifier = 1;
+}
+
 // L-series linalg family — sequential factorizations/solves that lower 1:1 from
 // the Graph IR op (already shape-verified there). Kept permissive at the Tile
 // layer (operand/result counts + shapes already validated upstream).

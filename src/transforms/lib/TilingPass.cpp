@@ -380,6 +380,69 @@ struct TileBatchedMatmulValue : public RewritePattern {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Rewrite pattern: TilePPOPolicyLossValue (Stage 13)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Preserve the narrow PPO loss executable envelope as a single registered Tile
+// op. The Apple GPU value lane consumes `tile.ppo_policy_loss` and emits a
+// MPSGraph-backed `tessera_apple.gpu.kernel_call`. Everything outside this
+// strict shape/attr envelope is left as Graph IR and gated downstream.
+struct TilePPOPolicyLossValue : public RewritePattern {
+  TilePPOPolicyLossValue(MLIRContext *ctx)
+      : RewritePattern("tessera.rl.ppo_policy_loss", /*benefit=*/2, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+      return failure();
+    auto nextTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto oldTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto advTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+    auto resTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!nextTy || !oldTy || !advTy || !resTy)
+      return failure();
+    if (!nextTy.hasStaticShape() || !oldTy.hasStaticShape() ||
+        !advTy.hasStaticShape() || !resTy.hasStaticShape())
+      return failure();
+    if (!nextTy.getElementType().isF32() || !oldTy.getElementType().isF32() ||
+        !advTy.getElementType().isF32() || !resTy.getElementType().isF32())
+      return failure();
+    auto sameShape = [](RankedTensorType a, RankedTensorType b) {
+      if (a.getRank() != b.getRank())
+        return false;
+      for (int64_t i = 0, e = a.getRank(); i < e; ++i)
+        if (a.getDimSize(i) != b.getDimSize(i))
+          return false;
+      return true;
+    };
+    if (!sameShape(nextTy, oldTy) || !sameShape(nextTy, advTy))
+      return failure();
+    if (resTy.getRank() != 0)
+      return failure();
+    if (auto r = op->getAttrOfType<StringAttr>("reduction");
+        r && r.getValue() != "mean")
+      return failure();
+    if (auto c = op->getAttrOfType<FloatAttr>("clip_epsilon");
+        c && c.getValueAsDouble() <= 0.0)
+      return failure();
+    if (auto k = op->getAttrOfType<FloatAttr>("kl_coef");
+        k && k.getValueAsDouble() != 0.0)
+      return failure();
+
+    OperationState st(op->getLoc(), "tile.ppo_policy_loss");
+    st.addOperands(op->getOperands());
+    st.addTypes(op->getResultTypes());
+    for (auto &na : op->getAttrs())
+      st.addAttribute(na.getName(), na.getValue());
+    st.addAttribute("source",
+                    rewriter.getStringAttr("tessera.rl.ppo_policy_loss"));
+    Operation *tiled = rewriter.create(st);
+    rewriter.replaceOp(op, tiled->getResults());
+    return success();
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Pass
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -437,6 +500,9 @@ struct TilingPassImpl
       patterns.add<TileMatmulValue>(&getContext(), "tessera.matmul");
       // Sprint 6: static rank-3 f32 batched matmul → tile.batched_gemm.
       patterns.add<TileBatchedMatmulValue>(&getContext(), "tessera.batched_gemm");
+      // Stage 13: static fp32 PPO mean loss → tile.ppo_policy_loss for the
+      // Apple GPU value lane. CPU TileToApple gates it explicitly.
+      patterns.add<TilePPOPolicyLossValue>(&getContext());
     } else {
       patterns.add<TileMatmul>(&getContext(),
                                static_cast<int64_t>(tileMOpt),

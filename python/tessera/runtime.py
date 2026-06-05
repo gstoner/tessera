@@ -1017,7 +1017,7 @@ def backend_capabilities(target: str = "cpu") -> BackendCapability:
 
 def query_backend(target: str = "cpu") -> dict[str, Any]:
     cap = backend_capabilities(target)
-    return {
+    result: dict[str, Any] = {
         "name": cap.name,
         "available": cap.available,
         "executable": cap.executable,
@@ -1025,6 +1025,15 @@ def query_backend(target: str = "cpu") -> dict[str, Any]:
         "dtypes": list(cap.dtypes),
         "features": list(cap.features),
     }
+    # Phase 3: for apple_gpu, attach the *observed* runtime capability snapshot
+    # (the canonical source — a real Metal-4 probe). It is always explicit:
+    # runtime_available=false + empty capabilities when the runtime can't load,
+    # so this never makes a silent "Metal 4 full" claim.
+    if target == "apple_gpu":
+        from ._apple_gpu_dispatch import apple_gpu_capabilities_snapshot
+
+        result["observed_capabilities"] = apple_gpu_capabilities_snapshot()
+    return result
 
 
 def compile(module_ir: str | RuntimeArtifact, target: str | None = None, options: dict[str, Any] | None = None) -> RuntimeArtifact:
@@ -1047,9 +1056,27 @@ def compile(module_ir: str | RuntimeArtifact, target: str | None = None, options
             metadata=metadata,
             abi_signature=module_ir.abi_signature,
         )
+    meta: dict[str, Any] = {
+        "target": target or "cpu",
+        "options": options or {},
+        "runtime_status": "artifact_only",
+    }
+    # Phase 3: pure containerization of an apple_gpu module is an ARTIFACT, not a
+    # runtime claim — stamp the metal_artifact descriptor (never metal_runtime /
+    # mtl4_runtime) and its required_capabilities. No observed_capabilities: no
+    # runtime probe ran here.
+    if (target or "") == "apple_gpu":
+        from .compiler.apple_target_descriptor import (
+            METAL_ARTIFACT,
+            apple_target_descriptor,
+        )
+
+        desc = apple_target_descriptor(METAL_ARTIFACT)
+        meta["target_descriptor"] = desc
+        meta["required_capabilities"] = desc["required_capabilities"]
     return RuntimeArtifact(
         graph_ir=str(module_ir),
-        metadata={"target": target or "cpu", "options": options or {}, "runtime_status": "artifact_only"},
+        metadata=meta,
         abi_signature=f"tessera.runtime.v1.{target or 'cpu'}",
     )
 

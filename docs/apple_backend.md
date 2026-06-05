@@ -635,3 +635,60 @@ subsequent dispatches are O(buffer setup + encode + commit + wait).
 | Benchmark harness | `benchmarks/apple_gpu/benchmark_fusion.py` |
 | Unit tests | `tests/unit/test_apple_backend_roadmap.py` (+ the suites above) |
 | Lit fixtures | `tests/tessera-ir/phase8/apple_*.mlir` |
+
+---
+
+## Apple GPU target descriptor — the contract boundary (Phase 3)
+
+Apple GPU is modeled as an **explicit target descriptor**, not a bare
+`target="apple_gpu"` string. The descriptor
+(`python/tessera/compiler/apple_target_descriptor.py`) is the contract boundary
+between *what the compiler produced* and *what the runtime can actually execute*.
+It is emitted into the generated Target IR attrs
+(`target_ir.lower_tile_to_target_ir` → `attrs["target_descriptor"]`) and carried
+in `RuntimeArtifact.metadata["target_descriptor"]` (JSON round-trip preserved).
+
+**Fixed identity:** `vendor="apple"`, `api="metal"`, `triple="air64-apple-macosx"`,
+`arch="apple-metal"`, `memory_model="unified_64"`.
+
+**Three DISTINCT execution contracts — never conflate them:**
+
+| `execution_contract` | Meaning | Runtime claim |
+|---|---|---|
+| `metal_artifact` | compile-time artifact only | **none** — pure compile / containerization produces this |
+| `metal_runtime` | classic MPS / MSL / MPSGraph lane (existing, mature) | runs on the classic command queue |
+| `mtl4_runtime` | Metal 4 cooperative-tensor-op lane (MTL4 command model) | runs on `MTL4CommandQueue`/allocator/compiler + cooperative `tensor` ops |
+
+**The lane split is load-bearing.** MPSGraph / classic-queue (`metal_runtime`)
+is a *separate surface* from MTL4 cooperative tensor ops (`mtl4_runtime`).
+MPSGraph does **not** run on the MTL4 command model; a module is never labeled
+across the two. The MPS execution path in `apple_gpu_runtime.mm` is
+`metal_runtime`, never `mtl4_runtime`.
+
+**Metal 4 features are capability-gated requirements** (`required_capabilities`).
+The vocabulary mirrors the runtime probe bits: `mtl4_command_queue`,
+`mtl4_command_allocator`, `mtl4_compiler`, `mtl_tensor`, `msl_4_0`,
+`mtl4_archive`, `mtl4_ml_encoder`. A `metal_artifact` / `metal_runtime` descriptor
+requires none of the MTL4 gates; an `mtl4_runtime` descriptor requires the
+command-model trio, and a cooperative-tensor op (e.g. MTL4 cooperative matmul)
+additionally requires **`mtl_tensor` + `msl_4_0`**.
+
+**Compile-time status is separate from observed runtime capabilities.** A
+descriptor produced by pure compile carries `required_capabilities` (what it would
+need) but never `observed_capabilities` (what a host has). Observed capabilities
+come **only from a real runtime probe** —
+`_apple_gpu_dispatch.apple_gpu_capabilities_snapshot()` is the canonical source,
+surfaced by `runtime.query_backend("apple_gpu")["observed_capabilities"]`. When
+the runtime can't load, the snapshot is explicit (`runtime_available=False`, empty
+`capabilities`, `mtl4_full=False`) — no silent "Metal 4 full" claim.
+
+**Explicit tensor / buffer ABI** (`apple_tensor_abi`): `dtype`, `rank`, `shape`,
+`strides` (row-major default), `offset_bytes`, `resource_kind`
+(`mtl_buffer` | `mtl_tensor_view` | `mtlpackage_tensor`), `resident` (true only
+for device-resident / `TsDeviceTensor` paths), and the buffer-vs-tensor `view`.
+
+**Contract guards** (`validate_descriptor` / `assert_not_artifact_claiming_runtime`):
+an artifact-only module must not claim a runtime contract; a classic lane must not
+smuggle MTL4 command-model caps; an `mtl4_runtime` descriptor's required caps are
+checked against observed caps when a probe ran. Tests:
+`tests/unit/test_apple_target_descriptor.py`.

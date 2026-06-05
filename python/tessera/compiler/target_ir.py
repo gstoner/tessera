@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 
 from ..diagnostics import DiagnosticLevel, DiagnosticWhere, TesseraDiagnostic, TesseraErrorCode
+from .apple_target_descriptor import apple_target_descriptor as _apple_target_descriptor
 from .capabilities import normalize_target
 from .tile_ir import TILE_METADATA_OPS, TileIRModule, TileIRVerificationError, TileOp
 
@@ -897,7 +898,17 @@ def lower_tile_to_target_ir(tile_module: TileIRModule, *, target_kind: str) -> T
         # runtime-bound modules without re-walking the body.
         apple_gpu_runtime = _apple_gpu_module_is_mps_runtime(tile_module)
         execution_mode = "metal_runtime" if apple_gpu_runtime else "metal_artifact"
-        attrs.update({"arch": "apple-metal", "execution_mode": execution_mode, "target_features": {"family": "apple", "metal": True, "device_timers": False}})
+        # Phase 3: emit the explicit Apple GPU target descriptor. execution_mode
+        # IS the execution_contract here — the existing lane is classic MPS
+        # (metal_runtime) or artifact-only (metal_artifact); never mtl4_runtime
+        # (the MTL4 cooperative-tensor lane is a separate, capability-gated
+        # surface and is not claimed by this MPS path).
+        attrs.update({
+            "arch": "apple-metal",
+            "execution_mode": execution_mode,
+            "target_features": {"family": "apple", "metal": True, "device_timers": False},
+            "target_descriptor": _apple_target_descriptor(execution_mode),
+        })
     target_module = TargetIRModule(attrs=attrs)
     apple_gpu_runtime_flag = (
         target_kind == APPLE_GPU_TARGET

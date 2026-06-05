@@ -78,3 +78,7 @@ target_include_directories(tessera_jit
 if(APPLE)
   target_link_options(tessera_jit PRIVATE "LINKER:-no_warn_duplicate_libraries")
 endif()
+
+# libffi: dynamic-arity dispatch of the c-iface wrapper (any number of memref
+# args). System libffi on macOS (/usr/lib) and standard on Linux.
+target_link_libraries(tessera_jit PRIVATE ffi)

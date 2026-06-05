@@ -58,10 +58,21 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/TargetSelect.h"
 
+// libffi: dynamic-arity call of the c-iface wrapper. Header path differs by
+// platform (macOS SDK ships <ffi/ffi.h>; Linux ships <ffi.h>).
+#if __has_include(<ffi.h>)
+#include <ffi.h>
+#elif __has_include(<ffi/ffi.h>)
+#include <ffi/ffi.h>
+#else
+#error "libffi header (ffi.h) not found"
+#endif
+
 #include <atomic>
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <vector>
 
 using namespace mlir;
 
@@ -73,6 +84,11 @@ thread_local std::string g_lastError;
 // JIT invoke increments this. A numerically-correct result without an increment
 // would mean a silent fallback — the oracle tests assert the counter advanced.
 std::atomic<int64_t> g_invocations{0};
+
+// Compile counter: increments once per successful tessera_jit_compile. The
+// Python compilation cache asserts that repeated same-shape calls do NOT
+// re-increment this (cache hit ⇒ no recompile).
+std::atomic<int64_t> g_compiles{0};
 
 void setError(const std::string &msg) { g_lastError = msg; }
 
@@ -241,7 +257,12 @@ void *tessera_jit_compile(const char *mlir_text) {
     return nullptr;
   }
   jm->engine = std::move(*expectedEngine);
+  g_compiles.fetch_add(1, std::memory_order_relaxed);
   return jm.release();
+}
+
+int64_t tessera_jit_compile_count(void) {
+  return g_compiles.load(std::memory_order_relaxed);
 }
 
 // Generic invoke: dispatch any compiled function by name. Looks up
@@ -271,46 +292,27 @@ int tessera_jit_invoke(void *handle, const char *name, void **packed_args,
   }
   void *fn = reinterpret_cast<void *>(*expectedFn);
 
-#define TJ_ARG(i) packed_args[i]
-#define TJ_CALL(...)                                                           \
-  reinterpret_cast<void (*)(__VA_ARGS__)>(fn)
-  // Arity dispatch covers single-op c-iface signatures up through any
-  // reasonable fused chain (16 memref args). Each entry is a void pointer to a
-  // caller-owned memref descriptor.
-  switch (nargs) {
-  case 1: TJ_CALL(void *)(TJ_ARG(0)); break;
-  case 2: TJ_CALL(void *, void *)(TJ_ARG(0), TJ_ARG(1)); break;
-  case 3: TJ_CALL(void *, void *, void *)(TJ_ARG(0), TJ_ARG(1), TJ_ARG(2)); break;
-  case 4:
-    TJ_CALL(void *, void *, void *, void *)(TJ_ARG(0), TJ_ARG(1), TJ_ARG(2),
-                                            TJ_ARG(3));
-    break;
-  case 5:
-    TJ_CALL(void *, void *, void *, void *, void *)(TJ_ARG(0), TJ_ARG(1),
-                                                    TJ_ARG(2), TJ_ARG(3),
-                                                    TJ_ARG(4));
-    break;
-  case 6:
-    TJ_CALL(void *, void *, void *, void *, void *, void *)(
-        TJ_ARG(0), TJ_ARG(1), TJ_ARG(2), TJ_ARG(3), TJ_ARG(4), TJ_ARG(5));
-    break;
-  case 7:
-    TJ_CALL(void *, void *, void *, void *, void *, void *, void *)(
-        TJ_ARG(0), TJ_ARG(1), TJ_ARG(2), TJ_ARG(3), TJ_ARG(4), TJ_ARG(5),
-        TJ_ARG(6));
-    break;
-  case 8:
-    TJ_CALL(void *, void *, void *, void *, void *, void *, void *, void *)(
-        TJ_ARG(0), TJ_ARG(1), TJ_ARG(2), TJ_ARG(3), TJ_ARG(4), TJ_ARG(5),
-        TJ_ARG(6), TJ_ARG(7));
-    break;
-  default:
-    setError("tessera_jit: unsupported nargs (extend arity dispatcher in "
-             "tessera_jit_invoke)");
+  // Every c-iface argument is a `void*` (a memref descriptor pointer) and the
+  // function returns void, so a single libffi call handles ANY arity — no
+  // hand-written per-arity dispatch, no cap. ffi wants `avalues[i]` to point to
+  // the storage of argument i; argument i's value is `packed_args[i]`, so we
+  // pass `&packed_args[i]`.
+  if (nargs < 0) {
+    setError("tessera_jit: negative nargs");
     return 1;
   }
-#undef TJ_ARG
-#undef TJ_CALL
+  std::vector<ffi_type *> atypes(static_cast<size_t>(nargs), &ffi_type_pointer);
+  ffi_cif cif;
+  if (ffi_prep_cif(&cif, FFI_DEFAULT_ABI, static_cast<unsigned>(nargs),
+                   &ffi_type_void, atypes.data()) != FFI_OK) {
+    setError("tessera_jit: ffi_prep_cif failed");
+    return 1;
+  }
+  std::vector<void *> avalues(static_cast<size_t>(nargs));
+  for (int i = 0; i < nargs; ++i)
+    avalues[i] = &packed_args[i];
+  ffi_call(&cif, FFI_FN(fn), /*rvalue=*/nullptr, avalues.data());
+
   g_invocations.fetch_add(1, std::memory_order_relaxed);
   return 0;
 }

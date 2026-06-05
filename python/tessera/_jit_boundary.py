@@ -89,6 +89,8 @@ def _load() -> ctypes.CDLL:
     lib.tessera_jit_last_error.argtypes = []
     lib.tessera_jit_invocation_count.restype = ctypes.c_int64
     lib.tessera_jit_invocation_count.argtypes = []
+    lib.tessera_jit_compile_count.restype = ctypes.c_int64
+    lib.tessera_jit_compile_count.argtypes = []
     _LIB = lib
     return lib
 
@@ -105,6 +107,12 @@ def is_available() -> bool:
 def invocation_count() -> int:
     """Successful JIT invocations since process start (proof-of-execution)."""
     return int(_load().tessera_jit_invocation_count())
+
+
+def compile_count() -> int:
+    """Successful JIT *compiles* since process start. With the compilation cache
+    (below) on, repeated same-shape calls do NOT advance this."""
+    return int(_load().tessera_jit_compile_count())
 
 
 # ── Descriptor packing ─────────────────────────────────────────────────────
@@ -230,15 +238,25 @@ def _build_packed_args(descriptors):
     return packed, keepalive
 
 
-# ── Compile + invoke ───────────────────────────────────────────────────────
+# ── Compile + invoke (with transparent compilation cache) ───────────────────
+#
+# Parse→lower→JIT is expensive and deterministic in the MLIR text, so we cache
+# the compiled handle keyed on that text. Repeated same-shape calls reuse the
+# cached ExecutionEngine — no recompile (proven by `compile_count()` not
+# advancing). Caching is transparent: `compile_module` returns a cached handle
+# and `destroy` is a no-op for cache-owned handles; the cache is freed at exit
+# (or explicitly via `clear_cache()`). Each invoke still runs (and counts).
+
+import atexit  # noqa: E402  (kept local to the cache section)
+import threading  # noqa: E402
+
+_COMPILE_CACHE: dict[str, int] = {}
+_CACHED_HANDLES: set[int] = set()
+_CACHE_LOCK = threading.Lock()
+_CACHE_ENABLED = True
 
 
-def compile_module(mlir_text: str) -> int:
-    """Compile an arbitrary MLIR module through the production pipeline.
-
-    Returns an opaque integer handle (truthy on success). Raises
-    :class:`TesseraJitError` on parse/lowering/JIT failure.
-    """
+def _raw_compile(mlir_text: str) -> int:
     lib = _load()
     handle = lib.tessera_jit_compile(mlir_text.encode("utf-8"))
     if not handle:
@@ -246,9 +264,69 @@ def compile_module(mlir_text: str) -> int:
     return handle
 
 
+def compile_module(mlir_text: str) -> int:
+    """Compile an MLIR module through the production pipeline (cache-backed).
+
+    Returns an opaque integer handle. On a cache hit the cached handle is
+    returned without recompiling. Raises :class:`TesseraJitError` on failure.
+    """
+    if not _CACHE_ENABLED:
+        return _raw_compile(mlir_text)
+    with _CACHE_LOCK:
+        hit = _COMPILE_CACHE.get(mlir_text)
+        if hit is not None:
+            return hit
+    # Compile outside the lock (slow); double-check on insert.
+    handle = _raw_compile(mlir_text)
+    with _CACHE_LOCK:
+        existing = _COMPILE_CACHE.get(mlir_text)
+        if existing is not None:
+            # Lost a race; keep the first, drop ours.
+            _load().tessera_jit_destroy(handle)
+            return existing
+        _COMPILE_CACHE[mlir_text] = handle
+        _CACHED_HANDLES.add(handle)
+        return handle
+
+
 def destroy(handle: int) -> None:
-    if handle:
-        _load().tessera_jit_destroy(handle)
+    """Destroy a handle. No-op for cache-owned handles (freed at exit)."""
+    if not handle:
+        return
+    with _CACHE_LOCK:
+        if handle in _CACHED_HANDLES:
+            return  # cache owns the lifetime
+    _load().tessera_jit_destroy(handle)
+
+
+def set_cache_enabled(enabled: bool) -> None:
+    """Enable/disable the compilation cache (mostly for benchmarking/tests)."""
+    global _CACHE_ENABLED
+    _CACHE_ENABLED = enabled
+
+
+def cache_size() -> int:
+    with _CACHE_LOCK:
+        return len(_COMPILE_CACHE)
+
+
+def clear_cache() -> None:
+    """Destroy all cached compiled functions and empty the cache."""
+    with _CACHE_LOCK:
+        handles = list(_CACHED_HANDLES)
+        _COMPILE_CACHE.clear()
+        _CACHED_HANDLES.clear()
+    lib = _load()
+    for h in handles:
+        lib.tessera_jit_destroy(h)
+
+
+@atexit.register
+def _free_cache_at_exit() -> None:  # pragma: no cover - process teardown
+    try:
+        clear_cache()
+    except Exception:
+        pass
 
 
 def invoke(
@@ -445,6 +523,42 @@ def jit_transpose(a: np.ndarray) -> np.ndarray:
         destroy(handle)
 
 
+def jit_bmm(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Production-lane batched matmul C[i] = A[i] @ B[i] (rank-3, f32 or bf16).
+
+    A is (B, M, K), B is (B, K, N), result (B, M, N). bf16 accumulates in f32
+    then truncates (ABI §12.5). No fallback.
+    """
+    a = np.asarray(a)
+    b = np.asarray(b)
+    elem, npdt = _resolve_elem([a, b])
+    if a.ndim != 3 or b.ndim != 3:
+        raise TesseraJitError(f"jit_bmm is rank-3 only (got {a.shape}, {b.shape})")
+    if a.shape[0] != b.shape[0] or a.shape[2] != b.shape[1]:
+        raise TesseraJitError(f"bmm shape mismatch: {a.shape} @ {b.shape}")
+    a = np.ascontiguousarray(a)
+    b = np.ascontiguousarray(b)
+    Bb, M, K = (int(s) for s in a.shape)
+    N = int(b.shape[2])
+    ta = f"tensor<{Bb}x{M}x{K}x{elem}>"
+    tb = f"tensor<{Bb}x{K}x{N}x{elem}>"
+    tc = f"tensor<{Bb}x{M}x{N}x{elem}>"
+    sym = "tessera_jit_bmm"
+    mlir = (
+        f"func.func @{sym}(%a: {ta}, %b: {tb}) -> {tc} {{\n"
+        f"  %0 = tessera.batched_gemm %a, %b : ({ta}, {tb}) -> {tc}\n"
+        f"  return %0 : {tc}\n"
+        f"}}\n"
+    )
+    handle = compile_module(mlir)
+    try:
+        out = np.empty((Bb, M, N), dtype=npdt)
+        invoke(handle, sym, [a, b], out)
+        return out
+    finally:
+        destroy(handle)
+
+
 # ── Reductions (Phase 1 Sprint 1.2: first op with result rank != input rank) ─
 
 _REDUCE_KINDS = frozenset({"sum", "max", "min", "mean"})
@@ -604,3 +718,188 @@ def jit_gelu(a: np.ndarray) -> np.ndarray:
     ``0.5*x*(1 + tanh(sqrt(2/pi)*(x + 0.044715*x³)))``. No fallback.
     """
     return _jit_unary("tessera.gelu", "tessera_jit_gelu", a)
+
+
+# ── Graph compilation (Phase 1 Sprint 1.8) ───────────────────────────────────
+#
+# The leap from op-at-a-time (each jit_* helper compiles a single-op module and
+# round-trips through the boundary) to compiling a whole MULTI-OP tessera
+# function as ONE JIT'd unit. Intermediates stay inside the compiled function —
+# no per-op descriptor packing, and the lowering can fuse across ops. The harness
+# already supports this (markCInterface + the DPS rewrite walk every function);
+# GraphFn is just the Python surface to express the graph.
+
+_ELEM_TO_NP: dict[str, Any] = {"f32": np.float32}
+if _BF16 is not None:
+    _ELEM_TO_NP["bf16"] = _BF16
+
+
+class _Val:
+    """An SSA value in a GraphFn: its name and static shape."""
+
+    __slots__ = ("ssa", "shape")
+
+    def __init__(self, ssa: str, shape: tuple[int, ...]):
+        self.ssa = ssa
+        self.shape = shape
+
+
+class GraphFn:
+    """Build a multi-op `tessera` function and compile/run it as one unit.
+
+    Example (single-head attention, scale folded into Q):
+        g = GraphFn()
+        q, k, v = g.arg((T, d)), g.arg((T, d)), g.arg((T, d))
+        s = g.matmul(q, k, transpose_b=True)   # Q Kᵀ
+        p = g.softmax(s)
+        o = g.matmul(p, v)
+        g.ret(o)
+        out = g.run(q_arr, k_arr, v_arr)        # ONE compile, ONE invoke
+    """
+
+    def __init__(self, name: str = "tessera_jit_graph", elem: str = "f32"):
+        if elem not in _ELEM_TO_NP:
+            raise TesseraJitError(f"GraphFn elem must be one of {sorted(_ELEM_TO_NP)}")
+        self._name = name
+        self._elem = elem
+        self._args: list[tuple[str, tuple[int, ...]]] = []
+        self._lines: list[str] = []
+        self._ctr = 0
+        self._ret: _Val | None = None
+
+    def _t(self, shape: tuple[int, ...]) -> str:
+        return "tensor<" + "x".join(str(s) for s in shape) + f"x{self._elem}>"
+
+    def _fresh(self) -> str:
+        self._ctr += 1
+        return f"%v{self._ctr}"
+
+    def arg(self, shape) -> _Val:
+        ssa = f"%arg{len(self._args)}"
+        shape = tuple(int(s) for s in shape)
+        self._args.append((ssa, shape))
+        return _Val(ssa, shape)
+
+    def _emit(self, op: str, ins, out_shape, attrs=None) -> _Val:
+        res = self._fresh()
+        in_types = ", ".join(self._t(o.shape) for o in ins)
+        in_ssas = ", ".join(o.ssa for o in ins)
+        attr_str = (" {" + ", ".join(attrs) + "}") if attrs else ""
+        self._lines.append(
+            f"  {res} = {op} {in_ssas}{attr_str} : "
+            f"({in_types}) -> {self._t(tuple(out_shape))}"
+        )
+        return _Val(res, tuple(out_shape))
+
+    # elementwise (same shape)
+    def add(self, a, b):
+        return self._binary("tessera.add", a, b)
+
+    def sub(self, a, b):
+        return self._binary("tessera.sub", a, b)
+
+    def mul(self, a, b):
+        return self._binary("tessera.mul", a, b)
+
+    def div(self, a, b):
+        return self._binary("tessera.div", a, b)
+
+    def _binary(self, op, a, b):
+        if a.shape != b.shape:
+            raise TesseraJitError(f"{op} needs equal shapes ({a.shape} vs {b.shape})")
+        return self._emit(op, [a, b], a.shape)
+
+    # unary (same shape)
+    def relu(self, a):
+        return self._emit("tessera.relu", [a], a.shape)
+
+    def sigmoid(self, a):
+        return self._emit("tessera.sigmoid", [a], a.shape)
+
+    def tanh(self, a):
+        return self._emit("tessera.tanh", [a], a.shape)
+
+    def silu(self, a):
+        return self._emit("tessera.silu", [a], a.shape)
+
+    def gelu(self, a):
+        return self._emit("tessera.gelu", [a], a.shape)
+
+    def softmax(self, a, axis: int = -1):
+        ax = axis + len(a.shape) if axis < 0 else axis
+        return self._emit("tessera.softmax", [a], a.shape, [f"axis = {ax} : i64"])
+
+    def rmsnorm(self, a, eps: float = 1e-5):
+        return self._emit("tessera.rmsnorm", [a], a.shape, [f"eps = {eps:.9e} : f64"])
+
+    def layer_norm(self, a, eps: float = 1e-5):
+        return self._emit(
+            "tessera.layer_norm", [a], a.shape, [f"eps = {eps:.9e} : f64"]
+        )
+
+    def transpose(self, a):
+        if len(a.shape) != 2:
+            raise TesseraJitError("GraphFn.transpose is rank-2 only")
+        return self._emit("tessera.transpose", [a], (a.shape[1], a.shape[0]))
+
+    def matmul(self, a, b, transpose_a: bool = False, transpose_b: bool = False):
+        if len(a.shape) != 2 or len(b.shape) != 2:
+            raise TesseraJitError("GraphFn.matmul is rank-2 only")
+        M, Ka = (a.shape[1], a.shape[0]) if transpose_a else (a.shape[0], a.shape[1])
+        Kb, N = (b.shape[1], b.shape[0]) if transpose_b else (b.shape[0], b.shape[1])
+        if Ka != Kb:
+            raise TesseraJitError(f"matmul contracting mismatch: {a.shape},{b.shape}")
+        attrs = []
+        if transpose_a:
+            attrs.append("transposeA = true")
+        if transpose_b:
+            attrs.append("transposeB = true")
+        return self._emit("tessera.matmul", [a, b], (M, N), attrs or None)
+
+    def bmm(self, a, b):
+        if len(a.shape) != 3 or len(b.shape) != 3:
+            raise TesseraJitError("GraphFn.bmm is rank-3 only")
+        Bb, M, K = a.shape
+        Bb2, K2, N = b.shape
+        if Bb != Bb2 or K != K2:
+            raise TesseraJitError(f"bmm shape mismatch: {a.shape},{b.shape}")
+        return self._emit("tessera.batched_gemm", [a, b], (Bb, M, N))
+
+    def ret(self, val: _Val):
+        self._ret = val
+
+    def build(self) -> str:
+        if self._ret is None:
+            raise TesseraJitError("GraphFn has no return value (call ret())")
+        arg_decl = ", ".join(f"{s}: {self._t(sh)}" for s, sh in self._args)
+        rt = self._t(self._ret.shape)
+        body = "\n".join(self._lines)
+        return (
+            f"func.func @{self._name}({arg_decl}) -> {rt} {{\n"
+            f"{body}\n"
+            f"  return {self._ret.ssa} : {rt}\n"
+            f"}}\n"
+        )
+
+    def run(self, *arrays: np.ndarray) -> np.ndarray:
+        """Compile the whole graph ONCE and invoke ONCE. Args in declaration order."""
+        if self._ret is None:
+            raise TesseraJitError("GraphFn has no return value (call ret())")
+        if len(arrays) != len(self._args):
+            raise TesseraJitError(
+                f"expected {len(self._args)} args, got {len(arrays)}"
+            )
+        npdt = _ELEM_TO_NP[self._elem]
+        ins = [np.ascontiguousarray(np.asarray(a)) for a in arrays]
+        for a, (_ssa, sh) in zip(ins, self._args):
+            if a.dtype != npdt or tuple(a.shape) != sh:
+                raise TesseraJitError(
+                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, want {npdt}{sh}"
+                )
+        handle = compile_module(self.build())
+        try:
+            out = np.empty(self._ret.shape, dtype=npdt)
+            invoke(handle, self._name, ins, out)
+            return out
+        finally:
+            destroy(handle)

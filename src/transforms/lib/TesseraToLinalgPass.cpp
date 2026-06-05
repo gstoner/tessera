@@ -231,6 +231,69 @@ struct MatmulLowering : public RewritePattern {
   }
 };
 
+// tessera.batched_gemm: C[b] = A[b] @ B[b], rank-3 → linalg.batch_matmul.
+// Same f32-accumulate-for-low-precision policy as matmul. No transposes.
+struct BatchedGemmLowering : public RewritePattern {
+  BatchedGemmLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.batched_gemm", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return failure();
+    auto lhsTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto rhsTy = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!lhsTy || !rhsTy || !outTy)
+      return failure();
+    if (lhsTy.getRank() != 3 || rhsTy.getRank() != 3 || outTy.getRank() != 3)
+      return rewriter.notifyMatchFailure(op, "batched_gemm is rank-3");
+    if (!lhsTy.hasStaticShape() || !rhsTy.hasStaticShape() ||
+        !outTy.hasStaticShape())
+      return rewriter.notifyMatchFailure(op, "static shapes required");
+
+    int64_t Bb = lhsTy.getDimSize(0), M = lhsTy.getDimSize(1),
+            K = lhsTy.getDimSize(2);
+    int64_t Bb2 = rhsTy.getDimSize(0), K2 = rhsTy.getDimSize(1),
+            N = rhsTy.getDimSize(2);
+    if (Bb != Bb2 || K != K2 || outTy.getDimSize(0) != Bb ||
+        outTy.getDimSize(1) != M || outTy.getDimSize(2) != N)
+      return rewriter.notifyMatchFailure(op, "batched_gemm shape mismatch");
+
+    Type elem = outTy.getElementType();
+    if (!isa<FloatType>(elem))
+      return rewriter.notifyMatchFailure(op, "float-only");
+
+    Location loc = op->getLoc();
+    bool lowPrecision = elem.isBF16() || elem.isF16();
+    Type accElem = lowPrecision ? rewriter.getF32Type() : elem;
+    auto accTy = RankedTensorType::get(outTy.getShape(), accElem);
+
+    Value empty =
+        tensor::EmptyOp::create(rewriter, loc, outTy.getShape(), accElem);
+    Value zero = arith::ConstantOp::create(rewriter, loc, accElem,
+                                           rewriter.getFloatAttr(accElem, 0.0));
+    Value filled = linalg::FillOp::create(rewriter, loc, ValueRange{zero},
+                                          ValueRange{empty})
+                       .getResult(0);
+    Value acc = linalg::BatchMatmulOp::create(
+                    rewriter, loc, TypeRange{accTy},
+                    ValueRange{op->getOperand(0), op->getOperand(1)},
+                    ValueRange{filled})
+                    .getResult(0);
+
+    Value out = acc;
+    if (lowPrecision)
+      out = emitUnaryElementwise(
+          rewriter, loc, outTy, acc,
+          [&](OpBuilder &b, Location l, Value a) -> Value {
+            return arith::TruncFOp::create(b, l, elem, a).getResult();
+          });
+    rewriter.replaceOp(op, out);
+    return success();
+  }
+};
+
 // ── tessera.reduce ─────────────────────────────────────────────────────────
 
 // Elementwise scale `input * scalar` into a fresh DPS init of `ty`. Used by the
@@ -709,6 +772,7 @@ public:
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.mul", BinaryKind::Mul);
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.div", BinaryKind::Div);
     patterns.add<MatmulLowering>(ctx);
+    patterns.add<BatchedGemmLowering>(ctx);
     patterns.add<TransposeLowering>(ctx);
     patterns.add<ReduceLowering>(ctx);
     patterns.add<SoftmaxLowering>(ctx);

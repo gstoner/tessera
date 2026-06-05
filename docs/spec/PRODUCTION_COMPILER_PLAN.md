@@ -44,12 +44,31 @@ last_updated: 2026-06-05
 >   primitives and matches the numpy oracle.** **109/109 production-lane tests
 >   green** across `tests/unit/test_production_jit_*.py`.
 >
-> **Phase 1 op coverage:** `add, sub, mul, div, matmul (+transpose, +bf16/f32-acc),
-> reduce(sum/max/min/mean), softmax, rmsnorm, layer_norm, relu, sigmoid, tanh,
-> silu, gelu, transpose` — ~14 structural patterns, all oracle-tested through real
-> codegen; f32 + bf16 boundary. Remaining Phase-1 polish: dynamic shapes,
-> reconcile `tessera_jit` ↔ `tsrCompileArtifact` (§12.7). Then Phase 2 (state /
-> control flow) and Phase 3 (Apple GPU end-to-end).
+> * **Phase 1 Sprint 1.8 landed 2026-06-05** — **multi-op graph compilation.**
+>   `GraphFn` (Python) builds a whole multi-op `tessera` function compiled as ONE
+>   JIT'd unit — intermediates never cross the boundary, the lowering can fuse.
+>   The invocation counter proves it (N-op graph ⇒ +1). **A LLaMA-style
+>   single-head transformer decoder layer (rmsnorm + attention + SwiGLU MLP +
+>   residuals) compiles as one function and matches numpy** — the "model layer
+>   end-to-end" milestone. C ABI invoke went arity-unlimited via libffi.
+> * **Phase 1 Sprint 1.9 landed 2026-06-05** — `tessera.batched_gemm` (rank-3,
+>   `C[i]=A[i]@B[i]`) → `linalg.batch_matmul`, f32-accumulate for bf16. Unblocks
+>   the batch/head dimension; batched per-head attention composes in one graph.
+> * **Phase 1 Sprint 1.10 landed 2026-06-05** — **compilation cache** (S14
+>   direction). Compiled handles cached on MLIR text; repeated same-(op,shape)
+>   calls skip parse→lower→JIT. Transparent (`compile_module` cache-backed,
+>   `destroy` no-op for cached, freed at exit). A C++ compile-counter proves cache
+>   hits don't recompile while each invoke still runs. **129/129 production-lane
+>   tests green.**
+>
+> **Phase 1 op coverage:** `add/sub/mul/div, matmul (±transpose, ±bf16/f32-acc),
+> batched_gemm, reduce(sum/max/min/mean), softmax, rmsnorm, layer_norm,
+> relu/sigmoid/tanh/silu/gelu, transpose`, plus **multi-op graph compilation** and
+> a **compilation cache** — all oracle-tested through real codegen; f32 + bf16.
+> Capstone proof: a transformer decoder layer compiles+runs as one function.
+> Remaining Phase-1 polish: dynamic shapes, reconcile `tessera_jit` ↔
+> `tsrCompileArtifact` (§12.7). Then Phase 2 (state / control flow) and Phase 3
+> (Apple GPU end-to-end).
 > **Scope:** Evolve Tessera from a Python-interpreted prototype into a production
 > MLIR/LLVM-IR compiler, while retaining the Python compiler as the
 > experimentation lane. This document is the committed decision record; it gates

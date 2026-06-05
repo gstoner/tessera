@@ -99,9 +99,25 @@ last_updated: 2026-06-05
 >
 > **Phase 2 COMPLETE** — control flow (select/masked_fill, scf.for, scf.if) +
 > state (write_row, multi-result, stateful decode). Control flow lives at the
-> builder + bufferization level (no bespoke region-carrying dialect ops). Next:
-> **Phase 3 — Apple GPU end-to-end** (the production milestone on real silicon:
-> the linalg front-half + bespoke Metal back-half).
+> builder + bufferization level (no bespoke region-carrying dialect ops).
+>
+> ### Phase 3 — Apple GPU end-to-end (production on real silicon)
+> There is **no upstream MLIR Metal/AIR backend**, so Apple GPU does NOT use the
+> CPU lane's `linalg→LLVM→ORC` path — it's a **bespoke Metal back-half** (D2). The
+> shared part is the `tessera` graph structure + the CPU lane as oracle; execution
+> routes to hand-tuned MPS/MSL kernels.
+> * **Sprint 3.1 landed 2026-06-05** — Apple GPU back-half + **cross-target
+>   oracle**. `python/tessera/_apple_gpu_backend.py` reuses the existing
+>   `tessera_apple_gpu_*` *kernel* C ABI (not `runtime.py`'s dispatch) via the
+>   on-the-fly runtime loader. matmul / softmax / **fused matmul→softmax** / gelu
+>   run on the real Apple GPU and match the **compiled CPU production lane**
+>   (which matches numpy). The fused `matmul→softmax` (one Metal kernel) equals the
+>   un-fused CPU composition — the **D2 fused-chain target override**, proven.
+>   **12/12 GPU tests green** (`tests/unit/test_production_jit_phase3_apple_gpu.py`).
+>
+> Phase 3 remaining toward the DoD (a full transformer block production-grade on
+> Apple GPU, oracle-matched): more kernels (norms, the SwiGLU chain, attention
+> fused chains), a `GraphFn`-level `target="apple_gpu"` dispatch, and bf16.
 > **Scope:** Evolve Tessera from a Python-interpreted prototype into a production
 > MLIR/LLVM-IR compiler, while retaining the Python compiler as the
 > experimentation lane. This document is the committed decision record; it gates

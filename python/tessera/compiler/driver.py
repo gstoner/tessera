@@ -1077,8 +1077,13 @@ def _lower_apple_value_target_ir(
     # parens). Normalize operand parens to the custom format the parser expects
     # — only on `tessera.*` invocations followed by an attr dict or the `:` type
     # signature (so functional-type parens are left intact).
+    #
+    # The op-name class includes `.` so multi-segment dotted names
+    # (`tessera.ebm.langevin_step`, `tessera.attn.online_softmax`, ...) are
+    # normalized too — `[A-Za-z0-9_]+` stopped at the first dot, leaving the
+    # paren form on dotted ops and breaking the parse with "expected ':'".
     parse_text = re.sub(
-        r"(\btessera\.[A-Za-z0-9_]+)\(([^()]*)\)(\s*\{|\s*:)",
+        r"(\btessera\.[A-Za-z0-9_.]+)\(([^()]*)\)(\s*\{|\s*:)",
         r"\1 \2\3", graph_text)
     try:
         # Sprint 9: the Apple value lane runs against the *registered* Tile IR

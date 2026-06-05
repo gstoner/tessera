@@ -31,6 +31,7 @@ target_link_libraries(tessera_jit PRIVATE
   MLIRTensorDialect
   MLIRLinalgDialect
   MLIRLinalgTransforms
+  MLIRMathDialect
   MLIRMemRefDialect
   MLIRMemRefTransforms
   MLIRBufferizationDialect
@@ -40,6 +41,7 @@ target_link_libraries(tessera_jit PRIVATE
   # conversions used by the pipeline
   MLIRFuncToLLVM
   MLIRArithToLLVM
+  MLIRMathToLLVM
   MLIRMemRefToLLVM
   MLIRControlFlowToLLVM
   MLIRSCFToControlFlow

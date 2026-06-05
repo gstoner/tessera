@@ -300,6 +300,43 @@ def jit_mul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return _jit_binary("tessera.mul", "tessera_jit_mul", a, b)
 
 
+def jit_div(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Production-lane elementwise div (rank>=1 f32). No fallback."""
+    return _jit_binary("tessera.div", "tessera_jit_div", a, b)
+
+
+def jit_softmax(a: np.ndarray, axis: int = -1) -> np.ndarray:
+    """Production-lane numerically-stable softmax over `axis` (f32).
+
+    Lowers to the stable decomposition ``exp(x - max) / sum(exp(x - max))``
+    (the JIT lowering does the max-subtract for stability). Same shape as input,
+    rank >= 1. No fallback.
+    """
+    a = np.asarray(a)
+    _f32_envelope_check([a])
+    if a.ndim < 1:
+        raise TesseraJitError("Phase 1 jit_softmax requires rank>=1")
+    ax = axis + a.ndim if axis < 0 else axis
+    if ax < 0 or ax >= a.ndim:
+        raise TesseraJitError(f"axis {axis} out of range for rank {a.ndim}")
+    a = np.ascontiguousarray(a)
+    t = "tensor<" + "x".join(str(s) for s in a.shape) + "xf32>"
+    sym = "tessera_jit_softmax"
+    mlir = (
+        f"func.func @{sym}(%x: {t}) -> {t} {{\n"
+        f"  %0 = tessera.softmax %x {{axis = {ax} : i64}} : ({t}) -> {t}\n"
+        f"  return %0 : {t}\n"
+        f"}}\n"
+    )
+    handle = compile_module(mlir)
+    try:
+        out = np.empty_like(a)
+        invoke(handle, sym, [a], out)
+        return out
+    finally:
+        destroy(handle)
+
+
 def jit_matmul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """Production-lane rank-2 f32 matmul. No transposes, no fallback."""
     a = np.asarray(a)

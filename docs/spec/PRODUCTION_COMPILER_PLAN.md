@@ -18,14 +18,20 @@ last_updated: 2026-06-05
 > * **Phase 1 Sprint 1.2 landed 2026-06-05** — `tessera.reduce` (one
 >   parameterized op, `kind` ∈ {sum,max,min,mean} × `axis`) →
 >   `linalg.fill(identity) → linalg.reduce`, mean = sum + 1/N scale. **First op
->   whose result rank differs from its input rank** — exercises the generic
->   descriptor packing across ranks. No harness change required (Sprint 1.1
->   payoff). **42/42 production-lane tests green**
->   (`tests/unit/test_production_jit_{add,phase1,phase1_reduce}.py`).
+>   whose result rank differs from its input rank.**
+> * **Phase 1 Sprint 1.3 landed 2026-06-05** — `tessera.softmax` →
+>   numerically-stable `max → (x−m) → exp → sum → (e/d)` decomposition. **First
+>   broadcast** (reduced `(…)` tensor applied against full `(…,N)` input via an
+>   affine map dropping the reduced axis — `emitBroadcastBinary`, reused by
+>   normalization next) and **first use of the `math` dialect** (`math.exp`,
+>   wired through `convert-math-to-llvm` in the JIT). Elementwise family
+>   completed with `tessera.div`. **55/55 production-lane tests green**
+>   (adds `tests/unit/test_production_jit_phase1_softmax.py`), incl. a
+>   large-value (1000–1002) stability test that a naive `exp` would overflow.
 >
 > Phase 1 *DoD* (the ~15 structural patterns covering the bulk of the op
-> surface, plus bf16 boundary) is *in progress*. Next slices: softmax (needs
-> `div` + `exp`), normalization (layer_norm/rmsnorm), bf16 boundary.
+> surface, plus bf16 boundary) is *in progress*. Next slices: normalization
+> (layer_norm/rmsnorm — reuses `emitBroadcastBinary`), bf16 boundary.
 > **Scope:** Evolve Tessera from a Python-interpreted prototype into a production
 > MLIR/LLVM-IR compiler, while retaining the Python compiler as the
 > experimentation lane. This document is the committed decision record; it gates

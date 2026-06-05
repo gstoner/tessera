@@ -8,10 +8,12 @@
 //
 // Coverage:
 //   Phase 0: tessera.add (elementwise, total)
-//   Phase 1: tessera.{sub,mul} (elementwise via shared table)
+//   Phase 1: tessera.{sub,mul,div} (elementwise via shared table)
 //            tessera.matmul (linalg.fill + linalg.matmul; rank-2, no transpose)
 //            tessera.reduce (linalg.reduce; sum/max/min/mean over one axis —
 //                            first op whose result rank != input rank)
+//            tessera.softmax (stable max→sub→exp→sum→div over one axis; first
+//                             use of broadcast affine maps + the math dialect)
 //
 // Decisions:
 //   - Match by op-name string (RewritePattern). Avoids leaking generated op
@@ -28,8 +30,11 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Utils/StructuredOpsUtils.h"
+#include "mlir/IR/AffineExpr.h"
+#include "mlir/IR/AffineMap.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
@@ -43,7 +48,7 @@ namespace {
 
 // ── Binary elementwise ─────────────────────────────────────────────────────
 
-enum class BinaryKind { Add, Sub, Mul };
+enum class BinaryKind { Add, Sub, Mul, Div };
 
 static Value emitBinaryScalar(OpBuilder &b, Location loc, BinaryKind kind,
                               Value a, Value c, Type elem) {
@@ -58,6 +63,9 @@ static Value emitBinaryScalar(OpBuilder &b, Location loc, BinaryKind kind,
   case BinaryKind::Mul:
     return isFloat ? arith::MulFOp::create(b, loc, a, c).getResult()
                    : arith::MulIOp::create(b, loc, a, c).getResult();
+  case BinaryKind::Div:
+    return isFloat ? arith::DivFOp::create(b, loc, a, c).getResult()
+                   : arith::DivSIOp::create(b, loc, a, c).getResult();
   }
   llvm_unreachable("unhandled BinaryKind");
 }
@@ -197,6 +205,97 @@ static Value buildUnaryScale(PatternRewriter &rewriter, Location loc,
   return generic.getResult(0);
 }
 
+// Unary elementwise `linalg.generic` applying `fn` over `input` into a fresh DPS
+// init of `ty`.
+static Value emitUnaryElementwise(
+    PatternRewriter &rewriter, Location loc, RankedTensorType ty, Value input,
+    function_ref<Value(OpBuilder &, Location, Value)> fn) {
+  int64_t rank = ty.getRank();
+  Value init = tensor::EmptyOp::create(rewriter, loc, ty.getShape(),
+                                       ty.getElementType());
+  AffineMap id = rewriter.getMultiDimIdentityMap(rank);
+  SmallVector<AffineMap, 2> maps = {id, id};
+  SmallVector<utils::IteratorType> iters(rank, utils::IteratorType::parallel);
+  auto generic = linalg::GenericOp::create(
+      rewriter, loc, TypeRange{ty}, ValueRange{input}, ValueRange{init}, maps,
+      iters, [&](OpBuilder &b, Location l, ValueRange args) {
+        linalg::YieldOp::create(b, l, fn(b, l, args[0]));
+      });
+  return generic.getResult(0);
+}
+
+// Reduce `input` (a full-rank tensor) over a single `axis` with kind
+// sum/max/min, returning the rank-(R-1) reduced tensor. Identity-fill +
+// linalg.reduce. (mean is handled by the caller as sum + scale.)
+static Value emitReduceCore(PatternRewriter &rewriter, Location loc,
+                            RankedTensorType inTy, Value input, int64_t axis,
+                            StringRef kind) {
+  Type elem = inTy.getElementType();
+  auto fty = cast<FloatType>(elem);
+  int64_t rank = inTy.getRank();
+  SmallVector<int64_t> outShape;
+  for (int64_t i = 0; i < rank; ++i)
+    if (i != axis)
+      outShape.push_back(inTy.getDimSize(i));
+
+  const llvm::fltSemantics &sem = fty.getFloatSemantics();
+  APFloat ident = APFloat::getZero(sem);
+  if (kind == "max")
+    ident = APFloat::getInf(sem, /*Negative=*/true);
+  else if (kind == "min")
+    ident = APFloat::getInf(sem, /*Negative=*/false);
+
+  Value empty = tensor::EmptyOp::create(rewriter, loc, outShape, elem);
+  Value identC = arith::ConstantOp::create(rewriter, loc, elem,
+                                           rewriter.getFloatAttr(elem, ident));
+  Value filled = linalg::FillOp::create(rewriter, loc, ValueRange{identC},
+                                        ValueRange{empty})
+                     .getResult(0);
+  auto reduceOp = linalg::ReduceOp::create(
+      rewriter, loc, ValueRange{input}, ValueRange{filled},
+      ArrayRef<int64_t>{axis}, [&](OpBuilder &b, Location l, ValueRange args) {
+        Value in = args[0], acc = args[1], r;
+        if (kind == "sum")
+          r = arith::AddFOp::create(b, l, in, acc);
+        else if (kind == "max")
+          r = arith::MaximumFOp::create(b, l, in, acc);
+        else
+          r = arith::MinimumFOp::create(b, l, in, acc);
+        linalg::YieldOp::create(b, l, r);
+      });
+  return reduceOp.getResults()[0];
+}
+
+// Broadcast-binary: `fn(full[i...], reduced[i... without axis])` over the full
+// iteration space, into a fresh DPS init of `fullTy`. The reduced operand uses
+// an affine map that drops `axis`, so it broadcasts along that dim. This is the
+// load-bearing new capability of Sprint 1.3 — softmax's `x - max` and `e / sum`,
+// and (later) normalization's centering/scaling, all route through it.
+static Value emitBroadcastBinary(
+    PatternRewriter &rewriter, Location loc, RankedTensorType fullTy, Value full,
+    Value reduced, int64_t axis,
+    function_ref<Value(OpBuilder &, Location, Value, Value)> fn) {
+  MLIRContext *ctx = fullTy.getContext();
+  int64_t rank = fullTy.getRank();
+  Value init = tensor::EmptyOp::create(rewriter, loc, fullTy.getShape(),
+                                       fullTy.getElementType());
+  AffineMap idFull = rewriter.getMultiDimIdentityMap(rank);
+  SmallVector<AffineExpr> exprs;
+  for (int64_t d = 0; d < rank; ++d)
+    if (d != axis)
+      exprs.push_back(getAffineDimExpr(d, ctx));
+  AffineMap redMap = AffineMap::get(rank, /*symbolCount=*/0, exprs, ctx);
+  SmallVector<AffineMap, 3> maps = {idFull, redMap, idFull};
+  SmallVector<utils::IteratorType> iters(rank, utils::IteratorType::parallel);
+  auto generic = linalg::GenericOp::create(
+      rewriter, loc, TypeRange{fullTy}, ValueRange{full, reduced},
+      ValueRange{init}, maps, iters,
+      [&](OpBuilder &b, Location l, ValueRange args) {
+        linalg::YieldOp::create(b, l, fn(b, l, args[0], args[1]));
+      });
+  return generic.getResult(0);
+}
+
 // Single-axis reduction (sum/max/min/mean) → linalg.reduce over `axis`, with a
 // fresh init pre-filled with the reduction identity (0 / -inf / +inf). `mean` is
 // `sum` followed by a 1/N scale. Result rank = input rank - 1.
@@ -243,34 +342,8 @@ struct ReduceLowering : public RewritePattern {
       return rewriter.notifyMatchFailure(op, "unknown reduce kind");
 
     Location loc = op->getLoc();
-    const llvm::fltSemantics &sem = fty.getFloatSemantics();
-    APFloat ident = APFloat::getZero(sem);
-    if (redKind == "max")
-      ident = APFloat::getInf(sem, /*Negative=*/true);
-    else if (redKind == "min")
-      ident = APFloat::getInf(sem, /*Negative=*/false);
-
-    Value empty = tensor::EmptyOp::create(rewriter, loc, outTy.getShape(), elem);
-    Value identC = arith::ConstantOp::create(rewriter, loc, elem,
-                                             rewriter.getFloatAttr(elem, ident));
-    Value filled = linalg::FillOp::create(rewriter, loc, ValueRange{identC},
-                                          ValueRange{empty})
-                       .getResult(0);
-
-    auto reduceOp = linalg::ReduceOp::create(
-        rewriter, loc, ValueRange{op->getOperand(0)}, ValueRange{filled},
-        ArrayRef<int64_t>{axis},
-        [&](OpBuilder &b, Location l, ValueRange args) {
-          Value in = args[0], acc = args[1], r;
-          if (redKind == "sum")
-            r = arith::AddFOp::create(b, l, in, acc);
-          else if (redKind == "max")
-            r = arith::MaximumFOp::create(b, l, in, acc);
-          else
-            r = arith::MinimumFOp::create(b, l, in, acc);
-          linalg::YieldOp::create(b, l, r);
-        });
-    Value reduced = reduceOp.getResults()[0];
+    Value reduced =
+        emitReduceCore(rewriter, loc, inTy, op->getOperand(0), axis, redKind);
 
     if (isMean) {
       double n = static_cast<double>(inTy.getDimSize(axis));
@@ -279,6 +352,59 @@ struct ReduceLowering : public RewritePattern {
       reduced = buildUnaryScale(rewriter, loc, outTy, reduced, recip);
     }
     rewriter.replaceOp(op, reduced);
+    return success();
+  }
+};
+
+// tessera.softmax (over `axis`, default innermost) → numerically-stable
+// decomposition:  m = max(x); e = exp(x - m); y = e / sum(e).  Composes the
+// reduction machinery (emitReduceCore) with broadcast-binary (emitBroadcastBinary)
+// and a math.exp unary. Result shape == input shape.
+struct SoftmaxLowering : public RewritePattern {
+  SoftmaxLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.softmax", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return failure();
+    auto ty = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!ty || !outTy || ty != outTy || !ty.hasStaticShape())
+      return rewriter.notifyMatchFailure(op, "static same-shape tensor required");
+    if (!isa<FloatType>(ty.getElementType()))
+      return rewriter.notifyMatchFailure(op, "float-only");
+
+    int64_t rank = ty.getRank();
+    int64_t axis = rank - 1; // default: innermost
+    if (auto a = op->getAttrOfType<IntegerAttr>("axis")) {
+      axis = a.getInt();
+      if (axis < 0)
+        axis += rank;
+    }
+    if (axis < 0 || axis >= rank)
+      return rewriter.notifyMatchFailure(op, "axis out of range");
+
+    Location loc = op->getLoc();
+    Value x = op->getOperand(0);
+    Value m = emitReduceCore(rewriter, loc, ty, x, axis, "max");
+    Value shifted = emitBroadcastBinary(
+        rewriter, loc, ty, x, m, axis,
+        [](OpBuilder &b, Location l, Value a, Value c) -> Value {
+          return arith::SubFOp::create(b, l, a, c).getResult();
+        });
+    Value e = emitUnaryElementwise(
+        rewriter, loc, ty, shifted,
+        [](OpBuilder &b, Location l, Value a) -> Value {
+          return math::ExpOp::create(b, l, a).getResult();
+        });
+    Value denom = emitReduceCore(rewriter, loc, ty, e, axis, "sum");
+    Value y = emitBroadcastBinary(
+        rewriter, loc, ty, e, denom, axis,
+        [](OpBuilder &b, Location l, Value a, Value c) -> Value {
+          return arith::DivFOp::create(b, l, a, c).getResult();
+        });
+    rewriter.replaceOp(op, y);
     return success();
   }
 };
@@ -298,7 +424,7 @@ public:
 
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<linalg::LinalgDialect, arith::ArithDialect,
-                    tensor::TensorDialect>();
+                    tensor::TensorDialect, math::MathDialect>();
   }
 
   void runOnOperation() override {
@@ -307,8 +433,10 @@ public:
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.add", BinaryKind::Add);
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.sub", BinaryKind::Sub);
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.mul", BinaryKind::Mul);
+    patterns.add<BinaryEltwiseLowering>(ctx, "tessera.div", BinaryKind::Div);
     patterns.add<MatmulLowering>(ctx);
     patterns.add<ReduceLowering>(ctx);
+    patterns.add<SoftmaxLowering>(ctx);
     if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
       signalPassFailure();
   }

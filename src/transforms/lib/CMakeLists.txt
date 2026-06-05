@@ -89,6 +89,7 @@ target_link_libraries(TesseraPasses
     MLIRSCFDialect
     MLIRTensorDialect
     MLIRLinalgDialect
+    MLIRMathDialect
     MLIRMemRefDialect
     MLIRBufferizationDialect
     MLIRBufferizationTransforms

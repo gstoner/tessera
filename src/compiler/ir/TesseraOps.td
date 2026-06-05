@@ -972,6 +972,12 @@ def Tessera_MulOp : Op<Tessera_Dialect, "mul", [Pure]> {
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
+def Tessera_DivOp : Op<Tessera_Dialect, "div", [Pure]> {
+  let summary = "Elementwise tensor division (a / b)";
+  let arguments = (ins TensorType:$lhs, TensorType:$rhs);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
 
 // Phase 1 Sprint 1.2 — single-axis reduction. One parameterized op
 // (`kind` ∈ {sum, max, min, mean}, `axis`) lowered to linalg.reduce + an

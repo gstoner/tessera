@@ -39,6 +39,7 @@
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -171,6 +172,7 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   pm2.nest<func::FuncOp>().addPass(createConvertLinalgToLoopsPass());
   pm2.addPass(createSCFToControlFlowPass());
   pm2.addPass(memref::createExpandStridedMetadataPass());
+  pm2.addPass(createConvertMathToLLVMPass());
   pm2.addPass(createArithToLLVMConversionPass());
   pm2.addPass(createConvertControlFlowToLLVMPass());
   pm2.addPass(createFinalizeMemRefToLLVMConversionPass());
@@ -196,8 +198,9 @@ void *tessera_jit_compile(const char *mlir_text) {
   tessera::registerTesseraDialects(registry);
   registry.insert<func::FuncDialect, arith::ArithDialect, scf::SCFDialect,
                   tensor::TensorDialect, linalg::LinalgDialect,
-                  memref::MemRefDialect, bufferization::BufferizationDialect,
-                  cf::ControlFlowDialect, LLVM::LLVMDialect>();
+                  math::MathDialect, memref::MemRefDialect,
+                  bufferization::BufferizationDialect, cf::ControlFlowDialect,
+                  LLVM::LLVMDialect>();
   registerBuiltinDialectTranslation(registry);
   registerLLVMDialectTranslation(registry);
 

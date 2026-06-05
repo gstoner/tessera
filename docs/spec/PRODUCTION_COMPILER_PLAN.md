@@ -22,16 +22,23 @@ last_updated: 2026-06-05
 > * **Phase 1 Sprint 1.3 landed 2026-06-05** — `tessera.softmax` →
 >   numerically-stable `max → (x−m) → exp → sum → (e/d)` decomposition. **First
 >   broadcast** (reduced `(…)` tensor applied against full `(…,N)` input via an
->   affine map dropping the reduced axis — `emitBroadcastBinary`, reused by
->   normalization next) and **first use of the `math` dialect** (`math.exp`,
->   wired through `convert-math-to-llvm` in the JIT). Elementwise family
->   completed with `tessera.div`. **55/55 production-lane tests green**
->   (adds `tests/unit/test_production_jit_phase1_softmax.py`), incl. a
->   large-value (1000–1002) stability test that a naive `exp` would overflow.
+>   affine map dropping the reduced axis — `emitBroadcastBinary`) and **first use
+>   of the `math` dialect** (`math.exp`, via `convert-math-to-llvm`). Elementwise
+>   family completed with `tessera.div`.
+> * **Phase 1 Sprint 1.4 landed 2026-06-05** — `tessera.rmsnorm`
+>   (`x / sqrt(mean(x²)+eps)`) and `tessera.layer_norm`
+>   (`(x−mean) / sqrt(var+eps)`), unweighted, innermost axis, `eps` default 1e-5.
+>   Almost pure composition over Sprint 1.3 (`emitMean` + `emitBroadcastBinary` +
+>   `math.sqrt`) — **proves the broadcast primitive generalizes beyond softmax**.
+>   Used precise `math.sqrt` (not approximate `rsqrt`) to match the oracle.
+>   **69/69 production-lane tests green** (adds
+>   `tests/unit/test_production_jit_phase1_norm.py`), incl. a layer-norm
+>   ~N(0,1)-per-row property test.
 >
 > Phase 1 *DoD* (the ~15 structural patterns covering the bulk of the op
-> surface, plus bf16 boundary) is *in progress*. Next slices: normalization
-> (layer_norm/rmsnorm — reuses `emitBroadcastBinary`), bf16 boundary.
+> surface, plus bf16 boundary) is *in progress*. Next slice: **bf16 boundary**
+> (the §12.5 ABI rule — `ml_dtypes` Python side / raw-i16 boundary / convert on
+> mismatch), then activations (gelu/silu/tanh — the `math`-unary family).
 > **Scope:** Evolve Tessera from a Python-interpreted prototype into a production
 > MLIR/LLVM-IR compiler, while retaining the Python compiler as the
 > experimentation lane. This document is the committed decision record; it gates

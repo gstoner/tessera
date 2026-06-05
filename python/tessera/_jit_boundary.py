@@ -437,3 +437,44 @@ def jit_amin(a: np.ndarray, axis: int) -> np.ndarray:
 def jit_mean(a: np.ndarray, axis: int) -> np.ndarray:
     """Production-lane mean over `axis` (f32). No fallback."""
     return jit_reduce(a, axis, "mean")
+
+
+# ── Normalization (Phase 1 Sprint 1.4: mean-reduce + broadcast + sqrt) ───────
+
+
+def _jit_norm(op_name: str, sym: str, a: np.ndarray, eps: float) -> np.ndarray:
+    a = np.asarray(a)
+    _f32_envelope_check([a])
+    if a.ndim < 1:
+        raise TesseraJitError("Phase 1 norm requires rank>=1")
+    a = np.ascontiguousarray(a)
+    t = "tensor<" + "x".join(str(s) for s in a.shape) + "xf32>"
+    mlir = (
+        f"func.func @{sym}(%x: {t}) -> {t} {{\n"
+        f"  %0 = {op_name} %x {{eps = {eps:.9e} : f64}} : ({t}) -> {t}\n"
+        f"  return %0 : {t}\n"
+        f"}}\n"
+    )
+    handle = compile_module(mlir)
+    try:
+        out = np.empty_like(a)
+        invoke(handle, sym, [a], out)
+        return out
+    finally:
+        destroy(handle)
+
+
+def jit_rmsnorm(a: np.ndarray, eps: float = 1e-5) -> np.ndarray:
+    """Production-lane unweighted RMSNorm over the innermost axis (f32).
+
+    ``x / sqrt(mean(x²) + eps)``. No fallback.
+    """
+    return _jit_norm("tessera.rmsnorm", "tessera_jit_rmsnorm", a, eps)
+
+
+def jit_layer_norm(a: np.ndarray, eps: float = 1e-5) -> np.ndarray:
+    """Production-lane unweighted LayerNorm over the innermost axis (f32).
+
+    ``(x - mean) / sqrt(var + eps)``. No fallback.
+    """
+    return _jit_norm("tessera.layer_norm", "tessera_jit_layer_norm", a, eps)

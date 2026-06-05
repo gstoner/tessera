@@ -14,6 +14,8 @@
 //                            first op whose result rank != input rank)
 //            tessera.softmax (stable max→sub→exp→sum→div over one axis; first
 //                             use of broadcast affine maps + the math dialect)
+//            tessera.{rmsnorm,layer_norm} (mean-reduce + broadcast + math.sqrt;
+//                             unweighted, innermost axis, eps default 1e-5)
 //
 // Decisions:
 //   - Match by op-name string (RewritePattern). Avoids leaking generated op
@@ -296,6 +298,20 @@ static Value emitBroadcastBinary(
   return generic.getResult(0);
 }
 
+// Mean of `input` over `axis`: sum reduction scaled by 1/N. Returns the
+// rank-(R-1) reduced tensor. Used by both norms (rmsnorm: mean(x²);
+// layer_norm: mean(x) and mean((x-mu)²)).
+static Value emitMean(PatternRewriter &rewriter, Location loc,
+                      RankedTensorType inTy, Value input, int64_t axis) {
+  Value summed = emitReduceCore(rewriter, loc, inTy, input, axis, "sum");
+  auto redTy = cast<RankedTensorType>(summed.getType());
+  Type elem = inTy.getElementType();
+  double n = static_cast<double>(inTy.getDimSize(axis));
+  Value recip = arith::ConstantOp::create(rewriter, loc, elem,
+                                          rewriter.getFloatAttr(elem, 1.0 / n));
+  return buildUnaryScale(rewriter, loc, redTy, summed, recip);
+}
+
 // Single-axis reduction (sum/max/min/mean) → linalg.reduce over `axis`, with a
 // fresh init pre-filled with the reduction identity (0 / -inf / +inf). `mean` is
 // `sum` followed by a 1/N scale. Result rank = input rank - 1.
@@ -409,6 +425,117 @@ struct SoftmaxLowering : public RewritePattern {
   }
 };
 
+// ── Normalization ──────────────────────────────────────────────────────────
+
+// Shared helpers for the norms: read `eps` (default 1e-5), square, add-eps,
+// sqrt — all reductions/broadcasts over the innermost axis.
+static double readEps(Operation *op) {
+  if (auto e = op->getAttrOfType<FloatAttr>("eps"))
+    return e.getValueAsDouble();
+  return 1e-5;
+}
+static Value emitSquare(PatternRewriter &r, Location loc, RankedTensorType ty,
+                        Value v) {
+  return emitUnaryElementwise(
+      r, loc, ty, v, [](OpBuilder &b, Location l, Value a) -> Value {
+        return arith::MulFOp::create(b, l, a, a).getResult();
+      });
+}
+static Value emitAddEpsThenSqrt(PatternRewriter &r, Location loc,
+                                RankedTensorType redTy, Value reduced,
+                                Type elem, double eps) {
+  Value epsC = arith::ConstantOp::create(r, loc, elem,
+                                         r.getFloatAttr(elem, eps));
+  Value withEps = emitUnaryElementwise(
+      r, loc, redTy, reduced, [&](OpBuilder &b, Location l, Value a) -> Value {
+        return arith::AddFOp::create(b, l, a, epsC).getResult();
+      });
+  // Precise IEEE sqrt (not rsqrt) so `x / sqrt(...)` matches the numpy oracle.
+  return emitUnaryElementwise(
+      r, loc, redTy, withEps, [](OpBuilder &b, Location l, Value a) -> Value {
+        return math::SqrtOp::create(b, l, a).getResult();
+      });
+}
+static Value emitDivBroadcast(PatternRewriter &r, Location loc,
+                              RankedTensorType ty, Value full, Value reducedDenom,
+                              int64_t axis) {
+  return emitBroadcastBinary(
+      r, loc, ty, full, reducedDenom, axis,
+      [](OpBuilder &b, Location l, Value a, Value c) -> Value {
+        return arith::DivFOp::create(b, l, a, c).getResult();
+      });
+}
+
+// rmsnorm(x) = x / sqrt(mean(x²) + eps), over the innermost axis (unweighted).
+struct RmsNormLowering : public RewritePattern {
+  RmsNormLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.rmsnorm", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return failure();
+    auto ty = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!ty || !outTy || ty != outTy || !ty.hasStaticShape() || ty.getRank() < 1)
+      return rewriter.notifyMatchFailure(op, "static same-shape rank>=1 tensor");
+    if (!isa<FloatType>(ty.getElementType()))
+      return rewriter.notifyMatchFailure(op, "float-only");
+
+    int64_t axis = ty.getRank() - 1;
+    double eps = readEps(op);
+    Location loc = op->getLoc();
+    Type elem = ty.getElementType();
+    Value x = op->getOperand(0);
+
+    Value ms = emitMean(rewriter, loc, ty, emitSquare(rewriter, loc, ty, x), axis);
+    auto redTy = cast<RankedTensorType>(ms.getType());
+    Value denom = emitAddEpsThenSqrt(rewriter, loc, redTy, ms, elem, eps);
+    Value y = emitDivBroadcast(rewriter, loc, ty, x, denom, axis);
+    rewriter.replaceOp(op, y);
+    return success();
+  }
+};
+
+// layer_norm(x) = (x - mean) / sqrt(var + eps), over the innermost axis
+// (unweighted; no gamma/beta).
+struct LayerNormLowering : public RewritePattern {
+  LayerNormLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.layer_norm", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return failure();
+    auto ty = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!ty || !outTy || ty != outTy || !ty.hasStaticShape() || ty.getRank() < 1)
+      return rewriter.notifyMatchFailure(op, "static same-shape rank>=1 tensor");
+    if (!isa<FloatType>(ty.getElementType()))
+      return rewriter.notifyMatchFailure(op, "float-only");
+
+    int64_t axis = ty.getRank() - 1;
+    double eps = readEps(op);
+    Location loc = op->getLoc();
+    Type elem = ty.getElementType();
+    Value x = op->getOperand(0);
+
+    Value mu = emitMean(rewriter, loc, ty, x, axis);
+    Value centered = emitBroadcastBinary(
+        rewriter, loc, ty, x, mu, axis,
+        [](OpBuilder &b, Location l, Value a, Value c) -> Value {
+          return arith::SubFOp::create(b, l, a, c).getResult();
+        });
+    Value var =
+        emitMean(rewriter, loc, ty, emitSquare(rewriter, loc, ty, centered), axis);
+    auto redTy = cast<RankedTensorType>(var.getType());
+    Value denom = emitAddEpsThenSqrt(rewriter, loc, redTy, var, elem, eps);
+    Value y = emitDivBroadcast(rewriter, loc, ty, centered, denom, axis);
+    rewriter.replaceOp(op, y);
+    return success();
+  }
+};
+
 // ── Pass ───────────────────────────────────────────────────────────────────
 
 class TesseraToLinalgPass
@@ -437,6 +564,8 @@ public:
     patterns.add<MatmulLowering>(ctx);
     patterns.add<ReduceLowering>(ctx);
     patterns.add<SoftmaxLowering>(ctx);
+    patterns.add<RmsNormLowering>(ctx);
+    patterns.add<LayerNormLowering>(ctx);
     if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
       signalPassFailure();
   }

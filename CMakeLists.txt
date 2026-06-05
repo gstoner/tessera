@@ -163,6 +163,8 @@ add_definitions(${LLVM_DEFINITIONS})
 add_subdirectory(src)
 add_subdirectory(tools/tessera-opt)
 add_subdirectory(tools/tessera-translate)
+# Phase 0 production-lane CPU JIT (experimental). docs/spec/PRODUCTION_COMPILER_PLAN.md
+add_subdirectory(tools/tessera-jit)
 
 set(TESSERA_COMPILER_FOUNDATION_DEPS
     TesseraIRTableGen

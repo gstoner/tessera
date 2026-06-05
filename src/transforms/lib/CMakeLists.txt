@@ -14,6 +14,10 @@ add_library(TesseraPasses
   TilingPass.cpp
   TileToX86Pass.cpp
 
+  # Phase 0 production spine — Graph IR → upstream linalg
+  # (docs/spec/PRODUCTION_COMPILER_PLAN.md).
+  TesseraToLinalgPass.cpp
+
   # Phase 3 GPU / FA-4 Tile IR lowering
   TileIRLoweringPass.cpp
 
@@ -84,6 +88,7 @@ target_link_libraries(TesseraPasses
     MLIRArithDialect
     MLIRSCFDialect
     MLIRTensorDialect
+    MLIRLinalgDialect
     MLIRMemRefDialect
     MLIRBufferizationDialect
     MLIRBufferizationTransforms

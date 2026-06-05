@@ -51,6 +51,13 @@ std::unique_ptr<mlir::Pass> createTilingPass(bool valueMode);
 //   --prefer-amx  prefer AMX over AVX-512 when both are available (default true)
 std::unique_ptr<mlir::Pass> createTileToX86Pass();
 
+// ── Phase 0 production spine — Graph IR → upstream linalg ─────────────────
+// Lowers total elementwise Tessera Graph IR ops (currently tessera.add) to
+// linalg.generic on tensors so the standard bufferize → llvm → ExecutionEngine
+// pipeline can produce executable code. The shared front-half every production
+// target inherits. See docs/spec/PRODUCTION_COMPILER_PLAN.md.
+std::unique_ptr<mlir::Pass> createTesseraToLinalgPass();
+
 // ── Phase 3 passes — GPU backend + FA-4 Tile IR ───────────────────────────
 //
 // Full GPU lowering pipeline (SM_90 FlashAttention)

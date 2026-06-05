@@ -576,11 +576,15 @@ of the stable C ABI unless a future runtime replay API promotes them.
 
 ## 12. Compiled-Function ABI (Production MLIR/LLVM Lane)
 
-> **Status: Proposed — Phase 0 (not yet implemented).** This section is the
-> ratified design for the production compiler's executable boundary
-> (`docs/spec/PRODUCTION_COMPILER_PLAN.md`, decision **D3**). It is normative for
-> that work; the "implemented" tables in §11 do **not** cover it yet. When Phase 0
-> lands, the status banner and §11 are updated together.
+> **Status: Implemented — Phase 0 (CPU, total elementwise).** Landed 2026-06-05.
+> The boundary is exercised end-to-end by `tools/tessera-jit` (the experimental
+> `libtessera_jit` CPU JIT) and `tests/unit/test_production_jit_add.py`:
+> `tessera.add` lowers `tessera → linalg → bufferize → llvm`, JITs via
+> `mlir::ExecutionEngine`, and writes a caller-allocated output through
+> `_mlir_ciface_tessera_jit_add(a*, b*, out*)` (void, DPS). The oracle test asserts
+> numerical match vs numpy **and** an unfakeable JIT invocation-counter advance, so
+> a silent numpy fallback fails the suite. Scope today is the Phase-0 total-op class
+> (§12.6); broader coverage is Phase 1. Design ref: `PRODUCTION_COMPILER_PLAN.md` D3.
 
 ### 12.0 Why this is a separate ABI
 
@@ -688,23 +692,51 @@ accident — no path may reinterpret bf16 bits as fp16 or vice versa.
 
 ### 12.6 Error and effect model
 
-Phase 0 compiled functions are **total** (elementwise/structured math; no failure
-mode), so the `void` signature is sufficient. Functions that can fail at runtime
-(bounds, device errors, allocation in later phases) will gain a status mechanism —
-either a trailing `TsrStatus* status_out` descriptor-adjacent parameter or
-integration with `tsrGetLastError()`. The choice is deferred to the phase that
-first needs it and recorded here when made. v1 callers may assume success.
+**`void` return is Phase 0 only.** It is valid solely because Phase 0 admits a
+strictly-total op class:
+
+- elementwise / structured math with **no failure mode** (add/mul/relu-style);
+- shapes and dtypes **prevalidated by the caller** before invocation;
+- **caller-allocated outputs** (§12.3), so no allocation occurs inside the
+  compiled function;
+- **no dynamic dispatch** that could fail inside the function.
+
+Under those conditions a compiled function cannot fail, so `void` is correct and
+v1 callers may assume success. **This guarantee does not extend past Phase 0.** Any
+op that can fail at runtime (bounds, device errors, callee allocation in later
+phases, dynamic dispatch) requires the status mechanism below; introducing such an
+op without it is an ABI violation.
+
+**Reserved future status mechanism.** When a fallible op first lands, the
+signature gains an explicit status channel. The **preferred** primary contract is a
+status **return value** or a trailing `TsrStatus* status_out` parameter — *not*
+hidden reliance on thread-local `tsrGetLastError()` as the primary signal
+(`tsrGetLastError` may still carry the human-readable detail, but must not be the
+sole success/failure indicator). The exact form is chosen by the phase that first
+needs it and recorded here. The signature section above (§12.1) is written so this
+addition is additive, not a breaking re-shape of the total-op case.
 
 ### 12.7 Relationship to `tsrCompileArtifact`
 
 `tsrCompileArtifact` (§5, `tessera_runtime.h`) currently interprets `module_ir` as
 a comma-separated list of pre-registered host-kernel names — the tile-kernel path.
-The Compiled-Function ABI is reached through a **new JIT surface** (working name
-`tessera_jit`: compile MLIR module → `ExecutionEngine` → look up `_mlir_ciface_S`),
-bound from Python by `canonical_compile(target="cpu")`. Whether `tessera_jit`
-folds into `tsrCompileArtifact` (as a real-codegen status beyond the name-registry
-behavior) or stays a sibling surface is decided in Phase 1; Phase 0 keeps it a
-standalone dylib loaded via `ctypes` to minimize moving parts under the boundary.
+Its artifact shape is **the wrong fit for MLIR `ExecutionEngine` proof work**, and
+forcing integration now would couple Phase 0 to legacy runtime decisions.
+
+The Compiled-Function ABI is therefore reached through a **separate, experimental
+production-lane JIT surface** — working name **`tessera_jit`** (a.k.a.
+`mlir_cpu_jit`): compile MLIR module → `ExecutionEngine` → look up
+`_mlir_ciface_S`, bound from Python by `canonical_compile(target="cpu")`. It is a
+standalone dylib loaded via `ctypes`.
+
+- **Naming guardrail:** this is *experimental production-lane plumbing*, **not
+  "runtime v2."** Do not market or document it as a runtime replacement. Its job in
+  Phase 0 is narrow and provable: MLIR lowers, the C-ABI wrapper exists, Python can
+  call it, the oracle passes.
+- **Compatibility note (Phase 1 decision, open):** Phase 1 must explicitly decide
+  whether `tessera_jit` (a) becomes the real-codegen behavior behind
+  `tsrCompileArtifact`, (b) is exposed as a sibling TSR API, or (c) remains a
+  separate CPU-JIT subsystem. Phase 0 deliberately does not pre-judge this.
 
 ---
 

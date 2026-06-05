@@ -940,6 +940,22 @@ def Tessera_SiluOp : Tessera_UnaryPureOp<"silu", "SiLU / swish activation (x * s
 def Tessera_TanhOp : Tessera_UnaryPureOp<"tanh", "Hyperbolic tangent activation">;
 def Tessera_SoftplusOp : Tessera_UnaryPureOp<"softplus", "Softplus activation (log(1 + exp(x)))">;
 
+// Phase 0 production-compiler spine (docs/spec/PRODUCTION_COMPILER_PLAN.md):
+// the minimal *total* binary elementwise op used to prove the
+// tessera -> linalg -> bufferize -> llvm -> ExecutionEngine boundary
+// (RUNTIME_ABI_SPEC.md §12). Deliberately trivial — no broadcasting;
+// SameOperandsAndResultType enforces the elementwise contract without a
+// custom verifier.
+def Tessera_AddOp : Op<
+  Tessera_Dialect, "add",
+  [Pure]
+> {
+  let summary = "Elementwise tensor addition (a + b)";
+  let arguments = (ins TensorType:$lhs, TensorType:$rhs);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
 // RMSNorm (unweighted) over the innermost dimension; eps optional.
 def Tessera_RmsNormOp : Tessera_UnaryPureOp<"rmsnorm", "RMSNorm over the innermost dimension"> {
   let arguments = (ins TensorType:$x,

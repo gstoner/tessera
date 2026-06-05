@@ -25,6 +25,9 @@ void registerTesseraPasses() {
   ::mlir::registerPass([]() { return createTilingPass(); });
   ::mlir::registerPass([]() { return createTileToX86Pass(); });
 
+  // ── Phase 0 production spine — Graph IR → upstream linalg ──────────────────
+  ::mlir::registerPass([]() { return createTesseraToLinalgPass(); });
+
   // Full Phase 2 lowering chain: Graph IR → x86 CPU calls.
   //
   // Pass order (normative — matches docs/spec/LOWERING_PIPELINE_SPEC.md §2.1):

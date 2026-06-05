@@ -109,11 +109,21 @@ def invocation_count() -> int:
 
 # ── Descriptor packing ─────────────────────────────────────────────────────
 
-# Tessera dtype name → (numpy dtype, ctypes elem type, MLIR element-type spell).
-# RUNTIME_ABI_SPEC.md §12.5. f16/bf16 land in a later sprint under this table.
+# Tessera dtype name → (numpy/ml_dtypes dtype, ctypes elem type, MLIR spelling).
+# RUNTIME_ABI_SPEC.md §12.5: bf16 uses ml_dtypes.bfloat16 on the Python side and
+# RAW 16-bit storage at the boundary (ctypes.c_uint16) — the bits are passed
+# through unreinterpreted; the MLIR `bf16` element type gives them meaning.
 _DTYPE_TABLE: dict[str, tuple[Any, Any, str]] = {
     "f32": (np.float32, ctypes.c_float, "f32"),
 }
+
+try:  # bf16 is optional: present iff ml_dtypes is installed (soft dependency).
+    import ml_dtypes as _ml_dtypes
+
+    _BF16 = _ml_dtypes.bfloat16
+    _DTYPE_TABLE["bf16"] = (_BF16, ctypes.c_uint16, "bf16")
+except ImportError:  # pragma: no cover - exercised only on minimal envs
+    _BF16 = None
 
 
 def _dtype_entry(arr: np.ndarray):
@@ -122,6 +132,26 @@ def _dtype_entry(arr: np.ndarray):
             return tag, ct_dt, mlir
     raise TesseraJitError(
         f"Phase 1 boundary supports {sorted(_DTYPE_TABLE)} only (got {arr.dtype})"
+    )
+
+
+def _resolve_elem(arrays: Sequence[np.ndarray]) -> tuple[str, Any]:
+    """Validate that all `arrays` share one supported dtype; return its MLIR
+    element spelling + the numpy/ml_dtypes dtype (for output allocation).
+
+    Mixed dtypes are rejected here rather than silently promoted — the boundary
+    contract is explicit (RUNTIME_ABI_SPEC §12.5: convert on mismatch is the
+    *caller's* responsibility).
+    """
+    dts = {a.dtype for a in arrays}
+    if len(dts) != 1:
+        raise TesseraJitError(f"operands must share one dtype; got {sorted(map(str, dts))}")
+    dt = next(iter(dts))
+    for _tag, (np_dt, _ct, mlir) in _DTYPE_TABLE.items():
+        if dt == np_dt:
+            return mlir, np_dt
+    raise TesseraJitError(
+        f"unsupported dtype {dt}; supported: {sorted(_DTYPE_TABLE)}"
     )
 
 
@@ -254,20 +284,10 @@ def _f32_envelope_check(arrays: Sequence[np.ndarray]) -> None:
             )
 
 
-def _mlir_for_binary(op_name: str, sym: str, shape: tuple[int, ...]) -> str:
-    t = "tensor<" + "x".join(str(s) for s in shape) + "xf32>"
-    return (
-        f"func.func @{sym}(%a: {t}, %b: {t}) -> {t} {{\n"
-        f"  %0 = {op_name} %a, %b : ({t}, {t}) -> {t}\n"
-        f"  return %0 : {t}\n"
-        f"}}\n"
-    )
-
-
 def _jit_binary(op_name: str, sym: str, a: np.ndarray, b: np.ndarray) -> np.ndarray:
     a = np.asarray(a)
     b = np.asarray(b)
-    _f32_envelope_check([a, b])
+    elem, _npdt = _resolve_elem([a, b])  # f32 or bf16; rejects mixed/unsupported
     if a.shape != b.shape:
         raise TesseraJitError(
             f"elementwise requires equal shapes (got {a.shape}, {b.shape})"
@@ -276,7 +296,14 @@ def _jit_binary(op_name: str, sym: str, a: np.ndarray, b: np.ndarray) -> np.ndar
         raise TesseraJitError("Phase 1 boundary requires rank>=1")
     a = np.ascontiguousarray(a)
     b = np.ascontiguousarray(b)
-    handle = compile_module(_mlir_for_binary(op_name, sym, tuple(a.shape)))
+    t = "tensor<" + "x".join(str(s) for s in a.shape) + f"x{elem}>"
+    mlir = (
+        f"func.func @{sym}(%a: {t}, %b: {t}) -> {t} {{\n"
+        f"  %0 = {op_name} %a, %b : ({t}, {t}) -> {t}\n"
+        f"  return %0 : {t}\n"
+        f"}}\n"
+    )
+    handle = compile_module(mlir)
     try:
         out = np.empty_like(a)
         invoke(handle, sym, [a, b], out)
@@ -286,17 +313,17 @@ def _jit_binary(op_name: str, sym: str, a: np.ndarray, b: np.ndarray) -> np.ndar
 
 
 def jit_add(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Production-lane elementwise add (rank>=1 f32). No fallback."""
+    """Production-lane elementwise add (rank>=1, f32 or bf16). No fallback."""
     return _jit_binary("tessera.add", "tessera_jit_add", a, b)
 
 
 def jit_sub(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Production-lane elementwise sub (rank>=1 f32). No fallback."""
+    """Production-lane elementwise sub (rank>=1, f32 or bf16). No fallback."""
     return _jit_binary("tessera.sub", "tessera_jit_sub", a, b)
 
 
 def jit_mul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Production-lane elementwise mul (rank>=1 f32). No fallback."""
+    """Production-lane elementwise mul (rank>=1, f32 or bf16). No fallback."""
     return _jit_binary("tessera.mul", "tessera_jit_mul", a, b)
 
 
@@ -337,36 +364,82 @@ def jit_softmax(a: np.ndarray, axis: int = -1) -> np.ndarray:
         destroy(handle)
 
 
-def jit_matmul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Production-lane rank-2 f32 matmul. No transposes, no fallback."""
+def jit_matmul(
+    a: np.ndarray,
+    b: np.ndarray,
+    transpose_a: bool = False,
+    transpose_b: bool = False,
+) -> np.ndarray:
+    """Production-lane rank-2 matmul (f32, or bf16 storage with f32 accumulate).
+
+    `transpose_a`/`transpose_b` select the attention-shaped variants: with
+    `transpose_b=True`, `b` is stored (N, K) and the op computes `a @ bᵀ`
+    (the `Q @ Kᵀ` pattern). For bf16 the result is bf16 (ABI §12.5: f32
+    accumulate, truncate-on-store, in the JIT lowering). No fallback.
+    """
     a = np.asarray(a)
     b = np.asarray(b)
-    _f32_envelope_check([a, b])
+    elem, npdt = _resolve_elem([a, b])
     if a.ndim != 2 or b.ndim != 2:
         raise TesseraJitError(
             f"Phase 1 jit_matmul is rank-2 only (got {a.shape}, {b.shape})"
         )
-    if a.shape[1] != b.shape[0]:
+    # Logical (M,K) for a and (K,N) for b after honoring the transpose flags.
+    M, Ka = (a.shape[1], a.shape[0]) if transpose_a else (a.shape[0], a.shape[1])
+    Kb, N = (b.shape[1], b.shape[0]) if transpose_b else (b.shape[0], b.shape[1])
+    if Ka != Kb:
         raise TesseraJitError(
-            f"matmul shape mismatch: {a.shape} @ {b.shape}"
+            f"matmul contracting mismatch: a={a.shape} (tA={transpose_a}) "
+            f"b={b.shape} (tB={transpose_b})"
         )
+    M, N = int(M), int(N)
     a = np.ascontiguousarray(a)
     b = np.ascontiguousarray(b)
-    M, K = int(a.shape[0]), int(a.shape[1])
-    N = int(b.shape[1])
-    ta = f"tensor<{M}x{K}xf32>"
-    tb = f"tensor<{K}x{N}xf32>"
-    tc = f"tensor<{M}x{N}xf32>"
+    ta = "tensor<" + "x".join(map(str, a.shape)) + f"x{elem}>"
+    tb = "tensor<" + "x".join(map(str, b.shape)) + f"x{elem}>"
+    tc = f"tensor<{M}x{N}x{elem}>"
+    attrs = []
+    if transpose_a:
+        attrs.append("transposeA = true")
+    if transpose_b:
+        attrs.append("transposeB = true")
+    attr_str = (" {" + ", ".join(attrs) + "}") if attrs else ""
     mlir = (
         f"func.func @tessera_jit_matmul(%a: {ta}, %b: {tb}) -> {tc} {{\n"
-        f"  %0 = tessera.matmul %a, %b : ({ta}, {tb}) -> {tc}\n"
+        f"  %0 = tessera.matmul %a, %b{attr_str} : ({ta}, {tb}) -> {tc}\n"
         f"  return %0 : {tc}\n"
         f"}}\n"
     )
     handle = compile_module(mlir)
     try:
-        out = np.empty((M, N), dtype=np.float32)
+        out = np.empty((M, N), dtype=npdt)
         invoke(handle, "tessera_jit_matmul", [a, b], out)
+        return out
+    finally:
+        destroy(handle)
+
+
+def jit_transpose(a: np.ndarray) -> np.ndarray:
+    """Production-lane rank-2 transpose (f32 or bf16). No fallback."""
+    a = np.asarray(a)
+    elem, npdt = _resolve_elem([a])
+    if a.ndim != 2:
+        raise TesseraJitError(f"Phase 1 jit_transpose is rank-2 only (got {a.shape})")
+    a = np.ascontiguousarray(a)
+    M, N = int(a.shape[0]), int(a.shape[1])
+    ti = f"tensor<{M}x{N}x{elem}>"
+    to = f"tensor<{N}x{M}x{elem}>"
+    sym = "tessera_jit_transpose"
+    mlir = (
+        f"func.func @{sym}(%x: {ti}) -> {to} {{\n"
+        f"  %0 = tessera.transpose %x : ({ti}) -> {to}\n"
+        f"  return %0 : {to}\n"
+        f"}}\n"
+    )
+    handle = compile_module(mlir)
+    try:
+        out = np.empty((N, M), dtype=npdt)
+        invoke(handle, sym, [a], out)
         return out
     finally:
         destroy(handle)
@@ -478,3 +551,56 @@ def jit_layer_norm(a: np.ndarray, eps: float = 1e-5) -> np.ndarray:
     ``(x - mean) / sqrt(var + eps)``. No fallback.
     """
     return _jit_norm("tessera.layer_norm", "tessera_jit_layer_norm", a, eps)
+
+
+# ── Activations (Phase 1 Sprint 1.6: unary math family) ──────────────────────
+
+
+def _jit_unary(op_name: str, sym: str, a: np.ndarray) -> np.ndarray:
+    a = np.asarray(a)
+    _f32_envelope_check([a])  # f32 keeps the oracle tight (bf16 acts: later)
+    if a.ndim < 1:
+        raise TesseraJitError("Phase 1 unary requires rank>=1")
+    a = np.ascontiguousarray(a)
+    t = "tensor<" + "x".join(str(s) for s in a.shape) + "xf32>"
+    mlir = (
+        f"func.func @{sym}(%x: {t}) -> {t} {{\n"
+        f"  %0 = {op_name} %x : ({t}) -> {t}\n"
+        f"  return %0 : {t}\n"
+        f"}}\n"
+    )
+    handle = compile_module(mlir)
+    try:
+        out = np.empty_like(a)
+        invoke(handle, sym, [a], out)
+        return out
+    finally:
+        destroy(handle)
+
+
+def jit_relu(a: np.ndarray) -> np.ndarray:
+    """Production-lane ReLU = max(x, 0) (f32). No fallback."""
+    return _jit_unary("tessera.relu", "tessera_jit_relu", a)
+
+
+def jit_sigmoid(a: np.ndarray) -> np.ndarray:
+    """Production-lane sigmoid = 1/(1+exp(-x)) (f32). No fallback."""
+    return _jit_unary("tessera.sigmoid", "tessera_jit_sigmoid", a)
+
+
+def jit_tanh(a: np.ndarray) -> np.ndarray:
+    """Production-lane tanh (f32). No fallback."""
+    return _jit_unary("tessera.tanh", "tessera_jit_tanh", a)
+
+
+def jit_silu(a: np.ndarray) -> np.ndarray:
+    """Production-lane SiLU/swish = x*sigmoid(x) (f32). No fallback."""
+    return _jit_unary("tessera.silu", "tessera_jit_silu", a)
+
+
+def jit_gelu(a: np.ndarray) -> np.ndarray:
+    """Production-lane GELU, tanh approximation (GPT-2/BERT form, f32).
+
+    ``0.5*x*(1 + tanh(sqrt(2/pi)*(x + 0.044715*x³)))``. No fallback.
+    """
+    return _jit_unary("tessera.gelu", "tessera_jit_gelu", a)

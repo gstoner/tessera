@@ -16,6 +16,9 @@
 //                             use of broadcast affine maps + the math dialect)
 //            tessera.{rmsnorm,layer_norm} (mean-reduce + broadcast + math.sqrt;
 //                             unweighted, innermost axis, eps default 1e-5)
+//            tessera.{relu,sigmoid,tanh,silu,gelu} (unary math family; gelu is
+//                             the tanh approximation; bf16/f16-aware)
+//   bf16: matmul accumulates in f32 then truncf to storage dtype (ABI §12.5)
 //
 // Decisions:
 //   - Match by op-name string (RewritePattern). Avoids leaking generated op
@@ -47,6 +50,12 @@
 using namespace mlir;
 
 namespace {
+
+// Forward declaration: defined with the reduction/broadcast helpers below, but
+// used earlier by MatmulLowering (bf16 truncf epilogue).
+static Value emitUnaryElementwise(
+    PatternRewriter &rewriter, Location loc, RankedTensorType ty, Value input,
+    function_ref<Value(OpBuilder &, Location, Value)> fn);
 
 // ── Binary elementwise ─────────────────────────────────────────────────────
 
@@ -123,11 +132,24 @@ struct BinaryEltwiseLowering : public RewritePattern {
   }
 };
 
-// ── tessera.matmul ─────────────────────────────────────────────────────────
+// ── transpose / matmul ─────────────────────────────────────────────────────
 
-// Rank-2 only; no transposes; accumulator policy ignored for now (Phase 1
-// scope). linalg.matmul takes (lhs: MxK, rhs: KxN) → out: MxN with
-// accumulation, so we zero-fill the DPS init first.
+// Rank-2 transpose via linalg.transpose (DPS). Used both standalone
+// (tessera.transpose) and by matmul to materialize transposed operands.
+static Value emitTranspose2d(PatternRewriter &rewriter, Location loc, Value in) {
+  auto ty = cast<RankedTensorType>(in.getType());
+  ArrayRef<int64_t> sh = ty.getShape();
+  SmallVector<int64_t> outShape = {sh[1], sh[0]};
+  Value init =
+      tensor::EmptyOp::create(rewriter, loc, outShape, ty.getElementType());
+  return linalg::TransposeOp::create(rewriter, loc, in, init,
+                                     ArrayRef<int64_t>{1, 0})
+      .getResults()[0];
+}
+
+// Rank-2; transposeA/transposeB supported by transposing the operand first;
+// bf16/f16 accumulate in f32 then truncf. linalg.matmul takes (lhs: MxK,
+// rhs: KxN) → out: MxN with accumulation into a zero-filled DPS init.
 struct MatmulLowering : public RewritePattern {
   MatmulLowering(MLIRContext *ctx)
       : RewritePattern("tessera.matmul", /*benefit=*/1, ctx) {}
@@ -142,21 +164,29 @@ struct MatmulLowering : public RewritePattern {
                                 PatternRewriter &rewriter) const override {
     if (op->getNumOperands() != 2 || op->getNumResults() != 1)
       return failure();
-    if (attrIsSetTrue(op, "transposeA") || attrIsSetTrue(op, "transposeB"))
-      return rewriter.notifyMatchFailure(
-          op, "Phase 1 does not yet support transposeA/transposeB");
 
-    auto lhsTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
-    auto rhsTy = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto lhsTy0 = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto rhsTy0 = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
     auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
-    if (!lhsTy || !rhsTy || !outTy)
+    if (!lhsTy0 || !rhsTy0 || !outTy)
       return failure();
-    if (lhsTy.getRank() != 2 || rhsTy.getRank() != 2 || outTy.getRank() != 2)
-      return rewriter.notifyMatchFailure(op,
-                                         "Phase 1 matmul is rank-2 only");
-    if (!lhsTy.hasStaticShape() || !rhsTy.hasStaticShape() ||
+    if (lhsTy0.getRank() != 2 || rhsTy0.getRank() != 2 || outTy.getRank() != 2)
+      return rewriter.notifyMatchFailure(op, "Phase 1 matmul is rank-2 only");
+    if (!lhsTy0.hasStaticShape() || !rhsTy0.hasStaticShape() ||
         !outTy.hasStaticShape())
       return rewriter.notifyMatchFailure(op, "static shapes required");
+
+    Location loc = op->getLoc();
+    // transposeA: A stored KxM; transposeB: B stored NxK. Materialize the
+    // transpose, then a plain matmul. (The op verifier already checked the
+    // post-transpose contracting dims agree.)
+    Value lhs = op->getOperand(0), rhs = op->getOperand(1);
+    if (attrIsSetTrue(op, "transposeA"))
+      lhs = emitTranspose2d(rewriter, loc, lhs);
+    if (attrIsSetTrue(op, "transposeB"))
+      rhs = emitTranspose2d(rewriter, loc, rhs);
+    auto lhsTy = cast<RankedTensorType>(lhs.getType());
+    auto rhsTy = cast<RankedTensorType>(rhs.getType());
 
     int64_t M = lhsTy.getDimSize(0), K = lhsTy.getDimSize(1);
     int64_t K2 = rhsTy.getDimSize(0), N = rhsTy.getDimSize(1);
@@ -165,21 +195,37 @@ struct MatmulLowering : public RewritePattern {
 
     Type elem = outTy.getElementType();
     if (!isa<FloatType>(elem))
-      return rewriter.notifyMatchFailure(
-          op, "Phase 1 matmul is float-only (i.e. f32)");
+      return rewriter.notifyMatchFailure(op, "Phase 1 matmul is float-only");
 
-    Location loc = op->getLoc();
-    Value empty = tensor::EmptyOp::create(rewriter, loc, outTy.getShape(), elem);
-    auto zeroAttr = rewriter.getFloatAttr(elem, 0.0);
-    Value zero = arith::ConstantOp::create(rewriter, loc, elem, zeroAttr);
+    // ABI §12.5 / numeric policy: low-precision storage matmul accumulates in
+    // f32. For bf16/f16 we run linalg.matmul into an f32 init (the named op
+    // casts the low-precision inputs up), then truncate the result back to the
+    // storage dtype. f32 storage accumulates in f32 directly.
+    bool lowPrecision = elem.isBF16() || elem.isF16();
+    Type accElem = lowPrecision ? rewriter.getF32Type() : elem;
+    auto accTy = RankedTensorType::get(outTy.getShape(), accElem);
+
+    Value empty =
+        tensor::EmptyOp::create(rewriter, loc, outTy.getShape(), accElem);
+    Value zero = arith::ConstantOp::create(rewriter, loc, accElem,
+                                           rewriter.getFloatAttr(accElem, 0.0));
     Value filled = linalg::FillOp::create(rewriter, loc, ValueRange{zero},
                                           ValueRange{empty})
                        .getResult(0);
-    Value out = linalg::MatmulOp::create(
-                    rewriter, loc, TypeRange{outTy},
-                    ValueRange{op->getOperand(0), op->getOperand(1)},
-                    ValueRange{filled})
+    Value acc = linalg::MatmulOp::create(rewriter, loc, TypeRange{accTy},
+                                         ValueRange{lhs, rhs},
+                                         ValueRange{filled})
                     .getResult(0);
+
+    Value out = acc;
+    if (lowPrecision) {
+      // truncf f32 accumulator -> storage dtype (bf16/f16).
+      out = emitUnaryElementwise(
+          rewriter, loc, outTy, acc,
+          [&](OpBuilder &b, Location l, Value a) -> Value {
+            return arith::TruncFOp::create(b, l, elem, a).getResult();
+          });
+    }
     rewriter.replaceOp(op, out);
     return success();
   }
@@ -536,6 +582,107 @@ struct LayerNormLowering : public RewritePattern {
   }
 };
 
+// ── Activations (unary math family) ────────────────────────────────────────
+
+enum class ActKind { Relu, Sigmoid, Tanh, Silu, Gelu };
+
+// Per-scalar activation body. All float; uses math.{exp,tanh} (lowered via
+// convert-math-to-llvm) + arith. gelu is the tanh approximation (GPT-2/BERT
+// form) — avoids math.erf, which has no standard LLVM-intrinsic lowering.
+static Value emitActScalar(OpBuilder &b, Location loc, ActKind kind, Value x,
+                           Type elem) {
+  auto cst = [&](double v) -> Value {
+    return arith::ConstantOp::create(b, loc, elem, b.getFloatAttr(elem, v))
+        .getResult();
+  };
+  switch (kind) {
+  case ActKind::Relu:
+    return arith::MaximumFOp::create(b, loc, x, cst(0.0)).getResult();
+  case ActKind::Tanh:
+    return math::TanhOp::create(b, loc, x).getResult();
+  case ActKind::Sigmoid: {
+    Value negx = arith::NegFOp::create(b, loc, x).getResult();
+    Value e = math::ExpOp::create(b, loc, negx).getResult();
+    Value one = cst(1.0);
+    Value denom = arith::AddFOp::create(b, loc, one, e).getResult();
+    return arith::DivFOp::create(b, loc, one, denom).getResult();
+  }
+  case ActKind::Silu: {
+    Value sig = emitActScalar(b, loc, ActKind::Sigmoid, x, elem);
+    return arith::MulFOp::create(b, loc, x, sig).getResult();
+  }
+  case ActKind::Gelu: {
+    // 0.5 * x * (1 + tanh( sqrt(2/pi) * (x + 0.044715 x³) ))
+    Value x2 = arith::MulFOp::create(b, loc, x, x).getResult();
+    Value x3 = arith::MulFOp::create(b, loc, x2, x).getResult();
+    Value inner = arith::AddFOp::create(
+                      b, loc, x,
+                      arith::MulFOp::create(b, loc, cst(0.044715), x3)
+                          .getResult())
+                      .getResult();
+    Value scaled =
+        arith::MulFOp::create(b, loc, cst(0.7978845608028654), inner)
+            .getResult();
+    Value t = math::TanhOp::create(b, loc, scaled).getResult();
+    Value onePlus = arith::AddFOp::create(b, loc, cst(1.0), t).getResult();
+    Value hx = arith::MulFOp::create(b, loc, cst(0.5), x).getResult();
+    return arith::MulFOp::create(b, loc, hx, onePlus).getResult();
+  }
+  }
+  llvm_unreachable("unhandled ActKind");
+}
+
+struct UnaryActLowering : public RewritePattern {
+  ActKind kind;
+  UnaryActLowering(MLIRContext *ctx, StringRef opName, ActKind k)
+      : RewritePattern(opName, /*benefit=*/1, ctx), kind(k) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return failure();
+    auto ty = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!ty || !ty.hasStaticShape())
+      return rewriter.notifyMatchFailure(op, "static-shape tensor required");
+    Type elem = ty.getElementType();
+    if (!isa<FloatType>(elem))
+      return rewriter.notifyMatchFailure(op, "float-only");
+    ActKind k = kind;
+    Value out = emitUnaryElementwise(
+        rewriter, op->getLoc(), ty, op->getOperand(0),
+        [&](OpBuilder &b, Location l, Value a) -> Value {
+          return emitActScalar(b, l, k, a, elem);
+        });
+    rewriter.replaceOp(op, out);
+    return success();
+  }
+};
+
+// tessera.transpose (rank-2; the result type fixes the permutation as [1,0]).
+struct TransposeLowering : public RewritePattern {
+  TransposeLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.transpose", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return failure();
+    auto inTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!inTy || !outTy || !inTy.hasStaticShape() || !outTy.hasStaticShape())
+      return rewriter.notifyMatchFailure(op, "static-shape tensors required");
+    if (inTy.getRank() != 2)
+      return rewriter.notifyMatchFailure(
+          op, "Phase 1 transpose is rank-2 only (op has no permutation attr)");
+    if (outTy.getDimSize(0) != inTy.getDimSize(1) ||
+        outTy.getDimSize(1) != inTy.getDimSize(0))
+      return rewriter.notifyMatchFailure(op, "result must be the [1,0] transpose");
+    rewriter.replaceOp(op,
+                       emitTranspose2d(rewriter, op->getLoc(), op->getOperand(0)));
+    return success();
+  }
+};
+
 // ── Pass ───────────────────────────────────────────────────────────────────
 
 class TesseraToLinalgPass
@@ -562,10 +709,16 @@ public:
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.mul", BinaryKind::Mul);
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.div", BinaryKind::Div);
     patterns.add<MatmulLowering>(ctx);
+    patterns.add<TransposeLowering>(ctx);
     patterns.add<ReduceLowering>(ctx);
     patterns.add<SoftmaxLowering>(ctx);
     patterns.add<RmsNormLowering>(ctx);
     patterns.add<LayerNormLowering>(ctx);
+    patterns.add<UnaryActLowering>(ctx, "tessera.relu", ActKind::Relu);
+    patterns.add<UnaryActLowering>(ctx, "tessera.sigmoid", ActKind::Sigmoid);
+    patterns.add<UnaryActLowering>(ctx, "tessera.tanh", ActKind::Tanh);
+    patterns.add<UnaryActLowering>(ctx, "tessera.silu", ActKind::Silu);
+    patterns.add<UnaryActLowering>(ctx, "tessera.gelu", ActKind::Gelu);
     if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
       signalPassFailure();
   }

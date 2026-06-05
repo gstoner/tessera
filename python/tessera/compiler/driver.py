@@ -309,7 +309,11 @@ def compile_graph_module(
     value_mode_error: str | None = None
     if str((options or {}).get("apple_target_ir_mode", "")) == "value" \
             and target_kind in ("apple_cpu", "apple_gpu"):
-        value_ir, value_mode_error = _lower_apple_value_target_ir(graph_text, target_kind)
+        # Feed the *canonical* (parseable custom-assembly) Graph IR straight to
+        # the value pipeline — no text rewrite. `graph_text` above is the paren
+        # form kept for hashing / display; the canonical render is parser-ready.
+        value_ir, value_mode_error = _lower_apple_value_target_ir(
+            module.to_mlir(verify=False, canonical=True), target_kind)
         if value_ir:
             target_artifact = LoweringArtifact("target", value_ir)
             # CPU value calls are executable now; the GPU value row stays gated
@@ -1072,19 +1076,13 @@ def _lower_apple_value_target_ir(
     if not tool:
         return None, "tessera-opt not found (set TESSERA_OPT, add to PATH, or build build/tools/tessera-opt)"
     pipeline = f"tessera-lower-to-{target_kind}-full"
-    # The Python Graph-IR emitter prints `tessera.op(%operands)` (paren form),
-    # but the registered ops' custom assembly is `tessera.op %operands` (no
-    # parens). Normalize operand parens to the custom format the parser expects
-    # — only on `tessera.*` invocations followed by an attr dict or the `:` type
-    # signature (so functional-type parens are left intact).
-    #
-    # The op-name class includes `.` so multi-segment dotted names
-    # (`tessera.ebm.langevin_step`, `tessera.attn.online_softmax`, ...) are
-    # normalized too — `[A-Za-z0-9_]+` stopped at the first dot, leaving the
-    # paren form on dotted ops and breaking the parse with "expected ':'".
-    parse_text = re.sub(
-        r"(\btessera\.[A-Za-z0-9_.]+)\(([^()]*)\)(\s*\{|\s*:)",
-        r"\1 \2\3", graph_text)
+    # `graph_text` is expected to be the CANONICAL (parseable custom-assembly)
+    # Graph IR render — `GraphIRModule.to_mlir(canonical=True)`. No text rewrite
+    # happens here anymore: the previous `tessera.op(...)` -> `tessera.op ...`
+    # regex was a fragile pre-parse seam (it mishandled nested operand parens and
+    # — until recently — dotted op names). The canonical render emits the form the
+    # parser already accepts, so the seam is gone.
+    parse_text = graph_text
     try:
         # Sprint 9: the Apple value lane runs against the *registered* Tile IR
         # dialect — no `--allow-unregistered-dialect`. If a tile.* op were

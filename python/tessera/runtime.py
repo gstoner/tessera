@@ -3164,6 +3164,74 @@ def _apple_gpu_ppo_policy_loss_ex_available() -> bool:
     return _APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE
 
 
+_APPLE_VALUE_COMPILE_PIPELINE_OK: bool | None = None
+
+
+def _apple_value_compile_pipeline_available() -> bool:
+    """True iff the apple_gpu VALUE COMPILE pipeline yields an executable value
+    artifact (metadata ``compiler_path == 'apple_value_target_ir'``) for a
+    representative dotted op.
+
+    This complements the per-op *runtime* probes below. Those bind a runtime
+    kernel symbol and run a tiny numerical check — but they say nothing about
+    whether the *compile* path still produces a value artifact. If the compile
+    path silently degrades while a runtime kernel is present (a broken
+    Graph-IR → tessera-opt seam, a missing/regressed apple value pipeline, or no
+    tessera-opt at all), a ``*_value_available()`` probe would otherwise report
+    True and the value tests — which assert on ``metadata['compiler_path']`` —
+    would KeyError instead of skipping. Gating those probes on this check makes
+    them SKIP.
+
+    Scope: the seam/pipeline regression class is uniform across dotted value ops,
+    so one representative op (``tessera.ebm.langevin_step``) suffices to detect
+    it. A genuinely op-specific compile gap still relies on that op's runtime
+    probe. Cached (the compile is run at most once per process).
+    """
+    global _APPLE_VALUE_COMPILE_PIPELINE_OK
+    if _APPLE_VALUE_COMPILE_PIPELINE_OK is not None:
+        return _APPLE_VALUE_COMPILE_PIPELINE_OK
+    ok = False
+    try:
+        from .compiler.canonical_compile import canonical_compile
+        from .compiler.graph_ir import (
+            GraphIRFunction, GraphIRModule, IRArg, IROp, IRType,
+        )
+
+        t = "tensor<2x3xf32>"
+        ty = IRType(t, ("2", "3"), "fp32")
+        op = IROp(
+            result="o", op_name="tessera.ebm.langevin_step",
+            operands=["%a0", "%a1", "%a2"], operand_types=[t, t, t],
+            result_type=t, kwargs={"eta": 0.125, "noise_scale": 0.25},
+        )
+        module = GraphIRModule(functions=[GraphIRFunction(
+            name="f", args=[IRArg(f"a{i}", ty) for i in range(3)],
+            result_types=[ty], body=[op], return_values=["%o"])])
+        art = canonical_compile(
+            module, target="apple_gpu",
+            options={"apple_target_ir_mode": "value"}).to_runtime_artifact()
+        ok = (art.metadata or {}).get("compiler_path") == "apple_value_target_ir"
+    except Exception:  # noqa: BLE001 — any failure means "not available"
+        ok = False
+    _APPLE_VALUE_COMPILE_PIPELINE_OK = ok
+    return ok
+
+
+def _require_value_compile_pipeline(probe):
+    """Decorator: a value-availability probe is only True if the runtime kernel
+    AND the value COMPILE pipeline are both available (so tests skip, not
+    KeyError, when the compile path has silently degraded)."""
+
+    def gated() -> bool:
+        return _apple_value_compile_pipeline_available() and probe()
+
+    gated.__name__ = probe.__name__
+    gated.__doc__ = probe.__doc__
+    gated.__wrapped__ = probe
+    return gated
+
+
+@_require_value_compile_pipeline
 def _apple_gpu_ebm_energy_quadratic_value_available() -> bool:
     """True iff the EBM energy value ABI runs a tiny Metal numerical probe."""
     global _APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE
@@ -3192,6 +3260,7 @@ def _apple_gpu_ebm_energy_quadratic_value_available() -> bool:
     return _APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE
 
 
+@_require_value_compile_pipeline
 def _apple_gpu_ebm_langevin_step_value_available() -> bool:
     """True iff the EBM Langevin value ABI runs a tiny Metal numerical probe."""
     global _APPLE_GPU_EBM_LANGEVIN_STEP_AVAILABLE
@@ -3263,6 +3332,7 @@ def _clifford_geo_product_cl30_np(np, a, b):
     return c
 
 
+@_require_value_compile_pipeline
 def _apple_gpu_ebm_refinement_value_available() -> bool:
     """True iff deterministic EBM refinement runs a tiny Metal probe."""
     global _APPLE_GPU_EBM_REFINEMENT_AVAILABLE
@@ -3294,6 +3364,7 @@ def _apple_gpu_ebm_refinement_value_available() -> bool:
     return _APPLE_GPU_EBM_REFINEMENT_AVAILABLE
 
 
+@_require_value_compile_pipeline
 def _apple_gpu_ebm_partition_exact_value_available() -> bool:
     """True iff scalar EBM partition exact runs a tiny Metal probe."""
     global _APPLE_GPU_EBM_PARTITION_EXACT_AVAILABLE
@@ -3322,6 +3393,7 @@ def _apple_gpu_ebm_partition_exact_value_available() -> bool:
     return _APPLE_GPU_EBM_PARTITION_EXACT_AVAILABLE
 
 
+@_require_value_compile_pipeline
 def _apple_gpu_clifford_geo_product_cl30_value_available() -> bool:
     """True iff cl30 Clifford geometric product runs a tiny Metal probe."""
     global _APPLE_GPU_CLIFFORD_GEO_PRODUCT_AVAILABLE

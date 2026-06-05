@@ -424,7 +424,7 @@ class IROp:
             return []
         return [n.strip() for n in self.result.split(",") if n.strip()]
 
-    def to_mlir(self, indent: str = "  ") -> str:
+    def to_mlir(self, indent: str = "  ", *, canonical: bool = False) -> str:
         ops_str = ", ".join(self.operands)
         types_in = ", ".join(self.operand_types)
         names = self.result_names
@@ -456,6 +456,17 @@ class IROp:
                 + ">"
             )
         attr_str = f" {{{', '.join(attr_parts)}}}" if attr_parts else ""
+        if canonical:
+            # Parseable custom-assembly form: `op %operands {attrs} : type` — no
+            # parens around the operands, so it round-trips through tessera-opt's
+            # parser directly. This is the dialect's own printed form and lets the
+            # driver feed Graph IR to the Apple value pipeline WITHOUT the old
+            # fragile text rewrite (the `tessera.op(...)` -> `tessera.op ...`
+            # regex, which also mishandled nested parens / dotted op names). The
+            # default (non-canonical) form below keeps the paren rendering used by
+            # human-inspection / golden-text consumers unchanged.
+            operand_part = f" {ops_str}" if ops_str else ""
+            return f"{indent}{lhs}{self.op_name}{operand_part}{attr_str}{type_str}"
         return f"{indent}{lhs}{self.op_name}({ops_str}){attr_str}{type_str}"
 
 
@@ -498,7 +509,7 @@ class GraphIRModule:
     def verify(self) -> "GraphIRVerificationResult":
         return GraphIRVerifier().verify_module(self)
 
-    def to_mlir(self, *, verify: bool = True) -> str:
+    def to_mlir(self, *, verify: bool = True, canonical: bool = False) -> str:
         if verify:
             result = self.verify()
             if not result.ok:
@@ -507,7 +518,7 @@ class GraphIRModule:
         attr_lines = ", ".join(f"{k} = {v}" for k, v in attrs.items())
         lines = [f"module attributes {{{attr_lines}}} {{"]
         for fn in self.functions:
-            for line in fn.to_mlir().splitlines():
+            for line in fn.to_mlir(canonical=canonical).splitlines():
                 lines.append("  " + line)
         lines.append("}")
         return "\n".join(lines)
@@ -567,7 +578,7 @@ class GraphIRFunction:
     proofs.  ``None`` when the producer doesn't have the source
     (e.g., textual-DSL parse without a backing file)."""
 
-    def to_mlir(self, *, verify: bool = False) -> str:
+    def to_mlir(self, *, verify: bool = False, canonical: bool = False) -> str:
         if verify:
             result = GraphIRVerifier().verify_function(self)
             if not result.ok:
@@ -583,7 +594,7 @@ class GraphIRFunction:
             attr_str = f" attributes {{{pairs}}}"
         lines = [f"func.func @{self.name}({args_str}){ret_str}{attr_str} {{"]
         for op in self.body:
-            lines.append(op.to_mlir())
+            lines.append(op.to_mlir(canonical=canonical))
         if self.return_values:
             values = ", ".join(self.return_values)
             types = ", ".join(str(t) for t in self.result_types)

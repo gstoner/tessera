@@ -211,6 +211,49 @@ struct MaskedFillLowering : public RewritePattern {
   }
 };
 
+// tessera.write_row(buffer (T,D), value (1,D), {row}) -> buffer with row `row`
+// set to value. Lowers to tensor.insert_slice (value-semantic; bufferization may
+// place it in-place). This is the functional KV-cache update primitive.
+struct WriteRowLowering : public RewritePattern {
+  WriteRowLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.write_row", /*benefit=*/1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return failure();
+    auto bufTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto valTy = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!bufTy || !valTy || !outTy || bufTy != outTy ||
+        !bufTy.hasStaticShape() || !valTy.hasStaticShape())
+      return rewriter.notifyMatchFailure(op, "static-shape, result==buffer");
+    if (bufTy.getRank() != 2 || valTy.getRank() != 2)
+      return rewriter.notifyMatchFailure(op, "write_row is rank-2 (T,D)<-(1,D)");
+    int64_t T = bufTy.getDimSize(0), D = bufTy.getDimSize(1);
+    if (valTy.getDimSize(0) != 1 || valTy.getDimSize(1) != D)
+      return rewriter.notifyMatchFailure(op, "value must be (1, D)");
+    auto rowAttr = op->getAttrOfType<IntegerAttr>("row");
+    if (!rowAttr)
+      return rewriter.notifyMatchFailure(op, "missing row attr");
+    int64_t row = rowAttr.getInt();
+    if (row < 0 || row >= T)
+      return rewriter.notifyMatchFailure(op, "row out of range");
+
+    Location loc = op->getLoc();
+    SmallVector<OpFoldResult> offsets = {rewriter.getIndexAttr(row),
+                                         rewriter.getIndexAttr(0)};
+    SmallVector<OpFoldResult> sizes = {rewriter.getIndexAttr(1),
+                                       rewriter.getIndexAttr(D)};
+    SmallVector<OpFoldResult> strides = {rewriter.getIndexAttr(1),
+                                         rewriter.getIndexAttr(1)};
+    Value out = tensor::InsertSliceOp::create(rewriter, loc, op->getOperand(1),
+                                              op->getOperand(0), offsets, sizes,
+                                              strides);
+    rewriter.replaceOp(op, out);
+    return success();
+  }
+};
+
 // ── transpose / matmul ─────────────────────────────────────────────────────
 
 // Rank-2 transpose via linalg.transpose (DPS). Used both standalone
@@ -852,6 +895,7 @@ public:
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.div", BinaryKind::Div);
     patterns.add<SelectLowering>(ctx);
     patterns.add<MaskedFillLowering>(ctx);
+    patterns.add<WriteRowLowering>(ctx);
     patterns.add<MatmulLowering>(ctx);
     patterns.add<BatchedGemmLowering>(ctx);
     patterns.add<TransposeLowering>(ctx);

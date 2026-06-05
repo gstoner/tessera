@@ -9,8 +9,8 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `real` | 73 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 9 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
-| `no_verifier` | 61 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 143 | |
+| `no_verifier` | 62 | No verifier declared.  TD constraints suffice — fine for many ops. |
+| **Total** | 144 | |
 
 ## Per-dialect details
 
@@ -151,6 +151,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `TanhOp` | `no_verifier` |
 | `TransposeOp` | `real` |
 | `TriSolveOp` | `real` |
+| `WriteRowOp` | `no_verifier` |
 
 ### `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td`
 

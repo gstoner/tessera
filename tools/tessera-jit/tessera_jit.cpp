@@ -131,20 +131,27 @@ void maybeTrace(PassManager &pm) {
 // symbol, negligible cost.
 LogicalResult rewriteResultsToOutParams(ModuleOp module) {
   for (auto fn : module.getOps<func::FuncOp>()) {
-    if (fn.getNumResults() != 1)
+    if (fn.getNumResults() == 0 || fn.isExternal())
       continue;
-    auto memrefTy = dyn_cast<MemRefType>(fn.getResultTypes()[0]);
-    if (!memrefTy)
+    // Every result must be a memref to apply DPS; otherwise leave the function.
+    bool allMemref = llvm::all_of(fn.getResultTypes(), [](Type t) {
+      return isa<MemRefType>(t);
+    });
+    if (!allMemref)
       continue;
-    if (fn.isExternal())
-      continue;
+
     Block &entry = fn.getBody().front();
     auto retOp = cast<func::ReturnOp>(entry.getTerminator());
-    Value ret = retOp.getOperand(0);
+    SmallVector<Value> rets(retOp.getOperands());
 
-    BlockArgument outArg = entry.addArgument(memrefTy, fn.getLoc());
     OpBuilder b(retOp);
-    memref::CopyOp::create(b, retOp.getLoc(), ret, outArg);
+    // Append one out-param per result (in result order, after the inputs) and
+    // copy each result into it. c-iface order becomes (inputs..., out0, out1...).
+    for (Value ret : rets) {
+      auto memrefTy = cast<MemRefType>(ret.getType());
+      BlockArgument outArg = entry.addArgument(memrefTy, fn.getLoc());
+      memref::CopyOp::create(b, retOp.getLoc(), ret, outArg);
+    }
     func::ReturnOp::create(b, retOp.getLoc());
     retOp.erase();
     fn.setType(
@@ -153,14 +160,25 @@ LogicalResult rewriteResultsToOutParams(ModuleOp module) {
   return success();
 }
 
-// Mark every non-external function for C-interface wrapper emission. The c-iface
-// (`_mlir_ciface_<name>`) is what we look up in the ExecutionEngine and what
-// `invokePacked` ultimately calls.
+// Mark every non-external function for C-interface wrapper emission, and mark
+// its tensor arguments read-only. The c-iface (`_mlir_ciface_<name>`) is what we
+// look up in the ExecutionEngine. The read-only marking is an ABI guarantee:
+// inputs must not be mutated (DPS — inputs read, outputs written). Without it,
+// one-shot-bufferize may write in-place into a caller's input buffer (e.g.
+// tensor.insert_slice for write_row), silently corrupting it; `writable = false`
+// forces a copy instead.
 void markCInterface(ModuleOp module) {
-  auto unit = UnitAttr::get(module->getContext());
-  for (auto fn : module.getOps<func::FuncOp>())
-    if (!fn.isExternal())
-      fn->setAttr("llvm.emit_c_interface", unit);
+  MLIRContext *ctx = module->getContext();
+  auto unit = UnitAttr::get(ctx);
+  auto notWritable = BoolAttr::get(ctx, false);
+  for (auto fn : module.getOps<func::FuncOp>()) {
+    if (fn.isExternal())
+      continue;
+    fn->setAttr("llvm.emit_c_interface", unit);
+    for (unsigned i = 0, e = fn.getNumArguments(); i < e; ++i)
+      if (isa<RankedTensorType>(fn.getArgument(i).getType()))
+        fn.setArgAttr(i, "bufferization.writable", notWritable);
+  }
 }
 
 LogicalResult buildAndRunPipeline(ModuleOp module) {

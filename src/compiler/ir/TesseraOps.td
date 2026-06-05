@@ -996,6 +996,16 @@ def Tessera_MaskedFillOp : Op<Tessera_Dialect, "masked_fill", [Pure]> {
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
+// Phase 2 state — functional KV-cache update. Writes `value` (1 x D) into row
+// `row` of `buffer` (T x D), returning the updated buffer (value-semantic; the
+// caller threads the cache across decode steps). Lowers to tensor.insert_slice.
+def Tessera_WriteRowOp : Op<Tessera_Dialect, "write_row", [Pure]> {
+  let summary = "Functional row update: buffer with row `row` set to value";
+  let arguments = (ins TensorType:$buffer, TensorType:$value, I64Attr:$row);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
 // Phase 1 Sprint 1.2 — single-axis reduction. One parameterized op
 // (`kind` ∈ {sum, max, min, mean}, `axis`) lowered to linalg.reduce + an
 // identity-fill init, mirroring how linalg.reduce is itself parameterized

@@ -197,15 +197,18 @@ def _row_major_strides(shape: Sequence[int]) -> list[int]:
     return strides
 
 
-def _make_descriptor(arr: np.ndarray, elem_ct: Any):
+def _make_descriptor(arr: np.ndarray, elem_ct: Any = None):
     """Build a memref descriptor for `arr`. RUNTIME_ABI_SPEC §12.2 / §12.4:
-    identity layout, C-contiguous, offset 0.
+    identity layout, C-contiguous, offset 0. The element ctype is derived from
+    `arr`'s own dtype (so different args/outs may have different dtypes).
     """
     if not arr.flags.c_contiguous:
         raise TesseraJitError(
             "boundary buffers must be C-contiguous (§12.4); "
             "caller must materialize a contiguous copy"
         )
+    if elem_ct is None:
+        _, elem_ct, _ = _dtype_entry(arr)
     rank = arr.ndim
     Desc = _descriptor_struct(rank, elem_ct)
     ptr = arr.ctypes.data_as(ctypes.POINTER(elem_ct))
@@ -330,18 +333,22 @@ def _free_cache_at_exit() -> None:  # pragma: no cover - process teardown
 
 
 def invoke(
-    handle: int, symbol: str, arrays: Sequence[np.ndarray], out: np.ndarray
+    handle: int,
+    symbol: str,
+    arrays: Sequence[np.ndarray],
+    out,
 ) -> None:
     """Invoke a compiled function via the C ABI.
 
-    ``arrays`` is the list of *input* arrays (c-iface order, all f32 in Phase 1).
-    ``out`` is the caller-allocated destination (DPS, §12.3). All buffers must
-    be C-contiguous identity-layout f32. Raises :class:`TesseraJitError` on any
+    ``arrays`` is the list of *input* arrays (c-iface order). ``out`` is the
+    caller-allocated destination — a single ndarray, or a list/tuple of them for
+    a multi-result function (DPS out-params in result order, §12.3). Each buffer's
+    dtype is read from the array itself. Raises :class:`TesseraJitError` on any
     failure — never silently falls back.
     """
     lib = _load()
-    _, elem_ct, _ = _dtype_entry(out)  # out determines dtype family
-    descs = [_make_descriptor(a, elem_ct) for a in (*arrays, out)]
+    outs = list(out) if isinstance(out, (list, tuple)) else [out]
+    descs = [_make_descriptor(a) for a in (*arrays, *outs)]
     packed, _keepalive = _build_packed_args(descs)
     rc = lib.tessera_jit_invoke(
         handle, symbol.encode("utf-8"), packed, len(descs)
@@ -432,6 +439,39 @@ def jit_select(cond: np.ndarray, a: np.ndarray, b: np.ndarray) -> np.ndarray:
     try:
         out = np.empty_like(a)
         invoke(handle, sym, [cond, a, b], out)
+        return out
+    finally:
+        destroy(handle)
+
+
+def jit_write_row(buffer: np.ndarray, value: np.ndarray, row: int) -> np.ndarray:
+    """Functional KV-cache update: `buffer` (T,D) with row `row` set to `value`
+    (1,D), returning the updated buffer (f32). Value-semantic — thread the result
+    into the next decode step. No fallback."""
+    buffer = np.asarray(buffer)
+    value = np.asarray(value)
+    elem, _ = _resolve_elem([buffer, value])
+    if buffer.ndim != 2 or value.shape != (1, buffer.shape[1]):
+        raise TesseraJitError(
+            f"write_row: buffer (T,D), value (1,D); got {buffer.shape},{value.shape}"
+        )
+    if not (0 <= row < buffer.shape[0]):
+        raise TesseraJitError(f"row {row} out of range for {buffer.shape}")
+    buffer = np.ascontiguousarray(buffer)
+    value = np.ascontiguousarray(value)
+    tb = "tensor<" + "x".join(map(str, buffer.shape)) + f"x{elem}>"
+    tv = "tensor<" + "x".join(map(str, value.shape)) + f"x{elem}>"
+    sym = "tessera_jit_write_row"
+    mlir = (
+        f"func.func @{sym}(%b: {tb}, %v: {tv}) -> {tb} {{\n"
+        f"  %0 = tessera.write_row %b, %v {{row = {int(row)} : i64}} "
+        f": ({tb}, {tv}) -> {tb}\n"
+        f"  return %0 : {tb}\n}}\n"
+    )
+    handle = compile_module(mlir)
+    try:
+        out = np.empty_like(buffer)
+        invoke(handle, sym, [buffer, value], out)
         return out
     finally:
         destroy(handle)
@@ -827,7 +867,7 @@ class GraphFn:
         self._scopes: list[list[str]] = [self._lines]
         self._ctr = 0
         self._idx = 0  # unique suffix for block args / index constants
-        self._ret: _Val | None = None
+        self._rets: list[_Val] = []
 
     def _t(self, shape: tuple[int, ...]) -> str:
         return "tensor<" + "x".join(str(s) for s in shape) + f"x{self._elem}>"
@@ -1007,25 +1047,41 @@ class GraphFn:
         cur.append("  }")
         return _Val(res, tval.shape)
 
-    def ret(self, val: _Val):
-        self._ret = val
+    def write_row(self, buffer, value, row: int):
+        """Functional KV-cache update: buffer (T,D) with row `row` set to value
+        (1,D). Returns the updated buffer (thread it for the next step)."""
+        if len(buffer.shape) != 2 or value.shape != (1, buffer.shape[1]):
+            raise TesseraJitError("write_row: buffer (T,D), value (1,D)")
+        return self._emit(
+            "tessera.write_row", [buffer, value], buffer.shape, [f"row = {int(row)} : i64"]
+        )
+
+    def ret(self, *vals: _Val):
+        """Set the function result(s). One or more values (multi-result → the
+        decode step returns out + updated caches in a single compiled function)."""
+        if not vals:
+            raise TesseraJitError("ret() needs at least one value")
+        self._rets = list(vals)
 
     def build(self) -> str:
-        if self._ret is None:
+        if not self._rets:
             raise TesseraJitError("GraphFn has no return value (call ret())")
         arg_decl = ", ".join(f"{s}: {self._t(sh)}" for s, sh in self._args)
-        rt = self._t(self._ret.shape)
+        rtypes = [self._t(r.shape) for r in self._rets]
+        rt = rtypes[0] if len(rtypes) == 1 else "(" + ", ".join(rtypes) + ")"
+        ret_ssas = ", ".join(r.ssa for r in self._rets)
         body = "\n".join(self._lines)
         return (
             f"func.func @{self._name}({arg_decl}) -> {rt} {{\n"
             f"{body}\n"
-            f"  return {self._ret.ssa} : {rt}\n"
+            f"  return {ret_ssas} : {', '.join(rtypes)}\n"
             f"}}\n"
         )
 
-    def run(self, *arrays: np.ndarray) -> np.ndarray:
-        """Compile the whole graph ONCE and invoke ONCE. Args in declaration order."""
-        if self._ret is None:
+    def run(self, *arrays: np.ndarray):
+        """Compile the whole graph ONCE and invoke ONCE. Returns the result
+        array, or a tuple of arrays for a multi-result function."""
+        if not self._rets:
             raise TesseraJitError("GraphFn has no return value (call ret())")
         if len(arrays) != len(self._args):
             raise TesseraJitError(
@@ -1040,8 +1096,8 @@ class GraphFn:
                 )
         handle = compile_module(self.build())
         try:
-            out = np.empty(self._ret.shape, dtype=npdt)
-            invoke(handle, self._name, ins, out)
-            return out
+            outs = [np.empty(r.shape, dtype=npdt) for r in self._rets]
+            invoke(handle, self._name, ins, outs)
+            return outs[0] if len(outs) == 1 else tuple(outs)
         finally:
             destroy(handle)

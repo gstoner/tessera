@@ -85,11 +85,23 @@ last_updated: 2026-06-05
 >   lowers to `memcpy` for the identity-layout boundary).
 > * **Sprint 2.3 landed 2026-06-05** — **`scf.if` conditional control flow.** A
 >   shape-(1,) runtime flag drives an `scf.if` (only the taken branch executes,
->   vs select). `GraphFn.cond(flag, then, else)`; **nests with `for_loop`**
->   (flag-dependent add/sub per iteration). **147/147 production-lane tests green.**
+>   vs select). `GraphFn.cond(flag, then, else)`; **nests with `for_loop`**.
+> * **Sprint 2.4 landed 2026-06-05 — state; Phase 2 COMPLETE.**
+>   `tessera.write_row` (functional KV-cache update → `tensor.insert_slice`) +
+>   **multi-result functions** (DPS out-param per result, so a decode step returns
+>   `out` *and* the updated caches as ONE compiled function). **Capstone (the
+>   Phase-2 DoD): a stateful incremental-decode loop** threads the KV cache across
+>   T steps through the production lane and matches a full causal-attention numpy
+>   oracle (and the accumulated cache equals K/V). ABI hardening: function inputs
+>   are marked `bufferization.writable = false` so bufferization can never write
+>   in-place into a caller's input buffer (write_row stays value-semantic).
+>   **154/154 production-lane tests green.**
 >
-> Phase 2 remaining: **state** (KV-cache / in-place mutation through the boundary —
-> the "stateful decode step" DoD). Then Phase 3 (Apple GPU end-to-end).
+> **Phase 2 COMPLETE** — control flow (select/masked_fill, scf.for, scf.if) +
+> state (write_row, multi-result, stateful decode). Control flow lives at the
+> builder + bufferization level (no bespoke region-carrying dialect ops). Next:
+> **Phase 3 — Apple GPU end-to-end** (the production milestone on real silicon:
+> the linalg front-half + bespoke Metal back-half).
 > **Scope:** Evolve Tessera from a Python-interpreted prototype into a production
 > MLIR/LLVM-IR compiler, while retaining the Python compiler as the
 > experimentation lane. This document is the committed decision record; it gates

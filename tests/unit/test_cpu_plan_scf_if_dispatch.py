@@ -14,9 +14,10 @@ Scope ladder:
 * ``scf.if`` with SSA-operand condition  → executable through CPU plan
 * ``scf.if`` with static-literal condition → executable
 * ``scf.if`` with text-only condition (no operand, no static literal) → eager
-* ``scf.for`` / ``scf.while`` → eager (loop-shaped executor is separate)
-* Nested ``scf.*`` inside scf.if → eager (the executor raises and
-  caller falls back)
+* Static-trip-count ``scf.for`` → executable through CPU plan
+* Dynamic/text-only ``scf.for`` and ``scf.while`` → eager
+* Nested supported ``scf.if`` / static ``scf.for`` markers dispatch
+  recursively
 
 Branch-dependent outputs (``y_then`` in one branch, ``y_else`` in the
 other, then ``return y``) still need phi/yield semantics — a separate,
@@ -38,8 +39,8 @@ from tessera.compiler.graph_ir import (
     GraphIRFunction, GraphIRModule, IRArg, IROp, IRType,
 )
 from tessera.compiler.matmul_pipeline import (
-    CPUPlan, _find_scf_if_brackets, _scf_body_is_plannable, build_cpu_plan,
-    explain_cpu_plan,
+    CPUPlan, _find_scf_for_end, _find_scf_if_brackets,
+    _scf_body_is_plannable, build_cpu_plan, explain_cpu_plan,
 )
 
 
@@ -68,6 +69,14 @@ def _make_cpu_plan(body: list[IROp], output_name: str) -> CPUPlan:
         tile=(128, 128, 64),
         target_kind="cpu",
         graph_ir="", schedule_ir="", tile_ir="", target_ir="",
+    )
+
+
+def _scf_for_op(kind: str, *, trip_count=3, induction: str = "i") -> IROp:
+    return IROp(
+        result=None, op_name=f"tessera.scf.for.{kind}",
+        operands=[], operand_types=[],
+        kwargs={"induction": induction, "trip_count": trip_count},
     )
 
 
@@ -122,6 +131,26 @@ def test_find_scf_if_brackets_unbalanced_raises():
                  operand_types=["tensor<*x?>"], result_type="tensor<*x?>")]
     with pytest.raises(ValueError, match="unbalanced"):
         _find_scf_if_brackets(body, 0)
+
+
+def test_find_scf_for_end_basic():
+    body = [
+        _scf_for_op("begin"),
+        IROp(result="y", op_name="tessera.relu", operands=["%x"],
+             operand_types=["tensor<*x?>"], result_type="tensor<*x?>"),
+        _scf_for_op("end"),
+    ]
+    assert _find_scf_for_end(body, 0) == 2
+
+
+def test_find_scf_for_end_nested():
+    body = [
+        _scf_for_op("begin"),
+        _scf_for_op("begin"),
+        _scf_for_op("end"),
+        _scf_for_op("end"),
+    ]
+    assert _find_scf_for_end(body, 0) == 3
 
 
 # ---- Real branch dispatch (the v1 contract) -----------------------------
@@ -208,6 +237,42 @@ def test_scf_if_without_else_does_not_crash_on_falsy():
     np.testing.assert_array_equal(out, np.array([2.0, -4.0]))
 
 
+# ---- Static scf.for dispatch (Sprint C) ---------------------------------
+
+def test_scf_for_static_trip_count_executes_body_each_iteration():
+    """Static trip-count loops execute through the CPU plan. Same-name
+    SSA rebinding is the v1 loop-carried value contract."""
+    body = [
+        IROp(result="y", op_name="tessera.mul", operands=["%x"],
+             operand_types=["tensor<*x?>"], result_type="tensor<*x?>",
+             kwargs={"scalar": 1.0, "scalar_side": "right"}),
+        _scf_for_op("begin", trip_count=3),
+        IROp(result="y", op_name="tessera.mul", operands=["%y"],
+             operand_types=["tensor<*x?>"], result_type="tensor<*x?>",
+             kwargs={"scalar": 2.0, "scalar_side": "right"}),
+        _scf_for_op("end", trip_count=3),
+    ]
+    plan = _make_cpu_plan(body, output_name="y")
+    out = plan.execute([np.array([1.0, -2.0], dtype=np.float32)], {}, ["x"])
+    np.testing.assert_array_equal(out, np.array([8.0, -16.0], dtype=np.float32))
+
+
+def test_scf_for_static_trip_count_binds_induction_temporarily():
+    body = [
+        IROp(result="y", op_name="tessera.mul", operands=["%x"],
+             operand_types=["tensor<*x?>"], result_type="tensor<*x?>",
+             kwargs={"scalar": 1.0, "scalar_side": "right"}),
+        _scf_for_op("begin", trip_count=4, induction="i"),
+        IROp(result="y", op_name="tessera.add", operands=["%y", "%i"],
+             operand_types=["tensor<*x?>", "index"],
+             result_type="tensor<*x?>"),
+        _scf_for_op("end", trip_count=4, induction="i"),
+    ]
+    plan = _make_cpu_plan(body, output_name="y")
+    out = plan.execute([np.array([10.0], dtype=np.float32)], {}, ["x"])
+    np.testing.assert_array_equal(out, np.array([16.0], dtype=np.float32))
+
+
 # ---- explain_cpu_plan reports the right status --------------------------
 
 def test_plannable_scf_function_does_not_trigger_eager_fallback():
@@ -235,10 +300,8 @@ def test_plannable_scf_function_does_not_trigger_eager_fallback():
     assert diag.code != "JIT_EAGER_FALLBACK_CONTROL_FLOW", diag
 
 
-def test_unplannable_scf_function_still_falls_back_to_eager():
-    """scf.for is NOT yet in the CPU plan executor's accept set —
-    explain_cpu_plan must still emit the eager-fallback diagnostic for
-    it (with the precise message)."""
+def test_static_scf_for_function_does_not_trigger_eager_fallback():
+    """Static scf.for is now in the CPU plan executor's accept set."""
     fn = GraphIRFunction(
         name="f", args=[IRArg("xs", _T)], result_types=[_T],
         body=[
@@ -255,8 +318,31 @@ def test_unplannable_scf_function_still_falls_back_to_eager():
     )
     mod = GraphIRModule(functions=[fn])
     diag = explain_cpu_plan(mod)
+    assert diag.code != "JIT_EAGER_FALLBACK_CONTROL_FLOW", diag
+
+
+def test_dynamic_scf_for_function_still_falls_back_to_eager():
+    """Dynamic/text-only scf.for remains outside the v1 executor rung."""
+    fn = GraphIRFunction(
+        name="f", args=[IRArg("xs", _T)], result_types=[_T],
+        body=[
+            IROp(result=None, op_name="tessera.scf.for.begin",
+                 operands=[], operand_types=[],
+                 kwargs={"kind": "dynamic", "induction": "i",
+                         "iter_text": "range(n)"}),
+            IROp(result="y", op_name="tessera.relu", operands=["%xs"],
+                 operand_types=["tensor<*x?>"], result_type="tensor<*x?>"),
+            IROp(result=None, op_name="tessera.scf.for.end",
+                 operands=[], operand_types=[],
+                 kwargs={"kind": "dynamic", "induction": "i",
+                         "iter_text": "range(n)"}),
+        ],
+        return_values=["%y"],
+    )
+    mod = GraphIRModule(functions=[fn])
+    diag = explain_cpu_plan(mod)
     assert diag.code == "JIT_EAGER_FALLBACK_CONTROL_FLOW"
-    assert "scf.for / scf.while" in diag.message or "scf.for" in diag.message
+    assert "dynamic scf.for" in diag.message or "scf.for" in diag.message
 
 
 # ---- _scf_body_is_plannable classifier ---------------------------------
@@ -286,14 +372,44 @@ def test_classifier_rejects_text_only_condition():
     assert _scf_body_is_plannable(body) is False
 
 
-def test_classifier_rejects_scf_for():
+def test_classifier_rejects_dynamic_scf_for():
     body = [
         IROp(result=None, op_name="tessera.scf.for.begin",
-             operands=[], operand_types=[]),
+             operands=[], operand_types=[], kwargs={"kind": "dynamic"}),
         IROp(result=None, op_name="tessera.scf.for.end",
-             operands=[], operand_types=[]),
+             operands=[], operand_types=[], kwargs={"kind": "dynamic"}),
     ]
     assert _scf_body_is_plannable(body) is False
+
+
+def test_classifier_accepts_static_scf_for():
+    body = [
+        IROp(result=None, op_name="tessera.scf.for.begin",
+             operands=[], operand_types=[],
+             kwargs={"induction": "i", "trip_count": 3}),
+        IROp(result=None, op_name="tessera.scf.for.end",
+             operands=[], operand_types=[],
+             kwargs={"induction": "i", "trip_count": 3}),
+    ]
+    assert _scf_body_is_plannable(body) is True
+
+
+def test_build_cpu_plan_accepts_static_scf_for():
+    fn = GraphIRFunction(
+        name="f", args=[IRArg("xs", _T)], result_types=[_T],
+        body=[
+            IROp(result=None, op_name="tessera.scf.for.begin",
+                 operands=[], operand_types=[],
+                 kwargs={"induction": "i", "trip_count": 2}),
+            IROp(result="y", op_name="tessera.relu", operands=["%xs"],
+                 operand_types=["tensor<*x?>"], result_type="tensor<*x?>"),
+            IROp(result=None, op_name="tessera.scf.for.end",
+                 operands=[], operand_types=[],
+                 kwargs={"induction": "i", "trip_count": 2}),
+        ],
+        return_values=["%y"],
+    )
+    assert build_cpu_plan(GraphIRModule(functions=[fn])) is not None
 
 
 # ---- build_cpu_plan rejects scf.if when condition is text-only --------

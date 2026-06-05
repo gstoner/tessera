@@ -6,10 +6,10 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 47 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 64 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 9 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
-| `no_verifier` | 80 | No verifier declared.  TD constraints suffice — fine for many ops. |
+| `no_verifier` | 63 | No verifier declared.  TD constraints suffice — fine for many ops. |
 | **Total** | 136 | |
 
 ## Per-dialect details
@@ -31,10 +31,10 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `ArchSTEOneHotOp` | `trivial_stub` |
 | `ArchSwitchOp` | `trivial_stub` |
 | `ArchWeightedSumOp` | `trivial_stub` |
-| `AttnCompressedBlocksOp` | `no_verifier` |
+| `AttnCompressedBlocksOp` | `real` |
 | `AttnLocalWindow2DOp` | `real` |
-| `AttnSlidingWindowOp` | `no_verifier` |
-| `AttnTopKBlocksOp` | `no_verifier` |
+| `AttnSlidingWindowOp` | `real` |
+| `AttnTopKBlocksOp` | `real` |
 | `BatchedGemmOp` | `real` |
 | `CachePageLookupOp` | `no_verifier` |
 | `CastOp` | `real` |
@@ -50,7 +50,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `Conv2DNHWCOp` | `real` |
 | `CustomAdjointCallOp` | `no_verifier` |
 | `DCTOp` | `no_verifier` |
-| `DeepSeekSparseAttentionOp` | `no_verifier` |
+| `DeepSeekSparseAttentionOp` | `real` |
 | `DequantizeFP4Op` | `no_verifier` |
 | `DequantizeFP8Op` | `no_verifier` |
 | `DropoutOp` | `real` |
@@ -67,39 +67,39 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `FFTOp` | `no_verifier` |
 | `FlashAttnOp` | `real` |
 | `FusedEpilogueOp` | `real` |
-| `GQAAttentionOp` | `no_verifier` |
-| `GatedAttentionOp` | `no_verifier` |
+| `GQAAttentionOp` | `real` |
+| `GatedAttentionOp` | `real` |
 | `GatedDeltaNetOp` | `no_verifier` |
 | `GeluOp` | `no_verifier` |
 | `HybridAttentionOp` | `no_verifier` |
 | `IFFTOp` | `no_verifier` |
 | `IRFFTOp` | `no_verifier` |
-| `KVCacheAppendOp` | `no_verifier` |
+| `KVCacheAppendOp` | `real` |
 | `KVCacheCreateOp` | `trivial_stub` |
-| `KVCachePruneOp` | `no_verifier` |
+| `KVCachePruneOp` | `real` |
 | `KimiDeltaAttentionOp` | `no_verifier` |
 | `LUOp` | `real` |
 | `LatentKVCompressOp` | `no_verifier` |
 | `LatentKVExpandKOp` | `no_verifier` |
 | `LatentKVExpandVOp` | `no_verifier` |
 | `LayerNormOp` | `real` |
-| `LightningAttentionOp` | `no_verifier` |
-| `LinearAttnOp` | `no_verifier` |
-| `LinearAttnStateOp` | `no_verifier` |
+| `LightningAttentionOp` | `real` |
+| `LinearAttnOp` | `real` |
+| `LinearAttnStateOp` | `real` |
 | `LionOp` | `no_verifier` |
 | `LogSoftmaxOp` | `no_verifier` |
-| `MLADecodeFusedOp` | `no_verifier` |
-| `MLADecodeOp` | `no_verifier` |
-| `MQAAttentionOp` | `no_verifier` |
+| `MLADecodeFusedOp` | `real` |
+| `MLADecodeOp` | `real` |
+| `MQAAttentionOp` | `real` |
 | `MatmulOp` | `real` |
 | `ModifiedDeltaAttentionOp` | `no_verifier` |
-| `MoeCombineOp` | `no_verifier` |
+| `MoeCombineOp` | `real` |
 | `MoeDispatchOp` | `real` |
 | `MomentumOp` | `no_verifier` |
 | `MorPartitionOp` | `no_verifier` |
 | `MorRouterOp` | `no_verifier` |
 | `MorScatterOp` | `no_verifier` |
-| `MultiHeadAttentionOp` | `no_verifier` |
+| `MultiHeadAttentionOp` | `real` |
 | `NTKRopeOp` | `no_verifier` |
 | `NativeSparseAttnFusedOp` | `no_verifier` |
 | `NeighborsHaloExchangeOp` | `no_verifier` |
@@ -112,7 +112,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `NeighborsStencilApplyOp` | `no_verifier` |
 | `NeighborsStencilDefineOp` | `no_verifier` |
 | `NeighborsTopologyCreateOp` | `no_verifier` |
-| `PowerAttnOp` | `no_verifier` |
+| `PowerAttnOp` | `real` |
 | `QROp` | `real` |
 | `QuantizeFP4Op` | `no_verifier` |
 | `QuantizeFP8Op` | `no_verifier` |

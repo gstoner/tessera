@@ -64,6 +64,24 @@ _LOCKED_REAL_OPS = (
     "CreateOp",
     "PushOp",
     "PopOp",
+    # Sprint B (2026-06-04): attention-family + KV/MoE verifier hardening.
+    "MultiHeadAttentionOp",
+    "GQAAttentionOp",
+    "MQAAttentionOp",
+    "MLADecodeOp",
+    "MLADecodeFusedOp",
+    "LinearAttnOp",
+    "LinearAttnStateOp",
+    "PowerAttnOp",
+    "LightningAttentionOp",
+    "GatedAttentionOp",
+    "AttnSlidingWindowOp",
+    "AttnCompressedBlocksOp",
+    "AttnTopKBlocksOp",
+    "DeepSeekSparseAttentionOp",
+    "MoeCombineOp",
+    "KVCacheAppendOp",
+    "KVCachePruneOp",
 )
 
 

@@ -660,8 +660,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/TesseraOps.cpp": {
-    "mtime": 1780573369.2514148,
-    "ast_hash": "54b25dceda604d9966ed781d634cbc1a",
+    "mtime": 1780616382.4035559,
+    "ast_hash": "50ba50f39c06884e20ffeea3438029f9",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/AdjointInterface.cpp": {
@@ -3030,8 +3030,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/matmul_pipeline.py": {
-    "mtime": 1780319100.1070197,
-    "ast_hash": "4cdd25bb398d85fd34f8362440f2cedd",
+    "mtime": 1780616125.5346873,
+    "ast_hash": "e7cf08c599cf18ac53ccf1b0c749148c",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/autotune_v2.py": {
@@ -6880,8 +6880,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_verifier_coverage.py": {
-    "mtime": 1780579665.7437427,
-    "ast_hash": "a4200f5ecd926988f4af8e319c347288",
+    "mtime": 1780616362.0744212,
+    "ast_hash": "4c5f55bb350be378fbdada5ff5147312",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_tessera_opt_build.py": {
@@ -10275,8 +10275,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/verifier_coverage.md": {
-    "mtime": 1780585683.7226386,
-    "ast_hash": "4de7d3f4cf84b513fdc6deecabbfbad8",
+    "mtime": 1780616367.0475085,
+    "ast_hash": "af633e46509e16f8d204d60e30db0f9a",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/effect_lattice_audit.md": {
@@ -11135,8 +11135,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_cpu_plan_scf_if_dispatch.py": {
-    "mtime": 1780319160.5092816,
-    "ast_hash": "d3164c794286f8ad61f4fb0701b9a0c8",
+    "mtime": 1780616784.053652,
+    "ast_hash": "178e8e76536d7d6442466cab2ec24e24",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/apple_gpu/benchmark_decoder_layer_one_cb.py": {
@@ -11845,8 +11845,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/test_coverage.md": {
-    "mtime": 1780585693.735024,
-    "ast_hash": "7152eb85d577c153658b131c8eea7308",
+    "mtime": 1780616488.9335892,
+    "ast_hash": "facfa86d4050f6d040c31a10e3e9ceb4",
     "semantic_hash": ""
   }
 }

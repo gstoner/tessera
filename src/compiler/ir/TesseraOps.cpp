@@ -7,6 +7,7 @@
 #include "llvm/ADT/StringSwitch.h"
 
 #include <algorithm>
+#include <optional>
 
 using namespace mlir;
 
@@ -189,6 +190,61 @@ LogicalResult verifyOptionalTensorShape(Operation *op, Value maybe,
   if (ty.getElementType() != reference.getElementType())
     return op->emitOpError() << label << " dtype must match state dtype";
   return verifySameRankedShape(op, reference, ty, label);
+}
+
+LogicalResult verifyPositiveI64(Operation *op, StringRef name, int64_t value) {
+  if (value <= 0)
+    return op->emitOpError() << name << " must be positive";
+  return success();
+}
+
+LogicalResult verifyPositiveOptionalI64(Operation *op, StringRef name,
+                                        std::optional<int64_t> value) {
+  if (value && *value <= 0)
+    return op->emitOpError() << name << " must be positive when set";
+  return success();
+}
+
+LogicalResult verifyAttentionQKV(Operation *op, Value q, Value k, Value v,
+                                 Value o, StringRef label) {
+  auto qTy = dyn_cast<RankedTensorType>(q.getType());
+  auto kTy = dyn_cast<RankedTensorType>(k.getType());
+  auto vTy = dyn_cast<RankedTensorType>(v.getType());
+  auto oTy = dyn_cast<RankedTensorType>(o.getType());
+  if (!qTy || !kTy || !vTy || !oTy)
+    return success();
+  if (qTy.getRank() < 2 || kTy.getRank() < 2 || vTy.getRank() < 2 ||
+      oTy.getRank() < 2)
+    return op->emitOpError() << label << " expects rank >= 2 tensors";
+  if (failed(verifyFloatSameDtype(op, {qTy, kTy, vTy, oTy}, label)))
+    return failure();
+  int64_t qD = qTy.getDimSize(qTy.getRank() - 1);
+  int64_t kD = kTy.getDimSize(kTy.getRank() - 1);
+  if (!dimsAgree(qD, kD))
+    return op->emitOpError() << label
+                             << " requires Q/K head dimensions to match";
+  int64_t vTokens = vTy.getDimSize(vTy.getRank() - 2);
+  int64_t kTokens = kTy.getDimSize(kTy.getRank() - 2);
+  if (!dimsAgree(kTokens, vTokens))
+    return op->emitOpError() << label
+                             << " requires K/V sequence dimensions to match";
+  int64_t qTokens = qTy.getDimSize(qTy.getRank() - 2);
+  int64_t oTokens = oTy.getDimSize(oTy.getRank() - 2);
+  if (!dimsAgree(qTokens, oTokens))
+    return op->emitOpError() << label
+                             << " output sequence must match Q sequence";
+  int64_t vD = vTy.getDimSize(vTy.getRank() - 1);
+  int64_t oD = oTy.getDimSize(oTy.getRank() - 1);
+  if (!dimsAgree(vD, oD))
+    return op->emitOpError() << label
+                             << " output feature dimension must match V";
+  return success();
+}
+
+LogicalResult verifyAttentionFeatureMap(Operation *op, StringRef featureMap) {
+  return verifyAllowedStringAttr(
+      op, "feature_map", {"elu", "relu", "identity", "softplus"},
+      featureMap);
 }
 
 LogicalResult verifyTemperatureNoiseCoupling(Operation *op, bool hasNoise,
@@ -1139,6 +1195,152 @@ LogicalResult MoeDispatchOp::verify() {
   return success();
 }
 
+LogicalResult MoeCombineOp::verify() {
+  auto partialsTy = dyn_cast<RankedTensorType>(getPartials().getType());
+  auto routeTy = dyn_cast<RankedTensorType>(getInverseRoute().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getX().getType());
+  if (failed(verifyAllowedStringAttr(this->getOperation(), "reduce",
+                                     {"sum", "mean"}, "sum")))
+    return failure();
+  if (!partialsTy || !routeTy || !outTy)
+    return success();
+  if (partialsTy.getRank() < 1 || routeTy.getRank() < 1 || outTy.getRank() < 1)
+    return emitOpError(
+        "moe_combine requires rank >= 1 partial, route, and output tensors");
+  if (partialsTy.getElementType() != outTy.getElementType())
+    return emitOpError("partials/output dtypes must match");
+  int64_t routeN = routeTy.getDimSize(0);
+  int64_t outN = outTy.getDimSize(0);
+  if (!dimsAgree(routeN, outN))
+    return emitOpError("inverse_route token count must match output dim 0");
+  return success();
+}
+
+LogicalResult MultiHeadAttentionOp::verify() {
+  if (failed(verifyPositiveI64(this->getOperation(), "num_heads",
+                               getNumHeads())))
+    return failure();
+  return verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                            getO(), "multi_head_attention");
+}
+
+LogicalResult GQAAttentionOp::verify() {
+  int64_t qHeads = getNumQueryHeads();
+  int64_t kvHeads = getNumKvHeads();
+  if (failed(verifyPositiveI64(this->getOperation(), "num_query_heads",
+                               qHeads)) ||
+      failed(verifyPositiveI64(this->getOperation(), "num_kv_heads",
+                               kvHeads)))
+    return failure();
+  if (qHeads % kvHeads != 0)
+    return emitOpError(
+        "num_query_heads must be divisible by num_kv_heads");
+  return verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                            getO(), "gqa_attention");
+}
+
+LogicalResult MQAAttentionOp::verify() {
+  return verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                            getO(), "mqa_attention");
+}
+
+LogicalResult MLADecodeOp::verify() {
+  auto qTy = dyn_cast<RankedTensorType>(getQ().getType());
+  auto kTy = dyn_cast<RankedTensorType>(getKLatent().getType());
+  auto vTy = dyn_cast<RankedTensorType>(getVLatent().getType());
+  auto oTy = dyn_cast<RankedTensorType>(getO().getType());
+  if (!qTy || !kTy || !vTy || !oTy)
+    return success();
+  if (failed(verifyFloatSameDtype(this->getOperation(), {qTy, kTy, vTy, oTy},
+                                  "mla_decode")))
+    return failure();
+  for (Value weight : getWeights()) {
+    auto wTy = dyn_cast<RankedTensorType>(weight.getType());
+    if (!wTy)
+      continue;
+    if (!isFloatTensor(wTy))
+      return emitOpError("MLA weights must be floating tensors");
+    if (wTy.getElementType() != qTy.getElementType())
+      return emitOpError("MLA weight dtype must match q dtype");
+  }
+  return success();
+}
+
+LogicalResult LinearAttnOp::verify() {
+  if (failed(verifyAttentionFeatureMap(this->getOperation(), getFeatureMap())))
+    return failure();
+  if (failed(verifyPositiveOptionalI64(this->getOperation(), "chunk_size",
+                                       getChunkSize())))
+    return failure();
+  return verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                            getO(), "linear_attn");
+}
+
+LogicalResult LinearAttnStateOp::verify() {
+  if (failed(verifyAttentionFeatureMap(this->getOperation(), getFeatureMap())))
+    return failure();
+  if (failed(verifyPositiveOptionalI64(this->getOperation(), "chunk_size",
+                                       getChunkSize())))
+    return failure();
+  auto qTy = dyn_cast<RankedTensorType>(getQ().getType());
+  auto kTy = dyn_cast<RankedTensorType>(getK().getType());
+  auto vTy = dyn_cast<RankedTensorType>(getV().getType());
+  auto stateTy = dyn_cast<RankedTensorType>(getState().getType());
+  if (!qTy || !kTy || !vTy || !stateTy)
+    return success();
+  return verifyFloatSameDtype(this->getOperation(), {qTy, kTy, vTy, stateTy},
+                              "linear_attn_state");
+}
+
+LogicalResult PowerAttnOp::verify() {
+  if (failed(verifyPositiveI64(this->getOperation(), "state", getState())) ||
+      failed(verifyPositiveI64(this->getOperation(), "deg", getDeg())) ||
+      failed(verifyPositiveOptionalI64(this->getOperation(), "window",
+                                       getWindow())))
+    return failure();
+  return verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                            getO(), "power_attn");
+}
+
+LogicalResult LightningAttentionOp::verify() {
+  if (failed(verifyAllowedStringAttr(this->getOperation(), "state_dtype",
+                                     {"fp32", "fp16", "bf16"}, "fp32")))
+    return failure();
+  if (failed(verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                                getO(), "lightning_attention")))
+    return failure();
+  auto qTy = dyn_cast<RankedTensorType>(getQ().getType());
+  if (!qTy)
+    return success();
+  if (failed(verifyOptionalTensorShape(this->getOperation(), getState(), qTy,
+                                       "state")) ||
+      failed(verifyOptionalTensorShape(this->getOperation(), getDecay(), qTy,
+                                       "decay")))
+    return failure();
+  return success();
+}
+
+LogicalResult GatedAttentionOp::verify() {
+  if (failed(verifyAllowedStringAttr(this->getOperation(), "gate_activation",
+                                     {"sigmoid", "silu", "linear"},
+                                     "sigmoid")))
+    return failure();
+  if (failed(verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                                getO(), "gated_attention")))
+    return failure();
+  auto qTy = dyn_cast<RankedTensorType>(getQ().getType());
+  auto gateTy = dyn_cast<RankedTensorType>(getGate().getType());
+  if (!qTy || !gateTy)
+    return success();
+  if (!isFloatTensor(gateTy))
+    return emitOpError("gate must be a floating tensor");
+  int64_t qTokens = qTy.getDimSize(qTy.getRank() - 2);
+  int64_t gateTokens = gateTy.getDimSize(gateTy.getRank() - 2);
+  if (!dimsAgree(qTokens, gateTokens))
+    return emitOpError("gate sequence dimension must match Q");
+  return success();
+}
+
 LogicalResult FusedEpilogueOp::verify() {
   if (!getHasBias()) {
     auto biasType = dyn_cast<ShapedType>(getBias().getType());
@@ -1187,6 +1389,50 @@ LogicalResult AttnLocalWindow2DOp::verify() {
           "Q and K must share spatial layout on axis ") << axis;
   }
   return success();
+}
+
+LogicalResult MLADecodeFusedOp::verify() {
+  auto xTy = dyn_cast<RankedTensorType>(getOperation()->getOperand(0).getType());
+  auto wDkvTy = dyn_cast<RankedTensorType>(getOperation()->getOperand(1).getType());
+  auto wUkTy = dyn_cast<RankedTensorType>(getOperation()->getOperand(2).getType());
+  auto wUvTy = dyn_cast<RankedTensorType>(getOperation()->getOperand(3).getType());
+  auto qTy = dyn_cast<RankedTensorType>(getOperation()->getOperand(4).getType());
+  auto oTy = dyn_cast<RankedTensorType>(getOperation()->getResult(0).getType());
+  if (!xTy || !wDkvTy || !wUkTy || !wUvTy || !qTy || !oTy)
+    return success();
+  if (failed(verifyFloatSameDtype(this->getOperation(),
+                                  {xTy, wDkvTy, wUkTy, wUvTy, qTy, oTy},
+                                  "mla_decode_fused")))
+    return failure();
+  if (xTy.getRank() < 2 || qTy.getRank() < 2 || oTy.getRank() < 2)
+    return emitOpError("mla_decode_fused expects rank >= 2 x/q/o tensors");
+  return success();
+}
+
+LogicalResult AttnSlidingWindowOp::verify() {
+  if (failed(verifyPositiveI64(this->getOperation(), "window_size",
+                               getWindowSize())))
+    return failure();
+  return verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                            getO(), "attn_sliding_window");
+}
+
+LogicalResult AttnCompressedBlocksOp::verify() {
+  return verifyAttentionQKV(this->getOperation(),
+                            getOperation()->getOperand(0),
+                            getOperation()->getOperand(1),
+                            getOperation()->getOperand(2),
+                            getOperation()->getResult(0),
+                            "attn_compressed_blocks");
+}
+
+LogicalResult AttnTopKBlocksOp::verify() {
+  if (failed(verifyPositiveI64(this->getOperation(), "top_k", getTopK())) ||
+      failed(verifyPositiveI64(this->getOperation(), "block_size",
+                               getBlockSize())))
+    return failure();
+  return verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                            getO(), "attn_top_k_blocks");
 }
 
 // Sprint V4b (2026-05-22) — CastOp: shape-preserving element-type
@@ -1288,6 +1534,48 @@ LogicalResult DropoutOp::verify() {
         return emitOpError("dropout must preserve dim ") << i;
     }
   }
+  return success();
+}
+
+LogicalResult DeepSeekSparseAttentionOp::verify() {
+  if (failed(verifyPositiveI64(this->getOperation(), "window_size",
+                               getWindowSize())) ||
+      failed(verifyPositiveI64(this->getOperation(), "block_size",
+                               getBlockSize())) ||
+      failed(verifyPositiveI64(this->getOperation(), "top_k", getTopK())))
+    return failure();
+  if (failed(verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                                getO(), "deepseek_sparse_attention")))
+    return failure();
+  if (getOperation()->getNumOperands() > 3) {
+    auto gateTy =
+        dyn_cast<RankedTensorType>(getOperation()->getOperand(3).getType());
+    if (gateTy && !isFloatTensor(gateTy))
+      return emitOpError("gate_logits must be a floating tensor");
+  }
+  return success();
+}
+
+LogicalResult KVCacheAppendOp::verify() {
+  auto kTy = dyn_cast<RankedTensorType>(getK().getType());
+  auto vTy = dyn_cast<RankedTensorType>(getV().getType());
+  if (!kTy || !vTy)
+    return success();
+  if (failed(verifyFloatSameDtype(this->getOperation(), {kTy, vTy},
+                                  "kv_cache.append")))
+    return failure();
+  if (kTy.getRank() < 2 || vTy.getRank() < 2)
+    return emitOpError("kv_cache.append expects rank >= 2 key/value tensors");
+  int64_t kTokens = kTy.getDimSize(kTy.getRank() - 2);
+  int64_t vTokens = vTy.getDimSize(vTy.getRank() - 2);
+  if (!dimsAgree(kTokens, vTokens))
+    return emitOpError("key/value token dimensions must match");
+  return success();
+}
+
+LogicalResult KVCachePruneOp::verify() {
+  if (getWindow() <= 0)
+    return emitOpError("window must be positive");
   return success();
 }
 

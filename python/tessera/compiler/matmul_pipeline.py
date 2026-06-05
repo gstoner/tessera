@@ -128,9 +128,14 @@ class CPUPlan:
         """
         values = {name: value for name, value in zip(arg_names, args)}
         values.update(kwargs)
-        i = 0
-        n = len(self.ops)
-        while i < n:
+        self._execute_range(0, len(self.ops), values)
+        if self.output_name not in values:
+            raise ValueError(f"CPU plan did not produce output {self.output_name!r}")
+        return values[self.output_name]
+
+    def _execute_range(self, lo: int, hi: int, values: dict[str, Any]) -> None:
+        i = lo
+        while i < hi:
             op = self.ops[i]
             if op.op_name == "tessera.scf.if.begin":
                 # Find matching .else / .end by depth tracking. Body
@@ -156,15 +161,7 @@ class CPUPlan:
                         (else_idx + 1, end_idx) if else_idx is not None
                         else (end_idx, end_idx)  # empty else
                     )
-                for j in range(branch_lo, branch_hi):
-                    sub = self.ops[j]
-                    if sub.op_name.startswith("tessera.scf."):
-                        # Nested control flow not supported in v1 of
-                        # the CF-aware executor. Fall through honestly.
-                        raise ValueError(
-                            "nested scf.* is not yet handled by the CPU "
-                            "plan executor; fall back to eager")
-                    self._execute_one(sub, values)
+                self._execute_range(branch_lo, branch_hi, values)
                 i = end_idx + 1
                 continue
             if op.op_name in ("tessera.scf.if.end", "tessera.scf.else"):
@@ -172,11 +169,28 @@ class CPUPlan:
                 # (the begin handler skips past .end), but defensive.
                 i += 1
                 continue
+            if op.op_name == "tessera.scf.for.begin":
+                end_idx = _find_scf_for_end(self.ops, i)
+                trip_count = _static_trip_count(op, values)
+                induction = str(op.kwargs.get("induction", "_"))
+                old_value = values.get(induction, None)
+                had_old_value = induction in values
+                for idx in range(trip_count):
+                    if induction != "_":
+                        values[induction] = idx
+                    self._execute_range(i + 1, end_idx, values)
+                if induction != "_":
+                    if had_old_value:
+                        values[induction] = old_value
+                    else:
+                        values.pop(induction, None)
+                i = end_idx + 1
+                continue
+            if op.op_name == "tessera.scf.for.end":
+                i += 1
+                continue
             self._execute_one(op, values)
             i += 1
-        if self.output_name not in values:
-            raise ValueError(f"CPU plan did not produce output {self.output_name!r}")
-        return values[self.output_name]
 
     def _execute_one(self, op: IROp, values: dict[str, Any]) -> None:
         """Dispatch a single non-control-flow op."""
@@ -221,24 +235,35 @@ _SUPPORTED_CONTROL_FLOW_OPS = frozenset({
     "tessera.scf.if.begin",
     "tessera.scf.else",
     "tessera.scf.if.end",
+    "tessera.scf.for.begin",
+    "tessera.scf.for.end",
 })
 
 
 def _scf_body_is_plannable(body: "Sequence[IROp]") -> bool:
     """Followup 1 — True iff every scf op in ``body`` is one the CPU
-    plan executor handles: only ``scf.if.{begin,else,end}``, and each
+    plan executor handles: ``scf.if.{begin,else,end}``, each
     ``scf.if.begin`` either carries an SSA operand condition or a
-    static literal in ``kwargs["condition"]``. ``scf.for.*`` /
-    ``scf.while.*`` need a loop-shaped executor — separate scope."""
+    static literal in ``kwargs["condition"]``; and static-trip-count
+    ``scf.for.{begin,end}`` with a non-nested supported body.
+    ``scf.while.*`` and dynamic/text-only loops remain eager-only."""
     for op in body:
         name = _canonical_op_name(op.op_name)
         if not name.startswith("tessera.scf."):
             continue
         if name not in _SUPPORTED_CONTROL_FLOW_OPS:
-            return False  # scf.for / scf.while etc.
+            return False  # scf.while etc.
         if name == "tessera.scf.if.begin":
             if not op.operands and "condition" not in op.kwargs:
                 return False  # text-only condition can't be evaluated
+        if name == "tessera.scf.for.begin":
+            if "trip_count" not in op.kwargs:
+                return False  # dynamic / text-only trip count
+            try:
+                if int(op.kwargs["trip_count"]) < 0:
+                    return False
+            except (TypeError, ValueError):
+                return False
     return True
 
 
@@ -266,6 +291,39 @@ def _find_scf_if_brackets(
         f"unbalanced scf.if at index {begin_idx} (no matching scf.if.end)")
 
 
+def _find_scf_for_end(ops: "Sequence[IROp]", begin_idx: int) -> int:
+    """For an op at ``begin_idx`` of kind ``tessera.scf.for.begin``,
+    return the matching ``scf.for.end`` index."""
+    depth = 1
+    for j in range(begin_idx + 1, len(ops)):
+        name = ops[j].op_name
+        if name == "tessera.scf.for.begin":
+            depth += 1
+        elif name == "tessera.scf.for.end":
+            depth -= 1
+            if depth == 0:
+                return j
+    raise ValueError(
+        f"unbalanced scf.for at index {begin_idx} (no matching scf.for.end)")
+
+
+def _static_trip_count(op: IROp, values: Mapping[str, Any]) -> int:
+    if "trip_count" in op.kwargs:
+        trip_count = int(op.kwargs["trip_count"])
+    elif op.operands:
+        name = _operand_name(op.operands[0])
+        if name not in values:
+            raise ValueError(
+                f"scf.for trip-count operand {name!r} not bound; "
+                "CPU plan can't dispatch")
+        trip_count = int(np.asarray(_as_value(values[name])).item())
+    else:
+        raise ValueError("scf.for requires a static trip_count")
+    if trip_count < 0:
+        raise ValueError("scf.for trip_count must be non-negative")
+    return trip_count
+
+
 def build_cpu_plan(
     module: GraphIRModule,
     *,
@@ -283,11 +341,9 @@ def build_cpu_plan(
         return None
     for op in fn.body:
         name = _canonical_op_name(op.op_name)
-        # Followup 1 — scf.if markers are accepted by the planner when
-        # the condition is an SSA operand (or a static literal); the
-        # CF-aware executor dispatches the right branch at runtime.
-        # scf.for / scf.while remain eager-only for now — they need a
-        # loop-shaped executor that's a separate, larger surface.
+        # Followup 1 accepted scf.if markers. Sprint C adds static
+        # trip-count scf.for markers; dynamic loops and scf.while remain
+        # eager-only.
         if name in _SUPPORTED_CONTROL_FLOW_OPS:
             if name == "tessera.scf.if.begin":
                 # Only operand-condition or static-attr scf.if is
@@ -295,6 +351,14 @@ def build_cpu_plan(
                 # operand, kwargs["condition_text"] only) need eager
                 # Python to evaluate the source — skip the plan.
                 if not op.operands and "condition" not in op.kwargs:
+                    return None
+            if name == "tessera.scf.for.begin":
+                if "trip_count" not in op.kwargs:
+                    return None
+                try:
+                    if int(op.kwargs["trip_count"]) < 0:
+                        return None
+                except (TypeError, ValueError):
                     return None
             continue
         if name not in SUPPORTED_CPU_OPS or not _valid_arity(op):
@@ -370,12 +434,18 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
                 _Code.EAGER_FALLBACK_CONTROL_FLOW.value,
                 (f"function contains structured control flow ({seen!r} and "
                  f"{len(scf_ops) - 1} other scf op(s)); CPU plan executor "
-                 f"handles scf.if with SSA / static conditions but this "
-                 f"body has scf.for / scf.while or a text-only condition — "
+                 f"handles scf.if with SSA / static conditions and "
+                 f"static-trip-count scf.for, but this body has "
+                 f"scf.while, dynamic scf.for, nested unsupported control "
+                 f"flow, or a text-only condition — "
                  f"falling back to eager Python (numerically correct, "
                  f"unoptimized)"),
             )
-    unsupported = [op for op in fn.body if _canonical_op_name(op.op_name) not in SUPPORTED_CPU_OPS]
+    unsupported = [
+        op for op in fn.body
+        if _canonical_op_name(op.op_name) not in SUPPORTED_CPU_OPS
+        and _canonical_op_name(op.op_name) not in _SUPPORTED_CONTROL_FLOW_OPS
+    ]
     if unsupported:
         names = ", ".join(sorted(SUPPORTED_CPU_OPS))
         seen = unsupported[0].op_name
@@ -394,7 +464,8 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
     unknown = [
         op
         for op in fn.body
-        if op.result is None or any(_operand_name(operand) in {"", "?"} for operand in op.operands)
+        if _canonical_op_name(op.op_name) not in _SUPPORTED_CONTROL_FLOW_OPS
+        and (op.result is None or any(_operand_name(operand) in {"", "?"} for operand in op.operands))
     ]
     if unknown:
         return JitDiagnostic(

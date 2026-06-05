@@ -659,6 +659,7 @@ def Tessera_MultiHeadAttentionOp : Op<Tessera_Dialect, "multi_head_attention", [
                         DefaultValuedAttr<BoolAttr, "false">:$causal);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_GQAAttentionOp : Op<Tessera_Dialect, "gqa_attention", [Pure]> {
@@ -668,6 +669,7 @@ def Tessera_GQAAttentionOp : Op<Tessera_Dialect, "gqa_attention", [Pure]> {
                         I64Attr:$num_kv_heads);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_MQAAttentionOp : Op<Tessera_Dialect, "mqa_attention", [Pure]> {
@@ -675,6 +677,7 @@ def Tessera_MQAAttentionOp : Op<Tessera_Dialect, "mqa_attention", [Pure]> {
   let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_MLADecodeOp : Op<Tessera_Dialect, "mla_decode", [Pure]> {
@@ -683,6 +686,7 @@ def Tessera_MLADecodeOp : Op<Tessera_Dialect, "mla_decode", [Pure]> {
                         Variadic<TensorType>:$weights);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_QuantizeFP8Op : Op<Tessera_Dialect, "quantize_fp8", [Pure]> {
@@ -730,6 +734,7 @@ def Tessera_MoeCombineOp : Op<Tessera_Dialect, "moe_combine", []> {
                         DefaultValuedAttr<StrAttr, "\"sum\"">:$reduce);
   let results = (outs TensorType:$x);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // attention_variants_plan, LA-1 — Linear / kernel-feature attention.
@@ -749,6 +754,7 @@ def Tessera_LinearAttnOp : Op<
                         OptionalAttr<I64Attr>:$chunk_size);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_LinearAttnStateOp : Op<
@@ -762,6 +768,7 @@ def Tessera_LinearAttnStateOp : Op<
                         OptionalAttr<I64Attr>:$chunk_size);
   let results = (outs TensorType:$state);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // attention_variants_plan, LA-4 — promotion of the example
@@ -785,6 +792,7 @@ def Tessera_PowerAttnOp : Op<
                         DefaultValuedAttr<BoolAttr, "true">:$causal);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_RetentionOp : Op<
@@ -816,6 +824,7 @@ def Tessera_LightningAttentionOp : Op<
                         DefaultValuedAttr<StrAttr, "\"fp32\"">:$state_dtype);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_GatedAttentionOp : Op<
@@ -829,6 +838,7 @@ def Tessera_GatedAttentionOp : Op<
                         DefaultValuedAttr<StrAttr, "\"sigmoid\"">:$gate_activation);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 class Tessera_DeltaAttentionOp<string mnemonic, string summaryText>
@@ -844,6 +854,7 @@ class Tessera_DeltaAttentionOp<string mnemonic, string summaryText>
                         DefaultValuedAttr<StrAttr, "\"fp32\"">:$state_dtype);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_GatedDeltaNetOp
@@ -1027,6 +1038,7 @@ def Tessera_MLADecodeFusedOp : Op<
                        DefaultValuedAttr<BoolAttr, "false">:$causal);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // attention_variants_plan, NSA — branch + fusion ODS ops.
@@ -1040,6 +1052,7 @@ def Tessera_AttnSlidingWindowOp : Op<
                         DefaultValuedAttr<BoolAttr, "true">:$causal);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_AttnCompressedBlocksOp : Op<
@@ -1050,6 +1063,7 @@ def Tessera_AttnCompressedBlocksOp : Op<
   let arguments = (ins TensorType:$q, TensorType:$k_c, TensorType:$v_c);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_AttnTopKBlocksOp : Op<
@@ -1064,6 +1078,7 @@ def Tessera_AttnTopKBlocksOp : Op<
                         DefaultValuedAttr<BoolAttr, "true">:$causal);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // Gap 4 / Sub-1 (2026-05-20) — 2D local-window attention for spatial
@@ -1124,6 +1139,7 @@ def Tessera_DeepSeekSparseAttentionOp : Op<
                         DefaultValuedAttr<BoolAttr, "true">:$causal);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // NSA-4 fusion target — collapses the three NSA branches + gating into
@@ -1365,6 +1381,7 @@ def Tessera_KVCacheAppendOp : Op<Tessera_Dialect, "kv_cache.append", []> {
   let arguments = (ins Tessera_KVCacheType:$cache, TensorType:$k, TensorType:$v);
   let results = (outs Tessera_KVCacheType:$updated);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_KVCachePruneOp : Op<Tessera_Dialect, "kv_cache.prune", []> {
@@ -1372,6 +1389,7 @@ def Tessera_KVCachePruneOp : Op<Tessera_Dialect, "kv_cache.prune", []> {
   let arguments = (ins Tessera_KVCacheType:$cache, I64Attr:$window);
   let results = (outs Tessera_KVCacheType:$updated);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_CachePageLookupOp : Op<Tessera_Dialect, "cache.page_lookup", []> {

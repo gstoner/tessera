@@ -410,6 +410,64 @@ def jit_div(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return _jit_binary("tessera.div", "tessera_jit_div", a, b)
 
 
+def jit_select(cond: np.ndarray, a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Production-lane elementwise select: cond != 0 ? a : b (f32). No fallback."""
+    cond = np.asarray(cond)
+    a = np.asarray(a)
+    b = np.asarray(b)
+    elem, _ = _resolve_elem([cond, a, b])
+    if not (cond.shape == a.shape == b.shape):
+        raise TesseraJitError(
+            f"select needs equal shapes ({cond.shape},{a.shape},{b.shape})"
+        )
+    cond, a, b = map(np.ascontiguousarray, (cond, a, b))
+    t = "tensor<" + "x".join(str(s) for s in a.shape) + f"x{elem}>"
+    sym = "tessera_jit_select"
+    mlir = (
+        f"func.func @{sym}(%c: {t}, %a: {t}, %b: {t}) -> {t} {{\n"
+        f"  %0 = tessera.select %c, %a, %b : ({t}, {t}, {t}) -> {t}\n"
+        f"  return %0 : {t}\n}}\n"
+    )
+    handle = compile_module(mlir)
+    try:
+        out = np.empty_like(a)
+        invoke(handle, sym, [cond, a, b], out)
+        return out
+    finally:
+        destroy(handle)
+
+
+def jit_masked_fill(
+    x: np.ndarray, mask: np.ndarray, value: float = -1e9
+) -> np.ndarray:
+    """Production-lane masked fill: mask != 0 ? x : value (f32).
+
+    The attention-masking primitive: ``masked_fill(scores, causal_mask, -1e9)``
+    before softmax. No fallback.
+    """
+    x = np.asarray(x)
+    mask = np.asarray(mask)
+    elem, _ = _resolve_elem([x, mask])
+    if x.shape != mask.shape:
+        raise TesseraJitError(f"masked_fill shape mismatch ({x.shape},{mask.shape})")
+    x, mask = np.ascontiguousarray(x), np.ascontiguousarray(mask)
+    t = "tensor<" + "x".join(str(s) for s in x.shape) + f"x{elem}>"
+    sym = "tessera_jit_masked_fill"
+    mlir = (
+        f"func.func @{sym}(%x: {t}, %m: {t}) -> {t} {{\n"
+        f"  %0 = tessera.masked_fill %x, %m {{value = {value:.9e} : f64}} "
+        f": ({t}, {t}) -> {t}\n"
+        f"  return %0 : {t}\n}}\n"
+    )
+    handle = compile_module(mlir)
+    try:
+        out = np.empty_like(x)
+        invoke(handle, sym, [x, mask], out)
+        return out
+    finally:
+        destroy(handle)
+
+
 def jit_softmax(a: np.ndarray, axis: int = -1) -> np.ndarray:
     """Production-lane numerically-stable softmax over `axis` (f32).
 
@@ -764,7 +822,11 @@ class GraphFn:
         self._elem = elem
         self._args: list[tuple[str, tuple[int, ...]]] = []
         self._lines: list[str] = []
+        # Scope stack for nested regions (scf.for/scf.if bodies). _emit appends to
+        # the innermost open scope; the function body is scopes[0] == _lines.
+        self._scopes: list[list[str]] = [self._lines]
         self._ctr = 0
+        self._idx = 0  # unique suffix for block args / index constants
         self._ret: _Val | None = None
 
     def _t(self, shape: tuple[int, ...]) -> str:
@@ -785,7 +847,7 @@ class GraphFn:
         in_types = ", ".join(self._t(o.shape) for o in ins)
         in_ssas = ", ".join(o.ssa for o in ins)
         attr_str = (" {" + ", ".join(attrs) + "}") if attrs else ""
-        self._lines.append(
+        self._scopes[-1].append(
             f"  {res} = {op} {in_ssas}{attr_str} : "
             f"({in_types}) -> {self._t(tuple(out_shape))}"
         )
@@ -856,6 +918,18 @@ class GraphFn:
             attrs.append("transposeB = true")
         return self._emit("tessera.matmul", [a, b], (M, N), attrs or None)
 
+    def select(self, cond, a, b):
+        if not (cond.shape == a.shape == b.shape):
+            raise TesseraJitError("GraphFn.select needs equal shapes")
+        return self._emit("tessera.select", [cond, a, b], a.shape)
+
+    def masked_fill(self, x, mask, value: float = -1e9):
+        if x.shape != mask.shape:
+            raise TesseraJitError("GraphFn.masked_fill shape mismatch")
+        return self._emit(
+            "tessera.masked_fill", [x, mask], x.shape, [f"value = {value:.9e} : f64"]
+        )
+
     def bmm(self, a, b):
         if len(a.shape) != 3 or len(b.shape) != 3:
             raise TesseraJitError("GraphFn.bmm is rank-3 only")
@@ -864,6 +938,74 @@ class GraphFn:
         if Bb != Bb2 or K != K2:
             raise TesseraJitError(f"bmm shape mismatch: {a.shape},{b.shape}")
         return self._emit("tessera.batched_gemm", [a, b], (Bb, M, N))
+
+    def for_loop(self, count: int, init: _Val, body):
+        """Emit an scf.for loop with a single tensor carry.
+
+        `body(carry) -> _Val` builds the loop body (it may reference outer SSA
+        values — function args, earlier results) and returns the next carry. The
+        loop runs `count` times; the final carry is returned. Control flow
+        through tessera→linalg→scf→llvm, one compiled function.
+        """
+        T = self._t(init.shape)
+        self._idx += 1
+        i = self._idx
+        lb, ub, st = f"%lb{i}", f"%ub{i}", f"%st{i}"
+        iv, carry = f"%i{i}", f"%carry{i}"
+        cur = self._scopes[-1]
+        cur.append(f"  {lb} = arith.constant 0 : index")
+        cur.append(f"  {ub} = arith.constant {int(count)} : index")
+        cur.append(f"  {st} = arith.constant 1 : index")
+        res = self._fresh()
+        self._scopes.append([])  # open the loop body scope
+        nxt = body(_Val(carry, init.shape))
+        if nxt.shape != init.shape:
+            raise TesseraJitError("for_loop body must preserve the carry shape")
+        body_lines = self._scopes.pop()
+        cur.append(
+            f"  {res} = scf.for {iv} = {lb} to {ub} step {st} "
+            f"iter_args({carry} = {init.ssa}) -> {T} {{"
+        )
+        cur.extend(body_lines)
+        cur.append(f"    scf.yield {nxt.ssa} : {T}")
+        cur.append("  }")
+        return _Val(res, init.shape)
+
+    def cond(self, flag: _Val, then_fn, else_fn):
+        """Emit an scf.if: if `flag[0] > 0` run `then_fn()` else `else_fn()`.
+
+        `flag` is a shape-(1,) tensor input (the runtime condition); only the
+        taken branch executes (divergent control flow, not data-parallel select).
+        Both branches must return _Vals of the same shape.
+        """
+        if flag.shape != (1,):
+            raise TesseraJitError("GraphFn.cond flag must be shape (1,)")
+        self._idx += 1
+        i = self._idx
+        c0, fv, zero, p = f"%c0_{i}", f"%f{i}", f"%z{i}", f"%p{i}"
+        cur = self._scopes[-1]
+        cur.append(f"  {c0} = arith.constant 0 : index")
+        cur.append(f"  {fv} = tensor.extract {flag.ssa}[{c0}] : {self._t((1,))}")
+        cur.append(f"  {zero} = arith.constant 0.0 : {self._elem}")
+        cur.append(f"  {p} = arith.cmpf ogt, {fv}, {zero} : {self._elem}")
+        res = self._fresh()
+        self._scopes.append([])
+        tval = then_fn()
+        tbody = self._scopes.pop()
+        self._scopes.append([])
+        eval_ = else_fn()
+        ebody = self._scopes.pop()
+        if tval.shape != eval_.shape:
+            raise TesseraJitError("cond branches must return the same shape")
+        T = self._t(tval.shape)
+        cur.append(f"  {res} = scf.if {p} -> {T} {{")
+        cur.extend(tbody)
+        cur.append(f"    scf.yield {tval.ssa} : {T}")
+        cur.append("  } else {")
+        cur.extend(ebody)
+        cur.append(f"    scf.yield {eval_.ssa} : {T}")
+        cur.append("  }")
+        return _Val(res, tval.shape)
 
     def ret(self, val: _Val):
         self._ret = val

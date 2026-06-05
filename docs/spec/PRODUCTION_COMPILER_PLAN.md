@@ -66,9 +66,30 @@ last_updated: 2026-06-05
 > relu/sigmoid/tanh/silu/gelu, transpose`, plus **multi-op graph compilation** and
 > a **compilation cache** — all oracle-tested through real codegen; f32 + bf16.
 > Capstone proof: a transformer decoder layer compiles+runs as one function.
-> Remaining Phase-1 polish: dynamic shapes, reconcile `tessera_jit` ↔
-> `tsrCompileArtifact` (§12.7). Then Phase 2 (state / control flow) and Phase 3
-> (Apple GPU end-to-end).
+> Remaining Phase-1 polish (deferred, optional): dynamic shapes, reconcile
+> `tessera_jit` ↔ `tsrCompileArtifact` (§12.7).
+>
+> ### Phase 2 — control flow (state is next)
+> * **Sprint 2.1 landed 2026-06-05** — data-parallel conditional: `tessera.select`
+>   (`cond!=0 ? a : b`) and `tessera.masked_fill` (`mask!=0 ? x : value`). The
+>   masked_fill path is the **causal-attention masking primitive**; a causal
+>   attention block (`softmax(masked_fill(Q Kᵀ, mask, -1e9)) V`) composes in one
+>   compiled function.
+> * **Sprint 2.2 landed 2026-06-05** — **`scf.for` control flow.** A bounded loop
+>   with a tensor carry, compiled as one function through
+>   tessera→linalg→scf→cf→llvm. `GraphFn.for_loop(count, init, body)`; proven with
+>   power iteration and **N iterated transformer FFN blocks (shared weights)**.
+>   Foundation work: registered scf bufferization, `allowReturnAllocsFromLoops`,
+>   and switched the DPS rewrite to **`memref.copy`** (the redirect-and-erase trick
+>   silently killed control flow — `memref.copy` is correct for any producer and
+>   lowers to `memcpy` for the identity-layout boundary).
+> * **Sprint 2.3 landed 2026-06-05** — **`scf.if` conditional control flow.** A
+>   shape-(1,) runtime flag drives an `scf.if` (only the taken branch executes,
+>   vs select). `GraphFn.cond(flag, then, else)`; **nests with `for_loop`**
+>   (flag-dependent add/sub per iteration). **147/147 production-lane tests green.**
+>
+> Phase 2 remaining: **state** (KV-cache / in-place mutation through the boundary —
+> the "stateful decode step" DoD). Then Phase 3 (Apple GPU end-to-end).
 > **Scope:** Evolve Tessera from a Python-interpreted prototype into a production
 > MLIR/LLVM-IR compiler, while retaining the Python compiler as the
 > experimentation lane. This document is the committed decision record; it gates

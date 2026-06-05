@@ -979,6 +979,23 @@ def Tessera_DivOp : Op<Tessera_Dialect, "div", [Pure]> {
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
+// Phase 2 Sprint 2.1 — data-parallel conditional (attention masking). select is
+// the general elementwise ternary (cond != 0 ? a : b); masked_fill is the
+// attention-masking form (mask != 0 ? x : value), with `value` a scalar attr
+// (e.g. a large negative for causal masking before softmax).
+def Tessera_SelectOp : Op<Tessera_Dialect, "select", [Pure]> {
+  let summary = "Elementwise select (cond != 0 ? a : b)";
+  let arguments = (ins TensorType:$cond, TensorType:$a, TensorType:$b);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+def Tessera_MaskedFillOp : Op<Tessera_Dialect, "masked_fill", [Pure]> {
+  let summary = "Elementwise masked fill (mask != 0 ? x : value)";
+  let arguments = (ins TensorType:$x, TensorType:$mask, F64Attr:$value);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
 // Phase 1 Sprint 1.2 — single-axis reduction. One parameterized op
 // (`kind` ∈ {sum, max, min, mean}, `axis`) lowered to linalg.reduce + an
 // identity-fill init, mirroring how linalg.reduce is itself parameterized

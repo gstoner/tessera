@@ -132,6 +132,85 @@ struct BinaryEltwiseLowering : public RewritePattern {
   }
 };
 
+// N-ary elementwise `linalg.generic` over `inputs` (all same shape as
+// `resultType`) into a fresh DPS init. Generalizes buildElementwiseGeneric.
+static Value buildElementwiseNary(
+    PatternRewriter &rewriter, Location loc, RankedTensorType resultType,
+    ValueRange inputs,
+    function_ref<Value(OpBuilder &, Location, ValueRange)> combine) {
+  int64_t rank = resultType.getRank();
+  Value init = tensor::EmptyOp::create(rewriter, loc, resultType.getShape(),
+                                       resultType.getElementType());
+  AffineMap id = rewriter.getMultiDimIdentityMap(rank);
+  SmallVector<AffineMap> maps(inputs.size() + 1, id);
+  SmallVector<utils::IteratorType> iters(rank, utils::IteratorType::parallel);
+  auto generic = linalg::GenericOp::create(
+      rewriter, loc, TypeRange{resultType}, inputs, ValueRange{init}, maps,
+      iters, [&](OpBuilder &b, Location l, ValueRange args) {
+        linalg::YieldOp::create(b, l, combine(b, l, args));
+      });
+  return generic.getResult(0);
+}
+
+// tessera.select(cond, a, b): elementwise `cond != 0 ? a : b`.
+struct SelectLowering : public RewritePattern {
+  SelectLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.select", /*benefit=*/1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+      return failure();
+    auto ty = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!ty || !ty.hasStaticShape() || !isa<FloatType>(ty.getElementType()))
+      return rewriter.notifyMatchFailure(op, "static-shape float tensor");
+    Type elem = ty.getElementType();
+    Value out = buildElementwiseNary(
+        rewriter, op->getLoc(), ty,
+        {op->getOperand(0), op->getOperand(1), op->getOperand(2)},
+        [&](OpBuilder &b, Location l, ValueRange a) -> Value {
+          Value zero = arith::ConstantOp::create(b, l, elem,
+                                                 b.getFloatAttr(elem, 0.0));
+          Value p = arith::CmpFOp::create(b, l, arith::CmpFPredicate::ONE,
+                                          a[0], zero);
+          return arith::SelectOp::create(b, l, p, a[1], a[2]).getResult();
+        });
+    rewriter.replaceOp(op, out);
+    return success();
+  }
+};
+
+// tessera.masked_fill(x, mask, {value}): elementwise `mask != 0 ? x : value`.
+struct MaskedFillLowering : public RewritePattern {
+  MaskedFillLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.masked_fill", /*benefit=*/1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return failure();
+    auto ty = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!ty || !ty.hasStaticShape() || !isa<FloatType>(ty.getElementType()))
+      return rewriter.notifyMatchFailure(op, "static-shape float tensor");
+    auto valAttr = op->getAttrOfType<FloatAttr>("value");
+    if (!valAttr)
+      return rewriter.notifyMatchFailure(op, "missing value attr");
+    Type elem = ty.getElementType();
+    double value = valAttr.getValueAsDouble();
+    Value out = buildElementwiseNary(
+        rewriter, op->getLoc(), ty, {op->getOperand(0), op->getOperand(1)},
+        [&](OpBuilder &b, Location l, ValueRange a) -> Value {
+          Value zero = arith::ConstantOp::create(b, l, elem,
+                                                 b.getFloatAttr(elem, 0.0));
+          Value v = arith::ConstantOp::create(b, l, elem,
+                                              b.getFloatAttr(elem, value));
+          Value p = arith::CmpFOp::create(b, l, arith::CmpFPredicate::ONE,
+                                          a[1], zero);
+          return arith::SelectOp::create(b, l, p, a[0], v).getResult();
+        });
+    rewriter.replaceOp(op, out);
+    return success();
+  }
+};
+
 // ── transpose / matmul ─────────────────────────────────────────────────────
 
 // Rank-2 transpose via linalg.transpose (DPS). Used both standalone
@@ -771,6 +850,8 @@ public:
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.sub", BinaryKind::Sub);
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.mul", BinaryKind::Mul);
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.div", BinaryKind::Div);
+    patterns.add<SelectLowering>(ctx);
+    patterns.add<MaskedFillLowering>(ctx);
     patterns.add<MatmulLowering>(ctx);
     patterns.add<BatchedGemmLowering>(ctx);
     patterns.add<TransposeLowering>(ctx);

@@ -9,8 +9,8 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `real` | 73 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 9 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
-| `no_verifier` | 54 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 136 | |
+| `no_verifier` | 61 | No verifier declared.  TD constraints suffice — fine for many ops. |
+| **Total** | 143 | |
 
 ## Per-dialect details
 
@@ -22,6 +22,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `AdafactorOp` | `no_verifier` |
 | `AdamOp` | `no_verifier` |
 | `AdamWOp` | `no_verifier` |
+| `AddOp` | `no_verifier` |
 | `AllGatherOp` | `no_verifier` |
 | `AllReduceOp` | `no_verifier` |
 | `ArchGumbelSoftmaxOp` | `trivial_stub` |
@@ -53,6 +54,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `DeepSeekSparseAttentionOp` | `real` |
 | `DequantizeFP4Op` | `no_verifier` |
 | `DequantizeFP8Op` | `no_verifier` |
+| `DivOp` | `no_verifier` |
 | `DropoutOp` | `real` |
 | `EBMBivectorLangevinStepOp` | `real` |
 | `EBMDecodeInitOp` | `real` |
@@ -91,6 +93,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `MLADecodeFusedOp` | `real` |
 | `MLADecodeOp` | `real` |
 | `MQAAttentionOp` | `real` |
+| `MaskedFillOp` | `no_verifier` |
 | `MatmulOp` | `real` |
 | `ModifiedDeltaAttentionOp` | `real` |
 | `MoeCombineOp` | `real` |
@@ -99,6 +102,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `MorPartitionOp` | `no_verifier` |
 | `MorRouterOp` | `no_verifier` |
 | `MorScatterOp` | `no_verifier` |
+| `MulOp` | `no_verifier` |
 | `MultiHeadAttentionOp` | `real` |
 | `NTKRopeOp` | `no_verifier` |
 | `NativeSparseAttnFusedOp` | `real` |
@@ -122,6 +126,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `RLNormalizeGroupAdvantagesOp` | `real` |
 | `RLPPOPolicyLossOp` | `real` |
 | `RMSNormSafeOp` | `no_verifier` |
+| `ReduceOp` | `no_verifier` |
 | `ReduceScatterOp` | `no_verifier` |
 | `ReluOp` | `no_verifier` |
 | `ReshapeOp` | `real` |
@@ -132,6 +137,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `RopeOp` | `real` |
 | `RopeSplitOp` | `no_verifier` |
 | `SVDOp` | `real` |
+| `SelectOp` | `no_verifier` |
 | `SigmoidOp` | `no_verifier` |
 | `SiluMulOp` | `no_verifier` |
 | `SiluOp` | `no_verifier` |
@@ -140,6 +146,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `SoftmaxSafeOp` | `no_verifier` |
 | `SoftplusOp` | `no_verifier` |
 | `SpectralConvOp` | `no_verifier` |
+| `SubOp` | `no_verifier` |
 | `SwigluFusedOp` | `no_verifier` |
 | `TanhOp` | `no_verifier` |
 | `TransposeOp` | `real` |

@@ -43,6 +43,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/SCF/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
@@ -120,6 +121,14 @@ void maybeTrace(PassManager &pm) {
 // the function into a void return. Phase 0 hardcoded one name; Phase 1 walks.
 // Functions that already return void / multiple results / non-memref are left
 // untouched (a non-applicable function isn't an error).
+//
+// We copy the produced buffer into the out-param rather than redirect-and-erase
+// the producer. The redirect trick only works when the producer writes through
+// a retargetable `outs` operand; it silently destroys control flow (an scf.for
+// whose result is replaced becomes dead and is erased, losing the loop). The
+// copy is correct for ANY producer, and for our identity-layout C-contiguous
+// boundary (§12.4) `memref.copy` lowers to a `memcpy` intrinsic — no runtime
+// symbol, negligible cost.
 LogicalResult rewriteResultsToOutParams(ModuleOp module) {
   for (auto fn : module.getOps<func::FuncOp>()) {
     if (fn.getNumResults() != 1)
@@ -134,14 +143,8 @@ LogicalResult rewriteResultsToOutParams(ModuleOp module) {
     Value ret = retOp.getOperand(0);
 
     BlockArgument outArg = entry.addArgument(memrefTy, fn.getLoc());
-    // Redirect the producer (e.g. linalg.* outs / linalg.fill init) and the
-    // return to write the caller's buffer; the original alloc becomes dead.
-    ret.replaceAllUsesWith(outArg);
-    if (Operation *def = ret.getDefiningOp())
-      if (def->use_empty())
-        def->erase();
-
     OpBuilder b(retOp);
+    memref::CopyOp::create(b, retOp.getLoc(), ret, outArg);
     func::ReturnOp::create(b, retOp.getLoc());
     retOp.erase();
     fn.setType(
@@ -174,6 +177,10 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   // Identity layout at the boundary == the ABI's row-major descriptor contract.
   bopts.functionBoundaryTypeConversion =
       bufferization::LayoutMapOption::IdentityLayoutMap;
+  // Phase 2 control flow: an scf.for body that yields a freshly-allocated tensor
+  // (e.g. acc = acc + x) is not buffer-equivalent to its iter_arg. Permit the
+  // loop to carry a new allocation rather than erroring on non-equivalence.
+  bopts.allowReturnAllocsFromLoops = true;
   pm1.addPass(bufferization::createOneShotBufferizePass(bopts));
   if (failed(pm1.run(module)))
     return failure();
@@ -225,6 +232,7 @@ void *tessera_jit_compile(const char *mlir_text) {
   arith::registerBufferizableOpInterfaceExternalModels(registry);
   linalg::registerBufferizableOpInterfaceExternalModels(registry);
   tensor::registerBufferizableOpInterfaceExternalModels(registry);
+  scf::registerBufferizableOpInterfaceExternalModels(registry);
   bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(
       registry);
 

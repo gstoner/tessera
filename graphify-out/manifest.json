@@ -495,8 +495,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/transforms/include/Tessera/Transforms/Passes.h": {
-    "mtime": 1780541855.3235402,
-    "ast_hash": "76774d0f96b85d198be189e95d3411df",
+    "mtime": 1780669924.865499,
+    "ast_hash": "3752bdb9365238b0bc3cb8ef2c9e2545",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/TilingPass.cpp": {
@@ -540,8 +540,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/Passes.cpp": {
-    "mtime": 1780541902.7921293,
-    "ast_hash": "0a17ab6c681e76a9762892e0e771b939",
+    "mtime": 1780669928.8630724,
+    "ast_hash": "5d135d1f21a493bfa33f62eae3052bcc",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/MigrateTesseraIR.cpp": {
@@ -660,8 +660,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/TesseraOps.cpp": {
-    "mtime": 1780619259.1913035,
-    "ast_hash": "0ab18e7752ff9571dc8179950d4c8fd2",
+    "mtime": 1780624277.619251,
+    "ast_hash": "e527af17ef4176d07692a9c1fdbb583d",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/ir/AdjointInterface.cpp": {
@@ -1735,8 +1735,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/CMakeLists.txt": {
-    "mtime": 1780541893.37796,
-    "ast_hash": "5ed6aa274c9d9061fc3d16405ccddef9",
+    "mtime": 1780687188.3218286,
+    "ast_hash": "d8ed77d0e7f1ce72ed35b1ede723a07e",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/collectives/CMakeLists.txt": {
@@ -2355,8 +2355,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/runtime.py": {
-    "mtime": 1780575895.960932,
-    "ast_hash": "abca3dbe745bf6c2203b9540576f7e76",
+    "mtime": 1780697987.918192,
+    "ast_hash": "db9425aedffdd86b870657474e532dc5",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/energy.py": {
@@ -2585,8 +2585,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/autodiff/vjp.py": {
-    "mtime": 1780406359.080945,
-    "ast_hash": "c273cfbea654baf95686f93d3b8edad5",
+    "mtime": 1780698194.6162694,
+    "ast_hash": "6e8546b54cc9cbe0841c90d331e94d5c",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/autodiff/grad.py": {
@@ -2595,8 +2595,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/autodiff/jvp.py": {
-    "mtime": 1780060444.0437727,
-    "ast_hash": "02c775e4d9458c991cf23f9973ea7a69",
+    "mtime": 1780698194.6156206,
+    "ast_hash": "1f788c4e20e885767101998fd510f1f5",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/autodiff/geometric/registry.py": {
@@ -2890,8 +2890,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/target_ir.py": {
-    "mtime": 1780524848.6059442,
-    "ast_hash": "58780c6e289897379581c4ca8d6c86a7",
+    "mtime": 1780697948.0299904,
+    "ast_hash": "9ae18aeb6f259b5b258cf8d5271cb746",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/symbol_table.py": {
@@ -8455,8 +8455,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/scripts/run_sanitizers.sh": {
-    "mtime": 1779201224.743735,
-    "ast_hash": "10f9320bc38a39696decbbb4ceca9544",
+    "mtime": 1780626314.61797,
+    "ast_hash": "5e3c8067073392a6a4b4cf26dfa74056",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/scripts/validate_nvcc_compile.py": {
@@ -8575,8 +8575,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/CMakeLists.txt": {
-    "mtime": 1780252633.1523974,
-    "ast_hash": "3eda4ff0cc6eff5c1b48cdae2dfdd16c",
+    "mtime": 1780670539.4984734,
+    "ast_hash": "89ea4e27b3b76557e93ef4353c832347",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/PROJECT_STRUCTURE.md": {
@@ -10105,8 +10105,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/RUNTIME_ABI_SPEC.md": {
-    "mtime": 1780371960.7911243,
-    "ast_hash": "6509bfd2a459f1738a71b5b19ca432b7",
+    "mtime": 1780671916.0331545,
+    "ast_hash": "d7abd612fa3da18a60f5bf1e30dcce38",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/CITL_ROCM_TRACE_PROFILER_SPEC.md": {
@@ -10235,57 +10235,57 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/support_table.md": {
-    "mtime": 1780585665.8977063,
+    "mtime": 1780698343.6360145,
     "ast_hash": "b57396fcdc2282ff014e032d4f493262",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/apple_target_map.md": {
-    "mtime": 1780585683.7239058,
+    "mtime": 1780698363.2842424,
     "ast_hash": "9687ebfbd30da391b3e421b84c1f8340",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/docs_freshness.md": {
-    "mtime": 1780585693.7853587,
-    "ast_hash": "16ab834abcf273dfd203f33e0999dc67",
+    "mtime": 1780698374.3150249,
+    "ast_hash": "a74ecae26c58a10066cac8cc6de4aa41",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/rocm_target_map.md": {
-    "mtime": 1780585683.727154,
+    "mtime": 1780698363.2876258,
     "ast_hash": "f643c3960879e6f6866192356072b3de",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/s_series_status.md": {
-    "mtime": 1780585683.567227,
+    "mtime": 1780698363.1036572,
     "ast_hash": "be164d8eba1733544cc3018fdb2ffefb",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/tsol_coverage.md": {
-    "mtime": 1780585693.7642581,
+    "mtime": 1780698374.2808552,
     "ast_hash": "ac24779d376b95e3dc25e8cbbc3b1239",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/runtime_abi.md": {
-    "mtime": 1780585683.6840553,
+    "mtime": 1780698363.2351906,
     "ast_hash": "722fe41beb7e336daacc03f6c7b2fdeb",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/e2e_op_coverage.md": {
-    "mtime": 1780585683.5567687,
+    "mtime": 1780698363.0922556,
     "ast_hash": "d4d5630611db1e335faba8efb1fa187d",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/verifier_coverage.md": {
-    "mtime": 1780619197.3717887,
-    "ast_hash": "67dc55ea8f61e531255461795c244403",
+    "mtime": 1780698363.2824817,
+    "ast_hash": "6f428949a1a4b6d2e199efbd6037f849",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/effect_lattice_audit.md": {
-    "mtime": 1780585693.7671711,
+    "mtime": 1780698374.2841928,
     "ast_hash": "211a5275d42f591e815d9faf80f3fcdf",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/nvidia_sm90_target_map.md": {
-    "mtime": 1780585683.726003,
+    "mtime": 1780698363.2864022,
     "ast_hash": "e5303448884bbb7873772af80f2120c2",
     "semantic_hash": ""
   },
@@ -11025,8 +11025,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_canonical_compile.py": {
-    "mtime": 1780284772.6955507,
-    "ast_hash": "2e956dcc9ae6c683a8ccd27dd51af322",
+    "mtime": 1780623938.7056575,
+    "ast_hash": "34d4366edb076a39f274c651963c7a7c",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_runtime_artifact_abi_g6.py": {
@@ -11100,12 +11100,12 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/op_target_conformance.md": {
-    "mtime": 1780585668.6258454,
+    "mtime": 1780698346.6437433,
     "ast_hash": "78ac02d611cfbdf3d9f86a203e2588a4",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/runtime_execution_matrix.md": {
-    "mtime": 1780585683.684419,
+    "mtime": 1780698363.2357616,
     "ast_hash": "5b9e21917d5febef69c11baa3ba74f03",
     "semantic_hash": ""
   },
@@ -11835,18 +11835,138 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/apple_backend.md": {
-    "mtime": 1780580162.0989616,
-    "ast_hash": "9f0e10e1218eabd83bf3c33bfe11ce3b",
+    "mtime": 1780698469.620485,
+    "ast_hash": "66fac2be08010ec14c529bb6ee4e84c9",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/surface_status.md": {
-    "mtime": 1780586705.7340782,
+    "mtime": 1780698374.3182971,
     "ast_hash": "b71d41a3faeaaa2166cd12a5f76aaacf",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/test_coverage.md": {
-    "mtime": 1780619384.692132,
-    "ast_hash": "82cf129ebf1cba4a4ca1817af81e60a0",
+    "mtime": 1780698374.247639,
+    "ast_hash": "eb8b4e66588f8ae66796de7444278885",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/python/tessera/_apple_gpu_backend.py": {
+    "mtime": 1780696029.8491433,
+    "ast_hash": "930dcccfc280aad257fc3da19e9e155a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/python/tessera/_jit_boundary.py": {
+    "mtime": 1780694810.0275583,
+    "ast_hash": "03b0f84fd9b79199b5d1adc937b9ee67",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/apple_target_descriptor.py": {
+    "mtime": 1780697906.2080095,
+    "ast_hash": "12eae982d67631e3a143cae62b34fe48",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/transforms/lib/TesseraToLinalgPass.cpp": {
+    "mtime": 1780694678.4424002,
+    "ast_hash": "43e505066e2ee7076553d54fd46a3564",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_target_descriptor.py": {
+    "mtime": 1780698091.7781665,
+    "ast_hash": "59ed2f870535089f7e456e8bf45a63dd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_add.py": {
+    "mtime": 1780676173.9722793,
+    "ast_hash": "c455cb1c581bbba5edbbf7213d94a65d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase1.py": {
+    "mtime": 1780676196.3306475,
+    "ast_hash": "613d9d1e6fceb627bc4749f2f725a6ab",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase1_activations.py": {
+    "mtime": 1780688955.280032,
+    "ast_hash": "1832d6272add695e12060cf09e69ff65",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase1_bf16.py": {
+    "mtime": 1780688803.3878448,
+    "ast_hash": "4637d78dd7a999f9a8c0ec4f3ad20911",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase1_bmm.py": {
+    "mtime": 1780690306.590616,
+    "ast_hash": "1d88183fe7096498b33e4801a545a8aa",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase1_cache.py": {
+    "mtime": 1780690478.1829386,
+    "ast_hash": "fbe784e03ca0964d1aeb17e421ffe958",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase1_graph.py": {
+    "mtime": 1780690018.5301116,
+    "ast_hash": "9254464a3ef314c301848ca0778531bd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase1_norm.py": {
+    "mtime": 1780688229.86187,
+    "ast_hash": "b3e36c2fde8ed36796fb0f746f7703ad",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase1_reduce.py": {
+    "mtime": 1780681436.242895,
+    "ast_hash": "cb91b34191deab9414adaa99ba6425bd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase1_softmax.py": {
+    "mtime": 1780687310.8646727,
+    "ast_hash": "4394401f9b82742a9500df0a4d5f55ad",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase1_transpose.py": {
+    "mtime": 1780689221.4124885,
+    "ast_hash": "97f3bb14b1a7354eeb02c11eddddc4f0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase2_cond.py": {
+    "mtime": 1780693186.4266322,
+    "ast_hash": "88edc1ed8f91eaa9a314e17317b0f6c0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase2_loop.py": {
+    "mtime": 1780693101.578368,
+    "ast_hash": "1959619ac68f9f4b591d901d7af4ad0f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase2_select.py": {
+    "mtime": 1780692996.5775528,
+    "ast_hash": "50c6b89164ed3660e092924ea71d03c2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase2_state.py": {
+    "mtime": 1780694835.5586195,
+    "ast_hash": "672199f03e894b46d2e49549f06549b6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_apple_gpu.py": {
+    "mtime": 1780696051.6785514,
+    "ast_hash": "6753c56121296610cdcb94f23280e6dc",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tools/tessera-jit/tessera_jit.cpp": {
+    "mtime": 1780694918.6630785,
+    "ast_hash": "8362059103a27bc8ec7f96ac6fa24fa2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/docs/spec/PRODUCTION_COMPILER_PLAN.md": {
+    "mtime": 1780696202.229104,
+    "ast_hash": "df62fe9b3c2279fb8d94f7d3ce4be2b4",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tools/tessera-jit/CMakeLists.txt": {
+    "mtime": 1780690126.705794,
+    "ast_hash": "6f61c04f655917b3eafd98206a5512f6",
     "semantic_hash": ""
   }
 }

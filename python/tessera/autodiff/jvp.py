@@ -1064,6 +1064,45 @@ def jvp_max_pool(primals, tangents, *, stride=None, padding=0, **_):
     return y, dy
 
 
+# ── S7 conv1d ──────────────────────────────────────────────────────────────
+
+
+@_jvp("conv1d")
+def jvp_conv1d(primals, tangents, *, stride=1, padding=0, dilation=1,
+               groups=1, **_):
+    """Forward-mode for Conv1d.
+
+    Conv1d is bilinear in (x, W), so the tangent decomposes as
+
+        dy = conv1d(dx, W) + conv1d(x, dW) + dbias
+
+    We import the fp64 helper from the VJP module to avoid recomputing
+    the forward path twice through `nn.functional.conv1d` (which casts to
+    fp32 and would inject quantization noise into the tangent).
+    """
+    from tessera.autodiff.vjp import _conv1d_forward_fp64
+
+    x = np.asarray(primals[0], dtype=np.float64)
+    w = np.asarray(primals[1], dtype=np.float64)
+    dx = np.asarray(tangents[0], dtype=np.float64)
+    dW = np.asarray(tangents[1], dtype=np.float64)
+
+    bias = primals[2] if len(primals) > 2 and primals[2] is not None else None
+    dbias = tangents[2] if len(tangents) > 2 and tangents[2] is not None else None
+
+    kw = dict(stride=stride, padding=padding, dilation=dilation, groups=groups)
+    y = _conv1d_forward_fp64(x, w, **kw)
+    dy = (
+        _conv1d_forward_fp64(dx, w, **kw)
+        + _conv1d_forward_fp64(x, dW, **kw)
+    )
+    if bias is not None:
+        y = y + np.asarray(bias, dtype=np.float64).reshape(1, -1, 1)
+        if dbias is not None:
+            dy = dy + np.asarray(dbias, dtype=np.float64).reshape(1, -1, 1)
+    return y, dy
+
+
 @_jvp("avg_pool")
 def jvp_avg_pool(primals, tangents, *, stride=None, padding=0, **_):
     x = primals[0]

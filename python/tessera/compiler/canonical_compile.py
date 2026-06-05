@@ -448,12 +448,12 @@ def _type_metadata(ir_type: Any, *, layout: str | None = None) -> dict[str, Any]
             dtype = parts[-1]
             dims = parts[:-1]
             if dims == ["*"]:
-                shape: list[str] = ["*"]
+                parsed_shape: list[str] = ["*"]
             else:
-                shape = dims
+                parsed_shape = dims
             meta.update({
-                "shape": shape,
-                "rank": None if "*" in shape else len(shape),
+                "shape": parsed_shape,
+                "rank": None if "*" in parsed_shape else len(parsed_shape),
                 "dtype": _dtype_from_mlir(dtype),
             })
     return meta

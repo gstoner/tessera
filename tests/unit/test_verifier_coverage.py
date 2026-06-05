@@ -82,6 +82,16 @@ _LOCKED_REAL_OPS = (
     "MoeCombineOp",
     "KVCacheAppendOp",
     "KVCachePruneOp",
+    # Sprint E (2026-06-04): remaining attention-family verifier pocket.
+    "RetentionOp",
+    "GatedDeltaNetOp",
+    "KimiDeltaAttentionOp",
+    "ModifiedDeltaAttentionOp",
+    "HybridAttentionOp",
+    "LatentKVCompressOp",
+    "LatentKVExpandKOp",
+    "LatentKVExpandVOp",
+    "NativeSparseAttnFusedOp",
 )
 
 

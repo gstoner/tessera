@@ -809,6 +809,7 @@ def Tessera_RetentionOp : Op<
   // (output, state, sum_of_keys) — matches RetNet's training/inference contract.
   let results = (outs TensorType:$o, TensorType:$state, TensorType:$sum_of_keys);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_LightningAttentionOp : Op<
@@ -858,11 +859,17 @@ class Tessera_DeltaAttentionOp<string mnemonic, string summaryText>
 }
 
 def Tessera_GatedDeltaNetOp
-  : Tessera_DeltaAttentionOp<"gated_deltanet", "Gated DeltaNet recurrent attention">;
+  : Tessera_DeltaAttentionOp<"gated_deltanet", "Gated DeltaNet recurrent attention"> {
+  let hasVerifier = 1;
+}
 def Tessera_KimiDeltaAttentionOp
-  : Tessera_DeltaAttentionOp<"kimi_delta_attention", "Kimi Delta Attention recurrent op">;
+  : Tessera_DeltaAttentionOp<"kimi_delta_attention", "Kimi Delta Attention recurrent op"> {
+  let hasVerifier = 1;
+}
 def Tessera_ModifiedDeltaAttentionOp
-  : Tessera_DeltaAttentionOp<"modified_delta_attention", "Modified bounded Delta Attention recurrent op">;
+  : Tessera_DeltaAttentionOp<"modified_delta_attention", "Modified bounded Delta Attention recurrent op"> {
+  let hasVerifier = 1;
+}
 
 def Tessera_HybridAttentionOp : Op<
   Tessera_Dialect, "hybrid_attention",
@@ -877,6 +884,7 @@ def Tessera_HybridAttentionOp : Op<
                         DefaultValuedAttr<StrAttr, "\"fp32\"">:$state_dtype);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_FusedEpilogueOp : Op<
@@ -992,6 +1000,7 @@ def Tessera_LatentKVCompressOp : Op<
   let arguments = (ins TensorType:$x, TensorType:$w_dkv);
   let results = (outs TensorType:$c);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_LatentKVExpandKOp : Op<
@@ -1002,6 +1011,7 @@ def Tessera_LatentKVExpandKOp : Op<
   let arguments = (ins TensorType:$c, TensorType:$w_uk);
   let results = (outs TensorType:$k);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_LatentKVExpandVOp : Op<
@@ -1012,6 +1022,7 @@ def Tessera_LatentKVExpandVOp : Op<
   let arguments = (ins TensorType:$c, TensorType:$w_uv);
   let results = (outs TensorType:$v);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // attention_variants_plan, MLA-1 — DeepSeek MLA decode fusion target.
@@ -1157,6 +1168,7 @@ def Tessera_NativeSparseAttnFusedOp : Op<
                         DefaultValuedAttr<BoolAttr, "true">:$causal);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // Phase F-MoR — Mixture of Recursions primitives.

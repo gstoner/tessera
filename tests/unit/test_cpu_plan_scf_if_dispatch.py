@@ -15,7 +15,8 @@ Scope ladder:
 * ``scf.if`` with static-literal condition → executable
 * ``scf.if`` with text-only condition (no operand, no static literal) → eager
 * Static-trip-count ``scf.for`` → executable through CPU plan
-* Dynamic/text-only ``scf.for`` and ``scf.while`` → eager
+* SSA-bound dynamic-trip-count ``scf.for`` → executable through CPU plan
+* Text-only ``scf.for`` and ``scf.while`` → eager
 * Nested supported ``scf.if`` / static ``scf.for`` markers dispatch
   recursively
 
@@ -273,6 +274,61 @@ def test_scf_for_static_trip_count_binds_induction_temporarily():
     np.testing.assert_array_equal(out, np.array([16.0], dtype=np.float32))
 
 
+# ---- SSA-bound dynamic scf.for dispatch (Sprint D) ----------------------
+
+def test_scf_for_dynamic_ssa_trip_count_executes_body_each_iteration():
+    body = [
+        IROp(result="y", op_name="tessera.mul", operands=["%x"],
+             operand_types=["tensor<*x?>"], result_type="tensor<*x?>",
+             kwargs={"scalar": 1.0, "scalar_side": "right"}),
+        IROp(result=None, op_name="tessera.scf.for.begin",
+             operands=["%n"], operand_types=["index"],
+             kwargs={"kind": "dynamic", "induction": "i"}),
+        IROp(result="y", op_name="tessera.mul", operands=["%y"],
+             operand_types=["tensor<*x?>"], result_type="tensor<*x?>",
+             kwargs={"scalar": 2.0, "scalar_side": "right"}),
+        IROp(result=None, op_name="tessera.scf.for.end",
+             operands=["%n"], operand_types=["index"],
+             kwargs={"kind": "dynamic", "induction": "i"}),
+    ]
+    plan = _make_cpu_plan(body, output_name="y")
+    out = plan.execute(
+        [np.array([1.0, -2.0], dtype=np.float32), np.array(4)],
+        {}, ["x", "n"])
+    np.testing.assert_array_equal(out, np.array([16.0, -32.0], dtype=np.float32))
+
+
+def test_scf_for_dynamic_ssa_trip_count_is_plannable():
+    body = [
+        IROp(result=None, op_name="tessera.scf.for.begin",
+             operands=["%n"], operand_types=["index"],
+             kwargs={"kind": "dynamic", "induction": "i"}),
+        IROp(result=None, op_name="tessera.scf.for.end",
+             operands=["%n"], operand_types=["index"],
+             kwargs={"kind": "dynamic", "induction": "i"}),
+    ]
+    assert _scf_body_is_plannable(body) is True
+
+
+def test_build_cpu_plan_accepts_dynamic_ssa_scf_for():
+    fn = GraphIRFunction(
+        name="f", args=[IRArg("xs", _T), IRArg("n", _T)],
+        result_types=[_T],
+        body=[
+            IROp(result=None, op_name="tessera.scf.for.begin",
+                 operands=["%n"], operand_types=["tensor<*x?>"],
+                 kwargs={"kind": "dynamic", "induction": "i"}),
+            IROp(result="y", op_name="tessera.relu", operands=["%xs"],
+                 operand_types=["tensor<*x?>"], result_type="tensor<*x?>"),
+            IROp(result=None, op_name="tessera.scf.for.end",
+                 operands=["%n"], operand_types=["tensor<*x?>"],
+                 kwargs={"kind": "dynamic", "induction": "i"}),
+        ],
+        return_values=["%y"],
+    )
+    assert build_cpu_plan(GraphIRModule(functions=[fn])) is not None
+
+
 # ---- explain_cpu_plan reports the right status --------------------------
 
 def test_plannable_scf_function_does_not_trigger_eager_fallback():
@@ -321,8 +377,30 @@ def test_static_scf_for_function_does_not_trigger_eager_fallback():
     assert diag.code != "JIT_EAGER_FALLBACK_CONTROL_FLOW", diag
 
 
-def test_dynamic_scf_for_function_still_falls_back_to_eager():
-    """Dynamic/text-only scf.for remains outside the v1 executor rung."""
+def test_dynamic_ssa_scf_for_function_does_not_trigger_eager_fallback():
+    """SSA-bound dynamic scf.for is now in the CPU plan executor's accept set."""
+    fn = GraphIRFunction(
+        name="f", args=[IRArg("xs", _T), IRArg("n", _T)],
+        result_types=[_T],
+        body=[
+            IROp(result=None, op_name="tessera.scf.for.begin",
+                 operands=["%n"], operand_types=["tensor<*x?>"],
+                 kwargs={"kind": "dynamic", "induction": "i"}),
+            IROp(result="y", op_name="tessera.relu", operands=["%xs"],
+                 operand_types=["tensor<*x?>"], result_type="tensor<*x?>"),
+            IROp(result=None, op_name="tessera.scf.for.end",
+                 operands=["%n"], operand_types=["tensor<*x?>"],
+                 kwargs={"kind": "dynamic", "induction": "i"}),
+        ],
+        return_values=["%y"],
+    )
+    mod = GraphIRModule(functions=[fn])
+    diag = explain_cpu_plan(mod)
+    assert diag.code != "JIT_EAGER_FALLBACK_CONTROL_FLOW", diag
+
+
+def test_text_only_scf_for_function_still_falls_back_to_eager():
+    """Text-only scf.for remains outside the executor rung."""
     fn = GraphIRFunction(
         name="f", args=[IRArg("xs", _T)], result_types=[_T],
         body=[
@@ -342,7 +420,7 @@ def test_dynamic_scf_for_function_still_falls_back_to_eager():
     mod = GraphIRModule(functions=[fn])
     diag = explain_cpu_plan(mod)
     assert diag.code == "JIT_EAGER_FALLBACK_CONTROL_FLOW"
-    assert "dynamic scf.for" in diag.message or "scf.for" in diag.message
+    assert "text-only scf.for" in diag.message or "scf.for" in diag.message
 
 
 # ---- _scf_body_is_plannable classifier ---------------------------------

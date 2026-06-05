@@ -244,9 +244,9 @@ def _scf_body_is_plannable(body: "Sequence[IROp]") -> bool:
     """Followup 1 — True iff every scf op in ``body`` is one the CPU
     plan executor handles: ``scf.if.{begin,else,end}``, each
     ``scf.if.begin`` either carries an SSA operand condition or a
-    static literal in ``kwargs["condition"]``; and static-trip-count
-    ``scf.for.{begin,end}`` with a non-nested supported body.
-    ``scf.while.*`` and dynamic/text-only loops remain eager-only."""
+    static literal in ``kwargs["condition"]``; and ``scf.for.{begin,end}``
+    with either a static ``trip_count`` attr or an SSA-bound trip-count
+    operand. ``scf.while.*`` and text-only loops remain eager-only."""
     for op in body:
         name = _canonical_op_name(op.op_name)
         if not name.startswith("tessera.scf."):
@@ -257,8 +257,10 @@ def _scf_body_is_plannable(body: "Sequence[IROp]") -> bool:
             if not op.operands and "condition" not in op.kwargs:
                 return False  # text-only condition can't be evaluated
         if name == "tessera.scf.for.begin":
+            if op.operands:
+                continue  # dynamic SSA trip count
             if "trip_count" not in op.kwargs:
-                return False  # dynamic / text-only trip count
+                return False  # text-only / unlowered trip count
             try:
                 if int(op.kwargs["trip_count"]) < 0:
                     return False
@@ -341,8 +343,9 @@ def build_cpu_plan(
         return None
     for op in fn.body:
         name = _canonical_op_name(op.op_name)
-        # Followup 1 accepted scf.if markers. Sprint C adds static
-        # trip-count scf.for markers; dynamic loops and scf.while remain
+        # Followup 1 accepted scf.if markers. Sprint C added static
+        # trip-count scf.for; Sprint D accepts SSA-bound dynamic
+        # trip-count scf.for. Text-only loops and scf.while remain
         # eager-only.
         if name in _SUPPORTED_CONTROL_FLOW_OPS:
             if name == "tessera.scf.if.begin":
@@ -353,6 +356,8 @@ def build_cpu_plan(
                 if not op.operands and "condition" not in op.kwargs:
                     return None
             if name == "tessera.scf.for.begin":
+                if op.operands:
+                    continue
                 if "trip_count" not in op.kwargs:
                     return None
                 try:
@@ -435,9 +440,9 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
                 (f"function contains structured control flow ({seen!r} and "
                  f"{len(scf_ops) - 1} other scf op(s)); CPU plan executor "
                  f"handles scf.if with SSA / static conditions and "
-                 f"static-trip-count scf.for, but this body has "
-                 f"scf.while, dynamic scf.for, nested unsupported control "
-                 f"flow, or a text-only condition — "
+                 f"static or SSA-bound trip-count scf.for, but this body "
+                 f"has scf.while, text-only scf.for, nested unsupported "
+                 f"control flow, or a text-only condition — "
                  f"falling back to eager Python (numerically correct, "
                  f"unoptimized)"),
             )

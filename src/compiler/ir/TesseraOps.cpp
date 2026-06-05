@@ -241,6 +241,65 @@ LogicalResult verifyAttentionQKV(Operation *op, Value q, Value k, Value v,
   return success();
 }
 
+LogicalResult verifyMatmulLike(Operation *op, Value lhs, Value rhs, Value out,
+                               StringRef label) {
+  auto lhsTy = dyn_cast<RankedTensorType>(lhs.getType());
+  auto rhsTy = dyn_cast<RankedTensorType>(rhs.getType());
+  auto outTy = dyn_cast<RankedTensorType>(out.getType());
+  if (!lhsTy || !rhsTy || !outTy)
+    return success();
+  if (lhsTy.getRank() < 2 || rhsTy.getRank() < 2 || outTy.getRank() < 2)
+    return op->emitOpError() << label << " expects rank >= 2 tensors";
+  if (failed(verifyFloatSameDtype(op, {lhsTy, rhsTy, outTy}, label)))
+    return failure();
+  int64_t lhsK = lhsTy.getDimSize(lhsTy.getRank() - 1);
+  int64_t rhsK = rhsTy.getDimSize(rhsTy.getRank() - 2);
+  if (!dimsAgree(lhsK, rhsK))
+    return op->emitOpError() << label
+                             << " contracting dimensions must match";
+  int64_t lhsM = lhsTy.getDimSize(lhsTy.getRank() - 2);
+  int64_t outM = outTy.getDimSize(outTy.getRank() - 2);
+  if (!dimsAgree(lhsM, outM))
+    return op->emitOpError() << label << " output M must match lhs";
+  int64_t rhsN = rhsTy.getDimSize(rhsTy.getRank() - 1);
+  int64_t outN = outTy.getDimSize(outTy.getRank() - 1);
+  if (!dimsAgree(rhsN, outN))
+    return op->emitOpError() << label << " output N must match rhs";
+  return success();
+}
+
+LogicalResult verifyOptionalOperandsMatchQ(Operation *op, RankedTensorType qTy,
+                                           unsigned firstOperand,
+                                           StringRef label) {
+  for (unsigned i = firstOperand, e = op->getNumOperands(); i < e; ++i) {
+    auto ty = dyn_cast<RankedTensorType>(op->getOperand(i).getType());
+    if (!ty)
+      continue;
+    if (!isFloatTensor(ty))
+      return op->emitOpError() << label
+                               << " optional tensor operands must be floating";
+    if (ty.getElementType() != qTy.getElementType())
+      return op->emitOpError() << label
+                               << " optional tensor dtype must match Q";
+  }
+  return success();
+}
+
+LogicalResult verifyAllowedStringAttr(Operation *op, StringRef name,
+                                      ArrayRef<StringRef> allowed,
+                                      StringRef fallback = "") {
+  StringRef value = fallback;
+  if (auto attr = op->getAttrOfType<StringAttr>(name))
+    value = attr.getValue();
+  if (value.empty())
+    return success();
+  for (StringRef a : allowed)
+    if (value == a)
+      return success();
+  return op->emitOpError() << name << " has unsupported value '" << value
+                           << "'";
+}
+
 LogicalResult verifyAttentionFeatureMap(Operation *op, StringRef featureMap) {
   return verifyAllowedStringAttr(
       op, "feature_map", {"elu", "relu", "identity", "softplus"},
@@ -278,21 +337,6 @@ LogicalResult verifyEBMAffineStep(Operation *op, RankedTensorType state,
   if (f64AttrOr(op, "noise_scale", 0.0) > 0.0 && !noise)
     return op->emitOpError("noise_scale > 0 requires a noise operand");
   return success();
-}
-
-LogicalResult verifyAllowedStringAttr(Operation *op, StringRef name,
-                                      ArrayRef<StringRef> allowed,
-                                      StringRef fallback = "") {
-  StringRef value = fallback;
-  if (auto attr = op->getAttrOfType<StringAttr>(name))
-    value = attr.getValue();
-  if (value.empty())
-    return success();
-  for (StringRef a : allowed)
-    if (value == a)
-      return success();
-  return op->emitOpError() << name << " has unsupported value '" << value
-                           << "'";
 }
 
 int64_t bladeCountFor(int64_t p, int64_t q) {
@@ -1341,6 +1385,80 @@ LogicalResult GatedAttentionOp::verify() {
   return success();
 }
 
+LogicalResult RetentionOp::verify() {
+  if (failed(verifyPositiveI64(this->getOperation(), "deg", getDeg())) ||
+      failed(verifyPositiveI64(this->getOperation(), "chunk", getChunk())) ||
+      failed(verifyPositiveOptionalI64(this->getOperation(), "switch_over",
+                                       getSwitchOver())))
+    return failure();
+  if (failed(verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                                getO(), "retention")))
+    return failure();
+  auto qTy = dyn_cast<RankedTensorType>(getQ().getType());
+  auto stateTy = dyn_cast<RankedTensorType>(getState().getType());
+  auto sumTy = dyn_cast<RankedTensorType>(getSumOfKeys().getType());
+  if (failed(verifyFloatSameDtype(this->getOperation(), {qTy, stateTy, sumTy},
+                                  "retention state")))
+    return failure();
+  return success();
+}
+
+LogicalResult GatedDeltaNetOp::verify() {
+  if (failed(verifyAllowedStringAttr(this->getOperation(), "state_dtype",
+                                     {"fp32", "fp16", "bf16"}, "fp32")))
+    return failure();
+  if (failed(verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                                getO(), "gated_deltanet")))
+    return failure();
+  auto qTy = dyn_cast<RankedTensorType>(getQ().getType());
+  if (!qTy)
+    return success();
+  return verifyOptionalOperandsMatchQ(this->getOperation(), qTy, 3,
+                                      "gated_deltanet");
+}
+
+LogicalResult KimiDeltaAttentionOp::verify() {
+  if (failed(verifyAllowedStringAttr(this->getOperation(), "state_dtype",
+                                     {"fp32", "fp16", "bf16"}, "fp32")))
+    return failure();
+  if (failed(verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                                getO(), "kimi_delta_attention")))
+    return failure();
+  auto qTy = dyn_cast<RankedTensorType>(getQ().getType());
+  if (!qTy)
+    return success();
+  return verifyOptionalOperandsMatchQ(this->getOperation(), qTy, 3,
+                                      "kimi_delta_attention");
+}
+
+LogicalResult ModifiedDeltaAttentionOp::verify() {
+  if (failed(verifyAllowedStringAttr(this->getOperation(), "state_dtype",
+                                     {"fp32", "fp16", "bf16"}, "fp32")))
+    return failure();
+  if (failed(verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                                getO(), "modified_delta_attention")))
+    return failure();
+  auto qTy = dyn_cast<RankedTensorType>(getQ().getType());
+  if (!qTy)
+    return success();
+  return verifyOptionalOperandsMatchQ(this->getOperation(), qTy, 3,
+                                      "modified_delta_attention");
+}
+
+LogicalResult HybridAttentionOp::verify() {
+  if (failed(verifyAllowedStringAttr(this->getOperation(), "pattern",
+                                     {"auto", "full", "sliding", "linear",
+                                      "delta", "hybrid"},
+                                     "auto")) ||
+      failed(verifyAllowedStringAttr(this->getOperation(), "state_dtype",
+                                     {"fp32", "fp16", "bf16"}, "fp32")))
+    return failure();
+  if (getLayerIndex() < 0)
+    return emitOpError("layer_index must be non-negative");
+  return verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                            getO(), "hybrid_attention");
+}
+
 LogicalResult FusedEpilogueOp::verify() {
   if (!getHasBias()) {
     auto biasType = dyn_cast<ShapedType>(getBias().getType());
@@ -1409,6 +1527,30 @@ LogicalResult MLADecodeFusedOp::verify() {
   return success();
 }
 
+LogicalResult LatentKVCompressOp::verify() {
+  return verifyMatmulLike(this->getOperation(),
+                          getOperation()->getOperand(0),
+                          getOperation()->getOperand(1),
+                          getOperation()->getResult(0),
+                          "latent_kv_compress");
+}
+
+LogicalResult LatentKVExpandKOp::verify() {
+  return verifyMatmulLike(this->getOperation(),
+                          getOperation()->getOperand(0),
+                          getOperation()->getOperand(1),
+                          getOperation()->getResult(0),
+                          "latent_kv_expand_k");
+}
+
+LogicalResult LatentKVExpandVOp::verify() {
+  return verifyMatmulLike(this->getOperation(),
+                          getOperation()->getOperand(0),
+                          getOperation()->getOperand(1),
+                          getOperation()->getResult(0),
+                          "latent_kv_expand_v");
+}
+
 LogicalResult AttnSlidingWindowOp::verify() {
   if (failed(verifyPositiveI64(this->getOperation(), "window_size",
                                getWindowSize())))
@@ -1433,6 +1575,31 @@ LogicalResult AttnTopKBlocksOp::verify() {
     return failure();
   return verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
                             getO(), "attn_top_k_blocks");
+}
+
+LogicalResult NativeSparseAttnFusedOp::verify() {
+  if (failed(verifyPositiveI64(this->getOperation(), "window_size",
+                               getWindowSize())) ||
+      failed(verifyPositiveI64(this->getOperation(), "block_size",
+                               getBlockSize())) ||
+      failed(verifyPositiveI64(this->getOperation(), "top_k", getTopK())))
+    return failure();
+  if (failed(verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                                getO(), "native_sparse_attn_fused")))
+    return failure();
+  auto qTy = dyn_cast<RankedTensorType>(getQ().getType());
+  auto gateTy = dyn_cast<RankedTensorType>(getGateLogits().getType());
+  if (!qTy || !gateTy)
+    return success();
+  if (!isFloatTensor(gateTy))
+    return emitOpError("gate_logits must be a floating tensor");
+  if (gateTy.getElementType() != qTy.getElementType())
+    return emitOpError("gate_logits dtype must match Q");
+  int64_t qTokens = qTy.getDimSize(qTy.getRank() - 2);
+  int64_t gateTokens = gateTy.getDimSize(gateTy.getRank() - 2);
+  if (!dimsAgree(qTokens, gateTokens))
+    return emitOpError("gate_logits sequence dimension must match Q");
+  return success();
 }
 
 // Sprint V4b (2026-05-22) — CastOp: shape-preserving element-type

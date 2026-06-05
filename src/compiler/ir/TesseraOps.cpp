@@ -1446,11 +1446,12 @@ LogicalResult ModifiedDeltaAttentionOp::verify() {
 }
 
 LogicalResult HybridAttentionOp::verify() {
-  if (failed(verifyAllowedStringAttr(this->getOperation(), "pattern",
-                                     {"auto", "full", "sliding", "linear",
-                                      "delta", "hybrid"},
-                                     "auto")) ||
-      failed(verifyAllowedStringAttr(this->getOperation(), "state_dtype",
+  // ``pattern`` on hybrid_attention is a *free-form* model-specific hybrid
+  // variant (e.g. "kimi_kda_mla", "ling_1_7_mla_lightning"), not a closed
+  // category enum: the reasoning passes pass it through verbatim as
+  // ``tessera.reasoning.variant`` (see AttentionFamilyPasses::hybridVariant).
+  // Only ``state_dtype`` is a closed set.
+  if (failed(verifyAllowedStringAttr(this->getOperation(), "state_dtype",
                                      {"fp32", "fp16", "bf16"}, "fp32")))
     return failure();
   if (getLayerIndex() < 0)

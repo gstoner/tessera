@@ -166,10 +166,15 @@ def test_module_is_pure_aggregator():
                 resolved.append(f"{pkg}.{leaf}" if pkg != "__future__"
                                 else pkg)
     allowed_prefixes = (
-        # The five upstream truth sources C reconciles.
+        # The upstream truth sources C reconciles. ``op_catalog`` is the
+        # source of each op's intrinsic ``effect`` / ``lowering`` family,
+        # which the first-class ``effects`` compile metadata reconciles
+        # (``_op_effect`` / ``_lowering_family``); it is a truth source,
+        # not new compiler logic.
         "tessera.compiler.driver",
         "tessera.compiler.graph_ir",
         "tessera.compiler.pipeline_gates",
+        "tessera.compiler.op_catalog",
         # Stdlib / typing.
         "__future__", "dataclasses", "pathlib", "typing",
     )

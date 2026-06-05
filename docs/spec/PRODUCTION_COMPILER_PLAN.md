@@ -2,16 +2,25 @@
 status: Ratified
 classification: Design / Roadmap
 authority: Production MLIR/LLVM compiler
-last_updated: 2026-06-05
+last_updated: 2026-06-06
 ---
 
 # Tessera Production Compiler Plan (MLIR/LLVM)
 
-> **Status:** Ratified architecture (decisions D1–D5 locked). **Phase 0 landed
-> 2026-06-05** — `tessera.add` executes through `tessera → linalg → bufferize →
-> LLVM → ExecutionEngine` (CPU), caller-allocated DPS, numpy-oracle + proof-of-
-> execution tests green (`tools/tessera-jit`, `tests/unit/test_production_jit_add.py`,
-> `RUNTIME_ABI_SPEC.md` §12). Phase 1 (broaden op coverage via linalg) is next.
+> **Status:** Ratified architecture (decisions D1–D5 locked).
+>
+> * **Phase 0 landed 2026-06-05** — boundary proof on `tessera.add`.
+> * **Phase 1 Sprint 1.1 landed 2026-06-06** — JIT harness generalized
+>   (`tessera_jit_invoke(handle, name, void** descs, int n)` via direct c-iface
+>   dispatch; arity 1–8); generic rank-N f32 descriptor packing in Python;
+>   `tessera.matmul` → `linalg.fill(0) → linalg.matmul` (first non-elementwise
+>   op); binary elementwise family expanded to `add/sub/mul`. **20/20 oracle +
+>   execution-counter + negative tests green** (`tests/unit/test_production_jit_add.py`,
+>   `tests/unit/test_production_jit_phase1.py`).
+>
+> Phase 1 *DoD* (the ~15 structural patterns covering the bulk of the op
+> surface, plus bf16 boundary) is *in progress*. Next slices: reductions,
+> softmax, normalization, bf16 boundary.
 > **Scope:** Evolve Tessera from a Python-interpreted prototype into a production
 > MLIR/LLVM-IR compiler, while retaining the Python compiler as the
 > experimentation lane. This document is the committed decision record; it gates

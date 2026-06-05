@@ -59,9 +59,12 @@ def test_jit_add_is_destination_passing_writes_into_fresh_output():
 @pytest.mark.parametrize(
     "a, b",
     [
-        (np.ones((2, 2, 2), np.float32), np.ones((2, 2, 2), np.float32)),  # rank-3
-        (np.ones((4, 4), np.float16), np.ones((4, 4), np.float16)),        # f16
-        (np.ones((4, 8), np.float32), np.ones((8, 4), np.float32)),        # shape mismatch
+        # f16 — dtype outside the f32-only Phase 1 envelope (bf16/f16 land later).
+        (np.ones((4, 4), np.float16), np.ones((4, 4), np.float16)),
+        # Shape mismatch — elementwise requires equal shapes.
+        (np.ones((4, 8), np.float32), np.ones((8, 4), np.float32)),
+        # Scalar (rank-0) — Phase 1 boundary requires rank >= 1.
+        (np.float32(1.0), np.float32(2.0)),
     ],
 )
 def test_jit_add_rejects_out_of_envelope_instead_of_falling_back(a, b):
@@ -69,6 +72,25 @@ def test_jit_add_rejects_out_of_envelope_instead_of_falling_back(a, b):
 
     A silent numpy fallback here would be a correctness-masking bug: it would
     return the right number while bypassing the compiled lane entirely.
+
+    Note: Phase 1 generalized the elementwise lowering, so rank-3+ adds now
+    legitimately execute through the lane (previously a Phase 0 envelope guard).
+    Negatives here are dtype + shape-mismatch + rank-0, which Phase 1 still rejects.
     """
     with pytest.raises(jb.TesseraJitError):
-        jb.jit_add(a, b)
+        jb.jit_add(np.asarray(a), np.asarray(b))
+
+
+def test_jit_add_phase1_higher_rank_now_executes():
+    """Phase 1 generalized elementwise: rank-3 add now executes through the lane.
+
+    This was a deliberate Phase 0 guard ("rank-2 only"); Phase 1 removed it.
+    The test pins that the broadening is real (oracle match + counter advance).
+    """
+    rng = np.random.default_rng(7)
+    a = rng.standard_normal((2, 3, 4)).astype(np.float32)
+    b = rng.standard_normal((2, 3, 4)).astype(np.float32)
+    before = jb.invocation_count()
+    out = jb.jit_add(a, b)
+    assert jb.invocation_count() == before + 1
+    np.testing.assert_allclose(out, a + b, rtol=1e-6, atol=1e-6)

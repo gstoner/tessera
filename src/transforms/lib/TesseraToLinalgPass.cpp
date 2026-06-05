@@ -1,20 +1,24 @@
 //===- TesseraToLinalgPass.cpp --------------------------------------------===//
-// Phase 0 of the production MLIR/LLVM compiler
+// Phase 0–1 of the production MLIR/LLVM compiler
 // (docs/spec/PRODUCTION_COMPILER_PLAN.md).
 //
-// Lowers *total* elementwise Tessera Graph IR ops onto the upstream `linalg`
-// dialect on tensors. This is the shared front-half of the production spine:
-// once an op is in linalg-on-tensors, the standard
+// Lowers Tessera Graph IR onto upstream `linalg` on tensors — the shared
+// front-half of the production spine. Every target (CPU LLVM/ORC now; NVVM,
+// ROCDL later) inherits this lowering.
 //
-//     linalg -> bufferize -> (vector) -> llvm -> ExecutionEngine
+// Coverage:
+//   Phase 0: tessera.add (elementwise, total)
+//   Phase 1: tessera.{sub,mul} (elementwise via shared table)
+//            tessera.matmul (linalg.fill + linalg.matmul; rank-2, no transpose)
 //
-// pipeline produces executable code (CPU now; gpu/NVVM/ROCDL later). The whole
-// bet of the production lane is that this front-half is built *once* and every
-// target inherits it (see PRODUCTION_COMPILER_PLAN.md, decisions D1/D2).
-//
-// Phase 0 scope is deliberately minimal: `tessera.add` only (the boundary-proof
-// op, RUNTIME_ABI_SPEC.md §12). Phase 1 broadens this to the ~15 structural
-// patterns that cover the bulk of the op surface.
+// Decisions:
+//   - Match by op-name string (RewritePattern). Avoids leaking generated op
+//     class includes through this pass; the ODS still verifies at parse time.
+//   - All ops emit DPS form (`outs` is a fresh tensor.empty / linalg.fill);
+//     bufferization + the harness's DPS rewrite turn the result into a
+//     caller-allocated out-param (RUNTIME_ABI_SPEC §12.3).
+//   - tessera.matmul attributes (transposeA/B, tile_k, numeric_policy) cause
+//     match failure today; later sprints add transpose / accum-policy support.
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/Transforms/Passes.h"
@@ -34,9 +38,30 @@ using namespace mlir;
 
 namespace {
 
+// ── Binary elementwise ─────────────────────────────────────────────────────
+
+enum class BinaryKind { Add, Sub, Mul };
+
+static Value emitBinaryScalar(OpBuilder &b, Location loc, BinaryKind kind,
+                              Value a, Value c, Type elem) {
+  bool isFloat = isa<FloatType>(elem);
+  switch (kind) {
+  case BinaryKind::Add:
+    return isFloat ? arith::AddFOp::create(b, loc, a, c).getResult()
+                   : arith::AddIOp::create(b, loc, a, c).getResult();
+  case BinaryKind::Sub:
+    return isFloat ? arith::SubFOp::create(b, loc, a, c).getResult()
+                   : arith::SubIOp::create(b, loc, a, c).getResult();
+  case BinaryKind::Mul:
+    return isFloat ? arith::MulFOp::create(b, loc, a, c).getResult()
+                   : arith::MulIOp::create(b, loc, a, c).getResult();
+  }
+  llvm_unreachable("unhandled BinaryKind");
+}
+
 // Build a fully-parallel elementwise `linalg.generic` applying `combine` over
-// `lhs`/`rhs` into a fresh `tensor.empty` of `resultType` (destination-passing
-// style — the init operand is the linalg `outs`, matching RUNTIME_ABI_SPEC §12.3).
+// `lhs`/`rhs` into a fresh `tensor.empty` of `resultType` (DPS — init is `outs`,
+// matching RUNTIME_ABI_SPEC §12.3).
 static Value buildElementwiseGeneric(
     PatternRewriter &rewriter, Location loc, RankedTensorType resultType,
     Value lhs, Value rhs,
@@ -57,12 +82,10 @@ static Value buildElementwiseGeneric(
   return generic.getResult(0);
 }
 
-// Match `tessera.add` by name so this pass does not depend on the generated op
-// class / include path. The op is registered via ODS (TesseraOps.td) so it still
-// parses and verifies (SameOperandsAndResultType) in fixtures.
-struct AddOpLowering : public RewritePattern {
-  AddOpLowering(MLIRContext *ctx)
-      : RewritePattern("tessera.add", /*benefit=*/1, ctx) {}
+struct BinaryEltwiseLowering : public RewritePattern {
+  BinaryKind kind;
+  BinaryEltwiseLowering(MLIRContext *ctx, StringRef opName, BinaryKind k)
+      : RewritePattern(opName, /*benefit=*/1, ctx), kind(k) {}
 
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
@@ -71,23 +94,85 @@ struct AddOpLowering : public RewritePattern {
     auto resultType = dyn_cast<RankedTensorType>(op->getResult(0).getType());
     if (!resultType || !resultType.hasStaticShape())
       return rewriter.notifyMatchFailure(
-          op, "Phase 0 requires a static-shape ranked-tensor result");
+          op, "static-shape ranked-tensor result required");
     Type elem = resultType.getElementType();
     Value lhs = op->getOperand(0);
     Value rhs = op->getOperand(1);
     Location loc = op->getLoc();
-
+    BinaryKind k = kind;
     Value out = buildElementwiseGeneric(
         rewriter, loc, resultType, lhs, rhs,
         [&](OpBuilder &b, Location l, Value a, Value c) -> Value {
-          if (isa<FloatType>(elem))
-            return arith::AddFOp::create(b, l, a, c);
-          return arith::AddIOp::create(b, l, a, c);
+          return emitBinaryScalar(b, l, k, a, c, elem);
         });
     rewriter.replaceOp(op, out);
     return success();
   }
 };
+
+// ── tessera.matmul ─────────────────────────────────────────────────────────
+
+// Rank-2 only; no transposes; accumulator policy ignored for now (Phase 1
+// scope). linalg.matmul takes (lhs: MxK, rhs: KxN) → out: MxN with
+// accumulation, so we zero-fill the DPS init first.
+struct MatmulLowering : public RewritePattern {
+  MatmulLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.matmul", /*benefit=*/1, ctx) {}
+
+  static bool attrIsSetTrue(Operation *op, StringRef name) {
+    if (auto a = op->getAttrOfType<BoolAttr>(name))
+      return a.getValue();
+    return false;
+  }
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return failure();
+    if (attrIsSetTrue(op, "transposeA") || attrIsSetTrue(op, "transposeB"))
+      return rewriter.notifyMatchFailure(
+          op, "Phase 1 does not yet support transposeA/transposeB");
+
+    auto lhsTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto rhsTy = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!lhsTy || !rhsTy || !outTy)
+      return failure();
+    if (lhsTy.getRank() != 2 || rhsTy.getRank() != 2 || outTy.getRank() != 2)
+      return rewriter.notifyMatchFailure(op,
+                                         "Phase 1 matmul is rank-2 only");
+    if (!lhsTy.hasStaticShape() || !rhsTy.hasStaticShape() ||
+        !outTy.hasStaticShape())
+      return rewriter.notifyMatchFailure(op, "static shapes required");
+
+    int64_t M = lhsTy.getDimSize(0), K = lhsTy.getDimSize(1);
+    int64_t K2 = rhsTy.getDimSize(0), N = rhsTy.getDimSize(1);
+    if (K != K2 || outTy.getDimSize(0) != M || outTy.getDimSize(1) != N)
+      return rewriter.notifyMatchFailure(op, "matmul shape mismatch");
+
+    Type elem = outTy.getElementType();
+    if (!isa<FloatType>(elem))
+      return rewriter.notifyMatchFailure(
+          op, "Phase 1 matmul is float-only (i.e. f32)");
+
+    Location loc = op->getLoc();
+    Value empty = tensor::EmptyOp::create(rewriter, loc, outTy.getShape(), elem);
+    auto zeroAttr = rewriter.getFloatAttr(elem, 0.0);
+    Value zero = arith::ConstantOp::create(rewriter, loc, elem, zeroAttr);
+    Value filled = linalg::FillOp::create(rewriter, loc, ValueRange{zero},
+                                          ValueRange{empty})
+                       .getResult(0);
+    Value out = linalg::MatmulOp::create(
+                    rewriter, loc, TypeRange{outTy},
+                    ValueRange{op->getOperand(0), op->getOperand(1)},
+                    ValueRange{filled})
+                    .getResult(0);
+    rewriter.replaceOp(op, out);
+    return success();
+  }
+};
+
+// ── Pass ───────────────────────────────────────────────────────────────────
 
 class TesseraToLinalgPass
     : public PassWrapper<TesseraToLinalgPass, OperationPass<func::FuncOp>> {
@@ -96,8 +181,8 @@ public:
 
   StringRef getArgument() const override { return "tessera-to-linalg"; }
   StringRef getDescription() const override {
-    return "Lower total elementwise Tessera Graph IR ops to upstream linalg on "
-           "tensors (Phase 0 production spine)";
+    return "Lower total elementwise + matmul Tessera Graph IR ops to upstream "
+           "linalg on tensors (production spine, Phases 0-1)";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
@@ -106,8 +191,12 @@ public:
   }
 
   void runOnOperation() override {
-    RewritePatternSet patterns(&getContext());
-    patterns.add<AddOpLowering>(&getContext());
+    MLIRContext *ctx = &getContext();
+    RewritePatternSet patterns(ctx);
+    patterns.add<BinaryEltwiseLowering>(ctx, "tessera.add", BinaryKind::Add);
+    patterns.add<BinaryEltwiseLowering>(ctx, "tessera.sub", BinaryKind::Sub);
+    patterns.add<BinaryEltwiseLowering>(ctx, "tessera.mul", BinaryKind::Mul);
+    patterns.add<MatmulLowering>(ctx);
     if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
       signalPassFailure();
   }

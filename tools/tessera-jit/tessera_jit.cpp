@@ -1,18 +1,27 @@
 //===- tessera_jit.cpp ----------------------------------------------------===//
-// Phase 0 production-lane plumbing (docs/spec/PRODUCTION_COMPILER_PLAN.md;
+// Production-lane CPU JIT plumbing (docs/spec/PRODUCTION_COMPILER_PLAN.md;
 // RUNTIME_ABI_SPEC.md §12). EXPERIMENTAL — NOT "runtime v2".
 //
-// A standalone CPU JIT: take an MLIR module containing `func @tessera_jit_add`
-// (in tessera+std form), run the production lowering pipeline
-//   tessera-to-linalg -> one-shot-bufferize -> buffer-results-to-out-params
-//                     -> linalg-to-loops -> scf-to-cf -> {arith,memref,cf,func}
-//                     -> reconcile-unrealized-casts
-// and JIT it with mlir::ExecutionEngine. Invocation is via the C-interface
-// wrapper `_mlir_ciface_tessera_jit_add` (we set `llvm.emit_c_interface`).
+// Phase 0 (landed): boundary proof on a single hardcoded `tessera_jit_add`
+// symbol with a typed C dispatcher. Phase 1 (this file): generalized to any
+// MLIR function. The C ABI exposes three primitives:
 //
-// Phase-0 scope (ratified guardrails): rank-2 f32 only; one hardcoded descriptor
-// struct; destination-passing (caller allocates `out`, fn returns void); failures
-// surface as a nonzero return + last-error string (Python raises).
+//   tessera_jit_compile(mlir_text) -> handle
+//   tessera_jit_invoke(handle, name, void** packed_args, int nargs) -> int
+//   tessera_jit_destroy(handle)
+//
+// plus tessera_jit_last_error() and tessera_jit_invocation_count() for
+// proof-of-execution. `invokePacked` from mlir::ExecutionEngine handles the
+// c-iface dispatch for any function signature, so adding a new op needs zero
+// changes here — only an MLIR lowering pattern + a Python helper.
+//
+// The whole module is run through the same pipeline:
+//   tessera-to-linalg -> empty-tensor-to-alloc-tensor
+//                     -> one-shot-bufferize (identity boundary layout)
+//                     -> [walk] DPS rewrite: single-memref result -> trailing out-param
+//                     -> linalg-to-loops -> scf-to-cf -> arith/cf/memref/func to LLVM
+//                     -> reconcile-unrealized-casts
+// `_mlir_ciface_<name>` wrappers are emitted on every function in the module.
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/IR/Dialects.h"
@@ -24,17 +33,17 @@
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Bufferization/Transforms/FuncBufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
-#include "mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"
-#include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Passes.h"
+#include "mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -44,6 +53,8 @@
 #include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/TargetSelect.h"
 
 #include <atomic>
@@ -57,22 +68,12 @@ namespace {
 
 thread_local std::string g_lastError;
 
-// Proof-of-execution counter (RUNTIME_ABI_SPEC §12 / Phase-0 guardrail): every
-// successful JIT invoke increments this. A numerically-correct result without an
-// increment would mean a silent fallback — the oracle test asserts count+1 to
-// make that impossible to hide.
+// Proof-of-execution counter (RUNTIME_ABI_SPEC §12 guardrail): every successful
+// JIT invoke increments this. A numerically-correct result without an increment
+// would mean a silent fallback — the oracle tests assert the counter advanced.
 std::atomic<int64_t> g_invocations{0};
 
 void setError(const std::string &msg) { g_lastError = msg; }
-
-// rank-2, row-major, f32 — the only descriptor Phase 0 admits (guardrail).
-struct MemRef2DF32 {
-  float *allocated;
-  float *aligned;
-  int64_t offset;
-  int64_t sizes[2];
-  int64_t strides[2];
-};
 
 struct JitModule {
   std::unique_ptr<MLIRContext> ctx;
@@ -97,61 +98,71 @@ void maybeTrace(PassManager &pm) {
         /*printAfterOnlyOnFailure=*/false, llvm::errs());
 }
 
-// Destination-passing rewrite (RUNTIME_ABI_SPEC §12.3): turn a single-memref-
-// returning function into one that takes the destination as a trailing
-// caller-allocated out-param and returns void. We do this explicitly rather than
-// via -buffer-results-to-out-params, which silently declines to convert a
-// freshly-allocated identity-layout result on this toolchain. Deterministic and
-// exactly the ABI we want for the Phase-0 total-op class.
-LogicalResult rewriteResultToOutParam(ModuleOp module, StringRef name) {
-  auto fn = module.lookupSymbol<func::FuncOp>(name);
-  if (!fn || fn.getNumResults() != 1)
-    return failure();
-  auto memrefTy = dyn_cast<MemRefType>(fn.getResultTypes()[0]);
-  if (!memrefTy)
-    return failure();
-  Block &entry = fn.getBody().front();
-  auto retOp = cast<func::ReturnOp>(entry.getTerminator());
-  Value ret = retOp.getOperand(0);
+// DPS rewrite (RUNTIME_ABI_SPEC §12.3): for every function whose sole result is
+// a memref, append the result as a trailing caller-allocated out-param and turn
+// the function into a void return. Phase 0 hardcoded one name; Phase 1 walks.
+// Functions that already return void / multiple results / non-memref are left
+// untouched (a non-applicable function isn't an error).
+LogicalResult rewriteResultsToOutParams(ModuleOp module) {
+  for (auto fn : module.getOps<func::FuncOp>()) {
+    if (fn.getNumResults() != 1)
+      continue;
+    auto memrefTy = dyn_cast<MemRefType>(fn.getResultTypes()[0]);
+    if (!memrefTy)
+      continue;
+    if (fn.isExternal())
+      continue;
+    Block &entry = fn.getBody().front();
+    auto retOp = cast<func::ReturnOp>(entry.getTerminator());
+    Value ret = retOp.getOperand(0);
 
-  BlockArgument outArg = entry.addArgument(memrefTy, fn.getLoc());
-  // Redirect the producer (e.g. linalg.generic outs) and the return to write the
-  // caller's buffer; the original alloc becomes dead.
-  ret.replaceAllUsesWith(outArg);
-  if (Operation *def = ret.getDefiningOp())
-    if (def->use_empty())
-      def->erase();
+    BlockArgument outArg = entry.addArgument(memrefTy, fn.getLoc());
+    // Redirect the producer (e.g. linalg.* outs / linalg.fill init) and the
+    // return to write the caller's buffer; the original alloc becomes dead.
+    ret.replaceAllUsesWith(outArg);
+    if (Operation *def = ret.getDefiningOp())
+      if (def->use_empty())
+        def->erase();
 
-  OpBuilder b(retOp);
-  func::ReturnOp::create(b, retOp.getLoc());
-  retOp.erase();
-  fn.setType(FunctionType::get(fn.getContext(), entry.getArgumentTypes(), {}));
+    OpBuilder b(retOp);
+    func::ReturnOp::create(b, retOp.getLoc());
+    retOp.erase();
+    fn.setType(
+        FunctionType::get(fn.getContext(), entry.getArgumentTypes(), {}));
+  }
   return success();
 }
 
-// The Phase-0 lowering pipeline. Brittle by nature (pass ordering churn) — kept
-// explicit so a failure points at the exact stage.
+// Mark every non-external function for C-interface wrapper emission. The c-iface
+// (`_mlir_ciface_<name>`) is what we look up in the ExecutionEngine and what
+// `invokePacked` ultimately calls.
+void markCInterface(ModuleOp module) {
+  auto unit = UnitAttr::get(module->getContext());
+  for (auto fn : module.getOps<func::FuncOp>())
+    if (!fn.isExternal())
+      fn->setAttr("llvm.emit_c_interface", unit);
+}
+
 LogicalResult buildAndRunPipeline(ModuleOp module) {
   // Stage 1: tessera → linalg → bufferized memref form, identity boundary layout.
   PassManager pm1(module->getContext());
   maybeTrace(pm1);
   pm1.nest<func::FuncOp>().addPass(tessera::createTesseraToLinalgPass());
-  // tensor.empty (the DPS init) has no buffer semantics; convert to alloc_tensor
-  // so one-shot-bufferize can place it ("op was not bufferized" otherwise).
+  // tensor.empty (DPS init) has no buffer semantics on its own; convert to
+  // alloc_tensor so one-shot-bufferize can place it.
   pm1.nest<func::FuncOp>().addPass(
       bufferization::createEmptyTensorToAllocTensorPass());
   bufferization::OneShotBufferizePassOptions bopts;
   bopts.bufferizeFunctionBoundaries = true;
-  // Identity layout at the boundary == the ABI's row-major descriptor contract
-  // (RUNTIME_ABI_SPEC §12.4); dynamic strided layout would break descriptor packing.
+  // Identity layout at the boundary == the ABI's row-major descriptor contract.
   bopts.functionBoundaryTypeConversion =
       bufferization::LayoutMapOption::IdentityLayoutMap;
   pm1.addPass(bufferization::createOneShotBufferizePass(bopts));
   if (failed(pm1.run(module)))
     return failure();
 
-  // Stage 1.5: explicit destination-passing rewrite.
-  if (failed(rewriteResultToOutParam(module, "tessera_jit_add")))
+  // Stage 1.5: explicit DPS rewrite (every function in the module).
+  if (failed(rewriteResultsToOutParams(module)))
     return failure();
 
   // Stage 2: memref/loops → LLVM dialect.
@@ -174,8 +185,9 @@ extern "C" {
 
 const char *tessera_jit_last_error(void) { return g_lastError.c_str(); }
 
-// Compile `mlir_text` (must contain `func @tessera_jit_add`). Returns an opaque
-// handle on success, nullptr on failure (see tessera_jit_last_error()).
+// Compile any MLIR module. Every non-external function is marked for c-iface
+// emission and has DPS applied when its sole result is a memref. Returns an
+// opaque handle on success, nullptr on failure (see tessera_jit_last_error()).
 void *tessera_jit_compile(const char *mlir_text) {
   ensureNativeTargetInit();
   auto jm = std::make_unique<JitModule>();
@@ -189,21 +201,16 @@ void *tessera_jit_compile(const char *mlir_text) {
   registerBuiltinDialectTranslation(registry);
   registerLLVMDialectTranslation(registry);
 
-  // One-shot-bufferize dispatches through BufferizableOpInterface; each dialect
-  // ships its implementation as an *external model* that must be registered on
-  // the registry. Without these, bufferization reports "op was not bufferized".
+  // BufferizableOpInterface external models — without these, one-shot-bufferize
+  // reports "op was not bufferized".
   arith::registerBufferizableOpInterfaceExternalModels(registry);
   linalg::registerBufferizableOpInterfaceExternalModels(registry);
   tensor::registerBufferizableOpInterfaceExternalModels(registry);
-  bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(registry);
+  bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(
+      registry);
 
   jm->ctx = std::make_unique<MLIRContext>(registry);
-  // Single-shot compiles: multithreading buys nothing and blocks IR-print tracing.
   jm->ctx->disableMultithreading();
-  // Do NOT loadAllAvailableDialects(): the parser loads dialects on demand and
-  // the PassManager pre-loads each pass's declared dependent dialects. Force-
-  // constructing every registered dialect here is both unnecessary and (on this
-  // toolchain) crash-prone.
 
   jm->module = parseSourceString<ModuleOp>(mlir_text, jm->ctx.get());
   if (!jm->module) {
@@ -211,13 +218,7 @@ void *tessera_jit_compile(const char *mlir_text) {
     return nullptr;
   }
 
-  // Mark the entry for C-interface wrapper emission (_mlir_ciface_*).
-  if (auto fn = jm->module->lookupSymbol<func::FuncOp>("tessera_jit_add"))
-    fn->setAttr("llvm.emit_c_interface", UnitAttr::get(jm->ctx.get()));
-  else {
-    setError("tessera_jit: module has no func @tessera_jit_add");
-    return nullptr;
-  }
+  markCInterface(*jm->module);
 
   if (failed(buildAndRunPipeline(*jm->module))) {
     setError("tessera_jit: lowering pipeline failed");
@@ -240,42 +241,77 @@ void *tessera_jit_compile(const char *mlir_text) {
   return jm.release();
 }
 
-// rank-2 f32 add. Caller allocates `out`. Returns 0 on success, 1 on failure.
-int tessera_jit_add_2d_f32(void *handle, const float *a, const float *b,
-                           float *out, int64_t d0, int64_t d1) {
+// Generic invoke: dispatch any compiled function by name. Looks up
+// `_mlir_ciface_<name>` (the stable C-interface wrapper MLIR emits when
+// `llvm.emit_c_interface` is set) and calls it directly. The c-iface ABI for
+// our DPS memref functions is `void(Desc*, Desc*, ..., Desc*)`, so
+// `packed_args[i]` is the i-th memref descriptor pointer — one level of
+// indirection, period. Avoids `invokePacked`'s wrapper-symbol semantics
+// (which were brittle on this toolchain).
+//
+// Returns 0 on success, 1 on failure. The execution counter advances only on
+// successful dispatch, so a numpy fallback masquerading as a JIT call is
+// impossible — proof-of-execution survives generalization.
+int tessera_jit_invoke(void *handle, const char *name, void **packed_args,
+                       int nargs) {
   auto *jm = static_cast<JitModule *>(handle);
   if (!jm || !jm->engine) {
     setError("tessera_jit: null/invalid handle");
     return 1;
   }
-  auto fill = [](MemRef2DF32 &d, const float *p, int64_t r, int64_t c) {
-    d.allocated = const_cast<float *>(p);
-    d.aligned = const_cast<float *>(p);
-    d.offset = 0;
-    d.sizes[0] = r;
-    d.sizes[1] = c;
-    d.strides[0] = c;
-    d.strides[1] = 1;
-  };
-  MemRef2DF32 da, db, dout;
-  fill(da, a, d0, d1);
-  fill(db, b, d0, d1);
-  fill(dout, out, d0, d1);
-
-  auto expectedFn = jm->engine->lookup("_mlir_ciface_tessera_jit_add");
+  std::string sym = std::string("_mlir_ciface_") + name;
+  auto expectedFn = jm->engine->lookup(sym);
   if (!expectedFn) {
-    setError("tessera_jit: _mlir_ciface_tessera_jit_add not found");
+    llvm::consumeError(expectedFn.takeError());
+    setError("tessera_jit: symbol not found: " + sym);
     return 1;
   }
-  // C-iface passes each memref as a pointer to its descriptor; out-param last.
-  using Fn = void (*)(void *, void *, void *);
-  reinterpret_cast<Fn>(*expectedFn)(&da, &db, &dout);
+  void *fn = reinterpret_cast<void *>(*expectedFn);
+
+#define TJ_ARG(i) packed_args[i]
+#define TJ_CALL(...)                                                           \
+  reinterpret_cast<void (*)(__VA_ARGS__)>(fn)
+  // Arity dispatch covers single-op c-iface signatures up through any
+  // reasonable fused chain (16 memref args). Each entry is a void pointer to a
+  // caller-owned memref descriptor.
+  switch (nargs) {
+  case 1: TJ_CALL(void *)(TJ_ARG(0)); break;
+  case 2: TJ_CALL(void *, void *)(TJ_ARG(0), TJ_ARG(1)); break;
+  case 3: TJ_CALL(void *, void *, void *)(TJ_ARG(0), TJ_ARG(1), TJ_ARG(2)); break;
+  case 4:
+    TJ_CALL(void *, void *, void *, void *)(TJ_ARG(0), TJ_ARG(1), TJ_ARG(2),
+                                            TJ_ARG(3));
+    break;
+  case 5:
+    TJ_CALL(void *, void *, void *, void *, void *)(TJ_ARG(0), TJ_ARG(1),
+                                                    TJ_ARG(2), TJ_ARG(3),
+                                                    TJ_ARG(4));
+    break;
+  case 6:
+    TJ_CALL(void *, void *, void *, void *, void *, void *)(
+        TJ_ARG(0), TJ_ARG(1), TJ_ARG(2), TJ_ARG(3), TJ_ARG(4), TJ_ARG(5));
+    break;
+  case 7:
+    TJ_CALL(void *, void *, void *, void *, void *, void *, void *)(
+        TJ_ARG(0), TJ_ARG(1), TJ_ARG(2), TJ_ARG(3), TJ_ARG(4), TJ_ARG(5),
+        TJ_ARG(6));
+    break;
+  case 8:
+    TJ_CALL(void *, void *, void *, void *, void *, void *, void *, void *)(
+        TJ_ARG(0), TJ_ARG(1), TJ_ARG(2), TJ_ARG(3), TJ_ARG(4), TJ_ARG(5),
+        TJ_ARG(6), TJ_ARG(7));
+    break;
+  default:
+    setError("tessera_jit: unsupported nargs (extend arity dispatcher in "
+             "tessera_jit_invoke)");
+    return 1;
+  }
+#undef TJ_ARG
+#undef TJ_CALL
   g_invocations.fetch_add(1, std::memory_order_relaxed);
   return 0;
 }
 
-// Number of successful JIT invocations since process start. Proof-of-execution
-// for the production lane (see g_invocations comment).
 int64_t tessera_jit_invocation_count(void) {
   return g_invocations.load(std::memory_order_relaxed);
 }

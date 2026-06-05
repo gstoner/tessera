@@ -956,6 +956,23 @@ def Tessera_AddOp : Op<
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
+// Phase 1 production-compiler binary elementwise family. Same shape as
+// Tessera_AddOp — trivial, total, lowered by `tessera-to-linalg` through a
+// shared name→arith-kind table. sub/mul are the minimum needed before
+// softmax/normalization arrive (softmax = max → sub → exp → div).
+def Tessera_SubOp : Op<Tessera_Dialect, "sub", [Pure]> {
+  let summary = "Elementwise tensor subtraction (a - b)";
+  let arguments = (ins TensorType:$lhs, TensorType:$rhs);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+def Tessera_MulOp : Op<Tessera_Dialect, "mul", [Pure]> {
+  let summary = "Elementwise tensor multiplication (a * b)";
+  let arguments = (ins TensorType:$lhs, TensorType:$rhs);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
 // RMSNorm (unweighted) over the innermost dimension; eps optional.
 def Tessera_RmsNormOp : Tessera_UnaryPureOp<"rmsnorm", "RMSNorm over the innermost dimension"> {
   let arguments = (ins TensorType:$x,

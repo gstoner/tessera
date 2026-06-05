@@ -333,3 +333,70 @@ def jit_matmul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
         return out
     finally:
         destroy(handle)
+
+
+# ── Reductions (Phase 1 Sprint 1.2: first op with result rank != input rank) ─
+
+_REDUCE_KINDS = frozenset({"sum", "max", "min", "mean"})
+
+
+def jit_reduce(a: np.ndarray, axis: int, kind: str) -> np.ndarray:
+    """Production-lane single-axis reduction (f32).
+
+    ``kind`` ∈ {sum, max, min, mean}. Reduces `a` over `axis`, returning an
+    array of rank ``a.ndim - 1``. Input must be rank >= 2 (so the result is
+    rank >= 1 — the boundary has no rank-0 descriptor in Phase 1). No fallback.
+    """
+    a = np.asarray(a)
+    _f32_envelope_check([a])
+    if kind not in _REDUCE_KINDS:
+        raise TesseraJitError(f"reduce kind must be one of {sorted(_REDUCE_KINDS)}")
+    if a.ndim < 2:
+        raise TesseraJitError(
+            f"Phase 1 jit_reduce requires rank>=2 (got rank {a.ndim}); "
+            "rank-0 results have no boundary descriptor yet"
+        )
+    ax = axis + a.ndim if axis < 0 else axis
+    if ax < 0 or ax >= a.ndim:
+        raise TesseraJitError(f"axis {axis} out of range for rank {a.ndim}")
+    a = np.ascontiguousarray(a)
+
+    in_shape = tuple(int(s) for s in a.shape)
+    out_shape = tuple(s for i, s in enumerate(in_shape) if i != ax)
+    ti = "tensor<" + "x".join(str(s) for s in in_shape) + "xf32>"
+    to = "tensor<" + "x".join(str(s) for s in out_shape) + "xf32>"
+    sym = "tessera_jit_reduce"
+    mlir = (
+        f"func.func @{sym}(%a: {ti}) -> {to} {{\n"
+        f'  %0 = tessera.reduce %a {{kind = "{kind}", axis = {ax} : i64}} '
+        f": ({ti}) -> {to}\n"
+        f"  return %0 : {to}\n"
+        f"}}\n"
+    )
+    handle = compile_module(mlir)
+    try:
+        out = np.empty(out_shape, dtype=np.float32)
+        invoke(handle, sym, [a], out)
+        return out
+    finally:
+        destroy(handle)
+
+
+def jit_sum(a: np.ndarray, axis: int) -> np.ndarray:
+    """Production-lane sum over `axis` (f32). No fallback."""
+    return jit_reduce(a, axis, "sum")
+
+
+def jit_amax(a: np.ndarray, axis: int) -> np.ndarray:
+    """Production-lane max over `axis` (f32). No fallback."""
+    return jit_reduce(a, axis, "max")
+
+
+def jit_amin(a: np.ndarray, axis: int) -> np.ndarray:
+    """Production-lane min over `axis` (f32). No fallback."""
+    return jit_reduce(a, axis, "min")
+
+
+def jit_mean(a: np.ndarray, axis: int) -> np.ndarray:
+    """Production-lane mean over `axis` (f32). No fallback."""
+    return jit_reduce(a, axis, "mean")

@@ -2,7 +2,7 @@
 status: Ratified
 classification: Design / Roadmap
 authority: Production MLIR/LLVM compiler
-last_updated: 2026-06-06
+last_updated: 2026-06-05
 ---
 
 # Tessera Production Compiler Plan (MLIR/LLVM)
@@ -10,17 +10,22 @@ last_updated: 2026-06-06
 > **Status:** Ratified architecture (decisions D1–D5 locked).
 >
 > * **Phase 0 landed 2026-06-05** — boundary proof on `tessera.add`.
-> * **Phase 1 Sprint 1.1 landed 2026-06-06** — JIT harness generalized
+> * **Phase 1 Sprint 1.1 landed 2026-06-05** — JIT harness generalized
 >   (`tessera_jit_invoke(handle, name, void** descs, int n)` via direct c-iface
 >   dispatch; arity 1–8); generic rank-N f32 descriptor packing in Python;
 >   `tessera.matmul` → `linalg.fill(0) → linalg.matmul` (first non-elementwise
->   op); binary elementwise family expanded to `add/sub/mul`. **20/20 oracle +
->   execution-counter + negative tests green** (`tests/unit/test_production_jit_add.py`,
->   `tests/unit/test_production_jit_phase1.py`).
+>   op); binary elementwise family expanded to `add/sub/mul`.
+> * **Phase 1 Sprint 1.2 landed 2026-06-05** — `tessera.reduce` (one
+>   parameterized op, `kind` ∈ {sum,max,min,mean} × `axis`) →
+>   `linalg.fill(identity) → linalg.reduce`, mean = sum + 1/N scale. **First op
+>   whose result rank differs from its input rank** — exercises the generic
+>   descriptor packing across ranks. No harness change required (Sprint 1.1
+>   payoff). **42/42 production-lane tests green**
+>   (`tests/unit/test_production_jit_{add,phase1,phase1_reduce}.py`).
 >
 > Phase 1 *DoD* (the ~15 structural patterns covering the bulk of the op
-> surface, plus bf16 boundary) is *in progress*. Next slices: reductions,
-> softmax, normalization, bf16 boundary.
+> surface, plus bf16 boundary) is *in progress*. Next slices: softmax (needs
+> `div` + `exp`), normalization (layer_norm/rmsnorm), bf16 boundary.
 > **Scope:** Evolve Tessera from a Python-interpreted prototype into a production
 > MLIR/LLVM-IR compiler, while retaining the Python compiler as the
 > experimentation lane. This document is the committed decision record; it gates

@@ -973,6 +973,18 @@ def Tessera_MulOp : Op<Tessera_Dialect, "mul", [Pure]> {
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
+// Phase 1 Sprint 1.2 — single-axis reduction. One parameterized op
+// (`kind` ∈ {sum, max, min, mean}, `axis`) lowered to linalg.reduce + an
+// identity-fill init, mirroring how linalg.reduce is itself parameterized
+// (dimensions + combiner region). This is the first production-lane op whose
+// result rank differs from its input rank.
+def Tessera_ReduceOp : Op<Tessera_Dialect, "reduce", [Pure]> {
+  let summary = "Reduction over a single axis (sum/max/min/mean)";
+  let arguments = (ins TensorType:$input, StrAttr:$kind, I64Attr:$axis);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
 // RMSNorm (unweighted) over the innermost dimension; eps optional.
 def Tessera_RmsNormOp : Tessera_UnaryPureOp<"rmsnorm", "RMSNorm over the innermost dimension"> {
   let arguments = (ins TensorType:$x,

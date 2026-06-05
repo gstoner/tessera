@@ -10,6 +10,8 @@
 //   Phase 0: tessera.add (elementwise, total)
 //   Phase 1: tessera.{sub,mul} (elementwise via shared table)
 //            tessera.matmul (linalg.fill + linalg.matmul; rank-2, no transpose)
+//            tessera.reduce (linalg.reduce; sum/max/min/mean over one axis —
+//                            first op whose result rank != input rank)
 //
 // Decisions:
 //   - Match by op-name string (RewritePattern). Avoids leaking generated op
@@ -32,6 +34,7 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/SmallVector.h"
 
 using namespace mlir;
@@ -172,6 +175,114 @@ struct MatmulLowering : public RewritePattern {
   }
 };
 
+// ── tessera.reduce ─────────────────────────────────────────────────────────
+
+// Elementwise scale `input * scalar` into a fresh DPS init of `ty`. Used by the
+// `mean` reduction (sum then multiply by 1/N). The scalar is captured into the
+// linalg.generic body directly (allowed — it's an outer SSA value).
+static Value buildUnaryScale(PatternRewriter &rewriter, Location loc,
+                             RankedTensorType ty, Value input, Value scalar) {
+  int64_t rank = ty.getRank();
+  Value init = tensor::EmptyOp::create(rewriter, loc, ty.getShape(),
+                                       ty.getElementType());
+  AffineMap id = rewriter.getMultiDimIdentityMap(rank);
+  SmallVector<AffineMap, 2> maps = {id, id};
+  SmallVector<utils::IteratorType> iters(rank, utils::IteratorType::parallel);
+  auto generic = linalg::GenericOp::create(
+      rewriter, loc, TypeRange{ty}, ValueRange{input}, ValueRange{init}, maps,
+      iters, [&](OpBuilder &b, Location l, ValueRange args) {
+        Value m = arith::MulFOp::create(b, l, args[0], scalar);
+        linalg::YieldOp::create(b, l, m);
+      });
+  return generic.getResult(0);
+}
+
+// Single-axis reduction (sum/max/min/mean) → linalg.reduce over `axis`, with a
+// fresh init pre-filled with the reduction identity (0 / -inf / +inf). `mean` is
+// `sum` followed by a 1/N scale. Result rank = input rank - 1.
+struct ReduceLowering : public RewritePattern {
+  ReduceLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.reduce", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return failure();
+    auto inTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!inTy || !outTy || !inTy.hasStaticShape() || !outTy.hasStaticShape())
+      return rewriter.notifyMatchFailure(op, "static-shape tensors required");
+    Type elem = inTy.getElementType();
+    auto fty = dyn_cast<FloatType>(elem);
+    if (!fty || elem != outTy.getElementType())
+      return rewriter.notifyMatchFailure(op, "float-only, matching elem types");
+
+    auto kindAttr = op->getAttrOfType<StringAttr>("kind");
+    auto axisAttr = op->getAttrOfType<IntegerAttr>("axis");
+    if (!kindAttr || !axisAttr)
+      return rewriter.notifyMatchFailure(op, "missing kind/axis attrs");
+    int64_t rank = inTy.getRank();
+    int64_t axis = axisAttr.getInt();
+    if (axis < 0)
+      axis += rank;
+    if (axis < 0 || axis >= rank)
+      return rewriter.notifyMatchFailure(op, "axis out of range");
+
+    // Result shape must be the input shape with `axis` removed.
+    SmallVector<int64_t> expected;
+    for (int64_t i = 0; i < rank; ++i)
+      if (i != axis)
+        expected.push_back(inTy.getDimSize(i));
+    if (outTy.getShape() != ArrayRef<int64_t>(expected))
+      return rewriter.notifyMatchFailure(op, "result shape != input minus axis");
+
+    StringRef kind = kindAttr.getValue();
+    bool isMean = kind == "mean";
+    StringRef redKind = isMean ? StringRef("sum") : kind;
+    if (redKind != "sum" && redKind != "max" && redKind != "min")
+      return rewriter.notifyMatchFailure(op, "unknown reduce kind");
+
+    Location loc = op->getLoc();
+    const llvm::fltSemantics &sem = fty.getFloatSemantics();
+    APFloat ident = APFloat::getZero(sem);
+    if (redKind == "max")
+      ident = APFloat::getInf(sem, /*Negative=*/true);
+    else if (redKind == "min")
+      ident = APFloat::getInf(sem, /*Negative=*/false);
+
+    Value empty = tensor::EmptyOp::create(rewriter, loc, outTy.getShape(), elem);
+    Value identC = arith::ConstantOp::create(rewriter, loc, elem,
+                                             rewriter.getFloatAttr(elem, ident));
+    Value filled = linalg::FillOp::create(rewriter, loc, ValueRange{identC},
+                                          ValueRange{empty})
+                       .getResult(0);
+
+    auto reduceOp = linalg::ReduceOp::create(
+        rewriter, loc, ValueRange{op->getOperand(0)}, ValueRange{filled},
+        ArrayRef<int64_t>{axis},
+        [&](OpBuilder &b, Location l, ValueRange args) {
+          Value in = args[0], acc = args[1], r;
+          if (redKind == "sum")
+            r = arith::AddFOp::create(b, l, in, acc);
+          else if (redKind == "max")
+            r = arith::MaximumFOp::create(b, l, in, acc);
+          else
+            r = arith::MinimumFOp::create(b, l, in, acc);
+          linalg::YieldOp::create(b, l, r);
+        });
+    Value reduced = reduceOp.getResults()[0];
+
+    if (isMean) {
+      double n = static_cast<double>(inTy.getDimSize(axis));
+      Value recip = arith::ConstantOp::create(
+          rewriter, loc, elem, rewriter.getFloatAttr(elem, 1.0 / n));
+      reduced = buildUnaryScale(rewriter, loc, outTy, reduced, recip);
+    }
+    rewriter.replaceOp(op, reduced);
+    return success();
+  }
+};
+
 // ── Pass ───────────────────────────────────────────────────────────────────
 
 class TesseraToLinalgPass
@@ -197,6 +308,7 @@ public:
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.sub", BinaryKind::Sub);
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.mul", BinaryKind::Mul);
     patterns.add<MatmulLowering>(ctx);
+    patterns.add<ReduceLowering>(ctx);
     if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
       signalPassFailure();
   }

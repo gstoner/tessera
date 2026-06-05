@@ -574,7 +574,141 @@ of the stable C ABI unless a future runtime replay API promotes them.
 
 ---
 
-## 12. Authoritative References
+## 12. Compiled-Function ABI (Production MLIR/LLVM Lane)
+
+> **Status: Proposed — Phase 0 (not yet implemented).** This section is the
+> ratified design for the production compiler's executable boundary
+> (`docs/spec/PRODUCTION_COMPILER_PLAN.md`, decision **D3**). It is normative for
+> that work; the "implemented" tables in §11 do **not** cover it yet. When Phase 0
+> lands, the status banner and §11 are updated together.
+
+### 12.0 Why this is a separate ABI
+
+§5–§6 define the **tile-kernel launch ABI**: the runtime calls a user/compiler
+callback once per `(tile, thread)` via `tsrHostKernelFn`, threading state through
+an opaque `void* user_payload`. That is the *imperative host-kernel* contract used
+by the Python/eager lane and the x86 host-tile path.
+
+The **Compiled-Function ABI** is different in kind. It is the boundary between a
+caller and a **whole MLIR-compiled function** — the unit produced by lowering a
+`tessera` Graph IR function through `linalg → bufferize → llvm` and JIT-compiling
+it with `mlir::ExecutionEngine`. There is no per-thread callback; the caller
+hands over typed buffers and the compiled function runs to completion. This is the
+contract every production phase inherits, so it is pinned before any nontrivial op
+is lowered.
+
+The two ABIs coexist. The tile-kernel ABI remains the device-memory / stream /
+event substrate (`tsrMalloc`, `tsrCreateStream`, …); the Compiled-Function ABI is
+the leaf that the runtime ultimately invokes. In Phase 0 the compiled function
+operates on **host memory only** — `tsr*` device integration arrives in Phase 3.
+
+### 12.1 Calling convention
+
+A production-accepted Tessera function lowers to an LLVM-dialect `func.func`
+emitted with **C-interface wrappers** (`-llvm-request-c-wrappers`). For a function
+symbol `S`, the runtime invokes:
+
+```c
+void _mlir_ciface_S(/* descriptors, see 12.3 */);
+```
+
+- Every tensor operand and result is passed as a **pointer to a memref
+  descriptor** (§12.2). The C wrapper is what stabilizes the layout — the bare
+  (non-`ciface`) entry uses an unpacked argument expansion that is *not* part of
+  this ABI.
+- The function returns `void`. Results are **not** returned by value or via `sret`
+  in v1 — they are destination operands (§12.4). This keeps every wrapper
+  parameter uniform (`Descriptor*`) and avoids struct-return ABI variance.
+
+### 12.2 The memref descriptor (the wire format)
+
+For a rank-`N` buffer of element type `T`, the descriptor is MLIR's standard
+lowered struct (stable across LLVM targets):
+
+```c
+typedef struct {
+  T*        allocated_ptr;   // base of the allocation (for free); = aligned_ptr in v1
+  T*        aligned_ptr;     // element-0 pointer the kernel reads/writes
+  intptr_t  offset;          // element offset from aligned_ptr; MUST be 0 in v1
+  intptr_t  sizes[N];        // extent per dimension
+  intptr_t  strides[N];      // element stride per dimension (row-major in v1)
+} TsrMemRefDescriptor_<T>_<N>;
+```
+
+`intptr_t` is 64-bit on supported hosts. `N` is fixed per compiled symbol (the
+function is monomorphic in rank). The descriptor is **caller-owned stack/heap
+memory**; the compiled function never retains a pointer to the descriptor past
+the call.
+
+### 12.3 Argument ordering — Destination-Passing Style (D3)
+
+Operands appear in source order, **inputs first, then outputs** (`outs`),
+mirroring `linalg`'s DPS convention so the boundary composes with bufferization
+end-to-end:
+
+```
+func @S(%in0: memref<...>, ..., %inK: memref<...>,
+        %out0: memref<...>, ..., %outM: memref<...>)
+  ⇒  void _mlir_ciface_S(Desc* in0, ..., Desc* inK, Desc* out0, ..., Desc* outM)
+```
+
+- **The caller allocates all buffers, including outputs.** The compiled function
+  writes results into the caller-provided `out*` descriptors. It performs **no
+  allocation or free of boundary memory** in v1.
+- Callee-allocated results (e.g. data-dependent output shapes) are a recognized
+  future need; they will be added as an **explicit, opt-in** descriptor variant,
+  never by silently changing v1 ownership. This is the ABI rule that prevents
+  callee allocation from becoming a permanent wart.
+
+### 12.4 Layout and contiguity contract
+
+In v1, every boundary memref is **identity-layout, C-contiguous**:
+`offset == 0` and `strides` are the row-major strides of `sizes`. A caller
+holding a non-contiguous / non-zero-offset / non-identity-layout buffer (e.g. a
+transposed numpy view) **must materialize a contiguous copy at the boundary**
+before the call. Non-identity layouts inside the compiled function are
+unconstrained — this rule governs only the boundary.
+
+### 12.5 Dtype contract (bf16 rule)
+
+Element types are the canonical Tessera dtypes (`python/tessera/dtype.py`). The
+boundary maps them to fixed byte representations:
+
+| Tessera dtype | Boundary representation | Phase 0 |
+|---|---|---|
+| `fp32` / `fp16` | IEEE-754 binary32 / binary16 | f32 yes; f16 P1 |
+| `bf16` | **raw 16-bit** (`uint16` storage; no native host type) | P1 |
+| `int8/16/32/64`, `bool` | native two's-complement / 1-byte bool | i32/i64 yes |
+| fp8 / fp6 / fp4 / nvfp4 | packed per `dtype.py`; boundary-opaque | later |
+
+**bf16 ABI rule (ratified):** the Python lane uses `ml_dtypes.bfloat16`; the
+MLIR/runtime boundary uses **raw 16-bit** storage; mismatched producers/consumers
+**copy/convert at the boundary**. This is an ABI rule, not an implementation
+accident — no path may reinterpret bf16 bits as fp16 or vice versa.
+
+### 12.6 Error and effect model
+
+Phase 0 compiled functions are **total** (elementwise/structured math; no failure
+mode), so the `void` signature is sufficient. Functions that can fail at runtime
+(bounds, device errors, allocation in later phases) will gain a status mechanism —
+either a trailing `TsrStatus* status_out` descriptor-adjacent parameter or
+integration with `tsrGetLastError()`. The choice is deferred to the phase that
+first needs it and recorded here when made. v1 callers may assume success.
+
+### 12.7 Relationship to `tsrCompileArtifact`
+
+`tsrCompileArtifact` (§5, `tessera_runtime.h`) currently interprets `module_ir` as
+a comma-separated list of pre-registered host-kernel names — the tile-kernel path.
+The Compiled-Function ABI is reached through a **new JIT surface** (working name
+`tessera_jit`: compile MLIR module → `ExecutionEngine` → look up `_mlir_ciface_S`),
+bound from Python by `canonical_compile(target="cpu")`. Whether `tessera_jit`
+folds into `tsrCompileArtifact` (as a real-codegen status beyond the name-registry
+behavior) or stays a sibling surface is decided in Phase 1; Phase 0 keeps it a
+standalone dylib loaded via `ctypes` to minimize moving parts under the boundary.
+
+---
+
+## 13. Authoritative References
 
 | Topic | Where to look |
 |-------|--------------|
@@ -586,6 +720,7 @@ of the stable C ABI unless a future runtime replay API promotes them.
 | Version macros | `src/runtime/include/tessera/tsr_version.h` |
 | Backend abstract class | `src/runtime/src/backend/base_backend.h` |
 | Runtime implementation notes | `CLAUDE.md` architecture-decision log |
+| Compiled-Function ABI design + phasing (§12) | `docs/spec/PRODUCTION_COMPILER_PLAN.md` |
 | Benchmark integration | `benchmarks/` |
 | Runtime ABI smoke binary | `src/runtime/tools/tessera-runtime-abi-smoke/runtime_abi_smoke.cpp` |
 | Collective runtime smoke binary | `src/collectives/tools/tessera-collective-runtime-smoke/runtime_smoke.cpp` |

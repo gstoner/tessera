@@ -1251,7 +1251,9 @@ class GraphFn:
         if self._target != "apple_gpu":
             raise TesseraJitError("run_mlpkg requires target='apple_gpu'")
         if self._elem != "f32":
-            raise TesseraJitError("run_mlpkg is f32-only")
+            raise TesseraJitError(
+                "run_mlpkg (whole-graph MPSGraph lane) is f32-only; use run() "
+                "for the bf16 interpreter path")
         if self._has_control_flow:
             raise TesseraJitError("run_mlpkg does not support scf control flow")
         if len(self._rets) != 1:
@@ -1311,8 +1313,9 @@ class GraphFn:
 
         if not self._rets:
             raise TesseraJitError("GraphFn has no return value (call ret())")
-        if self._elem != "f32":
-            raise TesseraJitError("apple_gpu GraphFn is f32-only (bf16 is Sprint 3.4)")
+        if self._elem not in ("f32", "bf16"):
+            raise TesseraJitError(
+                f"apple_gpu GraphFn supports f32/bf16, not {self._elem!r}")
         if self._has_control_flow:
             raise TesseraJitError(
                 "apple_gpu GraphFn does not support scf control flow yet "
@@ -1320,13 +1323,14 @@ class GraphFn:
             )
         if len(arrays) != len(self._args):
             raise TesseraJitError(f"expected {len(self._args)} args, got {len(arrays)}")
+        npdt = _ELEM_TO_NP[self._elem]
         env: dict[str, np.ndarray] = {}
         for (ssa, sh), arr in zip(self._args, arrays):
             a = np.ascontiguousarray(np.asarray(arr))
-            if a.dtype != np.float32 or tuple(a.shape) != sh:
+            if a.dtype != npdt or tuple(a.shape) != sh:
                 raise TesseraJitError(
-                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, want float32{sh}"
-                )
+                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, "
+                    f"want {npdt}{sh}")
             env[ssa] = a
         self._last_dispatch = []
         for node in self._fuse_for_gpu():

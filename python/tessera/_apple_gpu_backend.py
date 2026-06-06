@@ -24,6 +24,13 @@ from typing import Any
 
 import numpy as np
 
+try:  # bf16 boundary dtype (RUNTIME_ABI_SPEC §12.5); soft dependency.
+    import ml_dtypes as _ml_dtypes
+
+    _BF16: Any = _ml_dtypes.bfloat16
+except Exception:  # noqa: BLE001 - ml_dtypes optional
+    _BF16 = None
+
 
 class AppleGpuError(RuntimeError):
     """Raised when the Apple GPU back-half is unavailable or misused."""
@@ -51,6 +58,7 @@ def _load():
         raise AppleGpuError(f"could not load apple_gpu runtime: {exc}") from exc
 
     fp = ctypes.POINTER(ctypes.c_float)
+    u16 = ctypes.POINTER(ctypes.c_uint16)
     i32 = ctypes.c_int32
     i64 = ctypes.c_int64
     flt = ctypes.c_float
@@ -71,6 +79,15 @@ def _load():
         ("tessera_apple_gpu_swiglu_f32", [fp, fp, fp, fp, fp, i32, i32, i32, i32]),
         # Sprint 3.3 perf-fusion — fused pre-norm + projection.
         ("tessera_apple_gpu_rmsnorm_matmul_f32", [fp, fp, fp, fp, i32, i32, i32, flt]),
+        # Sprint 3.4 — native bf16 kernels (raw 16-bit boundary; f32 accumulate).
+        ("tessera_apple_gpu_mps_matmul_bf16", [u16, u16, u16, i32, i32, i32]),
+        ("tessera_apple_gpu_softmax_bf16", [u16, u16, i32, i32]),
+        ("tessera_apple_gpu_gelu_bf16", [u16, u16, i32]),
+        ("tessera_apple_gpu_matmul_softmax_bf16", [u16, u16, u16, i32, i32, i32]),
+        ("tessera_apple_gpu_matmul_softmax_matmul_bf16", [u16, u16, u16, u16, i32, i32, i32, i32]),
+        ("tessera_apple_gpu_matmul_gelu_bf16", [u16, u16, u16, i32, i32, i32]),
+        ("tessera_apple_gpu_matmul_rmsnorm_bf16", [u16, u16, u16, i32, i32, i32, flt]),
+        ("tessera_apple_gpu_swiglu_bf16", [u16, u16, u16, u16, u16, i32, i32, i32, i32]),
     ):
         try:
             sym = getattr(lib, name)
@@ -98,6 +115,29 @@ def _f32(a: np.ndarray, name: str) -> np.ndarray:
     return np.ascontiguousarray(a)
 
 
+def _is_bf16(a) -> bool:
+    return _BF16 is not None and np.asarray(a).dtype == _BF16
+
+
+def _arr(a, name: str) -> np.ndarray:
+    """Accept an f32 OR bf16 (ml_dtypes) array; reject anything else. The
+    dtype-polymorphic kernels branch on the result's dtype."""
+    a = np.asarray(a)
+    if a.dtype == np.float32 or _is_bf16(a):
+        return np.ascontiguousarray(a)
+    raise AppleGpuError(f"{name} must be f32 or bf16 (got {a.dtype})")
+
+
+def _to_f32(a) -> np.ndarray:
+    return np.ascontiguousarray(np.asarray(a, dtype=np.float32))
+
+
+def _to_bf16(a) -> np.ndarray:
+    if _BF16 is None:
+        raise AppleGpuError("bf16 requires ml_dtypes")
+    return np.ascontiguousarray(np.asarray(a).astype(_BF16))
+
+
 def _ptr(a: np.ndarray):
     return a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
 
@@ -106,24 +146,35 @@ def _ptr(a: np.ndarray):
 
 
 def gpu_matmul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """C = A @ B on the Apple GPU (MPS), rank-2 f32."""
-    a = _f32(a, "a")
-    b = _f32(b, "b")
+    """C = A @ B on the Apple GPU (MPS), rank-2 f32 or bf16 (native bf16 kernel,
+    f32 accumulate)."""
+    a = _arr(a, "a")
+    b = _arr(b, "b")
     if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
         raise AppleGpuError(f"gpu_matmul rank-2, K must match: {a.shape} @ {b.shape}")
     M, K = int(a.shape[0]), int(a.shape[1])
     N = int(b.shape[1])
+    if _is_bf16(a) or _is_bf16(b):
+        a, b = _to_bf16(a), _to_bf16(b)
+        out = np.zeros((M, N), _BF16)
+        _load().tessera_apple_gpu_mps_matmul_bf16(
+            _u16ptr(a), _u16ptr(b), _u16ptr(out), M, N, K)
+        return out
     out = np.zeros((M, N), np.float32)
     _load().tessera_apple_gpu_mps_matmul_f32(_ptr(a), _ptr(b), _ptr(out), M, N, K)
     return out
 
 
 def gpu_softmax(x: np.ndarray) -> np.ndarray:
-    """Row-softmax over the last axis on the Apple GPU (MSL), rank-2 f32."""
-    x = _f32(x, "x")
+    """Row-softmax over the last axis on the Apple GPU (MSL), rank-2 f32/bf16."""
+    x = _arr(x, "x")
     if x.ndim != 2:
         raise AppleGpuError(f"gpu_softmax is rank-2 (last-axis) only: {x.shape}")
     M, K = int(x.shape[0]), int(x.shape[1])
+    if _is_bf16(x):
+        out = np.zeros((M, K), _BF16)
+        _load().tessera_apple_gpu_softmax_bf16(_u16ptr(x), _u16ptr(out), M, K)
+        return out
     out = np.zeros((M, K), np.float32)
     _load().tessera_apple_gpu_softmax_f32(_ptr(x), _ptr(out), M, K)
     return out
@@ -131,20 +182,32 @@ def gpu_softmax(x: np.ndarray) -> np.ndarray:
 
 def gpu_matmul_softmax(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """Fused O = softmax(A @ B) in a single Metal kernel (the D2 fused-chain
-    target override), rank-2 f32."""
-    a = _f32(a, "a")
-    b = _f32(b, "b")
+    target override), rank-2 f32/bf16."""
+    a = _arr(a, "a")
+    b = _arr(b, "b")
     if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
         raise AppleGpuError(f"gpu_matmul_softmax shapes: {a.shape} @ {b.shape}")
     M, K = int(a.shape[0]), int(a.shape[1])
     N = int(b.shape[1])
+    if _is_bf16(a) or _is_bf16(b):
+        a, b = _to_bf16(a), _to_bf16(b)
+        out = np.zeros((M, N), _BF16)
+        _load().tessera_apple_gpu_matmul_softmax_bf16(
+            _u16ptr(a), _u16ptr(b), _u16ptr(out), M, N, K)
+        return out
     out = np.zeros((M, N), np.float32)
     _load().tessera_apple_gpu_matmul_softmax_f32(_ptr(a), _ptr(b), _ptr(out), M, N, K)
     return out
 
 
 def gpu_gelu(x: np.ndarray) -> np.ndarray:
-    """GELU on the Apple GPU (MSL), f32. Flattened elementwise."""
+    """GELU on the Apple GPU (MSL), f32/bf16. Flattened elementwise."""
+    if _is_bf16(x):
+        xb = _to_bf16(x)
+        flat = np.ascontiguousarray(xb.reshape(-1))
+        out = np.zeros_like(flat)
+        _load().tessera_apple_gpu_gelu_bf16(_u16ptr(flat), _u16ptr(out), int(flat.size))
+        return out.reshape(xb.shape)
     x = _f32(x, "x")
     flat = np.ascontiguousarray(x.reshape(-1))
     out = np.zeros_like(flat)
@@ -161,9 +224,13 @@ _BINARY_OPCODE = {"add": 0, "sub": 1, "mul": 2, "div": 3}
 
 
 def gpu_binary(kind: str, a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Elementwise add/sub/mul/div on the Apple GPU (MPSGraph), f32, equal shapes."""
+    """Elementwise add/sub/mul/div on the Apple GPU (MPSGraph), f32/bf16, equal
+    shapes. bf16 has no native MPSGraph-binary kernel, so it computes in f32 and
+    rounds the result to bf16 (bf16-storage / f32-compute)."""
     if kind not in _BINARY_OPCODE:
         raise AppleGpuError(f"gpu_binary kind must be one of {sorted(_BINARY_OPCODE)}")
+    if _is_bf16(a) or _is_bf16(b):
+        return _to_bf16(gpu_binary(kind, _to_f32(a), _to_f32(b)))
     a = _f32(a, "a")
     b = _f32(b, "b")
     if a.shape != b.shape:
@@ -180,8 +247,11 @@ def gpu_rmsnorm(x: np.ndarray, eps: float = 1e-5) -> np.ndarray:
     """Unweighted RMSNorm over the last axis on the Apple GPU, rank-2 f32.
 
     Calls the weighted GPU kernel with gamma=1 so it matches the CPU lane's
-    unweighted ``jit_rmsnorm`` oracle (``x / sqrt(mean(x²) + eps)``).
+    unweighted ``jit_rmsnorm`` oracle (``x / sqrt(mean(x²) + eps)``). f32/bf16
+    (bf16 computes in f32 and rounds — no native bf16 norm kernel).
     """
+    if _is_bf16(x):
+        return _to_bf16(gpu_rmsnorm(_to_f32(x), eps=eps))
     x = _f32(x, "x")
     if x.ndim != 2:
         raise AppleGpuError(f"gpu_rmsnorm is rank-2 (last-axis) only: {x.shape}")
@@ -197,8 +267,10 @@ def gpu_layer_norm(x: np.ndarray, eps: float = 1e-5) -> np.ndarray:
     """Unweighted LayerNorm over the last axis (gamma=1, beta=0), rank-2 f32.
 
     Matches the CPU lane's unweighted ``jit_layer_norm``
-    (``(x - mean) / sqrt(var + eps)``).
+    (``(x - mean) / sqrt(var + eps)``). f32/bf16 (bf16 via f32 compute + round).
     """
+    if _is_bf16(x):
+        return _to_bf16(gpu_layer_norm(_to_f32(x), eps=eps))
     x = _f32(x, "x")
     if x.ndim != 2:
         raise AppleGpuError(f"gpu_layer_norm is rank-2 (last-axis) only: {x.shape}")
@@ -219,10 +291,13 @@ def gpu_unary(kind: str, x: np.ndarray) -> np.ndarray:
     """Elementwise activation on the Apple GPU (MPSGraph), f32. Flattened.
 
     `kind` ∈ {relu, sigmoid, tanh, silu}. (gelu has its own dedicated MSL kernel
-    — use `gpu_gelu`.)
+    — use `gpu_gelu`.) f32/bf16 (bf16 via f32 compute + round — no native
+    MPSGraph-unary bf16 kernel).
     """
     if kind not in _UNARY_OPCODE:
         raise AppleGpuError(f"gpu_unary kind must be one of {sorted(_UNARY_OPCODE)}")
+    if _is_bf16(x):
+        return _to_bf16(gpu_unary(kind, _to_f32(x)))
     x = _f32(x, "x")
     flat = np.ascontiguousarray(x.reshape(-1))
     out = np.zeros_like(flat)
@@ -243,11 +318,11 @@ def gpu_attention(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> np.ndarray:
     Matches the CPU lane's un-fused matmul→softmax→matmul composition. No scale
     is applied — pre-scale ``A`` by ``1/sqrt(d)`` if you want scaled-dot-product.
 
-    ``A:(M,K)  B:(K,N)  C:(N,P)  ->  O:(M,P)``.
+    ``A:(M,K)  B:(K,N)  C:(N,P)  ->  O:(M,P)``. f32/bf16 (native bf16 kernel).
     """
-    a = _f32(a, "a")
-    b = _f32(b, "b")
-    c = _f32(c, "c")
+    a = _arr(a, "a")
+    b = _arr(b, "b")
+    c = _arr(c, "c")
     if a.ndim != 2 or b.ndim != 2 or c.ndim != 2:
         raise AppleGpuError("gpu_attention is rank-2 only")
     M, K = int(a.shape[0]), int(a.shape[1])
@@ -256,6 +331,12 @@ def gpu_attention(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> np.ndarray:
     if int(b.shape[0]) != K or int(c.shape[0]) != N:
         raise AppleGpuError(
             f"gpu_attention shape mismatch: {a.shape} @ {b.shape} @ {c.shape}")
+    if _is_bf16(a) or _is_bf16(b) or _is_bf16(c):
+        a, b, c = _to_bf16(a), _to_bf16(b), _to_bf16(c)
+        out = np.zeros((M, P), _BF16)
+        _load().tessera_apple_gpu_matmul_softmax_matmul_bf16(
+            _u16ptr(a), _u16ptr(b), _u16ptr(c), _u16ptr(out), M, K, N, P)
+        return out
     out = np.zeros((M, P), np.float32)
     _load().tessera_apple_gpu_matmul_softmax_matmul_f32(
         _ptr(a), _ptr(b), _ptr(c), _ptr(out), M, K, N, P)
@@ -263,26 +344,40 @@ def gpu_attention(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> np.ndarray:
 
 
 def gpu_matmul_gelu(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Fused ``O = gelu(A @ B)`` in one Metal kernel (tanh-approx gelu)."""
-    a = _f32(a, "a")
-    b = _f32(b, "b")
+    """Fused ``O = gelu(A @ B)`` in one Metal kernel (tanh-approx gelu). f32/bf16
+    (native bf16 kernel)."""
+    a = _arr(a, "a")
+    b = _arr(b, "b")
     if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
         raise AppleGpuError(f"gpu_matmul_gelu shapes: {a.shape} @ {b.shape}")
     M, K = int(a.shape[0]), int(a.shape[1])
     N = int(b.shape[1])
+    if _is_bf16(a) or _is_bf16(b):
+        a, b = _to_bf16(a), _to_bf16(b)
+        out = np.zeros((M, N), _BF16)
+        _load().tessera_apple_gpu_matmul_gelu_bf16(
+            _u16ptr(a), _u16ptr(b), _u16ptr(out), M, N, K)
+        return out
     out = np.zeros((M, N), np.float32)
     _load().tessera_apple_gpu_matmul_gelu_f32(_ptr(a), _ptr(b), _ptr(out), M, N, K)
     return out
 
 
 def gpu_matmul_rmsnorm(a: np.ndarray, b: np.ndarray, eps: float = 1e-5) -> np.ndarray:
-    """Fused ``O = rmsnorm(A @ B)`` (unweighted, last-axis) in one Metal kernel."""
-    a = _f32(a, "a")
-    b = _f32(b, "b")
+    """Fused ``O = rmsnorm(A @ B)`` (unweighted, last-axis) in one Metal kernel.
+    f32/bf16 (native bf16 kernel)."""
+    a = _arr(a, "a")
+    b = _arr(b, "b")
     if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
         raise AppleGpuError(f"gpu_matmul_rmsnorm shapes: {a.shape} @ {b.shape}")
     M, K = int(a.shape[0]), int(a.shape[1])
     N = int(b.shape[1])
+    if _is_bf16(a) or _is_bf16(b):
+        a, b = _to_bf16(a), _to_bf16(b)
+        out = np.zeros((M, N), _BF16)
+        _load().tessera_apple_gpu_matmul_rmsnorm_bf16(
+            _u16ptr(a), _u16ptr(b), _u16ptr(out), M, N, K, float(eps))
+        return out
     out = np.zeros((M, N), np.float32)
     _load().tessera_apple_gpu_matmul_rmsnorm_f32(
         _ptr(a), _ptr(b), _ptr(out), M, N, K, float(eps))
@@ -295,7 +390,10 @@ def gpu_rmsnorm_matmul(x: np.ndarray, w: np.ndarray, eps: float = 1e-5) -> np.nd
 
     Calls the weighted kernel with gamma=1 so it matches the CPU lane's
     ``matmul(rmsnorm(x), W)`` composition. ``X:(M,K)  W:(K,N)  ->  O:(M,N)``.
+    f32/bf16 (bf16 via f32 compute + round — no native bf16 variant).
     """
+    if _is_bf16(x) or _is_bf16(w):
+        return _to_bf16(gpu_rmsnorm_matmul(_to_f32(x), _to_f32(w), eps=eps))
     x = _f32(x, "x")
     w = _f32(w, "w")
     if x.ndim != 2 or w.ndim != 2 or x.shape[1] != w.shape[0]:
@@ -429,12 +527,13 @@ def gpu_swiglu(
     kernel (gate/up projections + silu + elementwise gate + down projection).
 
     ``X:(M,K)  Wg,Wu:(K,H)  Wd:(H,Kout)  ->  O:(M,Kout)``. Matches the CPU lane's
-    `(silu(matmul(x,wg)) * matmul(x,wu)) @ wd` composition.
+    `(silu(matmul(x,wg)) * matmul(x,wu)) @ wd` composition. f32/bf16 (native bf16
+    kernel).
     """
-    x = _f32(x, "x")
-    wg = _f32(wg, "wg")
-    wu = _f32(wu, "wu")
-    wd = _f32(wd, "wd")
+    x = _arr(x, "x")
+    wg = _arr(wg, "wg")
+    wu = _arr(wu, "wu")
+    wd = _arr(wd, "wd")
     if x.ndim != 2 or wg.ndim != 2 or wu.ndim != 2 or wd.ndim != 2:
         raise AppleGpuError("gpu_swiglu operands are all rank-2")
     M, K = int(x.shape[0]), int(x.shape[1])
@@ -444,6 +543,13 @@ def gpu_swiglu(
         raise AppleGpuError(
             f"gpu_swiglu shape mismatch: X{x.shape} Wg{wg.shape} "
             f"Wu{wu.shape} Wd{wd.shape}")
+    if any(_is_bf16(t) for t in (x, wg, wu, wd)):
+        x, wg, wu, wd = (_to_bf16(x), _to_bf16(wg), _to_bf16(wu), _to_bf16(wd))
+        out = np.zeros((M, Kout), _BF16)
+        _load().tessera_apple_gpu_swiglu_bf16(
+            _u16ptr(x), _u16ptr(wg), _u16ptr(wu), _u16ptr(wd), _u16ptr(out),
+            M, K, H, Kout)
+        return out
     out = np.zeros((M, Kout), np.float32)
     _load().tessera_apple_gpu_swiglu_f32(
         _ptr(x), _ptr(wg), _ptr(wu), _ptr(wd), _ptr(out), M, K, H, Kout)

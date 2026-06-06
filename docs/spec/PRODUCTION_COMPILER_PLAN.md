@@ -218,6 +218,29 @@ last_updated: 2026-06-05
 >   f16-rounded/f32-accumulate oracle. **15 tests**
 >   (`tests/unit/test_production_jit_phase3_mtl4_mlp.py`). **242/242 production-lane
 >   tests green.**
+> * **Sprint 3.4 — bf16 across the GPU back-half + GraphFn landed 2026-06-06.**
+>   The back-half kernels are now **dtype-polymorphic** (auto-detect from the input
+>   dtype): an `ml_dtypes.bfloat16` input routes to the **native bf16 Metal kernel**
+>   (matmul / softmax / gelu / attention / matmul_gelu / matmul_rmsnorm / swiglu,
+>   all f32-accumulate per the ABI) or, for ops with no native bf16 variant
+>   (rmsnorm / layer_norm / rmsnorm_matmul / silu+unary / elementwise-binary), to an
+>   **f32-compute-then-round** path (bf16-storage / f32-compute). `GraphFn(target=
+>   "apple_gpu", elem="bf16")` runs the WHOLE graph in bf16 through the interpreter
+>   — fusion still fires (`qkv_concat_prenorm`/`matmul_softmax_matmul`/`swiglu`).
+>   The full pre-norm transformer block runs end-to-end in bf16 and matches the f32
+>   lane to ~0.5% rel (bf16's ~8-bit mantissa). bf16 boundary = raw 16-bit
+>   (`ml_dtypes.bfloat16`), matching RUNTIME_ABI_SPEC §12.5 / the CPU lane's Phase
+>   1.5 policy. The whole-graph `run_mlpkg()` lane stays f32 (the `author_graph`
+>   MPSGraph is f32-hardcoded; bf16 there is a documented follow-on — use `run()`
+>   for bf16). **256/256 production-lane tests green** (+14;
+>   `tests/unit/test_production_jit_phase3_bf16.py`).
+>
+> **Phase 3 COMPLETE** — Apple GPU end-to-end on real silicon: per-kernel
+> interpreter (`run()`, any Metal macOS) + whole-graph one-dispatch (`run_mlpkg()`,
+> macOS 26+) + all four perf-fusions (rmsnorm_matmul / QKV-concat / mlpkg
+> whole-graph / MTL4 MLP session) + f32 **and** bf16. The full transformer block is
+> production-grade and oracle-matched on this Mac's GPU. Next: Phase 4 (NVIDIA
+> correctness-first).
 >
 > **Fusion opportunities surveyed (grounded in `apple_gpu_runtime.mm`):** the
 > runtime already carries deeper fusion infra — (1) ~~`rmsnorm_matmul`~~ **DONE**;

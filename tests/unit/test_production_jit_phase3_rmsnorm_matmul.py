@@ -69,10 +69,11 @@ def test_graph_rmsnorm_matmul_fuses_and_matches_cpu(T, d, N):
 # ── conservative: a norm feeding two matmuls is NOT fused ────────────────────
 
 
-def test_graph_rmsnorm_not_fused_when_shared_by_two_projections():
-    """When the rmsnorm output feeds more than one matmul (the QKV shape), the
-    single-call rmsnorm_matmul kernel can't represent it, so fusion is declined
-    and the norm + both matmuls run as separate GPU kernels."""
+def test_graph_prenorm_fold_declines_when_norm_output_escapes():
+    """When the rmsnorm output is also a function result (escapes the projection
+    group), the pre-norm fold must decline — the two projections still QKV-concat
+    into one plain matmul, but the rmsnorm stays a standalone GPU kernel so the
+    extra returned value is still computed correctly."""
     rng = np.random.default_rng(9)
     T, d, N = 8, 16, 16
     x = (rng.standard_normal((T, d)) * 1.5).astype(np.float32)
@@ -84,17 +85,22 @@ def test_graph_rmsnorm_not_fused_when_shared_by_two_projections():
         xi = g.arg((T, d))
         w1i, w2i = g.arg((d, N)), g.arg((d, N))
         xn = g.rmsnorm(xi)
-        g.ret(g.add(g.matmul(xn, w1i), g.matmul(xn, w2i)))
+        out = g.add(g.matmul(xn, w1i), g.matmul(xn, w2i))
+        g.ret(out, xn)  # xn escapes → pre-norm fold must decline
 
     gg = GraphFn(target="apple_gpu")
     build(gg)
     gc = GraphFn(target="cpu")
     build(gc)
 
-    np.testing.assert_allclose(gg.run(*ar), gc.run(*ar), rtol=2e-4, atol=2e-4)
+    og, xng = gg.run(*ar)
+    oc, xnc = gc.run(*ar)
+    np.testing.assert_allclose(og, oc, rtol=2e-4, atol=2e-4)
+    np.testing.assert_allclose(xng, xnc, rtol=2e-4, atol=2e-4)
     disp = gg.last_dispatch()
-    assert "rmsnorm_matmul" not in disp
-    assert disp.count("rmsnorm") == 1 and disp.count("matmul") == 2
+    assert "qkv_concat" in disp            # the 2 projections still concat-fuse
+    assert "qkv_concat_prenorm" not in disp  # but the norm did NOT fold in
+    assert disp.count("rmsnorm") == 1      # rmsnorm ran standalone (its value escapes)
 
 
 # ── pre-norm attention block: the norm→Wq fuses, K/V projections stay split ──

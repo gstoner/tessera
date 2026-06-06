@@ -125,9 +125,13 @@ def test_graph_full_transformer_block_matches_cpu():
 
     np.testing.assert_allclose(gg.run(*ar), gc.run(*ar), rtol=1e-3, atol=1e-3)
     disp = gg.last_dispatch()
+    # attention pre-norm + QKV projections → one qkv_concat_prenorm kernel;
+    # attention → one matmul_softmax_matmul; MLP → one swiglu. Only the MLP
+    # pre-norm remains a standalone rmsnorm (it feeds the swiglu kernel).
+    assert "qkv_concat_prenorm" in disp     # attn pre-norm + 3 projections fused
     assert "matmul_softmax_matmul" in disp  # attention fused to one kernel
     assert "swiglu" in disp                 # MLP fused to one kernel
-    assert disp.count("rmsnorm") == 2       # two pre-norms ran on GPU
+    assert disp.count("rmsnorm") == 1       # only the MLP pre-norm stands alone
     assert disp.count("add") == 2           # two residuals ran on GPU
 
 

@@ -1187,7 +1187,12 @@ class GraphFn:
             env[ssa] = a
         self._last_dispatch = []
         for node in self._fuse_for_gpu():
-            env[node.out.ssa] = self._dispatch_gpu(node, env, agb)
+            res = self._dispatch_gpu(node, env, agb)
+            if node.op == "__qkv_concat__":
+                for out_val, arr in zip(node.meta["outs"], res):
+                    env[out_val.ssa] = arr  # multi-output: Q, K, V, …
+            else:
+                env[node.out.ssa] = res
         outs = [env[r.ssa] for r in self._rets]
         return outs[0] if len(outs) == 1 else tuple(outs)
 
@@ -1268,6 +1273,41 @@ class GraphFn:
                 down.out, {})
             consumed.update(m for m in members if m != anchor)
 
+        # ── Pass 1a: QKV-concat — ≥2 plain matmuls sharing one input X fuse to
+        # a single concatenated projection (one matmul over [W0|W1|…]) + column
+        # split. If X is a single-use pre-norm of the group, the norm folds in
+        # too (one rmsnorm_matmul on the concat weight). It's a multi-output node
+        # (`meta["outs"]` lists the per-projection results, written by the
+        # executor). No single-use constraint on the outputs — the split values
+        # are identical to the separate matmuls, so downstream use is unaffected.
+        groups: dict[str, list] = {}
+        for i, op in enumerate(ops):
+            if i in consumed or i in fused_at:
+                continue
+            if (op.op == "tessera.matmul"
+                    and not op.meta.get("ta", False)
+                    and not op.meta.get("tb", False)):
+                groups.setdefault(op.ins[0].ssa, []).append(i)
+        for x_ssa, members in groups.items():
+            if len(members) < 2:
+                continue
+            anchor = members[0]
+            outs = [ops[mi].out for mi in members]
+            weights = [ops[mi].ins[1] for mi in members]
+            meta = {"splits": [int(o.shape[1]) for o in outs], "outs": outs}
+            x_val = ops[anchor].ins[0]
+            xp = prod(x_ssa)  # fold a single-use pre-norm of X into the concat
+            if (xp is not None and xp[1].op == "tessera.rmsnorm"
+                    and x_ssa not in returned
+                    and xp[0] not in fused_at and xp[0] not in consumed
+                    and len(consumers.get(x_ssa, [])) == len(members)):
+                meta["prenorm_eps"] = xp[1].meta.get("eps", 1e-5)
+                x_val = xp[1].ins[0]
+                consumed.add(xp[0])
+            fused_at[anchor] = _GraphOp(
+                "__qkv_concat__", [x_val] + weights, ops[anchor].out, meta)
+            consumed.update(m for m in members if m != anchor)
+
         # ── Pass 1b: pre-norm + projection (rmsnorm → matmul) ────────────────
         for i, op in enumerate(ops):
             if i in consumed or i in fused_at or op.op != "tessera.rmsnorm":
@@ -1344,6 +1384,21 @@ class GraphFn:
             return np.ascontiguousarray(arr.T) if flag else arr
 
         op, m = node.op, node.meta
+        if op == "__qkv_concat__":
+            x = val(node.ins[0])
+            wcat = np.ascontiguousarray(
+                np.concatenate([val(w) for w in node.ins[1:]], axis=1))
+            if "prenorm_eps" in m:
+                self._last_dispatch.append("qkv_concat_prenorm")
+                full = agb.gpu_rmsnorm_matmul(x, wcat, eps=m["prenorm_eps"])
+            else:
+                self._last_dispatch.append("qkv_concat")
+                full = agb.gpu_matmul(x, wcat)
+            cols, off = [], 0
+            for n in m["splits"]:
+                cols.append(np.ascontiguousarray(full[:, off:off + n]))
+                off += n
+            return cols
         if op == "__rmsnorm_matmul__":
             self._last_dispatch.append("rmsnorm_matmul")
             return agb.gpu_rmsnorm_matmul(

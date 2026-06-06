@@ -177,9 +177,26 @@ last_updated: 2026-06-05
 >   kernel authored end-to-end in the production lane (compiles on-the-fly from
 >   `apple_gpu_runtime.mm`, no CMake rebuild needed locally).
 >
+> * **Sprint 3.3 perf-fusion landed 2026-06-06 — QKV-concat (+ pre-norm fold).**
+>   When ≥2 plain matmuls share one input X (the Q/K/V projection shape), the
+>   GraphFn GPU executor concatenates their weights `[Wq|Wk|Wv]`, issues ONE
+>   matmul, and column-splits the result back — 3 GEMM dispatches → 1, with **no
+>   new Metal kernel** (host-side weight concat + existing `gpu_matmul` + split).
+>   It's a **multi-output** synthetic node (the executor writes Q,K,V from one
+>   dispatch). When X is a single-use pre-norm of exactly that group, the rmsnorm
+>   **folds in** (one `gpu_rmsnorm_matmul` on the concat weight) — so a full
+>   `rmsnorm → QKV` collapses to a SINGLE `qkv_concat_prenorm` kernel; the fold
+>   declines (plain `qkv_concat` + standalone norm) when the norm output escapes.
+>   Handles GQA/MQA unequal widths via per-projection column splits. In the full
+>   transformer block, the attention pre-norm + 3 projections now collapse to one
+>   kernel (dispatch: `qkv_concat_prenorm → matmul_softmax_matmul → add → rmsnorm
+>   → swiglu → add`). **220/220 production-lane tests green** (+6;
+>   `tests/unit/test_production_jit_phase3_qkv.py`).
+>
 > **Fusion opportunities surveyed (grounded in `apple_gpu_runtime.mm`):** the
 > runtime already carries deeper fusion infra not yet wired into the GraphFn lane —
-> (1) ~~`rmsnorm_matmul`~~ **DONE** (Sprint 3.3 perf-fusion above); (2) the `mlpkg_*`
+> (1) ~~`rmsnorm_matmul`~~ **DONE**; ~~QKV-concat~~ **DONE** (both Sprint 3.3
+> perf-fusion above); (2) the `mlpkg_*`
 > Metal-4 op-chain authoring API (`author_chain`/`compile`/`dispatch`) which could
 > compile an *arbitrary* graph to one dispatch (the "graph as one fused unit"
 > ideal, vs. today's per-kernel interpreter); (3) an MTL4 MLP session. A QKV-concat

@@ -151,11 +151,14 @@ def test_graph_prenorm_attention_block_matches_cpu():
     gc, _ = _cpu(build)
     np.testing.assert_allclose(gg.run(*ar), gc.run(*ar), rtol=1e-4, atol=1e-4)
     disp = gg.last_dispatch()
-    # attention collapsed to one fused kernel; 3 standalone projection matmuls;
-    # rmsnorm + residual add ran as their own GPU kernels.
+    # The pre-norm + 3 QKV projections collapse into ONE qkv_concat_prenorm
+    # kernel; attention collapses to one matmul_softmax_matmul; residual add runs
+    # as its own GPU kernel. No standalone projection matmuls or norm remain.
+    assert "qkv_concat_prenorm" in disp
     assert "matmul_softmax_matmul" in disp
-    assert disp.count("matmul") == 3
-    assert "rmsnorm" in disp and "add" in disp
+    assert disp.count("matmul") == 0
+    assert "rmsnorm" not in disp
+    assert "add" in disp
 
 
 # ── fusion is conservative: a reused intermediate is NOT fused ───────────────

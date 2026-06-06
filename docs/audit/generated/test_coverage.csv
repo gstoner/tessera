@@ -244,7 +244,7 @@ lu,1,1,0,2,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'lina
 mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
-matmul,209,141,10,350,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
+matmul,210,141,10,351,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
 maximum,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -366,7 +366,7 @@ sharded_dataset,2,0,0,2,0,,structural_only,category default for 'data'
 sigmoid,3,0,0,3,0,f32 fp32,covered_by_family,category default for 'elementwise'
 sigmoid_safe,3,0,0,3,0,,needs_direct_test,category default for 'stable_reduction'
 sign,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-silu,22,2,0,24,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
+silu,23,2,0,25,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
 silu_mul,6,10,0,16,0,fp32,covered_by_family,category default for 'elementwise'
 simple_rnn_cell,5,0,0,5,0,,needs_direct_test,category default for 'recurrent'
 sin,1,0,0,1,1,,covered_by_family,category default for 'elementwise'

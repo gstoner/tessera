@@ -381,11 +381,23 @@ last_updated: 2026-06-05
 >   non-matching → existing path); broad jit/compiler sweep (843) + production
 >   lane (315) green.
 >
-> Remaining close-out (plan `valiant-tickling-nest`): **B** bf16 control flow
-> (host upcast); **C** `control_if` Target-IR op + lowering + AST `if` bridge;
-> **D** `control_while` Target-IR op + lowering + AST `while` bridge (reuses the
-> existing `run_graph_while_f32`); **E** `scan`/`while` front-ends (ys-collection /
-> dynamic trip). Phase A (AST `for` bridge) ✅ landed.
+> * **Close-out Phase B — bf16 control flow (host upcast) landed 2026-06-06.** A
+>   bf16 bounded loop (via `jit_fori_loop` or the AST `@jit` bridge) now runs:
+>   `GraphFn._coerce_loop_args` upcasts bf16 args → f32 for the f32
+>   `run_graph_loop_f32` executor, the loop computes in f32 (f32 carry — more
+>   accurate than per-step bf16 rounding), and `_finalize_loop_out` downcasts the
+>   result back to bf16. `_serialize_loop_spec`'s `f32-only` gate relaxed to
+>   `{f32, bf16}` (the op-list is dtype-agnostic); `jit_fori_loop` infers `elem`
+>   from the carry dtype. No new C symbol (native `run_graph_loop_bf16` is a
+>   perf/exact-rounding follow-on). cond/while stay f32-only until C/D. **+4 tests**
+>   (`tests/unit/test_production_jit_phase3_control_flow_bf16.py`); the obsolete
+>   `test_loop_rejects_bf16` retargeted to assert bf16 now executes.
+>
+> Remaining close-out (plan `valiant-tickling-nest`): **C** `control_if` Target-IR
+> op + lowering + AST `if` bridge; **D** `control_while` Target-IR op + lowering +
+> AST `while` bridge (reuses the existing `run_graph_while_f32`); **E**
+> `scan`/`while` front-ends (ys-collection / dynamic trip). Phases A (AST `for`
+> bridge) + B (bf16 loop) ✅ landed.
 >
 > Next: Phase 4 (NVIDIA correctness-first).
 >

@@ -1282,8 +1282,9 @@ class GraphFn:
         if "_unsupported" in loop:
             raise TesseraJitError(
                 f"apple_gpu GraphFn loop: {loop['_unsupported']} not supported (v1)")
-        if self._elem != "f32":
-            raise TesseraJitError("apple_gpu GraphFn loop is f32-only (bf16 follow-on)")
+        if self._elem not in ("f32", "bf16"):
+            raise TesseraJitError(
+                f"apple_gpu GraphFn loop supports f32/bf16, got {self._elem!r}")
         if len(self._rets) != 1 or self._rets[0].ssa != loop["result_ssa"]:
             raise TesseraJitError(
                 "apple_gpu GraphFn loop must return exactly the loop result")
@@ -1303,28 +1304,55 @@ class GraphFn:
         return (arg_index[loop["init_ssa"]], loop["trip"], body_ops, body_out_id,
                 loop["carry_shape"])
 
-    def _validate_f32_args(self, arrays):
+    def _loop_elem_np(self):
+        """numpy dtype the loop's args must carry, per the GraphFn ``_elem``."""
+        if self._elem == "f32":
+            return np.float32
+        if self._elem == "bf16":
+            if _ml_dtypes is None:
+                raise TesseraJitError(
+                    "apple_gpu GraphFn bf16 loop needs the ml_dtypes package "
+                    "(pip install '.[ml_dtypes]')")
+            return _ml_dtypes.bfloat16
+        raise TesseraJitError(
+            f"apple_gpu GraphFn loop supports f32/bf16, got {self._elem!r}")
+
+    def _coerce_loop_args(self, arrays):
+        """Validate args against the declared ``_elem`` + recorded shapes and
+        return **f32** arrays for the executor. ``run_graph_loop_f32`` (and the
+        cond/while executors) are f32; bf16 control flow is host-upcast to f32 for
+        the run and the result is downcast back to bf16 by the caller — so a bf16
+        loop computes in f32 with an f32 carry (more accurate than per-step bf16
+        rounding; a native ``run_graph_loop_bf16`` is a perf/exact-rounding
+        follow-on). See ``_finalize_loop_out``."""
+        want = self._loop_elem_np()
         if len(arrays) != len(self._args):
             raise TesseraJitError(
                 f"expected {len(self._args)} args, got {len(arrays)}")
         ins = []
-        for (ssa, sh), arr in zip(self._args, arrays):
+        for (_ssa, sh), arr in zip(self._args, arrays):
             a = np.ascontiguousarray(np.asarray(arr))
-            if a.dtype != np.float32 or tuple(a.shape) != sh:
+            if a.dtype != want or tuple(a.shape) != sh:
                 raise TesseraJitError(
                     f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, "
-                    f"want float32{sh}")
-            ins.append(a)
+                    f"want {np.dtype(want).name}{sh}")
+            ins.append(a.astype(np.float32) if want != np.float32 else a)
         return ins
+
+    def _finalize_loop_out(self, out):
+        """Downcast an f32 loop result back to the declared ``_elem`` (bf16)."""
+        if self._elem == "bf16":
+            return out.astype(self._loop_elem_np())
+        return out
 
     def _run_apple_gpu_loop(self, arrays):
         from tessera import apple_mlpkg as mp
 
-        # Serialize first (elem/loop-shape checks, incl. the f32-only gate) so a
-        # bf16 graph reports "f32-only" rather than a generic arg-dtype mismatch.
+        # Serialize first (elem/loop-shape checks) so a bad elem is reported
+        # before the per-arg dtype check; bf16 is host-upcast in _coerce_loop_args.
         carry_arg_index, trip, body_ops, body_out_id, carry_shape = \
             self._serialize_loop_spec()
-        ins = self._validate_f32_args(arrays)
+        ins = self._coerce_loop_args(arrays)
         arg_shapes = [tuple(sh) for (_ssa, sh) in self._args]
         out = mp.run_graph_loop_f32(
             ins, arg_shapes, carry_arg_index, trip, body_ops, body_out_id,
@@ -1333,7 +1361,7 @@ class GraphFn:
             raise TesseraJitError(
                 "apple_gpu GraphFn loop dispatch failed / runtime unavailable")
         self._last_dispatch = ["forloop"]  # one MPSGraph forLoop dispatch
-        return out.copy()
+        return self._finalize_loop_out(out.copy())
 
     # ── MLIR-driven execution (Phase-G G-B.2) ────────────────────────────────
     #
@@ -1391,8 +1419,8 @@ class GraphFn:
         if self._target != "apple_gpu" or self._loop is None:
             raise TesseraJitError(
                 "run_via_target_ir requires an apple_gpu for_loop graph")
-        mlir = self._emit_control_for_mlir()  # serialize + f32-only check first
-        ins = self._validate_f32_args(arrays)
+        mlir = self._emit_control_for_mlir()  # serialize + elem check first
+        ins = self._coerce_loop_args(arrays)
         opt = _find_tessera_opt()
         if opt is None:
             raise TesseraJitError("tessera-opt binary not found (build it first)")
@@ -1406,7 +1434,7 @@ class GraphFn:
             raise TesseraJitError(
                 "control_loop execution failed (op/payload absent or runtime down)")
         self._last_dispatch = ["control_loop"]
-        return out.copy()
+        return self._finalize_loop_out(out.copy())
 
     def _serialize_branch(self, ops, idof, base, what):
         """Serialize a straight-line op-list (loop body / cond branch) to the
@@ -2083,11 +2111,15 @@ def jit_fori_loop(
     """
     init_arr = np.asarray(init)
     const_arrs = [np.asarray(c) for c in consts]
+    # Infer the element type from the carry: bf16 inits build a bf16 GraphFn
+    # (host-upcast to f32 for the executor, downcast on the way out — Phase B).
+    elem = "bf16" if (_ml_dtypes is not None
+                      and init_arr.dtype == _ml_dtypes.bfloat16) else "f32"
     g = build_fori_loop(
         int(trip), body,
         init_shape=init_arr.shape,
         const_shapes=[c.shape for c in const_arrs],
-        target=target, name=name,
+        target=target, name=name, elem=elem,
     )
     arrays = [init_arr, *const_arrs]
     if target == "apple_gpu":

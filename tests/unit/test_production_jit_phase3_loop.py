@@ -132,14 +132,22 @@ def test_loop_multi_arg_body_matches_cpu():
 # ── envelope: v1 restrictions are rejected with clear diagnostics ────────────
 
 
-def test_loop_rejects_bf16():
+def test_loop_bf16_now_supported_via_host_upcast():
+    """Phase-G close-out B: a bf16 loop no longer raises 'f32-only' — it runs the
+    f32 executor via host upcast and returns bf16. (Numeric correctness is covered
+    by test_production_jit_phase3_control_flow_bf16.py; here we only assert the
+    f32-only gate is gone and the elem is honored.)"""
+    ml_dtypes = pytest.importorskip("ml_dtypes")
     g = GraphFn(target="apple_gpu", elem="bf16")
     c = g.arg((1, 8))
     w = g.arg((8, 8))
     g.ret(g.for_loop(3, init=c, body=lambda x: g.matmul(x, w)))
-    import ml_dtypes
-    with pytest.raises(TesseraJitError, match="f32-only"):
-        g.run(np.ones((1, 8), ml_dtypes.bfloat16), np.ones((8, 8), ml_dtypes.bfloat16))
+    # Serialization (the former f32-only gate) must accept bf16 now.
+    spec = g._serialize_loop_spec()
+    assert spec[1] == 3  # trip
+    out = g.run(np.ones((1, 8), ml_dtypes.bfloat16),
+                np.ones((8, 8), ml_dtypes.bfloat16))
+    assert out.dtype == ml_dtypes.bfloat16
 
 
 def test_loop_rejects_init_not_an_arg():

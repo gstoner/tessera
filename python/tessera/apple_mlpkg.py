@@ -1419,6 +1419,8 @@ def author_graph_package(
     arg_shapes: "list[tuple[int, ...]]",
     ops: "list[dict]",
     output_id: int,
+    *,
+    bf16: bool = False,
 ) -> bool:
     """Author an ARBITRARY straight-line op graph as ONE serialized MPSGraph
     package — the whole graph becomes a single executable, so it runs as ONE
@@ -1435,6 +1437,8 @@ def author_graph_package(
 
     Positional bindings (inputs at ``0..``, output last); drive with
     ``fill_input_at`` / ``read_output_at`` then ``read_output_at(len(args), ...)``.
+    When ``bf16=True`` the boundary tensors are bf16 (inputs/output) while internal
+    compute stays f32 (the ABI f32-accumulate policy) — fill/read bf16 bytes.
     Returns ``True`` on success; ``False`` when the runtime is unavailable or the
     graph is malformed (unknown op / bad tensor id).
     """
@@ -1447,7 +1451,7 @@ def author_graph_package(
          ctypes.c_int32,
          ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
          ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
-         ctypes.POINTER(ctypes.c_float), ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32),
         restype=ctypes.c_int32,
     )
     if fn is None:
@@ -1473,7 +1477,7 @@ def author_graph_package(
         fattr[j] = float(o.get("eps", 1e-5))
     rc = int(fn(str(out_path).encode("utf-8"), ctypes.c_int32(na), rows, cols,
                 ctypes.c_int32(no), codes, in0, in1, iattr, fattr,
-                ctypes.c_int32(int(output_id))))
+                ctypes.c_int32(int(output_id)), ctypes.c_int32(1 if bf16 else 0)))
     return rc == 1
 
 

@@ -172,9 +172,32 @@ def test_graph_bf16_arg_dtype_checked():
         g.run(np.ones((4, 4), np.float32), np.ones((4, 4), np.float32))
 
 
-def test_run_mlpkg_rejects_bf16():
-    g = GraphFn(target="apple_gpu", elem="bf16")
-    a, b = g.arg((4, 8)), g.arg((8, 4))
-    g.ret(g.matmul(a, b))
-    with pytest.raises(TesseraJitError, match="f32-only"):
-        g.run_mlpkg(np.ones((4, 8), bf16), np.ones((8, 4), bf16))
+def test_run_mlpkg_bf16_whole_graph():
+    """bf16 in the whole-graph lane: GraphFn(elem='bf16').run_mlpkg() returns bf16
+    and matches the f32 package at bf16 tolerance. The package is f32 internally
+    (bf16 converted at the Python boundary — the mlpkg reflection path can't bind
+    bf16 tensors yet), so this is bf16-storage / f32-compute."""
+    import tessera.apple_mlpkg as mp
+    if not mp.packaged_ml_available():
+        pytest.skip("packaged-ML dispatch unavailable (needs macOS 26+)")
+    rng = np.random.default_rng(5)
+    M, K, N = 8, 16, 8
+    a = (rng.standard_normal((M, K)) / np.sqrt(K)).astype(np.float32)
+    b = rng.standard_normal((K, N)).astype(np.float32)
+
+    def build(g):
+        ai, bi = g.arg((M, K)), g.arg((K, N))
+        g.ret(g.softmax(g.matmul(ai, bi)))
+
+    gb = GraphFn(target="apple_gpu", elem="bf16")
+    build(gb)
+    gf = GraphFn(target="apple_gpu")
+    build(gf)
+    try:
+        out = gb.run_mlpkg(a.astype(bf16), b.astype(bf16))
+        assert out.dtype == bf16
+        np.testing.assert_allclose(
+            out.astype(np.float32), gf.run_mlpkg(a, b), rtol=3e-2, atol=3e-2)
+    finally:
+        gb.close()
+        gf.close()

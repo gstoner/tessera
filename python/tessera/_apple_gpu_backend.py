@@ -88,6 +88,11 @@ def _load():
         ("tessera_apple_gpu_matmul_gelu_bf16", [u16, u16, u16, i32, i32, i32]),
         ("tessera_apple_gpu_matmul_rmsnorm_bf16", [u16, u16, u16, i32, i32, i32, flt]),
         ("tessera_apple_gpu_swiglu_bf16", [u16, u16, u16, u16, u16, i32, i32, i32, i32]),
+        # Sprint 3.5 — native bf16 MPSGraph unary/binary/norm kernels.
+        ("tessera_apple_gpu_mpsgraph_unary_bf16", [i32, u16, u16, i64]),
+        ("tessera_apple_gpu_mpsgraph_binary_bf16", [i32, u16, u16, u16, i64]),
+        ("tessera_apple_gpu_rmsnorm_gpu_bf16", [u16, u16, u16, i32, i32, flt]),
+        ("tessera_apple_gpu_layer_norm_bf16", [u16, u16, u16, u16, i32, i32, flt]),
     ):
         try:
             sym = getattr(lib, name)
@@ -225,12 +230,19 @@ _BINARY_OPCODE = {"add": 0, "sub": 1, "mul": 2, "div": 3}
 
 def gpu_binary(kind: str, a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """Elementwise add/sub/mul/div on the Apple GPU (MPSGraph), f32/bf16, equal
-    shapes. bf16 has no native MPSGraph-binary kernel, so it computes in f32 and
-    rounds the result to bf16 (bf16-storage / f32-compute)."""
+    shapes (native bf16 kernel; f32 internal accumulation)."""
     if kind not in _BINARY_OPCODE:
         raise AppleGpuError(f"gpu_binary kind must be one of {sorted(_BINARY_OPCODE)}")
     if _is_bf16(a) or _is_bf16(b):
-        return _to_bf16(gpu_binary(kind, _to_f32(a), _to_f32(b)))
+        a, b = _to_bf16(a), _to_bf16(b)
+        if a.shape != b.shape:
+            raise AppleGpuError(f"gpu_binary needs equal shapes: {a.shape} vs {b.shape}")
+        fa = np.ascontiguousarray(a.reshape(-1))
+        fb = np.ascontiguousarray(b.reshape(-1))
+        out = np.zeros_like(fa)
+        _load().tessera_apple_gpu_mpsgraph_binary_bf16(
+            _BINARY_OPCODE[kind], _u16ptr(fa), _u16ptr(fb), _u16ptr(out), int(fa.size))
+        return out.reshape(a.shape)
     a = _f32(a, "a")
     b = _f32(b, "b")
     if a.shape != b.shape:
@@ -248,10 +260,18 @@ def gpu_rmsnorm(x: np.ndarray, eps: float = 1e-5) -> np.ndarray:
 
     Calls the weighted GPU kernel with gamma=1 so it matches the CPU lane's
     unweighted ``jit_rmsnorm`` oracle (``x / sqrt(mean(x²) + eps)``). f32/bf16
-    (bf16 computes in f32 and rounds — no native bf16 norm kernel).
+    (native bf16 kernel; f32 internal accumulation).
     """
     if _is_bf16(x):
-        return _to_bf16(gpu_rmsnorm(_to_f32(x), eps=eps))
+        x = _to_bf16(x)
+        if x.ndim != 2:
+            raise AppleGpuError(f"gpu_rmsnorm is rank-2 (last-axis) only: {x.shape}")
+        rows, cols = int(x.shape[0]), int(x.shape[1])
+        gamma = np.ones((cols,), _BF16)
+        out = np.zeros((rows, cols), _BF16)
+        _load().tessera_apple_gpu_rmsnorm_gpu_bf16(
+            _u16ptr(x), _u16ptr(gamma), _u16ptr(out), rows, cols, float(eps))
+        return out
     x = _f32(x, "x")
     if x.ndim != 2:
         raise AppleGpuError(f"gpu_rmsnorm is rank-2 (last-axis) only: {x.shape}")
@@ -267,10 +287,19 @@ def gpu_layer_norm(x: np.ndarray, eps: float = 1e-5) -> np.ndarray:
     """Unweighted LayerNorm over the last axis (gamma=1, beta=0), rank-2 f32.
 
     Matches the CPU lane's unweighted ``jit_layer_norm``
-    (``(x - mean) / sqrt(var + eps)``). f32/bf16 (bf16 via f32 compute + round).
+    (``(x - mean) / sqrt(var + eps)``). f32/bf16 (native bf16 kernel).
     """
     if _is_bf16(x):
-        return _to_bf16(gpu_layer_norm(_to_f32(x), eps=eps))
+        x = _to_bf16(x)
+        if x.ndim != 2:
+            raise AppleGpuError(f"gpu_layer_norm is rank-2 (last-axis) only: {x.shape}")
+        rows, cols = int(x.shape[0]), int(x.shape[1])
+        gamma = np.ones((cols,), _BF16)
+        beta = np.zeros((cols,), _BF16)
+        out = np.zeros((rows, cols), _BF16)
+        _load().tessera_apple_gpu_layer_norm_bf16(
+            _u16ptr(x), _u16ptr(gamma), _u16ptr(beta), _u16ptr(out), rows, cols, float(eps))
+        return out
     x = _f32(x, "x")
     if x.ndim != 2:
         raise AppleGpuError(f"gpu_layer_norm is rank-2 (last-axis) only: {x.shape}")
@@ -291,13 +320,17 @@ def gpu_unary(kind: str, x: np.ndarray) -> np.ndarray:
     """Elementwise activation on the Apple GPU (MPSGraph), f32. Flattened.
 
     `kind` ∈ {relu, sigmoid, tanh, silu}. (gelu has its own dedicated MSL kernel
-    — use `gpu_gelu`.) f32/bf16 (bf16 via f32 compute + round — no native
-    MPSGraph-unary bf16 kernel).
+    — use `gpu_gelu`.) f32/bf16 (native bf16 kernel; f32 internal accumulation).
     """
     if kind not in _UNARY_OPCODE:
         raise AppleGpuError(f"gpu_unary kind must be one of {sorted(_UNARY_OPCODE)}")
     if _is_bf16(x):
-        return _to_bf16(gpu_unary(kind, _to_f32(x)))
+        xb = _to_bf16(x)
+        flat = np.ascontiguousarray(xb.reshape(-1))
+        out = np.zeros_like(flat)
+        _load().tessera_apple_gpu_mpsgraph_unary_bf16(
+            _UNARY_OPCODE[kind], _u16ptr(flat), _u16ptr(out), int(flat.size))
+        return out.reshape(xb.shape)
     x = _f32(x, "x")
     flat = np.ascontiguousarray(x.reshape(-1))
     out = np.zeros_like(flat)

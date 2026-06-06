@@ -11418,8 +11418,9 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_author_op(
 // Tensor ids: 0..n_args-1 are inputs (placeholders); op j produces id n_args+j.
 // Each op carries an opcode, ≤2 input ids (in1 = -1 if unary), an int attr
 // (matmul transpose bits: bit0=A, bit1=B), and a float attr (norm eps).
-// `output_id` designates the single result. fp32. Positional bindings: inputs
-// in arg order at 0.., output last.
+// `output_id` designates the single result. `io_bf16` (0/1) selects the boundary
+// dtype: when 1, inputs/output are bf16 while internal compute stays f32 (ABI
+// f32-accumulate). Positional bindings: inputs in arg order at 0.., output last.
 //
 //   opcodes:  0 matmul | 1 add 2 sub 3 mul 4 div | 10 softmax(last-axis)
 //             11 rmsnorm 12 layer_norm (both unweighted) | 20 relu 21 sigmoid
@@ -11431,7 +11432,7 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_author_graph(
     const char *out_package_path, int32_t n_args, const int32_t *arg_rows,
     const int32_t *arg_cols, int32_t n_ops, const int32_t *op_codes,
     const int32_t *op_in0, const int32_t *op_in1, const int32_t *op_iattr,
-    const float *op_fattr, int32_t output_id) {
+    const float *op_fattr, int32_t output_id, int32_t io_bf16) {
   if (!out_package_path || n_args <= 0 || n_ops < 0 || !arg_rows ||
       !arg_cols || (n_ops > 0 && (!op_codes || !op_in0)))
     return -2;
@@ -11439,7 +11440,11 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_author_graph(
   if (!ctx.ok) return -1;
   if (@available(macOS 14.0, iOS 17.0, *)) {
     @autoreleasepool {
+      // Internal compute is always f32 (the ABI's f32-accumulate policy); when
+      // io_bf16 the boundary tensors are bf16 — inputs upcast to f32 right after
+      // the placeholder, the final output downcast back to bf16.
       MPSDataType dt = MPSDataTypeFloat32;
+      MPSDataType io_dt = io_bf16 ? MPSDataTypeBFloat16 : MPSDataTypeFloat32;
       int32_t total = n_args + n_ops;
       NSMutableArray *tensors = [NSMutableArray arrayWithCapacity:total];
       for (int i = 0; i < total; ++i) [tensors addObject:[NSNull null]];
@@ -11449,9 +11454,9 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_author_graph(
         NSArray<NSNumber *> *shp = (arg_cols[i] > 0)
                                        ? @[ @(arg_rows[i]), @(arg_cols[i]) ]
                                        : @[ @(arg_rows[i]) ];
-        MPSGraphTensor *p = [g placeholderWithShape:shp dataType:dt name:nil];
-        tensors[i] = p;
-        feeds[p] = [[MPSGraphShapedType alloc] initWithShape:shp dataType:dt];
+        MPSGraphTensor *p = [g placeholderWithShape:shp dataType:io_dt name:nil];
+        tensors[i] = io_bf16 ? [g castTensor:p toType:dt name:nil] : p;
+        feeds[p] = [[MPSGraphShapedType alloc] initWithShape:shp dataType:io_dt];
       }
       auto getT = [&](int tid) -> MPSGraphTensor * {
         if (tid < 0 || tid >= total) return nil;
@@ -11517,6 +11522,7 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_author_graph(
       }
       MPSGraphTensor *out = getT(output_id);
       if (!out) return -2;
+      if (io_bf16) out = [g castTensor:out toType:io_dt name:nil];
       return _mlpkg_compile_and_write(g, feeds, out, out_package_path);
     }
   }
@@ -13519,6 +13525,73 @@ extern "C" void tessera_apple_gpu_rmsnorm_gpu_f16(const uint16_t *x,
   if (ctx.ok && mpsg_run_rowop(ctx, 1, x, gamma, nullptr, out, rows, cols, eps,
                                MPSDataTypeFloat16, 2)) return;
   std::memcpy(out, x, (size_t)rows * cols * 2);
+}
+
+// ── Sprint 3.5: native bf16 MPSGraph unary / binary / norm kernels ───────────
+// MPSGraph supports bf16 (probe: tessera_apple_gpu_mpsgraph_bf16_supported), so
+// the dtype-parameterized mpsg_run_* helpers run these natively in bf16 (f32
+// internal accumulation inside MPSGraph). The host fallback upcasts to f32,
+// reuses the corresponding f32 extern, and rounds back — correct on any host.
+extern "C" void tessera_apple_gpu_mpsgraph_unary_bf16(int32_t op,
+                                                      const uint16_t *x,
+                                                      uint16_t *out, int64_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_unary(ctx, op, x, out, n, MPSDataTypeBFloat16, 2)) return;
+  std::vector<float> xf((size_t)n), of((size_t)n);
+  for (int64_t i = 0; i < n; ++i) xf[i] = bfloat16_to_float_gpu(x[i]);
+  tessera_apple_gpu_mpsgraph_unary_f32(op, xf.data(), of.data(), n);
+  for (int64_t i = 0; i < n; ++i) out[i] = float_to_bfloat16_gpu(of[i]);
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_binary_bf16(int32_t op,
+                                                       const uint16_t *a,
+                                                       const uint16_t *b,
+                                                       uint16_t *out,
+                                                       int64_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_binary(ctx, op, a, b, out, n, MPSDataTypeBFloat16, 2)) return;
+  std::vector<float> af((size_t)n), bf((size_t)n), of((size_t)n);
+  for (int64_t i = 0; i < n; ++i) {
+    af[i] = bfloat16_to_float_gpu(a[i]);
+    bf[i] = bfloat16_to_float_gpu(b[i]);
+  }
+  tessera_apple_gpu_mpsgraph_binary_f32(op, af.data(), bf.data(), of.data(), n);
+  for (int64_t i = 0; i < n; ++i) out[i] = float_to_bfloat16_gpu(of[i]);
+}
+
+extern "C" void tessera_apple_gpu_rmsnorm_gpu_bf16(const uint16_t *x,
+                                                   const uint16_t *gamma,
+                                                   uint16_t *out, int32_t rows,
+                                                   int32_t cols, float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_rowop(ctx, 1, x, gamma, nullptr, out, rows, cols, eps,
+                               MPSDataTypeBFloat16, 2)) return;
+  size_t nrc = (size_t)rows * cols;
+  std::vector<float> xf(nrc), gf((size_t)cols), of(nrc);
+  for (size_t i = 0; i < nrc; ++i) xf[i] = bfloat16_to_float_gpu(x[i]);
+  for (int32_t c = 0; c < cols; ++c) gf[c] = bfloat16_to_float_gpu(gamma[c]);
+  tessera_apple_gpu_rmsnorm_gpu_f32(xf.data(), gf.data(), of.data(), rows, cols, eps);
+  for (size_t i = 0; i < nrc; ++i) out[i] = float_to_bfloat16_gpu(of[i]);
+}
+
+extern "C" void tessera_apple_gpu_layer_norm_bf16(const uint16_t *x,
+                                                  const uint16_t *gamma,
+                                                  const uint16_t *beta,
+                                                  uint16_t *out, int32_t rows,
+                                                  int32_t cols, float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_rowop(ctx, 0, x, gamma, beta, out, rows, cols, eps,
+                               MPSDataTypeBFloat16, 2)) return;
+  size_t nrc = (size_t)rows * cols;
+  std::vector<float> xf(nrc), gf((size_t)cols), bbf((size_t)cols), of(nrc);
+  for (size_t i = 0; i < nrc; ++i) xf[i] = bfloat16_to_float_gpu(x[i]);
+  for (int32_t c = 0; c < cols; ++c) {
+    gf[c] = bfloat16_to_float_gpu(gamma[c]);
+    bbf[c] = bfloat16_to_float_gpu(beta[c]);
+  }
+  tessera_apple_gpu_layer_norm_f32(xf.data(), gf.data(), bbf.data(), of.data(),
+                                   rows, cols, eps);
+  for (size_t i = 0; i < nrc; ++i) out[i] = float_to_bfloat16_gpu(of[i]);
 }
 
 extern "C" void tessera_apple_gpu_mpsgraph_softmax_f32(const float *x,

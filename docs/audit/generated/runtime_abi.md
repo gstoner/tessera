@@ -4,7 +4,7 @@ Human-readable view. The canonical machine-readable artifact is `runtime_abi.csv
 
 ## Headline
 
-- **243** unique `extern "C" tessera_*` C ABI symbols across all backends.
+- **247** unique `extern "C" tessera_*` C ABI symbols across all backends.
 - **6 / 6** core runtime headers present.
 - **92** Apple GPU kernel families with per-dtype variants.
 
@@ -23,7 +23,7 @@ Human-readable view. The canonical machine-readable artifact is `runtime_abi.csv
 
 | Backend | Unique tessera_* symbols |
 |---------|-------------------------:|
-| `apple` | 232 |
+| `apple` | 236 |
 | `nvidia` | 3 |
 | `x86` | 8 |
 
@@ -79,7 +79,7 @@ Human-readable view. The canonical machine-readable artifact is `runtime_abi.csv
 | `gelu` | `bf16`, `f16`, `f32` |
 | `gumbel_argmax` | `f32` |
 | `gumbel_argmax_dev` | `f32` |
-| `layer_norm` | `f16`, `f32` |
+| `layer_norm` | `bf16`, `f16`, `f32` |
 | `linear_attn` | `f32` |
 | `log_softmax` | `f16`, `f32` |
 | `matmul_gelu` | `bf16`, `f16`, `f32` |
@@ -92,12 +92,12 @@ Human-readable view. The canonical machine-readable artifact is `runtime_abi.csv
 | `mla_decode_rope` | `bf16`, `f16`, `f32` |
 | `mps_matmul` | `bf16`, `f16`, `f32` |
 | `mpsgraph_argreduce` | `f32` |
-| `mpsgraph_binary` | `f16`, `f32` |
+| `mpsgraph_binary` | `bf16`, `f16`, `f32` |
 | `mpsgraph_bsmm` | `f16`, `f32` |
 | `mpsgraph_reduce` | `f32` |
 | `mpsgraph_scan` | `f32` |
 | `mpsgraph_softmax` | `f16`, `f32` |
-| `mpsgraph_unary` | `f16`, `f32` |
+| `mpsgraph_unary` | `bf16`, `f16`, `f32` |
 | `mtl4_conv2d` | `bf16`, `f16` |
 | `mtl4_matmul2d` | `bf16`, `f16` |
 | `mtl4_matmul2d_epilogue` | `bf16`, `f16` |
@@ -108,7 +108,7 @@ Human-readable view. The canonical machine-readable artifact is `runtime_abi.csv
 | `ppo_policy_loss_ex` | `f32` |
 | `random_normal` | `f32` |
 | `random_uniform` | `f32` |
-| `rmsnorm_gpu` | `f16`, `f32` |
+| `rmsnorm_gpu` | `bf16`, `f16`, `f32` |
 | `rmsnorm_matmul` | `f32` |
 | `rope` | `bf16`, `f16`, `f32` |
 | `rowop_dev` | `f32` |

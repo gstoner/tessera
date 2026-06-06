@@ -87,7 +87,7 @@ def _find_runtime_source() -> Optional[Path]:
 # Newest C ABI symbol — used as the staleness sentinel when accepting a
 # prebuilt library (env-pointed or CMake-built). If a candidate lacks it,
 # it predates the current source and we fall through to a fresh build.
-_SENTINEL_SYMBOL = "tessera_apple_gpu_mlpkg_author_graph"
+_SENTINEL_SYMBOL = "tessera_apple_gpu_rmsnorm_gpu_bf16"
 
 
 def _prebuilt_candidate() -> Optional[ctypes.CDLL]:

@@ -235,12 +235,30 @@ last_updated: 2026-06-05
 >   for bf16). **256/256 production-lane tests green** (+14;
 >   `tests/unit/test_production_jit_phase3_bf16.py`).
 >
+> * **Sprint 3.5 — bf16 gap closure (post-Phase-3 follow-on) landed 2026-06-06.**
+>   Closed the two bf16 gaps Sprint 3.4 left open. **(#2 bf16 in `run_mlpkg`):**
+>   `author_graph` gained an `io_bf16` boundary flag (bf16 placeholders → cast to
+>   f32 → f32 body → cast output to bf16), but the mlpkg reflection /
+>   `prepare_tensors` path (`MTLTensorDataTypeFromMPSDataType`) hard-asserts on
+>   bf16 *bindings* today, so `run_mlpkg(elem="bf16")` authors an **f32 package and
+>   converts at the Python boundary** (bf16 in/out, f32 internal compute) — the
+>   `io_bf16` C path is kept for when bf16 bindings become reflectable. Full block
+>   in bf16 matches the f32 package to ~1.3e-2 and the interpreter to ~2.3e-2.
+>   **(#3 native bf16 MPSGraph kernels):** added `tessera_apple_gpu_{mpsgraph_unary,
+>   mpsgraph_binary,rmsnorm_gpu,layer_norm}_bf16` (native via the dtype-parameterized
+>   `mpsg_run_*` helpers; bf16 supported per `mpsgraph_bf16_supported()` probe;
+>   upcast→f32-extern→round host fallback) + stub parity. The back-half's
+>   rmsnorm/layer_norm/silu+unary/elementwise bf16 paths now run **native bf16**
+>   instead of host-upcast. **256/256 production-lane tests green**; mypy clean
+>   both platforms. bf16 is now uniform across the GPU back-half AND both GraphFn
+>   engines (run + run_mlpkg).
+>
 > **Phase 3 COMPLETE** — Apple GPU end-to-end on real silicon: per-kernel
 > interpreter (`run()`, any Metal macOS) + whole-graph one-dispatch (`run_mlpkg()`,
 > macOS 26+) + all four perf-fusions (rmsnorm_matmul / QKV-concat / mlpkg
-> whole-graph / MTL4 MLP session) + f32 **and** bf16. The full transformer block is
-> production-grade and oracle-matched on this Mac's GPU. Next: Phase 4 (NVIDIA
-> correctness-first).
+> whole-graph / MTL4 MLP session) + f32 **and** bf16 (uniform after Sprint 3.5).
+> The full transformer block is production-grade and oracle-matched on this Mac's
+> GPU. Next: Phase 4 (NVIDIA correctness-first).
 >
 > **Fusion opportunities surveyed (grounded in `apple_gpu_runtime.mm`):** the
 > runtime already carries deeper fusion infra — (1) ~~`rmsnorm_matmul`~~ **DONE**;

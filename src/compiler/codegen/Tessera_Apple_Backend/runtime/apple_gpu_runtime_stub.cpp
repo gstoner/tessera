@@ -1592,7 +1592,7 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_author_chain(const char *,
 extern "C" int32_t tessera_apple_gpu_mlpkg_author_graph(
     const char *, int32_t, const int32_t *, const int32_t *, int32_t,
     const int32_t *, const int32_t *, const int32_t *, const int32_t *,
-    const float *, int32_t) {
+    const float *, int32_t, int32_t) {
   return -1;  // authoring requires MPSGraph (Darwin only)
 }
 extern "C" int32_t tessera_apple_gpu_dylib_serialize(const char *, const char *,
@@ -1899,6 +1899,42 @@ extern "C" void tessera_apple_gpu_rmsnorm_gpu_f16(const uint16_t* x, const uint1
                                                   uint16_t* out, int32_t rows,
                                                   int32_t cols, float) {
   std::memcpy(out, x, static_cast<std::size_t>(rows) * cols * 2);
+}
+// Sprint 3.5 — bf16 reference parity (upcast -> f32 reference -> round back).
+extern "C" void tessera_apple_gpu_mpsgraph_unary_bf16(int32_t op, const uint16_t* x,
+                                                      uint16_t* out, int64_t n) {
+  std::vector<float> xf((std::size_t)n), of((std::size_t)n);
+  for (int64_t i = 0; i < n; ++i) xf[i] = bfloat16_to_float_stub(x[i]);
+  tessera_apple_gpu_mpsgraph_unary_f32(op, xf.data(), of.data(), n);
+  for (int64_t i = 0; i < n; ++i) out[i] = float_to_bfloat16_stub(of[i]);
+}
+extern "C" void tessera_apple_gpu_mpsgraph_binary_bf16(int32_t op, const uint16_t* a,
+                                                       const uint16_t* b, uint16_t* out,
+                                                       int64_t n) {
+  std::vector<float> af((std::size_t)n), bf((std::size_t)n), of((std::size_t)n);
+  for (int64_t i = 0; i < n; ++i) { af[i] = bfloat16_to_float_stub(a[i]); bf[i] = bfloat16_to_float_stub(b[i]); }
+  tessera_apple_gpu_mpsgraph_binary_f32(op, af.data(), bf.data(), of.data(), n);
+  for (int64_t i = 0; i < n; ++i) out[i] = float_to_bfloat16_stub(of[i]);
+}
+extern "C" void tessera_apple_gpu_rmsnorm_gpu_bf16(const uint16_t* x, const uint16_t* gamma,
+                                                   uint16_t* out, int32_t rows,
+                                                   int32_t cols, float eps) {
+  std::size_t nrc = (std::size_t)rows * cols;
+  std::vector<float> xf(nrc), gf((std::size_t)cols), of(nrc);
+  for (std::size_t i = 0; i < nrc; ++i) xf[i] = bfloat16_to_float_stub(x[i]);
+  for (int32_t c = 0; c < cols; ++c) gf[c] = bfloat16_to_float_stub(gamma[c]);
+  tessera_apple_gpu_rmsnorm_gpu_f32(xf.data(), gf.data(), of.data(), rows, cols, eps);
+  for (std::size_t i = 0; i < nrc; ++i) out[i] = float_to_bfloat16_stub(of[i]);
+}
+extern "C" void tessera_apple_gpu_layer_norm_bf16(const uint16_t* x, const uint16_t* gamma,
+                                                  const uint16_t* beta, uint16_t* out,
+                                                  int32_t rows, int32_t cols, float eps) {
+  std::size_t nrc = (std::size_t)rows * cols;
+  std::vector<float> xf(nrc), gf((std::size_t)cols), bbf((std::size_t)cols), of(nrc);
+  for (std::size_t i = 0; i < nrc; ++i) xf[i] = bfloat16_to_float_stub(x[i]);
+  for (int32_t c = 0; c < cols; ++c) { gf[c] = bfloat16_to_float_stub(gamma[c]); bbf[c] = bfloat16_to_float_stub(beta[c]); }
+  tessera_apple_gpu_layer_norm_f32(xf.data(), gf.data(), bbf.data(), of.data(), rows, cols, eps);
+  for (std::size_t i = 0; i < nrc; ++i) out[i] = float_to_bfloat16_stub(of[i]);
 }
 extern "C" void tessera_apple_gpu_mpsgraph_softmax_f32(const float* x, float* out,
                                                        int32_t rows, int32_t cols) {

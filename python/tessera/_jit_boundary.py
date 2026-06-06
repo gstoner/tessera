@@ -1226,6 +1226,11 @@ class GraphFn:
         arg_shapes, ops, output_id, out_shape = self._serialize_mlpkg()
         d = tempfile.mkdtemp(prefix="tessera_mlpkg_")
         pkg = os.path.join(d, "graph.mtlpackage")  # loader needs the extension
+        # The package is ALWAYS authored f32: the mlpkg reflection / prepare_tensors
+        # path (MTLTensorDataTypeFromMPSDataType) asserts on bf16 bindings today, so
+        # bf16 is handled at the Python boundary in run_mlpkg (bf16 in/out, f32
+        # package internally — still f32-accumulate). The C `io_bf16=1` boundary
+        # capability stays for when bf16 bindings are reflectable.
         if not mp.author_graph_package(pkg, arg_shapes, ops, output_id):
             raise TesseraJitError(
                 f"mlpkg author_graph failed (err={mp.last_error_kind()})")
@@ -1243,17 +1248,16 @@ class GraphFn:
 
     def run_mlpkg(self, *arrays: np.ndarray):
         """Compile the WHOLE graph to one MPSGraph package and run it as a SINGLE
-        Metal dispatch (vs `run()`'s per-kernel interpreter). apple_gpu, f32,
-        single output, straight-line only. The package is authored+compiled once
-        and cached; later calls just re-fill inputs and dispatch."""
+        Metal dispatch (vs `run()`'s per-kernel interpreter). apple_gpu, f32 or
+        bf16 (bf16 = bf16 boundary, f32 internal compute), single output,
+        straight-line only. The package is authored+compiled once and cached;
+        later calls just re-fill inputs and dispatch."""
         from tessera import apple_mlpkg as mp
 
         if self._target != "apple_gpu":
             raise TesseraJitError("run_mlpkg requires target='apple_gpu'")
-        if self._elem != "f32":
-            raise TesseraJitError(
-                "run_mlpkg (whole-graph MPSGraph lane) is f32-only; use run() "
-                "for the bf16 interpreter path")
+        if self._elem not in ("f32", "bf16"):
+            raise TesseraJitError(f"run_mlpkg supports f32/bf16, not {self._elem!r}")
         if self._has_control_flow:
             raise TesseraJitError("run_mlpkg does not support scf control flow")
         if len(self._rets) != 1:
@@ -1261,25 +1265,30 @@ class GraphFn:
         if len(arrays) != len(self._args):
             raise TesseraJitError(
                 f"expected {len(self._args)} args, got {len(arrays)}")
+        npdt = _ELEM_TO_NP[self._elem]
+        is_bf16 = self._elem == "bf16"
         ins = []
         for (ssa, sh), arr in zip(self._args, arrays):
             a = np.ascontiguousarray(np.asarray(arr))
-            if a.dtype != np.float32 or tuple(a.shape) != sh:
+            if a.dtype != npdt or tuple(a.shape) != sh:
                 raise TesseraJitError(
                     f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, "
-                    f"want float32{sh}")
-            ins.append(a)
+                    f"want {npdt}{sh}")
+            # f32 package: upcast bf16 inputs at the boundary (bf16 rounding of the
+            # caller's data is preserved; compute is f32; output rounds back).
+            ins.append(a.astype(np.float32) if is_bf16 else a)
         pipe, out_shape = self._ensure_mlpkg_pipeline(mp)
         for i, a in enumerate(ins):
             if not pipe.fill_input_at(i, a.tobytes()):
                 raise TesseraJitError(f"mlpkg fill_input_at({i}) failed")
         if not pipe.dispatch(timeout_ms=30_000):
             raise TesseraJitError("mlpkg dispatch failed / timed out")
-        nbytes = int(np.prod(out_shape)) * 4
+        nbytes = int(np.prod(out_shape)) * 4  # f32 package output
         raw = pipe.read_output_at(len(self._args), nbytes)
         if raw is None:
             raise TesseraJitError("mlpkg read_output failed")
-        return np.frombuffer(raw, dtype=np.float32).reshape(out_shape).copy()
+        out = np.frombuffer(raw, dtype=np.float32).reshape(out_shape)
+        return out.astype(npdt).copy() if is_bf16 else out.copy()
 
     def close(self) -> None:
         """Release the cached mlpkg pipeline + its on-disk package (if any)."""

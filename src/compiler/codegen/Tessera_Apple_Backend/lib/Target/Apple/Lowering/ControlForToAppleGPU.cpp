@@ -85,6 +85,13 @@ struct LowerControlForToAppleGPUPass
       st.addAttribute("status", builder.getStringAttr("artifact"));
       st.addAttribute("symbol", builder.getStringAttr(kRunGraphLoopSymbol));
       st.addAttribute("framework", builder.getStringAttr("MPSGraph"));
+      // G-B.2 — carry the executable op-list payload through unchanged so the
+      // lowered op is self-contained + dispatchable via `symbol`.
+      for (llvm::StringRef k :
+           {"carry_arg_index", "body_opcodes", "body_in0", "body_in1",
+            "body_iattr", "body_fattr", "body_out_id"})
+        if (Attribute a = op->getAttr(k))
+          st.addAttribute(k, a);
       Operation *loop = builder.create(st);
       op->replaceAllUsesWith(loop);
       op->erase();

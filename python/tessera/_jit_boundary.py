@@ -29,6 +29,28 @@ from typing import Any, Sequence
 
 import numpy as np
 
+_TESSERA_OPT_PATH: Any = "unset"
+
+
+def _find_tessera_opt():
+    """Locate the built `tessera-opt` binary, or None. Honors $TESSERA_OPT_BIN,
+    then the in-repo build dir, then PATH. Cached (used by run_via_target_ir)."""
+    global _TESSERA_OPT_PATH
+    if _TESSERA_OPT_PATH != "unset":
+        return _TESSERA_OPT_PATH
+    import shutil
+    cands = []
+    env = os.environ.get("TESSERA_OPT_BIN")
+    if env:
+        cands.append(env)
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    cands.append(os.path.join(root, "build/tools/tessera-opt/tessera-opt"))
+    which = shutil.which("tessera-opt")
+    if which:
+        cands.append(which)
+    _TESSERA_OPT_PATH = next((p for p in cands if p and os.path.exists(p)), None)
+    return _TESSERA_OPT_PATH
+
 LAST_EXECUTION_BACKEND = "mlir_llvm_jit"
 
 
@@ -1251,9 +1273,11 @@ class GraphFn:
     # carry threads through the loop iteration argument. f32, single carry, init
     # must be a function arg, body references only args + carry (v1).
 
-    def _run_apple_gpu_loop(self, arrays):
-        from tessera import apple_mlpkg as mp
-
+    def _serialize_loop_spec(self):
+        """Serialize the captured `_loop` to the run_graph_loop op-list ABI:
+        returns (carry_arg_index, trip, body_ops, body_out_id, carry_shape).
+        Shared by the direct dispatch (`_run_apple_gpu_loop`) and the Target-IR
+        emit (`_emit_control_for_mlir`)."""
         loop = self._loop
         if "_unsupported" in loop:
             raise TesseraJitError(
@@ -1263,17 +1287,6 @@ class GraphFn:
         if len(self._rets) != 1 or self._rets[0].ssa != loop["result_ssa"]:
             raise TesseraJitError(
                 "apple_gpu GraphFn loop must return exactly the loop result")
-        if len(arrays) != len(self._args):
-            raise TesseraJitError(
-                f"expected {len(self._args)} args, got {len(arrays)}")
-        ins = []
-        for (ssa, sh), arr in zip(self._args, arrays):
-            a = np.ascontiguousarray(np.asarray(arr))
-            if a.dtype != np.float32 or tuple(a.shape) != sh:
-                raise TesseraJitError(
-                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, "
-                    f"want float32{sh}")
-            ins.append(a)
         arg_index = {ssa: k for k, (ssa, _sh) in enumerate(self._args)}
         if loop["init_ssa"] not in arg_index:
             raise TesseraJitError(
@@ -1287,14 +1300,112 @@ class GraphFn:
         if body_out_id is None:
             raise TesseraJitError(
                 "apple_gpu GraphFn loop: next carry is not produced by the body")
+        return (arg_index[loop["init_ssa"]], loop["trip"], body_ops, body_out_id,
+                loop["carry_shape"])
+
+    def _validate_f32_args(self, arrays):
+        if len(arrays) != len(self._args):
+            raise TesseraJitError(
+                f"expected {len(self._args)} args, got {len(arrays)}")
+        ins = []
+        for (ssa, sh), arr in zip(self._args, arrays):
+            a = np.ascontiguousarray(np.asarray(arr))
+            if a.dtype != np.float32 or tuple(a.shape) != sh:
+                raise TesseraJitError(
+                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, "
+                    f"want float32{sh}")
+            ins.append(a)
+        return ins
+
+    def _run_apple_gpu_loop(self, arrays):
+        from tessera import apple_mlpkg as mp
+
+        # Serialize first (elem/loop-shape checks, incl. the f32-only gate) so a
+        # bf16 graph reports "f32-only" rather than a generic arg-dtype mismatch.
+        carry_arg_index, trip, body_ops, body_out_id, carry_shape = \
+            self._serialize_loop_spec()
+        ins = self._validate_f32_args(arrays)
         arg_shapes = [tuple(sh) for (_ssa, sh) in self._args]
         out = mp.run_graph_loop_f32(
-            ins, arg_shapes, arg_index[loop["init_ssa"]], loop["trip"],
-            body_ops, body_out_id, loop["carry_shape"])
+            ins, arg_shapes, carry_arg_index, trip, body_ops, body_out_id,
+            carry_shape)
         if out is None:
             raise TesseraJitError(
                 "apple_gpu GraphFn loop dispatch failed / runtime unavailable")
         self._last_dispatch = ["forloop"]  # one MPSGraph forLoop dispatch
+        return out.copy()
+
+    # ── MLIR-driven execution (Phase-G G-B.2) ────────────────────────────────
+    #
+    # `run_via_target_ir()` proves the lowered Target IR executes: emit the
+    # `tessera.control_for` op (with the serialized op-list payload), lower it
+    # through `tessera-opt --tessera-control-for-to-apple_gpu` to
+    # `tessera_apple.gpu.control_loop`, then dispatch off the lowered op's
+    # recorded runtime `symbol` (vs run()'s direct in-memory dispatch).
+
+    def _emit_control_for_mlir(self) -> str:
+        from tessera.apple_mlpkg import GRAPH_OP
+
+        carry_arg_index, trip, body_ops, body_out_id, carry_shape = \
+            self._serialize_loop_spec()
+        codes, i0, i1, ia, fa = [], [], [], [], []
+        for o in body_ops:
+            codes.append(GRAPH_OP[o["op"]])
+            i0.append(int(o["in0"]))
+            i1.append(int(o.get("in1", -1)))
+            ia.append((1 if o.get("transpose_a") else 0)
+                      | (2 if o.get("transpose_b") else 0))
+            fa.append(float(o.get("eps", 1e-5)))
+
+        def i32a(xs):
+            return "array<i32: " + ", ".join(str(x) for x in xs) + ">"
+
+        def f32a(xs):
+            return "array<f32: " + ", ".join(f"{x:.9e}" for x in xs) + ">"
+
+        arg_decl = ", ".join(f"{s}: {self._t(sh)}" for s, sh in self._args)
+        operand_ssas = ", ".join(s for s, _ in self._args)
+        in_types = ", ".join(self._t(sh) for _, sh in self._args)
+        out_ty = self._t(carry_shape)
+        payload = (
+            f"carry_arg_index = {carry_arg_index} : i64, "
+            f"body_opcodes = {i32a(codes)}, body_in0 = {i32a(i0)}, "
+            f"body_in1 = {i32a(i1)}, body_iattr = {i32a(ia)}, "
+            f"body_fattr = {f32a(fa)}, body_out_id = {body_out_id} : i64")
+        op = (f'  %r = "tessera.control_for"({operand_ssas}) '
+              f"{{body = @loop_body, start = 0 : i64, stop = {trip} : i64, "
+              f"step = 1 : i64, {payload}}} "
+              f": ({in_types}) -> {out_ty}")
+        return (f"func.func private @loop_body({out_ty}) -> {out_ty}\n"
+                f"func.func @graph({arg_decl}) -> {out_ty} {{\n"
+                f"{op}\n  return %r : {out_ty}\n}}\n")
+
+    def run_via_target_ir(self, *arrays: np.ndarray):
+        """Emit `tessera.control_for`, lower it through tessera-opt to
+        `tessera_apple.gpu.control_loop`, and execute off the lowered op's
+        recorded runtime symbol. apple_gpu bounded for_loop only."""
+        import subprocess
+
+        from tessera import apple_mlpkg as mp
+
+        if self._target != "apple_gpu" or self._loop is None:
+            raise TesseraJitError(
+                "run_via_target_ir requires an apple_gpu for_loop graph")
+        mlir = self._emit_control_for_mlir()  # serialize + f32-only check first
+        ins = self._validate_f32_args(arrays)
+        opt = _find_tessera_opt()
+        if opt is None:
+            raise TesseraJitError("tessera-opt binary not found (build it first)")
+        proc = subprocess.run(
+            [opt, "--tessera-control-for-to-apple_gpu"],
+            input=mlir, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise TesseraJitError(f"tessera-opt lowering failed: {proc.stderr}")
+        out = mp.execute_control_loop_mlir(proc.stdout, ins)
+        if out is None:
+            raise TesseraJitError(
+                "control_loop execution failed (op/payload absent or runtime down)")
+        self._last_dispatch = ["control_loop"]
         return out.copy()
 
     def _serialize_branch(self, ops, idof, base, what):

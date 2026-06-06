@@ -324,9 +324,23 @@ last_updated: 2026-06-05
 >   off the op (calling run_graph_loop) + `control_if`/`control_while` IR ops are
 >   follow-ons.
 >
+> * **G-B.2 — MLIR-driven execution landed 2026-06-06.** The lowered Target IR
+>   op now *executes*, not just lit-checks. `tessera.control_for` /
+>   `tessera_apple.gpu.control_loop` gained optional **executable-payload attrs**
+>   (the loop body serialized to the run_graph_loop op-list ABI: `body_opcodes`/
+>   `body_in0`/`body_in1`/`body_iattr` `DenseI32ArrayAttr` + `body_fattr`
+>   `DenseF32ArrayAttr` + `body_out_id`/`carry_arg_index`), copied through by the
+>   lowering — so the lowered op is a self-contained executable contract.
+>   `GraphFn.run_via_target_ir()` emits the `control_for` MLIR, lowers it through
+>   `tessera-opt --tessera-control-for-to-apple_gpu`, and `apple_mlpkg.
+>   execute_control_loop_mlir()` reads the lowered op's payload + dispatches off
+>   its recorded `symbol` (`tessera_apple_gpu_run_graph_loop_f32`). End-to-end
+>   (GraphFn → control_for MLIR → C++ lowering → control_loop → execute) is
+>   **bit-identical to `run()`** and matches numpy (~6e-10). **286/286
+>   production-lane tests green** (+6; `tests/unit/test_production_jit_phase3_target_ir_exec.py`).
+>
 > Remaining Phase-G: `@jit(target="apple_gpu")` of `tessera.control.*` end-to-end
-> (G-C); `control_if`/`control_while` Graph-IR ops + lowerings; MLIR-driven
-> execution off the Target ops; bf16 control flow.
+> (G-C); `control_if`/`control_while` Graph-IR ops + lowerings; bf16 control flow.
 >
 > Next: Phase 4 (NVIDIA correctness-first).
 >

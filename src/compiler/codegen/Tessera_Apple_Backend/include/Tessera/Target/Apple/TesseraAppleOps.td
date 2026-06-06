@@ -289,7 +289,18 @@ def AppleGPU_ControlLoopOp : TesseraApple_Op<"gpu.control_loop", [Pure]> {
                        I64Attr:$ordinal,
                        OptionalAttr<StrAttr>:$status,
                        OptionalAttr<StrAttr>:$symbol,
-                       OptionalAttr<StrAttr>:$framework);
+                       OptionalAttr<StrAttr>:$framework,
+                       // G-B.2 executable payload (carried through from
+                       // tessera.control_for) — the body serialized to the
+                       // run_graph_loop op-list ABI, so the lowered op dispatches
+                       // via `symbol` directly off its attributes.
+                       OptionalAttr<I64Attr>:$carry_arg_index,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_opcodes,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_in0,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_in1,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_iattr,
+                       OptionalAttr<DenseF32ArrayAttr>:$body_fattr,
+                       OptionalAttr<I64Attr>:$body_out_id);
   let results = (outs Variadic<AnyType>:$results);
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";

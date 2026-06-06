@@ -1638,7 +1638,18 @@ def Tessera_ControlForOp : Op<
   let summary = "Bounded control-flow for-loop carried by iter_args (Phase-G G-B)";
   let arguments = (ins Variadic<AnyType>:$iter_args,
                        FlatSymbolRefAttr:$body,
-                       I64Attr:$start, I64Attr:$stop, I64Attr:$step);
+                       I64Attr:$start, I64Attr:$stop, I64Attr:$step,
+                       // G-B.2 executable payload — the loop body serialized to
+                       // the run_graph_loop op-list ABI so the lowered Target op
+                       // is self-contained + dispatchable (carry id = #operands;
+                       // body op j → #operands+1+j). Optional: omit for IR-only.
+                       OptionalAttr<I64Attr>:$carry_arg_index,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_opcodes,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_in0,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_in1,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_iattr,
+                       OptionalAttr<DenseF32ArrayAttr>:$body_fattr,
+                       OptionalAttr<I64Attr>:$body_out_id);
   let results = (outs Variadic<AnyType>:$results);
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";

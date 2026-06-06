@@ -1688,6 +1688,84 @@ def run_graph_while_f32(
     return out if rc == 1 else None
 
 
+def execute_control_loop_mlir(mlir_text: str, arg_arrays: "list"):
+    """MLIR-driven execution (Phase-G G-B.2): given a lowered module containing a
+    `tessera_apple.gpu.control_loop` op (with the serialized body op-list payload),
+    read the op's attributes and dispatch via its recorded runtime `symbol`
+    (`tessera_apple_gpu_run_graph_loop_f32`). This is what makes the IR path
+    *execute*, not just lit-check. Returns the final carry as an ``np.float32``
+    array, or ``None`` if the op/payload is absent or malformed."""
+    import re
+
+    import numpy as np
+
+    if "tessera_apple.gpu.control_loop" not in mlir_text:
+        return None
+    seg = mlir_text[mlir_text.index("tessera_apple.gpu.control_loop"):]
+    try:
+        attrs = seg[seg.index("{"):seg.index("}") + 1]
+    except ValueError:
+        return None
+
+    def i32arr(name):
+        m = re.search(name + r"\s*=\s*array<i32:\s*([^>]*)>", attrs)
+        if m is None:
+            return None
+        b = m.group(1).strip()
+        return [int(x) for x in b.split(",")] if b else []
+
+    def f32arr(name):
+        m = re.search(name + r"\s*=\s*array<f32:\s*([^>]*)>", attrs)
+        if m is None:
+            return None
+        b = m.group(1).strip()
+        return [float(x) for x in b.split(",")] if b else []
+
+    def i64(name):
+        m = re.search(name + r"\s*=\s*(-?\d+)\s*:\s*i64", attrs)
+        return int(m.group(1)) if m else None
+
+    def s(name):
+        m = re.search(name + r'\s*=\s*"([^"]*)"', attrs)
+        return m.group(1) if m else None
+
+    opcodes = i32arr("body_opcodes")
+    in0, in1, iattr, fattr = (i32arr("body_in0"), i32arr("body_in1"),
+                              i32arr("body_iattr"), f32arr("body_fattr"))
+    body_out_id = i64("body_out_id")
+    carry_arg_index = i64("carry_arg_index")
+    start, stop, step = i64("start"), i64("stop"), i64("step")
+    symbol = s("symbol")
+    if (opcodes is None or in0 is None or body_out_id is None
+            or carry_arg_index is None or start is None or stop is None
+            or step is None or step == 0
+            or symbol != "tessera_apple_gpu_run_graph_loop_f32"):
+        return None
+
+    rev = {v: k for k, v in GRAPH_OP.items()}
+    body_ops: list = []
+    for j, code in enumerate(opcodes):
+        name = rev.get(code)
+        if name is None:
+            return None
+        e: dict = {"op": name, "in0": in0[j]}
+        if name == "matmul":
+            e["in1"] = (in1 or [])[j]
+            e["transpose_a"] = bool((iattr or [])[j] & 1)
+            e["transpose_b"] = bool((iattr or [])[j] & 2)
+        elif name in ("add", "sub", "mul", "div"):
+            e["in1"] = (in1 or [])[j]
+        elif name in ("rmsnorm", "layer_norm"):
+            e["eps"] = (fattr or [1e-5])[j]
+        body_ops.append(e)
+
+    trip = (stop - start) // step
+    arg_shapes = [tuple(np.asarray(a).shape) for a in arg_arrays]
+    out_shape = tuple(np.asarray(arg_arrays[carry_arg_index]).shape)
+    return run_graph_loop_f32(arg_arrays, arg_shapes, carry_arg_index, trip,
+                              body_ops, body_out_id, out_shape)
+
+
 __all__ = [
     "ERROR_NONE",
     "ERROR_OS_UNAVAILABLE",
@@ -1710,6 +1788,7 @@ __all__ = [
     "run_graph_loop_f32",
     "run_graph_cond_f32",
     "run_graph_while_f32",
+    "execute_control_loop_mlir",
     "GRAPH_OP",
     "AUTHOR_CHAINS",
     "AUTHOR_OPS",

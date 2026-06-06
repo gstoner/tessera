@@ -274,10 +274,22 @@ last_updated: 2026-06-05
 >   (matmul/elementwise/softmax/norms/activations). Oracle: the same graph on the
 >   CPU `scf.for` lane — `carry = silu(carry@W)` and `carry = carry + rmsnorm(carry)@W`
 >   match to ~6e-10. **265/265 production-lane tests green** (+9;
->   `tests/unit/test_production_jit_phase3_loop.py`). Remaining Phase-G rungs:
->   `cond`/`switch` on GPU, variable-trip `while` (MSL route — MPSGraph `while`
->   SIGSEGVs), the Graph-IR `tessera.control.*` op + `tessera-lower-to-apple_gpu`
->   pass (G-B), and `@jit(target="apple_gpu")` of `tessera.control.*` (G-C).
+>   `tests/unit/test_production_jit_phase3_loop.py`).
+> * **G-A.2 — GraphFn `cond` (if/else) landed 2026-06-06.** `GraphFn(target=
+>   "apple_gpu").cond(flag, then_fn, else_fn)` authors the divergent branch as ONE
+>   MPSGraph `if` (`ifWithPredicateTensor:thenBlock:elseBlock:`, predicate =
+>   flag[0] > 0) and runs it directly (one dispatch; only the taken branch
+>   executes). New C ABI `tessera_apple_gpu_run_graph_cond_f32` + a factored
+>   `mpsg_build_branch` helper (free function — composes inside the ObjC if-blocks
+>   without lambda-capture hazards); the loop body-serialization was unified into a
+>   shared `GraphFn._serialize_branch`. v1: f32, flag is a function arg, each branch
+>   a straight-line op-list over the args (both same shape). Oracle: CPU `scf.if`
+>   lane — `silu(a)` vs `relu(b)`, `a@W` vs `b@W`, branch-returns-arg all match.
+>   Mixing for_loop + cond is rejected (v1). **272/272 production-lane tests green**
+>   (+7; `tests/unit/test_production_jit_phase3_cond.py`). Remaining Phase-G rungs:
+>   variable-trip `while` (MSL route — MPSGraph `while` SIGSEGVs), the Graph-IR
+>   `tessera.control.*` op + `tessera-lower-to-apple_gpu` pass (G-B), and
+>   `@jit(target="apple_gpu")` of `tessera.control.*` (G-C); bf16 loops/conds.
 >
 > Next: Phase 4 (NVIDIA correctness-first).
 >

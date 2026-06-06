@@ -11460,6 +11460,41 @@ static MPSGraphTensor *mpsg_build_graph_op(MPSGraph *g, int code,
   return nil;  // unknown opcode
 }
 
+// Build a straight-line branch/body op-list over `phs` (the arg placeholders)
+// plus `extra` already-bound tensors (e.g. the loop carry at id n_args). Tensor
+// ids: 0..n_args-1 = args, n_args..n_args+n_extra-1 = extra, n_args+n_extra+j =
+// op j. Returns the tensor at `out_id`, or nil on a bad id / unknown opcode.
+// A free function (not a lambda) so it composes cleanly inside ObjC blocks.
+static MPSGraphTensor *mpsg_build_branch(
+    MPSGraph *g, NSArray<MPSGraphTensor *> *phs, int n_args,
+    NSArray<MPSGraphTensor *> *extra, MPSDataType dt, int n_ops,
+    const int32_t *codes, const int32_t *in0, const int32_t *in1,
+    const int32_t *iattr, const float *fattr, int out_id) {
+  int n_extra = extra ? (int)extra.count : 0;
+  int total = n_args + n_extra + n_ops;
+  NSMutableArray *t = [NSMutableArray arrayWithCapacity:total];
+  for (int i = 0; i < total; ++i) [t addObject:[NSNull null]];
+  for (int i = 0; i < n_args; ++i) t[i] = phs[i];
+  for (int i = 0; i < n_extra; ++i) t[n_args + i] = extra[i];
+  const int base = n_args + n_extra;
+  auto get = [&](int tid) -> MPSGraphTensor * {
+    if (tid < 0 || tid >= total) return nil;
+    id v = t[tid];
+    return (v == [NSNull null]) ? nil : (MPSGraphTensor *)v;
+  };
+  for (int j = 0; j < n_ops; ++j) {
+    int code = codes[j];
+    MPSGraphTensor *a = get(in0[j]);
+    MPSGraphTensor *b = nil;
+    if (code == 0 || (code >= 1 && code <= 4)) b = get(in1 ? in1[j] : -1);
+    MPSGraphTensor *y = mpsg_build_graph_op(g, code, a, b, iattr ? iattr[j] : 0,
+                                            fattr ? fattr[j] : 1e-5f, dt);
+    if (!y) return nil;
+    t[base + j] = y;
+  }
+  return get(out_id);
+}
+
 // PK8c — author an ARBITRARY straight-line op graph into ONE serialized
 // `.mtlpackage`. The whole graph becomes a single MPSGraph executable, so the
 // entire GraphFn runs as ONE Metal dispatch (MPSGraph fuses globally) instead of
@@ -11628,6 +11663,101 @@ extern "C" int32_t tessera_apple_gpu_run_graph_loop_f32(
       // Pool-acquired input buffers, held alive in a guard vector until after
       // the synchronous run (RAII release on scope exit — the buffer-pool
       // invariant; no raw newBufferWith* in dispatchers).
+      std::vector<MetalBufferGuard> guards;
+      guards.reserve(n_args);
+      NSMutableDictionary *feeds = [NSMutableDictionary dictionary];
+      for (int i = 0; i < n_args; ++i) {
+        NSArray<NSNumber *> *shp = shapes[i];
+        size_t elems = 1;
+        for (NSNumber *n in shp) elems *= (size_t)n.intValue;
+        id<MTLBuffer> buf =
+            metal_buffer_acquire_with_bytes(ctx, arg_ptrs[i], elems * 4);
+        if (!buf) return -3;
+        guards.emplace_back(ctx, buf, elems * 4);
+        feeds[phs[i]] = [[MPSGraphTensorData alloc] initWithMTLBuffer:buf
+                                                                shape:shp
+                                                             dataType:dt];
+      }
+      NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                              feeds:feeds
+                                      targetTensors:@[ outT ]
+                                   targetOperations:nil];
+      MPSGraphTensorData *od = res[outT];
+      if (!od) return -3;
+      [[od mpsndarray] readBytes:out strideBytes:nil];
+      return 1;
+    }
+  }
+  return -1;
+}
+
+// PK8e — run a `cond` (divergent if/else) as ONE MPSGraph `if`, executed
+// DIRECTLY via runWithMTLCommandQueue (Phase-G G-A.2). Only the taken branch
+// executes. `predicate = args[flag_arg_index][0] > 0` (matches GraphFn.cond /
+// the CPU scf.if). Each branch is a recorded straight-line op-list over the args
+// (no carry); both must produce the same output shape. Body tensor ids per
+// branch: 0..n_args-1 = args, n_args+j = branch op j; `*_out_id` = branch result.
+// f32. arg_ptrs[i] / out as in run_graph_loop_f32. Returns 1 / <=0 error.
+extern "C" int32_t tessera_apple_gpu_run_graph_cond_f32(
+    int32_t n_args, const void *const *arg_ptrs, const int32_t *arg_rows,
+    const int32_t *arg_cols, int32_t flag_arg_index, int32_t n_then_ops,
+    const int32_t *then_codes, const int32_t *then_in0, const int32_t *then_in1,
+    const int32_t *then_iattr, const float *then_fattr, int32_t then_out_id,
+    int32_t n_else_ops, const int32_t *else_codes, const int32_t *else_in0,
+    const int32_t *else_in1, const int32_t *else_iattr, const float *else_fattr,
+    int32_t else_out_id, float *out) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;  // caller falls back to host
+  if (n_args <= 0 || flag_arg_index < 0 || flag_arg_index >= n_args ||
+      n_then_ops < 0 || n_else_ops < 0 || !arg_ptrs || !arg_rows || !arg_cols ||
+      !out)
+    return -2;
+  if (@available(macOS 14.0, iOS 17.0, *)) {
+    @autoreleasepool {
+      MPSDataType dt = MPSDataTypeFloat32;
+      MPSGraph *g = [MPSGraph new];
+      NSMutableArray<MPSGraphTensor *> *phs =
+          [NSMutableArray arrayWithCapacity:n_args];
+      NSMutableArray<NSArray<NSNumber *> *> *shapes =
+          [NSMutableArray arrayWithCapacity:n_args];
+      for (int i = 0; i < n_args; ++i) {
+        NSArray<NSNumber *> *shp = (arg_cols[i] > 0)
+                                       ? @[ @(arg_rows[i]), @(arg_cols[i]) ]
+                                       : @[ @(arg_rows[i]) ];
+        [phs addObject:[g placeholderWithShape:shp dataType:dt name:nil]];
+        [shapes addObject:shp];
+      }
+      // predicate = flag[0] > 0, as a scalar (rank-0) bool tensor.
+      MPSGraphTensor *flagS = [g reshapeTensor:phs[flag_arg_index]
+                                     withShape:@[]
+                                          name:nil];
+      MPSGraphTensor *zero = [g constantWithScalar:0.0 dataType:dt];
+      MPSGraphTensor *pred = [g greaterThanWithPrimaryTensor:flagS
+                                             secondaryTensor:zero
+                                                        name:nil];
+      __block int32_t err = 0;
+      NSArray<MPSGraphTensor *> *results = [g
+          ifWithPredicateTensor:pred
+                      thenBlock:^NSArray<MPSGraphTensor *> *() {
+                        MPSGraphTensor *y = mpsg_build_branch(
+                            g, phs, n_args, nil, dt, n_then_ops, then_codes,
+                            then_in0, then_in1, then_iattr, then_fattr,
+                            then_out_id);
+                        if (!y) { err = -6; y = [g constantWithScalar:0.0 dataType:dt]; }
+                        return @[ y ];
+                      }
+                      elseBlock:^NSArray<MPSGraphTensor *> *() {
+                        MPSGraphTensor *y = mpsg_build_branch(
+                            g, phs, n_args, nil, dt, n_else_ops, else_codes,
+                            else_in0, else_in1, else_iattr, else_fattr,
+                            else_out_id);
+                        if (!y) { err = -6; y = [g constantWithScalar:0.0 dataType:dt]; }
+                        return @[ y ];
+                      }
+                           name:nil];
+      if (err != 0) return err;
+      if (!results || results.count < 1) return -3;
+      MPSGraphTensor *outT = results[0];
       std::vector<MetalBufferGuard> guards;
       guards.reserve(n_args);
       NSMutableDictionary *feeds = [NSMutableDictionary dictionary];

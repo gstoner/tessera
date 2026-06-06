@@ -1548,6 +1548,85 @@ def run_graph_loop_f32(
     return out if rc == 1 else None
 
 
+def _flatten_ops(ops: "list[dict]"):
+    """Flatten an op-dict list to the 5 ctypes arrays the C ABI expects, or
+    ``None`` if any op name is unknown."""
+    nb = len(ops)
+    codes = (ctypes.c_int32 * nb)()
+    in0 = (ctypes.c_int32 * nb)()
+    in1 = (ctypes.c_int32 * nb)()
+    iattr = (ctypes.c_int32 * nb)()
+    fattr = (ctypes.c_float * nb)()
+    for j, o in enumerate(ops):
+        if o["op"] not in GRAPH_OP:
+            return None
+        codes[j] = GRAPH_OP[o["op"]]
+        in0[j] = int(o["in0"])
+        in1[j] = int(o.get("in1", -1))
+        iattr[j] = (1 if o.get("transpose_a") else 0) | (2 if o.get("transpose_b") else 0)
+        fattr[j] = float(o.get("eps", 1e-5))
+    return codes, in0, in1, iattr, fattr, nb
+
+
+def run_graph_cond_f32(
+    arg_arrays: "list",
+    arg_shapes: "list[tuple[int, ...]]",
+    flag_arg_index: int,
+    then_ops: "list[dict]",
+    then_out_id: int,
+    else_ops: "list[dict]",
+    else_out_id: int,
+    out_shape: "tuple[int, ...]",
+):
+    """Run a ``cond`` (divergent if/else) as ONE MPSGraph ``if``, executed
+    directly (PK8e / Phase-G G-A.2). The predicate is ``args[flag_arg_index] > 0``;
+    only the taken branch executes. Each branch is a straight-line op-list (op
+    dicts as in :func:`author_graph_package`) over the args — tensor ids per
+    branch: ``0..len(args)-1`` = args, ``len(args)+j`` = branch op ``j``; the
+    ``*_out_id`` is that branch's result. Both branches must produce ``out_shape``.
+    Returns the result as an ``np.float32`` array, or ``None`` if the runtime is
+    unavailable / a branch is malformed (caller falls back to host)."""
+    import numpy as np
+
+    if apple_gpu_runtime() is None:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_run_graph_cond_f32",
+        (ctypes.c_int32, ctypes.POINTER(ctypes.c_void_p),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.c_int32,
+         ctypes.c_int32, ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_float), ctypes.c_int32,
+         ctypes.c_int32, ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_float), ctypes.c_int32,
+         ctypes.POINTER(ctypes.c_float)),
+        restype=ctypes.c_int32,
+    )
+    if fn is None:
+        return None
+    tflat = _flatten_ops(then_ops)
+    eflat = _flatten_ops(else_ops)
+    if tflat is None or eflat is None:
+        return None
+    tc, ti0, ti1, tia, tfa, tnb = tflat
+    ec, ei0, ei1, eia, efa, enb = eflat
+    na = len(arg_shapes)
+    cargs = [np.ascontiguousarray(np.asarray(a, dtype=np.float32)) for a in arg_arrays]
+    ptrs = (ctypes.c_void_p * na)(
+        *[ctypes.cast(a.ctypes.data, ctypes.c_void_p) for a in cargs])
+    rows = (ctypes.c_int32 * na)(*[int(s[0]) for s in arg_shapes])
+    cols = (ctypes.c_int32 * na)(
+        *[int(s[1]) if len(s) > 1 else 0 for s in arg_shapes])
+    out = np.zeros(out_shape, dtype=np.float32)
+    rc = int(fn(ctypes.c_int32(na), ptrs, rows, cols, ctypes.c_int32(int(flag_arg_index)),
+                ctypes.c_int32(tnb), tc, ti0, ti1, tia, tfa, ctypes.c_int32(int(then_out_id)),
+                ctypes.c_int32(enb), ec, ei0, ei1, eia, efa, ctypes.c_int32(int(else_out_id)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_float))))
+    return out if rc == 1 else None
+
+
 __all__ = [
     "ERROR_NONE",
     "ERROR_OS_UNAVAILABLE",
@@ -1568,6 +1647,7 @@ __all__ = [
     "author_chain_package",
     "author_graph_package",
     "run_graph_loop_f32",
+    "run_graph_cond_f32",
     "GRAPH_OP",
     "AUTHOR_CHAINS",
     "AUTHOR_OPS",

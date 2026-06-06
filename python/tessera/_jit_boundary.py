@@ -897,8 +897,10 @@ class GraphFn:
         self._mlpkg_pipe: Any = None
         self._mlpkg_dir: Any = None
         self._mlpkg_out_shape: Any = None
-        # Structured bounded-loop record for the apple_gpu forLoop lane (G-A).
+        # Structured control-flow records for the apple_gpu lane: a bounded
+        # for_loop (G-A, MPSGraph forLoop) and/or a cond (G-A.2, MPSGraph if).
         self._loop: Any = None
+        self._cond: Any = None
 
     def _t(self, shape: tuple[int, ...]) -> str:
         return "tensor<" + "x".join(str(s) for s in shape) + f"x{self._elem}>"
@@ -1090,13 +1092,28 @@ class GraphFn:
         cur.append(f"  {p} = arith.cmpf ogt, {fv}, {zero} : {self._elem}")
         res = self._fresh()
         self._scopes.append([])
+        _then_start = len(self._ops)
         tval = then_fn()
         tbody = self._scopes.pop()
         self._scopes.append([])
+        _else_start = len(self._ops)
         eval_ = else_fn()
         ebody = self._scopes.pop()
         if tval.shape != eval_.shape:
             raise TesseraJitError("cond branches must return the same shape")
+        # Structured cond record for the apple_gpu MPSGraph-`if` lane (G-A.2).
+        if self._cond is None:
+            self._cond = {
+                "flag_ssa": flag.ssa,
+                "then_ops": list(self._ops[_then_start:_else_start]),
+                "then_out_ssa": tval.ssa,
+                "else_ops": list(self._ops[_else_start:]),
+                "else_out_ssa": eval_.ssa,
+                "result_ssa": res,
+                "out_shape": tuple(tval.shape),
+            }
+        else:
+            self._cond = {"_unsupported": "more than one cond"}
         T = self._t(tval.shape)
         cur.append(f"  {res} = scf.if {p} -> {T} {{")
         cur.extend(tbody)
@@ -1148,8 +1165,13 @@ class GraphFn:
         (matmul→softmax→matmul, matmul→softmax, matmul→gelu, matmul→rmsnorm)
         collapsed to single fused Metal kernels."""
         if self._target == "apple_gpu":
+            if self._loop is not None and self._cond is not None:
+                raise TesseraJitError(
+                    "apple_gpu GraphFn: mixing for_loop and cond is not supported (v1)")
             if self._loop is not None:
                 return self._run_apple_gpu_loop(arrays)
+            if self._cond is not None:
+                return self._run_apple_gpu_cond(arrays)
             return self._run_apple_gpu(arrays)
         if not self._rets:
             raise TesseraJitError("GraphFn has no return value (call ret())")
@@ -1217,34 +1239,9 @@ class GraphFn:
                 "apple_gpu GraphFn loop: the init carry must be a function arg (v1)")
         n_args = len(self._args)
         idof = dict(arg_index)
-        idof[loop["carry_ssa"]] = n_args
-        body_ops: list = []
-        for j, op in enumerate(loop["body_ops"]):
-            name = self._MLPKG_OP.get(op.op)
-            if name is None:
-                raise TesseraJitError(
-                    f"apple_gpu GraphFn loop body cannot express op {op.op!r}")
-            entry: dict = {"op": name}
-            try:
-                entry["in0"] = idof[op.ins[0].ssa]
-                if name == "matmul":
-                    entry["in1"] = idof[op.ins[1].ssa]
-                    entry["transpose_a"] = bool(op.meta.get("ta"))
-                    entry["transpose_b"] = bool(op.meta.get("tb"))
-                elif name in ("add", "sub", "mul", "div"):
-                    entry["in1"] = idof[op.ins[1].ssa]
-                elif name == "softmax":
-                    if op.meta.get("axis") != op.meta.get("rank", 0) - 1:
-                        raise TesseraJitError("apple_gpu loop softmax is last-axis only")
-                elif name in ("rmsnorm", "layer_norm"):
-                    entry["eps"] = float(op.meta.get("eps", 1e-5))
-            except KeyError:
-                raise TesseraJitError(
-                    "apple_gpu GraphFn loop body references a value that is not a "
-                    "function arg, the carry, or an earlier body op (v1: no "
-                    "pre-loop intermediates feeding the loop body)")
-            idof[op.out.ssa] = n_args + 1 + j
-            body_ops.append(entry)
+        idof[loop["carry_ssa"]] = n_args  # carry id sits right after the args
+        body_ops, idof = self._serialize_branch(
+            loop["body_ops"], idof, n_args + 1, "loop body")
         body_out_id = idof.get(loop["next_carry_ssa"])
         if body_out_id is None:
             raise TesseraJitError(
@@ -1257,6 +1254,96 @@ class GraphFn:
             raise TesseraJitError(
                 "apple_gpu GraphFn loop dispatch failed / runtime unavailable")
         self._last_dispatch = ["forloop"]  # one MPSGraph forLoop dispatch
+        return out.copy()
+
+    def _serialize_branch(self, ops, idof, base, what):
+        """Serialize a straight-line op-list (loop body / cond branch) to the
+        author-dict form ``run_graph_*`` expects. Op ``j``'s output gets id
+        ``base + j``; ``idof`` maps already-bound ssas (args, and the carry for a
+        loop) to ids. Returns ``(op_dicts, updated_idof)``. Raises on an
+        unexpressible op or a reference to a value not in scope (v1)."""
+        idof = dict(idof)
+        out: list = []
+        for j, op in enumerate(ops):
+            name = self._MLPKG_OP.get(op.op)
+            if name is None:
+                raise TesseraJitError(
+                    f"apple_gpu GraphFn {what} cannot express op {op.op!r}")
+            entry: dict = {"op": name}
+            try:
+                entry["in0"] = idof[op.ins[0].ssa]
+                if name == "matmul":
+                    entry["in1"] = idof[op.ins[1].ssa]
+                    entry["transpose_a"] = bool(op.meta.get("ta"))
+                    entry["transpose_b"] = bool(op.meta.get("tb"))
+                elif name in ("add", "sub", "mul", "div"):
+                    entry["in1"] = idof[op.ins[1].ssa]
+                elif name == "softmax":
+                    if op.meta.get("axis") != op.meta.get("rank", 0) - 1:
+                        raise TesseraJitError(
+                            f"apple_gpu GraphFn {what} softmax is last-axis only")
+                elif name in ("rmsnorm", "layer_norm"):
+                    entry["eps"] = float(op.meta.get("eps", 1e-5))
+            except KeyError:
+                raise TesseraJitError(
+                    f"apple_gpu GraphFn {what} references a value not in scope "
+                    "(v1: only function args, the carry, and earlier body ops)")
+            idof[op.out.ssa] = base + j
+            out.append(entry)
+        return out, idof
+
+    # ── Apple GPU cond lane (Phase-G G-A.2) ──────────────────────────────────
+    #
+    # `(args) → cond(flag=arg, then, else) → ret(result)` authors ONE MPSGraph
+    # `if` (predicate = flag[0] > 0) and runs it in one dispatch — only the taken
+    # branch executes. Each branch is a straight-line op-list over the args; both
+    # produce the same shape. f32, flag must be a function arg (v1).
+
+    def _run_apple_gpu_cond(self, arrays):
+        from tessera import apple_mlpkg as mp
+
+        cond = self._cond
+        if "_unsupported" in cond:
+            raise TesseraJitError(
+                f"apple_gpu GraphFn cond: {cond['_unsupported']} not supported (v1)")
+        if self._elem != "f32":
+            raise TesseraJitError("apple_gpu GraphFn cond is f32-only (bf16 follow-on)")
+        if len(self._rets) != 1 or self._rets[0].ssa != cond["result_ssa"]:
+            raise TesseraJitError(
+                "apple_gpu GraphFn cond must return exactly the cond result")
+        if len(arrays) != len(self._args):
+            raise TesseraJitError(
+                f"expected {len(self._args)} args, got {len(arrays)}")
+        ins = []
+        for (ssa, sh), arr in zip(self._args, arrays):
+            a = np.ascontiguousarray(np.asarray(arr))
+            if a.dtype != np.float32 or tuple(a.shape) != sh:
+                raise TesseraJitError(
+                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, "
+                    f"want float32{sh}")
+            ins.append(a)
+        arg_index = {ssa: k for k, (ssa, _sh) in enumerate(self._args)}
+        if cond["flag_ssa"] not in arg_index:
+            raise TesseraJitError(
+                "apple_gpu GraphFn cond: the flag must be a function arg (v1)")
+        n_args = len(self._args)
+        then_ops, tlocal = self._serialize_branch(
+            cond["then_ops"], arg_index, n_args, "cond then-branch")
+        else_ops, elocal = self._serialize_branch(
+            cond["else_ops"], arg_index, n_args, "cond else-branch")
+        then_out_id = tlocal.get(cond["then_out_ssa"])
+        else_out_id = elocal.get(cond["else_out_ssa"])
+        if then_out_id is None or else_out_id is None:
+            raise TesseraJitError(
+                "apple_gpu GraphFn cond: a branch result is not in scope")
+        arg_shapes = [tuple(sh) for (_ssa, sh) in self._args]
+        out = mp.run_graph_cond_f32(
+            ins, arg_shapes, arg_index[cond["flag_ssa"]],
+            then_ops, then_out_id, else_ops, else_out_id, cond["out_shape"])
+        if out is None:
+            raise TesseraJitError(
+                "apple_gpu GraphFn cond dispatch failed / runtime unavailable")
+        self._last_dispatch = ["cond"]  # one MPSGraph if dispatch
         return out.copy()
 
     # ── Whole-graph lane: compile the GraphFn to ONE MPSGraph dispatch ───────

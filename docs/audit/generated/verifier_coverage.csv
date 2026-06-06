@@ -29,6 +29,7 @@ src/compiler/ir/TesseraOps.td,CliffordNormOp,1,1,real
 src/compiler/ir/TesseraOps.td,CliffordOuterProductOp,1,1,real
 src/compiler/ir/TesseraOps.td,CliffordReverseOp,1,1,real
 src/compiler/ir/TesseraOps.td,CliffordRotorSandwichOp,1,1,real
+src/compiler/ir/TesseraOps.td,ControlForOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,Conv2DNHWCOp,1,1,real
 src/compiler/ir/TesseraOps.td,CustomAdjointCallOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,DCTOp,0,0,no_verifier

@@ -303,9 +303,30 @@ last_updated: 2026-06-05
 > **G-A series COMPLETE** — the in-graph control-flow primitives (bounded
 > `for_loop`, `cond`, bounded `while`) all lower to single MPSGraph dispatches via
 > direct `runWithMTLCommandQueue` (the package/MLEncoder path can't run control
-> flow). Remaining Phase-G: the Graph-IR `tessera.control.*` op +
-> `tessera-lower-to-apple_gpu` pass (G-B) so `@jit` (not just `GraphFn`) reaches
-> these; `@jit(target="apple_gpu")` of `tessera.control.*` (G-C); bf16 control flow.
+> flow).
+> * **G-B — Graph-IR control-flow op + Apple lowering landed 2026-06-06.** The
+>   compiler-track lift (C++ MLIR): a new `tessera.control_for` Graph-IR op
+>   (`src/compiler/ir/TesseraOps.td`) — a value-semantic bounded loop carried by
+>   `iter_args`, with the body as a **symbol-referenced `func.func`** (not a
+>   region — sidesteps region ODS/terminator/region-rewrite hazards; `tessera` had
+>   no region ops). A new `tessera_apple.gpu.control_loop` Target-IR op
+>   (`TesseraAppleOps.td`, value-preserving) records the body symbol + static range
+>   + the runtime `symbol = tessera_apple_gpu_run_graph_loop_f32`,
+>   `status = "artifact"` (Decision #19 hardware-free Target IR; IR-only). A
+>   lowering pass `tessera-control-for-to-apple_gpu` (manual module walk — NOT the
+>   greedy driver, whose region-simplification would DCE unrelated result-less
+>   artifact ops like an unlowered `tile.cholesky`) wired into the
+>   `tessera-lower-to-apple_gpu` pipeline + registered standalone. Builds clean
+>   under MLIR 22; lit fixture `tests/tessera-ir/phase8/apple_gpu_control_for.mlir`
+>   (phase8 lit 55 PASS / 7 UNSUPPORTED / 0 FAIL); `verifier_coverage` dashboard
+>   regenerated. So `@jit`-emitted IR (not just the Python `GraphFn`) can now carry
+>   a control-flow op that lowers through the Apple pipeline. MLIR-driven execution
+>   off the op (calling run_graph_loop) + `control_if`/`control_while` IR ops are
+>   follow-ons.
+>
+> Remaining Phase-G: `@jit(target="apple_gpu")` of `tessera.control.*` end-to-end
+> (G-C); `control_if`/`control_while` Graph-IR ops + lowerings; MLIR-driven
+> execution off the Target ops; bf16 control flow.
 >
 > Next: Phase 4 (NVIDIA correctness-first).
 >

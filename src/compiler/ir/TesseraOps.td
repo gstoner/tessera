@@ -1623,3 +1623,23 @@ def Tessera_CustomAdjointCallOp : Op<
   let results = (outs Variadic<AnyType>:$cotangents);
   let assemblyFormat = "$name `(` operands `)` attr-dict `:` functional-type(operands, results)";
 }
+
+// Phase-G G-B — Graph-IR bounded control-flow loop. The loop body is a
+// symbol-referenced `func.func` (`body`), not a region, so the op stays a
+// value-semantic leaf that the apple_gpu pipeline lowers to a
+// `tessera_apple.gpu.control_loop` Target-IR op (Decision #19). Carries the
+// iter-args (loop-carried state) + the static range; the result is the final
+// carry. Matching runtime capability: `tessera_apple_gpu_run_graph_loop_f32`
+// (exercised today via the GraphFn lane; an MLIR-driven executor is a follow-on).
+def Tessera_ControlForOp : Op<
+  Tessera_Dialect, "control_for",
+  [Pure]
+> {
+  let summary = "Bounded control-flow for-loop carried by iter_args (Phase-G G-B)";
+  let arguments = (ins Variadic<AnyType>:$iter_args,
+                       FlatSymbolRefAttr:$body,
+                       I64Attr:$start, I64Attr:$stop, I64Attr:$step);
+  let results = (outs Variadic<AnyType>:$results);
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+}

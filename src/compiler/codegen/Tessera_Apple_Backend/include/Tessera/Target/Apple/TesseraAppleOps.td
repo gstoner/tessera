@@ -275,4 +275,24 @@ def AppleGPU_PackageCallOp : TesseraApple_Op<"gpu.package_call", [Pure]> {
       "operands attr-dict `:` functional-type(operands, results)";
 }
 
+// Phase-G G-B — bounded control-flow loop Target-IR op. Value-preserving
+// (iter_args in, final carry out) so the lowering is a plain replaceOp. Carries
+// the body symbol + static range + the runtime `symbol`
+// (`tessera_apple_gpu_run_graph_loop_f32`). `status="artifact"`: the IR path is
+// lit-verified; MLIR-driven execution off this op is a follow-on (today the
+// GraphFn lane calls the runtime symbol directly).
+def AppleGPU_ControlLoopOp : TesseraApple_Op<"gpu.control_loop", [Pure]> {
+  let summary = "Apple GPU bounded control-flow loop (Phase-G G-B)";
+  let arguments = (ins Variadic<AnyType>:$iter_args,
+                       FlatSymbolRefAttr:$body,
+                       I64Attr:$start, I64Attr:$stop, I64Attr:$step,
+                       I64Attr:$ordinal,
+                       OptionalAttr<StrAttr>:$status,
+                       OptionalAttr<StrAttr>:$symbol,
+                       OptionalAttr<StrAttr>:$framework);
+  let results = (outs Variadic<AnyType>:$results);
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+}
+
 #endif // TESSERA_TARGET_APPLE_OPS

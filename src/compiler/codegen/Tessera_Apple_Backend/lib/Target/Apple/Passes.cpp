@@ -51,6 +51,9 @@ PassPipelineRegistration<> gAppleGPUPipeline(
     "tessera-lower-to-apple_gpu",
     "Lower Tessera Tile IR to Apple Silicon GPU Target IR (Metal)",
     [](OpPassManager &pm) {
+      // Phase-G G-B: control flow → tessera_apple.gpu.control_loop (before the
+      // generic Tile→Apple artifact lowering).
+      pm.addPass(createLowerControlForToAppleGPUPass());
       pm.addPass(createLowerTileToAppleGPUPass());
     });
 

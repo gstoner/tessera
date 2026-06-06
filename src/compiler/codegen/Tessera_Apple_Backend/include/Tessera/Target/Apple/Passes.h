@@ -27,6 +27,10 @@ std::unique_ptr<::mlir::Pass> createLowerTileToAppleCPUPass(bool valueMode = fal
 /// diagnostic otherwise); default emits artifact ops.
 std::unique_ptr<::mlir::Pass> createLowerTileToAppleGPUPass(bool valueMode = false);
 
+/// Phase-G G-B: tessera.control_for (bounded loop) → tessera_apple.gpu.control_loop
+/// Target-IR op (value-preserving; records the run_graph_loop runtime symbol).
+std::unique_ptr<::mlir::Pass> createLowerControlForToAppleGPUPass();
+
 /// tessera.matmul (rank-2, f32) → func.call into the Apple CPU runtime
 /// shim. Phase 8.2 — the executable counterpart to the artifact-only
 /// `tessera-lower-to-apple_cpu` pipeline.

@@ -36,7 +36,7 @@ def _load():
     global _LIB
     if _LIB is not None:
         return _LIB
-    if sys.platform != "darwin":
+    if not sys.platform.startswith("darwin"):
         raise AppleGpuError("Apple GPU back-half is Darwin-only")
     try:
         from tessera.runtime import _load_apple_gpu_runtime

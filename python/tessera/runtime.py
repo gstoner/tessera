@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.util
+import functools
 import hashlib
 import json
 import os
@@ -3222,12 +3223,10 @@ def _require_value_compile_pipeline(probe):
     AND the value COMPILE pipeline are both available (so tests skip, not
     KeyError, when the compile path has silently degraded)."""
 
+    @functools.wraps(probe)
     def gated() -> bool:
         return _apple_value_compile_pipeline_available() and probe()
 
-    gated.__name__ = probe.__name__
-    gated.__doc__ = probe.__doc__
-    gated.__wrapped__ = probe
     return gated
 
 

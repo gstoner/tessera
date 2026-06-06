@@ -56,6 +56,8 @@ def get_jvp(name: str) -> Callable | None:
 
 def _jvp(name: str):
     def deco(fn: Callable) -> Callable:
+        if name in _JVPS:
+            raise ValueError(f"duplicate JVP registration for {name!r} (already bound to {_JVPS[name].__name__})")
         _JVPS[name] = fn
         return fn
     return deco
@@ -237,18 +239,12 @@ def jvp_quantize_fp8(primals, tangents, **kwargs):
     return _jvp_quantize_with("quantize_fp8", primals, tangents, **kwargs)
 
 
-@_jvp("quantize_fp4")
-def jvp_quantize_fp4(primals, tangents, **kwargs):
-    return _jvp_quantize_with("quantize_fp4", primals, tangents, **kwargs)
-
-
 @_jvp("fake_quantize")
 def jvp_fake_quantize(primals, tangents, **kwargs):
     return _jvp_quantize_with("fake_quantize", primals, tangents, **kwargs)
 
 
 @_jvp("dequantize_fp8")
-@_jvp("dequantize_fp4")
 def jvp_dequantize_ste(primals, tangents, **kwargs):
     x_q, scale = primals
     dx_q, _dscale = tangents
@@ -520,33 +516,6 @@ def jvp_moe_combine(primals, tangents, *, reduce="sum", **_):
     if reduce == "sum" and np.asarray(partials).ndim > 1:
         return np.asarray(partials).sum(axis=0), np.asarray(dpartials).sum(axis=0)
     return partials, dpartials
-
-
-@_jvp("conv1d")
-def jvp_conv1d(
-    primals,
-    tangents,
-    *,
-    stride: int = 1,
-    padding: int = 0,
-    dilation: int = 1,
-    groups: int = 1,
-    **_,
-):
-    from .vjp import _conv1d_forward_fp64
-
-    x, weight = primals[:2]
-    dx, dweight = tangents[:2]
-    bias = primals[2] if len(primals) > 2 else None
-    dbias = tangents[2] if len(tangents) > 2 else None
-    kwargs = dict(stride=stride, padding=padding, dilation=dilation, groups=groups)
-    primal = _conv1d_forward_fp64(x, weight, **kwargs)
-    tangent = _conv1d_forward_fp64(dx, weight, **kwargs) + _conv1d_forward_fp64(x, dweight, **kwargs)
-    if bias is not None:
-        primal = primal + np.asarray(bias, dtype=np.float64).reshape(1, -1, 1)
-    if dbias is not None:
-        tangent = tangent + np.asarray(dbias, dtype=np.float64).reshape(1, -1, 1)
-    return primal, tangent
 
 
 @_jvp("sgd")

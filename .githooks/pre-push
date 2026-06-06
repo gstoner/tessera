@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Tessera pre-push gate — block a push if the generated audit docs have drifted
+# from their sources (the exact gate the CI audit lane runs). This is where the
+# drift actually bites: a commit may add a C ABI symbol / registry entry and CI
+# fails on `runtime_abi` (or another dashboard) being stale. Catch it locally,
+# before the push, instead of after.
+#
+# Zero-dependency: just bash + the repo's python3 (the script bootstraps its own
+# PYTHONPATH). Activated via `scripts/install-git-hooks.sh` (sets
+# core.hooksPath=.githooks). The drift check takes ~30s, so it runs at PUSH time
+# (not per-commit). Emergency bypass: `TESSERA_SKIP_DOC_DRIFT=1 git push`.
+set -uo pipefail
+
+if [ "${TESSERA_SKIP_DOC_DRIFT:-}" = "1" ]; then
+  echo "[pre-push] TESSERA_SKIP_DOC_DRIFT=1 — skipping generated-doc drift gate." >&2
+  exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel)"
+echo "[pre-push] checking generated-doc drift (audit dashboards)…"
+if bash "${repo_root}/scripts/check_generated_docs.sh"; then
+  exit 0
+fi
+
+cat >&2 <<'MSG'
+
+[pre-push] BLOCKED: generated audit docs are out of sync with their sources.
+  A registry / C-ABI / manifest change must be committed WITH the regenerated docs.
+
+  Fix:
+    scripts/check_generated_docs.sh --write
+    git add docs/audit/generated docs/audit/op_target_conformance.* && git commit --amend --no-edit   # or a new commit
+    git push
+
+  Bypass (not recommended — CI will still fail):
+    TESSERA_SKIP_DOC_DRIFT=1 git push
+MSG
+exit 1

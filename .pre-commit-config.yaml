@@ -1,18 +1,20 @@
-# Glass-jaw #12 (2026-06-01) — pre-commit drift gate for generated docs.
+# Glass-jaw #12 (2026-06-01) — drift gate for generated audit docs.
 #
-# A manifest / registry edit that changes the audit dashboards must be
-# committed together with the regenerated docs. This hook runs the
-# same `--check` gates the CI audit lane runs (via
-# scripts/check_generated_docs.sh), so drift is caught before commit
-# rather than in CI.
+# A manifest / registry / C-ABI edit that changes the audit dashboards must be
+# committed together with the regenerated docs. This hook runs the same
+# `--check` gate the CI audit lane runs (scripts/check_generated_docs.sh), so
+# drift is caught locally before it reaches CI.
 #
-# Install once:  pre-commit install
-# Run manually:  pre-commit run --all-files
+# Two ways to activate (pick one):
+#   * Zero-dependency (no `pre-commit` tool):  bash scripts/install-git-hooks.sh
+#     → points core.hooksPath at .githooks/; .githooks/pre-push runs this gate.
+#   * pre-commit framework:  pre-commit install --hook-type pre-push
 #
-# The hook is `language: system` (uses the repo's Homebrew python3 +
-# the script's own PYTHONPATH bootstrap) so it needs no isolated
-# virtualenv. It runs once per commit (not per-file) since the
-# generated docs depend on the whole registry, not individual files.
+# Staged at PRE-PUSH, not pre-commit: the full drift check is ~30s (it
+# regenerates every dashboard in-memory and byte-compares), which is too heavy
+# per-commit but fine per-push — and push is where CI bites. `language: system`
+# uses the repo's python3 + the script's own PYTHONPATH bootstrap (no venv).
+default_install_hook_types: [pre-push]
 repos:
   - repo: local
     hooks:
@@ -22,9 +24,4 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-        # Only the audit/registry sources can drift the dashboards;
-        # scope the trigger so unrelated commits don't pay the cost.
-        files: >-
-          (^python/tessera/compiler/(backend_manifest|primitive_coverage|conformance_matrix|apple_target_map|op_catalog)\.py$|
-           ^python/tessera/apple_gpu_chain\.py$|
-           ^docs/audit/(generated/|op_target_conformance\.md))
+        stages: [pre-push]

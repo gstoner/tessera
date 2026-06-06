@@ -634,6 +634,11 @@ Gate all of these behind `target_profile.isa >= ISA.SM_90`:
 ## Testing
 
 ```bash
+# First-time clone setup: activate the committed git hooks (one-time, idempotent).
+# Wires the pre-push generated-doc drift gate so a C-ABI/registry change can't
+# reach CI with stale docs/audit/generated/* (see Decision #26). Zero-dependency.
+bash scripts/install-git-hooks.sh
+
 # Python dev install (Python 3.14 venv at /Users/gregorystoner)
 pip install -e ".[dev]"
 

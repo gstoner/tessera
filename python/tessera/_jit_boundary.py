@@ -2010,3 +2010,88 @@ class GraphFn:
             f"apple_gpu GraphFn cannot dispatch op {op!r} (Sprint 3.3 supports "
             "matmul/softmax/norms/activations/elementwise + the fused matmul chains)"
         )
+
+
+# --------------------------------------------------------------------------- #
+# G-C — `@jit`-style bounded-loop front-end
+#
+# A natural one-call front-end that *traces* a bounded loop body into the
+# `tessera.control_for` Graph-IR op and executes it. The body is written against
+# the GraphFn build protocol (it calls `g.matmul` / `g.silu` / ... on _Val
+# handles), which is the production lane's own authoring surface — so this reuses
+# the entire G-A/G-B/G-B.2 machinery end-to-end:
+#
+#   build_fori_loop(...)  ->  GraphFn carrying a `tessera.control_for`
+#   jit_fori_loop(...)    ->  build + execute (apple_gpu: control_for -> tessera-opt
+#                             -> tessera_apple.gpu.control_loop -> run_graph_loop;
+#                             cpu: scf.for compiled natively).
+#
+# This is the front-end half of "@jit -> tessera.control_for": the AST `@tessera.
+# jit` decorator (canonical-compile lane) does not yet share a tracing protocol
+# with the executing GraphFn lane, so wiring the decorator itself is a separate
+# canonical-lane bridge. This API delivers the executing path today.
+# --------------------------------------------------------------------------- #
+def build_fori_loop(
+    trip: int,
+    body,
+    *,
+    init_shape,
+    const_shapes=(),
+    target: str = "apple_gpu",
+    name: str = "tessera_fori",
+    elem: str = "f32",
+) -> "GraphFn":
+    """Trace ``for _ in range(trip): carry = body(g, carry, *consts)`` into a
+    ``GraphFn`` carrying a ``tessera.control_for`` op (single tensor carry, v1).
+
+    ``body`` is ``(g, carry_val, *const_vals) -> carry_val`` operating on GraphFn
+    handles. ``init_shape`` is the carry shape; ``const_shapes`` are the
+    loop-invariant operand shapes (passed to ``body`` after the carry, in order).
+    Returns the built ``GraphFn`` (not yet executed) so callers can inspect the
+    emitted IR (``g._emit_control_for_mlir()``) or pick an execution path.
+    """
+    g = GraphFn(name=name, elem=elem, target=target)
+    carry = g.arg(tuple(init_shape))
+    consts = [g.arg(tuple(s)) for s in const_shapes]
+    out = g.for_loop(int(trip), init=carry, body=lambda c: body(g, c, *consts))
+    g.ret(out)
+    return g
+
+
+def jit_fori_loop(
+    trip: int,
+    body,
+    *,
+    init: "np.ndarray",
+    consts=(),
+    target: str = "apple_gpu",
+    via_target_ir: "bool | None" = None,
+    name: str = "tessera_fori",
+) -> "np.ndarray":
+    """Build (``build_fori_loop``) and execute a bounded loop, returning the final
+    carry as an ``np.ndarray``.
+
+    ``body`` is ``(g, carry_val, *const_vals) -> carry_val``. ``init`` is the
+    initial carry; ``consts`` the loop-invariant arrays (matched to ``body``'s
+    trailing params, in order). On ``apple_gpu`` the loop executes through the
+    Target-IR path (emit ``tessera.control_for`` -> ``tessera-opt
+    --tessera-control-for-to-apple_gpu`` -> ``tessera_apple.gpu.control_loop`` ->
+    ``run_graph_loop_f32``) when a built ``tessera-opt`` is available; set
+    ``via_target_ir=False`` to force the direct in-memory dispatch instead, or
+    ``True`` to require the IR path. On ``cpu`` the ``scf.for`` is compiled
+    natively.
+    """
+    init_arr = np.asarray(init)
+    const_arrs = [np.asarray(c) for c in consts]
+    g = build_fori_loop(
+        int(trip), body,
+        init_shape=init_arr.shape,
+        const_shapes=[c.shape for c in const_arrs],
+        target=target, name=name,
+    )
+    arrays = [init_arr, *const_arrs]
+    if target == "apple_gpu":
+        use_ir = (_find_tessera_opt() is not None) if via_target_ir is None \
+            else bool(via_target_ir)
+        return g.run_via_target_ir(*arrays) if use_ir else g.run(*arrays)
+    return g.run(*arrays)

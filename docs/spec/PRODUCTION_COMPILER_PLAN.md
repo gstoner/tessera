@@ -339,8 +339,31 @@ last_updated: 2026-06-05
 >   **bit-identical to `run()`** and matches numpy (~6e-10). **286/286
 >   production-lane tests green** (+6; `tests/unit/test_production_jit_phase3_target_ir_exec.py`).
 >
-> Remaining Phase-G: `@jit(target="apple_gpu")` of `tessera.control.*` end-to-end
-> (G-C); `control_if`/`control_while` Graph-IR ops + lowerings; bf16 control flow.
+> * **G-C — `@jit`-style bounded-loop front-end landed 2026-06-06.** A natural
+>   one-call front-end (`tessera._jit_boundary.{build_fori_loop,jit_fori_loop}`)
+>   *traces* a bounded loop body into `tessera.control_for` and executes it:
+>   `jit_fori_loop(trip, body, init=…, consts=[…], target="apple_gpu")` runs
+>   `for _ in range(trip): carry = body(g, carry, *consts)` on Apple GPU through
+>   the Target-IR path (control_for → `tessera-opt
+>   --tessera-control-for-to-apple_gpu` → `tessera_apple.gpu.control_loop` →
+>   `run_graph_loop_f32`), or compiles `scf.for` natively on `cpu`. `body` is
+>   `(g, carry, *consts) -> carry` written against the GraphFn build protocol, so
+>   the front-end reuses the entire G-A/G-B/G-B.2 machinery end-to-end (no new C
+>   ABI / ODS surface). Single tensor carry, f32, v1. `build_fori_loop` returns
+>   the un-executed GraphFn for IR inspection. **295/295 production-lane tests
+>   green** (+9; `tests/unit/test_production_jit_phase3_fori_frontend.py`).
+>
+>   *Front-end gap (follow-on):* the AST `@tessera.jit` decorator runs through the
+>   canonical-compile lane (`jit.py` → `compile_bundle`), which does not yet share
+>   a tracing protocol with the executing GraphFn lane; wiring a Python `for` /
+>   `tessera.control.fori_loop` in a decorated fn straight to `control_for` is a
+>   separate canonical-lane bridge (`graph_ir.py visit_For` carry-detection +
+>   apple_gpu canonical dispatch → run_graph_loop). G-C delivers the executing
+>   front-end via the explicit `jit_fori_loop` API today.
+>
+> Remaining Phase-G: AST `@tessera.jit` ↔ GraphFn canonical-lane bridge;
+> `control_if`/`control_while` Graph-IR ops + lowerings; bf16 control flow;
+> `scan`/`while` front-ends (ys-collection / dynamic trip).
 >
 > Next: Phase 4 (NVIDIA correctness-first).
 >

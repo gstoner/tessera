@@ -897,6 +897,8 @@ class GraphFn:
         self._mlpkg_pipe: Any = None
         self._mlpkg_dir: Any = None
         self._mlpkg_out_shape: Any = None
+        # Structured bounded-loop record for the apple_gpu forLoop lane (G-A).
+        self._loop: Any = None
 
     def _t(self, shape: tuple[int, ...]) -> str:
         return "tensor<" + "x".join(str(s) for s in shape) + f"x{self._elem}>"
@@ -1040,10 +1042,25 @@ class GraphFn:
         cur.append(f"  {st} = arith.constant 1 : index")
         res = self._fresh()
         self._scopes.append([])  # open the loop body scope
+        _body_start = len(self._ops)  # capture the structured body for the GPU lane
         nxt = body(_Val(carry, init.shape))
         if nxt.shape != init.shape:
             raise TesseraJitError("for_loop body must preserve the carry shape")
         body_lines = self._scopes.pop()
+        # Structured loop record for the apple_gpu forLoop lane (G-A). v1 supports
+        # a single loop; a second one disables the GPU loop path.
+        if self._loop is None:
+            self._loop = {
+                "trip": int(count),
+                "carry_ssa": carry,
+                "next_carry_ssa": nxt.ssa,
+                "init_ssa": init.ssa,
+                "body_ops": list(self._ops[_body_start:]),
+                "result_ssa": res,
+                "carry_shape": tuple(init.shape),
+            }
+        else:
+            self._loop = {"_unsupported": "more than one for_loop"}
         cur.append(
             f"  {res} = scf.for {iv} = {lb} to {ub} step {st} "
             f"iter_args({carry} = {init.ssa}) -> {T} {{"
@@ -1131,6 +1148,8 @@ class GraphFn:
         (matmul→softmax→matmul, matmul→softmax, matmul→gelu, matmul→rmsnorm)
         collapsed to single fused Metal kernels."""
         if self._target == "apple_gpu":
+            if self._loop is not None:
+                return self._run_apple_gpu_loop(arrays)
             return self._run_apple_gpu(arrays)
         if not self._rets:
             raise TesseraJitError("GraphFn has no return value (call ret())")
@@ -1160,6 +1179,85 @@ class GraphFn:
         test prove fusion happened — an attention graph fires ONE
         ``matmul_softmax_matmul`` kernel, not three separate ones."""
         return list(self._last_dispatch)
+
+    # ── Apple GPU bounded-loop lane (Phase-G G-A) ────────────────────────────
+    #
+    # When the graph is `(args) → for_loop(init=arg, body) → ret(final_carry)`,
+    # author it as ONE MPSGraph `forLoop` and run it in one dispatch (vs the host
+    # per-iteration interpreter). The body is the recorded straight-line op-list;
+    # carry threads through the loop iteration argument. f32, single carry, init
+    # must be a function arg, body references only args + carry (v1).
+
+    def _run_apple_gpu_loop(self, arrays):
+        from tessera import apple_mlpkg as mp
+
+        loop = self._loop
+        if "_unsupported" in loop:
+            raise TesseraJitError(
+                f"apple_gpu GraphFn loop: {loop['_unsupported']} not supported (v1)")
+        if self._elem != "f32":
+            raise TesseraJitError("apple_gpu GraphFn loop is f32-only (bf16 follow-on)")
+        if len(self._rets) != 1 or self._rets[0].ssa != loop["result_ssa"]:
+            raise TesseraJitError(
+                "apple_gpu GraphFn loop must return exactly the loop result")
+        if len(arrays) != len(self._args):
+            raise TesseraJitError(
+                f"expected {len(self._args)} args, got {len(arrays)}")
+        ins = []
+        for (ssa, sh), arr in zip(self._args, arrays):
+            a = np.ascontiguousarray(np.asarray(arr))
+            if a.dtype != np.float32 or tuple(a.shape) != sh:
+                raise TesseraJitError(
+                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, "
+                    f"want float32{sh}")
+            ins.append(a)
+        arg_index = {ssa: k for k, (ssa, _sh) in enumerate(self._args)}
+        if loop["init_ssa"] not in arg_index:
+            raise TesseraJitError(
+                "apple_gpu GraphFn loop: the init carry must be a function arg (v1)")
+        n_args = len(self._args)
+        idof = dict(arg_index)
+        idof[loop["carry_ssa"]] = n_args
+        body_ops: list = []
+        for j, op in enumerate(loop["body_ops"]):
+            name = self._MLPKG_OP.get(op.op)
+            if name is None:
+                raise TesseraJitError(
+                    f"apple_gpu GraphFn loop body cannot express op {op.op!r}")
+            entry: dict = {"op": name}
+            try:
+                entry["in0"] = idof[op.ins[0].ssa]
+                if name == "matmul":
+                    entry["in1"] = idof[op.ins[1].ssa]
+                    entry["transpose_a"] = bool(op.meta.get("ta"))
+                    entry["transpose_b"] = bool(op.meta.get("tb"))
+                elif name in ("add", "sub", "mul", "div"):
+                    entry["in1"] = idof[op.ins[1].ssa]
+                elif name == "softmax":
+                    if op.meta.get("axis") != op.meta.get("rank", 0) - 1:
+                        raise TesseraJitError("apple_gpu loop softmax is last-axis only")
+                elif name in ("rmsnorm", "layer_norm"):
+                    entry["eps"] = float(op.meta.get("eps", 1e-5))
+            except KeyError:
+                raise TesseraJitError(
+                    "apple_gpu GraphFn loop body references a value that is not a "
+                    "function arg, the carry, or an earlier body op (v1: no "
+                    "pre-loop intermediates feeding the loop body)")
+            idof[op.out.ssa] = n_args + 1 + j
+            body_ops.append(entry)
+        body_out_id = idof.get(loop["next_carry_ssa"])
+        if body_out_id is None:
+            raise TesseraJitError(
+                "apple_gpu GraphFn loop: next carry is not produced by the body")
+        arg_shapes = [tuple(sh) for (_ssa, sh) in self._args]
+        out = mp.run_graph_loop_f32(
+            ins, arg_shapes, arg_index[loop["init_ssa"]], loop["trip"],
+            body_ops, body_out_id, loop["carry_shape"])
+        if out is None:
+            raise TesseraJitError(
+                "apple_gpu GraphFn loop dispatch failed / runtime unavailable")
+        self._last_dispatch = ["forloop"]  # one MPSGraph forLoop dispatch
+        return out.copy()
 
     # ── Whole-graph lane: compile the GraphFn to ONE MPSGraph dispatch ───────
     #

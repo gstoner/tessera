@@ -11410,6 +11410,56 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_author_op(
   return -1;
 }
 
+// Shared op-node builder for the authored-graph paths (PK8c straight-line +
+// PK8d for-loop body). `a` is the resolved in0 tensor; `b` the resolved in1
+// (nil for unary). Mirrors the GraphFn opcode set; returns nil on bad args /
+// unknown opcode. Compute dtype `dt` (f32) drives the norm constants.
+//   opcodes: 0 matmul | 1 add 2 sub 3 mul 4 div | 10 softmax(last-axis)
+//            11 rmsnorm 12 layer_norm (unweighted) | 20 relu 21 sigmoid
+//            22 tanh 23 silu 24 gelu
+static MPSGraphTensor *mpsg_build_graph_op(MPSGraph *g, int code,
+                                           MPSGraphTensor *a, MPSGraphTensor *b,
+                                           int iattr, float eps,
+                                           MPSDataType dt) {
+  if (!a) return nil;
+  if (code == 0) {  // matmul (±transpose)
+    if (!b) return nil;
+    if (iattr & 1) a = [g transposeTensor:a dimension:0 withDimension:1 name:nil];
+    if (iattr & 2) b = [g transposeTensor:b dimension:0 withDimension:1 name:nil];
+    return [g matrixMultiplicationWithPrimaryTensor:a secondaryTensor:b name:nil];
+  }
+  if (code >= 1 && code <= 4) {  // add/sub/mul/div
+    if (!b) return nil;
+    return mpsg_binary_node(g, a, b, code - 1);
+  }
+  if (code == 10) return [g softMaxWithTensor:a axis:1 name:nil];  // last-axis
+  if (code == 11) {  // rmsnorm (unweighted)
+    MPSGraphTensor *sq = [g multiplicationWithPrimaryTensor:a secondaryTensor:a name:nil];
+    MPSGraphTensor *ms = [g meanOfTensor:sq axes:@[ @1 ] name:nil];
+    MPSGraphTensor *me = [g additionWithPrimaryTensor:ms
+                                      secondaryTensor:[g constantWithScalar:(double)eps dataType:dt]
+                                                 name:nil];
+    MPSGraphTensor *den = [g squareRootWithTensor:me name:nil];
+    return [g divisionWithPrimaryTensor:a secondaryTensor:den name:nil];
+  }
+  if (code == 12) {  // layer_norm (unweighted)
+    MPSGraphTensor *mean = [g meanOfTensor:a axes:@[ @1 ] name:nil];
+    MPSGraphTensor *xc = [g subtractionWithPrimaryTensor:a secondaryTensor:mean name:nil];
+    MPSGraphTensor *sq = [g multiplicationWithPrimaryTensor:xc secondaryTensor:xc name:nil];
+    MPSGraphTensor *var = [g meanOfTensor:sq axes:@[ @1 ] name:nil];
+    MPSGraphTensor *me = [g additionWithPrimaryTensor:var
+                                      secondaryTensor:[g constantWithScalar:(double)eps dataType:dt]
+                                                 name:nil];
+    MPSGraphTensor *den = [g squareRootWithTensor:me name:nil];
+    return [g divisionWithPrimaryTensor:xc secondaryTensor:den name:nil];
+  }
+  if (code >= 20 && code <= 24) {  // relu/sigmoid/tanh/silu/gelu
+    static const int kU[] = {0, 1, 2, 4, 5};
+    return mpsg_unary_node(g, a, kU[code - 20]);
+  }
+  return nil;  // unknown opcode
+}
+
 // PK8c — author an ARBITRARY straight-line op graph into ONE serialized
 // `.mtlpackage`. The whole graph becomes a single MPSGraph executable, so the
 // entire GraphFn runs as ONE Metal dispatch (MPSGraph fuses globally) instead of
@@ -11465,58 +11515,16 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_author_graph(
       };
       for (int j = 0; j < n_ops; ++j) {
         int code = op_codes[j];
-        int iattr = op_iattr ? op_iattr[j] : 0;
-        float eps = op_fattr ? op_fattr[j] : 1e-5f;
         MPSGraphTensor *a = getT(op_in0[j]);
         if (!a) return -2;
-        MPSGraphTensor *y = nil;
-        if (code == 0) {  // matmul (±transpose)
-          MPSGraphTensor *b = getT(op_in1 ? op_in1[j] : -1);
+        MPSGraphTensor *b = nil;
+        if (code == 0 || (code >= 1 && code <= 4)) {
+          b = getT(op_in1 ? op_in1[j] : -1);
           if (!b) return -2;
-          if (iattr & 1)
-            a = [g transposeTensor:a dimension:0 withDimension:1 name:nil];
-          if (iattr & 2)
-            b = [g transposeTensor:b dimension:0 withDimension:1 name:nil];
-          y = [g matrixMultiplicationWithPrimaryTensor:a
-                                       secondaryTensor:b
-                                                  name:nil];
-        } else if (code >= 1 && code <= 4) {  // add/sub/mul/div
-          MPSGraphTensor *b = getT(op_in1 ? op_in1[j] : -1);
-          if (!b) return -2;
-          y = mpsg_binary_node(g, a, b, code - 1);
-        } else if (code == 10) {  // softmax over last axis (rank-2 lane)
-          y = [g softMaxWithTensor:a axis:1 name:nil];
-        } else if (code == 11) {  // rmsnorm (unweighted)
-          MPSGraphTensor *sq =
-              [g multiplicationWithPrimaryTensor:a secondaryTensor:a name:nil];
-          MPSGraphTensor *ms = [g meanOfTensor:sq axes:@[ @1 ] name:nil];
-          MPSGraphTensor *me =
-              [g additionWithPrimaryTensor:ms
-                           secondaryTensor:[g constantWithScalar:(double)eps
-                                                        dataType:dt]
-                                      name:nil];
-          MPSGraphTensor *den = [g squareRootWithTensor:me name:nil];
-          y = [g divisionWithPrimaryTensor:a secondaryTensor:den name:nil];
-        } else if (code == 12) {  // layer_norm (unweighted)
-          MPSGraphTensor *mean = [g meanOfTensor:a axes:@[ @1 ] name:nil];
-          MPSGraphTensor *xc =
-              [g subtractionWithPrimaryTensor:a secondaryTensor:mean name:nil];
-          MPSGraphTensor *sq =
-              [g multiplicationWithPrimaryTensor:xc secondaryTensor:xc name:nil];
-          MPSGraphTensor *var = [g meanOfTensor:sq axes:@[ @1 ] name:nil];
-          MPSGraphTensor *me =
-              [g additionWithPrimaryTensor:var
-                           secondaryTensor:[g constantWithScalar:(double)eps
-                                                        dataType:dt]
-                                      name:nil];
-          MPSGraphTensor *den = [g squareRootWithTensor:me name:nil];
-          y = [g divisionWithPrimaryTensor:xc secondaryTensor:den name:nil];
-        } else if (code >= 20 && code <= 24) {  // relu/sigmoid/tanh/silu/gelu
-          static const int kU[] = {0, 1, 2, 4, 5};
-          y = mpsg_unary_node(g, a, kU[code - 20]);
-        } else {
-          return -6;
         }
+        MPSGraphTensor *y = mpsg_build_graph_op(
+            g, code, a, b, op_iattr ? op_iattr[j] : 0,
+            op_fattr ? op_fattr[j] : 1e-5f, dt);
         if (!y) return -6;
         tensors[n_args + j] = y;
       }
@@ -11524,6 +11532,125 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_author_graph(
       if (!out) return -2;
       if (io_bf16) out = [g castTensor:out toType:io_dt name:nil];
       return _mlpkg_compile_and_write(g, feeds, out, out_package_path);
+    }
+  }
+  return -1;
+}
+
+// PK8d — run a BOUNDED for-loop as ONE MPSGraph `forLoop`, executed DIRECTLY via
+// runWithMTLCommandQueue (the package/MLEncoder dispatch path rejects
+// control-flow ops, so — like cf_scan — the loop graph is built + run + read in
+// one call rather than serialized to a .mtlpackage). The body is a recorded
+// straight-line op-list over a single static-shape carry:
+//   for i in 0..trip:  carry = body(carry, args)   → final carry into `out`.
+// Generalizes cf_scan's fixed RNN body to an arbitrary GraphFn body, reusing
+// `mpsg_build_graph_op`.
+//
+// Body tensor ids: 0..n_args-1 = args, n_args = the carry (iteration argument),
+// n_args+1+j = body op j. `carry_arg_index` = the arg initializing the carry;
+// `body_out_id` = the next-carry tensor. `arg_ptrs[i]` points at arg i's f32
+// data (rows*cols elems, or rows if cols<=0). `out` is sized to the carry arg.
+// f32. Returns 1 / <=0 error (0 = runtime unavailable → caller falls back;
+// -2 bad args; -3 run/build failure; -6 unknown opcode / bad id).
+extern "C" int32_t tessera_apple_gpu_run_graph_loop_f32(
+    int32_t n_args, const void *const *arg_ptrs, const int32_t *arg_rows,
+    const int32_t *arg_cols, int32_t carry_arg_index, int32_t trip,
+    int32_t n_body_ops, const int32_t *body_codes, const int32_t *body_in0,
+    const int32_t *body_in1, const int32_t *body_iattr, const float *body_fattr,
+    int32_t body_out_id, float *out) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;  // caller falls back to host
+  if (n_args <= 0 || trip <= 0 || n_body_ops < 0 || carry_arg_index < 0 ||
+      carry_arg_index >= n_args || !arg_ptrs || !arg_rows || !arg_cols || !out ||
+      (n_body_ops > 0 && (!body_codes || !body_in0)))
+    return -2;
+  if (@available(macOS 14.0, iOS 17.0, *)) {
+    @autoreleasepool {
+      MPSDataType dt = MPSDataTypeFloat32;
+      MPSGraph *g = [MPSGraph new];
+      NSMutableArray<MPSGraphTensor *> *phs =
+          [NSMutableArray arrayWithCapacity:n_args];
+      NSMutableArray<NSArray<NSNumber *> *> *shapes =
+          [NSMutableArray arrayWithCapacity:n_args];
+      for (int i = 0; i < n_args; ++i) {
+        NSArray<NSNumber *> *shp = (arg_cols[i] > 0)
+                                       ? @[ @(arg_rows[i]), @(arg_cols[i]) ]
+                                       : @[ @(arg_rows[i]) ];
+        [phs addObject:[g placeholderWithShape:shp dataType:dt name:nil]];
+        [shapes addObject:shp];
+      }
+      const int total = n_args + 1 + n_body_ops;  // ids: args, carry, body ops
+      __block int32_t err = 0;
+      MPSGraphTensor *lb = [g constantWithScalar:0 dataType:MPSDataTypeInt32];
+      MPSGraphTensor *ub = [g constantWithScalar:trip dataType:MPSDataTypeInt32];
+      MPSGraphTensor *st = [g constantWithScalar:1 dataType:MPSDataTypeInt32];
+      NSArray<MPSGraphTensor *> *results = [g
+          forLoopWithLowerBound:lb
+                     upperBound:ub
+                           step:st
+           initialBodyArguments:@[ phs[carry_arg_index] ]
+                           body:^NSArray<MPSGraphTensor *> *(
+                               MPSGraphTensor *index,
+                               NSArray<MPSGraphTensor *> *bodyArgs) {
+                             (void)index;
+                             NSMutableArray *t =
+                                 [NSMutableArray arrayWithCapacity:total];
+                             for (int i = 0; i < total; ++i)
+                               [t addObject:[NSNull null]];
+                             for (int i = 0; i < n_args; ++i) t[i] = phs[i];
+                             t[n_args] = bodyArgs[0];  // the carry
+                             auto bgetT = [&](int tid) -> MPSGraphTensor * {
+                               if (tid < 0 || tid >= total) return nil;
+                               id v = t[tid];
+                               return (v == [NSNull null]) ? nil
+                                                           : (MPSGraphTensor *)v;
+                             };
+                             for (int j = 0; j < n_body_ops; ++j) {
+                               int code = body_codes[j];
+                               MPSGraphTensor *a = bgetT(body_in0[j]);
+                               MPSGraphTensor *b = nil;
+                               if (code == 0 || (code >= 1 && code <= 4))
+                                 b = bgetT(body_in1 ? body_in1[j] : -1);
+                               MPSGraphTensor *y = mpsg_build_graph_op(
+                                   g, code, a, b, body_iattr ? body_iattr[j] : 0,
+                                   body_fattr ? body_fattr[j] : 1e-5f, dt);
+                               if (!y) { err = -6; y = bodyArgs[0]; }
+                               t[n_args + 1 + j] = y;
+                             }
+                             MPSGraphTensor *nxt = bgetT(body_out_id);
+                             if (!nxt) { err = -6; nxt = bodyArgs[0]; }
+                             return @[ nxt ];
+                           }
+                           name:nil];
+      if (err != 0) return err;
+      if (!results || results.count < 1) return -3;
+      MPSGraphTensor *outT = results[0];
+      // Pool-acquired input buffers, held alive in a guard vector until after
+      // the synchronous run (RAII release on scope exit — the buffer-pool
+      // invariant; no raw newBufferWith* in dispatchers).
+      std::vector<MetalBufferGuard> guards;
+      guards.reserve(n_args);
+      NSMutableDictionary *feeds = [NSMutableDictionary dictionary];
+      for (int i = 0; i < n_args; ++i) {
+        NSArray<NSNumber *> *shp = shapes[i];
+        size_t elems = 1;
+        for (NSNumber *n in shp) elems *= (size_t)n.intValue;
+        id<MTLBuffer> buf =
+            metal_buffer_acquire_with_bytes(ctx, arg_ptrs[i], elems * 4);
+        if (!buf) return -3;
+        guards.emplace_back(ctx, buf, elems * 4);
+        feeds[phs[i]] = [[MPSGraphTensorData alloc] initWithMTLBuffer:buf
+                                                                shape:shp
+                                                             dataType:dt];
+      }
+      NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                              feeds:feeds
+                                      targetTensors:@[ outT ]
+                                   targetOperations:nil];
+      MPSGraphTensorData *od = res[outT];
+      if (!od) return -3;
+      [[od mpsndarray] readBytes:out strideBytes:nil];
+      return 1;
     }
   }
   return -1;

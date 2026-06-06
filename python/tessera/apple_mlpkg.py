@@ -1481,6 +1481,73 @@ def author_graph_package(
     return rc == 1
 
 
+def run_graph_loop_f32(
+    arg_arrays: "list",
+    arg_shapes: "list[tuple[int, ...]]",
+    carry_arg_index: int,
+    trip: int,
+    body_ops: "list[dict]",
+    body_out_id: int,
+    out_shape: "tuple[int, ...]",
+):
+    """Run a BOUNDED for-loop as ONE MPSGraph ``forLoop``, executed directly
+    (PK8d / Phase-G G-A): ``for _ in range(trip): carry = body(carry, args)`` →
+    the final carry. The package/MLEncoder path rejects control-flow ops, so the
+    loop graph is built + run + read in one call (like ``cf_scan``).
+
+    Body tensor ids: ``0..len(args)-1`` = args, ``len(args)`` = the carry,
+    ``len(args)+1+j`` = body op ``j`` (op dicts as in :func:`author_graph_package`).
+    ``carry_arg_index`` is the arg initializing the carry; ``body_out_id`` is the
+    next-carry tensor. f32. Returns the final carry as an ``np.float32`` array of
+    ``out_shape``, or ``None`` if the runtime is unavailable / the loop is
+    malformed (caller falls back to host)."""
+    import numpy as np
+
+    if apple_gpu_runtime() is None:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_run_graph_loop_f32",
+        (ctypes.c_int32, ctypes.POINTER(ctypes.c_void_p),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_float), ctypes.c_int32,
+         ctypes.POINTER(ctypes.c_float)),
+        restype=ctypes.c_int32,
+    )
+    if fn is None:
+        return None
+    na = len(arg_shapes)
+    cargs = [np.ascontiguousarray(np.asarray(a, dtype=np.float32)) for a in arg_arrays]
+    ptrs = (ctypes.c_void_p * na)(
+        *[ctypes.cast(a.ctypes.data, ctypes.c_void_p) for a in cargs])
+    rows = (ctypes.c_int32 * na)(*[int(s[0]) for s in arg_shapes])
+    cols = (ctypes.c_int32 * na)(
+        *[int(s[1]) if len(s) > 1 else 0 for s in arg_shapes])
+    nb = len(body_ops)
+    codes = (ctypes.c_int32 * nb)()
+    in0 = (ctypes.c_int32 * nb)()
+    in1 = (ctypes.c_int32 * nb)()
+    iattr = (ctypes.c_int32 * nb)()
+    fattr = (ctypes.c_float * nb)()
+    for j, o in enumerate(body_ops):
+        if o["op"] not in GRAPH_OP:
+            return None
+        codes[j] = GRAPH_OP[o["op"]]
+        in0[j] = int(o["in0"])
+        in1[j] = int(o.get("in1", -1))
+        iattr[j] = (1 if o.get("transpose_a") else 0) | (2 if o.get("transpose_b") else 0)
+        fattr[j] = float(o.get("eps", 1e-5))
+    out = np.zeros(out_shape, dtype=np.float32)
+    rc = int(fn(ctypes.c_int32(na), ptrs, rows, cols,
+                ctypes.c_int32(int(carry_arg_index)), ctypes.c_int32(int(trip)),
+                ctypes.c_int32(nb), codes, in0, in1, iattr, fattr,
+                ctypes.c_int32(int(body_out_id)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_float))))
+    return out if rc == 1 else None
+
+
 __all__ = [
     "ERROR_NONE",
     "ERROR_OS_UNAVAILABLE",
@@ -1500,6 +1567,7 @@ __all__ = [
     "author_op_package",
     "author_chain_package",
     "author_graph_package",
+    "run_graph_loop_f32",
     "GRAPH_OP",
     "AUTHOR_CHAINS",
     "AUTHOR_OPS",

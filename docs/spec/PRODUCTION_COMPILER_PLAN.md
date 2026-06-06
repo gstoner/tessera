@@ -258,7 +258,28 @@ last_updated: 2026-06-05
 > macOS 26+) + all four perf-fusions (rmsnorm_matmul / QKV-concat / mlpkg
 > whole-graph / MTL4 MLP session) + f32 **and** bf16 (uniform after Sprint 3.5).
 > The full transformer block is production-grade and oracle-matched on this Mac's
-> GPU. Next: Phase 4 (NVIDIA correctness-first).
+> GPU.
+>
+> ### Phase G — control flow on GPU (bounded loops)
+> * **G-A — GraphFn bounded for-loop landed 2026-06-06.** `GraphFn(target=
+>   "apple_gpu").for_loop(count, init, body)` now authors the bounded loop as ONE
+>   MPSGraph `forLoop` and runs it in a single dispatch (vs the host per-iteration
+>   interpreter). New C ABI `tessera_apple_gpu_run_graph_loop_f32` generalizes
+>   `cf_scan`'s fixed RNN body to an arbitrary recorded body op-list, reusing a
+>   factored `mpsg_build_graph_op` node-builder (shared with the PK8c straight-line
+>   author). **Executed DIRECTLY via `runWithMTLCommandQueue`, not the package
+>   path** — the MTL4 `MLEncoder` rejects control-flow ops ("Unsupported Ops or
+>   shapes for MLEncoder"), the same way it rejects bf16 bindings. v1: f32, single
+>   static-shape carry, init must be a function arg, body of args+carry only
+>   (matmul/elementwise/softmax/norms/activations). Oracle: the same graph on the
+>   CPU `scf.for` lane — `carry = silu(carry@W)` and `carry = carry + rmsnorm(carry)@W`
+>   match to ~6e-10. **265/265 production-lane tests green** (+9;
+>   `tests/unit/test_production_jit_phase3_loop.py`). Remaining Phase-G rungs:
+>   `cond`/`switch` on GPU, variable-trip `while` (MSL route — MPSGraph `while`
+>   SIGSEGVs), the Graph-IR `tessera.control.*` op + `tessera-lower-to-apple_gpu`
+>   pass (G-B), and `@jit(target="apple_gpu")` of `tessera.control.*` (G-C).
+>
+> Next: Phase 4 (NVIDIA correctness-first).
 >
 > **Fusion opportunities surveyed (grounded in `apple_gpu_runtime.mm`):** the
 > runtime already carries deeper fusion infra — (1) ~~`rmsnorm_matmul`~~ **DONE**;

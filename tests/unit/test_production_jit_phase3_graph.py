@@ -191,13 +191,16 @@ def test_graph_no_fusion_when_intermediate_returned():
 # ── envelope: control flow + dtype rejected on apple_gpu ─────────────────────
 
 
-def test_graph_gpu_rejects_control_flow():
+def test_graph_gpu_rejects_cond_control_flow():
+    # Bounded for_loop now lowers on GPU (G-A); `cond` divergent control flow is
+    # still unsupported by the interpreter and must be rejected with a diagnostic.
     g = GraphFn(target="apple_gpu")
-    x = g.arg((4, 4))
-    out = g.for_loop(3, x, lambda c: g.add(c, c))
-    g.ret(out)
+    flag = g.arg((1,))
+    a, b = g.arg((4, 4)), g.arg((4, 4))
+    g.ret(g.cond(flag, lambda: g.add(a, a), lambda: g.mul(b, b)))
     with pytest.raises(TesseraJitError, match="control flow"):
-        g.run(np.ones((4, 4), np.float32))
+        g.run(np.ones((1,), np.float32), np.ones((4, 4), np.float32),
+              np.ones((4, 4), np.float32))
 
 
 def test_graph_gpu_rejects_arg_dtype_mismatch():

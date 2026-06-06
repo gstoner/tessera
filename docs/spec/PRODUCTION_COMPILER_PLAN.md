@@ -129,14 +129,30 @@ last_updated: 2026-06-05
 >   the same composition on the CPU lane. **189/189 production-lane tests green**
 >   (+23; `tests/unit/test_production_jit_phase3_kernels.py`).
 >
+> * **Sprint 3.3 landed 2026-06-06** — **`GraphFn(target="apple_gpu")`
+>   graph-level dispatch.** A whole multi-op graph now routes to the Metal
+>   back-half as one `run()`: since there is no MLIR Metal backend (D2), the
+>   recorded straight-line graph is interpreted op-by-op against the
+>   `_apple_gpu_backend` kernels (numpy intermediates threaded), and the
+>   canonical chains **auto-fuse** — matmul→softmax→matmul, matmul→softmax,
+>   matmul→gelu, matmul→rmsnorm collapse to single fused Metal kernels. Fusion is
+>   conservative (only single-use, non-returned intermediates) so it never
+>   changes observable values, and `GraphFn.last_dispatch()` exposes which
+>   kernels fired (an attention graph fires ONE `matmul_softmax_matmul`).
+>   Oracle: the same graph built `target="cpu"` (compiled linalg→LLVM→ORC).
+>   Capstone: a **full pre-norm attention block** (rmsnorm → QKV proj →
+>   softmax(QKᵀ)V → residual) is expressed as one graph, routed to the GPU, and
+>   matches the CPU lane — the attention chain auto-fuses to one kernel while the
+>   3 projections + rmsnorm + residual run as their own GPU kernels. Control flow
+>   and non-f32 are rejected with clear diagnostics (deferred to later sprints).
+>   **199/199 production-lane tests green** (+10;
+>   `tests/unit/test_production_jit_phase3_graph.py`).
+>
 > Phase 3 remaining toward the DoD (a full transformer block production-grade on
-> Apple GPU, oracle-matched): a `GraphFn`-level `target="apple_gpu"` dispatch
-> (Sprint 3.3 — route a whole multi-op graph to the GPU back-half as one unit,
-> instead of today's per-op `agb.gpu_*` calls), then bf16 (Sprint 3.4). The
-> SwiGLU-chain and attention fused kernels exist in the runtime
-> (`swiglu_f32`, `matmul_softmax_matmul_f32`) and `gpu_attention` now wires the
-> latter; the SwiGLU fused kernel wiring is deferred to the GraphFn-dispatch
-> sprint where the whole MLP routes together.
+> Apple GPU, oracle-matched): the SwiGLU MLP chain (`swiglu_f32` fused kernel
+> wiring + `GraphFn` recognition) to complete the block alongside attention,
+> then bf16 (Sprint 3.4). Control-flow on GPU (iterated blocks / decode loop)
+> stays a later sprint — Sprint 3.3 is straight-line tensor algebra.
 > **Scope:** Evolve Tessera from a Python-interpreted prototype into a production
 > MLIR/LLVM-IR compiler, while retaining the Python compiler as the
 > experimentation lane. This document is the committed decision record; it gates

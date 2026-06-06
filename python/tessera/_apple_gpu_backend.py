@@ -36,7 +36,12 @@ def _load():
     global _LIB
     if _LIB is not None:
         return _LIB
-    if not sys.platform.startswith("darwin"):
+    # NB: alias through ``str(...)`` so mypy does not statically evaluate the
+    # platform check (mypy special-cases ``sys.platform`` comparisons *and*
+    # ``.startswith``, which would mark the body below unreachable on non-Darwin
+    # CI while it stays reachable locally on macOS — a baseline-breaking skew).
+    platform = str(sys.platform)
+    if not platform.startswith("darwin"):
         raise AppleGpuError("Apple GPU back-half is Darwin-only")
     try:
         from tessera.runtime import _load_apple_gpu_runtime
@@ -58,6 +63,7 @@ def _load():
         ("tessera_apple_gpu_rmsnorm_gpu_f32", [fp, fp, fp, i32, i32, flt]),
         ("tessera_apple_gpu_layer_norm_f32", [fp, fp, fp, fp, i32, i32, flt]),
         ("tessera_apple_gpu_mpsgraph_unary_f32", [i32, fp, fp, i64]),
+        ("tessera_apple_gpu_mpsgraph_binary_f32", [i32, fp, fp, fp, i64]),
         ("tessera_apple_gpu_matmul_softmax_matmul_f32", [fp, fp, fp, fp, i32, i32, i32, i32]),
         ("tessera_apple_gpu_matmul_gelu_f32", [fp, fp, fp, i32, i32, i32]),
         ("tessera_apple_gpu_matmul_rmsnorm_f32", [fp, fp, fp, i32, i32, i32, flt]),
@@ -146,6 +152,25 @@ def gpu_gelu(x: np.ndarray) -> np.ndarray:
 
 _MPSG_SILU = 4  # tessera_apple_gpu_mpsgraph_unary opcode: silu = x*sigmoid(x)
 
+# mpsgraph_binary opcodes (elementwise, used by the GraphFn GPU executor).
+_BINARY_OPCODE = {"add": 0, "sub": 1, "mul": 2, "div": 3}
+
+
+def gpu_binary(kind: str, a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Elementwise add/sub/mul/div on the Apple GPU (MPSGraph), f32, equal shapes."""
+    if kind not in _BINARY_OPCODE:
+        raise AppleGpuError(f"gpu_binary kind must be one of {sorted(_BINARY_OPCODE)}")
+    a = _f32(a, "a")
+    b = _f32(b, "b")
+    if a.shape != b.shape:
+        raise AppleGpuError(f"gpu_binary needs equal shapes: {a.shape} vs {b.shape}")
+    fa = np.ascontiguousarray(a.reshape(-1))
+    fb = np.ascontiguousarray(b.reshape(-1))
+    out = np.zeros_like(fa)
+    _load().tessera_apple_gpu_mpsgraph_binary_f32(
+        _BINARY_OPCODE[kind], _ptr(fa), _ptr(fb), _ptr(out), int(fa.size))
+    return out.reshape(a.shape)
+
 
 def gpu_rmsnorm(x: np.ndarray, eps: float = 1e-5) -> np.ndarray:
     """Unweighted RMSNorm over the last axis on the Apple GPU, rank-2 f32.
@@ -182,14 +207,29 @@ def gpu_layer_norm(x: np.ndarray, eps: float = 1e-5) -> np.ndarray:
     return out
 
 
-def gpu_silu(x: np.ndarray) -> np.ndarray:
-    """SiLU/swish = x*sigmoid(x) on the Apple GPU (MPSGraph), f32. Flattened."""
+# mpsgraph_unary opcodes (elementwise activations, used by the GraphFn executor).
+_UNARY_OPCODE = {"relu": 0, "sigmoid": 1, "tanh": 2, "silu": 4}
+
+
+def gpu_unary(kind: str, x: np.ndarray) -> np.ndarray:
+    """Elementwise activation on the Apple GPU (MPSGraph), f32. Flattened.
+
+    `kind` ∈ {relu, sigmoid, tanh, silu}. (gelu has its own dedicated MSL kernel
+    — use `gpu_gelu`.)
+    """
+    if kind not in _UNARY_OPCODE:
+        raise AppleGpuError(f"gpu_unary kind must be one of {sorted(_UNARY_OPCODE)}")
     x = _f32(x, "x")
     flat = np.ascontiguousarray(x.reshape(-1))
     out = np.zeros_like(flat)
     _load().tessera_apple_gpu_mpsgraph_unary_f32(
-        _MPSG_SILU, _ptr(flat), _ptr(out), int(flat.size))
+        _UNARY_OPCODE[kind], _ptr(flat), _ptr(out), int(flat.size))
     return out.reshape(x.shape)
+
+
+def gpu_silu(x: np.ndarray) -> np.ndarray:
+    """SiLU/swish = x*sigmoid(x) on the Apple GPU (MPSGraph), f32. Flattened."""
+    return gpu_unary("silu", x)
 
 
 def gpu_attention(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> np.ndarray:

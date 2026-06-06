@@ -842,6 +842,19 @@ class _Val:
         self.shape = shape
 
 
+class _GraphOp:
+    """A structured record of one straight-line graph op, used by the Apple GPU
+    executor (Sprint 3.3). The CPU lane ignores these and lowers the MLIR text."""
+
+    __slots__ = ("op", "ins", "out", "meta")
+
+    def __init__(self, op: str, ins, out: _Val, meta: dict):
+        self.op = op
+        self.ins = list(ins)
+        self.out = out
+        self.meta = meta
+
+
 class GraphFn:
     """Build a multi-op `tessera` function and compile/run it as one unit.
 
@@ -855,11 +868,19 @@ class GraphFn:
         out = g.run(q_arr, k_arr, v_arr)        # ONE compile, ONE invoke
     """
 
-    def __init__(self, name: str = "tessera_jit_graph", elem: str = "f32"):
+    def __init__(
+        self,
+        name: str = "tessera_jit_graph",
+        elem: str = "f32",
+        target: str = "cpu",
+    ):
         if elem not in _ELEM_TO_NP:
             raise TesseraJitError(f"GraphFn elem must be one of {sorted(_ELEM_TO_NP)}")
+        if target not in ("cpu", "apple_gpu"):
+            raise TesseraJitError("GraphFn target must be 'cpu' or 'apple_gpu'")
         self._name = name
         self._elem = elem
+        self._target = target
         self._args: list[tuple[str, tuple[int, ...]]] = []
         self._lines: list[str] = []
         # Scope stack for nested regions (scf.for/scf.if bodies). _emit appends to
@@ -868,6 +889,10 @@ class GraphFn:
         self._ctr = 0
         self._idx = 0  # unique suffix for block args / index constants
         self._rets: list[_Val] = []
+        # Structured straight-line op log + flags for the Apple GPU executor.
+        self._ops: list[_GraphOp] = []
+        self._has_control_flow = False
+        self._last_dispatch: list[str] = []  # kernels fired by the last GPU run
 
     def _t(self, shape: tuple[int, ...]) -> str:
         return "tensor<" + "x".join(str(s) for s in shape) + f"x{self._elem}>"
@@ -882,7 +907,7 @@ class GraphFn:
         self._args.append((ssa, shape))
         return _Val(ssa, shape)
 
-    def _emit(self, op: str, ins, out_shape, attrs=None) -> _Val:
+    def _emit(self, op: str, ins, out_shape, attrs=None, meta=None) -> _Val:
         res = self._fresh()
         in_types = ", ".join(self._t(o.shape) for o in ins)
         in_ssas = ", ".join(o.ssa for o in ins)
@@ -891,7 +916,9 @@ class GraphFn:
             f"  {res} = {op} {in_ssas}{attr_str} : "
             f"({in_types}) -> {self._t(tuple(out_shape))}"
         )
-        return _Val(res, tuple(out_shape))
+        out = _Val(res, tuple(out_shape))
+        self._ops.append(_GraphOp(op, ins, out, meta or {}))
+        return out
 
     # elementwise (same shape)
     def add(self, a, b):
@@ -929,14 +956,21 @@ class GraphFn:
 
     def softmax(self, a, axis: int = -1):
         ax = axis + len(a.shape) if axis < 0 else axis
-        return self._emit("tessera.softmax", [a], a.shape, [f"axis = {ax} : i64"])
+        return self._emit(
+            "tessera.softmax", [a], a.shape, [f"axis = {ax} : i64"],
+            meta={"axis": ax, "rank": len(a.shape)},
+        )
 
     def rmsnorm(self, a, eps: float = 1e-5):
-        return self._emit("tessera.rmsnorm", [a], a.shape, [f"eps = {eps:.9e} : f64"])
+        return self._emit(
+            "tessera.rmsnorm", [a], a.shape, [f"eps = {eps:.9e} : f64"],
+            meta={"eps": float(eps)},
+        )
 
     def layer_norm(self, a, eps: float = 1e-5):
         return self._emit(
-            "tessera.layer_norm", [a], a.shape, [f"eps = {eps:.9e} : f64"]
+            "tessera.layer_norm", [a], a.shape, [f"eps = {eps:.9e} : f64"],
+            meta={"eps": float(eps)},
         )
 
     def transpose(self, a):
@@ -956,7 +990,10 @@ class GraphFn:
             attrs.append("transposeA = true")
         if transpose_b:
             attrs.append("transposeB = true")
-        return self._emit("tessera.matmul", [a, b], (M, N), attrs or None)
+        return self._emit(
+            "tessera.matmul", [a, b], (M, N), attrs or None,
+            meta={"ta": bool(transpose_a), "tb": bool(transpose_b)},
+        )
 
     def select(self, cond, a, b):
         if not (cond.shape == a.shape == b.shape):
@@ -987,6 +1024,7 @@ class GraphFn:
         loop runs `count` times; the final carry is returned. Control flow
         through tessera→linalg→scf→llvm, one compiled function.
         """
+        self._has_control_flow = True
         T = self._t(init.shape)
         self._idx += 1
         i = self._idx
@@ -1020,6 +1058,7 @@ class GraphFn:
         """
         if flag.shape != (1,):
             raise TesseraJitError("GraphFn.cond flag must be shape (1,)")
+        self._has_control_flow = True
         self._idx += 1
         i = self._idx
         c0, fv, zero, p = f"%c0_{i}", f"%f{i}", f"%z{i}", f"%p{i}"
@@ -1080,7 +1119,15 @@ class GraphFn:
 
     def run(self, *arrays: np.ndarray):
         """Compile the whole graph ONCE and invoke ONCE. Returns the result
-        array, or a tuple of arrays for a multi-result function."""
+        array, or a tuple of arrays for a multi-result function.
+
+        For `target="apple_gpu"` there is no MLIR Metal backend (D2), so the
+        graph is interpreted op-by-op against the bespoke Metal back-half
+        (`_apple_gpu_backend`), with the canonical fused chains
+        (matmul→softmax→matmul, matmul→softmax, matmul→gelu, matmul→rmsnorm)
+        collapsed to single fused Metal kernels."""
+        if self._target == "apple_gpu":
+            return self._run_apple_gpu(arrays)
         if not self._rets:
             raise TesseraJitError("GraphFn has no return value (call ret())")
         if len(arrays) != len(self._args):
@@ -1101,3 +1148,182 @@ class GraphFn:
             return outs[0] if len(outs) == 1 else tuple(outs)
         finally:
             destroy(handle)
+
+    # ── Apple GPU graph executor (Sprint 3.3) ────────────────────────────────
+
+    def last_dispatch(self) -> list[str]:
+        """Kernel names fired by the most recent ``apple_gpu`` ``run()``. Lets a
+        test prove fusion happened — an attention graph fires ONE
+        ``matmul_softmax_matmul`` kernel, not three separate ones."""
+        return list(self._last_dispatch)
+
+    def _run_apple_gpu(self, arrays):
+        """Interpret the straight-line graph on the bespoke Metal back-half.
+
+        There is no MLIR Metal backend (D2), so instead of ``compile_module`` we
+        thread numpy intermediates between ``_apple_gpu_backend`` kernel
+        dispatches, after collapsing the canonical fused chains. The compiled CPU
+        lane stays the oracle (same graph, ``target="cpu"``)."""
+        from tessera import _apple_gpu_backend as agb
+
+        if not self._rets:
+            raise TesseraJitError("GraphFn has no return value (call ret())")
+        if self._elem != "f32":
+            raise TesseraJitError("apple_gpu GraphFn is f32-only (bf16 is Sprint 3.4)")
+        if self._has_control_flow:
+            raise TesseraJitError(
+                "apple_gpu GraphFn does not support scf control flow yet "
+                "(Sprint 3.3 is straight-line tensor algebra)"
+            )
+        if len(arrays) != len(self._args):
+            raise TesseraJitError(f"expected {len(self._args)} args, got {len(arrays)}")
+        env: dict[str, np.ndarray] = {}
+        for (ssa, sh), arr in zip(self._args, arrays):
+            a = np.ascontiguousarray(np.asarray(arr))
+            if a.dtype != np.float32 or tuple(a.shape) != sh:
+                raise TesseraJitError(
+                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, want float32{sh}"
+                )
+            env[ssa] = a
+        self._last_dispatch = []
+        for node in self._fuse_for_gpu():
+            env[node.out.ssa] = self._dispatch_gpu(node, env, agb)
+        outs = [env[r.ssa] for r in self._rets]
+        return outs[0] if len(outs) == 1 else tuple(outs)
+
+    def _fuse_for_gpu(self) -> list:
+        """Collapse the canonical fused chains (matmul→softmax→matmul,
+        matmul→softmax, matmul→gelu, matmul→rmsnorm) into single synthetic ops.
+
+        A chain is fused only when every intermediate has exactly ONE consumer
+        and is not a function result — so fusion can never change an observable
+        value, only how many kernels fire."""
+        ops = self._ops
+        returned = {r.ssa for r in self._rets}
+        consumers: dict[str, list] = {}
+        for i, op in enumerate(ops):
+            for pos, val in enumerate(op.ins):
+                consumers.setdefault(val.ssa, []).append((i, pos))
+
+        def lone(ssa):
+            cs = consumers.get(ssa, [])
+            return cs[0] if len(cs) == 1 and ssa not in returned else None
+
+        consumed = [False] * len(ops)
+        plan: list = []
+        for i, op in enumerate(ops):
+            if consumed[i]:
+                continue
+            if op.op == "tessera.matmul":
+                c = lone(op.out.ssa)
+                if c is not None:
+                    ci = c[0]
+                    cons = ops[ci]
+                    base = {
+                        "a_t": op.meta.get("ta", False),
+                        "b_t": op.meta.get("tb", False),
+                    }
+                    is_last_axis_softmax = (
+                        cons.op == "tessera.softmax"
+                        and cons.meta.get("axis") == cons.meta.get("rank", 0) - 1
+                    )
+                    if is_last_axis_softmax:
+                        c2 = lone(cons.out.ssa)
+                        if c2 is not None:
+                            c2i, c2pos = c2
+                            m2 = ops[c2i]
+                            if (
+                                m2.op == "tessera.matmul"
+                                and c2pos == 0
+                                and not m2.meta.get("ta", False)
+                            ):
+                                plan.append(_GraphOp(
+                                    "__attention__",
+                                    [op.ins[0], op.ins[1], m2.ins[1]],
+                                    m2.out,
+                                    {**base, "c_t": m2.meta.get("tb", False)},
+                                ))
+                                consumed[ci] = consumed[c2i] = True
+                                continue
+                        plan.append(_GraphOp(
+                            "__matmul_softmax__", [op.ins[0], op.ins[1]],
+                            cons.out, base))
+                        consumed[ci] = True
+                        continue
+                    if cons.op == "tessera.gelu":
+                        plan.append(_GraphOp(
+                            "__matmul_gelu__", [op.ins[0], op.ins[1]],
+                            cons.out, base))
+                        consumed[ci] = True
+                        continue
+                    if cons.op == "tessera.rmsnorm":
+                        plan.append(_GraphOp(
+                            "__matmul_rmsnorm__", [op.ins[0], op.ins[1]],
+                            cons.out, {**base, "eps": cons.meta.get("eps", 1e-5)}))
+                        consumed[ci] = True
+                        continue
+            plan.append(op)
+        return plan
+
+    def _dispatch_gpu(self, node, env, agb):
+        def val(x):
+            return env[x.ssa]
+
+        def tr(arr, flag):
+            return np.ascontiguousarray(arr.T) if flag else arr
+
+        op, m = node.op, node.meta
+        if op == "__attention__":
+            self._last_dispatch.append("matmul_softmax_matmul")
+            return agb.gpu_attention(
+                tr(val(node.ins[0]), m["a_t"]),
+                tr(val(node.ins[1]), m["b_t"]),
+                tr(val(node.ins[2]), m["c_t"]),
+            )
+        if op == "__matmul_softmax__":
+            self._last_dispatch.append("matmul_softmax")
+            return agb.gpu_matmul_softmax(
+                tr(val(node.ins[0]), m["a_t"]), tr(val(node.ins[1]), m["b_t"]))
+        if op == "__matmul_gelu__":
+            self._last_dispatch.append("matmul_gelu")
+            return agb.gpu_matmul_gelu(
+                tr(val(node.ins[0]), m["a_t"]), tr(val(node.ins[1]), m["b_t"]))
+        if op == "__matmul_rmsnorm__":
+            self._last_dispatch.append("matmul_rmsnorm")
+            return agb.gpu_matmul_rmsnorm(
+                tr(val(node.ins[0]), m["a_t"]), tr(val(node.ins[1]), m["b_t"]),
+                eps=m.get("eps", 1e-5))
+        if op == "tessera.matmul":
+            self._last_dispatch.append("matmul")
+            return agb.gpu_matmul(
+                tr(val(node.ins[0]), m.get("ta", False)),
+                tr(val(node.ins[1]), m.get("tb", False)))
+        if op == "tessera.softmax":
+            if m.get("axis") != m.get("rank", 0) - 1:
+                raise TesseraJitError("apple_gpu softmax is last-axis only")
+            self._last_dispatch.append("softmax")
+            return agb.gpu_softmax(val(node.ins[0]))
+        if op == "tessera.gelu":
+            self._last_dispatch.append("gelu")
+            return agb.gpu_gelu(val(node.ins[0]))
+        if op in ("tessera.relu", "tessera.sigmoid", "tessera.tanh", "tessera.silu"):
+            kind = op.split(".", 1)[1]
+            self._last_dispatch.append(kind)
+            return agb.gpu_unary(kind, val(node.ins[0]))
+        if op == "tessera.rmsnorm":
+            self._last_dispatch.append("rmsnorm")
+            return agb.gpu_rmsnorm(val(node.ins[0]), eps=m.get("eps", 1e-5))
+        if op == "tessera.layer_norm":
+            self._last_dispatch.append("layer_norm")
+            return agb.gpu_layer_norm(val(node.ins[0]), eps=m.get("eps", 1e-5))
+        if op in ("tessera.add", "tessera.sub", "tessera.mul", "tessera.div"):
+            kind = op.split(".", 1)[1]
+            self._last_dispatch.append(kind)
+            return agb.gpu_binary(kind, val(node.ins[0]), val(node.ins[1]))
+        if op == "tessera.transpose":
+            self._last_dispatch.append("transpose")
+            return np.ascontiguousarray(val(node.ins[0]).T)
+        raise TesseraJitError(
+            f"apple_gpu GraphFn cannot dispatch op {op!r} (Sprint 3.3 supports "
+            "matmul/softmax/norms/activations/elementwise + the fused matmul chains)"
+        )

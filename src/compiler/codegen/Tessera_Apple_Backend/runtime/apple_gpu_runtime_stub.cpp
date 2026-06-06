@@ -1589,6 +1589,12 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_author_chain(const char *,
                                                         int32_t, float) {
   return -1;
 }
+extern "C" int32_t tessera_apple_gpu_mlpkg_author_graph(
+    const char *, int32_t, const int32_t *, const int32_t *, int32_t,
+    const int32_t *, const int32_t *, const int32_t *, const int32_t *,
+    const float *, int32_t) {
+  return -1;  // authoring requires MPSGraph (Darwin only)
+}
 extern "C" int32_t tessera_apple_gpu_dylib_serialize(const char *, const char *,
                                                      const char *) {
   return -1;

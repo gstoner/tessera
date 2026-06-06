@@ -893,6 +893,10 @@ class GraphFn:
         self._ops: list[_GraphOp] = []
         self._has_control_flow = False
         self._last_dispatch: list[str] = []  # kernels fired by the last GPU run
+        # Cached mlpkg pipeline (whole-graph → one MPSGraph dispatch lane).
+        self._mlpkg_pipe: Any = None
+        self._mlpkg_dir: Any = None
+        self._mlpkg_out_shape: Any = None
 
     def _t(self, shape: tuple[int, ...]) -> str:
         return "tensor<" + "x".join(str(s) for s in shape) + f"x{self._elem}>"
@@ -1156,6 +1160,145 @@ class GraphFn:
         test prove fusion happened — an attention graph fires ONE
         ``matmul_softmax_matmul`` kernel, not three separate ones."""
         return list(self._last_dispatch)
+
+    # ── Whole-graph lane: compile the GraphFn to ONE MPSGraph dispatch ───────
+    #
+    # `run()` interprets the graph op-by-op against the bespoke Metal kernels
+    # (with hand fusions). `run_mlpkg()` instead authors the WHOLE straight-line
+    # graph into one serialized MPSGraph package (PK8c) and dispatches it as a
+    # single Metal ML pass — MPSGraph fuses globally, no per-kernel interpreter.
+    # The compiled package is cached on the instance (author+compile happen once;
+    # subsequent runs just re-fill inputs + dispatch). f32, single output,
+    # straight-line only.
+
+    _MLPKG_OP = {
+        "tessera.matmul": "matmul",
+        "tessera.add": "add", "tessera.sub": "sub",
+        "tessera.mul": "mul", "tessera.div": "div",
+        "tessera.softmax": "softmax",
+        "tessera.rmsnorm": "rmsnorm", "tessera.layer_norm": "layer_norm",
+        "tessera.silu": "silu", "tessera.relu": "relu",
+        "tessera.sigmoid": "sigmoid", "tessera.tanh": "tanh",
+        "tessera.gelu": "gelu",
+    }
+
+    def _serialize_mlpkg(self):
+        """Map the recorded straight-line ops to the author_graph_package form:
+        per-arg shapes, an op list (opcode + tensor ids + attrs), and the single
+        output tensor id. Tensor ids: args 0.., op j → n_args+j."""
+        idof: dict[str, int] = {}
+        arg_shapes: list = []
+        for k, (ssa, sh) in enumerate(self._args):
+            if len(sh) != 2:
+                raise TesseraJitError("run_mlpkg args must be rank-2")
+            idof[ssa] = k
+            arg_shapes.append((int(sh[0]), int(sh[1])))
+        n_args = len(self._args)
+        ops: list = []
+        for j, op in enumerate(self._ops):
+            name = self._MLPKG_OP.get(op.op)
+            if name is None:
+                raise TesseraJitError(
+                    f"run_mlpkg cannot express op {op.op!r} (whole-graph lane "
+                    "supports matmul/elementwise/softmax/norms/activations)")
+            entry: dict = {"op": name, "in0": idof[op.ins[0].ssa]}
+            if name == "matmul":
+                entry["in1"] = idof[op.ins[1].ssa]
+                entry["transpose_a"] = bool(op.meta.get("ta"))
+                entry["transpose_b"] = bool(op.meta.get("tb"))
+            elif name in ("add", "sub", "mul", "div"):
+                entry["in1"] = idof[op.ins[1].ssa]
+            elif name == "softmax":
+                if op.meta.get("axis") != op.meta.get("rank", 0) - 1:
+                    raise TesseraJitError("run_mlpkg softmax is last-axis only")
+            elif name in ("rmsnorm", "layer_norm"):
+                entry["eps"] = float(op.meta.get("eps", 1e-5))
+            idof[op.out.ssa] = n_args + j
+            ops.append(entry)
+        output_id = idof[self._rets[0].ssa]
+        return arg_shapes, ops, output_id, self._rets[0].shape
+
+    def _ensure_mlpkg_pipeline(self, mp):
+        if self._mlpkg_pipe is not None:
+            return self._mlpkg_pipe, self._mlpkg_out_shape
+        import os
+        import tempfile
+        arg_shapes, ops, output_id, out_shape = self._serialize_mlpkg()
+        d = tempfile.mkdtemp(prefix="tessera_mlpkg_")
+        pkg = os.path.join(d, "graph.mtlpackage")  # loader needs the extension
+        if not mp.author_graph_package(pkg, arg_shapes, ops, output_id):
+            raise TesseraJitError(
+                f"mlpkg author_graph failed (err={mp.last_error_kind()})")
+        fn = mp.first_function_name(pkg) or "main"
+        pipe = mp.compile_mlpackage(pkg, function_name=fn)
+        if pipe is None:
+            raise TesseraJitError(
+                f"mlpkg compile failed (err={mp.last_error_kind()})")
+        if not pipe.prepare_tensors():
+            raise TesseraJitError("mlpkg prepare_tensors failed")
+        self._mlpkg_dir = d
+        self._mlpkg_pipe = pipe
+        self._mlpkg_out_shape = tuple(out_shape)
+        return pipe, self._mlpkg_out_shape
+
+    def run_mlpkg(self, *arrays: np.ndarray):
+        """Compile the WHOLE graph to one MPSGraph package and run it as a SINGLE
+        Metal dispatch (vs `run()`'s per-kernel interpreter). apple_gpu, f32,
+        single output, straight-line only. The package is authored+compiled once
+        and cached; later calls just re-fill inputs and dispatch."""
+        from tessera import apple_mlpkg as mp
+
+        if self._target != "apple_gpu":
+            raise TesseraJitError("run_mlpkg requires target='apple_gpu'")
+        if self._elem != "f32":
+            raise TesseraJitError("run_mlpkg is f32-only")
+        if self._has_control_flow:
+            raise TesseraJitError("run_mlpkg does not support scf control flow")
+        if len(self._rets) != 1:
+            raise TesseraJitError("run_mlpkg supports exactly one return value")
+        if len(arrays) != len(self._args):
+            raise TesseraJitError(
+                f"expected {len(self._args)} args, got {len(arrays)}")
+        ins = []
+        for (ssa, sh), arr in zip(self._args, arrays):
+            a = np.ascontiguousarray(np.asarray(arr))
+            if a.dtype != np.float32 or tuple(a.shape) != sh:
+                raise TesseraJitError(
+                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, "
+                    f"want float32{sh}")
+            ins.append(a)
+        pipe, out_shape = self._ensure_mlpkg_pipeline(mp)
+        for i, a in enumerate(ins):
+            if not pipe.fill_input_at(i, a.tobytes()):
+                raise TesseraJitError(f"mlpkg fill_input_at({i}) failed")
+        if not pipe.dispatch(timeout_ms=30_000):
+            raise TesseraJitError("mlpkg dispatch failed / timed out")
+        nbytes = int(np.prod(out_shape)) * 4
+        raw = pipe.read_output_at(len(self._args), nbytes)
+        if raw is None:
+            raise TesseraJitError("mlpkg read_output failed")
+        return np.frombuffer(raw, dtype=np.float32).reshape(out_shape).copy()
+
+    def close(self) -> None:
+        """Release the cached mlpkg pipeline + its on-disk package (if any)."""
+        pipe = self._mlpkg_pipe
+        if pipe is not None:
+            try:
+                pipe.destroy()
+            except Exception:  # noqa: BLE001 - best-effort teardown
+                pass
+            self._mlpkg_pipe = None
+        d = self._mlpkg_dir
+        if d:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+            self._mlpkg_dir = None
+
+    def __del__(self):  # best-effort cleanup of the cached package
+        try:
+            self.close()
+        except Exception:  # noqa: BLE001
+            pass
 
     def _run_apple_gpu(self, arrays):
         """Interpret the straight-line graph on the bespoke Metal back-half.

@@ -193,10 +193,36 @@ last_updated: 2026-06-05
 >   → swiglu → add`). **220/220 production-lane tests green** (+6;
 >   `tests/unit/test_production_jit_phase3_qkv.py`).
 >
+> * **Sprint 3.3 — whole-graph compile (`GraphFn.run_mlpkg`) landed 2026-06-06.**
+>   The architectural leap: instead of `run()`'s per-kernel interpreter, the WHOLE
+>   straight-line graph is authored into ONE serialized MPSGraph package and
+>   dispatched as a SINGLE Metal ML pass — MPSGraph fuses globally. New C ABI
+>   `tessera_apple_gpu_mlpkg_author_graph` (PK8c) in `apple_gpu_runtime.mm` walks
+>   a flat op-list (args→placeholders, op j→tensor id n_args+j), builds the
+>   MPSGraph (reusing `mpsg_unary_node`/`mpsg_binary_node`; matmul/softmax/norms
+>   inline), and hands it to `_mlpkg_compile_and_write`. Python: `apple_mlpkg.
+>   author_graph_package` + `GraphFn.run_mlpkg()` (serializes `_ops`, authors to a
+>   `*.mtlpackage`, compiles once + caches the pipeline, fills inputs, dispatches,
+>   reads output). **The full ~13-op transformer block compiles to ONE MPSGraph
+>   dispatch**, matching both the CPU lane and the per-kernel interpreter to 1.1e-6.
+>   Op set: matmul(±transpose)/add/sub/mul/div/softmax/rmsnorm/layer_norm/relu/
+>   sigmoid/tanh/silu/gelu; single output, straight-line, f32; needs the
+>   packaged-ML dispatch lane (macOS 26+). Stub parity + `_SENTINEL_SYMBOL` bumped.
+>   **7 tests** (`tests/unit/test_production_jit_phase3_mlpkg.py`).
+> * **Sprint 3.3 — Metal-4 resident-weight MLP session landed 2026-06-06.** Wired
+>   the existing `mtl4_mlp_session_*` C ABI as `_apple_gpu_backend.Mtl4MlpSession`
+>   — `Y = act(X@W+bias)` with `W[K,N]` uploaded once and kept resident; per decode
+>   step uploads only `X` (f16/bf16) and dispatches one fused matmul+activation
+>   epilogue (act ∈ none/relu/gelu/silu). Amortizes the per-call MTL4 overhead that
+>   keeps routing off at small-M decode. `mtl4_mlp_available()` gate; matches an
+>   f16-rounded/f32-accumulate oracle. **15 tests**
+>   (`tests/unit/test_production_jit_phase3_mtl4_mlp.py`). **242/242 production-lane
+>   tests green.**
+>
 > **Fusion opportunities surveyed (grounded in `apple_gpu_runtime.mm`):** the
-> runtime already carries deeper fusion infra not yet wired into the GraphFn lane —
-> (1) ~~`rmsnorm_matmul`~~ **DONE**; ~~QKV-concat~~ **DONE** (both Sprint 3.3
-> perf-fusion above); (2) the `mlpkg_*`
+> runtime already carries deeper fusion infra — (1) ~~`rmsnorm_matmul`~~ **DONE**;
+> ~~QKV-concat~~ **DONE**; ~~`mlpkg_*` whole-graph → one dispatch~~ **DONE**;
+> ~~MTL4 MLP session~~ **DONE** (all Sprint 3.3 above). (2) historical `mlpkg_*`
 > Metal-4 op-chain authoring API (`author_chain`/`compile`/`dispatch`) which could
 > compile an *arbitrary* graph to one dispatch (the "graph as one fused unit"
 > ideal, vs. today's per-kernel interpreter); (3) an MTL4 MLP session. A QKV-concat

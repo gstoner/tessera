@@ -309,6 +309,119 @@ def gpu_rmsnorm_matmul(x: np.ndarray, w: np.ndarray, eps: float = 1e-5) -> np.nd
     return out
 
 
+# ── Metal-4 resident-weight MLP decode session ───────────────────────────────
+
+_ACT_CODE = {"none": 0, "relu": 1, "gelu": 2, "silu": 3}
+
+
+def _to_half_uint16(a: np.ndarray, bf16: bool) -> np.ndarray:
+    """Pack f32 → raw 16-bit halves (the session's X/W boundary dtype). f16 is a
+    native cast; bf16 is the upper 16 bits of the f32 pattern (truncate, matching
+    the runtime's bf16 convention)."""
+    a = np.ascontiguousarray(np.asarray(a, dtype=np.float32))
+    if bf16:
+        return (a.view(np.uint32) >> 16).astype(np.uint16)
+    return a.astype(np.float16).view(np.uint16)
+
+
+def _u16ptr(a: np.ndarray):
+    return a.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+
+
+class Mtl4MlpSession:
+    """Metal-4 resident-weight fused MLP decode session: ``Y = act(X @ W + bias)``
+    with ``W[K,N]`` uploaded once and kept resident across runs (the per-call cost
+    is just the dispatch — the decode-loop win). ``X`` is f16/bf16, ``Y`` is f32,
+    ``act`` ∈ {none, relu, gelu, silu}. Requires macOS 26+ (the MTL4 matrix-unit
+    lane); construction raises :class:`AppleGpuError` otherwise."""
+
+    def __init__(self, w, bias=None, act: str = "none", bf16: bool = False):
+        if act not in _ACT_CODE:
+            raise AppleGpuError(f"act must be one of {sorted(_ACT_CODE)}")
+        lib = _load()
+        w = np.ascontiguousarray(np.asarray(w, dtype=np.float32))
+        if w.ndim != 2:
+            raise AppleGpuError("W must be rank-2 [K, N]")
+        self._K, self._N = int(w.shape[0]), int(w.shape[1])
+        self._bf16 = bool(bf16)
+        self._wu = _to_half_uint16(w, self._bf16)  # keep alive across create
+        try:
+            create = lib.tessera_apple_gpu_mtl4_mlp_session_create
+            self._run_fn = lib.tessera_apple_gpu_mtl4_mlp_session_run
+            self._destroy_fn = lib.tessera_apple_gpu_mtl4_mlp_session_destroy
+        except AttributeError as exc:
+            raise AppleGpuError(f"runtime missing MTL4 MLP session symbol: {exc}")
+        create.restype = ctypes.c_void_p
+        create.argtypes = [ctypes.POINTER(ctypes.c_uint16),
+                           ctypes.POINTER(ctypes.c_float), ctypes.c_int32,
+                           ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+        self._run_fn.restype = ctypes.c_int32
+        self._run_fn.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16),
+                                ctypes.POINTER(ctypes.c_float), ctypes.c_int32]
+        self._destroy_fn.restype = None
+        self._destroy_fn.argtypes = [ctypes.c_void_p]
+        bptr = None
+        self._bias = None
+        if bias is not None:
+            b = np.ascontiguousarray(np.asarray(bias, dtype=np.float32))
+            if b.shape != (self._N,):
+                raise AppleGpuError(f"bias must be shape ({self._N},)")
+            self._bias = b
+            bptr = b.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        h = create(_u16ptr(self._wu), bptr, _ACT_CODE[act],
+                   self._K, self._N, int(self._bf16))
+        if not h:
+            raise AppleGpuError(
+                "MTL4 MLP session unavailable (needs macOS 26+ / MTL4 ML lane)")
+        self._h: Any = ctypes.c_void_p(h)
+
+    @property
+    def shape(self) -> tuple:
+        return (self._K, self._N)
+
+    def run(self, x: np.ndarray) -> np.ndarray:
+        """One decode step: ``Y[M,N] = act(X[M,K] @ W + bias)``. X is cast to the
+        session dtype (f16/bf16); Y is returned f32."""
+        if self._h is None:
+            raise AppleGpuError("session is closed")
+        x = np.ascontiguousarray(np.asarray(x, dtype=np.float32))
+        if x.ndim != 2 or int(x.shape[1]) != self._K:
+            raise AppleGpuError(f"X must be [M, {self._K}], got {x.shape}")
+        M = int(x.shape[0])
+        xu = _to_half_uint16(x, self._bf16)
+        y = np.zeros((M, self._N), np.float32)
+        if not self._run_fn(self._h, _u16ptr(xu), _ptr(y), M):
+            raise AppleGpuError("MTL4 MLP session run failed")
+        return y
+
+    def close(self) -> None:
+        if getattr(self, "_h", None) is not None:
+            self._destroy_fn(self._h)
+            self._h = None
+
+    def __enter__(self) -> "Mtl4MlpSession":
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        self.close()
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def mtl4_mlp_available() -> bool:
+    """True when a Metal-4 resident-weight MLP session can be created (Darwin +
+    macOS 26+ + MTL4 ML lane). Probes by building a tiny session."""
+    try:
+        Mtl4MlpSession(np.ones((2, 2), np.float32)).close()
+        return True
+    except AppleGpuError:
+        return False
+
+
 def gpu_swiglu(
     x: np.ndarray, wg: np.ndarray, wu: np.ndarray, wd: np.ndarray
 ) -> np.ndarray:

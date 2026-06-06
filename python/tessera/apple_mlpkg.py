@@ -1404,6 +1404,79 @@ def author_chain_package(
     return rc == 1
 
 
+# Opcodes — mirror the switch in tessera_apple_gpu_mlpkg_author_graph
+# (apple_gpu_runtime.mm). Keep in sync if either side changes.
+GRAPH_OP: dict[str, int] = {
+    "matmul": 0,
+    "add": 1, "sub": 2, "mul": 3, "div": 4,
+    "softmax": 10, "rmsnorm": 11, "layer_norm": 12,
+    "relu": 20, "sigmoid": 21, "tanh": 22, "silu": 23, "gelu": 24,
+}
+
+
+def author_graph_package(
+    out_path: str | Path,
+    arg_shapes: "list[tuple[int, ...]]",
+    ops: "list[dict]",
+    output_id: int,
+) -> bool:
+    """Author an ARBITRARY straight-line op graph as ONE serialized MPSGraph
+    package — the whole graph becomes a single executable, so it runs as ONE
+    Metal dispatch (MPSGraph fuses globally). This is the "graph as one fused
+    unit" authoring path (PK8c).
+
+    * ``arg_shapes`` — per-input shape ``(rows, cols)``; ``cols <= 0`` (or a
+      1-tuple) declares a rank-1 vector of length ``rows``.
+    * ``ops`` — straight-line op list; each is a dict
+      ``{"op": <name in GRAPH_OP>, "in0": <tensor id>, "in1": <id or -1>,
+      "transpose_a": bool, "transpose_b": bool, "eps": float}``.
+    * Tensor ids: ``0..len(arg_shapes)-1`` are inputs; op ``j`` produces id
+      ``len(arg_shapes)+j``. ``output_id`` is the single result.
+
+    Positional bindings (inputs at ``0..``, output last); drive with
+    ``fill_input_at`` / ``read_output_at`` then ``read_output_at(len(args), ...)``.
+    Returns ``True`` on success; ``False`` when the runtime is unavailable or the
+    graph is malformed (unknown op / bad tensor id).
+    """
+    if apple_gpu_runtime() is None:
+        return False
+    fn = bind_symbol(
+        "tessera_apple_gpu_mlpkg_author_graph",
+        (ctypes.c_char_p, ctypes.c_int32,
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.c_int32,
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_float), ctypes.c_int32),
+        restype=ctypes.c_int32,
+    )
+    if fn is None:
+        return False
+    na = len(arg_shapes)
+    rows = (ctypes.c_int32 * na)(*[int(s[0]) for s in arg_shapes])
+    cols = (ctypes.c_int32 * na)(
+        *[int(s[1]) if len(s) > 1 else 0 for s in arg_shapes])
+    no = len(ops)
+    codes = (ctypes.c_int32 * no)()
+    in0 = (ctypes.c_int32 * no)()
+    in1 = (ctypes.c_int32 * no)()
+    iattr = (ctypes.c_int32 * no)()
+    fattr = (ctypes.c_float * no)()
+    for j, o in enumerate(ops):
+        if o["op"] not in GRAPH_OP:
+            return False
+        codes[j] = GRAPH_OP[o["op"]]
+        in0[j] = int(o["in0"])
+        in1[j] = int(o.get("in1", -1))
+        bits = (1 if o.get("transpose_a") else 0) | (2 if o.get("transpose_b") else 0)
+        iattr[j] = bits
+        fattr[j] = float(o.get("eps", 1e-5))
+    rc = int(fn(str(out_path).encode("utf-8"), ctypes.c_int32(na), rows, cols,
+                ctypes.c_int32(no), codes, in0, in1, iattr, fattr,
+                ctypes.c_int32(int(output_id))))
+    return rc == 1
+
+
 __all__ = [
     "ERROR_NONE",
     "ERROR_OS_UNAVAILABLE",
@@ -1422,6 +1495,8 @@ __all__ = [
     "author_matmul_package",
     "author_op_package",
     "author_chain_package",
+    "author_graph_package",
+    "GRAPH_OP",
     "AUTHOR_CHAINS",
     "AUTHOR_OPS",
     "AUTHOR_OP_UNARY",

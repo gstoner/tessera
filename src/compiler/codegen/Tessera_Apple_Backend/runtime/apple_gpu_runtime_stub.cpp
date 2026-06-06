@@ -803,6 +803,31 @@ extern "C" void tessera_apple_gpu_matmul_rmsnorm_f32(const float* A,
   reference_matmul_rmsnorm_f32_stub(A, B, O, M, N, K, eps);
 }
 
+// Sprint 3.3 perf-fusion — fused pre-norm + projection (non-Darwin reference
+// parity): O = (rmsnorm(X) * gamma) @ W.  X:[M,K] gamma:[K] W:[K,N] -> O:[M,N].
+extern "C" void tessera_apple_gpu_rmsnorm_matmul_f32(const float* X,
+                                                     const float* gamma,
+                                                     const float* W, float* O,
+                                                     int32_t M, int32_t K,
+                                                     int32_t N, float eps) {
+  std::vector<float> norm((size_t)K, 0.0f);
+  for (int32_t m = 0; m < M; ++m) {
+    const float* xr = X + (size_t)m * K;
+    double ms = 0.0;
+    for (int32_t k = 0; k < K; ++k) ms += (double)xr[k] * xr[k];
+    ms /= K;
+    double inv = 1.0 / std::sqrt(ms + eps);
+    for (int32_t k = 0; k < K; ++k) norm[k] = (float)(xr[k] * inv * gamma[k]);
+    float* orow = O + (size_t)m * N;
+    for (int32_t n = 0; n < N; ++n) orow[n] = 0.0f;
+    for (int32_t k = 0; k < K; ++k) {
+      float nv = norm[k];
+      const float* wr = W + (size_t)k * N;
+      for (int32_t n = 0; n < N; ++n) orow[n] += nv * wr[n];
+    }
+  }
+}
+
 // f16/bf16 MLP-block fusion stubs — convert to fp32, reuse the reference, cast
 // back. Mirrors the native-half MSL kernels' fp32-accumulator convention.
 

@@ -67,6 +67,10 @@ def _load():
         ("tessera_apple_gpu_matmul_softmax_matmul_f32", [fp, fp, fp, fp, i32, i32, i32, i32]),
         ("tessera_apple_gpu_matmul_gelu_f32", [fp, fp, fp, i32, i32, i32]),
         ("tessera_apple_gpu_matmul_rmsnorm_f32", [fp, fp, fp, i32, i32, i32, flt]),
+        # Sprint 3.3 follow-on — fused SwiGLU MLP block.
+        ("tessera_apple_gpu_swiglu_f32", [fp, fp, fp, fp, fp, i32, i32, i32, i32]),
+        # Sprint 3.3 perf-fusion — fused pre-norm + projection.
+        ("tessera_apple_gpu_rmsnorm_matmul_f32", [fp, fp, fp, fp, i32, i32, i32, flt]),
     ):
         try:
             sym = getattr(lib, name)
@@ -282,4 +286,52 @@ def gpu_matmul_rmsnorm(a: np.ndarray, b: np.ndarray, eps: float = 1e-5) -> np.nd
     out = np.zeros((M, N), np.float32)
     _load().tessera_apple_gpu_matmul_rmsnorm_f32(
         _ptr(a), _ptr(b), _ptr(out), M, N, K, float(eps))
+    return out
+
+
+def gpu_rmsnorm_matmul(x: np.ndarray, w: np.ndarray, eps: float = 1e-5) -> np.ndarray:
+    """Fused pre-norm + projection ``O = rmsnorm(X) @ W`` (unweighted) in ONE
+    Metal/MPSGraph dispatch — the hottest chain in a pre-norm transformer.
+
+    Calls the weighted kernel with gamma=1 so it matches the CPU lane's
+    ``matmul(rmsnorm(x), W)`` composition. ``X:(M,K)  W:(K,N)  ->  O:(M,N)``.
+    """
+    x = _f32(x, "x")
+    w = _f32(w, "w")
+    if x.ndim != 2 or w.ndim != 2 or x.shape[1] != w.shape[0]:
+        raise AppleGpuError(f"gpu_rmsnorm_matmul shapes: rmsnorm{x.shape} @ {w.shape}")
+    M, K = int(x.shape[0]), int(x.shape[1])
+    N = int(w.shape[1])
+    gamma = np.ones((K,), np.float32)
+    out = np.zeros((M, N), np.float32)
+    _load().tessera_apple_gpu_rmsnorm_matmul_f32(
+        _ptr(x), _ptr(gamma), _ptr(w), _ptr(out), M, K, N, float(eps))
+    return out
+
+
+def gpu_swiglu(
+    x: np.ndarray, wg: np.ndarray, wu: np.ndarray, wd: np.ndarray
+) -> np.ndarray:
+    """Fused SwiGLU MLP block ``O = (silu(X @ Wg) ⊙ (X @ Wu)) @ Wd`` in ONE Metal
+    kernel (gate/up projections + silu + elementwise gate + down projection).
+
+    ``X:(M,K)  Wg,Wu:(K,H)  Wd:(H,Kout)  ->  O:(M,Kout)``. Matches the CPU lane's
+    `(silu(matmul(x,wg)) * matmul(x,wu)) @ wd` composition.
+    """
+    x = _f32(x, "x")
+    wg = _f32(wg, "wg")
+    wu = _f32(wu, "wu")
+    wd = _f32(wd, "wd")
+    if x.ndim != 2 or wg.ndim != 2 or wu.ndim != 2 or wd.ndim != 2:
+        raise AppleGpuError("gpu_swiglu operands are all rank-2")
+    M, K = int(x.shape[0]), int(x.shape[1])
+    H = int(wg.shape[1])
+    Kout = int(wd.shape[1])
+    if wg.shape != (K, H) or wu.shape != (K, H) or wd.shape != (H, Kout):
+        raise AppleGpuError(
+            f"gpu_swiglu shape mismatch: X{x.shape} Wg{wg.shape} "
+            f"Wu{wu.shape} Wd{wd.shape}")
+    out = np.zeros((M, Kout), np.float32)
+    _load().tessera_apple_gpu_swiglu_f32(
+        _ptr(x), _ptr(wg), _ptr(wu), _ptr(wd), _ptr(out), M, K, H, Kout)
     return out

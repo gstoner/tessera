@@ -15426,6 +15426,118 @@ extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f16(const uint16_t *A,
   std::memset(O, 0, (size_t)batch * M * P * 2);
 }
 
+//===----------------------------------------------------------------------===//
+// Sprint 3.3 perf-fusion — fused PRE-NORM + PROJECTION in one MPSGraph dispatch.
+//
+//   O = (rmsnorm(X) * gamma) @ W       X:[M,K] gamma:[K] W:[K,N] -> O:[M,N]
+//   rmsnorm(X) = X / sqrt(mean(X^2, axis=-1) + eps)
+//
+// The hottest chain in a pre-norm transformer (the norm feeding a projection).
+// Previously available only via the file-based `mlpkg_author_chain` ML-package
+// path; this is the direct single-call kernel the GraphFn GPU lane fuses into.
+// MPSGraph fuses norm+matmul across the ML pipeline → one dispatch. fp32.
+//===----------------------------------------------------------------------===//
+
+static bool mpsg_run_rmsnorm_matmul_f32(MetalDeviceContext &ctx, const float *X,
+                                        const float *gamma, const float *W,
+                                        float *O, int32_t M, int32_t K,
+                                        int32_t N, float eps) {
+  if (M <= 0 || K <= 0 || N <= 0) return true;
+  @autoreleasepool {
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, (size_t)M * K * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufG, ctx, gamma, (size_t)K * 4);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufW, ctx, W, (size_t)K * N * 4);
+    if (!bufX || !bufG || !bufW) return false;
+    MPSDataType dt = MPSDataTypeFloat32;
+    NSArray<NSNumber *> *xShape = @[ @(M), @(K) ];
+    NSArray<NSNumber *> *gShape = @[ @(K) ];
+    NSArray<NSNumber *> *wShape = @[ @(K), @(N) ];
+    NSString *key =
+        [NSString stringWithFormat:@"rmsnorm_matmul:%d:%d:%d:%a", M, K, N, eps];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *px, *pg, *pw, *y;
+    if (entry) {
+      g = entry[0];
+      px = ((NSArray *)entry[1])[0];
+      pg = ((NSArray *)entry[1])[1];
+      pw = ((NSArray *)entry[1])[2];
+      y = entry[2];
+    } else {
+      g = [MPSGraph new];
+      px = [g placeholderWithShape:xShape dataType:dt name:nil];
+      pg = [g placeholderWithShape:gShape dataType:dt name:nil];
+      pw = [g placeholderWithShape:wShape dataType:dt name:nil];
+      MPSGraphTensor *sq =
+          [g multiplicationWithPrimaryTensor:px secondaryTensor:px name:nil];
+      MPSGraphTensor *ms = [g meanOfTensor:sq axes:@[ @1 ] name:nil];
+      MPSGraphTensor *me =
+          [g additionWithPrimaryTensor:ms
+                       secondaryTensor:[g constantWithScalar:(double)eps
+                                                    dataType:dt]
+                                  name:nil];
+      MPSGraphTensor *denom = [g squareRootWithTensor:me name:nil];
+      MPSGraphTensor *norm =
+          [g divisionWithPrimaryTensor:px secondaryTensor:denom name:nil];
+      MPSGraphTensor *weighted =
+          [g multiplicationWithPrimaryTensor:norm secondaryTensor:pg name:nil];
+      y = [g matrixMultiplicationWithPrimaryTensor:weighted
+                                   secondaryTensor:pw
+                                              name:nil];
+      mpsg_cache_put(key, @[ g, @[ px, pg, pw ], y ]);
+    }
+    MPSGraphTensorData *xd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX
+                                                                    shape:xShape
+                                                                 dataType:dt];
+    MPSGraphTensorData *gd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufG
+                                                                    shape:gShape
+                                                                 dataType:dt];
+    MPSGraphTensorData *wd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufW
+                                                                    shape:wShape
+                                                                 dataType:dt];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{px : xd, pg : gd, pw : wd}
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:O strideBytes:nil];
+    return true;
+  }
+}
+
+static void reference_rmsnorm_matmul_f32(const float *X, const float *gamma,
+                                         const float *W, float *O, int32_t M,
+                                         int32_t K, int32_t N, float eps) {
+  std::vector<float> norm((size_t)K, 0.0f);
+  for (int32_t m = 0; m < M; ++m) {
+    const float *xr = X + (size_t)m * K;
+    double ms = 0.0;
+    for (int32_t k = 0; k < K; ++k) ms += (double)xr[k] * xr[k];
+    ms /= K;
+    double inv = 1.0 / std::sqrt(ms + eps);
+    for (int32_t k = 0; k < K; ++k) norm[k] = (float)(xr[k] * inv * gamma[k]);
+    float *orow = O + (size_t)m * N;
+    for (int32_t n = 0; n < N; ++n) orow[n] = 0.0f;
+    for (int32_t k = 0; k < K; ++k) {
+      float nv = norm[k];
+      const float *wr = W + (size_t)k * N;
+      for (int32_t n = 0; n < N; ++n) orow[n] += nv * wr[n];
+    }
+  }
+}
+
+extern "C" void tessera_apple_gpu_rmsnorm_matmul_f32(const float *X,
+                                                     const float *gamma,
+                                                     const float *W, float *O,
+                                                     int32_t M, int32_t K,
+                                                     int32_t N, float eps) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_rmsnorm_matmul_f32(ctx, X, gamma, W, O, M, K, N, eps))
+    return;
+  reference_rmsnorm_matmul_f32(X, gamma, W, O, M, K, N, eps);
+}
+
 // Forward decl: main already defines the f32 GQA kernel earlier in this TU.
 extern "C" void tessera_apple_gpu_flash_attn_gqa_f32(const float *, const float *, const float *, float *, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, float, int32_t);
 

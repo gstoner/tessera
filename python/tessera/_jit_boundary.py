@@ -1192,16 +1192,23 @@ class GraphFn:
         return outs[0] if len(outs) == 1 else tuple(outs)
 
     def _fuse_for_gpu(self) -> list:
-        """Collapse the canonical fused chains (matmul→softmax→matmul,
-        matmul→softmax, matmul→gelu, matmul→rmsnorm) into single synthetic ops.
+        """Collapse fused chains into single synthetic kernels:
 
-        A chain is fused only when every intermediate has exactly ONE consumer
-        and is not a function result — so fusion can never change an observable
-        value, only how many kernels fire."""
+        * SwiGLU MLP DAG ``(silu(X@Wg) ⊙ (X@Wu)) @ Wd`` → ``__swiglu__``
+        * attention ``softmax(A@B)@C`` → ``__attention__``
+        * ``matmul→softmax`` / ``matmul→gelu`` / ``matmul→rmsnorm``
+
+        A group is fused only when every internal intermediate has exactly ONE
+        consumer and is not a function result, so fusion can never change an
+        observable value — only how many kernels fire. Each group is anchored at
+        its earliest member (all external inputs are available by then) and
+        emitted in original op order via a single pass."""
         ops = self._ops
         returned = {r.ssa for r in self._rets}
         consumers: dict[str, list] = {}
+        producer: dict[str, int] = {}
         for i, op in enumerate(ops):
+            producer[op.out.ssa] = i
             for pos, val in enumerate(op.ins):
                 consumers.setdefault(val.ssa, []).append((i, pos))
 
@@ -1209,60 +1216,124 @@ class GraphFn:
             cs = consumers.get(ssa, [])
             return cs[0] if len(cs) == 1 and ssa not in returned else None
 
-        consumed = [False] * len(ops)
+        def prod(ssa):
+            idx = producer.get(ssa)
+            return (idx, ops[idx]) if idx is not None else None
+
+        def plain_matmul(op):
+            return (
+                op.op == "tessera.matmul"
+                and not op.meta.get("ta", False)
+                and not op.meta.get("tb", False)
+            )
+
+        fused_at: dict[int, _GraphOp] = {}
+        consumed: set[int] = set()
+
+        # ── Pass 1: SwiGLU DAG, anchored at the elementwise gate-multiply ────
+        for i, op in enumerate(ops):
+            if op.op != "tessera.mul":
+                continue
+            c = lone(op.out.ssa)  # mul → down-projection matmul
+            if c is None:
+                continue
+            di, dpos = c
+            down = ops[di]
+            if not plain_matmul(down) or dpos != 0:
+                continue
+            br = [prod(v.ssa) for v in op.ins]
+            if any(b is None for b in br):
+                continue
+            (ai, aop), (bi, bop) = br
+            if aop.op == "tessera.silu" and bop.op == "tessera.matmul":
+                (gi, gop), (ui, uop) = (ai, aop), (bi, bop)
+            elif bop.op == "tessera.silu" and aop.op == "tessera.matmul":
+                (gi, gop), (ui, uop) = (bi, bop), (ai, aop)
+            else:
+                continue
+            gm = prod(gop.ins[0].ssa)  # silu input ← gate-projection matmul
+            if gm is None or not plain_matmul(gm[1]) or not plain_matmul(uop):
+                continue
+            gmi, gmop = gm
+            if gmop.ins[0].ssa != uop.ins[0].ssa:  # gate & up share X
+                continue
+            if any(lone(s) is None for s in
+                   (gmop.out.ssa, gop.out.ssa, uop.out.ssa, op.out.ssa)):
+                continue
+            members = [gmi, gi, ui, i, di]
+            anchor = min(members)
+            fused_at[anchor] = _GraphOp(
+                "__swiglu__",
+                [gmop.ins[0], gmop.ins[1], uop.ins[1], down.ins[1]],
+                down.out, {})
+            consumed.update(m for m in members if m != anchor)
+
+        # ── Pass 1b: pre-norm + projection (rmsnorm → matmul) ────────────────
+        for i, op in enumerate(ops):
+            if i in consumed or i in fused_at or op.op != "tessera.rmsnorm":
+                continue
+            c = lone(op.out.ssa)  # rmsnorm feeds exactly one plain matmul (op0)
+            if c is None or c[0] in consumed or c[0] in fused_at:
+                continue
+            mi, mpos = c
+            mm = ops[mi]
+            if not plain_matmul(mm) or mpos != 0:
+                continue
+            fused_at[i] = _GraphOp(
+                "__rmsnorm_matmul__", [op.ins[0], mm.ins[1]], mm.out,
+                {"eps": op.meta.get("eps", 1e-5)})
+            consumed.add(mi)
+
+        # ── Pass 2: attention / matmul-chain, skipping SwiGLU-claimed ops ────
+        for i, op in enumerate(ops):
+            if i in consumed or i in fused_at or op.op != "tessera.matmul":
+                continue
+            c = lone(op.out.ssa)
+            if c is None or c[0] in consumed or c[0] in fused_at:
+                continue
+            ci = c[0]
+            cons = ops[ci]
+            base = {
+                "a_t": op.meta.get("ta", False),
+                "b_t": op.meta.get("tb", False),
+            }
+            is_last_axis_softmax = (
+                cons.op == "tessera.softmax"
+                and cons.meta.get("axis") == cons.meta.get("rank", 0) - 1
+            )
+            if is_last_axis_softmax:
+                c2 = lone(cons.out.ssa)
+                if c2 is not None and c2[0] not in consumed and c2[0] not in fused_at:
+                    c2i, c2pos = c2
+                    m2 = ops[c2i]
+                    if m2.op == "tessera.matmul" and c2pos == 0 \
+                            and not m2.meta.get("ta", False):
+                        fused_at[i] = _GraphOp(
+                            "__attention__",
+                            [op.ins[0], op.ins[1], m2.ins[1]],
+                            m2.out, {**base, "c_t": m2.meta.get("tb", False)})
+                        consumed.update((ci, c2i))
+                        continue
+                fused_at[i] = _GraphOp(
+                    "__matmul_softmax__", [op.ins[0], op.ins[1]], cons.out, base)
+                consumed.add(ci)
+            elif cons.op == "tessera.gelu":
+                fused_at[i] = _GraphOp(
+                    "__matmul_gelu__", [op.ins[0], op.ins[1]], cons.out, base)
+                consumed.add(ci)
+            elif cons.op == "tessera.rmsnorm":
+                fused_at[i] = _GraphOp(
+                    "__matmul_rmsnorm__", [op.ins[0], op.ins[1]], cons.out,
+                    {**base, "eps": cons.meta.get("eps", 1e-5)})
+                consumed.add(ci)
+
+        # ── Emit in original order ───────────────────────────────────────────
         plan: list = []
         for i, op in enumerate(ops):
-            if consumed[i]:
-                continue
-            if op.op == "tessera.matmul":
-                c = lone(op.out.ssa)
-                if c is not None:
-                    ci = c[0]
-                    cons = ops[ci]
-                    base = {
-                        "a_t": op.meta.get("ta", False),
-                        "b_t": op.meta.get("tb", False),
-                    }
-                    is_last_axis_softmax = (
-                        cons.op == "tessera.softmax"
-                        and cons.meta.get("axis") == cons.meta.get("rank", 0) - 1
-                    )
-                    if is_last_axis_softmax:
-                        c2 = lone(cons.out.ssa)
-                        if c2 is not None:
-                            c2i, c2pos = c2
-                            m2 = ops[c2i]
-                            if (
-                                m2.op == "tessera.matmul"
-                                and c2pos == 0
-                                and not m2.meta.get("ta", False)
-                            ):
-                                plan.append(_GraphOp(
-                                    "__attention__",
-                                    [op.ins[0], op.ins[1], m2.ins[1]],
-                                    m2.out,
-                                    {**base, "c_t": m2.meta.get("tb", False)},
-                                ))
-                                consumed[ci] = consumed[c2i] = True
-                                continue
-                        plan.append(_GraphOp(
-                            "__matmul_softmax__", [op.ins[0], op.ins[1]],
-                            cons.out, base))
-                        consumed[ci] = True
-                        continue
-                    if cons.op == "tessera.gelu":
-                        plan.append(_GraphOp(
-                            "__matmul_gelu__", [op.ins[0], op.ins[1]],
-                            cons.out, base))
-                        consumed[ci] = True
-                        continue
-                    if cons.op == "tessera.rmsnorm":
-                        plan.append(_GraphOp(
-                            "__matmul_rmsnorm__", [op.ins[0], op.ins[1]],
-                            cons.out, {**base, "eps": cons.meta.get("eps", 1e-5)}))
-                        consumed[ci] = True
-                        continue
-            plan.append(op)
+            if i in fused_at:
+                plan.append(fused_at[i])
+            elif i not in consumed:
+                plan.append(op)
         return plan
 
     def _dispatch_gpu(self, node, env, agb):
@@ -1273,6 +1344,15 @@ class GraphFn:
             return np.ascontiguousarray(arr.T) if flag else arr
 
         op, m = node.op, node.meta
+        if op == "__rmsnorm_matmul__":
+            self._last_dispatch.append("rmsnorm_matmul")
+            return agb.gpu_rmsnorm_matmul(
+                val(node.ins[0]), val(node.ins[1]), eps=m.get("eps", 1e-5))
+        if op == "__swiglu__":
+            self._last_dispatch.append("swiglu")
+            return agb.gpu_swiglu(
+                val(node.ins[0]), val(node.ins[1]),
+                val(node.ins[2]), val(node.ins[3]))
         if op == "__attention__":
             self._last_dispatch.append("matmul_softmax_matmul")
             return agb.gpu_attention(

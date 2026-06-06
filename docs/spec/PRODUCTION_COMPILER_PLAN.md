@@ -148,11 +148,49 @@ last_updated: 2026-06-05
 >   **199/199 production-lane tests green** (+10;
 >   `tests/unit/test_production_jit_phase3_graph.py`).
 >
-> Phase 3 remaining toward the DoD (a full transformer block production-grade on
-> Apple GPU, oracle-matched): the SwiGLU MLP chain (`swiglu_f32` fused kernel
-> wiring + `GraphFn` recognition) to complete the block alongside attention,
-> then bf16 (Sprint 3.4). Control-flow on GPU (iterated blocks / decode loop)
-> stays a later sprint — Sprint 3.3 is straight-line tensor algebra.
+> * **Sprint 3.3 follow-on landed 2026-06-06 — SwiGLU DAG fusion + the full
+>   transformer block.** Wired the `swiglu_f32` kernel (`gpu_swiglu`) and taught
+>   the GPU graph executor to recognize the **SwiGLU MLP DAG**
+>   `(silu(X@Wg) ⊙ (X@Wu)) @ Wd` — five primitive ops (two gate/up matmuls, silu,
+>   elementwise mul, down matmul) collapse to ONE fused Metal kernel. `_fuse_for_gpu`
+>   became a two-pass matcher (SwiGLU DAG anchored at the gate-multiply, then the
+>   linear chains), still conservative (only single-use, non-returned
+>   intermediates). **Phase-3 block milestone:** a full pre-norm transformer block
+>   — `h = x + attention(rmsnorm(x)); out = h + swiglu(rmsnorm(h))` — is expressed
+>   as ONE `GraphFn`, routed end-to-end on the Apple GPU back-half (attention →
+>   one `matmul_softmax_matmul`, MLP → one `swiglu`, plus 2 rmsnorm + 2 residual
+>   GPU kernels), and matches the same graph on the CPU lane. **206/206
+>   production-lane tests green** (+7; `tests/unit/test_production_jit_phase3_swiglu.py`).
+>
+> * **Sprint 3.3 perf-fusion landed 2026-06-06 — custom `rmsnorm_matmul` Metal
+>   kernel (pre-norm + projection).** Authored a NEW C ABI kernel
+>   `tessera_apple_gpu_rmsnorm_matmul_f32` in `apple_gpu_runtime.mm` — an
+>   in-memory **MPSGraph** that computes `O = (rmsnorm(X)*γ) @ W` as ONE fused
+>   dispatch (graph-cached + buffer-pool acquired; CPU reference fallback; stub
+>   parity in `apple_gpu_runtime_stub.cpp`; `_SENTINEL_SYMBOL` bumped to it).
+>   Wired `gpu_rmsnorm_matmul` (γ=1 → unweighted, matches the CPU lane) and a
+>   GraphFn fusion pass that folds a single-use `rmsnorm(x)→matmul` into the
+>   kernel (conservative: a norm shared by ≥2 projections, the QKV shape, stays
+>   unfused). Numerically exact (max err 4.8e-7 vs numpy). **214/214
+>   production-lane tests green** (+8;
+>   `tests/unit/test_production_jit_phase3_rmsnorm_matmul.py`). First custom Metal
+>   kernel authored end-to-end in the production lane (compiles on-the-fly from
+>   `apple_gpu_runtime.mm`, no CMake rebuild needed locally).
+>
+> **Fusion opportunities surveyed (grounded in `apple_gpu_runtime.mm`):** the
+> runtime already carries deeper fusion infra not yet wired into the GraphFn lane —
+> (1) ~~`rmsnorm_matmul`~~ **DONE** (Sprint 3.3 perf-fusion above); (2) the `mlpkg_*`
+> Metal-4 op-chain authoring API (`author_chain`/`compile`/`dispatch`) which could
+> compile an *arbitrary* graph to one dispatch (the "graph as one fused unit"
+> ideal, vs. today's per-kernel interpreter); (3) an MTL4 MLP session. A QKV-concat
+> fusion (3 projections sharing the pre-norm input → one matmul + split) is also
+> open. None are blockers for the block milestone (already met); they are the
+> perf-fusion backlog.
+>
+> Phase 3 remaining toward the DoD: bf16 across the GPU back-half + GraphFn
+> (Sprint 3.4). Optional perf-fusion follow-ons above. Control-flow on GPU
+> (iterated blocks / decode loop) stays a later sprint — the GPU GraphFn lane is
+> straight-line tensor algebra.
 > **Scope:** Evolve Tessera from a Python-interpreted prototype into a production
 > MLIR/LLVM-IR compiler, while retaining the Python compiler as the
 > experimentation lane. This document is the committed decision record; it gates

@@ -115,9 +115,28 @@ last_updated: 2026-06-05
 >   un-fused CPU composition — the **D2 fused-chain target override**, proven.
 >   **12/12 GPU tests green** (`tests/unit/test_production_jit_phase3_apple_gpu.py`).
 >
+> * **Sprint 3.2 landed 2026-06-06** — **Apple GPU kernel coverage toward the
+>   full transformer block.** Wired into the production back-half
+>   (`_apple_gpu_backend.py`), each cross-target oracle-matched vs the compiled
+>   CPU lane: `gpu_rmsnorm` / `gpu_layer_norm` (unweighted — GPU kernel called
+>   with γ=1, β=0 to match the CPU lane's unweighted norms), `gpu_silu`
+>   (MPSGraph unary opcode 4), the **fused single-head attention block**
+>   `gpu_attention` (`softmax(A@B)@C` in ONE Metal kernel — the D2 fused-chain
+>   override, == CPU's un-fused matmul→softmax→matmul), and the fused MLP chains
+>   `gpu_matmul_gelu` / `gpu_matmul_rmsnorm`. Capstone: a **pre-norm
+>   self-attention sub-block** (rmsnorm → QKV proj → softmax(QKᵀ/√d)V → residual)
+>   composes entirely from production GPU kernels and stays oracle-clean against
+>   the same composition on the CPU lane. **189/189 production-lane tests green**
+>   (+23; `tests/unit/test_production_jit_phase3_kernels.py`).
+>
 > Phase 3 remaining toward the DoD (a full transformer block production-grade on
-> Apple GPU, oracle-matched): more kernels (norms, the SwiGLU chain, attention
-> fused chains), a `GraphFn`-level `target="apple_gpu"` dispatch, and bf16.
+> Apple GPU, oracle-matched): a `GraphFn`-level `target="apple_gpu"` dispatch
+> (Sprint 3.3 — route a whole multi-op graph to the GPU back-half as one unit,
+> instead of today's per-op `agb.gpu_*` calls), then bf16 (Sprint 3.4). The
+> SwiGLU-chain and attention fused kernels exist in the runtime
+> (`swiglu_f32`, `matmul_softmax_matmul_f32`) and `gpu_attention` now wires the
+> latter; the SwiGLU fused kernel wiring is deferred to the GraphFn-dispatch
+> sprint where the whole MLP routes together.
 > **Scope:** Evolve Tessera from a Python-interpreted prototype into a production
 > MLIR/LLVM-IR compiler, while retaining the Python compiler as the
 > experimentation lane. This document is the committed decision record; it gates

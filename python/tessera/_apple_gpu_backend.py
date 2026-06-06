@@ -47,11 +47,20 @@ def _load():
 
     fp = ctypes.POINTER(ctypes.c_float)
     i32 = ctypes.c_int32
+    i64 = ctypes.c_int64
+    flt = ctypes.c_float
     for name, argtypes in (
         ("tessera_apple_gpu_mps_matmul_f32", [fp, fp, fp, i32, i32, i32]),
         ("tessera_apple_gpu_softmax_f32", [fp, fp, i32, i32]),
         ("tessera_apple_gpu_matmul_softmax_f32", [fp, fp, fp, i32, i32, i32]),
         ("tessera_apple_gpu_gelu_f32", [fp, fp, i32]),
+        # Sprint 3.2 — norms, activations, attention, fused-MLP chains.
+        ("tessera_apple_gpu_rmsnorm_gpu_f32", [fp, fp, fp, i32, i32, flt]),
+        ("tessera_apple_gpu_layer_norm_f32", [fp, fp, fp, fp, i32, i32, flt]),
+        ("tessera_apple_gpu_mpsgraph_unary_f32", [i32, fp, fp, i64]),
+        ("tessera_apple_gpu_matmul_softmax_matmul_f32", [fp, fp, fp, fp, i32, i32, i32, i32]),
+        ("tessera_apple_gpu_matmul_gelu_f32", [fp, fp, fp, i32, i32, i32]),
+        ("tessera_apple_gpu_matmul_rmsnorm_f32", [fp, fp, fp, i32, i32, i32, flt]),
     ):
         try:
             sym = getattr(lib, name)
@@ -131,3 +140,106 @@ def gpu_gelu(x: np.ndarray) -> np.ndarray:
     out = np.zeros_like(flat)
     _load().tessera_apple_gpu_gelu_f32(_ptr(flat), _ptr(out), int(flat.size))
     return out.reshape(x.shape)
+
+
+# ── Sprint 3.2 — norms, activations, attention, fused-MLP chains ─────────────
+
+_MPSG_SILU = 4  # tessera_apple_gpu_mpsgraph_unary opcode: silu = x*sigmoid(x)
+
+
+def gpu_rmsnorm(x: np.ndarray, eps: float = 1e-5) -> np.ndarray:
+    """Unweighted RMSNorm over the last axis on the Apple GPU, rank-2 f32.
+
+    Calls the weighted GPU kernel with gamma=1 so it matches the CPU lane's
+    unweighted ``jit_rmsnorm`` oracle (``x / sqrt(mean(x²) + eps)``).
+    """
+    x = _f32(x, "x")
+    if x.ndim != 2:
+        raise AppleGpuError(f"gpu_rmsnorm is rank-2 (last-axis) only: {x.shape}")
+    rows, cols = int(x.shape[0]), int(x.shape[1])
+    gamma = np.ones((cols,), np.float32)
+    out = np.zeros((rows, cols), np.float32)
+    _load().tessera_apple_gpu_rmsnorm_gpu_f32(
+        _ptr(x), _ptr(gamma), _ptr(out), rows, cols, float(eps))
+    return out
+
+
+def gpu_layer_norm(x: np.ndarray, eps: float = 1e-5) -> np.ndarray:
+    """Unweighted LayerNorm over the last axis (gamma=1, beta=0), rank-2 f32.
+
+    Matches the CPU lane's unweighted ``jit_layer_norm``
+    (``(x - mean) / sqrt(var + eps)``).
+    """
+    x = _f32(x, "x")
+    if x.ndim != 2:
+        raise AppleGpuError(f"gpu_layer_norm is rank-2 (last-axis) only: {x.shape}")
+    rows, cols = int(x.shape[0]), int(x.shape[1])
+    gamma = np.ones((cols,), np.float32)
+    beta = np.zeros((cols,), np.float32)
+    out = np.zeros((rows, cols), np.float32)
+    _load().tessera_apple_gpu_layer_norm_f32(
+        _ptr(x), _ptr(gamma), _ptr(beta), _ptr(out), rows, cols, float(eps))
+    return out
+
+
+def gpu_silu(x: np.ndarray) -> np.ndarray:
+    """SiLU/swish = x*sigmoid(x) on the Apple GPU (MPSGraph), f32. Flattened."""
+    x = _f32(x, "x")
+    flat = np.ascontiguousarray(x.reshape(-1))
+    out = np.zeros_like(flat)
+    _load().tessera_apple_gpu_mpsgraph_unary_f32(
+        _MPSG_SILU, _ptr(flat), _ptr(out), int(flat.size))
+    return out.reshape(x.shape)
+
+
+def gpu_attention(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> np.ndarray:
+    """Fused single-head attention block ``O = softmax(A @ B) @ C`` in ONE Metal
+    kernel (the D2 fused-chain target override).
+
+    Matches the CPU lane's un-fused matmul→softmax→matmul composition. No scale
+    is applied — pre-scale ``A`` by ``1/sqrt(d)`` if you want scaled-dot-product.
+
+    ``A:(M,K)  B:(K,N)  C:(N,P)  ->  O:(M,P)``.
+    """
+    a = _f32(a, "a")
+    b = _f32(b, "b")
+    c = _f32(c, "c")
+    if a.ndim != 2 or b.ndim != 2 or c.ndim != 2:
+        raise AppleGpuError("gpu_attention is rank-2 only")
+    M, K = int(a.shape[0]), int(a.shape[1])
+    N = int(b.shape[1])
+    P = int(c.shape[1])
+    if int(b.shape[0]) != K or int(c.shape[0]) != N:
+        raise AppleGpuError(
+            f"gpu_attention shape mismatch: {a.shape} @ {b.shape} @ {c.shape}")
+    out = np.zeros((M, P), np.float32)
+    _load().tessera_apple_gpu_matmul_softmax_matmul_f32(
+        _ptr(a), _ptr(b), _ptr(c), _ptr(out), M, K, N, P)
+    return out
+
+
+def gpu_matmul_gelu(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Fused ``O = gelu(A @ B)`` in one Metal kernel (tanh-approx gelu)."""
+    a = _f32(a, "a")
+    b = _f32(b, "b")
+    if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
+        raise AppleGpuError(f"gpu_matmul_gelu shapes: {a.shape} @ {b.shape}")
+    M, K = int(a.shape[0]), int(a.shape[1])
+    N = int(b.shape[1])
+    out = np.zeros((M, N), np.float32)
+    _load().tessera_apple_gpu_matmul_gelu_f32(_ptr(a), _ptr(b), _ptr(out), M, N, K)
+    return out
+
+
+def gpu_matmul_rmsnorm(a: np.ndarray, b: np.ndarray, eps: float = 1e-5) -> np.ndarray:
+    """Fused ``O = rmsnorm(A @ B)`` (unweighted, last-axis) in one Metal kernel."""
+    a = _f32(a, "a")
+    b = _f32(b, "b")
+    if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
+        raise AppleGpuError(f"gpu_matmul_rmsnorm shapes: {a.shape} @ {b.shape}")
+    M, K = int(a.shape[0]), int(a.shape[1])
+    N = int(b.shape[1])
+    out = np.zeros((M, N), np.float32)
+    _load().tessera_apple_gpu_matmul_rmsnorm_f32(
+        _ptr(a), _ptr(b), _ptr(out), M, N, K, float(eps))
+    return out

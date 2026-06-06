@@ -1627,6 +1627,67 @@ def run_graph_cond_f32(
     return out if rc == 1 else None
 
 
+def run_graph_while_f32(
+    arg_arrays: "list",
+    arg_shapes: "list[tuple[int, ...]]",
+    carry_arg_index: int,
+    max_iters: int,
+    body_ops: "list[dict]",
+    body_out_id: int,
+    cond_ops: "list[dict]",
+    cond_out_id: int,
+    out_shape: "tuple[int, ...]",
+):
+    """Run a BOUNDED ``while`` as ONE MPSGraph ``forLoop`` with select-masking
+    (PK8f / Phase-G G-A.3): ``for i in range(max_iters): pred = cond(carry)>0;
+    carry = pred ? body(carry) : carry`` → the final carry. MPSGraph's native
+    ``while`` is unstable, so a max-iter-capped while lowers to forLoop+select.
+    Body and cond are straight-line op-lists over args + carry (ids:
+    ``0..len(args)-1`` args, ``len(args)`` carry, ``len(args)+1+j`` op ``j``);
+    ``cond_out_id`` is the predicate source. Returns the final carry as an
+    ``np.float32`` array, or ``None`` (runtime unavailable / malformed)."""
+    import numpy as np
+
+    if apple_gpu_runtime() is None:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_run_graph_while_f32",
+        (ctypes.c_int32, ctypes.POINTER(ctypes.c_void_p),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_float), ctypes.c_int32,
+         ctypes.c_int32, ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_float), ctypes.c_int32,
+         ctypes.POINTER(ctypes.c_float)),
+        restype=ctypes.c_int32,
+    )
+    if fn is None:
+        return None
+    bflat = _flatten_ops(body_ops)
+    cflat = _flatten_ops(cond_ops)
+    if bflat is None or cflat is None:
+        return None
+    bc, bi0, bi1, bia, bfa, bnb = bflat
+    cc, ci0, ci1, cia, cfa, cnb = cflat
+    na = len(arg_shapes)
+    cargs = [np.ascontiguousarray(np.asarray(a, dtype=np.float32)) for a in arg_arrays]
+    ptrs = (ctypes.c_void_p * na)(
+        *[ctypes.cast(a.ctypes.data, ctypes.c_void_p) for a in cargs])
+    rows = (ctypes.c_int32 * na)(*[int(s[0]) for s in arg_shapes])
+    cols = (ctypes.c_int32 * na)(
+        *[int(s[1]) if len(s) > 1 else 0 for s in arg_shapes])
+    out = np.zeros(out_shape, dtype=np.float32)
+    rc = int(fn(ctypes.c_int32(na), ptrs, rows, cols,
+                ctypes.c_int32(int(carry_arg_index)), ctypes.c_int32(int(max_iters)),
+                ctypes.c_int32(bnb), bc, bi0, bi1, bia, bfa, ctypes.c_int32(int(body_out_id)),
+                ctypes.c_int32(cnb), cc, ci0, ci1, cia, cfa, ctypes.c_int32(int(cond_out_id)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_float))))
+    return out if rc == 1 else None
+
+
 __all__ = [
     "ERROR_NONE",
     "ERROR_OS_UNAVAILABLE",
@@ -1648,6 +1709,7 @@ __all__ = [
     "author_graph_package",
     "run_graph_loop_f32",
     "run_graph_cond_f32",
+    "run_graph_while_f32",
     "GRAPH_OP",
     "AUTHOR_CHAINS",
     "AUTHOR_OPS",

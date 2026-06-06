@@ -11786,6 +11786,113 @@ extern "C" int32_t tessera_apple_gpu_run_graph_cond_f32(
   return -1;
 }
 
+// PK8f — run a BOUNDED `while` as ONE MPSGraph `forLoop` with select-masking
+// (Phase-G G-A.3). MPSGraph's native `while` SIGSEGVs under churn (see
+// docs/apple_gpu_control_flow_lowering.md), so a max-iter-capped while lowers to
+// a forLoop where each step freezes the carry once the predicate goes false:
+//   for i in 0..max_iters:
+//     next = body(carry, args);  pred = cond(carry, args) > 0
+//     carry = select(pred, next, carry)        // pred broadcasts over the carry
+// → final carry. Both body and cond are recorded straight-line op-lists over the
+// args + carry (ids: 0..n_args-1 args, n_args carry, n_args+1+j op j). f32.
+// Returns 1 / <=0 error.
+extern "C" int32_t tessera_apple_gpu_run_graph_while_f32(
+    int32_t n_args, const void *const *arg_ptrs, const int32_t *arg_rows,
+    const int32_t *arg_cols, int32_t carry_arg_index, int32_t max_iters,
+    int32_t n_body_ops, const int32_t *body_codes, const int32_t *body_in0,
+    const int32_t *body_in1, const int32_t *body_iattr, const float *body_fattr,
+    int32_t body_out_id, int32_t n_cond_ops, const int32_t *cond_codes,
+    const int32_t *cond_in0, const int32_t *cond_in1, const int32_t *cond_iattr,
+    const float *cond_fattr, int32_t cond_out_id, float *out) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;  // caller falls back to host
+  if (n_args <= 0 || max_iters <= 0 || carry_arg_index < 0 ||
+      carry_arg_index >= n_args || n_body_ops < 0 || n_cond_ops < 0 ||
+      !arg_ptrs || !arg_rows || !arg_cols || !out)
+    return -2;
+  if (@available(macOS 14.0, iOS 17.0, *)) {
+    @autoreleasepool {
+      MPSDataType dt = MPSDataTypeFloat32;
+      MPSGraph *g = [MPSGraph new];
+      NSMutableArray<MPSGraphTensor *> *phs =
+          [NSMutableArray arrayWithCapacity:n_args];
+      NSMutableArray<NSArray<NSNumber *> *> *shapes =
+          [NSMutableArray arrayWithCapacity:n_args];
+      for (int i = 0; i < n_args; ++i) {
+        NSArray<NSNumber *> *shp = (arg_cols[i] > 0)
+                                       ? @[ @(arg_rows[i]), @(arg_cols[i]) ]
+                                       : @[ @(arg_rows[i]) ];
+        [phs addObject:[g placeholderWithShape:shp dataType:dt name:nil]];
+        [shapes addObject:shp];
+      }
+      __block int32_t err = 0;
+      MPSGraphTensor *lb = [g constantWithScalar:0 dataType:MPSDataTypeInt32];
+      MPSGraphTensor *ub = [g constantWithScalar:max_iters dataType:MPSDataTypeInt32];
+      MPSGraphTensor *st = [g constantWithScalar:1 dataType:MPSDataTypeInt32];
+      MPSGraphTensor *zero = [g constantWithScalar:0.0 dataType:dt];
+      NSArray<MPSGraphTensor *> *results = [g
+          forLoopWithLowerBound:lb
+                     upperBound:ub
+                           step:st
+           initialBodyArguments:@[ phs[carry_arg_index] ]
+                           body:^NSArray<MPSGraphTensor *> *(
+                               MPSGraphTensor *index,
+                               NSArray<MPSGraphTensor *> *bodyArgs) {
+                             (void)index;
+                             MPSGraphTensor *carry = bodyArgs[0];
+                             NSArray *extra = @[ carry ];
+                             MPSGraphTensor *next = mpsg_build_branch(
+                                 g, phs, n_args, extra, dt, n_body_ops, body_codes,
+                                 body_in0, body_in1, body_iattr, body_fattr,
+                                 body_out_id);
+                             MPSGraphTensor *c = mpsg_build_branch(
+                                 g, phs, n_args, extra, dt, n_cond_ops, cond_codes,
+                                 cond_in0, cond_in1, cond_iattr, cond_fattr,
+                                 cond_out_id);
+                             if (!next || !c) { err = -6; return @[ carry ]; }
+                             MPSGraphTensor *pred =
+                                 [g greaterThanWithPrimaryTensor:c
+                                                 secondaryTensor:zero
+                                                            name:nil];
+                             MPSGraphTensor *nextCarry =
+                                 [g selectWithPredicateTensor:pred
+                                          truePredicateTensor:next
+                                         falsePredicateTensor:carry
+                                                         name:nil];
+                             return @[ nextCarry ];
+                           }
+                           name:nil];
+      if (err != 0) return err;
+      if (!results || results.count < 1) return -3;
+      MPSGraphTensor *outT = results[0];
+      std::vector<MetalBufferGuard> guards;
+      guards.reserve(n_args);
+      NSMutableDictionary *feeds = [NSMutableDictionary dictionary];
+      for (int i = 0; i < n_args; ++i) {
+        NSArray<NSNumber *> *shp = shapes[i];
+        size_t elems = 1;
+        for (NSNumber *n in shp) elems *= (size_t)n.intValue;
+        id<MTLBuffer> buf =
+            metal_buffer_acquire_with_bytes(ctx, arg_ptrs[i], elems * 4);
+        if (!buf) return -3;
+        guards.emplace_back(ctx, buf, elems * 4);
+        feeds[phs[i]] = [[MPSGraphTensorData alloc] initWithMTLBuffer:buf
+                                                                shape:shp
+                                                             dataType:dt];
+      }
+      NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                              feeds:feeds
+                                      targetTensors:@[ outT ]
+                                   targetOperations:nil];
+      MPSGraphTensorData *od = res[outT];
+      if (!od) return -3;
+      [[od mpsndarray] readBytes:out strideBytes:nil];
+      return 1;
+    }
+  }
+  return -1;
+}
+
 // PK8b — author a *fused multi-op* `.mtlpackage` by composing MPSGraph nodes
 // into a single serialized executable. MPSGraph fuses the chain across the ML
 // pipeline, so the whole chain runs as one dispatch — the packaged equivalent

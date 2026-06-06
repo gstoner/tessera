@@ -901,6 +901,7 @@ class GraphFn:
         # for_loop (G-A, MPSGraph forLoop) and/or a cond (G-A.2, MPSGraph if).
         self._loop: Any = None
         self._cond: Any = None
+        self._while: Any = None
 
     def _t(self, shape: tuple[int, ...]) -> str:
         return "tensor<" + "x".join(str(s) for s in shape) + f"x{self._elem}>"
@@ -1124,6 +1125,44 @@ class GraphFn:
         cur.append("  }")
         return _Val(res, tval.shape)
 
+    def while_loop(self, max_iters: int, cond, body, init: _Val):
+        """Bounded ``while``: for up to ``max_iters`` steps, while
+        ``cond(carry) > 0`` keep updating ``carry = body(carry)``; return the
+        final carry. Lowers to an MPSGraph ``forLoop`` + select-masking on the
+        apple_gpu lane (MPSGraph's native ``while`` is unstable) — once the
+        predicate goes false the carry freezes. ``cond(carry) -> _Val`` (the
+        predicate source; ``> 0`` means continue), ``body(carry) -> _Val`` (the
+        next carry, same shape). v1: apple_gpu only (no CPU scf.while lane), f32,
+        init must be a function arg."""
+        if self._target != "apple_gpu":
+            raise TesseraJitError("while_loop is apple_gpu-only (no CPU scf.while lane)")
+        self._has_control_flow = True
+        self._idx += 1
+        carry_ssa = f"%wcarry{self._idx}"
+        cv = _Val(carry_ssa, init.shape)
+        body_start = len(self._ops)
+        nxt = body(cv)
+        if nxt.shape != init.shape:
+            raise TesseraJitError("while_loop body must preserve the carry shape")
+        cond_start = len(self._ops)
+        pred = cond(cv)
+        res = self._fresh()
+        if self._while is None:
+            self._while = {
+                "max_iters": int(max_iters),
+                "carry_ssa": carry_ssa,
+                "init_ssa": init.ssa,
+                "next_carry_ssa": nxt.ssa,
+                "pred_ssa": pred.ssa,
+                "result_ssa": res,
+                "body_ops": list(self._ops[body_start:cond_start]),
+                "cond_ops": list(self._ops[cond_start:]),
+                "carry_shape": tuple(init.shape),
+            }
+        else:
+            self._while = {"_unsupported": "more than one while_loop"}
+        return _Val(res, init.shape)
+
     def write_row(self, buffer, value, row: int):
         """Functional KV-cache update: buffer (T,D) with row `row` set to value
         (1,D). Returns the updated buffer (thread it for the next step)."""
@@ -1165,13 +1204,15 @@ class GraphFn:
         (matmul→softmax→matmul, matmul→softmax, matmul→gelu, matmul→rmsnorm)
         collapsed to single fused Metal kernels."""
         if self._target == "apple_gpu":
-            if self._loop is not None and self._cond is not None:
+            if sum(x is not None for x in (self._loop, self._cond, self._while)) > 1:
                 raise TesseraJitError(
-                    "apple_gpu GraphFn: mixing for_loop and cond is not supported (v1)")
+                    "apple_gpu GraphFn: mixing for_loop/cond/while is not supported (v1)")
             if self._loop is not None:
                 return self._run_apple_gpu_loop(arrays)
             if self._cond is not None:
                 return self._run_apple_gpu_cond(arrays)
+            if self._while is not None:
+                return self._run_apple_gpu_while(arrays)
             return self._run_apple_gpu(arrays)
         if not self._rets:
             raise TesseraJitError("GraphFn has no return value (call ret())")
@@ -1344,6 +1385,61 @@ class GraphFn:
             raise TesseraJitError(
                 "apple_gpu GraphFn cond dispatch failed / runtime unavailable")
         self._last_dispatch = ["cond"]  # one MPSGraph if dispatch
+        return out.copy()
+
+    # ── Apple GPU bounded-while lane (Phase-G G-A.3) ─────────────────────────
+    #
+    # `(args) → while_loop(max, cond, body, init=arg) → ret(result)` authors ONE
+    # MPSGraph `forLoop` with select-masking (carry freezes once cond goes false)
+    # — MPSGraph's native `while` is unstable. f32, init must be a function arg.
+
+    def _run_apple_gpu_while(self, arrays):
+        from tessera import apple_mlpkg as mp
+
+        wl = self._while
+        if "_unsupported" in wl:
+            raise TesseraJitError(
+                f"apple_gpu GraphFn while: {wl['_unsupported']} not supported (v1)")
+        if self._elem != "f32":
+            raise TesseraJitError("apple_gpu GraphFn while is f32-only (bf16 follow-on)")
+        if len(self._rets) != 1 or self._rets[0].ssa != wl["result_ssa"]:
+            raise TesseraJitError(
+                "apple_gpu GraphFn while must return exactly the while result")
+        if len(arrays) != len(self._args):
+            raise TesseraJitError(
+                f"expected {len(self._args)} args, got {len(arrays)}")
+        ins = []
+        for (ssa, sh), arr in zip(self._args, arrays):
+            a = np.ascontiguousarray(np.asarray(arr))
+            if a.dtype != np.float32 or tuple(a.shape) != sh:
+                raise TesseraJitError(
+                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, "
+                    f"want float32{sh}")
+            ins.append(a)
+        arg_index = {ssa: k for k, (ssa, _sh) in enumerate(self._args)}
+        if wl["init_ssa"] not in arg_index:
+            raise TesseraJitError(
+                "apple_gpu GraphFn while: the init carry must be a function arg (v1)")
+        n_args = len(self._args)
+        idof0 = dict(arg_index)
+        idof0[wl["carry_ssa"]] = n_args
+        body_ops, blocal = self._serialize_branch(
+            wl["body_ops"], idof0, n_args + 1, "while body")
+        cond_ops, clocal = self._serialize_branch(
+            wl["cond_ops"], idof0, n_args + 1, "while cond")
+        body_out_id = blocal.get(wl["next_carry_ssa"])
+        cond_out_id = clocal.get(wl["pred_ssa"])
+        if body_out_id is None or cond_out_id is None:
+            raise TesseraJitError(
+                "apple_gpu GraphFn while: body/cond output is not in scope")
+        arg_shapes = [tuple(sh) for (_ssa, sh) in self._args]
+        out = mp.run_graph_while_f32(
+            ins, arg_shapes, arg_index[wl["init_ssa"]], wl["max_iters"],
+            body_ops, body_out_id, cond_ops, cond_out_id, wl["carry_shape"])
+        if out is None:
+            raise TesseraJitError(
+                "apple_gpu GraphFn while dispatch failed / runtime unavailable")
+        self._last_dispatch = ["while"]  # one MPSGraph forLoop+select dispatch
         return out.copy()
 
     # ── Whole-graph lane: compile the GraphFn to ONE MPSGraph dispatch ───────

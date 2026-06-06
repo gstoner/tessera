@@ -286,10 +286,26 @@ last_updated: 2026-06-05
 >   a straight-line op-list over the args (both same shape). Oracle: CPU `scf.if`
 >   lane — `silu(a)` vs `relu(b)`, `a@W` vs `b@W`, branch-returns-arg all match.
 >   Mixing for_loop + cond is rejected (v1). **272/272 production-lane tests green**
->   (+7; `tests/unit/test_production_jit_phase3_cond.py`). Remaining Phase-G rungs:
->   variable-trip `while` (MSL route — MPSGraph `while` SIGSEGVs), the Graph-IR
->   `tessera.control.*` op + `tessera-lower-to-apple_gpu` pass (G-B), and
->   `@jit(target="apple_gpu")` of `tessera.control.*` (G-C); bf16 loops/conds.
+>   (+7; `tests/unit/test_production_jit_phase3_cond.py`).
+> * **G-A.3 — GraphFn bounded `while` landed 2026-06-06.** `GraphFn(target=
+>   "apple_gpu").while_loop(max_iters, cond, body, init)` authors a max-iter-capped
+>   while as ONE MPSGraph `forLoop` with **select-masking** (MPSGraph's native
+>   `while` SIGSEGVs under churn): each step computes `next=body(carry)`,
+>   `pred=cond(carry)>0`, `carry=select(pred, next, carry)` — once the predicate
+>   goes false the carry freezes. New C ABI `tessera_apple_gpu_run_graph_while_f32`
+>   (reuses `mpsg_build_branch` with the carry as `extra`; `selectWithPredicateTensor:`
+>   + `greaterThanWithPrimaryTensor:`, both grounded in the SDK header). No CPU
+>   `scf.while` lane, so the oracle is a numpy masking-while — decay-stops,
+>   runs-all-iters, and stops-immediately cases are **bit-exact**. v1: apple_gpu
+>   only, f32, init a function arg. **280/280 production-lane tests green** (+8;
+>   `tests/unit/test_production_jit_phase3_while.py`).
+>
+> **G-A series COMPLETE** — the in-graph control-flow primitives (bounded
+> `for_loop`, `cond`, bounded `while`) all lower to single MPSGraph dispatches via
+> direct `runWithMTLCommandQueue` (the package/MLEncoder path can't run control
+> flow). Remaining Phase-G: the Graph-IR `tessera.control.*` op +
+> `tessera-lower-to-apple_gpu` pass (G-B) so `@jit` (not just `GraphFn`) reaches
+> these; `@jit(target="apple_gpu")` of `tessera.control.*` (G-C); bf16 control flow.
 >
 > Next: Phase 4 (NVIDIA correctness-first).
 >

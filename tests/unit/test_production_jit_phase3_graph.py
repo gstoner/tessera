@@ -199,7 +199,7 @@ def test_graph_gpu_rejects_mixed_control_flow():
     c, w = g.arg((1, 8)), g.arg((8, 8))
     looped = g.for_loop(2, init=c, body=lambda x: g.matmul(x, w))
     g.ret(g.cond(flag, lambda: looped, lambda: c))
-    with pytest.raises(TesseraJitError, match="mixing for_loop and cond"):
+    with pytest.raises(TesseraJitError, match="mixing for_loop"):
         g.run(np.ones((1,), np.float32), np.ones((1, 8), np.float32),
               np.ones((8, 8), np.float32))
 

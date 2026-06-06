@@ -344,6 +344,21 @@ class JitFn:
         self.deterministic = deterministic
         self.seed = seed
         self.target = target
+        # Phase-G close-out (Phase A) — detect a single-carry bounded loop so an
+        # AST ``@jit(target="apple_gpu")`` for-loop executes through the GraphFn
+        # ``tessera.control_for`` path (see ``graphfn_bridge``). ``None`` for
+        # every non-matching function, which keeps the existing dispatch path.
+        # Pure structural inspection; a detect bug must not break decoration of
+        # unrelated functions, so it is best-effort here. The hard diagnostic for
+        # an untranslatable body op fires later, at build/run time (Decision #21).
+        self._loop_shape: Optional[Any] = None
+        self._bridge_cache: Dict[Any, Any] = {}
+        try:
+            from .graphfn_bridge import detect_loop_fn
+
+            self._loop_shape = detect_loop_fn(graph_ir, target)
+        except Exception:
+            self._loop_shape = None
         self.attn_config = attn_config
         self.cpu_plan = cpu_plan
         self.compile_bundle = compile_bundle
@@ -583,6 +598,14 @@ class JitFn:
         """
         self._enforce_call_time_constraints(args, kwargs)
         try:
+            # Phase-G close-out (Phase A) — a detected single-carry bounded loop
+            # on apple_gpu executes via the GraphFn control_for path. An
+            # untranslatable body op raises a stable diagnostic here (Decision
+            # #21); it never silently falls back to host Python.
+            if self._loop_shape is not None:
+                from .graphfn_bridge import run_bridged_loop
+
+                return run_bridged_loop(self, args, kwargs)
             if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
                 if self.execution_kind == "native_cpu":
                     return self._native_cpu_fast_call(args, kwargs)

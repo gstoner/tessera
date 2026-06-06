@@ -353,17 +353,39 @@ last_updated: 2026-06-05
 >   the un-executed GraphFn for IR inspection. **295/295 production-lane tests
 >   green** (+9; `tests/unit/test_production_jit_phase3_fori_frontend.py`).
 >
->   *Front-end gap (follow-on):* the AST `@tessera.jit` decorator runs through the
->   canonical-compile lane (`jit.py` → `compile_bundle`), which does not yet share
->   a tracing protocol with the executing GraphFn lane; wiring a Python `for` /
->   `tessera.control.fori_loop` in a decorated fn straight to `control_for` is a
->   separate canonical-lane bridge (`graph_ir.py visit_For` carry-detection +
->   apple_gpu canonical dispatch → run_graph_loop). G-C delivers the executing
->   front-end via the explicit `jit_fori_loop` API today.
+> * **Close-out Phase A — AST `@tessera.jit` → `control_for` bridge landed
+>   2026-06-06.** A plain Python `for` loop in `@jit(target="apple_gpu")` now
+>   lowers to the GraphFn `control_for` path and executes on Apple GPU — no
+>   explicit `jit_fori_loop` call needed:
+>   ```python
+>   @jit(target="apple_gpu")
+>   def f(x, w):
+>       for _ in range(N):
+>           x = ts.ops.silu(ts.ops.matmul(x, w))
+>       return x
+>   ```
+>   New `python/tessera/compiler/graphfn_bridge.py` does an **IR-to-IR
+>   translation**: `detect_loop_fn` reads the `@jit` graph_ir op-list (loop body
+>   inline between `tessera.scf.for.{begin,end}` markers), recovers the single
+>   tensor carry structurally (the one arg both read in and re-bound by the body),
+>   and `build_graphfn` replays the body ops through the GraphFn builder into
+>   `for_loop` → `run_via_target_ir`. Wired into `JitFn.__init__` (decoration-time
+>   detect, cached per arg-shape) + `__call__` (dispatch before the existing
+>   apple_gpu branch). **Dispatch policy (Decision #21):** auto-route any matching
+>   loop; if the shape matches but a body op has no GraphFn builder (e.g.
+>   `tessera.sqrt`/conv/einsum) raise a stable diagnostic naming the op — never
+>   silent host fallback. Reuses the entire G-A/G-B/G-C machinery; no new C ABI /
+>   ODS surface. Single tensor carry, loop-is-the-whole-function, f32, v1.
+>   **+9 tests** (`tests/unit/test_jit_apple_gpu_loop_bridge.py`: detect, numeric
+>   vs numpy, control_loop dispatch + per-shape cache, hard diagnostic,
+>   non-matching → existing path); broad jit/compiler sweep (843) + production
+>   lane (315) green.
 >
-> Remaining Phase-G: AST `@tessera.jit` ↔ GraphFn canonical-lane bridge;
-> `control_if`/`control_while` Graph-IR ops + lowerings; bf16 control flow;
-> `scan`/`while` front-ends (ys-collection / dynamic trip).
+> Remaining close-out (plan `valiant-tickling-nest`): **B** bf16 control flow
+> (host upcast); **C** `control_if` Target-IR op + lowering + AST `if` bridge;
+> **D** `control_while` Target-IR op + lowering + AST `while` bridge (reuses the
+> existing `run_graph_while_f32`); **E** `scan`/`while` front-ends (ys-collection /
+> dynamic trip). Phase A (AST `for` bridge) ✅ landed.
 >
 > Next: Phase 4 (NVIDIA correctness-first).
 >

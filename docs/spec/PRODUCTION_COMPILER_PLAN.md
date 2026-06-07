@@ -489,10 +489,22 @@ last_updated: 2026-06-05
 >   `add(matmul, x)` + `rmsnorm`, including the cross-reference to the original
 >   input the AST bridge can't express as one shape — matches numpy at 1.2e-7.
 >   **+12 tests** `tests/unit/test_trace_f1.py`; 813 autodiff/tape/production/vjp/jvp
->   tests green (no eager/tape regression from the shared hook). Next: F2
->   control-flow trace-awareness (`control.fori_loop`/`cond`/`while_loop` →
->   `control_for`/`if`/`while`), then F3–F5 (arbitrary-nesting Layer-2, `@jit`
->   trace-by-running, retire the AST bridge).
+>   tests green (no eager/tape regression from the shared hook).
+>
+> * **Phase F2 — control-flow trace-awareness landed 2026-06-06.** Under a trace,
+>   `tessera.control.fori_loop` / `cond` / `while_loop` (control.py) detect the
+>   active tracer and run their body/branches in a **nested trace**, emitting a
+>   `tessera.control_for` / `control_if` / `control_while` IROp that carries the
+>   sub-trace (body/branch op-lists + carry/flag SSAs) in its kwargs. `to_graphfn`
+>   replays each region through `GraphFn.for_loop`/`cond`/`while_loop`. The carry
+>   is captured by natural Python variable flow (the body's returned Tracer) — no
+>   SSA/AST heuristics. E2E: traced fori (7e-10), cond both branches (~1e-8), while
+>   (0.0) vs numpy. `while_loop` needs an explicit `max_steps` bound under trace.
+>   **+10 tests** `tests/unit/test_trace_f2.py`. (Surrounding straight-line code
+>   *around* a construct still hits GraphFn's "return == construct result / init ==
+>   arg" executor constraints — generalizing that is F3.) Next: F3 (generalize the
+>   GraphFn loop/cond executors for arbitrary nesting + surrounding code), F4
+>   (`@jit` trace-by-running), F5 (retire the AST bridge).
 >
 > Next: Phase 4 (NVIDIA correctness-first).
 >

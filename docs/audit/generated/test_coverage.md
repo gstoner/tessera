@@ -7,28 +7,28 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **435** ops in `primitive_coverage` registry.
-- **1709** total Python-test references, **485** total lit-fixture references.
-- **122** ops have **zero** references in either test surface.
-- **229** ops have ≤1 reference ("thinly tested").
+- **1737** total Python-test references, **485** total lit-fixture references.
+- **119** ops have **zero** references in either test surface.
+- **226** ops have ≤1 reference ("thinly tested").
 - **33** ops have ≥10 references ("well tested").
-- **49** ops have at least one associated `pytest.raises` negative test.
+- **51** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  222 |  141 |  363 |  11 | `bf16`, `f16`, `f32`, `fp16` … |
+| `matmul` |  232 |  141 |  373 |  12 | `bf16`, `f16`, `f32`, `fp16` … |
 | `flash_attn` |   76 |   44 |  120 |   4 | `bf16`, `f32`, `fp16`, `fp32` … |
 | `softmax` |   61 |   35 |   96 |   3 | `bf16`, `f16`, `f32`, `fp16` … |
-| `relu` |   82 |    3 |   85 |   6 | `bf16`, `f16`, `f32`, `fp32` |
+| `relu` |   85 |    3 |   88 |   7 | `bf16`, `f16`, `f32`, `fp32` |
 | `gemm` |   69 |    2 |   71 |   6 | `bf16`, `f16`, `f32`, `fp16` … |
 | `reduce` |   66 |    0 |   66 |   6 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
 | `mul` |   62 |    0 |   62 |   6 | `fp16`, `fp32`, `fp4_e2m1`, `fp6_e2m3` … |
 | `attn_local_window_2d` |   31 |   25 |   56 |   1 | `fp32` |
 | `add` |   50 |    2 |   52 |   5 | `bf16`, `f16`, `f32`, `fp32` |
 | `cholesky` |   14 |   30 |   44 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
+| `silu` |   38 |    2 |   40 |   2 | `bf16`, `f16`, `f32`, `fp16` … |
 | `rmsnorm` |   34 |    4 |   38 |   1 | `bf16`, `fp32` |
-| `silu` |   32 |    2 |   34 |   1 | `bf16`, `f16`, `f32`, `fp16` … |
 | `linear_attn` |   24 |    8 |   32 |   1 |  |
 | `gelu` |   21 |   10 |   31 |   1 | `bf16`, `f16`, `f32`, `fp16` … |
 | `cast` |    4 |   22 |   26 |   0 | `fp32` |
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **229** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **226** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -94,7 +94,6 @@ These **229** ops have at most one test reference across the whole test surface.
 | `complex_log` |    0 |    0 |    0 |
 | `complex_pow` |    0 |    0 |    0 |
 | `complex_sqrt` |    0 |    0 |    0 |
-| `cond` |    0 |    0 |    0 |
 | `conformal_jacobian` |    0 |    0 |    0 |
 | `contrastive_divergence_loss` |    0 |    0 |    0 |
 | `cos` |    1 |    0 |    1 |
@@ -104,8 +103,9 @@ These **229** ops have at most one test reference across the whole test surface.
 | `cross_ratio` |    0 |    0 |    0 |
 | `cummax` |    1 |    0 |    1 |
 | `cummin` |    1 |    0 |    1 |
+| `custom_batching` |    0 |    0 |    0 |
 
-_(169 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(166 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,12 +117,12 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**229** ops have ≤1 direct test reference.  They break down as:
+**226** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
 | `covered_by_family`      |   94 | Tested via a parent op or family wrapper |
-| `structural_only`        |  131 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `structural_only`        |  128 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
 | `deprecated_or_internal` |    0 | Not public test debt |
@@ -184,7 +184,7 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 
 _(64 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
-## `structural_only` — 131 ops
+## `structural_only` — 128 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
@@ -211,7 +211,6 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `checkpoint` | category default for 'transform' |
 | `chunk` | unclassified — defaults to structural_only |
 | `clamp` | unclassified — defaults to structural_only |
-| `cond` | category default for 'control_flow' |
 | `cosine_warmup_lr` | category default for 'schedule' |
 | `cummax` | unclassified — defaults to structural_only |
 | `cummin` | unclassified — defaults to structural_only |
@@ -220,5 +219,6 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `custom_jvp` | category default for 'extension' |
 | `custom_lowering` | category default for 'extension' |
 | `custom_primitive` | category default for 'extension' |
+| `custom_vjp` | category default for 'extension' |
 
-_(101 additional structural ops omitted.)_
+_(98 additional structural ops omitted.)_

@@ -168,6 +168,100 @@ class TraceBuilder:
         ))
         return Tracer(out_shape, dtype, ssa)
 
+    def _trace_region(self, run) -> Any:
+        """Run ``run()`` with a fresh sub-builder active (sharing this builder's
+        SSA counter so names stay globally unique) and return ``(sub_body, value)``
+        where ``sub_body`` is the recorded op-list and ``value`` is whatever
+        ``run`` returned (a Tracer or tuple of Tracers)."""
+        sub = TraceBuilder()
+        sub._counter = self._counter
+        token = _trace_hook.set_active_tracer(sub)
+        try:
+            value = run()
+        finally:
+            _trace_hook.reset_active_tracer(token)
+        self._counter = sub._counter
+        return sub.body, value
+
+    def record_for_loop(self, lower: int, upper: int, body_fun, init_carry
+                        ) -> "Tracer":
+        """Trace a bounded ``fori_loop`` into a ``tessera.control_for`` IROp.
+        ``body_fun(i, carry)`` is traced once with ``i=0`` (the control_for ABI is
+        index-independent); the carry is captured by the body's returned Tracer."""
+        if not isinstance(init_carry, Tracer):
+            raise TesseraTraceError("traced fori_loop: init_val must be a Tracer")
+        trip = int(upper) - int(lower)
+        carry_ssa = self._fresh()
+        carry = Tracer(init_carry.shape, init_carry.dtype, carry_ssa)
+        sub_body, nxt = self._trace_region(lambda: body_fun(0, carry))
+        if not isinstance(nxt, Tracer):
+            raise TesseraTraceError("traced fori_loop: body must return a Tracer")
+        if nxt.shape != init_carry.shape:
+            raise TesseraTraceError(
+                "traced fori_loop: body must preserve the carry shape")
+        res = self._fresh()
+        self.body.append(IROp(
+            result=res, op_name="tessera.control_for",
+            operands=[f"%{init_carry.ssa}"],
+            operand_types=[_ty(init_carry.shape, init_carry.dtype)],
+            result_type=_ty(init_carry.shape, init_carry.dtype),
+            kwargs={"_region": "for", "_trip": trip, "_carry_ssa": carry_ssa,
+                    "_next_ssa": nxt.ssa, "_body": sub_body},
+        ))
+        return Tracer(init_carry.shape, init_carry.dtype, res)
+
+    def record_cond(self, pred, true_fun, false_fun, operands) -> "Tracer":
+        """Trace a ``cond`` into a ``tessera.control_if`` IROp."""
+        if not isinstance(pred, Tracer):
+            raise TesseraTraceError("traced cond: pred must be a Tracer")
+        then_body, tval = self._trace_region(lambda: true_fun(*operands))
+        else_body, fval = self._trace_region(lambda: false_fun(*operands))
+        if not (isinstance(tval, Tracer) and isinstance(fval, Tracer)):
+            raise TesseraTraceError("traced cond: branches must return a Tracer")
+        if tval.shape != fval.shape:
+            raise TesseraTraceError("traced cond: branches must share a shape")
+        res = self._fresh()
+        self.body.append(IROp(
+            result=res, op_name="tessera.control_if",
+            operands=[f"%{pred.ssa}"],
+            operand_types=[_ty(pred.shape, pred.dtype)],
+            result_type=_ty(tval.shape, tval.dtype),
+            kwargs={"_region": "if", "_flag_ssa": pred.ssa,
+                    "_then_body": then_body, "_then_ssa": tval.ssa,
+                    "_else_body": else_body, "_else_ssa": fval.ssa},
+        ))
+        return Tracer(tval.shape, tval.dtype, res)
+
+    def record_while(self, cond_fun, body_fun, init, max_steps) -> "Tracer":
+        """Trace a bounded ``while_loop`` into a ``tessera.control_while`` IROp."""
+        if not isinstance(init, Tracer):
+            raise TesseraTraceError("traced while_loop: init_val must be a Tracer")
+        if max_steps is None:
+            raise TesseraTraceError(
+                "traced while_loop needs a bound: pass max_steps=N")
+        carry_ssa = self._fresh()
+        carry = Tracer(init.shape, init.dtype, carry_ssa)
+        body_ops, nxt = self._trace_region(lambda: body_fun(carry))
+        cond_ops, pred = self._trace_region(lambda: cond_fun(carry))
+        if not (isinstance(nxt, Tracer) and isinstance(pred, Tracer)):
+            raise TesseraTraceError(
+                "traced while_loop: cond/body must return a Tracer")
+        if nxt.shape != init.shape:
+            raise TesseraTraceError(
+                "traced while_loop: body must preserve the carry shape")
+        res = self._fresh()
+        self.body.append(IROp(
+            result=res, op_name="tessera.control_while",
+            operands=[f"%{init.ssa}"],
+            operand_types=[_ty(init.shape, init.dtype)],
+            result_type=_ty(init.shape, init.dtype),
+            kwargs={"_region": "while", "_max_iters": int(max_steps),
+                    "_carry_ssa": carry_ssa,
+                    "_body": body_ops, "_next_ssa": nxt.ssa,
+                    "_cond": cond_ops, "_pred_ssa": pred.ssa},
+        ))
+        return Tracer(init.shape, init.dtype, res)
+
     def set_outputs(self, outs: List[str]) -> None:
         self.outputs = list(outs)
 
@@ -232,18 +326,63 @@ def to_graphfn(traced: TracedFunction, *, elem: str = "f32",
     ``graphfn_bridge._apply_op`` + ``_OP_TABLE``). An op outside the executable
     subset raises the same hard diagnostic the AST bridge uses (Decision #21)."""
     from .._jit_boundary import GraphFn, TesseraJitError
-    from .graphfn_bridge import _apply_op
+    from .graphfn_bridge import _apply_op, _strip
 
     if len(traced.outputs) != 1:
         raise TesseraJitError(
-            "trace→GraphFn (F1) supports a single output; multi-output is F6")
+            "trace→GraphFn supports a single output; multi-output is F6")
     g = GraphFn(name="tessera_trace", elem=elem, target=target)
     env: Dict[str, Any] = {}
     for (ssa, shape, _dt) in traced.args:
         env[ssa] = g.arg(shape)
+
+    def _replay(ops, base_env):
+        """Replay a straight-line sub op-list (a control-flow region body) over a
+        copy of the enclosing env; return the env so the caller can read outputs."""
+        e = dict(base_env)
+        for bop in ops:
+            assert bop.result is not None
+            e[bop.result] = _apply_op(g, bop, e, TesseraJitError)
+        return e
+
     for op in traced.body:
-        assert op.result is not None  # traced ops always bind a result SSA
-        env[op.result] = _apply_op(g, op, env, TesseraJitError)
+        assert op.result is not None
+        if op.op_name == "tessera.control_for":
+            kw = op.kwargs
+            init = env[_strip(op.operands[0])]
+
+            def _body(carry, kw=kw):
+                e = dict(env)
+                e[kw["_carry_ssa"]] = carry
+                e = _replay(kw["_body"], e)
+                return e[kw["_next_ssa"]]
+
+            env[op.result] = g.for_loop(kw["_trip"], init=init, body=_body)
+        elif op.op_name == "tessera.control_if":
+            kw = op.kwargs
+            flag = env[kw["_flag_ssa"]]
+            env[op.result] = g.cond(
+                flag,
+                then_fn=lambda kw=kw: _replay(kw["_then_body"], env)[kw["_then_ssa"]],
+                else_fn=lambda kw=kw: _replay(kw["_else_body"], env)[kw["_else_ssa"]])
+        elif op.op_name == "tessera.control_while":
+            kw = op.kwargs
+            init = env[_strip(op.operands[0])]
+
+            def _wbody(carry, kw=kw):
+                e = dict(env)
+                e[kw["_carry_ssa"]] = carry
+                return _replay(kw["_body"], e)[kw["_next_ssa"]]
+
+            def _wcond(carry, kw=kw):
+                e = dict(env)
+                e[kw["_carry_ssa"]] = carry
+                return _replay(kw["_cond"], e)[kw["_pred_ssa"]]
+
+            env[op.result] = g.while_loop(
+                kw["_max_iters"], cond=_wcond, body=_wbody, init=init)
+        else:
+            env[op.result] = _apply_op(g, op, env, TesseraJitError)
     g.ret(env[traced.outputs[0]])
     return g
 

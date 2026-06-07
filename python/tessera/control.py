@@ -148,6 +148,14 @@ def associative_scan(
     return _stack_outputs(out, axis=axis)
 
 
+def _active_trace_builder():
+    """The active Phase-F trace builder, or None. Under trace, the control-flow
+    primitives emit a `tessera.control_*` op instead of running a host loop."""
+    from .compiler._trace_hook import active_tracer
+
+    return active_tracer()
+
+
 def while_loop(
     cond_fun: Callable[[Any], bool],
     body_fun: Callable[[Any], Any],
@@ -155,6 +163,9 @@ def while_loop(
     *,
     max_steps: int | None = None,
 ) -> Any:
+    tr = _active_trace_builder()
+    if tr is not None and hasattr(tr, "record_while"):
+        return tr.record_while(cond_fun, body_fun, init_val, max_steps)
     value = init_val
     steps = 0
     while bool(cond_fun(value)):
@@ -166,6 +177,9 @@ def while_loop(
 
 
 def fori_loop(lower: int, upper: int, body_fun: Callable[[int, Any], Any], init_val: Any) -> Any:
+    tr = _active_trace_builder()
+    if tr is not None and hasattr(tr, "record_for_loop"):
+        return tr.record_for_loop(lower, upper, body_fun, init_val)
     value = init_val
     for i in range(int(lower), int(upper)):
         value = body_fun(i, value)
@@ -173,11 +187,14 @@ def fori_loop(lower: int, upper: int, body_fun: Callable[[int, Any], Any], init_
 
 
 def cond(
-    pred: bool,
+    pred: Any,  # bool on the host path; a Tracer under a Phase-F trace
     true_fun: Callable[..., Any],
     false_fun: Callable[..., Any],
     *operands: Any,
 ) -> Any:
+    tr = _active_trace_builder()
+    if tr is not None and hasattr(tr, "record_cond") and not isinstance(pred, bool):
+        return tr.record_cond(pred, true_fun, false_fun, operands)
     return true_fun(*operands) if bool(pred) else false_fun(*operands)
 
 

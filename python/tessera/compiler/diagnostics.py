@@ -104,6 +104,13 @@ class JitDiagnosticCode(str, Enum):
     #: ``execution_kind == "artifact_only"``.
     TARGET_IR_ARTIFACT_ONLY = "JIT_TARGET_IR_ARTIFACT_ONLY"
 
+    #: Warning-level: AST Graph IR emission failed for an ``apple_gpu``
+    #: function, but decoration did NOT hard-fail — the Phase-F tracer
+    #: executes the function by running it (it never reads the AST
+    #: graph_ir), so a body the AST can't emit still decorates and runs
+    #: via the tracer at call time. Non-apple_gpu targets still raise.
+    APPLE_GPU_TRACE_DEFERRED = "JIT_APPLE_GPU_TRACE_DEFERRED"
+
 
 class FrontendDiagnosticCode(str, Enum):
     """Textual-DSL frontend (``tessera.compiler.frontend.parser``).

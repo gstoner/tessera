@@ -586,10 +586,17 @@ last_updated: 2026-06-05
 >   the ~15 feature tests now pass (straight-line untouched); 52 migrated
 >   bridge/bf16/trace tests green; mypy clean host + linux.
 >
->   *Remaining F5 sub-item (separable):* relax `@jit(target="apple_gpu")`
->   decoration so an AST-emission failure no longer hard-raises (defer to the
->   tracer at call time) — unlocks bodies the AST can't emit (e.g. surrounding code
->   around a loop). Not needed for the migration; noted as a follow-on.
+>   *F5 follow-on — decoration relaxation landed 2026-06-07.* An AST Graph-IR
+>   emission failure no longer hard-fails `@jit(target="apple_gpu")` decoration:
+>   the `_decorate` except branch (`jit.py`) catches it for apple_gpu, builds a
+>   deferred state (empty module + `compile_bundle=None` + a
+>   `JIT_APPLE_GPU_TRACE_DEFERRED` warning), and forces `_needs_trace=True` so the
+>   tracer runs the function at call time. So a body the AST can't emit (e.g.
+>   surrounding straight-line code + a residual + a shape-conditional around a raw
+>   loop) now decorates *and runs* through the `@jit` decorator itself (matched
+>   numpy at 0.0). Non-apple_gpu targets still raise. **+3 tests**
+>   `tests/unit/test_jit_apple_gpu_decoration_relax.py`; new diagnostic enum member
+>   `JitDiagnosticCode.APPLE_GPU_TRACE_DEFERRED`.
 >
 > **The abstract-interp tracing lift (F1–F6) is complete:** the tracer is the
 > default apple_gpu control-flow front-end (concrete tracing → full vocab; control

@@ -1339,6 +1339,10 @@ def jit(
             resolved_attn = SM90_DEFAULT
 
         # ── Step 6: emit Graph IR ────────────────────────────────────────────
+        # Phase-F follow-on: when set, AST emission failed for an apple_gpu
+        # function and we deferred to the tracer (which runs the function rather
+        # than reading the AST graph_ir). ``_needs_trace`` is forced on below.
+        _trace_deferred = False
         try:
             effect_tag = inferred_effect.name if deterministic or inferred_effect != Effect.pure else None
             # Attach GPU target attrs to the module when target is provided.
@@ -1435,9 +1439,25 @@ def jit(
             compile_result = compile_result_from_bundle(
                 compile_bundle, module=module)
         except Exception as exc:
-            raise TesseraJitError(
-                f"Graph IR emission failed for {fn.__name__!r}: {exc}"
-            ) from exc
+            # Phase-F follow-on — an AST Graph-IR emission failure does NOT
+            # hard-fail apple_gpu decoration. The tracer executes the function by
+            # RUNNING it (it never reads the AST graph_ir), so a body the AST
+            # can't emit (e.g. surrounding straight-line code around a loop) still
+            # decorates and runs via the tracer at call time (forced below). Other
+            # targets still raise — they depend on the emitted IR.
+            if target_kind != "apple_gpu":
+                raise TesseraJitError(
+                    f"Graph IR emission failed for {fn.__name__!r}: {exc}"
+                ) from exc
+            module = GraphIRModule()
+            cpu_plan = None
+            compile_bundle = None
+            compile_result = None
+            diagnostics = [JitDiagnostic(
+                "warning", "JIT_APPLE_GPU_TRACE_DEFERRED",
+                f"AST Graph IR emission failed ({exc}); deferring to the Phase-F "
+                "tracer at call time")]
+            _trace_deferred = True
 
         # PK8a wiring (2026-06-02) — recognize whether this module's compute
         # region is an authorable Apple-GPU packaged kernel (matmul / a single
@@ -1476,6 +1496,10 @@ def jit(
             dispatch_via_package=_resolve_dispatch_via_package(
                 dispatch_via_package, target_kind),
         )
+        if _trace_deferred:
+            # AST emission failed → the tracer is the only execution path. Force
+            # the surgical gate on (the empty graph_ir carries no scf markers).
+            jitfn._needs_trace = True
 
         # P1 canonical one-command-buffer route (2026-06-01) — the
         # `auto_batch=True` opt-in wraps the user fn with

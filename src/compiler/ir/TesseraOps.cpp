@@ -1747,6 +1747,72 @@ LogicalResult KVCachePruneOp::verify() {
   return success();
 }
 
+// Sprint V8 (2026-06-07) — norm/softmax family shape+dtype contracts.
+// These ops are pointwise-over-the-normalized-axis: they preserve rank,
+// per-axis static dims, and element type (mirrors SoftmaxOp / LayerNormOp).
+static LogicalResult verifyShapeDtypePreserving(Operation *op, Value in,
+                                                Value out, StringRef name) {
+  auto inTy = dyn_cast<RankedTensorType>(in.getType());
+  auto outTy = dyn_cast<RankedTensorType>(out.getType());
+  if (!inTy || !outTy)
+    return success();
+  if (inTy.getRank() != outTy.getRank())
+    return op->emitOpError() << name << " must preserve rank";
+  if (inTy.getElementType() != outTy.getElementType())
+    return op->emitOpError() << name << " must preserve element type";
+  for (int64_t i = 0, e = inTy.getRank(); i < e; ++i) {
+    int64_t a = inTy.getDimSize(i), b = outTy.getDimSize(i);
+    if (!ShapedType::isDynamic(a) && !ShapedType::isDynamic(b) && a != b)
+      return op->emitOpError() << name << " must preserve dim " << i;
+  }
+  return success();
+}
+
+LogicalResult RmsNormOp::verify() {
+  if (failed(verifyShapeDtypePreserving(getOperation(), getX(), getY(),
+                                        "rmsnorm")))
+    return failure();
+  if (auto eps = getEps()) {
+    double v = eps->convertToDouble();
+    if (!(v > 0.0))
+      return emitOpError("eps must be positive for stable rsqrt; got ") << v;
+  }
+  return success();
+}
+
+LogicalResult RMSNormSafeOp::verify() {
+  if (failed(verifyShapeDtypePreserving(getOperation(), getX(), getY(),
+                                        "rmsnorm_safe")))
+    return failure();
+  if (auto eps = getEps()) {
+    double v = eps->convertToDouble();
+    if (!(v > 0.0))
+      return emitOpError("eps must be positive for stable rsqrt; got ") << v;
+  }
+  return success();
+}
+
+LogicalResult SoftmaxSafeOp::verify() {
+  return verifyShapeDtypePreserving(getOperation(), getX(), getY(),
+                                    "softmax_safe");
+}
+
+LogicalResult LogSoftmaxOp::verify() {
+  if (failed(verifyShapeDtypePreserving(getOperation(), getX(), getY(),
+                                        "log_softmax")))
+    return failure();
+  if (auto axisOpt = getAxis()) {
+    if (auto inTy = dyn_cast<RankedTensorType>(getX().getType())) {
+      int64_t axis = *axisOpt, rank = inTy.getRank();
+      if (axis < -rank || axis >= rank)
+        return emitOpError("axis out of range: got ")
+               << axis << " for rank-" << rank << " input "
+               << "(expected -" << rank << " <= axis < " << rank << ")";
+    }
+  }
+  return success();
+}
+
 LogicalResult KVCacheCreateOp::verify() { return success(); }
 LogicalResult RingCreateOp::verify() { return success(); }
 LogicalResult ArchParameterOp::verify() { return success(); }

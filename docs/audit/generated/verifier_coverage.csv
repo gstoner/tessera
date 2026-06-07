@@ -73,7 +73,7 @@ src/compiler/ir/TesseraOps.td,LightningAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,LinearAttnOp,1,1,real
 src/compiler/ir/TesseraOps.td,LinearAttnStateOp,1,1,real
 src/compiler/ir/TesseraOps.td,LionOp,0,0,no_verifier
-src/compiler/ir/TesseraOps.td,LogSoftmaxOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,LogSoftmaxOp,1,1,real
 src/compiler/ir/TesseraOps.td,MLADecodeFusedOp,1,1,real
 src/compiler/ir/TesseraOps.td,MLADecodeOp,1,1,real
 src/compiler/ir/TesseraOps.td,MQAAttentionOp,1,1,real
@@ -109,14 +109,14 @@ src/compiler/ir/TesseraOps.td,RLCISPOPolicyLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,RLGRPOPolicyLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,RLNormalizeGroupAdvantagesOp,1,1,real
 src/compiler/ir/TesseraOps.td,RLPPOPolicyLossOp,1,1,real
-src/compiler/ir/TesseraOps.td,RMSNormSafeOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,RMSNormSafeOp,1,1,real
 src/compiler/ir/TesseraOps.td,ReduceOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,ReduceScatterOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,ReluOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,ReshapeOp,1,1,real
 src/compiler/ir/TesseraOps.td,RetentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,RingCreateOp,1,1,trivial_stub
-src/compiler/ir/TesseraOps.td,RmsNormOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,RmsNormOp,1,1,real
 src/compiler/ir/TesseraOps.td,RopeMergeOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,RopeOp,1,1,real
 src/compiler/ir/TesseraOps.td,RopeSplitOp,0,0,no_verifier
@@ -127,7 +127,7 @@ src/compiler/ir/TesseraOps.td,SiluMulOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,SiluOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,SinOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,SoftmaxOp,1,1,real
-src/compiler/ir/TesseraOps.td,SoftmaxSafeOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,SoftmaxSafeOp,1,1,real
 src/compiler/ir/TesseraOps.td,SoftplusOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,SpectralConvOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,SubOp,0,0,no_verifier

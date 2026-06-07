@@ -1023,6 +1023,7 @@ def Tessera_RmsNormOp : Tessera_UnaryPureOp<"rmsnorm", "RMSNorm over the innermo
   let arguments = (ins TensorType:$x,
                        OptionalAttr<F64Attr>:$eps,
                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
+  let hasVerifier = 1;
 }
 
 // Log-softmax over an explicit or innermost axis.
@@ -1030,6 +1031,7 @@ def Tessera_LogSoftmaxOp : Tessera_UnaryPureOp<"log_softmax", "Log-softmax over 
   let arguments = (ins TensorType:$x,
                        OptionalAttr<I64Attr>:$axis,
                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
+  let hasVerifier = 1;
 }
 
 // Phase 8.4.8 Stage 2a — fused silu-and-multiply primitive.
@@ -1441,6 +1443,7 @@ def Tessera_RMSNormSafeOp : Op<
                         OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_SoftmaxSafeOp : Op<
@@ -1452,6 +1455,7 @@ def Tessera_SoftmaxSafeOp : Op<
                         OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_KVCacheCreateOp : Op<Tessera_Dialect, "kv_cache.create", []> {

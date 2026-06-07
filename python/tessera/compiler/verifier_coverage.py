@@ -112,6 +112,13 @@ _OP_DEF_PATTERN = re.compile(
     re.MULTILINE,
 )
 
+# `class Name<...> : Op<...> { ... }` — op-template base classes that may
+# themselves declare `hasVerifier = 1` for one-line `def X : Name<...>;` ops.
+_CLASS_DEF_PATTERN = re.compile(
+    r'^class\s+([A-Za-z_][A-Za-z0-9_]*)',
+    re.MULTILINE,
+)
+
 # We classify an op def as an Op (subject to verification) vs a Type /
 # Attr / Dialect / Enum definition by checking the second token after
 # the colon.  All known Tessera op-template names contain "Op" — Op,
@@ -186,9 +193,22 @@ def _extract_op_block(td_text: str, op_class: str) -> str:
     We approximate the block boundary by finding the opening brace
     after the def, then scanning forward through balanced braces.
     TD syntax is brace-balanced for op blocks in practice.
+
+    The ``[^{{;]`` (note the ``;``) is load-bearing: a *one-line* def
+    ``def X : Base<...>;`` has no block, so the scan must stop at its ``;``
+    rather than greedily running into the **next** op's ``{ ... }`` block and
+    mis-attributing that op's ``hasVerifier`` to the block-less def.
     """
+    return _extract_block(td_text, op_class, "def")
+
+
+def _extract_block(td_text: str, name: str, keyword: str) -> str:
+    """Generic ``def``/``class`` block extractor (see ``_extract_op_block``).
+    ``[<:]`` after the name handles both ``def X : Base<...> {`` and
+    ``class X<args> : Op<...> {``; ``[^{{;]`` stops a block-less one-line
+    ``def X : Base<...>;`` from bleeding into the next block."""
     pattern = re.compile(
-        rf'def\s+{re.escape(op_class)}\s*:[^{{]*\{{',
+        rf'{keyword}\s+{re.escape(name)}\s*[<:][^{{;]*\{{',
     )
     match = pattern.search(td_text)
     if not match:
@@ -216,13 +236,22 @@ def _scan_td(td_path: Path) -> list[tuple[str, bool]]:
     which don't contain ``"Op"`` as a substring.
     """
     text = td_path.read_text()
+    # Op-template base classes that declare `hasVerifier = 1` in their own
+    # `class ... { ... }` block — one-line `def X : Base<...>;` ops inherit it
+    # (e.g. Tessera_CliffordBinaryOp), so we must resolve through the base.
+    base_has_verifier: dict[str, bool] = {}
+    for m in _CLASS_DEF_PATTERN.finditer(text):
+        cls = m.group(1)
+        base_has_verifier[cls] = bool(
+            _HAS_VERIFIER_RE.search(_extract_block(text, cls, "class")))
     ops: list[tuple[str, bool]] = []
     for match in _OP_DEF_PATTERN.finditer(text):
         op_name, template = match.group(1), match.group(2)
         if not _looks_like_op_template(template):
             continue
         block = _extract_op_block(text, op_name)
-        has_verifier = bool(_HAS_VERIFIER_RE.search(block))
+        has_verifier = (bool(_HAS_VERIFIER_RE.search(block))
+                        or base_has_verifier.get(template, False))
         # Strip the "Tessera_" / "TPP_" / etc. prefix to get the C++
         # class name.  ODS uses the prefixed form in `def Tessera_FooOp`
         # but the C++ class is just `FooOp`.

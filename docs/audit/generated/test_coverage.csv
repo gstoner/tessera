@@ -236,7 +236,7 @@ load_state,13,0,2,13,0,,structural_only,category default for 'serialization'
 log,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 log1p,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 log_cosh_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
-log_softmax,5,1,0,6,0,,needs_direct_test,category default for 'stable_reduction'
+log_softmax,5,5,0,10,0,,needs_direct_test,category default for 'stable_reduction'
 logical_and,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 logical_not,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 logical_or,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -325,8 +325,8 @@ repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reshape,4,5,0,9,0,,structural_only,unclassified — defaults to structural_only
 retention,3,0,1,3,0,,needs_direct_test,category default for 'attention'
 rfft,2,0,0,2,0,fp32,needs_direct_test,category default for 'spectral'
-rmsnorm,41,4,1,45,0,bf16 fp32,needs_direct_test,category default for 'normalization'
-rmsnorm_safe,2,1,0,3,0,,needs_direct_test,category default for 'normalization'
+rmsnorm,41,9,1,50,0,bf16 fp32,needs_direct_test,category default for 'normalization'
+rmsnorm_safe,2,5,0,7,0,,needs_direct_test,category default for 'normalization'
 rng_bernoulli,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_beta,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_categorical,0,0,0,0,1,,covered_by_family,category default for 'rng'
@@ -380,7 +380,7 @@ sinh,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 softmax,66,35,3,101,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'stable_reduction'
-softmax_safe,2,0,0,2,0,,needs_direct_test,category default for 'stable_reduction'
+softmax_safe,2,4,0,6,0,,needs_direct_test,category default for 'stable_reduction'
 softplus,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 sort,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
 spectral_conv,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'

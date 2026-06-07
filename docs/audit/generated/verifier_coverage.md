@@ -6,10 +6,10 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 73 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 77 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 9 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
-| `no_verifier` | 65 | No verifier declared.  TD constraints suffice — fine for many ops. |
+| `no_verifier` | 61 | No verifier declared.  TD constraints suffice — fine for many ops. |
 | **Total** | 147 | |
 
 ## Per-dialect details
@@ -92,7 +92,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `LinearAttnOp` | `real` |
 | `LinearAttnStateOp` | `real` |
 | `LionOp` | `no_verifier` |
-| `LogSoftmaxOp` | `no_verifier` |
+| `LogSoftmaxOp` | `real` |
 | `MLADecodeFusedOp` | `real` |
 | `MLADecodeOp` | `real` |
 | `MQAAttentionOp` | `real` |
@@ -128,14 +128,14 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `RLGRPOPolicyLossOp` | `real` |
 | `RLNormalizeGroupAdvantagesOp` | `real` |
 | `RLPPOPolicyLossOp` | `real` |
-| `RMSNormSafeOp` | `no_verifier` |
+| `RMSNormSafeOp` | `real` |
 | `ReduceOp` | `no_verifier` |
 | `ReduceScatterOp` | `no_verifier` |
 | `ReluOp` | `no_verifier` |
 | `ReshapeOp` | `real` |
 | `RetentionOp` | `real` |
 | `RingCreateOp` | `trivial_stub` |
-| `RmsNormOp` | `no_verifier` |
+| `RmsNormOp` | `real` |
 | `RopeMergeOp` | `no_verifier` |
 | `RopeOp` | `real` |
 | `RopeSplitOp` | `no_verifier` |
@@ -146,7 +146,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `SiluOp` | `no_verifier` |
 | `SinOp` | `no_verifier` |
 | `SoftmaxOp` | `real` |
-| `SoftmaxSafeOp` | `no_verifier` |
+| `SoftmaxSafeOp` | `real` |
 | `SoftplusOp` | `no_verifier` |
 | `SpectralConvOp` | `no_verifier` |
 | `SubOp` | `no_verifier` |

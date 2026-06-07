@@ -1813,15 +1813,223 @@ LogicalResult LogSoftmaxOp::verify() {
   return success();
 }
 
-LogicalResult KVCacheCreateOp::verify() { return success(); }
-LogicalResult RingCreateOp::verify() { return success(); }
-LogicalResult ArchParameterOp::verify() { return success(); }
-LogicalResult ArchGumbelSoftmaxOp::verify() { return success(); }
-LogicalResult ArchHardConcreteOp::verify() { return success(); }
+// Sprint V9 (2026-06-07) — close the trivial-stub verifiers with real
+// resource/scalar contracts.
+LogicalResult KVCacheCreateOp::verify() {
+  if (failed(verifyPositiveI64(getOperation(), "max_seq", getMaxSeq())) ||
+      failed(verifyPositiveI64(getOperation(), "head_dim", getHeadDim())))
+    return failure();
+  if (auto ps = getPageSize())
+    return verifyPositiveI64(getOperation(), "page_size", *ps);
+  return success();
+}
+LogicalResult RingCreateOp::verify() {
+  return verifyPositiveI64(getOperation(), "capacity", getCapacity());
+}
+
+LogicalResult ArchParameterOp::verify() {
+  return verifyPositiveI64(getOperation(), "size", getSize());
+}
+LogicalResult ArchGumbelSoftmaxOp::verify() {
+  return verifyPositiveAttr(getOperation(), "temperature");
+}
+LogicalResult ArchHardConcreteOp::verify() {
+  return verifyPositiveAttr(getOperation(), "temperature");
+}
+// STE one-hot: an opaque ArchParam → ArchGate with no scalar/shape contract to
+// check beyond ODS typing — left as a structural success.
 LogicalResult ArchSTEOneHotOp::verify() { return success(); }
-LogicalResult ArchWeightedSumOp::verify() { return success(); }
-LogicalResult ArchSwitchOp::verify() { return success(); }
-LogicalResult ArchMixedOp::verify() { return success(); }
+// WeightedSum / Switch: a non-empty candidate set, each candidate shape-matching
+// the (single) mixed result.
+static LogicalResult verifyArchCandidates(Operation *op,
+                                          OperandRange candidates, Value result) {
+  if (candidates.empty())
+    return op->emitOpError("requires at least one candidate");
+  auto outTy = dyn_cast<RankedTensorType>(result.getType());
+  if (!outTy)
+    return success();
+  for (Value c : candidates)
+    if (auto cty = dyn_cast<RankedTensorType>(c.getType()))
+      if (failed(verifySameRankedShape(op, cty, outTy, "candidate")))
+        return failure();
+  return success();
+}
+LogicalResult ArchWeightedSumOp::verify() {
+  return verifyArchCandidates(getOperation(), getCandidates(), getResult());
+}
+LogicalResult ArchSwitchOp::verify() {
+  return verifyArchCandidates(getOperation(), getCandidates(), getResult());
+}
+LogicalResult ArchMixedOp::verify() {
+  if (getCandidates().empty())
+    return emitOpError("candidates array must be non-empty");
+  return success();
+}
+
+// ── Phase-G control flow — payload-ABI + carry/flag-index contracts. ──────────
+// The serialized run_graph op-list arrays (opcodes/in0/in1/iattr/fattr) must be
+// mutually length-consistent (one entry per body op) with out_id set, else the
+// runtime reads past the op-list. IR-only ops (no opcodes) skip the check.
+static LogicalResult verifyControlPayload(Operation *op, StringRef prefix) {
+  auto i32 = [&](const Twine &suffix) -> std::optional<ArrayRef<int32_t>> {
+    if (auto a = op->getAttrOfType<DenseI32ArrayAttr>((prefix + suffix).str()))
+      return a.asArrayRef();
+    return std::nullopt;
+  };
+  auto opcodes = i32("_opcodes");
+  if (!opcodes)
+    return success();
+  int64_t n = static_cast<int64_t>(opcodes->size());
+  for (const char *suf : {"_in0", "_in1", "_iattr"}) {
+    if (auto arr = i32(suf))
+      if (static_cast<int64_t>(arr->size()) != n)
+        return op->emitOpError()
+               << prefix << suf << " length (" << arr->size()
+               << ") must match " << prefix << "_opcodes length (" << n << ")";
+  }
+  if (auto fattr = op->getAttrOfType<DenseF32ArrayAttr>((prefix + "_fattr").str()))
+    if (static_cast<int64_t>(fattr.size()) != n)
+      return op->emitOpError() << prefix << "_fattr length must match "
+                               << prefix << "_opcodes length (" << n << ")";
+  if (!op->getAttrOfType<IntegerAttr>((prefix + "_out_id").str()))
+    return op->emitOpError()
+           << prefix << "_out_id required when " << prefix
+           << "_opcodes is present";
+  return success();
+}
+
+LogicalResult ControlForOp::verify() {
+  if (getStep() == 0)
+    return emitOpError("step must be non-zero");
+  int64_t n = static_cast<int64_t>(getIterArgs().size());
+  if (auto idx = getCarryArgIndex())
+    if (*idx < 0 || *idx >= n)
+      return emitOpError("carry_arg_index out of range: ") << *idx;
+  if (getResults().size() != getIterArgs().size())
+    return emitOpError("loop must carry each iter_arg to a result (#results=")
+           << getResults().size() << ", #iter_args=" << getIterArgs().size()
+           << ")";
+  for (auto [in, out] : llvm::zip(getIterArgs(), getResults()))
+    if (in.getType() != out.getType())
+      return emitOpError("loop-carried type mismatch between iter_arg and result");
+  return verifyControlPayload(getOperation(), "body");
+}
+
+LogicalResult ControlIfOp::verify() {
+  int64_t n = static_cast<int64_t>(getIterArgs().size());
+  int64_t flag = getFlagArgIndex();
+  if (flag < 0 || flag >= n)
+    return emitOpError("flag_arg_index out of range: ") << flag;
+  bool hasThen = getOperation()->getAttrOfType<DenseI32ArrayAttr>("then_opcodes")
+                 != nullptr;
+  bool hasElse = getOperation()->getAttrOfType<DenseI32ArrayAttr>("else_opcodes")
+                 != nullptr;
+  if (hasThen != hasElse)
+    return emitOpError("then/else payloads must both be present or both absent");
+  if (failed(verifyControlPayload(getOperation(), "then")) ||
+      failed(verifyControlPayload(getOperation(), "else")))
+    return failure();
+  return success();
+}
+
+LogicalResult ControlWhileOp::verify() {
+  if (getMaxIters() <= 0)
+    return emitOpError("max_iters must be positive");
+  int64_t n = static_cast<int64_t>(getIterArgs().size());
+  int64_t idx = getCarryArgIndex();
+  if (idx < 0 || idx >= n)
+    return emitOpError("carry_arg_index out of range: ") << idx;
+  if (!getResults().empty() &&
+      getResults()[0].getType() != getIterArgs()[idx].getType())
+    return emitOpError("while result type must match the carried iter_arg type");
+  if (failed(verifyControlPayload(getOperation(), "body")) ||
+      failed(verifyControlPayload(getOperation(), "cond")))
+    return failure();
+  return success();
+}
+
+// ── MoR (mixture-of-recursions) ──────────────────────────────────────────────
+LogicalResult MorRouterOp::verify() {
+  return verifyPositiveI64(getOperation(), "max_depth", getMaxDepth());
+}
+LogicalResult MorPartitionOp::verify() {
+  if (getStep() < 0)
+    return emitOpError("step must be non-negative");
+  return success();
+}
+LogicalResult MorScatterOp::verify() {
+  auto fullTy = dyn_cast<RankedTensorType>(getFull().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getOut().getType());
+  if (fullTy && outTy)
+    return verifyShapeDtypePreserving(getOperation(), getFull(), getOut(),
+                                      "mor_scatter");
+  return success();
+}
+
+// ── Quantize / dequantize — shape-preserving (dtype changes), format set. ─────
+static LogicalResult verifyQuantFormat(Operation *op, StringRef name,
+                                       ArrayRef<StringRef> allowed) {
+  return verifyAllowedStringAttr(op, name, allowed);
+}
+static LogicalResult verifyQuantShape(Operation *op, Value a, Value b,
+                                      StringRef label) {
+  auto aTy = dyn_cast<RankedTensorType>(a.getType());
+  auto bTy = dyn_cast<RankedTensorType>(b.getType());
+  if (aTy && bTy)
+    return verifySameRankedShape(op, aTy, bTy, label);
+  return success();
+}
+LogicalResult QuantizeFP8Op::verify() {
+  if (failed(verifyQuantFormat(getOperation(), "format", {"e4m3", "e5m2"})))
+    return failure();
+  return verifyQuantShape(getOperation(), getX(), getXQ(), "quantize_fp8");
+}
+LogicalResult DequantizeFP8Op::verify() {
+  if (failed(verifyQuantFormat(getOperation(), "format", {"e4m3", "e5m2"})))
+    return failure();
+  return verifyQuantShape(getOperation(), getXQ(), getX(), "dequantize_fp8");
+}
+LogicalResult QuantizeFP4Op::verify() {
+  if (failed(verifyQuantFormat(getOperation(), "format", {"e2m1", "nvfp4"})))
+    return failure();
+  return verifyQuantShape(getOperation(), getX(), getXQ(), "quantize_fp4");
+}
+LogicalResult DequantizeFP4Op::verify() {
+  if (failed(verifyQuantFormat(getOperation(), "format", {"e2m1", "nvfp4"})))
+    return failure();
+  return verifyQuantShape(getOperation(), getXQ(), getX(), "dequantize_fp4");
+}
+
+// ── Spectral (FFT family) — axis-in-range against the input rank. ─────────────
+static LogicalResult verifySpectralAxis(Operation *op, Value x,
+                                        std::optional<int64_t> axis,
+                                        StringRef name) {
+  if (!axis)
+    return success();
+  auto xTy = dyn_cast<RankedTensorType>(x.getType());
+  if (!xTy)
+    return success();
+  int64_t rank = xTy.getRank(), a = *axis;
+  if (a < -rank || a >= rank)
+    return op->emitOpError() << name << " axis out of range: got " << a
+                             << " for rank-" << rank << " input";
+  return success();
+}
+LogicalResult FFTOp::verify() {
+  return verifySpectralAxis(getOperation(), getX(), getAxis(), "fft");
+}
+LogicalResult IFFTOp::verify() {
+  return verifySpectralAxis(getOperation(), getX(), getAxis(), "ifft");
+}
+LogicalResult RFFTOp::verify() {
+  return verifySpectralAxis(getOperation(), getX(), getAxis(), "rfft");
+}
+LogicalResult IRFFTOp::verify() {
+  return verifySpectralAxis(getOperation(), getX(), getAxis(), "irfft");
+}
+LogicalResult DCTOp::verify() {
+  return verifySpectralAxis(getOperation(), getX(), getAxis(), "dct");
+}
 
 } // namespace tessera
 

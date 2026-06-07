@@ -694,6 +694,7 @@ def Tessera_QuantizeFP8Op : Op<Tessera_Dialect, "quantize_fp8", [Pure]> {
   let arguments = (ins TensorType:$x, OptionalAttr<StrAttr>:$format);
   let results = (outs TensorType:$x_q, AnyType:$scale);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_DequantizeFP8Op : Op<Tessera_Dialect, "dequantize_fp8", [Pure]> {
@@ -701,6 +702,7 @@ def Tessera_DequantizeFP8Op : Op<Tessera_Dialect, "dequantize_fp8", [Pure]> {
   let arguments = (ins TensorType:$x_q, AnyType:$scale, OptionalAttr<StrAttr>:$format);
   let results = (outs TensorType:$x);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_QuantizeFP4Op : Op<Tessera_Dialect, "quantize_fp4", [Pure]> {
@@ -708,6 +710,7 @@ def Tessera_QuantizeFP4Op : Op<Tessera_Dialect, "quantize_fp4", [Pure]> {
   let arguments = (ins TensorType:$x, OptionalAttr<StrAttr>:$format);
   let results = (outs TensorType:$x_q, AnyType:$scale);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_DequantizeFP4Op : Op<Tessera_Dialect, "dequantize_fp4", [Pure]> {
@@ -715,6 +718,7 @@ def Tessera_DequantizeFP4Op : Op<Tessera_Dialect, "dequantize_fp4", [Pure]> {
   let arguments = (ins TensorType:$x_q, AnyType:$scale, OptionalAttr<StrAttr>:$format);
   let results = (outs TensorType:$x);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_MoeDispatchOp : Op<Tessera_Dialect, "moe_dispatch", []> {
@@ -1261,6 +1265,7 @@ def Tessera_MorRouterOp : Op<
                         I64Attr:$max_depth);
   let results = (outs TensorType:$depth);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_MorPartitionOp : Op<
@@ -1272,6 +1277,7 @@ def Tessera_MorPartitionOp : Op<
                         I64Attr:$step);
   let results = (outs TensorType:$mask);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_MorScatterOp : Op<
@@ -1282,6 +1288,7 @@ def Tessera_MorScatterOp : Op<
   let arguments = (ins TensorType:$full, TensorType:$updated, TensorType:$mask);
   let results = (outs TensorType:$out);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_TransposeOp : Op<
@@ -1373,6 +1380,7 @@ class Tessera_SpectralUnaryOp<string mnemonic, string summaryText> : Op<
                        OptionalAttr<I64Attr>:$axis);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_FFTOp : Tessera_SpectralUnaryOp<"fft", "FFT spectral transform">;
@@ -1383,6 +1391,7 @@ def Tessera_DCTOp : Tessera_SpectralUnaryOp<"dct", "Discrete cosine transform"> 
   let arguments = (ins TensorType:$x,
                        OptionalAttr<I64Attr>:$axis,
                        OptionalAttr<I64Attr>:$type);
+  let hasVerifier = 1;
 }
 
 def Tessera_SpectralConvOp : Op<Tessera_Dialect, "spectral_conv", [Pure]> {
@@ -1657,6 +1666,7 @@ def Tessera_ControlForOp : Op<
   let results = (outs Variadic<AnyType>:$results);
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_ControlIfOp : Op<
@@ -1696,6 +1706,7 @@ def Tessera_ControlIfOp : Op<
   let results = (outs Variadic<AnyType>:$results);
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_ControlWhileOp : Op<
@@ -1733,4 +1744,5 @@ def Tessera_ControlWhileOp : Op<
   let results = (outs Variadic<AnyType>:$results);
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }

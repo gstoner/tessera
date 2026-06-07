@@ -188,7 +188,7 @@ gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
 gqa_attention,3,0,0,3,0,,needs_direct_test,category default for 'attention'
 grad_scaler_step,3,0,0,3,0,,needs_direct_test,category default for 'numerics'
 group_norm,2,0,0,2,0,,needs_direct_test,category default for 'normalization'
-grouped_gemm,15,0,1,15,0,,structural_only,unclassified — defaults to structural_only
+grouped_gemm,17,0,1,17,0,,structural_only,unclassified — defaults to structural_only
 grpo_policy_loss,3,3,0,6,0,,needs_direct_test,category default for 'rl_loss'
 gru_cell,2,0,0,2,0,,needs_direct_test,category default for 'recurrent'
 gt,0,0,0,0,1,,covered_by_family,category default for 'comparison'

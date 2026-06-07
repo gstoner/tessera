@@ -59,6 +59,7 @@ def _load():
 
     fp = ctypes.POINTER(ctypes.c_float)
     u16 = ctypes.POINTER(ctypes.c_uint16)
+    ip = ctypes.POINTER(ctypes.c_int32)
     i32 = ctypes.c_int32
     i64 = ctypes.c_int64
     flt = ctypes.c_float
@@ -93,6 +94,8 @@ def _load():
         ("tessera_apple_gpu_mpsgraph_binary_bf16", [i32, u16, u16, u16, i64]),
         ("tessera_apple_gpu_rmsnorm_gpu_bf16", [u16, u16, u16, i32, i32, flt]),
         ("tessera_apple_gpu_layer_norm_bf16", [u16, u16, u16, u16, i32, i32, flt]),
+        # Thrust #3a — fused ragged grouped-GEMM (X, W, expert_ids, O, T, K, N, E).
+        ("tessera_apple_gpu_grouped_gemm_f32", [fp, fp, ip, fp, i32, i32, i32, i32]),
     ):
         try:
             sym = getattr(lib, name)
@@ -167,6 +170,34 @@ def gpu_matmul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
         return out
     out = np.zeros((M, N), np.float32)
     _load().tessera_apple_gpu_mps_matmul_f32(_ptr(a), _ptr(b), _ptr(out), M, N, K)
+    return out
+
+
+def gpu_grouped_gemm(x: np.ndarray, w: np.ndarray,
+                     expert_ids: np.ndarray) -> np.ndarray:
+    """Fused ragged grouped matmul on the Apple GPU — ONE dispatch over the whole
+    (T, N) output. Row ``t`` of the result is ``x[t] @ w[expert_ids[t]]``.
+
+    x: (T, K) f32; w: (E, K, N) f32; expert_ids: (T,) int — the per-token expert
+    id (e.g. ``np.repeat(arange(E), group_sizes)``). Returns (T, N) f32.
+    Replaces the per-group MPS-matmul loop with a single kernel that folds the
+    routing in, removing the per-expert dispatch overhead."""
+    x = _arr(x, "x").astype(np.float32, copy=False)
+    w = np.ascontiguousarray(w, dtype=np.float32)
+    e = np.ascontiguousarray(expert_ids, dtype=np.int32)
+    if x.ndim != 2 or w.ndim != 3:
+        raise AppleGpuError(
+            f"gpu_grouped_gemm expects x (T,K) + w (E,K,N); got {x.shape}, {w.shape}")
+    T, K = int(x.shape[0]), int(x.shape[1])
+    E, wk, N = int(w.shape[0]), int(w.shape[1]), int(w.shape[2])
+    if wk != K:
+        raise AppleGpuError(f"gpu_grouped_gemm K mismatch: x K={K}, w K={wk}")
+    if e.shape != (T,):
+        raise AppleGpuError(f"gpu_grouped_gemm expert_ids must be (T={T},); got {e.shape}")
+    out = np.zeros((T, N), np.float32)
+    _load().tessera_apple_gpu_grouped_gemm_f32(
+        _ptr(x), _ptr(w), e.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+        _ptr(out), T, K, N, E)
     return out
 
 

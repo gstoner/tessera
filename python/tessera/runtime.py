@@ -3985,7 +3985,19 @@ def _apple_gpu_dispatch_grouped_gemm(operands: Any, kwargs: Any, np: Any) -> Any
     x = np.asarray(operands[0], dtype=np.float32)
     w = np.asarray(operands[1], dtype=np.float32)
     gs = np.asarray(operands[2]).astype(np.int64).reshape(-1)
-    out = np.zeros((x.shape[0], w.shape[2]), dtype=np.float32)
+    T = int(x.shape[0])
+
+    # Fast path: ONE fused dispatch over the whole (T, N) output via the
+    # grouped_gemm MSL kernel (folds routing in, no per-expert dispatch).
+    if int(gs.sum()) == T:
+        expert_ids = np.repeat(np.arange(w.shape[0], dtype=np.int32), gs)
+        try:
+            return np.ascontiguousarray(agb.gpu_grouped_gemm(x, w, expert_ids))
+        except Exception:                           # noqa: BLE001 — fall to per-group
+            pass
+
+    # Fallback: per-group MPS matmul (also covers a malformed group_sizes sum).
+    out = np.zeros((T, w.shape[2]), dtype=np.float32)
     off = 0
     for e in range(w.shape[0]):
         n = int(gs[e])

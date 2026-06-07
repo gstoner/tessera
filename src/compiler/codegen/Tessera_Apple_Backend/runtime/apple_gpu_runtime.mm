@@ -15669,6 +15669,118 @@ extern "C" void tessera_apple_gpu_bmm_f32(const float *A, const float *B,
   reference_bmm_f32(A, B, O, batch, M, N, K, b_broadcast);
 }
 
+//===---------------------------------------------------------------------===//
+// Thrust #3a — fused ragged grouped-GEMM (the MoE expert-FFN compute core).
+//
+// One Metal dispatch over the whole (T, N) output instead of the per-group MPS
+// matmul loop in `_apple_gpu_dispatch_grouped_gemm`: each thread (t, n) reads
+// the per-token expert id `E[t]` and contracts X[t,:] with W[E[t],:,n]. Removes
+// the per-expert dispatch overhead (the win for many small groups) and folds
+// the routing into the kernel. f32; numerically validated against the per-group
+// reference.
+//===---------------------------------------------------------------------===//
+namespace {
+
+bool dispatch_grouped_gemm_msl(MetalDeviceContext &ctx, const float *X,
+                               const float *W, const int32_t *E, float *O,
+                               int32_t T, int32_t K, int32_t N, int32_t Ecount) {
+  static NSString *const kGroupedGemmSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void grouped_gemm_f32(
+    device const float* X   [[buffer(0)]],
+    device const float* W   [[buffer(1)]],
+    device const int*   E   [[buffer(2)]],   // per-token expert id
+    device float*       O   [[buffer(3)]],
+    constant int&       T   [[buffer(4)]],
+    constant int&       K   [[buffer(5)]],
+    constant int&       N   [[buffer(6)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    int t = (int)gid.x;
+    int n = (int)gid.y;
+    if (t >= T || n >= N) return;
+    int e = E[t];
+    int x_off = t * K;
+    int w_base = (e * K) * N + n;        // W[e, 0, n]; stride over k is N
+    float acc = 0.0f;
+    for (int k = 0; k < K; ++k)
+        acc += X[x_off + k] * W[w_base + k * N];
+    O[t * N + n] = acc;
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kGroupedGemmSource, @"grouped_gemm_f32");
+    if (!pso) return false;
+
+    NSUInteger xBytes = sizeof(float) * (NSUInteger)T * (NSUInteger)K;
+    NSUInteger wBytes =
+        sizeof(float) * (NSUInteger)Ecount * (NSUInteger)K * (NSUInteger)N;
+    NSUInteger eBytes = sizeof(int32_t) * (NSUInteger)T;
+    NSUInteger oBytes = sizeof(float) * (NSUInteger)T * (NSUInteger)N;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, xBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufW, ctx, W, wBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufE, ctx, E, eBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufX || !bufW || !bufE || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufW offset:0 atIndex:1];
+    [enc setBuffer:bufE offset:0 atIndex:2];
+    [enc setBuffer:bufO offset:0 atIndex:3];
+    [enc setBytes:&T length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:6];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)T, (NSUInteger)N, 1);
+    NSUInteger w = pso.threadExecutionWidth;
+    NSUInteger h = pso.maxTotalThreadsPerThreadgroup / (w == 0 ? 1 : w);
+    if (w == 0) w = 1;
+    if (h == 0) h = 1;
+    MTLSize tg = MTLSizeMake(w, h, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "grouped_gemm_msl"))
+      return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+inline void reference_grouped_gemm_f32(const float *X, const float *W,
+                                       const int32_t *E, float *O, int32_t T,
+                                       int32_t K, int32_t N) {
+  for (int32_t t = 0; t < T; ++t) {
+    int32_t e = E[t];
+    for (int32_t n = 0; n < N; ++n) {
+      float acc = 0.0f;
+      for (int32_t k = 0; k < K; ++k)
+        acc += X[(std::size_t)t * K + k] *
+               W[((std::size_t)e * K + k) * N + n];
+      O[(std::size_t)t * N + n] = acc;
+    }
+  }
+}
+
+}  // namespace
+
+extern "C" void tessera_apple_gpu_grouped_gemm_f32(
+    const float *X, const float *W, const int32_t *E, float *O, int32_t T,
+    int32_t K, int32_t N, int32_t Ecount) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && T > 0 && N > 0 &&
+      dispatch_grouped_gemm_msl(ctx, X, W, E, O, T, K, N, Ecount))
+    return;
+  reference_grouped_gemm_f32(X, W, E, O, T, K, N);
+}
+
 extern "C" int32_t tessera_apple_gpu_ppo_policy_loss_f32(
     const float *logp_new, const float *logp_old, const float *advantages,
     float *out, int32_t n, float clip_epsilon) {

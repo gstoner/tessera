@@ -2054,6 +2054,23 @@ extern "C" void tessera_apple_gpu_bmm_f32(const float* A, const float* B,
   }
 }
 
+// Thrust #3a — fused ragged grouped-GEMM (non-Darwin reference parity).
+extern "C" void tessera_apple_gpu_grouped_gemm_f32(
+    const float* X, const float* W, const int32_t* E, float* O, int32_t T,
+    int32_t K, int32_t N, int32_t Ecount) {
+  (void)Ecount;
+  for (int32_t t = 0; t < T; ++t) {
+    int32_t e = E[t];
+    for (int32_t n = 0; n < N; ++n) {
+      float acc = 0.0f;
+      for (int32_t k = 0; k < K; ++k)
+        acc += X[static_cast<std::size_t>(t) * K + k] *
+               W[(static_cast<std::size_t>(e) * K + k) * N + n];
+      O[static_cast<std::size_t>(t) * N + n] = acc;
+    }
+  }
+}
+
 extern "C" int32_t tessera_apple_gpu_ppo_policy_loss_f32(
     const float* logp_new, const float* logp_old, const float* advantages,
     float* out, int32_t n, float clip_epsilon) {
